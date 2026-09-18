@@ -8,7 +8,7 @@ ready-to-merge handback.
 ## Install
 
 ```bash
-git clone <this-repo> ~/Documents/Projects/Personal/ai-workflow
+git clone git@github.com:masnun-siam/ai-workflow.git ~/Documents/Projects/Personal/ai-workflow
 ```
 
 Then in Claude Code:
