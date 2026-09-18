@@ -144,14 +144,27 @@ Children desynchronize immediately, and that is correct: child 3 can be in revie
 child 5 is still writing tests. Nothing waits for a wave.
 
 **Stack budget.** A child needs its stack from phase 2.5 through phase 8.5 — most of its
-life. `epic.max_stacks` (default **2**) gates acquisition: a child that needs a stack and
+life. `epic.max_stacks` (default **1**) gates acquisition: a child that needs a stack and
 cannot get a slot stays parked at phase 2.5 rather than starting. A child's stack tears
 down the moment it clears the CI gate, freeing the slot. On a repo with no compose file
 (`stack=none`) there is no budget to spend and every child runs at once.
 
-Default 2 rather than a formula on core count: an epic that pegs the host is worse than
-one that takes longer, and the value is raisable per repo in `.run-issue.json` once the
-shape of that repo's stack is known.
+Default 1, not a formula on core count and not 2: `-p runissue-<issue>` namespaces
+*container names*, not published host ports. Two children raised from the same compose
+file with any `ports:` mapping collide on the host port, and the second `up --wait` fails
+both attempts. **Raising `max_stacks` above 1 requires a compose file with no published
+ports** — the value is raisable per repo in `.run-issue.json` once the shape of that
+repo's stack is known, and that is the thing to check before raising it. An epic that pegs
+the host is still worse than one that takes longer.
+
+**A child is assumed to need a stack until it proves otherwise.** `child_state` reports
+`needs_stack: true` until that child's phase 2.5 records `stack` in its ledger, so on a
+repo with *no* compose file the epic is throttled to `max_stacks` children until each of
+them reaches 2.5 and records `stack=none`. It self-heals within a turn or two and no child
+is lost, but the ramp is real and contradicts a naive reading of "no compose file, every
+child runs at once" above — that is the steady state, not the first turn. The alternative,
+probing the repo for a compose file inside `epic next`, would put I/O in the one function
+this design keeps pure.
 
 ## The three gates
 
