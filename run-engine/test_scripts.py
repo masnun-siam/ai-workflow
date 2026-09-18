@@ -227,6 +227,9 @@ assert epic.parse_depends("No dependency line here") == []
 assert epic.parse_depends("Depends on: none") == []
 assert epic.parse_depends("Depends on: #9, #9") == [9], "duplicates collapse"
 assert epic.parse_depends(None) == []
+assert epic.parse_depends(
+    "Depends on: #4 in passing\n\n## Dependencies\nDepends on: #12, #13\n"
+) == [4, 12, 13], "every Depends on line is unioned — the first does not win"
 ok("Depends on: parses to sorted unique issue numbers, absent means []")
 
 dag = epic.build_dag({10: [], 11: [10], 12: [10], 13: [11, 12]})
@@ -344,7 +347,8 @@ with tempfile.TemporaryDirectory() as tmp:
     for issue in (10, 11):
         led = json.load(open(os.path.join(runs, f"o-r-issue-{issue}", "run.json")))
         assert led["issue"] == issue and led["status"] == "running", led
-    # 11 depends on 10, so its base is 10's branch and must NOT default to the repo base
+    # The edge itself is recorded on the child. Setting base_branch from it is the
+    # orchestrator's job at Epic mode step 4 — this only checks the edge survived init.
     led11 = json.load(open(os.path.join(runs, "o-r-issue-11", "run.json")))
     assert led11["context"]["depends_on"] == "10", led11["context"]
 
@@ -356,6 +360,94 @@ with tempfile.TemporaryDirectory() as tmp:
     assert again.returncode == 0, again.stderr
     assert "already" in again.stdout.lower(), again.stdout
 ok("aiw epic init creates one ledger per child, records edges, and is idempotent")
+
+# `gh` is the only thing between `epic split` and GitHub, so the split tests drive a stub
+# that records its argv. What matters is not that gh was called but WITH WHAT: the
+# sub-issues endpoint takes a database id as an integer, and `-f` with an issue number
+# 422s on every child while `split` still exits 0 — a parent with no sub-issues, which
+# run-issue then runs as one ordinary issue.
+GH_STUB = r"""#!/usr/bin/env python3
+import json, os, sys
+argv = sys.argv[1:]
+cfg = json.load(open(os.environ["GH_STUB_CFG"]))
+with open(os.environ["GH_STUB_LOG"], "a") as fh:
+    fh.write(" ".join(argv) + "\n")
+if argv[0] == "issue" and argv[1] == "view":
+    print(cfg["bodies"].get(argv[2], ""))
+elif argv[1].endswith("/sub_issues") and any(a.startswith("-F") or a.startswith("-f") for a in argv):
+    sys.exit(cfg.get("link_exit", 0))
+elif argv[1].endswith("/sub_issues"):
+    print(json.dumps(cfg.get("linked", [])))
+else:  # repos/o/r/issues/<n> --jq .id
+    print(9000 + int(argv[1].rsplit("/", 1)[1]))
+"""
+
+
+def gh_stub(tmp, **cfg):
+    """A `gh` on PATH that answers from `cfg`. Returns (env, log path)."""
+    bindir = os.path.join(tmp, "bin")
+    os.makedirs(bindir, exist_ok=True)
+    stub = os.path.join(bindir, "gh")
+    write(bindir, "gh", GH_STUB)
+    os.chmod(stub, 0o755)
+    cfg_path, log = os.path.join(tmp, "cfg.json"), os.path.join(tmp, "gh.log")
+    with open(cfg_path, "w", encoding="utf-8") as fh:
+        json.dump(cfg, fh)
+    return dict(os.environ, PATH=bindir + os.pathsep + os.environ["PATH"],
+                GH_STUB_CFG=cfg_path, GH_STUB_LOG=log), log
+
+
+def split(tmp, env, children="10,11,12"):
+    epic_dir = os.path.join(tmp, "e")
+    os.makedirs(epic_dir, exist_ok=True)
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "epic", "split", epic_dir,
+         "--parent", "42", "--slug", "o/r", "--children", children],
+        capture_output=True, text=True, env=env,
+    )
+    return proc, os.path.join(epic_dir, "epic.json")
+
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, linked=[11], bodies={
+        "10": "no deps", "11": "Depends on: #10", "12": "Depends on: #10"})
+    proc, path = split(tmp, env)
+    assert proc.returncode == 0, proc.stderr
+    logged = open(log).read()
+    assert "-F sub_issue_id=9010" in logged and "-F sub_issue_id=9012" in logged, logged
+    assert "sub_issue_id=10" not in logged, "the ISSUE NUMBER was sent where the id belongs"
+    assert "-f sub_issue_id" not in logged, "-f sends a string; the field must be an integer"
+    assert "sub_issue_id=9011" not in logged, "#11 was already linked and must be skipped"
+    epic_json = json.load(open(path))
+    assert epic_json["dag"]["order"] == [10, 11, 12], epic_json
+    assert epic_json["max_stacks"] == 1, "one stack by default — `-p` does not namespace ports"
+ok("epic split links by database id with -F, skips what is linked, and caps stacks at 1")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, _ = gh_stub(tmp, bodies={"10": "", "11": "", "12": "Depends on: #41"})
+    proc, path = split(tmp, env)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "not in this epic" in proc.stderr, proc.stderr
+    assert not os.path.isfile(path), "a foreign edge must not produce an epic.json"
+ok("epic split refuses an edge pointing outside the epic instead of dropping it")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, _ = gh_stub(tmp, bodies={})
+    proc, path = split(tmp, env, children="")
+    assert proc.returncode != 0 and not os.path.isfile(path), proc.stdout
+ok("epic split refuses an empty child list rather than writing an epic nothing runs")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, _ = gh_stub(tmp, link_exit=1, bodies={"10": "", "11": "", "12": ""})
+    proc, path = split(tmp, env)
+    assert proc.returncode == 1, proc.stdout
+    assert not os.path.isfile(path), "a link failure must not leave a valid-looking epic.json"
+ok("a sub-issue link failure kills the split rather than warning past it")
+
+proc = subprocess.run([sys.executable, ROUTE, "epic", "next", "/nonexistent"],
+                      capture_output=True, text=True)
+assert proc.returncode == 2 and "runs-dir" in proc.stderr, proc.stderr
+ok("epic next requires --runs-dir instead of advertising a default it does not have")
 
 with tempfile.TemporaryDirectory() as tmp:
     epic_dir = os.path.join(tmp, "e")

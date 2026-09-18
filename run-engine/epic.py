@@ -13,15 +13,21 @@ DEPENDS_RE = re.compile(r"^\s*Depends on:\s*(.+)$", re.M | re.I)
 
 
 def parse_depends(body: str | None) -> list[int]:
-    """Issue numbers from a child's `Depends on: #12, #13` line.
+    """Issue numbers from a child's `Depends on: #12, #13` lines.
 
     Absent line, or a line naming no issues ("none"), means no dependencies —
     both are normal and neither is an error.
+
+    Every matching line is unioned rather than just the first: a body that
+    mentions "Depends on: #4" in prose above its Dependencies section would
+    otherwise silently win, and the edge that governs the base branch would be
+    decided by paragraph order.
     """
-    match = DEPENDS_RE.search(body or "")
-    if not match:
-        return []
-    return sorted({int(n) for n in re.findall(r"#(\d+)", match.group(1))})
+    return sorted({
+        int(n)
+        for match in DEPENDS_RE.finditer(body or "")
+        for n in re.findall(r"#(\d+)", match.group(1))
+    })
 
 
 def build_dag(deps: dict[int, list[int]]) -> dict:
@@ -92,7 +98,7 @@ import json  # noqa: E402  (kept beside the I/O half, the top of this file is pu
 import os  # noqa: E402
 
 from shared import (  # noqa: E402
-    die, gh_json, load_ledger, read_json, save_ledger, warn, write_json,
+    die, gh_json, load_ledger, read_json, save_ledger, write_json,
 )
 
 
@@ -137,13 +143,39 @@ def cmd_split(args) -> None:
     up rather than silently ignored.
     """
     children = [int(c) for c in args.children.split(",") if c.strip()]
+    if not children:
+        die(2, "--children names no issues: an epic with no children is not an epic")
+
+    # Already-linked children are skipped rather than re-POSTed, so a re-run after a
+    # partial failure is clean instead of 422-ing on the ones that worked.
+    linked, proc = gh_json(
+        ["api", f"repos/{args.slug}/issues/{args.parent}/sub_issues", "--jq", "[.[].number]"],
+    )
+    if proc.returncode != 0:
+        die(1, f"could not read #{args.parent}'s existing sub-issues: "
+               f"{(proc.stderr or '').strip()[:160]}")
+    already = set(linked or [])
+
     for child in children:
+        if child in already:
+            print(f"#{child}: already linked")
+            continue
+        # The sub-issues endpoint takes the issue's DATABASE id, not its number, and the
+        # field must be an integer — `-f` would send a string and 422.
+        child_id, proc = gh_json(["api", f"repos/{args.slug}/issues/{child}", "--jq", ".id"])
+        if proc.returncode != 0:
+            die(1, f"could not resolve #{child}'s issue id: "
+                   f"{(proc.stderr or '').strip()[:160]}")
         _, proc = gh_json(
             ["api", f"repos/{args.slug}/issues/{args.parent}/sub_issues",
-             "-f", f"sub_issue_id={child}"],
+             "-F", f"sub_issue_id={child_id}"],
         )
+        # Dying rather than warning: a parent with no sub-issues is indistinguishable from
+        # a non-epic to run-issue's epic check, so a warned-past link failure would run the
+        # whole BRD as one issue — the exact outcome this decomposition exists to prevent.
         if proc.returncode != 0:
-            warn(f"could not link #{child} as a sub-issue: {(proc.stderr or '').strip()[:160]}")
+            die(1, f"could not link #{child} as a sub-issue of #{args.parent}: "
+                   f"{(proc.stderr or '').strip()[:160]}")
 
     deps = {}
     for child in children:
@@ -152,8 +184,10 @@ def cmd_split(args) -> None:
         if proc.returncode != 0:
             die(1, f"could not read #{child}'s body to parse its dependencies: "
                    f"{(proc.stderr or '').strip()[:160]}")
-        deps[child] = [d for d in parse_depends(body if isinstance(body, str) else "")
-                       if d in children]
+        # Foreign edges are NOT filtered out here: build_dag rejects them, which is what
+        # turns a typo'd `Depends on: #41` (meant #14) into an exit 1 the user can fix
+        # rather than an epic that validates and orders wrongly.
+        deps[child] = parse_depends(body if isinstance(body, str) else "")
 
     try:
         dag = build_dag(deps)
@@ -177,7 +211,7 @@ def cmd_init(args) -> None:
 
     epic = load_epic(args.epic_dir)
     owner, _, repo_name = epic["slug"].partition("/")
-    runs_dir = args.runs_dir or die(2, "--runs-dir is required")
+    runs_dir = args.runs_dir
     deps = {int(k): v for k, v in epic["dag"]["deps"].items()}
 
     for child in epic["dag"]["order"]:
@@ -188,7 +222,8 @@ def cmd_init(args) -> None:
         route.main(["init", run_dir, "--issue", str(child), "--repo", args.repo]
                    + (["--mode", args.mode] if args.mode else []))
         ledger = load_ledger(run_dir)
-        # The edge is recorded on the child so phase 5 knows what to base its branch on.
+        # The edge is recorded on the child so the orchestrator can set base_branch to the
+        # dependency's branch before phase 2 cuts the worktree (worktree.py, not phase 5).
         # A child with no dependency keeps the repo's own base branch.
         if deps.get(child):
             ledger.context["depends_on"] = ",".join(str(d) for d in deps[child])
@@ -199,17 +234,17 @@ def cmd_init(args) -> None:
 
 def cmd_next(args) -> None:
     epic = load_epic(args.epic_dir)
-    runs_dir = args.runs_dir or die(2, "--runs-dir is required")
+    runs_dir = args.runs_dir
     states = {c: child_state(runs_dir, epic["slug"], c) for c in epic["children"]}
     print(json.dumps({
-        "ready": ready(epic["dag"], states, epic.get("max_stacks", 2)),
+        "ready": ready(epic["dag"], states, epic.get("max_stacks", 1)),
         "states": {str(k): v for k, v in states.items()},
     }, indent=2))
 
 
 def cmd_status(args) -> None:
     epic = load_epic(args.epic_dir)
-    runs_dir = args.runs_dir or die(2, "--runs-dir is required")
+    runs_dir = args.runs_dir
     for child in epic["dag"]["order"]:
         st = child_state(runs_dir, epic["slug"], child)
         blocked = f"  blocked_on={st['blocked_on']}" if st.get("blocked_on") else ""
@@ -226,7 +261,9 @@ def register(sub, add) -> None:
     q.add_argument("--parent", type=int, required=True)
     q.add_argument("--slug", required=True, help="owner/repo")
     q.add_argument("--children", required=True, help="comma-separated issue numbers")
-    q.add_argument("--max-stacks", type=int, default=2)
+    q.add_argument("--max-stacks", type=int, default=1,
+               help="concurrent Docker stacks; >1 needs a compose file with "
+                    "no published host ports, which `-p` does not namespace")
     q.set_defaults(func=cmd_split)
 
     q = ops.add_parser("init", help="create one run directory per child")
@@ -242,5 +279,5 @@ def register(sub, add) -> None:
     ):
         q = ops.add_parser(name, help=helptext)
         q.add_argument("epic_dir")
-        q.add_argument("--runs-dir", help="where child run dirs live (default: aiw paths runs_dir)")
+        q.add_argument("--runs-dir", required=True, help="where child run dirs live")
         q.set_defaults(func=fn)
