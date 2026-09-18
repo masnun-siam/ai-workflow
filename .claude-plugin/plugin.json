@@ -1,14 +1,23 @@
 {
   "name": "ai-workflow",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Issue-to-reviewed-PR pipeline: /run-issue, 14 agents, a deterministic routing engine, and the review/grind/QA skills around it.",
-  "author": { "name": "Blubird Interactive" },
-  "keywords": ["workflow", "github", "issue", "pull-request", "review", "ci"],
+  "author": {
+    "name": "Blubird Interactive"
+  },
+  "keywords": [
+    "workflow",
+    "github",
+    "issue",
+    "pull-request",
+    "review",
+    "ci"
+  ],
   "userConfig": {
     "slack_owner_uid": {
       "type": "string",
       "title": "Slack owner user id",
-      "description": "Slack user id of the run owner — the @-mention target on the terminal message, e.g. U01ABCDEF23. Used for nothing else."
+      "description": "Slack user id of the run owner \u2014 the @-mention target on the terminal message, e.g. U01ABCDEF23. Used for nothing else."
     },
     "slack_review_channel": {
       "type": "string",
