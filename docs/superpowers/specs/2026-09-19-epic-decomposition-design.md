@@ -196,18 +196,32 @@ default, which is what a kanban wants — but the columns are that project's Sta
 not anything the epic chooses. Nothing to configure, and nothing to promise the user about
 column names.
 
-**The filter, and its fallback.** The preferred form is `parent-issue:<owner>/<repo>#<n>`,
-which needs no extra state. The schema types `filter` as a bare `String`, so the server is
-the only authority on whether that qualifier is accepted — **unverified at time of
-writing.** The fallback is a per-epic label `epic-<n>`, applied to every child at
-decomposition, filtered as `label:epic-<n>`: less elegant, depends on nothing
-undocumented, and survives a child being re-parented.
+**The filter: `label:epic-<n>`, and why not `parent-issue:`.** Each child carries a
+per-epic label `epic-<n>`, applied at decomposition, and the board filters on it.
 
-Implementation applies the label **either way**. It costs one API call per child, it makes
-the epic visible in ordinary issue search independently of any project, and it means the
-board does not depend on a filter qualifier whose behaviour was never confirmed. The
-`parent-issue:` form is used when it is confirmed to work, with `label:` as the standing
-fallback.
+The obvious alternative, `parent-issue:<owner>/<repo>#<n>`, needs no extra state and was
+tested. The result was decisive in an unexpected direction: **the API does not validate
+filter strings at all.** Setting the filter to `parent-issue:...` succeeds and round-trips
+— and so does `totally-not-a-real-qualifier:banana`, which was the control. Both are
+accepted and echoed back unchanged.
+
+So a successful mutation carries no information about whether the filter works. Only the
+rendered Projects UI can answer that, and nothing in this pipeline can see it. Shipping a
+filter the API cannot validate means the failure mode is a board that comes up **silently
+empty** — which is indistinguishable from an epic where nothing has started, and is
+exactly the kind of quiet wrongness this pipeline's post-checks exist to eliminate.
+
+A label is verifiable: `gh issue list --label epic-<n>` returns the children, from the same
+CLI that applied it. It costs one API call per child, and it makes the epic visible in
+ordinary issue search independently of any project.
+
+**Closed projects reject views.** `createProjectV2View` on a closed project fails with
+`UNPROCESSABLE: Cannot create a view for a closed project` — encountered on the first probe
+attempt, because the only project on this account is closed. It is a normal state, not a
+bug, and takes the best-effort path: one warning line naming the project, no board, run
+continues. Note that `gh project list` **hides closed projects while still counting them**
+(`{"projects":[],"totalCount":1}`), so a project lookup that trusts the array will conclude
+there is no project at all.
 
 **Idempotent.** Read `project.views` and match by name before creating. A resumed epic must
 never create a second board — this is exactly the operation that quietly accumulates seven
