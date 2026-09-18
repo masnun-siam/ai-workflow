@@ -50,7 +50,7 @@ Everything else — the Laravel review panel, the notes-vault `dump` skill, `pr-
 
 ## Where state lives
 
-Nothing stateful lives in this repo. `route paths` resolves everything at run start:
+Nothing stateful lives in this repo. `aiw paths` resolves everything at run start:
 
 | Key | Contents |
 |---|---|
@@ -79,8 +79,12 @@ which **survives plugin upgrades** — in-flight runs are not lost when you upda
 commands/     run-issue (the orchestrator) + 4 intake commands
 agents/       11 run-* pipeline agents + ship, worklog-runner, gh-issue-factchecker
 skills/       pr-review, pr-grind, worklog, dump, 7 Laravel reviewers
-run-engine/   engine.py (pure), route.py (CLI), config.json (policy)
-bin/route     PATH shim so no markdown spells an absolute path
+run-engine/   engine.py (pure), route.py (CLI), checks.py + stack/worktree/
+              threads/pr/ci/gitnexus/project (the mechanical phases),
+              config.json (policy)
+bin/aiw       PATH shim so no markdown spells an absolute path.
+              NOT named `route`: that is the system network command, and
+              /sbin shadows plugin bins on a default macOS PATH.
 ```
 
 `run-engine/config.json` is the policy surface: station roster, bounce cap, mode

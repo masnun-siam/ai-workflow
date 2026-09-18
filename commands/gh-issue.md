@@ -3,7 +3,7 @@ description: Create a GitHub issue with codebase context
 argument-hint: "[bug | feature | task | improvement]"
 ---
 
-> **Paths.** `<...>` placeholders below are keys from `route paths` (run it; `route` is
+> **Paths.** `<...>` placeholders below are keys from `aiw paths` (run it; `aiw` is
 > on `PATH` via the plugin's `bin/`). Substitute the printed value; never guess a path.
 I have a ${1:-bug / feature request / task / improvement} to log as a GitHub issue.
 

@@ -6,7 +6,7 @@ model: opus
 effort: high
 ---
 
-> **Paths.** `<...>` placeholders below are keys from `route paths` (run it; `route` is
+> **Paths.** `<...>` placeholders below are keys from `aiw paths` (run it; `aiw` is
 > on `PATH` via the plugin's `bin/`). Substitute the printed value; never guess a path.
 
 You are the review phase of `/run-issue`, dispatched with a clean context — you were not
@@ -57,7 +57,7 @@ reads before merging.
 ## Envelope — your single return value
 
 Return **one JSON object and nothing else**. The orchestrator writes it verbatim to
-`<run_dir>/50-review.json` and routes on it with `route.py route`; a malformed envelope is
+`<run_dir>/50-review.json` and routes on it with `aiw route`; a malformed envelope is
 rejected (exit 5) and you are re-dispatched, so get the shape right the first time.
 
 Your prose report is not lost — it goes **inside** the envelope, in the field named below.

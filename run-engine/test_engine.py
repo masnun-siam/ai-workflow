@@ -238,7 +238,7 @@ ok("review policy: ordered, deduplicated, minimum, generalist never selected")
 # gate still runs. Failing here would re-dispatch a station that did its work correctly.
 
 sys.path.insert(0, HERE)
-from route import extract_json_object  # noqa: E402
+from shared import extract_json_object  # noqa: E402
 
 body = '{"issue": 1, "station": "dev", "status": "passed"}'
 for label, raw in [
@@ -253,6 +253,97 @@ for label, raw in [
 assert extract_json_object("no json here at all") is None
 assert extract_json_object("{not: valid}") is None
 ok("envelope reader recovers a fenced/prose-wrapped object, rejects genuine garbage")
+
+
+
+# --- 9. station post-checks -------------------------------------------------
+# No stubbing and no network: every case below is refuted by something local — a file
+# that is not on disk, a branch with no upstream.
+
+def post_check_repo(tmp):
+    """A git repo + an initialised run dir, baton parked on sdet."""
+    repo, run_dir = os.path.join(tmp, "repo"), os.path.join(tmp, "run")
+    os.makedirs(os.path.join(repo, "tests"))
+    def git(*a):
+        subprocess.run(["git", *a], cwd=repo, check=True, capture_output=True)
+    git("init", "-q", "-b", "base")
+    git("config", "user.email", "a@b"); git("config", "user.name", "a")
+    open(os.path.join(repo, "tests", "a.test.js"), "w").write("x\n")
+    git("add", "-A"); git("commit", "-qm", "init")
+    subprocess.run([sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--repo", repo],
+                   check=True, capture_output=True)
+    subprocess.run([sys.executable, ROUTE, "set", run_dir, "test_root=tests"],
+                   check=True, capture_output=True)
+    return repo, run_dir
+
+
+def route_it(run_dir, repo, name, env):
+    json.dump(env, open(os.path.join(run_dir, name), "w"))
+    return subprocess.run([sys.executable, ROUTE, "route", run_dir, name, "--repo", repo],
+                          capture_output=True, text=True)
+
+
+SDET_ENV = {
+    "issue": 41, "station": "sdet", "status": "passed", "attempt": 1,
+    "summary": "6 RED tests authored",
+    "evidence": {"commands": [{"cmd": "pytest", "exit": 1, "excerpt": "6 failed"}]},
+    "handoff": {"test_files": ["tests/does-not-exist.js"], "red_confirmed": True},
+}
+
+with tempfile.TemporaryDirectory() as tmp:
+    repo, run_dir = post_check_repo(tmp)
+
+    proc = route_it(run_dir, repo, "20-tests.json", SDET_ENV)
+    assert proc.returncode == 7, f"expected exit 7, got {proc.returncode}: {proc.stderr}"
+    assert proc.stdout.strip() == "bounce(sdet)", proc.stdout
+    assert "does not exist on disk" in proc.stderr, proc.stderr
+    led = json.load(open(os.path.join(run_dir, "run.json")))
+    assert led["bounceCounts"] == {"sdet->sdet": 1}, led["bounceCounts"]
+    ok("a passed envelope refuted by its own post-check self-bounces (exit 7)")
+
+    # cap is 1, so the second failure ADVANCES and is reported at the final gate rather
+    # than halting — the same doctrine as every other spent budget in this pipeline.
+    proc = route_it(run_dir, repo, "20-tests.json", SDET_ENV)
+    assert proc.returncode == 0, f"expected advance, got {proc.returncode}: {proc.stderr}"
+    assert proc.stdout.strip() == "advance(dev)", proc.stdout
+    led = json.load(open(os.path.join(run_dir, "run.json")))
+    assert led["bounceCounts"] == {"sdet->sdet": 1}, "a spent check budget must not keep counting"
+    failures = led["context"]["check_failures"]
+    assert len(failures) == 1 and failures[0]["station"] == "sdet", failures
+    ok("check_bounce_cap exhausted -> advance with check_failures recorded, never a halt")
+
+    # and the self-bounce never spent a REAL budget: dev->sdet is untouched, so a genuine
+    # dispute later still has its full allowance.
+    assert "dev->sdet" not in led["bounceCounts"]
+    ok("a self-bounce cannot spend a real (from, to) bounce budget")
+
+with tempfile.TemporaryDirectory() as tmp:
+    repo, run_dir = post_check_repo(tmp)
+    subprocess.run([sys.executable, ROUTE, "set", run_dir, "pr_number=88"],
+                   check=True, capture_output=True)
+    # fixer's branch has no upstream, so the push check cannot run at all. fixer is in
+    # FATAL_WHEN_UNRUNNABLE: a check that cannot run IS the finding there.
+    fix = {"issue": 41, "station": "fixer", "status": "passed", "attempt": 1,
+           "summary": "3 findings applied",
+           "evidence": {"commands": [{"cmd": "pytest", "exit": 0, "excerpt": "ok"}]},
+           "handoff": {"commits": [], "report": "x"}}
+    proc = route_it(run_dir, repo, "60-fix.json", fix)
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("escalate:"), proc.stdout
+    assert "post-check could not run" in proc.stdout, proc.stdout
+    ok("an unrunnable post-check escalates for fixer/reviewer, where it is the finding")
+
+with tempfile.TemporaryDirectory() as tmp:
+    repo, run_dir = post_check_repo(tmp)
+    # researcher has no post-check, so it routes exactly as it always did.
+    res = {"issue": 41, "station": "researcher", "status": "passed", "attempt": 1,
+           "summary": "brief written", "handoff": {"brief": "..."}}
+    proc = route_it(run_dir, repo, "00-readiness.json", res)
+    assert proc.returncode == 0 and proc.stdout.strip() == "advance(planner)", \
+        f"{proc.returncode}: {proc.stdout}{proc.stderr}"
+    led = json.load(open(os.path.join(run_dir, "run.json")))
+    assert "check_failures" not in led["context"] and "check_notes" not in led["context"]
+    ok("a station with no post-check routes exactly as it does today")
 
 
 print(f"\n{passed} checks passed")

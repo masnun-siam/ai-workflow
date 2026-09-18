@@ -1,20 +1,42 @@
 #!/usr/bin/env python3
-"""Deterministic routing CLI for /run-issue — the I/O half of the engine.
+"""`aiw` — the deterministic CLI behind /run-issue; the I/O half of the engine.
+
+Invoked as `aiw` (plugin bin/). NOT as `route`: that is the macOS/BSD/net-tools network
+command, and on a default macOS PATH /sbin shadows the plugin bin, so `route paths` ran
+/sbin/route, printed a usage error to stderr, and exited 0 — an unresolved path that looked
+like a success.
 
 Read the run ledger + a station's just-emitted envelope, validate it against the
 handoff contract, run the guards, decide the next action, persist, and print the
 action. The orchestrator acts on what this prints; it never eyeballs the routing.
 
 Usage:
-  route.py init <runDir> --issue N [--mode full|lean] [--repo PATH]
-  route.py route <runDir> <artifact.json> [--repo PATH]
-  route.py classify <runDir> [--loc N] [--labels a,b] [--depth N] < changed-paths
-  route.py resolve-review <runDir>
-  route.py set <runDir> key=value [key=value ...]
-  route.py paths            # print resolved plugin/data paths as JSON
+  aiw init <runDir> --issue N [--mode full|lean] [--repo PATH]
+  aiw route <runDir> <artifact.json> [--repo PATH]
+  aiw classify <runDir> [--loc N] [--labels a,b] [--depth N] < changed-paths
+  aiw resolve-review <runDir>
+  aiw set <runDir> key=value [key=value ...]
+  aiw paths            # print resolved plugin/data paths as JSON
 
-Exit codes: 0 ok · 2 usage · 3 unreadable artifact · 4 artifact is not a JSON object
-            · 5 artifact fails the handoff contract · 6 test-root ownership violation
+Mechanical subcommands (the phases that used to be prose in commands/run-issue.md):
+  aiw stack up|down|rebuild|status <runDir>
+  aiw worktree create <runDir> --title "<issue title>"
+  aiw threads list|resolve <pr-ref|node-id...>
+  aiw pr open <runDir> --body-file <file> [--draft]
+  aiw ci status <pr-ref> [--watch]
+  aiw gitnexus sync|index|clean <repo> [--run-dir <runDir>]
+  aiw project-status <owner/repo> <issue> "<status>"
+  aiw precheck <runDir> <station>      # sdet | reviewer | fixer
+
+Exit codes for `route`: 0 ok · 2 usage · 3 unreadable artifact · 4 artifact is not a
+JSON object · 5 artifact fails the handoff contract · 6 test-root ownership violation · 7 a station
+post-check refuted a `passed` envelope and the bounce has been routed.
+THAT vocabulary is the only one that means "Teardown and report".
+
+The mechanical subcommands use a different, smaller one: 0 ok · 1 the operation
+failed · 2 usage. `project-status`, `gitnexus` and `stack down` are best-effort and
+NEVER exit nonzero — the orchestrator's standing reflex is that nonzero stops a run,
+and a board with the wrong column name must not be able to trigger it.
 """
 
 from __future__ import annotations
@@ -28,6 +50,22 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from engine import Ledger, RouteAction, Router, classify, resolve_review_panel, validate_envelope  # noqa: E402
+import checks as checks_mod  # noqa: E402
+import ci  # noqa: E402
+import gitnexus  # noqa: E402
+import pr  # noqa: E402
+import project  # noqa: E402
+import stack  # noqa: E402
+import threads  # noqa: E402
+import worktree  # noqa: E402
+from shared import (  # noqa: E402
+    die,
+    ledger_path,
+    load_ledger,
+    read_json,
+    save_ledger,
+    write_json,
+)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GLOBAL_CONFIG = os.path.join(HERE, "config.json")
@@ -37,70 +75,6 @@ PLUGIN_ROOT = os.path.dirname(HERE)
 DATA_DIR = os.environ.get("CLAUDE_PLUGIN_DATA") or os.path.expanduser(
     "~/.claude/plugins/data/ai-workflow"
 )
-
-
-def die(code: int, message: str):
-    sys.stderr.write(message.rstrip() + "\n")
-    sys.exit(code)
-
-
-def read_json(path: str, missing_code: int = 3):
-    try:
-        with open(path, encoding="utf-8") as fh:
-            raw = fh.read()
-    except FileNotFoundError:
-        die(missing_code, f"cannot read: {path}")
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        pass
-    # Envelopes are written by an LLM told to return "one JSON object and nothing else",
-    # and sometimes it isn't: a ```json fence, or a sentence before the brace. Recover the
-    # object rather than failing the run over packaging — the CONTRACT is still enforced
-    # by validate_envelope, which is the part that matters. Being strict here would only
-    # convert a formatting slip into a re-dispatch, and re-dispatching a station that did
-    # its work correctly is the expensive kind of strictness.
-    obj = extract_json_object(raw)
-    if obj is None:
-        die(4, f"no JSON object found in: {path}")
-    return obj
-
-
-def extract_json_object(raw: str):
-    """Return the first balanced top-level {...} that parses, or None."""
-    start = raw.find("{")
-    while start != -1:
-        depth, in_str, esc = 0, False, False
-        for i in range(start, len(raw)):
-            ch = raw[i]
-            if in_str:
-                if esc:
-                    esc = False
-                elif ch == "\\":
-                    esc = True
-                elif ch == '"':
-                    in_str = False
-                continue
-            if ch == '"':
-                in_str = True
-            elif ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-                if depth == 0:
-                    try:
-                        return json.loads(raw[start : i + 1])
-                    except json.JSONDecodeError:
-                        break
-        start = raw.find("{", start + 1)
-    return None
-
-
-def write_json(path: str, data) -> None:
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=2, ensure_ascii=False)
-        fh.write("\n")
 
 
 def deep_merge(base: dict, overlay: dict) -> dict:
@@ -125,18 +99,6 @@ def load_config(repo: str | None) -> dict:
         if os.path.isfile(overlay_path):
             config = deep_merge(config, read_json(overlay_path))
     return config
-
-
-def ledger_path(run_dir: str) -> str:
-    return os.path.join(run_dir, "run.json")
-
-
-def load_ledger(run_dir: str) -> Ledger:
-    return Ledger.from_dict(read_json(ledger_path(run_dir)))
-
-
-def save_ledger(run_dir: str, ledger: Ledger) -> None:
-    write_json(ledger_path(run_dir), ledger.to_dict())
 
 
 # --------------------------------------------------------------------------- guards
@@ -258,11 +220,82 @@ def cmd_route(args) -> None:
             print(action)
             sys.exit(6)
 
+    # Post-checks. The station said what happened; this asks something with no
+    # incentive to pass. It runs HERE, inside `route route`, so the orchestrator's
+    # call sites do not change and cannot skip it.
+    if status == "passed":
+        result = checks_mod.run_post_check(station, ledger, envelope, repo, config)
+        if result is not None and result.unrunnable:
+            if station in checks_mod.FATAL_WHEN_UNRUNNABLE:
+                # For these two the check failing to run IS the finding: a fixer whose
+                # threads cannot be read is exactly the state the check exists for.
+                action = RouteAction(
+                    RouteAction.ESCALATE,
+                    reason=f"{station} post-check could not run: {result.reason}",
+                )
+                apply_action(ledger, action, station)
+                save_ledger(args.run_dir, ledger)
+                print(action)
+                sys.exit(0)
+            note = f"{station}: {result.reason}"
+            ledger.context.setdefault("check_notes", []).append(note)
+            sys.stderr.write(f"note: {station} post-check could not run: {result.reason}\n")
+        elif result is not None and not result.ok:
+            cap = config.get("check_bounce_cap", 1)
+            # Keyed "<station>-><station>", which no real bounce can produce, so the
+            # budget can never merge with a genuine one. record_bounce sets
+            # current_index to the target — the same station — so it re-dispatches in
+            # place. No new ledger field, no Router change, no new status.
+            if ledger.bounce_count(station, station) + 1 > cap:
+                # Cap exhausted ADVANCES rather than halting: existing doctrine is that a
+                # spent budget opens a draft PR and reports at the final gate rather than
+                # stopping mid-flow. This adds no fourth human gate.
+                ledger.context.setdefault("check_failures", []).append(
+                    {"station": station, "reason": result.reason}
+                )
+                sys.stderr.write(
+                    f"post-check failed again for {station} (cap {cap} spent): {result.reason}"
+                    " — advancing; this is reported at the final gate.\n"
+                )
+            else:
+                envelope = {
+                    **envelope,
+                    "status": "bounce",
+                    "summary": f"post-check failed: {result.reason}",
+                    "bounce": {"to": station, "reason": result.reason},
+                }
+                action = router.next(ledger, envelope)
+                apply_action(ledger, action, station)
+                save_ledger(args.run_dir, ledger)
+                sys.stderr.write(f"{station} post-check failed: {result.reason}\n")
+                print(action)
+                sys.exit(7)
+
     action = router.next(ledger, envelope)
 
     apply_action(ledger, action, station)
     save_ledger(args.run_dir, ledger)
     print(action)
+
+
+def cmd_precheck(args) -> None:
+    """The pre-guards. Unlike the post-checks these cannot live inside `route route` —
+    the engine only ever sees a station AFTER it ran. So the orchestrator calls this
+    before dispatching, and the station name is the argument."""
+    ledger = load_ledger(args.run_dir)
+    repo = args.repo or ledger.context.get("repo") or os.getcwd()
+    config = load_config(repo)
+    fn = checks_mod.PRE_CHECKS.get(args.station)
+    if fn is None:
+        print(f"no pre-guard for {args.station}")
+        return
+    result = fn(ledger, None, repo, config)
+    if result.unrunnable:
+        print(f"unrunnable: {result.reason}")
+        return
+    if not result.ok:
+        die(1, f"pre-guard failed for {args.station}: {result.reason}")
+    print(f"{args.station}: ok")
 
 
 def cmd_classify(args) -> None:
@@ -337,7 +370,7 @@ def cmd_paths(args):
 
 
 def main(argv=None) -> None:
-    parser = argparse.ArgumentParser(prog="route.py", description=__doc__)
+    parser = argparse.ArgumentParser(prog="aiw", description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     def add(name, help_text):
@@ -355,6 +388,10 @@ def main(argv=None) -> None:
     p_route.add_argument("artifact", help="artifact filename inside run_dir")
     p_route.set_defaults(func=cmd_route)
 
+    p_pre = add("precheck", "run a station's pre-guard before dispatching it")
+    p_pre.add_argument("station")
+    p_pre.set_defaults(func=cmd_precheck)
+
     p_cls = add("classify", "score the diff (changed paths on stdin)")
     p_cls.add_argument("--loc", type=int, default=0)
     p_cls.add_argument("--labels", default="")
@@ -370,6 +407,11 @@ def main(argv=None) -> None:
 
     p_paths = sub.add_parser("paths", help="print resolved plugin/data paths as JSON")
     p_paths.set_defaults(func=cmd_paths)
+
+    # The mechanical phases. Each module owns its own argparse wiring so adding one
+    # is a file plus a line, not a surgery on this function.
+    for module in (stack, worktree, threads, pr, ci, gitnexus, project):
+        module.register(sub, add)
 
     args = parser.parse_args(argv)
     try:

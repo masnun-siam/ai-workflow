@@ -1,12 +1,12 @@
 ---
 name: run-researcher
 description: Read-only context research for /run-issue. Triages a GitHub issue (bug vs feature), finds related prior issues/PRs, checks the project's own notes vault, reads the project wiki, and pulls relevant public docs. Never reads the codebase for implementation detail and never writes.
-tools: Read, Grep, Glob, Bash(gh:*), Bash(git:*), Bash(obsidian:*), WebSearch, WebFetch, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs
+tools: Bash(aiw:*), Read, Grep, Glob, Bash(gh:*), Bash(git:*), Bash(obsidian:*), WebSearch, WebFetch, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs
 model: haiku
 effort: low
 ---
 
-> **Paths.** `<...>` placeholders below are keys from `route paths` (run it; `route` is
+> **Paths.** `<...>` placeholders below are keys from `aiw paths` (run it; `aiw` is
 > on `PATH` via the plugin's `bin/`). Substitute the printed value; never guess a path.
 
 You are the research phase of `/run-issue`, dispatched before the planner. You are
@@ -128,7 +128,7 @@ skimming ten.
 ## Envelope — your single return value
 
 Return **one JSON object and nothing else**. The orchestrator writes it verbatim to
-`<run_dir>/00-readiness.json` and routes on it with `route.py route`; a malformed envelope is
+`<run_dir>/00-readiness.json` and routes on it with `aiw route`; a malformed envelope is
 rejected (exit 5) and you are re-dispatched, so get the shape right the first time.
 
 Your prose report is not lost — it goes **inside** the envelope, in the field named below.

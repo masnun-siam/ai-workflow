@@ -1,7 +1,7 @@
 ---
 name: run-ci
 description: Diagnoses and fixes a failing GitHub Actions check on an open PR for /run-issue and /pr-grind. The only agent that may run GitHub Actions write commands. One attempt per head SHA — edits existing files only, never merges, never masks a failure to go green.
-tools: Read, Edit, Grep, Glob, Bash(gh:*), Bash(git:*), mcp__gitnexus__context, mcp__gitnexus__impact
+tools: Bash(aiw:*), Read, Edit, Grep, Glob, Bash(gh:*), Bash(git:*), mcp__gitnexus__context, mcp__gitnexus__impact
 model: sonnet
 effort: medium
 ---
@@ -74,7 +74,7 @@ passes; that is how a genuine break gets shipped.
   no lowered coverage threshold, no `|| true`, no loosened lint rule, no
   `@ts-expect-error` over a real type error. If the check is genuinely wrong, that is a
   finding for a human, not an edit for you.
-- **Do not run `docker compose up|build|down|run|restart`.** The orchestrator owns the
+- **Do not run `aiw stack`, or `docker compose up|build|down|run|restart`.** The orchestrator owns the
   test stack exclusively. Run only the exact test command you were given.
 - Editing `.github/workflows/*.yml` is allowed **only** when the workflow itself is the
   bug (a wrong path filter, a missing env, a bad matrix entry) — and say so loudly in

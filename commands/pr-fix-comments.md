@@ -1,7 +1,7 @@
 ---
 description: Fix issues raised in a GitHub PR's review comments, confirming each action
 argument-hint: <PR url or owner/repo#123>
-allowed-tools: Bash(gh:*), Bash(git:*), Read, Edit, Grep, Glob, AskUserQuestion
+allowed-tools: Bash(aiw:*), Bash(gh:*), Bash(git:*), Read, Edit, Grep, Glob, AskUserQuestion
 ---
 
 Given the PR reference `$ARGUMENTS`, work through every review comment and
@@ -61,13 +61,16 @@ handled elsewhere, disagree because X, etc.) — no SHA, never a bare "skipped."
 After replying to an inline review comment — regardless of whether it was
 fixed, or replied-only with a reason for not fixing — resolve its review
 thread (top-level PR comments have no thread to resolve, skip those). This
-requires the thread's GraphQL node ID, not the REST comment id:
+requires the thread's GraphQL node ID, not the REST comment id, so look it up
+by the comment you just replied to:
 
-1. Get the thread ID:
-   `gh api graphql -f query='query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100){nodes{id isResolved comments(first:1){nodes{databaseId}}}}}}}' -f owner={owner} -f repo={repo} -F number={number}`
-   Match on `comments.nodes[0].databaseId` == the comment id you just replied to.
-2. Resolve it:
-   `gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' -f id={threadId}`
+```bash
+aiw threads list <PR> --for-comment <comment_id>   # -> [{node_id, ...}]
+aiw threads resolve <node_id>
+```
+
+`resolve` warns and continues on a thread it cannot close, so one failure
+never stops the pass.
 
 Do this automatically as part of step 6 for every issue that got a reply — no
 separate confirmation needed, since resolving follows directly from an action
