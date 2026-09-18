@@ -2,7 +2,7 @@
 name: pr-grind
 description: Automate the review-fix-retrigger loop on a PR that's stuck in CHANGES_REQUESTED — post the Slack thread trigger, wait for the reviewer bot's round, split findings into fix-vs-rebut, dispatch run-fixer, verify CI, re-trigger, repeat until approved or a rail stops it. Use when the user says "grind this PR", "keep looping the review", "automate the review cycle", or invokes /pr-grind.
 argument-hint: <slack thread url>   # run-issue phase 10 passes the url run-grinder just created
-allowed-tools: Bash(gh:*), Bash(git:*), Bash(slackcli:*), Read, Write, Agent, Skill, Monitor, ScheduleWakeup, AskUserQuestion
+allowed-tools: Bash(route:*), Bash(gh:*), Bash(git:*), Bash(bash:*), Bash(slackcli:*), Read, Write, Agent, Skill, Monitor, ScheduleWakeup, AskUserQuestion
 ---
 
 > **Paths.** `<...>` placeholders below are keys from `route paths` (run it; `route` is
@@ -150,9 +150,10 @@ not fix this round**:
 1. **Round cap** — 10 rounds recorded in the state file already → stop, post
    to Slack that the cap was hit with a link to the state file, then go to
    Step 8's paused stop.
-2. **CI red** — `gh pr checks` shows a failed check at current head (not
-   pending, not the check this round's fix would address). This rail
-   **escalates once before it stops.**
+2. **CI red** — `route ci status <pr> --watch` reports `state: red` at the
+   current head (not pending, not the check this round's fix would address).
+   It returns the failing jobs' logs with it; deciding flake-vs-real is
+   `run-ci`'s job, not yours. This rail **escalates once before it stops.**
 
    Look for a `ci-attempt: <sha>` line in the state file matching the current
    head SHA.
@@ -162,8 +163,8 @@ not fix this round**:
      repo root, and the approved test root if this run has one. Record
      `ci-attempt: <sha> — <outcome>` in the state file **before** acting on
      the result, so a crash mid-round can never buy a second attempt.
-     - `outcome: fixed` or `flake-rerun` → re-poll `gh pr checks` until no
-       bucket is pending. Green → continue this round normally. Still red →
+     - `outcome: fixed` or `flake-rerun` → re-poll `route ci status <pr>
+       --watch`. Green → continue this round normally. Still red →
        stop as below.
      - `outcome: cannot-fix`, or a `Needs human confirmation` section →
        stop as below, and include `run-ci`'s root cause in the Slack post.
@@ -224,7 +225,7 @@ The orchestrator (this skill), not `run-fixer`, decides fix-vs-rebut, because
 `run-fixer` auto-applies every actionable finding and cannot decline one.
 
 **Classifier-blocked GitHub writes.** In some environments the orchestrator's
-`gh issue comment` and the GraphQL `resolveReviewThread` mutation are blocked
+`gh issue comment` and `route threads resolve` are blocked
 by the harness permission classifier, while
 `POST /pulls/{n}/comments/{id}/replies` succeeds. `run-fixer` (a subagent) runs
 in a different permission context and **can** resolve threads. Therefore: let
@@ -241,9 +242,8 @@ For each finding not already resolved by step 4:
   would break a passing test, the premise is factually incorrect against the
   code). Reply directly, same calls `/pr-fix-comments` step 7 uses:
   - Inline: `gh api repos/{o}/{r}/pulls/{n}/comments/{id}/replies -f body="..."`
-  - Then resolve: fetch the thread id via the `reviewThreads` GraphQL query
-    matched on `comments.nodes[0].databaseId`, then the
-    `resolveReviewThread` mutation.
+  - Then resolve: `route threads list <pr> --for-comment <id>` for the node
+    id, then `route threads resolve <node_id>`.
   Do not touch code for a rebutted finding. When genuinely unsure whether a
   finding is wrong, it is not a rebuttal — put it on the fix-list.
 - **PR-body edit** — a should-fix whose remedy is "update the PR description /
@@ -258,9 +258,9 @@ the PR branch may already be checked out in a sibling worktree (e.g. from
 branch in the main repo (it fails if a worktree holds it).
 
 **Give it a test command that still works — and raise the stack if the tests
-need one.** When this PR came from `/run-issue`, its ledger is at
-`<runs_dir>/<owner>-<repo>-issue-<n>/run.json`; read
-`context.compose_prefix`, `context.test_cmd` and `context.test_cmd_host` from it.
+need one.** When this PR came from `/run-issue`, its run directory is
+`<runs_dir>/<owner>-<repo>-issue-<n>/`, and its ledger still holds everything
+about the stack that run used.
 
 `/run-issue`'s Teardown removed the stack before this loop started, so
 `context.test_cmd` (a `docker compose exec`) cannot work as-is. **And
@@ -270,15 +270,22 @@ name "postgres"` — the dependency was the *stack*, not the runner invocation.
 This has been observed: a fix pass reported "Tests — NOT verified … no docker
 stack is running … Per policy I did not start a stack", and pushed anyway.
 
-So: if `compose_prefix` is set, **bring the stack up yourself** for the duration
-of the grind (`<compose_prefix> up -d --wait`) and hand `run-fixer` the original
-`context.test_cmd`, telling it explicitly that the stack is up and it may run
-that command. `/run-issue`'s orchestrator-exclusivity rule covers concurrency
-*during a run*; after Teardown there is no run and no stack to collide with, so
-it does not apply here. Drop the stack again when the loop ends or pauses.
+So: if that run directory exists, **bring the stack up yourself** for the
+duration of the grind and hand `run-fixer` the `test_cmd` that comes back:
 
-If there is no `compose_prefix` (no Docker, or a PR this skill was pointed at
-directly), use `test_cmd_host` or detect the host runner as usual.
+```bash
+route stack up "<runs_dir>/<owner>-<repo>-issue-<n>"    # re-raises the same runissue-<n> stack
+route stack down "<runs_dir>/<owner>-<repo>-issue-<n>"  # when the loop ends or pauses
+```
+
+`up` re-records `test_cmd` in that ledger; read it back and tell `run-fixer`
+explicitly that the stack is up and it may run that command. `/run-issue`'s
+orchestrator-exclusivity rule covers concurrency *during a run*; after Teardown
+there is no run and no stack to collide with, so it does not apply here.
+
+`stack=none` comes back when there is no Docker — `test_cmd` is then already the
+host runner and there is nothing to raise. For a PR this skill was pointed at
+directly there is no run directory at all: detect the host runner as usual.
 
 Dispatch `run-fixer` once with the full fix-list (comment ids, file, line,
 body), that test command, and an explicit scope instruction: **only
@@ -296,9 +303,8 @@ history to split them. Record the single SHA against all fingerprints.
 
 ## Step 6 — Verify the push
 
-If `run-fixer` committed and pushed anything, poll `gh pr checks` until no
-bucket is pending (short backoff, not a Monitor — this is a bounded wait
-within the current turn). Red → this is rail 2 (step 3): apply it in full,
+If `run-fixer` committed and pushed anything, `route ci status <pr> --watch`
+(a bounded wait within the current turn, not a Monitor). Red → this is rail 2 (step 3): apply it in full,
 including the single `run-ci` escalation, against the **new** head SHA that
 `run-fixer` just pushed. That SHA has no `ci-attempt` line yet, so it gets its
 own one attempt — the budget is per head SHA, not per run. Do not re-trigger
@@ -337,32 +343,25 @@ fix/rebut/repeat disposition, commit SHAs, CI result.
    errors); and piping a review body containing raw control characters
    (tabs/newlines inside a fenced code block) through a second `echo | jq`
    pass makes that second jq invocation fail with "Invalid string: control
-   characters ... must be escaped". Avoid both by keeping the poll to
-   scalar fields only — never echo free-text `body` through a second jq
-   parse — and by redirecting stderr to stdout so a broken script is
-   visible as a notification instead of silent:
+   characters ... must be escaped".
+
+   Both are handled by the poll script, which exists as a file precisely so
+   it can be run once before being trusted:
+
    ```bash
-   export LAST="<ISO8601 of the last round already recorded in the state file>"
-   while true; do
-     out=$(gh api repos/{o}/{r}/pulls/{n}/reviews --paginate --jq '
-       .[] | select(.user.login=="{reviewer}") | select(.submitted_at > $ENV.LAST) |
-       # if reviewer is still UNRESOLVED, use select(.user.login!="{author}") instead
-       "\(.submitted_at) id=\(.id) state=\(.state)"
-     ' 2>&1)
-     if [ -n "$out" ]; then
-       echo "$out"
-       newest=$(echo "$out" | awk "{print \$1}" | sort | tail -1)
-       [ -n "$newest" ] && export LAST="$newest"
-     fi
-     sleep 60
-   done
+   bash <plugin_root>/skills/pr-grind/scripts/poll-reviews.sh \
+     <owner> <repo> <number> <login> "<last-ISO8601>" [reviewer|not-author]
    ```
-   This only emits `submitted_at`/`id`/`state` — enough to know a new round
+
+   Pass `not-author` with the PR author's login while the reviewer is still
+   `UNRESOLVED` (Step 0.4) — it filters on `user.login != <author>` instead.
+
+   It only emits `submitted_at`/`id`/`state` — enough to know a new round
    landed and go re-read it properly in step 1, without ever re-parsing
-   free-text through a second jq pass. After arming, do one manual
-   `gh api ... --jq '...'` dry-run of the exact same filter before trusting
-   the loop, so a syntax mistake is caught immediately instead of after a
-   silent 25-minute fallback gap.
+   free-text through a second jq pass. **Run it once in the foreground before
+   arming the Monitor** (ctrl-c after the first tick), so a bad login or a
+   mistyped cutoff surfaces immediately instead of after a silent 25-minute
+   fallback gap.
 3. State in text (before calling ScheduleWakeup, per its contract) that a
    Monitor is armed and this is a fallback heartbeat.
 4. `ScheduleWakeup({delaySeconds: 1500, reason: "...", prompt: "/pr-grind $ARGUMENTS", noop: <true if this tick did nothing, false otherwise>})`.

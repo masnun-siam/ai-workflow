@@ -46,7 +46,8 @@ under any justification.
    — grep for a sibling test file first and match it rather than inventing a new style.
 2. **Running tests.** You are given `test_cmd`. Run exactly that string, unchanged, with
    a wall-clock timeout (Bash tool `timeout: 600000`). You must never run
-   `docker compose up`, `build`, `down`, `run`, `restart`, or any other Docker command —
+   `route stack`, `docker compose up`, `build`, `down`, `run`, `restart`, or any other
+   Docker command —
    the orchestrator owns the stack; a second stack is what pegged the host on a previous
    run. If `test_cmd` fails because the container is unhealthy or missing, stop and
    report that — do not start one. If the run hits the timeout, stop and report; do not

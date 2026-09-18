@@ -74,7 +74,7 @@ passes; that is how a genuine break gets shipped.
   no lowered coverage threshold, no `|| true`, no loosened lint rule, no
   `@ts-expect-error` over a real type error. If the check is genuinely wrong, that is a
   finding for a human, not an edit for you.
-- **Do not run `docker compose up|build|down|run|restart`.** The orchestrator owns the
+- **Do not run `route stack`, or `docker compose up|build|down|run|restart`.** The orchestrator owns the
   test stack exclusively. Run only the exact test command you were given.
 - Editing `.github/workflows/*.yml` is allowed **only** when the workflow itself is the
   bug (a wrong path filter, a missing env, a bad matrix entry) — and say so loudly in

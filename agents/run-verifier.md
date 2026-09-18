@@ -42,7 +42,7 @@ changed files actually affect, when the criteria don't name them.
 
 ## Hard constraints
 
-- **Never run `docker compose up|build|down|run|restart`.** The orchestrator owns the
+- **Never run `route stack`, or `docker compose up|build|down|run|restart`.** The orchestrator owns the
   test stack exclusively and it is already up when you are dispatched. This rule exists
   because a prior run had three phases each bringing up their own uncapped stack and
   pegged the host. Run only what `qa-only` needs to drive a browser.

@@ -1,7 +1,7 @@
 ---
 name: run-fixer
 description: Applies PR review findings for /run-issue, unattended (auto-confirmed, unlike interactive /pr-fix-comments). Edits existing files only — cannot create new ones.
-tools: Read, Edit, Grep, Glob, Bash(gh:*), Bash(git:*), mcp__gitnexus__context, mcp__gitnexus__impact
+tools: Read, Edit, Grep, Glob, Bash(route:*), Bash(gh:*), Bash(git:*), mcp__gitnexus__context, mcp__gitnexus__impact
 model: sonnet
 effort: low
 ---
@@ -58,15 +58,15 @@ outside a "fix review comments" pass and belongs to gate 2's judgment, not yours
      test-root fix" in your report (§ Report) instead of silently dropping it.
 4. **Running tests.** You are given `test_cmd` — the exact string the caller resolved. Run exactly
    that string, unchanged, with a wall-clock timeout (Bash tool `timeout: 600000`), once
-   after all fixes are applied — not per fix. You must never run `docker compose up`,
+   after all fixes are applied — not per fix. You must never run `route stack`, `docker compose up`,
    `build`, `down`, `run`, `restart`, or any other Docker command — the orchestrator owns
    the stack; a second stack is what pegged the host on a previous run. If it fails,
    bisect by reverting the most likely fix rather than re-running the suite per fix; note
    the reverted fix as skipped-with-reason instead of leaving the tree broken. If
    `test_cmd` fails because the container is unhealthy or missing, stop and report that —
    do not start one.
-5. Commit per issue, reply on the thread with the commit SHA, resolve the thread —
-   exactly as `/pr-fix-comments` steps 6–7.
+5. Commit per issue, reply on the thread with the commit SHA, resolve the thread with
+   `route threads resolve <node_id>` — exactly as `/pr-fix-comments` steps 6–7.
 6. One pass only. Do not loop back over the same comment twice hunting for a better fix.
 7. After all comments are handled, push once.
 
@@ -91,9 +91,10 @@ is a finding no human ever sees.
 
 List every finding you skipped because it lives in the test root in
 `handoff.needs_test_root_fix`: file, line, a one-line summary of the requested fix, the
-thread URL, and the thread's GraphQL node ID (fetch it alongside the comment, e.g. via
-the `reviewThreads` query — the orchestrator dispatches `run-sdet` against these directly
-and needs the ID to resolve the thread afterward).
+thread URL, and the thread's GraphQL node ID. Get the IDs with `route threads list <PR>`
+— one call returns every thread with its `node_id` and the `comment_id` to match it
+against. The orchestrator dispatches `run-sdet` against these directly and needs the ID
+to resolve the thread afterward.
 
 ## Envelope — your single return value
 
