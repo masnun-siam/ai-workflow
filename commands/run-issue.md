@@ -987,13 +987,21 @@ once, exactly as phase 6 spawns the specialist panel in one message.
    repeat. Children desynchronize immediately and that is correct — child 3 can be in
    review while child 5 writes tests. Nothing waits for a wave.
 
+   **The orchestrator runs each child's mechanical phases itself**, at the same points in
+   that child's own progression as the single-issue flow: the phase 2 worktree, phase 2.5
+   `aiw stack up`, the phase 4/7/8 `aiw stack rebuild` points, phase 5 `aiw pr open`, the
+   phase 8 sync, the phase 8.5 CI gate, and Teardown's `aiw stack down`. A child is an
+   ordinary run whose stations happen to be interleaved with other children's — nothing
+   about it skips these because it is running inside an epic.
+
    A dependent child's `base_branch` is its dependency's branch, not the default branch.
    Phase 8's existing fetch-merge-test handles the rebase when that branch moves;
    `aiw pr open --base` takes it directly.
 
-   **Never raise a stack yourself.** `aiw epic next` withholds a child that needs one
-   when the budget is spent; a child's stack comes down via `aiw stack down` as soon as
-   it clears the CI gate, which is what frees the slot.
+   **Do not pre-raise a stack to get around the budget.** Raise a child's stack only when
+   that child's own phase 2.5 comes due — this is exactly what `aiw epic next` gates —
+   and run `aiw stack down` for it as soon as it clears its CI gate, because that is what
+   frees the slot for the next child.
 5. **A blocker parks its child, it does not stop the epic.** Record it and keep going with
    everything else.
 6. **GATE 2a — blockers, collected.** Fires **once**, when no further progress is possible

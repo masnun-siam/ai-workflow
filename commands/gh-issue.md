@@ -81,7 +81,13 @@ Do the following:
    outside the epic. Fix the offending child's `Depends on:` line with `gh issue edit`
    and re-run. Do not proceed with an invalid DAG: the ordering is what keeps a stacked
    child from branching off a base that does not exist yet.
-5. Add every child to the same project as the parent (step 6's calls, once per child),
+5. Step 4.5 (the `gh-issue-factchecker` dispatch) runs **once per child** — each child
+   body makes its own concrete claims about files and symbols, and that is exactly what
+   the factchecker verifies; a check against the parent would miss them. Step 5
+   (assignee confirmation) is asked **once**, and the chosen assignees are applied to the
+   parent and every child — asking once per child is the interruption-multiplying pattern
+   this whole design exists to avoid.
+6. Add every child to the same project as the parent (step 6's calls, once per child),
    then create the board:
 
    ```bash
@@ -90,7 +96,7 @@ Do the following:
 
    Best-effort — it always exits 0. A parent on no project, a closed project, or a
    missing `project` scope means no board and one warning line.
-6. Return the parent URL, the child URLs in dependency order, and the board name.
+7. Return the parent URL, the child URLs in dependency order, and the board name.
 4.5. Dispatch the `gh-issue-factchecker` agent (fresh context, no memory of the steps above) with just the issue number/URL and `owner/repo`. It re-reads the created issue cold and checks every concrete claim (file paths, symbols, described behavior, the proposed fix) against the real repo.
    - `PASS` → continue to step 5, no mention needed.
    - `ISSUES FOUND` → fix the flagged text yourself, write the corrected body to `/tmp/gh-issue-body.md`, run `gh issue edit <n> --body-file /tmp/gh-issue-body.md`, delete the temp file, and briefly tell me what was wrong and corrected. Do not silently ignore a flagged discrepancy.
