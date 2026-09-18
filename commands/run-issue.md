@@ -243,6 +243,15 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
    It tries the local runner, falls back to `npx gitnexus analyze` (which is also what
    generates the runner on a first run), and prints one line either way. **It always exits
    0** — gitnexus is best-effort here and never blocks the run.
+5.5. **Epic check.** `gh api repos/{owner}/{repo}/issues/<n>/sub_issues`. A non-empty
+   array means this is an epic parent — go to **Epic mode** below instead of the
+   single-issue phases. An empty array is the ordinary path.
+
+   Running `/run-issue` on a **child** stays legal and behaves as a normal single-issue
+   run. Its `Depends on:` line names a base branch that may not exist yet, so check with
+   `git ls-remote --heads origin <dep-branch>`; if it is absent, say so and ask whether to
+   base on the default branch instead. Never guess a substitute base — the same rule
+   phase 8 applies when `origin/<base>` has gone missing.
 6. **Read the lessons file.** If `tasks/lessons.md` exists in the checkout, read it and
    carry the entries relevant to this issue into the phase-1 `run-planner` prompt and
    every phase-4 `run-dev` prompt. This is the read side of the loop phase 9.2 writes —
@@ -951,6 +960,60 @@ It finds the issue's project items, matches the `Status` field's option by name 
 first, then by significant word — so a board using "On Review" still gets updated), and
 sets it. **Always exits 0**: an issue on no project, a missing field, or an unmatched
 option is one warning line. Never block the run on this.
+
+## Epic mode
+
+One session, N child ledgers, three gates total. Children are not nested `/run-issue`s —
+subagents do not nest — so this session walks the roster across all ready children at
+once, exactly as phase 6 spawns the specialist panel in one message.
+
+1. **Init.** `aiw epic init "<runs_dir>/<owner>-<repo>-epic-<n>" --runs-dir "<runs_dir>"
+   --repo <main-checkout> [--mode lean]` creates a run directory per child. Each is an ordinary ledger; every existing guard and post-check applies to
+   it unchanged.
+2. **Plan every child.** Dispatch one `run-planner` per child, **all in one message**.
+   Write each envelope to its own child run dir and route it with `aiw route`.
+3. **GATE 1 — the decomposition and every plan, once.** Print, in order: the DAG as a
+   readable order with the parallel groups marked; each child's DoR gaps and assumptions;
+   then every plan in full. Then `AskUserQuestion`: **Approve all** · **Revise child N**
+   (re-plan that child only, re-print, re-gate) · **Drop child N** (refused if anything
+   depends on it unless its dependents are dropped too) · **Abort**.
+4. **The relay.** Until every child is done or parked, loop:
+
+   ```bash
+   aiw epic next "<runs_dir>/<owner>-<repo>-epic-<n>" --runs-dir "<runs_dir>"
+   ```
+
+   Dispatch every ready child's next station **in one message**, route each envelope, and
+   repeat. Children desynchronize immediately and that is correct — child 3 can be in
+   review while child 5 writes tests. Nothing waits for a wave.
+
+   A dependent child's `base_branch` is its dependency's branch, not the default branch.
+   Phase 8's existing fetch-merge-test handles the rebase when that branch moves;
+   `aiw pr open --base` takes it directly.
+
+   **Never raise a stack yourself.** `aiw epic next` withholds a child that needs one
+   when the budget is spent; a child's stack comes down via `aiw stack down` as soon as
+   it clears the CI gate, which is what frees the slot.
+5. **A blocker parks its child, it does not stop the epic.** Record it and keep going with
+   everything else.
+6. **GATE 2a — blockers, collected.** Fires **once**, when no further progress is possible
+   without a human: everything else has finished, or a parked child is blocking the DAG.
+   Print every blocker together with its child and thread URL, then gate as phase 7 does.
+7. **GATE 2 — one epic report.** Per child: PR, CI verdict, open threads, runtime
+   verification, anything carried forward. Then:
+   - **Parked children**, and what they are waiting on.
+   - **Children that never started**, named explicitly with the failed dependency that
+     blocked them. A child silently absent from a list of twelve is how a third of an epic
+     turns out never to have been built.
+   - **Children re-targeted to the default branch** because their base was dropped or died
+     — the plan assumed a dependency that no longer exists, and that assumption may have
+     been load-bearing.
+   - **The merge order**, explicitly. Merging is manual and these PRs are stacked; merged
+     out of order they have to be unpicked by hand.
+   - The board name, if one was created.
+8. **The epic does not grind.** Phase 10 is skipped: `pr-grind` holds a session-local
+   `Monitor` and `ScheduleWakeup` and there cannot be eight. Tell the user to run
+   `/pr-grind <url>` per PR.
 
 ## Rules
 
