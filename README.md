@@ -35,14 +35,24 @@ top to bottom. It is a procedure, not a description.**
 
 ## Step 0 — Where is the repo?
 
-If it is not already on disk, ask the user where they want it, then clone:
+If it is not already on disk, ask the user where they want it, then clone. Set `REPO` first
+and use it throughout — **every command in this file is written to be pasted as-is**:
 
 ```bash
-git clone https://github.com/masnun-siam/ai-workflow.git <chosen-path>
+REPO=~/Documents/Projects/ai-workflow      # ask the user; this is only a suggestion
+gh repo clone masnun-siam/ai-workflow "$REPO"
 ```
 
-Default suggestion: `~/Documents/Projects/ai-workflow`. Use their answer, not the default.
-From here, `<repo>` means that path.
+`gh repo clone` rather than `git clone` because it uses the authentication `gh` already has
+— this repository may not be public, and a bare HTTPS clone of a private repo fails with a
+confusing 404 rather than an auth error.
+
+If the repo is already on disk, just point `REPO` at it.
+
+**Placeholders in this file are shell variables on purpose.** A literal `<repo>` inside a
+command is an input redirect: pasting `claude plugin marketplace add <repo>` runs it with
+**no argument at all** and the error you get back says the URL is empty. Keep the quoted
+`"$REPO"` form.
 
 ## Step 1 — Check the hard requirements
 
@@ -72,7 +82,7 @@ blocker. Tell the user they can add it later with `gh auth refresh -s project`.
 ## Step 2 — Install the plugin
 
 ```bash
-claude plugin marketplace add <repo>
+claude plugin marketplace add "$REPO"
 claude plugin install ai-workflow@ai-workflow
 ```
 
@@ -113,8 +123,8 @@ before the install. Tell the user to restart their session and re-run `aiw paths
 ## Step 4 — Run the test suites
 
 ```bash
-python3 <repo>/run-engine/test_engine.py
-python3 <repo>/run-engine/test_scripts.py
+python3 "$REPO"/run-engine/test_engine.py
+python3 "$REPO"/run-engine/test_scripts.py
 ```
 
 Both must exit 0. Expect 17 and 35 checks respectively at time of writing; a higher number
