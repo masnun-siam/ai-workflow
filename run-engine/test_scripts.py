@@ -337,4 +337,18 @@ with tempfile.TemporaryDirectory() as tmp:
     assert "already" in again.stdout.lower(), again.stdout
 ok("aiw epic init creates one ledger per child, records edges, and is idempotent")
 
+with tempfile.TemporaryDirectory() as tmp:
+    epic_dir = os.path.join(tmp, "e")
+    os.makedirs(epic_dir)
+    env = dict(os.environ, PATH="/nonexistent")
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "epic", "split", epic_dir,
+         "--parent", "42", "--slug", "o/r", "--children", "10,11"],
+        capture_output=True, text=True, env=env,
+    )
+    assert proc.returncode != 0, "gh is unreachable — split must not report success"
+    assert not os.path.isfile(os.path.join(epic_dir, "epic.json")), \
+        "a failed gh call must not produce a DAG, wrong or otherwise"
+ok("aiw epic split dies rather than recording an empty dependency list when gh fails")
+
 print(f"\n{passed} checks passed")

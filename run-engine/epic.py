@@ -147,8 +147,11 @@ def cmd_split(args) -> None:
 
     deps = {}
     for child in children:
-        body, _ = gh_json(["issue", "view", str(child), "--repo", args.slug,
-                           "--json", "body", "--jq", ".body"])
+        body, proc = gh_json(["issue", "view", str(child), "--repo", args.slug,
+                              "--json", "body", "--jq", ".body"])
+        if proc.returncode != 0:
+            die(1, f"could not read #{child}'s body to parse its dependencies: "
+                   f"{(proc.stderr or '').strip()[:160]}")
         deps[child] = [d for d in parse_depends(body if isinstance(body, str) else "")
                        if d in children]
 
