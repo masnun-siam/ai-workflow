@@ -18,6 +18,7 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ci  # noqa: E402
+import epic  # noqa: E402
 import project  # noqa: E402
 import stack  # noqa: E402
 import threads  # noqa: E402
@@ -172,6 +173,26 @@ assert project.match_option(OPTIONS, "Blocked") is None
 assert project.match_option(OPTIONS, "In") is None, "a filler-only target must not match everything"
 ok("project status matches the exact option, then the best significant-word overlap")
 
+# --------------------------------------------------------------------------- epic board
+
+VIEWS = [{"id": "V1", "name": "Board"}, {"id": "V2", "name": "Epic #42 — Billing"}]
+assert project.find_view(VIEWS, "Epic #42 — Billing")["id"] == "V2"
+assert project.find_view(VIEWS, "Epic #43 — Other") is None
+assert project.find_view([], "Epic #42 — Billing") is None
+ok("an existing epic board is found by name, so a resume never creates a second")
+
+assert project.board_name(42, "Billing overhaul") == "Epic #42 — Billing overhaul"
+assert project.board_name(42, "x" * 200).startswith("Epic #42 — ")
+assert len(project.board_name(42, "x" * 200)) <= 80, "view names must stay readable"
+ok("board names are derived from the parent and bounded in length")
+
+# project-board exits 0 even with a malformed slug (no `/`)
+env = dict(os.environ, PATH="/nonexistent")
+proc = subprocess.run([sys.executable, ROUTE, "project-board", "no-slash", "42", "--title", "x"],
+                      capture_output=True, text=True, env=env)
+assert proc.returncode == 0, f"project-board must exit 0 on bad slug, got {proc.returncode}: {proc.stderr}"
+ok("project-board exits 0 on malformed slug with gh unavailable")
+
 # --------------------------------------------------------------------------- worktree
 
 assert worktree.slugify("Fix the N+1 in OrderController!") == "fix-the-n-1-in-ordercontroller"
@@ -197,5 +218,249 @@ with tempfile.TemporaryDirectory() as d:
         proc = subprocess.run([sys.executable, ROUTE, *argv], capture_output=True, text=True, env=env)
         assert proc.returncode == 0, f"{argv} exited {proc.returncode}: {proc.stderr}"
 ok("best-effort subcommands exit 0 even with gh/node missing from PATH")
+
+# --------------------------------------------------------------------------- epic DAG
+
+assert epic.parse_depends("Some body\n\nDepends on: #12, #13\n") == [12, 13]
+assert epic.parse_depends("depends on: #7") == [7], "the header is case-insensitive"
+assert epic.parse_depends("No dependency line here") == []
+assert epic.parse_depends("Depends on: none") == []
+assert epic.parse_depends("Depends on: #9, #9") == [9], "duplicates collapse"
+assert epic.parse_depends(None) == []
+assert epic.parse_depends(
+    "Depends on: #4 in passing\n\n## Dependencies\nDepends on: #12, #13\n"
+) == [4, 12, 13], "every Depends on line is unioned — the first does not win"
+ok("Depends on: parses to sorted unique issue numbers, absent means []")
+
+dag = epic.build_dag({10: [], 11: [10], 12: [10], 13: [11, 12]})
+assert dag["order"] == [10, 11, 12, 13], dag["order"]
+assert dag["deps"]["13"] == [11, 12]
+ok("build_dag topologically orders a diamond deterministically")
+
+for bad, needle in [
+    ({10: [99]}, "not in this epic"),
+    ({10: [10]}, "itself"),
+    ({10: [11], 11: [10]}, "cycle"),
+    ({10: [11], 11: [12], 12: [10]}, "cycle"),
+]:
+    try:
+        epic.build_dag(bad)
+        raise AssertionError(f"expected ValueError for {bad}")
+    except ValueError as exc:
+        assert needle in str(exc), f"{bad}: {exc}"
+ok("build_dag rejects foreign edges, self-edges and cycles of any length")
+
+# --------------------------------------------------------------------------- epic readiness
+
+DAG = epic.build_dag({10: [], 11: [10], 12: []})
+
+
+def state(status="running", pr=False, stack_up=False, needs_stack=False):
+    return {"status": status, "pr": pr, "stack_up": stack_up, "needs_stack": needs_stack}
+
+
+s = {10: state(), 11: state(), 12: state()}
+assert epic.ready(DAG, s, max_stacks=2) == [10, 12], "11 waits: #10 has no PR yet"
+ok("a child waits until every dependency has reached PR open")
+
+s[10] = state(pr=True)
+assert epic.ready(DAG, s, max_stacks=2) == [10, 11, 12]
+ok("a dependency reaching PR open releases its dependents")
+
+s = {10: state(status="done", pr=True), 11: state(), 12: state(status="escalated")}
+assert epic.ready(DAG, s, max_stacks=2) == [11], "done and escalated children are not ready"
+ok("only children whose own run is still running are ready")
+
+# Stack budget, ISOLATED from the dependency rule. #10 must carry pr=True in every case
+# below, or #11 is excluded because its dependency has no PR yet and the assertion passes
+# for a reason that has nothing to do with the budget it is named for.
+s = {10: state(pr=True, stack_up=True), 11: state(needs_stack=True), 12: state(stack_up=True)}
+assert epic.ready(DAG, s, max_stacks=2) == [10, 12], "11 needs a stack, both slots taken"
+ok("a child needing a stack parks when the budget is spent")
+
+s = {10: state(pr=True, stack_up=True), 11: state(needs_stack=True), 12: state()}
+assert epic.ready(DAG, s, max_stacks=2) == [10, 11, 12], "one slot free, 11 takes it"
+ok("a freed stack slot releases exactly one parked child")
+
+s = {10: state(pr=True, needs_stack=True), 11: state(needs_stack=True), 12: state(needs_stack=True)}
+assert epic.ready(DAG, s, max_stacks=0) == [], "no budget at all"
+assert epic.ready(DAG, s, max_stacks=1) == [10], "the budget is a hard cap, not a hint"
+assert epic.ready(DAG, s, max_stacks=2) == [10, 11], "#12 is third in line for two slots"
+ok("the stack budget is a hard cap counted across the whole epic")
+
+# --------------------------------------------------------------------------- epic child_state
+
+with tempfile.TemporaryDirectory() as tmp:
+    run_dir = os.path.join(tmp, "o-r-issue-10")
+    os.makedirs(run_dir)
+    with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump({"issue": 10, "stations": ["dev"], "currentIndex": 0, "bounceCounts": {},
+                   "status": "running", "trace": [], "context": {"stack": "failed"},
+                   "classification": None, "specialists": []}, fh)
+    st = epic.child_state(tmp, "o/r", 10)
+    assert st["needs_stack"] is False, st
+ok("a child whose stack failed to come up does not hold a budget slot")
+
+# --------------------------------------------------------------------------- epic CLI
+
+with tempfile.TemporaryDirectory() as tmp:
+    epic_dir = os.path.join(tmp, "epic")
+    os.makedirs(epic_dir)
+    with open(os.path.join(epic_dir, "epic.json"), "w", encoding="utf-8") as fh:
+        json.dump({
+            "parent": 42, "slug": "o/r", "children": [10, 11],
+            "dag": {"order": [10, 11], "deps": {"10": [], "11": [10]}},
+            "max_stacks": 2,
+        }, fh)
+
+    runs = os.path.join(tmp, "runs")
+    for issue, ctx in ((10, {"pr": "https://x/1"}), (11, {})):
+        d = os.path.join(runs, f"o-r-issue-{issue}")
+        os.makedirs(d)
+        with open(os.path.join(d, "run.json"), "w", encoding="utf-8") as fh:
+            json.dump({"issue": issue, "stations": ["dev"], "currentIndex": 0,
+                       "bounceCounts": {}, "status": "running", "trace": [],
+                       "context": ctx, "classification": None, "specialists": []}, fh)
+
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "epic", "next", epic_dir, "--runs-dir", runs],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    got = json.loads(proc.stdout)
+    assert got["ready"] == [10, 11], got
+ok("aiw epic next reads every child ledger and prints who may advance")
+
+with tempfile.TemporaryDirectory() as tmp:
+    epic_dir, runs, repo = os.path.join(tmp, "e"), os.path.join(tmp, "runs"), os.path.join(tmp, "repo")
+    os.makedirs(epic_dir); os.makedirs(repo)
+    with open(os.path.join(epic_dir, "epic.json"), "w", encoding="utf-8") as fh:
+        json.dump({"parent": 42, "slug": "o/r", "children": [10, 11],
+                   "dag": {"order": [10, 11], "deps": {"10": [], "11": [10]}},
+                   "max_stacks": 2}, fh)
+
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "epic", "init", epic_dir, "--runs-dir", runs, "--repo", repo],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    for issue in (10, 11):
+        led = json.load(open(os.path.join(runs, f"o-r-issue-{issue}", "run.json")))
+        assert led["issue"] == issue and led["status"] == "running", led
+    # The edge itself is recorded on the child. Setting base_branch from it is the
+    # orchestrator's job at Epic mode step 4 — this only checks the edge survived init.
+    led11 = json.load(open(os.path.join(runs, "o-r-issue-11", "run.json")))
+    assert led11["context"]["depends_on"] == "10", led11["context"]
+
+    # re-running must not clobber a ledger that already exists
+    again = subprocess.run(
+        [sys.executable, ROUTE, "epic", "init", epic_dir, "--runs-dir", runs, "--repo", repo],
+        capture_output=True, text=True,
+    )
+    assert again.returncode == 0, again.stderr
+    assert "already" in again.stdout.lower(), again.stdout
+ok("aiw epic init creates one ledger per child, records edges, and is idempotent")
+
+# `gh` is the only thing between `epic split` and GitHub, so the split tests drive a stub
+# that records its argv. What matters is not that gh was called but WITH WHAT: the
+# sub-issues endpoint takes a database id as an integer, and `-f` with an issue number
+# 422s on every child while `split` still exits 0 — a parent with no sub-issues, which
+# run-issue then runs as one ordinary issue.
+GH_STUB = r"""#!/usr/bin/env python3
+import json, os, sys
+argv = sys.argv[1:]
+cfg = json.load(open(os.environ["GH_STUB_CFG"]))
+with open(os.environ["GH_STUB_LOG"], "a") as fh:
+    fh.write(" ".join(argv) + "\n")
+if argv[0] == "issue" and argv[1] == "view":
+    print(cfg["bodies"].get(argv[2], ""))
+elif argv[1].endswith("/sub_issues") and any(a.startswith("-F") or a.startswith("-f") for a in argv):
+    sys.exit(cfg.get("link_exit", 0))
+elif argv[1].endswith("/sub_issues"):
+    print(json.dumps(cfg.get("linked", [])))
+else:  # repos/o/r/issues/<n> --jq .id
+    print(9000 + int(argv[1].rsplit("/", 1)[1]))
+"""
+
+
+def gh_stub(tmp, **cfg):
+    """A `gh` on PATH that answers from `cfg`. Returns (env, log path)."""
+    bindir = os.path.join(tmp, "bin")
+    os.makedirs(bindir, exist_ok=True)
+    stub = os.path.join(bindir, "gh")
+    write(bindir, "gh", GH_STUB)
+    os.chmod(stub, 0o755)
+    cfg_path, log = os.path.join(tmp, "cfg.json"), os.path.join(tmp, "gh.log")
+    with open(cfg_path, "w", encoding="utf-8") as fh:
+        json.dump(cfg, fh)
+    return dict(os.environ, PATH=bindir + os.pathsep + os.environ["PATH"],
+                GH_STUB_CFG=cfg_path, GH_STUB_LOG=log), log
+
+
+def split(tmp, env, children="10,11,12"):
+    epic_dir = os.path.join(tmp, "e")
+    os.makedirs(epic_dir, exist_ok=True)
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "epic", "split", epic_dir,
+         "--parent", "42", "--slug", "o/r", "--children", children],
+        capture_output=True, text=True, env=env,
+    )
+    return proc, os.path.join(epic_dir, "epic.json")
+
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, linked=[11], bodies={
+        "10": "no deps", "11": "Depends on: #10", "12": "Depends on: #10"})
+    proc, path = split(tmp, env)
+    assert proc.returncode == 0, proc.stderr
+    logged = open(log).read()
+    assert "-F sub_issue_id=9010" in logged and "-F sub_issue_id=9012" in logged, logged
+    assert "sub_issue_id=10" not in logged, "the ISSUE NUMBER was sent where the id belongs"
+    assert "-f sub_issue_id" not in logged, "-f sends a string; the field must be an integer"
+    assert "sub_issue_id=9011" not in logged, "#11 was already linked and must be skipped"
+    epic_json = json.load(open(path))
+    assert epic_json["dag"]["order"] == [10, 11, 12], epic_json
+    assert epic_json["max_stacks"] == 1, "one stack by default — `-p` does not namespace ports"
+ok("epic split links by database id with -F, skips what is linked, and caps stacks at 1")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, _ = gh_stub(tmp, bodies={"10": "", "11": "", "12": "Depends on: #41"})
+    proc, path = split(tmp, env)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "not in this epic" in proc.stderr, proc.stderr
+    assert not os.path.isfile(path), "a foreign edge must not produce an epic.json"
+ok("epic split refuses an edge pointing outside the epic instead of dropping it")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, _ = gh_stub(tmp, bodies={})
+    proc, path = split(tmp, env, children="")
+    assert proc.returncode != 0 and not os.path.isfile(path), proc.stdout
+ok("epic split refuses an empty child list rather than writing an epic nothing runs")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, _ = gh_stub(tmp, link_exit=1, bodies={"10": "", "11": "", "12": ""})
+    proc, path = split(tmp, env)
+    assert proc.returncode == 1, proc.stdout
+    assert not os.path.isfile(path), "a link failure must not leave a valid-looking epic.json"
+ok("a sub-issue link failure kills the split rather than warning past it")
+
+proc = subprocess.run([sys.executable, ROUTE, "epic", "next", "/nonexistent"],
+                      capture_output=True, text=True)
+assert proc.returncode == 2 and "runs-dir" in proc.stderr, proc.stderr
+ok("epic next requires --runs-dir instead of advertising a default it does not have")
+
+with tempfile.TemporaryDirectory() as tmp:
+    epic_dir = os.path.join(tmp, "e")
+    os.makedirs(epic_dir)
+    env = dict(os.environ, PATH="/nonexistent")
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "epic", "split", epic_dir,
+         "--parent", "42", "--slug", "o/r", "--children", "10,11"],
+        capture_output=True, text=True, env=env,
+    )
+    assert proc.returncode != 0, "gh is unreachable — split must not report success"
+    assert not os.path.isfile(os.path.join(epic_dir, "epic.json")), \
+        "a failed gh call must not produce a DAG, wrong or otherwise"
+ok("aiw epic split dies rather than recording an empty dependency list when gh fails")
 
 print(f"\n{passed} checks passed")
