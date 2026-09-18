@@ -98,7 +98,14 @@ Edges may only point at siblings in the same epic. Cycles are rejected in code.
 
 **Linkage** uses the native sub-issues API
 (`POST repos/{owner}/{repo}/issues/{n}/sub_issues`), verified available on this repo. The
-parent auto-closes when its children close. No label convention.
+parent auto-closes when its children close. The parent/child relationship is **only** this
+— no label stands in for it.
+
+**Each child also gets an `epic-<n>` label.** This is not the linkage; it is what the epic
+board filters on, for the reason given under *The epic board* — a Projects filter cannot be
+validated through the API, and a label can. It is also what makes an epic's children
+findable with `gh issue list --label epic-<n>` when there is no project at all. Applied at
+decomposition, because that is the only point where every child is being created anyway.
 
 ## State
 
@@ -287,7 +294,7 @@ sessions.
 | `run-engine/epic.py` | new: DAG build, cycle rejection, `next` readiness, stack budget — pure logic |
 | `run-engine/project.py` | extended: create/find the epic board view, add children to the project |
 | `run-engine/route.py` | one entry in the module tuple in `main()` |
-| `commands/gh-issue.md` | epic-mode branch: detect, propose, write N DoR-complete children, link |
+| `commands/gh-issue.md` | epic-mode branch: detect, propose, write N DoR-complete children, link as sub-issues, apply `epic-<n>` |
 | `commands/run-issue.md` | epic-mode branch at phase 0: parent detected → the relay |
 | `run-engine/test_scripts.py` | DAG ordering, cycle rejection, readiness under a stack budget, drop-with-dependents |
 
