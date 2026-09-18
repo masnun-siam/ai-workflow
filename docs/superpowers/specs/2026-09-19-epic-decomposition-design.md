@@ -164,6 +164,63 @@ runtime-verification status, anything carried forward. Plus parked children and 
 **the merge order, explicitly**: merging is manual, and a stacked PR merged out of order
 has to be unpicked by hand.
 
+## The epic board
+
+A birds-eye view of one epic's progress, as a Kanban board in the project the parent
+already belongs to.
+
+**When.** Epic mode only, immediately after Gate 1 approval — once the children exist and
+the decomposition is agreed. Not at decomposition: a board for an epic that is then
+aborted is litter, and this runs unattended enough times that litter accumulates.
+
+**Prerequisite nobody would guess.** A Projects view renders only items that are **on the
+project**. So epic mode must add every child to the parent's project before creating the
+view, or the board comes up empty and reads as broken rather than as unpopulated.
+`/gh-issue` step 6 already knows how to add an issue to a project at creation time; epic
+mode reuses it per child, targeting whatever project the parent is on.
+
+**How.** Two mutations, because `filter` is not an input on create — only on update:
+
+```
+createProjectV2View(projectId, name: "Epic #<n> — <title>", layout: BOARD_LAYOUT)
+updateProjectV2View(viewId, filter: "<see below>")
+```
+
+A half-completed sequence is the failure worth handling: a created-but-unfiltered view
+shows the *entire project* under an epic's name, which is worse than no board at all. If
+the update fails, delete the view (`deleteProjectV2View`) rather than leave it.
+
+**Grouping is not settable.** `ProjectV2ViewConfigurationInput` exposes only
+`visibleFieldIds`; there is no group-by input. A `BOARD_LAYOUT` view groups by Status by
+default, which is what a kanban wants — but the columns are that project's Status options,
+not anything the epic chooses. Nothing to configure, and nothing to promise the user about
+column names.
+
+**The filter, and its fallback.** The preferred form is `parent-issue:<owner>/<repo>#<n>`,
+which needs no extra state. The schema types `filter` as a bare `String`, so the server is
+the only authority on whether that qualifier is accepted — **unverified at time of
+writing.** The fallback is a per-epic label `epic-<n>`, applied to every child at
+decomposition, filtered as `label:epic-<n>`: less elegant, depends on nothing
+undocumented, and survives a child being re-parented.
+
+Implementation applies the label **either way**. It costs one API call per child, it makes
+the epic visible in ordinary issue search independently of any project, and it means the
+board does not depend on a filter qualifier whose behaviour was never confirmed. The
+`parent-issue:` form is used when it is confirmed to work, with `label:` as the standing
+fallback.
+
+**Idempotent.** Read `project.views` and match by name before creating. A resumed epic must
+never create a second board — this is exactly the operation that quietly accumulates seven
+identical views over a month of resumes.
+
+**Best-effort, like every other project operation in this pipeline.** No project on the
+parent, no `project` scope on the token, a failed mutation: one warning line, never a stop.
+The epic's deliverable is the PRs; the board is a convenience, and `run-issue.md` already
+holds the rule that project updates never block a run.
+
+**Not deleted when the epic finishes.** The board is most useful while merging a stack of
+PRs by hand, which happens *after* Gate 2 hands back. Gate 2's report links it.
+
 ## Failure
 
 Each child takes the **Degraded finish** path that already exists: `blocked_on` recorded,
@@ -201,6 +258,9 @@ sessions.
   `/pr-grind <url>`. A multi-PR grind would be a second long-lived loop beside the one
   that works, which is how two budgets end up disagreeing about the same rerun.
 - Cross-repo epics.
+- Choosing the board's group-by field, or creating the project itself. If the parent is on
+  no project, there is no board; this pipeline has never created project structure
+  unattended and should not start.
 - Anything that merges.
 - Re-decomposing mid-flight. That is abort, re-split, re-run.
 - Inferring dependencies from predicted file lists. A plan's file list is a prediction —
@@ -211,6 +271,7 @@ sessions.
 | File | Change |
 |---|---|
 | `run-engine/epic.py` | new: DAG build, cycle rejection, `next` readiness, stack budget — pure logic |
+| `run-engine/project.py` | extended: create/find the epic board view, add children to the project |
 | `run-engine/route.py` | one entry in the module tuple in `main()` |
 | `commands/gh-issue.md` | epic-mode branch: detect, propose, write N DoR-complete children, link |
 | `commands/run-issue.md` | epic-mode branch at phase 0: parent detected → the relay |
