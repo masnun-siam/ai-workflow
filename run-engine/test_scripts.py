@@ -18,6 +18,7 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ci  # noqa: E402
+import epic  # noqa: E402
 import project  # noqa: E402
 import stack  # noqa: E402
 import threads  # noqa: E402
@@ -197,5 +198,33 @@ with tempfile.TemporaryDirectory() as d:
         proc = subprocess.run([sys.executable, ROUTE, *argv], capture_output=True, text=True, env=env)
         assert proc.returncode == 0, f"{argv} exited {proc.returncode}: {proc.stderr}"
 ok("best-effort subcommands exit 0 even with gh/node missing from PATH")
+
+# --------------------------------------------------------------------------- epic DAG
+
+assert epic.parse_depends("Some body\n\nDepends on: #12, #13\n") == [12, 13]
+assert epic.parse_depends("depends on: #7") == [7], "the header is case-insensitive"
+assert epic.parse_depends("No dependency line here") == []
+assert epic.parse_depends("Depends on: none") == []
+assert epic.parse_depends("Depends on: #9, #9") == [9], "duplicates collapse"
+assert epic.parse_depends(None) == []
+ok("Depends on: parses to sorted unique issue numbers, absent means []")
+
+dag = epic.build_dag({10: [], 11: [10], 12: [10], 13: [11, 12]})
+assert dag["order"] == [10, 11, 12, 13], dag["order"]
+assert dag["deps"]["13"] == [11, 12]
+ok("build_dag topologically orders a diamond deterministically")
+
+for bad, needle in [
+    ({10: [99]}, "not in this epic"),
+    ({10: [10]}, "itself"),
+    ({10: [11], 11: [10]}, "cycle"),
+    ({10: [11], 11: [12], 12: [10]}, "cycle"),
+]:
+    try:
+        epic.build_dag(bad)
+        raise AssertionError(f"expected ValueError for {bad}")
+    except ValueError as exc:
+        assert needle in str(exc), f"{bad}: {exc}"
+ok("build_dag rejects foreign edges, self-edges and cycles of any length")
 
 print(f"\n{passed} checks passed")
