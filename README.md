@@ -5,9 +5,54 @@ roster of specialised agents through a deterministic routing engine, stopping fo
 in **exactly three places**: plan approval, an escalated review finding, and the final
 ready-to-merge handback.
 
-**To understand how it works**, read [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
-**To install it**, hand this repository to Claude Code and say "set this up" — the rest of
-this file is the instruction it follows.
+## Install it yourself
+
+Needs `gh` (authenticated) and Python 3.10+. Nothing to `pip install` — the engine is
+stdlib-only. Copy the whole block:
+
+```bash
+REPO=~/Documents/Projects/ai-workflow
+gh repo clone masnun-siam/ai-workflow "$REPO"
+claude plugin marketplace add "$REPO"
+claude plugin install ai-workflow@ai-workflow
+```
+
+**Then restart Claude Code** — plugin binaries are put on `PATH` when a session starts, so
+the one you ran that in cannot see it yet. In the new session:
+
+```bash
+aiw paths
+```
+
+That must print JSON whose first line is `"plugin_root"`.
+
+- **`command not found`** → the session still hasn't picked up the plugin's `bin/`. The
+  checkout's shim works regardless: `"$REPO"/bin/aiw paths`.
+- **Anything else, including a networking usage message** → see
+  [Step 3](#step-3--verify-the-cli-resolves-to-this-plugin). A zero exit code is not proof
+  here, and the reason is worth two minutes.
+
+Optional, and each one degrades cleanly if missing: **Docker** (per-issue test stacks),
+**gitnexus** (code-graph lookups), **slackcli** (the review-trigger loop), **gstack**
+(runtime verification). [Step 5](#step-5--optional-dependencies) lists what you lose
+without each.
+
+## Use it
+
+```
+/ai-workflow:run-issue 41
+```
+
+Add `--lean` for a shorter roster on low-risk work. Full list of commands under
+[Reference](#commands).
+
+## Two more things
+
+- **How it actually works** → [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md), written in
+  layers: stop at any depth and you still know enough to use it.
+- **Want an agent to do the install?** Hand Claude Code this repository and say "set this
+  up". Everything below is the procedure it follows — you can read it, but you don't have
+  to.
 
 ---
 
@@ -116,9 +161,19 @@ stderr, and **exited 0**. Every path the orchestrator needed then silently resol
 nothing. A wrong binary exiting 0 is indistinguishable from a right one until something
 downstream reads a value that was never substituted. Hence: check the key, not the code.
 
-If `aiw` is not found at all, the plugin's `bin/` is not on `PATH`. Plugin bins are resolved
-when a Claude Code session starts, so the usual cause is simply that this session began
-before the install. Tell the user to restart their session and re-run `aiw paths`.
+If `aiw` is not found at all, the plugin's `bin/` is not on `PATH`. Plugin bins are put on
+`PATH` when a Claude Code session starts, so the usual cause is that this session began
+before the install — tell the user to restart and re-run it.
+
+**Do not block the setup on this.** The shim in the checkout works no matter what `PATH`
+says, and proves the CLI itself is sound:
+
+```bash
+"$REPO"/bin/aiw paths
+```
+
+If that prints `plugin_root` and the bare `aiw` does not, the installation is fine and only
+the session's `PATH` is stale. Say exactly that, rather than reporting a failed install.
 
 ## Step 4 — Run the test suites
 
