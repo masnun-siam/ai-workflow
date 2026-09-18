@@ -1,27 +1,32 @@
 #!/usr/bin/env python3
-"""Deterministic routing CLI for /run-issue — the I/O half of the engine.
+"""`aiw` — the deterministic CLI behind /run-issue; the I/O half of the engine.
+
+Invoked as `aiw` (plugin bin/). NOT as `route`: that is the macOS/BSD/net-tools network
+command, and on a default macOS PATH /sbin shadows the plugin bin, so `route paths` ran
+/sbin/route, printed a usage error to stderr, and exited 0 — an unresolved path that looked
+like a success.
 
 Read the run ledger + a station's just-emitted envelope, validate it against the
 handoff contract, run the guards, decide the next action, persist, and print the
 action. The orchestrator acts on what this prints; it never eyeballs the routing.
 
 Usage:
-  route.py init <runDir> --issue N [--mode full|lean] [--repo PATH]
-  route.py route <runDir> <artifact.json> [--repo PATH]
-  route.py classify <runDir> [--loc N] [--labels a,b] [--depth N] < changed-paths
-  route.py resolve-review <runDir>
-  route.py set <runDir> key=value [key=value ...]
-  route.py paths            # print resolved plugin/data paths as JSON
+  aiw init <runDir> --issue N [--mode full|lean] [--repo PATH]
+  aiw route <runDir> <artifact.json> [--repo PATH]
+  aiw classify <runDir> [--loc N] [--labels a,b] [--depth N] < changed-paths
+  aiw resolve-review <runDir>
+  aiw set <runDir> key=value [key=value ...]
+  aiw paths            # print resolved plugin/data paths as JSON
 
 Mechanical subcommands (the phases that used to be prose in commands/run-issue.md):
-  route.py stack up|down|rebuild|status <runDir>
-  route.py worktree create <runDir> --title "<issue title>"
-  route.py threads list|resolve <pr-ref|node-id...>
-  route.py pr open <runDir> --body-file <file> [--draft]
-  route.py ci status <pr-ref> [--watch]
-  route.py gitnexus sync|index|clean <repo> [--run-dir <runDir>]
-  route.py project-status <owner/repo> <issue> "<status>"
-  route.py precheck <runDir> <station>      # sdet | reviewer | fixer
+  aiw stack up|down|rebuild|status <runDir>
+  aiw worktree create <runDir> --title "<issue title>"
+  aiw threads list|resolve <pr-ref|node-id...>
+  aiw pr open <runDir> --body-file <file> [--draft]
+  aiw ci status <pr-ref> [--watch]
+  aiw gitnexus sync|index|clean <repo> [--run-dir <runDir>]
+  aiw project-status <owner/repo> <issue> "<status>"
+  aiw precheck <runDir> <station>      # sdet | reviewer | fixer
 
 Exit codes for `route`: 0 ok · 2 usage · 3 unreadable artifact · 4 artifact is not a
 JSON object · 5 artifact fails the handoff contract · 6 test-root ownership violation · 7 a station
@@ -365,7 +370,7 @@ def cmd_paths(args):
 
 
 def main(argv=None) -> None:
-    parser = argparse.ArgumentParser(prog="route.py", description=__doc__)
+    parser = argparse.ArgumentParser(prog="aiw", description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     def add(name, help_text):

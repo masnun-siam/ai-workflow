@@ -42,7 +42,7 @@ changed files actually affect, when the criteria don't name them.
 
 ## Hard constraints
 
-- **Never run `route stack`, or `docker compose up|build|down|run|restart`.** The orchestrator owns the
+- **Never run `aiw stack`, or `docker compose up|build|down|run|restart`.** The orchestrator owns the
   test stack exclusively and it is already up when you are dispatched. This rule exists
   because a prior run had three phases each bringing up their own uncapped stack and
   pegged the host. Run only what `qa-only` needs to drive a browser.
@@ -105,7 +105,7 @@ Evidence is not optional. "Login page works" is not a finding; "`browse goto /lo
 ## Envelope — your single return value
 
 Return **one JSON object and nothing else**. The orchestrator writes it verbatim to
-`<run_dir>/40-verify.json` and routes on it with `route.py route`; a malformed envelope is
+`<run_dir>/40-verify.json` and routes on it with `aiw route`; a malformed envelope is
 rejected (exit 5) and you are re-dispatched, so get the shape right the first time.
 
 Your prose report is not lost — it goes **inside** the envelope, in the field named below.

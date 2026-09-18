@@ -1,7 +1,7 @@
 ---
 description: Fix issues raised in a GitHub PR's review comments, confirming each action
 argument-hint: <PR url or owner/repo#123>
-allowed-tools: Bash(route:*), Bash(gh:*), Bash(git:*), Read, Edit, Grep, Glob, AskUserQuestion
+allowed-tools: Bash(aiw:*), Bash(gh:*), Bash(git:*), Read, Edit, Grep, Glob, AskUserQuestion
 ---
 
 Given the PR reference `$ARGUMENTS`, work through every review comment and
@@ -65,8 +65,8 @@ requires the thread's GraphQL node ID, not the REST comment id, so look it up
 by the comment you just replied to:
 
 ```bash
-route threads list <PR> --for-comment <comment_id>   # -> [{node_id, ...}]
-route threads resolve <node_id>
+aiw threads list <PR> --for-comment <comment_id>   # -> [{node_id, ...}]
+aiw threads resolve <node_id>
 ```
 
 `resolve` warns and continues on a thread it cannot close, so one failure

@@ -1,7 +1,7 @@
 ---
 description: Run an existing GitHub issue end-to-end to a reviewed PR, stopping for a human exactly three times — plan approval, an escalated review finding, and the final ready-to-merge handback
 argument-hint: "<issue-number-or-url> [--lean]"
-allowed-tools: Bash(route:*), Bash(gh:*), Bash(git:*), Bash(docker:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(composer:*), Bash(pnpm:*), Bash(yarn:*), Bash(go:*), Bash(python:*), Bash(python3:*), Bash(pip:*), Bash(pip3:*), Bash(dart:*), Bash(flutter:*), Bash(obsidian:*), Read, Write, Agent, Skill, AskUserQuestion
+allowed-tools: Bash(aiw:*), Bash(gh:*), Bash(git:*), Bash(docker:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(composer:*), Bash(pnpm:*), Bash(yarn:*), Bash(go:*), Bash(python:*), Bash(python3:*), Bash(pip:*), Bash(pip3:*), Bash(dart:*), Bash(flutter:*), Bash(obsidian:*), Read, Write, Agent, Skill, AskUserQuestion
 ---
 
 Run issue `$ARGUMENTS` through the full unattended pipeline: readiness → plan → tests →
@@ -37,7 +37,7 @@ This workflow ships as a plugin, so nothing below spells an absolute path. Befor
 else in phase 0, run:
 
 ```bash
-route paths
+aiw paths
 ```
 
 It prints JSON and creates the state directories. Every `<key>` placeholder in this file
@@ -45,13 +45,21 @@ and in the agents it dispatches is **that key's value from this JSON** — `<run
 `<config>`, `<dod>`, `<dor>`, `<channels>`, `<pr_grind_dir>`, `<agents_dir>`,
 `<plugin_root>`. Substitute them literally; never guess a path.
 
-`route` itself is on `PATH` (the plugin's `bin/`). If `route paths` is not found, the
-plugin is not installed correctly — stop and say so.
+`aiw` is the plugin's CLI, on `PATH` via its `bin/`. **Verify it is ours before trusting
+it**: `aiw paths` must print JSON whose first key is `plugin_root`. Anything else — a
+usage message, an empty stdout, "command not found" — means the plugin is not installed
+correctly; stop and say so.
 
-`route` is also how the mechanical phases below actually run. Anything whose outcome is
+That check is not paranoia. This CLI used to be called `route`, which is also the macOS,
+BSD and net-tools *network* command — and on a default macOS `PATH`, `/sbin` sits ahead of
+the plugin bin directories, so `route paths` resolved to `/sbin/route`, printed `route: bad
+keyword: paths` on stderr, and **exited 0**. Every `<key>` in this file then silently went
+unresolved. A zero exit from the wrong binary is the failure mode worth a two-second check.
+
+`aiw` is also how the mechanical phases below actually run. Anything whose outcome is
 decided by the filesystem, git, `gh` or Docker is a subcommand — `stack`, `worktree`,
 `threads`, `pr`, `ci`, `gitnexus`, `project-status` — and each writes the ledger keys it
-produces itself, so there is no follow-up `route set` to forget. `route --help` lists
+produces itself, so there is no follow-up `aiw set` to forget. `aiw --help` lists
 them. **Call the subcommand; do not re-derive what it does.** What is left in prose below
 is the part that needs judgment, and that part is yours.
 
@@ -66,7 +74,7 @@ Routing is **not** yours to eyeball. Each station returns a typed JSON envelope;
 it to the run directory and ask the engine what happens next:
 
 ```bash
-route route "$RUN_DIR" <NN-station.json>
+aiw route "$RUN_DIR" <NN-station.json>
 ```
 
 (It reads the repo path from the ledger, so the same call works before the worktree exists
@@ -98,13 +106,13 @@ It prints exactly one of `advance(<station>)` · `bounce(<station>)` · `escalat
   again on its own. The cap is enforced in code, so a bounce loop cannot run away.
 - **escalate** — the station hit a wall the engine cannot route around (a spent budget, an
   unroutable bounce, a genuine design dead-end). This is **not** a stop-and-ask. Record it
-  (`route set "$RUN_DIR" blocked_on='<one line>'`) and go to **Degraded finish** below.
+  (`aiw set "$RUN_DIR" blocked_on='<one line>'`) and go to **Degraded finish** below.
 - **done** — the roster is exhausted. Continue to phase 8 (sync), then 8.5 (CI), 9.1, 9.2,
   **Gate 2** (9.3), Teardown, and 10.
 
 ### Post-checks — the engine verifies what a station claimed
 
-A `passed` envelope is a claim. Before routing one, `route route` tries to refute it from
+A `passed` envelope is a claim. Before routing one, `aiw route` tries to refute it from
 something with no incentive to agree: an exit code, a git object, a GitHub API response, a
 file on disk. Five stations are checked — `sdet` (the suite really is red), `dev` (the
 commit resolves, no undeclared files, the suite really is green), `verifier` (the verdict
@@ -133,7 +141,7 @@ because it only ever sees a station after the fact. Call it yourself immediately
 dispatching `sdet`, `reviewer` or `fixer`:
 
 ```bash
-route precheck "$RUN_DIR" <station>
+aiw precheck "$RUN_DIR" <station>
 ```
 
 Exit 1 means do not dispatch: the worktree is dirty (`sdet`), or the PR is closed
@@ -157,13 +165,13 @@ finished. It is the *same* path as a clean finish, with one difference: the PR i
 
 Do not open a non-draft PR on this path, and do not ask the user whether to continue.
 
-Exit codes **for `route route`**: `0` ok · `2` usage · `3` unreadable · `4` not JSON ·
+Exit codes **for `aiw route`**: `0` ok · `2` usage · `3` unreadable · `4` not JSON ·
 `5` contract violation · `6` test-root ownership violation · `7` a post-check refuted the
 envelope. Exits 6 and 7 are the two that are not stops: the engine has already routed a `bounce(sdet)` and printed it, and you revert the
 files before acting on it (phase 4). **Every other nonzero exit means Teardown, then
 report** — the engine knows nothing about Docker, so that is on you.
 
-That reflex applies to `route route` and to nothing else. The mechanical subcommands
+That reflex applies to `aiw route` and to nothing else. The mechanical subcommands
 (`stack`, `worktree`, `threads`, `pr`, `ci`, `gitnexus`, `project-status`) use a smaller
 vocabulary — `0` ok · `1` the operation failed · `2` usage — and each phase below says what
 its own exit 1 means. `stack down`, `gitnexus` and `project-status` are best-effort and
@@ -190,7 +198,7 @@ and 1 run **before** the worktree exists; phase 9.3 tells the user to delete the
 while `pr-grind` keeps running for hours after it; and nothing has to be added to
 `.git/info/exclude` to keep pipeline state out of the PR.
 
-Write context with `route set <run-dir> key=value …`. Never hand-edit `run.json`.
+Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`.
 
 ## 0. Preflight
 
@@ -223,13 +231,13 @@ Write context with `route set <run-dir> key=value …`. Never hand-edit `run.jso
 
    Otherwise initialise:
    ```bash
-   route init "$RUN_DIR" --issue <n> --repo <main-checkout> [--mode lean]
+   aiw init "$RUN_DIR" --issue <n> --repo <main-checkout> [--mode lean]
    ```
 5. Sync the gitnexus index in the main checkout so the planner isn't reasoning against a
    stale graph:
 
    ```bash
-   route gitnexus sync <main-checkout>
+   aiw gitnexus sync <main-checkout>
    ```
 
    It tries the local runner, falls back to `npx gitnexus analyze` (which is also what
@@ -326,7 +334,7 @@ it out at Gate 2. Save the comment URL otherwise.
 Record the plan's mechanical fields for later phases:
 
 ```bash
-route set "$RUN_DIR" \
+aiw set "$RUN_DIR" \
   test_root=<handoff.test_root> base_branch=<handoff.base_branch> plan_comment=<url|FAILED>
 ```
 
@@ -339,7 +347,7 @@ route set "$RUN_DIR" \
 2. Create the worktree:
 
    ```bash
-   route worktree create "$RUN_DIR" --title "<issue title>"
+   aiw worktree create "$RUN_DIR" --title "<issue title>"
    ```
 
    It fetches the approved base, adds `../wt-issue-<n>` on a new `issue-<n>-<slug>`
@@ -363,7 +371,7 @@ route set "$RUN_DIR" \
 ## 2.5. Test stack
 
 ```bash
-route stack up "$RUN_DIR"
+aiw stack up "$RUN_DIR"
 ```
 
 One call. It detects the host runner and records `test_cmd_host` **first and always** —
@@ -393,13 +401,13 @@ repo: **say that in the Gate 2 report** rather than letting a whole quality gate
 quietly.
 
 **The orchestrator still owns the stack exclusively.** No dispatched agent may run
-`docker compose up|build|down|run|restart` or `route stack` — agents only ever run the
+`docker compose up|build|down|run|restart` or `aiw stack` — agents only ever run the
 exact `test_cmd` string they are given. Three phases each independently raising their own
 uncapped stack is what pegged the host on a prior run.
 
 ## 3. SDET phase (agent: run-sdet)
 
-`route precheck "$RUN_DIR" sdet` first — exit 1 means the worktree is dirty and the
+`aiw precheck "$RUN_DIR" sdet` first — exit 1 means the worktree is dirty and the
 SDET's own diff would be unreadable. Then dispatch `run-sdet` with the approved test root,
 the test case list, and `test_cmd` from phase 2.5. It writes tests under the test root only, confirms they fail for the right
 reason using `test_cmd` exactly as given, and commits.
@@ -408,7 +416,7 @@ Write its envelope to `$RUN_DIR/20-tests.json` and route it. Then **record the S
 commit — this is what the test-ownership guard measures against**:
 
 ```bash
-route set "$RUN_DIR" sdet_sha=$(git -C <worktree> rev-parse HEAD)
+aiw set "$RUN_DIR" sdet_sha=$(git -C <worktree> rev-parse HEAD)
 ```
 
 Miss this and the guard silently never runs. Move `sdet_sha` forward again after **every**
@@ -426,7 +434,7 @@ exceeding either escalates on its own.
 
 1. Dispatch `run-dev` with the plan, test root, `test_cmd` from phase 2.5, the relevant
    `tasks/lessons.md` entries, and any current test output.
-2. **Rebuild if needed**: `route stack rebuild "$RUN_DIR"`, then re-run `test_cmd` once.
+2. **Rebuild if needed**: `aiw stack rebuild "$RUN_DIR"`, then re-run `test_cmd` once.
    It no-ops when `source_mounted: yes` or there is no stack, so the condition is no
    longer yours to remember — call it unconditionally after `run-dev` commits source
    changes.
@@ -507,7 +515,7 @@ doesn't cover the new code, and the global registry keys repos by directory, so 
 separate entry: `wt-issue-<n>`.
 
 ```bash
-route gitnexus index <worktree> --run-dir "$RUN_DIR"
+aiw gitnexus index <worktree> --run-dir "$RUN_DIR"
 ```
 
 Always exits 0 and records `gitnexus=wt-issue-<n>` or `gitnexus=none`. Phases 6–8 pass
@@ -521,7 +529,7 @@ Write the PR body to a temp file with `Closes #<n>` on its own line (keeps auto-
 merge), then:
 
 ```bash
-route pr open "$RUN_DIR" --body-file <file> [--draft]
+aiw pr open "$RUN_DIR" --body-file <file> [--draft]
 ```
 
 It links the branch to the issue **before** pushing, pushes, creates the PR against the
@@ -537,7 +545,7 @@ Records `pr`, `pr_number`, `link`. The ordering is not cosmetic: `createLinkedBr
 part still yours, because it is triage, not a procedure:
 
 - Failing tests under the approved test root → dispatch `run-sdet` with the failing
-  output, then re-run `route pr open` once.
+  output, then re-run `aiw pr open` once.
 - Failing tests outside the test root, in files this PR's dev phase touched → dispatch
   `run-dev` with the failing output (route its envelope as always — the test-ownership
   guard applies here too), then retry once.
@@ -559,9 +567,9 @@ Score the PR's diff so the review panel is selected by policy rather than by who
 holding the context:
 
 ```bash
-gh pr diff <pr> --name-only | route classify "$RUN_DIR" \
+gh pr diff <pr> --name-only | aiw classify "$RUN_DIR" \
   --loc <total changed lines> --labels "<issue labels, comma-separated>" [--depth <upstream depth>]
-route resolve-review "$RUN_DIR"
+aiw resolve-review "$RUN_DIR"
 ```
 
 `--depth` comes from phase 4b's `mcp__gitnexus__impact` on the changed symbols. **Omit the
@@ -595,7 +603,7 @@ A specialist that returns a malformed verdict gets **re-dispatched**, not hand-c
 (H1). If it fails twice, drop that lens, say so in one line, and continue — the generalist
 still runs, and one missing lens is not worth stopping a run.
 
-`route precheck "$RUN_DIR" reviewer`, **then** dispatch `run-reviewer` (opus,
+`aiw precheck "$RUN_DIR" reviewer`, **then** dispatch `run-reviewer` (opus,
 `run_in_background: false` — phase 7 depends on it)
 with the PR URL, issue number, the paths of every `48-*-verdict.json`, and (when phase 4b
 succeeded) `mcp__gitnexus__detect_changes` with `repo: "wt-issue-<n>"` for the diff's blast
@@ -622,17 +630,17 @@ below on exactly the same footing as `run-fixer`'s — which is why it needs no 
 own. If it errors out, warn once and continue: it is advisory, and a failure there must
 not delay the review.
 
-`route set "$RUN_DIR" panel='<lenses>' laravel_review=<REVIEWED|SKIPPED>`
+`aiw set "$RUN_DIR" panel='<lenses>' laravel_review=<REVIEWED|SKIPPED>`
 
 ## 7. Fix (agent: run-fixer)
 
-`route precheck "$RUN_DIR" fixer`, then dispatch `run-fixer` on the PR, passing `test_cmd`
+`aiw precheck "$RUN_DIR" fixer`, then dispatch `run-fixer` on the PR, passing `test_cmd`
 from phase 2.5 explicitly. Unlike
 interactive `/pr-fix-comments`, it auto-applies every actionable finding (no per-comment
 confirmation — nobody's watching this phase). One pass. It commits, replies, resolves
 threads, and pushes once at the end.
 
-If `run-fixer` committed any change, `route stack rebuild "$RUN_DIR"` before trusting its
+If `run-fixer` committed any change, `aiw stack rebuild "$RUN_DIR"` before trusting its
 test result. It no-ops when `source_mounted: yes`.
 
 Write its envelope to `$RUN_DIR/60-fix.json` and route it. It reports `passed` even when it
@@ -654,11 +662,11 @@ alone doesn't reach GitHub, and an unresolved thread on a PR that's actually fin
 as unfinished work to the next person who opens it.
 
 ```bash
-route threads resolve <thread-node-id> [<thread-node-id> ...]
+aiw threads resolve <thread-node-id> [<thread-node-id> ...]
 ```
 
 `run-fixer` already reports each thread's node ID in `handoff.needs_confirmation[]`. If
-you only have a comment id, `route threads list <pr> --for-comment <id>` returns the
+you only have a comment id, `aiw threads list <pr> --for-comment <id>` returns the
 thread. Non-fatal per thread: it warns and continues if one fails.
 
 ## 7b. Findings the fixer could not apply (agents: run-sdet, run-dev)
@@ -673,7 +681,7 @@ with the list (each finding's summary, thread URL, thread node ID) and `test_cmd
 `run-dev` has `Write` and already owns implementation; `run-fixer`'s edit-only boundary is
 what keeps an unattended fix pass from inventing files, so the fix is to route past it, not
 to widen it. Instruct `run-dev` to reply on each thread with what it added and resolve it
-(`route threads resolve <node_id>`, as Gate 2a). Route its envelope as always — the
+(`aiw threads resolve <node_id>`, as Gate 2a). Route its envelope as always — the
 test-ownership guard applies. Empty list → set `fix_newfile=SKIPPED` and move on.
 
 **Test-root findings** — `60-fix.json`'s `handoff.needs_test_root_fix[]`. If it's empty, set
@@ -682,7 +690,7 @@ test-ownership guard applies. Empty list → set `fix_newfile=SKIPPED` and move 
 Otherwise dispatch `run-sdet` once with the full list — each finding's file, line,
 summary, thread URL, thread node ID (all reported by `run-fixer`), and `test_cmd` from
 phase 2.5. Instruct it to: apply each fix inside the test root, reply on each finding's
-thread with what changed, resolve the thread (`route threads resolve <node_id>`, as
+thread with what changed, resolve the thread (`aiw threads resolve <node_id>`, as
 Gate 2a), run `test_cmd`, and push once at the end. One pass, no retry loop — a finding
 it can't resolve stays open and gets reported at Gate 2, same as any other unresolved
 thread.
@@ -717,7 +725,7 @@ and phase 8's conflict resolution.
    the baseline behind and the ownership guard trips on it (exit 6) and halts the run on a
    false positive.
    **One resolution attempt only** — no retry loop.
-5. If step 4 dispatched `run-dev` (source paths changed), `route stack rebuild
+5. If step 4 dispatched `run-dev` (source paths changed), `aiw stack rebuild
    "$RUN_DIR"` first — it no-ops when the source is mounted. Then run `test_cmd` (from
    the ledger context).
    - Pass → `git commit` (the merge commit, plus any conflict-resolution changes) and
@@ -725,7 +733,7 @@ and phase 8's conflict resolution.
    - Fail → `git merge --abort`. The branch and PR return to their exact pre-merge
      state. Set `sync='CONFLICTS UNRESOLVED (<files>)'`. Never push a red merge.
 6. If the merge (step 3 or 5) succeeded and phase 4b indexed the worktree, run
-   `route gitnexus index <worktree>` (incremental, cheap) so the graph reflects the
+   `aiw gitnexus index <worktree>` (incremental, cheap) so the graph reflects the
    synced code. Skip if the merge was aborted or phase 4b never indexed.
 
 ## 8.5 CI gate — the PR must actually be green
@@ -738,7 +746,7 @@ This runs **before** Teardown, deliberately — the stack is still up, so a real
 be reproduced locally instead of guessed at.
 
 ```bash
-route ci status <pr> --watch
+aiw ci status <pr> --watch
 ```
 
 It polls until nothing is pending (20 min cap), then prints one JSON object:
@@ -756,7 +764,7 @@ a defect ships.
   reuses the existing budget of **one `run-ci` attempt per head SHA** — here and in
   `pr-grind` alike. Never grant a second on the same SHA.
 - **Red, real defect** → re-dispatch **`run-dev`** with the `log_excerpt` as findings.
-  `route stack rebuild "$RUN_DIR"` first. Route dev's envelope as always — the ownership guard applies here too — then
+  `aiw stack rebuild "$RUN_DIR"` first. Route dev's envelope as always — the ownership guard applies here too — then
   `git push --force-with-lease` and let CI re-run. **One attempt.**
 - **Still red after that one attempt, or the wall-clock cap expires** → set
   `ci='RED — <run url>'` and continue to 9.5. Do **not** loop here: phase 10's `pr-grind`
@@ -820,7 +828,7 @@ Set the issue's project status to **In Review** (see "Project status updates" be
 best-effort, warn and continue on failure. This is the point where the run hands the PR
 back to a human.
 
-Before reporting, run `route threads list <pr> --open-only` once and list every thread it
+Before reporting, run `aiw threads list <pr> --open-only` once and list every thread it
 returns, with its URL — this catches anything phase 7b couldn't close and anything that
 fell through the cracks elsewhere.
 
@@ -865,7 +873,7 @@ Post the same report as an issue comment (`gh issue comment <n> --body-file <tmp
 so the issue carries a full audit trail alongside the phase-1 plan comment. Non-fatal —
 warn and continue if it fails.
 
-If phase 4b indexed the worktree, tell the user to run `route gitnexus clean <worktree>`
+If phase 4b indexed the worktree, tell the user to run `aiw gitnexus clean <worktree>`
 before `git worktree remove`, so the throwaway `wt-issue-<n>` registry entry doesn't rot
 in `~/.gitnexus/registry.json`.
 
@@ -885,8 +893,8 @@ plain `php artisan test` still fails with `could not translate host name "postgr
 dependency was the *stack*, never the runner invocation. Observed exactly that way on a real
 fix pass, which then reported "Tests — NOT verified" and pushed anyway.
 
-So hand `pr-grind` the run directory: `route stack up "$RUN_DIR"` brings the same stack
-back under the same project name, and `route stack down` drops it again. **Orchestrator
+So hand `pr-grind` the run directory: `aiw stack up "$RUN_DIR"` brings the same stack
+back under the same project name, and `aiw stack down` drops it again. **Orchestrator
 stack-exclusivity does not extend past Teardown** — its
 whole purpose was to stop concurrent stacks during a run, and after Teardown there is no
 run and no stack to collide with. `pr-grind` may therefore raise and drop the stack around
@@ -895,7 +903,7 @@ its own rounds. Say so when dispatching, because `run-fixer`'s prompt otherwise 
 1. Dispatch `run-grinder` in **`open`** mode with the PR URL and `owner/repo`. It
    resolves the repo's review channel from `<channels>`, posts the
    reviewer-bot trigger with the PR link, and returns the Slack thread URL.
-2. `route set "$RUN_DIR" grind_thread=<url>`
+2. `aiw set "$RUN_DIR" grind_thread=<url>`
 3. Invoke the `ai-workflow:pr-grind` skill with that thread URL as its argument, **in this session**
    — not inside a subagent. `pr-grind` persists across rounds via `ScheduleWakeup` and a
    `persistent` Monitor, and a subagent cannot hold either: it would end the moment it
@@ -919,7 +927,7 @@ Merging is still manual. This phase does not change that, and nothing in it may 
 ## Teardown
 
 ```bash
-route stack down "$RUN_DIR"
+aiw stack down "$RUN_DIR"
 ```
 
 Always exits 0 — a `stack=none` ledger is a no-op, and a teardown that fails is a warning.
@@ -936,7 +944,7 @@ hands back to a human (Gate 2a's "Hold here", and phase 9.3 — which is now eve
 clean or degraded).
 
 ```bash
-route project-status <owner>/<repo> <n> "In Progress"
+aiw project-status <owner>/<repo> <n> "In Progress"
 ```
 
 It finds the issue's project items, matches the `Status` field's option by name (exact
@@ -948,7 +956,7 @@ option is one warning line. Never block the run on this.
 
 ### Routing
 
-- **The engine decides, you don't.** Every station envelope goes through `route route`,
+- **The engine decides, you don't.** Every station envelope goes through `aiw route`,
   and you act on what it printed. Never eyeball a routing decision, never keep a retry
   counter yourself, and never hand-set `currentIndex`. The caps and the roster live in
   `run.json` for exactly this reason.
@@ -1010,7 +1018,7 @@ option is one warning line. Never block the run on this.
 
 - `run.json` under `<runs_dir>/<owner>-<repo>-issue-<n>/` is the only state,
   and it lives **outside the repo** — phases 0-1 predate the worktree, and `pr-grind` runs
-  for hours after the worktree is deleted. Write it only via `route.py set`; never hand-edit
+  for hours after the worktree is deleted. Write it only via `aiw set`; never hand-edit
   it, and never invent a second state file. (This supersedes the old `.agent-run.md` rule.
   That rule's real intent was *no daemon, no ledger service, no dashboard*, and that still
   holds: this is one local JSON file written by a script that exits.)
@@ -1028,7 +1036,7 @@ option is one warning line. Never block the run on this.
 - Project status updates — never block or fail the run over a missing project, field, or
   option.
 - The orchestrator owns the Docker test stack exclusively (phase 2.5, rebuild points,
-  Teardown). No dispatched agent may run `route stack` or
+  Teardown). No dispatched agent may run `aiw stack` or
   `docker compose up|build|down|run|restart` —
   agents only ever run the exact `test_cmd` string they're given, with a wall-clock
   timeout. This is what pegged the host on a prior run: three phases each independently
@@ -1068,7 +1076,7 @@ option is one warning line. Never block the run on this.
   not sufficient. Phase 8.5 checks it before Teardown; a still-red PR is reported as red at
   Gate 2, never as done.
 - The classifier and the specialist panel are **not stations**. They never go through
-  `route route`, and the generalist `run-reviewer` synthesizes every verdict into the one
+  `aiw route`, and the generalist `run-reviewer` synthesizes every verdict into the one
   `50-review.json` the engine sees. Adding a second review envelope would break the linear
   contract.
 - Specialists are selected by `resolve-review`, never by judgment. Empty output means

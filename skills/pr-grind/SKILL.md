@@ -2,10 +2,10 @@
 name: pr-grind
 description: Automate the review-fix-retrigger loop on a PR that's stuck in CHANGES_REQUESTED — post the Slack thread trigger, wait for the reviewer bot's round, split findings into fix-vs-rebut, dispatch run-fixer, verify CI, re-trigger, repeat until approved or a rail stops it. Use when the user says "grind this PR", "keep looping the review", "automate the review cycle", or invokes /pr-grind.
 argument-hint: <slack thread url>   # run-issue phase 10 passes the url run-grinder just created
-allowed-tools: Bash(route:*), Bash(gh:*), Bash(git:*), Bash(bash:*), Bash(slackcli:*), Read, Write, Agent, Skill, Monitor, ScheduleWakeup, AskUserQuestion
+allowed-tools: Bash(aiw:*), Bash(gh:*), Bash(git:*), Bash(bash:*), Bash(slackcli:*), Read, Write, Agent, Skill, Monitor, ScheduleWakeup, AskUserQuestion
 ---
 
-> **Paths.** `<...>` placeholders below are keys from `route paths` (run it; `route` is
+> **Paths.** `<...>` placeholders below are keys from `aiw paths` (run it; `aiw` is
 > on `PATH` via the plugin's `bin/`). Substitute the printed value; never guess a path.
 
 Given the Slack thread URL `$ARGUMENTS`, drive a PR through repeated
@@ -150,7 +150,7 @@ not fix this round**:
 1. **Round cap** — 10 rounds recorded in the state file already → stop, post
    to Slack that the cap was hit with a link to the state file, then go to
    Step 8's paused stop.
-2. **CI red** — `route ci status <pr> --watch` reports `state: red` at the
+2. **CI red** — `aiw ci status <pr> --watch` reports `state: red` at the
    current head (not pending, not the check this round's fix would address).
    It returns the failing jobs' logs with it; deciding flake-vs-real is
    `run-ci`'s job, not yours. This rail **escalates once before it stops.**
@@ -163,7 +163,7 @@ not fix this round**:
      repo root, and the approved test root if this run has one. Record
      `ci-attempt: <sha> — <outcome>` in the state file **before** acting on
      the result, so a crash mid-round can never buy a second attempt.
-     - `outcome: fixed` or `flake-rerun` → re-poll `route ci status <pr>
+     - `outcome: fixed` or `flake-rerun` → re-poll `aiw ci status <pr>
        --watch`. Green → continue this round normally. Still red →
        stop as below.
      - `outcome: cannot-fix`, or a `Needs human confirmation` section →
@@ -225,7 +225,7 @@ The orchestrator (this skill), not `run-fixer`, decides fix-vs-rebut, because
 `run-fixer` auto-applies every actionable finding and cannot decline one.
 
 **Classifier-blocked GitHub writes.** In some environments the orchestrator's
-`gh issue comment` and `route threads resolve` are blocked
+`gh issue comment` and `aiw threads resolve` are blocked
 by the harness permission classifier, while
 `POST /pulls/{n}/comments/{id}/replies` succeeds. `run-fixer` (a subagent) runs
 in a different permission context and **can** resolve threads. Therefore: let
@@ -242,8 +242,8 @@ For each finding not already resolved by step 4:
   would break a passing test, the premise is factually incorrect against the
   code). Reply directly, same calls `/pr-fix-comments` step 7 uses:
   - Inline: `gh api repos/{o}/{r}/pulls/{n}/comments/{id}/replies -f body="..."`
-  - Then resolve: `route threads list <pr> --for-comment <id>` for the node
-    id, then `route threads resolve <node_id>`.
+  - Then resolve: `aiw threads list <pr> --for-comment <id>` for the node
+    id, then `aiw threads resolve <node_id>`.
   Do not touch code for a rebutted finding. When genuinely unsure whether a
   finding is wrong, it is not a rebuttal — put it on the fix-list.
 - **PR-body edit** — a should-fix whose remedy is "update the PR description /
@@ -274,8 +274,8 @@ So: if that run directory exists, **bring the stack up yourself** for the
 duration of the grind and hand `run-fixer` the `test_cmd` that comes back:
 
 ```bash
-route stack up "<runs_dir>/<owner>-<repo>-issue-<n>"    # re-raises the same runissue-<n> stack
-route stack down "<runs_dir>/<owner>-<repo>-issue-<n>"  # when the loop ends or pauses
+aiw stack up "<runs_dir>/<owner>-<repo>-issue-<n>"    # re-raises the same runissue-<n> stack
+aiw stack down "<runs_dir>/<owner>-<repo>-issue-<n>"  # when the loop ends or pauses
 ```
 
 `up` re-records `test_cmd` in that ledger; read it back and tell `run-fixer`
@@ -303,7 +303,7 @@ history to split them. Record the single SHA against all fingerprints.
 
 ## Step 6 — Verify the push
 
-If `run-fixer` committed and pushed anything, `route ci status <pr> --watch`
+If `run-fixer` committed and pushed anything, `aiw ci status <pr> --watch`
 (a bounded wait within the current turn, not a Monitor). Red → this is rail 2 (step 3): apply it in full,
 including the single `run-ci` escalation, against the **new** head SHA that
 `run-fixer` just pushed. That SHA has no `ci-attempt` line yet, so it gets its

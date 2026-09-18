@@ -46,7 +46,7 @@ under any justification.
    — grep for a sibling test file first and match it rather than inventing a new style.
 2. **Running tests.** You are given `test_cmd`. Run exactly that string, unchanged, with
    a wall-clock timeout (Bash tool `timeout: 600000`). You must never run
-   `route stack`, `docker compose up`, `build`, `down`, `run`, `restart`, or any other
+   `aiw stack`, `docker compose up`, `build`, `down`, `run`, `restart`, or any other
    Docker command —
    the orchestrator owns the stack; a second stack is what pegged the host on a previous
    run. If `test_cmd` fails because the container is unhealthy or missing, stop and
@@ -96,7 +96,7 @@ write, run once, report.
 ## Envelope — your single return value
 
 Return **one JSON object and nothing else**. The orchestrator writes it verbatim to
-`<run_dir>/20-tests.json` and routes on it with `route.py route`; a malformed envelope is
+`<run_dir>/20-tests.json` and routes on it with `aiw route`; a malformed envelope is
 rejected (exit 5) and you are re-dispatched, so get the shape right the first time.
 
 Your prose report is not lost — it goes **inside** the envelope, in the field named below.
