@@ -8,13 +8,13 @@ ready-to-merge handback.
 ## Install
 
 ```bash
-git clone <this-repo> ~/code/ai-workflow
+git clone <this-repo> ~/Documents/Projects/Personal/ai-workflow
 ```
 
 Then in Claude Code:
 
 ```
-/plugin marketplace add ~/code/ai-workflow
+/plugin marketplace add ~/Documents/Projects/Personal/ai-workflow
 /plugin install ai-workflow@ai-workflow
 ```
 
