@@ -173,6 +173,19 @@ assert project.match_option(OPTIONS, "Blocked") is None
 assert project.match_option(OPTIONS, "In") is None, "a filler-only target must not match everything"
 ok("project status matches the exact option, then the best significant-word overlap")
 
+# --------------------------------------------------------------------------- epic board
+
+VIEWS = [{"id": "V1", "name": "Board"}, {"id": "V2", "name": "Epic #42 — Billing"}]
+assert project.find_view(VIEWS, "Epic #42 — Billing")["id"] == "V2"
+assert project.find_view(VIEWS, "Epic #43 — Other") is None
+assert project.find_view([], "Epic #42 — Billing") is None
+ok("an existing epic board is found by name, so a resume never creates a second")
+
+assert project.board_name(42, "Billing overhaul") == "Epic #42 — Billing overhaul"
+assert project.board_name(42, "x" * 200).startswith("Epic #42 — ")
+assert len(project.board_name(42, "x" * 200)) <= 80, "view names must stay readable"
+ok("board names are derived from the parent and bounded in length")
+
 # --------------------------------------------------------------------------- worktree
 
 assert worktree.slugify("Fix the N+1 in OrderController!") == "fix-the-n-1-in-ordercontroller"

@@ -90,9 +90,95 @@ def cmd_set(args) -> None:
             print(f"{project.get('title')}: Status -> {option['name']}")
 
 
+VIEWS_QUERY = """
+query($p:ID!){ node(id:$p){ ... on ProjectV2{ views(first:50){ nodes{ id name } } } } }
+"""
+
+CREATE_VIEW = """
+mutation($p:ID!,$n:String!){
+  createProjectV2View(input:{projectId:$p,name:$n,layout:BOARD_LAYOUT}){ projectV2View{ id } } }
+"""
+
+SET_FILTER = """
+mutation($v:ID!,$f:String!){
+  updateProjectV2View(input:{viewId:$v,filter:$f}){ projectV2View{ id filter } } }
+"""
+
+DELETE_VIEW = """
+mutation($v:ID!){ deleteProjectV2View(input:{viewId:$v}){ projectV2View{ id } } }
+"""
+
+
+def board_name(parent: int, title: str) -> str:
+    """Stable, human-readable, and bounded — this string is the idempotency key."""
+    prefix = f"Epic #{parent} — "
+    return prefix + (title or "")[: 80 - len(prefix)]
+
+
+def find_view(views: list, name: str):
+    for view in views or []:
+        if view.get("name") == name:
+            return view
+    return None
+
+
+def cmd_board(args) -> None:
+    """Create (or find) the epic's board view. Best-effort: never exits nonzero.
+
+    The board filters on `label:epic-<n>`, never `parent-issue:` — the Projects API
+    accepts ANY filter string without validating it (a deliberately bogus qualifier
+    round-trips unchanged), so an unverifiable filter would fail as a silently empty
+    board, which is indistinguishable from an epic where nothing has started.
+    """
+    data, _ = gh_json(["api", "graphql", "-f", f"query={ITEMS_QUERY}",
+                       "-f", f"o={args.slug.split('/')[0]}",
+                       "-f", f"r={args.slug.split('/')[1]}", "-F", f"n={args.parent}"])
+    items = ((((data or {}).get("data") or {}).get("repository") or {})
+             .get("issue") or {}).get("projectItems") or {}
+    nodes = items.get("nodes") or []
+    if not nodes:
+        print("parent is not on any project — no board")
+        return
+    project_id = ((nodes[0].get("project") or {}).get("id"))
+
+    name = board_name(args.parent, args.title)
+    views, _ = gh_json(["api", "graphql", "-f", f"query={VIEWS_QUERY}", "-f", f"p={project_id}"])
+    existing = find_view(
+        ((((views or {}).get("data") or {}).get("node") or {}).get("views") or {}).get("nodes"),
+        name,
+    )
+    if existing:
+        print(f"board already exists: {name}")
+        return
+
+    created, proc = gh_json(["api", "graphql", "-f", f"query={CREATE_VIEW}",
+                             "-f", f"p={project_id}", "-f", f"n={name}"])
+    view = (((created or {}).get("data") or {}).get("createProjectV2View") or {}).get("projectV2View")
+    if not view:
+        # A closed project reports UNPROCESSABLE here. That is a normal state, not a bug.
+        warn(f"could not create the epic board: {(proc.stderr or '').strip()[:200]}")
+        return
+
+    _, fproc = gh_json(["api", "graphql", "-f", f"query={SET_FILTER}",
+                        "-f", f"v={view['id']}", "-f", f"f=label:epic-{args.parent}"])
+    if fproc.returncode != 0:
+        # An unfiltered view shows the ENTIRE project under an epic's name, which is
+        # worse than no board. Remove it rather than leave it misleading.
+        gh_json(["api", "graphql", "-f", f"query={DELETE_VIEW}", "-f", f"v={view['id']}"])
+        warn("could not set the board filter; removed the unfiltered view")
+        return
+    print(f"created board: {name}")
+
+
 def register(sub, add) -> None:
     p = sub.add_parser("project-status", help="move an issue's Projects v2 Status (best-effort)")
     p.add_argument("slug", help="owner/repo")
     p.add_argument("issue", type=int)
     p.add_argument("status", help='target status name, e.g. "In Progress"')
     p.set_defaults(func=cmd_set)
+
+    b = sub.add_parser("project-board", help="create the per-epic board view (best-effort)")
+    b.add_argument("slug", help="owner/repo")
+    b.add_argument("parent", type=int)
+    b.add_argument("--title", default="", help="parent issue title, for the view name")
+    b.set_defaults(func=cmd_board)
