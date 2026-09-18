@@ -23,6 +23,15 @@ Do the following:
 2.5. Dispatch the `run-researcher` agent (haiku, read-only) with the description above and the `owner/repo` slug, to collect context *outside* the codebase: prior related issues/PRs, project wiki, relevant public docs (library/API behavior the description implies). Carry its brief into steps 3 and 4 — do not print it verbatim, fold the relevant parts into the grilling and the issue body. Best-effort: if it errors or returns nothing useful, note that in one line and continue without it.
 3. Use the grill-me skill to interview me on anything unclear (acceptance criteria, priority, affected users, edge cases), asking via the AskUserQuestion tool. Wait for my answers.
    - As part of this grilling session, enumerate every corner case you can find for this issue (empty/null input, concurrency, permissions, error/failure paths, boundary values, existing data migrations, etc.) and validate each one with me before moving on — don't assume a corner case is out of scope without asking.
+3.5. **Epic check.** If the description covers more than one independently-shippable
+   outcome, or is large enough that one PR would not be reviewable in a sitting, this
+   is an epic. Do not split silently — propose the split with `AskUserQuestion`, listing
+   each proposed child as one line (title + the one outcome it delivers) plus the
+   dependency edges you intend to declare. On approval, go to step 4-EPIC instead of
+   step 4. On rejection, file one issue as normal.
+
+   More than ~8 children is a decomposition problem, not a bigger epic: say so and
+   propose a coarser split rather than launching 20 pipelines.
 4. Then create a GitHub issue on the current repo:
    - Write the full body to `/tmp/gh-issue-body.md` using the write tool
    - Run `gh issue create --title "..." --label "..." --body-file /tmp/gh-issue-body.md`
@@ -37,6 +46,51 @@ Do the following:
      - **Dependencies / Blockers** — its own section, not a line in Notes. `none` beats silence here too.
      - Never delete one of these five to avoid writing `none`, and never ship a body containing `[bracketed placeholders]` — that is a failed run, not a draft.
    - Labels: bug / enhancement / feature / chore, plus scope labels (`backend`, `frontend`, `infra`) as applicable
+
+### 4-EPIC. Create the parent and its children
+
+1. Create the **parent** with the BRD as its body, labelled `epic`. It is a container:
+   it needs no acceptance criteria of its own.
+2. For each child, write a **complete, independently DoR-satisfying** issue body — the
+   same section list as step 4, with the parent's context **inlined, never referenced**.
+   `run-researcher` scores each child on its own and blocks the run on a gap, so a child
+   whose Context section says "see parent" dies before its worktree is created.
+
+   Each child is one **vertical slice** — one thin end-to-end outcome, never a layer.
+   Horizontal slices ("all the models") maximize file overlap, which serializes the DAG,
+   and none of them has acceptance criteria that can be verified on their own.
+
+   Where a child depends on a sibling, add a line on its own:
+
+   ```
+   Depends on: #<n>, #<n>
+   ```
+
+   Edges may only point at siblings in this epic.
+3. Label every child `epic-<parent>` in addition to its normal labels. This is what the
+   epic board filters on, and what makes the children findable with
+   `gh issue list --label epic-<parent>` when there is no project.
+4. Link and validate:
+
+   ```bash
+   aiw epic split "<runs_dir>/<owner>-<repo>-epic-<parent>" \
+     --parent <parent> --slug <owner>/<repo> --children <n>,<n>,<n>
+   ```
+
+   Exit 1 means the edges do not form a DAG — a cycle, a self-edge, or an edge pointing
+   outside the epic. Fix the offending child's `Depends on:` line with `gh issue edit`
+   and re-run. Do not proceed with an invalid DAG: the ordering is what keeps a stacked
+   child from branching off a base that does not exist yet.
+5. Add every child to the same project as the parent (step 6's calls, once per child),
+   then create the board:
+
+   ```bash
+   aiw project-board <owner>/<repo> <parent> --title "<parent title>"
+   ```
+
+   Best-effort — it always exits 0. A parent on no project, a closed project, or a
+   missing `project` scope means no board and one warning line.
+6. Return the parent URL, the child URLs in dependency order, and the board name.
 4.5. Dispatch the `gh-issue-factchecker` agent (fresh context, no memory of the steps above) with just the issue number/URL and `owner/repo`. It re-reads the created issue cold and checks every concrete claim (file paths, symbols, described behavior, the proposed fix) against the real repo.
    - `PASS` → continue to step 5, no mention needed.
    - `ISSUES FOUND` → fix the flagged text yourself, write the corrected body to `/tmp/gh-issue-body.md`, run `gh issue edit <n> --body-file /tmp/gh-issue-body.md`, delete the temp file, and briefly tell me what was wrong and corrected. Do not silently ignore a flagged discrepancy.
