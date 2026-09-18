@@ -265,4 +265,76 @@ assert epic.ready(DAG, s, max_stacks=1) == [10], "the budget is a hard cap, not 
 assert epic.ready(DAG, s, max_stacks=2) == [10, 11], "#12 is third in line for two slots"
 ok("the stack budget is a hard cap counted across the whole epic")
 
+# --------------------------------------------------------------------------- epic child_state
+
+with tempfile.TemporaryDirectory() as tmp:
+    run_dir = os.path.join(tmp, "o-r-issue-10")
+    os.makedirs(run_dir)
+    with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump({"issue": 10, "stations": ["dev"], "currentIndex": 0, "bounceCounts": {},
+                   "status": "running", "trace": [], "context": {"stack": "failed"},
+                   "classification": None, "specialists": []}, fh)
+    st = epic.child_state(tmp, "o/r", 10)
+    assert st["needs_stack"] is False, st
+ok("a child whose stack failed to come up does not hold a budget slot")
+
+# --------------------------------------------------------------------------- epic CLI
+
+with tempfile.TemporaryDirectory() as tmp:
+    epic_dir = os.path.join(tmp, "epic")
+    os.makedirs(epic_dir)
+    with open(os.path.join(epic_dir, "epic.json"), "w", encoding="utf-8") as fh:
+        json.dump({
+            "parent": 42, "slug": "o/r", "children": [10, 11],
+            "dag": {"order": [10, 11], "deps": {"10": [], "11": [10]}},
+            "max_stacks": 2,
+        }, fh)
+
+    runs = os.path.join(tmp, "runs")
+    for issue, ctx in ((10, {"pr": "https://x/1"}), (11, {})):
+        d = os.path.join(runs, f"o-r-issue-{issue}")
+        os.makedirs(d)
+        with open(os.path.join(d, "run.json"), "w", encoding="utf-8") as fh:
+            json.dump({"issue": issue, "stations": ["dev"], "currentIndex": 0,
+                       "bounceCounts": {}, "status": "running", "trace": [],
+                       "context": ctx, "classification": None, "specialists": []}, fh)
+
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "epic", "next", epic_dir, "--runs-dir", runs],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    got = json.loads(proc.stdout)
+    assert got["ready"] == [10, 11], got
+ok("aiw epic next reads every child ledger and prints who may advance")
+
+with tempfile.TemporaryDirectory() as tmp:
+    epic_dir, runs, repo = os.path.join(tmp, "e"), os.path.join(tmp, "runs"), os.path.join(tmp, "repo")
+    os.makedirs(epic_dir); os.makedirs(repo)
+    with open(os.path.join(epic_dir, "epic.json"), "w", encoding="utf-8") as fh:
+        json.dump({"parent": 42, "slug": "o/r", "children": [10, 11],
+                   "dag": {"order": [10, 11], "deps": {"10": [], "11": [10]}},
+                   "max_stacks": 2}, fh)
+
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "epic", "init", epic_dir, "--runs-dir", runs, "--repo", repo],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    for issue in (10, 11):
+        led = json.load(open(os.path.join(runs, f"o-r-issue-{issue}", "run.json")))
+        assert led["issue"] == issue and led["status"] == "running", led
+    # 11 depends on 10, so its base is 10's branch and must NOT default to the repo base
+    led11 = json.load(open(os.path.join(runs, "o-r-issue-11", "run.json")))
+    assert led11["context"]["depends_on"] == "10", led11["context"]
+
+    # re-running must not clobber a ledger that already exists
+    again = subprocess.run(
+        [sys.executable, ROUTE, "epic", "init", epic_dir, "--runs-dir", runs, "--repo", repo],
+        capture_output=True, text=True,
+    )
+    assert again.returncode == 0, again.stderr
+    assert "already" in again.stdout.lower(), again.stdout
+ok("aiw epic init creates one ledger per child, records edges, and is idempotent")
+
 print(f"\n{passed} checks passed")

@@ -52,6 +52,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from engine import Ledger, RouteAction, Router, classify, resolve_review_panel, validate_envelope  # noqa: E402
 import checks as checks_mod  # noqa: E402
 import ci  # noqa: E402
+import epic  # noqa: E402
 import gitnexus  # noqa: E402
 import pr  # noqa: E402
 import project  # noqa: E402
@@ -410,7 +411,7 @@ def main(argv=None) -> None:
 
     # The mechanical phases. Each module owns its own argparse wiring so adding one
     # is a file plus a line, not a surgery on this function.
-    for module in (stack, worktree, threads, pr, ci, gitnexus, project):
+    for module in (stack, worktree, threads, pr, ci, gitnexus, project, epic):
         module.register(sub, add)
 
     args = parser.parse_args(argv)
