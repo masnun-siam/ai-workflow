@@ -1,0 +1,14 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "ai-workflow",
+  "description": "Blubird agent delivery workflow: GitHub issue to reviewed PR, with three human gates.",
+  "owner": { "name": "Blubird Interactive" },
+  "plugins": [
+    {
+      "name": "ai-workflow",
+      "description": "Issue-to-reviewed-PR pipeline: /run-issue, its agents, routing engine and review skills.",
+      "source": "./",
+      "category": "workflow"
+    }
+  ]
+}

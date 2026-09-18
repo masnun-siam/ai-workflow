@@ -1,0 +1,4 @@
+#!/bin/sh
+# Plugin bin/ is on PATH, so orchestrator markdown never spells an absolute path.
+# ponytail: a shim, not a wrapper — no arg parsing, no logic of its own.
+exec python3 "$(dirname "$(dirname "$(cd "$(dirname "$0")" && pwd)/$(basename "$0")")")/run-engine/route.py" "$@"

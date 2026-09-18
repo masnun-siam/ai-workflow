@@ -1,0 +1,72 @@
+---
+description: Create a GitHub issue with codebase context
+argument-hint: "[bug | feature | task | improvement]"
+---
+
+> **Paths.** `<...>` placeholders below are keys from `route paths` (run it; `route` is
+> on `PATH` via the plugin's `bin/`). Substitute the printed value; never guess a path.
+I have a ${1:-bug / feature request / task / improvement} to log as a GitHub issue.
+
+Details: $@
+
+**HARD RULE — this skill only ever creates a GitHub issue. It never touches code.**
+- NEVER use Write, Edit, or NotebookEdit on any file in the repo.
+- NEVER run a mutating shell command (`git commit`, `git checkout -b`, package installs, formatters, codemods, etc.).
+- The ONLY writes permitted are the temp body file at `/tmp/gh-issue-body.md`, the `gh issue create` / `gh issue edit` / `gh project` calls below, and the notes-vault dump in step 7 (that's a different vault, not the repo, and goes through the `dump` skill's own confirmation).
+- This holds even for a one-character fix. "It's trivial" is not an exception — the whole point of filing an issue is that a human decides whether and how to make the change.
+- If a fix is obvious from your investigation, do NOT apply it. Record it under a **Proposed Fix** section in the issue body instead (file path, symbol, and the change in prose or a fenced diff).
+
+Do the following:
+
+1. Use GitNexus MCP (`gitnexus_query`, `gitnexus_context`) to find the relevant code — execution flows, affected symbols, and files related to this description.
+2. Check git status and recent commits for any in-progress work that touches the same area.
+2.5. Dispatch the `run-researcher` agent (haiku, read-only) with the description above and the `owner/repo` slug, to collect context *outside* the codebase: prior related issues/PRs, project wiki, relevant public docs (library/API behavior the description implies). Carry its brief into steps 3 and 4 — do not print it verbatim, fold the relevant parts into the grilling and the issue body. Best-effort: if it errors or returns nothing useful, note that in one line and continue without it.
+3. Use the grill-me skill to interview me on anything unclear (acceptance criteria, priority, affected users, edge cases), asking via the AskUserQuestion tool. Wait for my answers.
+   - As part of this grilling session, enumerate every corner case you can find for this issue (empty/null input, concurrency, permissions, error/failure paths, boundary values, existing data migrations, etc.) and validate each one with me before moving on — don't assume a corner case is out of scope without asking.
+4. Then create a GitHub issue on the current repo:
+   - Write the full body to `/tmp/gh-issue-body.md` using the write tool
+   - Run `gh issue create --title "..." --label "..." --body-file /tmp/gh-issue-body.md`
+   - **NEVER use `--body` flag** — shell escaping breaks on backticks, pipes, quotes, newlines. Always `--body-file`.
+   - Delete `/tmp/gh-issue-body.md` after the issue is created
+   - Title: clear, specific, ≤72 chars
+   - Body sections: **Summary** (the problem and *why it matters* — not a restatement of the fix), **Specific Business Requirements**, **Out of Scope**, **Context / Affected Code** (file paths and symbols from step 1), **Steps to Reproduce / Requirements**, **Acceptance Criteria** (include every corner case validated in step 3 as its own explicit criterion), **Non-functional Constraints**, **Assumptions**, **Dependencies / Blockers**, **Proposed Fix** (only if a concrete fix is obvious — describe it, do NOT apply it), **Notes**
+   - **These sections exist to clear `/run-issue`'s Gate 0.** `run-researcher` scores every issue against `<dor>` and *blocks the run* on a gap, so an issue filed without them gets bounced back to you with a `needs-info` comment. Read that file; it is six items and this section list is one-to-one with it.
+     - **Out of Scope** — always at least one real entry. An issue with no stated edge is an issue whose PR grows one.
+     - **Non-functional Constraints** — performance, security, authorization, data migration, backward compatibility. Write `none` deliberately where it's true; silence scores as unconsidered, `none` scores as answered.
+     - **Assumptions** — anything you filled in that the issue's author didn't say, stated so they can correct it. This is the section that keeps a normalization from becoming invented scope.
+     - **Dependencies / Blockers** — its own section, not a line in Notes. `none` beats silence here too.
+     - Never delete one of these five to avoid writing `none`, and never ship a body containing `[bracketed placeholders]` — that is a failed run, not a draft.
+   - Labels: bug / enhancement / feature / chore, plus scope labels (`backend`, `frontend`, `infra`) as applicable
+4.5. Dispatch the `gh-issue-factchecker` agent (fresh context, no memory of the steps above) with just the issue number/URL and `owner/repo`. It re-reads the created issue cold and checks every concrete claim (file paths, symbols, described behavior, the proposed fix) against the real repo.
+   - `PASS` → continue to step 5, no mention needed.
+   - `ISSUES FOUND` → fix the flagged text yourself, write the corrected body to `/tmp/gh-issue-body.md`, run `gh issue edit <n> --body-file /tmp/gh-issue-body.md`, delete the temp file, and briefly tell me what was wrong and corrected. Do not silently ignore a flagged discrepancy.
+5. Assign the issue:
+   - Get the default assignee: `gh api user --jq .login`.
+   - Confirm via AskUserQuestion (`multiSelect: true`), with that login (as `@me`) recommended first, alongside other repo collaborators from `gh api repos/{owner}/{repo}/assignees --jq '.[].login'`.
+   - Pass each chosen login as its own `--assignee <login>` flag on `gh issue create` (combine with the create call in step 4 rather than a separate call).
+6. Add to a GitHub Project and fill its fields, discovered at runtime — never assume a project or field schema:
+   - `gh project list --owner <repo-owner> --format json`
+     - Zero projects → skip this step entirely, go straight to returning the URL.
+     - One project → use it.
+     - Multiple → ask via AskUserQuestion (`multiSelect: true`) which ones.
+   - Add the issue to each chosen project at creation time, one `--project "<title>"` flag per project (same call as step 4/5).
+   - For each chosen project, read its fields: `gh project field-list <number> --owner <owner> --format json`.
+   - For each `ProjectV2SingleSelectField` on each project, ask the user to pick from that field's real `options` (never invent option names) — batch into as few AskUserQuestion calls as possible (max 4 questions per call). Skip any field the user declines to set.
+   - Set each chosen field — **one field per `item-edit` call** (the CLI only supports single-field updates on non-draft issues):
+     `gh project item-edit <number> --owner <owner> --url <issue-url> --field "<name>" --value "<option>"`
+   - If any `gh project` call fails, don't abort — the issue already exists and is assigned. Report the URL and state plainly which fields couldn't be set and why (a missing `project` token scope is the likely cause; fix with `gh auth refresh -s project`).
+   - Verify project fields landed with `gh issue view <n> --repo <owner>/<repo> --json projectItems` — cheap, and confirms per-project field values (e.g. Status) directly on the issue. Do NOT verify by paginating `gh project item-list` (projects can hold hundreds/thousands of items — pulling the full list to find one issue wastes time and burns context).
+7. Dump the gathered context into the notes vault so it's there next time. Invoke the
+   `ai-workflow:dump` skill, passing it: the issue title and URL, the final issue body, and the
+   decisions from the step-3 grilling that did NOT make it into the body verbatim
+   (rejected alternatives, corner cases ruled out and why, priority/scope calls). If
+   step 2.5's research brief named a `feature folder`, state it as the proposed target so
+   `/dump` doesn't re-derive it.
+
+   `/dump` classifies, proposes a target, and confirms with you before writing — let it.
+   Do not pre-empt or skip its confirmation.
+
+   Best-effort: if the vault is unreachable or `/dump` is cancelled, say so in one line.
+   The issue already exists and is the deliverable; the dump is not worth failing over.
+
+Return the issue URL when done.
