@@ -130,9 +130,13 @@ def cmd_board(args) -> None:
     round-trips unchanged), so an unverifiable filter would fail as a silently empty
     board, which is indistinguishable from an epic where nothing has started.
     """
-    data, _ = gh_json(["api", "graphql", "-f", f"query={ITEMS_QUERY}",
-                       "-f", f"o={args.slug.split('/')[0]}",
-                       "-f", f"r={args.slug.split('/')[1]}", "-F", f"n={args.parent}"])
+    owner, _, repo = args.slug.partition("/")
+    data, proc = gh_json(["api", "graphql", "-f", f"query={ITEMS_QUERY}",
+                          "-f", f"o={owner}",
+                          "-f", f"r={repo}", "-F", f"n={args.parent}"])
+    if proc.returncode != 0:
+        warn(f"could not find parent issue: {(proc.stderr or '').strip()[:200]}")
+        return
     items = ((((data or {}).get("data") or {}).get("repository") or {})
              .get("issue") or {}).get("projectItems") or {}
     nodes = items.get("nodes") or []
@@ -142,7 +146,10 @@ def cmd_board(args) -> None:
     project_id = ((nodes[0].get("project") or {}).get("id"))
 
     name = board_name(args.parent, args.title)
-    views, _ = gh_json(["api", "graphql", "-f", f"query={VIEWS_QUERY}", "-f", f"p={project_id}"])
+    views, proc = gh_json(["api", "graphql", "-f", f"query={VIEWS_QUERY}", "-f", f"p={project_id}"])
+    if proc.returncode != 0 or views is None:
+        warn(f"could not check existing boards: {(proc.stderr or '').strip()[:200]}")
+        return
     existing = find_view(
         ((((views or {}).get("data") or {}).get("node") or {}).get("views") or {}).get("nodes"),
         name,

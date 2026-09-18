@@ -186,6 +186,13 @@ assert project.board_name(42, "x" * 200).startswith("Epic #42 — ")
 assert len(project.board_name(42, "x" * 200)) <= 80, "view names must stay readable"
 ok("board names are derived from the parent and bounded in length")
 
+# project-board exits 0 even with a malformed slug (no `/`)
+env = dict(os.environ, PATH="/nonexistent")
+proc = subprocess.run([sys.executable, ROUTE, "project-board", "no-slash", "42", "--title", "x"],
+                      capture_output=True, text=True, env=env)
+assert proc.returncode == 0, f"project-board must exit 0 on bad slug, got {proc.returncode}: {proc.stderr}"
+ok("project-board exits 0 on malformed slug with gh unavailable")
+
 # --------------------------------------------------------------------------- worktree
 
 assert worktree.slugify("Fix the N+1 in OrderController!") == "fix-the-n-1-in-ordercontroller"
