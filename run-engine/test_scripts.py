@@ -227,4 +227,42 @@ for bad, needle in [
         assert needle in str(exc), f"{bad}: {exc}"
 ok("build_dag rejects foreign edges, self-edges and cycles of any length")
 
+# --------------------------------------------------------------------------- epic readiness
+
+DAG = epic.build_dag({10: [], 11: [10], 12: []})
+
+
+def state(status="running", pr=False, stack_up=False, needs_stack=False):
+    return {"status": status, "pr": pr, "stack_up": stack_up, "needs_stack": needs_stack}
+
+
+s = {10: state(), 11: state(), 12: state()}
+assert epic.ready(DAG, s, max_stacks=2) == [10, 12], "11 waits: #10 has no PR yet"
+ok("a child waits until every dependency has reached PR open")
+
+s[10] = state(pr=True)
+assert epic.ready(DAG, s, max_stacks=2) == [10, 11, 12]
+ok("a dependency reaching PR open releases its dependents")
+
+s = {10: state(status="done", pr=True), 11: state(), 12: state(status="escalated")}
+assert epic.ready(DAG, s, max_stacks=2) == [11], "done and escalated children are not ready"
+ok("only children whose own run is still running are ready")
+
+# Stack budget, ISOLATED from the dependency rule. #10 must carry pr=True in every case
+# below, or #11 is excluded because its dependency has no PR yet and the assertion passes
+# for a reason that has nothing to do with the budget it is named for.
+s = {10: state(pr=True, stack_up=True), 11: state(needs_stack=True), 12: state(stack_up=True)}
+assert epic.ready(DAG, s, max_stacks=2) == [10, 12], "11 needs a stack, both slots taken"
+ok("a child needing a stack parks when the budget is spent")
+
+s = {10: state(pr=True, stack_up=True), 11: state(needs_stack=True), 12: state()}
+assert epic.ready(DAG, s, max_stacks=2) == [10, 11, 12], "one slot free, 11 takes it"
+ok("a freed stack slot releases exactly one parked child")
+
+s = {10: state(pr=True, needs_stack=True), 11: state(needs_stack=True), 12: state(needs_stack=True)}
+assert epic.ready(DAG, s, max_stacks=0) == [], "no budget at all"
+assert epic.ready(DAG, s, max_stacks=1) == [10], "the budget is a hard cap, not a hint"
+assert epic.ready(DAG, s, max_stacks=2) == [10, 11], "#12 is third in line for two slots"
+ok("the stack budget is a hard cap counted across the whole epic")
+
 print(f"\n{passed} checks passed")

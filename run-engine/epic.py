@@ -59,3 +59,30 @@ def build_dag(deps: dict[int, list[int]]) -> dict:
         stuck = sorted(set(deps) - set(order))
         raise ValueError("dependency cycle among: " + ", ".join(f"#{c}" for c in stuck))
     return {"order": order, "deps": {str(k): v for k, v in deps.items()}}
+
+
+def ready(dag: dict, states: dict, max_stacks: int) -> list[int]:
+    """The children that may advance right now.
+
+    A child is ready when its own run is still going, every dependency has reached
+    PR open (the point at which a stacked child has a base branch to branch from),
+    and — if it still needs a Docker stack — a slot is free.
+
+    The budget is counted across the whole epic and decremented as this function
+    hands out slots, so one call can never promise the same slot twice.
+    """
+    deps = {int(k): v for k, v in dag["deps"].items()}
+    in_use = sum(1 for s in states.values() if (s or {}).get("stack_up"))
+    out: list[int] = []
+    for child in dag["order"]:
+        current = states.get(child) or {}
+        if current.get("status") != "running":
+            continue
+        if not all((states.get(d) or {}).get("pr") for d in deps.get(child, [])):
+            continue
+        if current.get("needs_stack") and not current.get("stack_up"):
+            if in_use >= max_stacks:
+                continue
+            in_use += 1
+        out.append(child)
+    return out
