@@ -89,6 +89,13 @@ flowchart TD
     actually green. A local pass is necessary and not sufficient.
 13. **GATE 3.** One report: the PR, what the review caught, what is still open, whether CI
     is green, and anything it would have asked you about but wrote down instead.
+14. **Write it down.** Two side-channels, both best-effort, both one warning line if they
+    fail: the run gets summarised into your notes vault, and any durable lesson is appended
+    to the repo's `tasks/lessons.md` — evidence-backed only, and left uncommitted so it
+    lands in a commit a human read.
+15. **Tear down, then grind.** The Docker stack comes down, and *then* the review loop
+    starts. See Layer 4 — Gate 3 is where the pipeline hands you the PR, not where the work
+    stops.
 
 ---
 
@@ -219,7 +226,79 @@ folded together afterwards.
 
 ---
 
-## Layer 4 — Epics
+## Layer 4 — After the handback: the grind
+
+Gate 3 gives you a reviewed PR. But a PR usually gets reviewed *again* — by a bot in a Slack
+thread, by a person, by CI. `pr-grind` is the loop that works those rounds without you
+sitting in it.
+
+It runs **in your session**, not as a sub-agent, because it needs to sleep and wake for
+hours, and the tools that let it do that die with a sub-agent. And it runs **after** the
+Docker stack comes down, so a loop that might live all afternoon is not holding a stack open.
+
+### One round
+
+```mermaid
+flowchart LR
+    A["Post the trigger<br/>in the Slack thread"] --> B["Wait for the bot's<br/>review to land"]
+    B --> C{"Any blockers<br/>or should-fixes?"}
+    C -->|no| D["Ping you to merge.<br/>Done."]
+    C -->|yes| E{"Any rail<br/>tripped?"}
+    E -->|yes| F["Stop. Say why,<br/>and how to resume."]
+    E -->|no| G["Decide fix vs rebut,<br/>per finding"]
+    G --> H["Fixer applies them,<br/>pushes once"]
+    H --> I["CI green?"]
+    I --> A
+```
+
+**Triage is the loop's job, not the fixer's.** `run-fixer` auto-applies everything it is
+handed and cannot decline a finding — so something upstream has to decide what it is handed.
+The default is *fix*. A **rebuttal** needs concrete evidence the finding is wrong: the
+concern is already handled elsewhere in the diff, the suggested change would break a passing
+test, the premise is factually incorrect about the code. **Unsure is not a rebuttal** — it
+goes on the fix list.
+
+### The four rails
+
+A rail firing means *stop this round*. First one to fire wins.
+
+| Rail | Why it exists |
+|---|---|
+| **10 rounds** | A loop that has gone ten rounds is not converging. |
+| **CI is red** | Never push review fixes onto a broken branch. This one escalates **once** before stopping: `run-ci` gets exactly one attempt per head SHA — never two, here or anywhere else. |
+| **A real person commented** | Automation ends when a human weighs in. A *bot* commenting doesn't count, and an unknown named account is treated as a person, which is the safe default. |
+| **You said hold** | Said to the session, not in Slack. Nothing you post in the thread reaches it. |
+
+### The stall detector
+
+Each finding gets a fingerprint — its file and line plus the first stretch of its text — so
+the loop can tell when the reviewer is asking for the same thing twice.
+
+- **New** → fix it normally.
+- **Seen once before** → fix it, but with a more capable model, explicitly told to work out
+  *why the last fix did not satisfy the reviewer* before writing another one. Repeating the
+  same fix harder is the failure this catches.
+- **Seen twice before** → stop the whole loop. It is stuck, and one stuck finding halts the
+  round rather than being quietly left behind while everything else proceeds.
+
+### Nothing is listening
+
+This is the part worth internalising. When the loop stops for you, **it is not waiting** —
+it is over. There is no webhook from Slack back to Claude, and the sleep-and-wake machinery
+dies with the session. A reply you post in the thread reaches nothing.
+
+So a paused stop does three things and no more: records why, posts the reason ending in a
+literal resume instruction, and stops. It never implies it is watching. You restart it by
+re-running `/pr-grind <thread url>` yourself.
+
+One quirk you will see: **the bot replies to any message in the thread**, mention or not —
+including a post announcing the loop has stopped. That is not a new round. The loop only
+counts entries from GitHub's reviews API at the current head SHA, so a chatty bot is
+correctly invisible to it.
+
+And still: **merging is manual.** The grind ends by @-mentioning you to do it.
+
+## Layer 5 — Epics
 
 For work too big for one pull request.
 
@@ -249,7 +328,7 @@ you can see the whole thing at a glance.
 
 ---
 
-## Layer 5 — When things go wrong
+## Layer 6 — When things go wrong
 
 | You see | It means | What happens |
 |---|---|---|
@@ -278,6 +357,10 @@ Anything skipped is named in the final report.
   still one report.
 - **Worktree** — the throwaway checkout a run works in.
 - **Epic** — a parent issue with dependent children.
+- **Grind** — the post-handback loop that works repeated review rounds on an open PR.
+- **Rail** — a condition that stops the grind rather than letting it push another fix.
+- **Fingerprint** — how a finding is recognised across rounds, so a repeat is visible.
+- **Paused stop** — the grind ended and is not watching. Only you can restart it.
 
 ---
 
