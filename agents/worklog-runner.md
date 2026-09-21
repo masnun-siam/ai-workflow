@@ -1,7 +1,7 @@
 ---
 name: worklog-runner
-description: Executes the /worklog skill end-to-end — runs collect.sh, confirms ambiguous items with the user, clusters into tasks, and writes the ZenNotes daily note. Dispatched by the worklog skill; not for direct use.
-tools: Bash, AskUserQuestion, mcp__zennotes__search_by_title, mcp__zennotes__read_note, mcp__zennotes__create_note, mcp__zennotes__append_to_note, mcp__zennotes__replace_in_note
+description: Executes the /worklog skill end-to-end — runs collect.sh, confirms ambiguous items with the user, clusters into tasks, and writes the Obsidian daily note. Dispatched by the worklog skill; not for direct use.
+tools: Bash, AskUserQuestion
 model: opus
 effort: medium
 ---
@@ -12,9 +12,9 @@ effort: medium
 # Worklog runner
 
 You were dispatched by the `worklog` skill to generate one day's worklog
-entry from GitHub activity and save it into ZenNotes. The date argument the
-user typed (if any) is given to you in the prompt — treat empty/missing as
-"today".
+entry from GitHub activity and save it into the Obsidian vault. The date
+argument the user typed (if any) is given to you in the prompt — treat
+empty/missing as "today".
 
 Turns a day's GitHub activity (commits, PRs, the issues they close/reference)
 into a worklog entry, grouped as:
@@ -122,26 +122,62 @@ Projects alphabetical. Within a project, most-recently-active task first.
 Orphan-PR tasks link the PR itself (`[{repo}#{n}]({pr_url}) — {pr title}`)
 since there's no issue.
 
-### 8. Save to ZenNotes
+### 8. Save to the Obsidian daily note
 
-Target note: `YYYY-MM-DD` (the collected `date`).
+Target note: `YYYY-MM-DD` (the collected `date`). Every call passes
+`vault=notes` explicitly, and the note is written only through the
+`obsidian` CLI — never with plain filesystem tools — so Obsidian's index
+stays in sync.
 
-- `mcp__zennotes__search_by_title` for `YYYY-MM-DD`.
-- **Found** → use the `path` the search returned verbatim (older notes may
-  live under `Daily Notes/` instead of `02-Daily/` — don't assume the
-  folder). `mcp__zennotes__read_note` it. If a `## Worklog` section already
-  exists, replace exactly that section (via `mcp__zennotes__replace_in_note`)
-  with the newly rendered one, leaving everything else in the note
-  untouched. If no `## Worklog` section exists yet, append it
-  (`mcp__zennotes__append_to_note`).
-- **Not found** → `mcp__zennotes__create_note` in folder `inbox`, subpath
-  `02-Daily`, title `YYYY-MM-DD`, content starting with the rendered
-  `## Worklog` block.
+Resolve the folder first (don't hardcode it — it reflects the user's
+configured Daily Notes setting):
+
+```bash
+obsidian vault=notes daily:path
+```
+
+This prints the active day's path (e.g. `02-Daily/2026-09-21.md`); take the
+folder from it and check for `<folder>/<date>.md`:
+
+```bash
+obsidian vault=notes file path="<folder>/<date>.md"
+```
+
+This prints `Error: ... not found` in the **output text**, not via a
+failing exit code — check the text, not the exit code.
+
+- **Found** → `obsidian vault=notes read path="<folder>/<date>.md"`. There
+  is no partial-replace subcommand: read the whole note, edit the text
+  yourself — replace exactly the `## Worklog` section if one already exists,
+  otherwise append the rendered block at the end — then write the full note
+  back with `obsidian vault=notes create path="<folder>/<date>.md"
+  content="<full updated note>" overwrite`. Preserve frontmatter, heading
+  order, and every other line exactly.
+- **Not found, and `<date>` is today** →
+  `obsidian vault=notes daily:append content="<rendered ## Worklog block>"`.
+  This creates today's note through the Daily Notes plugin (so it gets the
+  user's own template) and appends the block in one call.
+- **Not found, and `<date>` is a past day** →
+  `obsidian vault=notes create path="<folder>/<date>.md" content="<rendered
+  ## Worklog block>"` — a plain note with just the worklog content, no
+  template.
+
+If neither `<folder>/<date>.md` nor a note appearing via `daily:path` for
+that date exists, older notes may live under a different folder (e.g.
+`Daily Notes/` instead of `02-Daily/`) — check
+`obsidian vault=notes files ext=md` for a `<date>.md` match before
+concluding the note is genuinely missing. Use `\n` for newlines inside any
+`content=` value, per the CLI's own quoting rules.
+
+If the `obsidian` command itself fails (Obsidian not running), report that
+in one line along with the rendered markdown — never lose the day's entry
+just because the write-back failed.
 
 ### 9. Report
 
-Return the rendered markdown, plus the note's `link` (`zennotes://...`) from
-the create/read/write response, as your final report.
+Return the rendered markdown, plus the note's vault path and its
+`obsidian://open?vault=notes&file=<url-encoded path>` link, as your final
+report.
 
 ## Notes
 

@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.2.1 — 2026-09-21
+
+### Changed
+
+- **Worklog now writes through Obsidian, not ZenNotes.** `worklog-runner` was the only
+  agent in this plugin that saved notes through the ZenNotes MCP server
+  (`mcp__zennotes__*`) — every other vault-touching agent (`dump`, `run-researcher`,
+  `run-issue` phase 9.1, `gh-issue` step 7) goes through the `obsidian` CLI against the
+  same vault. Two note backends for one vault meant the worklog path could break
+  independently of everything else and carried a dependency (the ZenNotes MCP server)
+  nothing else in the plugin needed. `worklog-runner` now resolves the daily note via
+  `obsidian vault=notes daily:path`, and reads/writes it with the same
+  `read`/`create ... overwrite`/`daily:append` sequence `dump` already uses, including
+  its "check the output text, not the exit code, for `not found`" gotcha. The
+  `mcp__zennotes__*` tool grants are gone from `worklog-runner`'s frontmatter.
+
 ## 1.2.0 — 2026-09-21
 
 ### Added
