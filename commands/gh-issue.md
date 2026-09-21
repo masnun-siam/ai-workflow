@@ -1,11 +1,19 @@
 ---
 description: Create a GitHub issue with codebase context
-argument-hint: "[bug | feature | task | improvement]"
+argument-hint: "[bug | feature | task | improvement] <details | sentry-url | file-path | vault-note>"
 ---
 
 > **Paths.** `<...>` placeholders below are keys from `aiw paths` (run it; `aiw` is
 > on `PATH` via the plugin's `bin/`). Substitute the printed value; never guess a path.
 I have a ${1:-bug / feature request / task / improvement} to log as a GitHub issue.
+
+0. **Source check.** If `$@` matches one of `/intake`'s detectable source shapes — a
+   `sentry.io` URL, an existing file path, or a vault note title that exactly matches one
+   note — invoke `/intake $@` and wait for its `## Intake result` block. Use its `type:`
+   value in place of `${1:-bug / feature request / task / improvement}` for the rest of
+   this skill, and use everything after its `---` line as `Details:` below. Otherwise
+   (plain text, no source shape matched), skip this step — `/intake`'s own text adapter
+   would be a no-op wrapper here, so there's no reason to make the extra call.
 
 Details: $@
 
