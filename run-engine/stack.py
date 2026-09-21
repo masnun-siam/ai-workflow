@@ -37,6 +37,8 @@ DATASTORE_HINTS = (
     "clickhouse", "kafka", "zookeeper", "selenium", "chrome",
 )
 APP_HINTS = ("app", "web", "php", "api", "laravel", "node", "server", "backend", "frontend")
+API_HINTS = ("api", "php", "laravel", "backend", "server")
+WEB_HINTS = ("web", "node", "frontend", "next", "react", "vite")
 
 
 # --------------------------------------------------------------------------- pure
@@ -177,6 +179,33 @@ def pick_app_service(config: dict) -> str | None:
     return pool[0]
 
 
+def pick_api_web_services(config: dict) -> tuple[str | None, str | None]:
+    """When the compose file exposes two distinct buildable app services, tell them
+    apart by name so phase 4.5 can address the API and the web app separately.
+
+    Returns (api_service, web_service), either or both None. Deliberately silent
+    (not a fallback to `app`) when there is only one buildable service — that case
+    is `app_url` alone, unchanged, so a single-service repo sees no new behaviour.
+    """
+    services = config.get("services") or {}
+    buildable = [n for n, s in services.items() if s.get("build") and not is_datastore(n)]
+    if len(buildable) < 2:
+        return None, None
+
+    def first_match(hints):
+        for hint in hints:
+            for name in buildable:
+                if hint in name.lower():
+                    return name
+        return None
+
+    api = first_match(API_HINTS)
+    web = first_match(WEB_HINTS)
+    if api and web and api != web:
+        return api, web
+    return None, None
+
+
 def source_is_mounted(config: dict, app: str, repo: str) -> bool:
     """True when the worktree is bind-mounted into the app container, i.e. code
     changes are live and no rebuild is ever needed this run."""
@@ -242,6 +271,9 @@ def write_override(repo: str, compose_file: str) -> bool:
 
 
 def cmd_up(args) -> None:
+    """Records `app_url` as always. `api_url`/`web_url` are the same address on a
+    single-service stack; they split apart only when `pick_api_web_services` finds
+    two distinct buildable app services — phase 4.5 is the only reader of the split."""
     ledger = load_ledger(args.run_dir)
     repo = repo_of(ledger, args.repo)
     test_root = ledger.context.get("test_root")
@@ -259,7 +291,8 @@ def cmd_up(args) -> None:
             stack="none", test_cmd_host=runner or "", test_cmd=runner or "",
             # source_mounted=yes with no stack is not a claim about a mount: it is what
             # makes `stack rebuild` a no-op, so no phase has to special-case "no Docker".
-            app_url="none", source_mounted="yes", compose_prefix="",
+            app_url="none", api_url="none", web_url="none",
+            source_mounted="yes", compose_prefix="",
             tests_unverified="" if runner else "no test runner detected on the host",
         ))
         return
@@ -280,7 +313,7 @@ def cmd_up(args) -> None:
         print_written(record(
             args.run_dir, ledger,
             stack="failed", compose_prefix=prefix, test_cmd="", test_cmd_host=runner,
-            app_url="none", source_mounted="no",
+            app_url="none", api_url="none", web_url="none", source_mounted="no",
             tests_unverified="docker stack would not come up: " + (reason[-1] if reason else "?"),
         ))
         # Exit 0 on purpose: a stack that will not come up is a documented run state
@@ -293,12 +326,24 @@ def cmd_up(args) -> None:
         warn("stack is up but no app service could be identified; treating tests as unrunnable")
         print_written(record(
             args.run_dir, ledger, stack="failed", compose_prefix=prefix, test_cmd="",
-            test_cmd_host=runner, app_url="none", source_mounted="no",
+            test_cmd_host=runner, app_url="none", api_url="none", web_url="none",
+            source_mounted="no",
             tests_unverified="no app service found in the test compose file",
         ))
         return
 
     port = published_port(config, app)
+
+    # Best-effort second address for phase 4.5's backend/frontend routing. A single-
+    # service repo (the common case) gets api_url=web_url=app_url — the same address,
+    # so a mode that asks for either one gets today's behaviour unchanged.
+    api_service, web_service = pick_api_web_services(config)
+    app_url = f"http://localhost:{port}" if port else "none"
+    api_port = published_port(config, api_service) if api_service else port
+    web_port = published_port(config, web_service) if web_service else port
+    api_url = f"http://localhost:{api_port}" if api_port else app_url
+    web_url = f"http://localhost:{web_port}" if web_port else app_url
+
     print_written(record(
         args.run_dir, ledger,
         stack="up",
@@ -307,7 +352,9 @@ def cmd_up(args) -> None:
         test_cmd=build_test_cmd(prefix, app, runner),
         test_cmd_host=runner,
         source_mounted="yes" if source_is_mounted(config, app, repo) else "no",
-        app_url=f"http://localhost:{port}" if port else "none",
+        app_url=app_url,
+        api_url=api_url,
+        web_url=web_url,
         tests_unverified="",
     ))
 

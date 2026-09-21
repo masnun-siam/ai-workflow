@@ -167,11 +167,37 @@ def check_dev_post(ledger, envelope, repo, config) -> CheckResult:
 
 PATH_RE = re.compile(r"[\w./-]+\.(?:png|jpg|jpeg|gif|webp|mp4|webm|har|json|txt|log|zip|trace)")
 
+VERDICT_RANK = {"fail": 3, "pass": 2, "unverifiable": 1, "skipped": 0}
+
+
+def _mode_verdict_ok(mode_block: dict) -> CheckResult:
+    """One mode's own claim has to agree with its own criteria — same rule the flat
+    envelope used to enforce, now per mode so 'backend FAIL, frontend PASS' can't hide
+    a bad backend claim behind a good frontend one."""
+    verdict = (mode_block.get("verdict") or "").lower()
+    if verdict in ("unverifiable", "skipped"):
+        return passed()
+    criteria = mode_block.get("criteria") or []
+    if verdict == "pass":
+        unmet = [c.get("criterion") for c in criteria if isinstance(c, dict) and c.get("met") is False]
+        if unmet:
+            return failed("mode verdict is pass but these criteria are not met: " + "; ".join(
+                str(u)[:60] for u in unmet[:5]))
+        if not criteria:
+            return failed("mode verdict is pass with no criteria[] — nothing was actually checked")
+    return passed()
+
 
 def check_verifier_post(ledger, envelope, repo, config) -> CheckResult:
     """The verifier's verdict has to agree with its own criteria, and any artifact it
     says it captured has to exist. That second half is what catches an observation
-    nobody made."""
+    nobody made.
+
+    Envelopes come in two shapes: the flat pre-existing one (single mode, no `modes`
+    key — a skip envelope, or a repo where only one side was ever dispatched) and the
+    per-mode one (`modes: {backend: {...}, frontend: {...}}` plus a rollup `verdict`).
+    Both are validated; a flat envelope is just a one-mode case of the same rule.
+    """
     handoff = _handoff(envelope)
     verdict = (handoff.get("verdict") or "").lower()
     if verdict in ("unverifiable", "skipped") or (envelope.get("evidence") or {}).get("skipped"):
@@ -179,19 +205,34 @@ def check_verifier_post(ledger, envelope, repo, config) -> CheckResult:
         # see the app must never hold the run hostage.
         return passed("unverifiable/skipped is a designed pass")
 
-    criteria = handoff.get("criteria") or []
-    if verdict == "pass":
-        unmet = [c.get("criterion") for c in criteria if isinstance(c, dict) and not c.get("met")]
-        if unmet:
-            return failed("verdict is pass but these criteria are not met: " + "; ".join(
-                str(u)[:60] for u in unmet[:5]))
-        if not criteria:
-            return failed("verdict is pass with no criteria[] — nothing was actually checked")
+    modes = envelope.get("modes")
+    if isinstance(modes, dict) and modes:
+        for name, block in modes.items():
+            if not isinstance(block, dict):
+                return failed(f"modes.{name} is not an object")
+            result = _mode_verdict_ok(block)
+            if not result.ok:
+                return failed(f"modes.{name}: {result.reason}")
+        mode_verdicts = [(m.get("verdict") or "").lower() for m in modes.values() if isinstance(m, dict)]
+        worst = max(mode_verdicts, key=lambda v: VERDICT_RANK.get(v, 0), default="")
+        rollup = (envelope.get("verdict") or "").lower()
+        if rollup and VERDICT_RANK.get(rollup, -1) != VERDICT_RANK.get(worst, -1):
+            return failed(f"envelope.verdict '{rollup}' does not match worst-of-modes '{worst}'")
+    else:
+        result = _mode_verdict_ok(handoff)
+        if not result.ok:
+            return result
 
     text = " ".join(
         str(c.get("excerpt", "")) for c in ((envelope.get("evidence") or {}).get("commands") or [])
         if isinstance(c, dict)
     )
+    for name, block in (modes or {}).items():
+        if isinstance(block, dict):
+            text += " " + " ".join(
+                str(c.get("excerpt", "")) for c in ((block.get("evidence") or {}).get("commands") or [])
+                if isinstance(c, dict)
+            )
     for candidate in set(PATH_RE.findall(text)):
         if "/" not in candidate:
             continue  # a bare filename in prose is not a claim that a file exists

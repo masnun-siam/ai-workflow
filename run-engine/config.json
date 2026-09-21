@@ -104,8 +104,26 @@
         "**/Dockerfile*",
         "docker-compose*",
         "**/docker-compose*"
+      ],
+      "backend": [
+        "**/routes/**",
+        "**/app/Http/**",
+        "**/app/Models/**",
+        "**/database/migrations/**",
+        "**/app/api/**/route.{ts,js}",
+        "**/pages/api/**",
+        "**/*.go",
+        "**/src/main/java/**"
+      ],
+      "frontend": [
+        "**/*.{tsx,jsx,vue,svelte}",
+        "**/components/**",
+        "**/app/**/page.tsx",
+        "**/resources/js/**",
+        "**/resources/views/**"
       ]
     },
+    "_qa_note": "`backend`/`frontend` drive phase 4.5's routing ONLY — they are deliberately absent from `signal_severity` and `review_policy.signals`. They classify what to runtime-verify, not how risky the change is; giving them a severity weight would double-count paths already scored by `api-contract`/`migration`.",
     "signal_severity": {
       "auth": 25,
       "migration": 20,
