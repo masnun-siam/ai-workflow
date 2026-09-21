@@ -1,7 +1,7 @@
 ---
 description: Run an existing GitHub issue end-to-end to a reviewed PR, stopping for a human exactly three times — plan approval, an escalated review finding, and the final ready-to-merge handback
-argument-hint: "<issue-number-or-url> [--lean]"
-allowed-tools: Bash(aiw:*), Bash(gh:*), Bash(git:*), Bash(docker:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(composer:*), Bash(pnpm:*), Bash(yarn:*), Bash(go:*), Bash(python:*), Bash(python3:*), Bash(pip:*), Bash(pip3:*), Bash(dart:*), Bash(flutter:*), Bash(obsidian:*), Read, Write, Agent, Skill, AskUserQuestion
+argument-hint: "<issue-number-or-url | sentry-url | file-path | vault-note | text> [--lean]"
+allowed-tools: Bash(aiw:*), Bash(gh:*), Bash(git:*), Bash(docker:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(composer:*), Bash(pnpm:*), Bash(yarn:*), Bash(go:*), Bash(python:*), Bash(python3:*), Bash(pip:*), Bash(pip3:*), Bash(dart:*), Bash(flutter:*), Bash(obsidian:*), Read, Write, Agent, Skill, AskUserQuestion, mcp__plugin_sentry_sentry__*, mcp__gitnexus__query, mcp__gitnexus__context, Grep, Glob
 ---
 
 Run issue `$ARGUMENTS` through the full unattended pipeline: readiness → plan → tests →
@@ -203,11 +203,22 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
 
 ## 0. Preflight
 
-1. Resolve `$ARGUMENTS` to an issue number (strip a URL if given) and note whether
-   `--lean` was passed. Resolve `<owner>/<repo>` from the git remote.
-2. `git status --porcelain` on the current checkout — if non-empty, stop and tell the user
+1. `git status --porcelain` on the current checkout — if non-empty, stop and tell the user
    to commit/stash first. Do not proceed on a dirty tree. Nothing this run writes lands in
-   the checkout, so there is no pipeline file to exempt.
+   the checkout, so there is no pipeline file to exempt. This check runs first,
+   unconditionally — step 2 below can create a real GitHub issue, and issue creation must
+   stay behind this abort so a retry after stashing never files a duplicate.
+2. Strip `--lean` off `$ARGUMENTS` (note whether it was passed) so every source below sees
+   only the issue reference. Resolve `<owner>/<repo>` from the git remote.
+
+   - Argument is a bare number, or a `github.com/.../issues/<n>` URL → resolve to `<n>`,
+     unchanged from before.
+   - Anything else (a Sentry link, a file path, a vault note title, or free text) →
+     invoke `/intake <stripped argument>`, then invoke `/gh-issue` passing its `type:` and
+     brief through exactly as `/gh-issue`'s own step 0 does — substitute directly into
+     step 1 rather than re-running step 0's detection. Parse the created issue number `<n>`
+     from `/gh-issue`'s returned URL. Continue to Preflight step 3 with that `<n>` as
+     though it had been passed to `/run-issue` directly.
 3. `gh issue view <n> --comments --json title,body,labels,comments,url` — if this fails,
    stop (bad issue number, wrong repo, or `gh` not authed).
 3.5. **Epic check — before step 4, not after it.** `gh api

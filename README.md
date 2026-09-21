@@ -204,6 +204,7 @@ comments on issues. That is the user's call on their repo, not a smoke test.
 | Command | Does |
 |---|---|
 | `/ai-workflow:run-issue <n> [--lean]` | the full pipeline: issue → reviewed PR. Accepts an epic parent. |
+| `/ai-workflow:intake <source>` | normalize a Sentry link, BRD file, or vault note into an issue brief — used internally by `/gh-issue` and `/run-issue` |
 | `/ai-workflow:gh-issue` | file a well-formed issue; splits a large brief into an epic |
 | `/ai-workflow:jira-to-gh <KEY>` | convert a Jira ticket into a GitHub issue |
 | `/ai-workflow:pr-fix-comments <pr>` | work through a PR's review comments, confirming each |
@@ -249,7 +250,7 @@ plugin upgrades** — in-flight runs are not lost when you update.
 ## Layout
 
 ```
-commands/     run-issue (the orchestrator) + 4 intake commands
+commands/     run-issue (the orchestrator) + 5 intake commands
 agents/       12 run-* pipeline agents + ship, worklog-runner, gh-issue-factchecker
 skills/       pr-review, pr-grind, worklog, dump, 7 Laravel reviewers
 run-engine/   engine.py (pure) · route.py (CLI) · checks.py (station post-checks)
