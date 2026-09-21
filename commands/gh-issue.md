@@ -8,12 +8,16 @@ argument-hint: "[bug | feature | task | improvement] <details | sentry-url | fil
 I have a ${1:-bug / feature request / task / improvement} to log as a GitHub issue.
 
 0. **Source check.** If `$@` matches one of `/intake`'s detectable source shapes — a
-   `sentry.io` URL, an existing file path, or a vault note title that exactly matches one
-   note — invoke `/intake $@` and wait for its `## Intake result` block. Use its `type:`
-   value in place of `${1:-bug / feature request / task / improvement}` for the rest of
-   this skill, and use everything after its `---` line as `Details:` below. Otherwise
-   (plain text, no source shape matched), skip this step — `/intake`'s own text adapter
-   would be a no-op wrapper here, so there's no reason to make the extra call.
+   `sentry.io` URL, an existing `.md`/`.txt`/`.pdf`/`.docx` file path, or a vault note
+   title that exactly matches one note — invoke `/intake $@` and wait for its `## Intake
+   result` block. Use its `type:` value in place of
+   `${1:-bug / feature request / task / improvement}` for the rest of this skill, and use
+   everything after its `---` line as `Details:` below. Otherwise (plain text, no source
+   shape matched), skip this step — `/intake`'s own text adapter would be a no-op wrapper
+   here, so there's no reason to make the extra call. When `/intake` was invoked, carry
+   its brief's `Source:` line (in the brief's `## Notes` section) verbatim into the
+   created issue's **Notes** section — it is traceability to the origin, not a claim
+   about this repo, and must not be dropped or "corrected".
 
 Details: $@
 
@@ -105,7 +109,7 @@ Do the following:
    Best-effort — it always exits 0. A parent on no project, a closed project, or a
    missing `project` scope means no board and one warning line.
 7. Return the parent URL, the child URLs in dependency order, and the board name.
-4.5. Dispatch the `gh-issue-factchecker` agent (fresh context, no memory of the steps above) with just the issue number/URL and `owner/repo`. It re-reads the created issue cold and checks every concrete claim (file paths, symbols, described behavior, the proposed fix) against the real repo.
+4.5. Dispatch the `gh-issue-factchecker` agent (fresh context, no memory of the steps above) with just the issue number/URL and `owner/repo`. It re-reads the created issue cold and checks every concrete claim (file paths, symbols, described behavior, the proposed fix) against the real repo. Tell it explicitly: a `Source:` line in the Notes section pointing outside the repo (a Sentry permalink, an absolute file path, or a vault note path) is expected traceability from `/intake`, not a claim about this repo, and must not be flagged as an unverifiable claim.
    - `PASS` → continue to step 5, no mention needed.
    - `ISSUES FOUND` → fix the flagged text yourself, write the corrected body to `/tmp/gh-issue-body.md`, run `gh issue edit <n> --body-file /tmp/gh-issue-body.md`, delete the temp file, and briefly tell me what was wrong and corrected. Do not silently ignore a flagged discrepancy.
 5. Assign the issue:

@@ -19,7 +19,10 @@ Do the following:
 1. **Detect the source**, testing in this order, first match wins:
    - Argument matches `*sentry.io/*` or contains `/organizations/*/issues/` → **Sentry**.
    - Argument resolves to an existing file on disk (absolute path, or relative to the
-     current directory) → **BRD**.
+     current directory) AND ends in `.md`, `.txt`, `.pdf`, or `.docx` → **BRD**. An
+     existing file with any other extension is not a supported document shape — fall
+     through to Note, then Text, rather than reading an arbitrary file's raw content into
+     a brief that becomes a public GitHub issue body.
    - `obsidian vault=notes search query="$ARGUMENTS" format=json`, and one returned path's
      filename stem (without extension) exactly equals the argument → **Note**. A
      near-miss (partial match, multiple candidates, no exact stem) does NOT count — fall
