@@ -212,7 +212,7 @@ known = classify(files, {"upstream_depth": 0, "loc_changed": 50}, CONFIG)
 unknown = classify(files, {"loc_changed": 50}, CONFIG)
 assert known["blast_radius"] == "d1" and unknown["blast_radius"] == "unknown"
 assert unknown["risk_score"] > known["risk_score"], "unknown must not score cheaper than d1"
-assert set(unknown["signals"]) == {"auth", "migration"}, unknown["signals"]
+assert set(unknown["signals"]) == {"auth", "migration", "backend"}, unknown["signals"]
 assert classify(["README.md", "docs/x.md"], {}, CONFIG)["ticket_type"] == "docs"
 assert classify(["src/a.ts"], {"labels": ["bug"]}, CONFIG)["ticket_type"] == "bugfix"
 ok("classifier: signals by path, doc/bugfix typing, unknown blast radius scores wide")
@@ -332,6 +332,58 @@ with tempfile.TemporaryDirectory() as tmp:
     assert proc.stdout.startswith("escalate:"), proc.stdout
     assert "post-check could not run" in proc.stdout, proc.stdout
     ok("an unrunnable post-check escalates for fixer/reviewer, where it is the finding")
+
+with tempfile.TemporaryDirectory() as tmp:
+    repo, run_dir = post_check_repo(tmp)
+    # both-mode dispatch: backend PASS, frontend FAIL. The rollup must be FAIL (worst
+    # wins) even though the backend block is individually fine — a check that only
+    # looked at handoff.verdict would miss a mode-level failure hiding under a green
+    # top-level claim.
+    both_env = {
+        "issue": 41, "station": "verifier", "status": "bounce", "attempt": 1,
+        "summary": "backend ok, frontend fails",
+        "verdict": "FAIL",
+        "modes": {
+            "backend": {"verdict": "PASS", "criteria": [{"criterion": "200 on GET /x", "met": True}]},
+            "frontend": {"verdict": "FAIL", "criteria": [{"criterion": "empty state renders", "met": False}]},
+        },
+        "evidence": {"commands": [{"cmd": "curl /x", "exit": 0, "excerpt": "200 ok"}]},
+        "handoff": {"verdict": "fail", "criteria": [], "report": "x"},
+        "bounce": {"to": "dev", "reason": "frontend empty state",
+                   "findings": [{"mode": "frontend", "where": "OrderList", "observed": "crash",
+                                 "expected": "empty message"}]},
+    }
+    proc = route_it(run_dir, repo, "40-verify.json", both_env)
+    assert proc.returncode == 0 and proc.stdout.strip() == "bounce(dev)", \
+        f"{proc.returncode}: {proc.stdout}{proc.stderr}"
+    ok("verifier rollup: one FAILing mode bounces even though the other mode passed")
+
+    # the rollup claim has to match the worst mode's verdict — a station cannot say
+    # PASS overall while a mode block says FAIL.
+    lying_env = dict(both_env, status="passed", verdict="PASS")
+    proc = route_it(run_dir, repo, "40-verify.json", lying_env)
+    assert proc.returncode == 7, f"expected exit 7, got {proc.returncode}: {proc.stderr}"
+    assert "does not match worst-of-modes" in proc.stderr, proc.stderr
+    ok("verifier rollup lying about a FAILing mode self-bounces")
+
+with tempfile.TemporaryDirectory() as tmp:
+    repo, run_dir = post_check_repo(tmp)
+    # a mode claiming PASS with no criteria[] is refuted per mode, same rule as the
+    # flat envelope always enforced — just scoped to the one mode that lied. Fresh
+    # repo/run_dir: the verifier->verifier check-bounce cap (1) must not already be
+    # spent from an earlier case.
+    empty_criteria_env = {
+        "issue": 41, "station": "verifier", "status": "passed", "attempt": 1,
+        "summary": "backend claims pass with nothing checked",
+        "verdict": "PASS",
+        "modes": {"backend": {"verdict": "PASS", "criteria": []}},
+        "evidence": {"commands": [{"cmd": "curl /x", "exit": 0, "excerpt": "200 ok"}]},
+        "handoff": {"verdict": "pass", "criteria": [], "report": "x"},
+    }
+    proc = route_it(run_dir, repo, "40-verify.json", empty_criteria_env)
+    assert proc.returncode == 7, f"expected exit 7, got {proc.returncode}: {proc.stderr}"
+    assert "modes.backend" in proc.stderr and "nothing was actually checked" in proc.stderr, proc.stderr
+    ok("verifier mode claiming pass with empty criteria[] is refuted")
 
 with tempfile.TemporaryDirectory() as tmp:
     repo, run_dir = post_check_repo(tmp)

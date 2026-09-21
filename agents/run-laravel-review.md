@@ -34,8 +34,9 @@ then match:
 |---|---|
 > **Skill names.** Skills bundled with this plugin are invoked namespaced:
 > `ai-workflow:pr-review`, `ai-workflow:pr-grind`, `ai-workflow:dump`, and the Laravel
-> reviewers (`ai-workflow:migration-index-reviewer`, etc). `qa-only` is gstack's and
-> stays bare.
+> reviewers (`ai-workflow:migration-index-reviewer`, etc). A skill genuinely bundled with
+> another plugin (gstack's `qa-only`, for instance) stays bare — but `run-verifier` no
+> longer uses it; it runs its own HTTP and Playwright checks directly.
 
 | `database/migrations/**`, schema changes | `migration-index-reviewer` — plus `data-migration-strategy` if data moves, not just structure |
 | new or changed query paths, Eloquent scopes, `where` chains on large tables | `migration-index-reviewer` (index coverage) |

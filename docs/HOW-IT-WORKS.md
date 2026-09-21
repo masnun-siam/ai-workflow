@@ -46,7 +46,7 @@ flowchart TD
     G1 --> D["Make a worktree,<br/>start the test stack"]
     D --> E["SDET writes tests<br/>that FAIL on purpose"]
     E --> F["Dev writes code<br/>until they pass"]
-    F --> H["Verifier opens the app<br/>and checks it really works"]
+    F --> H["Verifier checks it really works:<br/>HTTP for backend, Playwright+mocks for frontend"]
     H --> I["Open the pull request"]
     I --> J["Reviewer reviews it<br/>with fresh eyes"]
     J --> K["Fixer applies what<br/>the review found"]
@@ -75,8 +75,14 @@ flowchart TD
    before the feature exists is testing nothing.
 6. **Dev.** Writes code until the tests pass. **It is not allowed to touch the tests.** More
    on that below; it is enforced, not requested.
-7. **Verifier.** Opens the running app and checks the feature works for real. Unit tests
-   prove the parts behave; this asks whether the thing does what the issue asked for.
+7. **Verifier.** Checks the feature works for real, on whichever side of the stack the diff
+   touched. A backend change is hit over real HTTP — login, then every response state the
+   route can return, not just the happy path. A frontend change is driven with Playwright
+   against a mocked API, so every state (loading, empty, error, permission-denied, success)
+   can be forced instead of hoped for. A PR touching both gets both, backend first — its
+   captured responses become the frontend's mocks, so the two halves can't quietly disagree.
+   Unit tests prove the parts behave; this asks whether the thing does what the issue asked
+   for, from outside the process.
 8. **PR.** Links the branch to the issue, pushes, opens the pull request.
 9. **Review.** A reviewer with **no memory of the plan or the code being written** reviews
    the diff. On a risky diff, extra single-lens specialists (security, performance, API
@@ -337,8 +343,9 @@ you can see the whole thing at a glance.
 | `escalate: ...` | a budget is spent or a wall was hit | draft PR opened, reason recorded, lands at Gate 3 |
 | `stack=failed` | Docker would not come up | run continues, tests unverified, **said loudly** in the report |
 | `stack=none` | no test compose file | normal; the host runner is used |
-| `app_url=none` | nothing to open in a browser | runtime verification skipped, and the report says so |
-| `UNVERIFIABLE` | the verifier could not see the app | a pass with a note, never a stop |
+| `api_url=none` / `web_url=none` | nothing to hit over HTTP / nothing to open in a browser | that mode's runtime verification skipped, and the report says so |
+| `UNVERIFIABLE` (a mode) | the verifier could not see that side | a pass with a note, never a stop |
+| `FAIL` in either mode | the rollup verdict for the whole station | worst-of-both-modes; one bounce carries both modes' findings |
 
 The pattern: **a gate that silently stops running is worse than one that runs and fails.**
 Anything skipped is named in the final report.

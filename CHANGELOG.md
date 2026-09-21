@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.2.0 — 2026-09-21
+
+### Added
+
+- **Stack-aware runtime QA.** Phase 4.5's verifier no longer delegates to gstack's
+  `qa-only` and is no longer browser-only. It routes on `backend`/`frontend` glob
+  signals (deterministic, in `classification.signals`, overridable per repo) computed
+  from the diff:
+  - **Backend** is verified over real HTTP against `api_url` — one call per response
+    state (200/401/403/404/422/500), intersected with the diff-touched routes and the
+    plan's acceptance criteria. `tinker`/SQL seed preconditions and assert side effects
+    only; auth is always minted via the real login endpoint, never in-process.
+  - **Frontend** is verified with real Playwright specs against `web_url`, using
+    `page.route()` to force every state (loading/empty/error/permission-denied/success)
+    instead of hoping an exploratory pass reaches them, plus one unmocked smoke run.
+    Reuses a repo's own Playwright/`npx` setup before installing anything.
+  - A PR touching both runs backend first; its captured responses become the
+    frontend's mocks, so the two halves can't quietly disagree. A failing backend
+    still lets the frontend run, flagged provisional.
+  - `stack.py` now records `api_url`/`web_url` alongside `app_url` when a compose file
+    exposes two distinct buildable app services. The envelope's rollup verdict is the
+    worst of the dispatched modes, and `checks.py` validates each mode independently.
+
 ## 1.1.0 — 2026-09-19
 
 ### Added

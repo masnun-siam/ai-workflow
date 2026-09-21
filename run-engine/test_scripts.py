@@ -107,6 +107,21 @@ assert stack.build_test_cmd("docker compose -p runissue-9 -f c.yml", "app", "npx
     "docker compose -p runissue-9 -f c.yml exec -T app npx vitest --maxWorkers=2"
 ok("test_cmd execs against the running container with the worker cap applied")
 
+# --------------------------------------------------------------------------- api/web split
+
+MONOREPO = {
+    "services": {
+        "postgres": {"image": "postgres:16"},
+        "api": {"build": {"context": "./api"}, "ports": [{"published": "8000", "target": 80}]},
+        "web": {"build": {"context": "./web"}, "ports": [{"published": "3000", "target": 3000}]},
+    }
+}
+assert stack.pick_api_web_services(MONOREPO) == ("api", "web")
+assert stack.pick_api_web_services(CONFIG) == (None, None), \
+    "a single buildable app service must not be split — app_url alone covers it"
+assert stack.pick_api_web_services({"services": {"postgres": {"image": "postgres"}}}) == (None, None)
+ok("two distinct buildable services split into (api, web); one service never does")
+
 # --------------------------------------------------------------------------- stack=none
 
 with tempfile.TemporaryDirectory() as d:
