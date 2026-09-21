@@ -1,6 +1,6 @@
 ---
 description: Run an existing GitHub issue end-to-end to a reviewed PR, stopping for a human exactly three times — plan approval, an escalated review finding, and the final ready-to-merge handback
-argument-hint: "<issue-number-or-url> [--lean]"
+argument-hint: "<issue-number-or-url | sentry-url | file-path | vault-note | text> [--lean]"
 allowed-tools: Bash(aiw:*), Bash(gh:*), Bash(git:*), Bash(docker:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(composer:*), Bash(pnpm:*), Bash(yarn:*), Bash(go:*), Bash(python:*), Bash(python3:*), Bash(pip:*), Bash(pip3:*), Bash(dart:*), Bash(flutter:*), Bash(obsidian:*), Read, Write, Agent, Skill, AskUserQuestion
 ---
 
@@ -203,8 +203,16 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
 
 ## 0. Preflight
 
-1. Resolve `$ARGUMENTS` to an issue number (strip a URL if given) and note whether
-   `--lean` was passed. Resolve `<owner>/<repo>` from the git remote.
+1. Strip `--lean` off `$ARGUMENTS` first (note whether it was passed) so every source
+   below sees only the issue reference. Resolve `<owner>/<repo>` from the git remote.
+
+   - Argument is a bare number, or a `github.com/.../issues/<n>` URL → resolve to `<n>`,
+     unchanged from before.
+   - Anything else (a Sentry link, a file path, a vault note title, or free text) →
+     invoke `/intake $ARGUMENTS`, then invoke `/gh-issue` passing its `type:` and brief
+     through exactly as `/gh-issue`'s own step 0 does. Parse the created issue number `<n>`
+     from `/gh-issue`'s returned URL. Continue to Preflight step 2 with that `<n>` as
+     though it had been passed to `/run-issue` directly.
 2. `git status --porcelain` on the current checkout — if non-empty, stop and tell the user
    to commit/stash first. Do not proceed on a dirty tree. Nothing this run writes lands in
    the checkout, so there is no pipeline file to exempt.

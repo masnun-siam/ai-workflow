@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.0 — 2026-09-21
+
+### Added
+
+- **Content-oriented intake.** `/run-issue` and `/gh-issue` now accept a Sentry issue
+  link, a BRD file path, an Obsidian vault note, or free text — not only a GitHub issue
+  number/URL. A new `/intake` command normalizes any of those into an issue brief
+  (auto-detected, no flags); `/gh-issue` files it as a real issue exactly as it would a
+  hand-written description, and `/run-issue` runs `/intake` then `/gh-issue` automatically
+  when its argument isn't already an issue reference. The GitHub issue stays the single
+  source of truth — nothing downstream of Preflight step 1 changed. A BRD describing more
+  than one independently-shippable outcome prompts once to pick which one to run now; every
+  other source never prompts.
+
 ## 1.2.1 — 2026-09-21
 
 ### Changed
