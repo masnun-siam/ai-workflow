@@ -1206,8 +1206,12 @@ with tempfile.TemporaryDirectory() as d:
             raw = fh.read()
         assert "shh-do-not-leak-me" not in raw
         assert ".env" not in raw
+        # ponytail: a deliberately-planted non-empty synthetic secret is the
+        # deterministic check; skip empty-string env values (v and ...) so
+        # ambient vars set to "" (e.g. unset API keys) can never false-trip
+        # the loop below via Python's `"" in anything is True` behaviour.
         for v in os.environ.values():
-            assert v not in raw or v in ("/c/9",), \
+            assert not v or v in ("/c/9",) or v not in raw, \
                 "an os.environ value leaked into the checkouts registry"
 ok("registry content is only slug->path pairs; no os.environ value or .env-shaped content lands in it")
 
