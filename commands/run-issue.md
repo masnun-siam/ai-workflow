@@ -217,7 +217,9 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
      invoke `/intake <stripped argument>`, then invoke `/gh-issue` passing its `type:` and
      brief through exactly as `/gh-issue`'s own step 0 does — substitute directly into
      step 1 rather than re-running step 0's detection. Parse the created issue number `<n>`
-     from `/gh-issue`'s returned URL. Continue to Preflight step 3 with that `<n>` as
+     from `/gh-issue`'s returned URL — in the epic case (a parent plus child URLs), `<n>`
+     is the **parent** issue number specifically, never a child, so Preflight step 3.5's
+     `sub_issues` check fires correctly. Continue to Preflight step 3 with that `<n>` as
      though it had been passed to `/run-issue` directly. `/gh-issue`'s HARD RULE is scoped
      to issue creation and does not bind any later phase of this run.
 3. `gh issue view <n> --comments --json title,body,labels,comments,url` — if this fails,

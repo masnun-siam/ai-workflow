@@ -130,3 +130,6 @@ Do the following:
    ---
    <the brief built in step 2>
    ```
+
+   If `/gh-issue` or `/run-issue` invoked this skill, that caller proceeds with this
+   result once returned — see the Scope note in the HARD RULE above.

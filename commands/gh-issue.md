@@ -21,7 +21,9 @@ I have a ${1:-bug / feature request / task / improvement} to log as a GitHub iss
 
 Details: $@
 
-**HARD RULE — while executing steps 0–7 below, this skill only ever creates a
+**HARD RULE — while executing steps 0–7 below (note: the `4-EPIC` section has its own
+internal step 0–7 numbering; this range means this skill's top-level steps, not the
+epic branch's), this skill only ever creates a
 GitHub issue. It never touches code.**
 - NEVER use Write, Edit, or NotebookEdit on any file in the repo.
 - NEVER run a mutating shell command (`git commit`, `git checkout -b`, package installs, formatters, codemods, etc.).
@@ -112,7 +114,10 @@ Do the following:
 
    Best-effort — it always exits 0. A parent on no project, a closed project, or a
    missing `project` scope means no board and one warning line.
-7. Return the parent URL, the child URLs in dependency order, and the board name.
+7. Return the parent URL, the child URLs in dependency order, and the board name. If
+   `/run-issue` invoked this skill, hand control back to its Preflight step 3.5 (the
+   `sub_issues` epic check) with the **parent** issue number and continue the run; the
+   HARD RULE above no longer applies.
 4.5. Dispatch the `gh-issue-factchecker` agent (fresh context, no memory of the steps above) with just the issue number/URL and `owner/repo`. It re-reads the created issue cold and checks every concrete claim (file paths, symbols, described behavior, the proposed fix) against the real repo. Tell it explicitly: a `Source:` line in the Notes section pointing outside the repo (a Sentry permalink, an absolute file path, or a vault note path) is expected traceability from `/intake`, not a claim about this repo, and must not be flagged as an unverifiable claim.
    - `PASS` → continue to step 5, no mention needed.
    - `ISSUES FOUND` → fix the flagged text yourself, write the corrected body to `/tmp/gh-issue-body.md`, run `gh issue edit <n> --body-file /tmp/gh-issue-body.md`, delete the temp file, and briefly tell me what was wrong and corrected. Do not silently ignore a flagged discrepancy.
