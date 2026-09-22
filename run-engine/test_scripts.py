@@ -14,7 +14,6 @@ import os
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -593,11 +592,22 @@ with tempfile.TemporaryDirectory() as d:
     with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
         json.dump(ledger.to_dict(), fh)
     now = time.time()
-    fresh = {"run_dir": run_dir, "acquired_at": now - stack.LOCK_GRACE + 5}
-    old = {"run_dir": run_dir, "acquired_at": now - stack.LOCK_GRACE - 5}
-    assert stack.lock_stale(fresh, now) is False, "not stale until past the grace"
-    assert stack.lock_stale(old, now) is True, "done/escalated past the grace is reclaimed"
-ok("a done/escalated holder is reclaimed only once past LOCK_GRACE")
+    # A holder whose run reached "done" is never coming back to call `stack
+    # down` — it is reclaimed the moment that's known, not after LOCK_GRACE
+    # (LOCK_GRACE outlives the default --lock-timeout, so gating a done/
+    # escalated holder on it would starve every contender for nothing).
+    fresh = {"run_dir": run_dir, "acquired_at": now}
+    assert stack.lock_stale(fresh, now) is True, "done is reclaimed immediately, not grace-gated"
+
+    escalated = Ledger(10, ["dev"])
+    escalated.mark_escalated("test")
+    esc_run = os.path.join(d, "esc-run")
+    os.makedirs(esc_run)
+    with open(os.path.join(esc_run, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(escalated.to_dict(), fh)
+    assert stack.lock_stale({"run_dir": esc_run, "acquired_at": now}, now) is True, \
+        "escalated is reclaimed immediately, not grace-gated"
+ok("a done/escalated holder is reclaimed immediately regardless of LOCK_GRACE")
 
 with tempfile.TemporaryDirectory() as d:
     run_dir = os.path.join(d, "run")
@@ -641,24 +651,47 @@ _ns = _parser.parse_args(["stack", "up", "/tmp/x"])
 assert _ns.lock_timeout == 900
 ok("--lock-timeout exists on the `up` subparser with default 900")
 
-with tempfile.TemporaryDirectory() as d:
-    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
-        results = [None] * 8
+RACER = os.path.join(HERE, "_race_acquire_lock_helper.py")
+write(HERE, os.path.basename(RACER), f"""\
+import json, os, sys, time
+sys.path.insert(0, {HERE!r})
+import stack
 
-        def _worker(i):
-            rd = os.path.join(d, f"run{i}")
-            os.makedirs(rd)
-            with open(os.path.join(rd, "run.json"), "w", encoding="utf-8") as fh:
-                json.dump(Ledger(i, ["dev"]).to_dict(), fh)
-            results[i] = stack.acquire_lock(rd, i, "o/r", 0)
-
-        pool = [threading.Thread(target=_worker, args=(i,)) for i in range(8)]
-        for t in pool:
-            t.start()
-        for t in pool:
-            t.join()
-        assert results.count(True) == 1, results
-ok("N simultaneous acquires produce exactly one winner")
+run_dir, start_at = sys.argv[1], float(sys.argv[2])
+os.makedirs(run_dir, exist_ok=True)
+with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+    json.dump({{"status": "running"}}, fh)
+while time.time() < start_at:
+    pass
+print("True" if stack.acquire_lock(run_dir, 0, "o/r", 0) else "False")
+""")
+try:
+    with tempfile.TemporaryDirectory() as d:
+        data_d = os.path.join(d, "data")
+        env = dict(os.environ, CLAUDE_PLUGIN_DATA=data_d)
+        N = 12
+        # A single shared start timestamp, not just "spawned close together": every
+        # contender spin-waits up to it so they hit acquire_lock() concurrently
+        # instead of arriving staggered. Separate `python3` processes, one per
+        # contender — the actual shape of N `aiw stack up` invocations racing for
+        # the same lockfile, unlike the old in-process threading.Thread version,
+        # which only ever exercised the process-local threading.Lock and would
+        # have passed even with no cross-process exclusion at all.
+        start_at = time.time() + 0.5
+        procs = [
+            subprocess.Popen(
+                [sys.executable, RACER, os.path.join(d, f"run{i}"), str(start_at)],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
+            )
+            for i in range(N)
+        ]
+        outs = [p.communicate()[0].strip() for p in procs]
+        assert all(o in ("True", "False") for o in outs), outs
+        assert outs.count("True") == 1, outs
+finally:
+    os.remove(RACER)
+ok("N concurrent `aiw stack up`-shaped subprocesses racing for the same lockfile "
+   "produce exactly one winner")
 
 with tempfile.TemporaryDirectory() as d:
     blocker = os.path.join(d, "blocker")

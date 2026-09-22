@@ -44,25 +44,19 @@ def lock_path() -> str:
 def _read_holder(path: str) -> dict | None:
     """None means free: no file, empty file, or a file that isn't valid JSON.
     None of those are a crash — a lock file is advisory, not a database."""
-    try:
-        with open(path, encoding="utf-8") as fh:
-            raw = fh.read().strip()
-    except OSError:
-        return None
-    if not raw:
-        return None
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        return None
+    data = _json_file(path)
     return data if isinstance(data, dict) else None
 
 
 def lock_stale(holder: dict, now: float) -> bool:
     """True when the holder is provably finished or too old to trust.
 
-    Bounded, not eliminated: a run whose ledger never updates (a hard crash) is
-    only reclaimed once LOCK_GRACE has passed, not on the first poll.
+    Reclaimed immediately once the holder's ledger status is "done" or
+    "escalated" — that run is never coming back to call `stack down`. A
+    holder still "running" (or whose ledger cannot be read at all) is only
+    reclaimed once LOCK_GRACE has passed, bounding the crash case (a run
+    that dies without ever updating its ledger again) without waiting
+    forever.
     """
     run_dir = holder.get("run_dir")
     acquired_at = holder.get("acquired_at")
@@ -76,14 +70,13 @@ def lock_stale(holder: dict, now: float) -> bool:
         warn(f"stack lock holder {run_dir} has no run.json; reclaiming")
         return True
     try:
-        json.loads(raw)
+        data = json.loads(raw)
     except json.JSONDecodeError:
         warn(f"stack lock holder {run_dir} has an unreadable run.json; reclaiming")
         return True
-    # status/context.stack are read via the ledger above (parse succeeded, so the
-    # run is provably still recorded); the grace window is what decides staleness,
-    # not the status string itself — a "running" holder past LOCK_GRACE is exactly
-    # the crash case the pid-based approach would have missed.
+    status = data.get("status") if isinstance(data, dict) else None
+    if status in ("done", "escalated"):
+        return True
     return (now - acquired_at) > LOCK_GRACE
 
 
@@ -91,29 +84,65 @@ def acquire_lock(run_dir: str, issue: int, repo: str, timeout: int) -> bool:
     """Acquire the single stack lock for `run_dir`. Re-entrant: a run already
     holding it (pr-grind's second `stack up`) never blocks on itself.
 
+    The real contenders are separate `aiw stack up` OS processes, which share
+    nothing but the filesystem — so exclusion has to be an OS-level atomic
+    operation, not a process-local `threading.Lock` (that only ever serializes
+    threads inside one interpreter). `os.open(..., O_CREAT | O_EXCL)` is the
+    stdlib primitive that is atomic across processes: it fails with
+    FileExistsError if the file is already there, at the OS level, so at most
+    one contender's create can win a given instant.
+
     Fails OPEN on an unwritable data dir — a lock that cannot be written must
     not fail the run, it just stops protecting it.
     """
     path = lock_path()
     deadline = time.time() + max(timeout, 0)
     while True:
-        with _LOCK_GUARD:
+        with _LOCK_GUARD:  # still serializes threads within this process
             try:
                 os.makedirs(os.path.dirname(path), exist_ok=True)
             except OSError as exc:
                 warn(f"stack lock directory is not writable ({exc}); proceeding unlocked")
                 return True
-            existing = _read_holder(path)
-            if existing is None or existing.get("run_dir") == run_dir or lock_stale(existing, time.time()):
-                holder = {
-                    "run_dir": run_dir, "issue": issue, "repo": repo, "acquired_at": time.time(),
-                }
+
+            holder = {"run_dir": run_dir, "issue": issue, "repo": repo, "acquired_at": time.time()}
+            try:
+                fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                fd = None
+            except OSError as exc:
+                warn(f"stack lock file is not writable ({exc}); proceeding unlocked")
+                return True
+
+            if fd is not None:
+                # We created the file — nobody else could have, atomically.
                 try:
-                    with open(path, "w", encoding="utf-8") as fh:
+                    os.write(fd, json.dumps(holder).encode("utf-8"))
+                finally:
+                    os.close(fd)
+                return True
+
+            # The file already existed. Either it's ours (re-entrant), or it's
+            # someone else's and possibly stale/abandoned — reclaim by atomic
+            # replace so a concurrent reader never sees a half-written holder.
+            existing = _read_holder(path)
+            if existing is not None and existing.get("run_dir") == run_dir:
+                return True
+            if existing is None or lock_stale(existing, time.time()):
+                tmp = f"{path}.{os.getpid()}.tmp"
+                try:
+                    with open(tmp, "w", encoding="utf-8") as fh:
                         json.dump(holder, fh)
+                    os.replace(tmp, path)
+                    return True
                 except OSError as exc:
                     warn(f"stack lock file is not writable ({exc}); proceeding unlocked")
-                return True
+                    return True
+                finally:
+                    try:
+                        os.remove(tmp)
+                    except OSError:
+                        pass
         if time.time() >= deadline:
             return False
         time.sleep(min(LOCK_POLL, max(deadline - time.time(), 0)))

@@ -232,8 +232,11 @@ folded together afterwards.
 - **One stack at a time per host.** `stack up` takes a lockfile before starting Docker and
   holds it for as long as the stack is up; a second run waits (`--lock-timeout`, default 900s)
   and then degrades to `stack=failed` naming the holder rather than starting a second stack
-  alongside it. Staleness is ledger-based, not pid-based, so a holder whose run has finished
-  or crashed is reclaimed once past a bounded grace window instead of blocking forever.
+  alongside it. The lock is taken with an OS-level atomic create (`O_CREAT | O_EXCL`), so it
+  holds across separate `aiw stack up` processes, not just threads within one. Staleness is
+  ledger-status-based, not pid-based: a holder whose run has reached `done` or `escalated` is
+  reclaimed immediately, and a holder still `running` (or whose ledger can't be read at all)
+  is reclaimed once past a bounded grace window instead of blocking forever.
 
 ---
 
