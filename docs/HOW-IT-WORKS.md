@@ -229,6 +229,11 @@ folded together afterwards.
   what pegged a developer's machine once.
 - **No compose file?** Then `stack=none`, the host test runner is used, and everything else
   works identically. Most repos take this path.
+- **One stack at a time per host.** `stack up` takes a lockfile before starting Docker and
+  holds it for as long as the stack is up; a second run waits (`--lock-timeout`, default 900s)
+  and then degrades to `stack=failed` naming the holder rather than starting a second stack
+  alongside it. Staleness is ledger-based, not pid-based, so a holder whose run has finished
+  or crashed is reclaimed once past a bounded grace window instead of blocking forever.
 
 ---
 

@@ -21,6 +21,18 @@ import sys
 OK, FAILED, USAGE = 0, 1, 2
 
 
+def data_dir() -> str:
+    """Where plugin state lives, outside the plugin install directory itself so it
+    survives a plugin upgrade (which replaces the install directory wholesale).
+
+    Read at call time, not cached at import time — a test that sets
+    $CLAUDE_PLUGIN_DATA after this module is imported must still see it honoured.
+    """
+    return os.environ.get("CLAUDE_PLUGIN_DATA") or os.path.expanduser(
+        "~/.claude/plugins/data/ai-workflow"
+    )
+
+
 def die(code: int, message: str):
     sys.stderr.write(message.rstrip() + "\n")
     sys.exit(code)

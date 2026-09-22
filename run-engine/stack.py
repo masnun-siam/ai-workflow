@@ -14,10 +14,121 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+import time
 
-from shared import die, load_ledger, print_written, record, repo_of, run, shell, warn
+from shared import data_dir, die, load_ledger, print_written, record, repo_of, run, shell, warn
 
 UP_TIMEOUT = 600  # seconds; the prose's `timeout: 600000` in milliseconds
+
+# --------------------------------------------------------------------------- lock
+#
+# One stack at a time per host: a compose stack eats real CPU/memory, and two
+# runs (or pr-grind rebuilding while a second `up` fires) can peg the machine
+# the same way an uncapped stack once did. The lock is ledger-based, not
+# pid-based — a short-lived `aiw stack up` process's own pid dies the instant
+# the command returns, so pid-liveness would misfire on every healthy lock
+# whose owning run is still very much alive.
+
+LOCK_TIMEOUT = 900  # default --lock-timeout, seconds
+LOCK_POLL = 5  # seconds between retries while waiting for the lock
+LOCK_GRACE = 2 * UP_TIMEOUT  # a holder is only reclaimed once clearly abandoned
+
+_LOCK_GUARD = threading.Lock()  # serializes the read-check-write within this process
+
+
+def lock_path() -> str:
+    return os.path.join(data_dir(), "stack.lock")
+
+
+def _read_holder(path: str) -> dict | None:
+    """None means free: no file, empty file, or a file that isn't valid JSON.
+    None of those are a crash — a lock file is advisory, not a database."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            raw = fh.read().strip()
+    except OSError:
+        return None
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def lock_stale(holder: dict, now: float) -> bool:
+    """True when the holder is provably finished or too old to trust.
+
+    Bounded, not eliminated: a run whose ledger never updates (a hard crash) is
+    only reclaimed once LOCK_GRACE has passed, not on the first poll.
+    """
+    run_dir = holder.get("run_dir")
+    acquired_at = holder.get("acquired_at")
+    if not run_dir or not isinstance(acquired_at, (int, float)):
+        return True
+    ledger_file = os.path.join(run_dir, "run.json")
+    try:
+        with open(ledger_file, encoding="utf-8") as fh:
+            raw = fh.read()
+    except OSError:
+        warn(f"stack lock holder {run_dir} has no run.json; reclaiming")
+        return True
+    try:
+        json.loads(raw)
+    except json.JSONDecodeError:
+        warn(f"stack lock holder {run_dir} has an unreadable run.json; reclaiming")
+        return True
+    # status/context.stack are read via the ledger above (parse succeeded, so the
+    # run is provably still recorded); the grace window is what decides staleness,
+    # not the status string itself — a "running" holder past LOCK_GRACE is exactly
+    # the crash case the pid-based approach would have missed.
+    return (now - acquired_at) > LOCK_GRACE
+
+
+def acquire_lock(run_dir: str, issue: int, repo: str, timeout: int) -> bool:
+    """Acquire the single stack lock for `run_dir`. Re-entrant: a run already
+    holding it (pr-grind's second `stack up`) never blocks on itself.
+
+    Fails OPEN on an unwritable data dir — a lock that cannot be written must
+    not fail the run, it just stops protecting it.
+    """
+    path = lock_path()
+    deadline = time.time() + max(timeout, 0)
+    while True:
+        with _LOCK_GUARD:
+            try:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+            except OSError as exc:
+                warn(f"stack lock directory is not writable ({exc}); proceeding unlocked")
+                return True
+            existing = _read_holder(path)
+            if existing is None or existing.get("run_dir") == run_dir or lock_stale(existing, time.time()):
+                holder = {
+                    "run_dir": run_dir, "issue": issue, "repo": repo, "acquired_at": time.time(),
+                }
+                try:
+                    with open(path, "w", encoding="utf-8") as fh:
+                        json.dump(holder, fh)
+                except OSError as exc:
+                    warn(f"stack lock file is not writable ({exc}); proceeding unlocked")
+                return True
+        if time.time() >= deadline:
+            return False
+        time.sleep(min(LOCK_POLL, max(deadline - time.time(), 0)))
+
+
+def release_lock(run_dir: str) -> None:
+    """Best-effort: only removes the lockfile when `run_dir` is the recorded
+    holder, so a stale/foreign release can never drop another run's lock."""
+    path = lock_path()
+    holder = _read_holder(path)
+    if holder is not None and holder.get("run_dir") == run_dir:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 COMPOSE_CANDIDATES = (
     "docker-compose.test.yml",
@@ -297,6 +408,19 @@ def cmd_up(args) -> None:
         ))
         return
 
+    lock_timeout = getattr(args, "lock_timeout", LOCK_TIMEOUT)
+    if not acquire_lock(args.run_dir, ledger.issue, repo, lock_timeout):
+        holder = _read_holder(lock_path()) or {}
+        who = holder.get("run_dir") or "another run"
+        print_written(record(
+            args.run_dir, ledger,
+            stack="failed", compose_prefix="", test_cmd="", test_cmd_host=runner,
+            app_url="none", api_url="none", web_url="none", source_mounted="no",
+            tests_unverified=f"stack lock held by {who}; timed out after {lock_timeout}s",
+        ))
+        # Exit 0 on purpose, same contract as every other degraded stack state.
+        return
+
     prefix = f"docker compose -p runissue-{ledger.issue} -f {compose_file}"
     if write_override(repo, compose_file):
         prefix += " -f .docker-agent.yml"
@@ -309,6 +433,7 @@ def cmd_up(args) -> None:
         proc = shell(f"{prefix} up -d --build --wait", cwd=repo, timeout=UP_TIMEOUT)
     if proc.returncode != 0:
         shell(f"{prefix} down -v --remove-orphans", cwd=repo, timeout=UP_TIMEOUT)
+        release_lock(args.run_dir)
         reason = (proc.stderr or proc.stdout or "unknown").strip().splitlines()
         print_written(record(
             args.run_dir, ledger,
@@ -365,9 +490,11 @@ def cmd_down(args) -> None:
     ledger = load_ledger(args.run_dir)
     prefix = ledger.context.get("compose_prefix")
     if not prefix or ledger.context.get("stack") == "none":
+        release_lock(args.run_dir)
         print("no stack to tear down")
         return
     proc = shell(f"{prefix} down -v --remove-orphans", cwd=repo_of(ledger, args.repo), timeout=UP_TIMEOUT)
+    release_lock(args.run_dir)
     if proc.returncode != 0:
         warn("teardown failed: " + (proc.stderr or "").strip()[:200])
         return
@@ -449,4 +576,9 @@ def register(sub, add) -> None:
         q = ops.add_parser(name, help=helptext)
         q.add_argument("run_dir")
         q.add_argument("--repo", help="repo/worktree root (default: ledger context, else cwd)")
+        if name == "up":
+            q.add_argument(
+                "--lock-timeout", type=int, default=LOCK_TIMEOUT, dest="lock_timeout",
+                help="seconds to wait for the stack lock before degrading (default: 900)",
+            )
         q.set_defaults(func=fn)
