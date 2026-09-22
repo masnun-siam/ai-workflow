@@ -223,17 +223,20 @@ folded together afterwards.
   because a fresh checkout does not have them and their absence shows up much later as
   confusing test failures.
 - **Stack** — if the repo has a test compose file, one Docker stack comes up per run, named
-  `runissue-<issue>`, with CPU and memory caps. One command string (`test_cmd`) is resolved
-  once and **every station runs that exact string, unchanged**. Nobody re-detects it, and no
-  station is allowed to start its own stack. Three phases each starting an uncapped stack is
-  what pegged a developer's machine once.
+  `runissue-<repo-slug>-<digest>-<issue>` and with every port force-published to an
+  OS-chosen host port, with CPU and memory caps. One command string (`test_cmd`) is
+  resolved once and **every station runs that exact string, unchanged**. Nobody
+  re-detects it, and no station is allowed to start its own stack. Three phases each
+  starting an uncapped stack is what pegged a developer's machine once.
 - **No compose file?** Then `stack=none`, the host test runner is used, and everything else
   works identically. Most repos take this path.
-- **One stack at a time per host.** `stack up` takes a lockfile before starting Docker and
-  holds it for as long as the stack is up; a second run waits (`--lock-timeout`, default 900s)
-  and then degrades to `stack=failed` naming the holder rather than starting a second stack
-  alongside it. Acquiring a *free* lock is a single OS-level atomic create (`O_CREAT |
-  O_EXCL`), so it holds across separate `aiw stack up` processes, not just threads within
+- **One stack at a time per project.** `stack up` takes a lockfile keyed to the repo+issue's
+  Compose project before starting Docker and holds it for as long as the stack is up; a
+  second run *on the same project* waits (`--lock-timeout`, default 900s) and then degrades
+  to `stack=failed` naming the holder rather than starting a second stack alongside it. A run
+  on a different project (a different issue, or the same issue in a different repo) never
+  contends for that lock at all. Acquiring a *free* lock is a single OS-level atomic create
+  (`O_CREAT | O_EXCL`), so it holds across separate `aiw stack up` processes, not just threads within
   one. Staleness is ledger-status-based, not pid-based: a holder whose run has reached `done`
   or `escalated` is reclaimed immediately, and a holder still `running` (or whose ledger
   can't be read at all) is reclaimed once past a bounded grace window instead of blocking

@@ -411,9 +411,11 @@ aiw stack up "$RUN_DIR"
 One call. It detects the host runner and records `test_cmd_host` **first and always** —
 Docker or not, because phase 10's `pr-grind` runs hours after Teardown and has nothing
 else to use. Then it looks for a test compose file, and if there is one: generates the
-`.docker-agent.yml` resource-limits override, brings the stack up under the per-issue
-project name `runissue-<n>` (one retry, 600 s cap), identifies the app service, and
-records `stack`, `compose_prefix`, `app_service`, `test_cmd`, `source_mounted`,
+`.docker-agent.yml` resource-limits override (also force-publishing every port to an
+OS-chosen host port, so parallel stacks never collide on one), brings the stack up
+under the per-repo-per-issue project name `runissue-<repo-slug>-<digest>-<n>` (one
+retry, 600 s cap), identifies the app service, and records `stack`, `compose_prefix`,
+`compose_project`, `app_service`, `test_cmd`, `source_mounted`,
 `app_url`, `api_url` and `web_url`. `api_url`/`web_url` are the same address as
 `app_url` unless the compose file exposes two distinct buildable app services — a
 monorepo backend+frontend stack — in which case they split apart; phase 4.5 is the

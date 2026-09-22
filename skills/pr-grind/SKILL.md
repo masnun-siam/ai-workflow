@@ -274,7 +274,7 @@ So: if that run directory exists, **bring the stack up yourself** for the
 duration of the grind and hand `run-fixer` the `test_cmd` that comes back:
 
 ```bash
-aiw stack up "<runs_dir>/<owner>-<repo>-issue-<n>"    # re-raises the same runissue-<n> stack
+aiw stack up "<runs_dir>/<owner>-<repo>-issue-<n>"    # re-raises the same per-issue stack
 aiw stack down "<runs_dir>/<owner>-<repo>-issue-<n>"  # when the loop ends or pauses
 ```
 
