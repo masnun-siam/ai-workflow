@@ -230,6 +230,10 @@ def acquire_lock(run_dir: str, issue: int, repo: str, timeout: int) -> bool:
         time.sleep(min(LOCK_POLL, max(deadline - time.time(), 0)))
 
 
+RELEASE_SENTINEL_RETRIES = 3  # bounded attempts to win the sentinel, not to wait out a live holder
+RELEASE_SENTINEL_BACKOFF = 0.05  # seconds between attempts; keeps stack down fast
+
+
 def release_lock(run_dir: str) -> None:
     """Best-effort: only removes the lockfile when `run_dir` is the recorded
     holder, so a stale/foreign release can never drop another run's lock.
@@ -243,10 +247,14 @@ def release_lock(run_dir: str) -> None:
     call actually meant to release (round-3 review, reproduced 1/40 trials
     with a concurrent release).
 
-    Non-blocking, since `stack down` must never hang: if the sentinel is
-    already held, someone else is deciding the lock file's fate right now
-    and will resolve it on their own, so this just returns without doing
-    anything further.
+    Bounded retry, since `stack down` must never hang: if the sentinel is
+    already held, this makes a few short-backoff attempts to win it before
+    giving up (round-4 review — a single non-blocking attempt could lose to
+    mere contention noise, not just a genuine break-in-progress, and leave
+    the lockfile behind with nobody now clearing it; the next contender then
+    waits out the full LOCK_GRACE window for nothing). If every attempt still
+    loses the sentinel, this returns without doing anything further — never
+    fails, never blocks indefinitely.
     """
     path = lock_path()
 
@@ -257,8 +265,13 @@ def release_lock(run_dir: str) -> None:
                 os.remove(path)
             except OSError:
                 pass
+        return True  # ran to completion — distinguishes from "sentinel not won"
 
-    _with_break_sentinel(path, _release)
+    for attempt in range(RELEASE_SENTINEL_RETRIES):
+        if _with_break_sentinel(path, _release) is True:
+            return
+        if attempt < RELEASE_SENTINEL_RETRIES - 1:
+            time.sleep(RELEASE_SENTINEL_BACKOFF)
 
 
 COMPOSE_CANDIDATES = (

@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -820,6 +821,61 @@ with tempfile.TemporaryDirectory() as d:
         assert os.path.isfile(stack.lock_path())
         assert json.load(open(stack.lock_path()))["run_dir"] == holder_run
 ok("release_lock from a non-holder run_dir does not remove another run's lockfile")
+
+with tempfile.TemporaryDirectory() as d:
+    # Round-4 review: release_lock losing the sentinel to transient
+    # contention (not an actual break-in-progress) must retry through it
+    # rather than silently no-op'ing and leaving the lockfile behind.
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        holder_run = os.path.join(d, "holder")
+        assert stack.acquire_lock(holder_run, 1, "o/r", 5) is True
+        break_path = stack.lock_path() + ".break"
+        bfd = os.open(break_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.close(bfd)
+
+        def _release_sentinel_shortly():
+            time.sleep(0.03)
+            os.remove(break_path)
+
+        orig_retries, orig_backoff = stack.RELEASE_SENTINEL_RETRIES, stack.RELEASE_SENTINEL_BACKOFF
+        stack.RELEASE_SENTINEL_RETRIES, stack.RELEASE_SENTINEL_BACKOFF = 5, 0.02
+        t = threading.Thread(target=_release_sentinel_shortly)
+        t.start()
+        try:
+            stack.release_lock(holder_run)
+        finally:
+            t.join()
+            stack.RELEASE_SENTINEL_RETRIES, stack.RELEASE_SENTINEL_BACKOFF = orig_retries, orig_backoff
+        assert not os.path.isfile(stack.lock_path()), \
+            "release_lock must retry through transient sentinel contention, not no-op"
+ok("release_lock retries through transient `.break` sentinel contention instead of "
+   "silently no-op'ing (round-4 regression)")
+
+with tempfile.TemporaryDirectory() as d:
+    # The other half: if the sentinel stays held for the whole retry window
+    # (a genuine break in progress), release_lock must still give up
+    # gracefully — never hang, never raise — leaving the lock for whoever
+    # is actually clearing it.
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        holder_run = os.path.join(d, "holder")
+        assert stack.acquire_lock(holder_run, 1, "o/r", 5) is True
+        break_path = stack.lock_path() + ".break"
+        bfd = os.open(break_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.close(bfd)
+
+        orig_retries, orig_backoff = stack.RELEASE_SENTINEL_RETRIES, stack.RELEASE_SENTINEL_BACKOFF
+        stack.RELEASE_SENTINEL_RETRIES, stack.RELEASE_SENTINEL_BACKOFF = 3, 0.01
+        try:
+            started = time.time()
+            stack.release_lock(holder_run)  # must not raise or hang
+            assert time.time() - started < 1, "release_lock must give up quickly, not wedge"
+        finally:
+            os.remove(break_path)
+            stack.RELEASE_SENTINEL_RETRIES, stack.RELEASE_SENTINEL_BACKOFF = orig_retries, orig_backoff
+        assert os.path.isfile(stack.lock_path()), \
+            "the lock must survive when every retry loses the sentinel to a live holder"
+ok("release_lock gives up gracefully (never hangs, exits cleanly) when the `.break` sentinel "
+   "stays held for the entire retry window")
 
 with tempfile.TemporaryDirectory() as d:
     with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
