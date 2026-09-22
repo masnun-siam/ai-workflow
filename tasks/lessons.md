@@ -38,3 +38,22 @@
   force a change" for a nit without saying to resolve the thread — that is the gap the
   bounce fell into. PR: https://github.com/masnun-siam/ai-workflow/pull/13
   **Date**: 2026-09-22
+
+## Review — Acceptance Criteria
+- **Pattern**: Issue #12 listed as an explicit AC that a `/gh-issue` failure or human
+  cancellation mid-flow must make `/run-issue` stop with a clear message rather than
+  resume against a nonexistent issue number. The implementation wrote the happy path only
+  ("parse `<n>` from the returned URL, continue to step 3") with no stop clause, and the
+  run's own in-context self-review passed it. An external reviewer re-reading the diff
+  cold against the issue's AC list caught it one round later.
+  **Rule**: Before declaring a review pass done, walk the issue's AC list one item at a
+  time and point each one at the literal added/changed text that implements it, quoted
+  from the file as it stands now — not from the plan or the commit message. "The general
+  approach covers it" is not a trace. An AC that describes a failure/abort path is the
+  usual miss, because the happy path reads as complete on its own.
+  **Evidence**: review comment 4067994880 on
+  https://github.com/masnun-siam/ai-workflow/pull/13 (round 1, review 5273636176 against
+  commit 9a29ee2 — the state the PR was in *after* the pipeline's own review+fix cycle);
+  fixed by the added clause at `commands/run-issue.md:222` in commit 948327f, which
+  round 2 (review 5273653952) returned clean on.
+  **Date**: 2026-09-22
