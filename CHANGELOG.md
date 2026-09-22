@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.4.1 — 2026-09-22
+
+### Fixed
+
+- **Parallel `/run-issue` runs could collide on Docker test stacks (#21).** `-p
+  runissue-<issue>` namespaced container names only, never published host ports, and
+  had no repo component — so the same issue number in two different repos shared one
+  Compose project (a `down -v` from either tore down the other's containers/volumes),
+  and two different issues in the same repo with any `ports:` mapping collided on the
+  host port. `stack.py` now keys the Compose project (and its lock) on both repo and
+  issue (`runissue-<repo-slug>-<digest>-<issue>`), force-publishes every declared port
+  to an OS-chosen one, and reads the real port back via `docker compose port` after
+  `up --wait`. The host-wide lock is now per-project: a live lock on an unrelated
+  project never blocks a new run, while a second `up` on the *same* project still
+  serializes as before. Also closes a lock/teardown leak in the "no app service
+  identified" branch, and raises `epic.max_stacks`'s default (1 → 3) now that the
+  port-collision blocker forcing it to 1 is gone.
+
 ## 1.4.0 — 2026-09-22
 
 ### Added
