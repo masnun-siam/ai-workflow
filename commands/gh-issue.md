@@ -21,12 +21,19 @@ I have a ${1:-bug / feature request / task / improvement} to log as a GitHub iss
 
 Details: $@
 
-**HARD RULE — this skill only ever creates a GitHub issue. It never touches code.**
+**HARD RULE — while executing steps 0–7 below, including everything under `4-EPIC`
+(note: `4-EPIC` has its own internal 1–7 numbering; that's a sub-branch of top-level
+step 4, not a separate range, and it is still fully bound by this rule), this skill only
+ever creates a GitHub issue. It never touches code.**
 - NEVER use Write, Edit, or NotebookEdit on any file in the repo.
 - NEVER run a mutating shell command (`git commit`, `git checkout -b`, package installs, formatters, codemods, etc.).
 - The ONLY writes permitted are the temp body file at `/tmp/gh-issue-body.md`, the `gh issue create` / `gh issue edit` / `gh project` calls below, and the notes-vault dump in step 7 (that's a different vault, not the repo, and goes through the `dump` skill's own confirmation).
 - This holds even for a one-character fix. "It's trivial" is not an exception — the whole point of filing an issue is that a human decides whether and how to make the change.
 - If a fix is obvious from your investigation, do NOT apply it. Record it under a **Proposed Fix** section in the issue body instead (file path, symbol, and the change in prose or a fenced diff).
+- **Scope.** These constraints bind steps 0–7 of this skill only, including everything
+  under `4-EPIC`. When `/run-issue` invoked this skill, they lapse the moment the issue
+  URL is returned — the caller's later phases write code by design, and this rule must
+  not be carried into them.
 
 Do the following:
 
@@ -108,7 +115,10 @@ Do the following:
 
    Best-effort — it always exits 0. A parent on no project, a closed project, or a
    missing `project` scope means no board and one warning line.
-7. Return the parent URL, the child URLs in dependency order, and the board name.
+7. Return the parent URL, the child URLs in dependency order, and the board name. If
+   `/run-issue` invoked this skill, hand control back to its Preflight step 3 with the
+   **parent** issue number and continue the run — step 3.5 there will do its own
+   `sub_issues` detection; the HARD RULE above no longer applies.
 4.5. Dispatch the `gh-issue-factchecker` agent (fresh context, no memory of the steps above) with just the issue number/URL and `owner/repo`. It re-reads the created issue cold and checks every concrete claim (file paths, symbols, described behavior, the proposed fix) against the real repo. Tell it explicitly: a `Source:` line in the Notes section pointing outside the repo (a Sentry permalink, an absolute file path, or a vault note path) is expected traceability from `/intake`, not a claim about this repo, and must not be flagged as an unverifiable claim.
    - `PASS` → continue to step 5, no mention needed.
    - `ISSUES FOUND` → fix the flagged text yourself, write the corrected body to `/tmp/gh-issue-body.md`, run `gh issue edit <n> --body-file /tmp/gh-issue-body.md`, delete the temp file, and briefly tell me what was wrong and corrected. Do not silently ignore a flagged discrepancy.
@@ -141,4 +151,6 @@ Do the following:
    Best-effort: if the vault is unreachable or `/dump` is cancelled, say so in one line.
    The issue already exists and is the deliverable; the dump is not worth failing over.
 
-Return the issue URL when done.
+Return the issue URL. If `/run-issue` invoked this skill, hand control back to its
+Preflight step 3 with that issue number and continue the run; the HARD RULE above no
+longer applies.
