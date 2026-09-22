@@ -8,11 +8,13 @@ argument-hint: "<sentry-url | file-path | vault-note | free text>"
 
 Source: $ARGUMENTS
 
-**HARD RULE — this skill only ever produces a brief. It never creates a GitHub issue and
+**HARD RULE — while producing the brief below, this skill only ever produces a brief. It never creates a GitHub issue and
 never dispatches `/run-issue` or any pipeline station.**
 - NEVER run `gh issue create`, `gh issue edit`, or any other mutating command.
 - NEVER use Write, Edit, or NotebookEdit on any file in the repo.
 - The only output is the `## Intake result` block described at the end of this file.
+- **Scope.** This rule lapses once the `## Intake result` block is returned — a caller
+  such as `/run-issue` may act on that result afterward without violating it.
 
 Do the following:
 
@@ -128,3 +130,6 @@ Do the following:
    ---
    <the brief built in step 2>
    ```
+
+   If `/gh-issue` or `/run-issue` invoked this skill, that caller proceeds with this
+   result once returned — see the Scope note in the HARD RULE above.
