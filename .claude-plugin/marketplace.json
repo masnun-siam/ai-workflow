@@ -11,7 +11,7 @@
       "description": "Issue-to-reviewed-PR pipeline: /run-issue, its agents, routing engine and review skills.",
       "source": "./",
       "category": "workflow",
-      "version": "1.3.1"
+      "version": "1.4.0"
     }
   ]
 }
