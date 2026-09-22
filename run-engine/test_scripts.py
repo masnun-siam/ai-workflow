@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -1115,6 +1116,23 @@ ok("a heading present with no content beneath it counts as a gap")
 assert dispatch.dor_gaps(READY_BODY) == [], "literal 'None' under Non-functional Constraints satisfies it"
 ok("'None' as the literal body under Non-functional Constraints satisfies that item")
 
+# Regression for blocker 2 (PR #19 review): DOR_ITEMS' patterns must match the
+# literal section headings commands/gh-issue.md actually emits, not just the
+# generic definition-of-ready.md wording — otherwise every issue this
+# plugin's own tooling produces reports permanent DoR gaps. Pin the two
+# vocabularies together by parsing the real "Body sections:" line out of
+# gh-issue.md itself, rather than hand-copying it here where it could drift.
+GH_ISSUE_MD = os.path.join(HERE, "..", "commands", "gh-issue.md")
+with open(GH_ISSUE_MD, encoding="utf-8") as fh:
+    body_sections_line = next(
+        line for line in fh if line.strip().startswith("- Body sections:")
+    )
+section_names = re.findall(r"\*\*([^*]+)\*\*", body_sections_line)
+assert "Summary" in section_names and "Non-functional Constraints" in section_names, section_names
+gh_issue_body = "\n\n".join(f"## {name}\nSome real content for {name}." for name in section_names)
+assert dispatch.dor_gaps(gh_issue_body) == [], dispatch.dor_gaps(gh_issue_body)
+ok("a body built from gh-issue.md's own literal section headings screens ready with zero gaps")
+
 # --------------------------------------------------------------------------- dispatch: lane mode
 
 assert dispatch.lane_mode(["lean"]) == "lean"
@@ -1206,13 +1224,10 @@ with tempfile.TemporaryDirectory() as d:
             raw = fh.read()
         assert "shh-do-not-leak-me" not in raw
         assert ".env" not in raw
-        # ponytail: a deliberately-planted non-empty synthetic secret is the
-        # deterministic check; skip empty-string env values (v and ...) so
-        # ambient vars set to "" (e.g. unset API keys) can never false-trip
-        # the loop below via Python's `"" in anything is True` behaviour.
-        for v in os.environ.values():
-            assert not v or v in ("/c/9",) or v not in raw, \
-                "an os.environ value leaked into the checkouts registry"
+        # Exact equality on the parsed registry, not substring-matching against
+        # arbitrary live os.environ values (any env var set to a single char
+        # appearing in the JSON would false-trip a substring loop).
+        assert json.loads(raw) == {"o-r-issue-9": "/c/9"}
 ok("registry content is only slug->path pairs; no os.environ value or .env-shaped content lands in it")
 
 # --------------------------------------------------------------------------- dispatch: CLI wiring (RED until run-dev updates route.py)

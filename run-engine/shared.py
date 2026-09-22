@@ -108,6 +108,13 @@ def ledger_path(run_dir: str) -> str:
     return os.path.join(run_dir, "run.json")
 
 
+def run_dir_for(runs_dir: str, slug: str, issue: int) -> str:
+    """The per-issue run directory under `runs_dir` for `slug`'s issue #`issue` —
+    the `<owner>-<repo>-issue-<n>` naming every run-directory consumer shares."""
+    owner, _, repo = slug.partition("/")
+    return os.path.join(runs_dir, f"{owner}-{repo}-issue-{issue}")
+
+
 def load_ledger(run_dir: str):
     from engine import Ledger
 

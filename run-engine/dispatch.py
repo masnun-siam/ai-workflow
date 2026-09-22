@@ -45,12 +45,15 @@ def dedupe(issue_numbers: list[int]) -> list[int]:
 
 # Mirrors the six numbered items in definition-of-ready.md. Each entry is
 # (label, heading-pattern-words) — the pattern tolerates #/##/### markers,
-# case, and trailing text after the heading (e.g. "(draft)").
+# case, and trailing text after the heading (e.g. "(draft)"). Also matches
+# the literal section headings `commands/gh-issue.md` actually emits
+# ("Summary", "Context / Affected Code", ...) so an issue this plugin's own
+# tooling generates screens ready rather than reporting permanent gaps.
 DOR_ITEMS = [
-    ("Problem & why", r"problem\s*&?\s*why|problem\s+and\s+why"),
+    ("Problem & why", r"problem\s*&?\s*why|problem\s+and\s+why|summary"),
     ("Scope", r"scope"),
     ("Acceptance criteria", r"acceptance\s+criteria"),
-    ("Affected surface", r"affected\s+surface"),
+    ("Affected surface", r"affected\s+surface|affected\s+code"),
     ("Non-functional constraints", r"non-?functional\s+constraints"),
     ("Dependencies / blockers", r"dependencies\s*/?\s*blockers|dependencies\s+and\s+blockers"),
 ]
@@ -92,9 +95,16 @@ def dor_gaps(body: str | None) -> list[str]:
     for label, pattern in DOR_ITEMS:
         matched_text = None
         for title, text in sections.items():
-            if re.search(pattern, title, re.I):
+            if not re.search(pattern, title, re.I):
+                continue
+            if text:
                 matched_text = text
                 break
+            # This heading matches but has no prose directly beneath it (e.g.
+            # a parent heading like "## Scope" followed immediately by
+            # "### In scope" / "### Out of scope" subsections) — keep
+            # scanning for another matching heading that does have content
+            # before calling it a gap.
         if not matched_text:
             gaps.append(f"{label}: missing or empty")
     return gaps
@@ -112,6 +122,7 @@ def lane_mode(labels: list[str]) -> str:
 
 import json  # noqa: E402
 import os  # noqa: E402
+import subprocess  # noqa: E402
 
 
 def skip_reason(run_json_path: str | None, has_open_pr: bool) -> str | None:
@@ -141,7 +152,9 @@ def skip_reason(run_json_path: str | None, has_open_pr: bool) -> str | None:
 
 # --------------------------------------------------------------------------- checkouts.json registry
 
-from shared import data_dir  # noqa: E402
+from shared import data_dir, run_dir_for  # noqa: E402
+from shared import ledger_path as _ledger_path  # noqa: E402
+from stack import _write_holder  # noqa: E402
 
 
 def checkouts_path() -> str:
@@ -167,18 +180,39 @@ def read_checkouts() -> dict:
 
 
 def register_checkout(slug: str, path: str) -> None:
-    """Atomically add slug -> path to the registry (tmp-file + os.replace, the
-    same pattern as stack.py's _write_holder). Writes only the slug/path pair
-    given — never os.environ, never .env content."""
+    """Atomically add slug -> path to the registry. Writes only the slug/path
+    pair given — never os.environ, never .env content."""
     out_path = checkouts_path()
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     current = read_checkouts()
     current[slug] = path
-    tmp_path = f"{out_path}.tmp.{os.getpid()}"
-    with open(tmp_path, "w", encoding="utf-8") as fh:
-        json.dump(current, fh, indent=2, ensure_ascii=False)
-        fh.write("\n")
-    os.replace(tmp_path, out_path)
+    # Reuse stack.py's tmp-file + os.replace atomic-write pattern rather than
+    # re-implementing it (it already includes threading.get_ident() in the
+    # tmp filename for disambiguation, which a hand-rolled copy here lacked).
+    _write_holder(out_path, current)
+
+
+def _looks_like_checkout(path: str, slug: str) -> bool:
+    """True only if `path` is an actual git checkout, and (best-effort) its
+    `origin` remote plausibly matches `slug`. Guards against auto-registering
+    a bogus path (e.g. an empty tmpdir run with `--slug totally/bogus`) into
+    checkouts.json — a mapping that would otherwise persist permanently."""
+    try:
+        proc = subprocess.run(
+            ["git", "-C", path, "rev-parse", "--is-inside-work-tree"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except OSError:
+        return False
+    if proc.returncode != 0 or proc.stdout.strip() != "true":
+        return False
+    remote = subprocess.run(
+        ["git", "-C", path, "remote", "get-url", "origin"],
+        capture_output=True, text=True, timeout=10,
+    )
+    if remote.returncode == 0 and slug.lower() not in (remote.stdout or "").strip().lower():
+        return False  # a real git checkout, but of something else
+    return True
 
 
 # --------------------------------------------------------------------------- cmd_plan (I/O)
@@ -203,7 +237,7 @@ def _resolve_issue_numbers(args) -> list[int]:
     if args.query:
         data, proc = gh_json(
             ["issue", "list", "--repo", args.slug, "--search", args.query,
-             "--json", "number", "--jq", "[.[].number]"]
+             "--json", "number", "--jq", "[.[].number]", "--limit", "1000"]
         )
         if proc.returncode != 0:
             die(1, f"--query failed: {(proc.stderr or '').strip()[:200]}")
@@ -258,31 +292,55 @@ def _project_issue_numbers(slug: str, number: int, status: str) -> list[int]:
     return []
 
 
+def _has_open_linked_pr(slug: str, linked_numbers: list[int]) -> tuple[bool | None, str | None]:
+    """Whether any of `linked_numbers` (this issue's closedByPullRequestsReferences
+    PR numbers) is currently open. Returns (None, error) on a `gh` failure rather
+    than silently defaulting to False — a silent failure here would flip from
+    "skip everything" to "double-dispatch everything", which is worse.
+
+    `gh pr list --search "linked:<n>"` is NOT a valid GitHub search qualifier —
+    `gh` silently ignores it and returns every open PR in the repo, so this
+    deliberately does NOT use --search at all."""
+    if not linked_numbers:
+        return False, None
+    pr_data, proc = gh_json([
+        "pr", "list", "--repo", slug, "--state", "open",
+        "--json", "number", "--limit", "1000",
+    ])
+    if proc.returncode != 0:
+        return None, (proc.stderr or "").strip()[:200] or "gh pr list failed"
+    open_numbers = {n.get("number") for n in (pr_data or []) if isinstance(n, dict)}
+    return any(n in open_numbers for n in linked_numbers), None
+
+
 def _issue_readiness(args, number: int) -> dict:
-    """Fetch one issue's body/labels/PR state and screen it. A resolution
-    failure (bad number, closed issue, gh error) is reported, not raised —
-    the rest of the roster must still be screened."""
+    """Fetch one issue's body/labels/state/linked-PRs and screen it. A resolution
+    failure (bad number, gh error) is reported, not raised — the rest of the
+    roster must still be screened. A closed issue is reported as closed rather
+    than silently screening ready or silently vanishing from the report."""
     data, proc = gh_json([
         "issue", "view", str(number), "--repo", args.slug,
-        "--json", "body,labels,state",
+        "--json", "body,labels,state,closedByPullRequestsReferences",
     ])
     if proc.returncode != 0:
         return {"issue": number, "error": (proc.stderr or "").strip()[:200] or "gh issue view failed"}
+
+    state = (data.get("state") or "").upper() if isinstance(data, dict) else ""
+    if state == "CLOSED":
+        return {"issue": number, "closed": True}
 
     body = data.get("body") if isinstance(data, dict) else None
     labels = [l.get("name", "") for l in (data.get("labels") or [])] if isinstance(data, dict) else []
     gaps = dor_gaps(body)
     mode = lane_mode(labels)
 
-    pr_data, _ = gh_json([
-        "pr", "list", "--repo", args.slug, "--search", f"linked:{number}",
-        "--state", "open", "--json", "number",
-    ])
-    has_open_pr = bool(pr_data)
+    linked = data.get("closedByPullRequestsReferences") or [] if isinstance(data, dict) else []
+    linked_numbers = [p.get("number") for p in linked if isinstance(p, dict) and p.get("number") is not None]
+    has_open_pr, pr_error = _has_open_linked_pr(args.slug, linked_numbers)
+    if pr_error:
+        return {"issue": number, "error": f"could not check open PRs: {pr_error}"}
 
-    from shared import data_dir as _data_dir
-    owner, _, repo_name = args.slug.partition("/")
-    run_json_path = os.path.join(_data_dir(), "runs", f"{owner}-{repo_name}-issue-{number}", "run.json")
+    run_json_path = _ledger_path(run_dir_for(os.path.join(data_dir(), "runs"), args.slug, number))
     reason = skip_reason(run_json_path, has_open_pr)
 
     return {"issue": number, "gaps": gaps, "mode": mode, "skip_reason": reason}
@@ -291,12 +349,13 @@ def _issue_readiness(args, number: int) -> dict:
 def cmd_plan(args) -> None:
     numbers = _resolve_issue_numbers(args)
 
-    # First use of this checkout for this repo: register it once.
-    owner, _, repo_name = args.slug.partition("/")
+    # First use of this checkout for this repo: register it once, and only
+    # if it's actually a git checkout of (plausibly) this slug.
     checkouts = read_checkouts()
-    slug_key = args.slug
-    if slug_key not in checkouts:
-        register_checkout(slug_key, os.path.abspath(args.repo or os.getcwd()))
+    if args.slug not in checkouts:
+        candidate = os.path.abspath(args.repo or os.getcwd())
+        if _looks_like_checkout(candidate, args.slug):
+            register_checkout(args.slug, candidate)
 
     if not numbers:
         print("nothing to dispatch")
@@ -306,6 +365,9 @@ def cmd_plan(args) -> None:
         report = _issue_readiness(args, number)
         if "error" in report:
             print(f"#{number}: could not resolve ({report['error']})")
+            continue
+        if report.get("closed"):
+            print(f"#{number}: closed  SKIP: issue is closed")
             continue
         ready = not report["gaps"]
         status = "ready" if ready else f"not ready: {'; '.join(report['gaps'])}"
