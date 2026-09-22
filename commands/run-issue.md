@@ -218,7 +218,8 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
      brief through exactly as `/gh-issue`'s own step 0 does — substitute directly into
      step 1 rather than re-running step 0's detection. Parse the created issue number `<n>`
      from `/gh-issue`'s returned URL. Continue to Preflight step 3 with that `<n>` as
-     though it had been passed to `/run-issue` directly.
+     though it had been passed to `/run-issue` directly. `/gh-issue`'s HARD RULE is scoped
+     to issue creation and does not bind any later phase of this run.
 3. `gh issue view <n> --comments --json title,body,labels,comments,url` — if this fails,
    stop (bad issue number, wrong repo, or `gh` not authed).
 3.5. **Epic check — before step 4, not after it.** `gh api

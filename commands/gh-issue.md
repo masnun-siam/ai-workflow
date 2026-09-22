@@ -21,12 +21,16 @@ I have a ${1:-bug / feature request / task / improvement} to log as a GitHub iss
 
 Details: $@
 
-**HARD RULE — this skill only ever creates a GitHub issue. It never touches code.**
+**HARD RULE — while executing steps 0–7 below, this skill only ever creates a
+GitHub issue. It never touches code.**
 - NEVER use Write, Edit, or NotebookEdit on any file in the repo.
 - NEVER run a mutating shell command (`git commit`, `git checkout -b`, package installs, formatters, codemods, etc.).
 - The ONLY writes permitted are the temp body file at `/tmp/gh-issue-body.md`, the `gh issue create` / `gh issue edit` / `gh project` calls below, and the notes-vault dump in step 7 (that's a different vault, not the repo, and goes through the `dump` skill's own confirmation).
 - This holds even for a one-character fix. "It's trivial" is not an exception — the whole point of filing an issue is that a human decides whether and how to make the change.
 - If a fix is obvious from your investigation, do NOT apply it. Record it under a **Proposed Fix** section in the issue body instead (file path, symbol, and the change in prose or a fenced diff).
+- **Scope.** These constraints bind steps 0–7 of this skill only. When `/run-issue`
+  invoked this skill, they lapse the moment the issue URL is returned — the caller's
+  later phases write code by design, and this rule must not be carried into them.
 
 Do the following:
 
@@ -141,4 +145,6 @@ Do the following:
    Best-effort: if the vault is unreachable or `/dump` is cancelled, say so in one line.
    The issue already exists and is the deliverable; the dump is not worth failing over.
 
-Return the issue URL when done.
+Return the issue URL. If `/run-issue` invoked this skill, hand control back to its
+Preflight step 3 with that issue number and continue the run; the HARD RULE above no
+longer applies.
