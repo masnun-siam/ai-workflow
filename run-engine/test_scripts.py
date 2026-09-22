@@ -21,6 +21,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ci  # noqa: E402
+import dispatch  # noqa: E402
 import epic  # noqa: E402
 import project  # noqa: E402
 import shared  # noqa: E402
@@ -1034,5 +1035,200 @@ with tempfile.TemporaryDirectory() as d:
         ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
         assert ctx["stack"] == "failed"
 ok("cmd_up's up-failed branch releases the stack lock")
+
+# --------------------------------------------------------------------------- dispatch: roster
+
+assert dispatch.parse_issue_list("12,13,14") == [12, 13, 14]
+ok("--issues 12,13,14 resolves in input order")
+
+assert dispatch.parse_issue_list("#12, 13 ,#14") == [12, 13, 14]
+ok("--issues parses # prefixes, spaces and repeated separators")
+
+for bad in ("", ",,"):
+    try:
+        dispatch.parse_issue_list(bad)
+        raise AssertionError(f"expected error for {bad!r}")
+    except ValueError:
+        pass
+ok("--issues \"\" and \",,\" raise, distinct from a valid-but-empty roster")
+
+for bad in ("abc", "-5"):
+    try:
+        dispatch.parse_issue_list(bad)
+        raise AssertionError(f"expected error for {bad!r}")
+    except ValueError:
+        pass
+ok("--issues abc / -5 raise with no partial parse")
+
+assert dispatch.dedupe([12, 13, 12, 14, 13]) == [12, 13, 14]
+ok("dedupe drops repeats, first occurrence wins, order stable")
+
+# --------------------------------------------------------------------------- dispatch: DoR pre-screen
+
+READY_BODY = """\
+## Problem & why
+Users cannot export data, which blocks their monthly report.
+
+## Scope
+In scope: CSV export. Out of scope: PDF export.
+
+## Acceptance Criteria
+- [ ] Given a user, when they click export, then a CSV downloads.
+
+## Affected surface
+`app/Http/Controllers/ExportController.php`
+
+## Non-functional Constraints
+None
+
+## Dependencies / blockers
+None
+"""
+assert dispatch.dor_gaps(READY_BODY) == []
+ok("a body with all six DoR sections filled screens ready with zero gaps")
+
+assert len(dispatch.dor_gaps(None)) == 6
+assert len(dispatch.dor_gaps("")) == 6
+ok("a None or empty body reports all six DoR items as gaps and never raises")
+
+MISSING_SCOPE = READY_BODY.replace(
+    "## Scope\nIn scope: CSV export. Out of scope: PDF export.\n\n", ""
+)
+gaps = dispatch.dor_gaps(MISSING_SCOPE)
+assert len(gaps) == 1 and "scope" in gaps[0].lower(), gaps
+ok("a body missing exactly one section names that specific gap")
+
+for heading in ("### Acceptance Criteria", "## acceptance criteria", "## Acceptance criteria (draft)"):
+    body = READY_BODY.replace("## Acceptance Criteria", heading)
+    gaps = dispatch.dor_gaps(body)
+    assert not any("acceptance" in g.lower() for g in gaps), (heading, gaps)
+ok("heading variants (#/##/###, case, trailing text) all match Acceptance Criteria")
+
+EMPTY_HEADING = READY_BODY.replace(
+    "## Acceptance Criteria\n- [ ] Given a user, when they click export, then a CSV downloads.\n\n",
+    "## Acceptance Criteria\n\n",
+)
+gaps = dispatch.dor_gaps(EMPTY_HEADING)
+assert any("acceptance" in g.lower() for g in gaps), gaps
+ok("a heading present with no content beneath it counts as a gap")
+
+assert dispatch.dor_gaps(READY_BODY) == [], "literal 'None' under Non-functional Constraints satisfies it"
+ok("'None' as the literal body under Non-functional Constraints satisfies that item")
+
+# --------------------------------------------------------------------------- dispatch: lane mode
+
+assert dispatch.lane_mode(["lean"]) == "lean"
+assert dispatch.lane_mode(["bug"]) == "full"
+ok("an issue carrying the lean label resolves lean; one without it resolves full")
+
+assert dispatch.lane_mode(["Lean"]) == "lean"
+assert dispatch.lane_mode(["LEAN"]) == "lean"
+ok("Lean/LEAN label text still resolves lean, case-insensitive")
+
+assert dispatch.lane_mode(["bug", "lean", "p1"]) == "lean"
+ok("an issue carrying lean plus other labels still resolves lean")
+
+# --------------------------------------------------------------------------- dispatch: skip detection
+
+with tempfile.TemporaryDirectory() as d:
+    running = os.path.join(d, "running.json")
+    write(d, "running.json", json.dumps({"status": "running"}))
+    assert dispatch.skip_reason(running, False) is not None
+ok("a run.json at status=running is a skip reason")
+
+with tempfile.TemporaryDirectory() as d:
+    for status in ("done", "escalated"):
+        p = os.path.join(d, f"{status}.json")
+        write(d, f"{status}.json", json.dumps({"status": status}))
+        assert dispatch.skip_reason(p, False) is None, status
+ok("a run.json at status=done or escalated is NOT a skip reason (re-runnable)")
+
+with tempfile.TemporaryDirectory() as d:
+    zero = os.path.join(d, "zero.json")
+    write(d, "zero.json", "")
+    corrupt = os.path.join(d, "corrupt.json")
+    write(d, "corrupt.json", "{not json")
+    assert dispatch.skip_reason(zero, False) is None
+    assert dispatch.skip_reason(corrupt, False) is None
+    assert dispatch.skip_reason(os.path.join(d, "missing.json"), False) is None
+    assert dispatch.skip_reason(None, False) is None
+ok("a corrupt, zero-byte, missing, or None run.json path is treated as no-existing-run, never raises")
+
+assert dispatch.skip_reason(None, True) is not None
+assert dispatch.skip_reason(os.path.join("/tmp", "does-not-exist.json"), True) is not None
+ok("has_open_pr=True is a skip reason regardless of run.json state")
+
+# --------------------------------------------------------------------------- dispatch: checkouts.json registry
+
+with tempfile.TemporaryDirectory() as d:
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        assert dispatch.checkouts_path() == os.path.join(shared.data_dir(), "checkouts.json")
+ok("checkouts_path() reuses shared.data_dir() rather than re-deriving it")
+
+with tempfile.TemporaryDirectory() as d:
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        assert dispatch.read_checkouts() == {}
+        os.makedirs(os.path.dirname(dispatch.checkouts_path()), exist_ok=True)
+        open(dispatch.checkouts_path(), "w").close()  # zero bytes
+        assert dispatch.read_checkouts() == {}
+        with open(dispatch.checkouts_path(), "w", encoding="utf-8") as fh:
+            fh.write("{not json")
+        assert dispatch.read_checkouts() == {}
+ok("the registry read function returns {} for a missing/zero-byte/non-JSON file")
+
+with tempfile.TemporaryDirectory() as d:
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        dispatch.register_checkout("o-r-issue-12", "/checkouts/o-r-issue-12")
+        assert dispatch.read_checkouts() == {"o-r-issue-12": "/checkouts/o-r-issue-12"}
+ok("a registration write followed by a read round-trips the slug->path mapping")
+
+with tempfile.TemporaryDirectory() as d:
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        dispatch.register_checkout("o-r-issue-1", "/c/1")
+        # After any successful write, the file on disk is immediately valid JSON —
+        # never a truncated fragment from a non-atomic write.
+        with open(dispatch.checkouts_path(), encoding="utf-8") as fh:
+            json.loads(fh.read())
+        dispatch.register_checkout("o-r-issue-2", "/c/2")
+        with open(dispatch.checkouts_path(), encoding="utf-8") as fh:
+            data = json.loads(fh.read())
+        assert data == {"o-r-issue-1": "/c/1", "o-r-issue-2": "/c/2"}
+ok("registration writes are atomic: the file is always valid JSON immediately after a write")
+
+with tempfile.TemporaryDirectory() as d:
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        os.environ["AIW_TEST_SECRET_TOKEN"] = "shh-do-not-leak-me"
+        try:
+            dispatch.register_checkout("o-r-issue-9", "/c/9")
+        finally:
+            os.environ.pop("AIW_TEST_SECRET_TOKEN", None)
+        with open(dispatch.checkouts_path(), encoding="utf-8") as fh:
+            raw = fh.read()
+        assert "shh-do-not-leak-me" not in raw
+        assert ".env" not in raw
+        for v in os.environ.values():
+            assert v not in raw or v in ("/c/9",), \
+                "an os.environ value leaked into the checkouts registry"
+ok("registry content is only slug->path pairs; no os.environ value or .env-shaped content lands in it")
+
+# --------------------------------------------------------------------------- dispatch: CLI wiring (RED until run-dev updates route.py)
+
+proc = subprocess.run([sys.executable, ROUTE, "dispatch", "plan", "--help"],
+                      capture_output=True, text=True)
+assert proc.returncode == 0, proc.stderr
+ok("aiw dispatch plan --help exits 0 once dispatch is registered in route.py")
+
+with tempfile.TemporaryDirectory() as d:
+    dd = os.path.join(d, "data")
+    env = dict(os.environ, CLAUDE_PLUGIN_DATA=dd)
+    proc = subprocess.run([sys.executable, ROUTE, "paths"], capture_output=True, text=True, env=env)
+    assert proc.returncode == 0, proc.stderr
+    out = json.loads(proc.stdout)
+    assert out["checkouts"] == os.path.join(dd, "checkouts.json")
+    assert out["data_dir"] == dd
+    assert out["runs_dir"] == os.path.join(dd, "runs")
+    assert out["pr_grind_dir"] == os.path.join(dd, "pr-grind")
+    assert out["channels"] == os.path.join(dd, "channels.json")
+ok("aiw paths prints a checkouts key and its other existing keys are unchanged")
 
 print(f"\n{passed} checks passed")
