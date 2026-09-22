@@ -21,6 +21,18 @@ import sys
 OK, FAILED, USAGE = 0, 1, 2
 
 
+def data_dir() -> str:
+    """Where plugin state lives, outside the plugin install directory itself so it
+    survives a plugin upgrade (which replaces the install directory wholesale).
+
+    Read at call time, not cached at import time — a test that sets
+    $CLAUDE_PLUGIN_DATA after this module is imported must still see it honoured.
+    """
+    return os.environ.get("CLAUDE_PLUGIN_DATA") or os.path.expanduser(
+        "~/.claude/plugins/data/ai-workflow"
+    )
+
+
 def die(code: int, message: str):
     sys.stderr.write(message.rstrip() + "\n")
     sys.exit(code)
@@ -94,6 +106,13 @@ def write_json(path: str, data) -> None:
 
 def ledger_path(run_dir: str) -> str:
     return os.path.join(run_dir, "run.json")
+
+
+def run_dir_for(runs_dir: str, slug: str, issue: int) -> str:
+    """The per-issue run directory under `runs_dir` for `slug`'s issue #`issue` —
+    the `<owner>-<repo>-issue-<n>` naming every run-directory consumer shares."""
+    owner, _, repo = slug.partition("/")
+    return os.path.join(runs_dir, f"{owner}-{repo}-issue-{issue}")
 
 
 def load_ledger(run_dir: str):

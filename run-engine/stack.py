@@ -14,10 +14,265 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+import time
 
-from shared import die, load_ledger, print_written, record, repo_of, run, shell, warn
+from shared import data_dir, die, load_ledger, print_written, record, repo_of, run, shell, warn
 
 UP_TIMEOUT = 600  # seconds; the prose's `timeout: 600000` in milliseconds
+
+# --------------------------------------------------------------------------- lock
+#
+# One stack at a time per host: a compose stack eats real CPU/memory, and two
+# runs (or pr-grind rebuilding while a second `up` fires) can peg the machine
+# the same way an uncapped stack once did. The lock is ledger-based, not
+# pid-based — a short-lived `aiw stack up` process's own pid dies the instant
+# the command returns, so pid-liveness would misfire on every healthy lock
+# whose owning run is still very much alive.
+
+LOCK_TIMEOUT = 900  # default --lock-timeout, seconds
+LOCK_POLL = 5  # seconds between retries while waiting for the lock
+LOCK_GRACE = 2 * UP_TIMEOUT  # a holder is only reclaimed once clearly abandoned
+
+# The `.break` sentinel that gates a stale-lock reclaim (see acquire_lock)
+# only ever needs to exist for the handful of local filesystem calls between
+# creating it and removing it — no network I/O, no waiting. If one is ever
+# found older than this, its creator crashed mid-break; it's safe to treat
+# it as abandoned and clear it rather than wedging every future reclaim.
+BREAK_SENTINEL_STALE = 30  # seconds
+
+_LOCK_GUARD = threading.Lock()  # serializes the read-check-write within this process
+
+
+def lock_path() -> str:
+    return os.path.join(data_dir(), "stack.lock")
+
+
+def _read_holder(path: str) -> dict | None:
+    """None means free: no file, empty file, or a file that isn't valid JSON.
+    None of those are a crash — a lock file is advisory, not a database."""
+    data = _json_file(path)
+    return data if isinstance(data, dict) else None
+
+
+def lock_stale(holder: dict, now: float) -> bool:
+    """True when the holder is provably finished or too old to trust.
+
+    Reclaimed immediately once the holder's ledger status is "done" or
+    "escalated" — that run is never coming back to call `stack down`. A
+    holder still "running" (or whose ledger cannot be read at all) is only
+    reclaimed once LOCK_GRACE has passed, bounding the crash case (a run
+    that dies without ever updating its ledger again) without waiting
+    forever.
+    """
+    run_dir = holder.get("run_dir")
+    acquired_at = holder.get("acquired_at")
+    if not run_dir or not isinstance(acquired_at, (int, float)):
+        return True
+    ledger_file = os.path.join(run_dir, "run.json")
+    try:
+        with open(ledger_file, encoding="utf-8") as fh:
+            raw = fh.read()
+    except OSError:
+        warn(f"stack lock holder {run_dir} has no run.json; reclaiming")
+        return True
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        warn(f"stack lock holder {run_dir} has an unreadable run.json; reclaiming")
+        return True
+    status = data.get("status") if isinstance(data, dict) else None
+    if status in ("done", "escalated"):
+        return True
+    return (now - acquired_at) > LOCK_GRACE
+
+
+def _break_sentinel_path(path: str) -> str:
+    return f"{path}.break"
+
+
+def _reclaim_stale_break_sentinel(break_path: str) -> None:
+    """Best-effort: clear a `.break` sentinel abandoned mid-break (its creator
+    crashed between creating it and removing it in the `finally` below).
+
+    Tolerant of the file changing or vanishing between the two checks and the
+    remove: a fresh mtime read right before removing, plus a swallowed
+    FileNotFoundError, means the narrow window here can only ever no-op
+    (leave a live sentinel alone) or delete one that's still provably stale
+    at the moment of removal — never a sentinel a different contender just
+    created out from under us.
+    """
+    try:
+        st = os.stat(break_path)
+    except OSError:
+        return  # already gone
+    if time.time() - st.st_mtime <= BREAK_SENTINEL_STALE:
+        return
+    try:
+        st2 = os.stat(break_path)
+        if st2.st_mtime != st.st_mtime:
+            return  # replaced since the first check; its new owner is live
+        os.remove(break_path)
+    except FileNotFoundError:
+        pass  # someone else already cleared it — fine
+    except OSError:
+        pass
+
+
+def _with_break_sentinel(path: str, action):
+    """Run `action` while holding exclusive rights to mutate `path`, gated by
+    the `.break` sentinel: only the contender that wins the O_EXCL create of
+    `path.break` may touch `path` at all. Returns `action`'s return value if
+    it ran, `None` if it did not (sentinel already held elsewhere).
+
+    This is the ONLY way `path` is ever written or removed, by acquire_lock
+    or release_lock — a read-check-then-mutate with nothing atomic between
+    the two syscalls lets two callers race each other's decisions (round-3
+    review found this for release_lock; a second, narrower version of the
+    same TOCTOU also turned up between a reclaim's stale-check and its
+    `os.remove` racing a concurrent fresh publish, caught by this fix's own
+    40-trial race harness). Funnelling every mutation through one sentinel
+    closes both: at most one process is ever deciding-and-writing `path` at
+    a time, full stop.
+
+    Non-blocking: if the sentinel is already held, someone else is mutating
+    `path` right now and will resolve it on their own, so the loser just
+    returns instead of waiting — callers retry/back off on the outside.
+    """
+    break_path = _break_sentinel_path(path)
+    try:
+        bfd = os.open(break_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        _reclaim_stale_break_sentinel(break_path)  # best-effort unwedge
+        return None
+    except OSError:
+        return None  # can't write the sentinel at all
+
+    os.close(bfd)
+    try:
+        return action()
+    finally:
+        try:
+            os.remove(break_path)
+        except OSError:
+            pass
+
+
+def _write_holder(path: str, holder: dict) -> None:
+    """Publish `holder` at `path`, atomically replacing whatever is there
+    (or creating it fresh). Only ever called from inside a
+    `_with_break_sentinel` action, so nothing else can be reading or writing
+    `path` at the same moment — `os.replace` (an atomic rename on the same
+    filesystem) then means every reader sees either the old content or the
+    new, complete content, never a half-written or empty file."""
+    tmp_path = f"{path}.tmp.{os.getpid()}.{threading.get_ident()}"
+    with open(tmp_path, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(holder))
+    os.replace(tmp_path, path)
+
+
+def acquire_lock(run_dir: str, issue: int, repo: str, timeout: int) -> bool:
+    """Acquire the single stack lock for `run_dir`. Re-entrant: a run already
+    holding it (pr-grind's second `stack up`) never blocks on itself.
+
+    The real contenders are separate `aiw stack up` OS processes, which share
+    nothing but the filesystem — so exclusion has to be an OS-level atomic
+    operation, not a process-local `threading.Lock` (that only ever serializes
+    threads inside one interpreter). Every decision that could end in writing
+    or removing the lock file — "is it free", "is it stale", "publish mine" —
+    happens as one unit inside `_with_break_sentinel`, so it can't be
+    interleaved with another acquire_lock or release_lock call deciding the
+    same thing about the same file at the same time.
+
+    Fails OPEN on an unwritable data dir — a lock that cannot be written must
+    not fail the run, it just stops protecting it.
+    """
+    path = lock_path()
+    deadline = time.time() + max(timeout, 0)
+    while True:
+        # Cheap common case, no exclusion needed: we already hold this lock
+        # (pr-grind's second `stack up`). A plain read can't race with our
+        # own prior write in any way that matters — nobody else ever writes
+        # our run_dir as the holder.
+        current = _read_holder(path)
+        if current is not None and current.get("run_dir") == run_dir:
+            return True
+
+        with _LOCK_GUARD:  # still serializes threads within this process
+            try:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+            except OSError as exc:
+                warn(f"stack lock directory is not writable ({exc}); proceeding unlocked")
+                return True
+
+            holder = {"run_dir": run_dir, "issue": issue, "repo": repo, "acquired_at": time.time()}
+
+            def _decide_and_publish(path=path, run_dir=run_dir, holder=holder):
+                current = _read_holder(path)
+                if current is not None and current.get("run_dir") == run_dir:
+                    return True  # became ours between the fast check and the sentinel
+                if current is not None and not lock_stale(current, time.time()):
+                    return False  # a live holder — not ours to take
+                try:
+                    _write_holder(path, holder)
+                except OSError as exc:
+                    warn(f"stack lock file is not writable ({exc}); proceeding unlocked")
+                return True
+
+            outcome = _with_break_sentinel(path, _decide_and_publish)
+            if outcome:
+                return True
+            # outcome is None (lost the sentinel to another acquire_lock or
+            # release_lock call deciding this same instant) or False (a
+            # live, non-stale holder) — either way, back off and retry.
+        if time.time() >= deadline:
+            return False
+        time.sleep(min(LOCK_POLL, max(deadline - time.time(), 0)))
+
+
+RELEASE_SENTINEL_RETRIES = 3  # bounded attempts to win the sentinel, not to wait out a live holder
+RELEASE_SENTINEL_BACKOFF = 0.05  # seconds between attempts; keeps stack down fast
+
+
+def release_lock(run_dir: str) -> None:
+    """Best-effort: only removes the lockfile when `run_dir` is the recorded
+    holder, so a stale/foreign release can never drop another run's lock.
+
+    Gated behind the same `.break` sentinel acquire_lock uses for every
+    mutation of the lock file. Without it, this is a bare
+    read-check-then-remove with nothing atomic between the two syscalls: a
+    contender can read the same (stale) holder as this call, win a reclaim
+    race, and install its own fresh lock in the gap before this call's
+    `os.remove` runs — which then deletes the new lock, not the one this
+    call actually meant to release (round-3 review, reproduced 1/40 trials
+    with a concurrent release).
+
+    Bounded retry, since `stack down` must never hang: if the sentinel is
+    already held, this makes a few short-backoff attempts to win it before
+    giving up (round-4 review — a single non-blocking attempt could lose to
+    mere contention noise, not just a genuine break-in-progress, and leave
+    the lockfile behind with nobody now clearing it; the next contender then
+    waits out the full LOCK_GRACE window for nothing). If every attempt still
+    loses the sentinel, this returns without doing anything further — never
+    fails, never blocks indefinitely.
+    """
+    path = lock_path()
+
+    def _release(path=path, run_dir=run_dir):
+        holder = _read_holder(path)
+        if holder is not None and holder.get("run_dir") == run_dir:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        return True  # ran to completion — distinguishes from "sentinel not won"
+
+    for attempt in range(RELEASE_SENTINEL_RETRIES):
+        if _with_break_sentinel(path, _release) is True:
+            return
+        if attempt < RELEASE_SENTINEL_RETRIES - 1:
+            time.sleep(RELEASE_SENTINEL_BACKOFF)
+
 
 COMPOSE_CANDIDATES = (
     "docker-compose.test.yml",
@@ -297,6 +552,19 @@ def cmd_up(args) -> None:
         ))
         return
 
+    lock_timeout = getattr(args, "lock_timeout", LOCK_TIMEOUT)
+    if not acquire_lock(args.run_dir, ledger.issue, repo, lock_timeout):
+        holder = _read_holder(lock_path()) or {}
+        who = holder.get("run_dir") or "another run"
+        print_written(record(
+            args.run_dir, ledger,
+            stack="failed", compose_prefix="", test_cmd="", test_cmd_host=runner,
+            app_url="none", api_url="none", web_url="none", source_mounted="no",
+            tests_unverified=f"stack lock held by {who}; timed out after {lock_timeout}s",
+        ))
+        # Exit 0 on purpose, same contract as every other degraded stack state.
+        return
+
     prefix = f"docker compose -p runissue-{ledger.issue} -f {compose_file}"
     if write_override(repo, compose_file):
         prefix += " -f .docker-agent.yml"
@@ -309,6 +577,7 @@ def cmd_up(args) -> None:
         proc = shell(f"{prefix} up -d --build --wait", cwd=repo, timeout=UP_TIMEOUT)
     if proc.returncode != 0:
         shell(f"{prefix} down -v --remove-orphans", cwd=repo, timeout=UP_TIMEOUT)
+        release_lock(args.run_dir)
         reason = (proc.stderr or proc.stdout or "unknown").strip().splitlines()
         print_written(record(
             args.run_dir, ledger,
@@ -365,9 +634,11 @@ def cmd_down(args) -> None:
     ledger = load_ledger(args.run_dir)
     prefix = ledger.context.get("compose_prefix")
     if not prefix or ledger.context.get("stack") == "none":
+        release_lock(args.run_dir)
         print("no stack to tear down")
         return
     proc = shell(f"{prefix} down -v --remove-orphans", cwd=repo_of(ledger, args.repo), timeout=UP_TIMEOUT)
+    release_lock(args.run_dir)
     if proc.returncode != 0:
         warn("teardown failed: " + (proc.stderr or "").strip()[:200])
         return
@@ -449,4 +720,9 @@ def register(sub, add) -> None:
         q = ops.add_parser(name, help=helptext)
         q.add_argument("run_dir")
         q.add_argument("--repo", help="repo/worktree root (default: ledger context, else cwd)")
+        if name == "up":
+            q.add_argument(
+                "--lock-timeout", type=int, default=LOCK_TIMEOUT, dest="lock_timeout",
+                help="seconds to wait for the stack lock before degrading (default: 900)",
+            )
         q.set_defaults(func=fn)

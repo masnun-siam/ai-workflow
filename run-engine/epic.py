@@ -98,7 +98,7 @@ import json  # noqa: E402  (kept beside the I/O half, the top of this file is pu
 import os  # noqa: E402
 
 from shared import (  # noqa: E402
-    die, gh_json, load_ledger, read_json, save_ledger, write_json,
+    die, gh_json, ledger_path, load_ledger, read_json, run_dir_for, save_ledger, write_json,
 )
 
 
@@ -112,8 +112,7 @@ def child_state(runs_dir: str, slug: str, issue: int) -> dict:
     A child with no run directory yet has not been initialised; it reports as
     running with nothing done, which is exactly how it should be treated.
     """
-    owner, _, repo = slug.partition("/")
-    path = os.path.join(runs_dir, f"{owner}-{repo}-issue-{issue}", "run.json")
+    path = ledger_path(run_dir_for(runs_dir, slug, issue))
     if not os.path.isfile(path):
         return {"status": "running", "pr": False, "stack_up": False, "needs_stack": True}
     led = read_json(path)

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.1 — 2026-09-22
+
+### Fixed
+
+- **`/gh-issue`'s and `/intake`'s HARD RULE blocks silently halted `/run-issue`.**
+  Both rules were unbounded, so once read into context they were treated as binding
+  for the rest of `/run-issue`'s turn — silently halting the pipeline right after an
+  intake-routed issue was filed, instead of continuing on to Preflight step 3 and
+  Gate 1 as designed. Both rules are now explicitly scoped to their own skill's
+  steps, with an explicit handback stated both where the rule is defined and at
+  `/run-issue`'s call site.
+
 ## 1.3.0 — 2026-09-21
 
 ### Added
