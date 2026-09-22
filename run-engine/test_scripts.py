@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -651,8 +652,13 @@ _ns = _parser.parse_args(["stack", "up", "/tmp/x"])
 assert _ns.lock_timeout == 900
 ok("--lock-timeout exists on the `up` subparser with default 900")
 
-RACER = os.path.join(HERE, "_race_acquire_lock_helper.py")
-write(HERE, os.path.basename(RACER), f"""\
+# The helper script a race spawns as a subprocess. Written to a real temp
+# dir (not into run-engine/, which is the repo's own test root) so a killed
+# race-test process can never leave an untracked file behind for a later
+# `/run-issue` run's dirty-worktree guard to trip over.
+RACE_TMP = tempfile.mkdtemp(prefix="aiw-race-")
+RACER = os.path.join(RACE_TMP, "_race_acquire_lock_helper.py")
+write(RACE_TMP, os.path.basename(RACER), f"""\
 import json, os, sys, time
 sys.path.insert(0, {HERE!r})
 import stack
@@ -665,33 +671,68 @@ while time.time() < start_at:
     pass
 print("True" if stack.acquire_lock(run_dir, 0, "o/r", 0) else "False")
 """)
+
+
+def _race(d: str, data_d: str, n: int = 12) -> list[str]:
+    """Spawn `n` separate `python3` processes — the actual shape of N `aiw
+    stack up` invocations racing for the same lockfile, unlike an in-process
+    threading.Thread version, which would only ever exercise the
+    process-local threading.Lock and pass even with no cross-process
+    exclusion at all. A single shared start timestamp, not just "spawned
+    close together": every contender spin-waits up to it so they hit
+    acquire_lock() concurrently instead of arriving staggered."""
+    env = dict(os.environ, CLAUDE_PLUGIN_DATA=data_d)
+    start_at = time.time() + 0.5
+    procs = [
+        subprocess.Popen(
+            [sys.executable, RACER, os.path.join(d, f"run{i}"), str(start_at)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
+        )
+        for i in range(n)
+    ]
+    outs = [p.communicate()[0].strip() for p in procs]
+    assert all(o in ("True", "False") for o in outs), outs
+    return outs
+
+
+def _plant_stale_holder(data_d: str, status: str, acquired_at: float) -> None:
+    """Pre-plant a stale stack.lock, pointing at its own holder run.json, so
+    a race hits the reclaim branch instead of the cold "no lockfile yet"
+    branch O_EXCL alone already protects."""
+    os.makedirs(data_d, exist_ok=True)
+    holder_run = os.path.join(data_d, "stale-holder")
+    os.makedirs(holder_run, exist_ok=True)
+    with open(os.path.join(holder_run, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump({"status": status}, fh)
+    with open(os.path.join(data_d, "stack.lock"), "w", encoding="utf-8") as fh:
+        json.dump(
+            {"run_dir": holder_run, "issue": 0, "repo": "o/r", "acquired_at": acquired_at}, fh
+        )
+
+
 try:
     with tempfile.TemporaryDirectory() as d:
-        data_d = os.path.join(d, "data")
-        env = dict(os.environ, CLAUDE_PLUGIN_DATA=data_d)
-        N = 12
-        # A single shared start timestamp, not just "spawned close together": every
-        # contender spin-waits up to it so they hit acquire_lock() concurrently
-        # instead of arriving staggered. Separate `python3` processes, one per
-        # contender — the actual shape of N `aiw stack up` invocations racing for
-        # the same lockfile, unlike the old in-process threading.Thread version,
-        # which only ever exercised the process-local threading.Lock and would
-        # have passed even with no cross-process exclusion at all.
-        start_at = time.time() + 0.5
-        procs = [
-            subprocess.Popen(
-                [sys.executable, RACER, os.path.join(d, f"run{i}"), str(start_at)],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
-            )
-            for i in range(N)
-        ]
-        outs = [p.communicate()[0].strip() for p in procs]
-        assert all(o in ("True", "False") for o in outs), outs
+        outs = _race(d, os.path.join(d, "data"))
         assert outs.count("True") == 1, outs
+    ok("N concurrent `aiw stack up`-shaped subprocesses racing for the same lockfile "
+       "produce exactly one winner")
+
+    # The reclaim path: every contender independently reads the same stale
+    # holder and independently agrees it's stale — the read-check-write race
+    # the round-2 review found (5-10 winners per trial before the fix).
+    for label, status, acquired_at in (
+        ("status=done", "done", time.time()),
+        ("grace-expired status=running", "running", time.time() - stack.LOCK_GRACE - 1),
+    ):
+        with tempfile.TemporaryDirectory() as d:
+            data_d = os.path.join(d, "data")
+            _plant_stale_holder(data_d, status, acquired_at)
+            outs = _race(d, data_d)
+            assert outs.count("True") == 1, (label, outs)
+        ok(f"N concurrent processes racing to reclaim a stale lock ({label}) "
+           "produce exactly one winner")
 finally:
-    os.remove(RACER)
-ok("N concurrent `aiw stack up`-shaped subprocesses racing for the same lockfile "
-   "produce exactly one winner")
+    shutil.rmtree(RACE_TMP, ignore_errors=True)
 
 with tempfile.TemporaryDirectory() as d:
     blocker = os.path.join(d, "blocker")

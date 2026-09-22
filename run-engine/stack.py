@@ -34,6 +34,13 @@ LOCK_TIMEOUT = 900  # default --lock-timeout, seconds
 LOCK_POLL = 5  # seconds between retries while waiting for the lock
 LOCK_GRACE = 2 * UP_TIMEOUT  # a holder is only reclaimed once clearly abandoned
 
+# The `.break` sentinel that gates a stale-lock reclaim (see acquire_lock)
+# only ever needs to exist for the handful of local filesystem calls between
+# creating it and removing it — no network I/O, no waiting. If one is ever
+# found older than this, its creator crashed mid-break; it's safe to treat
+# it as abandoned and clear it rather than wedging every future reclaim.
+BREAK_SENTINEL_STALE = 30  # seconds
+
 _LOCK_GUARD = threading.Lock()  # serializes the read-check-write within this process
 
 
@@ -94,6 +101,12 @@ def acquire_lock(run_dir: str, issue: int, repo: str, timeout: int) -> bool:
 
     Fails OPEN on an unwritable data dir — a lock that cannot be written must
     not fail the run, it just stops protecting it.
+
+    Reclaiming a *stale* lock is a second exclusion problem, not covered by
+    the O_EXCL create above (that only guards the case where no lock file
+    exists yet): every contender that reads the same stale holder agrees
+    it's stale, so the break itself is gated behind its own O_EXCL-created
+    sentinel (`stack.lock.break`) — see below.
     """
     path = lock_path()
     deadline = time.time() + max(timeout, 0)
@@ -123,26 +136,59 @@ def acquire_lock(run_dir: str, issue: int, repo: str, timeout: int) -> bool:
                 return True
 
             # The file already existed. Either it's ours (re-entrant), or it's
-            # someone else's and possibly stale/abandoned — reclaim by atomic
-            # replace so a concurrent reader never sees a half-written holder.
+            # someone else's and possibly stale/abandoned.
             existing = _read_holder(path)
             if existing is not None and existing.get("run_dir") == run_dir:
                 return True
             if existing is None or lock_stale(existing, time.time()):
-                tmp = f"{path}.{os.getpid()}.tmp"
+                # Every contender that reads the same stale holder agrees
+                # it's stale — a plain read-check-write (even an atomic
+                # os.replace()) here lets all of them "win" independently,
+                # since os.replace() is only atomic per-writer, not mutual
+                # exclusion between writers. Gate the break itself behind a
+                # second O_EXCL create: only the contender that creates the
+                # `.break` sentinel is allowed to touch the real lock file.
+                # Everyone else backs off untouched and retries — no lost
+                # update is possible because only one process ever calls
+                # os.remove(path) for a given stale holder.
+                break_path = f"{path}.break"
                 try:
-                    with open(tmp, "w", encoding="utf-8") as fh:
-                        json.dump(holder, fh)
-                    os.replace(tmp, path)
-                    return True
-                except OSError as exc:
-                    warn(f"stack lock file is not writable ({exc}); proceeding unlocked")
-                    return True
-                finally:
+                    bfd = os.open(break_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                except FileExistsError:
+                    bfd = None  # lost the sentinel race — or a leftover
                     try:
-                        os.remove(tmp)
+                        age = time.time() - os.stat(break_path).st_mtime
+                        if age > BREAK_SENTINEL_STALE:
+                            os.remove(break_path)  # best-effort unwedge
                     except OSError:
                         pass
+                except OSError:
+                    bfd = None  # can't write the sentinel at all
+
+                if bfd is not None:
+                    os.close(bfd)
+                    try:
+                        # Re-confirm the holder didn't change out from under
+                        # us between the read above and winning the
+                        # sentinel — it may have been replaced by a fresh,
+                        # legitimate `stack up` in the meantime.
+                        if _read_holder(path) == existing:
+                            try:
+                                os.remove(path)
+                            except OSError:
+                                pass
+                    finally:
+                        try:
+                            os.remove(break_path)
+                        except OSError:
+                            pass
+                    # The lock is now free — retry the top-level O_EXCL
+                    # create immediately, uncontested by the processes that
+                    # just lost the sentinel race, instead of waiting out a
+                    # poll interval.
+                    continue
+                # Someone else is breaking it — don't touch the lock file
+                # at all, just poll and let the winner recreate it.
         if time.time() >= deadline:
             return False
         time.sleep(min(LOCK_POLL, max(deadline - time.time(), 0)))

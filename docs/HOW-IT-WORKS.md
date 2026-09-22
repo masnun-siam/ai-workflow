@@ -232,11 +232,16 @@ folded together afterwards.
 - **One stack at a time per host.** `stack up` takes a lockfile before starting Docker and
   holds it for as long as the stack is up; a second run waits (`--lock-timeout`, default 900s)
   and then degrades to `stack=failed` naming the holder rather than starting a second stack
-  alongside it. The lock is taken with an OS-level atomic create (`O_CREAT | O_EXCL`), so it
-  holds across separate `aiw stack up` processes, not just threads within one. Staleness is
-  ledger-status-based, not pid-based: a holder whose run has reached `done` or `escalated` is
-  reclaimed immediately, and a holder still `running` (or whose ledger can't be read at all)
-  is reclaimed once past a bounded grace window instead of blocking forever.
+  alongside it. Acquiring a *free* lock is a single OS-level atomic create (`O_CREAT |
+  O_EXCL`), so it holds across separate `aiw stack up` processes, not just threads within
+  one. Staleness is ledger-status-based, not pid-based: a holder whose run has reached `done`
+  or `escalated` is reclaimed immediately, and a holder still `running` (or whose ledger
+  can't be read at all) is reclaimed once past a bounded grace window instead of blocking
+  forever. Reclaiming a *stale* lock is a second, separately-guarded exclusion problem — every
+  contender that sees the same stale holder would otherwise agree it's stale and race to
+  replace it — so the break itself is gated behind its own `O_EXCL`-created sentinel file:
+  only the one process that creates the sentinel is allowed to remove the stale lock and
+  retry, everyone else backs off untouched and retries against the fresh lock instead.
 
 ---
 
