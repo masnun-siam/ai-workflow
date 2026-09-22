@@ -58,11 +58,29 @@ Do the following:
      - **Dependencies / Blockers** — its own section, not a line in Notes. `none` beats silence here too.
      - Never delete one of these five to avoid writing `none`, and never ship a body containing `[bracketed placeholders]` — that is a failed run, not a draft.
    - Labels: bug / enhancement / feature / chore, plus scope labels (`backend`, `frontend`, `infra`) as applicable
+   - **`lean` label.** `/run-issue` reads this label at init time to pick its roster
+     without a human remembering to pass a flag — see `commands/run-issue.md`'s
+     lean-mode tradeoff description. Apply `lean` only when **all** of these hold:
+     - one independently-shippable outcome
+     - roughly one to two files or symbols touched
+     - no new dependency
+     - no new public API surface
+     - and **none** of: authentication/authorization, data migrations, payment paths,
+       or a public API contract change
+     Any doubt → no label. Full mode is the safe default.
+
+     When `lean` is about to be applied, ensure it exists first (idempotent, cheap —
+     only run this when the label is actually about to be applied, not on every issue):
+     ```bash
+     gh label create lean --color 0E8A16 --description "small, well-specified: run lean roster" 2>/dev/null || true
+     ```
 
 ### 4-EPIC. Create the parent and its children
 
 1. Create the **parent** with the BRD as its body, labelled `epic`. It is a container:
-   it needs no acceptance criteria of its own.
+   it needs no acceptance criteria of its own, and it is **never** labelled `lean` — a
+   container spans however many children it has, which is never "one to two files or
+   symbols touched."
 2. For each child, write a **complete, independently DoR-satisfying** issue body — the
    same section list as step 4, with the parent's context **inlined, never referenced**.
    `run-researcher` scores each child on its own and blocks the run on a gap, so a child
@@ -82,6 +100,14 @@ Do the following:
 3. Label every child `epic-<parent>` in addition to its normal labels. This is what the
    epic board filters on, and what makes the children findable with
    `gh issue list --label epic-<parent>` when there is no project.
+
+   Judge each child against step 4's `lean` heuristic **independently, against its own
+   body** — a child's own outcome, file count, dependency, API-surface and risk-area
+   answers, not the epic's aggregate. The same idempotent ensure-create from step 4 runs
+   once, before the first child that earns the label:
+   ```bash
+   gh label create lean --color 0E8A16 --description "small, well-specified: run lean roster" 2>/dev/null || true
+   ```
 4. Link and validate:
 
    ```bash
