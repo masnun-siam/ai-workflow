@@ -672,6 +672,22 @@ while time.time() < start_at:
 print("True" if stack.acquire_lock(run_dir, 0, "o/r", 0) else "False")
 """)
 
+# The release-side racer for the release_lock blocker (round-3 review): a
+# separate subprocess that calls release_lock(run_dir) at the same shared
+# start timestamp the acquire contenders use, so it hits the sentinel gate
+# concurrently with them instead of running safely before/after the race.
+RELEASER = os.path.join(RACE_TMP, "_race_release_lock_helper.py")
+write(RACE_TMP, os.path.basename(RELEASER), f"""\
+import sys, time
+sys.path.insert(0, {HERE!r})
+import stack
+
+run_dir, start_at = sys.argv[1], float(sys.argv[2])
+while time.time() < start_at:
+    pass
+stack.release_lock(run_dir)
+""")
+
 
 def _race(d: str, data_d: str, n: int = 12) -> list[str]:
     """Spawn `n` separate `python3` processes — the actual shape of N `aiw
@@ -691,6 +707,33 @@ def _race(d: str, data_d: str, n: int = 12) -> list[str]:
         for i in range(n)
     ]
     outs = [p.communicate()[0].strip() for p in procs]
+    assert all(o in ("True", "False") for o in outs), outs
+    return outs
+
+
+def _race_with_release(d: str, data_d: str, holder_run: str, n: int = 10) -> list[str]:
+    """Same shape as `_race`, plus one more subprocess: the stale holder
+    itself calling `release_lock()` at the same shared start timestamp as
+    the N contenders trying to reclaim its (stale) lock. This is the exact
+    interleaving the round-3 review flagged — Teardown calls `stack down`
+    (release_lock) at precisely the moment a holder's ledger goes terminal,
+    which is also the instant lock_stale() starts telling contenders to
+    reclaim."""
+    env = dict(os.environ, CLAUDE_PLUGIN_DATA=data_d)
+    start_at = time.time() + 0.5
+    procs = [
+        subprocess.Popen(
+            [sys.executable, RACER, os.path.join(d, f"run{i}"), str(start_at)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
+        )
+        for i in range(n)
+    ]
+    releaser = subprocess.Popen(
+        [sys.executable, RELEASER, holder_run, str(start_at)],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
+    )
+    outs = [p.communicate()[0].strip() for p in procs]
+    releaser.communicate()
     assert all(o in ("True", "False") for o in outs), outs
     return outs
 
@@ -731,6 +774,28 @@ try:
             assert outs.count("True") == 1, (label, outs)
         ok(f"N concurrent processes racing to reclaim a stale lock ({label}) "
            "produce exactly one winner")
+
+    # The release_lock blocker (round-3 review): a stale holder calling
+    # release_lock() concurrently with N contenders reclaiming that same
+    # stale lock must never let two of them believe they hold it. 40 trials,
+    # matching the reviewer's own reproduction count. Zero winners in a
+    # given trial is not a bug to flag here — with --lock-timeout 0 every
+    # contender tries exactly once, so it's an expected (if unlucky) outcome
+    # when the concurrent release wins the decision for that instant; a real
+    # caller uses the default 900s timeout and simply retries. Only *more
+    # than one* "True" is the actual double-holder this test exists to catch.
+    double_holder_events = 0
+    for _trial in range(40):
+        with tempfile.TemporaryDirectory() as d:
+            data_d = os.path.join(d, "data")
+            _plant_stale_holder(data_d, "done", time.time())
+            holder_run = os.path.join(data_d, "stale-holder")
+            outs = _race_with_release(d, data_d, holder_run)
+            if outs.count("True") > 1:
+                double_holder_events += 1
+    assert double_holder_events == 0, f"{double_holder_events}/40 trials produced a double-holder"
+    ok("release_lock() called by a stale holder concurrently with N contenders reclaiming its lock "
+       "never produces a double-holder (40 trials, 10 contenders each)")
 finally:
     shutil.rmtree(RACE_TMP, ignore_errors=True)
 
@@ -755,6 +820,40 @@ with tempfile.TemporaryDirectory() as d:
         assert os.path.isfile(stack.lock_path())
         assert json.load(open(stack.lock_path()))["run_dir"] == holder_run
 ok("release_lock from a non-holder run_dir does not remove another run's lockfile")
+
+with tempfile.TemporaryDirectory() as d:
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        # Plant a stale holder so acquire_lock has to walk the sentinel-gated
+        # reclaim branch (a cold "no lockfile yet" acquire never touches the
+        # `.break` sentinel at all), then plant an orphaned `.break` sentinel
+        # of its own — the crash-recovery case: the previous reclaimer died
+        # between creating the sentinel and removing it in its `finally`.
+        holder_run = os.path.join(d, "holder")
+        os.makedirs(holder_run)
+        ledger = Ledger(3, ["dev"])
+        ledger.mark_done()
+        with open(os.path.join(holder_run, "run.json"), "w", encoding="utf-8") as fh:
+            json.dump(ledger.to_dict(), fh)
+        os.makedirs(os.path.dirname(stack.lock_path()), exist_ok=True)
+        with open(stack.lock_path(), "w", encoding="utf-8") as fh:
+            json.dump({"run_dir": holder_run, "issue": 3, "repo": "o/r", "acquired_at": time.time()}, fh)
+        break_path = stack.lock_path() + ".break"
+        open(break_path, "w").close()
+        old = time.time() - stack.BREAK_SENTINEL_STALE - 5
+        os.utime(break_path, (old, old))
+
+        orig_poll = stack.LOCK_POLL
+        stack.LOCK_POLL = 0.05  # this test's own reclaim-then-retry loop, not the race harness
+        try:
+            started = time.time()
+            assert stack.acquire_lock(os.path.join(d, "run"), 7, "o/r", 5) is True
+            assert time.time() - started < 2, \
+                "an abandoned .break sentinel must be reclaimed promptly, not wedge the full timeout"
+        finally:
+            stack.LOCK_POLL = orig_poll
+        assert not os.path.exists(break_path), "the abandoned sentinel itself is cleared, not left behind"
+ok("an abandoned `.break` sentinel older than BREAK_SENTINEL_STALE is reclaimed during a stale-lock "
+   "acquire (crash-recovery path), instead of wedging every future reclaim")
 
 # --------------------------------------------------------------------------- stack lock, via the CLI
 

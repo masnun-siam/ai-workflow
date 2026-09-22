@@ -87,6 +87,90 @@ def lock_stale(holder: dict, now: float) -> bool:
     return (now - acquired_at) > LOCK_GRACE
 
 
+def _break_sentinel_path(path: str) -> str:
+    return f"{path}.break"
+
+
+def _reclaim_stale_break_sentinel(break_path: str) -> None:
+    """Best-effort: clear a `.break` sentinel abandoned mid-break (its creator
+    crashed between creating it and removing it in the `finally` below).
+
+    Tolerant of the file changing or vanishing between the two checks and the
+    remove: a fresh mtime read right before removing, plus a swallowed
+    FileNotFoundError, means the narrow window here can only ever no-op
+    (leave a live sentinel alone) or delete one that's still provably stale
+    at the moment of removal — never a sentinel a different contender just
+    created out from under us.
+    """
+    try:
+        st = os.stat(break_path)
+    except OSError:
+        return  # already gone
+    if time.time() - st.st_mtime <= BREAK_SENTINEL_STALE:
+        return
+    try:
+        st2 = os.stat(break_path)
+        if st2.st_mtime != st.st_mtime:
+            return  # replaced since the first check; its new owner is live
+        os.remove(break_path)
+    except FileNotFoundError:
+        pass  # someone else already cleared it — fine
+    except OSError:
+        pass
+
+
+def _with_break_sentinel(path: str, action):
+    """Run `action` while holding exclusive rights to mutate `path`, gated by
+    the `.break` sentinel: only the contender that wins the O_EXCL create of
+    `path.break` may touch `path` at all. Returns `action`'s return value if
+    it ran, `None` if it did not (sentinel already held elsewhere).
+
+    This is the ONLY way `path` is ever written or removed, by acquire_lock
+    or release_lock — a read-check-then-mutate with nothing atomic between
+    the two syscalls lets two callers race each other's decisions (round-3
+    review found this for release_lock; a second, narrower version of the
+    same TOCTOU also turned up between a reclaim's stale-check and its
+    `os.remove` racing a concurrent fresh publish, caught by this fix's own
+    40-trial race harness). Funnelling every mutation through one sentinel
+    closes both: at most one process is ever deciding-and-writing `path` at
+    a time, full stop.
+
+    Non-blocking: if the sentinel is already held, someone else is mutating
+    `path` right now and will resolve it on their own, so the loser just
+    returns instead of waiting — callers retry/back off on the outside.
+    """
+    break_path = _break_sentinel_path(path)
+    try:
+        bfd = os.open(break_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        _reclaim_stale_break_sentinel(break_path)  # best-effort unwedge
+        return None
+    except OSError:
+        return None  # can't write the sentinel at all
+
+    os.close(bfd)
+    try:
+        return action()
+    finally:
+        try:
+            os.remove(break_path)
+        except OSError:
+            pass
+
+
+def _write_holder(path: str, holder: dict) -> None:
+    """Publish `holder` at `path`, atomically replacing whatever is there
+    (or creating it fresh). Only ever called from inside a
+    `_with_break_sentinel` action, so nothing else can be reading or writing
+    `path` at the same moment — `os.replace` (an atomic rename on the same
+    filesystem) then means every reader sees either the old content or the
+    new, complete content, never a half-written or empty file."""
+    tmp_path = f"{path}.tmp.{os.getpid()}.{threading.get_ident()}"
+    with open(tmp_path, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(holder))
+    os.replace(tmp_path, path)
+
+
 def acquire_lock(run_dir: str, issue: int, repo: str, timeout: int) -> bool:
     """Acquire the single stack lock for `run_dir`. Re-entrant: a run already
     holding it (pr-grind's second `stack up`) never blocks on itself.
@@ -94,23 +178,26 @@ def acquire_lock(run_dir: str, issue: int, repo: str, timeout: int) -> bool:
     The real contenders are separate `aiw stack up` OS processes, which share
     nothing but the filesystem — so exclusion has to be an OS-level atomic
     operation, not a process-local `threading.Lock` (that only ever serializes
-    threads inside one interpreter). `os.open(..., O_CREAT | O_EXCL)` is the
-    stdlib primitive that is atomic across processes: it fails with
-    FileExistsError if the file is already there, at the OS level, so at most
-    one contender's create can win a given instant.
+    threads inside one interpreter). Every decision that could end in writing
+    or removing the lock file — "is it free", "is it stale", "publish mine" —
+    happens as one unit inside `_with_break_sentinel`, so it can't be
+    interleaved with another acquire_lock or release_lock call deciding the
+    same thing about the same file at the same time.
 
     Fails OPEN on an unwritable data dir — a lock that cannot be written must
     not fail the run, it just stops protecting it.
-
-    Reclaiming a *stale* lock is a second exclusion problem, not covered by
-    the O_EXCL create above (that only guards the case where no lock file
-    exists yet): every contender that reads the same stale holder agrees
-    it's stale, so the break itself is gated behind its own O_EXCL-created
-    sentinel (`stack.lock.break`) — see below.
     """
     path = lock_path()
     deadline = time.time() + max(timeout, 0)
     while True:
+        # Cheap common case, no exclusion needed: we already hold this lock
+        # (pr-grind's second `stack up`). A plain read can't race with our
+        # own prior write in any way that matters — nobody else ever writes
+        # our run_dir as the holder.
+        current = _read_holder(path)
+        if current is not None and current.get("run_dir") == run_dir:
+            return True
+
         with _LOCK_GUARD:  # still serializes threads within this process
             try:
                 os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -119,76 +206,25 @@ def acquire_lock(run_dir: str, issue: int, repo: str, timeout: int) -> bool:
                 return True
 
             holder = {"run_dir": run_dir, "issue": issue, "repo": repo, "acquired_at": time.time()}
-            try:
-                fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            except FileExistsError:
-                fd = None
-            except OSError as exc:
-                warn(f"stack lock file is not writable ({exc}); proceeding unlocked")
-                return True
 
-            if fd is not None:
-                # We created the file — nobody else could have, atomically.
+            def _decide_and_publish(path=path, run_dir=run_dir, holder=holder):
+                current = _read_holder(path)
+                if current is not None and current.get("run_dir") == run_dir:
+                    return True  # became ours between the fast check and the sentinel
+                if current is not None and not lock_stale(current, time.time()):
+                    return False  # a live holder — not ours to take
                 try:
-                    os.write(fd, json.dumps(holder).encode("utf-8"))
-                finally:
-                    os.close(fd)
+                    _write_holder(path, holder)
+                except OSError as exc:
+                    warn(f"stack lock file is not writable ({exc}); proceeding unlocked")
                 return True
 
-            # The file already existed. Either it's ours (re-entrant), or it's
-            # someone else's and possibly stale/abandoned.
-            existing = _read_holder(path)
-            if existing is not None and existing.get("run_dir") == run_dir:
+            outcome = _with_break_sentinel(path, _decide_and_publish)
+            if outcome:
                 return True
-            if existing is None or lock_stale(existing, time.time()):
-                # Every contender that reads the same stale holder agrees
-                # it's stale — a plain read-check-write (even an atomic
-                # os.replace()) here lets all of them "win" independently,
-                # since os.replace() is only atomic per-writer, not mutual
-                # exclusion between writers. Gate the break itself behind a
-                # second O_EXCL create: only the contender that creates the
-                # `.break` sentinel is allowed to touch the real lock file.
-                # Everyone else backs off untouched and retries — no lost
-                # update is possible because only one process ever calls
-                # os.remove(path) for a given stale holder.
-                break_path = f"{path}.break"
-                try:
-                    bfd = os.open(break_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                except FileExistsError:
-                    bfd = None  # lost the sentinel race — or a leftover
-                    try:
-                        age = time.time() - os.stat(break_path).st_mtime
-                        if age > BREAK_SENTINEL_STALE:
-                            os.remove(break_path)  # best-effort unwedge
-                    except OSError:
-                        pass
-                except OSError:
-                    bfd = None  # can't write the sentinel at all
-
-                if bfd is not None:
-                    os.close(bfd)
-                    try:
-                        # Re-confirm the holder didn't change out from under
-                        # us between the read above and winning the
-                        # sentinel — it may have been replaced by a fresh,
-                        # legitimate `stack up` in the meantime.
-                        if _read_holder(path) == existing:
-                            try:
-                                os.remove(path)
-                            except OSError:
-                                pass
-                    finally:
-                        try:
-                            os.remove(break_path)
-                        except OSError:
-                            pass
-                    # The lock is now free — retry the top-level O_EXCL
-                    # create immediately, uncontested by the processes that
-                    # just lost the sentinel race, instead of waiting out a
-                    # poll interval.
-                    continue
-                # Someone else is breaking it — don't touch the lock file
-                # at all, just poll and let the winner recreate it.
+            # outcome is None (lost the sentinel to another acquire_lock or
+            # release_lock call deciding this same instant) or False (a
+            # live, non-stale holder) — either way, back off and retry.
         if time.time() >= deadline:
             return False
         time.sleep(min(LOCK_POLL, max(deadline - time.time(), 0)))
@@ -196,14 +232,34 @@ def acquire_lock(run_dir: str, issue: int, repo: str, timeout: int) -> bool:
 
 def release_lock(run_dir: str) -> None:
     """Best-effort: only removes the lockfile when `run_dir` is the recorded
-    holder, so a stale/foreign release can never drop another run's lock."""
+    holder, so a stale/foreign release can never drop another run's lock.
+
+    Gated behind the same `.break` sentinel acquire_lock uses for every
+    mutation of the lock file. Without it, this is a bare
+    read-check-then-remove with nothing atomic between the two syscalls: a
+    contender can read the same (stale) holder as this call, win a reclaim
+    race, and install its own fresh lock in the gap before this call's
+    `os.remove` runs — which then deletes the new lock, not the one this
+    call actually meant to release (round-3 review, reproduced 1/40 trials
+    with a concurrent release).
+
+    Non-blocking, since `stack down` must never hang: if the sentinel is
+    already held, someone else is deciding the lock file's fate right now
+    and will resolve it on their own, so this just returns without doing
+    anything further.
+    """
     path = lock_path()
-    holder = _read_holder(path)
-    if holder is not None and holder.get("run_dir") == run_dir:
-        try:
-            os.remove(path)
-        except OSError:
-            pass
+
+    def _release(path=path, run_dir=run_dir):
+        holder = _read_holder(path)
+        if holder is not None and holder.get("run_dir") == run_dir:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+    _with_break_sentinel(path, _release)
+
 
 COMPOSE_CANDIDATES = (
     "docker-compose.test.yml",
