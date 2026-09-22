@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.4.0 — 2026-09-22
+
+### Added
+
+- **`aiw dispatch plan`: batch roster resolution and DoR pre-screen (#14).** Resolves a
+  batch of issues to run from `--issues`, `--query`, `--project`+`--status`, or `--epic`,
+  then mechanically pre-screens each for Definition-of-Ready gaps, skip reasons (already
+  has an open PR, already closed), and lane mode — before any of them reach `/run-issue`.
+  Adds an atomic `checkouts.json` registry, mirroring `epic.py`'s file shape, so concurrent
+  dispatches share one source of truth for which repo checkout each issue runs against.
+- **Per-host stack lock (#14).** `aiw stack up`/`down` now serialize against each other
+  across separate OS processes, not just threads within one interpreter, using an atomic
+  `O_CREAT|O_EXCL` lock file. Staleness reclaim is ledger-status-based (`done`/`escalated`
+  reclaim immediately; a still-`running` holder is bounded by `LOCK_GRACE`), not a bare
+  timer, so a lock abandoned by a finished run no longer outlives every contender's
+  `--lock-timeout`. `stack up` gained a `--lock-timeout` flag (default 900s) and degrades
+  to `stack=failed` + `tests_unverified` on timeout instead of racing another run's writes.
+
 ## 1.3.1 — 2026-09-22
 
 ### Fixed
