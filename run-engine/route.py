@@ -60,6 +60,7 @@ import stack  # noqa: E402
 import threads  # noqa: E402
 import worktree  # noqa: E402
 from shared import (  # noqa: E402
+    data_dir,
     die,
     ledger_path,
     load_ledger,
@@ -72,10 +73,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 GLOBAL_CONFIG = os.path.join(HERE, "config.json")
 OVERLAY_NAME = ".run-issue.json"
 PLUGIN_ROOT = os.path.dirname(HERE)
-# State must outlive a plugin upgrade, which replaces PLUGIN_ROOT wholesale.
-DATA_DIR = os.environ.get("CLAUDE_PLUGIN_DATA") or os.path.expanduser(
-    "~/.claude/plugins/data/ai-workflow"
-)
 
 
 def deep_merge(base: dict, overlay: dict) -> dict:
@@ -354,12 +351,13 @@ def cmd_set(args) -> None:
 
 def cmd_paths(args):
     """Resolve every path the orchestrator prose needs, once, at preflight."""
+    dd = data_dir()
     out = {
         "plugin_root": PLUGIN_ROOT,
-        "data_dir": DATA_DIR,
-        "runs_dir": os.path.join(DATA_DIR, "runs"),
-        "pr_grind_dir": os.path.join(DATA_DIR, "pr-grind"),
-        "channels": os.path.join(DATA_DIR, "channels.json"),
+        "data_dir": dd,
+        "runs_dir": os.path.join(dd, "runs"),
+        "pr_grind_dir": os.path.join(dd, "pr-grind"),
+        "channels": os.path.join(dd, "channels.json"),
         "config": GLOBAL_CONFIG,
         "dod": os.path.join(PLUGIN_ROOT, "definition-of-done.md"),
         "dor": os.path.join(PLUGIN_ROOT, "definition-of-ready.md"),

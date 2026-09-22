@@ -11,15 +11,19 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ci  # noqa: E402
 import epic  # noqa: E402
 import project  # noqa: E402
+import shared  # noqa: E402
 import stack  # noqa: E402
 import threads  # noqa: E402
 import worktree  # noqa: E402
@@ -477,5 +481,558 @@ with tempfile.TemporaryDirectory() as tmp:
     assert not os.path.isfile(os.path.join(epic_dir, "epic.json")), \
         "a failed gh call must not produce a DAG, wrong or otherwise"
 ok("aiw epic split dies rather than recording an empty dependency list when gh fails")
+
+# --------------------------------------------------------------------------- data_dir()
+
+import contextlib  # noqa: E402
+
+
+@contextlib.contextmanager
+def env_var(key, value):
+    old = os.environ.get(key)
+    if value is None:
+        os.environ.pop(key, None)
+    else:
+        os.environ[key] = value
+    try:
+        yield
+    finally:
+        if old is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = old
+
+
+with env_var("CLAUDE_PLUGIN_DATA", "/tmp/aiw-test-data-dir-xyz"):
+    assert shared.data_dir() == "/tmp/aiw-test-data-dir-xyz"
+with env_var("CLAUDE_PLUGIN_DATA", None):
+    assert shared.data_dir() == os.path.expanduser("~/.claude/plugins/data/ai-workflow")
+ok("data_dir() honours $CLAUDE_PLUGIN_DATA and falls back to the default, read at call time")
+
+with tempfile.TemporaryDirectory() as d:
+    dd = os.path.join(d, "data")
+    env = dict(os.environ, CLAUDE_PLUGIN_DATA=dd)
+    proc = subprocess.run([sys.executable, ROUTE, "paths"], capture_output=True, text=True, env=env)
+    assert proc.returncode == 0, proc.stderr
+    out = json.loads(proc.stdout)
+    assert out["data_dir"] == dd
+    assert out["runs_dir"] == os.path.join(dd, "runs")
+    assert out["pr_grind_dir"] == os.path.join(dd, "pr-grind")
+    assert out["channels"] == os.path.join(dd, "channels.json")
+ok("aiw paths prints unchanged data_dir/runs_dir/pr_grind_dir/channels after the shared.data_dir() extraction")
+
+# --------------------------------------------------------------------------- stack lock primitives
+
+with tempfile.TemporaryDirectory() as d:
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        run_dir = os.path.join(d, "run")
+        assert stack.acquire_lock(run_dir, 7, "o/r", 5) is True
+        holder = json.load(open(stack.lock_path()))
+        assert holder["run_dir"] == run_dir and holder["issue"] == 7 and holder["repo"] == "o/r"
+        assert isinstance(holder["acquired_at"], (int, float))
+ok("acquire_lock on a free lock writes run_dir/issue/repo/acquired_at and returns True")
+
+with tempfile.TemporaryDirectory() as d:
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        run_dir = os.path.join(d, "run")
+        assert stack.acquire_lock(run_dir, 7, "o/r", 5) is True
+        stack.release_lock(run_dir)
+        assert not os.path.isfile(stack.lock_path())
+ok("release_lock by the holding run_dir removes the lockfile")
+
+with tempfile.TemporaryDirectory() as d:
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        run_dir = os.path.join(d, "run")
+        assert stack.acquire_lock(run_dir, 7, "o/r", 5) is True
+        assert stack.acquire_lock(run_dir, 7, "o/r", 0) is True, "same run_dir must not self-block"
+ok("acquire_lock is re-entrant for the same run_dir (pr-grind's second `stack up`)")
+
+with tempfile.TemporaryDirectory() as d:
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        run_dir_a, run_dir_b = os.path.join(d, "a"), os.path.join(d, "b")
+        os.makedirs(run_dir_a)
+        with open(os.path.join(run_dir_a, "run.json"), "w", encoding="utf-8") as fh:
+            json.dump(Ledger(1, ["dev"]).to_dict(), fh)
+        assert stack.acquire_lock(run_dir_a, 1, "o/r", 5) is True
+        assert stack.acquire_lock(run_dir_b, 2, "o/r", 0) is False
+        holder = json.load(open(stack.lock_path()))
+        assert holder["run_dir"] == run_dir_a, "the first holder must still be recorded"
+        stack.release_lock(run_dir_a)
+        assert stack.acquire_lock(run_dir_b, 2, "o/r", 0) is True
+ok("a second acquire for a different run_dir returns False without disturbing the first "
+   "holder, and succeeds cleanly once the first releases")
+
+with tempfile.TemporaryDirectory() as d:
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        os.makedirs(os.path.dirname(stack.lock_path()), exist_ok=True)
+        open(stack.lock_path(), "w").close()  # zero bytes
+        assert stack.acquire_lock(os.path.join(d, "run"), 7, "o/r", 0) is True
+ok("a zero-byte lockfile is treated as free/reclaimable, not a crash")
+
+with tempfile.TemporaryDirectory() as d:
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        os.makedirs(os.path.dirname(stack.lock_path()), exist_ok=True)
+        with open(stack.lock_path(), "w", encoding="utf-8") as fh:
+            fh.write("{not json")
+        assert stack.acquire_lock(os.path.join(d, "run"), 7, "o/r", 0) is True
+ok("a corrupt non-JSON lockfile is reclaimed rather than raising")
+
+assert stack.lock_stale({}, time.time()) is True
+assert stack.lock_stale({"run_dir": None, "acquired_at": time.time()}, time.time()) is True
+ok("a holder record missing run_dir is treated as stale")
+
+with tempfile.TemporaryDirectory() as d:
+    gone = os.path.join(d, "never-created")
+    assert stack.lock_stale({"run_dir": gone, "acquired_at": time.time()}, time.time()) is True
+ok("a holder whose run.json is gone is reclaimed immediately (with a warning)")
+
+with tempfile.TemporaryDirectory() as d:
+    run_dir = os.path.join(d, "run")
+    os.makedirs(run_dir)
+    ledger = Ledger(9, ["dev"])
+    ledger.mark_done()
+    with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(ledger.to_dict(), fh)
+    now = time.time()
+    # A holder whose run reached "done" is never coming back to call `stack
+    # down` — it is reclaimed the moment that's known, not after LOCK_GRACE
+    # (LOCK_GRACE outlives the default --lock-timeout, so gating a done/
+    # escalated holder on it would starve every contender for nothing).
+    fresh = {"run_dir": run_dir, "acquired_at": now}
+    assert stack.lock_stale(fresh, now) is True, "done is reclaimed immediately, not grace-gated"
+
+    escalated = Ledger(10, ["dev"])
+    escalated.mark_escalated("test")
+    esc_run = os.path.join(d, "esc-run")
+    os.makedirs(esc_run)
+    with open(os.path.join(esc_run, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(escalated.to_dict(), fh)
+    assert stack.lock_stale({"run_dir": esc_run, "acquired_at": now}, now) is True, \
+        "escalated is reclaimed immediately, not grace-gated"
+ok("a done/escalated holder is reclaimed immediately regardless of LOCK_GRACE")
+
+with tempfile.TemporaryDirectory() as d:
+    run_dir = os.path.join(d, "run")
+    os.makedirs(run_dir)
+    with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(Ledger(9, ["dev"]).to_dict(), fh)  # status still "running"
+    now = time.time()
+    just_under = {"run_dir": run_dir, "acquired_at": now - stack.LOCK_GRACE + 1}
+    just_over = {"run_dir": run_dir, "acquired_at": now - stack.LOCK_GRACE - 1}
+    assert stack.lock_stale(just_under, now) is False
+    assert stack.lock_stale(just_over, now) is True
+ok("staleness grace: just under LOCK_GRACE is not stale, just over is (now injected, no sleep)")
+
+with tempfile.TemporaryDirectory() as d:
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        holder_run = os.path.join(d, "holder")
+        os.makedirs(holder_run)
+        with open(os.path.join(holder_run, "run.json"), "w", encoding="utf-8") as fh:
+            json.dump(Ledger(1, ["dev"]).to_dict(), fh)
+        assert stack.acquire_lock(holder_run, 1, "o/r", 5) is True
+        started = time.time()
+        assert stack.acquire_lock(os.path.join(d, "other"), 2, "o/r", 0) is False
+        assert time.time() - started < 1, "--lock-timeout 0 must try once and never wait"
+ok("--lock-timeout 0 tries once and never waits")
+
+import argparse as _argparse  # noqa: E402
+
+_parser = _argparse.ArgumentParser()
+_sub = _parser.add_subparsers(dest="cmd")
+
+
+def _add(name, help_text):
+    p = _sub.add_parser(name)
+    p.add_argument("run_dir")
+    p.add_argument("--repo")
+    return p
+
+
+stack.register(_sub, _add)
+_ns = _parser.parse_args(["stack", "up", "/tmp/x"])
+assert _ns.lock_timeout == 900
+ok("--lock-timeout exists on the `up` subparser with default 900")
+
+# The helper script a race spawns as a subprocess. Written to a real temp
+# dir (not into run-engine/, which is the repo's own test root) so a killed
+# race-test process can never leave an untracked file behind for a later
+# `/run-issue` run's dirty-worktree guard to trip over.
+RACE_TMP = tempfile.mkdtemp(prefix="aiw-race-")
+RACER = os.path.join(RACE_TMP, "_race_acquire_lock_helper.py")
+write(RACE_TMP, os.path.basename(RACER), f"""\
+import json, os, sys, time
+sys.path.insert(0, {HERE!r})
+import stack
+
+run_dir, start_at = sys.argv[1], float(sys.argv[2])
+os.makedirs(run_dir, exist_ok=True)
+with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+    json.dump({{"status": "running"}}, fh)
+while time.time() < start_at:
+    pass
+print("True" if stack.acquire_lock(run_dir, 0, "o/r", 0) else "False")
+""")
+
+# The release-side racer for the release_lock blocker (round-3 review): a
+# separate subprocess that calls release_lock(run_dir) at the same shared
+# start timestamp the acquire contenders use, so it hits the sentinel gate
+# concurrently with them instead of running safely before/after the race.
+RELEASER = os.path.join(RACE_TMP, "_race_release_lock_helper.py")
+write(RACE_TMP, os.path.basename(RELEASER), f"""\
+import sys, time
+sys.path.insert(0, {HERE!r})
+import stack
+
+run_dir, start_at = sys.argv[1], float(sys.argv[2])
+while time.time() < start_at:
+    pass
+stack.release_lock(run_dir)
+""")
+
+
+def _race(d: str, data_d: str, n: int = 12) -> list[str]:
+    """Spawn `n` separate `python3` processes — the actual shape of N `aiw
+    stack up` invocations racing for the same lockfile, unlike an in-process
+    threading.Thread version, which would only ever exercise the
+    process-local threading.Lock and pass even with no cross-process
+    exclusion at all. A single shared start timestamp, not just "spawned
+    close together": every contender spin-waits up to it so they hit
+    acquire_lock() concurrently instead of arriving staggered."""
+    env = dict(os.environ, CLAUDE_PLUGIN_DATA=data_d)
+    start_at = time.time() + 0.5
+    procs = [
+        subprocess.Popen(
+            [sys.executable, RACER, os.path.join(d, f"run{i}"), str(start_at)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
+        )
+        for i in range(n)
+    ]
+    outs = [p.communicate()[0].strip() for p in procs]
+    assert all(o in ("True", "False") for o in outs), outs
+    return outs
+
+
+def _race_with_release(d: str, data_d: str, holder_run: str, n: int = 10) -> list[str]:
+    """Same shape as `_race`, plus one more subprocess: the stale holder
+    itself calling `release_lock()` at the same shared start timestamp as
+    the N contenders trying to reclaim its (stale) lock. This is the exact
+    interleaving the round-3 review flagged — Teardown calls `stack down`
+    (release_lock) at precisely the moment a holder's ledger goes terminal,
+    which is also the instant lock_stale() starts telling contenders to
+    reclaim."""
+    env = dict(os.environ, CLAUDE_PLUGIN_DATA=data_d)
+    start_at = time.time() + 0.5
+    procs = [
+        subprocess.Popen(
+            [sys.executable, RACER, os.path.join(d, f"run{i}"), str(start_at)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
+        )
+        for i in range(n)
+    ]
+    releaser = subprocess.Popen(
+        [sys.executable, RELEASER, holder_run, str(start_at)],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
+    )
+    outs = [p.communicate()[0].strip() for p in procs]
+    releaser.communicate()
+    assert all(o in ("True", "False") for o in outs), outs
+    return outs
+
+
+def _plant_stale_holder(data_d: str, status: str, acquired_at: float) -> None:
+    """Pre-plant a stale stack.lock, pointing at its own holder run.json, so
+    a race hits the reclaim branch instead of the cold "no lockfile yet"
+    branch O_EXCL alone already protects."""
+    os.makedirs(data_d, exist_ok=True)
+    holder_run = os.path.join(data_d, "stale-holder")
+    os.makedirs(holder_run, exist_ok=True)
+    with open(os.path.join(holder_run, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump({"status": status}, fh)
+    with open(os.path.join(data_d, "stack.lock"), "w", encoding="utf-8") as fh:
+        json.dump(
+            {"run_dir": holder_run, "issue": 0, "repo": "o/r", "acquired_at": acquired_at}, fh
+        )
+
+
+try:
+    with tempfile.TemporaryDirectory() as d:
+        outs = _race(d, os.path.join(d, "data"))
+        assert outs.count("True") == 1, outs
+    ok("N concurrent `aiw stack up`-shaped subprocesses racing for the same lockfile "
+       "produce exactly one winner")
+
+    # The reclaim path: every contender independently reads the same stale
+    # holder and independently agrees it's stale — the read-check-write race
+    # the round-2 review found (5-10 winners per trial before the fix).
+    for label, status, acquired_at in (
+        ("status=done", "done", time.time()),
+        ("grace-expired status=running", "running", time.time() - stack.LOCK_GRACE - 1),
+    ):
+        with tempfile.TemporaryDirectory() as d:
+            data_d = os.path.join(d, "data")
+            _plant_stale_holder(data_d, status, acquired_at)
+            outs = _race(d, data_d)
+            assert outs.count("True") == 1, (label, outs)
+        ok(f"N concurrent processes racing to reclaim a stale lock ({label}) "
+           "produce exactly one winner")
+
+    # The release_lock blocker (round-3 review): a stale holder calling
+    # release_lock() concurrently with N contenders reclaiming that same
+    # stale lock must never let two of them believe they hold it. 40 trials,
+    # matching the reviewer's own reproduction count. Zero winners in a
+    # given trial is not a bug to flag here — with --lock-timeout 0 every
+    # contender tries exactly once, so it's an expected (if unlucky) outcome
+    # when the concurrent release wins the decision for that instant; a real
+    # caller uses the default 900s timeout and simply retries. Only *more
+    # than one* "True" is the actual double-holder this test exists to catch.
+    double_holder_events = 0
+    for _trial in range(40):
+        with tempfile.TemporaryDirectory() as d:
+            data_d = os.path.join(d, "data")
+            _plant_stale_holder(data_d, "done", time.time())
+            holder_run = os.path.join(data_d, "stale-holder")
+            outs = _race_with_release(d, data_d, holder_run)
+            if outs.count("True") > 1:
+                double_holder_events += 1
+    assert double_holder_events == 0, f"{double_holder_events}/40 trials produced a double-holder"
+    ok("release_lock() called by a stale holder concurrently with N contenders reclaiming its lock "
+       "never produces a double-holder (40 trials, 10 contenders each)")
+finally:
+    shutil.rmtree(RACE_TMP, ignore_errors=True)
+
+with tempfile.TemporaryDirectory() as d:
+    blocker = os.path.join(d, "blocker")
+    open(blocker, "w").close()  # a FILE sitting where a directory is expected
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(blocker, "sub")):
+        import io as _io
+
+        buf = _io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            got = stack.acquire_lock(os.path.join(d, "run"), 1, "o/r", 0)
+        assert got is True, "an unwritable data dir must fail OPEN, not fail the run"
+        assert "warning" in buf.getvalue().lower()
+ok("an unwritable data dir warns and proceeds unlocked instead of failing the run")
+
+with tempfile.TemporaryDirectory() as d:
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        holder_run = os.path.join(d, "holder")
+        assert stack.acquire_lock(holder_run, 1, "o/r", 5) is True
+        stack.release_lock(os.path.join(d, "impostor"))
+        assert os.path.isfile(stack.lock_path())
+        assert json.load(open(stack.lock_path()))["run_dir"] == holder_run
+ok("release_lock from a non-holder run_dir does not remove another run's lockfile")
+
+with tempfile.TemporaryDirectory() as d:
+    # Round-4 review: release_lock losing the sentinel to transient
+    # contention (not an actual break-in-progress) must retry through it
+    # rather than silently no-op'ing and leaving the lockfile behind.
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        holder_run = os.path.join(d, "holder")
+        assert stack.acquire_lock(holder_run, 1, "o/r", 5) is True
+        break_path = stack.lock_path() + ".break"
+        bfd = os.open(break_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.close(bfd)
+
+        def _release_sentinel_shortly():
+            time.sleep(0.03)
+            os.remove(break_path)
+
+        orig_retries, orig_backoff = stack.RELEASE_SENTINEL_RETRIES, stack.RELEASE_SENTINEL_BACKOFF
+        stack.RELEASE_SENTINEL_RETRIES, stack.RELEASE_SENTINEL_BACKOFF = 5, 0.02
+        t = threading.Thread(target=_release_sentinel_shortly)
+        t.start()
+        try:
+            stack.release_lock(holder_run)
+        finally:
+            t.join()
+            stack.RELEASE_SENTINEL_RETRIES, stack.RELEASE_SENTINEL_BACKOFF = orig_retries, orig_backoff
+        assert not os.path.isfile(stack.lock_path()), \
+            "release_lock must retry through transient sentinel contention, not no-op"
+ok("release_lock retries through transient `.break` sentinel contention instead of "
+   "silently no-op'ing (round-4 regression)")
+
+with tempfile.TemporaryDirectory() as d:
+    # The other half: if the sentinel stays held for the whole retry window
+    # (a genuine break in progress), release_lock must still give up
+    # gracefully — never hang, never raise — leaving the lock for whoever
+    # is actually clearing it.
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        holder_run = os.path.join(d, "holder")
+        assert stack.acquire_lock(holder_run, 1, "o/r", 5) is True
+        break_path = stack.lock_path() + ".break"
+        bfd = os.open(break_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.close(bfd)
+
+        orig_retries, orig_backoff = stack.RELEASE_SENTINEL_RETRIES, stack.RELEASE_SENTINEL_BACKOFF
+        stack.RELEASE_SENTINEL_RETRIES, stack.RELEASE_SENTINEL_BACKOFF = 3, 0.01
+        try:
+            started = time.time()
+            stack.release_lock(holder_run)  # must not raise or hang
+            assert time.time() - started < 1, "release_lock must give up quickly, not wedge"
+        finally:
+            os.remove(break_path)
+            stack.RELEASE_SENTINEL_RETRIES, stack.RELEASE_SENTINEL_BACKOFF = orig_retries, orig_backoff
+        assert os.path.isfile(stack.lock_path()), \
+            "the lock must survive when every retry loses the sentinel to a live holder"
+ok("release_lock gives up gracefully (never hangs, exits cleanly) when the `.break` sentinel "
+   "stays held for the entire retry window")
+
+with tempfile.TemporaryDirectory() as d:
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        # Plant a stale holder so acquire_lock has to walk the sentinel-gated
+        # reclaim branch (a cold "no lockfile yet" acquire never touches the
+        # `.break` sentinel at all), then plant an orphaned `.break` sentinel
+        # of its own — the crash-recovery case: the previous reclaimer died
+        # between creating the sentinel and removing it in its `finally`.
+        holder_run = os.path.join(d, "holder")
+        os.makedirs(holder_run)
+        ledger = Ledger(3, ["dev"])
+        ledger.mark_done()
+        with open(os.path.join(holder_run, "run.json"), "w", encoding="utf-8") as fh:
+            json.dump(ledger.to_dict(), fh)
+        os.makedirs(os.path.dirname(stack.lock_path()), exist_ok=True)
+        with open(stack.lock_path(), "w", encoding="utf-8") as fh:
+            json.dump({"run_dir": holder_run, "issue": 3, "repo": "o/r", "acquired_at": time.time()}, fh)
+        break_path = stack.lock_path() + ".break"
+        open(break_path, "w").close()
+        old = time.time() - stack.BREAK_SENTINEL_STALE - 5
+        os.utime(break_path, (old, old))
+
+        orig_poll = stack.LOCK_POLL
+        stack.LOCK_POLL = 0.05  # this test's own reclaim-then-retry loop, not the race harness
+        try:
+            started = time.time()
+            assert stack.acquire_lock(os.path.join(d, "run"), 7, "o/r", 5) is True
+            assert time.time() - started < 2, \
+                "an abandoned .break sentinel must be reclaimed promptly, not wedge the full timeout"
+        finally:
+            stack.LOCK_POLL = orig_poll
+        assert not os.path.exists(break_path), "the abandoned sentinel itself is cleared, not left behind"
+ok("an abandoned `.break` sentinel older than BREAK_SENTINEL_STALE is reclaimed during a stale-lock "
+   "acquire (crash-recovery path), instead of wedging every future reclaim")
+
+# --------------------------------------------------------------------------- stack lock, via the CLI
+
+with tempfile.TemporaryDirectory() as d:
+    repo, run_dir = os.path.join(d, "repo"), os.path.join(d, "run")
+    os.makedirs(repo)
+    write(repo, "go.mod", "module x")
+    ledger = Ledger(21, ["dev"])
+    ledger.context["repo"] = repo
+    os.makedirs(run_dir)
+    with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(ledger.to_dict(), fh)
+    data_d = os.path.join(d, "data")
+    env = dict(os.environ, CLAUDE_PLUGIN_DATA=data_d)
+    proc = subprocess.run([sys.executable, ROUTE, "stack", "up", run_dir],
+                          capture_output=True, text=True, env=env)
+    assert proc.returncode == 0, proc.stderr
+    ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+    assert ctx["stack"] == "none"
+    assert not os.path.isfile(os.path.join(data_d, "stack.lock"))
+ok("`stack up` with no compose file records stack=none and creates no lockfile")
+
+with tempfile.TemporaryDirectory() as d:
+    repo, run_dir, other_run = os.path.join(d, "repo"), os.path.join(d, "run"), os.path.join(d, "other")
+    os.makedirs(repo)
+    os.makedirs(run_dir)
+    os.makedirs(other_run)
+    write(repo, "docker-compose.test.yml", "services: {}\n")
+    write(repo, "go.mod", "module x")
+    ledger = Ledger(22, ["dev"])
+    ledger.context["repo"] = repo
+    with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(ledger.to_dict(), fh)
+    with open(os.path.join(other_run, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(Ledger(23, ["dev"]).to_dict(), fh)
+
+    data_d = os.path.join(d, "data")
+    os.makedirs(data_d)
+    with open(os.path.join(data_d, "stack.lock"), "w", encoding="utf-8") as fh:
+        json.dump({"run_dir": other_run, "issue": 23, "repo": repo, "acquired_at": time.time()}, fh)
+
+    # PATH is emptied: if this ever shells out to docker, the process would fail
+    # loudly with "command not found" instead of quietly degrading.
+    env = dict(os.environ, CLAUDE_PLUGIN_DATA=data_d, PATH="/nonexistent")
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "stack", "up", run_dir, "--lock-timeout", "0"],
+        capture_output=True, text=True, env=env,
+    )
+    assert proc.returncode == 0, proc.stderr
+    ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+    assert ctx["stack"] == "failed"
+    assert other_run in ctx["tests_unverified"]
+    assert ctx["test_cmd_host"] == "go test ./..."
+    assert json.load(open(os.path.join(data_d, "stack.lock")))["run_dir"] == other_run
+ok("`stack up` behind a non-stale foreign lock with --lock-timeout 0 degrades to stack=failed "
+   "naming the holder, keeps test_cmd_host, exits 0, and never invokes Docker")
+
+with tempfile.TemporaryDirectory() as d:
+    run_dir = os.path.join(d, "run")
+    os.makedirs(run_dir)
+    ledger = Ledger(24, ["dev"])
+    ledger.context.update(stack="up", compose_prefix="true")
+    with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(ledger.to_dict(), fh)
+    data_d = os.path.join(d, "data")
+    os.makedirs(data_d)
+    with open(os.path.join(data_d, "stack.lock"), "w", encoding="utf-8") as fh:
+        json.dump({"run_dir": run_dir, "issue": 24, "repo": "o/r", "acquired_at": time.time()}, fh)
+    env = dict(os.environ, CLAUDE_PLUGIN_DATA=data_d)
+    proc = subprocess.run([sys.executable, ROUTE, "stack", "down", run_dir],
+                          capture_output=True, text=True, env=env)
+    assert proc.returncode == 0, proc.stderr
+    assert not os.path.isfile(os.path.join(data_d, "stack.lock"))
+ok("`stack down` releases the lock after a successful teardown, exit 0")
+
+with tempfile.TemporaryDirectory() as d:
+    run_dir = os.path.join(d, "run")
+    os.makedirs(run_dir)
+    ledger = Ledger(25, ["dev"])
+    ledger.context.update(stack="up", compose_prefix="false")
+    with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(ledger.to_dict(), fh)
+    data_d = os.path.join(d, "data")
+    os.makedirs(data_d)
+    with open(os.path.join(data_d, "stack.lock"), "w", encoding="utf-8") as fh:
+        json.dump({"run_dir": run_dir, "issue": 25, "repo": "o/r", "acquired_at": time.time()}, fh)
+    env = dict(os.environ, CLAUDE_PLUGIN_DATA=data_d)
+    proc = subprocess.run([sys.executable, ROUTE, "stack", "down", run_dir],
+                          capture_output=True, text=True, env=env)
+    assert proc.returncode == 0, proc.stderr
+    assert not os.path.isfile(os.path.join(data_d, "stack.lock")), \
+        "the lock must release even when teardown fails"
+ok("`stack down` releases the lock even when compose teardown fails, still exits 0")
+
+with tempfile.TemporaryDirectory() as d:
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        repo, run_dir = os.path.join(d, "repo"), os.path.join(d, "run")
+        os.makedirs(repo)
+        os.makedirs(run_dir)
+        write(repo, "docker-compose.test.yml", "services: {}\n")
+        write(repo, "go.mod", "module x")
+        ledger = Ledger(26, ["dev"])
+        ledger.context["repo"] = repo
+        with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+            json.dump(ledger.to_dict(), fh)
+
+        class _Args:
+            pass
+
+        args = _Args()
+        args.run_dir, args.repo = run_dir, None
+
+        real_shell, real_write_override = stack.shell, stack.write_override
+        stack.write_override = lambda *a, **k: False
+        stack.shell = lambda *a, **k: subprocess.CompletedProcess([], 1, "", "boom")
+        try:
+            stack.cmd_up(args)
+        finally:
+            stack.shell, stack.write_override = real_shell, real_write_override
+
+        assert not os.path.isfile(stack.lock_path()), "the up-failed branch must release the lock"
+        ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+        assert ctx["stack"] == "failed"
+ok("cmd_up's up-failed branch releases the stack lock")
 
 print(f"\n{passed} checks passed")
