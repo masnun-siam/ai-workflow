@@ -236,7 +236,7 @@ def cmd_next(args) -> None:
     runs_dir = args.runs_dir
     states = {c: child_state(runs_dir, epic["slug"], c) for c in epic["children"]}
     print(json.dumps({
-        "ready": ready(epic["dag"], states, epic.get("max_stacks", 1)),
+        "ready": ready(epic["dag"], states, epic.get("max_stacks", 3)),
         "states": {str(k): v for k, v in states.items()},
     }, indent=2))
 
@@ -260,9 +260,9 @@ def register(sub, add) -> None:
     q.add_argument("--parent", type=int, required=True)
     q.add_argument("--slug", required=True, help="owner/repo")
     q.add_argument("--children", required=True, help="comma-separated issue numbers")
-    q.add_argument("--max-stacks", type=int, default=1,
-               help="concurrent Docker stacks; >1 needs a compose file with "
-                    "no published host ports, which `-p` does not namespace")
+    q.add_argument("--max-stacks", type=int, default=3,
+               help="concurrent Docker stacks; each gets its own Compose project "
+                    "and ephemeral host ports (stack.py), so they no longer collide")
     q.set_defaults(func=cmd_split)
 
     q = ops.add_parser("init", help="create one run directory per child")
