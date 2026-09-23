@@ -18,12 +18,11 @@ from __future__ import annotations
 
 import json
 import re
-import sys
 from datetime import datetime, timezone
 
 import shared
 
-_VERDICT_RE = re.compile(r"Verdict:.*?\d+\s*blocker.*?\d+\s*should-fix", re.IGNORECASE | re.DOTALL)
+_VERDICT_RE = re.compile(r"Verdict:.*?\d+\s*blocker.*?\d+\s*should-fix", re.IGNORECASE)
 
 # Timezone-aware so it compares safely with the aware datetimes `_ts()` returns for
 # Z-suffixed GitHub timestamps (a naive `datetime.min` sentinel mixed with aware
@@ -105,7 +104,7 @@ def cmd_pick(args) -> None:
 
 
 def _load(path: str):
-    raw = sys.stdin.read() if path == "-" else _read_file(path)
+    raw = _read_file(path)
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
@@ -124,7 +123,7 @@ def register(sub, add) -> None:
     p = sub.add_parser("review", help="pick this round's review from a batch")
     ops = p.add_subparsers(dest="op", required=True)
     q = ops.add_parser("pick", help="select the review that carries the round's verdict")
-    q.add_argument("--reviews", required=True, help="path to `gh api .../reviews` JSON, or -")
-    q.add_argument("--comments", required=True, help="path to `gh api .../comments` JSON, or -")
+    q.add_argument("--reviews", required=True, help="path to `gh api .../reviews` JSON")
+    q.add_argument("--comments", required=True, help="path to `gh api .../comments` JSON")
     q.add_argument("--window", type=int, default=60, help="seconds around the newest review's timestamp treated as one round")
     q.set_defaults(func=cmd_pick)
