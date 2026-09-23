@@ -213,13 +213,22 @@ def cmd_init(args) -> None:
     runs_dir = args.runs_dir
     deps = {int(k): v for k, v in epic["dag"]["deps"].items()}
 
+    # Non-numeric entries are skipped, not fatal — a typo shouldn't fail the whole
+    # `epic init` when the rest of the list is fine. Entries naming a child that
+    # isn't in this epic are simply never matched below, so they're silently inert.
+    lean_children = {
+        entry.strip() for entry in (args.lean_children or "").split(",")
+        if entry.strip().isdigit()
+    }
+
     for child in epic["dag"]["order"]:
         run_dir = os.path.join(runs_dir, f"{owner}-{repo_name}-issue-{child}")
         if os.path.isfile(os.path.join(run_dir, "run.json")):
             print(f"#{child}: already initialised")
             continue
+        mode = "lean" if str(child) in lean_children else args.mode
         route.main(["init", run_dir, "--issue", str(child), "--repo", args.repo]
-                   + (["--mode", args.mode] if args.mode else []))
+                   + (["--mode", mode] if mode else []))
         ledger = load_ledger(run_dir)
         # The edge is recorded on the child so the orchestrator can set base_branch to the
         # dependency's branch before phase 2 cuts the worktree (worktree.py, not phase 5).
@@ -269,7 +278,11 @@ def register(sub, add) -> None:
     q.add_argument("epic_dir")
     q.add_argument("--runs-dir", required=True)
     q.add_argument("--repo", required=True, help="the main checkout")
-    q.add_argument("--mode", help="full | lean; applied to every child")
+    q.add_argument("--mode", help="full | lean; applied to every child, unless "
+                        "overridden per-child by --lean-children")
+    q.add_argument("--lean-children", default="",
+                   help="comma-separated child issue numbers to force onto the lean "
+                        "roster regardless of --mode")
     q.set_defaults(func=cmd_init)
 
     for name, fn, helptext in (

@@ -1,6 +1,6 @@
 ---
 description: Run an existing GitHub issue end-to-end to a reviewed PR, stopping for a human exactly three times — plan approval, an escalated review finding, and the final ready-to-merge handback
-argument-hint: "<issue-number-or-url | sentry-url | file-path | vault-note | text> [--lean]"
+argument-hint: "<issue-number-or-url | sentry-url | file-path | vault-note | text> [--lean|--full]"
 allowed-tools: Bash(aiw:*), Bash(gh:*), Bash(git:*), Bash(docker:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(composer:*), Bash(pnpm:*), Bash(yarn:*), Bash(go:*), Bash(python:*), Bash(python3:*), Bash(pip:*), Bash(pip3:*), Bash(dart:*), Bash(flutter:*), Bash(obsidian:*), Read, Write, Agent, Skill, AskUserQuestion, mcp__plugin_sentry_sentry__*, mcp__gitnexus__query, mcp__gitnexus__context, Grep, Glob
 ---
 
@@ -29,7 +29,9 @@ outside those three gates, the answer is to record it and carry it to Gate 2 ins
 fixer`. No independent RED tests, no runtime verification, no specialist panel. The CI
 gate still applies. See `<config> → modes.lean.tradeoff` for what
 that actually costs; use it for low-risk, well-specified work and full mode for auth,
-migrations, payment, or public API contracts.
+migrations, payment, or public API contracts. An explicit `--full` or `--lean` flag on
+the command line always overrides a `lean` label already on the issue, in either
+direction — see phase 0 step 2 and phase 4's mode choice below.
 
 ## Paths — resolve them once, first
 
@@ -208,7 +210,8 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
    the checkout, so there is no pipeline file to exempt. This check runs first,
    unconditionally — step 2 below can create a real GitHub issue, and issue creation must
    stay behind this abort so a retry after stashing never files a duplicate.
-2. Strip `--lean` off `$ARGUMENTS` (note whether it was passed) so every source below sees
+2. Strip `--lean` and `--full` off `$ARGUMENTS` (note which, if either, was passed — they
+   are mutually exclusive intent, resolved in phase 4 below) so every source below sees
    only the issue reference. Resolve `<owner>/<repo>` from the git remote.
 
    - Argument is a bare number, or a `github.com/.../issues/<n>` URL → resolve to `<n>`,
@@ -259,11 +262,25 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
    - **`status: "running"`** — resume properly: continue from `stations[currentIndex]` with
      the roster and bounce counts the ledger already holds.
 
-   Never re-init over an existing ledger, and never mix rosters mid-run — a `--lean` flag on
-   a resume of a full run is ignored, and vice versa; say so in one line if they disagree.
-   Gates 1 and 2 re-fire regardless of what the ledger says.
+   Never re-init over an existing ledger, and never mix rosters mid-run — a
+   `--lean`/`--full` flag or a `lean` label on a resume of a run with a different roster
+   already initialised is ignored — the ledger's roster wins; say so in one line if they
+   disagree. Gates 1 and 2 re-fire regardless of what the ledger says.
 
-   Otherwise initialise:
+   Otherwise, choose the mode before initialising, in this order:
+
+   1. Both `--full` and `--lean` were passed → resolve to **full** (the safe direction)
+      and say so: `mode: full (--full and --lean both passed, full wins)`.
+   2. `--full` alone → `mode: full (--full overrides the lean label)` if the issue also
+      carries a `lean` label, else `mode: full (--full)`.
+   3. `--lean` alone → `mode: lean (--lean)`.
+   4. Neither flag → check the `labels` already fetched by step 3's `gh issue view` above
+      (no new API call) for `lean`: present → `mode: lean (issue label)`; absent →
+      `mode: full (default)`.
+
+   Print exactly one of those lines. Then initialise, passing `--mode lean` only when
+   lean was chosen — full is already `aiw init`'s own default mode (see
+   `run-engine/route.py`'s `cmd_init`), so there is nothing to pass for it:
    ```bash
    aiw init "$RUN_DIR" --issue <n> --repo <main-checkout> [--mode lean]
    ```
@@ -1042,9 +1059,21 @@ once, exactly as phase 6 spawns the specialist panel in one message.
    It is idempotent on the linkage — children already linked as sub-issues are skipped —
    so running it on an epic `/gh-issue` created is harmless. Exit 1 means the edges do
    not form a DAG; print the message and stop, as `/gh-issue` does.
-1. **Init.** `aiw epic init "<runs_dir>/<owner>-<repo>-epic-<n>" --runs-dir "<runs_dir>"
-   --repo <main-checkout> [--mode lean]` creates a run directory per child. Each is an ordinary ledger; every existing guard and post-check applies to
-   it unchanged.
+1. **Init.** Phase 0 step 3's per-child `gh issue view` already read each child's labels;
+   pass through any that carry `lean`:
+
+   ```bash
+   aiw epic init "<runs_dir>/<owner>-<repo>-epic-<n>" --runs-dir "<runs_dir>" \
+     --repo <main-checkout> [--mode lean] [--lean-children <n>,<n>]
+   ```
+
+   creates a run directory per child. Each is an ordinary ledger; every existing guard
+   and post-check applies to it unchanged. An epic-wide `--lean`/`--full` flag, if the
+   epic run itself was invoked with one, still wins over an individual child's label —
+   same precedence as phase 4's single-issue mode choice above. Concretely: when the
+   epic run was invoked with `--full`, omit `--lean-children` entirely (every child gets
+   full, no per-child override); only pass `--lean-children` when no epic-wide `--full`
+   is in force.
 2. **Research, then plan, every child.** Every child ledger's roster starts at
    `researcher`, and `aiw route` rejects an envelope from any station that is not the one
    at `currentIndex` — so dispatching planners first would have every child's very first
