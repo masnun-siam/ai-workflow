@@ -1410,4 +1410,174 @@ with tempfile.TemporaryDirectory() as d:
     assert out["channels"] == os.path.join(dd, "channels.json")
 ok("aiw paths prints a checkouts key and its other existing keys are unchanged")
 
+# --------------------------------------------------------------------------- checks.suite_timeout / run_suite timeout override (issue #25)
+
+import checks  # noqa: E402
+import route  # noqa: E402
+
+
+class _FakeLedger:
+    """A ledger stand-in carrying only what run_suite reads: .context."""
+
+    def __init__(self, **context):
+        self.context = context
+
+
+def _stub_shell(calls):
+    def fake(cmd, cwd=None, timeout=None, **kw):
+        calls.append({"cmd": cmd, "cwd": cwd, "timeout": timeout})
+        return subprocess.CompletedProcess([], 0, "ok\n", "")
+    return fake
+
+
+real_checks_shell = checks.shell
+
+try:
+    calls = []
+    checks.shell = _stub_shell(calls)
+    ledger = _FakeLedger(stack="none", test_cmd="pytest")
+    code, detail = checks.run_suite(ledger, "/repo")
+    assert code == 0 and detail == "ok"
+    assert calls[-1]["timeout"] == 900
+    assert checks.suite_timeout({}) == 900
+finally:
+    checks.shell = real_checks_shell
+ok("suite_timeout with no overlay resolves to 900, and run_suite's shell call receives it")
+
+try:
+    with tempfile.TemporaryDirectory() as d:
+        write(d, ".run-issue.json", json.dumps({"checks": {"suite_timeout": 2400}}))
+        config = route.load_config(d)
+        assert checks.suite_timeout(config) == 2400
+
+        calls = []
+        checks.shell = _stub_shell(calls)
+        ledger = _FakeLedger(stack="none", test_cmd="pytest")
+        checks.run_suite(ledger, "/repo", config=config)
+        assert calls[-1]["timeout"] == 2400
+finally:
+    checks.shell = real_checks_shell
+ok("an overlay {checks: {suite_timeout: 2400}} deep-merges via route.load_config and reaches shell")
+
+try:
+    def _timeout_shell(cmd, cwd=None, timeout=None, **kw):
+        return subprocess.CompletedProcess([], 124, "", "")
+    checks.shell = _timeout_shell
+    with tempfile.TemporaryDirectory() as d:
+        write(d, ".run-issue.json", json.dumps({"checks": {"suite_timeout": 2400}}))
+        config = route.load_config(d)
+    ledger = _FakeLedger(stack="none", test_cmd="pytest")
+    code, detail = checks.run_suite(ledger, "/repo", config=config)
+    assert code is None
+    assert detail == "suite timed out after 2400s", detail
+    assert "900" not in detail
+finally:
+    checks.shell = real_checks_shell
+ok("the timeout message names the overridden 2400s, never the literal 900")
+
+try:
+    calls = []
+    checks.shell = _stub_shell(calls)
+    ledger = _FakeLedger(stack="none", test_cmd="pytest")
+    code, detail = checks.run_suite(ledger, "/repo")
+    assert code == 0
+    assert detail == "ok"
+finally:
+    checks.shell = real_checks_shell
+ok("happy path is unchanged: returncode 0 returns (0, last output line truncated to 200 chars)")
+
+for value in (1, 0, -5):
+    import io as _io2
+
+    buf = _io2.StringIO()
+    with contextlib.redirect_stderr(buf):
+        resolved = checks.suite_timeout({"checks": {"suite_timeout": value}})
+    if value == 1:
+        assert resolved == 1, f"{value} -> {resolved}"
+    else:
+        assert resolved == 900, f"{value} -> {resolved}"
+        assert str(value) in buf.getvalue(), buf.getvalue()
+        assert "900" in buf.getvalue(), buf.getvalue()
+ok("boundary: 1 is accepted; 0 and -5 are rejected with a stderr warning and fall back to 900")
+
+for value in 1, 0, -5:
+    calls = []
+    checks.shell = _stub_shell(calls)
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            write(d, ".run-issue.json", json.dumps({"checks": {"suite_timeout": value}}))
+            config = route.load_config(d)
+        ledger = _FakeLedger(stack="none", test_cmd="pytest")
+        checks.run_suite(ledger, "/repo", config=config)
+        assert calls[-1]["timeout"] == (1 if value == 1 else 900), (value, calls[-1])
+    finally:
+        checks.shell = real_checks_shell
+ok("suite_timeout=1 reaches shell as 1; 0 and -5 never reach shell — 900 does instead")
+
+for bad in ("900", 900.5, 900.0, None, [], {}, True, False):
+    buf = _io.StringIO()
+    with contextlib.redirect_stderr(buf):
+        resolved = checks.suite_timeout({"checks": {"suite_timeout": bad}})
+    assert resolved == 900, f"{bad!r} -> {resolved}"
+    assert "900" in buf.getvalue(), (bad, buf.getvalue())
+ok("non-integer values, and bool True/False (an int subclass), are rejected and fall back to 900")
+
+for checks_value in (None, {}, "absent"):
+    config = {} if checks_value == "absent" else {"checks": checks_value}
+    assert checks.suite_timeout(config) == 900, (checks_value, checks.suite_timeout(config))
+ok("checks absent, checks: {} and checks: null all resolve to 900 without raising")
+
+try:
+    ledger = _FakeLedger(stack="failed", test_cmd=None)
+    code, detail = checks.run_suite(ledger, "/repo", config={"checks": {"suite_timeout": 2400}})
+    assert code is None and detail == "no runner (stack=failed)", detail
+
+    ledger = _FakeLedger(stack="none", test_cmd=None)
+    code, detail = checks.run_suite(ledger, "/repo", config={"checks": {"suite_timeout": 2400}})
+    assert code is None and detail == "no test_cmd recorded", detail
+finally:
+    pass
+ok("run_suite's pre-shell bail-outs (no runner / no test_cmd) are unaffected by a suite_timeout override")
+
+try:
+    def _timeout_shell(cmd, cwd=None, timeout=None, **kw):
+        return subprocess.CompletedProcess([], 124, "", "")
+    checks.shell = _timeout_shell
+    ledger = _FakeLedger(stack="none", test_cmd="pytest")
+    envelope = {"handoff": {"test_files": ["run-engine/test_scripts.py"], "red_confirmed": True}}
+    ledger.context["test_root"] = "run-engine"
+    config = {"checks": {"suite_timeout": 2400}}
+    with tempfile.TemporaryDirectory() as d:
+        os.makedirs(os.path.join(d, "run-engine"))
+        write(d, "run-engine/test_scripts.py", "")
+        result = checks.check_sdet_post(ledger, envelope, d, config)
+    assert result.unrunnable is True
+    assert result.reason == "could not verify RED: suite timed out after 2400s", result.reason
+finally:
+    checks.shell = real_checks_shell
+ok("check_sdet_post still wraps as 'could not verify RED: suite timed out after 2400s' with an override")
+
+try:
+    def _timeout_shell(cmd, cwd=None, timeout=None, **kw):
+        return subprocess.CompletedProcess([], 124, "", "")
+    checks.shell = _timeout_shell
+    ledger = _FakeLedger(stack="none", test_cmd="pytest")
+    envelope = {"handoff": {}}
+    config = {"checks": {"suite_timeout": 2400}}
+    with tempfile.TemporaryDirectory() as d:
+        result = checks.check_dev_post(ledger, envelope, d, config)
+    assert result.unrunnable is True
+    assert result.reason == "could not verify the suite: suite timed out after 2400s", result.reason
+finally:
+    checks.shell = real_checks_shell
+ok("check_dev_post still wraps as 'could not verify the suite: suite timed out after 2400s' with an override")
+
+with tempfile.TemporaryDirectory() as d:
+    write(d, ".run-issue.json", json.dumps({"checks": {"suite_timeout": 2400}}))
+    config = route.load_config(d)
+    assert config["checks"]["enabled"] is True, config["checks"]
+    assert config["checks"]["skip"] == [], config["checks"]
+    assert config["checks"]["suite_timeout"] == 2400, config["checks"]
+ok("an overlay setting only suite_timeout keeps checks.enabled True and checks.skip []")
+
 print(f"\n{passed} checks passed")
