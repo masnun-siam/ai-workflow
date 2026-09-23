@@ -1410,4 +1410,135 @@ with tempfile.TemporaryDirectory() as d:
     assert out["channels"] == os.path.join(dd, "channels.json")
 ok("aiw paths prints a checkouts key and its other existing keys are unchanged")
 
+# --------------------------------------------------------------------------- issue #29: rerun-denied CI fallback (doc invariants)
+#
+# agents/run-ci.md, commands/run-issue.md and skills/pr-grind/SKILL.md are the source of
+# truth; these are drift-pinned to the literal text in those files (never hand-copied),
+# following the GH_ISSUE_MD pattern above.
+
+RUN_CI_MD = os.path.join(HERE, "..", "agents", "run-ci.md")
+RUN_ISSUE_MD = os.path.join(HERE, "..", "commands", "run-issue.md")
+PR_GRIND_SKILL_MD = os.path.join(HERE, "..", "skills", "pr-grind", "SKILL.md")
+
+with open(RUN_CI_MD, encoding="utf-8") as fh:
+    run_ci_text = fh.read()
+with open(RUN_ISSUE_MD, encoding="utf-8") as fh:
+    run_issue_text = fh.read()
+with open(PR_GRIND_SKILL_MD, encoding="utf-8") as fh:
+    pr_grind_text = fh.read()
+
+# run-ci.md's outcome enum line, e.g. "outcome: fixed | flake-rerun | cannot-fix"
+outcome_line = next(
+    line for line in run_ci_text.splitlines() if line.strip().startswith("outcome:")
+)
+outcome_tokens = [t.strip() for t in outcome_line.split(":", 1)[1].split("|")]
+assert "rerun-denied" in outcome_tokens, outcome_tokens
+assert set(outcome_tokens) >= {"fixed", "flake-rerun", "cannot-fix", "rerun-denied"}, outcome_tokens
+ok("run-ci.md's outcome enum contains rerun-denied alongside fixed|flake-rerun|cannot-fix")
+
+# Every outcome token parsed from run-ci.md must be branched on (mentioned) in both
+# run-issue.md phase 8.5 and SKILL.md rail 2's CI-red handling.
+for token in outcome_tokens:
+    assert token in run_issue_text, f"run-issue.md never branches on outcome {token!r}"
+    assert token in pr_grind_text, f"SKILL.md never branches on outcome {token!r}"
+ok("every outcome token parsed from run-ci.md is branched on in both run-issue.md phase 8.5 and SKILL.md rail 2")
+
+# Both rails' fallback uses git commit --allow-empty with an identical retrigger
+# message, compared across files rather than hand-copied.
+def _allow_empty_commit_lines(text: str) -> list[str]:
+    return [line.strip() for line in text.splitlines() if "--allow-empty" in line]
+
+run_issue_allow_empty = _allow_empty_commit_lines(run_issue_text)
+pr_grind_allow_empty = _allow_empty_commit_lines(pr_grind_text)
+assert run_issue_allow_empty, "run-issue.md documents no --allow-empty fallback"
+assert pr_grind_allow_empty, "SKILL.md documents no --allow-empty fallback"
+
+
+def _retrigger_message(lines: list[str]) -> str:
+    for line in lines:
+        m = re.search(r'-m\s+"([^"]+)"', line)
+        if m:
+            return m.group(1)
+    raise AssertionError(f"no -m \"...\" message found in {lines}")
+
+
+run_issue_msg = _retrigger_message(run_issue_allow_empty)
+pr_grind_msg = _retrigger_message(pr_grind_allow_empty)
+assert run_issue_msg == pr_grind_msg, (run_issue_msg, pr_grind_msg)
+ok("both rails' fallback uses git commit --allow-empty with an identical retrigger message")
+
+# The retrigger commit message marks it as a CI retrigger and names the reason.
+assert "retrigger" in run_issue_msg.lower() and "ci" in run_issue_msg.lower(), run_issue_msg
+assert re.search(r"rerun denied|denied", run_issue_msg.lower()), run_issue_msg
+ok("retrigger commit message marks it as CI retrigger and names the reason")
+
+# Neither rail's fallback mentions gh run rerun/cancel/workflow run around the fallback
+# text — the fallback path is git-only. (The pre-existing rerun/cancel/workflow-run
+# mentions elsewhere in these docs, for run-ci's own permitted use, are untouched; this
+# checks the fallback description itself never reintroduces an Actions write command.)
+for label, lines in (("run-issue.md", run_issue_allow_empty), ("SKILL.md", pr_grind_allow_empty)):
+    for line in lines:
+        assert "gh run rerun" not in line, (label, line)
+        assert "gh run cancel" not in line, (label, line)
+        assert "gh workflow run" not in line, (label, line)
+ok("neither rail's fallback line mentions gh run rerun/cancel/workflow run — git-only")
+
+# run-ci.md contains no --allow-empty and no commit instruction on the flake path —
+# run-ci diagnoses, the orchestrator commits.
+flake_section_start = run_ci_text.index("**Infra flake**")
+real_failure_start = run_ci_text.index("**Real failure**")
+flake_section = run_ci_text[flake_section_start:real_failure_start]
+assert "--allow-empty" not in flake_section, flake_section
+assert "git commit" not in flake_section, flake_section
+ok("run-ci.md contains no --allow-empty and no commit instruction on the flake path")
+
+# run-issue.md's fleet-wide policy paragraph still states run-ci is the only agent
+# permitted Actions write commands.
+assert "`run-ci` is the only agent that may run GitHub Actions write commands." in run_issue_text
+ok("run-issue.md's fleet-wide policy paragraph still states run-ci is the only agent permitted Actions write commands")
+
+# Both rails gate the fallback on the existing ci-attempt:<sha> budget; no second
+# budget key introduced.
+assert "ci-attempt" in run_issue_text
+assert "ci-attempt" in pr_grind_text
+for label, text in (("run-issue.md", run_issue_text), ("SKILL.md", pr_grind_text)):
+    for bad in ("retrigger-attempt", "fallback-attempt", "rerun-denied-attempt"):
+        assert bad not in text, (label, bad)
+ok("both rails gate the fallback on the existing ci-attempt:<sha> budget; no second budget key introduced")
+
+# run-issue.md phase 8.5 records ci-attempt in the ledger (net-new).
+phase_85_start = run_issue_text.index("## 8.5 CI gate")
+phase_86_start = run_issue_text.index("## 9.1 Dump the run into the notes vault")
+phase_85_text = run_issue_text[phase_85_start:phase_86_start]
+assert "ci-attempt" in phase_85_text, "phase 8.5 never records ci-attempt in the ledger"
+ok("run-issue.md phase 8.5 records ci-attempt in the ledger")
+
+# Both rails document a retrigger-commit guard via `git log -1 --pretty=%s`.
+assert "git log -1 --pretty=%s" in run_issue_text, "run-issue.md documents no retrigger-commit guard"
+assert "git log -1 --pretty=%s" in pr_grind_text, "SKILL.md documents no retrigger-commit guard"
+ok("both rails document a retrigger-commit guard via git log -1 --pretty=%s marker check")
+
+# Both rails document the push-refused path falling through to the existing outcome.
+assert "push" in phase_85_text.lower() and ("fall" in phase_85_text.lower() or "RED —" in phase_85_text)
+rail2_start = pr_grind_text.index("2. **CI red**")
+rail3_start = pr_grind_text.index("3. **Third-party human comment**")
+rail2_text = pr_grind_text[rail2_start:rail3_start]
+assert "push" in rail2_text.lower()
+ok("both rails document the push-refused path falling through to the existing outcome")
+
+# The --allow-empty line sits inside the rerun-denied branch only; cannot-fix branch
+# unchanged (no --allow-empty anywhere near the cannot-fix wording in either rail).
+cannot_fix_idx = rail2_text.index("`outcome: cannot-fix`")
+cannot_fix_tail = rail2_text[cannot_fix_idx: cannot_fix_idx + 200]
+assert "--allow-empty" not in cannot_fix_tail, cannot_fix_tail
+ok("the --allow-empty line sits inside the rerun-denied branch only; cannot-fix branch unchanged")
+
+# run-ci.md keeps "If you cannot tell which it is, it is a real failure" verbatim.
+assert "If you cannot tell which it is, it is a **real failure**." in run_ci_text
+ok('run-ci.md keeps "If you cannot tell which it is, it is a real failure" verbatim')
+
+# SKILL.md still contains the run-fixer-never-while-red sentence verbatim.
+assert "`run-fixer` is still **never** dispatched while CI is red" in pr_grind_text
+ok("SKILL.md still contains the run-fixer-never-while-red sentence verbatim")
+
 print(f"\n{passed} checks passed")
