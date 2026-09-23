@@ -398,4 +398,135 @@ with tempfile.TemporaryDirectory() as tmp:
     ok("a station with no post-check routes exactly as it does today")
 
 
+# --- 12. exit-6 recovery: git-show fallback for hook-blocked checkout/restore ----
+# Issue #26: `git checkout <sdet_sha> -- <paths>` can be blocked by a repo's git safety
+# hooks. The exit-6 bullet needs a fallback (`git show <sha>:<path> > /tmp/<file>` + a
+# plain write) and route.py's exit-6 stderr should mirror it.
+
+RUN_ISSUE_MD = os.path.join(HERE, "..", "commands", "run-issue.md")
+
+
+def _exit6_bullet():
+    """Slice the exit-6 recovery bullet out of the live markdown file. Raises loudly
+    if the bullet cannot be found, rather than silently matching an empty string."""
+    text = open(RUN_ISSUE_MD).read()
+    start_marker = "**exit 6 — test-ownership violation.**"
+    start = text.index(start_marker)  # raises ValueError if the bullet is gone/reflowed
+    # bullet ends at the next top-level list item ("   - **" at the same indent)
+    end = text.index("\n   - **", start)
+    bullet = text[start:end]
+    assert bullet.strip(), "exit-6 bullet matched but is empty — bad slice"
+    return bullet
+
+
+bullet = _exit6_bullet()
+assert "git show" in bullet, "fallback for hook-blocked git checkout/restore is missing"
+import re as _re
+assert _re.search(r"<sdet_sha>\s*:", bullet) or _re.search(r"<[a-zA-Z_]*sha>\s*:", bullet), \
+    "fallback must reference a sha:path pattern (e.g. <sdet_sha>:<path>)"
+assert "/tmp/" in bullet, "fallback must write to a /tmp/ destination"
+ok("exit-6 bullet documents a git-show + /tmp fallback for hook-blocked checkout")
+
+checkout_idx = bullet.index("git checkout")
+show_idx = bullet.index("git show")
+assert checkout_idx < show_idx, "primary `git checkout` instruction must precede the fallback"
+ok("primary git-checkout instruction still appears, and precedes the git-show fallback")
+
+normalized_bullet = " ".join(bullet.split())
+assert normalized_bullet.rstrip(".").endswith(
+    "Never re-dispatch `run-dev` with tampered tests still on disk"
+), "the invariant sentence must remain the LAST sentence of the exit-6 bullet"
+ok("the 'never re-dispatch run-dev with tampered tests' invariant survives as the last sentence")
+
+assert ("stderr" in bullet), "fallback must reference stderr / paths from stderr"
+for wildcard in ["-- .", "--all", " -- *", "-- *"]:
+    assert wildcard not in bullet, f"fallback must not use a blanket wildcard ({wildcard!r})"
+assert bullet.count("*") == 0, "fallback must not use a bare wildcard"
+ok("fallback is scoped to paths from stderr, no blanket wildcard")
+
+full_md = open(RUN_ISSUE_MD).read()
+assert full_md.count("git show") == 1, "the git-show fallback text must appear exactly once in run-issue.md"
+ok("git-show fallback text appears exactly once in commands/run-issue.md")
+
+
+# --- 13. exit-6 recovery: unchanged collateral (snapshot before dev edits) -------
+# Guards against the doc fix accidentally rewriting sibling bullets or the
+# "### Test ownership" section while adding the fallback.
+
+def _normalize(s):
+    return " ".join(s.split())
+
+
+bounce_sdet_bullet_start = full_md.index("**`bounce(sdet)`** — dev disputes a test.")
+advance_bullet_start = full_md.index("**`advance(…)`** — green.")
+escalate_bullet_start = full_md.index("**`escalate`** — the dev budget is spent.")
+test_ownership_start = full_md.index("### Test ownership")
+test_ownership_end = full_md.index("### State", test_ownership_start)
+
+EXPECTED_BOUNCE_SDET = _normalize("""
+**`bounce(sdet)`** — dev disputes a test. Dispatch `run-sdet` with the findings; it
+     amends or rejects and commits. Move `sdet_sha` forward, then re-dispatch `run-dev`.
+""")
+EXPECTED_ADVANCE = _normalize("""
+**`advance(…)`** — green. Continue.
+""")
+EXPECTED_ESCALATE_PREFIX = _normalize(
+    "**`escalate`** — the dev budget is spent. Record"
+)
+EXPECTED_TEST_OWNERSHIP = _normalize(full_md[test_ownership_start:test_ownership_end])
+
+assert _normalize(full_md[bounce_sdet_bullet_start:advance_bullet_start]) == EXPECTED_BOUNCE_SDET, \
+    "the bounce(sdet) bullet must be unchanged by the exit-6 doc fix"
+assert _normalize(full_md[advance_bullet_start:escalate_bullet_start]) == EXPECTED_ADVANCE, \
+    "the advance(...) bullet must be unchanged by the exit-6 doc fix"
+assert _normalize(full_md[escalate_bullet_start:]).startswith(EXPECTED_ESCALATE_PREFIX), \
+    "the escalate bullet must be unchanged by the exit-6 doc fix"
+assert EXPECTED_TEST_OWNERSHIP == _normalize(full_md[test_ownership_start:test_ownership_end]), \
+    "the ### Test ownership section must be unchanged by the exit-6 doc fix"
+ok("bounce(sdet)/advance/escalate bullets and ### Test ownership section are unchanged")
+
+
+# --- 14. exit-6 stderr mirrors the git-show fallback -----------------------------
+# Extends the existing exit-6 subprocess scenario (section 6 above) to assert route.py's
+# stderr also carries the fallback instruction, and that exit-6 routing itself still
+# behaves exactly as it does today (regression guard).
+
+with tempfile.TemporaryDirectory() as tmp:
+    repo, run_dir = os.path.join(tmp, "repo"), os.path.join(tmp, "run")
+    os.makedirs(os.path.join(repo, "tests"))
+    git = lambda *a: subprocess.run(["git", *a], cwd=repo, check=True, capture_output=True)
+    git("init", "-q", "-b", "main")
+    git("config", "user.email", "t@t"); git("config", "user.name", "t")
+    open(os.path.join(repo, "tests", "a.test.js"), "w").write("expect(1).toBe(2)\n")
+    git("add", "-A"); git("commit", "-qm", "sdet: red tests")
+    sdet_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True
+    ).stdout.strip()
+
+    open(os.path.join(repo, "tests", "a.test.js"), "w").write("expect(1).toBe(1)\n")
+    git("add", "-A"); git("commit", "-qm", "dev: implement")
+
+    subprocess.run(
+        [sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--repo", repo],
+        check=True, capture_output=True,
+    )
+    subprocess.run(
+        [sys.executable, ROUTE, "set", run_dir, f"sdet_sha={sdet_sha}", "test_root=tests"],
+        check=True, capture_output=True,
+    )
+    json.dump(envelope("dev"), open(os.path.join(run_dir, "30-build.json"), "w"))
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "route", run_dir, "30-build.json", "--repo", repo],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 6, f"expected exit 6, got {proc.returncode}: {proc.stdout}{proc.stderr}"
+    assert proc.stdout.strip() == "bounce(sdet)", proc.stdout
+    led = json.load(open(os.path.join(run_dir, "run.json")))
+    assert led["bounceCounts"].get("dev->sdet") == 1, led["bounceCounts"]
+    assert "tests/a.test.js" in proc.stderr, proc.stderr
+    assert f"git checkout {sdet_sha}" in proc.stderr, proc.stderr
+    assert "git show" in proc.stderr, "exit-6 stderr must mirror the git-show fallback"
+    ok("aiw route's exit-6 stderr mirrors the git-show fallback; exit-6 routing regression holds")
+
+
 print(f"\n{passed} checks passed")
