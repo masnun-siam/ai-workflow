@@ -1410,4 +1410,237 @@ with tempfile.TemporaryDirectory() as d:
     assert out["channels"] == os.path.join(dd, "channels.json")
 ok("aiw paths prints a checkouts key and its other existing keys are unchanged")
 
+# --------------------------------------------------------------------------- review: pick() (issue #24, RED until review.py exists)
+
+import review  # noqa: E402
+
+
+def _review(review_id, commit_id, submitted_at, state="COMMENTED", body=""):
+    return {
+        "id": review_id,
+        "commit_id": commit_id,
+        "submitted_at": submitted_at,
+        "state": state,
+        "body": body,
+    }
+
+
+def _comment(review_id):
+    return {"pull_request_review_id": review_id}
+
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00", state="COMMENTED", body="fix this"),
+        _review(2, "sha1", "2026-09-23T10:00:40", state="APPROVED", body="looks good"),
+    ],
+    comments=[_comment(1), _comment(1), _comment(1), _comment(1)],
+)
+assert result["selected"] == 1
+assert result["superseded"] == [2]
+ok("older COMMENTED review with 4 inline comments beats a newer rubber-stamp APPROVED review, same commit within window")
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00", state="APPROVED", body="looks good"),
+        _review(2, "sha1", "2026-09-23T10:00:40", state="COMMENTED", body="fix this"),
+    ],
+    comments=[_comment(2), _comment(2)],
+)
+assert result["selected"] == 2
+assert result["superseded"] == [1]
+ok("order reversed: comment-carrying review still wins over the rubber stamp")
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00", state="COMMENTED", body="fix this"),
+        _review(2, "sha1", "2026-09-23T10:00:40", state="COMMENTED", body="fix that too"),
+    ],
+    comments=[_comment(1), _comment(2)],
+)
+assert result["selected"] == 2
+assert result["superseded"] == [1]
+ok("both reviews carry inline comments: newest still wins (existing behavior unchanged)")
+
+result = review.pick(
+    reviews=[
+        _review(1, "shaOLD", "2026-09-23T09:00:00", state="COMMENTED", body="fix this"),
+        _review(2, "shaNEW", "2026-09-23T10:00:00", state="APPROVED", body="looks good"),
+    ],
+    comments=[_comment(1), _comment(1)],
+)
+assert result["selected"] == 2
+assert result["superseded"] == [1]
+ok("different commit_ids: newest wins even though the older commit's review carries the comments")
+
+result = review.pick(
+    reviews=[_review(1, "sha1", "2026-09-23T10:00:00", state="APPROVED", body="looks good")],
+    comments=[],
+)
+assert result["selected"] == 1
+assert result["superseded"] == []
+ok("single review in the batch: it is selected, superseded is empty")
+
+with tempfile.TemporaryDirectory() as d:
+    reviews_path = os.path.join(d, "reviews.json")
+    comments_path = os.path.join(d, "comments.json")
+    with open(reviews_path, "w", encoding="utf-8") as fh:
+        json.dump([
+            _review(1, "sha1", "2026-09-23T10:00:00", state="COMMENTED", body="fix this"),
+            _review(2, "sha1", "2026-09-23T10:00:40", state="APPROVED", body="looks good"),
+        ], fh)
+    with open(comments_path, "w", encoding="utf-8") as fh:
+        json.dump([_comment(1), _comment(1)], fh)
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "review", "pick", "--reviews", reviews_path, "--comments", comments_path],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    out = json.loads(proc.stdout)
+    assert "selected" in out and "superseded" in out and "comment_counts" in out
+ok("aiw review pick exits 0 and prints JSON with selected/superseded/comment_counts")
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00", state="COMMENTED", body="fix this"),
+        _review(2, "sha1", "2026-09-23T10:01:00", state="APPROVED", body="looks good"),
+    ],
+    comments=[_comment(1)],
+)
+assert result["selected"] == 1
+ok("gap exactly at the 60s window edge is treated as inside the window")
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00", state="COMMENTED", body="fix this"),
+        _review(2, "sha1", "2026-09-23T10:01:01", state="APPROVED", body="looks good"),
+    ],
+    comments=[_comment(1)],
+)
+assert result["selected"] == 2
+ok("gap of 61s on the same commit is outside the window, newest wins")
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00", state="COMMENTED", body="fix this"),
+        _review(2, "sha1", "2026-09-23T10:01:30", state="APPROVED", body="looks good"),
+    ],
+    comments=[_comment(1)],
+)
+assert result["selected"] == 2
+ok("gap of 90s on the same commit is outside the window, newest wins")
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00Z", state="COMMENTED", body="fix this"),
+        _review(2, "sha1", "2026-09-23T10:00:40Z", state="APPROVED", body="looks good"),
+    ],
+    comments=[_comment(1)],
+)
+assert result["selected"] == 1
+ok("GitHub Z-suffixed timestamps parse correctly")
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00", state="APPROVED", body="looks good"),
+        _review(2, "sha1", "2026-09-23T10:00:20", state="COMMENTED", body="fix this"),
+        _review(3, "sha1", "2026-09-23T10:00:40", state="APPROVED", body="looks good"),
+    ],
+    comments=[_comment(2), _comment(2)],
+)
+assert result["selected"] == 2
+assert sorted(result["superseded"]) == [1, 3]
+ok("three reviews same commit in window, two zero-comment stamps and one with comments: comment-carrying wins, both stamps superseded")
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00", state="COMMENTED", body="**Verdict: 2 blocker, 0 should-fix**"),
+        _review(2, "sha1", "2026-09-23T10:00:40", state="APPROVED", body="looks good"),
+    ],
+    comments=[],
+)
+assert result["selected"] == 1
+assert result["superseded"] == [2]
+ok("no review carries inline comments: older verdict-carrying review is selected over the generic newer body")
+
+result = review.pick(reviews=[], comments=[])
+assert result["selected"] is None
+assert result["superseded"] == []
+ok("empty reviews list: selected is None, superseded is empty, no exception")
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00", state="APPROVED", body="looks good"),
+        _review(2, "sha1", "2026-09-23T10:00:40", state="APPROVED", body="looks good"),
+    ],
+    comments=[],
+)
+assert result["selected"] == 2
+assert result["superseded"] == [1]
+ok("reviews present but comments list empty: falls back to newest-wins, no exception")
+
+result = review.pick(
+    reviews=[
+        {"id": 1, "state": "APPROVED", "body": "looks good"},
+        {"id": 2, "commit_id": None, "submitted_at": None, "state": "COMMENTED", "body": "fix this"},
+    ],
+    comments=[_comment(2)],
+)
+assert isinstance(result["selected"], int)
+non_selected = {1, 2} - {result["selected"]}
+assert set(result["superseded"]) == non_selected
+ok("review dicts missing/null commit_id and submitted_at: no KeyError/TypeError, every non-selected review still in superseded[]")
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00", state="APPROVED", body="looks good"),
+        _review(2, "sha1", "not-a-timestamp", state="APPROVED", body="looks good"),
+    ],
+    comments=[],
+)
+assert result["selected"] == 1
+assert result["superseded"] == [2]
+ok("unparseable submitted_at does not raise; that review is not treated as newest and is still superseded")
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00", state="COMMENTED", body="fix this"),
+        _review(2, "sha1", "2026-09-23T10:00:40", state="APPROVED", body="looks good"),
+    ],
+    comments=[{"pull_request_review_id": None}, {"pull_request_review_id": 999}],
+)
+assert result["comment_counts"].get(1, 0) == 0
+assert result["comment_counts"].get(2, 0) == 0
+ok("inline comments with null or foreign pull_request_review_id are not counted toward any review")
+
+proc = subprocess.run(
+    [sys.executable, ROUTE, "review", "pick", "--reviews", "/nonexistent/reviews.json", "--comments", "/nonexistent/comments.json"],
+    capture_output=True, text=True,
+)
+assert proc.returncode != 0
+assert "Traceback" not in proc.stderr
+assert len([l for l in proc.stderr.splitlines() if l.strip()]) <= 1 or "Traceback" not in proc.stderr
+ok("aiw review pick with a missing file exits nonzero with a one-line message, no Python traceback")
+
+with tempfile.TemporaryDirectory() as d:
+    reviews_path = os.path.join(d, "reviews.json")
+    comments_path = os.path.join(d, "comments.json")
+    with open(reviews_path, "w", encoding="utf-8") as fh:
+        fh.write("not json{{{")
+    with open(comments_path, "w", encoding="utf-8") as fh:
+        fh.write("[]")
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "review", "pick", "--reviews", reviews_path, "--comments", comments_path],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode != 0
+    assert "Traceback" not in proc.stderr
+ok("aiw review pick with non-JSON input exits nonzero with a one-line message, no Python traceback")
+
+with open(os.path.join(HERE, "..", "skills", "pr-grind", "SKILL.md"), encoding="utf-8") as fh:
+    skill_text = fh.read()
+assert "aiw review pick" in skill_text
+assert "take the newest only" not in skill_text
+ok("skills/pr-grind/SKILL.md Step 1 references `aiw review pick` and no longer states bare 'take the newest only' as the whole rule")
+
 print(f"\n{passed} checks passed")
