@@ -105,12 +105,19 @@ def cmd_pick(args) -> None:
 
 
 def _load(path: str):
-    if path == "-":
-        try:
-            return json.loads(sys.stdin.read())
-        except json.JSONDecodeError:
-            shared.die(shared.FAILED, f"not valid JSON: {path}")
-    return shared.read_json(path, missing_code=shared.FAILED)
+    raw = sys.stdin.read() if path == "-" else _read_file(path)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        shared.die(shared.FAILED, f"not valid JSON: {path}")
+
+
+def _read_file(path: str) -> str:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+    except OSError as exc:
+        shared.die(shared.FAILED, f"cannot read {path}: {exc.strerror or exc}")
 
 
 def register(sub, add) -> None:
