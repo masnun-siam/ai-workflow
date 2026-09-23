@@ -1593,7 +1593,7 @@ ok("review dicts missing/null commit_id and submitted_at: no KeyError/TypeError,
 
 result = review.pick(
     reviews=[
-        _review(1, "sha1", "2026-09-23T10:00:00", state="APPROVED", body="looks good"),
+        _review(1, "sha1", "2026-09-23T10:00:00Z", state="APPROVED", body="looks good"),
         _review(2, "sha1", "not-a-timestamp", state="APPROVED", body="looks good"),
     ],
     comments=[],
