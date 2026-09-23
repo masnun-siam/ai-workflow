@@ -1582,7 +1582,9 @@ ok("an overlay setting only suite_timeout keeps checks.enabled True and checks.s
 # `.run-issue.json` top-level `test_cmd` pins `cmd_up`'s recorded `test_cmd`, taking
 # precedence over both the derived value and any prior ledger value. Read via a
 # `stack.read_test_cmd_override(repo)` helper (per the approved plan). None of this
-# exists yet in stack.py/checks.py, so every assertion below is expected RED.
+# The assertions below were written RED-first, against a not-yet-implemented
+# `stack.read_test_cmd_override(repo)`; they now pass against the landed
+# implementation.
 
 
 class _Args:
