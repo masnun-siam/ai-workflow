@@ -485,7 +485,8 @@ exceeding either escalates on its own.
      <sdet_sha> -- <paths from stderr>` to revert, **then** act on the printed action.
      If a git safety hook blocks `git checkout`/`git restore`, fall back to `git show
      <sdet_sha>:<path> > /tmp/<basename>` for each path from stderr, then overwrite the
-     working file with that content — it only reads, so no hook can block it.
+     working file with that content — it's a read, not a checkout/restore/reset/clean, so a
+     discard-pattern hook has nothing to match.
      Never re-dispatch `run-dev` with tampered tests still on disk.
    - **`bounce(sdet)`** — dev disputes a test. Dispatch `run-sdet` with the findings; it
      amends or rejects and commits. Move `sdet_sha` forward, then re-dispatch `run-dev`.
