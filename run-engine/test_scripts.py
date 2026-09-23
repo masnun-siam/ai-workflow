@@ -400,6 +400,108 @@ with tempfile.TemporaryDirectory() as tmp:
     assert "already" in again.stdout.lower(), again.stdout
 ok("aiw epic init creates one ledger per child, records edges, and is idempotent")
 
+# --------------------------------------------------------------------------- epic --lean-children
+
+LEAN_STATIONS = ["researcher", "planner", "dev", "reviewer", "fixer"]
+FULL_STATIONS = ["researcher", "planner", "sdet", "dev", "verifier", "reviewer", "fixer"]
+
+
+def run_epic_init(children_deps: dict, lean_children: str | None, mode: str | None):
+    """One fresh epic.json/runs dir per call, `epic init` run once, ledgers returned."""
+    tmp = tempfile.mkdtemp()
+    epic_dir, runs, repo = (os.path.join(tmp, "e"), os.path.join(tmp, "runs"),
+                             os.path.join(tmp, "repo"))
+    os.makedirs(epic_dir); os.makedirs(repo)
+    order = sorted(children_deps, key=lambda c: (len(children_deps[c]), c))
+    with open(os.path.join(epic_dir, "epic.json"), "w", encoding="utf-8") as fh:
+        json.dump({"parent": 99, "slug": "o/r", "children": list(children_deps),
+                   "dag": {"order": order,
+                           "deps": {str(k): v for k, v in children_deps.items()}},
+                   "max_stacks": 2}, fh)
+    argv = [sys.executable, ROUTE, "epic", "init", epic_dir, "--runs-dir", runs, "--repo", repo]
+    if mode:
+        argv += ["--mode", mode]
+    if lean_children is not None:
+        argv += ["--lean-children", lean_children]
+    proc = subprocess.run(argv, capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    ledgers = {
+        c: json.load(open(os.path.join(runs, f"o-r-issue-{c}", "run.json")))
+        for c in children_deps
+        if os.path.isfile(os.path.join(runs, f"o-r-issue-{c}", "run.json"))
+    }
+    return runs, ledgers, proc
+
+
+_, leds, _ = run_epic_init({11: [], 12: [], 13: []}, "11,13", None)
+assert leds[11]["stations"] == LEAN_STATIONS, leds[11]["stations"]
+assert leds[13]["stations"] == LEAN_STATIONS, leds[13]["stations"]
+assert leds[12]["stations"] == FULL_STATIONS, leds[12]["stations"]
+ok("--lean-children puts only the named children on the lean roster, others stay full")
+
+_, leds, _ = run_epic_init({11: [], 12: [], 13: []}, None, None)
+assert all(leds[c]["stations"] == FULL_STATIONS for c in (11, 12, 13)), leds
+ok("omitting --lean-children is a no-op: every child gets the full roster as before")
+
+_, leds, _ = run_epic_init({11: [], 12: []}, "11,12", "lean")
+assert all(leds[c]["stations"] == LEAN_STATIONS for c in (11, 12)), leds
+ok("--lean-children combined with --mode lean: all children lean, no crash")
+
+# The ordering bug this whole feature exists to guard against: a lean child must still
+# get context.epic / context.depends_on wired exactly as a full child would.
+_, leds, _ = run_epic_init({10: [], 11: [10]}, "11", None)
+assert leds[11]["stations"] == LEAN_STATIONS, leds[11]["stations"]
+assert leds[11]["context"]["depends_on"] == "10", leds[11]["context"]
+assert leds[11]["context"]["epic"] == "99", leds[11]["context"]
+assert leds[10]["context"]["epic"] == "99", leds[10]["context"]
+ok("a lean child still receives context.epic and context.depends_on, same as a full child")
+
+for lc in ("", None):
+    _, leds, _ = run_epic_init({11: [], 12: []}, lc, None)
+    assert all(leds[c]["stations"] == FULL_STATIONS for c in (11, 12)), (lc, leds)
+ok("--lean-children '' and omitting the flag both mean no lean children")
+
+_, leds, _ = run_epic_init({11: [], 12: []}, "11,999", None)
+assert leds[11]["stations"] == LEAN_STATIONS, leds[11]["stations"]
+assert leds[12]["stations"] == FULL_STATIONS, leds[12]["stations"]
+assert set(leds) == {11, 12}, "999 is not a child of this epic — no phantom run dir"
+ok("a --lean-children entry naming no child of this epic is silently ignored")
+
+_, leds, _ = run_epic_init({11: [], 12: []}, "abc,11", None)
+assert leds[11]["stations"] == LEAN_STATIONS, leds[11]["stations"]
+assert leds[12]["stations"] == FULL_STATIONS, leds[12]["stations"]
+ok("a non-numeric --lean-children entry is skipped, not fatal; the valid entry is honoured")
+
+with tempfile.TemporaryDirectory() as tmp:
+    epic_dir, runs, repo = (os.path.join(tmp, "e"), os.path.join(tmp, "runs"),
+                             os.path.join(tmp, "repo"))
+    os.makedirs(epic_dir); os.makedirs(repo)
+    with open(os.path.join(epic_dir, "epic.json"), "w", encoding="utf-8") as fh:
+        json.dump({"parent": 99, "slug": "o/r", "children": [11, 12],
+                   "dag": {"order": [11, 12], "deps": {"11": [], "12": []}},
+                   "max_stacks": 2}, fh)
+
+    first = subprocess.run(
+        [sys.executable, ROUTE, "epic", "init", epic_dir, "--runs-dir", runs,
+         "--repo", repo, "--lean-children", "11"],
+        capture_output=True, text=True,
+    )
+    assert first.returncode == 0, first.stderr
+    led11 = json.load(open(os.path.join(runs, "o-r-issue-11", "run.json")))
+    assert led11["stations"] == LEAN_STATIONS, led11["stations"]
+
+    # Re-running WITHOUT --lean-children must not flip #11 back to full: an
+    # already-initialised child is skipped before the roster is ever recomputed.
+    again = subprocess.run(
+        [sys.executable, ROUTE, "epic", "init", epic_dir, "--runs-dir", runs, "--repo", repo],
+        capture_output=True, text=True,
+    )
+    assert again.returncode == 0, again.stderr
+    assert "already" in again.stdout.lower(), again.stdout
+    led11_again = json.load(open(os.path.join(runs, "o-r-issue-11", "run.json")))
+    assert led11_again["stations"] == LEAN_STATIONS, led11_again["stations"]
+ok("re-running epic init over an already-initialised child never flips lean back to full")
+
 # `gh` is the only thing between `epic split` and GitHub, so the split tests drive a stub
 # that records its argv. What matters is not that gh was called but WITH WHAT: the
 # sub-issues endpoint takes a database id as an integer, and `-f` with an issue number
