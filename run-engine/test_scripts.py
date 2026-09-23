@@ -1534,7 +1534,7 @@ try:
 
     ledger = _FakeLedger(stack="none", test_cmd=None)
     code, detail = checks.run_suite(ledger, "/repo", config={"checks": {"suite_timeout": 2400}})
-    assert code is None and detail == "no test_cmd recorded", detail
+    assert code is None and detail == "no runner (stack=none)", detail
 finally:
     pass
 ok("run_suite's pre-shell bail-outs (no runner / no test_cmd) are unaffected by a suite_timeout override")
