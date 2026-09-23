@@ -185,7 +185,7 @@ Tell the user, in this order:
 3. **The first command to try**, with a real issue number if they have one:
 
    ```
-   /ai-workflow:run-issue <issue-number-or-url> [--lean]
+   /ai-workflow:run-issue <issue-number-or-url> [--lean|--full]
    ```
 
 4. **Point them at [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md)** before their first run —
@@ -203,7 +203,7 @@ comments on issues. That is the user's call on their repo, not a smoke test.
 
 | Command | Does |
 |---|---|
-| `/ai-workflow:run-issue <n> [--lean]` | the full pipeline: issue → reviewed PR. Accepts an epic parent. |
+| `/ai-workflow:run-issue <n> [--lean\|--full]` | the full pipeline: issue → reviewed PR. Accepts an epic parent. |
 | `/ai-workflow:intake <source>` | normalize a Sentry link, BRD file, or vault note into an issue brief — used internally by `/gh-issue` and `/run-issue` |
 | `/ai-workflow:gh-issue` | file a well-formed issue; splits a large brief into an epic |
 | `/ai-workflow:jira-to-gh <KEY>` | convert a Jira ticket into a GitHub issue |
@@ -213,7 +213,9 @@ comments on issues. That is the user's call on their repo, not a smoke test.
 `--lean` runs a shorter roster — researcher → planner → dev → reviewer → fixer. No
 independent RED tests, no runtime verification, no specialist panel. The CI gate still
 applies. Use it for low-risk, well-specified work; use full mode for auth, migrations,
-payments, or public API contracts.
+payments, or public API contracts. `--full` forces the full roster. An issue already
+labelled `lean` (applied by `/gh-issue` or `/jira-to-gh` when it qualifies) is picked up
+automatically — no flag needed — unless `--full`/`--lean` is passed explicitly.
 
 ## The `aiw` CLI
 

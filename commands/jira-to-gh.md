@@ -58,6 +58,16 @@ Translate Jira fields to GitHub format:
   - **Acceptance Criteria** — from description or custom fields
   - **Notes** — priority, linked issues, any extra context
 - **Labels**: Map Jira issue type → `bug`/`enhancement`/`feature`/`chore`. Add scope labels from components if applicable.
+- **`lean` label.** `/run-issue` reads this label at init time to pick its roster
+  without a human remembering to pass a flag — see `commands/run-issue.md`'s
+  lean-mode tradeoff description. Apply `lean` only when **all** of these hold:
+  - one independently-shippable outcome
+  - roughly one to two files or symbols touched
+  - no new dependency
+  - no new public API surface
+  - and **none** of: authentication/authorization, data migrations, payment paths,
+    or a public API contract change
+  Any doubt → no label. Full mode is the safe default.
 
 ## Step 4 — Ask clarifying questions
 
@@ -65,7 +75,15 @@ Ask me up to 3 focused questions if anything is unclear or missing (e.g., accept
 
 ## Step 5 — Create GitHub issue
 
-Write the full body to `/tmp/gh-issue-body.md` using the write tool, then run:
+Write the full body to `/tmp/gh-issue-body.md` using the write tool. If `lean` is one of
+the labels being applied, ensure the label exists first (idempotent, cheap — only run
+this when the label is actually about to be applied, not on every issue):
+
+```bash
+gh label create lean --color 0E8A16 --description "small, well-specified: run lean roster" 2>/dev/null || true
+```
+
+Then run:
 
 ```bash
 gh issue create --title "TITLE" --label "labels" --body-file /tmp/gh-issue-body.md

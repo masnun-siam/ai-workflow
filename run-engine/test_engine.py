@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re as _re
 import subprocess
 import sys
 import tempfile
@@ -161,6 +162,11 @@ with tempfile.TemporaryDirectory() as tmp:
     )
     assert proc.returncode == 6, f"expected exit 6, got {proc.returncode}: {proc.stdout}{proc.stderr}"
     assert "tests/a.test.js" in proc.stderr, proc.stderr
+    # exit-6 stderr must also mirror the git-show fallback for hook-blocked checkout/restore
+    # (issue #26) so a dev/fixer whose `git checkout` is blocked by a repo's safety hooks
+    # has a documented recovery path.
+    assert f"git checkout {sdet_sha}" in proc.stderr, proc.stderr
+    assert "git show" in proc.stderr, "exit-6 stderr must mirror the git-show fallback"
 
     # The engine routes the bounce itself rather than asking the orchestrator to rewrite
     # dev's envelope — hand-authoring an envelope is exactly what H1 forbids, and the cap
@@ -171,6 +177,7 @@ with tempfile.TemporaryDirectory() as tmp:
     assert led["stations"][led["currentIndex"]] == "sdet", led["currentIndex"]
 ok("test-root guard catches an edit that was COMMITTED (the bug the old check missed)")
 ok("...and routes the bounce itself, consuming the cap — no hand-authored envelope")
+ok("exit-6 stderr mirrors the git-show fallback")
 
 
 # --- 7. envelope validation -------------------------------------------------
@@ -396,6 +403,100 @@ with tempfile.TemporaryDirectory() as tmp:
     led = json.load(open(os.path.join(run_dir, "run.json")))
     assert "check_failures" not in led["context"] and "check_notes" not in led["context"]
     ok("a station with no post-check routes exactly as it does today")
+
+
+# --- 12. exit-6 recovery: git-show fallback for hook-blocked checkout/restore ----
+# Issue #26: `git checkout <sdet_sha> -- <paths>` can be blocked by a repo's git safety
+# hooks. The exit-6 bullet needs a fallback (`git show <sha>:<path> > /tmp/<file>` + a
+# plain write) and route.py's exit-6 stderr should mirror it.
+
+RUN_ISSUE_MD = os.path.join(HERE, "..", "commands", "run-issue.md")
+
+
+def _exit6_bullet():
+    """Slice the exit-6 recovery bullet out of the live markdown file. Raises loudly
+    if the bullet cannot be found, rather than silently matching an empty string."""
+    text = open(RUN_ISSUE_MD).read()
+    start_marker = "**exit 6 — test-ownership violation.**"
+    start = text.index(start_marker)  # raises ValueError if the bullet is gone/reflowed
+    # bullet ends at the next top-level list item ("   - **" at the same indent)
+    end = text.index("\n   - **", start)
+    bullet = text[start:end]
+    assert bullet.strip(), "exit-6 bullet matched but is empty — bad slice"
+    return bullet
+
+
+bullet = _exit6_bullet()
+assert "git show" in bullet, "fallback for hook-blocked git checkout/restore is missing"
+assert _re.search(r"<sdet_sha>\s*:", bullet) or _re.search(r"<[a-zA-Z_]*sha>\s*:", bullet), \
+    "fallback must reference a sha:path pattern (e.g. <sdet_sha>:<path>)"
+assert "/tmp/" in bullet, "fallback must write to a /tmp/ destination"
+ok("exit-6 bullet documents a git-show + /tmp fallback for hook-blocked checkout")
+
+checkout_idx = bullet.index("git checkout")
+show_idx = bullet.index("git show")
+assert checkout_idx < show_idx, "primary `git checkout` instruction must precede the fallback"
+ok("primary git-checkout instruction still appears, and precedes the git-show fallback")
+
+normalized_bullet = " ".join(bullet.split())
+assert normalized_bullet.rstrip(".").endswith(
+    "Never re-dispatch `run-dev` with tampered tests still on disk"
+), "the invariant sentence must remain the LAST sentence of the exit-6 bullet"
+ok("the 'never re-dispatch run-dev with tampered tests' invariant survives as the last sentence")
+
+assert ("stderr" in bullet), "fallback must reference stderr / paths from stderr"
+# Scope the wildcard check to the fallback text itself (after the primary
+# `git checkout` instruction), not the whole bullet — the bullet's own
+# markdown bold header (`**exit 6 ...**`) contains literal asterisks that
+# are unrelated to a shell wildcard and must not trip this check.
+fallback_text = bullet[checkout_idx:]
+for wildcard in ["-- .", "--all", " -- *", "-- *"]:
+    assert wildcard not in fallback_text, f"fallback must not use a blanket wildcard ({wildcard!r})"
+# Strip markdown emphasis (`**bold**` / `*italic*`) before checking for a bare
+# shell-glob asterisk — emphasis markers are prose formatting, not wildcards.
+no_emphasis = _re.sub(r"\*\*[^*]+\*\*|\*[^*]+\*", "", fallback_text)
+assert "*" not in no_emphasis, "fallback must not use a bare wildcard"
+ok("fallback is scoped to paths from stderr, no blanket wildcard")
+
+full_md = open(RUN_ISSUE_MD).read()
+assert bullet.count("git show") == 1, "the git-show fallback must appear exactly once within the exit-6 bullet"
+ok("git-show fallback appears exactly once within the exit-6 bullet")
+
+
+# --- 13. exit-6 recovery: unchanged collateral (snapshot before dev edits) -------
+# Guards against the doc fix accidentally rewriting the "### Test ownership" section
+# while adding the fallback. (The bounce(sdet)/advance/escalate bullets aren't
+# hardcoded here — pinning their exact prose would make this suite fail on any future,
+# unrelated reword of those bullets; the PR's own diff is the cheaper collateral-scope
+# check for those.)
+
+def _normalize(s):
+    return " ".join(s.split())
+
+
+test_ownership_start = full_md.index("### Test ownership")
+test_ownership_end = full_md.index("### State", test_ownership_start)
+
+EXPECTED_TEST_OWNERSHIP = _normalize("""
+### Test ownership
+
+- Never let `run-dev` or `run-fixer` touch the test root. The guard runs on every `run-dev`
+  `passed` envelope and spans commits (`git diff <sdet_sha>..HEAD`), so committing an edit
+  does not hide it — that was the hole in the old worktree-only tripwire.
+- **Move `sdet_sha` forward after every legitimate `run-sdet` commit** — a bounce round,
+  phase 7b, phase 8's conflict resolution. Forget it and the SDET's own correct work trips
+  the guard on the next dev pass and halts the run on a false positive.
+- Phase 7b's dispatch, a `bounce(sdet)`, and phase 8's test-root conflict resolution are
+  the only paths that may edit the test root after phase 3.
+- Never use `--no-verify`.
+- If any phase's agent call errors out (not a designed stop, an actual failure), do not
+  retry silently more than once — surface it to the user with what failed.
+
+""")
+
+assert EXPECTED_TEST_OWNERSHIP == _normalize(full_md[test_ownership_start:test_ownership_end]), \
+    "the ### Test ownership section must be unchanged by the exit-6 doc fix"
+ok("### Test ownership section is unchanged")
 
 
 print(f"\n{passed} checks passed")
