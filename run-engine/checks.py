@@ -29,7 +29,7 @@ from shared import gh_json, run, shell, warn
 SUITE_TIMEOUT = 900
 
 
-def suite_timeout(config: dict) -> int:
+def suite_timeout(config: dict | None = None) -> int:
     """Resolve the suite-run timeout from `checks.suite_timeout`, falling back to
     SUITE_TIMEOUT for anything not a genuine positive int — `bool` is an `int`
     subclass in Python, so it is explicitly excluded rather than silently accepted
