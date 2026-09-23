@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 
 import stack as stack_mod
 import threads as threads_mod
@@ -27,6 +28,20 @@ from engine import resolve_review_panel
 from shared import gh_json, run, shell
 
 SUITE_TIMEOUT = 900
+
+
+def suite_timeout(config: dict) -> int:
+    """Resolve the suite-run timeout from `checks.suite_timeout`, falling back to
+    SUITE_TIMEOUT for anything not a genuine positive int — `bool` is an `int`
+    subclass in Python, so it is explicitly excluded rather than silently accepted
+    as 0/1 seconds."""
+    checks_cfg = (config or {}).get("checks") or {}
+    value = checks_cfg.get("suite_timeout", SUITE_TIMEOUT)
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    print(f"warning: checks.suite_timeout={value!r} is invalid, falling back to {SUITE_TIMEOUT}",
+          file=sys.stderr)
+    return SUITE_TIMEOUT
 
 
 class CheckResult:
@@ -57,7 +72,7 @@ def unrunnable(reason: str) -> CheckResult:
 # --------------------------------------------------------------------------- the suite
 
 
-def run_suite(ledger, repo: str):
+def run_suite(ledger, repo: str, config: dict | None = None):
     """Run the run's own `test_cmd`. Returns (exit_code, reason); exit_code None means
     the suite could not be run at all, which is NOT the same as a failure.
 
@@ -65,10 +80,13 @@ def run_suite(ledger, repo: str):
     one function. `test_cmd_host` is never used here: it executes outside the stack's
     database and services, so it fails spuriously in exactly the repos the Docker path
     exists for. `test_cmd` is the contract; `test_cmd_host` is a record.
+
+    `config` resolves `checks.suite_timeout` (default SUITE_TIMEOUT) via `suite_timeout()`.
     """
+    timeout = suite_timeout(config)
     state = ledger.context.get("stack")
     cmd = ledger.context.get("test_cmd")
-    if state in ("failed", "none") and not cmd:
+    if state == "failed" and not cmd:
         return None, f"no runner (stack={state})"
     if not cmd:
         return None, "no test_cmd recorded"
@@ -79,9 +97,9 @@ def run_suite(ledger, repo: str):
         healthy, why = stack_mod.app_healthy(ledger, repo)
         if not healthy:
             return None, why
-    proc = shell(cmd, cwd=repo, timeout=SUITE_TIMEOUT)
+    proc = shell(cmd, cwd=repo, timeout=timeout)
     if proc.returncode == 124:
-        return None, f"suite timed out after {SUITE_TIMEOUT}s"
+        return None, f"suite timed out after {timeout}s"
     lines = (proc.stdout or proc.stderr or "").strip().splitlines()
     return proc.returncode, (lines[-1][:200] if lines else "")
 
@@ -113,7 +131,7 @@ def check_sdet_post(ledger, envelope, repo, config) -> CheckResult:
         if test_root and not os.path.normpath(rel).startswith(os.path.normpath(test_root)):
             return failed(f"test file outside the approved test root {test_root}: {rel}")
 
-    code, detail = run_suite(ledger, repo)
+    code, detail = run_suite(ledger, repo, config=config)
     if code is None:
         # Non-fatal: a missing runner is already a first-class state everywhere else in
         # this pipeline (stack: failed), and a station that says so is not lying.
@@ -157,7 +175,7 @@ def check_dev_post(ledger, envelope, repo, config) -> CheckResult:
                     "changed files missing from handoff.files_changed[]: " + ", ".join(undeclared[:8])
                 )
 
-    code, detail = run_suite(ledger, repo)
+    code, detail = run_suite(ledger, repo, config=config)
     if code is None:
         return unrunnable(f"could not verify the suite: {detail}")
     if code != 0:
