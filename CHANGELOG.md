@@ -1,5 +1,49 @@
 # Changelog
 
+## 1.5.0 — 2026-09-23
+
+### Added
+
+- **`/gh-issue` and `/jira-to-gh` auto-apply a `lean` label at intake (#15).** A
+  smallness heuristic (one shippable outcome, ~1-2 files, no new dependency, no new
+  public API, none of auth/authz, migrations, payment, or a public API contract)
+  idempotently labels an issue `lean` so `/run-issue` can pick the lean 5-station
+  roster without a human remembering `--lean`. `/run-issue` gains an explicit `--full`
+  flag; precedence is both flags → full, `--full` alone → full, `--lean` alone → lean,
+  neither → the issue's label if present else full. Epic parents are never labelled;
+  each child is judged independently, and `epic init --lean-children <n>,<n>` lets
+  individual children opt into lean without losing their DAG wiring.
+- **`.run-issue.json` can now pin `test_cmd` per repo (#27).** A top-level `test_cmd`
+  override in the overlay is used verbatim by `aiw stack up` in place of the derived
+  command, and survives every degraded stack path (lock-held, up-failed, no-app-service)
+  instead of being silently overwritten with `""`. `run_suite` now also treats
+  `stack=failed` as unconditionally unrunnable regardless of a leftover `test_cmd`,
+  closing a false-RED hole a preserved override would otherwise open.
+- **Post-check suite timeout is configurable per repo (#25).** The hardcoded 900s
+  timeout on the sdet/dev post-check's test run is now `checks.suite_timeout` in
+  `.run-issue.json`, validated (positive int, bool excluded) and falling back to 900
+  with a stderr warning on any invalid value.
+- **`aiw pr open`'s push timeout is configurable per repo (#28).** A new `pr.push_timeout`
+  key (default 600s) follows the same validate-and-fallback pattern as `suite_timeout`.
+  A genuine timeout (return code 124) now reports a distinct message naming the
+  effective timeout and noting the push may still be running, instead of a generic
+  "push failed:" with no context.
+
+### Fixed
+
+- **`pr-grind` Step 1 discarded real review findings to a same-commit rubber-stamp
+  review (#24).** A reviewer bot posting a substantive `COMMENTED` review followed
+  seconds later by a zero-comment `APPROVED` rubber stamp on the identical commit made
+  "take the newest only" silently reinstate the exact bug the round was meant to catch.
+  A new `run-engine/review.py` (`aiw review pick`) prefers the comment-carrying review
+  within a 60s same-commit window regardless of posting order; different-commit rounds
+  and genuine multi-comment re-reviews still resolve to newest, unchanged.
+- **Exit-6 (test-ownership violation) recovery could be blocked by a git safety hook
+  (#26).** The documented `git checkout <sdet_sha> -- <paths>` recovery is now paired
+  with a fallback — `git show <sdet_sha>:<path> > /tmp/<file>` plus a plain file write —
+  for environments where a discard-pattern command is blocked even scoped to one file.
+  Mirrored in the engine's own exit-6 stderr message, not just the docs.
+
 ## 1.4.1 — 2026-09-22
 
 ### Fixed
