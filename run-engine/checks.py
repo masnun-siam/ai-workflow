@@ -20,12 +20,11 @@ from __future__ import annotations
 
 import os
 import re
-import sys
 
 import stack as stack_mod
 import threads as threads_mod
 from engine import resolve_review_panel
-from shared import gh_json, run, shell
+from shared import gh_json, run, shell, warn
 
 SUITE_TIMEOUT = 900
 
@@ -39,8 +38,7 @@ def suite_timeout(config: dict) -> int:
     value = checks_cfg.get("suite_timeout", SUITE_TIMEOUT)
     if isinstance(value, int) and not isinstance(value, bool) and value > 0:
         return value
-    print(f"warning: checks.suite_timeout={value!r} is invalid, falling back to {SUITE_TIMEOUT}",
-          file=sys.stderr)
+    warn(f"checks.suite_timeout={value!r} is invalid, falling back to {SUITE_TIMEOUT}")
     return SUITE_TIMEOUT
 
 
@@ -86,7 +84,7 @@ def run_suite(ledger, repo: str, config: dict | None = None):
     timeout = suite_timeout(config)
     state = ledger.context.get("stack")
     cmd = ledger.context.get("test_cmd")
-    if state == "failed" and not cmd:
+    if state in ("failed", "none") and not cmd:
         return None, f"no runner (stack={state})"
     if not cmd:
         return None, "no test_cmd recorded"
