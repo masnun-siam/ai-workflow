@@ -1518,13 +1518,29 @@ assert "git log -1 --pretty=%s" in run_issue_text, "run-issue.md documents no re
 assert "git log -1 --pretty=%s" in pr_grind_text, "SKILL.md documents no retrigger-commit guard"
 ok("both rails document a retrigger-commit guard via git log -1 --pretty=%s marker check")
 
-# Both rails document the push-refused path falling through to the existing outcome.
-assert "push" in phase_85_text.lower() and ("fall" in phase_85_text.lower() or "RED —" in phase_85_text)
+# Both rails document the push-refused path falling through to the existing outcome —
+# pinned to the text that immediately follows the --allow-empty retrigger line, so this
+# would fail if the rerun-denied fallback (and its push-refused handling) were deleted.
+allow_empty_idx_85 = phase_85_text.index("--allow-empty")
+after_allow_empty_85 = phase_85_text[allow_empty_idx_85: allow_empty_idx_85 + 400]
+assert "push" in after_allow_empty_85.lower(), "phase 8.5 --allow-empty line has no nearby push-refused wording"
+assert "fall" in after_allow_empty_85.lower() or "RED —" in after_allow_empty_85, (
+    "phase 8.5 --allow-empty line has no nearby fallback wording"
+)
+assert "refused" in after_allow_empty_85.lower(), "phase 8.5 does not mention the push being refused"
+
 rail2_start = pr_grind_text.index("2. **CI red**")
 rail3_start = pr_grind_text.index("3. **Third-party human comment**")
 rail2_text = pr_grind_text[rail2_start:rail3_start]
-assert "push" in rail2_text.lower()
-ok("both rails document the push-refused path falling through to the existing outcome")
+allow_empty_idx_rail2 = rail2_text.index("--allow-empty")
+after_allow_empty_rail2 = rail2_text[allow_empty_idx_rail2: allow_empty_idx_rail2 + 400]
+assert "push" in after_allow_empty_rail2.lower(), "SKILL.md --allow-empty line has no nearby push-refused wording"
+assert "refused" in after_allow_empty_rail2.lower(), "SKILL.md does not mention the push being refused"
+assert "fall" in after_allow_empty_rail2.lower() or "stop" in after_allow_empty_rail2.lower(), (
+    "SKILL.md --allow-empty line has no nearby fallback wording"
+)
+ok("both rails document the push-refused path falling through to the existing outcome, "
+   "pinned near the --allow-empty retrigger line")
 
 # The --allow-empty line sits inside the rerun-denied branch only; cannot-fix branch
 # unchanged (no --allow-empty anywhere near the cannot-fix wording in either rail).
