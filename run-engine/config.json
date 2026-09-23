@@ -2,10 +2,11 @@
   "_note": "Global defaults for the /run-issue engine. A repo may override any of this with a deep-merged <repo>/.run-issue.json. MERGE RULE: dicts merge, lists REPLACE — an overlay meant to narrow a signal must not silently widen it.",
   "bounce_cap": 2,
   "check_bounce_cap": 1,
-  "_check_note": "Post-checks compute a station's verdict from an exit code, a git object or a GitHub response instead of believing the envelope. A failure self-bounces (keyed '<station>-><station>', so it can never spend a real bounce budget) at most check_bounce_cap times, then ADVANCES and is reported at the final gate — the same doctrine as every other spent budget here. `skip` lets a repo overlay disable one it cannot support; disabling a check is a repo decision, never a station's.",
+  "_check_note": "Post-checks compute a station's verdict from an exit code, a git object or a GitHub response instead of believing the envelope. A failure self-bounces (keyed '<station>-><station>', so it can never spend a real bounce budget) at most check_bounce_cap times, then ADVANCES and is reported at the final gate — the same doctrine as every other spent budget here. `skip` lets a repo overlay disable one it cannot support; disabling a check is a repo decision, never a station's. `suite_timeout` (seconds) bounds how long a post-check's own test-suite run may take before it counts as unrunnable; a repo whose suite genuinely outruns 900s raises this in its own .run-issue.json, and an invalid value (non-int, bool, <=0) falls back to 900 with a warning.",
   "checks": {
     "enabled": true,
-    "skip": []
+    "skip": [],
+    "suite_timeout": 900
   },
   "default_mode": "full",
   "stations": [
