@@ -1939,4 +1939,325 @@ with tempfile.TemporaryDirectory() as d:
     assert config["checks"]["suite_timeout"] == 2400, config["checks"]
 ok("an overlay setting only suite_timeout keeps checks.enabled True and checks.skip []")
 
+# --------------------------------------------------------------------------- test_cmd override (issue #27)
+#
+# `.run-issue.json` top-level `test_cmd` pins `cmd_up`'s recorded `test_cmd`, taking
+# precedence over both the derived value and any prior ledger value. Read via a
+# `stack.read_test_cmd_override(repo)` helper (per the approved plan). None of this
+# The assertions below were written RED-first, against a not-yet-implemented
+# `stack.read_test_cmd_override(repo)`; they now pass against the landed
+# implementation.
+
+
+class _Args:
+    pass
+
+
+def _up_args(run_dir, repo=None):
+    a = _Args()
+    a.run_dir, a.repo = run_dir, repo
+    return a
+
+
+def _seed_run(d, issue, repo_rel="repo", run_rel="run", extra_context=None):
+    repo, run_dir = os.path.join(d, repo_rel), os.path.join(d, run_rel)
+    os.makedirs(repo, exist_ok=True)
+    os.makedirs(run_dir, exist_ok=True)
+    ledger = Ledger(issue, ["dev"])
+    ledger.context["repo"] = repo
+    if extra_context:
+        ledger.context.update(extra_context)
+    with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(ledger.to_dict(), fh)
+    return repo, run_dir
+
+
+# -- override-reader helper: '' with no overlay, override string with one ----------
+
+with tempfile.TemporaryDirectory() as d:
+    assert stack.read_test_cmd_override(d) == "", \
+        "no .run-issue.json at all must read back as absent, not raise"
+    write(d, ".run-issue.json", json.dumps({"test_cmd": "php artisan test --configuration=x.xml"}))
+    assert stack.read_test_cmd_override(d) == "php artisan test --configuration=x.xml"
+ok("stack.read_test_cmd_override reads the top-level .run-issue.json test_cmd key, "
+   "'' when there is none")
+
+# -- null / blank / non-string values are all treated as absent --------------------
+
+for bad_value in (None, "", "   ", 5, ["php", "artisan", "test"], {"cmd": "x"}, True):
+    with tempfile.TemporaryDirectory() as d:
+        write(d, ".run-issue.json", json.dumps({"test_cmd": bad_value}))
+        assert stack.read_test_cmd_override(d) == "", \
+            f"test_cmd={bad_value!r} must read back as absent, not crash or leak through"
+ok("null, blank/whitespace-only, and non-string test_cmd overlay values are all "
+   "treated as absent, no crash")
+
+# -- no overlay, no compose file: unchanged derivation ------------------------------
+
+with tempfile.TemporaryDirectory() as d:
+    repo, run_dir = _seed_run(d, 30)
+    write(repo, "go.mod", "module x")
+    proc = subprocess.run([sys.executable, ROUTE, "stack", "up", run_dir],
+                          capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+    assert ctx["test_cmd"] == ctx["test_cmd_host"] == "go test ./..."
+ok("no overlay, no compose file: test_cmd == test_cmd_host == derived host runner "
+   "(existing behavior unchanged)")
+
+# -- overlay on the no-compose-file path: test_cmd is the override, test_cmd_host derived
+
+with tempfile.TemporaryDirectory() as d:
+    repo, run_dir = _seed_run(d, 31)
+    write(repo, "go.mod", "module x")
+    write(repo, ".run-issue.json", json.dumps({"test_cmd": "go test -run TestFoo ./..."}))
+    proc = subprocess.run([sys.executable, ROUTE, "stack", "up", run_dir],
+                          capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+    assert ctx["test_cmd"] == "go test -run TestFoo ./...", ctx["test_cmd"]
+    assert ctx["test_cmd_host"] == "go test ./...", \
+        "the override must not leak into test_cmd_host, which stays the raw derivation"
+ok("overlay test_cmd on the no-compose-file path is recorded verbatim; test_cmd_host "
+   "stays derived")
+
+# -- overlay on the full success path: override wins over build_test_cmd -----------
+
+with tempfile.TemporaryDirectory() as d:
+    repo, run_dir = _seed_run(d, 32)
+    write(repo, "docker-compose.test.yml", "services: {}\n")
+    write(repo, "go.mod", "module x")
+    write(repo, ".run-issue.json", json.dumps({"test_cmd": "custom exec cmd"}))
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+
+        def _fake_shell(cmd, **kw):
+            return subprocess.CompletedProcess([], 0, "", "")
+
+        real_shell = stack.shell
+        real_compose_config = stack.compose_config
+        real_write_override = stack.write_override
+        stack.shell = _fake_shell
+        stack.compose_config = lambda *a, **k: {"services": {"app": {"build": {"context": "."}}}}
+        stack.write_override = lambda *a, **k: False
+        try:
+            stack.cmd_up(_up_args(run_dir))
+        finally:
+            stack.shell = real_shell
+            stack.compose_config = real_compose_config
+            stack.write_override = real_write_override
+    ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+    assert ctx["stack"] == "up", ctx
+    assert ctx["test_cmd"] == "custom exec cmd", \
+        f"override must win over build_test_cmd's derivation, got {ctx['test_cmd']!r}"
+ok("overlay test_cmd on the full success path is recorded instead of the "
+   "build_test_cmd-derived command")
+
+# -- two consecutive `stack up` calls with the same override still honor it --------
+
+with tempfile.TemporaryDirectory() as d:
+    repo, run_dir = _seed_run(d, 33)
+    write(repo, "go.mod", "module x")
+    write(repo, ".run-issue.json", json.dumps({"test_cmd": "go test -short ./..."}))
+    for _ in range(2):
+        proc = subprocess.run([sys.executable, ROUTE, "stack", "up", run_dir],
+                              capture_output=True, text=True)
+        assert proc.returncode == 0, proc.stderr
+        ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+        assert ctx["test_cmd"] == "go test -short ./...", ctx["test_cmd"]
+ok("two consecutive `stack up` calls with an override both record it, not just the first")
+
+# -- degraded paths preserve a prior test_cmd instead of overwriting it with "" ----
+
+with tempfile.TemporaryDirectory() as d:
+    # lock-held path, no override, prior test_cmd already recorded.
+    repo, run_dir, other_run = os.path.join(d, "repo"), os.path.join(d, "run"), os.path.join(d, "other")
+    os.makedirs(repo)
+    os.makedirs(run_dir)
+    os.makedirs(other_run)
+    write(repo, "docker-compose.test.yml", "services: {}\n")
+    write(repo, "go.mod", "module x")
+    ledger = Ledger(34, ["dev"])
+    ledger.context.update(repo=repo, test_cmd="preexisting --configuration=x.xml")
+    with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(ledger.to_dict(), fh)
+    with open(os.path.join(other_run, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(Ledger(34, ["dev"]).to_dict(), fh)
+
+    data_d = os.path.join(d, "data")
+    project = stack.compose_project(repo, 34)
+    lock_file = os.path.join(data_d, "locks", f"{project}.lock")
+    os.makedirs(os.path.dirname(lock_file))
+    with open(lock_file, "w", encoding="utf-8") as fh:
+        json.dump({"run_dir": other_run, "issue": 34, "repo": repo, "acquired_at": time.time()}, fh)
+
+    env = dict(os.environ, CLAUDE_PLUGIN_DATA=data_d, PATH="/nonexistent")
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "stack", "up", run_dir, "--lock-timeout", "0"],
+        capture_output=True, text=True, env=env,
+    )
+    assert proc.returncode == 0, proc.stderr
+    ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+    assert ctx["stack"] == "failed"
+    assert ctx["test_cmd"] == "preexisting --configuration=x.xml", \
+        f"lock-held degraded path must preserve the prior test_cmd, got {ctx['test_cmd']!r}"
+ok("cmd_up's lock-held degraded path preserves a prior test_cmd instead of erasing it")
+
+with tempfile.TemporaryDirectory() as d:
+    # up-failed path, no override, prior test_cmd already recorded.
+    repo, run_dir = os.path.join(d, "repo"), os.path.join(d, "run")
+    os.makedirs(repo)
+    os.makedirs(run_dir)
+    write(repo, "docker-compose.test.yml", "services: {}\n")
+    write(repo, "go.mod", "module x")
+    ledger = Ledger(35, ["dev"])
+    ledger.context.update(repo=repo, test_cmd="preexisting --configuration=x.xml")
+    with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(ledger.to_dict(), fh)
+
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        real_shell, real_write_override = stack.shell, stack.write_override
+        stack.write_override = lambda *a, **k: False
+        stack.shell = lambda *a, **k: subprocess.CompletedProcess([], 1, "", "boom")
+        try:
+            stack.cmd_up(_up_args(run_dir))
+        finally:
+            stack.shell, stack.write_override = real_shell, real_write_override
+    ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+    assert ctx["stack"] == "failed"
+    assert ctx["test_cmd"] == "preexisting --configuration=x.xml", \
+        f"up-failed degraded path must preserve the prior test_cmd, got {ctx['test_cmd']!r}"
+ok("cmd_up's up-failed degraded path preserves a prior test_cmd instead of erasing it")
+
+with tempfile.TemporaryDirectory() as d:
+    # no-app-service path, no override, prior test_cmd already recorded.
+    repo, run_dir = os.path.join(d, "repo"), os.path.join(d, "run")
+    os.makedirs(repo)
+    os.makedirs(run_dir)
+    write(repo, "docker-compose.test.yml", "services: {}\n")
+    write(repo, "go.mod", "module x")
+    ledger = Ledger(36, ["dev"])
+    ledger.context.update(repo=repo, test_cmd="preexisting --configuration=x.xml")
+    with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(ledger.to_dict(), fh)
+
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        real_shell = stack.shell
+        real_compose_config = stack.compose_config
+        real_write_override = stack.write_override
+        stack.shell = lambda cmd, **kw: subprocess.CompletedProcess([], 0, "", "")
+        stack.compose_config = lambda *a, **k: {"services": {}}  # no app service found
+        stack.write_override = lambda *a, **k: False
+        try:
+            stack.cmd_up(_up_args(run_dir))
+        finally:
+            stack.shell = real_shell
+            stack.compose_config = real_compose_config
+            stack.write_override = real_write_override
+    ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+    assert ctx["stack"] == "failed"
+    assert ctx["test_cmd"] == "preexisting --configuration=x.xml", \
+        f"no-app-service degraded path must preserve the prior test_cmd, got {ctx['test_cmd']!r}"
+ok("cmd_up's no-app-service degraded path preserves a prior test_cmd instead of erasing it")
+
+# -- degraded path on a fresh ledger (no prior, no override) still records '' ------
+
+with tempfile.TemporaryDirectory() as d:
+    repo, run_dir = os.path.join(d, "repo"), os.path.join(d, "run")
+    os.makedirs(repo)
+    os.makedirs(run_dir)
+    write(repo, "docker-compose.test.yml", "services: {}\n")
+    write(repo, "go.mod", "module x")
+    ledger = Ledger(37, ["dev"])
+    ledger.context["repo"] = repo
+    with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(ledger.to_dict(), fh)
+
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        real_shell, real_write_override = stack.shell, stack.write_override
+        stack.write_override = lambda *a, **k: False
+        stack.shell = lambda *a, **k: subprocess.CompletedProcess([], 1, "", "boom")
+        try:
+            stack.cmd_up(_up_args(run_dir))
+        finally:
+            stack.shell, stack.write_override = real_shell, real_write_override
+    ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+    assert ctx["stack"] == "failed"
+    assert ctx["test_cmd"] == "", ctx["test_cmd"]
+ok("a degraded path with no prior test_cmd and no override still records '' "
+   "(nothing to preserve, no regression to a stale value either)")
+
+# -- override + a different prior value on a degraded path: override wins ----------
+
+with tempfile.TemporaryDirectory() as d:
+    repo, run_dir = os.path.join(d, "repo"), os.path.join(d, "run")
+    os.makedirs(repo)
+    os.makedirs(run_dir)
+    write(repo, "docker-compose.test.yml", "services: {}\n")
+    write(repo, "go.mod", "module x")
+    write(repo, ".run-issue.json", json.dumps({"test_cmd": "the override wins"}))
+    ledger = Ledger(38, ["dev"])
+    ledger.context.update(repo=repo, test_cmd="a stale prior value")
+    with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(ledger.to_dict(), fh)
+
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        real_shell, real_write_override = stack.shell, stack.write_override
+        stack.write_override = lambda *a, **k: False
+        stack.shell = lambda *a, **k: subprocess.CompletedProcess([], 1, "", "boom")
+        try:
+            stack.cmd_up(_up_args(run_dir))
+        finally:
+            stack.shell, stack.write_override = real_shell, real_write_override
+    ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+    assert ctx["test_cmd"] == "the override wins", ctx["test_cmd"]
+ok("an override on a degraded path wins over both the derived value and the prior "
+   "ledger value")
+
+# -- malformed .run-issue.json: `stack up` still exits 0, derives test_cmd, warns --
+
+with tempfile.TemporaryDirectory() as d:
+    repo, run_dir = _seed_run(d, 39)
+    write(repo, "go.mod", "module x")
+    write(repo, ".run-issue.json", "{ not valid json")
+    proc = subprocess.run([sys.executable, ROUTE, "stack", "up", run_dir],
+                          capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+    assert ctx["test_cmd"] == "go test ./...", \
+        "a malformed overlay must fall back to the derived test_cmd, not crash the run"
+    assert proc.stderr.strip() != "", "a malformed overlay must warn on stderr"
+ok("a malformed .run-issue.json leaves `stack up` exiting 0 with a derived test_cmd, "
+   "warning on stderr")
+
+# --------------------------------------------------------------------------- run_suite: stack=failed is unconditionally unrunnable
+
+ledger = _FakeLedger(stack="failed", test_cmd="php artisan test --configuration=x.xml")
+shell_calls = []
+real_checks_shell = checks.shell
+checks.shell = _stub_shell(shell_calls)
+try:
+    code, detail = checks.run_suite(ledger, "/repo")
+finally:
+    checks.shell = real_checks_shell
+assert code is None, \
+    "stack=failed with a non-empty test_cmd must still be unrunnable, never a real exit code"
+assert not shell_calls, "stack=failed must never shell out, override test_cmd or not"
+ok("run_suite treats stack=failed as unconditionally unrunnable, even with a non-empty "
+   "test_cmd left over from a prior successful run")
+
+# -- regression guard: stack=none with a non-empty test_cmd still runs (host runner) --
+
+ledger = _FakeLedger(stack="none", test_cmd="go test ./...")
+shell_calls = []
+checks.shell = _stub_shell(shell_calls)
+try:
+    code, detail = checks.run_suite(ledger, "/repo")
+finally:
+    checks.shell = real_checks_shell
+assert code == 0 and detail == "ok", (code, detail)
+assert shell_calls and shell_calls[0]["cmd"] == "go test ./...", \
+    "the new stack=failed guard must not swallow the legitimate stack=none host-runner case"
+ok("run_suite with stack=none and a non-empty test_cmd still runs it — the new "
+   "stack=failed guard must not catch this legitimate host-runner case")
+
 print(f"\n{passed} checks passed")

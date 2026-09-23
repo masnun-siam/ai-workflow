@@ -175,6 +175,11 @@ over `run-engine/config.json`. Do not create one during setup. Mention it exists
 — the defaults are stack-neutral and the override only earns its keep once they have run
 something and found a rule they want changed.
 
+A repo may also pin a top-level `test_cmd` string in `.run-issue.json` to override the
+derived test command outright — useful when the derivation can't express a repo's real
+invocation (e.g. an extra flag a host or container runner needs). An invalid value (not a
+non-empty string) is ignored with a warning; it never fails `stack up`.
+
 ## Step 7 — Report and hand back
 
 Tell the user, in this order:

@@ -20,6 +20,10 @@ import sys
 
 OK, FAILED, USAGE = 0, 1, 2
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+GLOBAL_CONFIG = os.path.join(HERE, "config.json")
+OVERLAY_NAME = ".run-issue.json"
+
 
 def data_dir() -> str:
     """Where plugin state lives, outside the plugin install directory itself so it
@@ -99,6 +103,30 @@ def write_json(path: str, data) -> None:
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2, ensure_ascii=False)
         fh.write("\n")
+
+
+def deep_merge(base: dict, overlay: dict) -> dict:
+    """Dicts merge; lists (and scalars) REPLACE.
+
+    Lists replace deliberately: a repo overlay that narrows a signal's globs must
+    narrow it, not union with the global defaults and silently widen it.
+    """
+    out = dict(base)
+    for key, value in overlay.items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = deep_merge(out[key], value)
+        else:
+            out[key] = value
+    return out
+
+
+def load_config(repo: str | None) -> dict:
+    config = read_json(GLOBAL_CONFIG)
+    if repo:
+        overlay_path = os.path.join(repo, OVERLAY_NAME)
+        if os.path.isfile(overlay_path):
+            config = deep_merge(config, read_json(overlay_path))
+    return config
 
 
 # --------------------------------------------------------------------------- ledger

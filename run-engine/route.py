@@ -62,9 +62,13 @@ import stack  # noqa: E402
 import threads  # noqa: E402
 import worktree  # noqa: E402
 from shared import (  # noqa: E402
+    GLOBAL_CONFIG,
+    OVERLAY_NAME,
     data_dir,
+    deep_merge,
     die,
     ledger_path,
+    load_config,
     load_ledger,
     read_json,
     save_ledger,
@@ -72,33 +76,7 @@ from shared import (  # noqa: E402
 )
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-GLOBAL_CONFIG = os.path.join(HERE, "config.json")
-OVERLAY_NAME = ".run-issue.json"
 PLUGIN_ROOT = os.path.dirname(HERE)
-
-
-def deep_merge(base: dict, overlay: dict) -> dict:
-    """Dicts merge; lists (and scalars) REPLACE.
-
-    Lists replace deliberately: a repo overlay that narrows a signal's globs must
-    narrow it, not union with the global defaults and silently widen it.
-    """
-    out = dict(base)
-    for key, value in overlay.items():
-        if isinstance(value, dict) and isinstance(out.get(key), dict):
-            out[key] = deep_merge(out[key], value)
-        else:
-            out[key] = value
-    return out
-
-
-def load_config(repo: str | None) -> dict:
-    config = read_json(GLOBAL_CONFIG)
-    if repo:
-        overlay_path = os.path.join(repo, OVERLAY_NAME)
-        if os.path.isfile(overlay_path):
-            config = deep_merge(config, read_json(overlay_path))
-    return config
 
 
 # --------------------------------------------------------------------------- guards

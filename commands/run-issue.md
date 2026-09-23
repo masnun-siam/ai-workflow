@@ -444,11 +444,12 @@ the three that matter read straight off the ledger:
 | ledger | what happened | what you do |
 |---|---|---|
 | `stack=up` | the stack is running | nothing; `test_cmd` is live |
-| `stack=none` | no test compose file — most repos | nothing; `test_cmd == test_cmd_host` |
+| `stack=none` | no test compose file — most repos | nothing; `test_cmd == test_cmd_host`, unless a repo pins `test_cmd` via `.run-issue.json` |
 | `stack=failed` | it would not come up, twice | carry `tests_unverified` **prominently** into the Gate 2 report |
 
 On `stack=failed` every station is told explicitly that there is no runner, records that
-in its envelope, and does not fabricate a pass. An unverified run that says so is useful;
+in its envelope, and does not fabricate a pass — a non-empty `test_cmd` in that state (a
+prior pin an override left behind) must not be handed to a station as if the suite ran. An unverified run that says so is useful;
 a run that died at phase 2.5 with a half-built stack is not.
 
 `api_url=none` and `web_url=none` are likewise first-class, not a failure — each is what
