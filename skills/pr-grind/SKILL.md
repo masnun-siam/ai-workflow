@@ -166,6 +166,15 @@ not fix this round**:
      - `outcome: fixed` or `flake-rerun` → re-poll `aiw ci status <pr>
        --watch`. Green → continue this round normally. Still red →
        stop as below.
+     - `outcome: rerun-denied` → the rerun itself was refused, not the check.
+       Resolve the repo root via `git worktree list` (same rule as handing
+       `run-fixer` a working directory, below). If there is no `ci-attempt`
+       already recorded for this SHA **and** `git log -1 --pretty=%s` does
+       not already match a retrigger marker, run
+       `git commit --allow-empty -m "chore: retrigger CI (rerun denied, confirmed unrelated flake)"`
+       then `git push`, and re-poll `aiw ci status <pr> --watch`. Green →
+       continue this round normally. Still red → stop as below. If the push
+       is refused instead, fall through to the stop below — do not retry.
      - `outcome: cannot-fix`, or a `Needs human confirmation` section →
        stop as below, and include `run-ci`'s root cause in the Slack post.
    - **Attempt already recorded for this SHA** → do not dispatch again. Stop.
