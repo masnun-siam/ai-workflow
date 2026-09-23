@@ -1417,10 +1417,11 @@ import route  # noqa: E402
 
 
 class _FakeLedger:
-    """A ledger stand-in carrying only what run_suite reads: .context."""
+    """A ledger stand-in carrying only what run_suite/cmd_open read: .context, .issue."""
 
-    def __init__(self, **context):
+    def __init__(self, issue=28, **context):
         self.context = context
+        self.issue = issue
 
 
 def _stub_shell(calls):
@@ -1576,5 +1577,314 @@ with tempfile.TemporaryDirectory() as d:
     assert config["checks"]["skip"] == [], config["checks"]
     assert config["checks"]["suite_timeout"] == 2400, config["checks"]
 ok("an overlay setting only suite_timeout keeps checks.enabled True and checks.skip []")
+
+# --------------------------------------------------------------------------- pr.push_timeout / cmd_open push timeout override (issue #28)
+
+import pr  # noqa: E402
+
+assert pr.push_timeout({}) == 600
+ok("push_timeout with no overlay resolves to 600")
+
+assert pr.push_timeout({"pr": {"push_timeout": 1800}}) == 1800
+ok("push_timeout with a {pr: {push_timeout: 1800}} overlay resolves to 1800")
+
+assert pr.push_timeout(route.load_config(None)) == 600
+ok("route.load_config(None) on the real shipped config.json resolves push_timeout to 600 — default agreement")
+
+for pr_cfg in ({}, None):
+    assert pr.push_timeout({"pr": pr_cfg}) == 600, pr_cfg
+ok("pr: {} and pr: null both fall back to 600 without raising")
+
+assert pr.push_timeout({"pr": {"push_timeout": None}}) == 600
+ok("pr.push_timeout=null falls back to 600")
+
+for value in (0, -1):
+    buf = _io.StringIO()
+    with contextlib.redirect_stderr(buf):
+        resolved = pr.push_timeout({"pr": {"push_timeout": value}})
+    assert resolved == 600, f"{value} -> {resolved}"
+    assert "push_timeout" in buf.getvalue(), buf.getvalue()
+    assert "600" in buf.getvalue(), buf.getvalue()
+ok("boundary: push_timeout 0 and -1 are rejected with a stderr warning naming push_timeout and 600, fall back to 600")
+
+assert pr.push_timeout({"pr": {"push_timeout": 1}}) == 1
+ok("push_timeout=1 is accepted as-is")
+
+for bad in ("600", 600.5, 600.0, [], True, False):
+    buf = _io.StringIO()
+    with contextlib.redirect_stderr(buf):
+        resolved = pr.push_timeout({"pr": {"push_timeout": bad}})
+    assert resolved == 600, f"{bad!r} -> {resolved}"
+    assert "600" in buf.getvalue(), (bad, buf.getvalue())
+ok("string/float/list values and bool True/False (an int subclass) fall back to 600 with a stderr warning")
+
+buf = _io.StringIO()
+with contextlib.redirect_stderr(buf):
+    resolved = pr.push_timeout({"pr": "nope"})
+assert resolved == 600, resolved
+ok("pr: 'nope' (not a dict) falls back to 600 without raising")
+
+
+def _link_ok(repo_dir, issue, branch):
+    return True
+
+
+class _Args:
+    def __init__(self, run_dir, repo=None, base=None, draft=False, title=None, body_file=None):
+        self.run_dir = run_dir
+        self.repo = repo
+        self.base = base
+        self.draft = draft
+        self.title = title
+        self.body_file = body_file
+
+
+def _fake_load_ledger(run_dir):
+    return _FakeLedger(branch="issue-28-x", base_branch="master", repo="/repo")
+
+
+real_pr_run = pr.run
+real_pr_link_branch = pr.link_branch
+real_pr_load_ledger = pr.load_ledger
+real_pr_record = pr.record
+real_pr_linked_ok = pr.linked_ok
+real_pr_closes_ok = pr.closes_ok
+real_pr_gh_json = pr.gh_json
+
+
+def _stub_common():
+    pr.link_branch = _link_ok
+    pr.load_ledger = _fake_load_ledger
+    pr.record = lambda run_dir, ledger, **pairs: pairs
+
+
+def _restore_common():
+    pr.run = real_pr_run
+    pr.link_branch = real_pr_link_branch
+    pr.load_ledger = real_pr_load_ledger
+    pr.record = real_pr_record
+    pr.linked_ok = real_pr_linked_ok
+    pr.closes_ok = real_pr_closes_ok
+    pr.gh_json = real_pr_gh_json
+
+
+try:
+    calls = []
+
+    def _capture_run(argv, cwd=None, timeout=None, env=None):
+        calls.append({"argv": argv, "timeout": timeout})
+        if argv[:2] == ["git", "push"]:
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        return subprocess.CompletedProcess(argv, 1, "", "boom")
+
+    pr.run = _capture_run
+    _stub_common()
+    d = "irrelevant"
+    args = _Args(d, body_file="body.md")
+    try:
+        pr.cmd_open(args)
+    except SystemExit:
+        pass
+    push_calls = [c for c in calls if c["argv"][:2] == ["git", "push"]]
+    assert push_calls and push_calls[0]["timeout"] == 600, push_calls
+finally:
+    _restore_common()
+ok("cmd_open with no pr overlay calls run() for the push with timeout=600")
+
+try:
+    calls = []
+
+    def _capture_run(argv, cwd=None, timeout=None, env=None):
+        calls.append({"argv": argv, "timeout": timeout})
+        if argv[:2] == ["git", "push"]:
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        return subprocess.CompletedProcess(argv, 1, "", "boom")
+
+    pr.run = _capture_run
+    _stub_common()
+    with tempfile.TemporaryDirectory() as d:
+        write(d, ".run-issue.json", json.dumps({"pr": {"push_timeout": 1800}}))
+        args = _Args(d, repo=d, body_file="body.md")
+        try:
+            pr.cmd_open(args)
+        except SystemExit:
+            pass
+    push_calls = [c for c in calls if c["argv"][:2] == ["git", "push"]]
+    assert push_calls and push_calls[0]["timeout"] == 1800, push_calls
+finally:
+    _restore_common()
+ok("cmd_open with a {pr: {push_timeout: 1800}} overlay calls run() for the push with timeout=1800")
+
+try:
+    def _run_124(argv, cwd=None, timeout=None, env=None):
+        if argv[:2] == ["git", "push"]:
+            return subprocess.CompletedProcess(argv, 124, "", "timed out after 600s")
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    pr.run = _run_124
+    _stub_common()
+    args = _Args("irrelevant", body_file="body.md")
+    buf = _io.StringIO()
+    with contextlib.redirect_stderr(buf):
+        try:
+            pr.cmd_open(args)
+            raised = False
+        except SystemExit as exc:
+            raised = True
+            code = exc.code
+    assert raised and code == 1
+    msg = buf.getvalue()
+    assert "600" in msg, msg
+    assert "push failed:" not in msg, msg
+    assert "still running" in msg or "still be running" in msg, msg
+finally:
+    _restore_common()
+ok("push returncode 124 exits 1 with a message naming the effective timeout, distinct from 'push failed:'")
+
+try:
+    def _run_124(argv, cwd=None, timeout=None, env=None):
+        if argv[:2] == ["git", "push"]:
+            return subprocess.CompletedProcess(argv, 124, "", "timed out after 1800s")
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    pr.run = _run_124
+    _stub_common()
+    with tempfile.TemporaryDirectory() as d:
+        write(d, ".run-issue.json", json.dumps({"pr": {"push_timeout": 1800}}))
+        args = _Args(d, repo=d, body_file="body.md")
+        buf = _io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            try:
+                pr.cmd_open(args)
+                raised = False
+            except SystemExit as exc:
+                raised = True
+        assert raised
+        msg = buf.getvalue()
+        assert "1800" in msg, msg
+finally:
+    _restore_common()
+ok("the 124 timeout message reflects the overridden 1800s when a pr overlay is present")
+
+try:
+    def _run_1(argv, cwd=None, timeout=None, env=None):
+        if argv[:2] == ["git", "push"]:
+            return subprocess.CompletedProcess(argv, 1, "", "pre-push hook rejected: lint failed")
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    pr.run = _run_1
+    _stub_common()
+    args = _Args("irrelevant", body_file="body.md")
+    buf = _io.StringIO()
+    with contextlib.redirect_stderr(buf):
+        try:
+            pr.cmd_open(args)
+            raised = False
+        except SystemExit:
+            raised = True
+    assert raised
+    msg = buf.getvalue()
+    assert msg.strip() == "push failed:\npre-push hook rejected: lint failed", repr(msg)
+finally:
+    _restore_common()
+ok("push returncode 1 with hook stderr exits 1 with the unchanged 'push failed:\\n<stderr>' text")
+
+try:
+    def _run_1_empty_stderr(argv, cwd=None, timeout=None, env=None):
+        if argv[:2] == ["git", "push"]:
+            return subprocess.CompletedProcess(argv, 1, "stdout fallback text", "")
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    pr.run = _run_1_empty_stderr
+    _stub_common()
+    args = _Args("irrelevant", body_file="body.md")
+    buf = _io.StringIO()
+    with contextlib.redirect_stderr(buf):
+        try:
+            pr.cmd_open(args)
+            raised = False
+        except SystemExit:
+            raised = True
+    assert raised
+    msg = buf.getvalue()
+    assert msg.strip() == "push failed:\nstdout fallback text", repr(msg)
+finally:
+    _restore_common()
+ok("push returncode 1 with empty stderr falls back to stdout, as today")
+
+try:
+    def _run_127(argv, cwd=None, timeout=None, env=None):
+        if argv[:2] == ["git", "push"]:
+            return subprocess.CompletedProcess(argv, 127, "", "git: command not found")
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    pr.run = _run_127
+    _stub_common()
+    args = _Args("irrelevant", body_file="body.md")
+    buf = _io.StringIO()
+    with contextlib.redirect_stderr(buf):
+        try:
+            pr.cmd_open(args)
+            raised = False
+        except SystemExit:
+            raised = True
+    assert raised
+    msg = buf.getvalue()
+    assert msg.strip() == "push failed:\ngit: command not found", repr(msg)
+    assert "still running" not in msg, msg
+finally:
+    _restore_common()
+ok("push returncode 127 takes the generic rejection branch, not the timeout branch")
+
+for rc, out, err in ((124, "", "timed out after 600s"), (1, "", "rejected")):
+    try:
+        record_calls = []
+
+        def _run_rc(argv, cwd=None, timeout=None, env=None, _rc=rc, _out=out, _err=err):
+            if argv[:2] == ["git", "push"]:
+                return subprocess.CompletedProcess(argv, _rc, _out, _err)
+            return subprocess.CompletedProcess(argv, 0, "", "")
+
+        pr.run = _run_rc
+        _stub_common()
+        pr.record = lambda run_dir, ledger, **pairs: record_calls.append(pairs)
+        args = _Args("irrelevant", body_file="body.md")
+        with contextlib.redirect_stderr(_io.StringIO()):
+            try:
+                pr.cmd_open(args)
+            except SystemExit:
+                pass
+        assert record_calls == [], record_calls
+    finally:
+        _restore_common()
+ok("no ledger write (pr.record) occurs after either a 124 timeout or a plain rejection")
+
+try:
+    calls = []
+
+    def _run_success(argv, cwd=None, timeout=None, env=None):
+        calls.append(argv)
+        if argv[:2] == ["git", "push"]:
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        if argv[:2] == ["gh", "pr"] and "create" in argv:
+            return subprocess.CompletedProcess(argv, 0, "https://github.com/o/r/pull/1\n", "")
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    pr.run = _run_success
+    _stub_common()
+    pr.gh_json = lambda args, cwd=None, timeout=120: (
+        (1, None) if args[:2] == ["pr", "view"] else ("o/r", None)
+    )
+    pr.linked_ok = lambda *a, **k: True
+    pr.closes_ok = lambda *a, **k: True
+    args = _Args("irrelevant", body_file="body.md")
+    try:
+        pr.cmd_open(args)
+    except SystemExit:
+        pass
+    assert any(argv[:2] == ["gh", "pr"] and "create" in argv for argv in calls), calls
+finally:
+    _restore_common()
+ok("a successful push (returncode 0) proceeds to gh pr create")
 
 print(f"\n{passed} checks passed")

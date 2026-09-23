@@ -34,7 +34,9 @@ def suite_timeout(config: dict | None = None) -> int:
     SUITE_TIMEOUT for anything not a genuine positive int — `bool` is an `int`
     subclass in Python, so it is explicitly excluded rather than silently accepted
     as 0/1 seconds."""
-    checks_cfg = (config or {}).get("checks") or {}
+    checks_cfg = (config or {}).get("checks")
+    if not isinstance(checks_cfg, dict):
+        checks_cfg = {}
     value = checks_cfg.get("suite_timeout", SUITE_TIMEOUT)
     if isinstance(value, int) and not isinstance(value, bool) and value > 0:
         return value
