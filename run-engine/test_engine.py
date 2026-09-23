@@ -439,9 +439,17 @@ assert normalized_bullet.rstrip(".").endswith(
 ok("the 'never re-dispatch run-dev with tampered tests' invariant survives as the last sentence")
 
 assert ("stderr" in bullet), "fallback must reference stderr / paths from stderr"
+# Scope the wildcard check to the fallback text itself (after the primary
+# `git checkout` instruction), not the whole bullet — the bullet's own
+# markdown bold header (`**exit 6 ...**`) contains literal asterisks that
+# are unrelated to a shell wildcard and must not trip this check.
+fallback_text = bullet[checkout_idx:]
 for wildcard in ["-- .", "--all", " -- *", "-- *"]:
-    assert wildcard not in bullet, f"fallback must not use a blanket wildcard ({wildcard!r})"
-assert bullet.count("*") == 0, "fallback must not use a bare wildcard"
+    assert wildcard not in fallback_text, f"fallback must not use a blanket wildcard ({wildcard!r})"
+# Strip markdown emphasis (`**bold**` / `*italic*`) before checking for a bare
+# shell-glob asterisk — emphasis markers are prose formatting, not wildcards.
+no_emphasis = _re.sub(r"\*\*[^*]+\*\*|\*[^*]+\*", "", fallback_text)
+assert "*" not in no_emphasis, "fallback must not use a bare wildcard"
 ok("fallback is scoped to paths from stderr, no blanket wildcard")
 
 full_md = open(RUN_ISSUE_MD).read()
