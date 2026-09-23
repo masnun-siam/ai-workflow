@@ -97,8 +97,15 @@ If it's stale, record it as superseded in the state file and keep waiting.
   (`gh api repos/{o}/{r}/pulls/{n}/comments --paginate`, filtered to this
   review's comments) with severity read from the comment body if present.
   Trust the bot's label; do not re-classify severity yourself.
-- **More than one** → take the newest only; note the earlier one(s) as
-  superseded in the state file (don't act on stale rounds).
+- **More than one** → write both `gh api` responses to files and run
+  `aiw review pick --reviews <reviews.json> --comments <comments.json>`; its
+  `selected` is this round's verdict, and record every id in `superseded` as
+  superseded in the state file (don't act on stale rounds). Plain newest-wins
+  is not the whole rule: a comment-carrying review beats a same-commit,
+  same-window empty rubber stamp, because a bot re-run or a stray re-approve
+  landing seconds after the real review must not discard its findings.
+  Different-commit reviews, and a round where every review genuinely carries
+  comments, still resolve to newest — the rule is narrowed, not replaced.
 
 ## Step 2 — Exit check
 
