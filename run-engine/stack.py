@@ -568,10 +568,15 @@ def read_test_cmd_override(repo: str) -> str:
     try:
         config = load_config(repo)
     except SystemExit:
-        warn(f"could not read {OVERLAY_NAME} in {repo}; ignoring test_cmd override")
+        warn(f"could not load config for {repo}; ignoring test_cmd override")
         return ""
     value = config.get("test_cmd")
-    return value.strip() if isinstance(value, str) and value.strip() else ""
+    if value is None:
+        return ""
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    warn(f"test_cmd={value!r} is invalid, ignoring override")
+    return ""
 
 
 def build_test_cmd(compose_prefix: str, app: str, runner: str) -> str:
@@ -632,7 +637,7 @@ def cmd_up(args) -> None:
             # makes `stack rebuild` a no-op, so no phase has to special-case "no Docker".
             app_url="none", api_url="none", web_url="none",
             source_mounted="yes", compose_prefix="",
-            tests_unverified="" if runner else "no test runner detected on the host",
+            tests_unverified="" if (runner or override) else "no test runner detected on the host",
         ))
         return
 
