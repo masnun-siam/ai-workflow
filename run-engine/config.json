@@ -8,6 +8,10 @@
     "skip": [],
     "suite_timeout": 900
   },
+  "_pr_note": "`pr.push_timeout` (seconds) bounds `route pr open`'s `git push`, which runs any pre-push hook (lint/tests/etc) — it must outlast a real hook, not just the network round-trip. An invalid value (non-int, bool, <=0) falls back to 600 with a warning.",
+  "pr": {
+    "push_timeout": 600
+  },
   "default_mode": "full",
   "stations": [
     "researcher",

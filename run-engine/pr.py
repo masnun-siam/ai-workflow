@@ -16,6 +16,24 @@ from __future__ import annotations
 
 from shared import die, gh_json, load_ledger, print_written, record, repo_of, run, warn
 
+PUSH_TIMEOUT = 600  # seconds; must outlast a real pre-push hook (lint/tests/etc)
+
+
+def push_timeout(config: dict | None = None) -> int:
+    """Resolve the push timeout from `pr.push_timeout`, falling back to
+    PUSH_TIMEOUT for anything not a genuine positive int — `bool` is an `int`
+    subclass in Python, so it is explicitly excluded rather than silently accepted
+    as 0/1 seconds."""
+    pr_cfg = (config or {}).get("pr")
+    if not isinstance(pr_cfg, dict):
+        pr_cfg = {}
+    value = pr_cfg.get("push_timeout", PUSH_TIMEOUT)
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    warn(f"pr.push_timeout={value!r} is invalid, falling back to {PUSH_TIMEOUT}")
+    return PUSH_TIMEOUT
+
+
 LINK_MUTATION = """
 mutation($i:ID!,$b:String!,$r:ID!,$o:GitObjectID!){
   createLinkedBranch(input:{issueId:$i, name:$b, repositoryId:$r, oid:$o}){ linkedBranch{ id } }
@@ -75,7 +93,15 @@ def cmd_open(args) -> None:
 
     linked = link_branch(repo_dir, issue, branch)
 
-    proc = run(["git", "push", "-u", "origin", branch], cwd=repo_dir, timeout=600)
+    import route  # local: route imports pr at module level, so this stays lazy
+
+    config = route.load_config(repo_dir)
+    timeout = push_timeout(config)
+    proc = run(["git", "push", "-u", "origin", branch], cwd=repo_dir, timeout=timeout)
+    if proc.returncode == 124:
+        # Distinct from the rejection branch below: a 124 means the timeout fired,
+        # not that the hook rejected the push — the push may still be running.
+        die(1, f"push timed out after {timeout}s; the push may still be running on the remote")
     if proc.returncode != 0:
         # Exits 1 with the hook's own words: the orchestrator triages whether the
         # failing test is in the test root, in this PR's diff, or neither.
