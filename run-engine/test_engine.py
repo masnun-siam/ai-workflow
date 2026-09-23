@@ -465,21 +465,21 @@ def _normalize(s):
     return " ".join(s.split())
 
 
-bounce_sdet_bullet_start = full_md.index("**`bounce(sdet)`** — dev disputes a test.")
-advance_bullet_start = full_md.index("**`advance(…)`** — green.")
-escalate_bullet_start = full_md.index("**`escalate`** — the dev budget is spent.")
+bounce_sdet_bullet_start = full_md.index("- **`bounce(sdet)`** — dev disputes a test.")
+advance_bullet_start = full_md.index("- **`advance(…)`** — green.")
+escalate_bullet_start = full_md.index("- **`escalate`** — the dev budget is spent.")
 test_ownership_start = full_md.index("### Test ownership")
 test_ownership_end = full_md.index("### State", test_ownership_start)
 
 EXPECTED_BOUNCE_SDET = _normalize("""
-**`bounce(sdet)`** — dev disputes a test. Dispatch `run-sdet` with the findings; it
+- **`bounce(sdet)`** — dev disputes a test. Dispatch `run-sdet` with the findings; it
      amends or rejects and commits. Move `sdet_sha` forward, then re-dispatch `run-dev`.
 """)
 EXPECTED_ADVANCE = _normalize("""
-**`advance(…)`** — green. Continue.
+- **`advance(…)`** — green. Continue.
 """)
 EXPECTED_ESCALATE_PREFIX = _normalize(
-    "**`escalate`** — the dev budget is spent. Record"
+    "- **`escalate`** — the dev budget is spent. Record"
 )
 EXPECTED_TEST_OWNERSHIP = _normalize(full_md[test_ownership_start:test_ownership_end])
 
