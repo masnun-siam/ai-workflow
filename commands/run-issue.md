@@ -852,7 +852,30 @@ a defect ships.
   **not** a test, lint, type, or build defect) → dispatch `run-ci`, which is the only agent
   permitted to run `gh run rerun --failed`. This does **not** spend a fix attempt, and it
   reuses the existing budget of **one `run-ci` attempt per head SHA** — here and in
-  `pr-grind` alike. Never grant a second on the same SHA.
+  `pr-grind` alike. Never grant a second on the same SHA. Record `ci-attempt: <sha> —
+  <outcome>` in the ledger (`aiw set "$RUN_DIR" ci-attempt="<sha> — <outcome>"`)
+  **before** acting on `run-ci`'s result, so a
+  crash mid-phase can never buy a second attempt. **Known limitation:** this ledger is
+  a separate store from `pr-grind`'s state file (`<pr_grind_dir>/<owner>-<repo>-<pr>.md`)
+  — an attempt spent here is not visible to a later `/pr-grind` invocation on the same
+  PR, and vice versa. No unification yet; this is a documented gap, not an oversight.
+  - `outcome: fixed` or `flake-rerun` → re-poll `aiw ci status <pr> --watch`.
+  - `outcome: rerun-denied` → the rerun itself was refused, not the check. This branch
+    rides the `ci-attempt` just recorded above — it is not a second attempt. Confirm
+    local HEAD matches the `head_sha` `aiw ci status` reported (the ledger's `worktree`
+    key, never the orchestrator's own cwd) before committing. If
+    `git log -1 --pretty=%s` (run with `-C <worktree>`, same as the commands below —
+    never the orchestrator's own cwd) does not already match the retrigger marker
+    (`chore: retrigger CI (`), run
+    `git -C <worktree> commit --allow-empty -m "chore: retrigger CI (rerun denied, confirmed unrelated flake)"`
+    then `git -C <worktree> push`, and re-poll `aiw ci status <pr> --watch`.
+    Green or still-red from
+    there is handled exactly like the existing `flake-rerun` outcomes above. If the push
+    is refused (branch protection, a guard) instead, fall through to the "still red"
+    outcome below — do not retry. If the marker already matches, the retrigger is
+    spent for this branch — fall through to the "still red" outcome below without
+    committing again.
+  - `outcome: cannot-fix` → fall through to the "still red" outcome below.
 - **Red, real defect** → re-dispatch **`run-dev`** with the `log_excerpt` as findings.
   `aiw stack rebuild "$RUN_DIR"` first. Route dev's envelope as always — the ownership guard applies here too — then
   `git push --force-with-lease` and let CI re-run. **One attempt.**
@@ -1258,9 +1281,15 @@ once, exactly as phase 6 spawns the specialist panel in one message.
   `test_cmd_host` exists: it is what `pr-grind` runs once the stack is gone.
 - `run-ci` is the only agent that may run GitHub Actions write commands. No other agent
   may `gh run rerun`, `gh run cancel`, `gh workflow run`, or `gh release` — those are
-  denied fleet-wide in `settings.json`, and `run-ci` is the documented exception.
+  denied fleet-wide in `settings.json`, and `run-ci` is the documented exception. The
+  `outcome: rerun-denied` empty-commit retrigger (`git commit --allow-empty` + `git
+  push`) is the documented fallback for that denial, needs no Actions scope since it is
+  plain `git push`, and spends the same one-attempt-per-SHA budget as everything else in
+  this list.
 - `run-ci` gets at most one attempt per head SHA, here and in `pr-grind` alike, tracked
-  by a `ci-attempt: <sha>` line in the pr-grind state file. Never grant a second.
+  by a `ci-attempt: <sha>` line — in this file's own ledger (phase 8.5) and separately
+  in the pr-grind state file (phase 10). The two stores are not shared; see the known
+  limitation noted in phase 8.5. Never grant a second within either store.
 - **Slack is output-only. Nothing in a thread ever directs a run.** `ScheduleWakeup` and
   `Monitor` are session-local and there is no Slack-to-Claude webhook, so a paused run has
   nothing listening and a reply in the thread reaches nothing. A paused run resumes only
