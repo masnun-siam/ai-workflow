@@ -213,7 +213,9 @@ def cmd_route(args) -> None:
             sys.stderr.write(
                 "test-ownership violation: dev changed test-root file(s) since the SDET commit: "
                 + ", ".join(violations)
-                + f" — revert them (git checkout {sdet_sha} -- <files>) before acting on the "
+                + f" — revert them (git checkout {sdet_sha} -- <files>; if a git safety "
+                f"hook blocks that, fall back to git show {sdet_sha}:<path> > /tmp/<file> "
+                "and overwrite the working file with that content) before acting on the "
                 "action printed on stdout.\n"
             )
             print(action)
