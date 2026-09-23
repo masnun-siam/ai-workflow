@@ -33,7 +33,10 @@ Two header keys added by the CI escalation and the paused stop:
 
 - `ci-attempt: <sha> — <outcome>` — one line per head SHA that `run-ci` was
   dispatched for. Its presence is what makes the escalation one-shot, so write
-  it *before* acting on `run-ci`'s result, never after.
+  it *before* acting on `run-ci`'s result, never after. **Known limitation:**
+  this state file is a separate store from `/run-issue` phase 8.5's run ledger
+  (`aiw set "$RUN_DIR" ci-attempt=...`) — an attempt spent in one is not visible
+  to the other. No unification yet; this is a documented gap, not an oversight.
 - `paused: <ISO8601> — <reason>` — set by Step 8. Its presence means this run
   stopped for a human and is **not** running: nothing is polling it, and it
   resumes only when a human re-invokes `/pr-grind` on the thread.
@@ -179,6 +182,8 @@ not fix this round**:
        status <pr> --watch`. Green →
        continue this round normally. Still red → stop as below. If the push
        is refused instead, fall through to the stop below — do not retry.
+       If the marker already matches, the retrigger is spent for this SHA —
+       stop as below without committing again.
      - `outcome: cannot-fix`, or a `Needs human confirmation` section →
        stop as below, and include `run-ci`'s root cause in the Slack post.
    - **Attempt already recorded for this SHA** → do not dispatch again. Stop.
