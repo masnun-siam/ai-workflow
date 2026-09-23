@@ -19,7 +19,19 @@ import re
 import threading
 import time
 
-from shared import data_dir, die, load_ledger, print_written, record, repo_of, run, shell, warn
+from shared import (
+    OVERLAY_NAME,
+    data_dir,
+    die,
+    load_config,
+    load_ledger,
+    print_written,
+    record,
+    repo_of,
+    run,
+    shell,
+    warn,
+)
 
 UP_TIMEOUT = 600  # seconds; the prose's `timeout: 600000` in milliseconds
 
@@ -545,6 +557,23 @@ def resolve_port(compose_prefix: str, repo: str, service: str, container_port: s
     return port or None
 
 
+def read_test_cmd_override(repo: str) -> str:
+    """The pinned `test_cmd` from `.run-issue.json`, or '' when there is none.
+
+    Only a non-empty string counts as a pin — null, blank/whitespace, and any
+    non-string value all read back as absent rather than crashing or leaking
+    through. A malformed overlay must not fail `stack up` (contractually
+    exit-0), so a bad load just warns and falls back to ''.
+    """
+    try:
+        config = load_config(repo)
+    except SystemExit:
+        warn(f"could not read {OVERLAY_NAME} in {repo}; ignoring test_cmd override")
+        return ""
+    value = config.get("test_cmd")
+    return value.strip() if isinstance(value, str) and value.strip() else ""
+
+
 def build_test_cmd(compose_prefix: str, app: str, runner: str) -> str:
     """`exec` against the already-running container, never `run` — a `run` spawns a
     second container per invocation and (without --rm) leaks them."""
@@ -585,6 +614,9 @@ def cmd_up(args) -> None:
     repo = repo_of(ledger, args.repo)
     test_root = ledger.context.get("test_root")
 
+    override = read_test_cmd_override(repo)
+    prior = ledger.context.get("test_cmd") or ""
+
     runner = detect_host_runner(repo, test_root)
     if not runner:
         warn("no host test runner detected — stations will be told there is none")
@@ -595,7 +627,7 @@ def cmd_up(args) -> None:
         # expected to work exactly as well on them.
         print_written(record(
             args.run_dir, ledger,
-            stack="none", test_cmd_host=runner or "", test_cmd=runner or "",
+            stack="none", test_cmd_host=runner or "", test_cmd=override or runner or "",
             # source_mounted=yes with no stack is not a claim about a mount: it is what
             # makes `stack rebuild` a no-op, so no phase has to special-case "no Docker".
             app_url="none", api_url="none", web_url="none",
@@ -611,7 +643,7 @@ def cmd_up(args) -> None:
         who = holder.get("run_dir") or "another run"
         print_written(record(
             args.run_dir, ledger,
-            stack="failed", compose_prefix="", test_cmd="", test_cmd_host=runner,
+            stack="failed", compose_prefix="", test_cmd=override or prior, test_cmd_host=runner,
             app_url="none", api_url="none", web_url="none", source_mounted="no",
             tests_unverified=f"stack lock held by {who}; timed out after {lock_timeout}s",
         ))
@@ -635,7 +667,7 @@ def cmd_up(args) -> None:
         reason = (proc.stderr or proc.stdout or "unknown").strip().splitlines()
         print_written(record(
             args.run_dir, ledger,
-            stack="failed", compose_prefix=prefix, test_cmd="", test_cmd_host=runner,
+            stack="failed", compose_prefix=prefix, test_cmd=override or prior, test_cmd_host=runner,
             app_url="none", api_url="none", web_url="none", source_mounted="no",
             tests_unverified="docker stack would not come up: " + (reason[-1] if reason else "?"),
         ))
@@ -649,7 +681,7 @@ def cmd_up(args) -> None:
         shell(f"{prefix} down -v --remove-orphans", cwd=repo, timeout=UP_TIMEOUT)
         release_lock(args.run_dir, ledger.issue, repo)
         print_written(record(
-            args.run_dir, ledger, stack="failed", compose_prefix=prefix, test_cmd="",
+            args.run_dir, ledger, stack="failed", compose_prefix=prefix, test_cmd=override or prior,
             test_cmd_host=runner, app_url="none", api_url="none", web_url="none",
             source_mounted="no",
             tests_unverified="no app service found in the test compose file",
@@ -680,7 +712,7 @@ def cmd_up(args) -> None:
         compose_prefix=prefix,
         compose_project=project,
         app_service=app,
-        test_cmd=build_test_cmd(prefix, app, runner),
+        test_cmd=override or build_test_cmd(prefix, app, runner),
         test_cmd_host=runner,
         source_mounted="yes" if source_is_mounted(config, app, repo) else "no",
         app_url=app_url,

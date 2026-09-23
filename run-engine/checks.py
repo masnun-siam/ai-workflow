@@ -84,7 +84,9 @@ def run_suite(ledger, repo: str, config: dict | None = None):
     timeout = suite_timeout(config)
     state = ledger.context.get("stack")
     cmd = ledger.context.get("test_cmd")
-    if state in ("failed", "none") and not cmd:
+    if state == "failed":
+        return None, f"no runner (stack={state})"
+    if state == "none" and not cmd:
         return None, f"no runner (stack={state})"
     if not cmd:
         return None, "no test_cmd recorded"
