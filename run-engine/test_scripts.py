@@ -1647,6 +1647,9 @@ real_pr_run = pr.run
 real_pr_link_branch = pr.link_branch
 real_pr_load_ledger = pr.load_ledger
 real_pr_record = pr.record
+real_pr_linked_ok = pr.linked_ok
+real_pr_closes_ok = pr.closes_ok
+real_pr_gh_json = pr.gh_json
 
 
 def _stub_common():
@@ -1660,6 +1663,9 @@ def _restore_common():
     pr.link_branch = real_pr_link_branch
     pr.load_ledger = real_pr_load_ledger
     pr.record = real_pr_record
+    pr.linked_ok = real_pr_linked_ok
+    pr.closes_ok = real_pr_closes_ok
+    pr.gh_json = real_pr_gh_json
 
 
 try:
@@ -1866,6 +1872,9 @@ try:
 
     pr.run = _run_success
     _stub_common()
+    pr.gh_json = lambda args, cwd=None, timeout=120: (
+        (1, None) if args[:2] == ["pr", "view"] else ("o/r", None)
+    )
     pr.linked_ok = lambda *a, **k: True
     pr.closes_ok = lambda *a, **k: True
     args = _Args("irrelevant", body_file="body.md")
