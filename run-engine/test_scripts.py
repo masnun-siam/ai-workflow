@@ -1417,10 +1417,11 @@ import route  # noqa: E402
 
 
 class _FakeLedger:
-    """A ledger stand-in carrying only what run_suite reads: .context."""
+    """A ledger stand-in carrying only what run_suite/cmd_open read: .context, .issue."""
 
-    def __init__(self, **context):
+    def __init__(self, issue=28, **context):
         self.context = context
+        self.issue = issue
 
 
 def _stub_shell(calls):
