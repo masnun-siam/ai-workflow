@@ -167,12 +167,16 @@ not fix this round**:
        --watch`. Green → continue this round normally. Still red →
        stop as below.
      - `outcome: rerun-denied` → the rerun itself was refused, not the check.
-       Resolve the repo root via `git worktree list` (same rule as handing
-       `run-fixer` a working directory, below). If there is no `ci-attempt`
-       already recorded for this SHA **and** `git log -1 --pretty=%s` does
-       not already match a retrigger marker, run
-       `git commit --allow-empty -m "chore: retrigger CI (rerun denied, confirmed unrelated flake)"`
-       then `git push`, and re-poll `aiw ci status <pr> --watch`. Green →
+       This branch rides the `ci-attempt` just recorded above — it is not a
+       second attempt. Resolve the working directory via `git worktree list`
+       (same rule as handing `run-fixer` a working directory, below) and use
+       that resolved path. If `git log -1 --pretty=%s` (run against that
+       path) does not already match the retrigger marker (`chore: retrigger
+       CI (`), confirm local HEAD matches the `head_sha` `aiw ci status`
+       reported, then run
+       `git -C <resolved worktree path> commit --allow-empty -m "chore: retrigger CI (rerun denied, confirmed unrelated flake)"`
+       then `git -C <resolved worktree path> push`, and re-poll `aiw ci
+       status <pr> --watch`. Green →
        continue this round normally. Still red → stop as below. If the push
        is refused instead, fall through to the stop below — do not retry.
      - `outcome: cannot-fix`, or a `Needs human confirmation` section →

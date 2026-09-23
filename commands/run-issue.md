@@ -832,14 +832,19 @@ a defect ships.
   permitted to run `gh run rerun --failed`. This does **not** spend a fix attempt, and it
   reuses the existing budget of **one `run-ci` attempt per head SHA** — here and in
   `pr-grind` alike. Never grant a second on the same SHA. Record `ci-attempt: <sha> —
-  <outcome>` in the ledger (`aiw route set`) **before** acting on `run-ci`'s result, so a
+  <outcome>` in the ledger (`aiw set "$RUN_DIR" ci-attempt="<sha> — <outcome>"`)
+  **before** acting on `run-ci`'s result, so a
   crash mid-phase can never buy a second attempt.
   - `outcome: fixed` or `flake-rerun` → re-poll `aiw ci status <pr> --watch`.
-  - `outcome: rerun-denied` → the rerun itself was refused, not the check. If there is no
-    `ci-attempt` already recorded for this SHA **and** `git log -1 --pretty=%s` does not
-    already match a retrigger marker, run
+  - `outcome: rerun-denied` → the rerun itself was refused, not the check. This branch
+    rides the `ci-attempt` just recorded above — it is not a second attempt. If
+    `git log -1 --pretty=%s` does not already match the retrigger marker (`chore:
+    retrigger CI (`), run
     `git commit --allow-empty -m "chore: retrigger CI (rerun denied, confirmed unrelated flake)"`
-    then `git push`, and re-poll `aiw ci status <pr> --watch`. Green or still-red from
+    then `git push`, both `-C <worktree>` (the run's own worktree, per `aiw paths`/the
+    ledger — never the orchestrator's own cwd), and re-poll `aiw ci status <pr> --watch`.
+    Confirm local HEAD matches the `head_sha` `aiw ci status` reported before committing.
+    Green or still-red from
     there is handled exactly like the existing `flake-rerun` outcomes above. If the push
     is refused (branch protection, a guard) instead, fall through to the "still red"
     outcome below — do not retry.
