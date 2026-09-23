@@ -1527,16 +1527,13 @@ for checks_value in (None, {}, "absent"):
     assert checks.suite_timeout(config) == 900, (checks_value, checks.suite_timeout(config))
 ok("checks absent, checks: {} and checks: null all resolve to 900 without raising")
 
-try:
-    ledger = _FakeLedger(stack="failed", test_cmd=None)
-    code, detail = checks.run_suite(ledger, "/repo", config={"checks": {"suite_timeout": 2400}})
-    assert code is None and detail == "no runner (stack=failed)", detail
+ledger = _FakeLedger(stack="failed", test_cmd=None)
+code, detail = checks.run_suite(ledger, "/repo", config={"checks": {"suite_timeout": 2400}})
+assert code is None and detail == "no runner (stack=failed)", detail
 
-    ledger = _FakeLedger(stack="none", test_cmd=None)
-    code, detail = checks.run_suite(ledger, "/repo", config={"checks": {"suite_timeout": 2400}})
-    assert code is None and detail == "no runner (stack=none)", detail
-finally:
-    pass
+ledger = _FakeLedger(stack="none", test_cmd=None)
+code, detail = checks.run_suite(ledger, "/repo", config={"checks": {"suite_timeout": 2400}})
+assert code is None and detail == "no runner (stack=none)", detail
 ok("run_suite's pre-shell bail-outs (no runner / no test_cmd) are unaffected by a suite_timeout override")
 
 try:
