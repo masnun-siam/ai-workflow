@@ -19,13 +19,17 @@ from __future__ import annotations
 import json
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 import shared
 
 _VERDICT_RE = re.compile(r"Verdict:.*?\d+\s*blocker.*?\d+\s*should-fix", re.IGNORECASE | re.DOTALL)
 
-_EPOCH = datetime.min
+# Timezone-aware so it compares safely with the aware datetimes `_ts()` returns for
+# Z-suffixed GitHub timestamps (a naive `datetime.min` sentinel mixed with aware
+# values raises TypeError in `max()` the moment a review has a null `submitted_at`,
+# which GitHub sends for PENDING reviews).
+_EPOCH = datetime.min.replace(tzinfo=timezone.utc)
 
 
 def _ts(value) -> datetime | None:
@@ -35,9 +39,14 @@ def _ts(value) -> datetime | None:
         return None
     raw = value[:-1] + "+00:00" if value.endswith("Z") else value
     try:
-        return datetime.fromisoformat(raw)
+        parsed = datetime.fromisoformat(raw)
     except ValueError:
         return None
+    # Normalize naive parses (no offset in the source string) to UTC-aware so every
+    # value `max()` compares against `_EPOCH` is consistently aware.
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
 
 
 def _has_verdict(body) -> bool:
@@ -96,19 +105,12 @@ def cmd_pick(args) -> None:
 
 
 def _load(path: str):
-    raw = sys.stdin.read() if path == "-" else _read_file(path)
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        shared.die(shared.FAILED, f"not valid JSON: {path}")
-
-
-def _read_file(path: str) -> str:
-    try:
-        with open(path, encoding="utf-8") as fh:
-            return fh.read()
-    except OSError as exc:
-        shared.die(shared.FAILED, f"cannot read {path}: {exc.strerror or exc}")
+    if path == "-":
+        try:
+            return json.loads(sys.stdin.read())
+        except json.JSONDecodeError:
+            shared.die(shared.FAILED, f"not valid JSON: {path}")
+    return shared.read_json(path, missing_code=shared.FAILED)
 
 
 def register(sub, add) -> None:

@@ -98,7 +98,11 @@ If it's stale, record it as superseded in the state file and keep waiting.
   review's comments) with severity read from the comment body if present.
   Trust the bot's label; do not re-classify severity yourself.
 - **More than one** → write both `gh api` responses to files and run
-  `aiw review pick --reviews <reviews.json> --comments <comments.json>`; its
+  `aiw review pick --reviews <reviews.json> --comments <comments.json>`
+  (`--comments` must be the UNFILTERED `.../comments` output for every review
+  in the round, not filtered to a single review as above — `pick` groups
+  comments by `pull_request_review_id` itself, so pre-filtering zeroes out
+  every other review's comment count); its
   `selected` is this round's verdict, and record every id in `superseded` as
   superseded in the state file (don't act on stale rounds). Plain newest-wins
   is not the whole rule: a comment-carrying review beats a same-commit,
