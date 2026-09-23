@@ -25,6 +25,7 @@ import ci  # noqa: E402
 import dispatch  # noqa: E402
 import epic  # noqa: E402
 import project  # noqa: E402
+import review  # noqa: E402
 import shared  # noqa: E402
 import stack  # noqa: E402
 import threads  # noqa: E402
@@ -1412,8 +1413,6 @@ ok("aiw paths prints a checkouts key and its other existing keys are unchanged")
 
 # --------------------------------------------------------------------------- review: pick() (issue #24, RED until review.py exists)
 
-import review  # noqa: E402
-
 
 def _review(review_id, commit_id, submitted_at, state="COMMENTED", body=""):
     return {
@@ -1619,7 +1618,7 @@ proc = subprocess.run(
 )
 assert proc.returncode != 0
 assert "Traceback" not in proc.stderr
-assert len([l for l in proc.stderr.splitlines() if l.strip()]) <= 1 or "Traceback" not in proc.stderr
+assert len([l for l in proc.stderr.splitlines() if l.strip()]) <= 1
 ok("aiw review pick with a missing file exits nonzero with a one-line message, no Python traceback")
 
 with tempfile.TemporaryDirectory() as d:
@@ -1636,6 +1635,35 @@ with tempfile.TemporaryDirectory() as d:
     assert proc.returncode != 0
     assert "Traceback" not in proc.stderr
 ok("aiw review pick with non-JSON input exits nonzero with a one-line message, no Python traceback")
+
+with tempfile.TemporaryDirectory() as d:
+    reviews_path = os.path.join(d, "reviews.json")
+    comments_path = os.path.join(d, "comments.json")
+    with open(reviews_path, "w", encoding="utf-8") as fh:
+        fh.write('[{"id":1')
+    with open(comments_path, "w", encoding="utf-8") as fh:
+        fh.write("[]")
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "review", "pick", "--reviews", reviews_path, "--comments", comments_path],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 1
+    assert "Traceback" not in proc.stderr
+ok("aiw review pick with a truncated JSON array exits code 1, no Python traceback (guards against a partial-dict recovery fallback that would feed pick() string keys)")
+
+with tempfile.TemporaryDirectory() as d:
+    reviews_dir = os.path.join(d, "reviews.json")
+    os.makedirs(reviews_dir)
+    comments_path = os.path.join(d, "comments.json")
+    with open(comments_path, "w", encoding="utf-8") as fh:
+        fh.write("[]")
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "review", "pick", "--reviews", reviews_dir, "--comments", comments_path],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 1
+    assert "Traceback" not in proc.stderr
+ok("aiw review pick with a directory passed as --reviews exits code 1, no Python traceback (guards against an uncaught IsADirectoryError)")
 
 with open(os.path.join(HERE, "..", "skills", "pr-grind", "SKILL.md"), encoding="utf-8") as fh:
     skill_text = fh.read()
