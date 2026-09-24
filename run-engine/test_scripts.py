@@ -2292,12 +2292,12 @@ ok("run_suite with stack=none and a non-empty test_cmd still runs it — the new
 
 # --------------------------------------------------------------------------- /intake --whole passthrough for a multi-outcome BRD (issue #41)
 
-with open(os.path.join(HERE, "..", "commands", "intake.md"), encoding="utf-8") as fh:
+INTAKE_MD = os.path.join(HERE, "..", "commands", "intake.md")
+with open(INTAKE_MD, encoding="utf-8") as fh:
     intake_text = fh.read()
 
 assert "--whole" in intake_text, "commands/intake.md must document a --whole flag"
 decomp_idx = intake_text.index("**Decomposition check**")
-decomp_section_end = intake_text.index("**Build the brief", decomp_idx) if "**Build the brief" in intake_text[decomp_idx:] else len(intake_text)
 decomp_section = intake_text[decomp_idx:decomp_idx + 2000]
 assert "--whole" in decomp_section, \
     "the BRD adapter's Decomposition check section must have a branch for --whole"
@@ -2318,7 +2318,25 @@ assert "AskUserQuestion" not in whole_branch, \
     "the --whole branch must not contain AskUserQuestion — no question fires when --whole is set"
 ok("commands/intake.md --whole branch skips AskUserQuestion while the no-flag branch still asks")
 
-assert "/intake $@ --whole" in open(os.path.join(HERE, "..", "commands", "gh-issue.md"), encoding="utf-8").read(), \
+# Regression for PR #45 review thread: the Note adapter's search-query line and the
+# Text adapter's `## Summary` template must use the stripped-argument placeholder
+# (`<argument>`), never a literal `$ARGUMENTS` token that would leak the raw,
+# un-stripped (still containing `--whole`) argument into the brief.
+note_search_idx = intake_text.index('obsidian vault=notes search query=')
+note_search_line = intake_text[note_search_idx:intake_text.index("\n", note_search_idx)]
+assert "<argument>" in note_search_line and "$ARGUMENTS" not in note_search_line, \
+    "the Note adapter's search-query line must use the stripped <argument> placeholder, not $ARGUMENTS"
+
+text_summary_idx = intake_text.rindex("## Summary")
+text_summary_block = intake_text[text_summary_idx:text_summary_idx + 200]
+assert "<argument>" in text_summary_block and "$ARGUMENTS" not in text_summary_block, \
+    "the Text adapter's ## Summary template must use the stripped <argument> placeholder, not $ARGUMENTS"
+ok("the Note adapter's search query and the Text adapter's ## Summary template use the "
+   "stripped <argument> placeholder, never a literal $ARGUMENTS")
+
+with open(GH_ISSUE_MD, encoding="utf-8") as fh:
+    gh_issue_text = fh.read()
+assert "/intake $@ --whole" in gh_issue_text, \
     "commands/gh-issue.md step 0 must invoke /intake with --whole, not bare /intake $@"
 ok("commands/gh-issue.md invokes `/intake $@ --whole`")
 
