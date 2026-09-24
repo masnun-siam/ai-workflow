@@ -2014,6 +2014,104 @@ assert "aiw review pick" in skill_text
 assert "take the newest only" not in skill_text
 ok("skills/pr-grind/SKILL.md Step 1 references `aiw review pick` and no longer states bare 'take the newest only' as the whole rule")
 
+# --------------------------------------------------------------------------- decouple CI-red handling from the review-fix loop (issue #52)
+
+
+def _pr_grind_section(text: str, start_heading: str, end_heading: str) -> str:
+    start = text.index(start_heading)
+    end = text.index(end_heading, start)
+    return text[start:end]
+
+
+pr_grind_state_section = _pr_grind_section(skill_text, "## State file", "## Step 0 — Resolve")
+assert "queued-push:" in pr_grind_state_section, "State file section must document a queued-push: header key"
+assert "ci-attempt:" in pr_grind_state_section
+assert "paused:" in pr_grind_state_section
+ok("skills/pr-grind/SKILL.md State file section documents queued-push: next to ci-attempt: and paused:")
+
+pr_grind_rail2 = _pr_grind_section(
+    skill_text, "2. **CI red**", "3. **Third-party human comment**"
+)
+assert "run-fixer` is still **never** dispatched while CI is red" not in pr_grind_rail2, \
+    "rail 2 must no longer say run-fixer is never dispatched while CI is red"
+assert "hold_push" in pr_grind_rail2
+ok("skills/pr-grind/SKILL.md Step 3 rail 2 no longer bars run-fixer outright and mentions hold_push")
+
+assert "cannot-fix" in pr_grind_rail2
+assert "Needs human confirmation" in pr_grind_rail2
+assert "Step 8" in pr_grind_rail2
+ok("skills/pr-grind/SKILL.md Step 3 rail 2 still contains cannot-fix, Needs human confirmation, and Step 8")
+
+pr_grind_step5 = _pr_grind_section(skill_text, "## Step 5", "## Step 6")
+assert "hold_push" in pr_grind_step5
+assert "queued-push" in pr_grind_step5
+ok("skills/pr-grind/SKILL.md Step 5 section contains both hold_push and queued-push")
+
+with open(os.path.join(HERE, "..", "agents", "run-fixer.md"), encoding="utf-8") as fh:
+    run_fixer_text = fh.read()
+assert "hold_push" in run_fixer_text
+assert "push once" in run_fixer_text
+ok("agents/run-fixer.md contains hold_push and still contains push once")
+
+pr_grind_step6 = _pr_grind_section(skill_text, "## Step 6", "## Step 7")
+assert "apply it in full" not in pr_grind_step6, "Step 6 must no longer say 'apply it in full'"
+assert "queued-push" in pr_grind_step6
+ok("skills/pr-grind/SKILL.md Step 6 section no longer says 'apply it in full' and contains queued-push")
+
+pr_grind_step7 = _pr_grind_section(skill_text, "## Step 7", "## Step 8")
+assert "queued-push" in pr_grind_step7
+ok("skills/pr-grind/SKILL.md Step 7 section contains queued-push")
+
+assert "do not push review fixes onto a red branch" in skill_text
+ok("skills/pr-grind/SKILL.md still contains the literal sentence 'do not push review fixes onto a red branch'")
+
+assert "one attempt per head SHA" in skill_text
+assert "ci-attempt: <sha>" in skill_text
+ok("skills/pr-grind/SKILL.md still contains 'one attempt per head SHA' and 'ci-attempt: <sha>'")
+
+assert "already recorded" in pr_grind_rail2
+assert "Step 8" in pr_grind_rail2
+ok("skills/pr-grind/SKILL.md Step 3 rail 2 contains 'already recorded' together with 'Step 8'")
+
+assert "never dispatch" in pr_grind_rail2
+assert "queued-push" in pr_grind_rail2
+ok("skills/pr-grind/SKILL.md Step 3 rail 2 contains 'never dispatch' together with 'queued-push'")
+
+pr_grind_on_wake = _pr_grind_section(skill_text, "## On wake", "## Rules")
+assert "queued-push" in pr_grind_on_wake
+assert "rail 3" in pr_grind_on_wake
+assert "rail 5" in pr_grind_on_wake
+ok("skills/pr-grind/SKILL.md On wake section contains queued-push, rail 3, and rail 5")
+
+flush_idx = skill_text.find("flush")
+assert flush_idx != -1, "expected a 'flush' mention somewhere in SKILL.md"
+flush_context = skill_text[max(0, flush_idx - 500):flush_idx + 500]
+assert "not a new round" in flush_context
+ok("skills/pr-grind/SKILL.md flush-related text contains 'not a new round'")
+
+pr_grind_step2 = _pr_grind_section(skill_text, "## Step 2", "## Step 3")
+assert "queued-push" in pr_grind_step2
+ok("skills/pr-grind/SKILL.md Step 2 section contains queued-push")
+
+pr_grind_step8 = _pr_grind_section(skill_text, "## Step 8", "## On wake")
+step8_intro = pr_grind_step8[:pr_grind_step8.index("\n\n", pr_grind_step8.index("\n"))]
+assert "rails 1/2/3" not in step8_intro
+ok("skills/pr-grind/SKILL.md Step 8 intro no longer contains the literal string 'rails 1/2/3'")
+
+assert "run-ci` is the only agent dispatched while CI is red" not in skill_text, \
+    "old Rules line about run-ci being the only agent dispatched while CI is red must be gone"
+assert "one attempt per head SHA" in skill_text
+ok("skills/pr-grind/SKILL.md Rules section no longer claims run-ci is the only agent dispatched while CI is red, and still has 'one attempt per head SHA'")
+
+with open(os.path.join(HERE, "..", "docs", "HOW-IT-WORKS.md"), encoding="utf-8") as fh:
+    how_it_works_rails_text = fh.read()
+how_it_works_rails_start = how_it_works_rails_text.index("### The four rails")
+how_it_works_rails_end = how_it_works_rails_text.index("### The stall detector", how_it_works_rails_start)
+how_it_works_rails_section = how_it_works_rails_text[how_it_works_rails_start:how_it_works_rails_end]
+assert "queued" in how_it_works_rails_section
+assert "one attempt per head SHA" in how_it_works_rails_section
+ok("docs/HOW-IT-WORKS.md rails-table section contains 'queued' and 'one attempt per head SHA'")
+
 # --------------------------------------------------------------------------- gh-issue always decomposes before creating any issue (issue #38)
 
 with open(os.path.join(HERE, "..", "commands", "gh-issue.md"), encoding="utf-8") as fh:
