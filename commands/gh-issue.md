@@ -9,7 +9,7 @@ I have a ${1:-bug / feature request / task / improvement} to log as a GitHub iss
 
 0. **Source check.** If `$@` matches one of `/intake`'s detectable source shapes — a
    `sentry.io` URL, an existing `.md`/`.txt`/`.pdf`/`.docx` file path, or a vault note
-   title that exactly matches one note — invoke `/intake $@` and wait for its `## Intake
+   title that exactly matches one note — invoke `/intake $@ --whole` and wait for its `## Intake
    result` block. Use its `type:` value in place of
    `${1:-bug / feature request / task / improvement}` for the rest of this skill, and use
    everything after its `---` line as `Details:` below. Otherwise (plain text, no source

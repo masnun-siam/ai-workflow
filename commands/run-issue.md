@@ -217,7 +217,7 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
    - Argument is a bare number, or a `github.com/.../issues/<n>` URL → resolve to `<n>`,
      unchanged from before.
    - Anything else (a Sentry link, a file path, a vault note title, or free text) →
-     invoke `/intake <stripped argument>`, then invoke `/gh-issue` passing its `type:` and
+     invoke `/intake <stripped argument> --whole`, then invoke `/gh-issue` passing its `type:` and
      brief through exactly as `/gh-issue`'s own step 0 does — substitute directly into
      step 1 rather than re-running step 0's detection. Parse the created issue number `<n>`
      from `/gh-issue`'s returned URL — in the epic case (a parent plus child URLs), `<n>`

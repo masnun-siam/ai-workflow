@@ -2497,4 +2497,87 @@ assert shell_calls and shell_calls[0]["cmd"] == "go test ./...", \
 ok("run_suite with stack=none and a non-empty test_cmd still runs it — the new "
    "stack=failed guard must not catch this legitimate host-runner case")
 
+# --------------------------------------------------------------------------- /intake --whole passthrough for a multi-outcome BRD (issue #41)
+
+INTAKE_MD = os.path.join(HERE, "..", "commands", "intake.md")
+with open(INTAKE_MD, encoding="utf-8") as fh:
+    intake_text = fh.read()
+
+assert "--whole" in intake_text, "commands/intake.md must document a --whole flag"
+decomp_idx = intake_text.index("**Decomposition check**")
+decomp_section = intake_text[decomp_idx:decomp_idx + 2000]
+assert "--whole" in decomp_section, \
+    "the BRD adapter's Decomposition check section must have a branch for --whole"
+ok("commands/intake.md documents a --whole flag and the Decomposition check has a --whole branch")
+
+# Split the Decomposition-check section into its --whole branch and its no-flag branch,
+# by locating "--whole" inside the section and treating text before/after as the two branches.
+whole_marker_idx = decomp_section.index("--whole")
+before_whole = decomp_section[:whole_marker_idx]
+after_whole = decomp_section[whole_marker_idx:]
+assert "AskUserQuestion" in before_whole or "AskUserQuestion" in intake_text[decomp_idx:decomp_idx + 200], \
+    "no-flag branch of the Decomposition check must still contain AskUserQuestion (regression: standalone /intake must still ask)"
+# The --whole branch itself (from the --whole marker to the next AskUserQuestion mention,
+# or to the end of the section if none) must not fire AskUserQuestion.
+whole_branch_end = after_whole.find("AskUserQuestion")
+whole_branch = after_whole if whole_branch_end == -1 else after_whole[:whole_branch_end]
+assert "AskUserQuestion" not in whole_branch, \
+    "the --whole branch must not contain AskUserQuestion — no question fires when --whole is set"
+ok("commands/intake.md --whole branch skips AskUserQuestion while the no-flag branch still asks")
+
+# Regression for PR #45 review thread: the Note adapter's search-query line and the
+# Text adapter's `## Summary` template must use the stripped-argument placeholder
+# (`<argument>`), never a literal `$ARGUMENTS` token that would leak the raw,
+# un-stripped (still containing `--whole`) argument into the brief.
+note_search_idx = intake_text.index('obsidian vault=notes search query=')
+note_search_line = intake_text[note_search_idx:intake_text.index("\n", note_search_idx)]
+assert "<argument>" in note_search_line and "$ARGUMENTS" not in note_search_line, \
+    "the Note adapter's search-query line must use the stripped <argument> placeholder, not $ARGUMENTS"
+
+text_summary_idx = intake_text.rindex("## Summary")
+text_summary_block = intake_text[text_summary_idx:text_summary_idx + 200]
+assert "<argument>" in text_summary_block and "$ARGUMENTS" not in text_summary_block, \
+    "the Text adapter's ## Summary template must use the stripped <argument> placeholder, not $ARGUMENTS"
+ok("the Note adapter's search query and the Text adapter's ## Summary template use the "
+   "stripped <argument> placeholder, never a literal $ARGUMENTS")
+
+with open(GH_ISSUE_MD, encoding="utf-8") as fh:
+    gh_issue_text = fh.read()
+assert "/intake $@ --whole" in gh_issue_text, \
+    "commands/gh-issue.md step 0 must invoke /intake with --whole, not bare /intake $@"
+ok("commands/gh-issue.md invokes `/intake $@ --whole`")
+
+with open(os.path.join(HERE, "..", "commands", "run-issue.md"), encoding="utf-8") as fh:
+    run_issue_text = fh.read()
+assert "/intake <stripped argument> --whole" in run_issue_text, \
+    "commands/run-issue.md Preflight step 2 must invoke /intake with --whole"
+ok("commands/run-issue.md invokes `/intake <stripped argument> --whole`")
+
+# Every OTHER "invoke `/intake" call site (outside intake.md itself) must also carry --whole.
+# Enumerated, not hardcoded to a count of 2, so a future new call site that skips --whole fails here.
+_intake_call_sites = []
+for _base in ("commands", "agents"):
+    _dir = os.path.join(HERE, "..", _base)
+    if not os.path.isdir(_dir):
+        continue
+    for _fn in sorted(os.listdir(_dir)):
+        if not _fn.endswith(".md"):
+            continue
+        _path = os.path.join(_dir, _fn)
+        if os.path.abspath(_path) == os.path.abspath(os.path.join(HERE, "..", "commands", "intake.md")):
+            continue
+        with open(_path, encoding="utf-8") as fh:
+            for _lineno, _line in enumerate(fh, 1):
+                if re.search(r"invoke `/intake", _line):
+                    _intake_call_sites.append((_path, _lineno, _line.rstrip("\n")))
+assert _intake_call_sites, "expected at least one '/intake' call site outside commands/intake.md"
+for _path, _lineno, _line in _intake_call_sites:
+    assert "--whole" in _line, f"{_path}:{_lineno} invokes /intake without --whole: {_line!r}"
+ok(f"every 'invoke `/intake' call site outside commands/intake.md ({len(_intake_call_sites)} found) carries --whole")
+
+detect_idx = intake_text.index("**Detect the source**")
+assert "strip" in intake_text[:detect_idx].lower() or "--whole" in intake_text[:detect_idx], \
+    "commands/intake.md must document stripping --whole from the arguments before step 1's 'Detect the source'"
+ok("commands/intake.md documents stripping --whole before step 1's 'Detect the source'")
+
 print(f"\n{passed} checks passed")
