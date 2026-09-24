@@ -134,11 +134,12 @@ gh issue create --title "TITLE" --label "labels" --body-file /tmp/gh-issue-body.
 
 ### 5-EPIC. Create the parent and its children
 
-This section runs only when Step 4.5 routed 2 or more tasks here.
+This section runs only when Step 4.5 routed 2 or more tasks here — it is an
+alternate path to Step 5 above, not a sub-case nested under it.
 
-1. Create the **parent** with Step 3's field mapping as its body, plus an
-   `## Original Jira` section linking back to `$1` (Jira URL if determinable from
-   config). Labels: `epic` plus the Jira-mapped type labels from Step 3 — it is
+1. Create the **parent** with Step 3's field mapping as its body — Step 3's mapping
+   already includes an `## Original Jira` section linking back to `$1`; reuse it,
+   don't add a second one. Labels: `epic` plus the Jira-mapped type labels from Step 3 — it is
    **never** labelled `lean`, a container spans however many children it has. It
    needs no Implementation Guide (parent exemption). Ensure the `epic` label exists
    first (idempotent, cheap):
@@ -149,7 +150,7 @@ This section runs only when Step 4.5 routed 2 or more tasks here.
    child gets a **complete, independently DoR-satisfying** body — full context
    written out, never "see parent" — with the parent's Jira context inlined.
 
-   - Body sections: **Summary** (the problem and *why it matters* — not a restatement of the fix), **Specific Business Requirements**, **Out of Scope**, **Context / Affected Code** (file paths and symbols from Step 4.5's GitNexus lookup), **Steps to Reproduce / Requirements**, **Acceptance Criteria** (include every corner case validated in Step 4 as its own explicit criterion), **Implementation Guide** (ordered numbered steps; exact path:line/symbol references reusing the GitNexus lookup from Step 4.5; an existing pattern to copy, or "no existing pattern — net-new"; the exact test/verify command(s); a one-line done-check), **Non-functional Constraints**, **Assumptions**, **Dependencies / Blockers**, **Proposed Fix** (only if a concrete fix is obvious — describe it, do NOT apply it), **Notes** (include the Jira key/URL here as traceability)
+   - Body sections: **Summary** (the problem and *why it matters* — not a restatement of the fix), **Specific Business Requirements**, **Out of Scope**, **Context / Affected Code** (file paths and symbols from Step 4.5's GitNexus lookup), **Steps to Reproduce / Requirements**, **Acceptance Criteria** (include every corner case surfaced in Step 4's clarifying Q&A as its own explicit criterion), **Implementation Guide** (ordered numbered steps; exact path:line/symbol references reusing the GitNexus lookup from Step 4.5; an existing pattern to copy, or "no existing pattern — net-new"; the exact test/verify command(s); a one-line done-check), **Non-functional Constraints**, **Assumptions**, **Dependencies / Blockers**, **Proposed Fix** (only if a concrete fix is obvious — describe it, do NOT apply it), **Notes** (include the Jira key/URL here as traceability)
    - Each child is one **vertical slice** — one thin end-to-end outcome, never a
      layer. Each child's Implementation Guide covers only that child's own slice —
      never a step that touches a sibling's files or refers to a sibling's steps.
@@ -190,9 +191,13 @@ This section runs only when Step 4.5 routed 2 or more tasks here.
    - **"Retry the missing ones"**: re-enter the loop starting at child k, reusing the
      already-known issue numbers for children 1..k-1 (needed for their `Depends on:`
      lines in later children). Never re-create 1..k-1.
-   - **"Stop here"**: end the run, report the partial state (created vs. missing), do
-     NOT call `aiw epic split` (it only runs once every planned child exists), and
-     return no issue URL/number.
+   - **"Stop here"**: before ending the run — if the parent was successfully created
+     (k > 0), still run Step 6's attachment upload against the parent (attachments
+     describe the whole Jira ticket, which exists regardless of how many children got
+     created); if the parent itself failed (k=0), skip Step 6, there is nothing to
+     attach to. Either way, run Step 7's cleanup. Then end the run, report the partial
+     state (created vs. missing), do NOT call `aiw epic split` (it only runs once every
+     planned child exists), and return no issue URL/number.
 
    Never auto-close or delete issues already created — a partial epic is a
    recoverable state, not a failure state.
