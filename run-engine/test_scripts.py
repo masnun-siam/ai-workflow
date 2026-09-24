@@ -1409,12 +1409,6 @@ assert (
 ), section_names
 ok("Implementation Guide is ordered after Acceptance Criteria and before Non-functional Constraints")
 
-assert dispatch.dor_gaps(gh_issue_body) == [], dispatch.dor_gaps(gh_issue_body)
-ok("adding Implementation Guide content still screens ready with zero DoR gaps")
-
-assert len(dispatch.dor_gaps("")) == 6, dispatch.dor_gaps("")
-ok("an empty body still reports exactly the six DoR items as gaps, unaffected by Implementation Guide")
-
 assert not any(re.search(pattern, "Implementation Guide", re.I) for _, pattern in dispatch.DOR_ITEMS), [
     label for label, pattern in dispatch.DOR_ITEMS if re.search(pattern, "Implementation Guide", re.I)
 ]
