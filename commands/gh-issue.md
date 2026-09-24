@@ -129,6 +129,18 @@ Do the following:
    `#<n>` issue number already returned for child j (child j must have been created
    first — this is why order matters).
 
+   Include `epic-<parent>` in each child's `--label` list on its `gh issue create` call,
+   alongside its normal labels — apply it at creation time, not afterward. Deferring the
+   label to a later step means a child created mid-loop, before a later sibling's create
+   call fails, would never carry it if the run stops before that later step runs; the
+   loop can end at any child, and every child already created must be immediately
+   findable via `gh issue list --label epic-<parent>` regardless of where the loop
+   stopped. When `epic-<parent>` is about to be applied for the first time this run,
+   ensure it exists first (idempotent, cheap):
+   ```bash
+   gh label create epic-<parent> --color 5319E7 --description "child of epic #<parent>" 2>/dev/null || true
+   ```
+
    Check each `gh issue create` exit status immediately. On failure at child k of N
    (k=0 means the parent itself failed, before any children exist): stop the loop.
    Report, by number, which issues exist (the parent and children 1..k-1, with the
@@ -148,14 +160,11 @@ Do the following:
 
    Never auto-close or delete issues already created — a partial epic is a recoverable
    state, not a failure state.
-3. Label every child `epic-<parent>` in addition to its normal labels. This is what the
-   epic board filters on, and what makes the children findable with
-   `gh issue list --label epic-<parent>` when there is no project.
-
-   Judge each child against step 4's `lean` heuristic **independently, against its own
+3. Judge each child against step 4's `lean` heuristic **independently, against its own
    body** — a child's own outcome, file count, dependency, API-surface and risk-area
-   answers, not the epic's aggregate. The same idempotent ensure-create from step 4 runs
-   once, before the first child that earns the label:
+   answers, not the epic's aggregate. (`epic-<parent>` was already applied at creation
+   time in step 2.5 — see above.) The same idempotent ensure-create from step 4 runs
+   once, before the first child that earns the `lean` label:
    ```bash
    gh label create lean --color 0E8A16 --description "small, well-specified: run lean roster" 2>/dev/null || true
    ```
