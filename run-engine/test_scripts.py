@@ -503,6 +503,77 @@ with tempfile.TemporaryDirectory() as tmp:
     assert led11_again["stations"] == LEAN_STATIONS, led11_again["stations"]
 ok("re-running epic init over an already-initialised child never flips lean back to full")
 
+# --------------------------------------------------------------------------- tasks checklist
+# render_tasks_section / upsert_tasks_section splice a "## Tasks" checklist into the
+# parent's body. Unit-level first: the exact string shape, then the splice behaviour
+# against every body shape gh_json can hand back (no section, trailing section with no
+# final newline — exactly what .strip() leaves — mid-body section, and CRLF).
+
+order = [11, 12, 10]
+titles = {10: "t10", 11: "t11", 12: "t12"}
+rendered = epic.render_tasks_section(order, titles)
+assert rendered == "## Tasks\n\n- [ ] #11 t11\n- [ ] #12 t12\n- [ ] #10 t10", rendered
+ok("render_tasks_section orders the checklist topologically, not numerically")
+
+section = epic.render_tasks_section([10, 11], {10: "t10", 11: "t11"})
+
+out = epic.upsert_tasks_section("", section)
+assert out == section + "\n", repr(out)
+ok("upsert_tasks_section on an empty body is just the section plus one trailing newline")
+
+body_no_section = "Some intro text.\n\nMore text."
+out = epic.upsert_tasks_section(body_no_section, section)
+assert out.count("## Tasks") == 1, out
+assert "Some intro text." in out and "More text." in out, out
+assert out.index("More text.") < out.index("## Tasks"), \
+    "the section must be appended after the existing body, not before"
+assert out.rstrip("\n").endswith(section.rstrip("\n")), out
+ok("upsert_tasks_section appends a fresh section when the body has none")
+
+body_trailing_no_nl = "Intro\n\n## Tasks\n\n- [ ] #10 old title"
+out = epic.upsert_tasks_section(body_trailing_no_nl, section)
+assert out.count("## Tasks") == 1, "a trailing section (no final newline) must be REPLACED: " + out
+assert "old title" not in out, out
+assert "t10" in out and "t11" in out, out
+assert "Intro" in out, out
+ok("upsert_tasks_section replaces a trailing section with no final newline (the gh_json .strip() shape)")
+
+body_mid = "Intro\n\n## Tasks\n\nTBD\n\n## Notes\n\nkeep me"
+out = epic.upsert_tasks_section(body_mid, section)
+assert out.count("## Tasks") == 1, out
+assert out.count("## Notes") == 1, out
+assert "TBD" not in out, out
+assert "keep me" in out, "content after the Tasks section must survive"
+assert out.index("## Tasks") < out.index("## Notes"), out
+assert out.index("Intro") < out.index("## Tasks"), out
+ok("upsert_tasks_section replaces a mid-body section and preserves what follows")
+
+body_crlf = "Intro\r\n\r\n## Tasks\r\n\r\nold\r\n\r\n## Notes\r\n\r\nkeep me"
+out = epic.upsert_tasks_section(body_crlf, section)
+assert out.count("## Tasks") == 1, out
+assert "old" not in out, out
+assert "keep me" in out, out
+ok("upsert_tasks_section handles a CRLF body without duplicating the section")
+
+for probe in (body_no_section, body_trailing_no_nl):
+    once = epic.upsert_tasks_section(probe, section)
+    twice = epic.upsert_tasks_section(once, section)
+    assert once == twice, (once, twice)
+ok("upsert_tasks_section is idempotent for both the no-section and trailing-section cases")
+
+backslash_title = "Handle C:\\new\\path \\d"
+sec = epic.render_tasks_section([10], {10: backslash_title})
+assert f"#10 {backslash_title}" in sec, sec
+roundtrip = epic.upsert_tasks_section("Intro", sec)
+assert f"#10 {backslash_title}" in roundtrip, \
+    "backslashes must round-trip verbatim — re.sub's replacement escaping would corrupt them: " + repr(roundtrip)
+ok("a title containing backslashes round-trips through render+upsert without re.error or corruption")
+
+special_title = "Do [X] not #1 | keep this"
+sec = epic.render_tasks_section([10], {10: special_title})
+assert f"- [ ] #10 {special_title}" in sec, sec
+ok("a title with markdown special characters is rendered verbatim")
+
 # `gh` is the only thing between `epic split` and GitHub, so the split tests drive a stub
 # that records its argv. What matters is not that gh was called but WITH WHAT: the
 # sub-issues endpoint takes a database id as an integer, and `-f` with an issue number
@@ -515,7 +586,28 @@ cfg = json.load(open(os.environ["GH_STUB_CFG"]))
 with open(os.environ["GH_STUB_LOG"], "a") as fh:
     fh.write(" ".join(argv) + "\n")
 if argv[0] == "issue" and argv[1] == "view":
-    print(cfg["bodies"].get(argv[2], ""))
+    num = argv[2]
+    if num in cfg.get("view_fail", []):
+        sys.exit(1)
+    fields = argv[argv.index("--json") + 1] if "--json" in argv else ""
+    if "title" in fields:
+        data = {"body": cfg["bodies"].get(num, "")}
+        if num not in cfg.get("no_title", []):
+            data["title"] = cfg.get("titles", {}).get(num, f"t{num}")
+        print(json.dumps(data))
+    elif "--jq" in argv:
+        print(cfg["bodies"].get(num, ""))
+    else:
+        print(json.dumps({"body": cfg["bodies"].get(num, "")}))
+elif argv[0] == "issue" and argv[1] == "edit":
+    if cfg.get("edit_fail"):
+        sys.exit(1)
+    path = argv[argv.index("--body-file") + 1]
+    with open(path, encoding="utf-8") as fh:
+        new_body = fh.read()
+    cfg.setdefault("bodies", {})[argv[2]] = new_body
+    with open(os.environ["GH_STUB_CFG"], "w") as fh:
+        json.dump(cfg, fh)
 elif argv[1].endswith("/sub_issues") and any(a.startswith("-F") or a.startswith("-f") for a in argv):
     sys.exit(cfg.get("link_exit", 0))
 elif argv[1].endswith("/sub_issues"):
@@ -586,6 +678,90 @@ with tempfile.TemporaryDirectory() as tmp:
     assert proc.returncode == 1, proc.stdout
     assert not os.path.isfile(path), "a link failure must not leave a valid-looking epic.json"
 ok("a sub-issue link failure kills the split rather than warning past it")
+
+# ----------------------------------------------------------------- parent Tasks checklist
+# `epic split` must also splice a "## Tasks" checklist into the PARENT issue's body via
+# `gh issue edit --body-file`, sourced from the children's titles and the DAG order.
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, linked=[], bodies={
+        "42": "Parent intro.\n\nSome context.",
+        "10": "no deps", "11": "Depends on: #10", "12": "Depends on: #10",
+    }, titles={"10": "t10", "11": "t11", "12": "t12"})
+    proc, path = split(tmp, env)
+    assert proc.returncode == 0, proc.stderr
+    cfg_after = json.load(open(os.path.join(tmp, "cfg.json")))
+    parent_body = cfg_after["bodies"]["42"]
+    assert parent_body.count("## Tasks") == 1, parent_body
+    assert "Parent intro." in parent_body, parent_body
+    order_in_body = re.findall(r"- \[ \] #(\d+)", parent_body)
+    assert order_in_body == ["10", "11", "12"], \
+        "checklist must follow the DAG's topological order: " + parent_body
+    assert "t10" in parent_body and "t11" in parent_body and "t12" in parent_body, parent_body
+ok("epic split writes a single Tasks checklist onto the parent, in topological order")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, linked=[], bodies={
+        "42": "Parent intro.",
+        "10": "no deps", "11": "Depends on: #10", "12": "Depends on: #10",
+    }, titles={"10": "t10", "11": "t11", "12": "t12"})
+    first, _ = split(tmp, env)
+    assert first.returncode == 0, first.stderr
+    body_after_first = json.load(open(os.path.join(tmp, "cfg.json")))["bodies"]["42"]
+    # second run against the same (now-updated) parent body — already-linked children are
+    # skipped, so re-run split with the same children to exercise the idempotency path
+    second, _ = split(tmp, env)
+    assert second.returncode == 0, second.stderr
+    body_after_second = json.load(open(os.path.join(tmp, "cfg.json")))["bodies"]["42"]
+    assert body_after_second == body_after_first, \
+        "re-running split must not duplicate the Tasks section: " + body_after_second
+    assert body_after_second.count("## Tasks") == 1, body_after_second
+ok("re-running epic split against the same parent is idempotent — no duplicate Tasks section")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, linked=[], view_fail=["11"], bodies={
+        "42": "Parent intro.", "10": "", "11": "", "12": "",
+    }, titles={"10": "t10", "12": "t12"})
+    proc, path = split(tmp, env)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "#11" in proc.stderr, proc.stderr
+    assert "edit" not in open(log).read(), \
+        "a child view failure must abort before the parent is ever edited: " + open(log).read()
+    assert not os.path.isfile(path), "no epic.json when a child's title/body fetch fails"
+ok("a child's issue-view failure during the title fetch dies naming that child")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, linked=[], no_title=["11"], bodies={
+        "42": "Parent intro.", "10": "", "11": "Depends on: #10", "12": "",
+    }, titles={"10": "t10", "12": "t12"})
+    proc, path = split(tmp, env)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "#11" in proc.stderr, proc.stderr
+    assert not os.path.isfile(path), "no epic.json when a child's JSON is missing title"
+ok("a child view response with no title field dies naming that child")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, linked=[], view_fail=["42"], bodies={
+        "10": "", "11": "", "12": "",
+    }, titles={"10": "t10", "11": "t11", "12": "t12"})
+    proc, path = split(tmp, env)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "edit" not in open(log).read(), \
+        "the parent body read failed — gh issue edit must never be called: " + open(log).read()
+    assert not os.path.isfile(path), "no epic.json when the parent body read fails"
+ok("a failed parent body read dies without ever calling gh issue edit")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, linked=[], edit_fail=True, bodies={
+        "42": "Parent intro.", "10": "", "11": "", "12": "",
+    }, titles={"10": "t10", "11": "t11", "12": "t12"})
+    proc, path = split(tmp, env)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert not os.path.isfile(path), "no epic.json when gh issue edit fails"
+    leftover = [f for f in os.listdir(tmp) if f.startswith("tmp") and f not in ("e", "bin")]
+    assert not [f for f in leftover if os.path.isfile(os.path.join(tmp, f))], \
+        "a failed gh issue edit should not leave a temp body file behind: " + str(leftover)
+ok("a failed gh issue edit dies without writing epic.json")
 
 proc = subprocess.run([sys.executable, ROUTE, "epic", "next", "/nonexistent"],
                       capture_output=True, text=True)
