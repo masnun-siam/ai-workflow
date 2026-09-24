@@ -79,7 +79,7 @@ Do the following:
    - **Implementation Guide is not a DoR item** — it's the plan, not a readiness gate.
      Required on every issue except an epic parent. Every step names a real path:line
      or symbol — no vague area names like "the auth code." A `[bracketed placeholder]`
-     in it counts as a failed run under the same rule as the five sections above.
+     in it counts as a failed run under the same rule as the four sections above.
      When a **Proposed Fix** section is also present, it stays the literal patch;
      Implementation Guide is the ordered plan to get there.
    - Labels: bug / enhancement / feature / chore, plus scope labels (`backend`, `frontend`, `infra`) as applicable

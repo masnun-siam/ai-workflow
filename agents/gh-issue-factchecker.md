@@ -30,7 +30,11 @@ the point.
    - A proposed fix, if present — does it actually match the code it claims to change?
 3. Flag anything vague enough to be unverifiable (e.g. "the auth code" with no path, or
    an Implementation Guide step with no path or symbol reference) as a gap, not a pass —
-   the whole point is that a reader shouldn't have to take this on faith.
+   the whole point is that a reader shouldn't have to take this on faith. A MISSING
+   Implementation Guide section — on any issue that is not itself an epic parent (check
+   the labels for `epic`) — is also a gap to report, not a silent pass: a child/single
+   issue with no Implementation Guide at all has nothing to verify inside it, but that
+   absence is itself the finding.
 4. Do not re-litigate scope, priority, or whether the issue *should* exist — that's a
    human call already made. You are checking facts, not opinions.
 
