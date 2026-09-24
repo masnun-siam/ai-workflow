@@ -68,7 +68,11 @@ outside a "fix review comments" pass and belongs to gate 2's judgment, not yours
 5. Commit per issue, reply on the thread with the commit SHA, resolve the thread with
    `aiw threads resolve <node_id>` — exactly as `/pr-fix-comments` steps 6–7.
 6. One pass only. Do not loop back over the same comment twice hunting for a better fix.
-7. After all comments are handled, push once.
+7. After all comments are handled, push once — unless the caller passed
+   `hold_push: true` (opt-in; `/run-issue`'s phase 7 never passes it, so its
+   behavior is unchanged). With `hold_push: true`, still commit, reply to
+   threads, and resolve them, but do **not** push. List the commit SHA(s) in
+   `handoff.commits` and say "push held by caller" in your report.
 
 ## Out of scope
 

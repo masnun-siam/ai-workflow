@@ -287,7 +287,7 @@ A rail firing means *stop this round*. First one to fire wins.
 | Rail | Why it exists |
 |---|---|
 | **10 rounds** | A loop that has gone ten rounds is not converging. |
-| **CI is red** | Never push review fixes onto a broken branch. This one escalates **once** before stopping: `run-ci` gets exactly one attempt per head SHA — never two, here or anywhere else. |
+| **CI is red** | Never push review fixes onto a broken branch. `run-ci` gets exactly one attempt per head SHA — never two, here or anywhere else. A `fixed`/`flake-rerun` outcome no longer stops the round: review triage keeps going, and any new fix commits are queued rather than pushed until CI goes green. Only a terminal outcome (cannot-fix, needs human confirmation, or the one attempt already spent and still red) stops the round. |
 | **A real person commented** | Automation ends when a human weighs in. A *bot* commenting doesn't count, and an unknown named account is treated as a person, which is the safe default. |
 | **You said hold** | Said to the session, not in Slack. Nothing you post in the thread reaches it. |
 
