@@ -322,11 +322,10 @@ And still: **merging is manual.** The grind ends by @-mentioning you to do it.
 
 ## Layer 5 — Epics
 
-For work too big for one pull request.
-
-`/gh-issue` can split a large brief into a **parent** issue plus several **children**, each
-of which is a complete, independently-readable issue — not a fragment that says "see
-parent". Children declare their order in plain text:
+`/gh-issue` always breaks a request into a numbered task list before filing anything. One
+task files one issue as before; two or more tasks file a **parent** issue plus several
+**children**, each of which is a complete, independently-readable issue — not a fragment
+that says "see parent". Children declare their order in plain text:
 
 ```
 Depends on: #12, #13
@@ -344,6 +343,9 @@ Then `/run-issue <parent>` drives them all. The rules:
 - **A failed child with dependents is reported by name.** "Never started, blocked by #14" —
   because a child silently missing from a list of twelve is how you discover a month later
   that a third of the epic was never built.
+- **A child-create failure partway through is a recoverable state, not a failure state.**
+  `/gh-issue` reports which issues exist and which are missing, then asks whether to retry
+  the missing ones or stop here; nothing already created is auto-closed or deleted.
 
 Optionally it also creates a Kanban view in your GitHub Project filtered to that epic, so
 you can see the whole thing at a glance.
