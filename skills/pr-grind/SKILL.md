@@ -131,13 +131,17 @@ GitHub's `reviewDecision` field (nits don't block).
 Do **not** re-trigger the bot for a nit-only round — nits don't block, and a
 re-trigger risks reopening the cycle.
 
-**Push gate applies here too.** This nit-fix dispatch pushes before Step 3's
-rails run, so it has the same shape as rail 2's problem. If the nit-fix commit
-ends up queued (CI not green at push time), record it in the state file as
-`queued-push: <sha>[ <sha>...] — round <n> — then close` instead of
-immediately posting the close summary below and calling
-`ScheduleWakeup({stop: true})`. Defer those two actions until the queued
-commit is pushed (Step 6's logic below), then complete the close as normal.
+**Push gate applies here too, with a real trigger.** This nit-fix dispatch
+pushes before Step 3's rails run, so it has the same shape as rail 2's
+problem — but nothing here checks CI on its own, so before dispatching
+`run-fixer` for the nit, run `aiw ci status <pr>` (same call rail 2 uses).
+If it is not green — red or pending — at the current head, pass
+`hold_push: true` to `run-fixer`. If the nit-fix commit ends up queued this
+way, record it in the state file as `queued-push: <sha>[ <sha>...] — round
+<n> — then close` instead of immediately posting the close summary below and
+calling `ScheduleWakeup({stop: true})`. Defer those two actions until the
+queued commit is pushed (Step 6's logic below), then complete the close as
+normal.
 
 Then post the final Slack summary (round count, what got fixed across the run,
 including any nits, PR URL, "ready for human merge — merging stays manual") by
@@ -170,9 +174,9 @@ harmless bot reply after it.
 ## Step 3 — Rails
 
 Check in this order; the first that fires wins, and firing means **stop, do
-not fix this round** — except rail 2, which no longer stops the round outright
-for the common case; only its genuinely terminal outcomes (cannot-fix /
-needs-confirmation / attempt-spent-still-red) go to Step 8:
+not fix this round** — except rail 2, whose only fully-terminal outcomes
+(cannot-fix / needs-confirmation / attempt-spent-still-red) go to Step 8; a
+`fixed`/`flake-rerun` outcome does not stop the round:
 
 1. **Round cap** — 10 rounds recorded in the state file already → stop, post
    to Slack that the cap was hit with a link to the state file, then go to
@@ -180,9 +184,9 @@ needs-confirmation / attempt-spent-still-red) go to Step 8:
 2. **CI red** — `aiw ci status <pr> --watch` reports `state: red` at the
    current head (not pending, not the check this round's fix would address).
    It returns the failing jobs' logs with it; deciding flake-vs-real is
-   `run-ci`'s job, not yours. This rail **escalates once before it stops**,
-   and — decoupled per issue #52 — a `fixed`/`flake-rerun` outcome no longer
-   halts the round; it only closes the push gate.
+   `run-ci`'s job, not yours. This rail **escalates once before it stops**;
+   a `fixed`/`flake-rerun` outcome does not halt the round — it only closes
+   the push gate.
 
    Look for a `ci-attempt: <sha>` line in the state file matching the current
    head SHA. `run-ci` and queued review commits must never overlap on the same
@@ -207,6 +211,14 @@ needs-confirmation / attempt-spent-still-red) go to Step 8:
    `run-fixer` may still run while CI is not green, but only with
    `hold_push: true` passed to it (see Step 5 below). The invariant holds:
    do not push review fixes onto a red branch.
+
+   **The push gate is stricter than this rail's firing condition.** This
+   rail's `run-ci` dispatch above only fires on `state: red` — pending has
+   nothing to diagnose yet, so the rail itself does not fire on pending. But
+   the **push gate** closes whenever CI is not green at the current head —
+   red *or* pending — regardless of whether this rail fired this round. Step
+   5 checks CI state directly for the push gate; it does not infer the gate
+   from "did rail 2 fire".
 3. **Third-party human comment** — any comment (inline or top-level) since
    the last processed round from an account that is neither the reviewer nor
    the PR author → stop, post to Slack quoting it, then go to Step 8's
@@ -328,8 +340,11 @@ exactly as `/run-issue` gate 2a does: stop,
 post to Slack with the finding and thread URL, then go to Step 8's paused
 stop — do not proceed to step 6.
 
-**Push gate.** If rail 2 (Step 3) closed the push gate this round — CI is not
-green at the current head — pass `hold_push: true` to `run-fixer`. It still
+**Push gate.** Check CI state directly (`aiw ci status <pr>`, same call rail
+2 uses): if it is not green — red or pending — at the current head, pass
+`hold_push: true` to `run-fixer`, regardless of whether rail 2 fired this
+round (rail 2's `run-ci` dispatch only fires on red; pending alone doesn't
+trigger it, but still closes the push gate). It still
 commits, replies to threads, and resolves them, but does not push. Take its
 `handoff.commits` (the commit SHA(s) it made) and record them in the state
 file's `queued-push:` line as `queued-push: <sha>[ <sha>...] — round <n> —
@@ -369,9 +384,9 @@ fix/rebut/repeat disposition, commit SHAs, CI result.
 
 ## Step 7 — Re-trigger and re-arm
 
-**Never post the re-trigger while `queued-push:` is set, or while CI is red at
-the current head.** The reviewer bot must not review a head that's missing the
-queued fixes.
+**Never post the re-trigger while `queued-push:` is set, or while CI is not
+green (red or pending) at the current head.** The reviewer bot must not
+review a head that's missing the queued fixes.
 
 1. Post the **re-trigger** message to the Slack thread. This is **not** the
    same text that opened the thread — follow-up rounds use a short recheck
@@ -491,9 +506,20 @@ Step 7, `close` → Step 2's close). While `queued-push:` is still set, treat an
 newly-observed review the same as Step 1's "none found" branch — don't count a round
 against a head that's missing the queued fixes.
 
-Otherwise re-enter at Step 1. The state file and the Monitor mean this is
-cheap — most wakes will either be a genuine new round (Monitor fired) or a
-no-op heartbeat (fallback fired with nothing new), handled by step 1's "none
+Else — no `paused:` line, no `queued-push:` line — check CI state directly
+(`aiw ci status <pr>`) before re-entering Step 1. If it is not green (red or
+pending) at the current head, run rail 2's logic (Step 3) directly rather
+than going to Step 1 first: dispatch or reuse `run-ci`'s per-SHA attempt as
+usual, and any terminal outcome (cannot-fix / needs-confirmation /
+attempt-spent-still-red) goes to Step 8. This is what breaks the
+wake-forever loop when every finding was rebutted or Step 6's post-push path
+left nothing queued — without it, Step 1's "none found" branch never
+re-checks rail 2, and Step 7 just re-arms the heartbeat again on every tick.
+
+Otherwise (CI is green, or rail 2 above returned `fixed`/`flake-rerun`),
+re-enter at Step 1. The state file and the Monitor mean this is cheap — most
+wakes will either be a genuine new round (Monitor fired) or a no-op
+heartbeat (fallback fired with nothing new), handled by step 1's "none
 found" branch.
 
 ## Rules
