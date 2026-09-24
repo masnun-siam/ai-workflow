@@ -1414,6 +1414,53 @@ assert not any(re.search(pattern, "Implementation Guide", re.I) for _, pattern i
 ]
 ok("no DOR_ITEMS pattern matches the Implementation Guide heading, keeping it a non-DoR section")
 
+# Regression for issue #42: jira-to-gh.md's Step 5-EPIC (mirroring gh-issue.md's
+# 4-EPIC) must define its child issue's "Body sections:" list with the exact same
+# section names, in the exact same order, as gh-issue.md's own list — copied
+# literally, not hand-maintained separately where it could drift.
+JIRA_TO_GH_MD = os.path.join(HERE, "..", "commands", "jira-to-gh.md")
+with open(JIRA_TO_GH_MD, encoding="utf-8") as fh:
+    jira_to_gh_lines = fh.readlines()
+
+step5_epic_start = next(
+    (i for i, line in enumerate(jira_to_gh_lines) if line.strip().startswith("### 5-EPIC")),
+    None,
+)
+assert step5_epic_start is not None, "jira-to-gh.md has no '### 5-EPIC' section yet (issue #42 not implemented)"
+
+jira_to_gh_body_sections_line = next(
+    line
+    for line in jira_to_gh_lines[step5_epic_start:]
+    if line.strip().startswith("- Body sections:")
+)
+jira_to_gh_section_names = re.findall(r"\*\*([^*]+)\*\*", jira_to_gh_body_sections_line)
+assert jira_to_gh_section_names == section_names, (jira_to_gh_section_names, section_names)
+ok("jira-to-gh.md's Step 5-EPIC Body sections list exactly matches gh-issue.md's Body sections list")
+
+jira_to_gh_child_body = "\n\n".join(
+    f"## {name}\nSome real content for {name}." for name in jira_to_gh_section_names
+)
+assert dispatch.dor_gaps(jira_to_gh_child_body) == [], dispatch.dor_gaps(jira_to_gh_child_body)
+ok("a jira-to-gh.md child body built from Step 5-EPIC's own section headings screens ready with zero gaps")
+
+# The parentheticals were legitimately adapted from gh-issue.md's own step numbering
+# to jira-to-gh.md's step numbering (issue #42 PR review). Pin that any "Step N"
+# reference inside jira-to-gh.md's Body sections parentheticals names a step heading
+# that actually exists in jira-to-gh.md, so a future renumbering can't leave a
+# dangling cross-reference.
+jira_to_gh_step_numbers = {
+    m.group(1)
+    for line in jira_to_gh_lines
+    if (m := re.match(r"^#{1,3}\s+Step\s+(\d+(?:\.\d+)?)", line.strip()))
+}
+referenced_step_numbers = set(re.findall(r"Step\s+(\d+(?:\.\d+)?)", jira_to_gh_body_sections_line))
+assert referenced_step_numbers, "expected at least one Step N cross-reference in the parentheticals"
+assert referenced_step_numbers <= jira_to_gh_step_numbers, (
+    referenced_step_numbers - jira_to_gh_step_numbers,
+    jira_to_gh_step_numbers,
+)
+ok("every 'Step N' cross-reference in jira-to-gh.md's Body sections parentheticals names a real step heading")
+
 # --------------------------------------------------------------------------- dispatch: lane mode
 
 assert dispatch.lane_mode(["lean"]) == "lean"
