@@ -2083,11 +2083,10 @@ assert "rail 3" in pr_grind_on_wake
 assert "rail 5" in pr_grind_on_wake
 ok("skills/pr-grind/SKILL.md On wake section contains queued-push, rail 3, and rail 5")
 
-flush_idx = skill_text.find("flush")
-assert flush_idx != -1, "expected a 'flush' mention somewhere in SKILL.md"
-flush_context = skill_text[max(0, flush_idx - 500):flush_idx + 500]
-assert "not a new round" in flush_context
-ok("skills/pr-grind/SKILL.md flush-related text contains 'not a new round'")
+pr_grind_step6 = _pr_grind_section(skill_text, "## Step 6", "## Step 7")
+assert "flush" in pr_grind_step6, "expected a 'flush' mention in the Step 6 section"
+assert "not a new round" in pr_grind_step6
+ok("skills/pr-grind/SKILL.md Step 6 section flush-related text contains 'not a new round'")
 
 pr_grind_step2 = _pr_grind_section(skill_text, "## Step 2", "## Step 3")
 assert "queued-push" in pr_grind_step2
