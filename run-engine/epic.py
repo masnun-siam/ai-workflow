@@ -10,9 +10,56 @@ from __future__ import annotations
 import re
 
 DEPENDS_RE = re.compile(r"^\s*Depends on:\s*(.+)$", re.M | re.I)
-# Matches to end-of-string when there's no trailing newline / no following heading (the
-# exact shape gh_json's .strip() leaves), and re.S/re.M so CRLF-normalized bodies work too.
-TASKS_RE = re.compile(r"^## Tasks[ \t]*$.*?(?=^#{1,2} |\Z)", re.M | re.S)
+# CRLF bodies are normalized to \n by the explicit .replace() in upsert_tasks_section
+# before this ever runs, so these line-anchored patterns never have to deal with \r.
+TASKS_HEADING_RE = re.compile(r"^## Tasks[ \t]*$")
+HEADING_RE = re.compile(r"^#{1,2} ")
+
+
+def _find_tasks_section(body: str) -> tuple[int, int] | None:
+    """(start, end) of the `## Tasks` section in `body`, fence-aware.
+
+    A `#`/`##`-looking line inside a ``` fence is never treated as the Tasks
+    heading or as its closing boundary — otherwise a fenced code block that
+    quotes `## Tasks` (this repo's own issue bodies do exactly that) would be
+    silently mistaken for the real section and its content would be cut.
+    # ponytail: fence detection is a plain ``` toggle, not a real Markdown
+    # parser — a body with an odd number of ``` (a genuinely malformed fence)
+    # will misread past that point. Upgrade to a real Markdown parser if that
+    # ever proves to matter in practice.
+    """
+    lines = body.split("\n")
+    offsets = []
+    pos = 0
+    for line in lines:
+        offsets.append(pos)
+        pos += len(line) + 1
+
+    in_fence = False
+    start_idx = None
+    for i, line in enumerate(lines):
+        if line.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if not in_fence and TASKS_HEADING_RE.match(line):
+            start_idx = i
+            break
+    if start_idx is None:
+        return None
+
+    in_fence = False
+    end_idx = len(lines)
+    for i in range(start_idx, len(lines)):
+        line = lines[i]
+        if i > start_idx and not in_fence and HEADING_RE.match(line):
+            end_idx = i
+            break
+        if line.startswith("```"):
+            in_fence = not in_fence
+
+    start = offsets[start_idx]
+    end = offsets[end_idx] if end_idx < len(lines) else len(body)
+    return start, end
 
 
 def parse_depends(body: str | None) -> list[int]:
@@ -45,9 +92,10 @@ def upsert_tasks_section(body: str, section: str) -> str:
     otherwise be misread as regex backreferences in the replacement string.
     """
     body = (body or "").replace("\r\n", "\n")
-    m = TASKS_RE.search(body)
-    if m:
-        result = body[:m.start()] + section + "\n\n" + body[m.end():]
+    found = _find_tasks_section(body)
+    if found:
+        start, end = found
+        result = body[:start] + section + "\n\n" + body[end:]
     else:
         result = (body.rstrip() + "\n\n" if body.strip() else "") + section
     return result.rstrip() + "\n"
@@ -228,7 +276,9 @@ def cmd_split(args) -> None:
     if proc.returncode != 0:
         die(1, f"could not read #{args.parent}'s body to write its Tasks checklist: "
                f"{(proc.stderr or '').strip()[:160]}")
-    body = (parent_body or {}).get("body", "") if isinstance(parent_body, dict) else ""
+    if not isinstance(parent_body, dict) or "body" not in parent_body:
+        die(1, f"#{args.parent}'s issue view response has no body")
+    body = parent_body.get("body") or ""
     new_body = upsert_tasks_section(body, render_tasks_section(dag["order"], titles))
 
     tmp_fh = tempfile.NamedTemporaryFile(
