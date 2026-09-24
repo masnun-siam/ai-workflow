@@ -1443,6 +1443,24 @@ jira_to_gh_child_body = "\n\n".join(
 assert dispatch.dor_gaps(jira_to_gh_child_body) == [], dispatch.dor_gaps(jira_to_gh_child_body)
 ok("a jira-to-gh.md child body built from Step 5-EPIC's own section headings screens ready with zero gaps")
 
+# The parentheticals were legitimately adapted from gh-issue.md's own step numbering
+# to jira-to-gh.md's step numbering (issue #42 PR review). Pin that any "Step N"
+# reference inside jira-to-gh.md's Body sections parentheticals names a step heading
+# that actually exists in jira-to-gh.md, so a future renumbering can't leave a
+# dangling cross-reference.
+jira_to_gh_step_numbers = {
+    m.group(1)
+    for line in jira_to_gh_lines
+    if (m := re.match(r"^#{1,3}\s+Step\s+(\d+(?:\.\d+)?)", line.strip()))
+}
+referenced_step_numbers = set(re.findall(r"Step\s+(\d+(?:\.\d+)?)", jira_to_gh_body_sections_line))
+assert referenced_step_numbers, "expected at least one Step N cross-reference in the parentheticals"
+assert referenced_step_numbers <= jira_to_gh_step_numbers, (
+    referenced_step_numbers - jira_to_gh_step_numbers,
+    jira_to_gh_step_numbers,
+)
+ok("every 'Step N' cross-reference in jira-to-gh.md's Body sections parentheticals names a real step heading")
+
 # --------------------------------------------------------------------------- dispatch: lane mode
 
 assert dispatch.lane_mode(["lean"]) == "lean"
