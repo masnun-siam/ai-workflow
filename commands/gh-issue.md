@@ -162,7 +162,9 @@ Do the following:
    Exit 1 means the edges do not form a DAG — a cycle, a self-edge, or an edge pointing
    outside the epic. Fix the offending child's `Depends on:` line with `gh issue edit`
    and re-run. Do not proceed with an invalid DAG: the ordering is what keeps a stacked
-   child from branching off a base that does not exist yet.
+   child from branching off a base that does not exist yet. This call also writes the
+   parent's `## Tasks` checklist in dependency order, so there is no separate `gh issue
+   edit` needed for it.
 5. Step 4.5 (the `gh-issue-factchecker` dispatch) runs **once per child** — each child
    body makes its own concrete claims about files and symbols, and that is exactly what
    the factchecker verifies; a check against the parent would miss them. Step 5

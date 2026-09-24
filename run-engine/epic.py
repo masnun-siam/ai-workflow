@@ -10,6 +10,9 @@ from __future__ import annotations
 import re
 
 DEPENDS_RE = re.compile(r"^\s*Depends on:\s*(.+)$", re.M | re.I)
+# Matches to end-of-string when there's no trailing newline / no following heading (the
+# exact shape gh_json's .strip() leaves), and re.S/re.M so CRLF-normalized bodies work too.
+TASKS_RE = re.compile(r"^## Tasks[ \t]*$.*?(?=^#{1,2} |\Z)", re.M | re.S)
 
 
 def parse_depends(body: str | None) -> list[int]:
@@ -28,6 +31,26 @@ def parse_depends(body: str | None) -> list[int]:
         for match in DEPENDS_RE.finditer(body or "")
         for n in re.findall(r"#(\d+)", match.group(1))
     })
+
+
+def render_tasks_section(order: list[int], titles: dict[int, str]) -> str:
+    """The parent's `## Tasks` checklist, in topological (not numeric) order."""
+    return "## Tasks\n\n" + "\n".join(f"- [ ] #{n} {titles[n]}" for n in order)
+
+
+def upsert_tasks_section(body: str, section: str) -> str:
+    """Splice `section` into `body`, replacing any existing `## Tasks` section.
+
+    Sliced rather than `re.sub`'d: a child title containing backslashes would
+    otherwise be misread as regex backreferences in the replacement string.
+    """
+    body = (body or "").replace("\r\n", "\n")
+    m = TASKS_RE.search(body)
+    if m:
+        result = body[:m.start()] + section + "\n\n" + body[m.end():]
+    else:
+        result = (body.rstrip() + "\n\n" if body.strip() else "") + section
+    return result.rstrip() + "\n"
 
 
 def build_dag(deps: dict[int, list[int]]) -> dict:
@@ -96,6 +119,7 @@ def ready(dag: dict, states: dict, max_stacks: int) -> list[int]:
 
 import json  # noqa: E402  (kept beside the I/O half, the top of this file is pure)
 import os  # noqa: E402
+import tempfile  # noqa: E402
 
 from shared import (  # noqa: E402
     die, gh_json, ledger_path, load_ledger, read_json, run_dir_for, save_ledger, write_json,
@@ -177,21 +201,48 @@ def cmd_split(args) -> None:
                    f"{(proc.stderr or '').strip()[:160]}")
 
     deps = {}
+    titles: dict[int, str] = {}
     for child in children:
-        body, proc = gh_json(["issue", "view", str(child), "--repo", args.slug,
-                              "--json", "body", "--jq", ".body"])
+        resp, proc = gh_json(["issue", "view", str(child), "--repo", args.slug,
+                              "--json", "body,title"])
         if proc.returncode != 0:
-            die(1, f"could not read #{child}'s body to parse its dependencies: "
+            die(1, f"could not read #{child}'s body/title to parse its dependencies: "
                    f"{(proc.stderr or '').strip()[:160]}")
+        data = resp if isinstance(resp, dict) else {}
+        title = data.get("title")
+        if not isinstance(title, str):
+            die(1, f"#{child}'s issue view response has no title")
+        titles[child] = title
         # Foreign edges are NOT filtered out here: build_dag rejects them, which is what
         # turns a typo'd `Depends on: #41` (meant #14) into an exit 1 the user can fix
         # rather than an epic that validates and orders wrongly.
-        deps[child] = parse_depends(body if isinstance(body, str) else "")
+        deps[child] = parse_depends(data.get("body") if isinstance(data.get("body"), str) else "")
 
     try:
         dag = build_dag(deps)
     except ValueError as exc:
         die(1, f"invalid epic: {exc}")
+
+    parent_body, proc = gh_json(["issue", "view", str(args.parent), "--repo", args.slug,
+                                 "--json", "body"])
+    if proc.returncode != 0:
+        die(1, f"could not read #{args.parent}'s body to write its Tasks checklist: "
+               f"{(proc.stderr or '').strip()[:160]}")
+    body = (parent_body or {}).get("body", "") if isinstance(parent_body, dict) else ""
+    new_body = upsert_tasks_section(body, render_tasks_section(dag["order"], titles))
+
+    tmp_fh = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".md", delete=False, encoding="utf-8")
+    try:
+        tmp_fh.write(new_body)
+        tmp_fh.close()
+        _, proc = gh_json(["issue", "edit", str(args.parent), "--repo", args.slug,
+                           "--body-file", tmp_fh.name])
+        if proc.returncode != 0:
+            die(1, f"could not write #{args.parent}'s Tasks checklist: "
+                   f"{(proc.stderr or '').strip()[:160]}")
+    finally:
+        os.unlink(tmp_fh.name)
 
     write_json(epic_path(args.epic_dir), {
         "parent": args.parent, "slug": args.slug, "children": children,
