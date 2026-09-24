@@ -6,7 +6,7 @@ argument-hint: "<sentry-url | file-path | vault-note | free text>"
 > **Paths.** `<...>` placeholders below are keys from `aiw paths` (run it; `aiw` is
 > on `PATH` via the plugin's `bin/`). Substitute the printed value; never guess a path.
 
-Source: $ARGUMENTS
+Source: <argument>
 
 **HARD RULE — while producing the brief below, this skill only ever produces a brief. It never creates a GitHub issue and
 never dispatches `/run-issue` or any pipeline station.**
@@ -32,7 +32,7 @@ Do the following:
      existing file with any other extension is not a supported document shape — fall
      through to Note, then Text, rather than reading an arbitrary file's raw content into
      a brief that becomes a public GitHub issue body.
-   - `obsidian vault=notes search query="$ARGUMENTS" format=json`, and one returned path's
+   - `obsidian vault=notes search query="<argument>" format=json`, and one returned path's
      filename stem (without extension) exactly equals the argument → **Note**. A
      near-miss (partial match, multiple candidates, no exact stem) does NOT count — fall
      through to Text.
@@ -153,7 +153,7 @@ Do the following:
    - Build the brief (`type: task`) directly from the argument:
      ```
      ## Summary
-     $ARGUMENTS
+     <argument>
 
      ## Notes
      Source: raw text from /intake invocation
@@ -166,7 +166,7 @@ Do the following:
    ## Intake result
    type: <bug|feature|task|improvement>
    ---
-   <the brief built in step 2>
+   <the brief built in step 3>
    ```
 
    If `/gh-issue` or `/run-issue` invoked this skill, that caller proceeds with this
