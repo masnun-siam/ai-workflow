@@ -76,7 +76,7 @@ Do the following:
    - `.docx` → use the `anthropic-skills:docx` skill to extract text.
    - Extract goals, scope, and acceptance criteria, preserving the document's own wording
      where it states them; do not paraphrase a stated acceptance criterion.
-   - **Decomposition check** (same test `gh-issue.md` step 3.5 applies): if the document
+   - **Decomposition check**: if the document
      covers more than one independently-shippable outcome, list each candidate as one
      line (title + the one outcome it delivers), then `AskUserQuestion` — single question,
      one option per candidate — asking which one to run now. If it's a single outcome,
