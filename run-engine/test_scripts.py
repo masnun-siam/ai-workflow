@@ -1396,6 +1396,30 @@ gh_issue_body = "\n\n".join(f"## {name}\nSome real content for {name}." for name
 assert dispatch.dor_gaps(gh_issue_body) == [], dispatch.dor_gaps(gh_issue_body)
 ok("a body built from gh-issue.md's own literal section headings screens ready with zero gaps")
 
+# Regression for issue #39: gh-issue.md must define an "Implementation Guide"
+# section, placed after Acceptance Criteria and before Non-functional
+# Constraints, without becoming a DoR item.
+assert "Implementation Guide" in section_names, section_names
+ok("Implementation Guide is present in gh-issue.md's Body sections list")
+
+assert (
+    section_names.index("Acceptance Criteria")
+    < section_names.index("Implementation Guide")
+    < section_names.index("Non-functional Constraints")
+), section_names
+ok("Implementation Guide is ordered after Acceptance Criteria and before Non-functional Constraints")
+
+assert dispatch.dor_gaps(gh_issue_body) == [], dispatch.dor_gaps(gh_issue_body)
+ok("adding Implementation Guide content still screens ready with zero DoR gaps")
+
+assert len(dispatch.dor_gaps("")) == 6, dispatch.dor_gaps("")
+ok("an empty body still reports exactly the six DoR items as gaps, unaffected by Implementation Guide")
+
+assert not any(re.search(pattern, "Implementation Guide", re.I) for _, pattern in dispatch.DOR_ITEMS), [
+    label for label, pattern in dispatch.DOR_ITEMS if re.search(pattern, "Implementation Guide", re.I)
+]
+ok("no DOR_ITEMS pattern matches the Implementation Guide heading, keeping it a non-DoR section")
+
 # --------------------------------------------------------------------------- dispatch: lane mode
 
 assert dispatch.lane_mode(["lean"]) == "lean"
