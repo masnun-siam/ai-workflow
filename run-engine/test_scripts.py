@@ -1772,6 +1772,36 @@ with open(os.path.join(HERE, "..", "skills", "pr-grind", "SKILL.md"), encoding="
 assert "aiw review pick" in skill_text
 assert "take the newest only" not in skill_text
 ok("skills/pr-grind/SKILL.md Step 1 references `aiw review pick` and no longer states bare 'take the newest only' as the whole rule")
+
+# --------------------------------------------------------------------------- gh-issue always decomposes before creating any issue (issue #38)
+
+with open(os.path.join(HERE, "..", "commands", "gh-issue.md"), encoding="utf-8") as fh:
+    gh_issue_text = fh.read()
+assert "3.5. **Decompose.**" in gh_issue_text, "expected the renamed step heading '3.5. **Decompose.**'"
+assert "Epic check" not in gh_issue_text, "old 'Epic check' heading text must be gone"
+ok("commands/gh-issue.md step 3.5 is headed 'Decompose.' and no longer says 'Epic check'")
+
+for choice in ("Create as shown", "Let me edit the list", "File as one issue instead"):
+    assert choice in gh_issue_text, f"missing AskUserQuestion choice label: {choice!r}"
+ok("commands/gh-issue.md contains all three AskUserQuestion choice labels verbatim")
+
+epic_section_start = gh_issue_text.index("### 4-EPIC")
+epic_section = gh_issue_text[epic_section_start:]
+assert "Retry the missing ones" in epic_section, "4-EPIC section missing 'Retry the missing ones'"
+assert "Stop here" in epic_section, "4-EPIC section missing 'Stop here'"
+ok("commands/gh-issue.md's 4-EPIC section covers both 'Retry the missing ones' and 'Stop here'")
+
+with open(os.path.join(HERE, "..", "README.md"), encoding="utf-8") as fh:
+    readme_text = fh.read()
+assert "splits a large brief" not in readme_text, "README.md must no longer describe gh-issue as splitting a large brief"
+ok("README.md no longer contains 'splits a large brief'")
+
+with open(os.path.join(HERE, "..", "docs", "HOW-IT-WORKS.md"), encoding="utf-8") as fh:
+    how_it_works_text = fh.read()
+assert "can split a large brief" not in how_it_works_text, "HOW-IT-WORKS.md must no longer say 'can split a large brief'"
+assert "For work too big for one pull request" not in how_it_works_text, "HOW-IT-WORKS.md must no longer say 'For work too big for one pull request'"
+ok("docs/HOW-IT-WORKS.md no longer contains 'can split a large brief' or 'For work too big for one pull request'")
+
 # --------------------------------------------------------------------------- checks.suite_timeout / run_suite timeout override (issue #25)
 
 import checks  # noqa: E402
