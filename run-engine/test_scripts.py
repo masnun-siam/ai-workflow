@@ -1804,10 +1804,23 @@ for choice in ("Create as shown", "Let me edit the list", "File as one issue ins
 ok("commands/gh-issue.md contains all three AskUserQuestion choice labels verbatim")
 
 epic_section_start = gh_issue_text.index("### 4-EPIC")
-epic_section = gh_issue_text[epic_section_start:]
+epic_section_end_match = re.search(r"^### (?!4-EPIC)", gh_issue_text[epic_section_start + 1:], re.MULTILINE)
+epic_section_end = (
+    epic_section_start + 1 + epic_section_end_match.start()
+    if epic_section_end_match
+    else len(gh_issue_text)
+)
+epic_section = gh_issue_text[epic_section_start:epic_section_end]
 assert "Retry the missing ones" in epic_section, "4-EPIC section missing 'Retry the missing ones'"
 assert "Stop here" in epic_section, "4-EPIC section missing 'Stop here'"
 ok("commands/gh-issue.md's 4-EPIC section covers both 'Retry the missing ones' and 'Stop here'")
+
+epic_section_flat = " ".join(epic_section.split())
+assert "the parent and children 1..k-1" in epic_section_flat and "URLs" in epic_section_flat, \
+    "4-EPIC section's partial-failure report must describe naming created issues (parent + children 1..k-1) with URLs"
+assert "which are missing" in epic_section_flat and "by planned title" in epic_section_flat, \
+    "4-EPIC section's partial-failure report must describe naming missing issues (k..N) by planned title"
+ok("commands/gh-issue.md's 4-EPIC section's partial-failure report describes both created (parent+children, URLs) and missing (by planned title) issues")
 
 with open(os.path.join(HERE, "..", "README.md"), encoding="utf-8") as fh:
     readme_text = fh.read()
