@@ -10,6 +10,56 @@ from __future__ import annotations
 import re
 
 DEPENDS_RE = re.compile(r"^\s*Depends on:\s*(.+)$", re.M | re.I)
+# CRLF bodies are normalized to \n by the explicit .replace() in upsert_tasks_section
+# before this ever runs, so these line-anchored patterns never have to deal with \r.
+TASKS_HEADING_RE = re.compile(r"^## Tasks[ \t]*$")
+HEADING_RE = re.compile(r"^#{1,2} ")
+
+
+def _find_tasks_section(body: str) -> tuple[int, int] | None:
+    """(start, end) of the `## Tasks` section in `body`, fence-aware.
+
+    A `#`/`##`-looking line inside a ``` fence is never treated as the Tasks
+    heading or as its closing boundary — otherwise a fenced code block that
+    quotes `## Tasks` (this repo's own issue bodies do exactly that) would be
+    silently mistaken for the real section and its content would be cut.
+    # ponytail: fence detection is a plain ``` toggle, not a real Markdown
+    # parser — a body with an odd number of ``` (a genuinely malformed fence)
+    # will misread past that point. Upgrade to a real Markdown parser if that
+    # ever proves to matter in practice.
+    """
+    lines = body.split("\n")
+    offsets = []
+    pos = 0
+    for line in lines:
+        offsets.append(pos)
+        pos += len(line) + 1
+
+    in_fence = False
+    start_idx = None
+    for i, line in enumerate(lines):
+        if line.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if not in_fence and TASKS_HEADING_RE.match(line):
+            start_idx = i
+            break
+    if start_idx is None:
+        return None
+
+    in_fence = False
+    end_idx = len(lines)
+    for i in range(start_idx, len(lines)):
+        line = lines[i]
+        if i > start_idx and not in_fence and HEADING_RE.match(line):
+            end_idx = i
+            break
+        if line.startswith("```"):
+            in_fence = not in_fence
+
+    start = offsets[start_idx]
+    end = offsets[end_idx] if end_idx < len(lines) else len(body)
+    return start, end
 
 
 def parse_depends(body: str | None) -> list[int]:
@@ -28,6 +78,27 @@ def parse_depends(body: str | None) -> list[int]:
         for match in DEPENDS_RE.finditer(body or "")
         for n in re.findall(r"#(\d+)", match.group(1))
     })
+
+
+def render_tasks_section(order: list[int], titles: dict[int, str]) -> str:
+    """The parent's `## Tasks` checklist, in topological (not numeric) order."""
+    return "## Tasks\n\n" + "\n".join(f"- [ ] #{n} {titles[n]}" for n in order)
+
+
+def upsert_tasks_section(body: str, section: str) -> str:
+    """Splice `section` into `body`, replacing any existing `## Tasks` section.
+
+    Sliced rather than `re.sub`'d: a child title containing backslashes would
+    otherwise be misread as regex backreferences in the replacement string.
+    """
+    body = (body or "").replace("\r\n", "\n")
+    found = _find_tasks_section(body)
+    if found:
+        start, end = found
+        result = body[:start] + section + "\n\n" + body[end:]
+    else:
+        result = (body.rstrip() + "\n\n" if body.strip() else "") + section
+    return result.rstrip() + "\n"
 
 
 def build_dag(deps: dict[int, list[int]]) -> dict:
@@ -96,6 +167,7 @@ def ready(dag: dict, states: dict, max_stacks: int) -> list[int]:
 
 import json  # noqa: E402  (kept beside the I/O half, the top of this file is pure)
 import os  # noqa: E402
+import tempfile  # noqa: E402
 
 from shared import (  # noqa: E402
     die, gh_json, ledger_path, load_ledger, read_json, run_dir_for, save_ledger, write_json,
@@ -177,21 +249,50 @@ def cmd_split(args) -> None:
                    f"{(proc.stderr or '').strip()[:160]}")
 
     deps = {}
+    titles: dict[int, str] = {}
     for child in children:
-        body, proc = gh_json(["issue", "view", str(child), "--repo", args.slug,
-                              "--json", "body", "--jq", ".body"])
+        resp, proc = gh_json(["issue", "view", str(child), "--repo", args.slug,
+                              "--json", "body,title"])
         if proc.returncode != 0:
-            die(1, f"could not read #{child}'s body to parse its dependencies: "
+            die(1, f"could not read #{child}'s body/title to parse its dependencies: "
                    f"{(proc.stderr or '').strip()[:160]}")
+        data = resp if isinstance(resp, dict) else {}
+        title = data.get("title")
+        if not isinstance(title, str):
+            die(1, f"#{child}'s issue view response has no title")
+        titles[child] = title
         # Foreign edges are NOT filtered out here: build_dag rejects them, which is what
         # turns a typo'd `Depends on: #41` (meant #14) into an exit 1 the user can fix
         # rather than an epic that validates and orders wrongly.
-        deps[child] = parse_depends(body if isinstance(body, str) else "")
+        deps[child] = parse_depends(data.get("body") if isinstance(data.get("body"), str) else "")
 
     try:
         dag = build_dag(deps)
     except ValueError as exc:
         die(1, f"invalid epic: {exc}")
+
+    parent_body, proc = gh_json(["issue", "view", str(args.parent), "--repo", args.slug,
+                                 "--json", "body"])
+    if proc.returncode != 0:
+        die(1, f"could not read #{args.parent}'s body to write its Tasks checklist: "
+               f"{(proc.stderr or '').strip()[:160]}")
+    if not isinstance(parent_body, dict) or "body" not in parent_body:
+        die(1, f"#{args.parent}'s issue view response has no body")
+    body = parent_body.get("body") or ""
+    new_body = upsert_tasks_section(body, render_tasks_section(dag["order"], titles))
+
+    tmp_fh = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".md", delete=False, encoding="utf-8")
+    try:
+        tmp_fh.write(new_body)
+        tmp_fh.close()
+        _, proc = gh_json(["issue", "edit", str(args.parent), "--repo", args.slug,
+                           "--body-file", tmp_fh.name])
+        if proc.returncode != 0:
+            die(1, f"could not write #{args.parent}'s Tasks checklist: "
+                   f"{(proc.stderr or '').strip()[:160]}")
+    finally:
+        os.unlink(tmp_fh.name)
 
     write_json(epic_path(args.epic_dir), {
         "parent": args.parent, "slug": args.slug, "children": children,

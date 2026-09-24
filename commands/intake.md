@@ -6,7 +6,7 @@ argument-hint: "<sentry-url | file-path | vault-note | free text>"
 > **Paths.** `<...>` placeholders below are keys from `aiw paths` (run it; `aiw` is
 > on `PATH` via the plugin's `bin/`). Substitute the printed value; never guess a path.
 
-Source: $ARGUMENTS
+Source: <argument>
 
 **HARD RULE — while producing the brief below, this skill only ever produces a brief. It never creates a GitHub issue and
 never dispatches `/run-issue` or any pipeline station.**
@@ -18,20 +18,27 @@ never dispatches `/run-issue` or any pipeline station.**
 
 Do the following:
 
-1. **Detect the source**, testing in this order, first match wins:
+1. **Strip `--whole`.** If `$ARGUMENTS` contains a `--whole` flag, remove it and remember
+   that `--whole` was set; every later reference to the argument below (source detection,
+   the Note adapter's search query, and the Text adapter's `## Summary`) uses this
+   stripped value, never the raw `$ARGUMENTS`. `--whole` is passed only by `/gh-issue`
+   step 0 and `/run-issue` Preflight step 2 — a human typing `/intake` directly never
+   passes it.
+
+2. **Detect the source**, testing in this order, first match wins:
    - Argument matches `*sentry.io/*` or contains `/organizations/*/issues/` → **Sentry**.
    - Argument resolves to an existing file on disk (absolute path, or relative to the
      current directory) AND ends in `.md`, `.txt`, `.pdf`, or `.docx` → **BRD**. An
      existing file with any other extension is not a supported document shape — fall
      through to Note, then Text, rather than reading an arbitrary file's raw content into
      a brief that becomes a public GitHub issue body.
-   - `obsidian vault=notes search query="$ARGUMENTS" format=json`, and one returned path's
+   - `obsidian vault=notes search query="<argument>" format=json`, and one returned path's
      filename stem (without extension) exactly equals the argument → **Note**. A
      near-miss (partial match, multiple candidates, no exact stem) does NOT count — fall
      through to Text.
    - Otherwise → **Text**.
 
-2. **Run the matched adapter.**
+3. **Run the matched adapter.**
 
    **Sentry:**
    - Resolve the org/project slug from the URL. Use
@@ -76,29 +83,60 @@ Do the following:
    - `.docx` → use the `anthropic-skills:docx` skill to extract text.
    - Extract goals, scope, and acceptance criteria, preserving the document's own wording
      where it states them; do not paraphrase a stated acceptance criterion.
-   - **Decomposition check**: if the document
-     covers more than one independently-shippable outcome, list each candidate as one
-     line (title + the one outcome it delivers), then `AskUserQuestion` — single question,
-     one option per candidate — asking which one to run now. If it's a single outcome,
-     skip straight to building the brief with no prompt.
-   - Build the brief (`type: feature`) from the **chosen** candidate:
-     ```
-     ## Summary
-     <the chosen outcome, in the BRD's own words where possible>
+   - **Decomposition check**: if the document covers more than one independently-shippable
+     outcome, list each candidate as one line (title + the one outcome it delivers), then
+     `AskUserQuestion` — single question, one option per candidate — asking which one to
+     run now, and build the brief from the **chosen** candidate only — unless `--whole`
+     was set, in which case skip the prompt entirely and put every candidate into the
+     brief instead of narrowing to one. If it's a single outcome, skip straight to
+     building the brief with no prompt, in either mode.
+   - Build the brief (`type: feature`):
+     - **Single candidate** (no-flag mode's chosen candidate, or a single-outcome
+       document in either mode):
+       ```
+       ## Summary
+       <the chosen outcome, in the BRD's own words where possible>
 
-     ## Scope
-     <what this candidate covers>
+       ## Scope
+       <what this candidate covers>
 
-     ## Acceptance criteria
-     <bulleted, from the BRD>
+       ## Acceptance criteria
+       <bulleted, from the BRD>
 
-     ## Out of scope — candidate follow-ups
-     <one line per unpicked candidate: title + the outcome it would deliver.
-      Omit this section entirely if there was only one candidate.>
+       ## Out of scope — candidate follow-ups
+       <one line per unpicked candidate: title + the outcome it would deliver.
+        Omit this section entirely if there was only one candidate.>
 
-     ## Notes
-     Source: <the absolute file path>
-     ```
+       ## Notes
+       Source: <the absolute file path>
+       ```
+     - **`--whole`, multiple candidates**:
+       ```
+       ## Summary
+       This document covers <N> independently-shippable outcomes, listed below.
+
+       ## Candidate: <candidate 1 title>
+       ### Summary
+       <the outcome, in the BRD's own words where possible>
+       ### Scope
+       <what this candidate covers>
+       ### Acceptance criteria
+       <bulleted, from the BRD>
+
+       ## Candidate: <candidate 2 title>
+       ### Summary
+       <the outcome, in the BRD's own words where possible>
+       ### Scope
+       <what this candidate covers>
+       ### Acceptance criteria
+       <bulleted, from the BRD>
+
+       <one such block per candidate — no "Out of scope — candidate follow-ups" section,
+        since every candidate is included here rather than deferred>
+
+       ## Notes
+       Source: <the absolute file path>
+       ```
 
    **Note:**
    - `obsidian vault=notes read path="<the matched path>"`.
@@ -115,20 +153,20 @@ Do the following:
    - Build the brief (`type: task`) directly from the argument:
      ```
      ## Summary
-     $ARGUMENTS
+     <argument>
 
      ## Notes
      Source: raw text from /intake invocation
      ```
 
-3. **Return the result** as the final message, exactly in this shape (no other text
+4. **Return the result** as the final message, exactly in this shape (no other text
    after it):
 
    ```
    ## Intake result
    type: <bug|feature|task|improvement>
    ---
-   <the brief built in step 2>
+   <the brief built in step 3>
    ```
 
    If `/gh-issue` or `/run-issue` invoked this skill, that caller proceeds with this

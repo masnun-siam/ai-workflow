@@ -503,6 +503,77 @@ with tempfile.TemporaryDirectory() as tmp:
     assert led11_again["stations"] == LEAN_STATIONS, led11_again["stations"]
 ok("re-running epic init over an already-initialised child never flips lean back to full")
 
+# --------------------------------------------------------------------------- tasks checklist
+# render_tasks_section / upsert_tasks_section splice a "## Tasks" checklist into the
+# parent's body. Unit-level first: the exact string shape, then the splice behaviour
+# against every body shape gh_json can hand back (no section, trailing section with no
+# final newline — exactly what .strip() leaves — mid-body section, and CRLF).
+
+order = [11, 12, 10]
+titles = {10: "t10", 11: "t11", 12: "t12"}
+rendered = epic.render_tasks_section(order, titles)
+assert rendered == "## Tasks\n\n- [ ] #11 t11\n- [ ] #12 t12\n- [ ] #10 t10", rendered
+ok("render_tasks_section orders the checklist topologically, not numerically")
+
+section = epic.render_tasks_section([10, 11], {10: "t10", 11: "t11"})
+
+out = epic.upsert_tasks_section("", section)
+assert out == section + "\n", repr(out)
+ok("upsert_tasks_section on an empty body is just the section plus one trailing newline")
+
+body_no_section = "Some intro text.\n\nMore text."
+out = epic.upsert_tasks_section(body_no_section, section)
+assert out.count("## Tasks") == 1, out
+assert "Some intro text." in out and "More text." in out, out
+assert out.index("More text.") < out.index("## Tasks"), \
+    "the section must be appended after the existing body, not before"
+assert out.rstrip("\n").endswith(section.rstrip("\n")), out
+ok("upsert_tasks_section appends a fresh section when the body has none")
+
+body_trailing_no_nl = "Intro\n\n## Tasks\n\n- [ ] #10 old title"
+out = epic.upsert_tasks_section(body_trailing_no_nl, section)
+assert out.count("## Tasks") == 1, "a trailing section (no final newline) must be REPLACED: " + out
+assert "old title" not in out, out
+assert "t10" in out and "t11" in out, out
+assert "Intro" in out, out
+ok("upsert_tasks_section replaces a trailing section with no final newline (the gh_json .strip() shape)")
+
+body_mid = "Intro\n\n## Tasks\n\nTBD\n\n## Notes\n\nkeep me"
+out = epic.upsert_tasks_section(body_mid, section)
+assert out.count("## Tasks") == 1, out
+assert out.count("## Notes") == 1, out
+assert "TBD" not in out, out
+assert "keep me" in out, "content after the Tasks section must survive"
+assert out.index("## Tasks") < out.index("## Notes"), out
+assert out.index("Intro") < out.index("## Tasks"), out
+ok("upsert_tasks_section replaces a mid-body section and preserves what follows")
+
+body_crlf = "Intro\r\n\r\n## Tasks\r\n\r\nold\r\n\r\n## Notes\r\n\r\nkeep me"
+out = epic.upsert_tasks_section(body_crlf, section)
+assert out.count("## Tasks") == 1, out
+assert "old" not in out, out
+assert "keep me" in out, out
+ok("upsert_tasks_section handles a CRLF body without duplicating the section")
+
+for probe in (body_no_section, body_trailing_no_nl):
+    once = epic.upsert_tasks_section(probe, section)
+    twice = epic.upsert_tasks_section(once, section)
+    assert once == twice, (once, twice)
+ok("upsert_tasks_section is idempotent for both the no-section and trailing-section cases")
+
+backslash_title = "Handle C:\\new\\path \\d"
+sec = epic.render_tasks_section([10], {10: backslash_title})
+assert f"#10 {backslash_title}" in sec, sec
+roundtrip = epic.upsert_tasks_section("Intro", sec)
+assert f"#10 {backslash_title}" in roundtrip, \
+    "backslashes must round-trip verbatim — re.sub's replacement escaping would corrupt them: " + repr(roundtrip)
+ok("a title containing backslashes round-trips through render+upsert without re.error or corruption")
+
+special_title = "Do [X] not #1 | keep this"
+sec = epic.render_tasks_section([10], {10: special_title})
+assert f"- [ ] #10 {special_title}" in sec, sec
+ok("a title with markdown special characters is rendered verbatim")
+
 # `gh` is the only thing between `epic split` and GitHub, so the split tests drive a stub
 # that records its argv. What matters is not that gh was called but WITH WHAT: the
 # sub-issues endpoint takes a database id as an integer, and `-f` with an issue number
@@ -515,7 +586,28 @@ cfg = json.load(open(os.environ["GH_STUB_CFG"]))
 with open(os.environ["GH_STUB_LOG"], "a") as fh:
     fh.write(" ".join(argv) + "\n")
 if argv[0] == "issue" and argv[1] == "view":
-    print(cfg["bodies"].get(argv[2], ""))
+    num = argv[2]
+    if num in cfg.get("view_fail", []):
+        sys.exit(1)
+    fields = argv[argv.index("--json") + 1] if "--json" in argv else ""
+    if "title" in fields:
+        data = {"body": cfg["bodies"].get(num, "")}
+        if num not in cfg.get("no_title", []):
+            data["title"] = cfg.get("titles", {}).get(num, f"t{num}")
+        print(json.dumps(data))
+    elif "--jq" in argv:
+        print(cfg["bodies"].get(num, ""))
+    else:
+        print(json.dumps({"body": cfg["bodies"].get(num, "")}))
+elif argv[0] == "issue" and argv[1] == "edit":
+    if cfg.get("edit_fail"):
+        sys.exit(1)
+    path = argv[argv.index("--body-file") + 1]
+    with open(path, encoding="utf-8") as fh:
+        new_body = fh.read()
+    cfg.setdefault("bodies", {})[argv[2]] = new_body
+    with open(os.environ["GH_STUB_CFG"], "w") as fh:
+        json.dump(cfg, fh)
 elif argv[1].endswith("/sub_issues") and any(a.startswith("-F") or a.startswith("-f") for a in argv):
     sys.exit(cfg.get("link_exit", 0))
 elif argv[1].endswith("/sub_issues"):
@@ -586,6 +678,90 @@ with tempfile.TemporaryDirectory() as tmp:
     assert proc.returncode == 1, proc.stdout
     assert not os.path.isfile(path), "a link failure must not leave a valid-looking epic.json"
 ok("a sub-issue link failure kills the split rather than warning past it")
+
+# ----------------------------------------------------------------- parent Tasks checklist
+# `epic split` must also splice a "## Tasks" checklist into the PARENT issue's body via
+# `gh issue edit --body-file`, sourced from the children's titles and the DAG order.
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, linked=[], bodies={
+        "42": "Parent intro.\n\nSome context.",
+        "10": "no deps", "11": "Depends on: #10", "12": "Depends on: #10",
+    }, titles={"10": "t10", "11": "t11", "12": "t12"})
+    proc, path = split(tmp, env)
+    assert proc.returncode == 0, proc.stderr
+    cfg_after = json.load(open(os.path.join(tmp, "cfg.json")))
+    parent_body = cfg_after["bodies"]["42"]
+    assert parent_body.count("## Tasks") == 1, parent_body
+    assert "Parent intro." in parent_body, parent_body
+    order_in_body = re.findall(r"- \[ \] #(\d+)", parent_body)
+    assert order_in_body == ["10", "11", "12"], \
+        "checklist must follow the DAG's topological order: " + parent_body
+    assert "t10" in parent_body and "t11" in parent_body and "t12" in parent_body, parent_body
+ok("epic split writes a single Tasks checklist onto the parent, in topological order")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, linked=[], bodies={
+        "42": "Parent intro.",
+        "10": "no deps", "11": "Depends on: #10", "12": "Depends on: #10",
+    }, titles={"10": "t10", "11": "t11", "12": "t12"})
+    first, _ = split(tmp, env)
+    assert first.returncode == 0, first.stderr
+    body_after_first = json.load(open(os.path.join(tmp, "cfg.json")))["bodies"]["42"]
+    # second run against the same (now-updated) parent body — already-linked children are
+    # skipped, so re-run split with the same children to exercise the idempotency path
+    second, _ = split(tmp, env)
+    assert second.returncode == 0, second.stderr
+    body_after_second = json.load(open(os.path.join(tmp, "cfg.json")))["bodies"]["42"]
+    assert body_after_second == body_after_first, \
+        "re-running split must not duplicate the Tasks section: " + body_after_second
+    assert body_after_second.count("## Tasks") == 1, body_after_second
+ok("re-running epic split against the same parent is idempotent — no duplicate Tasks section")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, linked=[], view_fail=["11"], bodies={
+        "42": "Parent intro.", "10": "", "11": "", "12": "",
+    }, titles={"10": "t10", "12": "t12"})
+    proc, path = split(tmp, env)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "#11" in proc.stderr, proc.stderr
+    assert "edit" not in open(log).read(), \
+        "a child view failure must abort before the parent is ever edited: " + open(log).read()
+    assert not os.path.isfile(path), "no epic.json when a child's title/body fetch fails"
+ok("a child's issue-view failure during the title fetch dies naming that child")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, linked=[], no_title=["11"], bodies={
+        "42": "Parent intro.", "10": "", "11": "Depends on: #10", "12": "",
+    }, titles={"10": "t10", "12": "t12"})
+    proc, path = split(tmp, env)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "#11" in proc.stderr, proc.stderr
+    assert not os.path.isfile(path), "no epic.json when a child's JSON is missing title"
+ok("a child view response with no title field dies naming that child")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, linked=[], view_fail=["42"], bodies={
+        "10": "", "11": "", "12": "",
+    }, titles={"10": "t10", "11": "t11", "12": "t12"})
+    proc, path = split(tmp, env)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "edit" not in open(log).read(), \
+        "the parent body read failed — gh issue edit must never be called: " + open(log).read()
+    assert not os.path.isfile(path), "no epic.json when the parent body read fails"
+ok("a failed parent body read dies without ever calling gh issue edit")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, linked=[], edit_fail=True, bodies={
+        "42": "Parent intro.", "10": "", "11": "", "12": "",
+    }, titles={"10": "t10", "11": "t11", "12": "t12"})
+    proc, path = split(tmp, env)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert not os.path.isfile(path), "no epic.json when gh issue edit fails"
+    leftover = [f for f in os.listdir(tmp) if f.startswith("tmp") and f not in ("e", "bin")]
+    assert not [f for f in leftover if os.path.isfile(os.path.join(tmp, f))], \
+        "a failed gh issue edit should not leave a temp body file behind: " + str(leftover)
+ok("a failed gh issue edit dies without writing epic.json")
 
 proc = subprocess.run([sys.executable, ROUTE, "epic", "next", "/nonexistent"],
                       capture_output=True, text=True)
@@ -1395,6 +1571,24 @@ assert "Summary" in section_names and "Non-functional Constraints" in section_na
 gh_issue_body = "\n\n".join(f"## {name}\nSome real content for {name}." for name in section_names)
 assert dispatch.dor_gaps(gh_issue_body) == [], dispatch.dor_gaps(gh_issue_body)
 ok("a body built from gh-issue.md's own literal section headings screens ready with zero gaps")
+
+# Regression for issue #39: gh-issue.md must define an "Implementation Guide"
+# section, placed after Acceptance Criteria and before Non-functional
+# Constraints, without becoming a DoR item.
+assert "Implementation Guide" in section_names, section_names
+ok("Implementation Guide is present in gh-issue.md's Body sections list")
+
+assert (
+    section_names.index("Acceptance Criteria")
+    < section_names.index("Implementation Guide")
+    < section_names.index("Non-functional Constraints")
+), section_names
+ok("Implementation Guide is ordered after Acceptance Criteria and before Non-functional Constraints")
+
+assert not any(re.search(pattern, "Implementation Guide", re.I) for _, pattern in dispatch.DOR_ITEMS), [
+    label for label, pattern in dispatch.DOR_ITEMS if re.search(pattern, "Implementation Guide", re.I)
+]
+ok("no DOR_ITEMS pattern matches the Implementation Guide heading, keeping it a non-DoR section")
 
 # --------------------------------------------------------------------------- dispatch: lane mode
 
@@ -2302,5 +2496,88 @@ assert shell_calls and shell_calls[0]["cmd"] == "go test ./...", \
     "the new stack=failed guard must not swallow the legitimate stack=none host-runner case"
 ok("run_suite with stack=none and a non-empty test_cmd still runs it — the new "
    "stack=failed guard must not catch this legitimate host-runner case")
+
+# --------------------------------------------------------------------------- /intake --whole passthrough for a multi-outcome BRD (issue #41)
+
+INTAKE_MD = os.path.join(HERE, "..", "commands", "intake.md")
+with open(INTAKE_MD, encoding="utf-8") as fh:
+    intake_text = fh.read()
+
+assert "--whole" in intake_text, "commands/intake.md must document a --whole flag"
+decomp_idx = intake_text.index("**Decomposition check**")
+decomp_section = intake_text[decomp_idx:decomp_idx + 2000]
+assert "--whole" in decomp_section, \
+    "the BRD adapter's Decomposition check section must have a branch for --whole"
+ok("commands/intake.md documents a --whole flag and the Decomposition check has a --whole branch")
+
+# Split the Decomposition-check section into its --whole branch and its no-flag branch,
+# by locating "--whole" inside the section and treating text before/after as the two branches.
+whole_marker_idx = decomp_section.index("--whole")
+before_whole = decomp_section[:whole_marker_idx]
+after_whole = decomp_section[whole_marker_idx:]
+assert "AskUserQuestion" in before_whole or "AskUserQuestion" in intake_text[decomp_idx:decomp_idx + 200], \
+    "no-flag branch of the Decomposition check must still contain AskUserQuestion (regression: standalone /intake must still ask)"
+# The --whole branch itself (from the --whole marker to the next AskUserQuestion mention,
+# or to the end of the section if none) must not fire AskUserQuestion.
+whole_branch_end = after_whole.find("AskUserQuestion")
+whole_branch = after_whole if whole_branch_end == -1 else after_whole[:whole_branch_end]
+assert "AskUserQuestion" not in whole_branch, \
+    "the --whole branch must not contain AskUserQuestion — no question fires when --whole is set"
+ok("commands/intake.md --whole branch skips AskUserQuestion while the no-flag branch still asks")
+
+# Regression for PR #45 review thread: the Note adapter's search-query line and the
+# Text adapter's `## Summary` template must use the stripped-argument placeholder
+# (`<argument>`), never a literal `$ARGUMENTS` token that would leak the raw,
+# un-stripped (still containing `--whole`) argument into the brief.
+note_search_idx = intake_text.index('obsidian vault=notes search query=')
+note_search_line = intake_text[note_search_idx:intake_text.index("\n", note_search_idx)]
+assert "<argument>" in note_search_line and "$ARGUMENTS" not in note_search_line, \
+    "the Note adapter's search-query line must use the stripped <argument> placeholder, not $ARGUMENTS"
+
+text_summary_idx = intake_text.rindex("## Summary")
+text_summary_block = intake_text[text_summary_idx:text_summary_idx + 200]
+assert "<argument>" in text_summary_block and "$ARGUMENTS" not in text_summary_block, \
+    "the Text adapter's ## Summary template must use the stripped <argument> placeholder, not $ARGUMENTS"
+ok("the Note adapter's search query and the Text adapter's ## Summary template use the "
+   "stripped <argument> placeholder, never a literal $ARGUMENTS")
+
+with open(GH_ISSUE_MD, encoding="utf-8") as fh:
+    gh_issue_text = fh.read()
+assert "/intake $@ --whole" in gh_issue_text, \
+    "commands/gh-issue.md step 0 must invoke /intake with --whole, not bare /intake $@"
+ok("commands/gh-issue.md invokes `/intake $@ --whole`")
+
+with open(os.path.join(HERE, "..", "commands", "run-issue.md"), encoding="utf-8") as fh:
+    run_issue_text = fh.read()
+assert "/intake <stripped argument> --whole" in run_issue_text, \
+    "commands/run-issue.md Preflight step 2 must invoke /intake with --whole"
+ok("commands/run-issue.md invokes `/intake <stripped argument> --whole`")
+
+# Every OTHER "invoke `/intake" call site (outside intake.md itself) must also carry --whole.
+# Enumerated, not hardcoded to a count of 2, so a future new call site that skips --whole fails here.
+_intake_call_sites = []
+for _base in ("commands", "agents"):
+    _dir = os.path.join(HERE, "..", _base)
+    if not os.path.isdir(_dir):
+        continue
+    for _fn in sorted(os.listdir(_dir)):
+        if not _fn.endswith(".md"):
+            continue
+        _path = os.path.join(_dir, _fn)
+        if os.path.abspath(_path) == os.path.abspath(os.path.join(HERE, "..", "commands", "intake.md")):
+            continue
+        with open(_path, encoding="utf-8") as fh:
+            for _lineno, _line in enumerate(fh, 1):
+                if re.search(r"invoke `/intake", _line):
+                    _intake_call_sites.append((_path, _lineno, _line.rstrip("\n")))
+assert _intake_call_sites, "expected at least one '/intake' call site outside commands/intake.md"
+for _path, _lineno, _line in _intake_call_sites:
+    assert "--whole" in _line, f"{_path}:{_lineno} invokes /intake without --whole: {_line!r}"
+ok(f"every 'invoke `/intake' call site outside commands/intake.md ({len(_intake_call_sites)} found) carries --whole")
+
+detect_idx = intake_text.index("**Detect the source**")
+assert "strip" in intake_text[:detect_idx].lower() or "--whole" in intake_text[:detect_idx], \
+    "commands/intake.md must document stripping --whole from the arguments before step 1's 'Detect the source'"
+ok("commands/intake.md documents stripping --whole before step 1's 'Detect the source'")
 
 print(f"\n{passed} checks passed")
