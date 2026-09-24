@@ -1,6 +1,6 @@
 {
   "name": "ai-workflow",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Issue-to-reviewed-PR pipeline: /run-issue, 14 agents, a deterministic routing engine, and the review/grind/QA skills around it.",
   "author": {
     "name": "Blubird Interactive"
