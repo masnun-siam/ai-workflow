@@ -108,8 +108,10 @@ It prints exactly one of `advance(<station>)` · `bounce(<station>)` · `escalat
   Never re-dispatch the finder: when X passes, the roster walks forward and reaches it
   again on its own. The cap is enforced in code, so a bounce loop cannot run away.
 - **escalate** — the station hit a wall the engine cannot route around (a spent budget, an
-  unroutable bounce, a genuine design dead-end). This is **not** a stop-and-ask. Record it
-  (`aiw set "$RUN_DIR" blocked_on='<one line>'`) and go to **Degraded finish** below.
+  unroutable bounce, a genuine design dead-end). This is **not a stop-and-ask**. Record it
+  (`aiw set "$RUN_DIR" blocked_on='<one line>'`) and go to **Degraded finish** below (in
+  Epic mode, this is also the trigger for step 4's immediate per-blocker ask — the
+  routing/Degraded-finish behavior itself is unchanged, that is additive).
 - **done** — the roster is exhausted. Continue to phase 8 (sync), then 8.5 (CI), 9.1, 9.2,
   **Gate 2** (9.3), Teardown, and 10.
 
@@ -1139,16 +1141,62 @@ once, exactly as phase 6 spawns the specialist panel in one message.
    in use from the ledgers that record `stack: "up"`, so a slot handed out and not spent
    before the next call is handed out again — two children, one slot, and the second
    `up --wait` collides with the first.
-5. **A blocker parks its child, it does not stop the epic.** Record it and keep going with
-   everything else.
-6. **GATE 2a — blockers, collected.** Fires **once**, when no further progress is possible
-   without a human: everything else has finished, or a parked child is blocking the DAG.
-   Print every blocker together with its child and thread URL, then gate as phase 7 does.
 
-   Once 2a has fired it does not fire again. A child resumed after 2a can raise a fresh
-   blocker; that blocker is **recorded and carried to Gate 2**, exactly as every other
-   non-gate outcome in this file is. Three gates is the contract, and "once" has to mean
-   once even when the epic keeps moving afterwards.
+   **Cause, checked for each child after routing its envelope, every relay tick:** (a)
+   `aiw route` printed `escalate: <reason>`; (b) the child has reached its own phase 7 and
+   that dispatch's `60-fix.json` `handoff.needs_confirmation[]` (or `run-laravel-review`'s
+   equivalent section) is non-empty.
+
+   **At once, for each such child:**
+
+   ```bash
+   aiw set "<runs_dir>/<owner>-<repo>-issue-<child>" blocked_on='<one line>' blocker_ask=pending
+   ```
+
+   — mirroring the single-issue `blocked_on` write above, but adding `blocker_ask=pending`
+   in the same call. For case (a), the child's escalate path continues into its own
+   Degraded finish as it does today (unchanged) — this ledger write happens in addition to
+   that, not instead of it.
+
+   **Then, before dispatching the next `aiw epic next` call:** fire exactly one
+   `AskUserQuestion` per parked child this tick — never batched, even if several children
+   parked in the same tick. Name `#<child>`, the blocking station, and the one-line reason
+   (plus the finding text and thread URL for case (b)). Word it in the style of the
+   existing single-issue phase-7 Gate 2a below.
+
+   Options for case (b) (`needs_confirmation`): **Confirmed, continue** — run
+   `aiw threads resolve <node_id>` for each confirmed thread exactly as phase 7 does, then
+   `aiw set "<child run dir>" blocked_on= blocker_ask=answered`, and that child proceeds to
+   phase 7b in the relay as normal. **Defer** — `aiw set "<child run dir>" blocker_ask=deferred`;
+   that child does not proceed to **7b**/**8.5** this run — it is held.
+
+   Options for case (a) (`escalate`): **Answer now** — record the reply with
+   `aiw set "<child run dir>" blocker_answer='<one line>' blocker_ask=answered`. An
+   escalated child's ledger status is terminal (the engine's `ready()` skips it, and
+   `currentIndex` cannot be hand-set), so this does **not** resume the child in this
+   session — it just records the answer to carry into the resume command at end-of-run.
+   **Defer** — `aiw set "<child run dir>" blocker_ask=deferred`.
+
+   Answering or deferring one child's ask never gates or pauses any other child's progress
+   in the same relay loop. There is no waiting or polling for a reply outside the current
+   session — an ask left unanswered is functionally a deferred blocker. A child that later
+   raises a second, different blocker goes back through the same cause-check and gets
+   `blocker_ask=pending` again (a fresh ask).
+5. **A blocker parks its child, it does not stop the epic.** The step 4 mechanism above —
+   the ledger write plus the immediate ask — records it and keeps going with everything
+   else.
+6. **GATE 2a — the end-of-run closer.** Read `aiw epic status` output (or iterate
+   children's `blocker_ask` via `child_state`) to build the list of children whose
+   `blocker_ask` is still `pending` (an ask never reached/answered/deferred this session —
+   e.g. it happened in an earlier resumed run, or truly never got answered) or `deferred`
+   (explicitly deferred). If that list is empty, skip this gate entirely — nothing to close.
+
+   Otherwise it still fires **once**, printing every such blocker together with its child
+   and thread URL (where there is one), then gates as phase 7 does.
+
+   The immediate per-blocker asks in step 4 keep firing throughout the run regardless of
+   whether this closer has already run; a blocker deferred even after this closer has fired
+   still needs to be carried forward and reported at Gate 2.
 7. **GATE 2 — one epic report.** Per child: PR, CI verdict, open threads, runtime
    verification, anything carried forward. Then:
    - **Parked children**, and what they are waiting on.
@@ -1197,6 +1245,9 @@ once, exactly as phase 6 spawns the specialist panel in one message.
   merge). Anything else you are tempted to ask gets **recorded and carried to Gate 2**
   instead. The engine enforces the shape of this: there is no `pause` action and no
   `blocked` status for a station to reach for.
+- In Epic mode, both the immediate per-blocker asks (step 4) and the end-of-run closer
+  (step 6) are still Gate 2a, not a fourth gate — the "exactly three" count is
+  unaffected.
 - Never skip Gate 1 (phase 1) or Gate 2 (phase 9.3), whatever the resume state says. Gates
   are not modelled in `run.json` on purpose — they re-fire.
 - **Readiness is advisory.** A thin issue surfaces its DoR gaps and assumptions *at Gate 1*,
