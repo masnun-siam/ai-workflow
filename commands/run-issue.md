@@ -110,8 +110,9 @@ It prints exactly one of `advance(<station>)` · `bounce(<station>)` · `escalat
 - **escalate** — the station hit a wall the engine cannot route around (a spent budget, an
   unroutable bounce, a genuine design dead-end). This is **not a stop-and-ask**. Record it
   (`aiw set "$RUN_DIR" blocked_on='<one line>'`) and go to **Degraded finish** below (in
-  Epic mode, this is also the trigger for step 4's immediate per-blocker ask — the
-  routing/Degraded-finish behavior itself is unchanged, that is additive).
+  Epic mode, this also triggers step 4's ledger write plus a printed one-line notice — never
+  an interactive ask — the routing/Degraded-finish behavior itself is unchanged, that is
+  additive).
 - **done** — the roster is exhausted. Continue to phase 8 (sync), then 8.5 (CI), 9.1, 9.2,
   **Gate 2** (9.3), Teardown, and 10.
 
@@ -259,8 +260,12 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
      station, so resuming would re-dispatch `fixer` against a finished PR.
    - **`status: "escalated"`** — the run stopped on a rail. Print the escalate reason from
      the trace, say which station holds the baton, and ask whether to resume from there or
-     start fresh. A resume here is legitimate — the human is expected to have fixed whatever
-     the rail caught — but it must be their call, not an assumption.
+     start fresh. If the ledger has a `blocker_answer` (recorded when the user answered an
+     Epic-mode case-(a) blocker mid-run), print it alongside the escalate reason — it is
+     the human's own answer to this same blocker and must not be silently dropped. A resume
+     here is legitimate — the human is expected to have fixed whatever the rail caught, or
+     to confirm the recorded `blocker_answer` still applies — but it must be their call, not
+     an assumption.
    - **`status: "running"`** — resume properly: continue from `stations[currentIndex]` with
      the roster and bounce counts the ledger already holds.
 
@@ -1158,30 +1163,44 @@ once, exactly as phase 6 spawns the specialist panel in one message.
    Degraded finish as it does today (unchanged) — this ledger write happens in addition to
    that, not instead of it.
 
-   **Then, before dispatching the next `aiw epic next` call:** fire exactly one
-   `AskUserQuestion` per parked child this tick — never batched, even if several children
-   parked in the same tick. Name `#<child>`, the blocking station, and the one-line reason
-   (plus the finding text and thread URL for case (b)). Word it in the style of the
-   existing single-issue phase-7 Gate 2a below.
+   **Then, before dispatching the next `aiw epic next` call, the two causes diverge:**
 
-   Options for case (b) (`needs_confirmation`): **Confirmed, continue** — run
+   Case (b) (`needs_confirmation`) is the only one that fires an interactive ask, because
+   it is the only one where an answer resumes the child in this session. Fire exactly one
+   `AskUserQuestion` per parked case-(b) child this tick — never batched, even if several
+   children parked in the same tick. Name `#<child>`, the blocking station, the one-line
+   reason, the finding text, and the thread URL. Word it in the style of the existing
+   single-issue phase-7 Gate 2a below. Options: **Confirmed, continue** — run
    `aiw threads resolve <node_id>` for each confirmed thread exactly as phase 7 does, then
    `aiw set "<child run dir>" blocked_on= blocker_ask=answered`, and that child proceeds to
    phase 7b in the relay as normal. **Defer** — `aiw set "<child run dir>" blocker_ask=deferred`;
-   that child does not proceed to **7b**/**8.5** this run — it is held.
+   that child does not proceed to **7b**/**8.5** this run — it is held (if it still has a
+   stack up, tear it down — see below).
 
-   Options for case (a) (`escalate`): **Answer now** — record the reply with
-   `aiw set "<child run dir>" blocker_answer='<one line>' blocker_ask=answered`. An
-   escalated child's ledger status is terminal (the engine's `ready()` skips it, and
-   `currentIndex` cannot be hand-set), so this does **not** resume the child in this
-   session — it just records the answer to carry into the resume command at end-of-run.
-   **Defer** — `aiw set "<child run dir>" blocker_ask=deferred`.
+   Case (a) (`escalate`) never fires an interactive ask — the child's ledger status is
+   already terminal (the engine's `ready()` skips it, and `currentIndex` cannot be
+   hand-set), so an answer cannot resume it this session, and blocking the whole relay for
+   an ask nobody can act on yet is the bug this fix removes. Instead, after the ledger
+   write above, print one line to the terminal — `#<child> escalated at <station>:
+   <reason> — continuing other children; will surface at end-of-run Gate 2a unless you
+   interrupt to answer now` — and continue the relay loop immediately, dispatching the next
+   `aiw epic next` call without waiting. If the user wants to answer a case-(a) blocker
+   before end-of-run, they use the existing general "the user can always interject" path to
+   interrupt the session directly; when they do, record the reply with
+   `aiw set "<child run dir>" blocker_answer='<one line>' blocker_ask=answered`.
 
-   Answering or deferring one child's ask never gates or pauses any other child's progress
-   in the same relay loop. There is no waiting or polling for a reply outside the current
-   session — an ask left unanswered is functionally a deferred blocker. A child that later
-   raises a second, different blocker goes back through the same cause-check and gets
-   `blocker_ask=pending` again (a fresh ask).
+   Answering, deferring, or notice-and-continuing one child's blocker never gates or pauses
+   any other child's progress in the same relay loop. There is no waiting or polling for a
+   reply outside the current session — a case-(a) notice or a case-(b) ask left unanswered
+   is functionally a deferred blocker. A child that later raises a second, different
+   blocker goes back through the same cause-check and gets `blocker_ask=pending` again (a
+   fresh ask or notice).
+
+   **If a parked child's own Docker stack is still up** (either cause), tear it down as
+   part of the park handling: `aiw stack down "<runs_dir>/<owner>-<repo>-issue-<child>"`.
+   `ready()` in `run-engine/epic.py` counts any ledger with `stack_up` against
+   `max_stacks` regardless of that child's status, so a parked child holding its stack
+   throttles every sibling's ability to raise its own stack for the rest of the run.
 5. **A blocker parks its child, it does not stop the epic.** The step 4 mechanism above —
    the ledger write plus the immediate ask — records it and keeps going with everything
    else.
@@ -1199,7 +1218,10 @@ once, exactly as phase 6 spawns the specialist panel in one message.
    still needs to be carried forward and reported at Gate 2.
 7. **GATE 2 — one epic report.** Per child: PR, CI verdict, open threads, runtime
    verification, anything carried forward. Then:
-   - **Parked children**, and what they are waiting on.
+   - **Parked children**, and what they are waiting on. For any child with a recorded
+     `blocker_answer` in its ledger, print it here next to that child's resume command —
+     the answer the user already gave is not surfaced anywhere else and must not be
+     silently discarded.
    - **Children that never started**, named explicitly with the failed dependency that
      blocked them. A child silently absent from a list of twelve is how a third of an epic
      turns out never to have been built.
@@ -1245,9 +1267,10 @@ once, exactly as phase 6 spawns the specialist panel in one message.
   merge). Anything else you are tempted to ask gets **recorded and carried to Gate 2**
   instead. The engine enforces the shape of this: there is no `pause` action and no
   `blocked` status for a station to reach for.
-- In Epic mode, both the immediate per-blocker asks (step 4) and the end-of-run closer
-  (step 6) are still Gate 2a, not a fourth gate — the "exactly three" count is
-  unaffected.
+- In Epic mode, both the immediate per-blocker ask for case (b) (step 4) and the
+  end-of-run closer (step 6) are still Gate 2a, not a fourth gate — the "exactly three"
+  count is unaffected. Case (a)'s step 4 notice is not an ask at all (see the escalate
+  bullet above and step 4), so it needs no such carve-out.
 - Never skip Gate 1 (phase 1) or Gate 2 (phase 9.3), whatever the resume state says. Gates
   are not modelled in `run.json` on purpose — they re-fire.
 - **Readiness is advisory.** A thin issue surfaces its DoR gaps and assumptions *at Gate 1*,
