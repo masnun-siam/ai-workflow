@@ -2774,9 +2774,15 @@ assert set_idx < ask_idx, \
 ok("run-issue.md Epic step 4 writes blocked_on=/blocker_ask=pending before AskUserQuestion")
 
 assert "epic next" in run_issue_step4, run_issue_step4
-assert re.search(r"#<?child>?|child issue", run_issue_step4, re.I) or "child" in run_issue_step4.lower(), \
-    run_issue_step4
-ok("run-issue.md Epic step 4 says the ask fires before the next epic next, naming the child/station/reason")
+assert "before dispatching the next" in run_issue_step4, \
+    "step 4 must say the ask fires before dispatching the next aiw epic next call"
+assert "#<child>" in run_issue_step4, \
+    "step 4 must name the child issue number as #<child>"
+assert "the blocking station" in run_issue_step4, \
+    "step 4 must name the blocking station"
+assert "the one-line\n   reason" in run_issue_step4 or "the one-line reason" in run_issue_step4, \
+    "step 4 must name the one-line reason"
+ok("run-issue.md Epic step 4 says the ask fires before dispatching the next epic next, naming the child/station/reason")
 
 assert "AskUserQuestion" in run_issue_step4
 assert "one `AskUserQuestion` per parked child" in run_issue_step4 or \
