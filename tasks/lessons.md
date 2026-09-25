@@ -21,6 +21,29 @@
   after it", upstream of the reported failure). Review:
   https://github.com/masnun-siam/ai-workflow/pull/13#pullrequestreview-5273570158
   **Date**: 2026-09-22
+- **Pattern**: Issue #52's plan applied the rule above and found the third site (pr-grind
+  Step 2's nit-fix path), and the sdet test for it asserted only that the Step 2 section
+  contains the string `queued-push`. The dev pass wrote what happens *once* a commit is
+  queued ("record `queued-push: ... then close`") but never added the `aiw ci status`
+  check or the `hold_push: true` hand-off that makes anything queue. The test passed and
+  the path was still ungated. In the same pass the Rules prose promised "nothing pushes
+  onto a head that is red or pending" while the gate it described checked only `red`.
+  Both were caught only by the external reviewer.
+  **Rule**: In procedure/skill prose, every "if X is queued/held/paused" consequence needs
+  the check that *causes* X, written at that same site. Finding the site does not fix
+  it. Before calling a site done, trace it: which command reads the state, which branch
+  sets the flag, what gets passed to the subagent. Then read every summary sentence
+  (Rules, docs tables) back against the gate condition word by word. A summary that
+  names more states than the gate checks is a bug. Keyword-presence doc tests
+  (`"queued-push" in section`) pass when only the consequence is there, so they do not
+  prove a gate exists.
+  **Evidence**: review comments 4097133245 (Step 2 "nothing here makes it queue") and
+  4097133250 (Rules "red or pending" vs. a red-only gate) on
+  https://github.com/masnun-siam/ai-workflow/pull/54 (review 5308598696, against dev
+  commit 2bc9cf6, whose Step 2 section mentions `queued-push` but contains neither
+  `ci status` nor `hold_push`). Fixed in 2997c6f. The keyword-only assertion is
+  `run-engine/test_scripts.py:2091-2093`, which is on the PR branch and not yet on master.
+  **Date**: 2026-09-25
 
 ## Run Engine — Fixer Handoff
 - **Pattern**: A fixer pass declined an optional nit, replied on the thread explaining why,
