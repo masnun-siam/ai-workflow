@@ -186,7 +186,8 @@ def child_state(runs_dir: str, slug: str, issue: int) -> dict:
     """
     path = ledger_path(run_dir_for(runs_dir, slug, issue))
     if not os.path.isfile(path):
-        return {"status": "running", "pr": False, "stack_up": False, "needs_stack": True}
+        return {"status": "running", "pr": False, "stack_up": False, "needs_stack": True,
+                "blocker_ask": None}
     led = read_json(path)
     ctx = led.get("context") or {}
     return {
@@ -199,6 +200,7 @@ def child_state(runs_dir: str, slug: str, issue: int) -> dict:
         "needs_stack": ctx.get("stack") not in ("none", "failed"),
         "station": (led.get("stations") or [None])[led.get("currentIndex", 0)],
         "blocked_on": ctx.get("blocked_on"),
+        "blocker_ask": ctx.get("blocker_ask"),
     }
 
 
@@ -357,8 +359,9 @@ def cmd_status(args) -> None:
     for child in epic["dag"]["order"]:
         st = child_state(runs_dir, epic["slug"], child)
         blocked = f"  blocked_on={st['blocked_on']}" if st.get("blocked_on") else ""
+        blocker_ask = f"  blocker_ask={st['blocker_ask']}" if st.get("blocker_ask") else ""
         print(f"#{child}  {st['status']:<10} station={st.get('station')}  "
-              f"pr={'yes' if st['pr'] else 'no'}{blocked}")
+              f"pr={'yes' if st['pr'] else 'no'}{blocked}{blocker_ask}")
 
 
 def register(sub, add) -> None:

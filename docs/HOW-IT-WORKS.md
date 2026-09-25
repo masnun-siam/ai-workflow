@@ -338,8 +338,10 @@ Then `/run-issue <parent>` drives them all. The rules:
   reach "PR open" first.
 - **Still three gates, for the whole epic.** Gate 1 shows you the split and *every* child's
   plan at once. A blocker in one child parks that child and the others keep going; Gate 2a
-  fires once, when nothing more can proceed without you. Gate 3 is one report covering
-  everything, including the order you must merge in.
+  covers both an immediate, per-blocker ask fired as soon as that child parks (so you are
+  not left waiting until the end to hear about it) and an end-of-run closer that fires once,
+  collecting whatever is still pending or deferred when nothing more can proceed without
+  you. Gate 3 is one report covering everything, including the order you must merge in.
 - **A failed child with dependents is reported by name.** "Never started, blocked by #14" —
   because a child silently missing from a list of twelve is how you discover a month later
   that a third of the epic was never built.
