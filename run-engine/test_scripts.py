@@ -2014,6 +2014,103 @@ assert "aiw review pick" in skill_text
 assert "take the newest only" not in skill_text
 ok("skills/pr-grind/SKILL.md Step 1 references `aiw review pick` and no longer states bare 'take the newest only' as the whole rule")
 
+# --------------------------------------------------------------------------- decouple CI-red handling from the review-fix loop (issue #52)
+
+
+def _pr_grind_section(text: str, start_heading: str, end_heading: str) -> str:
+    start = text.index(start_heading)
+    end = text.index(end_heading, start)
+    return text[start:end]
+
+
+pr_grind_state_section = _pr_grind_section(skill_text, "## State file", "## Step 0 — Resolve")
+assert "queued-push:" in pr_grind_state_section, "State file section must document a queued-push: header key"
+assert "ci-attempt:" in pr_grind_state_section
+assert "paused:" in pr_grind_state_section
+ok("skills/pr-grind/SKILL.md State file section documents queued-push: next to ci-attempt: and paused:")
+
+pr_grind_rail2 = _pr_grind_section(
+    skill_text, "2. **CI red**", "3. **Third-party human comment**"
+)
+assert "run-fixer` is still **never** dispatched while CI is red" not in pr_grind_rail2, \
+    "rail 2 must no longer say run-fixer is never dispatched while CI is red"
+assert "hold_push" in pr_grind_rail2
+ok("skills/pr-grind/SKILL.md Step 3 rail 2 no longer bars run-fixer outright and mentions hold_push")
+
+assert "cannot-fix" in pr_grind_rail2
+assert "Needs human confirmation" in pr_grind_rail2
+assert "Step 8" in pr_grind_rail2
+ok("skills/pr-grind/SKILL.md Step 3 rail 2 still contains cannot-fix, Needs human confirmation, and Step 8")
+
+pr_grind_step5 = _pr_grind_section(skill_text, "## Step 5", "## Step 6")
+assert "hold_push" in pr_grind_step5
+assert "queued-push" in pr_grind_step5
+ok("skills/pr-grind/SKILL.md Step 5 section contains both hold_push and queued-push")
+
+with open(os.path.join(HERE, "..", "agents", "run-fixer.md"), encoding="utf-8") as fh:
+    run_fixer_text = fh.read()
+assert "hold_push" in run_fixer_text
+assert "push once" in run_fixer_text
+ok("agents/run-fixer.md contains hold_push and still contains push once")
+
+pr_grind_step6 = _pr_grind_section(skill_text, "## Step 6", "## Step 7")
+assert "apply it in full" not in pr_grind_step6, "Step 6 must no longer say 'apply it in full'"
+assert "queued-push" in pr_grind_step6
+ok("skills/pr-grind/SKILL.md Step 6 section no longer says 'apply it in full' and contains queued-push")
+
+pr_grind_step7 = _pr_grind_section(skill_text, "## Step 7", "## Step 8")
+assert "queued-push" in pr_grind_step7
+ok("skills/pr-grind/SKILL.md Step 7 section contains queued-push")
+
+assert "do not push review fixes onto a red branch" in skill_text
+ok("skills/pr-grind/SKILL.md still contains the literal sentence 'do not push review fixes onto a red branch'")
+
+assert "one attempt per head SHA" in skill_text
+assert "ci-attempt: <sha>" in skill_text
+ok("skills/pr-grind/SKILL.md still contains 'one attempt per head SHA' and 'ci-attempt: <sha>'")
+
+assert "already recorded" in pr_grind_rail2
+assert "Step 8" in pr_grind_rail2
+ok("skills/pr-grind/SKILL.md Step 3 rail 2 contains 'already recorded' together with 'Step 8'")
+
+assert "never dispatch" in pr_grind_rail2
+assert "queued-push" in pr_grind_rail2
+ok("skills/pr-grind/SKILL.md Step 3 rail 2 contains 'never dispatch' together with 'queued-push'")
+
+pr_grind_on_wake = _pr_grind_section(skill_text, "## On wake", "## Rules")
+assert "queued-push" in pr_grind_on_wake
+assert "rail 3" in pr_grind_on_wake
+assert "rail 5" in pr_grind_on_wake
+ok("skills/pr-grind/SKILL.md On wake section contains queued-push, rail 3, and rail 5")
+
+pr_grind_step6 = _pr_grind_section(skill_text, "## Step 6", "## Step 7")
+assert "flush" in pr_grind_step6, "expected a 'flush' mention in the Step 6 section"
+assert "not a new round" in pr_grind_step6
+ok("skills/pr-grind/SKILL.md Step 6 section flush-related text contains 'not a new round'")
+
+pr_grind_step2 = _pr_grind_section(skill_text, "## Step 2", "## Step 3")
+assert "queued-push" in pr_grind_step2
+ok("skills/pr-grind/SKILL.md Step 2 section contains queued-push")
+
+pr_grind_step8 = _pr_grind_section(skill_text, "## Step 8", "## On wake")
+step8_intro = pr_grind_step8[:pr_grind_step8.index("\n\n", pr_grind_step8.index("\n"))]
+assert "rails 1/2/3" not in step8_intro
+ok("skills/pr-grind/SKILL.md Step 8 intro no longer contains the literal string 'rails 1/2/3'")
+
+assert "run-ci` is the only agent dispatched while CI is red" not in skill_text, \
+    "old Rules line about run-ci being the only agent dispatched while CI is red must be gone"
+assert "one attempt per head SHA" in skill_text
+ok("skills/pr-grind/SKILL.md Rules section no longer claims run-ci is the only agent dispatched while CI is red, and still has 'one attempt per head SHA'")
+
+with open(os.path.join(HERE, "..", "docs", "HOW-IT-WORKS.md"), encoding="utf-8") as fh:
+    how_it_works_rails_text = fh.read()
+how_it_works_rails_start = how_it_works_rails_text.index("### The four rails")
+how_it_works_rails_end = how_it_works_rails_text.index("### The stall detector", how_it_works_rails_start)
+how_it_works_rails_section = how_it_works_rails_text[how_it_works_rails_start:how_it_works_rails_end]
+assert "queued" in how_it_works_rails_section
+assert "one attempt per head SHA" in how_it_works_rails_section
+ok("docs/HOW-IT-WORKS.md rails-table section contains 'queued' and 'one attempt per head SHA'")
+
 # --------------------------------------------------------------------------- gh-issue always decomposes before creating any issue (issue #38)
 
 with open(os.path.join(HERE, "..", "commands", "gh-issue.md"), encoding="utf-8") as fh:
@@ -2626,5 +2723,217 @@ detect_idx = intake_text.index("**Detect the source**")
 assert "strip" in intake_text[:detect_idx].lower() or "--whole" in intake_text[:detect_idx], \
     "commands/intake.md must document stripping --whole from the arguments before step 1's 'Detect the source'"
 ok("commands/intake.md documents stripping --whole before step 1's 'Detect the source'")
+
+# --------------------------------------------------------------------------- epic blocker_ask (issue #53)
+# A parked child's ledger carries `blocker_ask` (pending/answered/deferred) next to
+# `blocked_on`, so the orchestrator can ask about it immediately instead of waiting for
+# Gate 2a to collect every blocker at the end.
+
+
+def _write_child_ledger(runs_dir, issue, status="running", context=None):
+    d = os.path.join(runs_dir, f"o-r-issue-{issue}")
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump({"issue": issue, "stations": ["dev"], "currentIndex": 0,
+                   "bounceCounts": {}, "status": status, "trace": [],
+                   "context": context or {}, "classification": None,
+                   "specialists": []}, fh)
+
+
+with tempfile.TemporaryDirectory() as tmp:
+    _write_child_ledger(tmp, 10, context={"blocked_on": "waiting on X", "blocker_ask": "pending"})
+    st = epic.child_state(tmp, "o/r", 10)
+    assert st["blocked_on"] == "waiting on X", st
+    assert st["blocker_ask"] == "pending", st
+ok("epic.child_state returns blocker_ask from the child ledger's context alongside blocked_on")
+
+with tempfile.TemporaryDirectory() as tmp:
+    _write_child_ledger(tmp, 10, context={})
+    st = epic.child_state(tmp, "o/r", 10)
+    assert st["blocker_ask"] is None, st
+    st_no_dir = epic.child_state(tmp, "o/r", 999)
+    assert st_no_dir["blocker_ask"] is None, st_no_dir
+ok("epic.child_state reports blocker_ask=None when absent, including a child with no run dir yet")
+
+with tempfile.TemporaryDirectory() as tmp:
+    epic_dir = os.path.join(tmp, "epic")
+    os.makedirs(epic_dir)
+    with open(os.path.join(epic_dir, "epic.json"), "w", encoding="utf-8") as fh:
+        json.dump({"parent": 42, "slug": "o/r", "children": [10, 11],
+                   "dag": {"order": [10, 11], "deps": {"10": [], "11": []}},
+                   "max_stacks": 2}, fh)
+    runs = os.path.join(tmp, "runs")
+    _write_child_ledger(runs, 10, context={"blocked_on": "stuck", "blocker_ask": "pending"})
+    _write_child_ledger(runs, 11, context={})
+
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "epic", "status", epic_dir, "--runs-dir", runs],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    lines = {int(line.split()[0].lstrip("#")): line for line in proc.stdout.splitlines()}
+    assert "blocker_ask=pending" in lines[10], lines[10]
+    assert "blocker_ask" not in lines[11], lines[11]
+ok("aiw epic status prints blocker_ask=pending on a child's line, and omits it when unset")
+
+with tempfile.TemporaryDirectory() as tmp:
+    epic_dir = os.path.join(tmp, "epic")
+    os.makedirs(epic_dir)
+    with open(os.path.join(epic_dir, "epic.json"), "w", encoding="utf-8") as fh:
+        json.dump({"parent": 42, "slug": "o/r", "children": [10, 11, 12],
+                   "dag": {"order": [10, 11, 12], "deps": {"10": [], "11": [], "12": []}},
+                   "max_stacks": 3}, fh)
+    runs = os.path.join(tmp, "runs")
+    _write_child_ledger(runs, 10, status="escalated",
+                        context={"blocked_on": "needs a human", "blocker_ask": "pending"})
+    _write_child_ledger(runs, 11, status="running")
+    _write_child_ledger(runs, 12, status="running")
+
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "epic", "next", epic_dir, "--runs-dir", runs],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    got = json.loads(proc.stdout)
+    assert got["ready"] == [11, 12], "a parked child must not stall its independent siblings: " + repr(got)
+    assert got["states"]["10"]["blocked_on"] == "needs a human", got
+    assert got["states"]["10"]["blocker_ask"] == "pending", got
+ok("aiw epic next excludes a parked child from ready but still reports its blocked_on/blocker_ask")
+
+with tempfile.TemporaryDirectory() as tmp:
+    epic_dir = os.path.join(tmp, "epic")
+    os.makedirs(epic_dir)
+    with open(os.path.join(epic_dir, "epic.json"), "w", encoding="utf-8") as fh:
+        json.dump({"parent": 42, "slug": "o/r", "children": [10, 11],
+                   "dag": {"order": [10, 11], "deps": {"10": [], "11": []}},
+                   "max_stacks": 2}, fh)
+    runs = os.path.join(tmp, "runs")
+    _write_child_ledger(runs, 10, status="escalated",
+                        context={"blocked_on": "first blocker", "blocker_ask": "pending"})
+    _write_child_ledger(runs, 11, status="escalated",
+                        context={"blocked_on": "second blocker", "blocker_ask": "pending"})
+
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "epic", "next", epic_dir, "--runs-dir", runs],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    got = json.loads(proc.stdout)
+    assert got["states"]["10"]["blocked_on"] == "first blocker", got
+    assert got["states"]["11"]["blocked_on"] == "second blocker", got
+    assert got["states"]["10"]["blocker_ask"] == "pending" and got["states"]["11"]["blocker_ask"] == "pending", got
+ok("two children each carry their own blocked_on/blocker_ask independently, never merged")
+
+with tempfile.TemporaryDirectory() as tmp:
+    run_dir = os.path.join(tmp, "o-r-issue-10")
+    os.makedirs(run_dir)
+    with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump({"issue": 10, "stations": ["dev"], "currentIndex": 0, "bounceCounts": {},
+                   "status": "escalated", "trace": [], "context": {}, "classification": None,
+                   "specialists": []}, fh)
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "set", run_dir, "blocked_on=first", "blocker_ask=answered"],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    proc2 = subprocess.run(
+        [sys.executable, ROUTE, "set", run_dir, "blocked_on=second", "blocker_ask=pending"],
+        capture_output=True, text=True,
+    )
+    assert proc2.returncode == 0, proc2.stderr
+    led = json.load(open(os.path.join(run_dir, "run.json")))
+    assert led["context"]["blocked_on"] == "second", led["context"]
+    assert led["context"]["blocker_ask"] == "pending", led["context"]
+ok("a new blocker overwrites and re-arms blocker_ask, ending at second/pending")
+
+# --------------------------------------------------------------------------- run-issue.md prose (issue #53)
+
+
+def _run_issue_section(text: str, start_heading: str, end_heading: str) -> str:
+    start = text.index(start_heading)
+    end = text.index(end_heading, start)
+    return text[start:end]
+
+
+run_issue_step4 = _run_issue_section(
+    run_issue_text, "4. **The relay.**", "5. **A blocker")
+assert "escalate" in run_issue_step4, run_issue_step4
+assert "needs_confirmation" in run_issue_step4, \
+    "step 4 must name both park causes: aiw route printing escalate, and a non-empty needs_confirmation"
+ok("run-issue.md Epic step 4 names both park causes: escalate and needs_confirmation")
+
+assert "blocked_on=" in run_issue_step4, run_issue_step4
+assert "blocker_ask=pending" in run_issue_step4, run_issue_step4
+set_idx = run_issue_step4.index("blocked_on=")
+ask_idx = run_issue_step4.index("AskUserQuestion")
+assert set_idx < ask_idx, \
+    "the ledger write (blocked_on=/blocker_ask=pending) must happen before AskUserQuestion"
+ok("run-issue.md Epic step 4 writes blocked_on=/blocker_ask=pending before AskUserQuestion")
+
+assert "epic next" in run_issue_step4, run_issue_step4
+assert "before dispatching the next" in run_issue_step4, \
+    "step 4 must say the ask fires before dispatching the next aiw epic next call"
+assert "#<child>" in run_issue_step4, \
+    "step 4 must name the child issue number as #<child>"
+assert "the blocking station" in run_issue_step4, \
+    "step 4 must name the blocking station"
+assert "the one-line\n   reason" in run_issue_step4 or "the one-line reason" in run_issue_step4, \
+    "step 4 must name the one-line reason"
+ok("run-issue.md Epic step 4 says the ask fires before dispatching the next epic next, naming the child/station/reason")
+
+assert "AskUserQuestion" in run_issue_step4
+assert "one `AskUserQuestion` per parked child" in run_issue_step4 or \
+    "never batched" in run_issue_step4, \
+    "step 4 must say one AskUserQuestion per parked child, never batched"
+ok("run-issue.md Epic step 4 says one AskUserQuestion per parked child, never batched")
+
+assert "blocker_ask=answered" in run_issue_step4, run_issue_step4
+assert "blocker_ask=deferred" in run_issue_step4, run_issue_step4
+assert "7b" in run_issue_step4 and "8.5" in run_issue_step4, \
+    "step 4 must say a deferred needs_confirmation child does not proceed to 7b/8.5"
+assert "Degraded finish" in run_issue_step4, \
+    "step 4 must say the escalate path still goes to Degraded finish"
+ok("run-issue.md Epic step 4 covers blocker_ask=answered/deferred and both park paths' downstream routing")
+
+run_issue_step6 = _run_issue_section(
+    run_issue_text, "6. **GATE 2a", "7. **GATE 2")
+assert "blocker_ask" in run_issue_step6, run_issue_step6
+assert "pending" in run_issue_step6 and "deferred" in run_issue_step6, run_issue_step6
+assert "epic status" in run_issue_step6, run_issue_step6
+assert "once" in run_issue_step6.lower(), run_issue_step6
+assert "Once 2a has fired it does not fire again." not in run_issue_step6, \
+    "the old unqualified sentence must be gone now that step 6 reads blocker_ask"
+ok("run-issue.md Epic step 6 reads blocker_ask via aiw epic status, still fires once, "
+   "drops the old unqualified sentence")
+
+assert re.search(r"skip.*gate|no.*blocker_ask.*pending", run_issue_step6, re.I), \
+    "step 6 must say to skip the gate when no child has a pending or deferred blocker_ask"
+ok("run-issue.md Epic step 6 says to skip the gate when nothing has a pending/deferred blocker_ask")
+
+gates_section = _run_issue_section(
+    run_issue_text, "### Gates — exactly three", "### Test ownership")
+assert "epic" in gates_section.lower() and "Gate 2a" in gates_section, gates_section
+assert "not a fourth gate" in gates_section or "still Gate 2a" in gates_section, \
+    "the Gates section must state the per-blocker asks are a use of Gate 2a, not a fourth gate"
+ok("run-issue.md Gates section states the per-blocker asks are Gate 2a, not a fourth gate")
+
+gate2a_span = _run_issue_section(
+    run_issue_text, "### GATE 2a — human confirmation on blockers", "## 7b.")
+assert "**Confirmed, continue**" in gate2a_span, gate2a_span
+assert "**Hold here**" in gate2a_span, gate2a_span
+ok("run-issue.md phase 7's GATE 2a still contains Confirmed, continue and Hold here, unchanged")
+
+routing_rules = _run_issue_section(run_issue_text, "### Routing", "### Gates — exactly three")
+assert "not a stop-and-ask" in routing_rules or "not a stop-and-ask" in run_issue_text, \
+    "the engine's escalate bullet must still contain 'not a stop-and-ask'"
+assert "Degraded finish" in routing_rules
+ok("run-issue.md engine escalate bullet still says not a stop-and-ask and routes to Degraded finish")
+
+with open(os.path.join(HERE, "..", "docs", "HOW-IT-WORKS.md"), encoding="utf-8") as fh:
+    how_it_works_text = fh.read()
+assert "immediate" in how_it_works_text.lower() or "as soon as" in how_it_works_text.lower(), \
+    "docs/HOW-IT-WORKS.md must mention the immediate per-blocker ask in its epic Gate 2a description"
+assert "sole channel" not in how_it_works_text.lower(), how_it_works_text
+ok("docs/HOW-IT-WORKS.md mentions the immediate per-blocker ask, not just the once-at-the-end description")
 
 print(f"\n{passed} checks passed")

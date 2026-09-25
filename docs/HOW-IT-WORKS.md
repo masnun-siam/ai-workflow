@@ -287,7 +287,7 @@ A rail firing means *stop this round*. First one to fire wins.
 | Rail | Why it exists |
 |---|---|
 | **10 rounds** | A loop that has gone ten rounds is not converging. |
-| **CI is red** | Never push review fixes onto a broken branch. This one escalates **once** before stopping: `run-ci` gets exactly one attempt per head SHA — never two, here or anywhere else. |
+| **CI is red** | Never push review fixes onto a broken branch. `run-ci` gets exactly one attempt per head SHA — never two, here or anywhere else. A `fixed`/`flake-rerun` outcome does not stop the round: review triage keeps going, and any new fix commits are queued rather than pushed until CI goes green. Only a terminal outcome (cannot-fix, needs human confirmation, or the one attempt already spent and still red) stops the round. |
 | **A real person commented** | Automation ends when a human weighs in. A *bot* commenting doesn't count, and an unknown named account is treated as a person, which is the safe default. |
 | **You said hold** | Said to the session, not in Slack. Nothing you post in the thread reaches it. |
 
@@ -338,8 +338,10 @@ Then `/run-issue <parent>` drives them all. The rules:
   reach "PR open" first.
 - **Still three gates, for the whole epic.** Gate 1 shows you the split and *every* child's
   plan at once. A blocker in one child parks that child and the others keep going; Gate 2a
-  fires once, when nothing more can proceed without you. Gate 3 is one report covering
-  everything, including the order you must merge in.
+  covers both an immediate, per-blocker ask fired as soon as that child parks (so you are
+  not left waiting until the end to hear about it) and an end-of-run closer that fires once,
+  collecting whatever is still pending or deferred when nothing more can proceed without
+  you. Gate 3 is one report covering everything, including the order you must merge in.
 - **A failed child with dependents is reported by name.** "Never started, blocked by #14" —
   because a child silently missing from a list of twelve is how you discover a month later
   that a third of the epic was never built.
