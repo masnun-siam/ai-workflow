@@ -23,16 +23,19 @@ def ok(label: str) -> None:
     print(f"  ok  {label}")
 
 
-def ledger(issue, stations, current_index, status="running", **context_extra):
+def ledger(
+    issue, stations, current_index, status="running",
+    bounce_counts=None, trace=None, classification=None, **context_extra,
+):
     return {
         "issue": issue,
         "stations": stations,
         "currentIndex": current_index,
-        "bounceCounts": {},
+        "bounceCounts": bounce_counts or {},
         "status": status,
-        "trace": [],
+        "trace": trace or [],
         "context": {"repo": "/tmp/whatever", **context_extra},
-        "classification": None,
+        "classification": classification,
         "specialists": [],
     }
 
@@ -173,5 +176,46 @@ board = build_board([record(led)], {}, lambda o, r, i: "t")
 _, card = card_for(board, 10)
 assert card["project"] == "some-owner/some-repo", card
 ok("project name: falls back to raw owner/repo slug when unmapped")
+
+
+# --- 11. card carries full popup detail: trace, PR/branch/CI, classification, bounces --
+
+led = ledger(
+    11, FULL, FULL.index("reviewer"),
+    trace=["init: mode=full", "advance->planner", "advance->reviewer"],
+    bounce_counts={"dev->reviewer": 1},
+    classification={"ticket_type": "feature", "risk_score": 39, "risk_band": "medium", "blast_radius": "unknown"},
+    pr="https://github.com/acme/widgets/pull/9",
+    branch="issue-11-thing",
+    base_branch="master",
+    ci="green",
+)
+board = build_board([record(led)], {}, lambda o, r, i: "t")
+_, card = card_for(board, 11)
+assert card["trace"] == ["init: mode=full", "advance->planner", "advance->reviewer"], card
+assert card["bounceCounts"] == {"dev->reviewer": 1}, card
+assert card["classification"] == {
+    "ticket_type": "feature", "risk_score": 39, "risk_band": "medium", "blast_radius": "unknown",
+}, card
+assert card["pr"] == "https://github.com/acme/widgets/pull/9", card
+assert card["branch"] == "issue-11-thing", card
+assert card["base_branch"] == "master", card
+assert card["ci"] == "green", card
+ok("card detail: trace/bounceCounts/classification/pr/branch/base_branch/ci all surfaced")
+
+
+# --- 12. detail fields default sensibly when absent from context/classification ---
+
+led = ledger(12, FULL, FULL.index("planner"))
+board = build_board([record(led)], {}, lambda o, r, i: "t")
+_, card = card_for(board, 12)
+assert card["trace"] == [], card
+assert card["bounceCounts"] == {}, card
+assert card["classification"] is None, card
+assert card["pr"] is None, card
+assert card["branch"] is None, card
+assert card["base_branch"] is None, card
+assert card["ci"] is None, card
+ok("card detail: absent context/classification fields default to empty/None, not KeyError")
 
 print(f"\n{passed} passed")
