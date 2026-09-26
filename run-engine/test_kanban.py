@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Self-check for scripts/kanban.py. `python3 scripts/test_kanban.py` — exit 0 = green.
+"""Self-check for run-engine/kanban.py. `python3 test_kanban.py` — exit 0 = green.
 
 Deliberately assert-based with no framework, matching run-engine/test_engine.py:
 this file must run anywhere python3 does, with no install step.
@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from kanban import STATIONS, build_board  # noqa: E402
+from kanban import STATIONS, build_board, memoize_title_fetcher  # noqa: E402
 
 passed = 0
 
@@ -217,5 +217,24 @@ assert card["branch"] is None, card
 assert card["base_branch"] is None, card
 assert card["ci"] is None, card
 ok("card detail: absent context/classification fields default to empty/None, not KeyError")
+
+
+# --- 13. memoize_title_fetcher: same key hits the cache, different keys don't ----
+
+calls = []
+
+
+def fake_fetch(owner, repo, issue):
+    calls.append((owner, repo, issue))
+    return f"title-{issue}"
+
+
+cached_fetch = memoize_title_fetcher(fake_fetch)
+assert cached_fetch("acme", "widgets", 1) == "title-1"
+assert cached_fetch("acme", "widgets", 1) == "title-1"
+assert calls == [("acme", "widgets", 1)], calls
+assert cached_fetch("acme", "widgets", 2) == "title-2"
+assert calls == [("acme", "widgets", 1), ("acme", "widgets", 2)], calls
+ok("memoize_title_fetcher: repeat calls for the same key hit the cache, new keys don't")
 
 print(f"\n{passed} passed")
