@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.6.1 — 2026-09-26
+
+### Added
+
+- **Agent-facing domain docs**: `CONTEXT.md` (domain glossary), `docs/agents/issue-tracker.md`
+  (GitHub-issues-as-tracker conventions), `docs/agents/triage-labels.md` (canonical triage
+  label mapping), and `docs/agents/domain.md` (how skills should consume this repo's domain
+  docs when exploring). CLAUDE.md now points at all three under a new "Agent skills" section.
+- `.gitignore` now excludes `.gstack/`.
+
 ## 1.6.0 — 2026-09-24
 
 ### Added
