@@ -38,8 +38,8 @@ ever creates a GitHub issue. It never touches code.**
 - This holds even for a one-character fix. "It's trivial" is not an exception — the whole point of filing an issue is that a human decides whether and how to make the change.
 - If a fix is obvious from your investigation, do NOT apply it. Record it under a **Proposed Fix** section in the issue body instead (file path, symbol, and the change in prose or a fenced diff).
 - **Scope.** These constraints bind steps 0–7 of this skill only, including everything
-  under `4-EPIC` and Refine mode. When `/run-issue` invoked this skill, they lapse the moment the issue
-  URL is returned — the caller's later phases write code by design, and this rule must
+  under `4-EPIC` and Refine mode. When `/run-issue` invoked this skill (including refine mode from its step 3.6),
+  they lapse the moment the issue URL is returned or refine mode ends — the caller's later phases write code by design, and this rule must
   not be carried into them.
 
 Do the following:
@@ -251,7 +251,9 @@ Do the following:
    The issue already exists and is the deliverable; the dump is not worth failing over.
 
 Return the issue URL. If `/run-issue` invoked this skill, hand control back to its
-Preflight step 3 with that issue number and continue the run; the HARD RULE above no
+Preflight step 3 with that issue number and continue the run (in refine mode, back to
+step 3.6, which re-fetches and decides; any refine-mode stop ends only this skill, and
+step 3.6 then takes its failure path); the HARD RULE above no
 longer applies.
 
 ### Refine mode

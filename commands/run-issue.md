@@ -15,6 +15,9 @@ implement → verify → PR → review → fix → sync → CI.
 3. **Gate 2 — the PR is ready for a human to review and merge** (phase 9.3). Always fires,
    and it is the *only* terminal report.
 
+Preflight-time stops happen before any run exists and are not gates: step 3.5's missing
+base branch, step 3.6's `refined` check, and step 4's resume / done / escalated ask.
+
 **Nothing else may stop to ask.** Everything in between either self-corrects, or is
 recorded and carried into Gate 2. A spent budget, a failed verification, a stack that
 won't come up, an unpushable branch — none of those is a question for the user; they are
@@ -234,8 +237,9 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
    stop (bad issue number, wrong repo, or `gh` not authed).
 3.5. **Epic check — before step 4, not after it.** `gh api
    repos/{owner}/{repo}/issues/<n>/sub_issues`. A non-empty array means this is an epic
-   parent — go to **Epic mode** below instead of the single-issue phases; keep the
-   child numbers it returned, Epic mode step 0 needs them. An empty array is the
+   parent — keep the child numbers **and their `labels`** from that same response (Epic
+   mode step 0 needs the numbers, step 3.6 the labels), and after step 3.6 passes go to
+   **Epic mode** below instead of the single-issue phases. An empty array is the
    ordinary path.
 
    This runs **before** step 4 because step 4 would otherwise get there first. A second
@@ -248,7 +252,35 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
    run. Its `Depends on:` line names a base branch that may not exist yet, so check with
    `git ls-remote --heads origin <dep-branch>`; if it is absent, say so and ask whether to
    base on the default branch instead. Never guess a substitute base — the same rule
-   phase 8 applies when `origin/<base>` has gone missing.
+   phase 8 applies when `origin/<base>` has gone missing. Run this after step 3.6, so it
+   reads the post-refine body.
+3.6. **Refined check — before step 4, so no `RUN_DIR` exists yet.** The set to check is
+   `<n>` alone for an ordinary issue, or `<n>` plus every child from step 3.5's
+   `sub_issues` response for an epic parent. Read labels from step 3's JSON and from that
+   response's `.labels[].name` — no new `gh` call. Match the label name `refined`
+   **exactly**: `unrefined` or `refined-later` does not count.
+
+   - Every issue in the set carries `refined` (for an epic, the parent and every child) →
+     continue with no ask and no behaviour change: to Epic mode if 3.5 found children,
+     otherwise step 4.
+   - Otherwise the issues that lack `refined` need refining. Ask **once**, a single
+     `AskUserQuestion`, naming every missing number (`#<n>` and/or children), with exactly
+     two options:
+     - **Stop here** — print the unrefined issue numbers and end the run. Create no
+       `RUN_DIR`, no `run.json`, no `aiw init`.
+     - **Refine now** — invoke `/gh-issue <n>` (refine mode; `<m>` for a child) for each
+       missing issue in sequence; do not re-enter this gate or continue until the last one
+       returns. Then re-run
+       `gh issue view <n> --comments --json title,body,labels,comments,url`
+       (and step 3.5's `sub_issues` call for an epic) so phase 0.5 sees the **refined**
+       body, and to confirm `refined` is now on every issue in the set. If any `/gh-issue`
+       failed or was cancelled, or `refined` is still absent after the re-fetch, stop and
+       say which issue; no ledger or `RUN_DIR` is created. Otherwise continue into the
+       epic branch or step 4 in this same run, without the user having to re-type `/run-issue`.
+   - `--full` and `--lean` are not consulted here and cannot bypass this check.
+   - This runs before step 4 reads `run.json`, so an existing ledger (`running` or
+     `escalated`) does not exempt the issue.
+
 4. **Resume check.** `RUN_DIR=<runs_dir>/<owner>-<repo>-issue-<n>`. If
    `$RUN_DIR/run.json` exists, read it and **branch on `status` first** — `currentIndex`
    alone is not enough, because a terminal run leaves the baton parked on the station that
@@ -1071,7 +1103,7 @@ once, exactly as phase 6 spawns the specialist panel in one message.
    It is idempotent on the linkage — children already linked as sub-issues are skipped —
    so running it on an epic `/gh-issue` created is harmless. Exit 1 means the edges do
    not form a DAG; print the message and stop, as `/gh-issue` does.
-1. **Init.** Phase 0 step 3's per-child `gh issue view` already read each child's labels;
+1. **Init.** Phase 0 step 3.5's `sub_issues` response, carried through step 3.6, already holds each child's labels;
    pass through any that carry `lean`:
 
    ```bash
@@ -1273,7 +1305,8 @@ once, exactly as phase 6 spawns the specialist panel in one message.
   bullet above and step 4), so it needs no such carve-out.
 - Never skip Gate 1 (phase 1) or Gate 2 (phase 9.3), whatever the resume state says. Gates
   are not modelled in `run.json` on purpose — they re-fire.
-- **Readiness is advisory.** A thin issue surfaces its DoR gaps and assumptions *at Gate 1*,
+- **Readiness is advisory.** (The `refined` label is a separate Preflight check, step 3.6,
+  not DoR scoring.) A thin issue surfaces its DoR gaps and assumptions *at Gate 1*,
   above the plan, not as a stop before it. Same information, one fewer interruption, and you
   see it with the plan in front of you.
 - **A build-phase failure is not a question.** Spent budget, failed verification, dead-end
