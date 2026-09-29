@@ -7,7 +7,7 @@ argument-hint: "[bug | feature | task | improvement] <details | sentry-url | fil
 > on `PATH` via the plugin's `bin/`). Substitute the printed value; never guess a path.
 I have a ${1:-bug / feature request / task / improvement} to log as a GitHub issue.
 
-0. **Source check.** First, the refine check: if the trimmed `$@` is a bare positive integer (an issue number),
+0. **Source check.** First, the refine check: if the trimmed `$@` is a bare positive integer, optionally `#`-prefixed (`42` or `#42`),
    or a `github.com/<owner>/<repo>/issues/<n>` URL whose owner/repo equals the current repo
    (resolve it from the git remote), go to **Refine mode** (the Refine mode section at
    the end of this file) and skip the rest of this new-issue flow, including the `/intake`
@@ -75,7 +75,7 @@ Do the following:
    - Every issue this command creates carries the `refined` label (unconditional). Ensure it
      exists once per run, before the first create (idempotent, cheap):
      ```bash
-     gh label create refined --color 0E8A16 --description "properly specified: created or refined by /gh-issue" 2>/dev/null || true
+     gh label create refined --color 1D76DB --description "properly specified: passes the issue template" 2>/dev/null || true
      ```
    - Run `gh issue create --title "..." --label "refined,..." --body-file /tmp/gh-issue-body.md`
    - **NEVER use `--body` flag** — shell escaping breaks on backticks, pipes, quotes, newlines. Always `--body-file`.
@@ -117,10 +117,9 @@ Do the following:
 1. Create the **parent** with the BRD as its body, labelled `epic` and `refined`. Ensure
    `refined` exists before this first create of the epic path (idempotent, cheap):
    ```bash
-   gh label create refined --color 0E8A16 --description "properly specified: created or refined by /gh-issue" 2>/dev/null || true
+   gh label create refined --color 1D76DB --description "properly specified: passes the issue template" 2>/dev/null || true
    ```
-   It is a container:
-   it needs no acceptance criteria of its own, and it is **never** labelled `lean` — a
+   It is a container: it needs no acceptance criteria of its own, and it is **never** labelled `lean` — a
    container spans however many children it has, which is never "one to two files or
    symbols touched."
 2. For each child, write a **complete, independently DoR-satisfying** issue body — the
@@ -268,8 +267,8 @@ R1. Run `gh issue view <n> --json state,title,body,labels,url,comments`. If it f
 R2. Run steps 1, 2, 2.5 (pass the fetched title, body and comments as run-researcher's
     description) and 3 unchanged, scoped to that content.
 R3. Skip steps 3.5, 5, 6 and 7.
-R4. Write only the refinement to `/tmp/gh-issue-body.md`: step 4's Body sections list
-    (the body-sections list in step 4) as `###` sub-headings, with the same rules (no
+R4. Write only the refinement to `/tmp/gh-issue-body.md`: the body sections listed in
+    step 4, as `###` sub-headings, with the same rules (no
     placeholders, `none` over silence, How with path:line refs). No `#` or `##` headings.
 R5. Run `gh issue view <n> --json body | aiw dispatch refine-body /tmp/gh-issue-body.md`.
     It preserves the current body under `## Original report` and sets the single
