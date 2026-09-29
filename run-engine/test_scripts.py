@@ -3204,7 +3204,10 @@ RESUME_HEAD = "4. **Resume check.**"
 assert REFINED_HEAD in run_issue_text, \
     "run-issue.md is missing Preflight step 3.6 (refined check): add '3.6. **Refined check' before step 4"
 _fetch_at = run_issue_text.index("gh issue view <n> --comments --json title,body,labels,comments,url")
-assert _fetch_at < run_issue_text.index(REFINED_HEAD) < run_issue_text.index(RESUME_HEAD)
+_pos = [_fetch_at, run_issue_text.index("3.5. **Epic check"), run_issue_text.index(REFINED_HEAD),
+        run_issue_text.index(RESUME_HEAD), run_issue_text.index('aiw init "$RUN_DIR"')]
+assert _pos == sorted(_pos) and len(set(_pos)) == 5, \
+    "Preflight order must be step 3 fetch, 3.5, 3.6, 4, first aiw init"
 ok("run-issue.md step 3.6 sits after step 3's gh issue view and before step 4")
 
 refined_sec = _run_issue_section(run_issue_text, REFINED_HEAD, RESUME_HEAD)
@@ -3275,8 +3278,22 @@ ok("Gates readiness bullet, definition-of-ready.md and HOW-IT-WORKS.md name the 
 
 with open(os.path.join(HERE, "..", "commands", "gh-issue.md"), encoding="utf-8") as fh:
     gh_issue_text = fh.read()
-assert "3.6" in gh_issue_text or "refined check" in gh_issue_text.lower(), \
-    "gh-issue.md hand-back must reference run-issue's refined check (step 3.6)"
+_r9 = gh_issue_text[gh_issue_text.index("\nR9."):]
+_r9 = _r9[:_r9.index("HARD RULE above no longer applies")]
+assert "step 3.6" in _r9 and "without re-entering" in _r9 and "R1, R5 or" in _r9, _r9
+_flat = " ".join(_r9.split())
+assert "never to Preflight step 3" in _flat and "back to Preflight step 3" not in _flat, _r9
 ok("gh-issue.md hand-back covers refine mode invoked from run-issue's refined check")
+
+assert "deferred" in rs_low and "Depends on:" in refined_sec, refined_sec
+_ok_path = refined_sec[:refined_sec.index("Otherwise the issues")]
+assert "Depends on:" in _ok_path and _ok_path.index("Depends on:") < _ok_path.rindex("step 4"), _ok_path
+assert "Depends on:" in refined_sec[refined_sec.index("**Refine now**"):], refined_sec
+ok("step 3.6: success paths run the deferred Depends on: base-branch check before step 4")
+
+assert "closed" in rs_low and "gh issue edit <m> --add-label refined" in refined_sec, refined_sec
+_rn = refined_sec.index("**Refine now**")
+assert refined_sec.index("closed", _rn) < refined_sec.index("/gh-issue <n>", _rn), refined_sec
+ok("step 3.6: closed issue lacking refined stops naming gh issue edit <m> --add-label refined")
 
 print(f"\n{passed} checks passed")
