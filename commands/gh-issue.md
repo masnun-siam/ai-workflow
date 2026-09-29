@@ -75,7 +75,7 @@ Do the following:
    - Every issue this command creates carries the `refined` label (unconditional). Ensure it
      exists once per run, before the first create (idempotent, cheap):
      ```bash
-     gh label create refined --color 0E8A16 --description "properly specified: created or refined by /gh-issue" 2>/dev/null || true
+     gh label create refined --color 1D76DB --description "properly specified: passes the issue template" 2>/dev/null || true
      ```
    - Run `gh issue create --title "..." --label "refined,..." --body-file /tmp/gh-issue-body.md`
    - **NEVER use `--body` flag** — shell escaping breaks on backticks, pipes, quotes, newlines. Always `--body-file`.
@@ -117,10 +117,9 @@ Do the following:
 1. Create the **parent** with the BRD as its body, labelled `epic` and `refined`. Ensure
    `refined` exists before this first create of the epic path (idempotent, cheap):
    ```bash
-   gh label create refined --color 0E8A16 --description "properly specified: created or refined by /gh-issue" 2>/dev/null || true
+   gh label create refined --color 1D76DB --description "properly specified: passes the issue template" 2>/dev/null || true
    ```
-   It is a container:
-   it needs no acceptance criteria of its own, and it is **never** labelled `lean` — a
+   It is a container: it needs no acceptance criteria of its own, and it is **never** labelled `lean` — a
    container spans however many children it has, which is never "one to two files or
    symbols touched."
 2. For each child, write a **complete, independently DoR-satisfying** issue body — the

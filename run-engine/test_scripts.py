@@ -1910,11 +1910,11 @@ for name, text in (("gh-issue.md", gh_text), ("jira-to-gh.md", jira_text)):
     assert re.search(LABEL_RE, text), name
 ok("both commands ensure-create the refined label")
 
-for name, sect, create_at in (
-    ("gh-issue.md step 4", _slice(gh_text, "4. Then create a GitHub issue", "### 4-EPIC"), None),
-    ("jira-to-gh.md Step 5", _slice(jira_text, "## Step 5", "### 5-EPIC"), None),
-    ("gh-issue.md 4-EPIC", gh_text[gh_text.index("### 4-EPIC"):], None),
-    ("jira-to-gh.md 5-EPIC", jira_text[jira_text.index("### 5-EPIC"):], None),
+for name, sect in (
+    ("gh-issue.md step 4", _slice(gh_text, "4. Then create a GitHub issue", "### 4-EPIC")),
+    ("jira-to-gh.md Step 5", _slice(jira_text, "## Step 5", "### 5-EPIC")),
+    ("gh-issue.md 4-EPIC", gh_text[gh_text.index("### 4-EPIC"):]),
+    ("jira-to-gh.md 5-EPIC", jira_text[jira_text.index("### 5-EPIC"):]),
 ):
     m = re.search(LABEL_RE, sect)
     assert m, (name, "no refined ensure-create")
@@ -1922,6 +1922,18 @@ for name, sect, create_at in (
     assert m.start() < first_create, (name, "refined ensure-create must precede gh issue create")
     assert "refined" in sect[first_create:], (name, "refined not applied at create")
 ok("refined is ensure-created before first gh issue create and applied on single and epic paths")
+
+# The epic PARENT step itself must carry `refined` (child wording must not satisfy this).
+for name, text, start, end in (
+    ("gh-issue.md 4-EPIC", gh_text, "1. Create the **parent**", "\n2. For each child"),
+    ("jira-to-gh.md 5-EPIC", jira_text, "1. Create the **parent**", "\n2. Create children"),
+):
+    step1 = _slice(text[text.index("-EPIC. Create the parent"):], start, end)
+    assert "`epic` and `refined`" in step1 or "`epic`, `refined`" in step1, (name, "parent not labelled refined")
+    assert re.search(LABEL_RE, step1), (name, "parent step lacks refined ensure-create")
+    if "gh issue create" in step1:
+        assert re.search(LABEL_RE, step1).start() < step1.index("gh issue create"), name
+ok("epic parent step ensure-creates and applies refined")
 
 # --------------------------------------------------------------------------- dispatch: lane mode
 
