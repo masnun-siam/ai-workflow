@@ -262,13 +262,18 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
 
    - Every issue in the set carries `refined` (for an epic, the parent and every child) →
      continue with no ask and no behaviour change: to Epic mode if 3.5 found children,
-     otherwise step 4.
+     otherwise run step 3.5's deferred child-run `Depends on:` base-branch check (skip it
+     if the issue has no `Depends on:` line), then step 4.
    - Otherwise the issues that lack `refined` need refining. Ask **once**, a single
      `AskUserQuestion`, naming every missing number (`#<n>` and/or children), with exactly
      two options:
      - **Stop here** — print the unrefined issue numbers and end the run. Create no
        `RUN_DIR`, no `run.json`, no `aiw init`.
-     - **Refine now** — invoke `/gh-issue <n>` (refine mode; `<m>` for a child) for each
+     - **Refine now** — first, any missing issue that is `closed` (state is in the
+       `sub_issues` response / step 3's JSON) cannot be refined, since `/gh-issue` refine
+       refuses closed issues: do not invoke it, and stop naming it with the manual escape
+       `gh issue edit <m> --add-label refined` (the check still covers the parent and every
+       child). Otherwise invoke `/gh-issue <n>` (refine mode; `<m>` for a child) for each
        missing issue in sequence; do not re-enter this gate or continue until the last one
        returns. Then re-run
        `gh issue view <n> --comments --json title,body,labels,comments,url`
@@ -276,7 +281,7 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
        body, and to confirm `refined` is now on every issue in the set. If any `/gh-issue`
        failed or was cancelled, or `refined` is still absent after the re-fetch, stop and
        say which issue; no ledger or `RUN_DIR` is created. Otherwise continue into the
-       epic branch or step 4 in this same run, without the user having to re-type `/run-issue`.
+       epic branch, or (single issue) the deferred `Depends on:` check then step 4 in this same run, without the user having to re-type `/run-issue`.
    - `--full` and `--lean` are not consulted here and cannot bypass this check.
    - This runs before step 4 reads `run.json`, so an existing ledger (`running` or
      `escalated`) does not exempt the issue.

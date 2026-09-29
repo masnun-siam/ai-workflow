@@ -285,5 +285,8 @@ R8. Run step 4.5 against `<n>`, telling the factchecker that `## Original report
     reporter's preserved text and must not be flagged or rewritten. On `ISSUES FOUND`, fix
     only the Refinement content: rewrite `/tmp/gh-issue-body.md` with the corrected
     refinement and repeat R5 and R6.
-R9. Return the issue URL. If `/run-issue` invoked this skill, hand control back to its
-    Preflight step 3; the HARD RULE above no longer applies.
+R9. Return the issue URL. If `/run-issue` invoked this skill from its step 3.6, hand
+    control back to step 3.6's refine loop (next missing issue, or the re-fetch) — never
+    to Preflight step 3, and without re-entering the 3.5/3.6 gate. Any stop in R1, R5 or
+    R6 ends only this skill and returns to step 3.6, which then takes its failure path.
+    The HARD RULE above no longer applies.
