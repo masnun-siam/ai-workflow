@@ -3197,4 +3197,86 @@ assert "immediate" in how_it_works_text.lower() or "as soon as" in how_it_works_
 assert "sole channel" not in how_it_works_text.lower(), how_it_works_text
 ok("docs/HOW-IT-WORKS.md mentions the immediate per-blocker ask, not just the once-at-the-end description")
 
+# --------------------------------------------------------------------------- run-issue.md prose (issue #73)
+
+REFINED_HEAD = "3.6. **Refined check"
+RESUME_HEAD = "4. **Resume check.**"
+assert REFINED_HEAD in run_issue_text, \
+    "run-issue.md is missing Preflight step 3.6 (refined check): add '3.6. **Refined check' before step 4"
+_fetch_at = run_issue_text.index("gh issue view <n> --comments --json title,body,labels,comments,url")
+assert _fetch_at < run_issue_text.index(REFINED_HEAD) < run_issue_text.index(RESUME_HEAD)
+ok("run-issue.md step 3.6 sits after step 3's gh issue view and before step 4")
+
+refined_sec = _run_issue_section(run_issue_text, REFINED_HEAD, RESUME_HEAD)
+rs_low = refined_sec.lower()
+for needle in ("refined", "AskUserQuestion", "**Refine now**", "**Stop here**"):
+    assert needle in refined_sec, needle
+ok("step 3.6 names refined, AskUserQuestion, Refine now and Stop here")
+
+assert "no ask" in rs_low and "no behaviour change" in rs_low and "every" in rs_low, refined_sec
+ok("step 3.6: all issues refined continues with no ask and no behaviour change")
+
+assert "no new" in rs_low and "#<n>" in refined_sec and "lack" in rs_low, refined_sec
+ok("step 3.6: unrefined issue (labels from step 3's fetch, no new call) asks, naming #<n>")
+
+_refetch = "gh issue view <n> --comments --json title,body,labels,comments,url"
+assert "/gh-issue <n>" in refined_sec and _refetch in refined_sec and "sub_issues" in refined_sec, refined_sec
+assert refined_sec.index(_refetch) < rs_low.index("continue", refined_sec.index(_refetch) - 1) \
+    and "re-type" in rs_low, refined_sec
+ok("step 3.6: Refine now runs /gh-issue, re-fetches, then continues the same run")
+
+assert "fail" in rs_low and "cancel" in rs_low and "stop" in rs_low, refined_sec
+assert "no ledger" in rs_low and "RUN_DIR" in refined_sec, refined_sec
+assert "still" in rs_low and "absent" in rs_low or "still missing" in rs_low, refined_sec
+assert refined_sec.index(_refetch) < rs_low.rindex("continue"), refined_sec
+ok("step 3.6: refine failure/cancel or label still absent stops with no ledger; re-fetch precedes continue")
+
+assert "unrefined" in rs_low and "run.json" in refined_sec and "RUN_DIR" in refined_sec, refined_sec
+assert run_issue_text.index(REFINED_HEAD) < run_issue_text.index('aiw init "$RUN_DIR"'), \
+    "step 3.6 must precede the first aiw init"
+ok("step 3.6: Stop here ends the run, prints unrefined numbers, creates no RUN_DIR; precedes aiw init")
+
+assert "exact" in rs_low and ".labels[].name" in refined_sec and "refined-later" in refined_sec, refined_sec
+ok("step 3.6 requires an exact match on the refined label name")
+
+assert "sub_issues" in refined_sec and "single" in rs_low and "every" in rs_low, refined_sec
+assert "in sequence" in rs_low and "re-enter" in rs_low, refined_sec
+ok("step 3.6: epic reads child labels from sub_issues; one ask lists every missing number; refines in sequence")
+
+assert "epic mode" in rs_low and "no ask" in rs_low and "parent and every child" in rs_low, refined_sec
+ok("step 3.6: epic with parent and all children refined enters Epic mode with no ask")
+
+step35 = _run_issue_section(run_issue_text, "3.5. **Epic check", REFINED_HEAD)
+assert "3.6" in step35, "step 3.5 must defer Epic mode until step 3.6 passes"
+ok("step 3.5 defers the Epic-mode jump until step 3.6 passes")
+
+assert "--full" in refined_sec and "--lean" in refined_sec and "bypass" in rs_low, refined_sec
+mode_choice = _run_issue_section(run_issue_text, "Otherwise, choose the mode", "aiw init")
+assert "refined" not in mode_choice, mode_choice
+assert "--force-unrefined" not in run_issue_text
+assert 'argument-hint: "<issue-number-or-url | sentry-url | file-path | vault-note | text> [--lean|--full]"' in run_issue_text
+ok("--full/--lean cannot bypass step 3.6; no bypass flag; argument-hint unchanged")
+
+assert "run.json" in refined_sec and "escalated" in rs_low and "before step 4" in rs_low, refined_sec
+ok("step 3.6 states a resumed/escalated ledger does not exempt the issue")
+
+gates_head = _run_issue_section(
+    run_issue_text, "## Three human gates. Exactly three.", "## Paths")
+assert "Exactly three" in gates_head and "Preflight" in gates_head and "refined" in gates_head, gates_head
+assert "base branch" in gates_head.lower() and "resume" in gates_head.lower(), gates_head
+assert "exactly three times" in run_issue_text.split("---")[1]
+ok("Three human gates section still says Exactly three and names the Preflight stops incl. refined")
+
+assert "refined" in gates_section and "Preflight" in gates_section, gates_section
+for doc in ("definition-of-ready.md", os.path.join("docs", "HOW-IT-WORKS.md")):
+    with open(os.path.join(HERE, "..", doc), encoding="utf-8") as fh:
+        assert "refined" in fh.read(), doc
+ok("Gates readiness bullet, definition-of-ready.md and HOW-IT-WORKS.md name the refined Preflight check")
+
+with open(os.path.join(HERE, "..", "commands", "gh-issue.md"), encoding="utf-8") as fh:
+    gh_issue_text = fh.read()
+assert "3.6" in gh_issue_text or "refined check" in gh_issue_text.lower(), \
+    "gh-issue.md hand-back must reference run-issue's refined check (step 3.6)"
+ok("gh-issue.md hand-back covers refine mode invoked from run-issue's refined check")
+
 print(f"\n{passed} checks passed")
