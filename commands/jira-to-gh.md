@@ -55,7 +55,7 @@ Translate Jira fields to GitHub format:
 
 - **Title**: Use summary, ≤72 chars, specific and actionable
 - **Body sections**:
-  - **What** — requirements and repro steps / requirements extracted from the description (or "To be defined")
+  - **What** — the business requirements, plus repro steps for a bug or requirements for a feature, extracted from the description (or "To be defined")
   - **Why** — from Jira description: the problem and why it matters
   - **Original Jira** — link back: `$1` (include Jira URL if determinable from config)
   - **Acceptance Criteria** — from description or custom fields
@@ -119,11 +119,10 @@ Write the full body to `/tmp/gh-issue-body.md` using the write tool. Every issue
 the `refined` label (unconditional); ensure it exists first (idempotent, cheap):
 
 ```bash
-gh label create refined --color 0E8A16 --description "properly specified: created or refined by /gh-issue" 2>/dev/null || true
+gh label create refined --color 1D76DB --description "properly specified: passes the issue template" 2>/dev/null || true
 ```
 
-If `lean` is one of
-the labels being applied, ensure the label exists first (idempotent, cheap — only run
+If `lean` is one of the labels being applied, ensure the label exists first (idempotent, cheap — only run
 this when the label is actually about to be applied, not on every issue):
 
 ```bash
@@ -147,11 +146,11 @@ alternate path to Step 5 above, not a sub-case nested under it.
    already includes an `## Original Jira` section linking back to `$1`; reuse it,
    don't add a second one. Labels: `epic`, `refined` plus the Jira-mapped type labels from Step 3 — it is
    **never** labelled `lean`, a container spans however many children it has. It
-   needs no How section (parent exemption). Ensure the `epic` label exists
-   first (idempotent, cheap):
+   needs no How section (parent exemption). Ensure the `epic` and `refined` labels
+   exist first (idempotent, cheap):
    ```bash
    gh label create epic --color 5319E7 --description "parent of a decomposed issue" 2>/dev/null || true
-   gh label create refined --color 0E8A16 --description "properly specified: created or refined by /gh-issue" 2>/dev/null || true
+   gh label create refined --color 1D76DB --description "properly specified: passes the issue template" 2>/dev/null || true
    ```
 2. Create children one at a time, in the approved list's dependency order. Each
    child gets a **complete, independently DoR-satisfying** body — full context
@@ -170,7 +169,7 @@ alternate path to Step 5 above, not a sub-case nested under it.
      ```
      Edges may only point at siblings in this epic.
    - On each child's `gh issue create` call, include `epic-<parent>` and `refined` in the
-     `--label` list, alongside its normal labels — apply it at creation time, not afterward, so
+     `--label` list, alongside its normal labels — apply them at creation time, not afterward, so
      every child already created is immediately findable via
      `gh issue list --label epic-<parent>` regardless of where the loop stopped. When
      `epic-<parent>` is about to be applied for the first time this run, ensure it
