@@ -1623,6 +1623,182 @@ for heading in ("How", "What"):
     ]
 ok("no DOR_ITEMS pattern matches the How or What heading, keeping them non-DoR sections")
 
+# Issue #72: /gh-issue refine mode. Pure logic first (refine_body / refinement_block),
+# then dor_gaps scoping, the CLI, and prose pins on commands/gh-issue.md.
+for _fn in ("refine_body", "refinement_block"):
+    assert hasattr(dispatch, _fn), f"dispatch.{_fn} does not exist yet (issue #72 not implemented)"
+
+_OR, _RF = "## Original report", "## Refinement"
+_orig = "Login page 500s.\n\n## Steps\n1. open\n2. click\n"
+_r1 = dispatch.refine_body(_orig, "### What\nfix login")
+assert _r1.startswith(_OR), _r1
+assert _r1[len(_OR):].lstrip("\n").startswith(_orig), _r1
+assert _r1.count(_RF) == 1 and _r1.endswith("### What\nfix login"), _r1
+assert _r1.index(_orig) < _r1.index(_RF), _r1
+ok("refine_body wraps the original verbatim under '## Original report' then one '## Refinement'")
+
+_r2 = dispatch.refine_body(_r1, "### What\nsecond text")
+assert _r2.count(_RF) == 1 and _r2.count(_OR) == 1, _r2
+assert _r2[:_r2.index(_RF)] == _r1[:_r1.index(_RF)], (_r1, _r2)
+assert "second text" in _r2 and "fix login" not in _r2, _r2
+ok("second refine keeps one of each heading, identical prefix, replaces old refinement text")
+
+assert dispatch.refine_body(dispatch.refine_body(_orig, "A text"), "B text") == dispatch.refine_body(_orig, "B text")
+assert dispatch.refine_body(dispatch.refine_body(_orig, "A text"), "A text") == dispatch.refine_body(_orig, "A text")
+ok("refine_body is idempotent / last-write-wins")
+
+_hand = "## Original report\n\nalready wrapped by hand\n"
+_h = dispatch.refine_body(_hand, "new stuff")
+assert _h.count(_OR) == 1 and _h.startswith(_hand) and _h.count(_RF) == 1 and _h.endswith("new stuff"), _h
+ok("body with '## Original report' but no '## Refinement' is not re-wrapped; block appended")
+
+_tri = dispatch.refine_body(_orig, "old") + "\n\n## Triage notes\nkeep me\n"
+_t = dispatch.refine_body(_tri, "fresh")
+assert "## Triage notes\nkeep me\n" in _t and "fresh" in _t and "old" not in _t, _t
+assert _t.count(_RF) == 1, _t
+ok("human-added '## Triage notes' after the Refinement survives a replace")
+
+for _empty in ("", None):
+    _e = dispatch.refine_body(_empty, "only refinement")
+    assert _e.startswith(_OR) and _RF in _e and _e.endswith("only refinement"), _e
+    assert _e.index(_OR) < _e.index(_RF)
+ok("empty/None original gives Original report heading plus Refinement, no exception")
+
+for _blank in ("", "   ", "\n\t\n"):
+    try:
+        dispatch.refine_body(_orig, _blank)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f"blank refinement {_blank!r} must raise ValueError")
+ok("empty/whitespace refinement raises ValueError")
+
+_own = "reporter text\n\n## Refinement\nreporter's own\n"
+_f = dispatch.refine_body(_own, "mine one")
+assert _f.startswith(_OR) and _own in _f and _f.endswith("mine one"), _f
+assert _f.count(_RF) == 2, _f
+_g = dispatch.refine_body(_f, "mine two")
+assert _own in _g and "mine two" in _g and "mine one" not in _g and _g.count(_RF) == 2, _g
+ok("original's own '## Refinement' is wrapped verbatim; later refines replace only the last block")
+
+for _bad in ("# x\nbody", "ok\n## x\nmore"):
+    try:
+        dispatch.refine_body(_orig, _bad)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f"refinement with level-1/2 heading {_bad!r} must raise ValueError")
+assert "### Sub" in dispatch.refine_body(_orig, "### Sub\ncontent")
+ok("refinement with a '#'/'##' heading raises ValueError; '###' accepted")
+
+_crlf = "line one\r\n\r\n## Steps\r\nstep\r\n"
+_c1 = dispatch.refine_body(_crlf, "### What\nx")
+assert _crlf in _c1, repr(_c1)
+_c2 = dispatch.refine_body(_c1.replace(_RF + "\n", _RF + "\r\n"), "### What\ny")
+assert _crlf in _c2 and _c2.count("## Refinement") == 1 and "x" not in _c2.split("## Refinement")[1], repr(_c2)
+ok("CRLF original preserved byte-for-byte and '## Refinement\\r' detected on re-run")
+
+assert dispatch.refinement_block("text\n\n## Refinement\nhand written\n") is None
+assert dispatch.refinement_block("just a body\n## Summary\nx\n") is None
+assert dispatch.refinement_block(None or "") is None
+_blk = dispatch.refinement_block(dispatch.refine_body(_orig, "### What\nz"))
+assert _blk is not None and "z" in _blk and "Login page" not in _blk, _blk
+ok("refinement_block is None without a preceding Original report, and for neither heading")
+
+_ref = "\n\n".join(f"### {n}\nRefined content for {n}." for n in section_names)
+_refined = dispatch.refine_body("bare hand-written report, no headings", _ref)
+assert dispatch.dor_gaps(_refined) == [], dispatch.dor_gaps(_refined)
+ok("dor_gaps is empty for a refined body built from gh-issue.md's parsed section list")
+
+_g1 = dispatch.refine_body(
+    "## Summary\nfilled summary.\n\n## Acceptance Criteria\n- [ ] filled criterion\n",
+    "\n\n".join(f"### {n}\nc." if n != "Acceptance Criteria" else "### Acceptance Criteria\n"
+                for n in section_names))
+assert any("cceptance" in g for g in dispatch.dor_gaps(_g1)), dispatch.dor_gaps(_g1)
+ok("original's filled Acceptance Criteria/Summary do not mask an empty Refinement AC (scoped DoR)")
+
+_g2 = dispatch.refine_body(
+    "## Scope\n\n## Summary\nx\n",
+    "\n\n".join(f"### {n}\nc." for n in section_names))
+assert not any("cope" in g for g in dispatch.dor_gaps(_g2)), dispatch.dor_gaps(_g2)
+ok("original's empty '## Scope' does not create a gap when Refinement's Out of Scope is filled")
+
+# CLI: aiw dispatch refine-body <file>
+_cd = tempfile.mkdtemp()
+_rf = os.path.join(_cd, "ref.md")
+
+
+def _cli(stdin: str, path: str):
+    return subprocess.run([sys.executable, ROUTE, "dispatch", "refine-body", path],
+                          input=stdin, capture_output=True, text=True)
+
+
+with open(_rf, "w", encoding="utf-8") as fh:
+    fh.write("### What\ncli refinement")
+_p = _cli(json.dumps({"body": _orig}), _rf)
+assert _p.returncode == 0, (_p.returncode, _p.stderr)
+with open(_rf, encoding="utf-8") as fh:
+    assert fh.read() == dispatch.refine_body(_orig, "### What\ncli refinement")
+ok("aiw dispatch refine-body rewrites <file> in place to refine_body(stdin.body, file)")
+
+for _label, _stdin, _content, _path in (
+    ("bad json", "not json", "### What\nx", _rf),
+    ("missing body key", "{}", "### What\nx", _rf),
+    ("missing file", json.dumps({"body": "b"}), None, os.path.join(_cd, "nope.md")),
+    ("empty refinement", json.dumps({"body": "b"}), "  \n", _rf),
+    ("heading violation", json.dumps({"body": "b"}), "## bad\nx", _rf),
+):
+    if _content is not None:
+        with open(_path, "w", encoding="utf-8") as fh:
+            fh.write(_content)
+    _p = _cli(_stdin, _path)
+    assert _p.returncode != 0 and _p.stderr.strip(), (_label, _p.returncode, _p.stderr)
+    if _content is not None:
+        with open(_path, encoding="utf-8") as fh:
+            assert fh.read() == _content, (_label, "file was modified")
+    else:
+        assert not os.path.exists(_path), _label
+ok("refine-body CLI: bad input exits non-zero, message on stderr, file unchanged")
+shutil.rmtree(_cd, ignore_errors=True)
+
+# Prose pins on commands/gh-issue.md
+with open(GH_ISSUE_MD, encoding="utf-8") as fh:
+    gh_issue_text = fh.read()
+assert "### Refine mode" in gh_issue_text, "gh-issue.md has no '### Refine mode' section (issue #72)"
+_rm_start = gh_issue_text.index("### Refine mode")
+_rm_end = gh_issue_text.find("\n### ", _rm_start + 5)
+refine_sec = gh_issue_text[_rm_start:] if _rm_end == -1 else gh_issue_text[_rm_start:_rm_end]
+
+_step0 = gh_issue_text[gh_issue_text.index("0. **Source check.**"):gh_issue_text.index("Details: $@")]
+assert "Refine mode" in _step0 and "issues/" in _step0 and "github.com" in _step0, _step0
+assert re.search(r"bare (positive )?(integer|number)|issue number", _step0, re.I), _step0
+assert _step0.index("Refine mode") < _step0.index("/intake"), "refine routing must precede the /intake branch"
+assert "/intake $@ --whole" in gh_issue_text
+ok("gh-issue.md step 0 routes a bare number and a same-repo issues URL to refine mode before /intake")
+
+_closed = refine_sec.index("CLOSED")
+assert "state" in refine_sec[:_closed] and _closed < refine_sec.index("gh issue edit"), refine_sec
+assert re.search(r"stop[^\n]*no further calls|no further calls", refine_sec, re.I), refine_sec
+ok("refine section stops on CLOSED state, with no further calls, before the first gh issue edit")
+
+assert "aiw dispatch refine-body" in refine_sec
+assert "gh issue edit <n> --body-file /tmp/gh-issue-body.md" in refine_sec
+assert "gh label create refined" in refine_sec and "--add-label refined" in refine_sec
+assert refine_sec.index("--body-file") < refine_sec.index("--add-label refined"), "label must follow the edit"
+for _forbidden in ("gh issue create", "--assignee", "--project"):
+    assert _forbidden not in refine_sec, _forbidden
+ok("refine section uses refine-body + gh issue edit --body-file, then labels refined; no create/assignee/project")
+
+assert re.search(r"gh issue view[^\n]*(fail|non-zero)|(fail|non-zero)[^\n]*gh issue view", refine_sec, re.I), refine_sec
+assert re.search(r"exit status|non-zero|fails?", refine_sec[refine_sec.index("--body-file"):], re.I), refine_sec
+assert re.search(r"(without|no) label", refine_sec, re.I), "must say to stop without labelling on edit failure"
+ok("refine section stops on failed gh issue view and on failed gh issue edit (no label)")
+
+_first_bs = gh_issue_text.index("- Body sections:")
+assert _first_bs < _rm_start, "step 4's Body sections line must precede the Refine mode section"
+assert gh_issue_text.count("- Body sections:") == 1, "refine mode must not add a second Body sections line"
+ok("the first '- Body sections:' line is still step 4's list")
+
 # Regression for issue #42: jira-to-gh.md's Step 5-EPIC (mirroring gh-issue.md's
 # 4-EPIC) must define its child issue's "Body sections:" list with the exact same
 # section names, in the exact same order, as gh-issue.md's own list — copied
