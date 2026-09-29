@@ -96,12 +96,12 @@ def _refinement_span(body: str):
     """(start, end) of the plugin-owned Refinement block's content — from just
     after the last `## Refinement` line (which must follow `## Original report`)
     to the next level-1/2 heading or EOF. None if the body isn't a refined one."""
-    orig = _ORIG_RE.search(body)
-    marks = [m for m in _REFINE_RE.finditer(body) if orig and m.start() > orig.start()]
+    orig = next(finditer_unfenced(_ORIG_RE, body), None)
+    marks = [m for m in finditer_unfenced(_REFINE_RE, body) if orig and m.start() > orig.start()]
     if not marks:
         return None
     start = marks[-1].end()
-    nxt = _H12_RE.search(body, start)
+    nxt = next(finditer_unfenced(_H12_RE, body, start), None)
     return start, (nxt.start() if nxt else len(body))
 
 
@@ -115,11 +115,11 @@ def refine_body(original: str | None, refinement: str) -> str:
     `## Refinement` block to `refinement`. Slices strings so original bytes survive."""
     if not (refinement or "").strip():
         raise ValueError("refinement is empty")
-    if _H12_RE.search(refinement):
+    if next(finditer_unfenced(_H12_RE, refinement), None):
         raise ValueError("refinement must not contain level-1/2 headings (use ###)")
     body = original or ""
     span = _refinement_span(body)
-    if not _ORIG_RE.search(body):
+    if not next(finditer_unfenced(_ORIG_RE, body), None):
         # first refine: wrap verbatim; a `## Refinement` in the reporter's text is theirs
         body = "## Original report\n\n" + body
         if not body.endswith("\n"):
@@ -199,7 +199,7 @@ def skip_reason(run_json_path: str | None, has_open_pr: bool) -> str | None:
 
 # --------------------------------------------------------------------------- checkouts.json registry
 
-from shared import data_dir, run_dir_for  # noqa: E402
+from shared import data_dir, finditer_unfenced, run_dir_for  # noqa: E402
 from shared import ledger_path as _ledger_path  # noqa: E402
 from stack import _write_holder  # noqa: E402
 

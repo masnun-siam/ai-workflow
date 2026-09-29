@@ -7,7 +7,7 @@ argument-hint: "[bug | feature | task | improvement] <details | sentry-url | fil
 > on `PATH` via the plugin's `bin/`). Substitute the printed value; never guess a path.
 I have a ${1:-bug / feature request / task / improvement} to log as a GitHub issue.
 
-0. **Source check.** First, the refine check: if the trimmed `$@` is a bare positive integer (an issue number),
+0. **Source check.** First, the refine check: if the trimmed `$@` is a bare positive integer, optionally `#`-prefixed (`42` or `#42`),
    or a `github.com/<owner>/<repo>/issues/<n>` URL whose owner/repo equals the current repo
    (resolve it from the git remote), go to **Refine mode** (the Refine mode section at
    the end of this file) and skip the rest of this new-issue flow, including the `/intake`
@@ -266,8 +266,8 @@ R1. Run `gh issue view <n> --json state,title,body,labels,url,comments`. If it f
 R2. Run steps 1, 2, 2.5 (pass the fetched title, body and comments as run-researcher's
     description) and 3 unchanged, scoped to that content.
 R3. Skip steps 3.5, 5, 6 and 7.
-R4. Write only the refinement to `/tmp/gh-issue-body.md`: step 4's Body sections list
-    (the body-sections list in step 4) as `###` sub-headings, with the same rules (no
+R4. Write only the refinement to `/tmp/gh-issue-body.md`: the body sections listed in
+    step 4, as `###` sub-headings, with the same rules (no
     placeholders, `none` over silence, How with path:line refs). No `#` or `##` headings.
 R5. Run `gh issue view <n> --json body | aiw dispatch refine-body /tmp/gh-issue-body.md`.
     It preserves the current body under `## Original report` and sets the single
