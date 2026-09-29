@@ -1698,6 +1698,31 @@ _c2 = dispatch.refine_body(_c1.replace(_RF + "\n", _RF + "\r\n"), "### What\ny")
 assert _crlf in _c2 and _c2.count("## Refinement") == 1 and "x" not in _c2.split("## Refinement")[1], repr(_c2)
 ok("CRLF original preserved byte-for-byte and '## Refinement\\r' detected on re-run")
 
+_fo = "intro\n```md\n## Original report\nx\n## Refinement\ny\n```\nreporter trailer\n"
+_fr1 = dispatch.refine_body(_fo, "### What\nfirst")
+assert _fr1.startswith("## Original report\n\n" + _fo), repr(_fr1)
+assert _fr1.endswith("\n## Refinement\n\n### What\nfirst"), repr(_fr1)
+_fr2 = dispatch.refine_body(_fr1, "### What\nsecond")
+assert _fr2.startswith("## Original report\n\n" + _fo) and "first" not in _fr2, repr(_fr2)
+assert _fr2.endswith("### What\nsecond") and _fr2.count("## Refinement") == 2, repr(_fr2)
+ok("fenced Original report/Refinement in the original survive byte-for-byte; only the real block is replaced")
+
+_fc = dispatch.refine_body(_orig, "### Run\n```bash\n# install deps\nmake\n```\n```python\n## not a heading\n```")
+assert "# install deps" in _fc and "## not a heading" in _fc, _fc
+for _bad in ("# real heading\n```bash\n# c\n```", "```bash\n# c\n```\n## real heading"):
+    try:
+        dispatch.refine_body(_orig, _bad)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f"unfenced heading in {_bad!r} must raise ValueError")
+ok("'#' comment inside a fenced block in the refinement is accepted; unfenced '#'/'##' still raises")
+
+_fd = READY_BODY + "\n```\n## Original report\n\n## Refinement\nexample\n```\n"
+assert dispatch.refinement_block(_fd) is None, dispatch.refinement_block(_fd)
+assert dispatch.dor_gaps(_fd) == [], dispatch.dor_gaps(_fd)
+ok("dor_gaps on an unrefined body with fenced example headings is not scoped to the fence")
+
 assert dispatch.refinement_block("text\n\n## Refinement\nhand written\n") is None
 assert dispatch.refinement_block("just a body\n## Summary\nx\n") is None
 assert dispatch.refinement_block(None or "") is None
