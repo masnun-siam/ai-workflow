@@ -36,6 +36,10 @@ paused stop:
   dispatched for. Its presence is what makes the escalation one-shot, so write
   it *before* acting on `run-ci`'s result, never after. Also covers run-ci's
   own push: `ci-attempt: <sha> — fixed → <new-sha>`.
+  **Known limitation:**
+  this state file is a separate store from `/run-issue` phase 8.5's run ledger
+  (`aiw set "$RUN_DIR" ci-attempt=...`) — an attempt spent in one is not visible
+  to the other. No unification yet; this is a documented gap, not an oversight.
 - `queued-push: <sha>[ <sha>...] — round <n> — then <retrigger|close>` — review-fix commits
   committed locally and held because CI is not green at the remote head. The loop is
   still running — this is NOT a pause. Removed once the commits are pushed. Survives a
@@ -201,6 +205,22 @@ not fix this round** — except rail 2, whose only fully-terminal outcomes
        Continue the round (Steps 4 and 5) with the push gate closed: review
        triage, replies, and thread resolution proceed normally, and only a
        new push is held back (queued via `queued-push:`, see Step 5/6).
+     - `outcome: rerun-denied` → the rerun itself was refused, not the check.
+       This branch rides the `ci-attempt` just recorded above — it is not a
+       second attempt. Resolve the working directory via `git worktree list`
+       (same rule as handing `run-fixer` a working directory, below) and use
+       that resolved path. If `git log -1 --pretty=%s` (run against that
+       path) does not already match the retrigger marker (`chore: retrigger
+       CI (`), confirm local HEAD matches the `head_sha` `aiw ci status`
+       reported, then run
+       `git -C <resolved worktree path> commit --allow-empty -m "chore: retrigger CI (rerun denied, confirmed unrelated flake)"`
+       then `git -C <resolved worktree path> push`, and
+       record `ci-attempt: <sha> — rerun-denied → <new-sha>`, then continue the
+       round with the push gate closed, exactly as for `fixed`/`flake-rerun`.
+       If the push is refused instead, fall through to the stop below — do not
+       retry.
+       If the marker already matches, the retrigger is spent for this SHA —
+       stop as below without committing again.
      - `outcome: cannot-fix`, or a `Needs human confirmation` section →
        post to Slack with `run-ci`'s root cause, then go to Step 8.
    - **Attempt already recorded for this SHA** (still red at this exact head,

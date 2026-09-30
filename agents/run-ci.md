@@ -51,6 +51,16 @@ out-of-disk. Nothing about the diff caused it.
 → `gh run rerun <run-id> --failed`, once. Report `outcome: flake-rerun` with the log
 line that justifies calling it a flake. Do not touch code.
 
+If the rerun is **refused** rather than merely failing on its own merits — either (a)
+your session's permission layer refuses the `Bash` call outright, or (b) `gh` itself
+returns an authorization error (HTTP 403, "Resource not accessible", "must have write
+access") — report `outcome: rerun-denied` with the full flake diagnosis (the same log
+line and reasoning you would have given for `flake-rerun`) so the caller has everything
+it needs to act without you. Any **other** rerun failure (run not found, already
+re-run, a network error hitting the GitHub API) is not a denial — that stays
+`cannot-fix`. `run-ci` does **not** create the retrigger commit itself on a denial; the
+caller does.
+
 **Real failure** — a test assertion, a lint or format violation, a type error, a build
 error, a migration failure. The diff (or the base it merged with) caused it.
 
@@ -85,7 +95,7 @@ passes; that is how a genuine break gets shipped.
 Return exactly this shape, nothing else:
 
 ```
-outcome: fixed | flake-rerun | cannot-fix
+outcome: fixed | flake-rerun | cannot-fix | rerun-denied
 check: <failing check name>
 head: <sha you worked against>
 root cause: <one or two sentences — the cause, not the symptom>
