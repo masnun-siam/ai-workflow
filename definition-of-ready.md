@@ -4,7 +4,7 @@ The rubric `/run-issue` scores an issue against before it spends a pipeline on i
 `run-researcher` scores each item and returns the failures in `handoff.gaps[]`, alongside
 every normalization it made in `handoff.assumptions[]`.
 
-**Readiness is advisory. It does not stop the run.** The gaps surface at **Gate 1**, printed
+**Readiness is advisory. It does not stop the run.** (The separate `refined` label check at Preflight step 3.6 is not DoR scoring.) The gaps surface at **Gate 1**, printed
 above the plan under a "⚠ This issue was thin" heading, where you decide with the plan in
 front of you. There is no `blocked` status for the researcher to return — the engine's
 vocabulary is `passed` / `bounce` / `escalate` and nothing else, which is what stops any

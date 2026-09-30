@@ -62,7 +62,7 @@ flowchart TD
 
 1. **Read the issue.** A researcher reads the issue, its comments, related past issues, and
    your notes. It also scores the issue against a *Definition of Ready* — six questions like
-   "is there a testable acceptance criterion?". A thin issue does not stop the run; the gaps
+   "is there a testable acceptance criterion?". A thin issue does not stop the run (only the separate `refined` Preflight check can); the gaps
    get shown to you at Gate 1, next to the plan, where you can actually act on them.
 2. **Plan.** A planner reads the issue and the codebase and writes one document: which tests
    to write, where they go, how to build it, what could go wrong.
