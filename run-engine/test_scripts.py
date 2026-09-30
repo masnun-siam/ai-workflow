@@ -25,6 +25,7 @@ import ci  # noqa: E402
 import dispatch  # noqa: E402
 import epic  # noqa: E402
 import project  # noqa: E402
+import review  # noqa: E402
 import shared  # noqa: E402
 import stack  # noqa: E402
 import threads  # noqa: E402
@@ -502,6 +503,77 @@ with tempfile.TemporaryDirectory() as tmp:
     assert led11_again["stations"] == LEAN_STATIONS, led11_again["stations"]
 ok("re-running epic init over an already-initialised child never flips lean back to full")
 
+# --------------------------------------------------------------------------- tasks checklist
+# render_tasks_section / upsert_tasks_section splice a "## Tasks" checklist into the
+# parent's body. Unit-level first: the exact string shape, then the splice behaviour
+# against every body shape gh_json can hand back (no section, trailing section with no
+# final newline — exactly what .strip() leaves — mid-body section, and CRLF).
+
+order = [11, 12, 10]
+titles = {10: "t10", 11: "t11", 12: "t12"}
+rendered = epic.render_tasks_section(order, titles)
+assert rendered == "## Tasks\n\n- [ ] #11 t11\n- [ ] #12 t12\n- [ ] #10 t10", rendered
+ok("render_tasks_section orders the checklist topologically, not numerically")
+
+section = epic.render_tasks_section([10, 11], {10: "t10", 11: "t11"})
+
+out = epic.upsert_tasks_section("", section)
+assert out == section + "\n", repr(out)
+ok("upsert_tasks_section on an empty body is just the section plus one trailing newline")
+
+body_no_section = "Some intro text.\n\nMore text."
+out = epic.upsert_tasks_section(body_no_section, section)
+assert out.count("## Tasks") == 1, out
+assert "Some intro text." in out and "More text." in out, out
+assert out.index("More text.") < out.index("## Tasks"), \
+    "the section must be appended after the existing body, not before"
+assert out.rstrip("\n").endswith(section.rstrip("\n")), out
+ok("upsert_tasks_section appends a fresh section when the body has none")
+
+body_trailing_no_nl = "Intro\n\n## Tasks\n\n- [ ] #10 old title"
+out = epic.upsert_tasks_section(body_trailing_no_nl, section)
+assert out.count("## Tasks") == 1, "a trailing section (no final newline) must be REPLACED: " + out
+assert "old title" not in out, out
+assert "t10" in out and "t11" in out, out
+assert "Intro" in out, out
+ok("upsert_tasks_section replaces a trailing section with no final newline (the gh_json .strip() shape)")
+
+body_mid = "Intro\n\n## Tasks\n\nTBD\n\n## Notes\n\nkeep me"
+out = epic.upsert_tasks_section(body_mid, section)
+assert out.count("## Tasks") == 1, out
+assert out.count("## Notes") == 1, out
+assert "TBD" not in out, out
+assert "keep me" in out, "content after the Tasks section must survive"
+assert out.index("## Tasks") < out.index("## Notes"), out
+assert out.index("Intro") < out.index("## Tasks"), out
+ok("upsert_tasks_section replaces a mid-body section and preserves what follows")
+
+body_crlf = "Intro\r\n\r\n## Tasks\r\n\r\nold\r\n\r\n## Notes\r\n\r\nkeep me"
+out = epic.upsert_tasks_section(body_crlf, section)
+assert out.count("## Tasks") == 1, out
+assert "old" not in out, out
+assert "keep me" in out, out
+ok("upsert_tasks_section handles a CRLF body without duplicating the section")
+
+for probe in (body_no_section, body_trailing_no_nl):
+    once = epic.upsert_tasks_section(probe, section)
+    twice = epic.upsert_tasks_section(once, section)
+    assert once == twice, (once, twice)
+ok("upsert_tasks_section is idempotent for both the no-section and trailing-section cases")
+
+backslash_title = "Handle C:\\new\\path \\d"
+sec = epic.render_tasks_section([10], {10: backslash_title})
+assert f"#10 {backslash_title}" in sec, sec
+roundtrip = epic.upsert_tasks_section("Intro", sec)
+assert f"#10 {backslash_title}" in roundtrip, \
+    "backslashes must round-trip verbatim — re.sub's replacement escaping would corrupt them: " + repr(roundtrip)
+ok("a title containing backslashes round-trips through render+upsert without re.error or corruption")
+
+special_title = "Do [X] not #1 | keep this"
+sec = epic.render_tasks_section([10], {10: special_title})
+assert f"- [ ] #10 {special_title}" in sec, sec
+ok("a title with markdown special characters is rendered verbatim")
+
 # `gh` is the only thing between `epic split` and GitHub, so the split tests drive a stub
 # that records its argv. What matters is not that gh was called but WITH WHAT: the
 # sub-issues endpoint takes a database id as an integer, and `-f` with an issue number
@@ -514,7 +586,28 @@ cfg = json.load(open(os.environ["GH_STUB_CFG"]))
 with open(os.environ["GH_STUB_LOG"], "a") as fh:
     fh.write(" ".join(argv) + "\n")
 if argv[0] == "issue" and argv[1] == "view":
-    print(cfg["bodies"].get(argv[2], ""))
+    num = argv[2]
+    if num in cfg.get("view_fail", []):
+        sys.exit(1)
+    fields = argv[argv.index("--json") + 1] if "--json" in argv else ""
+    if "title" in fields:
+        data = {"body": cfg["bodies"].get(num, "")}
+        if num not in cfg.get("no_title", []):
+            data["title"] = cfg.get("titles", {}).get(num, f"t{num}")
+        print(json.dumps(data))
+    elif "--jq" in argv:
+        print(cfg["bodies"].get(num, ""))
+    else:
+        print(json.dumps({"body": cfg["bodies"].get(num, "")}))
+elif argv[0] == "issue" and argv[1] == "edit":
+    if cfg.get("edit_fail"):
+        sys.exit(1)
+    path = argv[argv.index("--body-file") + 1]
+    with open(path, encoding="utf-8") as fh:
+        new_body = fh.read()
+    cfg.setdefault("bodies", {})[argv[2]] = new_body
+    with open(os.environ["GH_STUB_CFG"], "w") as fh:
+        json.dump(cfg, fh)
 elif argv[1].endswith("/sub_issues") and any(a.startswith("-F") or a.startswith("-f") for a in argv):
     sys.exit(cfg.get("link_exit", 0))
 elif argv[1].endswith("/sub_issues"):
@@ -585,6 +678,90 @@ with tempfile.TemporaryDirectory() as tmp:
     assert proc.returncode == 1, proc.stdout
     assert not os.path.isfile(path), "a link failure must not leave a valid-looking epic.json"
 ok("a sub-issue link failure kills the split rather than warning past it")
+
+# ----------------------------------------------------------------- parent Tasks checklist
+# `epic split` must also splice a "## Tasks" checklist into the PARENT issue's body via
+# `gh issue edit --body-file`, sourced from the children's titles and the DAG order.
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, linked=[], bodies={
+        "42": "Parent intro.\n\nSome context.",
+        "10": "no deps", "11": "Depends on: #10", "12": "Depends on: #10",
+    }, titles={"10": "t10", "11": "t11", "12": "t12"})
+    proc, path = split(tmp, env)
+    assert proc.returncode == 0, proc.stderr
+    cfg_after = json.load(open(os.path.join(tmp, "cfg.json")))
+    parent_body = cfg_after["bodies"]["42"]
+    assert parent_body.count("## Tasks") == 1, parent_body
+    assert "Parent intro." in parent_body, parent_body
+    order_in_body = re.findall(r"- \[ \] #(\d+)", parent_body)
+    assert order_in_body == ["10", "11", "12"], \
+        "checklist must follow the DAG's topological order: " + parent_body
+    assert "t10" in parent_body and "t11" in parent_body and "t12" in parent_body, parent_body
+ok("epic split writes a single Tasks checklist onto the parent, in topological order")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, linked=[], bodies={
+        "42": "Parent intro.",
+        "10": "no deps", "11": "Depends on: #10", "12": "Depends on: #10",
+    }, titles={"10": "t10", "11": "t11", "12": "t12"})
+    first, _ = split(tmp, env)
+    assert first.returncode == 0, first.stderr
+    body_after_first = json.load(open(os.path.join(tmp, "cfg.json")))["bodies"]["42"]
+    # second run against the same (now-updated) parent body — already-linked children are
+    # skipped, so re-run split with the same children to exercise the idempotency path
+    second, _ = split(tmp, env)
+    assert second.returncode == 0, second.stderr
+    body_after_second = json.load(open(os.path.join(tmp, "cfg.json")))["bodies"]["42"]
+    assert body_after_second == body_after_first, \
+        "re-running split must not duplicate the Tasks section: " + body_after_second
+    assert body_after_second.count("## Tasks") == 1, body_after_second
+ok("re-running epic split against the same parent is idempotent — no duplicate Tasks section")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, linked=[], view_fail=["11"], bodies={
+        "42": "Parent intro.", "10": "", "11": "", "12": "",
+    }, titles={"10": "t10", "12": "t12"})
+    proc, path = split(tmp, env)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "#11" in proc.stderr, proc.stderr
+    assert "edit" not in open(log).read(), \
+        "a child view failure must abort before the parent is ever edited: " + open(log).read()
+    assert not os.path.isfile(path), "no epic.json when a child's title/body fetch fails"
+ok("a child's issue-view failure during the title fetch dies naming that child")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, linked=[], no_title=["11"], bodies={
+        "42": "Parent intro.", "10": "", "11": "Depends on: #10", "12": "",
+    }, titles={"10": "t10", "12": "t12"})
+    proc, path = split(tmp, env)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "#11" in proc.stderr, proc.stderr
+    assert not os.path.isfile(path), "no epic.json when a child's JSON is missing title"
+ok("a child view response with no title field dies naming that child")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, linked=[], view_fail=["42"], bodies={
+        "10": "", "11": "", "12": "",
+    }, titles={"10": "t10", "11": "t11", "12": "t12"})
+    proc, path = split(tmp, env)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "edit" not in open(log).read(), \
+        "the parent body read failed — gh issue edit must never be called: " + open(log).read()
+    assert not os.path.isfile(path), "no epic.json when the parent body read fails"
+ok("a failed parent body read dies without ever calling gh issue edit")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, linked=[], edit_fail=True, bodies={
+        "42": "Parent intro.", "10": "", "11": "", "12": "",
+    }, titles={"10": "t10", "11": "t11", "12": "t12"})
+    proc, path = split(tmp, env)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert not os.path.isfile(path), "no epic.json when gh issue edit fails"
+    leftover = [f for f in os.listdir(tmp) if f.startswith("tmp") and f not in ("e", "bin")]
+    assert not [f for f in leftover if os.path.isfile(os.path.join(tmp, f))], \
+        "a failed gh issue edit should not leave a temp body file behind: " + str(leftover)
+ok("a failed gh issue edit dies without writing epic.json")
 
 proc = subprocess.run([sys.executable, ROUTE, "epic", "next", "/nonexistent"],
                       capture_output=True, text=True)
@@ -1395,6 +1572,71 @@ gh_issue_body = "\n\n".join(f"## {name}\nSome real content for {name}." for name
 assert dispatch.dor_gaps(gh_issue_body) == [], dispatch.dor_gaps(gh_issue_body)
 ok("a body built from gh-issue.md's own literal section headings screens ready with zero gaps")
 
+# Regression for issue #39: gh-issue.md must define an "Implementation Guide"
+# section, placed after Acceptance Criteria and before Non-functional
+# Constraints, without becoming a DoR item.
+assert "Implementation Guide" in section_names, section_names
+ok("Implementation Guide is present in gh-issue.md's Body sections list")
+
+assert (
+    section_names.index("Acceptance Criteria")
+    < section_names.index("Implementation Guide")
+    < section_names.index("Non-functional Constraints")
+), section_names
+ok("Implementation Guide is ordered after Acceptance Criteria and before Non-functional Constraints")
+
+assert not any(re.search(pattern, "Implementation Guide", re.I) for _, pattern in dispatch.DOR_ITEMS), [
+    label for label, pattern in dispatch.DOR_ITEMS if re.search(pattern, "Implementation Guide", re.I)
+]
+ok("no DOR_ITEMS pattern matches the Implementation Guide heading, keeping it a non-DoR section")
+
+# Regression for issue #42: jira-to-gh.md's Step 5-EPIC (mirroring gh-issue.md's
+# 4-EPIC) must define its child issue's "Body sections:" list with the exact same
+# section names, in the exact same order, as gh-issue.md's own list — copied
+# literally, not hand-maintained separately where it could drift.
+JIRA_TO_GH_MD = os.path.join(HERE, "..", "commands", "jira-to-gh.md")
+with open(JIRA_TO_GH_MD, encoding="utf-8") as fh:
+    jira_to_gh_lines = fh.readlines()
+
+step5_epic_start = next(
+    (i for i, line in enumerate(jira_to_gh_lines) if line.strip().startswith("### 5-EPIC")),
+    None,
+)
+assert step5_epic_start is not None, "jira-to-gh.md has no '### 5-EPIC' section yet (issue #42 not implemented)"
+
+jira_to_gh_body_sections_line = next(
+    line
+    for line in jira_to_gh_lines[step5_epic_start:]
+    if line.strip().startswith("- Body sections:")
+)
+jira_to_gh_section_names = re.findall(r"\*\*([^*]+)\*\*", jira_to_gh_body_sections_line)
+assert jira_to_gh_section_names == section_names, (jira_to_gh_section_names, section_names)
+ok("jira-to-gh.md's Step 5-EPIC Body sections list exactly matches gh-issue.md's Body sections list")
+
+jira_to_gh_child_body = "\n\n".join(
+    f"## {name}\nSome real content for {name}." for name in jira_to_gh_section_names
+)
+assert dispatch.dor_gaps(jira_to_gh_child_body) == [], dispatch.dor_gaps(jira_to_gh_child_body)
+ok("a jira-to-gh.md child body built from Step 5-EPIC's own section headings screens ready with zero gaps")
+
+# The parentheticals were legitimately adapted from gh-issue.md's own step numbering
+# to jira-to-gh.md's step numbering (issue #42 PR review). Pin that any "Step N"
+# reference inside jira-to-gh.md's Body sections parentheticals names a step heading
+# that actually exists in jira-to-gh.md, so a future renumbering can't leave a
+# dangling cross-reference.
+jira_to_gh_step_numbers = {
+    m.group(1)
+    for line in jira_to_gh_lines
+    if (m := re.match(r"^#{1,3}\s+Step\s+(\d+(?:\.\d+)?)", line.strip()))
+}
+referenced_step_numbers = set(re.findall(r"Step\s+(\d+(?:\.\d+)?)", jira_to_gh_body_sections_line))
+assert referenced_step_numbers, "expected at least one Step N cross-reference in the parentheticals"
+assert referenced_step_numbers <= jira_to_gh_step_numbers, (
+    referenced_step_numbers - jira_to_gh_step_numbers,
+    jira_to_gh_step_numbers,
+)
+ok("every 'Step N' cross-reference in jira-to-gh.md's Body sections parentheticals names a real step heading")
+
 # --------------------------------------------------------------------------- dispatch: lane mode
 
 assert dispatch.lane_mode(["lean"]) == "lean"
@@ -1655,9 +1897,409 @@ ok("the --allow-empty line sits inside the rerun-denied branch only; cannot-fix 
 assert "If you cannot tell which it is, it is a **real failure**." in run_ci_text
 ok('run-ci.md keeps "If you cannot tell which it is, it is a real failure" verbatim')
 
-# SKILL.md still contains the run-fixer-never-while-red sentence verbatim.
-assert "`run-fixer` is still **never** dispatched while CI is red" in pr_grind_text
-ok("SKILL.md still contains the run-fixer-never-while-red sentence verbatim")
+# SKILL.md still states the no-push-onto-red invariant (run-fixer only runs held while CI is not green, per #52).
+assert "do not push review fixes onto a red branch" in pr_grind_text
+ok("SKILL.md still states the do-not-push-review-fixes-onto-a-red-branch invariant")
+
+# --------------------------------------------------------------------------- review: pick() (issue #24, RED until review.py exists)
+
+
+def _review(review_id, commit_id, submitted_at, state="COMMENTED", body=""):
+    return {
+        "id": review_id,
+        "commit_id": commit_id,
+        "submitted_at": submitted_at,
+        "state": state,
+        "body": body,
+    }
+
+
+def _comment(review_id):
+    return {"pull_request_review_id": review_id}
+
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00", state="COMMENTED", body="fix this"),
+        _review(2, "sha1", "2026-09-23T10:00:40", state="APPROVED", body="looks good"),
+    ],
+    comments=[_comment(1), _comment(1), _comment(1), _comment(1)],
+)
+assert result["selected"] == 1
+assert result["superseded"] == [2]
+ok("older COMMENTED review with 4 inline comments beats a newer rubber-stamp APPROVED review, same commit within window")
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00", state="APPROVED", body="looks good"),
+        _review(2, "sha1", "2026-09-23T10:00:40", state="COMMENTED", body="fix this"),
+    ],
+    comments=[_comment(2), _comment(2)],
+)
+assert result["selected"] == 2
+assert result["superseded"] == [1]
+ok("order reversed: comment-carrying review still wins over the rubber stamp")
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00", state="COMMENTED", body="fix this"),
+        _review(2, "sha1", "2026-09-23T10:00:40", state="COMMENTED", body="fix that too"),
+    ],
+    comments=[_comment(1), _comment(2)],
+)
+assert result["selected"] == 2
+assert result["superseded"] == [1]
+ok("both reviews carry inline comments: newest still wins (existing behavior unchanged)")
+
+result = review.pick(
+    reviews=[
+        _review(1, "shaOLD", "2026-09-23T09:00:00", state="COMMENTED", body="fix this"),
+        _review(2, "shaNEW", "2026-09-23T10:00:00", state="APPROVED", body="looks good"),
+    ],
+    comments=[_comment(1), _comment(1)],
+)
+assert result["selected"] == 2
+assert result["superseded"] == [1]
+ok("different commit_ids: newest wins even though the older commit's review carries the comments")
+
+result = review.pick(
+    reviews=[_review(1, "sha1", "2026-09-23T10:00:00", state="APPROVED", body="looks good")],
+    comments=[],
+)
+assert result["selected"] == 1
+assert result["superseded"] == []
+ok("single review in the batch: it is selected, superseded is empty")
+
+with tempfile.TemporaryDirectory() as d:
+    reviews_path = os.path.join(d, "reviews.json")
+    comments_path = os.path.join(d, "comments.json")
+    with open(reviews_path, "w", encoding="utf-8") as fh:
+        json.dump([
+            _review(1, "sha1", "2026-09-23T10:00:00", state="COMMENTED", body="fix this"),
+            _review(2, "sha1", "2026-09-23T10:00:40", state="APPROVED", body="looks good"),
+        ], fh)
+    with open(comments_path, "w", encoding="utf-8") as fh:
+        json.dump([_comment(1), _comment(1)], fh)
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "review", "pick", "--reviews", reviews_path, "--comments", comments_path],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    out = json.loads(proc.stdout)
+    assert "selected" in out and "superseded" in out and "comment_counts" in out
+ok("aiw review pick exits 0 and prints JSON with selected/superseded/comment_counts")
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00", state="COMMENTED", body="fix this"),
+        _review(2, "sha1", "2026-09-23T10:01:00", state="APPROVED", body="looks good"),
+    ],
+    comments=[_comment(1)],
+)
+assert result["selected"] == 1
+ok("gap exactly at the 60s window edge is treated as inside the window")
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00", state="COMMENTED", body="fix this"),
+        _review(2, "sha1", "2026-09-23T10:01:01", state="APPROVED", body="looks good"),
+    ],
+    comments=[_comment(1)],
+)
+assert result["selected"] == 2
+ok("gap of 61s on the same commit is outside the window, newest wins")
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00", state="COMMENTED", body="fix this"),
+        _review(2, "sha1", "2026-09-23T10:01:30", state="APPROVED", body="looks good"),
+    ],
+    comments=[_comment(1)],
+)
+assert result["selected"] == 2
+ok("gap of 90s on the same commit is outside the window, newest wins")
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00Z", state="COMMENTED", body="fix this"),
+        _review(2, "sha1", "2026-09-23T10:00:40Z", state="APPROVED", body="looks good"),
+    ],
+    comments=[_comment(1)],
+)
+assert result["selected"] == 1
+ok("GitHub Z-suffixed timestamps parse correctly")
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00", state="APPROVED", body="looks good"),
+        _review(2, "sha1", "2026-09-23T10:00:20", state="COMMENTED", body="fix this"),
+        _review(3, "sha1", "2026-09-23T10:00:40", state="APPROVED", body="looks good"),
+    ],
+    comments=[_comment(2), _comment(2)],
+)
+assert result["selected"] == 2
+assert sorted(result["superseded"]) == [1, 3]
+ok("three reviews same commit in window, two zero-comment stamps and one with comments: comment-carrying wins, both stamps superseded")
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00", state="COMMENTED", body="**Verdict: 2 blocker, 0 should-fix**"),
+        _review(2, "sha1", "2026-09-23T10:00:40", state="APPROVED", body="looks good"),
+    ],
+    comments=[],
+)
+assert result["selected"] == 1
+assert result["superseded"] == [2]
+ok("no review carries inline comments: older verdict-carrying review is selected over the generic newer body")
+
+result = review.pick(reviews=[], comments=[])
+assert result["selected"] is None
+assert result["superseded"] == []
+ok("empty reviews list: selected is None, superseded is empty, no exception")
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00", state="APPROVED", body="looks good"),
+        _review(2, "sha1", "2026-09-23T10:00:40", state="APPROVED", body="looks good"),
+    ],
+    comments=[],
+)
+assert result["selected"] == 2
+assert result["superseded"] == [1]
+ok("reviews present but comments list empty: falls back to newest-wins, no exception")
+
+result = review.pick(
+    reviews=[
+        {"id": 1, "state": "APPROVED", "body": "looks good"},
+        {"id": 2, "commit_id": None, "submitted_at": None, "state": "COMMENTED", "body": "fix this"},
+    ],
+    comments=[_comment(2)],
+)
+assert isinstance(result["selected"], int)
+non_selected = {1, 2} - {result["selected"]}
+assert set(result["superseded"]) == non_selected
+ok("review dicts missing/null commit_id and submitted_at: no KeyError/TypeError, every non-selected review still in superseded[]")
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00Z", state="APPROVED", body="looks good"),
+        _review(2, "sha1", "not-a-timestamp", state="APPROVED", body="looks good"),
+    ],
+    comments=[],
+)
+assert result["selected"] == 1
+assert result["superseded"] == [2]
+ok("unparseable submitted_at does not raise; that review is not treated as newest and is still superseded")
+
+result = review.pick(
+    reviews=[
+        _review(1, "sha1", "2026-09-23T10:00:00", state="COMMENTED", body="fix this"),
+        _review(2, "sha1", "2026-09-23T10:00:40", state="APPROVED", body="looks good"),
+    ],
+    comments=[{"pull_request_review_id": None}, {"pull_request_review_id": 999}],
+)
+assert result["comment_counts"].get(1, 0) == 0
+assert result["comment_counts"].get(2, 0) == 0
+ok("inline comments with null or foreign pull_request_review_id are not counted toward any review")
+
+proc = subprocess.run(
+    [sys.executable, ROUTE, "review", "pick", "--reviews", "/nonexistent/reviews.json", "--comments", "/nonexistent/comments.json"],
+    capture_output=True, text=True,
+)
+assert proc.returncode != 0
+assert "Traceback" not in proc.stderr
+assert len([l for l in proc.stderr.splitlines() if l.strip()]) <= 1
+ok("aiw review pick with a missing file exits nonzero with a one-line message, no Python traceback")
+
+with tempfile.TemporaryDirectory() as d:
+    reviews_path = os.path.join(d, "reviews.json")
+    comments_path = os.path.join(d, "comments.json")
+    with open(reviews_path, "w", encoding="utf-8") as fh:
+        fh.write("not json{{{")
+    with open(comments_path, "w", encoding="utf-8") as fh:
+        fh.write("[]")
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "review", "pick", "--reviews", reviews_path, "--comments", comments_path],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode != 0
+    assert "Traceback" not in proc.stderr
+ok("aiw review pick with non-JSON input exits nonzero with a one-line message, no Python traceback")
+
+with tempfile.TemporaryDirectory() as d:
+    reviews_path = os.path.join(d, "reviews.json")
+    comments_path = os.path.join(d, "comments.json")
+    with open(reviews_path, "w", encoding="utf-8") as fh:
+        fh.write('[{"id":1')
+    with open(comments_path, "w", encoding="utf-8") as fh:
+        fh.write("[]")
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "review", "pick", "--reviews", reviews_path, "--comments", comments_path],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 1
+    assert "Traceback" not in proc.stderr
+ok("aiw review pick with a truncated JSON array exits code 1, no Python traceback (guards against a partial-dict recovery fallback that would feed pick() string keys)")
+
+with tempfile.TemporaryDirectory() as d:
+    reviews_dir = os.path.join(d, "reviews.json")
+    os.makedirs(reviews_dir)
+    comments_path = os.path.join(d, "comments.json")
+    with open(comments_path, "w", encoding="utf-8") as fh:
+        fh.write("[]")
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "review", "pick", "--reviews", reviews_dir, "--comments", comments_path],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 1
+    assert "Traceback" not in proc.stderr
+ok("aiw review pick with a directory passed as --reviews exits code 1, no Python traceback (guards against an uncaught IsADirectoryError)")
+
+with open(os.path.join(HERE, "..", "skills", "pr-grind", "SKILL.md"), encoding="utf-8") as fh:
+    skill_text = fh.read()
+assert "aiw review pick" in skill_text
+assert "take the newest only" not in skill_text
+ok("skills/pr-grind/SKILL.md Step 1 references `aiw review pick` and no longer states bare 'take the newest only' as the whole rule")
+
+# --------------------------------------------------------------------------- decouple CI-red handling from the review-fix loop (issue #52)
+
+
+def _pr_grind_section(text: str, start_heading: str, end_heading: str) -> str:
+    start = text.index(start_heading)
+    end = text.index(end_heading, start)
+    return text[start:end]
+
+
+pr_grind_state_section = _pr_grind_section(skill_text, "## State file", "## Step 0 — Resolve")
+assert "queued-push:" in pr_grind_state_section, "State file section must document a queued-push: header key"
+assert "ci-attempt:" in pr_grind_state_section
+assert "paused:" in pr_grind_state_section
+ok("skills/pr-grind/SKILL.md State file section documents queued-push: next to ci-attempt: and paused:")
+
+pr_grind_rail2 = _pr_grind_section(
+    skill_text, "2. **CI red**", "3. **Third-party human comment**"
+)
+assert "run-fixer` is still **never** dispatched while CI is red" not in pr_grind_rail2, \
+    "rail 2 must no longer say run-fixer is never dispatched while CI is red"
+assert "hold_push" in pr_grind_rail2
+ok("skills/pr-grind/SKILL.md Step 3 rail 2 no longer bars run-fixer outright and mentions hold_push")
+
+assert "cannot-fix" in pr_grind_rail2
+assert "Needs human confirmation" in pr_grind_rail2
+assert "Step 8" in pr_grind_rail2
+ok("skills/pr-grind/SKILL.md Step 3 rail 2 still contains cannot-fix, Needs human confirmation, and Step 8")
+
+pr_grind_step5 = _pr_grind_section(skill_text, "## Step 5", "## Step 6")
+assert "hold_push" in pr_grind_step5
+assert "queued-push" in pr_grind_step5
+ok("skills/pr-grind/SKILL.md Step 5 section contains both hold_push and queued-push")
+
+with open(os.path.join(HERE, "..", "agents", "run-fixer.md"), encoding="utf-8") as fh:
+    run_fixer_text = fh.read()
+assert "hold_push" in run_fixer_text
+assert "push once" in run_fixer_text
+ok("agents/run-fixer.md contains hold_push and still contains push once")
+
+pr_grind_step6 = _pr_grind_section(skill_text, "## Step 6", "## Step 7")
+assert "apply it in full" not in pr_grind_step6, "Step 6 must no longer say 'apply it in full'"
+assert "queued-push" in pr_grind_step6
+ok("skills/pr-grind/SKILL.md Step 6 section no longer says 'apply it in full' and contains queued-push")
+
+pr_grind_step7 = _pr_grind_section(skill_text, "## Step 7", "## Step 8")
+assert "queued-push" in pr_grind_step7
+ok("skills/pr-grind/SKILL.md Step 7 section contains queued-push")
+
+assert "do not push review fixes onto a red branch" in skill_text
+ok("skills/pr-grind/SKILL.md still contains the literal sentence 'do not push review fixes onto a red branch'")
+
+assert "one attempt per head SHA" in skill_text
+assert "ci-attempt: <sha>" in skill_text
+ok("skills/pr-grind/SKILL.md still contains 'one attempt per head SHA' and 'ci-attempt: <sha>'")
+
+assert "already recorded" in pr_grind_rail2
+assert "Step 8" in pr_grind_rail2
+ok("skills/pr-grind/SKILL.md Step 3 rail 2 contains 'already recorded' together with 'Step 8'")
+
+assert "never dispatch" in pr_grind_rail2
+assert "queued-push" in pr_grind_rail2
+ok("skills/pr-grind/SKILL.md Step 3 rail 2 contains 'never dispatch' together with 'queued-push'")
+
+pr_grind_on_wake = _pr_grind_section(skill_text, "## On wake", "## Rules")
+assert "queued-push" in pr_grind_on_wake
+assert "rail 3" in pr_grind_on_wake
+assert "rail 5" in pr_grind_on_wake
+ok("skills/pr-grind/SKILL.md On wake section contains queued-push, rail 3, and rail 5")
+
+pr_grind_step6 = _pr_grind_section(skill_text, "## Step 6", "## Step 7")
+assert "flush" in pr_grind_step6, "expected a 'flush' mention in the Step 6 section"
+assert "not a new round" in pr_grind_step6
+ok("skills/pr-grind/SKILL.md Step 6 section flush-related text contains 'not a new round'")
+
+pr_grind_step2 = _pr_grind_section(skill_text, "## Step 2", "## Step 3")
+assert "queued-push" in pr_grind_step2
+ok("skills/pr-grind/SKILL.md Step 2 section contains queued-push")
+
+pr_grind_step8 = _pr_grind_section(skill_text, "## Step 8", "## On wake")
+step8_intro = pr_grind_step8[:pr_grind_step8.index("\n\n", pr_grind_step8.index("\n"))]
+assert "rails 1/2/3" not in step8_intro
+ok("skills/pr-grind/SKILL.md Step 8 intro no longer contains the literal string 'rails 1/2/3'")
+
+assert "run-ci` is the only agent dispatched while CI is red" not in skill_text, \
+    "old Rules line about run-ci being the only agent dispatched while CI is red must be gone"
+assert "one attempt per head SHA" in skill_text
+ok("skills/pr-grind/SKILL.md Rules section no longer claims run-ci is the only agent dispatched while CI is red, and still has 'one attempt per head SHA'")
+
+with open(os.path.join(HERE, "..", "docs", "HOW-IT-WORKS.md"), encoding="utf-8") as fh:
+    how_it_works_rails_text = fh.read()
+how_it_works_rails_start = how_it_works_rails_text.index("### The four rails")
+how_it_works_rails_end = how_it_works_rails_text.index("### The stall detector", how_it_works_rails_start)
+how_it_works_rails_section = how_it_works_rails_text[how_it_works_rails_start:how_it_works_rails_end]
+assert "queued" in how_it_works_rails_section
+assert "one attempt per head SHA" in how_it_works_rails_section
+ok("docs/HOW-IT-WORKS.md rails-table section contains 'queued' and 'one attempt per head SHA'")
+
+# --------------------------------------------------------------------------- gh-issue always decomposes before creating any issue (issue #38)
+
+with open(os.path.join(HERE, "..", "commands", "gh-issue.md"), encoding="utf-8") as fh:
+    gh_issue_text = fh.read()
+assert "3.5. **Decompose.**" in gh_issue_text, "expected the renamed step heading '3.5. **Decompose.**'"
+assert "Epic check" not in gh_issue_text, "old 'Epic check' heading text must be gone"
+ok("commands/gh-issue.md step 3.5 is headed 'Decompose.' and no longer says 'Epic check'")
+
+for choice in ("Create as shown", "Let me edit the list", "File as one issue instead"):
+    assert choice in gh_issue_text, f"missing AskUserQuestion choice label: {choice!r}"
+ok("commands/gh-issue.md contains all three AskUserQuestion choice labels verbatim")
+
+epic_section_start = gh_issue_text.index("### 4-EPIC")
+epic_section_end_match = re.search(r"^### (?!4-EPIC)", gh_issue_text[epic_section_start + 1:], re.MULTILINE)
+epic_section_end = (
+    epic_section_start + 1 + epic_section_end_match.start()
+    if epic_section_end_match
+    else len(gh_issue_text)
+)
+epic_section = gh_issue_text[epic_section_start:epic_section_end]
+assert "Retry the missing ones" in epic_section, "4-EPIC section missing 'Retry the missing ones'"
+assert "Stop here" in epic_section, "4-EPIC section missing 'Stop here'"
+ok("commands/gh-issue.md's 4-EPIC section covers both 'Retry the missing ones' and 'Stop here'")
+
+epic_section_flat = " ".join(epic_section.split())
+assert "the parent and children 1..k-1" in epic_section_flat and "URLs" in epic_section_flat, \
+    "4-EPIC section's partial-failure report must describe naming created issues (parent + children 1..k-1) with URLs"
+assert "which are missing" in epic_section_flat and "by planned title" in epic_section_flat, \
+    "4-EPIC section's partial-failure report must describe naming missing issues (k..N) by planned title"
+ok("commands/gh-issue.md's 4-EPIC section's partial-failure report describes both created (parent+children, URLs) and missing (by planned title) issues")
+
+with open(os.path.join(HERE, "..", "README.md"), encoding="utf-8") as fh:
+    readme_text = fh.read()
+assert "splits a large brief" not in readme_text, "README.md must no longer describe gh-issue as splitting a large brief"
+ok("README.md no longer contains 'splits a large brief'")
+
+with open(os.path.join(HERE, "..", "docs", "HOW-IT-WORKS.md"), encoding="utf-8") as fh:
+    how_it_works_text = fh.read()
+assert "can split a large brief" not in how_it_works_text, "HOW-IT-WORKS.md must no longer say 'can split a large brief'"
+assert "For work too big for one pull request" not in how_it_works_text, "HOW-IT-WORKS.md must no longer say 'For work too big for one pull request'"
+ok("docs/HOW-IT-WORKS.md no longer contains 'can split a large brief' or 'For work too big for one pull request'")
+
 # --------------------------------------------------------------------------- checks.suite_timeout / run_suite timeout override (issue #25)
 
 import checks  # noqa: E402
@@ -1824,5 +2466,621 @@ with tempfile.TemporaryDirectory() as d:
     assert config["checks"]["skip"] == [], config["checks"]
     assert config["checks"]["suite_timeout"] == 2400, config["checks"]
 ok("an overlay setting only suite_timeout keeps checks.enabled True and checks.skip []")
+
+# --------------------------------------------------------------------------- test_cmd override (issue #27)
+#
+# `.run-issue.json` top-level `test_cmd` pins `cmd_up`'s recorded `test_cmd`, taking
+# precedence over both the derived value and any prior ledger value. Read via a
+# `stack.read_test_cmd_override(repo)` helper (per the approved plan). None of this
+# The assertions below were written RED-first, against a not-yet-implemented
+# `stack.read_test_cmd_override(repo)`; they now pass against the landed
+# implementation.
+
+
+class _Args:
+    pass
+
+
+def _up_args(run_dir, repo=None):
+    a = _Args()
+    a.run_dir, a.repo = run_dir, repo
+    return a
+
+
+def _seed_run(d, issue, repo_rel="repo", run_rel="run", extra_context=None):
+    repo, run_dir = os.path.join(d, repo_rel), os.path.join(d, run_rel)
+    os.makedirs(repo, exist_ok=True)
+    os.makedirs(run_dir, exist_ok=True)
+    ledger = Ledger(issue, ["dev"])
+    ledger.context["repo"] = repo
+    if extra_context:
+        ledger.context.update(extra_context)
+    with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(ledger.to_dict(), fh)
+    return repo, run_dir
+
+
+# -- override-reader helper: '' with no overlay, override string with one ----------
+
+with tempfile.TemporaryDirectory() as d:
+    assert stack.read_test_cmd_override(d) == "", \
+        "no .run-issue.json at all must read back as absent, not raise"
+    write(d, ".run-issue.json", json.dumps({"test_cmd": "php artisan test --configuration=x.xml"}))
+    assert stack.read_test_cmd_override(d) == "php artisan test --configuration=x.xml"
+ok("stack.read_test_cmd_override reads the top-level .run-issue.json test_cmd key, "
+   "'' when there is none")
+
+# -- null / blank / non-string values are all treated as absent --------------------
+
+for bad_value in (None, "", "   ", 5, ["php", "artisan", "test"], {"cmd": "x"}, True):
+    with tempfile.TemporaryDirectory() as d:
+        write(d, ".run-issue.json", json.dumps({"test_cmd": bad_value}))
+        assert stack.read_test_cmd_override(d) == "", \
+            f"test_cmd={bad_value!r} must read back as absent, not crash or leak through"
+ok("null, blank/whitespace-only, and non-string test_cmd overlay values are all "
+   "treated as absent, no crash")
+
+# -- no overlay, no compose file: unchanged derivation ------------------------------
+
+with tempfile.TemporaryDirectory() as d:
+    repo, run_dir = _seed_run(d, 30)
+    write(repo, "go.mod", "module x")
+    proc = subprocess.run([sys.executable, ROUTE, "stack", "up", run_dir],
+                          capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+    assert ctx["test_cmd"] == ctx["test_cmd_host"] == "go test ./..."
+ok("no overlay, no compose file: test_cmd == test_cmd_host == derived host runner "
+   "(existing behavior unchanged)")
+
+# -- overlay on the no-compose-file path: test_cmd is the override, test_cmd_host derived
+
+with tempfile.TemporaryDirectory() as d:
+    repo, run_dir = _seed_run(d, 31)
+    write(repo, "go.mod", "module x")
+    write(repo, ".run-issue.json", json.dumps({"test_cmd": "go test -run TestFoo ./..."}))
+    proc = subprocess.run([sys.executable, ROUTE, "stack", "up", run_dir],
+                          capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+    assert ctx["test_cmd"] == "go test -run TestFoo ./...", ctx["test_cmd"]
+    assert ctx["test_cmd_host"] == "go test ./...", \
+        "the override must not leak into test_cmd_host, which stays the raw derivation"
+ok("overlay test_cmd on the no-compose-file path is recorded verbatim; test_cmd_host "
+   "stays derived")
+
+# -- overlay on the full success path: override wins over build_test_cmd -----------
+
+with tempfile.TemporaryDirectory() as d:
+    repo, run_dir = _seed_run(d, 32)
+    write(repo, "docker-compose.test.yml", "services: {}\n")
+    write(repo, "go.mod", "module x")
+    write(repo, ".run-issue.json", json.dumps({"test_cmd": "custom exec cmd"}))
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+
+        def _fake_shell(cmd, **kw):
+            return subprocess.CompletedProcess([], 0, "", "")
+
+        real_shell = stack.shell
+        real_compose_config = stack.compose_config
+        real_write_override = stack.write_override
+        stack.shell = _fake_shell
+        stack.compose_config = lambda *a, **k: {"services": {"app": {"build": {"context": "."}}}}
+        stack.write_override = lambda *a, **k: False
+        try:
+            stack.cmd_up(_up_args(run_dir))
+        finally:
+            stack.shell = real_shell
+            stack.compose_config = real_compose_config
+            stack.write_override = real_write_override
+    ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+    assert ctx["stack"] == "up", ctx
+    assert ctx["test_cmd"] == "custom exec cmd", \
+        f"override must win over build_test_cmd's derivation, got {ctx['test_cmd']!r}"
+ok("overlay test_cmd on the full success path is recorded instead of the "
+   "build_test_cmd-derived command")
+
+# -- two consecutive `stack up` calls with the same override still honor it --------
+
+with tempfile.TemporaryDirectory() as d:
+    repo, run_dir = _seed_run(d, 33)
+    write(repo, "go.mod", "module x")
+    write(repo, ".run-issue.json", json.dumps({"test_cmd": "go test -short ./..."}))
+    for _ in range(2):
+        proc = subprocess.run([sys.executable, ROUTE, "stack", "up", run_dir],
+                              capture_output=True, text=True)
+        assert proc.returncode == 0, proc.stderr
+        ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+        assert ctx["test_cmd"] == "go test -short ./...", ctx["test_cmd"]
+ok("two consecutive `stack up` calls with an override both record it, not just the first")
+
+# -- degraded paths preserve a prior test_cmd instead of overwriting it with "" ----
+
+with tempfile.TemporaryDirectory() as d:
+    # lock-held path, no override, prior test_cmd already recorded.
+    repo, run_dir, other_run = os.path.join(d, "repo"), os.path.join(d, "run"), os.path.join(d, "other")
+    os.makedirs(repo)
+    os.makedirs(run_dir)
+    os.makedirs(other_run)
+    write(repo, "docker-compose.test.yml", "services: {}\n")
+    write(repo, "go.mod", "module x")
+    ledger = Ledger(34, ["dev"])
+    ledger.context.update(repo=repo, test_cmd="preexisting --configuration=x.xml")
+    with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(ledger.to_dict(), fh)
+    with open(os.path.join(other_run, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(Ledger(34, ["dev"]).to_dict(), fh)
+
+    data_d = os.path.join(d, "data")
+    project = stack.compose_project(repo, 34)
+    lock_file = os.path.join(data_d, "locks", f"{project}.lock")
+    os.makedirs(os.path.dirname(lock_file))
+    with open(lock_file, "w", encoding="utf-8") as fh:
+        json.dump({"run_dir": other_run, "issue": 34, "repo": repo, "acquired_at": time.time()}, fh)
+
+    env = dict(os.environ, CLAUDE_PLUGIN_DATA=data_d, PATH="/nonexistent")
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "stack", "up", run_dir, "--lock-timeout", "0"],
+        capture_output=True, text=True, env=env,
+    )
+    assert proc.returncode == 0, proc.stderr
+    ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+    assert ctx["stack"] == "failed"
+    assert ctx["test_cmd"] == "preexisting --configuration=x.xml", \
+        f"lock-held degraded path must preserve the prior test_cmd, got {ctx['test_cmd']!r}"
+ok("cmd_up's lock-held degraded path preserves a prior test_cmd instead of erasing it")
+
+with tempfile.TemporaryDirectory() as d:
+    # up-failed path, no override, prior test_cmd already recorded.
+    repo, run_dir = os.path.join(d, "repo"), os.path.join(d, "run")
+    os.makedirs(repo)
+    os.makedirs(run_dir)
+    write(repo, "docker-compose.test.yml", "services: {}\n")
+    write(repo, "go.mod", "module x")
+    ledger = Ledger(35, ["dev"])
+    ledger.context.update(repo=repo, test_cmd="preexisting --configuration=x.xml")
+    with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(ledger.to_dict(), fh)
+
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        real_shell, real_write_override = stack.shell, stack.write_override
+        stack.write_override = lambda *a, **k: False
+        stack.shell = lambda *a, **k: subprocess.CompletedProcess([], 1, "", "boom")
+        try:
+            stack.cmd_up(_up_args(run_dir))
+        finally:
+            stack.shell, stack.write_override = real_shell, real_write_override
+    ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+    assert ctx["stack"] == "failed"
+    assert ctx["test_cmd"] == "preexisting --configuration=x.xml", \
+        f"up-failed degraded path must preserve the prior test_cmd, got {ctx['test_cmd']!r}"
+ok("cmd_up's up-failed degraded path preserves a prior test_cmd instead of erasing it")
+
+with tempfile.TemporaryDirectory() as d:
+    # no-app-service path, no override, prior test_cmd already recorded.
+    repo, run_dir = os.path.join(d, "repo"), os.path.join(d, "run")
+    os.makedirs(repo)
+    os.makedirs(run_dir)
+    write(repo, "docker-compose.test.yml", "services: {}\n")
+    write(repo, "go.mod", "module x")
+    ledger = Ledger(36, ["dev"])
+    ledger.context.update(repo=repo, test_cmd="preexisting --configuration=x.xml")
+    with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(ledger.to_dict(), fh)
+
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        real_shell = stack.shell
+        real_compose_config = stack.compose_config
+        real_write_override = stack.write_override
+        stack.shell = lambda cmd, **kw: subprocess.CompletedProcess([], 0, "", "")
+        stack.compose_config = lambda *a, **k: {"services": {}}  # no app service found
+        stack.write_override = lambda *a, **k: False
+        try:
+            stack.cmd_up(_up_args(run_dir))
+        finally:
+            stack.shell = real_shell
+            stack.compose_config = real_compose_config
+            stack.write_override = real_write_override
+    ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+    assert ctx["stack"] == "failed"
+    assert ctx["test_cmd"] == "preexisting --configuration=x.xml", \
+        f"no-app-service degraded path must preserve the prior test_cmd, got {ctx['test_cmd']!r}"
+ok("cmd_up's no-app-service degraded path preserves a prior test_cmd instead of erasing it")
+
+# -- degraded path on a fresh ledger (no prior, no override) still records '' ------
+
+with tempfile.TemporaryDirectory() as d:
+    repo, run_dir = os.path.join(d, "repo"), os.path.join(d, "run")
+    os.makedirs(repo)
+    os.makedirs(run_dir)
+    write(repo, "docker-compose.test.yml", "services: {}\n")
+    write(repo, "go.mod", "module x")
+    ledger = Ledger(37, ["dev"])
+    ledger.context["repo"] = repo
+    with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(ledger.to_dict(), fh)
+
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        real_shell, real_write_override = stack.shell, stack.write_override
+        stack.write_override = lambda *a, **k: False
+        stack.shell = lambda *a, **k: subprocess.CompletedProcess([], 1, "", "boom")
+        try:
+            stack.cmd_up(_up_args(run_dir))
+        finally:
+            stack.shell, stack.write_override = real_shell, real_write_override
+    ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+    assert ctx["stack"] == "failed"
+    assert ctx["test_cmd"] == "", ctx["test_cmd"]
+ok("a degraded path with no prior test_cmd and no override still records '' "
+   "(nothing to preserve, no regression to a stale value either)")
+
+# -- override + a different prior value on a degraded path: override wins ----------
+
+with tempfile.TemporaryDirectory() as d:
+    repo, run_dir = os.path.join(d, "repo"), os.path.join(d, "run")
+    os.makedirs(repo)
+    os.makedirs(run_dir)
+    write(repo, "docker-compose.test.yml", "services: {}\n")
+    write(repo, "go.mod", "module x")
+    write(repo, ".run-issue.json", json.dumps({"test_cmd": "the override wins"}))
+    ledger = Ledger(38, ["dev"])
+    ledger.context.update(repo=repo, test_cmd="a stale prior value")
+    with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(ledger.to_dict(), fh)
+
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        real_shell, real_write_override = stack.shell, stack.write_override
+        stack.write_override = lambda *a, **k: False
+        stack.shell = lambda *a, **k: subprocess.CompletedProcess([], 1, "", "boom")
+        try:
+            stack.cmd_up(_up_args(run_dir))
+        finally:
+            stack.shell, stack.write_override = real_shell, real_write_override
+    ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+    assert ctx["test_cmd"] == "the override wins", ctx["test_cmd"]
+ok("an override on a degraded path wins over both the derived value and the prior "
+   "ledger value")
+
+# -- malformed .run-issue.json: `stack up` still exits 0, derives test_cmd, warns --
+
+with tempfile.TemporaryDirectory() as d:
+    repo, run_dir = _seed_run(d, 39)
+    write(repo, "go.mod", "module x")
+    write(repo, ".run-issue.json", "{ not valid json")
+    proc = subprocess.run([sys.executable, ROUTE, "stack", "up", run_dir],
+                          capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
+    assert ctx["test_cmd"] == "go test ./...", \
+        "a malformed overlay must fall back to the derived test_cmd, not crash the run"
+    assert proc.stderr.strip() != "", "a malformed overlay must warn on stderr"
+ok("a malformed .run-issue.json leaves `stack up` exiting 0 with a derived test_cmd, "
+   "warning on stderr")
+
+# --------------------------------------------------------------------------- run_suite: stack=failed is unconditionally unrunnable
+
+ledger = _FakeLedger(stack="failed", test_cmd="php artisan test --configuration=x.xml")
+shell_calls = []
+real_checks_shell = checks.shell
+checks.shell = _stub_shell(shell_calls)
+try:
+    code, detail = checks.run_suite(ledger, "/repo")
+finally:
+    checks.shell = real_checks_shell
+assert code is None, \
+    "stack=failed with a non-empty test_cmd must still be unrunnable, never a real exit code"
+assert not shell_calls, "stack=failed must never shell out, override test_cmd or not"
+ok("run_suite treats stack=failed as unconditionally unrunnable, even with a non-empty "
+   "test_cmd left over from a prior successful run")
+
+# -- regression guard: stack=none with a non-empty test_cmd still runs (host runner) --
+
+ledger = _FakeLedger(stack="none", test_cmd="go test ./...")
+shell_calls = []
+checks.shell = _stub_shell(shell_calls)
+try:
+    code, detail = checks.run_suite(ledger, "/repo")
+finally:
+    checks.shell = real_checks_shell
+assert code == 0 and detail == "ok", (code, detail)
+assert shell_calls and shell_calls[0]["cmd"] == "go test ./...", \
+    "the new stack=failed guard must not swallow the legitimate stack=none host-runner case"
+ok("run_suite with stack=none and a non-empty test_cmd still runs it — the new "
+   "stack=failed guard must not catch this legitimate host-runner case")
+
+# --------------------------------------------------------------------------- /intake --whole passthrough for a multi-outcome BRD (issue #41)
+
+INTAKE_MD = os.path.join(HERE, "..", "commands", "intake.md")
+with open(INTAKE_MD, encoding="utf-8") as fh:
+    intake_text = fh.read()
+
+assert "--whole" in intake_text, "commands/intake.md must document a --whole flag"
+decomp_idx = intake_text.index("**Decomposition check**")
+decomp_section = intake_text[decomp_idx:decomp_idx + 2000]
+assert "--whole" in decomp_section, \
+    "the BRD adapter's Decomposition check section must have a branch for --whole"
+ok("commands/intake.md documents a --whole flag and the Decomposition check has a --whole branch")
+
+# Split the Decomposition-check section into its --whole branch and its no-flag branch,
+# by locating "--whole" inside the section and treating text before/after as the two branches.
+whole_marker_idx = decomp_section.index("--whole")
+before_whole = decomp_section[:whole_marker_idx]
+after_whole = decomp_section[whole_marker_idx:]
+assert "AskUserQuestion" in before_whole or "AskUserQuestion" in intake_text[decomp_idx:decomp_idx + 200], \
+    "no-flag branch of the Decomposition check must still contain AskUserQuestion (regression: standalone /intake must still ask)"
+# The --whole branch itself (from the --whole marker to the next AskUserQuestion mention,
+# or to the end of the section if none) must not fire AskUserQuestion.
+whole_branch_end = after_whole.find("AskUserQuestion")
+whole_branch = after_whole if whole_branch_end == -1 else after_whole[:whole_branch_end]
+assert "AskUserQuestion" not in whole_branch, \
+    "the --whole branch must not contain AskUserQuestion — no question fires when --whole is set"
+ok("commands/intake.md --whole branch skips AskUserQuestion while the no-flag branch still asks")
+
+# Regression for PR #45 review thread: the Note adapter's search-query line and the
+# Text adapter's `## Summary` template must use the stripped-argument placeholder
+# (`<argument>`), never a literal `$ARGUMENTS` token that would leak the raw,
+# un-stripped (still containing `--whole`) argument into the brief.
+note_search_idx = intake_text.index('obsidian vault=notes search query=')
+note_search_line = intake_text[note_search_idx:intake_text.index("\n", note_search_idx)]
+assert "<argument>" in note_search_line and "$ARGUMENTS" not in note_search_line, \
+    "the Note adapter's search-query line must use the stripped <argument> placeholder, not $ARGUMENTS"
+
+text_summary_idx = intake_text.rindex("## Summary")
+text_summary_block = intake_text[text_summary_idx:text_summary_idx + 200]
+assert "<argument>" in text_summary_block and "$ARGUMENTS" not in text_summary_block, \
+    "the Text adapter's ## Summary template must use the stripped <argument> placeholder, not $ARGUMENTS"
+ok("the Note adapter's search query and the Text adapter's ## Summary template use the "
+   "stripped <argument> placeholder, never a literal $ARGUMENTS")
+
+with open(GH_ISSUE_MD, encoding="utf-8") as fh:
+    gh_issue_text = fh.read()
+assert "/intake $@ --whole" in gh_issue_text, \
+    "commands/gh-issue.md step 0 must invoke /intake with --whole, not bare /intake $@"
+ok("commands/gh-issue.md invokes `/intake $@ --whole`")
+
+with open(os.path.join(HERE, "..", "commands", "run-issue.md"), encoding="utf-8") as fh:
+    run_issue_text = fh.read()
+assert "/intake <stripped argument> --whole" in run_issue_text, \
+    "commands/run-issue.md Preflight step 2 must invoke /intake with --whole"
+ok("commands/run-issue.md invokes `/intake <stripped argument> --whole`")
+
+# Every OTHER "invoke `/intake" call site (outside intake.md itself) must also carry --whole.
+# Enumerated, not hardcoded to a count of 2, so a future new call site that skips --whole fails here.
+_intake_call_sites = []
+for _base in ("commands", "agents"):
+    _dir = os.path.join(HERE, "..", _base)
+    if not os.path.isdir(_dir):
+        continue
+    for _fn in sorted(os.listdir(_dir)):
+        if not _fn.endswith(".md"):
+            continue
+        _path = os.path.join(_dir, _fn)
+        if os.path.abspath(_path) == os.path.abspath(os.path.join(HERE, "..", "commands", "intake.md")):
+            continue
+        with open(_path, encoding="utf-8") as fh:
+            for _lineno, _line in enumerate(fh, 1):
+                if re.search(r"invoke `/intake", _line):
+                    _intake_call_sites.append((_path, _lineno, _line.rstrip("\n")))
+assert _intake_call_sites, "expected at least one '/intake' call site outside commands/intake.md"
+for _path, _lineno, _line in _intake_call_sites:
+    assert "--whole" in _line, f"{_path}:{_lineno} invokes /intake without --whole: {_line!r}"
+ok(f"every 'invoke `/intake' call site outside commands/intake.md ({len(_intake_call_sites)} found) carries --whole")
+
+detect_idx = intake_text.index("**Detect the source**")
+assert "strip" in intake_text[:detect_idx].lower() or "--whole" in intake_text[:detect_idx], \
+    "commands/intake.md must document stripping --whole from the arguments before step 1's 'Detect the source'"
+ok("commands/intake.md documents stripping --whole before step 1's 'Detect the source'")
+
+# --------------------------------------------------------------------------- epic blocker_ask (issue #53)
+# A parked child's ledger carries `blocker_ask` (pending/answered/deferred) next to
+# `blocked_on`, so the orchestrator can ask about it immediately instead of waiting for
+# Gate 2a to collect every blocker at the end.
+
+
+def _write_child_ledger(runs_dir, issue, status="running", context=None):
+    d = os.path.join(runs_dir, f"o-r-issue-{issue}")
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump({"issue": issue, "stations": ["dev"], "currentIndex": 0,
+                   "bounceCounts": {}, "status": status, "trace": [],
+                   "context": context or {}, "classification": None,
+                   "specialists": []}, fh)
+
+
+with tempfile.TemporaryDirectory() as tmp:
+    _write_child_ledger(tmp, 10, context={"blocked_on": "waiting on X", "blocker_ask": "pending"})
+    st = epic.child_state(tmp, "o/r", 10)
+    assert st["blocked_on"] == "waiting on X", st
+    assert st["blocker_ask"] == "pending", st
+ok("epic.child_state returns blocker_ask from the child ledger's context alongside blocked_on")
+
+with tempfile.TemporaryDirectory() as tmp:
+    _write_child_ledger(tmp, 10, context={})
+    st = epic.child_state(tmp, "o/r", 10)
+    assert st["blocker_ask"] is None, st
+    st_no_dir = epic.child_state(tmp, "o/r", 999)
+    assert st_no_dir["blocker_ask"] is None, st_no_dir
+ok("epic.child_state reports blocker_ask=None when absent, including a child with no run dir yet")
+
+with tempfile.TemporaryDirectory() as tmp:
+    epic_dir = os.path.join(tmp, "epic")
+    os.makedirs(epic_dir)
+    with open(os.path.join(epic_dir, "epic.json"), "w", encoding="utf-8") as fh:
+        json.dump({"parent": 42, "slug": "o/r", "children": [10, 11],
+                   "dag": {"order": [10, 11], "deps": {"10": [], "11": []}},
+                   "max_stacks": 2}, fh)
+    runs = os.path.join(tmp, "runs")
+    _write_child_ledger(runs, 10, context={"blocked_on": "stuck", "blocker_ask": "pending"})
+    _write_child_ledger(runs, 11, context={})
+
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "epic", "status", epic_dir, "--runs-dir", runs],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    lines = {int(line.split()[0].lstrip("#")): line for line in proc.stdout.splitlines()}
+    assert "blocker_ask=pending" in lines[10], lines[10]
+    assert "blocker_ask" not in lines[11], lines[11]
+ok("aiw epic status prints blocker_ask=pending on a child's line, and omits it when unset")
+
+with tempfile.TemporaryDirectory() as tmp:
+    epic_dir = os.path.join(tmp, "epic")
+    os.makedirs(epic_dir)
+    with open(os.path.join(epic_dir, "epic.json"), "w", encoding="utf-8") as fh:
+        json.dump({"parent": 42, "slug": "o/r", "children": [10, 11, 12],
+                   "dag": {"order": [10, 11, 12], "deps": {"10": [], "11": [], "12": []}},
+                   "max_stacks": 3}, fh)
+    runs = os.path.join(tmp, "runs")
+    _write_child_ledger(runs, 10, status="escalated",
+                        context={"blocked_on": "needs a human", "blocker_ask": "pending"})
+    _write_child_ledger(runs, 11, status="running")
+    _write_child_ledger(runs, 12, status="running")
+
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "epic", "next", epic_dir, "--runs-dir", runs],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    got = json.loads(proc.stdout)
+    assert got["ready"] == [11, 12], "a parked child must not stall its independent siblings: " + repr(got)
+    assert got["states"]["10"]["blocked_on"] == "needs a human", got
+    assert got["states"]["10"]["blocker_ask"] == "pending", got
+ok("aiw epic next excludes a parked child from ready but still reports its blocked_on/blocker_ask")
+
+with tempfile.TemporaryDirectory() as tmp:
+    epic_dir = os.path.join(tmp, "epic")
+    os.makedirs(epic_dir)
+    with open(os.path.join(epic_dir, "epic.json"), "w", encoding="utf-8") as fh:
+        json.dump({"parent": 42, "slug": "o/r", "children": [10, 11],
+                   "dag": {"order": [10, 11], "deps": {"10": [], "11": []}},
+                   "max_stacks": 2}, fh)
+    runs = os.path.join(tmp, "runs")
+    _write_child_ledger(runs, 10, status="escalated",
+                        context={"blocked_on": "first blocker", "blocker_ask": "pending"})
+    _write_child_ledger(runs, 11, status="escalated",
+                        context={"blocked_on": "second blocker", "blocker_ask": "pending"})
+
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "epic", "next", epic_dir, "--runs-dir", runs],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    got = json.loads(proc.stdout)
+    assert got["states"]["10"]["blocked_on"] == "first blocker", got
+    assert got["states"]["11"]["blocked_on"] == "second blocker", got
+    assert got["states"]["10"]["blocker_ask"] == "pending" and got["states"]["11"]["blocker_ask"] == "pending", got
+ok("two children each carry their own blocked_on/blocker_ask independently, never merged")
+
+with tempfile.TemporaryDirectory() as tmp:
+    run_dir = os.path.join(tmp, "o-r-issue-10")
+    os.makedirs(run_dir)
+    with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump({"issue": 10, "stations": ["dev"], "currentIndex": 0, "bounceCounts": {},
+                   "status": "escalated", "trace": [], "context": {}, "classification": None,
+                   "specialists": []}, fh)
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "set", run_dir, "blocked_on=first", "blocker_ask=answered"],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    proc2 = subprocess.run(
+        [sys.executable, ROUTE, "set", run_dir, "blocked_on=second", "blocker_ask=pending"],
+        capture_output=True, text=True,
+    )
+    assert proc2.returncode == 0, proc2.stderr
+    led = json.load(open(os.path.join(run_dir, "run.json")))
+    assert led["context"]["blocked_on"] == "second", led["context"]
+    assert led["context"]["blocker_ask"] == "pending", led["context"]
+ok("a new blocker overwrites and re-arms blocker_ask, ending at second/pending")
+
+# --------------------------------------------------------------------------- run-issue.md prose (issue #53)
+
+
+def _run_issue_section(text: str, start_heading: str, end_heading: str) -> str:
+    start = text.index(start_heading)
+    end = text.index(end_heading, start)
+    return text[start:end]
+
+
+run_issue_step4 = _run_issue_section(
+    run_issue_text, "4. **The relay.**", "5. **A blocker")
+assert "escalate" in run_issue_step4, run_issue_step4
+assert "needs_confirmation" in run_issue_step4, \
+    "step 4 must name both park causes: aiw route printing escalate, and a non-empty needs_confirmation"
+ok("run-issue.md Epic step 4 names both park causes: escalate and needs_confirmation")
+
+assert "blocked_on=" in run_issue_step4, run_issue_step4
+assert "blocker_ask=pending" in run_issue_step4, run_issue_step4
+set_idx = run_issue_step4.index("blocked_on=")
+ask_idx = run_issue_step4.index("AskUserQuestion")
+assert set_idx < ask_idx, \
+    "the ledger write (blocked_on=/blocker_ask=pending) must happen before AskUserQuestion"
+ok("run-issue.md Epic step 4 writes blocked_on=/blocker_ask=pending before AskUserQuestion")
+
+assert "epic next" in run_issue_step4, run_issue_step4
+assert "before dispatching the next" in run_issue_step4, \
+    "step 4 must say the ask fires before dispatching the next aiw epic next call"
+assert "#<child>" in run_issue_step4, \
+    "step 4 must name the child issue number as #<child>"
+assert "the blocking station" in run_issue_step4, \
+    "step 4 must name the blocking station"
+assert "the one-line\n   reason" in run_issue_step4 or "the one-line reason" in run_issue_step4, \
+    "step 4 must name the one-line reason"
+ok("run-issue.md Epic step 4 says the ask fires before dispatching the next epic next, naming the child/station/reason")
+
+assert "AskUserQuestion" in run_issue_step4
+assert "one `AskUserQuestion` per parked child" in run_issue_step4 or \
+    "never batched" in run_issue_step4, \
+    "step 4 must say one AskUserQuestion per parked child, never batched"
+ok("run-issue.md Epic step 4 says one AskUserQuestion per parked child, never batched")
+
+assert "blocker_ask=answered" in run_issue_step4, run_issue_step4
+assert "blocker_ask=deferred" in run_issue_step4, run_issue_step4
+assert "7b" in run_issue_step4 and "8.5" in run_issue_step4, \
+    "step 4 must say a deferred needs_confirmation child does not proceed to 7b/8.5"
+assert "Degraded finish" in run_issue_step4, \
+    "step 4 must say the escalate path still goes to Degraded finish"
+ok("run-issue.md Epic step 4 covers blocker_ask=answered/deferred and both park paths' downstream routing")
+
+run_issue_step6 = _run_issue_section(
+    run_issue_text, "6. **GATE 2a", "7. **GATE 2")
+assert "blocker_ask" in run_issue_step6, run_issue_step6
+assert "pending" in run_issue_step6 and "deferred" in run_issue_step6, run_issue_step6
+assert "epic status" in run_issue_step6, run_issue_step6
+assert "once" in run_issue_step6.lower(), run_issue_step6
+assert "Once 2a has fired it does not fire again." not in run_issue_step6, \
+    "the old unqualified sentence must be gone now that step 6 reads blocker_ask"
+ok("run-issue.md Epic step 6 reads blocker_ask via aiw epic status, still fires once, "
+   "drops the old unqualified sentence")
+
+assert re.search(r"skip.*gate|no.*blocker_ask.*pending", run_issue_step6, re.I), \
+    "step 6 must say to skip the gate when no child has a pending or deferred blocker_ask"
+ok("run-issue.md Epic step 6 says to skip the gate when nothing has a pending/deferred blocker_ask")
+
+gates_section = _run_issue_section(
+    run_issue_text, "### Gates — exactly three", "### Test ownership")
+assert "epic" in gates_section.lower() and "Gate 2a" in gates_section, gates_section
+assert "not a fourth gate" in gates_section or "still Gate 2a" in gates_section, \
+    "the Gates section must state the per-blocker asks are a use of Gate 2a, not a fourth gate"
+ok("run-issue.md Gates section states the per-blocker asks are Gate 2a, not a fourth gate")
+
+gate2a_span = _run_issue_section(
+    run_issue_text, "### GATE 2a — human confirmation on blockers", "## 7b.")
+assert "**Confirmed, continue**" in gate2a_span, gate2a_span
+assert "**Hold here**" in gate2a_span, gate2a_span
+ok("run-issue.md phase 7's GATE 2a still contains Confirmed, continue and Hold here, unchanged")
+
+routing_rules = _run_issue_section(run_issue_text, "### Routing", "### Gates — exactly three")
+assert "not a stop-and-ask" in routing_rules or "not a stop-and-ask" in run_issue_text, \
+    "the engine's escalate bullet must still contain 'not a stop-and-ask'"
+assert "Degraded finish" in routing_rules
+ok("run-issue.md engine escalate bullet still says not a stop-and-ask and routes to Degraded finish")
+
+with open(os.path.join(HERE, "..", "docs", "HOW-IT-WORKS.md"), encoding="utf-8") as fh:
+    how_it_works_text = fh.read()
+assert "immediate" in how_it_works_text.lower() or "as soon as" in how_it_works_text.lower(), \
+    "docs/HOW-IT-WORKS.md must mention the immediate per-blocker ask in its epic Gate 2a description"
+assert "sole channel" not in how_it_works_text.lower(), how_it_works_text
+ok("docs/HOW-IT-WORKS.md mentions the immediate per-blocker ask, not just the once-at-the-end description")
 
 print(f"\n{passed} checks passed")

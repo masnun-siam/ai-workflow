@@ -66,9 +66,18 @@ outside a "fix review comments" pass and belongs to gate 2's judgment, not yours
    `test_cmd` fails because the container is unhealthy or missing, stop and report that —
    do not start one.
 5. Commit per issue, reply on the thread with the commit SHA, resolve the thread with
-   `aiw threads resolve <node_id>` — exactly as `/pr-fix-comments` steps 6–7.
+   `aiw threads resolve <node_id>` — exactly as `/pr-fix-comments` steps 6–7. **If the
+   caller passed `hold_push: true`,** the reply must not claim the fix is already live —
+   that SHA isn't pushed yet, and a human reading the thread mid-pause would be misled.
+   Say something like "Committed in `<sha>`, held pending green CI — will push once CI
+   clears" instead of the usual "fixed in `<sha>`" wording. Still reply and resolve as
+   normal — only the wording changes.
 6. One pass only. Do not loop back over the same comment twice hunting for a better fix.
-7. After all comments are handled, push once.
+7. After all comments are handled, push once — unless the caller passed
+   `hold_push: true` (opt-in; `/run-issue`'s phase 7 never passes it, so its
+   behavior is unchanged). With `hold_push: true`, still commit, reply to
+   threads, and resolve them, but do **not** push. List the commit SHA(s) in
+   `handoff.commits` and say "push held by caller" in your report.
 
 ## Out of scope
 

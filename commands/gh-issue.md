@@ -9,7 +9,7 @@ I have a ${1:-bug / feature request / task / improvement} to log as a GitHub iss
 
 0. **Source check.** If `$@` matches one of `/intake`'s detectable source shapes — a
    `sentry.io` URL, an existing `.md`/`.txt`/`.pdf`/`.docx` file path, or a vault note
-   title that exactly matches one note — invoke `/intake $@` and wait for its `## Intake
+   title that exactly matches one note — invoke `/intake $@ --whole` and wait for its `## Intake
    result` block. Use its `type:` value in place of
    `${1:-bug / feature request / task / improvement}` for the rest of this skill, and use
    everything after its `---` line as `Details:` below. Otherwise (plain text, no source
@@ -42,28 +42,46 @@ Do the following:
 2.5. Dispatch the `run-researcher` agent (haiku, read-only) with the description above and the `owner/repo` slug, to collect context *outside* the codebase: prior related issues/PRs, project wiki, relevant public docs (library/API behavior the description implies). Carry its brief into steps 3 and 4 — do not print it verbatim, fold the relevant parts into the grilling and the issue body. Best-effort: if it errors or returns nothing useful, note that in one line and continue without it.
 3. Use the grill-me skill to interview me on anything unclear (acceptance criteria, priority, affected users, edge cases), asking via the AskUserQuestion tool. Wait for my answers.
    - As part of this grilling session, enumerate every corner case you can find for this issue (empty/null input, concurrency, permissions, error/failure paths, boundary values, existing data migrations, etc.) and validate each one with me before moving on — don't assume a corner case is out of scope without asking.
-3.5. **Epic check.** If the description covers more than one independently-shippable
-   outcome, or is large enough that one PR would not be reviewable in a sitting, this
-   is an epic. Do not split silently — propose the split with `AskUserQuestion`, listing
-   each proposed child as one line (title + the one outcome it delivers) plus the
-   dependency edges you intend to declare. On approval, go to step 4-EPIC instead of
-   step 4. On rejection, file one issue as normal.
+3.5. **Decompose.** Every run, after step 3's grilling — no size test gates this, it
+   always happens. Build a numbered task list from the grilled requirements. Each task
+   has: a title, the one outcome it delivers, the files/symbols it's expected to touch
+   (from step 1's GitNexus lookup), and `Depends on: task <k>` placeholder edges (using
+   ordinals — the real issue numbers don't exist yet).
 
-   More than ~8 children is a decomposition problem, not a bigger epic: say so and
-   propose a coarser split rather than launching 20 pipelines.
+   More than ~8 tasks is a decomposition problem, not a bigger epic: create nothing and
+   don't ask yet — say so, then rebuild the list coarser once before presenting it.
+
+   Present the list in exactly one `AskUserQuestion` call with three choices, verbatim:
+   **"Create as shown"**, **"Let me edit the list"**, **"File as one issue instead"**.
+   Style this like Gate 1's revise loop in `commands/run-issue.md`:
+
+   - **"Let me edit the list"**: take the free-text feedback, revise the list, re-apply
+     the more-than-8 guard, and present the same question again. Loop until one of the
+     other two choices is picked. No round limit.
+   - **"Create as shown"**: route on the approved list's task count, not on the choice
+     itself — 1 task goes to step 4 (single issue, unchanged); 2 or more tasks go to
+     4-EPIC, in the list's dependency order.
+   - **"File as one issue instead"**: go to step 4 with the full grilled requirements,
+     bypassing 4-EPIC entirely, regardless of how many tasks were on the list.
 4. Then create a GitHub issue on the current repo:
    - Write the full body to `/tmp/gh-issue-body.md` using the write tool
    - Run `gh issue create --title "..." --label "..." --body-file /tmp/gh-issue-body.md`
    - **NEVER use `--body` flag** — shell escaping breaks on backticks, pipes, quotes, newlines. Always `--body-file`.
    - Delete `/tmp/gh-issue-body.md` after the issue is created
    - Title: clear, specific, ≤72 chars
-   - Body sections: **Summary** (the problem and *why it matters* — not a restatement of the fix), **Specific Business Requirements**, **Out of Scope**, **Context / Affected Code** (file paths and symbols from step 1), **Steps to Reproduce / Requirements**, **Acceptance Criteria** (include every corner case validated in step 3 as its own explicit criterion), **Non-functional Constraints**, **Assumptions**, **Dependencies / Blockers**, **Proposed Fix** (only if a concrete fix is obvious — describe it, do NOT apply it), **Notes**
+   - Body sections: **Summary** (the problem and *why it matters* — not a restatement of the fix), **Specific Business Requirements**, **Out of Scope**, **Context / Affected Code** (file paths and symbols from step 1), **Steps to Reproduce / Requirements**, **Acceptance Criteria** (include every corner case validated in step 3 as its own explicit criterion), **Implementation Guide** (ordered numbered steps; exact path:line/symbol references reusing the GitNexus lookup from step 1; an existing pattern to copy, or "no existing pattern — net-new"; the exact test/verify command(s); a one-line done-check), **Non-functional Constraints**, **Assumptions**, **Dependencies / Blockers**, **Proposed Fix** (only if a concrete fix is obvious — describe it, do NOT apply it), **Notes**
    - **These sections exist to clear `/run-issue`'s Gate 0.** `run-researcher` scores every issue against `<dor>` and *blocks the run* on a gap, so an issue filed without them gets bounced back to you with a `needs-info` comment. Read that file; it is six items and this section list is one-to-one with it.
      - **Out of Scope** — always at least one real entry. An issue with no stated edge is an issue whose PR grows one.
      - **Non-functional Constraints** — performance, security, authorization, data migration, backward compatibility. Write `none` deliberately where it's true; silence scores as unconsidered, `none` scores as answered.
      - **Assumptions** — anything you filled in that the issue's author didn't say, stated so they can correct it. This is the section that keeps a normalization from becoming invented scope.
      - **Dependencies / Blockers** — its own section, not a line in Notes. `none` beats silence here too.
      - Never delete one of these five to avoid writing `none`, and never ship a body containing `[bracketed placeholders]` — that is a failed run, not a draft.
+   - **Implementation Guide is not a DoR item** — it's the plan, not a readiness gate.
+     Required on every issue except an epic parent. Every step names a real path:line
+     or symbol — no vague area names like "the auth code." A `[bracketed placeholder]`
+     in it counts as a failed run under the same rule as the four sections above.
+     When a **Proposed Fix** section is also present, it stays the literal patch;
+     Implementation Guide is the ordered plan to get there.
    - Labels: bug / enhancement / feature / chore, plus scope labels (`backend`, `frontend`, `infra`) as applicable
    - **`lean` label.** `/run-issue` reads this label at init time to pick its roster
      without a human remembering to pass a flag — see `commands/run-issue.md`'s
@@ -95,7 +113,9 @@ Do the following:
 
    Each child is one **vertical slice** — one thin end-to-end outcome, never a layer.
    Horizontal slices ("all the models") maximize file overlap, which serializes the DAG,
-   and none of them has acceptance criteria that can be verified on their own.
+   and none of them has acceptance criteria that can be verified on their own. Each
+   child's Implementation Guide covers only that child's own slice — never a step that
+   touches a sibling's files or refers to a sibling's steps.
 
    Where a child depends on a sibling, add a line on its own:
 
@@ -104,18 +124,52 @@ Do the following:
    ```
 
    Edges may only point at siblings in this epic.
-3. Label every child `epic-<parent>` in addition to its normal labels. This is what the
-   epic board filters on, and what makes the children findable with
-   `gh issue list --label epic-<parent>` when there is no project.
+2.5. Create children one at a time, in the approved list's order. Before writing child
+   k's body, replace each `task <j>` placeholder from step 3.5's list with the real
+   `#<n>` issue number already returned for child j (child j must have been created
+   first — this is why order matters).
 
-   Judge each child against step 4's `lean` heuristic **independently, against its own
+   Include `epic-<parent>` in each child's `--label` list on its `gh issue create` call,
+   alongside its normal labels — apply it at creation time, not afterward. Deferring the
+   label to a later step means a child created mid-loop, before a later sibling's create
+   call fails, would never carry it if the run stops before that later step runs; the
+   loop can end at any child, and every child already created must be immediately
+   findable via `gh issue list --label epic-<parent>` regardless of where the loop
+   stopped. When `epic-<parent>` is about to be applied for the first time this run,
+   ensure it exists first (idempotent, cheap):
+   ```bash
+   gh label create epic-<parent> --color 5319E7 --description "child of epic #<parent>" 2>/dev/null || true
+   ```
+
+   Check each `gh issue create` exit status immediately. On failure at child k of N
+   (k=0 means the parent itself failed, before any children exist): stop the loop.
+   Report, by number, which issues exist (the parent and children 1..k-1, with the
+   URLs already returned by their create calls) and which are missing (k..N, by
+   planned title).
+
+   Then `AskUserQuestion` with exactly these two choices: **"Retry the missing ones"**,
+   **"Stop here"**.
+
+   - **"Retry the missing ones"**: re-enter the loop starting at child k, reusing the
+     already-known issue numbers for children 1..k-1 (needed for their `Depends on:`
+     lines in later children). Never re-create 1..k-1.
+   - **"Stop here"**: end the run, report the partial state (created vs. missing), do
+     NOT call `aiw epic split` (it only runs once every planned child exists — see step
+     4), and return no issue URL/number to the caller — `/run-issue`'s own preflight
+     then correctly stops instead of treating an unlinked parent as a complete epic.
+
+   Never auto-close or delete issues already created — a partial epic is a recoverable
+   state, not a failure state.
+3. Judge each child against step 4's `lean` heuristic **independently, against its own
    body** — a child's own outcome, file count, dependency, API-surface and risk-area
-   answers, not the epic's aggregate. The same idempotent ensure-create from step 4 runs
-   once, before the first child that earns the label:
+   answers, not the epic's aggregate. (`epic-<parent>` was already applied at creation
+   time in step 2.5 — see above.) The same idempotent ensure-create from step 4 runs
+   once, before the first child that earns the `lean` label:
    ```bash
    gh label create lean --color 0E8A16 --description "small, well-specified: run lean roster" 2>/dev/null || true
    ```
-4. Link and validate:
+4. Link and validate. This step only runs once every planned child exists — step 2.5's
+   partial-failure gating is what guarantees that:
 
    ```bash
    aiw epic split "<runs_dir>/<owner>-<repo>-epic-<parent>" \
@@ -125,7 +179,9 @@ Do the following:
    Exit 1 means the edges do not form a DAG — a cycle, a self-edge, or an edge pointing
    outside the epic. Fix the offending child's `Depends on:` line with `gh issue edit`
    and re-run. Do not proceed with an invalid DAG: the ordering is what keeps a stacked
-   child from branching off a base that does not exist yet.
+   child from branching off a base that does not exist yet. This call also writes the
+   parent's `## Tasks` checklist in dependency order, so there is no separate `gh issue
+   edit` needed for it.
 5. Step 4.5 (the `gh-issue-factchecker` dispatch) runs **once per child** — each child
    body makes its own concrete claims about files and symbols, and that is exactly what
    the factchecker verifies; a check against the parent would miss them. Step 5

@@ -1,5 +1,94 @@
 # Changelog
 
+## 1.6.1 — 2026-09-26
+
+### Added
+
+- **Agent-facing domain docs**: `CONTEXT.md` (domain glossary), `docs/agents/issue-tracker.md`
+  (GitHub-issues-as-tracker conventions), `docs/agents/triage-labels.md` (canonical triage
+  label mapping), and `docs/agents/domain.md` (how skills should consume this repo's domain
+  docs when exploring). CLAUDE.md now points at all three under a new "Agent skills" section.
+- `.gitignore` now excludes `.gstack/`.
+
+## 1.6.0 — 2026-09-24
+
+### Added
+
+- **`/gh-issue` always decomposes a request into a task list before creating any issue
+  (#38).** Step 3.5 is no longer a size-triggered "Epic check" — it runs unconditionally
+  after grilling, presents the task list via a three-choice `AskUserQuestion` (create /
+  edit / file as one issue), and routes on the approved list's task count: 1 task files a
+  single issue as before, 2+ go to `4-EPIC`. More than ~8 tasks proposes a coarser split
+  instead of creating anything. `4-EPIC`'s child-creation loop now handles partial
+  failure explicitly: a failed `gh issue create` at child *k* of *N* stops the loop,
+  reports created-vs-missing issues by number/title, and offers retry-missing or
+  stop-here — nothing already created is ever auto-closed.
+- **Every issue `/gh-issue` creates now requires an `Implementation Guide` section
+  (#39).** Ordered steps, exact `path:line`/symbol references, an existing pattern to
+  copy (or "net-new"), a verify command, and a one-line done-check — required on every
+  non-parent issue. `run-planner` reads it as its starting point instead of re-deriving
+  an approach from scratch, and `gh-issue-factchecker` verifies its `path:line`/symbol
+  claims the same way it already verifies "Context / Affected Code".
+- **`aiw epic split` now writes the parent epic's `## Tasks` checklist (#40).** After
+  validating the child DAG, it fetches each child's title and idempotently splices a
+  dependency-ordered checklist into the parent body — replacing an existing section
+  rather than duplicating it, fence-aware so a `## Tasks`-looking line inside a quoted
+  code block in the BRD doesn't corrupt the body.
+- **`/intake`'s BRD adapter can pass a multi-outcome document through whole (#41).** A
+  caller-only `--whole` flag (passed by `/gh-issue` and `/run-issue`, never typed by a
+  human) skips the old "pick one candidate" narrowing and instead lists every outcome as
+  its own Summary/Scope/Acceptance-criteria block, so `/gh-issue`'s own decomposition
+  (#38) has every outcome to work with instead of just one.
+- **`/jira-to-gh` decomposes multi-outcome Jira tickets into a parent plus sub-issues
+  (#42).** Mirrors `/gh-issue`'s decomposition and `4-EPIC` pattern (including the
+  Implementation Guide requirement and partial-failure retry/stop handling) instead of
+  always collapsing a ticket into one flat issue. Attachments and the `## Original Jira`
+  section go to the parent (or the single issue) only, never duplicated onto children.
+
+## 1.5.0 — 2026-09-23
+
+### Added
+
+- **`/gh-issue` and `/jira-to-gh` auto-apply a `lean` label at intake (#15).** A
+  smallness heuristic (one shippable outcome, ~1-2 files, no new dependency, no new
+  public API, none of auth/authz, migrations, payment, or a public API contract)
+  idempotently labels an issue `lean` so `/run-issue` can pick the lean 5-station
+  roster without a human remembering `--lean`. `/run-issue` gains an explicit `--full`
+  flag; precedence is both flags → full, `--full` alone → full, `--lean` alone → lean,
+  neither → the issue's label if present else full. Epic parents are never labelled;
+  each child is judged independently, and `epic init --lean-children <n>,<n>` lets
+  individual children opt into lean without losing their DAG wiring.
+- **`.run-issue.json` can now pin `test_cmd` per repo (#27).** A top-level `test_cmd`
+  override in the overlay is used verbatim by `aiw stack up` in place of the derived
+  command, and survives every degraded stack path (lock-held, up-failed, no-app-service)
+  instead of being silently overwritten with `""`. `run_suite` now also treats
+  `stack=failed` as unconditionally unrunnable regardless of a leftover `test_cmd`,
+  closing a false-RED hole a preserved override would otherwise open.
+- **Post-check suite timeout is configurable per repo (#25).** The hardcoded 900s
+  timeout on the sdet/dev post-check's test run is now `checks.suite_timeout` in
+  `.run-issue.json`, validated (positive int, bool excluded) and falling back to 900
+  with a stderr warning on any invalid value.
+- **`aiw pr open`'s push timeout is configurable per repo (#28).** A new `pr.push_timeout`
+  key (default 600s) follows the same validate-and-fallback pattern as `suite_timeout`.
+  A genuine timeout (return code 124) now reports a distinct message naming the
+  effective timeout and noting the push may still be running, instead of a generic
+  "push failed:" with no context.
+
+### Fixed
+
+- **`pr-grind` Step 1 discarded real review findings to a same-commit rubber-stamp
+  review (#24).** A reviewer bot posting a substantive `COMMENTED` review followed
+  seconds later by a zero-comment `APPROVED` rubber stamp on the identical commit made
+  "take the newest only" silently reinstate the exact bug the round was meant to catch.
+  A new `run-engine/review.py` (`aiw review pick`) prefers the comment-carrying review
+  within a 60s same-commit window regardless of posting order; different-commit rounds
+  and genuine multi-comment re-reviews still resolve to newest, unchanged.
+- **Exit-6 (test-ownership violation) recovery could be blocked by a git safety hook
+  (#26).** The documented `git checkout <sdet_sha> -- <paths>` recovery is now paired
+  with a fallback — `git show <sdet_sha>:<path> > /tmp/<file>` plus a plain file write —
+  for environments where a discard-pattern command is blocked even scoped to one file.
+  Mirrored in the engine's own exit-6 stderr message, not just the docs.
+
 ## 1.4.1 — 2026-09-22
 
 ### Fixed

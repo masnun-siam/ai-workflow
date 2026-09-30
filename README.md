@@ -175,6 +175,11 @@ over `run-engine/config.json`. Do not create one during setup. Mention it exists
 — the defaults are stack-neutral and the override only earns its keep once they have run
 something and found a rule they want changed.
 
+A repo may also pin a top-level `test_cmd` string in `.run-issue.json` to override the
+derived test command outright — useful when the derivation can't express a repo's real
+invocation (e.g. an extra flag a host or container runner needs). An invalid value (not a
+non-empty string) is ignored with a warning; it never fails `stack up`.
+
 ## Step 7 — Report and hand back
 
 Tell the user, in this order:
@@ -205,7 +210,7 @@ comments on issues. That is the user's call on their repo, not a smoke test.
 |---|---|
 | `/ai-workflow:run-issue <n> [--lean\|--full]` | the full pipeline: issue → reviewed PR. Accepts an epic parent. |
 | `/ai-workflow:intake <source>` | normalize a Sentry link, BRD file, or vault note into an issue brief — used internally by `/gh-issue` and `/run-issue` |
-| `/ai-workflow:gh-issue` | file a well-formed issue; splits a large brief into an epic |
+| `/ai-workflow:gh-issue` | file a well-formed issue; always decomposes first — one task files one issue, two or more file a parent plus children |
 | `/ai-workflow:jira-to-gh <KEY>` | convert a Jira ticket into a GitHub issue |
 | `/ai-workflow:pr-fix-comments <pr>` | work through a PR's review comments, confirming each |
 | `/ai-workflow:issue-to-pr` | the interactive, non-unattended variant |
