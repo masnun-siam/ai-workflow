@@ -20,6 +20,28 @@ import sys
 
 OK, FAILED, USAGE = 0, 1, 2
 
+
+def finditer_unfenced(regex, body: str, pos: int = 0):
+    """Matches of `regex` in `body` whose start is not inside a ``` fence.
+
+    Same plain line-start ``` toggle as epic._find_tasks_section.
+    # ponytail: an odd number of ``` fences everything after the last opener.
+    """
+    spans, start, off = [], None, 0
+    for line in body.split("\n"):
+        if line.startswith("```"):
+            if start is None:
+                start = off
+            else:
+                spans.append((start, off + len(line)))
+                start = None
+        off += len(line) + 1
+    if start is not None:
+        spans.append((start, len(body) + 1))
+    for m in regex.finditer(body, pos):
+        if not any(a <= m.start() < b for a, b in spans):
+            yield m
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 GLOBAL_CONFIG = os.path.join(HERE, "config.json")
 OVERLAY_NAME = ".run-issue.json"

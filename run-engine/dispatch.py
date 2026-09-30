@@ -87,11 +87,56 @@ def _section_bodies(body: str) -> dict:
     return sections
 
 
+_ORIG_RE = re.compile(r"(?m)^##[ \t]+Original report[ \t]*\r?$")
+_REFINE_RE = re.compile(r"(?m)^##[ \t]+Refinement[ \t]*\r?$")
+_H12_RE = re.compile(r"(?m)^#{1,2}[ \t]")
+
+
+def _refinement_span(body: str):
+    """(start, end) of the plugin-owned Refinement block's content — from just
+    after the last `## Refinement` line (which must follow `## Original report`)
+    to the next level-1/2 heading or EOF. None if the body isn't a refined one."""
+    orig = next(finditer_unfenced(_ORIG_RE, body), None)
+    marks = [m for m in finditer_unfenced(_REFINE_RE, body) if orig and m.start() > orig.start()]
+    if not marks:
+        return None
+    start = marks[-1].end()
+    nxt = next(finditer_unfenced(_H12_RE, body, start), None)
+    return start, (nxt.start() if nxt else len(body))
+
+
+def refinement_block(body: str | None) -> str | None:
+    span = _refinement_span(body or "")
+    return None if span is None else (body or "")[span[0]:span[1]]
+
+
+def refine_body(original: str | None, refinement: str) -> str:
+    """Wrap `original` under `## Original report` (once) and set the single
+    `## Refinement` block to `refinement`. Slices strings so original bytes survive."""
+    if not (refinement or "").strip():
+        raise ValueError("refinement is empty")
+    if next(finditer_unfenced(_H12_RE, refinement), None):
+        raise ValueError("refinement must not contain level-1/2 headings (use ###)")
+    body = original or ""
+    span = _refinement_span(body)
+    if not next(finditer_unfenced(_ORIG_RE, body), None):
+        # first refine: wrap verbatim; a `## Refinement` in the reporter's text is theirs
+        body = "## Original report\n\n" + body
+        if not body.endswith("\n"):
+            body += "\n"
+        span = None
+    if span is None:
+        return body + "\n## Refinement\n\n" + refinement
+    tail = ("\n\n" + body[span[1]:]) if body[span[1]:] else ""
+    return body[:span[0]] + "\n\n" + refinement + tail
+
+
 def dor_gaps(body: str | None) -> list[str]:
     """Mechanical Definition-of-Ready screen. Returns the human-readable gap
     labels for items not satisfied. Never raises — a None/empty body simply
     reports every item as a gap."""
-    sections = _section_bodies(body or "")
+    scoped = refinement_block(body)
+    sections = _section_bodies(scoped if scoped is not None else (body or ""))
     gaps = []
     for label, pattern in DOR_ITEMS:
         matched_text = None
@@ -124,6 +169,7 @@ def lane_mode(labels: list[str]) -> str:
 import json  # noqa: E402
 import os  # noqa: E402
 import subprocess  # noqa: E402
+import sys  # noqa: E402
 
 
 def skip_reason(run_json_path: str | None, has_open_pr: bool) -> str | None:
@@ -153,7 +199,7 @@ def skip_reason(run_json_path: str | None, has_open_pr: bool) -> str | None:
 
 # --------------------------------------------------------------------------- checkouts.json registry
 
-from shared import data_dir, run_dir_for  # noqa: E402
+from shared import data_dir, finditer_unfenced, run_dir_for  # noqa: E402
 from shared import ledger_path as _ledger_path  # noqa: E402
 from stack import _write_holder  # noqa: E402
 
@@ -378,6 +424,19 @@ def cmd_plan(args) -> None:
         print(line)
 
 
+def cmd_refine_body(args) -> None:
+    """stdin: `gh issue view --json body` output; <file>: the refinement, rewritten in place."""
+    try:
+        original = json.load(sys.stdin)["body"]
+        with open(args.file, encoding="utf-8", newline="") as fh:
+            refinement = fh.read()
+        out = refine_body(original, refinement)
+    except (ValueError, KeyError, TypeError, OSError) as e:  # JSONDecodeError is a ValueError
+        die(1, f"refine-body: {e}")
+    with open(args.file, "w", encoding="utf-8", newline="") as fh:
+        fh.write(out)
+
+
 def register(sub, add) -> None:
     p = sub.add_parser("dispatch", help="resolve a roster and screen it before dispatching")
     ops = p.add_subparsers(dest="op", required=True)
@@ -391,3 +450,7 @@ def register(sub, add) -> None:
     q.add_argument("--status", help="Projects v2 Status column name")
     q.add_argument("--epic", type=int, help="parent issue number; resolves its sub-issues")
     q.set_defaults(func=cmd_plan)
+
+    r = ops.add_parser("refine-body", help="merge a refinement into an issue body (stdin JSON) and rewrite <file>")
+    r.add_argument("file", help="file holding the refinement; rewritten in place")
+    r.set_defaults(func=cmd_refine_body)

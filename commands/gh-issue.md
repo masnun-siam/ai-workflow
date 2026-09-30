@@ -1,13 +1,19 @@
 ---
 description: Create a GitHub issue with codebase context
-argument-hint: "[bug | feature | task | improvement] <details | sentry-url | file-path | vault-note>"
+argument-hint: "[bug | feature | task | improvement] <details | sentry-url | file-path | vault-note | issue-number | issue-url>"
 ---
 
 > **Paths.** `<...>` placeholders below are keys from `aiw paths` (run it; `aiw` is
 > on `PATH` via the plugin's `bin/`). Substitute the printed value; never guess a path.
 I have a ${1:-bug / feature request / task / improvement} to log as a GitHub issue.
 
-0. **Source check.** If `$@` matches one of `/intake`'s detectable source shapes — a
+0. **Source check.** First, the refine check: if the trimmed `$@` is a bare positive integer, optionally `#`-prefixed (`42` or `#42`),
+   or a `github.com/<owner>/<repo>/issues/<n>` URL whose owner/repo equals the current repo
+   (resolve it from the git remote), go to **Refine mode** (the Refine mode section at
+   the end of this file) and skip the rest of this new-issue flow, including the `/intake`
+   check below. A URL for another repo, a pull-request URL, or a number followed by more
+   text is not refine mode; carry on below.
+   Otherwise, if `$@` matches one of `/intake`'s detectable source shapes — a
    `sentry.io` URL, an existing `.md`/`.txt`/`.pdf`/`.docx` file path, or a vault note
    title that exactly matches one note — invoke `/intake $@ --whole` and wait for its `## Intake
    result` block. Use its `type:` value in place of
@@ -21,17 +27,18 @@ I have a ${1:-bug / feature request / task / improvement} to log as a GitHub iss
 
 Details: $@
 
-**HARD RULE — while executing steps 0–7 below, including everything under `4-EPIC`
+**HARD RULE — while executing steps 0–7 below, including everything under `4-EPIC` and
+Refine mode
 (note: `4-EPIC` has its own internal 1–7 numbering; that's a sub-branch of top-level
 step 4, not a separate range, and it is still fully bound by this rule), this skill only
 ever creates a GitHub issue. It never touches code.**
 - NEVER use Write, Edit, or NotebookEdit on any file in the repo.
 - NEVER run a mutating shell command (`git commit`, `git checkout -b`, package installs, formatters, codemods, etc.).
-- The ONLY writes permitted are the temp body file at `/tmp/gh-issue-body.md`, the `gh issue create` / `gh issue edit` / `gh project` calls below, and the notes-vault dump in step 7 (that's a different vault, not the repo, and goes through the `dump` skill's own confirmation).
+- The ONLY writes permitted are the temp body file at `/tmp/gh-issue-body.md` (which `aiw dispatch refine-body` also rewrites in Refine mode), the `gh issue create` / `gh issue edit` / `gh project` calls below, and the notes-vault dump in step 7 (that's a different vault, not the repo, and goes through the `dump` skill's own confirmation).
 - This holds even for a one-character fix. "It's trivial" is not an exception — the whole point of filing an issue is that a human decides whether and how to make the change.
 - If a fix is obvious from your investigation, do NOT apply it. Record it under a **Proposed Fix** section in the issue body instead (file path, symbol, and the change in prose or a fenced diff).
 - **Scope.** These constraints bind steps 0–7 of this skill only, including everything
-  under `4-EPIC`. When `/run-issue` invoked this skill, they lapse the moment the issue
+  under `4-EPIC` and Refine mode. When `/run-issue` invoked this skill, they lapse the moment the issue
   URL is returned — the caller's later phases write code by design, and this rule must
   not be carried into them.
 
@@ -245,3 +252,35 @@ Do the following:
 Return the issue URL. If `/run-issue` invoked this skill, hand control back to its
 Preflight step 3 with that issue number and continue the run; the HARD RULE above no
 longer applies.
+
+### Refine mode
+
+Entered from step 0 with issue number `<n>` in this repo. It edits that one issue; it
+never creates an issue, decomposes, assigns, or touches a project.
+
+R1. Run `gh issue view <n> --json state,title,body,labels,url,comments`. If it fails
+    (non-zero exit: nonexistent number, or a PR number), print why and stop. If `state` is
+    `CLOSED`, print `Issue #<n> is closed — refine mode does not run against closed issues.`
+    and stop, with no further calls.
+R2. Run steps 1, 2, 2.5 (pass the fetched title, body and comments as run-researcher's
+    description) and 3 unchanged, scoped to that content.
+R3. Skip steps 3.5, 5, 6 and 7.
+R4. Write only the refinement to `/tmp/gh-issue-body.md`: the body sections listed in
+    step 4, as `###` sub-headings, with the same rules (no
+    placeholders, `none` over silence, How with path:line refs). No `#` or `##` headings.
+R5. Run `gh issue view <n> --json body | aiw dispatch refine-body /tmp/gh-issue-body.md`.
+    It preserves the current body under `## Original report` and sets the single
+    `## Refinement` block. On non-zero exit, stop and report.
+R6. Run `gh issue edit <n> --body-file /tmp/gh-issue-body.md` and check its exit status.
+    On failure, stop and report, without labelling. Otherwise delete the temp file.
+R7. Ensure the label exists, then apply it:
+    ```bash
+    gh label create refined --color 0E8A16 --description "properly specified: created or refined by /gh-issue" 2>/dev/null || true
+    gh issue edit <n> --add-label refined
+    ```
+R8. Run step 4.5 against `<n>`, telling the factchecker that `## Original report` is the
+    reporter's preserved text and must not be flagged or rewritten. On `ISSUES FOUND`, fix
+    only the Refinement content: rewrite `/tmp/gh-issue-body.md` with the corrected
+    refinement and repeat R5 and R6.
+R9. Return the issue URL. If `/run-issue` invoked this skill, hand control back to its
+    Preflight step 3; the HARD RULE above no longer applies.
