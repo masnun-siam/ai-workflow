@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.8.0 — 2026-09-30
+
+### Added
+
+- **`/gh-issue` restructures issue bodies to What / Why / How and applies the `refined`
+  label (#71, #74).** `/jira-to-gh` follows the same body shape and label, including the
+  epic parent step.
+- **`/jira-to-gh` decomposes Jira tickets into a parent issue plus sub-issues (#42, #50).**
+
+### Fixed
+
+- **CI-red rails now have a fallback when `gh run rerun` is denied (#29, #34).** `run-ci`
+  and `pr-grind` retrigger with an empty commit, and document the rerun-denied
+  marker-match terminal state.
+
 ## 1.6.1 — 2026-09-26
 
 ### Added
