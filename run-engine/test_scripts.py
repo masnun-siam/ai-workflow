@@ -1552,6 +1552,34 @@ gaps = dispatch.dor_gaps(EMPTY_HEADING)
 assert any("acceptance" in g.lower() for g in gaps), gaps
 ok("a heading present with no content beneath it counts as a gap")
 
+# Issue #71: gh-issue.md's problem heading is now "Why"; "Summary" stays for legacy bodies.
+PROBLEM_HEADING = "## Problem & why"
+WHY_BODY = READY_BODY.replace(PROBLEM_HEADING, "## Why")
+assert not any(g.startswith("Problem & why") for g in dispatch.dor_gaps(WHY_BODY)), dispatch.dor_gaps(WHY_BODY)
+ok("a body whose only problem heading is '## Why' has no Problem & why gap")
+
+for heading in ("### Why", "## why", "## Why (draft)"):
+    gaps = dispatch.dor_gaps(READY_BODY.replace(PROBLEM_HEADING, heading))
+    assert not any(g.startswith("Problem & why") for g in gaps), (heading, gaps)
+ok("Why heading variants (#/##/###, case, trailing text) all satisfy Problem & why")
+
+for heading in ("## Steps and why", "## Whywhy"):
+    gaps = dispatch.dor_gaps(READY_BODY.replace(PROBLEM_HEADING, heading))
+    assert any(g.startswith("Problem & why") for g in gaps), (heading, gaps)
+ok("headings merely containing 'why' elsewhere do not satisfy Problem & why (anchored)")
+
+gaps = dispatch.dor_gaps(
+    READY_BODY.replace(
+        "## Problem & why\nUsers cannot export data, which blocks their monthly report.\n\n", "## Why\n\n"
+    )
+)
+assert any(g.startswith("Problem & why") for g in gaps), gaps
+ok("an empty '## Why' heading still reports a Problem & why gap")
+
+gaps = dispatch.dor_gaps(READY_BODY.replace(PROBLEM_HEADING, "## Summary"))
+assert not any(g.startswith("Problem & why") for g in gaps), gaps
+ok("a legacy '## Summary' body still satisfies Problem & why (backward compat)")
+
 assert dispatch.dor_gaps(READY_BODY) == [], "literal 'None' under Non-functional Constraints satisfies it"
 ok("'None' as the literal body under Non-functional Constraints satisfies that item")
 
@@ -1567,28 +1595,33 @@ with open(GH_ISSUE_MD, encoding="utf-8") as fh:
         line for line in fh if line.strip().startswith("- Body sections:")
     )
 section_names = re.findall(r"\*\*([^*]+)\*\*", body_sections_line)
-assert "Summary" in section_names and "Non-functional Constraints" in section_names, section_names
+EXPECTED_SECTIONS = [
+    "What", "Why", "Out of Scope", "Context / Affected Code", "Acceptance Criteria", "How",
+    "Non-functional Constraints", "Assumptions", "Dependencies / Blockers", "Proposed Fix", "Notes",
+]
+assert section_names == EXPECTED_SECTIONS, section_names
+ok("gh-issue.md's Body sections list is What/Why/.../How/.../Notes exactly")
+for old in ("Summary", "Specific Business Requirements", "Steps to Reproduce / Requirements", "Implementation Guide"):
+    assert old not in section_names, (old, section_names)
+ok("gh-issue.md's Body sections list contains none of the pre-#71 section names")
 gh_issue_body = "\n\n".join(f"## {name}\nSome real content for {name}." for name in section_names)
 assert dispatch.dor_gaps(gh_issue_body) == [], dispatch.dor_gaps(gh_issue_body)
 ok("a body built from gh-issue.md's own literal section headings screens ready with zero gaps")
 
-# Regression for issue #39: gh-issue.md must define an "Implementation Guide"
-# section, placed after Acceptance Criteria and before Non-functional
-# Constraints, without becoming a DoR item.
-assert "Implementation Guide" in section_names, section_names
-ok("Implementation Guide is present in gh-issue.md's Body sections list")
-
+# Issue #71 (was #39): "How" sits after Acceptance Criteria and before
+# Non-functional Constraints, without becoming a DoR item.
 assert (
     section_names.index("Acceptance Criteria")
-    < section_names.index("Implementation Guide")
+    < section_names.index("How")
     < section_names.index("Non-functional Constraints")
 ), section_names
-ok("Implementation Guide is ordered after Acceptance Criteria and before Non-functional Constraints")
+ok("How is ordered after Acceptance Criteria and before Non-functional Constraints")
 
-assert not any(re.search(pattern, "Implementation Guide", re.I) for _, pattern in dispatch.DOR_ITEMS), [
-    label for label, pattern in dispatch.DOR_ITEMS if re.search(pattern, "Implementation Guide", re.I)
-]
-ok("no DOR_ITEMS pattern matches the Implementation Guide heading, keeping it a non-DoR section")
+for heading in ("How", "What"):
+    assert not any(re.search(pattern, heading, re.I) for _, pattern in dispatch.DOR_ITEMS), [
+        label for label, pattern in dispatch.DOR_ITEMS if re.search(pattern, heading, re.I)
+    ]
+ok("no DOR_ITEMS pattern matches the How or What heading, keeping them non-DoR sections")
 
 # Regression for issue #42: jira-to-gh.md's Step 5-EPIC (mirroring gh-issue.md's
 # 4-EPIC) must define its child issue's "Body sections:" list with the exact same
@@ -1636,6 +1669,70 @@ assert referenced_step_numbers <= jira_to_gh_step_numbers, (
     jira_to_gh_step_numbers,
 )
 ok("every 'Step N' cross-reference in jira-to-gh.md's Body sections parentheticals names a real step heading")
+
+# Issue #71: jira-to-gh Step 3 mapping, Implementation Guide removal, `refined` label.
+def _slice(text, start, end):
+    i = text.index(start)
+    return text[i : text.index(end, i + len(start))]
+
+
+def _read(*parts):
+    with open(os.path.join(HERE, "..", *parts), encoding="utf-8") as fh:
+        return fh.read()
+
+
+gh_text = _read("commands", "gh-issue.md")
+jira_text = _read("commands", "jira-to-gh.md")
+planner_text = _read("agents", "run-planner.md")
+checker_text = _read("agents", "gh-issue-factchecker.md")
+
+step3 = _slice(jira_text, "## Step 3", "## Step 4")
+assert "**What**" in step3 and "**Why**" in step3, step3
+for old in ("**Summary**", "**Specific Business Requirements**", "**Steps to Reproduce / Requirements**"):
+    assert old not in step3, old
+ok("jira-to-gh.md Step 3 mapping names What and Why, not the pre-#71 sections")
+
+for name, text in (
+    ("run-planner.md", planner_text), ("gh-issue-factchecker.md", checker_text),
+    ("gh-issue.md", gh_text), ("jira-to-gh.md", jira_text),
+):
+    assert "Implementation Guide" not in text, name
+assert "How" in planner_text and "How" in checker_text
+ok("Implementation Guide is gone from both commands and both agents")
+
+assert re.search(r"MISSING How section", checker_text), "missing How must still be a named gap"
+assert "epic" in checker_text and re.search(r"path:line|path.*line", checker_text)
+ok("factchecker keeps the missing-How gap, epic exemption and path:line verification")
+
+LABEL_RE = r"gh label create refined\b[^\n]*2>/dev/null \|\| true"
+for name, text in (("gh-issue.md", gh_text), ("jira-to-gh.md", jira_text)):
+    assert re.search(LABEL_RE, text), name
+ok("both commands ensure-create the refined label")
+
+for name, sect in (
+    ("gh-issue.md step 4", _slice(gh_text, "4. Then create a GitHub issue", "### 4-EPIC")),
+    ("jira-to-gh.md Step 5", _slice(jira_text, "## Step 5", "### 5-EPIC")),
+    ("gh-issue.md 4-EPIC", gh_text[gh_text.index("### 4-EPIC"):]),
+    ("jira-to-gh.md 5-EPIC", jira_text[jira_text.index("### 5-EPIC"):]),
+):
+    m = re.search(LABEL_RE, sect)
+    assert m, (name, "no refined ensure-create")
+    first_create = sect.index("gh issue create")
+    assert m.start() < first_create, (name, "refined ensure-create must precede gh issue create")
+    assert "refined" in sect[first_create:], (name, "refined not applied at create")
+ok("refined is ensure-created before first gh issue create and applied on single and epic paths")
+
+# The epic PARENT step itself must carry `refined` (child wording must not satisfy this).
+for name, text, start, end in (
+    ("gh-issue.md 4-EPIC", gh_text, "1. Create the **parent**", "\n2. For each child"),
+    ("jira-to-gh.md 5-EPIC", jira_text, "1. Create the **parent**", "\n2. Create children"),
+):
+    step1 = _slice(text[text.index("-EPIC. Create the parent"):], start, end)
+    assert "`epic` and `refined`" in step1 or "`epic`, `refined`" in step1, (name, "parent not labelled refined")
+    assert re.search(LABEL_RE, step1), (name, "parent step lacks refined ensure-create")
+    if "gh issue create" in step1:
+        assert re.search(LABEL_RE, step1).start() < step1.index("gh issue create"), name
+ok("epic parent step ensure-creates and applies refined")
 
 # --------------------------------------------------------------------------- dispatch: lane mode
 

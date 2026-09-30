@@ -56,7 +56,7 @@ repo-wide `grep -r` when `impact` or `context` answers the same question in one 
 6. Enumerate test cases, including corner cases: empty/null input, boundary values,
    concurrency, permissions/auth, error paths, and any existing-data migration concerns
    implied by the issue. Do not skip corner cases because the issue didn't mention them.
-7. Write an implementation approach. If the issue body has a `## Implementation Guide`
+7. Write an implementation approach. If the issue body has a `## How`
    section, start from it: read its path:line/symbol references, and carry its steps,
    pattern to reuse, and verify command into the `## Implementation approach` output
    below. If the actual code has diverged from what the guide describes, state the
@@ -85,12 +85,12 @@ Return ONLY this structure as your final message (no extra prose, no code):
 (only include corner-case categories that actually apply — don't pad)
 
 ## Implementation approach
-<start from the issue's Implementation Guide if present (path:line/symbol refs, steps,
+<start from the issue's How section if present (path:line/symbol refs, steps,
 pattern, verify command); otherwise numbered steps, files likely touched, existing
 patterns to reuse>
 
 ## Risks / open questions
-<bullet list, or "none" — include any deviation between the Implementation Guide and
+<bullet list, or "none" — include any deviation between the How section and
 the actual current code, with the reason>
 ```
 

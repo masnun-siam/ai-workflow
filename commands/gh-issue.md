@@ -65,23 +65,28 @@ Do the following:
      bypassing 4-EPIC entirely, regardless of how many tasks were on the list.
 4. Then create a GitHub issue on the current repo:
    - Write the full body to `/tmp/gh-issue-body.md` using the write tool
-   - Run `gh issue create --title "..." --label "..." --body-file /tmp/gh-issue-body.md`
+   - Every issue this command creates carries the `refined` label (unconditional). Ensure it
+     exists once per run, before the first create (idempotent, cheap):
+     ```bash
+     gh label create refined --color 1D76DB --description "properly specified: passes the issue template" 2>/dev/null || true
+     ```
+   - Run `gh issue create --title "..." --label "refined,..." --body-file /tmp/gh-issue-body.md`
    - **NEVER use `--body` flag** — shell escaping breaks on backticks, pipes, quotes, newlines. Always `--body-file`.
    - Delete `/tmp/gh-issue-body.md` after the issue is created
    - Title: clear, specific, ≤72 chars
-   - Body sections: **Summary** (the problem and *why it matters* — not a restatement of the fix), **Specific Business Requirements**, **Out of Scope**, **Context / Affected Code** (file paths and symbols from step 1), **Steps to Reproduce / Requirements**, **Acceptance Criteria** (include every corner case validated in step 3 as its own explicit criterion), **Implementation Guide** (ordered numbered steps; exact path:line/symbol references reusing the GitNexus lookup from step 1; an existing pattern to copy, or "no existing pattern — net-new"; the exact test/verify command(s); a one-line done-check), **Non-functional Constraints**, **Assumptions**, **Dependencies / Blockers**, **Proposed Fix** (only if a concrete fix is obvious — describe it, do NOT apply it), **Notes**
+   - Body sections: **What** (the change: the business requirements, plus repro steps for a bug or requirements for a feature), **Why** (the problem and *why it matters* — not a restatement of the fix), **Out of Scope**, **Context / Affected Code** (file paths and symbols from step 1), **Acceptance Criteria** (include every corner case validated in step 3 as its own explicit criterion), **How** (ordered numbered steps; exact path:line/symbol references reusing the GitNexus lookup from step 1; an existing pattern to copy, or "no existing pattern — net-new"; the exact test/verify command(s); a one-line done-check), **Non-functional Constraints**, **Assumptions**, **Dependencies / Blockers**, **Proposed Fix** (only if a concrete fix is obvious — describe it, do NOT apply it), **Notes**
    - **These sections exist to clear `/run-issue`'s Gate 0.** `run-researcher` scores every issue against `<dor>` and *blocks the run* on a gap, so an issue filed without them gets bounced back to you with a `needs-info` comment. Read that file; it is six items and this section list is one-to-one with it.
      - **Out of Scope** — always at least one real entry. An issue with no stated edge is an issue whose PR grows one.
      - **Non-functional Constraints** — performance, security, authorization, data migration, backward compatibility. Write `none` deliberately where it's true; silence scores as unconsidered, `none` scores as answered.
      - **Assumptions** — anything you filled in that the issue's author didn't say, stated so they can correct it. This is the section that keeps a normalization from becoming invented scope.
      - **Dependencies / Blockers** — its own section, not a line in Notes. `none` beats silence here too.
      - Never delete one of these five to avoid writing `none`, and never ship a body containing `[bracketed placeholders]` — that is a failed run, not a draft.
-   - **Implementation Guide is not a DoR item** — it's the plan, not a readiness gate.
+   - **How is not a DoR item** — it's the plan, not a readiness gate.
      Required on every issue except an epic parent. Every step names a real path:line
      or symbol — no vague area names like "the auth code." A `[bracketed placeholder]`
      in it counts as a failed run under the same rule as the four sections above.
      When a **Proposed Fix** section is also present, it stays the literal patch;
-     Implementation Guide is the ordered plan to get there.
+     How is the ordered plan to get there.
    - Labels: bug / enhancement / feature / chore, plus scope labels (`backend`, `frontend`, `infra`) as applicable
    - **`lean` label.** `/run-issue` reads this label at init time to pick its roster
      without a human remembering to pass a flag — see `commands/run-issue.md`'s
@@ -102,8 +107,12 @@ Do the following:
 
 ### 4-EPIC. Create the parent and its children
 
-1. Create the **parent** with the BRD as its body, labelled `epic`. It is a container:
-   it needs no acceptance criteria of its own, and it is **never** labelled `lean` — a
+1. Create the **parent** with the BRD as its body, labelled `epic` and `refined`. Ensure
+   `refined` exists before this first create of the epic path (idempotent, cheap):
+   ```bash
+   gh label create refined --color 1D76DB --description "properly specified: passes the issue template" 2>/dev/null || true
+   ```
+   It is a container: it needs no acceptance criteria of its own, and it is **never** labelled `lean` — a
    container spans however many children it has, which is never "one to two files or
    symbols touched."
 2. For each child, write a **complete, independently DoR-satisfying** issue body — the
@@ -114,7 +123,7 @@ Do the following:
    Each child is one **vertical slice** — one thin end-to-end outcome, never a layer.
    Horizontal slices ("all the models") maximize file overlap, which serializes the DAG,
    and none of them has acceptance criteria that can be verified on their own. Each
-   child's Implementation Guide covers only that child's own slice — never a step that
+   child's How section covers only that child's own slice — never a step that
    touches a sibling's files or refers to a sibling's steps.
 
    Where a child depends on a sibling, add a line on its own:
@@ -129,8 +138,8 @@ Do the following:
    `#<n>` issue number already returned for child j (child j must have been created
    first — this is why order matters).
 
-   Include `epic-<parent>` in each child's `--label` list on its `gh issue create` call,
-   alongside its normal labels — apply it at creation time, not afterward. Deferring the
+   On each child's `gh issue create` call, include `epic-<parent>` and `refined` in the `--label` list,
+   alongside its normal labels — apply them at creation time, not afterward. Deferring the
    label to a later step means a child created mid-loop, before a later sibling's create
    call fails, would never carry it if the run stops before that later step runs; the
    loop can end at any child, and every child already created must be immediately

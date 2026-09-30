@@ -47,10 +47,11 @@ def dedupe(issue_numbers: list[int]) -> list[int]:
 # (label, heading-pattern-words) — the pattern tolerates #/##/### markers,
 # case, and trailing text after the heading (e.g. "(draft)"). Also matches
 # the literal section headings `commands/gh-issue.md` actually emits
-# ("Summary", "Context / Affected Code", ...) so an issue this plugin's own
+# ("Why", "Context / Affected Code", ...) so an issue this plugin's own
 # tooling generates screens ready rather than reporting permanent gaps.
+# "Summary" is still accepted for older issues and /intake bodies.
 DOR_ITEMS = [
-    ("Problem & why", r"problem\s*&?\s*why|problem\s+and\s+why|summary"),
+    ("Problem & why", r"problem\s*&?\s*why|problem\s+and\s+why|^why\b|summary"),
     ("Scope", r"scope"),
     ("Acceptance criteria", r"acceptance\s+criteria"),
     ("Affected surface", r"affected\s+surface|affected\s+code"),

@@ -55,10 +55,9 @@ Translate Jira fields to GitHub format:
 
 - **Title**: Use summary, ≤72 chars, specific and actionable
 - **Body sections**:
-  - **Summary** — from Jira description
-  - **Specific Business Requirements** — extracted acceptance criteria or "To be defined"
+  - **What** — the business requirements, plus repro steps for a bug or requirements for a feature, extracted from the description (or "To be defined")
+  - **Why** — from Jira description: the problem and why it matters
   - **Original Jira** — link back: `$1` (include Jira URL if determinable from config)
-  - **Steps to Reproduce / Requirements** — from description
   - **Acceptance Criteria** — from description or custom fields
   - **Notes** — priority, linked issues, any extra context
 - **Labels**: Map Jira issue type → `bug`/`enhancement`/`feature`/`chore`. Add scope labels from components if applicable.
@@ -86,7 +85,7 @@ Ask me up to 3 focused questions if anything is unclear or missing (e.g., accept
 Every run, after Step 4's clarifying questions — no size test gates this, it always
 happens. Use GitNexus MCP (`gitnexus_query`, `gitnexus_context`) to find the relevant
 code — execution flows, affected symbols, and files related to the ticket — the
-children need this for their Context/Affected Code and Implementation Guide
+children need this for their Context/Affected Code and How
 path:line references.
 
 Build a numbered task list seeded from Step 3's field mapping (summary, description,
@@ -116,8 +115,14 @@ Present the list in exactly one `AskUserQuestion` call with three choices, verba
 This step runs only when exactly 1 task was approved in Step 4.5, or "File as one
 issue instead" was chosen.
 
-Write the full body to `/tmp/gh-issue-body.md` using the write tool. If `lean` is one of
-the labels being applied, ensure the label exists first (idempotent, cheap — only run
+Write the full body to `/tmp/gh-issue-body.md` using the write tool. Every issue carries
+the `refined` label (unconditional); ensure it exists first (idempotent, cheap):
+
+```bash
+gh label create refined --color 1D76DB --description "properly specified: passes the issue template" 2>/dev/null || true
+```
+
+If `lean` is one of the labels being applied, ensure the label exists first (idempotent, cheap — only run
 this when the label is actually about to be applied, not on every issue):
 
 ```bash
@@ -127,7 +132,7 @@ gh label create lean --color 0E8A16 --description "small, well-specified: run le
 Then run:
 
 ```bash
-gh issue create --title "TITLE" --label "labels" --body-file /tmp/gh-issue-body.md
+gh issue create --title "TITLE" --label "refined,labels" --body-file /tmp/gh-issue-body.md
 ```
 
 **NEVER use `--body` flag** — shell escaping breaks on backticks, pipes, quotes, newlines. Always `--body-file`.
@@ -139,20 +144,21 @@ alternate path to Step 5 above, not a sub-case nested under it.
 
 1. Create the **parent** with Step 3's field mapping as its body — Step 3's mapping
    already includes an `## Original Jira` section linking back to `$1`; reuse it,
-   don't add a second one. Labels: `epic` plus the Jira-mapped type labels from Step 3 — it is
+   don't add a second one. Labels: `epic`, `refined` plus the Jira-mapped type labels from Step 3 — it is
    **never** labelled `lean`, a container spans however many children it has. It
-   needs no Implementation Guide (parent exemption). Ensure the `epic` label exists
-   first (idempotent, cheap):
+   needs no How section (parent exemption). Ensure the `epic` and `refined` labels
+   exist first (idempotent, cheap):
    ```bash
    gh label create epic --color 5319E7 --description "parent of a decomposed issue" 2>/dev/null || true
+   gh label create refined --color 1D76DB --description "properly specified: passes the issue template" 2>/dev/null || true
    ```
 2. Create children one at a time, in the approved list's dependency order. Each
    child gets a **complete, independently DoR-satisfying** body — full context
    written out, never "see parent" — with the parent's Jira context inlined.
 
-   - Body sections: **Summary** (the problem and *why it matters* — not a restatement of the fix), **Specific Business Requirements**, **Out of Scope**, **Context / Affected Code** (file paths and symbols from Step 4.5's GitNexus lookup), **Steps to Reproduce / Requirements**, **Acceptance Criteria** (include every corner case surfaced in Step 4's clarifying Q&A as its own explicit criterion), **Implementation Guide** (ordered numbered steps; exact path:line/symbol references reusing the GitNexus lookup from Step 4.5; an existing pattern to copy, or "no existing pattern — net-new"; the exact test/verify command(s); a one-line done-check), **Non-functional Constraints**, **Assumptions**, **Dependencies / Blockers**, **Proposed Fix** (only if a concrete fix is obvious — describe it, do NOT apply it), **Notes** (include the Jira key/URL here as traceability)
+   - Body sections: **What** (the change: the business requirements, plus repro steps for a bug or requirements for a feature), **Why** (the problem and *why it matters* — not a restatement of the fix), **Out of Scope**, **Context / Affected Code** (file paths and symbols from Step 4.5's GitNexus lookup), **Acceptance Criteria** (include every corner case surfaced in Step 4's clarifying Q&A as its own explicit criterion), **How** (ordered numbered steps; exact path:line/symbol references reusing the GitNexus lookup from Step 4.5; an existing pattern to copy, or "no existing pattern — net-new"; the exact test/verify command(s); a one-line done-check), **Non-functional Constraints**, **Assumptions**, **Dependencies / Blockers**, **Proposed Fix** (only if a concrete fix is obvious — describe it, do NOT apply it), **Notes** (include the Jira key/URL here as traceability)
    - Each child is one **vertical slice** — one thin end-to-end outcome, never a
-     layer. Each child's Implementation Guide covers only that child's own slice —
+     layer. Each child's How section covers only that child's own slice —
      never a step that touches a sibling's files or refers to a sibling's steps.
    - Before writing child k's body, replace each `task <j>` placeholder from Step
      4.5's list with the real `#<n>` issue number already returned for child j
@@ -162,8 +168,8 @@ alternate path to Step 5 above, not a sub-case nested under it.
      Depends on: #<n>, #<n>
      ```
      Edges may only point at siblings in this epic.
-   - Include `epic-<parent>` in each child's `--label` list on its `gh issue create`
-     call, alongside its normal labels — apply it at creation time, not afterward, so
+   - On each child's `gh issue create` call, include `epic-<parent>` and `refined` in the
+     `--label` list, alongside its normal labels — apply them at creation time, not afterward, so
      every child already created is immediately findable via
      `gh issue list --label epic-<parent>` regardless of where the loop stopped. When
      `epic-<parent>` is about to be applied for the first time this run, ensure it
