@@ -3495,4 +3495,59 @@ assert not any(l.lstrip().startswith("- Body sections:") for l in flat.splitline
 assert "`lean` is never applied here." in flat_ws
 ok("#82 keeps the #80 and #81 guards")
 
+# Issue #83
+j = _read("commands", "jira-to-gh.md")
+g = _read("commands", "gh-issue.md")
+N = lambda s: " ".join(s.split())
+g35 = N(_slice(g, "3.5. **Decompose.**", "3.6."))
+g36 = N(_slice(g, "3.6.", "4. Then create a GitHub issue"))
+s45 = _slice(j, "## Step 4.5 \u2014 Decompose", "## Step 4.6")
+s46 = _slice(j, "## Step 4.6 \u2014 Save the task list", "## Step 5 \u2014")
+
+
+def _para(t, first, last):
+    assert t.count(first) == 1 and t.count(last) == 1, (first, last)
+    i = t.index(first)
+    out = t[i : t.index(last, i) + len(last)]
+    assert len(out) > 100, first
+    return out
+
+
+def _mirror(t, first, last, dest, sub=None):
+    para = _para(t, first, last)
+    if sub:
+        para = para.replace(*sub)
+    assert para in N(dest), first
+
+
+_mirror(g35, "Every task is one layer-scoped deliverable", "rebuild the list before presenting it.", s45)
+_mirror(g35, "Present the list in exactly one `AskUserQuestion` call with two choices, verbatim:", "`commands/run-issue.md`:", s45)
+_mirror(g35, '**"Let me edit the list"**: take the free-text feedback', "No round limit.", s45)
+ok("#83 Step 4.5 mirrors rubric, choices, edit loop")
+assert ("**\"Create as shown\"**: route on the approved list's task count \u2014 1 task goes to Step 5 (single-task path); "
+        "2 or more tasks go to `5-FLAT`, in the list's dependency order, after Step 4.6 saves the list.") in N(s45)
+assert len(re.findall(r'^\s*- \*\*"', s45, re.M)) == 2
+assert "Build a numbered task list seeded from Step 3's field mapping" in N(s45)
+assert "jira-to-gh has no grilling step" in N(s45)
+assert "Use GitNexus MCP (`gitnexus_query`, `gitnexus_context`) to find the relevant code" in N(s45)
+assert j.index("## Step 4.5 \u2014 Decompose") < j.index("## Step 4.6 \u2014 Save the task list") < j.index("## Step 5 \u2014 Create GitHub issue (single-task path)")
+ok("#83 routing, two bullets, Jira intake kept, heading order")
+assert ("Runs once, right after Step 4.5's \"Create as shown\" and before its routing creates any issue. "
+        "Slug: kebab-case from the Jira ticket's summary (Step 3's title).") in N(s46)
+_mirror(g36, "Ask ONE `AskUserQuestion` (multiSelect)", "(local is always on, not a choice).", s46)
+_mirror(g36, "If `docs/tasks/<slug>.md` already exists", "the saved list is only read, not rewritten.", s46, ("`4-FLAT`", "`5-FLAT`"))
+_mirror(g36, "File shape:", "`Rubric: flagged \u2014 <limit broken>` line.", s46)
+_mirror(g36, "- **Local** (always):", "stop before creating any issue.", s46)
+assert "If the local write itself fails, stop before creating any issue." in N(s46)
+ok("#83 Step 4.6 mirrors gh-issue 3.6")
+assert not any(w in N(s45) for w in ("~8", "more-than-8", "three choices", "coarser", "bigger epic"))
+assert "File as one issue" not in N(j)
+assert "This step runs only when exactly 1 task was approved in Step 4.5." in N(_slice(j, "## Step 5 \u2014", "### 5-EPIC"))
+assert "epic" not in s45.lower() and "epic" not in s46.lower()
+jl = j.splitlines()
+assert jl[22] == "- Issue type (bug, story, task, epic)"
+assert jl[27] == "- Linked issues / parent epic"
+assert "epic" not in g.lower()
+ok("#83 old guard gone, Step 5 single-task, epic lines untouched")
+
 print(f"\n{passed} checks passed")
