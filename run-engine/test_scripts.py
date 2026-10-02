@@ -2363,9 +2363,35 @@ assert "3.5. **Decompose.**" in gh_issue_text, "expected the renamed step headin
 assert "Epic check" not in gh_issue_text, "old 'Epic check' heading text must be gone"
 ok("commands/gh-issue.md step 3.5 is headed 'Decompose.' and no longer says 'Epic check'")
 
-for choice in ("Create as shown", "Let me edit the list", "File as one issue instead"):
-    assert choice in gh_issue_text, f"missing AskUserQuestion choice label: {choice!r}"
-ok("commands/gh-issue.md contains all three AskUserQuestion choice labels verbatim")
+step35 = " ".join(gh_issue_text[gh_issue_text.index("3.5. **Decompose.**"):gh_issue_text.index("4. Then create a GitHub issue")].split())
+
+for choice in ("Create as shown", "Let me edit the list"):
+    assert choice in step35, f"step 3.5 missing AskUserQuestion choice label: {choice!r}"
+assert "File as one issue instead" not in gh_issue_text, "'File as one issue instead' choice must be gone"
+assert "two choices" in step35 and "three choices" not in step35, "step 3.5 must offer two choices"
+ok("commands/gh-issue.md step 3.5 offers exactly two choices (Create as shown / Let me edit the list)")
+
+for unit in ("DB migration", "service logic", "API endpoint", "UI unit"):
+    assert unit in step35, f"step 3.5 rubric missing layer unit: {unit!r}"
+assert "request" in step35 and "resource" in step35, "API endpoint unit must mention request and resource"
+ok("commands/gh-issue.md step 3.5 rubric names the four layer units")
+
+assert "production files" in step35 and "3" in step35, "rubric must cap production files at 3"
+assert re.search(r"1[\u2013-]4 acceptance criteria", step35), "rubric must say 1-4 acceptance criteria"
+assert "one verify command" in step35 and "dependency" in step35
+ok("commands/gh-issue.md step 3.5 rubric states size limits (files, ACs, verify command, dependency)")
+
+assert "split the failing task" in step35 and "coarser" not in step35
+ok("commands/gh-issue.md step 3.5 splits a failing task rather than going coarser")
+
+assert "~8" not in step35 and "more-than-8" not in step35, "old ~8 threshold must be gone"
+ok("commands/gh-issue.md step 3.5 no longer uses the ~8 threshold")
+
+assert "1 task" in step35 and "step 4" in step35 and "4-FLAT" in step35 and "4-EPIC" not in step35
+ok("commands/gh-issue.md step 3.5 routes 1 task to step 4 / 4-FLAT, not 4-EPIC")
+
+assert "No round limit" in step35 and re.search(r"re-apply the (layer )?rubric", step35, re.I)
+ok("commands/gh-issue.md step 3.5 keeps 'No round limit' and re-applies the rubric on edit")
 
 epic_section_start = gh_issue_text.index("### 4-EPIC")
 epic_section_end_match = re.search(r"^### (?!4-EPIC)", gh_issue_text[epic_section_start + 1:], re.MULTILINE)
