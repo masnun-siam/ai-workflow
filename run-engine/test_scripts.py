@@ -3215,10 +3215,11 @@ assert "only when" in _hr79.lower() and ("sole" in _hr79.lower() or "nothing els
 ok("gh-issue.md HARD RULE carves out docs/tasks/ (Obsidian/wiki only when chosen) as the sole exception")
 
 for needle in ("NEVER use Write, Edit, or NotebookEdit", "NEVER run a mutating shell command",
-               "/tmp/gh-issue-body.md", "/dump", '"It\'s trivial" is not an exception', "**Scope.**"):
-    assert needle in _hr79 or needle in _g79, f"earlier HARD RULE text lost: {needle!r}"
-assert "/dump" in _hr79 and "**Scope.**" in _g79
-ok("gh-issue.md HARD RULE keeps every earlier prohibition")
+               "/tmp/gh-issue-body.md", "/dump", '"It\'s trivial" is not an exception'):
+    assert needle in _hr79, f"earlier HARD RULE text lost: {needle!r}"
+ok("gh-issue.md HARD RULE block keeps every earlier prohibition")
+assert "**Scope.**" in _g79
+ok("gh-issue.md still has its Scope paragraph (whole-file check)")
 
 _i35 = _g79.index("3.5. **Decompose.**")
 assert "3.6." in _g79[_i35:], "step 3.6 missing"
