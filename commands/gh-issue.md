@@ -48,21 +48,24 @@ Do the following:
    (from step 1's GitNexus lookup), and `Depends on: task <k>` placeholder edges (using
    ordinals — the real issue numbers don't exist yet).
 
-   More than ~8 tasks is a decomposition problem, not a bigger epic: create nothing and
-   don't ask yet — say so, then rebuild the list coarser once before presenting it.
+   Every task is one layer-scoped deliverable: a DB migration, service logic, an API
+   endpoint (its request and resource count as one unit), or one UI unit. Each task
+   touches 3 or fewer production files (tests not counted), has 1-4 acceptance
+   criteria, has one verify command, and adds no new dependency. Non-layered work (docs,
+   config) uses the same limits, split by file or section. If any task fails the rubric,
+   create nothing and don't ask yet: split the failing task and rebuild the list before
+   presenting it.
 
-   Present the list in exactly one `AskUserQuestion` call with three choices, verbatim:
-   **"Create as shown"**, **"Let me edit the list"**, **"File as one issue instead"**.
+   Present the list in exactly one `AskUserQuestion` call with two choices, verbatim:
+   **"Create as shown"** and **"Let me edit the list"**.
    Style this like Gate 1's revise loop in `commands/run-issue.md`:
 
    - **"Let me edit the list"**: take the free-text feedback, revise the list, re-apply
-     the more-than-8 guard, and present the same question again. Loop until one of the
-     other two choices is picked. No round limit.
-   - **"Create as shown"**: route on the approved list's task count, not on the choice
-     itself — 1 task goes to step 4 (single issue, unchanged); 2 or more tasks go to
-     4-EPIC, in the list's dependency order.
-   - **"File as one issue instead"**: go to step 4 with the full grilled requirements,
-     bypassing 4-EPIC entirely, regardless of how many tasks were on the list.
+     the rubric, and present the same question again. Loop until **"Create as shown"**
+     is picked. No round limit.
+   - **"Create as shown"**: route on the approved list's task count — 1 task goes to
+     step 4 (single issue, unchanged); 2 or more tasks go to `4-FLAT`
+     ("### 4-FLAT. Create the flat issues"), in the list's dependency order.
 4. Then create a GitHub issue on the current repo:
    - Write the full body to `/tmp/gh-issue-body.md` using the write tool
    - Every issue this command creates carries the `refined` label (unconditional). Ensure it
