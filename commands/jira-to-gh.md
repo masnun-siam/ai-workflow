@@ -95,25 +95,65 @@ that role. Each task has: a title, the one outcome it delivers, the files/symbol
 expected to touch, and `Depends on: task <k>` placeholder edges (using ordinals — the
 real issue numbers don't exist yet).
 
-More than ~8 tasks is a decomposition problem, not a bigger epic: create nothing and
-don't ask yet — say so, then rebuild the list coarser once before presenting it.
+Every task is one layer-scoped deliverable: a DB migration, service logic, an API
+endpoint (its request and resource count as one unit), or one UI unit. Each task
+touches 3 or fewer production files (tests not counted), has 1-4 acceptance
+criteria, has one verify command, and adds no new dependency. If an endpoint unit
+(controller, request, resource, routes) needs more than 3 production files, split it
+by file group (e.g. route+controller, then request+resource) rather than waiving the
+cap. Non-layered work (docs, config) uses the same limits, split by file or section. If any task fails the rubric,
+create nothing and don't ask yet: split the failing task and rebuild the list before presenting it.
 
-Present the list in exactly one `AskUserQuestion` call with three choices, verbatim:
-**"Create as shown"**, **"Let me edit the list"**, **"File as one issue instead"**.
+Present the list in exactly one `AskUserQuestion` call with two choices, verbatim:
+**"Create as shown"** and **"Let me edit the list"**.
+Style this like Gate 1's revise loop in `commands/run-issue.md`:
 
 - **"Let me edit the list"**: take the free-text feedback, revise the list, re-apply
-  the more-than-8 guard, and present the same question again. Loop until one of the
-  other two choices is picked. No round limit.
-- **"Create as shown"**: route on the approved list's task count, not on the choice
-  itself — 1 task goes to Step 5 (single, below); 2 or more tasks go to Step 5-EPIC,
-  in the list's dependency order.
-- **"File as one issue instead"**: go to Step 5 with the full Step 3 mapping,
-  bypassing Step 5-EPIC entirely, regardless of how many tasks were on the list.
+  the rubric (a requested merge that would break a limit is declined, with the reason
+  shown), and present the same question again. Loop until **"Create as shown"**
+  is picked. No round limit.
+- **"Create as shown"**: route on the approved list's task count — 1 task goes to Step 5 (single-task path); 2 or more tasks go to `5-FLAT`, in the list's dependency order, after Step 4.6 saves the list.
+
+## Step 4.6 — Save the task list
+
+Runs once, right after Step 4.5's "Create as shown" and before its routing creates any issue. Slug: kebab-case from the Jira ticket's summary (Step 3's title).
+
+Ask ONE `AskUserQuestion` (multiSelect) that shows the
+proposed slug as the recommended answer (the user edits it via Other) and offers the optional destinations Obsidian and/or GitHub wiki (local is always
+on, not a choice).
+
+If `docs/tasks/<slug>.md` already exists, stop and ask (new slug, skip the save, or **"Resume this list"**); never
+overwrite silently. Show the existing file's title, source and how many `Issue:` slots are filled, so the user can tell a resume from an unrelated collision. **"Resume this list"** leaves the file as is and goes to `5-FLAT`, which then uses the saved list instead of the one just approved. Resume skips the Obsidian/wiki destination writes: the saved list is only read, not rewritten.
+
+File shape: a header (title, source, date, owner/repo), then one block per task in the
+approved dependency order: `## Task <n> — <title>` (n is the task's sequence number),
+Outcome, Files/symbols, Acceptance criteria, Verify command, `Depends on: task <k>` (or
+none), and `Issue: —` (the issue-number slot, filled in later). Only when a task genuinely cannot be split further, and so still fails
+the size rubric, it gets a `Rubric: flagged — <limit broken>` line.
+
+- **Local** (always): write via the Write tool, creating `docs/tasks/` on demand. Never
+  `git add` or commit it.
+- **Obsidian** (only if chosen): resolve `05-Work/<Project>/<Feature>/` the way `/dump`
+  does (a new feature folder needs explicit OK). First run
+  `obsidian vault=notes read path="05-Work/<Project>/<Feature>/Tasks.md"`; it prints
+  `Error: ... not found` when missing. If the note exists, stop and ask (new name such
+  as `Task List.md`, or skip Obsidian); never overwrite. Then
+  `obsidian vault=notes create path="05-Work/<Project>/<Feature>/Tasks.md" ...`, tags via
+  `property:set`, and a `## Related` append per `skills/dump/SKILL.md` "Tagging and
+  linking". Never plain file writes.
+- **Wiki** (only if chosen): ask a separate "push the task list to the wiki?"
+  confirmation. If yes, shallow-clone `.wiki.git` into the scratchpad, write
+  `Tasks-<Title-With-Dashes>.md` (stop and ask if it exists), make a plain commit, and
+  push. Never `--no-verify`. A repo with no wiki counts as a failed destination; do not
+  create one.
+- **Failures**: an Obsidian or wiki failure keeps the local file. Report each
+  destination on its own line with its path/URL, or `failed — <reason>` naming the
+  destination by name, then continue. If the local write itself fails, stop before
+  creating any issue.
 
 ## Step 5 — Create GitHub issue (single-task path)
 
-This step runs only when exactly 1 task was approved in Step 4.5, or "File as one
-issue instead" was chosen.
+This step runs only when exactly 1 task was approved in Step 4.5.
 
 Write the full body to `/tmp/gh-issue-body.md` using the write tool. Every issue carries
 the `refined` label (unconditional); ensure it exists first (idempotent, cheap):
