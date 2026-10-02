@@ -3313,4 +3313,70 @@ assert "for that one path only" in _hr80 and "no other repo file" in _hr80
 assert not re.search(r"edit(ed)?\s+(freely|any|anything)", _hr80, re.I) and "freely" not in _hr80
 ok("HARD RULE edit exception is narrow: Issue: slots in the one saved file only")
 
+# Issue #81: resume from the saved list and partial-failure retry in gh-issue.md.
+_g81 = _read("commands", "gh-issue.md")
+flat = _slice(_g81, "### 4-FLAT", "\n4.5.")
+flat_ws = " ".join(flat.split())
+s36 = " ".join(_slice(_g81, "3.6.", "4. Then create a GitHub issue").split())
+_choices = 'exactly these two choices: **"Retry the missing ones"**, **"Stop here"**'
+assert _choices in flat_ws and "AskUserQuestion" in flat_ws
+assert _g81.count(_choices) == 1
+assert _g81.count('**"Stop here"**') >= 1 and _g81.count('**"Retry the missing ones"**') >= 1
+ok("4-FLAT failure prompt offers exactly the two choices Retry the missing ones / Stop here")
+
+assert flat_ws.index("Check each create's and each write-back's exit status") < flat_ws.index('**"Retry the missing ones"**')
+assert flat.index("gh issue create") < flat_ws.index('**"Retry the missing ones"**')
+assert flat_ws.index("gh issue create") < flat_ws.index('**"Stop here"**')
+ok("4-FLAT failure prompt sits after the create call inside the failure sub-step")
+
+assert "re-enter the loop at the failed task" in flat_ws
+assert "reusing the already-known issue numbers of earlier tasks for their `Depends on:` lines" in flat_ws
+assert "never re-create a task that already has an issue" in flat_ws
+ok("4-FLAT Retry re-enters at the failed task and never re-creates an existing issue")
+
+assert '**"Stop here"**: end the run and report the partial state' in flat_ws
+assert "the created issues (number and URL)" in flat_ws and "the missing ones (by planned title)" in flat_ws
+ok("4-FLAT Stop ends the run and reports created and missing tasks")
+
+for _p in ('**"Resume this list"**', "read it, show which tasks have no issue number yet",
+           "create only tasks without an issue number, in list order",
+           "reuse the existing `Issue: #<n>` numbers for their `Depends on:` lines"):
+    assert _p in flat_ws, _p
+assert flat_ws.index("Resume this list") < flat_ws.index("gh label create refined")
+ok("4-FLAT resume uses the saved list and runs in the preflight before any create")
+
+for _p in ('**"Resume this list"**', "never overwrite silently", "filled"):
+    assert _p in s36, _p
+assert "overwrit" in s36 and "ask" in s36
+ok("step 3.6 offers Resume this list on a collision and never overwrites silently")
+
+assert "If every slot is filled, create nothing" in flat_ws
+assert "or already in its `Issue:` slot" in flat_ws
+assert "Depends on: task <k>" in flat and "Depends on: #<n>" in flat and "earlier" in flat
+ok("4-FLAT resume of a complete list creates nothing and reuses slot numbers for dependencies")
+
+assert "gh issue list --label prd-<slug> --state all --limit 200" in flat
+assert "Task <n> of docs/tasks/<slug>.md" in flat_ws
+assert "instead of creating it again" in flat_ws
+assert "gets its write-back retried, not a second create" in flat_ws
+assert flat_ws.index("gh issue list --label prd-<slug>") < flat_ws.index("gh label create refined")
+ok("4-FLAT resume and retry never duplicate a created-but-unrecorded issue")
+
+assert "Never close or delete an issue already created" in flat_ws
+assert "a partial list is a recoverable state" in flat_ws
+assert "never delete created issues" in flat_ws
+assert not re.search(r"gh issue (close|delete)", _g81)
+ok("4-FLAT never closes or deletes created issues")
+
+assert "three choices" not in flat_ws
+assert "Retry the missing one\"" not in _g81 and "Stop now" not in _g81
+ok("4-FLAT choice labels have no variants")
+
+assert "epic" not in _g81.lower()
+assert flat.count("gh label create refined") == 1
+assert "already exists, stop and ask for a new slug" in flat_ws
+assert "Skip when step 3.6 saved no local file" in flat_ws
+assert "edited only to fill `Issue:` slots in `4-FLAT`" in " ".join(_slice(_g81, "**HARD RULE", "Do the following:").split())
+ok("#81 keeps the #80 regression guards")
+
 print(f"\n{passed} checks passed")
