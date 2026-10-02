@@ -3255,7 +3255,7 @@ _lab = [l for l in flat.splitlines() if "--label" in l and "gh issue create" in 
 assert any("refined" in l and "prd-<slug>" in l for l in _lab), _lab
 ok("4-FLAT creates with --label refined,prd-<slug> and --body-file, never --body")
 
-_prd = re.search(r"gh label create prd-<slug>\b[^\n]*2>/dev/null \|\| true", flat)
+_prd = re.search(r"gh label create prd-<slug>\s[^\n]*2>/dev/null \|\| true", flat)
 assert _prd and _prd.start() < _create
 _ref = re.search(LABEL_RE, flat)
 assert _ref and _ref.start() < _create
