@@ -3593,9 +3593,11 @@ ok("#84 Step 3 note, Step 6 target and closing paragraph")
 heads = set(re.findall(r"^#{1,3} Step (\d+(?:\.\d+)?)", jira_cmd, re.M))
 assert set(re.findall(r"\bStep (\d+(?:\.\d+)?)", jira_cmd)) <= heads
 assert "Step 5-" not in jira_cmd
-assert set(re.findall(r"`(\d+-[A-Z]+)`", jira_cmd)) == {"5-FLAT"}
+# 4-FLAT is legitimately named once, in the 5-FLAT scope note (gh-issue.md's flat flow); 5-FLAT is the only other backticked ref.
+assert set(re.findall(r"`(\d+-[A-Z]+)`", jira_cmd)) == {"4-FLAT", "5-FLAT"}
+assert jira_cmd.count("4-FLAT") == 1 and "4-FLAT" in jf
 assert not re.search(r"(?<![-\w])step \d", jira_cmd)
-ok("#84 whole-file Step N and 5-FLAT references resolve")
+ok("#84 whole-file Step N refs resolve; backticked N-XXX refs are only 5-FLAT plus the single 4-FLAT scope-note mention")
 for bad in ("5-EPIC", "4-EPIC", "aiw epic split", "epic-<parent>", "gh label create epic"):
     assert bad not in jira_cmd, bad
 assert not any("--label" in l and "epic" in l.lower() for l in jira_cmd.splitlines())
