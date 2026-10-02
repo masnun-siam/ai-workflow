@@ -3496,16 +3496,15 @@ assert "`lean` is never applied here." in flat_ws
 ok("#82 keeps the #80 and #81 guards")
 
 # Issue #83
-j = _read("commands", "jira-to-gh.md")
-g = _read("commands", "gh-issue.md")
-N = lambda s: " ".join(s.split())
-g35 = N(_slice(g, "3.5. **Decompose.**", "3.6."))
-g36 = N(_slice(g, "3.6.", "4. Then create a GitHub issue"))
-s45 = _slice(j, "## Step 4.5 \u2014 Decompose", "## Step 4.6")
-s46 = _slice(j, "## Step 4.6 \u2014 Save the task list", "## Step 5 \u2014")
+jira_cmd = _read("commands", "jira-to-gh.md")
+gh_cmd = _read("commands", "gh-issue.md")
+gh35 = _n(_slice(gh_cmd, "3.5. **Decompose.**", "3.6."))
+gh36 = _n(_slice(gh_cmd, "3.6.", "4. Then create a GitHub issue"))
+s45 = _slice(jira_cmd, "## Step 4.5 \u2014 Decompose", "## Step 4.6")
+s46 = _slice(jira_cmd, "## Step 4.6 \u2014 Save the task list", "## Step 5 \u2014")
 
 
-def _para(t, first, last):
+def _span(t, first, last):
     assert t.count(first) == 1 and t.count(last) == 1, (first, last)
     i = t.index(first)
     out = t[i : t.index(last, i) + len(last)]
@@ -3513,41 +3512,44 @@ def _para(t, first, last):
     return out
 
 
-def _mirror(t, first, last, dest, sub=None):
-    para = _para(t, first, last)
+def _mirror_span(src, dest, first, last, sub=None):
+    """Whole-span equality: the mirrored span must be identical on both sides."""
+    want = _span(src, first, last)
     if sub:
-        para = para.replace(*sub)
-    assert para in N(dest), first
+        want = want.replace(*sub)
+    assert want == _span(dest, first, last), first
 
 
-_mirror(g35, "Every task is one layer-scoped deliverable", "rebuild the list before presenting it.", s45)
-_mirror(g35, "Present the list in exactly one `AskUserQuestion` call with two choices, verbatim:", "`commands/run-issue.md`:", s45)
-_mirror(g35, '**"Let me edit the list"**: take the free-text feedback', "No round limit.", s45)
-ok("#83 Step 4.5 mirrors rubric, choices, edit loop")
+s45n, s46n = _n(s45), _n(s46)
+_mirror_span(gh35, s45n, "Every task is one layer-scoped deliverable", "No round limit.")
+ok("#83 Step 4.5 mirrors rubric, choices, edit loop (whole span)")
 assert ("**\"Create as shown\"**: route on the approved list's task count \u2014 1 task goes to Step 5 (single-task path); "
-        "2 or more tasks go to `5-FLAT`, in the list's dependency order, after Step 4.6 saves the list.") in N(s45)
+        "2 or more tasks go to `5-FLAT`, in the list's dependency order, after Step 4.6 saves the list.") in s45n
 assert len(re.findall(r'^\s*- \*\*"', s45, re.M)) == 2
-assert "Build a numbered task list seeded from Step 3's field mapping" in N(s45)
-assert "jira-to-gh has no grilling step" in N(s45)
-assert "Use GitNexus MCP (`gitnexus_query`, `gitnexus_context`) to find the relevant code" in N(s45)
-assert j.index("## Step 4.5 \u2014 Decompose") < j.index("## Step 4.6 \u2014 Save the task list") < j.index("## Step 5 \u2014 Create GitHub issue (single-task path)")
+assert "Build a numbered task list seeded from Step 3's field mapping" in s45n
+assert "jira-to-gh has no grilling step" in s45n
+assert "Use GitNexus MCP (`gitnexus_query`, `gitnexus_context`) to find the relevant code" in s45n
+assert "each task's issue needs this for its Context / Affected Code and How path:line references" in s45n
+assert not re.search(r"child", s45 + s46, re.I)
+assert jira_cmd.index("## Step 4.5 \u2014 Decompose") < jira_cmd.index("## Step 4.6 \u2014 Save the task list") < jira_cmd.index("## Step 5 \u2014 Create GitHub issue (single-task path)")
 ok("#83 routing, two bullets, Jira intake kept, heading order")
 assert ("Runs once, right after Step 4.5's \"Create as shown\" and before its routing creates any issue. "
-        "Slug: kebab-case from the Jira ticket's summary (Step 3's title).") in N(s46)
-_mirror(g36, "Ask ONE `AskUserQuestion` (multiSelect)", "(local is always on, not a choice).", s46)
-_mirror(g36, "If `docs/tasks/<slug>.md` already exists", "the saved list is only read, not rewritten.", s46, ("`4-FLAT`", "`5-FLAT`"))
-_mirror(g36, "File shape:", "`Rubric: flagged \u2014 <limit broken>` line.", s46)
-_mirror(g36, "- **Local** (always):", "stop before creating any issue.", s46)
-assert "If the local write itself fails, stop before creating any issue." in N(s46)
+        "Slug: kebab-case from the Jira ticket's summary (Step 3's title).") in s46n
+assert ("This step is skipped when exactly 1 task was approved: Step 5 files it as a single issue "
+        "and no task list is saved.") in s46n
+_mirror_span(gh36, s46n, "Ask ONE `AskUserQuestion` (multiSelect)", "stop before creating any issue.", ("`4-FLAT`", "`5-FLAT`"))
+assert "stop before creating any issue. Remove any temp files this skill created before stopping." in s46n
+assert "\n\nRemove any temp files this skill created before stopping." in s46 and s46.rstrip().endswith("before stopping.")
+assert s46.count("Remove any temp files this skill created before stopping.") == 1
 ok("#83 Step 4.6 mirrors gh-issue 3.6")
-assert not any(w in N(s45) for w in ("~8", "more-than-8", "three choices", "coarser", "bigger epic"))
-assert "File as one issue" not in N(j)
-assert "This step runs only when exactly 1 task was approved in Step 4.5." in N(_slice(j, "## Step 5 \u2014", "### 5-EPIC"))
+assert not any(w in s45n for w in ("~8", "more-than-8", "three choices", "coarser", "bigger epic"))
+assert "File as one issue" not in _n(jira_cmd)
+assert "This step runs only when exactly 1 task was approved in Step 4.5." in _n(_slice(jira_cmd, "## Step 5 \u2014", "### 5-EPIC"))
 assert "epic" not in s45.lower() and "epic" not in s46.lower()
-jl = j.splitlines()
+jl = jira_cmd.splitlines()
 assert jl[22] == "- Issue type (bug, story, task, epic)"
 assert jl[27] == "- Linked issues / parent epic"
-assert "epic" not in g.lower()
+assert "epic" not in gh_cmd.lower()
 ok("#83 old guard gone, Step 5 single-task, epic lines untouched")
 
 print(f"\n{passed} checks passed")
