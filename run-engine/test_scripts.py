@@ -3251,7 +3251,7 @@ ok("gh-issue.md has the 4-FLAT heading exactly once")
 
 _create = flat.index("gh issue create")
 assert "--body-file /tmp/gh-issue-body.md" in flat and "--body " not in flat
-_lab = [l for l in flat.splitlines() if "--label" in l and "gh issue create" in l or "--label" in l]
+_lab = [l for l in flat.splitlines() if "--label" in l and ("gh issue create" in l or "--label" in l)]
 assert any("refined" in l and "prd-<slug>" in l for l in _lab), _lab
 ok("4-FLAT creates with --label refined,prd-<slug> and --body-file, never --body")
 
@@ -3279,7 +3279,7 @@ ok("4-FLAT creates issues one at a time in list order")
 
 assert "gh label create lean" not in flat
 assert not any("--label" in l and "lean" in l for l in flat.splitlines())
-assert re.search(r"never apply `?lean", flat, re.I) or re.search(r"`lean`[^.\n]*never", flat_ws, re.I)
+assert "`lean` is never applied here." in flat_ws
 ok("4-FLAT never applies lean")
 
 for bad in ("4-EPIC", "aiw epic split", "project-board", "sub_issues", "epic-<parent>"):
@@ -3294,5 +3294,23 @@ ok("gh-issue.md HARD RULE names 4-FLAT and the Issue: slot write-back")
 
 assert not any(l.lstrip().startswith("- Body sections:") for l in flat.splitlines())
 ok("4-FLAT adds no '- Body sections:' line")
+
+# Issue #80 review: pin each 4-FLAT rule sentence so a single-edit reversal fails.
+assert flat_ws.index("Preflight, before anything is created") < flat_ws.index("gh label create refined")
+assert "check every `Depends on: task <j>` in task k has j < k; otherwise stop, report the offending task" in flat_ws
+ok("4-FLAT preflight rejects forward Depends on edges before creating anything")
+assert "already exists, stop and ask for a new slug" in flat_ws
+ok("4-FLAT stops for a new slug when step 3.6 skipped the save (collision)")
+assert "never `replace_all` and never Edit on that line alone" in flat_ws
+assert "Edit with an `old_string` that starts at the task's own `## Task <k> \u2014 <title>` heading and runs through its `Issue: \u2014` line (unique), setting `Issue: #<n>`" in flat_ws
+assert "Right after each successful create" in flat_ws and "Skip when step 3.6 saved no local file" in flat_ws
+ok("4-FLAT write-back is a per-task heading-anchored Edit, never replace_all")
+assert "Check each create's and each write-back's exit status. On failure, stop like a failed create" in flat_ws
+assert "never delete created issues" in flat_ws and "unrecorded in the file" in flat_ws
+ok("4-FLAT stops on a failed create or write-back and never deletes created issues")
+assert "edited only to fill `Issue:` slots in `4-FLAT`" in _hr80
+assert "for that one path only" in _hr80 and "no other repo file" in _hr80
+assert not re.search(r"edit(ed)?\s+(freely|any|anything)", _hr80, re.I) and "freely" not in _hr80
+ok("HARD RULE edit exception is narrow: Issue: slots in the one saved file only")
 
 print(f"\n{passed} checks passed")
