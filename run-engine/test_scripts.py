@@ -3390,4 +3390,90 @@ assert flat_ws.count("--json number,url,title,body") == 2 and "whose title also 
 assert "the `j < k` check runs on the saved list" in flat_ws
 ok("#81 pins resume-as-is, two-choice bullets, new-slug carve-out, retry duplicate guard, title match, saved-list edge check")
 
+# Issue #82: per-issue factcheck, one-time assignees/project, ordered list return.
+_n = lambda t: " ".join(t.split())
+g = _read("commands", "gh-issue.md")
+flat = _slice(g, "### 4-FLAT", "\n4.5.")
+flat_ws = _n(flat)
+s4 = _n(_slice(g, "4. Then create a GitHub issue", "### 4-FLAT"))
+s45 = _n(_slice(g, "\n4.5.", "\n5. Assign"))
+s5 = _n(_slice(g, "\n5. Assign", "\n6. Add to a GitHub Project"))
+s6 = _n(_slice(g, "\n6. Add to a GitHub Project", "\n7. Dump"))
+close = _n(g[g.rindex("Return the issue URL"):])
+
+for _p in ("once per issue created in this run (one from step 4, each one from `4-FLAT`)",
+           "each time with just that issue's number/URL and `owner/repo`"):
+    assert _p in s45, _p
+ok("#82 factcheck runs once per created issue")
+
+for _p in ("a `Source:` line in the Notes section pointing outside the repo",
+           "is expected traceability from `/intake`", "PASS", "ISSUES FOUND",
+           "gh issue edit <n> --body-file /tmp/gh-issue-body.md",
+           "Do not silently ignore a flagged discrepancy"):
+    assert _p in s45, _p
+ok("#82 factcheck keeps its existing rules")
+
+for _p in ("Ask this once per run, never per issue, and apply the chosen logins to every issue this run creates",
+           "multiSelect: true", "(as `@me`) recommended first", "on every `gh issue create`"):
+    assert _p in s5, _p
+assert s5.count("AskUserQuestion") == 1
+ok("#82 assignees are asked once and applied to every create")
+
+for _p in ("Ask the project and field questions once per run and apply the answers to every issue this run creates",
+           "Add every issue to each chosen project at creation time",
+           "Set each chosen field on every issue"):
+    assert _p in s6, _p
+ok("#82 projects are asked once and applied to every issue")
+
+for _p in ("If any `gh project` call fails, don't abort", "keep going with the remaining issues and fields",
+           "Report each affected issue URL and state plainly which fields couldn't be set and why",
+           "gh auth refresh -s project"):
+    assert _p in s6, _p
+ok("#82 a project failure does not abort the remaining issues")
+
+assert "Verify project fields landed on every issue with `gh issue view <n> --repo <owner>/<repo> --json projectItems`" in s6
+assert "Do NOT verify by paginating `gh project item-list`" in s6
+ok("#82 project fields are verified on every issue")
+
+assert "Zero projects \u2192 skip this step entirely, go straight to returning the URL(s)." in s6
+ok("#82 a repo with no projects is skipped silently")
+
+_ask = "Ask step 5's assignee question and step 6's project and field questions here, once for the whole list and before the first create"
+assert _ask in flat_ws
+assert flat_ws.index("once for the whole list") < flat_ws.index("gh label create refined")
+assert flat_ws.index("once for the whole list") < flat_ws.index("gh issue create")
+_pre = "on the `4-FLAT` path in its sub-step 0 preflight, before the first create"
+assert _pre in s5 and _pre in s6
+ok("#82 questions are asked in the preflight before the first create")
+
+assert "skip them when nothing is left to create" in flat_ws
+ok("#82 nothing left to create means no questions")
+
+_add = "Add step 5's `--assignee` flags and step 6's `--project` flags from the preflight answers to every create."
+assert _add in flat_ws and flat_ws.index(_add) > flat_ws.index("gh issue create")
+ok("#82 preflight answers reach every flat create")
+
+for _p in ("When `4-FLAT` ran (2 or more tasks), return the ordered list of issue URLs, one per task in list order",
+           "hand control back to its Preflight step 3",
+           "with that ordered list of issue URLs for 2 or more"):
+    assert _p in close, _p
+ok("#82 the ordered list is returned and handed back")
+
+assert "Return the issue URL when step 4 created one issue" in close
+assert "with that issue number for one issue" in close
+assert 'gh issue create --title "..." --label "refined,..." --body-file /tmp/gh-issue-body.md' in s4
+assert "--assignee" not in s4 and "--project" not in s4
+_sp = "on the step 4 path before its create"
+assert _sp in s5 and _sp in s6
+ok("#82 single-issue path is unchanged")
+
+assert "epic" not in g.lower()
+assert not re.search(r"gh issue (close|delete)", g)
+assert "--body " not in flat
+assert flat.count("gh label create refined") == 1
+assert g.count('exactly these two choices: **"Retry the missing ones"**, **"Stop here"**') == 1
+assert not any(l.lstrip().startswith("- Body sections:") for l in flat.splitlines())
+assert "`lean` is never applied here." in flat_ws
+ok("#82 keeps the #80 and #81 guards")
+
 print(f"\n{passed} checks passed")
