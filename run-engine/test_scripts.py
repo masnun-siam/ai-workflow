@@ -1623,34 +1623,34 @@ for heading in ("How", "What"):
     ]
 ok("no DOR_ITEMS pattern matches the How or What heading, keeping them non-DoR sections")
 
-# Regression for issue #42: jira-to-gh.md's Step 5-EPIC (mirroring gh-issue.md's
-# 4-EPIC) must define its child issue's "Body sections:" list with the exact same
+# Regression for issue #42: jira-to-gh.md's Step 5-FLAT (mirroring gh-issue.md's
+# 4-FLAT) must define each task issue's "Body sections:" list with the exact same
 # section names, in the exact same order, as gh-issue.md's own list — copied
 # literally, not hand-maintained separately where it could drift.
 JIRA_TO_GH_MD = os.path.join(HERE, "..", "commands", "jira-to-gh.md")
 with open(JIRA_TO_GH_MD, encoding="utf-8") as fh:
     jira_to_gh_lines = fh.readlines()
 
-step5_epic_start = next(
-    (i for i, line in enumerate(jira_to_gh_lines) if line.strip().startswith("### 5-EPIC")),
+step5_flat_start = next(
+    (i for i, line in enumerate(jira_to_gh_lines) if line.strip().startswith("### 5-FLAT")),
     None,
 )
-assert step5_epic_start is not None, "jira-to-gh.md has no '### 5-EPIC' section yet (issue #42 not implemented)"
+assert step5_flat_start is not None, "jira-to-gh.md has no '### 5-FLAT' section yet (issue #84 not implemented)"
 
 jira_to_gh_body_sections_line = next(
     line
-    for line in jira_to_gh_lines[step5_epic_start:]
+    for line in jira_to_gh_lines[step5_flat_start:]
     if line.strip().startswith("- Body sections:")
 )
 jira_to_gh_section_names = re.findall(r"\*\*([^*]+)\*\*", jira_to_gh_body_sections_line)
 assert jira_to_gh_section_names == section_names, (jira_to_gh_section_names, section_names)
-ok("jira-to-gh.md's Step 5-EPIC Body sections list exactly matches gh-issue.md's Body sections list")
+ok("jira-to-gh.md's Step 5-FLAT Body sections list exactly matches gh-issue.md's Body sections list")
 
 jira_to_gh_child_body = "\n\n".join(
     f"## {name}\nSome real content for {name}." for name in jira_to_gh_section_names
 )
 assert dispatch.dor_gaps(jira_to_gh_child_body) == [], dispatch.dor_gaps(jira_to_gh_child_body)
-ok("a jira-to-gh.md child body built from Step 5-EPIC's own section headings screens ready with zero gaps")
+ok("a jira-to-gh.md task body built from Step 5-FLAT's own section headings screens ready with zero gaps")
 
 # The parentheticals were legitimately adapted from gh-issue.md's own step numbering
 # to jira-to-gh.md's step numbering (issue #42 PR review). Pin that any "Step N"
@@ -1711,27 +1711,16 @@ ok("both commands ensure-create the refined label")
 
 for name, sect in (
     ("gh-issue.md step 4", _slice(gh_text, "4. Then create a GitHub issue", "### 4-FLAT")),
-    ("jira-to-gh.md Step 5", _slice(jira_text, "## Step 5", "### 5-EPIC")),
+    ("jira-to-gh.md Step 5", _slice(jira_text, "## Step 5", "### 5-FLAT")),
     ("gh-issue.md 4-FLAT", _slice(gh_text, "### 4-FLAT", "\n4.5.")),
-    ("jira-to-gh.md 5-EPIC", jira_text[jira_text.index("### 5-EPIC"):]),
+    ("jira-to-gh.md 5-FLAT", jira_text[jira_text.index("### 5-FLAT"):]),
 ):
     m = re.search(LABEL_RE, sect)
     assert m, (name, "no refined ensure-create")
     first_create = sect.index("gh issue create")
     assert m.start() < first_create, (name, "refined ensure-create must precede gh issue create")
     assert "refined" in sect[first_create:], (name, "refined not applied at create")
-ok("refined is ensure-created before first gh issue create and applied on single and epic paths")
-
-# The epic PARENT step itself must carry `refined` (child wording must not satisfy this).
-for name, text, start, end in (
-    ("jira-to-gh.md 5-EPIC", jira_text, "1. Create the **parent**", "\n2. Create children"),
-):
-    step1 = _slice(text[text.index("-EPIC. Create the parent"):], start, end)
-    assert "`epic` and `refined`" in step1 or "`epic`, `refined`" in step1, (name, "parent not labelled refined")
-    assert re.search(LABEL_RE, step1), (name, "parent step lacks refined ensure-create")
-    if "gh issue create" in step1:
-        assert re.search(LABEL_RE, step1).start() < step1.index("gh issue create"), name
-ok("epic parent step ensure-creates and applies refined")
+ok("refined is ensure-created before first gh issue create and applied on single and flat paths")
 
 # --------------------------------------------------------------------------- dispatch: lane mode
 
@@ -3544,12 +3533,83 @@ assert s46.count("Remove any temp files this skill created before stopping.") ==
 ok("#83 Step 4.6 mirrors gh-issue 3.6")
 assert not any(w in s45n for w in ("~8", "more-than-8", "three choices", "coarser", "bigger epic"))
 assert "File as one issue" not in _n(jira_cmd)
-assert "This step runs only when exactly 1 task was approved in Step 4.5." in _n(_slice(jira_cmd, "## Step 5 \u2014", "### 5-EPIC"))
+assert "This step runs only when exactly 1 task was approved in Step 4.5." in _n(_slice(jira_cmd, "## Step 5 \u2014", "### 5-FLAT"))
 assert "epic" not in s45.lower() and "epic" not in s46.lower()
 jl = jira_cmd.splitlines()
 assert jl[22] == "- Issue type (bug, story, task, epic)"
 assert jl[27] == "- Linked issues / parent epic"
 assert "epic" not in gh_cmd.lower()
 ok("#83 old guard gone, Step 5 single-task, epic lines untouched")
+
+# Issue #84
+ghf = _n(_slice(gh_cmd, "### 4-FLAT", "\n4.5.")).replace("step 3.6", "Step 4.6").replace("step 3.5", "Step 4.5")
+jfr = _slice(jira_cmd, "### 5-FLAT", "## Step 6")
+jf = _n(jfr)
+assert jira_cmd.count("### 5-FLAT. Create the flat issues") == 1 and len(jf) > 1000
+for first, last in (
+    ("Preflight, before anything is created", "create nothing and report the existing issues."),
+    ("Ensure the labels once, before the first create", 'description "task from docs/tasks/<slug>.md" 2>/dev/null || true'),
+    ("Create the issues one at a time in list order.", "`lean` is never applied here."),
+    ("Write-back: every task block ends", "Skip when Step 4.6 saved no local file."),
+    ("Check each create's and each write-back's exit status.", "not created twice."),
+):
+    _mirror_span(ghf, jf, first, last)
+ok("#84 5-FLAT mirrors gh-issue 4-FLAT preflight, labels, create, write-back, failure (whole spans)")
+assert "Skip when Step 4.6 saved no local file." in jf and "create nothing and report the existing issues." in jf
+ok("#84 resume-all-filled and no-local-file write-back skip are present")
+guard = "gh issue list --label prd-<slug> --state all --limit 200 --json number,url,title,body"
+assert ghf.count(guard) == 2 and jf.count(guard) == 2
+ok("#84 duplicate guard appears as often as in 4-FLAT")
+for sent in (
+    "Context is inlined, never referenced: a task body must stand alone. Each How covers only its own task. Notes links `Task <n> of docs/tasks/<slug>.md`.",
+    "end the run and report the partial state (created vs. missing); the filled `Issue:` slots let a later run resume the list.",
+    "Never close or delete an issue already created \u2014 a partial list is a recoverable state.",
+):
+    assert ghf.count(sent) == 1 and sent in jf, sent
+ok("#84 verbatim inlined-context, Stop-here tail and never-close sentences")
+order = ["Preflight", "gh label create refined", "gh label create prd-<slug>", "gh issue create", "Write-back:",
+         "Check each create's", "gh-issue-factchecker"]
+idx = [jf.index(x) for x in order]
+assert idx == sorted(idx) and len(set(idx)) == len(idx), idx
+ok("#84 ordering inside 5-FLAT")
+assert "Jira context from Step 3 inlined" in jf
+assert "a Jira key/URL in the **Notes** section is expected traceability from `$1`" in jf
+assert "once per issue" in jf and "reused on resume" in jf
+stop = next(l for l in jf.split("- **\"Stop here\"**")[1:2])
+assert "Step 6" in stop[:400] and "Step 7" in stop[:400], stop[:400]
+assert "`commands/gh-issue.md`" in jf and "`4-FLAT`" in jf and "Assignees and project-board questions" in jf
+assert "deliberately NOT mirrored" in jf
+ok("#84 Jira adaptations pinned")
+step3_84 = _slice(jira_cmd, "## Step 3", "## Step 4")
+assert "5-FLAT" in step3_84 and "`lean` is never applied" in step3_84
+assert not re.search(r"5-EPIC|parent|child", step3_84)
+step6_84 = _slice(jira_cmd, "## Step 6", "## Step 7")
+tgt = _n(step6_84)
+assert "<TARGET_ISSUE>" in tgt and "`5-FLAT`" in tgt and not re.search(r"parent|child", tgt)
+closing = _n(jira_cmd[jira_cmd.rindex("Return the issue URL"):])
+assert "return the ordered list of issue URLs, one per task in list order (including issues reused on resume)" in closing
+assert "parent URL" not in closing and "child URLs" not in closing
+ok("#84 Step 3 note, Step 6 target and closing paragraph")
+heads = set(re.findall(r"^#{1,3} Step (\d+(?:\.\d+)?)", jira_cmd, re.M))
+assert set(re.findall(r"\bStep (\d+(?:\.\d+)?)", jira_cmd)) <= heads
+assert "Step 5-" not in jira_cmd
+assert set(re.findall(r"`(\d+-[A-Z]+)`", jira_cmd)) == {"5-FLAT"}
+assert not re.search(r"(?<![-\w])step \d", jira_cmd)
+ok("#84 whole-file Step N and 5-FLAT references resolve")
+for bad in ("5-EPIC", "4-EPIC", "aiw epic split", "epic-<parent>", "gh label create epic"):
+    assert bad not in jira_cmd, bad
+assert not any("--label" in l and "epic" in l.lower() for l in jira_cmd.splitlines())
+assert not re.search(r"gh issue (close|delete)", jf) and "--body " not in jf and "gh label create lean" not in jf
+assert not re.search(r"child|sibling", jira_cmd, re.I)
+assert [i + 1 for i, l in enumerate(jira_cmd.splitlines()) if "epic" in l.lower()] == [23, 28]
+assert not any(w in jf for w in ("assignee", "--project", "gh project"))
+ok("#84 negative guards: no epic, parent, child, close/delete, assignee or project")
+lab = re.compile(r'gh label create prd-<slug>[^\n]*2>/dev/null \|\| true')
+assert len(lab.findall(jira_cmd)) == 1
+assert lab.search(jfr).start() < jfr.index("gh issue create")
+assert re.search(LABEL_RE, jfr).start() < jfr.index("gh issue create")
+cl = next(l for l in jfr.splitlines() if "gh issue create" in l and "--label" in l)
+assert "refined" in cl and "prd-<slug>" in cl, cl
+ok("#84 5-FLAT ensure-creates refined and prd-<slug> before create and applies both")
 
 print(f"\n{passed} checks passed")
