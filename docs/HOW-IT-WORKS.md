@@ -342,7 +342,9 @@ which files only the missing tasks. `/jira-to-gh` decomposes, saves and files a 
 the same way.
 
 `/gh-issue` returns the issue URLs in list order. Run `/run-issue <n>` on each, dependencies
-first; handed two or more issues at once, `/run-issue` prints the list and stops.
+first. If you hand `/run-issue` a source that is not an issue yet, it calls `/gh-issue` for
+you; when that returns two or more issues, `/run-issue` prints the list and stops — run
+`/run-issue <n>` on each issue, dependencies first.
 
 **Epic mode** still exists for epics that already exist: a parent issue with sub-issues,
 filed by hand or before this change. `/run-issue <parent>` drives all its children. The rules:
@@ -391,7 +393,8 @@ Anything skipped is named in the final report.
 - **Degraded finish** — the ending where the work is not done: draft PR, reason attached,
   still one report.
 - **Worktree** — the throwaway checkout a run works in.
-- **Epic** — an existing parent issue with sub-issues, run by `/run-issue` Epic mode; `/gh-issue` and `/jira-to-gh` no longer create one.
+- **Epic** — an existing parent issue with sub-issues, run by `/run-issue` Epic mode;
+  `/gh-issue` and `/jira-to-gh` no longer create one.
 - **Grind** — the post-handback loop that works repeated review rounds on an open PR.
 - **Rail** — a condition that stops the grind rather than letting it push another fix.
 - **Fingerprint** — how a finding is recognised across rounds, so a repeat is visible.
