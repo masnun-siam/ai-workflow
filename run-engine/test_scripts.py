@@ -3682,7 +3682,12 @@ ROW86 = (
     "ordered by `Depends on: #n` lines, with no parent issue |"
 )
 assert rdn86.count(ROW86) == 1
-assert "parent plus children" not in rdn86
+assert "parent plus children" not in rdn86 and "parent plus children" not in hwn86
+JROW86 = (
+    "| `/ai-workflow:jira-to-gh <KEY>` | decompose a Jira ticket and file flat issues the same way as `/gh-issue` "
+    "(one issue for a single task; two or more saved to `docs/tasks/<slug>.md` and filed flat) |"
+)
+assert rdn86.count(JROW86) == 1
 assert "flat issue per task" in ROW86 and "no parent issue" in ROW86 and "`docs/tasks/<slug>.md`" in ROW86
 assert "Accepts an epic parent." in rdn86
 assert "aiw epic split|init|next|status    epic decomposition and sequencing" in rd86
@@ -3708,8 +3713,10 @@ P2 = (
     'tasks. `/jira-to-gh` decomposes, saves and files a Jira ticket the same way.'
 )
 P3 = (
-    '`/gh-issue` returns the issue URLs in list order. Run `/run-issue <n>` on each, dependencies first; '
-    'handed two or more issues at once, `/run-issue` prints the list and stops.'
+    '`/gh-issue` returns the issue URLs in list order. Run `/run-issue <n>` on each, dependencies first. '
+    'If you hand `/run-issue` a source that is not an issue yet, it calls `/gh-issue` for you; when that returns '
+    'two or more issues, `/run-issue` prints the list and stops \u2014 run `/run-issue <n>` on each issue, '
+    'dependencies first.'
 )
 P4 = (
     '**Epic mode** still exists for epics that already exist: a parent issue with sub-issues, filed by hand '
@@ -3717,19 +3724,25 @@ P4 = (
 )
 for para in (P1, P2, P3, P4):
     assert l5.count(para) == 1, para[:50]
-assert "```" in hw86 and "Depends on: #12, #13" in l5
+assert l5.count("``` Depends on: #12, #13 ```") == 1
 assert l5.index(P1) < l5.index("Depends on: #12, #13") < l5.index(P2) < l5.index(P3) < l5.index(P4)
 for b in (
     "**Independent children run at the same time.** Dependent ones cannot, by definition \u2014 a child stacks its branch on top of the branch it depends on, so it waits for that one to reach \"PR open\" first.",
-    "**Still three gates, for the whole epic.**",
-    "an immediate, per-blocker ask fired as soon as that child parks",
-    "**A failed child with dependents is reported by name.**",
+    "**Still three gates, for the whole epic.** Gate 1 shows you the split and *every* child's plan at once. "
+    "A blocker in one child parks that child and the others keep going; Gate 2a covers both an immediate, "
+    "per-blocker ask fired as soon as that child parks (so you are not left waiting until the end to hear about it) "
+    "and an end-of-run closer that fires once, collecting whatever is still pending or deferred when nothing more "
+    "can proceed without you. Gate 3 is one report covering everything, including the order you must merge in.",
+    "**A failed child with dependents is reported by name.** \"Never started, blocked by #14\" \u2014 because a child "
+    "silently missing from a list of twelve is how you discover a month later that a third of the epic was never built.",
 ):
     assert b in l5, b
 for gone in (
     "a **parent** issue plus several",
     "A child-create failure partway through is a recoverable state, not a failure state.**",
-    "Kanban view",
+    "Kanban",
+    "board view",
+    "parent plus children",
 ):
     assert gone not in l5, gone
 ok("#86 Layer 5 heading, flat-flow paragraphs, Epic-mode lead-in and kept bullets pinned")
@@ -3739,8 +3752,13 @@ assert hwn86.count(GL86) == 1
 assert "- **Epic** \u2014 a parent issue with dependent children." not in hwn86
 ok("#86 glossary Epic line pinned")
 
-assert cl86.startswith("# Changelog\n\n## Unreleased\n\n### Changed\n") and cl86.count("## Unreleased") == 1
-cln86 = _n(_slice(cl86, "## Unreleased", "## 1.8.0"))
+_T86 = "# Changelog\n\n"
+_E86 = "## 1.8.0 \u2014 2026-09-30"
+assert cl86.startswith(_T86 + "## ") and cl86.count(_E86) == 1
+_top86 = cl86[len(_T86) : cl86.index(_E86)]  # topmost section, whatever its heading is called
+assert "\n## " not in _top86 and "\n### Changed\n" in _top86
+cln86 = _n(_top86)
+assert _top86.count("\n- **") == 3
 CB1 = (
     '- **`/gh-issue` and `/jira-to-gh` file flat issues instead of a parent plus children (#78, #79, #80, #81, #83, #84).** '
     'Decomposition applies a size rubric (one layer-scoped deliverable, 3 or fewer production files, 1-4 acceptance criteria, '
@@ -3765,7 +3783,7 @@ for frag in ("docs/tasks/<slug>.md", "prd-<slug>", "Depends on: #n", "Retry the 
     assert frag in cln86, frag
 ok("#86 CHANGELOG Unreleased entry pinned")
 
-_old86 = cl86[cl86.index("## 1.8.0 \u2014 2026-09-30") :]
+_old86 = cl86[cl86.index(_E86) :]
 assert _hl86.sha256(_old86.encode()).hexdigest() == "6e29635bc50416a75fd4a331051088eb42d6a8f2c05f9e8a0707ee4c10228557"
 ok("#86 CHANGELOG old entries unchanged")
 
