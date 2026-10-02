@@ -3379,4 +3379,15 @@ assert "Skip when step 3.6 saved no local file" in flat_ws
 assert "edited only to fill `Issue:` slots in `4-FLAT`" in " ".join(_slice(_g81, "**HARD RULE", "Do the following:").split())
 ok("#81 keeps the #80 regression guards")
 
+# Review round: pin the wording whose single-edit reversals survived mutation testing.
+assert "leaves the file as is" in s36 and "uses the saved list instead of the one just approved" in s36
+assert "Resume skips the Obsidian/wiki destination writes" in s36
+_ch = flat[flat.index("exactly these two choices") : flat.index("Never close or delete an issue already created")]
+assert len(re.findall(r'^\s*- \*\*"', _ch, re.M)) == 2, "failure prompt must have exactly two option bullets"
+assert "This resume branch overrides the new-slug stop above" in flat_ws
+assert "Apply the duplicate guard above before every create after a failure" in flat_ws
+assert "--json number,url,title,body" in flat_ws and "whose title also matches that task's planned title" in flat_ws
+assert "the `j < k` check runs on the saved list" in flat_ws
+ok("#81 pins resume-as-is, two-choice bullets, new-slug carve-out, retry duplicate guard, title match, saved-list edge check")
+
 print(f"\n{passed} checks passed")
