@@ -182,6 +182,8 @@ gh issue create --title "TITLE" --label "refined,labels" --body-file /tmp/gh-iss
 
 ### 5-FLAT. Create the flat issues
 
+This section runs only when Step 4.5 routed 2 or more tasks here — it is an alternate path to Step 5 above, not a sub-case nested under it.
+
 One issue per task from the Step 4.6 list, each standalone.
 
 0. Preflight, before anything is created. If Step 4.6 skipped the save because
