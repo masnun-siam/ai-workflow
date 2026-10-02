@@ -1710,9 +1710,9 @@ for name, text in (("gh-issue.md", gh_text), ("jira-to-gh.md", jira_text)):
 ok("both commands ensure-create the refined label")
 
 for name, sect in (
-    ("gh-issue.md step 4", _slice(gh_text, "4. Then create a GitHub issue", "### 4-EPIC")),
+    ("gh-issue.md step 4", _slice(gh_text, "4. Then create a GitHub issue", "### 4-FLAT")),
     ("jira-to-gh.md Step 5", _slice(jira_text, "## Step 5", "### 5-EPIC")),
-    ("gh-issue.md 4-EPIC", gh_text[gh_text.index("### 4-EPIC"):]),
+    ("gh-issue.md 4-FLAT", _slice(gh_text, "### 4-FLAT", "\n4.5.")),
     ("jira-to-gh.md 5-EPIC", jira_text[jira_text.index("### 5-EPIC"):]),
 ):
     m = re.search(LABEL_RE, sect)
@@ -1724,7 +1724,6 @@ ok("refined is ensure-created before first gh issue create and applied on single
 
 # The epic PARENT step itself must carry `refined` (child wording must not satisfy this).
 for name, text, start, end in (
-    ("gh-issue.md 4-EPIC", gh_text, "1. Create the **parent**", "\n2. For each child"),
     ("jira-to-gh.md 5-EPIC", jira_text, "1. Create the **parent**", "\n2. Create children"),
 ):
     step1 = _slice(text[text.index("-EPIC. Create the parent"):], start, end)
@@ -2392,25 +2391,6 @@ ok("commands/gh-issue.md step 3.5 routes 1 task to step 4 / 4-FLAT, not 4-EPIC")
 
 assert "No round limit" in step35 and re.search(r"re-apply the (layer )?rubric", step35, re.I)
 ok("commands/gh-issue.md step 3.5 keeps 'No round limit' and re-applies the rubric on edit")
-
-epic_section_start = gh_issue_text.index("### 4-EPIC")
-epic_section_end_match = re.search(r"^### (?!4-EPIC)", gh_issue_text[epic_section_start + 1:], re.MULTILINE)
-epic_section_end = (
-    epic_section_start + 1 + epic_section_end_match.start()
-    if epic_section_end_match
-    else len(gh_issue_text)
-)
-epic_section = gh_issue_text[epic_section_start:epic_section_end]
-assert "Retry the missing ones" in epic_section, "4-EPIC section missing 'Retry the missing ones'"
-assert "Stop here" in epic_section, "4-EPIC section missing 'Stop here'"
-ok("commands/gh-issue.md's 4-EPIC section covers both 'Retry the missing ones' and 'Stop here'")
-
-epic_section_flat = " ".join(epic_section.split())
-assert "the parent and children 1..k-1" in epic_section_flat and "URLs" in epic_section_flat, \
-    "4-EPIC section's partial-failure report must describe naming created issues (parent + children 1..k-1) with URLs"
-assert "which are missing" in epic_section_flat and "by planned title" in epic_section_flat, \
-    "4-EPIC section's partial-failure report must describe naming missing issues (k..N) by planned title"
-ok("commands/gh-issue.md's 4-EPIC section's partial-failure report describes both created (parent+children, URLs) and missing (by planned title) issues")
 
 with open(os.path.join(HERE, "..", "README.md"), encoding="utf-8") as fh:
     readme_text = fh.read()
@@ -3261,5 +3241,153 @@ for bad in ("4-EPIC", "three choices", "coarser", "~8", "more-than-8",
     assert bad not in _s36, f"step 3.6 slice must not contain {bad!r}"
 assert not any(l.lstrip().startswith("- Body sections:") for l in _raw36.splitlines())
 ok("step 3.6 slice stays scoped (no 4-EPIC / 3.5 / step 4 leakage)")
+
+# Issue #80: flat creation loop (4-FLAT) replaces 4-EPIC in gh-issue.md.
+_g80 = _read("commands", "gh-issue.md")
+flat = _slice(_g80, "### 4-FLAT", "\n4.5.")
+flat_ws = " ".join(flat.split())
+assert _g80.count("### 4-FLAT. Create the flat issues") == 1
+ok("gh-issue.md has the 4-FLAT heading exactly once")
+
+_create = flat.index("gh issue create")
+assert "--body-file /tmp/gh-issue-body.md" in flat and "--body " not in flat
+_lab = [l for l in flat.splitlines() if "--label" in l and ("gh issue create" in l or "--label" in l)]
+assert any("refined" in l and "prd-<slug>" in l for l in _lab), _lab
+ok("4-FLAT creates with --label refined,prd-<slug> and --body-file, never --body")
+
+_prd = re.search(r"gh label create prd-<slug>\s[^\n]*2>/dev/null \|\| true", flat)
+assert _prd and _prd.start() < _create
+_ref = re.search(LABEL_RE, flat)
+assert _ref and _ref.start() < _create
+assert flat.count("gh label create prd-<slug>") == 1 and flat.count("gh label create refined") == 1
+ok("4-FLAT ensure-creates prd-<slug> and refined once each before the first create")
+
+assert "same section list as step 4" in flat_ws and "inlined, never referenced" in flat_ws
+assert "docs/tasks/<slug>.md" in flat
+ok("4-FLAT bodies reuse step 4 sections, inline context, and link docs/tasks/<slug>.md in Notes")
+
+assert "Depends on: task <k>" in flat and "Depends on: #<n>" in flat and "earlier" in flat
+ok("4-FLAT resolves Depends on: task <k> to Depends on: #<n> from earlier tasks")
+
+assert "Issue:" in flat and "docs/tasks/<slug>.md" in flat and "#<n>" in flat
+assert re.search(r"write.?back", flat, re.I)
+assert re.search(r"no local file|skip the save", flat_ws, re.I)
+ok("4-FLAT writes #<n> back into the Issue: slot and skips when no local file was saved")
+
+assert "one at a time" in flat_ws and "list order" in flat_ws
+ok("4-FLAT creates issues one at a time in list order")
+
+assert "gh label create lean" not in flat
+assert not any("--label" in l and "lean" in l for l in flat.splitlines())
+assert "`lean` is never applied here." in flat_ws
+ok("4-FLAT never applies lean")
+
+for bad in ("4-EPIC", "aiw epic split", "project-board", "sub_issues", "epic-<parent>"):
+    assert bad not in _g80, bad
+assert "epic" not in _g80.lower()
+ok("gh-issue.md has no epic machinery")
+
+_hr80 = " ".join(_slice(_g80, "**HARD RULE", "Do the following:").split())
+assert "4-FLAT" in _hr80 and "4-EPIC" not in _hr80
+assert "Issue:" in _hr80 and "docs/tasks/<slug>.md" in _hr80
+ok("gh-issue.md HARD RULE names 4-FLAT and the Issue: slot write-back")
+
+assert not any(l.lstrip().startswith("- Body sections:") for l in flat.splitlines())
+ok("4-FLAT adds no '- Body sections:' line")
+
+# Issue #80 review: pin each 4-FLAT rule sentence so a single-edit reversal fails.
+assert flat_ws.index("Preflight, before anything is created") < flat_ws.index("gh label create refined")
+assert "check every `Depends on: task <j>` in task k has j < k; otherwise stop, report the offending task" in flat_ws
+ok("4-FLAT preflight rejects forward Depends on edges before creating anything")
+assert "already exists, stop and ask for a new slug" in flat_ws
+ok("4-FLAT stops for a new slug when step 3.6 skipped the save (collision)")
+assert "never `replace_all` and never Edit on that line alone" in flat_ws
+assert "Edit with an `old_string` that starts at the task's own `## Task <k> \u2014 <title>` heading and runs through its `Issue: \u2014` line (unique), setting `Issue: #<n>`" in flat_ws
+assert "Right after each successful create" in flat_ws and "Skip when step 3.6 saved no local file" in flat_ws
+ok("4-FLAT write-back is a per-task heading-anchored Edit, never replace_all")
+assert "Check each create's and each write-back's exit status. On failure, stop like a failed create" in flat_ws
+assert "never delete created issues" in flat_ws and "unrecorded in the file" in flat_ws
+ok("4-FLAT stops on a failed create or write-back and never deletes created issues")
+assert "edited only to fill `Issue:` slots in `4-FLAT`" in _hr80
+assert "for that one path only" in _hr80 and "no other repo file" in _hr80
+assert not re.search(r"edit(ed)?\s+(freely|any|anything)", _hr80, re.I) and "freely" not in _hr80
+ok("HARD RULE edit exception is narrow: Issue: slots in the one saved file only")
+
+# Issue #81: resume from the saved list and partial-failure retry in gh-issue.md.
+_g81 = _read("commands", "gh-issue.md")
+flat = _slice(_g81, "### 4-FLAT", "\n4.5.")
+flat_ws = " ".join(flat.split())
+s36 = " ".join(_slice(_g81, "3.6.", "4. Then create a GitHub issue").split())
+_choices = 'exactly these two choices: **"Retry the missing ones"**, **"Stop here"**'
+assert _choices in flat_ws and "AskUserQuestion" in flat_ws
+assert _g81.count(_choices) == 1
+assert _g81.count('**"Stop here"**') >= 1 and _g81.count('**"Retry the missing ones"**') >= 1
+ok("4-FLAT failure prompt offers exactly the two choices Retry the missing ones / Stop here")
+
+assert flat_ws.index("Check each create's and each write-back's exit status") < flat_ws.index('**"Retry the missing ones"**')
+assert flat.index("gh issue create") < flat_ws.index('**"Retry the missing ones"**')
+assert flat_ws.index("gh issue create") < flat_ws.index('**"Stop here"**')
+ok("4-FLAT failure prompt sits after the create call inside the failure sub-step")
+
+assert "re-enter the loop at the failed task" in flat_ws
+assert "reusing the already-known issue numbers of earlier tasks for their `Depends on:` lines" in flat_ws
+assert "never re-create a task that already has an issue" in flat_ws
+ok("4-FLAT Retry re-enters at the failed task and never re-creates an existing issue")
+
+assert '**"Stop here"**: end the run and report the partial state' in flat_ws
+assert "the created issues (number and URL)" in flat_ws and "the missing ones (by planned title)" in flat_ws
+ok("4-FLAT Stop ends the run and reports created and missing tasks")
+
+for _p in ('**"Resume this list"**', "read it, show which tasks have no issue number yet",
+           "create only tasks without an issue number, in list order",
+           "reuse the existing `Issue: #<n>` numbers for their `Depends on:` lines"):
+    assert _p in flat_ws, _p
+assert flat_ws.index("Resume this list") < flat_ws.index("gh label create refined")
+ok("4-FLAT resume uses the saved list and runs in the preflight before any create")
+
+for _p in ('**"Resume this list"**', "never overwrite silently", "filled"):
+    assert _p in s36, _p
+assert "overwrit" in s36 and "ask" in s36
+ok("step 3.6 offers Resume this list on a collision and never overwrites silently")
+
+assert "If every slot is filled, create nothing" in flat_ws
+assert "or already in its `Issue:` slot" in flat_ws
+assert "Depends on: task <k>" in flat and "Depends on: #<n>" in flat and "earlier" in flat
+ok("4-FLAT resume of a complete list creates nothing and reuses slot numbers for dependencies")
+
+assert "gh issue list --label prd-<slug> --state all --limit 200" in flat
+assert "Task <n> of docs/tasks/<slug>.md" in flat_ws
+assert "instead of creating it again" in flat_ws
+assert "gets its write-back retried, not a second create" in flat_ws
+assert flat_ws.index("gh issue list --label prd-<slug>") < flat_ws.index("gh label create refined")
+ok("4-FLAT resume and retry never duplicate a created-but-unrecorded issue")
+
+assert "Never close or delete an issue already created" in flat_ws
+assert "a partial list is a recoverable state" in flat_ws
+assert "never delete created issues" in flat_ws
+assert not re.search(r"gh issue (close|delete)", _g81)
+ok("4-FLAT never closes or deletes created issues")
+
+assert "three choices" not in flat_ws
+assert "Retry the missing one\"" not in _g81 and "Stop now" not in _g81
+ok("4-FLAT choice labels have no variants")
+
+assert "epic" not in _g81.lower()
+assert flat.count("gh label create refined") == 1
+assert "already exists, stop and ask for a new slug" in flat_ws
+assert "Skip when step 3.6 saved no local file" in flat_ws
+assert "edited only to fill `Issue:` slots in `4-FLAT`" in " ".join(_slice(_g81, "**HARD RULE", "Do the following:").split())
+ok("#81 keeps the #80 regression guards")
+
+# Review round: pin the wording whose single-edit reversals survived mutation testing.
+assert "leaves the file as is" in s36 and "uses the saved list instead of the one just approved" in s36
+assert "Resume skips the Obsidian/wiki destination writes" in s36
+_ch = flat[flat.index("exactly these two choices") : flat.index("Never close or delete an issue already created")]
+assert len(re.findall(r'^\s*- \*\*"', _ch, re.M)) == 2, "failure prompt must have exactly two option bullets"
+assert "This resume branch overrides the new-slug stop above" in flat_ws
+assert "Apply the duplicate guard above before every create after a failure" in flat_ws
+assert flat_ws.count("--json number,url,title,body") == 2 and "whose title also matches that task's planned title" in flat_ws
+assert "the `j < k` check runs on the saved list" in flat_ws
+ok("#81 pins resume-as-is, two-choice bullets, new-slug carve-out, retry duplicate guard, title match, saved-list edge check")
 
 print(f"\n{passed} checks passed")
