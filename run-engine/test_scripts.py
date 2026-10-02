@@ -2363,7 +2363,7 @@ assert "3.5. **Decompose.**" in gh_issue_text, "expected the renamed step headin
 assert "Epic check" not in gh_issue_text, "old 'Epic check' heading text must be gone"
 ok("commands/gh-issue.md step 3.5 is headed 'Decompose.' and no longer says 'Epic check'")
 
-step35 = " ".join(gh_issue_text[gh_issue_text.index("3.5. **Decompose.**"):gh_issue_text.index("4. Then create a GitHub issue")].split())
+step35 = " ".join(_slice(gh_issue_text, "3.5. **Decompose.**", "4. Then create a GitHub issue").split())
 
 for choice in ("Create as shown", "Let me edit the list"):
     assert choice in step35, f"step 3.5 missing AskUserQuestion choice label: {choice!r}"
@@ -2376,9 +2376,9 @@ for unit in ("DB migration", "service logic", "API endpoint", "UI unit"):
 assert "request" in step35 and "resource" in step35, "API endpoint unit must mention request and resource"
 ok("commands/gh-issue.md step 3.5 rubric names the four layer units")
 
-assert "production files" in step35 and "3" in step35, "rubric must cap production files at 3"
+assert "3 or fewer production files (tests not counted)" in step35, "rubric must cap production files at 3"
 assert re.search(r"1[\u2013-]4 acceptance criteria", step35), "rubric must say 1-4 acceptance criteria"
-assert "one verify command" in step35 and "dependency" in step35
+assert "one verify command" in step35 and "adds no new dependency" in step35
 ok("commands/gh-issue.md step 3.5 rubric states size limits (files, ACs, verify command, dependency)")
 
 assert "split the failing task" in step35 and "coarser" not in step35
