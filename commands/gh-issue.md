@@ -22,7 +22,7 @@ I have a ${1:-bug / feature request / task / improvement} to log as a GitHub iss
 Details: $@
 
 **HARD RULE — while executing steps 0–7 below, including everything under `4-FLAT`
-(note: `4-FLAT` has its own internal 1–7 numbering; that's a sub-branch of top-level
+(note: `4-FLAT` has its own internal 1–5 numbering; that's a sub-branch of top-level
 step 4, not a separate range, and it is still fully bound by this rule), this skill only
 ever creates a GitHub issue. It never touches code.**
 - NEVER use Write, Edit, or NotebookEdit on any file in the repo.
@@ -150,6 +150,11 @@ Do the following:
 
 One issue per task from the step 3.6 list, each standalone.
 
+0. Preflight, before anything is created. If step 3.6 skipped the save because
+   `docs/tasks/<slug>.md` already exists, stop and ask for a new slug by step 3.6's
+   existing rule, so the `prd-<slug>` label and Notes links never mix two lists. Then check
+   every `Depends on: task <j>` in task k has j < k; otherwise stop, report the offending
+   task, and let the user fix the list via step 3.5's edit loop.
 1. Ensure the labels once, before the first create (`<slug>` is the step 3.6 slug):
 
    ```bash
@@ -166,11 +171,14 @@ One issue per task from the step 3.6 list, each standalone.
    `gh issue create --title "..." --label "refined,prd-<slug>,<type>,<scope...>" --body-file /tmp/gh-issue-body.md`
    and delete the temp file. Labels are set at creation time: exactly `refined`,
    `prd-<slug>`, the type and the scope labels. `lean` is never applied here.
-4. Write-back: right after each successful create, use the Edit tool to change that
-   task's `Issue: —` line in `docs/tasks/<slug>.md` to `Issue: #<n>`. Skip the
-   write-back when step 3.6 saved no local file.
-5. Check each create's exit status. On failure, stop and report the created issues
-   (number and URL) and the missing ones (planned title); never delete created issues.
+4. Write-back: every task block ends with an identical `Issue: —` line, so never
+   `replace_all` and never Edit on that line alone. Right after each successful create,
+   Edit with an `old_string` that starts at the task's own `## Task <k> — <title>` heading
+   and runs through its `Issue: —` line (unique), setting `Issue: #<n>`. Skip when
+   step 3.6 saved no local file.
+5. Check each create's and each write-back's exit status. On failure, stop like a failed
+   create: report the created issues (number and URL), the missing ones (planned title),
+   and any issue that exists but is unrecorded in the file; never delete created issues.
 
 4.5. Dispatch the `gh-issue-factchecker` agent (fresh context, no memory of the steps above) with just the issue number/URL and `owner/repo`. It re-reads the created issue cold and checks every concrete claim (file paths, symbols, described behavior, the proposed fix) against the real repo. Tell it explicitly: a `Source:` line in the Notes section pointing outside the repo (a Sentry permalink, an absolute file path, or a vault note path) is expected traceability from `/intake`, not a claim about this repo, and must not be flagged as an unverifiable claim.
    - `PASS` → continue to step 5, no mention needed.
