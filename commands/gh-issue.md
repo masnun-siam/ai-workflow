@@ -21,18 +21,18 @@ I have a ${1:-bug / feature request / task / improvement} to log as a GitHub iss
 
 Details: $@
 
-**HARD RULE — while executing steps 0–7 below, including everything under `4-EPIC`
-(note: `4-EPIC` has its own internal 1–7 numbering; that's a sub-branch of top-level
+**HARD RULE — while executing steps 0–7 below, including everything under `4-FLAT`
+(note: `4-FLAT` has its own internal 1–7 numbering; that's a sub-branch of top-level
 step 4, not a separate range, and it is still fully bound by this rule), this skill only
 ever creates a GitHub issue. It never touches code.**
 - NEVER use Write, Edit, or NotebookEdit on any file in the repo.
 - NEVER run a mutating shell command (`git commit`, `git checkout -b`, package installs, formatters, codemods, etc.).
 - The ONLY writes permitted are the temp body file at `/tmp/gh-issue-body.md`, the `gh issue create` / `gh issue edit` / `gh project` calls below, and the notes-vault dump in step 7 (that's a different vault, not the repo, and goes through the `dump` skill's own confirmation).
-- The sole exception to the rules above is the step 3.6 task-list save, and only when its conditions hold: (a) `docs/tasks/<slug>.md` written via the Write tool (an override of the no-Write rule for that one path only); (b) the Obsidian `Tasks.md` via `obsidian vault=notes`, only when the user chose Obsidian, placed the way `/dump` does, plus the vault sibling writes `/dump`'s linking rules produce (the Index append and Related link); (c) the wiki clone/commit/push of `Tasks-<Title>.md` in a scratchpad clone, only when the user chose the wiki and confirmed the push (an override of the no-mutating-shell rule for that clone only). It covers nothing else: no other repo file, and no `git add` or commit of `docs/tasks/`.
+- The sole exception to the rules above is the step 3.6 task-list save, and only when its conditions hold: (a) `docs/tasks/<slug>.md` written via the Write tool in step 3.6 and edited only to fill `Issue:` slots in `4-FLAT` (an override of the no-Write/no-Edit rule for that one path only); (b) the Obsidian `Tasks.md` via `obsidian vault=notes`, only when the user chose Obsidian, placed the way `/dump` does, plus the vault sibling writes `/dump`'s linking rules produce (the Index append and Related link); (c) the wiki clone/commit/push of `Tasks-<Title>.md` in a scratchpad clone, only when the user chose the wiki and confirmed the push (an override of the no-mutating-shell rule for that clone only). It covers nothing else: no other repo file, and no `git add` or commit of `docs/tasks/`.
 - This holds even for a one-character fix. "It's trivial" is not an exception — the whole point of filing an issue is that a human decides whether and how to make the change.
 - If a fix is obvious from your investigation, do NOT apply it. Record it under a **Proposed Fix** section in the issue body instead (file path, symbol, and the change in prose or a fenced diff).
 - **Scope.** These constraints bind steps 0–7 of this skill only, including everything
-  under `4-EPIC`. When `/run-issue` invoked this skill, they lapse the moment the issue
+  under `4-FLAT`. When `/run-issue` invoked this skill, they lapse the moment the issue
   URL is returned — the caller's later phases write code by design, and this rule must
   not be carried into them.
 
@@ -123,7 +123,7 @@ Do the following:
      - **Dependencies / Blockers** — its own section, not a line in Notes. `none` beats silence here too.
      - Never delete one of these five to avoid writing `none`, and never ship a body containing `[bracketed placeholders]` — that is a failed run, not a draft.
    - **How is not a DoR item** — it's the plan, not a readiness gate.
-     Required on every issue except an epic parent. Every step names a real path:line
+     Required on every issue. Every step names a real path:line
      or symbol — no vague area names like "the auth code." A `[bracketed placeholder]`
      in it counts as a failed run under the same rule as the four sections above.
      When a **Proposed Fix** section is also present, it stays the literal patch;
@@ -146,111 +146,32 @@ Do the following:
      gh label create lean --color 0E8A16 --description "small, well-specified: run lean roster" 2>/dev/null || true
      ```
 
-### 4-EPIC. Create the parent and its children
+### 4-FLAT. Create the flat issues
 
-1. Create the **parent** with the BRD as its body, labelled `epic` and `refined`. Ensure
-   `refined` exists before this first create of the epic path (idempotent, cheap):
+One issue per task from the step 3.6 list, each standalone.
+
+1. Ensure the labels once, before the first create (`<slug>` is the step 3.6 slug):
+
    ```bash
    gh label create refined --color 1D76DB --description "properly specified: passes the issue template" 2>/dev/null || true
+   gh label create prd-<slug> --color 5319E7 --description "task from docs/tasks/<slug>.md" 2>/dev/null || true
    ```
-   It is a container: it needs no acceptance criteria of its own, and it is **never** labelled `lean` — a
-   container spans however many children it has, which is never "one to two files or
-   symbols touched."
-2. For each child, write a **complete, independently DoR-satisfying** issue body — the
-   same section list as step 4, with the parent's context **inlined, never referenced**.
-   `run-researcher` scores each child on its own and blocks the run on a gap, so a child
-   whose Context section says "see parent" dies before its worktree is created.
+2. Write one complete, DoR-passing body per task, using the same section list as step 4.
+   Context is inlined, never referenced: a task body must stand alone. Each How covers
+   only its own task. Notes links `Task <n> of docs/tasks/<slug>.md`.
+3. Create the issues one at a time in list order. Before writing task k's body, replace
+   each `Depends on: task <k>` line (k = an earlier task's number) with `Depends on: #<n>`, using the number already returned
+   for that task (edges only point at earlier tasks). Write the body to
+   `/tmp/gh-issue-body.md`, then run
+   `gh issue create --title "..." --label "refined,prd-<slug>,<type>,<scope...>" --body-file /tmp/gh-issue-body.md`
+   and delete the temp file. Labels are set at creation time: exactly `refined`,
+   `prd-<slug>`, the type and the scope labels. `lean` is never applied here.
+4. Write-back: right after each successful create, use the Edit tool to change that
+   task's `Issue: —` line in `docs/tasks/<slug>.md` to `Issue: #<n>`. Skip the
+   write-back when step 3.6 saved no local file.
+5. Check each create's exit status. On failure, stop and report the created issues
+   (number and URL) and the missing ones (planned title); never delete created issues.
 
-   Each child is one **vertical slice** — one thin end-to-end outcome, never a layer.
-   Horizontal slices ("all the models") maximize file overlap, which serializes the DAG,
-   and none of them has acceptance criteria that can be verified on their own. Each
-   child's How section covers only that child's own slice — never a step that
-   touches a sibling's files or refers to a sibling's steps.
-
-   Where a child depends on a sibling, add a line on its own:
-
-   ```
-   Depends on: #<n>, #<n>
-   ```
-
-   Edges may only point at siblings in this epic.
-2.5. Create children one at a time, in the approved list's order. Before writing child
-   k's body, replace each `task <j>` placeholder from step 3.5's list with the real
-   `#<n>` issue number already returned for child j (child j must have been created
-   first — this is why order matters).
-
-   On each child's `gh issue create` call, include `epic-<parent>` and `refined` in the `--label` list,
-   alongside its normal labels — apply them at creation time, not afterward. Deferring the
-   label to a later step means a child created mid-loop, before a later sibling's create
-   call fails, would never carry it if the run stops before that later step runs; the
-   loop can end at any child, and every child already created must be immediately
-   findable via `gh issue list --label epic-<parent>` regardless of where the loop
-   stopped. When `epic-<parent>` is about to be applied for the first time this run,
-   ensure it exists first (idempotent, cheap):
-   ```bash
-   gh label create epic-<parent> --color 5319E7 --description "child of epic #<parent>" 2>/dev/null || true
-   ```
-
-   Check each `gh issue create` exit status immediately. On failure at child k of N
-   (k=0 means the parent itself failed, before any children exist): stop the loop.
-   Report, by number, which issues exist (the parent and children 1..k-1, with the
-   URLs already returned by their create calls) and which are missing (k..N, by
-   planned title).
-
-   Then `AskUserQuestion` with exactly these two choices: **"Retry the missing ones"**,
-   **"Stop here"**.
-
-   - **"Retry the missing ones"**: re-enter the loop starting at child k, reusing the
-     already-known issue numbers for children 1..k-1 (needed for their `Depends on:`
-     lines in later children). Never re-create 1..k-1.
-   - **"Stop here"**: end the run, report the partial state (created vs. missing), do
-     NOT call `aiw epic split` (it only runs once every planned child exists — see step
-     4), and return no issue URL/number to the caller — `/run-issue`'s own preflight
-     then correctly stops instead of treating an unlinked parent as a complete epic.
-
-   Never auto-close or delete issues already created — a partial epic is a recoverable
-   state, not a failure state.
-3. Judge each child against step 4's `lean` heuristic **independently, against its own
-   body** — a child's own outcome, file count, dependency, API-surface and risk-area
-   answers, not the epic's aggregate. (`epic-<parent>` was already applied at creation
-   time in step 2.5 — see above.) The same idempotent ensure-create from step 4 runs
-   once, before the first child that earns the `lean` label:
-   ```bash
-   gh label create lean --color 0E8A16 --description "small, well-specified: run lean roster" 2>/dev/null || true
-   ```
-4. Link and validate. This step only runs once every planned child exists — step 2.5's
-   partial-failure gating is what guarantees that:
-
-   ```bash
-   aiw epic split "<runs_dir>/<owner>-<repo>-epic-<parent>" \
-     --parent <parent> --slug <owner>/<repo> --children <n>,<n>,<n>
-   ```
-
-   Exit 1 means the edges do not form a DAG — a cycle, a self-edge, or an edge pointing
-   outside the epic. Fix the offending child's `Depends on:` line with `gh issue edit`
-   and re-run. Do not proceed with an invalid DAG: the ordering is what keeps a stacked
-   child from branching off a base that does not exist yet. This call also writes the
-   parent's `## Tasks` checklist in dependency order, so there is no separate `gh issue
-   edit` needed for it.
-5. Step 4.5 (the `gh-issue-factchecker` dispatch) runs **once per child** — each child
-   body makes its own concrete claims about files and symbols, and that is exactly what
-   the factchecker verifies; a check against the parent would miss them. Step 5
-   (assignee confirmation) is asked **once**, and the chosen assignees are applied to the
-   parent and every child — asking once per child is the interruption-multiplying pattern
-   this whole design exists to avoid.
-6. Add every child to the same project as the parent (step 6's calls, once per child),
-   then create the board:
-
-   ```bash
-   aiw project-board <owner>/<repo> <parent> --title "<parent title>"
-   ```
-
-   Best-effort — it always exits 0. A parent on no project, a closed project, or a
-   missing `project` scope means no board and one warning line.
-7. Return the parent URL, the child URLs in dependency order, and the board name. If
-   `/run-issue` invoked this skill, hand control back to its Preflight step 3 with the
-   **parent** issue number and continue the run — step 3.5 there will do its own
-   `sub_issues` detection; the HARD RULE above no longer applies.
 4.5. Dispatch the `gh-issue-factchecker` agent (fresh context, no memory of the steps above) with just the issue number/URL and `owner/repo`. It re-reads the created issue cold and checks every concrete claim (file paths, symbols, described behavior, the proposed fix) against the real repo. Tell it explicitly: a `Source:` line in the Notes section pointing outside the repo (a Sentry permalink, an absolute file path, or a vault note path) is expected traceability from `/intake`, not a claim about this repo, and must not be flagged as an unverifiable claim.
    - `PASS` → continue to step 5, no mention needed.
    - `ISSUES FOUND` → fix the flagged text yourself, write the corrected body to `/tmp/gh-issue-body.md`, run `gh issue edit <n> --body-file /tmp/gh-issue-body.md`, delete the temp file, and briefly tell me what was wrong and corrected. Do not silently ignore a flagged discrepancy.
