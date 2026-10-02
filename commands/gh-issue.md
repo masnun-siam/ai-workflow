@@ -76,8 +76,8 @@ Do the following:
    proposed slug as the recommended answer (the user edits it via Other) and offers the optional destinations Obsidian and/or GitHub wiki (local is always
    on, not a choice).
 
-   If `docs/tasks/<slug>.md` already exists, stop and ask (new slug or skip the save); never
-   overwrite silently.
+   If `docs/tasks/<slug>.md` already exists, stop and ask (new slug, skip the save, or **"Resume this list"**); never
+   overwrite silently. Show the existing file's title, source and how many `Issue:` slots are filled, so the user can tell a resume from an unrelated collision. **"Resume this list"** leaves the file as is and goes to `4-FLAT`, which then uses the saved list instead of the one just approved.
 
    File shape: a header (title, source, date, owner/repo), then one block per task in the
    approved dependency order: `## Task <n> — <title>` (n is the task's sequence number),
@@ -155,6 +155,7 @@ One issue per task from the step 3.6 list, each standalone.
    existing rule, so the `prd-<slug>` label and Notes links never mix two lists. Then check
    every `Depends on: task <j>` in task k has j < k; otherwise stop, report the offending
    task, and let the user fix the list via step 3.5's edit loop.
+   If the user chose **"Resume this list"** in step 3.6, the saved `docs/tasks/<slug>.md` is the list: read it, show which tasks have no issue number yet, and create only tasks without an issue number, in list order; reuse the existing `Issue: #<n>` numbers for their `Depends on:` lines. First run `gh issue list --label prd-<slug> --state all --limit 200 --json number,url,body`; an issue whose Notes says `Task <n> of docs/tasks/<slug>.md` for a task with an empty slot was created but never recorded, so fill that slot with the sub-step 4 write-back instead of creating it again. If every slot is filled, create nothing and report the existing issues.
 1. Ensure the labels once, before the first create (`<slug>` is the step 3.6 slug):
 
    ```bash
@@ -166,7 +167,7 @@ One issue per task from the step 3.6 list, each standalone.
    only its own task. Notes links `Task <n> of docs/tasks/<slug>.md`.
 3. Create the issues one at a time in list order. Before writing task k's body, replace
    each `Depends on: task <k>` line (k = an earlier task's number) with `Depends on: #<n>`, using the number already returned
-   for that task (edges only point at earlier tasks). Write the body to
+   for that task (or already in its `Issue:` slot) (edges only point at earlier tasks). Write the body to
    `/tmp/gh-issue-body.md`, then run
    `gh issue create --title "..." --label "refined,prd-<slug>,<type>,<scope...>" --body-file /tmp/gh-issue-body.md`
    and delete the temp file. Labels are set at creation time: exactly `refined`,
@@ -177,8 +178,12 @@ One issue per task from the step 3.6 list, each standalone.
    and runs through its `Issue: —` line (unique), setting `Issue: #<n>`. Skip when
    step 3.6 saved no local file.
 5. Check each create's and each write-back's exit status. On failure, stop like a failed
-   create: report the created issues (number and URL), the missing ones (planned title),
+   create: report the created issues (number and URL), the missing ones (by planned title),
    and any issue that exists but is unrecorded in the file; never delete created issues.
+   Then `AskUserQuestion` with exactly these two choices: **"Retry the missing ones"**, **"Stop here"**.
+   - **"Retry the missing ones"**: re-enter the loop at the failed task, reusing the already-known issue numbers of earlier tasks for their `Depends on:` lines; never re-create a task that already has an issue (an unrecorded one gets its write-back retried, not a second create).
+   - **"Stop here"**: end the run and report the partial state (created vs. missing); the filled `Issue:` slots let a later run resume the list.
+   Never close or delete an issue already created — a partial list is a recoverable state.
 
 4.5. Dispatch the `gh-issue-factchecker` agent (fresh context, no memory of the steps above) with just the issue number/URL and `owner/repo`. It re-reads the created issue cold and checks every concrete claim (file paths, symbols, described behavior, the proposed fix) against the real repo. Tell it explicitly: a `Source:` line in the Notes section pointing outside the repo (a Sentry permalink, an absolute file path, or a vault note path) is expected traceability from `/intake`, not a claim about this repo, and must not be flagged as an unverifiable claim.
    - `PASS` → continue to step 5, no mention needed.
