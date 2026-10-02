@@ -85,7 +85,7 @@ Ask me up to 3 focused questions if anything is unclear or missing (e.g., accept
 Every run, after Step 4's clarifying questions — no size test gates this, it always
 happens. Use GitNexus MCP (`gitnexus_query`, `gitnexus_context`) to find the relevant
 code — execution flows, affected symbols, and files related to the ticket — the
-children need this for their Context/Affected Code and How
+each task's issue needs this for its Context / Affected Code and How
 path:line references.
 
 Build a numbered task list seeded from Step 3's field mapping (summary, description,
@@ -117,6 +117,8 @@ Style this like Gate 1's revise loop in `commands/run-issue.md`:
 ## Step 4.6 — Save the task list
 
 Runs once, right after Step 4.5's "Create as shown" and before its routing creates any issue. Slug: kebab-case from the Jira ticket's summary (Step 3's title).
+
+This step is skipped when exactly 1 task was approved: Step 5 files it as a single issue and no task list is saved.
 
 Ask ONE `AskUserQuestion` (multiSelect) that shows the
 proposed slug as the recommended answer (the user edits it via Other) and offers the optional destinations Obsidian and/or GitHub wiki (local is always
@@ -150,6 +152,8 @@ the size rubric, it gets a `Rubric: flagged — <limit broken>` line.
   destination on its own line with its path/URL, or `failed — <reason>` naming the
   destination by name, then continue. If the local write itself fails, stop before
   creating any issue.
+
+Remove any temp files this skill created before stopping.
 
 ## Step 5 — Create GitHub issue (single-task path)
 
