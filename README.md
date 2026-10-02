@@ -210,8 +210,8 @@ comments on issues. That is the user's call on their repo, not a smoke test.
 |---|---|
 | `/ai-workflow:run-issue <n> [--lean\|--full]` | the full pipeline: issue → reviewed PR. Accepts an epic parent. |
 | `/ai-workflow:intake <source>` | normalize a Sentry link, BRD file, or vault note into an issue brief — used internally by `/gh-issue` and `/run-issue` |
-| `/ai-workflow:gh-issue` | file a well-formed issue; always decomposes first — one task files one issue, two or more file a parent plus children |
-| `/ai-workflow:jira-to-gh <KEY>` | convert a Jira ticket into a GitHub issue |
+| `/ai-workflow:gh-issue` | file a well-formed issue; always decomposes first — one task files one issue; two or more save the task list to `docs/tasks/<slug>.md` and file one flat issue per task, ordered by `Depends on: #n` lines, with no parent issue |
+| `/ai-workflow:jira-to-gh <KEY>` | decompose a Jira ticket and file flat issues the same way as `/gh-issue` (one issue for a single task; two or more saved to `docs/tasks/<slug>.md` and filed flat) |
 | `/ai-workflow:pr-fix-comments <pr>` | work through a PR's review comments, confirming each |
 | `/ai-workflow:issue-to-pr` | the interactive, non-unattended variant |
 
