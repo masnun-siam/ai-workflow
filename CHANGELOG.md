@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **`/gh-issue` and `/jira-to-gh` file flat issues instead of a parent plus children (#78, #79, #80, #81, #83, #84).** Decomposition applies a size rubric (one layer-scoped deliverable, 3 or fewer production files, 1-4 acceptance criteria, one verify command) and asks "Create as shown" or "Let me edit the list". Two or more tasks save the approved list to `docs/tasks/<slug>.md` (optionally also Obsidian or the GitHub wiki), then create one standalone issue per task, labelled `prd-<slug>` and ordered by `Depends on: #n` lines, writing each number back into the list. A partial failure offers "Retry the missing ones" or "Stop here", and "Resume this list" picks a saved list back up without duplicating issues. `4-EPIC` and `5-EPIC` are gone.
+- **`/gh-issue` asks the assignee and project questions once per run, factchecks every created issue, and returns the ordered list of issue URLs (#82).**
+- **`/run-issue` lists the issues and stops when `/gh-issue` returns two or more (#85).** Run `/run-issue <n>` on each, dependencies first. Epic mode is unchanged for epics that already exist.
+
 ## 1.8.0 — 2026-09-30
 
 ### Added

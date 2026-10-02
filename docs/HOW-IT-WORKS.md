@@ -320,18 +320,32 @@ correctly invisible to it.
 
 And still: **merging is manual.** The grind ends by @-mentioning you to do it.
 
-## Layer 5 — Epics
+## Layer 5 — Task lists and epics
 
-`/gh-issue` always breaks a request into a numbered task list before filing anything. One
-task files one issue as before; two or more tasks file a **parent** issue plus several
-**children**, each of which is a complete, independently-readable issue — not a fragment
-that says "see parent". Children declare their order in plain text:
+`/gh-issue` always breaks a request into a numbered task list before filing anything. Each
+task is one layer-scoped deliverable: 3 or fewer production files, 1-4 acceptance criteria,
+one verify command. You approve the list with **"Create as shown"** or revise it with **"Let
+me edit the list"**. One task files one issue as before. Two or more tasks save the list to
+`docs/tasks/<slug>.md` first (optionally also to Obsidian or the GitHub wiki), then file one
+**flat** issue per task: no parent issue, no sub-issues. Each is a complete,
+independently-readable issue labelled `prd-<slug>`, and declares its order in plain text:
 
 ```
 Depends on: #12, #13
 ```
 
-Then `/run-issue <parent>` drives them all. The rules:
+Each new issue number is written back into the saved list. A create failure partway through
+is a recoverable state, not a failure state: `/gh-issue` reports which issues exist and which
+are missing, then asks **"Retry the missing ones"** or **"Stop here"**, and nothing already
+created is closed or deleted. Re-running it on the same list offers **"Resume this list"**,
+which files only the missing tasks. `/jira-to-gh` decomposes, saves and files a Jira ticket
+the same way.
+
+`/gh-issue` returns the issue URLs in list order. Run `/run-issue <n>` on each, dependencies
+first; handed two or more issues at once, `/run-issue` prints the list and stops.
+
+**Epic mode** still exists for epics that already exist: a parent issue with sub-issues,
+filed by hand or before this change. `/run-issue <parent>` drives all its children. The rules:
 
 - **Independent children run at the same time.** Dependent ones cannot, by definition — a
   child stacks its branch on top of the branch it depends on, so it waits for that one to
@@ -345,12 +359,6 @@ Then `/run-issue <parent>` drives them all. The rules:
 - **A failed child with dependents is reported by name.** "Never started, blocked by #14" —
   because a child silently missing from a list of twelve is how you discover a month later
   that a third of the epic was never built.
-- **A child-create failure partway through is a recoverable state, not a failure state.**
-  `/gh-issue` reports which issues exist and which are missing, then asks whether to retry
-  the missing ones or stop here; nothing already created is auto-closed or deleted.
-
-Optionally it also creates a Kanban view in your GitHub Project filtered to that epic, so
-you can see the whole thing at a glance.
 
 ---
 
@@ -383,7 +391,7 @@ Anything skipped is named in the final report.
 - **Degraded finish** — the ending where the work is not done: draft PR, reason attached,
   still one report.
 - **Worktree** — the throwaway checkout a run works in.
-- **Epic** — a parent issue with dependent children.
+- **Epic** — an existing parent issue with sub-issues, run by `/run-issue` Epic mode; `/gh-issue` and `/jira-to-gh` no longer create one.
 - **Grind** — the post-handback loop that works repeated review rounds on an open PR.
 - **Rail** — a condition that stops the grind rather than letting it push another fix.
 - **Fingerprint** — how a finding is recognised across rounds, so a repeat is visible.
