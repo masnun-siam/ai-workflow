@@ -3671,4 +3671,108 @@ assert hashlib.sha256(st35.encode()).hexdigest() == S35_SHA
 assert hashlib.sha256(_n(_ep).encode()).hexdigest() == EPIC_SHA
 ok("#85 step 3.5 and Epic mode are unchanged")
 
+# Issue #86: docs describe the flat task-list flow (README, HOW-IT-WORKS Layer 5 + glossary, CHANGELOG).
+import hashlib as _hl86
+
+rd86, hw86, cl86 = _read("README.md"), _read("docs", "HOW-IT-WORKS.md"), _read("CHANGELOG.md")
+rdn86, hwn86 = _n(rd86), _n(hw86)
+ROW86 = (
+    "| `/ai-workflow:gh-issue` | file a well-formed issue; always decomposes first \u2014 one task files one issue; "
+    "two or more save the task list to `docs/tasks/<slug>.md` and file one flat issue per task, "
+    "ordered by `Depends on: #n` lines, with no parent issue |"
+)
+assert rdn86.count(ROW86) == 1
+assert "parent plus children" not in rdn86
+assert "flat issue per task" in ROW86 and "no parent issue" in ROW86 and "`docs/tasks/<slug>.md`" in ROW86
+assert "Accepts an epic parent." in rdn86
+assert "aiw epic split|init|next|status    epic decomposition and sequencing" in rd86
+ok("#86 README gh-issue row pinned whole; Epic-mode README lines intact")
+
+H5 = "## Layer 5 \u2014 Task lists and epics"
+assert hw86.count(H5) == 1 and "## Layer 5 \u2014 Epics" not in hw86
+l5 = _n(_slice(hw86, "## Layer 5", "\n---"))
+P1 = (
+    '`/gh-issue` always breaks a request into a numbered task list before filing anything. Each task is one '
+    'layer-scoped deliverable: 3 or fewer production files, 1-4 acceptance criteria, one verify command. '
+    'You approve the list with **"Create as shown"** or revise it with **"Let me edit the list"**. '
+    'One task files one issue as before. Two or more tasks save the list to `docs/tasks/<slug>.md` first '
+    '(optionally also to Obsidian or the GitHub wiki), then file one **flat** issue per task: no parent issue, '
+    'no sub-issues. Each is a complete, independently-readable issue labelled `prd-<slug>`, and declares its '
+    'order in plain text:'
+)
+P2 = (
+    'Each new issue number is written back into the saved list. A create failure partway through is a '
+    'recoverable state, not a failure state: `/gh-issue` reports which issues exist and which are missing, '
+    'then asks **"Retry the missing ones"** or **"Stop here"**, and nothing already created is closed or '
+    'deleted. Re-running it on the same list offers **"Resume this list"**, which files only the missing '
+    'tasks. `/jira-to-gh` decomposes, saves and files a Jira ticket the same way.'
+)
+P3 = (
+    '`/gh-issue` returns the issue URLs in list order. Run `/run-issue <n>` on each, dependencies first; '
+    'handed two or more issues at once, `/run-issue` prints the list and stops.'
+)
+P4 = (
+    '**Epic mode** still exists for epics that already exist: a parent issue with sub-issues, filed by hand '
+    'or before this change. `/run-issue <parent>` drives all its children. The rules:'
+)
+for para in (P1, P2, P3, P4):
+    assert l5.count(para) == 1, para[:50]
+assert "```" in hw86 and "Depends on: #12, #13" in l5
+assert l5.index(P1) < l5.index("Depends on: #12, #13") < l5.index(P2) < l5.index(P3) < l5.index(P4)
+for b in (
+    "**Independent children run at the same time.** Dependent ones cannot, by definition \u2014 a child stacks its branch on top of the branch it depends on, so it waits for that one to reach \"PR open\" first.",
+    "**Still three gates, for the whole epic.**",
+    "an immediate, per-blocker ask fired as soon as that child parks",
+    "**A failed child with dependents is reported by name.**",
+):
+    assert b in l5, b
+for gone in (
+    "a **parent** issue plus several",
+    "A child-create failure partway through is a recoverable state, not a failure state.**",
+    "Kanban view",
+):
+    assert gone not in l5, gone
+ok("#86 Layer 5 heading, flat-flow paragraphs, Epic-mode lead-in and kept bullets pinned")
+
+GL86 = "- **Epic** \u2014 an existing parent issue with sub-issues, run by `/run-issue` Epic mode; `/gh-issue` and `/jira-to-gh` no longer create one."
+assert hwn86.count(GL86) == 1
+assert "- **Epic** \u2014 a parent issue with dependent children." not in hwn86
+ok("#86 glossary Epic line pinned")
+
+assert cl86.startswith("# Changelog\n\n## Unreleased\n\n### Changed\n") and cl86.count("## Unreleased") == 1
+cln86 = _n(_slice(cl86, "## Unreleased", "## 1.8.0"))
+CB1 = (
+    '- **`/gh-issue` and `/jira-to-gh` file flat issues instead of a parent plus children (#78, #79, #80, #81, #83, #84).** '
+    'Decomposition applies a size rubric (one layer-scoped deliverable, 3 or fewer production files, 1-4 acceptance criteria, '
+    'one verify command) and asks "Create as shown" or "Let me edit the list". Two or more tasks save the approved list to '
+    '`docs/tasks/<slug>.md` (optionally also Obsidian or the GitHub wiki), then create one standalone issue per task, labelled '
+    '`prd-<slug>` and ordered by `Depends on: #n` lines, writing each number back into the list. A partial failure offers '
+    '"Retry the missing ones" or "Stop here", and "Resume this list" picks a saved list back up without duplicating issues. '
+    '`4-EPIC` and `5-EPIC` are gone.'
+)
+CB2 = (
+    '- **`/gh-issue` asks the assignee and project questions once per run, factchecks every created issue, and returns '
+    'the ordered list of issue URLs (#82).**'
+)
+CB3 = (
+    '- **`/run-issue` lists the issues and stops when `/gh-issue` returns two or more (#85).** Run `/run-issue <n>` on each, '
+    'dependencies first. Epic mode is unchanged for epics that already exist.'
+)
+for cb in (CB1, CB2, CB3):
+    assert cln86.count(cb) == 1, cb[:50]
+for frag in ("docs/tasks/<slug>.md", "prd-<slug>", "Depends on: #n", "Retry the missing ones", "Stop here",
+             "Resume this list", "Create as shown", "Let me edit the list", "Epic mode"):
+    assert frag in cln86, frag
+ok("#86 CHANGELOG Unreleased entry pinned")
+
+_old86 = cl86[cl86.index("## 1.8.0 \u2014 2026-09-30") :]
+assert _hl86.sha256(_old86.encode()).hexdigest() == "6e29635bc50416a75fd4a331051088eb42d6a8f2c05f9e8a0707ee4c10228557"
+ok("#86 CHANGELOG old entries unchanged")
+
+assert "splits a large brief" not in rd86
+assert "can split a large brief" not in hw86 and "For work too big for one pull request" not in hw86
+assert ("immediate" in hw86 or "as soon as" in hw86) and "sole channel" not in hw86
+assert "queued" in hw86 and "one attempt per head SHA" in hw86
+ok("#86 earlier doc regressions still hold")
+
 print(f"\n{passed} checks passed")
