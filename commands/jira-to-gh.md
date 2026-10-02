@@ -84,7 +84,7 @@ Ask me up to 3 focused questions if anything is unclear or missing (e.g., accept
 
 Every run, after Step 4's clarifying questions — no size test gates this, it always
 happens. Use GitNexus MCP (`gitnexus_query`, `gitnexus_context`) to find the relevant
-code — execution flows, affected symbols, and files related to the ticket — the
+code — execution flows, affected symbols, and files related to the ticket —
 each task's issue needs this for its Context / Affected Code and How
 path:line references.
 
