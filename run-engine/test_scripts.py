@@ -3758,7 +3758,7 @@ assert cl86.startswith(_T86 + "## ") and cl86.count(_E86) == 1
 _top86 = cl86[len(_T86) : cl86.index(_E86)]  # topmost section, whatever its heading is called
 assert "\n## " not in _top86 and "\n### Changed\n" in _top86
 cln86 = _n(_top86)
-assert _top86.count("\n- **") == 3
+assert _top86.count("\n- **") == 4  # 3 "Changed" bullets (#86) + the /prd "Added" bullet (1.9.0 release)
 CB1 = (
     '- **`/gh-issue` and `/jira-to-gh` file flat issues instead of a parent plus children (#78, #79, #80, #81, #83, #84).** '
     'Decomposition applies a size rubric (one layer-scoped deliverable, 3 or fewer production files, 1-4 acceptance criteria, '
@@ -3776,7 +3776,12 @@ CB3 = (
     '- **`/run-issue` lists the issues and stops when `/gh-issue` returns two or more (#85).** Run `/run-issue <n>` on each, '
     'dependencies first. Epic mode is unchanged for epics that already exist.'
 )
-for cb in (CB1, CB2, CB3):
+CB4 = (
+    '- **`/prd` turns a rough requirement into a reviewed PRD (#100).** It scans the codebase first, interviews you with the '
+    '`grilling` skill, shows the full draft for approval, then saves it to `docs/prd/<slug>.md`, the Obsidian vault and/or the '
+    'GitHub wiki. Run `/gh-issue` on the saved PRD to file its tasks.'
+)
+for cb in (CB1, CB2, CB3, CB4):
     assert cln86.count(cb) == 1, cb[:50]
 for frag in ("docs/tasks/<slug>.md", "prd-<slug>", "Depends on: #n", "Retry the missing ones", "Stop here",
              "Resume this list", "Create as shown", "Let me edit the list", "Epic mode"):

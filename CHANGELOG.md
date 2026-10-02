@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 1.9.0 — 2026-10-02
+
+### Added
+
+- **`/prd` turns a rough requirement into a reviewed PRD (#100).** It scans the codebase
+  first, interviews you with the `grilling` skill, shows the full draft for approval, then
+  saves it to `docs/prd/<slug>.md`, the Obsidian vault and/or the GitHub wiki. Run
+  `/gh-issue` on the saved PRD to file its tasks.
 
 ### Changed
 
