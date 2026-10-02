@@ -1710,9 +1710,9 @@ for name, text in (("gh-issue.md", gh_text), ("jira-to-gh.md", jira_text)):
 ok("both commands ensure-create the refined label")
 
 for name, sect in (
-    ("gh-issue.md step 4", _slice(gh_text, "4. Then create a GitHub issue", "### 4-EPIC")),
+    ("gh-issue.md step 4", _slice(gh_text, "4. Then create a GitHub issue", "### 4-FLAT")),
     ("jira-to-gh.md Step 5", _slice(jira_text, "## Step 5", "### 5-EPIC")),
-    ("gh-issue.md 4-EPIC", gh_text[gh_text.index("### 4-EPIC"):]),
+    ("gh-issue.md 4-FLAT", _slice(gh_text, "### 4-FLAT", "\n4.5.")),
     ("jira-to-gh.md 5-EPIC", jira_text[jira_text.index("### 5-EPIC"):]),
 ):
     m = re.search(LABEL_RE, sect)
@@ -1724,7 +1724,6 @@ ok("refined is ensure-created before first gh issue create and applied on single
 
 # The epic PARENT step itself must carry `refined` (child wording must not satisfy this).
 for name, text, start, end in (
-    ("gh-issue.md 4-EPIC", gh_text, "1. Create the **parent**", "\n2. For each child"),
     ("jira-to-gh.md 5-EPIC", jira_text, "1. Create the **parent**", "\n2. Create children"),
 ):
     step1 = _slice(text[text.index("-EPIC. Create the parent"):], start, end)
@@ -2392,25 +2391,6 @@ ok("commands/gh-issue.md step 3.5 routes 1 task to step 4 / 4-FLAT, not 4-EPIC")
 
 assert "No round limit" in step35 and re.search(r"re-apply the (layer )?rubric", step35, re.I)
 ok("commands/gh-issue.md step 3.5 keeps 'No round limit' and re-applies the rubric on edit")
-
-epic_section_start = gh_issue_text.index("### 4-EPIC")
-epic_section_end_match = re.search(r"^### (?!4-EPIC)", gh_issue_text[epic_section_start + 1:], re.MULTILINE)
-epic_section_end = (
-    epic_section_start + 1 + epic_section_end_match.start()
-    if epic_section_end_match
-    else len(gh_issue_text)
-)
-epic_section = gh_issue_text[epic_section_start:epic_section_end]
-assert "Retry the missing ones" in epic_section, "4-EPIC section missing 'Retry the missing ones'"
-assert "Stop here" in epic_section, "4-EPIC section missing 'Stop here'"
-ok("commands/gh-issue.md's 4-EPIC section covers both 'Retry the missing ones' and 'Stop here'")
-
-epic_section_flat = " ".join(epic_section.split())
-assert "the parent and children 1..k-1" in epic_section_flat and "URLs" in epic_section_flat, \
-    "4-EPIC section's partial-failure report must describe naming created issues (parent + children 1..k-1) with URLs"
-assert "which are missing" in epic_section_flat and "by planned title" in epic_section_flat, \
-    "4-EPIC section's partial-failure report must describe naming missing issues (k..N) by planned title"
-ok("commands/gh-issue.md's 4-EPIC section's partial-failure report describes both created (parent+children, URLs) and missing (by planned title) issues")
 
 with open(os.path.join(HERE, "..", "README.md"), encoding="utf-8") as fh:
     readme_text = fh.read()
@@ -3261,5 +3241,58 @@ for bad in ("4-EPIC", "three choices", "coarser", "~8", "more-than-8",
     assert bad not in _s36, f"step 3.6 slice must not contain {bad!r}"
 assert not any(l.lstrip().startswith("- Body sections:") for l in _raw36.splitlines())
 ok("step 3.6 slice stays scoped (no 4-EPIC / 3.5 / step 4 leakage)")
+
+# Issue #80: flat creation loop (4-FLAT) replaces 4-EPIC in gh-issue.md.
+_g80 = _read("commands", "gh-issue.md")
+flat = _slice(_g80, "### 4-FLAT", "\n4.5.")
+flat_ws = " ".join(flat.split())
+assert _g80.count("### 4-FLAT. Create the flat issues") == 1
+ok("gh-issue.md has the 4-FLAT heading exactly once")
+
+_create = flat.index("gh issue create")
+assert "--body-file /tmp/gh-issue-body.md" in flat and "--body " not in flat
+_lab = [l for l in flat.splitlines() if "--label" in l and "gh issue create" in l or "--label" in l]
+assert any("refined" in l and "prd-<slug>" in l for l in _lab), _lab
+ok("4-FLAT creates with --label refined,prd-<slug> and --body-file, never --body")
+
+_prd = re.search(r"gh label create prd-<slug>\b[^\n]*2>/dev/null \|\| true", flat)
+assert _prd and _prd.start() < _create
+_ref = re.search(LABEL_RE, flat)
+assert _ref and _ref.start() < _create
+assert flat.count("gh label create prd-<slug>") == 1 and flat.count("gh label create refined") == 1
+ok("4-FLAT ensure-creates prd-<slug> and refined once each before the first create")
+
+assert "same section list as step 4" in flat_ws and "inlined, never referenced" in flat_ws
+assert "docs/tasks/<slug>.md" in flat
+ok("4-FLAT bodies reuse step 4 sections, inline context, and link docs/tasks/<slug>.md in Notes")
+
+assert "Depends on: task <k>" in flat and "Depends on: #<n>" in flat and "earlier" in flat
+ok("4-FLAT resolves Depends on: task <k> to Depends on: #<n> from earlier tasks")
+
+assert "Issue:" in flat and "docs/tasks/<slug>.md" in flat and "#<n>" in flat
+assert re.search(r"write.?back", flat, re.I)
+assert re.search(r"no local file|skip the save", flat_ws, re.I)
+ok("4-FLAT writes #<n> back into the Issue: slot and skips when no local file was saved")
+
+assert "one at a time" in flat_ws and "list order" in flat_ws
+ok("4-FLAT creates issues one at a time in list order")
+
+assert "gh label create lean" not in flat
+assert not any("--label" in l and "lean" in l for l in flat.splitlines())
+assert re.search(r"never apply `?lean", flat, re.I) or re.search(r"`lean`[^.\n]*never", flat_ws, re.I)
+ok("4-FLAT never applies lean")
+
+for bad in ("4-EPIC", "aiw epic split", "project-board", "sub_issues", "epic-<parent>"):
+    assert bad not in _g80, bad
+assert "epic" not in _g80.lower()
+ok("gh-issue.md has no epic machinery")
+
+_hr80 = " ".join(_slice(_g80, "**HARD RULE", "Do the following:").split())
+assert "4-FLAT" in _hr80 and "4-EPIC" not in _hr80
+assert "Issue:" in _hr80 and "docs/tasks/<slug>.md" in _hr80
+ok("gh-issue.md HARD RULE names 4-FLAT and the Issue: slot write-back")
+
+assert not any(l.lstrip().startswith("- Body sections:") for l in flat.splitlines())
+ok("4-FLAT adds no '- Body sections:' line")
 
 print(f"\n{passed} checks passed")
