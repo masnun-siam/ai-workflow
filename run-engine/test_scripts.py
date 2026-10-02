@@ -3462,7 +3462,26 @@ ok("#82 the ordered list is returned and handed back")
 assert "Return the issue URL when step 4 created one issue" in close
 assert "with that issue number for one issue" in close
 assert 'gh issue create --title "..." --label "refined,..." --body-file /tmp/gh-issue-body.md' in s4
-assert "--assignee" not in s4 and "--project" not in s4
+assert "ask step 5's assignee question and step 6's project and field questions first, and add their `--assignee` / `--project` flags to this create" in s4
+
+assert "one `--project \"<title>\"` flag per project on every create (same call as step 4/5)" in s6
+assert "Retry reuses the preflight answers and does not re-ask." in s6
+_ps = flat_ws[flat_ws.index("0. Preflight"):flat_ws.index("1. Ensure the labels")]
+assert _ps.index("once for the whole list") > _ps.index("This resume branch overrides")
+assert _ps.index("once for the whole list") > _ps.index("If every slot is filled, create nothing")
+_f5 = flat_ws[flat_ws.index("5. Check each create"):]
+assert _f5.count("stop") == 1 and "first failure" not in _f5
+assert "On failure, stop like a failed create: report the created issues (number and URL)" in _f5
+assert "(including issues reused on resume)" in close
+assert "`PASS` \u2192 continue with the next issue's factcheck, then step 5" in s45
+_rt = ("retry that create once without `--project`, then after the loop add the issue to the chosen projects with "
+       "`gh project item-add <number> --owner <owner> --url <issue-url>` and report it as a project failure in step 6")
+assert _rt in flat_ws
+assert "On the `4-FLAT` path this skips only the project questions; the run goes on to the first create." in s6
+assert "Zero projects \u2192 skip this step entirely, go straight to returning the URL(s)." in s6
+assert "once per issue created in this run (one from step 4, each one from `4-FLAT`)" in s45
+assert "On a resume, also apply 4.5 and step 6 to reused issues never factchecked in an earlier run" in s45
+ok("#82 review-fix wording pinned")
 _sp = "on the step 4 path before its create"
 assert _sp in s5 and _sp in s6
 ok("#82 single-issue path is unchanged")
