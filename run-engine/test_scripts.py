@@ -2363,7 +2363,7 @@ assert "3.5. **Decompose.**" in gh_issue_text, "expected the renamed step headin
 assert "Epic check" not in gh_issue_text, "old 'Epic check' heading text must be gone"
 ok("commands/gh-issue.md step 3.5 is headed 'Decompose.' and no longer says 'Epic check'")
 
-step35 = " ".join(_slice(gh_issue_text, "3.5. **Decompose.**", "4. Then create a GitHub issue").split())
+step35 = " ".join(_slice(gh_issue_text, "3.5. **Decompose.**", "3.6.").split())
 
 for choice in ("Create as shown", "Let me edit the list"):
     assert choice in step35, f"step 3.5 missing AskUserQuestion choice label: {choice!r}"
@@ -3205,5 +3205,60 @@ assert "immediate" in how_it_works_text.lower() or "as soon as" in how_it_works_
     "docs/HOW-IT-WORKS.md must mention the immediate per-blocker ask in its epic Gate 2a description"
 assert "sole channel" not in how_it_works_text.lower(), how_it_works_text
 ok("docs/HOW-IT-WORKS.md mentions the immediate per-blocker ask, not just the once-at-the-end description")
+
+# Issue #79: gh-issue step 3.6 saves the approved task list; HARD RULE gets one exception.
+_g79 = _read("commands", "gh-issue.md")
+_hr79 = " ".join(_slice(_g79, "**HARD RULE", "Do the following:").split())
+for needle in ("docs/tasks/", "Obsidian", "wiki"):
+    assert needle in _hr79, f"HARD RULE missing {needle!r}"
+assert "only when" in _hr79.lower() and ("sole" in _hr79.lower() or "nothing else" in _hr79.lower()), _hr79
+ok("gh-issue.md HARD RULE carves out docs/tasks/ (Obsidian/wiki only when chosen) as the sole exception")
+
+for needle in ("NEVER use Write, Edit, or NotebookEdit", "NEVER run a mutating shell command",
+               "/tmp/gh-issue-body.md", "/dump", '"It\'s trivial" is not an exception', "**Scope.**"):
+    assert needle in _hr79 or needle in _g79, f"earlier HARD RULE text lost: {needle!r}"
+assert "/dump" in _hr79 and "**Scope.**" in _g79
+ok("gh-issue.md HARD RULE keeps every earlier prohibition")
+
+_i35 = _g79.index("3.5. **Decompose.**")
+assert "3.6." in _g79[_i35:], "step 3.6 missing"
+_i36 = _g79.index("3.6.", _i35 + 5)
+_i4 = _g79.index("4. Then create a GitHub issue")
+assert _i35 < _i36 < _i4, "step 3.6 must sit between 3.5 and 4"
+ok("gh-issue.md has step 3.6 between 3.5 and 4")
+
+_raw36 = _slice(_g79, "3.6.", "4. Then create a GitHub issue")
+_s36 = " ".join(_raw36.split())
+_low36 = _s36.lower()
+for f in ("sequence number", "title", "outcome", "files", "symbols", "acceptance criteria",
+          "verify command", "Depends on: task <k>", "issue-number"):
+    assert f.lower() in _low36, f"step 3.6 missing per-task field {f!r}"
+ok("step 3.6 names every per-task field")
+
+for needle in ("docs/tasks/<slug>.md", "obsidian vault=notes", "05-Work/<Project>/<Feature>/Tasks.md",
+               "Tasks-<Title-With-Dashes>.md", "on demand", "separate"):
+    assert needle.lower() in _low36, f"step 3.6 missing {needle!r}"
+assert "never" in _low36 and "git add" in _low36 and "commit" in _low36
+assert "confirmation" in _low36 or "confirm" in _low36
+ok("step 3.6 covers local save, Obsidian path, wiki page and separate push confirmation")
+
+assert "fail" in _low36 and "by name" in _low36 and "local" in _low36
+assert "no wiki" in _low36 and "failed destination" in _low36
+ok("step 3.6 keeps local save on failure, names failed destination, no-wiki counts as failed")
+
+assert "size rubric" in _low36 and "flag" in _low36
+ok("step 3.6 flags tasks that still fail the size rubric")
+
+assert "no title" in _low36 and "slug" in _low36 and "confirm" in _low36
+ok("step 3.6 proposes a slug for title-less free text")
+
+assert "overwrit" in _low36 and "ask" in _low36
+ok("step 3.6 never silently overwrites an existing file")
+
+for bad in ("4-EPIC", "three choices", "coarser", "~8", "more-than-8",
+            "4. Then create a GitHub issue", "3.5. **Decompose.**"):
+    assert bad not in _s36, f"step 3.6 slice must not contain {bad!r}"
+assert not any(l.lstrip().startswith("- Body sections:") for l in _raw36.splitlines())
+ok("step 3.6 slice stays scoped (no 4-EPIC / 3.5 / step 4 leakage)")
 
 print(f"\n{passed} checks passed")
