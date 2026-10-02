@@ -33,7 +33,7 @@ ever creates a GitHub issue. It never touches code.**
 - If a fix is obvious from your investigation, do NOT apply it. Record it under a **Proposed Fix** section in the issue body instead (file path, symbol, and the change in prose or a fenced diff).
 - **Scope.** These constraints bind steps 0–7 of this skill only, including everything
   under `4-FLAT`. When `/run-issue` invoked this skill, they lapse the moment the issue
-  URL is returned — the caller's later phases write code by design, and this rule must
+  URL (or the ordered URL list) is returned — the caller's later phases write code by design, and this rule must
   not be carried into them.
 
 Do the following:
@@ -111,7 +111,7 @@ Do the following:
      ```bash
      gh label create refined --color 1D76DB --description "properly specified: passes the issue template" 2>/dev/null || true
      ```
-   - Run `gh issue create --title "..." --label "refined,..." --body-file /tmp/gh-issue-body.md`
+   - Run `gh issue create --title "..." --label "refined,..." --body-file /tmp/gh-issue-body.md`; ask step 5's assignee question and step 6's project and field questions first, and add their `--assignee` / `--project` flags to this create
    - **NEVER use `--body` flag** — shell escaping breaks on backticks, pipes, quotes, newlines. Always `--body-file`.
    - Delete `/tmp/gh-issue-body.md` after the issue is created
    - Title: clear, specific, ≤72 chars
@@ -157,6 +157,7 @@ One issue per task from the step 3.6 list, each standalone.
    task, and let the user fix the list via step 3.5's edit loop.
    This resume branch overrides the new-slug stop above: choosing **"Resume this list"** is not skipping the save, and the `j < k` check runs on the saved list (the one Resume uses), not the approved one it discards.
    If the user chose **"Resume this list"** in step 3.6, the saved `docs/tasks/<slug>.md` is the list: read it, show which tasks have no issue number yet, and create only tasks without an issue number, in list order; reuse the existing `Issue: #<n>` numbers for their `Depends on:` lines. First run `gh issue list --label prd-<slug> --state all --limit 200 --json number,url,title,body` (the guard runs before the show step is final, so that list reflects its findings); an issue whose Notes says `Task <n> of docs/tasks/<slug>.md` (Notes wrap the path in backticks, so match on the `Task <n> of` text and the slug) for a task with an empty slot, and whose title also matches that task's planned title, was created but never recorded, so fill that slot with the sub-step 4 write-back instead of creating it again. A Notes-only match with a different title may belong to another list sharing the slug: report it and leave it for the user. If every slot is filled, create nothing and report the existing issues.
+   Ask step 5's assignee question and step 6's project and field questions here, once for the whole list and before the first create; skip them when nothing is left to create.
 1. Ensure the labels once, before the first create (`<slug>` is the step 3.6 slug):
 
    ```bash
@@ -173,6 +174,7 @@ One issue per task from the step 3.6 list, each standalone.
    `gh issue create --title "..." --label "refined,prd-<slug>,<type>,<scope...>" --body-file /tmp/gh-issue-body.md`
    and delete the temp file. Labels are set at creation time: exactly `refined`,
    `prd-<slug>`, the type and the scope labels. `lean` is never applied here.
+   Add step 5's `--assignee` flags and step 6's `--project` flags from the preflight answers to every create. If a create fails and the error names the project (e.g. missing `project` scope), retry that create once without `--project`, then after the loop add the issue to the chosen projects with `gh project item-add <number> --owner <owner> --url <issue-url>` and report it as a project failure in step 6 (don't abort). This applies on both paths.
 4. Write-back: every task block ends with an identical `Issue: —` line, so never
    `replace_all` and never Edit on that line alone. Right after each successful create,
    Edit with an `old_string` that starts at the task's own `## Task <k> — <title>` heading
@@ -186,25 +188,27 @@ One issue per task from the step 3.6 list, each standalone.
    - **"Stop here"**: end the run and report the partial state (created vs. missing); the filled `Issue:` slots let a later run resume the list.
    Never close or delete an issue already created — a partial list is a recoverable state.
 
-4.5. Dispatch the `gh-issue-factchecker` agent (fresh context, no memory of the steps above) with just the issue number/URL and `owner/repo`. It re-reads the created issue cold and checks every concrete claim (file paths, symbols, described behavior, the proposed fix) against the real repo. Tell it explicitly: a `Source:` line in the Notes section pointing outside the repo (a Sentry permalink, an absolute file path, or a vault note path) is expected traceability from `/intake`, not a claim about this repo, and must not be flagged as an unverifiable claim.
-   - `PASS` → continue to step 5, no mention needed.
+4.5. Dispatch the `gh-issue-factchecker` agent (fresh context, no memory of the steps above) once per issue created in this run (one from step 4, each one from `4-FLAT`), each time with just that issue's number/URL and `owner/repo`. It re-reads the created issue cold and checks every concrete claim (file paths, symbols, described behavior, the proposed fix) against the real repo. Tell it explicitly: a `Source:` line in the Notes section pointing outside the repo (a Sentry permalink, an absolute file path, or a vault note path) is expected traceability from `/intake`, not a claim about this repo, and must not be flagged as an unverifiable claim. On a resume, also apply 4.5 and step 6 to reused issues never factchecked in an earlier run: every issue the resume run returns, created now or reused.
+   - `PASS` → continue with the next issue's factcheck, then step 5, no mention needed.
    - `ISSUES FOUND` → fix the flagged text yourself, write the corrected body to `/tmp/gh-issue-body.md`, run `gh issue edit <n> --body-file /tmp/gh-issue-body.md`, delete the temp file, and briefly tell me what was wrong and corrected. Do not silently ignore a flagged discrepancy.
-5. Assign the issue:
+5. Assign the issues:
+   - Ask this once per run, never per issue, and apply the chosen logins to every issue this run creates: on the step 4 path before its create, on the `4-FLAT` path in its sub-step 0 preflight, before the first create.
    - Get the default assignee: `gh api user --jq .login`.
    - Confirm via AskUserQuestion (`multiSelect: true`), with that login (as `@me`) recommended first, alongside other repo collaborators from `gh api repos/{owner}/{repo}/assignees --jq '.[].login'`.
-   - Pass each chosen login as its own `--assignee <login>` flag on `gh issue create` (combine with the create call in step 4 rather than a separate call).
+   - Pass each chosen login as its own `--assignee <login>` flag on every `gh issue create` (combine with the create call in step 4 or `4-FLAT` sub-step 3 rather than a separate call).
 6. Add to a GitHub Project and fill its fields, discovered at runtime — never assume a project or field schema:
+   - Ask the project and field questions once per run and apply the answers to every issue this run creates: on the step 4 path before its create, on the `4-FLAT` path in its sub-step 0 preflight, before the first create.
    - `gh project list --owner <repo-owner> --format json`
-     - Zero projects → skip this step entirely, go straight to returning the URL.
+     - Zero projects → skip this step entirely, go straight to returning the URL(s). On the `4-FLAT` path this skips only the project questions; the run goes on to the first create.
      - One project → use it.
      - Multiple → ask via AskUserQuestion (`multiSelect: true`) which ones.
-   - Add the issue to each chosen project at creation time, one `--project "<title>"` flag per project (same call as step 4/5).
+   - Add every issue to each chosen project at creation time, one `--project "<title>"` flag per project on every create (same call as step 4/5). Retry reuses the preflight answers and does not re-ask.
    - For each chosen project, read its fields: `gh project field-list <number> --owner <owner> --format json`.
    - For each `ProjectV2SingleSelectField` on each project, ask the user to pick from that field's real `options` (never invent option names) — batch into as few AskUserQuestion calls as possible (max 4 questions per call). Skip any field the user declines to set.
-   - Set each chosen field — **one field per `item-edit` call** (the CLI only supports single-field updates on non-draft issues):
+   - Set each chosen field on every issue — **one field per `item-edit` call** (the CLI only supports single-field updates on non-draft issues):
      `gh project item-edit <number> --owner <owner> --url <issue-url> --field "<name>" --value "<option>"`
-   - If any `gh project` call fails, don't abort — the issue already exists and is assigned. Report the URL and state plainly which fields couldn't be set and why (a missing `project` token scope is the likely cause; fix with `gh auth refresh -s project`).
-   - Verify project fields landed with `gh issue view <n> --repo <owner>/<repo> --json projectItems` — cheap, and confirms per-project field values (e.g. Status) directly on the issue. Do NOT verify by paginating `gh project item-list` (projects can hold hundreds/thousands of items — pulling the full list to find one issue wastes time and burns context).
+   - If any `gh project` call fails, don't abort — the issue already exists and is assigned; keep going with the remaining issues and fields. Report each affected issue URL and state plainly which fields couldn't be set and why (a missing `project` token scope is the likely cause; fix with `gh auth refresh -s project`).
+   - Verify project fields landed on every issue with `gh issue view <n> --repo <owner>/<repo> --json projectItems` — cheap, and confirms per-project field values (e.g. Status) directly on the issue. Do NOT verify by paginating `gh project item-list` (projects can hold hundreds/thousands of items — pulling the full list to find one issue wastes time and burns context).
 7. Dump the gathered context into the notes vault so it's there next time. Invoke the
    `ai-workflow:dump` skill, passing it: the issue title and URL, the final issue body, and the
    decisions from the step-3 grilling that did NOT make it into the body verbatim
@@ -218,6 +222,8 @@ One issue per task from the step 3.6 list, each standalone.
    Best-effort: if the vault is unreachable or `/dump` is cancelled, say so in one line.
    The issue already exists and is the deliverable; the dump is not worth failing over.
 
-Return the issue URL. If `/run-issue` invoked this skill, hand control back to its
-Preflight step 3 with that issue number and continue the run; the HARD RULE above no
-longer applies.
+Return the issue URL when step 4 created one issue. When `4-FLAT` ran (2 or more tasks),
+return the ordered list of issue URLs, one per task in list order (including issues reused
+on resume). If `/run-issue` invoked this skill, hand control back to its Preflight step 3
+— with that issue number for one issue, or with that ordered list of issue URLs for 2 or
+more — and continue the run; the HARD RULE above no longer applies.
