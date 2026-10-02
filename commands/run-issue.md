@@ -231,8 +231,9 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
        no parent, and `/gh-issue` no longer files epics): print the issue URLs in list
        order and end the run here. This is a clean stop, not an escalation: no Ledger, no
        worktree, no `aiw init`, and no further Preflight step. Tell the user to run
-       `/run-issue <n>` for each issue, in list order; each issue's `Depends on:` line
-       names its base.
+       `/run-issue <n>` for each issue in list order; each issue's `Depends on:` line names
+       the issue it builds on, so run those first — `/run-issue` bases a flat issue on the
+       default branch unless its plan says otherwise.
      - **Exactly one issue URL**: parse the created issue number `<n>` from it and
        continue to Preflight step 3 with that `<n>` as though it had been passed to
        `/run-issue` directly.
