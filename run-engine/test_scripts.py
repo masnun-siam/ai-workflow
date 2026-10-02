@@ -3638,15 +3638,18 @@ ok("#85 step 2 has no stale epic wording")
 NOURL = "**No issue URL** (it failed, the human cancelled, or a `4-FLAT` run ended on **\"Stop here\"**, whatever partial list it reported): stop and say so \u2014 do not continue to step 3."
 LIST1 = "**An ordered list of 2 or more issue URLs** (its `4-FLAT` return; flat issues have no parent, and `/gh-issue` no longer files epics): print the issue URLs in list order and end the run here."
 LIST2 = "This is a clean stop, not an escalation: no Ledger, no worktree, no `aiw init`, and no further Preflight step."
-LIST3 = "Tell the user to run `/run-issue <n>` for each issue, in list order; each issue's `Depends on:` line names its base."
+LIST3 = "Tell the user to run `/run-issue <n>` for each issue in list order; each issue's `Depends on:` line names the issue it builds on, so run those first \u2014 `/run-issue` bases a flat issue on the default branch unless its plan says otherwise."
 ONE = "**Exactly one issue URL**: parse the created issue number `<n>` from it and continue to Preflight step 3 with that `<n>` as though it had been passed to `/run-issue` directly."
 HARD = "`/gh-issue`'s HARD RULE is scoped to issue creation and does not bind any later phase of this run."
 for sent in (NOURL, LIST1, LIST2, LIST3, ONE, HARD):
     assert st2.count(sent) == 1, sent
-assert ri85.count(HARD) == 1 and st2.endswith(HARD)
+assert _n(ri85).count(HARD) == 1 and st2.endswith(HARD)
 ok("#85 step 2 pins the three branches and the HARD RULE sentence whole")
-lst = st2[st2.index("**An ordered list") : st2.index("**Exactly one issue URL**")]
-assert len(lst) > 200 and "continue to Preflight step 3" not in lst and "step 3.5" not in lst
+_a, _b, _h = st2.index("**An ordered list"), st2.index("**Exactly one issue URL**"), st2.index(HARD)
+# whole-bullet pins: appended text or an inserted bullet inside a branch fails
+assert st2[st2.index("**No issue URL**") : _a].rstrip(" -") == NOURL
+assert st2[_a:_b].rstrip(" -") == f"{LIST1} {LIST2} {LIST3}"
+assert st2[_b:_h].strip() == ONE
 assert "2 or more issue URLs" in st2 and "3 or more" not in st2 and "more than 2" not in st2
 ok("#85 list branch stops the run and the threshold is literally 2")
 pos = [st2.index(m) for m in ("invoke `/intake <stripped argument> --whole`", "**No issue URL**", "**An ordered list of 2 or more", "**Exactly one issue URL**", HARD)]
@@ -3656,6 +3659,7 @@ assert "Argument is a bare number, or a `github.com/.../issues/<n>` URL \u2192 r
 assert "A non-empty array means this is an epic parent \u2014 go to **Epic mode** below instead of the single-issue phases; keep the child numbers it returned, Epic mode step 0 needs them." in st35
 assert "An empty array is the ordinary path." in st35
 ok("#85 bare-number bullet and step 3.5 epic routing sentences intact")
+# both pins below hash/compare whitespace-normalised text (_n), so reflowing lines does not trip them
 # sha256 of whitespace-normalised text on base 0ff5687 (pre-#85): step 3.5 slice, and "## Epic mode" up to "\n## Rules"
 S35_SHA = "6e1464ddf2883001109064bba0ffcef2471985262dca9d9d1d470eacb25258c5"
 EPIC_SHA = "05afb6cb8795262f6c025b93699b63680e2749534df0e1f17f734e69c4401870"
