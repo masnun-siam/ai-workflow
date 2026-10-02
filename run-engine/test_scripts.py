@@ -3386,7 +3386,7 @@ _ch = flat[flat.index("exactly these two choices") : flat.index("Never close or 
 assert len(re.findall(r'^\s*- \*\*"', _ch, re.M)) == 2, "failure prompt must have exactly two option bullets"
 assert "This resume branch overrides the new-slug stop above" in flat_ws
 assert "Apply the duplicate guard above before every create after a failure" in flat_ws
-assert "--json number,url,title,body" in flat_ws and "whose title also matches that task's planned title" in flat_ws
+assert flat_ws.count("--json number,url,title,body") == 2 and "whose title also matches that task's planned title" in flat_ws
 assert "the `j < k` check runs on the saved list" in flat_ws
 ok("#81 pins resume-as-is, two-choice bullets, new-slug carve-out, retry duplicate guard, title match, saved-list edge check")
 
