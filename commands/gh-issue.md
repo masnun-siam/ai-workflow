@@ -28,6 +28,7 @@ ever creates a GitHub issue. It never touches code.**
 - NEVER use Write, Edit, or NotebookEdit on any file in the repo.
 - NEVER run a mutating shell command (`git commit`, `git checkout -b`, package installs, formatters, codemods, etc.).
 - The ONLY writes permitted are the temp body file at `/tmp/gh-issue-body.md`, the `gh issue create` / `gh issue edit` / `gh project` calls below, and the notes-vault dump in step 7 (that's a different vault, not the repo, and goes through the `dump` skill's own confirmation).
+- The sole exception to the rules above is the step 3.6 task-list save, and only when its conditions hold: (a) `docs/tasks/<slug>.md` written via the Write tool (an override of the no-Write rule for that one path only); (b) the Obsidian `Tasks.md` via `obsidian vault=notes`, only when the user chose Obsidian, placed the way `/dump` does, plus the vault sibling writes `/dump`'s linking rules produce (the Index append and Related link); (c) the wiki clone/commit/push of `Tasks-<Title>.md` in a scratchpad clone, only when the user chose the wiki and confirmed the push (an override of the no-mutating-shell rule for that clone only). It covers nothing else: no other repo file, and no `git add` or commit of `docs/tasks/`.
 - This holds even for a one-character fix. "It's trivial" is not an exception — the whole point of filing an issue is that a human decides whether and how to make the change.
 - If a fix is obvious from your investigation, do NOT apply it. Record it under a **Proposed Fix** section in the issue body instead (file path, symbol, and the change in prose or a fenced diff).
 - **Scope.** These constraints bind steps 0–7 of this skill only, including everything
@@ -67,7 +68,42 @@ Do the following:
      shown), and present the same question again. Loop until **"Create as shown"**
      is picked. No round limit.
    - **"Create as shown"**: route on the approved list's task count — 1 task goes to
-     step 4 (single issue, unchanged); 2 or more tasks go to `4-FLAT`, in the list's dependency order.
+     step 4 (single issue, unchanged); 2 or more tasks go to `4-FLAT`, in the list's dependency order, after step 3.6 saves the list.
+3.6. **Save the task list.** Runs once, right after step 3.5's "Create as shown" and
+   before its routing creates any issue. Slug: kebab-case from the PRD/source title (the
+   `/intake` brief's title when step 0 ran). For free text with no title, propose a slug
+   and have the user confirm it. Ask ONE `AskUserQuestion` (multiSelect) that shows the
+   proposed slug as the recommended answer (the user edits it via Other) and offers the optional destinations Obsidian and/or GitHub wiki (local is always
+   on, not a choice).
+
+   If `docs/tasks/<slug>.md` already exists, stop and ask (new slug or skip the save); never
+   overwrite silently.
+
+   File shape: a header (title, source, date, owner/repo), then one block per task in the
+   approved dependency order: `## Task <n> — <title>` (n is the task's sequence number),
+   Outcome, Files/symbols, Acceptance criteria, Verify command, `Depends on: task <k>` (or
+   none), and `Issue: —` (the issue-number slot, filled in later). Only when a task genuinely cannot be split further, and so still fails
+   the size rubric, it gets a `Rubric: flagged — <limit broken>` line.
+
+   - **Local** (always): write via the Write tool, creating `docs/tasks/` on demand. Never
+     `git add` or commit it.
+   - **Obsidian** (only if chosen): resolve `05-Work/<Project>/<Feature>/` the way `/dump`
+     does (a new feature folder needs explicit OK). First run
+     `obsidian vault=notes read path="05-Work/<Project>/<Feature>/Tasks.md"`; it prints
+     `Error: ... not found` when missing. If the note exists, stop and ask (new name such
+     as `Task List.md`, or skip Obsidian); never overwrite. Then
+     `obsidian vault=notes create path="05-Work/<Project>/<Feature>/Tasks.md" ...`, tags via
+     `property:set`, and a `## Related` append per `skills/dump/SKILL.md` "Tagging and
+     linking". Never plain file writes.
+   - **Wiki** (only if chosen): ask a separate "push the task list to the wiki?"
+     confirmation. If yes, shallow-clone `.wiki.git` into the scratchpad, write
+     `Tasks-<Title-With-Dashes>.md` (stop and ask if it exists), make a plain commit, and
+     push. Never `--no-verify`. A repo with no wiki counts as a failed destination; do not
+     create one.
+   - **Failures**: an Obsidian or wiki failure keeps the local file. Report each
+     destination on its own line with its path/URL, or `failed — <reason>` naming the
+     destination by name, then continue. If the local write itself fails, stop before
+     creating any issue.
 4. Then create a GitHub issue on the current repo:
    - Write the full body to `/tmp/gh-issue-body.md` using the write tool
    - Every issue this command creates carries the `refined` label (unconditional). Ensure it
