@@ -51,8 +51,10 @@ Do the following:
    Every task is one layer-scoped deliverable: a DB migration, service logic, an API
    endpoint (its request and resource count as one unit), or one UI unit. Each task
    touches 3 or fewer production files (tests not counted), has 1-4 acceptance
-   criteria, has one verify command, and adds no new dependency. Non-layered work (docs,
-   config) uses the same limits, split by file or section. If any task fails the rubric,
+   criteria, has one verify command, and adds no new dependency. If an endpoint unit
+   (controller, request, resource, routes) needs more than 3 production files, split it
+   by file group (e.g. route+controller, then request+resource) rather than waiving the
+   cap. Non-layered work (docs, config) uses the same limits, split by file or section. If any task fails the rubric,
    create nothing and don't ask yet: split the failing task and rebuild the list before
    presenting it.
 
@@ -61,11 +63,11 @@ Do the following:
    Style this like Gate 1's revise loop in `commands/run-issue.md`:
 
    - **"Let me edit the list"**: take the free-text feedback, revise the list, re-apply
-     the rubric, and present the same question again. Loop until **"Create as shown"**
+     the rubric (a requested merge that would break a limit is declined, with the reason
+     shown), and present the same question again. Loop until **"Create as shown"**
      is picked. No round limit.
    - **"Create as shown"**: route on the approved list's task count — 1 task goes to
-     step 4 (single issue, unchanged); 2 or more tasks go to `4-FLAT`
-     ("### 4-FLAT. Create the flat issues"), in the list's dependency order.
+     step 4 (single issue, unchanged); 2 or more tasks go to `4-FLAT`, in the list's dependency order.
 4. Then create a GitHub issue on the current repo:
    - Write the full body to `/tmp/gh-issue-body.md` using the write tool
    - Every issue this command creates carries the `refined` label (unconditional). Ensure it
