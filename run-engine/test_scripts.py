@@ -3546,6 +3546,13 @@ ghf = _n(_slice(gh_cmd, "### 4-FLAT", "\n4.5.")).replace("step 3.6", "Step 4.6")
 jfr = _slice(jira_cmd, "### 5-FLAT", "## Step 6")
 jf = _n(jfr)
 assert jira_cmd.count("### 5-FLAT. Create the flat issues") == 1 and len(jf) > 1000
+_SPAN_TAILS = {
+    "create nothing and report the existing issues.": " 1. Ensure the labels",
+    'description "task from docs/tasks/<slug>.md" 2>/dev/null || true': " ``` 2. Write one",
+    "`lean` is never applied here.": " 4. Write-back: every",
+    "Skip when Step 4.6 saved no local file.": " 5. Check each create's",
+    "not created twice.": " - **\"Stop here\"**: first",
+}
 for first, last in (
     ("Preflight, before anything is created", "create nothing and report the existing issues."),
     ("Ensure the labels once, before the first create", 'description "task from docs/tasks/<slug>.md" 2>/dev/null || true'),
@@ -3554,6 +3561,8 @@ for first, last in (
     ("Check each create's and each write-back's exit status.", "not created twice."),
 ):
     _mirror_span(ghf, jf, first, last)
+    tail = jf[jf.index(last, jf.index(first)) + len(last):][:40]
+    assert tail.startswith(_SPAN_TAILS[last]), (last, tail)
 ok("#84 5-FLAT mirrors gh-issue 4-FLAT preflight, labels, create, write-back, failure (whole spans)")
 assert "Skip when Step 4.6 saved no local file." in jf and "create nothing and report the existing issues." in jf
 ok("#84 resume-all-filled and no-local-file write-back skip are present")
@@ -3576,7 +3585,8 @@ assert "Jira context from Step 3 inlined" in jf
 assert "a Jira key/URL in the **Notes** section is expected traceability from `$1`" in jf
 assert "once per issue" in jf and "reused on resume" in jf
 stop = next(l for l in jf.split("- **\"Stop here\"**")[1:2])
-assert "Step 6" in stop[:400] and "Step 7" in stop[:400], stop[:400]
+assert "first run Step 6's attachment upload against the issues created so far (skip it if none were created), then Step 7's cleanup, then end the run" in stop, stop[:400]
+assert jf.startswith("### 5-FLAT. Create the flat issues This section runs only when Step 4.5 routed 2 or more tasks here \u2014 it is an alternate path to Step 5 above, not a sub-case nested under it. One issue per task")
 assert "`commands/gh-issue.md`" in jf and "`4-FLAT`" in jf and "Assignees and project-board questions" in jf
 assert "deliberately NOT mirrored" in jf
 ok("#84 Jira adaptations pinned")
@@ -3586,6 +3596,7 @@ assert not re.search(r"5-EPIC|parent|child", step3_84)
 step6_84 = _slice(jira_cmd, "## Step 6", "## Step 7")
 tgt = _n(step6_84)
 assert "<TARGET_ISSUE>" in tgt and "`5-FLAT`" in tgt and not re.search(r"parent|child", tgt)
+assert "or each issue created by `5-FLAT` on the multi-task path (every issue created in this run, not re-attached on resume)." in tgt
 closing = _n(jira_cmd[jira_cmd.rindex("Return the issue URL"):])
 assert "return the ordered list of issue URLs, one per task in list order (including issues reused on resume)" in closing
 assert "parent URL" not in closing and "child URLs" not in closing
@@ -3603,7 +3614,7 @@ for bad in ("5-EPIC", "4-EPIC", "aiw epic split", "epic-<parent>", "gh label cre
 assert not any("--label" in l and "epic" in l.lower() for l in jira_cmd.splitlines())
 assert not re.search(r"gh issue (close|delete)", jf) and "--body " not in jf and "gh label create lean" not in jf
 assert not re.search(r"child|sibling", jira_cmd, re.I)
-assert [i + 1 for i, l in enumerate(jira_cmd.splitlines()) if "epic" in l.lower()] == [23, 28]
+assert [l.strip() for l in jira_cmd.splitlines() if "epic" in l.lower()] == ["- Issue type (bug, story, task, epic)", "- Linked issues / parent epic"]
 assert not any(w in jf for w in ("assignee", "--project", "gh project"))
 ok("#84 negative guards: no epic, parent, child, close/delete, assignee or project")
 lab = re.compile(r'gh label create prd-<slug>[^\n]*2>/dev/null \|\| true')
