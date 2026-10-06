@@ -183,6 +183,143 @@ claude plugin install ai-workflow@ai-workflow</pre><button class="btn" data-copy
   </div>
 </section>
 
+<!-- 1b PLANNING -->
+<section class="tab" id="tab-planning" role="tabpanel" hidden>
+  <div class="block">
+    <h1>From a rough request to buildable tickets</h1>
+    <p>The pipeline only works if the issue is clear. Before <code>/run-issue</code> ever runs, three commands turn whatever you have into well-specified, small, ordered GitHub issues. This is where most of the quality is decided.</p>
+    <figure>
+      <div class="diagram"><svg id="svg-plan" role="img" aria-label="Refinement flow: raw input, /intake brief, optional /prd, grilling interview, task list, flat issues, fact-check, ready for run-issue. You approve at the PRD, the task list and the interview."></svg></div>
+      <figcaption>Amber "YOU" badges are the points where the commands stop and ask you. <code>/gh-issue</code> covers the grill, task list, issues and fact-check. Click a step for what it does.</figcaption>
+    </figure>
+  </div>
+
+  <div class="block">
+    <h2>Ticket refinement</h2>
+    <p><code>/gh-issue</code> never writes code. It only ever creates an issue, even for a one-character fix. If a fix is obvious, it goes into a <b>Proposed Fix</b> section of the issue instead of being applied.</p>
+    <div class="tbl"><table>
+      <tr><th>Step</th><th>What happens</th></tr>
+      <tr><td>Source check</td><td>If the input is a Sentry URL, a .md/.txt/.pdf/.docx file or an exact-match Obsidian note, <code>/intake</code> normalises it into a brief first. Plain text skips this.</td></tr>
+      <tr><td>Look at the code</td><td>Code-graph lookup for the relevant flows, symbols and files, plus a check of git status and recent commits for in-progress work in the same area.</td></tr>
+      <tr><td>Gather outside context</td><td><code>run-researcher</code> collects prior issues and PRs, the project wiki and public docs. Its findings feed the interview and the body.</td></tr>
+      <tr><td>Grill you</td><td>An interview about anything unclear: acceptance criteria, priority, affected users. It also enumerates every corner case it can find (empty input, concurrency, permissions, failure paths, boundary values, existing data) and validates each with you instead of assuming it is out of scope.</td></tr>
+      <tr><td>Break it down</td><td>See task breakdown below. Always runs, with no size test deciding whether to skip it.</td></tr>
+      <tr><td>Create issues</td><td>One body per task using the structure below. Assignees and GitHub Project fields are asked once per run, then applied to every issue.</td></tr>
+      <tr><td>Fact-check</td><td><code>gh-issue-factchecker</code> re-reads each created issue cold and checks file paths, symbols, described behaviour and the proposed fix against the real repo. Wrong text is corrected with <code>gh issue edit</code> and you are told what changed.</td></tr>
+      <tr><td>Save context</td><td>The grilling decisions that did not fit the body (rejected alternatives, ruled-out corner cases) go to the Obsidian vault via <code>/dump</code>. Best effort.</td></tr>
+    </table></div>
+  </div>
+
+  <div class="block">
+    <h2>Issue structure</h2>
+    <p>Every issue has the same sections. They map one to one to the Definition of Ready, so a well-filed issue clears the readiness check by construction.</p>
+    <div class="tbl"><table>
+      <tr><th>Section</th><th>What goes in it</th><th>Ready item</th></tr>
+      <tr><td>What</td><td>The change, as business requirements. Repro steps for a bug.</td><td>Problem</td></tr>
+      <tr><td>Why</td><td>The problem and why it matters, not a restatement of the fix.</td><td>Problem</td></tr>
+      <tr><td>Out of Scope</td><td>At least one real entry. An issue with no stated edge gets a PR that grows one.</td><td>Scope</td></tr>
+      <tr><td>Context / Affected Code</td><td>File paths and symbols from the code lookup.</td><td>Affected surface</td></tr>
+      <tr><td>Acceptance Criteria</td><td>Testable statements. Every corner case validated in the interview is its own criterion.</td><td>Acceptance</td></tr>
+      <tr><td>How</td><td>Ordered steps with real <code>path:line</code> or symbol references, an existing pattern to copy (or "net-new"), the exact test command and a one-line done-check.</td><td>The plan, not a readiness item</td></tr>
+      <tr><td>Non-functional Constraints</td><td>Performance, security, authorization, data migration, backward compatibility. "none" is a valid answer, silence is not.</td><td>Constraints</td></tr>
+      <tr><td>Assumptions</td><td>Anything filled in that the author did not say, so they can correct it.</td><td>Normalisation record</td></tr>
+      <tr><td>Dependencies / Blockers</td><td>Its own section, not a line in Notes. "none" beats silence.</td><td>Dependencies</td></tr>
+      <tr><td>Proposed Fix</td><td>Only when a concrete fix is obvious. Described, never applied.</td><td>Optional</td></tr>
+      <tr><td>Notes</td><td>The <code>Source:</code> line from <code>/intake</code>, kept verbatim for traceability. On split work: <code>Task n of docs/tasks/&lt;slug&gt;.md</code>.</td><td>Traceability</td></tr>
+    </table></div>
+    <p class="hint">A body containing <code>[bracketed placeholders]</code> counts as a failed run, not a draft. Titles are specific and at most 72 characters.</p>
+  </div>
+
+  <div class="block">
+    <h2>Labels</h2>
+    <div class="tbl"><table>
+      <tr><th>Label</th><th>Meaning</th></tr>
+      <tr><td><code>refined</code></td><td>On every issue the command creates. It is properly specified and passes the issue template.</td></tr>
+      <tr><td>type</td><td><code>bug</code>, <code>enhancement</code>, <code>feature</code> or <code>chore</code>.</td></tr>
+      <tr><td>scope</td><td><code>backend</code>, <code>frontend</code> or <code>infra</code>, as applicable.</td></tr>
+      <tr><td><code>prd-&lt;slug&gt;</code></td><td>Groups the issues that came from one task list.</td></tr>
+      <tr><td><code>lean</code></td><td>Tells <code>/run-issue</code> to use the short roster. Applied only to single issues, and only when every condition holds: one shippable outcome, about one to two files or symbols, no new dependency, no new public API, and none of auth, data migration, payments or a public contract change. Any doubt means no label.</td></tr>
+    </table></div>
+  </div>
+
+  <div class="block">
+    <h2>Task breakdown</h2>
+    <p>Every request is decomposed after the interview, whatever its size. A task is a single-layer deliverable: a database migration, service logic, one API endpoint (request and resource count as one unit) or one UI unit. Docs and config work follow the same limits, split by file or section.</p>
+    <div class="tbl"><table>
+      <tr><th>Size rule for each task</th></tr>
+      <tr><td>Touches 3 or fewer production files (tests do not count)</td></tr>
+      <tr><td>1 to 4 acceptance criteria</td></tr>
+      <tr><td>One verify command</td></tr>
+      <tr><td>Adds no new dependency</td></tr>
+      <tr><td>An endpoint needing more than 3 files is split by file group, for example route and controller first, then request and resource. The cap is never waived.</td></tr>
+    </table></div>
+    <p>A task that fails the rule is split and the list rebuilt before you ever see it. You then get one question with two choices: <b>Create as shown</b> or <b>Let me edit the list</b>. Editing loops with no round limit. A requested merge that would break a limit is declined, with the reason shown.</p>
+    <div class="two">
+      <div class="stack">
+        <h3>One task</h3>
+        <p style="color:var(--muted)">It becomes a single issue, and nothing is saved to disk.</p>
+        <h3>Two or more tasks</h3>
+        <p style="color:var(--muted)">The list is saved, then filed as flat issues, one per task, each standalone and created in dependency order. Context is inlined, so a task body never needs another issue to be understood. Each issue is labelled <code>refined</code> and <code>prd-&lt;slug&gt;</code>.</p>
+        <h3>Dependencies</h3>
+        <p style="color:var(--muted)">Edges are written as <code>Depends on: task k</code> and can only point at earlier tasks. At creation each one is rewritten as <code>Depends on: #n</code> using the real issue number. <code>/run-issue</code> is then run on each issue, dependencies first.</p>
+      </div>
+      <div class="stack">
+        <h3>Saved task list shape</h3>
+        <pre>docs/tasks/&lt;slug&gt;.md
+
+# header: title, source, date, owner/repo
+
+## Task 1 — &lt;title&gt;
+Outcome: ...
+Files/symbols: ...
+Acceptance criteria: ...
+Verify command: ...
+Depends on: none
+Issue: #101      (filled after creation)
+
+## Task 2 — &lt;title&gt;
+...
+Depends on: task 1   becomes   #101</pre>
+      </div>
+    </div>
+    <details><summary>Where the task list is saved, and what happens on failure</summary><div>
+      <ul>
+        <li><b>Local</b> (always): <code>docs/tasks/&lt;slug&gt;.md</code>, never committed by the command.</li>
+        <li><b>Obsidian</b> (optional): a <code>Tasks.md</code> note under the project and feature folder, never overwriting an existing one.</li>
+        <li><b>GitHub wiki</b> (optional): <code>Tasks-&lt;Title&gt;.md</code>, pushed only after a separate confirmation.</li>
+        <li>If the file already exists you choose a new slug, skip the save, or <b>Resume this list</b>. Resume creates only the tasks without an issue number and checks existing <code>prd-&lt;slug&gt;</code> issues first, so nothing is created twice.</li>
+        <li>If a create fails, the command reports what exists and what is missing, then offers <b>Retry the missing ones</b> or <b>Stop here</b>. Created issues are never closed or deleted, so a partial list is recoverable.</li>
+      </ul>
+    </div></details>
+  </div>
+
+  <div class="block">
+    <h2>Definition of Ready</h2>
+    <p>Before spending a pipeline on an issue, <code>run-researcher</code> scores it against six items. The result is advisory. Gaps are printed above the plan at Gate 1, where you decide with the plan in front of you.</p>
+    <div class="tbl"><table>
+      <tr><th>#</th><th>Item</th><th>Passes when</th></tr>
+      <tr><td>1</td><td>Problem and why</td><td>States the problem and why it matters, not only a solution. "Add a status column" is a solution.</td></tr>
+      <tr><td>2</td><td>Scope</td><td>Explicit in-scope and out-of-scope boundaries.</td></tr>
+      <tr><td>3</td><td>Acceptance criteria</td><td>Testable. Each one becomes at least one automated test, so "works correctly" does not count.</td></tr>
+      <tr><td>4</td><td>Affected surface</td><td>Modules, services, endpoints or screens, grounded in the code.</td></tr>
+      <tr><td>5</td><td>Non-functional constraints</td><td>Performance, security, authorization, migration, compatibility. "None" is valid.</td></tr>
+      <tr><td>6</td><td>Dependencies and blockers</td><td>Other issues, specs, ordering, or an upstream PR that must land first.</td></tr>
+    </table></div>
+    <p>A borderline issue can be <b>normalised</b>: gaps filled with explicitly stated assumptions that Gate 1 shows you. An assumption is always recorded and shown, never silently adopted. If one search of the code answers a missing item, that is an assumption, not a gap.</p>
+  </div>
+
+  <details><summary>What /intake and /prd each produce</summary><div>
+    <p><b>/intake</b> returns a brief and a type (bug, feature, task or improvement). It never creates issues.</p>
+    <ul>
+      <li><b>Sentry link:</b> title, culprit and stack trace, occurrence counts (first and last seen, events, users, release), and an optional root-cause hypothesis labelled unverified.</li>
+      <li><b>Requirements file:</b> goals, scope and acceptance criteria in the document's own words. If it holds several independently shippable outcomes, you pick one, or <code>--whole</code> keeps every candidate for <code>/gh-issue</code> to split.</li>
+      <li><b>Obsidian note:</b> the note body verbatim, only on an exact title match.</li>
+      <li><b>Free text:</b> wrapped as a summary with a source line.</li>
+    </ul>
+    <p><b>/prd</b> covers the what and why only. It scans the code first, so its questions are informed, then interviews you across: problem and users, goals and non-goals, testable requirements with acceptance criteria, edge cases, success metrics, rollout and dependencies. The PRD has Overview (with codebase context), Problem, Users, Goals, Non-goals, Requirements (FR-1, FR-2 each with an acceptance check), Edge cases, Success metrics, Decisions, Open questions and Related. You review the full draft before anything is saved to <code>docs/prd/&lt;slug&gt;.md</code>, the vault or the wiki. The next step it offers is <code>/gh-issue</code>.</p>
+  </div></details>
+</section>
+
 <!-- 2 PIPELINE -->
 <section class="tab" id="tab-pipeline" role="tabpanel" hidden>
   <div class="block">
@@ -305,7 +442,7 @@ claude plugin install ai-workflow@ai-workflow</pre><button class="btn" data-copy
     <p>Plain assert scripts, no framework, no network, no Docker: <code>python3 run-engine/test_engine.py</code>, <code>test_scripts.py</code>, <code>test_kanban.py</code>.</p>
   </div>
 
-  <div class="note"><b>Known doc drift.</b> The final gate is "Gate 3" in <code>docs/HOW-IT-WORKS.md</code> but "GATE 2" in <code>commands/run-issue.md</code> section 9.3. <code>plugin.json</code> says 14 agents and the README says 12 <code>run-*</code> plus 3. The repo has 15 agent files (12 <code>run-*</code>, plus <code>ship</code>, <code>worklog-runner</code> and <code>gh-issue-factchecker</code>). This page uses the actual values.</div>
+  <div class="note"><b>Known doc drift.</b> The final gate is "Gate 3" in <code>docs/HOW-IT-WORKS.md</code> but "GATE 2" in <code>commands/run-issue.md</code> section 9.3. <code>plugin.json</code> says 14 agents and the README says 12 <code>run-*</code> plus 3. The repo has 15 agent files (12 <code>run-*</code>, plus <code>ship</code>, <code>worklog-runner</code> and <code>gh-issue-factchecker</code>). Also, <code>commands/gh-issue.md</code> says the readiness check "blocks the run" on a gap, while <code>definition-of-ready.md</code> says it is advisory and only surfaces at Gate 1. This page follows <code>definition-of-ready.md</code>. This page uses the actual values.</div>
 </section>
 
 <!-- 5 GUARDRAILS -->
@@ -362,7 +499,16 @@ claude plugin install ai-workflow@ai-workflow</pre><button class="btn" data-copy
 <script>
 /* ---------- shared data: diagrams, toolbox and drawer all read this ---------- */
 const I = {
- // phases
+ // planning
+ p_input:{n:"Raw input",k:"Input",o:"A Sentry link, requirements file, Obsidian note, Jira key or plain text.",t:"<p>No need to write a perfect ticket first. Jira keys go through <code>/jira-to-gh</code>, which files the issue the same way as <code>/gh-issue</code>.</p>"},
+ p_brief:{n:"/intake",k:"Command",p:"commands/intake.md",o:"Normalises the input into a brief with a type.",t:"<p>Detects the source, runs the matching adapter and returns an <code>## Intake result</code> block. A requirements file that holds several shippable outcomes triggers a decomposition check. Never creates issues.</p>"},
+ p_prd:{n:"/prd",k:"Skill",p:"skills/prd/SKILL.md",o:"Optional. Pins the what and why into a reviewed PRD.",t:"<p>Checks for an existing PRD first, scans the code, interviews you, shows the full draft, then saves to <code>docs/prd/&lt;slug&gt;.md</code> and optionally the vault and wiki. No architecture or API design here.</p>"},
+ p_grill:{n:"Grill",k:"Interview",o:"Questions, corner cases and decisions, with you.",t:"<p>Asks about acceptance criteria, priority, affected users and edge cases. Every corner case it finds is validated with you rather than assumed out of scope. Facts the code can answer are looked up, not asked.</p>"},
+ p_tasks:{n:"Task list",k:"Decomposition",p:"docs/tasks/<slug>.md",o:"Small, single-layer, ordered tasks that you approve.",t:"<p>Each task touches 3 or fewer production files, has 1 to 4 acceptance criteria, one verify command and no new dependency. You choose <b>Create as shown</b> or <b>Let me edit the list</b>.</p>"},
+ p_issues:{n:"Issues",k:"GitHub",o:"One standalone issue per task, in dependency order.",t:"<p>Labelled <code>refined</code> and <code>prd-&lt;slug&gt;</code>. Dependency edges become real <code>Depends on: #n</code> lines. Body sections map to the Definition of Ready.</p>"},
+ p_check:{n:"Fact-check",k:"Agent",m:"sonnet",a:"Read-only",p:"agents/gh-issue-factchecker.md",o:"A fresh agent verifies every claim in each created issue.",t:"<p>Checks file paths, symbols, behaviour and the proposed fix against the repo. Wrong text is corrected in place and you are told.</p>"},
+ p_ready:{n:"Ready",k:"Output",o:"Issues that pass the Definition of Ready.",t:"<p>Run <code>/run-issue</code> on each, dependencies first.</p>"},
+ // pipeline phases
  idea:{n:"The idea",k:"Input",o:"A request, in whatever form it arrives.",t:"<p>A Sentry error link, a requirements file (.md, .txt, .pdf, .docx), an Obsidian note, a Jira key, or plain text. You do not need to write a perfect ticket first.</p>"},
  preflight:{n:"Preflight",k:"Phase 0",o:"Safety checks before anything runs.",t:"<p>Stops if the checkout has uncommitted changes. If the argument is not an issue number or URL, it runs <code>/intake</code> then <code>/gh-issue</code> to make one. If that produces two or more issues, it prints them and stops cleanly.</p>"},
  worktree:{n:"Worktree + test stack",k:"Phases 2 and 2.5",o:"A throwaway checkout and, if available, a Docker test stack.",t:"<p>A sibling checkout on a new branch with gitignored files such as <code>.env</code> copied in. If the repo has a test compose file, a stack named <code>runissue-&lt;slug&gt;-&lt;digest&gt;-&lt;issue&gt;</code> starts with CPU and memory caps and a lockfile so only one runs per project. The test command is resolved once and every Station uses that exact string.</p>",c:"aiw worktree create, aiw stack up|down|rebuild|status"},
@@ -462,9 +608,12 @@ const GLOSS=[
  ["rail","A condition that stops the grind."],
  ["fingerprint","A finding's identity across grind rounds: file, line and the start of its text."],
  ["project","A friendly name for an owner/repo, from skills/worklog/projects.json."],
+ ["dor","Definition of Ready. Six items an issue is scored against before a pipeline is spent on it: problem and why, scope, acceptance criteria, affected surface, non-functional constraints, dependencies. Advisory only."],
+ ["tasklist","The approved breakdown of a request into small single-layer tasks, saved as docs/tasks/<slug>.md when there are two or more."],
+ ["lean","A label on small, well-specified issues that makes /run-issue use the short roster."],
  ["board","The kanban view: one column per Station, one card per issue from its latest run."]
 ];
-const GN={station:"Station",run:"Run",ledger:"Ledger",envelope:"Envelope",postcheck:"Post-check",bounce:"Bounce",escalated:"Escalated",status:"Status",classification:"Classification",testroot:"Test root",worktree:"Worktree",degraded:"Degraded finish",epic:"Epic",grind:"Grind",rail:"Rail",fingerprint:"Fingerprint",project:"Project",board:"Board / Card"};
+const GN={station:"Station",run:"Run",ledger:"Ledger",envelope:"Envelope",postcheck:"Post-check",bounce:"Bounce",escalated:"Escalated",status:"Status",classification:"Classification",testroot:"Test root",worktree:"Worktree",degraded:"Degraded finish",epic:"Epic",grind:"Grind",rail:"Rail",fingerprint:"Fingerprint",project:"Project",board:"Board / Card",dor:"Definition of Ready",tasklist:"Task list",lean:"Lean label"};
 
 /* ---------- svg helpers ---------- */
 const NW=128,NH=58,GX=34,GY=62,PAD=16;
@@ -495,6 +644,10 @@ function drawAll(){
   flow("svg-pipe",[
     [{id:"preflight",sub:"clean checkout?"},{id:"researcher",sub:"haiku"},{id:"planner",sub:"opus",gate:"GATE 1"},{id:"worktree",label:"Worktree + stack",sub:"isolated"},{id:"sdet",label:"SDET",sub:"failing tests"},{id:"dev",label:"Dev",sub:"make them pass"},{id:"verifier",label:"Verifier",sub:"runs the feature"}],
     [{id:"pr",label:"Open PR",sub:"classify risk"},{id:"reviewer",label:"Reviewer",sub:"+ specialists"},{id:"fixer",label:"Fixer",sub:"apply findings",gate:"GATE 2a"},{id:"runci",label:"CI gate",sub:"merge base, go green"},{id:"final",label:"Final report",sub:"you decide",gate:"GATE 3"},{id:"prgrind",label:"Grind",sub:"Slack review loop"}]
+  ]);
+  flow("svg-plan",[
+    [{id:"p_input",label:"Raw input",sub:"text, BRD, Sentry"},{id:"p_brief",label:"/intake",sub:"normalise to a brief"},{id:"p_prd",label:"/prd",sub:"optional: what + why",gate:"YOU",cls:"dim"},{id:"p_grill",label:"Grill",sub:"questions, corner cases",gate:"YOU"}],
+    [{id:"p_tasks",label:"Task list",sub:"small, ordered",gate:"YOU"},{id:"p_issues",label:"Issues",sub:"flat, one per task"},{id:"p_check",label:"Fact-check",sub:"fresh-eyes agent"},{id:"p_ready",label:"Ready",sub:"passes DoR"}]
   ]);
   bounce();grind();
 }
@@ -531,7 +684,7 @@ document.getElementById("rails").innerHTML=RAILS.map(r=>`<div class="card" style
 document.getElementById("gloss").innerHTML=GLOSS.map(g=>`<dt id="g-${g[0]}">${GN[g[0]]}</dt><dd>${g[1]}</dd>`).join("");
 
 /* ---------- tabs ---------- */
-const TABS=[["overview","Overview"],["pipeline","The Pipeline"],["toolbox","Toolbox"],["hood","Under the hood"],["rails","Guardrails and integrations"],["glossary","Glossary"]];
+const TABS=[["overview","Overview"],["planning","Refine and break down"],["pipeline","The Pipeline"],["toolbox","Toolbox"],["hood","Under the hood"],["rails","Guardrails and integrations"],["glossary","Glossary"]];
 const nav=document.getElementById("tabs");
 nav.innerHTML=TABS.map(t=>`<button role="tab" id="t-${t[0]}" aria-controls="tab-${t[0]}" data-tab="${t[0]}">${t[1]}</button>`).join("");
 function show(name,push){
