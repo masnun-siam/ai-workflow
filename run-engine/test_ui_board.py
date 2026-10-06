@@ -7,14 +7,16 @@ this file must run anywhere python3 does, with no install step.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import ui_board  # noqa: E402
-import kanban  # noqa: E402
-from ui_board import STATIONS, build_board, memoize_title_fetcher  # noqa: E402
+import ui_board
+import kanban
+from ui_board import STATIONS, build_board, memoize_title_fetcher
 
 passed = 0
 
@@ -239,26 +241,6 @@ assert cached_fetch("acme", "widgets", 2) == "title-2"
 assert calls == [("acme", "widgets", 1), ("acme", "widgets", 2)], calls
 ok("memoize_title_fetcher: repeat calls for the same key hit the cache, new keys don't")
 
-
-import json  # noqa: E402
-import tempfile  # noqa: E402
-
-# --- 14. same output as kanban on a shared fixture set ---------------------
-
-fixtures = [
-    record(ledger(1, FULL, FULL.index("reviewer"), pr="https://github.com/a/b/pull/1")),
-    record(ledger(2, LEAN, LEAN.index("dev"))),
-    record(ledger(3, FULL, FULL.index("dev"), status="escalated")),
-    record(ledger(4, FULL, FULL.index("fixer"), status="done")),
-    record(ledger(5, FULL, 1), mtime=100.0),
-    record(ledger(5, FULL, 5), mtime=200.0),
-    record(ledger(11, FULL, 5, trace=["x"], bounce_counts={"a": 1}, ci="green")),
-]
-tf = lambda o, r, i: "T"  # noqa: E731
-assert json.dumps(ui_board.build_board(fixtures, {"a/b": "AB"}, tf)) == json.dumps(
-    kanban.build_board(fixtures, {"a/b": "AB"}, tf)
-)
-ok("build_board output identical to kanban.build_board")
 
 # --- 15. kanban re-exports ui_board symbols --------------------------------
 
