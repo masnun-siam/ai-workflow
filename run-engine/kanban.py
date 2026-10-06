@@ -11,7 +11,7 @@ from __future__ import annotations
 import http.server
 import json
 
-from ui_board import STATIONS, PROJECTS_PATH, build_board, fetch_title, load_projects, memoize_title_fetcher, scan_records  # noqa: F401
+from ui_board import STATIONS, build_board, fetch_title, load_projects, memoize_title_fetcher, scan_records  # noqa: F401
 
 
 _PAGE_TEMPLATE = """<!DOCTYPE html>

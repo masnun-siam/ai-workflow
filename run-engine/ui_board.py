@@ -102,7 +102,7 @@ def memoize_title_fetcher(fetch_title):
 
 
 # --------------------------------------------------------------------------- I/O edges
-# Untested thin wrappers around the pure core above (per the agreed seam).
+# Thin I/O wrappers around the pure core above (per the agreed seam).
 
 
 def scan_records() -> list:
