@@ -145,8 +145,8 @@ def _group_gone(pgid: int, proc) -> bool:
     try:
         os.killpg(pgid, 0)
         return False
-    except ProcessLookupError:
-        return True
+    except (ProcessLookupError, PermissionError):
+        return True  # PermissionError: pid reused by another user's group, not ours
 
 
 def stop(sid: str) -> dict:
@@ -156,10 +156,12 @@ def stop(sid: str) -> dict:
     if rec["status"] not in ("starting", "running") or not rec.get("pid"):
         return rec
     pgid, proc = rec["pid"], _procs.get(sid)
+    if proc is not None and proc.poll() is not None:
+        return rec  # already exited: let the follower record done/failed
     _stopping.add(sid)
     try:
         os.killpg(pgid, signal.SIGTERM)
-    except ProcessLookupError:
+    except (ProcessLookupError, PermissionError):
         pass
     deadline = time.time() + STOP_GRACE_SECONDS
     while not _group_gone(pgid, proc) and time.time() < deadline:
@@ -167,7 +169,7 @@ def stop(sid: str) -> dict:
     if not _group_gone(pgid, proc):
         try:
             os.killpg(pgid, signal.SIGKILL)
-        except ProcessLookupError:
+        except (ProcessLookupError, PermissionError):
             pass
         end = time.time() + 2
         while not _group_gone(pgid, proc) and time.time() < end:
