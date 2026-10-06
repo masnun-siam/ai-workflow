@@ -7,6 +7,7 @@ restart because they live only on disk.
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import re
@@ -58,8 +59,8 @@ def _read_meta(path: str):
             data = json.load(f)
     except FileNotFoundError:
         return None
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        warn(f"skipping corrupt session record: {path}")
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError) as e:
+        warn(f"skipping unreadable session record: {path} ({e})")
         return None
     if not isinstance(data, dict):
         warn(f"skipping corrupt session record: {path}")
@@ -95,13 +96,17 @@ def update(sid: str, **fields) -> dict:
     if "id" in fields:
         raise ValueError("session id is immutable")
     path = os.path.join(session_dir(sid), "meta.json")
-    record = _read_meta(path)
-    if record is None:
-        raise FileNotFoundError(path)
-    # ponytail: read-modify-write, atomic replace guards corruption not lost updates;
-    # add fcntl.flock here if concurrent writers must both land.
-    record.update(fields)
-    _atomic_write_json(path, record)
+    # flock (POSIX; repo targets macOS/Linux) serialises read-modify-write so
+    # concurrent writers both land; atomic replace still guards readers.
+    with open(os.path.join(session_dir(sid), ".lock"), "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if not os.path.exists(path):
+            raise FileNotFoundError(path)
+        record = _read_meta(path)
+        if record is None:
+            raise ValueError(f"corrupt session record: {path}")
+        record.update(fields)
+        _atomic_write_json(path, record)
     return record
 
 
