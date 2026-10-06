@@ -1,0 +1,736 @@
+<title>ai-workflow Field Guide</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: sticky masthead with tabs, one reading column per tab, details drawer slides in from the right (bottom sheet on phones). */
+:root{
+  --bg:#f4f6f8; --surface:#ffffff; --fg:#13181f; --muted:#566170; --line:#d9dfe6;
+  --accent:#0d7a63; --accent-soft:#dff3ed; --accent-fg:#ffffff;
+  --gate:#a85a06; --gate-soft:#fdeed8; --bad:#b3261e;
+  --code:#eef1f4;
+  --font-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --font-body:"Public Sans","Segoe UI",system-ui,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1318; --surface:#151b22; --fg:#e5e9ee; --muted:#9aa5b2; --line:#27313c;
+  --accent:#3fc6a2; --accent-soft:#12302a; --accent-fg:#06211b;
+  --gate:#f0b25a; --gate-soft:#33260f; --bad:#ff8a80; --code:#1b232c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1318; --surface:#151b22; --fg:#e5e9ee; --muted:#9aa5b2; --line:#27313c;
+  --accent:#3fc6a2; --accent-soft:#12302a; --accent-fg:#06211b;
+  --gate:#f0b25a; --gate-soft:#33260f; --bad:#ff8a80; --code:#1b232c; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:15px/1.6 var(--font-body)}
+*{box-sizing:border-box}
+a{color:var(--accent)}
+code,.mono{font-family:var(--font-mono);font-size:.88em}
+code{background:var(--code);padding:.1em .35em;border-radius:4px}
+.wrap{max-width:1120px;margin-inline:auto;padding-inline:16px}
+header.mast{background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:env(safe-area-inset-top,0px);z-index:5}
+.mast .wrap{display:flex;flex-direction:column;gap:6px;padding-block:12px 0}
+.brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.brand b{font:700 20px var(--font-display);letter-spacing:-.01em}
+.brand span{color:var(--muted);font-size:13px}
+nav[role=tablist]{display:flex;gap:2px;overflow-x:auto;scrollbar-width:thin}
+nav button{appearance:none;background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);font:500 14px var(--font-body);padding:10px 12px;cursor:pointer;white-space:nowrap}
+nav button:hover{color:var(--fg)}
+nav button[aria-selected=true]{color:var(--fg);border-bottom-color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+main{padding-block:28px 64px}
+section.tab{display:flex;flex-direction:column;gap:32px}
+section.tab[hidden]{display:none}
+h1,h2,h3{font-family:var(--font-display);letter-spacing:-.015em;text-wrap:balance;margin:0}
+h1{font-size:clamp(28px,4.4vw,42px);line-height:1.1;font-weight:700}
+h2{font-size:22px;line-height:1.2}
+h3{font-size:16px;line-height:1.3}
+p{margin:0}
+.lede{font-size:18px;line-height:1.55;max-width:62ch}
+.stack{display:flex;flex-direction:column;gap:12px}
+.block{display:flex;flex-direction:column;gap:14px}
+.block>p{max-width:68ch;color:var(--muted)}
+figure{margin:0;display:flex;flex-direction:column;gap:8px}
+figcaption{font-size:13px;color:var(--muted);max-width:76ch}
+.diagram{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px}
+.diagram svg{display:block;min-width:720px;width:100%;height:auto}
+.hint{font-size:12px;color:var(--muted)}
+/* svg */
+svg text{fill:currentColor;font-family:var(--font-body)}
+.node rect.box{fill:var(--surface);stroke:var(--fg);stroke-width:1.2}
+.node{cursor:pointer;color:var(--fg)}
+.node:hover rect.box,.node:focus-visible rect.box,.node.on rect.box{fill:var(--accent-soft);stroke:var(--accent);stroke-width:2}
+.node:focus-visible{outline:none}
+.nl{font-size:13px;font-weight:600}
+.ns{font-size:10.5px;fill:var(--muted)}
+.node.dim rect.box{stroke-dasharray:4 3}
+.node.warn rect.box{stroke:var(--gate)}
+.gb{fill:var(--gate-soft);stroke:var(--gate);stroke-width:1}
+.gt{font-size:9.5px;font-weight:600;fill:var(--gate)!important;letter-spacing:.04em}
+.edge{stroke:var(--muted);stroke-width:1.4;fill:none}
+.edge.dash{stroke-dasharray:5 4}
+.elab{font-size:10.5px;fill:var(--muted)}
+/* pills + tables */
+.pill{display:inline-block;font:500 11px var(--font-mono);padding:2px 8px;border-radius:99px;background:var(--code);color:var(--muted);white-space:nowrap}
+.pill.gate{background:var(--gate-soft);color:var(--gate)}
+.pill.ok{background:var(--accent-soft);color:var(--accent)}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:500 11px var(--font-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td.c,th.c{text-align:center}
+/* gates */
+.gates{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.gate-card{background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--gate);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:6px}
+.gate-card .pill{align-self:flex-start}
+.gate-card p{font-size:14px;color:var(--muted)}
+/* hero */
+.hero{display:flex;flex-direction:column;gap:14px;padding-top:4px}
+.facts{display:flex;flex-wrap:wrap;gap:8px}
+.try{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px}
+pre{margin:0;background:var(--code);border-radius:8px;padding:12px 14px;overflow-x:auto;font:13px/1.55 var(--font-mono)}
+.copyrow{display:flex;gap:8px;align-items:flex-start}
+.copyrow pre{flex:1;min-width:0}
+.btn{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--fg);font:500 12px var(--font-body);border-radius:6px;padding:6px 10px;cursor:pointer}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+/* toolbox */
+.group{display:flex;flex-direction:column;gap:12px}
+.group>header{display:flex;flex-direction:column;gap:2px}
+.group>header p{color:var(--muted);font-size:14px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.card{appearance:none;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;cursor:pointer;color:var(--fg);font:inherit;min-width:0}
+.card:hover{border-color:var(--accent)}
+.card .top{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.card .nm{font:500 14px var(--font-mono);overflow-wrap:anywhere}
+.card .one{font-size:13.5px;color:var(--muted)}
+/* details/collapsibles */
+details{background:var(--surface);border:1px solid var(--line);border-radius:8px}
+summary{cursor:pointer;padding:11px 14px;font-weight:600;font-size:14.5px}
+details>div{padding:0 14px 14px;display:flex;flex-direction:column;gap:10px;color:var(--muted);font-size:14px}
+details>div ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.note{border-left:3px solid var(--gate);background:var(--gate-soft);padding:10px 14px;border-radius:0 8px 8px 0;font-size:14px}
+dl.gloss{display:grid;grid-template-columns:minmax(120px,200px) 1fr;gap:0;margin:0;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+dl.gloss dt,dl.gloss dd{margin:0;padding:11px 14px;border-bottom:1px solid var(--line)}
+dl.gloss dt{font:500 13.5px var(--font-mono);scroll-margin-top:110px}
+dl.gloss dt:target,dl.gloss dt.hl{color:var(--accent)}
+dl.gloss dd{color:var(--muted);font-size:14.5px}
+dl.gloss dt:last-of-type,dl.gloss dd:last-of-type{border-bottom:0}
+@media (max-width:560px){dl.gloss{grid-template-columns:1fr}dl.gloss dt{border-bottom:0;padding-bottom:0}}
+/* drawer */
+#drawer{position:fixed;z-index:20;top:0;right:0;bottom:0;width:min(400px,100%);background:var(--surface);border-left:1px solid var(--line);box-shadow:-8px 0 30px rgba(0,0,0,.14);transform:translateX(105%);transition:transform .2s;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)}
+#drawer.open{transform:none}
+#drawer .dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:16px 16px 8px}
+#drawer .db{padding:4px 16px 24px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;font-size:14.5px}
+#drawer dl{display:grid;grid-template-columns:90px 1fr;gap:6px 10px;margin:0;font-size:13.5px}
+#drawer dt{color:var(--muted);font:500 11px var(--font-mono);text-transform:uppercase;letter-spacing:.05em;padding-top:2px}
+#drawer dd{margin:0;min-width:0;overflow-wrap:anywhere}
+#drawer ul{margin:0;padding-left:18px}
+@media (max-width:700px){
+  #drawer{top:auto;left:0;width:100%;max-height:72%;border-left:0;border-top:1px solid var(--line);border-radius:14px 14px 0 0;transform:translateY(105%);padding-bottom:env(safe-area-inset-bottom,0px)}
+  #drawer.open{transform:none}
+}
+@media (prefers-reduced-motion:reduce){#drawer{transition:none}}
+</style>
+
+<header class="mast">
+  <div class="wrap">
+    <div class="brand"><b>ai-workflow</b><span>A Claude Code plugin that turns a GitHub issue into a reviewed pull request</span></div>
+    <nav role="tablist" aria-label="Sections" id="tabs"></nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+<!-- 1 OVERVIEW -->
+<section class="tab" id="tab-overview" role="tabpanel" hidden>
+  <div class="hero">
+    <h1>Give it a GitHub issue. Get back a reviewed pull request with passing CI.</h1>
+    <p class="lede">ai-workflow runs a team of specialised AI agents, called <a class="t" href="#g-station">Stations</a>, one after another on a single issue. One plans, one writes failing tests, one writes the code, one checks it running, one reviews it. A small Python engine decides who goes next, and every Station must show evidence that another check then tries to disprove. You stay in charge. It stops for you exactly three times and it never merges anything.</p>
+    <div class="facts">
+      <span class="pill ok">v1.9.0</span><span class="pill">Claude Code plugin</span><span class="pill">GitHub-first</span><span class="pill">15 agents</span><span class="pill">Python 3.10+ stdlib only</span>
+    </div>
+  </div>
+
+  <div class="block">
+    <h2>The whole journey, from idea to merge</h2>
+    <figure>
+      <div class="diagram"><svg id="svg-life" role="img" aria-label="Idea to merge: intake or PRD, then gh-issue, then run-issue, then a ready PR, then pr-grind, then a human merges."></svg></div>
+      <figcaption>Click any box for details. Only the middle three steps are the heavy machinery. The first two make sure the issue is clear enough to build, and the last two are review loops with a person making the final call.</figcaption>
+    </figure>
+  </div>
+
+  <div class="block">
+    <h2>The three moments it asks for you</h2>
+    <p>Anything else it runs into (a missing detail, a flaky check) it records and reports at the end instead of stopping. There is no fourth gate by design.</p>
+    <div class="gates">
+      <div class="gate-card"><span class="pill gate">Gate 1</span><h3>Approve the plan</h3><p>The planner writes one combined test and implementation plan. You approve, revise (as many times as you like) or abort.</p></div>
+      <div class="gate-card"><span class="pill gate">Gate 2a</span><h3>Confirm a risky finding</h3><p>Only fires if a review finding needs human judgement, such as an irreversible data operation. Choose "Confirmed, continue" or "Hold here".</p></div>
+      <div class="gate-card"><span class="pill gate">Gate 3</span><h3>Final handback</h3><p>A report with the PR, CI verdict, open review threads, lessons learned and anything it decided on its own. You merge, or not.</p></div>
+    </div>
+  </div>
+
+  <div class="two">
+    <div class="block">
+      <h2>What problem it solves</h2>
+      <p>Handing a ticket to an AI agent usually yields code that looks right, with nothing proving it is. This repo splits the work between agents that each own one job, forces tests to fail before the code exists, checks the running feature, and has a reviewer with fresh eyes read the diff. Claims without proof get rejected by code, not by trust.</p>
+    </div>
+    <div class="try">
+      <h2>Try it</h2>
+      <div class="copyrow"><pre id="try1">claude plugin marketplace add &lt;path-to-this-repo&gt;
+claude plugin install ai-workflow@ai-workflow</pre><button class="btn" data-copy="try1">Copy</button></div>
+      <div class="copyrow"><pre id="try2">/ai-workflow:run-issue 42 --lean</pre><button class="btn" data-copy="try2">Copy</button></div>
+      <p class="hint">Needs an authenticated <code>gh</code> CLI and Python 3.10+. Docker, Slack, GitNexus and Obsidian are optional extras. The README is written so you can hand the repo to Claude Code and say "set this up".</p>
+    </div>
+  </div>
+</section>
+
+<!-- 1b PLANNING -->
+<section class="tab" id="tab-planning" role="tabpanel" hidden>
+  <div class="block">
+    <h1>From a rough request to buildable tickets</h1>
+    <p>The pipeline only works if the issue is clear. Before <code>/run-issue</code> ever runs, three commands turn whatever you have into well-specified, small, ordered GitHub issues. This is where most of the quality is decided.</p>
+    <figure>
+      <div class="diagram"><svg id="svg-plan" role="img" aria-label="Refinement flow: raw input, /intake brief, optional /prd, grilling interview, task list, flat issues, fact-check, ready for run-issue. You approve at the PRD, the task list and the interview."></svg></div>
+      <figcaption>Amber "YOU" badges are the points where the commands stop and ask you. <code>/gh-issue</code> covers the grill, task list, issues and fact-check. Click a step for what it does.</figcaption>
+    </figure>
+  </div>
+
+  <div class="block">
+    <h2>Ticket refinement</h2>
+    <p><code>/gh-issue</code> never writes code. It only ever creates an issue, even for a one-character fix. If a fix is obvious, it goes into a <b>Proposed Fix</b> section of the issue instead of being applied.</p>
+    <div class="tbl"><table>
+      <tr><th>Step</th><th>What happens</th></tr>
+      <tr><td>Source check</td><td>If the input is a Sentry URL, a .md/.txt/.pdf/.docx file or an exact-match Obsidian note, <code>/intake</code> normalises it into a brief first. Plain text skips this.</td></tr>
+      <tr><td>Look at the code</td><td>Code-graph lookup for the relevant flows, symbols and files, plus a check of git status and recent commits for in-progress work in the same area.</td></tr>
+      <tr><td>Gather outside context</td><td><code>run-researcher</code> collects prior issues and PRs, the project wiki and public docs. Its findings feed the interview and the body.</td></tr>
+      <tr><td>Grill you</td><td>An interview about anything unclear: acceptance criteria, priority, affected users. It also enumerates every corner case it can find (empty input, concurrency, permissions, failure paths, boundary values, existing data) and validates each with you instead of assuming it is out of scope.</td></tr>
+      <tr><td>Break it down</td><td>See task breakdown below. Always runs, with no size test deciding whether to skip it.</td></tr>
+      <tr><td>Create issues</td><td>One body per task using the structure below. Assignees and GitHub Project fields are asked once per run, then applied to every issue.</td></tr>
+      <tr><td>Fact-check</td><td><code>gh-issue-factchecker</code> re-reads each created issue cold and checks file paths, symbols, described behaviour and the proposed fix against the real repo. Wrong text is corrected with <code>gh issue edit</code> and you are told what changed.</td></tr>
+      <tr><td>Save context</td><td>The grilling decisions that did not fit the body (rejected alternatives, ruled-out corner cases) go to the Obsidian vault via <code>/dump</code>. Best effort.</td></tr>
+    </table></div>
+  </div>
+
+  <div class="block">
+    <h2>Issue structure</h2>
+    <p>Every issue has the same sections. They map one to one to the Definition of Ready, so a well-filed issue clears the readiness check by construction.</p>
+    <div class="tbl"><table>
+      <tr><th>Section</th><th>What goes in it</th><th>Ready item</th></tr>
+      <tr><td>What</td><td>The change, as business requirements. Repro steps for a bug.</td><td>Problem</td></tr>
+      <tr><td>Why</td><td>The problem and why it matters, not a restatement of the fix.</td><td>Problem</td></tr>
+      <tr><td>Out of Scope</td><td>At least one real entry. An issue with no stated edge gets a PR that grows one.</td><td>Scope</td></tr>
+      <tr><td>Context / Affected Code</td><td>File paths and symbols from the code lookup.</td><td>Affected surface</td></tr>
+      <tr><td>Acceptance Criteria</td><td>Testable statements. Every corner case validated in the interview is its own criterion.</td><td>Acceptance</td></tr>
+      <tr><td>How</td><td>Ordered steps with real <code>path:line</code> or symbol references, an existing pattern to copy (or "net-new"), the exact test command and a one-line done-check.</td><td>The plan, not a readiness item</td></tr>
+      <tr><td>Non-functional Constraints</td><td>Performance, security, authorization, data migration, backward compatibility. "none" is a valid answer, silence is not.</td><td>Constraints</td></tr>
+      <tr><td>Assumptions</td><td>Anything filled in that the author did not say, so they can correct it.</td><td>Normalisation record</td></tr>
+      <tr><td>Dependencies / Blockers</td><td>Its own section, not a line in Notes. "none" beats silence.</td><td>Dependencies</td></tr>
+      <tr><td>Proposed Fix</td><td>Only when a concrete fix is obvious. Described, never applied.</td><td>Optional</td></tr>
+      <tr><td>Notes</td><td>The <code>Source:</code> line from <code>/intake</code>, kept verbatim for traceability. On split work: <code>Task n of docs/tasks/&lt;slug&gt;.md</code>.</td><td>Traceability</td></tr>
+    </table></div>
+    <p class="hint">A body containing <code>[bracketed placeholders]</code> counts as a failed run, not a draft. Titles are specific and at most 72 characters.</p>
+  </div>
+
+  <div class="block">
+    <h2>Labels</h2>
+    <div class="tbl"><table>
+      <tr><th>Label</th><th>Meaning</th></tr>
+      <tr><td><code>refined</code></td><td>On every issue the command creates. It is properly specified and passes the issue template.</td></tr>
+      <tr><td>type</td><td><code>bug</code>, <code>enhancement</code>, <code>feature</code> or <code>chore</code>.</td></tr>
+      <tr><td>scope</td><td><code>backend</code>, <code>frontend</code> or <code>infra</code>, as applicable.</td></tr>
+      <tr><td><code>prd-&lt;slug&gt;</code></td><td>Groups the issues that came from one task list.</td></tr>
+      <tr><td><code>lean</code></td><td>Tells <code>/run-issue</code> to use the short roster. Applied only to single issues, and only when every condition holds: one shippable outcome, about one to two files or symbols, no new dependency, no new public API, and none of auth, data migration, payments or a public contract change. Any doubt means no label.</td></tr>
+    </table></div>
+  </div>
+
+  <div class="block">
+    <h2>Task breakdown</h2>
+    <p>Every request is decomposed after the interview, whatever its size. A task is a single-layer deliverable: a database migration, service logic, one API endpoint (request and resource count as one unit) or one UI unit. Docs and config work follow the same limits, split by file or section.</p>
+    <div class="tbl"><table>
+      <tr><th>Size rule for each task</th></tr>
+      <tr><td>Touches 3 or fewer production files (tests do not count)</td></tr>
+      <tr><td>1 to 4 acceptance criteria</td></tr>
+      <tr><td>One verify command</td></tr>
+      <tr><td>Adds no new dependency</td></tr>
+      <tr><td>An endpoint needing more than 3 files is split by file group, for example route and controller first, then request and resource. The cap is never waived.</td></tr>
+    </table></div>
+    <p>A task that fails the rule is split and the list rebuilt before you ever see it. You then get one question with two choices: <b>Create as shown</b> or <b>Let me edit the list</b>. Editing loops with no round limit. A requested merge that would break a limit is declined, with the reason shown.</p>
+    <div class="two">
+      <div class="stack">
+        <h3>One task</h3>
+        <p style="color:var(--muted)">It becomes a single issue, and nothing is saved to disk.</p>
+        <h3>Two or more tasks</h3>
+        <p style="color:var(--muted)">The list is saved, then filed as flat issues, one per task, each standalone and created in dependency order. Context is inlined, so a task body never needs another issue to be understood. Each issue is labelled <code>refined</code> and <code>prd-&lt;slug&gt;</code>.</p>
+        <h3>Dependencies</h3>
+        <p style="color:var(--muted)">Edges are written as <code>Depends on: task k</code> and can only point at earlier tasks. At creation each one is rewritten as <code>Depends on: #n</code> using the real issue number. <code>/run-issue</code> is then run on each issue, dependencies first.</p>
+      </div>
+      <div class="stack">
+        <h3>Saved task list shape</h3>
+        <pre>docs/tasks/&lt;slug&gt;.md
+
+# header: title, source, date, owner/repo
+
+## Task 1 — &lt;title&gt;
+Outcome: ...
+Files/symbols: ...
+Acceptance criteria: ...
+Verify command: ...
+Depends on: none
+Issue: #101      (filled after creation)
+
+## Task 2 — &lt;title&gt;
+...
+Depends on: task 1   becomes   #101</pre>
+      </div>
+    </div>
+    <details><summary>Where the task list is saved, and what happens on failure</summary><div>
+      <ul>
+        <li><b>Local</b> (always): <code>docs/tasks/&lt;slug&gt;.md</code>, never committed by the command.</li>
+        <li><b>Obsidian</b> (optional): a <code>Tasks.md</code> note under the project and feature folder, never overwriting an existing one.</li>
+        <li><b>GitHub wiki</b> (optional): <code>Tasks-&lt;Title&gt;.md</code>, pushed only after a separate confirmation.</li>
+        <li>If the file already exists you choose a new slug, skip the save, or <b>Resume this list</b>. Resume creates only the tasks without an issue number and checks existing <code>prd-&lt;slug&gt;</code> issues first, so nothing is created twice.</li>
+        <li>If a create fails, the command reports what exists and what is missing, then offers <b>Retry the missing ones</b> or <b>Stop here</b>. Created issues are never closed or deleted, so a partial list is recoverable.</li>
+      </ul>
+    </div></details>
+  </div>
+
+  <div class="block">
+    <h2>Definition of Ready</h2>
+    <p>Before spending a pipeline on an issue, <code>run-researcher</code> scores it against six items. The result is advisory. Gaps are printed above the plan at Gate 1, where you decide with the plan in front of you.</p>
+    <div class="tbl"><table>
+      <tr><th>#</th><th>Item</th><th>Passes when</th></tr>
+      <tr><td>1</td><td>Problem and why</td><td>States the problem and why it matters, not only a solution. "Add a status column" is a solution.</td></tr>
+      <tr><td>2</td><td>Scope</td><td>Explicit in-scope and out-of-scope boundaries.</td></tr>
+      <tr><td>3</td><td>Acceptance criteria</td><td>Testable. Each one becomes at least one automated test, so "works correctly" does not count.</td></tr>
+      <tr><td>4</td><td>Affected surface</td><td>Modules, services, endpoints or screens, grounded in the code.</td></tr>
+      <tr><td>5</td><td>Non-functional constraints</td><td>Performance, security, authorization, migration, compatibility. "None" is valid.</td></tr>
+      <tr><td>6</td><td>Dependencies and blockers</td><td>Other issues, specs, ordering, or an upstream PR that must land first.</td></tr>
+    </table></div>
+    <p>A borderline issue can be <b>normalised</b>: gaps filled with explicitly stated assumptions that Gate 1 shows you. An assumption is always recorded and shown, never silently adopted. If one search of the code answers a missing item, that is an assumption, not a gap.</p>
+  </div>
+
+  <details><summary>What /intake and /prd each produce</summary><div>
+    <p><b>/intake</b> returns a brief and a type (bug, feature, task or improvement). It never creates issues.</p>
+    <ul>
+      <li><b>Sentry link:</b> title, culprit and stack trace, occurrence counts (first and last seen, events, users, release), and an optional root-cause hypothesis labelled unverified.</li>
+      <li><b>Requirements file:</b> goals, scope and acceptance criteria in the document's own words. If it holds several independently shippable outcomes, you pick one, or <code>--whole</code> keeps every candidate for <code>/gh-issue</code> to split.</li>
+      <li><b>Obsidian note:</b> the note body verbatim, only on an exact title match.</li>
+      <li><b>Free text:</b> wrapped as a summary with a source line.</li>
+    </ul>
+    <p><b>/prd</b> covers the what and why only. It scans the code first, so its questions are informed, then interviews you across: problem and users, goals and non-goals, testable requirements with acceptance criteria, edge cases, success metrics, rollout and dependencies. The PRD has Overview (with codebase context), Problem, Users, Goals, Non-goals, Requirements (FR-1, FR-2 each with an acceptance check), Edge cases, Success metrics, Decisions, Open questions and Related. You review the full draft before anything is saved to <code>docs/prd/&lt;slug&gt;.md</code>, the vault or the wiki. The next step it offers is <code>/gh-issue</code>.</p>
+  </div></details>
+</section>
+
+<!-- 2 PIPELINE -->
+<section class="tab" id="tab-pipeline" role="tabpanel" hidden>
+  <div class="block">
+    <h1>The pipeline behind <code>/run-issue</code></h1>
+    <p>One command drives every step. Each Station does one thing, writes a numbered JSON file into the run folder, and hands off. The engine reads that file and picks the next Station.</p>
+    <figure>
+      <div class="diagram"><svg id="svg-pipe" role="img" aria-label="The run-issue pipeline from preflight through researcher, planner, worktree and test stack, SDET, dev, verifier, PR open, reviewer, fixer, CI gate, final report and grind, with gates marked."></svg></div>
+      <figcaption>Amber badges mark the three human gates. Click a Station to see its model, what it may touch and what it hands on.</figcaption>
+    </figure>
+  </div>
+
+  <div class="block">
+    <h2>When a Station is wrong: bounces and escalation</h2>
+    <p>Work can be sent back to an earlier Station. Each pair gets two bounces. A third one escalates the run.</p>
+    <figure>
+      <div class="diagram"><svg id="svg-bounce" role="img" aria-label="Bounce paths: dev back to SDET, verifier back to dev, fixer back to dev. After the cap of two per pair, the run escalates and ends as a draft PR with the reason."></svg></div>
+      <figcaption>Dev cannot edit tests. If dev thinks a test is wrong it bounces to the SDET, and if it edits one anyway the engine reverts the files and bounces. Escalation never drops work: it produces a draft PR and the reason, delivered at Gate 3.</figcaption>
+    </figure>
+  </div>
+
+  <div class="block">
+    <h2>Full mode vs lean mode</h2>
+    <p>Full mode is the default. Lean mode is picked automatically for issues labelled <code>lean</code>, or with <code>--lean</code>. The CI gate applies to both.</p>
+    <div class="tbl"><table>
+      <tr><th>Station</th><th class="c">Full</th><th class="c">Lean</th></tr>
+      <tr><td>Researcher, planner</td><td class="c">yes</td><td class="c">yes</td></tr>
+      <tr><td>SDET (failing tests first)</td><td class="c">yes</td><td class="c">no</td></tr>
+      <tr><td>Dev</td><td class="c">yes</td><td class="c">yes</td></tr>
+      <tr><td>Verifier (runtime check)</td><td class="c">yes</td><td class="c">no</td></tr>
+      <tr><td>Reviewer</td><td class="c">yes</td><td class="c">yes</td></tr>
+      <tr><td>Specialist reviewers</td><td class="c">yes</td><td class="c">no</td></tr>
+      <tr><td>Fixer, CI gate</td><td class="c">yes</td><td class="c">yes</td></tr>
+    </table></div>
+  </div>
+
+  <details><summary>Epic mode: parent issues with sub-issues</summary><div>
+    <p>If the issue is an existing parent with sub-issues, <code>/run-issue</code> runs the children as a dependency graph. Independent children run in parallel. A dependent child builds its branch on top of its parent's branch once the parent has a PR open. The whole epic still has only three gates.</p>
+    <p>Note that <code>/gh-issue</code> no longer creates epics as of 1.9.0. Epic mode only applies to epics that already exist.</p>
+  </div></details>
+
+  <details><summary>What the first phases do</summary><div>
+    <ul>
+      <li><b>Preflight.</b> Stops if the checkout has uncommitted changes. If you passed free text, a Sentry link or a file instead of an issue, it runs <code>/intake</code> and <code>/gh-issue</code> first. If that files two or more issues, it prints them and stops cleanly. You then run each one, dependencies first.</li>
+      <li><b>Researcher.</b> Scores the issue against a Definition of Ready. Gaps are shown at Gate 1 and never stop the run.</li>
+      <li><b>Worktree and stack.</b> A sibling checkout on a new branch, plus (if the repo has a test compose file) a capped, locked Docker stack, one per project at a time.</li>
+    </ul>
+  </div></details>
+</section>
+
+<!-- 3 TOOLBOX -->
+<section class="tab" id="tab-toolbox" role="tabpanel" hidden>
+  <div class="block">
+    <h1>Toolbox</h1>
+    <p>Everything the plugin ships: slash commands you type, skills, agents that do the work, and the <code>aiw</code> CLI the engine runs. Click a card for the model it uses, what it may change and where it lives.</p>
+  </div>
+  <div id="toolbox" class="stack" style="gap:32px"></div>
+</section>
+
+<!-- 4 UNDER THE HOOD -->
+<section class="tab" id="tab-hood" role="tabpanel" hidden>
+  <div class="block">
+    <h1>Under the hood</h1>
+    <p>The design rule is that anything mechanical moves out of the prompt text and into code. The orchestrator does not eyeball a decision it can compute.</p>
+  </div>
+
+  <div class="two">
+    <div class="block">
+      <h2>One folder per run</h2>
+      <p>Each <a class="t" href="#g-run">Run</a> gets <code>&lt;runs_dir&gt;/&lt;owner&gt;-&lt;repo&gt;-issue-&lt;n&gt;/</code>. It holds <code>run.json</code> (the <a class="t" href="#g-ledger">Ledger</a>: roster, current Station, bounce counts, trace, and a context map with branch, PR and CI) and one numbered file per Station.</p>
+      <pre>run.json
+00-readiness.json   researcher
+10-plan.json        planner
+20-tests.json       sdet
+30-build.json       dev
+40-verify.json      verifier
+50-review.json      reviewer
+60-fix.json         fixer</pre>
+      <p class="hint">State lives under <code>$CLAUDE_PLUGIN_DATA</code> (default <code>~/.claude/plugins/data/ai-workflow</code>), so it survives plugin upgrades.</p>
+    </div>
+    <div class="block">
+      <h2>Every Station answers in one shape</h2>
+      <p>The <a class="t" href="#g-envelope">Envelope</a> is fixed JSON. A <code>passed</code> claim from sdet, dev, verifier, reviewer or fixer must carry the commands it ran.</p>
+      <pre>{
+  "issue": 42,
+  "station": "dev",
+  "status": "passed" | "bounce" | "escalate",
+  "attempt": 1,
+  "summary": "...",
+  "evidence": { "commands": [ ... ] },
+  "handoff": { ... }
+}</pre>
+    </div>
+  </div>
+
+  <div class="block">
+    <h2>Claims are checked by code</h2>
+    <p>After a Station reports, <code>checks.py</code> runs a <a class="t" href="#g-postcheck">post-check</a> that tries to prove the claim false. A refuted claim gets one redo. After that the run moves on and the failure is reported at Gate 3.</p>
+    <div class="tbl"><table>
+      <tr><th>Station</th><th>Post-check</th></tr>
+      <tr><td>SDET</td><td>Refused if the test suite is already green. Tests must fail first.</td></tr>
+      <tr><td>Dev</td><td>The commit must resolve and no undeclared files may be touched.</td></tr>
+      <tr><td>Reviewer</td><td>The review must actually exist on GitHub.</td></tr>
+      <tr><td>Fixer</td><td>Every review thread is resolved and the push happened.</td></tr>
+    </table></div>
+  </div>
+
+  <div class="two">
+    <div class="block">
+      <h2>Engine and CLI</h2>
+      <p><code>engine.py</code> is pure logic with no I/O. <code>route.py</code> does the I/O. <code>bin/aiw</code> is a thin shell wrapper over it. It was named <code>aiw</code> because macOS already has <code>/sbin/route</code>, which shadowed the old name and still exited 0.</p>
+    </div>
+    <div class="block">
+      <h2>Config</h2>
+      <p><code>config.json</code> holds the policy: models, caps, the human gates. A repo can override any of it with <code>.run-issue.json</code>. Dicts merge and lists replace.</p>
+    </div>
+  </div>
+
+  <div class="block">
+    <h2>Tests</h2>
+    <p>Plain assert scripts, no framework, no network, no Docker: <code>python3 run-engine/test_engine.py</code>, <code>test_scripts.py</code>, <code>test_kanban.py</code>.</p>
+  </div>
+
+  <div class="note"><b>Known doc drift.</b> The final gate is "Gate 3" in <code>docs/HOW-IT-WORKS.md</code> but "GATE 2" in <code>commands/run-issue.md</code> section 9.3. <code>plugin.json</code> says 14 agents and the README says 12 <code>run-*</code> plus 3. The repo has 15 agent files (12 <code>run-*</code>, plus <code>ship</code>, <code>worklog-runner</code> and <code>gh-issue-factchecker</code>). Also, <code>commands/gh-issue.md</code> says the readiness check "blocks the run" on a gap, while <code>definition-of-ready.md</code> says it is advisory and only surfaces at Gate 1. This page follows <code>definition-of-ready.md</code>. This page uses the actual values.</div>
+</section>
+
+<!-- 5 GUARDRAILS -->
+<section class="tab" id="tab-rails" role="tabpanel" hidden>
+  <div class="block">
+    <h1>Guardrails and integrations</h1>
+    <p>The rules the engine enforces, the review loop that runs after handback, and the tools it talks to.</p>
+  </div>
+
+  <div class="block">
+    <h2>Invariants</h2>
+    <div class="cards" id="rails"></div>
+  </div>
+
+  <div class="block">
+    <h2>The grind loop</h2>
+    <p>After Gate 3, <code>pr-grind</code> runs in your own session. It automates the cycle of review, fix, re-trigger for a PR stuck in "changes requested".</p>
+    <figure>
+      <div class="diagram"><svg id="svg-grind" role="img" aria-label="Grind loop: post Slack trigger, bot reviews, split findings into fix or rebut, run-fixer applies fixes and pushes, check CI, then re-trigger for the next round, until approved or a rail stops it."></svg></div>
+      <figcaption>Stop conditions: 10 rounds used, CI is red, a real person commented, or you said hold. If the same finding comes back, the second time it is fixed with a stronger model and the third time the loop stops.</figcaption>
+    </figure>
+  </div>
+
+  <div class="block">
+    <h2>Integrations</h2>
+    <div class="tbl"><table>
+      <tr><th>Tool</th><th>Used for</th><th>Without it</th></tr>
+      <tr><td><span class="pill ok">required</span> <code>gh</code></td><td>Issues, PRs, threads, CI, Projects board (needs the <code>project</code> scope)</td><td>Nothing works</td></tr>
+      <tr><td><span class="pill ok">required</span> Python 3.10+</td><td>The <code>aiw</code> engine, stdlib only</td><td>Nothing works</td></tr>
+      <tr><td>Docker</td><td>Per-issue test stack with CPU and memory caps</td><td>Falls back to the host test runner</td></tr>
+      <tr><td>GitNexus</td><td>Code graph for impact and caller lookups</td><td>Agents fall back to grep</td></tr>
+      <tr><td><code>slackcli</code></td><td>Review-bot trigger and the grind loop</td><td>No grind loop</td></tr>
+      <tr><td>gstack + Playwright</td><td>Runtime verification, mostly frontend</td><td>Verifier reports <code>UNVERIFIABLE</code></td></tr>
+      <tr><td>Obsidian CLI</td><td>Notes, run summaries, worklog</td><td>That side-channel is skipped</td></tr>
+      <tr><td>Sentry MCP, <code>acli</code> (Jira)</td><td>Intake from an error or a ticket</td><td>Use free text instead</td></tr>
+      <tr><td>Context7, web search</td><td>Researcher pulls public docs</td><td>Less context at Gate 1</td></tr>
+    </table></div>
+  </div>
+</section>
+
+<!-- 6 GLOSSARY -->
+<section class="tab" id="tab-glossary" role="tabpanel" hidden>
+  <div class="block"><h1>Glossary</h1><p>The vocabulary from the repo's <code>CONTEXT.md</code>, in plain words.</p></div>
+  <dl class="gloss" id="gloss"></dl>
+</section>
+
+</main>
+
+<aside id="drawer" aria-hidden="true" aria-label="Details">
+  <div class="dh"><div class="stack" style="gap:6px"><span class="pill" id="dkind"></span><h2 id="dtitle"></h2></div><button class="btn" id="dclose" aria-label="Close details">Close</button></div>
+  <div class="db" id="dbody"></div>
+</aside>
+
+<script>
+/* ---------- shared data: diagrams, toolbox and drawer all read this ---------- */
+const I = {
+ // planning
+ p_input:{n:"Raw input",k:"Input",o:"A Sentry link, requirements file, Obsidian note, Jira key or plain text.",t:"<p>No need to write a perfect ticket first. Jira keys go through <code>/jira-to-gh</code>, which files the issue the same way as <code>/gh-issue</code>.</p>"},
+ p_brief:{n:"/intake",k:"Command",p:"commands/intake.md",o:"Normalises the input into a brief with a type.",t:"<p>Detects the source, runs the matching adapter and returns an <code>## Intake result</code> block. A requirements file that holds several shippable outcomes triggers a decomposition check. Never creates issues.</p>"},
+ p_prd:{n:"/prd",k:"Skill",p:"skills/prd/SKILL.md",o:"Optional. Pins the what and why into a reviewed PRD.",t:"<p>Checks for an existing PRD first, scans the code, interviews you, shows the full draft, then saves to <code>docs/prd/&lt;slug&gt;.md</code> and optionally the vault and wiki. No architecture or API design here.</p>"},
+ p_grill:{n:"Grill",k:"Interview",o:"Questions, corner cases and decisions, with you.",t:"<p>Asks about acceptance criteria, priority, affected users and edge cases. Every corner case it finds is validated with you rather than assumed out of scope. Facts the code can answer are looked up, not asked.</p>"},
+ p_tasks:{n:"Task list",k:"Decomposition",p:"docs/tasks/<slug>.md",o:"Small, single-layer, ordered tasks that you approve.",t:"<p>Each task touches 3 or fewer production files, has 1 to 4 acceptance criteria, one verify command and no new dependency. You choose <b>Create as shown</b> or <b>Let me edit the list</b>.</p>"},
+ p_issues:{n:"Issues",k:"GitHub",o:"One standalone issue per task, in dependency order.",t:"<p>Labelled <code>refined</code> and <code>prd-&lt;slug&gt;</code>. Dependency edges become real <code>Depends on: #n</code> lines. Body sections map to the Definition of Ready.</p>"},
+ p_check:{n:"Fact-check",k:"Agent",m:"sonnet",a:"Read-only",p:"agents/gh-issue-factchecker.md",o:"A fresh agent verifies every claim in each created issue.",t:"<p>Checks file paths, symbols, behaviour and the proposed fix against the repo. Wrong text is corrected in place and you are told.</p>"},
+ p_ready:{n:"Ready",k:"Output",o:"Issues that pass the Definition of Ready.",t:"<p>Run <code>/run-issue</code> on each, dependencies first.</p>"},
+ // pipeline phases
+ idea:{n:"The idea",k:"Input",o:"A request, in whatever form it arrives.",t:"<p>A Sentry error link, a requirements file (.md, .txt, .pdf, .docx), an Obsidian note, a Jira key, or plain text. You do not need to write a perfect ticket first.</p>"},
+ preflight:{n:"Preflight",k:"Phase 0",o:"Safety checks before anything runs.",t:"<p>Stops if the checkout has uncommitted changes. If the argument is not an issue number or URL, it runs <code>/intake</code> then <code>/gh-issue</code> to make one. If that produces two or more issues, it prints them and stops cleanly.</p>"},
+ worktree:{n:"Worktree + test stack",k:"Phases 2 and 2.5",o:"A throwaway checkout and, if available, a Docker test stack.",t:"<p>A sibling checkout on a new branch with gitignored files such as <code>.env</code> copied in. If the repo has a test compose file, a stack named <code>runissue-&lt;slug&gt;-&lt;digest&gt;-&lt;issue&gt;</code> starts with CPU and memory caps and a lockfile so only one runs per project. The test command is resolved once and every Station uses that exact string.</p>",c:"aiw worktree create, aiw stack up|down|rebuild|status"},
+ pr:{n:"Open PR + classify",k:"Phases 5 and 5.5",o:"Push, open the PR, score the diff, pick reviewers.",t:"<p><code>aiw pr open</code> links the branch to the issue, pushes and opens the PR. <code>aiw classify</code> scores the diff (risk score and band, signals like migration or auth). <code>aiw resolve-review</code> then picks which specialist lenses to run.</p>"},
+ final:{n:"Final report",k:"Gate 3",o:"Handback to a human.",t:"<p>First it dumps a run summary to the Obsidian vault and appends lessons to <code>tasks/lessons.md</code> (left uncommitted, in the main checkout). Then the report: the PR, CI verdict, open threads, failed checks, lessons added, and anything carried here instead of asked. Project status moves to \"In Review\". A degraded finish (work not done) lands here as a draft PR with the reason.</p>"},
+ prready:{n:"Reviewed PR",k:"Output",o:"A PR with passing CI and review comments already addressed.",t:"<p>The PR has failing-then-passing tests, a runtime check, a review from a fresh-context reviewer, and a green CI gate.</p>"},
+ merge:{n:"You merge",k:"Human",o:"Merging is always manual.",t:"<p>Nothing in this plugin merges a PR.</p>"},
+ // stations
+ researcher:{n:"run-researcher",k:"Agent",m:"haiku",a:"Read-only",p:"agents/run-researcher.md",o:"Triages bug vs feature and gathers context.",t:"<p>Finds related prior issues and PRs, checks the notes vault and project wiki, pulls public docs via Context7, and scores the issue against <code>definition-of-ready.md</code>. Writes <code>00-readiness.json</code>. Gaps are advisory.</p>"},
+ planner:{n:"run-planner",k:"Agent",m:"opus",a:"Read-only",p:"agents/run-planner.md",o:"Writes one combined test and implementation plan.",t:"<p>Output is <code>10-plan.json</code>. <b>Gate 1:</b> you approve, revise or abort. Never writes code.</p>"},
+ sdet:{n:"run-sdet",k:"Agent",m:"sonnet",a:"Writes only inside the approved test root",p:"agents/run-sdet.md",o:"Writes failing tests first.",t:"<p>Must show the tests fail before any code exists (the post-check refuses a green suite). Also handles bounce rounds when another Station argues a test is wrong. Writes <code>20-tests.json</code>.</p>"},
+ dev:{n:"run-dev",k:"Agent",m:"sonnet",a:"Writes everywhere except the test root",p:"agents/run-dev.md",o:"Implements the plan until tests pass.",t:"<p>If it believes a test is wrong it bounces to the SDET instead of editing it. After every dev step the engine diffs the test root against the SDET's commit. A violation reverts the files. Writes <code>30-build.json</code>.</p>"},
+ verifier:{n:"run-verifier",k:"Agent",m:"opus",a:"Read-only toward the worktree, writes evidence only",p:"agents/run-verifier.md",o:"Checks the feature actually works while running.",t:"<p>Backend changes are hit over real HTTP. Frontend changes are driven with Playwright against a mocked API. Never starts or stops the Docker stack. Writes <code>40-verify.json</code>.</p>"},
+ reviewer:{n:"run-reviewer",k:"Agent",m:"opus",a:"Read-only",p:"agents/run-reviewer.md",o:"Reviews the PR with no memory of how it was built.",t:"<p>Runs the <code>pr-review</code> skill on a clean context. Specialists (one lens each, chosen by the engine) and the Laravel reviewer run in parallel and the reviewer folds their verdicts in. The review must exist on GitHub. Writes <code>50-review.json</code>.</p>"},
+ specialist:{n:"run-specialist",k:"Agent",m:"sonnet",a:"Read-only",p:"agents/run-specialist.md",o:"Single-lens reviewer (security, performance, API contract).",t:"<p>Spawned in parallel, one per lens the review policy selects. Never self-selects, never edits and never posts to the PR.</p>"},
+ laravelrev:{n:"run-laravel-review",k:"Agent",m:"opus",a:"Read-only, advisory",p:"agents/run-laravel-review.md",o:"Routes PHP diffs to the right Laravel review skills.",t:"<p>Picks at most two of the seven Laravel skills. Does nothing on non-Laravel repos.</p>"},
+ fixer:{n:"run-fixer",k:"Agent",m:"sonnet",a:"Edits existing files only, cannot create files",p:"agents/run-fixer.md",o:"Applies review findings, unattended.",t:"<p>Resolves each thread and pushes once. Findings it cannot apply go back to the SDET or dev (phase 7b). <b>Gate 2a</b> fires only if a finding needs human judgement. Writes <code>60-fix.json</code>.</p>"},
+ runci:{n:"run-ci",k:"Agent",m:"sonnet",a:"The only agent allowed GitHub Actions write commands",p:"agents/run-ci.md",o:"Gets CI to green on the PR, honestly.",t:"<p>Merges the base branch in, re-runs tests and waits for CI to go green. One attempt per head SHA. It must never mask a failure to look green.</p>"},
+ grinder:{n:"run-grinder",k:"Agent",m:"sonnet",a:"Posts to Slack, edits nothing",p:"agents/run-grinder.md",o:"Opens and closes the Slack review cycle.",t:"<p>Posts the reviewer-bot trigger with the PR link, returns the thread URL, and posts the final mention. Never loops, merges or edits files.</p>"},
+ lessons:{n:"run-lessons",k:"Agent",m:"opus",a:"Appends to tasks/lessons.md",p:"agents/run-lessons.md",o:"Records lessons that are backed by evidence.",t:"<p>Every lesson must cite a <code>file:line</code> or a review-comment id. Never rewrites or deletes existing lessons. Never commits.</p>"},
+ // commands / skills
+ runissue:{n:"/run-issue",k:"Command",m:"orchestrator",a:"Drives the whole pipeline",p:"commands/run-issue.md",o:"Issue number in, reviewed PR out.",t:"<p>Usage: <code>/ai-workflow:run-issue &lt;n|url|text&gt; [--lean|--full]</code>. About 1,350 lines of instructions across phases 0 to 10, plus Epic mode. Stops for you exactly three times.</p>"},
+ issue2pr:{n:"/issue-to-pr",k:"Command",m:"interactive",a:"Asks before commit, push, PR",p:"commands/issue-to-pr.md",o:"The hands-on variant of run-issue.",t:"<p>Interviews you, plans, executes, pauses for a manual end-to-end test, and asks before committing. Not meant for unattended use.</p>"},
+ intake:{n:"/intake · /prd",k:"Command + skill",a:"Writes a brief or a PRD",p:"commands/intake.md, skills/prd/SKILL.md",o:"Turns rough input into something buildable.",t:"<p><b>/intake</b> normalises a Sentry URL, requirements file, Obsidian note or free text into a brief ready for an issue.</p><p><b>/prd</b> (new in 1.9.0) scans the codebase, interviews you, and saves a PRD to <code>docs/prd/&lt;slug&gt;.md</code>, the vault and/or the GitHub wiki. The next step is <code>/gh-issue</code>.</p>"},
+ ghissue:{n:"/gh-issue",k:"Command",a:"Creates GitHub issues",p:"commands/gh-issue.md",o:"Files issues with codebase context.",t:"<p>Always splits the request into tasks first. One task becomes one issue. Two or more are saved to <code>docs/tasks/&lt;slug&gt;.md</code> and filed as flat issues labelled <code>prd-&lt;slug&gt;</code>, ordered by <code>Depends on: #n</code> lines. Bodies use What / Why / How and get the <code>refined</code> label, plus <code>lean</code> when it qualifies.</p>"},
+ jira2gh:{n:"/jira-to-gh",k:"Command",a:"Creates GitHub issues",p:"commands/jira-to-gh.md",o:"Pulls a Jira ticket and files it as a GitHub issue.",t:"<p>Fetches with <code>acli jira workitem view &lt;KEY&gt;</code>, then files it the same way as <code>/gh-issue</code>.</p>"},
+ factchecker:{n:"gh-issue-factchecker",k:"Agent",m:"sonnet",a:"Read-only",p:"agents/gh-issue-factchecker.md",o:"Fresh-eyes check of a just-created issue.",t:"<p>Checks every file path, symbol and described behaviour in the issue against the repo, with no memory of how it was drafted.</p>"},
+ prreview:{n:"pr-review",k:"Skill",a:"Posts inline review comments",p:"skills/pr-review/",o:"Evidence-based review of a pull request.",t:"<p>Reads the description, every commit, linked issues and the full diff. Checks intent against the issues, DRY across the whole repo (not just the diff), SOLID and security. Escalates to humans when a change is too consequential.</p>"},
+ prgrind:{n:"pr-grind",k:"Skill",a:"Loops over review rounds",p:"skills/pr-grind/",o:"Automates review, fix and re-trigger.",t:"<p>Posts the Slack trigger, waits for the bot's review, splits findings into fix or rebut, dispatches <code>run-fixer</code>, verifies CI and repeats until approved or a rail stops it.</p>"},
+ prfix:{n:"/pr-fix-comments",k:"Command",a:"Edits files, confirming each",p:"commands/pr-fix-comments.md",o:"Works through PR comments with you.",t:"<p>The interactive cousin of <code>run-fixer</code>: it confirms each fix with you.</p>"},
+ worklog:{n:"/worklog",k:"Skill + agent",a:"Writes an Obsidian note",p:"skills/worklog/, agents/worklog-runner.md",o:"Daily worklog from GitHub activity.",t:"<p>Collects PRs, commits and linked issues, groups them by Project, confirms ambiguous items with you, and writes the Obsidian daily note.</p>"},
+ dump:{n:"/dump",k:"Skill",a:"Files notes in the vault",p:"skills/dump/",o:"Files free-form input into the vault.",t:"<p>Routes a feature request, bug, task or meeting note into the Project/Feature structure (PRD, SRS, Dump, Decisions, Bugs, Tasks). <code>/run-issue</code> calls it to save the run summary.</p>"},
+ ship:{n:"ship",k:"Agent",m:"sonnet",a:"Commits, pushes, opens PR",p:"agents/ship.md",o:"Merge base, test, bump version, changelog, PR.",t:"<p>The release-style shipping flow.</p>"},
+ // laravel
+ l1:{n:"api-hardening-patterns",k:"Skill",a:"Advisory",p:"skills/api-hardening-patterns/",o:"API validation, authorization and abuse resistance.",t:""},
+ l2:{n:"data-migration-strategy",k:"Skill",a:"Advisory",p:"skills/data-migration-strategy/",o:"Phased data migrations and rollback.",t:""},
+ l3:{n:"deployment-readiness",k:"Skill",a:"Advisory",p:"skills/deployment-readiness/",o:"Config, queues, caching and rollback readiness.",t:""},
+ l4:{n:"frontend-performance-review",k:"Skill",a:"Advisory",p:"skills/frontend-performance-review/",o:"Frontend performance and Lighthouse practices.",t:""},
+ l5:{n:"migration-index-reviewer",k:"Skill",a:"Advisory",p:"skills/migration-index-reviewer/",o:"Missing, redundant or risky database indexes.",t:""},
+ l6:{n:"resilient-check",k:"Skill",a:"Advisory",p:"skills/resilient-check/",o:"Retries, timeouts and idempotency.",t:""},
+ l7:{n:"upgrade-assistant",k:"Skill",a:"Advisory",p:"skills/upgrade-assistant/",o:"Laravel and PHP upgrade planning.",t:""},
+ // bounce / grind
+ b_esc:{n:"Escalated",k:"Status",o:"A Station needs a human, or a budget is spent.",t:"<p>Bounces are capped at 2 per pair (for example <code>verifier->dev</code>). Going over escalates. Run status has only three values: running, done, escalated. There is no \"blocked\", so no Station can invent a fourth gate.</p>"},
+ b_draft:{n:"Draft PR + reason",k:"Outcome",o:"A degraded finish still delivers something.",t:"<p>The unfinished work lands as a draft PR with the reason, at the final gate.</p>"},
+ g_trigger:{n:"Post Slack trigger",k:"Grind step",o:"run-grinder pings the reviewer bot.",t:"<p>Posts the bot trigger with the PR link and returns the thread URL.</p>"},
+ g_bot:{n:"Bot reviews",k:"Grind step",o:"The reviewer bot posts a round of findings.",t:"<p>The loop waits for the round, then picks which review carries the verdict (<code>aiw review pick</code>).</p>"},
+ g_split:{n:"Fix or rebut",k:"Grind step",o:"Each finding is sorted.",t:"<p>Findings worth fixing go to the fixer. Findings that are wrong get a rebuttal. A finding's identity across rounds is its <a class='t' href='#g-fingerprint'>fingerprint</a>.</p>"},
+ g_fix:{n:"run-fixer + push",k:"Grind step",o:"Fixes are applied and pushed.",t:"<p>Same agent as the main pipeline, unattended.</p>"},
+ g_ci:{n:"Check CI",k:"Grind step",o:"Confirms the push is green.",t:"<p>Uses <code>aiw ci status</code>: green, red or pending, plus the failing job log. Red CI is a stop rail.</p>"},
+ g_stop:{n:"Approved or stopped",k:"Exit",o:"The loop ends.",t:"<p>Approved, or a <a class='t' href='#g-rail'>rail</a>: 10 rounds, CI red, a real human commented, or you said hold. A paused stop does not watch for replies.</p>"}
+};
+const GROUPS=[
+ ["Intake and issue writing","Get from a rough idea to well-formed GitHub issues.",["intake","ghissue","jira2gh","factchecker"]],
+ ["Issue to PR pipeline","The orchestrator and the twelve run-* agents it dispatches.",["runissue","issue2pr","researcher","planner","sdet","dev","verifier","reviewer","specialist","laravelrev","fixer","runci","grinder","lessons"]],
+ ["PR review loop","Review a PR, and keep iterating until the bot approves.",["prreview","prgrind","prfix"]],
+ ["Worklog and notes","Obsidian-backed notes and daily logs.",["worklog","dump"]],
+ ["Laravel reviewers","Seven stack-specific review skills. run-laravel-review picks at most two per run.",["l1","l2","l3","l4","l5","l6","l7"]],
+ ["Shipping","",["ship"]]
+];
+const AIW=[
+ ["paths","Resolve all paths and create state directories"],["init · route · set","Create the Ledger, validate an Envelope and decide the next action, write context"],
+ ["precheck &lt;station&gt;","Run a Station's guard before dispatch"],["classify · resolve-review","Score the diff and choose specialist lenses"],
+ ["stack up|down|rebuild|status","Manage the per-issue Docker test stack"],["worktree create","Create the per-issue worktree"],
+ ["pr open","Link branch to issue, push, open the PR"],["threads list|resolve","List and resolve PR review threads"],
+ ["ci status","Green, red or pending, with the failing log"],["review pick","Choose which review carries the verdict in a grind round"],
+ ["epic split|init|next|status","Epic dependency graph and sequencing"],["dispatch plan","Resolve the roster and run the Definition of Ready screen"],
+ ["gitnexus sync|index|clean","Maintain the code graph (best-effort)"],["project-status · project-board","GitHub Projects v2 integration (best-effort)"],
+ ["kanban serve","Live progress board, one column per Station"]
+];
+const RAILS=[
+ ["Exactly three human gates","Plan approval, Gate 2a (only when needed), final handback. Anything else is recorded and reported, never asked."],
+ ["Nothing ever merges","Merging is always a person's action."],
+ ["Evidence is required","A passed claim from sdet, dev, verifier, reviewer or fixer needs the commands that prove it."],
+ ["Test ownership","Dev may not edit the test root. After every dev step the engine diffs it. A violation reverts and bounces to the SDET."],
+ ["Bounce cap of 2 per pair","A third bounce escalates, which ends as a draft PR at Gate 3."],
+ ["One CI attempt per head SHA","run-ci edits existing files only and never hides a failure to look green."],
+ ["Fresh-context reviewer","The reviewer sees no plan and no conversation history."],
+ ["Side-channels never stop a run","Vault dump, lessons, GitNexus and Projects status each produce one warning line on failure."],
+ ["Capped, locked Docker stacks","CPU and memory caps and a lockfile, one stack per project. Stations may not start their own."],
+ ["Lessons must cite evidence","A file:line or review-comment id each. Never committed by the pipeline, never rewritten."]
+];
+const GLOSS=[
+ ["station","One stage of the pipeline: researcher, planner, sdet, dev, verifier, reviewer, fixer, done."],
+ ["run","One execution of /run-issue on one issue. Only the latest run counts."],
+ ["ledger","run.json. The only source of truth for a run. Never edit it by hand."],
+ ["envelope","The fixed JSON shape every Station returns: issue, station, status, attempt, summary, evidence, handoff."],
+ ["postcheck","Code that tries to disprove a Station's claim."],
+ ["bounce","Sending work back to an earlier Station. Counted per pair, for example verifier->dev."],
+ ["escalated","A Station needs a human, or a bounce budget is spent."],
+ ["status","running, done or escalated. There is no blocked."],
+ ["classification","Ticket type, risk score, risk band and blast radius, set once per run."],
+ ["testroot","The directory the SDET owns and dev may not edit."],
+ ["worktree","The throwaway checkout a run works in."],
+ ["degraded","The work is not done, so a draft PR with the reason lands at the final gate."],
+ ["epic","An existing parent issue with sub-issues."],
+ ["grind","The review loop that runs after the handback."],
+ ["rail","A condition that stops the grind."],
+ ["fingerprint","A finding's identity across grind rounds: file, line and the start of its text."],
+ ["project","A friendly name for an owner/repo, from skills/worklog/projects.json."],
+ ["dor","Definition of Ready. Six items an issue is scored against before a pipeline is spent on it: problem and why, scope, acceptance criteria, affected surface, non-functional constraints, dependencies. Advisory only."],
+ ["tasklist","The approved breakdown of a request into small single-layer tasks, saved as docs/tasks/<slug>.md when there are two or more."],
+ ["lean","A label on small, well-specified issues that makes /run-issue use the short roster."],
+ ["board","The kanban view: one column per Station, one card per issue from its latest run."]
+];
+const GN={station:"Station",run:"Run",ledger:"Ledger",envelope:"Envelope",postcheck:"Post-check",bounce:"Bounce",escalated:"Escalated",status:"Status",classification:"Classification",testroot:"Test root",worktree:"Worktree",degraded:"Degraded finish",epic:"Epic",grind:"Grind",rail:"Rail",fingerprint:"Fingerprint",project:"Project",board:"Board / Card",dor:"Definition of Ready",tasklist:"Task list",lean:"Lean label"};
+
+/* ---------- svg helpers ---------- */
+const NW=128,NH=58,GX=34,GY=62,PAD=16;
+const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
+function gnode(id,x,y,o={}){
+  const it=I[id],lab=o.label||it.n,sub=o.sub||"";
+  const gate=o.gate?`<rect class="gb" x="${x+NW-58}" y="${y-9}" width="58" height="16" rx="8"/><text class="gt" x="${x+NW-29}" y="${y+2.5}" text-anchor="middle">${o.gate}</text>`:"";
+  return `<g class="node ${o.cls||""}" data-id="${id}" tabindex="0" role="button" aria-label="${esc(lab)}"><rect class="box" x="${x}" y="${y}" width="${NW}" height="${NH}" rx="8"/><text class="nl" x="${x+NW/2}" y="${y+(sub?25:34)}" text-anchor="middle">${esc(lab)}</text>${sub?`<text class="ns" x="${x+NW/2}" y="${y+42}" text-anchor="middle">${esc(sub)}</text>`:""}${gate}</g>`;
+}
+const defs=`<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor" style="color:var(--muted)"/></marker></defs>`;
+const arrow=(x1,y1,x2,y2,cls="")=>`<line class="edge ${cls}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" marker-end="url(#ar)"/>`;
+function flow(svgId,rows,extra=""){
+  const per=Math.max(...rows.map(r=>r.length));
+  const W=PAD*2+per*NW+(per-1)*GX, H=PAD+14+rows.length*NH+(rows.length-1)*GY+PAD+(extra?extra.h:0);
+  let out=defs,pos=[];
+  rows.forEach((r,ri)=>{r.forEach((n,ci)=>{
+    const x=PAD+ci*(NW+GX),y=PAD+14+ri*(NH+GY);pos.push({x,y});
+    out+=gnode(n.id,x,y,n);
+    if(ci>0) out+=arrow(x-GX+2,y+NH/2,x-2,y+NH/2);
+  });
+  if(ri>0){const pr=rows[ri-1],lx=PAD+(pr.length-1)*(NW+GX)+NW/2,ly=PAD+14+(ri-1)*(NH+GY)+NH,fx=PAD+NW/2,fy=PAD+14+ri*(NH+GY),my=ly+GY/2;
+    out+=`<path class="edge" d="M${lx} ${ly+2}V${my}H${fx}V${fy-2}" marker-end="url(#ar)"/>`;}
+  });
+  const s=document.getElementById(svgId);s.setAttribute("viewBox",`0 0 ${W} ${H}`);s.innerHTML=out+(extra?extra.svg:"");
+}
+function drawAll(){
+  flow("svg-life",[[{id:"idea",sub:"Sentry, BRD, note, text"},{id:"intake",sub:"clarify + PRD"},{id:"ghissue",sub:"split into issues"},{id:"runissue",sub:"the pipeline"},{id:"prready",label:"Reviewed PR",sub:"CI green"},{id:"prgrind",label:"/pr-grind",sub:"bot review loop"},{id:"merge",gate:"HUMAN",sub:"always manual"}]]);
+  flow("svg-pipe",[
+    [{id:"preflight",sub:"clean checkout?"},{id:"researcher",sub:"haiku"},{id:"planner",sub:"opus",gate:"GATE 1"},{id:"worktree",label:"Worktree + stack",sub:"isolated"},{id:"sdet",label:"SDET",sub:"failing tests"},{id:"dev",label:"Dev",sub:"make them pass"},{id:"verifier",label:"Verifier",sub:"runs the feature"}],
+    [{id:"pr",label:"Open PR",sub:"classify risk"},{id:"reviewer",label:"Reviewer",sub:"+ specialists"},{id:"fixer",label:"Fixer",sub:"apply findings",gate:"GATE 2a"},{id:"runci",label:"CI gate",sub:"merge base, go green"},{id:"final",label:"Final report",sub:"you decide",gate:"GATE 3"},{id:"prgrind",label:"Grind",sub:"Slack review loop"}]
+  ]);
+  flow("svg-plan",[
+    [{id:"p_input",label:"Raw input",sub:"text, BRD, Sentry"},{id:"p_brief",label:"/intake",sub:"normalise to a brief"},{id:"p_prd",label:"/prd",sub:"optional: what + why",gate:"YOU",cls:"dim"},{id:"p_grill",label:"Grill",sub:"questions, corner cases",gate:"YOU"}],
+    [{id:"p_tasks",label:"Task list",sub:"small, ordered",gate:"YOU"},{id:"p_issues",label:"Issues",sub:"flat, one per task"},{id:"p_check",label:"Fact-check",sub:"fresh-eyes agent"},{id:"p_ready",label:"Ready",sub:"passes DoR"}]
+  ]);
+  bounce();grind();
+}
+function bounce(){
+  const ids=["sdet","dev","verifier","reviewer","fixer"],lab=["SDET","Dev","Verifier","Reviewer","Fixer"],sub=["writes tests","writes code","runs it","reads diff","applies fixes"];
+  const W=PAD*2+6*NW+5*GX,Y=PAD+14,B=Y+NH,cx=i=>PAD+i*(NW+GX)+NW/2;
+  let o=defs;
+  ids.forEach((id,i)=>{o+=gnode(id,PAD+i*(NW+GX),Y,{label:lab[i],sub:sub[i]});if(i)o+=arrow(PAD+i*(NW+GX)-GX+2,Y+NH/2,PAD+i*(NW+GX)-2,Y+NH/2)});
+  const curve=(a,b,d,t)=>{const x1=cx(a)-10,x2=cx(b)+10,xa=a>b?x1:x1,mid=(x1+x2)/2;return `<path class="edge dash" d="M${cx(a)-10} ${B+2}C${cx(a)-10} ${B+d},${cx(b)+10} ${B+d},${cx(b)+10} ${B+4}" marker-end="url(#ar)"/><text class="elab" x="${(cx(a)+cx(b))/2}" y="${B+d*0.75+12}" text-anchor="middle">${t}</text>`};
+  o+=curve(1,0,46,"test is wrong");o+=curve(2,1,46,"runtime fails");o+=curve(4,1,92,"unapplied findings (7b)");
+  const ex=PAD+5*(NW+GX);
+  o+=gnode("b_esc",ex,Y,{label:"Escalated",sub:"cap hit",cls:"warn"});
+  o+=`<path class="edge dash" d="M${cx(4)+NW/2+2} ${Y+NH/2}H${ex-2}" marker-end="url(#ar)"/><text class="elab" x="${(cx(4)+NW/2+ex)/2}" y="${Y+NH/2-6}" text-anchor="middle">3rd bounce</text>`;
+  o+=gnode("b_draft",ex,Y+NH+GY,{label:"Draft PR",sub:"+ reason",cls:"warn"});
+  o+=arrow(ex+NW/2,Y+NH+2,ex+NW/2,Y+NH+GY-2,"dash");
+  const H=Y+NH+GY+NH+PAD;
+  const s=document.getElementById("svg-bounce");s.setAttribute("viewBox",`0 0 ${W} ${H}`);s.innerHTML=o;
+}
+function grind(){
+  const ids=["g_trigger","g_bot","g_split","g_fix","g_ci"],lab=["Slack trigger","Bot reviews","Fix or rebut","run-fixer","Check CI"],sub=["ping reviewer bot","one round","per finding","apply + push","green?"];
+  const W=PAD*2+6*NW+5*GX,Y=PAD+14,B=Y+NH,cx=i=>PAD+i*(NW+GX)+NW/2;let o=defs;
+  ids.forEach((id,i)=>{o+=gnode(id,PAD+i*(NW+GX),Y,{label:lab[i],sub:sub[i]});if(i)o+=arrow(PAD+i*(NW+GX)-GX+2,Y+NH/2,PAD+i*(NW+GX)-2,Y+NH/2)});
+  o+=`<path class="edge" d="M${cx(4)} ${B+2}C${cx(4)} ${B+60},${cx(1)} ${B+60},${cx(1)} ${B+4}" marker-end="url(#ar)"/><text class="elab" x="${(cx(1)+cx(4))/2}" y="${B+52}" text-anchor="middle">re-trigger, next round</text>`;
+  const ex=PAD+5*(NW+GX);o+=gnode("g_stop",ex,Y,{label:"Approved / stop",sub:"or a rail hit",cls:"warn"});
+  o+=`<path class="edge dash" d="M${PAD+4*(NW+GX)+NW+2} ${Y+NH/2}H${ex-2}" marker-end="url(#ar)"/>`;
+  const s=document.getElementById("svg-grind");s.setAttribute("viewBox",`0 0 ${W} ${B+PAD+70}`);s.innerHTML=o;
+}
+
+/* ---------- toolbox, rails, glossary ---------- */
+function card(id){const it=I[id];return `<button class="card" data-id="${id}"><div class="top"><span class="nm">${esc(it.n)}</span><span class="pill">${it.m||it.k}</span></div><span class="one">${it.o}</span></button>`}
+document.getElementById("toolbox").innerHTML=GROUPS.map(g=>`<div class="group"><header><h2>${g[0]}</h2>${g[1]?`<p>${g[1]}</p>`:""}</header><div class="cards">${g[2].map(card).join("")}</div></div>`).join("")+
+ `<div class="group"><header><h2>The aiw CLI</h2><p>What the engine and the orchestrator call. Run <code>aiw paths</code> to check the install: it must print JSON whose first key is <code>plugin_root</code>.</p></header><div class="tbl"><table><tr><th>Subcommand</th><th>What it does</th></tr>${AIW.map(a=>`<tr><td><code>${a[0]}</code></td><td>${a[1]}</td></tr>`).join("")}</table></div></div>`;
+document.getElementById("rails").innerHTML=RAILS.map(r=>`<div class="card" style="cursor:default"><span class="nm" style="font-family:var(--font-body);font-weight:600">${r[0]}</span><span class="one">${r[1]}</span></div>`).join("");
+document.getElementById("gloss").innerHTML=GLOSS.map(g=>`<dt id="g-${g[0]}">${GN[g[0]]}</dt><dd>${g[1]}</dd>`).join("");
+
+/* ---------- tabs ---------- */
+const TABS=[["overview","Overview"],["planning","Refine and break down"],["pipeline","The Pipeline"],["toolbox","Toolbox"],["hood","Under the hood"],["rails","Guardrails and integrations"],["glossary","Glossary"]];
+const nav=document.getElementById("tabs");
+nav.innerHTML=TABS.map(t=>`<button role="tab" id="t-${t[0]}" aria-controls="tab-${t[0]}" data-tab="${t[0]}">${t[1]}</button>`).join("");
+function show(name,push){
+  if(!TABS.some(t=>t[0]===name))name="overview";
+  TABS.forEach(t=>{const on=t[0]===name;document.getElementById("tab-"+t[0]).hidden=!on;const b=document.getElementById("t-"+t[0]);b.setAttribute("aria-selected",on);b.tabIndex=on?0:-1});
+  closeDrawer();
+  try{localStorage.setItem("aiw-tab",name)}catch(e){}
+  if(push)try{history.replaceState(null,"","#"+name)}catch(e){}
+  window.scrollTo(0,0);
+}
+nav.addEventListener("click",e=>{const b=e.target.closest("[data-tab]");if(b)show(b.dataset.tab,true)});
+nav.addEventListener("keydown",e=>{if(e.key!=="ArrowRight"&&e.key!=="ArrowLeft")return;const i=TABS.findIndex(t=>document.getElementById("t-"+t[0]).getAttribute("aria-selected")==="true");const n=TABS[(i+(e.key==="ArrowRight"?1:TABS.length-1))%TABS.length][0];show(n,true);document.getElementById("t-"+n).focus()});
+function goGloss(id){show("glossary",false);const el=document.getElementById(id);if(el){el.scrollIntoView({block:"start"});el.classList.add("hl");setTimeout(()=>el.classList.remove("hl"),2200)}}
+document.addEventListener("click",e=>{const a=e.target.closest("a.t");if(a){e.preventDefault();goGloss(a.getAttribute("href").slice(1))}});
+
+/* ---------- drawer ---------- */
+const dr=document.getElementById("drawer");let lastFocus=null;
+function openDrawer(id){
+  const it=I[id];if(!it)return;
+  document.querySelectorAll(".node.on").forEach(n=>n.classList.remove("on"));
+  document.querySelectorAll(`.node[data-id="${id}"]`).forEach(n=>n.classList.add("on"));
+  document.getElementById("dkind").textContent=it.k;document.getElementById("dtitle").textContent=it.n;
+  const rows=[["Model",it.m],["Access",it.a],["File",it.p&&`<code>${it.p}</code>`],["CLI",it.c&&`<code>${it.c}</code>`]].filter(r=>r[1]);
+  document.getElementById("dbody").innerHTML=`<p><b>${it.o}</b></p>${it.t||""}${rows.length?`<dl>${rows.map(r=>`<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join("")}</dl>`:""}`;
+  dr.classList.add("open");dr.setAttribute("aria-hidden","false");lastFocus=document.activeElement;
+  document.getElementById("dclose").focus({preventScroll:true});
+}
+function closeDrawer(){dr.classList.remove("open");dr.setAttribute("aria-hidden","true");document.querySelectorAll(".node.on").forEach(n=>n.classList.remove("on"))}
+document.getElementById("dclose").onclick=()=>{closeDrawer();if(lastFocus&&lastFocus.focus)lastFocus.focus()};
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer();if((e.key==="Enter"||e.key===" ")&&e.target.classList&&e.target.classList.contains("node")){e.preventDefault();openDrawer(e.target.dataset.id)}});
+document.addEventListener("click",e=>{
+  const n=e.target.closest("[data-id]");
+  if(n){openDrawer(n.dataset.id);return}
+  if(dr.classList.contains("open")&&!dr.contains(e.target))closeDrawer();
+  const c=e.target.closest("[data-copy]");
+  if(c){const t=document.getElementById(c.dataset.copy);const txt=t.textContent;
+    const done=()=>{c.textContent="Copied";setTimeout(()=>c.textContent="Copy",1400)};
+    const sel=()=>{const r=document.createRange();r.selectNodeContents(t);const s=getSelection();s.removeAllRanges();s.addRange(r)};
+    (navigator.clipboard?navigator.clipboard.writeText(txt).then(done,sel):Promise.reject()).catch(sel);}
+});
+
+/* ---------- boot ---------- */
+drawAll();
+let start="overview";
+try{start=localStorage.getItem("aiw-tab")||start}catch(e){}
+const h=location.hash.slice(1);
+if(h.startsWith("g-")){show("glossary",false);setTimeout(()=>goGloss(h),0)}
+else show(TABS.some(t=>t[0]===h)?h:start,false);
+</script>
