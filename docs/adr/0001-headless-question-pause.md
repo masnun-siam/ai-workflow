@@ -55,22 +55,22 @@ Same session id, the model saw the earlier turns, and no dangling tool_use probl
 **Corner cases.**
 
 - `aiw ask` missing: with the real `aiw` on PATH (no `ask` subcommand yet) the Bash call returned `Exit code 2 ... invalid choice: 'ask'`, the model said "Done. Awaiting answer." and the process exited 0 with no record file. A missing tool fails silently, so the engine must treat "exit 0 and no new record" as an error, never as "answered".
-- asked twice: the stub overwrote its single record file; this was not experimented further. The record must therefore be append-only with a per-call `id` (see shape below), and the engine acts on the newest `pending` record; a second `aiw ask` in one session while one is pending is rejected by `aiw ask`.
+- asked twice: the stub overwrote its single record file; this was not experimented further. The record must therefore be append-only with a per-call `id` (see shape below), and a second `aiw ask` in one session while one is pending is rejected by `aiw ask`. The rejection prints the same `RECORDED <existing id>. End your turn immediately` message and exits 0, so asking the same question twice is idempotent and never looks like an error to the model.
 - never answered: nothing consumes the record, the process is already gone (exit 0), and the session stays resumable by its `session_id`. The record with `"status":"pending"` is what the UI shows as "waiting on you". There is no timeout or hang to clean up.
-- A model that does not follow "end your turn" after `aiw ask`: option (a)'s result is reusable as hardening. A PreToolUse hook on `Bash` returning `{"continue":false}` ran the command and then ended the process with `hook_stopped`, exit 0. That was verified on Bash with a stub command, not on `aiw ask`.
+- A model that does not follow "end your turn" after `aiw ask`: option (a)'s result is a possible hardening. A PreToolUse hook on `Bash` returning `{"continue":false}` ran the command and then ended the process with `hook_stopped`, exit 0. That was observed once on 2.1.289 with a stub command, not on `aiw ask`, and the tool still running is not documented behaviour, so a CLI update could change it. A `PostToolUse` hook on `Bash` returning `{"continue":false}` is the documented way to stop after a tool has run and is untested here. Either hook must check `tool_input.command` for `aiw ask` and do nothing for other Bash calls, otherwise every Bash call in a headless session ends the run.
 
 ## Consequences
 
 - Chosen: (b) `aiw ask`. Rejected: (a) PreToolUse on `AskUserQuestion`, because the hook cannot fire when the tool is not offered under `-p`, with or without `--dangerously-skip-permissions`. (a) would only work if the CLI re-enabled the tool headlessly, which 2.1.289 does not.
-- Headless marker: the engine starts UI sessions with `AIW_HEADLESS=1` in the environment (and `AIW_RUN_DIR` pointing at the run directory). Each command's question sites say: when `AIW_HEADLESS=1`, call `aiw ask` instead of `AskUserQuestion`. Interactive runs have no marker and are unchanged: `AskUserQuestion` works exactly as today. The marker was chosen, not tested; the experiments used the stub on PATH and `AIW_RUN_DIR` only.
+- Headless marker: the engine starts UI sessions with `AIW_HEADLESS=1` in the environment (and `AIW_RUN_DIR` pointing at the run directory). The model cannot see the process environment without running a command, so the engine also tells it directly at launch: `--append-system-prompt "Headless run: ask via aiw ask, never AskUserQuestion"`. That system prompt is the model-facing switch; `AIW_HEADLESS=1` is for `aiw ask` and the engine. Each command's question sites say: when headless, call `aiw ask` instead of `AskUserQuestion`. Tasks 16 and 26 use this one approach and do not add a `printenv` step. Interactive runs have no marker and are unchanged: `AskUserQuestion` works exactly as today. The marker was chosen, not tested; the experiments used the stub on PATH and `AIW_RUN_DIR` only.
 - Record shape written by `aiw ask` (stdin is the same `questions` array `AskUserQuestion` takes):
 
 ```json
 {"id":"q-<n>","status":"pending","questions":[{"header":"Gate 1","question":"Approve plan?","multiSelect":false,"options":[{"label":"Approve and start (Recommended)","description":"..."}]}]}
 ```
 
-  The answer is a message to `--resume`, one entry per question (option label or free text). A multi-question round is answered in one message.
-- `--dangerously-skip-permissions` (FR-10) does not suppress capture: `aiw ask` is a Bash call, permissions do not gate it, and the experiments show the record written with and without the flag.
+  The answer is a message to `--resume`, keyed by question index (not `header`, which is a short chip label and not guaranteed unique within a round). Each value is `{"labels":["..."]}` for option picks (a list, so `multiSelect` works) or `{"other":"..."}` for free text, for example `{"0":{"other":"drop task 3"},"1":{"labels":["staging"]}}`. A multi-question round is answered in one message. (The Evidence run used header keys with a separate `Gate 1 other` key; that was an ad hoc test message, not the shape to build on.)
+- `--dangerously-skip-permissions` (FR-10) does not suppress capture: the experiments show the record written with and without the flag. Only two permission setups were tested: unscoped `--allowedTools Bash` and skip-permissions. Scoped `Bash(aiw:*)`, as real commands use (`commands/run-issue.md:4`), was not tested, and the evidence call shape `echo '{...}' | aiw ask` starts with `echo`, so it may not match that rule; if denied the result would be the same silent exit 0 with no record as the `missing` case. Task 16 must test scoped permissions, and should have `aiw ask` take its input so the command starts with `aiw` (for example `aiw ask --json '<...>'` or a heredoc).
 - Task 15 (pending question and answer API): reads the newest `pending` record, takes the whole round's answers, calls `claude -p --resume <session_id>` with them, and marks the record answered. Task 16 (emit run-issue gates as recorded questions): switches the run-issue sites to `aiw ask` under `AIW_HEADLESS=1`, and checks after each process exit that a new record exists (the `missing` case above). Task 26 (interview routing): the same for the interview commands.
 - Where `aiw ask` registers: the `register` loop in `run-engine/route.py` (`for module in (stack, worktree, ..., kanban): module.register(sub, add)`, around line 396); `ask` is one more module in that tuple.
 - Every `AskUserQuestion` site under `commands/` that the mechanism must cover (current lines):
@@ -80,5 +80,9 @@ Same session id, the model saw the earlier turns, and no dangling tool_use probl
   - `commands/jira-to-gh.md`: 106, 122, 221.
   - `commands/issue-to-pr.md`: 35.
   - `commands/pr-fix-comments.md`: 4 (allowed-tools), 36.
-  - The PRD also names prd, dump and worklog interview rounds; those commands are not in this repo's `commands/` (nothing to edit here), and Task 26 must cover them wherever they live.
+  - Outside `commands/`, in this repo, also covered by Task 26:
+    - `skills/prd/SKILL.md:11` (allowed tool).
+    - `agents/worklog-runner.md`: 4 (tool), 58, 71 (ask sites). Agent-level sites matter as much as command prose, since the tool is disabled in subagents too.
+    - `skills/pr-grind/SKILL.md`: 5, 54 (pr-grind re-entry is out of scope for #103, but the sites belong on the list).
+    - `skills/dump/` has no literal `AskUserQuestion`; it needs a prose-level check.
 - The `aiw ask` subcommand and the command-prose changes are not built here; this ADR is the spike result only.
