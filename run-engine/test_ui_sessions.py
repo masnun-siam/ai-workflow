@@ -160,7 +160,7 @@ res, err = captured(ui_sessions.list_sessions)
 assert [x["id"] for x in res] == [good["id"]]
 assert any(l.startswith("warning:") and bad in l for l in err.splitlines()), err
 res, err = captured(lambda: ui_sessions.load(bad))
-assert res is None and err.startswith("warning:") or "warning:" in err, err
+assert res is None and "warning:" in err, err
 ok("invalid JSON skipped with warning")
 
 # 12. non-object json
