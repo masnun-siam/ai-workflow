@@ -81,6 +81,25 @@ export function boardSummary(columns, sessions, now = new Date()) {
   return { live, waiting, today };
 }
 
+// FLIP: cards whose position changed between two polls, as [key, dx, dy] to animate from.
+export function flipDeltas(before, after) {
+  const moved = [];
+  for (const [key, from] of before) {
+    const to = after.get(key);
+    if (to && (Math.abs(from.x - to.x) > 1 || Math.abs(from.y - to.y) > 1)) moved.push([key, from.x - to.x, from.y - to.y]);
+  }
+  return moved;
+}
+
+const cardRects = (root) => {
+  const rects = new Map();
+  for (const el of root.querySelectorAll('[data-card]')) {
+    const r = el.getBoundingClientRect();
+    rects.set(el.dataset.card, { x: r.left, y: r.top, el });
+  }
+  return rects;
+};
+
 export function boardChanged(prevText, nextData) {
   return JSON.stringify(nextData) !== prevText;
 }
@@ -126,6 +145,19 @@ export class Board extends Component {
 
   componentWillUnmount() {
     if (this.stop) this.stop();
+  }
+
+  componentWillUpdate() {
+    this.before = this.base && this.base.querySelectorAll ? cardRects(this.base) : null;
+  }
+
+  componentDidUpdate() {
+    if (!this.before || !this.base || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const after = cardRects(this.base);
+    for (const [key, dx, dy] of flipDeltas(this.before, after)) {
+      after.get(key).el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration: 320, easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)' });
+    }
+    this.before = null;
   }
 
   render({ sessions }, { data, repo, error, doneOpen }) {

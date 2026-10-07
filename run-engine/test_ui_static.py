@@ -840,7 +840,7 @@ const B = await import(process.env.BOARD_URL);
 const { parseRoute } = await import(process.env.APP_URL);
 const assert = (await import('node:assert')).strict;
 const out = (n) => console.log('ok ' + n);
-const { cardTitle, runHref, matchSession, cardChips, formatCost, filterColumns, repoOptions, boardChanged, stationLabel, visibleCards, boardSummary, DONE_LIMIT } = B;
+const { cardTitle, runHref, matchSession, cardChips, formatCost, filterColumns, repoOptions, boardChanged, stationLabel, visibleCards, boardSummary, DONE_LIMIT, flipDeltas } = B;
 const card = { owner: 'acme', repo: 'web', issue: 42 };
 const S = (owner, repo, issue, status, extra = {}) => ({ id: owner + repo + issue, link: { owner, repo, issue }, status, ...extra });
 
@@ -909,6 +909,13 @@ const sum = boardSummary(
 assert.deepEqual(sum, { live: 1, waiting: 1, today: 1.5 });
 assert.deepEqual(boardSummary([], null, day), { live: 0, waiting: 0, today: 0 });
 out('boardSummary');
+
+const rect = (x, y) => ({ x, y });
+assert.deepEqual(
+  flipDeltas(new Map([['a', rect(0, 0)], ['b', rect(10, 10)], ['gone', rect(1, 1)]]), new Map([['a', rect(0, 0.5)], ['b', rect(110, 40)], ['new', rect(5, 5)]])),
+  [['b', -100, -30]],
+);
+out('flipDeltas only reports cards that moved and still exist');
 
 const d = { columns: [] };
 assert.equal(boardChanged(JSON.stringify(d), d), false);
