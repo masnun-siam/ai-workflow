@@ -24,7 +24,7 @@ import review
 import shared
 import ui_sessions
 from dispatch import read_checkouts
-from shared import data_dir, warn
+from shared import data_dir, ledger_path, run_dir_for, warn
 import ui_events
 
 HEADLESS_PROMPT = ("Headless run: ask via aiw ask, never AskUserQuestion. Gate questions go through "
@@ -81,7 +81,8 @@ def _proc_start(pid):
     return (p.stdout.strip() or None) if p.returncode == 0 else None
 
 
-def _spawn(sid: str, argv: list, path: str, *, env_extra=None, pass_fds=(), **fields) -> dict:
+def _spawn(sid: str, argv: list, path: str, *, env_extra=None, pass_fds=(), answer=None,
+           **fields) -> dict:
     """Spawn claude detached, record pid/running, start the follower. Any failure -> _fail."""
     d = ui_sessions.session_dir(sid)
     stream_path = os.path.join(d, "stream.jsonl")
@@ -98,7 +99,8 @@ def _spawn(sid: str, argv: list, path: str, *, env_extra=None, pass_fds=(), **fi
     rec = ui_sessions.update(sid, pid=proc.pid, pid_started=_proc_start(proc.pid),
                              status="running", **fields)
     _procs[sid] = proc
-    threading.Thread(target=_follow, args=(sid, proc, None, None, offset), daemon=True).start()
+    threading.Thread(target=_follow, args=(sid, proc, None, None, offset, answer),
+                     daemon=True).start()
     return rec
 
 
@@ -116,7 +118,7 @@ def start(command_text, cwd, link=None, *, extra_args=(), env_extra=None, pass_f
     exe = _preflight(sid)
     gate = ["--append-system-prompt", HEADLESS_PROMPT] if gate_questions else []
     return _spawn(sid, [exe, *CLAUDE_ARGS, *gate, *extra_args, command_text], path,
-                  env_extra=env_extra, pass_fds=pass_fds)
+                  env_extra=env_extra, pass_fds=pass_fds, cwd_path=path)
 
 
 def resume(sid: str, answer_text) -> dict:
@@ -132,19 +134,57 @@ def resume(sid: str, answer_text) -> dict:
     repo = rec.get("repo")
     path = read_checkouts().get(repo, repo)
     if not isinstance(path, str) or not os.path.isdir(path):
-        _fail(sid, f"cannot resume: cwd is not a directory: {repo!r}")
+        return _fallback(sid, answer_text, f"cwd is not a directory: {repo!r}")
     exe = _preflight(sid)
     return _spawn(sid, [exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, "--resume", rec["session_id"], answer_text], path,
-                  ended_at=None, error=None)
+                  answer=answer_text, ended_at=None, error=None, pending_answer=answer_text,
+                  resumed_fresh=None, note=None, terminal_handoff=None)
 
 
-def _follow(sid: str, proc, pid=None, started=None, offset: int = 0) -> None:
+def _fallback(sid: str, answer: str, reason: str) -> dict:
+    """A resume that could not start: re-enter a /run-issue run fresh from the Ledger, else hand off.
+
+    Reads run.json leniently (shared.read_json would die()); never writes the Ledger.
+    """
+    rec = ui_sessions.load(sid) or {}
+    repo = rec.get("repo")
+    m = re.match(r"/(?:[\w-]+:)?run-issue\s+(.*)", rec.get("command") or "")
+    n = re.search(r"(?:^|\s|/issues/)#?(\d+)(?=\s|$)", m.group(1)) if m else None
+    checkouts = read_checkouts()
+    path = checkouts.get(repo)
+    if n and repo in checkouts and "/" in repo:
+        run_json = ledger_path(run_dir_for(os.path.join(data_dir(), "runs"), repo, int(n.group(1))))
+        if os.path.isfile(run_json):
+            if not (isinstance(path, str) and os.path.isdir(path)):
+                try:
+                    with open(run_json, encoding="utf-8") as f:
+                        ctx = json.load(f).get("context")
+                    path = ctx.get("repo")
+                except (OSError, ValueError, AttributeError):
+                    path = None
+            if isinstance(path, str) and os.path.isdir(path):
+                old = rec.get("cwd_path")
+                note = "resumed fresh from the Ledger: the previous claude session could not be resumed"
+                if old and old != path:
+                    note += f" (working directory changed from {old} to {path})"
+                exe = _preflight(sid)
+                return _spawn(sid, [exe, *CLAUDE_ARGS, f"/run-issue {n.group(1)} {answer}"], path,
+                              ended_at=None, error=None, resumed_fresh=True, note=note,
+                              terminal_handoff=None, pending_answer=answer)
+    ui_sessions.update(sid, status="failed", ended_at=_now(), pending_question=None,
+                       terminal_handoff=True, pending_answer=answer,
+                       error=f"cannot resume: {reason}")
+    return ui_sessions.load(sid)
+
+
+def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None) -> None:
     """Follow a session until it exits. proc is None for a re-attached (non-child) pid."""
     path = os.path.join(ui_sessions.session_dir(sid), "stream.jsonl")
     buf, is_error, saw_result, asked = b"", False, False, False
+    saw_init, first_err = False, None
 
     def handle(line: bytes) -> None:
-        nonlocal is_error, saw_result, asked
+        nonlocal is_error, saw_result, asked, saw_init, first_err
         try:
             ev = json.loads(line)
         except ValueError:
@@ -152,6 +192,7 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0) -> None:
         if not isinstance(ev, dict):
             return
         if ev.get("type") == "system" and ev.get("subtype") == "init":
+            saw_init = True
             ui_sessions.update(sid, session_id=ev.get("session_id"))
         elif ev.get("type") == "assistant":
             asked = asked or any(
@@ -160,6 +201,9 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0) -> None:
                 for e in ui_events.parse_line(line))
         elif ev.get("type") == "result":
             is_error, saw_result = bool(ev.get("is_error")), True
+            if is_error and first_err is None:
+                errs = ev.get("errors")
+                first_err = str(errs[0]) if isinstance(errs, list) and errs else str(ev.get("result") or "claude reported an error")
             ui_sessions.update(sid, cost=ev.get("total_cost_usd"))
 
     def drain() -> None:
@@ -201,26 +245,29 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0) -> None:
         rc = proc.returncode if proc is not None else None
         status = (ui_sessions.load(sid) or {}).get("status")
         if sid not in _stopping and status != "stopped":
-            if proc is None and not (saw_result and not is_error):
+            if answer and rc != 0 and not saw_init and first_err is not None:
+                _fallback(sid, answer, first_err)  # resume itself failed; nothing was applied
+            elif proc is None and not (saw_result and not is_error):
                 ui_sessions.update(sid, status="failed", ended_at=_now(), pending_question=None,
                                    error="claude exited while the UI was down without a "
                                          "successful result; see stderr.log")
             elif (rc == 0 or proc is None) and not is_error:
                 if status == "waiting":  # question recorded mid-run: stay waiting for the answer
-                    ui_sessions.update(sid, ended_at=_now())
+                    ui_sessions.update(sid, ended_at=_now(), pending_answer=None)
                 elif asked:  # model ran `aiw ask` but nothing was recorded: don't call it done
                     ui_sessions.update(sid, status="failed", ended_at=_now(),
                                        error="aiw ask ran but recorded no question; see stream.jsonl")
                 else:
-                    ui_sessions.update(sid, status="done", ended_at=_now())
+                    ui_sessions.update(sid, status="done", ended_at=_now(), pending_answer=None)
             else:
                 ui_sessions.update(sid, status="failed", ended_at=_now(), pending_question=None,
                                    error=f"claude exited with code {rc}; see stderr.log")
     except Exception as e:  # keep the daemon thread from dying silently
         warn(f"ui_runner follower for {sid} failed: {e}")
     finally:
-        _procs.pop(sid, None)
-        _stopping.discard(sid)
+        if _procs.get(sid) is proc:  # a fallback may have replaced it with a newer process
+            _procs.pop(sid, None)
+            _stopping.discard(sid)
 
 
 def reconcile() -> None:
