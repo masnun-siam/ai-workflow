@@ -3,6 +3,8 @@ import htm from './vendor/htm.mjs';
 import { Answer } from './answer.js';
 import { isWaiting, waitingWatcher, notifyState, requestNotify, notifyWaiting, pageTitle, answerHash } from './notify.js';
 import { Board } from './board.js';
+// ponytail: import cycle with run.js (it imports poll); safe, neither uses the other at top level.
+import { RunDetail } from './run.js';
 import { Launcher } from './launcher.js';
 import { History } from './history.js';
 
@@ -57,9 +59,8 @@ export function poll(url, ms, onResult, keepAlive = () => false) {
     timer = null;
     let result;
     try {
-      const res = await fetch(url, { headers: { Accept: 'application/json' } });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      result = { ok: true, data: await res.json() };
+      const res = await fetch(typeof url === 'function' ? url() : url, { headers: { Accept: 'application/json' } });
+      result = res.ok ? { ok: true, data: await res.json() } : { ok: false, status: res.status };
     } catch {
       result = { ok: false };
     }
@@ -101,7 +102,7 @@ function View({ route, sessions }) {
       return html`<${Board} sessions=${sessions} />`;
     case 'run': {
       const { owner, repo, n } = route.params;
-      return html`<h1>Run</h1><p>${owner}/${repo}#${n}</p>`;
+      return html`<${RunDetail} key=${`${owner}/${repo}/${n}`} owner=${owner} repo=${repo} n=${n} sessions=${sessions} />`;
     }
     case 'answer':
       return html`<${Answer} session=${route.params.session} key=${route.params.session} />`;

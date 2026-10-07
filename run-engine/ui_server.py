@@ -12,6 +12,7 @@ import http.server
 import json
 import mimetypes
 import os
+import shlex
 import subprocess
 import sys
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -106,6 +107,7 @@ def _answer_text(pending: dict, answers) -> str:
 
 
 def _public(rec: dict) -> dict:
+    p, sid = rec.get("cwd_path"), rec.get("session_id")
     return {
         "id": rec.get("id"),
         "command": rec.get("command"),
@@ -123,6 +125,8 @@ def _public(rec: dict) -> dict:
         "note": rec.get("note"),
         "terminal_handoff": rec.get("terminal_handoff"),
         "pending_answer": rec.get("pending_answer"),
+        "repo_path": p,
+        "resume_command": f"cd {shlex.quote(p)} && claude --resume {shlex.quote(sid)}" if p and sid else None,
     }
 
 
@@ -223,8 +227,41 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._start()
         elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] == "answer":
             self._answer(parts[3])
+        elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] in ("stop", "resume"):
+            (self._stop if parts[4] == "stop" else self._resume)(parts[3])
         else:
             self._method_not_allowed(guarded=True)
+
+    def _stop(self, sid: str) -> None:
+        try:
+            rec = ui_sessions.load(sid)
+        except ValueError:
+            rec = None
+        if rec is None:
+            self._json(404, {"error": "not found"})
+            return
+        if rec.get("status") in ("done", "failed", "stopped"):
+            self._json(409, {"error": "session already finished"})
+            return
+        rec = ui_runner.stop(sid)
+        if rec.get("status") != "stopped":
+            self._json(409, {"error": "session is starting, retry"})
+            return
+        self._json(200, _public(rec))
+
+    def _resume(self, sid: str) -> None:
+        try:
+            rec = ui_runner.resume_stopped(sid)
+        except (FileNotFoundError, ValueError):
+            self._json(404, {"error": "not found"})
+            return
+        except ui_runner.Conflict as e:
+            self._json(409, {"error": str(e)})
+            return
+        except (ui_runner.RunnerError, OSError) as e:
+            self._json(500, {"error": str(e)})
+            return
+        self._json(200, _public(rec))
 
     def _start(self) -> None:
         try:
