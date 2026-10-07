@@ -38,6 +38,20 @@ header a[aria-current="page"] { border-bottom: 2px solid var(--accent); }
 .offline { color: var(--error); margin-left: auto; }
 .muted { color: var(--muted); margin-left: auto; }
 main { max-width: 960px; margin: 0 auto; padding: 16px; overflow-wrap: anywhere; }
+main:has(.board) { max-width: none; }
+.board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(250px, 1fr); gap: 12px; overflow-x: auto; scroll-snap-type: x proximity; }
+.column { scroll-snap-align: start; min-width: 0; }
+.column h2 { font-size: 1rem; text-transform: capitalize; }
+.card { display: block; min-height: 44px; margin-bottom: 8px; padding: 8px 12px; border: 1px solid #263040; border-radius: 8px; text-decoration: none; color: var(--fg); }
+.card-meta { display: block; color: var(--muted); font-size: 0.85rem; }
+.card-title { display: block; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { font-size: 0.8rem; padding: 0 8px; border: 1px solid var(--muted); border-radius: 12px; }
+.chip-running { color: var(--accent); border-color: var(--accent); }
+.chip-waiting { color: var(--waiting); border-color: var(--waiting); }
+.chip-stopped { color: var(--error); border-color: var(--error); }
+.cost { color: var(--muted); font-size: 0.8rem; }
+.empty { color: var(--muted); }
 .run { display: flex; flex-wrap: wrap; gap: 12px 16px; }
 .run > * { flex: 1 1 100%; }
 .run .panel { flex: 1 1 320px; min-width: 0; }
@@ -59,12 +73,16 @@ main { max-width: 960px; margin: 0 auto; padding: 16px; overflow-wrap: anywhere;
 .timeline { list-style: none; margin: 0; padding: 0; }
 .timeline li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 0; border-bottom: 1px solid #263040; }
 .timeline li[aria-current="step"] { border-left: 3px solid var(--accent); padding-left: 8px; }
-.chip { padding: 0 8px; border-radius: 12px; background: #263040; font-size: 0.85em; }
-.chip.done { color: var(--accent); }
-.chip.running, .chip.pending { color: var(--waiting); }
-.chip.escalated, .chip.bounced { color: var(--error); }
+.run .chip { background: #263040; border: 0; font-size: 0.85em; }
+.run .chip.done { color: var(--accent); }
+.run .chip.running, .run .chip.pending { color: var(--waiting); }
+.run .chip.escalated, .run .chip.bounced { color: var(--error); }
 .output { max-height: 60vh; overflow-y: auto; white-space: pre-wrap; background: #0a0d12; padding: 8px; border-radius: 6px; }
 .ev { margin: 0 0 6px; }
 .ev.tool { color: var(--muted); }
 .ev.error { color: var(--error); }
 .md pre { overflow-x: auto; }
+@media (max-width: 480px) {
+  .board { grid-auto-columns: 100%; scroll-snap-type: x mandatory; }
+  .column { scroll-snap-stop: always; }
+}

@@ -23,7 +23,7 @@ one pass, commits+replies+resolves+pushes, "Needs human confirmation" section).
 
 `<pr_grind_dir>/<owner>-<repo>-<pr>.md`. One markdown file, created on
 first run, appended each round. This is what survives a compaction or a
-`ScheduleWakeup` re-entry — always read it before doing anything else if it
+`ScheduleWakeup` re-entry or an aiw ui tick (see Headless mode) — always read it before doing anything else if it
 exists. Record per round: round number, reviewer review id + `submitted_at`,
 parsed verdict (blocker/should-fix/nit counts), each finding's fingerprint
 (`path:line` + first ~80 normalized chars of the comment body), which
@@ -47,6 +47,16 @@ paused stop:
 - `paused: <ISO8601> — <reason>` — set by Step 8. Its presence means this run
   stopped for a human and is **not** running: nothing is polling it, and it
   resumes only when a human re-invokes `/pr-grind` on the thread.
+
+Header keys are `key: value` lines above the first `## Round <n>` heading. The names
+are pinned so the aiw ui tick can parse them: `owner: repo: number: thread: reviewer:
+author: base:`. Keys added for headless re-entry (ADR 0002):
+
+- `next-poll: <ISO8601>` — when the aiw ui timer should next re-enter a headless run
+  (round end + 1500s; the tick also pre-writes it before spawning a round).
+- `done: <ISO8601> — <reason>` — terminal. The timer never restarts a run that has it.
+- `poll-since:` and `ci-seen: <sha> <state>` — owned by the aiw ui tick. Rounds must
+  preserve them and never edit them.
 
 ## Step 0 — Resolve
 
@@ -79,7 +89,13 @@ paused stop:
    `user.login != PR author`. Until it's resolved, the Step 7 Monitor poll
    filters on `user.login != "<author>"` rather than a fixed reviewer login.
 5. Read the state file if it exists; otherwise create it with the header
-   (owner, repo, number, reviewer, author, thread URL, base branch).
+   (`owner:`, `repo:`, `number:`, `thread:`, `reviewer:`, `author:`, `base:`).
+
+   **Step 0.5 (human invocation):** a human invocation, meaning no automated-re-entry
+   system prompt, clears `paused:` and `done:` as it always did. An interactive
+   (non-headless) invocation also removes `next-poll:`, so the aiw ui timer stops
+   ticking a PR that a live interactive session now owns. An automated re-entry
+   (headless) clears neither and never removes `next-poll:`.
 
 ## Step 1 — Read the round
 
@@ -100,7 +116,8 @@ If it's stale, record it as superseded in the state file and keep waiting.
 - **None found** → the trigger hasn't landed a review yet. This tick is a
   no-op — go straight to step 7's re-arm (do not re-post the trigger, do not
   touch state). This is the "still landing" guard: never act on a
-  half-arrived round.
+  half-arrived round. Headless: do the headless re-arm (see Headless mode) instead of
+  step 7 items 2-4, and exit.
 - **One found** → parse its `body` for the verdict line
   (`**Verdict: ...** — N blocker, M should-fix`, the `pr-review` skill's
   format). Also collect every inline review comment on this review
@@ -145,7 +162,8 @@ way, record it in the state file as `queued-push: <sha>[ <sha>...] — round
 <n> — then close` instead of immediately posting the close summary below and
 calling `ScheduleWakeup({stop: true})`. Defer those two actions until the
 queued commit is pushed (Step 6's logic below), then complete the close as
-normal.
+normal. Headless: the deferral is the same, and the eventual close writes
+`done:` instead of calling ScheduleWakeup (see the close below).
 
 Then post the final Slack summary (round count, what got fixed across the run,
 including any nits, PR URL, "ready for human merge — merging stays manual") by
@@ -162,6 +180,7 @@ already been posted by this point.
 
 Append to the state file, then `ScheduleWakeup({stop: true})`. Stop here. This
 is the one exit that really ends the run; every other stop goes to Step 8.
+Headless: instead of ScheduleWakeup, write `done: <ISO8601> — approved` to the header and exit.
 
 **The final summary must not mention or `@`-reference the reviewer bot** (no
 re-trigger text, no bot user id). Same for any other terminal Slack message
@@ -394,7 +413,8 @@ attempt-spent-still-red). Green or no checks configured → continue.
   then verify the new head as above.
 - **Red** → apply rail 2's decoupled logic (Step 3).
 - **Pending or timeout** → keep the commits queued, skip the re-trigger, and
-  just re-arm the heartbeat (Step 7 items 2-4, with `noop: false`).
+  just re-arm the heartbeat (Step 7 items 2-4, with `noop: false`). Headless: skip
+  items 2-4, do the headless re-arm, and exit.
 
 A flush tick is **not a new round** — it's appended under the existing round
 record, not counted against the round cap.
@@ -425,6 +445,8 @@ review a head that's missing the queued fixes.
    `gh api repos/{o}/{r}/pulls/{n}/reviews` every 60s, emitting one line per
    review by the reviewer account newer than the last one this skill has
    seen (track the last-seen id/timestamp in the poll script itself).
+   Headless: skip items 2-4, do the headless re-arm (see Headless mode), and exit; the
+   aiw ui tick does the polling.
 
    **Monitor only turns stdout into notifications — stderr is silently
    logged to the output file and never surfaces.** A script that fails on
@@ -454,10 +476,12 @@ review a head that's missing the queued fixes.
    free-text through a second jq pass. **Run it once in the foreground before
    arming the Monitor** (ctrl-c after the first tick), so a bad login or a
    mistyped cutoff surfaces immediately instead of after a silent 25-minute
-   fallback gap.
+   fallback gap. Headless: never arm it (see item 2).
 3. State in text (before calling ScheduleWakeup, per its contract) that a
-   Monitor is armed and this is a fallback heartbeat.
+   Monitor is armed and this is a fallback heartbeat. Headless: skip this, do the
+   headless re-arm, and exit.
 4. `ScheduleWakeup({delaySeconds: 1500, reason: "...", prompt: "/pr-grind $ARGUMENTS", noop: <true if this tick did nothing, false otherwise>})`.
+   Headless: no ScheduleWakeup; write `next-poll:` per the headless re-arm and end the turn.
 
 ## Step 8 — Paused stop
 
@@ -471,6 +495,7 @@ exit never comes here — that path is step 2's, and it ends the run.
 the session ends, nothing polls. There is no Slack-to-Claude webhook, so a reply you post
 in the thread reaches nothing and no paused run resumes on its own. Do not post anything
 that implies otherwise, and do not arm a wakeup to fake it.
+Headless runs have the same limit: the aiw ui timer, not a wakeup, re-enters them.
 
 So a paused stop does exactly three things:
 
@@ -488,7 +513,7 @@ So a paused stop does exactly three things:
    not "when ready". A paused run with no stated precondition is a run nobody knows how to
    restart.
 3. `ScheduleWakeup({stop: true})`. Stop. Do not keep a heartbeat armed to watch a thread
-   nothing is reading.
+   nothing is reading. Headless: no ScheduleWakeup; `paused:` already stops the timer, so exit.
 
 ### The reviewer bot will answer this post
 
@@ -515,7 +540,9 @@ Two consequences:
 If the state file header carries a `paused:` line, this run was stopped for a human and
 nothing has cleared it. Do not silently resume: say what it is paused on and what the
 resume precondition was, then stop. A human re-invoking `/pr-grind` on the thread is what
-clears a pause — remove the `paused:` line only when re-entered that way.
+clears a pause — remove the `paused:` line only when re-entered that way. An automated
+re-entry (the system prompt says it is an aiw ui tick) never clears `paused:`. A `done:`
+line means stop: do nothing and exit.
 
 Else if the state file header carries a `queued-push:` line: first check rail 3
 (any third-party human comment since the last processed round) and rail 5 (owner
@@ -541,6 +568,16 @@ re-enter at Step 1. The state file and the Monitor mean this is cheap — most
 wakes will either be a genuine new round (Monitor fired) or a no-op
 heartbeat (fallback fired with nothing new), handled by step 1's "none
 found" branch.
+
+## Headless mode
+
+When the system prompt says this is a headless aiw ui run, there is no live session to
+hold a wakeup or a Monitor. The **headless re-arm** replaces Step 7 items 2-4: write
+`next-poll: <now+1500s, ISO8601>` to the state file header, call neither ScheduleWakeup
+nor Monitor, and end the turn. The aiw ui timer re-enters on `next-poll:`, a new review,
+or a CI change. A system prompt that says it is an automated aiw ui tick means take the
+On-wake branch and never clear `paused:`. A human UI resume is headless but not automated.
+Every site above that would call ScheduleWakeup or arm a Monitor has its own headless clause.
 
 ## Rules
 

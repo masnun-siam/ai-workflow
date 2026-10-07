@@ -1,5 +1,6 @@
 import { h, render, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
+import { Board } from './board.js';
 // ponytail: import cycle with run.js (it imports poll); safe, neither uses the other at top level.
 import { RunDetail } from './run.js';
 
@@ -93,7 +94,7 @@ const NAV = [
 function View({ route, sessions }) {
   switch (route.name) {
     case 'board':
-      return html`<h1>Board</h1><p>Runs will appear here.</p>`;
+      return html`<${Board} sessions=${sessions} />`;
     case 'run': {
       const { owner, repo, n } = route.params;
       return html`<${RunDetail} key=${`${owner}/${repo}/${n}`} owner=${owner} repo=${repo} n=${n} sessions=${sessions} />`;

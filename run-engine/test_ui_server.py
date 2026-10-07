@@ -412,7 +412,6 @@ ui_server.register(sub, lambda name, h: sub.add_parser(name, help=h))
 a = parser.parse_args(["ui", "--allow-host", "a", "--allow-host", "b"])
 assert a.allow_host == ["a", "b"] and a.port == 8420
 ok("register: --allow-host append, --port default 8420")
-
 runs_section()
 
 print(f"{passed} checks passed")
