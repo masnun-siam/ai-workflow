@@ -630,9 +630,11 @@ try:
     ok("normal run: stream bytes, session_id, cost, done, ended_at")
     assert lines(fk, "argv").split("\n")[:-1] == [
         "--print", "--output-format", "stream-json", "--verbose",
-        "--dangerously-skip-permissions", "/run-issue 42"], lines(fk, "argv")
+        "--dangerously-skip-permissions", "--append-system-prompt", ui_runner.HEADLESS_PROMPT,
+        "/run-issue 42"], lines(fk, "argv")
     assert ui_runner.CLAUDE_ARGS == ["--print", "--output-format", "stream-json", "--verbose",
-                                     "--dangerously-skip-permissions"]
+                                     "--dangerously-skip-permissions", "--append-system-prompt",
+                                     ui_runner.HEADLESS_PROMPT]
     assert real(lines(fk, "pwd")) == real(work)
     ok("argv exact, cwd is checkout")
     assert b"some warning" in read(sid, "stderr.log")

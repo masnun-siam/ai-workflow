@@ -86,3 +86,10 @@ Same session id, the model saw the earlier turns, and no dangling tool_use probl
     - `skills/pr-grind/SKILL.md`: 5, 54 (pr-grind re-entry is out of scope for #103, but the sites belong on the list).
     - `skills/dump/` has no literal `AskUserQuestion`; it needs a prose-level check.
 - The `aiw ask` subcommand and the command-prose changes are not built here; this ADR is the spike result only.
+
+## Follow-up (#118)
+
+- The env pair actually used is `AIW_HEADLESS=1` plus `AIW_UI_SESSION=<ui session id>`, set by `ui_runner._spawn` on start and resume. It replaces `AIW_RUN_DIR`, which the UI runner never knows.
+- The round lives in the session's `meta.json` `pending_question` via `ui_sessions.set_pending` (#117), not in a separate append-only file. History stays in `stream.jsonl`.
+- `aiw ask` takes `--json` or stdin, so the command starts with `aiw` and matches `Bash(aiw:*)`.
+- The follower fails a session that exits cleanly after an `aiw ask` tool_use but recorded no question ("aiw ask ran but recorded no question").

@@ -20,8 +20,10 @@ import ui_sessions
 from dispatch import read_checkouts
 from shared import warn
 
+HEADLESS_PROMPT = ("Headless run: ask via aiw ask, never AskUserQuestion. Gate questions go through "
+                   "`aiw ask --json '<AskUserQuestion input>'`; then end your turn.")
 CLAUDE_ARGS = ["--print", "--output-format", "stream-json", "--verbose",
-               "--dangerously-skip-permissions"]
+               "--dangerously-skip-permissions", "--append-system-prompt", HEADLESS_PROMPT]
 STOP_GRACE_SECONDS = 10
 POLL_SECONDS = 0.2
 
@@ -67,7 +69,8 @@ def _spawn(sid: str, argv: list, path: str, **fields) -> dict:
         offset = os.path.getsize(stream_path) if os.path.exists(stream_path) else 0
         with open(stream_path, "ab") as stream_f, open(os.path.join(d, "stderr.log"), "ab") as err_f:
             proc = subprocess.Popen(argv, cwd=path, stdin=subprocess.DEVNULL, stdout=stream_f,
-                                    stderr=err_f, start_new_session=True, close_fds=True)
+                                    stderr=err_f, start_new_session=True, close_fds=True,
+                                    env={**os.environ, "AIW_HEADLESS": "1", "AIW_UI_SESSION": sid})
     except (OSError, ValueError) as e:
         _fail(sid, f"failed to spawn claude: {e}")
     rec = ui_sessions.update(sid, pid=proc.pid, status="running", **fields)
@@ -111,10 +114,10 @@ def resume(sid: str, answer_text) -> dict:
 
 def _follow(sid: str, proc, offset: int = 0) -> None:
     path = os.path.join(ui_sessions.session_dir(sid), "stream.jsonl")
-    buf, is_error = b"", False
+    buf, is_error, asked = b"", False, False
 
     def handle(line: bytes) -> None:
-        nonlocal is_error
+        nonlocal is_error, asked
         try:
             ev = json.loads(line)
         except ValueError:
@@ -123,6 +126,12 @@ def _follow(sid: str, proc, offset: int = 0) -> None:
             return
         if ev.get("type") == "system" and ev.get("subtype") == "init":
             ui_sessions.update(sid, session_id=ev.get("session_id"))
+        elif ev.get("type") == "assistant":
+            msg = ev.get("message")
+            for b in (msg.get("content") if isinstance(msg, dict) else None) or ():
+                cmd = (b.get("input") or {}).get("command") if isinstance(b, dict) and b.get("name") == "Bash" else None
+                if isinstance(cmd, str) and cmd.startswith("aiw ask"):
+                    asked = True
         elif ev.get("type") == "result":
             is_error = bool(ev.get("is_error"))
             ui_sessions.update(sid, cost=ev.get("total_cost_usd"))
@@ -150,6 +159,9 @@ def _follow(sid: str, proc, offset: int = 0) -> None:
             if rc == 0 and not is_error:
                 if status == "waiting":  # question recorded mid-run: stay waiting for the answer
                     ui_sessions.update(sid, ended_at=_now())
+                elif asked:  # model ran `aiw ask` but nothing was recorded: don't call it done
+                    ui_sessions.update(sid, status="failed", ended_at=_now(),
+                                       error="aiw ask ran but recorded no question; see stream.jsonl")
                 else:
                     ui_sessions.update(sid, status="done", ended_at=_now())
             else:
