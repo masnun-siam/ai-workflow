@@ -19,7 +19,7 @@ subagent does not inherit it, so also put the line `Headless run: ask via aiw as
 prompt. A subagent cannot end your turn: if its report is `RECORDED q-...` plus a resolved
 date, end your turn immediately. When the answer arrives (`Answer to q-...: {...}`),
 re-dispatch `worklog-runner` with that resolved date (not `today`), the answer verbatim and
-the headless marker, telling it to apply the answer instead of asking again.
+the headless marker, telling it to re-run collection with that date and apply the answer instead of asking again.
 
 Nothing else needs to be included — `worklog-runner`'s own instructions
 cover collection, confirmation, clustering, rendering, and saving.

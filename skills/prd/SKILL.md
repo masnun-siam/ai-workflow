@@ -124,7 +124,7 @@ The Obsidian copy additionally gets tag frontmatter and full-path wikilinks in `
 
 ## Step 6: Review gate — always
 
-Show the **full** draft (if headless, put the draft in the question text and use `aiw ask`, then end your turn), plus for each chosen destination the exact path it will be written to (and, for Obsidian, the resolved project/feature folder and whether it is new). Wait for an explicit OK. Apply any edits and show the changed draft again until the user approves. If `--to` was not given, ask here whether to also save to Obsidian and/or the wiki.
+Show the **full** draft (if headless, put the draft in the question text and use `aiw ask` with options `Approve (Recommended)` / `Edit`, edits as free text, then end your turn), plus for each chosen destination the exact path it will be written to (and, for Obsidian, the resolved project/feature folder and whether it is new). Wait for an explicit OK. Apply any edits and show the changed draft again until the user approves. If `--to` was not given, ask here whether to also save to Obsidian and/or the wiki.
 
 Nothing is written anywhere before this approval. The wiki push needs its own explicit confirmation in Step 7, because pushing to a wiki publishes it.
 

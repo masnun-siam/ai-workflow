@@ -43,10 +43,10 @@ are used either way; only the transport differs.
   ```
 
   Steps 3 and 4 are asked as one round (all their questions in one `aiw ask`, split past 4 options as below), and you write nothing. Instead of ending your turn, finish with a final report that is only `RECORDED q-...` (the id `aiw ask` printed) plus the resolved `date` from collect.sh; the dispatching skill ends its turn and re-dispatches you with the answer. List the recommended option first with `(Recommended)` on its label. Free text is
-  always allowed. Then end your turn immediately and do nothing else; when re-dispatched, the answer is in your prompt as `Answer to q-...: {"0":{"labels":["..."]}}` or
+  always allowed. Return that report and stop; when re-dispatched, the answer is in your prompt as `Answer to q-...: {"0":{"labels":["..."]}}` or
   `{"0":{"other":"free text"}}`. Strip any ` (Recommended)` suffix from the label and take
   the same branch the interactive answer would. Free text that names no option means none selected.
-  On a re-dispatch, skip steps 1 to 4: use the date and answer you were given, apply the answer, and continue from step 5.
+  On a re-dispatch your context is fresh, so run step 1 again with the resolved date you were given (not `today`), rebuild steps 3 and 4's questions in the same order so answer keys `"0"`, `"1"`... map back to them, skip asking, apply the answer, and continue from step 5.
 - **Otherwise:** not headless, so skip `aiw ask` and call AskUserQuestion exactly as written at the question.
 
 ## Steps
