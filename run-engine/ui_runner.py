@@ -118,8 +118,8 @@ def _fallback(sid: str, answer: str, reason: str) -> dict:
     """
     rec = ui_sessions.load(sid) or {}
     repo = rec.get("repo")
-    m = re.match(r"/run-issue\s+(.*)", rec.get("command") or "")
-    n = re.search(r"(?:^|\s)#?(\d+)(?=\s|$)", m.group(1)) if m else None
+    m = re.match(r"/(?:[\w-]+:)?run-issue\s+(.*)", rec.get("command") or "")
+    n = re.search(r"(?:^|\s|/issues/)#?(\d+)(?=\s|$)", m.group(1)) if m else None
     checkouts = read_checkouts()
     path = checkouts.get(repo)
     if n and repo in checkouts and "/" in repo:
@@ -140,7 +140,7 @@ def _fallback(sid: str, answer: str, reason: str) -> dict:
                 exe = _preflight(sid)
                 return _spawn(sid, [exe, *CLAUDE_ARGS, f"/run-issue {n.group(1)} {answer}"], path,
                               ended_at=None, error=None, resumed_fresh=True, note=note,
-                              terminal_handoff=None)
+                              terminal_handoff=None, pending_answer=answer)
     ui_sessions.update(sid, status="failed", ended_at=_now(), pending_question=None,
                        terminal_handoff=True, pending_answer=answer,
                        error=f"cannot resume: {reason}")
