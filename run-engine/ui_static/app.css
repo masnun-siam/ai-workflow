@@ -293,6 +293,24 @@ main fieldset { border: 1px solid var(--border); border-radius: 8px; margin: 0 0
 legend { font-weight: 600; padding: 0 4px; }
 .opt { padding: 8px 12px; }
 .opt small { display: block; color: var(--muted); }
+/* ---- answer ---------------------------------------------------------------------------- */
+.answer { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+.answer-context { flex: 1 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding: 24px; }
+.answer-form { flex: 0 1 460px; min-width: 300px; display: flex; flex-direction: column; gap: 16px; padding: 24px; border-color: var(--waiting-border); }
+.answer-form:only-child { flex: 1 1 560px; max-width: 720px; }
+.answer-form h1, .answer-context h1 { font-size: 22px; margin-top: 4px; }
+.waiting-line { display: flex; align-items: center; gap: 8px; color: var(--waiting); font-weight: 500; }
+.waiting-line .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--waiting); animation: blink 1.6s ease-in-out infinite; }
+.answer fieldset { margin: 0; }
+.answer fieldset.solo { border: 0; padding: 0; }
+.answer fieldset.solo legend { font-size: 16px; padding: 0; margin-bottom: 10px; }
+.answer .opt { align-items: flex-start; padding: 12px 14px; }
+.answer .opt input { margin-top: 3px; }
+.answer .own textarea { min-height: 56px; }
+.answer .own { display: flex; flex-direction: column; gap: 6px; color: var(--muted); }
+.answer .fine { margin: 0; font-size: 12px; }
+.answer-failed { max-width: 640px; display: flex; flex-direction: column; gap: 12px; }
+.answer-failed h1 { margin-bottom: 0; }
 pre.plan { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); color: var(--body); padding: 12px; border-radius: 8px; font-size: 13px; }
 main code { overflow-wrap: anywhere; }
 
