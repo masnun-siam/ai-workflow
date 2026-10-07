@@ -63,6 +63,7 @@ tmp = tempfile.mkdtemp()
 real_static = getattr(ui_server, "STATIC_DIR", None)
 SHELL = sys.argv[1:3] == ["--view", "shell"]
 ANSWER = sys.argv[1:3] == ["--view", "answer"]
+NOTIFY = sys.argv[1:3] == ["--view", "notify"]
 
 NODE_JS = r"""
 const { parseRoute, waitingInfo, headerBadge, sessionList, poll } = await import(process.env.APP_URL);
@@ -96,7 +97,8 @@ assert.equal(parseRoute('#/answer/a%20b').params.session, 'a b');
 assert.equal(nm('#/answer/%E0%A4%A'), 'notfound');
 out('parseRoute trailing slash, decoding, malformed escape');
 
-const mk = (id, status) => (status === undefined ? { id } : { id, status });
+// real _public() shape: outcome + waiting, never `status`
+const mk = (id, status) => (status === undefined ? { id } : { id, outcome: status, waiting: status === 'waiting' });
 const list = [mk('a', 'running'), mk('b', 'waiting'), mk('c', 'done'), mk('d', 'waiting')];
 assert.deepEqual({ ...waitingInfo(list) }, { count: 2, firstId: 'b' });
 out('waitingInfo counts waiting, first in API order');
@@ -359,7 +361,7 @@ def shell_checks():
     css = read(os.path.join(STATIC, "app.css")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
     assert specs, "no imports found"
-    assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./answer.js"}, specs
+    assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./answer.js", "./notify.js"}, specs
     assert not re.search(r"https?://", js), "no absolute URLs"
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
@@ -457,6 +459,234 @@ def answer_checks():
     for line in p.stdout.splitlines():
         if line.startswith("ok "):
             ok(line[3:])
+
+
+
+NOTIFY_NODE_JS = r"""
+const assert = (await import('node:assert')).strict;
+const out = (n) => console.log('ok ' + n);
+const tick = () => new Promise((r) => setImmediate(r));
+// import with no document/Notification/location globals
+const N = await import(process.env.NOTIFY_URL);
+const { isWaiting, waitingWatcher, notifyState, requestNotify, notifyWaiting, pageTitle } = N;
+out('import without browser globals does not throw');
+assert.equal(notifyState(), 'unavailable');
+assert.equal(await requestNotify(), 'unavailable');
+out('no Notification global is unavailable');
+
+const A = await import(process.env.APP_URL);
+const { waitingInfo, headerBadge, poll } = A;
+
+assert.equal(pageTitle(3), '(3) aiw');
+assert.equal(pageTitle(1), '(1) aiw');
+assert.equal(pageTitle(0), 'aiw');
+out('pageTitle');
+
+const W = (id, round = 'r1') => ({ id, waiting: true, outcome: 'waiting', pending_question: { id: round } });
+const R = (id) => ({ id, waiting: false, outcome: 'running' });
+const pub = [R('a'), W('b'), R('c'), W('d')];
+assert.deepEqual({ ...waitingInfo(pub) }, { count: 2, firstId: 'b' });
+assert.deepEqual({ ...headerBadge(false, pub) }, { kind: 'waiting', count: 2, href: '#/answer/b' });
+out('badge counts _public()-shaped waiting sessions');
+for (const bad of [{ id: 'x', status: 'waiting' }, { id: 'x', waiting: 'true' }, { id: 'x', waiting: 1 }])
+  assert.equal(waitingInfo([bad]).count, 0);
+assert.equal(isWaiting(W('a')), true);
+assert.equal(isWaiting(null), false);
+out('badge regression: only waiting === true counts');
+
+const ids = (l) => l.map((s) => s.id);
+let w = waitingWatcher();
+assert.deepEqual(w([W('a')]), []);
+assert.deepEqual(ids(w([W('a'), W('b')])), ['b']);
+assert.deepEqual(w([W('a'), W('b')]), []);
+out('watcher primes silently, notifies new, not repeats');
+
+w = waitingWatcher(); w([]);
+assert.deepEqual(ids(w([W('a'), W('b')])), ['a', 'b']);
+out('watcher returns two newly waiting in one poll');
+
+w = waitingWatcher(); w([]);
+assert.deepEqual(ids(w([W('a', 'r1')])), ['a']);
+assert.deepEqual(w([R('a')]), []);
+assert.deepEqual(ids(w([W('a', 'r2')])), ['a']);
+out('re-arm: waits, stops, waits new round');
+w = waitingWatcher(); w([]);
+assert.deepEqual(ids(w([W('a', 'r1')])), ['a']);
+assert.deepEqual(ids(w([W('a', 'r2')])), ['a']);
+assert.deepEqual(w([W('a', 'r2')]), []);
+out('re-arm: stays waiting, round id changes');
+w = waitingWatcher(); w([]);
+assert.deepEqual(ids(w([W('a', 'r1')])), ['a']);
+assert.deepEqual(w([R('a')]), []);
+assert.deepEqual(ids(w([W('a', 'r1')])), ['a']);
+out('re-arm: stop then same round again');
+
+w = waitingWatcher();
+for (const bad of [[], null, undefined]) assert.deepEqual(w(bad), []);
+w = waitingWatcher(); w([W('a')]);
+assert.deepEqual(w([]), []);
+assert.deepEqual(ids(w([W('a')])), ['a']);
+out('watcher empty/null input, absent then reappearing');
+
+// Notification mock
+let made = [];
+const install = (perm, { throwCtor = false, reqResult, reqThrows = false } = {}) => {
+  made = [];
+  class Mock {
+    constructor(title, opts) { if (throwCtor) throw new Error('ctor'); this.title = title; this.opts = opts; this.closed = 0; made.push(this); }
+    close() { this.closed++; }
+  }
+  Mock.permission = perm;
+  Mock.reqCalls = 0;
+  Mock.requestPermission = async () => { Mock.reqCalls++; if (reqThrows) throw new Error('rej'); if (reqResult) Mock.permission = reqResult; return reqResult ?? perm; };
+  globalThis.Notification = Mock;
+  return Mock;
+};
+const loc = { hash: '' };
+let focused = 0;
+globalThis.location = loc;
+globalThis.focus = () => { focused++; };
+
+const sess = { id: 'a b', session_id: 'SESSIONXYZ', command: '/run-issue 124', repo: '/tmp/myrepo',
+  pending_question: { id: 'r1', questions: [{ question: 'SECRETQ?', options: [{ label: 'SECRETOPT' }] }] } };
+install('granted');
+const nn = notifyWaiting(sess);
+assert.ok(nn, 'returns the notification');
+assert.equal(made.length, 1);
+const txt = String(made[0].title) + ' ' + String(made[0].opts && made[0].opts.body);
+assert.ok(txt.includes('/run-issue 124') && txt.includes('/tmp/myrepo'), txt);
+for (const leak of ['SECRETQ', 'SECRETOPT', 'SESSIONXYZ']) assert.ok(!txt.includes(leak), leak);
+out('granted: one notification with command and repo only');
+made[0].onclick();
+assert.equal(loc.hash, '#/answer/' + encodeURIComponent('a b'));
+assert.equal(focused, 1);
+assert.equal(made[0].closed, 1);
+out('click: sets hash, focuses, closes');
+
+notifyWaiting({ id: 'z', pending_question: { id: 'r', questions: [{ question: 'SECRETQ?' }] } });
+const fb = made.at(-1);
+const ftxt = String(fb.title) + ' ' + String(fb.opts.body);
+assert.ok(!/undefined|null|SECRETQ/.test(ftxt), ftxt);
+assert.ok(String(fb.opts.body).length > 0);
+out('missing command/repo uses fixed fallbacks');
+
+for (const p of ['default', 'denied']) {
+  install(p);
+  assert.equal(notifyWaiting(sess), null);
+  assert.equal(made.length, 0);
+  assert.equal(notifyState(), p);
+}
+out('default/denied: notifyWaiting returns null, no constructor');
+
+const M1 = install('default', { reqResult: 'granted' });
+assert.equal(await requestNotify(), 'granted');
+assert.equal(notifyState(), 'granted');
+assert.equal(M1.reqCalls, 1);
+out('requestNotify resolves granted, notifyState reports it');
+
+install('granted'); globalThis.isSecureContext = false;
+assert.equal(notifyState(), 'unavailable');
+assert.equal(notifyWaiting(sess), null);
+assert.equal(made.length, 0);
+const M2 = install('default'); globalThis.isSecureContext = false;
+assert.equal(await requestNotify(), 'unavailable');
+assert.equal(M2.reqCalls, 0);
+globalThis.isSecureContext = true;
+assert.equal(notifyState(), 'default');
+delete globalThis.isSecureContext;
+delete globalThis.Notification;
+assert.equal(notifyState(), 'unavailable');
+assert.equal(notifyWaiting(sess), null);
+out('unavailable on insecure context or missing API');
+
+install('granted', { throwCtor: true });
+assert.equal(notifyWaiting(sess), null);
+out('constructor throwing returns null');
+install('default', { reqThrows: true });
+const rs = await requestNotify();
+assert.equal(typeof rs, 'string');
+out('requestPermission rejection resolves a state string');
+
+// late grant: no notification for already-waiting at first poll
+install('default');
+w = waitingWatcher();
+for (const s of w([W('a')])) notifyWaiting(s);
+globalThis.Notification.permission = 'granted';
+for (const s of w([W('a')])) notifyWaiting(s);
+assert.equal(made.length, 0);
+out('already waiting at first poll, granted later: no notification');
+
+// poll keepAlive
+const doc = { hidden: false, ls: {}, addEventListener(t, f) { (this.ls[t] ||= []).push(f); },
+  removeEventListener(t, f) { this.ls[t] = (this.ls[t] || []).filter((x) => x !== f); } };
+const fire = (t) => (doc.ls[t] || []).slice().forEach((f) => f());
+globalThis.document = doc;
+let timers = [], tid = 0, calls = [], pend = [];
+globalThis.setTimeout = (fn, ms) => { const t = { id: ++tid, fn, ms }; timers.push(t); return t.id; };
+globalThis.clearTimeout = (id) => { timers = timers.filter((t) => t.id !== id); };
+globalThis.fetch = (u) => { calls.push(u); return new Promise((res, rej) => pend.push({ res, rej })); };
+const resp = (body) => ({ ok: true, status: 200, json: async () => body });
+const stop = poll('/api/sessions', 1000, () => {}, () => true);
+pend.shift().res(resp([])); await tick();
+assert.equal(timers.length, 1);
+doc.hidden = true; fire('visibilitychange');
+assert.equal(timers.length, 1, 'hide does not clear with keepAlive');
+timers.shift().fn();
+assert.equal(calls.length, 2);
+pend.shift().res(resp([])); await tick();
+assert.equal(timers.length, 1, 'keeps scheduling while hidden');
+stop();
+assert.equal(timers.length, 0);
+out('poll keepAlive keeps polling while hidden');
+"""
+
+
+def notify_checks():
+    import subprocess
+
+    s, r, _ = req(port, "/static/notify.js")
+    assert s == 200 and r.getheader("Content-Type", "").startswith("text/javascript"), ("notify.js", s)
+    ok("notify.js served as text/javascript")
+
+    js = read(os.path.join(STATIC, "notify.js")).decode()
+    app = read(os.path.join(STATIC, "app.js")).decode()
+    specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
+    assert all(x.startswith("./") for x in specs), specs
+    assert re.search(r"""from\s*['"]\./notify\.js['"]""", app), "app.js imports notify.js"
+    ok("app.js imports notify.js, notify.js imports only relative modules")
+
+    for bad in ("innerHTML", "console.log", "debugger", "http://", "https://"):
+        assert bad not in js, bad
+    assert not re.search(r"\.(questions|question|options)\b", js), "must not read question text"
+    assert not re.search(r"pending_question\??\.(?!id\b)", js), "only the round id may be read"
+    ok("notify.js hygiene")
+
+    assert re.search(r"document\.title\s*=", app), "app.js sets document.title"
+    assert re.search(r"""<button[^>]*type="button"[^>]*>\s*Enable notifications""", app), "labelled Enable button"
+    assert re.search(r"""notif\s*===\s*['"]default['"]""", app), "button gated on default state"
+    ok("app.js sets title and gates a labelled Enable notifications button")
+
+    if not shutil.which("node"):
+        print("note: node not found, skipping notify logic checks")
+        return
+    env = dict(os.environ, NOTIFY_URL=pathlib.Path(os.path.join(STATIC, "notify.js")).as_uri(),
+               APP_URL=pathlib.Path(os.path.join(STATIC, "app.js")).as_uri())
+    p = subprocess.run(["node", "--input-type=module", "-e", NOTIFY_NODE_JS], env=env,
+                       capture_output=True, text=True, timeout=60)
+    assert p.returncode == 0, p.stderr[-1500:]
+    for line in p.stdout.splitlines():
+        if line.startswith("ok "):
+            ok(line[3:])
+
+
+if NOTIFY:
+    try:
+        notify_checks()
+    finally:
+        srv.shutdown()
+        shutil.rmtree(tmp, ignore_errors=True)
+    print(f"{passed} checks passed")
+    sys.exit(0)
 
 
 if ANSWER:
