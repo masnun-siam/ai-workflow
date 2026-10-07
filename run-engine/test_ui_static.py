@@ -1868,7 +1868,7 @@ const out = (n) => console.log('ok ' + n);
 const tick = () => new Promise((r) => setImmediate(r));
 out('import without document does not throw');
 
-const { rowOutcome, rowAction, transcriptHref, filterSessions, fmtCost, fmtTime, resumeSession, History } = H;
+const { rowOutcome, rowAction, transcriptHref, sessionHref, filterSessions, fmtCost, fmtTime, resumeSession, History } = H;
 const S = (o) => ({ id: 's1', command: 'cmd', repo: 'r', outcome: 'done', cost: 0.5,
   started_at: '2026-01-02T03:04:05Z', ended_at: '2026-01-02T04:04:05Z', link: null, ...o });
 
@@ -1898,8 +1898,9 @@ assert.equal(transcriptHref(S({ link })), '#/run/o/r/7');
 assert.equal(transcriptHref(S({ link: { owner: 'a b', repo: 'c/d', issue: 1 } })), '#/run/a%20b/c%2Fd/1');
 for (const l of [null, undefined, { owner: 'o', repo: 'r', issue: 0 }, { owner: 'o', repo: 'r', issue: 1.5 },
   { owner: 'o', repo: 'r', issue: '3' }, { owner: 'o', repo: 'r' }]) {
-  assert.equal(transcriptHref(S({ id: 'x y', link: l })), '/api/sessions/x%20y/stream');
+  assert.equal(transcriptHref(S({ id: 'x y', link: l })), '#/session/x%20y');
 }
+assert.equal(sessionHref(S({ id: 'a/b' })), '#/session/a%2Fb');
 out('transcriptHref');
 
 const L = [S({ id: '1', outcome: 'failed' }), S({ id: '2', outcome: 'done' }), S({ id: '3', outcome: 'failed' }),
@@ -1924,7 +1925,9 @@ r = await resumeSession('x'); assert.equal(r.ok, false); assert.ok(typeof r.erro
 out('resumeSession ok, server error, HTTP status, network failure');
 
 assert.equal(fmtCost(0.1234), '$0.12'); assert.equal(fmtCost(0), '$0.00');
-assert.match(fmtTime('2026-01-02T03:04:05Z'), /2026|26/);
+assert.match(fmtTime('2020-01-02T03:04:05Z'), /2020/);
+assert.match(fmtTime(new Date().toISOString()), /^Today \d\d:\d\d$/);
+assert.equal(fmtTime('not-a-date'), 'not-a-date'); assert.equal(fmtTime(null), '—');
 out('fmtCost/fmtTime');
 
 // mini renderer: vnode -> html string, plus element lookup
@@ -1974,7 +1977,7 @@ assert.ok(t.includes('—'), 'em dash');
 assert.match(t, /unknown/);
 assert.ok(t.includes('not-a-date'));
 assert.ok(t.includes(`title="${longCmd}"`), 'full command in title');
-assert.ok(t.includes('/api/sessions/s1/stream'), 'missing link falls back to stream');
+assert.ok(t.includes('#/session/s1'), 'Transcript links to the in-app viewer');
 out('null fields, unknown outcome, invalid date, long command title');
 
 t = html([S({ outcome: 'failed' })]);
@@ -2035,7 +2038,7 @@ def history_checks():
 
     js = read(os.path.join(STATIC, "history.js")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./fmt.js"}, specs
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
     names = {x.split(" as ")[-1].strip() for x in exports.split(",")}

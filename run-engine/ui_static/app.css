@@ -336,6 +336,8 @@ table.history { border-collapse: collapse; min-width: 64rem; width: 100%; }
 .history a, .history button { min-height: 44px; display: inline-flex; align-items: center; }
 .history a { color: var(--live); }
 .history summary { min-height: 44px; display: list-item; line-height: 44px; cursor: pointer; }
+.history-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 16px; }
+.history-head .muted { font-size: 13px; }
 .history-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; color: var(--muted); }
 .history-filter select { min-height: 44px; width: auto; }
 .history code { user-select: all; overflow-wrap: anywhere; }

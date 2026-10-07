@@ -1,6 +1,8 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 
+import { formatWhen, shortRepo } from './fmt.js';
+
 const html = htm.bind(h);
 
 const DASH = '—';
@@ -15,7 +17,11 @@ export function transcriptHref(s) {
   if (l && l.owner && l.repo && Number.isInteger(l.issue) && l.issue >= 1) {
     return `#/run/${encodeURIComponent(l.owner)}/${encodeURIComponent(l.repo)}/${l.issue}`;
   }
-  return `/api/sessions/${encodeURIComponent(s.id)}/stream`;
+  return sessionHref(s);
+}
+
+export function sessionHref(s) {
+  return `#/session/${encodeURIComponent(s.id)}`;
 }
 
 export function rowAction(s) {
@@ -61,8 +67,7 @@ export function fmtCost(c) {
 
 export function fmtTime(iso) {
   if (!iso) return DASH;
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? String(iso) : d.toLocaleString();
+  return Number.isNaN(new Date(iso).getTime()) ? String(iso) : formatWhen(iso);
 }
 
 const orDash = (v) => (v == null || v === '' ? DASH : v);
@@ -104,12 +109,12 @@ export class History extends Component {
     return html`
       <tr>
         <td class="cmd" title=${s.command || ''}>${orDash(s.command)}</td>
-        <td>${orDash(s.repo)}</td>
+        <td title=${s.repo || ''}>${s.repo ? shortRepo(s.repo) : DASH}</td>
         <td>${fmtTime(s.started_at)}</td>
         <td>${fmtTime(s.ended_at)}</td>
         <td><span class=${'chip chip-' + known}>${known}</span></td>
         <td>${fmtCost(s.cost)}</td>
-        <td><a href=${transcriptHref(s)}>Transcript</a></td>
+        <td><a href=${sessionHref(s)}>Transcript</a></td>
         <td>${this.action(s)}</td>
       </tr>
     `;
@@ -144,7 +149,10 @@ export class History extends Component {
     }
     return html`
       <section>
-      <h1>Sessions</h1>
+      <div class="history-head">
+        <h1>Sessions</h1>
+        <span class="muted">Kept on disk · survives UI restarts</span>
+      </div>
       <div class="history-filter">
         <label>Outcome
           <select onChange=${(e) => this.setState({ filter: e.target.value })}>

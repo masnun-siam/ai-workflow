@@ -10,7 +10,8 @@ export function formatWhen(iso, now = new Date()) {
   const days = Math.round((startOfDay(now) - startOfDay(d)) / 86400000);
   if (days === 0) return `Today ${hm}`;
   if (days === 1) return `Yesterday ${hm}`;
-  return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${hm}`;
+  const date = d.toLocaleDateString([], d.getFullYear() === now.getFullYear() ? { month: 'short', day: 'numeric' } : { year: 'numeric', month: 'short', day: 'numeric' });
+  return `${date} ${hm}`;
 }
 
 // Last path segment of a repo path or owner/repo slug.
