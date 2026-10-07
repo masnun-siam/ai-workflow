@@ -3,6 +3,7 @@ import htm from './vendor/htm.mjs';
 import { Answer } from './answer.js';
 import { isWaiting, waitingWatcher, notifyState, requestNotify, notifyWaiting, pageTitle, answerHash } from './notify.js';
 import { Board } from './board.js';
+import { Launcher } from './launcher.js';
 import { History } from './history.js';
 
 const html = htm.bind(h);
@@ -105,7 +106,7 @@ function View({ route, sessions }) {
     case 'answer':
       return html`<${Answer} session=${route.params.session} key=${route.params.session} />`;
     case 'new':
-      return html`<h1>New run</h1><p>Start a run here.</p>`;
+      return html`<${Launcher} />`;
     case 'sessions':
       return html`<${History} sessions=${sessions} />`;
     default:
