@@ -194,7 +194,8 @@ export class RunDetail extends Component {
       this.setState({ stream: this.stream, msg: '', fallback: false });
     }
     if (!id) return;
-    const live = s.outcome === 'starting' || s.outcome === 'running';
+    // waiting stays live until the claude process exits (ui_runner stamps ended_at only then).
+    const live = ['starting', 'running'].includes(s.outcome) || (s.outcome === 'waiting' && !s.ended_at);
     if (live === this.live) return;
     this.live = live;
     if (this.stopStream) this.stopStream();
