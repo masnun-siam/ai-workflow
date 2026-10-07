@@ -1760,7 +1760,7 @@ def notify_checks():
     ok("notify.js hygiene")
 
     assert re.search(r"document\.title\s*=", app), "app.js sets document.title"
-    assert re.search(r"""<button[^>]*type="button"[^>]*>\s*Enable notifications""", app), "labelled Enable button"
+    assert re.search(r'<button[^>]*type="button"[^>]*aria-label="Enable notifications"', app), "labelled Enable button"
     assert re.search(r"""notif\s*===\s*['"]default['"]""", app), "button gated on default state"
     ok("app.js sets title and gates a labelled Enable notifications button")
 

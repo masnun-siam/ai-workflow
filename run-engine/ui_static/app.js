@@ -97,9 +97,10 @@ export function poll(url, ms, onResult, keepAlive = () => false) {
 
 const NAV = [
   ['board', '#/', 'Board'],
-  ['new', '#/new', 'New run'],
   ['sessions', '#/sessions', 'Sessions'],
 ];
+
+const BELL = html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10 21a2 2 0 0 0 4 0"></path></svg>`;
 
 function View({ route, sessions }) {
   switch (route.name) {
@@ -152,16 +153,18 @@ export class App extends Component {
     const b = headerBadge(offline, sessions);
     let badge = null;
     if (b?.kind === 'offline') badge = html`<span role="status" class="offline">Offline: retrying</span>`;
-    else if (b?.kind === 'waiting') badge = html`<a class="badge waiting" href=${b.href}>${b.count} waiting on you</a>`;
+    else if (b?.kind === 'waiting') badge = html`<a class="badge waiting" href=${b.href}>${BELL}Waiting on you · ${b.count}</a>`;
     else if (b?.kind === 'idle') badge = html`<span class="muted">Nothing waiting</span>`;
     return html`
       <header>
-        <a class="brand" href="#/">aiw</a>
+        <a class="brand" href="#/">aiw ui</a>
         <nav aria-label="Main">
           ${NAV.map(([name, href, label]) => html`<a href=${href} aria-current=${route.name === name ? 'page' : undefined}>${label}</a>`)}
         </nav>
+        <span class="spacer"></span>
         ${badge}
-        ${notif === 'default' && html`<button type="button" onClick=${this.enableNotify}>Enable notifications</button>`}
+        ${notif === 'default' && html`<button type="button" class="icon-btn" aria-label="Enable notifications" title="Enable desktop notifications" onClick=${this.enableNotify}>${BELL}</button>`}
+        <a class="btn btn--primary" href="#/new" aria-current=${route.name === 'new' ? 'page' : undefined}>New run</a>
       </header>
       <main><${View} route=${route} sessions=${sessions} /></main>
     `;
