@@ -105,6 +105,22 @@ def write_json(path: str, data) -> None:
         fh.write("\n")
 
 
+def atomic_write_text(path: str, text: str) -> None:
+    """tmp file + fsync + os.replace: readers never see a partial file."""
+    import tempfile
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+
+
 def deep_merge(base: dict, overlay: dict) -> dict:
     """Dicts merge; lists (and scalars) REPLACE.
 

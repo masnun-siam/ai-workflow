@@ -78,6 +78,26 @@ def _proc_start(pid):
     return (p.stdout.strip() or None) if p.returncode == 0 else None
 
 
+def _spawn(sid: str, argv: list, path: str, *, env_extra=None, pass_fds=(), **fields) -> dict:
+    """Spawn claude detached, record pid/running, start the follower. Any failure -> _fail."""
+    d = ui_sessions.session_dir(sid)
+    stream_path = os.path.join(d, "stream.jsonl")
+    try:
+        offset = os.path.getsize(stream_path) if os.path.exists(stream_path) else 0
+        with open(stream_path, "ab") as stream_f, open(os.path.join(d, "stderr.log"), "ab") as err_f:
+            proc = subprocess.Popen(argv, cwd=path, stdin=subprocess.DEVNULL, stdout=stream_f,
+                                    stderr=err_f, start_new_session=True, close_fds=True,
+                                    env={**os.environ, **env_extra} if env_extra else None,
+                                    pass_fds=tuple(pass_fds))
+    except (OSError, ValueError) as e:
+        _fail(sid, f"failed to spawn claude: {e}")
+    rec = ui_sessions.update(sid, pid=proc.pid, pid_started=_proc_start(proc.pid),
+                             status="running", **fields)
+    _procs[sid] = proc
+    threading.Thread(target=_follow, args=(sid, proc, None, None, offset), daemon=True).start()
+    return rec
+
+
 def start(command_text, cwd, link=None, *, extra_args=(), env_extra=None, pass_fds=()) -> dict:
     if not isinstance(command_text, str) or not command_text.strip():
         raise ValueError("command_text must be a non-empty string")
@@ -89,33 +109,33 @@ def start(command_text, cwd, link=None, *, extra_args=(), env_extra=None, pass_f
 
     sid = ui_sessions.create(command_text, cwd, link)["id"]
     exe = _preflight(sid)
-    d = ui_sessions.session_dir(sid)
-    stream_f = open(os.path.join(d, "stream.jsonl"), "ab")
-    try:
-        err_f = open(os.path.join(d, "stderr.log"), "ab")
-        try:
-            proc = subprocess.Popen([exe, *CLAUDE_ARGS, *extra_args, command_text], cwd=path,
-                                    stdin=subprocess.DEVNULL, stdout=stream_f, stderr=err_f,
-                                    env={**os.environ, **env_extra} if env_extra else None,
-                                    start_new_session=True, close_fds=True,
-                                    pass_fds=tuple(pass_fds))
-        except (OSError, ValueError) as e:
-            _fail(sid, f"failed to spawn claude: {e}")
-        finally:
-            err_f.close()
-    finally:
-        stream_f.close()
-    rec = ui_sessions.update(sid, pid=proc.pid, pid_started=_proc_start(proc.pid),
-                            status="running")
-    _procs[sid] = proc
-    threading.Thread(target=_follow, args=(sid, proc), daemon=True).start()
-    return rec
+    return _spawn(sid, [exe, *CLAUDE_ARGS, *extra_args, command_text], path,
+                  env_extra=env_extra, pass_fds=pass_fds)
 
 
-def _follow(sid: str, proc, pid=None, started=None) -> None:
+def resume(sid: str, answer_text) -> dict:
+    if not isinstance(answer_text, str) or not answer_text.strip():
+        raise ValueError("answer_text must be a non-empty string")
+    if answer_text.startswith("-"):
+        raise ValueError("answer_text must not start with '-' (claude would parse it as a flag)")
+    rec = ui_sessions.load(sid)
+    if rec is None:
+        raise FileNotFoundError(f"no such session: {sid}")
+    if not rec.get("session_id"):
+        _fail(sid, "cannot resume: session has no claude session_id")
+    repo = rec.get("repo")
+    path = read_checkouts().get(repo, repo)
+    if not isinstance(path, str) or not os.path.isdir(path):
+        _fail(sid, f"cannot resume: cwd is not a directory: {repo!r}")
+    exe = _preflight(sid)
+    return _spawn(sid, [exe, *CLAUDE_ARGS, "--resume", rec["session_id"], answer_text], path,
+                  ended_at=None, error=None)
+
+
+def _follow(sid: str, proc, pid=None, started=None, offset: int = 0) -> None:
     """Follow a session until it exits. proc is None for a re-attached (non-child) pid."""
     path = os.path.join(ui_sessions.session_dir(sid), "stream.jsonl")
-    offset, buf, is_error, saw_result = 0, b"", False, False
+    buf, is_error, saw_result = b"", False, False
 
     def handle(line: bytes) -> None:
         nonlocal is_error, saw_result
@@ -168,15 +188,19 @@ def _follow(sid: str, proc, pid=None, started=None) -> None:
         if buf.strip():
             handle(buf)  # final line without trailing newline
         rc = proc.returncode if proc is not None else None
-        if sid not in _stopping and (ui_sessions.load(sid) or {}).get("status") != "stopped":
+        status = (ui_sessions.load(sid) or {}).get("status")
+        if sid not in _stopping and status != "stopped":
             if proc is None and not (saw_result and not is_error):
-                ui_sessions.update(sid, status="failed", ended_at=_now(),
+                ui_sessions.update(sid, status="failed", ended_at=_now(), pending_question=None,
                                    error="claude exited while the UI was down without a "
                                          "successful result; see stderr.log")
             elif (rc == 0 or proc is None) and not is_error:
-                ui_sessions.update(sid, status="done", ended_at=_now())
+                if status == "waiting":  # question recorded mid-run: stay waiting for the answer
+                    ui_sessions.update(sid, ended_at=_now())
+                else:
+                    ui_sessions.update(sid, status="done", ended_at=_now())
             else:
-                ui_sessions.update(sid, status="failed", ended_at=_now(),
+                ui_sessions.update(sid, status="failed", ended_at=_now(), pending_question=None,
                                    error=f"claude exited with code {rc}; see stderr.log")
     except Exception as e:  # keep the daemon thread from dying silently
         warn(f"ui_runner follower for {sid} failed: {e}")
