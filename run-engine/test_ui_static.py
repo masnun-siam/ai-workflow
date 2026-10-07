@@ -63,6 +63,7 @@ tmp = tempfile.mkdtemp()
 real_static = getattr(ui_server, "STATIC_DIR", None)
 SHELL = sys.argv[1:3] == ["--view", "shell"]
 LAUNCHER = sys.argv[1:3] == ["--view", "launcher"]
+LAUNCHER_ALL = sys.argv[1:3] == ["--view", "launcher-all"]
 
 NODE_JS = r"""
 const { parseRoute, waitingInfo, headerBadge, sessionList, poll } = await import(process.env.APP_URL);
@@ -348,11 +349,11 @@ const find = (t, root) => { nodes.length = 0; walk(root); return nodes.filter((n
 let tree = render({});
 assert.equal(find('select', tree).length, 1);
 const radios = find('input', tree).filter((i) => i.props.type === 'radio');
-assert.deepEqual(radios.map((r) => r.props.value).sort(), ['pr-grind', 'run-issue']);
+assert.deepEqual(radios.map((r) => r.props.value).sort(), ['dump', 'gh-issue', 'intake', 'pr-grind', 'prd', 'run-issue', 'worklog']);
 const lab = (t) => find('label', render({ command: t })).map((l) => text(l)).join('|');
 assert.match(lab('run-issue'), /issue/i); assert.match(lab('pr-grind'), /PR|pull/i);
 assert.notEqual(lab('run-issue'), lab('pr-grind'));
-out('render: repo select, two command radios, command-specific args label');
+out('render: repo select, seven command radios, command-specific args label');
 const fs = find('fieldset', tree); assert.ok(fs.length >= 1); assert.ok(find('legend', fs[0]).length === 1);
 tree = render({});
 const labelFor = new Set(find('label', tree).map((l) => l.props.htmlFor ?? l.props['for']));
@@ -448,7 +449,7 @@ def launcher_checks():
     css = read(os.path.join(STATIC, "app.css")).decode()
     for m in re.finditer(r"(?<![\w-])(?:min-)?width\s*:\s*(\d+)px", css):
         assert int(m.group(1)) <= 390, m.group(0)
-    assert re.search(r"(?:input|select|button)[^{}]*\{[^}]*min-height\s*:\s*(?:4[4-9]|[5-9]\d)px", css), "form controls need min-height >= 44px"
+    assert re.search(r"(?:input|select|button|textarea)[^{}]*\{[^}]*min-height\s*:\s*(?:4[4-9]|[5-9]\d)px", css), "form controls need min-height >= 44px"
     ok("css: no wide fixed widths, form controls >= 44px")
 
     if not shutil.which("node"):
@@ -467,6 +468,254 @@ def launcher_checks():
 if LAUNCHER:
     try:
         launcher_checks()
+    finally:
+        srv.shutdown()
+        shutil.rmtree(tmp, ignore_errors=True)
+    print(f"{passed} checks passed")
+    sys.exit(0)
+
+
+LAUNCHER_ALL_JS = r"""
+const L = await import(process.env.LAUNCHER_URL);
+const fix = JSON.parse(process.env.LAUNCHER_FIX);
+const assert = (await import('node:assert')).strict;
+const out = (n) => console.log('ok ' + n);
+const tick = () => new Promise((r) => setImmediate(r));
+const plain = (x) => JSON.parse(JSON.stringify(x));
+const { validate, buildBody, makeSubmitter, Launcher } = L;
+const ALL = ['dump', 'gh-issue', 'intake', 'pr-grind', 'prd', 'run-issue', 'worklog'];
+assert.equal(typeof L.validateCustom, 'function', 'validateCustom export');
+assert.equal(typeof L.buildCustomBody, 'function', 'buildCustomBody export');
+
+const base = { repos: [{ value: 'o/r', label: 'o/r' }], repo: 'o/r', manual: false, path: '', command: 'run-issue', args: '', text: '', pending: false, errors: {}, result: null };
+const render = (st) => new Launcher({}).render({}, { ...base, ...st });
+const nodes = [];
+const walk = (n) => { if (n == null || typeof n === 'boolean') return; if (Array.isArray(n)) return n.forEach(walk);
+  if (typeof n !== 'object') return; nodes.push(n); walk(n.props && n.props.children); };
+const text = (n) => (n == null || typeof n === 'boolean') ? '' : Array.isArray(n) ? n.map(text).join('') : typeof n === 'object' ? text(n.props && n.props.children) : String(n);
+const find = (t, root) => { nodes.length = 0; walk(root); return nodes.filter((n) => n.type === t); };
+const alerts = (t) => find('p', t).concat(find('div', t)).filter((n) => n.props.role === 'alert');
+
+let tree = render({});
+const fs = find('fieldset', tree);
+const radios = find('input', fs[0]).filter((i) => i.props.type === 'radio');
+assert.deepEqual(radios.map((r) => r.props.value).sort(), ALL);
+out('seven command radios');
+const hint = (c) => find('label', render({ command: c })).map((l) => text(l)).join('|');
+const hints = ALL.map(hint);
+assert.ok(hints.every((h) => h.length > 0)); assert.equal(new Set(hints).size, 7, 'hints pairwise distinct');
+assert.match(hint('run-issue'), /issue/i); assert.match(hint('pr-grind'), /PR|pull/i);
+out('per-command hints distinct');
+
+for (const c of ['prd', 'intake', 'dump', 'worklog', 'gh-issue']) {
+  const b = plain(buildBody({ repo: 'o/r', command: c, args: '  some text ' }));
+  assert.deepEqual(b, { repo: 'o/r', command: c, args: 'some text' }, c);
+}
+assert.deepEqual(plain(buildBody({ repo: 'o/r', command: 'pr-grind', args: '#12' })), { repo: 'o/r', command: 'pr-grind', args: '#12', issue: 12 });
+out('buildBody for new commands has no issue key');
+assert.equal(validate({ repo: 'o/r', command: 'worklog', args: '' }), null);
+for (const c of ALL.filter((c) => c !== 'worklog')) for (const a of ['', '  ', '\n']) {
+  const e = validate({ repo: 'o/r', command: c, args: a }); assert.ok(e && e.args, c + JSON.stringify(a));
+}
+out('worklog args optional, others required');
+
+tree = render({});
+const ta = find('textarea', tree);
+assert.equal(ta.length, 1); assert.equal(ta[0].props.id, 'custom');
+assert.ok(find('label', tree).some((l) => (l.props.htmlFor ?? l.props['for']) === 'custom'));
+assert.ok(find('button', tree).some((b) => text(b).trim() === 'Run in selected repo'));
+assert.match(text(tree), /skip-permissions/i);
+out('custom box: textarea, label, button, skip-permissions note');
+
+assert.deepEqual(plain(L.buildCustomBody({ repo: 'o/r', text: '/pr-fix-comments 42' })), { repo: 'o/r', text: '/pr-fix-comments 42' });
+assert.equal(L.buildCustomBody({ repo: 'o/r', text: '  /pr-fix-comments 42\n' }).text, '/pr-fix-comments 42');
+assert.equal(L.buildCustomBody({ repo: 'o/r', text: ' a\nb \n' }).text, 'a\nb');
+out('buildCustomBody exact shape, outer trim only');
+for (const t of ['', '   ', '\n\t', null, undefined]) {
+  const e = L.validateCustom({ repo: 'o/r', text: t }); assert.ok(e && typeof e.text === 'string' && e.text, JSON.stringify(t));
+}
+assert.equal(L.validateCustom({ repo: 'o/r', text: '/x' }), null);
+assert.ok(L.validateCustom({ repo: '', path: '', text: '/x' }).repo);
+assert.ok(L.validateCustom({ repo: '', path: ' ', manual: true, text: '/x' }).repo);
+out('validateCustom empty text / repo');
+
+let fetched = 0; globalThis.fetch = async () => { fetched++; return { status: 201, json: async () => ({}) }; };
+const inst = new Launcher({}); inst.state = { ...base, text: ' \n' };
+let prevented = false;
+await inst.onCustom({ preventDefault() { prevented = true; } }); await tick();
+assert.ok(prevented); assert.equal(fetched, 0);
+const et = render({ errors: { text: 'enter a command' } });
+const ea = alerts(et).find((n) => /enter a command/.test(text(n)));
+assert.ok(ea && ea.props.id === 'custom-error');
+const ta2 = find('textarea', et)[0];
+assert.ok(ta2.props['aria-invalid']); assert.equal(ta2.props['aria-describedby'], 'custom-error');
+out('empty custom submit blocked, error tied to textarea');
+
+// single flight across both forms
+let calls = 0, pend = [];
+globalThis.fetch = (...a) => { calls++; return new Promise((res) => pend.push(res)); };
+const sf = new Launcher({}); sf.state = { ...base, args: '7', text: '/pr-fix-comments 42' };
+sf.setState = (p) => { sf.state = { ...sf.state, ...(typeof p === 'function' ? p(sf.state) : p) }; };
+const named = sf.onSubmit({ preventDefault() {} }); await tick();
+await sf.onCustom({ preventDefault() {} }); await tick();
+assert.equal(calls, 1, 'custom must not fetch while named pending');
+assert.ok(sf.state.pending);
+const btns = find('button', new Launcher({}).render({}, sf.state));
+assert.ok(btns.length >= 2 && btns.every((b) => b.props.disabled));
+pend.shift()({ status: 400, json: async () => ({ error: 'x' }) }); await named;
+out('single-flight spans named and custom forms');
+
+// custom outcomes
+async function custom(status, body, text = '/run-issue 7') {
+  globalThis.fetch = async () => ({ status, json: async () => body });
+  const i = new Launcher({}); i.state = { ...base, text };
+  i.setState = (p) => { i.state = { ...i.state, ...p }; };
+  await i.onCustom({ preventDefault() {} }); await tick();
+  return i.state;
+}
+let st = await custom(400, fix.bad_repo);
+assert.equal(st.result.kind, 'repo'); assert.ok(alerts(render({ result: st.result })).some((n) => text(n).startsWith('not a git repository')));
+st = await custom(409, fix.dup);
+assert.equal(st.result.kind, 'duplicate');
+assert.ok(find('a', alerts(render({ result: st.result }))[0]).some((a) => a.props.href === '#/run/o/r/7'));
+st = await custom(502, null); assert.equal(st.result.kind, 'error');
+globalThis.fetch = async () => { throw new Error('net'); };
+const ni = new Launcher({}); ni.state = { ...base, text: '/x' }; ni.setState = (p) => { ni.state = { ...ni.state, ...p }; };
+await ni.onCustom({ preventDefault() {} }); await tick();
+assert.equal(ni.state.result.kind, 'error');
+out('custom submit outcomes: repo, duplicate, generic, network');
+"""
+
+
+def launcher_all_checks():
+    import json
+    import subprocess
+
+    data = tempfile.mkdtemp()
+    os.environ["CLAUDE_PLUGIN_DATA"] = data
+    import ui_runner
+    import ui_sessions
+
+    def git(*a, cwd):
+        subprocess.run(["git", *a], cwd=cwd, check=True, capture_output=True)
+
+    repo = os.path.realpath(tempfile.mkdtemp())
+    git("init", "-q", cwd=repo)
+    plain = os.path.realpath(tempfile.mkdtemp())
+    with open(os.path.join(data, "checkouts.json"), "w") as f:
+        json.dump({"o/r": repo}, f)
+
+    def call(obj, method="POST", path="/api/sessions"):
+        h = f"127.0.0.1:{port}"
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+        c.putrequest(method, path, skip_host=True, skip_accept_encoding=True)
+        c.putheader("Host", h)
+        body = json.dumps(obj).encode() if obj is not None else None
+        if body is not None:
+            c.putheader("Origin", f"http://{h}")
+            c.putheader("Content-Type", "application/json")
+            c.putheader("Content-Length", str(len(body)))
+        c.endheaders()
+        if body is not None:
+            c.send(body)
+        r = c.getresponse()
+        d = r.read()
+        c.close()
+        return r.status, json.loads(d)
+
+    # SAFETY: never launch a real claude
+    captured = []
+    real_start = ui_runner.start
+
+    def stub(command_text, cwd, link=None):
+        captured.append((command_text, cwd))
+        return ui_sessions.create(command_text, cwd, link=link)
+
+    ui_runner.start = stub
+    try:
+        s, repos = call(None, "GET", "/api/repos")
+        assert s == 200, s
+        s, bad = call({"repo": plain, "text": "/pr-fix-comments 42"})
+        assert s == 400 and bad["error"].startswith("not a git repository"), (s, bad)
+        assert not captured
+        s, b = call({"repo": "o/r", "text": "/pr-fix-comments 42"})
+        assert s == 201 and captured[-1] == ("/pr-fix-comments 42", repo), (s, b, captured)
+        s, b = call({"repo": "o/r", "command": "prd", "args": "x"})
+        assert s == 201 and captured[-1][0] == "/prd x", (s, b, captured)
+        ok("real server (runner stubbed): custom text verbatim, named prd -> '/prd x'")
+        n = len(captured)
+        s, b = call({"repo": "o/r", "text": "/no-such-command 1"})
+        assert s == 201 and captured[-1][0] == "/no-such-command 1", (s, b)
+        for t in ("  \n", "--help"):
+            s, b = call({"repo": "o/r", "text": t})
+            assert s == 400, (t, s, b)
+        assert len(captured) == n + 1
+        ok("unknown slash command accepted; blank and leading-dash rejected")
+
+        rec = ui_sessions.create("/pr-fix-comments 42", repo)
+        ui_sessions.update(rec["id"], status="waiting")
+        s, lst = call(None, "GET")
+        assert s == 200, s
+        live = ui_sessions.create("/run-issue 7", repo, link={"owner": "o", "repo": "r", "issue": 7})
+        ui_sessions.update(live["id"], status="running")
+        s, dup = call({"repo": "o/r", "command": "run-issue", "args": "7"})
+        assert s == 409 and dup["link"]["issue"] == 7, (s, dup)
+        s, lst = call(None, "GET")
+        sj = json.dumps(lst)
+        assert rec["id"] in sj
+    finally:
+        ui_runner.start = real_start
+
+    lp = os.path.join(STATIC, "launcher.js")
+    assert os.path.exists(lp), "launcher.js missing"
+    js = read(lp).decode()
+    for name in ("run-issue", "pr-grind", "prd", "intake", "dump", "worklog", "gh-issue"):
+        assert name in js, name
+    specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs"}, specs
+    assert not re.search(r"console\.log|debugger|https?://", js)
+    s, r, _ = req(port, "/static/launcher.js")
+    assert s == 200 and r.getheader("Content-Type", "").startswith("text/javascript"), s
+    ok("launcher.js served, names all seven commands, hygiene")
+
+    css = read(os.path.join(STATIC, "app.css")).decode()
+    assert re.search(r"textarea[^{}]*\{[^}]*min-height\s*:\s*(?:4[4-9]|[5-9]\d)px", css), "textarea min-height >= 44px"
+    assert re.search(r"textarea[^{}]*\{[^}]*font-family\s*:[^;}]*monospace", css), "textarea monospace"
+    for m in re.finditer(r"(?<![\w-])(?:min-)?width\s*:\s*(\d+)px", css):
+        assert int(m.group(1)) <= 390, m.group(0)
+    ok("css: textarea >= 44px, monospace")
+
+    if not shutil.which("node"):
+        print("note: node not found, skipping launcher logic checks")
+        return
+    appjs = pathlib.Path(os.path.join(STATIC, "app.js")).as_uri()
+    chk = (
+        "const A=await import(process.env.APP_URL);"
+        "const d=JSON.parse(process.env.LIST);const w=A.waitingInfo(d);"
+        "if(w.count<1)throw new Error('no waiting');"
+        "const b=A.headerBadge(false,d);"
+        "if(b.href!=='#/answer/'+encodeURIComponent(w.firstId))throw new Error(b.href);"
+        "console.log('ok custom waiting session routes to #/answer/<id>');"
+    )
+    p = subprocess.run(["node", "--input-type=module", "-e", chk],
+                       env=dict(os.environ, APP_URL=appjs, LIST=json.dumps(lst)),
+                       capture_output=True, text=True, timeout=60)
+    assert p.returncode == 0, p.stderr[-1500:]
+    ok("custom waiting session routes to #/answer/<id>")
+
+    env = dict(os.environ, LAUNCHER_URL=pathlib.Path(lp).as_uri(),
+               LAUNCHER_FIX=json.dumps({"bad_repo": bad, "dup": dup}))
+    p = subprocess.run(["node", "--input-type=module", "-e", LAUNCHER_ALL_JS], env=env,
+                       capture_output=True, text=True, timeout=60)
+    for line in p.stdout.splitlines():
+        if line.startswith("ok "):
+            ok(line[3:])
+    assert p.returncode == 0, p.stderr[-1500:]
+
+
+if LAUNCHER_ALL:
+    try:
+        launcher_all_checks()
     finally:
         srv.shutdown()
         shutil.rmtree(tmp, ignore_errors=True)
