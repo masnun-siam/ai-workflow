@@ -7,15 +7,16 @@ this file must run anywhere python3 does, with no install step.
 
 from __future__ import annotations
 
+import importlib.machinery
 import json
 import os
+import subprocess
 import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ui_board
-import kanban
 from ui_board import STATIONS, build_board, memoize_title_fetcher
 
 passed = 0
@@ -242,12 +243,23 @@ assert calls == [("acme", "widgets", 1), ("acme", "widgets", 2)], calls
 ok("memoize_title_fetcher: repeat calls for the same key hit the cache, new keys don't")
 
 
-# --- 15. kanban re-exports ui_board symbols --------------------------------
+# --- 15. kanban is gone -----------------------------------------------------
 
-for name in ("build_board", "scan_records", "load_projects", "fetch_title",
-             "memoize_title_fetcher", "STATIONS"):
-    assert getattr(kanban, name) is getattr(ui_board, name), name
-ok("kanban re-exports ui_board symbols by identity")
+HERE = os.path.dirname(os.path.abspath(__file__))
+proc = subprocess.run(
+    [sys.executable, os.path.join(HERE, "route.py"), "kanban", "--help"],
+    capture_output=True, text=True, timeout=30,
+)
+assert proc.returncode != 0, proc.returncode
+assert "invalid choice: 'kanban'" in proc.stderr, proc.stderr
+ok("route.py kanban --help: non-zero exit, invalid choice")
+
+assert importlib.machinery.PathFinder.find_spec("kanban", [HERE]) is None
+ok("kanban module is not importable")
+
+for fname in ("kanban.py", "test_kanban.py"):
+    assert not os.path.exists(os.path.join(HERE, fname)), fname
+ok("kanban.py and test_kanban.py do not exist")
 
 # --- 16. no runs ------------------------------------------------------------
 
