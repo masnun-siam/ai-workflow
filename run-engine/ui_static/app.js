@@ -1,6 +1,7 @@
 import { h, render, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { Answer } from './answer.js';
+import { isWaiting, waitingWatcher, notifyState, requestNotify, notifyWaiting, pageTitle, answerHash } from './notify.js';
 import { Board } from './board.js';
 // ponytail: import cycle with run.js (it imports poll); safe, neither uses the other at top level.
 import { RunDetail } from './run.js';
@@ -29,25 +30,25 @@ export function parseRoute(hash) {
   return { name: 'notfound', params: {} };
 }
 
-// Assumes /api/sessions (task 12) items carry `status` and `id`; pin these names on task 12.
+// /api/sessions items (_public) carry `id` and a boolean `waiting`.
 export function sessionList(data) {
   if (Array.isArray(data)) return data;
   return data && Array.isArray(data.sessions) ? data.sessions : null;
 }
 
 export function waitingInfo(data) {
-  const waiting = (sessionList(data) || []).filter((s) => s && s.status === 'waiting');
+  const waiting = (sessionList(data) || []).filter((s) => isWaiting(s));
   return { count: waiting.length, firstId: waiting.length ? waiting[0].id : null };
 }
 
 export function headerBadge(offline, data) {
   if (offline) return { kind: 'offline', count: 0, href: null };
   const { count, firstId } = waitingInfo(data);
-  if (count > 0) return { kind: 'waiting', count, href: '#/answer/' + encodeURIComponent(firstId) };
+  if (count > 0) return { kind: 'waiting', count, href: answerHash(firstId) };
   return sessionList(data) ? { kind: 'idle', count: 0, href: null } : null;
 }
 
-export function poll(url, ms, onResult) {
+export function poll(url, ms, onResult, keepAlive = () => false) {
   let timer = null;
   let inflight = false;
   let stopped = false;
@@ -65,11 +66,12 @@ export function poll(url, ms, onResult) {
     inflight = false;
     if (stopped) return;
     onResult(result);
-    if (!document.hidden) timer = setTimeout(tick, ms);
+    if (!document.hidden || keepAlive()) timer = setTimeout(tick, ms);
   }
 
   function onVisibility() {
     if (document.hidden) {
+      if (keepAlive()) return;
       clearTimeout(timer);
       timer = null;
     } else if (!inflight && timer === null) {
@@ -113,24 +115,34 @@ function View({ route, sessions }) {
 }
 
 export class App extends Component {
-  state = { route: parseRoute(globalThis.location?.hash), sessions: null, offline: false };
+  state = { route: parseRoute(globalThis.location?.hash), sessions: null, offline: false, notif: notifyState() };
 
   onHash = () => this.setState({ route: parseRoute(location.hash) });
 
   componentDidMount() {
     addEventListener('hashchange', this.onHash);
+    this.watch = waitingWatcher();
     this.stop = poll('/api/sessions', 3000, (r) => {
-      if (r.ok) this.setState({ sessions: sessionList(r.data), offline: false });
-      else this.setState({ offline: true });
-    });
+      if (r.ok) {
+        const list = sessionList(r.data);
+        this.setState({ sessions: list, offline: false });
+        document.title = pageTitle(waitingInfo(list).count);
+        for (const s of this.watch(list)) notifyWaiting(s);
+      } else {
+        this.setState({ offline: true });
+        document.title = pageTitle(0);
+      }
+    }, () => notifyState() === 'granted');
   }
+
+  enableNotify = async () => this.setState({ notif: await requestNotify() });
 
   componentWillUnmount() {
     removeEventListener('hashchange', this.onHash);
     if (this.stop) this.stop();
   }
 
-  render(_, { route, sessions, offline }) {
+  render(_, { route, sessions, offline, notif }) {
     const b = headerBadge(offline, sessions);
     let badge = null;
     if (b?.kind === 'offline') badge = html`<span role="status" class="offline">Offline: retrying</span>`;
@@ -143,6 +155,7 @@ export class App extends Component {
           ${NAV.map(([name, href, label]) => html`<a href=${href} aria-current=${route.name === name ? 'page' : undefined}>${label}</a>`)}
         </nav>
         ${badge}
+        ${notif === 'default' && html`<button type="button" onClick=${this.enableNotify}>Enable notifications</button>`}
       </header>
       <main><${View} route=${route} sessions=${sessions} /></main>
     `;
