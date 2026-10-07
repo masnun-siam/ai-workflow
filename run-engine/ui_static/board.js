@@ -29,9 +29,9 @@ export function matchSession(card, sessions) {
 export function cardChips(card, columnKey, session) {
   if (columnKey === 'done') return ['merged'];
   const chips = [];
-  const status = session && session.status;
+  const status = session && (session.status ?? session.outcome);
   if (status === 'running' || status === 'stopped') chips.push(status);
-  else if (status === 'waiting' || (!session && card.escalated)) chips.push('waiting');
+  else if (status === 'waiting' || (session && session.waiting === true) || card.escalated) chips.push('waiting');
   if (session && session.resumed_fresh === true) chips.push('resumed fresh');
   return chips;
 }
@@ -69,14 +69,17 @@ function Card({ card, columnKey, sessions }) {
 }
 
 export class Board extends Component {
-  state = { data: null, repo: '' };
+  state = { data: null, repo: '', error: false };
 
   componentDidMount() {
     this.stop = poll('/board.json', 3000, (r) => {
-      if (!r.ok) return; // keep last data on failure
+      if (!r.ok) {
+        if (!this.state.data) this.setState({ error: true }); // keep last data on later failures
+        return;
+      }
       if (!boardChanged(this.last, r.data)) return;
       this.last = JSON.stringify(r.data);
-      this.setState({ data: r.data });
+      this.setState({ data: r.data, error: false });
     });
   }
 
@@ -84,8 +87,8 @@ export class Board extends Component {
     if (this.stop) this.stop();
   }
 
-  render({ sessions }, { data, repo }) {
-    if (!data) return html`<h1>Board</h1><p>Loading board…</p>`;
+  render({ sessions }, { data, repo, error }) {
+    if (!data) return html`<h1>Board</h1><p>${error ? 'Board unavailable, retrying…' : 'Loading board…'}</p>`;
     const columns = filterColumns(data.columns, repo);
     return html`
       <h1>Board</h1>
@@ -100,7 +103,7 @@ export class Board extends Component {
           (col) => html`<section class="column" aria-label=${col.key}>
             <h2>${col.key} (${col.cards.length})</h2>
             ${col.cards.length
-              ? col.cards.map((card) => html`<${Card} card=${card} columnKey=${col.key} sessions=${sessions} />`)
+              ? col.cards.map((card) => html`<${Card} key=${card.owner + '/' + card.repo + '#' + card.issue} card=${card} columnKey=${col.key} sessions=${sessions} />`)
               : html`<p class="empty">No runs</p>`}
           </section>`,
         )}
