@@ -90,9 +90,46 @@ def start(command_text, cwd, link=None) -> dict:
     return rec
 
 
-def _follow(sid: str, proc) -> None:
+def resume(sid: str, answer_text) -> dict:
+    if not isinstance(answer_text, str) or not answer_text.strip():
+        raise ValueError("answer_text must be a non-empty string")
+    if answer_text.startswith("-"):
+        raise ValueError("answer_text must not start with '-' (claude would parse it as a flag)")
+    rec = ui_sessions.load(sid)
+    if rec is None:
+        raise FileNotFoundError(f"no such session: {sid}")
+    if not rec.get("session_id"):
+        _fail(sid, "cannot resume: session has no claude session_id")
+    repo = rec.get("repo")
+    path = read_checkouts().get(repo, repo)
+    if not isinstance(path, str) or not os.path.isdir(path):
+        _fail(sid, f"cannot resume: cwd is not a directory: {repo!r}")
+    exe = _preflight(sid)
+    d = ui_sessions.session_dir(sid)
+    stream_path = os.path.join(d, "stream.jsonl")
+    offset = os.path.getsize(stream_path)
+    stream_f = open(stream_path, "ab")
+    try:
+        err_f = open(os.path.join(d, "stderr.log"), "ab")
+        try:
+            proc = subprocess.Popen([exe, *CLAUDE_ARGS, "--resume", rec["session_id"], answer_text],
+                                    cwd=path, stdin=subprocess.DEVNULL, stdout=stream_f,
+                                    stderr=err_f, start_new_session=True, close_fds=True)
+        except OSError as e:
+            _fail(sid, f"failed to spawn claude: {e}")
+        finally:
+            err_f.close()
+    finally:
+        stream_f.close()
+    rec = ui_sessions.update(sid, pid=proc.pid, status="running", ended_at=None, error=None)
+    _procs[sid] = proc
+    threading.Thread(target=_follow, args=(sid, proc, offset), daemon=True).start()
+    return rec
+
+
+def _follow(sid: str, proc, offset: int = 0) -> None:
     path = os.path.join(ui_sessions.session_dir(sid), "stream.jsonl")
-    offset, buf, is_error = 0, b"", False
+    buf, is_error = b"", False
 
     def handle(line: bytes) -> None:
         nonlocal is_error
@@ -126,9 +163,13 @@ def _follow(sid: str, proc) -> None:
         if buf.strip():
             handle(buf)  # final line without trailing newline
         rc = proc.returncode
-        if sid not in _stopping and (ui_sessions.load(sid) or {}).get("status") != "stopped":
+        status = (ui_sessions.load(sid) or {}).get("status")
+        if sid not in _stopping and status != "stopped":
             if rc == 0 and not is_error:
-                ui_sessions.update(sid, status="done", ended_at=_now())
+                if status == "waiting":  # question recorded mid-run: stay waiting for the answer
+                    ui_sessions.update(sid, ended_at=_now())
+                else:
+                    ui_sessions.update(sid, status="done", ended_at=_now())
             else:
                 ui_sessions.update(sid, status="failed", ended_at=_now(),
                                    error=f"claude exited with code {rc}; see stderr.log")
