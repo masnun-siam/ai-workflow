@@ -36,16 +36,18 @@ export function buildBody({ repo, command, args }) {
   return body;
 }
 
-export function sessionHref(body) {
+export function sessionHref(body, command) {
+  // pr-grind has no per-session route yet (#126); #/run/ is the issue-keyed ledger
+  if (command === 'pr-grind') return '#/sessions';
   const l = body && body.link;
   if (!l || !l.owner || !l.repo || !Number.isInteger(l.issue) || l.issue < 1) return '#/sessions';
   return `#/run/${encodeURIComponent(l.owner)}/${encodeURIComponent(l.repo)}/${l.issue}`;
 }
 
-export function outcome(status, body) {
+export function outcome(status, body, command) {
   const err = body && typeof body.error === 'string' ? body.error : `Request failed (HTTP ${status})`;
-  if (status === 201) return { kind: 'open', href: sessionHref(body) };
-  if (status === 409) return { kind: 'duplicate', message: err, href: sessionHref(body) };
+  if (status === 201) return { kind: 'open', href: sessionHref(body, command) };
+  if (status === 409) return { kind: 'duplicate', message: err, href: sessionHref(body, command) };
   if (status === 400 && err.startsWith('not a git repository')) return { kind: 'repo', message: err };
   return { kind: 'error', message: err };
 }
@@ -83,7 +85,7 @@ export function makeSubmitter(fetchImpl) {
       } catch {
         // non-JSON body: outcome falls back to the HTTP status
       }
-      return outcome(res.status, data);
+      return outcome(res.status, data, body.command);
     } catch {
       return { kind: 'error', message: 'could not reach the aiw server' };
     } finally {
@@ -110,8 +112,8 @@ export class Launcher extends Component {
     this.setState({
       repos,
       repo: known ? known.value : repos.length ? repos[0].value : '',
-      manual: !known && !!last ? true : repos.length === 0,
-      path: !known && last ? last : '',
+      manual: !known && !!last && last.startsWith('/') ? true : repos.length === 0,
+      path: !known && last && last.startsWith('/') ? last : '',
       result: failed ? { kind: 'error', message: 'could not load repos' } : null,
     });
   }
@@ -146,7 +148,8 @@ export class Launcher extends Component {
         <h1>New run</h1>
         ${repos.length
           ? html`<label for="repo-select">Repo</label>
-            <select id="repo-select" value=${showPath ? '' : repo} onChange=${onRepo}>
+            <select id="repo-select" value=${showPath ? '' : repo} onChange=${onRepo}
+              aria-invalid=${repoMsg && !showPath ? 'true' : undefined} aria-describedby=${repoMsg && !showPath ? 'repo-error' : undefined}>
               ${repos.map((r) => html`<option value=${r.value}>${r.label}</option>`)}
               <option value="">Other path...</option>
             </select>`
