@@ -7,7 +7,7 @@ import os
 import re
 import subprocess
 
-from shared import data_dir
+from shared import data_dir, extract_json_object, run_dir_for
 
 STATIONS = ["researcher", "planner", "sdet", "dev", "verifier", "reviewer", "fixer", "done"]
 
@@ -83,6 +83,40 @@ def _guess_owner_repo_from_dir_name(dir_name, issue, projects):
     return owner, repo
 
 
+def run_timeline(stations, current_index, status, trace):
+    """Pure core: Ledger fields -> ({stations: [{name, status, bounces}]}, currentStation, totals).
+
+    A station after the current one is `bounced` if the trace shows it already ran
+    (advance->X, or the source of a bounce->) and so will run again; else `pending`.
+    """
+    reached, bounces, total_bounces = set(), {}, 0
+    for entry in trace:
+        if entry.startswith("advance->"):
+            reached.add(entry[len("advance->") :])
+        elif entry.startswith("bounce->"):
+            src, _, _ = entry[len("bounce->") :].rsplit("#", 1)[0].partition("->")
+            reached.add(src)
+            bounces[src] = bounces.get(src, 0) + 1
+            total_bounces += 1
+    done = status == "done"
+    rows = []
+    for i, name in enumerate(stations):
+        if done or i < current_index:
+            st = "done"
+        elif i == current_index:
+            st = status
+        else:
+            st = "bounced" if name in reached else "pending"
+        rows.append({"name": name, "status": st, "bounces": bounces.get(name, 0)})
+    current = None if done or not 0 <= current_index < len(stations) else stations[current_index]
+    totals = {
+        "stations": len(rows),
+        "done": sum(r["status"] == "done" for r in rows),
+        "bounces": total_bounces,
+    }
+    return rows, current, totals
+
+
 def memoize_title_fetcher(fetch_title):
     """Wrap a (owner, repo, issue) -> title function with an in-memory cache.
 
@@ -118,6 +152,65 @@ def scan_records() -> list:
             ledger = json.load(fh)
         records.append({"ledger": ledger, "mtime": os.path.getmtime(run_json), "dir_name": dir_name})
     return records
+
+
+_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
+_ISSUE_RE = re.compile(r"[1-9][0-9]{0,8}")
+
+
+def _read_part(path):
+    """Read-only, lenient JSON object read -> (obj, error). Never exits, unlike shared.read_json."""
+    name = os.path.basename(path)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            raw = fh.read()
+        try:
+            obj = json.loads(raw)
+        except ValueError:
+            obj = extract_json_object(raw)
+    except (OSError, ValueError):
+        return None, f"{name}: unreadable"
+    if not isinstance(obj, dict):
+        return None, f"{name}: invalid JSON"
+    return obj, None
+
+
+def load_run(owner: str, repo: str, n: str, runs_dir=None):
+    """One run from the Ledger: dict, or None if absent. ValueError on an unsafe segment."""
+    if not (_NAME_RE.fullmatch(owner) and _NAME_RE.fullmatch(repo) and _ISSUE_RE.fullmatch(n)):
+        raise ValueError("bad run id")
+    runs_dir = runs_dir or os.path.join(data_dir(), "runs")
+    run_dir = run_dir_for(runs_dir, f"{owner}/{repo}", int(n))
+    run_json = os.path.join(run_dir, "run.json")
+    if not os.path.isfile(run_json):
+        return None
+    errors = {}
+    body = {"owner": owner, "repo": repo, "issue": int(n), "status": None, "currentStation": None,
+            "stations": [], "trace": [], "plan": None,
+            "totals": {"stations": 0, "done": 0, "bounces": 0}, "errors": errors}
+    data, err = _read_part(run_json)
+    if data is not None:
+        from engine import Ledger
+
+        try:
+            led = Ledger.from_dict(data)
+        except (TypeError, ValueError):
+            err = "run.json: invalid ledger"
+        else:
+            rows, current, totals = run_timeline(led.stations, led.current_index, led.status, led.trace)
+            body.update(status=led.status, currentStation=current, stations=rows, trace=led.trace, totals=totals)
+    if err:
+        errors["ledger"] = err
+    plan_path = os.path.join(run_dir, "10-plan.json")
+    if os.path.isfile(plan_path):
+        env, err = _read_part(plan_path)
+        if err:
+            errors["plan"] = err
+        else:
+            handoff = env.get("handoff")
+            plan = handoff.get("plan_md") if isinstance(handoff, dict) else None
+            body["plan"] = plan if isinstance(plan, str) else None
+    return body
 
 
 def load_projects() -> dict:

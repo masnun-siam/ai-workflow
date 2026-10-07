@@ -17,7 +17,7 @@ from urllib.parse import parse_qs, urlsplit
 import ui_events
 import ui_sessions
 from shared import die
-from ui_board import build_board, fetch_title, load_projects, memoize_title_fetcher, scan_records
+from ui_board import build_board, fetch_title, load_projects, load_run, memoize_title_fetcher, scan_records
 
 
 def _guard(handler) -> bool:
@@ -78,8 +78,21 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             parts = path.split("/")
             if len(parts) in (4, 5) and parts[:3] == ["", "api", "sessions"] and (len(parts) == 4 or parts[4] == "stream"):
                 self._session(parts[3], len(parts) == 5)
+            elif len(parts) == 6 and parts[:3] == ["", "api", "runs"]:
+                self._run(parts[3], parts[4], parts[5])
             else:
                 self._send(404, "text/plain; charset=utf-8", b"not found")
+
+    def _run(self, owner: str, repo: str, n: str) -> None:
+        try:
+            body = load_run(owner, repo, n)
+        except ValueError:
+            self._send(400, "text/plain; charset=utf-8", b"bad run id")
+            return
+        if body is None:
+            self._send(404, "text/plain; charset=utf-8", b"not found")
+            return
+        self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
 
     def _session(self, sid: str, stream: bool) -> None:
         try:
