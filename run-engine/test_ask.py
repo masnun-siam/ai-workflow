@@ -275,6 +275,22 @@ def t_spawn_env_argv():
     ok("spawn: AIW_UI_SESSION set, AIW_HEADLESS not; prompt only on resume / gate_questions start")
 
 
+def post_answer(sid, round_id, answers):
+    srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, (), lambda *_: "t")
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        c = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=30)
+        c.request("POST", f"/api/sessions/{sid}/answer",
+                  body=json.dumps({"round_id": round_id, "answers": answers}),
+                  headers={"Content-Type": "application/json"})
+        resp = c.getresponse()
+        resp.read()
+        c.close()
+        return resp.status
+    finally:
+        srv.shutdown()
+
+
 def e2e(answers, resume_mode):
     fk, work = setup("aiwask")
     rec = ui_runner.start("/run-issue 1", work, gate_questions=True)
@@ -288,21 +304,7 @@ def e2e(answers, resume_mode):
     assert_gate1_round(r["pending_question"])
     os.environ["FAKE_CLAUDE_MODE"] = resume_mode
 
-    def req(method, path, body):
-        c = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
-        c.request(method, path, body=json.dumps(body), headers={"Content-Type": "application/json"})
-        resp = c.getresponse()
-        resp.read()
-        c.close()
-        return resp.status
-
-    srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, (), lambda *_: "t")
-    port = srv.server_address[1]
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    try:
-        s = req("POST", f"/api/sessions/{sid}/answer", {"round_id": first, "answers": answers})
-    finally:
-        srv.shutdown()
+    s = post_answer(sid, first, answers)
     assert s == 200, s
     wait_status(sid, {"waiting", "done", "failed"})
     wait_finished(sid)
@@ -377,10 +379,10 @@ with open(os.path.join(ROOT, "commands", "run-issue.md")) as _f:
     DOC = _f.read()
 
 
-def blocks():
+def blocks(doc=None):
     """Paragraphs, further split at list-item starts, whitespace-normalised."""
     out = []
-    for para in re.split(r"\n\s*\n", DOC):
+    for para in re.split(r"\n\s*\n", DOC if doc is None else doc):
         for item in re.split(r"\n(?=\s*(?:\d+\.|-)\s)", para):
             out.append(" ".join(item.split()))
     return out
@@ -428,10 +430,199 @@ def t_doc_permissions():
     ok("example aiw ask starts with `aiw `, no pipe prefix; allowed-tools keeps both")
 
 
-for _fn in (t_ask_json, t_ask_stdin, t_gate_twice_and_idempotent, t_not_ui_session, t_headless_irrelevant, t_bad_session,
+# ---- #128 interview rounds (prd, intake, gh-issue, dump, worklog) --------------
+def rd(*parts):
+    with open(os.path.join(ROOT, *parts)) as f:
+        return f.read()
+
+
+def q(header, question, labels, multi=False):
+    return {"header": header, "question": question, "multiSelect": multi,
+            "options": [{"label": lb, "description": "d"} for lb in labels]}
+
+
+R_PRD = {"questions": [q("Q1", "Which storage?", ["SQLite (Recommended)", "Postgres"]),
+                       q("Q2", "Who approves?", ["The owner (Recommended)"])]}
+R_INTAKE = {"questions": [q("Scope", "Which one first?", ["Auth", "Billing", "Reports"])]}
+R_GHI = {"questions": [q("Q1", "Priority?", ["P1 (Recommended)", "P2"]),
+                       q("Q2", "Affected users?", ["All (Recommended)", "Admins"])]}
+R_DUMP = {"questions": [q("Confirm", "Proceed?", ["Proceed (Recommended)", "Cancel"])]}
+R_WORK = {"questions": [q("Issues", "Which issues?", ["#1", "#2"], True),
+                        q("Commits", "Which commits?", ["abc123", "def456"], True)]}
+ROUNDS = {"/prd x": R_PRD, "/intake brd.md": R_INTAKE, "/gh-issue feature x": R_GHI,
+          "/dump x": R_DUMP, "/worklog": R_WORK}
+
+
+def interview_e2e(command, rnd, answers, resume_mode):
+    fk, work = setup("aiwask")
+    os.environ["FAKE_ASK_JSON"] = json.dumps(rnd)
+    sid = ui_runner.start(command, work, gate_questions=True)["id"]
+    wait_status(sid, {"waiting", "failed", "done"})
+    wait_finished(sid)
+    r = ui_sessions.load(sid)
+    assert r["status"] == "waiting", r
+    env_has(fk, sid)
+    pq = r["pending_question"]
+    assert pq["allowFreeText"] is True and pq["status"] == "pending", pq
+    assert len(pq["questions"]) == len(rnd["questions"]), pq
+    for got, want in zip(pq["questions"], rnd["questions"]):
+        assert [o["label"] for o in got["options"]] == [o["label"] for o in want["options"]], got
+        rec = next((o["label"] for o in want["options"] if "(Recommended)" in o["label"]), None)
+        assert got["recommended"] == rec, (got["recommended"], rec)
+    assert sid not in ui_runner._procs
+    first = pq["id"]
+    os.environ["FAKE_CLAUDE_MODE"] = resume_mode
+    if answers is None:
+        return sid, first, work, pq
+    s = post_answer(sid, first, answers)
+    assert s == 200, s
+    wait_status(sid, {"waiting", "done", "failed"})
+    wait_finished(sid)
+    text = f"Answer to {first}: " + json.dumps(answers, ensure_ascii=False, separators=(",", ":"))
+    assert lines(fk, "argv").split("\n")[:-1] == ui_runner.CLAUDE_ARGS + [
+        "--append-system-prompt", ui_runner.HEADLESS_PROMPT, "--resume", "sess-abc", text]
+    return sid, first, work, pq
+
+
+def t_iv_first_rounds():
+    for cmd, rnd in ROUNDS.items():
+        interview_e2e(cmd, rnd, None, "normal")
+    ok("iv: all five interview round shapes record their first round, headless env/argv, no leftover proc")
+
+
+def t_iv_resume_done_and_next_round():
+    sid, first, _, _ = interview_e2e("/prd x", R_PRD, {"0": {"labels": ["Postgres"]}, "1": {"labels": ["The owner (Recommended)"]}}, "normal")
+    r = ui_sessions.load(sid)
+    assert r["status"] == "done" and r["pending_question"] is None, r
+    sid, first, _, _ = interview_e2e("/prd x", R_PRD, {"0": {"labels": ["Postgres"]}, "1": {"labels": ["The owner (Recommended)"]}}, "aiwask")
+    r = ui_sessions.load(sid)
+    assert r["status"] == "waiting" and r["pending_question"]["id"] != first, r
+    ok("iv: answer resumes same session; normal -> done, aiwask -> waiting under new round id")
+
+
+def t_iv_mixed_free_text():
+    interview_e2e("/prd x", R_PRD, {"0": {"labels": ["SQLite (Recommended)"]}, "1": {"other": "someone else"}}, "normal")
+    assert '"0":' in lines(os.environ["FAKE_DIR"], "argv") and '"1":{"other":"someone else"}' in lines(os.environ["FAKE_DIR"], "argv")
+    ok("iv: prd single-select + free text carries both entries")
+
+
+def t_iv_multiselect():
+    interview_e2e("/worklog", R_WORK, {"0": {"labels": ["#1", "#2"]}, "1": {"other": "none"}}, "normal")
+    ok("iv: worklog multiSelect + free 'none' accepted verbatim")
+
+
+def t_iv_intake_no_recommended():
+    sid, _, _, pq = interview_e2e("/intake brd.md", R_INTAKE, None, "normal")
+    assert pq["questions"][0]["recommended"] is None, pq
+    ok("iv: intake round without (Recommended) records, recommended None")
+
+
+def t_iv_dump_other_target():
+    interview_e2e("/dump x", R_DUMP, {"0": {"other": "projectB/feature9"}}, "normal")
+    assert "projectB/feature9" in lines(os.environ["FAKE_DIR"], "argv")
+    ok("iv: dump free-text target passed through")
+
+
+def t_iv_answered_after_days():
+    sid, first, work, _ = interview_e2e("/gh-issue feature x", R_GHI, None, "normal")
+    old = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - 3 * 86400))
+    ui_sessions.update(sid, updated_at=old)
+    s = post_answer(sid, first, {"0": {"labels": ["P1 (Recommended)"]}, "1": {"labels": ["All (Recommended)"]}})
+    assert s == 200, s
+    wait_status(sid, {"done", "failed", "waiting"})
+    wait_finished(sid)
+    assert "--resume\nsess-abc" in lines(os.environ["FAKE_DIR"], "argv")
+    ok("iv: answer 3 days later still accepted and resumed with --resume sess-abc")
+
+
+def t_iv_aiwaskfail():
+    fk, work = setup("aiwaskfail")
+    sid = ui_runner.start("/prd x", work)["id"]
+    wait_status(sid, {"done", "failed", "waiting"})
+    wait_finished(sid)
+    r = ui_sessions.load(sid)
+    assert r["status"] == "failed" and "no question" in r["error"], r
+    ok("iv: /prd with aiwaskfail ends failed, no recorded question")
+
+
+def t_iv_concurrent_ask():
+    sid = new_sid()
+    first = rid_of(ask(sid, ["--json", json.dumps(R_PRD)]).stdout)
+    before = meta_bytes(sid)
+    again = ask(sid, ["--json", json.dumps(R_GHI)])
+    assert rid_of(again.stdout) == first and meta_bytes(sid) == before
+    ok("iv: second ask during a pending 2-question round returns same id, record identical")
+
+
+IV_SITES = {
+    "skills/prd/SKILL.md": ["Invoke the `grilling` skill", "Show the **full** draft",
+                            "\"push to the wiki?\" confirmation"],
+    "commands/intake.md": ["Decomposition check"],
+    "commands/gh-issue.md": ["Use the grill-me skill", "Present the list in exactly one",
+                             "Ask ONE `AskUserQuestion` (multiSelect)",
+                             "Then `AskUserQuestion` with exactly these two choices",
+                             "Confirm via AskUserQuestion", "ask via AskUserQuestion (`multiSelect: true`) which ones",
+                             "ask the user to pick from that field's real"],
+    "skills/dump/SKILL.md": ["Proceed? [y"],
+    "agents/worklog-runner.md": ["If `needsConfirm` is non-empty", "reference any issue or PR"],
+}
+IV_FILES = list(IV_SITES) + ["skills/worklog/SKILL.md"]
+
+
+def t_iv_doc_sites():
+    bad = []
+    for path, anchors in IV_SITES.items():
+        bs = blocks(rd(*path.split("/")))
+        for a in anchors:
+            hits = [b for b in bs if a in b]
+            if not hits:
+                bad.append(f"{path}: site not found: {a}")
+            elif not all(headless_branch(h) for h in hits):
+                bad.append(f"{path}: no same-paragraph headless `aiw ask` + end-turn branch at: {a}")
+    w = rd("skills", "worklog", "SKILL.md")
+    if not ("Headless run: ask via aiw ask" in w and "Answer to" in w and "re-dispatch" in w.lower()):
+        bad.append("skills/worklog/SKILL.md: dispatch must pass headless marker and re-dispatch on the answer")
+    assert not bad, "missing headless branch:\n    " + "\n    ".join(bad)
+    ok("iv: every interview site has a same-paragraph headless branch")
+
+
+def t_iv_no_unbranched_ask():
+    bad = []
+    for path in IV_FILES:
+        d = rd(*path.split("/"))
+        d = d.split("---", 2)[2] if d.startswith("---") else d  # skip frontmatter tool lists
+        for b in blocks(d):
+            if "AskUserQuestion" in b and "aiw ask" not in b:
+                bad.append(f"{path}: {b[:60]}")
+    assert not bad, "AskUserQuestion paragraph without aiw ask:\n    " + "\n    ".join(bad)
+    ok("iv: no AskUserQuestion paragraph lacks aiw ask")
+
+
+def t_iv_interactive_unchanged():
+    bad = []
+    for path in IV_FILES:
+        d = rd(*path.split("/"))
+        if not re.search(r"\*\*Otherwise:\*\*[^\n]*not headless[^\n]*AskUserQuestion exactly as written", " ".join(d.split())):
+            bad.append(f"{path}: missing '**Otherwise:** not headless ... AskUserQuestion exactly as written'")
+        for e in re.findall(r"^\s*(\S*\s*aiw ask\b.*)$", d, re.M):
+            if "--json" in e or "<<" in e:
+                assert e.strip().startswith("aiw ") and "|" not in e.split("aiw ask")[0], (path, e)
+    assert "AskUserQuestion" in rd("skills", "prd", "SKILL.md").split("---")[1]
+    assert re.search(r"^tools:.*AskUserQuestion", rd("agents", "worklog-runner.md"), re.M)
+    assert not bad, "\n    ".join(bad)
+    ok("iv: interactive branch retained; tool lists keep AskUserQuestion")
+
+
+INTERVIEWS = (t_iv_first_rounds, t_iv_resume_done_and_next_round, t_iv_mixed_free_text,
+              t_iv_multiselect, t_iv_intake_no_recommended, t_iv_dump_other_target,
+              t_iv_answered_after_days, t_iv_aiwaskfail, t_iv_concurrent_ask, t_iv_doc_sites,
+              t_iv_no_unbranched_ask, t_iv_interactive_unchanged)
+
+BASE = (t_ask_json, t_ask_stdin, t_gate_twice_and_idempotent, t_not_ui_session, t_headless_irrelevant, t_bad_session,
             t_bad_input, t_registration, t_spawn_env_argv, t_e2e_approve, t_e2e_revise_free_text, t_e2e_abort,
             t_missing_record, t_interactive_unchanged, t_doc_sites, t_doc_no_unbranched_ask,
-            t_doc_permissions):
+            t_doc_permissions)
+for _fn in (INTERVIEWS if "--interviews" in sys.argv else BASE + INTERVIEWS):
     check(_fn)
 
 print(f"\n{passed} checks passed, {failed} failed")

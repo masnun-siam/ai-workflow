@@ -49,6 +49,31 @@ Match on feature folder names and PRD titles against the dumped text's keywords/
 - **Exactly one plausible feature matches** → that's your proposed target.
 - **Multiple features plausibly match, or nothing matches (looks like a new feature or a brand-new project)** → note this; you'll still show a proposal in Step 3, but flag it as uncertain and be ready to accept a correction.
 
+### Asking the user
+
+A headless run (started from the workflow UI) has no terminal to answer in, so
+`AskUserQuestion` is not available there. You are headless when your system prompt contains
+`Headless run: ask via aiw ask`. At every question below, the same header, question and options
+are used either way; only the transport differs.
+
+- **Headless:** call the command below. Use the quoted heredoc: target paths may embed arbitrary
+  text, so never put it inside single quotes on the command line. Starts with `aiw `.
+
+  ```
+  # one call per round
+  aiw ask <<'EOF'
+  {"questions":[{"header":"...","question":"...","multiSelect":false,"options":[{"label":"...","description":"..."}]}]}
+  EOF
+  ```
+
+  List the recommended option first with `(Recommended)` on its label. Free text is
+  always allowed. Then end your turn immediately and do nothing else; the answer arrives as
+  your next message, `Answer to q-...: {"0":{"labels":["..."]}}` or
+  `{"0":{"other":"free text"}}`. Strip any ` (Recommended)` suffix from the label and take
+  the same branch the interactive answer would. Free text that names no option is feedback for
+  that question, never an approval.
+- **Otherwise:** not headless, so skip `aiw ask` and ask the Step 3 block in prose, or call AskUserQuestion exactly as written wherever a step names it.
+
 ## Step 3: Propose and confirm — ALWAYS, no exceptions
 
 Before writing anything, show the user a compact block:
@@ -59,6 +84,7 @@ Target: <exact vault path> (<why this target — "existing feature match" / "new
 Action: <one line: create feature / append to Bugs.md / edit PRD.md + log Decisions.md / etc.>
 Proceed? [y / pick a different project-feature / cancel]
 ```
+If headless, ask this block once via `aiw ask` instead, then end your turn: options `Proceed (Recommended)` / `Cancel`; a different project-feature arrives as free text, re-confirm once.
 
 Wait for the user's reply. Do this every single time, regardless of how confident the match is — this is a hard rule from the spec, not a judgment call to skip on "obvious" cases.
 

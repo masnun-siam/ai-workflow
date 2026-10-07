@@ -8,6 +8,32 @@ argument-hint: "<sentry-url | file-path | vault-note | free text>"
 
 Source: <argument>
 
+### Asking the user
+
+A headless run (started from the workflow UI) has no terminal to answer in, so
+`AskUserQuestion` is not available there. You are headless when your system prompt contains
+`Headless run: ask via aiw ask`. At every question below, the same header, question and options
+are used either way; only the transport differs.
+
+- **Headless:** call the command below. Use the quoted heredoc: candidate titles may embed arbitrary
+  text, so never put it inside single quotes on the command line. Starts with `aiw `.
+
+  ```
+  # one call per round
+  aiw ask <<'EOF'
+  {"questions":[{"header":"...","question":"...","multiSelect":false,"options":[{"label":"...","description":"..."}]}]}
+  EOF
+  ```
+
+  List the recommended option first with `(Recommended)` on its label. Free text is
+  always allowed. Then end your turn immediately and do nothing else; the answer arrives as
+  your next message, `Answer to q-...: {"0":{"labels":["..."]}}` or
+  `{"0":{"other":"free text"}}`. Strip any ` (Recommended)` suffix from the label and take
+  the same branch the interactive answer would. Free text that names no option is feedback for
+  that question, never an approval.
+- **Otherwise:** not headless, so skip `aiw ask` and call AskUserQuestion exactly as written at the question.
+
+
 **HARD RULE — while producing the brief below, this skill only ever produces a brief. It never creates a GitHub issue and
 never dispatches `/run-issue` or any pipeline station.**
 - NEVER run `gh issue create`, `gh issue edit`, or any other mutating command.
@@ -85,7 +111,7 @@ Do the following:
      where it states them; do not paraphrase a stated acceptance criterion.
    - **Decomposition check**: if the document covers more than one independently-shippable
      outcome, list each candidate as one line (title + the one outcome it delivers), then
-     `AskUserQuestion` — single question, one option per candidate — asking which one to
+     `AskUserQuestion` (if headless, `aiw ask` instead, then end your turn) — single question, one option per candidate, none marked recommended — asking which one to
      run now, and build the brief from the **chosen** candidate only — unless `--whole`
      was set, in which case skip the prompt entirely and put every candidate into the
      brief instead of narrowing to one. If it's a single outcome, skip straight to
