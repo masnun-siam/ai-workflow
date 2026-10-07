@@ -905,14 +905,17 @@ def stop_checks():
     SLUG = "own/repo"
     ROSTER = ["planner", "sdet", "dev", "review"]
 
-    def http_(method, path, host=None, origin=None):
+    def http_(method, path, host=None, origin=None, body=None):
         c = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
         c.putrequest(method, path, skip_host=True, skip_accept_encoding=True)
         c.putheader("Host", host or f"127.0.0.1:{port}")
         if origin is not None:
             c.putheader("Origin", origin)
-        c.putheader("Content-Length", "0")
-        c.endheaders()
+        data = json.dumps(body).encode() if body is not None else b""
+        if body is not None:
+            c.putheader("Content-Type", "application/json")
+        c.putheader("Content-Length", str(len(data)))
+        c.endheaders(data)
         r = c.getresponse()
         raw = r.read()
         c.close()
@@ -1105,7 +1108,7 @@ def stop_checks():
 
         # -- stop on waiting without a live process
         sid = cheap(work=work, status="done")
-        ui_sessions.set_pending(sid, {"id": "q-1", "status": "pending", "questions": []})
+        ui_sessions.set_pending(sid, {"id": "q-1", "status": "pending", "questions": [{"header": "G", "question": "Proceed?", "multiSelect": False, "options": [{"label": "Go", "description": "go"}, {"label": "No", "description": "no"}]}]})
         ui_sessions.update(sid, status="waiting")
         assert sid not in ui_runner._procs
         with mock.patch("os.killpg") as kp, mock.patch("os.kill") as k:
@@ -1113,7 +1116,7 @@ def stop_checks():
         assert st == 200 and body["outcome"] == "stopped" and body["ended_at"], (st, body)
         assert body["waiting"] is False and body["pending_question"] is None, body
         assert not kp.called and not k.called
-        st, _b = http_("POST", f"/api/sessions/{sid}/answer")
+        st, _b = http_("POST", f"/api/sessions/{sid}/answer", body={"round_id": "q-1", "answers": {"0": {"labels": ["Go"]}}})
         assert st == 409, st
         ok("stop on waiting without process: stopped, pending cleared, no signal, later answer 409")
 
@@ -1123,7 +1126,7 @@ def stop_checks():
         live.append(rec)
         sid = rec["id"]
         wait_for(lambda: (ui_sessions.load(sid) or {}).get("session_id"))
-        ui_sessions.set_pending(sid, {"id": "q-1", "status": "pending", "questions": []})
+        ui_sessions.set_pending(sid, {"id": "q-1", "status": "pending", "questions": [{"header": "G", "question": "Proceed?", "multiSelect": False, "options": [{"label": "Go", "description": "go"}, {"label": "No", "description": "no"}]}]})
         assert sid in ui_runner._procs
         st, body = http_("POST", f"/api/sessions/{sid}/stop")
         assert st == 200 and body["outcome"] == "stopped", (st, body)
