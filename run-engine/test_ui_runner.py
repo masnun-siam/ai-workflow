@@ -253,7 +253,7 @@ def answer_checks():
         return f"Answer to {rid}: " + json.dumps(norm, ensure_ascii=False, separators=(",", ":"))
 
     def argv_of(fk, t):
-        return ui_runner.CLAUDE_ARGS + ["--resume", "sess-abc", t]
+        return ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, "--resume", "sess-abc", t]
 
     def intact(sid, fk, rid="q-1"):
         r = ui_sessions.load(sid)
@@ -1334,11 +1334,9 @@ try:
     ok("normal run: stream bytes, session_id, cost, done, ended_at")
     assert lines(fk, "argv").split("\n")[:-1] == [
         "--print", "--output-format", "stream-json", "--verbose",
-        "--dangerously-skip-permissions", "--append-system-prompt", ui_runner.HEADLESS_PROMPT,
-        "/run-issue 42"], lines(fk, "argv")
+        "--dangerously-skip-permissions", "/run-issue 42"], lines(fk, "argv")
     assert ui_runner.CLAUDE_ARGS == ["--print", "--output-format", "stream-json", "--verbose",
-                                     "--dangerously-skip-permissions", "--append-system-prompt",
-                                     ui_runner.HEADLESS_PROMPT]
+                                     "--dangerously-skip-permissions"]
     assert real(lines(fk, "pwd")) == real(work)
     ok("argv exact, cwd is checkout")
     assert b"some warning" in read(sid, "stderr.log")

@@ -30,7 +30,7 @@ import ui_events
 HEADLESS_PROMPT = ("Headless run: ask via aiw ask, never AskUserQuestion. Gate questions go through "
                    "`aiw ask --json '<AskUserQuestion input>'`; then end your turn.")
 CLAUDE_ARGS = ["--print", "--output-format", "stream-json", "--verbose",
-               "--dangerously-skip-permissions", "--append-system-prompt", HEADLESS_PROMPT]
+               "--dangerously-skip-permissions"]
 STOP_GRACE_SECONDS = 10
 POLL_SECONDS = 0.2
 
@@ -90,7 +90,7 @@ def _spawn(sid: str, argv: list, path: str, *, env_extra=None, pass_fds=(), **fi
         with open(stream_path, "ab") as stream_f, open(os.path.join(d, "stderr.log"), "ab") as err_f:
             proc = subprocess.Popen(argv, cwd=path, stdin=subprocess.DEVNULL, stdout=stream_f,
                                     stderr=err_f, start_new_session=True, close_fds=True,
-                                    env={**os.environ, "AIW_HEADLESS": "1", "AIW_UI_SESSION": sid,
+                                    env={**os.environ, "AIW_UI_SESSION": sid,
                                          "CLAUDE_PLUGIN_DATA": data_dir(), **(env_extra or {})},
                                     pass_fds=tuple(pass_fds))
     except (OSError, ValueError) as e:
@@ -102,7 +102,8 @@ def _spawn(sid: str, argv: list, path: str, *, env_extra=None, pass_fds=(), **fi
     return rec
 
 
-def start(command_text, cwd, link=None, *, extra_args=(), env_extra=None, pass_fds=()) -> dict:
+def start(command_text, cwd, link=None, *, extra_args=(), env_extra=None, pass_fds=(),
+          gate_questions=False) -> dict:
     if not isinstance(command_text, str) or not command_text.strip():
         raise ValueError("command_text must be a non-empty string")
     if command_text.startswith("-"):
@@ -113,7 +114,8 @@ def start(command_text, cwd, link=None, *, extra_args=(), env_extra=None, pass_f
 
     sid = ui_sessions.create(command_text, cwd, link)["id"]
     exe = _preflight(sid)
-    return _spawn(sid, [exe, *CLAUDE_ARGS, *extra_args, command_text], path,
+    gate = ["--append-system-prompt", HEADLESS_PROMPT] if gate_questions else []
+    return _spawn(sid, [exe, *CLAUDE_ARGS, *gate, *extra_args, command_text], path,
                   env_extra=env_extra, pass_fds=pass_fds)
 
 
@@ -132,7 +134,7 @@ def resume(sid: str, answer_text) -> dict:
     if not isinstance(path, str) or not os.path.isdir(path):
         _fail(sid, f"cannot resume: cwd is not a directory: {repo!r}")
     exe = _preflight(sid)
-    return _spawn(sid, [exe, *CLAUDE_ARGS, "--resume", rec["session_id"], answer_text], path,
+    return _spawn(sid, [exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, "--resume", rec["session_id"], answer_text], path,
                   ended_at=None, error=None)
 
 

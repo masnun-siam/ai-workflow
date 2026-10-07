@@ -62,7 +62,7 @@ Same session id, the model saw the earlier turns, and no dangling tool_use probl
 ## Consequences
 
 - Chosen: (b) `aiw ask`. Rejected: (a) PreToolUse on `AskUserQuestion`, because the hook cannot fire when the tool is not offered under `-p`, with or without `--dangerously-skip-permissions`. (a) would only work if the CLI re-enabled the tool headlessly, which 2.1.289 does not.
-- Headless marker: the engine starts UI sessions with `AIW_HEADLESS=1` in the environment (and `AIW_RUN_DIR` pointing at the run directory). The model cannot see the process environment without running a command, so the engine also tells it directly at launch: `--append-system-prompt "Headless run: ask via aiw ask, never AskUserQuestion"`. That system prompt is the model-facing switch; `AIW_HEADLESS=1` is for `aiw ask` and the engine. Each command's question sites say: when headless, call `aiw ask` instead of `AskUserQuestion`. Tasks 16 and 26 use this one approach and do not add a `printenv` step. Interactive runs have no marker and are unchanged: `AskUserQuestion` works exactly as today. The marker was chosen, not tested; the experiments used the stub on PATH and `AIW_RUN_DIR` only.
+- Headless marker: the engine starts UI sessions with `AIW_UI_SESSION` in the environment (see the #118 follow-up below; it replaced `AIW_HEADLESS=1`) (and `AIW_RUN_DIR` pointing at the run directory). The model cannot see the process environment without running a command, so the engine also tells it directly at launch: `--append-system-prompt "Headless run: ask via aiw ask, never AskUserQuestion"`. That system prompt is the model-facing switch; `AIW_UI_SESSION` is for `aiw ask` and the engine. Each command's question sites say: when headless, call `aiw ask` instead of `AskUserQuestion`. Tasks 16 and 26 use this one approach and do not add a `printenv` step. Interactive runs have no marker and are unchanged: `AskUserQuestion` works exactly as today. The marker was chosen, not tested; the experiments used the stub on PATH and `AIW_RUN_DIR` only.
 - Record shape written by `aiw ask` (stdin is the same `questions` array `AskUserQuestion` takes):
 
 ```json
@@ -89,7 +89,7 @@ Same session id, the model saw the earlier turns, and no dangling tool_use probl
 
 ## Follow-up (#118)
 
-- The env pair actually used is `AIW_HEADLESS=1` plus `AIW_UI_SESSION=<ui session id>`, set by `ui_runner._spawn` on start and resume. It replaces `AIW_RUN_DIR`, which the UI runner never knows.
+- The marker actually used is `AIW_UI_SESSION=<ui session id>` (plus `CLAUDE_PLUGIN_DATA`), set by `ui_runner._spawn`. It replaces `AIW_RUN_DIR`, which the UI runner never knows. `AIW_HEADLESS` stays reserved for the pr-grind re-entry (ADR 0002). The aiw-ask system prompt is added by `resume` and by `start(gate_questions=True)`, not by `CLAUDE_ARGS`.
 - The round lives in the session's `meta.json` `pending_question` via `ui_sessions.set_pending` (#117), not in a separate append-only file. History stays in `stream.jsonl`.
 - `aiw ask` takes `--json` or stdin, so the command starts with `aiw` and matches `Bash(aiw:*)`.
 - The follower fails a session that exits cleanly after an `aiw ask` tool_use but recorded no question ("aiw ask ran but recorded no question").
