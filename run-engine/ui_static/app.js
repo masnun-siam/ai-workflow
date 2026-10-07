@@ -1,7 +1,7 @@
 import { h, render, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { Answer } from './answer.js';
-import { isWaiting, waitingWatcher, notifyState, requestNotify, notifyWaiting, pageTitle } from './notify.js';
+import { isWaiting, waitingWatcher, notifyState, requestNotify, notifyWaiting, pageTitle, answerHash } from './notify.js';
 
 const html = htm.bind(h);
 
@@ -40,7 +40,7 @@ export function waitingInfo(data) {
 export function headerBadge(offline, data) {
   if (offline) return { kind: 'offline', count: 0, href: null };
   const { count, firstId } = waitingInfo(data);
-  if (count > 0) return { kind: 'waiting', count, href: '#/answer/' + encodeURIComponent(firstId) };
+  if (count > 0) return { kind: 'waiting', count, href: answerHash(firstId) };
   return sessionList(data) ? { kind: 'idle', count: 0, href: null } : null;
 }
 

@@ -38,16 +38,20 @@ export async function requestNotify() {
   return notifyState();
 }
 
+export function answerHash(id) {
+  return '#/answer/' + encodeURIComponent(id);
+}
+
 export function notifyWaiting(s) {
   if (notifyState() !== 'granted') return null;
   try {
     const n = new Notification('aiw: waiting on you', {
-      body: `${s.command || 'A session'} · ${s.repo || 'unknown repo'}`,
-      tag: 'aiw-' + s.id,
+      body: `${String(s.command || '').trim().split(/\s+/)[0] || 'A session'} · ${String(s.repo || '').split(/[\\/]/).filter(Boolean).pop() || 'unknown repo'}`,
+      tag: 'aiw-' + s.id + '-' + (s.pending_question?.id ?? ''),
     });
     n.onclick = () => {
       globalThis.focus?.();
-      location.hash = '#/answer/' + encodeURIComponent(s.id);
+      location.hash = answerHash(s.id);
       n.close();
     };
     return n;
