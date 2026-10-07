@@ -243,6 +243,22 @@ def env_has(fk, sid):
     assert "Headless run: ask via aiw ask" in argv[i + 1], argv
 
 
+def post_answer(sid, round_id, answers):
+    srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, (), lambda *_: "t")
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        c = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=30)
+        c.request("POST", f"/api/sessions/{sid}/answer",
+                  body=json.dumps({"round_id": round_id, "answers": answers}),
+                  headers={"Content-Type": "application/json"})
+        resp = c.getresponse()
+        resp.read()
+        c.close()
+        return resp.status
+    finally:
+        srv.shutdown()
+
+
 def e2e(answers, resume_mode):
     fk, work = setup("aiwask")
     rec = ui_runner.start("/run-issue 1", work)
@@ -256,21 +272,7 @@ def e2e(answers, resume_mode):
     assert_gate1_round(r["pending_question"])
     os.environ["FAKE_CLAUDE_MODE"] = resume_mode
 
-    def req(method, path, body):
-        c = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
-        c.request(method, path, body=json.dumps(body), headers={"Content-Type": "application/json"})
-        resp = c.getresponse()
-        resp.read()
-        c.close()
-        return resp.status
-
-    srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, (), lambda *_: "t")
-    port = srv.server_address[1]
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    try:
-        s = req("POST", f"/api/sessions/{sid}/answer", {"round_id": first, "answers": answers})
-    finally:
-        srv.shutdown()
+    s = post_answer(sid, first, answers)
     assert s == 200, s
     wait_status(sid, {"waiting", "done", "failed"})
     wait_finished(sid)
@@ -439,20 +441,8 @@ def interview_e2e(command, rnd, answers, resume_mode):
     os.environ["FAKE_CLAUDE_MODE"] = resume_mode
     if answers is None:
         return sid, first, work, pq
-    srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, (), lambda *_: "t")
-    port = srv.server_address[1]
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    try:
-        c = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
-        c.request("POST", f"/api/sessions/{sid}/answer",
-                  body=json.dumps({"round_id": first, "answers": answers}),
-                  headers={"Content-Type": "application/json"})
-        resp = c.getresponse()
-        resp.read()
-        c.close()
-    finally:
-        srv.shutdown()
-    assert resp.status == 200, resp.status
+    s = post_answer(sid, first, answers)
+    assert s == 200, s
     wait_status(sid, {"waiting", "done", "failed"})
     wait_finished(sid)
     text = f"Answer to {first}: " + json.dumps(answers, ensure_ascii=False, separators=(",", ":"))
@@ -463,7 +453,7 @@ def interview_e2e(command, rnd, answers, resume_mode):
 def t_iv_first_rounds():
     for cmd, rnd in ROUNDS.items():
         interview_e2e(cmd, rnd, None, "normal")
-    ok("iv: all five commands record their first round, headless env/argv, no leftover proc")
+    ok("iv: all five interview round shapes record their first round, headless env/argv, no leftover proc")
 
 
 def t_iv_resume_done_and_next_round():
@@ -503,17 +493,8 @@ def t_iv_answered_after_days():
     sid, first, work, _ = interview_e2e("/gh-issue feature x", R_GHI, None, "normal")
     old = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - 3 * 86400))
     ui_sessions.update(sid, updated_at=old)
-    srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, (), lambda *_: "t")
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    try:
-        c = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=30)
-        c.request("POST", f"/api/sessions/{sid}/answer", headers={"Content-Type": "application/json"},
-                  body=json.dumps({"round_id": first, "answers": {"0": {"labels": ["P1 (Recommended)"]}, "1": {"labels": ["All (Recommended)"]}}}))
-        resp = c.getresponse()
-        resp.read()
-    finally:
-        srv.shutdown()
-    assert resp.status == 200, resp.status
+    s = post_answer(sid, first, {"0": {"labels": ["P1 (Recommended)"]}, "1": {"labels": ["All (Recommended)"]}})
+    assert s == 200, s
     wait_status(sid, {"done", "failed", "waiting"})
     wait_finished(sid)
     assert "--resume\nsess-abc" in lines(os.environ["FAKE_DIR"], "argv")
