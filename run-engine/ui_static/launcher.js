@@ -115,7 +115,7 @@ export function makeSubmitter(fetchImpl) {
 }
 
 export class Launcher extends Component {
-  state = { repos: [], repo: '', manual: false, path: '', command: 'run-issue', args: '', text: '', pending: false, errors: {}, result: null };
+  state = { repos: [], repo: '', manual: false, path: '', command: 'run-issue', args: '', text: '', pending: false, errors: {}, result: null, form: 'named' };
 
   async componentDidMount() {
     let repos = [];
@@ -138,18 +138,17 @@ export class Launcher extends Component {
     });
   }
 
-  onSubmit = async (ev) => {
+  start = async (ev, form, errors, mkBody) => {
     ev.preventDefault();
     const s = this.state;
-    const errors = validate(s);
     if (errors) {
       this.setState({ errors, result: null });
       return;
     }
     this.submit = this.submit || makeSubmitter((...a) => fetch(...a));
     const repo = (s.manual || !s.repos.length ? s.path : s.repo).trim();
-    this.setState({ pending: true, errors: {}, result: null });
-    const r = await this.submit(buildBody({ repo, command: s.command, args: s.args }));
+    this.setState({ pending: true, form, errors: {}, result: null });
+    const r = await this.submit(mkBody(repo));
     if (!r) return;
     this.setState({ pending: false, result: r.kind === 'open' ? null : r });
     if (r.kind === 'open') {
@@ -158,30 +157,18 @@ export class Launcher extends Component {
     }
   };
 
-  onCustom = async (ev) => {
-    ev.preventDefault();
-    const s = this.state;
-    const errors = validateCustom(s);
-    if (errors) {
-      this.setState({ errors, result: null });
-      return;
-    }
-    this.submit = this.submit || makeSubmitter((...a) => fetch(...a));
-    const repo = (s.manual || !s.repos.length ? s.path : s.repo).trim();
-    this.setState({ pending: true, errors: {}, result: null });
-    const r = await this.submit(buildCustomBody({ repo, text: s.text }));
-    if (!r) return;
-    this.setState({ pending: false, result: r.kind === 'open' ? null : r });
-    if (r.kind === 'open') {
-      saveLastRepo(globalThis.localStorage, repo);
-      location.hash = r.href;
-    }
-  };
+  onSubmit = (ev) => this.start(ev, 'named', validate(this.state), (repo) => buildBody({ repo, command: this.state.command, args: this.state.args }));
 
-  render(_, { repos, repo, manual, path, command, args, text, pending, errors, result }) {
+  onCustom = (ev) => this.start(ev, 'custom', validateCustom(this.state), (repo) => buildCustomBody({ repo, text: this.state.text }));
+
+  render(_, { repos, repo, manual, path, command, args, text, pending, form, errors, result }) {
     const showPath = manual || repos.length === 0;
     const set = (k) => (e) => this.setState({ [k]: e.target.value });
     const onRepo = (e) => (e.target.value === '' ? this.setState({ manual: true }) : this.setState({ manual: false, repo: e.target.value }));
+    const mine = (f) => (result && (form || 'named') === f ? result : null);
+    const outcomeMsg = (f) => { const r = mine(f); return r && r.kind === 'duplicate'
+      ? html`<p role="alert" class="error">${r.message} <a href=${r.href}>Open that run</a></p>`
+      : r && r.kind === 'error' ? html`<p role="alert" class="error">${r.message}</p>` : null; };
     const repoMsg = errors.repo || (result && result.kind === 'repo' ? result.message : null);
     return html`
       <form class="launcher" onSubmit=${this.onSubmit} noValidate>
@@ -210,11 +197,8 @@ export class Launcher extends Component {
         <input id="args" type="text" value=${args} onInput=${set('args')}
           aria-invalid=${errors.args ? 'true' : undefined} aria-describedby=${errors.args ? 'args-error' : undefined} />
         ${errors.args ? html`<p id="args-error" role="alert" class="error">${errors.args}</p>` : null}
-        ${result && result.kind === 'duplicate'
-          ? html`<p role="alert" class="error">${result.message} <a href=${result.href}>Open that run</a></p>`
-          : null}
-        ${result && result.kind === 'error' ? html`<p role="alert" class="error">${result.message}</p>` : null}
-        <button type="submit" disabled=${pending}>${pending ? 'Starting...' : 'Start'}</button>
+        ${outcomeMsg('named')}
+        <button type="submit" disabled=${pending}>${pending && (form || 'named') === 'named' ? 'Starting...' : 'Start'}</button>
       </form>
       <form class="launcher" onSubmit=${this.onCustom} noValidate>
         <label for="custom">Custom command or prompt</label>
@@ -222,7 +206,8 @@ export class Launcher extends Component {
           aria-invalid=${errors.text ? 'true' : undefined} aria-describedby=${errors.text ? 'custom-error' : undefined}></textarea>
         ${errors.text ? html`<p id="custom-error" role="alert" class="error">${errors.text}</p>` : null}
         <p class="note">Runs with --dangerously-skip-permissions: the command or prompt is not gated.</p>
-        <button type="submit" disabled=${pending}>Run in selected repo</button>
+        ${outcomeMsg('custom')}
+        <button type="submit" disabled=${pending}>${pending && form === 'custom' ? 'Starting...' : 'Run in selected repo'}</button>
       </form>
     `;
   }
