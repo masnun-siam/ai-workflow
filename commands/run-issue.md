@@ -246,7 +246,9 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
    only the issue reference. Resolve `<owner>/<repo>` from the git remote.
 
    - Argument is a bare number, or a `github.com/.../issues/<n>` URL → resolve to `<n>`,
-     unchanged from before.
+     unchanged from before. If free text follows that number/URL (`/run-issue 42 <text>`),
+     it is the human's answer to the Ledger's pending gate for `<n>`: re-enter `<n>` and
+     feed the text to that gate; never treat it as a new issue.
    - Anything else (a Sentry link, a file path, a vault note title, or free text) →
      invoke `/intake <stripped argument> --whole`, then invoke `/gh-issue` passing its `type:` and
      brief through exactly as `/gh-issue`'s own step 0 does — substitute directly into
