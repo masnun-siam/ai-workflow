@@ -102,7 +102,7 @@ export function planText(data) {
 
 export function resumeCommand(session) {
   if (!session || !session.session_id) return null;
-  return `cd '${String(session.repo || '').replace(/'/g, "'\\''")}' && claude --resume ${session.session_id}`;
+  return `cd '${String(session.repo || '').replace(/'/g, "'\\''")}' && claude --resume '${String(session.session_id).replace(/'/g, "'\\''")}'`;
 }
 
 async function getJson(url) {
