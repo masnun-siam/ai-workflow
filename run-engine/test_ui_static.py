@@ -390,20 +390,19 @@ out('render: duplicate alert links to run view');
 """
 
 
-def launcher_checks():
+_fixture_dirs: list[str] = []
+
+
+def _launcher_fixture():
     import json
     import subprocess
 
     data = tempfile.mkdtemp()
-    os.environ["CLAUDE_PLUGIN_DATA"] = data
-    import ui_sessions
-
-    def git(*a, cwd):
-        subprocess.run(["git", *a], cwd=cwd, check=True, capture_output=True)
-
     repo = os.path.realpath(tempfile.mkdtemp())
-    git("init", "-q", cwd=repo)
     plain = os.path.realpath(tempfile.mkdtemp())
+    _fixture_dirs.extend([data, repo, plain])
+    os.environ["CLAUDE_PLUGIN_DATA"] = data
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True, capture_output=True)
     with open(os.path.join(data, "checkouts.json"), "w") as f:
         json.dump({"o/r": repo}, f)
 
@@ -424,6 +423,16 @@ def launcher_checks():
         d = r.read()
         c.close()
         return r.status, r, json.loads(d)
+
+    return repo, plain, call
+
+
+def launcher_checks():
+    import json
+    import subprocess
+
+    repo, plain, call = _launcher_fixture()
+    import ui_sessions
 
     s, r, repos = call("GET", "/api/repos")
     assert s == 200 and repos["repos"][0]["slug"] == "o/r", (s, repos)
@@ -470,6 +479,8 @@ if LAUNCHER:
         launcher_checks()
     finally:
         srv.shutdown()
+        for d in _fixture_dirs:
+            shutil.rmtree(d, ignore_errors=True)
         shutil.rmtree(tmp, ignore_errors=True)
     print(f"{passed} checks passed")
     sys.exit(0)
@@ -591,37 +602,13 @@ def launcher_all_checks():
     import json
     import subprocess
 
-    data = tempfile.mkdtemp()
-    os.environ["CLAUDE_PLUGIN_DATA"] = data
+    repo, plain, fcall = _launcher_fixture()
     import ui_runner
     import ui_sessions
 
-    def git(*a, cwd):
-        subprocess.run(["git", *a], cwd=cwd, check=True, capture_output=True)
-
-    repo = os.path.realpath(tempfile.mkdtemp())
-    git("init", "-q", cwd=repo)
-    plain = os.path.realpath(tempfile.mkdtemp())
-    with open(os.path.join(data, "checkouts.json"), "w") as f:
-        json.dump({"o/r": repo}, f)
-
     def call(obj, method="POST", path="/api/sessions"):
-        h = f"127.0.0.1:{port}"
-        c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
-        c.putrequest(method, path, skip_host=True, skip_accept_encoding=True)
-        c.putheader("Host", h)
-        body = json.dumps(obj).encode() if obj is not None else None
-        if body is not None:
-            c.putheader("Origin", f"http://{h}")
-            c.putheader("Content-Type", "application/json")
-            c.putheader("Content-Length", str(len(body)))
-        c.endheaders()
-        if body is not None:
-            c.send(body)
-        r = c.getresponse()
-        d = r.read()
-        c.close()
-        return r.status, json.loads(d)
+        s, _r, d = fcall(method, path, obj)
+        return s, d
 
     # SAFETY: never launch a real claude
     captured = []
@@ -725,6 +712,8 @@ if LAUNCHER_ALL:
         launcher_all_checks()
     finally:
         srv.shutdown()
+        for d in _fixture_dirs:
+            shutil.rmtree(d, ignore_errors=True)
         shutil.rmtree(tmp, ignore_errors=True)
     print(f"{passed} checks passed")
     sys.exit(0)
@@ -735,6 +724,8 @@ if SHELL:
         shell_checks()
     finally:
         srv.shutdown()
+        for d in _fixture_dirs:
+            shutil.rmtree(d, ignore_errors=True)
         shutil.rmtree(tmp, ignore_errors=True)
     print(f"{passed} checks passed")
     sys.exit(0)
