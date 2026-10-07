@@ -43,10 +43,31 @@ if [ "$1" = "auth" ]; then
 fi
 printf '%s\n' "$@" > "$FAKE_DIR/argv"
 pwd > "$FAKE_DIR/pwd"
+echo "$PWD|$*" >> "$FAKE_DIR/calls"
+RESUMING=0
+for a in "$@"; do [ "$a" = "--resume" ] && RESUMING=1; done
 echo "$FAKE_CLAUDE_INIT_ENV" > /dev/null
 INIT='{"type":"system","subtype":"init","session_id":"'"${FAKE_SID:-sess-abc}"'"}'
 RESULT='{"type":"result","subtype":"success","is_error":false,"total_cost_usd":'"${FAKE_COST:-0.0421}"'}'
+BADRES='{"type":"result","subtype":"error_during_execution","is_error":true,"errors":["No conversation found with session ID: sess-abc"]}'
 case "$FAKE_CLAUDE_MODE" in
+  badresume|badresume_freshfail|badresume_freshsleep|resumecrash_afterinit|resumesilent)
+    if [ "$RESUMING" = 1 ]; then
+      while [ -f "$FAKE_DIR/hold" ]; do sleep 0.1; done
+      case "$FAKE_CLAUDE_MODE" in
+        resumecrash_afterinit) printf '%s\n' "$INIT"; exit 1;;
+        resumesilent) exit 1;;
+        *) printf '%s\n' "$BADRES"; exit 1;;
+      esac
+    fi
+    case "$FAKE_CLAUDE_MODE" in
+      badresume_freshfail)
+        printf '%s\n' "$INIT" '{"type":"result","subtype":"error","is_error":true,"total_cost_usd":0.5}'; exit 1;;
+      badresume_freshsleep)
+        printf '%s\n' "$INIT"
+        while :; do sleep 0.2; done;;
+      *) printf '%s\n' "$INIT" "$RESULT"; exit 0;;
+    esac;;
   normal)
     printf '%s\n' "$INIT" '{"type":"assistant","message":"hi"}' "$RESULT"
     echo "some warning" >&2
@@ -608,6 +629,249 @@ def answer_checks():
         reap(*live)
 
 
+# ---- resume fallback from the Ledger (issue #119) ---------------------------
+def fallback_checks():
+    def boom(*_a, **_k):
+        raise AssertionError("fetch_title must not be called")
+
+    srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, (), boom)
+    port = srv.server_address[1]
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    live = []
+    SLUG = "own/repo"
+
+    def calls(fk):
+        p = os.path.join(fk, "calls")
+        if not os.path.exists(p):
+            return []
+        out = []
+        for ln in lines(fk, "calls").splitlines():
+            cwd, _, args = ln.partition("|")
+            out.append((real(cwd), args))
+        return out
+
+    def ledger(d, issue, body=None, raw=None):
+        rd = os.path.join(d, "runs", f"own-repo-issue-{issue}")
+        os.makedirs(rd, exist_ok=True)
+        path = os.path.join(rd, "run.json")
+        with open(path, "wb") as f:
+            f.write(raw if raw is not None else json.dumps(body or {"context": {}}).encode())
+        return path
+
+    def mk(command="/run-issue 42", slug=True, led=True):
+        """Finished first run (session_id sess-abc, cwd_path recorded), calls log cleared."""
+        d, fk, work = setup("normal")
+        with open(os.path.join(d, "checkouts.json"), "w") as f:
+            json.dump({SLUG: work} if slug else {}, f)
+        rec = ui_runner.start(command, SLUG if slug else work)
+        live.append(rec)
+        wait_status(rec["id"], {"done", "failed"})
+        wait_finished(rec["id"])
+        os.remove(os.path.join(fk, "calls"))
+        if led:
+            ledger(d, 42)
+        return rec["id"], d, fk, work
+
+    def go(sid, mode, ans="the answer", sess="sess-new"):
+        os.environ["FAKE_CLAUDE_MODE"] = mode
+        os.environ["FAKE_SID"] = sess
+        ui_runner.resume(sid, ans)
+
+    def end(sid):
+        wait_status(sid, {"done", "failed", "stopped"})
+        wait_finished(sid)
+        return ui_sessions.load(sid)
+
+    def fresh_args(cmd, ans):
+        return " ".join(ui_runner.CLAUDE_ARGS + [f"{cmd} {ans}"])
+
+    def resume_args(ans, sess="sess-abc"):
+        return " ".join(ui_runner.CLAUDE_ARGS + ["--resume", sess, ans])
+
+    def terminal(r, fk, n_calls=1, kept="the answer"):
+        assert r["status"] == "failed" and r.get("terminal_handoff") is True, r
+        assert r.get("pending_answer") == kept, r
+        assert len(calls(fk)) == n_calls, calls(fk)
+
+    try:
+        # -- through the answer API, exposed via GET
+        sid, d, fk, work = mk()
+        rid = {"id": "q-1", "status": "pending", "questions": [
+            {"header": "G", "question": "Go?", "multiSelect": False,
+             "options": [{"label": "Yes", "description": "y"}, {"label": "No", "description": "n"}]}]}
+        ui_sessions.set_pending(sid, rid)
+        os.environ["FAKE_CLAUDE_MODE"], os.environ["FAKE_SID"] = "badresume", "sess-new"
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
+        c.request("POST", f"/api/sessions/{sid}/answer",
+                  body=json.dumps({"round_id": "q-1", "answers": {"0": {"labels": ["Yes"]}}}).encode(),
+                  headers={"Content-Type": "application/json"})
+        resp = c.getresponse()
+        resp.read()
+        c.close()
+        assert resp.status == 200, resp.status
+        r = end(sid)
+        ans = 'Answer to q-1: {"0":{"labels":["Yes"]}}'
+        cl = calls(fk)
+        assert len(cl) == 2, cl
+        assert cl[0] == (real(work), resume_args(ans)), cl
+        assert cl[1] == (real(work), fresh_args("/run-issue 42", ans)), cl
+        assert r["status"] == "done" and r["resumed_fresh"] is True and "resumed fresh" in r["note"], r
+        assert r["session_id"] == "sess-new" and r.get("terminal_handoff") in (None, False), r
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
+        c.request("GET", f"/api/sessions/{sid}")
+        pub = json.loads(c.getresponse().read())
+        c.close()
+        assert pub["resumed_fresh"] is True and "resumed fresh" in pub["note"], pub
+        assert "terminal_handoff" in pub and "pending_answer" in pub, pub
+        ok("run-issue answer with dead resume: fresh spawn, resumed_fresh, note, new session_id, in GET")
+
+        # -- successful resume: no fallback
+        sid, d, fk, work = mk()
+        go(sid, "normal")
+        r = end(sid)
+        assert [a for _, a in calls(fk)] == [resume_args("the answer")], calls(fk)
+        assert r["status"] == "done" and not r.get("resumed_fresh") and not r.get("terminal_handoff"), r
+        assert not r.get("pending_answer"), r
+        ok("successful resume: one spawn, no fallback flags, pending_answer cleared")
+
+        # -- non-run-issue commands: terminal handoff
+        for cmd in ("/prd x", "/intake x", "/dump x", "/worklog", "/gh-issue 3", "/pr-grind 12"):
+            sid, d, fk, work = mk(cmd)
+            go(sid, "badresume")
+            r = end(sid)
+            terminal(r, fk)
+            assert "No conversation found" in (r["error"] or ""), r
+        ok("non-run-issue failed resume: failed + terminal_handoff, one spawn, answer kept, claude error")
+
+        # -- no run.json
+        sid, d, fk, work = mk(led=False)
+        go(sid, "badresume")
+        terminal(end(sid), fk)
+        ok("run-issue without Ledger: terminal handoff, no second spawn")
+
+        # -- command parsing
+        for cmd, fresh in (("/run-issue --lean 42", True), ("/run-issue #42", True),
+                           ("/run-issue", False), ("/run-issuex 42", False)):
+            sid, d, fk, work = mk(cmd)
+            go(sid, "badresume")
+            r = end(sid)
+            if fresh:
+                assert r["status"] == "done" and r["resumed_fresh"] is True, (cmd, r)
+                assert calls(fk)[1][1] == fresh_args("/run-issue 42", "the answer"), (cmd, calls(fk))
+            else:
+                terminal(r, fk)
+        ok("issue parsing: --lean/# forms fall back as '/run-issue 42'; no-number/-issuex do not")
+
+        # -- init then non-zero exit: existing failed path
+        sid, d, fk, work = mk()
+        go(sid, "resumecrash_afterinit")
+        r = end(sid)
+        assert r["status"] == "failed" and len(calls(fk)) == 1 and not r.get("resumed_fresh"), r
+        ok("resume emitted init then exited non-zero: failed, no fallback")
+
+        # -- zero events non-zero exit
+        sid, d, fk, work = mk()
+        go(sid, "resumesilent")
+        r = end(sid)
+        assert r["status"] == "failed" and len(calls(fk)) == 1 and not r.get("resumed_fresh"), r
+        assert r.get("pending_answer") == "the answer", r
+        ok("resume exit non-zero with zero events: failed, no fallback, answer kept")
+
+        # -- fallback spawn also fails
+        sid, d, fk, work = mk()
+        go(sid, "badresume_freshfail")
+        r = end(sid)
+        assert r["status"] == "failed" and r["resumed_fresh"] is True, r
+        assert r.get("pending_answer") == "the answer" and len(calls(fk)) == 2, (r, calls(fk))
+        ok("fallback also fails: failed, resumed_fresh, answer kept, exactly two spawns")
+
+        # -- changed cwd A -> B
+        sid, d, fk, work = mk()
+        B = tempfile.mkdtemp()
+        with open(os.path.join(d, "checkouts.json"), "w") as f:
+            json.dump({SLUG: B}, f)
+        go(sid, "badresume")
+        r = end(sid)
+        cl = calls(fk)
+        assert r["status"] == "done" and r["resumed_fresh"] is True, r
+        assert cl[-1][0] == real(B) and work in r["note"] and B in r["note"], (cl, r)
+        ok("changed cwd: fallback runs in new checkout, note names both")
+
+        # -- cwd gone + Ledger context.repo
+        sid, d, fk, work = mk()
+        C = tempfile.mkdtemp()
+        ledger(d, 42, {"context": {"repo": C}})
+        os.rmdir(work)
+        go(sid, "badresume")
+        r = end(sid)
+        assert r["status"] == "done" and r["resumed_fresh"] is True and r["note"], r
+        assert len(calls(fk)) == 1 and calls(fk)[0][0] == real(C), calls(fk)
+        ok("cwd gone + Ledger context.repo: fresh spawn there with note")
+
+        # -- cwd gone, no Ledger
+        sid, d, fk, work = mk(led=False)
+        os.rmdir(work)
+        go(sid, "badresume")
+        terminal(end(sid), fk, n_calls=0)
+        ok("cwd gone + no Ledger: failed + terminal_handoff, no spawn")
+
+        # -- corrupt run.json
+        sid, d, fk, work = mk()
+        ledger(d, 42, raw=b"{not json")
+        go(sid, "badresume")
+        r = end(sid)
+        assert r["status"] == "done" and r["resumed_fresh"] is True and len(calls(fk)) == 2, r
+        ok("corrupt run.json: fallback still spawns, no SystemExit")
+
+        # -- run.json untouched
+        sid, d, fk, work = mk()
+        path = ledger(d, 42, {"context": {"a": 1}, "k": [1, 2]})
+        before = open(path, "rb").read()
+        go(sid, "badresume")
+        end(sid)
+        assert open(path, "rb").read() == before
+        ok("run.json bytes unchanged after fallback")
+
+        # -- stop during fallback
+        sid, d, fk, work = mk()
+        old_pid = ui_sessions.load(sid)["pid"]
+        go(sid, "badresume_freshsleep")
+        wait_for(lambda: len(calls(fk)) == 2)
+        proc = wait_for(lambda: (p := ui_runner._procs.get(sid)) and p.args[-1].startswith("/run-issue") and p)
+        assert proc.pid != old_pid
+        ui_runner.stop(sid)
+        r = end(sid)
+        assert r["status"] == "stopped" and len(calls(fk)) == 2 and proc.poll() is not None, r
+        ok("stop during fallback kills the new process: stopped, no further spawn")
+
+        # -- stop during failing resume
+        sid, d, fk, work = mk()
+        open(os.path.join(fk, "hold"), "w").close()
+        go(sid, "badresume")
+        wait_for(lambda: len(calls(fk)) == 1)
+        ui_runner.stop(sid)
+        os.remove(os.path.join(fk, "hold"))
+        r = end(sid)
+        time.sleep(0.5)
+        assert r["status"] == "stopped" and len(calls(fk)) == 1 and not r.get("resumed_fresh"), r
+        ok("stop during failing resume: stopped, no fallback")
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        reap(*live)
+        for p in list(ui_runner._procs.values()):
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+
+
+if "--fallback" in sys.argv:
+    fallback_checks()
+    print(f"\n{passed} checks passed")
+    sys.exit(0)
+
+
 if "--answer" in sys.argv:
     answer_checks()
     print(f"\n{passed} checks passed")
@@ -909,5 +1173,6 @@ finally:
     reap(*recs)
 
 answer_checks()
+fallback_checks()
 
 print(f"\n{passed} checks passed")
