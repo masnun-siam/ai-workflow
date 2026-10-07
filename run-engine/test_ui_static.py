@@ -62,6 +62,7 @@ port = srv.server_address[1]
 tmp = tempfile.mkdtemp()
 real_static = getattr(ui_server, "STATIC_DIR", None)
 SHELL = sys.argv[1:3] == ["--view", "shell"]
+BOARD = sys.argv[1:3] == ["--view", "board"]
 
 NODE_JS = r"""
 const { parseRoute, waitingInfo, headerBadge, sessionList, poll } = await import(process.env.APP_URL);
@@ -207,7 +208,7 @@ def shell_checks():
     css = read(os.path.join(STATIC, "app.css")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
     assert specs, "no imports found"
-    assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs"}, specs
+    assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./board.js"}, specs
     assert not re.search(r"https?://", js), "no absolute URLs"
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
@@ -244,6 +245,196 @@ def shell_checks():
     for line in p.stdout.splitlines():
         if line.startswith("ok "):
             ok(line[3:])
+
+
+BOARD_JS = r"""
+const B = await import(process.env.BOARD_URL);
+const { parseRoute } = await import(process.env.APP_URL);
+const assert = (await import('node:assert')).strict;
+const out = (n) => console.log('ok ' + n);
+const { cardTitle, runHref, matchSession, cardChips, formatCost, filterColumns, repoOptions, boardChanged } = B;
+const card = { owner: 'acme', repo: 'web', issue: 42 };
+const S = (owner, repo, issue, status, extra = {}) => ({ id: owner + repo + issue, link: { owner, repo, issue }, status, ...extra });
+
+const a = S('acme', 'web', 42, 'running'), b = S('acme', 'web', '42', 'stopped');
+assert.equal(matchSession(card, [a, b]), a);
+assert.equal(matchSession(card, [S('acme', 'web2', 42, 'running'), S('acme', 'web', 4, 'running')]), null);
+for (const bad of [null, undefined, [], [{ id: 1, link: null }], [{ id: 1, link: 'x' }], [null], [S('acme', 'web', 43, 'running')]])
+  assert.equal(matchSession(card, bad), null);
+out('matchSession join and corners');
+
+assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, 'running')), ['running']);
+assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, 'waiting')), ['waiting']);
+assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, 'stopped')), ['stopped']);
+assert.deepEqual(cardChips({ ...card, escalated: true }, 'dev', null), ['waiting']);
+assert.deepEqual(cardChips(card, 'done', S('a', 'b', 1, 'running')), ['merged']);
+assert.deepEqual(cardChips({ ...card, escalated: true }, 'done', null), ['merged']);
+assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, 'running', { resumed_fresh: true })), ['running', 'resumed fresh']);
+assert.deepEqual(cardChips(card, 'dev', null), []);
+assert.deepEqual(cardChips(card, 'done', null), ['merged']);
+for (const st of ['done', 'failed', 'starting', undefined]) assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, st)), []);
+assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, 'done', { resumed_fresh: true })), ['resumed fresh']);
+out('cardChips');
+
+assert.equal(formatCost(0.4213), '$0.42'); assert.equal(formatCost(0), '$0.00');
+assert.equal(formatCost(null), ''); assert.equal(formatCost(undefined), '');
+out('formatCost');
+
+assert.equal(runHref(card), '#/run/acme/web/42');
+assert.deepEqual({ ...parseRoute(runHref(card)).params }, { owner: 'acme', repo: 'web', n: 42 });
+const odd = { owner: 'a b', repo: 'r', issue: 1 };
+assert.equal(runHref(odd), '#/run/a%20b/r/1');
+assert.equal(parseRoute(runHref(odd)).params.owner, 'a b');
+out('runHref');
+
+const cols = [{ key: 'dev', cards: [card, { owner: 'z', repo: 'q', issue: 1 }] }, { key: 'done', cards: [] }];
+const f = filterColumns(cols, 'acme/web');
+assert.deepEqual(f.map((c) => c.key), ['dev', 'done']);
+assert.deepEqual(f[0].cards, [card]); assert.deepEqual(f[1].cards, []);
+assert.deepEqual(filterColumns(cols, ''), cols);
+assert.deepEqual(filterColumns(cols, 'gone/repo').map((c) => c.cards.length), [0, 0]);
+assert.deepEqual(repoOptions(cols, ''), ['acme/web', 'z/q']);
+assert.ok(repoOptions(cols, 'gone/repo').includes('gone/repo'));
+out('filterColumns, repoOptions');
+
+for (const t of ['', null, undefined]) assert.equal(cardTitle({ issue: 7, title: t }), '#7');
+assert.equal(cardTitle({ issue: 7 }), '#7'); assert.equal(cardTitle({ issue: 7, title: 'Hi' }), 'Hi');
+out('cardTitle');
+
+const d = { columns: [] };
+assert.equal(boardChanged(JSON.stringify(d), d), false);
+assert.equal(boardChanged(JSON.stringify(d), { columns: [1] }), true);
+out('boardChanged');
+"""
+
+
+def mkrun(base, name, ledger):
+    import json
+
+    d = os.path.join(base, "runs", name)
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "run.json"), "w") as f:
+        json.dump(ledger, f)
+
+
+def board_checks():
+    import json
+    import subprocess
+
+    import ui_board
+
+    js_path = os.path.join(STATIC, "board.js")
+    assert os.path.isfile(js_path), "ui_static/board.js missing"
+    s, r, body = req(port, "/static/board.js")
+    assert s == 200 and r.getheader("Content-Type", "").startswith("text/javascript"), s
+    assert body == read(js_path)
+    ok("board.js served")
+
+    data = os.path.join(tmp, "plugindata")
+    old_env, old_fetch = os.environ.get("CLAUDE_PLUGIN_DATA"), srv.fetch_title
+    os.environ["CLAUDE_PLUGIN_DATA"] = data
+    srv.fetch_title = lambda o, r_, i: "A title"
+    try:
+        def board():
+            s, _, b = req(port, "/board.json")
+            assert s == 200
+            return json.loads(b)
+
+        def where(bd, issue):
+            return [c["key"] for c in bd["columns"] if any(x["issue"] == issue for x in c["cards"])]
+
+        bd = board()
+        assert [c["key"] for c in bd["columns"]] == ui_board.STATIONS
+        assert all(c["cards"] == [] for c in bd["columns"])
+        ok("empty board has every column")
+
+        led = {"issue": 42, "stations": ["researcher", "planner", "sdet", "dev"], "currentIndex": 1,
+               "bounceCounts": {}, "status": "in_progress", "trace": [], "specialists": [],
+               "classification": None, "context": {"pr": "https://github.com/acme/web/pull/9"}}
+        mkrun(data, "acme-web-issue-42", led)
+        bd = board()
+        assert where(bd, 42) == ["planner"], where(bd, 42)
+        c = next(x for c in bd["columns"] for x in c["cards"])
+        assert (c["owner"], c["repo"], c["issue"]) == ("acme", "web", 42)
+        led["currentIndex"] = 3
+        mkrun(data, "acme-web-issue-42", led)
+        assert where(board(), 42) == ["dev"]
+        ok("card moves between columns without caching")
+
+        led["status"] = "done"
+        mkrun(data, "acme-web-issue-42", led)
+        assert where(board(), 42) == ["done"]
+        led["status"] = "escalated"
+        mkrun(data, "acme-web-issue-42", led)
+        bd = board()
+        assert where(bd, 42) == ["dev"]
+        assert next(x for c in bd["columns"] for x in c["cards"])["escalated"] is True
+        ok("done and escalated placement")
+
+        srv.fetch_title = lambda o, r_, i: ""
+        mkrun(data, "acme-web-issue-43", dict(led, issue=43, status="in_progress"))
+        bd = board()
+        assert next(x for c in bd["columns"] for x in c["cards"] if x["issue"] == 43)["title"] == ""
+        ok("empty title passes through")
+    finally:
+        srv.fetch_title = old_fetch
+        if old_env is None:
+            os.environ.pop("CLAUDE_PLUGIN_DATA", None)
+        else:
+            os.environ["CLAUDE_PLUGIN_DATA"] = old_env
+
+    js = read(js_path).decode()
+    css = read(os.path.join(STATIC, "app.css")).decode()
+    app = read(os.path.join(STATIC, "app.js")).decode()
+    specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js"}, specs
+    pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
+    exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
+    names = {x.split(" as ")[-1].strip() for x in exports.split(",")}
+    for m in re.finditer(r"import\s*\{([^}]*)\}\s*from\s*['\"]\./vendor/preact\.mjs", js):
+        for n in m.group(1).split(","):
+            assert n.strip().split(" as ")[0].strip() in names, n
+    assert not re.search(r"https?://", js) and "console.log" not in js and "debugger" not in js
+    ok("board.js imports and hygiene")
+
+    assert re.search(r"poll\(\s*['\"]/board\.json['\"]\s*,\s*3000", js) and "fetch(" not in js
+    assert re.search(r"ok\s*\)\s*return|!\s*\w+\.ok", js), "onResult must ignore ok:false"
+    ok("board.js polls /board.json every 3s via poll")
+
+    assert re.search(r"import\s*\{[^}]*\bBoard\b[^}]*\}\s*from\s*['\"]\./board\.js['\"]", app)
+    assert "Runs will appear here." not in app
+    ok("app.js renders Board")
+
+    assert "display: grid" in css or "display:grid" in css
+    assert re.search(r"minmax\(\s*250px|min-width\s*:\s*250px", css)
+    assert re.search(r"scroll-snap-type\s*:\s*x", css) and "scroll-snap-align" in css
+    assert re.search(r"overflow-x\s*:\s*(auto|scroll)", css)
+    for m in re.finditer(r"(?<![\w-])(?:min-)?width\s*:\s*(\d+)px", css.replace("250px", "0px")):
+        assert int(m.group(1)) <= 390, m.group(0)
+    assert not re.search(r"@media[^{]*min-width", css)
+    ok("board css")
+
+    if not shutil.which("node"):
+        print("note: node not found, skipping board logic checks")
+        return
+    env = dict(os.environ, APP_URL=pathlib.Path(os.path.join(STATIC, "app.js")).as_uri(),
+               BOARD_URL=pathlib.Path(js_path).as_uri())
+    p = subprocess.run(["node", "--input-type=module", "-e", BOARD_JS], env=env,
+                       capture_output=True, text=True, timeout=60)
+    assert p.returncode == 0, p.stderr[-1500:]
+    for line in p.stdout.splitlines():
+        if line.startswith("ok "):
+            ok(line[3:])
+
+
+if BOARD:
+    try:
+        board_checks()
+    finally:
+        srv.shutdown()
+        shutil.rmtree(tmp, ignore_errors=True)
+    print(f"{passed} checks passed")
+    sys.exit(0)
 
 
 if SHELL:
