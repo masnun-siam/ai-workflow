@@ -50,33 +50,6 @@ def _serve_static(handler, rel: str) -> None:
     handler._send(200, ctype, body, {"Cache-Control": "no-cache"})
 
 
-
-STATIC_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ui_static")
-
-
-def _serve_static(handler, rel: str) -> None:
-    root = os.path.realpath(STATIC_DIR)
-    try:
-        # unquote once only: %252e stays literal; realpath containment (not string checks) blocks escapes
-        full = os.path.realpath(os.path.join(root, unquote(rel).lstrip("/")))
-        if os.path.commonpath([root, full]) != root or not os.path.isfile(full):
-            raise FileNotFoundError
-        with open(full, "rb") as f:
-            body = f.read()
-    except (ValueError, FileNotFoundError, IsADirectoryError):
-        handler._send(404, "text/plain; charset=utf-8", b"not found")
-        return
-    except OSError as e:  # e.g. PermissionError: broken install, not a missing file
-        print(f"ui_server: cannot read {rel!r}: {e}", file=sys.stderr)
-        handler._send(500, "text/plain; charset=utf-8", b"internal error")
-        return
-    ext = os.path.splitext(full)[1].lower()
-    ctype = "text/javascript" if ext in (".js", ".mjs") else mimetypes.guess_type(full)[0] or "application/octet-stream"
-    if ctype.startswith("text/"):
-        ctype += "; charset=utf-8"
-    handler._send(200, ctype, body, {"Cache-Control": "no-cache"})
-
-
 def _guard(handler) -> bool:
     host = (handler.headers.get("Host") or "").strip().lower()
     if host not in handler.server.allowed_hosts:
