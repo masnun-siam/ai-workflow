@@ -418,4 +418,27 @@ assert a.allow_host == ["a", "b"] and a.port == 8420
 ok("register: --allow-host append, --port default 8420")
 runs_section()
 
+# A cold page load opens many connections at once; none may be reset by a tiny listen backlog.
+assert ui_server._Server.request_queue_size >= 64, ui_server._Server.request_queue_size
+sv, pt = start()
+good = f"127.0.0.1:{pt}"
+failures = []
+
+
+def burst():
+    try:
+        assert req(pt, host=good)[0] == 200
+    except Exception as exc:  # collected so the main thread can fail with the cause
+        failures.append(exc)
+
+
+threads = [threading.Thread(target=burst) for _ in range(60)]
+for t in threads:
+    t.start()
+for t in threads:
+    t.join()
+sv.shutdown()
+assert not failures, failures[:2]
+ok("burst of 60 simultaneous connections all served (listen backlog)")
+
 print(f"{passed} checks passed")

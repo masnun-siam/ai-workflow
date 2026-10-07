@@ -171,7 +171,8 @@ export class Launcher extends Component {
       : r && r.kind === 'error' ? html`<p role="alert" class="error">${r.message}</p>` : null; };
     const repoMsg = errors.repo || (result && result.kind === 'repo' ? result.message : null);
     return html`
-      <form class="launcher" onSubmit=${this.onSubmit} noValidate>
+      <div class="launch">
+      <form class="launcher panel" onSubmit=${this.onSubmit} noValidate>
         <h1>New run</h1>
         ${repos.length
           ? html`<label for="repo-select">Repo</label>
@@ -198,17 +199,24 @@ export class Launcher extends Component {
           aria-invalid=${errors.args ? 'true' : undefined} aria-describedby=${errors.args ? 'args-error' : undefined} />
         ${errors.args ? html`<p id="args-error" role="alert" class="error">${errors.args}</p>` : null}
         ${outcomeMsg('named')}
-        <button type="submit" disabled=${pending}>${pending && (form || 'named') === 'named' ? 'Starting...' : 'Start'}</button>
+        <div class="launch-actions">
+          <button type="submit" disabled=${pending}>${pending && (form || 'named') === 'named' ? 'Starting...' : 'Start'}</button>
+          <span class="note">Runs headless in the chosen checkout</span>
+        </div>
       </form>
-      <form class="launcher" onSubmit=${this.onCustom} noValidate>
+      <aside class="launch-side">
+      <form class="launcher panel" onSubmit=${this.onCustom} noValidate>
+        <h2>Custom command</h2>
         <label for="custom">Custom command or prompt</label>
         <textarea id="custom" placeholder="/pr-fix-comments 42" value=${text} onInput=${set('text')}
           aria-invalid=${errors.text ? 'true' : undefined} aria-describedby=${errors.text ? 'custom-error' : undefined}></textarea>
         ${errors.text ? html`<p id="custom-error" role="alert" class="error">${errors.text}</p>` : null}
-        <p class="note">Runs with --dangerously-skip-permissions: the command or prompt is not gated.</p>
+        <p class="note danger">Runs with --dangerously-skip-permissions: the command or prompt is not gated.</p>
         ${outcomeMsg('custom')}
         <button type="submit" disabled=${pending}>${pending && form === 'custom' ? 'Starting...' : 'Run in selected repo'}</button>
       </form>
+      </aside>
+      </div>
     `;
   }
 }

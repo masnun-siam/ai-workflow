@@ -369,6 +369,8 @@ _TITLE_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="title")
 class _Server(http.server.ThreadingHTTPServer):
     # macOS lets a 127.0.0.1 bind succeed while another process holds 0.0.0.0:<port> when reuse is on
     allow_reuse_address = False
+    # A cold page load fires a dozen module/font requests at once; the default backlog of 5 resets some of them.
+    request_queue_size = 128
 
     def __init__(self, address, handler, allowed_hosts, fetch_title):
         super().__init__(address, handler)
