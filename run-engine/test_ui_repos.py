@@ -106,9 +106,9 @@ def req(path, method="GET", body=None, host=HOST, origin=None, headers=None):
 calls = []
 
 
-def fake_start(command_text, cwd, link=None):
+def fake_start(command_text, cwd, link=None, claude_cmd=None):
     calls.append((command_text, cwd, link))
-    return ui_sessions.create(command_text, cwd, link)
+    return ui_sessions.create(command_text, cwd, link, claude_cmd=claude_cmd)
 
 
 def post(obj, raw=None, **kw):
@@ -303,7 +303,7 @@ try:
     reset_sessions()
     calls.clear()
 
-    def slow_start(command_text, cwd, link=None):
+    def slow_start(command_text, cwd, link=None, claude_cmd=None):
         time.sleep(0.3)
         return ui_sessions.create(command_text, cwd, link)
 

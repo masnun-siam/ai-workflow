@@ -23,6 +23,7 @@ import ci
 import review
 import shared
 import ui_sessions
+import ui_settings
 from dispatch import read_checkouts
 from shared import data_dir, ledger_path, run_dir_for, warn
 import ui_events
@@ -59,13 +60,18 @@ def _fail(sid: str, msg: str):
     raise RunnerError(msg)
 
 
-def _preflight(sid: str) -> str:
-    exe = shutil.which("claude")
-    if exe is None:
-        _fail(sid, "claude CLI not found on PATH")
-    login_msg = "claude CLI is not logged in, run `claude auth login`"
+def _preflight(sid: str) -> list:
+    """argv prefix of the session's bound claude command, after checking it is logged in."""
+    cmd = (ui_sessions.load(sid) or {}).get("claude_cmd") or ui_settings.DEFAULT_CMD
     try:
-        p = subprocess.run([exe, "auth", "status", "--json"], capture_output=True,
+        exe = ui_settings.argv(cmd)
+    except ValueError as e:
+        _fail(sid, f"claude command {cmd!r} unusable: {e}" if cmd != ui_settings.DEFAULT_CMD
+              else "claude CLI not found on PATH")
+    login_msg = (f"claude CLI is not logged in, run `{cmd} auth login`"
+                 if cmd != ui_settings.DEFAULT_CMD else "claude CLI is not logged in, run `claude auth login`")
+    try:
+        p = subprocess.run([*exe, "auth", "status", "--json"], capture_output=True,
                            text=True, timeout=30)
         status = json.loads(p.stdout)
     except (subprocess.TimeoutExpired, OSError, ValueError) as e:
@@ -112,7 +118,7 @@ def _spawn(sid: str, argv: list, path: str, answer=None, resuming=False, *, env_
 
 
 def start(command_text, cwd, link=None, *, extra_args=(), env_extra=None, pass_fds=(),
-          gate_questions=False) -> dict:
+          gate_questions=False, claude_cmd=None) -> dict:
     if not isinstance(command_text, str) or not command_text.strip():
         raise ValueError("command_text must be a non-empty string")
     if command_text.startswith("-"):
@@ -121,10 +127,10 @@ def start(command_text, cwd, link=None, *, extra_args=(), env_extra=None, pass_f
     if not isinstance(path, str) or not os.path.isdir(path):
         raise ValueError(f"cwd is not a directory or known checkout slug: {cwd!r}")
 
-    sid = ui_sessions.create(command_text, cwd, link)["id"]
+    sid = ui_sessions.create(command_text, cwd, link, claude_cmd=claude_cmd or ui_settings.default_cmd())["id"]
     exe = _preflight(sid)
     gate = ["--append-system-prompt", HEADLESS_PROMPT] if gate_questions else []
-    return _spawn(sid, [exe, *CLAUDE_ARGS, *gate, *extra_args, command_text], path, cwd_path=path,
+    return _spawn(sid, [*exe, *CLAUDE_ARGS, *gate, *extra_args, command_text], path, cwd_path=path,
                   env_extra=env_extra, pass_fds=pass_fds)
 
 
@@ -143,7 +149,7 @@ def resume(sid: str, answer_text) -> dict:
     if not isinstance(path, str) or not os.path.isdir(path):
         return _fallback(sid, answer_text, f"cwd is not a directory: {repo!r}")
     exe = _preflight(sid)
-    return _spawn(sid, [exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT,
+    return _spawn(sid, [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT,
                   "--resume", rec["session_id"], answer_text], path,
                   answer=answer_text, ended_at=None, error=None, pending_answer=answer_text,
                   resumed_fresh=None, note=None, terminal_handoff=None)
@@ -182,7 +188,7 @@ def _fallback(sid: str, answer, reason: str) -> dict:
                 if old and old != path:
                     note += f" (working directory changed from {old} to {path})"
                 exe = _preflight(sid)
-                return _spawn(sid, [exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, f"/run-issue {key[1]}" + (f" {answer}" if answer else "")],
+                return _spawn(sid, [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, f"/run-issue {key[1]}" + (f" {answer}" if answer else "")],
                               path, cwd_path=path, ended_at=None, error=None, resumed_fresh=True, note=note,
                               terminal_handoff=None, pending_answer=answer)
     ui_sessions.update(sid, status="failed", ended_at=_now(), pending_question=None,
@@ -373,7 +379,7 @@ def resume_stopped(sid: str) -> dict:
     if not isinstance(path, str) or not os.path.isdir(path):
         return _fallback(sid, None, f"cwd is not a directory: {repo!r}")
     exe = _preflight(sid)
-    return _spawn(sid, [exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT,
+    return _spawn(sid, [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT,
                   "--resume", rec["session_id"], CONTINUE_PROMPT], path,
                   resuming=True, cwd_path=path, ended_at=None, error=None, pending_question=None,
                   resumed_fresh=None, note=None, terminal_handoff=None, pending_answer=None)
@@ -538,7 +544,8 @@ def prgrind_tick(path: str, now=None) -> str:
         _set_header(path, "next-poll", _iso(now + timedelta(seconds=PRGRIND_HEARTBEAT)))
         try:
             start(cmd, cwd, link=pr_url, extra_args=["--append-system-prompt", REENTRY_PROMPT],
-                  env_extra={"AIW_HEADLESS": "1"}, pass_fds=[lock.fileno()])
+                  env_extra={"AIW_HEADLESS": "1"}, pass_fds=[lock.fileno()],
+                  claude_cmd=next((r["claude_cmd"] for r in recs if r.get("claude_cmd")), None))
         except (RunnerError, ValueError) as e:
             warn(f"pr-grind tick: could not start round for {thread}: {e}")
             return "error"

@@ -22,6 +22,7 @@ import ui_events
 import ui_repos
 import ui_runner
 import ui_sessions
+import ui_settings
 from shared import die
 from ui_board import build_board, fetch_title, load_projects, load_run, memoize_title_fetcher, scan_records
 
@@ -126,6 +127,7 @@ def _public(rec: dict) -> dict:
         "note": rec.get("note"),
         "terminal_handoff": rec.get("terminal_handoff"),
         "pending_answer": rec.get("pending_answer"),
+        "claude_cmd": rec.get("claude_cmd"),
         "repo_path": p,
         "resume_command": f"cd {shlex.quote(p)} && claude --resume {shlex.quote(sid)}" if p and sid else None,
     }
@@ -159,6 +161,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(200, "application/json; charset=utf-8", json.dumps(board).encode("utf-8"))
         elif path == "/api/repos":
             self._json(200, {"repos": ui_repos.list_repos()})
+        elif path == "/api/settings":
+            self._json(200, ui_settings.load())
         elif path == "/api/sessions":
             body = {"sessions": [_public(r) for r in ui_sessions.list_sessions()]}
             self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
@@ -227,6 +231,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         parts = urlsplit(self.path).path.split("/")
         if parts == ["", "api", "sessions"]:
             self._start()
+        elif parts == ["", "api", "settings", "test"]:
+            body = self._read_body()
+            if body is not None:
+                cmd = body.get("cmd")
+                self._json(200, ui_settings.check_login(cmd) if isinstance(cmd, str) and cmd.strip()
+                           else {"ok": False, "message": "cmd required"})
         elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] == "answer":
             self._answer(parts[3])
         elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] in ("stop", "resume"):
@@ -265,23 +275,44 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         self._json(200, _public(rec))
 
-    def _start(self) -> None:
+    def _read_body(self):
+        """Parsed JSON object body, or None after sending the 4xx."""
         try:
             n = int(self.headers.get("Content-Length") or "")
         except ValueError:
             n = -1
         if n < 0:
             self._json(400, {"error": "bad Content-Length"})
-            return
+            return None
         if n > MAX_BODY:
             self._json(413, {"error": "body too large"})
-            return
+            return None
         try:
             body = json.loads(self.rfile.read(n))
         except ValueError:
             body = None
         if not isinstance(body, dict):
             self._json(400, {"error": "body must be a JSON object"})
+            return None
+        return body
+
+    def do_PUT(self):
+        if not _guard(self):
+            return
+        if urlsplit(self.path).path != "/api/settings":
+            self._method_not_allowed(guarded=True)
+            return
+        body = self._read_body()
+        if body is None:
+            return
+        try:
+            self._json(200, ui_settings.save(body))
+        except ValueError as e:
+            self._json(400, {"error": str(e)})
+
+    def _start(self) -> None:
+        body = self._read_body()
+        if body is None:
             return
         status, payload = ui_repos.start_session(body)
         self._json(status, _public(payload) if status == 201 else payload)
@@ -359,7 +390,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(405, "text/plain; charset=utf-8", b"method not allowed", {"Allow": "GET"})
 
     # every verb needs a do_* or stdlib answers 501 before _guard runs
-    do_PUT = do_DELETE = do_PATCH = do_HEAD = do_OPTIONS = do_TRACE = do_CONNECT = _method_not_allowed
+    do_DELETE = do_PATCH = do_HEAD = do_OPTIONS = do_TRACE = do_CONNECT = _method_not_allowed
 
 
 # Bounded so a cold /board.json can't fan out unbounded `gh` processes.

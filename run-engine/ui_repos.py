@@ -16,6 +16,7 @@ import dispatch
 import ui_board
 import ui_runner
 import ui_sessions
+import ui_settings
 
 NAMED = ("run-issue", "pr-grind", "prd", "intake", "dump", "worklog", "gh-issue")
 MAX_PROMPT_CHARS = 32000
@@ -141,6 +142,12 @@ def start_session(body: dict):
         cwd, slug = resolve_repo(repo)
     except ValueError as exc:
         return 400, {"error": str(exc)}
+    claude_cmd = body.get("claude_cmd")  # a saved label; raw command strings are never accepted
+    if claude_cmd is not None:
+        saved = {c["label"]: c["cmd"] for c in ui_settings.load()["commands"]}
+        if not isinstance(claude_cmd, str) or claude_cmd not in saved:
+            return 400, {"error": "claude_cmd must be a label saved in Settings"}
+        claude_cmd = saved[claude_cmd]
     fam = family(text)
     if issue is None and fam == "run-issue":
         issue = issue_from_args((text.split(None, 1) + [""])[1])
@@ -159,7 +166,7 @@ def start_session(body: dict):
                     "href": f"/api/sessions/{dup['id']}",
                 }
         try:
-            return 201, ui_runner.start(text, cwd, link)
+            return 201, ui_runner.start(text, cwd, link, claude_cmd=claude_cmd)
         except ValueError as exc:
             return 400, {"error": str(exc)}
         except ui_runner.RunnerError as exc:

@@ -70,7 +70,7 @@ def _read_meta(path: str):
     return data
 
 
-def create(command: str, repo: str, link=None) -> dict:
+def create(command: str, repo: str, link=None, claude_cmd=None) -> dict:
     os.makedirs(sessions_dir(), exist_ok=True)
     while True:
         now = datetime.now(timezone.utc)
@@ -85,6 +85,7 @@ def create(command: str, repo: str, link=None) -> dict:
         "id": sid, "command": command, "repo": repo, "link": link,
         "session_id": None, "pid": None, "status": "starting", "cost": None,
         "started_at": now.isoformat(), "ended_at": None, "pending_question": None,
+        "claude_cmd": claude_cmd,
     }
     _atomic_write_json(os.path.join(session_dir(sid), "meta.json"), record)
     return record
