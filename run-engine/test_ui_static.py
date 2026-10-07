@@ -65,6 +65,7 @@ SHELL = sys.argv[1:3] == ["--view", "shell"]
 LAUNCHER = sys.argv[1:3] == ["--view", "launcher"]
 LAUNCHER_ALL = sys.argv[1:3] == ["--view", "launcher-all"]
 BOARD = sys.argv[1:3] == ["--view", "board"]
+ANSWER = sys.argv[1:3] == ["--view", "answer"]
 HISTORY = sys.argv[1:3] == ["--view", "history"]
 
 NODE_JS = r"""
@@ -189,6 +190,157 @@ assert.equal(calls.length, n);
 out('poll stop clears timer and listener');
 """
 
+ANSWER_NODE_JS = r"""
+const A = await import(process.env.ANSWER_URL);
+const assert = (await import('node:assert')).strict;
+const out = (n) => console.log('ok ' + n);
+const { viewMode, displayLabel, initialAnswers, toggle, buildBody, startSubmit, afterSubmit,
+  submitAnswer, runHash, planRun, planText, resumeCommand } = A;
+out('import without document does not throw');
+
+const waiting = { waiting: true, outcome: 'waiting', pending_question: { id: 'q1', status: 'pending' } };
+assert.equal(viewMode(waiting), 'form');
+assert.equal(viewMode({ ...waiting, waiting: false }), 'state');
+assert.equal(viewMode({ ...waiting, outcome: 'running' }), 'state');
+assert.equal(viewMode({ ...waiting, pending_question: { id: 'q1', status: 'answered' } }), 'state');
+assert.equal(viewMode({ ...waiting, pending_question: null }), 'state');
+assert.equal(viewMode({ outcome: 'failed' }), 'failed');
+assert.equal(viewMode({ outcome: 'done' }), 'state');
+assert.equal(viewMode(null), 'state');
+assert.equal(viewMode({}), 'state');
+out('viewMode');
+
+const REC = 'Approve (Recommended)';
+const pending = { id: 'r9', status: 'pending', questions: [
+  { question: 'Pick one', header: 'One', multiSelect: false, allowFreeText: true, recommended: REC,
+    options: [{ label: REC, description: 'd' }, { label: 'Reject', description: 'e' }] },
+  { question: 'Pick many', header: 'Many', multiSelect: true, allowFreeText: true, recommended: 'B (Recommended)',
+    options: [{ label: 'A' }, { label: 'B (Recommended)' }, { label: 'C' }] },
+  { question: 'Free', header: 'Free', multiSelect: false, allowFreeText: true,
+    options: [{ label: 'X' }, { label: 'Y' }] },
+] };
+const init = initialAnswers(pending);
+assert.equal(init.length, 3);
+assert.deepEqual(init[0].labels, [REC]); assert.equal(init[0].other, '');
+assert.deepEqual(init[1].labels, ['B (Recommended)']);
+assert.deepEqual(init[2].labels, []); assert.equal(init[2].other, '');
+out('initialAnswers preselects recommended');
+
+const st = { answers: [{ labels: [REC], other: '' }, { labels: ['A', 'B (Recommended)'], other: '' }, { labels: [], other: 'text' }], sending: false, error: null };
+assert.deepEqual(buildBody(pending, st), { round_id: 'r9', answers: { '0': { labels: [REC] }, '1': { labels: ['A', 'B (Recommended)'] }, '2': { other: 'text' } } });
+out('buildBody mixed round, exact labels incl. (Recommended)');
+assert.equal(displayLabel(REC), 'Approve');
+assert.equal(displayLabel('Plain'), 'Plain');
+out('displayLabel strips suffix');
+
+const mkst = (o) => ({ answers: [{ labels: [], other: '' }, { labels: ['A'], other: '' }, { labels: ['X'], other: '' }], sending: false, error: null, ...o });
+let b = buildBody(pending, mkst({}));
+assert.ok(b.error && /Pick one|One/.test(b.error), 'names question');
+const wsp = mkst({ answers: [{ labels: [], other: '   ' }, { labels: ['A'], other: '' }, { labels: ['X'], other: '' }] });
+assert.ok(buildBody(pending, wsp).error);
+const both = mkst({ answers: [{ labels: [REC], other: ' mine ' }, { labels: ['A'], other: '  ' }, { labels: ['X'], other: '' }] });
+b = buildBody(pending, both);
+assert.deepEqual(b.answers['0'], { other: 'mine' });
+assert.deepEqual(b.answers['1'], { labels: ['A'] });
+out('buildBody empty, whitespace, other wins');
+
+const nf = { id: 'r', questions: [{ question: 'Q', multiSelect: false, allowFreeText: false, options: [{ label: 'a' }] }] };
+b = buildBody(nf, { answers: [{ labels: ['a'], other: 'sneaky' }] });
+assert.deepEqual(b.answers['0'], { labels: ['a'] });
+assert.ok(buildBody(nf, { answers: [{ labels: [], other: 'sneaky' }] }).error);
+out('allowFreeText false never emits other');
+
+const big = (n) => ({ answers: [{ labels: [], other: 'x'.repeat(n) }] });
+const one = { id: 'r', questions: [{ question: 'Q', allowFreeText: true, options: [{ label: 'a' }] }] };
+assert.equal(buildBody(one, big(4000)).answers['0'].other.length, 4000);
+assert.ok(buildBody(one, big(4001)).error);
+out('4000 char boundary');
+
+const t0 = { answers: [{ labels: ['A'], other: '' }] };
+assert.deepEqual(toggle(t0, 0, 'B', false).answers[0].labels, ['B']);
+assert.deepEqual(toggle(t0, 0, 'B', true).answers[0].labels, ['A', 'B']);
+assert.deepEqual(toggle(toggle(t0, 0, 'B', true), 0, 'A', true).answers[0].labels, ['B']);
+assert.deepEqual(t0.answers[0].labels, ['A'], 'pure');
+const pre = { answers: initialAnswers(pending) };
+assert.ok(!toggle(pre, 1, 'B (Recommended)', true).answers[1].labels.includes('B (Recommended)'));
+out('toggle pure, single/multi, untick recommended');
+
+// fetch mocking
+let calls = [], pend = [];
+globalThis.fetch = (u, o) => { calls.push([u, o]); return new Promise((res, rej) => pend.push({ res, rej })); };
+const tick = () => new Promise((r) => setImmediate(r));
+const body = { round_id: 'r9', answers: { '0': { labels: ['a'] } } };
+const pr = submitAnswer('a/b c', body);
+assert.equal(calls.length, 1);
+assert.equal(calls[0][0], '/api/sessions/' + encodeURIComponent('a/b c') + '/answer');
+assert.equal(calls[0][1].method, 'POST');
+assert.equal(calls[0][1].headers['Content-Type'], 'application/json');
+assert.deepEqual(JSON.parse(calls[0][1].body), body);
+pend.shift().res({ ok: true, status: 200, json: async () => ({ ok: 1 }) });
+assert.deepEqual({ ...(await pr) }, { ok: true, status: 200, data: { ok: 1 } });
+out('submitAnswer request and result');
+
+let s1 = startSubmit(mkst({}));
+assert.equal(s1.sending, true);
+assert.equal(startSubmit(s1), null);
+calls = []; pend = [];
+const s2 = startSubmit(mkst({}));
+if (s2) submitAnswer('s', body);
+const s3 = startSubmit({ ...s2, sending: true });
+if (s3) submitAnswer('s', body);
+assert.equal(calls.length, 1, 'exactly one fetch');
+out('startSubmit blocks double submit');
+
+const typed = mkst({ sending: true });
+const okr = afterSubmit(typed, { ok: true, status: 200, data: {} });
+assert.ok(okr && okr.navigate, 'navigate target on success');
+for (const [status, msg] of [[409, 'round already answered'], [400, 'bad'], [409, 'not waiting'], [500, 'boom']]) {
+  const r = afterSubmit(typed, { ok: false, status, data: { error: msg } });
+  assert.equal(r.sending, false); assert.equal(r.error, msg);
+  assert.deepEqual(r.answers, typed.answers);
+}
+for (const bad of [{ ok: false, status: 0, data: null }, { ok: false, status: 502, data: undefined }]) {
+  const r = afterSubmit(typed, bad);
+  assert.equal(r.sending, false); assert.ok(typeof r.error === 'string' && r.error);
+  assert.deepEqual(r.answers, typed.answers);
+}
+out('afterSubmit success and failures keep answers');
+calls = []; pend = [];
+const pf = submitAnswer('s', body); pend.shift().rej(new Error('net'));
+const rf = await pf;
+assert.equal(rf.ok, false);
+const pj = submitAnswer('s', body); pend.shift().res({ ok: false, status: 500, json: async () => { throw new SyntaxError('x'); } });
+assert.equal((await pj).ok, false);
+assert.match(afterSubmit(typed, rf).error, /Could not reach|error|failed/i);
+out('submitAnswer network/non-JSON errors resolve ok:false');
+
+const L = { owner: 'o w', repo: 'r', issue: 5 };
+assert.equal(runHash({ link: L }), '#/run/' + encodeURIComponent('o w') + '/r/5');
+for (const bad of [{}, null, { link: { owner: 'o', repo: 'r', issue: 0 } }, { link: { owner: 'o', repo: 'r', issue: 1.5 } },
+  { link: { owner: 'o', repo: 'r', issue: '5' } }, { link: { owner: 'o' } }]) assert.equal(runHash(bad), '#/sessions');
+out('runHash');
+
+const gate = { questions: [{ options: [{ label: 'Approve plan (Recommended)' }, { label: 'Revise' }] }] };
+const g2a = { questions: [{ options: [{ label: 'Confirmed, continue' }, { label: 'Revise' }] }] };
+const sess = (c) => ({ command: c, link: { owner: 'o', repo: 'r', issue: 7 } });
+assert.deepEqual({ ...planRun(sess('/run-issue 7'), gate) }, { owner: 'o', repo: 'r', n: 7 });
+assert.deepEqual({ ...planRun(sess('/ai-workflow:run-issue 7'), gate) }, { owner: 'o', repo: 'r', n: 7 });
+assert.equal(planRun(sess('/run-issue 7'), g2a), null);
+assert.equal(planRun(sess('/other 7'), gate), null);
+assert.equal(planRun({ command: '/run-issue 7' }, gate), null);
+assert.equal(planRun({ command: '/run-issue 7', link: { owner: 'o' } }, gate), null);
+out('planRun gate detection');
+assert.equal(planText({ plan: 'hello' }), 'hello');
+for (const d of [{ plan: null }, { plan: '' }, { plan: 5 }, {}, null, undefined]) assert.equal(planText(d), null);
+out('planText');
+
+assert.equal(resumeCommand({ repo: '/tmp/x', session_id: 'abc' }), "cd '/tmp/x' && claude --resume 'abc'");
+assert.equal(resumeCommand({ repo: "/tmp/it's", session_id: 'abc' }), "cd '/tmp/it'\\''s' && claude --resume 'abc'");
+assert.equal(resumeCommand({ repo: '/tmp/x', session_id: "a'b" }), "cd '/tmp/x' && claude --resume 'a'\\''b'");
+assert.equal(resumeCommand({ repo: '/tmp/x' }), null);
+out('resumeCommand quoting');
+"""
+
 
 def shell_checks():
     import subprocess
@@ -211,7 +363,7 @@ def shell_checks():
     css = read(os.path.join(STATIC, "app.css")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
     assert specs, "no imports found"
-    assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./launcher.js", "./board.js", "./history.js"}, specs
+    assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./launcher.js", "./board.js", "./history.js", "./answer.js"}, specs
     assert not re.search(r"https?://", js), "no absolute URLs"
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
@@ -896,6 +1048,77 @@ if LAUNCHER_ALL:
         srv.shutdown()
         for d in _fixture_dirs:
             shutil.rmtree(d, ignore_errors=True)
+        shutil.rmtree(tmp, ignore_errors=True)
+    print(f"{passed} checks passed")
+    sys.exit(0)
+
+
+def answer_checks():
+    import subprocess
+
+    s, r, _ = req(port, "/static/answer.js")
+    assert s == 200 and r.getheader("Content-Type", "").startswith("text/javascript"), ("answer.js", s)
+    ok("answer.js served as text/javascript")
+
+    js = read(os.path.join(STATIC, "answer.js")).decode()
+    app = read(os.path.join(STATIC, "app.js")).decode()
+    css = read(os.path.join(STATIC, "app.css")).decode()
+    specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs"}, specs
+    pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
+    exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
+    names = {x.split(" as ")[-1].strip() for x in exports.split(",")}
+    for m in re.finditer(r"import\s*\{([^}]*)\}\s*from\s*['\"]\./vendor/preact\.mjs", js):
+        for n in m.group(1).split(","):
+            assert n.strip().split(" as ")[0].strip() in names, n
+    ok("answer.js imports only vendored modules, real names")
+
+    assert re.search(r"import\s*\{[^}]*\bAnswer\b[^}]*\}\s*from\s*['\"]\./answer\.js['\"]", app), "app.js imports Answer"
+    assert re.search(r"<\$\{Answer\}\s+session=\$\{route\.params\.session\}", app), "answer route renders Answer"
+    ok("app.js imports and renders Answer")
+
+    for bad in ("innerHTML", "dangerouslySetInnerHTML", "outerHTML", "insertAdjacentHTML",
+                "http://", "https://", "console.log", "debugger"):
+        assert bad not in js, bad
+    ok("answer.js security/hygiene")
+
+    for tok in ("<fieldset", "<legend", 'role="alert"', 'role="status"', 'maxlength="4000"', "<pre",
+                "Session not found", "#/sessions", "Continue in terminal", "Copy failed", "disabled"):
+        assert tok in js, tok
+    assert "/api/sessions/" in js and "/api/runs/" in js
+    ok("answer.js markup: fieldset/legend/alert/status/maxlength/pre/not-found/copy/disabled")
+
+    def block(sel):
+        m = re.search(re.escape(sel) + r"[^{]*\{([^}]*)\}", css)
+        assert m, sel
+        return m.group(1)
+    for sel in (".opt", "button"):
+        mh = re.search(r"min-height\s*:\s*(\d+)px", block(sel))
+        assert mh and int(mh.group(1)) >= 44, sel
+    plan = block("pre.plan")
+    assert "pre-wrap" in plan and re.search(r"overflow-wrap\s*:\s*anywhere", plan)
+    assert re.search(r"width\s*:\s*100%", block("textarea"))
+    for m in re.finditer(r"(?<![\w-])(?:min-)?width\s*:\s*(\d+)px", css):
+        assert int(m.group(1)) <= 390, m.group(0)
+    ok("answer css: tap targets, plan wrapping, textarea width, no wide fixed widths")
+
+    if not shutil.which("node"):
+        print("note: node not found, skipping answer logic checks")
+        return
+    env = dict(os.environ, ANSWER_URL=pathlib.Path(os.path.join(STATIC, "answer.js")).as_uri())
+    p = subprocess.run(["node", "--input-type=module", "-e", ANSWER_NODE_JS], env=env,
+                       capture_output=True, text=True, timeout=60)
+    assert p.returncode == 0, p.stderr[-1500:]
+    for line in p.stdout.splitlines():
+        if line.startswith("ok "):
+            ok(line[3:])
+
+
+if ANSWER:
+    try:
+        answer_checks()
+    finally:
+        srv.shutdown()
         shutil.rmtree(tmp, ignore_errors=True)
     print(f"{passed} checks passed")
     sys.exit(0)

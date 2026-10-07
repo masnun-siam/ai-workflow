@@ -60,6 +60,18 @@ main:has(.board) { max-width: none; }
 .chip-stopped { color: var(--error); border-color: var(--error); }
 .cost { color: var(--muted); font-size: 0.8rem; }
 .empty { color: var(--muted); }
+main fieldset { border: 1px solid #263040; border-radius: 8px; margin: 0 0 16px; padding: 8px 12px; }
+legend { font-weight: 600; padding: 0 4px; }
+.opt { display: flex; align-items: center; gap: 12px; min-height: 44px; }
+.opt input { width: 24px; height: 24px; flex: none; }
+.opt small { display: block; color: var(--muted); }
+.tag { color: var(--bg); background: var(--accent); border-radius: 10px; padding: 0 8px; font-size: 0.8em; }
+main textarea { width: 100%; min-height: 88px; background: var(--bg); color: var(--fg); border: 1px solid #263040; border-radius: 8px; padding: 8px; font: inherit; }
+main button { min-height: 44px; width: 100%; padding: 0 16px; font: inherit; font-weight: 600; background: var(--accent); color: var(--bg); border: 0; border-radius: 8px; }
+main button:disabled { opacity: 0.6; }
+[role="alert"] { color: var(--error); }
+pre.plan { white-space: pre-wrap; overflow-wrap: anywhere; background: #161b22; padding: 12px; border-radius: 8px; }
+main code { overflow-wrap: anywhere; }
 @media (max-width: 480px) {
   .board { grid-auto-columns: 100%; scroll-snap-type: x mandatory; }
   .column { scroll-snap-stop: always; }
