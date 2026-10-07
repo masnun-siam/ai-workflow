@@ -24,10 +24,22 @@ export function parseRoute(hash) {
   return { name: 'notfound', params: {} };
 }
 
+// Assumes /api/sessions (task 12) items carry `status` and `id`; pin these names on task 12.
+export function sessionList(data) {
+  if (Array.isArray(data)) return data;
+  return data && Array.isArray(data.sessions) ? data.sessions : null;
+}
+
 export function waitingInfo(data) {
-  const list = Array.isArray(data) ? data : data && Array.isArray(data.sessions) ? data.sessions : [];
-  const waiting = list.filter((s) => s && s.status === 'waiting');
+  const waiting = (sessionList(data) || []).filter((s) => s && s.status === 'waiting');
   return { count: waiting.length, firstId: waiting.length ? waiting[0].id : null };
+}
+
+export function headerBadge(offline, data) {
+  if (offline) return { kind: 'offline', count: 0, href: null };
+  const { count, firstId } = waitingInfo(data);
+  if (count > 0) return { kind: 'waiting', count, href: '#/answer/' + encodeURIComponent(firstId) };
+  return sessionList(data) ? { kind: 'idle', count: 0, href: null } : null;
 }
 
 export function poll(url, ms, onResult) {
@@ -106,7 +118,7 @@ export class App extends Component {
   componentDidMount() {
     addEventListener('hashchange', this.onHash);
     this.stop = poll('/api/sessions', 3000, (r) => {
-      if (r.ok) this.setState({ sessions: Array.isArray(r.data) ? r.data : r.data?.sessions ?? null, offline: false, data: r.data });
+      if (r.ok) this.setState({ sessions: sessionList(r.data), offline: false });
       else this.setState({ offline: true });
     });
   }
@@ -116,13 +128,12 @@ export class App extends Component {
     if (this.stop) this.stop();
   }
 
-  render(_, { route, sessions, offline, data }) {
-    const { count, firstId } = waitingInfo(data);
+  render(_, { route, sessions, offline }) {
+    const b = headerBadge(offline, sessions);
     let badge = null;
-    if (offline) badge = html`<span role="status" class="offline">Offline: retrying</span>`;
-    else if (count > 0) {
-      badge = html`<a class="badge waiting" href=${'#/answer/' + encodeURIComponent(firstId)}>${count} waiting on you</a>`;
-    } else if (sessions) badge = html`<span class="muted">Nothing waiting</span>`;
+    if (b?.kind === 'offline') badge = html`<span role="status" class="offline">Offline: retrying</span>`;
+    else if (b?.kind === 'waiting') badge = html`<a class="badge waiting" href=${b.href}>${b.count} waiting on you</a>`;
+    else if (b?.kind === 'idle') badge = html`<span class="muted">Nothing waiting</span>`;
     return html`
       <header>
         <a class="brand" href="#/">aiw</a>
