@@ -8,6 +8,7 @@ is put first on PATH; env vars FAKE_CLAUDE_MODE / FAKE_CLAUDE_AUTH / FAKE_DIR dr
 from __future__ import annotations
 
 import concurrent.futures
+import shlex
 import http.client
 import json
 import os
@@ -68,6 +69,20 @@ case "$FAKE_CLAUDE_MODE" in
         while :; do sleep 0.2; done;;
       *) printf '%s\n' "$INIT" "$RESULT"; exit 0;;
     esac;;
+  stations|stations_badresume)
+    if [ "$FAKE_CLAUDE_MODE" = stations_badresume ] && [ "$RESUMING" = 1 ]; then
+      printf '%s\n' "$BADRES"; exit 1
+    fi
+    printf '%s\n' "$INIT"
+    for s in planner sdet dev review; do
+      grep -qx "$s" "$FAKE_DIR/done" 2>/dev/null && continue
+      echo "$s" >> "$FAKE_DIR/ran"
+      while [ ! -f "$FAKE_DIR/go" ] && [ ! -f "$FAKE_DIR/goall" ]; do sleep 0.1; done
+      rm -f "$FAKE_DIR/go"
+      echo "$s" >> "$FAKE_DIR/done"
+    done
+    printf '%s\n' "$RESULT"
+    exit 0;;
   normal)
     printf '%s\n' "$INIT" '{"type":"assistant","message":"hi"}' "$RESULT"
     echo "some warning" >&2
@@ -878,6 +893,347 @@ def fallback_checks():
                 pass
 
 
+# ---- stop + resume API (issue #120) -----------------------------------------
+def stop_checks():
+    def boom(*_a, **_k):
+        raise AssertionError("fetch_title must not be called")
+
+    srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, (), boom)
+    port = srv.server_address[1]
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    live = []
+    SLUG = "own/repo"
+    ROSTER = ["planner", "sdet", "dev", "review"]
+
+    def http_(method, path, host=None, origin=None):
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
+        c.putrequest(method, path, skip_host=True, skip_accept_encoding=True)
+        c.putheader("Host", host or f"127.0.0.1:{port}")
+        if origin is not None:
+            c.putheader("Origin", origin)
+        c.putheader("Content-Length", "0")
+        c.endheaders()
+        r = c.getresponse()
+        raw = r.read()
+        c.close()
+        try:
+            return r.status, json.loads(raw)
+        except ValueError:
+            return r.status, raw
+
+    def calls(fk):
+        p = os.path.join(fk, "calls")
+        if not os.path.exists(p):
+            return []
+        out = []
+        for ln in lines(fk, "calls").splitlines():
+            cwd, _, args = ln.partition("|")
+            out.append((real(cwd), args))
+        return out
+
+    def ledger(d, issue):
+        rd = os.path.join(d, "runs", f"own-repo-issue-{issue}")
+        os.makedirs(rd, exist_ok=True)
+        path = os.path.join(rd, "run.json")
+        with open(path, "wb") as f:
+            f.write(json.dumps({"context": {}, "status": "running"}).encode())
+        return path
+
+    def setup_(mode):
+        d, fk, work = setup(mode)
+        with open(os.path.join(d, "checkouts.json"), "w") as f:
+            json.dump({SLUG: work}, f)
+        return d, fk, work
+
+    def cheap(command="/run-issue 42", work=None, status="stopped", sess="sess-abc"):
+        rec = ui_sessions.create(command, SLUG)
+        ui_sessions.update(rec["id"], session_id=sess, status=status, cwd_path=work,
+                           **({"ended_at": "2026-01-01T00:00:00+00:00"} if status in ("stopped", "done", "failed") else {}))
+        return rec["id"]
+
+    def lst(fk, name):
+        p = os.path.join(fk, name)
+        return open(p).read().split() if os.path.exists(p) else []
+
+    def cont_args(sess="sess-abc"):
+        return " ".join(ui_runner.CLAUDE_ARGS + ["--resume", sess, ui_runner.CONTINUE_PROMPT])
+
+    def end(sid):
+        wait_status(sid, {"done", "failed", "stopped"})
+        wait_finished(sid)
+        return ui_sessions.load(sid)
+
+    def stations_run(mode):
+        d, fk, work = setup_(mode)
+        ledger_p = ledger(d, 42)
+        before = (open(ledger_p, "rb").read(), os.stat(ledger_p).st_mtime_ns)
+        rec = ui_runner.start("/run-issue 42", SLUG)
+        live.append(rec)
+        sid = rec["id"]
+        wait_for(lambda: lst(fk, "ran") == ["planner"])
+        open(os.path.join(fk, "go"), "w").close()
+        wait_for(lambda: lst(fk, "ran") == ["planner", "sdet"])
+        assert lst(fk, "done") == ["planner"]
+        st, body = http_("POST", f"/api/sessions/{sid}/stop")
+        assert st == 200 and body["outcome"] == "stopped" and body["ended_at"], (st, body)
+        wait_for(lambda: group_gone(rec["pid"]))
+        wait_finished(sid)
+        assert ui_sessions.load(sid)["status"] == "stopped"
+        os.environ["FAKE_CLAUDE_MODE"] = mode
+        open(os.path.join(fk, "goall"), "w").close()
+        st, body = http_("POST", f"/api/sessions/{sid}/resume")
+        assert st == 200, (st, body)
+        r = end(sid)
+        assert r["status"] == "done", r
+        assert lst(fk, "ran") == ["planner", "sdet", "sdet", "dev", "review"], lst(fk, "ran")
+        assert lst(fk, "done") == ROSTER, lst(fk, "done")
+        after = (open(ledger_p, "rb").read(), os.stat(ledger_p).st_mtime_ns)
+        assert before == after, "Ledger was touched"
+        return sid, fk, work, r
+
+    try:
+        # -- stop then resume via --resume
+        sid, fk, work, r = stations_run("stations")
+        cl = calls(fk)
+        assert len(cl) == 2 and cl[1] == (real(work), cont_args()), cl
+        ok("stop then resume via --resume: continue prompt, no repeated stations, Ledger untouched")
+
+        # -- stop then resume via fallback
+        sid, fk, work, r = stations_run("stations_badresume")
+        cl = calls(fk)
+        assert len(cl) == 3, cl
+        assert cl[2] == (real(work), " ".join(ui_runner.CLAUDE_ARGS + ["/run-issue 42"])), cl
+        assert r["resumed_fresh"] is True and "resumed fresh" in r["note"], r
+        assert not r.get("pending_answer"), r
+        ok("stop then resume via fallback: fresh /run-issue 42 with no answer text, resumed_fresh, Ledger untouched")
+
+        # -- detail + list fields
+        d, fk, work = setup_("normal")
+        rec = ui_runner.start("/run-issue 42", SLUG)
+        live.append(rec)
+        sid = rec["id"]
+        end(sid)
+        st, pub = http_("GET", f"/api/sessions/{sid}")
+        assert st == 200 and real(pub["repo_path"]) == real(work), pub
+        assert pub["resume_command"] == "cd " + shlex.quote(pub["repo_path"]) + " && claude --resume " + shlex.quote("sess-abc"), pub
+        st, lst_ = http_("GET", "/api/sessions")
+        item = [x for x in lst_["sessions"] if x["id"] == sid][0]
+        assert item["repo_path"] == pub["repo_path"] and item["resume_command"] == pub["resume_command"], item
+        ok("session detail and list expose repo_path and resume_command")
+
+        # -- no session_id: null resume_command, fallback only
+        d, fk, work = setup_("crash")
+        ledger(d, 42)
+        rec = ui_runner.start("/run-issue 42", SLUG)
+        live.append(rec)
+        sid = end(rec["id"])["id"]
+        ui_sessions.update(sid, status="stopped")
+        assert ui_sessions.load(sid).get("session_id") in (None, "")
+        st, pub = http_("GET", f"/api/sessions/{sid}")
+        assert pub["resume_command"] is None, pub
+        os.remove(os.path.join(fk, "calls"))
+        os.environ["FAKE_CLAUDE_MODE"] = "normal"
+        st, _b = http_("POST", f"/api/sessions/{sid}/resume")
+        assert st == 200, (st, _b)
+        r = end(sid)
+        cl = calls(fk)
+        assert r["status"] == "done" and len(cl) == 1 and "--resume" not in cl[0][1], (r, cl)
+        assert cl[0][1] == " ".join(ui_runner.CLAUDE_ARGS + ["/run-issue 42"]), cl
+        d, fk, work = setup_("crash")
+        rec = ui_runner.start("/prd x", SLUG)
+        live.append(rec)
+        sid = end(rec["id"])["id"]
+        ui_sessions.update(sid, status="stopped")
+        os.remove(os.path.join(fk, "calls"))
+        http_("POST", f"/api/sessions/{sid}/resume")
+        r = ui_sessions.load(sid)
+        assert r["status"] == "failed" and r.get("terminal_handoff") is True, r
+        assert not os.path.exists(os.path.join(fk, "calls")), "must not spawn"
+        ok("no session_id: resume_command null, run-issue falls back fresh, others terminal_handoff, never --resume")
+
+        # -- metacharacter path
+        d, fk, work = setup_("normal")
+        bad = os.path.join(work, "a b;touch PWNED$(x)")
+        os.mkdir(bad)
+        with open(os.path.join(d, "checkouts.json"), "w") as f:
+            json.dump({SLUG: bad}, f)
+        rec = ui_runner.start("/run-issue 42", SLUG)
+        live.append(rec)
+        sid = end(rec["id"])["id"]
+        st, pub = http_("GET", f"/api/sessions/{sid}")
+        cmd = pub["resume_command"]
+        assert shlex.split(cmd) == ["cd", pub["repo_path"], "&&", "claude", "--resume", "sess-abc"], cmd
+        stub = tempfile.mkdtemp()
+        with open(os.path.join(stub, "claude"), "w") as f:
+            f.write("#!/bin/sh\nexit 0\n")
+        os.chmod(os.path.join(stub, "claude"), 0o755)
+        elsewhere = tempfile.mkdtemp()
+        subprocess.run(["sh", "-c", cmd], cwd=elsewhere, check=True,
+                       env={**os.environ, "PATH": stub + os.pathsep + ORIG_PATH})
+        for dd in (bad, elsewhere, work):
+            assert not os.path.exists(os.path.join(dd, "PWNED")), dd
+        ok("resume_command with spaces/metacharacters round-trips through shlex and runs without injection")
+
+        # -- stuck: SIGKILL after grace
+        d, fk, work = setup_("stuck")
+        rec = ui_runner.start("/run-issue 42", SLUG)
+        live.append(rec)
+        sid = rec["id"]
+        wait_for(lambda: (ui_sessions.load(sid) or {}).get("session_id"))
+        old = ui_runner.STOP_GRACE_SECONDS
+        ui_runner.STOP_GRACE_SECONDS = 1
+        try:
+            t0 = time.time()
+            st, body = http_("POST", f"/api/sessions/{sid}/stop")
+        finally:
+            ui_runner.STOP_GRACE_SECONDS = old
+        assert st == 200 and body["outcome"] == "stopped", (st, body)
+        assert time.time() - t0 >= 0.9 and group_gone(rec["pid"]), time.time() - t0
+        ok("stop of a SIGTERM-ignoring session escalates to SIGKILL after the grace")
+
+        # -- stop on finished sessions
+        d, fk, work = setup_("normal")
+        for status in ("done", "failed", "stopped"):
+            sid = cheap(work=work, status=status)
+            before = ui_sessions.load(sid)
+            with mock.patch("os.killpg") as kp, mock.patch("os.kill") as k:
+                st, _b = http_("POST", f"/api/sessions/{sid}/stop")
+            assert st == 409, (status, st)
+            assert not kp.called and not k.called
+            assert ui_sessions.load(sid) == before
+        ok("stop on done/failed/stopped: 409, no signal, record unchanged")
+
+        # -- stop on waiting without a live process
+        sid = cheap(work=work, status="done")
+        ui_sessions.set_pending(sid, {"id": "q-1", "status": "pending", "questions": []})
+        ui_sessions.update(sid, status="waiting")
+        assert sid not in ui_runner._procs
+        with mock.patch("os.killpg") as kp, mock.patch("os.kill") as k:
+            st, body = http_("POST", f"/api/sessions/{sid}/stop")
+        assert st == 200 and body["outcome"] == "stopped" and body["ended_at"], (st, body)
+        assert body["waiting"] is False and body["pending_question"] is None, body
+        assert not kp.called and not k.called
+        st, _b = http_("POST", f"/api/sessions/{sid}/answer")
+        assert st == 409, st
+        ok("stop on waiting without process: stopped, pending cleared, no signal, later answer 409")
+
+        # -- stop on waiting with a live process
+        d, fk, work = setup_("ask")
+        rec = ui_runner.start("/run-issue 42", SLUG)
+        live.append(rec)
+        sid = rec["id"]
+        wait_for(lambda: (ui_sessions.load(sid) or {}).get("session_id"))
+        ui_sessions.set_pending(sid, {"id": "q-1", "status": "pending", "questions": []})
+        assert sid in ui_runner._procs
+        st, body = http_("POST", f"/api/sessions/{sid}/stop")
+        assert st == 200 and body["outcome"] == "stopped", (st, body)
+        wait_finished(sid)
+        time.sleep(0.5)
+        assert ui_sessions.load(sid)["status"] == "stopped" and group_gone(rec["pid"])
+        ok("stop on waiting with live process: signals group, stays stopped")
+
+        # -- resume on non-stopped
+        d, fk, work = setup_("normal")
+        for status in ("running", "waiting", "done", "failed"):
+            sid = cheap(work=work, status=status)
+            st, _b = http_("POST", f"/api/sessions/{sid}/resume")
+            assert st == 409, (status, st)
+            assert ui_sessions.load(sid)["status"] == status
+        assert calls(fk) == [], calls(fk)
+        ok("resume on non-stopped: 409, nothing spawned")
+
+        # -- resume blocked by live session for same issue
+        d, fk, work = setup_("sleep")
+        live_rec = ui_runner.start("/run-issue 42", SLUG)
+        live.append(live_rec)
+        wait_for(lambda: (ui_sessions.load(live_rec["id"]) or {}).get("session_id"))
+        n0 = len(calls(fk))
+        sid = cheap(work=work)
+        st, body = http_("POST", f"/api/sessions/{sid}/resume")
+        assert st == 409 and live_rec["id"] in json.dumps(body), (st, body)
+        assert len(calls(fk)) == n0 and ui_sessions.load(sid)["status"] == "stopped"
+        os.environ["FAKE_CLAUDE_MODE"] = "normal"
+        for cmd_other in ("/run-issue 43", "/prd x"):
+            sid2 = cheap(command=cmd_other, work=work)
+            st, _b = http_("POST", f"/api/sessions/{sid2}/resume")
+            assert st == 200, (cmd_other, st, _b)
+            assert end(sid2)["status"] == "done"
+        ok("resume blocked by live same-issue session (named); other issue / non-run-issue not blocked")
+
+        # -- preflight failure
+        d, fk, work = setup_("normal")
+        sid = cheap(work=work)
+        os.environ["FAKE_CLAUDE_AUTH"] = "out"
+        st, _b = http_("POST", f"/api/sessions/{sid}/resume")
+        r = ui_sessions.load(sid)
+        assert st == 500 and r["status"] == "failed" and r["error"], (st, r)
+        ok("resume with claude logged out: 500, failed with auth message")
+
+        # -- ids and verbs
+        for bad_id in ("nope", "..", "%2e%2e"):
+            for act in ("stop", "resume"):
+                st, _b = http_("POST", f"/api/sessions/{bad_id}/{act}")
+                assert st == 404, (bad_id, act, st)
+        sid = cheap(work=work)
+        for act in ("stop", "resume"):
+            assert http_("GET", f"/api/sessions/{sid}/{act}")[0] == 404
+            for verb in ("PUT", "DELETE", "PATCH"):
+                assert http_(verb, f"/api/sessions/{sid}/{act}")[0] == 405, (verb, act)
+        ok("unknown/traversal ids 404; GET 404 and other verbs 405 on stop/resume")
+
+        # -- guard
+        d, fk, work = setup_("normal")
+        sid = cheap(work=work)
+        for act in ("stop", "resume"):
+            with mock.patch("os.killpg") as kp:
+                assert http_("POST", f"/api/sessions/{sid}/{act}", host="evil.com")[0] == 403
+                assert http_("POST", f"/api/sessions/{sid}/{act}", origin="http://evil.com")[0] == 403
+            assert not kp.called
+        assert ui_sessions.load(sid)["status"] == "stopped" and calls(fk) == []
+        ok("stop/resume with bad Host or cross-site Origin: 403, untouched")
+
+        # -- double resume
+        d, fk, work = setup_("normal")
+        sid = cheap(work=work)
+        with concurrent.futures.ThreadPoolExecutor(2) as ex:
+            res = sorted(f.result()[0] for f in [ex.submit(http_, "POST", f"/api/sessions/{sid}/resume") for _ in range(2)])
+        assert res == [200, 409], res
+        end(sid)
+        assert len(calls(fk)) == 1, calls(fk)
+        ok("simultaneous resume: exactly one 200, one 409, one spawn")
+
+        # -- stop during failing resume
+        d, fk, work = setup_("badresume")
+        ledger(d, 42)
+        sid = cheap(work=work)
+        open(os.path.join(fk, "hold"), "w").close()
+        st, _b = http_("POST", f"/api/sessions/{sid}/resume")
+        assert st == 200, (st, _b)
+        wait_for(lambda: len(calls(fk)) == 1)
+        st, _b = http_("POST", f"/api/sessions/{sid}/stop")
+        assert st == 200, (st, _b)
+        os.remove(os.path.join(fk, "hold"))
+        r = end(sid)
+        time.sleep(0.5)
+        assert r["status"] == "stopped" and len(calls(fk)) == 1 and not r.get("resumed_fresh"), r
+        ok("stop during failing resume: stopped, fallback never spawns")
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        reap(*live)
+        for p in list(ui_runner._procs.values()):
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+
+
+if "--stop" in sys.argv:
+    stop_checks()
+    print(f"\n{passed} checks passed")
+    sys.exit(0)
+
+
 if "--fallback" in sys.argv:
     fallback_checks()
     print(f"\n{passed} checks passed")
@@ -1186,5 +1542,6 @@ finally:
 
 answer_checks()
 fallback_checks()
+stop_checks()
 
 print(f"\n{passed} checks passed")
