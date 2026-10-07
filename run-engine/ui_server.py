@@ -90,6 +90,10 @@ def _public(rec: dict) -> dict:
         "waiting": rec.get("pending_question") is not None,
         "pending_question": rec.get("pending_question"),
         "error": rec.get("error"),
+        "resumed_fresh": rec.get("resumed_fresh"),
+        "note": rec.get("note"),
+        "terminal_handoff": rec.get("terminal_handoff"),
+        "pending_answer": rec.get("pending_answer"),
     }
 
 

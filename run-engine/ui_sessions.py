@@ -2,7 +2,8 @@
 
 Each holds meta.json (the record) and stream.jsonl (raw event stream, owned by the
 runner). Vocabulary: docs/prd/workflow-control-ui.md, issue #105. Records survive a
-restart because they live only on disk.
+restart because they live only on disk. Runner-set optional fields (#119): cwd_path,
+pending_answer, resumed_fresh, note, terminal_handoff.
 """
 
 from __future__ import annotations
