@@ -194,7 +194,8 @@ REPO_ROOT = os.path.dirname(HERE)
 POLL = os.path.join(REPO_ROOT, "skills", "pr-grind", "scripts", "poll-reviews.sh")
 SKILL = os.path.join(REPO_ROOT, "skills", "pr-grind", "SKILL.md")
 NOW = datetime(2030, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
-THREAD = "https://github.com/o/r/pull/7"
+THREAD = "https://acme.slack.com/archives/C0123/p1700000000000100"
+PR_URL = "https://github.com/o/r/pull/7"
 REV_NEW = "2030-06-01T11:00:00Z id=9 state=APPROVED"
 SINCE = "2030-06-01T10:00:00Z"
 FUTURE = "2030-06-01T13:00:00Z"
@@ -282,7 +283,7 @@ def prgrind_cases() -> int:
         assert len(ss) == 2, ss
         cmds = [r for r in ss if r["command"] == f"/pr-grind {THREAD}"]
         assert len(cmds) == 2 and {r["repo"] for r in cmds} == {work}, ss
-        assert any(r["link"] == THREAD for r in cmds), ss
+        assert any(r["link"] == PR_URL for r in cmds), ss
         wait_for(lambda: os.path.exists(os.path.join(fk, "headless")))
         wait_for(lambda: lines(fk, "headless") != "")
         assert lines(fk, "headless") == "1"
@@ -409,7 +410,7 @@ def prgrind_cases() -> int:
             act, err = tick(path)
             assert act == "invalid" and err.strip(), (k, act)
         assert ghlog(fk) == ""
-        path = mkpr(d, "nopr", thread="https://github.com/o/r/pull/99")
+        path = mkpr(d, "nopr", thread="https://acme.slack.com/archives/C0123/p99")
         n = len(all_sessions())
         act, err = tick(path)
         assert act == "invalid" and err.strip() and len(all_sessions()) == n, (act, err)
@@ -560,18 +561,14 @@ def prgrind_cases() -> int:
         d, fk, work = pset()
         prior(work)
         bad = [{"repo": "../../x"}, {"owner": "a/b"}, {"repo": ".."}, {"owner": "o;rm"},
-               {"number": "7x"}, {"number": "-1"}, {"thread": "http://github.com/o/r/pull/7"},
-               {"thread": "https://x/y z"}, {"thread": "https://x/y\n--evil"}]
+               {"number": "7x"}, {"number": "-1"}, {"thread": "http://acme.slack.com/archives/C0123/p1"},
+               {"thread": "https://x/y z"}, {"thread": "-https://x/y"}, {"thread": "https://x/y\x07z"},
+               {"thread": "https://x/y\tz"}]
         for i, kv in enumerate(bad):
-            if "\n" in kv.get("thread", ""):
-                path = mkpr(d, f"u{i}")
-                txt = open(path).read().replace(f"thread: {THREAD}", "thread: https://x/y\n--evil")
-                open(path, "w").write(txt)
-            else:
-                path = mkpr(d, f"u{i}", **kv)
-            act, _ = tick(path)
+            act, _ = tick(mkpr(d, f"u{i}", **kv))
             assert act == "invalid", (kv, act)
         assert ghlog(fk) == "" and len(all_sessions()) == 1
+        assert tick(mkpr(d, "slack"))[0] == "started"  # Slack thread URL is the real contract
 
     def skill_sites():
         text = open(SKILL).read()
