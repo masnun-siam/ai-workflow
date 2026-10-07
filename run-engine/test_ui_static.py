@@ -66,13 +66,22 @@ RUN = sys.argv[1:3] == ["--view", "run"]
 
 RUN_JS = r"""
 const M = await import(process.env.RUN_URL);
-const { sessionForRun, actionsFor, mergeStream, totals, nearBottom, mdToHtml, copyCommand, postAction, RunDetail } = M;
+const { sessionForRun, sessionsForRun, actionsFor, mergeStream, totals, nearBottom, mdToHtml, copyCommand, postAction, RunDetail } = M;
 const A = await import(process.env.APP_URL);
 const assert = (await import('node:assert')).strict;
 const out = (n) => console.log('ok ' + n);
 const tick = () => new Promise((r) => setImmediate(r));
 const settle = async () => { for (let i = 0; i < 8; i++) await tick(); };
 out('run.js imports without a document');
+
+const { formatWhen, shortRepo } = await import(new URL('./fmt.js', process.env.RUN_URL).href);
+const noon = new Date(2026, 9, 7, 12, 0);
+assert.match(formatWhen(new Date(2026, 9, 7, 9, 5).toISOString(), noon), /^Today 09:05$/);
+assert.match(formatWhen(new Date(2026, 9, 6, 17, 40).toISOString(), noon), /^Yesterday 17:40$/);
+assert.match(formatWhen(new Date(2026, 9, 1, 8, 0).toISOString(), noon), /^Oct 1 08:00$/);
+assert.equal(formatWhen(null, noon), '—'); assert.equal(formatWhen('garbage', noon), '—');
+assert.equal(shortRepo('/Users/x/Projects/ai-workflow/'), 'ai-workflow'); assert.equal(shortRepo('o/r'), 'r'); assert.equal(shortRepo(''), '—');
+out('fmt: formatWhen and shortRepo');
 
 // ---- sessionForRun
 const S = (id, command, extra = {}) => ({ id, repo: 'own/repo', command, outcome: 'done', ...extra });
@@ -82,6 +91,9 @@ assert.equal(sessionForRun([S('x', 'whatever', { link: 'https://github.com/own/r
 assert.equal(sessionForRun([S('new', '/run-issue 42'), S('old', '/run-issue 42')], 'own', 'repo', 42).id, 'new');
 assert.equal(sessionForRun([S('o', '/run-issue 7'), S('m', '/run-issue 42')], 'own', 'repo', 42).id, 'm');
 out('sessionForRun matches command forms and link, newest first');
+assert.deepEqual(sessionsForRun([S('a', '/run-issue 42'), S('b', '/run-issue 7'), S('c', '/run-issue 42')], 'own', 'repo', 42).map((x) => x.id), ['a', 'c']);
+assert.deepEqual(sessionsForRun(null, 'own', 'repo', 42), []);
+out('sessionsForRun returns every matching session');
 for (const c of ['/run-issue 420', '/run-issue 4', '/pr-grind 42', '/run-issue 42x'])
   assert.equal(sessionForRun([S('x', c)], 'own', 'repo', 42), null, c);
 assert.equal(sessionForRun([S('x', '/run-issue 42', { repo: 'other/repo' })], 'own', 'repo', 42), null);
@@ -350,7 +362,7 @@ out('404 shows not-found with Board link; other failures keep data and retry');
 reset(); c = await mount([]);
 const tabs = find(T(c), (n) => n.props.role === 'tablist')[0];
 assert.ok(tabs); const tt = find(tabs, (n) => n.props.role === 'tab');
-assert.equal(tt.length, 2);
+assert.equal(tt.length, 3);
 for (const t of tt) { assert.equal(t.type, 'button'); assert.ok(t.props['aria-controls']); assert.ok(t.props.id); }
 assert.equal(tt.filter((t) => t.props['aria-selected'] === true || t.props['aria-selected'] === 'true').length, 1);
 let panel = find(T(c), (n) => n.props.role === 'tabpanel');
@@ -362,6 +374,10 @@ await tab(c, /plan/i).props.onClick({}); await settle();
 assert.notEqual(selId(c).props.id, first); assert.match(text(selId(c)), /plan/i);
 panel = find(T(c), (n) => n.props.role === 'tabpanel');
 assert.equal(panel[0].props['aria-labelledby'], selId(c).props.id);
+await tab(c, /sessions/i).props.onClick({}); await settle();
+assert.match(text(tab(c, /sessions/i)), /Sessions \(0\)/);
+assert.match(txt(c), /No UI sessions for this run/);
+await tab(c, /plan/i).props.onClick({}); await settle();
 const dsh = find(panel[0], (n) => n.props.dangerouslySetInnerHTML)[0];
 assert.match(dsh.props.dangerouslySetInnerHTML.__html, /<h1>Plan title<\/h1>/);
 out('tabs aria and plan rendering via mdToHtml');
@@ -447,7 +463,7 @@ def run_checks():
     js = read(os.path.join(STATIC, "run.js")).decode()
     css = read(os.path.join(STATIC, "app.css")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./fmt.js"}, specs
     assert not re.search(r"https?://", js), "no absolute URLs"
     assert "console.log" not in js and "debugger" not in js and "innerHTML" not in js.replace("dangerouslySetInnerHTML", "")
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
@@ -1003,7 +1019,7 @@ def board_checks():
     css = read(os.path.join(STATIC, "app.css")).decode()
     app = read(os.path.join(STATIC, "app.js")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./fmt.js"}, specs
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
     names = {x.split(" as ")[-1].strip() for x in exports.split(",")}

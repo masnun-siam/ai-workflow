@@ -227,6 +227,11 @@ def _read_part(path):
     return obj, None
 
 
+def _https_url(value):
+    """Only https URLs reach the browser as links (the ledger is a file, not a trust boundary we own)."""
+    return value if isinstance(value, str) and value.startswith("https://") else None
+
+
 def load_run(owner: str, repo: str, n: str, runs_dir=None):
     """One run from the Ledger: dict, or None if absent. ValueError on an unsafe segment."""
     if not (_NAME_RE.fullmatch(owner) and _NAME_RE.fullmatch(repo) and _ISSUE_RE.fullmatch(n)):
@@ -238,7 +243,7 @@ def load_run(owner: str, repo: str, n: str, runs_dir=None):
         return None
     errors = {}
     body = {"owner": owner, "repo": repo, "issue": int(n), "status": None, "currentStation": None,
-            "stations": [], "trace": [], "plan": None,
+            "stations": [], "trace": [], "plan": None, "pr": None, "branch": None, "title": None,
             "totals": {"stations": 0, "done": 0, "bounces": 0}, "errors": errors}
     data, err = _read_part(run_json)
     if data is not None:
@@ -251,6 +256,8 @@ def load_run(owner: str, repo: str, n: str, runs_dir=None):
         else:
             rows, current, totals = run_timeline(led.stations, led.current_index, led.status, led.trace)
             body.update(status=led.status, currentStation=current, stations=rows, trace=led.trace, totals=totals)
+            context = data.get("context") if isinstance(data.get("context"), dict) else {}
+            body.update(pr=_https_url(context.get("pr")), branch=context.get("branch") if isinstance(context.get("branch"), str) else None)
     if err:
         errors["ledger"] = err
     plan_path = os.path.join(run_dir, "10-plan.json")

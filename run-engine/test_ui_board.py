@@ -400,4 +400,22 @@ assert c31["note"] == "x" * 200 and c32["note"] == "", (len(c31["note"]), c32["n
 assert (c31["updated"], c32["updated"]) == (10.0, 20.0)
 ok("cards: note trimmed to 200 chars, updated mtime, columns sorted newest first")
 
+# --- 23. load_run exposes pr/branch, but only https PR links ----------------
+
+import tempfile
+from shared import run_dir_for
+from ui_board import load_run
+
+with tempfile.TemporaryDirectory() as runs:
+    for issue, pr in ((5, "https://github.com/acme/widgets/pull/9"), (6, "javascript:alert(1)")):
+        d = run_dir_for(runs, "acme/widgets", issue)
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "run.json"), "w", encoding="utf-8") as fh:
+            json.dump(ledger(issue, FULL, 3, pr=pr, branch="issue-5-x"), fh)
+    good = load_run("acme", "widgets", "5", runs_dir=runs)
+    bad = load_run("acme", "widgets", "6", runs_dir=runs)
+assert good["pr"] == "https://github.com/acme/widgets/pull/9" and good["branch"] == "issue-5-x", good
+assert bad["pr"] is None, bad["pr"]
+ok("load_run: https pr link and branch exposed, javascript: link dropped")
+
 print(f"\n{passed} passed")

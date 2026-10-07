@@ -39,8 +39,8 @@ def boom(*_a, **_k):
     raise AssertionError("fetch_title must not be called")
 
 
-def start(extras=()):
-    srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, extras, boom)
+def start(extras=(), fetch=boom):
+    srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, extras, fetch)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     return srv, srv.server_address[1]
 
@@ -124,7 +124,7 @@ def runs_section():
         return out
 
     before = snap()
-    sv, pt = start()
+    sv, pt = start(fetch=lambda o, r, i: f"Title {o}/{r}#{i}")
     good = f"127.0.0.1:{pt}"
 
     def get(n, o="acme", r="widgets"):
@@ -146,6 +146,10 @@ def runs_section():
         assert b["trace"] == adv and b["plan"] == "## Plan\nbody" and b["errors"] == {}
         assert b["totals"] == {"stations": 7, "done": 3, "bounces": 0}, b["totals"]
         ok("runs: mid-run")
+
+        assert b["title"] == "Title acme/widgets#1", b["title"]
+        assert b["pr"] is None and b["branch"] is None, (b["pr"], b["branch"])
+        ok("runs: title from the (memoized) fetcher; pr/branch null without context")
 
         b = get(2)
         v = [s for s in b["stations"] if s["name"] == "verifier"][0]

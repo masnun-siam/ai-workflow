@@ -180,6 +180,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if body is None:
             self._send(404, "text/plain; charset=utf-8", b"not found")
             return
+        body["title"] = self.server.fetch_title(owner, repo, int(n))
         self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
 
     def _session(self, sid: str, stream: bool) -> None:
