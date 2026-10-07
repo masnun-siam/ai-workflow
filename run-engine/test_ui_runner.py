@@ -78,6 +78,8 @@ def ok(label: str) -> None:
 def fresh() -> str:
     d = tempfile.mkdtemp()
     os.environ["CLAUDE_PLUGIN_DATA"] = d
+    for k in [k for k in os.environ if k.startswith("AIW_NTFY_")]:
+        os.environ.pop(k)
     return d
 
 

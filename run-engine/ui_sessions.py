@@ -111,6 +111,9 @@ def update(sid: str, **fields) -> dict:
         event = record.get("status") if "status" in fields else None
         key = ui_notify.dedupe_key(event, record)
         seen = record.get("notified", [])
+        if event in ("starting", "running"):  # resumed: let done/failed push again
+            seen = [k for k in seen if k not in ("done", "failed")]
+            record["notified"] = seen
         if key is None or key in seen:
             event = None
         else:
