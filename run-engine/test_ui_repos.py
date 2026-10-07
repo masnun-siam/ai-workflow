@@ -238,7 +238,7 @@ try:
         assert "o/r#7" in err(p), p
         text = json.dumps(p)
         assert rec["id"] in text and "/api/sessions/" + rec["id"] in text, p
-        assert p.get("link") == {"owner": "o", "repo": "r", "issue": 7} or "link" in text, p
+        assert p.get("link") == {"owner": "o", "repo": "r", "issue": 7}, p
     ok("live run-issue -> 409 naming o/r#7, existing id, link, href; start not called")
 
     rec = live("/pr-grind", "running")
@@ -251,6 +251,32 @@ try:
         s, p = post({"repo": "o/r", "text": text})
         assert s == 409 and calls == [], (text, s, p)
     ok("custom text spelling a run-issue command -> 409")
+
+    for text in ("/run-issue\n7", "/run-issue\t7"):
+        live("/run-issue 7")
+        s, p = post({"repo": "o/r", "text": text})
+        assert s == 409 and calls == [], (repr(text), s, p)
+    ok("whitespace-variant custom text (newline/tab) -> 409, dup-check not bypassed")
+
+    reset_sessions()
+    calls.clear()
+    s, data, _ = req("/api/sessions", "POST", json.dumps(
+        {"repo": "o/r", "command": "run-issue", "args": "7 \u0000"}).encode())
+    assert s == 400, (s, data)
+    assert not [r for r in ui_sessions.list_sessions()
+                if r.get("status") in ("starting", "running")], ui_sessions.list_sessions()
+    s, p = post({"repo": "o/r", "command": "run-issue", "args": "7"})
+    assert s == 201, (s, p)
+    ok("NUL in args -> 400, no stuck record, next run-issue 7 -> 201")
+
+    reset_sessions()
+    dead = subprocess.Popen(["true"], start_new_session=True)
+    dead.wait()
+    rec = ui_sessions.create("/run-issue 7", REPO_A, link={"owner": "o", "repo": "r", "issue": 7})
+    ui_sessions.update(rec["id"], status="running", pid=dead.pid)
+    s, p = post({"repo": "o/r", "command": "run-issue", "args": "7"})
+    assert s == 201, (s, p)
+    ok("stale running record with gone process group does not block")
 
     live("/run-issue 7")
     s, p = post({"repo": "O/R", "command": "run-issue", "args": "7"})
