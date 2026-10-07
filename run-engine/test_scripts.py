@@ -3755,7 +3755,7 @@ ok("#86 glossary Epic line pinned")
 _T86 = "# Changelog\n\n"
 _E86 = "## 1.8.0 \u2014 2026-09-30"
 assert cl86.startswith(_T86 + "## ") and cl86.count(_E86) == 1
-_top86 = cl86[len(_T86) : cl86.index(_E86)]  # topmost section, whatever its heading is called
+_top86 = cl86[cl86.index("## 1.9.0 ") : cl86.index(_E86)]  # the 1.9.0 section that carries the #86 entry
 assert "\n## " not in _top86 and "\n### Changed\n" in _top86
 cln86 = _n(_top86)
 assert _top86.count("\n- **") == 4  # 3 "Changed" bullets (#86) + the /prd "Added" bullet (1.9.0 release)
