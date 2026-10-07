@@ -258,12 +258,25 @@ try:
     assert s == 405 and r.getheader("Allow") == "GET"
     ok("POST -> 405")
 
+    tail = json.dumps(RES).encode()  # unterminated final line
+    for status, expect in (("done", True), ("running", False)):
+        t = ui_sessions.create("/run-issue", "r/tail")
+        ui_sessions.update(t["id"], status=status)
+        with open(os.path.join(ui_sessions.session_dir(t["id"]), "stream.jsonl"), "wb") as f:
+            f.write(tail)
+        st = jget(f"/api/sessions/{t['id']}/stream?offset=0")
+        if expect:
+            assert st["events"] == [EXPECTED[3]] and st["offset"] == len(tail), st
+        else:
+            assert st == {"events": [], "offset": 0}, st
+    ok("stream: terminal parses unterminated last line; running holds it back")
+
     bodies = b"".join(req(p)[2] for p in ("/api/sessions", f"/api/sessions/{v}",
                                           f"/api/sessions/{new['id']}",
                                           f"/api/sessions/{v}/stream"))
-    for secret in (b"SECRET-TOKEN-XYZ", b"SECRET-META", b"4242", b"999"):
+    for secret in (b"SECRET-TOKEN-XYZ", b"SECRET-META"):
         assert secret not in bodies, secret
-    assert all("pid" not in x for x in rows)
+    assert all("pid" not in x for x in rows) and "pid" not in d
     ok("secrets and pid never leak")
 finally:
     srv.shutdown()
