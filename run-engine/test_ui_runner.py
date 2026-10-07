@@ -503,7 +503,7 @@ def answer_checks():
         ok("unknown/malformed session ids: 404")
 
         # -- 405 still holds
-        for path in ("/api/sessions", "/board.json", f"/api/sessions/{sid}"):
+        for path in ("/board.json", f"/api/sessions/{sid}"):  # POST /api/sessions is the trigger (#116)
             s, h, _ = req("POST", path, {})
             assert s == 405 and h["Allow"] == "GET", (path, s)
         ok("other POSTs still 405 with Allow: GET")
