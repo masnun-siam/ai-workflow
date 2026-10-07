@@ -1339,8 +1339,8 @@ once, exactly as phase 6 spawns the specialist panel in one message.
   and it lives **outside the repo** — phases 0-1 predate the worktree, and `pr-grind` runs
   for hours after the worktree is deleted. Write it only via `aiw set`; never hand-edit
   it, and never invent a second state file. (This supersedes the old `.agent-run.md` rule.
-  That rule's real intent was *no daemon, no ledger service, no dashboard*, and that still
-  holds: this is one local JSON file written by a script that exits.)
+  The old rule forbade a ledger service: no ledger service; a local UI server is allowed,
+  and `aiw ui` reads `run.json` but never writes it: this is one local JSON file written by a script that exits.)
 ### Best-effort (a failure here is one warning line, never a stop)
 
 - GitNexus everywhere it appears: preflight sync, phase 4b indexing, phase 5.5's `--depth`,
