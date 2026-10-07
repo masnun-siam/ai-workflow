@@ -38,3 +38,15 @@ header a[aria-current="page"] { border-bottom: 2px solid var(--accent); }
 .offline { color: var(--error); margin-left: auto; }
 .muted { color: var(--muted); margin-left: auto; }
 main { max-width: 960px; margin: 0 auto; padding: 16px; overflow-wrap: anywhere; }
+.table-wrap { overflow-x: auto; }
+table.history { border-collapse: collapse; min-width: 48rem; width: 100%; }
+.history th, .history td { padding: 4px 8px; text-align: left; border-bottom: 1px solid #263040; }
+.history td.cmd { max-width: 20rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.history a, .history button, .history summary { min-height: 44px; display: inline-flex; align-items: center; }
+.history-filter select { min-height: 44px; }
+.history code { user-select: all; overflow-wrap: anywhere; }
+.history .error { color: var(--error); }
+.chip { padding: 2px 8px; border-radius: 12px; border: 1px solid var(--muted); color: var(--muted); }
+.chip-failed { color: var(--error); border-color: var(--error); }
+.chip-waiting { color: var(--waiting); border-color: var(--waiting); }
+.chip-running, .chip-starting { color: var(--accent); border-color: var(--accent); }
