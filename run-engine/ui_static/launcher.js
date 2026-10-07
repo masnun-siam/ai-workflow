@@ -20,7 +20,26 @@ export function repoOptions(body) {
   const list = body && Array.isArray(body.repos) ? body.repos : [];
   return list
     .filter((r) => r && typeof r.slug === 'string' && typeof r.path === 'string')
-    .map((r) => ({ value: r.slug, label: `${r.name || r.slug} - ${r.path}` }));
+    .map((r) => ({ value: r.slug, label: `${r.name || r.slug} - ${r.path}`, name: r.name || r.slug, path: r.path }));
+}
+
+// A typed absolute path is usable as-is; the server validates that it is a git checkout.
+export function pathOption(query) {
+  const q = String(query ?? '').trim();
+  return q.startsWith('/') ? q : null;
+}
+
+// Options for the repo combobox: repos matching the query, a "use this path" entry for a typed
+// absolute path, and a closing "Other path" entry that switches to free entry.
+export function comboOptions(repos, query) {
+  const q = String(query ?? '').trim().toLowerCase();
+  const out = repos
+    .filter((r) => !q || r.label.toLowerCase().includes(q) || r.value.toLowerCase().includes(q))
+    .map((r) => ({ kind: 'repo', value: r.value, name: r.name, path: r.path }));
+  const path = pathOption(query);
+  if (path) out.push({ kind: 'path', path });
+  out.push({ kind: 'other' });
+  return out;
 }
 
 export function argIssue(command, args) {
@@ -115,7 +134,7 @@ export function makeSubmitter(fetchImpl) {
 }
 
 export class Launcher extends Component {
-  state = { repos: [], repo: '', manual: false, path: '', command: 'run-issue', args: '', text: '', pending: false, errors: {}, result: null, form: 'named' };
+  state = { repos: [], repo: '', manual: false, path: '', command: 'run-issue', args: '', text: '', pending: false, errors: {}, result: null, form: 'named', repoQuery: null, repoOpen: false, repoActive: 0 };
 
   async componentDidMount() {
     let repos = [];
@@ -157,14 +176,41 @@ export class Launcher extends Component {
     }
   };
 
+  // Repo combobox: one input that filters repos as you type, and also takes an absolute path.
+  pickRepo = (opt) => {
+    if (opt.kind === 'repo') this.setState({ repo: opt.value, manual: false, repoQuery: null, repoOpen: false });
+    else if (opt.kind === 'path') this.setState({ manual: true, path: opt.path, repoQuery: null, repoOpen: false });
+    else this.setState({ manual: true, path: '', repoQuery: '', repoOpen: false });
+  };
+
+  onComboInput = (e) => {
+    const q = e.target.value;
+    const path = pathOption(q);
+    this.setState({ repoQuery: q, repoOpen: true, repoActive: 0, ...(path ? { manual: true, path } : {}) });
+  };
+
+  onComboKey = (e) => {
+    const opts = comboOptions(this.state.repos, this.state.repoQuery);
+    const n = opts.length;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const step = e.key === 'ArrowDown' ? 1 : n - 1;
+      this.setState({ repoOpen: true, repoActive: (this.state.repoActive + step) % n });
+    } else if (e.key === 'Enter' && this.state.repoOpen && n) {
+      e.preventDefault();
+      this.pickRepo(opts[Math.min(this.state.repoActive, n - 1)]);
+    } else if (e.key === 'Escape' && this.state.repoOpen) {
+      e.preventDefault();
+      this.setState({ repoOpen: false, repoQuery: null });
+    }
+  };
+
   onSubmit = (ev) => this.start(ev, 'named', validate(this.state), (repo) => buildBody({ repo, command: this.state.command, args: this.state.args }));
 
   onCustom = (ev) => this.start(ev, 'custom', validateCustom(this.state), (repo) => buildCustomBody({ repo, text: this.state.text }));
 
-  render(_, { repos, repo, manual, path, command, args, text, pending, form, errors, result }) {
-    const showPath = manual || repos.length === 0;
+  render(_, { repos, repo, manual, path, command, args, text, pending, form, errors, result, repoQuery, repoOpen, repoActive }) {
     const set = (k) => (e) => this.setState({ [k]: e.target.value });
-    const onRepo = (e) => (e.target.value === '' ? this.setState({ manual: true }) : this.setState({ manual: false, repo: e.target.value }));
     const mine = (f) => (result && (form || 'named') === f ? result : null);
     const outcomeMsg = (f) => { const r = mine(f); return r && r.kind === 'duplicate'
       ? html`<p role="alert" class="error">${r.message} <a href=${r.href}>Open that run</a></p>`
@@ -174,19 +220,30 @@ export class Launcher extends Component {
       <div class="launch">
       <form class="launcher panel" onSubmit=${this.onSubmit} noValidate>
         <h1>New run</h1>
+        <label for="repo-path">${repos.length ? 'Repo' : 'Repo path'}</label>
         ${repos.length
-          ? html`<label for="repo-select">Repo</label>
-            <select id="repo-select" value=${showPath ? '' : repo} onChange=${onRepo}
-              aria-invalid=${repoMsg && !showPath ? 'true' : undefined} aria-describedby=${repoMsg && !showPath ? 'repo-error' : undefined}>
-              ${repos.map((r) => html`<option value=${r.value}>${r.label}</option>`)}
-              <option value="">Other path...</option>
-            </select>`
-          : null}
-        ${showPath
-          ? html`<label for="repo-path">Repo path</label>
-            <input id="repo-path" type="text" value=${path} onInput=${set('path')}
-              aria-invalid=${repoMsg ? 'true' : undefined} aria-describedby=${repoMsg ? 'repo-error' : undefined} />`
-          : null}
+          ? html`<div class="combo">
+              <input id="repo-path" type="text" class="combo-input" role="combobox" autocomplete="off" spellcheck="false"
+                aria-expanded=${repoOpen ? 'true' : 'false'} aria-controls="repo-list" aria-autocomplete="list"
+                aria-activedescendant=${repoOpen ? 'repo-opt-' + repoActive : undefined}
+                placeholder="Search repos or type an absolute path"
+                value=${repoQuery !== null ? repoQuery : manual ? path : (repos.find((r) => r.value === repo) || {}).label || ''}
+                onInput=${this.onComboInput} onKeyDown=${this.onComboKey}
+                onFocus=${(e) => { e.target.select(); this.setState({ repoOpen: true }); }}
+                onBlur=${() => this.setState({ repoOpen: false, repoQuery: null })}
+                aria-invalid=${repoMsg ? 'true' : undefined} aria-describedby=${repoMsg ? 'repo-error' : undefined} />
+              ${repoOpen && html`<ul id="repo-list" class="combo-list" role="listbox" aria-label="Repos">
+                ${comboOptions(repos, repoQuery).map((o, i) => html`<li id=${'repo-opt-' + i} role="option" key=${i}
+                  aria-selected=${i === repoActive ? 'true' : 'false'} class=${o.kind === 'repo' && !manual && o.value === repo ? 'current' : ''}
+                  onMouseDown=${(e) => e.preventDefault()} onMouseEnter=${() => this.setState({ repoActive: i })} onClick=${() => this.pickRepo(o)}>
+                  ${o.kind === 'repo' ? html`<span>${o.name}</span><small class="mono">${o.path}</small>`
+                    : o.kind === 'path' ? html`<span>Use path</span><small class="mono">${o.path}</small>`
+                    : html`<span>Other path…</span><small>Type an absolute path to a git checkout</small>`}
+                </li>`)}
+              </ul>`}
+            </div>`
+          : html`<input id="repo-path" type="text" value=${path} onInput=${set('path')}
+              aria-invalid=${repoMsg ? 'true' : undefined} aria-describedby=${repoMsg ? 'repo-error' : undefined} />`}
         ${repoMsg ? html`<p id="repo-error" role="alert" class="error">${repoMsg}</p>` : null}
         <fieldset>
           <legend>Command</legend>

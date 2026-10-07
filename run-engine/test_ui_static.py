@@ -1065,7 +1065,7 @@ const fix = JSON.parse(process.env.LAUNCHER_FIX);
 const assert = (await import('node:assert')).strict;
 const out = (n) => console.log('ok ' + n);
 const tick = () => new Promise((r) => setImmediate(r));
-const { repoOptions, argIssue, validate, buildBody, outcome, sessionHref, loadLastRepo, saveLastRepo, makeSubmitter, Launcher } = L;
+const { repoOptions, pathOption, comboOptions, argIssue, validate, buildBody, outcome, sessionHref, loadLastRepo, saveLastRepo, makeSubmitter, Launcher } = L;
 out('import without document/localStorage does not throw');
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
@@ -1073,6 +1073,13 @@ const plain = (x) => JSON.parse(JSON.stringify(x));
 const opts = repoOptions(fix.repos);
 assert.equal(opts.length, 1); assert.equal(opts[0].value, 'o/r');
 out('repoOptions from real /api/repos body');
+assert.equal(pathOption('  /a/b '), '/a/b'); assert.equal(pathOption('rel/x'), null); assert.equal(pathOption(''), null);
+const two = [{ value: 'a/web', label: 'Web - /p/web', name: 'Web', path: '/p/web' }, { value: 'a/api', label: 'Api - /p/api', name: 'Api', path: '/p/api' }];
+assert.deepEqual(comboOptions(two, '').map((o) => o.kind), ['repo', 'repo', 'other']);
+assert.deepEqual(comboOptions(two, 'AP').map((o) => o.value ?? o.kind), ['a/api', 'other']);
+assert.deepEqual(comboOptions(two, '/tmp/x').map((o) => o.kind), ['path', 'other']);
+assert.deepEqual(comboOptions(two, '/p/web').map((o) => o.value ?? o.kind), ['a/web', 'path', 'other']);
+out('comboOptions filters by name/slug/path, offers typed path and Other path');
 for (const bad of [null, undefined, {}, { repos: 5 }, [], { repos: [{ name: 'x' }, { slug: 'a/b' }, null] }])
   assert.deepEqual(plain(repoOptions(bad)), [], JSON.stringify(bad));
 out('repoOptions empty/malformed -> []');
@@ -1158,13 +1165,13 @@ const walk = (n) => { if (n == null || typeof n === 'boolean') return; if (Array
 const text = (n) => (n == null || typeof n === 'boolean') ? '' : Array.isArray(n) ? n.map(text).join('') : typeof n === 'object' ? text(n.props && n.props.children) : String(n);
 const find = (t, root) => { nodes.length = 0; walk(root); return nodes.filter((n) => n.type === t); };
 let tree = render({});
-assert.equal(find('select', tree).length, 1);
+assert.equal(find('input', tree).filter((i) => i.props.role === 'combobox').length, 1);
 const radios = find('input', tree).filter((i) => i.props.type === 'radio');
 assert.deepEqual(radios.map((r) => r.props.value).sort(), ['dump', 'gh-issue', 'intake', 'pr-grind', 'prd', 'run-issue', 'worklog']);
 const lab = (t) => find('label', render({ command: t })).map((l) => text(l)).join('|');
 assert.match(lab('run-issue'), /issue/i); assert.match(lab('pr-grind'), /PR|pull/i);
 assert.notEqual(lab('run-issue'), lab('pr-grind'));
-out('render: repo select, seven command radios, command-specific args label');
+out('render: repo combobox, seven command radios, command-specific args label');
 const fs = find('fieldset', tree); assert.ok(fs.length >= 1); assert.ok(find('legend', fs[0]).length === 1);
 tree = render({});
 const labelFor = new Set(find('label', tree).map((l) => l.props.htmlFor ?? l.props['for']));
