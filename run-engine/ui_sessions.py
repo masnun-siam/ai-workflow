@@ -15,6 +15,7 @@ import secrets
 import tempfile
 from datetime import datetime, timezone
 
+import ui_notify
 from shared import data_dir, warn
 
 # Timestamp prefix makes ids sort by creation time; the strict whitelist doubles as
@@ -106,7 +107,17 @@ def update(sid: str, **fields) -> dict:
         if record is None:
             raise ValueError(f"corrupt session record: {path}")
         record.update(fields)
+        # Dedupe is recorded under the lock; the network call happens after release.
+        event = record.get("status") if "status" in fields else None
+        key = ui_notify.dedupe_key(event, record)
+        seen = record.get("notified", [])
+        if key is None or key in seen:
+            event = None
+        else:
+            record["notified"] = [*seen, key]
         _atomic_write_json(path, record)
+    if event:
+        ui_notify.notify(event, record)
     return record
 
 
