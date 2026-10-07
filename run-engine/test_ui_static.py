@@ -330,8 +330,9 @@ assert.equal(planText({ plan: 'hello' }), 'hello');
 for (const d of [{ plan: null }, { plan: '' }, { plan: 5 }, {}, null, undefined]) assert.equal(planText(d), null);
 out('planText');
 
-assert.equal(resumeCommand({ repo: '/tmp/x', session_id: 'abc' }), "cd '/tmp/x' && claude --resume abc");
-assert.equal(resumeCommand({ repo: "/tmp/it's", session_id: 'abc' }), "cd '/tmp/it'\\''s' && claude --resume abc");
+assert.equal(resumeCommand({ repo: '/tmp/x', session_id: 'abc' }), "cd '/tmp/x' && claude --resume 'abc'");
+assert.equal(resumeCommand({ repo: "/tmp/it's", session_id: 'abc' }), "cd '/tmp/it'\\''s' && claude --resume 'abc'");
+assert.equal(resumeCommand({ repo: '/tmp/x', session_id: "a'b" }), "cd '/tmp/x' && claude --resume 'a'\\''b'");
 assert.equal(resumeCommand({ repo: '/tmp/x' }), null);
 out('resumeCommand quoting');
 """
