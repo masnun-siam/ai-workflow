@@ -25,7 +25,10 @@ import shared
 import ui_sessions
 from dispatch import read_checkouts
 from shared import data_dir, ledger_path, run_dir_for, warn
+import ui_events
 
+HEADLESS_PROMPT = ("Headless run: ask via aiw ask, never AskUserQuestion. Gate questions go through "
+                   "`aiw ask --json '<AskUserQuestion input>'`; then end your turn.")
 CLAUDE_ARGS = ["--print", "--output-format", "stream-json", "--verbose",
                "--dangerously-skip-permissions"]
 STOP_GRACE_SECONDS = 10
@@ -88,7 +91,8 @@ def _spawn(sid: str, argv: list, path: str, *, env_extra=None, pass_fds=(), answ
         with open(stream_path, "ab") as stream_f, open(os.path.join(d, "stderr.log"), "ab") as err_f:
             proc = subprocess.Popen(argv, cwd=path, stdin=subprocess.DEVNULL, stdout=stream_f,
                                     stderr=err_f, start_new_session=True, close_fds=True,
-                                    env={**os.environ, **env_extra} if env_extra else None,
+                                    env={**os.environ, "AIW_UI_SESSION": sid,
+                                         "CLAUDE_PLUGIN_DATA": data_dir(), **(env_extra or {})},
                                     pass_fds=tuple(pass_fds))
     except (OSError, ValueError) as e:
         _fail(sid, f"failed to spawn claude: {e}")
@@ -100,7 +104,8 @@ def _spawn(sid: str, argv: list, path: str, *, env_extra=None, pass_fds=(), answ
     return rec
 
 
-def start(command_text, cwd, link=None, *, extra_args=(), env_extra=None, pass_fds=()) -> dict:
+def start(command_text, cwd, link=None, *, extra_args=(), env_extra=None, pass_fds=(),
+          gate_questions=False) -> dict:
     if not isinstance(command_text, str) or not command_text.strip():
         raise ValueError("command_text must be a non-empty string")
     if command_text.startswith("-"):
@@ -111,7 +116,8 @@ def start(command_text, cwd, link=None, *, extra_args=(), env_extra=None, pass_f
 
     sid = ui_sessions.create(command_text, cwd, link)["id"]
     exe = _preflight(sid)
-    return _spawn(sid, [exe, *CLAUDE_ARGS, *extra_args, command_text], path,
+    gate = ["--append-system-prompt", HEADLESS_PROMPT] if gate_questions else []
+    return _spawn(sid, [exe, *CLAUDE_ARGS, *gate, *extra_args, command_text], path,
                   env_extra=env_extra, pass_fds=pass_fds, cwd_path=path)
 
 
@@ -130,7 +136,7 @@ def resume(sid: str, answer_text) -> dict:
     if not isinstance(path, str) or not os.path.isdir(path):
         return _fallback(sid, answer_text, f"cwd is not a directory: {repo!r}")
     exe = _preflight(sid)
-    return _spawn(sid, [exe, *CLAUDE_ARGS, "--resume", rec["session_id"], answer_text], path,
+    return _spawn(sid, [exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, "--resume", rec["session_id"], answer_text], path,
                   answer=answer_text, ended_at=None, error=None, pending_answer=answer_text,
                   resumed_fresh=None, note=None, terminal_handoff=None)
 
@@ -174,10 +180,11 @@ def _fallback(sid: str, answer: str, reason: str) -> dict:
 def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None) -> None:
     """Follow a session until it exits. proc is None for a re-attached (non-child) pid."""
     path = os.path.join(ui_sessions.session_dir(sid), "stream.jsonl")
-    buf, is_error, saw_result, saw_init, first_err = b"", False, False, False, None
+    buf, is_error, saw_result, asked = b"", False, False, False
+    saw_init, first_err = False, None
 
     def handle(line: bytes) -> None:
-        nonlocal is_error, saw_result, saw_init, first_err
+        nonlocal is_error, saw_result, asked, saw_init, first_err
         try:
             ev = json.loads(line)
         except ValueError:
@@ -187,6 +194,11 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
         if ev.get("type") == "system" and ev.get("subtype") == "init":
             saw_init = True
             ui_sessions.update(sid, session_id=ev.get("session_id"))
+        elif ev.get("type") == "assistant":
+            asked = asked or any(
+                e["kind"] == "tool" and e["name"] == "Bash" and isinstance(e["input"], dict)
+                and str(e["input"].get("command", "")).lstrip().startswith("aiw ask")
+                for e in ui_events.parse_line(line))
         elif ev.get("type") == "result":
             is_error, saw_result = bool(ev.get("is_error")), True
             if is_error and first_err is None:
@@ -242,6 +254,9 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
             elif (rc == 0 or proc is None) and not is_error:
                 if status == "waiting":  # question recorded mid-run: stay waiting for the answer
                     ui_sessions.update(sid, ended_at=_now(), pending_answer=None)
+                elif asked:  # model ran `aiw ask` but nothing was recorded: don't call it done
+                    ui_sessions.update(sid, status="failed", ended_at=_now(),
+                                       error="aiw ask ran but recorded no question; see stream.jsonl")
                 else:
                     ui_sessions.update(sid, status="done", ended_at=_now(), pending_answer=None)
             else:

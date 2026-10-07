@@ -17,6 +17,7 @@ import sys
 from urllib.parse import parse_qs, unquote, urlsplit
 
 import ui_events
+import ui_repos
 import ui_runner
 import ui_sessions
 from shared import die
@@ -151,6 +152,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/board.json":
             board = build_board(scan_records(), load_projects(), self.server.fetch_title)
             self._send(200, "application/json; charset=utf-8", json.dumps(board).encode("utf-8"))
+        elif path == "/api/repos":
+            self._json(200, {"repos": ui_repos.list_repos()})
         elif path == "/api/sessions":
             body = {"sessions": [_public(r) for r in ui_sessions.list_sessions()]}
             self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
@@ -216,10 +219,33 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if not _guard(self):
             return
         parts = urlsplit(self.path).path.split("/")
-        if len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] == "answer":
+        if parts == ["", "api", "sessions"]:
+            self._start()
+        elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] == "answer":
             self._answer(parts[3])
         else:
             self._method_not_allowed(guarded=True)
+
+    def _start(self) -> None:
+        try:
+            n = int(self.headers.get("Content-Length") or "")
+        except ValueError:
+            n = -1
+        if n < 0:
+            self._json(400, {"error": "bad Content-Length"})
+            return
+        if n > MAX_BODY:
+            self._json(413, {"error": "body too large"})
+            return
+        try:
+            body = json.loads(self.rfile.read(n))
+        except ValueError:
+            body = None
+        if not isinstance(body, dict):
+            self._json(400, {"error": "body must be a JSON object"})
+            return
+        status, payload = ui_repos.start_session(body)
+        self._json(status, _public(payload) if status == 201 else payload)
 
     def _answer(self, sid: str) -> None:
         try:

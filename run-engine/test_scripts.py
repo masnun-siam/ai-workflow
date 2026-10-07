@@ -3662,7 +3662,7 @@ ok("#85 bare-number bullet and step 3.5 epic routing sentences intact")
 # both pins below hash/compare whitespace-normalised text (_n), so reflowing lines does not trip them
 # sha256 of whitespace-normalised text on base 0ff5687 (pre-#85): step 3.5 slice, and "## Epic mode" up to "\n## Rules"
 S35_SHA = "6e1464ddf2883001109064bba0ffcef2471985262dca9d9d1d470eacb25258c5"
-EPIC_SHA = "05afb6cb8795262f6c025b93699b63680e2749534df0e1f17f734e69c4401870"
+EPIC_SHA = "430b81e3dde45f1bbcb51da394667d3ad58003d127d92ba40a4dd74dff3fe577"  # re-pinned in #118: headless `aiw ask` branches added at the epic gate sites
 import hashlib
 _ep = ri85[ri85.index("## Epic mode") :]
 _ep = _ep[: _ep.index("\n## ", 5)]
@@ -3798,6 +3798,51 @@ assert ("immediate" in hw86 or "as soon as" in hw86) and "sole channel" not in h
 assert "queued" in hw86 and "one attempt per head SHA" in hw86
 ok("#86 earlier doc regressions still hold")
 
+
+# Issue #130: docs describe `aiw ui` (CONTEXT Session, run-issue.md invariant, README section).
+rd130, cx130, ri130 = _read("README.md"), _read("CONTEXT.md"), _read("commands", "run-issue.md")
+_lang130 = cx130[cx130.index("## Language") :]
+_lang130 = _lang130[: _lang130.index("\n## ", 5)] if "\n## " in _lang130[5:] else _lang130
+assert "**Session**:" in _lang130, "CONTEXT.md Language lacks **Session**:"
+_sess130 = _lang130[_lang130.index("**Session**:") :]
+assert "Run" in _sess130[:600] and "headless" in _sess130[:600].lower()
+ok("#130 CONTEXT.md defines Session")
+
+assert "no ledger service; a local UI server is allowed" in ri130
+assert "no daemon, no ledger service, no dashboard" not in ri130
+_st130 = ri130[ri130.index("### State") :]
+_st130 = _st130[: _st130.index("\n### ", 5)]
+_st130n = " ".join(_st130.split())
+for frag in ("is the only state", "never invent a second state file",
+             "one local JSON file written by a script that exits"):
+    assert frag in _st130n, frag
+ok("#130 run-issue.md State invariant reworded, anchors kept")
+
+_cli130 = rd130[rd130.index("## The `aiw` CLI") :]
+_cli130 = _cli130[: _cli130.index("\n## ", 5)]
+assert "aiw ui" in _cli130, "aiw CLI block lacks aiw ui"
+_m130 = re.search(r"^#{2,4} .*aiw ui.*$", rd130, re.M)
+assert _m130, "README has no aiw ui section heading"
+_ui130 = rd130[_m130.end() :]
+_nx130 = re.search(r"^#{1,%d} " % len(_m130.group(0).split()[0]), _ui130, re.M)
+_ui130 = _ui130[: _nx130.start()] if _nx130 else _ui130
+_ui130n = " ".join(_ui130.split())
+for frag in ("--port", "8420", "--allow-host", "tailscale serve", "ui.json", "0600", "ntfy",
+             "server", "topic", "token", "public_url"):
+    assert frag in _ui130, frag
+low130 = _ui130n.lower()
+assert "auth" in low130 and "tailnet" in low130 and "acl" in low130
+assert "--dangerously-skip-permissions" in _ui130
+assert "repeatable" in low130 and "exact" in low130 and "443" in _ui130 and "bare" in low130
+assert "chmod 600" in _ui130 and "warning" in low130 and "ignored" in low130
+for var in ("AIW_NTFY_SERVER", "AIW_NTFY_TOPIC", "AIW_NTFY_TOKEN"):
+    assert var in _ui130, var
+assert not re.search(r"tk_[A-Za-z0-9]{10,}", rd130)
+for host in re.findall(r"[\w.<>-]+\.ts\.net", rd130):
+    assert host.startswith("<") and ".<tailnet>.ts.net" in host, host
+assert "allowed_hosts" not in rd130
+assert "--allow-host" in _ui130
+ok("#130 README aiw ui section pinned")
 # ---- #103 ADR: headless question pause ----
 _adr103 = os.path.join(HERE, "..", "docs", "adr", "0001-headless-question-pause.md")
 assert os.path.isfile(_adr103), "#103 ADR missing: docs/adr/0001-headless-question-pause.md"
