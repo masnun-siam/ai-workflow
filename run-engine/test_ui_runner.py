@@ -382,18 +382,18 @@ def answer_checks():
         assert "4000" in b["error"], b
         ok("invalid answers/bodies: 400, round intact, nothing spawned")
 
+        # -- 4000 boundary accepted, after the 400s above
+        assert post(sid, "q-1", {"0": GOOD["0"], "1": {"other": "a" * 4000}})[0] == 200
+        wait_status(sid, {"done", "failed"})
+        wait_finished(sid)
+        ok("exactly 4000 chars accepted; round usable after earlier 400s")
+
         # -- free text rejected when allowFreeText false
         sid2, fk2, _ = mk(free=False)
         s, _, _ = post(sid2, "q-1", {"0": GOOD["0"], "1": {"other": "x"}})
         assert s == 400
         intact(sid2, fk2)
         ok("free text on allowFreeText=False question: 400")
-
-        # -- 4000 boundary accepted, after the 400s above
-        assert post(sid, "q-1", {"0": GOOD["0"], "1": {"other": "a" * 4000}})[0] == 200
-        wait_status(sid, {"done", "failed"})
-        wait_finished(sid)
-        ok("exactly 4000 chars accepted; round usable after earlier 400s")
 
         # -- oversized body 413, not read
         sid, fk, work = mk()
