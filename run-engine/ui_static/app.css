@@ -38,6 +38,14 @@ header a[aria-current="page"] { border-bottom: 2px solid var(--accent); }
 .offline { color: var(--error); margin-left: auto; }
 .muted { color: var(--muted); margin-left: auto; }
 main { max-width: 960px; margin: 0 auto; padding: 16px; overflow-wrap: anywhere; }
+.launcher { display: flex; flex-direction: column; gap: 8px; max-width: 480px; }
+.launcher input[type="text"], .launcher select, .launcher textarea, .launcher button { width: 100%; min-height: 44px; font: inherit; padding: 0 12px; }
+.launcher fieldset { border: 1px solid #263040; }
+.launcher .radio { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.launcher .radio input { width: 24px; height: 24px; }
+.launcher .error { color: var(--error); margin: 0; }
+.launcher textarea { min-height: 88px; padding: 8px 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.launcher .note { color: var(--muted, #8a97a8); margin: 0; font-size: 0.9em; }
 main:has(.board) { max-width: none; }
 .board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(250px, 1fr); gap: 12px; overflow-x: auto; scroll-snap-type: x proximity; }
 .column { scroll-snap-align: start; min-width: 0; }

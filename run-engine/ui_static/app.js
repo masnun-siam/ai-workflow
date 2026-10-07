@@ -5,6 +5,7 @@ import { isWaiting, waitingWatcher, notifyState, requestNotify, notifyWaiting, p
 import { Board } from './board.js';
 // ponytail: import cycle with run.js (it imports poll); safe, neither uses the other at top level.
 import { RunDetail } from './run.js';
+import { Launcher } from './launcher.js';
 import { History } from './history.js';
 
 const html = htm.bind(h);
@@ -106,7 +107,7 @@ function View({ route, sessions }) {
     case 'answer':
       return html`<${Answer} session=${route.params.session} key=${route.params.session} />`;
     case 'new':
-      return html`<h1>New run</h1><p>Start a run here.</p>`;
+      return html`<${Launcher} />`;
     case 'sessions':
       return html`<${History} sessions=${sessions} />`;
     default:
