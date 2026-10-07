@@ -129,6 +129,7 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); width
 .chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
 .chip-running, .chip-starting, .chip.running { color: var(--live); background: var(--live-bg); }
 .chip-waiting, .chip.pending { color: var(--waiting); background: var(--waiting-bg); }
+.chip-limited { color: var(--waiting); background: var(--waiting-bg); }
 .chip-stopped { color: var(--stop); background: var(--stop-bg); }
 .chip-failed, .chip.escalated, .chip.bounced { color: var(--error); background: var(--error-bg); }
 .chip-done, .chip.done { color: var(--done); background: var(--done-bg); }
@@ -404,3 +405,12 @@ header .kbd-hint { color: var(--muted); font-size: 13px; gap: 10px; }
 .toast { max-width: min(360px, calc(100vw - 32px)); padding: 10px 14px; border-radius: 8px; background: var(--raised); border: 1px solid var(--border-input); color: var(--fg); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); animation: enter 0.2s var(--ease); }
 .toast-ok { border-color: #1f4a37; }
 .toast-error { border-color: var(--error-border); color: var(--error); }
+
+.limit-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin: 12px 0; padding: 10px 14px; border-radius: 8px; background: var(--waiting-bg); border: 1px solid var(--waiting-border); color: var(--waiting); }
+.limit-banner .error { flex-basis: 100%; margin: 0; }
+.settings-cols { display: grid; grid-template-columns: 180px 1fr; gap: 20px; align-items: start; }
+.settings-menu a { display: block; padding: 8px 12px; border-radius: 6px; color: var(--body); text-decoration: none; }
+.settings-menu a[aria-current="page"] { background: var(--raised); color: var(--fg); }
+.cmd-row { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(140px, 2fr) auto auto auto; gap: 8px; align-items: center; margin-bottom: 10px; }
+.cmd-row > span { grid-column: 1 / -1; font-size: 12px; }
+@media (max-width: 720px) { .settings-cols { grid-template-columns: 1fr; } .cmd-row { grid-template-columns: 1fr 1fr; } }

@@ -1,6 +1,7 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { toast } from './toast.js';
+import { clockText } from './fmt.js';
 
 const html = htm.bind(h);
 const KEY = 'aiw.lastRepo';
@@ -138,6 +139,10 @@ export class Launcher extends Component {
   state = { repos: [], repo: '', manual: false, path: '', command: 'run-issue', args: '', text: '', pending: false, errors: {}, result: null, form: 'named', repoQuery: null, repoOpen: false, repoActive: 0 };
 
   async componentDidMount() {
+    fetch('/api/settings', { headers: { Accept: 'application/json' } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s) => s && this.setState({ cmds: s.commands || [], claudeLabel: s.default || '' }))
+      .catch(() => {}); // no picker without settings: runs use claude
     let repos = [];
     let failed = false;
     try {
@@ -168,7 +173,7 @@ export class Launcher extends Component {
     this.submit = this.submit || makeSubmitter((...a) => fetch(...a));
     const repo = (s.manual || !s.repos.length ? s.path : s.repo).trim();
     this.setState({ pending: true, form, errors: {}, result: null });
-    const r = await this.submit(mkBody(repo));
+    const r = await this.submit({ ...mkBody(repo), ...(s.claudeLabel ? { claude_cmd: s.claudeLabel } : {}) });
     if (!r) return;
     this.setState({ pending: false, result: r.kind === 'open' ? null : r });
     if (r.kind === 'open') {
@@ -211,7 +216,7 @@ export class Launcher extends Component {
 
   onCustom = (ev) => this.start(ev, 'custom', validateCustom(this.state), (repo) => buildCustomBody({ repo, text: this.state.text }));
 
-  render(_, { repos, repo, manual, path, command, args, text, pending, form, errors, result, repoQuery, repoOpen, repoActive }) {
+  render({ limits }, { cmds, claudeLabel, repos, repo, manual, path, command, args, text, pending, form, errors, result, repoQuery, repoOpen, repoActive }) {
     const set = (k) => (e) => this.setState({ [k]: e.target.value });
     const mine = (f) => (result && (form || 'named') === f ? result : null);
     const outcomeMsg = (f) => { const r = mine(f); return r && r.kind === 'duplicate'
@@ -247,6 +252,13 @@ export class Launcher extends Component {
           : html`<input id="repo-path" type="text" value=${path} onInput=${set('path')}
               aria-invalid=${repoMsg ? 'true' : undefined} aria-describedby=${repoMsg ? 'repo-error' : undefined} />`}
         ${repoMsg ? html`<p id="repo-error" role="alert" class="error">${repoMsg}</p>` : null}
+        ${cmds && cmds.length > 0 && html`
+          <label for="claude-cmd">Claude command</label>
+          <select id="claude-cmd" value=${claudeLabel} onChange=${set('claudeLabel')}>
+            <option value="" selected=${!claudeLabel}>claude</option>
+            ${cmds.map((c) => { const until = ((limits || {})[c.cmd] || {}).limited_until; return html`<option value=${c.label} selected=${c.label === claudeLabel}>${c.label}${until ? ` (limited until ${clockText(until)})` : ''}</option>`; })}
+          </select>
+          ${(((limits || {})[(cmds.find((c) => c.label === claudeLabel) || {}).cmd] || {}).limited_until) ? html`<p class="note">This account is rate limited: the run is queued and starts automatically at reset.</p>` : null}`}
         <fieldset>
           <legend>Command</legend>
           ${COMMANDS.map((c) => html`<label for=${'cmd-' + c} class="radio">

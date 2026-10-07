@@ -7,7 +7,7 @@ import { toast } from './toast.js';
 const html = htm.bind(h);
 
 const DASH = '—';
-const OUTCOMES = ['starting', 'running', 'waiting', 'done', 'failed', 'stopped'];
+const OUTCOMES = ['starting', 'running', 'waiting', 'limited', 'done', 'failed', 'stopped'];
 
 export function rowOutcome(s) {
   return s.outcome === 'waiting' || s.waiting === true ? 'waiting' : s.outcome;
@@ -31,6 +31,8 @@ export function rowAction(s) {
       return { kind: 'terminal', label: 'Continue in terminal', command: s.resume_command };
     case 'waiting':
       return { kind: 'link', label: 'Answer', href: '#/answer/' + encodeURIComponent(s.id) };
+    case 'limited':
+      return { kind: 'post', label: 'Resume now', method: 'POST', url: `/api/sessions/${encodeURIComponent(s.id)}/resume` };
     case 'stopped':
       return { kind: 'post', label: 'Resume', method: 'POST', url: `/api/sessions/${encodeURIComponent(s.id)}/resume` };
     case 'running':

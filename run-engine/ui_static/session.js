@@ -4,6 +4,7 @@ import { poll } from './app.js';
 import { mergeStream } from './run.js';
 import { runLink, runHash } from './answer.js';
 import { shortRepo } from './fmt.js';
+import { LimitBanner } from './limits.js';
 
 const html = htm.bind(h);
 
@@ -130,6 +131,7 @@ export class Session extends Component {
           ${meta.outcome === 'waiting' && html`<a class="btn btn--primary" href=${`#/answer/${encodeURIComponent(meta.id)}`}>Answer</a>`}
           ${retry && html`<span role="status" class="offline">Retrying…</span>`}
         </div>
+        ${meta.outcome === 'limited' && html`<${LimitBanner} key=${meta.id} s=${meta} />`}
         <div class="tbar">
           <input type="search" data-search class="field" aria-label="Search transcript" placeholder="Search messages and tool calls" value=${q}
             onInput=${(e) => this.setState({ q: e.target.value })} />

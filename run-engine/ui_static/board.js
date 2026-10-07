@@ -30,7 +30,7 @@ export function cardChips(card, columnKey, session) {
   if (columnKey === 'done') return ['merged'];
   const chips = [];
   const status = session && (session.status ?? session.outcome);
-  if (status === 'running' || status === 'stopped') chips.push(status);
+  if (status === 'running' || status === 'stopped' || status === 'limited') chips.push(status);
   else if (status === 'waiting' || (session && session.waiting === true)) chips.push('waiting');
   else if (card.escalated) chips.push('escalated');
   if (session && session.resumed_fresh === true) chips.push('resumed fresh');

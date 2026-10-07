@@ -16,3 +16,13 @@ export function formatWhen(iso, now = new Date()) {
 
 // Last path segment of a repo path or owner/repo slug.
 export const shortRepo = (repo) => String(repo || '').replace(/\/+$/, '').split('/').pop() || '—';
+
+// "in 1h 12m", "in 5m", "now" for an epoch-seconds reset time.
+export function untilText(epochSec, nowMs = Date.now()) {
+  const m = Math.ceil((epochSec * 1000 - nowMs) / 60000);
+  if (!(m > 0)) return 'now';
+  return m >= 60 ? `in ${Math.floor(m / 60)}h ${m % 60}m` : `in ${m}m`;
+}
+
+// Local "HH:MM" of an epoch-seconds time.
+export const clockText = (epochSec) => new Date(epochSec * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });

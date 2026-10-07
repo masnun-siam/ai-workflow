@@ -3,6 +3,7 @@ import htm from './vendor/htm.mjs';
 import { poll } from './app.js';
 import { formatWhen } from './fmt.js';
 import { toast } from './toast.js';
+import { LimitBanner } from './limits.js';
 
 const html = htm.bind(h);
 
@@ -29,7 +30,7 @@ export function sessionForRun(sessions, owner, repo, n) {
 export function actionsFor(session) {
   if (!session) return [];
   const out = [];
-  if (['starting', 'running', 'waiting'].includes(session.outcome)) out.push('stop');
+  if (['starting', 'running', 'waiting', 'limited'].includes(session.outcome)) out.push('stop');
   if (session.outcome === 'stopped') out.push('resume');
   if (session.resume_command) out.push('terminal');
   return out;
@@ -312,6 +313,8 @@ export class RunDetail extends Component {
               ${acts.includes('terminal') && html`<button type="button" onClick=${this.terminal}>Continue in terminal</button>`}
             </div>`}
         </div>
+        ${s && s.outcome === 'limited' && html`<${LimitBanner} key=${s.id} s=${s} />`}
+        ${s && s.claude_cmd && s.claude_cmd !== 'claude' && html`<p class="note">Account: <span class="mono">${s.claude_cmd}</span></p>`}
         ${s && s.resumed_fresh && html`<p class="note">${`Resumed fresh${s.note ? `: ${s.note}` : ''}`}</p>`}
         ${run.errors?.ledger && html`<p class="muted">Ledger could not be read</p>`}
         <div role="status" class="msg">${msg}</div>

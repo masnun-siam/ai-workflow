@@ -73,6 +73,7 @@ export function paletteItems({ board, sessions }) {
     { id: 'nav-board', group: 'Go to', label: 'Board', detail: 'g b', href: '#/' },
     { id: 'nav-sessions', group: 'Go to', label: 'Sessions', detail: 'g s', href: '#/sessions' },
     { id: 'nav-new', group: 'Go to', label: 'New run', detail: 'n', href: '#/new' },
+    { id: 'nav-settings', group: 'Go to', label: 'Settings', detail: 'Claude commands', href: '#/settings' },
   ];
   for (const col of (board && board.columns) || []) {
     for (const card of col.cards || []) {
