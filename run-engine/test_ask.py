@@ -387,7 +387,7 @@ def t_doc_permissions():
     front = DOC.split("---")[1]
     allowed = next(line for line in front.splitlines() if line.startswith("allowed-tools:"))
     assert "AskUserQuestion" in allowed and "Bash(aiw:*)" in allowed
-    cmds = re.findall(r"`(\w[^`]*?aiw ask[^`]*)`|^\s*(\S.*aiw ask.*)$", DOC, re.M)
+    cmds = re.findall(r"`((?:\w[^`]*?)?aiw ask[^`]*)`|^\s*((?:\S.*?)?aiw ask.*)$", DOC, re.M)
     examples = [a or b for a, b in cmds if "--json" in (a or b) or "<<" in (a or b)]
     assert examples, "no example aiw ask command in run-issue.md"
     assert all(e.strip().startswith("aiw ") for e in examples), examples

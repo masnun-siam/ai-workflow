@@ -37,7 +37,7 @@ are used either way; only the transport differs.
   for short fixed strings only. Both start with `aiw `.
 
   ```
-  aiw ask <<'EOF'  # aiw ask: records the round
+  aiw ask <<'EOF'
   {"questions":[{"header":"...","question":"...","multiSelect":false,"options":[{"label":"...","description":"..."}]}]}
   EOF
   ```
