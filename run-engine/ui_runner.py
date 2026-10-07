@@ -25,7 +25,7 @@ CLAUDE_ARGS = ["--print", "--output-format", "stream-json", "--verbose",
 STOP_GRACE_SECONDS = 10
 POLL_SECONDS = 0.2
 
-# pid -> Popen for sessions started here; None for sessions re-attached by reconcile().
+# session id -> Popen for sessions started here; None for sessions re-attached by reconcile().
 _procs: dict = {}
 _stopping: set = set()
 
@@ -59,13 +59,16 @@ def _preflight(sid: str) -> str:
     return exe
 
 
-def _proc_start(pid) -> str | None:
+_PS_ERROR = object()  # ps itself failed: liveness unknown, not 'no such process'
+
+
+def _proc_start(pid):
     # ponytail: lstart has 1s resolution; a pid recycled within the same second looks the same
     try:
         p = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True,
                            text=True, timeout=5, env={**os.environ, "LC_ALL": "C"})
     except (OSError, subprocess.TimeoutExpired):
-        return None
+        return _PS_ERROR
     return (p.stdout.strip() or None) if p.returncode == 0 else None
 
 
@@ -130,9 +133,20 @@ def _follow(sid: str, proc, pid=None, started=None) -> None:
         for line in whole:
             handle(line)
 
+    ps_errors = [0]
+
     def alive() -> bool:
         # ponytail: one ps per tick per re-attached session; fine for a handful
-        return proc.poll() is None if proc is not None else _proc_start(pid) == started
+        if proc is not None:
+            return proc.poll() is None
+        if not started:
+            return False
+        cur = _proc_start(pid)
+        if cur is _PS_ERROR:  # transient ps failure: keep following, bounded
+            ps_errors[0] += 1
+            return ps_errors[0] <= 25
+        ps_errors[0] = 0
+        return cur == started
 
     try:
         while alive():
