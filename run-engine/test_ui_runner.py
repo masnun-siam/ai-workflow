@@ -145,7 +145,7 @@ def group_gone(pgid):
     try:
         os.killpg(pgid, 0)
         return False
-    except ProcessLookupError:
+    except (ProcessLookupError, PermissionError):
         return True
 
 
@@ -199,6 +199,7 @@ REV_NEW = "2030-06-01T11:00:00Z id=9 state=APPROVED"
 SINCE = "2030-06-01T10:00:00Z"
 FUTURE = "2030-06-01T13:00:00Z"
 PAST = "2030-06-01T11:00:00Z"
+REAL_PAST = "2000-01-01T00:00:00Z"  # due under the real clock
 BODY = "\n## Round 1\n- notes:  keep   spacing\nnext-poll: inside-body-ignored\n\n"
 
 
@@ -388,7 +389,7 @@ def prgrind_cases() -> int:
 
     def timer_catchup():
         d, fk, work = pset()
-        mkpr(d)
+        mkpr(d, **{"next-poll": REAL_PAST})
         prior(work)
         t = ui_runner.start_prgrind_timer(3600)
         assert isinstance(t, threading.Thread) and t.daemon
@@ -473,7 +474,7 @@ def prgrind_cases() -> int:
 
     def restart_survival():
         d, fk, work = pset("sleep")
-        path = mkpr(d)
+        path = mkpr(d, **{"next-poll": REAL_PAST})
         prior(work)
         code = ("import sys; sys.path.insert(0, %r); import ui_runner; "
                 "print(ui_runner.prgrind_tick(%r))" % (HERE, path))
@@ -484,7 +485,9 @@ def prgrind_cases() -> int:
         assert tick(path)[0] in ("locked", "busy")
         os.killpg(kid["pid"], signal.SIGKILL)
         wait_for(lambda: group_gone(kid["pid"]), 10)
-        _ = header(path)
+        txt = open(path).read()
+        txt = txt.replace(header(path)["next-poll"], REAL_PAST, 1)
+        open(path, "w").write(txt)
         out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
         assert out.stdout.strip() == "started", (out.stdout, out.stderr)
 
