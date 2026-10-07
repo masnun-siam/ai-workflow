@@ -68,7 +68,12 @@ def _answer_text(pending: dict, answers) -> str:
             if len(other) > MAX_FREE_TEXT:
                 raise ValueError(f"answer {i}: free text over the {MAX_FREE_TEXT} character cap")
             out[str(i)] = {"other": other}
-    return f"Answer to {pending['id']}: " + json.dumps(out, ensure_ascii=False, separators=(",", ":"))
+    text = f"Answer to {pending['id']}: " + json.dumps(out, ensure_ascii=False, separators=(",", ":"))
+    try:
+        text.encode("utf-8")  # lone surrogates can't be passed as argv
+    except UnicodeEncodeError:
+        raise ValueError("free text must be valid UTF-8") from None
+    return text
 
 
 def _public(rec: dict) -> dict:

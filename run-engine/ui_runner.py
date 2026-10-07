@@ -59,6 +59,23 @@ def _preflight(sid: str) -> str:
     return exe
 
 
+def _spawn(sid: str, argv: list, path: str, **fields) -> dict:
+    """Spawn claude detached, record pid/running, start the follower. Any failure -> _fail."""
+    d = ui_sessions.session_dir(sid)
+    stream_path = os.path.join(d, "stream.jsonl")
+    try:
+        offset = os.path.getsize(stream_path) if os.path.exists(stream_path) else 0
+        with open(stream_path, "ab") as stream_f, open(os.path.join(d, "stderr.log"), "ab") as err_f:
+            proc = subprocess.Popen(argv, cwd=path, stdin=subprocess.DEVNULL, stdout=stream_f,
+                                    stderr=err_f, start_new_session=True, close_fds=True)
+    except (OSError, ValueError) as e:
+        _fail(sid, f"failed to spawn claude: {e}")
+    rec = ui_sessions.update(sid, pid=proc.pid, status="running", **fields)
+    _procs[sid] = proc
+    threading.Thread(target=_follow, args=(sid, proc, offset), daemon=True).start()
+    return rec
+
+
 def start(command_text, cwd, link=None) -> dict:
     if not isinstance(command_text, str) or not command_text.strip():
         raise ValueError("command_text must be a non-empty string")
@@ -70,24 +87,7 @@ def start(command_text, cwd, link=None) -> dict:
 
     sid = ui_sessions.create(command_text, cwd, link)["id"]
     exe = _preflight(sid)
-    d = ui_sessions.session_dir(sid)
-    stream_f = open(os.path.join(d, "stream.jsonl"), "ab")
-    try:
-        err_f = open(os.path.join(d, "stderr.log"), "ab")
-        try:
-            proc = subprocess.Popen([exe, *CLAUDE_ARGS, command_text], cwd=path,
-                                    stdin=subprocess.DEVNULL, stdout=stream_f, stderr=err_f,
-                                    start_new_session=True, close_fds=True)
-        except OSError as e:
-            _fail(sid, f"failed to spawn claude: {e}")
-        finally:
-            err_f.close()
-    finally:
-        stream_f.close()
-    rec = ui_sessions.update(sid, pid=proc.pid, status="running")
-    _procs[sid] = proc
-    threading.Thread(target=_follow, args=(sid, proc), daemon=True).start()
-    return rec
+    return _spawn(sid, [exe, *CLAUDE_ARGS, command_text], path)
 
 
 def resume(sid: str, answer_text) -> dict:
@@ -105,26 +105,8 @@ def resume(sid: str, answer_text) -> dict:
     if not isinstance(path, str) or not os.path.isdir(path):
         _fail(sid, f"cannot resume: cwd is not a directory: {repo!r}")
     exe = _preflight(sid)
-    d = ui_sessions.session_dir(sid)
-    stream_path = os.path.join(d, "stream.jsonl")
-    offset = os.path.getsize(stream_path)
-    stream_f = open(stream_path, "ab")
-    try:
-        err_f = open(os.path.join(d, "stderr.log"), "ab")
-        try:
-            proc = subprocess.Popen([exe, *CLAUDE_ARGS, "--resume", rec["session_id"], answer_text],
-                                    cwd=path, stdin=subprocess.DEVNULL, stdout=stream_f,
-                                    stderr=err_f, start_new_session=True, close_fds=True)
-        except OSError as e:
-            _fail(sid, f"failed to spawn claude: {e}")
-        finally:
-            err_f.close()
-    finally:
-        stream_f.close()
-    rec = ui_sessions.update(sid, pid=proc.pid, status="running", ended_at=None, error=None)
-    _procs[sid] = proc
-    threading.Thread(target=_follow, args=(sid, proc, offset), daemon=True).start()
-    return rec
+    return _spawn(sid, [exe, *CLAUDE_ARGS, "--resume", rec["session_id"], answer_text], path,
+                  ended_at=None, error=None)
 
 
 def _follow(sid: str, proc, offset: int = 0) -> None:
@@ -171,7 +153,7 @@ def _follow(sid: str, proc, offset: int = 0) -> None:
                 else:
                     ui_sessions.update(sid, status="done", ended_at=_now())
             else:
-                ui_sessions.update(sid, status="failed", ended_at=_now(),
+                ui_sessions.update(sid, status="failed", ended_at=_now(), pending_question=None,
                                    error=f"claude exited with code {rc}; see stderr.log")
     except Exception as e:  # keep the daemon thread from dying silently
         warn(f"ui_runner follower for {sid} failed: {e}")
