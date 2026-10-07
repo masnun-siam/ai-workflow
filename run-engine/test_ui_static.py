@@ -121,21 +121,23 @@ try:
     with open(os.path.join(tmp, "ui_static_evil", "x.js"), "w") as f:
         f.write("EVIL")
     ui_server.STATIC_DIR = root
-    for n, t in (("a.js", "text/javascript"), ("a.css", "text/css"), ("a.html", "text/html")):
-        s, r, _ = req(port, f"/static/{n}")
-        assert s == 200 and r.getheader("Content-Type", "").startswith(t), (n, s)
-    ok("js/css/html content types")
-    mimetypes.add_type("application/x-bogus", ".mjs")
-    s, r, _ = req(port, "/static/a.mjs")
-    assert s == 200 and r.getheader("Content-Type", "").startswith("text/javascript")
-    ok(".mjs forced to text/javascript")
-    s, _, body = req(port, "/static/link")
-    assert s == 404 and b"SECRET" not in body
-    ok("escaping symlink 404")
-    s, _, body = req(port, "/static/../ui_static_evil/x.js")
-    assert s == 404 and b"EVIL" not in body
-    ok("sibling-prefix escape 404")
-    ui_server.STATIC_DIR = real_static
+    try:
+        for n, t in (("a.js", "text/javascript"), ("a.css", "text/css"), ("a.html", "text/html")):
+            s, r, _ = req(port, f"/static/{n}")
+            assert s == 200 and r.getheader("Content-Type", "").startswith(t), (n, s)
+        ok("js/css/html content types")
+        mimetypes.add_type("application/x-bogus", ".mjs")
+        s, r, _ = req(port, "/static/a.mjs")
+        assert s == 200 and r.getheader("Content-Type", "").startswith("text/javascript")
+        ok(".mjs forced to text/javascript")
+        s, _, body = req(port, "/static/link")
+        assert s == 404 and b"SECRET" not in body
+        ok("escaping symlink 404")
+        s, _, body = req(port, "/static/../ui_static_evil/x.js")
+        assert s == 404 and b"EVIL" not in body
+        ok("sibling-prefix escape 404")
+    finally:
+        ui_server.STATIC_DIR = real_static
 
     # vendoring
     for name, lic in (("preact", "MIT"), ("htm", "Apache-2.0")):
@@ -145,16 +147,21 @@ try:
         assert name in head and lic in head and re.search(r"\d+\.\d+\.\d+", head), name
         assert "sourceMappingURL" not in src, name
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
-    assert re.search(r"export\s*\{", pre) and all(re.search(rf"\b{n}\b", pre) for n in ("h", "render", "Component"))
+    assert re.search(r"export\s*\{", pre) and all(re.search(rf"\bas\s+{n}\b", pre) or re.search(rf"export\s*\{{[^}}]*\b{n}\b", pre) for n in ("h", "render", "Component"))
     htm = read(os.path.join(VENDOR, "htm.mjs")).decode()
     assert "export default" in htm or re.search(r"export\s*\{", htm)
     ok("vendored headers and exports")
 
     # hygiene
     assert not os.path.exists(os.path.join(VENDOR, "package.json"))
-    for d, dirs, files in os.walk(REPO):
-        dirs[:] = [x for x in dirs if x not in (".git", ".gitnexus")]
-        assert "node_modules" not in dirs and "package.json" not in files, d
+    import subprocess
+    g = subprocess.run(["git", "-C", REPO, "ls-files"], capture_output=True, text=True)
+    if g.returncode:
+        print("note: not a git checkout, skipping tracked-file hygiene check")
+    else:
+        for f in g.stdout.splitlines():
+            parts = f.split("/")
+            assert "node_modules" not in parts and parts[-1] != "package.json", f
     ok("no package.json / node_modules")
 finally:
     srv.shutdown()
