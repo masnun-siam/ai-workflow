@@ -2,6 +2,7 @@ import { h, render, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { Answer } from './answer.js';
 import { Board } from './board.js';
+import { History } from './history.js';
 
 const html = htm.bind(h);
 
@@ -103,10 +104,8 @@ function View({ route, sessions }) {
       return html`<${Answer} session=${route.params.session} key=${route.params.session} />`;
     case 'new':
       return html`<h1>New run</h1><p>Start a run here.</p>`;
-    case 'sessions': {
-      const empty = Array.isArray(sessions) && sessions.length === 0;
-      return html`<h1>Sessions</h1><p>${empty ? 'No sessions yet' : 'Sessions will appear here.'}</p>`;
-    }
+    case 'sessions':
+      return html`<${History} sessions=${sessions} />`;
     default:
       return html`<h1>Page not found</h1><p><a href="#/">Back to Board</a></p>`;
   }
