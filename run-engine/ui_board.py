@@ -56,8 +56,13 @@ def build_board(records, projects, fetch_title):
             "branch": context.get("branch"),
             "base_branch": context.get("base_branch"),
             "ci": context.get("ci"),
+            "note": (context.get("blocked_on") or "")[:200],
+            "updated": rec["mtime"],
         }
         columns[station].append(card)
+
+    for cards in columns.values():
+        cards.sort(key=lambda c: c["updated"], reverse=True)
 
     return {"columns": [{"key": station, "cards": columns[station]} for station in STATIONS]}
 

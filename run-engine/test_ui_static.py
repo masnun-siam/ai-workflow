@@ -840,7 +840,7 @@ const B = await import(process.env.BOARD_URL);
 const { parseRoute } = await import(process.env.APP_URL);
 const assert = (await import('node:assert')).strict;
 const out = (n) => console.log('ok ' + n);
-const { cardTitle, runHref, matchSession, cardChips, formatCost, filterColumns, repoOptions, boardChanged } = B;
+const { cardTitle, runHref, matchSession, cardChips, formatCost, filterColumns, repoOptions, boardChanged, stationLabel, visibleCards, boardSummary, DONE_LIMIT } = B;
 const card = { owner: 'acme', repo: 'web', issue: 42 };
 const S = (owner, repo, issue, status, extra = {}) => ({ id: owner + repo + issue, link: { owner, repo, issue }, status, ...extra });
 
@@ -854,7 +854,8 @@ out('matchSession join and corners');
 assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, 'running')), ['running']);
 assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, 'waiting')), ['waiting']);
 assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, 'stopped')), ['stopped']);
-assert.deepEqual(cardChips({ ...card, escalated: true }, 'dev', null), ['waiting']);
+assert.deepEqual(cardChips({ ...card, escalated: true }, 'dev', null), ['escalated']);
+assert.deepEqual(cardChips({ ...card, escalated: true }, 'dev', S('a', 'b', 1, 'waiting')), ['waiting']);
 assert.deepEqual(cardChips(card, 'done', S('a', 'b', 1, 'running')), ['merged']);
 assert.deepEqual(cardChips({ ...card, escalated: true }, 'done', null), ['merged']);
 assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, 'running', { resumed_fresh: true })), ['running', 'resumed fresh']);
@@ -888,6 +889,26 @@ out('filterColumns, repoOptions');
 for (const t of ['', null, undefined]) assert.equal(cardTitle({ issue: 7, title: t }), '#7');
 assert.equal(cardTitle({ issue: 7 }), '#7'); assert.equal(cardTitle({ issue: 7, title: 'Hi' }), 'Hi');
 out('cardTitle');
+
+assert.equal(stationLabel('researcher'), 'Research'); assert.equal(stationLabel('sdet'), 'SDET'); assert.equal(stationLabel('nope'), 'nope');
+out('stationLabel');
+
+const many = { key: 'done', cards: Array.from({ length: 25 }, (_, i) => ({ issue: i })) };
+assert.equal(visibleCards(many, false).length, DONE_LIMIT);
+assert.equal(visibleCards(many, true).length, 25);
+assert.equal(visibleCards({ ...many, key: 'dev' }, false).length, 25);
+out('visibleCards collapses only the done column');
+
+const day = new Date('2026-10-07T12:00:00');
+const sum = boardSummary(
+  [{ key: 'dev', cards: [{ owner: 'a', repo: 'b', issue: 1 }, { owner: 'a', repo: 'b', issue: 2, escalated: true }] },
+   { key: 'done', cards: [{ owner: 'a', repo: 'b', issue: 3, escalated: true }] }],
+  [S('a', 'b', 1, 'running', { cost: 1.5, started_at: '2026-10-07T09:00:00' }), S('x', 'y', 9, 'done', { cost: 2, started_at: '2026-10-06T09:00:00' })],
+  day,
+);
+assert.deepEqual(sum, { live: 1, waiting: 1, today: 1.5 });
+assert.deepEqual(boardSummary([], null, day), { live: 0, waiting: 0, today: 0 });
+out('boardSummary');
 
 const d = { columns: [] };
 assert.equal(boardChanged(JSON.stringify(d), d), false);

@@ -387,4 +387,17 @@ finally:
         os.environ["PATH"] = old_path_env
 ok("fetch_title: missing gh -> 'Issue #7 (title unavailable)'")
 
+# --- 22. cards carry a trimmed note and updated time; columns are newest-first ----
+
+older = ledger(31, FULL, 3, status="escalated", blocked_on="x" * 500)
+newer = ledger(32, FULL, 3)
+board = build_board([record(older, mtime=10.0), record(newer, mtime=20.0)], {}, lambda o, r, i: "t")
+dev = next(c for c in board["columns"] if c["key"] == "dev")
+assert [c["issue"] for c in dev["cards"]] == [32, 31], dev["cards"]
+_, c31 = card_for(board, 31)
+_, c32 = card_for(board, 32)
+assert c31["note"] == "x" * 200 and c32["note"] == "", (len(c31["note"]), c32["note"])
+assert (c31["updated"], c32["updated"]) == (10.0, 20.0)
+ok("cards: note trimmed to 200 chars, updated mtime, columns sorted newest first")
+
 print(f"\n{passed} passed")
