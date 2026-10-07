@@ -240,7 +240,7 @@ aiw ci status                      check state plus the failing job's log
 aiw gitnexus sync|index|clean      the code graph (best-effort)
 aiw project-status | project-board GitHub Projects (best-effort)
 aiw epic split|init|next|status    epic decomposition and sequencing
-aiw ui [--port N] [--allow-host HOST]  local web UI for starting and tracking sessions
+aiw ui [--port N] [--allow-host HOST]  local web UI to start and track sessions
 ```
 
 ## aiw ui
@@ -266,7 +266,8 @@ a looser mode is ignored with a warning. `AIW_NTFY_SERVER`, `AIW_NTFY_TOPIC` and
 
 **Security:** there is no app-level auth. Access relies on tailnet ACLs, so anyone who can
 reach the URL can start sessions. Sessions run `claude --dangerously-skip-permissions` by
-default, with no opt-out flag.
+default, with no opt-out flag. Never use `tailscale funnel` (public exposure plus skip-permissions
+is remote code execution), and on a shared machine any local user can reach the loopback port.
 
 ## Where state lives
 
