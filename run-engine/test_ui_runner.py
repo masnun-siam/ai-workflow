@@ -255,7 +255,7 @@ def answer_checks():
         return f"Answer to {rid}: " + json.dumps(norm, ensure_ascii=False, separators=(",", ":"))
 
     def argv_of(fk, t):
-        return ui_runner.CLAUDE_ARGS + ["--resume", "sess-abc", t]
+        return ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, "--resume", "sess-abc", t]
 
     def intact(sid, fk, rid="q-1"):
         r = ui_sessions.load(sid)
