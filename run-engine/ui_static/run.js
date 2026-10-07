@@ -6,7 +6,7 @@ const html = htm.bind(h);
 
 // Hooks are not vendored, so RunDetail is a class component and everything else is a pure helper.
 
-// Mirrors ui_runner._issue_key; /api/sessions is newest first, so the first match wins.
+// Mirrors ui_runner._issue_key (anchored, leading slash); /api/sessions is newest first, so the first match wins.
 export function sessionForRun(sessions, owner, repo, n) {
   if (!Array.isArray(sessions)) return null;
   const slug = `${owner}/${repo}`;
@@ -14,7 +14,7 @@ export function sessionForRun(sessions, owner, repo, n) {
     sessions.find((s) => {
       if (!s || s.repo !== slug) return false;
       if (typeof s.link === 'string' && s.link.endsWith(`/${slug}/issues/${n}`)) return true;
-      const cmd = /(?:[\w-]+:)?run-issue\s+(.*)/.exec(String(s.command || ''));
+      const cmd = /^\/(?:[\w-]+:)?run-issue\s+(.*)/.exec(String(s.command || ''));
       const num = cmd && /(?:^|\s|\/issues\/)#?(\d+)(?=\s|$)/.exec(cmd[1]);
       return !!num && Number(num[1]) === n;
     }) || null
@@ -175,7 +175,9 @@ export class RunDetail extends Component {
 
   take = (id) => (r) => {
     if (!r.ok || this.sid !== id) return;
-    this.stream = mergeStream(this.stream, r.data);
+    const next = mergeStream(this.stream, r.data);
+    if (next === this.stream) return;
+    this.stream = next;
     this.setState({ stream: this.stream });
   };
 
@@ -202,7 +204,7 @@ export class RunDetail extends Component {
     else this.finalFetch(id, url);
   }
 
-  // One last read from the saved offset picks up the final unterminated line.
+  // One last read from the saved offset picks up lines written after the final poll tick.
   async finalFetch(id, url) {
     let r;
     try {
@@ -255,7 +257,8 @@ export class RunDetail extends Component {
     const TABS = [['output', 'Output'], ['plan', 'Plan']];
 
     let plan;
-    if (run.plan) plan = html`<div class="md" dangerouslySetInnerHTML=${{ __html: mdToHtml(run.plan) }}></div>`;
+    if (tab !== 'plan') plan = null;
+    else if (run.plan) plan = html`<div class="md" dangerouslySetInnerHTML=${{ __html: mdToHtml(run.plan) }}></div>`;
     else if (run.errors?.plan) plan = html`<p class="muted">Plan could not be read</p>`;
     else plan = html`<p class="muted">No plan yet</p>`;
 
@@ -278,6 +281,7 @@ export class RunDetail extends Component {
             ${acts.includes('resume') && html`<button type="button" disabled=${busy === 'resume'} onClick=${this.act('resume', 'Resumed')}>Resume</button>`}
             ${acts.includes('terminal') && html`<button type="button" onClick=${this.terminal}>Continue in terminal</button>`}
           </div>`}
+        ${run.errors?.ledger && html`<p class="muted">Ledger could not be read</p>`}
         <div role="status" class="msg">${msg}</div>
         ${fallback && s && html`<label class="cmd">Command <input readOnly value=${s.resume_command} aria-label="Resume command" ref=${this.selectBox} /></label>`}
         <div class="panel">
