@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import http.client
+import io
 import json
 import os
 import shutil
@@ -17,6 +18,7 @@ import sys
 import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import redirect_stderr
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -120,10 +122,18 @@ try:
     ok("bad host + unknown path -> 403")
 
     # methods
-    for m in ("POST", "PUT", "DELETE", "PATCH", "HEAD"):
-        s, r, _, _ = req(port, "/board.json", method=m, host=good)
+    for m in ("POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "TRACE", "CONNECT"):
+        s, r, body, _ = req(port, "/board.json", method=m, host=good)
         assert s == 405 and r.getheader("Allow") == "GET", (m, s)
-    ok("write methods + HEAD -> 405 Allow: GET")
+        if m == "HEAD":
+            assert body == b"" and r.getheader("Content-Length") == "0"
+    ok("all non-GET verbs -> 405 Allow: GET (HEAD empty body)")
+    for m in ("OPTIONS", "TRACE"):
+        s, _, _, h = req(port, "/board.json", method=m, host="evil.example")
+        assert s == 403 and no_cors(h), m
+    ok("OPTIONS/TRACE bad host -> 403 (guard first)")
+    assert ui_server._Server.allow_reuse_address is False
+    ok("allow_reuse_address is False")
     assert req(port, "/board.json", method="POST", host="evil.example")[0] == 403
     ok("POST bad host -> 403")
 
@@ -135,6 +145,7 @@ try:
 finally:
     srv.shutdown(); tail.shutdown()
     srv.server_close(); tail.server_close()
+    shutil.rmtree(data_dir, ignore_errors=True)
     if old_data is None:
         os.environ.pop("CLAUDE_PLUGIN_DATA", None)
     else:
@@ -159,9 +170,6 @@ p = free_port()
 holder = socket.socket()
 holder.bind(("127.0.0.1", p))
 holder.listen(1)
-import io
-from contextlib import redirect_stderr
-
 try:
     buf = io.StringIO()
     with redirect_stderr(buf):
@@ -186,6 +194,12 @@ try:
     ok("lsof-missing fallback names URL")
 finally:
     holder.close()
+
+buf = io.StringIO()
+with redirect_stderr(buf):
+    e = serve_fail(70000)
+assert e.code not in (0, None) and "70000" in buf.getvalue() + (e.code if isinstance(e.code, str) else "")
+ok("out-of-range port -> SystemExit naming port")
 
 # CLI wiring
 out = subprocess.run([sys.executable, os.path.join(HERE, "route.py"), "ui", "--help"],
