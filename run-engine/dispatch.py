@@ -321,14 +321,14 @@ def _issue_readiness(args, number: int) -> dict:
     than silently screening ready or silently vanishing from the report."""
     data, proc = gh_json([
         "issue", "view", str(number), "--repo", args.slug,
-        "--json", "body,labels,state,closedByPullRequestsReferences",
+        "--json", "title,body,labels,state,closedByPullRequestsReferences",
     ])
     if proc.returncode != 0:
         return {"issue": number, "error": (proc.stderr or "").strip()[:200] or "gh issue view failed"}
 
     state = (data.get("state") or "").upper() if isinstance(data, dict) else ""
     if state == "CLOSED":
-        return {"issue": number, "closed": True}
+        return {"issue": number, "closed": True, "title": data.get("title") or ""}
 
     body = data.get("body") if isinstance(data, dict) else None
     labels = [l.get("name", "") for l in (data.get("labels") or [])] if isinstance(data, dict) else []
@@ -344,7 +344,10 @@ def _issue_readiness(args, number: int) -> dict:
     run_json_path = _ledger_path(run_dir_for(os.path.join(data_dir(), "runs"), args.slug, number))
     reason = skip_reason(run_json_path, has_open_pr)
 
-    return {"issue": number, "gaps": gaps, "mode": mode, "skip_reason": reason}
+    from epic import parse_depends  # local: epic imports shared, dispatch is imported early
+
+    return {"issue": number, "gaps": gaps, "mode": mode, "skip_reason": reason,
+            "title": data.get("title") or "", "deps": parse_depends(body)}
 
 
 def cmd_plan(args) -> None:

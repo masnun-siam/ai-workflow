@@ -39,8 +39,8 @@ def boom(*_a, **_k):
     raise AssertionError("fetch_title must not be called")
 
 
-def start(extras=()):
-    srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, extras, boom)
+def start(extras=(), fetch=boom):
+    srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, extras, fetch)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     return srv, srv.server_address[1]
 
@@ -124,7 +124,7 @@ def runs_section():
         return out
 
     before = snap()
-    sv, pt = start()
+    sv, pt = start(fetch=lambda o, r, i: f"Title {o}/{r}#{i}")
     good = f"127.0.0.1:{pt}"
 
     def get(n, o="acme", r="widgets"):
@@ -146,6 +146,10 @@ def runs_section():
         assert b["trace"] == adv and b["plan"] == "## Plan\nbody" and b["errors"] == {}
         assert b["totals"] == {"stations": 7, "done": 3, "bounces": 0}, b["totals"]
         ok("runs: mid-run")
+
+        assert b["title"] == "Title acme/widgets#1", b["title"]
+        assert b["pr"] is None and b["branch"] is None, (b["pr"], b["branch"])
+        ok("runs: title from the (memoized) fetcher; pr/branch null without context")
 
         b = get(2)
         v = [s for s in b["stations"] if s["name"] == "verifier"][0]
@@ -413,5 +417,28 @@ a = parser.parse_args(["ui", "--allow-host", "a", "--allow-host", "b"])
 assert a.allow_host == ["a", "b"] and a.port == 8420
 ok("register: --allow-host append, --port default 8420")
 runs_section()
+
+# A cold page load opens many connections at once; none may be reset by a tiny listen backlog.
+assert ui_server._Server.request_queue_size >= 64, ui_server._Server.request_queue_size
+sv, pt = start()
+good = f"127.0.0.1:{pt}"
+failures = []
+
+
+def burst():
+    try:
+        assert req(pt, host=good)[0] == 200
+    except Exception as exc:  # collected so the main thread can fail with the cause
+        failures.append(exc)
+
+
+threads = [threading.Thread(target=burst) for _ in range(60)]
+for t in threads:
+    t.start()
+for t in threads:
+    t.join()
+sv.shutdown()
+assert not failures, failures[:2]
+ok("burst of 60 simultaneous connections all served (listen backlog)")
 
 print(f"{passed} checks passed")

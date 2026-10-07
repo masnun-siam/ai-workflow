@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+import threading
 
 from shared import data_dir, extract_json_object, run_dir_for
 
@@ -55,8 +56,13 @@ def build_board(records, projects, fetch_title):
             "branch": context.get("branch"),
             "base_branch": context.get("base_branch"),
             "ci": context.get("ci"),
+            "note": (context.get("blocked_on") or "")[:200],
+            "updated": rec["mtime"],
         }
         columns[station].append(card)
+
+    for cards in columns.values():
+        cards.sort(key=lambda c: c["updated"], reverse=True)
 
     return {"columns": [{"key": station, "cards": columns[station]} for station in STATIONS]}
 
@@ -117,20 +123,64 @@ def run_timeline(stations, current_index, status, trace):
     return rows, current, totals
 
 
-def memoize_title_fetcher(fetch_title):
+_SLUG_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+def plausible_repo(owner, repo):
+    """False for owner/repo pairs guessed from a ledger dir name that can't be a real repo.
+
+    `_guess_owner_repo_from_dir_name` falls back to a first-dash split, which yields
+    things like `masnun/siam-ai-workflow-issue-108.lean-misinit`; asking `gh` about those
+    only burns its 30 s timeout.
+    """
+    return bool(owner and repo and _SLUG_RE.match(owner) and _SLUG_RE.match(repo) and "-issue-" not in repo)
+
+
+def memoize_title_fetcher(fetch_title, pool=None):
     """Wrap a (owner, repo, issue) -> title function with an in-memory cache.
 
     A live server polls every few seconds; re-running `gh issue view` per Issue on
     every poll would be slow and rate-limit-risky. Titles rarely change, so cache
     for the life of the server process.
+
+    With a `pool` (concurrent.futures executor) a cache miss returns None immediately
+    and the title is filled in by a later call once the pool has fetched it, so a cold
+    /board.json never waits on `gh`. Without one the fetch is synchronous.
+    Implausible owner/repo pairs are never fetched and stay None.
     """
     cache: dict = {}
+    pending: set = set()
+    lock = threading.Lock()
+
+    def fill(key):
+        try:
+            title = fetch_title(*key)
+        except Exception:
+            title = None
+        with lock:
+            if title is not None:
+                cache[key] = title
+            pending.discard(key)
 
     def cached(owner, repo, issue):
+        if not plausible_repo(owner, repo):
+            return None
         key = (owner, repo, issue)
-        if key not in cache:
-            cache[key] = fetch_title(owner, repo, issue)
-        return cache[key]
+        with lock:
+            if key in cache:
+                return cache[key]
+            if pool is None:
+                start = True
+            else:
+                start = key not in pending
+                if start:
+                    pending.add(key)
+        if pool is None:
+            cache[key] = fetch_title(*key)
+            return cache[key]
+        if start:
+            pool.submit(fill, key)
+        return None
 
     return cached
 
@@ -177,6 +227,11 @@ def _read_part(path):
     return obj, None
 
 
+def _https_url(value):
+    """Only https URLs reach the browser as links (the ledger is a file, not a trust boundary we own)."""
+    return value if isinstance(value, str) and value.startswith("https://") else None
+
+
 def load_run(owner: str, repo: str, n: str, runs_dir=None):
     """One run from the Ledger: dict, or None if absent. ValueError on an unsafe segment."""
     if not (_NAME_RE.fullmatch(owner) and _NAME_RE.fullmatch(repo) and _ISSUE_RE.fullmatch(n)):
@@ -188,8 +243,9 @@ def load_run(owner: str, repo: str, n: str, runs_dir=None):
         return None
     errors = {}
     body = {"owner": owner, "repo": repo, "issue": int(n), "status": None, "currentStation": None,
-            "stations": [], "trace": [], "plan": None,
-            "totals": {"stations": 0, "done": 0, "bounces": 0}, "errors": errors}
+            "stations": [], "trace": [], "plan": None, "pr": None, "branch": None, "title": None,
+            "totals": {"stations": 0, "done": 0, "bounces": 0}, "errors": errors,
+            "updated": os.path.getmtime(run_json)}
     data, err = _read_part(run_json)
     if data is not None:
         from engine import Ledger
@@ -201,6 +257,8 @@ def load_run(owner: str, repo: str, n: str, runs_dir=None):
         else:
             rows, current, totals = run_timeline(led.stations, led.current_index, led.status, led.trace)
             body.update(status=led.status, currentStation=current, stations=rows, trace=led.trace, totals=totals)
+            context = data.get("context") if isinstance(data.get("context"), dict) else {}
+            body.update(pr=_https_url(context.get("pr")), branch=context.get("branch") if isinstance(context.get("branch"), str) else None)
     if err:
         errors["ledger"] = err
     plan_path = os.path.join(run_dir, "10-plan.json")

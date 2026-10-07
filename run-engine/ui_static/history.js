@@ -1,10 +1,14 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 
+import { formatWhen, shortRepo } from './fmt.js';
+import { toast } from './toast.js';
+import { openCleanup } from './cleanup.js';
+
 const html = htm.bind(h);
 
 const DASH = '—';
-const OUTCOMES = ['starting', 'running', 'waiting', 'done', 'failed', 'stopped'];
+const OUTCOMES = ['starting', 'running', 'waiting', 'limited', 'done', 'failed', 'stopped'];
 
 export function rowOutcome(s) {
   return s.outcome === 'waiting' || s.waiting === true ? 'waiting' : s.outcome;
@@ -15,7 +19,11 @@ export function transcriptHref(s) {
   if (l && l.owner && l.repo && Number.isInteger(l.issue) && l.issue >= 1) {
     return `#/run/${encodeURIComponent(l.owner)}/${encodeURIComponent(l.repo)}/${l.issue}`;
   }
-  return `/api/sessions/${encodeURIComponent(s.id)}/stream`;
+  return sessionHref(s);
+}
+
+export function sessionHref(s) {
+  return `#/session/${encodeURIComponent(s.id)}`;
 }
 
 export function rowAction(s) {
@@ -24,6 +32,8 @@ export function rowAction(s) {
       return { kind: 'terminal', label: 'Continue in terminal', command: s.resume_command };
     case 'waiting':
       return { kind: 'link', label: 'Answer', href: '#/answer/' + encodeURIComponent(s.id) };
+    case 'limited':
+      return { kind: 'post', label: 'Resume now', method: 'POST', url: `/api/sessions/${encodeURIComponent(s.id)}/resume` };
     case 'stopped':
       return { kind: 'post', label: 'Resume', method: 'POST', url: `/api/sessions/${encodeURIComponent(s.id)}/resume` };
     case 'running':
@@ -61,8 +71,7 @@ export function fmtCost(c) {
 
 export function fmtTime(iso) {
   if (!iso) return DASH;
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? String(iso) : d.toLocaleString();
+  return Number.isNaN(new Date(iso).getTime()) ? String(iso) : formatWhen(iso);
 }
 
 const orDash = (v) => (v == null || v === '' ? DASH : v);
@@ -80,6 +89,7 @@ export class History extends Component {
     const r = await resumeSession(id);
     this.inflight.delete(id);
     this.setState((st) => ({ busy: { ...st.busy, [id]: false }, errors: { ...st.errors, [id]: r.ok ? null : r.error } }));
+    if (r.ok) toast('Session resumed');
   };
 
   action(s) {
@@ -104,12 +114,12 @@ export class History extends Component {
     return html`
       <tr>
         <td class="cmd" title=${s.command || ''}>${orDash(s.command)}</td>
-        <td>${orDash(s.repo)}</td>
+        <td title=${s.repo || ''}>${s.repo ? shortRepo(s.repo) : DASH}</td>
         <td>${fmtTime(s.started_at)}</td>
         <td>${fmtTime(s.ended_at)}</td>
         <td><span class=${'chip chip-' + known}>${known}</span></td>
         <td>${fmtCost(s.cost)}</td>
-        <td><a href=${transcriptHref(s)}>Transcript</a></td>
+        <td><a href=${sessionHref(s)}>Transcript</a></td>
         <td>${this.action(s)}</td>
       </tr>
     `;
@@ -144,14 +154,18 @@ export class History extends Component {
     }
     return html`
       <section>
-      <h1>Sessions</h1>
+      <div class="history-head">
+        <h1>Sessions</h1>
+        <span class="muted">Kept on disk · survives UI restarts</span>
+      </div>
       <div class="history-filter">
         <label>Outcome
-          <select onChange=${(e) => this.setState({ filter: e.target.value })}>
+          <select data-search onChange=${(e) => this.setState({ filter: e.target.value })}>
             <option value="all" selected=${filter === 'all'}>all</option>
             ${OUTCOMES.map((o) => html`<option value=${o} selected=${filter === o}>${o}</option>`)}
           </select>
         </label>
+        <button type="button" class="btn" onClick=${() => openCleanup()}>Clean up…</button>
       </div>
       ${body}
       </section>

@@ -23,6 +23,7 @@ import ci
 import review
 import shared
 import ui_sessions
+import ui_settings
 from dispatch import read_checkouts
 from shared import data_dir, ledger_path, run_dir_for, warn
 import ui_events
@@ -40,6 +41,11 @@ _stopping: set = set()
 # ponytail: in-process lock, single UI server only; flock on the sessions dir if that changes
 _resume_lock = threading.Lock()
 CONTINUE_PROMPT = "Continue from where you were stopped."
+LIMIT_BUFFER_SECONDS = 5
+LIMIT_TICK_SECONDS = 30
+_LIMIT_RE = re.compile(r"usage limit|limit reached|rate.?limit|hit your limit", re.I)
+# claude command -> latest rate_limit_info warning seen. ponytail: in-memory, lost on restart
+_usage: dict = {}
 
 
 class RunnerError(Exception):
@@ -59,13 +65,18 @@ def _fail(sid: str, msg: str):
     raise RunnerError(msg)
 
 
-def _preflight(sid: str) -> str:
-    exe = shutil.which("claude")
-    if exe is None:
-        _fail(sid, "claude CLI not found on PATH")
-    login_msg = "claude CLI is not logged in, run `claude auth login`"
+def _preflight(sid: str) -> list:
+    """argv prefix of the session's bound claude command, after checking it is logged in."""
+    cmd = (ui_sessions.load(sid) or {}).get("claude_cmd") or ui_settings.DEFAULT_CMD
     try:
-        p = subprocess.run([exe, "auth", "status", "--json"], capture_output=True,
+        exe = ui_settings.argv(cmd)
+    except ValueError as e:
+        _fail(sid, f"claude command {cmd!r} unusable: {e}" if cmd != ui_settings.DEFAULT_CMD
+              else "claude CLI not found on PATH")
+    login_msg = (f"claude CLI is not logged in, run `{cmd} auth login`"
+                 if cmd != ui_settings.DEFAULT_CMD else "claude CLI is not logged in, run `claude auth login`")
+    try:
+        p = subprocess.run([*exe, "auth", "status", "--json"], capture_output=True,
                            text=True, timeout=30)
         status = json.loads(p.stdout)
     except (subprocess.TimeoutExpired, OSError, ValueError) as e:
@@ -112,7 +123,7 @@ def _spawn(sid: str, argv: list, path: str, answer=None, resuming=False, *, env_
 
 
 def start(command_text, cwd, link=None, *, extra_args=(), env_extra=None, pass_fds=(),
-          gate_questions=False) -> dict:
+          gate_questions=False, claude_cmd=None) -> dict:
     if not isinstance(command_text, str) or not command_text.strip():
         raise ValueError("command_text must be a non-empty string")
     if command_text.startswith("-"):
@@ -121,10 +132,15 @@ def start(command_text, cwd, link=None, *, extra_args=(), env_extra=None, pass_f
     if not isinstance(path, str) or not os.path.isdir(path):
         raise ValueError(f"cwd is not a directory or known checkout slug: {cwd!r}")
 
-    sid = ui_sessions.create(command_text, cwd, link)["id"]
+    claude_cmd = claude_cmd or ui_settings.default_cmd()
+    sid = ui_sessions.create(command_text, cwd, link, claude_cmd=claude_cmd)["id"]
+    until = limits().get(claude_cmd, {}).get("limited_until")
+    if until and not (extra_args or env_extra or pass_fds):  # queue: the limit timer starts it at reset
+        return ui_sessions.update(sid, status="limited", limit_resets_at=until, auto_resume=True,
+                                  cwd_path=path, note="queued: account is rate limited")
     exe = _preflight(sid)
     gate = ["--append-system-prompt", HEADLESS_PROMPT] if gate_questions else []
-    return _spawn(sid, [exe, *CLAUDE_ARGS, *gate, *extra_args, command_text], path, cwd_path=path,
+    return _spawn(sid, [*exe, *CLAUDE_ARGS, *gate, *extra_args, command_text], path, cwd_path=path,
                   env_extra=env_extra, pass_fds=pass_fds)
 
 
@@ -143,7 +159,7 @@ def resume(sid: str, answer_text) -> dict:
     if not isinstance(path, str) or not os.path.isdir(path):
         return _fallback(sid, answer_text, f"cwd is not a directory: {repo!r}")
     exe = _preflight(sid)
-    return _spawn(sid, [exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT,
+    return _spawn(sid, [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT,
                   "--resume", rec["session_id"], answer_text], path,
                   answer=answer_text, ended_at=None, error=None, pending_answer=answer_text,
                   resumed_fresh=None, note=None, terminal_handoff=None)
@@ -182,7 +198,7 @@ def _fallback(sid: str, answer, reason: str) -> dict:
                 if old and old != path:
                     note += f" (working directory changed from {old} to {path})"
                 exe = _preflight(sid)
-                return _spawn(sid, [exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, f"/run-issue {key[1]}" + (f" {answer}" if answer else "")],
+                return _spawn(sid, [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, f"/run-issue {key[1]}" + (f" {answer}" if answer else "")],
                               path, cwd_path=path, ended_at=None, error=None, resumed_fresh=True, note=note,
                               terminal_handoff=None, pending_answer=answer)
     ui_sessions.update(sid, status="failed", ended_at=_now(), pending_question=None,
@@ -196,9 +212,11 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
     """Follow a session until it exits. proc is None for a re-attached (non-child) pid."""
     path = os.path.join(ui_sessions.session_dir(sid), "stream.jsonl")
     buf, is_error, saw_init, saw_result, first_err, asked = b"", False, False, False, None, False
+    limit = None  # rate_limit_info of a rejected event
+    cmd = (ui_sessions.load(sid) or {}).get("claude_cmd") or ui_settings.DEFAULT_CMD
 
     def handle(line: bytes) -> None:
-        nonlocal is_error, saw_init, saw_result, first_err, asked
+        nonlocal is_error, saw_init, saw_result, first_err, asked, limit
         try:
             ev = json.loads(line)
         except ValueError:
@@ -213,6 +231,11 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
                 e["kind"] == "tool" and e["name"] == "Bash" and isinstance(e["input"], dict)
                 and str(e["input"].get("command", "")).lstrip().startswith("aiw ask")
                 for e in ui_events.parse_line(line))
+        elif ev.get("type") == "rate_limit_event" and isinstance(ev.get("rate_limit_info"), dict):
+            info = ev["rate_limit_info"]
+            _usage[cmd] = info
+            if info.get("status") not in (None, "allowed", "allowed_warning"):
+                limit = info
         elif ev.get("type") == "result":
             is_error, saw_result = bool(ev.get("is_error")), True
             if is_error and first_err is None:
@@ -259,7 +282,9 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
         rc = proc.returncode if proc is not None else None
         status = (ui_sessions.load(sid) or {}).get("status")
         if sid not in _stopping and status != "stopped":
-            if (answer or resuming) and rc != 0 and not saw_init and first_err is not None:
+            if is_error and (limit or _LIMIT_RE.search(first_err or "")):
+                _mark_limited(sid, limit, first_err)
+            elif (answer or resuming) and rc != 0 and not saw_init and first_err is not None:
                 _fallback(sid, answer, first_err)  # resume itself failed; nothing was applied
             elif proc is None and not (saw_result and not is_error):
                 ui_sessions.update(sid, status="failed", ended_at=_now(), pending_question=None,
@@ -282,6 +307,85 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
         if _procs.get(sid) is proc:  # a fallback may have replaced it with a newer process
             _procs.pop(sid, None)
             _stopping.discard(sid)
+
+
+def _mark_limited(sid: str, info, err) -> None:
+    resets = (info or {}).get("resetsAt")
+    resets = int(resets) if isinstance(resets, (int, float)) and not isinstance(resets, bool) else None
+    ui_sessions.update(sid, status="limited", pending_question=None, error=err, ended_at=None,
+                       limit_resets_at=resets, limit_type=(info or {}).get("rateLimitType"),
+                       auto_resume=resets is not None)
+
+
+def limits(now=None) -> dict:
+    """{claude command: {limited_until, warning}} for the UI header chips."""
+    now = now or time.time()
+    out: dict = {}
+    for rec in ui_sessions.list_sessions():
+        until = rec.get("limit_resets_at")
+        if rec.get("status") == "limited" and until and until > now:
+            e = out.setdefault(rec.get("claude_cmd") or ui_settings.DEFAULT_CMD, {})
+            e["limited_until"] = max(until, e.get("limited_until", 0))
+    for cmd, info in list(_usage.items()):
+        if info.get("status") == "allowed_warning" and (info.get("resetsAt") or 0) > now:
+            out.setdefault(cmd, {})["warning"] = {"type": info.get("rateLimitType"),
+                                                 "utilization": info.get("utilization")}
+    return out
+
+
+def _copy_transcript(rec: dict, path: str, new_cmd: str) -> None:
+    """Make a session resumable under another account: copy its jsonl into that profile."""
+    old = ui_settings.config_dir(rec.get("claude_cmd") or ui_settings.DEFAULT_CMD)
+    new = ui_settings.config_dir(new_cmd)
+    if old == new:
+        return
+    slug = re.sub(r"[^A-Za-z0-9]", "-", os.path.realpath(path))
+    src = os.path.join(old, "projects", slug, f"{rec['session_id']}.jsonl")
+    if not os.path.isfile(src):
+        raise Conflict(f"transcript not found at {src}")
+    dst_dir = os.path.join(new, "projects", slug)
+    os.makedirs(dst_dir, exist_ok=True)
+    shutil.copyfile(src, os.path.join(dst_dir, os.path.basename(src)))
+
+
+def cancel_auto(sid: str) -> dict:
+    rec = ui_sessions.load(sid)
+    if rec is None:
+        raise FileNotFoundError(f"no such session: {sid}")
+    if rec.get("status") != "limited":
+        raise Conflict("session is not limited")
+    return ui_sessions.update(sid, auto_resume=False)
+
+
+def limit_tick(now=None, stagger=2) -> list:
+    """Resume every auto-resume limited session whose limit has reset."""
+    now = now or time.time()
+    out = []
+    for rec in ui_sessions.list_sessions():
+        until = rec.get("limit_resets_at")
+        if rec.get("status") == "limited" and rec.get("auto_resume") and until \
+                and until + LIMIT_BUFFER_SECONDS <= now:
+            try:
+                resume_stopped(rec["id"])
+                out.append(rec["id"])
+            except (Conflict, RunnerError, FileNotFoundError, OSError) as e:
+                warn(f"limit auto-resume of {rec['id']} failed: {e}")
+            time.sleep(stagger)
+    return out
+
+
+def start_limit_timer(interval=LIMIT_TICK_SECONDS) -> threading.Thread:
+    """First tick runs at once, so limits that reset while the UI was down catch up on startup."""
+    def loop():
+        while True:
+            try:
+                limit_tick()
+            except Exception as e:  # noqa: BLE001 - keep the timer alive
+                warn(f"limit timer tick failed: {e}")
+            time.sleep(interval)
+    t = threading.Thread(target=loop, daemon=True)
+    t.start()
+    return t
 
 
 def reconcile() -> None:
@@ -321,6 +425,8 @@ def stop(sid: str) -> dict:
     if rec is None:
         raise FileNotFoundError(f"no such session: {sid}")
     proc = _procs.get(sid)
+    if rec["status"] == "limited":
+        return ui_sessions.update(sid, status="stopped", ended_at=_now(), auto_resume=False)
     if rec["status"] == "waiting" and (proc is None or proc.poll() is not None):
         return ui_sessions.update(sid, status="stopped", ended_at=_now(), pending_question=None)
     if rec["status"] not in ("starting", "running", "waiting") or not rec.get("pid"):
@@ -349,32 +455,47 @@ def stop(sid: str) -> dict:
     return ui_sessions.update(sid, status="stopped", ended_at=_now(), pending_question=None)
 
 
-def resume_stopped(sid: str) -> dict:
-    """Continue a stopped session via --resume (Ledger fallback if that fails); no answer is sent."""
+def resume_stopped(sid: str, claude_cmd=None) -> dict:
+    """Continue a stopped or limited session via --resume (Ledger fallback if that fails).
+
+    A limited session resumes with its unanswered answer, if any; claude_cmd rebinds it to another
+    account first (its transcript is copied into that account's config dir).
+    """
     with _resume_lock:
         rec = ui_sessions.load(sid)
         if rec is None:
             raise FileNotFoundError(f"no such session: {sid}")
-        if rec.get("status") != "stopped" or sid in _procs:
-            raise Conflict("session is not stopped")
+        if rec.get("status") not in ("stopped", "limited") or sid in _procs:
+            raise Conflict("session is not stopped or limited")
         key = _issue_key(rec)
         if key:
             for o in ui_sessions.list_sessions():
                 if (o.get("id") != sid and _issue_key(o) == key
                         and o.get("status") in ("starting", "running", "waiting")):
                     raise Conflict(f"session {o['id']} is already live for this issue")
+        repo = rec.get("repo")
+        path = read_checkouts().get(repo, repo)
+        rebind = {}
+        if claude_cmd and claude_cmd != rec.get("claude_cmd"):
+            if rec.get("session_id") and isinstance(path, str) and os.path.isdir(path):
+                _copy_transcript(rec, path, claude_cmd)
+            rebind = {"claude_cmd": claude_cmd}
         # claim: makes double-submits safe; pid=None so a /stop during preflight can't kill the old group
-        ui_sessions.update(sid, status="starting", pid=None)
+        ui_sessions.update(sid, status="starting", pid=None, limit_resets_at=None, limit_type=None,
+                           auto_resume=None, **rebind)
         _stopping.discard(sid)
-    if not rec.get("session_id"):
-        return _fallback(sid, None, "no claude session_id")
-    repo = rec.get("repo")
-    path = read_checkouts().get(repo, repo)
+    prompt = (rec.get("pending_answer") if rec.get("status") == "limited" else None) or CONTINUE_PROMPT
     if not isinstance(path, str) or not os.path.isdir(path):
         return _fallback(sid, None, f"cwd is not a directory: {repo!r}")
+    if not rec.get("session_id"):
+        if rec.get("status") == "limited":  # limited before claude ever reported a session: start over
+            exe = _preflight(sid)
+            return _spawn(sid, [*exe, *CLAUDE_ARGS, rec["command"]], path, cwd_path=path,
+                          ended_at=None, error=None)
+        return _fallback(sid, None, "no claude session_id")
     exe = _preflight(sid)
-    return _spawn(sid, [exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT,
-                  "--resume", rec["session_id"], CONTINUE_PROMPT], path,
+    return _spawn(sid, [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT,
+                  "--resume", rec["session_id"], prompt], path,
                   resuming=True, cwd_path=path, ended_at=None, error=None, pending_question=None,
                   resumed_fresh=None, note=None, terminal_handoff=None, pending_answer=None)
 
@@ -538,7 +659,8 @@ def prgrind_tick(path: str, now=None) -> str:
         _set_header(path, "next-poll", _iso(now + timedelta(seconds=PRGRIND_HEARTBEAT)))
         try:
             start(cmd, cwd, link=pr_url, extra_args=["--append-system-prompt", REENTRY_PROMPT],
-                  env_extra={"AIW_HEADLESS": "1"}, pass_fds=[lock.fileno()])
+                  env_extra={"AIW_HEADLESS": "1"}, pass_fds=[lock.fileno()],
+                  claude_cmd=next((r["claude_cmd"] for r in recs if r.get("claude_cmd")), None))
         except (RunnerError, ValueError) as e:
             warn(f"pr-grind tick: could not start round for {thread}: {e}")
             return "error"

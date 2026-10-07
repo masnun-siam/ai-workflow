@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.11.0 — 2026-10-07
+
+### Added
+
+- **The `aiw ui` Dispatch tab runs `/run-issue` over a batch of issues.** Paste a GitHub
+  issue search URL, issue URLs, issue numbers or an epic number; the UI lists the issues
+  with their readiness, dependencies and skip reasons, and starts a pipeline from the
+  ones you tick. A pipeline runs in parallel (up to N at once) or one at a time, always
+  honouring `Depends on: #n` lines, and skips the dependents of an issue that fails or is
+  stopped. Several pipelines can run at once. The detail page shows each ticket's
+  station, session status, PR and CI, with pause, resume, stop, retry, skip, add-issues
+  and a merge-order list. Pipelines survive a UI restart.
+- **A new look for `aiw ui`, built from the design canvas (#175).** Board summary strip
+  and cards that glide between columns, run detail with the issue title, PR link and
+  station stepper, a redesigned answer view, new-run form with a searchable repo picker
+  and folder browse, sessions table, an in-app transcript viewer, toasts, keyboard
+  shortcuts and a Cmd/Ctrl+K command palette.
+- **Settings page with named Claude commands.** Pick which account a run uses; a run
+  that hits its usage limit shows as limited, resumes by itself when the limit resets,
+  or can be resumed on another account. Header chips show limited and near-limit
+  accounts.
+- **GitHub status on the board and run detail.** Issue state, PR link, review approval
+  and CI, read-only and cached.
+- **Clean up finished runs from the UI.** Removes a run's worktree, run directory and
+  sessions, and the local branch of a finished run; live sessions and escalated runs are
+  never offered.
+
+### Fixed
+
+- **The Board loads instantly (#175).** Issue titles are fetched off the request thread,
+  junk repos are skipped, and polling times out instead of hanging.
+- **Sessions that outlived the UI are re-attached on start.** `reconcile()` existed but
+  was never called, so a restart left their status stuck on running.
+
 ## 1.10.0 — 2026-10-07
 
 ### Added

@@ -1,5 +1,6 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
+import { toast } from './toast.js';
 
 const html = htm.bind(h);
 const MAX_OTHER = 4000;
@@ -167,7 +168,10 @@ export class Answer extends Component {
     const res = await submitAnswer(this.props.session, body);
     if (this.gone) return;
     const next = afterSubmit(started, res, session);
-    if (next.navigate) location.hash = next.navigate;
+    if (next.navigate) {
+      toast('Answer sent, session resuming');
+      location.hash = next.navigate;
+    }
     else this.setState({ form: next });
   };
 
@@ -180,10 +184,10 @@ export class Answer extends Component {
     }
   };
 
-  renderQuestion(q, i, a, sending) {
+  renderQuestion(q, i, a, sending, solo) {
     const multi = q.multiSelect === true;
     return html`
-      <fieldset key=${i}>
+      <fieldset key=${i} class=${solo ? 'solo' : ''}>
         <legend>${q.question || q.header || `Question ${i + 1}`}</legend>
         ${(q.options || []).map((o) => html`
           <label class="opt">
@@ -194,7 +198,7 @@ export class Answer extends Component {
               ${o.description ? html`<small>${o.description}</small>` : null}</span>
           </label>`)}
         ${q.allowFreeText ? html`
-          <label>Or answer in your own words (replaces the choice above)
+          <label class="own">Or write your own answer (replaces the choice above)
             <textarea maxlength="4000" value=${a.other} disabled=${sending}
               onInput=${(e) => this.setOther(i, e.target.value)}></textarea>
           </label>` : null}
@@ -206,29 +210,45 @@ export class Answer extends Component {
     if (notFound) return html`<h1>Answer</h1><p>Session not found. <a href="#/sessions">Back to sessions</a></p>`;
     if (loadError) return html`<h1>Answer</h1><p role="alert">Could not load the session.</p><button type="button" onClick=${() => this.load()}>Retry</button>`;
     const mode = viewMode(session);
+    const link = runLink(session);
+    const where = link ? `${link.repo} #${link.n}` : String(session.repo || '').split('/').pop();
     if (mode === 'form') {
       const pending = session.pending_question;
+      const qs = pending.questions;
+      const n = qs.length;
       return html`
-        <h1>Answer</h1>
-        ${plan ? html`<section aria-label="Plan"><pre class="plan">${plan}</pre></section>` : null}
-        <form onSubmit=${this.submit}>
-          ${pending.questions.map((q, i) => this.renderQuestion(q, i, form.answers[i], form.sending))}
-          <button type="submit" disabled=${form.sending}>${form.sending ? 'Sending' : 'Submit answer'}</button>
-          ${form.error ? html`<p role="alert">${form.error}</p>` : null}
-          ${form.stale ? html`<button type="button" onClick=${() => this.load()}>Reload question</button>` : null}
-        </form>`;
+        <div class="answer">
+          ${plan ? html`
+            <section class="panel answer-context" aria-label="Plan">
+              <div class="mono muted">${where} · ${String(session.command || '')}</div>
+              <h1>Plan: test plan + implementation plan</h1>
+              <pre class="plan">${plan}</pre>
+              ${link ? html`<a href=${runHash(session)}>Open run detail</a>` : null}
+            </section>` : null}
+          <form class="panel answer-form" onSubmit=${this.submit}>
+            <div class="waiting-line"><span class="dot"></span>Waiting on you${session.ended_at ? ' · no process running' : ''}</div>
+            ${plan ? null : html`<div><div class="mono muted">${where} · ${String(session.command || '')}</div><h1>${n > 1 ? `${n} questions, answered together` : 'Answer needed'}</h1></div>`}
+            ${qs.map((q, i) => this.renderQuestion(q, i, form.answers[i], form.sending, n === 1))}
+            <button type="submit" class="btn--primary" disabled=${form.sending}>${form.sending ? 'Sending' : n > 1 ? `Submit all ${n} and resume` : 'Submit and resume session'}</button>
+            ${form.error ? html`<p role="alert">${form.stale ? html`<strong>Already answered.</strong> ` : null}${form.error}</p>` : null}
+            ${form.stale ? html`<button type="button" onClick=${() => this.load()}>Reload question</button>` : null}
+            ${session.session_id ? html`<p class="muted fine">Resumes with <span class="mono">--resume ${String(session.session_id).slice(0, 8)}…</span>. If that session is gone, run-issue re-enters from the Ledger.</p>` : null}
+          </form>
+        </div>`;
     }
     if (mode === 'failed') {
       const cmd = resumeCommand(session);
       return html`
-        <h1>Answer</h1>
-        <p>This session failed.</p>
-        ${session.error ? html`<p role="alert">${String(session.error)}</p>` : null}
-        ${cmd ? html`
-          <p><code>${cmd}</code></p>
-          <button type="button" onClick=${() => this.copy(cmd)}>Continue in terminal</button>
-          ${copied ? html`<p role="status">${copied}</p>` : null}` : null}`;
+        <section class="panel answer-failed">
+          <h1>Session failed</h1>
+          <p>This session failed.</p>
+          ${session.error ? html`<p role="alert">${String(session.error)}</p>` : null}
+          ${cmd ? html`
+            <p><code>${cmd}</code></p>
+            <button type="button" onClick=${() => this.copy(cmd)}>Continue in terminal</button>
+            ${copied ? html`<p role="status">${copied}</p>` : null}` : null}
+        </section>`;
     }
-    return html`<h1>Answer</h1><p>This session is ${session.outcome || 'not waiting'}; nothing to answer. <a href=${runHash(session)}>Continue</a></p>`;
+    return html`<section class="panel answer-failed"><h1>Nothing to answer</h1><p>This session is ${session.outcome || 'not waiting'}; nothing to answer. <a href=${runHash(session)}>Continue</a></p></section>`;
   }
 }

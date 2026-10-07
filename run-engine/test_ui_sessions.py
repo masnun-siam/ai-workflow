@@ -26,7 +26,7 @@ import ui_sessions  # noqa: E402
 passed = 0
 ID_RE = re.compile(r"[0-9]{8}T[0-9]{12}Z-[0-9a-f]{8}")
 KEYS = {"id", "command", "repo", "link", "session_id", "pid", "status",
-        "cost", "started_at", "ended_at", "pending_question"}
+        "cost", "started_at", "ended_at", "pending_question", "claude_cmd"}
 NEVER = "20990101T000000000000Z-deadbeef"
 
 

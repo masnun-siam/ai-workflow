@@ -1607,7 +1607,15 @@ def prgrind_cases() -> int:
         assert tick(path)[0] in ("locked", "busy")
         os.killpg(child["pid"], signal.SIGKILL)
         wait_for(lambda: group_gone(child["pid"]), 10)
-        lock_free(path)
+
+        def freed():  # the follower releases the lock only after reaping the killed child
+            try:
+                lock_free(path)
+                return True
+            except BlockingIOError:
+                return False
+
+        wait_for(freed, 10)
 
     def restart_survival():
         d, fk, work = pset("sleep")

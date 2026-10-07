@@ -242,6 +242,39 @@ assert cached_fetch("acme", "widgets", 2) == "title-2"
 assert calls == [("acme", "widgets", 1), ("acme", "widgets", 2)], calls
 ok("memoize_title_fetcher: repeat calls for the same key hit the cache, new keys don't")
 
+# --- 13b. async mode: miss returns None at once, later call sees the title; junk repos skipped ----
+
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
+gate = threading.Event()
+async_calls = []
+
+
+def slow_fetch(owner, repo, issue):
+    async_calls.append((owner, repo, issue))
+    gate.wait(5)
+    return f"slow-{issue}"
+
+
+with ThreadPoolExecutor(max_workers=2) as pool:
+    async_fetch = memoize_title_fetcher(slow_fetch, pool)
+    assert async_fetch("acme", "widgets", 1) is None  # does not block on the slow fetch
+    assert async_fetch("acme", "widgets", 1) is None  # still pending: not re-submitted
+    gate.set()
+    pool.shutdown(wait=True)
+assert async_calls == [("acme", "widgets", 1)], async_calls
+assert async_fetch("acme", "widgets", 1) == "slow-1"
+ok("memoize_title_fetcher(pool): miss returns None immediately, no duplicate fetch, title appears once fetched")
+
+junk_calls = []
+junk_fetch = memoize_title_fetcher(lambda o, r, i: junk_calls.append((o, r, i)) or "t")
+for owner, repo in [("masnun", "siam-ai-workflow-issue-108.lean-misinit"), ("weird", ""), ("", "x"), ("a b", "c")]:
+    assert junk_fetch(owner, repo, 1) is None, (owner, repo)
+assert junk_calls == [], junk_calls
+assert junk_fetch("acme", "widgets", 1) == "t"
+ok("memoize_title_fetcher: implausible owner/repo pairs never reach gh")
+
 
 # --- 15. kanban is gone -----------------------------------------------------
 
@@ -353,5 +386,36 @@ finally:
     else:
         os.environ["PATH"] = old_path_env
 ok("fetch_title: missing gh -> 'Issue #7 (title unavailable)'")
+
+# --- 22. cards carry a trimmed note and updated time; columns are newest-first ----
+
+older = ledger(31, FULL, 3, status="escalated", blocked_on="x" * 500)
+newer = ledger(32, FULL, 3)
+board = build_board([record(older, mtime=10.0), record(newer, mtime=20.0)], {}, lambda o, r, i: "t")
+dev = next(c for c in board["columns"] if c["key"] == "dev")
+assert [c["issue"] for c in dev["cards"]] == [32, 31], dev["cards"]
+_, c31 = card_for(board, 31)
+_, c32 = card_for(board, 32)
+assert c31["note"] == "x" * 200 and c32["note"] == "", (len(c31["note"]), c32["note"])
+assert (c31["updated"], c32["updated"]) == (10.0, 20.0)
+ok("cards: note trimmed to 200 chars, updated mtime, columns sorted newest first")
+
+# --- 23. load_run exposes pr/branch, but only https PR links ----------------
+
+import tempfile
+from shared import run_dir_for
+from ui_board import load_run
+
+with tempfile.TemporaryDirectory() as runs:
+    for issue, pr in ((5, "https://github.com/acme/widgets/pull/9"), (6, "javascript:alert(1)")):
+        d = run_dir_for(runs, "acme/widgets", issue)
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "run.json"), "w", encoding="utf-8") as fh:
+            json.dump(ledger(issue, FULL, 3, pr=pr, branch="issue-5-x"), fh)
+    good = load_run("acme", "widgets", "5", runs_dir=runs)
+    bad = load_run("acme", "widgets", "6", runs_dir=runs)
+assert good["pr"] == "https://github.com/acme/widgets/pull/9" and good["branch"] == "issue-5-x", good
+assert bad["pr"] is None, bad["pr"]
+ok("load_run: https pr link and branch exposed, javascript: link dropped")
 
 print(f"\n{passed} passed")

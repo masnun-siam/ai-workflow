@@ -66,13 +66,92 @@ RUN = sys.argv[1:3] == ["--view", "run"]
 
 RUN_JS = r"""
 const M = await import(process.env.RUN_URL);
-const { sessionForRun, actionsFor, mergeStream, totals, nearBottom, mdToHtml, copyCommand, postAction, RunDetail } = M;
+const { sessionForRun, sessionsForRun, actionsFor, mergeStream, totals, nearBottom, mdToHtml, copyCommand, postAction, RunDetail } = M;
 const A = await import(process.env.APP_URL);
 const assert = (await import('node:assert')).strict;
 const out = (n) => console.log('ok ' + n);
 const tick = () => new Promise((r) => setImmediate(r));
 const settle = async () => { for (let i = 0; i < 8; i++) await tick(); };
 out('run.js imports without a document');
+
+const SS = await import(new URL('./session.js', process.env.RUN_URL).href);
+assert.equal(SS.eventText({ kind: 'text', text: 'hi' }), 'hi');
+assert.equal(SS.eventText({ kind: 'tool', name: 'Bash', input: { command: 'ls' } }), 'Bash {"command":"ls"}');
+assert.equal(SS.eventText({ kind: 'result', text: null }), ''); assert.equal(SS.eventText(null), '');
+const evs = [{ kind: 'text', text: 'Hello World' }, { kind: 'tool', name: 'Bash', input: { command: 'git status' } }, { kind: 'result', text: 'ok' }];
+assert.deepEqual(SS.filterEvents(evs, '').map((x) => x.i), [0, 1, 2]);
+assert.deepEqual(SS.filterEvents(evs, ' GIT ').map((x) => x.i), [1]);
+assert.deepEqual(SS.filterEvents(evs, 'nomatch'), []); assert.deepEqual(SS.filterEvents(null, 'x'), []);
+assert.equal(SS.toolSummary({ input: { command: 'ls   -la\n/tmp' } }), 'ls -la /tmp');
+assert.equal(SS.toolSummary({ input: { file_path: '/a/b.js', other: 1 } }), '/a/b.js');
+assert.equal(SS.toolSummary({ input: { weird: 1 } }), '{"weird":1}');
+assert.equal(SS.toolSummary({ input: { command: 'x'.repeat(300) } }).length, 110);
+assert.equal(SS.toolSummary({}), '');
+out('session.js: eventText, filterEvents, toolSummary');
+
+const K = await import(new URL('./keys.js', process.env.RUN_URL).href);
+const ev = (key, extra = {}) => ({ key, target: { tagName: 'BODY' }, ...extra });
+assert.deepEqual(K.keyIntent(ev('k', { metaKey: true })), { type: 'palette' });
+assert.deepEqual(K.keyIntent(ev('K', { ctrlKey: true, target: { tagName: 'INPUT' } })), { type: 'palette' });
+assert.equal(K.keyIntent(ev('n', { metaKey: true })), null);
+assert.deepEqual(K.keyIntent(ev('n')), { type: 'goto', hash: '#/new' });
+assert.equal(K.keyIntent(ev('n', { target: { tagName: 'TEXTAREA' } })), null);
+assert.equal(K.keyIntent(ev('j', { target: { tagName: 'DIV', isContentEditable: true } })), null);
+assert.deepEqual(K.keyIntent(ev('Escape', { target: { tagName: 'INPUT' } })), { type: 'escape' });
+assert.deepEqual(K.keyIntent(ev('g')), { type: 'chord' });
+assert.deepEqual(K.keyIntent(ev('s'), true), { type: 'goto', hash: '#/sessions' });
+assert.deepEqual(K.keyIntent(ev('b'), true), { type: 'goto', hash: '#/' });
+assert.equal(K.keyIntent(ev('x'), true), null); assert.equal(K.keyIntent(ev('q')), null);
+assert.deepEqual(K.keyIntent(ev('ArrowDown')), { type: 'move', dir: 'down' });
+assert.deepEqual(K.keyIntent(ev('h')), { type: 'move', dir: 'left' });
+assert.deepEqual(K.keyIntent(ev('?')), { type: 'sheet' }); assert.deepEqual(K.keyIntent(ev('/')), { type: 'search' });
+out('keys: keyIntent ignores typing except palette/escape, chords, arrows');
+
+assert.equal(K.moveTarget([0, 0], null, 'down'), null);
+assert.deepEqual(K.moveTarget([0, 3, 2], null, 'down'), [1, 0]);
+assert.deepEqual(K.moveTarget([0, 3, 2], [1, 0], 'down'), [1, 1]);
+assert.deepEqual(K.moveTarget([0, 3, 2], [1, 2], 'down'), [1, 2]);
+assert.deepEqual(K.moveTarget([0, 3, 2], [1, 0], 'up'), [1, 0]);
+assert.deepEqual(K.moveTarget([0, 3, 2], [1, 2], 'right'), [2, 1]);
+assert.deepEqual(K.moveTarget([0, 3, 2], [1, 1], 'right'), [2, 1]);
+assert.deepEqual(K.moveTarget([0, 3, 2], [2, 0], 'right'), [2, 0]);
+assert.deepEqual(K.moveTarget([0, 3, 2], [1, 0], 'left'), [1, 0]);
+assert.deepEqual(K.moveTarget([4, 0, 2], [0, 3], 'right'), [2, 1]);
+out('keys: moveTarget walks cards, skips empty columns, clamps row');
+
+const items = K.paletteItems({
+  board: { columns: [{ key: 'dev', cards: [{ owner: 'o', repo: 'r', issue: 7, title: 'Fix login' }] }] },
+  sessions: [{ id: 's1', command: '/prd', repo: '/x/proj', outcome: 'waiting' }, { id: 's2', command: '/gh-issue', repo: 'o/r', outcome: 'done' }],
+});
+assert.deepEqual(items.map((i) => i.group), ['Go to', 'Go to', 'Go to', 'Run', 'Session', 'Session']);
+assert.equal(items.find((i) => i.id === 'session-s1').href, '#/answer/s1');
+assert.equal(items.find((i) => i.id === 'session-s2').href, '#/session/s2');
+assert.equal(items.find((i) => i.group === 'Run').href, '#/run/o/r/7');
+assert.deepEqual(K.filterItems(items, 'login').map((i) => i.group), ['Run']);
+assert.deepEqual(K.filterItems(items, 'dev fix').length, 1);
+assert.equal(K.filterItems(items, '').length, 6); assert.equal(K.filterItems(items, '', 2).length, 2);
+assert.equal(K.filterItems(items, 'zzz').length, 0);
+assert.equal(K.paletteItems({ board: null, sessions: null }).length, 3);
+out('keys: paletteItems and filterItems');
+
+const TOAST = await import(new URL('./toast.js', process.env.RUN_URL).href);
+const prevDoc = globalThis.document;
+globalThis.document = undefined; TOAST.toast('no document is fine'); globalThis.document = {}; TOAST.toast('no body is fine');
+const made = []; const host = { appendChild: (c) => made.push(c), setAttribute() {} };
+globalThis.document = { body: { appendChild() {} }, getElementById: () => host, createElement: () => ({ remove() {}, className: '', textContent: '' }) };
+TOAST.toast('hello', 'error');
+assert.equal(made.length, 1); assert.equal(made[0].textContent, 'hello'); assert.equal(made[0].className, 'toast toast-error');
+globalThis.document = prevDoc;
+out('toast: no-ops without a document, appends a kinded message');
+
+const { formatWhen, shortRepo } = await import(new URL('./fmt.js', process.env.RUN_URL).href);
+const noon = new Date(2026, 9, 7, 12, 0);
+assert.match(formatWhen(new Date(2026, 9, 7, 9, 5).toISOString(), noon), /^Today 09:05$/);
+assert.match(formatWhen(new Date(2026, 9, 6, 17, 40).toISOString(), noon), /^Yesterday 17:40$/);
+assert.match(formatWhen(new Date(2026, 9, 1, 8, 0).toISOString(), noon), /^Oct 1 08:00$/);
+assert.equal(formatWhen(null, noon), '—'); assert.equal(formatWhen('garbage', noon), '—');
+assert.equal(shortRepo('/Users/x/Projects/ai-workflow/'), 'ai-workflow'); assert.equal(shortRepo('o/r'), 'r'); assert.equal(shortRepo(''), '—');
+out('fmt: formatWhen and shortRepo');
 
 // ---- sessionForRun
 const S = (id, command, extra = {}) => ({ id, repo: 'own/repo', command, outcome: 'done', ...extra });
@@ -82,6 +161,9 @@ assert.equal(sessionForRun([S('x', 'whatever', { link: 'https://github.com/own/r
 assert.equal(sessionForRun([S('new', '/run-issue 42'), S('old', '/run-issue 42')], 'own', 'repo', 42).id, 'new');
 assert.equal(sessionForRun([S('o', '/run-issue 7'), S('m', '/run-issue 42')], 'own', 'repo', 42).id, 'm');
 out('sessionForRun matches command forms and link, newest first');
+assert.deepEqual(sessionsForRun([S('a', '/run-issue 42'), S('b', '/run-issue 7'), S('c', '/run-issue 42')], 'own', 'repo', 42).map((x) => x.id), ['a', 'c']);
+assert.deepEqual(sessionsForRun(null, 'own', 'repo', 42), []);
+out('sessionsForRun returns every matching session');
 for (const c of ['/run-issue 420', '/run-issue 4', '/pr-grind 42', '/run-issue 42x'])
   assert.equal(sessionForRun([S('x', c)], 'own', 'repo', 42), null, c);
 assert.equal(sessionForRun([S('x', '/run-issue 42', { repo: 'other/repo' })], 'own', 'repo', 42), null);
@@ -350,7 +432,7 @@ out('404 shows not-found with Board link; other failures keep data and retry');
 reset(); c = await mount([]);
 const tabs = find(T(c), (n) => n.props.role === 'tablist')[0];
 assert.ok(tabs); const tt = find(tabs, (n) => n.props.role === 'tab');
-assert.equal(tt.length, 2);
+assert.equal(tt.length, 3);
 for (const t of tt) { assert.equal(t.type, 'button'); assert.ok(t.props['aria-controls']); assert.ok(t.props.id); }
 assert.equal(tt.filter((t) => t.props['aria-selected'] === true || t.props['aria-selected'] === 'true').length, 1);
 let panel = find(T(c), (n) => n.props.role === 'tabpanel');
@@ -362,6 +444,10 @@ await tab(c, /plan/i).props.onClick({}); await settle();
 assert.notEqual(selId(c).props.id, first); assert.match(text(selId(c)), /plan/i);
 panel = find(T(c), (n) => n.props.role === 'tabpanel');
 assert.equal(panel[0].props['aria-labelledby'], selId(c).props.id);
+await tab(c, /sessions/i).props.onClick({}); await settle();
+assert.match(text(tab(c, /sessions/i)), /Sessions \(0\)/);
+assert.match(txt(c), /No UI sessions for this run/);
+await tab(c, /plan/i).props.onClick({}); await settle();
 const dsh = find(panel[0], (n) => n.props.dangerouslySetInnerHTML)[0];
 assert.match(dsh.props.dangerouslySetInnerHTML.__html, /<h1>Plan title<\/h1>/);
 out('tabs aria and plan rendering via mdToHtml');
@@ -447,7 +533,7 @@ def run_checks():
     js = read(os.path.join(STATIC, "run.js")).decode()
     css = read(os.path.join(STATIC, "app.css")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./fmt.js", "./toast.js"}, specs
     assert not re.search(r"https?://", js), "no absolute URLs"
     assert "console.log" not in js and "debugger" not in js and "innerHTML" not in js.replace("dangerouslySetInnerHTML", "")
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
@@ -525,8 +611,36 @@ for (const h of ['#/run/acme/web', '#/run/acme/web/0', '#/run/acme/web/-1', '#/r
   '#/run/a/b/1/extra', '#/answer/', '#/bogus']) assert.equal(nm(h), 'notfound', h);
 out('parseRoute boundary routes are notfound');
 
+assert.equal(nm('#/dispatch'), 'dispatch');
+assert.deepEqual({ ...parseRoute('#/dispatch/p-20261007120000-aaaaaa') }, { name: 'pipeline', params: { id: 'p-20261007120000-aaaaaa' } });
+for (const h of ['#/dispatch/nope', '#/dispatch/p-1-a', '#/dispatch/p-20261007120000-aaaaaa/x']) assert.equal(nm(h), 'notfound', h);
+out('parseRoute dispatch routes');
+
+const D = await import(process.env.APP_URL.replace('app.js', 'dispatch.js'));
+assert.equal(D.hasUrl('see https://github.com/o/r/issues?q=x'), true);
+assert.equal(D.hasUrl('#12, 14'), false);
+assert.deepEqual(D.issueNumbers('#12, 14 15 12'), [12, 14, 15]);
+assert.deepEqual(D.issueNumbers('https://github.com/o/r2/issues/7\nhttps://github.com/o/r2/issues/9'), [7, 9]);
+assert.deepEqual([...D.defaultSelection([{ issue: 1, ready: true }, { issue: 2, ready: false }])], [1]);
+const pv = { slug: 'o/r', repo_path: '/x', items: [{ issue: 1 }, { issue: 2 }, { issue: 3 }] };
+assert.deepEqual(D.startBody(pv, new Set([3, 1]), { mode: 'parallel', max: 2, claude: 'work' }),
+  { slug: 'o/r', repo: '/x', issues: [1, 3], mode: 'parallel', max: 2, claude_cmd: 'work' });
+assert.equal('claude_cmd' in D.startBody(pv, new Set([1]), { mode: 'sequential', max: 1, claude: '' }), false);
+out('dispatch: input, selection and start body helpers');
+
+assert.deepEqual(D.itemActions({ state: 'failed' }), ['retry', 'skip']);
+assert.deepEqual(D.itemActions({ state: 'skipped', reason: 'blocked by #3' }), []);
+assert.deepEqual(D.itemActions({ state: 'skipped', reason: 'manual' }), ['retry']);
+assert.deepEqual(D.itemActions({ state: 'running' }), []);
+assert.deepEqual(D.pipelineActions('active'), ['pause', 'stop']);
+assert.deepEqual(D.pipelineActions('done'), []);
+assert.equal(D.progressText([{ state: 'done' }, { state: 'running' }, { state: 'failed' }]), '1 of 3 done · 1 running · 1 failed');
+out('dispatch: actions and progress text');
+
 assert.equal(nm('#/sessions/'), 'sessions');
 assert.equal(parseRoute('#/answer/a%20b').params.session, 'a b');
+assert.deepEqual({ ...parseRoute('#/session/x%20y') }, { name: 'session', params: { id: 'x y' } });
+assert.equal(nm('#/session/'), 'notfound'); assert.equal(nm('#/session/a/b'), 'notfound');
 assert.equal(nm('#/answer/%E0%A4%A'), 'notfound');
 out('parseRoute trailing slash, decoding, malformed escape');
 
@@ -562,11 +676,13 @@ globalThis.document = doc;
 let timers = [], tid = 0, calls = [], pend = [];
 globalThis.setTimeout = (fn, ms) => { const t = { id: ++tid, fn, ms }; timers.push(t); return t.id; };
 globalThis.clearTimeout = (id) => { timers = timers.filter((t) => t.id !== id); };
-globalThis.fetch = (u) => { calls.push(u); return new Promise((res, rej) => pend.push({ res, rej })); };
+let lastOpts = null;
+globalThis.fetch = (u, o) => { calls.push(u); lastOpts = o; return new Promise((res, rej) => pend.push({ res, rej })); };
 const resp = (ok, status, body) => ({ ok, status, json: async () => { if (body instanceof Error) throw body; return body; } });
 const results = [];
 const stop = poll('/api/sessions', 1000, (r) => results.push(r));
 assert.equal(calls.length, 1); assert.equal(calls[0], '/api/sessions');
+assert.ok(lastOpts.signal instanceof AbortSignal, 'fetch carries a timeout signal so a hung server cannot stall the poll');
 assert.equal(timers.length, 0);
 await tick();
 assert.equal(timers.length, 0, 'no overlap while request in flight');
@@ -794,7 +910,7 @@ def shell_checks():
     css = read(os.path.join(STATIC, "app.css")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
     assert specs, "no imports found"
-    assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./board.js", "./run.js", "./history.js", "./answer.js", "./notify.js", "./launcher.js"}, specs
+    assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./board.js", "./run.js", "./history.js", "./answer.js", "./notify.js", "./launcher.js", "./session.js", "./keys.js", "./toast.js", "./settings.js", "./dispatch.js", "./fmt.js", "./cleanup.js"}, specs
     assert not re.search(r"https?://", js), "no absolute URLs"
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
@@ -838,7 +954,7 @@ const B = await import(process.env.BOARD_URL);
 const { parseRoute } = await import(process.env.APP_URL);
 const assert = (await import('node:assert')).strict;
 const out = (n) => console.log('ok ' + n);
-const { cardTitle, runHref, matchSession, cardChips, formatCost, filterColumns, repoOptions, boardChanged } = B;
+const { cardTitle, runHref, matchSession, cardChips, formatCost, filterColumns, repoOptions, boardChanged, stationLabel, visibleCards, boardSummary, DONE_LIMIT, flipDeltas } = B;
 const card = { owner: 'acme', repo: 'web', issue: 42 };
 const S = (owner, repo, issue, status, extra = {}) => ({ id: owner + repo + issue, link: { owner, repo, issue }, status, ...extra });
 
@@ -852,7 +968,8 @@ out('matchSession join and corners');
 assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, 'running')), ['running']);
 assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, 'waiting')), ['waiting']);
 assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, 'stopped')), ['stopped']);
-assert.deepEqual(cardChips({ ...card, escalated: true }, 'dev', null), ['waiting']);
+assert.deepEqual(cardChips({ ...card, escalated: true }, 'dev', null), ['escalated']);
+assert.deepEqual(cardChips({ ...card, escalated: true }, 'dev', S('a', 'b', 1, 'waiting')), ['waiting']);
 assert.deepEqual(cardChips(card, 'done', S('a', 'b', 1, 'running')), ['merged']);
 assert.deepEqual(cardChips({ ...card, escalated: true }, 'done', null), ['merged']);
 assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, 'running', { resumed_fresh: true })), ['running', 'resumed fresh']);
@@ -886,6 +1003,33 @@ out('filterColumns, repoOptions');
 for (const t of ['', null, undefined]) assert.equal(cardTitle({ issue: 7, title: t }), '#7');
 assert.equal(cardTitle({ issue: 7 }), '#7'); assert.equal(cardTitle({ issue: 7, title: 'Hi' }), 'Hi');
 out('cardTitle');
+
+assert.equal(stationLabel('researcher'), 'Research'); assert.equal(stationLabel('sdet'), 'SDET'); assert.equal(stationLabel('nope'), 'nope');
+out('stationLabel');
+
+const many = { key: 'done', cards: Array.from({ length: 25 }, (_, i) => ({ issue: i })) };
+assert.equal(visibleCards(many, false).length, DONE_LIMIT);
+assert.equal(visibleCards(many, true).length, 25);
+assert.equal(visibleCards({ ...many, key: 'dev' }, false).length, 25);
+out('visibleCards collapses only the done column');
+
+const day = new Date('2026-10-07T12:00:00');
+const sum = boardSummary(
+  [{ key: 'dev', cards: [{ owner: 'a', repo: 'b', issue: 1 }, { owner: 'a', repo: 'b', issue: 2, escalated: true }] },
+   { key: 'done', cards: [{ owner: 'a', repo: 'b', issue: 3, escalated: true }] }],
+  [S('a', 'b', 1, 'running', { cost: 1.5, started_at: '2026-10-07T09:00:00' }), S('x', 'y', 9, 'done', { cost: 2, started_at: '2026-10-06T09:00:00' })],
+  day,
+);
+assert.deepEqual(sum, { live: 1, waiting: 1, today: 1.5 });
+assert.deepEqual(boardSummary([], null, day), { live: 0, waiting: 0, today: 0 });
+out('boardSummary');
+
+const rect = (x, y) => ({ x, y });
+assert.deepEqual(
+  flipDeltas(new Map([['a', rect(0, 0)], ['b', rect(10, 10)], ['gone', rect(1, 1)]]), new Map([['a', rect(0, 0.5)], ['b', rect(110, 40)], ['new', rect(5, 5)]])),
+  [['b', -100, -30]],
+);
+out('flipDeltas only reports cards that moved and still exist');
 
 const d = { columns: [] };
 assert.equal(boardChanged(JSON.stringify(d), d), false);
@@ -973,7 +1117,7 @@ def board_checks():
     css = read(os.path.join(STATIC, "app.css")).decode()
     app = read(os.path.join(STATIC, "app.js")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./fmt.js", "./toast.js"}, specs
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
     names = {x.split(" as ")[-1].strip() for x in exports.split(",")}
@@ -1019,7 +1163,7 @@ const fix = JSON.parse(process.env.LAUNCHER_FIX);
 const assert = (await import('node:assert')).strict;
 const out = (n) => console.log('ok ' + n);
 const tick = () => new Promise((r) => setImmediate(r));
-const { repoOptions, argIssue, validate, buildBody, outcome, sessionHref, loadLastRepo, saveLastRepo, makeSubmitter, Launcher } = L;
+const { repoOptions, pathOption, comboOptions, argIssue, validate, buildBody, outcome, sessionHref, loadLastRepo, saveLastRepo, makeSubmitter, Launcher } = L;
 out('import without document/localStorage does not throw');
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
@@ -1027,6 +1171,13 @@ const plain = (x) => JSON.parse(JSON.stringify(x));
 const opts = repoOptions(fix.repos);
 assert.equal(opts.length, 1); assert.equal(opts[0].value, 'o/r');
 out('repoOptions from real /api/repos body');
+assert.equal(pathOption('  /a/b '), '/a/b'); assert.equal(pathOption('rel/x'), null); assert.equal(pathOption(''), null);
+const two = [{ value: 'a/web', label: 'Web - /p/web', name: 'Web', path: '/p/web' }, { value: 'a/api', label: 'Api - /p/api', name: 'Api', path: '/p/api' }];
+assert.deepEqual(comboOptions(two, '').map((o) => o.kind), ['repo', 'repo', 'other']);
+assert.deepEqual(comboOptions(two, 'AP').map((o) => o.value ?? o.kind), ['a/api', 'other']);
+assert.deepEqual(comboOptions(two, '/tmp/x').map((o) => o.kind), ['path', 'other']);
+assert.deepEqual(comboOptions(two, '/p/web').map((o) => o.value ?? o.kind), ['a/web', 'path', 'other']);
+out('comboOptions filters by name/slug/path, offers typed path and Other path');
 for (const bad of [null, undefined, {}, { repos: 5 }, [], { repos: [{ name: 'x' }, { slug: 'a/b' }, null] }])
   assert.deepEqual(plain(repoOptions(bad)), [], JSON.stringify(bad));
 out('repoOptions empty/malformed -> []');
@@ -1112,13 +1263,13 @@ const walk = (n) => { if (n == null || typeof n === 'boolean') return; if (Array
 const text = (n) => (n == null || typeof n === 'boolean') ? '' : Array.isArray(n) ? n.map(text).join('') : typeof n === 'object' ? text(n.props && n.props.children) : String(n);
 const find = (t, root) => { nodes.length = 0; walk(root); return nodes.filter((n) => n.type === t); };
 let tree = render({});
-assert.equal(find('select', tree).length, 1);
+assert.equal(find('input', tree).filter((i) => i.props.role === 'combobox').length, 1);
 const radios = find('input', tree).filter((i) => i.props.type === 'radio');
 assert.deepEqual(radios.map((r) => r.props.value).sort(), ['dump', 'gh-issue', 'intake', 'pr-grind', 'prd', 'run-issue', 'worklog']);
 const lab = (t) => find('label', render({ command: t })).map((l) => text(l)).join('|');
 assert.match(lab('run-issue'), /issue/i); assert.match(lab('pr-grind'), /PR|pull/i);
 assert.notEqual(lab('run-issue'), lab('pr-grind'));
-out('render: repo select, seven command radios, command-specific args label');
+out('render: repo combobox, seven command radios, command-specific args label');
 const fs = find('fieldset', tree); assert.ok(fs.length >= 1); assert.ok(find('legend', fs[0]).length === 1);
 tree = render({});
 const labelFor = new Set(find('label', tree).map((l) => l.props.htmlFor ?? l.props['for']));
@@ -1213,7 +1364,7 @@ def launcher_checks():
     assert os.path.exists(lp), "launcher.js missing"
     js = read(lp).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./toast.js"}, specs
     assert not re.search(r"console\.log|debugger|https?://", js)
     ok("launcher.js imports only vendored modules, no debug/absolute URLs")
     s, r, _ = req(port, "/static/launcher.js")
@@ -1430,7 +1581,7 @@ def launcher_all_checks():
     for name in ("run-issue", "pr-grind", "prd", "intake", "dump", "worklog", "gh-issue"):
         assert name in js, name
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./toast.js"}, specs
     assert not re.search(r"console\.log|debugger|https?://", js)
     s, r, _ = req(port, "/static/launcher.js")
     assert s == 200 and r.getheader("Content-Type", "").startswith("text/javascript"), s
@@ -1495,7 +1646,7 @@ def answer_checks():
     app = read(os.path.join(STATIC, "app.js")).decode()
     css = read(os.path.join(STATIC, "app.css")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./toast.js"}, specs
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
     names = {x.split(" as ")[-1].strip() for x in exports.split(",")}
@@ -1758,7 +1909,7 @@ def notify_checks():
     ok("notify.js hygiene")
 
     assert re.search(r"document\.title\s*=", app), "app.js sets document.title"
-    assert re.search(r"""<button[^>]*type="button"[^>]*>\s*Enable notifications""", app), "labelled Enable button"
+    assert re.search(r'<button[^>]*type="button"[^>]*aria-label="Enable notifications"', app), "labelled Enable button"
     assert re.search(r"""notif\s*===\s*['"]default['"]""", app), "button gated on default state"
     ok("app.js sets title and gates a labelled Enable notifications button")
 
@@ -1822,7 +1973,7 @@ const out = (n) => console.log('ok ' + n);
 const tick = () => new Promise((r) => setImmediate(r));
 out('import without document does not throw');
 
-const { rowOutcome, rowAction, transcriptHref, filterSessions, fmtCost, fmtTime, resumeSession, History } = H;
+const { rowOutcome, rowAction, transcriptHref, sessionHref, filterSessions, fmtCost, fmtTime, resumeSession, History } = H;
 const S = (o) => ({ id: 's1', command: 'cmd', repo: 'r', outcome: 'done', cost: 0.5,
   started_at: '2026-01-02T03:04:05Z', ended_at: '2026-01-02T04:04:05Z', link: null, ...o });
 
@@ -1852,8 +2003,9 @@ assert.equal(transcriptHref(S({ link })), '#/run/o/r/7');
 assert.equal(transcriptHref(S({ link: { owner: 'a b', repo: 'c/d', issue: 1 } })), '#/run/a%20b/c%2Fd/1');
 for (const l of [null, undefined, { owner: 'o', repo: 'r', issue: 0 }, { owner: 'o', repo: 'r', issue: 1.5 },
   { owner: 'o', repo: 'r', issue: '3' }, { owner: 'o', repo: 'r' }]) {
-  assert.equal(transcriptHref(S({ id: 'x y', link: l })), '/api/sessions/x%20y/stream');
+  assert.equal(transcriptHref(S({ id: 'x y', link: l })), '#/session/x%20y');
 }
+assert.equal(sessionHref(S({ id: 'a/b' })), '#/session/a%2Fb');
 out('transcriptHref');
 
 const L = [S({ id: '1', outcome: 'failed' }), S({ id: '2', outcome: 'done' }), S({ id: '3', outcome: 'failed' }),
@@ -1878,7 +2030,9 @@ r = await resumeSession('x'); assert.equal(r.ok, false); assert.ok(typeof r.erro
 out('resumeSession ok, server error, HTTP status, network failure');
 
 assert.equal(fmtCost(0.1234), '$0.12'); assert.equal(fmtCost(0), '$0.00');
-assert.match(fmtTime('2026-01-02T03:04:05Z'), /2026|26/);
+assert.match(fmtTime('2020-01-02T03:04:05Z'), /2020/);
+assert.match(fmtTime(new Date().toISOString()), /^Today \d\d:\d\d$/);
+assert.equal(fmtTime('not-a-date'), 'not-a-date'); assert.equal(fmtTime(null), '—');
 out('fmtCost/fmtTime');
 
 // mini renderer: vnode -> html string, plus element lookup
@@ -1928,7 +2082,7 @@ assert.ok(t.includes('—'), 'em dash');
 assert.match(t, /unknown/);
 assert.ok(t.includes('not-a-date'));
 assert.ok(t.includes(`title="${longCmd}"`), 'full command in title');
-assert.ok(t.includes('/api/sessions/s1/stream'), 'missing link falls back to stream');
+assert.ok(t.includes('#/session/s1'), 'Transcript links to the in-app viewer');
 out('null fields, unknown outcome, invalid date, long command title');
 
 t = html([S({ outcome: 'failed' })]);
@@ -1989,7 +2143,7 @@ def history_checks():
 
     js = read(os.path.join(STATIC, "history.js")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./fmt.js", "./toast.js"}, specs
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
     names = {x.split(" as ")[-1].strip() for x in exports.split(",")}

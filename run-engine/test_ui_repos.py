@@ -106,9 +106,9 @@ def req(path, method="GET", body=None, host=HOST, origin=None, headers=None):
 calls = []
 
 
-def fake_start(command_text, cwd, link=None):
+def fake_start(command_text, cwd, link=None, claude_cmd=None):
     calls.append((command_text, cwd, link))
-    return ui_sessions.create(command_text, cwd, link)
+    return ui_sessions.create(command_text, cwd, link, claude_cmd=claude_cmd)
 
 
 def post(obj, raw=None, **kw):
@@ -136,11 +136,11 @@ try:
     # ------------------------------------------------------------- GET /api/repos
     s, data, h = req("/api/repos")
     assert s == 200, (s, data)
-    assert json.loads(data) == {"repos": [
+    assert json.loads(data)["repos"] == [
         {"slug": "a/first", "name": "a/first", "path": REPO_A},
         {"slug": "o/r", "name": "Orange Repo", "path": REPO_A},
         {"slug": "z/last", "name": "Zed", "path": REPO_B},
-    ]}, data
+    ], data
     ok("GET /api/repos sorted by slug, name from projects.json, fallback slug, projects-only not listed")
 
     for label, co in [("missing", None), ("empty", ""), ("non-json", "{nope")]:
@@ -149,7 +149,7 @@ try:
         else:
             set_registry(co)
         s, data, _ = req("/api/repos")
-        assert s == 200 and json.loads(data) == {"repos": []}, (label, s, data)
+        assert s == 200 and json.loads(data)["repos"] == [], (label, s, data)
     ok("checkouts.json missing/empty/non-JSON -> {repos: []}")
 
     set_registry({"o/r": REPO_A, "bad/val": 5, "bad/none": None})
@@ -303,7 +303,7 @@ try:
     reset_sessions()
     calls.clear()
 
-    def slow_start(command_text, cwd, link=None):
+    def slow_start(command_text, cwd, link=None, claude_cmd=None):
         time.sleep(0.3)
         return ui_sessions.create(command_text, cwd, link)
 
@@ -409,6 +409,59 @@ try:
         s, data, _ = req("/api/sessions", "POST", json.dumps(good).encode())
     assert s == 502 and "claude CLI not found" in err(json.loads(data)), (s, data)
     ok("RunnerError -> 502 {error}")
+
+    # ------------------------------------------------- folder picker + remember
+    for plat, host, want in [("darwin", HOST, True), ("darwin", f"localhost:{port}", True), ("linux", HOST, False)]:
+        with mock.patch.object(sys, "platform", plat):
+            s, data, _ = req("/api/repos", host=host)
+        assert s == 200 and json.loads(data)["can_browse"] is want, (plat, host, s, data)
+    with mock.patch.object(sys, "platform", "darwin"):
+        srv.allowed_hosts.add("mac.tailnet:80")
+        s, data, _ = req("/api/repos", host="mac.tailnet:80")
+        assert json.loads(data)["can_browse"] is False, data
+        s, data, _ = req("/api/repos/browse", "POST", b"{}", host="mac.tailnet:80")
+        assert s == 403, (s, data)
+        srv.allowed_hosts.discard("mac.tailnet:80")
+    with mock.patch.object(sys, "platform", "linux"):
+        s, _, _ = req("/api/repos/browse", "POST", b"{}")
+    assert s == 403, s
+    with mock.patch.object(sys, "platform", "darwin"), mock.patch.object(ui_repos, "browse_folder", lambda st: f"picked:{st}"):
+        s, data, _ = req("/api/repos/browse", "POST", json.dumps({"start": "/x"}).encode())
+    assert s == 200 and json.loads(data) == {"path": "picked:/x"}, (s, data)
+    ok("can_browse only on darwin + localhost Host; browse -> 403 otherwise, path when allowed")
+
+    def osa(rc, out):
+        return mock.Mock(return_value=subprocess.CompletedProcess([], rc, out, ""))
+
+    with mock.patch.object(subprocess, "run", osa(0, "/Users/me/proj/\n")) as run:
+        assert ui_repos.browse_folder(REPO_A) == "/Users/me/proj"
+        assert run.call_args[0][0][-1] == REPO_A and run.call_args[0][0][0] == "osascript"
+        ui_repos.browse_folder("/no/such/dir")
+        assert run.call_args[0][0][-1] == os.path.expanduser("~")
+    with mock.patch.object(subprocess, "run", osa(1, "")):
+        assert ui_repos.browse_folder(None) is None
+    with mock.patch.object(subprocess, "run", mock.Mock(side_effect=OSError)):
+        assert ui_repos.browse_folder(None) is None
+    ok("browse_folder: path trimmed, start passed as argv (bad start -> ~), cancel/error -> None")
+
+    remote = git_repo()
+    subprocess.run(["git", "-C", remote, "remote", "add", "origin", "https://github.com/new/thing.git"], check=True)
+    set_registry({"o/r": REPO_A})
+    s, p = post({"repo": remote, "text": "hello"})
+    assert s == 201, (s, p)
+    assert ui_repos.dispatch.read_checkouts().get("new/thing") == remote
+    post({"repo": remote, "text": "hello"})  # already registered: left alone
+    assert list(ui_repos.dispatch.read_checkouts()) == ["o/r", "new/thing"]
+    s, _ = post({"repo": PLAIN, "text": "hello"})  # not a repo: rejected, nothing registered
+    assert s == 400 and "new/thing" in ui_repos.dispatch.read_checkouts() and len(ui_repos.dispatch.read_checkouts()) == 2
+    nourl = git_repo()
+    post({"repo": nourl, "text": "hello"})  # no origin -> no slug -> nothing to register
+    assert len(ui_repos.dispatch.read_checkouts()) == 2
+    with mock.patch.object(ui_repos.dispatch, "register_checkout", side_effect=OSError("ro")):
+        set_registry({"o/r": REPO_A})
+        s, _ = post({"repo": remote, "text": "hello"})
+    assert s == 201, s  # registry failure must not fail the start
+    ok("manual path with an origin slug is registered once; no slug/non-repo/registry error never block start")
 
     # ------------------------------------------------------------ guard / verbs
     body = json.dumps(good).encode()

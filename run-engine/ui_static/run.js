@@ -1,30 +1,38 @@
+import { GhChips, FailingChecks, issueUrl, quiet } from './ghstatus.js';
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { poll } from './app.js';
+import { formatWhen } from './fmt.js';
+import { toast } from './toast.js';
+import { openCleanup } from './cleanup.js';
+import { LimitBanner } from './limits.js';
 
 const html = htm.bind(h);
 
 // Hooks are not vendored, so RunDetail is a class component and everything else is a pure helper.
 
-// Mirrors ui_runner._issue_key (anchored, leading slash); /api/sessions is newest first, so the first match wins.
+// Mirrors ui_runner._issue_key (anchored, leading slash).
+function matchesRun(s, slug, n) {
+  if (!s || s.repo !== slug) return false;
+  if (typeof s.link === 'string' && s.link.endsWith(`/${slug}/issues/${n}`)) return true;
+  const cmd = /^\/(?:[\w-]+:)?run-issue\s+(.*)/.exec(String(s.command || ''));
+  const num = cmd && /(?:^|\s|\/issues\/)#?(\d+)(?=\s|$)/.exec(cmd[1]);
+  return !!num && Number(num[1]) === n;
+}
+
+// /api/sessions is newest first, so the first match is the current session.
+export function sessionsForRun(sessions, owner, repo, n) {
+  return Array.isArray(sessions) ? sessions.filter((s) => matchesRun(s, `${owner}/${repo}`, n)) : [];
+}
+
 export function sessionForRun(sessions, owner, repo, n) {
-  if (!Array.isArray(sessions)) return null;
-  const slug = `${owner}/${repo}`;
-  return (
-    sessions.find((s) => {
-      if (!s || s.repo !== slug) return false;
-      if (typeof s.link === 'string' && s.link.endsWith(`/${slug}/issues/${n}`)) return true;
-      const cmd = /^\/(?:[\w-]+:)?run-issue\s+(.*)/.exec(String(s.command || ''));
-      const num = cmd && /(?:^|\s|\/issues\/)#?(\d+)(?=\s|$)/.exec(cmd[1]);
-      return !!num && Number(num[1]) === n;
-    }) || null
-  );
+  return sessionsForRun(sessions, owner, repo, n)[0] || null;
 }
 
 export function actionsFor(session) {
   if (!session) return [];
   const out = [];
-  if (['starting', 'running', 'waiting'].includes(session.outcome)) out.push('stop');
+  if (['starting', 'running', 'waiting', 'limited'].includes(session.outcome)) out.push('stop');
   if (session.outcome === 'stopped') out.push('resume');
   if (session.resume_command) out.push('terminal');
   return out;
@@ -219,16 +227,21 @@ export class RunDetail extends Component {
 
   act = (action, label) => async (e) => {
     e?.preventDefault?.();
+    if (action === 'stop' && !window.confirm('Stop this run? The process is killed; the branch and worktree are kept and you can resume it.')) return;
     const id = this.sid;
     this.setState({ busy: action, msg: '' });
     const r = await postAction(id, action);
-    this.setState({ busy: null, msg: r.ok ? label : `${action === 'stop' ? 'Stop' : 'Resume'} failed: ${r.error}` });
+    const msg = r.ok ? label : `${action === 'stop' ? 'Stop' : 'Resume'} failed: ${r.error}`;
+    this.setState({ busy: null, msg });
+    toast(msg, r.ok ? 'ok' : 'error');
   };
 
   terminal = async (e) => {
     e?.preventDefault?.();
     const r = await copyCommand(this.session()?.resume_command);
-    this.setState({ msg: r.ok ? 'Copied' : 'Copy failed: select the command below', fallback: !r.ok });
+    const msg = r.ok ? 'Copied' : 'Copy failed: select the command below';
+    this.setState({ msg, fallback: !r.ok });
+    toast(msg, r.ok ? 'ok' : 'error');
   };
 
   onScroll = (e) => {
@@ -251,11 +264,13 @@ export class RunDetail extends Component {
     if (!run) return html`<h1>${`${owner}/${repo}#${n}`}</h1><p role="status">Loading…</p>`;
     const s = this.session();
     const acts = actionsFor(s);
+    const cleanable = run.status === 'done' || (s ? ['stopped', 'failed'].includes(s.outcome) : quiet(run.updated, run.status)) || run.gh?.pr?.state === 'MERGED';
     const t = totals(stream.events, s);
     const rt = run.totals || {};
     const stations = Array.isArray(run.stations) ? run.stations : [];
     const chip = (st) => `chip ${KNOWN.includes(st) ? st : 'other'}`;
-    const TABS = [['output', 'Output'], ['plan', 'Plan']];
+    const all = sessionsForRun(sessions, owner, repo, n);
+    const TABS = [['output', 'Live output'], ['plan', 'Plan'], ['sessions', `Sessions (${all.length})`]];
 
     let plan;
     if (tab !== 'plan') plan = null;
@@ -268,43 +283,73 @@ export class RunDetail extends Component {
     else if (!stream.events.length) output = html`<p class="muted">No output yet</p>`;
     else output = stream.events.map((e, i) => html`<${Event} key=${i} e=${e} />`);
 
+    const meta = [`${owner}/${repo}#${n}`];
+    if (s) meta.push(String(s.command || '').replace(/^\/(?:[\w-]+:)?/, '').split(/\s/)[0] || 'run', `session ${String(s.id).slice(-8)}`);
+
+    let body;
+    if (tab === 'plan') body = plan;
+    else if (tab === 'sessions') {
+      body = all.length
+        ? html`<ul class="sessions-list">${all.map((x) => html`
+            <li>
+              <span class="mono">${x.command}</span>
+              <span class=${`chip chip-${x.outcome}`}>${x.outcome}</span>
+              <span class="muted">${formatWhen(x.started_at)}</span>
+              <span class="mono muted">${money(x.cost)}</span>
+              <a href=${`#/session/${encodeURIComponent(x.id)}`}>Transcript</a>
+            </li>`)}</ul>`
+        : html`<p class="muted">No UI sessions for this run</p>`;
+    } else body = html`<div class="output" ref=${this.setOut} onScroll=${this.onScroll}>${output}${this.live && html`<div class="streaming"><span class="pulse"></span>streaming events…</div>`}</div>`;
+
     return html`
       <section class="run">
         <div class="run-head">
-          <h1>${`${owner}/${repo}#${n}`}</h1>
+          <div class="run-title">
+            <div class="run-meta mono">${meta.join(' · ')}${html` · <a href=${issueUrl(owner, repo, n)} target="_blank" rel="noopener noreferrer">Issue</a>`}${(run.pr || run.gh?.pr?.url) && html` · <a href=${run.pr || run.gh.pr.url} target="_blank" rel="noopener noreferrer">PR${run.gh?.pr?.number ? ' #' + run.gh.pr.number : ''}</a>`}${run.branch && html` · <span title="branch">${run.branch}</span>`}</div>
+            <h1>${run.title || `Issue #${n}`}</h1>
+          </div>
           <span class=${chip(run.status)}>${run.status}</span>
+          <${GhChips} gh=${run.gh} labels=${true} />
           ${retry && html`<span role="status" class="offline">Retrying…</span>`}
+          ${cleanable && html`<button type="button" class="btn" onClick=${() => openCleanup(`${owner}/${repo}#${n}`)}>Clean up</button>`}
+          ${acts.length > 0 && html`
+            <div class="actions">
+              ${acts.includes('stop') && html`<button type="button" class="btn btn--danger" disabled=${busy === 'stop'} onClick=${this.act('stop', 'Stopped')}>Stop</button>`}
+              ${acts.includes('resume') && html`<button type="button" disabled=${busy === 'resume'} onClick=${this.act('resume', 'Resumed')}>Resume</button>`}
+              ${acts.includes('terminal') && html`<button type="button" onClick=${this.terminal}>Continue in terminal</button>`}
+            </div>`}
         </div>
+        ${s && s.outcome === 'limited' && html`<${LimitBanner} key=${s.id} s=${s} />`}
+        ${s && s.claude_cmd && s.claude_cmd !== 'claude' && html`<p class="note">Account: <span class="mono">${s.claude_cmd}</span></p>`}
         ${s && s.resumed_fresh && html`<p class="note">${`Resumed fresh${s.note ? `: ${s.note}` : ''}`}</p>`}
-        ${acts.length > 0 && html`
-          <div class="actions">
-            ${acts.includes('stop') && html`<button type="button" disabled=${busy === 'stop'} onClick=${this.act('stop', 'Stopped')}>Stop</button>`}
-            ${acts.includes('resume') && html`<button type="button" disabled=${busy === 'resume'} onClick=${this.act('resume', 'Resumed')}>Resume</button>`}
-            ${acts.includes('terminal') && html`<button type="button" onClick=${this.terminal}>Continue in terminal</button>`}
-          </div>`}
+        <${FailingChecks} gh=${run.gh} />
         ${run.errors?.ledger && html`<p class="muted">Ledger could not be read</p>`}
         <div role="status" class="msg">${msg}</div>
         ${fallback && s && html`<label class="cmd">Command <input readOnly value=${s.resume_command} aria-label="Resume command" ref=${this.selectBox} /></label>`}
-        <div class="panel">
-          <h2>Timeline</h2>
-          <ol class="timeline">
-            ${stations.map((st) => html`
-              <li aria-current=${st.name === run.currentStation ? 'step' : undefined}>
-                <span class="name">${st.name}</span>
-                <span class=${chip(st.status)}>${st.status}</span>
-                ${st.bounces > 0 && html`<span class="muted">${`${st.bounces} bounces`}</span>`}
-              </li>`)}
-          </ol>
-          <p class="muted">${`${rt.stations ?? stations.length} stations, ${rt.done ?? 0} done, ${rt.bounces ?? 0} bounces`}</p>
-          <p class="muted">${`Cost ${money(t.cost)}`}${t.tokens && `, ${t.tokens.input} in / ${t.tokens.output} out tokens`}</p>
-        </div>
-        <div class="panel">
-          <div role="tablist" aria-label="Run detail">
-            ${TABS.map(([k, label]) => html`
-              <button type="button" role="tab" id=${`tab-${k}`} aria-controls="run-panel" aria-selected=${tab === k} onClick=${() => this.setState({ tab: k })}>${label}</button>`)}
+        <div class="run-cols">
+          <div class="panel stations">
+            <h2>Stations</h2>
+            <ol class="timeline">
+              ${stations.map((st) => html`
+                <li class=${`st-${KNOWN.includes(st.status) ? st.status : 'other'}`} aria-current=${st.name === run.currentStation ? 'step' : undefined}>
+                  <span class="dot" aria-hidden="true"></span>
+                  <span class="name">${st.name}</span>
+                  <span class=${chip(st.status)}>${st.status}</span>
+                  ${st.bounces > 0 && html`<span class="muted">${`${st.bounces} bounces`}</span>`}
+                </li>`)}
+            </ol>
+            <div class="stats">
+              <div><div class="muted">Cost</div><div class="mono big">${money(t.cost)}</div></div>
+              ${t.tokens && html`<div><div class="muted">Tokens</div><div class="mono big">${`${t.tokens.input} in / ${t.tokens.output} out`}</div></div>`}
+            </div>
+            <p class="muted">${`${rt.stations ?? stations.length} stations, ${rt.done ?? 0} done, ${rt.bounces ?? 0} bounces`}</p>
           </div>
-          <div role="tabpanel" id="run-panel" aria-labelledby=${`tab-${tab}`}>
-            ${tab === 'plan' ? plan : html`<div class="output" ref=${this.setOut} onScroll=${this.onScroll}>${output}</div>`}
+          <div class="panel main">
+            <div role="tablist" aria-label="Run detail">
+              ${TABS.map(([k, label]) => html`
+                <button type="button" role="tab" id=${`tab-${k}`} aria-controls="run-panel" aria-selected=${tab === k} onClick=${() => this.setState({ tab: k })}>${label}</button>`)}
+            </div>
+            <div role="tabpanel" id="run-panel" aria-labelledby=${`tab-${tab}`}>${body}</div>
           </div>
         </div>
       </section>
