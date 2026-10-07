@@ -1220,6 +1220,57 @@ def stop_checks():
         time.sleep(0.5)
         assert r["status"] == "stopped" and len(calls(fk)) == 1 and not r.get("resumed_fresh"), r
         ok("stop during failing resume: stopped, fallback never spawns")
+
+        # -- stop during resume's claim/preflight window (pid cleared, old group untouched)
+        d, fk, work = setup_("normal")
+        sid = cheap(work=work)
+        old = subprocess.Popen(["sleep", "60"], start_new_session=True)
+        try:
+            ui_sessions.update(sid, pid=old.pid)
+            gate, real_pf = threading.Event(), ui_runner._preflight
+
+            def slow_pf(s):
+                gate.wait(20)
+                return real_pf(s)
+
+            out = []
+            with mock.patch.object(ui_runner, "_preflight", slow_pf):
+                t = threading.Thread(target=lambda: out.append(http_("POST", f"/api/sessions/{sid}/resume")))
+                t.start()
+                wait_for(lambda: ui_sessions.load(sid)["status"] == "starting")
+                assert ui_sessions.load(sid).get("pid") is None
+                with mock.patch("os.killpg") as kp, mock.patch("os.kill") as k1:
+                    st, _b = http_("POST", f"/api/sessions/{sid}/stop")
+                assert st == 409 and "retry" in _b["error"], (st, _b)
+                assert not kp.called and not k1.called
+                assert old.poll() is None, "old pid's group must not be killed"
+                assert ui_sessions.load(sid)["status"] == "starting"
+                gate.set()
+                t.join(20)
+            assert out[0][0] == 200, out
+            r = end(sid)
+            assert r["status"] == "done" and len(calls(fk)) == 1, r
+        finally:
+            old.kill()
+            old.wait()
+        ok("stop during resume preflight: 409 retry, no signal, old group alive, resume completes")
+
+        # -- stop with no in-process handle clears _stopping
+        d, fk, work = setup_("normal")
+        sid = cheap(work=work, status="running")
+        old = subprocess.Popen(["sleep", "60"], start_new_session=True)
+        try:
+            ui_sessions.update(sid, pid=old.pid)
+            assert sid not in ui_runner._procs
+            assert http_("POST", f"/api/sessions/{sid}/stop")[0] == 200
+            old.wait(10)
+            assert sid not in ui_runner._stopping, "stale _stopping after handle-less stop"
+            assert http_("POST", f"/api/sessions/{sid}/resume")[0] == 200
+            assert end(sid)["status"] == "done"
+        finally:
+            old.kill()
+            old.wait()
+        ok("handle-less stop clears _stopping: later resume finishes done")
     finally:
         srv.shutdown()
         srv.server_close()
