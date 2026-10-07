@@ -240,7 +240,34 @@ aiw ci status                      check state plus the failing job's log
 aiw gitnexus sync|index|clean      the code graph (best-effort)
 aiw project-status | project-board GitHub Projects (best-effort)
 aiw epic split|init|next|status    epic decomposition and sequencing
+aiw ui [--port N] [--allow-host HOST]  local web UI to start and track sessions
 ```
+
+## aiw ui
+
+`aiw ui` serves a local web UI for starting and tracking headless Claude sessions.
+
+- It binds to loopback only. `--port` sets the port (default 8420).
+- `--allow-host HOST` is repeatable and matches exactly: use `name:port`, or the bare name for the default 443 serve.
+- To reach it over a tailnet: `tailscale serve --bg 8420`, then
+  `aiw ui --allow-host <machine>.<tailnet>.ts.net`.
+
+Optional push notifications and links live in `<data_dir>/ui.json` (the data dir is
+`$CLAUDE_PLUGIN_DATA`, default `~/.claude/plugins/data/ai-workflow`):
+
+```json
+{"ntfy": {"server": "<ntfy-server-url>", "topic": "<topic>", "token": "<token>"},
+ "public_url": "<https://your-ui-url>"}
+```
+
+The file must be mode 0600 (`chmod 600 <data_dir>/ui.json`) because it can hold a token;
+a looser mode is ignored with a warning. `AIW_NTFY_SERVER`, `AIW_NTFY_TOPIC` and
+`AIW_NTFY_TOKEN` override the file. `public_url` is the base for push click-through links.
+
+**Security:** there is no app-level auth. Access relies on tailnet ACLs, so anyone who can
+reach the URL can start sessions. Sessions run `claude --dangerously-skip-permissions` by
+default, with no opt-out flag. Never use `tailscale funnel` (public exposure plus skip-permissions
+is remote code execution), and on a shared machine any local user can reach the loopback port.
 
 ## Where state lives
 

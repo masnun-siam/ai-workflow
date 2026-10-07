@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.10.0 — 2026-10-07
+
+### Added
+
+- **`aiw ui` is a local web UI for driving and watching runs (#107-#114, #121-#129).**
+  It serves a live Board of every run, a session list, a run-detail view with the
+  streamed events, a session history view, and a new-run form for any command (or a
+  custom prompt) that starts a detached headless `claude` session. A session that
+  stops at a gate or an interview round shows a waiting badge, a browser notification
+  and an answer view; answering resumes it, with a fallback to the ledger when the
+  session id is lost. Sessions are re-attached after a UI restart. The server only
+  answers requests whose Host and Origin are local (`--allow-host` adds more).
+- **Optional ntfy pushes when a session is waiting, done or failed (#121).** Configure
+  them in the UI JSON config.
+- **`aiw ask` records a gate or interview question for the UI instead of blocking on
+  a prompt (#118, #128).** `/run-issue` gates and the `/prd`, `/intake`, `/dump`,
+  `/worklog` and `/gh-issue` interviews go through it when a UI session is running.
+- **`/pr-grind` can run headless (#127).** `poll-reviews.sh once` does a single poll,
+  and the UI ticks it to re-enter the grind loop.
+
+### Changed
+
+- **`aiw kanban serve` and `kanban.py` are gone (#108).** Use `aiw ui`.
+- **The docs describe the Session term and the `aiw ui` server (#130).** Two ADRs
+  record the headless question pause (#103) and the pr-grind re-entry (#104).
+
 ## 1.9.0 — 2026-10-02
 
 ### Added

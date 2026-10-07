@@ -103,7 +103,7 @@ by file group (e.g. route+controller, then request+resource) rather than waiving
 cap. Non-layered work (docs, config) uses the same limits, split by file or section. If any task fails the rubric,
 create nothing and don't ask yet: split the failing task and rebuild the list before presenting it.
 
-Present the list in exactly one `AskUserQuestion` call with two choices, verbatim:
+Present the list in exactly one `AskUserQuestion` call (if headless, one `aiw ask`, then end your turn) with two choices, verbatim:
 **"Create as shown"** and **"Let me edit the list"**.
 Style this like Gate 1's revise loop in `commands/run-issue.md`:
 
@@ -119,7 +119,7 @@ Runs once, right after Step 4.5's "Create as shown" and before its routing creat
 
 This step is skipped when exactly 1 task was approved: Step 5 files it as a single issue and no task list is saved.
 
-Ask ONE `AskUserQuestion` (multiSelect) that shows the
+Ask ONE `AskUserQuestion` (multiSelect) (if headless, one `aiw ask`, then end your turn) that shows the
 proposed slug as the recommended answer (the user edits it via Other) and offers the optional destinations Obsidian and/or GitHub wiki (local is always
 on, not a choice).
 
@@ -218,7 +218,7 @@ One issue per task from the Step 4.6 list, each standalone.
 5. Check each create's and each write-back's exit status. On failure, stop like a failed
    create: report the created issues (number and URL), the missing ones (by planned title),
    and any issue that exists but is unrecorded in the file; never delete created issues.
-   Then `AskUserQuestion` with exactly these two choices: **"Retry the missing ones"**, **"Stop here"**.
+   Then `AskUserQuestion` with exactly these two choices: **"Retry the missing ones"**, **"Stop here"** (if headless, `aiw ask`, then end your turn).
    - **"Retry the missing ones"**: re-enter the loop at the failed task, reusing the already-known issue numbers of earlier tasks for their `Depends on:` lines; never re-create a task that already has an issue (an unrecorded one gets its write-back retried, not a second create). Apply the duplicate guard above before every create after a failure: run the same `gh issue list --label prd-<slug> --state all --limit 200 --json number,url,title,body` lookup, so an issue GitHub accepted but whose create reported no number is recorded, not created twice.
    - **"Stop here"**: first run Step 6's attachment upload against the issues created so far (skip it if none were created), then Step 7's cleanup, then end the run and report the partial state (created vs. missing); the filled `Issue:` slots let a later run resume the list.
    Never close or delete an issue already created — a partial list is a recoverable state.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Self-check for run-engine/kanban.py. `python3 test_kanban.py` — exit 0 = green.
+"""Self-check for run-engine/ui_board.py. `python3 test_ui_board.py` — exit 0 = green.
 
 Deliberately assert-based with no framework, matching run-engine/test_engine.py:
 this file must run anywhere python3 does, with no install step.
@@ -7,12 +7,17 @@ this file must run anywhere python3 does, with no install step.
 
 from __future__ import annotations
 
+import importlib.machinery
+import json
 import os
+import subprocess
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from kanban import STATIONS, build_board, memoize_title_fetcher  # noqa: E402
+import ui_board
+from ui_board import STATIONS, build_board, memoize_title_fetcher
 
 passed = 0
 
@@ -236,5 +241,117 @@ assert calls == [("acme", "widgets", 1)], calls
 assert cached_fetch("acme", "widgets", 2) == "title-2"
 assert calls == [("acme", "widgets", 1), ("acme", "widgets", 2)], calls
 ok("memoize_title_fetcher: repeat calls for the same key hit the cache, new keys don't")
+
+
+# --- 15. kanban is gone -----------------------------------------------------
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+proc = subprocess.run(
+    [sys.executable, os.path.join(HERE, "route.py"), "kanban", "--help"],
+    capture_output=True, text=True, timeout=30,
+)
+assert proc.returncode != 0, proc.returncode
+assert "invalid choice: 'kanban'" in proc.stderr, proc.stderr
+ok("route.py kanban --help: non-zero exit, invalid choice")
+
+assert importlib.machinery.PathFinder.find_spec("kanban", [HERE]) is None
+ok("kanban module is not importable")
+
+for fname in ("kanban.py", "test_kanban.py"):
+    assert not os.path.exists(os.path.join(HERE, fname)), fname
+ok("kanban.py and test_kanban.py do not exist")
+
+# --- 16. no runs ------------------------------------------------------------
+
+old_env = os.environ.get("CLAUDE_PLUGIN_DATA")
+try:
+    with tempfile.TemporaryDirectory() as tmp:
+        os.environ["CLAUDE_PLUGIN_DATA"] = tmp
+        assert ui_board.scan_records() == []
+        os.makedirs(os.path.join(tmp, "runs"))
+        assert ui_board.scan_records() == []
+finally:
+    if old_env is None:
+        os.environ.pop("CLAUDE_PLUGIN_DATA", None)
+    else:
+        os.environ["CLAUDE_PLUGIN_DATA"] = old_env
+board = build_board([], {}, no_title)
+assert [c["key"] for c in board["columns"]] == STATIONS
+assert STATIONS == ["researcher", "planner", "sdet", "dev", "verifier", "reviewer", "fixer", "done"]
+assert all(c["cards"] == [] for c in board["columns"])
+ok("no runs: scan_records [] and empty board has all 8 columns")
+
+# --- 17. run dir without run.json skipped -----------------------------------
+
+old_env = os.environ.get("CLAUDE_PLUGIN_DATA")
+try:
+    with tempfile.TemporaryDirectory() as tmp:
+        os.environ["CLAUDE_PLUGIN_DATA"] = tmp
+        os.makedirs(os.path.join(tmp, "runs", "empty-issue-1"))
+        good = os.path.join(tmp, "runs", "o-r-issue-2")
+        os.makedirs(good)
+        led = ledger(2, FULL, 0)
+        with open(os.path.join(good, "run.json"), "w", encoding="utf-8") as fh:
+            json.dump(led, fh)
+        recs = ui_board.scan_records()
+        assert len(recs) == 1, recs
+        assert recs[0]["ledger"] == led and recs[0]["dir_name"] == "o-r-issue-2"
+        assert isinstance(recs[0]["mtime"], float)
+finally:
+    if old_env is None:
+        os.environ.pop("CLAUDE_PLUGIN_DATA", None)
+    else:
+        os.environ["CLAUDE_PLUGIN_DATA"] = old_env
+ok("scan_records skips dirs lacking run.json")
+
+# --- 18. load_projects: missing and valid -----------------------------------
+
+old_path = ui_board.PROJECTS_PATH
+try:
+    with tempfile.TemporaryDirectory() as tmp:
+        ui_board.PROJECTS_PATH = os.path.join(tmp, "nope.json")
+        assert ui_board.load_projects() == {}
+        p = os.path.join(tmp, "projects.json")
+        with open(p, "w", encoding="utf-8") as fh:
+            json.dump({"a/b": "AB"}, fh)
+        ui_board.PROJECTS_PATH = p
+        assert ui_board.load_projects() == {"a/b": "AB"}
+finally:
+    ui_board.PROJECTS_PATH = old_path
+ok("load_projects: missing file -> {}, valid file parsed")
+
+# --- 19. unparseable dir name does not raise --------------------------------
+
+led = ledger(20, FULL, 0)
+board = build_board([record(led, dir_name="weird")], {}, lambda o, r, i: "t")
+_, card = card_for(board, 20)
+assert (card["owner"], card["repo"]) == ("weird", ""), card
+assert card["project"] == "weird/", card
+assert ui_board._guess_owner_repo_from_dir_name("weird", 20, {}) == ("weird", "")
+ok("unparseable dir name: owner='weird', repo='', project='weird/'")
+
+# --- 20. dir-name suffix for a different issue number -----------------------
+
+led = ledger(8, FULL, 0)
+board = build_board([record(led, dir_name="acme-widgets-issue-99")], {}, lambda o, r, i: "t")
+_, card = card_for(board, 8)
+assert (card["owner"], card["repo"]) == ("acme", "widgets-issue-99"), card
+assert ui_board._guess_owner_repo_from_dir_name("acme-widgets-issue-99", 8, {}) == (
+    "acme", "widgets-issue-99")
+ok("mismatched issue suffix is not stripped; first-dash partition")
+
+# --- 21. fetch_title degrades without gh ------------------------------------
+
+old_path_env = os.environ.get("PATH")
+try:
+    with tempfile.TemporaryDirectory() as tmp:
+        os.environ["PATH"] = tmp
+        assert ui_board.fetch_title("o", "r", 7) == "Issue #7 (title unavailable)"
+finally:
+    if old_path_env is None:
+        os.environ.pop("PATH", None)
+    else:
+        os.environ["PATH"] = old_path_env
+ok("fetch_title: missing gh -> 'Issue #7 (title unavailable)'")
 
 print(f"\n{passed} passed")

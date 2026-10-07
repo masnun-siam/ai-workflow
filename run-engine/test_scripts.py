@@ -3662,7 +3662,7 @@ ok("#85 bare-number bullet and step 3.5 epic routing sentences intact")
 # both pins below hash/compare whitespace-normalised text (_n), so reflowing lines does not trip them
 # sha256 of whitespace-normalised text on base 0ff5687 (pre-#85): step 3.5 slice, and "## Epic mode" up to "\n## Rules"
 S35_SHA = "6e1464ddf2883001109064bba0ffcef2471985262dca9d9d1d470eacb25258c5"
-EPIC_SHA = "05afb6cb8795262f6c025b93699b63680e2749534df0e1f17f734e69c4401870"
+EPIC_SHA = "430b81e3dde45f1bbcb51da394667d3ad58003d127d92ba40a4dd74dff3fe577"  # re-pinned in #118: headless `aiw ask` branches added at the epic gate sites
 import hashlib
 _ep = ri85[ri85.index("## Epic mode") :]
 _ep = _ep[: _ep.index("\n## ", 5)]
@@ -3755,7 +3755,7 @@ ok("#86 glossary Epic line pinned")
 _T86 = "# Changelog\n\n"
 _E86 = "## 1.8.0 \u2014 2026-09-30"
 assert cl86.startswith(_T86 + "## ") and cl86.count(_E86) == 1
-_top86 = cl86[len(_T86) : cl86.index(_E86)]  # topmost section, whatever its heading is called
+_top86 = cl86[cl86.index("## 1.9.0 ") : cl86.index(_E86)]  # the 1.9.0 section that carries the #86 entry
 assert "\n## " not in _top86 and "\n### Changed\n" in _top86
 cln86 = _n(_top86)
 assert _top86.count("\n- **") == 4  # 3 "Changed" bullets (#86) + the /prd "Added" bullet (1.9.0 release)
@@ -3797,5 +3797,118 @@ assert "can split a large brief" not in hw86 and "For work too big for one pull 
 assert ("immediate" in hw86 or "as soon as" in hw86) and "sole channel" not in hw86
 assert "queued" in hw86 and "one attempt per head SHA" in hw86
 ok("#86 earlier doc regressions still hold")
+
+
+# Issue #130: docs describe `aiw ui` (CONTEXT Session, run-issue.md invariant, README section).
+rd130, cx130, ri130 = _read("README.md"), _read("CONTEXT.md"), _read("commands", "run-issue.md")
+_lang130 = cx130[cx130.index("## Language") :]
+_lang130 = _lang130[: _lang130.index("\n## ", 5)] if "\n## " in _lang130[5:] else _lang130
+assert "**Session**:" in _lang130, "CONTEXT.md Language lacks **Session**:"
+_sess130 = _lang130[_lang130.index("**Session**:") :]
+assert "Run" in _sess130[:600] and "headless" in _sess130[:600].lower()
+ok("#130 CONTEXT.md defines Session")
+
+assert "no ledger service; a local UI server is allowed" in ri130
+assert "no daemon, no ledger service, no dashboard" not in ri130
+_st130 = ri130[ri130.index("### State") :]
+_st130 = _st130[: _st130.index("\n### ", 5)]
+_st130n = " ".join(_st130.split())
+for frag in ("is the only state", "never invent a second state file",
+             "one local JSON file written by a script that exits"):
+    assert frag in _st130n, frag
+ok("#130 run-issue.md State invariant reworded, anchors kept")
+
+_cli130 = rd130[rd130.index("## The `aiw` CLI") :]
+_cli130 = _cli130[: _cli130.index("\n## ", 5)]
+assert "aiw ui" in _cli130, "aiw CLI block lacks aiw ui"
+_m130 = re.search(r"^#{2,4} .*aiw ui.*$", rd130, re.M)
+assert _m130, "README has no aiw ui section heading"
+_ui130 = rd130[_m130.end() :]
+_nx130 = re.search(r"^#{1,%d} " % len(_m130.group(0).split()[0]), _ui130, re.M)
+_ui130 = _ui130[: _nx130.start()] if _nx130 else _ui130
+_ui130n = " ".join(_ui130.split())
+for frag in ("--port", "8420", "--allow-host", "tailscale serve", "ui.json", "0600", "ntfy",
+             "server", "topic", "token", "public_url"):
+    assert frag in _ui130, frag
+low130 = _ui130n.lower()
+assert "auth" in low130 and "tailnet" in low130 and "acl" in low130
+assert "--dangerously-skip-permissions" in _ui130
+assert "repeatable" in low130 and "exact" in low130 and "443" in _ui130 and "bare" in low130
+assert "chmod 600" in _ui130 and "warning" in low130 and "ignored" in low130
+for var in ("AIW_NTFY_SERVER", "AIW_NTFY_TOPIC", "AIW_NTFY_TOKEN"):
+    assert var in _ui130, var
+assert not re.search(r"tk_[A-Za-z0-9]{10,}", rd130)
+for host in re.findall(r"[\w.<>-]+\.ts\.net", rd130):
+    assert host.startswith("<") and ".<tailnet>.ts.net" in host, host
+assert "allowed_hosts" not in rd130
+assert "--allow-host" in _ui130
+ok("#130 README aiw ui section pinned")
+# ---- #103 ADR: headless question pause ----
+_adr103 = os.path.join(HERE, "..", "docs", "adr", "0001-headless-question-pause.md")
+assert os.path.isfile(_adr103), "#103 ADR missing: docs/adr/0001-headless-question-pause.md"
+_t103 = open(_adr103, encoding="utf-8").read()
+_l103 = [ln for ln in _t103.splitlines() if ln.strip()]
+assert _l103[0].startswith("Decision:"), "#103 first non-empty line must start with 'Decision:'"
+_h103 = {}
+for _n in ("Context", "Evidence", "Consequences"):
+    _m = re.search(r"^#+\s*" + _n + r"\b", _t103, re.M)
+    assert _m, "#103 missing heading " + _n
+    _h103[_n] = _m
+assert _t103.index("Decision:") < _h103["Context"].start() < _h103["Evidence"].start() < _h103["Consequences"].start(), "#103 heading order"
+
+
+def _sec103(name, nxt):
+    a = _h103[name].end()
+    b = _h103[nxt].start() if nxt else len(_t103)
+    return _t103[a:b]
+
+
+_pre103 = _t103[: _h103["Evidence"].start()]
+_ev103 = _sec103("Evidence", "Consequences")
+_co103 = _sec103("Consequences", None)
+assert "PreToolUse" in _t103 and "aiw ask" in _t103, "#103 both options named"
+assert re.search(r"reject", _t103, re.I), "#103 states a rejected option"
+for _k in ("--print", "stream-json", "--resume"):
+    assert _k in _ev103, "#103 Evidence lacks " + _k
+assert re.search(r"(^|\s)-p\b", _ev103), "#103 Evidence lacks -p"
+for _k in ("multi-question", "option", "recommended", "free text"):
+    assert _k in _t103.lower(), "#103 AskUserQuestion shape lacks " + _k
+for _k in ("15", "16", "26"):
+    assert re.search(r"\b" + _k + r"\b", _co103), "#103 Consequences lacks task " + _k
+for _k in ("asked twice", "missing", "never answered"):
+    assert _k in _t103.lower(), "#103 corner case lacks " + _k
+assert "--dangerously-skip-permissions" in _t103 and "FR-10" in _t103, "#103 skip-permissions/FR-10"
+assert re.search(r"interactive", _t103, re.I) and re.search(r"unchanged", _t103, re.I), "#103 interactive unchanged"
+ok("#103 ADR headless question pause")
+
+# ---- #104 ADR: pr-grind headless re-entry ----
+_adr104 = os.path.join(HERE, "..", "docs", "adr", "0002-pr-grind-headless-reentry.md")
+assert os.path.isfile(_adr104), "#104 ADR missing: docs/adr/0002-pr-grind-headless-reentry.md"
+_t104 = open(_adr104, encoding="utf-8").read()
+_lo104 = _t104.lower()
+_l104 = [ln for ln in _t104.splitlines() if ln.strip()]
+assert _l104[0].startswith("Decision:"), "#104 first non-empty line must start with 'Decision:'"
+_h104 = {}
+for _n in ("Context", "Evidence", "Consequences"):
+    _m = re.search(r"^#+\s*" + _n + r"\b", _t104, re.M)
+    assert _m, "#104 missing heading " + _n
+    _h104[_n] = _m
+assert _t104.index("Decision:") < _h104["Context"].start() < _h104["Evidence"].start() < _h104["Consequences"].start(), "#104 heading order"
+_co104 = _t104[_h104["Consequences"].end():]
+assert "aiw ui" in _t104 and "timer" in _lo104, "#104 UI-side timer option"
+assert "launchd" in _lo104 or "cron" in _lo104, "#104 external scheduler option"
+assert re.search(r"reject", _t104, re.I), "#104 states a rejected option"
+for _k in ("ScheduleWakeup", "Monitor", "FR-16", "restart", "queued-push:", "paused:"):
+    assert _k in _t104, "#104 lacks " + _k
+assert "<owner>-<repo>-<pr>.md" in _t104 or "pr_grind_dir" in _t104, "#104 state file reused"
+for _k in ("merged", "closed", "waiting for reviewer", "waiting on you", "macos", "linux"):
+    assert _k in _lo104, "#104 lacks " + _k
+assert re.search(r"two re-entries|race|racing", _t104, re.I), "#104 race corner"
+assert "flock" in _t104 or "lock" in _lo104, "#104 lock"
+assert re.search(r"still running", _t104, re.I), "#104 still running corner"
+assert re.search(r"only while|not running", _t104, re.I), "#104 timer only while aiw ui runs"
+assert re.search(r"\b25\b", _co104), "#104 Consequences lacks task 25"
+assert re.search(r"interactive", _t104, re.I) and re.search(r"unchanged", _t104, re.I), "#104 interactive unchanged"
+ok("#104 ADR pr-grind headless re-entry")
 
 print(f"\n{passed} checks passed")
