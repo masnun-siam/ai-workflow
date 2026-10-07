@@ -1,5 +1,7 @@
 import { h, render, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
+// ponytail: import cycle with run.js (it imports poll); safe, neither uses the other at top level.
+import { RunDetail } from './run.js';
 
 const html = htm.bind(h);
 
@@ -52,9 +54,8 @@ export function poll(url, ms, onResult) {
     timer = null;
     let result;
     try {
-      const res = await fetch(url, { headers: { Accept: 'application/json' } });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      result = { ok: true, data: await res.json() };
+      const res = await fetch(typeof url === 'function' ? url() : url, { headers: { Accept: 'application/json' } });
+      result = res.ok ? { ok: true, data: await res.json() } : { ok: false, status: res.status };
     } catch {
       result = { ok: false };
     }
@@ -95,7 +96,7 @@ function View({ route, sessions }) {
       return html`<h1>Board</h1><p>Runs will appear here.</p>`;
     case 'run': {
       const { owner, repo, n } = route.params;
-      return html`<h1>Run</h1><p>${owner}/${repo}#${n}</p>`;
+      return html`<${RunDetail} key=${`${owner}/${repo}/${n}`} owner=${owner} repo=${repo} n=${n} sessions=${sessions} />`;
     }
     case 'answer':
       return html`<h1>Answer</h1><p>Session ${route.params.session}</p>`;
