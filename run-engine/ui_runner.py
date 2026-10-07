@@ -29,9 +29,16 @@ POLL_SECONDS = 0.2
 # In-process only: re-attach after a restart is out of scope here.
 _procs: dict = {}
 _stopping: set = set()
+# ponytail: in-process lock, single UI server only; flock on the sessions dir if that changes
+_resume_lock = threading.Lock()
+CONTINUE_PROMPT = "Continue from where you were stopped."
 
 
 class RunnerError(Exception):
+    pass
+
+
+class Conflict(Exception):
     pass
 
 
@@ -60,7 +67,7 @@ def _preflight(sid: str) -> str:
     return exe
 
 
-def _spawn(sid: str, argv: list, path: str, answer=None, **fields) -> dict:
+def _spawn(sid: str, argv: list, path: str, answer=None, resuming=False, **fields) -> dict:
     """Spawn claude detached, record pid/running, start the follower. Any failure -> _fail."""
     d = ui_sessions.session_dir(sid)
     stream_path = os.path.join(d, "stream.jsonl")
@@ -73,7 +80,7 @@ def _spawn(sid: str, argv: list, path: str, answer=None, **fields) -> dict:
         _fail(sid, f"failed to spawn claude: {e}")
     rec = ui_sessions.update(sid, pid=proc.pid, status="running", **fields)
     _procs[sid] = proc
-    threading.Thread(target=_follow, args=(sid, proc, offset, answer), daemon=True).start()
+    threading.Thread(target=_follow, args=(sid, proc, offset, answer, resuming), daemon=True).start()
     return rec
 
 
@@ -111,19 +118,25 @@ def resume(sid: str, answer_text) -> dict:
                   resumed_fresh=None, note=None, terminal_handoff=None)
 
 
-def _fallback(sid: str, answer: str, reason: str) -> dict:
+def _issue_key(rec: dict):
+    """(repo, issue number) of a /run-issue session, else None."""
+    m = re.match(r"/(?:[\w-]+:)?run-issue\s+(.*)", rec.get("command") or "")
+    n = re.search(r"(?:^|\s|/issues/)#?(\d+)(?=\s|$)", m.group(1)) if m else None
+    return (rec.get("repo"), n.group(1)) if n else None
+
+
+def _fallback(sid: str, answer, reason: str) -> dict:
     """A resume that could not start: re-enter a /run-issue run fresh from the Ledger, else hand off.
 
     Reads run.json leniently (shared.read_json would die()); never writes the Ledger.
     """
     rec = ui_sessions.load(sid) or {}
     repo = rec.get("repo")
-    m = re.match(r"/(?:[\w-]+:)?run-issue\s+(.*)", rec.get("command") or "")
-    n = re.search(r"(?:^|\s|/issues/)#?(\d+)(?=\s|$)", m.group(1)) if m else None
+    key = _issue_key(rec)
     checkouts = read_checkouts()
     path = checkouts.get(repo)
-    if n and repo in checkouts and "/" in repo:
-        run_json = ledger_path(run_dir_for(os.path.join(data_dir(), "runs"), repo, int(n.group(1))))
+    if key and repo in checkouts and "/" in repo:
+        run_json = ledger_path(run_dir_for(os.path.join(data_dir(), "runs"), repo, int(key[1])))
         if os.path.isfile(run_json):
             if not (isinstance(path, str) and os.path.isdir(path)):
                 try:
@@ -138,8 +151,8 @@ def _fallback(sid: str, answer: str, reason: str) -> dict:
                 if old and old != path:
                     note += f" (working directory changed from {old} to {path})"
                 exe = _preflight(sid)
-                return _spawn(sid, [exe, *CLAUDE_ARGS, f"/run-issue {n.group(1)} {answer}"], path,
-                              ended_at=None, error=None, resumed_fresh=True, note=note,
+                return _spawn(sid, [exe, *CLAUDE_ARGS, f"/run-issue {key[1]}" + (f" {answer}" if answer else "")],
+                              path, cwd_path=path, ended_at=None, error=None, resumed_fresh=True, note=note,
                               terminal_handoff=None, pending_answer=answer)
     ui_sessions.update(sid, status="failed", ended_at=_now(), pending_question=None,
                        terminal_handoff=True, pending_answer=answer,
@@ -147,7 +160,7 @@ def _fallback(sid: str, answer: str, reason: str) -> dict:
     return ui_sessions.load(sid)
 
 
-def _follow(sid: str, proc, offset: int = 0, answer=None) -> None:
+def _follow(sid: str, proc, offset: int = 0, answer=None, resuming=False) -> None:
     path = os.path.join(ui_sessions.session_dir(sid), "stream.jsonl")
     buf, is_error, saw_init, first_err = b"", False, False, None
 
@@ -189,7 +202,7 @@ def _follow(sid: str, proc, offset: int = 0, answer=None) -> None:
         rc = proc.returncode
         status = (ui_sessions.load(sid) or {}).get("status")
         if sid not in _stopping and status != "stopped":
-            if answer and rc != 0 and not saw_init and first_err is not None:
+            if (answer or resuming) and rc != 0 and not saw_init and first_err is not None:
                 _fallback(sid, answer, first_err)  # resume itself failed; nothing was applied
             elif rc == 0 and not is_error:
                 if status == "waiting":  # question recorded mid-run: stay waiting for the answer
@@ -221,9 +234,12 @@ def stop(sid: str) -> dict:
     rec = ui_sessions.load(sid)
     if rec is None:
         raise FileNotFoundError(f"no such session: {sid}")
-    if rec["status"] not in ("starting", "running") or not rec.get("pid"):
+    proc = _procs.get(sid)
+    if rec["status"] == "waiting" and (proc is None or proc.poll() is not None):
+        return ui_sessions.update(sid, status="stopped", ended_at=_now(), pending_question=None)
+    if rec["status"] not in ("starting", "running", "waiting") or not rec.get("pid"):
         return rec
-    pgid, proc = rec["pid"], _procs.get(sid)
+    pgid = rec["pid"]
     if proc is not None and proc.poll() is not None:
         return rec  # already exited: let the follower record done/failed
     _stopping.add(sid)
@@ -242,4 +258,31 @@ def stop(sid: str) -> dict:
         end = time.time() + 2
         while not _group_gone(pgid, proc) and time.time() < end:
             time.sleep(0.05)
-    return ui_sessions.update(sid, status="stopped", ended_at=_now())
+    return ui_sessions.update(sid, status="stopped", ended_at=_now(), pending_question=None)
+
+
+def resume_stopped(sid: str) -> dict:
+    """Continue a stopped session via --resume (Ledger fallback if that fails); no answer is sent."""
+    with _resume_lock:
+        rec = ui_sessions.load(sid)
+        if rec is None:
+            raise FileNotFoundError(f"no such session: {sid}")
+        if rec.get("status") != "stopped" or sid in _procs:
+            raise Conflict("session is not stopped")
+        key = _issue_key(rec)
+        if key:
+            for o in ui_sessions.list_sessions():
+                if (o.get("id") != sid and _issue_key(o) == key
+                        and o.get("status") in ("starting", "running", "waiting")):
+                    raise Conflict(f"session {o['id']} is already live for this issue")
+        ui_sessions.update(sid, status="starting")  # claim: makes double-submits safe
+    if not rec.get("session_id"):
+        return _fallback(sid, None, "no claude session_id")
+    repo = rec.get("repo")
+    path = read_checkouts().get(repo, repo)
+    if not isinstance(path, str) or not os.path.isdir(path):
+        return _fallback(sid, None, f"cwd is not a directory: {repo!r}")
+    exe = _preflight(sid)
+    return _spawn(sid, [exe, *CLAUDE_ARGS, "--resume", rec["session_id"], CONTINUE_PROMPT], path,
+                  resuming=True, ended_at=None, error=None, pending_question=None,
+                  resumed_fresh=None, note=None, terminal_handoff=None, pending_answer=None)
