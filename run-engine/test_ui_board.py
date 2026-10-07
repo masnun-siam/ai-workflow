@@ -7,7 +7,7 @@ this file must run anywhere python3 does, with no install step.
 
 from __future__ import annotations
 
-import importlib.util
+import importlib.machinery
 import json
 import os
 import subprocess
@@ -254,7 +254,7 @@ assert proc.returncode != 0, proc.returncode
 assert "invalid choice: 'kanban'" in proc.stderr, proc.stderr
 ok("route.py kanban --help: non-zero exit, invalid choice")
 
-assert importlib.util.find_spec("kanban") is None
+assert importlib.machinery.PathFinder.find_spec("kanban", [HERE]) is None
 ok("kanban module is not importable")
 
 for fname in ("kanban.py", "test_kanban.py"):
