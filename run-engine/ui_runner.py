@@ -15,12 +15,12 @@ import re
 import shutil
 import signal
 import subprocess
-import tempfile
 import threading
 import time
 from datetime import datetime, timedelta, timezone
 
 import ci
+import review
 import shared
 import ui_sessions
 from dispatch import read_checkouts
@@ -237,24 +237,11 @@ def _set_header(path: str, key: str, value) -> None:
     elif new is not None:
         last = max((i for i in range(end) if ": " in lines[i]), default=-1)
         lines.insert(last + 1, new)
-    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
-            f.write("\n".join(lines))
-        os.replace(tmp, path)
-    except BaseException:
-        if os.path.exists(tmp):
-            os.unlink(tmp)
-        raise
+    shared.atomic_write_text(path, "\n".join(lines))
 
 
 def _iso(dt) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _parse_iso(s):
-    dt = datetime.fromisoformat(s.strip().replace("Z", "+00:00"))
-    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
 def _valid(h: dict) -> bool:
@@ -262,10 +249,10 @@ def _valid(h: dict) -> bool:
         v = h.get(k, "")
         if not _NAME_RE.fullmatch(v) or ".." in v or v == ".":
             return False
+    # thread is the Slack thread URL (pr-grind's argument): any safe https URL, no argv injection.
     return (re.fullmatch(r"[0-9]+", h.get("number", "")) is not None
-            and re.fullmatch(r"https://[A-Za-z0-9.-]+/%s/%s/pull/%s" % (
-                re.escape(h["owner"]), re.escape(h["repo"]), h["number"]),
-                h.get("thread", "")) is not None)
+            and re.fullmatch(r"https://[^\s\x00-\x1f\x7f-][^\s\x00-\x1f\x7f]*",
+                             h.get("thread", "")) is not None)
 
 
 def _live(rec) -> bool:
@@ -278,6 +265,8 @@ def _new_review(h: dict, now) -> str | None:
         else (h["reviewer"], "reviewer")
     p = shared.run(["bash", _POLL_SH, h["owner"], h["repo"], h["number"], login,
                     h.get("poll-since") or _iso(now), mode, "once"], timeout=120)
+    if p.returncode != 0:
+        raise RuntimeError(f"poll-reviews.sh exited {p.returncode}: {(p.stdout or '')[-200:].strip()}")
     dates = sorted(ln.split()[0] for ln in (p.stdout or "").splitlines()
                    if ln.startswith("20"))
     return dates[-1] if dates else None
@@ -303,7 +292,13 @@ def prgrind_tick(path: str, now=None) -> str:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return "locked"
+        h = _header(path)  # re-read under the lock: a round may have written paused/done meanwhile
+        if "paused" in h:
+            return "paused"
+        if "done" in h:
+            return "done"
         slug = f"{h['owner']}/{h['repo']}"
+        pr_url = f"https://github.com/{slug}/pull/{h['number']}"
         view, _ = shared.gh_json(["pr", "view", h["number"], "--repo", slug, "--json", "state"])
         if not isinstance(view, dict):
             warn(f"pr-grind tick: gh pr view failed for {slug}#{h['number']}")
@@ -316,8 +311,8 @@ def prgrind_tick(path: str, now=None) -> str:
         due = True
         if "next-poll" in h:
             try:
-                due = _parse_iso(h["next-poll"]) <= now
-            except ValueError:
+                due = review._ts(h["next-poll"]) <= now
+            except TypeError:
                 warn(f"pr-grind tick: unparseable next-poll {h['next-poll']!r} in {path}")
         trigger = due
         try:
@@ -348,7 +343,7 @@ def prgrind_tick(path: str, now=None) -> str:
             return "invalid"
         _set_header(path, "next-poll", _iso(now + timedelta(seconds=PRGRIND_HEARTBEAT)))
         try:
-            start(cmd, cwd, link=thread, extra_args=["--append-system-prompt", REENTRY_PROMPT],
+            start(cmd, cwd, link=pr_url, extra_args=["--append-system-prompt", REENTRY_PROMPT],
                   env_extra={"AIW_HEADLESS": "1"}, pass_fds=[lock.fileno()])
         except (RunnerError, ValueError) as e:
             warn(f"pr-grind tick: could not start round for {thread}: {e}")
