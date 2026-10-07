@@ -3798,4 +3798,72 @@ assert ("immediate" in hw86 or "as soon as" in hw86) and "sole channel" not in h
 assert "queued" in hw86 and "one attempt per head SHA" in hw86
 ok("#86 earlier doc regressions still hold")
 
+# ---- #103 ADR: headless question pause ----
+_adr103 = os.path.join(HERE, "..", "docs", "adr", "0001-headless-question-pause.md")
+assert os.path.isfile(_adr103), "#103 ADR missing: docs/adr/0001-headless-question-pause.md"
+_t103 = open(_adr103, encoding="utf-8").read()
+_l103 = [ln for ln in _t103.splitlines() if ln.strip()]
+assert _l103[0].startswith("Decision:"), "#103 first non-empty line must start with 'Decision:'"
+_h103 = {}
+for _n in ("Context", "Evidence", "Consequences"):
+    _m = re.search(r"^#+\s*" + _n + r"\b", _t103, re.M)
+    assert _m, "#103 missing heading " + _n
+    _h103[_n] = _m
+assert _t103.index("Decision:") < _h103["Context"].start() < _h103["Evidence"].start() < _h103["Consequences"].start(), "#103 heading order"
+
+
+def _sec103(name, nxt):
+    a = _h103[name].end()
+    b = _h103[nxt].start() if nxt else len(_t103)
+    return _t103[a:b]
+
+
+_pre103 = _t103[: _h103["Evidence"].start()]
+_ev103 = _sec103("Evidence", "Consequences")
+_co103 = _sec103("Consequences", None)
+assert "PreToolUse" in _t103 and "aiw ask" in _t103, "#103 both options named"
+assert re.search(r"reject", _t103, re.I), "#103 states a rejected option"
+for _k in ("--print", "stream-json", "--resume"):
+    assert _k in _ev103, "#103 Evidence lacks " + _k
+assert re.search(r"(^|\s)-p\b", _ev103), "#103 Evidence lacks -p"
+for _k in ("multi-question", "option", "recommended", "free text"):
+    assert _k in _t103.lower(), "#103 AskUserQuestion shape lacks " + _k
+for _k in ("15", "16", "26"):
+    assert re.search(r"\b" + _k + r"\b", _co103), "#103 Consequences lacks task " + _k
+for _k in ("asked twice", "missing", "never answered"):
+    assert _k in _t103.lower(), "#103 corner case lacks " + _k
+assert "--dangerously-skip-permissions" in _t103 and "FR-10" in _t103, "#103 skip-permissions/FR-10"
+assert re.search(r"interactive", _t103, re.I) and re.search(r"unchanged", _t103, re.I), "#103 interactive unchanged"
+ok("#103 ADR headless question pause")
+
+# ---- #104 ADR: pr-grind headless re-entry ----
+_adr104 = os.path.join(HERE, "..", "docs", "adr", "0002-pr-grind-headless-reentry.md")
+assert os.path.isfile(_adr104), "#104 ADR missing: docs/adr/0002-pr-grind-headless-reentry.md"
+_t104 = open(_adr104, encoding="utf-8").read()
+_lo104 = _t104.lower()
+_l104 = [ln for ln in _t104.splitlines() if ln.strip()]
+assert _l104[0].startswith("Decision:"), "#104 first non-empty line must start with 'Decision:'"
+_h104 = {}
+for _n in ("Context", "Evidence", "Consequences"):
+    _m = re.search(r"^#+\s*" + _n + r"\b", _t104, re.M)
+    assert _m, "#104 missing heading " + _n
+    _h104[_n] = _m
+assert _t104.index("Decision:") < _h104["Context"].start() < _h104["Evidence"].start() < _h104["Consequences"].start(), "#104 heading order"
+_co104 = _t104[_h104["Consequences"].end():]
+assert "aiw ui" in _t104 and "timer" in _lo104, "#104 UI-side timer option"
+assert "launchd" in _lo104 or "cron" in _lo104, "#104 external scheduler option"
+assert re.search(r"reject", _t104, re.I), "#104 states a rejected option"
+for _k in ("ScheduleWakeup", "Monitor", "FR-16", "restart", "queued-push:", "paused:"):
+    assert _k in _t104, "#104 lacks " + _k
+assert "<owner>-<repo>-<pr>.md" in _t104 or "pr_grind_dir" in _t104, "#104 state file reused"
+for _k in ("merged", "closed", "waiting for reviewer", "waiting on you", "macos", "linux"):
+    assert _k in _lo104, "#104 lacks " + _k
+assert re.search(r"two re-entries|race|racing", _t104, re.I), "#104 race corner"
+assert "flock" in _t104 or "lock" in _lo104, "#104 lock"
+assert re.search(r"still running", _t104, re.I), "#104 still running corner"
+assert re.search(r"only while|not running", _t104, re.I), "#104 timer only while aiw ui runs"
+assert re.search(r"\b25\b", _co104), "#104 Consequences lacks task 25"
+assert re.search(r"interactive", _t104, re.I) and re.search(r"unchanged", _t104, re.I), "#104 interactive unchanged"
+ok("#104 ADR pr-grind headless re-entry")
+
 print(f"\n{passed} checks passed")
