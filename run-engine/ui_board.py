@@ -84,7 +84,7 @@ def _guess_owner_repo_from_dir_name(dir_name, issue, projects):
 
 
 def run_timeline(stations, current_index, status, trace):
-    """Pure core: Ledger fields -> ({stations: [{name, status, bounces}]}, currentStation, totals).
+    """Pure core: Ledger fields -> ([{name, status, bounces}], currentStation, totals).
 
     A station after the current one is `bounced` if the trace shows it already ran
     (advance->X, or the source of a bounce->) and so will run again; else `pending`.
@@ -167,6 +167,8 @@ def _read_part(path):
         try:
             obj = json.loads(raw)
         except ValueError:
+            if name != "10-plan.json":
+                raise
             obj = extract_json_object(raw)
     except (OSError, ValueError):
         return None, f"{name}: unreadable"
@@ -194,7 +196,7 @@ def load_run(owner: str, repo: str, n: str, runs_dir=None):
 
         try:
             led = Ledger.from_dict(data)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, AttributeError):
             err = "run.json: invalid ledger"
         else:
             rows, current, totals = run_timeline(led.stations, led.current_index, led.status, led.trace)
