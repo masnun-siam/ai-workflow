@@ -15,6 +15,7 @@ import secrets
 import tempfile
 from datetime import datetime, timezone
 
+import ui_notify
 from shared import data_dir, warn
 
 # Timestamp prefix makes ids sort by creation time; the strict whitelist doubles as
@@ -106,6 +107,75 @@ def update(sid: str, **fields) -> dict:
         if record is None:
             raise ValueError(f"corrupt session record: {path}")
         record.update(fields)
+        # Dedupe is recorded under the lock; the network call happens after release.
+        event = record.get("status") if "status" in fields else None
+        key = ui_notify.dedupe_key(event, record)
+        seen = record.get("notified", [])
+        if event in ("starting", "running"):  # resumed: let done/failed push again
+            seen = [k for k in seen if k not in ("done", "failed")]
+            record["notified"] = seen
+        if key is None or key in seen:
+            event = None
+        else:
+            record["notified"] = [*seen, key]
+        _atomic_write_json(path, record)
+    if event:
+        ui_notify.notify(event, record)
+    return record
+
+
+def set_pending(sid: str, round) -> dict:
+    """Store a question round (ADR 0001 shape) and mark the session waiting."""
+    if not isinstance(round, dict):
+        raise ValueError("round must be an object")
+    rid, qs = round.get("id"), round.get("questions")
+    if not isinstance(rid, str) or not rid:
+        raise ValueError("round id must be a non-empty string")
+    if not isinstance(qs, list) or not qs:
+        raise ValueError("questions must be a non-empty list")
+    questions = []
+    for q in qs:
+        if not isinstance(q, dict):
+            raise ValueError("question must be an object")
+        multi, free, opts = q.get("multiSelect", False), q.get("allowFreeText", True), q.get("options")
+        if not isinstance(multi, bool) or not isinstance(free, bool):
+            raise ValueError("multiSelect and allowFreeText must be bool")
+        if not isinstance(opts, list) or not opts:
+            raise ValueError("question needs options")
+        options, seen = [], set()
+        for o in opts:
+            label = o.get("label") if isinstance(o, dict) else None
+            if not isinstance(label, str) or not label:
+                raise ValueError("option label must be a non-empty string")
+            if label in seen:
+                raise ValueError(f"duplicate option label: {label!r}")
+            seen.add(label)
+            options.append({"label": label, "description": o.get("description")})
+        questions.append({
+            "header": q.get("header"), "question": q.get("question"), "multiSelect": multi,
+            "options": options,
+            "recommended": next((o["label"] for o in options if o["label"].endswith("(Recommended)")), None),
+            "allowFreeText": free,
+        })
+    rec = {"id": rid, "status": "pending", "allowFreeText": True, "questions": questions}
+    return update(sid, pending_question=rec, status="waiting")
+
+
+def claim_answer(sid: str, round_id: str):
+    """Atomically consume the pending round; returns the record to the single winner, else None."""
+    path = os.path.join(session_dir(sid), "meta.json")
+    with open(os.path.join(session_dir(sid), ".lock"), "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if not os.path.exists(path):
+            raise FileNotFoundError(path)
+        record = _read_meta(path)
+        if record is None:
+            raise ValueError(f"corrupt session record: {path}")
+        pq = record.get("pending_question")
+        if (record.get("status") != "waiting" or not isinstance(pq, dict)
+                or pq.get("status") != "pending" or pq.get("id") != round_id):
+            return None
+        record.update(pending_question=None, status="starting")
         _atomic_write_json(path, record)
     return record
 
