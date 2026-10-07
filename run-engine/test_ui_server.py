@@ -109,6 +109,8 @@ def runs_section():
     mk(18, L(18, full, 0), "{not json")
     mk(19, "[]")
     mk(20, L(20, full, "x"))
+    mk(21, '{"issue": 7, "context": {"a": 1}, "stations": [')
+    mk(22, {**L(22, full, 0), "bounceCounts": ["x"]})
 
     def snap():
         out = {}
@@ -214,6 +216,14 @@ def runs_section():
         for n in (19, 20):
             assert get(n)["errors"].get("ledger"), n
         ok("runs: non-object / bad currentIndex -> errors.ledger")
+
+        b = get(21)
+        assert b["errors"].get("ledger") and b["status"] is None and b["currentStation"] is None
+        assert b["stations"] == [], b
+        ok("runs: truncated run.json with nested object -> errors.ledger")
+
+        assert get(22)["errors"].get("ledger")
+        ok("runs: non-dict bounceCounts -> errors.ledger, 200")
 
         for seg in ("..", ".hidden", "-x", "a%2Fb", "%2e%2e", "a%20b", "a;b"):
             assert req(pt, f"/api/runs/{seg}/widgets/1", host=good)[0] == 400, ("owner", seg)
