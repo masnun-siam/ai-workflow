@@ -2,6 +2,7 @@ import { h, render, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { Answer } from './answer.js';
 import { isWaiting, waitingWatcher, notifyState, requestNotify, notifyWaiting, pageTitle, answerHash } from './notify.js';
+import { Board } from './board.js';
 
 const html = htm.bind(h);
 
@@ -95,7 +96,7 @@ const NAV = [
 function View({ route, sessions }) {
   switch (route.name) {
     case 'board':
-      return html`<h1>Board</h1><p>Runs will appear here.</p>`;
+      return html`<${Board} sessions=${sessions} />`;
     case 'run': {
       const { owner, repo, n } = route.params;
       return html`<h1>Run</h1><p>${owner}/${repo}#${n}</p>`;

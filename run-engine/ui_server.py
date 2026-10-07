@@ -20,7 +20,33 @@ import ui_events
 import ui_runner
 import ui_sessions
 from shared import die
-from ui_board import build_board, fetch_title, load_projects, memoize_title_fetcher, scan_records
+from ui_board import build_board, fetch_title, load_projects, load_run, memoize_title_fetcher, scan_records
+
+
+STATIC_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ui_static")
+
+
+def _serve_static(handler, rel: str) -> None:
+    root = os.path.realpath(STATIC_DIR)
+    try:
+        # unquote once only: %252e stays literal; realpath containment (not string checks) blocks escapes
+        full = os.path.realpath(os.path.join(root, unquote(rel).lstrip("/")))
+        if os.path.commonpath([root, full]) != root or not os.path.isfile(full):
+            raise FileNotFoundError
+        with open(full, "rb") as f:
+            body = f.read()
+    except (ValueError, FileNotFoundError, IsADirectoryError):
+        handler._send(404, "text/plain; charset=utf-8", b"not found")
+        return
+    except OSError as e:  # e.g. PermissionError: broken install, not a missing file
+        print(f"ui_server: cannot read {rel!r}: {e}", file=sys.stderr)
+        handler._send(500, "text/plain; charset=utf-8", b"internal error")
+        return
+    ext = os.path.splitext(full)[1].lower()
+    ctype = "text/javascript" if ext in (".js", ".mjs") else mimetypes.guess_type(full)[0] or "application/octet-stream"
+    if ctype.startswith("text/"):
+        ctype += "; charset=utf-8"
+    handler._send(200, ctype, body, {"Cache-Control": "no-cache"})
 
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ui_static")
@@ -154,8 +180,21 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             parts = path.split("/")
             if len(parts) in (4, 5) and parts[:3] == ["", "api", "sessions"] and (len(parts) == 4 or parts[4] == "stream"):
                 self._session(parts[3], len(parts) == 5)
+            elif len(parts) == 6 and parts[:3] == ["", "api", "runs"]:
+                self._run(parts[3], parts[4], parts[5])
             else:
                 self._send(404, "text/plain; charset=utf-8", b"not found")
+
+    def _run(self, owner: str, repo: str, n: str) -> None:
+        try:
+            body = load_run(owner, repo, n)
+        except ValueError:
+            self._send(400, "text/plain; charset=utf-8", b"bad run id")
+            return
+        if body is None:
+            self._send(404, "text/plain; charset=utf-8", b"not found")
+            return
+        self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
 
     def _session(self, sid: str, stream: bool) -> None:
         try:
