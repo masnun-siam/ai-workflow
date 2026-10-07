@@ -53,18 +53,20 @@ export function startSubmit(state) {
   return state.sending ? null : { ...state, sending: true, error: null };
 }
 
-export function runHash(session) {
+export function runLink(session) {
   const l = session && session.link;
-  if (l && l.owner && l.repo && Number.isInteger(l.issue) && l.issue >= 1) {
-    return `#/run/${encodeURIComponent(l.owner)}/${encodeURIComponent(l.repo)}/${l.issue}`;
-  }
-  return '#/sessions';
+  return l && l.owner && l.repo && Number.isInteger(l.issue) && l.issue >= 1 ? { owner: l.owner, repo: l.repo, n: l.issue } : null;
+}
+
+export function runHash(session) {
+  const l = runLink(session);
+  return l ? `#/run/${encodeURIComponent(l.owner)}/${encodeURIComponent(l.repo)}/${l.n}` : '#/sessions';
 }
 
 export function afterSubmit(state, res, session) {
   if (res.ok) return { navigate: runHash(session) };
   const err = res.data && typeof res.data.error === 'string' && res.data.error;
-  return { ...state, sending: false, error: err || 'Could not reach the server or it returned an error' };
+  return { ...state, sending: false, stale: res.status === 409, error: err || 'Could not reach the server or it returned an error' };
 }
 
 export async function submitAnswer(sid, body) {
@@ -87,11 +89,11 @@ export async function submitAnswer(sid, body) {
 }
 
 export function planRun(session, pending) {
-  const l = session && session.link;
-  if (!l || !l.owner || !l.repo || !Number.isInteger(l.issue) || l.issue < 1) return null;
+  const l = runLink(session);
+  if (!l) return null;
   if (!/^\/(?:[\w.-]+:)?run-issue(?:\s|$)/.test(String(session.command || ''))) return null;
   const approve = (pending.questions || []).some((q) => (q.options || []).some((o) => String(o.label).startsWith('Approve')));
-  return approve ? { owner: l.owner, repo: l.repo, n: l.issue } : null;
+  return approve ? l : null;
 }
 
 export function planText(data) {
@@ -109,7 +111,7 @@ async function getJson(url) {
 }
 
 export class Answer extends Component {
-  state = { loaded: false, notFound: false, session: null, plan: null, form: null, copied: null };
+  state = { loaded: false, notFound: false, loadError: false, session: null, plan: null, form: null, copied: null };
 
   componentDidMount() {
     this.load();
@@ -124,11 +126,12 @@ export class Answer extends Component {
       r = { status: 0, data: null };
     }
     if (this.gone) return;
-    if (!r.data) return this.setState({ loaded: true, notFound: true });
+    if (r.status === 404) return this.setState({ loaded: true, notFound: true, loadError: false });
+    if (!r.data) return this.setState({ loaded: true, notFound: false, loadError: true });
     const session = r.data;
     const pending = session.pending_question;
     const form = viewMode(session) === 'form' ? { answers: initialAnswers(pending), sending: false, error: null } : null;
-    this.setState({ loaded: true, session, form });
+    this.setState({ loaded: true, notFound: false, loadError: false, session, form });
     const pr = form && planRun(session, pending);
     if (!pr) return;
     try {
@@ -181,7 +184,7 @@ export class Answer extends Component {
     const multi = q.multiSelect === true;
     return html`
       <fieldset key=${i}>
-        <legend>${q.question || q.header}</legend>
+        <legend>${q.question || q.header || `Question ${i + 1}`}</legend>
         ${(q.options || []).map((o) => html`
           <label class="opt">
             <input type=${multi ? 'checkbox' : 'radio'} name=${'q' + i} checked=${a.labels.includes(o.label)}
@@ -198,9 +201,10 @@ export class Answer extends Component {
       </fieldset>`;
   }
 
-  render(_, { loaded, notFound, session, plan, form, copied }) {
+  render(_, { loaded, notFound, loadError, session, plan, form, copied }) {
     if (!loaded) return html`<h1>Answer</h1><p role="status">Loading</p>`;
     if (notFound) return html`<h1>Answer</h1><p>Session not found. <a href="#/sessions">Back to sessions</a></p>`;
+    if (loadError) return html`<h1>Answer</h1><p role="alert">Could not load the session.</p><button type="button" onClick=${() => this.load()}>Retry</button>`;
     const mode = viewMode(session);
     if (mode === 'form') {
       const pending = session.pending_question;
@@ -211,6 +215,7 @@ export class Answer extends Component {
           ${pending.questions.map((q, i) => this.renderQuestion(q, i, form.answers[i], form.sending))}
           <button type="submit" disabled=${form.sending}>${form.sending ? 'Sending' : 'Submit answer'}</button>
           ${form.error ? html`<p role="alert">${form.error}</p>` : null}
+          ${form.stale ? html`<button type="button" onClick=${() => this.load()}>Reload question</button>` : null}
         </form>`;
     }
     if (mode === 'failed') {
