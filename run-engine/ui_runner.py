@@ -25,7 +25,7 @@ CLAUDE_ARGS = ["--print", "--output-format", "stream-json", "--verbose",
 STOP_GRACE_SECONDS = 10
 POLL_SECONDS = 0.2
 
-# In-process only: re-attach after a restart is out of scope here.
+# session id -> Popen for sessions started here; None for sessions re-attached by reconcile().
 _procs: dict = {}
 _stopping: set = set()
 
@@ -59,6 +59,19 @@ def _preflight(sid: str) -> str:
     return exe
 
 
+_PS_ERROR = object()  # ps itself failed: liveness unknown, not 'no such process'
+
+
+def _proc_start(pid):
+    # ponytail: lstart has 1s resolution; a pid recycled within the same second looks the same
+    try:
+        p = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True,
+                           text=True, timeout=5, env={**os.environ, "LC_ALL": "C"})
+    except (OSError, subprocess.TimeoutExpired):
+        return _PS_ERROR
+    return (p.stdout.strip() or None) if p.returncode == 0 else None
+
+
 def start(command_text, cwd, link=None) -> dict:
     if not isinstance(command_text, str) or not command_text.strip():
         raise ValueError("command_text must be a non-empty string")
@@ -84,18 +97,20 @@ def start(command_text, cwd, link=None) -> dict:
             err_f.close()
     finally:
         stream_f.close()
-    rec = ui_sessions.update(sid, pid=proc.pid, status="running")
+    rec = ui_sessions.update(sid, pid=proc.pid, pid_started=_proc_start(proc.pid),
+                            status="running")
     _procs[sid] = proc
     threading.Thread(target=_follow, args=(sid, proc), daemon=True).start()
     return rec
 
 
-def _follow(sid: str, proc) -> None:
+def _follow(sid: str, proc, pid=None, started=None) -> None:
+    """Follow a session until it exits. proc is None for a re-attached (non-child) pid."""
     path = os.path.join(ui_sessions.session_dir(sid), "stream.jsonl")
-    offset, buf, is_error = 0, b"", False
+    offset, buf, is_error, saw_result = 0, b"", False, False
 
     def handle(line: bytes) -> None:
-        nonlocal is_error
+        nonlocal is_error, saw_result
         try:
             ev = json.loads(line)
         except ValueError:
@@ -105,7 +120,7 @@ def _follow(sid: str, proc) -> None:
         if ev.get("type") == "system" and ev.get("subtype") == "init":
             ui_sessions.update(sid, session_id=ev.get("session_id"))
         elif ev.get("type") == "result":
-            is_error = bool(ev.get("is_error"))
+            is_error, saw_result = bool(ev.get("is_error")), True
             ui_sessions.update(sid, cost=ev.get("total_cost_usd"))
 
     def drain() -> None:
@@ -118,16 +133,39 @@ def _follow(sid: str, proc) -> None:
         for line in whole:
             handle(line)
 
+    ps_errors = [0]
+
+    def alive() -> bool:
+        # ponytail: one ps per tick per re-attached session; fine for a handful
+        if proc is not None:
+            return proc.poll() is None
+        if not started:
+            return False
+        cur = _proc_start(pid)
+        if cur is _PS_ERROR:  # transient ps failure: keep following, bounded
+            ps_errors[0] += 1
+            return ps_errors[0] <= 25
+        ps_errors[0] = 0
+        return cur == started
+
     try:
-        while proc.poll() is None:
+        while alive():
             drain()
             time.sleep(POLL_SECONDS)
-        drain()
+        try:
+            drain()
+        except FileNotFoundError:
+            if proc is not None:
+                raise  # re-attached sessions may legitimately have no stream
         if buf.strip():
             handle(buf)  # final line without trailing newline
-        rc = proc.returncode
+        rc = proc.returncode if proc is not None else None
         if sid not in _stopping and (ui_sessions.load(sid) or {}).get("status") != "stopped":
-            if rc == 0 and not is_error:
+            if proc is None and not (saw_result and not is_error):
+                ui_sessions.update(sid, status="failed", ended_at=_now(),
+                                   error="claude exited while the UI was down without a "
+                                         "successful result; see stderr.log")
+            elif (rc == 0 or proc is None) and not is_error:
                 ui_sessions.update(sid, status="done", ended_at=_now())
             else:
                 ui_sessions.update(sid, status="failed", ended_at=_now(),
@@ -137,6 +175,28 @@ def _follow(sid: str, proc) -> None:
     finally:
         _procs.pop(sid, None)
         _stopping.discard(sid)
+
+
+def reconcile() -> None:
+    """Call once at UI startup: re-attach live sessions, close the ones that died meanwhile."""
+    for rec in ui_sessions.list_sessions():
+        sid = rec["id"]
+        try:
+            if rec.get("status") not in ("starting", "running") or sid in _procs:
+                continue
+            pid, started = rec.get("pid"), rec.get("pid_started")
+            if not pid:
+                ui_sessions.update(sid, status="failed", ended_at=_now(),
+                                   error="session never started (UI exited before spawn)")
+            elif started and _proc_start(pid) == started:
+                # ponytail: _procs check-and-set is unlocked; reconcile is startup-only
+                _procs[sid] = None
+                threading.Thread(target=_follow, args=(sid, None, pid, started),
+                                 daemon=True).start()
+            else:
+                _follow(sid, None, pid, started)  # not ours/dead: loop exits, closes from stream
+        except Exception as e:
+            warn(f"ui_runner reconcile of {sid} failed: {e}")
 
 
 def _group_gone(pgid: int, proc) -> bool:
