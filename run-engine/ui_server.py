@@ -55,13 +55,24 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(404, "text/plain; charset=utf-8", b"not found")
 
     def _method_not_allowed(self):
-        if _guard(self):
+        if not _guard(self):
+            return
+        if self.command == "HEAD":
+            self.send_response(405)
+            self.send_header("Allow", "GET")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+        else:
             self._send(405, "text/plain; charset=utf-8", b"method not allowed", {"Allow": "GET"})
 
-    do_POST = do_PUT = do_DELETE = do_PATCH = do_HEAD = _method_not_allowed
+    # every verb needs a do_* or stdlib answers 501 before _guard runs
+    do_POST = do_PUT = do_DELETE = do_PATCH = do_HEAD = do_OPTIONS = do_TRACE = do_CONNECT = _method_not_allowed
 
 
 class _Server(http.server.ThreadingHTTPServer):
+    # macOS lets a 127.0.0.1 bind succeed while another process holds 0.0.0.0:<port> when reuse is on
+    allow_reuse_address = False
+
     def __init__(self, address, handler, allowed_hosts, fetch_title):
         super().__init__(address, handler)
         port = self.server_address[1]
@@ -87,14 +98,14 @@ def cmd_serve(args) -> None:
     extras = args.allow_host or []
     try:
         server = _Server(("127.0.0.1", port), _Handler, extras, memoize_title_fetcher(fetch_title))
-    except OSError as exc:
-        if exc.errno != errno.EADDRINUSE:
+    except (OSError, OverflowError) as exc:
+        if getattr(exc, "errno", None) != errno.EADDRINUSE:
             die(1, f"cannot bind 127.0.0.1:{port}: {exc}")
         holder = _port_holder(port)
         if holder:
             die(1, f"port {port} is already in use by PID {holder[0]} ({holder[1]}) — stop it or pass --port")
         die(1, f"port {port} is already in use (http://127.0.0.1:{port}/) — stop it or pass --port")
-    print(f"serving http://127.0.0.1:{port}/ — Ctrl+C to stop")
+    print(f"serving http://127.0.0.1:{server.server_address[1]}/ — Ctrl+C to stop")
     if extras:
         print("also allowing hosts: " + ", ".join(extras))
     try:
