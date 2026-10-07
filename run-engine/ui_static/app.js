@@ -7,6 +7,7 @@ import { Board } from './board.js';
 import { RunDetail } from './run.js';
 import { Launcher } from './launcher.js';
 import { History } from './history.js';
+import { Session } from './session.js';
 
 const html = htm.bind(h);
 
@@ -24,6 +25,7 @@ export function parseRoute(hash) {
   const [a, ...rest] = seg;
   if (a === 'new' && !rest.length) return { name: 'new', params: {} };
   if (a === 'sessions' && !rest.length) return { name: 'sessions', params: {} };
+  if (a === 'session' && rest.length === 1 && rest[0]) return { name: 'session', params: { id: rest[0] } };
   if (a === 'answer' && rest.length === 1 && rest[0]) return { name: 'answer', params: { session: rest[0] } };
   if (a === 'run' && rest.length === 3 && rest[0] && rest[1] && /^[1-9]\d*$/.test(rest[2])) {
     return { name: 'run', params: { owner: rest[0], repo: rest[1], n: Number(rest[2]) } };
@@ -112,6 +114,8 @@ function View({ route, sessions }) {
     }
     case 'answer':
       return html`<${Answer} session=${route.params.session} key=${route.params.session} />`;
+    case 'session':
+      return html`<${Session} key=${route.params.id} id=${route.params.id} />`;
     case 'new':
       return html`<${Launcher} />`;
     case 'sessions':

@@ -74,6 +74,21 @@ const tick = () => new Promise((r) => setImmediate(r));
 const settle = async () => { for (let i = 0; i < 8; i++) await tick(); };
 out('run.js imports without a document');
 
+const SS = await import(new URL('./session.js', process.env.RUN_URL).href);
+assert.equal(SS.eventText({ kind: 'text', text: 'hi' }), 'hi');
+assert.equal(SS.eventText({ kind: 'tool', name: 'Bash', input: { command: 'ls' } }), 'Bash {"command":"ls"}');
+assert.equal(SS.eventText({ kind: 'result', text: null }), ''); assert.equal(SS.eventText(null), '');
+const evs = [{ kind: 'text', text: 'Hello World' }, { kind: 'tool', name: 'Bash', input: { command: 'git status' } }, { kind: 'result', text: 'ok' }];
+assert.deepEqual(SS.filterEvents(evs, '').map((x) => x.i), [0, 1, 2]);
+assert.deepEqual(SS.filterEvents(evs, ' GIT ').map((x) => x.i), [1]);
+assert.deepEqual(SS.filterEvents(evs, 'nomatch'), []); assert.deepEqual(SS.filterEvents(null, 'x'), []);
+assert.equal(SS.toolSummary({ input: { command: 'ls   -la\n/tmp' } }), 'ls -la /tmp');
+assert.equal(SS.toolSummary({ input: { file_path: '/a/b.js', other: 1 } }), '/a/b.js');
+assert.equal(SS.toolSummary({ input: { weird: 1 } }), '{"weird":1}');
+assert.equal(SS.toolSummary({ input: { command: 'x'.repeat(300) } }).length, 110);
+assert.equal(SS.toolSummary({}), '');
+out('session.js: eventText, filterEvents, toolSummary');
+
 const { formatWhen, shortRepo } = await import(new URL('./fmt.js', process.env.RUN_URL).href);
 const noon = new Date(2026, 9, 7, 12, 0);
 assert.match(formatWhen(new Date(2026, 9, 7, 9, 5).toISOString(), noon), /^Today 09:05$/);
@@ -543,6 +558,8 @@ out('parseRoute boundary routes are notfound');
 
 assert.equal(nm('#/sessions/'), 'sessions');
 assert.equal(parseRoute('#/answer/a%20b').params.session, 'a b');
+assert.deepEqual({ ...parseRoute('#/session/x%20y') }, { name: 'session', params: { id: 'x y' } });
+assert.equal(nm('#/session/'), 'notfound'); assert.equal(nm('#/session/a/b'), 'notfound');
 assert.equal(nm('#/answer/%E0%A4%A'), 'notfound');
 out('parseRoute trailing slash, decoding, malformed escape');
 
@@ -812,7 +829,7 @@ def shell_checks():
     css = read(os.path.join(STATIC, "app.css")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
     assert specs, "no imports found"
-    assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./board.js", "./run.js", "./history.js", "./answer.js", "./notify.js", "./launcher.js"}, specs
+    assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./board.js", "./run.js", "./history.js", "./answer.js", "./notify.js", "./launcher.js", "./session.js"}, specs
     assert not re.search(r"https?://", js), "no absolute URLs"
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)

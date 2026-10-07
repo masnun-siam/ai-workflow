@@ -354,3 +354,27 @@ table.history { border-collapse: collapse; min-width: 64rem; width: 100%; }
   .board { grid-auto-columns: 100%; scroll-snap-type: x mandatory; }
   .column { scroll-snap-stop: always; }
 }
+
+/* ---- transcript ------------------------------------------------------------------------ */
+main:has(.transcript) { max-width: 1100px; padding-top: 24px; }
+.transcript { display: flex; flex-direction: column; gap: 16px; }
+.tbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.tbar .field { flex: 1 1 260px; max-width: 420px; }
+.tcount { font-size: 13px; margin-right: auto; }
+.tlog { display: flex; flex-direction: column; gap: 10px; padding: 16px; }
+.msg { margin: 0; padding: 12px 14px; border-radius: 8px; background: var(--card); border: 1px solid var(--border); }
+.msg p { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--body); line-height: 1.55; }
+.msg-role { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.msg-tool { padding: 0; background: transparent; border-color: var(--border); }
+.msg-tool summary { display: flex; align-items: baseline; gap: 12px; min-height: 40px; padding: 8px 14px; cursor: pointer; list-style: none; }
+.msg-tool summary::-webkit-details-marker { display: none; }
+.msg-tool summary::before { content: "▸"; color: var(--faint); transition: transform 0.15s; }
+.msg-tool[open] summary::before { transform: rotate(90deg); }
+.msg-tool summary:hover { background: var(--card); border-radius: 8px; }
+.tool-name { color: var(--live); font-weight: 500; flex: none; }
+.tool-sum { color: var(--muted); font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg-tool pre { margin: 0; padding: 12px 14px; max-height: 360px; overflow: auto; border-top: 1px solid var(--border); font-size: 12px; color: var(--body); white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg-result { border-color: #1f4a37; background: var(--done-bg); }
+.msg-result .msg-role { color: var(--done); }
+.msg-result.error { border-color: var(--error-border); background: var(--error-bg); }
+.msg-result.error .msg-role { color: var(--error); }
