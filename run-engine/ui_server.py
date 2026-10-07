@@ -128,6 +128,9 @@ def _public(rec: dict) -> dict:
         "terminal_handoff": rec.get("terminal_handoff"),
         "pending_answer": rec.get("pending_answer"),
         "claude_cmd": rec.get("claude_cmd"),
+        "limit_resets_at": rec.get("limit_resets_at"),
+        "limit_type": rec.get("limit_type"),
+        "auto_resume": rec.get("auto_resume"),
         "repo_path": p,
         "resume_command": f"cd {shlex.quote(p)} && claude --resume {shlex.quote(sid)}" if p and sid else None,
     }
@@ -164,7 +167,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/api/settings":
             self._json(200, ui_settings.load())
         elif path == "/api/sessions":
-            body = {"sessions": [_public(r) for r in ui_sessions.list_sessions()]}
+            body = {"sessions": [_public(r) for r in ui_sessions.list_sessions()],
+                    "limits": ui_runner.limits()}
             self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
         else:
             parts = path.split("/")
@@ -239,8 +243,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                            else {"ok": False, "message": "cmd required"})
         elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] == "answer":
             self._answer(parts[3])
-        elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] in ("stop", "resume"):
-            (self._stop if parts[4] == "stop" else self._resume)(parts[3])
+        elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] in ("stop", "resume", "cancel-auto"):
+            {"stop": self._stop, "resume": self._resume, "cancel-auto": self._cancel_auto}[parts[4]](parts[3])
         else:
             self._method_not_allowed(guarded=True)
 
@@ -261,9 +265,28 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         self._json(200, _public(rec))
 
-    def _resume(self, sid: str) -> None:
+    def _cancel_auto(self, sid: str) -> None:
         try:
-            rec = ui_runner.resume_stopped(sid)
+            self._json(200, _public(ui_runner.cancel_auto(sid)))
+        except (FileNotFoundError, ValueError):
+            self._json(404, {"error": "not found"})
+        except ui_runner.Conflict as e:
+            self._json(409, {"error": str(e)})
+
+    def _resume(self, sid: str) -> None:
+        cmd = None
+        if (self.headers.get("Content-Length") or "0").strip() not in ("", "0"):  # optional {"claude_cmd": <saved label>}
+            body = self._read_body()
+            if body is None:
+                return
+            if body.get("claude_cmd") is not None:
+                saved = {c["label"]: c["cmd"] for c in ui_settings.load()["commands"]}
+                cmd = saved.get(body["claude_cmd"])
+                if cmd is None:
+                    self._json(400, {"error": "claude_cmd must be a label saved in Settings"})
+                    return
+        try:
+            rec = ui_runner.resume_stopped(sid, cmd)
         except (FileNotFoundError, ValueError):
             self._json(404, {"error": "not found"})
             return
@@ -435,6 +458,7 @@ def cmd_serve(args) -> None:
         if holder:
             die(1, f"port {port} is already in use by PID {holder[0]} ({holder[1]}) — stop it or pass --port")
         die(1, f"port {port} is already in use (http://127.0.0.1:{port}/) — stop it or pass --port")
+    ui_runner.start_limit_timer()  # auto-resume limited runs, incl. catch-up of resets missed while down
     print(f"serving http://127.0.0.1:{server.server_address[1]}/ — Ctrl+C to stop")
     if extras:
         print("also allowing hosts: " + ", ".join(extras))

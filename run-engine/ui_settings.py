@@ -103,3 +103,11 @@ def check_login(cmd: str) -> dict:
         return {"ok": False, "message": "not logged in"}
     who = status.get("email") or status.get("account") or ""
     return {"ok": True, "message": f"logged in {who}".strip()}
+
+
+def config_dir(cmd: str) -> str:
+    """Claude config dir an account command runs under (cc-profile <p> -> ~/.claude-profiles/<p>)."""
+    toks = shlex.split(cmd)
+    if toks[:1] in (["cc"], ["cc-profile"]) and len(toks) > 1:
+        return os.path.expanduser(f"~/.claude-profiles/{toks[1]}")
+    return os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
