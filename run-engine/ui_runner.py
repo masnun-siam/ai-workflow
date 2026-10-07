@@ -18,7 +18,8 @@ from datetime import datetime, timezone
 
 import ui_sessions
 from dispatch import read_checkouts
-from shared import warn
+from shared import data_dir, warn
+import ui_events
 
 HEADLESS_PROMPT = ("Headless run: ask via aiw ask, never AskUserQuestion. Gate questions go through "
                    "`aiw ask --json '<AskUserQuestion input>'`; then end your turn.")
@@ -70,7 +71,8 @@ def _spawn(sid: str, argv: list, path: str, **fields) -> dict:
         with open(stream_path, "ab") as stream_f, open(os.path.join(d, "stderr.log"), "ab") as err_f:
             proc = subprocess.Popen(argv, cwd=path, stdin=subprocess.DEVNULL, stdout=stream_f,
                                     stderr=err_f, start_new_session=True, close_fds=True,
-                                    env={**os.environ, "AIW_HEADLESS": "1", "AIW_UI_SESSION": sid})
+                                    env={**os.environ, "AIW_HEADLESS": "1", "AIW_UI_SESSION": sid,
+                                         "CLAUDE_PLUGIN_DATA": data_dir()})
     except (OSError, ValueError) as e:
         _fail(sid, f"failed to spawn claude: {e}")
     rec = ui_sessions.update(sid, pid=proc.pid, status="running", **fields)
@@ -127,11 +129,10 @@ def _follow(sid: str, proc, offset: int = 0) -> None:
         if ev.get("type") == "system" and ev.get("subtype") == "init":
             ui_sessions.update(sid, session_id=ev.get("session_id"))
         elif ev.get("type") == "assistant":
-            msg = ev.get("message")
-            for b in (msg.get("content") if isinstance(msg, dict) else None) or ():
-                cmd = (b.get("input") or {}).get("command") if isinstance(b, dict) and b.get("name") == "Bash" else None
-                if isinstance(cmd, str) and cmd.startswith("aiw ask"):
-                    asked = True
+            asked = asked or any(
+                e["kind"] == "tool" and e["name"] == "Bash" and isinstance(e["input"], dict)
+                and str(e["input"].get("command", "")).lstrip().startswith("aiw ask")
+                for e in ui_events.parse_line(line))
         elif ev.get("type") == "result":
             is_error = bool(ev.get("is_error"))
             ui_sessions.update(sid, cost=ev.get("total_cost_usd"))

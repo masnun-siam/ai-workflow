@@ -32,11 +32,18 @@ A headless run (started from the workflow UI) has no terminal to answer in, so
 `Headless run: ask via aiw ask`. At every gate below, the same header, question and options
 are used either way; only the transport differs.
 
-- **Headless:** call the command below (or feed the same JSON on stdin with a heredoc).
+- **Headless:** call the command below. Use the quoted heredoc: gate text embeds finding text
+  from PR threads, so never put it inside single quotes on the command line. Keep `--json '...'`
+  for short fixed strings only. Both start with `aiw `.
 
   ```
-  aiw ask --json '{"questions":[{"header":"...","question":"...","multiSelect":false,"options":[{"label":"...","description":"..."}]}]}'  # aiw ask: records the round
+  aiw ask <<'EOF'  # aiw ask: records the round
+  {"questions":[{"header":"...","question":"...","multiSelect":false,"options":[{"label":"...","description":"..."}]}]}
+  EOF
   ```
+
+  Any other stop-and-ask in this command (H2 halt, missing dep branch, resume of a `done` or
+  `escalated` ledger) also goes through `aiw ask` when headless, never prose.
 
   List the recommended option first with `(Recommended)` on its label. Free text is always
   allowed. Then end your turn immediately and do nothing else; the answer arrives as your
