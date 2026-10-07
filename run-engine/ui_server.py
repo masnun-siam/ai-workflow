@@ -15,9 +15,13 @@ import subprocess
 from urllib.parse import parse_qs, urlsplit
 
 import ui_events
+import ui_repos
 import ui_sessions
 from shared import die
 from ui_board import build_board, fetch_title, load_projects, memoize_title_fetcher, scan_records
+
+
+MAX_BODY_BYTES = 65536
 
 
 def _guard(handler) -> bool:
@@ -71,6 +75,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/board.json":
             board = build_board(scan_records(), load_projects(), self.server.fetch_title)
             self._send(200, "application/json; charset=utf-8", json.dumps(board).encode("utf-8"))
+        elif path == "/api/repos":
+            self._send(200, "application/json; charset=utf-8", json.dumps({"repos": ui_repos.list_repos()}).encode("utf-8"))
         elif path == "/api/sessions":
             body = {"sessions": [_public(r) for r in ui_sessions.list_sessions()]}
             self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
@@ -116,9 +122,40 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             body = {"events": events, "offset": new_offset}
         self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
 
-    def _method_not_allowed(self):
+    def _json(self, status: int, body: dict) -> None:
+        self._send(status, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
+
+    def do_POST(self):
         if not _guard(self):
             return
+        if urlsplit(self.path).path != "/api/sessions":
+            self._deny_method()
+            return
+        try:
+            n = int(self.headers.get("Content-Length") or "")
+        except ValueError:
+            n = -1
+        if n < 0:
+            self._json(400, {"error": "bad Content-Length"})
+            return
+        if n > MAX_BODY_BYTES:
+            self._json(413, {"error": "body too large"})
+            return
+        try:
+            body = json.loads(self.rfile.read(n))
+        except ValueError:
+            body = None
+        if not isinstance(body, dict):
+            self._json(400, {"error": "body must be a JSON object"})
+            return
+        status, payload = ui_repos.start_session(body)
+        self._json(status, _public(payload) if status == 201 else payload)
+
+    def _method_not_allowed(self):
+        if _guard(self):
+            self._deny_method()
+
+    def _deny_method(self):
         if self.command == "HEAD":
             self.send_response(405)
             self.send_header("Allow", "GET")
@@ -128,7 +165,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(405, "text/plain; charset=utf-8", b"method not allowed", {"Allow": "GET"})
 
     # every verb needs a do_* or stdlib answers 501 before _guard runs
-    do_POST = do_PUT = do_DELETE = do_PATCH = do_HEAD = do_OPTIONS = do_TRACE = do_CONNECT = _method_not_allowed
+    do_PUT = do_DELETE = do_PATCH = do_HEAD = do_OPTIONS = do_TRACE = do_CONNECT = _method_not_allowed
 
 
 class _Server(http.server.ThreadingHTTPServer):
