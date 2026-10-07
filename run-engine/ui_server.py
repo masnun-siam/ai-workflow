@@ -76,7 +76,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             board = build_board(scan_records(), load_projects(), self.server.fetch_title)
             self._send(200, "application/json; charset=utf-8", json.dumps(board).encode("utf-8"))
         elif path == "/api/repos":
-            self._send(200, "application/json; charset=utf-8", json.dumps({"repos": ui_repos.list_repos()}).encode("utf-8"))
+            self._json(200, {"repos": ui_repos.list_repos()})
         elif path == "/api/sessions":
             body = {"sessions": [_public(r) for r in ui_sessions.list_sessions()]}
             self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
@@ -108,7 +108,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 return
             sp = os.path.join(ui_sessions.session_dir(sid), "stream.jsonl")
             events, new_offset = ui_events.read_from(sp, offset)
-            if rec.get("status") in ("done", "failed", "stopped"):
+            if rec.get("status") in ui_repos._TERMINAL:
                 # terminal session: no more writes, so an unterminated last line is complete
                 try:
                     with open(sp, "rb") as f:

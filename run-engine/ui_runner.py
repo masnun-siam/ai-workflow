@@ -78,7 +78,7 @@ def start(command_text, cwd, link=None) -> dict:
             proc = subprocess.Popen([exe, *CLAUDE_ARGS, command_text], cwd=path,
                                     stdin=subprocess.DEVNULL, stdout=stream_f, stderr=err_f,
                                     start_new_session=True, close_fds=True)
-        except OSError as e:
+        except (OSError, ValueError) as e:
             _fail(sid, f"failed to spawn claude: {e}")
         finally:
             err_f.close()

@@ -99,6 +99,8 @@ def find_live(fam: str, link: dict):
         other = rec.get("link")
         if rec.get("status") in _TERMINAL or not isinstance(other, dict):
             continue
+        if rec.get("pid") and ui_runner._group_gone(rec["pid"], None):
+            continue  # crashed record: process group is gone
         if family(rec.get("command") or "") == fam and other.get("issue") == link["issue"] and (
             str(other.get("owner")).lower(), str(other.get("repo")).lower()
         ) == (link["owner"].lower(), link["repo"].lower()):
@@ -132,6 +134,8 @@ def start_session(body: dict):
         if "issue" in body and (not isinstance(issue, int) or isinstance(issue, bool) or issue < 1):
             raise ValueError("issue must be a positive integer")
         text = _prompt(body)
+        if "\x00" in text:
+            raise ValueError("prompt must not contain NUL bytes")
         if len(text) > MAX_PROMPT_CHARS:
             raise ValueError(f"prompt too long (max {MAX_PROMPT_CHARS} characters)")
         cwd, slug = resolve_repo(repo)
@@ -139,7 +143,7 @@ def start_session(body: dict):
         return 400, {"error": str(exc)}
     fam = family(text)
     if issue is None and fam == "run-issue":
-        issue = issue_from_args(text.lstrip().partition(" ")[2])
+        issue = issue_from_args((text.split(None, 1) + [""])[1])
     link = None
     if slug and issue is not None and "/" in slug:
         owner, _, name = slug.partition("/")
