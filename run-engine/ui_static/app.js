@@ -1,5 +1,6 @@
 import { h, render, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
+import { Answer } from './answer.js';
 import { Board } from './board.js';
 // ponytail: import cycle with run.js (it imports poll); safe, neither uses the other at top level.
 import { RunDetail } from './run.js';
@@ -101,7 +102,7 @@ function View({ route, sessions }) {
       return html`<${RunDetail} key=${`${owner}/${repo}/${n}`} owner=${owner} repo=${repo} n=${n} sessions=${sessions} />`;
     }
     case 'answer':
-      return html`<h1>Answer</h1><p>Session ${route.params.session}</p>`;
+      return html`<${Answer} session=${route.params.session} key=${route.params.session} />`;
     case 'new':
       return html`<h1>New run</h1><p>Start a run here.</p>`;
     case 'sessions':
