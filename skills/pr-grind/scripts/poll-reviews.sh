@@ -2,6 +2,8 @@
 # Monitor poll for /pr-grind: emit one line per NEW review by the reviewer account.
 #
 # Usage: poll-reviews.sh <owner> <repo> <number> <login> <last-iso> [mode] [interval]
+#   interval  seconds between polls (default 60), or "once": poll one time, print, exit with
+#             gh's status (used by the headless aiw ui tick)
 #   login  the reviewer account, or the PR author when the reviewer is UNRESOLVED
 #   mode   "reviewer" (default, login==) or "not-author" (login!=)
 #
@@ -32,6 +34,7 @@ while true; do
     .[] | $MATCH | select(.submitted_at > \$ENV.LAST) |
     \"\(.submitted_at) id=\(.id) state=\(.state)\"
   " 2>&1)
+  rc=$?
 
   if [ -n "$out" ]; then
     echo "$out"
@@ -41,5 +44,6 @@ while true; do
       *) : ;;                          # an error line must not become the new cutoff
     esac
   fi
+  [ "$INTERVAL" = once ] && exit "$rc"
   sleep "$INTERVAL"
 done
