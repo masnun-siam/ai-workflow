@@ -388,7 +388,7 @@ c.componentWillUnmount && c.componentWillUnmount();
 assert.equal(timers.length, 0, 'unmount stops all polls');
 for (const o of ['done', 'failed', 'stopped', 'waiting']) {
   reset(); when(STREAM(), jr(true, 200, { events: [], offset: 0 }));
-  c = await mount([sess({ outcome: o })]);
+  c = await mount([sess({ outcome: o, ...(o === 'waiting' ? { ended_at: '2026-01-01T00:00:00Z' } : {}) })]);
   assert.equal(streamCalls().length, 1, o); assert.match(streamCalls()[0].u, /offset=0$/);
   assert.ok(!timers.some((t) => t.ms === 1000), o + ' no stream timer');
   c.componentWillUnmount && c.componentWillUnmount();
@@ -396,7 +396,15 @@ for (const o of ['done', 'failed', 'stopped', 'waiting']) {
 reset(); when(STREAM(), jr(true, 200, { events: [], offset: 0 }));
 c = await mount([sess({ outcome: 'starting' })]); assert.ok(timers.some((t) => t.ms === 1000), 'starting polls');
 c.componentWillUnmount && c.componentWillUnmount();
-out('stream poll only while starting/running; terminal fetched once; run endpoint 3s');
+reset(); when(STREAM(), jr(true, 200, { events: [], offset: 0 }));
+c = await mount([sess({ outcome: 'waiting', ended_at: null })]);
+assert.ok(timers.some((t) => t.ms === 1000), 'waiting + process alive (ended_at null) keeps 1s stream poll');
+c.componentWillUnmount && c.componentWillUnmount();
+reset(); when(STREAM(), jr(true, 200, { events: [], offset: 0 }));
+c = await mount([sess({ outcome: 'waiting', ended_at: '2026-01-01T00:00:00Z' })]);
+assert.equal(streamCalls().length, 1); assert.ok(!timers.some((t) => t.ms === 1000), 'waiting + ended_at set: one fetch, no timer');
+c.componentWillUnmount && c.componentWillUnmount();
+out('stream poll only while starting/running or live waiting; terminal fetched once; run endpoint 3s');
 
 // ---- output pane, offsets, terminal transition, id change
 const EV = [{ kind: 'text', text: 'hello <b>x</b>' }, { kind: 'tool', name: 'Bash', input: { command: 'ls -la' } }, { kind: 'result', cost: 0.5, is_error: false, text: 'finished ok' }];
@@ -422,6 +430,16 @@ assert.ok(!timers.some((t) => t.ms === 1000));
 await fireTimers(3000);
 assert.equal(streamCalls().length, before + 1, 'no further stream fetches');
 out('terminal transition stops poll and fetches the tail once');
+
+reset(); when(STREAM(), jr(true, 200, { events: [], offset: 7 }));
+c = await mount([sess({ outcome: 'waiting', ended_at: null })]);
+assert.ok(timers.some((t) => t.ms === 1000), 'live waiting polls');
+when(STREAM(), jr(true, 200, { events: [{ kind: 'text', text: 'TAIL2' }], offset: 20 }));
+const before2 = streamCalls().length;
+await update(c, [sess({ outcome: 'done', ended_at: '2026-01-01T00:00:00Z' })]);
+assert.equal(streamCalls().length, before2 + 1); assert.match(streamCalls().at(-1).u, /offset=7$/);
+assert.match(txt(c), /TAIL2/); assert.ok(!timers.some((t) => t.ms === 1000));
+out('waiting-live to done does the final fetch and stops the poll');
 
 reset(); when(STREAM('s1'), jr(true, 200, { events: [{ kind: 'text', text: 'OLDSTREAM' }], offset: 50 }));
 when(STREAM('s2'), jr(true, 200, { events: [{ kind: 'text', text: 'NEWSTREAM' }], offset: 7 }));
