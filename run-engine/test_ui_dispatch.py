@@ -167,6 +167,13 @@ assert out["max"] == 4 and out["mode"] == "sequential"
 ok("pause + live max/mode edit")
 assert raises(d.act, created["id"], "update", {"max": 0})
 ok("bad max rejected")
+_real = d._screen
+d._screen = lambda slug, nums: [{"issue": n, "error": "Could not resolve to an Issue"} for n in nums]
+assert raises(d.act, created["id"], "update", {"add": [404]}) and raises(d.create, {"repo": "o/r", "issues": [404]})
+d._screen = lambda slug, nums: [{"issue": n, "closed": True, "title": "x"} for n in nums]
+assert raises(d.act, created["id"], "update", {"add": [405]})
+d._screen = _real
+ok("unresolvable or closed issues are refused on create and add")
 out = d.act(created["id"], "update", {"add": [7]})
 assert [i["issue"] for i in out["items"]][-1] == 7
 ok("add issues to a live pipeline")

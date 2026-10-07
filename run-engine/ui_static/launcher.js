@@ -136,7 +136,7 @@ export function makeSubmitter(fetchImpl) {
 }
 
 export class Launcher extends Component {
-  state = { repos: [], repo: '', manual: false, path: '', command: 'run-issue', args: '', text: '', pending: false, errors: {}, result: null, form: 'named', repoQuery: null, repoOpen: false, repoActive: 0 };
+  state = { repos: [], repo: '', manual: false, path: '', command: 'run-issue', args: '', text: '', pending: false, errors: {}, result: null, form: 'named', repoQuery: null, repoOpen: false, repoActive: 0, canBrowse: false, browsing: false };
 
   async componentDidMount() {
     fetch('/api/settings', { headers: { Accept: 'application/json' } })
@@ -145,10 +145,13 @@ export class Launcher extends Component {
       .catch(() => {}); // no picker without settings: runs use claude
     let repos = [];
     let failed = false;
+    let canBrowse = false;
     try {
       const res = await fetch('/api/repos', { headers: { Accept: 'application/json' } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      repos = repoOptions(await res.json());
+      const body = await res.json();
+      repos = repoOptions(body);
+      canBrowse = body.can_browse === true;
     } catch {
       failed = true;
     }
@@ -156,6 +159,7 @@ export class Launcher extends Component {
     const known = repos.find((r) => r.value === last);
     this.setState({
       repos,
+      canBrowse,
       repo: known ? known.value : repos.length ? repos[0].value : '',
       manual: !known && !!last && last.startsWith('/') ? true : repos.length === 0,
       path: !known && last && last.startsWith('/') ? last : '',
@@ -190,6 +194,27 @@ export class Launcher extends Component {
     else this.setState({ manual: true, path: '', repoQuery: '', repoOpen: false });
   };
 
+  // Native folder dialog opened by the server on this Mac; Start still validates the git checkout.
+  browse = async () => {
+    const s = this.state;
+    const start = s.manual ? s.path : (s.repos.find((r) => r.value === s.repo) || {}).path;
+    this.setState({ browsing: true });
+    try {
+      const res = await fetch('/api/repos/browse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ start: start || '' }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { path } = await res.json();
+      if (path) this.setState({ manual: true, path, repoQuery: null, repoOpen: false, errors: { ...this.state.errors, repo: undefined }, result: null });
+    } catch {
+      toast('Could not open the folder picker');
+    } finally {
+      this.setState({ browsing: false });
+    }
+  };
+
   onComboInput = (e) => {
     const q = e.target.value;
     const path = pathOption(q);
@@ -216,7 +241,7 @@ export class Launcher extends Component {
 
   onCustom = (ev) => this.start(ev, 'custom', validateCustom(this.state), (repo) => buildCustomBody({ repo, text: this.state.text }));
 
-  render({ limits }, { cmds, claudeLabel, repos, repo, manual, path, command, args, text, pending, form, errors, result, repoQuery, repoOpen, repoActive }) {
+  render({ limits }, { canBrowse, browsing, cmds, claudeLabel, repos, repo, manual, path, command, args, text, pending, form, errors, result, repoQuery, repoOpen, repoActive }) {
     const set = (k) => (e) => this.setState({ [k]: e.target.value });
     const mine = (f) => (result && (form || 'named') === f ? result : null);
     const outcomeMsg = (f) => { const r = mine(f); return r && r.kind === 'duplicate'
@@ -228,7 +253,8 @@ export class Launcher extends Component {
       <form class="launcher panel" onSubmit=${this.onSubmit} noValidate>
         <h1>New run</h1>
         <label for="repo-path">${repos.length ? 'Repo' : 'Repo path'}</label>
-        ${repos.length
+        <div class="repo-row">
+          ${repos.length
           ? html`<div class="combo">
               <input id="repo-path" type="text" class="combo-input" role="combobox" autocomplete="off" spellcheck="false"
                 aria-expanded=${repoOpen ? 'true' : 'false'} aria-controls="repo-list" aria-autocomplete="list"
@@ -251,6 +277,11 @@ export class Launcher extends Component {
             </div>`
           : html`<input id="repo-path" type="text" value=${path} onInput=${set('path')}
               aria-invalid=${repoMsg ? 'true' : undefined} aria-describedby=${repoMsg ? 'repo-error' : undefined} />`}
+          ${canBrowse && html`<button type="button" class="browse-btn" aria-label="Browse for a folder" title="Browse for a folder"
+            disabled=${browsing} onClick=${this.browse}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          </button>`}
+        </div>
         ${repoMsg ? html`<p id="repo-error" role="alert" class="error">${repoMsg}</p>` : null}
         ${cmds && cmds.length > 0 && html`
           <label for="claude-cmd">Claude command</label>

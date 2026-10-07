@@ -62,7 +62,7 @@ def parse_input(text: str):
             tokens = [t for t in shlex.split(unquote_plus(q), posix=False)
                       if t.lower() not in _DROP_TOKENS and not t.lower().startswith("sort:")]
             if not tokens:
-                raise ValueError("the search URL has no query (q=…) — refusing to dispatch every open issue")
+                raise ValueError("that search matches every open issue — add a filter such as label:ready or in:title ui")
             return slug, "query", " ".join(tokens)
         nums = [int(n) for _, _, n, _ in urls if n]
         if not nums:
@@ -202,6 +202,18 @@ def _screen(slug: str, numbers: list[int]) -> list[dict]:
         return list(pool.map(lambda n: dispatch._issue_readiness(args, n), numbers))
 
 
+def _screen_open(slug: str, numbers: list[int]) -> list[dict]:
+    """_screen, but refuse issues GitHub could not resolve or that are closed — a typo'd
+    number must not become a pipeline item that fails an hour later."""
+    rows = _screen(slug, numbers)
+    for r in rows:
+        if "error" in r:
+            raise ValueError(f"#{r['issue']}: {r['error']}")
+        if r.get("closed"):
+            raise ValueError(f"#{r['issue']} is closed")
+    return rows
+
+
 def preview(text: str, repo) -> dict:
     """Resolve + screen the pasted input. ValueError carries a user-facing message."""
     slug, kind, value = parse_input(text)
@@ -262,7 +274,7 @@ def create(body: dict) -> dict:
         raise ValueError("could not tell which GitHub repo this is")
     nums = dispatch.dedupe(issues)
     known = set(nums)
-    rows = _screen(slug, nums)
+    rows = _screen_open(slug, nums)
     items = [_new_item({"issue": r["issue"], "title": r.get("title", ""),
                         "deps": [d for d in r.get("deps", []) if d in known and d != r["issue"]],
                         "ext_deps": [d for d in r.get("deps", []) if d not in known]}) for r in rows]
@@ -439,7 +451,7 @@ def act(pid: str, action: str, body: dict | None = None, issue=None) -> dict:
                 new = [_new_item({"issue": r["issue"], "title": r.get("title", ""),
                                   "deps": [d for d in r.get("deps", []) if d in known and d != r["issue"]],
                                   "ext_deps": [d for d in r.get("deps", []) if d not in known]})
-                       for r in _screen(pipe["slug"], add)]
+                       for r in _screen_open(pipe["slug"], add)]
                 items = pipe["items"] + new
                 order_of(items)
                 pipe["items"] = items

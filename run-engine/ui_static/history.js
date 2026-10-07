@@ -3,6 +3,7 @@ import htm from './vendor/htm.mjs';
 
 import { formatWhen, shortRepo } from './fmt.js';
 import { toast } from './toast.js';
+import { openCleanup } from './cleanup.js';
 
 const html = htm.bind(h);
 
@@ -164,6 +165,7 @@ export class History extends Component {
             ${OUTCOMES.map((o) => html`<option value=${o} selected=${filter === o}>${o}</option>`)}
           </select>
         </label>
+        <button type="button" class="btn" onClick=${() => openCleanup()}>Clean up…</button>
       </div>
       ${body}
       </section>

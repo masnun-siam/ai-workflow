@@ -1,8 +1,10 @@
+import { GhChips, FailingChecks, issueUrl, quiet } from './ghstatus.js';
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { poll } from './app.js';
 import { formatWhen } from './fmt.js';
 import { toast } from './toast.js';
+import { openCleanup } from './cleanup.js';
 import { LimitBanner } from './limits.js';
 
 const html = htm.bind(h);
@@ -225,6 +227,7 @@ export class RunDetail extends Component {
 
   act = (action, label) => async (e) => {
     e?.preventDefault?.();
+    if (action === 'stop' && !window.confirm('Stop this run? The process is killed; the branch and worktree are kept and you can resume it.')) return;
     const id = this.sid;
     this.setState({ busy: action, msg: '' });
     const r = await postAction(id, action);
@@ -261,6 +264,7 @@ export class RunDetail extends Component {
     if (!run) return html`<h1>${`${owner}/${repo}#${n}`}</h1><p role="status">Loading…</p>`;
     const s = this.session();
     const acts = actionsFor(s);
+    const cleanable = run.status === 'done' || (s ? ['stopped', 'failed'].includes(s.outcome) : quiet(run.updated, run.status)) || run.gh?.pr?.state === 'MERGED';
     const t = totals(stream.events, s);
     const rt = run.totals || {};
     const stations = Array.isArray(run.stations) ? run.stations : [];
@@ -301,11 +305,13 @@ export class RunDetail extends Component {
       <section class="run">
         <div class="run-head">
           <div class="run-title">
-            <div class="run-meta mono">${meta.join(' · ')}${run.pr && html` · <a href=${run.pr} target="_blank" rel="noopener noreferrer">PR</a>`}${run.branch && html` · <span title="branch">${run.branch}</span>`}</div>
+            <div class="run-meta mono">${meta.join(' · ')}${html` · <a href=${issueUrl(owner, repo, n)} target="_blank" rel="noopener noreferrer">Issue</a>`}${(run.pr || run.gh?.pr?.url) && html` · <a href=${run.pr || run.gh.pr.url} target="_blank" rel="noopener noreferrer">PR${run.gh?.pr?.number ? ' #' + run.gh.pr.number : ''}</a>`}${run.branch && html` · <span title="branch">${run.branch}</span>`}</div>
             <h1>${run.title || `Issue #${n}`}</h1>
           </div>
           <span class=${chip(run.status)}>${run.status}</span>
+          <${GhChips} gh=${run.gh} labels=${true} />
           ${retry && html`<span role="status" class="offline">Retrying…</span>`}
+          ${cleanable && html`<button type="button" class="btn" onClick=${() => openCleanup(`${owner}/${repo}#${n}`)}>Clean up</button>`}
           ${acts.length > 0 && html`
             <div class="actions">
               ${acts.includes('stop') && html`<button type="button" class="btn btn--danger" disabled=${busy === 'stop'} onClick=${this.act('stop', 'Stopped')}>Stop</button>`}
@@ -316,6 +322,7 @@ export class RunDetail extends Component {
         ${s && s.outcome === 'limited' && html`<${LimitBanner} key=${s.id} s=${s} />`}
         ${s && s.claude_cmd && s.claude_cmd !== 'claude' && html`<p class="note">Account: <span class="mono">${s.claude_cmd}</span></p>`}
         ${s && s.resumed_fresh && html`<p class="note">${`Resumed fresh${s.note ? `: ${s.note}` : ''}`}</p>`}
+        <${FailingChecks} gh=${run.gh} />
         ${run.errors?.ledger && html`<p class="muted">Ledger could not be read</p>`}
         <div role="status" class="msg">${msg}</div>
         ${fallback && s && html`<label class="cmd">Command <input readOnly value=${s.resume_command} aria-label="Resume command" ref=${this.selectBox} /></label>`}

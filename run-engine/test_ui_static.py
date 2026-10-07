@@ -611,6 +611,32 @@ for (const h of ['#/run/acme/web', '#/run/acme/web/0', '#/run/acme/web/-1', '#/r
   '#/run/a/b/1/extra', '#/answer/', '#/bogus']) assert.equal(nm(h), 'notfound', h);
 out('parseRoute boundary routes are notfound');
 
+assert.equal(nm('#/dispatch'), 'dispatch');
+assert.deepEqual({ ...parseRoute('#/dispatch/p-20261007120000-aaaaaa') }, { name: 'pipeline', params: { id: 'p-20261007120000-aaaaaa' } });
+for (const h of ['#/dispatch/nope', '#/dispatch/p-1-a', '#/dispatch/p-20261007120000-aaaaaa/x']) assert.equal(nm(h), 'notfound', h);
+out('parseRoute dispatch routes');
+
+const D = await import(process.env.APP_URL.replace('app.js', 'dispatch.js'));
+assert.equal(D.hasUrl('see https://github.com/o/r/issues?q=x'), true);
+assert.equal(D.hasUrl('#12, 14'), false);
+assert.deepEqual(D.issueNumbers('#12, 14 15 12'), [12, 14, 15]);
+assert.deepEqual(D.issueNumbers('https://github.com/o/r2/issues/7\nhttps://github.com/o/r2/issues/9'), [7, 9]);
+assert.deepEqual([...D.defaultSelection([{ issue: 1, ready: true }, { issue: 2, ready: false }])], [1]);
+const pv = { slug: 'o/r', repo_path: '/x', items: [{ issue: 1 }, { issue: 2 }, { issue: 3 }] };
+assert.deepEqual(D.startBody(pv, new Set([3, 1]), { mode: 'parallel', max: 2, claude: 'work' }),
+  { slug: 'o/r', repo: '/x', issues: [1, 3], mode: 'parallel', max: 2, claude_cmd: 'work' });
+assert.equal('claude_cmd' in D.startBody(pv, new Set([1]), { mode: 'sequential', max: 1, claude: '' }), false);
+out('dispatch: input, selection and start body helpers');
+
+assert.deepEqual(D.itemActions({ state: 'failed' }), ['retry', 'skip']);
+assert.deepEqual(D.itemActions({ state: 'skipped', reason: 'blocked by #3' }), []);
+assert.deepEqual(D.itemActions({ state: 'skipped', reason: 'manual' }), ['retry']);
+assert.deepEqual(D.itemActions({ state: 'running' }), []);
+assert.deepEqual(D.pipelineActions('active'), ['pause', 'stop']);
+assert.deepEqual(D.pipelineActions('done'), []);
+assert.equal(D.progressText([{ state: 'done' }, { state: 'running' }, { state: 'failed' }]), '1 of 3 done · 1 running · 1 failed');
+out('dispatch: actions and progress text');
+
 assert.equal(nm('#/sessions/'), 'sessions');
 assert.equal(parseRoute('#/answer/a%20b').params.session, 'a b');
 assert.deepEqual({ ...parseRoute('#/session/x%20y') }, { name: 'session', params: { id: 'x y' } });
@@ -884,7 +910,7 @@ def shell_checks():
     css = read(os.path.join(STATIC, "app.css")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
     assert specs, "no imports found"
-    assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./board.js", "./run.js", "./history.js", "./answer.js", "./notify.js", "./launcher.js", "./session.js", "./keys.js", "./toast.js"}, specs
+    assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./board.js", "./run.js", "./history.js", "./answer.js", "./notify.js", "./launcher.js", "./session.js", "./keys.js", "./toast.js", "./settings.js", "./dispatch.js", "./fmt.js", "./cleanup.js"}, specs
     assert not re.search(r"https?://", js), "no absolute URLs"
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)

@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import sys
 import threading
 
 import dispatch
@@ -43,6 +44,20 @@ def list_repos() -> list:
         name = projects.get(slug)
         repos.append({"slug": slug, "name": name if isinstance(name, str) else slug, "path": path})
     return sorted(repos, key=lambda r: r["slug"])
+
+
+_PICK = 'on run argv\nPOSIX path of (choose folder default location (POSIX file (item 1 of argv)))\nend run'
+
+
+def browse_folder(start):
+    """Open the macOS folder dialog on this machine; the chosen absolute path, or None if cancelled."""
+    start = start if isinstance(start, str) and os.path.isdir(start) else os.path.expanduser("~")
+    try:
+        r = subprocess.run(["osascript", "-e", _PICK, start], capture_output=True, text=True, timeout=300)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    out = r.stdout.strip()
+    return (out.rstrip("/") or "/") if r.returncode == 0 and out else None
 
 
 def _git(real: str, *args: str) -> str:
@@ -126,6 +141,16 @@ def _prompt(body: dict) -> str:
     return text
 
 
+def _remember(slug, cwd) -> None:
+    """Register a manually entered checkout so it shows in the repo list next time."""
+    if not slug or any(k.lower() == slug.lower() for k in dispatch.read_checkouts()):
+        return
+    try:
+        dispatch.register_checkout(slug, cwd)
+    except OSError as exc:
+        print(f"ui_repos: could not register checkout {slug}: {exc}", file=sys.stderr)
+
+
 def start_session(body: dict):
     repo = body.get("repo")
     if not isinstance(repo, str) or not repo:
@@ -166,7 +191,9 @@ def start_session(body: dict):
                     "href": f"/api/sessions/{dup['id']}",
                 }
         try:
-            return 201, ui_runner.start(text, cwd, link, claude_cmd=claude_cmd)
+            res = ui_runner.start(text, cwd, link, claude_cmd=claude_cmd)
+            _remember(slug, cwd)
+            return 201, res
         except ValueError as exc:
             return 400, {"error": str(exc)}
         except ui_runner.RunnerError as exc:

@@ -1,6 +1,8 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { poll } from './app.js';
+import { openCleanup } from './cleanup.js';
+import { GhChips, GhLinks, quiet } from './ghstatus.js';
 
 const html = htm.bind(h);
 
@@ -107,15 +109,21 @@ export function boardChanged(prevText, nextData) {
 function Card({ card, columnKey, sessions }) {
   const session = matchSession(card, sessions);
   const cost = formatCost(session && session.cost);
-  return html`<a class="card" href=${runHref(card)} data-card=${card.owner + '/' + card.repo + '#' + card.issue}>
-    <span class="card-meta"><span>#${card.issue}</span><span class="card-repo" title=${card.owner + '/' + card.repo}>${card.repo}</span></span>
+  const key = card.owner + '/' + card.repo + '#' + card.issue;
+  const state = session && (session.status ?? session.outcome);
+  const cleanable = columnKey === 'done' || state === 'stopped' || state === 'failed' || (!session && quiet(card.updated, card.escalated ? 'escalated' : 'running')) || card.gh?.pr?.state === 'MERGED';
+  return html`<div class="card-wrap">${cleanable && html`<button type="button" class="card-clean" aria-label=${'Clean up ' + key} title="Clean up" onClick=${() => openCleanup(key)}>Clean up</button>`}
+  <a class="card" href=${runHref(card)} data-card=${key}>
+    <span class="card-meta"><span>#${card.issue}</span><span class="card-repo" title=${card.owner + '/' + card.repo}>${card.repo}</span>${card.pipeline && html`<span class="card-pipe" title="Part of a dispatch pipeline">pipeline</span>`}</span>
     <span class="card-title">${cardTitle(card)}</span>
     <span class="chips">
       ${cardChips(card, columnKey, session).map((c) => html`<span class="chip chip-${c.replace(' ', '-')}">${c}</span>`)}
+      <${GhChips} gh=${card.gh} />
       ${cost && html`<span class="cost">${cost}</span>`}
     </span>
     ${card.note && html`<span class="card-note">${card.note}</span>`}
-  </a>`;
+  </a>
+  <${GhLinks} owner=${card.owner} repo=${card.repo} issue=${card.issue} pr=${card.pr} gh=${card.gh} /></div>`;
 }
 
 function Skeleton() {
@@ -176,6 +184,7 @@ export class Board extends Component {
         <span><b>$${sum.today.toFixed(2)}</b> today</span>
         <span class="strip-poll mono">polling /board.json · 3s</span>
         <span class="spacer"></span>
+        <button type="button" class="btn" onClick=${() => openCleanup()}>Clean up…</button>
         <label class="strip-filter">Repo
           <select data-search value=${repo} onChange=${(e) => this.setState({ repo: e.target.value })}>
             <option value="">All repos</option>

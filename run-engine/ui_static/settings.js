@@ -73,8 +73,8 @@ export class Settings extends Component {
             <p class="note">The command a run is launched with. Use <code>cc masum</code> to run under another account. The default is <code>claude</code> when nothing is set.</p>
             ${commands.map((c, i) => html`
               <div class="cmd-row" key=${i}>
-                <input aria-label="Label" placeholder="Label (Masum)" value=${c.label} onInput=${this.edit(i, 'label')} />
-                <input aria-label="Command" class="mono" placeholder="cc masum" value=${c.cmd} onInput=${this.edit(i, 'cmd')} />
+                <input type="text" aria-label="Label" placeholder="Label (Masum)" value=${c.label} onInput=${this.edit(i, 'label')} />
+                <input type="text" aria-label="Command" class="mono" placeholder="cc masum" value=${c.cmd} onInput=${this.edit(i, 'cmd')} />
                 <label class="radio"><input type="radio" name="default" checked=${!!c.label && def === c.label} disabled=${!c.label} onChange=${() => this.setState({ def: c.label })} /> default</label>
                 <button type="button" onClick=${() => this.test(i)}>Test</button>
                 <button type="button" class="btn--danger" aria-label=${`Remove ${c.label || 'command'}`} onClick=${() => this.remove(i)}>Remove</button>

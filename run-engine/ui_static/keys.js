@@ -18,7 +18,7 @@ export function keyIntent(e, chord = false) {
   if (e.metaKey || e.ctrlKey || e.altKey) return null;
   if (key === 'Escape') return { type: 'escape' };
   if (isTyping(e.target)) return null;
-  if (chord) return { b: go('#/'), s: go('#/sessions'), n: go('#/new') }[key] || null;
+  if (chord) return { b: go('#/'), s: go('#/sessions'), d: go('#/dispatch'), n: go('#/new') }[key] || null;
   switch (key) {
     case 'g': return { type: 'chord' };
     case 'n': return go('#/new');
@@ -72,6 +72,7 @@ export function paletteItems({ board, sessions }) {
   const items = [
     { id: 'nav-board', group: 'Go to', label: 'Board', detail: 'g b', href: '#/' },
     { id: 'nav-sessions', group: 'Go to', label: 'Sessions', detail: 'g s', href: '#/sessions' },
+    { id: 'nav-dispatch', group: 'Go to', label: 'Dispatch', detail: 'g d · run a batch of issues', href: '#/dispatch' },
     { id: 'nav-new', group: 'Go to', label: 'New run', detail: 'n', href: '#/new' },
     { id: 'nav-settings', group: 'Go to', label: 'Settings', detail: 'Claude commands', href: '#/settings' },
   ];
@@ -112,6 +113,7 @@ export const SHORTCUTS = [
   ['⌘K / Ctrl+K', 'Command palette'],
   ['g then b', 'Go to Board'],
   ['g then s', 'Go to Sessions'],
+  ['g then d', 'Go to Dispatch'],
   ['n', 'New run'],
   ['j / k', 'Next / previous card'],
   ['h / l', 'Previous / next column'],

@@ -244,7 +244,8 @@ def load_run(owner: str, repo: str, n: str, runs_dir=None):
     errors = {}
     body = {"owner": owner, "repo": repo, "issue": int(n), "status": None, "currentStation": None,
             "stations": [], "trace": [], "plan": None, "pr": None, "branch": None, "title": None,
-            "totals": {"stations": 0, "done": 0, "bounces": 0}, "errors": errors}
+            "totals": {"stations": 0, "done": 0, "bounces": 0}, "errors": errors,
+            "updated": os.path.getmtime(run_json)}
     data, err = _read_part(run_json)
     if data is not None:
         from engine import Ledger

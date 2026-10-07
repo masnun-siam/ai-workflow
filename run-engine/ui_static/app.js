@@ -9,8 +9,10 @@ import { Launcher } from './launcher.js';
 import { History } from './history.js';
 import { Session } from './session.js';
 import { Settings } from './settings.js';
+import { Dispatch, PipelineDetail } from './dispatch.js';
 import { clockText } from './fmt.js';
 import { toast } from './toast.js';
+import { CleanupDialog } from './cleanup.js';
 import { keyIntent, moveFocus, Palette, Shortcuts } from './keys.js';
 
 const html = htm.bind(h);
@@ -30,6 +32,8 @@ export function parseRoute(hash) {
   if (a === 'new' && !rest.length) return { name: 'new', params: {} };
   if (a === 'sessions' && !rest.length) return { name: 'sessions', params: {} };
   if (a === 'settings' && !rest.length) return { name: 'settings', params: {} };
+  if (a === 'dispatch' && !rest.length) return { name: 'dispatch', params: {} };
+  if (a === 'dispatch' && rest.length === 1 && /^p-\d{14}-[0-9a-f]{6}$/.test(rest[0])) return { name: 'pipeline', params: { id: rest[0] } };
   if (a === 'session' && rest.length === 1 && rest[0]) return { name: 'session', params: { id: rest[0] } };
   if (a === 'answer' && rest.length === 1 && rest[0]) return { name: 'answer', params: { session: rest[0] } };
   if (a === 'run' && rest.length === 3 && rest[0] && rest[1] && /^[1-9]\d*$/.test(rest[2])) {
@@ -104,6 +108,7 @@ export function poll(url, ms, onResult, keepAlive = () => false) {
 
 const NAV = [
   ['board', '#/', 'Board'],
+  ['dispatch', '#/dispatch', 'Dispatch'],
   ['sessions', '#/sessions', 'Sessions'],
 ];
 
@@ -138,6 +143,10 @@ function View({ route, sessions, limits }) {
       return html`<${Launcher} limits=${limits} />`;
     case 'settings':
       return html`<${Settings} />`;
+    case 'dispatch':
+      return html`<${Dispatch} />`;
+    case 'pipeline':
+      return html`<${PipelineDetail} key=${route.params.id} id=${route.params.id} />`;
     case 'sessions':
       return html`<${History} sessions=${sessions} />`;
     default:
@@ -146,7 +155,7 @@ function View({ route, sessions, limits }) {
 }
 
 export class App extends Component {
-  state = { route: parseRoute(globalThis.location?.hash), sessions: null, limits: {}, commands: [], offline: false, notif: notifyState(), palette: false, sheet: false };
+  state = { route: parseRoute(globalThis.location?.hash), sessions: null, limits: {}, commands: [], offline: false, notif: notifyState(), palette: false, sheet: false, cleanup: null };
 
   onHash = () => {
     this.setState({ route: parseRoute(location.hash) });
@@ -172,7 +181,7 @@ export class App extends Component {
     const intent = keyIntent(e, Date.now() - this.chordAt < 800);
     this.chordAt = 0;
     if (!intent) return;
-    const { palette, sheet, route } = this.state;
+    const { palette, sheet, cleanup, route } = this.state;
     switch (intent.type) {
       case 'chord': this.chordAt = Date.now(); break;
       case 'goto': e.preventDefault(); location.hash = intent.hash; break;
@@ -183,27 +192,30 @@ export class App extends Component {
         if (el) { e.preventDefault(); el.focus(); }
         break;
       }
-      case 'move': if (!palette && !sheet && moveFocus(intent.dir)) e.preventDefault(); break;
+      case 'move': if (!palette && !sheet && !cleanup && moveFocus(intent.dir)) e.preventDefault(); break;
       case 'escape':
-        if (palette || sheet) this.openDialog({ palette: false, sheet: false });
-        else if (['run', 'session', 'answer'].includes(route.name)) history.length > 1 ? history.back() : (location.hash = '#/');
+        if (palette || sheet || cleanup) this.openDialog({ palette: false, sheet: false, cleanup: null });
+        else if (['run', 'session', 'answer', 'pipeline'].includes(route.name)) history.length > 1 ? history.back() : (location.hash = '#/');
         break;
     }
   };
 
   // Remembers what had focus so closing a dialog puts it back.
   openDialog(next) {
-    const opening = next.palette || next.sheet;
-    if (opening && !this.state.palette && !this.state.sheet) this.returnFocus = document.activeElement;
+    const opening = next.palette || next.sheet || next.cleanup;
+    if (opening && !this.state.palette && !this.state.sheet && !this.state.cleanup) this.returnFocus = document.activeElement;
     this.setState(next);
     if (!opening && this.returnFocus && this.returnFocus.focus) this.returnFocus.focus();
   }
 
-  closeDialogs = () => this.openDialog({ palette: false, sheet: false });
+  closeDialogs = () => this.openDialog({ palette: false, sheet: false, cleanup: null });
+
+  onCleanup = (e) => this.openDialog({ palette: false, sheet: false, cleanup: { only: e.detail?.key || null } });
 
   componentDidMount() {
     addEventListener('hashchange', this.onHash);
     addEventListener('keydown', this.onKey);
+    addEventListener('aiw:cleanup', this.onCleanup);
     this.watch = waitingWatcher();
     this.loadCommands();
     this.stop = poll('/api/sessions', 3000, (r) => {
@@ -229,10 +241,11 @@ export class App extends Component {
     this.gone = true;
     removeEventListener('hashchange', this.onHash);
     removeEventListener('keydown', this.onKey);
+    removeEventListener('aiw:cleanup', this.onCleanup);
     if (this.stop) this.stop();
   }
 
-  render(_, { route, sessions, limits, commands, offline, notif, palette, sheet }) {
+  render(_, { route, sessions, limits, commands, offline, notif, palette, sheet, cleanup }) {
     const b = headerBadge(offline, sessions);
     let badge = null;
     if (b?.kind === 'offline') badge = html`<span role="status" class="offline">Offline: retrying</span>`;
@@ -255,6 +268,7 @@ export class App extends Component {
       <main><${View} route=${route} sessions=${sessions} limits=${limits} /></main>
       ${palette && html`<${Palette} sessions=${sessions} onClose=${this.closeDialogs} />`}
       ${sheet && html`<${Shortcuts} onClose=${this.closeDialogs} />`}
+      ${cleanup && html`<${CleanupDialog} only=${cleanup.only} onClose=${this.closeDialogs} />`}
     `;
   }
 }
