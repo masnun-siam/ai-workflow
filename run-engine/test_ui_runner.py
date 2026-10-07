@@ -66,6 +66,10 @@ case "$FAKE_CLAUDE_MODE" in
     while [ ! -f "$FAKE_DIR/exit" ]; do sleep 0.1; done
     printf '%s\n' "$RESULT"
     exit 0;;
+  askfail)
+    printf '%s\n' "$INIT"
+    while [ ! -f "$FAKE_DIR/exit" ]; do sleep 0.1; done
+    exit 1;;
   sleep|stuck|spawn)
     [ "$FAKE_CLAUDE_MODE" = stuck ] && trap '' TERM
     if [ "$FAKE_CLAUDE_MODE" = spawn ]; then sleep 300 & echo $! > "$FAKE_DIR/gc"; fi
@@ -394,6 +398,30 @@ def answer_checks():
         assert s == 400
         intact(sid2, fk2)
         ok("free text on allowFreeText=False question: 400")
+
+        # -- lone surrogate in free text: 400, round intact, then valid answer 200
+        sid, fk, work = mk()
+        body = ('{"round_id":"q-1","answers":{"0":{"labels":["Revise"]},'
+                '"1":{"other":"x\\ud800y"}}}').encode()
+        s, _, b = req("POST", f"/api/sessions/{sid}/answer", body)
+        assert s == 400 and "error" in b, (s, b)
+        intact(sid, fk)
+        assert post(sid, "q-1", GOOD)[0] == 200
+        wait_status(sid, {"done", "failed"})
+        wait_finished(sid)
+        ok("lone surrogate free text: 400, round intact, valid answer still 200")
+
+        # -- run that recorded a round then exits non-zero: failed, round cleared
+        d, fk, work = setup("askfail")
+        rec = ui_runner.start("/run-issue 1", work)
+        live.append(rec)
+        wait_for(lambda: b"init" in read(rec["id"], "stream.jsonl"))
+        ui_sessions.set_pending(rec["id"], rnd())
+        open(os.path.join(fk, "exit"), "w").close()
+        wait_finished(rec["id"])
+        r = ui_sessions.load(rec["id"])
+        assert r["status"] == "failed" and r["pending_question"] is None, r
+        ok("round recorded then non-zero exit: failed, pending_question None")
 
         # -- oversized body 413, not read
         sid, fk, work = mk()
