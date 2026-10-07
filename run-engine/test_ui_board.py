@@ -242,6 +242,39 @@ assert cached_fetch("acme", "widgets", 2) == "title-2"
 assert calls == [("acme", "widgets", 1), ("acme", "widgets", 2)], calls
 ok("memoize_title_fetcher: repeat calls for the same key hit the cache, new keys don't")
 
+# --- 13b. async mode: miss returns None at once, later call sees the title; junk repos skipped ----
+
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
+gate = threading.Event()
+async_calls = []
+
+
+def slow_fetch(owner, repo, issue):
+    async_calls.append((owner, repo, issue))
+    gate.wait(5)
+    return f"slow-{issue}"
+
+
+with ThreadPoolExecutor(max_workers=2) as pool:
+    async_fetch = memoize_title_fetcher(slow_fetch, pool)
+    assert async_fetch("acme", "widgets", 1) is None  # does not block on the slow fetch
+    assert async_fetch("acme", "widgets", 1) is None  # still pending: not re-submitted
+    gate.set()
+    pool.shutdown(wait=True)
+assert async_calls == [("acme", "widgets", 1)], async_calls
+assert async_fetch("acme", "widgets", 1) == "slow-1"
+ok("memoize_title_fetcher(pool): miss returns None immediately, no duplicate fetch, title appears once fetched")
+
+junk_calls = []
+junk_fetch = memoize_title_fetcher(lambda o, r, i: junk_calls.append((o, r, i)) or "t")
+for owner, repo in [("masnun", "siam-ai-workflow-issue-108.lean-misinit"), ("weird", ""), ("", "x"), ("a b", "c")]:
+    assert junk_fetch(owner, repo, 1) is None, (owner, repo)
+assert junk_calls == [], junk_calls
+assert junk_fetch("acme", "widgets", 1) == "t"
+ok("memoize_title_fetcher: implausible owner/repo pairs never reach gh")
+
 
 # --- 15. kanban is gone -----------------------------------------------------
 

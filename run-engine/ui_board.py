@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+import threading
 
 from shared import data_dir, extract_json_object, run_dir_for
 
@@ -117,20 +118,64 @@ def run_timeline(stations, current_index, status, trace):
     return rows, current, totals
 
 
-def memoize_title_fetcher(fetch_title):
+_SLUG_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+def plausible_repo(owner, repo):
+    """False for owner/repo pairs guessed from a ledger dir name that can't be a real repo.
+
+    `_guess_owner_repo_from_dir_name` falls back to a first-dash split, which yields
+    things like `masnun/siam-ai-workflow-issue-108.lean-misinit`; asking `gh` about those
+    only burns its 30 s timeout.
+    """
+    return bool(owner and repo and _SLUG_RE.match(owner) and _SLUG_RE.match(repo) and "-issue-" not in repo)
+
+
+def memoize_title_fetcher(fetch_title, pool=None):
     """Wrap a (owner, repo, issue) -> title function with an in-memory cache.
 
     A live server polls every few seconds; re-running `gh issue view` per Issue on
     every poll would be slow and rate-limit-risky. Titles rarely change, so cache
     for the life of the server process.
+
+    With a `pool` (concurrent.futures executor) a cache miss returns None immediately
+    and the title is filled in by a later call once the pool has fetched it, so a cold
+    /board.json never waits on `gh`. Without one the fetch is synchronous.
+    Implausible owner/repo pairs are never fetched and stay None.
     """
     cache: dict = {}
+    pending: set = set()
+    lock = threading.Lock()
+
+    def fill(key):
+        try:
+            title = fetch_title(*key)
+        except Exception:
+            title = None
+        with lock:
+            if title is not None:
+                cache[key] = title
+            pending.discard(key)
 
     def cached(owner, repo, issue):
+        if not plausible_repo(owner, repo):
+            return None
         key = (owner, repo, issue)
-        if key not in cache:
-            cache[key] = fetch_title(owner, repo, issue)
-        return cache[key]
+        with lock:
+            if key in cache:
+                return cache[key]
+            if pool is None:
+                start = True
+            else:
+                start = key not in pending
+                if start:
+                    pending.add(key)
+        if pool is None:
+            cache[key] = fetch_title(*key)
+            return cache[key]
+        if start:
+            pool.submit(fill, key)
+        return None
 
     return cached
 

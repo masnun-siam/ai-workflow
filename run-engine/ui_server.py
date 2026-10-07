@@ -15,6 +15,7 @@ import os
 import shlex
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qs, unquote, urlsplit
 
 import ui_events
@@ -360,6 +361,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     do_PUT = do_DELETE = do_PATCH = do_HEAD = do_OPTIONS = do_TRACE = do_CONNECT = _method_not_allowed
 
 
+# Bounded so a cold /board.json can't fan out unbounded `gh` processes.
+_TITLE_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="title")
+
+
 class _Server(http.server.ThreadingHTTPServer):
     # macOS lets a 127.0.0.1 bind succeed while another process holds 0.0.0.0:<port> when reuse is on
     allow_reuse_address = False
@@ -388,7 +393,7 @@ def cmd_serve(args) -> None:
     port = args.port
     extras = args.allow_host or []
     try:
-        server = _Server(("127.0.0.1", port), _Handler, extras, memoize_title_fetcher(fetch_title))
+        server = _Server(("127.0.0.1", port), _Handler, extras, memoize_title_fetcher(fetch_title, _TITLE_POOL))
     except (OSError, OverflowError) as exc:
         if getattr(exc, "errno", None) != errno.EADDRINUSE:
             die(1, f"cannot bind 127.0.0.1:{port}: {exc}")

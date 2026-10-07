@@ -49,6 +49,8 @@ export function headerBadge(offline, data) {
   return sessionList(data) ? { kind: 'idle', count: 0, href: null } : null;
 }
 
+const FETCH_TIMEOUT_MS = 8000;
+
 export function poll(url, ms, onResult, keepAlive = () => false) {
   let timer = null;
   let inflight = false;
@@ -59,7 +61,10 @@ export function poll(url, ms, onResult, keepAlive = () => false) {
     timer = null;
     let result;
     try {
-      const res = await fetch(typeof url === 'function' ? url() : url, { headers: { Accept: 'application/json' } });
+      const res = await fetch(typeof url === 'function' ? url() : url, {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
       result = res.ok ? { ok: true, data: await res.json() } : { ok: false, status: res.status };
     } catch {
       result = { ok: false };
