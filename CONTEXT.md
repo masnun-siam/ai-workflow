@@ -38,5 +38,9 @@ _Avoid_: Repo (when referring to the display name — "repo" is fine for the raw
 The generated visual page showing every Issue's current progress. Composed of Columns (one per Station, plus done) and Cards (one per Issue, sourced from its latest Run's Ledger).
 _Avoid_: Dashboard
 
+**Session**:
+A headless Claude invocation started and tracked by the UI (`aiw ui`), recorded under `<data_dir>/sessions/<id>/`. A Session may or may not link to a Run.
+_Avoid_: Run (a Run is the pipeline for one Issue; a Session is a single UI-started invocation)
+
 **Card** (kanban):
 One Issue's current-progress tile on the Board: Project, Issue number, and title. Represents the Issue via its latest Run only, not every Run.
