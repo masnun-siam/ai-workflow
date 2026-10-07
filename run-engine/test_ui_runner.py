@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import concurrent.futures
 import http.client
+import contextlib
+import fcntl
+import io
 import json
 import os
 import signal
@@ -17,6 +20,7 @@ import sys
 import tempfile
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -43,6 +47,7 @@ if [ "$1" = "auth" ]; then
 fi
 printf '%s\n' "$@" > "$FAKE_DIR/argv"
 pwd > "$FAKE_DIR/pwd"
+printf '%s' "${AIW_HEADLESS-UNSET}" > "$FAKE_DIR/headless"
 echo "$FAKE_CLAUDE_INIT_ENV" > /dev/null
 INIT='{"type":"system","subtype":"init","session_id":"'"${FAKE_SID:-sess-abc}"'"}'
 RESULT='{"type":"result","subtype":"success","is_error":false,"total_cost_usd":'"${FAKE_COST:-0.0421}"'}'
@@ -76,6 +81,12 @@ case "$FAKE_CLAUDE_MODE" in
     printf '%s\n' "$INIT"
     while :; do
       if [ -f "$FAKE_DIR/go" ]; then echo '{"type":"assistant","message":"LATE"}'; rm -f "$FAKE_DIR/go"; fi
+      if [ -f "$FAKE_DIR/finish" ]; then
+        if grep -q err "$FAKE_DIR/finish"; then
+          printf '%s\n' '{"type":"result","subtype":"error","is_error":true,"total_cost_usd":0.5}'; exit 1
+        fi
+        printf '%s\n' "$RESULT"; exit 0
+      fi
       sleep 0.2
     done;;
 esac
@@ -152,7 +163,7 @@ def group_gone(pgid):
     try:
         os.killpg(pgid, 0)
         return False
-    except ProcessLookupError:
+    except (ProcessLookupError, PermissionError):
         return True
 
 
@@ -613,6 +624,698 @@ if "--answer" in sys.argv:
     print(f"\n{passed} checks passed")
     sys.exit(0)
 
+# ---- pr-grind headless re-entry (#127) ---------------------------------------
+FAKE_GH = r"""#!/bin/sh
+echo "$* LOGIN=$LOGIN" >> "$FAKE_DIR/gh.log"
+[ "$FAKE_GH_FAIL" = 1 ] && { echo "gh: boom" >&2; exit 1; }
+case "$1 $2" in
+  "pr view")
+    case "$*" in
+      *headRefOid*) printf '%s\n' "${FAKE_GH_SHA:-abc}";;
+      *) printf '{"state":"%s"}\n' "${FAKE_GH_STATE:-OPEN}";;
+    esac;;
+  "pr checks") printf '%s\n' "${FAKE_GH_CHECKS:-[]}";;
+  api*) printf '%s\n' "$FAKE_GH_REVIEWS" | awk -v l="$LAST" '$1 > l';;
+esac
+"""
+REPO_ROOT = os.path.dirname(HERE)
+POLL = os.path.join(REPO_ROOT, "skills", "pr-grind", "scripts", "poll-reviews.sh")
+SKILL = os.path.join(REPO_ROOT, "skills", "pr-grind", "SKILL.md")
+NOW = datetime(2030, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+THREAD = "https://acme.slack.com/archives/C0123/p1700000000000100"
+PR_URL = "https://github.com/o/r/pull/7"
+REV_NEW = "2030-06-01T11:00:00Z id=9 state=APPROVED"
+SINCE = "2030-06-01T10:00:00Z"
+FUTURE = "2030-06-01T13:00:00Z"
+PAST = "2030-06-01T11:00:00Z"
+REAL_PAST = "2000-01-01T00:00:00Z"  # due under the real clock
+BODY = "\n## Round 1\n- notes:  keep   spacing\nnext-poll: inside-body-ignored\n\n"
+
+
+def prgrind_cases() -> int:
+    fails = []
+    extra_procs = []
+
+    def pset(mode="normal", auth="in"):
+        d, fk, work = setup(mode, auth)
+        gh = os.path.join(fk, "bin", "gh")
+        with open(gh, "w") as f:
+            f.write(FAKE_GH)
+        os.chmod(gh, 0o755)
+        for k in ("AIW_HEADLESS", "FAKE_GH_FAIL", "FAKE_GH_REVIEWS", "FAKE_GH_CHECKS", "FAKE_GH_SHA"):
+            os.environ.pop(k, None)
+        os.environ["FAKE_GH_STATE"] = "OPEN"
+        return d, fk, work
+
+    def mkpr(d, name="p1", thread=THREAD, body=BODY, **kv):
+        h = {"owner": "o", "repo": "r", "number": "7", "thread": thread, "reviewer": "alice",
+             "author": "bob", "next-poll": PAST, "poll-since": SINCE, "ci-seen": "abc green"}
+        h.update(kv)
+        os.makedirs(os.path.join(d, "pr-grind"), exist_ok=True)
+        path = os.path.join(d, "pr-grind", name + ".md")
+        with open(path, "w") as f:
+            f.write("".join(f"{k}: {v}\n" for k, v in h.items() if v is not None) + body)
+        return path
+
+    def prior(work, thread=THREAD):
+        r = ui_sessions.create(f"/pr-grind {thread}", work)
+        return ui_sessions.update(r["id"], status="done")
+
+    def header(path):
+        out = {}
+        for ln in open(path).read().split("\n"):
+            if ln.startswith("## "):
+                break
+            k, sep, v = ln.partition(": ")
+            if sep:
+                out.setdefault(k, v)
+        return out
+
+    def tick(path, **kw):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            act = ui_runner.prgrind_tick(path, **kw) if "now" in kw else ui_runner.prgrind_tick(path, now=NOW)
+        return act, err.getvalue()
+
+    def ts(s):
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+
+    def lock_free(path):
+        with open(path[:-3] + ".lock", "a") as f:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def ghlog(fk):
+        p = os.path.join(fk, "gh.log")
+        return open(p).read() if os.path.exists(p) else ""
+
+    def case(fn):
+        try:
+            fn()
+            ok("prgrind: " + fn.__name__)
+        except BaseException as e:  # noqa: BLE001 - collect every red, not just the first
+            fails.append(fn.__name__)
+            print(f"  FAIL prgrind: {fn.__name__}: {type(e).__name__}: {e}")
+        finally:
+            reap(*all_sessions())
+            for p in extra_procs:
+                reap({"pid": p.pid})
+            extra_procs.clear()
+
+    def due_start():
+        d, fk, work = pset()
+        path = mkpr(d)
+        prior(work)
+        act, _ = tick(path)
+        assert act == "started", act
+        ss = all_sessions()
+        assert len(ss) == 2, ss
+        cmds = [r for r in ss if r["command"] == f"/pr-grind {THREAD}"]
+        assert len(cmds) == 2 and {r["repo"] for r in cmds} == {work}, ss
+        assert any(r["link"] == PR_URL for r in cmds), ss
+        wait_for(lambda: os.path.exists(os.path.join(fk, "headless")))
+        wait_for(lambda: lines(fk, "headless") != "")
+        assert lines(fk, "headless") == "1"
+        wait_for(lambda: os.path.exists(os.path.join(fk, "argv")) and lines(fk, "argv").endswith("\n"))
+        a = lines(fk, "argv")
+        parts = a.split("\n")
+        assert parts[:5] == ui_runner.CLAUDE_ARGS and parts[5] == "--append-system-prompt", parts
+        assert ui_runner.REENTRY_PROMPT in a and parts[-2] == f"/pr-grind {THREAD}", parts
+
+    def interactive_unchanged():
+        d, fk, work = pset()
+        os.environ.pop("AIW_HEADLESS", None)
+        rec = ui_runner.start("/run-issue 1", work)
+        wait_status(rec["id"], {"done", "failed"})
+        assert lines(fk, "argv").split("\n")[:-1] == ui_runner.CLAUDE_ARGS + ["/run-issue 1"]
+        assert lines(fk, "headless") == "UNSET"
+        assert ui_runner.PRGRIND_HEARTBEAT == 1500
+
+    def heartbeat_rewrite():
+        d, fk, work = pset("sleep")
+        extra = "paused-note: x\nqueued-push: abc\nci-attempt: 2 — red"
+        path = mkpr(d, **{"queued-push": "abc", "ci-attempt": "2 — red"})
+        prior(work)
+        before = open(path).read()
+        act, _ = tick(path)
+        assert act == "started", act
+        after = open(path).read()
+        assert header(path)["next-poll"] != PAST
+        assert abs((ts(header(path)["next-poll"]) - (NOW + timedelta(seconds=1500))).total_seconds()) < 2
+        assert after.replace(header(path)["next-poll"], PAST, 1) == before
+        assert after.split("## Round 1", 1)[1] == before.split("## Round 1", 1)[1]
+
+    def review_trigger():
+        d, fk, work = pset()
+        os.environ["FAKE_GH_REVIEWS"] = REV_NEW
+        path = mkpr(d, **{"next-poll": FUTURE})
+        prior(work)
+        act, _ = tick(path)
+        assert act == "started", act
+        assert header(path)["poll-since"] == "2030-06-01T11:00:00Z"
+        wait_for(lambda: all(r["status"] != "running" and r["status"] != "starting" for r in all_sessions()))
+        wait_for(lambda: not ui_runner._procs)
+        act2, _ = tick(path)
+        assert act2 != "started", act2
+
+    def ci_trigger():
+        d, fk, work = pset()
+        path = mkpr(d, **{"next-poll": FUTURE, "ci-seen": "abc pending"})
+        prior(work)
+        act, _ = tick(path)
+        assert act == "started", act
+        assert header(path)["ci-seen"] == "abc green", header(path)
+        wait_for(lambda: not ui_runner._procs)
+        d2, fk2, work2 = pset()
+        path2 = mkpr(d2, **{"next-poll": FUTURE, "ci-seen": None})
+        prior(work2)
+        act, _ = tick(path2)
+        assert act == "idle", act
+        assert header(path2).get("ci-seen"), "baseline not written"
+
+    def idle_releases():
+        d, fk, work = pset()
+        path = mkpr(d, **{"next-poll": FUTURE})
+        prior(work)
+        act, _ = tick(path)
+        assert act == "idle", act
+        assert len(all_sessions()) == 1
+        lock_free(path)
+
+    def poll_once():
+        d, fk, work = pset()
+        os.environ["FAKE_GH_REVIEWS"] = REV_NEW + "\n2030-06-01T11:30:00Z id=10 state=COMMENTED"
+        def run(extra):
+            p = subprocess.Popen(["bash", POLL, "o", "r", "7", "alice", SINCE, *extra],
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                 start_new_session=True)
+            extra_procs.append(p)
+            return p
+        p = run(["reviewer", "once"])
+        out, _ = p.communicate(timeout=10)
+        assert p.returncode == 0 and "id=9" in out and "id=10" in out, (p.returncode, out)
+        os.environ["FAKE_GH_REVIEWS"] = ""
+        p = run(["reviewer", "once"])
+        out, _ = p.communicate(timeout=10)
+        assert p.returncode == 0 and out.strip() == "", out
+        os.environ["FAKE_GH_REVIEWS"] = REV_NEW
+        p = run([])
+        time.sleep(2)
+        assert p.poll() is None, "default mode must keep looping"
+        os.killpg(p.pid, signal.SIGKILL)
+
+    def tick_all_scan():
+        d, fk, work = pset()
+        prior(work)
+        a = mkpr(d, "a")
+        mkpr(d, "b", paused="x")
+        mkpr(d, "c", done="y")
+        mkpr(d, "d", **{"next-poll": None})
+        open(os.path.join(d, "pr-grind", "e.lock"), "w").close()
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            res = ui_runner.prgrind_tick_all(now=NOW)
+        assert [(p, x) for p, x in res] == [(a, "started")], res
+
+    def timer_catchup():
+        d, fk, work = pset()
+        mkpr(d, **{"next-poll": REAL_PAST})
+        prior(work)
+        t = ui_runner.start_prgrind_timer(3600)
+        assert isinstance(t, threading.Thread) and t.daemon
+        wait_for(lambda: len(all_sessions()) >= 2, 10)
+
+    def empty_and_invalid():
+        d, fk, work = pset()
+        assert ui_runner.prgrind_tick_all(now=NOW) == []
+        os.makedirs(os.path.join(d, "pr-grind"))
+        empty = os.path.join(d, "pr-grind", "z.md")
+        open(empty, "w").close()
+        act, err = tick(empty)
+        assert act == "invalid" and err.strip(), (act, err)
+        for k in ("owner", "repo", "number", "thread"):
+            path = mkpr(d, "m" + k, **{k: None})
+            prior(work)
+            act, err = tick(path)
+            assert act == "invalid" and err.strip(), (k, act)
+        assert ghlog(fk) == ""
+        path = mkpr(d, "nopr", thread="https://acme.slack.com/archives/C0123/p99")
+        n = len(all_sessions())
+        act, err = tick(path)
+        assert act == "invalid" and err.strip() and len(all_sessions()) == n, (act, err)
+
+    def boundaries():
+        d, fk, work = pset()
+        prior(work)
+        eq = mkpr(d, "eq", **{"next-poll": "2030-06-01T12:00:00Z"})
+        assert tick(eq)[0] == "started"
+        wait_for(lambda: not ui_runner._procs)
+        plus = mkpr(d, "plus", **{"next-poll": "2030-06-01T12:00:00+00:00"})
+        assert tick(plus)[0] == "started"
+        wait_for(lambda: not ui_runner._procs)
+        early = mkpr(d, "early", **{"next-poll": "2030-06-01T12:00:01Z"})
+        assert tick(early)[0] == "idle"
+        bad = mkpr(d, "bad", **{"next-poll": "not-a-date"})
+        act, err = tick(bad)
+        assert act == "started" and err.strip(), (act, err)
+        assert abs((ts(header(bad)["next-poll"]) - (NOW + timedelta(seconds=1500))).total_seconds()) < 2
+
+    def unresolved_reviewer():
+        d, fk, work = pset()
+        path = mkpr(d, reviewer="UNRESOLVED", **{"next-poll": FUTURE})
+        prior(work)
+        assert tick(path)[0] == "idle"
+        log = ghlog(fk)
+        assert "api" in log and "LOGIN=bob" in log and "!=" in log, log
+
+    def race():
+        d, fk, work = pset("sleep")
+        path = mkpr(d)
+        prior(work)
+        bar = threading.Barrier(2)
+        out = []
+        def go():
+            bar.wait()
+            out.append(tick(path)[0])
+        ts_ = [threading.Thread(target=go) for _ in range(2)]
+        [t.start() for t in ts_]
+        [t.join(30) for t in ts_]
+        assert out.count("started") == 1, out
+        assert out.count("locked") + out.count("busy") == 1, out
+        assert len(all_sessions()) == 2
+
+    def lock_handoff():
+        d, fk, work = pset("sleep")
+        path = mkpr(d)
+        prior(work)
+        assert tick(path)[0] == "started"
+        child = [r for r in all_sessions() if r["pid"]][-1]
+        lockp = path[:-3] + ".lock"
+        with open(lockp, "a") as f:
+            try:
+                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                raise AssertionError("lock not held by child")
+            except BlockingIOError:
+                pass
+        assert tick(path)[0] in ("locked", "busy")
+        os.killpg(child["pid"], signal.SIGKILL)
+        wait_for(lambda: group_gone(child["pid"]), 10)
+        lock_free(path)
+
+    def restart_survival():
+        d, fk, work = pset("sleep")
+        path = mkpr(d, **{"next-poll": REAL_PAST})
+        prior(work)
+        code = ("import sys; sys.path.insert(0, %r); import ui_runner; "
+                "print(ui_runner.prgrind_tick(%r))" % (HERE, path))
+        out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
+        assert out.stdout.strip() == "started", (out.stdout, out.stderr)
+        kid = [r for r in ui_sessions.list_sessions() if r["pid"]][-1]
+        assert not group_gone(kid["pid"]), "child died with its starter"
+        assert tick(path)[0] in ("locked", "busy")
+        os.killpg(kid["pid"], signal.SIGKILL)
+        wait_for(lambda: group_gone(kid["pid"]), 10)
+        txt = open(path).read()
+        txt = txt.replace(header(path)["next-poll"], REAL_PAST, 1)
+        open(path, "w").write(txt)
+        out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
+        assert out.stdout.strip() == "started", (out.stdout, out.stderr)
+
+    def busy_and_stale():
+        d, fk, work = pset()
+        r = prior(work)
+        live = subprocess.Popen(["sleep", "300"], start_new_session=True)
+        extra_procs.append(live)
+        ui_sessions.update(r["id"], status="running", pid=live.pid)
+        path = mkpr(d)
+        assert tick(path)[0] == "busy"
+        dead = subprocess.Popen(["true"], start_new_session=True)
+        dead.wait()
+        ui_sessions.update(r["id"], status="running", pid=dead.pid)
+        assert tick(path)[0] == "started"
+
+    def merged_closed():
+        for st, word in (("MERGED", "merged"), ("CLOSED", "closed")):
+            d, fk, work = pset()
+            os.environ["FAKE_GH_STATE"] = st
+            path = mkpr(d)
+            prior(work)
+            assert tick(path)[0] == "done"
+            assert header(path)["done"].endswith(word), header(path)
+            assert len(all_sessions()) == 1
+            lock_free(path)
+            assert tick(path)[0] == "done"
+            assert ui_runner.prgrind_tick_all(now=NOW) == []
+
+    def gh_errors():
+        d, fk, work = pset()
+        os.environ["FAKE_GH_FAIL"] = "1"
+        path = mkpr(d)
+        prior(work)
+        before = open(path).read()
+        act, err = tick(path)
+        assert act == "error" and err.strip() and open(path).read() == before, (act, err)
+        assert len(all_sessions()) == 1
+        lock_free(path)
+        os.environ.pop("FAKE_GH_FAIL")
+        os.environ["FAKE_GH_REVIEWS"] = "gh: HTTP 500 server error"
+        path = mkpr(d, "q", **{"next-poll": FUTURE})
+        assert tick(path)[0] == "idle" and header(path)["poll-since"] == SINCE
+        import ci
+        with mock.patch.object(ci, "snapshot", side_effect=RuntimeError("ci boom")):
+            path = mkpr(d, "r", **{"next-poll": FUTURE})
+            act, err = tick(path)
+            assert act == "idle" and "ci boom" in err, (act, err)
+            path = mkpr(d, "s")
+            assert tick(path)[0] == "started"
+
+    def runner_error():
+        d, fk, work = pset(auth="out")
+        path = mkpr(d)
+        prior(work)
+        fds = len(os.listdir("/dev/fd"))
+        act, err = tick(path)
+        assert act == "error", act
+        lock_free(path)
+        assert len(os.listdir("/dev/fd")) <= fds, "fd leak"
+
+    def paused():
+        d, fk, work = pset()
+        path = mkpr(d, paused="ci red")
+        before = open(path).read()
+        assert tick(path)[0] == "paused"
+        assert ghlog(fk) == "" and open(path).read() == before and len(all_sessions()) == 0
+
+    def untrusted_headers():
+        d, fk, work = pset()
+        prior(work)
+        bad = [{"repo": "../../x"}, {"owner": "a/b"}, {"repo": ".."}, {"owner": "o;rm"},
+               {"number": "7x"}, {"number": "-1"}, {"thread": "http://acme.slack.com/archives/C0123/p1"},
+               {"thread": "https://x/y z"}, {"thread": "-https://x/y"}, {"thread": "https://x/y\x07z"},
+               {"thread": "https://x/y\tz"}]
+        for i, kv in enumerate(bad):
+            act, _ = tick(mkpr(d, f"u{i}", **kv))
+            assert act == "invalid", (kv, act)
+        assert ghlog(fk) == "" and len(all_sessions()) == 1
+        assert tick(mkpr(d, "slack"))[0] == "started"  # Slack thread URL is the real contract
+
+    def skill_sites():
+        text = open(SKILL).read()
+        assert "## Headless mode" in text, "no Headless mode section"
+        body = text.split("\n---\n", 1)[1]
+        blocks, cur = [], []
+        for ln in body.split("\n"):
+            if not ln.strip() or ln.lstrip().startswith("#") or (cur and (ln[:1].isdigit() or ln.lstrip().startswith("- ")) and not ln.startswith("   ")):
+                if cur:
+                    blocks.append("\n".join(cur))
+                cur = [ln] if ln.strip() and not ln.lstrip().startswith("#") else []
+            else:
+                cur.append(ln)
+        blocks.append("\n".join(cur))
+        sites = [b for b in blocks if "ScheduleWakeup(" in b
+                 or ("Monitor" in b and any(w in b for w in ("armed", "arming", "arm ")))]
+        assert len(sites) >= 8, len(sites)
+        bare = [b.strip().split("\n")[0][:70] for b in sites if "headless" not in b.lower()]
+        assert not bare, bare
+        assert text.count("ScheduleWakeup({delaySeconds: 1500") == 1
+        assert text.count("ScheduleWakeup({stop: true})") >= 2
+
+    for fn in (due_start, interactive_unchanged, heartbeat_rewrite, review_trigger, ci_trigger,
+               idle_releases, poll_once, tick_all_scan, timer_catchup, empty_and_invalid,
+               boundaries, unresolved_reviewer, race, lock_handoff, restart_survival,
+               busy_and_stale, merged_closed, gh_errors, runner_error, paused,
+               untrusted_headers, skill_sites):
+        case(fn)
+    os.environ["PATH"] = ORIG_PATH
+    if fails:
+        print(f"\n{len(fails)} prgrind case(s) FAILED: {', '.join(fails)}")
+    return len(fails)
+
+
+if "--prgrind" in sys.argv:
+    sys.exit(1 if prgrind_cases() else 0)
+
+def meta_bytes(sid):
+    return read(sid, "meta.json")
+
+
+def mk(status, pid, stream=None, **kw):
+    """Build a session record directly: status/pid + optional raw stream.jsonl text."""
+    r = ui_sessions.create("/x", tempfile.mkdtemp())
+    r = ui_sessions.update(r["id"], status=status, pid=pid, **kw)
+    if stream is not None:
+        with open(os.path.join(sdir(r["id"]), "stream.jsonl"), "w") as f:
+            f.write(stream)
+    return r["id"]
+
+
+def dead_pid():
+    p = subprocess.Popen(["true"])
+    p.wait()
+    return p.pid
+
+
+def detached(work):
+    helper = (
+        "import sys; sys.path.insert(0, %r); import ui_runner; "
+        "r = ui_runner.start('/run-issue 5', %r); print(r['id'], r['pid'])" % (HERE, work)
+    )
+    out = subprocess.run([sys.executable, "-c", helper], capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, out.stderr
+    sid, pid = out.stdout.split()
+    return sid, int(pid)
+
+
+def restart_cases():
+    import threading
+    OLD = "Thu Jan  1 00:00:00 1970"
+    S = INIT + "\n"
+
+    # live re-attach, success
+    d, fk, work = setup("sleep")
+    ui_runner._procs.clear()
+    sid, pid = detached(work)
+    try:
+        assert "pid_started" in ui_sessions.load(sid)
+        ui_runner.reconcile()
+        assert sid in ui_runner._procs and ui_runner._procs[sid] is None
+        open(os.path.join(fk, "go"), "w").close()
+        wait_for(lambda: b"LATE" in read(sid, "stream.jsonl"))
+        with open(os.path.join(fk, "finish"), "w") as f:
+            f.write("ok")
+        r = wait_status(sid, {"done", "failed"})
+        assert r["status"] == "done" and r["cost"] == 0.0421 and r["session_id"] == "sess-abc" \
+            and r["ended_at"], r
+        ok("live re-attach: LATE lands, finish -> done with cost/session_id/ended_at")
+    finally:
+        reap({"pid": pid})
+
+    # live re-attach, error; plus idempotent reconcile
+    d, fk, work = setup("sleep")
+    ui_runner._procs.clear()
+    sid, pid = detached(work)
+    try:
+        ui_runner.reconcile()
+        n = threading.active_count()
+        ui_runner.reconcile()
+        assert threading.active_count() == n and list(ui_runner._procs).count(sid) == 1
+        ok("reconcile twice re-attaches a live session once")
+        with open(os.path.join(fk, "finish"), "w") as f:
+            f.write("err")
+        r = wait_status(sid, {"done", "failed"})
+        assert r["status"] == "failed" and r["cost"] == 0.5, r
+        ok("live re-attach ending in is_error -> failed, cost 0.5")
+    finally:
+        reap({"pid": pid})
+
+    # stop() on re-attached session sticks
+    d, fk, work = setup("sleep")
+    ui_runner._procs.clear()
+    sid, pid = detached(work)
+    try:
+        ui_runner.reconcile()
+        assert ui_runner._procs[sid] is None
+        ui_runner.stop(sid)
+        assert group_gone(pid) and ui_sessions.load(sid)["status"] == "stopped"
+        wait_finished(sid)
+        time.sleep(0.5)
+        assert ui_sessions.load(sid)["status"] == "stopped"
+        ok("stop on re-attached session: stopped and stays stopped")
+    finally:
+        reap({"pid": pid})
+
+    # dead pid cases
+    d, fk, work = setup()
+    ui_runner._procs.clear()
+    base = threading.active_count()
+    a = mk("running", dead_pid(), S + ASSIST + "\n" + RESULT + "\n", pid_started=OLD)
+    b = mk("running", dead_pid(), S + RESULT_ERR + "\n", pid_started=OLD)
+    ui_runner.reconcile()
+    ra, rb = ui_sessions.load(a), ui_sessions.load(b)
+    assert ra["status"] == "done" and ra["ended_at"] and ra["cost"] == 0.0421, ra
+    assert rb["status"] == "failed" and "stderr.log" in rb["error"] \
+        and "exit code None" not in rb["error"], rb
+    assert a not in ui_runner._procs and b not in ui_runner._procs
+    assert threading.active_count() == base
+    ended = ra["ended_at"]
+    ui_runner.reconcile()
+    assert ui_sessions.load(a)["ended_at"] == ended
+    ok("dead pid: done / failed from stream, no _procs entry, no thread, ended_at stable")
+
+    # empty / null / junk
+    cases = {"empty": "", "junk": "garbage\n[1,2,3]\n42\n", "missing": None}
+    ids = {k: mk("running", dead_pid(), v, pid_started=OLD) for k, v in cases.items()}
+    ui_runner.reconcile()
+    for k, i in ids.items():
+        assert ui_sessions.load(i)["status"] == "failed", (k, ui_sessions.load(i))
+    ok("dead pid with empty/missing/junk stream -> failed")
+
+    # trailing partial result
+    i = mk("running", dead_pid(), S + RESULT, pid_started=OLD)
+    ui_runner.reconcile()
+    assert ui_sessions.load(i)["status"] == "done"
+    ok("dead pid, RESULT without trailing newline -> done")
+
+    # last result wins
+    i = mk("running", dead_pid(), S + RESULT_ERR + "\n" + RESULT + "\n", pid_started=OLD)
+    j = mk("running", dead_pid(), S + RESULT + "\n" + RESULT_ERR + "\n", pid_started=OLD)
+    ui_runner.reconcile()
+    assert ui_sessions.load(i)["status"] == "done" and ui_sessions.load(j)["status"] == "failed"
+    ok("several results: last wins")
+
+    # starting with no pid
+    i = mk("starting", None)
+    ui_runner.reconcile()
+    r = ui_sessions.load(i)
+    assert r["status"] == "failed" and "never started" in r["error"] and r["ended_at"], r
+    ok("starting with pid None -> failed, never started")
+
+    # recycled pid / legacy record: no signals, not re-attached
+    i = mk("running", os.getpid(), S + RESULT + "\n", pid_started=OLD)
+    j = mk("running", os.getpid(), S + RESULT_ERR + "\n")
+    with mock.patch("os.kill") as k, mock.patch("os.killpg") as kg:
+        ui_runner.reconcile()
+        assert not k.called and not kg.called
+    assert i not in ui_runner._procs and j not in ui_runner._procs
+    assert ui_sessions.load(i)["status"] == "done" and ui_sessions.load(j)["status"] == "failed"
+    ok("recycled pid and legacy (no pid_started) closed from stream, no signal")
+
+    # waiting and terminal untouched
+    w1 = mk("waiting", None)
+    w2 = mk("waiting", os.getpid())
+    t = [mk(st, os.getpid(), S + RESULT + "\n", pid_started=OLD) for st in ("done", "failed", "stopped")]
+    before = {x: meta_bytes(x) for x in [w1, w2] + t}
+    with mock.patch("subprocess.run", side_effect=AssertionError("ps called")), \
+            mock.patch("os.kill") as k, mock.patch("os.killpg") as kg:
+        ui_runner.reconcile()
+        assert not k.called and not kg.called
+    assert before == {x: meta_bytes(x) for x in before}
+    ok("waiting and terminal records byte-identical, no ps/signal")
+
+    # history order unchanged
+    mk("running", dead_pid(), S + RESULT + "\n", pid_started=OLD)
+    ids_before = [r["id"] for r in ui_sessions.list_sessions()]
+    ui_runner.reconcile()
+    assert [r["id"] for r in ui_sessions.list_sessions()] == ids_before
+    ok("list_sessions ids/order unchanged by reconcile")
+
+    # session owned by this process skipped
+    i = mk("running", dead_pid(), S + RESULT + "\n", pid_started=OLD)
+    fake = mock.Mock()
+    ui_runner._procs[i] = fake
+    n = threading.active_count()
+    ui_runner.reconcile()
+    assert ui_runner._procs[i] is fake and ui_sessions.load(i)["status"] == "running"
+    assert threading.active_count() == n
+    ui_runner._procs.pop(i)
+    ok("session already in _procs is skipped")
+
+    # error paths: corrupt meta, update raising, ps failing
+    d, fk, work = setup()
+    ui_runner._procs.clear()
+    bad = mk("running", dead_pid(), S + RESULT + "\n", pid_started=OLD)
+    with open(os.path.join(sdir(bad), "meta.json"), "w") as f:
+        f.write("{not json")
+    x = mk("running", dead_pid(), S + RESULT + "\n", pid_started=OLD)
+    y = mk("running", dead_pid(), S + RESULT + "\n", pid_started=OLD)
+    ui_runner.reconcile()
+    assert ui_sessions.load(x)["status"] == "done" and ui_sessions.load(y)["status"] == "done"
+    ok("corrupt meta.json skipped, others processed")
+
+    x = mk("running", dead_pid(), S + RESULT + "\n", pid_started=OLD)
+    y = mk("running", dead_pid(), S + RESULT + "\n", pid_started=OLD)
+    real_update = ui_sessions.update
+
+    def flaky(s, **kw):
+        if s == x:
+            raise OSError("disk boom")
+        return real_update(s, **kw)
+
+    with mock.patch.object(ui_sessions, "update", side_effect=flaky):
+        ui_runner.reconcile()
+    assert ui_sessions.load(y)["status"] == "done" and ui_sessions.load(x)["status"] == "running"
+    ok("update raising for one session: others still closed")
+
+    x = mk("running", os.getpid(), S + RESULT + "\n", pid_started=OLD)
+    with mock.patch("subprocess.run", side_effect=OSError("no ps")):
+        ui_runner.reconcile()
+    assert ui_sessions.load(x)["status"] == "done" and x not in ui_runner._procs
+    ok("ps missing: treated as not owned, closed from stream, no crash")
+
+    # legacy record (None / missing pid_started) + dead pid: returns promptly, closes from stream
+    import threading as _th
+    a = mk("running", dead_pid(), S + RESULT + "\n", pid_started=None)
+    b = mk("running", dead_pid(), S + RESULT_ERR + "\n")
+    t = _th.Thread(target=ui_runner.reconcile, daemon=True)
+    t.start()
+    t.join(15)
+    assert not t.is_alive(), "reconcile hung on legacy dead-pid record"
+    assert ui_sessions.load(a)["status"] == "done" and ui_sessions.load(b)["status"] == "failed"
+    assert a not in ui_runner._procs and b not in ui_runner._procs
+    ok("legacy record with dead pid: reconcile returns, closed from stream")
+
+    # transient ps errors while following a LIVE re-attached process: not failed, bounded
+    def follow_with(seq, sid_):
+        it = iter(seq)
+        with mock.patch.object(ui_runner, "POLL_SECONDS", 0.001), \
+                mock.patch.object(ui_runner, "_proc_start", lambda pid: next(it, None)):
+            t_ = _th.Thread(target=ui_runner._follow, args=(sid_, None, os.getpid(), "STARTED"),
+                            daemon=True)
+            t_.start()
+            t_.join(15)
+            assert not t_.is_alive(), "follower hung"
+
+    E = ui_runner._PS_ERROR
+    x = mk("running", os.getpid(), S + RESULT + "\n", pid_started="STARTED")
+    follow_with([E] * 24 + ["STARTED"] * 3 + [E] * 5 + ["STARTED"] * 2, x)  # errors reset on success
+    assert ui_sessions.load(x)["status"] == "done", ui_sessions.load(x)
+    ok("transient ps errors on live process: kept following (counter resets), ended normally")
+
+    y = mk("running", os.getpid(), S + "\n")
+    seen = []
+    it = iter([E] * 100)
+    with mock.patch.object(ui_runner, "POLL_SECONDS", 0.001), \
+            mock.patch.object(ui_runner, "_proc_start", lambda pid: seen.append(1) or next(it)):
+        t = _th.Thread(target=ui_runner._follow, args=(y, None, os.getpid(), "STARTED"), daemon=True)
+        t.start()
+        t.join(15)
+    assert not t.is_alive() and len(seen) == 26, len(seen)
+    assert ui_sessions.load(y)["status"] == "failed"
+    ok("persistent ps errors: bounded at 25, then treated as gone")
+
+    z = mk("running", os.getpid(), S + RESULT + "\n", pid_started="STARTED")
+    with mock.patch.object(ui_runner, "POLL_SECONDS", 0.001), \
+            mock.patch("subprocess.run", side_effect=OSError("no ps")):
+        t = _th.Thread(target=ui_runner._follow, args=(z, None, os.getpid(), "STARTED"), daemon=True)
+        t.start()
+        t.join(15)
+    assert not t.is_alive() and ui_sessions.load(z)["status"] == "done"
+    ok("subprocess.run OSError: follower terminates, no hang")
+
+
+if "--restart" in sys.argv:
+    restart_cases()
+    print(f"\n{passed} restart checks passed")
+    sys.exit(0)
 
 # ---- normal: full run -------------------------------------------------------
 d, fk, work = setup("normal")
@@ -627,6 +1330,7 @@ try:
     assert read(sid, "stream.jsonl") == (INIT + "\n" + ASSIST + "\n" + RESULT + "\n").encode()
     assert final["session_id"] == "sess-abc" and final["cost"] == 0.0421, final
     assert final["status"] == "done" and final["pid"] and final["ended_at"], final
+    assert isinstance(final.get("pid_started"), str) and final["pid_started"], final
     ok("normal run: stream bytes, session_id, cost, done, ended_at")
     assert lines(fk, "argv").split("\n")[:-1] == [
         "--print", "--output-format", "stream-json", "--verbose",
@@ -911,5 +1615,8 @@ finally:
     reap(*recs)
 
 answer_checks()
+if prgrind_cases():
+    sys.exit(1)
+restart_cases()
 
 print(f"\n{passed} checks passed")

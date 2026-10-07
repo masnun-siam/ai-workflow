@@ -439,7 +439,7 @@ Depends on: task 1   becomes   #101</pre>
 
   <div class="block">
     <h2>Tests</h2>
-    <p>Plain assert scripts, no framework, no network, no Docker: <code>python3 run-engine/test_engine.py</code>, <code>test_scripts.py</code>, <code>test_kanban.py</code>.</p>
+    <p>Plain assert scripts, no framework, no network, no Docker: <code>python3 run-engine/test_engine.py</code>, <code>test_scripts.py</code>, <code>test_ui_board.py</code>.</p>
   </div>
 
   <div class="note"><b>Known doc drift.</b> The final gate is "Gate 3" in <code>docs/HOW-IT-WORKS.md</code> but "GATE 2" in <code>commands/run-issue.md</code> section 9.3. <code>plugin.json</code> says 14 agents and the README says 12 <code>run-*</code> plus 3. The repo has 15 agent files (12 <code>run-*</code>, plus <code>ship</code>, <code>worklog-runner</code> and <code>gh-issue-factchecker</code>). Also, <code>commands/gh-issue.md</code> says the readiness check "blocks the run" on a gap, while <code>definition-of-ready.md</code> says it is advisory and only surfaces at Gate 1. This page follows <code>definition-of-ready.md</code>. This page uses the actual values.</div>
@@ -576,7 +576,7 @@ const AIW=[
  ["ci status","Green, red or pending, with the failing log"],["review pick","Choose which review carries the verdict in a grind round"],
  ["epic split|init|next|status","Epic dependency graph and sequencing"],["dispatch plan","Resolve the roster and run the Definition of Ready screen"],
  ["gitnexus sync|index|clean","Maintain the code graph (best-effort)"],["project-status · project-board","GitHub Projects v2 integration (best-effort)"],
- ["kanban serve","Live progress board, one column per Station"]
+ ["ui","Workflow control UI on 127.0.0.1; serves the Board as /board.json"]
 ];
 const RAILS=[
  ["Exactly three human gates","Plan approval, Gate 2a (only when needed), final handback. Anything else is recorded and reported, never asked."],

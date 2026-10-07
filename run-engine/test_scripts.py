@@ -3836,4 +3836,34 @@ assert "--dangerously-skip-permissions" in _t103 and "FR-10" in _t103, "#103 ski
 assert re.search(r"interactive", _t103, re.I) and re.search(r"unchanged", _t103, re.I), "#103 interactive unchanged"
 ok("#103 ADR headless question pause")
 
+# ---- #104 ADR: pr-grind headless re-entry ----
+_adr104 = os.path.join(HERE, "..", "docs", "adr", "0002-pr-grind-headless-reentry.md")
+assert os.path.isfile(_adr104), "#104 ADR missing: docs/adr/0002-pr-grind-headless-reentry.md"
+_t104 = open(_adr104, encoding="utf-8").read()
+_lo104 = _t104.lower()
+_l104 = [ln for ln in _t104.splitlines() if ln.strip()]
+assert _l104[0].startswith("Decision:"), "#104 first non-empty line must start with 'Decision:'"
+_h104 = {}
+for _n in ("Context", "Evidence", "Consequences"):
+    _m = re.search(r"^#+\s*" + _n + r"\b", _t104, re.M)
+    assert _m, "#104 missing heading " + _n
+    _h104[_n] = _m
+assert _t104.index("Decision:") < _h104["Context"].start() < _h104["Evidence"].start() < _h104["Consequences"].start(), "#104 heading order"
+_co104 = _t104[_h104["Consequences"].end():]
+assert "aiw ui" in _t104 and "timer" in _lo104, "#104 UI-side timer option"
+assert "launchd" in _lo104 or "cron" in _lo104, "#104 external scheduler option"
+assert re.search(r"reject", _t104, re.I), "#104 states a rejected option"
+for _k in ("ScheduleWakeup", "Monitor", "FR-16", "restart", "queued-push:", "paused:"):
+    assert _k in _t104, "#104 lacks " + _k
+assert "<owner>-<repo>-<pr>.md" in _t104 or "pr_grind_dir" in _t104, "#104 state file reused"
+for _k in ("merged", "closed", "waiting for reviewer", "waiting on you", "macos", "linux"):
+    assert _k in _lo104, "#104 lacks " + _k
+assert re.search(r"two re-entries|race|racing", _t104, re.I), "#104 race corner"
+assert "flock" in _t104 or "lock" in _lo104, "#104 lock"
+assert re.search(r"still running", _t104, re.I), "#104 still running corner"
+assert re.search(r"only while|not running", _t104, re.I), "#104 timer only while aiw ui runs"
+assert re.search(r"\b25\b", _co104), "#104 Consequences lacks task 25"
+assert re.search(r"interactive", _t104, re.I) and re.search(r"unchanged", _t104, re.I), "#104 interactive unchanged"
+ok("#104 ADR pr-grind headless re-entry")
+
 print(f"\n{passed} checks passed")
