@@ -1,5 +1,6 @@
 import { h, render, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
+import { Answer } from './answer.js';
 import { Board } from './board.js';
 import { History } from './history.js';
 
@@ -100,7 +101,7 @@ function View({ route, sessions }) {
       return html`<h1>Run</h1><p>${owner}/${repo}#${n}</p>`;
     }
     case 'answer':
-      return html`<h1>Answer</h1><p>Session ${route.params.session}</p>`;
+      return html`<${Answer} session=${route.params.session} key=${route.params.session} />`;
     case 'new':
       return html`<h1>New run</h1><p>Start a run here.</p>`;
     case 'sessions':
