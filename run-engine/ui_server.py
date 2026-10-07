@@ -10,11 +10,35 @@ from __future__ import annotations
 import errno
 import http.server
 import json
+import mimetypes
+import os
 import subprocess
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from shared import die
 from ui_board import build_board, fetch_title, load_projects, memoize_title_fetcher, scan_records
+
+
+STATIC_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ui_static")
+
+
+def _serve_static(handler, rel: str) -> None:
+    root = os.path.realpath(STATIC_DIR)
+    try:
+        # unquote once only: %252e stays literal; realpath containment (not string checks) blocks escapes
+        full = os.path.realpath(os.path.join(root, unquote(rel).lstrip("/")))
+        if os.path.commonpath([root, full]) != root or not os.path.isfile(full):
+            raise OSError
+        with open(full, "rb") as f:
+            body = f.read()
+    except (ValueError, OSError):
+        handler._send(404, "text/plain; charset=utf-8", b"not found")
+        return
+    ext = os.path.splitext(full)[1].lower()
+    ctype = "text/javascript" if ext in (".js", ".mjs") else mimetypes.guess_type(full)[0] or "application/octet-stream"
+    if ctype.startswith("text/"):
+        ctype += "; charset=utf-8"
+    handler._send(200, ctype, body, {"Cache-Control": "no-cache"})
 
 
 def _guard(handler) -> bool:
@@ -46,7 +70,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if not _guard(self):
             return
         path = urlsplit(self.path).path
-        if path == "/api/health":
+        if path == "/":
+            _serve_static(self, "index.html")
+        elif path.startswith("/static/"):
+            _serve_static(self, path[len("/static/"):])
+        elif path == "/api/health":
             self._send(200, "application/json; charset=utf-8", b'{"ok": true}')
         elif path == "/board.json":
             board = build_board(scan_records(), load_projects(), self.server.fetch_title)
