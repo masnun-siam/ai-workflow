@@ -18,13 +18,16 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qs, unquote, urlsplit
 
+import ui_cleanup
+import ui_dispatch
 import ui_events
 import ui_repos
 import ui_runner
 import ui_sessions
 import ui_settings
+import ui_status
 from shared import die
-from ui_board import build_board, fetch_title, load_projects, load_run, memoize_title_fetcher, scan_records
+from ui_board import build_board, fetch_title, load_projects, plausible_repo, load_run, memoize_title_fetcher, scan_records
 
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ui_static")
@@ -63,6 +66,12 @@ def _guard(handler) -> bool:
         handler._send(403, "text/plain; charset=utf-8", b"forbidden")
         return False
     return True
+
+
+def _can_browse(handler) -> bool:
+    """The folder dialog opens on the server's screen, so only offer it to a local macOS browser."""
+    host = (handler.headers.get("Host") or "").strip().lower().rsplit(":", 1)[0]
+    return sys.platform == "darwin" and host in ("127.0.0.1", "localhost")
 
 
 MAX_FREE_TEXT = 4000
@@ -161,11 +170,23 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(200, "application/json; charset=utf-8", b'{"ok": true}')
         elif path == "/board.json":
             board = build_board(scan_records(), load_projects(), self.server.fetch_title)
+            member = ui_dispatch.membership()
+            for column in board["columns"]:
+                for card in column["cards"]:
+                    card["gh"] = _gh_status(card["owner"], card["repo"], card["issue"], card["pr"], card["branch"])
+                    card["pipeline"] = member.get(f"{card['owner']}/{card['repo']}#{card['issue']}".lower())
             self._send(200, "application/json; charset=utf-8", json.dumps(board).encode("utf-8"))
         elif path == "/api/repos":
-            self._json(200, {"repos": ui_repos.list_repos()})
+            self._json(200, {"repos": ui_repos.list_repos(), "can_browse": _can_browse(self)})
         elif path == "/api/settings":
             self._json(200, ui_settings.load())
+        elif path == "/api/cleanup":
+            self._json(200, {"items": list(_TITLE_POOL.map(ui_cleanup.describe, ui_cleanup.find_targets()))})
+        elif path == "/api/pipelines":
+            self._json(200, {"pipelines": [ui_dispatch.summary(p) for p in ui_dispatch.list_all()]})
+        elif path.startswith("/api/pipelines/"):
+            body = ui_dispatch.detail(path.split("/")[3], _gh_status) if len(path.split("/")) == 4 else None
+            self._json(200, body) if body else self._json(404, {"error": "not found"})
         elif path == "/api/sessions":
             body = {"sessions": [_public(r) for r in ui_sessions.list_sessions()],
                     "limits": ui_runner.limits()}
@@ -189,6 +210,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(404, "text/plain; charset=utf-8", b"not found")
             return
         body["title"] = self.server.fetch_title(owner, repo, int(n))
+        body["gh"] = _gh_status(owner, repo, int(n), body["pr"], body["branch"])
         self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
 
     def _session(self, sid: str, stream: bool) -> None:
@@ -235,6 +257,26 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         parts = urlsplit(self.path).path.split("/")
         if parts == ["", "api", "sessions"]:
             self._start()
+        elif parts == ["", "api", "repos", "browse"]:
+            body = self._read_body()
+            if body is None:
+                return
+            if _can_browse(self):
+                self._json(200, {"path": ui_repos.browse_folder(body.get("start"))})
+            else:
+                self._json(403, {"error": "folder picker is only available locally on macOS"})
+        elif parts == ["", "api", "cleanup"]:
+            self._cleanup()
+        elif parts[:3] == ["", "api", "dispatch"] and parts[3:] == ["preview"]:
+            self._dispatch(lambda b: ui_dispatch.preview(b.get("input"), b.get("repo")))
+        elif parts == ["", "api", "pipelines"]:
+            self._dispatch(ui_dispatch.create, 201)
+        elif len(parts) == 5 and parts[:3] == ["", "api", "pipelines"] and parts[4] == "delete":
+            self._dispatch(lambda b: ui_dispatch.delete(parts[3]) or {"ok": True})
+        elif len(parts) == 5 and parts[:3] == ["", "api", "pipelines"]:
+            self._dispatch(lambda b: ui_dispatch.act(parts[3], parts[4], b))
+        elif len(parts) == 7 and parts[:3] == ["", "api", "pipelines"] and parts[4] == "items" and parts[5].isdigit():
+            self._dispatch(lambda b: ui_dispatch.act(parts[3], parts[6], b, issue=int(parts[5])))
         elif parts == ["", "api", "settings", "test"]:
             body = self._read_body()
             if body is not None:
@@ -247,6 +289,36 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             {"stop": self._stop, "resume": self._resume, "cancel-auto": self._cancel_auto}[parts[4]](parts[3])
         else:
             self._method_not_allowed(guarded=True)
+
+    def _dispatch(self, fn, ok: int = 200) -> None:
+        """Run a ui_dispatch call on the JSON body, mapping its errors to HTTP statuses."""
+        body = self._read_body()
+        if body is None:
+            return
+        try:
+            self._json(ok, fn(body))
+        except ui_dispatch.NotFound:
+            self._json(404, {"error": "not found"})
+        except ui_dispatch.Conflict as e:
+            self._json(409, {"error": str(e)})
+        except (ValueError, TypeError) as e:
+            self._json(400, {"error": str(e)})
+
+    def _cleanup(self) -> None:
+        body = self._read_body()
+        if body is None:
+            return
+        asked = body.get("items")
+        if not isinstance(asked, list) or not all(isinstance(a, dict) and isinstance(a.get("key"), str) for a in asked):
+            self._json(400, {"error": "items must be a list of {key, force?}"})
+            return
+        targets = {t["key"]: t for t in ui_cleanup.find_targets()}  # re-derived: the client never names paths
+        results = [
+            ui_cleanup.clean(targets[a["key"]], a.get("force") is True) if a["key"] in targets
+            else {"key": a["key"], "ok": False, "error": "not cleanable (gone, live, or escalated)"}
+            for a in asked
+        ]
+        self._json(200, {"results": results})
 
     def _stop(self, sid: str) -> None:
         try:
@@ -420,6 +492,15 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 _TITLE_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="title")
 
 
+def _gh_status(owner, repo, issue, pr, branch):
+    if not plausible_repo(owner, repo):
+        return None
+    # ledger values reach `gh` argv: only https PR URLs and non-option branch names
+    pr = pr if isinstance(pr, str) and pr.startswith("https://") else None
+    branch = branch if isinstance(branch, str) and branch and not branch.startswith("-") else None
+    return ui_status.get(owner, repo, issue, pr, branch, _TITLE_POOL)
+
+
 class _Server(http.server.ThreadingHTTPServer):
     # macOS lets a 127.0.0.1 bind succeed while another process holds 0.0.0.0:<port> when reuse is on
     allow_reuse_address = False
@@ -458,6 +539,8 @@ def cmd_serve(args) -> None:
         if holder:
             die(1, f"port {port} is already in use by PID {holder[0]} ({holder[1]}) — stop it or pass --port")
         die(1, f"port {port} is already in use (http://127.0.0.1:{port}/) — stop it or pass --port")
+    ui_runner.reconcile()  # re-attach sessions that outlived the last UI, close the ones that died
+    ui_dispatch.start_timer()  # advance dispatch pipelines (needs reconciled session states)
     ui_runner.start_limit_timer()  # auto-resume limited runs, incl. catch-up of resets missed while down
     print(f"serving http://127.0.0.1:{server.server_address[1]}/ — Ctrl+C to stop")
     if extras:

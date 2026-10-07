@@ -17,7 +17,8 @@ from shared import data_dir, warn
 
 TIMEOUT_SECONDS = 5
 
-_TITLES = {"waiting": "aiw: waiting on you", "done": "aiw: run done", "failed": "aiw: session failed"}
+_TITLES = {"waiting": "aiw: waiting on you", "done": "aiw: run done", "failed": "aiw: session failed",
+           "pipeline": "aiw: pipeline finished"}
 
 
 def load_config() -> dict:
@@ -55,6 +56,8 @@ def click_url(event: str, rec: dict, public_url) -> str | None:
     if not public_url:
         return None
     base = str(public_url).rstrip("/")
+    if event == "pipeline":
+        return f"{base}/#/dispatch/{quote(str(rec['id']), safe='')}"
     if event == "waiting":
         return f"{base}/#/answer/{quote(str(rec['id']), safe='')}"
     link = rec.get("link")
