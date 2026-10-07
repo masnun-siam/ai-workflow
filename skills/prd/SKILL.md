@@ -24,6 +24,31 @@ Why this order matters: scanning before interviewing means the questions are inf
 - `<requirement>`: free text, a BRD file, an Obsidian note, a Sentry link or a GitHub issue URL.
 - `--to`: one or more destinations. Default `local`. If the user passes none, still use `local` as the preselected default, but ask once at the end (Step 6) whether to add the others.
 
+### Asking the user
+
+A headless run (started from the workflow UI) has no terminal to answer in, so
+`AskUserQuestion` is not available there. You are headless when your system prompt contains
+`Headless run: ask via aiw ask`. At every question below, the same header, question and options
+are used either way; only the transport differs.
+
+- **Headless:** call the command below. Use the quoted heredoc: question text may embed arbitrary
+  text, so never put it inside single quotes on the command line. Starts with `aiw `.
+
+  ```
+  # one call per round
+  aiw ask <<'EOF'
+  {"questions":[{"header":"...","question":"...","multiSelect":false,"options":[{"label":"...","description":"..."}]}]}
+  EOF
+  ```
+
+  Any other stop-and-ask in this skill also goes through `aiw ask` when headless, never prose. List the recommended option first with `(Recommended)` on its label. Free text is
+  always allowed. Then end your turn immediately and do nothing else; the answer arrives as
+  your next message, `Answer to q-...: {"0":{"labels":["..."]}}` or
+  `{"0":{"other":"free text"}}`. Strip any ` (Recommended)` suffix from the label and take
+  the same branch the interactive answer would. Free text that names no option is feedback for
+  that question, never an approval.
+- **Otherwise:** not headless, so skip `aiw ask` and call AskUserQuestion exactly as written at the question.
+
 ## Step 1: Normalise the input
 
 Free text → use as is. Anything else (file path, Obsidian note, URL) → run `/intake` on it and use its brief as the requirement. Don't re-implement parsing here.
@@ -40,7 +65,7 @@ Interviewing for ten minutes and then discovering a PRD already exists wastes th
 | obsidian | `obsidian vault=notes file path="05-Work/<Project>/<Feature>/PRD.md"` — prints `Error: ... not found` (exit code 0) when missing, so read the output text |
 | wiki | after cloning (Step 7), look for `PRD-<Title-With-Dashes>.md`; for an early check use `git ls-remote` only to confirm the wiki exists, and defer the page check to the clone |
 
-If a PRD already exists anywhere: **stop and ask the user** what to do (read it and update it, pick a new name, skip that destination). Never overwrite silently. If they choose to update, read the existing PRD before Step 4 so the interview builds on it and keeps earlier decisions.
+If a PRD already exists anywhere: **stop and ask the user** (headless: `aiw ask`, then end your turn) what to do (read it and update it, pick a new name, skip that destination). Never overwrite silently. If they choose to update, read the existing PRD before Step 4 so the interview builds on it and keeps earlier decisions.
 
 For Obsidian, also resolve the project and feature folder here, the same way `dump` does:
 
@@ -55,7 +80,7 @@ Follow the repo's own search rules if its CLAUDE.md names a preferred code-searc
 
 ## Step 4: Grill
 
-Invoke the `grilling` skill via the Skill tool, passing the requirement, the scan summary and the starting design tree below. Let grilling run its own rounds and its own rule about facts vs decisions: when a question needs a fact from the code, look it up (sub-agent) instead of asking the user. The interview ends only when the user confirms shared understanding.
+Invoke the `grilling` skill via the Skill tool, passing the requirement, the scan summary and the starting design tree below. Let grilling run its own rounds and its own rule about facts vs decisions: when a question needs a fact from the code, look it up (sub-agent) instead of asking the user. The interview ends only when the user confirms shared understanding. Headless, the interview is the same but every round goes through `aiw ask`, then end your turn: one `aiw ask` per grilling round, one question per numbered question (header `Q<n>`, `multiSelect` false), options are the choices the question names with the recommended first, and a question naming no choices carries its recommended answer as the single option.
 
 Starting tree. Each branch unlocks the ones below it, so ask the top ones first:
 
@@ -99,7 +124,7 @@ The Obsidian copy additionally gets tag frontmatter and full-path wikilinks in `
 
 ## Step 6: Review gate — always
 
-Show the **full** draft, plus for each chosen destination the exact path it will be written to (and, for Obsidian, the resolved project/feature folder and whether it is new). Wait for an explicit OK. Apply any edits and show the changed draft again until the user approves. If `--to` was not given, ask here whether to also save to Obsidian and/or the wiki.
+Show the **full** draft (if headless, put the draft in the question text and use `aiw ask`, then end your turn), plus for each chosen destination the exact path it will be written to (and, for Obsidian, the resolved project/feature folder and whether it is new). Wait for an explicit OK. Apply any edits and show the changed draft again until the user approves. If `--to` was not given, ask here whether to also save to Obsidian and/or the wiki.
 
 Nothing is written anywhere before this approval. The wiki push needs its own explicit confirmation in Step 7, because pushing to a wiki publishes it.
 
@@ -118,7 +143,7 @@ obsidian vault=notes append path="05-Work/<Project>/Index.md" content="- [[05-Wo
 
 Read a sibling's tags first to reuse the feature slug, and list existing siblings (Dump, Decisions, SRS…) in `## Related`. Add the PRD line to existing siblings' Related blocks as dump does. The project tag table lives in dump's SKILL.md.
 
-**wiki** — only after a final "push to the wiki?" confirmation:
+**wiki** — only after a final "push to the wiki?" confirmation (if headless, `aiw ask` it, then end your turn):
 
 1. `git clone --depth 1 https://github.com/<owner>/<repo>.wiki.git` into the scratchpad directory (the wiki's default branch is usually `master`; check with `git branch --show-current`).
 2. Write `PRD-<Title-With-Dashes>.md`. Stop and ask if it already exists.
