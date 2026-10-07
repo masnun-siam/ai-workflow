@@ -152,7 +152,8 @@ port = srv.server_address[1]
 HOST = f"127.0.0.1:{port}"
 ALLOWED = {"id", "command", "repo", "link", "session_id", "outcome", "cost",
            "started_at", "ended_at", "waiting", "pending_question", "error",
-           "resumed_fresh", "note", "terminal_handoff", "pending_answer"}
+           "resumed_fresh", "note", "terminal_handoff", "pending_answer",
+           "repo_path", "resume_command"}
 
 
 def req(path, method="GET", host=HOST, origin=None):
