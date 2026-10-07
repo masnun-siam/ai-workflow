@@ -10,11 +10,43 @@ from __future__ import annotations
 import errno
 import http.server
 import json
+import mimetypes
+import os
 import subprocess
-from urllib.parse import urlsplit
+import sys
+from urllib.parse import parse_qs, unquote, urlsplit
 
+import ui_events
+import ui_runner
+import ui_sessions
 from shared import die
-from ui_board import build_board, fetch_title, load_projects, memoize_title_fetcher, scan_records
+from ui_board import build_board, fetch_title, load_projects, load_run, memoize_title_fetcher, scan_records
+
+
+STATIC_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ui_static")
+
+
+def _serve_static(handler, rel: str) -> None:
+    root = os.path.realpath(STATIC_DIR)
+    try:
+        # unquote once only: %252e stays literal; realpath containment (not string checks) blocks escapes
+        full = os.path.realpath(os.path.join(root, unquote(rel).lstrip("/")))
+        if os.path.commonpath([root, full]) != root or not os.path.isfile(full):
+            raise FileNotFoundError
+        with open(full, "rb") as f:
+            body = f.read()
+    except (ValueError, FileNotFoundError, IsADirectoryError):
+        handler._send(404, "text/plain; charset=utf-8", b"not found")
+        return
+    except OSError as e:  # e.g. PermissionError: broken install, not a missing file
+        print(f"ui_server: cannot read {rel!r}: {e}", file=sys.stderr)
+        handler._send(500, "text/plain; charset=utf-8", b"internal error")
+        return
+    ext = os.path.splitext(full)[1].lower()
+    ctype = "text/javascript" if ext in (".js", ".mjs") else mimetypes.guess_type(full)[0] or "application/octet-stream"
+    if ctype.startswith("text/"):
+        ctype += "; charset=utf-8"
+    handler._send(200, ctype, body, {"Cache-Control": "no-cache"})
 
 
 def _guard(handler) -> bool:
@@ -27,6 +59,66 @@ def _guard(handler) -> bool:
         handler._send(403, "text/plain; charset=utf-8", b"forbidden")
         return False
     return True
+
+
+MAX_FREE_TEXT = 4000
+MAX_BODY = 65536
+
+
+def _answer_text(pending: dict, answers) -> str:
+    """Validate answers against the pending round; return the text to resume with."""
+    qs = pending["questions"]
+    if not isinstance(answers, dict) or set(answers) != {str(i) for i in range(len(qs))}:
+        raise ValueError("answers must be an object with exactly one entry per question index")
+    out = {}
+    for i, q in enumerate(qs):
+        a = answers[str(i)]
+        if not isinstance(a, dict) or len(a) != 1 or next(iter(a)) not in ("labels", "other"):
+            raise ValueError(f"answer {i} must be exactly one of labels or other")
+        if "labels" in a:
+            labels = a["labels"]
+            valid = {o["label"] for o in q["options"]}
+            if not isinstance(labels, list) or not labels or not all(isinstance(l, str) for l in labels):
+                raise ValueError(f"answer {i}: labels must be a non-empty list of strings")
+            if len(set(labels)) != len(labels):
+                raise ValueError(f"answer {i}: duplicate labels")
+            if not q["multiSelect"] and len(labels) > 1:
+                raise ValueError(f"answer {i}: only one label allowed")
+            if any(l not in valid or "\0" in l for l in labels):
+                raise ValueError(f"answer {i}: label is not an option of this question")
+            out[str(i)] = {"labels": labels}
+        else:
+            other = a["other"]
+            if not q.get("allowFreeText", True):
+                raise ValueError(f"answer {i}: free text not allowed")
+            if not isinstance(other, str) or not other.strip() or "\0" in other:
+                raise ValueError(f"answer {i}: free text must be a non-empty string without NUL")
+            if len(other) > MAX_FREE_TEXT:
+                raise ValueError(f"answer {i}: free text over the {MAX_FREE_TEXT} character cap")
+            out[str(i)] = {"other": other}
+    text = f"Answer to {pending['id']}: " + json.dumps(out, ensure_ascii=False, separators=(",", ":"))
+    try:
+        text.encode("utf-8")  # lone surrogates can't be passed as argv
+    except UnicodeEncodeError:
+        raise ValueError("free text must be valid UTF-8") from None
+    return text
+
+
+def _public(rec: dict) -> dict:
+    return {
+        "id": rec.get("id"),
+        "command": rec.get("command"),
+        "repo": rec.get("repo"),
+        "link": rec.get("link"),
+        "session_id": rec.get("session_id"),
+        "outcome": rec.get("status"),
+        "cost": rec.get("cost"),
+        "started_at": rec.get("started_at"),
+        "ended_at": rec.get("ended_at"),
+        "waiting": rec.get("pending_question") is not None,
+        "pending_question": rec.get("pending_question"),
+        "error": rec.get("error"),
+    }
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
@@ -46,16 +138,148 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if not _guard(self):
             return
         path = urlsplit(self.path).path
-        if path == "/api/health":
+        if path == "/":
+            _serve_static(self, "index.html")
+        elif path.startswith("/static/"):
+            _serve_static(self, path[len("/static/"):])
+        elif path == "/api/health":
             self._send(200, "application/json; charset=utf-8", b'{"ok": true}')
         elif path == "/board.json":
             board = build_board(scan_records(), load_projects(), self.server.fetch_title)
             self._send(200, "application/json; charset=utf-8", json.dumps(board).encode("utf-8"))
+        elif path == "/api/sessions":
+            body = {"sessions": [_public(r) for r in ui_sessions.list_sessions()]}
+            self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
         else:
-            self._send(404, "text/plain; charset=utf-8", b"not found")
+            parts = path.split("/")
+            if len(parts) in (4, 5) and parts[:3] == ["", "api", "sessions"] and (len(parts) == 4 or parts[4] == "stream"):
+                self._session(parts[3], len(parts) == 5)
+            elif len(parts) == 6 and parts[:3] == ["", "api", "runs"]:
+                self._run(parts[3], parts[4], parts[5])
+            else:
+                self._send(404, "text/plain; charset=utf-8", b"not found")
 
-    def _method_not_allowed(self):
+    def _run(self, owner: str, repo: str, n: str) -> None:
+        try:
+            body = load_run(owner, repo, n)
+        except ValueError:
+            self._send(400, "text/plain; charset=utf-8", b"bad run id")
+            return
+        if body is None:
+            self._send(404, "text/plain; charset=utf-8", b"not found")
+            return
+        self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
+
+    def _session(self, sid: str, stream: bool) -> None:
+        try:
+            rec = ui_sessions.load(sid)
+        except ValueError:
+            rec = None
+        if rec is None:
+            self._send(404, "text/plain; charset=utf-8", b"not found")
+            return
+        if not stream:
+            body = _public(rec)
+        else:
+            raw = parse_qs(urlsplit(self.path).query, keep_blank_values=True).get("offset", ["0"])[0]
+            try:
+                offset = int(raw)
+            except ValueError:
+                offset = -1
+            if offset < 0:
+                self._send(400, "text/plain; charset=utf-8", b"bad offset")
+                return
+            sp = os.path.join(ui_sessions.session_dir(sid), "stream.jsonl")
+            events, new_offset = ui_events.read_from(sp, offset)
+            if rec.get("status") in ("done", "failed", "stopped"):
+                # terminal session: no more writes, so an unterminated last line is complete
+                try:
+                    with open(sp, "rb") as f:
+                        f.seek(new_offset)
+                        tail = f.read()
+                except FileNotFoundError:
+                    tail = b""
+                if tail:
+                    events += ui_events.parse_line(tail)
+                    new_offset += len(tail)
+            body = {"events": events, "offset": new_offset}
+        self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
+
+    def _json(self, status: int, body: dict) -> None:
+        self._send(status, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
+
+    def do_POST(self):
         if not _guard(self):
+            return
+        parts = urlsplit(self.path).path.split("/")
+        if len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] == "answer":
+            self._answer(parts[3])
+        else:
+            self._method_not_allowed(guarded=True)
+
+    def _answer(self, sid: str) -> None:
+        try:
+            rec = ui_sessions.load(sid)
+        except ValueError:
+            rec = None
+        if rec is None:
+            self._json(404, {"error": "not found"})
+            return
+        if not (self.headers.get("Content-Type") or "").lower().startswith("application/json"):
+            self._json(415, {"error": "Content-Type must be application/json"})
+            return
+        try:
+            length = int(self.headers.get("Content-Length"))
+        except (TypeError, ValueError):
+            self._json(400, {"error": "Content-Length required"})
+            return
+        if length < 0:
+            self._json(400, {"error": "bad Content-Length"})
+            return
+        if length > MAX_BODY:
+            self._json(413, {"error": f"body over {MAX_BODY} bytes"})
+            return
+        try:
+            body = json.loads(self.rfile.read(length))
+        except ValueError:
+            body = None
+        if not isinstance(body, dict):
+            self._json(400, {"error": "body must be a JSON object"})
+            return
+        pending = rec.get("pending_question")
+        if rec.get("status") != "waiting" or not isinstance(pending, dict):
+            self._json(409, {"error": "session is not waiting for an answer"})
+            return
+        if sid in ui_runner._procs:
+            self._json(409, {"error": "session process is still running"})
+            return
+        if not rec.get("session_id"):
+            self._json(409, {"error": "session has no claude session_id to resume"})
+            return
+        round_id = body.get("round_id")
+        if not isinstance(round_id, str) or not round_id:
+            self._json(400, {"error": "round_id required"})
+            return
+        if round_id != pending.get("id"):
+            self._json(409, {"error": "round_id is not the current pending round"})
+            return
+        try:
+            text = _answer_text(pending, body.get("answers"))
+        except ValueError as e:
+            self._json(400, {"error": str(e)})
+            return
+        if ui_sessions.claim_answer(sid, round_id) is None:
+            self._json(409, {"error": "round already answered"})
+            return
+        try:
+            rec = ui_runner.resume(sid, text)
+        except (ui_runner.RunnerError, ValueError, OSError) as e:
+            self._json(500, {"error": str(e)})
+            return
+        self._json(200, _public(rec))
+
+    def _method_not_allowed(self, guarded: bool = False):
+        if not guarded and not _guard(self):
             return
         if self.command == "HEAD":
             self.send_response(405)
@@ -66,7 +290,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(405, "text/plain; charset=utf-8", b"method not allowed", {"Allow": "GET"})
 
     # every verb needs a do_* or stdlib answers 501 before _guard runs
-    do_POST = do_PUT = do_DELETE = do_PATCH = do_HEAD = do_OPTIONS = do_TRACE = do_CONNECT = _method_not_allowed
+    do_PUT = do_DELETE = do_PATCH = do_HEAD = do_OPTIONS = do_TRACE = do_CONNECT = _method_not_allowed
 
 
 class _Server(http.server.ThreadingHTTPServer):
