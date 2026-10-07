@@ -8,6 +8,7 @@ from __future__ import annotations
 import http.client
 import mimetypes
 import os
+import pathlib
 import re
 import shutil
 import sys
@@ -60,6 +61,194 @@ threading.Thread(target=srv.serve_forever, daemon=True).start()
 port = srv.server_address[1]
 tmp = tempfile.mkdtemp()
 real_static = getattr(ui_server, "STATIC_DIR", None)
+SHELL = sys.argv[1:3] == ["--view", "shell"]
+
+NODE_JS = r"""
+const { parseRoute, waitingInfo, poll } = await import(process.env.APP_URL);
+const assert = (await import('node:assert')).strict;
+const out = (n) => console.log('ok ' + n);
+const tick = () => new Promise((r) => setImmediate(r));
+out('import without document does not throw');
+
+const nm = (h) => parseRoute(h).name;
+assert.equal(nm('#/'), 'board');
+const run = parseRoute('#/run/acme/web/42');
+assert.equal(run.name, 'run');
+assert.deepEqual({ ...run.params }, { owner: 'acme', repo: 'web', n: 42 });
+const ans = parseRoute('#/answer/abc123');
+assert.equal(ans.name, 'answer');
+assert.equal(ans.params.session, 'abc123');
+assert.equal(nm('#/new'), 'new');
+assert.equal(nm('#/sessions'), 'sessions');
+out('parseRoute normal routes');
+
+assert.equal(nm(''), 'board');
+assert.equal(nm('#'), 'board');
+out('parseRoute empty hash is board');
+
+for (const h of ['#/run/acme/web', '#/run/acme/web/0', '#/run/acme/web/-1', '#/run/acme/web/4x',
+  '#/run/a/b/1/extra', '#/answer/', '#/bogus']) assert.equal(nm(h), 'notfound', h);
+out('parseRoute boundary routes are notfound');
+
+assert.equal(nm('#/sessions/'), 'sessions');
+assert.equal(parseRoute('#/answer/a%20b').params.session, 'a b');
+assert.equal(nm('#/answer/%E0%A4%A'), 'notfound');
+out('parseRoute trailing slash, decoding, malformed escape');
+
+const mk = (id, status) => (status === undefined ? { id } : { id, status });
+const list = [mk('a', 'running'), mk('b', 'waiting'), mk('c', 'done'), mk('d', 'waiting')];
+assert.deepEqual({ ...waitingInfo(list) }, { count: 2, firstId: 'b' });
+out('waitingInfo counts waiting, first in API order');
+assert.deepEqual({ ...waitingInfo([]) }, { count: 0, firstId: null });
+assert.equal(waitingInfo([mk('x'), mk('y')]).count, 0);
+out('waitingInfo empty and missing status');
+for (const bad of [null, {}, { sessions: 5 }, 'str', undefined]) assert.equal(waitingInfo(bad).count, 0);
+assert.deepEqual({ ...waitingInfo({ sessions: list }) }, { count: 2, firstId: 'b' });
+out('waitingInfo non-array bodies and {sessions:[]}');
+
+// poll harness
+const doc = { hidden: false, ls: {}, addEventListener(t, f) { (this.ls[t] ||= []).push(f); },
+  removeEventListener(t, f) { this.ls[t] = (this.ls[t] || []).filter((x) => x !== f); } };
+const fire = (t) => (doc.ls[t] || []).slice().forEach((f) => f());
+globalThis.document = doc;
+let timers = [], tid = 0, calls = [], pend = [];
+globalThis.setTimeout = (fn, ms) => { const t = { id: ++tid, fn, ms }; timers.push(t); return t.id; };
+globalThis.clearTimeout = (id) => { timers = timers.filter((t) => t.id !== id); };
+globalThis.fetch = (u) => { calls.push(u); return new Promise((res, rej) => pend.push({ res, rej })); };
+const resp = (ok, status, body) => ({ ok, status, json: async () => { if (body instanceof Error) throw body; return body; } });
+const results = [];
+const stop = poll('/api/sessions', 1000, (r) => results.push(r));
+assert.equal(calls.length, 1); assert.equal(calls[0], '/api/sessions');
+assert.equal(timers.length, 0);
+await tick();
+assert.equal(timers.length, 0, 'no overlap while request in flight');
+pend.shift().res(resp(true, 200, [1]));
+await tick();
+assert.deepEqual(results.at(-1), { ok: true, data: [1] });
+assert.equal(timers.length, 1);
+out('poll fetches immediately, schedules after settle');
+
+timers.shift().fn();
+assert.equal(calls.length, 2);
+assert.equal(timers.length, 0);
+doc.hidden = true;
+pend.shift().res(resp(true, 200, []));
+await tick();
+assert.equal(timers.length, 0, 'nothing scheduled while hidden');
+out('poll schedules nothing while hidden');
+
+doc.hidden = false; fire('visibilitychange');
+assert.equal(calls.length, 3, 'visible fetches immediately');
+pend.shift().res(resp(true, 200, []));
+await tick();
+assert.equal(timers.length, 1);
+doc.hidden = true; fire('visibilitychange');
+assert.equal(timers.length, 0, 'hidden clears pending timer');
+doc.hidden = false; fire('visibilitychange');
+assert.equal(calls.length, 4);
+pend.shift().res(resp(true, 200, []));
+await tick();
+assert.equal(timers.length, 1, 'schedule resumed');
+out('poll visibilitychange clears and resumes');
+
+// errors
+timers.shift().fn(); pend.shift().rej(new Error('net')); await tick();
+assert.equal(results.at(-1).ok, false); assert.equal(timers.length, 1);
+timers.shift().fn(); pend.shift().res(resp(false, 404, {})); await tick();
+assert.equal(results.at(-1).ok, false); assert.equal(timers.length, 1);
+timers.shift().fn(); pend.shift().res(resp(true, 200, new SyntaxError('bad'))); await tick();
+assert.equal(results.at(-1).ok, false); assert.equal(timers.length, 1);
+timers.shift().fn(); pend.shift().res(resp(true, 200, [2])); await tick();
+assert.deepEqual(results.at(-1), { ok: true, data: [2] });
+assert.equal(timers.length, 1);
+out('poll reports failures as ok:false, keeps polling, recovers');
+
+const n = calls.length;
+stop();
+assert.equal(timers.length, 0);
+assert.equal((doc.ls.visibilitychange || []).length, 0);
+doc.hidden = false; fire('visibilitychange');
+await tick();
+assert.equal(calls.length, n);
+out('poll stop clears timer and listener');
+"""
+
+
+def shell_checks():
+    import json
+    import shutil as _sh
+    import subprocess
+
+    index = read(os.path.join(STATIC, "index.html")).decode()
+    s, r, body = req(port, "/")
+    assert s == 200 and body.decode() == index
+    assert 'name="viewport"' in index and '<div id="app">' in index
+    assert re.search(r'<script[^>]*type="module"[^>]*src="/static/app\.js"', index), "app.js script"
+    assert re.search(r'<link[^>]*rel="stylesheet"[^>]*href="/static/app\.css"', index), "app.css link"
+    assert not re.search(r'(?:src|href)="https?://', index), "no external origins"
+    ok("index.html links app.js/app.css, no CDN")
+
+    for name, t in (("app.js", "text/javascript"), ("app.css", "text/css")):
+        s, r, _ = req(port, f"/static/{name}")
+        assert s == 200 and r.getheader("Content-Type", "").startswith(t), (name, s)
+    ok("app.js/app.css served with correct types")
+
+    js = read(os.path.join(STATIC, "app.js")).decode()
+    css = read(os.path.join(STATIC, "app.css")).decode()
+    specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
+    assert specs, "no imports found"
+    assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs"}, specs
+    assert not re.search(r"https?://", js), "no absolute URLs"
+    pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
+    exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
+    names = {x.split(" as ")[-1].strip() for x in exports.split(",")}
+    for m in re.finditer(r"import\s*\{([^}]*)\}\s*from\s*['\"]\./vendor/preact\.mjs", js):
+        for n in m.group(1).split(","):
+            n = n.strip().split(" as ")[0].strip()
+            assert n in names, f"{n} not exported by preact.mjs"
+    ok("app.js imports only vendored modules, real names")
+
+    for t, src in (("app.js", js), ("app.css", css)):
+        assert "console.log" not in src and "debugger" not in src, t
+    ok("no console.log/debugger")
+
+    assert "#0e1116" in css.lower() and "#5eead4" in css.lower()
+    assert re.search(r"--[\w-]*(?:waiting|amber)[\w-]*\s*:", css), "amber variable"
+    assert re.search(r"flex-wrap\s*:\s*wrap", css)
+    heights = [int(x) for x in re.findall(r"min-height\s*:\s*(\d+)px", css)]
+    assert heights and max(heights) >= 44, heights
+    for m in re.finditer(r"(?<![\w-])(?:min-)?width\s*:\s*(\d+)px", css):
+        assert int(m.group(1)) <= 390, m.group(0)
+    ok("css palette, wrapping header, tap targets, no wide fixed widths")
+
+    assert "/api/sessions" in js
+    ok("app.js fetches /api/sessions")
+
+    if not _sh.which("node"):
+        print("note: node not found, skipping shell logic checks")
+        return
+    env = dict(os.environ, APP_URL=pathlib.Path(os.path.join(STATIC, "app.js")).as_uri())
+    p = subprocess.run(["node", "--input-type=module", "-e", NODE_JS], env=env,
+                       capture_output=True, text=True, timeout=60)
+    sys.stdout.write(p.stdout)
+    assert p.returncode == 0, p.stderr[-1500:]
+    for line in p.stdout.splitlines():
+        passed_inc()
+
+
+def passed_inc():
+    global passed
+    passed += 1
+
+
+if SHELL:
+    try:
+        shell_checks()
+    finally:
+        srv.shutdown()
+    print(f"{passed} checks passed")
+    sys.exit(0)
+
 try:
     # real tree
     s, r, body = req(port, "/")
