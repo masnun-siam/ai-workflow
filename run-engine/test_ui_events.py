@@ -256,9 +256,9 @@ try:
             assert s == 403 and no_cors(h), (p, label, s)
         assert no_cors(req(p)[3])
     ok("403 on bad host/origin, no CORS headers")
-    s, r, _, _ = req("/api/sessions", method="POST")
+    s, r, _, _ = req("/api/sessions", method="PUT")
     assert s == 405 and r.getheader("Allow") == "GET"
-    ok("POST -> 405")
+    ok("PUT -> 405")
 
     tail = json.dumps(RES).encode()  # unterminated final line
     for status, expect in (("done", True), ("running", False)):

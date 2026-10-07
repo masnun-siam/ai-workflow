@@ -86,3 +86,14 @@ main:has(.board) { max-width: none; }
   .board { grid-auto-columns: 100%; scroll-snap-type: x mandatory; }
   .column { scroll-snap-stop: always; }
 }
+.table-wrap { overflow-x: auto; }
+table.history { border-collapse: collapse; min-width: 48rem; width: 100%; }
+.history th, .history td { padding: 4px 8px; text-align: left; border-bottom: 1px solid #263040; }
+.history td.cmd { max-width: 20rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.history a, .history button { min-height: 44px; display: inline-flex; align-items: center; }
+.history summary { min-height: 44px; display: list-item; line-height: 44px; }
+.history-filter select { min-height: 44px; }
+.history code { user-select: all; overflow-wrap: anywhere; }
+.history .error { color: var(--error); }
+.chip-failed { color: var(--error); border-color: var(--error); }
+.chip-starting { color: var(--accent); border-color: var(--accent); }

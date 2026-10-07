@@ -3,6 +3,7 @@ import htm from './vendor/htm.mjs';
 import { Board } from './board.js';
 // ponytail: import cycle with run.js (it imports poll); safe, neither uses the other at top level.
 import { RunDetail } from './run.js';
+import { History } from './history.js';
 
 const html = htm.bind(h);
 
@@ -103,10 +104,8 @@ function View({ route, sessions }) {
       return html`<h1>Answer</h1><p>Session ${route.params.session}</p>`;
     case 'new':
       return html`<h1>New run</h1><p>Start a run here.</p>`;
-    case 'sessions': {
-      const empty = Array.isArray(sessions) && sessions.length === 0;
-      return html`<h1>Sessions</h1><p>${empty ? 'No sessions yet' : 'Sessions will appear here.'}</p>`;
-    }
+    case 'sessions':
+      return html`<${History} sessions=${sessions} />`;
     default:
       return html`<h1>Page not found</h1><p><a href="#/">Back to Board</a></p>`;
   }

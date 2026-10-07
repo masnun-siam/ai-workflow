@@ -291,7 +291,7 @@ def answer_checks():
         return f"Answer to {rid}: " + json.dumps(norm, ensure_ascii=False, separators=(",", ":"))
 
     def argv_of(fk, t):
-        return ui_runner.CLAUDE_ARGS + ["--resume", "sess-abc", t]
+        return ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, "--resume", "sess-abc", t]
 
     def intact(sid, fk, rid="q-1"):
         r = ui_sessions.load(sid)
@@ -539,7 +539,7 @@ def answer_checks():
         ok("unknown/malformed session ids: 404")
 
         # -- 405 still holds
-        for path in ("/api/sessions", "/board.json", f"/api/sessions/{sid}"):
+        for path in ("/board.json", f"/api/sessions/{sid}"):  # POST /api/sessions is the trigger (#116)
             s, h, _ = req("POST", path, {})
             assert s == 405 and h["Allow"] == "GET", (path, s)
         ok("other POSTs still 405 with Allow: GET")
@@ -711,10 +711,10 @@ def fallback_checks():
         return ui_sessions.load(sid)
 
     def fresh_args(cmd, ans):
-        return " ".join(ui_runner.CLAUDE_ARGS + [f"{cmd} {ans}"])
+        return " ".join(ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, f"{cmd} {ans}"])
 
     def resume_args(ans, sess="sess-abc"):
-        return " ".join(ui_runner.CLAUDE_ARGS + ["--resume", sess, ans])
+        return " ".join(ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, "--resume", sess, ans])
 
     def terminal(r, fk, n_calls=1, kept="the answer"):
         assert r["status"] == "failed" and r.get("terminal_handoff") is True, r
@@ -972,7 +972,7 @@ def stop_checks():
         return open(p).read().split() if os.path.exists(p) else []
 
     def cont_args(sess="sess-abc"):
-        return " ".join(ui_runner.CLAUDE_ARGS + ["--resume", sess, ui_runner.CONTINUE_PROMPT])
+        return " ".join(ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, "--resume", sess, ui_runner.CONTINUE_PROMPT])
 
     def end(sid):
         wait_status(sid, {"done", "failed", "stopped"})
@@ -1018,7 +1018,7 @@ def stop_checks():
         sid, fk, work, r = stations_run("stations_badresume")
         cl = calls(fk)
         assert len(cl) == 3, cl
-        assert cl[2] == (real(work), " ".join(ui_runner.CLAUDE_ARGS + ["/run-issue 42"])), cl
+        assert cl[2] == (real(work), " ".join(ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, "/run-issue 42"])), cl
         assert r["resumed_fresh"] is True and "resumed fresh" in r["note"], r
         assert not r.get("pending_answer"), r
         ok("stop then resume via fallback: fresh /run-issue 42 with no answer text, resumed_fresh, Ledger untouched")
@@ -1054,7 +1054,7 @@ def stop_checks():
         r = end(sid)
         cl = calls(fk)
         assert r["status"] == "done" and len(cl) == 1 and "--resume" not in cl[0][1], (r, cl)
-        assert cl[0][1] == " ".join(ui_runner.CLAUDE_ARGS + ["/run-issue 42"]), cl
+        assert cl[0][1] == " ".join(ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, "/run-issue 42"]), cl
         d, fk, work = setup_("crash")
         rec = ui_runner.start("/prd x", SLUG)
         live.append(rec)
