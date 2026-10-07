@@ -3,8 +3,17 @@ import htm from './vendor/htm.mjs';
 
 const html = htm.bind(h);
 const KEY = 'aiw.lastRepo';
-const COMMANDS = ['run-issue', 'pr-grind'];
-const LABELS = { 'run-issue': 'Issue number or URL', 'pr-grind': 'PR number or URL' };
+const LABELS = {
+  'run-issue': 'Issue number or URL',
+  'pr-grind': 'PR number or URL',
+  prd: 'Requirement: free text, file path, vault note or issue URL',
+  intake: 'Sentry URL, file path, vault note or free text',
+  dump: 'What to capture: feature, change, bug or task',
+  worklog: 'Date (optional, defaults to today)',
+  'gh-issue': 'Type (bug, feature, task, improvement) and details',
+};
+const COMMANDS = Object.keys(LABELS);
+const OPTIONAL_ARGS = new Set(['worklog']);
 const URL_KIND = { 'run-issue': 'issues', 'pr-grind': 'pull' };
 
 export function repoOptions(body) {
@@ -24,8 +33,19 @@ export function argIssue(command, args) {
 export function validate({ repo, path, manual, command, args }) {
   const errors = {};
   if (!String((manual ? path : repo) ?? '').trim()) errors.repo = 'Choose a repo or enter a path';
-  if (!String(args ?? '').trim()) errors.args = `Enter ${LABELS[command].toLowerCase()}`;
+  if (!OPTIONAL_ARGS.has(command) && !String(args ?? '').trim()) errors.args = `Enter ${LABELS[command].toLowerCase()}`;
   return Object.keys(errors).length ? errors : null;
+}
+
+export function validateCustom({ repo, path, manual, text }) {
+  const errors = {};
+  if (!String((manual ? path : repo) ?? '').trim()) errors.repo = 'Choose a repo or enter a path';
+  if (!String(text ?? '').trim()) errors.text = 'Enter a command or prompt';
+  return Object.keys(errors).length ? errors : null;
+}
+
+export function buildCustomBody({ repo, text }) {
+  return { repo, text: String(text).trim() };
 }
 
 export function buildBody({ repo, command, args }) {
@@ -95,7 +115,7 @@ export function makeSubmitter(fetchImpl) {
 }
 
 export class Launcher extends Component {
-  state = { repos: [], repo: '', manual: false, path: '', command: 'run-issue', args: '', pending: false, errors: {}, result: null };
+  state = { repos: [], repo: '', manual: false, path: '', command: 'run-issue', args: '', text: '', pending: false, errors: {}, result: null };
 
   async componentDidMount() {
     let repos = [];
@@ -138,7 +158,27 @@ export class Launcher extends Component {
     }
   };
 
-  render(_, { repos, repo, manual, path, command, args, pending, errors, result }) {
+  onCustom = async (ev) => {
+    ev.preventDefault();
+    const s = this.state;
+    const errors = validateCustom(s);
+    if (errors) {
+      this.setState({ errors, result: null });
+      return;
+    }
+    this.submit = this.submit || makeSubmitter((...a) => fetch(...a));
+    const repo = (s.manual || !s.repos.length ? s.path : s.repo).trim();
+    this.setState({ pending: true, errors: {}, result: null });
+    const r = await this.submit(buildCustomBody({ repo, text: s.text }));
+    if (!r) return;
+    this.setState({ pending: false, result: r.kind === 'open' ? null : r });
+    if (r.kind === 'open') {
+      saveLastRepo(globalThis.localStorage, repo);
+      location.hash = r.href;
+    }
+  };
+
+  render(_, { repos, repo, manual, path, command, args, text, pending, errors, result }) {
     const showPath = manual || repos.length === 0;
     const set = (k) => (e) => this.setState({ [k]: e.target.value });
     const onRepo = (e) => (e.target.value === '' ? this.setState({ manual: true }) : this.setState({ manual: false, repo: e.target.value }));
@@ -175,6 +215,14 @@ export class Launcher extends Component {
           : null}
         ${result && result.kind === 'error' ? html`<p role="alert" class="error">${result.message}</p>` : null}
         <button type="submit" disabled=${pending}>${pending ? 'Starting...' : 'Start'}</button>
+      </form>
+      <form class="launcher" onSubmit=${this.onCustom} noValidate>
+        <label for="custom">Custom command or prompt</label>
+        <textarea id="custom" placeholder="/pr-fix-comments 42" value=${text} onInput=${set('text')}
+          aria-invalid=${errors.text ? 'true' : undefined} aria-describedby=${errors.text ? 'custom-error' : undefined}></textarea>
+        ${errors.text ? html`<p id="custom-error" role="alert" class="error">${errors.text}</p>` : null}
+        <p class="note">Runs with --dangerously-skip-permissions: the command or prompt is not gated.</p>
+        <button type="submit" disabled=${pending}>Run in selected repo</button>
       </form>
     `;
   }
