@@ -10,9 +10,12 @@ from __future__ import annotations
 import errno
 import http.server
 import json
+import os
 import subprocess
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
+import ui_events
+import ui_sessions
 from shared import die
 from ui_board import build_board, fetch_title, load_projects, memoize_title_fetcher, scan_records
 
@@ -27,6 +30,23 @@ def _guard(handler) -> bool:
         handler._send(403, "text/plain; charset=utf-8", b"forbidden")
         return False
     return True
+
+
+def _public(rec: dict) -> dict:
+    return {
+        "id": rec.get("id"),
+        "command": rec.get("command"),
+        "repo": rec.get("repo"),
+        "link": rec.get("link"),
+        "session_id": rec.get("session_id"),
+        "outcome": rec.get("status"),
+        "cost": rec.get("cost"),
+        "started_at": rec.get("started_at"),
+        "ended_at": rec.get("ended_at"),
+        "waiting": rec.get("pending_question") is not None,
+        "pending_question": rec.get("pending_question"),
+        "error": rec.get("error"),
+    }
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
@@ -51,8 +71,38 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/board.json":
             board = build_board(scan_records(), load_projects(), self.server.fetch_title)
             self._send(200, "application/json; charset=utf-8", json.dumps(board).encode("utf-8"))
+        elif path == "/api/sessions":
+            body = {"sessions": [_public(r) for r in ui_sessions.list_sessions()]}
+            self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
         else:
+            parts = path.split("/")
+            if len(parts) in (4, 5) and parts[:3] == ["", "api", "sessions"] and (len(parts) == 4 or parts[4] == "stream"):
+                self._session(parts[3], len(parts) == 5)
+            else:
+                self._send(404, "text/plain; charset=utf-8", b"not found")
+
+    def _session(self, sid: str, stream: bool) -> None:
+        try:
+            rec = ui_sessions.load(sid)
+        except ValueError:
+            rec = None
+        if rec is None:
             self._send(404, "text/plain; charset=utf-8", b"not found")
+            return
+        if not stream:
+            body = _public(rec)
+        else:
+            raw = parse_qs(urlsplit(self.path).query, keep_blank_values=True).get("offset", ["0"])[0]
+            try:
+                offset = int(raw)
+            except ValueError:
+                offset = -1
+            if offset < 0:
+                self._send(400, "text/plain; charset=utf-8", b"bad offset")
+                return
+            events, new_offset = ui_events.read_from(os.path.join(ui_sessions.session_dir(sid), "stream.jsonl"), offset)
+            body = {"events": events, "offset": new_offset}
+        self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
 
     def _method_not_allowed(self):
         if not _guard(self):
