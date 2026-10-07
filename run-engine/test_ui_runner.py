@@ -808,6 +808,18 @@ def fallback_checks():
         assert len(calls(fk)) == 1 and calls(fk)[0][0] == real(C), calls(fk)
         ok("cwd gone + Ledger context.repo: fresh spawn there with note")
 
+        # -- cwd gone + Ledger context.repo + fresh fallback fails
+        sid, d, fk, work = mk()
+        C = tempfile.mkdtemp()
+        ledger(d, 42, {"context": {"repo": C}})
+        os.rmdir(work)
+        go(sid, "badresume_freshfail")
+        r = end(sid)
+        assert r["status"] == "failed" and r["resumed_fresh"] is True, r
+        assert r.get("pending_answer") == "the answer", r
+        assert len(calls(fk)) == 1 and calls(fk)[0][0] == real(C), calls(fk)
+        ok("cwd gone + Ledger + fallback fails: failed, resumed_fresh, answer kept")
+
         # -- cwd gone, no Ledger
         sid, d, fk, work = mk(led=False)
         os.rmdir(work)
