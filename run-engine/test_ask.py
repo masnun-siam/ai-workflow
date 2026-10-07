@@ -120,7 +120,7 @@ GATE1 = {"questions": [{"header": "Gate 1", "question": "Approve the plan?", "mu
 
 
 def ask(sid, args=(), stdin=None, env_extra=None, drop=()):
-    env = {**os.environ, "AIW_HEADLESS": "1", "AIW_UI_SESSION": sid or "", **(env_extra or {})}
+    env = {**os.environ, "AIW_UI_SESSION": sid or "", **(env_extra or {})}
     for k in drop:
         env.pop(k, None)
     return subprocess.run([AIW, "ask", *args], input=stdin, capture_output=True, text=True,
@@ -186,15 +186,22 @@ def t_gate_twice_and_idempotent():
     ok("pending ask is idempotent; every new ask after an answer gets a new round id")
 
 
-def t_not_headless():
-    for val in (None, "0", "true", ""):
+def t_not_ui_session():
+    sid = new_sid()
+    before = meta_bytes(sid)
+    p = ask(sid, ["--json", json.dumps(GATE1)], drop=("AIW_UI_SESSION",))
+    assert p.returncode != 0 and "AskUserQuestion" in p.stderr, (p.returncode, p.stderr)
+    assert meta_bytes(sid) == before
+    ok("AIW_UI_SESSION unset: nonzero, names AskUserQuestion, nothing written")
+
+
+def t_headless_irrelevant():
+    for val in (None, "0", "1", ""):
         sid = new_sid()
-        before = meta_bytes(sid)
-        env = {"AIW_HEADLESS": val} if val is not None else {}
+        env = {} if val is None else {"AIW_HEADLESS": val}
         p = ask(sid, ["--json", json.dumps(GATE1)], env_extra=env, drop=("AIW_HEADLESS",) if val is None else ())
-        assert p.returncode != 0 and "AskUserQuestion" in p.stderr, (val, p.returncode, p.stderr)
-        assert meta_bytes(sid) == before
-    ok("AIW_HEADLESS unset or != 1: nonzero, names AskUserQuestion, record untouched")
+        assert p.returncode == 0 and ui_sessions.load(sid)["status"] == "waiting", (val, p.returncode, p.stderr)
+    ok("AIW_HEADLESS absent or any value is ignored when AIW_UI_SESSION is valid")
 
 
 def t_bad_session():
@@ -235,12 +242,37 @@ def t_registration():
 
 
 # ---- runner env/argv + end to end ---------------------------------------------
-def env_has(fk, sid):
+PROMPT_MARK = "Headless run: ask via aiw ask"
+
+
+def env_has(fk, sid, prompt=True):
     env = lines(fk, "env").split("\n")
-    assert "AIW_HEADLESS=1" in env and f"AIW_UI_SESSION={sid}" in env, env
+    assert f"AIW_UI_SESSION={sid}" in env and not any(e.startswith("AIW_HEADLESS=") for e in env), env
+    assert any(e.startswith("CLAUDE_PLUGIN_DATA=") for e in env), env
     argv = lines(fk, "argv").split("\n")
-    i = argv.index("--append-system-prompt")
-    assert "Headless run: ask via aiw ask" in argv[i + 1], argv
+    assert ("--append-system-prompt" in argv) == prompt, argv
+    if prompt:
+        assert PROMPT_MARK in argv[argv.index("--append-system-prompt") + 1], argv
+
+
+def t_spawn_env_argv():
+    assert "--append-system-prompt" not in ui_runner.CLAUDE_ARGS, ui_runner.CLAUDE_ARGS
+    fk, work = setup("normal")
+    sid = ui_runner.start("/run-issue 1", work)["id"]
+    wait_status(sid, {"done", "failed"})
+    wait_finished(sid)
+    env_has(fk, sid, prompt=False)
+    assert lines(fk, "argv").split("\n")[:-1] == ui_runner.CLAUDE_ARGS + ["/run-issue 1"]
+    sid = ui_runner.start("/run-issue 1", work, gate_questions=True)["id"]
+    wait_status(sid, {"done", "failed"})
+    wait_finished(sid)
+    env_has(fk, sid)
+    ui_runner.resume(sid, "ans")
+    wait_finished(sid)
+    env_has(fk, sid)
+    assert lines(fk, "argv").split("\n")[:-1] == (
+        ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, "--resume", "sess-abc", "ans"])
+    ok("spawn: AIW_UI_SESSION set, AIW_HEADLESS not; prompt only on resume / gate_questions start")
 
 
 def post_answer(sid, round_id, answers):
@@ -261,7 +293,7 @@ def post_answer(sid, round_id, answers):
 
 def e2e(answers, resume_mode):
     fk, work = setup("aiwask")
-    rec = ui_runner.start("/run-issue 1", work)
+    rec = ui_runner.start("/run-issue 1", work, gate_questions=True)
     sid = rec["id"]
     wait_status(sid, {"waiting", "failed", "done"})
     wait_finished(sid)
@@ -278,7 +310,8 @@ def e2e(answers, resume_mode):
     wait_finished(sid)
     env_has(fk, sid)
     text = f"Answer to {first}: " + json.dumps(answers, ensure_ascii=False, separators=(",", ":"))
-    assert lines(fk, "argv").split("\n")[:-1] == ui_runner.CLAUDE_ARGS + ["--resume", "sess-abc", text]
+    assert lines(fk, "argv").split("\n")[:-1] == ui_runner.CLAUDE_ARGS + [
+        "--append-system-prompt", ui_runner.HEADLESS_PROMPT, "--resume", "sess-abc", text]
     return sid, first, work
 
 
@@ -305,7 +338,7 @@ def t_e2e_abort():
     with open(run_json, "rb") as f:
         before = f.read()
     os.environ["FAKE_CLAUDE_MODE"] = "aiwask"
-    rec = ui_runner.start("/run-issue 1", work)
+    rec = ui_runner.start("/run-issue 1", work, gate_questions=True)
     sid = rec["id"]
     wait_status(sid, {"waiting", "failed", "done"})
     wait_finished(sid)
@@ -323,7 +356,7 @@ def t_e2e_abort():
 
 def t_missing_record():
     fk, work = setup("aiwaskfail")
-    sid = ui_runner.start("/run-issue 1", work)["id"]
+    sid = ui_runner.start("/run-issue 1", work, gate_questions=True)["id"]
     wait_status(sid, {"done", "failed", "waiting"})
     wait_finished(sid)
     r = ui_sessions.load(sid)
@@ -423,7 +456,7 @@ ROUNDS = {"/prd x": R_PRD, "/intake brd.md": R_INTAKE, "/gh-issue feature x": R_
 def interview_e2e(command, rnd, answers, resume_mode):
     fk, work = setup("aiwask")
     os.environ["FAKE_ASK_JSON"] = json.dumps(rnd)
-    sid = ui_runner.start(command, work)["id"]
+    sid = ui_runner.start(command, work, gate_questions=True)["id"]
     wait_status(sid, {"waiting", "failed", "done"})
     wait_finished(sid)
     r = ui_sessions.load(sid)
@@ -446,7 +479,8 @@ def interview_e2e(command, rnd, answers, resume_mode):
     wait_status(sid, {"waiting", "done", "failed"})
     wait_finished(sid)
     text = f"Answer to {first}: " + json.dumps(answers, ensure_ascii=False, separators=(",", ":"))
-    assert lines(fk, "argv").split("\n")[:-1] == ui_runner.CLAUDE_ARGS + ["--resume", "sess-abc", text]
+    assert lines(fk, "argv").split("\n")[:-1] == ui_runner.CLAUDE_ARGS + [
+        "--append-system-prompt", ui_runner.HEADLESS_PROMPT, "--resume", "sess-abc", text]
     return sid, first, work, pq
 
 
@@ -584,8 +618,8 @@ INTERVIEWS = (t_iv_first_rounds, t_iv_resume_done_and_next_round, t_iv_mixed_fre
               t_iv_answered_after_days, t_iv_aiwaskfail, t_iv_concurrent_ask, t_iv_doc_sites,
               t_iv_no_unbranched_ask, t_iv_interactive_unchanged)
 
-BASE = (t_ask_json, t_ask_stdin, t_gate_twice_and_idempotent, t_not_headless, t_bad_session,
-            t_bad_input, t_registration, t_e2e_approve, t_e2e_revise_free_text, t_e2e_abort,
+BASE = (t_ask_json, t_ask_stdin, t_gate_twice_and_idempotent, t_not_ui_session, t_headless_irrelevant, t_bad_session,
+            t_bad_input, t_registration, t_spawn_env_argv, t_e2e_approve, t_e2e_revise_free_text, t_e2e_abort,
             t_missing_record, t_interactive_unchanged, t_doc_sites, t_doc_no_unbranched_ask,
             t_doc_permissions)
 for _fn in (INTERVIEWS if "--interviews" in sys.argv else BASE + INTERVIEWS):
