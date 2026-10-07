@@ -56,6 +56,7 @@ import dispatch  # noqa: E402
 import epic  # noqa: E402
 import gitnexus  # noqa: E402
 import ui_server  # noqa: E402
+import ask  # noqa: E402
 import pr  # noqa: E402
 import project  # noqa: E402
 import review  # noqa: E402
@@ -393,7 +394,7 @@ def main(argv=None) -> None:
 
     # The mechanical phases. Each module owns its own argparse wiring so adding one
     # is a file plus a line, not a surgery on this function.
-    for module in (stack, worktree, threads, pr, ci, gitnexus, project, epic, dispatch, review, ui_server):
+    for module in (stack, worktree, threads, pr, ci, gitnexus, project, epic, dispatch, review, ui_server, ask):
         module.register(sub, add)
 
     args = parser.parse_args(argv)

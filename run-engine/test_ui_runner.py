@@ -255,7 +255,7 @@ def answer_checks():
         return f"Answer to {rid}: " + json.dumps(norm, ensure_ascii=False, separators=(",", ":"))
 
     def argv_of(fk, t):
-        return ui_runner.CLAUDE_ARGS + ["--resume", "sess-abc", t]
+        return ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, "--resume", "sess-abc", t]
 
     def intact(sid, fk, rid="q-1"):
         r = ui_sessions.load(sid)
@@ -503,7 +503,7 @@ def answer_checks():
         ok("unknown/malformed session ids: 404")
 
         # -- 405 still holds
-        for path in ("/api/sessions", "/board.json", f"/api/sessions/{sid}"):
+        for path in ("/board.json", f"/api/sessions/{sid}"):  # POST /api/sessions is the trigger (#116)
             s, h, _ = req("POST", path, {})
             assert s == 405 and h["Allow"] == "GET", (path, s)
         ok("other POSTs still 405 with Allow: GET")
