@@ -100,7 +100,19 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             if offset < 0:
                 self._send(400, "text/plain; charset=utf-8", b"bad offset")
                 return
-            events, new_offset = ui_events.read_from(os.path.join(ui_sessions.session_dir(sid), "stream.jsonl"), offset)
+            sp = os.path.join(ui_sessions.session_dir(sid), "stream.jsonl")
+            events, new_offset = ui_events.read_from(sp, offset)
+            if rec.get("status") in ("done", "failed", "stopped"):
+                # terminal session: no more writes, so an unterminated last line is complete
+                try:
+                    with open(sp, "rb") as f:
+                        f.seek(new_offset)
+                        tail = f.read()
+                except FileNotFoundError:
+                    tail = b""
+                if tail:
+                    events += ui_events.parse_line(tail)
+                    new_offset += len(tail)
             body = {"events": events, "offset": new_offset}
         self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
 
