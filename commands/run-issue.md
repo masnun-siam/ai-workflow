@@ -25,6 +25,34 @@ rather than stopping mid-flow and leaving a worktree for someone to find later.
 This is a contract, not a preference. If you find yourself about to ask the user something
 outside those three gates, the answer is to record it and carry it to Gate 2 instead.
 
+### Asking a gate question
+
+A headless run (started from the workflow UI) has no terminal to answer in, so
+`AskUserQuestion` is not available there. You are headless when your system prompt contains
+`Headless run: ask via aiw ask`. At every gate below, the same header, question and options
+are used either way; only the transport differs.
+
+- **Headless:** call the command below. Use the quoted heredoc: gate text embeds finding text
+  from PR threads, so never put it inside single quotes on the command line. Keep `--json '...'`
+  for short fixed strings only. Both start with `aiw `.
+
+  ```
+  aiw ask <<'EOF'
+  {"questions":[{"header":"...","question":"...","multiSelect":false,"options":[{"label":"...","description":"..."}]}]}
+  EOF
+  ```
+
+  Any other stop-and-ask in this command (H2 halt, missing dep branch, resume of a `done` or
+  `escalated` ledger) also goes through `aiw ask` when headless, never prose.
+
+  List the recommended option first with `(Recommended)` on its label. Free text is always
+  allowed. Then end your turn immediately and do nothing else; the answer arrives as your
+  next message, `Answer to q-...: {"0":{"labels":["..."]}}` or `{"0":{"other":"free text"}}`.
+  Strip any ` (Recommended)` suffix from the label and take the same branch the interactive
+  answer would. Free text that names no option is feedback for that gate's re-plan or
+  re-ask, never an approval.
+- **Otherwise:** not headless, so skip `aiw ask` and call `AskUserQuestion` exactly as written at the gate.
+
 `--lean` (combinable) runs a shorter roster: `researcher → planner → dev → reviewer →
 fixer`. No independent RED tests, no runtime verification, no specialist panel. The CI
 gate still applies. See `<config> → modes.lean.tradeoff` for what
@@ -369,7 +397,9 @@ this order:
    deciding.
 
 Then gate with `AskUserQuestion` — options: **Approve and start**, **Revise**, **Abort**.
-Do not proceed past this point without an explicit approval.
+Do not proceed past this point without an explicit approval. If headless, ask with `aiw ask`
+instead (see "Asking a gate question"; **Approve and start** is the recommended option) and end your turn; free text
+is **Revise** with that text as the user's feedback.
 
 - **Revise**: take the user's free-text notes, re-dispatch `run-planner` with the
   previous plan, the phase-0.5 research brief (same as the first dispatch — don't drop
@@ -757,7 +787,8 @@ has blockers to raise — those are Gate 2a's business, not the router's.
 
 Read `60-fix.json`'s `handoff.needs_confirmation[]` (plus `run-laravel-review`'s
 equivalent section). If either lists any critical/escalated findings, print them (finding +
-thread URL) and gate with `AskUserQuestion` — options:
+thread URL) and gate with `AskUserQuestion` (if headless, `aiw ask` instead, no recommended
+option, then end your turn; see "Asking a gate question") — options:
 **Confirmed, continue**, **Hold here** (leave the worktree and PR as-is, skip phases
 7b–9, end the run so the user can resolve it manually). Do not proceed to phase 7b with an
 unconfirmed blocker outstanding. If the section is empty, skip this gate and continue
@@ -1132,7 +1163,8 @@ once, exactly as phase 6 spawns the specialist panel in one message.
    gap is not the one-decomposition-one-decision gate this design promises.
 3. **GATE 1 — the decomposition and every plan, once.** Print, in order: the DAG as a
    readable order with the parallel groups marked; each child's DoR gaps and assumptions;
-   then every plan in full. Then `AskUserQuestion`: **Approve all** · **Revise child N**
+   then every plan in full. Then `AskUserQuestion` (if headless, `aiw ask` with **Approve all**
+   recommended, then end your turn; see "Asking a gate question"; N for Revise/Drop comes as free text): **Approve all** · **Revise child N**
    (re-plan that child only, re-print, re-gate) · **Drop child N** (refused if anything
    depends on it unless its dependents are dropped too) · **Abort**.
 4. **The relay.** Until every child is done or parked, loop:
@@ -1199,7 +1231,8 @@ once, exactly as phase 6 spawns the specialist panel in one message.
 
    Case (b) (`needs_confirmation`) is the only one that fires an interactive ask, because
    it is the only one where an answer resumes the child in this session. Fire exactly one
-   `AskUserQuestion` per parked case-(b) child this tick — never batched, even if several
+   `AskUserQuestion` (if headless, `aiw ask` instead, then end your turn, which pauses the whole
+   relay until the answer arrives; see "Asking a gate question") per parked case-(b) child this tick — never batched, even if several
    children parked in the same tick. Name `#<child>`, the blocking station, the one-line
    reason, the finding text, and the thread URL. Word it in the style of the existing
    single-issue phase-7 Gate 2a below. Options: **Confirmed, continue** — run
@@ -1243,7 +1276,7 @@ once, exactly as phase 6 spawns the specialist panel in one message.
    (explicitly deferred). If that list is empty, skip this gate entirely — nothing to close.
 
    Otherwise it still fires **once**, printing every such blocker together with its child
-   and thread URL (where there is one), then gates as phase 7 does.
+   and thread URL (where there is one), then gates as phase 7 does (headless: `aiw ask`, then end your turn).
 
    The immediate per-blocker asks in step 4 keep firing throughout the run regardless of
    whether this closer has already run; a blocker deferred even after this closer has fired

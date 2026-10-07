@@ -25,6 +25,30 @@ into a worklog entry, grouped as:
         - [{repo}#{n}]({url}) — {issue title}
 ```
 
+### Asking the user
+
+A headless run (started from the workflow UI) has no terminal to answer in, so
+`AskUserQuestion` is not available there. You are headless when your dispatch prompt contains
+`Headless run: ask via aiw ask`. At every question below, the same header, question and options
+are used either way; only the transport differs.
+
+- **Headless:** call the command below. Use the quoted heredoc: commit messages and issue titles may embed arbitrary
+  text, so never put it inside single quotes on the command line. Starts with `aiw `.
+
+  ```
+  # one call per round
+  aiw ask <<'EOF'
+  {"questions":[{"header":"...","question":"...","multiSelect":false,"options":[{"label":"...","description":"..."}]}]}
+  EOF
+  ```
+
+  Steps 3 and 4 are asked as one round (all their questions in one `aiw ask`, split past 4 options as below), and you write nothing. Instead of ending your turn, finish with a final report that is only `RECORDED q-...` (the id `aiw ask` printed) plus the resolved `date` from collect.sh; the dispatching skill ends its turn and re-dispatches you with the answer. List the recommended option first with `(Recommended)` on its label. Free text is
+  always allowed. Return that report and stop; when re-dispatched, the answer is in your prompt as `Answer to q-...: {"0":{"labels":["..."]}}` or
+  `{"0":{"other":"free text"}}`. Strip any ` (Recommended)` suffix from the label and take
+  the same branch the interactive answer would. Free text that names no option means none selected.
+  On a re-dispatch your context is fresh, so run step 1 again with the resolved date you were given (not `today`), rebuild steps 3 and 4's questions in the same order so answer keys `"0"`, `"1"`... map back to them, skip asking, apply the answer, and continue from step 5.
+- **Otherwise:** not headless, so skip `aiw ask` and call AskUserQuestion exactly as written at the question.
+
 ## Steps
 
 ### 1. Collect
@@ -55,11 +79,11 @@ If the JSON has `"empty": true`: report "No tracked GitHub activity for
 
 ### 3. Confirm the no-PR issues
 
-If `needsConfirm` is non-empty, ask with `AskUserQuestion` (`multiSelect:
+If `needsConfirm` is non-empty, ask with `AskUserQuestion` (if headless, `aiw ask` instead, then end your turn) (`multiSelect:
 true`) which of those issues to include — one option per issue, labeled
 `repo#N — title`. Skip this step entirely if the list is empty. Drop
 unselected issues from the working set.
-`AskUserQuestion` caps at 4 options per question — split into multiple
+`AskUserQuestion` (and `aiw ask`) caps at 4 options per question — split into multiple
 questions (e.g. "1/2", "2/2") if there are more than 4 candidates. The tool
 may report only one of several questions as answered; if a later batch comes
 back with no answer, treat it as "none selected" for that batch and move on
@@ -68,7 +92,7 @@ rather than re-asking indefinitely.
 ### 4. Confirm the unlinked commits
 
 If `unlinkedCommits` is non-empty, these are real commits that don't
-reference any issue or PR — ask with `AskUserQuestion` (`multiSelect: true`)
+reference any issue or PR — ask with `AskUserQuestion` (if headless, `aiw ask` instead, then end your turn) (`multiSelect: true`)
 which to include, one option per commit labeled `repo — message` (use the
 commit's own message as the label; don't paraphrase it). Skip this step if
 the list is empty, and split across multiple questions past 4 candidates,

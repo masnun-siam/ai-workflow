@@ -21,13 +21,39 @@ I have a ${1:-bug / feature request / task / improvement} to log as a GitHub iss
 
 Details: $@
 
+### Asking the user
+
+A headless run (started from the workflow UI) has no terminal to answer in, so
+`AskUserQuestion` is not available there. You are headless when your system prompt contains
+`Headless run: ask via aiw ask`. At every question below, the same header, question and options
+are used either way; only the transport differs.
+
+- **Headless:** call the command below. Use the quoted heredoc: issue text may embed arbitrary
+  text, so never put it inside single quotes on the command line. Starts with `aiw `.
+
+  ```
+  # one call per round
+  aiw ask <<'EOF'
+  {"questions":[{"header":"...","question":"...","multiSelect":false,"options":[{"label":"...","description":"..."}]}]}
+  EOF
+  ```
+
+  Every question in steps 3 to 6 below follows this; one `aiw ask` per grilling round, one question per numbered question (header `Q<n>`, `multiSelect` false), options are the choices the question names, and a question naming no choices carries its recommended answer as the single option. List the recommended option first with `(Recommended)` on its label. Free text is
+  always allowed. Then end your turn immediately and do nothing else; the answer arrives as
+  your next message, `Answer to q-...: {"0":{"labels":["..."]}}` or
+  `{"0":{"other":"free text"}}`. Strip any ` (Recommended)` suffix from the label and take
+  the same branch the interactive answer would. Free text that names no option is feedback for
+  that question, never an approval.
+- **Otherwise:** not headless, so skip `aiw ask` and call AskUserQuestion exactly as written at the question.
+
+
 **HARD RULE — while executing steps 0–7 below, including everything under `4-FLAT`
 (note: `4-FLAT` has its own internal 1–5 numbering; that's a sub-branch of top-level
 step 4, not a separate range, and it is still fully bound by this rule), this skill only
 ever creates a GitHub issue. It never touches code.**
 - NEVER use Write, Edit, or NotebookEdit on any file in the repo.
 - NEVER run a mutating shell command (`git commit`, `git checkout -b`, package installs, formatters, codemods, etc.).
-- The ONLY writes permitted are the temp body file at `/tmp/gh-issue-body.md`, the `gh issue create` / `gh issue edit` / `gh project` calls below, and the notes-vault dump in step 7 (that's a different vault, not the repo, and goes through the `dump` skill's own confirmation).
+- The ONLY writes permitted are the temp body file at `/tmp/gh-issue-body.md`, the `gh issue create` / `gh issue edit` / `gh project` calls below, `aiw ask` when headless (records the question in the UI session, outside the repo), and the notes-vault dump in step 7 (that's a different vault, not the repo, and goes through the `dump` skill's own confirmation).
 - The sole exception to the rules above is the step 3.6 task-list save, and only when its conditions hold: (a) `docs/tasks/<slug>.md` written via the Write tool in step 3.6 and edited only to fill `Issue:` slots in `4-FLAT` (an override of the no-Write/no-Edit rule for that one path only); (b) the Obsidian `Tasks.md` via `obsidian vault=notes`, only when the user chose Obsidian, placed the way `/dump` does, plus the vault sibling writes `/dump`'s linking rules produce (the Index append and Related link); (c) the wiki clone/commit/push of `Tasks-<Title>.md` in a scratchpad clone, only when the user chose the wiki and confirmed the push (an override of the no-mutating-shell rule for that clone only). It covers nothing else: no other repo file, and no `git add` or commit of `docs/tasks/`.
 - This holds even for a one-character fix. "It's trivial" is not an exception — the whole point of filing an issue is that a human decides whether and how to make the change.
 - If a fix is obvious from your investigation, do NOT apply it. Record it under a **Proposed Fix** section in the issue body instead (file path, symbol, and the change in prose or a fenced diff).
@@ -41,7 +67,7 @@ Do the following:
 1. Use GitNexus MCP (`gitnexus_query`, `gitnexus_context`) to find the relevant code — execution flows, affected symbols, and files related to this description.
 2. Check git status and recent commits for any in-progress work that touches the same area.
 2.5. Dispatch the `run-researcher` agent (haiku, read-only) with the description above and the `owner/repo` slug, to collect context *outside* the codebase: prior related issues/PRs, project wiki, relevant public docs (library/API behavior the description implies). Carry its brief into steps 3 and 4 — do not print it verbatim, fold the relevant parts into the grilling and the issue body. Best-effort: if it errors or returns nothing useful, note that in one line and continue without it.
-3. Use the grill-me skill to interview me on anything unclear (acceptance criteria, priority, affected users, edge cases), asking via the AskUserQuestion tool. Wait for my answers.
+3. Use the grill-me skill to interview me on anything unclear (acceptance criteria, priority, affected users, edge cases), asking via the AskUserQuestion tool (if headless, `aiw ask` per round instead, then end your turn). Wait for my answers.
    - As part of this grilling session, enumerate every corner case you can find for this issue (empty/null input, concurrency, permissions, error/failure paths, boundary values, existing data migrations, etc.) and validate each one with me before moving on — don't assume a corner case is out of scope without asking.
 3.5. **Decompose.** Every run, after step 3's grilling — no size test gates this, it
    always happens. Build a numbered task list from the grilled requirements. Each task
@@ -59,7 +85,7 @@ Do the following:
    create nothing and don't ask yet: split the failing task and rebuild the list before
    presenting it.
 
-   Present the list in exactly one `AskUserQuestion` call with two choices, verbatim:
+   Present the list in exactly one `AskUserQuestion` call (if headless, one `aiw ask`, then end your turn) with two choices, verbatim:
    **"Create as shown"** and **"Let me edit the list"**.
    Style this like Gate 1's revise loop in `commands/run-issue.md`:
 
@@ -72,7 +98,7 @@ Do the following:
 3.6. **Save the task list.** Runs once, right after step 3.5's "Create as shown" and
    before its routing creates any issue. Slug: kebab-case from the PRD/source title (the
    `/intake` brief's title when step 0 ran). For free text with no title, propose a slug
-   and have the user confirm it. Ask ONE `AskUserQuestion` (multiSelect) that shows the
+   and have the user confirm it. Ask ONE `AskUserQuestion` (multiSelect) (if headless, one `aiw ask`, then end your turn) that shows the
    proposed slug as the recommended answer (the user edits it via Other) and offers the optional destinations Obsidian and/or GitHub wiki (local is always
    on, not a choice).
 
@@ -183,7 +209,7 @@ One issue per task from the step 3.6 list, each standalone.
 5. Check each create's and each write-back's exit status. On failure, stop like a failed
    create: report the created issues (number and URL), the missing ones (by planned title),
    and any issue that exists but is unrecorded in the file; never delete created issues.
-   Then `AskUserQuestion` with exactly these two choices: **"Retry the missing ones"**, **"Stop here"**.
+   Then `AskUserQuestion` with exactly these two choices: **"Retry the missing ones"**, **"Stop here"** (if headless, `aiw ask`, then end your turn).
    - **"Retry the missing ones"**: re-enter the loop at the failed task, reusing the already-known issue numbers of earlier tasks for their `Depends on:` lines; never re-create a task that already has an issue (an unrecorded one gets its write-back retried, not a second create). Apply the duplicate guard above before every create after a failure: run the same `gh issue list --label prd-<slug> --state all --limit 200 --json number,url,title,body` lookup, so an issue GitHub accepted but whose create reported no number is recorded, not created twice.
    - **"Stop here"**: end the run and report the partial state (created vs. missing); the filled `Issue:` slots let a later run resume the list.
    Never close or delete an issue already created — a partial list is a recoverable state.
@@ -194,17 +220,17 @@ One issue per task from the step 3.6 list, each standalone.
 5. Assign the issues:
    - Ask this once per run, never per issue, and apply the chosen logins to every issue this run creates: on the step 4 path before its create, on the `4-FLAT` path in its sub-step 0 preflight, before the first create.
    - Get the default assignee: `gh api user --jq .login`.
-   - Confirm via AskUserQuestion (`multiSelect: true`), with that login (as `@me`) recommended first, alongside other repo collaborators from `gh api repos/{owner}/{repo}/assignees --jq '.[].login'`.
+   - Confirm via AskUserQuestion (`multiSelect: true`), with that login (as `@me`) recommended first, alongside other repo collaborators from `gh api repos/{owner}/{repo}/assignees --jq '.[].login'` (if headless, `aiw ask`, then end your turn).
    - Pass each chosen login as its own `--assignee <login>` flag on every `gh issue create` (combine with the create call in step 4 or `4-FLAT` sub-step 3 rather than a separate call).
 6. Add to a GitHub Project and fill its fields, discovered at runtime — never assume a project or field schema:
    - Ask the project and field questions once per run and apply the answers to every issue this run creates: on the step 4 path before its create, on the `4-FLAT` path in its sub-step 0 preflight, before the first create.
    - `gh project list --owner <repo-owner> --format json`
      - Zero projects → skip this step entirely, go straight to returning the URL(s). On the `4-FLAT` path this skips only the project questions; the run goes on to the first create.
      - One project → use it.
-     - Multiple → ask via AskUserQuestion (`multiSelect: true`) which ones.
+     - Multiple → ask via AskUserQuestion (`multiSelect: true`) which ones (if headless, `aiw ask`, then end your turn).
    - Add every issue to each chosen project at creation time, one `--project "<title>"` flag per project on every create (same call as step 4/5). Retry reuses the preflight answers and does not re-ask.
    - For each chosen project, read its fields: `gh project field-list <number> --owner <owner> --format json`.
-   - For each `ProjectV2SingleSelectField` on each project, ask the user to pick from that field's real `options` (never invent option names) — batch into as few AskUserQuestion calls as possible (max 4 questions per call). Skip any field the user declines to set.
+   - For each `ProjectV2SingleSelectField` on each project, ask the user to pick from that field's real `options` (never invent option names) — batch into as few AskUserQuestion calls as possible (max 4 questions per call). Skip any field the user declines to set. If headless, use `aiw ask` (one round, up to 4 questions), then end your turn.
    - Set each chosen field on every issue — **one field per `item-edit` call** (the CLI only supports single-field updates on non-draft issues):
      `gh project item-edit <number> --owner <owner> --url <issue-url> --field "<name>" --value "<option>"`
    - If any `gh project` call fails, don't abort — the issue already exists and is assigned; keep going with the remaining issues and fields. Report each affected issue URL and state plainly which fields couldn't be set and why (a missing `project` token scope is the likely cause; fix with `gh auth refresh -s project`).

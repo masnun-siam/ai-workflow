@@ -194,7 +194,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 return
             sp = os.path.join(ui_sessions.session_dir(sid), "stream.jsonl")
             events, new_offset = ui_events.read_from(sp, offset)
-            if rec.get("status") in ui_repos._TERMINAL:
+            if rec.get("status") in ("done", "failed", "stopped"):
                 # terminal session: no more writes, so an unterminated last line is complete
                 try:
                     with open(sp, "rb") as f:
@@ -215,10 +215,33 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if not _guard(self):
             return
         parts = urlsplit(self.path).path.split("/")
-        if len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] == "answer":
+        if parts == ["", "api", "sessions"]:
+            self._start()
+        elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] == "answer":
             self._answer(parts[3])
         else:
             self._method_not_allowed(guarded=True)
+
+    def _start(self) -> None:
+        try:
+            n = int(self.headers.get("Content-Length") or "")
+        except ValueError:
+            n = -1
+        if n < 0:
+            self._json(400, {"error": "bad Content-Length"})
+            return
+        if n > MAX_BODY:
+            self._json(413, {"error": "body too large"})
+            return
+        try:
+            body = json.loads(self.rfile.read(n))
+        except ValueError:
+            body = None
+        if not isinstance(body, dict):
+            self._json(400, {"error": "body must be a JSON object"})
+            return
+        status, payload = ui_repos.start_session(body)
+        self._json(status, _public(payload) if status == 201 else payload)
 
     def _answer(self, sid: str) -> None:
         try:
