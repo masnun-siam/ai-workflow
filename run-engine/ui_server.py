@@ -15,6 +15,7 @@ import os
 import subprocess
 import sys
 from urllib.parse import parse_qs, unquote, urlsplit
+
 import ui_events
 import ui_repos
 import ui_sessions

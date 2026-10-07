@@ -1,0 +1,178 @@
+import { h, Component } from './vendor/preact.mjs';
+import htm from './vendor/htm.mjs';
+
+const html = htm.bind(h);
+const KEY = 'aiw.lastRepo';
+const COMMANDS = ['run-issue', 'pr-grind'];
+const LABELS = { 'run-issue': 'Issue number or URL', 'pr-grind': 'PR number or URL' };
+const URL_KIND = { 'run-issue': 'issues', 'pr-grind': 'pull' };
+
+export function repoOptions(body) {
+  const list = body && Array.isArray(body.repos) ? body.repos : [];
+  return list
+    .filter((r) => r && typeof r.slug === 'string' && typeof r.path === 'string')
+    .map((r) => ({ value: r.slug, label: `${r.name || r.slug} - ${r.path}` }));
+}
+
+export function argIssue(command, args) {
+  const s = String(args ?? '').trim();
+  const m = /^#?(\d+)$/.exec(s) || new RegExp(`^https?://[^/\\s]+/[^/\\s]+/[^/\\s]+/${URL_KIND[command]}/(\\d+)/?$`).exec(s);
+  const n = m ? Number(m[1]) : 0;
+  return n > 0 ? n : null;
+}
+
+export function validate({ repo, path, manual, command, args }) {
+  const errors = {};
+  if (!String((manual ? path : repo) ?? '').trim()) errors.repo = 'Choose a repo or enter a path';
+  if (!String(args ?? '').trim()) errors.args = `Enter ${LABELS[command].toLowerCase()}`;
+  return Object.keys(errors).length ? errors : null;
+}
+
+export function buildBody({ repo, command, args }) {
+  const a = String(args).trim();
+  const body = { repo, command, args: a };
+  const issue = command === 'pr-grind' ? argIssue(command, a) : null;
+  if (issue) body.issue = issue;
+  return body;
+}
+
+export function sessionHref(body) {
+  const l = body && body.link;
+  if (!l || !l.owner || !l.repo || !Number.isInteger(l.issue) || l.issue < 1) return '#/sessions';
+  return `#/run/${encodeURIComponent(l.owner)}/${encodeURIComponent(l.repo)}/${l.issue}`;
+}
+
+export function outcome(status, body) {
+  const err = body && typeof body.error === 'string' ? body.error : `Request failed (HTTP ${status})`;
+  if (status === 201) return { kind: 'open', href: sessionHref(body) };
+  if (status === 409) return { kind: 'duplicate', message: err, href: sessionHref(body) };
+  if (status === 400 && err.startsWith('not a git repository')) return { kind: 'repo', message: err };
+  return { kind: 'error', message: err };
+}
+
+export function loadLastRepo(storage) {
+  try {
+    return storage.getItem(KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveLastRepo(storage, value) {
+  try {
+    storage.setItem(KEY, value);
+  } catch {
+    // storage unavailable: remembering the repo is best-effort
+  }
+}
+
+export function makeSubmitter(fetchImpl) {
+  let inflight = false;
+  return async function submit(body) {
+    if (inflight) return null;
+    inflight = true;
+    try {
+      const res = await fetchImpl('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      let data = null;
+      try {
+        data = await res.json();
+      } catch {
+        // non-JSON body: outcome falls back to the HTTP status
+      }
+      return outcome(res.status, data);
+    } catch {
+      return { kind: 'error', message: 'could not reach the aiw server' };
+    } finally {
+      inflight = false;
+    }
+  };
+}
+
+export class Launcher extends Component {
+  state = { repos: [], repo: '', manual: false, path: '', command: 'run-issue', args: '', pending: false, errors: {}, result: null };
+
+  async componentDidMount() {
+    let repos = [];
+    let failed = false;
+    try {
+      const res = await fetch('/api/repos', { headers: { Accept: 'application/json' } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      repos = repoOptions(await res.json());
+    } catch {
+      failed = true;
+    }
+    const last = loadLastRepo(globalThis.localStorage);
+    const known = repos.find((r) => r.value === last);
+    this.setState({
+      repos,
+      repo: known ? known.value : repos.length ? repos[0].value : '',
+      manual: !known && !!last ? true : repos.length === 0,
+      path: !known && last ? last : '',
+      result: failed ? { kind: 'error', message: 'could not load repos' } : null,
+    });
+  }
+
+  onSubmit = async (ev) => {
+    ev.preventDefault();
+    const s = this.state;
+    const errors = validate(s);
+    if (errors) {
+      this.setState({ errors, result: null });
+      return;
+    }
+    this.submit = this.submit || makeSubmitter((...a) => fetch(...a));
+    const repo = (s.manual || !s.repos.length ? s.path : s.repo).trim();
+    this.setState({ pending: true, errors: {}, result: null });
+    const r = await this.submit(buildBody({ repo, command: s.command, args: s.args }));
+    if (!r) return;
+    this.setState({ pending: false, result: r.kind === 'open' ? null : r });
+    if (r.kind === 'open') {
+      saveLastRepo(globalThis.localStorage, repo);
+      location.hash = r.href;
+    }
+  };
+
+  render(_, { repos, repo, manual, path, command, args, pending, errors, result }) {
+    const showPath = manual || repos.length === 0;
+    const set = (k) => (e) => this.setState({ [k]: e.target.value });
+    const onRepo = (e) => (e.target.value === '' ? this.setState({ manual: true }) : this.setState({ manual: false, repo: e.target.value }));
+    const repoMsg = errors.repo || (result && result.kind === 'repo' ? result.message : null);
+    return html`
+      <form class="launcher" onSubmit=${this.onSubmit} noValidate>
+        <h1>New run</h1>
+        ${repos.length
+          ? html`<label for="repo-select">Repo</label>
+            <select id="repo-select" value=${showPath ? '' : repo} onChange=${onRepo}>
+              ${repos.map((r) => html`<option value=${r.value}>${r.label}</option>`)}
+              <option value="">Other path...</option>
+            </select>`
+          : null}
+        ${showPath
+          ? html`<label for="repo-path">Repo path</label>
+            <input id="repo-path" type="text" value=${path} onInput=${set('path')}
+              aria-invalid=${repoMsg ? 'true' : undefined} aria-describedby=${repoMsg ? 'repo-error' : undefined} />`
+          : null}
+        ${repoMsg ? html`<p id="repo-error" role="alert" class="error">${repoMsg}</p>` : null}
+        <fieldset>
+          <legend>Command</legend>
+          ${COMMANDS.map((c) => html`<label for=${'cmd-' + c} class="radio">
+            <input id=${'cmd-' + c} type="radio" name="command" value=${c} checked=${command === c} onChange=${set('command')} />
+            ${c}</label>`)}
+        </fieldset>
+        <label for="args">${LABELS[command]}</label>
+        <input id="args" type="text" value=${args} onInput=${set('args')}
+          aria-invalid=${errors.args ? 'true' : undefined} aria-describedby=${errors.args ? 'args-error' : undefined} />
+        ${errors.args ? html`<p id="args-error" role="alert" class="error">${errors.args}</p>` : null}
+        ${result && result.kind === 'duplicate'
+          ? html`<p role="alert" class="error">${result.message} <a href=${result.href}>Open that run</a></p>`
+          : null}
+        ${result && result.kind === 'error' ? html`<p role="alert" class="error">${result.message}</p>` : null}
+        <button type="submit" disabled=${pending}>${pending ? 'Starting...' : 'Start'}</button>
+      </form>
+    `;
+  }
+}
