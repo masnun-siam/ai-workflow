@@ -64,7 +64,7 @@ real_static = getattr(ui_server, "STATIC_DIR", None)
 SHELL = sys.argv[1:3] == ["--view", "shell"]
 
 NODE_JS = r"""
-const { parseRoute, waitingInfo, poll } = await import(process.env.APP_URL);
+const { parseRoute, waitingInfo, headerBadge, sessionList, poll } = await import(process.env.APP_URL);
 const assert = (await import('node:assert')).strict;
 const out = (n) => console.log('ok ' + n);
 const tick = () => new Promise((r) => setImmediate(r));
@@ -105,6 +105,18 @@ out('waitingInfo empty and missing status');
 for (const bad of [null, {}, { sessions: 5 }, 'str', undefined]) assert.equal(waitingInfo(bad).count, 0);
 assert.deepEqual({ ...waitingInfo({ sessions: list }) }, { count: 2, firstId: 'b' });
 out('waitingInfo non-array bodies and {sessions:[]}');
+
+assert.deepEqual({ ...headerBadge(true, list) }, { kind: 'offline', count: 0, href: null });
+assert.deepEqual({ ...headerBadge(true, null) }, { kind: 'offline', count: 0, href: null });
+assert.deepEqual({ ...headerBadge(false, list) }, { kind: 'waiting', count: 2, href: '#/answer/b' });
+assert.equal(headerBadge(false, [mk('a b', 'waiting')]).href, '#/answer/a%20b');
+assert.deepEqual({ ...headerBadge(false, [mk('a', 'running')]) }, { kind: 'idle', count: 0, href: null });
+assert.deepEqual({ ...headerBadge(false, []) }, { kind: 'idle', count: 0, href: null });
+assert.equal(headerBadge(false, null), null);
+assert.equal(headerBadge(false, undefined), null);
+assert.deepEqual(sessionList({ sessions: list }), list);
+assert.equal(sessionList('x'), null);
+out('headerBadge offline, waiting, idle, pre-response');
 
 // poll harness
 const doc = { hidden: false, ls: {}, addEventListener(t, f) { (this.ls[t] ||= []).push(f); },
@@ -175,8 +187,6 @@ out('poll stop clears timer and listener');
 
 
 def shell_checks():
-    import json
-    import shutil as _sh
     import subprocess
 
     index = read(os.path.join(STATIC, "index.html")).decode()
@@ -224,21 +234,16 @@ def shell_checks():
     assert "/api/sessions" in js
     ok("app.js fetches /api/sessions")
 
-    if not _sh.which("node"):
+    if not shutil.which("node"):
         print("note: node not found, skipping shell logic checks")
         return
     env = dict(os.environ, APP_URL=pathlib.Path(os.path.join(STATIC, "app.js")).as_uri())
     p = subprocess.run(["node", "--input-type=module", "-e", NODE_JS], env=env,
                        capture_output=True, text=True, timeout=60)
-    sys.stdout.write(p.stdout)
     assert p.returncode == 0, p.stderr[-1500:]
     for line in p.stdout.splitlines():
-        passed_inc()
-
-
-def passed_inc():
-    global passed
-    passed += 1
+        if line.startswith("ok "):
+            ok(line[3:])
 
 
 if SHELL:
@@ -246,6 +251,7 @@ if SHELL:
         shell_checks()
     finally:
         srv.shutdown()
+        shutil.rmtree(tmp, ignore_errors=True)
     print(f"{passed} checks passed")
     sys.exit(0)
 
