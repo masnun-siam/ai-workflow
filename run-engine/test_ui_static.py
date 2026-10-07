@@ -653,9 +653,15 @@ def launcher_all_checks():
         ok("unknown slash command accepted; blank and leading-dash rejected")
 
         rec = ui_sessions.create("/pr-fix-comments 42", repo)
-        ui_sessions.update(rec["id"], status="waiting")
+        ui_sessions.update(rec["id"], status="waiting", pending_question={"text": "q?"})
+        named = ui_sessions.create("/prd x", repo)
+        ui_sessions.update(named["id"], status="waiting", pending_question={"text": "q?"})
         s, lst = call(None, "GET")
         assert s == 200, s
+        items = {i["id"]: i for i in lst["sessions"]}
+        assert items[rec["id"]]["waiting"] is True and items[rec["id"]]["command"] == "/pr-fix-comments 42", items[rec["id"]]
+        assert items[rec["id"]]["waiting"] == items[named["id"]]["waiting"]
+        ok("custom-text session surfaced waiting exactly like a named one")
         live = ui_sessions.create("/run-issue 7", repo, link={"owner": "o", "repo": "r", "issue": 7})
         ui_sessions.update(live["id"], status="running")
         s, dup = call({"repo": "o/r", "command": "run-issue", "args": "7"})
@@ -691,14 +697,15 @@ def launcher_all_checks():
     appjs = pathlib.Path(os.path.join(STATIC, "app.js")).as_uri()
     chk = (
         "const A=await import(process.env.APP_URL);"
-        "const d=JSON.parse(process.env.LIST);const w=A.waitingInfo(d);"
+        "const d=[{id:process.env.SID,status:'waiting'}];const w=A.waitingInfo(d);"
         "if(w.count<1)throw new Error('no waiting');"
         "const b=A.headerBadge(false,d);"
         "if(b.href!=='#/answer/'+encodeURIComponent(w.firstId))throw new Error(b.href);"
+        "if(b.href!=='#/answer/'+process.env.SID)throw new Error('id '+b.href);"
         "console.log('ok custom waiting session routes to #/answer/<id>');"
     )
     p = subprocess.run(["node", "--input-type=module", "-e", chk],
-                       env=dict(os.environ, APP_URL=appjs, LIST=json.dumps(lst)),
+                       env=dict(os.environ, APP_URL=appjs, SID=rec["id"]),
                        capture_output=True, text=True, timeout=60)
     assert p.returncode == 0, p.stderr[-1500:]
     ok("custom waiting session routes to #/answer/<id>")
