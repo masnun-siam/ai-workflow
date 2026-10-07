@@ -1020,7 +1020,7 @@ def launcher_all_checks():
     appjs = pathlib.Path(os.path.join(STATIC, "app.js")).as_uri()
     chk = (
         "const A=await import(process.env.APP_URL);"
-        "const d=[{id:process.env.SID,status:'waiting'}];const w=A.waitingInfo(d);"
+        "const d=[{id:process.env.SID,waiting:true}];const w=A.waitingInfo(d);"
         "if(w.count<1)throw new Error('no waiting');"
         "const b=A.headerBadge(false,d);"
         "if(b.href!=='#/answer/'+encodeURIComponent(w.firstId))throw new Error(b.href);"
