@@ -334,7 +334,6 @@ def restart_cases():
     ok("waiting and terminal records byte-identical, no ps/signal")
 
     # history order unchanged
-    ids_before = [r["id"] for r in ui_sessions.list_sessions()]
     mk("running", dead_pid(), S + RESULT + "\n", pid_started=OLD)
     ids_before = [r["id"] for r in ui_sessions.list_sessions()]
     ui_runner.reconcile()
@@ -383,6 +382,56 @@ def restart_cases():
         ui_runner.reconcile()
     assert ui_sessions.load(x)["status"] == "done" and x not in ui_runner._procs
     ok("ps missing: treated as not owned, closed from stream, no crash")
+
+    # legacy record (None / missing pid_started) + dead pid: returns promptly, closes from stream
+    import threading as _th
+    a = mk("running", dead_pid(), S + RESULT + "\n", pid_started=None)
+    b = mk("running", dead_pid(), S + RESULT_ERR + "\n")
+    t = _th.Thread(target=ui_runner.reconcile, daemon=True)
+    t.start()
+    t.join(15)
+    assert not t.is_alive(), "reconcile hung on legacy dead-pid record"
+    assert ui_sessions.load(a)["status"] == "done" and ui_sessions.load(b)["status"] == "failed"
+    assert a not in ui_runner._procs and b not in ui_runner._procs
+    ok("legacy record with dead pid: reconcile returns, closed from stream")
+
+    # transient ps errors while following a LIVE re-attached process: not failed, bounded
+    def follow_with(seq, sid_):
+        it = iter(seq)
+        with mock.patch.object(ui_runner, "POLL_SECONDS", 0.001), \
+                mock.patch.object(ui_runner, "_proc_start", lambda pid: next(it, None)):
+            t_ = _th.Thread(target=ui_runner._follow, args=(sid_, None, os.getpid(), "STARTED"),
+                            daemon=True)
+            t_.start()
+            t_.join(15)
+            assert not t_.is_alive(), "follower hung"
+
+    E = ui_runner._PS_ERROR
+    x = mk("running", os.getpid(), S + RESULT + "\n", pid_started="STARTED")
+    follow_with([E] * 24 + ["STARTED"] * 3 + [E] * 5 + ["STARTED"] * 2, x)  # errors reset on success
+    assert ui_sessions.load(x)["status"] == "done", ui_sessions.load(x)
+    ok("transient ps errors on live process: kept following (counter resets), ended normally")
+
+    y = mk("running", os.getpid(), S + "\n")
+    seen = []
+    it = iter([E] * 100)
+    with mock.patch.object(ui_runner, "POLL_SECONDS", 0.001), \
+            mock.patch.object(ui_runner, "_proc_start", lambda pid: seen.append(1) or next(it)):
+        t = _th.Thread(target=ui_runner._follow, args=(y, None, os.getpid(), "STARTED"), daemon=True)
+        t.start()
+        t.join(15)
+    assert not t.is_alive() and len(seen) == 26, len(seen)
+    assert ui_sessions.load(y)["status"] == "failed"
+    ok("persistent ps errors: bounded at 25, then treated as gone")
+
+    z = mk("running", os.getpid(), S + RESULT + "\n", pid_started="STARTED")
+    with mock.patch.object(ui_runner, "POLL_SECONDS", 0.001), \
+            mock.patch("subprocess.run", side_effect=OSError("no ps")):
+        t = _th.Thread(target=ui_runner._follow, args=(z, None, os.getpid(), "STARTED"), daemon=True)
+        t.start()
+        t.join(15)
+    assert not t.is_alive() and ui_sessions.load(z)["status"] == "done"
+    ok("subprocess.run OSError: follower terminates, no hang")
 
 
 if "--restart" in sys.argv:
