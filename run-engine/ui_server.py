@@ -13,6 +13,7 @@ import json
 import mimetypes
 import os
 import subprocess
+import sys
 from urllib.parse import unquote, urlsplit
 
 from shared import die
@@ -28,11 +29,15 @@ def _serve_static(handler, rel: str) -> None:
         # unquote once only: %252e stays literal; realpath containment (not string checks) blocks escapes
         full = os.path.realpath(os.path.join(root, unquote(rel).lstrip("/")))
         if os.path.commonpath([root, full]) != root or not os.path.isfile(full):
-            raise OSError
+            raise FileNotFoundError
         with open(full, "rb") as f:
             body = f.read()
-    except (ValueError, OSError):
+    except (ValueError, FileNotFoundError, IsADirectoryError):
         handler._send(404, "text/plain; charset=utf-8", b"not found")
+        return
+    except OSError as e:  # e.g. PermissionError: broken install, not a missing file
+        print(f"ui_server: cannot read {rel!r}: {e}", file=sys.stderr)
+        handler._send(500, "text/plain; charset=utf-8", b"internal error")
         return
     ext = os.path.splitext(full)[1].lower()
     ctype = "text/javascript" if ext in (".js", ".mjs") else mimetypes.guess_type(full)[0] or "application/octet-stream"
