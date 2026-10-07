@@ -258,6 +258,8 @@ def stop(sid: str) -> dict:
         end = time.time() + 2
         while not _group_gone(pgid, proc) and time.time() < end:
             time.sleep(0.05)
+    if proc is None:
+        _stopping.discard(sid)  # no follower in this process to clear it (e.g. after a UI restart)
     return ui_sessions.update(sid, status="stopped", ended_at=_now(), pending_question=None)
 
 
@@ -275,7 +277,9 @@ def resume_stopped(sid: str) -> dict:
                 if (o.get("id") != sid and _issue_key(o) == key
                         and o.get("status") in ("starting", "running", "waiting")):
                     raise Conflict(f"session {o['id']} is already live for this issue")
-        ui_sessions.update(sid, status="starting")  # claim: makes double-submits safe
+        # claim: makes double-submits safe; pid=None so a /stop during preflight can't kill the old group
+        ui_sessions.update(sid, status="starting", pid=None)
+        _stopping.discard(sid)
     if not rec.get("session_id"):
         return _fallback(sid, None, "no claude session_id")
     repo = rec.get("repo")
@@ -284,5 +288,5 @@ def resume_stopped(sid: str) -> dict:
         return _fallback(sid, None, f"cwd is not a directory: {repo!r}")
     exe = _preflight(sid)
     return _spawn(sid, [exe, *CLAUDE_ARGS, "--resume", rec["session_id"], CONTINUE_PROMPT], path,
-                  resuming=True, ended_at=None, error=None, pending_question=None,
+                  resuming=True, cwd_path=path, ended_at=None, error=None, pending_question=None,
                   resumed_fresh=None, note=None, terminal_handoff=None, pending_answer=None)
