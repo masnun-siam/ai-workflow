@@ -155,7 +155,7 @@ export class History extends Component {
       </div>
       <div class="history-filter">
         <label>Outcome
-          <select onChange=${(e) => this.setState({ filter: e.target.value })}>
+          <select data-search onChange=${(e) => this.setState({ filter: e.target.value })}>
             <option value="all" selected=${filter === 'all'}>all</option>
             ${OUTCOMES.map((o) => html`<option value=${o} selected=${filter === o}>${o}</option>`)}
           </select>

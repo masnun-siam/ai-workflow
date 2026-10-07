@@ -177,7 +177,7 @@ export class Board extends Component {
         <span class="strip-poll mono">polling /board.json · 3s</span>
         <span class="spacer"></span>
         <label class="strip-filter">Repo
-          <select value=${repo} onChange=${(e) => this.setState({ repo: e.target.value })}>
+          <select data-search value=${repo} onChange=${(e) => this.setState({ repo: e.target.value })}>
             <option value="">All repos</option>
             ${repoOptions(data.columns, repo).map((r) => html`<option value=${r}>${r}</option>`)}
           </select>

@@ -8,6 +8,7 @@ import { RunDetail } from './run.js';
 import { Launcher } from './launcher.js';
 import { History } from './history.js';
 import { Session } from './session.js';
+import { keyIntent, moveFocus, Palette, Shortcuts } from './keys.js';
 
 const html = htm.bind(h);
 
@@ -126,12 +127,49 @@ function View({ route, sessions }) {
 }
 
 export class App extends Component {
-  state = { route: parseRoute(globalThis.location?.hash), sessions: null, offline: false, notif: notifyState() };
+  state = { route: parseRoute(globalThis.location?.hash), sessions: null, offline: false, notif: notifyState(), palette: false, sheet: false };
 
   onHash = () => this.setState({ route: parseRoute(location.hash) });
 
+  // One global key handler: shortcuts are ignored while typing, except Cmd/Ctrl+K and Escape.
+  chordAt = 0;
+
+  onKey = (e) => {
+    const intent = keyIntent(e, Date.now() - this.chordAt < 800);
+    this.chordAt = 0;
+    if (!intent) return;
+    const { palette, sheet, route } = this.state;
+    switch (intent.type) {
+      case 'chord': this.chordAt = Date.now(); break;
+      case 'goto': e.preventDefault(); location.hash = intent.hash; break;
+      case 'palette': e.preventDefault(); this.openDialog({ palette: !palette, sheet: false }); break;
+      case 'sheet': e.preventDefault(); this.openDialog({ sheet: !sheet, palette: false }); break;
+      case 'search': {
+        const el = document.querySelector('[data-search]');
+        if (el) { e.preventDefault(); el.focus(); }
+        break;
+      }
+      case 'move': if (!palette && !sheet && moveFocus(intent.dir)) e.preventDefault(); break;
+      case 'escape':
+        if (palette || sheet) this.openDialog({ palette: false, sheet: false });
+        else if (['run', 'session', 'answer'].includes(route.name)) history.length > 1 ? history.back() : (location.hash = '#/');
+        break;
+    }
+  };
+
+  // Remembers what had focus so closing a dialog puts it back.
+  openDialog(next) {
+    const opening = next.palette || next.sheet;
+    if (opening && !this.state.palette && !this.state.sheet) this.returnFocus = document.activeElement;
+    this.setState(next);
+    if (!opening && this.returnFocus && this.returnFocus.focus) this.returnFocus.focus();
+  }
+
+  closeDialogs = () => this.openDialog({ palette: false, sheet: false });
+
   componentDidMount() {
     addEventListener('hashchange', this.onHash);
+    addEventListener('keydown', this.onKey);
     this.watch = waitingWatcher();
     this.stop = poll('/api/sessions', 3000, (r) => {
       if (r.ok) {
@@ -150,10 +188,11 @@ export class App extends Component {
 
   componentWillUnmount() {
     removeEventListener('hashchange', this.onHash);
+    removeEventListener('keydown', this.onKey);
     if (this.stop) this.stop();
   }
 
-  render(_, { route, sessions, offline, notif }) {
+  render(_, { route, sessions, offline, notif, palette, sheet }) {
     const b = headerBadge(offline, sessions);
     let badge = null;
     if (b?.kind === 'offline') badge = html`<span role="status" class="offline">Offline: retrying</span>`;
@@ -166,11 +205,14 @@ export class App extends Component {
           ${NAV.map(([name, href, label]) => html`<a href=${href} aria-current=${route.name === name ? 'page' : undefined}>${label}</a>`)}
         </nav>
         <span class="spacer"></span>
+        <button type="button" class="btn kbd-hint" aria-label="Open command palette" onClick=${() => this.openDialog({ palette: true, sheet: false })}>Search <kbd>⌘K</kbd></button>
         ${badge}
         ${notif === 'default' && html`<button type="button" class="icon-btn" aria-label="Enable notifications" title="Enable desktop notifications" onClick=${this.enableNotify}>${BELL}</button>`}
         <a class="btn btn--primary" href="#/new" aria-current=${route.name === 'new' ? 'page' : undefined}>New run</a>
       </header>
       <main><${View} route=${route} sessions=${sessions} /></main>
+      ${palette && html`<${Palette} sessions=${sessions} onClose=${this.closeDialogs} />`}
+      ${sheet && html`<${Shortcuts} onClose=${this.closeDialogs} />`}
     `;
   }
 }

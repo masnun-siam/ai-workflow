@@ -89,6 +89,51 @@ assert.equal(SS.toolSummary({ input: { command: 'x'.repeat(300) } }).length, 110
 assert.equal(SS.toolSummary({}), '');
 out('session.js: eventText, filterEvents, toolSummary');
 
+const K = await import(new URL('./keys.js', process.env.RUN_URL).href);
+const ev = (key, extra = {}) => ({ key, target: { tagName: 'BODY' }, ...extra });
+assert.deepEqual(K.keyIntent(ev('k', { metaKey: true })), { type: 'palette' });
+assert.deepEqual(K.keyIntent(ev('K', { ctrlKey: true, target: { tagName: 'INPUT' } })), { type: 'palette' });
+assert.equal(K.keyIntent(ev('n', { metaKey: true })), null);
+assert.deepEqual(K.keyIntent(ev('n')), { type: 'goto', hash: '#/new' });
+assert.equal(K.keyIntent(ev('n', { target: { tagName: 'TEXTAREA' } })), null);
+assert.equal(K.keyIntent(ev('j', { target: { tagName: 'DIV', isContentEditable: true } })), null);
+assert.deepEqual(K.keyIntent(ev('Escape', { target: { tagName: 'INPUT' } })), { type: 'escape' });
+assert.deepEqual(K.keyIntent(ev('g')), { type: 'chord' });
+assert.deepEqual(K.keyIntent(ev('s'), true), { type: 'goto', hash: '#/sessions' });
+assert.deepEqual(K.keyIntent(ev('b'), true), { type: 'goto', hash: '#/' });
+assert.equal(K.keyIntent(ev('x'), true), null); assert.equal(K.keyIntent(ev('q')), null);
+assert.deepEqual(K.keyIntent(ev('ArrowDown')), { type: 'move', dir: 'down' });
+assert.deepEqual(K.keyIntent(ev('h')), { type: 'move', dir: 'left' });
+assert.deepEqual(K.keyIntent(ev('?')), { type: 'sheet' }); assert.deepEqual(K.keyIntent(ev('/')), { type: 'search' });
+out('keys: keyIntent ignores typing except palette/escape, chords, arrows');
+
+assert.equal(K.moveTarget([0, 0], null, 'down'), null);
+assert.deepEqual(K.moveTarget([0, 3, 2], null, 'down'), [1, 0]);
+assert.deepEqual(K.moveTarget([0, 3, 2], [1, 0], 'down'), [1, 1]);
+assert.deepEqual(K.moveTarget([0, 3, 2], [1, 2], 'down'), [1, 2]);
+assert.deepEqual(K.moveTarget([0, 3, 2], [1, 0], 'up'), [1, 0]);
+assert.deepEqual(K.moveTarget([0, 3, 2], [1, 2], 'right'), [2, 1]);
+assert.deepEqual(K.moveTarget([0, 3, 2], [1, 1], 'right'), [2, 1]);
+assert.deepEqual(K.moveTarget([0, 3, 2], [2, 0], 'right'), [2, 0]);
+assert.deepEqual(K.moveTarget([0, 3, 2], [1, 0], 'left'), [1, 0]);
+assert.deepEqual(K.moveTarget([4, 0, 2], [0, 3], 'right'), [2, 1]);
+out('keys: moveTarget walks cards, skips empty columns, clamps row');
+
+const items = K.paletteItems({
+  board: { columns: [{ key: 'dev', cards: [{ owner: 'o', repo: 'r', issue: 7, title: 'Fix login' }] }] },
+  sessions: [{ id: 's1', command: '/prd', repo: '/x/proj', outcome: 'waiting' }, { id: 's2', command: '/gh-issue', repo: 'o/r', outcome: 'done' }],
+});
+assert.deepEqual(items.map((i) => i.group), ['Go to', 'Go to', 'Go to', 'Run', 'Session', 'Session']);
+assert.equal(items.find((i) => i.id === 'session-s1').href, '#/answer/s1');
+assert.equal(items.find((i) => i.id === 'session-s2').href, '#/session/s2');
+assert.equal(items.find((i) => i.group === 'Run').href, '#/run/o/r/7');
+assert.deepEqual(K.filterItems(items, 'login').map((i) => i.group), ['Run']);
+assert.deepEqual(K.filterItems(items, 'dev fix').length, 1);
+assert.equal(K.filterItems(items, '').length, 6); assert.equal(K.filterItems(items, '', 2).length, 2);
+assert.equal(K.filterItems(items, 'zzz').length, 0);
+assert.equal(K.paletteItems({ board: null, sessions: null }).length, 3);
+out('keys: paletteItems and filterItems');
+
 const { formatWhen, shortRepo } = await import(new URL('./fmt.js', process.env.RUN_URL).href);
 const noon = new Date(2026, 9, 7, 12, 0);
 assert.match(formatWhen(new Date(2026, 9, 7, 9, 5).toISOString(), noon), /^Today 09:05$/);
@@ -829,7 +874,7 @@ def shell_checks():
     css = read(os.path.join(STATIC, "app.css")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
     assert specs, "no imports found"
-    assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./board.js", "./run.js", "./history.js", "./answer.js", "./notify.js", "./launcher.js", "./session.js"}, specs
+    assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./board.js", "./run.js", "./history.js", "./answer.js", "./notify.js", "./launcher.js", "./session.js", "./keys.js"}, specs
     assert not re.search(r"https?://", js), "no absolute URLs"
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)

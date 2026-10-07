@@ -131,7 +131,7 @@ export class Session extends Component {
           ${retry && html`<span role="status" class="offline">Retrying…</span>`}
         </div>
         <div class="tbar">
-          <input type="search" class="field" aria-label="Search transcript" placeholder="Search messages and tool calls" value=${q}
+          <input type="search" data-search class="field" aria-label="Search transcript" placeholder="Search messages and tool calls" value=${q}
             onInput=${(e) => this.setState({ q: e.target.value })} />
           <span class="muted tcount" role="status">${q ? `${shown.length} of ${stream.events.length}` : `${stream.events.length} events`}</span>
           <button type="button" class="btn" onClick=${() => this.setState({ openAll: !openAll })}>${openAll ? 'Collapse tools' : 'Expand tools'}</button>
