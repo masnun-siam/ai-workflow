@@ -3798,4 +3798,42 @@ assert ("immediate" in hw86 or "as soon as" in hw86) and "sole channel" not in h
 assert "queued" in hw86 and "one attempt per head SHA" in hw86
 ok("#86 earlier doc regressions still hold")
 
+# ---- #103 ADR: headless question pause ----
+_adr103 = os.path.join(HERE, "..", "docs", "adr", "0001-headless-question-pause.md")
+assert os.path.isfile(_adr103), "#103 ADR missing: docs/adr/0001-headless-question-pause.md"
+_t103 = open(_adr103, encoding="utf-8").read()
+_l103 = [ln for ln in _t103.splitlines() if ln.strip()]
+assert _l103[0].startswith("Decision:"), "#103 first non-empty line must start with 'Decision:'"
+_h103 = {}
+for _n in ("Context", "Evidence", "Consequences"):
+    _m = re.search(r"^#+\s*" + _n + r"\b", _t103, re.M)
+    assert _m, "#103 missing heading " + _n
+    _h103[_n] = _m
+assert _t103.index("Decision:") < _h103["Context"].start() < _h103["Evidence"].start() < _h103["Consequences"].start(), "#103 heading order"
+
+
+def _sec103(name, nxt):
+    a = _h103[name].end()
+    b = _h103[nxt].start() if nxt else len(_t103)
+    return _t103[a:b]
+
+
+_pre103 = _t103[: _h103["Evidence"].start()]
+_ev103 = _sec103("Evidence", "Consequences")
+_co103 = _sec103("Consequences", None)
+assert "PreToolUse" in _t103 and "aiw ask" in _t103, "#103 both options named"
+assert re.search(r"reject", _t103, re.I), "#103 states a rejected option"
+for _k in ("--print", "stream-json", "--resume"):
+    assert _k in _ev103, "#103 Evidence lacks " + _k
+assert re.search(r"(^|\s)-p\b", _ev103), "#103 Evidence lacks -p"
+for _k in ("multi-question", "option", "recommended", "free text"):
+    assert _k in _t103.lower(), "#103 AskUserQuestion shape lacks " + _k
+for _k in ("15", "16", "26"):
+    assert re.search(r"\b" + _k + r"\b", _co103), "#103 Consequences lacks task " + _k
+for _k in ("asked twice", "missing", "never answered"):
+    assert _k in _t103.lower(), "#103 corner case lacks " + _k
+assert "--dangerously-skip-permissions" in _t103 and "FR-10" in _t103, "#103 skip-permissions/FR-10"
+assert re.search(r"interactive", _t103, re.I) and re.search(r"unchanged", _t103, re.I), "#103 interactive unchanged"
+ok("#103 ADR headless question pause")
+
 print(f"\n{passed} checks passed")
