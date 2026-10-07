@@ -1,5 +1,6 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
+import { toast } from './toast.js';
 
 const html = htm.bind(h);
 const MAX_OTHER = 4000;
@@ -167,7 +168,10 @@ export class Answer extends Component {
     const res = await submitAnswer(this.props.session, body);
     if (this.gone) return;
     const next = afterSubmit(started, res, session);
-    if (next.navigate) location.hash = next.navigate;
+    if (next.navigate) {
+      toast('Answer sent, session resuming');
+      location.hash = next.navigate;
+    }
     else this.setState({ form: next });
   };
 

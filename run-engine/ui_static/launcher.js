@@ -1,5 +1,6 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
+import { toast } from './toast.js';
 
 const html = htm.bind(h);
 const KEY = 'aiw.lastRepo';
@@ -172,6 +173,7 @@ export class Launcher extends Component {
     this.setState({ pending: false, result: r.kind === 'open' ? null : r });
     if (r.kind === 'open') {
       saveLastRepo(globalThis.localStorage, repo);
+      toast('Session started');
       location.hash = r.href;
     }
   };

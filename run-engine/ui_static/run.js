@@ -2,6 +2,7 @@ import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { poll } from './app.js';
 import { formatWhen } from './fmt.js';
+import { toast } from './toast.js';
 
 const html = htm.bind(h);
 
@@ -226,13 +227,17 @@ export class RunDetail extends Component {
     const id = this.sid;
     this.setState({ busy: action, msg: '' });
     const r = await postAction(id, action);
-    this.setState({ busy: null, msg: r.ok ? label : `${action === 'stop' ? 'Stop' : 'Resume'} failed: ${r.error}` });
+    const msg = r.ok ? label : `${action === 'stop' ? 'Stop' : 'Resume'} failed: ${r.error}`;
+    this.setState({ busy: null, msg });
+    toast(msg, r.ok ? 'ok' : 'error');
   };
 
   terminal = async (e) => {
     e?.preventDefault?.();
     const r = await copyCommand(this.session()?.resume_command);
-    this.setState({ msg: r.ok ? 'Copied' : 'Copy failed: select the command below', fallback: !r.ok });
+    const msg = r.ok ? 'Copied' : 'Copy failed: select the command below';
+    this.setState({ msg, fallback: !r.ok });
+    toast(msg, r.ok ? 'ok' : 'error');
   };
 
   onScroll = (e) => {

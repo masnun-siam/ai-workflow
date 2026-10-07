@@ -2,6 +2,7 @@ import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 
 import { formatWhen, shortRepo } from './fmt.js';
+import { toast } from './toast.js';
 
 const html = htm.bind(h);
 
@@ -85,6 +86,7 @@ export class History extends Component {
     const r = await resumeSession(id);
     this.inflight.delete(id);
     this.setState((st) => ({ busy: { ...st.busy, [id]: false }, errors: { ...st.errors, [id]: r.ok ? null : r.error } }));
+    if (r.ok) toast('Session resumed');
   };
 
   action(s) {

@@ -346,6 +346,7 @@ table.history { border-collapse: collapse; min-width: 64rem; width: 100%; }
 .history-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 16px; }
 .history-head .muted { font-size: 13px; }
 .history-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; color: var(--muted); }
+.history-filter label { display: flex; align-items: center; gap: 8px; }
 .history-filter select { min-height: 44px; width: auto; }
 .history code { user-select: all; overflow-wrap: anywhere; }
 .history .error { color: var(--error); }
@@ -397,3 +398,9 @@ header .kbd-hint { color: var(--muted); font-size: 13px; gap: 10px; }
 .keys dt { margin: 0; }
 .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @keyframes fade { from { opacity: 0; } }
+
+/* ---- toasts ---------------------------------------------------------------------------- */
+#toasts { position: fixed; right: 16px; bottom: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; pointer-events: none; }
+.toast { max-width: min(360px, calc(100vw - 32px)); padding: 10px 14px; border-radius: 8px; background: var(--raised); border: 1px solid var(--border-input); color: var(--fg); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); animation: enter 0.2s var(--ease); }
+.toast-ok { border-color: #1f4a37; }
+.toast-error { border-color: var(--error-border); color: var(--error); }

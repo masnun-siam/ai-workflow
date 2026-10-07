@@ -134,6 +134,16 @@ assert.equal(K.filterItems(items, 'zzz').length, 0);
 assert.equal(K.paletteItems({ board: null, sessions: null }).length, 3);
 out('keys: paletteItems and filterItems');
 
+const TOAST = await import(new URL('./toast.js', process.env.RUN_URL).href);
+const prevDoc = globalThis.document;
+globalThis.document = undefined; TOAST.toast('no document is fine'); globalThis.document = {}; TOAST.toast('no body is fine');
+const made = []; const host = { appendChild: (c) => made.push(c), setAttribute() {} };
+globalThis.document = { body: { appendChild() {} }, getElementById: () => host, createElement: () => ({ remove() {}, className: '', textContent: '' }) };
+TOAST.toast('hello', 'error');
+assert.equal(made.length, 1); assert.equal(made[0].textContent, 'hello'); assert.equal(made[0].className, 'toast toast-error');
+globalThis.document = prevDoc;
+out('toast: no-ops without a document, appends a kinded message');
+
 const { formatWhen, shortRepo } = await import(new URL('./fmt.js', process.env.RUN_URL).href);
 const noon = new Date(2026, 9, 7, 12, 0);
 assert.match(formatWhen(new Date(2026, 9, 7, 9, 5).toISOString(), noon), /^Today 09:05$/);
@@ -523,7 +533,7 @@ def run_checks():
     js = read(os.path.join(STATIC, "run.js")).decode()
     css = read(os.path.join(STATIC, "app.css")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./fmt.js"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./fmt.js", "./toast.js"}, specs
     assert not re.search(r"https?://", js), "no absolute URLs"
     assert "console.log" not in js and "debugger" not in js and "innerHTML" not in js.replace("dangerouslySetInnerHTML", "")
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
@@ -874,7 +884,7 @@ def shell_checks():
     css = read(os.path.join(STATIC, "app.css")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
     assert specs, "no imports found"
-    assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./board.js", "./run.js", "./history.js", "./answer.js", "./notify.js", "./launcher.js", "./session.js", "./keys.js"}, specs
+    assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./board.js", "./run.js", "./history.js", "./answer.js", "./notify.js", "./launcher.js", "./session.js", "./keys.js", "./toast.js"}, specs
     assert not re.search(r"https?://", js), "no absolute URLs"
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
@@ -1081,7 +1091,7 @@ def board_checks():
     css = read(os.path.join(STATIC, "app.css")).decode()
     app = read(os.path.join(STATIC, "app.js")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./fmt.js"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./fmt.js", "./toast.js"}, specs
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
     names = {x.split(" as ")[-1].strip() for x in exports.split(",")}
@@ -1328,7 +1338,7 @@ def launcher_checks():
     assert os.path.exists(lp), "launcher.js missing"
     js = read(lp).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./toast.js"}, specs
     assert not re.search(r"console\.log|debugger|https?://", js)
     ok("launcher.js imports only vendored modules, no debug/absolute URLs")
     s, r, _ = req(port, "/static/launcher.js")
@@ -1545,7 +1555,7 @@ def launcher_all_checks():
     for name in ("run-issue", "pr-grind", "prd", "intake", "dump", "worklog", "gh-issue"):
         assert name in js, name
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./toast.js"}, specs
     assert not re.search(r"console\.log|debugger|https?://", js)
     s, r, _ = req(port, "/static/launcher.js")
     assert s == 200 and r.getheader("Content-Type", "").startswith("text/javascript"), s
@@ -1610,7 +1620,7 @@ def answer_checks():
     app = read(os.path.join(STATIC, "app.js")).decode()
     css = read(os.path.join(STATIC, "app.css")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./toast.js"}, specs
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
     names = {x.split(" as ")[-1].strip() for x in exports.split(",")}
@@ -2107,7 +2117,7 @@ def history_checks():
 
     js = read(os.path.join(STATIC, "history.js")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./fmt.js"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./fmt.js", "./toast.js"}, specs
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
     names = {x.split(" as ")[-1].strip() for x in exports.split(",")}
