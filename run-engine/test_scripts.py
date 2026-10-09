@@ -4013,4 +4013,34 @@ assert "hand control back to its Preflight step 3" in _close184
 assert _close184.index("hand control back") < _close184.index(NEXT), "#184 hand-back sentence stays first"
 ok("#184 /gh-issue ends with \u2192 next: herdr-dispatch; /run-issue hand-back unchanged")
 
+
+# Guided Flow /flow (issue #187): one feature from raw input to a dispatched batch, stopping at every boundary.
+_flow_path = os.path.join(HERE, "..", "skills", "flow", "SKILL.md")
+assert os.path.isfile(_flow_path), "#187 skills/flow/SKILL.md missing"
+_flow = _read("skills", "flow", "SKILL.md")
+_flow_front = _flow.split("---")[1]
+assert re.search(r"^name: flow$", _flow_front, re.M), "#187 frontmatter name"
+for _t in ("Skill", "AskUserQuestion", "Bash"):
+    assert f"  - {_t}" in _flow_front, f"#187 allowed-tools lacks {_t}"
+_fs = _skill_sections("skills/flow/SKILL.md")
+_args187 = _ws(_key183(_fs, "Arguments"))
+for _shape, _stage in (("Raw text", "dump"), ("feature folder", "prd"), ("PRD path", "gh-issue"), ("Issue numbers", "dispatch")):
+    assert re.search(rf"{_shape}.{{0,160}}\| {_stage} \|", _args187, re.I), f"#187 entry shape {_shape} -> {_stage}"
+assert "Dump.md" in _args187, "#187 Dump.md path enters at prd"
+ok("#187 /flow exists and names the four entry shapes")
+_route187 = _ws(_key183(_fs, "Routing after dump"))
+for _cls, _path in (("New feature", "prd \u2192 gh-issue \u2192 dispatch"), ("Change request", "prd"),
+                    ("Bug report", "gh-issue \u2192 dispatch"), ("Unclassifiable", "stop")):
+    assert re.search(rf"{_cls}.{{0,120}}{_path}", _route187, re.I), f"#187 routing {_cls}"
+ok("#187 /flow routes by dump classification and stops after filing for the rest")
+_flow_ws = _ws(_flow)
+assert f"`{NEXT}" in _flow_ws and "take the next stage's argument from that line" in _flow_ws, "#187 \u2192 next: handoff rule"
+_cp187 = _ws(_key183(_fs, "Checkpoints"))
+assert "AskUserQuestion" in _cp187 and "(Recommended)" in _cp187 and "Stop here" in _cp187, "#187 checkpoint question"
+_dp187 = _ws(_key183(_fs, "Dispatch"))
+assert "--dry-run" in _dp187 and "--max 2" in _dp187 and "Launch" in _dp187, "#187 dispatch dry-run then Launch"
+assert _dp187.index("--dry-run") < _dp187.index("Launch"), "#187 dry-run is shown before the launch question"
+assert re.search(r"[Nn]ever (launch|dispatch).{0,60}without an explicit", _flow_ws), "#187 never dispatch without a go"
+ok("#187 /flow checkpoints every boundary; dispatch shows --dry-run (--max 2) and launches only on an explicit go")
+
 print(f"\n{passed} checks passed")
