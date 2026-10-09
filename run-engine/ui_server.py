@@ -21,6 +21,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qs, unquote, urlsplit
 
+import ui_afk
 import ui_cleanup
 import ui_dispatch
 import ui_events
@@ -88,47 +89,7 @@ def _can_browse(handler) -> bool:
     return sys.platform == "darwin" and host in ("127.0.0.1", "localhost")
 
 
-MAX_FREE_TEXT = 4000
 MAX_BODY = 65536
-
-
-def _answer_text(pending: dict, answers) -> str:
-    """Validate answers against the pending round; return the text to resume with."""
-    qs = pending["questions"]
-    if not isinstance(answers, dict) or set(answers) != {str(i) for i in range(len(qs))}:
-        raise ValueError("answers must be an object with exactly one entry per question index")
-    out = {}
-    for i, q in enumerate(qs):
-        a = answers[str(i)]
-        if not isinstance(a, dict) or len(a) != 1 or next(iter(a)) not in ("labels", "other"):
-            raise ValueError(f"answer {i} must be exactly one of labels or other")
-        if "labels" in a:
-            labels = a["labels"]
-            valid = {o["label"] for o in q["options"]}
-            if not isinstance(labels, list) or not labels or not all(isinstance(l, str) for l in labels):
-                raise ValueError(f"answer {i}: labels must be a non-empty list of strings")
-            if len(set(labels)) != len(labels):
-                raise ValueError(f"answer {i}: duplicate labels")
-            if not q["multiSelect"] and len(labels) > 1:
-                raise ValueError(f"answer {i}: only one label allowed")
-            if any(l not in valid or "\0" in l for l in labels):
-                raise ValueError(f"answer {i}: label is not an option of this question")
-            out[str(i)] = {"labels": labels}
-        else:
-            other = a["other"]
-            if not q.get("allowFreeText", True):
-                raise ValueError(f"answer {i}: free text not allowed")
-            if not isinstance(other, str) or not other.strip() or "\0" in other:
-                raise ValueError(f"answer {i}: free text must be a non-empty string without NUL")
-            if len(other) > MAX_FREE_TEXT:
-                raise ValueError(f"answer {i}: free text over the {MAX_FREE_TEXT} character cap")
-            out[str(i)] = {"other": other}
-    text = f"Answer to {pending['id']}: " + json.dumps(out, ensure_ascii=False, separators=(",", ":"))
-    try:
-        text.encode("utf-8")  # lone surrogates can't be passed as argv
-    except UnicodeEncodeError:
-        raise ValueError("free text must be valid UTF-8") from None
-    return text
 
 
 def _public(rec: dict) -> dict:
@@ -212,8 +173,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                     it["grind"] = ui_grind.for_card(gidx, owner, repo, it["issue"], (it.get("run") or {}).get("pr"))
             self._json(200, body) if body else self._json(404, {"error": "not found"})
         elif path == "/api/sessions":
-            body = {"sessions": [_public(r) for r in ui_sessions.list_sessions()],
-                    "limits": ui_runner.limits()}
+            recs = ui_sessions.list_sessions()
+            body = {"sessions": [_public(r) for r in recs], "limits": ui_runner.limits(), "afk": ui_afk.public(recs)}
             self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
         else:
             parts = path.split("/")
@@ -304,6 +265,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 self._json(403, {"error": "folder picker is only available locally on macOS"})
         elif parts == ["", "api", "cleanup"]:
             self._cleanup()
+        elif parts == ["", "api", "afk"]:
+            self._dispatch(lambda b: ui_afk.start(b.get("until")))
+        elif parts in (["", "api", "afk", "stop"], ["", "api", "afk", "dismiss"]):
+            self._dispatch(lambda b: ui_afk.stop() if parts[3] == "stop" else ui_afk.dismiss())
         elif parts == ["", "api", "repos", "register"]:
             self._dispatch(lambda b: {"path": ui_repos.register(b.get("slug"), b.get("path")), "repos": ui_repos.list_repos()})
         elif parts == ["", "api", "repos", "scan"]:
@@ -549,7 +514,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json(409, {"error": "round_id is not the current pending round"})
             return
         try:
-            text = _answer_text(pending, body.get("answers"))
+            text = ui_sessions.answer_text(pending, body.get("answers"))
         except ValueError as e:
             self._json(400, {"error": str(e)})
             return
@@ -653,6 +618,7 @@ def cmd_serve(args) -> None:
     ui_grind.start_timer()  # queued/auto grinds, ntfy on pause/finish
     ui_runner.start_prgrind_timer()  # re-enter pr-grind loops whose session ended (reviews, CI, heartbeat)
     ui_runner.start_limit_timer()  # auto-resume limited runs, incl. catch-up of resets missed while down
+    ui_afk.start_timer()  # AFK mode: auto-answer, skip CI on paused grinds, retry failures; ends the window
     print(f"serving http://127.0.0.1:{server.server_address[1]}/ — Ctrl+C to stop")
     if ts:
         print(f"also on your tailnet: {ts['url']}/ (only {ts['login']}; removed when this exits)")

@@ -508,7 +508,7 @@ def stop(sid: str) -> dict:
 
 
 def resume_stopped(sid: str, claude_cmd=None) -> dict:
-    """Continue a stopped or limited session via --resume (Ledger fallback if that fails).
+    """Continue a stopped, limited or failed session via --resume (Ledger fallback if that fails).
 
     A limited session resumes with its unanswered answer, if any; claude_cmd rebinds it to another
     account first (its transcript is copied into that account's config dir).
@@ -517,8 +517,8 @@ def resume_stopped(sid: str, claude_cmd=None) -> dict:
         rec = ui_sessions.load(sid)
         if rec is None:
             raise FileNotFoundError(f"no such session: {sid}")
-        if rec.get("status") not in ("stopped", "limited") or sid in _procs:
-            raise Conflict("session is not stopped or limited")
+        if rec.get("status") not in ("stopped", "limited", "failed") or sid in _procs:
+            raise Conflict("session is not stopped, limited or failed")
         key = _issue_key(rec)
         if key:
             for o in ui_sessions.list_sessions():

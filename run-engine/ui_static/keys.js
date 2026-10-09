@@ -68,13 +68,16 @@ export function moveFocus(dir, doc = document) {
   return true;
 }
 
-export function paletteItems({ board, sessions }) {
+export function paletteItems({ board, sessions, afk }) {
   const items = [
     { id: 'nav-board', group: 'Go to', label: 'Board', detail: 'g b', href: '#/' },
     { id: 'nav-sessions', group: 'Go to', label: 'Sessions', detail: 'g s', href: '#/sessions' },
     { id: 'nav-dispatch', group: 'Go to', label: 'Dispatch', detail: 'g d · run a batch of issues', href: '#/dispatch' },
     { id: 'nav-new', group: 'Go to', label: 'New run', detail: 'n', href: '#/new' },
     { id: 'nav-settings', group: 'Go to', label: 'Settings', detail: 'Claude commands', href: '#/settings' },
+    afk?.active
+      ? { id: 'afk', group: 'Autopilot', label: "I'm back", detail: 'end AFK mode now', event: 'aiw:afk-back' }
+      : { id: 'afk', group: 'Autopilot', label: 'Go AFK…', detail: 'autopilot for 30 min to 4 hours', event: 'aiw:afk' },
   ];
   for (const col of (board && board.columns) || []) {
     for (const card of col.cards || []) {
@@ -140,12 +143,13 @@ export class Palette extends Component {
   }
 
   items() {
-    return filterItems(paletteItems({ board: this.state.board, sessions: this.props.sessions }), this.state.q);
+    return filterItems(paletteItems({ board: this.state.board, sessions: this.props.sessions, afk: this.props.afk }), this.state.q);
   }
 
   pick = (item) => {
     this.props.onClose();
-    location.hash = item.href;
+    if (item.event) dispatchEvent(new CustomEvent(item.event));
+    else location.hash = item.href;
   };
 
   onKey = (e) => {
