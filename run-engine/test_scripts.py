@@ -3641,16 +3641,17 @@ NOURL = "**No issue URL** (it failed, the human cancelled, or a `4-FLAT` run end
 LIST1 = "**An ordered list of 2 or more issue URLs** (its `4-FLAT` return; flat issues have no parent, and `/gh-issue` no longer files epics): print the issue URLs in list order and end the run here."
 LIST2 = "This is a clean stop, not an escalation: no Ledger, no worktree, no `aiw init`, and no further Preflight step."
 LIST3 = "Tell the user to run `/run-issue <n>` for each issue in list order; each issue's `Depends on:` line names the issue it builds on, so run those first \u2014 `/run-issue` bases a flat issue on the default branch unless its plan says otherwise."
+LIST4 = "End with the line `\u2192 next: herdr-dispatch <n> <n> \u2026` (every created issue number, in list order); `herdr-dispatch` runs them in that dependency order."  # #186
 ONE = "**Exactly one issue URL**: parse the created issue number `<n>` from it and continue to Preflight step 3 with that `<n>` as though it had been passed to `/run-issue` directly."
 HARD = "`/gh-issue`'s HARD RULE is scoped to issue creation and does not bind any later phase of this run."
-for sent in (NOURL, LIST1, LIST2, LIST3, ONE, HARD):
+for sent in (NOURL, LIST1, LIST2, LIST3, LIST4, ONE, HARD):
     assert st2.count(sent) == 1, sent
 assert _n(ri85).count(HARD) == 1 and st2.endswith(HARD)
 ok("#85 step 2 pins the three branches and the HARD RULE sentence whole")
 _a, _b, _h = st2.index("**An ordered list"), st2.index("**Exactly one issue URL**"), st2.index(HARD)
 # whole-bullet pins: appended text or an inserted bullet inside a branch fails
 assert st2[st2.index("**No issue URL**") : _a].rstrip(" -") == NOURL
-assert st2[_a:_b].rstrip(" -") == f"{LIST1} {LIST2} {LIST3}"
+assert st2[_a:_b].rstrip(" -") == f"{LIST1} {LIST2} {LIST3} {LIST4}"
 assert st2[_b:_h].strip() == ONE
 assert "2 or more issue URLs" in st2 and "3 or more" not in st2 and "more than 2" not in st2
 ok("#85 list branch stops the run and the threshold is literally 2")

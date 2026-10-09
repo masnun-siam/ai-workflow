@@ -269,7 +269,9 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
        worktree, no `aiw init`, and no further Preflight step. Tell the user to run
        `/run-issue <n>` for each issue in list order; each issue's `Depends on:` line names
        the issue it builds on, so run those first — `/run-issue` bases a flat issue on the
-       default branch unless its plan says otherwise.
+       default branch unless its plan says otherwise. End with the line
+       `→ next: herdr-dispatch <n> <n> …` (every created issue number, in list order);
+       `herdr-dispatch` runs them in that dependency order.
      - **Exactly one issue URL**: parse the created issue number `<n>` from it and
        continue to Preflight step 3 with that `<n>` as though it had been passed to
        `/run-issue` directly.
