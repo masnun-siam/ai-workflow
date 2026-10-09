@@ -16,6 +16,7 @@ import time
 
 import dispatch
 import ui_board
+import ui_flows
 import ui_runner
 import ui_sessions
 import ui_settings
@@ -262,6 +263,9 @@ def start_session(body: dict):
         if not isinstance(claude_cmd, str) or claude_cmd not in saved:
             return 400, {"error": "claude_cmd must be a label saved in Settings"}
         claude_cmd = saved[claude_cmd]
+    flow_id = body.get("flow_id")
+    if flow_id is not None and (not isinstance(flow_id, str) or ui_flows.load(flow_id) is None):
+        return 400, {"error": "flow_id must name an existing flow"}
     fam = family(text)
     if issue is None and fam == "run-issue":
         issue = issue_from_args((text.split(None, 1) + [""])[1])
@@ -283,7 +287,7 @@ def start_session(body: dict):
                     "href": f"/api/sessions/{dup['id']}",
                 }
         try:
-            res = ui_runner.start(text, cwd, link, claude_cmd=claude_cmd, gate_questions=True)
+            res = ui_runner.start(text, cwd, link, claude_cmd=claude_cmd, gate_questions=True, flow_id=flow_id)
             if fam == "run-issue" and link and body.get("auto_grind", ui_settings.load()["auto_grind"]) is True:
                 res = ui_sessions.update(res["id"], auto_grind=True)  # ui_grind.autostart queues it when the run finishes
             _remember(slug, cwd)

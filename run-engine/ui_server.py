@@ -24,6 +24,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 import ui_afk
 import ui_cleanup
 import ui_dispatch
+import ui_flows
 import ui_events
 import ui_grind
 import ui_issue
@@ -116,6 +117,7 @@ def _public(rec: dict) -> dict:
         "limit_resets_at": rec.get("limit_resets_at"),
         "limit_type": rec.get("limit_type"),
         "auto_resume": rec.get("auto_resume"),
+        "flow_id": rec.get("flow_id"),
         "repo_path": p,
         "resume_command": f"cd {shlex.quote(p)} && claude --resume {shlex.quote(sid)}" if p and sid else None,
     }
@@ -162,6 +164,23 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json(200, ui_settings.load())
         elif path == "/api/cleanup":
             self._json(200, {"items": list(_TITLE_POOL.map(ui_cleanup.describe, ui_cleanup.find_targets()))})
+        elif path == "/api/flows":
+            q = parse_qs(urlsplit(self.path).query)
+            self._json(200, {"flows": [ui_flows.summary(f) for f in ui_flows.list_all(q.get("archived") == ["1"])]})
+        elif path.startswith("/api/flows/") and path.endswith("/issues") and len(path.split("/")) == 5:
+            body = ui_flows.issues_for(path.split("/")[3])
+            self._json(200, body) if body is not None else self._json(404, {"error": "not found"})
+        elif path.startswith("/api/flows/") and len(path.split("/")) == 4:
+            f = ui_flows.load(path.split("/")[3])
+            self._json(200, f) if f else self._json(404, {"error": "not found"})
+        elif path == "/api/notes":
+            q = parse_qs(urlsplit(self.path).query)
+            try:
+                self._json(200, ui_flows.read_note((q.get("path") or [""])[0]))
+            except ui_flows.NotFound:
+                self._json(404, {"error": "note not found"})
+            except ValueError as e:
+                self._json(400, {"error": str(e)})
         elif path == "/api/pipelines":
             self._json(200, {"pipelines": [ui_dispatch.summary(p) for p in ui_dispatch.list_all()]})
         elif path.startswith("/api/pipelines/"):
@@ -275,6 +294,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._dispatch(self._scan)
         elif parts[:3] == ["", "api", "dispatch"] and parts[3:] == ["preview"]:
             self._dispatch(lambda b: ui_dispatch.preview(b.get("input"), b.get("repo")))
+        elif parts == ["", "api", "flows"]:
+            self._dispatch(ui_flows.create, 201)
+        elif len(parts) == 5 and parts[:3] == ["", "api", "flows"] and parts[4] in ("update", "archive", "unarchive"):
+            self._dispatch(lambda b: ui_flows.update(parts[3], b) if parts[4] == "update"
+                           else ui_flows.set_archived(parts[3], parts[4] == "archive"))
         elif parts == ["", "api", "pipelines"]:
             self._dispatch(ui_dispatch.create, 201)
         elif len(parts) == 5 and parts[:3] == ["", "api", "pipelines"] and parts[4] == "delete":
@@ -334,7 +358,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json(ok, fn(body))
         except ui_dispatch.NeedsCheckout as e:
             self._json(409, {"error": str(e), "code": "no_checkout", "slug": e.slug, "candidates": e.candidates})
-        except ui_dispatch.NotFound:
+        except (ui_dispatch.NotFound, ui_flows.NotFound):
             self._json(404, {"error": "not found"})
         except ui_dispatch.Conflict as e:
             self._json(409, {"error": str(e)})
