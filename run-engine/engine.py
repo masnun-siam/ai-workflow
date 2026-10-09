@@ -149,7 +149,7 @@ class Ledger:
     """The run's state: who holds the baton, what has bounced, and the trace.
 
     This is the in-memory shape of run.json. `stations` lives here rather than in
-    config so the engine is roster-agnostic — a mode (`--lean`) needs zero code
+    config so the engine is roster-agnostic — a mode (`--full`) needs zero code
     change, and a resumed run can never silently swap rosters mid-flight.
     """
 
@@ -291,7 +291,7 @@ class Router:
 
         # A bounce to a station outside THIS run's roster is unroutable — it happens
         # whenever an agent prompt names a target the roster does not contain (a dev
-        # bouncing `to: sdet` is correct in the full roster and impossible in --lean,
+        # bouncing `to: sdet` is correct in the full roster and impossible in the default one,
         # where the sdet never ran). Escalate with the roster spelled out rather than
         # blowing up on index_of().
         if target not in ledger.stations:

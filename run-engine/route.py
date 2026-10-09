@@ -132,6 +132,7 @@ def cmd_init(args) -> None:
     modes = config.get("modes") or {}
     if mode not in modes:
         die(2, f"unknown mode: {mode} (have: {', '.join(sorted(modes)) or 'none'})")
+    mode = modes[mode].get("alias_of", mode)
 
     stations = modes[mode].get("stations") or config.get("stations") or []
     if os.path.isfile(ledger_path(args.run_dir)):
@@ -162,30 +163,41 @@ def cmd_route(args) -> None:
     station = envelope.get("station")
     status = envelope.get("status")
 
-    # Test ownership. The SDET owns the tests it authored; dev makes them pass by
-    # writing product code, never by editing the test. Skipped when there is no
-    # sdet_sha (lean mode never ran an SDET, so there is no baseline to protect).
-    sdet_sha = ledger.context.get("sdet_sha")
+    # Test ownership. In full mode the SDET owns the tests it authored; dev makes them
+    # pass by writing product code, never by editing the test. In default mode there is
+    # no SDET: dev commits its own RED tests first (handoff.tests_sha) and may change one
+    # afterwards only with a handoff.test_changes[] entry saying why — an unjustified
+    # change bounces dev back to itself.
+    handoff = envelope.get("handoff") if isinstance(envelope.get("handoff"), dict) else {}
+    owner = "sdet" if "sdet" in ledger.stations else "dev"
+    if owner == "dev" and station == "dev" and handoff.get("tests_sha") and not ledger.context.get("tests_sha"):
+        ledger.context["tests_sha"] = handoff["tests_sha"]
+    sdet_sha = ledger.context.get("sdet_sha" if owner == "sdet" else "tests_sha")
     test_root = ledger.context.get("test_root")
     router = Router(config.get("bounce_cap", 2))
 
     if station == "dev" and status == "passed" and sdet_sha and test_root:
         violations = test_root_violations(repo, sdet_sha, test_root)
+        if owner == "dev":
+            justified = {c.get("file") for c in handoff.get("test_changes") or []
+                         if isinstance(c, dict) and str(c.get("reason") or "").strip()}
+            violations = [v for v in violations if v not in justified]
         if violations:
             # Route the bounce HERE rather than telling the orchestrator to rewrite the
             # station's envelope. Hand-authoring an envelope is the one thing the contract
             # cannot detect (H1), so the engine must not ask for it — not even to correct a
-            # violation. Deciding this here also means the bounce consumes the dev->sdet cap
+            # violation. Deciding this here also means the bounce consumes the dev->sdet (or dev->dev) cap
             # and escalates past it like any other, so tampering cannot loop.
             envelope = {
                 **envelope,
                 "status": "bounce",
                 "summary": "test-ownership violation: " + ", ".join(violations),
                 "bounce": {
-                    "to": "sdet",
-                    "reason": "dev changed SDET-owned test files; reverted",
+                    "to": owner,
+                    "reason": f"dev changed test files after the {'SDET' if owner == 'sdet' else 'RED-tests'} commit; reverted",
                     "findings": [{"file": f, "severity": "blocker",
-                                  "note": "changed since the SDET commit; the SDET owns this file"}
+                                  "note": "changed since the SDET commit; the SDET owns this file" if owner == "sdet"
+                                  else "changed since tests_sha with no handoff.test_changes[] reason"}
                                  for f in violations],
                 },
             }
@@ -193,7 +205,7 @@ def cmd_route(args) -> None:
             apply_action(ledger, action, station)
             save_ledger(run_dir_for(args), ledger)
             sys.stderr.write(
-                "test-ownership violation: dev changed test-root file(s) since the SDET commit: "
+                f"test-ownership violation: dev changed test-root file(s) since {sdet_sha}: "
                 + ", ".join(violations)
                 + f" — revert them (git checkout {sdet_sha} -- <files>; if a git safety "
                 f"hook blocks that, fall back to git show {sdet_sha}:<path> > /tmp/<file> "
