@@ -19,10 +19,11 @@ Why this order matters: scanning before interviewing means the questions are inf
 
 ## Arguments
 
-`/prd <requirement> [--to local,obsidian,wiki]`
+`/prd <requirement | feature-folder> [--to local,obsidian,wiki]`
 
 - `<requirement>`: free text, a BRD file, an Obsidian note, a Sentry link or a GitHub issue URL.
-- `--to`: one or more destinations. Default `local`. If the user passes none, still use `local` as the preselected default, but ask once at the end (Step 6) whether to add the others.
+- `<feature-folder>`: a vault path `05-Work/<Project>/<Feature>` that holds a `Dump.md` (as left by `/dump`). `/prd` fills that folder's seeded `PRD.md`.
+- `--to`: one or more destinations. Default `obsidian`, and nothing is asked about other destinations: `local` and `wiki` are written only when named here. If the Obsidian project can't be resolved (Step 2), ask which project to use and offer `local` instead; never leave the run with no destination.
 
 ### Asking the user
 
@@ -51,7 +52,7 @@ are used either way; only the transport differs.
 
 ## Step 1: Normalise the input
 
-Free text → use as is. Anything else (file path, Obsidian note, URL) → run `/intake` on it and use its brief as the requirement. Don't re-implement parsing here.
+A vault feature folder (`05-Work/<Project>/<Feature>`) that contains `Dump.md` → read `Dump.md` and `PRD.md` with `obsidian vault=notes read` and use both as the requirement; take the project and feature from the path (skip the folder resolution at the end of Step 2). Free text → use as is. Anything else (file path, Obsidian note, URL) → run `/intake` on it and use its brief as the requirement. Don't re-implement parsing here.
 
 Derive a short **title** and kebab-case **slug** from the requirement. Detect the repo with `gh repo view --json nameWithOwner,name` (fall back to the git remote).
 
@@ -65,12 +66,15 @@ Interviewing for ten minutes and then discovering a PRD already exists wastes th
 | obsidian | `obsidian vault=notes file path="05-Work/<Project>/<Feature>/PRD.md"` — prints `Error: ... not found` (exit code 0) when missing, so read the output text |
 | wiki | after cloning (Step 7), look for `PRD-<Title-With-Dashes>.md`; for an early check use `git ls-remote` only to confirm the wiki exists, and defer the page check to the clone |
 
+Exception: an Obsidian `PRD.md` with frontmatter `status: seed` is the input, not a collision — continue without asking and fill that same file. Read the status with `obsidian vault=notes property:read path="05-Work/<Project>/<Feature>/PRD.md" name=status` (the existence check above does not show frontmatter); only output that is exactly `seed` counts. Anything else (another value, empty output, an error) means any other existing PRD, including finished PRDs and ones seeded before the marker existed, and still stops here.
+
 If a PRD already exists anywhere: **stop and ask the user** (headless: `aiw ask`, then end your turn) what to do (read it and update it, pick a new name, skip that destination). Never overwrite silently. If they choose to update, read the existing PRD before Step 4 so the interview builds on it and keeps earlier decisions.
 
 For Obsidian, also resolve the project and feature folder here, the same way `dump` does:
 
 1. `obsidian vault=notes read path="05-Work/Index.md"` and match the repo/project name against it (e.g. wasensi → `05-Work/Wasensi`). Read `05-Work/<Project>/Index.md` too.
 2. Show the resolved target in the Step 6 confirmation. A **new** feature folder needs the user's explicit OK, same rule as `/dump`; never create a project folder or edit `05-Work/Index.md` on your own.
+3. If no `05-Work/<Project>` entry matches, **stop and ask** (headless: `aiw ask`, then end your turn): which existing project to use, or write to `local` instead. Do not guess and do not create one.
 
 ## Step 3: Scan the codebase (once, up front)
 
@@ -124,7 +128,7 @@ The Obsidian copy additionally gets tag frontmatter and full-path wikilinks in `
 
 ## Step 6: Review gate — always
 
-Show the **full** draft (if headless, put the draft in the question text and use `aiw ask` with options `Approve (Recommended)` / `Edit`, edits as free text, then end your turn), plus for each chosen destination the exact path it will be written to (and, for Obsidian, the resolved project/feature folder and whether it is new). Wait for an explicit OK. Apply any edits and show the changed draft again until the user approves. If `--to` was not given, ask here whether to also save to Obsidian and/or the wiki.
+Show the **full** draft (if headless, put the draft in the question text and use `aiw ask` with options `Approve (Recommended)` / `Edit`, edits as free text, then end your turn), plus for each chosen destination the exact path it will be written to (and, for Obsidian, the resolved project/feature folder and whether it is new). Wait for an explicit OK. Apply any edits and show the changed draft again until the user approves.
 
 Nothing is written anywhere before this approval. The wiki push needs its own explicit confirmation in Step 7, because pushing to a wiki publishes it.
 
@@ -140,6 +144,8 @@ obsidian vault=notes property:set path="05-Work/<Project>/<Feature>/PRD.md" name
 obsidian vault=notes append path="05-Work/<Project>/<Feature>/PRD.md" content="\n## Related\n- [[05-Work/<Project>/Index|<Project> Project Index]]"
 obsidian vault=notes append path="05-Work/<Project>/Index.md" content="- [[05-Work/<Project>/<Feature>/PRD|<Feature>]]"
 ```
+
+If the target was a seed (Step 2): replace the `create` line above with `obsidian vault=notes create path="05-Work/<Project>/<Feature>/PRD.md" content="<PRD>" overwrite`, skip the project-index `append` (`/dump` already added it), and after the `tags` line run `obsidian vault=notes property:set path="05-Work/<Project>/<Feature>/PRD.md" name=status value=draft`. Overwriting re-creates the file, so keep the `tags` and `## Related` lines; the `## Related` block must list `Dump` again (see the next paragraph).
 
 Read a sibling's tags first to reuse the feature slug, and list existing siblings (Dump, Decisions, SRS…) in `## Related`. Add the PRD line to existing siblings' Related blocks as dump does. The project tag table lives in dump's SKILL.md.
 

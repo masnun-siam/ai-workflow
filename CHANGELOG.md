@@ -13,6 +13,7 @@
 
 ### Changed
 
+- **`/prd` default destination is Obsidian.** `--to` now defaults to `obsidian` instead of `local`, and `/prd` fills the seeded `PRD.md` that `/dump` leaves in a feature folder (`status: seed`, set to `draft` once filled). `local` and `wiki` are written only when named in `--to`.
 - **Run page.** The header groups the title, status chips and actions, the stations list
   is compact and sticky, assistant output renders as markdown in a readable measure, only
   the latest 80 events render until "Show earlier events", and "Jump to latest" appears
