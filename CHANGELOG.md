@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.12.0 — 2026-10-09
 
 ### Added
 
@@ -18,6 +18,12 @@
   is compact and sticky, assistant output renders as markdown in a readable measure, only
   the latest 80 events render until "Show earlier events", and "Jump to latest" appears
   when you scroll up. On phones the page scrolls instead of the log.
+- **Flow page.** The steps sit on a vertical rail that fills as each one hands off; only
+  the current step opens into a panel, and later steps are one line saying what they
+  produce. Buttons name the outcome ("File the idea", "Write the PRD", "Create the
+  issues"), errors sit under their field, and "Start over" asks before clearing progress.
+- **Flow uses the New run repo picker.** Search repos, type an absolute path or browse
+  for a folder; the combobox is now shared by both pages.
 
 ### Fixed
 

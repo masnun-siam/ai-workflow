@@ -1,7 +1,7 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { poll } from './app.js';
-import { buildBody, loadLastRepo } from './launcher.js';
+import { buildBody, loadLastRepo, repoCombo, repoOptions } from './launcher.js';
 import { issueNumbers } from './dispatch.js';
 
 const html = htm.bind(h);
@@ -9,11 +9,16 @@ const html = htm.bind(h);
 // Guided Flow (#190): Dump → PRD → Issues → Dispatch. Each step runs its command as a headless
 // session; its final `→ next:` line pre-fills the next step. All state lives in the hash.
 const STEPS = [
-  { key: 'dump', label: 'Dump', command: 'dump', input: 'Raw input: a feature idea, change, bug or task' },
-  { key: 'prd', label: 'PRD', command: 'prd', input: 'Feature folder (05-Work/<Project>/<Feature>)' },
-  { key: 'issues', label: 'Issues', command: 'gh-issue', input: 'PRD path, or the Bugs.md / Tasks.md note' },
-  { key: 'dispatch', label: 'Dispatch', input: 'Issue numbers' },
+  { key: 'dump', label: 'Dump', command: 'dump', action: 'File the idea', input: 'What do you want built or fixed?',
+    placeholder: 'e.g. Admins can export the bookings table as CSV, filtered by date range',
+    produces: 'Files the idea into a feature folder in your notes.' },
+  { key: 'prd', label: 'PRD', command: 'prd', action: 'Write the PRD', input: 'Feature folder (05-Work/<Project>/<Feature>)',
+    produces: 'Writes a reviewed PRD for the feature.' },
+  { key: 'issues', label: 'Issues', command: 'gh-issue', action: 'Create the issues', input: 'PRD path, or the Bugs.md / Tasks.md note',
+    produces: 'Creates GitHub issues from the PRD.' },
+  { key: 'dispatch', label: 'Dispatch', input: 'Issue numbers', produces: 'Starts a run for each issue.' },
 ];
+const STATE_TEXT = { done: 'Done', skipped: 'Skipped', active: 'Current step', locked: 'Not started' };
 const TERMINAL = ['done', 'failed', 'stopped'];
 
 // The last `→ next: <command> <arg>` line of a session's final result, or null. Tolerates the
@@ -64,30 +69,38 @@ export class Flow extends Component {
   constructor(props) {
     super(props);
     const p = props.route.params;
-    this.state = { repo: p.repo || loadLastRepo(globalThis.localStorage) || '', repos: [], text: '', folder: p.folder, prd: p.prd,
-      issues: p.issues.join(' '), sid: p.sid, meta: null, why: null, busy: false };
+    // The repo is a registered slug or, like New run, an absolute path to a checkout.
+    const repo = p.repo || loadLastRepo(globalThis.localStorage) || '';
+    const manual = repo.startsWith('/');
+    this.state = { repo: manual ? '' : repo, manual, path: manual ? repo : '', repos: [], canBrowse: false, repoQuery: null, repoOpen: false,
+      repoActive: 0, browsing: false, text: '', folder: p.folder, prd: p.prd, issues: p.issues.join(' '), sid: p.sid, meta: null, why: null, busy: false };
   }
+
+  combo = repoCombo(this, () => this.save({ why: null }));
 
   componentDidMount() {
     fetch('/api/repos', { headers: { Accept: 'application/json' } }).then((r) => (r.ok ? r.json() : null)).then((b) => {
-      const repos = ((b && b.repos) || []).filter((r) => r && r.slug);
-      this.setState({ repos, repo: this.state.repo || (repos[0] || {}).slug || '' });
+      const repos = repoOptions(b);
+      const { repo, manual } = this.state;
+      this.setState({ repos, canBrowse: !!b && b.can_browse === true, repo: repo || manual ? repo : (repos[0] || {}).value || '',
+        ...(repos.length || manual ? {} : { manual: true, path: repo }) });
     }).catch(() => {});
     if (this.state.sid) this.watch(this.state.sid);
   }
 
   componentWillUnmount() { this.gone = true; if (this.stop) this.stop(); }
 
-  fields = (s = this.state) => ({ repo: s.repo, folder: s.folder, prd: s.prd, issues: issueNumbers(s.issues), sid: s.sid });
+  fields = (s = this.state) => ({ repo: (s.manual ? s.path : s.repo).trim(), folder: s.folder, prd: s.prd, issues: issueNumbers(s.issues), sid: s.sid });
 
   save(patch) {
     this.setState(patch, () => history.replaceState(null, '', flowHash(this.fields())));
   }
 
   start = async (step) => {
-    const { repo, text, folder, prd } = this.state;
+    const { text, folder, prd } = this.state;
+    const { repo } = this.fields();
     const args = { dump: text, prd: folder, issues: prd }[step.key].trim();
-    if (!repo || !args) { this.setState({ why: !repo ? 'Pick a repo first.' : 'Fill in the input first.' }); return; }
+    if (!repo || !args) { this.setState({ why: !repo ? 'Pick a repo first.' : 'Fill in the field above first.' }); return; }
     this.setState({ busy: true, why: null, meta: null });
     let res, data = null;
     try {
@@ -134,44 +147,57 @@ export class Flow extends Component {
   input(step) {
     const id = `flow-${step.key}`;
     const field = { dump: 'text', prd: 'folder', issues: 'prd', dispatch: 'issues' }[step.key];
-    const Tag = step.key === 'dump' ? 'textarea' : 'input';
+    const prose = step.key === 'dump';
+    const Tag = prose ? 'textarea' : 'input';
     return html`<label for=${id}>${step.input}</label>
-      <${Tag} id=${id} class="field mono" rows=${step.key === 'dump' ? 4 : undefined} type=${step.key === 'dump' ? undefined : 'text'}
-        value=${this.state[field]} disabled=${this.running()} onInput=${(e) => (field === 'text' ? this.setState({ text: e.target.value }) : this.save({ [field]: e.target.value }))} />`;
+      <${Tag} id=${id} class=${prose ? 'field flow-prose' : 'field mono'} rows=${prose ? 6 : undefined} type=${prose ? undefined : 'text'}
+        placeholder=${step.placeholder} aria-describedby=${this.state.why ? 'flow-why' : undefined} aria-invalid=${this.state.why ? 'true' : undefined}
+        value=${this.state[field]} disabled=${this.running()} onInput=${(e) => (field === 'text' ? this.setState({ text: e.target.value }) : this.save({ [field]: e.target.value }))} />
+      ${this.state.why && html`<p id="flow-why" role="alert" class="error">${this.state.why}</p>`}`;
   }
 
-  render(_, { repo, repos, sid, meta, why, busy }) {
+  // Resetting drops every handed-off value, so ask once any step has produced one.
+  startOver = (e) => {
+    const { folder, prd, issues } = this.state;
+    if ((folder || prd || issues) && !globalThis.confirm('Start over? The folder, PRD and issue numbers from this flow are cleared.')) e.preventDefault();
+  };
+
+  render(_, st) {
+    const { sid, meta, busy, folder, prd, why } = st;
+    const { repo } = this.fields(st);
     const cur = stepFromState(this.fields());
     const at = STEPS.findIndex((s) => s.key === cur);
     const issues = issueNumbers(this.state.issues);
     const waiting = meta && meta.outcome === 'waiting';
-    return html`
-      <h1>Flow</h1>
-      <p class="note">Take one feature from a raw idea to dispatched runs: Dump → PRD → Issues → Dispatch. Each step stops for you.</p>
+    return html`<div class="flow">
+      <div class="flow-top">
+        <h1>Flow</h1>
+        ${(folder || prd || issues.length || sid) && html`<a class="btn" href=${flowHash({ repo })} onClick=${this.startOver}>Start over</a>`}
+      </div>
+      <p class="note">Turn a raw idea into dispatched issue runs. You review each step's result before the next one starts.</p>
       <label for="flow-repo">Repo</label>
-      <select id="flow-repo" class="field" value=${repo} onChange=${(e) => this.save({ repo: e.target.value })}>
-        ${repo && !repos.some((r) => r.slug === repo) && html`<option value=${repo}>${repo}</option>`}
-        ${repos.map((r) => html`<option value=${r.slug}>${r.slug}</option>`)}
-      </select>
+      ${this.combo.render(st, { id: 'flow-repo', error: why === 'Pick a repo first.' ? 'flow-why' : null })}
       <ol class="flow-steps">
         ${STEPS.map((step, i) => {
-          const state = i < at ? (step.key === 'prd' && !this.state.folder ? 'skipped' : 'done') : i === at ? 'active' : 'locked';
-          return html`<li class=${`panel flow-step flow-${state}`} aria-current=${state === 'active' ? 'step' : undefined}>
-            <div class="flow-head"><span class="flow-name">${i + 1}. ${step.label}</span><span class=${`chip flow-chip-${state}`}>${{ done: 'Done', skipped: 'Skipped', active: 'Current', locked: 'Locked' }[state]}</span></div>
-            ${state === 'locked' && html`<p class="note">Unlocks when ${STEPS[i - 1].label} hands off.</p>`}
-            ${state === 'active' && step.key !== 'dispatch' && html`
-              ${this.input(step)}
-              ${sid ? html`<p class="note" role="status">Session ${meta ? meta.outcome : 'starting'}${waiting ? html` · <a href=${`#/answer/${encodeURIComponent(sid)}`}>Answer its question</a>` : ''} · <a href=${`#/session/${encodeURIComponent(sid)}`}>Open session</a></p>` : null}
-              ${meta && meta.outcome !== 'done' && TERMINAL.includes(meta.outcome) && meta.resume_command && html`<p class="note">Continue in terminal: <code>${meta.resume_command}</code></p>`}
-              <button type="button" class="primary" disabled=${busy || this.running()} onClick=${() => this.start(step)}>${sid ? 'Run again' : `Run ${step.command}`}</button>`}
-            ${state === 'active' && step.key === 'dispatch' && html`
-              ${this.input(step)}
-              ${issues.length ? html`<a class="btn btn--primary" href=${dispatchHref(issues)}>Open Dispatch with ${issues.join(', ')}</a>` : null}`}
-            ${state === 'done' && html`<p class="note mono">${{ dump: this.state.folder || this.state.prd, prd: this.state.prd, issues: issues.join(', ') }[step.key]}</p>`}
-            ${state === 'active' && why && html`<p role="alert" class="error">${why}</p>`}
+          const state = i < at ? (step.key === 'prd' && !folder ? 'skipped' : 'done') : i === at ? 'active' : 'locked';
+          return html`<li class=${`flow-step flow-${state}`} aria-current=${state === 'active' ? 'step' : undefined}>
+            <span class="flow-mark" aria-hidden="true">${state === 'done' ? '✓' : i + 1}</span>
+            <div class="flow-body">
+              <h2 class="flow-name">${step.label} <span class="sr-only">(${STATE_TEXT[state]})</span>${state === 'skipped' && html` <span class="flow-tag">Skipped</span>`}</h2>
+              ${state !== 'done' && html`<p class="note">${step.produces}</p>`}
+              ${state === 'active' && step.key !== 'dispatch' && html`
+                ${this.input(step)}
+                ${sid ? html`<p class="note" role="status">Session ${meta ? meta.outcome : 'starting'}${waiting ? html` · <a href=${`#/answer/${encodeURIComponent(sid)}`}>Answer its question</a>` : ''} · <a href=${`#/session/${encodeURIComponent(sid)}`}>Open session</a></p>` : null}
+                ${meta && meta.outcome !== 'done' && TERMINAL.includes(meta.outcome) && meta.resume_command && html`<p class="note">Continue in terminal: <code>${meta.resume_command}</code></p>`}
+                <button type="button" class="primary" disabled=${busy || this.running()} onClick=${() => this.start(step)}>${sid ? `${step.action} again` : step.action}</button>`}
+              ${state === 'active' && step.key === 'dispatch' && html`
+                ${this.input(step)}
+                ${issues.length ? html`<a class="btn btn--primary" href=${dispatchHref(issues)}>Open Dispatch with ${issues.join(', ')}</a>` : null}`}
+              ${state === 'done' && html`<p class="note mono">${{ dump: folder || prd, prd, issues: issues.join(', ') }[step.key]}</p>`}
+            </div>
           </li>`;
         })}
       </ol>
-      <p><a href=${flowHash({ repo })}>Start over</a></p>`;
+    </div>`;
   }
 }
