@@ -44,3 +44,19 @@ _Avoid_: Run (a Run is the pipeline for one Issue; a Session is a single UI-star
 
 **Card** (kanban):
 One Issue's current-progress tile on the Board: Project, Issue number, and title. Represents the Issue via its latest Run only, not every Run.
+
+**Dump**:
+A raw capture filed into the Obsidian vault by `/dump` (new feature, change request, bug, task or meeting notes). For a new feature it seeds a `PRD.md` with `status: seed` next to the verbatim `Dump.md`.
+_Avoid_: Note, intake (intake normalises a source into a brief; it files nothing)
+
+**PRD**:
+The product requirements for one feature (the what and why, never the how), written by `/prd` after an interview. A `status: seed` PRD is a placeholder from `/dump` that `/prd` fills.
+_Avoid_: Spec, design doc
+
+**Refined**:
+The label `/gh-issue` puts on an issue that meets the definition of ready: flat, independently readable, with acceptance criteria, a How and a verify command, and its order declared by `Depends on: #n`.
+_Avoid_: Groomed, ready (ready is the Gate 2 verdict on a PR)
+
+**Dispatch**:
+Launching `/run-issue` over a batch of Issues in dependency order with a concurrency cap, via `herdr-dispatch` in the terminal or the `#/dispatch` page in the UI.
+_Avoid_: Batch run, fan-out
