@@ -26,3 +26,39 @@ export function untilText(epochSec, nowMs = Date.now()) {
 
 // Local "HH:MM" of an epoch-seconds time.
 export const clockText = (epochSec) => new Date(epochSec * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+
+// Label for a run's review-grind state ({state, round} or null).
+export function grindLabel(g) {
+  if (!g) return '';
+  const r = g.round ? ` · round ${g.round}` : '';
+  return { queued: 'grind queued', running: `grinding${r}`, idle: `grind idle${r}`, paused: `grind paused${r}`, done: 'grind done' }[g.state] || '';
+}
+
+// One-line gist of a tool call: its most telling argument, capped.
+export function toolSummary(e, max = 110) {
+  const input = e && e.input;
+  let s = '';
+  if (input && typeof input === 'object') {
+    const key = ['command', 'file_path', 'path', 'pattern', 'url', 'description', 'prompt', 'skill'].find((k) => typeof input[k] === 'string' && input[k]);
+    s = key ? input[key] : JSON.stringify(input);
+  } else if (input !== undefined && input !== null) s = String(input);
+  s = s.replace(/\s+/g, ' ').trim();
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+// Short name for a session in lists: grind sessions carry long instruction text as their command.
+export const sessionLabel = (command) => (/^\/(?:[\w-]+:)?pr-grind\b/.test(command) ? 'pr-grind round' : String(command).startsWith('Start the review grind') ? 'pr-grind start' : String(command));
+
+// Splits plain text into strings and { href } parts for http(s) URLs; trailing punctuation stays outside the link.
+export function linkParts(text) {
+  const s = String(text ?? '');
+  const out = [];
+  let last = 0;
+  for (const m of s.matchAll(/https?:\/\/[^\s<>"'`]+/g)) {
+    const href = m[0].replace(/[.,;:!?)\]}]+$/, '');
+    out.push(s.slice(last, m.index), { href });
+    last = m.index + href.length;
+  }
+  out.push(s.slice(last));
+  return out;
+}

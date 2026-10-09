@@ -106,7 +106,7 @@ def req(path, method="GET", body=None, host=HOST, origin=None, headers=None):
 calls = []
 
 
-def fake_start(command_text, cwd, link=None, claude_cmd=None):
+def fake_start(command_text, cwd, link=None, claude_cmd=None, gate_questions=False):
     calls.append((command_text, cwd, link))
     return ui_sessions.create(command_text, cwd, link, claude_cmd=claude_cmd)
 
@@ -166,6 +166,10 @@ try:
     # ------------------------------------------------------------ build_command
     assert ui_repos.build_command("run-issue", "116") == "/run-issue 116"
     assert ui_repos.build_command("pr-grind", "") == "/pr-grind"
+    assert ui_repos.build_command("pr-review", "5960") == "/pr-review 5960"
+    assert ui_repos.build_command("pr-fix-comments", "o/r#5960") == "/pr-fix-comments o/r#5960"
+    assert ui_repos.build_command("issue-to-pr", "https://github.com/o/r/issues/7") == "/issue-to-pr https://github.com/o/r/issues/7"
+    assert ui_repos.build_command("day", "") == "/day" and ui_repos.build_command("day", "call Abir") == "/day call Abir"
     assert ui_repos.MAX_PROMPT_CHARS == 32000
     ok("build_command units, MAX_PROMPT_CHARS")
 
@@ -303,7 +307,7 @@ try:
     reset_sessions()
     calls.clear()
 
-    def slow_start(command_text, cwd, link=None, claude_cmd=None):
+    def slow_start(command_text, cwd, link=None, claude_cmd=None, gate_questions=False):
         time.sleep(0.3)
         return ui_sessions.create(command_text, cwd, link)
 
@@ -484,6 +488,55 @@ try:
         s, _, h = req("/api/sessions", m)
         assert s == 405, (m, s)
     ok("POST /board.json still 405 Allow: GET; PUT/DELETE /api/sessions -> 405")
+    # --- finding, registering and scanning clones (Dispatch's "where is your clone?")
+    root = os.path.realpath(tempfile.mkdtemp())
+
+    def clone(rel, origin):
+        d = os.path.join(root, rel)
+        os.makedirs(d)
+        subprocess.run(["git", "init", "-q", d], check=True)
+        if origin:
+            subprocess.run(["git", "-C", d, "remote", "add", "origin", origin], check=True)
+        return d
+
+    a = clone("work/acme-app", "https://github.com/Acme/App.git")
+    clone("work/acme-app-copy", "git@github.com:acme/app.git")
+    b = clone("work/other", "https://github.com/acme/other")
+    clone("work/no-remote", None)
+    os.makedirs(os.path.join(root, "work", "node_modules", "dep"))
+    subprocess.run(["git", "init", "-q", os.path.join(root, "work", "node_modules", "dep")], check=True)
+    deep = clone("a/b/c/d/e/too-deep", "https://github.com/acme/deep")
+    ssh443 = clone("work/ssh443", "ssh://git@ssh.github.com:443/acme/ssh443.git")
+
+    found = {c["path"]: c["slug"] for c in ui_repos.find_clones([root, os.path.join(root, "work")])}
+    assert found == {a: "Acme/App", os.path.join(root, "work", "acme-app-copy"): "acme/app", b: "acme/other", ssh443: "acme/ssh443"}, found
+    ok("find_clones: GitHub-origin clones only (incl. ssh.github.com:443 remotes); no-remote, node_modules, too-deep skipped; overlapping roots do not repeat")
+    assert [c["path"] for c in ui_repos.find_clones([root], "ACME/app")] == sorted(
+        [a, os.path.join(root, "work", "acme-app-copy")], key=lambda p: p) or True
+    assert {c["path"] for c in ui_repos.find_clones([root], "ACME/app")} == {a, os.path.join(root, "work", "acme-app-copy")}
+    ok("find_clones filters by slug, case-insensitively")
+
+    assert ui_repos.is_unregistered_slug("acme/other") and not ui_repos.is_unregistered_slug("/abs/path")
+    assert ui_repos.register("acme/other", b) == b
+    assert not ui_repos.is_unregistered_slug("ACME/Other") and ui_repos.resolve_repo("acme/other")[0] == b
+    ok("register records a clone whose origin matches; the slug then resolves")
+    for bad_slug, bad_path in (("acme/other", a), ("acme/other", "/nonexistent"), ("nope", b), ("acme/x", root)):
+        try:
+            ui_repos.register(bad_slug, bad_path)
+        except ValueError:
+            continue
+        raise AssertionError(("register accepted", bad_slug, bad_path))
+    ok("register refuses a folder with another origin, a missing path, a bad slug, a non-repo")
+
+    res = ui_repos.scan_and_register([root])
+    assert {c["slug"].lower() for c in res["added"]} == {"acme/app", "acme/ssh443"} and len(res["duplicates"]) == 1, res
+    assert ui_repos.scan_and_register([root]) == {"added": [], "duplicates": []}
+    ok("scan registers new repos once; a second clone of the same repo is reported as a duplicate")
+    s, body, _ = req("/api/repos/scan", "POST", json.dumps({"roots": ["relative/dir"]}).encode())
+    assert s == 400, (s, body)
+    s, body, _ = req("/api/repos/register", "POST", json.dumps({"slug": "acme/other", "path": a}).encode())
+    assert s == 400 and "origin" in json.loads(body)["error"], (s, body)
+    ok("API: scan refuses non-absolute roots; register refuses an origin mismatch")
 finally:
     srv.shutdown()
     srv.server_close()

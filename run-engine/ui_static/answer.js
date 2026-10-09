@@ -1,6 +1,7 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { toast } from './toast.js';
+import { mdToHtml } from './run.js';
 
 const html = htm.bind(h);
 const MAX_OTHER = 4000;
@@ -222,7 +223,7 @@ export class Answer extends Component {
             <section class="panel answer-context" aria-label="Plan">
               <div class="mono muted">${where} · ${String(session.command || '')}</div>
               <h1>Plan: test plan + implementation plan</h1>
-              <pre class="plan">${plan}</pre>
+              <div class="md plan-md" dangerouslySetInnerHTML=${{ __html: mdToHtml(plan) }}></div>
               ${link ? html`<a href=${runHash(session)}>Open run detail</a>` : null}
             </section>` : null}
           <form class="panel answer-form" onSubmit=${this.submit}>

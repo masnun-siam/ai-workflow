@@ -1,14 +1,17 @@
 """ntfy push notifications for UI sessions (issue #121). Stdlib only.
 
-Config: <data_dir>/ui.json (must be mode 0600, it can hold a token) with
-{"ntfy": {"server", "topic", "token"}, "public_url"}; AIW_NTFY_SERVER/TOPIC/TOKEN
-override the file. notify() never raises and never logs the token.
+Config: <data_dir>/ui.json (must be mode 0600, it can hold a token or password) with
+{"ntfy": {"server", "topic", "token" | "user", "password"}, "public_url"};
+AIW_NTFY_SERVER/TOPIC/TOKEN/USER/PASSWORD override the file. A token (Bearer) wins over
+user+password (Basic). notify() never raises and never logs a credential.
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 from urllib.parse import quote, urlparse
@@ -17,8 +20,58 @@ from shared import data_dir, warn
 
 TIMEOUT_SECONDS = 5
 
-_TITLES = {"waiting": "aiw: waiting on you", "done": "aiw: run done", "failed": "aiw: session failed",
-           "pipeline": "aiw: pipeline finished"}
+# event -> (ntfy emoji shortcode shown as the icon, title with/without an issue number, action label).
+# Titles stay ASCII: they travel as an HTTP header.
+_LOOK = {
+    "waiting": ("speech_balloon", "aiw: #{n} waiting on you", "aiw: waiting on you", "Answer"),
+    "done": ("white_check_mark", "aiw: #{n} is done", "aiw: run done", "Open run"),
+    "failed": ("x", "aiw: #{n} failed", "aiw: session failed", "Open run"),
+    "grind-paused": ("pause_button", "aiw: #{n} grind paused", "aiw: grind paused", "Open run"),
+    "grind-done": ("mag", "aiw: #{n} grind finished", "aiw: grind finished", "Open run"),
+    "pipeline": ("checkered_flag", "aiw: pipeline finished", "aiw: pipeline finished", "Open pipeline"),
+}
+_TAG_SAFE = re.compile(r"[^A-Za-z0-9._#/-]+")
+
+
+def _tag(text) -> str:
+    return _TAG_SAFE.sub("", str(text or ""))[:40]
+
+
+def _first_line(text, limit=200) -> str:
+    line = next((l.strip() for l in str(text or "").splitlines() if l.strip()), "")
+    return line if len(line) <= limit else line[: limit - 1] + "…"
+
+
+def compose(event: str, rec: dict, public_url=None) -> tuple[dict, str]:
+    """(headers, body) for one push: an emoji icon + issue/repo tags, a title naming the
+    issue, a body that leads with the question or error, and an action button when a
+    public URL is set. Pure; notify() adds auth and sends it."""
+    icon, with_n, without_n, action = _LOOK.get(event, ("bell", "aiw: update", "aiw: update", "Open"))
+    link = rec.get("link") if isinstance(rec.get("link"), dict) else {}
+    issue = link.get("issue") if isinstance(link.get("issue"), int) else None
+    family = (str(rec.get("command") or "").lstrip("/").split(None, 1) or [""])[0].split(":")[-1]
+    tags = [icon] + [t for t in (_tag(family), _tag(str(rec.get("repo") or "").rsplit("/", 1)[-1]),
+                                 f"#{issue}" if issue else "") if t]
+    headers = {"Title": (with_n.replace("{n}", str(issue)) if issue else without_n),
+               "Priority": "default" if event in ("done", "pipeline", "grind-done") else "high",
+               "Tags": ",".join(tags)}
+    lines = []
+    if event == "waiting":
+        q = next(iter((rec.get("pending_question") or {}).get("questions") or []), None) or {}
+        lines.append(_first_line(q.get("question") or q.get("header")))
+        if q.get("recommended"):
+            lines.append(f"Suggested: {_first_line(q['recommended'], 80)}")
+    elif event == "failed":
+        lines.append(_first_line(rec.get("error")))
+    elif event.startswith("grind-"):
+        lines.append(_first_line(rec.get("note")))
+    lines.append(f"{rec.get('repo', '')} · {_first_line(rec.get('command'), 120)}".strip(" ·"))
+    click = click_url(event, rec, public_url)
+    if click:
+        headers["Click"] = click
+        if click.isascii():
+            headers["Actions"] = f"view, {action}, {click}"
+    return headers, "\n".join(l for l in lines if l)
 
 
 def load_config() -> dict:
@@ -45,7 +98,7 @@ def load_config() -> dict:
                 cfg = {}
     ntfy = cfg.get("ntfy")
     cfg["ntfy"] = ntfy = dict(ntfy) if isinstance(ntfy, dict) else {}
-    for key in ("server", "topic", "token"):
+    for key in ("server", "topic", "token", "user", "password"):
         val = os.environ.get(f"AIW_NTFY_{key.upper()}")
         if val:
             ntfy[key] = val
@@ -74,7 +127,13 @@ def dedupe_key(event, rec: dict):
     return event if event in ("done", "failed") else None
 
 
+# A grind round ends its session every time; the loop's own grind-done/grind-paused push is the signal.
+_QUIET_DONE = ("/pr-grind ", "Start the review grind for PR ")  # keep in step with ui_runner.GRIND_PREFIX
+
+
 def notify(event: str, rec: dict) -> None:
+    if event == "done" and str(rec.get("command", "")).startswith(_QUIET_DONE):
+        return
     try:
         cfg = load_config()
         ntfy = cfg["ntfy"]
@@ -84,14 +143,15 @@ def notify(event: str, rec: dict) -> None:
         if urlparse(str(server)).scheme not in ("http", "https"):
             warn("ntfy server must be an http(s) URL; push skipped")
             return
-        headers = {"Title": _TITLES.get(event, "aiw: update"),
-                   "Priority": "default" if event == "done" else "high"}
-        click = click_url(event, rec, cfg.get("public_url"))
-        if click:
-            headers["Click"] = click
+        headers, text = compose(event, rec, cfg.get("public_url"))
+        # Cloudflare's Browser Integrity Check rejects urllib's default User-Agent (error 1010).
+        headers["User-Agent"] = "aiw-ui (ntfy publisher)"
+        user, password = ntfy.get("user"), ntfy.get("password")
         if token:
             headers["Authorization"] = f"Bearer {token}"
-        body = f"{rec.get('command', '')}\n{rec.get('repo', '')}".encode("utf-8")
+        elif user and password:
+            headers["Authorization"] = "Basic " + base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
+        body = text.encode("utf-8")
         req = urllib.request.Request(str(server).rstrip("/") + "/" + quote(str(topic), safe=""),
                                      data=body, headers=headers, method="POST")
         urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS).close()

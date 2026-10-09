@@ -8,7 +8,7 @@ import re
 import subprocess
 import threading
 
-from shared import data_dir, extract_json_object, run_dir_for
+from shared import atomic_write_text, data_dir, extract_json_object, run_dir_for
 
 STATIONS = ["researcher", "planner", "sdet", "dev", "verifier", "reviewer", "fixer", "done"]
 
@@ -136,7 +136,7 @@ def plausible_repo(owner, repo):
     return bool(owner and repo and _SLUG_RE.match(owner) and _SLUG_RE.match(repo) and "-issue-" not in repo)
 
 
-def memoize_title_fetcher(fetch_title, pool=None):
+def memoize_title_fetcher(fetch_title, pool=None, store=None):
     """Wrap a (owner, repo, issue) -> title function with an in-memory cache.
 
     A live server polls every few seconds; re-running `gh issue view` per Issue on
@@ -147,8 +147,19 @@ def memoize_title_fetcher(fetch_title, pool=None):
     and the title is filled in by a later call once the pool has fetched it, so a cold
     /board.json never waits on `gh`. Without one the fetch is synchronous.
     Implausible owner/repo pairs are never fetched and stay None.
+
+    With a `store` path the good titles also live in that JSON file: a restarted server shows them at
+    once (each is still refreshed in the background once) instead of a bare #N until `gh` answers.
     """
     cache: dict = {}
+    disk: dict = {}
+    if store:
+        try:
+            with open(store, encoding="utf-8") as fh:
+                loaded = json.load(fh)
+            disk = {k: v for k, v in loaded.items() if isinstance(k, str) and isinstance(v, str)} if isinstance(loaded, dict) else {}
+        except (OSError, ValueError):
+            disk = {}
     pending: set = set()
     lock = threading.Lock()
 
@@ -160,6 +171,12 @@ def memoize_title_fetcher(fetch_title, pool=None):
         with lock:
             if title is not None:
                 cache[key] = title
+                if store and not title.endswith("(title unavailable)") and disk.get("%s/%s#%s" % key) != title:
+                    disk["%s/%s#%s" % key] = title
+                    try:
+                        atomic_write_text(store, json.dumps(disk))
+                    except OSError:
+                        pass  # a read-only data dir only costs the warm start
             pending.discard(key)
 
     def cached(owner, repo, issue):
@@ -169,6 +186,7 @@ def memoize_title_fetcher(fetch_title, pool=None):
         with lock:
             if key in cache:
                 return cache[key]
+            warm = disk.get("%s/%s#%s" % key)  # read before the fetch can overwrite it
             if pool is None:
                 start = True
             else:
@@ -180,7 +198,7 @@ def memoize_title_fetcher(fetch_title, pool=None):
             return cache[key]
         if start:
             pool.submit(fill, key)
-        return None
+        return warm
 
     return cached
 
@@ -230,6 +248,29 @@ def _read_part(path):
 def _https_url(value):
     """Only https URLs reach the browser as links (the ledger is a file, not a trust boundary we own)."""
     return value if isinstance(value, str) and value.startswith("https://") else None
+
+
+def transferred_run(slug: str, issue: int):
+    """(owner, repo, issue) of the run an issue was transferred into, matched on the new Ledger's
+    `transferred_from` (`owner/repo#n` of the old issue), or None."""
+    want = f"{slug}#{issue}".lower()
+    projects = load_projects()
+    for rec in scan_records():
+        ctx = rec["ledger"].get("context")
+        if isinstance(ctx, dict) and str(ctx.get("transferred_from") or "").strip().lower() == want:
+            owner, repo = _resolve_owner_repo(rec["ledger"], rec["dir_name"], projects)
+            return owner, repo, rec["ledger"]["issue"]
+    return None
+
+
+def issue_for_pr(pr_url) -> int | None:
+    """The issue whose run opened this PR (matched on the Ledger's context.pr), or None."""
+    want = str(pr_url or "").lower()
+    for rec in scan_records():
+        ctx = rec["ledger"].get("context")
+        if want and isinstance(ctx, dict) and str(ctx.get("pr") or "").lower() == want:
+            return rec["ledger"].get("issue")
+    return None
 
 
 def load_run(owner: str, repo: str, n: str, runs_dir=None):

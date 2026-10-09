@@ -170,6 +170,40 @@ assert g.reqs[-1]["path"] == "/only"
 assert "authorization" not in g.reqs[-1]["headers"]  # 6 no token
 f.close(); g.close(); ok("env overrides, env-only, no token")
 
+# 6b basic auth: user+password -> Basic, token wins, password never logged on failure
+import base64
+f = Fake(); fresh({"ntfy": {"server": f.url, "topic": "t", "user": "alice", "password": "s3cret"}})
+ui_notify.notify("done", rec())
+assert f.reqs[-1]["headers"]["authorization"] == "Basic " + base64.b64encode(b"alice:s3cret").decode()
+fresh({"ntfy": {"server": f.url, "topic": "t", "user": "alice", "password": "s3cret", "token": "tk_X"}})
+ui_notify.notify("done", rec())
+assert f.reqs[-1]["headers"]["authorization"] == "Bearer tk_X"
+fresh({"ntfy": {"server": f.url, "topic": "t", "user": "alice"}})
+ui_notify.notify("done", rec())
+assert "authorization" not in f.reqs[-1]["headers"]  # a user without a password sends nothing
+assert f.reqs[-1]["headers"]["user-agent"].startswith("aiw-ui")  # not urllib's default, which Cloudflare blocks
+f.close(); ok("basic auth from user+password; token wins; incomplete pair sends no auth; own User-Agent")
+
+# 6c presentation: icon + context tags, issue in title, question/error first, action button
+q = {"id": "r1", "questions": [{"header": "Plan", "question": "Approve the plan?\nSecond line", "recommended": "Approve (Recommended)"}]}
+h, body = ui_notify.compose("waiting", rec(pending_question=q), "https://box.ts.net")
+assert h["Title"] == "aiw: #5 waiting on you" and h["Tags"] == "speech_balloon,run-issue,r,#5", h
+assert h["Actions"] == "view, Answer, https://box.ts.net/#/answer/sid1" and h["Click"].endswith("/#/answer/sid1")
+assert body.splitlines() == ["Approve the plan?", "Suggested: Approve (Recommended)", "o/r · /run-issue 5"], body
+h, body = ui_notify.compose("failed", rec(error="claude exited 1\ntraceback..."), "https://box.ts.net")
+assert h["Title"] == "aiw: #5 failed" and h["Tags"].startswith("x,") and h["Priority"] == "high"
+assert body.splitlines() == ["claude exited 1", "o/r · /run-issue 5"] and h["Actions"].startswith("view, Open run,")
+h, body = ui_notify.compose("done", rec(), None)
+assert h["Tags"].startswith("white_check_mark,") and h["Priority"] == "default" and "Actions" not in h and "Click" not in h
+h, _ = ui_notify.compose("done", rec(link=None, command="/prd x"), None)
+assert h["Title"] == "aiw: run done" and h["Tags"] == "white_check_mark,prd,r", h
+h, _ = ui_notify.compose("pipeline", {"id": "p-1", "repo": "o/r", "command": "pipeline x"}, "https://box.ts.net")
+assert h["Tags"].startswith("checkered_flag") and h["Actions"] == "view, Open pipeline, https://box.ts.net/#/dispatch/p-1"
+h, body = ui_notify.compose("done", rec(repo="o/r\r\nX-Evil: 1", command="/run-issue 5\r\nX-Evil: 1"), None)
+assert all("\n" not in v and "\r" not in v for v in h.values()) and "X-Evil: 1" not in h["Tags"].replace("X-Evil1", ""), h
+h["Title"].encode("ascii"); h["Tags"].encode("ascii")
+ok("compose: icon tags, titles, question/error body, action button, header-safe")
+
 # 7 empty configs
 f = Fake()
 for kind in ("missing", "zero", "{}", '{"ntfy":{}}', "notopic"):

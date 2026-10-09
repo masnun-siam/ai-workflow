@@ -513,7 +513,28 @@ So a paused stop does exactly three things:
    not "when ready". A paused run with no stated precondition is a run nobody knows how to
    restart.
 3. `ScheduleWakeup({stop: true})`. Stop. Do not keep a heartbeat armed to watch a thread
-   nothing is reading. Headless: no ScheduleWakeup; `paused:` already stops the timer, so exit.
+   nothing is reading. Headless: no ScheduleWakeup; `paused:` already stops the timer, so exit
+   — unless this is a decision stop, below.
+
+**Headless decision stops.** When the system prompt says this is a headless aiw ui run and
+the stop is a *decision* only the owner can make — a critical or needs-confirmation finding
+with distinct ways forward, a release-order call, a fix outside the PR's diff — do steps 1
+and 2 first, then ask through `aiw ask` instead of exiting silently, so the owner gets the
+answer form and a push notification rather than a paused chip nobody reads:
+
+```
+aiw ask <<'EOF'
+{"questions":[{"header":"Grind decision","question":"<the finding, the thread/comment URL, and what each option costs>","multiSelect":false,"options":[{"label":"<way forward A> (Recommended)","description":"..."},{"label":"<way forward B>","description":"..."},{"label":"Hold","description":"Stay paused; I will deal with it outside the grind"}]}]}
+EOF
+```
+
+Then end your turn. The answer arrives as `Answer to q-...: {...}` (free text is the owner's
+own instruction, not a menu pick). An answer is a human decision, which is what clears a
+pause: remove the `paused:` line, record the decision in the round's notes, and carry it out
+by the normal path (a fix goes to `run-fixer` as in step 5). **Hold**, or free text that only
+says to wait, leaves `paused:` in place. Stops that need an action outside this skill first
+— red CI or a runner outage, an unpushed branch, a third-party human comment (rail 3), the
+owner asking to hold — are not decisions: keep the plain paused stop, no `aiw ask`.
 
 ### The reviewer bot will answer this post
 
@@ -540,7 +561,8 @@ Two consequences:
 If the state file header carries a `paused:` line, this run was stopped for a human and
 nothing has cleared it. Do not silently resume: say what it is paused on and what the
 resume precondition was, then stop. A human re-invoking `/pr-grind` on the thread is what
-clears a pause — remove the `paused:` line only when re-entered that way. An automated
+clears a pause — remove the `paused:` line only when re-entered that way, or when the owner's
+answer to your own `aiw ask` (Step 8, decision stops) tells you to proceed. An automated
 re-entry (the system prompt says it is an aiw ui tick) never clears `paused:`. A `done:`
 line means stop: do nothing and exit.
 

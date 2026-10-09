@@ -33,7 +33,8 @@ def raises(fn, *a):
     return False
 
 
-assert ui_settings.load() == {"commands": [], "default": None}
+BUILTIN = {"label": "claude", "cmd": "claude", "builtin": True}
+assert ui_settings.load() == {"commands": [BUILTIN], "default": "claude", "auto_grind": False}
 assert ui_settings.default_cmd() == "claude"
 assert ui_settings.argv("cc masum") == [os.path.join(bindir, "cc-profile"), "masum"]  # alias -> script
 assert ui_settings.argv("claude --model x")[1:] == ["--model", "x"]
@@ -41,10 +42,20 @@ assert raises(ui_settings.argv, "") and raises(ui_settings.argv, "nope-xyz") and
 saved = ui_settings.save({"commands": [{"label": "Main", "cmd": "claude"}, {"label": "Masum", "cmd": "cc masum"}],
                           "default": "Masum"})
 assert ui_settings.load() == saved and ui_settings.default_cmd() == "cc masum"
+assert saved["commands"][0] == BUILTIN and [c["label"] for c in saved["commands"]] == ["claude", "Main", "Masum"]
 assert raises(ui_settings.save, {"commands": [{"label": "A", "cmd": "claude"}, {"label": "A", "cmd": "claude"}]})
 assert raises(ui_settings.save, {"commands": [{"label": "A", "cmd": "nope-xyz"}]})
 assert raises(ui_settings.save, {"commands": [], "default": "ghost"})
 assert ui_settings.load() == saved  # failed saves leave the file alone
+# the built-in: renamable, can be default, cmd is always claude, never dropped
+s2 = ui_settings.save({"commands": [{"label": "Work", "cmd": "rm -rf /", "builtin": True}, {"label": "Masum", "cmd": "cc masum"}],
+                       "default": "Work"})
+assert s2["commands"][0] == {"label": "Work", "cmd": "claude", "builtin": True} and s2["default"] == "Work"
+assert ui_settings.default_cmd() == "claude"
+assert ui_settings.save({"commands": [{"label": "Masum", "cmd": "cc masum"}]})["commands"][0] == BUILTIN
+assert raises(ui_settings.save, {"commands": [{"label": "Masum", "cmd": "claude", "builtin": True}, {"label": "Masum", "cmd": "cc masum"}]})
+assert raises(ui_settings.save, {"commands": [{"label": " ", "cmd": "claude", "builtin": True}]})
+saved = ui_settings.load()
 assert ui_settings.check_login("claude")["ok"] and not ui_settings.check_login("cc x")["ok"]
 assert not ui_settings.check_login("nope-xyz")["ok"]
-print("ui_settings: 14 checks passed")
+print("ui_settings: 20 checks passed")

@@ -3,8 +3,11 @@ import htm from './vendor/htm.mjs';
 import { poll } from './app.js';
 import { mergeStream } from './run.js';
 import { runLink, runHash } from './answer.js';
-import { shortRepo } from './fmt.js';
+import { shortRepo, toolSummary } from './fmt.js';
 import { LimitBanner } from './limits.js';
+import { Linked } from './linked.js';
+
+export { toolSummary };
 
 const html = htm.bind(h);
 
@@ -24,22 +27,10 @@ export function filterEvents(events, query) {
   return q ? all.filter(({ e }) => eventText(e).toLowerCase().includes(q)) : all;
 }
 
-// One-line gist of a tool call: its most telling argument, capped.
-export function toolSummary(e, max = 110) {
-  const input = e && e.input;
-  let s = '';
-  if (input && typeof input === 'object') {
-    const key = ['command', 'file_path', 'path', 'pattern', 'url', 'description', 'prompt', 'skill'].find((k) => typeof input[k] === 'string' && input[k]);
-    s = key ? input[key] : JSON.stringify(input);
-  } else if (input !== undefined && input !== null) s = String(input);
-  s = s.replace(/\s+/g, ' ').trim();
-  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
-}
-
 const isLive = (m) => !!m && (['starting', 'running'].includes(m.outcome) || (m.outcome === 'waiting' && !m.ended_at));
 
 function Message({ e, open }) {
-  if (e.kind === 'text') return html`<div class="msg msg-text"><div class="msg-role mono">claude</div><p>${e.text}</p></div>`;
+  if (e.kind === 'text') return html`<div class="msg msg-text"><div class="msg-role mono">claude</div><p><${Linked} text=${e.text} /></p></div>`;
   if (e.kind === 'tool') {
     return html`<details class="msg msg-tool" open=${open}>
       <summary><span class="tool-name mono">${e.name}</span><span class="tool-sum mono">${toolSummary(e)}</span></summary>
@@ -49,10 +40,43 @@ function Message({ e, open }) {
   if (e.kind === 'result') {
     return html`<div class=${e.is_error ? 'msg msg-result error' : 'msg msg-result'}>
       <div class="msg-role mono">${e.is_error ? 'failed' : 'result'}${typeof e.cost === 'number' ? ` · $${e.cost.toFixed(2)}` : ''}</div>
-      ${e.text ? html`<p>${e.text}</p>` : null}
+      ${e.text ? html`<p><${Linked} text=${e.text} /></p>` : null}
     </div>`;
   }
   return null;
+}
+
+// Prompt box for sessions with no run page (the run page has its own). Same /prompt endpoint: queued while live, resumes once ended.
+class Composer extends Component {
+  state = { text: '', busy: false, msg: '' };
+
+  send = async (e) => {
+    e.preventDefault();
+    const text = this.state.text.trim();
+    if (!text || this.state.busy || this.props.s.outcome === 'waiting') return;
+    this.setState({ busy: true });
+    try {
+      const res = await fetch(`/api/sessions/${encodeURIComponent(this.props.s.id)}/prompt`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) this.setState({ text: '', msg: data.state === 'queued' ? 'Queued: it goes out when the session ends' : 'Prompt sent, the session is resuming' });
+      else this.setState({ msg: data.error || `HTTP ${res.status}` });
+    } catch (er) {
+      this.setState({ msg: String(er?.message || er) });
+    }
+    this.setState({ busy: false });
+  };
+
+  render({ s }, { text, busy, msg }) {
+    const waiting = s.outcome === 'waiting';
+    const note = waiting ? 'Answer the pending question first.' : ['running', 'starting', 'limited'].includes(s.outcome) ? 'It is running: the prompt is queued and goes out when it ends.' : 'Resumes the session with this prompt.';
+    return html`<form class="prompt-form composer panel" onSubmit=${this.send}>
+      <label for="session-prompt">Send a prompt to this session</label>
+      <textarea id="session-prompt" class="field" onKeyDown=${(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); e.currentTarget.form.requestSubmit(); } }} rows="2" maxlength="4000" placeholder="Tell it what to do next…" value=${text} onInput=${(e) => this.setState({ text: e.target.value })}></textarea>
+      <button type="submit" disabled=${!text.trim() || busy || waiting}>Send</button>
+      <p class="note">${msg || note}</p>
+      ${s.queued_prompt && html`<p class="note">Queued: ${s.queued_prompt}</p>`}
+    </form>`;
+  }
 }
 
 export class Session extends Component {
@@ -72,7 +96,7 @@ export class Session extends Component {
   }
 
   componentDidUpdate() {
-    if (this.state.follow && this.live && this.endEl) this.endEl.scrollIntoView({ block: 'end' });
+    if (this.state.follow && this.live && this.endEl) this.endEl.scrollIntoView({ block: 'nearest' });
   }
 
   componentWillUnmount() {
@@ -139,12 +163,13 @@ export class Session extends Component {
           <button type="button" class="btn" onClick=${() => this.setState({ openAll: !openAll })}>${openAll ? 'Collapse tools' : 'Expand tools'}</button>
           ${live && html`<button type="button" class="btn" aria-pressed=${follow} onClick=${() => this.setState({ follow: !follow })}>Auto-scroll: ${follow ? 'on' : 'off'}</button>`}
         </div>
+        ${meta.session_id && html`<${Composer} key=${meta.id} s=${meta} />`}
         <div class="panel tlog">
-          ${shown.length
-            ? shown.map(({ e, i }) => html`<${Message} key=${i} e=${e} open=${openAll} />`)
-            : html`<p class="muted">${stream.events.length ? 'No events match your search' : live ? 'Waiting for output…' : 'No output recorded'}</p>`}
-          ${live && html`<div class="streaming"><span class="pulse"></span>streaming events…</div>`}
           <div ref=${(el) => { this.endEl = el; }}></div>
+          ${live && html`<div class="streaming"><span class="pulse"></span>streaming events…</div>`}
+          ${shown.length
+            ? shown.slice().reverse().map(({ e, i }) => html`<${Message} key=${i} e=${e} open=${openAll} />`)
+            : html`<p class="muted">${stream.events.length ? 'No events match your search' : live ? 'Waiting for output…' : 'No output recorded'}</p>`}
         </div>
       </section>
     `;

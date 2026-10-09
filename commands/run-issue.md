@@ -236,9 +236,14 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
 
 ## 0. Preflight
 
-1. `git status --porcelain` on the current checkout — if non-empty, stop and tell the user
-   to commit/stash first. Do not proceed on a dirty tree. Nothing this run writes lands in
-   the checkout, so there is no pipeline file to exempt. This check runs first,
+1. ``git status --porcelain -- . ':(exclude)tasks/lessons.md' ':(exclude,glob)**/CLAUDE.md' ':(exclude,glob)**/AGENTS.md'``
+   on the current checkout — if non-empty, stop and tell the user to commit/stash first. Do not
+   proceed on a dirty tree. Three paths are exempt. `tasks/lessons.md`: phase 9.2 deliberately
+   leaves it dirty in the main checkout for a human-reviewed commit, so one run's harvest must
+   not block the next run (a pipeline would otherwise stop every issue after the first at this
+   check). `CLAUDE.md` / `AGENTS.md` at any depth: code-index tooling (GitNexus, `/init`) rewrites
+   them as a side effect and they are never part of an issue's change. Nothing else
+   this run writes lands in the checkout, so there is no pipeline file to exempt. This check runs first,
    unconditionally — step 2 below can create a real GitHub issue, and issue creation must
    stay behind this abort so a retry after stashing never files a duplicate.
 2. Strip `--lean` and `--full` off `$ARGUMENTS` (note which, if either, was passed — they
@@ -350,6 +355,22 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
    fact** — entries are agent-written and at least one in the existing corpus is false
    for the codebase, so an entry that contradicts what the code actually says loses to
    the code. Missing or empty file → skip silently, it is not an error.
+
+### The issue belongs in another repo
+
+If research (phase 0.5) or the plan shows the change lives in a different repo than the issue,
+do not move anything silently: ask first (a gate question, **Transfer the issue** recommended,
+**Stay here**, **Abort**). On approval, `gh issue transfer <n> <new owner/repo>`. The transferred
+issue gets a **new number in the new repo**, so re-resolve `<owner>/<repo>` and `<n>` from the URL
+`gh` prints and run everything below under those; the run directory is the new one. As soon as it
+exists, record where the issue came from:
+
+```bash
+aiw set "$RUN_DIR" transferred_from=<old owner/repo>#<old n>
+```
+
+`aiw ui` launched the run under the old number: this key is how a dispatch pipeline and the board
+follow the issue to its new repo instead of showing the old number as a run that never started.
 
 ## 0.5 Research + readiness (agent: run-researcher) — no gate
 
