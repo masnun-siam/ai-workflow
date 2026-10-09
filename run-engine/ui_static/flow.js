@@ -3,6 +3,8 @@ import htm from './vendor/htm.mjs';
 import { poll } from './app.js';
 import { buildBody, loadLastRepo, repoCombo, repoOptions } from './launcher.js';
 import { issueNumbers } from './dispatch.js';
+import { Answer } from './answer.js';
+import { loadFlow, saveFlow, clearFlow } from './flowstore.js';
 
 const html = htm.bind(h);
 
@@ -65,30 +67,79 @@ export function flowHash({ repo, folder, prd, issues, sid } = {}) {
 
 export const dispatchHref = (issues) => `#/dispatch?issues=${issues.join(',')}`;
 
+export { loadFlow, saveFlow, clearFlow };
+
+// Steps passed (done or skipped) for the nav progress bar, or null when there is no flow in
+// progress. A typed-but-unrun draft is not progress: a step must have handed off or be running.
+export function flowProgress(flow) {
+  if (!flow) return null;
+  const at = STEPS.findIndex((s) => s.key === stepFromState({ ...flow, issues: issueNumbers(flow.issues || '') }));
+  return at > 0 || flow.sid ? { done: at, total: STEPS.length } : null;
+}
+
+// "Continue in Flow" for a session of one of the flow's commands: the flow reattaches to it and
+// takes its handoff. Null for any other command.
+export function flowLink(meta) {
+  const m = /^\/(?:[\w-]+:)?(dump|prd|gh-issue)(\s|$)/.exec((meta && meta.command) || '');
+  return m ? flowHash({ repo: meta.repo, sid: meta.id }) : null;
+}
+
+// Following that link replaces the saved flow, so ask first when the saved one has a finished step.
+export function continueFlow(e, meta) {
+  const storage = globalThis.localStorage;
+  const saved = loadFlow(storage);
+  const p = flowProgress(saved);
+  if (p && p.done > 0 && saved.sid !== meta.id && !globalThis.confirm('Replace the flow in progress? Its folder, PRD and issue numbers are cleared.')) {
+    e.preventDefault();
+    return;
+  }
+  clearFlow(storage);
+}
+
 export class Flow extends Component {
   constructor(props) {
     super(props);
     const p = props.route.params;
+    // A bare #/flow (the nav link) resumes the saved flow; a hash with values links to a specific one.
+    const saved = loadFlow(globalThis.localStorage) || {};
+    this.linked = !!(p.repo || p.folder || p.prd || p.issues.length || p.sid);
+    const f = this.linked ? { ...p, issues: p.issues.join(' ') } : saved;
     // The repo is a registered slug or, like New run, an absolute path to a checkout.
-    const repo = p.repo || loadLastRepo(globalThis.localStorage) || '';
+    const repo = f.repo || loadLastRepo(globalThis.localStorage) || '';
     const manual = repo.startsWith('/');
     this.state = { repo: manual ? '' : repo, manual, path: manual ? repo : '', repos: [], canBrowse: false, repoQuery: null, repoOpen: false,
-      repoActive: 0, browsing: false, text: '', folder: p.folder, prd: p.prd, issues: p.issues.join(' '), sid: p.sid, meta: null, why: null, busy: false };
+      repoActive: 0, browsing: false, text: saved.text || '', folder: f.folder || '', prd: f.prd || '', issues: f.issues || '', sid: f.sid || '',
+      meta: null, why: null, busy: false };
+  }
+
+  persisted = (s = this.state) => ({ ...this.fields(s), issues: s.issues, text: s.text });
+
+  componentDidUpdate(_, prev) {
+    const a = JSON.stringify(this.persisted()), b = JSON.stringify(this.persisted(prev));
+    if (a !== b && !this.gone) saveFlow(globalThis.localStorage, this.persisted());
   }
 
   combo = repoCombo(this, () => this.save({ why: null }));
 
   componentDidMount() {
+    // Wide screens answer a session's question in a column beside the steps; narrow ones in the step.
+    this.mq = globalThis.matchMedia?.('(min-width: 1200px)');
+    if (this.mq) { this.onMq = () => this.setState({ wide: this.mq.matches }); this.mq.addEventListener('change', this.onMq); this.onMq(); }
     fetch('/api/repos', { headers: { Accept: 'application/json' } }).then((r) => (r.ok ? r.json() : null)).then((b) => {
       const repos = repoOptions(b);
-      const { repo, manual } = this.state;
-      this.setState({ repos, canBrowse: !!b && b.can_browse === true, repo: repo || manual ? repo : (repos[0] || {}).value || '',
-        ...(repos.length || manual ? {} : { manual: true, path: repo }) });
+      const { repo, manual, path } = this.state;
+      // A checkout path that is a registered repo (a session's repo, say) shows as that repo.
+      const known = manual && repos.find((r) => r.path === path);
+      this.setState({ repos, canBrowse: !!b && b.can_browse === true, repo: known ? known.value : repo || manual ? repo : (repos[0] || {}).value || '',
+        ...(known ? { manual: false, path: '' } : repos.length || manual ? {} : { manual: true, path: repo }) }, () => this.save({}));
     }).catch(() => {});
+    // A link names the flow to work on: it becomes the saved flow right away, not on its first change.
+    if (this.linked) saveFlow(globalThis.localStorage, this.persisted());
+    else history.replaceState(null, '', flowHash(this.fields()));
     if (this.state.sid) this.watch(this.state.sid);
   }
 
-  componentWillUnmount() { this.gone = true; if (this.stop) this.stop(); }
+  componentWillUnmount() { this.gone = true; if (this.stop) this.stop(); if (this.mq) this.mq.removeEventListener('change', this.onMq); }
 
   fields = (s = this.state) => ({ repo: (s.manual ? s.path : s.repo).trim(), folder: s.folder, prd: s.prd, issues: issueNumbers(s.issues), sid: s.sid });
 
@@ -127,7 +178,10 @@ export class Flow extends Component {
   }
 
   async finish(sid, meta) {
-    const step = stepFromState(this.fields());
+    // The session's own command names the step it ran, so a session reattached from its page
+    // ("Continue in Flow") hands off correctly even when the flow knew nothing before it.
+    const cmd = (/^\/(?:[\w-]+:)?([\w-]+)/.exec(meta.command || '') || [])[1];
+    const step = (STEPS.find((s) => s.command === cmd) || {}).key || stepFromState(this.fields());
     let result = null;
     try {
       const res = await fetch(`/api/sessions/${encodeURIComponent(sid)}/stream?offset=0`, { headers: { Accept: 'application/json' } });
@@ -160,6 +214,7 @@ export class Flow extends Component {
   startOver = (e) => {
     const { folder, prd, issues } = this.state;
     if ((folder || prd || issues) && !globalThis.confirm('Start over? The folder, PRD and issue numbers from this flow are cleared.')) e.preventDefault();
+    else { this.gone = true; clearFlow(globalThis.localStorage); }
   };
 
   render(_, st) {
@@ -169,7 +224,11 @@ export class Flow extends Component {
     const at = STEPS.findIndex((s) => s.key === cur);
     const issues = issueNumbers(this.state.issues);
     const waiting = meta && meta.outcome === 'waiting';
-    return html`<div class="flow">
+    const ask = waiting && html`<${Answer} key=${`${sid}:${(meta.pending_question || {}).id}`} session=${sid}
+      onSent=${() => this.setState({ meta: { ...meta, outcome: 'running' } })} />`;
+    const aside = ask && st.wide;
+    return html`<div class=${aside ? 'flow flow--ask' : 'flow'}>
+      <div class="flow-main">
       <div class="flow-top">
         <h1>Flow</h1>
         ${(folder || prd || issues.length || sid) && html`<a class="btn" href=${flowHash({ repo })} onClick=${this.startOver}>Start over</a>`}
@@ -187,17 +246,23 @@ export class Flow extends Component {
               ${state !== 'done' && html`<p class="note">${step.produces}</p>`}
               ${state === 'active' && step.key !== 'dispatch' && html`
                 ${this.input(step)}
-                ${sid ? html`<p class="note" role="status">Session ${meta ? meta.outcome : 'starting'}${waiting ? html` · <a href=${`#/answer/${encodeURIComponent(sid)}`}>Answer its question</a>` : ''} · <a href=${`#/session/${encodeURIComponent(sid)}`}>Open session</a></p>` : null}
+                ${sid ? html`<p class="note" role="status">${waiting ? 'Session waiting for your answer' : `Session ${meta ? meta.outcome : 'starting'}`} · <a href=${`#/session/${encodeURIComponent(sid)}`}>Open session</a></p>` : null}
+                ${!aside && ask}
                 ${meta && meta.outcome !== 'done' && TERMINAL.includes(meta.outcome) && meta.resume_command && html`<p class="note">Continue in terminal: <code>${meta.resume_command}</code></p>`}
-                <button type="button" class="primary" disabled=${busy || this.running()} onClick=${() => this.start(step)}>${sid ? `${step.action} again` : step.action}</button>`}
+                ${!waiting && html`<button type="button" class="primary" disabled=${busy || this.running()} onClick=${() => this.start(step)}>${sid ? `${step.action} again` : step.action}</button>`}`}
               ${state === 'active' && step.key === 'dispatch' && html`
                 ${this.input(step)}
-                ${issues.length ? html`<a class="btn btn--primary" href=${dispatchHref(issues)}>Open Dispatch with ${issues.join(', ')}</a>` : null}`}
+                ${issues.length ? html`<a class="btn btn--primary" href=${dispatchHref(issues)} onClick=${() => { this.gone = true; clearFlow(globalThis.localStorage); }}>Open Dispatch with ${issues.join(', ')}</a>` : null}`}
               ${state === 'done' && html`<p class="note mono">${{ dump: folder || prd, prd, issues: issues.join(', ') }[step.key]}</p>`}
             </div>
           </li>`;
         })}
       </ol>
+      </div>
+      ${aside && html`<aside class="flow-ask panel" aria-labelledby="flow-ask-h">
+        <h2 id="flow-ask-h">${STEPS[at].label} needs your answer</h2>
+        ${ask}
+      </aside>`}
     </div>`;
   }
 }

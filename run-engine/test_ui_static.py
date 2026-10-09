@@ -685,6 +685,20 @@ assert.equal(evil.params.prd.length, 500);
 assert.equal(F.dispatchHref([12, 13]), '#/dispatch?issues=12,13');
 assert.deepEqual(parseRoute(F.dispatchHref([12, 13])).issues, [12, 13]);
 out('flow: flowHash round-trips through parseRoute; dispatch link carries the issues');
+assert.equal(F.flowProgress(null), null);
+assert.equal(F.flowProgress({ repo: 'o/r', text: 'a draft' }), null);
+assert.deepEqual(F.flowProgress({ sid: 's1' }), { done: 0, total: 4 });
+assert.deepEqual(F.flowProgress({ folder: 'f', prd: 'p' }), { done: 2, total: 4 });
+assert.deepEqual(F.flowProgress({ prd: 'p', issues: '4 5' }), { done: 3, total: 4 });
+const mem = new Map(); const store = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v), removeItem: (k) => mem.delete(k) };
+F.saveFlow(store, { repo: 'o/r', prd: 'p' }); assert.deepEqual(F.loadFlow(store), { repo: 'o/r', prd: 'p' });
+F.clearFlow(store); assert.equal(F.loadFlow(store), null);
+mem.set('aiw.flow', '{not json'); assert.equal(F.loadFlow(store), null);
+assert.equal(F.flowLink({ id: 's1', repo: '/x/y', command: '/ai-workflow:gh-issue PRD.md' }), '#/flow?repo=%2Fx%2Fy&sid=s1');
+assert.equal(F.flowLink({ id: 's1', repo: 'o/r', command: '/prd' }), '#/flow?repo=o%2Fr&sid=s1');
+assert.equal(F.flowLink({ id: 's1', repo: 'o/r', command: '/run-issue 7' }), null);
+assert.equal(F.flowLink({ id: 's1', repo: 'o/r', command: '/dumpster' }), null);
+out('flow: saved flow round-trips, drafts are not progress, Continue in Flow only for dump/prd/gh-issue');
 
 const D = await import(process.env.APP_URL.replace('app.js', 'dispatch.js'));
 assert.equal(D.hasUrl('see https://github.com/o/r/issues?q=x'), true);
@@ -815,7 +829,7 @@ const A = await import(process.env.ANSWER_URL);
 const assert = (await import('node:assert')).strict;
 const out = (n) => console.log('ok ' + n);
 const { viewMode, displayLabel, initialAnswers, toggle, buildBody, startSubmit, afterSubmit,
-  submitAnswer, runHash, planRun, planText, resumeCommand } = A;
+  submitAnswer, runHash, doneHash, planRun, planText, resumeCommand } = A;
 out('import without document does not throw');
 
 const waiting = { waiting: true, outcome: 'waiting', pending_question: { id: 'q1', status: 'pending' } };
@@ -936,6 +950,12 @@ out('submitAnswer network/non-JSON errors resolve ok:false');
 
 const L = { owner: 'o w', repo: 'r', issue: 5 };
 assert.equal(runHash({ link: L }), '#/run/' + encodeURIComponent('o w') + '/r/5');
+assert.equal(doneHash({ id: 's1', link: L }, { sid: 's1' }), runHash({ link: L }));
+assert.equal(doneHash({ id: 's1' }, { sid: 's1' }), '#/flow');
+assert.equal(doneHash({ id: 's 2' }, { sid: 's1' }), '#/session/s%202');
+assert.equal(doneHash({ id: 's1' }, null), '#/session/s1');
+assert.equal(doneHash(undefined, null), '#/sessions');
+out('doneHash: run, then the flow waiting on it, then the session itself');
 for (const bad of [{}, null, { link: { owner: 'o', repo: 'r', issue: 0 } }, { link: { owner: 'o', repo: 'r', issue: 1.5 } },
   { link: { owner: 'o', repo: 'r', issue: '5' } }, { link: { owner: 'o' } }]) assert.equal(runHash(bad), '#/sessions');
 out('runHash');
@@ -999,9 +1019,9 @@ def shell_checks():
     assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./board.js", "./run.js", "./history.js", "./answer.js", "./notify.js", "./launcher.js", "./session.js", "./keys.js", "./toast.js", "./settings.js", "./dispatch.js", "./fmt.js", "./cleanup.js", "./issue.js", "./pr.js", "./afk.js", "./flow.js"}, specs
     fjs = read(os.path.join(STATIC, "flow.js")).decode()
     fspecs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", fjs)
-    assert fspecs and set(fspecs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./launcher.js", "./dispatch.js"}, fspecs
+    assert fspecs and set(fspecs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./launcher.js", "./dispatch.js", "./answer.js", "./flowstore.js"}, fspecs
     assert "innerHTML" not in fjs and "console.log" not in fjs
-    ok("flow.js imports only preact, htm, app.js, launcher.js and dispatch.js; no innerHTML")
+    ok("flow.js imports only preact, htm, app.js, launcher.js, dispatch.js, answer.js and flowstore.js; no innerHTML")
     assert not re.search(r"https?://", js), "no absolute URLs"
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
@@ -1760,7 +1780,7 @@ def answer_checks():
     app = read(os.path.join(STATIC, "app.js")).decode()
     css = read(os.path.join(STATIC, "app.css")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./toast.js", "./run.js"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./toast.js", "./run.js", "./flowstore.js"}, specs
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
     names = {x.split(" as ")[-1].strip() for x in exports.split(",")}

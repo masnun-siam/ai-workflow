@@ -167,6 +167,11 @@ header a, header button, header .badge, header .offline, header .muted {
 header a { text-decoration: none; border-radius: 6px; }
 header a:hover { background: var(--raised); }
 header a[aria-current="page"] { color: var(--fg); background: var(--raised); }
+/* A flow in progress: its steps as a rail under the Flow link, teal through the ones passed */
+header nav a { position: relative; }
+.nav-rail { position: absolute; left: 12px; right: 12px; bottom: 7px; display: flex; gap: 2px; }
+.nav-rail i { flex: 1; height: 3px; border-radius: 2px; background: var(--border-input); }
+.nav-rail i.on { background: var(--accent); }
 header a.btn { padding: 0 16px; }
 header a.btn--primary { color: var(--on-accent); background: var(--accent); }
 header a.btn--primary:hover { color: var(--on-accent); background: var(--accent-hover); }
@@ -928,3 +933,23 @@ header .afk-chip:hover { border-color: var(--accent); }
 textarea.flow-prose { font-family: var(--font); font-size: 14px; line-height: 1.5; }
 .flow-step button.primary, .flow-step .btn--primary { justify-self: start; margin-top: 4px; text-decoration: none; }
 .flow-step .error { color: var(--error); margin: 0; }
+/* Wide screens: the session's question gets the column beside the steps, sticky while you scroll */
+.flow.flow--ask { max-width: none; display: grid; grid-template-columns: minmax(0, 680px) minmax(420px, 1fr); gap: 32px; align-items: start; }
+.flow-ask { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; border-color: var(--waiting-border); padding: 24px; }
+.flow-ask h2 { margin: 0 0 4px; font-size: 16px; color: var(--waiting); }
+.flow-ask .answer-form.answer-inline { margin-top: 0; padding-top: 12px; border-top: 0; }
+.answer-inline legend { white-space: pre-line; line-height: 1.55; font-weight: 500; color: var(--fg); max-width: 72ch; }
+/* A long question can't sit on a fieldset border, so legends float as plain blocks and questions are split by a rule */
+.answer-form.answer-inline fieldset { border: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.answer-form.answer-inline fieldset + fieldset { padding-top: 16px; border-top: 1px solid var(--border); }
+.answer-form.answer-inline fieldset legend { float: left; width: 100%; padding: 0; margin-bottom: 4px; font-size: 15px; }
+/* A question from the step's session, answered in place: the step panel is its frame */
+.answer-form.answer-inline { flex: none; min-width: 0; margin-top: 8px; padding: 16px 0 0; border-top: 1px solid var(--waiting-border); }
+.answer-inline fieldset { margin: 0; }
+.answer-inline fieldset.solo { border: 0; padding: 0; }
+.answer-inline fieldset.solo legend { font-size: 15px; padding: 0; margin-bottom: 10px; }
+.answer-inline .opt { align-items: flex-start; padding: 12px 14px; }
+.answer-inline .opt input { margin-top: 3px; }
+.answer-inline button[type="submit"] { align-self: flex-start; }
+.answer-inline .own { display: flex; flex-direction: column; gap: 6px; color: var(--muted); }
+.answer-inline .own textarea { min-height: 56px; }
