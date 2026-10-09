@@ -89,7 +89,7 @@ flowchart TD
    guarded: after the RED commit, dev may change a test only with a written reason that
    lands in the PR body. The same agent also stands in for the fixer at step 10. A
    `refined` issue whose body already holds acceptance criteria and a numbered How skips
-   the research and planning agents too, and Gate 1 shrinks to a check of the parsed fields.
+   the research and planning agents and Gate 1 too: the refined body is the approved plan.
 8. **PR.** Links the branch to the issue, pushes, opens the pull request.
 9. **Review.** A reviewer with **no memory of the plan or the code being written** reviews
    the diff. On a risky diff, extra single-lens specialists (security, performance, API
