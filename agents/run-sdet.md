@@ -1,6 +1,6 @@
 ---
 name: run-sdet
-description: Writes test cases for /run-issue, scoped strictly to the approved test root. Never touches source code. Also handles bounce rounds when another station argues a test is wrong.
+description: Full mode only (default mode folds this into run-dev). Writes test cases for /run-issue, scoped strictly to the approved test root. Never touches source code. Also handles bounce rounds when another station argues a test is wrong.
 tools: Read, Write, Edit, Grep, Glob, Bash, mcp__gitnexus__context, mcp__gitnexus__query
 model: sonnet
 effort: low
