@@ -163,6 +163,48 @@ def set_pending(sid: str, round) -> dict:
     return update(sid, pending_question=rec, status="waiting")
 
 
+MAX_FREE_TEXT = 4000
+
+
+def answer_text(pending: dict, answers) -> str:
+    """Validate answers against the pending round; return the text to resume with."""
+    qs = pending["questions"]
+    if not isinstance(answers, dict) or set(answers) != {str(i) for i in range(len(qs))}:
+        raise ValueError("answers must be an object with exactly one entry per question index")
+    out = {}
+    for i, q in enumerate(qs):
+        a = answers[str(i)]
+        if not isinstance(a, dict) or len(a) != 1 or next(iter(a)) not in ("labels", "other"):
+            raise ValueError(f"answer {i} must be exactly one of labels or other")
+        if "labels" in a:
+            labels = a["labels"]
+            valid = {o["label"] for o in q["options"]}
+            if not isinstance(labels, list) or not labels or not all(isinstance(l, str) for l in labels):
+                raise ValueError(f"answer {i}: labels must be a non-empty list of strings")
+            if len(set(labels)) != len(labels):
+                raise ValueError(f"answer {i}: duplicate labels")
+            if not q["multiSelect"] and len(labels) > 1:
+                raise ValueError(f"answer {i}: only one label allowed")
+            if any(l not in valid or "\0" in l for l in labels):
+                raise ValueError(f"answer {i}: label is not an option of this question")
+            out[str(i)] = {"labels": labels}
+        else:
+            other = a["other"]
+            if not q.get("allowFreeText", True):
+                raise ValueError(f"answer {i}: free text not allowed")
+            if not isinstance(other, str) or not other.strip() or "\0" in other:
+                raise ValueError(f"answer {i}: free text must be a non-empty string without NUL")
+            if len(other) > MAX_FREE_TEXT:
+                raise ValueError(f"answer {i}: free text over the {MAX_FREE_TEXT} character cap")
+            out[str(i)] = {"other": other}
+    text = f"Answer to {pending['id']}: " + json.dumps(out, ensure_ascii=False, separators=(",", ":"))
+    try:
+        text.encode("utf-8")  # lone surrogates can't be passed as argv
+    except UnicodeEncodeError:
+        raise ValueError("free text must be valid UTF-8") from None
+    return text
+
+
 def claim_answer(sid: str, round_id: str):
     """Atomically consume the pending round; returns the record to the single winner, else None."""
     path = os.path.join(session_dir(sid), "meta.json")

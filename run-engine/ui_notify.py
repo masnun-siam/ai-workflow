@@ -29,7 +29,10 @@ _LOOK = {
     "grind-paused": ("pause_button", "aiw: #{n} grind paused", "aiw: grind paused", "Open run"),
     "grind-done": ("mag", "aiw: #{n} grind finished", "aiw: grind finished", "Open run"),
     "pipeline": ("checkered_flag", "aiw: pipeline finished", "aiw: pipeline finished", "Open pipeline"),
+    "afk": ("robot", "aiw: autopilot ended", "aiw: autopilot ended", "Open board"),
 }
+# While AFK mode runs, autopilot handles or holds these; the one "afk" push at the end sums them up.
+_AFK_MUTED = ("waiting", "failed", "grind-paused")
 _TAG_SAFE = re.compile(r"[^A-Za-z0-9._#/-]+")
 
 
@@ -53,7 +56,7 @@ def compose(event: str, rec: dict, public_url=None) -> tuple[dict, str]:
     tags = [icon] + [t for t in (_tag(family), _tag(str(rec.get("repo") or "").rsplit("/", 1)[-1]),
                                  f"#{issue}" if issue else "") if t]
     headers = {"Title": (with_n.replace("{n}", str(issue)) if issue else without_n),
-               "Priority": "default" if event in ("done", "pipeline", "grind-done") else "high",
+               "Priority": "default" if event in ("done", "pipeline", "grind-done", "afk") else "high",
                "Tags": ",".join(tags)}
     lines = []
     if event == "waiting":
@@ -63,7 +66,7 @@ def compose(event: str, rec: dict, public_url=None) -> tuple[dict, str]:
             lines.append(f"Suggested: {_first_line(q['recommended'], 80)}")
     elif event == "failed":
         lines.append(_first_line(rec.get("error")))
-    elif event.startswith("grind-"):
+    elif event.startswith("grind-") or event == "afk":
         lines.append(_first_line(rec.get("note")))
     lines.append(f"{rec.get('repo', '')} · {_first_line(rec.get('command'), 120)}".strip(" ·"))
     click = click_url(event, rec, public_url)
@@ -111,6 +114,8 @@ def click_url(event: str, rec: dict, public_url) -> str | None:
     base = str(public_url).rstrip("/")
     if event == "pipeline":
         return f"{base}/#/dispatch/{quote(str(rec['id']), safe='')}"
+    if event == "afk":
+        return f"{base}/#/"
     if event == "waiting":
         return f"{base}/#/answer/{quote(str(rec['id']), safe='')}"
     link = rec.get("link")
@@ -134,6 +139,10 @@ _QUIET_DONE = ("/pr-grind ", "Start the review grind for PR ")  # keep in step w
 def notify(event: str, rec: dict) -> None:
     if event == "done" and str(rec.get("command", "")).startswith(_QUIET_DONE):
         return
+    if event in _AFK_MUTED:
+        import ui_afk  # lazy: ui_afk imports the session store, which imports this module
+        if ui_afk.active():
+            return
     try:
         cfg = load_config()
         ntfy = cfg["ntfy"]

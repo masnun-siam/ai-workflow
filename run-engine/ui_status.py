@@ -100,3 +100,10 @@ def get(owner, repo, issue, pr_url, branch, pool):
     if not entry or not entry["value"]:
         return None
     return {**entry["value"], "stale": entry["stale"]}
+
+
+def cached(owner, repo, issue):
+    """The last fetched status for a Card, or None; never starts a fetch."""
+    with _lock:
+        entry = _cache.get((owner, repo, int(issue)))
+    return entry["value"] if entry else None
