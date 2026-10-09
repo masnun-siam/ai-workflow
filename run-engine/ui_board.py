@@ -311,7 +311,34 @@ def load_run(owner: str, repo: str, n: str, runs_dir=None):
             handoff = env.get("handoff")
             plan = handoff.get("plan_md") if isinstance(handoff, dict) else None
             body["plan"] = plan if isinstance(plan, str) else None
+    body["log"], skipped = _run_log(run_dir)
+    for row in body["stations"]:
+        if row["name"] in skipped:
+            row["skipped"] = True
     return body
+
+
+_ENVELOPE_RE = re.compile(r"\d\d-[\w-]+\.json")
+
+
+def _run_log(run_dir):
+    """Station envelopes (`NN-*.json`) in file order -> ([{file, station, status, summary}], skipped station names).
+
+    The only record of a run started outside the UI. An unreadable envelope is left out, never fatal.
+    """
+    log, skipped = [], set()
+    for name in sorted(os.listdir(run_dir)):
+        if not _ENVELOPE_RE.fullmatch(name):
+            continue
+        env, err = _read_part(os.path.join(run_dir, name))
+        if err or not isinstance(env.get("station"), str):
+            continue
+        log.append({"file": name, "station": env["station"], "status": env.get("status"),
+                    "summary": env.get("summary") if isinstance(env.get("summary"), str) else ""})
+        evidence = env.get("evidence")
+        if isinstance(evidence, dict) and evidence.get("skipped") is True:
+            skipped.add(env["station"])
+    return log, skipped
 
 
 def load_projects() -> dict:
