@@ -335,6 +335,20 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
    ```bash
    aiw init "$RUN_DIR" --issue <n> --repo <main-checkout> [--mode lean]
    ```
+
+   **Refined fast path.** If the `labels` from step 3 include `refined` (and this is a fresh
+   init, not a resume), write the issue body to a temp file and run:
+   ```bash
+   aiw refined "$RUN_DIR" --labels <comma-separated labels> --body-file <tmpfile>
+   ```
+   Exit 0 means the body passed the check (non-empty `## Acceptance Criteria`, numbered
+   `## How`, a resolvable test root and base branch): it has written `00-readiness.json` (a
+   researcher skip) and `10-plan.json` (the plan, taken from the body). Print
+   `refined: researcher + planner skipped` and take the refined branches of phases 0.5 and 1.
+   Exit 1 means the label is there but the body is not actually refined: print
+   `refined label, but <stderr reason> — running researcher + planner` and continue as
+   normal. The roster is unchanged either way, so a later `bounce(planner)` still has a
+   planner to land on.
 5. Sync the gitnexus index in the main checkout so the planner isn't reasoning against a
    stale graph:
 
@@ -401,7 +415,20 @@ run continues without a brief or a readiness score and go to phase 1 unchanged.
 
 Skip this phase when resuming a run whose `00-readiness.json` already exists.
 
+**Refined fast path:** do not dispatch `run-researcher`. Route the `00-readiness.json`
+that `aiw refined` already wrote, and go to phase 1.
+
 ## 1. Plan (agent: run-planner) — GATE 1
+
+**Refined fast path:** do not dispatch `run-planner`. Route the `10-plan.json` that
+`aiw refined` already wrote. On `advance(…)`, print the plan's `test_root`, `base_branch`,
+and each acceptance criterion (one line each; the How itself was already approved when the
+issue was refined), then gate with **Approve and start**, **Run the planner**, **Abort**
+(headless: `aiw ask`, same as below). **Approve and start** continues exactly as the normal
+approval below: comment the plan, then `aiw set` its fields. **Run the planner** (or free
+text, carried in as `User feedback:`) drops out of the fast path: dispatch `run-planner` as
+below, overwrite `10-plan.json`, and run the full Gate 1. The same applies to a later
+`bounce(planner)` on a refined run: the planner runs for real, and the full Gate 1 fires.
 
 Dispatch the `run-planner` agent with the issue's title/body/comments/labels **and the
 phase-0.5 research brief verbatim, under a `## Research brief` heading** (omit the
@@ -963,7 +990,11 @@ Invoke the `ai-workflow:dump` skill with the full run context, target pre-resolv
 auto-confirmed (see "Programmatic invocation" in the dump skill):
 
 - target: the `feature folder` from the phase-0.5 research brief's
-  `## Project notes (vault)` section, in `00-readiness.json`'s `handoff.brief`.
+  `## Project notes (vault)` section, in `00-readiness.json`'s `handoff.brief`. On the
+  refined fast path the brief is empty: resolve it yourself with one
+  `obsidian vault=notes search query="<issue title keywords>" path="05-Work" format=json`
+  and take the single feature folder the top hits share; anything less clear counts as
+  `no match`.
 - the issue number, title, and URL; the PR URL and its final state
 - what the approved plan decided, and where implementation diverged from it
 - what the review caught and what was fixed (phases 6-7), and any still-open threads
