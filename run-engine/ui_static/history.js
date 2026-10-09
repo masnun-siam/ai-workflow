@@ -1,7 +1,7 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 
-import { formatWhen, shortRepo } from './fmt.js';
+import { formatWhen, shortRepo, sessionLabel } from './fmt.js';
 import { toast } from './toast.js';
 import { openCleanup } from './cleanup.js';
 
@@ -39,6 +39,8 @@ export function rowAction(s) {
     case 'running':
     case 'starting':
       return { kind: 'link', label: 'Open', href: transcriptHref(s) };
+    case 'done':
+      return { kind: 'link', label: 'Open', href: transcriptHref(s) };
     default:
       return null;
   }
@@ -74,7 +76,12 @@ export function fmtTime(iso) {
   return Number.isNaN(new Date(iso).getTime()) ? String(iso) : formatWhen(iso);
 }
 
-const orDash = (v) => (v == null || v === '' ? DASH : v);
+// Grind commands are long instruction text; the short label plus the issue says more.
+export function cmdLabel(s) {
+  const label = sessionLabel(s.command);
+  return label !== s.command && s.link && s.link.issue ? `${label} #${s.link.issue}` : label;
+}
+
 
 export class History extends Component {
   state = { filter: 'all', busy: {}, errors: {} };
@@ -113,13 +120,12 @@ export class History extends Component {
     const known = OUTCOMES.includes(o) ? o : 'unknown';
     return html`
       <tr>
-        <td class="cmd" title=${s.command || ''}>${orDash(s.command)}</td>
+        <td class="cmd" title=${s.command || ''}>${s.command ? html`<a href=${sessionHref(s)}>${cmdLabel(s)}</a>` : DASH}</td>
         <td title=${s.repo || ''}>${s.repo ? shortRepo(s.repo) : DASH}</td>
         <td>${fmtTime(s.started_at)}</td>
         <td>${fmtTime(s.ended_at)}</td>
         <td><span class=${'chip chip-' + known}>${known}</span></td>
         <td>${fmtCost(s.cost)}</td>
-        <td><a href=${sessionHref(s)}>Transcript</a></td>
         <td>${this.action(s)}</td>
       </tr>
     `;
@@ -144,7 +150,6 @@ export class History extends Component {
                   <th scope="col">Ended</th>
                   <th scope="col">Outcome</th>
                   <th scope="col">Cost</th>
-                  <th scope="col">Transcript</th>
                   <th scope="col">Action</th>
                 </tr>
               </thead>
@@ -153,11 +158,8 @@ export class History extends Component {
           </div>`;
     }
     return html`
-      <section>
-      <div class="history-head">
-        <h1>Sessions</h1>
-        <span class="muted">Kept on disk · survives UI restarts</span>
-      </div>
+      <section class="history-page">
+      <h1>Sessions</h1>
       <div class="history-filter">
         <label>Outcome
           <select data-search onChange=${(e) => this.setState({ filter: e.target.value })}>

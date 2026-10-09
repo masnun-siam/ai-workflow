@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Issue and PR popups in `aiw ui`.** Clicking an issue or PR link opens an overview
+  instead of a new tab: state, labels, people and the GitHub-rendered body and comments
+  for an issue; description, conversation with review verdicts, changed files with inline
+  diffs, commits and CI checks for a PR. "Open on GitHub" is in the footer, and
+  Cmd/Ctrl-click still opens GitHub directly. Served by `/api/issues/...` and
+  `/api/pulls/...`, read-only through `gh`.
+
+### Changed
+
+- **Run page.** The header groups the title, status chips and actions, the stations list
+  is compact and sticky, assistant output renders as markdown in a readable measure, only
+  the latest 80 events render until "Show earlier events", and "Jump to latest" appears
+  when you scroll up. On phones the page scrolls instead of the log.
+
+### Fixed
+
+- Dispatch's "Add" button no longer wraps to "Ad / d".
+
 ## 1.11.0 — 2026-10-07
 
 ### Added
@@ -21,6 +43,25 @@
   that hits its usage limit shows as limited, resumes by itself when the limit resets,
   or can be resumed on another account. Header chips show limited and near-limit
   accounts.
+- **`aiw ui` serves itself on your tailnet when Tailscale is running.** It runs
+  `tailscale serve` to `https://<node>.<tailnet>.ts.net` (tailnet-only, never funnel),
+  limited to the node owner by the `Tailscale-User-Login` header, and removes the handler
+  when it exits. A port that already has a handler is never overwritten.
+  `--tailscale-port` picks 443 (default), 8443 or 10000; `--no-tailscale` turns it off.
+- **ntfy pushes are richer.** An emoji icon and run/repo/issue tags, a title naming the
+  issue, a body that leads with the question or error, and an Answer / Open run button
+  when `public_url` is set. Auth is a Bearer token or `user` + `password`, and pushes
+  send their own User-Agent so Cloudflare's Browser Integrity Check lets them through.
+- **Dispatch asks where a repo's clone is instead of failing.** A repo aiw has not seen
+  (for example one pasted as a search URL) shows a "Where is owner/repo on this Mac?" step with
+  clones found on disk, a path field and Browse; the pick is remembered and the preview re-runs.
+  Settings has a Repos panel with "Find my repos", which registers every clone with a GitHub
+  origin under the folders you list. Clones whose remote is `ssh://git@ssh.github.com:443/...`
+  are recognised now (they were skipped before).
+- **`/worklog` includes non-GitHub work.** It reads the daily note's `## Log` section
+  (meetings, support, reviews) and adds those items to `## Worklog` under their project,
+  or `Other`, as `done`. Plans and deferred items are skipped, and a day with only log
+  items still gets a worklog.
 - **GitHub status on the board and run detail.** Issue state, PR link, review approval
   and CI, read-only and cached.
 - **Clean up finished runs from the UI.** Removes a run's worktree, run directory and

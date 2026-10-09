@@ -1,5 +1,7 @@
 import { h } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
+import { IssueLink } from './issue.js';
+import { PrLink } from './pr.js';
 
 const html = htm.bind(h);
 
@@ -16,9 +18,13 @@ export function ghChips(gh, labels = false) {
   if (!gh) return [];
   const chips = [];
   if (gh.issue && gh.issue.state) {
-    const closed = gh.issue.state === 'CLOSED';
-    chips.push({ text: 'issue ' + (closed ? 'closed' : 'open'), tone: closed ? 'ok' : 'neutral' });
-    if (labels) for (const label of gh.issue.labels || []) chips.push({ text: label, tone: 'neutral' });
+    // Open is the normal case, so only a closed issue earns a chip.
+    if (gh.issue.state === 'CLOSED') chips.push({ text: 'issue closed', tone: 'ok' });
+    if (labels) {
+      const all = gh.issue.labels || [];
+      for (const label of all.slice(0, 3)) chips.push({ text: label, tone: 'label' });
+      if (all.length > 3) chips.push({ text: `+${all.length - 3} more`, tone: 'label' });
+    }
   }
   const pr = gh.pr;
   if (pr) {
@@ -45,8 +51,8 @@ export function GhLinks({ owner, repo, issue, pr, gh }) {
   const prUrl = (gh && gh.pr && gh.pr.url) || pr;
   const num = gh && gh.pr && gh.pr.number;
   return html`<div class="card-links">
-    <a href=${issueUrl(owner, repo, issue)} target="_blank" rel="noopener noreferrer">Issue #${issue}</a>
-    ${prUrl && html`<a href=${prUrl} target="_blank" rel="noopener noreferrer">PR${num ? ' #' + num : ''}</a>`}
+    <${IssueLink} owner=${owner} repo=${repo} issue=${issue}>Issue #${issue}<//>
+    ${prUrl && html`<${PrLink} url=${prUrl}>PR${num ? ' #' + num : ''}<//>`}
   </div>`;
 }
 

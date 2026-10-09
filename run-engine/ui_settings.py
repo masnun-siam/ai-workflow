@@ -1,6 +1,7 @@
 """UI settings: the named claude commands a run can be launched with (`claude`, `cc masum`, ...).
 
-Stored in <data_dir>/ui_settings.json. A command is exec'd directly (no shell): `cc` is only an
+The plain `claude` command is built in: always first, never removable, but its label is the
+user's to rename (stored as `claude_label`). Stored in <data_dir>/ui_settings.json. A command is exec'd directly (no shell): `cc` is only an
 interactive-shell alias, so a leading `cc` is rewritten to the `cc-profile` script it points at.
 """
 
@@ -28,12 +29,17 @@ def load() -> dict:
             data = json.load(f)
     except (OSError, ValueError):
         data = None
-    if not isinstance(data, dict) or not isinstance(data.get("commands"), list):
-        return {"commands": [], "default": None}
-    cmds = [{"label": c["label"], "cmd": c["cmd"]} for c in data["commands"]
-            if isinstance(c, dict) and isinstance(c.get("label"), str) and isinstance(c.get("cmd"), str)]
+    if not isinstance(data, dict):
+        data = {}
+    alias = data.get("claude_label")
+    alias = alias if isinstance(alias, str) and alias.strip() else DEFAULT_CMD
+    cmds = [{"label": alias, "cmd": DEFAULT_CMD, "builtin": True}]
+    cmds += [{"label": c["label"], "cmd": c["cmd"]} for c in data.get("commands") or []
+             if isinstance(c, dict) and isinstance(c.get("label"), str) and isinstance(c.get("cmd"), str)
+             and c["label"] != alias]
     default = data.get("default")
-    return {"commands": cmds, "default": default if any(c["label"] == default for c in cmds) else None}
+    return {"commands": cmds, "default": default if any(c["label"] == default for c in cmds) else alias,
+            "auto_grind": data.get("auto_grind") is True}
 
 
 def argv(cmd: str) -> list:
@@ -60,8 +66,17 @@ def validate(body) -> dict:
         raise ValueError("commands must be a list")
     if len(body["commands"]) > MAX_COMMANDS:
         raise ValueError(f"at most {MAX_COMMANDS} commands")
-    cmds, seen = [], set()
+    builtin = [c for c in body["commands"] if isinstance(c, dict) and c.get("builtin") is True]
+    if len(builtin) > 1:
+        raise ValueError("only one built-in command")
+    alias = builtin[0].get("label") if builtin else DEFAULT_CMD
+    if not isinstance(alias, str) or not alias.strip() or len(alias) > 40:
+        raise ValueError("label must be a non-empty string of at most 40 characters")
+    alias = alias.strip()
+    cmds, seen = [], {alias}
     for c in body["commands"]:
+        if isinstance(c, dict) and c.get("builtin") is True:
+            continue  # its command is always `claude`; only the label is editable
         label = c.get("label") if isinstance(c, dict) else None
         cmd = c.get("cmd") if isinstance(c, dict) else None
         if not isinstance(label, str) or not label.strip() or len(label) > 40:
@@ -77,13 +92,13 @@ def validate(body) -> dict:
     default = body.get("default")
     if default is not None and default not in seen:
         raise ValueError("default must be one of the labels")
-    return {"commands": cmds, "default": default}
+    return {"claude_label": alias, "commands": cmds, "default": None if default == alias else default,
+            "auto_grind": body.get("auto_grind") is True}
 
 
 def save(body) -> dict:
-    clean = validate(body)
-    shared.atomic_write_text(_path(), json.dumps(clean, indent=2))
-    return clean
+    shared.atomic_write_text(_path(), json.dumps(validate(body), indent=2))
+    return load()
 
 
 def default_cmd() -> str:

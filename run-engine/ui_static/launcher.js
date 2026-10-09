@@ -12,10 +12,24 @@ const LABELS = {
   intake: 'Sentry URL, file path, vault note or free text',
   dump: 'What to capture: feature, change, bug or task',
   worklog: 'Date (optional, defaults to today)',
+  day: 'What to capture: a task, follow-up or meeting notes (leave empty to plan, shut down or review the week)',
   'gh-issue': 'Type (bug, feature, task, improvement) and details',
+  'pr-review': 'PR number or URL to review',
+  'pr-fix-comments': 'PR URL or owner/repo#123',
+  'issue-to-pr': 'Issue URL',
 };
 const COMMANDS = Object.keys(LABELS);
-const OPTIONAL_ARGS = new Set(['worklog']);
+const HINTS = {
+  'run-issue': '5940, or an issue URL',
+  'pr-grind': 'The Slack link of the review thread',
+  worklog: '2026-10-08',
+  'pr-review': '5960, or a PR URL',
+  'pr-fix-comments': 'owner/repo#5960, or a PR URL',
+  'issue-to-pr': 'An issue URL',
+};
+const OPTIONAL_ARGS = new Set(['worklog', 'day']);
+// These take a written description rather than a number or link, so they get room to write.
+export const FREE_TEXT = new Set(['prd', 'intake', 'dump', 'gh-issue', 'day']);
 const URL_KIND = { 'run-issue': 'issues', 'pr-grind': 'pull' };
 
 export function repoOptions(body) {
@@ -42,6 +56,19 @@ export function comboOptions(repos, query) {
   if (path) out.push({ kind: 'path', path });
   out.push({ kind: 'other' });
   return out;
+}
+
+// Reset time (epoch s) of the chosen account when it is rate limited, else null.
+export function limitedUntil(cmds, label, limits) {
+  const c = (cmds || []).find((x) => x.label === label);
+  return (c && ((limits || {})[c.cmd] || {}).limited_until) || null;
+}
+
+// Registered repo named by a GitHub URL or owner/repo#N in the text, else null.
+export function repoFromText(repos, text) {
+  const m = /(?:github\.com\/|(?:^|\s))([\w.-]+\/[\w.-]+)(?:\/(?:issues|pull)\/\d+|#\d+)/.exec(String(text ?? ''));
+  const hit = m && repos.find((r) => r.value.toLowerCase() === m[1].toLowerCase());
+  return hit ? hit.value : null;
 }
 
 export function argIssue(command, args) {
@@ -141,7 +168,7 @@ export class Launcher extends Component {
   async componentDidMount() {
     fetch('/api/settings', { headers: { Accept: 'application/json' } })
       .then((r) => (r.ok ? r.json() : null))
-      .then((s) => s && this.setState({ cmds: s.commands || [], claudeLabel: s.default || '' }))
+      .then((s) => s && this.setState({ cmds: s.commands || [], claudeLabel: s.default || '', autoGrind: !!s.auto_grind }))
       .catch(() => {}); // no picker without settings: runs use claude
     let repos = [];
     let failed = false;
@@ -177,7 +204,7 @@ export class Launcher extends Component {
     this.submit = this.submit || makeSubmitter((...a) => fetch(...a));
     const repo = (s.manual || !s.repos.length ? s.path : s.repo).trim();
     this.setState({ pending: true, form, errors: {}, result: null });
-    const r = await this.submit({ ...mkBody(repo), ...(s.claudeLabel ? { claude_cmd: s.claudeLabel } : {}) });
+    const r = await this.submit({ ...mkBody(repo), ...(s.claudeLabel ? { claude_cmd: s.claudeLabel } : {}), auto_grind: s.autoGrind === true });
     if (!r) return;
     this.setState({ pending: false, result: r.kind === 'open' ? null : r });
     if (r.kind === 'open') {
@@ -215,6 +242,13 @@ export class Launcher extends Component {
     }
   };
 
+  // Typing an issue/PR link picks its repo from the dropdown when it is registered.
+  setText = (k) => (e) => {
+    const v = e.target.value;
+    const hit = repoFromText(this.state.repos, v);
+    this.setState({ [k]: v, ...(hit ? { repo: hit, manual: false, repoQuery: null } : {}) });
+  };
+
   onComboInput = (e) => {
     const q = e.target.value;
     const path = pathOption(q);
@@ -241,7 +275,7 @@ export class Launcher extends Component {
 
   onCustom = (ev) => this.start(ev, 'custom', validateCustom(this.state), (repo) => buildCustomBody({ repo, text: this.state.text }));
 
-  render({ limits }, { canBrowse, browsing, cmds, claudeLabel, repos, repo, manual, path, command, args, text, pending, form, errors, result, repoQuery, repoOpen, repoActive }) {
+  render({ limits }, { canBrowse, browsing, cmds, claudeLabel, autoGrind, repos, repo, manual, path, command, args, text, pending, form, errors, result, repoQuery, repoOpen, repoActive }) {
     const set = (k) => (e) => this.setState({ [k]: e.target.value });
     const mine = (f) => (result && (form || 'named') === f ? result : null);
     const outcomeMsg = (f) => { const r = mine(f); return r && r.kind === 'duplicate'
@@ -260,7 +294,8 @@ export class Launcher extends Component {
                 aria-expanded=${repoOpen ? 'true' : 'false'} aria-controls="repo-list" aria-autocomplete="list"
                 aria-activedescendant=${repoOpen ? 'repo-opt-' + repoActive : undefined}
                 placeholder="Search repos or type an absolute path"
-                value=${repoQuery !== null ? repoQuery : manual ? path : (repos.find((r) => r.value === repo) || {}).label || ''}
+                value=${repoQuery !== null ? repoQuery : manual ? path : (repos.find((r) => r.value === repo) || {}).name || ''}
+                title=${manual ? path : (repos.find((r) => r.value === repo) || {}).path || ''}
                 onInput=${this.onComboInput} onKeyDown=${this.onComboKey}
                 onFocus=${(e) => { e.target.select(); this.setState({ repoOpen: true }); }}
                 onBlur=${() => this.setState({ repoOpen: false, repoQuery: null })}
@@ -283,13 +318,6 @@ export class Launcher extends Component {
           </button>`}
         </div>
         ${repoMsg ? html`<p id="repo-error" role="alert" class="error">${repoMsg}</p>` : null}
-        ${cmds && cmds.length > 0 && html`
-          <label for="claude-cmd">Claude command</label>
-          <select id="claude-cmd" value=${claudeLabel} onChange=${set('claudeLabel')}>
-            <option value="" selected=${!claudeLabel}>claude</option>
-            ${cmds.map((c) => { const until = ((limits || {})[c.cmd] || {}).limited_until; return html`<option value=${c.label} selected=${c.label === claudeLabel}>${c.label}${until ? ` (limited until ${clockText(until)})` : ''}</option>`; })}
-          </select>
-          ${(((limits || {})[(cmds.find((c) => c.label === claudeLabel) || {}).cmd] || {}).limited_until) ? html`<p class="note">This account is rate limited: the run is queued and starts automatically at reset.</p>` : null}`}
         <fieldset>
           <legend>Command</legend>
           ${COMMANDS.map((c) => html`<label for=${'cmd-' + c} class="radio">
@@ -297,20 +325,36 @@ export class Launcher extends Component {
             ${c}</label>`)}
         </fieldset>
         <label for="args">${LABELS[command]}</label>
-        <input id="args" type="text" value=${args} onInput=${set('args')}
-          aria-invalid=${errors.args ? 'true' : undefined} aria-describedby=${errors.args ? 'args-error' : undefined} />
+        ${FREE_TEXT.has(command)
+          ? html`<textarea id="args" class="args-text" rows="8" value=${args} onInput=${this.setText('args')}
+              onKeyDown=${(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); e.target.form.requestSubmit(); } }}
+              aria-invalid=${errors.args ? 'true' : undefined} aria-describedby=${errors.args ? 'args-error' : undefined}></textarea>`
+          : html`<input id="args" type="text" placeholder=${HINTS[command] || ''} value=${args} onInput=${this.setText('args')}
+              aria-invalid=${errors.args ? 'true' : undefined} aria-describedby=${errors.args ? 'args-error' : undefined} />`}
         ${errors.args ? html`<p id="args-error" role="alert" class="error">${errors.args}</p>` : null}
+        ${limitedUntil(cmds, claudeLabel, limits) ? html`<p class="note">This account is rate limited: the run is queued and starts automatically at reset.</p>` : null}
+        ${command === 'run-issue' && html`<label class="check" for="auto-grind"><input id="auto-grind" type="checkbox" checked=${autoGrind === true} onChange=${(e) => this.setState({ autoGrind: e.target.checked })} /> Start review grinding when the run finishes</label>`}
         ${outcomeMsg('named')}
         <div class="launch-actions">
-          <button type="submit" disabled=${pending}>${pending && (form || 'named') === 'named' ? 'Starting...' : 'Start'}</button>
-          <span class="note">Runs headless in the chosen checkout</span>
+          <button type="submit" disabled=${pending}>${pending && (form || 'named') === 'named' ? 'Starting...' : 'Start'}${FREE_TEXT.has(command) && html` <kbd>⌘↵</kbd>`}</button>
+          ${cmds && cmds.length > 1 && html`<div class="runas" role="radiogroup" aria-label="Run as">
+            <span class="runas-label" aria-hidden="true">Run as</span>
+            <div class="seg">
+              ${cmds.map((o) => {
+                const until = limitedUntil(cmds, o.label, limits);
+                return html`<button type="button" role="radio" aria-checked=${claudeLabel === o.label} class=${claudeLabel === o.label ? 'on' : ''}
+                  title=${until ? `Limited until ${clockText(until)}` : ''} onClick=${() => this.setState({ claudeLabel: o.label })}>
+                  ${until && html`<span class="runas-limited" aria-label="rate limited"></span>`}${o.label}</button>`;
+              })}
+            </div>
+          </div>`}
         </div>
       </form>
       <aside class="launch-side">
       <form class="launcher panel" onSubmit=${this.onCustom} noValidate>
         <h2>Custom command</h2>
         <label for="custom">Custom command or prompt</label>
-        <textarea id="custom" placeholder="/pr-fix-comments 42" value=${text} onInput=${set('text')}
+        <textarea id="custom" placeholder="/pr-fix-comments 42" value=${text} onInput=${this.setText('text')}
           aria-invalid=${errors.text ? 'true' : undefined} aria-describedby=${errors.text ? 'custom-error' : undefined}></textarea>
         ${errors.text ? html`<p id="custom-error" role="alert" class="error">${errors.text}</p>` : null}
         <p class="note danger">Runs with --dangerously-skip-permissions: the command or prompt is not gated.</p>

@@ -12,7 +12,10 @@ import http.server
 import json
 import mimetypes
 import os
+import re
 import shlex
+import signal
+import socket
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -21,15 +24,21 @@ from urllib.parse import parse_qs, unquote, urlsplit
 import ui_cleanup
 import ui_dispatch
 import ui_events
+import ui_grind
+import ui_issue
+import ui_pr
 import ui_repos
 import ui_runner
 import ui_sessions
 import ui_settings
 import ui_status
+import ui_tailscale
+import shared
 from shared import die
 from ui_board import build_board, fetch_title, load_projects, plausible_repo, load_run, memoize_title_fetcher, scan_records
 
 
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 STATIC_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ui_static")
 
 
@@ -61,6 +70,11 @@ def _guard(handler) -> bool:
     if host not in handler.server.allowed_hosts:
         handler._send(403, "text/plain; charset=utf-8", b"forbidden")
         return False
+    if host in handler.server.tailnet_hosts:
+        who = (handler.headers.get("Tailscale-User-Login") or "").strip().lower()
+        if not who or who != (handler.server.tailnet_login or "").lower():
+            handler._send(403, "text/plain; charset=utf-8", b"forbidden: tailnet access is limited to the node owner")
+            return False
     origin = handler.headers.get("Origin")
     if origin is not None and urlsplit(origin.strip()).netloc.lower() != host:
         handler._send(403, "text/plain; charset=utf-8", b"forbidden")
@@ -136,6 +150,7 @@ def _public(rec: dict) -> dict:
         "note": rec.get("note"),
         "terminal_handoff": rec.get("terminal_handoff"),
         "pending_answer": rec.get("pending_answer"),
+        "queued_prompt": rec.get("queued_prompt"),
         "claude_cmd": rec.get("claude_cmd"),
         "limit_resets_at": rec.get("limit_resets_at"),
         "limit_type": rec.get("limit_type"),
@@ -164,6 +179,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/":
             _serve_static(self, "index.html")
+        elif path == "/sw.js":  # served at the root so its scope covers the whole app
+            _serve_static(self, "sw.js")
         elif path.startswith("/static/"):
             _serve_static(self, path[len("/static/"):])
         elif path == "/api/health":
@@ -171,13 +188,15 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/board.json":
             board = build_board(scan_records(), load_projects(), self.server.fetch_title)
             member = ui_dispatch.membership()
+            gidx = ui_grind.index()
             for column in board["columns"]:
                 for card in column["cards"]:
+                    card["grind"] = ui_grind.for_card(gidx, card["owner"], card["repo"], card["issue"], card["pr"])
                     card["gh"] = _gh_status(card["owner"], card["repo"], card["issue"], card["pr"], card["branch"])
                     card["pipeline"] = member.get(f"{card['owner']}/{card['repo']}#{card['issue']}".lower())
             self._send(200, "application/json; charset=utf-8", json.dumps(board).encode("utf-8"))
         elif path == "/api/repos":
-            self._json(200, {"repos": ui_repos.list_repos(), "can_browse": _can_browse(self)})
+            self._json(200, {"repos": ui_repos.list_repos(), "can_browse": _can_browse(self), "scan_roots": ui_repos.default_roots()})
         elif path == "/api/settings":
             self._json(200, ui_settings.load())
         elif path == "/api/cleanup":
@@ -186,6 +205,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json(200, {"pipelines": [ui_dispatch.summary(p) for p in ui_dispatch.list_all()]})
         elif path.startswith("/api/pipelines/"):
             body = ui_dispatch.detail(path.split("/")[3], _gh_status) if len(path.split("/")) == 4 else None
+            if body:
+                owner, _, repo = body["slug"].partition("/")
+                gidx = ui_grind.index()
+                for it in body["items"]:
+                    it["grind"] = ui_grind.for_card(gidx, owner, repo, it["issue"], (it.get("run") or {}).get("pr"))
             self._json(200, body) if body else self._json(404, {"error": "not found"})
         elif path == "/api/sessions":
             body = {"sessions": [_public(r) for r in ui_sessions.list_sessions()],
@@ -197,6 +221,16 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 self._session(parts[3], len(parts) == 5)
             elif len(parts) == 6 and parts[:3] == ["", "api", "runs"]:
                 self._run(parts[3], parts[4], parts[5])
+            elif len(parts) == 6 and parts[:3] == ["", "api", "issues"]:
+                if ui_issue.valid(*parts[3:]):
+                    self._json(*ui_issue.fetch(*parts[3:]))
+                else:
+                    self._json(400, {"error": "bad issue id"})
+            elif len(parts) == 6 and parts[:3] == ["", "api", "pulls"]:
+                if ui_pr.valid(*parts[3:]):
+                    self._json(*ui_pr.fetch(*parts[3:]))
+                else:
+                    self._json(400, {"error": "bad pull request id"})
             else:
                 self._send(404, "text/plain; charset=utf-8", b"not found")
 
@@ -211,6 +245,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         body["title"] = self.server.fetch_title(owner, repo, int(n))
         body["gh"] = _gh_status(owner, repo, int(n), body["pr"], body["branch"])
+        body["grind"] = ui_grind.for_card(ui_grind.index(), owner, repo, int(n), body["pr"])
+        if body["grind"] and body["grind"]["state"] == "paused":
+            body["grind"] = {**body["grind"], "message": ui_grind.last_message(owner, repo, int(n))}
         self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
 
     def _session(self, sid: str, stream: bool) -> None:
@@ -267,6 +304,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 self._json(403, {"error": "folder picker is only available locally on macOS"})
         elif parts == ["", "api", "cleanup"]:
             self._cleanup()
+        elif parts == ["", "api", "repos", "register"]:
+            self._dispatch(lambda b: {"path": ui_repos.register(b.get("slug"), b.get("path")), "repos": ui_repos.list_repos()})
+        elif parts == ["", "api", "repos", "scan"]:
+            self._dispatch(self._scan)
         elif parts[:3] == ["", "api", "dispatch"] and parts[3:] == ["preview"]:
             self._dispatch(lambda b: ui_dispatch.preview(b.get("input"), b.get("repo")))
         elif parts == ["", "api", "pipelines"]:
@@ -277,6 +318,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._dispatch(lambda b: ui_dispatch.act(parts[3], parts[4], b))
         elif len(parts) == 7 and parts[:3] == ["", "api", "pipelines"] and parts[4] == "items" and parts[5].isdigit():
             self._dispatch(lambda b: ui_dispatch.act(parts[3], parts[6], b, issue=int(parts[5])))
+        elif len(parts) == 4 and parts[:3] == ["", "api", "grind"] and parts[3] in ("start", "pause", "resume", "rerun-ci", "reply"):
+            self._grind(parts[3])
         elif parts == ["", "api", "settings", "test"]:
             body = self._read_body()
             if body is not None:
@@ -285,10 +328,37 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                            else {"ok": False, "message": "cmd required"})
         elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] == "answer":
             self._answer(parts[3])
+        elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] == "prompt":
+            self._prompt(parts[3])
         elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] in ("stop", "resume", "cancel-auto"):
             {"stop": self._stop, "resume": self._resume, "cancel-auto": self._cancel_auto}[parts[4]](parts[3])
         else:
             self._method_not_allowed(guarded=True)
+
+    def _grind(self, action: str) -> None:
+        body = self._read_body()
+        if body is None:
+            return
+        owner, repo, issue = body.get("owner"), body.get("repo"), body.get("issue")
+        if not (isinstance(owner, str) and isinstance(repo, str) and isinstance(issue, int) and not isinstance(issue, bool)):
+            self._json(400, {"error": "owner, repo and issue are required"})
+            return
+        try:
+            status, res = (ui_grind.request(owner, repo, issue) if action == "start"
+                           else ui_grind.rerun_ci(owner, repo, issue) if action == "rerun-ci"
+                           else ui_grind.reply(owner, repo, issue, body.get("text")) if action == "reply"
+                           else ui_grind.control(owner, repo, issue, action))
+        except ValueError as e:
+            status, res = 400, {"error": str(e)}
+        self._json(status, res)
+
+    @staticmethod
+    def _scan(body: dict) -> dict:
+        roots = body.get("roots") or ui_repos.default_roots()
+        if not isinstance(roots, list) or not all(isinstance(r, str) and os.path.isabs(r) and ".." not in r.split(os.sep) for r in roots):
+            raise ValueError("roots must be a list of absolute folders")
+        res = ui_repos.scan_and_register([r for r in roots if os.path.isdir(r)])
+        return {**res, "repos": ui_repos.list_repos()}
 
     def _dispatch(self, fn, ok: int = 200) -> None:
         """Run a ui_dispatch call on the JSON body, mapping its errors to HTTP statuses."""
@@ -297,6 +367,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         try:
             self._json(ok, fn(body))
+        except ui_dispatch.NeedsCheckout as e:
+            self._json(409, {"error": str(e), "code": "no_checkout", "slug": e.slug, "candidates": e.candidates})
         except ui_dispatch.NotFound:
             self._json(404, {"error": "not found"})
         except ui_dispatch.Conflict as e:
@@ -336,6 +408,24 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json(409, {"error": "session is starting, retry"})
             return
         self._json(200, _public(rec))
+
+    def _prompt(self, sid: str) -> None:
+        body = self._read_body()
+        if body is None:
+            return
+        try:
+            state = ui_runner.send_prompt(sid, body.get("text"))
+        except (FileNotFoundError, ValueError) as e:
+            self._json(404 if isinstance(e, FileNotFoundError) else 400,
+                       {"error": "not found" if isinstance(e, FileNotFoundError) else str(e)})
+            return
+        except ui_runner.Conflict as e:
+            self._json(409, {"error": str(e)})
+            return
+        except (ui_runner.RunnerError, OSError) as e:
+            self._json(500, {"error": str(e)})
+            return
+        self._json(202 if state == "queued" else 200, {"state": state})
 
     def _cancel_auto(self, sid: str) -> None:
         try:
@@ -502,10 +592,15 @@ def _gh_status(owner, repo, issue, pr, branch):
 
 
 class _Server(http.server.ThreadingHTTPServer):
-    # macOS lets a 127.0.0.1 bind succeed while another process holds 0.0.0.0:<port> when reuse is on
-    allow_reuse_address = False
+    # Reuse is on so a restart is not refused while closed connections sit in TIME_WAIT; cmd_serve probes
+    # the port first because macOS would otherwise let a 127.0.0.1 bind succeed over a 0.0.0.0 holder.
+    allow_reuse_address = True
     # A cold page load fires a dozen module/font requests at once; the default backlog of 5 resets some of them.
     request_queue_size = 128
+    # Set by cmd_serve when `tailscale serve` fronts this server: Host values that arrive over the
+    # tailnet, and the one login allowed to use them (the UI can start agents).
+    tailnet_hosts: frozenset = frozenset()
+    tailnet_login = None
 
     def __init__(self, address, handler, allowed_hosts, fetch_title):
         super().__init__(address, handler)
@@ -527,11 +622,19 @@ def _port_holder(port: int):
     return (fields[1], fields[0]) if len(fields) >= 2 else None
 
 
+def _port_answers(port: int) -> bool:
+    with socket.socket() as s:
+        s.settimeout(1)
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
 def cmd_serve(args) -> None:
     port = args.port
     extras = args.allow_host or []
     try:
-        server = _Server(("127.0.0.1", port), _Handler, extras, memoize_title_fetcher(fetch_title, _TITLE_POOL))
+        if _port_answers(port):
+            raise OSError(errno.EADDRINUSE, "address in use")
+        server = _Server(("127.0.0.1", port), _Handler, extras, memoize_title_fetcher(fetch_title, _TITLE_POOL, os.path.join(shared.data_dir(), "titles.json")))
     except (OSError, OverflowError) as exc:
         if getattr(exc, "errno", None) != errno.EADDRINUSE:
             die(1, f"cannot bind 127.0.0.1:{port}: {exc}")
@@ -539,22 +642,36 @@ def cmd_serve(args) -> None:
         if holder:
             die(1, f"port {port} is already in use by PID {holder[0]} ({holder[1]}) — stop it or pass --port")
         die(1, f"port {port} is already in use (http://127.0.0.1:{port}/) — stop it or pass --port")
+    ts = None
+    if not args.no_tailscale:
+        ts = ui_tailscale.up(server.server_address[1], args.tailscale_port)
+        if ts:
+            server.allowed_hosts |= ts["hosts"]
+            server.tailnet_hosts, server.tailnet_login = frozenset(ts["hosts"]), ts["login"]
     ui_runner.reconcile()  # re-attach sessions that outlived the last UI, close the ones that died
     ui_dispatch.start_timer()  # advance dispatch pipelines (needs reconciled session states)
+    ui_grind.start_timer()  # queued/auto grinds, ntfy on pause/finish
+    ui_runner.start_prgrind_timer()  # re-enter pr-grind loops whose session ended (reviews, CI, heartbeat)
     ui_runner.start_limit_timer()  # auto-resume limited runs, incl. catch-up of resets missed while down
     print(f"serving http://127.0.0.1:{server.server_address[1]}/ — Ctrl+C to stop")
+    if ts:
+        print(f"also on your tailnet: {ts['url']}/ (only {ts['login']}; removed when this exits)")
     if extras:
         print("also allowing hosts: " + ", ".join(extras))
+    for sig in (signal.SIGTERM, signal.SIGHUP):  # SIGHUP: closed terminal; let `finally` remove the tailscale handler
+        signal.signal(sig, lambda *_: sys.exit(0))
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nstopped")
     finally:
         server.server_close()
+        if ts:
+            ui_tailscale.down(ts["https_port"])
 
 
 def register(sub, add) -> None:
-    p = sub.add_parser("ui", help="workflow control UI server (loopback only)")
+    p = sub.add_parser("ui", help="workflow control UI server (loopback; also your tailnet when tailscale is running)")
     p.add_argument("--port", type=int, default=8420)
     p.add_argument(
         "--allow-host",
@@ -564,4 +681,8 @@ def register(sub, add) -> None:
         help="extra accepted Host header, exact match (repeatable); give name:port unless the proxy serves "
         "the default port, e.g. a tailscale serve name on 443 is passed bare",
     )
+    p.add_argument("--no-tailscale", action="store_true",
+                   help="do not serve on the tailnet (default: serve there when tailscale is running)")
+    p.add_argument("--tailscale-port", type=int, default=ui_tailscale.DEFAULT_HTTPS_PORT, metavar="PORT",
+                   help="HTTPS port on the tailnet name: 443, 8443 or 10000 (default 443; an occupied port is never overwritten)")
     p.set_defaults(func=cmd_serve)

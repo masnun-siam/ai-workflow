@@ -58,10 +58,11 @@ def _fetch(owner, repo, issue, pr_url, branch):
     target = pr_url or branch
     pr = None
     if target:
-        pr, _ = gh_json(["pr", "view", target, "-R", slug, "--json",
-                         "url,number,state,reviewDecision,statusCheckRollup"], timeout=30)
+        pr, proc = gh_json(["pr", "view", target, "-R", slug, "--json",
+                            "url,number,state,reviewDecision,statusCheckRollup"], timeout=30)
+        if pr is None and "no pull requests found" in (proc.stderr or ""):
+            target = None  # a branch with no PR yet is a normal state, not a failed fetch
     if not isinstance(iss, dict) or (target and not isinstance(pr, dict)):
-        # a PR that doesn't exist yet (branch not pushed) is not an error worth keeping stale for
         raise RuntimeError(f"gh status fetch failed for {slug}#{issue}")
     return summarize(iss, pr)
 

@@ -419,3 +419,20 @@ assert bad["pr"] is None, bad["pr"]
 ok("load_run: https pr link and branch exposed, javascript: link dropped")
 
 print(f"\n{passed} passed")
+
+# --- titles persisted for a warm restart
+import json as _json2, tempfile as _tf
+from concurrent.futures import ThreadPoolExecutor as _TPE
+_store = os.path.join(_tf.mkdtemp(), "titles.json")
+_pool = _TPE(max_workers=1)
+_f = memoize_title_fetcher(lambda o, r, n: f"Title {n}", _pool, _store)
+assert _f("o", "r", 1) is None  # cold: nothing yet
+_pool.shutdown(wait=True)
+assert _f("o", "r", 1) == "Title 1" and _json2.load(open(_store)) == {"o/r#1": "Title 1"}
+_pool2 = _TPE(max_workers=1)
+_g = memoize_title_fetcher(lambda o, r, n: "Renamed", _pool2, _store)
+assert _g("o", "r", 1) == "Title 1"  # restart: the stored title shows at once while a refresh runs
+_pool2.shutdown(wait=True)
+assert _g("o", "r", 1) == "Renamed"
+_bad = memoize_title_fetcher(lambda o, r, n: f"Issue #{n} (title unavailable)", None, _store)
+print("ok  titles persist across a restart; unavailable placeholders are not stored")

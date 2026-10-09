@@ -12,6 +12,7 @@ import re
 import subprocess
 import sys
 import threading
+import time
 
 import dispatch
 import ui_board
@@ -19,11 +20,12 @@ import ui_runner
 import ui_sessions
 import ui_settings
 
-NAMED = ("run-issue", "pr-grind", "prd", "intake", "dump", "worklog", "gh-issue")
+NAMED = ("run-issue", "pr-grind", "prd", "intake", "dump", "worklog", "gh-issue", "pr-review", "pr-fix-comments", "issue-to-pr", "day")
 MAX_PROMPT_CHARS = 32000
 _TERMINAL = ("done", "failed", "stopped")
-_ORIGIN_RE = re.compile(r"github\.com[:/]([^/\s]+)/([^/\s]+?)(?:\.git)?/?$")
+_ORIGIN_RE = re.compile(r"github\.com(?::\d+)?[:/]([^/\s]+)/([^/\s]+?)(?:\.git)?/?$")  # (?::\d+): ssh.github.com:443
 _ISSUE_RE = re.compile(r"^(?:#|.*/issues/)?(\d+)$")
+_ISSUE_URL_RE = re.compile(r"github\.com/([\w.-]+)/([\w.-]+)/issues/(\d+)")
 
 # ponytail: one global in-process lock, held across start's auth preflight (~30s); per-key locks
 # or an flock in the data dir are the upgrade path.
@@ -77,6 +79,86 @@ def validate_repo(path: str) -> str:
             if top:
                 return top
     raise ValueError(f"not a git repository: {path}")
+
+
+_SLUG_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+_SCAN_SKIP = {"node_modules", "vendor", "venv", "dist", "build", "target", "Library", "Applications"}
+
+
+def is_unregistered_slug(repo: str) -> bool:
+    """True for an owner/repo string with no registered clone. Only callers that take slugs
+    (Dispatch) ask this; resolve_repo keeps treating unknown strings as paths."""
+    return bool(_SLUG_RE.match(repo)) and not os.path.isabs(repo) and not any(
+        k.lower() == repo.lower() for k in dispatch.read_checkouts())
+
+
+def default_roots() -> list:
+    """Existing folders where people usually keep clones; the Settings scan starts here."""
+    home = os.path.expanduser("~")
+    cands = [os.path.join(home, p) for p in ("Documents/Projects", "Projects", "Developer", "code", "work", "dev", "src", "Documents")]
+    return [p for p in cands if os.path.isdir(p)]
+
+
+def _origin_slug(top: str):
+    m = _ORIGIN_RE.search(_git(top, "remote", "get-url", "origin"))
+    return f"{m.group(1)}/{m.group(2)}" if m else None
+
+
+def find_clones(roots, slug=None, max_depth: int = 4, budget_s: float = 4.0) -> list:
+    """[{"slug", "path"}] for git clones (a real .git directory, so worktrees are skipped) under
+    `roots` that have a GitHub origin; only those matching `slug` when given. Depth- and
+    time-bounded: this runs inside a request."""
+    deadline = time.monotonic() + budget_s
+    want = slug.lower() if slug else None
+    out, seen = [], set()  # seen: overlapping roots (Documents and Documents/Projects) must not repeat a clone
+    for root in roots:
+        root = os.path.realpath(root)
+        base = root.count(os.sep)
+        for dirpath, dirs, _files in os.walk(root):
+            if time.monotonic() > deadline:
+                return out
+            if os.path.isdir(os.path.join(dirpath, ".git")):
+                found = _origin_slug(dirpath) if dirpath not in seen else None
+                seen.add(dirpath)
+                if found and (want is None or found.lower() == want):
+                    out.append({"slug": found, "path": dirpath})
+                dirs[:] = []  # do not descend into a clone
+                continue
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in _SCAN_SKIP]
+            if dirpath.count(os.sep) - base >= max_depth:
+                dirs[:] = []
+    return out
+
+
+def register(slug: str, path: str) -> str:
+    """Record `path` as the clone of `slug` after checking its origin really is that repo."""
+    if not isinstance(slug, str) or not _SLUG_RE.match(slug):
+        raise ValueError("slug must look like owner/repo")
+    if not isinstance(path, str):
+        raise ValueError("path must be a string")
+    top = validate_repo(path.strip())
+    found = _origin_slug(top)
+    if not found or found.lower() != slug.lower():
+        raise ValueError(f"that folder's origin is {found or 'not a GitHub repo'}, not {slug}")
+    dispatch.register_checkout(slug, top)
+    return top
+
+
+def scan_and_register(roots) -> dict:
+    """Register every clone found under `roots` that is not already known. Where one repo has
+    several clones the first found wins; the rest are reported, not registered."""
+    known = {k.lower() for k in dispatch.read_checkouts()}
+    added, duplicates, added_keys = [], [], set()
+    for c in find_clones(roots, budget_s=20.0):
+        key = c["slug"].lower()
+        if key not in known:
+            dispatch.register_checkout(c["slug"], c["path"])
+            known.add(key)
+            added_keys.add(key)
+            added.append(c)
+        elif key in added_keys:
+            duplicates.append(c)
+    return {"added": added, "duplicates": duplicates}
 
 
 def resolve_repo(repo: str):
@@ -153,8 +235,8 @@ def _remember(slug, cwd) -> None:
 
 def start_session(body: dict):
     repo = body.get("repo")
-    if not isinstance(repo, str) or not repo:
-        return 400, {"error": "repo is required"}
+    if repo is not None and not isinstance(repo, str):
+        return 400, {"error": "repo must be a string"}
     issue = body.get("issue")
     try:
         if "issue" in body and (not isinstance(issue, int) or isinstance(issue, bool) or issue < 1):
@@ -164,6 +246,13 @@ def start_session(body: dict):
             raise ValueError("prompt must not contain NUL bytes")
         if len(text) > MAX_PROMPT_CHARS:
             raise ValueError(f"prompt too long (max {MAX_PROMPT_CHARS} characters)")
+        url = _ISSUE_URL_RE.search(text)
+        url_slug = f"{url.group(1)}/{url.group(2)}" if url else None
+        # the issue URL names the repo: prefer its registered checkout over the picked one
+        if url_slug and any(k.lower() == url_slug.lower() for k in dispatch.read_checkouts()):
+            repo = url_slug
+        if not repo:
+            raise ValueError("repo is required" + (f" (no local checkout registered for {url_slug})" if url_slug else ""))
         cwd, slug = resolve_repo(repo)
     except ValueError as exc:
         return 400, {"error": str(exc)}
@@ -177,7 +266,10 @@ def start_session(body: dict):
     if issue is None and fam == "run-issue":
         issue = issue_from_args((text.split(None, 1) + [""])[1])
     link = None
-    if slug and issue is not None and "/" in slug:
+    url = _ISSUE_URL_RE.search(text)  # the URL names the real repo; the checkout may be a different one
+    if url and int(url.group(3)) == issue:
+        link = {"owner": url.group(1), "repo": url.group(2), "issue": issue}
+    elif slug and issue is not None and "/" in slug:
         owner, _, name = slug.partition("/")
         link = {"owner": owner, "repo": name, "issue": issue}
     with _start_lock:
@@ -185,13 +277,15 @@ def start_session(body: dict):
             dup = find_live(fam, link)
             if dup:
                 return 409, {
-                    "error": f"{fam} already running for {slug}#{issue} (session {dup['id']})",
+                    "error": f"{fam} already running for {link["owner"]}/{link["repo"]}#{issue} (session {dup['id']})",
                     "id": dup["id"],
                     "link": link,
                     "href": f"/api/sessions/{dup['id']}",
                 }
         try:
-            res = ui_runner.start(text, cwd, link, claude_cmd=claude_cmd)
+            res = ui_runner.start(text, cwd, link, claude_cmd=claude_cmd, gate_questions=True)
+            if fam == "run-issue" and link and body.get("auto_grind", ui_settings.load()["auto_grind"]) is True:
+                res = ui_sessions.update(res["id"], auto_grind=True)  # ui_grind.autostart queues it when the run finishes
             _remember(slug, cwd)
             return 201, res
         except ValueError as exc:

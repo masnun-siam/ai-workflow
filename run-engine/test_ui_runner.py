@@ -1532,6 +1532,15 @@ def prgrind_cases() -> int:
         assert isinstance(t, threading.Thread) and t.daemon
         wait_for(lambda: len(all_sessions()) >= 2, 10)
 
+    def run_issue_origin():
+        d, fk, work = pset()
+        path = mkpr(d)
+        r = ui_sessions.create("/run-issue 7", work, {"owner": "o", "repo": "r", "issue": 7})
+        ui_sessions.update(r["id"], status="done")
+        act, _ = tick(path)
+        assert act == "started", act
+        assert any(x["command"] == f"/pr-grind {THREAD}" for x in all_sessions())
+
     def empty_and_invalid():
         d, fk, work = pset()
         assert ui_runner.prgrind_tick_all(now=NOW) == []
@@ -1736,7 +1745,7 @@ def prgrind_cases() -> int:
         assert text.count("ScheduleWakeup({stop: true})") >= 2
 
     for fn in (due_start, interactive_unchanged, heartbeat_rewrite, review_trigger, ci_trigger,
-               idle_releases, poll_once, tick_all_scan, timer_catchup, empty_and_invalid,
+               idle_releases, poll_once, tick_all_scan, timer_catchup, run_issue_origin, empty_and_invalid,
                boundaries, unresolved_reviewer, race, lock_handoff, restart_survival,
                busy_and_stale, merged_closed, gh_errors, runner_error, paused,
                untrusted_headers, skill_sites):

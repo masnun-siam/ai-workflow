@@ -25,6 +25,7 @@ import ui_notify
 import ui_repos
 import ui_runner
 import ui_sessions
+import ui_settings
 from shared import atomic_write_text, data_dir, gh_json, warn
 
 MAX_ISSUES = 100
@@ -78,13 +79,14 @@ def order_of(items: list) -> list[int]:
 
 
 def item_state(sess_status, ledger_status):
-    """Pipeline-item state from a session's status + the run Ledger's status (None = unknown)."""
+    """Pipeline-item state from a session's status + the run Ledger's status (None = no ledger). A session that
+exited cleanly is only done when its Ledger says so: a run that stopped at preflight leaves none."""
     if sess_status in ("starting", "running"):
         return "running"
     if sess_status in ("waiting", "limited", "failed", "stopped"):
         return sess_status
     if sess_status == "done":
-        return "failed" if ledger_status == "escalated" else "done"
+        return "done" if ledger_status == "done" else "failed"
     return None
 
 
@@ -98,6 +100,8 @@ def advance(pipe: dict, observed: dict):
             st = item_state(*observed[n])
             if st:
                 it["state"] = st
+                if st == "failed" and observed[n][0] == "done":  # the session ended but the run never completed
+                    it["reason"] = {"escalated": "run escalated", None: "run did not start"}.get(observed[n][1], "run ended before finishing")
     for n in order_of(pipe["items"]):
         it = by[n]
         if it["state"] not in ("queued", "skipped") or it.get("reason") == "manual":
@@ -175,8 +179,24 @@ def summary(pipe: dict) -> dict:
 
 def membership() -> dict:
     """{"owner/repo#n": pipeline id} for pipelines that are not finished, for board tags."""
-    return {f"{p['slug'].lower()}#{it['issue']}": p["id"]
-            for p in list_all() if p["status"] != "done" for it in p["items"]}
+    out = {}
+    for p in list_all():
+        if p["status"] == "done":
+            continue
+        for it in p["items"]:
+            out[f"{p['slug'].lower()}#{it['issue']}"] = p["id"]
+            m = it.get("moved_to")
+            if m:
+                out[f"{m['owner']}/{m['repo']}#{m['issue']}".lower()] = p["id"]
+    return out
+
+
+def wants_grind() -> set:
+    """{"owner/repo#n"} of issues in unfinished pipelines that grind when they finish: the pipeline's own
+    flag, else the Settings default (so a pipeline made before the option existed follows the default)."""
+    default = ui_settings.load()["auto_grind"]
+    return {f"{p['slug'].lower()}#{it['issue']}" for p in list_all()
+            if p["status"] != "done" and p.get("auto_grind", default) is True for it in p["items"]}
 
 
 # --------------------------------------------------------------------------- GitHub edge
@@ -214,13 +234,25 @@ def _screen_open(slug: str, numbers: list[int]) -> list[dict]:
     return rows
 
 
+class NeedsCheckout(Exception):
+    """The repo has no registered local clone; `candidates` are clones found on disk for it."""
+
+    def __init__(self, slug: str, candidates: list):
+        super().__init__(f"no local clone registered for {slug}")
+        self.slug, self.candidates = slug, candidates
+
+
+def _checkout(repo: str):
+    """(path, slug) via ui_repos.resolve_repo; an unregistered owner/repo becomes NeedsCheckout."""
+    if ui_repos.is_unregistered_slug(repo):
+        raise NeedsCheckout(repo, [c["path"] for c in ui_repos.find_clones(ui_repos.default_roots(), repo)])
+    return ui_repos.resolve_repo(repo)
+
+
 def preview(text: str, repo) -> dict:
     """Resolve + screen the pasted input. ValueError carries a user-facing message."""
     slug, kind, value = parse_input(text)
-    try:
-        cwd, repo_slug = ui_repos.resolve_repo(slug or repo or "")
-    except ValueError as exc:
-        raise ValueError(f"no local checkout for {slug or repo or 'a repo'} — {exc}") from None
+    cwd, repo_slug = _checkout(slug or repo or "")
     slug = slug or repo_slug
     if not slug or "/" not in slug:
         raise ValueError("could not tell which GitHub repo this is — pick one with an origin remote")
@@ -243,6 +275,11 @@ def preview(text: str, repo) -> dict:
                     "ext_deps": [d for d in r["deps"] if d not in known],
                     "ready": not r["gaps"] and not r["skip_reason"]}
         items.append(row)
+    try:  # execution order, top to bottom: dependencies first, then oldest issue first
+        rank = {n: i for i, n in enumerate(epic.build_dag({r["issue"]: r.get("deps", []) for r in items})["order"])}
+    except ValueError:  # a cycle is reported by create; just sort by number
+        rank = {r["issue"]: r["issue"] for r in items}
+    items.sort(key=lambda r: rank[r["issue"]])
     return {"slug": slug, "repo_path": cwd, "items": items}
 
 
@@ -268,7 +305,7 @@ def create(body: dict) -> dict:
     label = body.get("claude_cmd")
     if label is not None and not isinstance(label, str):
         raise ValueError("claude_cmd must be a saved label")
-    cwd, slug = ui_repos.resolve_repo(str(body.get("repo") or ""))
+    cwd, slug = _checkout(str(body.get("repo") or ""))
     slug = body.get("slug") or slug
     if not isinstance(slug, str) or "/" not in slug:
         raise ValueError("could not tell which GitHub repo this is")
@@ -282,7 +319,7 @@ def create(body: dict) -> dict:
     pid = f"p-{time.strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(3)}"
     name = (body.get("name") or "").strip()[:80] or f"{slug} · {len(items)} issue{'s' * (len(items) != 1)}"
     pipe = {"id": pid, "name": name, "slug": slug, "repo_path": cwd, "mode": mode, "max": cap,
-            "claude_cmd": label, "status": "active", "created": time.time(), "notified": False, "items": items}
+            "claude_cmd": label, "auto_grind": body.get("auto_grind") is True, "status": "active", "created": time.time(), "notified": False, "items": items}
     with _lock:
         save(pipe)
     tick(pid)
@@ -293,11 +330,35 @@ def _launch(pipe: dict, it: dict) -> None:
     body = {"repo": pipe["repo_path"], "command": "run-issue", "args": str(it["issue"]), "issue": it["issue"]}
     if pipe.get("claude_cmd"):
         body["claude_cmd"] = pipe["claude_cmd"]
+    if "auto_grind" in pipe:  # a pipeline made before the option existed inherits the Settings default
+        body["auto_grind"] = pipe["auto_grind"] is True
     status, res = ui_repos.start_session(body)
     if status in (201, 409):  # 409 = a session for this issue is already live: adopt it
         it["session_id"], it["state"], it["reason"] = res["id"], "running", "adopted" if status == 409 else None
     else:
         it["state"], it["reason"] = "failed", f"could not start: {res.get('error', status)}"
+
+
+def _run_of(owner: str, repo: str, it: dict):
+    """(run, (owner, repo, issue)) for a pipeline item. A run-issue that moved the issue to another repo
+    leaves its Ledger under the new number: follow `transferred_from` there and remember it on the item."""
+    try:
+        run = ui_board.load_run(owner, repo, str(it["issue"]))
+    except ValueError:
+        run = None
+    if run or it.get("moved_to") is None and not it.get("session_id"):
+        return run, (owner, repo, it["issue"])
+    moved = it.get("moved_to")
+    if not moved:
+        found = ui_board.transferred_run(f"{owner}/{repo}", it["issue"])
+        moved = {"owner": found[0], "repo": found[1], "issue": found[2]} if found else None
+    if not moved:
+        return run, (owner, repo, it["issue"])
+    try:
+        run = ui_board.load_run(moved["owner"], moved["repo"], str(moved["issue"]))
+    except ValueError:
+        run = None
+    return run, (moved["owner"], moved["repo"], moved["issue"])
 
 
 def _observe(pipe: dict) -> dict:
@@ -310,11 +371,14 @@ def _observe(pipe: dict) -> dict:
             rec = ui_sessions.load(it["session_id"])
         except ValueError:
             rec = None
-        run = None
-        try:
-            run = ui_board.load_run(owner, repo, str(it["issue"]))
-        except ValueError:
-            pass
+        run, loc = _run_of(owner, repo, it)
+        if loc != (owner, repo, it["issue"]) and it.get("moved_to") != {"owner": loc[0], "repo": loc[1], "issue": loc[2]}:
+            it["moved_to"] = {"owner": loc[0], "repo": loc[1], "issue": loc[2]}
+            if rec:  # the run page of the new number finds this session through its link
+                try:
+                    ui_sessions.update(it["session_id"], link=dict(it["moved_to"]))
+                except (ValueError, OSError) as exc:
+                    warn(f"ui_dispatch: could not relink {it['session_id']}: {exc}")
         out[it["issue"]] = (rec["status"] if rec else "failed", run["status"] if run else None)
     return out
 
@@ -482,11 +546,8 @@ def detail(pid: str, gh_status=None) -> dict | None:
     owner, _, repo = pipe["slug"].partition("/")
     rows = []
     for it in pipe["items"]:
-        run = sess = None
-        try:
-            run = ui_board.load_run(owner, repo, str(it["issue"]))
-        except ValueError:
-            pass
+        sess = None
+        run, (r_owner, r_repo, r_issue) = _run_of(owner, repo, it)
         if it.get("session_id"):
             try:
                 rec = ui_sessions.load(it["session_id"])
@@ -498,7 +559,7 @@ def detail(pid: str, gh_status=None) -> dict | None:
         if run:
             row["run"] = {k: run.get(k) for k in ("status", "currentStation", "stations", "totals", "pr", "branch")}
             if gh_status:
-                row["gh"] = gh_status(owner, repo, it["issue"], run.get("pr"), run.get("branch"))
+                row["gh"] = gh_status(r_owner, r_repo, r_issue, run.get("pr"), run.get("branch"))
         rows.append(row)
     try:
         order = order_of(pipe["items"])
@@ -506,5 +567,5 @@ def detail(pid: str, gh_status=None) -> dict | None:
         order = [it["issue"] for it in pipe["items"]]
     by = {r["issue"]: r for r in rows}
     return {**{k: pipe[k] for k in ("id", "name", "slug", "mode", "max", "status", "created", "claude_cmd")},
-            "items": rows, "order": order,
+            "auto_grind": pipe.get("auto_grind") is True, "items": rows, "order": order,
             "merge_order": [n for n in order if (by[n].get("run") or {}).get("pr")]}

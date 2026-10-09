@@ -336,8 +336,8 @@ try:
         s, _, _, h = req(port, "/board.json", method=m, host="evil.example")
         assert s == 403 and no_cors(h), m
     ok("OPTIONS/TRACE bad host -> 403 (guard first)")
-    assert ui_server._Server.allow_reuse_address is False
-    ok("allow_reuse_address is False")
+    assert ui_server._Server.allow_reuse_address is True
+    ok("allow_reuse_address is True")
     assert req(port, "/board.json", method="POST", host="evil.example")[0] == 403
     ok("POST bad host -> 403")
 
@@ -364,7 +364,7 @@ def free_port():
 
 def serve_fail(p):
     try:
-        ui_server.cmd_serve(argparse.Namespace(port=p, allow_host=None))
+        ui_server.cmd_serve(argparse.Namespace(port=p, allow_host=None, no_tailscale=True, tailscale_port=8443))
     except SystemExit as e:
         return e
     raise AssertionError("expected SystemExit")

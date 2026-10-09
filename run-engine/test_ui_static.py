@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import http.client
+import json
 import mimetypes
 import os
 import pathlib
@@ -66,7 +67,7 @@ RUN = sys.argv[1:3] == ["--view", "run"]
 
 RUN_JS = r"""
 const M = await import(process.env.RUN_URL);
-const { sessionForRun, sessionsForRun, actionsFor, mergeStream, totals, nearBottom, mdToHtml, copyCommand, postAction, RunDetail } = M;
+const { sessionForRun, sessionsForRun, actionsFor, mergeStream, totals, nearBottom, mdToHtml, visibleEvents, copyCommand, postAction, RunDetail } = M;
 const A = await import(process.env.APP_URL);
 const assert = (await import('node:assert')).strict;
 const out = (n) => console.log('ok ' + n);
@@ -88,6 +89,11 @@ assert.equal(SS.toolSummary({ input: { weird: 1 } }), '{"weird":1}');
 assert.equal(SS.toolSummary({ input: { command: 'x'.repeat(300) } }).length, 110);
 assert.equal(SS.toolSummary({}), '');
 out('session.js: eventText, filterEvents, toolSummary');
+const GH = await import(new URL('./ghstatus.js', process.env.RUN_URL).href);
+assert.deepEqual(GH.ghChips({ issue: { state: 'OPEN', labels: ['bug'] } }), []);
+assert.deepEqual(GH.ghChips({ issue: { state: 'CLOSED', labels: ['bug'] } }, true).map((c) => c.tone), ['ok', 'label']);
+assert.deepEqual(GH.ghChips({ issue: { state: 'OPEN', labels: ['a', 'b', 'c', 'd', 'e'] } }, true).map((c) => c.text), ['a', 'b', 'c', '+2 more']);
+out('ghstatus: no chip for an open issue, labels get their own tone');
 
 const K = await import(new URL('./keys.js', process.env.RUN_URL).href);
 const ev = (key, extra = {}) => ({ key, target: { tagName: 'BODY' }, ...extra });
@@ -123,15 +129,15 @@ const items = K.paletteItems({
   board: { columns: [{ key: 'dev', cards: [{ owner: 'o', repo: 'r', issue: 7, title: 'Fix login' }] }] },
   sessions: [{ id: 's1', command: '/prd', repo: '/x/proj', outcome: 'waiting' }, { id: 's2', command: '/gh-issue', repo: 'o/r', outcome: 'done' }],
 });
-assert.deepEqual(items.map((i) => i.group), ['Go to', 'Go to', 'Go to', 'Run', 'Session', 'Session']);
+assert.deepEqual(items.map((i) => i.group), ['Go to', 'Go to', 'Go to', 'Go to', 'Go to', 'Run', 'Session', 'Session']);
 assert.equal(items.find((i) => i.id === 'session-s1').href, '#/answer/s1');
 assert.equal(items.find((i) => i.id === 'session-s2').href, '#/session/s2');
 assert.equal(items.find((i) => i.group === 'Run').href, '#/run/o/r/7');
 assert.deepEqual(K.filterItems(items, 'login').map((i) => i.group), ['Run']);
 assert.deepEqual(K.filterItems(items, 'dev fix').length, 1);
-assert.equal(K.filterItems(items, '').length, 6); assert.equal(K.filterItems(items, '', 2).length, 2);
+assert.equal(K.filterItems(items, '').length, 8); assert.equal(K.filterItems(items, '', 2).length, 2);
 assert.equal(K.filterItems(items, 'zzz').length, 0);
-assert.equal(K.paletteItems({ board: null, sessions: null }).length, 3);
+assert.equal(K.paletteItems({ board: null, sessions: null }).length, 5);
 out('keys: paletteItems and filterItems');
 
 const TOAST = await import(new URL('./toast.js', process.env.RUN_URL).href);
@@ -164,6 +170,9 @@ out('sessionForRun matches command forms and link, newest first');
 assert.deepEqual(sessionsForRun([S('a', '/run-issue 42'), S('b', '/run-issue 7'), S('c', '/run-issue 42')], 'own', 'repo', 42).map((x) => x.id), ['a', 'c']);
 assert.deepEqual(sessionsForRun(null, 'own', 'repo', 42), []);
 out('sessionsForRun returns every matching session');
+assert.equal(sessionForRun([{ id: 'p', repo: '/Users/x/own-repo', command: '/run-issue 42', link: { owner: 'own', repo: 'repo', issue: 42 } }], 'own', 'repo', 42)?.id, 'p');
+assert.equal(sessionForRun([{ id: 'p', repo: '/Users/x/own-repo', command: '/run-issue 42', link: { owner: 'own', repo: 'repo', issue: 7 } }], 'own', 'repo', 42), null);
+out('sessionForRun matches a path-repo session by its link object');
 for (const c of ['/run-issue 420', '/run-issue 4', '/pr-grind 42', '/run-issue 42x'])
   assert.equal(sessionForRun([S('x', c)], 'own', 'repo', 42), null, c);
 assert.equal(sessionForRun([S('x', '/run-issue 42', { repo: 'other/repo' })], 'own', 'repo', 42), null);
@@ -228,6 +237,10 @@ for (const bad of ['<img src=x onerror=alert(1)>', '<script>alert(1)</script>', 
 assert.match(mdToHtml('a & <b> "q" \'s\''), /a &amp; &lt;b&gt; &quot;q&quot; &#0?39;s&#0?39;|a &amp; &lt;b&gt; &quot;q&quot; &#x27;s&#x27;/);
 assert.equal(mdToHtml(''), ''); assert.equal(mdToHtml(null), '');
 out('mdToHtml escapes hostile input; empty is empty');
+const sameText = { kind: 'text', text: ' same ' };
+assert.deepEqual(visibleEvents([sameText, { kind: 'result', text: 'same' }, { kind: 'text', text: 'x' }, { kind: 'result', text: 'y' }, { kind: 'result', text: 'same', is_error: true }]).map((e) => e.kind), ['text', 'turn', 'text', 'result', 'result']);
+assert.deepEqual(visibleEvents(null), []);
+out('visibleEvents folds a result that repeats the message above it into a turn divider');
 
 // ---- copyCommand / postAction
 assert.deepEqual({ ...(await copyCommand('c', { clipboard: { writeText: async () => {} } })) }, { ok: true });
@@ -241,6 +254,7 @@ let calls = [], timers = [], tid = 0, routes = [];
 const doc = { hidden: false, ls: {}, addEventListener(t, f) { (this.ls[t] ||= []).push(f); },
   removeEventListener(t, f) { this.ls[t] = (this.ls[t] || []).filter((x) => x !== f); } };
 globalThis.document = doc;
+globalThis.confirm = () => true;
 globalThis.setTimeout = (fn, ms) => { const t = { id: ++tid, fn, ms }; timers.push(t); return t.id; };
 globalThis.clearTimeout = (id) => { timers = timers.filter((t) => t.id !== id); };
 globalThis.fetch = (u, o) => {
@@ -533,7 +547,7 @@ def run_checks():
     js = read(os.path.join(STATIC, "run.js")).decode()
     css = read(os.path.join(STATIC, "app.css")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./fmt.js", "./toast.js"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./fmt.js", "./toast.js", "./ghstatus.js", "./cleanup.js", "./limits.js"}, specs
     assert not re.search(r"https?://", js), "no absolute URLs"
     assert "console.log" not in js and "debugger" not in js and "innerHTML" not in js.replace("dangerouslySetInnerHTML", "")
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
@@ -624,7 +638,7 @@ assert.deepEqual(D.issueNumbers('https://github.com/o/r2/issues/7\nhttps://githu
 assert.deepEqual([...D.defaultSelection([{ issue: 1, ready: true }, { issue: 2, ready: false }])], [1]);
 const pv = { slug: 'o/r', repo_path: '/x', items: [{ issue: 1 }, { issue: 2 }, { issue: 3 }] };
 assert.deepEqual(D.startBody(pv, new Set([3, 1]), { mode: 'parallel', max: 2, claude: 'work' }),
-  { slug: 'o/r', repo: '/x', issues: [1, 3], mode: 'parallel', max: 2, claude_cmd: 'work' });
+  { slug: 'o/r', repo: '/x', issues: [1, 3], mode: 'parallel', max: 2, claude_cmd: 'work', auto_grind: false });
 assert.equal('claude_cmd' in D.startBody(pv, new Set([1]), { mode: 'sequential', max: 1, claude: '' }), false);
 out('dispatch: input, selection and start body helpers');
 
@@ -901,6 +915,19 @@ def shell_checks():
     assert not re.search(r'(?:src|href)="https?://', index), "no external origins"
     ok("index.html links app.js/app.css, no CDN")
 
+    s, r, body = req(port, "/sw.js")
+    assert s == 200 and r.getheader("Content-Type").startswith("text/javascript") and b"addEventListener('fetch'" in body
+    s, r, body = req(port, "/static/manifest.webmanifest")
+    assert s == 200 and r.getheader("Content-Type").startswith("application/manifest+json")
+    man = json.loads(body)
+    assert man["display"] == "standalone" and man["start_url"] == "/" and man["scope"] == "/"
+    sizes = {i["sizes"] for i in man["icons"]}
+    assert {"192x192", "512x512"} <= sizes and any(i["purpose"] == "maskable" for i in man["icons"])
+    for i in man["icons"]:
+        assert req(port, i["src"])[0] == 200, i["src"]
+    assert 'rel="manifest"' in index and "serviceWorker.register('/sw.js')" in index
+    ok("PWA: root service worker, manifest MIME, installable icons served")
+
     for name, t in (("app.js", "text/javascript"), ("app.css", "text/css")):
         s, r, _ = req(port, f"/static/{name}")
         assert s == 200 and r.getheader("Content-Type", "").startswith(t), (name, s)
@@ -970,11 +997,13 @@ assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, 'waiting')), ['waiting'])
 assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, 'stopped')), ['stopped']);
 assert.deepEqual(cardChips({ ...card, escalated: true }, 'dev', null), ['escalated']);
 assert.deepEqual(cardChips({ ...card, escalated: true }, 'dev', S('a', 'b', 1, 'waiting')), ['waiting']);
-assert.deepEqual(cardChips(card, 'done', S('a', 'b', 1, 'running')), ['merged']);
-assert.deepEqual(cardChips({ ...card, escalated: true }, 'done', null), ['merged']);
+assert.deepEqual(cardChips(card, 'done', S('a', 'b', 1, 'running')), ['done']);
+assert.deepEqual(cardChips({ ...card, escalated: true }, 'done', null), ['done']);
+assert.deepEqual(cardChips({ ...card, gh: { pr: { state: 'MERGED' } } }, 'done', null), ['merged']);
+assert.deepEqual(cardChips({ ...card, gh: { pr: { state: 'OPEN' } } }, 'done', null), ['done']);
 assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, 'running', { resumed_fresh: true })), ['running', 'resumed fresh']);
 assert.deepEqual(cardChips(card, 'dev', null), []);
-assert.deepEqual(cardChips(card, 'done', null), ['merged']);
+assert.deepEqual(cardChips(card, 'done', null), ['done']);
 for (const st of ['done', 'failed', 'starting', undefined]) assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, st)), []);
 assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, 'done', { resumed_fresh: true })), ['resumed fresh']);
 out('cardChips');
@@ -1117,7 +1146,7 @@ def board_checks():
     css = read(os.path.join(STATIC, "app.css")).decode()
     app = read(os.path.join(STATIC, "app.js")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./fmt.js", "./toast.js"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./fmt.js", "./toast.js", "./cleanup.js", "./ghstatus.js"}, specs
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
     names = {x.split(" as ")[-1].strip() for x in exports.split(",")}
@@ -1163,7 +1192,7 @@ const fix = JSON.parse(process.env.LAUNCHER_FIX);
 const assert = (await import('node:assert')).strict;
 const out = (n) => console.log('ok ' + n);
 const tick = () => new Promise((r) => setImmediate(r));
-const { repoOptions, pathOption, comboOptions, argIssue, validate, buildBody, outcome, sessionHref, loadLastRepo, saveLastRepo, makeSubmitter, Launcher } = L;
+const { repoOptions, pathOption, comboOptions, argIssue, repoFromText, validate, buildBody, outcome, sessionHref, loadLastRepo, saveLastRepo, makeSubmitter, Launcher } = L;
 out('import without document/localStorage does not throw');
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
@@ -1188,6 +1217,14 @@ for (const a of ['#12', 'https://github.com/o/r/pull/12'])
   assert.deepEqual(plain(buildBody({ repo: 'o/r', command: 'pr-grind', args: a })), { repo: 'o/r', command: 'pr-grind', args: a, issue: 12 });
 out('buildBody trims; pr-grind adds issue');
 
+// repoFromText
+{
+  const rs = [{ value: 'Blu/bop-bd' }, { value: 'o/r' }];
+  assert.equal(repoFromText(rs, 'https://github.com/blu/bop-bd/issues/5978'), 'Blu/bop-bd');
+  assert.equal(repoFromText(rs, 'o/r#12'), 'o/r');
+  assert.equal(repoFromText(rs, 'https://github.com/x/y/pull/3'), null);
+  assert.equal(repoFromText(rs, '42'), null);
+}
 // argIssue
 for (const a of ['7', '#7', 'https://github.com/o/r/issues/7']) assert.equal(argIssue('run-issue', a), 7, a);
 for (const a of ['12', '#12', 'https://github.com/o/r/pull/12']) assert.equal(argIssue('pr-grind', a), 12, a);
@@ -1265,7 +1302,7 @@ const find = (t, root) => { nodes.length = 0; walk(root); return nodes.filter((n
 let tree = render({});
 assert.equal(find('input', tree).filter((i) => i.props.role === 'combobox').length, 1);
 const radios = find('input', tree).filter((i) => i.props.type === 'radio');
-assert.deepEqual(radios.map((r) => r.props.value).sort(), ['dump', 'gh-issue', 'intake', 'pr-grind', 'prd', 'run-issue', 'worklog']);
+assert.deepEqual(radios.map((r) => r.props.value).sort(), ['day', 'dump', 'gh-issue', 'intake', 'issue-to-pr', 'pr-fix-comments', 'pr-grind', 'pr-review', 'prd', 'run-issue', 'worklog']);
 const lab = (t) => find('label', render({ command: t })).map((l) => text(l)).join('|');
 assert.match(lab('run-issue'), /issue/i); assert.match(lab('pr-grind'), /PR|pull/i);
 assert.notEqual(lab('run-issue'), lab('pr-grind'));
@@ -1364,7 +1401,7 @@ def launcher_checks():
     assert os.path.exists(lp), "launcher.js missing"
     js = read(lp).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./toast.js"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./toast.js", "./fmt.js"}, specs
     assert not re.search(r"console\.log|debugger|https?://", js)
     ok("launcher.js imports only vendored modules, no debug/absolute URLs")
     s, r, _ = req(port, "/static/launcher.js")
@@ -1410,7 +1447,7 @@ const out = (n) => console.log('ok ' + n);
 const tick = () => new Promise((r) => setImmediate(r));
 const plain = (x) => JSON.parse(JSON.stringify(x));
 const { validate, buildBody, makeSubmitter, Launcher } = L;
-const ALL = ['dump', 'gh-issue', 'intake', 'pr-grind', 'prd', 'run-issue', 'worklog'];
+const ALL = ['day', 'dump', 'gh-issue', 'intake', 'issue-to-pr', 'pr-fix-comments', 'pr-grind', 'pr-review', 'prd', 'run-issue', 'worklog'];
 assert.equal(typeof L.validateCustom, 'function', 'validateCustom export');
 assert.equal(typeof L.buildCustomBody, 'function', 'buildCustomBody export');
 
@@ -1427,10 +1464,10 @@ let tree = render({});
 const fs = find('fieldset', tree);
 const radios = find('input', fs[0]).filter((i) => i.props.type === 'radio');
 assert.deepEqual(radios.map((r) => r.props.value).sort(), ALL);
-out('seven command radios');
+out('one radio per command');
 const hint = (c) => find('label', render({ command: c })).map((l) => text(l)).join('|');
 const hints = ALL.map(hint);
-assert.ok(hints.every((h) => h.length > 0)); assert.equal(new Set(hints).size, 7, 'hints pairwise distinct');
+assert.ok(hints.every((h) => h.length > 0)); assert.equal(new Set(hints).size, ALL.length, 'hints pairwise distinct');
 assert.match(hint('run-issue'), /issue/i); assert.match(hint('pr-grind'), /PR|pull/i);
 out('per-command hints distinct');
 
@@ -1440,11 +1477,11 @@ for (const c of ['prd', 'intake', 'dump', 'worklog', 'gh-issue']) {
 }
 assert.deepEqual(plain(buildBody({ repo: 'o/r', command: 'pr-grind', args: '#12' })), { repo: 'o/r', command: 'pr-grind', args: '#12', issue: 12 });
 out('buildBody for new commands has no issue key');
-assert.equal(validate({ repo: 'o/r', command: 'worklog', args: '' }), null);
-for (const c of ALL.filter((c) => c !== 'worklog')) for (const a of ['', '  ', '\n']) {
+for (const c of ['worklog', 'day']) assert.equal(validate({ repo: 'o/r', command: c, args: '' }), null, c);
+for (const c of ALL.filter((c) => c !== 'worklog' && c !== 'day')) for (const a of ['', '  ', '\n']) {
   const e = validate({ repo: 'o/r', command: c, args: a }); assert.ok(e && e.args, c + JSON.stringify(a));
 }
-out('worklog args optional, others required');
+out('worklog and day args optional, others required');
 
 tree = render({});
 const ta = find('textarea', tree);
@@ -1453,6 +1490,19 @@ assert.ok(find('label', tree).some((l) => (l.props.htmlFor ?? l.props['for']) ==
 assert.ok(find('button', tree).some((b) => text(b).trim() === 'Run in selected repo'));
 assert.match(text(tree), /skip-permissions/i);
 out('custom box: textarea, label, button, skip-permissions note');
+for (const c of ['prd', 'intake', 'dump', 'gh-issue', 'day']) assert.equal(find('textarea', render({ command: c })).filter((t) => t.props.id === 'args').length, 1, c);
+for (const c of ['run-issue', 'pr-grind', 'worklog']) assert.equal(find('textarea', render({ command: c })).filter((t) => t.props.id === 'args').length, 0, c);
+out('free-text commands get a textarea, number/link commands a single line');
+{
+  const cmds = [{ label: 'Work', cmd: 'claude', builtin: true }, { label: 'Masum', cmd: 'cc masum' }];
+  assert.equal(L.limitedUntil(cmds, 'Masum', { 'cc masum': { limited_until: 99 } }), 99);
+  assert.equal(L.limitedUntil(cmds, '', { 'cc masum': { limited_until: 99 } }), null);
+  const radios = find('button', render({ cmds, claudeLabel: 'Masum' })).filter((b) => b.props.role === 'radio');
+  assert.deepEqual(radios.map((b) => [text(b).trim(), b.props['aria-checked']]), [['Work', false], ['Masum', true]]);
+  assert.equal(find('button', render({ cmds: cmds.slice(0, 1) })).filter((b) => b.props.role === 'radio').length, 0, 'no switch with one account');
+  assert.equal(find('select', render({ cmds })).length, 0);
+}
+out('Run as: one radio per account, chosen one checked, limited reset lookup');
 
 assert.deepEqual(plain(L.buildCustomBody({ repo: 'o/r', text: '/pr-fix-comments 42' })), { repo: 'o/r', text: '/pr-fix-comments 42' });
 assert.equal(L.buildCustomBody({ repo: 'o/r', text: '  /pr-fix-comments 42\n' }).text, '/pr-fix-comments 42');
@@ -1530,7 +1580,7 @@ def launcher_all_checks():
     captured = []
     real_start = ui_runner.start
 
-    def stub(command_text, cwd, link=None):
+    def stub(command_text, cwd, link=None, **_):
         captured.append((command_text, cwd))
         return ui_sessions.create(command_text, cwd, link=link)
 
@@ -1578,10 +1628,10 @@ def launcher_all_checks():
     lp = os.path.join(STATIC, "launcher.js")
     assert os.path.exists(lp), "launcher.js missing"
     js = read(lp).decode()
-    for name in ("run-issue", "pr-grind", "prd", "intake", "dump", "worklog", "gh-issue"):
+    for name in ("run-issue", "pr-grind", "prd", "intake", "dump", "worklog", "gh-issue", "pr-review", "pr-fix-comments", "issue-to-pr", "day"):
         assert name in js, name
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./toast.js"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./toast.js", "./fmt.js"}, specs
     assert not re.search(r"console\.log|debugger|https?://", js)
     s, r, _ = req(port, "/static/launcher.js")
     assert s == 200 and r.getheader("Content-Type", "").startswith("text/javascript"), s
@@ -1646,7 +1696,7 @@ def answer_checks():
     app = read(os.path.join(STATIC, "app.js")).decode()
     css = read(os.path.join(STATIC, "app.css")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./toast.js"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./toast.js", "./run.js"}, specs
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
     names = {x.split(" as ")[-1].strip() for x in exports.split(",")}
@@ -1659,12 +1709,14 @@ def answer_checks():
     assert re.search(r"<\$\{Answer\}\s+session=\$\{route\.params\.session\}", app), "answer route renders Answer"
     ok("app.js imports and renders Answer")
 
-    for bad in ("innerHTML", "dangerouslySetInnerHTML", "outerHTML", "insertAdjacentHTML",
+    # the plan goes through run.js mdToHtml (escape-first), the only innerHTML sink here
+    assert js.count("dangerouslySetInnerHTML") == 1 and "__html: mdToHtml(plan)" in js
+    for bad in ("outerHTML", "insertAdjacentHTML",
                 "http://", "https://", "console.log", "debugger"):
         assert bad not in js, bad
     ok("answer.js security/hygiene")
 
-    for tok in ("<fieldset", "<legend", 'role="alert"', 'role="status"', 'maxlength="4000"', "<pre",
+    for tok in ("<fieldset", "<legend", 'role="alert"', 'role="status"', 'maxlength="4000"', "mdToHtml",
                 "Session not found", "#/sessions", "Continue in terminal", "Copy failed", "disabled"):
         assert tok in js, tok
     assert "/api/sessions/" in js and "/api/runs/" in js
@@ -1994,7 +2046,7 @@ for (const o of ['running', 'starting']) {
   const a = rowAction(S({ outcome: o, link }));
   assert.equal(a.label, 'Open'); assert.equal(a.href, '#/run/o/r/7');
 }
-assert.equal(rowAction(S({ outcome: 'done' })), null);
+assert.deepEqual(rowAction(S({ outcome: 'done' })), { kind: 'link', label: 'Open', href: '#/session/s1' });
 assert.equal(rowAction(S({ outcome: 'weird' })), null);
 assert.equal(rowAction(S({ outcome: undefined })), null);
 out('rowAction mapping');
@@ -2034,6 +2086,9 @@ assert.match(fmtTime('2020-01-02T03:04:05Z'), /2020/);
 assert.match(fmtTime(new Date().toISOString()), /^Today \d\d:\d\d$/);
 assert.equal(fmtTime('not-a-date'), 'not-a-date'); assert.equal(fmtTime(null), '—');
 out('fmtCost/fmtTime');
+assert.equal(H.cmdLabel({ command: '/pr-grind https://x.slack.com/a', link: { issue: 7 } }), 'pr-grind round #7');
+assert.equal(H.cmdLabel({ command: '/run-issue 7', link: { issue: 7 } }), '/run-issue 7');
+out('cmdLabel shortens grind commands and names the issue');
 
 // mini renderer: vnode -> html string, plus element lookup
 const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -2112,7 +2167,7 @@ insts.clear();
 const SL = [S({ id: 'r1', outcome: 'stopped' })];
 calls = []; const pend = [];
 globalThis.fetch = (u, o) => { calls.push(u); return new Promise((res) => pend.push(res)); };
-const btn = () => find(render(SL), (n) => n.tag === 'button')[0];
+const btn = () => find(render(SL), (n) => n.tag === 'button' && n.props.class !== 'btn')[0];
 const click = (b) => (b.props.onClick || b.props.onclick)({ preventDefault() {} });
 click(btn()); await tick();
 assert.equal(calls.length, 1);
@@ -2143,7 +2198,7 @@ def history_checks():
 
     js = read(os.path.join(STATIC, "history.js")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./fmt.js", "./toast.js"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./fmt.js", "./toast.js", "./cleanup.js"}, specs
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
     names = {x.split(" as ")[-1].strip() for x in exports.split(",")}
@@ -2159,9 +2214,9 @@ def history_checks():
 
     assert "<table" in js and "<thead" in js
     heads = re.findall(r'<th\s+scope="col"\s*>\s*([^<]*?)\s*</th>', js)
-    assert heads == ["Command", "Repo", "Started", "Ended", "Outcome", "Cost", "Transcript", "Action"], heads
+    assert heads == ["Command", "Repo", "Started", "Ended", "Outcome", "Cost", "Action"], heads
     assert "<select" in js and "<label" in js
-    ok("table markup: 8 scoped headers, labelled outcome select")
+    ok("table markup: 7 scoped headers, labelled outcome select")
 
     for bad in ("innerHTML", "dangerouslySetInnerHTML", "console.log", "debugger"):
         assert bad not in js, bad

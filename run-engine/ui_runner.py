@@ -26,10 +26,14 @@ import ui_sessions
 import ui_settings
 from dispatch import read_checkouts
 from shared import data_dir, ledger_path, run_dir_for, warn
+import ui_board
 import ui_events
 
 HEADLESS_PROMPT = ("Headless run: ask via aiw ask, never AskUserQuestion. Gate questions go through "
-                   "`aiw ask --json '<AskUserQuestion input>'`; then end your turn.")
+                   "`aiw ask --json '<AskUserQuestion input>'`; then end your turn. "
+                   "When running /run-issue, skip phase 10 (grinding): the aiw ui starts it on request.")
+MAX_GRINDS = 2  # grind rounds running at once; idle loops cost nothing
+GRIND_PREFIX = "Start the review grind for PR "
 CLAUDE_ARGS = ["--print", "--output-format", "stream-json", "--verbose",
                "--dangerously-skip-permissions"]
 STOP_GRACE_SECONDS = 10
@@ -165,6 +169,52 @@ def resume(sid: str, answer_text) -> dict:
                   resumed_fresh=None, note=None, terminal_handoff=None)
 
 
+MAX_CUSTOM_PROMPT = 4000
+
+
+def send_prompt(sid: str, text) -> str:
+    """A free-text prompt into a session: "sent" (resumed with it now) or "queued" (it goes out when the
+    session ends, so a running station is never interrupted). Conflict when it cannot be taken."""
+    if not isinstance(text, str) or not text.strip():
+        raise ValueError("prompt must be a non-empty string")
+    text = text.strip()
+    if len(text) > MAX_CUSTOM_PROMPT or "\x00" in text or text.startswith("-"):
+        raise ValueError(f"prompt must be at most {MAX_CUSTOM_PROMPT} characters, no NUL bytes, not starting with '-'")
+    with _resume_lock:
+        rec = ui_sessions.load(sid)
+        if rec is None:
+            raise FileNotFoundError(f"no such session: {sid}")
+        status = rec.get("status")
+        if status == "waiting":
+            raise Conflict("answer the pending question first")
+        if status in ("starting", "running", "limited"):
+            ui_sessions.update(sid, queued_prompt=text)
+            return "queued"
+        if not rec.get("session_id"):
+            raise Conflict("this session has no claude session id to resume")
+        key = _issue_key(rec)
+        for o in ui_sessions.list_sessions() if key else []:
+            if o.get("id") != sid and _issue_key(o) == key and o.get("status") in ("starting", "running", "waiting"):
+                raise Conflict(f"session {o['id']} is already live for this issue")
+        ui_sessions.update(sid, status="starting", pid=None, queued_prompt=None)  # claim: double-submits are safe
+    resume(sid, text)
+    return "sent"
+
+
+def _deliver_queued(sid: str) -> None:
+    """The session just ended: send the prompt that was queued while it ran."""
+    rec = ui_sessions.load(sid) or {}
+    text = rec.get("queued_prompt")
+    if not text or rec.get("status") not in ("done", "failed"):
+        return
+    ui_sessions.update(sid, queued_prompt=None)
+    try:
+        send_prompt(sid, text)
+    except (ValueError, Conflict, RunnerError, OSError) as e:
+        warn(f"queued prompt for {sid} not sent: {e}")
+        ui_sessions.update(sid, note=f"queued prompt not sent: {e}")
+
+
 def _issue_key(rec: dict):
     """(repo, issue number) of a /run-issue session, else None."""
     m = re.match(r"/(?:[\w-]+:)?run-issue\s+(.*)", rec.get("command") or "")
@@ -225,6 +275,7 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
             return
         if ev.get("type") == "system" and ev.get("subtype") == "init":
             saw_init = True
+            asked = False  # a new claude process: an earlier `aiw ask` was answered (or this is a replay after a UI restart)
             ui_sessions.update(sid, session_id=ev.get("session_id"))
         elif ev.get("type") == "assistant":
             asked = asked or any(
@@ -301,6 +352,7 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
             else:
                 ui_sessions.update(sid, status="failed", ended_at=_now(), pending_question=None,
                                    error=f"claude exited with code {rc}; see stderr.log")
+            _deliver_queued(sid)
     except Exception as e:  # keep the daemon thread from dying silently
         warn(f"ui_runner follower for {sid} failed: {e}")
     finally:
@@ -490,7 +542,7 @@ def resume_stopped(sid: str, claude_cmd=None) -> dict:
     if not rec.get("session_id"):
         if rec.get("status") == "limited":  # limited before claude ever reported a session: start over
             exe = _preflight(sid)
-            return _spawn(sid, [*exe, *CLAUDE_ARGS, rec["command"]], path, cwd_path=path,
+            return _spawn(sid, [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, rec["command"]], path, cwd_path=path,
                           ended_at=None, error=None)
         return _fallback(sid, None, "no claude session_id")
     exe = _preflight(sid)
@@ -510,7 +562,8 @@ PRGRIND_TICK_SECONDS = 60
 REENTRY_PROMPT = (
     "This is an automated headless pr-grind re-entry from the aiw ui timer. Take the On-wake "
     "branch, never clear `paused:`, never call ScheduleWakeup or Monitor, follow the headless "
-    "steps in SKILL.md, then exit."
+    "steps in SKILL.md, then exit. A stop that needs a human decision is asked through `aiw ask` "
+    "as Step 8 says; any other stop stays a plain paused stop."
 )
 _NAME_RE = re.compile(r"[A-Za-z0-9_.-]+")
 _POLL_SH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -530,12 +583,23 @@ def _header_end(lines: list) -> int:
     return next((i for i, ln in enumerate(lines) if ln.startswith("## ")), len(lines))
 
 
+_DONE_LINE = re.compile(r"done: \d{4}-\d\d-\d\dT")
+
+
 def _header(path: str) -> dict:
     out = {}
-    for ln in _read_lines(path)[:_header_end(_read_lines(path))]:
+    lines = _read_lines(path)
+    end = _header_end(lines)
+    for ln in lines[:end]:
         k, sep, v = ln.partition(": ")
         if sep:
             out.setdefault(k, v.strip())
+    # The skill sometimes ends a loop with `done: <ISO8601> — <reason>` under its last `## Round` instead of in
+    # the header. It is terminal and never reverts, so honour it wherever it is (a stray one would restart a
+    # finished loop forever).
+    for ln in lines[end:]:
+        if _DONE_LINE.match(ln):
+            out.setdefault("done", ln[len("done: "):].strip())
     return out
 
 
@@ -652,21 +716,47 @@ def prgrind_tick(path: str, now=None) -> str:
         if not trigger:
             return "idle"
 
-        cwd = next((r["repo"] for r in recs if r.get("repo")), None)
+        # a grind begun inside /run-issue has no /pr-grind session: take the checkout from any session on this repo
+        same = recs or [r for r in ui_sessions.list_sessions()
+                        if isinstance(r.get("link"), dict)
+                        and (r["link"].get("owner", "").lower(), r["link"].get("repo", "").lower()) == (h["owner"].lower(), h["repo"].lower())]
+        cwd = next((r["repo"] for r in same if r.get("repo")), None)
         if cwd is None:
             warn(f"pr-grind tick: no prior session to take a cwd from for {thread}")
             return "invalid"
+        if grind_live() >= MAX_GRINDS:
+            return "queued"  # next-poll is untouched, so the next tick retries
         _set_header(path, "next-poll", _iso(now + timedelta(seconds=PRGRIND_HEARTBEAT)))
         try:
-            start(cmd, cwd, link=pr_url, extra_args=["--append-system-prompt", REENTRY_PROMPT],
+            issue = ui_board.issue_for_pr(pr_url)  # a link naming the issue puts the round in that run's Sessions tab
+            start(cmd, cwd, link={"owner": h["owner"], "repo": h["repo"], "issue": issue} if issue else pr_url, extra_args=["--append-system-prompt", REENTRY_PROMPT],
                   env_extra={"AIW_HEADLESS": "1"}, pass_fds=[lock.fileno()],
-                  claude_cmd=next((r["claude_cmd"] for r in recs if r.get("claude_cmd")), None))
+                  claude_cmd=next((r["claude_cmd"] for r in same if r.get("claude_cmd")), None))
         except (RunnerError, ValueError) as e:
             warn(f"pr-grind tick: could not start round for {thread}: {e}")
             return "error"
         return "started"
     finally:
         lock.close()
+
+
+def grind_live() -> int:
+    """Grind sessions running right now (a first-grind session or a /pr-grind round)."""
+    return sum(1 for r in ui_sessions.list_sessions()
+               if str(r.get("command", "")).startswith(("/pr-grind ", GRIND_PREFIX)) and _live(r))
+
+
+def grinding() -> set:
+    """(owner, repo, pr number) of every pr-grind loop that is neither paused nor done."""
+    out = set()
+    for path in glob.glob(os.path.join(_prgrind_dir(), "*.md")):
+        try:
+            h = _header(path)
+        except OSError:
+            continue
+        if _valid(h) and "paused" not in h and "done" not in h:
+            out.add((h["owner"].lower(), h["repo"].lower(), int(h["number"])))
+    return out
 
 
 def prgrind_tick_all(now=None) -> list:

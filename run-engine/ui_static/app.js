@@ -13,6 +13,8 @@ import { Dispatch, PipelineDetail } from './dispatch.js';
 import { clockText } from './fmt.js';
 import { toast } from './toast.js';
 import { CleanupDialog } from './cleanup.js';
+import { IssueDialog } from './issue.js';
+import { PrDialog } from './pr.js';
 import { keyIntent, moveFocus, Palette, Shortcuts } from './keys.js';
 
 const html = htm.bind(h);
@@ -155,7 +157,7 @@ function View({ route, sessions, limits }) {
 }
 
 export class App extends Component {
-  state = { route: parseRoute(globalThis.location?.hash), sessions: null, limits: {}, commands: [], offline: false, notif: notifyState(), palette: false, sheet: false, cleanup: null };
+  state = { route: parseRoute(globalThis.location?.hash), sessions: null, limits: {}, commands: [], offline: false, notif: notifyState(), palette: false, sheet: false, cleanup: null, peek: null };
 
   onHash = () => {
     this.setState({ route: parseRoute(location.hash) });
@@ -181,7 +183,7 @@ export class App extends Component {
     const intent = keyIntent(e, Date.now() - this.chordAt < 800);
     this.chordAt = 0;
     if (!intent) return;
-    const { palette, sheet, cleanup, route } = this.state;
+    const { palette, sheet, cleanup, peek, route } = this.state;
     switch (intent.type) {
       case 'chord': this.chordAt = Date.now(); break;
       case 'goto': e.preventDefault(); location.hash = intent.hash; break;
@@ -192,9 +194,9 @@ export class App extends Component {
         if (el) { e.preventDefault(); el.focus(); }
         break;
       }
-      case 'move': if (!palette && !sheet && !cleanup && moveFocus(intent.dir)) e.preventDefault(); break;
+      case 'move': if (!palette && !sheet && !cleanup && !peek && moveFocus(intent.dir)) e.preventDefault(); break;
       case 'escape':
-        if (palette || sheet || cleanup) this.openDialog({ palette: false, sheet: false, cleanup: null });
+        if (palette || sheet || cleanup || peek) this.closeDialogs();
         else if (['run', 'session', 'answer', 'pipeline'].includes(route.name)) history.length > 1 ? history.back() : (location.hash = '#/');
         break;
     }
@@ -202,13 +204,16 @@ export class App extends Component {
 
   // Remembers what had focus so closing a dialog puts it back.
   openDialog(next) {
-    const opening = next.palette || next.sheet || next.cleanup;
-    if (opening && !this.state.palette && !this.state.sheet && !this.state.cleanup) this.returnFocus = document.activeElement;
+    const opening = next.palette || next.sheet || next.cleanup || next.peek;
+    const { palette, sheet, cleanup, peek } = this.state;
+    if (opening && !palette && !sheet && !cleanup && !peek) this.returnFocus = document.activeElement;
     this.setState(next);
     if (!opening && this.returnFocus && this.returnFocus.focus) this.returnFocus.focus();
   }
 
-  closeDialogs = () => this.openDialog({ palette: false, sheet: false, cleanup: null });
+  closeDialogs = () => this.openDialog({ palette: false, sheet: false, cleanup: null, peek: null });
+
+  onPeek = (e) => this.openDialog({ palette: false, sheet: false, cleanup: null, peek: e.detail });
 
   onCleanup = (e) => this.openDialog({ palette: false, sheet: false, cleanup: { only: e.detail?.key || null } });
 
@@ -216,6 +221,7 @@ export class App extends Component {
     addEventListener('hashchange', this.onHash);
     addEventListener('keydown', this.onKey);
     addEventListener('aiw:cleanup', this.onCleanup);
+    addEventListener('aiw:peek', this.onPeek);
     this.watch = waitingWatcher();
     this.loadCommands();
     this.stop = poll('/api/sessions', 3000, (r) => {
@@ -242,10 +248,11 @@ export class App extends Component {
     removeEventListener('hashchange', this.onHash);
     removeEventListener('keydown', this.onKey);
     removeEventListener('aiw:cleanup', this.onCleanup);
+    removeEventListener('aiw:peek', this.onPeek);
     if (this.stop) this.stop();
   }
 
-  render(_, { route, sessions, limits, commands, offline, notif, palette, sheet, cleanup }) {
+  render(_, { route, sessions, limits, commands, offline, notif, palette, sheet, cleanup, peek }) {
     const b = headerBadge(offline, sessions);
     let badge = null;
     if (b?.kind === 'offline') badge = html`<span role="status" class="offline">Offline: retrying</span>`;
@@ -268,6 +275,8 @@ export class App extends Component {
       <main><${View} route=${route} sessions=${sessions} limits=${limits} /></main>
       ${palette && html`<${Palette} sessions=${sessions} onClose=${this.closeDialogs} />`}
       ${sheet && html`<${Shortcuts} onClose=${this.closeDialogs} />`}
+      ${peek && peek.kind === 'issue' && html`<${IssueDialog} key=${`${peek.owner}/${peek.repo}#${peek.n}`} owner=${peek.owner} repo=${peek.repo} issue=${peek.n} onClose=${this.closeDialogs} />`}
+      ${peek && peek.kind === 'pr' && html`<${PrDialog} key=${`${peek.owner}/${peek.repo}#${peek.n}`} owner=${peek.owner} repo=${peek.repo} pr=${peek.n} onClose=${this.closeDialogs} />`}
       ${cleanup && html`<${CleanupDialog} only=${cleanup.only} onClose=${this.closeDialogs} />`}
     `;
   }

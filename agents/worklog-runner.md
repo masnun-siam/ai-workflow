@@ -16,8 +16,9 @@ entry from GitHub activity and save it into the Obsidian vault. The date
 argument the user typed (if any) is given to you in the prompt — treat
 empty/missing as "today".
 
-Turns a day's GitHub activity (commits, PRs, the issues they close/reference)
-into a worklog entry, grouped as:
+Turns a day's GitHub activity (commits, PRs, the issues they close/reference),
+plus the non-GitHub work the user logged in that day's note (meetings, support,
+reviews — the `## Log` section `/day` writes), into a worklog entry, grouped as:
 
 ```
 - {Project}
@@ -72,10 +73,16 @@ that yourself.
 If it exits non-zero (missing `gh`/`jq`, not authenticated), report the
 stderr message and stop.
 
+Then read the day's note: resolve and check it exactly as in step 8. If it
+exists and has a `## Log` section, keep its bullets as **log items**. Not
+found, or no `## Log`, means no log items.
+
 ### 2. Handle the empty case
 
-If the JSON has `"empty": true`: report "No tracked GitHub activity for
-`<date>`." and **stop** — do not create or touch any note.
+If the JSON has `"empty": true` and there are no log items: report "No
+tracked activity for `<date>`." and **stop** — do not create or touch any
+note. If it is empty but there are log items, skip steps 3–4 and continue
+with the log items alone.
 
 ### 3. Confirm the no-PR issues
 
@@ -120,12 +127,23 @@ keep issues separate rather than forcing an over-broad grouping.
 For each task, write one plain-language summary line: what changed and why,
 not a restated issue title.
 
+Then add the log items. Each bullet that records work done that day (a
+meeting, support, a review, ops) becomes a task in the project its text names
+— match it against the project names in `projects.json` loosely ("desi
+commerce" is DeshiCommerce) — or under `Other` when it names none. Skip a
+bullet that is a plan, a tentative or deferred item, or a task move (it is not
+work done). A bullet about work a GitHub task already covers adds its context
+to that task's summary instead of becoming a second task. Summarize each in
+one line in the same voice as the GitHub tasks; it gets a link bullet only
+when it names an issue or PR (`repo#n`).
+
 ### 6. Determine status per task
 
 Look at the state of the issue(s)/PR(s) backing the task:
 - `merged` — the backing PR(s) are merged (or issue is closed with a PR ref you can see merged), or it's a confirmed unlinked commit (a commit that shipped always counts as merged)
 - `in review` — a backing PR is open
 - `open` — issue(s) only, no PR
+- `done` — a task from a log item
 
 ### 7. Render
 
@@ -138,11 +156,13 @@ Look at the state of the issue(s)/PR(s) backing the task:
         - [{repo}#{n}]({url}) — {issue title}
     - {task summary} — {status}
         - [{repo}#{n}]({url}) — {issue title}
+    - {log item summary} — done
 - {Project B}
     - ...
 ```
 
-Projects alphabetical. Within a project, most-recently-active task first.
+Projects alphabetical, `Other` last. Within a project, most-recently-active
+task first, log-item tasks after the GitHub ones.
 Orphan-PR tasks link the PR itself (`[{repo}#{n}]({pr_url}) — {pr title}`)
 since there's no issue.
 
@@ -208,8 +228,8 @@ report.
 - `<plugin_root>/skills/worklog/projects.json` maps `owner/repo` → project name.
   A repo not listed falls back to its bare repo name — add new repos to this
   file as they come up, don't invent a mapping on the fly.
-- Never widen the source beyond GitHub (no Jira/Slack) — this is
-  GitHub-activity-only by design.
+- Sources are GitHub plus the day note's own `## Log` section — never
+  Jira or Slack. The `## Log` section is read, never rewritten.
 - The author is auto-detected from the authenticated `gh` account — no
   hardcoded username.
 - A merge alone is not work: merged PRs only count when at least one

@@ -3,7 +3,8 @@ import htm from './vendor/htm.mjs';
 import { poll } from './app.js';
 import { toast } from './toast.js';
 import { GhChips } from './ghstatus.js';
-import { formatWhen } from './fmt.js';
+import { PrLink } from './pr.js';
+import { formatWhen, grindLabel } from './fmt.js';
 
 const html = htm.bind(h);
 
@@ -23,10 +24,11 @@ export const hasUrl = (text) => /github\.com\//i.test(String(text || ''));
 // Issues that screen ready start ticked; flagged ones (gaps, open PR, running, closed) start unticked.
 export const defaultSelection = (items) => new Set((items || []).filter((i) => i.ready).map((i) => i.issue));
 
-export function startBody(preview, selected, { mode, max, claude }) {
+export function startBody(preview, selected, { mode, max, claude, grind }) {
   const issues = preview.items.map((i) => i.issue).filter((n) => selected.has(n));
   const body = { slug: preview.slug, repo: preview.repo_path, issues, mode, max };
   if (claude) body.claude_cmd = claude;
+  body.auto_grind = grind === true;
   return body;
 }
 
@@ -73,7 +75,7 @@ async function api(path, body) {
     });
     let data = null;
     try { data = await res.json(); } catch { /* non-JSON error body */ }
-    return res.ok ? { ok: true, data } : { ok: false, error: (data && data.error) || `Request failed (HTTP ${res.status})` };
+    return res.ok ? { ok: true, data } : { ok: false, error: (data && data.error) || `Request failed (HTTP ${res.status})`, data };
   } catch {
     return { ok: false, error: 'could not reach the aiw server' };
   }
@@ -95,7 +97,7 @@ function Rail({ run, state }) {
   const cur = run && run.currentStation;
   return html`<div class="rail" aria-label="run-issue stations">
     <ol>${rows.map((r) => html`<li class=${`rs rs-${r.status}${r.name === cur && LIVE.includes(state) ? ' rs-now' : ''}`} title=${`${STATION_LABEL[r.name] || r.name} · ${r.status}${r.bounces ? ` · bounced ${r.bounces}×` : ''}`}></li>`)}</ol>
-    <span class="rail-label">${cur ? STATION_LABEL[cur] || cur : run && run.status === 'done' ? 'Done' : state === 'queued' ? 'Not started' : ''}</span>
+    <span class="rail-label">${cur ? STATION_LABEL[cur] || cur : run && run.status === 'done' ? 'Done' : state === 'queued' ? 'Not started' : state === 'running' ? 'Starting…' : ''}</span>
   </div>`;
 }
 
@@ -104,21 +106,21 @@ const StatePill = ({ state }) => html`<span class=${`chip dp-${state}`}>${STATE_
 // ---- Dispatch: new pipeline + pipeline list -----------------------------------------------------
 
 export class Dispatch extends Component {
-  state = { text: '', repos: [], repo: '', cmds: [], claude: '', mode: 'parallel', max: 2, preview: null, selected: new Set(), busy: null, error: null, list: null };
+  state = { text: '', repos: [], repo: '', cmds: [], claude: '', grind: false, mode: 'parallel', max: 2, preview: null, selected: new Set(), busy: null, error: null, list: null, need: null, canBrowse: false };
 
   componentDidMount() {
     fetch('/api/repos', { headers: { Accept: 'application/json' } }).then((r) => (r.ok ? r.json() : null)).then((b) => {
       const repos = ((b && b.repos) || []).filter((r) => r && r.slug);
       const last = (() => { try { return localStorage.getItem('aiw.lastRepo'); } catch { return null; } })();
-      this.setState({ repos, repo: (repos.find((r) => r.slug === last) || repos[0] || {}).slug || '' });
+      this.setState({ repos, canBrowse: !!(b && b.can_browse), repo: (repos.find((r) => r.slug === last) || repos[0] || {}).slug || '' });
     }).catch(() => {});
-    fetch('/api/settings', { headers: { Accept: 'application/json' } }).then((r) => (r.ok ? r.json() : null)).then((s) => s && this.setState({ cmds: s.commands || [], claude: s.default || '' })).catch(() => {});
+    fetch('/api/settings', { headers: { Accept: 'application/json' } }).then((r) => (r.ok ? r.json() : null)).then((s) => s && this.setState({ cmds: s.commands || [], claude: s.default || '', grind: !!s.auto_grind })).catch(() => {});
     this.stop = poll('/api/pipelines', 3000, (r) => r.ok && this.setState({ list: r.data.pipelines }));
   }
 
   componentWillUnmount() { if (this.stop) this.stop(); }
 
-  onText = (e) => this.setState({ text: e.target.value, preview: null, error: null });
+  onText = (e) => this.setState({ text: e.target.value, preview: null, error: null, need: null });
 
   onKey = (e) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); this.runPreview(e.target.value); }
@@ -128,10 +130,35 @@ export class Dispatch extends Component {
     const text = typeof typed === 'string' ? typed : this.state.text;
     const { repo } = this.state;
     if (!text.trim()) { this.setState({ error: 'Paste a GitHub issue search URL or a list of issue numbers' }); return; }
-    this.setState({ text, busy: 'preview', error: null, preview: null });
+    this.setState({ text, busy: 'preview', error: null, preview: null, need: null });
     const r = await api('/api/dispatch/preview', { input: text, repo: hasUrl(text) ? undefined : repo });
-    if (!r.ok) { this.setState({ busy: null, error: r.error }); return; }
+    if (!r.ok) { this.fail(r, 'runPreview'); return; }
     this.setState({ busy: null, preview: r.data, selected: defaultSelection(r.data.items) });
+  };
+
+  // A repo aiw has no clone for yet is not an error to read: ask where the clone is, then redo `again`.
+  fail(r, again) {
+    const d = r.data;
+    if (d && d.code === 'no_checkout') this.setState({ busy: null, need: { slug: d.slug, candidates: d.candidates || [], path: '', busy: false, error: '', again } });
+    else this.setState({ busy: null, error: r.error });
+  }
+
+  setNeed = (patch) => this.setState(({ need }) => ({ need: need && { ...need, ...patch } }));
+
+  register = async (path) => {
+    const { need } = this.state;
+    this.setNeed({ busy: true, error: '' });
+    const r = await api('/api/repos/register', { slug: need.slug, path });
+    if (!r.ok) { this.setNeed({ busy: false, error: r.error }); return; }
+    toast(`Registered ${need.slug}`);
+    this.setState({ need: null, repos: r.data.repos.filter((x) => x && x.slug) });
+    this[need.again]();
+  };
+
+  browseNeed = async () => {
+    const r = await api('/api/repos/browse', { start: this.state.need.path || '' });
+    if (r.ok && r.data.path) this.setNeed({ path: r.data.path, error: '' });
+    else if (!r.ok) toast('Could not open the folder picker', 'error');
   };
 
   toggle = (n) => {
@@ -147,15 +174,16 @@ export class Dispatch extends Component {
   };
 
   start = async () => {
-    const { preview, selected, mode, max, claude } = this.state;
+    const { preview, selected, mode, max, claude, grind } = this.state;
     this.setState({ busy: 'start', error: null });
-    const r = await api('/api/pipelines', startBody(preview, selected, { mode, max, claude }));
-    if (!r.ok) { this.setState({ busy: null, error: r.error }); return; }
+    const r = await api('/api/pipelines', startBody(preview, selected, { mode, max, claude, grind }));
+    if (!r.ok) { this.fail(r, 'start'); return; }
+    try { localStorage.setItem('aiw.lastRepo', r.data.slug); } catch { /* private mode: the default repo just won't stick */ }
     toast(`Pipeline started · ${r.data.items.length} issues`);
     location.hash = `#/dispatch/${r.data.id}`;
   };
 
-  render(_, { text, repos, repo, cmds, claude, mode, max, preview, selected, busy, error, list }) {
+  render(_, { text, repos, repo, cmds, claude, grind, mode, max, preview, selected, busy, error, list, need, canBrowse }) {
     const chosen = preview ? preview.items.filter((i) => selected.has(i.issue)).length : 0;
     const flagged = preview ? preview.items.filter((i) => !i.ready).length : 0;
     return html`
@@ -166,7 +194,7 @@ export class Dispatch extends Component {
           <h2 id="dp-new-h">New pipeline</h2>
           <label for="dp-input">Issues</label>
           <textarea id="dp-input" class="field" rows="3" spellcheck="false" value=${text} onInput=${this.onText} onKeyDown=${this.onKey}
-            placeholder="https://github.com/owner/repo/issues?q=label%3Aready   or   #12, 14, 15"></textarea>
+            placeholder="A search URL, issue URLs, or numbers: #12, 14, 15"></textarea>
           <p class="note">A search URL, issue URLs, issue numbers, or a single epic number to run its sub-issues.</p>
           ${!hasUrl(text) && html`<label for="dp-repo">Repo for plain issue numbers</label>
             <select id="dp-repo" value=${repo} onChange=${(e) => this.setState({ repo: e.target.value, preview: null })}>
@@ -176,6 +204,21 @@ export class Dispatch extends Component {
             <button type="button" class="primary" disabled=${busy === 'preview'} onClick=${() => this.runPreview()}>${busy === 'preview' ? 'Reading issues…' : 'Preview issues'} <kbd>⌘↵</kbd></button>
           </div>
           ${error && html`<p role="alert" class="error">${error}</p>`}
+          ${need && html`<div class="dp-need" role="group" aria-labelledby="dp-need-h">
+            <h3 id="dp-need-h">Where is ${need.slug} on this Mac?</h3>
+            <p class="note">aiw works inside a local clone, and it hasn't seen this repo yet. Pick the clone once and it is remembered.</p>
+            ${need.candidates.length > 0 ? html`<ul class="dp-cands">${need.candidates.map((p) => html`<li>
+              <button type="button" class="dp-cand" disabled=${need.busy} onClick=${() => this.register(p)}><span class="mono">${p}</span><span class="dp-cand-go">Use this clone</span></button>
+            </li>`)}</ul>` : html`<p class="muted">No clone found in your usual project folders. Enter or browse to it:</p>`}
+            <div class="repo-row">
+              <input type="text" class="field mono" aria-label="Path to the clone" placeholder=${`/path/to/${need.slug.split('/')[1]}`} value=${need.path}
+                onInput=${(e) => this.setNeed({ path: e.target.value, error: '' })}
+                onKeyDown=${(e) => { if (e.key === 'Enter' && need.path.trim()) { e.preventDefault(); this.register(need.path); } }} />
+              ${canBrowse && html`<button type="button" class="browse-btn" aria-label="Browse for the folder" title="Browse for the folder" onClick=${this.browseNeed}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>`}
+              <button type="button" class="primary" disabled=${!need.path.trim() || need.busy} onClick=${() => this.register(need.path)}>${need.busy ? 'Checking…' : 'Use this folder'}</button>
+            </div>
+            ${need.error && html`<p role="alert" class="error">${need.error}</p>`}
+          </div>`}
 
           ${preview && html`
             <div class="dp-preview">
@@ -217,6 +260,7 @@ export class Dispatch extends Component {
                   ${cmds.map((c) => html`<option value=${c.label}>${c.label}</option>`)}
                 </select>`}
               </div>
+              <label class="check"><input type="checkbox" checked=${grind} onChange=${(e) => this.setState({ grind: e.target.checked })} /> Start review grinding when each run finishes</label>
               <p class="note">${mode === 'parallel' ? `Each run brings up its own Docker stack, so ${max} at once is the cap.` : 'Issues run one after another, oldest dependency first.'}</p>
               <button type="button" class="primary dp-go" disabled=${!chosen || busy === 'start'} onClick=${this.start}>${busy === 'start' ? 'Starting…' : chosen ? `Start ${chosen} issue${chosen === 1 ? '' : 's'}` : 'Select issues to start'}</button>
             </div>`}
@@ -243,7 +287,7 @@ export class Dispatch extends Component {
 // ---- PipelineDetail ----------------------------------------------------------------------------
 
 export class PipelineDetail extends Component {
-  state = { data: null, gone: false, offline: false, confirm: null, busy: false, adding: false, addText: '' };
+  state = { data: null, gone: false, offline: false, confirm: null, busy: false, adding: false, addText: '', showDone: null };
 
   componentDidMount() {
     this.stop = poll(`/api/pipelines/${encodeURIComponent(this.props.id)}`, 3000, (r) => {
@@ -301,10 +345,13 @@ export class PipelineDetail extends Component {
     if (await this.act('/update', { add }, `Added ${add.length} issue${add.length === 1 ? '' : 's'}`)) this.setState({ adding: false, addText: '' });
   };
 
-  render({ id }, { data, gone, offline, confirm, busy, adding, addText }) {
+  render({ id }, { data, gone, offline, confirm, busy, adding, addText, showDone }) {
     if (gone) return html`<h1>Pipeline not found</h1><p><a href="#/dispatch">Back to Dispatch</a></p>`;
     if (!data) return html`<p class="empty">${offline ? 'Offline: retrying' : 'Loading…'}</p>`;
     const items = data.items;
+    // Finished issues fold away while others are still going, so what needs attention stays on screen.
+    const finished = items.filter((i) => i.state === 'done' && !(i.grind && ['running', 'paused', 'queued'].includes(i.grind.state)));
+    const fold = showDone === null ? finished.length > 0 && finished.length < items.length : !showDone;
     const acts = pipelineActions(data.status);
     const live = items.some((i) => LIVE.includes(i.state));
     return html`
@@ -323,7 +370,7 @@ export class PipelineDetail extends Component {
         <section class="panel pd-sum">
           <${Bar} issues=${items} onPick=${this.jump} />
           <div class="pd-sum-row">
-            <span>${progressText(items)}</span>
+            <span>${progressText(items)}${(() => { const g = items.filter((i) => i.grind && i.grind.state === 'running').length; return g ? ` · ${g} grinding` : ''; })()}</span>
             <span class="spacer"></span>
             <div class="seg" role="radiogroup" aria-label="Order">
               ${['parallel', 'sequential'].map((m) => html`<button type="button" role="radio" aria-checked=${data.mode === m} class=${data.mode === m ? 'on' : ''} disabled=${busy} onClick=${() => data.mode !== m && this.act('/update', { mode: m })}>${m === 'parallel' ? 'In parallel' : 'One at a time'}</button>`)}
@@ -341,30 +388,36 @@ export class PipelineDetail extends Component {
           </form>`}
         </section>
 
+        ${finished.length > 0 && finished.length < items.length && html`<button type="button" class="btn pd-fold" aria-expanded=${!fold} onClick=${() => this.setState({ showDone: fold })}>${finished.length} finished · ${fold ? 'show' : 'hide'}</button>`}
         <ul class="pd-items">
-          ${items.map((it) => {
+          ${[...items].filter((it) => !(fold && finished.includes(it))).sort((a, b) => data.order.indexOf(a.issue) - data.order.indexOf(b.issue)).map((it) => {
             const run = it.run;
             const sess = it.session;
-            const runHref = `#/run/${encodeURIComponent(data.slug.split('/')[0])}/${encodeURIComponent(data.slug.split('/')[1])}/${it.issue}`;
+            const at = it.moved_to || { owner: data.slug.split('/')[0], repo: data.slug.split('/')[1], issue: it.issue }; // a transferred issue's run lives under its new repo and number
+            const runHref = `#/run/${encodeURIComponent(at.owner)}/${encodeURIComponent(at.repo)}/${at.issue}`;
             const ia = itemActions(it);
-            return html`<li id=${`it-${it.issue}`} class=${`pd-item s-${it.state}`}>
+            const grindStuck = it.grind && it.grind.state === 'paused';
+            return html`<li id=${`it-${it.issue}`} class=${`pd-item s-${it.state}${grindStuck ? ' attn' : ''}`}>
               <div class="pd-main">
                 <div class="pd-title">
-                  <a class="mono" href=${runHref}>#${it.issue}</a>
-                  <span>${it.title || 'Untitled'}</span>
+                  <span class="mono">#${it.issue}</span>
+                  <a href=${runHref}>${it.title || 'Untitled'}</a>
+                  ${it.moved_to && html`<span class="chip" title=${`Transferred to ${it.moved_to.owner}/${it.moved_to.repo}#${it.moved_to.issue}`}>moved to ${it.moved_to.repo} #${it.moved_to.issue}</span>`}
                 </div>
                 <div class="pd-sub">
                   ${(it.deps || []).map((d) => html`<a class="chip dp-queued" href=${`#it-${d}`} onClick=${(e) => { e.preventDefault(); this.jump(d); }}>after #${d}</a>`)}
                   ${it.reason && html`<span class="muted">${it.reason}</span>`}
                   ${sess && sess.status === 'limited' && html`<span class="muted">${sess.auto_resume ? 'resumes automatically' : 'usage limit'}</span>`}
                   ${sess && sess.error && html`<span class="error">${sess.error}</span>`}
+                  ${grindStuck && it.grind.reason && html`<span class="pd-why" title=${it.grind.reason}>${it.grind.reason}</span>`}
                 </div>
               </div>
               <${Rail} run=${run} state=${it.state} />
-              <div class="pd-gh">${run && it.gh && html`<${GhChips} gh=${it.gh} />`}${run && run.pr && html`<a class="chip" href=${run.pr} target="_blank" rel="noopener noreferrer">PR ↗</a>`}</div>
+              <div class="pd-gh">${it.grind && grindLabel(it.grind) && html`<span class=${'chip chip-grind-' + it.grind.state}>${grindLabel(it.grind)}</span>`}${run && it.gh && html`<${GhChips} gh=${it.gh} />`}${run && run.pr && html`<${PrLink} class="chip" url=${run.pr}>PR ↗<//>`}</div>
               <div class="pd-state"><${StatePill} state=${it.state} /></div>
               <div class="pd-acts">
                 ${it.state === 'waiting' && sess && html`<a class="btn btn-sm btn--primary" href=${`#/answer/${encodeURIComponent(sess.id)}`}>Answer</a>`}
+                ${grindStuck && html`<a class="btn btn-sm btn--primary" href=${runHref}>Unblock grind</a>`}
                 ${sess && html`<a class="btn btn-sm" href=${`#/session/${encodeURIComponent(sess.id)}`}>Session</a>`}
                 ${ia.includes('retry') && html`<button type="button" class="btn-sm" disabled=${busy} onClick=${() => this.act(`/items/${it.issue}/retry`, {}, `Retrying #${it.issue}`)}>Retry</button>`}
                 ${ia.includes('skip') && html`<button type="button" class="btn-sm" disabled=${busy} onClick=${() => this.act(`/items/${it.issue}/skip`, {}, `Skipped #${it.issue}`)}>Skip</button>`}
@@ -373,11 +426,11 @@ export class PipelineDetail extends Component {
           })}
         </ul>
 
-        ${data.merge_order.length > 0 && html`<section class="panel pd-merge">
-          <h2>Merge order</h2>
+        ${data.merge_order.length > 0 && html`<details class="panel pd-merge" open=${data.merge_order.length <= 5}>
+          <summary><h2>Merge order · ${data.merge_order.length} PR${data.merge_order.length === 1 ? '' : 's'}</h2></summary>
           <p class="note">PRs are stacked on their dependencies, so merge them in this order.</p>
-          <ol>${data.merge_order.map((n) => { const it = items.find((i) => i.issue === n); return html`<li><a href=${it.run.pr} target="_blank" rel="noopener noreferrer">#${n} ${it.title || ''}</a></li>`; })}</ol>
-        </section>`}
+          <ol>${data.merge_order.map((n) => { const it = items.find((i) => i.issue === n); return html`<li><${PrLink} url=${it.run.pr}>#${n} ${it.title || ''}<//></li>`; })}</ol>
+        </details>`}
       </div>`;
   }
 }

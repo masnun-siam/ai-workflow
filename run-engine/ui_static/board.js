@@ -2,6 +2,7 @@ import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { poll } from './app.js';
 import { openCleanup } from './cleanup.js';
+import { grindLabel } from './fmt.js';
 import { GhChips, GhLinks, quiet } from './ghstatus.js';
 
 const html = htm.bind(h);
@@ -29,7 +30,8 @@ export function matchSession(card, sessions) {
 }
 
 export function cardChips(card, columnKey, session) {
-  if (columnKey === 'done') return ['merged'];
+  // The Ledger is done once the PR is handed back for review; only GitHub knows it merged.
+  if (columnKey === 'done') return [card.gh?.pr?.state === 'MERGED' ? 'merged' : 'done'];
   const chips = [];
   const status = session && (session.status ?? session.outcome);
   if (status === 'running' || status === 'stopped' || status === 'limited') chips.push(status);
@@ -72,7 +74,7 @@ export function boardSummary(columns, sessions, now = new Date()) {
     for (const card of col.cards) {
       const chips = cardChips(card, col.key, matchSession(card, sessions));
       if (chips.includes('running')) live++;
-      if (chips.includes('waiting') || chips.includes('escalated')) waiting++;
+      if (chips.includes('waiting') || chips.includes('escalated') || (card.grind && card.grind.state === 'paused')) waiting++;
     }
   }
   const day = now.toDateString();
@@ -117,7 +119,8 @@ function Card({ card, columnKey, sessions }) {
     <span class="card-meta"><span>#${card.issue}</span><span class="card-repo" title=${card.owner + '/' + card.repo}>${card.repo}</span>${card.pipeline && html`<span class="card-pipe" title="Part of a dispatch pipeline">pipeline</span>`}</span>
     <span class="card-title">${cardTitle(card)}</span>
     <span class="chips">
-      ${cardChips(card, columnKey, session).map((c) => html`<span class="chip chip-${c.replace(' ', '-')}">${c}</span>`)}
+      ${cardChips(card, columnKey, session).filter((c, _, all) => !(c === 'done' && all.length === 1 && (card.grind || card.gh))).map((c) => html`<span class="chip chip-${c.replace(' ', '-')}">${c}</span>`)}
+      ${card.grind && grindLabel(card.grind) && html`<span class=${'chip chip-grind-' + card.grind.state} title="Review grinding">${grindLabel(card.grind)}</span>`}
       <${GhChips} gh=${card.gh} />
       ${cost && html`<span class="cost">${cost}</span>`}
     </span>
@@ -182,7 +185,6 @@ export class Board extends Component {
         <span><b>${sum.live}</b> live</span>
         <span class="strip-wait"><b>${sum.waiting}</b> waiting</span>
         <span><b>$${sum.today.toFixed(2)}</b> today</span>
-        <span class="strip-poll mono">polling /board.json · 3s</span>
         <span class="spacer"></span>
         <button type="button" class="btn" onClick=${() => openCleanup()}>Clean up…</button>
         <label class="strip-filter">Repo
@@ -192,11 +194,13 @@ export class Board extends Component {
           </select>
         </label>
       </div>
+      ${columns.every((c) => !c.cards.length) && html`<p class="board-empty">No runs${repo ? ' for this repo' : ''} yet. Start one from <a href="#/new">New run</a> or <a href="#/dispatch">Dispatch</a>.</p>`}
       <div class="board">
         ${columns.map((col) => {
           const shown = visibleCards(col, doneOpen);
           const hidden = col.cards.length - shown.length;
-          return html`<section class="column" aria-label=${stationLabel(col.key)}>
+          // Empty stations shrink to a narrow rail so the busy ones get the width.
+          return html`<section class=${col.cards.length ? 'column' : 'column is-empty'} aria-label=${stationLabel(col.key)}>
             <h2><span>${stationLabel(col.key)}</span><span class="mono">${col.cards.length}</span></h2>
             ${shown.length
               ? shown.map((card) => html`<${Card} key=${card.owner + '/' + card.repo + '#' + card.issue} card=${card} columnKey=${col.key} sessions=${sessions} />`)

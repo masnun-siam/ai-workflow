@@ -1,6 +1,6 @@
 ---
 name: worklog
-description: Generate today's (or a given day's) worklog entry from GitHub activity — PRs, commits, and their linked issues — grouped by project and task, and save it into the Obsidian daily note. Use when the user asks for a worklog, daily log, standup entry, or "what did I do today/yesterday".
+description: Generate today's (or a given day's) worklog entry from GitHub activity — PRs, commits, and their linked issues — plus the non-GitHub work (meetings, support) logged in the daily note's `## Log` section, grouped by project and task, and save it into the Obsidian daily note. Use when the user asks for a worklog, daily log, standup entry, or "what did I do today/yesterday".
 ---
 
 # Worklog
