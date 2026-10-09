@@ -3945,11 +3945,15 @@ assert "status: seed" in _s2_183 and "not a collision" in _s2_183, "#183 Step 2 
 _s7_183 = _key183(_prd183, "Step 7")
 assert "overwrite" in _s7_183 and "status" in _s7_183 and "draft" in _s7_183 and "seed" in _s7_183, \
     "#183 Step 7 must overwrite the seed and set status: draft"
+assert "stop and ask" in _s2_183.split("For Obsidian, also resolve")[1], "#183 Step 2 must ask when no project resolves"
 ok("#183 /prd feature-folder input, seed exception, overwrite + status: draft")
 
 # AC3: anything that is not a seed still stops and asks.
 assert "**stop and ask the user**" in _s2_183 and "Never overwrite silently" in _s2_183, "#183 Step 2 lost stop-and-ask"
 assert re.search(r"any other existing PRD|not .{0,20}seed", _s2_183), "#183 Step 2 must say non-seed PRDs still stop"
+assert re.search(r"property:read path=.{0,60}PRD\.md. name=status", _s2_183) and "exactly `seed`" in _s2_183, \
+    "#183 Step 2 must name how the seed status is read (property:read, exactly seed)"
+assert re.search(r"Anything else.{0,220}still stops here", _s2_183), "#183 Step 2: anything other than seed must still stop"
 ok("#183 /prd on a non-seed PRD still stops and asks")
 
 # AC4: default --to is obsidian only; Step 6 no longer asks about extra destinations.

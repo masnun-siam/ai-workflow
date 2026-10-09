@@ -189,7 +189,6 @@ Then add a line for it to the project index and top-level index:
 obsidian vault=notes append path="05-Work/<Project>/Index.md" content="- [[05-Work/<Project>/<Feature>/PRD|<Feature>]]"
 ```
 (Only touch `05-Work/Index.md` too if this is also a brand-new project with no existing entry there — add it under the appropriate section.)
-The `status: seed` marker tells `/prd` this `PRD.md` is only a seed it may fill in, not a finished PRD.
 Tag and link both new files per the **Tagging and linking** section: `PRD.md` gets
 `type/feature`, `Dump.md` gets `type/dump`, and each gets a `## Related` block listing the other
 plus the project index:
@@ -200,6 +199,7 @@ obsidian vault=notes property:set path="05-Work/<Project>/<Feature>/PRD.md" name
 obsidian vault=notes append path="05-Work/<Project>/<Feature>/PRD.md" content="\n## Related\n- [[05-Work/<Project>/<Feature>/Dump|Dump]] — raw capture\n- [[05-Work/<Project>/Index|<Project> Project Index]]"
 obsidian vault=notes append path="05-Work/<Project>/<Feature>/Dump.md" content="\n## Related\n- [[05-Work/<Project>/<Feature>/PRD|PRD]] — requirements\n- [[05-Work/<Project>/Index|<Project> Project Index]]"
 ```
+The `status: seed` marker tells `/prd` this `PRD.md` is only a seed it may fill in, not a finished PRD.
 
 **Change request** — target feature already has `PRD.md`/`SRS.md`:
 ```

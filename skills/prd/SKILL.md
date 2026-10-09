@@ -23,7 +23,7 @@ Why this order matters: scanning before interviewing means the questions are inf
 
 - `<requirement>`: free text, a BRD file, an Obsidian note, a Sentry link or a GitHub issue URL.
 - `<feature-folder>`: a vault path `05-Work/<Project>/<Feature>` that holds a `Dump.md` (as left by `/dump`). `/prd` fills that folder's seeded `PRD.md`.
-- `--to`: one or more destinations. Default `obsidian`, and nothing is asked about other destinations: `local` and `wiki` are written only when named here.
+- `--to`: one or more destinations. Default `obsidian`, and nothing is asked about other destinations: `local` and `wiki` are written only when named here. If the Obsidian project can't be resolved (Step 2), ask which project to use and offer `local` instead; never leave the run with no destination.
 
 ### Asking the user
 
@@ -66,7 +66,7 @@ Interviewing for ten minutes and then discovering a PRD already exists wastes th
 | obsidian | `obsidian vault=notes file path="05-Work/<Project>/<Feature>/PRD.md"` — prints `Error: ... not found` (exit code 0) when missing, so read the output text |
 | wiki | after cloning (Step 7), look for `PRD-<Title-With-Dashes>.md`; for an early check use `git ls-remote` only to confirm the wiki exists, and defer the page check to the clone |
 
-Exception: an Obsidian `PRD.md` with frontmatter `status: seed` is the input, not a collision — continue without asking and fill that same file; any other existing PRD (no `status: seed`, including finished PRDs and ones seeded before the marker existed) still stops here.
+Exception: an Obsidian `PRD.md` with frontmatter `status: seed` is the input, not a collision — continue without asking and fill that same file. Read the status with `obsidian vault=notes property:read path="05-Work/<Project>/<Feature>/PRD.md" name=status` (the existence check above does not show frontmatter); only output that is exactly `seed` counts. Anything else (another value, empty output, an error) means any other existing PRD, including finished PRDs and ones seeded before the marker existed, and still stops here.
 
 If a PRD already exists anywhere: **stop and ask the user** (headless: `aiw ask`, then end your turn) what to do (read it and update it, pick a new name, skip that destination). Never overwrite silently. If they choose to update, read the existing PRD before Step 4 so the interview builds on it and keeps earlier decisions.
 
@@ -74,6 +74,7 @@ For Obsidian, also resolve the project and feature folder here, the same way `du
 
 1. `obsidian vault=notes read path="05-Work/Index.md"` and match the repo/project name against it (e.g. wasensi → `05-Work/Wasensi`). Read `05-Work/<Project>/Index.md` too.
 2. Show the resolved target in the Step 6 confirmation. A **new** feature folder needs the user's explicit OK, same rule as `/dump`; never create a project folder or edit `05-Work/Index.md` on your own.
+3. If no `05-Work/<Project>` entry matches, **stop and ask** (headless: `aiw ask`, then end your turn): which existing project to use, or write to `local` instead. Do not guess and do not create one.
 
 ## Step 3: Scan the codebase (once, up front)
 
@@ -144,7 +145,7 @@ obsidian vault=notes append path="05-Work/<Project>/<Feature>/PRD.md" content="\
 obsidian vault=notes append path="05-Work/<Project>/Index.md" content="- [[05-Work/<Project>/<Feature>/PRD|<Feature>]]"
 ```
 
-If the target was a seed, overwrite it (`obsidian vault=notes create path="05-Work/<Project>/<Feature>/PRD.md" content="<PRD>" overwrite`) and set `status: draft` (`obsidian vault=notes property:set path="05-Work/<Project>/<Feature>/PRD.md" name=status value=draft`). Overwriting re-creates the file, so re-apply the tags and `## Related` below; the project-index line is already there from `/dump`, so skip it.
+If the target was a seed (Step 2): replace the `create` line above with `obsidian vault=notes create path="05-Work/<Project>/<Feature>/PRD.md" content="<PRD>" overwrite`, skip the project-index `append` (`/dump` already added it), and after the `tags` line run `obsidian vault=notes property:set path="05-Work/<Project>/<Feature>/PRD.md" name=status value=draft`. Overwriting re-creates the file, so keep the `tags` and `## Related` lines; the `## Related` block must list `Dump` again (see the next paragraph).
 
 Read a sibling's tags first to reuse the feature slug, and list existing siblings (Dump, Decisions, SRS…) in `## Related`. Add the PRD line to existing siblings' Related blocks as dump does. The project tag table lives in dump's SKILL.md.
 
