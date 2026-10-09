@@ -75,6 +75,13 @@ const tick = () => new Promise((r) => setImmediate(r));
 const settle = async () => { for (let i = 0; i < 8; i++) await tick(); };
 out('run.js imports without a document');
 
+assert.equal(M.canStartGrind({ status: 'done', pr: 'https://x/pull/1', gh: { pr: { state: 'OPEN' } } }), true);
+assert.equal(M.canStartGrind({ status: 'done', pr: 'https://x/pull/1' }), true);
+for (const state of ['MERGED', 'CLOSED']) assert.equal(M.canStartGrind({ status: 'done', pr: 'https://x/pull/1', gh: { pr: { state } } }), false);
+assert.equal(M.canStartGrind({ status: 'done', pr: 'https://x/pull/1', grind: { state: 'idle' } }), false);
+assert.equal(M.canStartGrind({ status: 'running', pr: 'https://x/pull/1' }), false);
+out('Start grinding only on a finished run whose PR is still open');
+
 const SS = await import(new URL('./session.js', process.env.RUN_URL).href);
 assert.equal(SS.eventText({ kind: 'text', text: 'hi' }), 'hi');
 assert.equal(SS.eventText({ kind: 'tool', name: 'Bash', input: { command: 'ls' } }), 'Bash {"command":"ls"}');

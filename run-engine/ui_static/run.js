@@ -180,6 +180,9 @@ export const SKIP_CI_REPLY = 'Skip CI for now, complete the grind, then come bac
 // A grind paused because of CI (red head commit, Gate 2, a failing check), not because of a review decision.
 export const pausedOnCi = (run) => !!run?.grind && run.grind.state === 'paused' && (run.gh?.pr?.ci === 'red' || /\b(ci|gate\s*2|checks?)\b/i.test(run.grind.reason || ''));
 
+// A merged or closed PR has nothing left to review, so it never offers a grind.
+export const canStartGrind = (run) => run?.status === 'done' && !!run.pr && !run.grind && !['MERGED', 'CLOSED'].includes(run.gh?.pr?.state);
+
 export async function grindPost(owner, repo, issue, action, text) {
   try {
     const res = await fetch(`/api/grind/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ owner, repo, issue, ...(text ? { text } : {}) }) });
@@ -395,7 +398,11 @@ export class RunDetail extends Component {
     else plan = html`<p class="muted">No plan yet</p>`;
 
     let output;
-    if (!s) output = html`<p class="muted">${Array.isArray(sessions) ? 'No UI session for this run' : 'Loading…'}</p>`;
+    if (!s && Array.isArray(sessions) && run.log?.length) {
+      output = html`<p class="muted">Started outside the UI: station results from the run's ledger.</p>
+        <ol class="run-log">${run.log.map((e) => html`
+          <li><span class="mono">${e.station}</span> <span class=${chip(e.status === 'passed' ? 'done' : e.status)}>${e.status}</span> ${e.summary}</li>`)}</ol>`;
+    } else if (!s) output = html`<p class="muted">${Array.isArray(sessions) ? 'No UI session for this run' : 'Loading…'}</p>`;
     else if (!stream.events.length) output = html`<p class="muted">No output yet</p>`;
     else {
       const all = visibleEvents(stream.events);
@@ -447,7 +454,7 @@ export class RunDetail extends Component {
             ${acts.includes('stop') && html`<button type="button" class="btn btn--danger" disabled=${busy === 'stop'} onClick=${this.act('stop', 'Stopped')}>Stop</button>`}
             ${acts.includes('resume') && html`<button type="button" disabled=${busy === 'resume'} onClick=${this.act('resume', 'Resumed')}>Resume</button>`}
             ${acts.includes('terminal') && html`<button type="button" onClick=${this.terminal}>Continue in terminal</button>`}
-            ${run.status === 'done' && run.pr && !run.grind && html`<button type="button" class="btn btn--primary" disabled=${busy === 'grind'} onClick=${() => this.grind('start')} title="Posts a trigger to the repo's Slack review channel">Start grinding</button>`}
+            ${canStartGrind(run) && html`<button type="button" class="btn btn--primary" disabled=${busy === 'grind'} onClick=${() => this.grind('start')} title="Posts a trigger to the repo's Slack review channel">Start grinding</button>`}
             ${run.grind && ['running', 'idle'].includes(run.grind.state) && html`<button type="button" class="btn" disabled=${busy === 'grind'} onClick=${() => this.grind('pause')}>Pause grind</button>`}
             ${run.grind && run.grind.state === 'paused' && run.gh?.pr?.ci === 'red' && html`<button type="button" class="btn" disabled=${busy === 'grind'} onClick=${() => this.grind('rerun-ci')} title="Reruns the failed jobs of the latest CI run on the PR head">Rerun failed CI</button>`}
             ${run.grind && run.grind.state === 'paused' && html`<button type="button" class="btn" disabled=${busy === 'grind' || run.gh?.pr?.ci === 'red'} title=${run.gh?.pr?.ci === 'red' ? 'CI is red at the head commit: rerun it first, or the grind pauses again' : ''} onClick=${() => this.grind('resume')}>Resume grind</button>`}
@@ -481,7 +488,8 @@ export class RunDetail extends Component {
                 <li class=${`st-${KNOWN.includes(st.status) ? st.status : 'other'}`} aria-current=${st.name === run.currentStation ? 'step' : undefined}>
                   <span class="dot" aria-hidden="true"></span>
                   <span class="name">${st.name}</span>
-                  ${st.status === 'done' ? html`<span class="sr-only">done</span>` : html`<span class=${chip(st.status)}>${st.status}</span>`}
+                  ${st.skipped ? html`<span class="chip other" title="Bypassed: the refined issue body was used as the plan">skipped</span>`
+                    : st.status === 'done' ? html`<span class="sr-only">done</span>` : html`<span class=${chip(st.status)}>${st.status}</span>`}
                   ${st.bounces > 0 && html`<span class="muted">${`${st.bounces} ${st.bounces === 1 ? 'bounce' : 'bounces'}`}</span>`}
                 </li>`)}
             </ol>

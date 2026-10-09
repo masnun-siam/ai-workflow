@@ -418,6 +418,30 @@ assert good["pr"] == "https://github.com/acme/widgets/pull/9" and good["branch"]
 assert bad["pr"] is None, bad["pr"]
 ok("load_run: https pr link and branch exposed, javascript: link dropped")
 
+# --- 24. load_run: station envelopes become a run log; skipped stations flagged ----
+
+with tempfile.TemporaryDirectory() as runs:
+    d = run_dir_for(runs, "acme/widgets", 7)
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "run.json"), "w", encoding="utf-8") as fh:
+        json.dump(ledger(7, ["researcher", "planner", "dev"], 3, status="done"), fh)
+    for name, env in (
+        ("00-readiness.json", {"station": "researcher", "status": "passed", "summary": "skipped — refined", "evidence": {"skipped": True}}),
+        ("10-plan.json", {"station": "planner", "status": "passed", "summary": "skipped — refined", "evidence": {"skipped": True}, "handoff": {"plan_md": "# p"}}),
+        ("30-build.json", {"station": "dev", "status": "passed", "summary": "built it", "evidence": {}}),
+    ):
+        with open(os.path.join(d, name), "w", encoding="utf-8") as fh:
+            json.dump(env, fh)
+    with open(os.path.join(d, "45-broken.json"), "w", encoding="utf-8") as fh:
+        fh.write("{not json")
+    r7 = load_run("acme", "widgets", "7", runs_dir=runs)
+assert [(e["station"], e["summary"]) for e in r7["log"]] == [
+    ("researcher", "skipped — refined"), ("planner", "skipped — refined"), ("dev", "built it")], r7["log"]
+assert [s.get("skipped", False) for s in r7["stations"]] == [True, True, False], r7["stations"]
+assert all(s["status"] == "done" for s in r7["stations"]) and r7["totals"]["done"] == 3, r7
+assert r7["plan"] == "# p"
+ok("load_run: envelopes in file order as log, unreadable ones skipped, skipped stations flagged but still done")
+
 print(f"\n{passed} passed")
 
 # --- titles persisted for a warm restart
