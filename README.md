@@ -214,6 +214,7 @@ comments on issues. That is the user's call on their repo, not a smoke test.
 | `/ai-workflow:jira-to-gh <KEY>` | decompose a Jira ticket and file flat issues the same way as `/gh-issue` (one issue for a single task; two or more saved to `docs/tasks/<slug>.md` and filed flat) |
 | `/ai-workflow:pr-fix-comments <pr>` | work through a PR's review comments, confirming each |
 | `/ai-workflow:issue-to-pr` | the interactive, non-unattended variant |
+| `/ai-workflow:flow <idea \| folder \| PRD \| issue numbers>` | the guided flow (`/flow` for short): dump → PRD → flat issues → herdr-dispatch for one feature, starting at whichever stage the input implies and stopping for your go at each boundary |
 
 The default roster is researcher → planner → dev → reviewer → fixer. `run-dev` writes the
 RED tests first, implements, and runtime-verifies in one dispatch, and also applies the
@@ -287,7 +288,7 @@ plugin upgrades** — in-flight runs are not lost when you update.
 ```
 commands/     run-issue (the orchestrator) + 5 intake commands
 agents/       12 run-* pipeline agents + ship, worklog-runner, gh-issue-factchecker
-skills/       pr-review, pr-grind, herdr-dispatch, worklog, dump, 7 Laravel reviewers
+skills/       pr-review, pr-grind, herdr-dispatch, worklog, dump, prd, flow, 7 Laravel reviewers
 run-engine/   engine.py (pure) · route.py (CLI) · checks.py (station post-checks)
               stack/worktree/threads/pr/ci/gitnexus/project/epic (mechanical phases)
               config.json (policy) · test_engine.py + test_scripts.py

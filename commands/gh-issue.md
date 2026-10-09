@@ -253,3 +253,6 @@ return the ordered list of issue URLs, one per task in list order (including iss
 on resume). If `/run-issue` invoked this skill, hand control back to its Preflight step 3
 — with that issue number for one issue, or with that ordered list of issue URLs for 2 or
 more — and continue the run; the HARD RULE above no longer applies.
+On a standalone run there is nothing to hand back to. End with the line
+`→ next: herdr-dispatch <n> <n> …` listing every returned issue number in list order (one
+number for a single issue). It is the last line of your output; the Guided Flow parses it.

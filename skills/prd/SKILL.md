@@ -160,7 +160,7 @@ If any save step fails, report which destinations succeeded and which didn't. Do
 
 ## Step 8: Report and hand off
 
-One line per destination with its final path or URL. Then offer, in one line, to run `/gh-issue` with the PRD as the body. Do nothing further unless the user says yes.
+One line per destination with its final path or URL. End with the line `→ next: /gh-issue <prd-path>`, where `<prd-path>` is the Obsidian `PRD.md` path, or the first written destination when Obsidian was not chosen. It is the last line of your output; the Guided Flow parses it. Do nothing further.
 
 ## Guardrails
 

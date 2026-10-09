@@ -10,6 +10,7 @@ import { History } from './history.js';
 import { Session } from './session.js';
 import { Settings } from './settings.js';
 import { Dispatch, PipelineDetail } from './dispatch.js';
+import { Flow } from './flow.js';
 import { clockText } from './fmt.js';
 import { toast } from './toast.js';
 import { CleanupDialog } from './cleanup.js';
@@ -21,8 +22,14 @@ import { AfkControl, AfkSummary, afkPost } from './afk.js';
 const html = htm.bind(h);
 
 // Hooks are not vendored, so routing and polling are plain functions plus one class component.
+// Issue numbers from a `?issues=1,2` query; hash input is untrusted, so only plain digits pass.
+const queryIssues = (q) => (q.get('issues') || '').split(',').filter((s) => /^\d+$/.test(s)).map(Number);
+
 export function parseRoute(hash) {
   let path = String(hash || '').replace(/^#/, '');
+  const qi = path.indexOf('?');
+  const query = new URLSearchParams(qi < 0 ? '' : path.slice(qi + 1));
+  if (qi >= 0) path = path.slice(0, qi);
   if (path.length > 1 && path.endsWith('/')) path = path.slice(0, -1);
   let seg;
   try {
@@ -35,7 +42,15 @@ export function parseRoute(hash) {
   if (a === 'new' && !rest.length) return { name: 'new', params: {} };
   if (a === 'sessions' && !rest.length) return { name: 'sessions', params: {} };
   if (a === 'settings' && !rest.length) return { name: 'settings', params: {} };
-  if (a === 'dispatch' && !rest.length) return { name: 'dispatch', params: {} };
+  if (a === 'dispatch' && !rest.length) {
+    const issues = queryIssues(query);
+    return issues.length ? { name: 'dispatch', params: {}, issues } : { name: 'dispatch', params: {} };
+  }
+  if (a === 'flow' && !rest.length) {
+    // folder/prd become headless session args: one line, bounded, so the input shows all that is sent
+    const get = (k) => (query.get(k) || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').slice(0, 500);
+    return { name: 'flow', params: { repo: get('repo'), folder: get('folder'), prd: get('prd'), issues: queryIssues(query), sid: get('sid') } };
+  }
   if (a === 'dispatch' && rest.length === 1 && /^p-\d{14}-[0-9a-f]{6}$/.test(rest[0])) return { name: 'pipeline', params: { id: rest[0] } };
   if (a === 'session' && rest.length === 1 && rest[0]) return { name: 'session', params: { id: rest[0] } };
   if (a === 'answer' && rest.length === 1 && rest[0]) return { name: 'answer', params: { session: rest[0] } };
@@ -109,8 +124,9 @@ export function poll(url, ms, onResult, keepAlive = () => false) {
   };
 }
 
-const NAV = [
+export const NAV = [
   ['board', '#/', 'Board'],
+  ['flow', '#/flow', 'Flow'],
   ['dispatch', '#/dispatch', 'Dispatch'],
   ['sessions', '#/sessions', 'Sessions'],
 ];
@@ -146,8 +162,10 @@ function View({ route, sessions, limits }) {
       return html`<${Launcher} limits=${limits} />`;
     case 'settings':
       return html`<${Settings} />`;
+    case 'flow':
+      return html`<${Flow} key=${JSON.stringify(route.params)} route=${route} />`;
     case 'dispatch':
-      return html`<${Dispatch} />`;
+      return html`<${Dispatch} key=${(route.issues || []).join(',')} issues=${route.issues} />`;
     case 'pipeline':
       return html`<${PipelineDetail} key=${route.params.id} id=${route.params.id} />`;
     case 'sessions':

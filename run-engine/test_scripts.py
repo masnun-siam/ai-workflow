@@ -3641,16 +3641,17 @@ NOURL = "**No issue URL** (it failed, the human cancelled, or a `4-FLAT` run end
 LIST1 = "**An ordered list of 2 or more issue URLs** (its `4-FLAT` return; flat issues have no parent, and `/gh-issue` no longer files epics): print the issue URLs in list order and end the run here."
 LIST2 = "This is a clean stop, not an escalation: no Ledger, no worktree, no `aiw init`, and no further Preflight step."
 LIST3 = "Tell the user to run `/run-issue <n>` for each issue in list order; each issue's `Depends on:` line names the issue it builds on, so run those first \u2014 `/run-issue` bases a flat issue on the default branch unless its plan says otherwise."
+LIST4 = "End with the line `\u2192 next: herdr-dispatch <n> <n> \u2026` (every created issue number, in list order); `herdr-dispatch` runs them in that dependency order."  # #186
 ONE = "**Exactly one issue URL**: parse the created issue number `<n>` from it and continue to Preflight step 3 with that `<n>` as though it had been passed to `/run-issue` directly."
 HARD = "`/gh-issue`'s HARD RULE is scoped to issue creation and does not bind any later phase of this run."
-for sent in (NOURL, LIST1, LIST2, LIST3, ONE, HARD):
+for sent in (NOURL, LIST1, LIST2, LIST3, LIST4, ONE, HARD):
     assert st2.count(sent) == 1, sent
 assert _n(ri85).count(HARD) == 1 and st2.endswith(HARD)
 ok("#85 step 2 pins the three branches and the HARD RULE sentence whole")
 _a, _b, _h = st2.index("**An ordered list"), st2.index("**Exactly one issue URL**"), st2.index(HARD)
 # whole-bullet pins: appended text or an inserted bullet inside a branch fails
 assert st2[st2.index("**No issue URL**") : _a].rstrip(" -") == NOURL
-assert st2[_a:_b].rstrip(" -") == f"{LIST1} {LIST2} {LIST3}"
+assert st2[_a:_b].rstrip(" -") == f"{LIST1} {LIST2} {LIST3} {LIST4}"
 assert st2[_b:_h].strip() == ONE
 assert "2 or more issue URLs" in st2 and "3 or more" not in st2 and "more than 2" not in st2
 ok("#85 list branch stops the run and the threshold is literally 2")
@@ -3983,5 +3984,63 @@ _s6_183 = _key183(_prd183, "Step 6")
 assert "ask here whether to also save" not in _s6_183, "#183 Step 6 still asks about extra destinations"
 assert "aiw ask" in _s6_183, "#183 Step 6 must keep its aiw ask branch"
 ok("#183 /prd default --to is obsidian; Step 6 asks no destination question")
+
+
+# Issue #184: `→ next:` handoff lines on dump, prd and gh-issue (parsed by the UI stepper).
+NEXT = "\u2192 next: "
+_ws = lambda t: " ".join(t.split())  # noqa: E731  (_n is rebound by loops above)
+_dump184 = _skill_sections("skills/dump/SKILL.md")
+_s5_184 = _ws(_key183(_dump184, "Step 5"))
+for _p in (f"`{NEXT}/prd <feature-folder>`", f"`{NEXT}/gh-issue <note-path>`"):
+    assert _p in _s5_184, f"#184 dump Step 5 lacks {_p}"
+assert re.search(r"new feature.{0,40}change request.{0,80}/prd <feature-folder>", _s5_184, re.I), "#184 dump: prd line routes"
+assert re.search(r"bug report.{0,40}feature-scoped task.{0,80}/gh-issue <note-path>", _s5_184, re.I), "#184 dump: gh-issue line routes"
+assert re.search(r"standalone task.{0,40}meeting notes.{0,40}unclassifiable.{0,60}no `\u2192 next:` line", _s5_184, re.I), \
+    "#184 dump: no line for standalone/meeting/unclassifiable"
+assert "last line of your output" in _s5_184, "#184 dump: next line must be the last line"
+assert "no `\u2192 next:` line" in _ws(_key183(_dump184, "Programmatic invocation")), "#184 dump: programmatic run omits next line"
+ok("#184 /dump Step 5 ends with the routed \u2192 next: line; programmatic runs omit it")
+
+_s8_184 = _ws(_key183(_skill_sections("skills/prd/SKILL.md"), "Step 8"))
+assert f"End with the line `{NEXT}/gh-issue <prd-path>`" in _s8_184, "#184 prd Step 8 lacks the next line"
+assert "offer, in one line" not in _s8_184, "#184 prd Step 8 still has the prose offer"
+ok("#184 /prd Step 8 ends with \u2192 next: /gh-issue <prd-path>")
+
+_close184 = _ws(_read("commands", "gh-issue.md"))
+_close184 = _close184[_close184.rindex("Return the issue URL"):]
+assert f"End with the line `{NEXT}herdr-dispatch <n> <n> \u2026`" in _close184, "#184 gh-issue lacks the next line"
+assert "hand control back to its Preflight step 3" in _close184
+assert _close184.index("hand control back") < _close184.index(NEXT), "#184 hand-back sentence stays first"
+ok("#184 /gh-issue ends with \u2192 next: herdr-dispatch; /run-issue hand-back unchanged")
+
+
+# Guided Flow /flow (issue #187): one feature from raw input to a dispatched batch, stopping at every boundary.
+_flow_path = os.path.join(HERE, "..", "skills", "flow", "SKILL.md")
+assert os.path.isfile(_flow_path), "#187 skills/flow/SKILL.md missing"
+_flow = _read("skills", "flow", "SKILL.md")
+_flow_front = _flow.split("---")[1]
+assert re.search(r"^name: flow$", _flow_front, re.M), "#187 frontmatter name"
+for _t in ("Skill", "AskUserQuestion", "Bash"):
+    assert f"  - {_t}" in _flow_front, f"#187 allowed-tools lacks {_t}"
+_fs = _skill_sections("skills/flow/SKILL.md")
+_args187 = _ws(_key183(_fs, "Arguments"))
+for _shape, _stage in (("Raw text", "dump"), ("feature folder", "prd"), ("PRD path", "gh-issue"), ("Issue numbers", "dispatch")):
+    assert re.search(rf"{_shape}.{{0,160}}\| {_stage} \|", _args187, re.I), f"#187 entry shape {_shape} -> {_stage}"
+assert "Dump.md" in _args187, "#187 Dump.md path enters at prd"
+ok("#187 /flow exists and names the four entry shapes")
+_route187 = _ws(_key183(_fs, "Routing after dump"))
+for _cls, _path in (("New feature", "prd \u2192 gh-issue \u2192 dispatch"), ("Change request", "prd"),
+                    ("Bug report", "gh-issue \u2192 dispatch"), ("Unclassifiable", "stop")):
+    assert re.search(rf"{_cls}.{{0,120}}{_path}", _route187, re.I), f"#187 routing {_cls}"
+ok("#187 /flow routes by dump classification and stops after filing for the rest")
+_flow_ws = _ws(_flow)
+assert f"`{NEXT}" in _flow_ws and "take the next stage's argument from that line" in _flow_ws, "#187 \u2192 next: handoff rule"
+_cp187 = _ws(_key183(_fs, "Checkpoints"))
+assert "AskUserQuestion" in _cp187 and "(Recommended)" in _cp187 and "Stop here" in _cp187, "#187 checkpoint question"
+_dp187 = _ws(_key183(_fs, "Dispatch"))
+assert "--dry-run" in _dp187 and "--max 2" in _dp187 and "Launch" in _dp187, "#187 dispatch dry-run then Launch"
+assert _dp187.index("--dry-run") < _dp187.index("Launch"), "#187 dry-run is shown before the launch question"
+assert re.search(r"[Nn]ever (launch|dispatch).{0,60}without an explicit", _flow_ws), "#187 never dispatch without a go"
+ok("#187 /flow checkpoints every boundary; dispatch shows --dry-run (--max 2) and launches only on an explicit go")
 
 print(f"\n{passed} checks passed")

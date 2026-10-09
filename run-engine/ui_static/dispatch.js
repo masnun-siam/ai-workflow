@@ -106,7 +106,7 @@ const StatePill = ({ state }) => html`<span class=${`chip dp-${state}`}>${state 
 // ---- Dispatch: new pipeline + pipeline list -----------------------------------------------------
 
 export class Dispatch extends Component {
-  state = { text: '', repos: [], repo: '', cmds: [], claude: '', grind: false, mode: 'parallel', max: 2, preview: null, selected: new Set(), busy: null, error: null, list: null, need: null, canBrowse: false };
+  state = { text: (this.props.issues || []).join(' '), repos: [], repo: '', cmds: [], claude: '', grind: false, mode: 'parallel', max: 2, preview: null, selected: new Set(), busy: null, error: null, list: null, need: null, canBrowse: false };
 
   componentDidMount() {
     fetch('/api/repos', { headers: { Accept: 'application/json' } }).then((r) => (r.ok ? r.json() : null)).then((b) => {

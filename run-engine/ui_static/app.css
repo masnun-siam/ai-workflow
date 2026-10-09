@@ -905,3 +905,16 @@ header .afk-chip:hover { border-color: var(--accent); }
   .afk-q { white-space: normal; }
 }
 
+
+/* Guided Flow stepper (#190): state is in the chip text, colour only reinforces it */
+.flow-steps { list-style: none; margin: 16px 0; padding: 0; display: grid; gap: 12px; max-width: 760px; }
+.flow-step { display: grid; gap: 8px; }
+.flow-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.flow-name { font-weight: 600; color: var(--fg); }
+.flow-active { border-color: var(--accent); }
+.flow-locked, .flow-skipped { opacity: 0.7; }
+.flow-chip-active { color: var(--live); background: var(--live-bg); }
+.flow-chip-done { color: var(--done); background: var(--done-bg); }
+.flow-chip-skipped, .flow-chip-locked { color: var(--stop); background: var(--stop-bg); }
+.flow-step .btn--primary { justify-self: start; text-decoration: none; }
+.flow-step .error { color: var(--error); margin: 0; }

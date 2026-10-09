@@ -44,8 +44,8 @@ Q = lambda label="Approve and start (Recommended)", rec=True: {
                                 "options": [{"label": label if rec else "Approve"}, {"label": "Abort"}]}]}
 
 
-def waiting(rec=True, sid_ok=True):
-    s = ui_sessions.create("/run-issue 1", d, {"owner": "o", "repo": "r", "issue": 1})
+def waiting(rec=True, sid_ok=True, command="/run-issue 1"):
+    s = ui_sessions.create(command, d, {"owner": "o", "repo": "r", "issue": 1})
     if sid_ok:
         ui_sessions.update(s["id"], session_id="abc")
     ui_sessions.set_pending(s["id"], Q(rec=rec))
@@ -160,5 +160,14 @@ assert ui_afk.dismiss()["summary"] is None
 # a new window starts a fresh log and skip list
 ui_afk.start(t + 3600, t)
 assert ui_afk.load()["log"] == [] and ui_afk.load()["skipped_ci"] == []
+
+# #188: prd and dump interviews are never auto-answered (also plugin-prefixed); other families still are
+resumed.clear()
+held = [waiting(command=c) for c in ("/prd x", "/dump x", "/ai-workflow:prd x")]
+gi = waiting(command="/gh-issue x")
+ui_afk.tick(t + 1)
+assert all(ui_sessions.load(h)["status"] == "waiting" for h in held), [ui_sessions.load(h)["status"] for h in held]
+assert sorted(sid for sid, _ in resumed) == sorted([c, gi]), resumed  # c: the /run-issue left waiting above
+assert sorted(e["sid"] for e in ui_afk.load()["log"] if e["kind"] == "answer") == sorted([c, gi])
 
 print("test_ui_afk: ok")

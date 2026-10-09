@@ -24,6 +24,7 @@ import shared
 import ui_board
 import ui_grind
 import ui_notify
+import ui_repos
 import ui_runner
 import ui_sessions
 import ui_status
@@ -135,7 +136,13 @@ def _entry(kind: str, rec: dict, now: float, question, picked) -> dict:
             "picked": str(picked or "")[:500]}
 
 
+# #188: these interviews are the user's product decisions, so they always wait for a human.
+NEVER_AUTO = ("prd", "dump")
+
+
 def _answer(rec: dict, now: float) -> dict | None:
+    if ui_repos.family(rec.get("command", "")) in NEVER_AUTO:
+        return None
     pq = rec.get("pending_question")
     if rec.get("status") != "waiting" or not isinstance(pq, dict) or pq.get("status") != "pending":
         return None

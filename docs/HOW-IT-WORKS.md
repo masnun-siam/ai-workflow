@@ -371,6 +371,56 @@ filed by hand or before this change. `/run-issue <parent>` drives all its childr
 
 ---
 
+## Idea to PRs
+
+The Guided Flow takes one feature from a raw idea to a batch of dispatched runs. Each stage is
+an existing skill; the flow only orders them, carries one stage's output into the next, and
+stops for you at every boundary. Start it with `/flow` in the terminal or the **Flow** page
+(`#/flow`) in `aiw ui`.
+
+```mermaid
+flowchart TD
+    CLI["/flow (terminal)"] --> E{"Entry stage<br/>from the input"}
+    UI["#/flow (aiw ui)"] --> D
+    E -->|raw text| D["/dump<br/>file it in the vault"]
+    E -->|feature folder| P
+    E -->|PRD path| G
+    E -->|issue numbers| X
+    D --> C1{{"checkpoint"}}
+    C1 -->|new feature, change request| P["/prd<br/>grill and fill the PRD"]
+    C1 -->|bug, feature-scoped task| G
+    C1 -->|anything else| S["stop after filing"]
+    P --> C2{{"checkpoint"}}
+    C2 --> G["/gh-issue<br/>flat refined issues"]
+    G --> C3{{"checkpoint"}}
+    C3 --> X["dispatch<br/>herdr-dispatch or #/dispatch"]
+    X --> R["/run-issue × N,<br/>dependencies first"]
+```
+
+**Entry detection.** `/flow` reads its argument and starts where the work already is: raw
+text starts at `/dump`, a vault feature folder (or its `Dump.md`) at `/prd`, a PRD path at
+`/gh-issue`, and issue numbers at dispatch. There is no state file; the vault note, the PRD
+and the issues are the state, so half-done work resumes instead of starting over.
+
+**Routing by dump class.** A new feature or change request goes on to `/prd`, which fills the
+`status: seed` PRD that `/dump` left (or updates a finished one). A bug report or
+feature-scoped task skips the PRD and goes straight to `/gh-issue`. A standalone task, weekly
+meeting notes or anything unclassifiable stops once it is filed.
+
+**The `→ next:` contract.** `/dump`, `/prd` and `/gh-issue` each end with one line,
+`→ next: <command> <argument>`, naming the next stage and the artifact it should take. `/flow`
+and the UI stepper read the next stage's input from that line, and you see exactly what to
+run if you are going by hand. No line means the flow stops there. `/gh-issue` files flat
+`refined` issues ordered by `Depends on: #n`, and `/run-issue`'s multi-issue stop ends with
+the same `→ next: herdr-dispatch …` line.
+
+**Dispatch.** In the terminal, `/flow` shows a `herdr-dispatch <numbers> --dry-run` plan
+(`--max 2`) and launches only when you say **Launch**. In the UI, the last step links to
+`#/dispatch?issues=<numbers>`, where you preview and start the pipeline yourself. AFK mode
+never auto-answers a `/prd` or `/dump` question: those answers are your product decisions.
+
+---
+
 ## Layer 6 — When things go wrong
 
 | You see | It means | What happens |
@@ -407,6 +457,8 @@ Anything skipped is named in the final report.
 - **Rail** — a condition that stops the grind rather than letting it push another fix.
 - **Fingerprint** — how a finding is recognised across rounds, so a repeat is visible.
 - **Paused stop** — the grind ended and is not watching. Only you can restart it.
+- **Guided flow** — `/flow` or `#/flow`: dump → PRD → issues → dispatch for one feature, with a
+  checkpoint at every stage (see **Idea to PRs**; terms in `CONTEXT.md`).
 
 ---
 
