@@ -129,7 +129,7 @@ const items = K.paletteItems({
   board: { columns: [{ key: 'dev', cards: [{ owner: 'o', repo: 'r', issue: 7, title: 'Fix login' }] }] },
   sessions: [{ id: 's1', command: '/prd', repo: '/x/proj', outcome: 'waiting' }, { id: 's2', command: '/gh-issue', repo: 'o/r', outcome: 'done' }],
 });
-assert.deepEqual(items.map((i) => i.group), ['Go to', 'Go to', 'Go to', 'Go to', 'Go to', 'Run', 'Session', 'Session']);
+assert.deepEqual(items.map((i) => i.group), ['Go to', 'Go to', 'Go to', 'Go to', 'Go to', 'Autopilot', 'Run', 'Session', 'Session']);
 assert.equal(items.find((i) => i.id === 'session-s1').href, '#/answer/s1');
 assert.equal(items.find((i) => i.id === 'session-s2').href, '#/session/s2');
 assert.equal(items.find((i) => i.group === 'Run').href, '#/run/o/r/7');
@@ -137,7 +137,7 @@ assert.deepEqual(K.filterItems(items, 'login').map((i) => i.group), ['Run']);
 assert.deepEqual(K.filterItems(items, 'dev fix').length, 1);
 assert.equal(K.filterItems(items, '').length, 8); assert.equal(K.filterItems(items, '', 2).length, 2);
 assert.equal(K.filterItems(items, 'zzz').length, 0);
-assert.equal(K.paletteItems({ board: null, sessions: null }).length, 5);
+assert.equal(K.paletteItems({ board: null, sessions: null }).length, 6);  // five pages + Go AFK
 out('keys: paletteItems and filterItems');
 
 const TOAST = await import(new URL('./toast.js', process.env.RUN_URL).href);
@@ -547,7 +547,7 @@ def run_checks():
     js = read(os.path.join(STATIC, "run.js")).decode()
     css = read(os.path.join(STATIC, "app.css")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./fmt.js", "./toast.js", "./ghstatus.js", "./cleanup.js", "./limits.js"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./fmt.js", "./toast.js", "./ghstatus.js", "./cleanup.js", "./limits.js", "./issue.js", "./pr.js"}, specs
     assert not re.search(r"https?://", js), "no absolute URLs"
     assert "console.log" not in js and "debugger" not in js and "innerHTML" not in js.replace("dangerouslySetInnerHTML", "")
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
@@ -937,7 +937,7 @@ def shell_checks():
     css = read(os.path.join(STATIC, "app.css")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
     assert specs, "no imports found"
-    assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./board.js", "./run.js", "./history.js", "./answer.js", "./notify.js", "./launcher.js", "./session.js", "./keys.js", "./toast.js", "./settings.js", "./dispatch.js", "./fmt.js", "./cleanup.js"}, specs
+    assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./board.js", "./run.js", "./history.js", "./answer.js", "./notify.js", "./launcher.js", "./session.js", "./keys.js", "./toast.js", "./settings.js", "./dispatch.js", "./fmt.js", "./cleanup.js", "./issue.js", "./pr.js", "./afk.js"}, specs
     assert not re.search(r"https?://", js), "no absolute URLs"
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
@@ -2258,6 +2258,71 @@ if HISTORY:
     finally:
         srv.shutdown()
         shutil.rmtree(tmp, ignore_errors=True)
+    print(f"{passed} checks passed")
+    sys.exit(0)
+
+
+AFK = sys.argv[1:3] == ["--view", "afk"]
+
+AFK_NODE_JS = r"""
+const assert = (await import('node:assert')).strict;
+const out = (n) => console.log('ok ' + n);
+const { countdownText, untilClock, entryHref, plural, PRESETS } = await import(process.env.AFK_URL);
+const { paletteItems } = await import(process.env.KEYS_URL);
+assert.equal(countdownText(5025), '1:23:45');
+assert.equal(countdownText(725), '12:05');
+assert.equal(countdownText(-3), '0:00');
+out('countdownText');
+const now = new Date(2026, 9, 9, 14, 30);
+assert.equal(untilClock('15:00', now), Math.floor(new Date(2026, 9, 9, 15, 0).getTime() / 1000));
+assert.equal(untilClock('14:30', now), Math.floor(new Date(2026, 9, 10, 14, 30).getTime() / 1000));
+for (const bad of ['', '25:00', '9', 'ab:cd', '12:60']) assert.equal(untilClock(bad, now), null);
+out('untilClock rolls to tomorrow and rejects bad input');
+assert.equal(entryHref({ link: { owner: 'o', repo: 'r', issue: 7 }, sid: 'x' }), '#/run/o/r/7');
+assert.equal(entryHref({ link: null, sid: 'a b' }), '#/session/a%20b');
+assert.equal(entryHref({}), null);
+assert.equal(plural(1, 'decision'), '1 decision');
+assert.equal(plural(3, 'decision'), '3 decisions');
+assert.deepEqual(PRESETS.map((p) => p[0]), [30, 60, 120, 240]);
+out('entryHref, plural, presets');
+const off = paletteItems({ board: null, sessions: [], afk: { active: false } }).find((i) => i.id === 'afk');
+const on = paletteItems({ board: null, sessions: [], afk: { active: true } }).find((i) => i.id === 'afk');
+assert.equal(off.event, 'aiw:afk');
+assert.equal(on.event, 'aiw:afk-back');
+assert.equal(on.label, "I'm back");
+out('palette offers Go AFK or I\'m back');
+"""
+
+
+def afk_checks():
+    import subprocess
+    css = read(os.path.join(STATIC, "app.css")).decode()
+    app = read(os.path.join(STATIC, "app.js")).decode()
+    assert "#7ff0dd" not in css.split(":root", 1)[1].split("}", 1)[1], "accent hover goes through --accent-hover"
+    afk = css[css.index("html[data-afk] {"):]
+    for tok in ("--accent:", "--accent-bg:", "--on-accent:", "--accent-hover:"):
+        assert tok in afk.split("}", 1)[0], tok
+    for sel in (".needs-you", ".strip-wait", ".pcard-attn", ".grind-needs"):
+        assert re.search(r"html\[data-afk\] " + re.escape(sel) + r"[ ,{]", css), sel
+    ok("AFK theme swaps accent tokens and hides needs-you surfaces")
+    assert "toggleAttribute('data-afk'" in app and "headerBadge(offline, afk?.active ? [] : sessions)" in app
+    assert "if (!away) notifyWaiting(s)" in app
+    ok("app.js themes on data-afk and mutes the badge and pings while away")
+    if not shutil.which("node"):
+        print("note: node not found, skipping afk logic checks")
+        return
+    env = dict(os.environ, AFK_URL=pathlib.Path(os.path.join(STATIC, "afk.js")).as_uri(),
+               KEYS_URL=pathlib.Path(os.path.join(STATIC, "keys.js")).as_uri())
+    p = subprocess.run(["node", "--input-type=module", "-e", AFK_NODE_JS], env=env,
+                       capture_output=True, text=True, timeout=60)
+    assert p.returncode == 0, p.stderr[-1500:]
+    for line in p.stdout.splitlines():
+        if line.startswith("ok "):
+            ok(line[3:])
+
+
+if AFK:
+    afk_checks()
     print(f"{passed} checks passed")
     sys.exit(0)
 

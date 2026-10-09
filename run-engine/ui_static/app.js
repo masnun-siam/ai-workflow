@@ -16,6 +16,7 @@ import { CleanupDialog } from './cleanup.js';
 import { IssueDialog } from './issue.js';
 import { PrDialog } from './pr.js';
 import { keyIntent, moveFocus, Palette, Shortcuts } from './keys.js';
+import { AfkControl, AfkSummary, afkPost } from './afk.js';
 
 const html = htm.bind(h);
 
@@ -157,7 +158,7 @@ function View({ route, sessions, limits }) {
 }
 
 export class App extends Component {
-  state = { route: parseRoute(globalThis.location?.hash), sessions: null, limits: {}, commands: [], offline: false, notif: notifyState(), palette: false, sheet: false, cleanup: null, peek: null };
+  state = { route: parseRoute(globalThis.location?.hash), sessions: null, limits: {}, afk: null, commands: [], offline: false, notif: notifyState(), palette: false, sheet: false, cleanup: null, peek: null };
 
   onHash = () => {
     this.setState({ route: parseRoute(location.hash) });
@@ -222,24 +223,43 @@ export class App extends Component {
     addEventListener('keydown', this.onKey);
     addEventListener('aiw:cleanup', this.onCleanup);
     addEventListener('aiw:peek', this.onPeek);
+    addEventListener('aiw:afk-back', this.onAfkBack);
     this.watch = waitingWatcher();
     this.loadCommands();
     this.stop = poll('/api/sessions', 3000, (r) => {
       if (r.ok) {
         const list = sessionList(r.data);
+        this.setAfk((r.data && r.data.afk) || null);
         this.setState({ sessions: list, limits: (r.data && r.data.limits) || {}, offline: false });
         for (const s of list || []) {
           if (this.prev[s.id] === 'limited' && ['starting', 'running'].includes(s.outcome)) toast(`Resumed after limit: ${s.command || 'run'}`);
           this.prev[s.id] = s.outcome;
         }
-        document.title = pageTitle(waitingInfo(list).count);
-        for (const s of this.watch(list)) notifyWaiting(s);
+        const away = !!this.state.afk?.active;  // autopilot handles or holds these; no badge count, no pings
+        document.title = pageTitle(away ? 0 : waitingInfo(list).count);
+        for (const s of this.watch(list)) if (!away) notifyWaiting(s);
       } else {
         this.setState({ offline: true });
         document.title = pageTitle(0);
       }
     }, () => notifyState() === 'granted');
   }
+
+  // The whole app re-themes from one attribute while autopilot is on.
+  setAfk = (afk) => {
+    document.documentElement.toggleAttribute('data-afk', !!afk?.active);
+    this.setState({ afk });
+  };
+
+  onAfkBack = async () => {
+    const r = await afkPost('/stop');
+    if (r) this.setAfk(r);
+  };
+
+  dismissAfk = async () => {
+    const r = await afkPost('/dismiss');
+    if (r) this.setAfk(r);
+  };
 
   enableNotify = async () => this.setState({ notif: await requestNotify() });
 
@@ -249,11 +269,12 @@ export class App extends Component {
     removeEventListener('keydown', this.onKey);
     removeEventListener('aiw:cleanup', this.onCleanup);
     removeEventListener('aiw:peek', this.onPeek);
+    removeEventListener('aiw:afk-back', this.onAfkBack);
     if (this.stop) this.stop();
   }
 
-  render(_, { route, sessions, limits, commands, offline, notif, palette, sheet, cleanup, peek }) {
-    const b = headerBadge(offline, sessions);
+  render(_, { route, sessions, limits, afk, commands, offline, notif, palette, sheet, cleanup, peek }) {
+    const b = headerBadge(offline, afk?.active ? [] : sessions);
     let badge = null;
     if (b?.kind === 'offline') badge = html`<span role="status" class="offline">Offline: retrying</span>`;
     else if (b?.kind === 'waiting') badge = html`<a class="badge waiting" href=${b.href}>${BELL}Waiting on you · ${b.count}</a>`;
@@ -267,13 +288,17 @@ export class App extends Component {
         <span class="spacer"></span>
         <button type="button" class="btn kbd-hint" aria-label="Open command palette" onClick=${() => this.openDialog({ palette: true, sheet: false })}>Search <kbd>⌘K</kbd></button>
         ${limitChips(limits, commands).map((c) => html`<span class=${`chip chip-${c.kind === 'limited' ? 'limited' : 'waiting'}`} role="status">${c.text}</span>`)}
-        ${badge}
+        <${AfkControl} afk=${afk} onChange=${this.setAfk} />
+        ${!afk?.active && badge}
         <a class="icon-btn" href="#/settings" aria-label="Settings" title="Settings" aria-current=${route.name === 'settings' ? 'page' : undefined}>${GEAR}</a>
         ${notif === 'default' && html`<button type="button" class="icon-btn" aria-label="Enable notifications" title="Enable desktop notifications" onClick=${this.enableNotify}>${BELL}</button>`}
         <a class="btn btn--primary" href="#/new" aria-current=${route.name === 'new' ? 'page' : undefined}>New run</a>
       </header>
-      <main><${View} route=${route} sessions=${sessions} limits=${limits} /></main>
-      ${palette && html`<${Palette} sessions=${sessions} onClose=${this.closeDialogs} />`}
+      <main>
+        ${afk?.summary && html`<${AfkSummary} summary=${afk.summary} onDismiss=${this.dismissAfk} />`}
+        <${View} route=${route} sessions=${sessions} limits=${limits} />
+      </main>
+      ${palette && html`<${Palette} sessions=${sessions} afk=${afk} onClose=${this.closeDialogs} />`}
       ${sheet && html`<${Shortcuts} onClose=${this.closeDialogs} />`}
       ${peek && peek.kind === 'issue' && html`<${IssueDialog} key=${`${peek.owner}/${peek.repo}#${peek.n}`} owner=${peek.owner} repo=${peek.repo} issue=${peek.n} onClose=${this.closeDialogs} />`}
       ${peek && peek.kind === 'pr' && html`<${PrDialog} key=${`${peek.owner}/${peek.repo}#${peek.n}`} owner=${peek.owner} repo=${peek.repo} pr=${peek.n} onClose=${this.closeDialogs} />`}

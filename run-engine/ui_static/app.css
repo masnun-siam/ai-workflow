@@ -21,6 +21,7 @@
   --accent: #5eead4;
   --accent-bg: #12302b;
   --on-accent: #06241f;
+  --accent-hover: #7ff0dd;
   --live: #7aa2f7;
   --live-bg: #12263f;
   --waiting: #fbbf24;
@@ -80,7 +81,7 @@ h2 { font-weight: 600; }
 .btn:active, main button:active { transform: translateY(1px); }
 .btn:disabled, main button:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn--primary, main button.primary, main button[type="submit"] { color: var(--on-accent); background: var(--accent); border: 0; font-weight: 600; }
-.btn--primary:hover, main button.primary:hover, main button[type="submit"]:hover { background: #7ff0dd; color: var(--on-accent); }
+.btn--primary:hover, main button.primary:hover, main button[type="submit"]:hover { background: var(--accent-hover); color: var(--on-accent); }
 .btn--danger { color: var(--error); background: var(--error-bg); border-color: var(--error-border); }
 .btn--danger:hover { background: #3a181b; border-color: #9b3a40; color: var(--error); }
 .field, main textarea, main select, main input[type="text"], .launcher input[type="text"], .launcher select, .launcher textarea {
@@ -168,7 +169,7 @@ header a:hover { background: var(--raised); }
 header a[aria-current="page"] { color: var(--fg); background: var(--raised); }
 header a.btn { padding: 0 16px; }
 header a.btn--primary { color: var(--on-accent); background: var(--accent); }
-header a.btn--primary:hover { color: var(--on-accent); background: #7ff0dd; }
+header a.btn--primary:hover { color: var(--on-accent); background: var(--accent-hover); }
 .spacer { flex: 1 1 0; }
 header .icon-btn { width: 44px; padding: 0; justify-content: center; color: var(--muted); }
 header .icon-btn:hover { color: var(--fg); }
@@ -541,7 +542,7 @@ main:has(.dispatch), main:has(.pd) { max-width: 1360px; padding-top: 24px; }
 .dp-new .note, .pd .note { margin: 0; font-size: 12px; }
 .dp-new .error, .pd .error { color: var(--error); margin: 0; }
 .dp-row { display: flex; gap: 10px; align-items: center; }
-.dp-row kbd, .launch-actions kbd { margin-left: 4px; background: rgba(6, 36, 31, 0.25); border-color: rgba(6, 36, 31, 0.35); color: var(--on-accent); }
+.dp-row kbd, .launch-actions kbd { margin-left: 4px; background: color-mix(in srgb, var(--on-accent) 25%, transparent); border-color: color-mix(in srgb, var(--on-accent) 35%, transparent); color: var(--on-accent); }
 .btn-sm, main button.btn-sm { min-height: 32px; padding: 0 10px; font-size: 13px; }
 a.btn.btn-sm { min-height: 32px; padding: 0 10px; font-size: 13px; }
 
@@ -824,3 +825,83 @@ body:has(main .run, main .history, main .dispatch, main .pd) header { padding-in
   header .icon-btn { min-width: 36px; padding: 0 6px; }
   header a.btn--primary { padding: 0 12px; }
 }
+
+/* ---- AFK mode (#178) ---------------------------------------------------------------------
+   One attribute re-themes the app: the accent turns violet, the header takes a night tint, and a
+   line across the top drains as the window runs out. Needs-you surfaces step aside. */
+html[data-afk] {
+  --accent: #a78bfa;
+  --accent-bg: #221a3d;
+  --on-accent: #170f2e;
+  --accent-hover: #c4b5fd;
+  --header: #15121f;
+}
+html[data-afk] header { border-bottom-color: #2e2648; }
+html[data-afk] body::before {
+  content: "";
+  position: fixed;
+  z-index: 60;
+  inset: 0 auto auto 0;
+  width: calc(var(--afk-left, 1) * 100%);
+  height: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+  transition: width 1s linear;
+  pointer-events: none;
+}
+.afk-only { display: none; }
+html[data-afk] .afk-only { display: inline; }
+html[data-afk] .needs-you, html[data-afk] .strip-wait, html[data-afk] .pcard-attn, html[data-afk] .grind-needs { display: none; }
+html[data-afk] .pcard.attn { border-color: var(--border); }
+html[data-afk] .pd-item.attn { border-left-color: var(--accent); background: var(--surface); }
+
+header .afk-btn { color: var(--muted); }
+header .afk-btn:hover { color: var(--fg); }
+header .afk-chip { gap: 10px; color: var(--accent); background: var(--accent-bg); border-color: #3b2f66; }
+header .afk-chip:hover { border-color: var(--accent); }
+.afk-time { color: var(--fg); font-variant-numeric: tabular-nums; }
+.afk-held { color: var(--waiting); font-size: 12px; font-weight: 500; }
+.afk-pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: afk-pulse 2.4s ease-in-out infinite; }
+@keyframes afk-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+.afk-pop {
+  position: fixed;
+  inset: 72px var(--gutter) auto auto;
+  margin: 0;
+  width: min(360px, calc(100vw - 2 * var(--gutter)));
+  padding: 20px;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--border-input);
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+.afk-pop::backdrop { background: transparent; }
+.afk-pop h2 { margin: 0 0 6px; font-size: 16px; }
+.afk-pop .note { margin: 0 0 16px; }
+.afk-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 8px; }
+.afk-row .btn { min-height: 44px; padding: 0 8px; justify-content: center; white-space: nowrap; }
+.afk-until { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.afk-until label { color: var(--muted); }
+.afk-until .field { flex: 1 1 auto; width: auto; min-height: 44px; }
+.afk-until .btn { min-height: 44px; }
+
+.afk-summary { margin-bottom: 20px; border-color: #3b2f66; }
+.afk-sum-top { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.afk-summary h2 { margin: 0 0 4px; font-size: 16px; }
+.afk-summary .note { margin: 0; }
+.afk-log { list-style: none; margin: 16px 0 0; padding: 0; max-height: 320px; overflow-y: auto; border-top: 1px solid var(--border); }
+.afk-log li { display: grid; grid-template-columns: 48px 96px minmax(80px, 140px) minmax(0, 1fr) minmax(0, 220px); gap: 12px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.afk-log time { color: var(--faint); font-size: 12px; }
+.afk-kind { font-size: 12px; font-weight: 500; color: #c4b5fd; }
+.afk-kind.k-retry { color: var(--live); }
+.afk-kind.k-skip-ci { color: var(--waiting); }
+.afk-q { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.afk-pick { color: var(--fg); }
+@media (max-width: 640px) {
+  .afk-pop { inset: auto 0 0 0; width: 100%; border-radius: 12px 12px 0 0; padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+  .afk-log li { grid-template-columns: 48px 1fr; gap: 2px 12px; }
+  .afk-log li > :nth-child(n + 3) { grid-column: 2; }
+  .afk-q { white-space: normal; }
+}
+

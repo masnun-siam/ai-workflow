@@ -101,7 +101,7 @@ function Rail({ run, state }) {
   </div>`;
 }
 
-const StatePill = ({ state }) => html`<span class=${`chip dp-${state}`}>${STATE_LABEL[state] || state}</span>`;
+const StatePill = ({ state }) => html`<span class=${`chip dp-${state}`}>${state === 'waiting' ? html`<span class="needs-you">${STATE_LABEL.waiting}</span><span class="afk-only">Held</span>` : STATE_LABEL[state] || state}</span>`;
 
 // ---- Dispatch: new pipeline + pipeline list -----------------------------------------------------
 
@@ -416,8 +416,8 @@ export class PipelineDetail extends Component {
               <div class="pd-gh">${it.grind && grindLabel(it.grind) && html`<span class=${'chip chip-grind-' + it.grind.state}>${grindLabel(it.grind)}</span>`}${run && it.gh && html`<${GhChips} gh=${it.gh} />`}${run && run.pr && html`<${PrLink} class="chip" url=${run.pr}>PR ↗<//>`}</div>
               <div class="pd-state"><${StatePill} state=${it.state} /></div>
               <div class="pd-acts">
-                ${it.state === 'waiting' && sess && html`<a class="btn btn-sm btn--primary" href=${`#/answer/${encodeURIComponent(sess.id)}`}>Answer</a>`}
-                ${grindStuck && html`<a class="btn btn-sm btn--primary" href=${runHref}>Unblock grind</a>`}
+                ${it.state === 'waiting' && sess && html`<a class="btn btn-sm btn--primary needs-you" href=${`#/answer/${encodeURIComponent(sess.id)}`}>Answer</a>`}
+                ${grindStuck && html`<a class="btn btn-sm btn--primary needs-you" href=${runHref}>Unblock grind</a>`}
                 ${sess && html`<a class="btn btn-sm" href=${`#/session/${encodeURIComponent(sess.id)}`}>Session</a>`}
                 ${ia.includes('retry') && html`<button type="button" class="btn-sm" disabled=${busy} onClick=${() => this.act(`/items/${it.issue}/retry`, {}, `Retrying #${it.issue}`)}>Retry</button>`}
                 ${ia.includes('skip') && html`<button type="button" class="btn-sm" disabled=${busy} onClick=${() => this.act(`/items/${it.issue}/skip`, {}, `Skipped #${it.issue}`)}>Skip</button>`}
