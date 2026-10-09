@@ -3984,4 +3984,32 @@ assert "ask here whether to also save" not in _s6_183, "#183 Step 6 still asks a
 assert "aiw ask" in _s6_183, "#183 Step 6 must keep its aiw ask branch"
 ok("#183 /prd default --to is obsidian; Step 6 asks no destination question")
 
+
+# Issue #184: `→ next:` handoff lines on dump, prd and gh-issue (parsed by the UI stepper).
+NEXT = "\u2192 next: "
+_ws = lambda t: " ".join(t.split())  # noqa: E731  (_n is rebound by loops above)
+_dump184 = _skill_sections("skills/dump/SKILL.md")
+_s5_184 = _ws(_key183(_dump184, "Step 5"))
+for _p in (f"`{NEXT}/prd <feature-folder>`", f"`{NEXT}/gh-issue <note-path>`"):
+    assert _p in _s5_184, f"#184 dump Step 5 lacks {_p}"
+assert re.search(r"new feature.{0,40}change request.{0,80}/prd <feature-folder>", _s5_184, re.I), "#184 dump: prd line routes"
+assert re.search(r"bug report.{0,40}feature-scoped task.{0,80}/gh-issue <note-path>", _s5_184, re.I), "#184 dump: gh-issue line routes"
+assert re.search(r"standalone task.{0,40}meeting notes.{0,40}unclassifiable.{0,60}no `\u2192 next:` line", _s5_184, re.I), \
+    "#184 dump: no line for standalone/meeting/unclassifiable"
+assert "last line of your output" in _s5_184, "#184 dump: next line must be the last line"
+assert "no `\u2192 next:` line" in _ws(_key183(_dump184, "Programmatic invocation")), "#184 dump: programmatic run omits next line"
+ok("#184 /dump Step 5 ends with the routed \u2192 next: line; programmatic runs omit it")
+
+_s8_184 = _ws(_key183(_skill_sections("skills/prd/SKILL.md"), "Step 8"))
+assert f"End with the line `{NEXT}/gh-issue <prd-path>`" in _s8_184, "#184 prd Step 8 lacks the next line"
+assert "offer, in one line" not in _s8_184, "#184 prd Step 8 still has the prose offer"
+ok("#184 /prd Step 8 ends with \u2192 next: /gh-issue <prd-path>")
+
+_close184 = _ws(_read("commands", "gh-issue.md"))
+_close184 = _close184[_close184.rindex("Return the issue URL"):]
+assert f"End with the line `{NEXT}herdr-dispatch <n> <n> \u2026`" in _close184, "#184 gh-issue lacks the next line"
+assert "hand control back to its Preflight step 3" in _close184
+assert _close184.index("hand control back") < _close184.index(NEXT), "#184 hand-back sentence stays first"
+ok("#184 /gh-issue ends with \u2192 next: herdr-dispatch; /run-issue hand-back unchanged")
+
 print(f"\n{passed} checks passed")

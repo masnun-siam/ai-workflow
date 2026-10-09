@@ -111,6 +111,7 @@ new feature or change request, and a completed-run dump as a change request: app
 brief verbatim to `Dump.md` and a dated line per decision to `Decisions.md`, and update
 `PRD.md`/`SRS.md` where the run changed what the feature actually does. Include the issue
 and PR URLs in the `Decisions.md` lines — they're the audit trail back out of the vault.
+Step 5 prints no `→ next:` line here; the calling command owns what happens next.
 
 ## Tagging and linking — applies to every file this skill creates
 
@@ -334,6 +335,14 @@ Tell the user explicitly that this landed in `00-Quick` unsorted and why nothing
 ## Step 5: Report
 
 After writing, give a one-line summary: what type it was classified as, and the exact final path(s) touched. Never end silently.
+
+Then end with the `→ next:` line for the type. It is the last line of your output, byte-for-byte in this form, because the Guided Flow (`/flow`, and the UI's `#/flow` stepper) parses it to start the next stage:
+
+| Type | Final line |
+|---|---|
+| New feature request, change request | `→ next: /prd <feature-folder>` (the `05-Work/<Project>/<Feature>` folder) |
+| Bug report, feature-scoped task | `→ next: /gh-issue <note-path>` (the `Bugs.md` / `Tasks.md` you appended to) |
+| Standalone task, weekly meeting notes, unclassifiable | no `→ next:` line — the flow stops here |
 
 ## Notes
 
