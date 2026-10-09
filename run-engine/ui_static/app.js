@@ -10,6 +10,7 @@ import { History } from './history.js';
 import { Session } from './session.js';
 import { Settings } from './settings.js';
 import { Dispatch, PipelineDetail } from './dispatch.js';
+import { Flow } from './flow.js';
 import { clockText } from './fmt.js';
 import { toast } from './toast.js';
 import { CleanupDialog } from './cleanup.js';
@@ -44,6 +45,10 @@ export function parseRoute(hash) {
   if (a === 'dispatch' && !rest.length) {
     const issues = queryIssues(query);
     return issues.length ? { name: 'dispatch', params: {}, issues } : { name: 'dispatch', params: {} };
+  }
+  if (a === 'flow' && !rest.length) {
+    const get = (k) => query.get(k) || '';
+    return { name: 'flow', params: { repo: get('repo'), folder: get('folder'), prd: get('prd'), issues: queryIssues(query), sid: get('sid') } };
   }
   if (a === 'dispatch' && rest.length === 1 && /^p-\d{14}-[0-9a-f]{6}$/.test(rest[0])) return { name: 'pipeline', params: { id: rest[0] } };
   if (a === 'session' && rest.length === 1 && rest[0]) return { name: 'session', params: { id: rest[0] } };
@@ -118,8 +123,9 @@ export function poll(url, ms, onResult, keepAlive = () => false) {
   };
 }
 
-const NAV = [
+export const NAV = [
   ['board', '#/', 'Board'],
+  ['flow', '#/flow', 'Flow'],
   ['dispatch', '#/dispatch', 'Dispatch'],
   ['sessions', '#/sessions', 'Sessions'],
 ];
@@ -155,6 +161,8 @@ function View({ route, sessions, limits }) {
       return html`<${Launcher} limits=${limits} />`;
     case 'settings':
       return html`<${Settings} />`;
+    case 'flow':
+      return html`<${Flow} key=${JSON.stringify(route.params)} route=${route} />`;
     case 'dispatch':
       return html`<${Dispatch} key=${(route.issues || []).join(',')} issues=${route.issues} />`;
     case 'pipeline':
