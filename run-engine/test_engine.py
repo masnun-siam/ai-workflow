@@ -77,10 +77,10 @@ ok("bounce cap: 2 bounces allowed, the 3rd escalates")
 
 
 # --- 2. bounce to a station outside this run's roster -----------------------
-# In --lean there is no sdet, and run-dev's prompt still says bounce `to: sdet`.
-# That must escalate with the roster named, not blow up on an index lookup.
+# In the default mode there is no sdet, and run-dev's full-mode prompt says bounce
+# `to: sdet`. That must escalate with the roster named, not blow up on an index lookup.
 
-lean = Ledger(41, CONFIG["modes"]["lean"]["stations"], 2)
+lean = Ledger(41, CONFIG["modes"]["default"]["stations"], 2)
 action = Router(2).next(lean, envelope("dev", "bounce", bounce={"to": "sdet", "reason": "bad test"}))
 assert action.kind == RouteAction.ESCALATE, action
 assert "not in this run's roster" in action.reason and "researcher -> planner" in action.reason
@@ -148,7 +148,7 @@ with tempfile.TemporaryDirectory() as tmp:
     assert stale == "", "precondition: the OLD worktree-diff check sees nothing once committed"
 
     subprocess.run(
-        [sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--repo", repo],
+        [sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--repo", repo, "--mode", "full"],
         check=True, capture_output=True,
     )
     subprocess.run(
@@ -277,7 +277,7 @@ def post_check_repo(tmp):
     git("config", "user.email", "a@b"); git("config", "user.name", "a")
     open(os.path.join(repo, "tests", "a.test.js"), "w").write("x\n")
     git("add", "-A"); git("commit", "-qm", "init")
-    subprocess.run([sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--repo", repo],
+    subprocess.run([sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--repo", repo, "--mode", "full"],
                    check=True, capture_output=True)
     subprocess.run([sys.executable, ROUTE, "set", run_dir, "test_root=tests"],
                    check=True, capture_output=True)
@@ -488,6 +488,10 @@ EXPECTED_TEST_OWNERSHIP = _normalize("""
   the guard on the next dev pass and halts the run on a false positive.
 - Phase 7b's dispatch, a `bounce(sdet)`, and phase 8's test-root conflict resolution are
   the only paths that may edit the test root after phase 3.
+- **Default mode** has no SDET: `run-dev` owns its own RED tests, the guard measures from
+  `tests_sha`, and a test-root change is legal only with a `handoff.test_changes[]` reason.
+  Every reason goes into the PR body and the Gate 2 report, so the reviewer and the human
+  see each test that moved.
 - Never use `--no-verify`.
 - If any phase's agent call errors out (not a designed stop, an actual failure), do not
   retry silently more than once — surface it to the user with what failed.
@@ -497,6 +501,79 @@ EXPECTED_TEST_OWNERSHIP = _normalize("""
 assert EXPECTED_TEST_OWNERSHIP == _normalize(full_md[test_ownership_start:test_ownership_end]), \
     "the ### Test ownership section must be unchanged by the exit-6 doc fix"
 ok("### Test ownership section is unchanged")
+
+
+# --- default mode: dev owns its RED tests and its runtime verify ------------
+
+with tempfile.TemporaryDirectory() as tmp:
+    run_dir = os.path.join(tmp, "alias")
+    subprocess.run([sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--mode", "lean"],
+                   check=True, capture_output=True)
+    led = json.load(open(os.path.join(run_dir, "run.json")))
+    assert led["stations"] == CONFIG["modes"]["default"]["stations"] and "sdet" not in led["stations"], led
+    assert led["context"]["mode"] == "default", led["context"]
+ok("--mode lean is an alias of the default roster")
+
+
+def default_mode_repo(tmp):
+    """tests_sha = a RED-tests commit; HEAD = dev's commit that also edits that test."""
+    repo, run_dir = os.path.join(tmp, "repo"), os.path.join(tmp, "run")
+    os.makedirs(os.path.join(repo, "tests"))
+    git = lambda *a: subprocess.run(["git", *a], cwd=repo, check=True, capture_output=True, text=True)
+    git("init", "-q", "-b", "main")
+    git("config", "user.email", "t@t"); git("config", "user.name", "t")
+    open(os.path.join(repo, "README"), "w").write("x\n")
+    git("add", "-A"); git("commit", "-qm", "base")
+    open(os.path.join(repo, "tests", "a.test.js"), "w").write("expect(1).toBe(2)\n")
+    git("add", "-A"); git("commit", "-qm", "red tests")
+    tests_sha = git("rev-parse", "HEAD").stdout.strip()
+    open(os.path.join(repo, "tests", "a.test.js"), "w").write("expect(1).toBe(1)\n")
+    open(os.path.join(repo, "app.js"), "w").write("y\n")
+    git("add", "-A"); git("commit", "-qm", "implement")
+    subprocess.run([sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--repo", repo],
+                   check=True, capture_output=True)
+    subprocess.run([sys.executable, ROUTE, "set", run_dir, "test_root=tests", "stack=failed"],
+                   check=True, capture_output=True)
+    led = json.load(open(os.path.join(run_dir, "run.json")))
+    led["currentIndex"] = led["stations"].index("dev")
+    json.dump(led, open(os.path.join(run_dir, "run.json"), "w"))
+    return repo, run_dir, tests_sha
+
+
+def dev_env(tests_sha, **handoff):
+    return {"issue": 41, "station": "dev", "status": "passed", "attempt": 1, "summary": "done",
+            "evidence": {"commands": [{"cmd": "npm test", "exit": 0, "excerpt": "1 passed"}]},
+            "handoff": {"tests_sha": tests_sha, "files_changed": ["app.js", "tests/a.test.js"],
+                        "verify": {"verdict": "skipped", "reason": "no backend/frontend signal"},
+                        **handoff}}
+
+
+with tempfile.TemporaryDirectory() as tmp:
+    repo, run_dir, tests_sha = default_mode_repo(tmp)
+    proc = route_it(run_dir, repo, "30-build.json", dev_env(tests_sha))
+    assert proc.returncode == 6, f"{proc.returncode}: {proc.stdout}{proc.stderr}"
+    assert proc.stdout.strip() == "bounce(dev)", proc.stdout
+    led = json.load(open(os.path.join(run_dir, "run.json")))
+    assert led["bounceCounts"].get("dev->dev") == 1 and led["context"]["tests_sha"] == tests_sha, led
+ok("default mode: an unjustified edit after tests_sha bounces dev to itself")
+
+with tempfile.TemporaryDirectory() as tmp:
+    repo, run_dir, tests_sha = default_mode_repo(tmp)
+    why = [{"file": "tests/a.test.js", "reason": "the test asserted the wrong constant"}]
+    proc = route_it(run_dir, repo, "30-build.json", dev_env(tests_sha, test_changes=why))
+    assert proc.returncode == 0 and proc.stdout.strip() == "advance(reviewer)", f"{proc.stdout}{proc.stderr}"
+ok("default mode: a test change with a test_changes[] reason passes the guard")
+
+for bad, needle in (({"tests_sha": None}, "tests_sha"),
+                    ({"verify": None}, "handoff.verify"),
+                    ({"verify": {"verdict": "fail", "modes": {}}}, "FAIL")):
+    with tempfile.TemporaryDirectory() as tmp:
+        repo, run_dir, tests_sha = default_mode_repo(tmp)
+        env = dev_env(tests_sha, test_changes=[{"file": "tests/a.test.js", "reason": "r"}])
+        env["handoff"].update(bad)
+        proc = route_it(run_dir, repo, "30-build.json", env)
+        assert proc.returncode == 7 and needle in proc.stderr, (bad, proc.returncode, proc.stderr)
+ok("default mode: dev's post-check refuses a missing tests_sha, a missing verify, and a FAIL verify")
 
 
 print(f"\n{passed} checks passed")

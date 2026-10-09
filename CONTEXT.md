@@ -13,7 +13,7 @@ The persisted state of a Run, stored as `run.json` under the plugin data directo
 _Avoid_: State file, run data
 
 **Station**:
-One stage in the `/run-issue` pipeline (researcher, planner, sdet, dev, verifier, reviewer, fixer, done). A Ledger advances through its Station roster in order; "lean" mode Runs skip the sdet and verifier Stations.
+One stage in the `/run-issue` pipeline (researcher, planner, sdet, dev, verifier, reviewer, fixer, done). A Ledger advances through its Station roster in order; default-mode Runs skip the sdet and verifier Stations (run-dev does both jobs), and only "full" mode Runs include them.
 _Avoid_: Stage, step, phase
 
 **Status** (Ledger):

@@ -177,7 +177,7 @@ dl.gloss dt:last-of-type,dl.gloss dd:last-of-type{border-bottom:0}
       <h2>Try it</h2>
       <div class="copyrow"><pre id="try1">claude plugin marketplace add &lt;path-to-this-repo&gt;
 claude plugin install ai-workflow@ai-workflow</pre><button class="btn" data-copy="try1">Copy</button></div>
-      <div class="copyrow"><pre id="try2">/ai-workflow:run-issue 42 --lean</pre><button class="btn" data-copy="try2">Copy</button></div>
+      <div class="copyrow"><pre id="try2">/ai-workflow:run-issue 42</pre><button class="btn" data-copy="try2">Copy</button></div>
       <p class="hint">Needs an authenticated <code>gh</code> CLI and Python 3.10+. Docker, Slack, GitNexus and Obsidian are optional extras. The README is written so you can hand the repo to Claude Code and say "set this up".</p>
     </div>
   </div>
@@ -238,7 +238,7 @@ claude plugin install ai-workflow@ai-workflow</pre><button class="btn" data-copy
       <tr><td>type</td><td><code>bug</code>, <code>enhancement</code>, <code>feature</code> or <code>chore</code>.</td></tr>
       <tr><td>scope</td><td><code>backend</code>, <code>frontend</code> or <code>infra</code>, as applicable.</td></tr>
       <tr><td><code>prd-&lt;slug&gt;</code></td><td>Groups the issues that came from one task list.</td></tr>
-      <tr><td><code>lean</code></td><td>Tells <code>/run-issue</code> to use the short roster. Applied only to single issues, and only when every condition holds: one shippable outcome, about one to two files or symbols, no new dependency, no new public API, and none of auth, data migration, payments or a public contract change. Any doubt means no label.</td></tr>
+      <tr><td><code>lean</code></td><td>Deprecated: <code>/run-issue</code> now treats it as the default roster. Applied only to single issues, and only when every condition holds: one shippable outcome, about one to two files or symbols, no new dependency, no new public API, and none of auth, data migration, payments or a public contract change. Any doubt means no label.</td></tr>
     </table></div>
   </div>
 
@@ -341,17 +341,17 @@ Depends on: task 1   becomes   #101</pre>
   </div>
 
   <div class="block">
-    <h2>Full mode vs lean mode</h2>
-    <p>Full mode is the default. Lean mode is picked automatically for issues labelled <code>lean</code>, or with <code>--lean</code>. The CI gate applies to both.</p>
+    <h2>Default mode vs full mode</h2>
+    <p>Default mode runs unless you pass <code>--full</code> or the issue is labelled <code>full</code>. <code>--lean</code> and the <code>lean</code> label are old names for default. The CI gate applies to both. A <code>refined</code> issue that passes <code>aiw refined</code> also skips the researcher and planner.</p>
     <div class="tbl"><table>
-      <tr><th>Station</th><th class="c">Full</th><th class="c">Lean</th></tr>
+      <tr><th>Job</th><th class="c">Default</th><th class="c">Full</th></tr>
       <tr><td>Researcher, planner</td><td class="c">yes</td><td class="c">yes</td></tr>
-      <tr><td>SDET (failing tests first)</td><td class="c">yes</td><td class="c">no</td></tr>
-      <tr><td>Dev</td><td class="c">yes</td><td class="c">yes</td></tr>
-      <tr><td>Verifier (runtime check)</td><td class="c">yes</td><td class="c">no</td></tr>
-      <tr><td>Reviewer</td><td class="c">yes</td><td class="c">yes</td></tr>
-      <tr><td>Specialist reviewers</td><td class="c">yes</td><td class="c">no</td></tr>
-      <tr><td>Fixer, CI gate</td><td class="c">yes</td><td class="c">yes</td></tr>
+      <tr><td>Failing tests first</td><td class="c">run-dev</td><td class="c">run-sdet</td></tr>
+      <tr><td>Implementation</td><td class="c">run-dev</td><td class="c">run-dev</td></tr>
+      <tr><td>Runtime check</td><td class="c">run-dev</td><td class="c">run-verifier</td></tr>
+      <tr><td>Reviewer, specialist reviewers</td><td class="c">yes</td><td class="c">yes</td></tr>
+      <tr><td>Applying review findings</td><td class="c">run-dev</td><td class="c">run-fixer</td></tr>
+      <tr><td>CI gate</td><td class="c">yes</td><td class="c">yes</td></tr>
     </table></div>
   </div>
 
@@ -530,7 +530,7 @@ const I = {
  grinder:{n:"run-grinder",k:"Agent",m:"sonnet",a:"Posts to Slack, edits nothing",p:"agents/run-grinder.md",o:"Opens and closes the Slack review cycle.",t:"<p>Posts the reviewer-bot trigger with the PR link, returns the thread URL, and posts the final mention. Never loops, merges or edits files.</p>"},
  lessons:{n:"run-lessons",k:"Agent",m:"opus",a:"Appends to tasks/lessons.md",p:"agents/run-lessons.md",o:"Records lessons that are backed by evidence.",t:"<p>Every lesson must cite a <code>file:line</code> or a review-comment id. Never rewrites or deletes existing lessons. Never commits.</p>"},
  // commands / skills
- runissue:{n:"/run-issue",k:"Command",m:"orchestrator",a:"Drives the whole pipeline",p:"commands/run-issue.md",o:"Issue number in, reviewed PR out.",t:"<p>Usage: <code>/ai-workflow:run-issue &lt;n|url|text&gt; [--lean|--full]</code>. About 1,350 lines of instructions across phases 0 to 10, plus Epic mode. Stops for you exactly three times.</p>"},
+ runissue:{n:"/run-issue",k:"Command",m:"orchestrator",a:"Drives the whole pipeline",p:"commands/run-issue.md",o:"Issue number in, reviewed PR out.",t:"<p>Usage: <code>/ai-workflow:run-issue &lt;n|url|text&gt; [--full]</code>. About 1,350 lines of instructions across phases 0 to 10, plus Epic mode. Stops for you exactly three times.</p>"},
  issue2pr:{n:"/issue-to-pr",k:"Command",m:"interactive",a:"Asks before commit, push, PR",p:"commands/issue-to-pr.md",o:"The hands-on variant of run-issue.",t:"<p>Interviews you, plans, executes, pauses for a manual end-to-end test, and asks before committing. Not meant for unattended use.</p>"},
  intake:{n:"/intake · /prd",k:"Command + skill",a:"Writes a brief or a PRD",p:"commands/intake.md, skills/prd/SKILL.md",o:"Turns rough input into something buildable.",t:"<p><b>/intake</b> normalises a Sentry URL, requirements file, Obsidian note or free text into a brief ready for an issue.</p><p><b>/prd</b> (new in 1.9.0) scans the codebase, interviews you, and saves a PRD to <code>docs/prd/&lt;slug&gt;.md</code>, the vault and/or the GitHub wiki. The next step is <code>/gh-issue</code>.</p>"},
  ghissue:{n:"/gh-issue",k:"Command",a:"Creates GitHub issues",p:"commands/gh-issue.md",o:"Files issues with codebase context.",t:"<p>Always splits the request into tasks first. One task becomes one issue. Two or more are saved to <code>docs/tasks/&lt;slug&gt;.md</code> and filed as flat issues labelled <code>prd-&lt;slug&gt;</code>, ordered by <code>Depends on: #n</code> lines. Bodies use What / Why / How and get the <code>refined</code> label, plus <code>lean</code> when it qualifies.</p>"},
@@ -610,7 +610,7 @@ const GLOSS=[
  ["project","A friendly name for an owner/repo, from skills/worklog/projects.json."],
  ["dor","Definition of Ready. Six items an issue is scored against before a pipeline is spent on it: problem and why, scope, acceptance criteria, affected surface, non-functional constraints, dependencies. Advisory only."],
  ["tasklist","The approved breakdown of a request into small single-layer tasks, saved as docs/tasks/<slug>.md when there are two or more."],
- ["lean","A label on small, well-specified issues that makes /run-issue use the short roster."],
+ ["lean","Deprecated alias of the default /run-issue roster. Use the full label to force the seven-station roster."],
  ["board","The kanban view: one column per Station, one card per issue from its latest run."]
 ];
 const GN={station:"Station",run:"Run",ledger:"Ledger",envelope:"Envelope",postcheck:"Post-check",bounce:"Bounce",escalated:"Escalated",status:"Status",classification:"Classification",testroot:"Test root",worktree:"Worktree",degraded:"Degraded finish",epic:"Epic",grind:"Grind",rail:"Rail",fingerprint:"Fingerprint",project:"Project",board:"Board / Card",dor:"Definition of Ready",tasklist:"Task list",lean:"Lean label"};
