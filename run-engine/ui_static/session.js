@@ -6,7 +6,7 @@ import { runLink, runHash } from './answer.js';
 import { shortRepo, toolSummary } from './fmt.js';
 import { LimitBanner } from './limits.js';
 import { Linked } from './linked.js';
-import { continueFlow, flowLink } from './flow.js';
+import { flowLink } from './flow.js';
 
 export { toolSummary };
 
@@ -153,7 +153,7 @@ export class Session extends Component {
           </div>
           <span class=${`chip chip-${meta.outcome}`}>${meta.outcome}</span>
           ${link && html`<a class="btn" href=${runHash(meta)}>Open run</a>`}
-          ${flowLink(meta) && html`<a class="btn" href=${flowLink(meta)} onClick=${(e) => continueFlow(e, meta)}>Continue in Flow</a>`}
+          ${flowLink(meta) && html`<a class="btn" href=${flowLink(meta)}>Continue in Flow</a>`}
           ${meta.outcome === 'waiting' && html`<a class="btn btn--primary" href=${`#/answer/${encodeURIComponent(meta.id)}`}>Answer</a>`}
           ${retry && html`<span role="status" class="offline">Retrying…</span>`}
         </div>

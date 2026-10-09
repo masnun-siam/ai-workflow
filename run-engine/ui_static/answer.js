@@ -2,7 +2,6 @@ import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { toast } from './toast.js';
 import { mdToHtml } from './run.js';
-import { loadFlow } from './flowstore.js';
 
 const html = htm.bind(h);
 const MAX_OTHER = 4000;
@@ -66,11 +65,11 @@ export function runHash(session) {
   return l ? `#/run/${encodeURIComponent(l.owner)}/${encodeURIComponent(l.repo)}/${l.n}` : '#/sessions';
 }
 
-// Where answering lands: the run for /run-issue, Flow when the saved flow is waiting on this
-// session, otherwise the session itself (its transcript shows the answer being picked up).
-export function doneHash(session, flow = loadFlow(globalThis.localStorage)) {
+// Where answering lands: the run for /run-issue, the flow a Flow session belongs to, otherwise
+// the session itself (its transcript shows the answer being picked up).
+export function doneHash(session) {
   if (runLink(session)) return runHash(session);
-  if (session && session.id && flow && flow.sid === session.id) return '#/flow';
+  if (session && session.flow_id) return `#/flow/${encodeURIComponent(session.flow_id)}`;
   return session && session.id ? `#/session/${encodeURIComponent(session.id)}` : '#/sessions';
 }
 

@@ -686,19 +686,45 @@ assert.equal(F.dispatchHref([12, 13]), '#/dispatch?issues=12,13');
 assert.deepEqual(parseRoute(F.dispatchHref([12, 13])).issues, [12, 13]);
 out('flow: flowHash round-trips through parseRoute; dispatch link carries the issues');
 assert.equal(F.flowProgress(null), null);
-assert.equal(F.flowProgress({ repo: 'o/r', text: 'a draft' }), null);
-assert.deepEqual(F.flowProgress({ sid: 's1' }), { done: 0, total: 4 });
-assert.deepEqual(F.flowProgress({ folder: 'f', prd: 'p' }), { done: 2, total: 4 });
-assert.deepEqual(F.flowProgress({ prd: 'p', issues: '4 5' }), { done: 3, total: 4 });
-const mem = new Map(); const store = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v), removeItem: (k) => mem.delete(k) };
-F.saveFlow(store, { repo: 'o/r', prd: 'p' }); assert.deepEqual(F.loadFlow(store), { repo: 'o/r', prd: 'p' });
-F.clearFlow(store); assert.equal(F.loadFlow(store), null);
-mem.set('aiw.flow', '{not json'); assert.equal(F.loadFlow(store), null);
+assert.equal(F.flowProgress({ step: 'dump', running: false }), null);
+assert.deepEqual(F.flowProgress({ step: 'dump', running: true }), { done: 0, total: 4 });
+assert.deepEqual(F.flowProgress({ step: 'issues', running: false }), { done: 2, total: 4 });
+assert.deepEqual(F.flowProgress({ step: 'dispatch', running: false }), { done: 3, total: 4 });
+assert.equal(F.sessionStep('/ai-workflow:gh-issue PRD.md'), 'issues');
+assert.equal(F.sessionStep('/dump x'), 'dump');
+assert.equal(F.sessionStep('/dumpster'), null);
 assert.equal(F.flowLink({ id: 's1', repo: '/x/y', command: '/ai-workflow:gh-issue PRD.md' }), '#/flow?repo=%2Fx%2Fy&sid=s1');
-assert.equal(F.flowLink({ id: 's1', repo: 'o/r', command: '/prd' }), '#/flow?repo=o%2Fr&sid=s1');
+assert.equal(F.flowLink({ id: 's1', repo: 'o/r', command: '/prd', flow_id: 'f-20261010000000-abcdef' }), '#/flow/f-20261010000000-abcdef');
 assert.equal(F.flowLink({ id: 's1', repo: 'o/r', command: '/run-issue 7' }), null);
 assert.equal(F.flowLink({ id: 's1', repo: 'o/r', command: '/dumpster' }), null);
-out('flow: saved flow round-trips, drafts are not progress, Continue in Flow only for dump/prd/gh-issue');
+assert.equal(parseRoute('#/flow/f-20261010000000-abcdef').params.id, 'f-20261010000000-abcdef');
+assert.equal(parseRoute('#/flow/new').params.id, 'new');
+assert.equal(parseRoute('#/flow/../x').name, 'notfound');
+out('flow: nav progress from a summary, session step, Continue in Flow opens the session\'s own flow, #/flow/<id> routes');
+const sv = (o) => F.sideView({ view: null, at: 0, runStep: null, folder: '', prd: '', ...o });
+assert.equal(sv({}), null);
+assert.deepEqual(sv({ runStep: 'dump' }), { kind: 'filing' });
+assert.deepEqual(sv({ at: 1, folder: '05-Work/P/F/' }), { kind: 'note', path: '05-Work/P/F/Dump.md' });
+assert.deepEqual(sv({ at: 1, runStep: 'prd', folder: '05-Work/P/F' }), { kind: 'note', path: '05-Work/P/F/PRD.md', stale: true });
+assert.deepEqual(sv({ at: 2, folder: 'f', prd: 'f/PRD.md' }), { kind: 'note', path: 'f/PRD.md' });
+assert.deepEqual(sv({ at: 3, prd: 'f/PRD.md' }), { kind: 'issues' });
+assert.deepEqual(sv({ at: 3, view: 'dump', folder: 'f' }), { kind: 'note', path: 'f/Dump.md' });
+out('flow: the right column shows the running step, else the last done one, else the step clicked on the rail');
+const FS = await import(process.env.APP_URL.replace('app.js', 'flowside.js'));
+const now = 1_800_000_000_000;
+assert.deepEqual([30, 300, 7200, 200000].map((s) => FS.ago(now / 1000 - s, now)), ['now', '5m', '2h', '2d']);
+assert.deepEqual(FS.issueTrack('fixing', false), { on: 2, now: 2, tone: 'warn', label: 'fixing…' });
+assert.equal(FS.issueTrack('checked', true).on, 4);
+assert.equal(FS.issueTrack('created', true).label, 'done');
+assert.deepEqual(FS.issueTrack('checking', true), { on: 4, now: null, label: 'done' });
+assert.equal(FS.issueTrack('failed', true).tone, 'error');
+assert.equal(FS.stripFrontmatter('---\ntags: [a]\n---\n# T\n'), '# T\n');
+assert.equal(FS.stripFrontmatter('# no fm'), '# no fm');
+assert.deepEqual(FS.mergeRows({ reading: false, rows: [{ number: 64, title: 'A', state: 'checked' }] }, [64, 65]).rows,
+  [{ number: 64, title: 'A', state: 'checked' }, { number: 65, title: '', state: 'created' }]);
+assert.equal(FS.mergeRows(null, [7]).reading, false);
+assert.equal(FS.mergeRows(null, []).reading, true);
+out('flowside: relative time, issue track states, frontmatter stripped');
 
 const D = await import(process.env.APP_URL.replace('app.js', 'dispatch.js'));
 assert.equal(D.hasUrl('see https://github.com/o/r/issues?q=x'), true);
@@ -950,11 +976,10 @@ out('submitAnswer network/non-JSON errors resolve ok:false');
 
 const L = { owner: 'o w', repo: 'r', issue: 5 };
 assert.equal(runHash({ link: L }), '#/run/' + encodeURIComponent('o w') + '/r/5');
-assert.equal(doneHash({ id: 's1', link: L }, { sid: 's1' }), runHash({ link: L }));
-assert.equal(doneHash({ id: 's1' }, { sid: 's1' }), '#/flow');
-assert.equal(doneHash({ id: 's 2' }, { sid: 's1' }), '#/session/s%202');
-assert.equal(doneHash({ id: 's1' }, null), '#/session/s1');
-assert.equal(doneHash(undefined, null), '#/sessions');
+assert.equal(doneHash({ id: 's1', link: L, flow_id: 'f-1' }), runHash({ link: L }));
+assert.equal(doneHash({ id: 's1', flow_id: 'f-20261010000000-abcdef' }), '#/flow/f-20261010000000-abcdef');
+assert.equal(doneHash({ id: 's 2' }), '#/session/s%202');
+assert.equal(doneHash(undefined), '#/sessions');
 out('doneHash: run, then the flow waiting on it, then the session itself');
 for (const bad of [{}, null, { link: { owner: 'o', repo: 'r', issue: 0 } }, { link: { owner: 'o', repo: 'r', issue: 1.5 } },
   { link: { owner: 'o', repo: 'r', issue: '5' } }, { link: { owner: 'o' } }]) assert.equal(runHash(bad), '#/sessions');
@@ -1019,9 +1044,9 @@ def shell_checks():
     assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./board.js", "./run.js", "./history.js", "./answer.js", "./notify.js", "./launcher.js", "./session.js", "./keys.js", "./toast.js", "./settings.js", "./dispatch.js", "./fmt.js", "./cleanup.js", "./issue.js", "./pr.js", "./afk.js", "./flow.js"}, specs
     fjs = read(os.path.join(STATIC, "flow.js")).decode()
     fspecs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", fjs)
-    assert fspecs and set(fspecs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./launcher.js", "./dispatch.js", "./answer.js", "./flowstore.js"}, fspecs
+    assert fspecs and set(fspecs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./launcher.js", "./dispatch.js", "./answer.js", "./flowside.js"}, fspecs
     assert "innerHTML" not in fjs and "console.log" not in fjs
-    ok("flow.js imports only preact, htm, app.js, launcher.js, dispatch.js, answer.js and flowstore.js; no innerHTML")
+    ok("flow.js imports only preact, htm, app.js, launcher.js, dispatch.js, answer.js and flowside.js; no innerHTML")
     assert not re.search(r"https?://", js), "no absolute URLs"
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
@@ -1780,7 +1805,7 @@ def answer_checks():
     app = read(os.path.join(STATIC, "app.js")).decode()
     css = read(os.path.join(STATIC, "app.css")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./toast.js", "./run.js", "./flowstore.js"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./toast.js", "./run.js"}, specs
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
     names = {x.split(" as ")[-1].strip() for x in exports.split(",")}

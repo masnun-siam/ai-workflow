@@ -933,11 +933,76 @@ header .afk-chip:hover { border-color: var(--accent); }
 textarea.flow-prose { font-family: var(--font); font-size: 14px; line-height: 1.5; }
 .flow-step button.primary, .flow-step .btn--primary { justify-self: start; margin-top: 4px; text-decoration: none; }
 .flow-step .error { color: var(--error); margin: 0; }
-/* Wide screens: the session's question gets the column beside the steps, sticky while you scroll */
-.flow.flow--ask { max-width: none; display: grid; grid-template-columns: minmax(0, 680px) minmax(420px, 1fr); gap: 32px; align-items: start; }
-.flow-ask { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; border-color: var(--waiting-border); padding: 24px; }
-.flow-ask h2 { margin: 0 0 4px; font-size: 16px; color: var(--waiting); }
+/* The right column: a waiting question first, else the selected step's output. Beside the steps
+   from 1200px (sticky while you scroll), below them on narrower screens. */
+.flow-top .flow-actions { display: flex; gap: 8px; }
+.flow.flow--side { max-width: none; display: grid; grid-template-columns: minmax(0, 680px) minmax(420px, 1fr); gap: 32px; align-items: start; }
+.flow-side { padding: 24px; min-width: 0; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; }
+@media (max-width: 1199px) {
+  .flow.flow--side { display: block; max-width: 760px; }
+  .flow-side { position: static; max-height: none; margin-top: 24px; }
+}
+.flow-ask { border-color: var(--waiting-border); }
+.flow-ask-h { margin: 0 0 4px; font-size: 16px; color: var(--waiting); }
 .flow-ask .answer-form.answer-inline { margin-top: 0; padding-top: 12px; border-top: 0; }
+
+/* Done steps on the rail are buttons that pick what the right column shows */
+.flow-name .flow-name-btn { min-height: 0; padding: 0; border: 0; border-radius: 2px; background: none; font: inherit; color: inherit;
+  text-decoration: underline dotted var(--faint); text-underline-offset: 5px; }
+.flow-name .flow-name-btn:hover { background: none; border: 0; color: var(--fg); text-decoration-color: var(--fg); }
+.flow-name .flow-name-btn[aria-pressed="true"] { color: var(--accent); text-decoration: underline solid var(--accent); }
+
+/* A note from the vault, read-only: a calm reading measure, the full path for orientation */
+.flow-doc-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 14px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+.flow-doc-head h2 { margin: 0; font-size: 16px; color: var(--fg); }
+.flow-doc-head p { margin: 4px 0 0; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.flow-doc-body { font-size: 15px; line-height: 1.65; max-width: 68ch; }
+.flow-doc-body h1 { font-size: 20px; } .flow-doc-body h2 { font-size: 17px; } .flow-doc-body h3 { font-size: 15px; }
+.flow-doc-body ul, .flow-doc-body ol { padding-left: 22px; }
+.flow-sent { margin: 0; padding: 4px 0 4px 14px; border-left: 2px solid var(--border-input); color: var(--body); white-space: pre-wrap; line-height: 1.6; }
+
+/* Issue rows: each issue's own small rail (created, fact-checked, checked or fixed, done) */
+.fi-rows { list-style: none; margin: 0; padding: 0; }
+.fi-row { display: grid; grid-template-columns: 56px minmax(0, 1fr) 64px 104px; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid var(--border); }
+.fi-row:first-child { border-top: 0; }
+.fi-num { font: 500 13px var(--mono); color: var(--muted); }
+.fi-num a { color: var(--fg); }
+.fi-title { color: var(--fg); overflow-wrap: anywhere; }
+.fi-reading .fi-title, .fi-reading .fi-num { color: var(--muted); }
+.fi-track { display: flex; gap: 3px; }
+.fi-track i { flex: 1; height: 4px; border-radius: 2px; background: var(--border-input); }
+.fi-track i.on { background: var(--accent); }
+.fi-track i.now.live { background: var(--live); }
+.fi-track i.now.warn { background: var(--waiting); }
+.fi-track i.now.error { background: var(--error-dot); }
+.fi-state { font-size: 13px; color: var(--muted); }
+.fi-state.warn { color: var(--waiting); }
+.fi-state.error { color: var(--error); }
+@media (max-width: 560px) {
+  .fi-row { grid-template-columns: 48px minmax(0, 1fr); row-gap: 6px; }
+  .fi-track { grid-column: 2; width: 64px; }
+  .fi-state { grid-column: 2; }
+}
+
+/* Flows switcher: previous flows, newest first */
+.fs { position: relative; }
+.fs-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; width: min(420px, calc(100vw - 32px)); max-height: 60vh; overflow-y: auto;
+  padding: 6px; background: var(--surface); border: 1px solid var(--border-input); border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45); }
+.fs-pop > .note { margin: 8px 10px; }
+.fs-rows { list-style: none; margin: 0; padding: 0; }
+.fs-row { display: flex; align-items: center; gap: 4px; border-radius: 6px; }
+.fs-row:hover, .fs-row:focus-within { background: var(--raised); }
+.fs-row > a { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; row-gap: 2px; padding: 9px 10px; color: var(--fg); text-decoration: none; }
+.fs-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fs-row.current .fs-name::after { content: " ✓"; color: var(--accent); }
+.fs-row.archived .fs-name { color: var(--muted); }
+.fs-meta { display: flex; gap: 10px; font-size: 12px; color: var(--muted); }
+.fs-meta time { color: var(--faint); }
+.fs-repo { grid-column: 1 / -1; font-size: 12px; color: var(--faint); }
+.fs-row .fs-archive { min-height: 32px; padding: 0 10px; font-size: 12px; color: var(--muted); background: none; border-color: transparent; opacity: 0; }
+.fs-row:hover .fs-archive, .fs-row:focus-within .fs-archive { opacity: 1; }
+@media (hover: none) { .fs-row .fs-archive { opacity: 1; } }
+.fs-show { display: flex; margin: 6px 10px 4px; font-size: 13px; color: var(--muted); }
 .answer-inline legend { white-space: pre-line; line-height: 1.55; font-weight: 500; color: var(--fg); max-width: 72ch; }
 /* A long question can't sit on a fieldset border, so legends float as plain blocks and questions are split by a rule */
 .answer-form.answer-inline fieldset { border: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
