@@ -3913,4 +3913,56 @@ assert re.search(r"\b25\b", _co104), "#104 Consequences lacks task 25"
 assert re.search(r"interactive", _t104, re.I) and re.search(r"unchanged", _t104, re.I), "#104 interactive unchanged"
 ok("#104 ADR pr-grind headless re-entry")
 
+# --------------------------------------------------------------------------- #183 /prd fills dump's seed
+
+
+def _skill_sections(rel: str) -> dict:
+    with open(os.path.join(HERE, "..", *rel.split("/")), encoding="utf-8") as fh:
+        text = fh.read()
+    parts = re.split(r"^(#{2,3} .*)$", text, flags=re.M)
+    return {parts[i].lstrip("# ").strip(): parts[i + 1] for i in range(1, len(parts) - 1, 2)}
+
+
+_dump183 = _skill_sections("skills/dump/SKILL.md")
+_prd183 = _skill_sections("skills/prd/SKILL.md")
+_key183 = lambda secs, pre: next(v for k, v in secs.items() if k.startswith(pre))  # noqa: E731
+
+# AC1: new-feature route marks the seeded PRD.md as a seed.
+_nf183 = _dump183["Step 4: File it"].split("**Change request**")[0]
+assert re.search(r'property:set path="05-Work/<Project>/<Feature>/PRD\.md" name=status value=seed', _nf183), \
+    "#183 dump New feature route must set status=seed on PRD.md"
+assert "/prd" in _nf183, "#183 dump New feature route must say the marker tells /prd it is a seed"
+ok("#183 dump New feature route sets status: seed on the seeded PRD.md")
+
+# AC2: /prd takes a feature folder, accepts a seed, fills it and flips to draft.
+_args183 = _prd183["Arguments"]
+assert "05-Work/<Project>/<Feature>" in _args183 and "feature-folder" in _args183, "#183 Arguments lacks /prd <feature-folder>"
+_s1_183 = _key183(_prd183, "Step 1")
+assert "Dump.md" in _s1_183 and "PRD.md" in _s1_183 and "feature folder" in _s1_183, "#183 Step 1 lacks feature-folder branch"
+assert _s1_183.index("Dump.md") < _s1_183.index("/intake"), "#183 feature-folder branch must precede the /intake routing"
+_s2_183 = _key183(_prd183, "Step 2")
+assert "status: seed" in _s2_183 and "not a collision" in _s2_183, "#183 Step 2 lacks the seed exception"
+_s7_183 = _key183(_prd183, "Step 7")
+assert "overwrite" in _s7_183 and "status" in _s7_183 and "draft" in _s7_183 and "seed" in _s7_183, \
+    "#183 Step 7 must overwrite the seed and set status: draft"
+assert "stop and ask" in _s2_183.split("For Obsidian, also resolve")[1], "#183 Step 2 must ask when no project resolves"
+ok("#183 /prd feature-folder input, seed exception, overwrite + status: draft")
+
+# AC3: anything that is not a seed still stops and asks.
+assert "**stop and ask the user**" in _s2_183 and "Never overwrite silently" in _s2_183, "#183 Step 2 lost stop-and-ask"
+assert re.search(r"any other existing PRD|not .{0,20}seed", _s2_183), "#183 Step 2 must say non-seed PRDs still stop"
+assert re.search(r"property:read path=.{0,60}PRD\.md. name=status", _s2_183) and "exactly `seed`" in _s2_183, \
+    "#183 Step 2 must name how the seed status is read (property:read, exactly seed)"
+assert re.search(r"Anything else.{0,220}still stops here", _s2_183), "#183 Step 2: anything other than seed must still stop"
+ok("#183 /prd on a non-seed PRD still stops and asks")
+
+# AC4: default --to is obsidian only; Step 6 no longer asks about extra destinations.
+_a4_183 = next(l for l in _args183.splitlines() if l.startswith("- `--to`"))
+assert "Default `obsidian`" in _a4_183 and "Default `local`" not in _a4_183, "#183 default --to must be obsidian"
+assert "(Step 6)" not in _a4_183, "#183 Arguments must not defer a destination question to Step 6"
+_s6_183 = _key183(_prd183, "Step 6")
+assert "ask here whether to also save" not in _s6_183, "#183 Step 6 still asks about extra destinations"
+assert "aiw ask" in _s6_183, "#183 Step 6 must keep its aiw ask branch"
+ok("#183 /prd default --to is obsidian; Step 6 asks no destination question")
+
 print(f"\n{passed} checks passed")
