@@ -287,7 +287,7 @@ plugin upgrades** — in-flight runs are not lost when you update.
 ```
 commands/     run-issue (the orchestrator) + 5 intake commands
 agents/       12 run-* pipeline agents + ship, worklog-runner, gh-issue-factchecker
-skills/       pr-review, pr-grind, worklog, dump, 7 Laravel reviewers
+skills/       pr-review, pr-grind, herdr-dispatch, worklog, dump, 7 Laravel reviewers
 run-engine/   engine.py (pure) · route.py (CLI) · checks.py (station post-checks)
               stack/worktree/threads/pr/ci/gitnexus/project/epic (mechanical phases)
               config.json (policy) · test_engine.py + test_scripts.py

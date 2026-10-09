@@ -3913,6 +3913,25 @@ assert re.search(r"\b25\b", _co104), "#104 Consequences lacks task 25"
 assert re.search(r"interactive", _t104, re.I) and re.search(r"unchanged", _t104, re.I), "#104 interactive unchanged"
 ok("#104 ADR pr-grind headless re-entry")
 
+# --- #185: herdr-dispatch skill lives in the plugin -------------------------
+_hd185 = os.path.join(HERE, "..", "skills", "herdr-dispatch")
+for _f in ("SKILL.md", "scripts/resolve.sh", "scripts/poll.sh"):
+    assert os.path.isfile(os.path.join(_hd185, _f)), "#185 missing skills/herdr-dispatch/" + _f
+for _f in ("resolve.sh", "poll.sh"):
+    _p185 = os.path.join(_hd185, "scripts", _f)
+    assert os.access(_p185, os.X_OK), "#185 not executable: " + _f
+    assert subprocess.run(["bash", "-n", _p185]).returncode == 0, "#185 bash -n failed: " + _f
+_t185 = open(os.path.join(_hd185, "SKILL.md"), encoding="utf-8").read()
+assert "`aiw paths`" in _t185 and "Paths." in _t185, "#185 SKILL.md lacks the aiw paths placeholder note"
+assert "name: herdr-dispatch" in _t185, "#185 frontmatter name changed"
+_pre185 = "<plugin_root>/skills/herdr-dispatch/"
+for _f in ("resolve.sh", "poll.sh"):
+    assert "bash " + _pre185 + "scripts/" + _f in _t185, "#185 SKILL.md does not call " + _f + " via plugin_root"
+# structural: every `scripts/` reference must be preceded by the plugin_root prefix
+for _m in re.finditer(r"scripts/", _t185):
+    assert _t185[max(0, _m.start() - len(_pre185)):_m.start()] == _pre185, "#185 bare relative scripts/ ref at offset %d" % _m.start()
+ok("#185 herdr-dispatch skill in plugin")
+
 # --------------------------------------------------------------------------- #183 /prd fills dump's seed
 
 
