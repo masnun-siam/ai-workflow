@@ -58,6 +58,93 @@ export function comboOptions(repos, query) {
   return out;
 }
 
+// The repo combobox shared by New run and Flow: one input that filters repos as you type, also
+// takes an absolute path, plus the native folder picker. It is a render helper, not a component,
+// so its state (repo, manual, path, repoQuery, repoOpen, repoActive, browsing) lives on the host
+// and the host's own render tree contains the input. onPick runs after a repo or path is chosen.
+export function repoCombo(host, onPick = () => {}) {
+  const pick = (opt) => {
+    const patch = opt.kind === 'repo' ? { repo: opt.value, manual: false }
+      : opt.kind === 'path' ? { manual: true, path: opt.path } : { manual: true, path: '' };
+    host.setState({ ...patch, repoQuery: opt.kind === 'other' ? '' : null, repoOpen: false }, onPick);
+  };
+  // Native folder dialog opened by the server on this Mac; the server still validates the git checkout.
+  const browse = async () => {
+    const s = host.state;
+    const start = s.manual ? s.path : (s.repos.find((r) => r.value === s.repo) || {}).path;
+    host.setState({ browsing: true });
+    try {
+      const res = await fetch('/api/repos/browse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ start: start || '' }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { path } = await res.json();
+      if (path) host.setState({ manual: true, path, repoQuery: null, repoOpen: false }, onPick);
+    } catch {
+      toast('Could not open the folder picker');
+    } finally {
+      host.setState({ browsing: false });
+    }
+  };
+  const input = (e) => {
+    const q = e.target.value;
+    const path = pathOption(q);
+    host.setState({ repoQuery: q, repoOpen: true, repoActive: 0, ...(path ? { manual: true, path } : {}) }, path ? onPick : undefined);
+  };
+  const key = (e) => {
+    const s = host.state;
+    const opts = comboOptions(s.repos, s.repoQuery);
+    const n = opts.length;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      host.setState({ repoOpen: true, repoActive: ((s.repoActive || 0) + (e.key === 'ArrowDown' ? 1 : n - 1)) % n });
+    } else if (e.key === 'Enter' && s.repoOpen && n) {
+      e.preventDefault();
+      pick(opts[Math.min(s.repoActive || 0, n - 1)]);
+    } else if (e.key === 'Escape' && s.repoOpen) {
+      e.preventDefault();
+      host.setState({ repoOpen: false, repoQuery: null });
+    }
+  };
+  const render = ({ repos, repo, manual, path, repoQuery, repoOpen, repoActive, canBrowse, browsing }, { id, error }) => {
+    const list = `${id}-list`;
+    const known = repos.find((r) => r.value === repo) || {};
+    return html`<div class="repo-row">
+      ${repos.length
+      ? html`<div class="combo">
+          <input id=${id} type="text" class="combo-input" role="combobox" autocomplete="off" spellcheck="false"
+            aria-expanded=${repoOpen ? 'true' : 'false'} aria-controls=${list} aria-autocomplete="list"
+            aria-activedescendant=${repoOpen ? `${id}-opt-${repoActive || 0}` : undefined}
+            placeholder="Search repos or type an absolute path"
+            value=${repoQuery != null ? repoQuery : manual ? path : known.name || repo || ''}
+            title=${manual ? path : known.path || ''}
+            onInput=${input} onKeyDown=${key}
+            onFocus=${(e) => { e.target.select(); host.setState({ repoOpen: true }); }}
+            onBlur=${() => host.setState({ repoOpen: false, repoQuery: null })}
+            aria-invalid=${error ? 'true' : undefined} aria-describedby=${error || undefined} />
+          ${repoOpen && html`<ul id=${list} class="combo-list" role="listbox" aria-label="Repos">
+            ${comboOptions(repos, repoQuery).map((o, i) => html`<li id=${`${id}-opt-${i}`} role="option" key=${i}
+              aria-selected=${i === (repoActive || 0) ? 'true' : 'false'} class=${o.kind === 'repo' && !manual && o.value === repo ? 'current' : ''}
+              onMouseDown=${(e) => e.preventDefault()} onMouseEnter=${() => host.setState({ repoActive: i })} onClick=${() => pick(o)}>
+              ${o.kind === 'repo' ? html`<span>${o.name}</span><small class="mono">${o.path}</small>`
+                : o.kind === 'path' ? html`<span>Use path</span><small class="mono">${o.path}</small>`
+                : html`<span>Other path…</span><small>Type an absolute path to a git checkout</small>`}
+            </li>`)}
+          </ul>`}
+        </div>`
+      : html`<input id=${id} type="text" value=${path} onInput=${(e) => host.setState({ path: e.target.value }, onPick)}
+          aria-invalid=${error ? 'true' : undefined} aria-describedby=${error || undefined} />`}
+      ${canBrowse && html`<button type="button" class="browse-btn" aria-label="Browse for a folder" title="Browse for a folder"
+        disabled=${browsing} onClick=${browse}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      </button>`}
+    </div>`;
+  };
+  return { render, pick };
+}
+
 // Reset time (epoch s) of the chosen account when it is rate limited, else null.
 export function limitedUntil(cmds, label, limits) {
   const c = (cmds || []).find((x) => x.label === label);
@@ -214,61 +301,13 @@ export class Launcher extends Component {
     }
   };
 
-  // Repo combobox: one input that filters repos as you type, and also takes an absolute path.
-  pickRepo = (opt) => {
-    if (opt.kind === 'repo') this.setState({ repo: opt.value, manual: false, repoQuery: null, repoOpen: false });
-    else if (opt.kind === 'path') this.setState({ manual: true, path: opt.path, repoQuery: null, repoOpen: false });
-    else this.setState({ manual: true, path: '', repoQuery: '', repoOpen: false });
-  };
-
-  // Native folder dialog opened by the server on this Mac; Start still validates the git checkout.
-  browse = async () => {
-    const s = this.state;
-    const start = s.manual ? s.path : (s.repos.find((r) => r.value === s.repo) || {}).path;
-    this.setState({ browsing: true });
-    try {
-      const res = await fetch('/api/repos/browse', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ start: start || '' }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const { path } = await res.json();
-      if (path) this.setState({ manual: true, path, repoQuery: null, repoOpen: false, errors: { ...this.state.errors, repo: undefined }, result: null });
-    } catch {
-      toast('Could not open the folder picker');
-    } finally {
-      this.setState({ browsing: false });
-    }
-  };
+  combo = repoCombo(this, () => this.setState({ errors: { ...this.state.errors, repo: undefined }, result: null }));
 
   // Typing an issue/PR link picks its repo from the dropdown when it is registered.
   setText = (k) => (e) => {
     const v = e.target.value;
     const hit = repoFromText(this.state.repos, v);
     this.setState({ [k]: v, ...(hit ? { repo: hit, manual: false, repoQuery: null } : {}) });
-  };
-
-  onComboInput = (e) => {
-    const q = e.target.value;
-    const path = pathOption(q);
-    this.setState({ repoQuery: q, repoOpen: true, repoActive: 0, ...(path ? { manual: true, path } : {}) });
-  };
-
-  onComboKey = (e) => {
-    const opts = comboOptions(this.state.repos, this.state.repoQuery);
-    const n = opts.length;
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      e.preventDefault();
-      const step = e.key === 'ArrowDown' ? 1 : n - 1;
-      this.setState({ repoOpen: true, repoActive: (this.state.repoActive + step) % n });
-    } else if (e.key === 'Enter' && this.state.repoOpen && n) {
-      e.preventDefault();
-      this.pickRepo(opts[Math.min(this.state.repoActive, n - 1)]);
-    } else if (e.key === 'Escape' && this.state.repoOpen) {
-      e.preventDefault();
-      this.setState({ repoOpen: false, repoQuery: null });
-    }
   };
 
   onSubmit = (ev) => this.start(ev, 'named', validate(this.state), (repo) => buildBody({ repo, command: this.state.command, args: this.state.args }));
@@ -287,36 +326,7 @@ export class Launcher extends Component {
       <form class="launcher panel" onSubmit=${this.onSubmit} noValidate>
         <h1>New run</h1>
         <label for="repo-path">${repos.length ? 'Repo' : 'Repo path'}</label>
-        <div class="repo-row">
-          ${repos.length
-          ? html`<div class="combo">
-              <input id="repo-path" type="text" class="combo-input" role="combobox" autocomplete="off" spellcheck="false"
-                aria-expanded=${repoOpen ? 'true' : 'false'} aria-controls="repo-list" aria-autocomplete="list"
-                aria-activedescendant=${repoOpen ? 'repo-opt-' + repoActive : undefined}
-                placeholder="Search repos or type an absolute path"
-                value=${repoQuery !== null ? repoQuery : manual ? path : (repos.find((r) => r.value === repo) || {}).name || ''}
-                title=${manual ? path : (repos.find((r) => r.value === repo) || {}).path || ''}
-                onInput=${this.onComboInput} onKeyDown=${this.onComboKey}
-                onFocus=${(e) => { e.target.select(); this.setState({ repoOpen: true }); }}
-                onBlur=${() => this.setState({ repoOpen: false, repoQuery: null })}
-                aria-invalid=${repoMsg ? 'true' : undefined} aria-describedby=${repoMsg ? 'repo-error' : undefined} />
-              ${repoOpen && html`<ul id="repo-list" class="combo-list" role="listbox" aria-label="Repos">
-                ${comboOptions(repos, repoQuery).map((o, i) => html`<li id=${'repo-opt-' + i} role="option" key=${i}
-                  aria-selected=${i === repoActive ? 'true' : 'false'} class=${o.kind === 'repo' && !manual && o.value === repo ? 'current' : ''}
-                  onMouseDown=${(e) => e.preventDefault()} onMouseEnter=${() => this.setState({ repoActive: i })} onClick=${() => this.pickRepo(o)}>
-                  ${o.kind === 'repo' ? html`<span>${o.name}</span><small class="mono">${o.path}</small>`
-                    : o.kind === 'path' ? html`<span>Use path</span><small class="mono">${o.path}</small>`
-                    : html`<span>Other path…</span><small>Type an absolute path to a git checkout</small>`}
-                </li>`)}
-              </ul>`}
-            </div>`
-          : html`<input id="repo-path" type="text" value=${path} onInput=${set('path')}
-              aria-invalid=${repoMsg ? 'true' : undefined} aria-describedby=${repoMsg ? 'repo-error' : undefined} />`}
-          ${canBrowse && html`<button type="button" class="browse-btn" aria-label="Browse for a folder" title="Browse for a folder"
-            disabled=${browsing} onClick=${this.browse}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-          </button>`}
-        </div>
+        ${this.combo.render({ repos, repo, manual, path, repoQuery, repoOpen, repoActive, canBrowse, browsing }, { id: 'repo-path', error: repoMsg ? 'repo-error' : null })}
         ${repoMsg ? html`<p id="repo-error" role="alert" class="error">${repoMsg}</p>` : null}
         <fieldset>
           <legend>Command</legend>

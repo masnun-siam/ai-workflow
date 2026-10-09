@@ -906,15 +906,25 @@ header .afk-chip:hover { border-color: var(--accent); }
 }
 
 
-/* Guided Flow stepper (#190): state is in the chip text, colour only reinforces it */
-.flow-steps { list-style: none; margin: 16px 0; padding: 0; display: grid; gap: 12px; max-width: 760px; }
-.flow-step { display: grid; gap: 8px; }
-.flow-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
-.flow-name { font-weight: 600; color: var(--fg); }
-.flow-active { border-color: var(--accent); }
-.flow-locked, .flow-skipped { opacity: 0.7; }
-.flow-chip-active { color: var(--live); background: var(--live-bg); }
-.flow-chip-done { color: var(--done); background: var(--done-bg); }
-.flow-chip-skipped, .flow-chip-locked { color: var(--stop); background: var(--stop-bg); }
-.flow-step .btn--primary { justify-self: start; text-decoration: none; }
+/* Guided Flow stepper (#190): a rail of numbered markers. The rail fills through finished steps
+   and only the current step opens into a panel; screen readers get the state as text. */
+.flow { max-width: 760px; }
+.flow-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.flow-steps { list-style: none; margin: 24px 0 0; padding: 0; }
+.flow-step { --mt: 0px; position: relative; display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 16px; padding-bottom: 20px; }
+.flow-step:not(:last-child)::before { content: ""; position: absolute; left: 15px; top: calc(var(--mt) + 36px); bottom: 4px; width: 2px; border-radius: 1px; background: var(--border-input); }
+.flow-step.flow-done::before, .flow-step.flow-skipped::before { background: var(--accent); }
+.flow-mark { margin-top: var(--mt); width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; border: 2px solid var(--border-input); color: var(--muted); font: 600 13px var(--font); }
+.flow-done .flow-mark { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+.flow-skipped .flow-mark { border-style: dashed; border-color: var(--accent); }
+.flow-active { --mt: 12px; }
+.flow-active .flow-mark { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
+.flow-body { display: grid; gap: 8px; min-width: 0; }
+.flow-body > .note { margin: 0; }
+.flow-active .flow-body { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 20px 20px; }
+.flow-name { margin: 0; font-size: 15px; line-height: 32px; color: var(--fg); }
+.flow-locked .flow-name { color: var(--muted); }
+.flow-tag { margin-left: 6px; padding: 2px 8px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--border-input); color: var(--muted); font-size: 12px; font-weight: 500; vertical-align: 2px; }
+textarea.flow-prose { font-family: var(--font); font-size: 14px; line-height: 1.5; }
+.flow-step button.primary, .flow-step .btn--primary { justify-self: start; margin-top: 4px; text-decoration: none; }
 .flow-step .error { color: var(--error); margin: 0; }
