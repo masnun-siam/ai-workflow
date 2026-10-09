@@ -8,17 +8,36 @@
     "skip": [],
     "suite_timeout": 900
   },
-  "default_mode": "full",
+  "default_mode": "default",
   "stations": [
     "researcher",
     "planner",
-    "sdet",
     "dev",
-    "verifier",
     "reviewer",
     "fixer"
   ],
   "modes": {
+    "default": {
+      "stations": [
+        "researcher",
+        "planner",
+        "dev",
+        "reviewer",
+        "fixer"
+      ],
+      "classifier": true,
+      "specialists": true,
+      "skipped": [
+        "sdet",
+        "verifier"
+      ],
+      "absorbed_by": {
+        "sdet": "dev — commits the RED tests first and hands back that commit as handoff.tests_sha; the test-root guard measures from it",
+        "verifier": "dev — runtime-verifies under run-verifier's rules as its last step and returns the verdict as handoff.verify",
+        "fixer": "the `fixer` station stays (its push/threads post-check still runs), but phase 7 dispatches run-dev in fix mode instead of run-fixer"
+      },
+      "tradeoff": "CHEAPER, with one guarantee relaxed rather than lost: tests are still RED-first and still guarded, but by the same agent that writes the code, so a test it changes after tests_sha must carry a handoff.test_changes[] justification that lands in the PR body. Runtime verification still runs, but self-checked; the clean-context reviewer is the independent eye. Use `full` (flag or label) for auth, migrations, payment, or public API contracts."
+    },
     "full": {
       "stations": [
         "researcher",
@@ -33,26 +52,8 @@
       "specialists": true
     },
     "lean": {
-      "stations": [
-        "researcher",
-        "planner",
-        "dev",
-        "reviewer",
-        "fixer"
-      ],
-      "classifier": false,
-      "specialists": false,
-      "skipped": [
-        "sdet",
-        "verifier",
-        "run-specialist"
-      ],
-      "absorbed_by": {
-        "sdet": "dev — writes its own tests alongside the implementation; there is no RED-first phase",
-        "verifier": "the test suite + the CI gate — nothing observes the running app",
-        "specialists": "run-reviewer alone — no parallel single-lens pass before the fix phase"
-      },
-      "tradeoff": "FASTER but WEAKER. Three guarantees are lost, not relocated: (1) tests are no longer authored RED-first by an independent station, so a test written to fit the implementation still passes; (2) nothing observes the feature actually working in a browser; (3) only one reviewer sees the diff. The test-root guard is not 'inert' here — it is INAPPLICABLE: with no sdet commit there is no sdet_sha and no baseline to protect, which is a different and honest thing. CI is still the real gate. Use for low-risk, well-specified work; use full mode for auth, migrations, payment, or public API contracts."
+      "alias_of": "default",
+      "_note": "Deprecated: the old lean roster is now the default. Kept so --lean, the lean label and epic --lean-children still resolve."
     }
   },
   "_human_gates": "EXACTLY THREE, and no station may invent a fourth: (1) plan approval, (2) a review finding an automated pass should not be the last word on, (3) the PR is ready for a human to review and merge. Everything else either self-corrects, or is recorded and carried into gate 3's report. This is why the status vocabulary has no 'blocked': a thin issue surfaces its Definition-of-Ready gaps at gate 1 alongside the plan rather than stopping before it, and a spent budget opens a DRAFT PR and reports at gate 3 rather than stopping mid-flow.",

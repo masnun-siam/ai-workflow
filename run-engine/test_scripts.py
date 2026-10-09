@@ -434,15 +434,15 @@ def run_epic_init(children_deps: dict, lean_children: str | None, mode: str | No
     return runs, ledgers, proc
 
 
-_, leds, _ = run_epic_init({11: [], 12: [], 13: []}, "11,13", None)
+_, leds, _ = run_epic_init({11: [], 12: [], 13: []}, "11,13", "full")
 assert leds[11]["stations"] == LEAN_STATIONS, leds[11]["stations"]
 assert leds[13]["stations"] == LEAN_STATIONS, leds[13]["stations"]
 assert leds[12]["stations"] == FULL_STATIONS, leds[12]["stations"]
 ok("--lean-children puts only the named children on the lean roster, others stay full")
 
-_, leds, _ = run_epic_init({11: [], 12: [], 13: []}, None, None)
+_, leds, _ = run_epic_init({11: [], 12: [], 13: []}, None, "full")
 assert all(leds[c]["stations"] == FULL_STATIONS for c in (11, 12, 13)), leds
-ok("omitting --lean-children is a no-op: every child gets the full roster as before")
+ok("omitting --lean-children under --mode full: every child gets the full roster")
 
 _, leds, _ = run_epic_init({11: [], 12: []}, "11,12", "lean")
 assert all(leds[c]["stations"] == LEAN_STATIONS for c in (11, 12)), leds
@@ -450,7 +450,7 @@ ok("--lean-children combined with --mode lean: all children lean, no crash")
 
 # The ordering bug this whole feature exists to guard against: a lean child must still
 # get context.epic / context.depends_on wired exactly as a full child would.
-_, leds, _ = run_epic_init({10: [], 11: [10]}, "11", None)
+_, leds, _ = run_epic_init({10: [], 11: [10]}, "11", "full")
 assert leds[11]["stations"] == LEAN_STATIONS, leds[11]["stations"]
 assert leds[11]["context"]["depends_on"] == "10", leds[11]["context"]
 assert leds[11]["context"]["epic"] == "99", leds[11]["context"]
@@ -458,17 +458,17 @@ assert leds[10]["context"]["epic"] == "99", leds[10]["context"]
 ok("a lean child still receives context.epic and context.depends_on, same as a full child")
 
 for lc in ("", None):
-    _, leds, _ = run_epic_init({11: [], 12: []}, lc, None)
+    _, leds, _ = run_epic_init({11: [], 12: []}, lc, "full")
     assert all(leds[c]["stations"] == FULL_STATIONS for c in (11, 12)), (lc, leds)
 ok("--lean-children '' and omitting the flag both mean no lean children")
 
-_, leds, _ = run_epic_init({11: [], 12: []}, "11,999", None)
+_, leds, _ = run_epic_init({11: [], 12: []}, "11,999", "full")
 assert leds[11]["stations"] == LEAN_STATIONS, leds[11]["stations"]
 assert leds[12]["stations"] == FULL_STATIONS, leds[12]["stations"]
 assert set(leds) == {11, 12}, "999 is not a child of this epic — no phantom run dir"
 ok("a --lean-children entry naming no child of this epic is silently ignored")
 
-_, leds, _ = run_epic_init({11: [], 12: []}, "abc,11", None)
+_, leds, _ = run_epic_init({11: [], 12: []}, "abc,11", "full")
 assert leds[11]["stations"] == LEAN_STATIONS, leds[11]["stations"]
 assert leds[12]["stations"] == FULL_STATIONS, leds[12]["stations"]
 ok("a non-numeric --lean-children entry is skipped, not fatal; the valid entry is honoured")
@@ -494,7 +494,8 @@ with tempfile.TemporaryDirectory() as tmp:
     # Re-running WITHOUT --lean-children must not flip #11 back to full: an
     # already-initialised child is skipped before the roster is ever recomputed.
     again = subprocess.run(
-        [sys.executable, ROUTE, "epic", "init", epic_dir, "--runs-dir", runs, "--repo", repo],
+        [sys.executable, ROUTE, "epic", "init", epic_dir, "--runs-dir", runs, "--repo", repo,
+         "--mode", "full"],
         capture_output=True, text=True,
     )
     assert again.returncode == 0, again.stderr
@@ -2399,10 +2400,11 @@ import route  # noqa: E402
 
 
 class _FakeLedger:
-    """A ledger stand-in carrying only what run_suite reads: .context."""
+    """A ledger stand-in carrying only what run_suite and check_dev_post read."""
 
     def __init__(self, **context):
         self.context = context
+        self.stations = FULL_STATIONS
 
 
 def _stub_shell(calls):
@@ -3662,7 +3664,7 @@ ok("#85 bare-number bullet and step 3.5 epic routing sentences intact")
 # both pins below hash/compare whitespace-normalised text (_n), so reflowing lines does not trip them
 # sha256 of whitespace-normalised text on base 0ff5687 (pre-#85): step 3.5 slice, and "## Epic mode" up to "\n## Rules"
 S35_SHA = "6e1464ddf2883001109064bba0ffcef2471985262dca9d9d1d470eacb25258c5"
-EPIC_SHA = "430b81e3dde45f1bbcb51da394667d3ad58003d127d92ba40a4dd74dff3fe577"  # re-pinned in #118: headless `aiw ask` branches added at the epic gate sites
+EPIC_SHA = "e301c4367ff0d14d1316064fc35316c6b90cac928af03f5040fb791edefdb253"  # re-pinned: epic init passes --mode full, lean is an alias of default
 import hashlib
 _ep = ri85[ri85.index("## Epic mode") :]
 _ep = _ep[: _ep.index("\n## ", 5)]

@@ -1,6 +1,6 @@
 ---
 description: Run an existing GitHub issue end-to-end to a reviewed PR, stopping for a human exactly three times — plan approval, an escalated review finding, and the final ready-to-merge handback
-argument-hint: "<issue-number-or-url | sentry-url | file-path | vault-note | text> [--lean|--full]"
+argument-hint: "<issue-number-or-url | sentry-url | file-path | vault-note | text> [--full]"
 allowed-tools: Bash(aiw:*), Bash(gh:*), Bash(git:*), Bash(docker:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(composer:*), Bash(pnpm:*), Bash(yarn:*), Bash(go:*), Bash(python:*), Bash(python3:*), Bash(pip:*), Bash(pip3:*), Bash(dart:*), Bash(flutter:*), Bash(obsidian:*), Read, Write, Agent, Skill, AskUserQuestion, mcp__plugin_sentry_sentry__*, mcp__gitnexus__query, mcp__gitnexus__context, Grep, Glob
 ---
 
@@ -53,13 +53,13 @@ are used either way; only the transport differs.
   re-ask, never an approval.
 - **Otherwise:** not headless, so skip `aiw ask` and call `AskUserQuestion` exactly as written at the gate.
 
-`--lean` (combinable) runs a shorter roster: `researcher → planner → dev → reviewer →
-fixer`. No independent RED tests, no runtime verification, no specialist panel. The CI
-gate still applies. See `<config> → modes.lean.tradeoff` for what
-that actually costs; use it for low-risk, well-specified work and full mode for auth,
-migrations, payment, or public API contracts. An explicit `--full` or `--lean` flag on
-the command line always overrides a `lean` label already on the issue, in either
-direction — see phase 0 step 2 and phase 4's mode choice below.
+Two modes. **Default** runs `researcher → planner → dev → reviewer → fixer`: `run-dev`
+writes the RED tests first, implements, and runtime-verifies in one dispatch, and phase 7
+dispatches `run-dev` in fix mode in place of `run-fixer`. **`--full`** (or a `full` label)
+runs the old seven-station roster with an independent `run-sdet` and `run-verifier`. See
+`<config> → modes.default.tradeoff` for what default gives up; use full for auth,
+migrations, payment, or public API contracts. `--lean` and a `lean` label are deprecated
+aliases of default. An explicit `--full` on the command line always wins over labels.
 
 ## Paths — resolve them once, first
 
@@ -118,18 +118,18 @@ It prints exactly one of `advance(<station>)` · `bounce(<station>)` · `escalat
   sits between stations, and the engine knows nothing about them. Treat the table below as
   **preconditions**: before dispatching X, anything in its row that has not happened yet must
   happen now. Written as preconditions rather than as boundaries on purpose — that way it
-  holds for `--lean` too, where the roster is shorter and the boundaries land differently.
+  holds for the default roster too, where the roster is shorter and the boundaries land differently.
 
   | before dispatching | these must already have happened |
   |---|---|
   | `planner` | — |
   | `sdet` | **Gate 1** · worktree (phase 2) · test stack (phase 2.5) |
-  | `dev` | same as `sdet` — in `--lean` there is no `sdet`, so this is where the worktree and stack get created |
+  | `dev` | same as `sdet` — in default mode there is no `sdet`, so this is where the worktree and stack get created |
   | `verifier` | — |
-  | `reviewer` | worktree indexed (4b) · **PR open (phase 5)** · classification + panel (5.5, full mode only) |
+  | `reviewer` | worktree indexed (4b) · **PR open (phase 5)** · classification + panel (5.5) |
   | `fixer` | review posted (phase 6) |
 
-  The `reviewer` row is the one that bites: in `--lean`, `advance(reviewer)` comes straight
+  The `reviewer` row is the one that bites: in default mode, `advance(reviewer)` comes straight
   off `dev`, and nothing in the roster mentions opening a PR. Skip phase 5 there and the
   reviewer is handed a PR that does not exist.
 - **bounce(X)** — re-dispatch X with `bounce.reason` and `findings` as required input.
@@ -314,26 +314,23 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
      the roster and bounce counts the ledger already holds.
 
    Never re-init over an existing ledger, and never mix rosters mid-run — a
-   `--lean`/`--full` flag or a `lean` label on a resume of a run with a different roster
+   `--lean`/`--full` flag or a `lean`/`full` label on a resume of a run with a different roster
    already initialised is ignored — the ledger's roster wins; say so in one line if they
    disagree. Gates 1 and 2 re-fire regardless of what the ledger says.
 
    Otherwise, choose the mode before initialising, in this order:
 
-   1. Both `--full` and `--lean` were passed → resolve to **full** (the safe direction)
-      and say so: `mode: full (--full and --lean both passed, full wins)`.
-   2. `--full` alone → `mode: full (--full overrides the lean label)` if the issue also
-      carries a `lean` label, else `mode: full (--full)`.
-   3. `--lean` alone → `mode: lean (--lean)`.
-   4. Neither flag → check the `labels` already fetched by step 3's `gh issue view` above
-      (no new API call) for `lean`: present → `mode: lean (issue label)`; absent →
-      `mode: full (default)`.
+   1. `--full` was passed (with or without `--lean`) → `mode: full (--full)`.
+   2. Otherwise check the `labels` already fetched by step 3's `gh issue view` above (no
+      new API call) for `full`: present → `mode: full (issue label)`; absent →
+      `mode: default` (a `--lean` flag or `lean` label changes nothing: lean is a
+      deprecated alias of default).
 
-   Print exactly one of those lines. Then initialise, passing `--mode lean` only when
-   lean was chosen — full is already `aiw init`'s own default mode (see
+   Print exactly one of those lines. Then initialise, passing `--mode full` only when
+   full was chosen — default is already `aiw init`'s own default mode (see
    `run-engine/route.py`'s `cmd_init`), so there is nothing to pass for it:
    ```bash
-   aiw init "$RUN_DIR" --issue <n> --repo <main-checkout> [--mode lean]
+   aiw init "$RUN_DIR" --issue <n> --repo <main-checkout> [--mode full]
    ```
 
    **Refined fast path.** If the `labels` from step 3 include `refined` (and this is a fresh
@@ -576,8 +573,8 @@ Miss this and the guard silently never runs. Move `sdet_sha` forward again after
 later legitimate `run-sdet` commit (a bounce round, phase 7b, phase 8's test-root conflict
 resolution) — otherwise the SDET's own correct work trips the guard on the next dev pass.
 
-Skipped entirely in `--lean` (no `sdet` in the roster, so no `sdet_sha`, so the guard is
-not inert but *inapplicable* — there is no baseline to protect).
+Skipped entirely in default mode: `run-dev` writes the RED tests itself (phase 4) and the
+guard measures from its `tests_sha` instead of `sdet_sha`.
 
 ## 4. Dev phase (agent: run-dev)
 
@@ -585,8 +582,12 @@ not inert but *inapplicable* — there is no baseline to protect).
 `verifier→dev` bounce and a `dev→sdet` bounce never spend each other's budget, and
 exceeding either escalates on its own.
 
-1. Dispatch `run-dev` with the plan, test root, `test_cmd` from phase 2.5, the relevant
-   `tasks/lessons.md` entries, and any current test output.
+1. Dispatch `run-dev` with `mode: <default|full>`, the plan, test root, `test_cmd` from
+   phase 2.5, the relevant `tasks/lessons.md` entries, and any current test output. In
+   **default mode** also pass everything phase 4.5 would have handed `run-verifier`:
+   `$RUN_DIR`, `api_url`, `web_url`, the acceptance criteria, and the issue number and
+   title. `run-dev` then writes and commits the RED tests, implements, and runtime-verifies
+   in this one dispatch (see its **Default mode** section).
 2. **Rebuild if needed**: `aiw stack rebuild "$RUN_DIR"`, then re-run `test_cmd` once.
    It no-ops when `source_mounted: yes` or there is no stack, so the condition is no
    longer yours to remember — call it unconditionally after `run-dev` commits source
@@ -601,12 +602,17 @@ exceeding either escalates on its own.
      <sdet_sha>:<path> > /tmp/<basename>` for each path from stderr, then overwrite the
      working file with that content — it's a read, not a checkout/restore/reset/clean, so a
      discard-pattern hook has nothing to match.
+     In **default mode** the printed action is `bounce(dev)` and the baseline is
+     `tests_sha` (from the ledger): only test files changed *without* a
+     `handoff.test_changes[]` reason are reverted. Re-dispatch `run-dev` with the findings,
+     telling it to either justify each change or leave the test alone.
      Never re-dispatch `run-dev` with tampered tests still on disk.
    - **`bounce(sdet)`** — dev disputes a test. Dispatch `run-sdet` with the findings; it
      amends or rejects and commits. Move `sdet_sha` forward, then re-dispatch `run-dev`.
    - **`advance(…)`** — green. Continue.
-   - **`escalate`** — the dev budget is spent. Record
-     `blocked_on='dev budget spent — <the failing tests>'` and go to **Degraded finish**
+   - **`escalate`** — the dev budget is spent, or (default mode) its own runtime verify
+     still FAILs. Record `blocked_on='dev budget spent — <the failing tests>'` (or
+     `'verification failed — <the unmet criterion>'`) and go to **Degraded finish**
      (see The engine, above). Do **not** stop to ask: open the draft PR so the partial work
      is reviewable, and report it at Gate 2.
 
@@ -624,6 +630,11 @@ ledger once you have fixed whatever the rail caught.
 
 Phase 4 proved the units behave. This phase asks whether the feature works — for
 whichever side of the stack the diff actually touched.
+
+**Default mode: no dispatch here.** `run-dev` already verified as its last step, and its
+post-check validated `30-build.json`'s `handoff.verify` the same way this station's
+envelope is validated. Carry that verdict, and any skip reason, into the Gate 2 report
+exactly as below, then go to phase 4b. Everything else in this phase is full mode only.
 
 **Route first, deterministically — this is not the verifier's call.** Phase 5.5's real
 classification hasn't run yet (it needs a PR diff, and there is no PR until phase 5), so
@@ -713,7 +724,9 @@ scores it wide — the correct conservative reading.
 ## 5. Open the PR
 
 Write the PR body to a temp file with `Closes #<n>` on its own line (keeps auto-close on
-merge), then:
+merge). In default mode, add a `## Test changes after RED` section listing every
+`30-build.json` `handoff.test_changes[]` entry (file and reason), or `none`. That is the
+reviewer's cue to check each one. Then:
 
 ```bash
 aiw pr open "$RUN_DIR" --body-file <file> [--draft]
@@ -731,8 +744,8 @@ Records `pr`, `pr_number`, `link`. The ordering is not cosmetic: `createLinkedBr
 **Exit 1 means the push failed, and the hook's own output is on stderr.** That is the one
 part still yours, because it is triage, not a procedure:
 
-- Failing tests under the approved test root → dispatch `run-sdet` with the failing
-  output, then re-run `aiw pr open` once.
+- Failing tests under the approved test root → dispatch `run-sdet` (default mode:
+  `run-dev`) with the failing output, then re-run `aiw pr open` once.
 - Failing tests outside the test root, in files this PR's dev phase touched → dispatch
   `run-dev` with the failing output (route its envelope as always — the test-ownership
   guard applies here too), then retry once.
@@ -746,9 +759,6 @@ Cap at one retry per category — this is triage, not a loop. Never alter unrela
 force the push through, and never `--no-verify`.
 
 ## 5.5 Classify the diff and resolve the review panel
-
-Skipped in `--lean` (`modes.lean.classifier: false`) — go straight to phase 6 with the
-generalist alone.
 
 Score the PR's diff so the review panel is selected by policy rather than by whoever is
 holding the context:
@@ -819,10 +829,13 @@ not delay the review.
 
 `aiw set "$RUN_DIR" panel='<lenses>' laravel_review=<REVIEWED|SKIPPED>`
 
-## 7. Fix (agent: run-fixer)
+## 7. Fix (agent: run-fixer; run-dev in fix mode by default)
 
-`aiw precheck "$RUN_DIR" fixer`, then dispatch `run-fixer` on the PR, passing `test_cmd`
-from phase 2.5 explicitly. Unlike
+`aiw precheck "$RUN_DIR" fixer`, then dispatch the fixer on the PR, passing `test_cmd`
+from phase 2.5 explicitly. In **default mode** that is a fresh `run-dev` dispatch with
+`fix: true` (not a resume of the phase-4 agent): it follows run-fixer's procedure and
+envelope, but can create files and edit tests, so phase 7b has nothing left to route. In
+**full mode** it is `run-fixer`. Unlike
 interactive `/pr-fix-comments`, it auto-applies every actionable finding (no per-comment
 confirmation — nobody's watching this phase). One pass. It commits, replies, resolves
 threads, and pushes once at the end.
@@ -858,6 +871,9 @@ you only have a comment id, `aiw threads list <pr> --for-comment <id>` returns t
 thread. Non-fatal per thread: it warns and continues if one fails.
 
 ## 7b. Findings the fixer could not apply (agents: run-sdet, run-dev)
+
+Full mode only. In default mode `run-dev`'s fix pass returns both lists empty: set
+`fix_newfile=SKIPPED fix_tests=SKIPPED` and go to phase 8.
 
 `run-fixer` edits existing files only, so two kinds of finding come back unapplied. Both
 get dispatched here, in one pass each, so a review round can actually reach zero findings —
@@ -905,11 +921,12 @@ and phase 8's conflict resolution.
    - Conflicts → step 4.
 4. Partition the conflicted files (`git diff --name-only --diff-filter=U`) against the
    approved test root:
-   - Paths under the test root → dispatch `run-sdet` with just those paths.
+   - Paths under the test root → dispatch `run-sdet` with just those paths (default
+     mode: `run-dev`, which records each in `handoff.test_changes[]`).
    - Paths outside it → dispatch `run-dev` with just those paths plus the approved
      plan, told to preserve both sides' intent.
-   **Move `sdet_sha` forward after the `run-sdet` dispatch, before routing anything from
-   `run-dev`.** The SDET resolving its own test-root conflicts is legitimate work; leave
+   **Move `sdet_sha` (default mode: `tests_sha`) forward after the test-root dispatch,
+   before routing anything from `run-dev`.** The SDET resolving its own test-root conflicts is legitimate work; leave
    the baseline behind and the ownership guard trips on it (exit 6) and halts the run on a
    false positive.
    **One resolution attempt only** — no retry loop.
@@ -1073,6 +1090,8 @@ Then:
   never ran is worse than one that ran and failed.
 - **Whether runtime verification ran**: passed, skipped, or unverifiable, and why. A gate
   that silently never runs is worse than one that runs and fails.
+- **Default mode: every test changed after `tests_sha`**, from phases 4, 7 and 8, each with
+  its `test_changes[]` reason.
 - The sync outcome from phase 8 (merged clean / N conflicts resolved / unresolved with file
   list / skipped and why).
 - What phase 9.2 added to `tasks/lessons.md`, uncommitted in the main checkout.
@@ -1188,21 +1207,18 @@ once, exactly as phase 6 spawns the specialist panel in one message.
    It is idempotent on the linkage — children already linked as sub-issues are skipped —
    so running it on an epic `/gh-issue` created is harmless. Exit 1 means the edges do
    not form a DAG; print the message and stop, as `/gh-issue` does.
-1. **Init.** Phase 0 step 3's per-child `gh issue view` already read each child's labels;
-   pass through any that carry `lean`:
+1. **Init.**
 
    ```bash
    aiw epic init "<runs_dir>/<owner>-<repo>-epic-<n>" --runs-dir "<runs_dir>" \
-     --repo <main-checkout> [--mode lean] [--lean-children <n>,<n>]
+     --repo <main-checkout> [--mode full]
    ```
 
    creates a run directory per child. Each is an ordinary ledger; every existing guard
-   and post-check applies to it unchanged. An epic-wide `--lean`/`--full` flag, if the
-   epic run itself was invoked with one, still wins over an individual child's label —
-   same precedence as phase 4's single-issue mode choice above. Concretely: when the
-   epic run was invoked with `--full`, omit `--lean-children` entirely (every child gets
-   full, no per-child override); only pass `--lean-children` when no epic-wide `--full`
-   is in force.
+   and post-check applies to it unchanged. Pass `--mode full` only when the epic run
+   itself was invoked with `--full`; otherwise every child gets the default roster.
+   Per-child `full` labels are not read in epic mode. `--lean-children` still parses but,
+   with lean an alias of default, it changes nothing.
 2. **Research, then plan, every child.** Every child ledger's roster starts at
    `researcher`, and `aiw route` rejects an envelope from any station that is not the one
    at `currentIndex` — so dispatching planners first would have every child's very first
@@ -1416,6 +1432,10 @@ once, exactly as phase 6 spawns the specialist panel in one message.
   the guard on the next dev pass and halts the run on a false positive.
 - Phase 7b's dispatch, a `bounce(sdet)`, and phase 8's test-root conflict resolution are
   the only paths that may edit the test root after phase 3.
+- **Default mode** has no SDET: `run-dev` owns its own RED tests, the guard measures from
+  `tests_sha`, and a test-root change is legal only with a `handoff.test_changes[]` reason.
+  Every reason goes into the PR body and the Gate 2 report, so the reviewer and the human
+  see each test that moved.
 - Never use `--no-verify`.
 - If any phase's agent call errors out (not a designed stop, an actual failure), do not
   retry silently more than once — surface it to the user with what failed.
@@ -1521,7 +1541,7 @@ once, exactly as phase 6 spawns the specialist panel in one message.
   2a — do not add a gate for it. It is deliberately **not** classifier-selected: its trigger
   is a repo fact, not a changed path, so a Laravel PR that happens not to touch
   `composer.json` would never fire a path-glob signal. It self-gates, as it always has.
-- `--lean` changes the roster and nothing else — the engine walks whatever `run.json` holds.
-  Never mix rosters on a resume. What lean gives up is written down in
-  `<config> → modes.lean.tradeoff`; read it before reaching for the
-  flag on anything touching auth, migrations, payment, or a public API contract.
+- The mode changes the roster and nothing else — the engine walks whatever `run.json` holds.
+  Never mix rosters on a resume. What default gives up against full is written down in
+  `<config> → modes.default.tradeoff`; read it before skipping `--full` on anything
+  touching auth, migrations, payment, or a public API contract.
