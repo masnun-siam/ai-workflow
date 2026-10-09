@@ -637,6 +637,13 @@ assert.deepEqual({ ...parseRoute('#/dispatch/p-20261007120000-aaaaaa') }, { name
 for (const h of ['#/dispatch/nope', '#/dispatch/p-1-a', '#/dispatch/p-20261007120000-aaaaaa/x']) assert.equal(nm(h), 'notfound', h);
 out('parseRoute dispatch routes');
 
+// #189: #/dispatch?issues= prefill; digits only, empty/invalid behaves like plain #/dispatch
+assert.deepEqual({ ...parseRoute('#/dispatch?issues=12,13') }, { name: 'dispatch', params: {}, issues: [12, 13] });
+assert.deepEqual({ ...parseRoute('#/dispatch?issues=12,x,1e3,,-4,13') }, { name: 'dispatch', params: {}, issues: [12, 13] });
+for (const h of ['#/dispatch', '#/dispatch?issues=', '#/dispatch?issues=a,b', '#/dispatch?other=1']) assert.deepEqual({ ...parseRoute(h) }, { name: 'dispatch', params: {} }, h);
+assert.deepEqual({ ...parseRoute('#/dispatch/p-20261007120000-aaaaaa?issues=1') }, { name: 'pipeline', params: { id: 'p-20261007120000-aaaaaa' } });
+out('parseRoute dispatch ?issues= prefill');
+
 const D = await import(process.env.APP_URL.replace('app.js', 'dispatch.js'));
 assert.equal(D.hasUrl('see https://github.com/o/r/issues?q=x'), true);
 assert.equal(D.hasUrl('#12, 14'), false);
@@ -648,6 +655,9 @@ assert.deepEqual(D.startBody(pv, new Set([3, 1]), { mode: 'parallel', max: 2, cl
   { slug: 'o/r', repo: '/x', issues: [1, 3], mode: 'parallel', max: 2, claude_cmd: 'work', auto_grind: false });
 assert.equal('claude_cmd' in D.startBody(pv, new Set([1]), { mode: 'sequential', max: 1, claude: '' }), false);
 out('dispatch: input, selection and start body helpers');
+assert.equal(new D.Dispatch({ issues: [12, 13] }).state.text, '12 13');
+assert.equal(new D.Dispatch({}).state.text, '');
+out('dispatch: issues prop prefills the input');
 
 assert.deepEqual(D.itemActions({ state: 'failed' }), ['retry', 'skip']);
 assert.deepEqual(D.itemActions({ state: 'skipped', reason: 'blocked by #3' }), []);
