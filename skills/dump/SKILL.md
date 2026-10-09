@@ -92,6 +92,15 @@ Wait for the user's reply. Do this every single time, regardless of how confiden
 - If the user picks a different feature/project → update Target and re-confirm once more, then proceed.
 - If the user cancels → stop, write nothing.
 
+### Flow auto mode
+
+When the system prompt contains `Flow auto mode`, this run is a step of the aiw ui guided Flow
+and the user has chosen to answer only grilling questions. Step 3 is not asked: take the proposed
+Target as confirmed and go straight to Step 4. When nothing matches, create the new project or
+feature folder you proposed (this is the one case where auto-confirm creates vault structure).
+Put the Step 3 block in your final report so the choice is visible; the user corrects a wrong
+folder in Flow's next step, not here. Everything else in this skill is unchanged.
+
 ## Programmatic invocation (from /gh-issue and /run-issue)
 
 Another command may invoke this skill with a pre-resolved target and, in the unattended
@@ -350,4 +359,4 @@ Then end with the `→ next:` line for the type. It is the last line of your out
 - The `## Related` block is the exception to "write once": when a new sibling doc first appears in
   a folder, rewrite the `## Related` block of every existing sibling to add the new line, so the
   older docs link to the new one (see **Tagging and linking**).
-- Never skip Step 3's confirmation for a human-invoked `/dump`, even for a bug report that obviously names its feature. This is the one rule this skill must never bend on for interactive use — the only exception is the programmatic `auto-confirm: yes` path above, and even that never creates new vault structure.
+- Never skip Step 3's confirmation for a human-invoked `/dump`, even for a bug report that obviously names its feature. This is the one rule this skill must never bend on for interactive use — the only exceptions are the programmatic `auto-confirm: yes` path above, which never creates new vault structure, and **Flow auto mode**, where the user opted out of the confirmation in the UI.

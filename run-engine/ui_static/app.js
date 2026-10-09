@@ -10,7 +10,7 @@ import { History } from './history.js';
 import { Session } from './session.js';
 import { Settings } from './settings.js';
 import { Dispatch, PipelineDetail } from './dispatch.js';
-import { Flow } from './flow.js';
+import { Flow, flowProgress } from './flow.js';
 import { clockText } from './fmt.js';
 import { toast } from './toast.js';
 import { CleanupDialog } from './cleanup.js';
@@ -45,6 +45,9 @@ export function parseRoute(hash) {
   if (a === 'dispatch' && !rest.length) {
     const issues = queryIssues(query);
     return issues.length ? { name: 'dispatch', params: {}, issues } : { name: 'dispatch', params: {} };
+  }
+  if (a === 'flow' && rest.length === 1 && (rest[0] === 'new' || /^f-\d{14}-[0-9a-f]{6}$/.test(rest[0]))) {
+    return { name: 'flow', params: { id: rest[0], repo: '', folder: '', prd: '', issues: [], sid: '' } };
   }
   if (a === 'flow' && !rest.length) {
     // folder/prd become headless session args: one line, bounded, so the input shows all that is sent
@@ -181,6 +184,7 @@ export class App extends Component {
   onHash = () => {
     this.setState({ route: parseRoute(location.hash) });
     this.loadCommands();
+    this.onFlow(); // a step may have started or finished while you were elsewhere
   };
 
   // Account labels for the header chips; reloaded on navigation so Settings edits show up.
@@ -234,6 +238,10 @@ export class App extends Component {
 
   onPeek = (e) => this.openDialog({ palette: false, sheet: false, cleanup: null, peek: e.detail });
 
+  // The nav rail follows the most recently active flow; Flow fires aiw:flow whenever it saves.
+  onFlow = () => fetch('/api/flows', { headers: { Accept: 'application/json' } }).then((r) => (r.ok ? r.json() : null))
+    .then((b) => { if (!this.gone) this.setState({ flowNav: (b && b.flows && b.flows[0]) || null }); }).catch(() => {});
+
   onCleanup = (e) => this.openDialog({ palette: false, sheet: false, cleanup: { only: e.detail?.key || null } });
 
   componentDidMount() {
@@ -241,6 +249,8 @@ export class App extends Component {
     addEventListener('keydown', this.onKey);
     addEventListener('aiw:cleanup', this.onCleanup);
     addEventListener('aiw:peek', this.onPeek);
+    addEventListener('aiw:flow', this.onFlow);
+    this.onFlow();
     addEventListener('aiw:afk-back', this.onAfkBack);
     this.watch = waitingWatcher();
     this.loadCommands();
@@ -287,6 +297,7 @@ export class App extends Component {
     removeEventListener('keydown', this.onKey);
     removeEventListener('aiw:cleanup', this.onCleanup);
     removeEventListener('aiw:peek', this.onPeek);
+    removeEventListener('aiw:flow', this.onFlow);
     removeEventListener('aiw:afk-back', this.onAfkBack);
     if (this.stop) this.stop();
   }
@@ -301,7 +312,13 @@ export class App extends Component {
       <header>
         <a class="brand" href="#/">aiw ui</a>
         <nav aria-label="Main">
-          ${NAV.map(([name, href, label]) => html`<a href=${href} aria-current=${route.name === name ? 'page' : undefined}>${label}</a>`)}
+          ${NAV.map(([name, href, label]) => {
+            // The Flow link carries a flow in progress as a small rail of its steps: the way back to it.
+            const fp = name === 'flow' ? flowProgress(this.state.flowNav) : null;
+            return html`<a href=${href} aria-current=${route.name === name ? 'page' : undefined}
+              aria-label=${fp ? `${label}, ${fp.done} of ${fp.total} steps done` : undefined}>${label}${fp && html`<span class="nav-rail" aria-hidden="true">
+                ${Array.from({ length: fp.total }, (_, i) => html`<i class=${i < fp.done ? 'on' : ''}></i>`)}</span>`}</a>`;
+          })}
         </nav>
         <span class="spacer"></span>
         <button type="button" class="btn kbd-hint" aria-label="Open command palette" onClick=${() => this.openDialog({ palette: true, sheet: false })}>Search <kbd>⌘K</kbd></button>

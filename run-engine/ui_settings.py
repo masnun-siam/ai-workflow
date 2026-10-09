@@ -16,11 +16,26 @@ import subprocess
 import shared
 
 DEFAULT_CMD = "claude"
+DEFAULT_VAULT = os.path.join("~", "Documents", "notes")  # the `notes` vault /dump and /prd write to
 MAX_COMMANDS = 20
 
 
 def _path() -> str:
     return os.path.join(shared.data_dir(), "ui_settings.json")
+
+
+def _stored() -> dict:
+    try:
+        with open(_path(), encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def vault_dir() -> str:
+    """Absolute path of the Obsidian vault Flow reads notes from (read-only)."""
+    return os.path.expanduser(_stored().get("vault_dir") or DEFAULT_VAULT)
 
 
 def load() -> dict:
@@ -39,7 +54,7 @@ def load() -> dict:
              and c["label"] != alias]
     default = data.get("default")
     return {"commands": cmds, "default": default if any(c["label"] == default for c in cmds) else alias,
-            "auto_grind": data.get("auto_grind") is True}
+            "auto_grind": data.get("auto_grind") is True, "vault_dir": vault_dir()}
 
 
 def argv(cmd: str) -> list:
@@ -92,8 +107,15 @@ def validate(body) -> dict:
     default = body.get("default")
     if default is not None and default not in seen:
         raise ValueError("default must be one of the labels")
+    vault = body.get("vault_dir", _stored().get("vault_dir"))  # a save that omits it keeps the stored one
+    if vault is not None:
+        if not isinstance(vault, str) or "\x00" in vault or len(vault) > 500:
+            raise ValueError("vault_dir must be a path of at most 500 characters")
+        vault = vault.strip() or None
+        if vault and not os.path.isabs(os.path.expanduser(vault)):
+            raise ValueError("vault_dir must be an absolute path (or start with ~)")
     return {"claude_label": alias, "commands": cmds, "default": None if default == alias else default,
-            "auto_grind": body.get("auto_grind") is True}
+            "auto_grind": body.get("auto_grind") is True, "vault_dir": vault}
 
 
 def save(body) -> dict:
