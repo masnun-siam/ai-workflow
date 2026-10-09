@@ -231,6 +231,7 @@ subcommand:
 aiw paths                          resolve every path, create the state dirs
 aiw init | route | set             the ledger and the router
 aiw precheck <station>             a station's pre-guard, before dispatching it
+aiw refined                        plan from a refined issue body (skips researcher + planner)
 aiw classify | resolve-review      score a diff, pick the specialist panel
 aiw stack up|down|rebuild|status   the per-issue Docker test stack
 aiw worktree create                the per-issue worktree
