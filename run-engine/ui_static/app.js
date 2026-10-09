@@ -47,7 +47,8 @@ export function parseRoute(hash) {
     return issues.length ? { name: 'dispatch', params: {}, issues } : { name: 'dispatch', params: {} };
   }
   if (a === 'flow' && !rest.length) {
-    const get = (k) => query.get(k) || '';
+    // folder/prd become headless session args: one line, bounded, so the input shows all that is sent
+    const get = (k) => (query.get(k) || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').slice(0, 500);
     return { name: 'flow', params: { repo: get('repo'), folder: get('folder'), prd: get('prd'), issues: queryIssues(query), sid: get('sid') } };
   }
   if (a === 'dispatch' && rest.length === 1 && /^p-\d{14}-[0-9a-f]{6}$/.test(rest[0])) return { name: 'pipeline', params: { id: rest[0] } };

@@ -917,3 +917,4 @@ header .afk-chip:hover { border-color: var(--accent); }
 .flow-chip-done { color: var(--done); background: var(--done-bg); }
 .flow-chip-skipped, .flow-chip-locked { color: var(--stop); background: var(--stop-bg); }
 .flow-step .btn--primary { justify-self: start; text-decoration: none; }
+.flow-step .error { color: var(--error); margin: 0; }

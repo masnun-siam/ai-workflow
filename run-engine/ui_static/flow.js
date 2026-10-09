@@ -2,6 +2,7 @@ import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { poll } from './app.js';
 import { buildBody, loadLastRepo } from './launcher.js';
+import { issueNumbers } from './dispatch.js';
 
 const html = htm.bind(h);
 
@@ -14,11 +15,11 @@ const STEPS = [
   { key: 'dispatch', label: 'Dispatch', input: 'Issue numbers' },
 ];
 const TERMINAL = ['done', 'failed', 'stopped'];
-const digits = (s) => String(s || '').split(/[\s,]+/).filter((x) => /^\d+$/.test(x)).map(Number);
 
-// The last `→ next: <command> <arg>` line of a session's final result, or null.
+// The last `→ next: <command> <arg>` line of a session's final result, or null. Tolerates the
+// line being indented or wrapped in a code span or bold, since models often format it.
 export function parseNext(text) {
-  const all = [...String(text || '').matchAll(/^→ next: (\S+)\s*(.*)$/gm)];
+  const all = [...String(text || '').matchAll(/^[ \t]*[`*]*→ next: (\S+)[ \t]*(.*?)[`*]*[ \t]*$/gm)];
   const m = all.at(-1);
   return m ? { command: m[1], arg: m[2].trim() } : null;
 }
@@ -31,11 +32,11 @@ export function handoff(step, result) {
   if (!result) return { error: 'The session ended without a final result.' };
   if (result.is_error) return { error: 'The session failed. Continue in terminal.' };
   const next = parseNext(result.text);
-  if (!next) return { error: step === 'dump' ? 'No next stage: dump filed it as a standalone task, meeting notes or unclassifiable.' : 'The result has no → next: line.' };
+  if (!next) return { error: step === 'dump' ? 'No → next: line found: dump ends the flow for a standalone task, meeting notes or unclassifiable.' : 'The result has no → next: line.' };
   const field = (NEXT[step] || {})[next.command.replace(/^\//, '').split(':').pop()];
   if (!field) return { error: `Unexpected next command: ${next.command}` };
   if (field === 'issues') {
-    const issues = digits(next.arg);
+    const issues = issueNumbers(next.arg);
     return issues.length ? { issues } : { error: 'The → next: line lists no issue numbers.' };
   }
   return next.arg ? { [field]: next.arg } : { error: 'The → next: line has no argument.' };
@@ -77,7 +78,7 @@ export class Flow extends Component {
 
   componentWillUnmount() { this.gone = true; if (this.stop) this.stop(); }
 
-  fields = (s = this.state) => ({ repo: s.repo, folder: s.folder, prd: s.prd, issues: digits(s.issues), sid: s.sid });
+  fields = (s = this.state) => ({ repo: s.repo, folder: s.folder, prd: s.prd, issues: issueNumbers(s.issues), sid: s.sid });
 
   save(patch) {
     this.setState(patch, () => history.replaceState(null, '', flowHash(this.fields())));
@@ -127,19 +128,22 @@ export class Flow extends Component {
     this.save({ ...out, sid: '', meta: null, why: null });
   }
 
+  // A session is in flight: its step's input stays fixed so the handoff lands on the step that ran.
+  running = () => !!this.state.sid && !(this.state.meta && TERMINAL.includes(this.state.meta.outcome));
+
   input(step) {
     const id = `flow-${step.key}`;
     const field = { dump: 'text', prd: 'folder', issues: 'prd', dispatch: 'issues' }[step.key];
     const Tag = step.key === 'dump' ? 'textarea' : 'input';
     return html`<label for=${id}>${step.input}</label>
       <${Tag} id=${id} class="field mono" rows=${step.key === 'dump' ? 4 : undefined} type=${step.key === 'dump' ? undefined : 'text'}
-        value=${this.state[field]} onInput=${(e) => (field === 'text' ? this.setState({ text: e.target.value }) : this.save({ [field]: e.target.value }))} />`;
+        value=${this.state[field]} disabled=${this.running()} onInput=${(e) => (field === 'text' ? this.setState({ text: e.target.value }) : this.save({ [field]: e.target.value }))} />`;
   }
 
   render(_, { repo, repos, sid, meta, why, busy }) {
     const cur = stepFromState(this.fields());
     const at = STEPS.findIndex((s) => s.key === cur);
-    const issues = digits(this.state.issues);
+    const issues = issueNumbers(this.state.issues);
     const waiting = meta && meta.outcome === 'waiting';
     return html`
       <h1>Flow</h1>
@@ -159,7 +163,7 @@ export class Flow extends Component {
               ${this.input(step)}
               ${sid ? html`<p class="note" role="status">Session ${meta ? meta.outcome : 'starting'}${waiting ? html` · <a href=${`#/answer/${encodeURIComponent(sid)}`}>Answer its question</a>` : ''} · <a href=${`#/session/${encodeURIComponent(sid)}`}>Open session</a></p>` : null}
               ${meta && meta.outcome !== 'done' && TERMINAL.includes(meta.outcome) && meta.resume_command && html`<p class="note">Continue in terminal: <code>${meta.resume_command}</code></p>`}
-              <button type="button" class="primary" disabled=${busy || (sid && !(meta && TERMINAL.includes(meta.outcome)))} onClick=${() => this.start(step)}>${sid ? 'Run again' : `Run ${step.command}`}</button>`}
+              <button type="button" class="primary" disabled=${busy || this.running()} onClick=${() => this.start(step)}>${sid ? 'Run again' : `Run ${step.command}`}</button>`}
             ${state === 'active' && step.key === 'dispatch' && html`
               ${this.input(step)}
               ${issues.length ? html`<a class="btn btn--primary" href=${dispatchHref(issues)}>Open Dispatch with ${issues.join(', ')}</a>` : null}`}
