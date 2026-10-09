@@ -9,7 +9,8 @@ implement → verify → PR → review → fix → sync → CI.
 
 ## Three human gates. Exactly three.
 
-1. **Gate 1 — plan approval** (phase 1). Always fires.
+1. **Gate 1 — plan approval** (phase 1). Always fires, except on the refined fast path,
+   where the issue body was the approved plan.
 2. **Gate 2a — a finding an automated pass should not be the last word on** (phase 7).
    Fires only when the review actually raises one.
 3. **Gate 2 — the PR is ready for a human to review and merge** (phase 9.3). Always fires,
@@ -421,14 +422,12 @@ that `aiw refined` already wrote, and go to phase 1.
 ## 1. Plan (agent: run-planner) — GATE 1
 
 **Refined fast path:** do not dispatch `run-planner`. Route the `10-plan.json` that
-`aiw refined` already wrote. On `advance(…)`, print the plan's `test_root`, `base_branch`,
-and each acceptance criterion (one line each; the How itself was already approved when the
-issue was refined), then gate with **Approve and start**, **Run the planner**, **Abort**
-(headless: `aiw ask`, same as below). **Approve and start** continues exactly as the normal
-approval below: comment the plan, then `aiw set` its fields. **Run the planner** (or free
-text, carried in as `User feedback:`) drops out of the fast path: dispatch `run-planner` as
-below, overwrite `10-plan.json`, and run the full Gate 1. The same applies to a later
-`bounce(planner)` on a refined run: the planner runs for real, and the full Gate 1 fires.
+`aiw refined` already wrote. **No gate**: the refined issue body was the approved plan. On
+`advance(…)`, print the plan's `test_root`, `base_branch`, and each acceptance criterion
+(one line each) so the log shows what the run committed to, then continue exactly as
+**Approve and start** below: comment the plan on the issue, then `aiw set` its fields. A
+later `bounce(planner)` on a refined run drops out of the fast path: the planner runs for
+real, and the full Gate 1 fires on its plan.
 
 Dispatch the `run-planner` agent with the issue's title/body/comments/labels **and the
 phase-0.5 research brief verbatim, under a `## Research brief` heading** (omit the
