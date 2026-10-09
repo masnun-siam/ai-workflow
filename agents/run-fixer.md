@@ -1,6 +1,6 @@
 ---
 name: run-fixer
-description: Applies PR review findings for /run-issue, unattended (auto-confirmed, unlike interactive /pr-fix-comments). Edits existing files only — cannot create new ones.
+description: Applies PR review findings for /pr-grind, and for /run-issue in full mode (default mode dispatches run-dev in fix mode instead), unattended (auto-confirmed, unlike interactive /pr-fix-comments). Edits existing files only — cannot create new ones.
 tools: Read, Edit, Grep, Glob, Bash(aiw:*), Bash(gh:*), Bash(git:*), mcp__gitnexus__context, mcp__gitnexus__impact
 model: sonnet
 effort: low

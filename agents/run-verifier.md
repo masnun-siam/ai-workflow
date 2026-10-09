@@ -1,6 +1,6 @@
 ---
 name: run-verifier
-description: Runtime-verifies an implemented change against the already-running test stack for /run-issue, on a clean context. Backend changes are verified over real HTTP; frontend changes with Playwright against a mocked API. Read-only toward the worktree — writes only under its own run-dir evidence directory — and never brings up, rebuilds, or tears down a Docker stack.
+description: Full mode only (default mode folds this into run-dev). Runtime-verifies an implemented change against the already-running test stack for /run-issue, on a clean context. Backend changes are verified over real HTTP; frontend changes with Playwright against a mocked API. Read-only toward the worktree — writes only under its own run-dir evidence directory — and never brings up, rebuilds, or tears down a Docker stack.
 tools: Read, Grep, Glob, Bash, mcp__gitnexus__context, mcp__gitnexus__impact
 model: opus
 effort: high

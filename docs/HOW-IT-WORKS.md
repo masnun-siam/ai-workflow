@@ -83,6 +83,13 @@ flowchart TD
    captured responses become the frontend's mocks, so the two halves can't quietly disagree.
    Unit tests prove the parts behave; this asks whether the thing does what the issue asked
    for, from outside the process.
+   Steps 5–7 are three agents only in **full mode** (`--full` or a `full` label). By
+   default one `run-dev` dispatch does all three in order — commits the failing tests,
+   implements, then verifies — which saves two agent spawns per issue. The tests are still
+   guarded: after the RED commit, dev may change a test only with a written reason that
+   lands in the PR body. The same agent also stands in for the fixer at step 10. A
+   `refined` issue whose body already holds acceptance criteria and a numbered How skips
+   the research and planning agents and Gate 1 too: the refined body is the approved plan.
 8. **PR.** Links the branch to the issue, pushes, opens the pull request.
 9. **Review.** A reviewer with **no memory of the plan or the code being written** reviews
    the diff. On a risky diff, extra single-lens specialists (security, performance, API
@@ -369,6 +376,7 @@ filed by hand or before this change. `/run-issue <parent>` drives all its childr
 | You see | It means | What happens |
 |---|---|---|
 | `bounce(sdet)` with exit code 6 | dev edited a test | files reverted, sent back to the SDET, one retry spent |
+| `bounce(dev)` with exit code 6 | default mode: dev changed a test after its RED commit without a reason | files reverted, dev re-dispatched, one retry spent |
 | exit code 7 | a post-check refuted a `passed` claim | that station redoes its own work, once |
 | `escalate: ...` | a budget is spent or a wall was hit | draft PR opened, reason recorded, lands at Gate 3 |
 | `stack=failed` | Docker would not come up | run continues, tests unverified, **said loudly** in the report |
