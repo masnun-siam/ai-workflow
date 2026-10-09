@@ -75,6 +75,8 @@ def _clean(body: dict) -> dict:
                 v = ""
             if not isinstance(v, str) or "\x00" in v or len(v) > MAX_TEXT:
                 raise ValueError(f"{k} must be a string of at most {MAX_TEXT} characters")
+            if k == "sid" and v and not ui_sessions._ID_RE.fullmatch(v):
+                raise ValueError("sid must be a session id")
             out[k] = v
     return out
 
@@ -100,9 +102,11 @@ def update(fid: str, body: dict) -> dict:
     flow = load(fid)
     if flow is None:
         raise NotFound(fid)
+    before = {k: flow.get(k) for k in FIELDS if k != "repo"}
     flow.update(_clean(body))
     _attach(flow, flow["sid"])
-    flow["updated"] = _now()
+    if {k: flow.get(k) for k in FIELDS if k != "repo"} != before:  # opening a flow or re-picking its repo isn't activity
+        flow["updated"] = _now()
     return _save(flow)
 
 
@@ -140,7 +144,8 @@ def _empty(flow: dict) -> bool:
 
 def summary(flow: dict) -> dict:
     return {"id": flow["id"], "name": name(flow), "repo": flow.get("repo", ""), "step": step(flow),
-            "updated": flow["updated"], "archived": flow.get("archived", False), "dispatched": flow.get("dispatched", False)}
+            "updated": flow["updated"], "archived": flow.get("archived", False), "dispatched": flow.get("dispatched", False),
+            "running": bool(flow.get("sid"))}
 
 
 def list_all(include_archived: bool = False, now=None) -> list:
@@ -311,8 +316,10 @@ def issue_progress(lines) -> dict:
                 cmd = inp.get("command") if isinstance(inp.get("command"), str) else ""
                 if b.get("name") == "Bash" and "gh issue create" in cmd:
                     reading = False
-                    new = [{"number": None, "title": (t[0] or t[1]).replace('\\"', '"'), "state": "creating"}
-                           for t in _TITLE_RE.findall(cmd)] or [{"number": None, "title": "", "state": "creating"}]
+                    # A title built from a shell variable (a create loop) is unknown here; the UI looks it up.
+                    titles = [(t[0] or t[1]).replace('\\"', '"') for t in _TITLE_RE.findall(cmd)]
+                    new = [{"number": None, "title": "" if "$" in t else t, "state": "creating"} for t in titles] \
+                        or [{"number": None, "title": "", "state": "creating"}]
                     rows.extend(new)
                     pending[b.get("id")] = ("create", new)
                 elif b.get("name") == "Bash" and _EDIT_RE.search(cmd):
@@ -321,12 +328,13 @@ def issue_progress(lines) -> dict:
                         r["state"] = "fixing"
                         pending[b.get("id")] = ("edit", r)
                 elif b.get("name") in ("Agent", "Task") and "factcheck" in json.dumps(inp).lower():
-                    ns = [int(n) for n in re.findall(r"(?:#|issues/)(\d+)", json.dumps(inp))]
-                    r = next((by_number(n) for n in ns if by_number(n)), None) \
-                        or next((x for x in rows if x["state"] == "created"), None)
-                    if r:
+                    # one factcheck may cover several issues ("#67, #68 and #69")
+                    ns = dict.fromkeys(int(n) for n in re.findall(r"(?:#|issues/)(\d+)", json.dumps(inp)))
+                    targets = [by_number(n) for n in ns if by_number(n)] \
+                        or [x for x in rows if x["state"] == "created"][:1]
+                    for r in targets:
                         r["state"] = "checking"
-                    pending[b.get("id")] = ("check", r)
+                    pending[b.get("id")] = ("check", targets)
         elif ev.get("type") == "user":
             for b in content:
                 if not isinstance(b, dict) or b.get("type") != "tool_result" or b.get("tool_use_id") not in pending:
@@ -334,16 +342,29 @@ def issue_progress(lines) -> dict:
                 kind, target = pending.pop(b.get("tool_use_id"))
                 text, err = _result_text(b), b.get("is_error") is True
                 if kind == "create":
-                    nums = [int(n) for n in _URL_RE.findall(text)]
+                    nums = list(dict.fromkeys(int(n) for n in _URL_RE.findall(text)))
                     for i, r in enumerate(target):
                         if i < len(nums):
                             r["number"], r["state"] = nums[i], "created"
                         else:
                             r["state"] = "failed" if err or nums else r["state"]
-                elif kind == "check" and target:
-                    target["state"] = "fixing" if "ISSUES FOUND" in text.upper() else "checked"
+                    # one command can create several issues (a loop): a row per issue URL it printed
+                    at = rows.index(target[-1]) + 1
+                    rows[at:at] = [{"number": n, "title": "", "state": "created"} for n in nums[len(target):]]
+                elif kind == "check":
+                    up = text.upper()
+                    if "PASS" not in up and "ISSUES FOUND" not in up:
+                        continue  # launched in the background: the verdict isn't in this result
+                    for r in target:
+                        # a per-issue verdict line ("#68: ISSUES FOUND") wins over the overall one
+                        line = next((ln for ln in up.splitlines() if re.search(rf"(?:#|ISSUES/){r['number']}\b", ln)
+                                     and ("PASS" in ln or "ISSUES FOUND" in ln)), up)
+                        r["state"] = "fixing" if "ISSUES FOUND" in line else "checked"
                 elif kind == "edit":
-                    target["state"] = "failed" if err else "fixed"
+                    # GitHub printing the issue URL means the edit landed, even if a later command in the
+                    # same shell call failed
+                    landed = re.search(rf"issues/{target['number']}\b", text)
+                    target["state"] = "fixed" if landed or not err else "failed"
     return {"reading": reading, "rows": rows}
 
 

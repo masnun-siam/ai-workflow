@@ -62,6 +62,7 @@ g = ui_flows.update(g["id"], {"sid": sid})
 assert g["sessions"] == [sid] and ui_sessions.load(sid)["flow_id"] == g["id"]
 assert raises(ValueError, ui_flows.update, g["id"], {"issues": ["7"]})
 assert raises(ValueError, ui_flows.update, g["id"], {"text": 5})
+assert raises(ValueError, ui_flows.update, g["id"], {"sid": "../x"})
 assert raises(ui_flows.NotFound, ui_flows.update, "f-00000000000000-000000", {})
 assert raises(ui_flows.NotFound, ui_flows.update, "../etc", {})
 ui_flows.set_archived(g["id"], True)
@@ -71,6 +72,8 @@ e = ui_flows.create({})
 assert os.path.exists(ui_flows._path(e["id"]))
 ui_flows.list_all(now=e["updated"] + ui_flows.EMPTY_TTL + 1)
 assert not os.path.exists(ui_flows._path(e["id"]))
+t0 = ui_flows.load(g["id"])["updated"]
+assert ui_flows.update(g["id"], {"repo": "/abs/path", "text": g["text"]})["updated"] == t0  # same work, new repo spelling
 print("ok create, update, archive, prune empty")
 
 # ---- issue progress from raw stream lines
@@ -130,3 +133,21 @@ import ui_runner  # noqa: E402
 assert "Flow auto mode" in ui_runner._system({"flow_id": "f-1"}) and ui_runner.HEADLESS_PROMPT in ui_runner._system({"flow_id": "f-1"})
 assert ui_runner._system({}) == ui_runner._system(None) == ui_runner.HEADLESS_PROMPT
 print("ok Flow auto mode prompt only for flow sessions")
+
+# ---- a create loop: one command, a shell-variable title, several URLs -> one row per issue
+loop = [use("L", "Bash", {"command": 'for k in 0 1 2; do gh issue create --title "${titles[$k]}" --body-file b$k; done'}),
+        res("L", "https://github.com/o/r/issues/64\nhttps://github.com/o/r/issues/65\nhttps://github.com/o/r/issues/66\n")]
+rows = ui_flows.issue_progress(loop)["rows"]
+assert [(r["number"], r["title"], r["state"]) for r in rows] == [(64, "", "created"), (65, "", "created"), (66, "", "created")], rows
+print("ok a create loop gives one row per issue, titles left for the UI to look up")
+
+# ---- one factcheck over several issues, per-issue verdicts; background factcheck; edit that landed despite a failing shell
+base = [use("c", "Bash", {"command": 'gh issue create --title "A"'}),
+        res("c", "https://github.com/o/r/issues/7\nhttps://github.com/o/r/issues/8\n")]
+multi = base + [use("f", "Agent", {"prompt": "factcheck #7 and #8"}), res("f", "#7: PASS\n#8: ISSUES FOUND, wrong file")]
+assert [r["state"] for r in ui_flows.issue_progress(multi)["rows"]] == ["checked", "fixing"]
+bg = base + [use("f", "Agent", {"prompt": "factcheck #7"}), res("f", "Async agent launched successfully. agentId: x")]
+assert [r["state"] for r in ui_flows.issue_progress(bg)["rows"]] == ["checking", "created"]
+landed = multi + [use("e", "Bash", {"command": "gh issue edit 8 --body-file b; rm -r /tmp/x"}), res("e", "Exit code 1\nhttps://github.com/o/r/issues/8\nblocked", True)]
+assert [r["state"] for r in ui_flows.issue_progress(landed)["rows"]] == ["checked", "fixed"]
+print("ok multi-issue factcheck verdicts, background factcheck, edit that landed despite a shell error")
