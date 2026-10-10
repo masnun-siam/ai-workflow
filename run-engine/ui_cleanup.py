@@ -1,4 +1,4 @@
-"""Clean up finished runs for the UI: remove the per-run worktree, run dir and linked sessions.
+"""Clean up finished runs for the UI: remove the per-run worktree (a main-tree run only gets its base branch checked back out), run dir and linked sessions.
 
 A target is one issue (`owner/repo#n`: its ledger run plus every linked session) or one
 link-less session (`session:<id>`). Only terminal work is eligible: a ledger `done`, or a
@@ -31,6 +31,10 @@ def _worktree_plan(ledger: dict) -> dict:
     ctx = ledger.get("context") if isinstance(ledger.get("context"), dict) else {}
     issue, main, wt, branch = ledger.get("issue"), ctx.get("main_checkout"), ctx.get("worktree"), ctx.get("branch")
     out = {"main": None, "worktree": None, "branch": None, "pr": ctx.get("pr")}
+    if ctx.get("tree") == "main" and isinstance(main, str) and os.path.isdir(main):
+        ok_branch = isinstance(branch, str) and isinstance(issue, int) and branch.startswith(f"issue-{issue}-")
+        return {**out, "main": main, "tree": "main", "base": ctx.get("base_branch"),
+                "branch": branch if ok_branch else None}
     if isinstance(main, str) and isinstance(wt, str) and isinstance(issue, int) and os.path.isdir(main):
         expect = os.path.abspath(os.path.join(main, "..", f"wt-issue-{issue}"))
         if os.path.abspath(wt) == expect:
@@ -144,6 +148,20 @@ def clean(t: dict, force: bool) -> dict:
                 notes.append("issue closed" if p.returncode == 0 else "could not close issue: " + (p.stderr or "").strip()[:200])
         else:
             notes.append("issue left open: PR " + ("not merged" if merged is False else "state unknown"))
+
+    if plan and plan.get("tree") == "main":
+        main, br = plan["main"], plan["branch"]
+        head = (_git(main, "rev-parse", "--abbrev-ref", "HEAD").stdout or "").strip()
+        clean_tree = not (_git(main, "status", "--porcelain").stdout or "").strip()
+        if br and head == br and plan.get("base") and clean_tree:
+            p = _git(main, "checkout", plan["base"])
+            notes.append(f"checked out {plan['base']}" if p.returncode == 0
+                         else "could not check out the base: " + (p.stderr or "").strip()[:200])
+            head = plan["base"] if p.returncode == 0 else head
+        if done and br and head != br and _git(main, "rev-parse", "--verify", "-q", f"refs/heads/{br}").returncode == 0:
+            p = _git(main, "branch", "-D", br)
+            if p.returncode != 0:
+                notes.append("could not delete branch: " + (p.stderr or "").strip()[:200])
 
     if plan and plan["worktree"]:
         wt, main = plan["worktree"], plan["main"]
