@@ -291,7 +291,7 @@ export class Launcher extends Component {
     this.submit = this.submit || makeSubmitter((...a) => fetch(...a));
     const repo = (s.manual || !s.repos.length ? s.path : s.repo).trim();
     this.setState({ pending: true, form, errors: {}, result: null });
-    const r = await this.submit({ ...mkBody(repo), ...(s.claudeLabel ? { claude_cmd: s.claudeLabel } : {}), auto_grind: s.autoGrind === true });
+    const r = await this.submit({ ...mkBody(repo), ...(s.claudeLabel ? { claude_cmd: s.claudeLabel } : {}), auto_grind: s.autoGrind === true, worktree: s.worktree !== false });
     if (!r) return;
     this.setState({ pending: false, result: r.kind === 'open' ? null : r });
     if (r.kind === 'open') {
@@ -314,7 +314,7 @@ export class Launcher extends Component {
 
   onCustom = (ev) => this.start(ev, 'custom', validateCustom(this.state), (repo) => buildCustomBody({ repo, text: this.state.text }));
 
-  render({ limits }, { canBrowse, browsing, cmds, claudeLabel, autoGrind, repos, repo, manual, path, command, args, text, pending, form, errors, result, repoQuery, repoOpen, repoActive }) {
+  render({ limits }, { canBrowse, browsing, cmds, claudeLabel, autoGrind, worktree, repos, repo, manual, path, command, args, text, pending, form, errors, result, repoQuery, repoOpen, repoActive }) {
     const set = (k) => (e) => this.setState({ [k]: e.target.value });
     const mine = (f) => (result && (form || 'named') === f ? result : null);
     const outcomeMsg = (f) => { const r = mine(f); return r && r.kind === 'duplicate'
@@ -344,6 +344,7 @@ export class Launcher extends Component {
         ${errors.args ? html`<p id="args-error" role="alert" class="error">${errors.args}</p>` : null}
         ${limitedUntil(cmds, claudeLabel, limits) ? html`<p class="note">This account is rate limited: the run is queued and starts automatically at reset.</p>` : null}
         ${command === 'run-issue' && html`<label class="check" for="auto-grind"><input id="auto-grind" type="checkbox" checked=${autoGrind === true} onChange=${(e) => this.setState({ autoGrind: e.target.checked })} /> Start review grinding when the run finishes</label>`}
+        ${command === 'run-issue' && html`<label class="check" for="worktree"><input id="worktree" type="checkbox" checked=${worktree !== false} onChange=${(e) => this.setState({ worktree: e.target.checked })} /> Run in a worktree (off: the main checkout, waiting for any main-tree run already there)</label>`}
         ${outcomeMsg('named')}
         <div class="launch-actions">
           <button type="submit" disabled=${pending}>${pending && (form || 'named') === 'named' ? 'Starting...' : 'Start'}${FREE_TEXT.has(command) && html` <kbd>⌘↵</kbd>`}</button>

@@ -24,11 +24,12 @@ export const hasUrl = (text) => /github\.com\//i.test(String(text || ''));
 // Issues that screen ready start ticked; flagged ones (gaps, open PR, running, closed) start unticked.
 export const defaultSelection = (items) => new Set((items || []).filter((i) => i.ready).map((i) => i.issue));
 
-export function startBody(preview, selected, { mode, max, claude, grind }) {
+export function startBody(preview, selected, { mode, max, claude, grind, worktree }) {
   const issues = preview.items.map((i) => i.issue).filter((n) => selected.has(n));
   const body = { slug: preview.slug, repo: preview.repo_path, issues, mode, max };
   if (claude) body.claude_cmd = claude;
   body.auto_grind = grind === true;
+  body.worktree = mode !== 'sequential' || worktree !== false; // main tree is sequential-only
   return body;
 }
 
@@ -106,7 +107,7 @@ const StatePill = ({ state }) => html`<span class=${`chip dp-${state}`}>${state 
 // ---- Dispatch: new pipeline + pipeline list -----------------------------------------------------
 
 export class Dispatch extends Component {
-  state = { text: (this.props.issues || []).join(' '), repos: [], repo: '', cmds: [], claude: '', grind: false, mode: 'parallel', max: 2, preview: null, selected: new Set(), busy: null, error: null, list: null, need: null, canBrowse: false };
+  state = { text: (this.props.issues || []).join(' '), repos: [], repo: '', cmds: [], claude: '', grind: false, worktree: true, mode: 'parallel', max: 2, preview: null, selected: new Set(), busy: null, error: null, list: null, need: null, canBrowse: false };
 
   componentDidMount() {
     fetch('/api/repos', { headers: { Accept: 'application/json' } }).then((r) => (r.ok ? r.json() : null)).then((b) => {
@@ -174,16 +175,16 @@ export class Dispatch extends Component {
   };
 
   start = async () => {
-    const { preview, selected, mode, max, claude, grind } = this.state;
+    const { preview, selected, mode, max, claude, grind, worktree } = this.state;
     this.setState({ busy: 'start', error: null });
-    const r = await api('/api/pipelines', startBody(preview, selected, { mode, max, claude, grind }));
+    const r = await api('/api/pipelines', startBody(preview, selected, { mode, max, claude, grind, worktree }));
     if (!r.ok) { this.fail(r, 'start'); return; }
     try { localStorage.setItem('aiw.lastRepo', r.data.slug); } catch { /* private mode: the default repo just won't stick */ }
     toast(`Pipeline started · ${r.data.items.length} issues`);
     location.hash = `#/dispatch/${r.data.id}`;
   };
 
-  render(_, { text, repos, repo, cmds, claude, grind, mode, max, preview, selected, busy, error, list, need, canBrowse }) {
+  render(_, { text, repos, repo, cmds, claude, grind, worktree, mode, max, preview, selected, busy, error, list, need, canBrowse }) {
     const chosen = preview ? preview.items.filter((i) => selected.has(i.issue)).length : 0;
     const flagged = preview ? preview.items.filter((i) => !i.ready).length : 0;
     return html`
@@ -261,6 +262,7 @@ export class Dispatch extends Component {
                 </select>`}
               </div>
               <label class="check"><input type="checkbox" checked=${grind} onChange=${(e) => this.setState({ grind: e.target.checked })} /> Start review grinding when each run finishes</label>
+              <label class="check"><input type="checkbox" checked=${mode !== 'sequential' || worktree} disabled=${mode !== 'sequential'} onChange=${(e) => this.setState({ worktree: e.target.checked })} /> Run each issue in its own worktree${mode !== 'sequential' ? ' (the main tree needs sequential)' : ' (off: the main checkout, one at a time)'}</label>
               <p class="note">${mode === 'parallel' ? `Each run brings up its own Docker stack, so ${max} at once is the cap.` : 'Issues run one after another, oldest dependency first.'}</p>
               <button type="button" class="primary dp-go" disabled=${!chosen || busy === 'start'} onClick=${this.start}>${busy === 'start' ? 'Starting…' : chosen ? `Start ${chosen} issue${chosen === 1 ? '' : 's'}` : 'Select issues to start'}</button>
             </div>`}
