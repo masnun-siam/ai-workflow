@@ -34,6 +34,11 @@ def analyze(repo: str) -> tuple[bool, str]:
 
 def cmd_run(args) -> None:
     repo = os.path.abspath(args.repo)
+    if args.op == "clean" and os.path.isdir(os.path.join(repo, ".git")):
+        # a worktree's .git is a file; a directory means the main checkout, whose index the owner keeps
+        warn(f"{repo} is a main checkout, not a run worktree — leaving its gitnexus index alone")
+        print("skipped")
+        return
     if args.op == "clean":
         runner = _runner(repo)
         if runner:

@@ -24,7 +24,7 @@ import re
 import stack as stack_mod
 import threads as threads_mod
 from engine import resolve_review_panel
-from shared import gh_json, run, shell, warn
+from shared import gh_json, porcelain_paths, run, shell, warn
 
 SUITE_TIMEOUT = 900
 
@@ -116,9 +116,28 @@ def _handoff(envelope) -> dict:
 # --------------------------------------------------------------------------- checks
 
 
+def _carried_guard(ledger, repo) -> CheckResult:
+    """A main-tree run carries the owner's uncommitted work; no station may commit it."""
+    carried = {os.path.normpath(p) for p in ledger.context.get("carried") or []}
+    if not carried:
+        return passed()
+    mb = _git(repo, "merge-base", f"origin/{ledger.context.get('base_branch')}", "HEAD")
+    if mb.returncode != 0:
+        return unrunnable("git merge-base failed")
+    diff = _git(repo, "diff", "--name-only", f"{mb.stdout.strip()}..HEAD")
+    hit = sorted(carried & {os.path.normpath(f) for f in diff.stdout.split()})
+    if hit:
+        return failed("committed the owner's uncommitted work carried into the main tree: "
+                      + ", ".join(hit[:8]) + " — drop it from the commit; if the issue needs that file, stop and ask")
+    return passed()
+
+
 def check_sdet_post(ledger, envelope, repo, config) -> CheckResult:
     """The SDET's whole claim is `red_confirmed`. A suite that is green cannot have
     proved anything red."""
+    guard = _carried_guard(ledger, repo)
+    if not guard.ok:
+        return guard
     handoff = _handoff(envelope)
     test_root = (ledger.context.get("test_root") or "").rstrip("/")
 
@@ -149,6 +168,9 @@ def check_sdet_post(ledger, envelope, repo, config) -> CheckResult:
 
 def check_dev_post(ledger, envelope, repo, config) -> CheckResult:
     """Dev claims a commit, a file list, and a green suite. All three are checkable."""
+    guard = _carried_guard(ledger, repo)
+    if not guard.ok:
+        return guard
     handoff = _handoff(envelope)
     sha = handoff.get("commit")
     if sha:
@@ -334,6 +356,9 @@ def check_reviewer_post(ledger, envelope, repo, config) -> CheckResult:
 
 def check_fixer_post(ledger, envelope, repo, config) -> CheckResult:
     """The motivating case: fixer reports `passed` with threads open and nothing pushed."""
+    guard = _carried_guard(ledger, repo)
+    if not guard.ok:
+        return guard
     handoff = _handoff(envelope)
 
     head = _git(repo, "rev-parse", "HEAD")
@@ -385,8 +410,10 @@ def check_sdet_pre(ledger, envelope, repo, config) -> CheckResult:
     proc = _git(repo, "status", "--porcelain")
     if proc.returncode != 0:
         return unrunnable("git status failed")
-    if proc.stdout.strip():
-        return failed("worktree is dirty before the SDET runs: " + proc.stdout.strip()[:200])
+    carried = {os.path.normpath(p) for p in ledger.context.get("carried") or []}
+    dirty = [p for p in porcelain_paths(proc.stdout) if os.path.normpath(p) not in carried]
+    if dirty:
+        return failed("worktree is dirty before the SDET runs: " + ", ".join(dirty)[:200])
     return passed()
 
 

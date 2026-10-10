@@ -83,4 +83,37 @@ assert open(os.path.join(main, "b.txt")).read() == "b mine\n"
 assert sh("git", "rev-parse", "--abbrev-ref", "HEAD", cwd=main).stdout.strip() == "main"
 ok("a carried edit that collides with the base refuses and names the file")
 
+sys.path.insert(0, HERE)
+import checks  # noqa: E402
+from shared import load_ledger  # noqa: E402
+
+sh("git", "checkout", "-q", "--", "b.txt", cwd=main)
+run_dir3 = os.path.join(root, "run3")
+aiw("init", run_dir3, "--issue", "7", "--repo", main, cwd=main)
+open(os.path.join(main, "mine.txt"), "w").write("mine\n")
+assert aiw("worktree", "create", run_dir3, "--main-tree", "--title", "y", "--base", "main", cwd=main).returncode == 0
+aiw("set", run_dir3, "base_branch=main", cwd=main)
+led = load_ledger(run_dir3)
+
+assert checks.check_sdet_pre(led, {}, main, {}).ok
+ok("sdet precheck ignores carried paths")
+open(os.path.join(main, "stray.txt"), "w").write("x\n")
+assert not checks.check_sdet_pre(led, {}, main, {}).ok
+os.remove(os.path.join(main, "stray.txt"))
+ok("sdet precheck still fails on a non-carried dirty path")
+
+open(os.path.join(main, "c.txt"), "w").write("c\n")
+sh("git", "add", "c.txt", cwd=main)
+sh("git", "commit", "-qm", "work", cwd=main)
+assert checks._carried_guard(led, main).ok
+sh("git", "add", "mine.txt", cwd=main)
+sh("git", "commit", "-qm", "oops", cwd=main)
+r = checks._carried_guard(led, main)
+assert not r.ok and "mine.txt" in r.reason
+ok("committing a carried path fails the guard")
+
+p = aiw("gitnexus", "clean", main, cwd=main)
+assert p.returncode == 0 and "main checkout" in p.stderr, p.stderr
+ok("gitnexus clean refuses a main checkout")
+
 print(f"{n_ok} passed")
