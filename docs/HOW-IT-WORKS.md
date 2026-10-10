@@ -91,7 +91,9 @@ flowchart TD
    `refined` issue whose body already holds acceptance criteria and a numbered How skips
    the research and planning agents and Gate 1 too: the refined body is the approved plan.
 8. **PR.** Links the branch to the issue, pushes, opens the pull request.
-9. **Review.** A reviewer with **no memory of the plan or the code being written** reviews
+9. **Review** (skipped with `--no-review`: steps 9–11 are left out, so the dev step completes the
+   run and the PR goes straight on to sync and CI; the run page and pipeline page can also turn it
+   off for a run that has not reached review yet). A reviewer with **no memory of the plan or the code being written** reviews
    the diff. On a risky diff, extra single-lens specialists (security, performance, API
    contract) review in parallel and the generalist folds their verdicts into one review.
 10. **Fix.** A fixer applies every actionable finding, replies on each thread, resolves it,

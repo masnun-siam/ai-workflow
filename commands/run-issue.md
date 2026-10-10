@@ -1,18 +1,19 @@
 ---
 description: Run an existing GitHub issue end-to-end to a reviewed PR, stopping for a human exactly three times — plan approval, an escalated review finding, and the final ready-to-merge handback
-argument-hint: "<issue-number-or-url | sentry-url | file-path | vault-note | text> [--full] [--no-worktree] [--no-grind]"
+argument-hint: "<issue-number-or-url | sentry-url | file-path | vault-note | text> [--full] [--no-worktree] [--no-grind] [--no-review]"
 allowed-tools: Bash(aiw:*), Bash(gh:*), Bash(git:*), Bash(docker:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(composer:*), Bash(pnpm:*), Bash(yarn:*), Bash(go:*), Bash(python:*), Bash(python3:*), Bash(pip:*), Bash(pip3:*), Bash(dart:*), Bash(flutter:*), Bash(obsidian:*), Read, Write, Agent, Skill, AskUserQuestion, mcp__plugin_sentry_sentry__*, mcp__gitnexus__query, mcp__gitnexus__context, Grep, Glob
 ---
 
 Run issue `$ARGUMENTS` through the full unattended pipeline: readiness → plan → tests →
-implement → verify → PR → review → fix → sync → CI.
+implement → verify → PR → review → fix → sync → CI. With `--no-review`, the review and fix
+steps are left out and the dev step completes the run.
 
 ## Three human gates. Exactly three.
 
 1. **Gate 1 — plan approval** (phase 1). Always fires, except on the refined fast path,
    where the issue body was the approved plan.
 2. **Gate 2a — a finding an automated pass should not be the last word on** (phase 7).
-   Fires only when the review actually raises one.
+   Fires only when the review actually raises one. Never fires with `--no-review`.
 3. **Gate 2 — the PR is ready for a human to review and merge** (phase 9.3). Always fires,
    and it is the *only* terminal report.
 
@@ -145,6 +146,14 @@ It prints exactly one of `advance(<station>)` · `bounce(<station>)` · `escalat
 - **done** — the roster is exhausted. Continue to phase 8 (sync), then 8.5 (CI), 9.1, 9.2,
   **Gate 2** (9.3), Teardown, and 10.
 
+  **With `--no-review` (context `review=skipped`) the roster has no `reviewer`**, so nothing
+  has opened the PR yet. On `done`, run phase 4b and phase 5 first, then skip phases 5.5, 6,
+  7, Gate 2a and 7b entirely and go straight to phase 8.
+
+  The roster can also be trimmed **mid-run**: the UI calls `aiw skip-review "$RUN_DIR"` while the
+  baton is before `reviewer`. Nothing in this session changes — the next `aiw route` simply
+  prints `done`, and the paragraph above applies. Once the reviewer is current it refuses.
+
 ### Post-checks — the engine verifies what a station claimed
 
 A `passed` envelope is a claim. Before routing one, `aiw route` tries to refute it from
@@ -249,9 +258,10 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
    this run writes lands in the checkout, so there is no pipeline file to exempt. This check runs first,
    unconditionally — step 2 below can create a real GitHub issue, and issue creation must
    stay behind this abort so a retry after stashing never files a duplicate.
-2. Strip `--lean`, `--full`, `--no-worktree` and `--no-grind` off `$ARGUMENTS` (note which were
+2. Strip `--lean`, `--full`, `--no-worktree`, `--no-grind` and `--no-review` off `$ARGUMENTS` (note which were
    passed — `--lean`/`--full` are mutually exclusive intent, resolved in phase 4 below;
-   `--no-worktree` runs in the main checkout, phase 2; `--no-grind` skips phase 10) so every source below sees
+   `--no-worktree` runs in the main checkout, phase 2; `--no-grind` skips phase 10;
+   `--no-review` drops the reviewer and fixer stations, so phases 5.5–7b are skipped) so every source below sees
    only the issue reference. Resolve `<owner>/<repo>` from the git remote.
 
    - Argument is a bare number, or a `github.com/.../issues/<n>` URL → resolve to `<n>`,
@@ -352,8 +362,11 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
    full was chosen — default is already `aiw init`'s own default mode (see
    `run-engine/route.py`'s `cmd_init`), so there is nothing to pass for it:
    ```bash
-   aiw init "$RUN_DIR" --issue <n> --repo <main-checkout> [--mode full]
+   aiw init "$RUN_DIR" --issue <n> --repo <main-checkout> [--mode full] [--no-review]
    ```
+
+   Pass `--no-review` only when it was given. `aiw init` then removes `reviewer` and `fixer`
+   from the roster and records `review=skipped` in the run context.
 
    **Refined fast path.** If the `labels` from step 3 include `refined` (and this is a fresh
    init, not a resume), write the issue body to a temp file and run:
@@ -1045,7 +1058,8 @@ auto-confirmed (see "Programmatic invocation" in the dump skill):
   `no match`.
 - the issue number, title, and URL; the PR URL and its final state
 - what the approved plan decided, and where implementation diverged from it
-- what the review caught and what was fixed (phases 6-7), and any still-open threads
+- what the review caught and what was fixed (phases 6-7), and any still-open threads — or
+  `internal review skipped (--no-review)`
 - decisions made mid-run that aren't in the issue or the PR description — a rejected
   approach, a constraint discovered in the code, a test that had to change
 
@@ -1112,6 +1126,7 @@ Then:
   actually executed the suite. This is the most important line in the report when it is
   present, because every other line is weaker than it looks.
 - What the review caught — including which specialist lenses ran, or that none fired — and
+  (with `--no-review`) the single line `Internal review: skipped (--no-review)` instead; and
   what was fixed, with SHAs.
 - Any still-open review threads, from the check above.
 - **`context.check_failures[]`, verbatim** — a station whose claim the engine refuted

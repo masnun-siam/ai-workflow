@@ -284,7 +284,7 @@ def load_run(owner: str, repo: str, n: str, runs_dir=None):
         return None
     errors = {}
     body = {"owner": owner, "repo": repo, "issue": int(n), "status": None, "currentStation": None,
-            "stations": [], "trace": [], "plan": None, "pr": None, "branch": None, "title": None,
+            "stations": [], "trace": [], "plan": None, "pr": None, "branch": None, "title": None, "reviewSkipped": False,
             "totals": {"stations": 0, "done": 0, "bounces": 0}, "errors": errors,
             "updated": os.path.getmtime(run_json)}
     data, err = _read_part(run_json)
@@ -299,7 +299,8 @@ def load_run(owner: str, repo: str, n: str, runs_dir=None):
             rows, current, totals = run_timeline(led.stations, led.current_index, led.status, led.trace)
             body.update(status=led.status, currentStation=current, stations=rows, trace=led.trace, totals=totals)
             context = data.get("context") if isinstance(data.get("context"), dict) else {}
-            body.update(pr=_https_url(context.get("pr")), branch=context.get("branch") if isinstance(context.get("branch"), str) else None)
+            body.update(pr=_https_url(context.get("pr")), branch=context.get("branch") if isinstance(context.get("branch"), str) else None,
+                        reviewSkipped=context.get("review") == "skipped")
     if err:
         errors["ledger"] = err
     plan_path = os.path.join(run_dir, "10-plan.json")

@@ -411,11 +411,15 @@ with tempfile.TemporaryDirectory() as runs:
         d = run_dir_for(runs, "acme/widgets", issue)
         os.makedirs(d, exist_ok=True)
         with open(os.path.join(d, "run.json"), "w", encoding="utf-8") as fh:
-            json.dump(ledger(issue, FULL, 3, pr=pr, branch="issue-5-x"), fh)
+            led = ledger(issue, FULL, 3, pr=pr, branch="issue-5-x")
+            if issue == 6:
+                led["context"]["review"] = "skipped"
+            json.dump(led, fh)
     good = load_run("acme", "widgets", "5", runs_dir=runs)
     bad = load_run("acme", "widgets", "6", runs_dir=runs)
 assert good["pr"] == "https://github.com/acme/widgets/pull/9" and good["branch"] == "issue-5-x", good
 assert bad["pr"] is None, bad["pr"]
+assert good["reviewSkipped"] is False and bad["reviewSkipped"] is True, (good, bad)
 ok("load_run: https pr link and branch exposed, javascript: link dropped")
 
 # --- 24. load_run: station envelopes become a run log; skipped stations flagged ----

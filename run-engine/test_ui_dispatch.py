@@ -178,6 +178,28 @@ assert out["max"] == 4 and out["mode"] == "sequential"
 ok("pause + live max/mode edit")
 assert raises(d.act, created["id"], "update", {"max": 0})
 ok("bad max rejected")
+
+# --- review / auto_grind edits: stored on the pipeline, applied to live runs, per-item result
+ep = pipe([(201, []), (202, [])])
+ep["id"] = "p-20260101000009-aaaaaa"
+ep["items"][0].update(state="running", session_id="s-1")
+d.save(ep)
+_calls = []
+_real_apply = d.ui_options.apply
+d.ui_options.apply = lambda o, r, i, b, session_id=None: _calls.append((i, b, session_id)) or {"review": "too_late"}
+out = d.act(ep["id"], "update", {"review": False, "auto_grind": False})
+assert out["review"] is False and out["auto_grind"] is False, out
+assert _calls == [(201, {"review": False, "auto_grind": False}, "s-1")], _calls
+assert out["applied"] == {201: {"review": "too_late"}}, out
+_calls.clear()
+out = d.act(ep["id"], "update", {"review": True})
+assert out["review"] is True and not _calls, (out, _calls)  # turning review back on only reaches queued items
+assert raises(d.act, ep["id"], "update", {"review": "no"})
+assert raises(d.act, ep["id"], "update", {"auto_grind": 1})
+d.ui_options.apply = _real_apply
+os.unlink(d._path(ep["id"]))  # a live pipeline would leak into the checks below
+notes.clear()
+ok("update review/auto_grind: stored, applied to live runs with a per-item result, non-bool rejected")
 _real = d._screen
 d._screen = lambda slug, nums: [{"issue": n, "error": "Could not resolve to an Issue"} for n in nums]
 assert raises(d.act, created["id"], "update", {"add": [404]}) and raises(d.create, {"repo": "o/r", "issues": [404]})
@@ -262,6 +284,11 @@ assert calls[-1]["issue"] == 90 and calls[-1]["worktree"] is False
 assert d.create({"repo": "o/r", "issues": [92]})["worktree"] is True
 assert d.detail(mt["id"])["worktree"] is False
 print("ok  main-tree pipeline must be sequential; the flag reaches each launched session")
+assert raises(d.create, {"repo": "o/r", "issues": [93], "review": "no"})
+nr = d.create({"repo": "o/r", "issues": [94], "review": False})
+assert nr["review"] is False and calls[-1]["review"] is False
+assert d.create({"repo": "o/r", "issues": [95]})["review"] is True
+print("ok  review flag is stored on the pipeline and reaches each launched session")
 assert raises(d.act, mt["id"], "update", {"mode": "parallel"})
 assert d.load(mt["id"])["mode"] == "sequential"
 print("ok  a main-tree pipeline cannot switch to parallel")
