@@ -151,14 +151,17 @@ d.tick(created["id"])
 by = {i["issue"]: i for i in d.load(created["id"])["items"]}
 assert by[1]["state"] == "done"
 ok("tick observes finished sessions")
-ledgers.pop(1)  # a session that exited cleanly without a ledger (stopped at preflight) is a failure
-d.tick(created["id"])
-by = {i["issue"]: i for i in d.load(created["id"])["items"]}
-assert by[1]["state"] == "failed" and by[1]["reason"] == "run did not start", by[1]
-ledgers[1] = "done"
+ledgers.pop(1)  # a finished run whose ledger was cleaned up (PR merged + cleanup) stays done
 d.tick(created["id"])
 assert d.load(created["id"])["items"][0]["state"] == "done"
-ok("done session without a completed ledger is failed, recovers when the ledger completes")
+ok("done item stays done when its ledger is cleaned up")
+pp = {"status": "active", "mode": "parallel", "max": 3, "items": [
+    {"issue": 1, "state": "running", "session_id": "s", "deps": []}]}
+d.advance(pp, {1: ("done", None)})  # a session that exited cleanly without ever writing a ledger
+assert pp["items"][0]["state"] == "failed" and pp["items"][0]["reason"] == "run did not start"
+d.advance(pp, {1: ("done", "done")})
+assert pp["items"][0]["state"] == "done"
+ok("done session without a ledger is failed, recovers when the ledger completes")
 
 sessions["sess-3"]["status"] = "done"
 sessions["sess-2"] = {"status": "running"}
