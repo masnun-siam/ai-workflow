@@ -335,6 +335,12 @@ For each finding not already resolved by step 4:
   replies + resolves. If `gh issue comment` for a companion-issue annotation
   is classifier-blocked, note it as needing a human.
 
+**Main-tree PRs.** If the head branch is `issue-<n>-…` and
+`<runs_dir>/<owner>-<repo>-issue-<n>/run.json` has `context.tree == "main"`, take the main tree
+first: `aiw maintree acquire <owner>/<repo> <n> --grind --wait 540`, repeated while it prints
+`waiting …`. Then `git -C <main checkout> checkout <branch>`, and stop if that fails. Hand
+`run-fixer` the main checkout and the ledger's `carried` list.
+
 Before handing `run-fixer` a working directory, check `git worktree list` —
 the PR branch may already be checked out in a sibling worktree (e.g. from
 `/run-issue`). Point `run-fixer` at that path; do not `git checkout` the

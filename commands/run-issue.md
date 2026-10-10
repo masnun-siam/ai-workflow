@@ -1,6 +1,6 @@
 ---
 description: Run an existing GitHub issue end-to-end to a reviewed PR, stopping for a human exactly three times — plan approval, an escalated review finding, and the final ready-to-merge handback
-argument-hint: "<issue-number-or-url | sentry-url | file-path | vault-note | text> [--full]"
+argument-hint: "<issue-number-or-url | sentry-url | file-path | vault-note | text> [--full] [--no-worktree] [--no-grind]"
 allowed-tools: Bash(aiw:*), Bash(gh:*), Bash(git:*), Bash(docker:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(composer:*), Bash(pnpm:*), Bash(yarn:*), Bash(go:*), Bash(python:*), Bash(python3:*), Bash(pip:*), Bash(pip3:*), Bash(dart:*), Bash(flutter:*), Bash(obsidian:*), Read, Write, Agent, Skill, AskUserQuestion, mcp__plugin_sentry_sentry__*, mcp__gitnexus__query, mcp__gitnexus__context, Grep, Glob
 ---
 
@@ -237,7 +237,9 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
 
 ## 0. Preflight
 
-1. ``git status --porcelain -- . ':(exclude)tasks/lessons.md' ':(exclude,glob)**/CLAUDE.md' ':(exclude,glob)**/AGENTS.md'``
+1. With `--no-worktree`, skip this check: the owner's uncommitted changes ride along onto the issue
+   branch and `carried` keeps every station from committing them (phase 2). Otherwise run
+   ``git status --porcelain -- . ':(exclude)tasks/lessons.md' ':(exclude,glob)**/CLAUDE.md' ':(exclude,glob)**/AGENTS.md'``
    on the current checkout — if non-empty, stop and tell the user to commit/stash first. Do not
    proceed on a dirty tree. Three paths are exempt. `tasks/lessons.md`: phase 9.2 deliberately
    leaves it dirty in the main checkout for a human-reviewed commit, so one run's harvest must
@@ -247,8 +249,9 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
    this run writes lands in the checkout, so there is no pipeline file to exempt. This check runs first,
    unconditionally — step 2 below can create a real GitHub issue, and issue creation must
    stay behind this abort so a retry after stashing never files a duplicate.
-2. Strip `--lean` and `--full` off `$ARGUMENTS` (note which, if either, was passed — they
-   are mutually exclusive intent, resolved in phase 4 below) so every source below sees
+2. Strip `--lean`, `--full`, `--no-worktree` and `--no-grind` off `$ARGUMENTS` (note which were
+   passed — `--lean`/`--full` are mutually exclusive intent, resolved in phase 4 below;
+   `--no-worktree` runs in the main checkout, phase 2; `--no-grind` skips phase 10) so every source below sees
    only the issue reference. Resolve `<owner>/<repo>` from the git remote.
 
    - Argument is a bare number, or a `github.com/.../issues/<n>` URL → resolve to `<n>`,
@@ -315,6 +318,22 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
      an assumption.
    - **`status: "running"`** — resume properly: continue from `stations[currentIndex]` with
      the roster and bounce counts the ledger already holds.
+
+   **Main tree (`--no-worktree` only).** Before resuming a `running` ledger or initialising a
+   fresh one (never for a `done`/`escalated` stop), take the repo's main tree — the planner reads
+   this checkout, so this comes before any code is read:
+
+   ```bash
+   aiw maintree acquire <owner>/<repo> <n> --wait 540 [--grind]
+   ```
+
+   Pass `--grind` unless `--no-grind` was given. If the first line is
+   `waiting for #N (…) — position k`, show it to the user and run the same command again;
+   repeat until it prints `granted`. That is the queue, not a failure: never skip it and never
+   start work while waiting. A blocked holder is freed by its owner with
+   `aiw maintree release <owner>/<repo>`. A resume of a ledger whose context has `tree: main`
+   runs this loop too, then `aiw worktree create "$RUN_DIR" --main-tree`, which puts the run's
+   branch back and refuses if it cannot.
 
    Never re-init over an existing ledger, and never mix rosters mid-run — a
    `--lean`/`--full` flag or a `lean`/`full` label on a resume of a run with a different roster
@@ -494,6 +513,14 @@ aiw set "$RUN_DIR" \
    ```bash
    aiw worktree create "$RUN_DIR" --title "<issue title>"
    ```
+
+   **With `--no-worktree`**, run `aiw worktree create "$RUN_DIR" --title "<issue title>" --main-tree`
+   instead. It branches `issue-<n>-<slug>` off `origin/<base>` inside the main checkout and
+   records `tree=main` and `carried=[…]` — the owner's uncommitted paths. Exit 1 names the files
+   that collide with the base: stop and relay that message verbatim. From here `worktree` is the
+   main checkout, and every "inside the worktree" below means that directory. Give every station
+   that commits (sdet, dev, fixer, ci) the `carried` list with: these are the owner's files,
+   never stage them, and stop and report blocked if the change needs one.
 
    It fetches the approved base, adds `../wt-issue-<n>` on a new `issue-<n>-<slug>`
    branch, copies every gitignored `.env*`/key/credential file out of the main checkout,
@@ -717,7 +744,8 @@ separate entry: `wt-issue-<n>`.
 aiw gitnexus index <worktree> --run-dir "$RUN_DIR"
 ```
 
-Always exits 0 and records `gitnexus=wt-issue-<n>` or `gitnexus=none`. Phases 6–8 pass
+Always exits 0 and records `gitnexus=wt-issue-<n>` or `gitnexus=none`. In a main-tree run
+`<worktree>` is the main checkout, so the key is the repo's own name, not `wt-issue-<n>`. Phases 6–8 pass
 `repo: "wt-issue-<n>"` to gitnexus tool calls from here on. On `none` the rest of the
 pipeline still works, just slower, and phase 5.5 reports `blast_radius: unknown` and
 scores it wide — the correct conservative reading.
@@ -1108,6 +1136,10 @@ Post the same report as an issue comment (`gh issue comment <n> --body-file <tmp
 so the issue carries a full audit trail alongside the phase-1 plan comment. Non-fatal —
 warn and continue if it fails.
 
+Main-tree runs: skip the next paragraph — there is no worktree. Tell the user the main tree stays
+held until the grind (if any) finishes approved and CI is green, and that
+`aiw maintree release <owner>/<repo>` frees it early.
+
 If phase 4b indexed the worktree, tell the user to run `aiw gitnexus clean <worktree>`
 before `git worktree remove`, so the throwaway `wt-issue-<n>` registry entry doesn't rot
 in `~/.gitnexus/registry.json`.
@@ -1115,6 +1147,8 @@ in `~/.gitnexus/registry.json`.
 Then run Teardown, then Phase 10 (see below).
 
 ## 10. Grind the review — no gate
+
+Skipped entirely when `--no-grind` was passed.
 
 Runs only from phase 9's success path, and only if a PR exists. Skipped entirely after
 a Degraded finish or Gate 2a's "Hold here" — there is nothing ready to review.

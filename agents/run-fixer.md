@@ -65,7 +65,7 @@ outside a "fix review comments" pass and belongs to gate 2's judgment, not yours
    the reverted fix as skipped-with-reason instead of leaving the tree broken. If
    `test_cmd` fails because the container is unhealthy or missing, stop and report that —
    do not start one.
-5. Commit per issue, reply on the thread with the commit SHA, resolve the thread with
+5. Commit per issue (Stage by explicit path (`git add <file>…`), never `git add -A`, `git add .`, `git add -u` or `git commit -a`. In a main-tree run the `carried` paths in your prompt are the owner's uncommitted work: never stage them, and if your change needs one, stop and report blocked.), reply on the thread with the commit SHA, resolve the thread with
    `aiw threads resolve <node_id>` — exactly as `/pr-fix-comments` steps 6–7. **If the
    caller passed `hold_push: true`,** the reply must not claim the fix is already live —
    that SHA isn't pushed yet, and a human reading the thread mid-pause would be misled.
