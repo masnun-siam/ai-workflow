@@ -36,6 +36,7 @@ import ui_sessions
 import ui_settings
 import ui_status
 import ui_tailscale
+import ui_usage
 import shared
 from shared import die
 from ui_board import build_board, fetch_title, load_projects, plausible_repo, load_run, memoize_title_fetcher, scan_records
@@ -176,7 +177,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json(200, body) if body else self._json(404, {"error": "not found"})
         elif path == "/api/sessions":
             recs = ui_sessions.list_sessions()
-            body = {"sessions": [_public(r) for r in recs], "limits": ui_runner.limits(), "afk": ui_afk.public(recs)}
+            body = {"sessions": [_public(r) for r in recs], "limits": ui_runner.limits(), "usage": ui_usage.snapshot(), "afk": ui_afk.public(recs)}
             self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
         else:
             parts = path.split("/")
@@ -646,6 +647,7 @@ def cmd_serve(args) -> None:
     ui_grind.start_timer()  # queued/auto grinds, ntfy on pause/finish
     ui_runner.start_prgrind_timer()  # re-enter pr-grind loops whose session ended (reviews, CI, heartbeat)
     ui_runner.start_limit_timer()  # auto-resume limited runs, incl. catch-up of resets missed while down
+    ui_usage.start_timer()  # 5h/7d usage per account, only while the UI is open
     ui_afk.start_timer()  # AFK mode: auto-answer, skip CI on paused grinds, retry failures; ends the window
     print(f"serving http://127.0.0.1:{server.server_address[1]}/ — Ctrl+C to stop")
     if ts:
