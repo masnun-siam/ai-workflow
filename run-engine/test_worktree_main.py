@@ -116,4 +116,32 @@ p = aiw("gitnexus", "clean", main, cwd=main)
 assert p.returncode == 0 and "main checkout" in p.stderr, p.stderr
 ok("gitnexus clean refuses a main checkout")
 
+# staged owner changes would ride into the first commit: refuse before branching
+sh("git", "checkout", "-q", "main", cwd=main)
+sh("git", "reset", "-q", "--hard", "origin/main", cwd=main)
+open(os.path.join(main, "staged.txt"), "w").write("s\n")
+sh("git", "add", "staged.txt", cwd=main)
+run_dir4 = os.path.join(root, "run4")
+aiw("init", run_dir4, "--issue", "8", "--repo", main, cwd=main)
+p = aiw("worktree", "create", run_dir4, "--main-tree", "--title", "z", "--base", "main", cwd=main)
+assert p.returncode == 1 and "staged" in p.stderr.lower(), p.stderr
+assert sh("git", "rev-parse", "--abbrev-ref", "HEAD", cwd=main).stdout.strip() == "main"
+ok("staged owner changes refuse the main-tree branch and say how to unstage")
+sh("git", "reset", "-q", "--hard", "origin/main", cwd=main)
+
+# a carried untracked DIRECTORY is guarded by prefix
+os.makedirs(os.path.join(main, "newdir"))
+open(os.path.join(main, "newdir", "x.py"), "w").write("x\n")
+run_dir5 = os.path.join(root, "run5")
+aiw("init", run_dir5, "--issue", "9", "--repo", main, cwd=main)
+assert aiw("worktree", "create", run_dir5, "--main-tree", "--title", "d", "--base", "main", cwd=main).returncode == 0
+aiw("set", run_dir5, "base_branch=main", cwd=main)
+led5 = load_ledger(run_dir5)
+assert "newdir/" in led5.context["carried"], led5.context["carried"]
+sh("git", "add", "newdir/x.py", cwd=main)
+sh("git", "commit", "-qm", "oops", cwd=main)
+r = checks._carried_guard(led5, main)
+assert not r.ok and "newdir/x.py" in r.reason, r.reason
+ok("a committed file inside a carried untracked directory fails the guard")
+
 print(f"{n_ok} passed")

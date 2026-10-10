@@ -118,14 +118,17 @@ def _handoff(envelope) -> dict:
 
 def _carried_guard(ledger, repo) -> CheckResult:
     """A main-tree run carries the owner's uncommitted work; no station may commit it."""
-    carried = {os.path.normpath(p) for p in ledger.context.get("carried") or []}
+    entries = ledger.context.get("carried") or []
+    carried = {os.path.normpath(p) for p in entries}
+    dirs = [os.path.normpath(p) + os.sep for p in entries if p.endswith("/")]  # an untracked dir: guard by prefix
     if not carried:
         return passed()
     mb = _git(repo, "merge-base", f"origin/{ledger.context.get('base_branch')}", "HEAD")
     if mb.returncode != 0:
         return unrunnable("git merge-base failed")
     diff = _git(repo, "diff", "--name-only", f"{mb.stdout.strip()}..HEAD")
-    hit = sorted(carried & {os.path.normpath(f) for f in diff.stdout.split()})
+    changed = {os.path.normpath(f) for f in diff.stdout.split()}
+    hit = sorted((carried & changed) | {f for f in changed if any(f.startswith(d) for d in dirs)})
     if hit:
         return failed("committed the owner's uncommitted work carried into the main tree: "
                       + ", ".join(hit[:8]) + " — drop it from the commit; if the issue needs that file, stop and ask")

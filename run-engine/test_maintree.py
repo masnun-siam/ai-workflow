@@ -118,4 +118,15 @@ assert m.for_issue("O", "R", 9) == {"role": "queued", "position": 1, "ahead": 6}
 assert m.for_issue("o", "r", 99) is None
 ok("for_issue: holder / queued / unrelated")
 
+# --- phase 10 skipped on a degraded finish: not "grinding" forever
+m.cancel(SLUG, 9)
+m.release(SLUG)
+m.acquire(SLUG, 20, grind=True)
+d = shared.run_dir_for(os.path.join(shared.data_dir(), "runs"), SLUG, 20)
+os.makedirs(d, exist_ok=True)
+json.dump({"issue": 20, "status": "done", "context": {"pr": PR.format(20), "grind": "skipped"}}, open(os.path.join(d, "run.json"), "w"))
+h = m.status(SLUG)["holder"]
+assert h["phase"] == "blocked" and "skipped" in h["reason"], h
+ok("a run that skipped phase 10 blocks the tree instead of reading as grinding")
+
 print(f"{n_ok} passed")

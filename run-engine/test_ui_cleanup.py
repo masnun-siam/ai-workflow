@@ -170,4 +170,15 @@ r = ui_cleanup.clean(t, False)
 assert r["ok"] and head(main) == branch and branch in branches(main), r
 ok("a dirty main tree stays on its branch")
 
+# cleaning a main-tree run frees the main tree it may still hold
+import maintree  # noqa: E402
+
+main, branch, run_dir = setup_main(14, "done")
+maintree.acquire("acme/widgets", 14, grind=False)
+assert maintree.load("acme/widgets")["holder"]["issue"] == 14
+[t] = ui_cleanup.find_targets()
+assert ui_cleanup.clean(t, False)["ok"]
+assert maintree.load("acme/widgets")["holder"] is None
+ok("main-tree cleanup releases the holder so the queue cannot wedge")
+
 print(f"{passed} passed")

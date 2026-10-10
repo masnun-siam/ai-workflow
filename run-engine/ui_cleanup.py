@@ -13,6 +13,7 @@ import os
 import time
 import shutil
 
+import maintree
 import ui_sessions
 from shared import data_dir, gh_json, run
 from ui_board import _resolve_owner_repo, load_projects, scan_records
@@ -151,6 +152,8 @@ def clean(t: dict, force: bool) -> dict:
 
     if plan and plan.get("tree") == "main":
         main, br = plan["main"], plan["branch"]
+        if maintree.release(f"{t['owner']}/{t['repo']}", t["issue"]):
+            notes.append("main tree released")
         head = (_git(main, "rev-parse", "--abbrev-ref", "HEAD").stdout or "").strip()
         clean_tree = not (_git(main, "status", "--porcelain").stdout or "").strip()
         if br and head == br and plan.get("base") and clean_tree:

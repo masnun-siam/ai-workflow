@@ -144,6 +144,9 @@ def cmd_main(args, ledger, main_checkout: str, base: str) -> None:
     proc = run(["git", "fetch", "origin", base], cwd=main_checkout, timeout=600)
     if proc.returncode != 0:
         die(1, f"git fetch origin {base} failed: " + (proc.stderr or "").strip()[:300])
+    if run(["git", "diff", "--cached", "--quiet"], cwd=main_checkout).returncode != 0:
+        die(1, "you have staged changes: unstage them (git restore --staged .) or commit them first — "
+               "a station's commit would otherwise sweep them into the PR")
     carried = porcelain_paths(run(["git", "status", "--porcelain"], cwd=main_checkout).stdout)
     proc = run(["git", "checkout", "-b", branch, f"origin/{base}"], cwd=main_checkout)
     if proc.returncode != 0:

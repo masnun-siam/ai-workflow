@@ -79,6 +79,8 @@ def phase(slug: str, holder: dict) -> tuple[str, str | None]:
         return "blocked", "run finished without a PR"
     owner, repo, number = parse_pr_ref(pr)
     if holder.get("grind"):
+        if (run.get("context") or {}).get("grind") == "skipped":
+            return "blocked", "grind skipped (degraded finish or hold) — release when done"
         h = _grind_header(owner, repo, number)
         if h is None or ("done" not in h and "paused" not in h):
             return "grinding", None

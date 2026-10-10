@@ -943,7 +943,9 @@ and phase 8's conflict resolution.
 2. `git rev-parse --verify origin/<base>` — if this fails (base branch deleted or
    renamed mid-run), append `- [ ] sync: SKIPPED (origin/<base> gone)` and go straight
    to phase 9. Do not guess a substitute branch.
-3. `git merge origin/<base>`:
+3. `git merge origin/<base>` (main-tree run: the owner's uncommitted `carried` files can make git
+   refuse outright, "local changes would be overwritten", with no conflicted files — then set
+   `sync='SKIPPED (carried <files> overlap origin/<base>)'` and go straight to 8.5):
    - Already up to date → append `- [x] sync: already current`, go to phase 9.
    - Clean merge → continue to step 5 (still run tests — a clean merge can break
      things semantically).
@@ -1148,7 +1150,9 @@ Then run Teardown, then Phase 10 (see below).
 
 ## 10. Grind the review — no gate
 
-Skipped entirely when `--no-grind` was passed.
+Skipped entirely when `--no-grind` was passed. On the Degraded-finish and Gate 2a "Hold here"
+paths of a main-tree run, first `aiw set "$RUN_DIR" grind=skipped`, so the main-tree queue shows
+the holder as blocked (release it with `aiw maintree release <owner>/<repo>`), not grinding.
 
 Runs only from phase 9's success path, and only if a PR exists. Skipped entirely after
 a Degraded finish or Gate 2a's "Hold here" — there is nothing ready to review.
