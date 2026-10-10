@@ -12,6 +12,7 @@ import { Settings } from './settings.js';
 import { Dispatch, PipelineDetail } from './dispatch.js';
 import { Flow } from './flow.js';
 import { clockText } from './fmt.js';
+import { UsageGauge } from './usage.js';
 import { toast } from './toast.js';
 import { CleanupDialog } from './cleanup.js';
 import { IssueDialog } from './issue.js';
@@ -133,13 +134,13 @@ export const NAV = [
 
 const BELL = html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10 21a2 2 0 0 0 4 0"></path></svg>`;
 
-// One header chip per account that is limited or near its limit.
-export function limitChips(limits, commands) {
+// One header chip per account that is limited (or warned by a run, when no usage poll covers it).
+export function limitChips(limits, commands, usage) {
   const label = (cmd) => (commands.find((c) => c.cmd === cmd) || {}).label || cmd;
   return Object.entries(limits || {}).flatMap(([cmd, v]) => {
     if (v.limited_until) return [{ kind: 'limited', text: `${label(cmd)} · limited until ${clockText(v.limited_until)}` }];
     const w = v.warning;
-    if (w && typeof w.utilization === 'number') return [{ kind: 'warn', text: `${label(cmd)} · ${w.type === 'seven_day' ? '7d' : w.type === 'five_hour' ? '5h' : 'usage'} ${Math.round(w.utilization * 100)}%` }];
+    if (!(usage || {})[cmd] && w && typeof w.utilization === 'number') return [{ kind: 'warn', text: `${label(cmd)} · ${w.type === 'seven_day' ? '7d' : w.type === 'five_hour' ? '5h' : 'usage'} ${Math.round(w.utilization * 100)}%` }];
     return [];
   });
 }
@@ -176,7 +177,7 @@ function View({ route, sessions, limits }) {
 }
 
 export class App extends Component {
-  state = { route: parseRoute(globalThis.location?.hash), sessions: null, limits: {}, afk: null, commands: [], offline: false, notif: notifyState(), palette: false, sheet: false, cleanup: null, peek: null };
+  state = { route: parseRoute(globalThis.location?.hash), sessions: null, limits: {}, usage: {}, afk: null, commands: [], offline: false, notif: notifyState(), palette: false, sheet: false, cleanup: null, peek: null };
 
   onHash = () => {
     this.setState({ route: parseRoute(location.hash) });
@@ -248,7 +249,7 @@ export class App extends Component {
       if (r.ok) {
         const list = sessionList(r.data);
         this.setAfk((r.data && r.data.afk) || null);
-        this.setState({ sessions: list, limits: (r.data && r.data.limits) || {}, offline: false });
+        this.setState({ sessions: list, limits: (r.data && r.data.limits) || {}, usage: (r.data && r.data.usage) || {}, offline: false });
         for (const s of list || []) {
           if (this.prev[s.id] === 'limited' && ['starting', 'running'].includes(s.outcome)) toast(`Resumed after limit: ${s.command || 'run'}`);
           this.prev[s.id] = s.outcome;
@@ -291,7 +292,7 @@ export class App extends Component {
     if (this.stop) this.stop();
   }
 
-  render(_, { route, sessions, limits, afk, commands, offline, notif, palette, sheet, cleanup, peek }) {
+  render(_, { route, sessions, limits, usage, afk, commands, offline, notif, palette, sheet, cleanup, peek }) {
     const b = headerBadge(offline, afk?.active ? [] : sessions);
     let badge = null;
     if (b?.kind === 'offline') badge = html`<span role="status" class="offline">Offline: retrying</span>`;
@@ -305,7 +306,8 @@ export class App extends Component {
         </nav>
         <span class="spacer"></span>
         <button type="button" class="btn kbd-hint" aria-label="Open command palette" onClick=${() => this.openDialog({ palette: true, sheet: false })}>Search <kbd>⌘K</kbd></button>
-        ${limitChips(limits, commands).map((c) => html`<span class=${`chip chip-${c.kind === 'limited' ? 'limited' : 'waiting'}`} role="status">${c.text}</span>`)}
+        ${limitChips(limits, commands, usage).map((c) => html`<span class=${`chip chip-${c.kind === 'limited' ? 'limited' : 'waiting'}`} role="status">${c.text}</span>`)}
+        <${UsageGauge} usage=${usage} commands=${commands} />
         <${AfkControl} afk=${afk} onChange=${this.setAfk} />
         ${!afk?.active && badge}
         <a class="icon-btn" href="#/settings" aria-label="Settings" title="Settings" aria-current=${route.name === 'settings' ? 'page' : undefined}>${GEAR}</a>

@@ -99,6 +99,8 @@ def advance(pipe: dict, observed: dict):
     by = {it["issue"]: it for it in pipe["items"]}
     for n, it in by.items():
         if it.get("session_id") and n in observed:
+            if it["state"] == "done" and observed[n][1] is None:  # ledger cleaned up after the run finished
+                continue
             st = item_state(*observed[n])
             if st:
                 it["state"] = st

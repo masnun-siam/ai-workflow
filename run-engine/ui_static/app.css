@@ -931,3 +931,27 @@ header .afk-chip:hover { border-color: var(--accent); }
 textarea.flow-prose { font-family: var(--font); font-size: 14px; line-height: 1.5; }
 .flow-step button.primary, .flow-step .btn--primary { justify-self: start; margin-top: 4px; text-decoration: none; }
 .flow-step .error { color: var(--error); margin: 0; }
+
+/* plan usage gauge: two hairline meters (5h over 7d) per account in the header, details in a popover */
+header .ugauge { gap: 12px; padding: 0 10px; border-radius: 6px; color: var(--muted); }
+header .ugauge:hover { background: var(--raised); }
+.ug-acct { display: inline-flex; align-items: center; gap: 6px; }
+.ug-id { font-size: 12px; font-weight: 600; color: var(--fg); }
+.ug-bars { display: grid; gap: 4px; width: 30px; }
+.um { display: block; height: 4px; border-radius: 2px; background: var(--border-input); overflow: hidden; }
+.um-fill { display: block; height: 100%; border-radius: inherit; }
+.um-ok { background: var(--accent); }
+.um-warn { background: var(--waiting); }
+.um-high { background: var(--error-dot); }
+.usage-pop { width: min(340px, calc(100vw - 2 * var(--gutter))); }
+.usage-pop:popover-open { display: grid; gap: 14px; }
+.uacct h2 { margin: 0 0 8px; font-size: 14px; }
+.uacct .note { margin: 4px 0 0; }
+.uline { display: grid; grid-template-columns: 22px 1fr 38px 82px; gap: 10px; align-items: center; margin-top: 6px; }
+.ureset { font-size: 12px; color: var(--muted); text-align: right; white-space: nowrap; }
+.ufoot { margin: 0; }
+.uname { font-size: 12px; color: var(--muted); }
+.ubar .um { height: 6px; }
+.upct { font-variant-numeric: tabular-nums; text-align: right; font-weight: 600; }
+.u-warn { color: var(--waiting); }
+.u-high { color: var(--error); }
