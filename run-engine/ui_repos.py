@@ -262,7 +262,13 @@ def start_session(body: dict):
         if not isinstance(claude_cmd, str) or claude_cmd not in saved:
             return 400, {"error": "claude_cmd must be a label saved in Settings"}
         claude_cmd = saved[claude_cmd]
+    worktree = body.get("worktree", True)
+    if not isinstance(worktree, bool):
+        return 400, {"error": "worktree must be true or false"}
     fam = family(text)
+    if fam == "run-issue" and not worktree:
+        grind = body.get("auto_grind", ui_settings.load()["auto_grind"]) is True
+        text += " --no-worktree" + ("" if grind else " --no-grind")
     if issue is None and fam == "run-issue":
         issue = issue_from_args((text.split(None, 1) + [""])[1])
     link = None

@@ -29,6 +29,7 @@ import ui_settings
 from shared import atomic_write_text, data_dir, gh_json, warn
 
 MAX_ISSUES = 100
+MAIN_TREE_PARALLEL = "main-tree runs go one at a time: use sequential, or run in worktrees"
 LIVE = ("running", "waiting", "limited")
 BAD = ("failed", "stopped", "skipped")
 TERMINAL = ("done", "failed", "stopped", "skipped")
@@ -302,6 +303,11 @@ def create(body: dict) -> dict:
     cap = body.get("max", 2)
     if mode not in ("parallel", "sequential") or not isinstance(cap, int) or isinstance(cap, bool) or not 1 <= cap <= 10:
         raise ValueError("mode must be parallel|sequential and max an integer 1-10")
+    worktree = body.get("worktree", True)
+    if not isinstance(worktree, bool):
+        raise ValueError("worktree must be true or false")
+    if not worktree and mode != "sequential":
+        raise ValueError(MAIN_TREE_PARALLEL)
     label = body.get("claude_cmd")
     if label is not None and not isinstance(label, str):
         raise ValueError("claude_cmd must be a saved label")
@@ -319,7 +325,7 @@ def create(body: dict) -> dict:
     pid = f"p-{time.strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(3)}"
     name = (body.get("name") or "").strip()[:80] or f"{slug} · {len(items)} issue{'s' * (len(items) != 1)}"
     pipe = {"id": pid, "name": name, "slug": slug, "repo_path": cwd, "mode": mode, "max": cap,
-            "claude_cmd": label, "auto_grind": body.get("auto_grind") is True, "status": "active", "created": time.time(), "notified": False, "items": items}
+            "claude_cmd": label, "auto_grind": body.get("auto_grind") is True, "worktree": worktree, "status": "active", "created": time.time(), "notified": False, "items": items}
     with _lock:
         save(pipe)
     tick(pid)
@@ -330,6 +336,7 @@ def _launch(pipe: dict, it: dict) -> None:
     body = {"repo": pipe["repo_path"], "command": "run-issue", "args": str(it["issue"]), "issue": it["issue"]}
     if pipe.get("claude_cmd"):
         body["claude_cmd"] = pipe["claude_cmd"]
+    body["worktree"] = pipe.get("worktree", True)
     if "auto_grind" in pipe:  # a pipeline made before the option existed inherits the Settings default
         body["auto_grind"] = pipe["auto_grind"] is True
     status, res = ui_repos.start_session(body)
@@ -506,6 +513,8 @@ def act(pid: str, action: str, body: dict | None = None, issue=None) -> dict:
             if "mode" in body:
                 if body["mode"] not in ("parallel", "sequential"):
                     raise ValueError("mode must be parallel|sequential")
+                if body["mode"] == "parallel" and pipe.get("worktree") is False:
+                    raise ValueError(MAIN_TREE_PARALLEL)
                 pipe["mode"] = body["mode"]
             if body.get("add"):
                 add = [n for n in dispatch.dedupe([int(n) for n in body["add"]]) if all(i["issue"] != n for i in pipe["items"])]
@@ -567,5 +576,5 @@ def detail(pid: str, gh_status=None) -> dict | None:
         order = [it["issue"] for it in pipe["items"]]
     by = {r["issue"]: r for r in rows}
     return {**{k: pipe[k] for k in ("id", "name", "slug", "mode", "max", "status", "created", "claude_cmd")},
-            "auto_grind": pipe.get("auto_grind") is True, "items": rows, "order": order,
+            "auto_grind": pipe.get("auto_grind") is True, "worktree": pipe.get("worktree", True), "items": rows, "order": order,
             "merge_order": [n for n in order if (by[n].get("run") or {}).get("pr")]}
