@@ -12,7 +12,7 @@ import os
 import re
 import shutil
 
-from shared import die, load_ledger, print_written, record, run, warn
+from shared import die, load_ledger, porcelain_paths, print_written, record, run, warn
 
 # Copied into the worktree because `git worktree add` materializes tracked files
 # only, and the test stack needs these to exist. Copying too little here is
@@ -95,12 +95,80 @@ def install_dir(repo: str, test_root: str | None) -> str:
     return repo
 
 
+def _install(repo: str, ledger) -> list[str] | None:
+    where = install_dir(repo, ledger.context.get("test_root"))
+    install = pick_install(where)
+    if install:
+        proc = run(install, cwd=where, timeout=1800)
+        if proc.returncode != 0:
+            warn(" ".join(install) + " failed: " + (proc.stderr or "").strip()[:300])
+    else:
+        warn("no lockfile found — skipping dependency install")
+    return install
+
+
+def _exclude_override(repo: str) -> None:
+    # So run-sdet/run-dev's commits never sweep the generated compose override into
+    # the PR. `.git` in a worktree is a FILE pointing at the real gitdir, so the path
+    # has to come from git — and git reads info/exclude from the COMMON dir, which is
+    # why this is asked for rather than assumed. It is never committed either way.
+    where = run(["git", "rev-parse", "--path-format=absolute", "--git-path", "info/exclude"], cwd=repo)
+    exclude = (where.stdout or "").strip()
+    if not exclude:
+        warn("could not locate info/exclude; .docker-agent.yml may reach the PR")
+        return
+    os.makedirs(os.path.dirname(exclude), exist_ok=True)
+    existing = ""
+    if os.path.isfile(exclude):
+        with open(exclude, encoding="utf-8") as fh:
+            existing = fh.read()
+    if ".docker-agent.yml" not in existing:
+        with open(exclude, "a", encoding="utf-8") as fh:
+            fh.write("\n.docker-agent.yml\n")
+
+
+def cmd_main(args, ledger, main_checkout: str, base: str) -> None:
+    """--main-tree: the run's branch lives in the primary checkout; the owner's uncommitted
+    work rides along and is recorded as `carried` so no station ever commits it."""
+    if ledger.context.get("tree") == "main" and ledger.context.get("branch"):
+        branch = ledger.context["branch"]
+        head = run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=main_checkout).stdout.strip()
+        if head != branch:
+            proc = run(["git", "checkout", branch], cwd=main_checkout)
+            if proc.returncode != 0:
+                die(1, f"git checkout {branch} failed: " + (proc.stderr or "").strip()[:300])
+        print(f"resumed on {branch}")
+        return
+
+    branch = f"issue-{ledger.issue}-{slugify(args.title)}"
+    proc = run(["git", "fetch", "origin", base], cwd=main_checkout, timeout=600)
+    if proc.returncode != 0:
+        die(1, f"git fetch origin {base} failed: " + (proc.stderr or "").strip()[:300])
+    carried = porcelain_paths(run(["git", "status", "--porcelain"], cwd=main_checkout).stdout)
+    proc = run(["git", "checkout", "-b", branch, f"origin/{base}"], cwd=main_checkout)
+    if proc.returncode != 0:
+        die(1, f"your uncommitted changes conflict with origin/{base} — commit or move them, then retry:\n"
+               + (proc.stderr or "").strip()[:600])
+    install = _install(main_checkout, ledger)
+    _exclude_override(main_checkout)
+    print(f"main tree on {branch}; carried {len(carried)} uncommitted path(s); "
+          f"install: {' '.join(install) if install else 'skipped'}")
+    print_written(record(
+        args.run_dir, ledger, worktree=main_checkout, branch=branch, main_checkout=main_checkout,
+        repo=main_checkout, tree="main", carried=carried,
+    ))
+
+
 def cmd_create(args) -> None:
     ledger = load_ledger(args.run_dir)
     main_checkout = os.path.abspath(args.repo or ledger.context.get("repo") or os.getcwd())
     base = args.base or ledger.context.get("base_branch")
     if not base:
         die(2, "no base branch: pass --base, or record base_branch from the approved plan first")
+
+    if args.main_tree:
+        cmd_main(args, ledger, main_checkout, base)
+        return
 
     issue = ledger.issue
     branch = f"issue-{issue}-{slugify(args.title)}"
@@ -128,33 +196,8 @@ def cmd_create(args) -> None:
         except OSError as exc:
             warn(f"could not copy {rel}: {exc}")
 
-    where = install_dir(worktree, ledger.context.get("test_root"))
-    install = pick_install(where)
-    if install:
-        proc = run(install, cwd=where, timeout=1800)
-        if proc.returncode != 0:
-            warn(" ".join(install) + " failed: " + (proc.stderr or "").strip()[:300])
-    else:
-        warn("no lockfile found — skipping dependency install")
-
-    # So run-sdet/run-dev's commits never sweep the generated compose override into
-    # the PR. `.git` in a worktree is a FILE pointing at the real gitdir, so the path
-    # has to come from git — and git reads info/exclude from the COMMON dir, which is
-    # why this is asked for rather than assumed. It is never committed either way.
-    where = run(["git", "rev-parse", "--path-format=absolute", "--git-path", "info/exclude"],
-                cwd=worktree)
-    exclude = (where.stdout or "").strip()
-    if exclude:
-        os.makedirs(os.path.dirname(exclude), exist_ok=True)
-        existing = ""
-        if os.path.isfile(exclude):
-            with open(exclude, encoding="utf-8") as fh:
-                existing = fh.read()
-        if ".docker-agent.yml" not in existing:
-            with open(exclude, "a", encoding="utf-8") as fh:
-                fh.write("\n.docker-agent.yml\n")
-    else:
-        warn("could not locate info/exclude; .docker-agent.yml may reach the PR")
+    install = _install(worktree, ledger)
+    _exclude_override(worktree)
 
     print(f"copied {copied} gitignored file(s); install: {' '.join(install) if install else 'skipped'}")
     print_written(record(
@@ -171,4 +214,6 @@ def register(sub, add) -> None:
     q.add_argument("--title", default="", help="issue title, for the branch slug")
     q.add_argument("--base", help="base branch (default: base_branch from the ledger)")
     q.add_argument("--repo", help="main checkout (default: ledger context, else cwd)")
+    q.add_argument("--main-tree", action="store_true",
+                   help="branch inside the main checkout instead of adding a worktree")
     q.set_defaults(func=cmd_create)
