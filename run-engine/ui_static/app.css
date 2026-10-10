@@ -132,7 +132,10 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); width
 .chip-waiting { color: var(--waiting); background: var(--waiting-bg); }
 .chip.pending { color: var(--faint); background: transparent; box-shadow: inset 0 0 0 1px var(--border); }
 .chip-grind-idle, .chip-grind-queued { color: var(--muted); background: var(--surface); }
-.chip-grind-paused { color: var(--waiting); background: var(--waiting-bg); }
+.chip-grind-paused, .chip-maintree-blocked { color: var(--waiting); background: var(--waiting-bg); }
+.chip-maintree-queued, .chip-maintree-ci { color: var(--muted); background: var(--surface); }
+.chip-maintree-running, .chip-maintree-grinding { color: var(--live); background: var(--live-bg); }
+.chip-maintree-done { color: var(--done); background: var(--done-bg); }
 .chip-grind-done { color: var(--done); background: var(--done-bg); }
 .check { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 .chip-limited { color: var(--waiting); background: var(--waiting-bg); }

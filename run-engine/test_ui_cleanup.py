@@ -139,4 +139,46 @@ t = next(t for t in ui_cleanup.find_targets() if t["key"] == f"session:{loose['i
 assert ui_cleanup.clean(t, False)["ok"] and ui_sessions.load(loose["id"]) is None
 ok("link-less session cleaned alone")
 
+# main-tree run: nothing removed; base checked out when clean; a done run's branch is deleted
+def setup_main(issue: int, status: str):
+    main, wt, branch, run_dir, sid = setup(issue, status)
+    git(main, "worktree", "remove", "--force", wt)
+    git(main, "checkout", "-q", branch)
+    led = json.load(open(os.path.join(run_dir, "run.json")))
+    led["context"].update(tree="main", worktree=main, base_branch="main", carried=[])
+    json.dump(led, open(os.path.join(run_dir, "run.json"), "w"))
+    return main, branch, run_dir
+
+
+def head(main):
+    return subprocess.run(["git", "-C", main, "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True).stdout.strip()
+
+
+main, branch, run_dir = setup_main(12, "done")
+[t] = ui_cleanup.find_targets()
+assert t["plan"]["worktree"] is None and t["plan"]["branch"] == branch, t["plan"]
+assert ui_cleanup.describe(t)["has_worktree"] is False
+r = ui_cleanup.clean(t, False)
+assert r["ok"], r
+assert os.path.isdir(main) and head(main) == "main" and branch not in branches(main) and not os.path.exists(run_dir)
+ok("main-tree cleanup checks out the base and deletes the done branch, keeps the checkout")
+
+main, branch, run_dir = setup_main(13, "done")
+open(os.path.join(main, "dirty.txt"), "w").write("wip")
+[t] = ui_cleanup.find_targets()
+r = ui_cleanup.clean(t, False)
+assert r["ok"] and head(main) == branch and branch in branches(main), r
+ok("a dirty main tree stays on its branch")
+
+# cleaning a main-tree run frees the main tree it may still hold
+import maintree  # noqa: E402
+
+main, branch, run_dir = setup_main(14, "done")
+maintree.acquire("acme/widgets", 14, grind=False)
+assert maintree.load("acme/widgets")["holder"]["issue"] == 14
+[t] = ui_cleanup.find_targets()
+assert ui_cleanup.clean(t, False)["ok"]
+assert maintree.load("acme/widgets")["holder"] is None
+ok("main-tree cleanup releases the holder so the queue cannot wedge")
+
 print(f"{passed} passed")

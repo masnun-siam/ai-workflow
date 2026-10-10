@@ -64,7 +64,7 @@ caller does.
 **Real failure** — a test assertion, a lint or format violation, a type error, a build
 error, a migration failure. The diff (or the base it merged with) caused it.
 
-→ Fix the cause. Then commit and push so the check re-runs.
+→ Fix the cause. Then commit and push so the check re-runs. Stage by explicit path (`git add <file>…`), never `git add -A`, `git add .`, `git add -u` or `git commit -a`. In a main-tree run the `carried` paths in your prompt are the owner's uncommitted work: never stage them, and if your change needs one, stop and report blocked.
 
 If you cannot tell which it is, it is a **real failure**. Never rerun a check hoping it
 passes; that is how a genuine break gets shipped.

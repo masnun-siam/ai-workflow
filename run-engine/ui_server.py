@@ -25,6 +25,7 @@ import ui_afk
 import ui_cleanup
 import ui_dispatch
 import ui_events
+import maintree
 import ui_grind
 import ui_issue
 import ui_pr
@@ -207,6 +208,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         body["title"] = self.server.fetch_title(owner, repo, int(n))
         body["gh"] = _gh_status(owner, repo, int(n), body["pr"], body["branch"])
         body["grind"] = ui_grind.for_card(ui_grind.index(), owner, repo, int(n), body["pr"])
+        body["maintree"] = maintree.for_issue(owner, repo, int(n))
         if body["grind"] and body["grind"]["state"] == "paused":
             body["grind"] = {**body["grind"], "message": ui_grind.last_message(owner, repo, int(n))}
         self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
@@ -283,6 +285,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._dispatch(lambda b: ui_dispatch.act(parts[3], parts[4], b))
         elif len(parts) == 7 and parts[:3] == ["", "api", "pipelines"] and parts[4] == "items" and parts[5].isdigit():
             self._dispatch(lambda b: ui_dispatch.act(parts[3], parts[6], b, issue=int(parts[5])))
+        elif parts == ["", "api", "maintree", "release"]:
+            self._maintree_release()
         elif len(parts) == 4 and parts[:3] == ["", "api", "grind"] and parts[3] in ("start", "pause", "resume", "rerun-ci", "reply"):
             self._grind(parts[3])
         elif parts == ["", "api", "settings", "test"]:
@@ -299,6 +303,16 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             {"stop": self._stop, "resume": self._resume, "cancel-auto": self._cancel_auto}[parts[4]](parts[3])
         else:
             self._method_not_allowed(guarded=True)
+
+    def _maintree_release(self) -> None:
+        body = self._read_body()
+        if body is None:
+            return
+        owner, repo = body.get("owner"), body.get("repo")
+        if not (isinstance(owner, str) and isinstance(repo, str) and owner and repo):
+            self._json(400, {"error": "owner and repo are required"})
+            return
+        self._json(200, {"released": maintree.release(f"{owner}/{repo}")})
 
     def _grind(self, action: str) -> None:
         body = self._read_body()

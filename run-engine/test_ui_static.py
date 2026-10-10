@@ -694,7 +694,10 @@ assert.deepEqual(D.issueNumbers('https://github.com/o/r2/issues/7\nhttps://githu
 assert.deepEqual([...D.defaultSelection([{ issue: 1, ready: true }, { issue: 2, ready: false }])], [1]);
 const pv = { slug: 'o/r', repo_path: '/x', items: [{ issue: 1 }, { issue: 2 }, { issue: 3 }] };
 assert.deepEqual(D.startBody(pv, new Set([3, 1]), { mode: 'parallel', max: 2, claude: 'work' }),
-  { slug: 'o/r', repo: '/x', issues: [1, 3], mode: 'parallel', max: 2, claude_cmd: 'work', auto_grind: false });
+  { slug: 'o/r', repo: '/x', issues: [1, 3], mode: 'parallel', max: 2, claude_cmd: 'work', auto_grind: false, worktree: true });
+assert.equal(D.startBody(pv, new Set([1]), { mode: 'sequential', max: 1, worktree: false }).worktree, false);
+assert.equal(D.startBody(pv, new Set([1]), { mode: 'parallel', max: 2, worktree: false }).worktree, true);
+assert.equal(D.startBody(pv, new Set([1]), { mode: 'parallel', max: 2 }).worktree, true);
 assert.equal('claude_cmd' in D.startBody(pv, new Set([1]), { mode: 'sequential', max: 1, claude: '' }), false);
 out('dispatch: input, selection and start body helpers');
 assert.equal(new D.Dispatch({ issues: [12, 13] }).state.text, '12 13');

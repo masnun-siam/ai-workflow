@@ -332,6 +332,15 @@ export class RunDetail extends Component {
     }
   };
 
+  releaseMainTree = async () => {
+    const { owner, repo } = this.props;
+    if (!globalThis.confirm('Release the main tree? The next waiting main-tree run starts in this checkout.')) return;
+    this.setState({ busy: 'maintree' });
+    const r = await fetch('/api/maintree/release', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ owner, repo }) })
+      .then((x) => x.json()).catch(() => ({ error: 'request failed' }));
+    this.setState({ busy: null, msg: r.error || (r.released ? 'Main tree released' : 'Nothing was holding the main tree') });
+  };
+
   grind = async (action) => {
     const { owner, repo, n } = this.props;
     if (action === 'start' && !globalThis.confirm('Start review grinding? This posts a trigger message to the repo\'s Slack review channel.')) return;
@@ -454,6 +463,8 @@ export class RunDetail extends Component {
             ${acts.includes('stop') && html`<button type="button" class="btn btn--danger" disabled=${busy === 'stop'} onClick=${this.act('stop', 'Stopped')}>Stop</button>`}
             ${acts.includes('resume') && html`<button type="button" disabled=${busy === 'resume'} onClick=${this.act('resume', 'Resumed')}>Resume</button>`}
             ${acts.includes('terminal') && html`<button type="button" onClick=${this.terminal}>Continue in terminal</button>`}
+            ${run.maintree && html`<span class=${'chip chip-maintree-' + (run.maintree.phase || 'queued')} title="This run works in the main checkout">${run.maintree.role === 'queued' ? `Main tree: waiting for #${run.maintree.ahead} (position ${run.maintree.position})` : `Main tree: ${run.maintree.phase}${run.maintree.reason ? ' — ' + run.maintree.reason : ''}`}</span>`}
+            ${run.maintree && run.maintree.role === 'holder' && run.maintree.phase !== 'done' && html`<button type="button" class="btn" disabled=${busy === 'maintree'} onClick=${this.releaseMainTree} title="Lets the next main-tree run start on top of this one's branch">Release main tree</button>`}
             ${canStartGrind(run) && html`<button type="button" class="btn btn--primary" disabled=${busy === 'grind'} onClick=${() => this.grind('start')} title="Posts a trigger to the repo's Slack review channel">Start grinding</button>`}
             ${run.grind && ['running', 'idle'].includes(run.grind.state) && html`<button type="button" class="btn" disabled=${busy === 'grind'} onClick=${() => this.grind('pause')}>Pause grind</button>`}
             ${run.grind && run.grind.state === 'paused' && run.gh?.pr?.ci === 'red' && html`<button type="button" class="btn" disabled=${busy === 'grind'} onClick=${() => this.grind('rerun-ci')} title="Reruns the failed jobs of the latest CI run on the PR head">Rerun failed CI</button>`}

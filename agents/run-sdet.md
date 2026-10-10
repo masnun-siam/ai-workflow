@@ -54,7 +54,7 @@ under any justification.
    retry. Confirm the new tests **fail** — they must fail because the feature doesn't
    exist yet, not because of a typo or bad import. A test that passes before
    implementation exists is testing nothing; fix it.
-3. Commit with a message naming the issue.
+3. Commit with a message naming the issue. Stage by explicit path (`git add <file>…`), never `git add -A`, `git add .`, `git add -u` or `git commit -a`. In a main-tree run the `carried` paths in your prompt are the owner's uncommitted work: never stage them, and if your change needs one, stop and report blocked.
 4. Report: files written, test names, confirmation they fail for the right reason.
 
 ## Bounce round (you were bounced to)

@@ -111,7 +111,7 @@ or misreads a corner case) — do not edit it, and do not implement around it. B
    command, not by you) — so don't thrash. If you're not converging, stop and report
    exactly which tests are still red and the last real error, rather than guessing
    again.
-4. Commit with a message naming the issue.
+4. Commit with a message naming the issue. Stage by explicit path (`git add <file>…`), never `git add -A`, `git add .`, `git add -u` or `git commit -a`. In a main-tree run the `carried` paths in your prompt are the owner's uncommitted work: never stage them, and if your change needs one, stop and report blocked.
 5. Report: files changed, test results, anything notable.
 
 ## Out of scope

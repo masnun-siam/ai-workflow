@@ -252,3 +252,16 @@ assert d.membership().get("o/new#12") == tp["id"]
 assert d.detail(tp["id"])["items"][0]["run"]["pr"].endswith("/o/new/pull/9")
 d.ui_board.load_run = real_load_run
 print("ok  transferred issue: item follows its run to the new repo and number")
+
+# --- main tree: sequential only
+assert raises(d.create, {"repo": "o/r", "issues": [90], "mode": "parallel", "worktree": False})
+assert raises(d.create, {"repo": "o/r", "issues": [90], "mode": "sequential", "worktree": "no"})
+mt = d.create({"repo": "o/r", "issues": [90, 91], "mode": "sequential", "worktree": False})
+assert mt["worktree"] is False
+assert calls[-1]["issue"] == 90 and calls[-1]["worktree"] is False
+assert d.create({"repo": "o/r", "issues": [92]})["worktree"] is True
+assert d.detail(mt["id"])["worktree"] is False
+print("ok  main-tree pipeline must be sequential; the flag reaches each launched session")
+assert raises(d.act, mt["id"], "update", {"mode": "parallel"})
+assert d.load(mt["id"])["mode"] == "sequential"
+print("ok  a main-tree pipeline cannot switch to parallel")
