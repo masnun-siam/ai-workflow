@@ -166,7 +166,26 @@ def load_ledger(run_dir: str):
 
 
 def save_ledger(run_dir: str, ledger) -> None:
-    write_json(ledger_path(run_dir), ledger.to_dict())
+    # atomic: the UI reads run.json while a run writes it
+    path = ledger_path(run_dir)
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    atomic_write_text(path, json.dumps(ledger.to_dict(), indent=2, ensure_ascii=False) + "\n")
+
+
+def ledger_lock(run_dir: str):
+    """Exclusive flock on the run dir, for the short load -> mutate -> save commands
+    (set, route, skip-review) so a UI-triggered edit cannot interleave with them."""
+    import contextlib
+    import fcntl
+
+    @contextlib.contextmanager
+    def held():
+        os.makedirs(run_dir, exist_ok=True)
+        with open(os.path.join(run_dir, ".run.lock"), "a") as fh:
+            fcntl.flock(fh, fcntl.LOCK_EX)
+            yield
+
+    return held()
 
 
 def record(run_dir: str, ledger, **pairs) -> dict:

@@ -11,7 +11,7 @@ description: Dispatch a batch of GitHub issues into separate herdr tabs (one `/a
 You are the **controller**. Each issue runs in its own herdr tab as an independent Claude session; you launch them in a safe order, watch them, and tell the user when something needs them. You do not do the issue work, answer a tab's gates, merge, or post to GitHub.
 
 ## Inputs
-`<input>` is a GitHub issues search URL, a label name, issue numbers, or one epic parent number. Flags: `--sequential` (one at a time), `--max N` (concurrency, default 2), `--cmd "<template with {n}>"` (default `/ai-workflow:run-issue {n}`), `--dry-run`, `--no-worktree` (every issue runs in the main checkout as `/ai-workflow:run-issue {n} --no-worktree`; it requires `--sequential` — without it, stop and tell the user main-tree runs go one at a time).
+`<input>` is a GitHub issues search URL, a label name, issue numbers, or one epic parent number. Flags: `--sequential` (one at a time), `--max N` (concurrency, default 2), `--cmd "<template with {n}>"` (default `/ai-workflow:run-issue {n}`), `--dry-run`, `--no-worktree` (every issue runs in the main checkout as `/ai-workflow:run-issue {n} --no-worktree`; it requires `--sequential` — without it, stop and tell the user main-tree runs go one at a time), `--no-review` (every issue runs as `/ai-workflow:run-issue {n} --no-review`: no review or fix step, the dev step completes each run; it combines with `--no-worktree`).
 
 ## Flow
 

@@ -190,7 +190,7 @@ Tell the user, in this order:
 3. **The first command to try**, with a real issue number if they have one:
 
    ```
-   /ai-workflow:run-issue <issue-number-or-url> [--full]
+   /ai-workflow:run-issue <issue-number-or-url> [--full] [--no-review]
    ```
 
 4. **Point them at [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md)** before their first run —
@@ -208,7 +208,7 @@ comments on issues. That is the user's call on their repo, not a smoke test.
 
 | Command | Does |
 |---|---|
-| `/ai-workflow:run-issue <n> [--full]` | the full pipeline: issue → reviewed PR. Accepts an epic parent. |
+| `/ai-workflow:run-issue <n> [--full] [--no-review]` | the full pipeline: issue → reviewed PR (`--no-review` skips review and fix). Accepts an epic parent. |
 | `/ai-workflow:intake <source>` | normalize a Sentry link, BRD file, or vault note into an issue brief — used internally by `/gh-issue` and `/run-issue` |
 | `/ai-workflow:gh-issue` | file a well-formed issue; always decomposes first — one task files one issue; two or more save the task list to `docs/tasks/<slug>.md` and file one flat issue per task, ordered by `Depends on: #n` lines, with no parent issue |
 | `/ai-workflow:jira-to-gh <KEY>` | decompose a Jira ticket and file flat issues the same way as `/gh-issue` (one issue for a single task; two or more saved to `docs/tasks/<slug>.md` and filed flat) |

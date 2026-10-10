@@ -11,7 +11,7 @@ handoff contract, run the guards, decide the next action, persist, and print the
 action. The orchestrator acts on what this prints; it never eyeballs the routing.
 
 Usage:
-  aiw init <runDir> --issue N [--mode full|lean] [--repo PATH]
+  aiw init <runDir> --issue N [--mode full|lean] [--no-review] [--repo PATH]
   aiw route <runDir> <artifact.json> [--repo PATH]
   aiw classify <runDir> [--loc N] [--labels a,b] [--depth N] < changed-paths
   aiw resolve-review <runDir>
@@ -72,6 +72,7 @@ from shared import (  # noqa: E402
     data_dir,
     deep_merge,
     die,
+    ledger_lock,
     ledger_path,
     load_config,
     load_ledger,
@@ -137,11 +138,16 @@ def cmd_init(args) -> None:
     mode = modes[mode].get("alias_of", mode)
 
     stations = modes[mode].get("stations") or config.get("stations") or []
+    if args.no_review:
+        # No review panel and no fix round: the last remaining station completes the run.
+        stations = [s for s in stations if s not in ("reviewer", "fixer")]
     if os.path.isfile(ledger_path(args.run_dir)):
         die(2, f"run already initialised: {ledger_path(args.run_dir)} — use `resume`, don't re-init")
 
     ledger = Ledger(args.issue, stations)
     ledger.context["mode"] = mode
+    if args.no_review:
+        ledger.context["review"] = "skipped"
     if args.repo:
         ledger.context["repo"] = os.path.abspath(args.repo)
     ledger.trace.append(f"init: mode={mode} roster=" + " -> ".join(stations))
@@ -337,6 +343,24 @@ def cmd_resolve_review(args) -> None:
         print(lens)
 
 
+def cmd_skip_review(args) -> None:
+    """Drop reviewer + fixer from a live run's roster. Only before the reviewer is current:
+    once review has started, stopping it is the Stop control's job."""
+    ledger = load_ledger(args.run_dir)
+    if ledger.context.get("review") == "skipped":
+        print("review already skipped")
+        return
+    if "reviewer" not in ledger.stations:
+        die(1, "no reviewer in this run's roster")
+    if ledger.current_index >= ledger.stations.index("reviewer"):
+        die(1, "review already started")
+    ledger.stations = [s for s in ledger.stations if s not in ("reviewer", "fixer")]
+    ledger.context["review"] = "skipped"
+    ledger.trace.append("skip-review: reviewer, fixer dropped from the roster")
+    save_ledger(args.run_dir, ledger)
+    print("review skipped: " + " -> ".join(ledger.stations))
+
+
 def cmd_set(args) -> None:
     ledger = load_ledger(args.run_dir)
     for pair in args.pairs:
@@ -381,6 +405,7 @@ def main(argv=None) -> None:
     p_init = add("init", "create run.json")
     p_init.add_argument("--issue", type=int, required=True)
     p_init.add_argument("--mode")
+    p_init.add_argument("--no-review", action="store_true")
     p_init.set_defaults(func=cmd_init)
 
     p_route = add("route", "validate an envelope and decide the next action")
@@ -400,6 +425,9 @@ def main(argv=None) -> None:
     p_rr = add("resolve-review", "print the specialist lenses to spawn, one per line")
     p_rr.set_defaults(func=cmd_resolve_review)
 
+    p_skip = add("skip-review", "drop reviewer and fixer from a live run before review starts")
+    p_skip.set_defaults(func=cmd_skip_review)
+
     p_set = add("set", "write key=value pairs into ledger context")
     p_set.add_argument("pairs", nargs="+")
     p_set.set_defaults(func=cmd_set)
@@ -414,7 +442,11 @@ def main(argv=None) -> None:
 
     args = parser.parse_args(argv)
     try:
-        args.func(args)
+        if args.cmd in ("set", "route", "skip-review"):
+            with ledger_lock(args.run_dir):
+                args.func(args)
+        else:
+            args.func(args)
     except ValueError as exc:
         die(5, str(exc))
 

@@ -265,7 +265,12 @@ def start_session(body: dict):
     worktree = body.get("worktree", True)
     if not isinstance(worktree, bool):
         return 400, {"error": "worktree must be true or false"}
+    review = body.get("review", True)
+    if not isinstance(review, bool):
+        return 400, {"error": "review must be true or false"}
     fam = family(text)
+    if fam == "run-issue" and not review:
+        text += " --no-review"
     if fam == "run-issue" and not worktree:
         grind = body.get("auto_grind", ui_settings.load()["auto_grind"]) is True
         text += " --no-worktree" + ("" if grind else " --no-grind")

@@ -181,6 +181,16 @@ export const SKIP_CI_REPLY = 'Skip CI for now, complete the grind, then come bac
 export const pausedOnCi = (run) => !!run?.grind && run.grind.state === 'paused' && (run.gh?.pr?.ci === 'red' || /\b(ci|gate\s*2|checks?)\b/i.test(run.grind.reason || ''));
 
 // A merged or closed PR has nothing left to review, so it never offers a grind.
+// Review can still be turned off while the baton is before the reviewer; auto-grind until a grind exists.
+export function reviewEditable(run) {
+  if (!run || run.reviewSkipped || run.status === 'done') return false;
+  const names = (run.stations || []).map((s) => s.name);
+  const r = names.indexOf('reviewer');
+  const cur = names.indexOf(run.currentStation);
+  return r >= 0 && cur >= 0 && cur < r;
+}
+export const grindEditable = (run) => run?.autoGrind != null && !run.grind;
+
 export const canStartGrind = (run) => run?.status === 'done' && !!run.pr && !run.grind && !['MERGED', 'CLOSED'].includes(run.gh?.pr?.state);
 
 export async function grindPost(owner, repo, issue, action, text) {
@@ -332,6 +342,15 @@ export class RunDetail extends Component {
     }
   };
 
+  options = async (body, okMsg) => {
+    const { owner, repo, n } = this.props;
+    this.setState({ busy: 'options' });
+    const r = await fetch(`/api/runs/${owner}/${repo}/${n}/options`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then((x) => x.json()).catch(() => ({ error: 'request failed' }));
+    const late = Object.values(r).includes('too_late');
+    this.setState({ busy: null, msg: r.error ? `Edit failed: ${r.error}` : late ? 'Too late: review already started' : okMsg });
+  };
+
   releaseMainTree = async () => {
     const { owner, repo } = this.props;
     if (!globalThis.confirm('Release the main tree? The next waiting main-tree run starts in this checkout.')) return;
@@ -463,6 +482,9 @@ export class RunDetail extends Component {
             ${acts.includes('stop') && html`<button type="button" class="btn btn--danger" disabled=${busy === 'stop'} onClick=${this.act('stop', 'Stopped')}>Stop</button>`}
             ${acts.includes('resume') && html`<button type="button" disabled=${busy === 'resume'} onClick=${this.act('resume', 'Resumed')}>Resume</button>`}
             ${acts.includes('terminal') && html`<button type="button" onClick=${this.terminal}>Continue in terminal</button>`}
+            ${run.reviewSkipped && html`<span class="chip" title="The dev step completes the run: no review or fix step">No review</span>`}
+            ${!run.reviewSkipped && html`<label class="check" title=${reviewEditable(run) ? 'Turn off to let the dev step complete the run' : 'Review already started or finished'}><input type="checkbox" checked disabled=${busy === 'options' || !reviewEditable(run)} onChange=${() => this.options({ review: false }, 'Review turned off')} /> Review</label>`}
+            ${run.autoGrind != null && html`<label class="check" title=${grindEditable(run) ? 'Start grinding when the run finishes' : 'Grinding already started'}><input type="checkbox" checked=${run.autoGrind} disabled=${busy === 'options' || !grindEditable(run)} onChange=${(e) => this.options({ auto_grind: e.target.checked }, e.target.checked ? 'Auto-grind on' : 'Auto-grind off')} /> Auto-grind</label>`}
             ${run.maintree && html`<span class=${'chip chip-maintree-' + (run.maintree.phase || 'queued')} title="This run works in the main checkout">${run.maintree.role === 'queued' ? `Main tree: waiting for #${run.maintree.ahead} (position ${run.maintree.position})` : `Main tree: ${run.maintree.phase}${run.maintree.reason ? ' — ' + run.maintree.reason : ''}`}</span>`}
             ${run.maintree && run.maintree.role === 'holder' && run.maintree.phase !== 'done' && html`<button type="button" class="btn" disabled=${busy === 'maintree'} onClick=${this.releaseMainTree} title="Lets the next main-tree run start on top of this one's branch">Release main tree</button>`}
             ${canStartGrind(run) && html`<button type="button" class="btn btn--primary" disabled=${busy === 'grind'} onClick=${() => this.grind('start')} title="Posts a trigger to the repo's Slack review channel">Start grinding</button>`}

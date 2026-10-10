@@ -26,6 +26,7 @@ import ui_cleanup
 import ui_dispatch
 import ui_events
 import maintree
+import ui_options
 import ui_grind
 import ui_issue
 import ui_pr
@@ -209,6 +210,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         body["gh"] = _gh_status(owner, repo, int(n), body["pr"], body["branch"])
         body["grind"] = ui_grind.for_card(ui_grind.index(), owner, repo, int(n), body["pr"])
         body["maintree"] = maintree.for_issue(owner, repo, int(n))
+        sess = ui_options.session_of(owner, repo, int(n))
+        body["autoGrind"] = None if sess is None else sess.get("auto_grind") is True
         if body["grind"] and body["grind"]["state"] == "paused":
             body["grind"] = {**body["grind"], "message": ui_grind.last_message(owner, repo, int(n))}
         self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
@@ -287,6 +290,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._dispatch(lambda b: ui_dispatch.act(parts[3], parts[6], b, issue=int(parts[5])))
         elif parts == ["", "api", "maintree", "release"]:
             self._maintree_release()
+        elif len(parts) == 7 and parts[:3] == ["", "api", "runs"] and parts[6] == "options" and parts[5].isdigit():
+            self._run_options(parts[3], parts[4], int(parts[5]))
         elif len(parts) == 4 and parts[:3] == ["", "api", "grind"] and parts[3] in ("start", "pause", "resume", "rerun-ci", "reply"):
             self._grind(parts[3])
         elif parts == ["", "api", "settings", "test"]:
@@ -303,6 +308,15 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             {"stop": self._stop, "resume": self._resume, "cancel-auto": self._cancel_auto}[parts[4]](parts[3])
         else:
             self._method_not_allowed(guarded=True)
+
+    def _run_options(self, owner: str, repo: str, n: int) -> None:
+        body = self._read_body()
+        if body is None:
+            return
+        try:
+            self._json(200, ui_options.apply(owner, repo, n, body))
+        except ValueError as e:
+            self._json(400, {"error": str(e)})
 
     def _maintree_release(self) -> None:
         body = self._read_body()

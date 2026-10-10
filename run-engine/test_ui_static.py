@@ -75,6 +75,14 @@ const tick = () => new Promise((r) => setImmediate(r));
 const settle = async () => { for (let i = 0; i < 8; i++) await tick(); };
 out('run.js imports without a document');
 
+const stations = ['researcher', 'planner', 'dev', 'reviewer', 'fixer'].map((name) => ({ name, status: 'pending' }));
+assert.equal(M.reviewEditable({ status: 'running', stations, currentStation: 'dev' }), true);
+assert.equal(M.reviewEditable({ status: 'running', stations, currentStation: 'reviewer' }), false);
+assert.equal(M.reviewEditable({ status: 'running', stations, currentStation: 'dev', reviewSkipped: true }), false);
+assert.equal(M.reviewEditable({ status: 'done', stations, currentStation: null }), false);
+assert.equal(M.grindEditable({ autoGrind: true }), true);
+assert.equal(M.grindEditable({ autoGrind: false, grind: { state: 'running' } }), false);
+assert.equal(M.grindEditable({ autoGrind: null }), false);
 assert.equal(M.canStartGrind({ status: 'done', pr: 'https://x/pull/1', gh: { pr: { state: 'OPEN' } } }), true);
 assert.equal(M.canStartGrind({ status: 'done', pr: 'https://x/pull/1' }), true);
 for (const state of ['MERGED', 'CLOSED']) assert.equal(M.canStartGrind({ status: 'done', pr: 'https://x/pull/1', gh: { pr: { state } } }), false);
@@ -694,10 +702,11 @@ assert.deepEqual(D.issueNumbers('https://github.com/o/r2/issues/7\nhttps://githu
 assert.deepEqual([...D.defaultSelection([{ issue: 1, ready: true }, { issue: 2, ready: false }])], [1]);
 const pv = { slug: 'o/r', repo_path: '/x', items: [{ issue: 1 }, { issue: 2 }, { issue: 3 }] };
 assert.deepEqual(D.startBody(pv, new Set([3, 1]), { mode: 'parallel', max: 2, claude: 'work' }),
-  { slug: 'o/r', repo: '/x', issues: [1, 3], mode: 'parallel', max: 2, claude_cmd: 'work', auto_grind: false, worktree: true });
+  { slug: 'o/r', repo: '/x', issues: [1, 3], mode: 'parallel', max: 2, claude_cmd: 'work', auto_grind: false, worktree: true, review: true });
 assert.equal(D.startBody(pv, new Set([1]), { mode: 'sequential', max: 1, worktree: false }).worktree, false);
 assert.equal(D.startBody(pv, new Set([1]), { mode: 'parallel', max: 2, worktree: false }).worktree, true);
 assert.equal(D.startBody(pv, new Set([1]), { mode: 'parallel', max: 2 }).worktree, true);
+assert.equal(D.startBody(pv, new Set([1]), { mode: 'parallel', max: 2, review: false }).review, false);
 assert.equal('claude_cmd' in D.startBody(pv, new Set([1]), { mode: 'sequential', max: 1, claude: '' }), false);
 out('dispatch: input, selection and start body helpers');
 assert.equal(new D.Dispatch({ issues: [12, 13] }).state.text, '12 13');

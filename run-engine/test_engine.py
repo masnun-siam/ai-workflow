@@ -514,6 +514,45 @@ with tempfile.TemporaryDirectory() as tmp:
     assert led["context"]["mode"] == "default", led["context"]
 ok("--mode lean is an alias of the default roster")
 
+for mode in ("default", "full"):
+    with tempfile.TemporaryDirectory() as tmp:
+        run_dir = os.path.join(tmp, "noreview")
+        subprocess.run([sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--mode", mode, "--no-review"],
+                       check=True, capture_output=True)
+        led = json.load(open(os.path.join(run_dir, "run.json")))
+        want = [s for s in CONFIG["modes"][mode]["stations"] if s not in ("reviewer", "fixer")]
+        assert led["stations"] == want and led["stations"][-1] in ("dev", "verifier"), led["stations"]
+        assert led["context"]["review"] == "skipped", led["context"]
+ok("--no-review drops reviewer and fixer from the roster and records review=skipped")
+
+# --- aiw skip-review: edit a live run before its reviewer is current ---------
+
+def aiw(*a):
+    return subprocess.run([sys.executable, ROUTE, *a], capture_output=True, text=True)
+
+with tempfile.TemporaryDirectory() as tmp:
+    run_dir = os.path.join(tmp, "live")
+    assert aiw("init", run_dir, "--issue", "41", "--mode", "default").returncode == 0
+    proc = aiw("skip-review", run_dir)
+    assert proc.returncode == 0, proc
+    led = json.load(open(os.path.join(run_dir, "run.json")))
+    assert "reviewer" not in led["stations"] and "fixer" not in led["stations"], led["stations"]
+    assert led["context"]["review"] == "skipped" and any("skip-review" in t for t in led["trace"]), led
+    again = aiw("skip-review", run_dir)
+    assert again.returncode == 0 and "already skipped" in again.stdout, again
+ok("skip-review trims the roster of a live run and is idempotent")
+
+with tempfile.TemporaryDirectory() as tmp:
+    run_dir = os.path.join(tmp, "late")
+    assert aiw("init", run_dir, "--issue", "41", "--mode", "default").returncode == 0
+    led = json.load(open(os.path.join(run_dir, "run.json")))
+    led["currentIndex"] = led["stations"].index("reviewer")
+    json.dump(led, open(os.path.join(run_dir, "run.json"), "w"))
+    proc = aiw("skip-review", run_dir)
+    assert proc.returncode == 1 and "already started" in proc.stderr, proc
+    assert "reviewer" in json.load(open(os.path.join(run_dir, "run.json")))["stations"]
+ok("skip-review refuses once the reviewer is current")
+
 
 def default_mode_repo(tmp):
     """tests_sha = a RED-tests commit; HEAD = dev's commit that also edits that test."""

@@ -22,6 +22,7 @@ import dispatch
 import epic
 import ui_board
 import ui_notify
+import ui_options
 import ui_repos
 import ui_runner
 import ui_sessions
@@ -308,6 +309,9 @@ def create(body: dict) -> dict:
         raise ValueError("worktree must be true or false")
     if not worktree and mode != "sequential":
         raise ValueError(MAIN_TREE_PARALLEL)
+    review = body.get("review", True)
+    if not isinstance(review, bool):
+        raise ValueError("review must be true or false")
     label = body.get("claude_cmd")
     if label is not None and not isinstance(label, str):
         raise ValueError("claude_cmd must be a saved label")
@@ -325,7 +329,7 @@ def create(body: dict) -> dict:
     pid = f"p-{time.strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(3)}"
     name = (body.get("name") or "").strip()[:80] or f"{slug} · {len(items)} issue{'s' * (len(items) != 1)}"
     pipe = {"id": pid, "name": name, "slug": slug, "repo_path": cwd, "mode": mode, "max": cap,
-            "claude_cmd": label, "auto_grind": body.get("auto_grind") is True, "worktree": worktree, "status": "active", "created": time.time(), "notified": False, "items": items}
+            "claude_cmd": label, "auto_grind": body.get("auto_grind") is True, "worktree": worktree, "review": review, "status": "active", "created": time.time(), "notified": False, "items": items}
     with _lock:
         save(pipe)
     tick(pid)
@@ -337,6 +341,7 @@ def _launch(pipe: dict, it: dict) -> None:
     if pipe.get("claude_cmd"):
         body["claude_cmd"] = pipe["claude_cmd"]
     body["worktree"] = pipe.get("worktree", True)
+    body["review"] = pipe.get("review", True)  # a pipeline made before the option existed reviews
     if "auto_grind" in pipe:  # a pipeline made before the option existed inherits the Settings default
         body["auto_grind"] = pipe["auto_grind"] is True
     status, res = ui_repos.start_session(body)
@@ -470,9 +475,29 @@ def retry(pipe: dict, it: dict) -> None:
         pipe["status"], pipe["notified"] = "active", False
 
 
+def _apply_options(pipe: dict, edit: dict) -> dict:
+    """Store the new defaults (queued items read them at launch), then reach the runs already
+    launched. {issue: per-field outcome}: too_late means that run is past its boundary."""
+    if "review" in edit:
+        pipe["review"] = edit["review"]
+    if "auto_grind" in edit:
+        pipe["auto_grind"] = edit["auto_grind"]
+    owner, _, repo = pipe["slug"].partition("/")
+    out = {}
+    for it in pipe["items"]:
+        if it["state"] not in LIVE or not it.get("session_id"):
+            continue
+        _, (r_owner, r_repo, r_issue) = _run_of(owner, repo, it)
+        live = {k: v for k, v in edit.items() if not (k == "review" and v is True)}  # on again: queued items only
+        if live:
+            out[it["issue"]] = ui_options.apply(r_owner, r_repo, r_issue, live, session_id=it["session_id"])
+    return out
+
+
 def act(pid: str, action: str, body: dict | None = None, issue=None) -> dict:
     """Pipeline controls. Raises NotFound / Conflict / ValueError (user-facing messages)."""
     body = body or {}
+    applied: dict = {}
 
     def run(pipe):
         if issue is not None:
@@ -516,6 +541,13 @@ def act(pid: str, action: str, body: dict | None = None, issue=None) -> dict:
                 if body["mode"] == "parallel" and pipe.get("worktree") is False:
                     raise ValueError(MAIN_TREE_PARALLEL)
                 pipe["mode"] = body["mode"]
+            edit = {k: body[k] for k in ("review", "auto_grind") if k in body}
+            if edit:
+                if "review" in edit and not isinstance(edit["review"], bool):
+                    raise ValueError("review must be true or false")
+                if "auto_grind" in edit and not isinstance(edit["auto_grind"], bool):
+                    raise ValueError("auto_grind must be true or false")
+                applied.update(_apply_options(pipe, edit))
             if body.get("add"):
                 add = [n for n in dispatch.dedupe([int(n) for n in body["add"]]) if all(i["issue"] != n for i in pipe["items"])]
                 if len(pipe["items"]) + len(add) > MAX_ISSUES:
@@ -531,7 +563,8 @@ def act(pid: str, action: str, body: dict | None = None, issue=None) -> dict:
         else:
             raise ValueError("unknown action")
 
-    return _mutate(pid, run)
+    res = _mutate(pid, run)
+    return {**res, "applied": applied} if applied else res
 
 
 def delete(pid: str) -> None:
@@ -576,5 +609,5 @@ def detail(pid: str, gh_status=None) -> dict | None:
         order = [it["issue"] for it in pipe["items"]]
     by = {r["issue"]: r for r in rows}
     return {**{k: pipe[k] for k in ("id", "name", "slug", "mode", "max", "status", "created", "claude_cmd")},
-            "auto_grind": pipe.get("auto_grind") is True, "worktree": pipe.get("worktree", True), "items": rows, "order": order,
+            "auto_grind": pipe.get("auto_grind") is True, "worktree": pipe.get("worktree", True), "review": pipe.get("review", True), "items": rows, "order": order,
             "merge_order": [n for n in order if (by[n].get("run") or {}).get("pr")]}

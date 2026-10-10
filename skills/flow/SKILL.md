@@ -64,7 +64,7 @@ At every boundary between stages, ask one AskUserQuestion: "Continue to <next st
 
 1. Convert any issue URLs to their numbers (`herdr-dispatch` takes numbers, not URLs). Invoke the `ai-workflow:herdr-dispatch` skill with `<numbers> --max 2 --dry-run` and show the user its order and launch plan.
 2. Ask one AskUserQuestion: "Launch" / "Stop here".
-3. On "Launch", invoke `ai-workflow:herdr-dispatch` with `<numbers> --max 2`. If the user asked for the main tree (`/flow … --no-worktree`), use `<numbers> --sequential --no-worktree` instead of `--max 2`, in both the dry run and the launch. On "Stop here", print `→ next: herdr-dispatch <numbers>` and stop.
+3. On "Launch", invoke `ai-workflow:herdr-dispatch` with `<numbers> --max 2`. If the user asked for the main tree (`/flow … --no-worktree`), use `<numbers> --sequential --no-worktree` instead of `--max 2`, in both the dry run and the launch. If the user passed `--no-review`, append `--no-review` to the herdr-dispatch arguments too. On "Stop here", print `→ next: herdr-dispatch <numbers>` and stop.
 
 ## Guardrails
 
