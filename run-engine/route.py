@@ -20,7 +20,8 @@ Usage:
 
 Mechanical subcommands (the phases that used to be prose in commands/run-issue.md):
   aiw stack up|down|rebuild|status <runDir>
-  aiw worktree create <runDir> --title "<issue title>"
+  aiw worktree create <runDir> --title "<issue title>" [--main-tree]
+  aiw maintree acquire <owner/repo> <issue> [--grind] [--wait SECONDS] | status <owner/repo> | release <owner/repo> [--issue N]
   aiw threads list|resolve <pr-ref|node-id...>
   aiw pr open <runDir> --body-file <file> [--draft]
   aiw ci status <pr-ref> [--watch]
@@ -64,6 +65,7 @@ import review  # noqa: E402
 import stack  # noqa: E402
 import threads  # noqa: E402
 import worktree  # noqa: E402
+import maintree  # noqa: E402
 from shared import (  # noqa: E402
     GLOBAL_CONFIG,
     OVERLAY_NAME,
@@ -407,7 +409,7 @@ def main(argv=None) -> None:
 
     # The mechanical phases. Each module owns its own argparse wiring so adding one
     # is a file plus a line, not a surgery on this function.
-    for module in (stack, worktree, threads, pr, ci, gitnexus, project, epic, dispatch, review, ui_server, ask, refined):
+    for module in (stack, worktree, maintree, threads, pr, ci, gitnexus, project, epic, dispatch, review, ui_server, ask, refined):
         module.register(sub, add)
 
     args = parser.parse_args(argv)

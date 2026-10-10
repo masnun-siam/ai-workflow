@@ -184,6 +184,15 @@ def print_written(written: dict) -> None:
         print(f"{key}={written[key]}")
 
 
+def porcelain_paths(text: str) -> list[str]:
+    """Paths named by `git status --porcelain` (v1); a rename names its new path."""
+    out = []
+    for line in (text or "").splitlines():
+        if len(line) > 3:
+            out.append(line[3:].split(" -> ")[-1].strip().strip('"'))
+    return out
+
+
 def repo_of(ledger, override: str | None = None) -> str:
     return override or ledger.context.get("repo") or os.getcwd()
 
