@@ -142,6 +142,118 @@ out('flowside: elapsed formats m:ss from a start time');
 }
 """
 
+FLOWFEED_JS = r"""
+const F = await import(process.env.FLOW_URL);
+const FS = await import(new URL('./flowside.js', process.env.FLOW_URL).href);
+const assert = (await import('node:assert')).strict;
+const out = (n) => console.log('ok ' + n);
+const settle = async () => { for (let i = 0; i < 12; i++) await new Promise((r) => setImmediate(r)); };
+
+// #212: flow.js tails the session's stream every 1 s from the moment the step starts and mounts StepFeed.
+globalThis.document = { hidden: false, addEventListener() {}, removeEventListener() {} };
+let timers = [], tid = 0, calls = [];
+globalThis.setTimeout = (fn, ms) => { const t = { id: ++tid, fn, ms }; timers.push(t); return t.id; };
+globalThis.clearTimeout = (id) => { timers = timers.filter((t) => t.id !== id); };
+const jr = (ok, status, body) => ({ ok, status, json: async () => body });
+const server = { meta: null, events: [] }; // offset = number of events, like a growing stream file
+globalThis.fetch = async (u) => {
+  calls.push(String(u));
+  const m = /^\/api\/sessions\/s1\/stream\?offset=(\d+)$/.exec(u);
+  if (m) return jr(true, 200, { events: server.events.slice(+m[1]), offset: server.events.length });
+  if (u === '/api/sessions/s1') return jr(true, 200, server.meta);
+  return jr(false, 500, {});
+};
+const streamCalls = () => calls.filter((u) => u.includes('/stream'));
+const streamTimers = () => timers.filter((t) => t.ms === 1000);
+const fire = async (ms) => { const t = timers.find((x) => x.ms === ms); timers = timers.filter((x) => x !== t); t.fn(); await settle(); };
+
+const mk = (state = {}) => {
+  const c = new F.Flow({ route: { params: { repo: 'o/r', folder: '', prd: '', issues: [], sid: '' } } });
+  c.setState = (p, cb) => { c.state = { ...c.state, ...(typeof p === 'function' ? p(c.state, c.props) : p) }; if (cb) cb(); };
+  c.state = { ...c.state, loaded: true, id: 'f-20261012000000-abcdef', text: 'an idea', sid: 's1', ...state };
+  return c;
+};
+const feeds = (v, acc = []) => {
+  if (v == null || typeof v !== 'object') return acc;
+  if (Array.isArray(v)) { v.forEach((x) => feeds(x, acc)); return acc; }
+  if (v.type === FS.StepFeed) acc.push(v);
+  return feeds(v.props && v.props.children, acc);
+};
+const feedsOf = (c) => feeds(c.render(c.props, c.state));
+const tool = (name) => ({ kind: 'tool', name, input: {} });
+const reset = () => { timers = []; calls = []; server.meta = { id: 's1', outcome: 'running', command: '/dump x', started_at: '2026-10-12T00:00:00+00:00' }; server.events = []; };
+
+// AC1: the stream is polled every second with a running offset, events accumulate, no duplicates.
+reset(); server.events = [tool('Read')];
+let c = mk(); c.watch('s1'); await settle();
+assert.equal(calls.filter((u) => u === '/api/sessions/s1/stream?offset=0').length, 1, 'stream is read as soon as the step starts');
+assert.equal(c.state.stream.events.length, 1);
+assert.equal(streamTimers().length, 1, 'next stream poll is 1 s out');
+server.events = [tool('Read'), tool('Grep')];
+await fire(1000);
+assert.equal(streamCalls().at(-1), '/api/sessions/s1/stream?offset=1', 'the poll carries the running offset');
+assert.deepEqual(c.state.stream.events.map((e) => e.name), ['Read', 'Grep']);
+await fire(1000);
+assert.equal(streamCalls().at(-1), '/api/sessions/s1/stream?offset=2');
+assert.equal(c.state.stream.events.length, 2, 'an unchanged offset adds nothing');
+out('flow: the stream is polled every 1 s with a running offset and events accumulate without duplicates');
+
+// AC1/AC2: StepFeed sits in the active step's pane (Dump, PRD, Issues) and gets events, startedAt, done, failed.
+let fs = feedsOf(c);
+assert.equal(fs.length, 1);
+assert.deepEqual(fs[0].props.events.map((e) => e.name), ['Read', 'Grep']);
+assert.equal(fs[0].props.startedAt, Date.parse('2026-10-12T00:00:00+00:00'));
+assert.equal(!!fs[0].props.done, false); assert.equal(!!fs[0].props.failed, false);
+for (const state of [{}, { folder: '05-Work/P/F' }, { folder: '05-Work/P/F', prd: '05-Work/P/F/PRD.md' }]) {
+  const d = mk({ ...state, stream: { events: [], offset: 0 }, meta: null });
+  assert.equal(feedsOf(d).length, 1, JSON.stringify(state));
+}
+assert.equal(feedsOf(mk({ folder: 'f', prd: 'f/PRD.md', issues: '7' })).length, 0, 'Dispatch runs no session, so no feed');
+assert.equal(feedsOf(mk({ sid: '' })).length, 0, 'no session, no feed');
+out('flow: StepFeed is mounted in the Dump, PRD and Issues panes with events and start time');
+
+// AC2: between the click and the first event there is a feed, not a blank wait.
+const b = mk({ sid: '', busy: true });
+assert.equal(feedsOf(b).length, 1);
+assert.equal(feedsOf(b)[0].props.events.length, 0);
+assert.equal(!!feedsOf(b)[0].props.failed, false);
+out('flow: a feed is up from the click, before the session exists');
+c.componentWillUnmount();
+assert.equal(streamTimers().length, 0, 'unmount stops the stream poll');
+
+// AC3: when the session ends the stream poll stops and the handoff reads the result from the accumulated events.
+reset(); server.events = [tool('Read')];
+c = mk(); c.watch('s1'); await settle();
+const before = streamCalls().length;
+server.events = [tool('Read'), { kind: 'result', is_error: false, text: 'Filed.\n→ next: /prd 05-Work/P/F' }];
+server.meta = { ...server.meta, outcome: 'done' };
+await fire(3000);
+assert.equal(c.state.folder, '05-Work/P/F', 'handoff found the result');
+assert.equal(c.state.sid, '');
+assert.ok(streamCalls().slice(before).every((u) => !u.endsWith('offset=0')), 'the last read continues from the running offset');
+assert.equal(streamTimers().length, 0, 'stream polling stops once the session ends');
+const n = calls.length;
+await settle();
+assert.equal(calls.length, n);
+out('flow: stream polling stops when the session ends and the result still hands off');
+
+// AC3: a session that dies before any event shows the failure and the raw log.
+reset();
+c = mk(); c.watch('s1'); await settle();
+assert.equal(feedsOf(c)[0].props.events.length, 0);
+server.meta = { ...server.meta, outcome: 'failed' };
+await fire(3000);
+assert.equal(streamTimers().length, 0, 'a dead session stops the stream poll');
+fs = feedsOf(c);
+assert.equal(fs.length, 1, 'the feed stays up after the session fails');
+assert.equal(fs[0].props.failed, true);
+assert.equal(!!fs[0].props.done, false);
+assert.equal(fs[0].props.events.length, 0);
+assert.match(c.state.why, /failed/);
+out('flow: a session that dies before any event keeps its feed, marked failed');
+c.componentWillUnmount();
+"""
+
 SHELL = sys.argv[1:3] == ["--view", "shell"]
 RUN = sys.argv[1:3] == ["--view", "run"]
 
@@ -1136,7 +1248,7 @@ def shell_checks():
     assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./board.js", "./run.js", "./history.js", "./answer.js", "./notify.js", "./launcher.js", "./session.js", "./keys.js", "./toast.js", "./settings.js", "./dispatch.js", "./fmt.js", "./cleanup.js", "./issue.js", "./pr.js", "./afk.js", "./flow.js"}, specs
     fjs = read(os.path.join(STATIC, "flow.js")).decode()
     fspecs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", fjs)
-    assert fspecs and set(fspecs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./launcher.js", "./dispatch.js", "./answer.js", "./flowside.js"}, fspecs
+    assert fspecs and set(fspecs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./launcher.js", "./dispatch.js", "./answer.js", "./flowside.js", "./run.js"}, fspecs
     assert "innerHTML" not in fjs and "console.log" not in fjs
     ok("flow.js imports only preact, htm, app.js, launcher.js, dispatch.js, answer.js and flowside.js; no innerHTML")
     assert not re.search(r"https?://", js), "no absolute URLs"
@@ -2618,6 +2730,16 @@ try:
                 ok(line[3:])
     else:
         print("note: node not found, skipping StepFeed checks")
+
+    # Flow feed wiring (#212)
+    if shutil.which("node"):
+        env = dict(os.environ, FLOW_URL=pathlib.Path(os.path.join(STATIC, "flow.js")).as_uri())
+        p = subprocess.run(["node", "--input-type=module", "-e", FLOWFEED_JS], env=env,
+                           capture_output=True, text=True, timeout=60)
+        assert p.returncode == 0, p.stderr[-1500:]
+        for line in p.stdout.splitlines():
+            if line.startswith("ok "):
+                ok(line[3:])
 
     # vendoring
     for name, lic in (("preact", "MIT"), ("htm", "Apache-2.0")):
