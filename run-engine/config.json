@@ -36,24 +36,7 @@
         "verifier": "dev — runtime-verifies under run-verifier's rules as its last step and returns the verdict as handoff.verify",
         "fixer": "the `fixer` station stays (its push/threads post-check still runs), but phase 7 dispatches run-dev in fix mode instead of run-fixer"
       },
-      "tradeoff": "CHEAPER, with one guarantee relaxed rather than lost: tests are still RED-first and still guarded, but by the same agent that writes the code, so a test it changes after tests_sha must carry a handoff.test_changes[] justification that lands in the PR body. Runtime verification still runs, but self-checked; the clean-context reviewer is the independent eye. Use `full` (flag or label) for auth, migrations, payment, or public API contracts."
-    },
-    "full": {
-      "stations": [
-        "researcher",
-        "planner",
-        "sdet",
-        "dev",
-        "verifier",
-        "reviewer",
-        "fixer"
-      ],
-      "classifier": true,
-      "specialists": true
-    },
-    "lean": {
-      "alias_of": "default",
-      "_note": "Deprecated: the old lean roster is now the default. Kept so --lean, the lean label and epic --lean-children still resolve."
+      "tradeoff": "CHEAPER, with one guarantee relaxed rather than lost: tests are still RED-first and still guarded, but by the same agent that writes the code, so a test it changes after tests_sha must carry a handoff.test_changes[] justification that lands in the PR body. Runtime verification still runs, but self-checked; the clean-context reviewer is the independent eye."
     }
   },
   "_human_gates": "EXACTLY THREE, and no station may invent a fourth: (1) plan approval, (2) a review finding an automated pass should not be the last word on, (3) the PR is ready for a human to review and merge. Everything else either self-corrects, or is recorded and carried into gate 3's report. This is why the status vocabulary has no 'blocked': a thin issue surfaces its Definition-of-Ready gaps at gate 1 alongside the plan rather than stopping before it, and a spent budget opens a DRAFT PR and reports at gate 3 rather than stopping mid-flow.",

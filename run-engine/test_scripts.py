@@ -403,6 +403,9 @@ ok("aiw epic init creates one ledger per child, records edges, and is idempotent
 
 # --------------------------------------------------------------------------- epic init flags
 
+FULL_STATIONS = ["researcher", "planner", "sdet", "dev", "verifier", "reviewer", "fixer"]
+
+
 def epic_init_argv(tmp, *extra):
     epic_dir, runs, repo = (os.path.join(tmp, "e"), os.path.join(tmp, "runs"),
                              os.path.join(tmp, "repo"))

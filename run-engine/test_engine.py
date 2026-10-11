@@ -531,7 +531,7 @@ for flag in ("default", "full", "lean"):
 ok("`aiw init --mode X` is rejected as an unknown option and writes nothing")
 
 assert sorted(CONFIG["modes"]) == ["default"] and CONFIG["default_mode"] == "default", CONFIG["modes"]
-assert not _re.search(r"full|lean|alias_of", json.dumps(CONFIG["modes"]), _re.I), CONFIG["modes"]
+assert not _re.search(r"\b(full|lean|alias_of)\b", json.dumps(CONFIG["modes"]), _re.I), CONFIG["modes"]
 ok("config.json modes holds only `default`, with no full/lean/alias_of text")
 
 with tempfile.TemporaryDirectory() as tmp:

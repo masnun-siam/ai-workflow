@@ -11,7 +11,7 @@ handoff contract, run the guards, decide the next action, persist, and print the
 action. The orchestrator acts on what this prints; it never eyeballs the routing.
 
 Usage:
-  aiw init <runDir> --issue N [--mode full|lean] [--no-review] [--repo PATH]
+  aiw init <runDir> --issue N [--no-review] [--repo PATH]
   aiw route <runDir> <artifact.json> [--repo PATH]
   aiw classify <runDir> [--loc N] [--labels a,b] [--depth N] < changed-paths
   aiw resolve-review <runDir>
@@ -131,11 +131,10 @@ def run_dir_for(args) -> str:
 
 def cmd_init(args) -> None:
     config = load_config(args.repo)
-    mode = args.mode or config.get("default_mode", "full")
+    mode = config["default_mode"]
     modes = config.get("modes") or {}
     if mode not in modes:
         die(2, f"unknown mode: {mode} (have: {', '.join(sorted(modes)) or 'none'})")
-    mode = modes[mode].get("alias_of", mode)
 
     stations = modes[mode].get("stations") or config.get("stations") or []
     if args.no_review:
@@ -404,7 +403,6 @@ def main(argv=None) -> None:
 
     p_init = add("init", "create run.json")
     p_init.add_argument("--issue", type=int, required=True)
-    p_init.add_argument("--mode")
     p_init.add_argument("--no-review", action="store_true")
     p_init.set_defaults(func=cmd_init)
 
