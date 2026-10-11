@@ -753,6 +753,34 @@ assert.equal(new D.Dispatch({ issues: [12, 13] }).state.text, '12 13');
 assert.equal(new D.Dispatch({}).state.text, '');
 out('dispatch: issues prop prefills the input');
 
+// #209: the repo is chosen with the shared repoCombo, not a <select id="dp-repo">.
+{
+  const dnodes = [];
+  const dwalk = (n) => { if (n == null || typeof n === 'boolean') return; if (Array.isArray(n)) return n.forEach(dwalk);
+    if (typeof n !== 'object') return; dnodes.push(n); dwalk(n.props && n.props.children); };
+  const dfind = (t, root) => { dnodes.length = 0; dwalk(root); return dnodes.filter((n) => n.type === t); };
+  const dd = new D.Dispatch({});
+  const reposD = [{ value: 'a/api', label: 'api - /p/api', name: 'api', path: '/p/api' }, { value: 'a/web', label: 'web - /p/web', name: 'web', path: '/p/web' }];
+  const dtree = dd.render({}, { ...dd.state, repos: reposD, repo: 'a/api', text: '#12' });
+  assert.equal(dfind('select', dtree).length, 0);
+  const combos = dfind('input', dtree).filter((i) => i.props.role === 'combobox');
+  assert.equal(combos.length, 1);
+  assert.equal(combos[0].props.id, 'dp-repo');
+  assert.equal(dfind('label', dtree).filter((l) => l.props.for === 'dp-repo').length, 1);
+  // a pasted URL names its own repo, so no picker
+  assert.equal(dfind('input', dd.render({}, { ...dd.state, repos: reposD, text: 'https://github.com/o/r/issues?q=x' })).filter((i) => i.props.role === 'combobox').length, 0);
+  // changing the repo clears the preview; a keystroke that leaves the value alone does not
+  dd.state = { ...dd.state, repos: reposD, repo: 'a/api', preview: { items: [] } };
+  dd.setState = (patch, cb) => { dd.state = { ...dd.state, ...(typeof patch === 'function' ? patch(dd.state) : patch) }; if (cb) cb(); };
+  dd.picked = 'a/api';
+  dd.onPick();
+  assert.ok(dd.state.preview, 'same repo keeps the preview');
+  dd.state.repo = 'a/web';
+  dd.onPick();
+  assert.equal(dd.state.preview, null);
+  out('dispatch: repoCombo replaces the repo <select>; a changed repo clears the preview');
+}
+
 assert.deepEqual(D.itemActions({ state: 'failed' }), ['retry', 'skip']);
 assert.deepEqual(D.itemActions({ state: 'skipped', reason: 'blocked by #3' }), []);
 assert.deepEqual(D.itemActions({ state: 'skipped', reason: 'manual' }), ['retry']);
