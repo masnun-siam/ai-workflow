@@ -290,10 +290,9 @@ class Router:
         target = bounce["to"]
 
         # A bounce to a station outside THIS run's roster is unroutable — it happens
-        # whenever an agent prompt names a target the roster does not contain (a dev
-        # bouncing `to: sdet` is correct in the full roster and impossible in the default one,
-        # where the sdet never ran). Escalate with the roster spelled out rather than
-        # blowing up on index_of().
+        # whenever an agent prompt names a target the roster does not contain (a lean
+        # roster has no verifier, so a bounce to it cannot be routed). Escalate with the
+        # roster spelled out rather than blowing up on index_of().
         if target not in ledger.stations:
             return RouteAction(
                 RouteAction.ESCALATE,

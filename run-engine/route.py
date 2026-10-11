@@ -27,7 +27,7 @@ Mechanical subcommands (the phases that used to be prose in commands/run-issue.m
   aiw ci status <pr-ref> [--watch]
   aiw gitnexus sync|index|clean <repo> [--run-dir <runDir>]
   aiw project-status <owner/repo> <issue> "<status>"
-  aiw precheck <runDir> <station>      # sdet | reviewer | fixer
+  aiw precheck <runDir> <station>      # reviewer | fixer
 
 Exit codes for `route`: 0 ok · 2 usage · 3 unreadable artifact · 4 artifact is not a
 JSON object · 5 artifact fails the handoff contract · 6 test-root ownership violation · 7 a station

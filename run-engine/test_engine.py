@@ -290,33 +290,33 @@ def route_it(run_dir, repo, name, env):
                           capture_output=True, text=True)
 
 
-SDET_ENV = {
-    "issue": 41, "station": "sdet", "status": "passed", "attempt": 1,
-    "summary": "6 RED tests authored",
-    "evidence": {"commands": [{"cmd": "pytest", "exit": 1, "excerpt": "6 failed"}]},
-    "handoff": {"test_files": ["tests/does-not-exist.js"], "red_confirmed": True},
+DEV_ENV = {
+    "issue": 41, "station": "dev", "status": "passed", "attempt": 1,
+    "summary": "implemented",
+    "evidence": {"commands": [{"cmd": "pytest", "exit": 0, "excerpt": "6 passed"}]},
+    "handoff": {"files_changed": [], "report": "x"},
 }
 
 with tempfile.TemporaryDirectory() as tmp:
     repo, run_dir = post_check_repo(tmp)
 
-    proc = route_it(run_dir, repo, "20-tests.json", SDET_ENV)
+    proc = route_it(run_dir, repo, "30-build.json", DEV_ENV)
     assert proc.returncode == 7, f"expected exit 7, got {proc.returncode}: {proc.stderr}"
-    assert proc.stdout.strip() == "bounce(sdet)", proc.stdout
-    assert "does not exist on disk" in proc.stderr, proc.stderr
+    assert proc.stdout.strip() == "bounce(dev)", proc.stdout
+    assert "no handoff.tests_sha" in proc.stderr, proc.stderr
     led = json.load(open(os.path.join(run_dir, "run.json")))
-    assert led["bounceCounts"] == {"sdet->sdet": 1}, led["bounceCounts"]
+    assert led["bounceCounts"] == {"dev->dev": 1}, led["bounceCounts"]
     ok("a passed envelope refuted by its own post-check self-bounces (exit 7)")
 
     # cap is 1, so the second failure ADVANCES and is reported at the final gate rather
     # than halting — the same doctrine as every other spent budget in this pipeline.
-    proc = route_it(run_dir, repo, "20-tests.json", SDET_ENV)
+    proc = route_it(run_dir, repo, "30-build.json", DEV_ENV)
     assert proc.returncode == 0, f"expected advance, got {proc.returncode}: {proc.stderr}"
-    assert proc.stdout.strip() == "advance(dev)", proc.stdout
+    assert proc.stdout.strip() == "advance(verifier)", proc.stdout
     led = json.load(open(os.path.join(run_dir, "run.json")))
-    assert led["bounceCounts"] == {"sdet->sdet": 1}, "a spent check budget must not keep counting"
+    assert led["bounceCounts"] == {"dev->dev": 1}, "a spent check budget must not keep counting"
     failures = led["context"]["check_failures"]
-    assert len(failures) == 1 and failures[0]["station"] == "sdet", failures
+    assert len(failures) == 1 and failures[0]["station"] == "dev", failures
     ok("check_bounce_cap exhausted -> advance with check_failures recorded, never a halt")
 
     # and the self-bounce never spent a REAL budget: dev->sdet is untouched, so a genuine

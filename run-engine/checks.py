@@ -24,7 +24,7 @@ import re
 import stack as stack_mod
 import threads as threads_mod
 from engine import resolve_review_panel
-from shared import gh_json, porcelain_paths, run, shell, warn
+from shared import gh_json, run, shell, warn
 
 SUITE_TIMEOUT = 900
 
@@ -135,40 +135,6 @@ def _carried_guard(ledger, repo) -> CheckResult:
     return passed()
 
 
-def check_sdet_post(ledger, envelope, repo, config) -> CheckResult:
-    """The SDET's whole claim is `red_confirmed`. A suite that is green cannot have
-    proved anything red."""
-    guard = _carried_guard(ledger, repo)
-    if not guard.ok:
-        return guard
-    handoff = _handoff(envelope)
-    test_root = (ledger.context.get("test_root") or "").rstrip("/")
-
-    files = handoff.get("test_files") or []
-    if not files:
-        return failed("no handoff.test_files[] — the SDET reported passing with no tests named")
-    for rel in files:
-        if not os.path.exists(os.path.join(repo, rel)):
-            return failed(f"handoff names a test file that does not exist on disk: {rel}")
-        if test_root and not os.path.normpath(rel).startswith(os.path.normpath(test_root)):
-            return failed(f"test file outside the approved test root {test_root}: {rel}")
-
-    code, detail = run_suite(ledger, repo, config=config)
-    if code is None:
-        # Non-fatal: a missing runner is already a first-class state everywhere else in
-        # this pipeline (stack: failed), and a station that says so is not lying.
-        return unrunnable(f"could not verify RED: {detail}")
-    if code == 0:
-        return failed("the suite is GREEN — there is no red to prove")
-    return passed()
-
-# KNOWN HOLE, deliberate: this inverts the WHOLE suite, with no known-red baseline. A
-# repo whose suite is already red for unrelated reasons passes check_sdet_post trivially.
-# The alternative is wf's known-red baseline, deferred until this actually bites — a
-# baseline that is itself wrong is worse than no baseline, and the SDET's tests are
-# reviewed by a human at Gate 1 anyway.
-
-
 def check_dev_post(ledger, envelope, repo, config) -> CheckResult:
     """Dev claims a commit, a file list, and a green suite. All three are checkable."""
     guard = _carried_guard(ledger, repo)
@@ -180,12 +146,11 @@ def check_dev_post(ledger, envelope, repo, config) -> CheckResult:
         if _git(repo, "cat-file", "-e", f"{sha}^{{commit}}").returncode != 0:
             return failed(f"handoff.commit does not resolve to a commit in this repo: {sha}")
 
-    if "sdet" not in ledger.stations:
-        result = _dev_owns_tests_and_verify(ledger, handoff, repo, config)
-        if not result.ok:
-            return result
+    result = _dev_owns_tests_and_verify(ledger, handoff, repo, config)
+    if not result.ok:
+        return result
 
-    base = ledger.context.get("sdet_sha") or ledger.context.get("tests_sha")
+    base = ledger.context.get("tests_sha")
     if not base:
         merge_base = _git(repo, "merge-base", f"origin/{ledger.context.get('base_branch')}", "HEAD")
         base = merge_base.stdout.strip() if merge_base.returncode == 0 else None
@@ -214,7 +179,7 @@ def check_dev_post(ledger, envelope, repo, config) -> CheckResult:
 
 
 def _dev_owns_tests_and_verify(ledger, handoff, repo, config) -> CheckResult:
-    """Default mode: dev did the SDET's and the verifier's jobs, so it owes their proof —
+    """Dev writes the RED tests and runs the runtime verification, so it owes their proof —
     a RED-tests commit on this branch that touches only the test root, and a verify
     verdict that passes the verifier's own check."""
     tests_sha = handoff.get("tests_sha") or ledger.context.get("tests_sha")
@@ -409,17 +374,6 @@ def check_fixer_post(ledger, envelope, repo, config) -> CheckResult:
 # --------------------------------------------------------------------------- pre-guards
 
 
-def check_sdet_pre(ledger, envelope, repo, config) -> CheckResult:
-    proc = _git(repo, "status", "--porcelain")
-    if proc.returncode != 0:
-        return unrunnable("git status failed")
-    carried = {os.path.normpath(p) for p in ledger.context.get("carried") or []}
-    dirty = [p for p in porcelain_paths(proc.stdout) if os.path.normpath(p) not in carried]
-    if dirty:
-        return failed("worktree is dirty before the SDET runs: " + ", ".join(dirty)[:200])
-    return passed()
-
-
 def _pr_is_open(ledger, repo) -> CheckResult:
     pr = ledger.context.get("pr_number")
     if not pr:
@@ -442,17 +396,15 @@ def check_fixer_pre(ledger, envelope, repo, config) -> CheckResult:
 
 # Data, not code: adding a station is a line here.
 POST_CHECKS = {
-    "sdet": check_sdet_post,
     "dev": check_dev_post,
     "verifier": check_verifier_post,
     "reviewer": check_reviewer_post,
     "fixer": check_fixer_post,
 }
 
-# Deliberately only three. A pre-check that restates what the ledger already knows is
+# Deliberately only two. A pre-check that restates what the ledger already knows is
 # noise that trains you to ignore the ones that matter.
 PRE_CHECKS = {
-    "sdet": check_sdet_pre,
     "reviewer": check_reviewer_pre,
     "fixer": check_fixer_pre,
 }

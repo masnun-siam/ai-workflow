@@ -2527,6 +2527,7 @@ def _dev_repo(d):
     git("init", "-q")
     git("config", "user.email", "t@t")
     git("config", "user.name", "t")
+    git("commit", "-q", "--allow-empty", "-m", "init")
     write(d, "run-engine/t.py", "")
     git("add", "run-engine/t.py")
     git("commit", "-qm", "test: RED tests")
