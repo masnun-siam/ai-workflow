@@ -468,12 +468,10 @@ assert bullet.count("git show") == 1, "the git-show fallback must appear exactly
 ok("git-show fallback appears exactly once within the exit-6 bullet")
 
 
-# --- 13. exit-6 recovery: unchanged collateral (snapshot before dev edits) -------
-# Guards against the doc fix accidentally rewriting the "### Test ownership" section
-# while adding the fallback. (The bounce(sdet)/advance/escalate bullets aren't
-# hardcoded here — pinning their exact prose would make this suite fail on any future,
-# unrelated reword of those bullets; the PR's own diff is the cheaper collateral-scope
-# check for those.)
+# --- 13. "### Test ownership" matches the single-mode wording (#203) --------------
+# Pinned so the section cannot silently drift back to describing a separate test-writing
+# agent. (The advance/escalate bullets aren't hardcoded here — pinning their exact prose
+# would make this suite fail on any unrelated reword of those bullets.)
 
 def _normalize(s):
     return " ".join(s.split())
@@ -485,27 +483,24 @@ test_ownership_end = full_md.index("### State", test_ownership_start)
 EXPECTED_TEST_OWNERSHIP = _normalize("""
 ### Test ownership
 
-- Never let `run-dev` or `run-fixer` touch the test root. The guard runs on every `run-dev`
-  `passed` envelope and spans commits (`git diff <sdet_sha>..HEAD`), so committing an edit
-  does not hide it — that was the hole in the old worktree-only tripwire.
-- **Move `sdet_sha` forward after every legitimate `run-sdet` commit** — a bounce round,
-  phase 7b, phase 8's conflict resolution. Forget it and the SDET's own correct work trips
-  the guard on the next dev pass and halts the run on a false positive.
-- Phase 7b's dispatch, a `bounce(sdet)`, and phase 8's test-root conflict resolution are
-  the only paths that may edit the test root after phase 3.
-- **Default mode** has no SDET: `run-dev` owns its own RED tests, the guard measures from
-  `tests_sha`, and a test-root change is legal only with a `handoff.test_changes[]` reason.
+- `run-dev` owns its own RED tests. The guard runs on every `run-dev` `passed` envelope,
+  measures from `tests_sha`, and spans commits (`git diff <tests_sha>..HEAD`), so committing
+  an edit does not hide it — that was the hole in the old worktree-only tripwire.
+- A test-root change after `tests_sha` is legal only with a `handoff.test_changes[]` reason.
   Every reason goes into the PR body and the Gate 2 report, so the reviewer and the human
   see each test that moved.
+- Phase 8's test-root conflict resolution is a `run-dev` dispatch too: move `tests_sha`
+  forward after it, before routing anything else from `run-dev`.
 - Never use `--no-verify`.
 - If any phase's agent call errors out (not a designed stop, an actual failure), do not
   retry silently more than once — surface it to the user with what failed.
 
 """)
 
+
 assert EXPECTED_TEST_OWNERSHIP == _normalize(full_md[test_ownership_start:test_ownership_end]), \
-    "the ### Test ownership section must be unchanged by the exit-6 doc fix"
-ok("### Test ownership section is unchanged")
+    "the ### Test ownership section must describe single-mode ownership (run-dev, tests_sha)"
+ok("### Test ownership section is the single-mode wording")
 
 
 # --- default mode: dev owns its RED tests and its runtime verify ------------
@@ -652,6 +647,42 @@ for bad, needle in (({"tests_sha": None}, "tests_sha"),
         proc = route_it(run_dir, repo, "30-build.json", env)
         assert proc.returncode == 7 and needle in proc.stderr, (bad, proc.returncode, proc.stderr)
 ok("default mode: dev's post-check refuses a missing tests_sha, a missing verify, and a FAIL verify")
+
+
+# --- /run-issue is single-mode (#203, PRD FR-14) ----------------------------------
+
+_ri_lines = full_md.splitlines()
+_removed = "full mode was removed"
+_legacy_re = _re.compile(r"--full|--mode full|run-sdet|run-verifier")
+_legacy_hits = [(i + 1, ln) for i, ln in enumerate(_ri_lines) if _legacy_re.search(ln)]
+assert _legacy_hits and all(_removed in ln for _, ln in _legacy_hits), \
+    f"only the --full reject message may name removed flags/agents: {_legacy_hits}"
+ok("run-issue.md names --full / --mode full / run-sdet / run-verifier only in the reject message")
+
+assert "--full" not in _ri_lines[2] and "[--full]" not in _ri_lines[2], "argument-hint still offers --full"
+ok("run-issue.md argument-hint no longer offers --full")
+
+assert not _re.search(r"aiw (epic )?init[^\n]*--mode|--mode", full_md), "aiw init / aiw epic init must not pass --mode"
+ok("run-issue.md never passes --mode to aiw init or aiw epic init")
+
+assert _re.search(r"`full` label[^\n]*\n?[^\n]*" + _removed, full_md) or \
+    _re.search(r"full` label.{0,200}" + _removed, full_md, _re.S), "no notice for an issue still labelled full"
+ok("run-issue.md prints a one-line notice for an issue still labelled full")
+
+for gone in ("## 3. SDET phase", "## 4.5 Runtime verification", "## 7b.", "bounce(sdet)", "sdet_sha",
+             "precheck \"$RUN_DIR\" sdet", "full mode only", "<default|full>"):
+    assert gone not in full_md, f"removed full-mode passage still present: {gone!r}"
+assert not _re.search(r"\bsdet\b|\bverifier\b", full_md, _re.I), "a removed station is still referenced"
+ok("run-issue.md has no SDET phase, runtime-verification phase, 7b phase, or sdet/verifier station text")
+
+_fix = full_md[full_md.index("## 7. Fix"):full_md.index("### GATE 2a")]
+assert "run-dev" in _fix and "fix: true" in _fix and "run-fixer" not in _fix and "full mode" not in _fix.lower(), \
+    "phase 7 must always dispatch run-dev in fix mode"
+ok("run-issue.md phase 7 always dispatches run-dev in fix mode")
+
+_dispatch = [ln for ln in _ri_lines if "Dispatch `run-dev` with" in ln]
+assert _dispatch and "mode:" not in _dispatch[0], "phase 4 must not pass a mode parameter"
+ok("run-issue.md phase 4 dispatches run-dev without a mode parameter")
 
 
 print(f"\n{passed} checks passed")

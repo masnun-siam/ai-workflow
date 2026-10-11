@@ -3061,8 +3061,8 @@ ok("run-issue.md Epic step 4 says one AskUserQuestion per parked child, never ba
 
 assert "blocker_ask=answered" in run_issue_step4, run_issue_step4
 assert "blocker_ask=deferred" in run_issue_step4, run_issue_step4
-assert "7b" in run_issue_step4 and "8.5" in run_issue_step4, \
-    "step 4 must say a deferred needs_confirmation child does not proceed to 7b/8.5"
+assert "phase 8" in run_issue_step4 and "8.5" in run_issue_step4, \
+    "step 4 must say a deferred needs_confirmation child does not proceed to phase 8/8.5"
 assert "Degraded finish" in run_issue_step4, \
     "step 4 must say the escalate path still goes to Degraded finish"
 ok("run-issue.md Epic step 4 covers blocker_ask=answered/deferred and both park paths' downstream routing")
@@ -3090,7 +3090,7 @@ assert "not a fourth gate" in gates_section or "still Gate 2a" in gates_section,
 ok("run-issue.md Gates section states the per-blocker asks are Gate 2a, not a fourth gate")
 
 gate2a_span = _run_issue_section(
-    run_issue_text, "### GATE 2a — human confirmation on blockers", "## 7b.")
+    run_issue_text, "### GATE 2a — human confirmation on blockers", "## 8. Sync")
 assert "**Confirmed, continue**" in gate2a_span, gate2a_span
 assert "**Hold here**" in gate2a_span, gate2a_span
 ok("run-issue.md phase 7's GATE 2a still contains Confirmed, continue and Hold here, unchanged")
