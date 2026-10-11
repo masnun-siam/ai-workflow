@@ -274,7 +274,7 @@ def preview(text: str, repo) -> dict:
         elif r.get("closed"):
             row |= {"problem": "issue is closed", "ready": False}
         else:
-            row |= {"gaps": r["gaps"], "lane": r["mode"], "skip": r["skip_reason"],
+            row |= {"gaps": r["gaps"], "skip": r["skip_reason"],
                     "deps": [d for d in r["deps"] if d in known],
                     "ext_deps": [d for d in r["deps"] if d not in known],
                     "ready": not r["gaps"] and not r["skip_reason"]}

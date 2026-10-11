@@ -243,7 +243,6 @@ export class Dispatch extends Component {
                     ${i.problem && html`<span class="chip dp-failed">${i.problem}</span>`}
                     ${i.skip && html`<span class="chip dp-skipped">${i.skip}</span>`}
                     ${i.gaps && i.gaps.length > 0 && html`<span class="chip dp-waiting" title=${i.gaps.join('; ')}>Missing: ${i.gaps.slice(0, 2).join(', ')}${i.gaps.length > 2 ? ` +${i.gaps.length - 2}` : ''}</span>`}
-                    ${i.lane === 'lean' && html`<span class="chip dp-queued">lean</span>`}
                     ${(i.deps || []).map((d) => html`<span class="chip dp-queued" title="runs after this issue">after #${d}${selected.has(d) ? '' : ' (not selected)'}</span>`)}
                     ${(i.ext_deps || []).map((d) => html`<span class="chip dp-queued" title="outside this pipeline, not enforced">needs #${d} (outside)</span>`)}
                   </div>
