@@ -95,13 +95,6 @@ assert aiw("worktree", "create", run_dir3, "--main-tree", "--title", "y", "--bas
 aiw("set", run_dir3, "base_branch=main", cwd=main)
 led = load_ledger(run_dir3)
 
-assert checks.check_sdet_pre(led, {}, main, {}).ok
-ok("sdet precheck ignores carried paths")
-open(os.path.join(main, "stray.txt"), "w").write("x\n")
-assert not checks.check_sdet_pre(led, {}, main, {}).ok
-os.remove(os.path.join(main, "stray.txt"))
-ok("sdet precheck still fails on a non-carried dirty path")
-
 open(os.path.join(main, "c.txt"), "w").write("c\n")
 sh("git", "add", "c.txt", cwd=main)
 sh("git", "commit", "-qm", "work", cwd=main)

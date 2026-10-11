@@ -2520,38 +2520,61 @@ code, detail = checks.run_suite(ledger, "/repo", config={"checks": {"suite_timeo
 assert code is None and detail == "no runner (stack=none)", detail
 ok("run_suite's pre-shell bail-outs (no runner / no test_cmd) are unaffected by a suite_timeout override")
 
-try:
-    def _timeout_shell(cmd, cwd=None, timeout=None, **kw):
-        return subprocess.CompletedProcess([], 124, "", "")
-    checks.shell = _timeout_shell
-    ledger = _FakeLedger(stack="none", test_cmd="pytest")
-    envelope = {"handoff": {"test_files": ["run-engine/test_scripts.py"], "red_confirmed": True}}
-    ledger.context["test_root"] = "run-engine"
-    config = {"checks": {"suite_timeout": 2400}}
-    with tempfile.TemporaryDirectory() as d:
-        os.makedirs(os.path.join(d, "run-engine"))
-        write(d, "run-engine/test_scripts.py", "")
-        result = checks.check_sdet_post(ledger, envelope, d, config)
-    assert result.unrunnable is True
-    assert result.reason == "could not verify RED: suite timed out after 2400s", result.reason
-finally:
-    checks.shell = real_checks_shell
-ok("check_sdet_post still wraps as 'could not verify RED: suite timed out after 2400s' with an override")
+def _dev_repo(d):
+    """A git repo whose HEAD is a RED-tests commit touching only run-engine/; returns its sha."""
+    def git(*a):
+        subprocess.run(["git", *a], cwd=d, capture_output=True, text=True, check=True)
+    git("init", "-q")
+    git("config", "user.email", "t@t")
+    git("config", "user.name", "t")
+    write(d, "run-engine/t.py", "")
+    git("add", "run-engine/t.py")
+    git("commit", "-qm", "test: RED tests")
+    return subprocess.run(["git", "rev-parse", "HEAD"], cwd=d, capture_output=True, text=True).stdout.strip()
 
-try:
-    def _timeout_shell(cmd, cwd=None, timeout=None, **kw):
-        return subprocess.CompletedProcess([], 124, "", "")
-    checks.shell = _timeout_shell
-    ledger = _FakeLedger(stack="none", test_cmd="pytest")
-    envelope = {"handoff": {}}
-    config = {"checks": {"suite_timeout": 2400}}
-    with tempfile.TemporaryDirectory() as d:
-        result = checks.check_dev_post(ledger, envelope, d, config)
-    assert result.unrunnable is True
-    assert result.reason == "could not verify the suite: suite timed out after 2400s", result.reason
-finally:
-    checks.shell = real_checks_shell
+
+def _dev_post(handoff, shell_code=0):
+    """check_dev_post on a ledger that still lists sdet, in a throwaway repo."""
+    try:
+        checks.shell = lambda cmd, cwd=None, timeout=None, **kw: subprocess.CompletedProcess([], shell_code, "", "")
+        ledger = _FakeLedger(stack="none", test_cmd="pytest", test_root="run-engine")
+        with tempfile.TemporaryDirectory() as d:
+            sha = _dev_repo(d)
+            handoff = {"tests_sha": sha, "files_changed": [], **handoff}
+            return checks.check_dev_post(ledger, {"handoff": handoff}, d, {"checks": {"suite_timeout": 2400}})
+    finally:
+        checks.shell = real_checks_shell
+
+
+assert not hasattr(checks, "check_sdet_post") and not hasattr(checks, "check_sdet_pre")
+assert "sdet" not in checks.POST_CHECKS and "sdet" not in checks.PRE_CHECKS
+ok("the sdet post/pre checks and their registry entries are gone")
+
+result = _dev_post({})
+assert not result.ok and "handoff.verify" in result.reason, result
+result = _dev_post({"verify": {"verdict": "fail"}})
+assert not result.ok and "FAIL" in result.reason, result
+result = _dev_post({"verify": {"verdict": "pass", "criteria": [{"criterion": "x", "met": False}]}})
+assert not result.ok and "not met" in result.reason, result
+ok("check_dev_post validates handoff.verify against the verifier criteria even when the ledger lists sdet")
+
+result = _dev_post({"verify": {"verdict": "skipped", "reason": "no stack"}}, shell_code=124)
+assert result.unrunnable is True
+assert result.reason == "could not verify the suite: suite timed out after 2400s", result.reason
 ok("check_dev_post still wraps as 'could not verify the suite: suite timed out after 2400s' with an override")
+
+result = _dev_post({"verify": {"verdict": "skipped", "reason": "no stack"}})
+assert result.ok, result
+ok("check_dev_post passes a skipped verify on a green suite")
+
+with open(os.path.join(HERE, "engine.py"), encoding="utf-8") as fh:
+    assert "to: sdet" not in fh.read()
+ok("engine.py's escalation text no longer offers bounce.to: sdet")
+
+old = Ledger.from_dict({"issue": 7, "stations": FULL_STATIONS, "currentIndex": 2, "status": "running",
+                        "trace": ["sdet"], "bounceCounts": {"dev->sdet": 1}, "context": {"sdet_sha": "abc"}})
+assert old.stations == FULL_STATIONS and old.context["sdet_sha"] == "abc" and old.bounce_count("dev", "sdet") == 1
+ok("a ledger with sdet stations from an old run still loads")
 
 with tempfile.TemporaryDirectory() as d:
     write(d, ".run-issue.json", json.dumps({"checks": {"suite_timeout": 2400}}))
