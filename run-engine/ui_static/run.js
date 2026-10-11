@@ -517,12 +517,11 @@ export class RunDetail extends Component {
           <div class="panel stations">
             <h2>Stations</h2>
             <ol class="timeline">
-              ${stations.map((st) => html`
+              ${stations.filter((st) => !st.skipped).map((st) => html`
                 <li class=${`st-${KNOWN.includes(st.status) ? st.status : 'other'}`} aria-current=${st.name === run.currentStation ? 'step' : undefined}>
                   <span class="dot" aria-hidden="true"></span>
                   <span class="name">${st.name}</span>
-                  ${st.skipped ? html`<span class="chip other" title="Bypassed: the refined issue body was used as the plan">skipped</span>`
-                    : st.status === 'done' ? html`<span class="sr-only">done</span>` : html`<span class=${chip(st.status)}>${st.status}</span>`}
+                  ${st.status === 'done' ? html`<span class="sr-only">done</span>` : html`<span class=${chip(st.status)}>${st.status}</span>`}
                   ${st.bounces > 0 && html`<span class="muted">${`${st.bounces} ${st.bounces === 1 ? 'bounce' : 'bounces'}`}</span>`}
                 </li>`)}
             </ol>
