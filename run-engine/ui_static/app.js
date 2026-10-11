@@ -31,6 +31,8 @@ export function parseRoute(hash) {
   const qi = path.indexOf('?');
   const query = new URLSearchParams(qi < 0 ? '' : path.slice(qi + 1));
   if (qi >= 0) path = path.slice(0, qi);
+  // Query text (folder/prd become headless session args): one line, bounded, so the input shows all that is sent.
+  const get = (k) => (query.get(k) || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').slice(0, 500);
   if (path.length > 1 && path.endsWith('/')) path = path.slice(0, -1);
   let seg;
   try {
@@ -43,17 +45,17 @@ export function parseRoute(hash) {
   if (a === 'new' && !rest.length) return { name: 'new', params: {} };
   if (a === 'sessions' && !rest.length) return { name: 'sessions', params: {} };
   if (a === 'settings' && !rest.length) return { name: 'settings', params: {} };
+  // cmd= is a Settings command label chosen in the flow; the page falls back to the default when Settings lacks it.
   if (a === 'dispatch' && !rest.length) {
     const issues = queryIssues(query);
-    return issues.length ? { name: 'dispatch', params: {}, issues } : { name: 'dispatch', params: {} };
+    const cmd = get('cmd');
+    return { name: 'dispatch', params: {}, ...(issues.length ? { issues } : {}), ...(cmd ? { cmd } : {}) };
   }
   if (a === 'flow' && rest.length === 1 && (rest[0] === 'new' || /^f-\d{14}-[0-9a-f]{6}$/.test(rest[0]))) {
-    return { name: 'flow', params: { id: rest[0], repo: '', folder: '', prd: '', issues: [], sid: '' } };
+    return { name: 'flow', params: { id: rest[0], repo: '', folder: '', prd: '', issues: [], sid: '', cmd: get('cmd') } };
   }
   if (a === 'flow' && !rest.length) {
-    // folder/prd become headless session args: one line, bounded, so the input shows all that is sent
-    const get = (k) => (query.get(k) || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').slice(0, 500);
-    return { name: 'flow', params: { repo: get('repo'), folder: get('folder'), prd: get('prd'), issues: queryIssues(query), sid: get('sid') } };
+    return { name: 'flow', params: { repo: get('repo'), folder: get('folder'), prd: get('prd'), issues: queryIssues(query), sid: get('sid'), cmd: get('cmd') } };
   }
   if (a === 'dispatch' && rest.length === 1 && /^p-\d{14}-[0-9a-f]{6}$/.test(rest[0])) return { name: 'pipeline', params: { id: rest[0] } };
   if (a === 'session' && rest.length === 1 && rest[0]) return { name: 'session', params: { id: rest[0] } };
@@ -169,7 +171,7 @@ function View({ route, sessions, limits }) {
     case 'flow':
       return html`<${Flow} key=${JSON.stringify(route.params)} route=${route} />`;
     case 'dispatch':
-      return html`<${Dispatch} key=${(route.issues || []).join(',')} issues=${route.issues} />`;
+      return html`<${Dispatch} key=${`${(route.issues || []).join(',')}|${route.cmd || ''}`} issues=${route.issues} cmd=${route.cmd} />`;
     case 'pipeline':
       return html`<${PipelineDetail} key=${route.params.id} id=${route.params.id} />`;
     case 'sessions':

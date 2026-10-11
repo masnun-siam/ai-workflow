@@ -25,6 +25,9 @@ export const hasUrl = (text) => /github\.com\//i.test(String(text || ''));
 // Issues that screen ready start ticked; flagged ones (gaps, open PR, running, closed) start unticked.
 export const defaultSelection = (items) => new Set((items || []).filter((i) => i.ready).map((i) => i.issue));
 
+// The Settings command to run as: `want` when Settings has that label, else the Settings default.
+export const pickCmd = (cmds, want, dflt) => ((cmds || []).some((c) => c.label === want) ? want : dflt || '');
+
 export function startBody(preview, selected, { mode, max, claude, grind, worktree, review }) {
   const issues = preview.items.map((i) => i.issue).filter((n) => selected.has(n));
   const body = { slug: preview.slug, repo: preview.repo_path, issues, mode, max };
@@ -109,7 +112,7 @@ const StatePill = ({ state }) => html`<span class=${`chip dp-${state}`}>${state 
 // ---- Dispatch: new pipeline + pipeline list -----------------------------------------------------
 
 export class Dispatch extends Component {
-  state = { text: (this.props.issues || []).join(' '), repos: [], repo: '', manual: false, path: '', repoQuery: null, repoOpen: false, repoActive: 0, browsing: false, cmds: [], claude: '', grind: false, worktree: true, review: true, mode: 'parallel', max: 2, preview: null, selected: new Set(), busy: null, error: null, list: null, need: null, canBrowse: false };
+  state = { text: (this.props.issues || []).join(' '), repos: [], repo: '', manual: false, path: '', repoQuery: null, repoOpen: false, repoActive: 0, browsing: false, cmds: [], claude: this.props.cmd || '', grind: false, worktree: true, review: true, mode: 'parallel', max: 2, preview: null, selected: new Set(), busy: null, error: null, list: null, need: null, canBrowse: false };
 
   // The repo for plain issue numbers: a registered slug or a typed/browsed absolute path.
   repoValue = (s = this.state) => (s.manual ? s.path : s.repo).trim();
@@ -132,7 +135,7 @@ export class Dispatch extends Component {
       this.picked = repo;
       this.setState({ repos, canBrowse: !!(b && b.can_browse), repo });
     }).catch(() => {});
-    fetch('/api/settings', { headers: { Accept: 'application/json' } }).then((r) => (r.ok ? r.json() : null)).then((s) => s && this.setState({ cmds: s.commands || [], claude: s.default || '', grind: !!s.auto_grind })).catch(() => {});
+    fetch('/api/settings', { headers: { Accept: 'application/json' } }).then((r) => (r.ok ? r.json() : null)).then((s) => s && this.setState({ cmds: s.commands || [], claude: pickCmd(s.commands, this.props.cmd, s.default), grind: !!s.auto_grind })).catch(() => {});
     this.stop = poll('/api/pipelines', 3000, (r) => r.ok && this.setState({ list: r.data.pipelines }));
   }
 
@@ -273,7 +276,7 @@ export class Dispatch extends Component {
                   <span><b>${max}</b> at once</span>
                   <button type="button" aria-label="More" disabled=${max >= 6} onClick=${() => this.setState({ max: max + 1 })}>+</button>
                 </div>`}
-                ${cmds.length > 1 && html`<select aria-label="Claude account" value=${claude} onChange=${(e) => this.setState({ claude: e.target.value })}>
+                ${cmds.length > 1 && !cmds.some((c) => c.label === this.props.cmd) && html`<select aria-label="Claude account" value=${claude} onChange=${(e) => this.setState({ claude: e.target.value })}>
                   ${cmds.map((c) => html`<option value=${c.label}>${c.label}</option>`)}
                 </select>`}
               </div>

@@ -2,7 +2,7 @@ import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { poll } from './app.js';
 import { buildBody, loadLastRepo, repoCombo, repoOptions } from './launcher.js';
-import { issueNumbers } from './dispatch.js';
+import { issueNumbers, pickCmd } from './dispatch.js';
 import { Answer } from './answer.js';
 import { FlowSwitcher, IssueRows, NotePane, mergeRows } from './flowside.js';
 
@@ -58,17 +58,20 @@ export function stepFromState({ folder, prd, issues } = {}) {
   return 'dump';
 }
 
-export function flowHash({ repo, folder, prd, issues, sid } = {}) {
+export function flowHash({ repo, folder, prd, issues, sid, cmd } = {}) {
   const q = new URLSearchParams();
-  for (const [k, v] of Object.entries({ repo, folder, prd, sid })) if (v) q.set(k, v);
+  for (const [k, v] of Object.entries({ repo, folder, prd, sid, cmd })) if (v) q.set(k, v);
   if (issues && issues.length) q.set('issues', issues.join(','));
   const s = q.toString().replaceAll('%2C', ',');
   return s ? `#/flow?${s}` : '#/flow';
 }
 
-export const dispatchHref = (issues) => `#/dispatch?issues=${issues.join(',')}`;
+// cmd is the Settings command label the flow runs as; dispatch then uses it without asking again.
+const cmdQuery = (cmd, sep) => (cmd ? `${sep}cmd=${encodeURIComponent(cmd)}` : '');
 
-export const flowHref = (id) => `#/flow/${encodeURIComponent(id)}`;
+export const dispatchHref = (issues, cmd) => `#/dispatch?issues=${issues.join(',')}${cmdQuery(cmd, '&')}`;
+
+export const flowHref = (id, cmd) => `#/flow/${encodeURIComponent(id)}${cmdQuery(cmd, '?')}`;
 
 // The step a session ran, from its command (`/ai-workflow:gh-issue …` → issues), or null.
 export function sessionStep(command) {
@@ -117,7 +120,7 @@ export class Flow extends Component {
     const repo = p.repo || loadLastRepo(globalThis.localStorage) || '';
     this.state = { id: null, loaded: false, missing: false, ...this.repoState(repo), repos: [], canBrowse: false, repoQuery: null,
       repoOpen: false, repoActive: 0, browsing: false, text: '', folder: p.folder || '', prd: p.prd || '', issues: (p.issues || []).join(' '),
-      sid: p.sid || '', meta: null, why: null, busy: false, wide: false, view: null, progress: null };
+      sid: p.sid || '', meta: null, why: null, busy: false, wide: false, view: null, progress: null, cmds: [], claude: '' };
   }
 
   // The repo is a registered slug or, like New run, an absolute path to a checkout.
@@ -130,6 +133,7 @@ export class Flow extends Component {
     this.mq = globalThis.matchMedia?.('(min-width: 1200px)');
     if (this.mq) { this.onMq = () => this.setState({ wide: this.mq.matches }); this.mq.addEventListener('change', this.onMq); this.onMq(); }
     this.loadRepos();
+    this.loadCmds();
     const p = this.props.route.params;
     try {
       if (p.id && p.id !== 'new') await this.open(p.id);
@@ -137,7 +141,7 @@ export class Flow extends Component {
       else if (!p.id) {
         const r = await api('GET', '/api/flows');
         const latest = r.ok && r.data && r.data.flows[0];
-        if (latest) { history.replaceState(null, '', flowHref(latest.id)); await this.open(latest.id); }
+        if (latest) { history.replaceState(null, '', flowHref(latest.id, this.state.claude)); await this.open(latest.id); }
       }
     } catch {
       this.setState({ why: 'Could not reach the aiw server.' });
@@ -177,6 +181,21 @@ export class Flow extends Component {
     }).catch(() => {});
   }
 
+  // Settings commands for the picker: the hash's cmd= when Settings has it, else the Settings default.
+  loadCmds() {
+    fetch('/api/settings', { headers: { Accept: 'application/json' } }).then((r) => (r.ok ? r.json() : null)).then((s) => {
+      if (!s || this.gone) return;
+      this.setState({ cmds: s.commands || [], claude: pickCmd(s.commands, this.props.route.params.cmd, s.default) }, this.syncHash);
+    }).catch(() => {}); // no picker without settings: sessions run as the default
+  }
+
+  // The chosen command lives in the hash so a reload keeps it. With no id yet (bare #/flow), the
+  // record's creation or the latest-flow redirect writes it instead.
+  syncHash = () => {
+    const id = this.state.id || this.props.route.params.id;
+    if (!this.gone && id && this.state.claude) history.replaceState(null, '', flowHref(id, this.state.claude));
+  };
+
   fields = (s = this.state) => ({ repo: (s.manual ? s.path : s.repo).trim(), folder: s.folder, prd: s.prd, issues: issueNumbers(s.issues), sid: s.sid });
 
   persisted = (s = this.state) => ({ ...this.fields(s), text: s.text });
@@ -201,7 +220,7 @@ export class Flow extends Component {
       if (!this.creating) {
         this.creating = api('POST', '/api/flows', body).then((r) => {
           if (!r.ok || !r.data) return null;
-          if (!this.gone) { this.setState({ id: r.data.id }); history.replaceState(null, '', flowHref(r.data.id)); }
+          if (!this.gone) { this.setState({ id: r.data.id }); history.replaceState(null, '', flowHref(r.data.id, this.state.claude)); }
           globalThis.dispatchEvent(new Event('aiw:flow'));
           return r.data.id;
         });
@@ -226,7 +245,8 @@ export class Flow extends Component {
     const flowId = await this.persist(true);
     let r;
     try {
-      r = await api('POST', '/api/sessions', { ...buildBody({ repo, command: step.command, args }), ...(flowId ? { flow_id: flowId } : {}) });
+      r = await api('POST', '/api/sessions', { ...buildBody({ repo, command: step.command, args }), ...(flowId ? { flow_id: flowId } : {}),
+        ...(this.state.claude ? { claude_cmd: this.state.claude } : {}) });
     } catch {
       this.setState({ busy: false, why: 'Could not reach the aiw server.' });
       return;
@@ -364,6 +384,13 @@ export class Flow extends Component {
       <p class="note">Turn a raw idea into dispatched issue runs. Each step stops for you only when it has a question.</p>
       <label for="flow-repo">Repo</label>
       ${this.combo.render(st, { id: 'flow-repo', error: why === 'Pick a repo first.' ? 'flow-why' : null })}
+      ${st.cmds.length > 1 && html`<div class="runas flow-runas" role="radiogroup" aria-label="Run as">
+        <span class="runas-label" aria-hidden="true">Run as</span>
+        <div class="seg">
+          ${st.cmds.map((o) => html`<button type="button" role="radio" aria-checked=${st.claude === o.label} class=${st.claude === o.label ? 'on' : ''}
+            onClick=${() => this.setState({ claude: o.label }, this.syncHash)}>${o.label}</button>`)}
+        </div>
+      </div>`}
       <ol class="flow-steps">
         ${STEPS.map((step, i) => {
           const state = i < at ? (step.key === 'prd' && !folder ? 'skipped' : 'done') : i === at ? 'active' : 'locked';
@@ -384,7 +411,7 @@ export class Flow extends Component {
                 ${!waiting && html`<button type="button" class="primary" disabled=${busy || this.running()} onClick=${() => this.start(step)}>${sid ? `${step.action} again` : step.action}</button>`}`}
               ${state === 'active' && step.key === 'dispatch' && html`
                 ${this.input(step)}
-                ${issues.length ? html`<a class="btn btn--primary" href=${dispatchHref(issues)} onClick=${this.dispatched}>Open Dispatch with ${issues.join(', ')}</a>` : null}`}
+                ${issues.length ? html`<a class="btn btn--primary" href=${dispatchHref(issues, st.claude)} onClick=${this.dispatched}>Open Dispatch with ${issues.join(', ')}</a>` : null}`}
               ${state === 'done' && html`<p class="note mono">${{ dump: folder || st.prd, prd: st.prd, issues: issues.join(', ') }[step.key]}</p>`}
             </div>
           </li>`;

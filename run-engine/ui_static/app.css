@@ -235,6 +235,7 @@ main > h1, .history-page > h1 { margin-bottom: 20px; }
 .runas { display: flex; align-items: center; gap: 10px; margin-left: auto; color: var(--muted); font-size: 13px; }
 .runas .seg button { gap: 6px; }
 .runas-limited { width: 6px; height: 6px; border-radius: 50%; background: var(--waiting); }
+.flow-runas { margin: 12px 0 0; }
 .launch-side button[type="submit"] { color: var(--fg); background: var(--raised); border: 1px solid var(--border-input); font-weight: 500; }
 .launch-side button[type="submit"]:hover { background: #232c38; color: var(--fg); }
 
