@@ -4,6 +4,7 @@ import { poll } from './app.js';
 import { toast } from './toast.js';
 import { GhChips } from './ghstatus.js';
 import { PrLink } from './pr.js';
+import { repoCombo, repoOptions } from './launcher.js';
 import { formatWhen, grindLabel } from './fmt.js';
 
 const html = htm.bind(h);
@@ -108,13 +109,28 @@ const StatePill = ({ state }) => html`<span class=${`chip dp-${state}`}>${state 
 // ---- Dispatch: new pipeline + pipeline list -----------------------------------------------------
 
 export class Dispatch extends Component {
-  state = { text: (this.props.issues || []).join(' '), repos: [], repo: '', cmds: [], claude: '', grind: false, worktree: true, review: true, mode: 'parallel', max: 2, preview: null, selected: new Set(), busy: null, error: null, list: null, need: null, canBrowse: false };
+  state = { text: (this.props.issues || []).join(' '), repos: [], repo: '', manual: false, path: '', repoQuery: null, repoOpen: false, repoActive: 0, browsing: false, cmds: [], claude: '', grind: false, worktree: true, review: true, mode: 'parallel', max: 2, preview: null, selected: new Set(), busy: null, error: null, list: null, need: null, canBrowse: false };
+
+  // The repo for plain issue numbers: a registered slug or a typed/browsed absolute path.
+  repoValue = (s = this.state) => (s.manual ? s.path : s.repo).trim();
+
+  // onPick also fires on every typed keystroke, so only a changed repo clears the preview.
+  onPick = () => {
+    const v = this.repoValue();
+    if (v === this.picked) return;
+    this.picked = v;
+    this.setState({ preview: null });
+  };
+
+  combo = repoCombo(this, () => this.onPick());
 
   componentDidMount() {
     fetch('/api/repos', { headers: { Accept: 'application/json' } }).then((r) => (r.ok ? r.json() : null)).then((b) => {
-      const repos = ((b && b.repos) || []).filter((r) => r && r.slug);
+      const repos = repoOptions(b);
       const last = (() => { try { return localStorage.getItem('aiw.lastRepo'); } catch { return null; } })();
-      this.setState({ repos, canBrowse: !!(b && b.can_browse), repo: (repos.find((r) => r.slug === last) || repos[0] || {}).slug || '' });
+      const repo = (repos.find((r) => r.value === last) || repos[0] || {}).value || '';
+      this.picked = repo;
+      this.setState({ repos, canBrowse: !!(b && b.can_browse), repo });
     }).catch(() => {});
     fetch('/api/settings', { headers: { Accept: 'application/json' } }).then((r) => (r.ok ? r.json() : null)).then((s) => s && this.setState({ cmds: s.commands || [], claude: s.default || '', grind: !!s.auto_grind })).catch(() => {});
     this.stop = poll('/api/pipelines', 3000, (r) => r.ok && this.setState({ list: r.data.pipelines }));
@@ -130,7 +146,7 @@ export class Dispatch extends Component {
 
   runPreview = async (typed) => {
     const text = typeof typed === 'string' ? typed : this.state.text;
-    const { repo } = this.state;
+    const repo = this.repoValue();
     if (!text.trim()) { this.setState({ error: 'Paste a GitHub issue search URL or a list of issue numbers' }); return; }
     this.setState({ text, busy: 'preview', error: null, preview: null, need: null });
     const r = await api('/api/dispatch/preview', { input: text, repo: hasUrl(text) ? undefined : repo });
@@ -153,7 +169,7 @@ export class Dispatch extends Component {
     const r = await api('/api/repos/register', { slug: need.slug, path });
     if (!r.ok) { this.setNeed({ busy: false, error: r.error }); return; }
     toast(`Registered ${need.slug}`);
-    this.setState({ need: null, repos: r.data.repos.filter((x) => x && x.slug) });
+    this.setState({ need: null, repos: repoOptions(r.data) });
     this[need.again]();
   };
 
@@ -185,7 +201,8 @@ export class Dispatch extends Component {
     location.hash = `#/dispatch/${r.data.id}`;
   };
 
-  render(_, { text, repos, repo, cmds, claude, grind, worktree, review, mode, max, preview, selected, busy, error, list, need, canBrowse }) {
+  render(_, st) {
+    const { text, cmds, claude, grind, worktree, review, mode, max, preview, selected, busy, error, list, need, canBrowse } = st;
     const chosen = preview ? preview.items.filter((i) => selected.has(i.issue)).length : 0;
     const flagged = preview ? preview.items.filter((i) => !i.ready).length : 0;
     return html`
@@ -199,9 +216,7 @@ export class Dispatch extends Component {
             placeholder="A search URL, issue URLs, or numbers: #12, 14, 15"></textarea>
           <p class="note">A search URL, issue URLs, issue numbers, or a single epic number to run its sub-issues.</p>
           ${!hasUrl(text) && html`<label for="dp-repo">Repo for plain issue numbers</label>
-            <select id="dp-repo" value=${repo} onChange=${(e) => this.setState({ repo: e.target.value, preview: null })}>
-              ${repos.length ? repos.map((r) => html`<option value=${r.slug}>${r.slug}</option>`) : html`<option value="">No repos yet — start a run once to register one</option>`}
-            </select>`}
+            ${this.combo.render(st, { id: 'dp-repo' })}`}
           <div class="dp-row">
             <button type="button" class="primary" disabled=${busy === 'preview'} onClick=${() => this.runPreview()}>${busy === 'preview' ? 'Reading issues…' : 'Preview issues'} <kbd>⌘↵</kbd></button>
           </div>
