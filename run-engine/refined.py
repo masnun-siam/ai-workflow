@@ -18,7 +18,7 @@ import subprocess
 from shared import die, load_ledger, write_json
 
 SECTION_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
-BULLET_RE = re.compile(r"^\s*[-*]\s+(?:\[[ xX]\]\s+)?(.+?)\s*$", re.MULTILINE)
+BULLET_RE = re.compile(r"^\s*(?:[-*]|\d+[.)])\s+(?:\[[ xX]\]\s+)?(.+?)\s*$", re.MULTILINE)
 STEP_RE = re.compile(r"^\s*\d+\.\s+\S", re.MULTILINE)
 FIELD_RE = r"^\s*[-*]?\s*\**{}\**\s*:\s*`?([^`\s]+)`?\s*$"
 CONVENTIONAL_ROOTS = ("tests", "test", "__tests__", "spec")
@@ -66,7 +66,7 @@ def parse(labels: list[str], body: str, repo: str) -> tuple[dict | None, str]:
     secs = sections(body)
     ac = [b for b in BULLET_RE.findall(secs.get("acceptance criteria", "")) if b]
     if not ac:
-        return None, "`## Acceptance Criteria` is missing or has no bullet items"
+        return None, "`## Acceptance Criteria` is missing or has no bullet or numbered items"
     how = secs.get("how", "")
     if not STEP_RE.search(how):
         return None, "`## How` is missing or has no numbered steps"
