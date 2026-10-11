@@ -752,6 +752,15 @@ out('dispatch: input, selection and start body helpers');
 assert.equal(new D.Dispatch({ issues: [12, 13] }).state.text, '12 13');
 assert.equal(new D.Dispatch({}).state.text, '');
 out('dispatch: issues prop prefills the input');
+{
+  const lean = { issue: 1, title: 'T', gaps: [], skip: null, deps: [], ext_deps: [], ready: true, lane: 'lean' };
+  const dp = new D.Dispatch({});
+  dp.state = { ...dp.state, preview: { slug: 'o/r', repo_path: '/x', items: [lean] }, selected: new Set([1]) };
+  const words = (v) => (v == null || typeof v === 'boolean' ? '' : typeof v === 'object' ? [].concat(v.props ? v.props.children : v).map(words).join(' ') : String(v));
+  assert.ok(words(dp.render(dp.props, dp.state)).includes('Ready only'));
+  assert.ok(!words(dp.render(dp.props, dp.state)).includes('lean'));
+}
+out('dispatch: preview rows render no lane chip');
 
 assert.deepEqual(D.itemActions({ state: 'failed' }), ['retry', 'skip']);
 assert.deepEqual(D.itemActions({ state: 'skipped', reason: 'blocked by #3' }), []);

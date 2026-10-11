@@ -246,6 +246,14 @@ ok("finish notifies once")
 assert d.membership() == {} and d.summary(d.load(p2["id"]))["counts"] == {"done": 1}
 ok("finished pipelines drop out of board membership; summary counts")
 
+# #208: preview rows carry no lane; skip and gaps stay
+_real = d._screen
+d._screen = lambda slug, nums: [{"issue": n, "title": f"T{n}", "deps": [], "gaps": ["AC"], "mode": "lean", "skip_reason": "done"} for n in nums]
+row = d.preview("#1", "o/r")["items"][0]
+assert "lane" not in row and row["gaps"] == ["AC"] and row["skip"] == "done" and row["ready"] is False
+d._screen = _real
+ok("preview rows carry no lane key; skip and gaps are unchanged")
+
 # unknown repo -> NeedsCheckout carrying the clones found on disk
 d.ui_repos.is_unregistered_slug = lambda r: r == "acme/new"
 d.ui_repos.find_clones = lambda roots, slug=None, **k: [{"slug": slug, "path": "/home/me/new"}]
