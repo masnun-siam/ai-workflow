@@ -49,6 +49,8 @@ with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as tmp
     assert h["test_cases"][0] == "[acceptance] Returns 200 for a valid id"
     assert "1. In `app/x.py:10`" in h["plan_md"] and "## Test root\ntests/" in h["plan_md"]
 
+    numbered = BODY.replace("- [ ] Returns", "1. Returns").replace("- [ ] Corner", "2. Corner")
+    assert refined.parse(["refined"], numbered, repo)[0]["acceptance_criteria"] == h["acceptance_criteria"]
     assert refined.parse(["bug"], BODY, repo)[1] == "no `refined` label"
     assert "Acceptance" in refined.parse(["refined"], BODY.replace("- [ ] ", "").replace("- ", ""), repo)[1]
     assert "How" in refined.parse(["refined"], BODY.replace("1. ", "").replace("2. ", ""), repo)[1]
