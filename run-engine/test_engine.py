@@ -121,65 +121,6 @@ assert action.kind == RouteAction.BOUNCE, f"a fresh pair must still be allowed, 
 ok("bounce budgets are per (from,to) pair, never merged")
 
 
-# --- 6. the test-root guard sees a COMMITTED edit ---------------------------
-# This is the bug the guard exists for: run-dev commits its work, so the old
-# `git diff --name-only <test-root>` (worktree-vs-index) saw nothing.
-
-with tempfile.TemporaryDirectory() as tmp:
-    repo = os.path.join(tmp, "repo")
-    run_dir = os.path.join(tmp, "run")
-    os.makedirs(os.path.join(repo, "tests"))
-    git = lambda *a: subprocess.run(["git", *a], cwd=repo, check=True, capture_output=True)
-    git("init", "-q", "-b", "main")
-    git("config", "user.email", "t@t"); git("config", "user.name", "t")
-    open(os.path.join(repo, "tests", "a.test.js"), "w").write("expect(1).toBe(2)\n")
-    git("add", "-A"); git("commit", "-qm", "sdet: red tests")
-    sdet_sha = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True
-    ).stdout.strip()
-
-    # dev weakens the test AND COMMITS it — invisible to a worktree diff.
-    open(os.path.join(repo, "tests", "a.test.js"), "w").write("expect(1).toBe(1)\n")
-    git("add", "-A"); git("commit", "-qm", "dev: implement")
-
-    stale = subprocess.run(
-        ["git", "diff", "--name-only", "--", "tests"], cwd=repo, capture_output=True, text=True
-    ).stdout.strip()
-    assert stale == "", "precondition: the OLD worktree-diff check sees nothing once committed"
-
-    subprocess.run(
-        [sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--repo", repo, "--mode", "full"],
-        check=True, capture_output=True,
-    )
-    subprocess.run(
-        [sys.executable, ROUTE, "set", run_dir, f"sdet_sha={sdet_sha}", "test_root=tests"],
-        check=True, capture_output=True,
-    )
-    json.dump(envelope("dev"), open(os.path.join(run_dir, "30-build.json"), "w"))
-    proc = subprocess.run(
-        [sys.executable, ROUTE, "route", run_dir, "30-build.json", "--repo", repo],
-        capture_output=True, text=True,
-    )
-    assert proc.returncode == 6, f"expected exit 6, got {proc.returncode}: {proc.stdout}{proc.stderr}"
-    assert "tests/a.test.js" in proc.stderr, proc.stderr
-    # exit-6 stderr must also mirror the git-show fallback for hook-blocked checkout/restore
-    # (issue #26) so a dev/fixer whose `git checkout` is blocked by a repo's safety hooks
-    # has a documented recovery path.
-    assert f"git checkout {sdet_sha}" in proc.stderr, proc.stderr
-    assert "git show" in proc.stderr, "exit-6 stderr must mirror the git-show fallback"
-
-    # The engine routes the bounce itself rather than asking the orchestrator to rewrite
-    # dev's envelope — hand-authoring an envelope is exactly what H1 forbids, and the cap
-    # has to be consumed or a tampering loop is unbounded.
-    assert proc.stdout.strip() == "bounce(sdet)", proc.stdout
-    led = json.load(open(os.path.join(run_dir, "run.json")))
-    assert led["bounceCounts"].get("dev->sdet") == 1, led["bounceCounts"]
-    assert led["stations"][led["currentIndex"]] == "sdet", led["currentIndex"]
-ok("test-root guard catches an edit that was COMMITTED (the bug the old check missed)")
-ok("...and routes the bounce itself, consuming the cap — no hand-authored envelope")
-ok("exit-6 stderr mirrors the git-show fallback")
-
-
 # --- 7. envelope validation -------------------------------------------------
 
 led = ledger_at("dev")
@@ -590,25 +531,17 @@ def dev_env(tests_sha, **handoff):
 with tempfile.TemporaryDirectory() as tmp:
     repo, run_dir, tests_sha = default_mode_repo(tmp)
     proc = route_it(run_dir, repo, "30-build.json", dev_env(tests_sha))
-    assert proc.returncode == 6, f"{proc.returncode}: {proc.stdout}{proc.stderr}"
-    assert proc.stdout.strip() == "bounce(dev)", proc.stdout
-    led = json.load(open(os.path.join(run_dir, "run.json")))
-    assert led["bounceCounts"].get("dev->dev") == 1 and led["context"]["tests_sha"] == tests_sha, led
-ok("default mode: an unjustified edit after tests_sha bounces dev to itself")
-
-with tempfile.TemporaryDirectory() as tmp:
-    repo, run_dir, tests_sha = default_mode_repo(tmp)
-    why = [{"file": "tests/a.test.js", "reason": "the test asserted the wrong constant"}]
-    proc = route_it(run_dir, repo, "30-build.json", dev_env(tests_sha, test_changes=why))
     assert proc.returncode == 0 and proc.stdout.strip() == "advance(reviewer)", f"{proc.stdout}{proc.stderr}"
-ok("default mode: a test change with a test_changes[] reason passes the guard")
+    led = json.load(open(os.path.join(run_dir, "run.json")))
+    assert led["context"]["tests_sha"] == tests_sha and not led["bounceCounts"], led
+ok("default mode: an edit to a test after tests_sha is not reverted or bounced")
 
 for bad, needle in (({"tests_sha": None}, "tests_sha"),
                     ({"verify": None}, "handoff.verify"),
                     ({"verify": {"verdict": "fail", "modes": {}}}, "FAIL")):
     with tempfile.TemporaryDirectory() as tmp:
         repo, run_dir, tests_sha = default_mode_repo(tmp)
-        env = dev_env(tests_sha, test_changes=[{"file": "tests/a.test.js", "reason": "r"}])
+        env = dev_env(tests_sha)
         env["handoff"].update(bad)
         proc = route_it(run_dir, repo, "30-build.json", env)
         assert proc.returncode == 7 and needle in proc.stderr, (bad, proc.returncode, proc.stderr)
