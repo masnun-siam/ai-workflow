@@ -2526,6 +2526,71 @@ try:
     finally:
         ui_server.STATIC_DIR = real_static
 
+    # scroll boxes are sized from the room left in the viewport, not from a 100vh guess (#221)
+    def css_rules(src):
+        """[(media or None, selector, body)] with comments dropped; one @media level deep."""
+        src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+        out = []
+
+        def walk(text, media):
+            i = 0
+            while i < len(text):
+                j = text.find("{", i)
+                if j < 0:
+                    break
+                head, depth, k = text[i:j].strip(), 1, j + 1
+                while depth and k < len(text):
+                    depth += {"{": 1, "}": -1}.get(text[k], 0)
+                    k += 1
+                inner = text[j + 1:k - 1]
+                if head.startswith("@media"):
+                    walk(inner, re.sub(r"\s+", " ", head[6:].strip()))
+                elif not head.startswith("@"):
+                    out.append((media, re.sub(r"\s+", " ", head), inner))
+                i = k
+
+        walk(src, None)
+        return out
+
+    def decl(rules, media, selector):
+        got = [b for m, sel, b in rules if m == media and selector in [x.strip() for x in sel.split(",")]]
+        assert got, (media, selector)
+        return " ".join(got)
+
+    rules = css_rules(read(os.path.join(STATIC, "app.css")).decode())
+    # the Flow side panel and the Run output no longer size themselves from 100vh
+    assert "vh" not in decl(rules, None, ".flow-side"), "flow-side must not be sized from vh"
+    wide_flow = decl(rules, "(min-width: 1200px)", "body:has(.flow--side) #app")
+    assert re.search(r"height\s*:\s*100dvh", wide_flow) and re.search(r"flex-direction\s*:\s*column", wide_flow), wide_flow
+    wide_run = decl(rules, "(min-width: 961px)", "body:has(.run .output) #app")
+    assert re.search(r"height\s*:\s*100dvh", wide_run) and re.search(r"flex-direction\s*:\s*column", wide_run), wide_run
+    # Flow: the main column is the scroll area (a size container), the sticky panel is bounded by it
+    flow_main = decl(rules, "(min-width: 1200px)", "main:has(.flow--side)")
+    assert re.search(r"container-type\s*:\s*size", flow_main) and re.search(r"overflow-y\s*:\s*auto", flow_main), flow_main
+    side = decl(rules, None, ".flow-side")
+    assert re.search(r"max-height\s*:[^;]*100cqh", side) and re.search(r"overflow-y\s*:\s*auto", side) and "sticky" in side, side
+    # Run: the output shrinks to the room left under the header, and no longer carries its own cap there
+    run_out = decl(rules, "(min-width: 961px)", ".run:has(.output) .output")
+    assert re.search(r"max-height\s*:\s*none", run_out), run_out
+    run_panel = decl(rules, "(min-width: 961px)", ".run:has(.output) .panel.main")
+    assert re.search(r"max-height\s*:\s*max\(100%", run_panel), run_panel
+    ok("css flow side and run output are bounded by the viewport layout, not 100vh")
+
+    # below the wide layouts the page scrolls as before (#221)
+    assert re.search(r"position\s*:\s*static", decl(rules, "(max-width: 1199px)", ".flow-side"))
+    assert re.search(r"max-height\s*:\s*none", decl(rules, "(max-width: 1199px)", ".flow-side"))
+    assert re.search(r"max-height\s*:\s*none", decl(rules, "(max-width: 640px)", ".output"))
+    assert re.search(r"overflow\s*:\s*visible", decl(rules, "(max-width: 640px)", ".output"))
+    base_out = decl(rules, None, ".output")
+    assert "overflow-y: auto" in base_out and "max-height" in base_out
+    ok("css narrow layouts keep page-level scrolling")
+
+    # every remaining vh-sized scroll box is an overlay that starts near the top (audited in #221)
+    # (.output keeps its vh cap only where the stations stack above it and the page scrolls: under 961px)
+    vh_boxes = sorted({sel for m, sel, b in rules if re.search(r"max-height\s*:[^;]*\dvh\b", b)})
+    assert vh_boxes == [".dialog", ".dialog.issue", ".fs-pop", ".output"], vh_boxes
+    ok("css only audited overlays keep a vh max-height")
+
     # vendoring
     for name, lic in (("preact", "MIT"), ("htm", "Apache-2.0")):
         src = read(os.path.join(VENDOR, f"{name}.mjs")).decode()
