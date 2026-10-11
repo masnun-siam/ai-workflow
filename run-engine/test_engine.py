@@ -25,11 +25,20 @@ from engine import (  # noqa: E402
     resolve_review_panel,
     validate_envelope,
 )
+from shared import save_ledger  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROUTE = os.path.join(HERE, "route.py")
 CONFIG = json.load(open(os.path.join(HERE, "config.json"), encoding="utf-8"))
-FULL = CONFIG["modes"]["full"]["stations"]
+# The legacy 7-station roster: no longer a config mode, but ledgers carrying it are still on disk.
+FULL = ["researcher", "planner", "sdet", "dev", "verifier", "reviewer", "fixer"]
+
+
+def seed_full_ledger(run_dir, repo):
+    """A legacy full-roster ledger, written directly (`aiw init` can no longer make one)."""
+    led = Ledger(41, FULL)
+    led.context.update(mode="full", repo=os.path.abspath(repo))
+    save_ledger(run_dir, led)
 
 passed = 0
 
@@ -147,10 +156,7 @@ with tempfile.TemporaryDirectory() as tmp:
     ).stdout.strip()
     assert stale == "", "precondition: the OLD worktree-diff check sees nothing once committed"
 
-    subprocess.run(
-        [sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--repo", repo, "--mode", "full"],
-        check=True, capture_output=True,
-    )
+    seed_full_ledger(run_dir, repo)
     subprocess.run(
         [sys.executable, ROUTE, "set", run_dir, f"sdet_sha={sdet_sha}", "test_root=tests"],
         check=True, capture_output=True,
@@ -277,8 +283,7 @@ def post_check_repo(tmp):
     git("config", "user.email", "a@b"); git("config", "user.name", "a")
     open(os.path.join(repo, "tests", "a.test.js"), "w").write("x\n")
     git("add", "-A"); git("commit", "-qm", "init")
-    subprocess.run([sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--repo", repo, "--mode", "full"],
-                   check=True, capture_output=True)
+    seed_full_ledger(run_dir, repo)
     subprocess.run([sys.executable, ROUTE, "set", run_dir, "test_root=tests"],
                    check=True, capture_output=True)
     return repo, run_dir
@@ -506,23 +511,57 @@ ok("### Test ownership section is unchanged")
 # --- default mode: dev owns its RED tests and its runtime verify ------------
 
 with tempfile.TemporaryDirectory() as tmp:
-    run_dir = os.path.join(tmp, "alias")
-    subprocess.run([sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--mode", "lean"],
+    run_dir = os.path.join(tmp, "bare")
+    proc = subprocess.run([sys.executable, ROUTE, "init", run_dir, "--issue", "41"],
+                          capture_output=True, text=True)
+    assert proc.returncode == 0 and proc.stdout.startswith("initialised default:"), proc
+    led = json.load(open(os.path.join(run_dir, "run.json")))
+    assert led["stations"] == CONFIG["modes"]["default"]["stations"], led["stations"]
+    assert "sdet" not in led["stations"] and "verifier" not in led["stations"], led["stations"]
+    assert led["context"]["mode"] == "default", led["context"]
+ok("bare `aiw init` writes the default roster")
+
+for flag in ("default", "full", "lean"):
+    with tempfile.TemporaryDirectory() as tmp:
+        run_dir = os.path.join(tmp, "nomode")
+        proc = subprocess.run([sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--mode", flag],
+                              capture_output=True, text=True)
+        assert proc.returncode == 2 and "unrecognized arguments" in proc.stderr, proc
+        assert not os.path.exists(os.path.join(run_dir, "run.json"))
+ok("`aiw init --mode X` is rejected as an unknown option and writes nothing")
+
+assert sorted(CONFIG["modes"]) == ["default"] and CONFIG["default_mode"] == "default", CONFIG["modes"]
+assert not _re.search(r"full|lean|alias_of", json.dumps(CONFIG["modes"]), _re.I), CONFIG["modes"]
+ok("config.json modes holds only `default`, with no full/lean/alias_of text")
+
+with tempfile.TemporaryDirectory() as tmp:
+    repo, run_dir = os.path.join(tmp, "repo"), os.path.join(tmp, "run")
+    os.makedirs(repo)
+    json.dump({"default_mode": "lean"}, open(os.path.join(repo, ".run-issue.json"), "w"))
+    proc = subprocess.run([sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--repo", repo],
+                          capture_output=True, text=True)
+    assert proc.returncode == 2 and "unknown mode: lean (have: default)" in proc.stderr, proc
+    assert "Traceback" not in proc.stderr, proc.stderr
+ok("a stale overlay default_mode fails cleanly with `unknown mode`")
+
+with tempfile.TemporaryDirectory() as tmp:
+    run_dir = os.path.join(tmp, "legacy")
+    seed_full_ledger(run_dir, tmp)
+    proc = subprocess.run([sys.executable, ROUTE, "set", run_dir, "test_root=tests"],
+                          capture_output=True, text=True)
+    assert proc.returncode == 0, proc
+    led = json.load(open(os.path.join(run_dir, "run.json")))
+    assert led["stations"] == FULL and led["context"]["mode"] == "full", led
+ok("a legacy full-roster ledger still loads and `aiw set` works on it")
+
+with tempfile.TemporaryDirectory() as tmp:
+    run_dir = os.path.join(tmp, "noreview")
+    subprocess.run([sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--no-review"],
                    check=True, capture_output=True)
     led = json.load(open(os.path.join(run_dir, "run.json")))
-    assert led["stations"] == CONFIG["modes"]["default"]["stations"] and "sdet" not in led["stations"], led
-    assert led["context"]["mode"] == "default", led["context"]
-ok("--mode lean is an alias of the default roster")
-
-for mode in ("default", "full"):
-    with tempfile.TemporaryDirectory() as tmp:
-        run_dir = os.path.join(tmp, "noreview")
-        subprocess.run([sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--mode", mode, "--no-review"],
-                       check=True, capture_output=True)
-        led = json.load(open(os.path.join(run_dir, "run.json")))
-        want = [s for s in CONFIG["modes"][mode]["stations"] if s not in ("reviewer", "fixer")]
-        assert led["stations"] == want and led["stations"][-1] in ("dev", "verifier"), led["stations"]
-        assert led["context"]["review"] == "skipped", led["context"]
+    want = [s for s in CONFIG["modes"]["default"]["stations"] if s not in ("reviewer", "fixer")]
+    assert led["stations"] == want and led["stations"][-1] == "dev", led["stations"]
+    assert led["context"]["review"] == "skipped", led["context"]
 ok("--no-review drops reviewer and fixer from the roster and records review=skipped")
 
 # --- aiw skip-review: edit a live run before its reviewer is current ---------
@@ -532,7 +571,7 @@ def aiw(*a):
 
 with tempfile.TemporaryDirectory() as tmp:
     run_dir = os.path.join(tmp, "live")
-    assert aiw("init", run_dir, "--issue", "41", "--mode", "default").returncode == 0
+    assert aiw("init", run_dir, "--issue", "41").returncode == 0
     proc = aiw("skip-review", run_dir)
     assert proc.returncode == 0, proc
     led = json.load(open(os.path.join(run_dir, "run.json")))
@@ -544,7 +583,7 @@ ok("skip-review trims the roster of a live run and is idempotent")
 
 with tempfile.TemporaryDirectory() as tmp:
     run_dir = os.path.join(tmp, "late")
-    assert aiw("init", run_dir, "--issue", "41", "--mode", "default").returncode == 0
+    assert aiw("init", run_dir, "--issue", "41").returncode == 0
     led = json.load(open(os.path.join(run_dir, "run.json")))
     led["currentIndex"] = led["stations"].index("reviewer")
     json.dump(led, open(os.path.join(run_dir, "run.json"), "w"))
