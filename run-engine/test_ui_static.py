@@ -62,6 +62,86 @@ threading.Thread(target=srv.serve_forever, daemon=True).start()
 port = srv.server_address[1]
 tmp = tempfile.mkdtemp()
 real_static = getattr(ui_server, "STATIC_DIR", None)
+STEPFEED_JS = r"""
+const FS = await import(process.env.FLOWSIDE_URL);
+const assert = (await import('node:assert')).strict;
+const out = (n) => console.log('ok ' + n);
+// #211: StepFeed. cardFor maps a stream event to a condensed label; unknown tools keep their name.
+const tool = (name, input) => ({ kind: 'tool', name, input });
+assert.deepEqual(FS.cardFor(tool('Read', { file_path: '/vault/05-Work/P/F/Dump.md' })), { label: 'Reading Dump.md' });
+assert.equal(FS.cardFor(tool('Read', null)).label, 'Reading a file');
+assert.equal(FS.cardFor(tool('Grep', { pattern: 'x' })).label, 'Scanning the codebase');
+assert.equal(FS.cardFor(tool('Glob', { pattern: '*.js' })).label, 'Scanning the codebase');
+assert.equal(FS.cardFor(tool('AskUserQuestion', {})).label, 'Asking a question');
+assert.equal(FS.cardFor(tool('Bash', { command: 'gh issue create --title "x" --body y' })).label, 'Creating an issue');
+assert.equal(FS.cardFor(tool('Bash', { command: 'ls -la' })).label, 'Bash');
+assert.equal(FS.cardFor(tool('WebFetch', { url: 'https://x' })).label, 'WebFetch');
+assert.equal(FS.cardFor({ kind: 'text', text: 'hello' }), null);
+assert.equal(FS.cardFor({ kind: 'result', is_error: false, text: 'ok' }), null);
+out('flowside: cardFor maps tool events to condensed labels, unknown tools keep their name');
+
+// feedStatus: a result event stops the pulse; an error result or a dead session is a failure.
+const ev = [tool('Read', {}), { kind: 'text', text: 'hi' }];
+assert.equal(FS.feedStatus(ev, false, false), 'running');
+assert.equal(FS.feedStatus([], false, false), 'running');
+assert.equal(FS.feedStatus([...ev, { kind: 'result', is_error: false }], false, false), 'done');
+assert.equal(FS.feedStatus([...ev, { kind: 'result', is_error: true }], false, false), 'failed');
+assert.equal(FS.feedStatus(ev, false, true), 'failed');
+assert.equal(FS.feedStatus(ev, true, false), 'done');
+assert.equal(FS.feedStatus([{ kind: 'result', is_error: false }], false, true), 'failed');
+out('flowside: feedStatus is running until a result, failed on is_error or a dead session');
+
+// elapsed: m:ss counted from the first event.
+assert.equal(FS.elapsed(1000, 1000), '0:00');
+assert.equal(FS.elapsed(1000, 66000), '1:05');
+assert.equal(FS.elapsed(0, 3_725_000), '62:05');
+assert.equal(FS.elapsed(5000, 1000), '0:00');
+assert.equal(FS.elapsed(null, 9000), '0:00');
+out('flowside: elapsed formats m:ss from a start time');
+
+{
+  const nrm = (v) => {
+    if (v == null || typeof v === 'boolean') return null;
+    if (typeof v === 'string' || typeof v === 'number') return String(v);
+    if (Array.isArray(v)) return { type: null, props: {}, kids: v.map(nrm).filter((x) => x !== null) };
+    const c = v.props?.children;
+    return { type: v.type, props: v.props || {}, kids: c == null ? [] : [].concat(c).flatMap((x) => (Array.isArray(x) ? x : [x])).map(nrm).filter((x) => x !== null) };
+  };
+  const walk = (n, acc = []) => { if (typeof n === 'string') return acc; acc.push(n); n.kids.forEach((k) => walk(k, acc)); return acc; };
+  const str = (n) => (typeof n === 'string' ? n : n.kids.map(str).join(' ')).replace(/\s+/g, ' ').trim();
+  const feed = (props) => nrm(new FS.StepFeed(props).render(props, { now: (props.startedAt || 0) + 65000 }));
+  const cls = (n, c) => walk(n).filter((x) => String(x.props.class || '').split(' ').includes(c));
+  const base = { events: [tool('Read', { file_path: 'Dump.md' }), tool('Grep', {}), { kind: 'text', text: 'thinking' }], startedAt: 1000, done: false, failed: false };
+
+  let t = feed(base);
+  assert.equal(walk(t).filter((x) => x.props['aria-live'] === 'polite').length, 1);
+  assert.deepEqual(cls(t, 'sf-card').map(str), ['Reading Dump.md', 'Scanning the codebase']);
+  assert.equal(cls(t, 'sf-pulse').length, 1);
+  assert.match(str(t), /1:05/);
+  const det = walk(t).filter((x) => x.type === 'details');
+  assert.equal(det.length, 1);
+  assert.ok(!det[0].props.open);
+  assert.match(str(det[0]), /Reading|Read/);
+  assert.match(str(det[0]), /thinking/);
+  out('flowside: StepFeed is a polite live region with cards, a pulse, a timer and a collapsed raw log');
+
+  t = feed({ ...base, events: [...base.events, { kind: 'result', is_error: false, text: 'done' }] });
+  assert.equal(cls(t, 'sf-pulse').length, 0);
+  assert.equal(cls(t, 'sf-failed').length, 0);
+  assert.ok(!walk(t).find((x) => x.type === 'details').props.open);
+  out('flowside: a result event stops the pulse');
+
+  for (const p of [{ ...base, events: [...base.events, { kind: 'result', is_error: true, text: 'boom' }] }, { ...base, failed: true }]) {
+    t = feed(p);
+    assert.equal(cls(t, 'sf-pulse').length, 0);
+    assert.equal(cls(t, 'sf-failed').length, 1);
+    assert.ok(walk(t).find((x) => x.type === 'details').props.open);
+  }
+  assert.match(str(feed({ ...base, events: [...base.events, { kind: 'result', is_error: true, text: 'boom' }] })), /boom/);
+  out('flowside: an error result or a dead session shows the failure and the open raw log, no pulse');
+}
+"""
+
 SHELL = sys.argv[1:3] == ["--view", "shell"]
 RUN = sys.argv[1:3] == ["--view", "run"]
 
@@ -2525,6 +2605,19 @@ try:
         ok("sibling-prefix escape 404")
     finally:
         ui_server.STATIC_DIR = real_static
+
+    # StepFeed (#211): cardFor, feedStatus, elapsed and the rendered feed
+    import subprocess
+    if shutil.which("node"):
+        env = dict(os.environ, FLOWSIDE_URL=pathlib.Path(os.path.join(STATIC, "flowside.js")).as_uri())
+        p = subprocess.run(["node", "--input-type=module", "-e", STEPFEED_JS], env=env,
+                           capture_output=True, text=True, timeout=60)
+        assert p.returncode == 0, p.stderr[-1500:]
+        for line in p.stdout.splitlines():
+            if line.startswith("ok "):
+                ok(line[3:])
+    else:
+        print("note: node not found, skipping StepFeed checks")
 
     # vendoring
     for name, lic in (("preact", "MIT"), ("htm", "Apache-2.0")):
