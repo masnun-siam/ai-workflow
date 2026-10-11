@@ -366,6 +366,22 @@ assert.equal(find(T(c), (n) => n.props['aria-current'] === 'step').length, 0);
 assert.match(txt(c), /zzz-unknown/);
 out('timeline done run has no current row; unknown status shown');
 
+reset(); when(/./, jr(true, 200, {}));
+const stn = (name, status, extra = {}) => ({ name, status, bounces: 0, ...extra });
+const names = (cmp) => find(T(cmp), (n) => n.type === 'ol')[0].kids.filter((k) => k.type === 'li').map((li) => text(li).trim().split(' ')[0]);
+c = await mount([sess()], jr(true, 200, { ...RUN, currentStation: 'dev', stations: [stn('researcher', 'done', { skipped: true }), stn('planner', 'done', { skipped: true }), stn('dev', 'running'), stn('reviewer', 'pending'), stn('fixer', 'pending')], totals: { stations: 5, done: 2, bounces: 0 } }));
+assert.deepEqual(names(c), ['dev', 'reviewer', 'fixer']);
+assert.doesNotMatch(txt(c), /skipped/);
+assert.equal(find(T(c), (n) => n.props['aria-current'] === 'step').length, 1);
+assert.match(txt(c), /2 of 5 stations done/);
+out('timeline hides skipped stations but stationNote still counts them');
+c = await mount([sess()], jr(true, 200, { ...RUN, stations: [stn('researcher', 'done'), stn('planner', 'done'), stn('dev', 'running')] }));
+assert.deepEqual(names(c), ['researcher', 'planner', 'dev']);
+out('timeline keeps Research and Plan on non-refined runs');
+c = await mount([sess()], jr(true, 200, { ...RUN, stations: [stn('researcher', 'done'), stn('sdet', 'done'), stn('dev', 'running'), stn('verifier', 'pending')] }));
+assert.deepEqual(names(c), ['researcher', 'sdet', 'dev', 'verifier']);
+out('timeline still renders sdet and verifier stations');
+
 // ---- polling schedule
 reset(); when(STREAM(), jr(true, 200, { events: [], offset: 0 }));
 c = await mount([sess({ outcome: 'running' })]);
