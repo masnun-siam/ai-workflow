@@ -45,6 +45,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -108,7 +109,13 @@ def test_root_violations(repo: str, sdet_sha: str, test_root: str) -> list[str]:
         # continue rather than halting on a guard that could not run.
         sys.stderr.write(f"warning: test-root guard could not run: {proc.stderr.strip()}\n")
         return []
-    return [line for line in proc.stdout.splitlines() if line.strip()]
+    changed = [line for line in proc.stdout.splitlines() if line.strip()]
+    # A test root that is a whole package (`run-engine`) holds product code beside its
+    # tests; only test-named files are the guard's business there. A dedicated test
+    # directory (`tests/`, `__tests__/`) keeps every file under it guarded.
+    if re.search(r"(^|/)(tests?|__tests__|specs?)$", test_root.rstrip("/")):
+        return changed
+    return [f for f in changed if re.search(r"(^|/)(test_[^/]*|[^/]*_test\.[^/]*|[^/]*\.(test|spec)\.[^/]*)$", f)]
 
 
 def apply_action(ledger: Ledger, action: RouteAction, station) -> None:

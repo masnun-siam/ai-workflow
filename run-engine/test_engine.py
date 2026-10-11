@@ -654,4 +654,21 @@ for bad, needle in (({"tests_sha": None}, "tests_sha"),
 ok("default mode: dev's post-check refuses a missing tests_sha, a missing verify, and a FAIL verify")
 
 
+import route as _route  # noqa: E402
+with tempfile.TemporaryDirectory() as g:
+    def _git(*a): subprocess.run(["git", "-C", g, *a], check=True, capture_output=True)
+    _git("init", "-q"); _git("config", "user.email", "a@b"); _git("config", "user.name", "a")
+    os.makedirs(os.path.join(g, "pkg")); os.makedirs(os.path.join(g, "tests"))
+    for f in ("pkg/mod.py", "pkg/test_mod.py", "tests/fixture.json"):
+        open(os.path.join(g, f), "w").write("1")
+    _git("add", "."); _git("commit", "-qm", "base")
+    base = subprocess.run(["git", "-C", g, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    for f in ("pkg/mod.py", "pkg/test_mod.py", "tests/fixture.json"):
+        open(os.path.join(g, f), "w").write("2")
+    _git("commit", "-qam", "change")
+    assert _route.test_root_violations(g, base, "pkg") == ["pkg/test_mod.py"]
+    assert _route.test_root_violations(g, base, "tests") == ["tests/fixture.json"]
+ok("ownership guard: a package test root guards test files only; a tests/ dir guards everything")
+
+
 print(f"\n{passed} checks passed")
