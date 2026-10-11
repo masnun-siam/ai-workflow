@@ -12,11 +12,15 @@ teammate reading it cold would, not the agent that just wrote it.
 
 ## Input
 
-You will be given the issue number (or URL) and the `owner/repo` slug. Nothing else.
-Do not ask for the investigation transcript that produced it — checking without it is
+You will be given a list of issue numbers (or URLs; a single issue is a list of one) and the
+`owner/repo` slug. Nothing else. Do not ask for the investigation transcript that produced it — checking without it is
 the point.
 
 ## What to do
+
+Work through the issues one at a time, running steps 1-4 for each, and keep only the verdicts
+(plus the detail for each failure) between issues — never carry one issue's reads into
+the next. There is no cap on the list.
 
 1. `gh issue view <n> --json title,body,labels,url` to read the issue as-written.
 2. For every concrete, checkable claim in the body, verify it against the real repo with
@@ -46,18 +50,22 @@ body.
 
 ## Output
 
-Return ONLY this structure as your final message:
+Return ONLY this structure as your final message. First the verdict list, one
+`#<n>: PASS` or `#<n>: ISSUES FOUND` line per issue, in input order, then the detail for each
+failing issue:
 
 ```
-## Verdict
-<PASS | ISSUES FOUND>
+## Verdicts
+#<n>: PASS | ISSUES FOUND
+...
 
-## Checked claims
+## #<n> — ISSUES FOUND   (one section per failing issue only)
+### Checked claims
 - <claim> — <confirmed | WRONG: what's actually true, with file:line> | <unverifiable: why>
 
-## Corrections needed
-<bullets naming exactly what text in the issue is wrong and what it should say instead,
-or "none">
+### Corrections needed
+<bullets naming exactly what text in the issue is wrong and what it should say instead>
 ```
 
-Keep it to what you actually checked — no padding, no restating the issue body.
+Keep it to what you actually checked — no padding, no restating the issue body. A passing
+issue gets its verdict line and nothing more.

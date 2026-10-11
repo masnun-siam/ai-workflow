@@ -358,7 +358,9 @@ def issue_progress(lines) -> dict:
                     for r in target:
                         # a per-issue verdict line ("#68: ISSUES FOUND") wins over the overall one
                         line = next((ln for ln in up.splitlines() if re.search(rf"(?:#|ISSUES/){r['number']}\b", ln)
-                                     and ("PASS" in ln or "ISSUES FOUND" in ln)), up)
+                                     and ("PASS" in ln or "ISSUES FOUND" in ln)), up if len(target) == 1 else None)
+                        if line is None:
+                            continue  # a batched factcheck gave this issue no verdict: still checking
                         r["state"] = "fixing" if "ISSUES FOUND" in line else "checked"
                 elif kind == "edit":
                     # GitHub printing the issue URL means the edit landed, even if a later command in the
