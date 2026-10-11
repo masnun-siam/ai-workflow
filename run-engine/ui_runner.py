@@ -34,7 +34,9 @@ HEADLESS_PROMPT = ("Headless run: ask via aiw ask, never AskUserQuestion. Gate q
                    "When running /run-issue, skip phase 10 (grinding): the aiw ui starts it on request.")
 # Sessions started from the guided Flow carry flow_id; skills read this line as their "Flow auto mode".
 FLOW_PROMPT = ("Flow auto mode: this session is a step of the aiw ui guided Flow. Ask only grilling "
-               "questions; settle every other choice yourself as the command's 'Flow auto mode' section says.")
+               "questions; settle every other choice yourself as the command's 'Flow auto mode' section says. "
+               "Never run herdr or the herdr-dispatch skill and open no terminal tabs: dispatching is the "
+               "UI's own Dispatch step, and a trailing '→ next: herdr-dispatch …' line is only text the UI parses.")
 
 
 def _system(rec) -> str:
