@@ -132,6 +132,7 @@ print("ok notes read-only inside the vault; traversal, absolute paths, symlinks 
 import ui_runner  # noqa: E402
 assert "Flow auto mode" in ui_runner._system({"flow_id": "f-1"}) and ui_runner.HEADLESS_PROMPT in ui_runner._system({"flow_id": "f-1"})
 assert ui_runner._system({}) == ui_runner._system(None) == ui_runner.HEADLESS_PROMPT
+assert "Never run herdr" in ui_runner._system({"flow_id": "f-1"})
 print("ok Flow auto mode prompt only for flow sessions")
 
 # ---- a create loop: one command, a shell-variable title, several URLs -> one row per issue

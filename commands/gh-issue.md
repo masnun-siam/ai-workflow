@@ -71,6 +71,8 @@ decided in the final report:
   issue's content and the PRD (for example Priority from the PRD's priority). Never invent option
   names. List every value set, per issue, in the report.
 - **Step 7:** the `/dump` it invokes runs in Flow auto mode too, so its confirmation is skipped.
+- **Hand-off line:** print the `→ next: herdr-dispatch <n> …` line as text only. Never invoke the
+  `herdr-dispatch` skill or the `herdr` CLI or open tabs; the UI's Dispatch step starts the runs.
 
 
 **HARD RULE — while executing steps 0–7 below, including everything under `4-FLAT`
