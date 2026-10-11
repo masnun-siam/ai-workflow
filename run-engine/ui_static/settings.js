@@ -17,13 +17,13 @@ async function api(method, url, body) {
 
 export class Settings extends Component {
   saved = { commands: [], default: null };
-  state = { commands: null, def: '', autoGrind: false, tests: {}, err: '', saving: false, repos: [], roots: '', scanning: false, scanMsg: '' };
+  state = { commands: null, def: '', autoGrind: false, tests: {}, err: '', saving: false, repos: [], roots: '', scanning: false, scanMsg: '', vault: '', vaultMsg: '' };
 
   async componentDidMount() {
     try {
       const s = await api('GET', '/api/settings');
       this.saved = { commands: s.commands, default: s.default };
-      this.setState({ commands: s.commands, def: s.default || '', autoGrind: !!s.auto_grind });
+      this.setState({ commands: s.commands, def: s.default || '', autoGrind: !!s.auto_grind, vault: s.vault_dir || '' });
     } catch (e) {
       this.setState({ commands: [], err: e.message });
     }
@@ -88,6 +88,20 @@ export class Settings extends Component {
     this.setState({ saving: false });
   };
 
+  // The notes vault saves on its own, with the last *saved* commands, like the grinding default.
+  saveVault = async (e) => {
+    e.preventDefault();
+    this.setState({ saving: true, vaultMsg: '' });
+    try {
+      const s = await api('PUT', '/api/settings', { ...this.saved, auto_grind: this.state.autoGrind, vault_dir: this.state.vault });
+      this.setState({ vault: s.vault_dir || '' });
+      toast('Notes vault saved');
+    } catch (er) {
+      this.setState({ vaultMsg: er.message });
+    }
+    this.setState({ saving: false });
+  };
+
   save = async (e) => {
     e.preventDefault();
     const { commands, def, autoGrind } = this.state;
@@ -103,7 +117,7 @@ export class Settings extends Component {
     this.setState({ saving: false });
   };
 
-  render(_, { commands, def, autoGrind, tests, err, saving, repos, roots, scanning, scanMsg }) {
+  render(_, { commands, def, autoGrind, tests, err, saving, repos, roots, scanning, scanMsg, vault, vaultMsg }) {
     if (!commands) return html`<h1>Settings</h1><p role="status">Loading…</p>`;
     return html`
       <section class="settings">
@@ -135,6 +149,16 @@ export class Settings extends Component {
             <label class="check"><input type="checkbox" checked=${autoGrind} disabled=${saving} onChange=${this.setAutoGrind} /> Start grinding when a run finishes</label>
             <p class="note">The default for new runs and pipelines; each can override it. A grind posts to the repo's Slack review channel. Saved as soon as you change it.</p>
           </section>
+          <form class="panel" aria-labelledby="vault-h" onSubmit=${this.saveVault} noValidate>
+            <h2 id="vault-h">Notes vault</h2>
+            <p class="note">Flow shows the Dump and PRD notes from this Obsidian vault, read-only. It's the vault <code>/dump</code> and <code>/prd</code> write to.</p>
+            <label for="vault-dir">Vault folder</label>
+            <input id="vault-dir" type="text" class="field mono" spellcheck="false" placeholder="~/Documents/notes" value=${vault}
+              aria-invalid=${vaultMsg ? 'true' : undefined} aria-describedby=${vaultMsg ? 'vault-err' : undefined}
+              onInput=${(e) => this.setState({ vault: e.target.value })} />
+            ${vaultMsg && html`<p id="vault-err" role="alert" class="error">${vaultMsg}</p>`}
+            <div class="launch-actions"><button type="submit" disabled=${saving}>Save vault folder</button></div>
+          </form>
           <section class="panel" aria-labelledby="repos-h">
             <h2 id="repos-h">Repos</h2>
             <p class="note">aiw works inside a local clone of each repo. Scan your project folders to register every clone that has a GitHub origin, so Dispatch and New run can find them.</p>

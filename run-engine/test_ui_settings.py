@@ -34,7 +34,8 @@ def raises(fn, *a):
 
 
 BUILTIN = {"label": "claude", "cmd": "claude", "builtin": True}
-assert ui_settings.load() == {"commands": [BUILTIN], "default": "claude", "auto_grind": False}
+assert {k: v for k, v in ui_settings.load().items() if k != "vault_dir"} == {"commands": [BUILTIN], "default": "claude", "auto_grind": False}
+assert ui_settings.load()["vault_dir"] == os.path.expanduser("~/Documents/notes")
 assert ui_settings.default_cmd() == "claude"
 assert ui_settings.argv("cc masum") == [os.path.join(bindir, "cc-profile"), "masum"]  # alias -> script
 assert ui_settings.argv("claude --model x")[1:] == ["--model", "x"]

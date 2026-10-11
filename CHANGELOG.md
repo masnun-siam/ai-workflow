@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Flow history.** Every flow is saved on the aiw server at `#/flow/<id>`. **Flows** lists
+  earlier ones with their step and last activity, archive hides one, and **New flow** starts
+  another. A draft is saved as you type. Past `/dump`, `/prd` and `/gh-issue` sessions are
+  imported into flows once, and "Continue in Flow" on a session opens its own flow.
+- **Step output beside the steps.** With no question waiting, the Flow page shows the selected
+  step's `Dump.md` or `PRD.md` (read-only, from the new **Notes vault** setting) or one row per
+  issue as `/gh-issue` creates, fact-checks and fixes it. Click a done step to show its output.
+- **Flow auto mode.** Sessions started from Flow ask only `/prd`'s grilling questions, which now
+  cover acceptance criteria, priority, users and corner cases and run until the PRD has no open
+  questions. `/dump` picks the folder itself, and `/gh-issue` assigns you, adds issues to the
+  repo's linked project and fills its fields without asking.
+- **Questions answered in Flow.** A step's question opens beside the steps (in the step on narrow
+  screens), and answering from the Answer page returns to the flow or the session.
+
 ## 1.12.0 — 2026-10-09
 
 ### Added

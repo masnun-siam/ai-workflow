@@ -65,8 +65,16 @@ export function runHash(session) {
   return l ? `#/run/${encodeURIComponent(l.owner)}/${encodeURIComponent(l.repo)}/${l.n}` : '#/sessions';
 }
 
+// Where answering lands: the run for /run-issue, the flow a Flow session belongs to, otherwise
+// the session itself (its transcript shows the answer being picked up).
+export function doneHash(session) {
+  if (runLink(session)) return runHash(session);
+  if (session && session.flow_id) return `#/flow/${encodeURIComponent(session.flow_id)}`;
+  return session && session.id ? `#/session/${encodeURIComponent(session.id)}` : '#/sessions';
+}
+
 export function afterSubmit(state, res, session) {
-  if (res.ok) return { navigate: runHash(session) };
+  if (res.ok) return { navigate: doneHash(session) };
   const err = res.data && typeof res.data.error === 'string' && res.data.error;
   return { ...state, sending: false, stale: res.status === 409, error: err || 'Could not reach the server or it returned an error' };
 }
@@ -171,7 +179,9 @@ export class Answer extends Component {
     const next = afterSubmit(started, res, session);
     if (next.navigate) {
       toast('Answer sent, session resuming');
-      location.hash = next.navigate;
+      // Embedded in Flow's step there is nowhere to go: the step keeps watching the session.
+      if (this.props.onSent) this.props.onSent();
+      else location.hash = next.navigate;
     }
     else this.setState({ form: next });
   };
@@ -206,7 +216,23 @@ export class Answer extends Component {
       </fieldset>`;
   }
 
+  renderForm(session, form, embedded, plan, where) {
+    const qs = session.pending_question.questions;
+    const n = qs.length;
+    return html`
+          <form class=${embedded ? 'answer-form answer-inline' : 'panel answer-form'} onSubmit=${this.submit}>
+            ${!embedded && html`<div class="waiting-line"><span class="dot"></span>Waiting on you${session.ended_at ? ' · no process running' : ''}</div>`}
+            ${plan || embedded ? null : html`<div><div class="mono muted">${where} · ${String(session.command || '')}</div><h1>${n > 1 ? `${n} questions, answered together` : 'Answer needed'}</h1></div>`}
+            ${qs.map((q, i) => this.renderQuestion(q, i, form.answers[i], form.sending, n === 1))}
+            <button type="submit" class="btn--primary" disabled=${form.sending}>${form.sending ? 'Sending' : n > 1 ? `Submit all ${n} and resume` : 'Submit and resume session'}</button>
+            ${form.error ? html`<p role="alert">${form.stale ? html`<strong>Already answered.</strong> ` : null}${form.error}</p>` : null}
+            ${form.stale ? html`<button type="button" onClick=${() => this.load()}>Reload question</button>` : null}
+            ${!embedded && session.session_id ? html`<p class="muted fine">Resumes with <span class="mono">--resume ${String(session.session_id).slice(0, 8)}…</span>. If that session is gone, run-issue re-enters from the Ledger.</p>` : null}
+          </form>`;
+  }
+
   render(_, { loaded, notFound, loadError, session, plan, form, copied }) {
+    if (this.props.onSent) return loaded && session && viewMode(session) === 'form' ? this.renderForm(session, form, true) : null;
     if (!loaded) return html`<h1>Answer</h1><p role="status">Loading</p>`;
     if (notFound) return html`<h1>Answer</h1><p>Session not found. <a href="#/sessions">Back to sessions</a></p>`;
     if (loadError) return html`<h1>Answer</h1><p role="alert">Could not load the session.</p><button type="button" onClick=${() => this.load()}>Retry</button>`;
@@ -214,9 +240,6 @@ export class Answer extends Component {
     const link = runLink(session);
     const where = link ? `${link.repo} #${link.n}` : String(session.repo || '').split('/').pop();
     if (mode === 'form') {
-      const pending = session.pending_question;
-      const qs = pending.questions;
-      const n = qs.length;
       return html`
         <div class="answer">
           ${plan ? html`
@@ -226,15 +249,7 @@ export class Answer extends Component {
               <div class="md plan-md" dangerouslySetInnerHTML=${{ __html: mdToHtml(plan) }}></div>
               ${link ? html`<a href=${runHash(session)}>Open run detail</a>` : null}
             </section>` : null}
-          <form class="panel answer-form" onSubmit=${this.submit}>
-            <div class="waiting-line"><span class="dot"></span>Waiting on you${session.ended_at ? ' · no process running' : ''}</div>
-            ${plan ? null : html`<div><div class="mono muted">${where} · ${String(session.command || '')}</div><h1>${n > 1 ? `${n} questions, answered together` : 'Answer needed'}</h1></div>`}
-            ${qs.map((q, i) => this.renderQuestion(q, i, form.answers[i], form.sending, n === 1))}
-            <button type="submit" class="btn--primary" disabled=${form.sending}>${form.sending ? 'Sending' : n > 1 ? `Submit all ${n} and resume` : 'Submit and resume session'}</button>
-            ${form.error ? html`<p role="alert">${form.stale ? html`<strong>Already answered.</strong> ` : null}${form.error}</p>` : null}
-            ${form.stale ? html`<button type="button" onClick=${() => this.load()}>Reload question</button>` : null}
-            ${session.session_id ? html`<p class="muted fine">Resumes with <span class="mono">--resume ${String(session.session_id).slice(0, 8)}…</span>. If that session is gone, run-issue re-enters from the Ledger.</p>` : null}
-          </form>
+          ${this.renderForm(session, form, false, plan, where)}
         </div>`;
     }
     if (mode === 'failed') {
@@ -250,6 +265,6 @@ export class Answer extends Component {
             ${copied ? html`<p role="status">${copied}</p>` : null}` : null}
         </section>`;
     }
-    return html`<section class="panel answer-failed"><h1>Nothing to answer</h1><p>This session is ${session.outcome || 'not waiting'}; nothing to answer. <a href=${runHash(session)}>Continue</a></p></section>`;
+    return html`<section class="panel answer-failed"><h1>Nothing to answer</h1><p>This session is ${session.outcome || 'not waiting'}; nothing to answer. <a href=${doneHash(session)}>Continue</a></p></section>`;
   }
 }

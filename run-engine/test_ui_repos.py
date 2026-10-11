@@ -106,9 +106,10 @@ def req(path, method="GET", body=None, host=HOST, origin=None, headers=None):
 calls = []
 
 
-def fake_start(command_text, cwd, link=None, claude_cmd=None, gate_questions=False):
+def fake_start(command_text, cwd, link=None, claude_cmd=None, gate_questions=False, flow_id=None):
     calls.append((command_text, cwd, link))
-    return ui_sessions.create(command_text, cwd, link, claude_cmd=claude_cmd)
+    rec = ui_sessions.create(command_text, cwd, link, claude_cmd=claude_cmd)
+    return ui_sessions.update(rec["id"], flow_id=flow_id) if flow_id else rec
 
 
 def post(obj, raw=None, **kw):
@@ -307,7 +308,7 @@ try:
     reset_sessions()
     calls.clear()
 
-    def slow_start(command_text, cwd, link=None, claude_cmd=None, gate_questions=False):
+    def slow_start(command_text, cwd, link=None, claude_cmd=None, gate_questions=False, flow_id=None):
         time.sleep(0.3)
         return ui_sessions.create(command_text, cwd, link)
 
@@ -413,6 +414,15 @@ try:
         s, data, _ = req("/api/sessions", "POST", json.dumps(good).encode())
     assert s == 502 and "claude CLI not found" in err(json.loads(data)), (s, data)
     ok("RunnerError -> 502 {error}")
+
+    import ui_flows
+    fl = ui_flows.create({"repo": "o/r", "text": "idea"})
+    s, body = post({**good, "flow_id": fl["id"]})
+    assert s == 201 and ui_sessions.load(body["id"])["flow_id"] == fl["id"], (s, body)
+    for bad in ("f-00000000000000-000000", "../x", 5):
+        s, body = post({**good, "flow_id": bad})
+        assert s == 400 and "flow_id" in err(body), (bad, s, body)
+    ok("flow_id: an existing flow is passed to the runner; unknown or malformed ids are 400")
 
     # ------------------------------------------------- folder picker + remember
     for plat, host, want in [("darwin", HOST, True), ("darwin", f"localhost:{port}", True), ("linux", HOST, False)]:
