@@ -25,7 +25,7 @@ something that has no reason to be generous.
 | Piece | Plain English | Where |
 |---|---|---|
 | **The orchestrator** | The to-do list for the whole job. Runs in your session, talks to you. | `commands/run-issue.md` |
-| **Stations** | Specialists. One writes tests, one writes code, one reviews. Each gets a fresh mind — no memory of the others. | `agents/run-*.md` |
+| **Stations** | Specialists. One writes code, one reviews, one fixes. Each gets a fresh mind — no memory of the others. | `agents/run-*.md` |
 | **The envelope** | The form a station fills in when it finishes. Always the same shape. | defined in `run-engine/engine.py` |
 | **The engine** | The traffic controller. Reads the envelope, decides who goes next. Never guesses. | `run-engine/` |
 | **The ledger** | One JSON file per run. What has happened, who holds the baton, what budgets are left. | `run.json` |
@@ -44,10 +44,8 @@ flowchart TD
     B --> C["Planner writes a plan"]
     C --> G1{{"GATE 1<br/>you approve the plan"}}
     G1 --> D["Make a worktree,<br/>start the test stack"]
-    D --> E["SDET writes tests<br/>that FAIL on purpose"]
-    E --> F["Dev writes code<br/>until they pass"]
-    F --> H["Verifier checks it really works:<br/>HTTP for backend, Playwright+mocks for frontend"]
-    H --> I["Open the pull request"]
+    D --> F["Dev writes failing tests,<br/>then the code, then checks it really works:<br/>HTTP for backend, Playwright+mocks for frontend"]
+    F --> I["Open the pull request"]
     I --> J["Reviewer reviews it<br/>with fresh eyes"]
     J --> K["Fixer applies what<br/>the review found"]
     K --> G2{{"GATE 2a<br/>only if something<br/>needs your judgement"}}
@@ -71,25 +69,23 @@ flowchart TD
 4. **Worktree and stack.** A separate checkout on a new branch, so your working copy is
    untouched. If the repo has a test compose file, a Docker stack comes up under its own
    name (`runissue-41`), capped so it cannot eat your machine.
-5. **SDET.** Writes the tests *first*, and has to prove they **fail** — a test that passes
-   before the feature exists is testing nothing.
-6. **Dev.** Writes code until the tests pass. **It is not allowed to touch the tests.** More
-   on that below; it is enforced, not requested.
-7. **Verifier.** Checks the feature works for real, on whichever side of the stack the diff
-   touched. A backend change is hit over real HTTP — login, then every response state the
-   route can return, not just the happy path. A frontend change is driven with Playwright
-   against a mocked API, so every state (loading, empty, error, permission-denied, success)
-   can be forced instead of hoped for. A PR touching both gets both, backend first — its
-   captured responses become the frontend's mocks, so the two halves can't quietly disagree.
-   Unit tests prove the parts behave; this asks whether the thing does what the issue asked
-   for, from outside the process.
-   Steps 5–7 are three agents only in **full mode** (`--full` or a `full` label). By
-   default one `run-dev` dispatch does all three in order — commits the failing tests,
-   implements, then verifies — which saves two agent spawns per issue. The tests are still
-   guarded: after the RED commit, dev may change a test only with a written reason that
-   lands in the PR body. The same agent also stands in for the fixer at step 10. A
-   `refined` issue whose body already holds acceptance criteria and a numbered How skips
-   the research and planning agents and Gate 1 too: the refined body is the approved plan.
+5. **Dev.** One agent, three jobs in order. It writes the tests *first* and has to prove they
+   **fail** — a test that passes before the feature exists is testing nothing — and commits
+   them on their own. It then writes the code until they pass. Finally it checks the feature
+   works for real, on whichever side of the stack the diff touched. A backend change is hit
+   over real HTTP — login, then every response state the route can return, not just the happy
+   path. A frontend change is driven with Playwright against a mocked API, so every state
+   (loading, empty, error, permission-denied, success) can be forced instead of hoped for. A
+   PR touching both gets both, backend first — its captured responses become the frontend's
+   mocks, so the two halves can't quietly disagree. Unit tests prove the parts behave; this
+   asks whether the thing does what the issue asked for, from outside the process.
+6. **Tests stay guarded.** After the RED commit, dev may change a test only with a written
+   reason that lands in the PR body. More on that below; it is enforced, not requested.
+7. **One mode.** There is a single run mode, so one `run-dev` dispatch does the whole of
+   step 5, and the same agent stands in for the fixer at step 10. A `refined` issue whose
+   body already holds acceptance criteria and a numbered How skips the research and planning
+   agents and Gate 1 too: the refined body is the approved plan, and the run goes
+   Dev → Review → Fix.
 8. **PR.** Links the branch to the issue, pushes, opens the pull request.
 9. **Review** (skipped with `--no-review`: steps 9–11 are left out, so the dev step completes the
    run and the PR goes straight on to sync and CI; the run page and pipeline page can also turn it
@@ -156,9 +152,7 @@ something with no incentive to agree:
 
 | Station | Its claim | What actually checks it |
 |---|---|---|
-| SDET | "the tests are red" | run the suite. **If it is green, refuse** — there is no red to prove. |
-| Dev | "implemented, suite green" | the commit resolves in git; no undeclared files in the diff; the suite really exits 0 |
-| Verifier | "the feature works" | its verdict must agree with its own criteria; any screenshot it names must exist on disk |
+| Dev | "implemented, suite green, feature works" | the commit resolves in git; no undeclared files in the diff; the suite really exits 0; its verify verdict must agree with its own criteria and any screenshot it names must exist on disk |
 | Reviewer | "review posted" | fetch that review from GitHub; the panel must match what policy chose |
 | Fixer | "all findings applied" | **every review thread must actually be resolved**, and the push must have happened |
 
@@ -172,20 +166,23 @@ the work done so far.
 
 ### 3.3 The test-ownership guard
 
-The SDET owns the tests. The dev makes them pass by writing *product* code.
+Dev writes the failing tests, commits them on their own, then makes them pass by writing
+*product* code. That commit's sha is recorded as `tests_sha`.
 
-The tempting cheat is to edit the test. So after every dev step, the engine runs:
+The tempting cheat is to edit the test to force green. So after every dev step, the engine runs:
 
 ```
-git diff <the SDET's commit>..HEAD -- <the test directory>
+git diff <tests_sha>..HEAD -- <the test directory>
 ```
 
-Anything there is a violation. Note it diffs **commits**, not the working copy — an earlier
-version checked the working copy, and committing the edit hid it completely.
+A changed test file is fine only if dev gave a reason for it in `handoff.test_changes[]` — the
+test contradicted the acceptance criteria, or named a helper that does not exist. Any file
+without a reason is a violation. Each reason lands in the PR body for the reviewer. Note it
+diffs **commits**, not the working copy — an earlier version checked the working copy, and
+committing the edit hid it completely.
 
-On a violation the engine sends it back to the SDET automatically, spends one of the retry
-budget, and tells the orchestrator to revert the files first. Tampering therefore cannot
-loop forever.
+On a violation the engine sends the work back to dev, reverts the unexplained test edits,
+and spends one of the retry budget. Tampering therefore cannot loop forever.
 
 ### 3.4 Budgets, and why they are per-pair
 
@@ -193,13 +190,12 @@ When one station sends work back to another, that is a **bounce**. Bounces are c
 *pair*, not per station:
 
 ```
-"verifier->dev": 1
-"dev->sdet":     1
+"dev->dev": 1
 ```
 
-Keeping them separate matters. If the verifier sends work back to dev twice, that must not
-eat the budget dev needs to dispute a wrong test. Merging them would make one station's bad
-day silently spend another's allowance.
+Keying by pair keeps one station's bad day from silently spending another's allowance. A
+post-check that refutes dev's own claim, or a test edit with no reason, re-dispatches dev
+against `dev->dev`.
 
 Default cap is 2 per pair. Exceeding it escalates.
 
@@ -438,14 +434,13 @@ per issue as `/gh-issue` creates, fact-checks and fixes it.
 
 | You see | It means | What happens |
 |---|---|---|
-| `bounce(sdet)` with exit code 6 | dev edited a test | files reverted, sent back to the SDET, one retry spent |
-| `bounce(dev)` with exit code 6 | default mode: dev changed a test after its RED commit without a reason | files reverted, dev re-dispatched, one retry spent |
+| `bounce(dev)` with exit code 6 | dev changed a test after its RED commit without a reason | files reverted, dev re-dispatched, one retry spent |
 | exit code 7 | a post-check refuted a `passed` claim | that station redoes its own work, once |
 | `escalate: ...` | a budget is spent or a wall was hit | draft PR opened, reason recorded, lands at Gate 3 |
 | `stack=failed` | Docker would not come up | run continues, tests unverified, **said loudly** in the report |
 | `stack=none` | no test compose file | normal; the host runner is used |
 | `api_url=none` / `web_url=none` | nothing to hit over HTTP / nothing to open in a browser | that mode's runtime verification skipped, and the report says so |
-| `UNVERIFIABLE` (a mode) | the verifier could not see that side | a pass with a note, never a stop |
+| `UNVERIFIABLE` (a mode) | dev could not see that side at runtime | a pass with a note, never a stop |
 | `FAIL` in either mode | the rollup verdict for the whole station | worst-of-both-modes; one bounce carries both modes' findings |
 
 The pattern: **a gate that silently stops running is worse than one that runs and fails.**
@@ -460,7 +455,7 @@ Anything skipped is named in the final report.
 - **Ledger** (`run.json`) — the single source of truth for a run. Never hand-edited.
 - **Bounce** — sending work back to an earlier station.
 - **Post-check** — code that tries to disprove a station's claim before the run moves on.
-- **Test root** — the directory the SDET owns and the dev may not touch.
+- **Test root** — the directory dev writes its RED tests in, and may later change only with a written reason.
 - **Degraded finish** — the ending where the work is not done: draft PR, reason attached,
   still one report.
 - **Worktree** — the throwaway checkout a run works in.

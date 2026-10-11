@@ -190,7 +190,7 @@ Tell the user, in this order:
 3. **The first command to try**, with a real issue number if they have one:
 
    ```
-   /ai-workflow:run-issue <issue-number-or-url> [--full] [--no-review]
+   /ai-workflow:run-issue <issue-number-or-url> [--no-review]
    ```
 
 4. **Point them at [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md)** before their first run —
@@ -208,7 +208,7 @@ comments on issues. That is the user's call on their repo, not a smoke test.
 
 | Command | Does |
 |---|---|
-| `/ai-workflow:run-issue <n> [--full] [--no-review]` | the full pipeline: issue → reviewed PR (`--no-review` skips review and fix). Accepts an epic parent. |
+| `/ai-workflow:run-issue <n> [--no-review]` | the full pipeline: issue → reviewed PR (`--no-review` skips review and fix). Accepts an epic parent. |
 | `/ai-workflow:intake <source>` | normalize a Sentry link, BRD file, or vault note into an issue brief — used internally by `/gh-issue` and `/run-issue` |
 | `/ai-workflow:gh-issue` | file a well-formed issue; always decomposes first — one task files one issue; two or more save the task list to `docs/tasks/<slug>.md` and file one flat issue per task, ordered by `Depends on: #n` lines, with no parent issue |
 | `/ai-workflow:jira-to-gh <KEY>` | decompose a Jira ticket and file flat issues the same way as `/gh-issue` (one issue for a single task; two or more saved to `docs/tasks/<slug>.md` and filed flat) |
@@ -216,12 +216,11 @@ comments on issues. That is the user's call on their repo, not a smoke test.
 | `/ai-workflow:issue-to-pr` | the interactive, non-unattended variant |
 | `/ai-workflow:flow <idea \| folder \| PRD \| issue numbers>` | the guided flow (`/flow` for short): dump → PRD → flat issues → herdr-dispatch for one feature, starting at whichever stage the input implies and stopping for your go at each boundary |
 
-The default roster is researcher → planner → dev → reviewer → fixer. `run-dev` writes the
-RED tests first, implements, and runtime-verifies in one dispatch, and also applies the
-review findings. `--full` (or a `full` label) runs the seven-station roster with an
-independent `run-sdet` and `run-verifier`. Use it for auth, migrations, payments, or public
-API contracts. `--lean` and the `lean` label are deprecated aliases of the default. A
-`refined` issue whose body passes `aiw refined` also skips the researcher and planner.
+There is one run mode. The roster is researcher → planner → dev → reviewer → fixer. `run-dev`
+writes the RED tests first, implements, and runtime-verifies in one dispatch, and also applies
+the review findings. A `refined` issue whose body passes `aiw refined` also skips the
+researcher and planner, so the run is Dev → Review → Fix. `--lean` and the `lean` label are
+accepted and change nothing.
 
 ## The `aiw` CLI
 
