@@ -5,9 +5,8 @@ completeness check, not fabrication-proof". So `run-fixer` can report `passed` w
 three review threads still open and nothing pushed, and the run advances.
 
 Every check here answers its station's central claim from something with no incentive
-to pass: an exit code, a git object, a GitHub API response, a file on disk. The pattern
-is not new to this repo — `route.py:test_root_violations` already does exactly this for
-one case. This generalises it into a station-keyed table.
+to pass: an exit code, a git object, a GitHub API response, a file on disk. They live in
+a station-keyed table.
 
 I/O half, like route.py. engine.py stays pure.
 
