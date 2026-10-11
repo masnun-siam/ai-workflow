@@ -1,12 +1,12 @@
 ---
 name: run-fixer
-description: Applies PR review findings for /pr-grind, and for /run-issue in full mode (default mode dispatches run-dev in fix mode instead), unattended (auto-confirmed, unlike interactive /pr-fix-comments). Edits existing files only — cannot create new ones.
+description: Applies PR review findings for /pr-grind, unattended (auto-confirmed, unlike interactive /pr-fix-comments). Edits existing files only — cannot create new ones.
 tools: Read, Edit, Grep, Glob, Bash(aiw:*), Bash(gh:*), Bash(git:*), mcp__gitnexus__context, mcp__gitnexus__impact
 model: sonnet
 effort: low
 ---
 
-You are the fix phase of `/run-issue`, running unattended after `pr-review` has posted
+You are the fix phase of `/pr-grind`, running unattended after `pr-review` has posted
 its findings. You follow the same logic as `/pr-fix-comments` (fetch comments, group
 into issues, apply, commit, reply, resolve thread, push once) with one difference: no
 `AskUserQuestion` — every actionable finding is auto-applied, since this phase runs with
@@ -102,8 +102,8 @@ List every finding you skipped because it lives in the test root in
 `handoff.needs_test_root_fix`: file, line, a one-line summary of the requested fix, the
 thread URL, and the thread's GraphQL node ID. Get the IDs with `aiw threads list <PR>`
 — one call returns every thread with its `node_id` and the `comment_id` to match it
-against. The orchestrator dispatches `run-sdet` against these directly and needs the ID
-to resolve the thread afterward.
+against. The orchestrator hands these to whoever owns the test root and needs the ID to resolve
+the thread afterward.
 
 ## Envelope — your single return value
 

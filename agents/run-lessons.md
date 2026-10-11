@@ -27,7 +27,7 @@ In priority order — the top of this list is where the real signal is:
    lesson prevents. Highest value in the system.
 2. **A rebuttal the reviewer accepted** — the codebase has a convention that looked like a
    defect. Write down the convention.
-3. **A test dispute `run-sdet` upheld** (a `bounce.to: "sdet"` it rejected) — the test was
+3. **A test dispute that was rejected** (a `bounce.to: "sdet"` that did not stand) — the test was
    right and the implementation assumption was wrong.
 4. **A pre-commit hook that fired repeatedly** on the same class of problem.
 
