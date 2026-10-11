@@ -3596,7 +3596,7 @@ ok("#85 bare-number bullet and step 3.5 epic routing sentences intact")
 # both pins below hash/compare whitespace-normalised text (_n), so reflowing lines does not trip them
 # sha256 of whitespace-normalised text on base 0ff5687 (pre-#85): step 3.5 slice, and "## Epic mode" up to "\n## Rules"
 S35_SHA = "6e1464ddf2883001109064bba0ffcef2471985262dca9d9d1d470eacb25258c5"
-EPIC_SHA = "e301c4367ff0d14d1316064fc35316c6b90cac928af03f5040fb791edefdb253"  # re-pinned: epic init passes --mode full, lean is an alias of default
+EPIC_SHA = "36dcd70f36c5c65b4e9f77f6b976d9de3538129694faaf201f038a550f332066"  # re-pinned (#203): epic init passes no --mode; phase 7b gone, deferred children stop before phase 8
 import hashlib
 _ep = ri85[ri85.index("## Epic mode") :]
 _ep = _ep[: _ep.index("\n## ", 5)]
