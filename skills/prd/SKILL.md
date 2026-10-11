@@ -50,6 +50,25 @@ are used either way; only the transport differs.
   that question, never an approval.
 - **Otherwise:** not headless, so skip `aiw ask` and call AskUserQuestion exactly as written at the question.
 
+### Flow auto mode
+
+When the system prompt contains `Flow auto mode`, this run is the PRD step of the aiw ui guided
+Flow. The user answers grilling questions and nothing else, and the next step (`/gh-issue`) will
+ask nothing at all, so this interview is the only chance to settle anything. Changes:
+
+- **Grilling (Step 4)** also covers what `/gh-issue` would otherwise grill on: acceptance criteria
+  for every requirement, priority, affected users, and every corner case (empty/null input,
+  concurrency, permissions, error and failure paths, boundary values, existing-data migration).
+  Add these as branches of the starting tree.
+- **Open questions must be empty.** Before Step 6, if the draft's `## Open questions` lists
+  anything, keep grilling on exactly those items until none remain; only implementation choices
+  meant for the later technical spec may stay, and each must say so.
+- **No other question is asked.** Existing PRD (Step 2): update it in place. No matching
+  project (Step 2): use the project and feature folder from the input path, creating the feature
+  folder if needed. Destinations: Obsidian only, whatever `--to` says. Review gate (Step 6):
+  approved automatically once Open questions is empty. The wiki is never pushed.
+- Report the destination path in Step 8 as usual; the `→ next:` line is unchanged.
+
 ## Step 1: Normalise the input
 
 A vault feature folder (`05-Work/<Project>/<Feature>`) that contains `Dump.md` → read `Dump.md` and `PRD.md` with `obsidian vault=notes read` and use both as the requirement; take the project and feature from the path (skip the folder resolution at the end of Step 2). Free text → use as is. Anything else (file path, Obsidian note, URL) → run `/intake` on it and use its brief as the requirement. Don't re-implement parsing here.

@@ -32,6 +32,15 @@ import ui_events
 HEADLESS_PROMPT = ("Headless run: ask via aiw ask, never AskUserQuestion. Gate questions go through "
                    "`aiw ask --json '<AskUserQuestion input>'`; then end your turn. "
                    "When running /run-issue, skip phase 10 (grinding): the aiw ui starts it on request.")
+# Sessions started from the guided Flow carry flow_id; skills read this line as their "Flow auto mode".
+FLOW_PROMPT = ("Flow auto mode: this session is a step of the aiw ui guided Flow. Ask only grilling "
+               "questions; settle every other choice yourself as the command's 'Flow auto mode' section says.")
+
+
+def _system(rec) -> str:
+    return HEADLESS_PROMPT + ("\n" + FLOW_PROMPT if (rec or {}).get("flow_id") else "")
+
+
 MAX_GRINDS = 2  # grind rounds running at once; idle loops cost nothing
 GRIND_PREFIX = "Start the review grind for PR "
 CLAUDE_ARGS = ["--print", "--output-format", "stream-json", "--verbose",
@@ -127,7 +136,7 @@ def _spawn(sid: str, argv: list, path: str, answer=None, resuming=False, *, env_
 
 
 def start(command_text, cwd, link=None, *, extra_args=(), env_extra=None, pass_fds=(),
-          gate_questions=False, claude_cmd=None) -> dict:
+          gate_questions=False, claude_cmd=None, flow_id=None) -> dict:
     if not isinstance(command_text, str) or not command_text.strip():
         raise ValueError("command_text must be a non-empty string")
     if command_text.startswith("-"):
@@ -138,12 +147,14 @@ def start(command_text, cwd, link=None, *, extra_args=(), env_extra=None, pass_f
 
     claude_cmd = claude_cmd or ui_settings.default_cmd()
     sid = ui_sessions.create(command_text, cwd, link, claude_cmd=claude_cmd)["id"]
+    if flow_id:
+        ui_sessions.update(sid, flow_id=flow_id)
     until = limits().get(claude_cmd, {}).get("limited_until")
     if until and not (extra_args or env_extra or pass_fds):  # queue: the limit timer starts it at reset
         return ui_sessions.update(sid, status="limited", limit_resets_at=until, auto_resume=True,
                                   cwd_path=path, note="queued: account is rate limited")
     exe = _preflight(sid)
-    gate = ["--append-system-prompt", HEADLESS_PROMPT] if gate_questions else []
+    gate = ["--append-system-prompt", _system({"flow_id": flow_id})] if gate_questions else []
     return _spawn(sid, [*exe, *CLAUDE_ARGS, *gate, *extra_args, command_text], path, cwd_path=path,
                   env_extra=env_extra, pass_fds=pass_fds)
 
@@ -163,7 +174,7 @@ def resume(sid: str, answer_text) -> dict:
     if not isinstance(path, str) or not os.path.isdir(path):
         return _fallback(sid, answer_text, f"cwd is not a directory: {repo!r}")
     exe = _preflight(sid)
-    return _spawn(sid, [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT,
+    return _spawn(sid, [*exe, *CLAUDE_ARGS, "--append-system-prompt", _system(rec),
                   "--resume", rec["session_id"], answer_text], path,
                   answer=answer_text, ended_at=None, error=None, pending_answer=answer_text,
                   resumed_fresh=None, note=None, terminal_handoff=None)
@@ -542,11 +553,11 @@ def resume_stopped(sid: str, claude_cmd=None) -> dict:
     if not rec.get("session_id"):
         if rec.get("status") == "limited":  # limited before claude ever reported a session: start over
             exe = _preflight(sid)
-            return _spawn(sid, [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, rec["command"]], path, cwd_path=path,
+            return _spawn(sid, [*exe, *CLAUDE_ARGS, "--append-system-prompt", _system(rec), rec["command"]], path, cwd_path=path,
                           ended_at=None, error=None)
         return _fallback(sid, None, "no claude session_id")
     exe = _preflight(sid)
-    return _spawn(sid, [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT,
+    return _spawn(sid, [*exe, *CLAUDE_ARGS, "--append-system-prompt", _system(rec),
                   "--resume", rec["session_id"], prompt], path,
                   resuming=True, cwd_path=path, ended_at=None, error=None, pending_question=None,
                   resumed_fresh=None, note=None, terminal_handoff=None, pending_answer=None)

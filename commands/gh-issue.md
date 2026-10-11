@@ -46,6 +46,32 @@ are used either way; only the transport differs.
   that question, never an approval.
 - **Otherwise:** not headless, so skip `aiw ask` and call AskUserQuestion exactly as written at the question.
 
+### Flow auto mode
+
+When the system prompt contains `Flow auto mode`, this run is the Issues step of the aiw ui
+guided Flow. Its input PRD was already grilled until no open question remained, and the user has
+chosen to answer no questions here. Ask nothing; settle every choice as follows and list what you
+decided in the final report:
+
+- **Step 3 (grilling):** skipped. Take requirements, acceptance criteria, priority, users and
+  corner cases from the PRD. Anything the PRD leaves undecided is written into the issue's Notes
+  as an assumption, never asked.
+- **Task list (3.5):** created as shown. **Slug and destinations (3.6):** the proposed slug;
+  save to `docs/tasks/<slug>.md` and the feature's Obsidian `Tasks.md` (no wiki). An existing
+  `docs/tasks/<slug>.md` is resumed; an existing `Tasks.md` gets this run's list appended.
+  A new feature folder is fine to create.
+- **Create failure (4-FLAT step 5):** retry the missing ones once, then stop and report.
+- **Assignee (step 5):** only the authenticated user (`gh api user --jq .login`).
+- **Project (step 6):** the project(s) linked to the repo
+  (`gh repo view <owner>/<repo> --json projectsV2 --jq '.projectsV2.Nodes'`); if several,
+  the most recently updated one. If none is linked, use the owner's project when
+  `gh project list` shows exactly one; otherwise add to no project and say so.
+- **Project fields:** a field named `Status` (or the single-select field that plays that role)
+  gets its first option. Every other single-select field gets the option that best fits the
+  issue's content and the PRD (for example Priority from the PRD's priority). Never invent option
+  names. List every value set, per issue, in the report.
+- **Step 7:** the `/dump` it invokes runs in Flow auto mode too, so its confirmation is skipped.
+
 
 **HARD RULE — while executing steps 0–7 below, including everything under `4-FLAT`
 (note: `4-FLAT` has its own internal 1–5 numbering; that's a sub-branch of top-level
@@ -243,7 +269,7 @@ One issue per task from the step 3.6 list, each standalone.
    `/dump` doesn't re-derive it.
 
    `/dump` classifies, proposes a target, and confirms with you before writing — let it.
-   Do not pre-empt or skip its confirmation.
+   Do not pre-empt or skip its confirmation (outside Flow auto mode, see above).
 
    Best-effort: if the vault is unreachable or `/dump` is cancelled, say so in one line.
    The issue already exists and is the deliverable; the dump is not worth failing over.
