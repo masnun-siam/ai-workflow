@@ -4,7 +4,8 @@ import { poll } from './app.js';
 import { buildBody, loadLastRepo, repoCombo, repoOptions } from './launcher.js';
 import { issueNumbers } from './dispatch.js';
 import { Answer } from './answer.js';
-import { FlowSwitcher, IssueRows, NotePane, mergeRows } from './flowside.js';
+import { FlowSwitcher, IssueRows, NotePane, StepFeed, mergeRows } from './flowside.js';
+import { mergeStream } from './run.js';
 
 const html = htm.bind(h);
 
@@ -117,7 +118,7 @@ export class Flow extends Component {
     const repo = p.repo || loadLastRepo(globalThis.localStorage) || '';
     this.state = { id: null, loaded: false, missing: false, ...this.repoState(repo), repos: [], canBrowse: false, repoQuery: null,
       repoOpen: false, repoActive: 0, browsing: false, text: '', folder: p.folder || '', prd: p.prd || '', issues: (p.issues || []).join(' '),
-      sid: p.sid || '', meta: null, why: null, busy: false, wide: false, view: null, progress: null };
+      sid: p.sid || '', meta: null, why: null, busy: false, wide: false, view: null, progress: null, stream: { events: [], offset: 0 }, t0: null };
   }
 
   // The repo is a registered slug or, like New run, an absolute path to a checkout.
@@ -150,6 +151,7 @@ export class Flow extends Component {
   componentWillUnmount() {
     this.gone = true;
     if (this.stop) this.stop();
+    if (this.stopStream) this.stopStream();
     if (this.stopIssues) this.stopIssues();
     clearTimeout(this.timer);
     if (this.dirty) this.persist(); // flush a pending draft save
@@ -221,7 +223,7 @@ export class Flow extends Component {
     const { repo } = this.fields();
     const args = { dump: text, prd: folder, issues: prd }[step.key].trim();
     if (!repo || !args) { this.setState({ why: !repo ? 'Pick a repo first.' : 'Fill in the field above first.' }); return; }
-    this.setState({ busy: true, why: null, meta: null, view: null });
+    this.setState({ busy: true, why: null, meta: null, view: null, t0: Date.now(), stream: { events: [], offset: 0 } });
     clearTimeout(this.timer);
     const flowId = await this.persist(true);
     let r;
@@ -236,9 +238,21 @@ export class Flow extends Component {
     this.watch(r.data.id);
   };
 
-  // Poll the active session at the usual 3 s; once it ends, read its final result and hand off.
+  take = (r) => {
+    if (!r.ok || this.gone) return;
+    const next = mergeStream(this.state.stream, r.data);
+    if (next !== this.state.stream) this.setState({ stream: next });
+  };
+
+  url = (sid) => () => `/api/sessions/${encodeURIComponent(sid)}/stream?offset=${this.state.stream.offset}`;
+
+  // Poll the active session at the usual 3 s, and tail its stream every 1 s from the start so the
+  // step's feed fills as it works; once it ends, read the rest of the stream and hand off.
   watch(sid) {
     if (this.stop) this.stop();
+    if (this.stopStream) this.stopStream();
+    this.setState({ stream: { events: [], offset: 0 }, t0: this.state.t0 || Date.now() });
+    this.stopStream = poll(this.url(sid), 1000, this.take);
     this.stop = poll(`/api/sessions/${encodeURIComponent(sid)}`, 3000, (r) => {
       if (!r.ok) { if (r.status === 404) { this.stop(); this.setState({ sid: '', why: 'That session no longer exists.' }); } return; }
       this.setState({ meta: r.data });
@@ -250,17 +264,17 @@ export class Flow extends Component {
     // The session's own command names the step it ran, so a session reattached from its page
     // ("Continue in Flow") hands off correctly even when the flow knew nothing before it.
     const step = sessionStep(meta.command) || stepFromState(this.fields());
-    let result = null;
+    this.stopStream();
     try {
-      const res = await fetch(`/api/sessions/${encodeURIComponent(sid)}/stream?offset=0`, { headers: { Accept: 'application/json' } });
-      const body = res.ok ? await res.json() : null;
-      result = ((body && body.events) || []).filter((e) => e && e.kind === 'result').at(-1) || null;
-    } catch { /* falls through to "no final result" */ }
+      const res = await fetch(this.url(sid)(), { headers: { Accept: 'application/json' } });
+      this.take({ ok: res.ok, data: res.ok ? await res.json() : null });
+    } catch { /* falls through to what the tail already read */ }
     if (this.gone) return;
+    const result = this.state.stream.events.filter((e) => e && e.kind === 'result').at(-1) || null;
     const out = meta.outcome === 'done' ? handoff(step, result) : { error: `The session ${meta.outcome}. Continue in terminal.` };
     if (out.error) { this.setState({ why: out.error }); return; }
     if (out.issues) out.issues = out.issues.join(' ');
-    this.setState({ ...out, sid: '', meta: null, why: null, lastSid: sid });
+    this.setState({ ...out, sid: '', meta: null, why: null, lastSid: sid, t0: null, stream: { events: [], offset: 0 } });
   }
 
   // A session is in flight: its step's input stays fixed so the handoff lands on the step that ran.
@@ -378,6 +392,8 @@ export class Flow extends Component {
               ${state !== 'done' && html`<p class="note">${step.produces}</p>`}
               ${state === 'active' && step.key !== 'dispatch' && html`
                 ${this.input(step)}
+                ${(sid || busy) && html`<${StepFeed} events=${st.stream.events} startedAt=${Date.parse(meta && meta.started_at) || st.t0 || undefined}
+                  done=${!!meta && meta.outcome === 'done'} failed=${!!meta && ['failed', 'stopped'].includes(meta.outcome)} />`}
                 ${sid ? html`<p class="note" role="status">${waiting ? 'Session waiting for your answer' : `Session ${meta ? meta.outcome : 'starting'}`} · <a href=${`#/session/${encodeURIComponent(sid)}`}>Open session</a></p>` : null}
                 ${!st.wide && ask}
                 ${meta && meta.outcome !== 'done' && TERMINAL.includes(meta.outcome) && meta.resume_command && html`<p class="note">Continue in terminal: <code>${meta.resume_command}</code></p>`}
