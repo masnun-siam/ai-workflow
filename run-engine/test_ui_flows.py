@@ -149,6 +149,8 @@ multi = base + [use("f", "Agent", {"prompt": "factcheck #7 and #8"}), res("f", "
 assert [r["state"] for r in ui_flows.issue_progress(multi)["rows"]] == ["checked", "fixing"]
 bg = base + [use("f", "Agent", {"prompt": "factcheck #7"}), res("f", "Async agent launched successfully. agentId: x")]
 assert [r["state"] for r in ui_flows.issue_progress(bg)["rows"]] == ["checking", "created"]
+part = base + [use("f", "Agent", {"prompt": "factcheck #7 and #8"}), res("f", "#7: PASS")]
+assert [r["state"] for r in ui_flows.issue_progress(part)["rows"]] == ["checked", "checking"]
 landed = multi + [use("e", "Bash", {"command": "gh issue edit 8 --body-file b; rm -r /tmp/x"}), res("e", "Exit code 1\nhttps://github.com/o/r/issues/8\nblocked", True)]
 assert [r["state"] for r in ui_flows.issue_progress(landed)["rows"]] == ["checked", "fixed"]
 print("ok multi-issue factcheck verdicts, background factcheck, edit that landed despite a shell error")

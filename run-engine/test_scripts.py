@@ -3392,10 +3392,11 @@ s5 = _n(_slice(g, "\n5. Assign", "\n6. Add to a GitHub Project"))
 s6 = _n(_slice(g, "\n6. Add to a GitHub Project", "\n7. Dump"))
 close = _n(g[g.rindex("Return the issue URL"):])
 
-for _p in ("once per issue created in this run (one from step 4, each one from `4-FLAT`)",
-           "each time with just that issue's number/URL and `owner/repo`"):
+for _p in ("once per run, with every issue created in this run (one from step 4, each one from `4-FLAT`)",
+           "as a list of issue numbers/URLs and `owner/repo`"):
     assert _p in s45, _p
-ok("#82 factcheck runs once per created issue")
+assert "once per issue" not in s45 and "each time" not in s45
+ok("#213 factcheck is one dispatch per run over the whole list")
 
 for _p in ("a `Source:` line in the Notes section pointing outside the repo",
            "is expected traceability from `/intake`", "PASS", "ISSUES FOUND",
@@ -3464,14 +3465,20 @@ _f5 = flat_ws[flat_ws.index("5. Check each create"):]
 assert _f5.count("stop") == 1 and "first failure" not in _f5
 assert "On failure, stop like a failed create: report the created issues (number and URL)" in _f5
 assert "(including issues reused on resume)" in close
-assert "`PASS` \u2192 continue with the next issue's factcheck, then step 5" in s45
+assert "`PASS` \u2192 nothing to fix for that issue; once every verdict is handled, go to step 5" in s45
 _rt = ("retry that create once without `--project`, then after the loop add the issue to the chosen projects with "
        "`gh project item-add <number> --owner <owner> --url <issue-url>` and report it as a project failure in step 6")
 assert _rt in flat_ws
 assert "On the `4-FLAT` path this skips only the project questions; the run goes on to the first create." in s6
 assert "Zero projects \u2192 skip this step entirely, go straight to returning the URL(s)." in s6
-assert "once per issue created in this run (one from step 4, each one from `4-FLAT`)" in s45
+assert "once per run, with every issue created in this run (one from step 4, each one from `4-FLAT`)" in s45
 assert "On a resume, also apply 4.5 and step 6 to reused issues never factchecked in an earlier run" in s45
+assert "one `#<n>: PASS` or `#<n>: ISSUES FOUND` line per issue" in s45
+assert "re-check it once in a second dispatch of only the issues without a verdict, then report any still without one as unchecked" in s45
+assert "a single-issue run is a list of one" in s45 and "no cap" in s45
+for _p in ("a list of issue numbers", "one `#<n>: PASS` or `#<n>: ISSUES FOUND` line per issue", "keep only the verdicts"):
+    assert _p in _n(checker_text), _p
+ok("#213 per-issue verdict lines, re-check once, unchecked, list of one")
 ok("#82 review-fix wording pinned")
 _sp = "on the step 4 path before its create"
 assert _sp in s5 and _sp in s6
