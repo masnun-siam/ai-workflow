@@ -1011,6 +1011,20 @@ header .ugauge:hover { background: var(--raised); }
   .fi-state { grid-column: 2; }
 }
 
+/* Step activity feed: condensed cards, a pulse while working, raw log behind a disclosure */
+.sf { display: grid; gap: 10px; }
+.sf-live { position: relative; display: grid; gap: 8px; }
+.sf-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.sf-card { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--fg); overflow-wrap: anywhere; }
+.sf-status { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.sf-failed { color: var(--error); overflow-wrap: anywhere; }
+.sf-time { position: absolute; top: 0; right: 0; font-size: 12px; color: var(--muted); }
+.sf-pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--live); animation: sf-pulse 1.2s ease-in-out infinite; }
+@keyframes sf-pulse { 50% { opacity: 0.3; transform: scale(0.7); } }
+@media (prefers-reduced-motion: reduce) { .sf-pulse { animation: none; } }
+.sf-log summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.sf-log pre { margin: 8px 0 0; max-height: 320px; overflow: auto; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--body); }
+
 /* Flows switcher: previous flows, newest first */
 .fs { position: relative; }
 .fs-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; width: min(420px, calc(100vw - 32px)); max-height: 60vh; overflow-y: auto;

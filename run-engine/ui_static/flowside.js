@@ -118,6 +118,74 @@ export function IssueRows({ title, progress, slug, sessionDone }) {
   </section>`;
 }
 
+// ---- step activity feed (#211) -------------------------------------------------------------------
+
+const basename = (p) => String(p).split('/').pop();
+
+// A stream event as a condensed card; null for events that aren't a step (text, result).
+// Unknown tools keep their own name so nothing is hidden.
+export function cardFor(ev) {
+  if (!ev || ev.kind !== 'tool') return null;
+  const input = ev.input && typeof ev.input === 'object' ? ev.input : {};
+  if (ev.name === 'Read') return { label: typeof input.file_path === 'string' ? `Reading ${basename(input.file_path)}` : 'Reading a file' };
+  if (ev.name === 'Grep' || ev.name === 'Glob') return { label: 'Scanning the codebase' };
+  if (ev.name === 'AskUserQuestion') return { label: 'Asking a question' };
+  if (ev.name === 'Bash' && /\bgh issue create\b/.test(String(input.command || ''))) return { label: 'Creating an issue' };
+  return { label: ev.name };
+}
+
+// 'running' until a result event arrives; an error result or a dead session (`failed`) is 'failed'.
+export function feedStatus(events, done, failed) {
+  const result = (events || []).find((e) => e.kind === 'result');
+  if (failed || (result && result.is_error)) return 'failed';
+  return done || result ? 'done' : 'running';
+}
+
+// "1:05" from a start time in ms; 0:00 before it or when there is none.
+export function elapsed(startedAt, nowMs = Date.now()) {
+  const s = startedAt == null ? 0 : Math.max(0, Math.floor((nowMs - startedAt) / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+const logLine = (e) => (e.kind === 'tool' ? `${e.name} ${JSON.stringify(e.input)}` : e.text || '');
+
+export class StepFeed extends Component {
+  state = { now: Date.now() };
+
+  componentDidMount() { this.sync(); }
+  componentDidUpdate() { this.sync(); }
+  componentWillUnmount() { clearInterval(this.timer); }
+
+  // Tick once a second while running; one last tick when it stops so the timer shows the final time.
+  sync() {
+    const { events, done, failed } = this.props;
+    const running = feedStatus(events, done, failed) === 'running';
+    if (running && !this.timer) this.timer = setInterval(() => this.setState({ now: Date.now() }), 1000);
+    else if (!running && this.timer) { clearInterval(this.timer); this.timer = null; this.setState({ now: Date.now() }); }
+  }
+
+  render({ events = [], startedAt, done, failed }, { now }) {
+    const status = feedStatus(events, done, failed);
+    const result = events.find((e) => e.kind === 'result');
+    // ponytail: without a startedAt the timer starts when the first event is first seen here.
+    if (startedAt == null && events.length && this.t0 == null) this.t0 = Date.now();
+    const cards = events.map(cardFor).filter(Boolean);
+    return html`<section class="sf" aria-label="Step activity">
+      <div class="sf-live" aria-live="polite">
+        <ol class="sf-cards">${cards.map((c, i) => html`<li class="sf-card" key=${i}>${c.label}</li>`)}</ol>
+        ${status === 'running' && html`<p class="sf-status"><span class="sf-pulse" aria-hidden="true"></span>Working…</p>`}
+        ${status === 'done' && html`<p class="sf-status">Done</p>`}
+        ${status === 'failed' && html`<p class="sf-status sf-failed">Failed${result && result.text ? `: ${result.text}` : ''}</p>`}
+        <time class="sf-time mono">${elapsed(startedAt ?? this.t0, now)}</time>
+      </div>
+      <details class="sf-log" open=${status === 'failed'}>
+        <summary>Raw log</summary>
+        <pre>${events.map(logLine).join('\n')}</pre>
+      </details>
+    </section>`;
+  }
+}
+
 // ---- flows switcher ------------------------------------------------------------------------------
 
 const STEP_LABEL = { dump: 'Dump', prd: 'PRD', issues: 'Issues', dispatch: 'Dispatch' };
