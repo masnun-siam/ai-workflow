@@ -41,7 +41,7 @@ Invoke the `ai-workflow:prd` skill with the feature folder (`/prd <feature-folde
 
 ### gh-issue
 
-Invoke the `ai-workflow:gh-issue` skill with the PRD path or note path. It splits the work into flat `refined` issues with `Depends on: #n` lines, under its own confirmations. Its final line is `→ next: herdr-dispatch <n> <n> …`.
+Invoke the `ai-workflow:gh-issue` skill with the PRD path or note path. It splits the work into flat `refined` issues with `Depends on: #n` lines, grouped under one `tracking` parent as native sub-issues with blocked-by links, under its own confirmations. Its final line is `→ next: herdr-dispatch <n> <n> …`.
 
 ### dispatch
 
@@ -70,5 +70,5 @@ At every boundary between stages, ask one AskUserQuestion: "Continue to <next st
 
 - No stage logic copied here: classification, PRD writing, issue splitting and dispatch belong to their own skills.
 - No state file. The artifacts (vault note, PRD, issues) are the state, which is why `/flow <argument>` can resume.
-- One feature per run. No epics or parent tracking issues.
+- One feature per run. `/gh-issue` creates one `tracking` parent per feature, with the tasks as native sub-issues. `herdr-dispatch <parent>` dispatches them; `/run-issue` refuses the parent.
 - Never launch a dispatch without an explicit "Launch", and never create issues without the user's "Continue" into the gh-issue stage.

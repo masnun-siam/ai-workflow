@@ -4,6 +4,14 @@
 
 ### Added
 
+- **`/gh-issue` groups a feature's tasks under a `tracking` parent.** This reverses the
+  flat-only decision: a run with 2 or more tasks now creates one parent labelled
+  `prd-<slug>` and `tracking` (not `refined`) with a task checklist, and each task becomes a
+  native sub-issue with native blocked-by links matching its `Depends on`. The text line is
+  still written. If a link call fails the run reports it and continues; no issue is deleted.
+  `herdr-dispatch <parent>` runs the sub-issues in blocked-by order (the text line is the
+  fallback), and `/run-issue <parent>` refuses with a message.
+
 - **Flow history.** Every flow is saved on the aiw server at `#/flow/<id>`. **Flows** lists
   earlier ones with their step and last activity, archive hides one, and **New flow** starts
   another. A draft is saved as you type. Past `/dump`, `/prd` and `/gh-issue` sessions are

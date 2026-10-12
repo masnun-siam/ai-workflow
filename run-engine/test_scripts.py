@@ -3204,7 +3204,7 @@ assert not any("--label" in l and "lean" in l for l in flat.splitlines())
 assert "`lean` is never applied here." in flat_ws
 ok("4-FLAT never applies lean")
 
-for bad in ("4-EPIC", "aiw epic split", "project-board", "sub_issues", "epic-<parent>"):
+for bad in ("4-EPIC", "aiw epic split", "project-board", "epic-<parent>"):
     assert bad not in _g80, bad
 assert "epic" not in _g80.lower()
 ok("gh-issue.md has no epic machinery")

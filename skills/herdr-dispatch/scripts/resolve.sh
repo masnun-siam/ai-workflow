@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # resolve.sh <owner/repo> <input...>  ->  "n<TAB>title<TAB>deps" sorted by issue number.
 # input: GitHub issues search URL | label name | issue numbers | one epic parent number.
-# deps = "Depends on #N" refs that are also in the resolved set.
+# deps = native blocked-by links plus "Depends on #N" refs, kept only if also in the resolved set.
 set -euo pipefail
 repo=$1; shift
 nums=()
@@ -20,6 +20,8 @@ fi
 set=" ${nums[*]} "
 for n in $(printf '%s\n' "${nums[@]}" | sort -n); do
   read -r title < <(gh issue view "$n" -R "$repo" --json title -q .title)
-  deps=$(gh issue view "$n" -R "$repo" --json body -q .body | grep -ioE 'depends on[^.]*' | grep -oE '#[0-9]+' | tr -d '#' | sort -un | while read -r d; do [[ $set == *" $d "* && $d != "$n" ]] && echo "$d"; done | paste -sd, - || true)
+  # blocked-by is best-effort: a failed call falls back to the text line alone
+  deps=$({ gh issue view "$n" -R "$repo" --json body -q .body | grep -ioE 'depends on[^.]*' | grep -oE '#[0-9]+' | tr -d '#' || true
+           gh api "repos/$repo/issues/$n/dependencies/blocked_by" -q '.[].number' 2>/dev/null || true; } | sort -un | while read -r d; do [[ $set == *" $d "* && $d != "$n" ]] && echo "$d"; done | paste -sd, - || true)
   printf '%s\t%s\t%s\n' "$n" "$title" "$deps"
 done

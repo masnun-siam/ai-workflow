@@ -202,7 +202,7 @@ Do the following:
 
 ### 4-FLAT. Create the flat issues
 
-One issue per task from the step 3.6 list, each standalone.
+One issue per task from the step 3.6 list, each standalone, plus one `tracking` parent that groups them (4-FLAT always has 2 or more tasks).
 
 0. Preflight, before anything is created. If step 3.6 skipped the save because
    `docs/tasks/<slug>.md` already exists, stop and ask for a new slug by step 3.6's
@@ -217,7 +217,9 @@ One issue per task from the step 3.6 list, each standalone.
    ```bash
    gh label create refined --color 1D76DB --description "properly specified: passes the issue template" 2>/dev/null || true
    gh label create prd-<slug> --color 5319E7 --description "task from docs/tasks/<slug>.md" 2>/dev/null || true
+   gh label create tracking --color C5DEF5 --description "parent that groups a feature's sub-issues: dispatch it, never run it" 2>/dev/null || true
    ```
+   Then create the parent once, before the first task create, unless a resume finds it: `gh issue list --label prd-<slug>,tracking --state all --json number,url` returns one. Title: the feature or PRD title. Labels: exactly `prd-<slug>` and `tracking`, never `refined` (it is not a runnable issue). Body: a short summary and links to the PRD and `docs/tasks/<slug>.md`, plus a `## Tasks` section listing the planned task titles (`- [ ] <title>`) for now. Add step 5's `--assignee` and step 6's `--project` flags like any other create. Keep the parent's number as `<parent>`.
 2. Write one complete, DoR-passing body per task, using the same section list as step 4.
    Context is inlined, never referenced: a task body must stand alone. Each How covers
    only its own task. Notes links `Task <n> of docs/tasks/<slug>.md`.
@@ -229,6 +231,14 @@ One issue per task from the step 3.6 list, each standalone.
    and delete the temp file. Labels are set at creation time: exactly `refined`,
    `prd-<slug>`, the type and the scope labels. `lean` is never applied here.
    Add step 5's `--assignee` flags and step 6's `--project` flags from the preflight answers to every create. If a create fails and the error names the project (e.g. missing `project` scope), retry that create once without `--project`, then after the loop add the issue to the chosen projects with `gh project item-add <number> --owner <owner> --url <issue-url>` and report it as a project failure in step 6 (don't abort). This applies on both paths.
+   Right after each successful create, link it (`<o>/<r>` is the repo; `-F` sends the ids as integers). `<id>` is the new issue's database id, not its number: `gh api repos/<o>/<r>/issues/<n> --jq .id`.
+
+   ```bash
+   gh api -X POST repos/<o>/<r>/issues/<parent>/sub_issues -F sub_issue_id=<id>
+   gh api -X POST repos/<o>/<r>/issues/<n>/dependencies/blocked_by -F issue_id=<blocker id>
+   ```
+
+   The first call makes it a native sub-issue of the parent. Run the second once per `Depends on: #<m>` line, with `<blocker id>` the database id of issue `<m>`; the `Depends on:` text line is still written either way. A failure of either call is not a create failure: report it (issue number, which link, the error) and continue; the issue exists and nothing is deleted. On a resume, re-link any reused issue the same way (a link that already exists is not an error).
 4. Write-back: every task block ends with an identical `Issue: —` line, so never
    `replace_all` and never Edit on that line alone. Right after each successful create,
    Edit with an `old_string` that starts at the task's own `## Task <k> — <title>` heading
@@ -241,8 +251,9 @@ One issue per task from the step 3.6 list, each standalone.
    - **"Retry the missing ones"**: re-enter the loop at the failed task, reusing the already-known issue numbers of earlier tasks for their `Depends on:` lines; never re-create a task that already has an issue (an unrecorded one gets its write-back retried, not a second create). Apply the duplicate guard above before every create after a failure: run the same `gh issue list --label prd-<slug> --state all --limit 200 --json number,url,title,body` lookup, so an issue GitHub accepted but whose create reported no number is recorded, not created twice.
    - **"Stop here"**: end the run and report the partial state (created vs. missing); the filled `Issue:` slots let a later run resume the list.
    Never close or delete an issue already created — a partial list is a recoverable state.
+6. After the last task, rewrite the parent's `## Tasks` section as the checklist `- [ ] #<n> <title>` in list order and save it with `gh issue edit <parent> --body-file /tmp/gh-issue-body.md` (delete the temp file). Report the parent's number and URL beside the task issues.
 
-4.5. Dispatch the `gh-issue-factchecker` agent (fresh context, no memory of the steps above) once per issue created in this run (one from step 4, each one from `4-FLAT`), each time with just that issue's number/URL and `owner/repo`. It re-reads the created issue cold and checks every concrete claim (file paths, symbols, described behavior, the proposed fix) against the real repo. Tell it explicitly: a `Source:` line in the Notes section pointing outside the repo (a Sentry permalink, an absolute file path, or a vault note path) is expected traceability from `/intake`, not a claim about this repo, and must not be flagged as an unverifiable claim. On a resume, also apply 4.5 and step 6 to reused issues never factchecked in an earlier run: every issue the resume run returns, created now or reused.
+4.5. Dispatch the `gh-issue-factchecker` agent (fresh context, no memory of the steps above) once per issue created in this run (one from step 4, each one from `4-FLAT`), each time with just that issue's number/URL and `owner/repo`. The `tracking` parent is not factchecked. It re-reads the created issue cold and checks every concrete claim (file paths, symbols, described behavior, the proposed fix) against the real repo. Tell it explicitly: a `Source:` line in the Notes section pointing outside the repo (a Sentry permalink, an absolute file path, or a vault note path) is expected traceability from `/intake`, not a claim about this repo, and must not be flagged as an unverifiable claim. On a resume, also apply 4.5 and step 6 to reused issues never factchecked in an earlier run: every issue the resume run returns, created now or reused.
    - `PASS` → continue with the next issue's factcheck, then step 5, no mention needed.
    - `ISSUES FOUND` → fix the flagged text yourself, write the corrected body to `/tmp/gh-issue-body.md`, run `gh issue edit <n> --body-file /tmp/gh-issue-body.md`, delete the temp file, and briefly tell me what was wrong and corrected. Do not silently ignore a flagged discrepancy.
 5. Assign the issues:

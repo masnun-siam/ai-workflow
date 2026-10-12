@@ -291,7 +291,11 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
 
      `/gh-issue`'s HARD RULE is scoped to issue creation and does not bind any later phase of this run.
 3. `gh issue view <n> --comments --json title,body,labels,comments,url` — if this fails,
-   stop (bad issue number, wrong repo, or `gh` not authed).
+   stop (bad issue number, wrong repo, or `gh` not authed). If its labels include
+   `tracking`, stop here, before step 3.5: it is a `/gh-issue` parent that only groups
+   sub-issues, not work to run. Say "#<n> is a tracking parent; dispatch its sub-issues
+   with `herdr-dispatch <n>`, or run one with `/run-issue <child>`." Do not enter Epic
+   mode, start a ledger or touch the issue.
 3.5. **Epic check — before step 4, not after it.** `gh api
    repos/{owner}/{repo}/issues/<n>/sub_issues`. A non-empty array means this is an epic
    parent — go to **Epic mode** below instead of the single-issue phases; keep the
