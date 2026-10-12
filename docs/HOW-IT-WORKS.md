@@ -406,7 +406,8 @@ text starts at `/dump`, a vault feature folder (or its `Dump.md`) at `/prd`, a P
 and the issues are the state, so half-done work resumes instead of starting over.
 
 **Routing by dump class.** A new feature or change request goes on to `/prd`, which fills the
-`status: seed` PRD that `/dump` left (or updates a finished one). A bug report or
+`status: seed` PRD that `/dump` left (or updates a finished one). The PRD it saves to the repo's
+`docs/prd/<slug>.md` is the canonical copy; the vault `PRD.md` is a mirror. A bug report or
 feature-scoped task skips the PRD and goes straight to `/gh-issue`. A standalone task, weekly
 meeting notes or anything unclassifiable stops once it is filed.
 

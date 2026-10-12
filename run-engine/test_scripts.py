@@ -4318,12 +4318,13 @@ ok("#183 /prd on a non-seed PRD still stops and asks")
 
 # AC4: default --to is obsidian only; Step 6 no longer asks about extra destinations.
 _a4_183 = next(ln for ln in _args183.splitlines() if ln.startswith("- `--to`"))
-assert "Default `obsidian`" in _a4_183 and "Default `local`" not in _a4_183, "#183 default --to must be obsidian"
+# ADR-era change: the repo copy (docs/prd/<slug>.md) is canonical, mirrored to Obsidian.
+assert "Default `local,obsidian`" in _a4_183, "--to default must be local,obsidian (repo canonical + vault mirror)"
 assert "(Step 6)" not in _a4_183, "#183 Arguments must not defer a destination question to Step 6"
 _s6_183 = _key183(_prd183, "Step 6")
 assert "ask here whether to also save" not in _s6_183, "#183 Step 6 still asks about extra destinations"
 assert "aiw ask" in _s6_183, "#183 Step 6 must keep its aiw ask branch"
-ok("#183 /prd default --to is obsidian; Step 6 asks no destination question")
+ok("/prd default --to is local,obsidian; Step 6 asks no destination question")
 
 
 # Issue #184: `→ next:` handoff lines on dump, prd and gh-issue (parsed by the UI stepper).
@@ -4363,6 +4364,31 @@ for _route in ("**New feature**", "**Change request**", "**Bug report**"):
     assert "problem statement" in _body.lower(), f"dump {_route} route must write a problem statement"
 assert "<the raw, unedited dump text, verbatim>" not in _s4, "dump New feature still writes raw text as Dump.md"
 ok("dump writes a problem statement (Problem/Who/Evidence/Expected + raw input) for features, changes, bugs")
+# Six-flow step 2: the repo PRD is canonical, and --update appends downstream decisions to it.
+_prd_all = _skill_sections("skills/prd/SKILL.md")
+_canon = _ws(_prd183["Arguments"]) + " " + _ws(_key183(_prd_all, "Step 7"))
+assert re.search(r"canonical", _canon) and "docs/prd/<slug>.md" in _canon, "prd: docs/prd/<slug>.md must be canonical"
+_upd = _ws(_key183(_prd_all, "Update mode"))
+assert "--update" in _ws(_prd183["Arguments"]), "prd Arguments must document --update"
+for _w in ("## Decisions", "Open questions", "mirror", "no grilling"):
+    assert _w.lower() in _upd.lower(), f"prd Update mode lacks {_w!r}"
+assert re.search(r"already (there|present|recorded)", _upd), "prd Update mode must skip a decision already recorded"
+# The pair is linked both ways at save time and followed, never guessed from names.
+_s7 = _ws(_key183(_prd_all, "Step 7"))
+assert "**Mirror:**" in _s7 and "name=canonical" in _s7, "prd: Step 7 must record the mirror/canonical links"
+assert "never by matching names" in _ws(_key183(_prd_all, "Step 2")), "prd: Step 2 follows the links"
+assert "no canonical copy" in _upd and "Never create a repo file during an update" in _upd, "prd: vault-only update"
+assert "before \u2192 after" in _upd, "prd: Update mode reports edited requirements as before -> after"
+assert "not inside a git repo" in _ws(_key183(_prd_all, "Step 1")), "prd: no repo -> Obsidian only"
+assert re.search(r"re-run `property:set` for each of them right after it", _s7) and "`canonical`" in _s7, (
+    "prd: frontmatter (incl. canonical) must be re-set after every overwrite"
+)
+assert "and re-set `tags`, `status` and `canonical` after the overwrite" in _upd, "prd: Update mode re-sets canonical"
+assert "never overwrite with partial content" in (_upd + _ws(_key183(_prd_all, "Step 7"))).lower(), (
+    "prd: overwrite guard"
+)
+assert "\u2192 next:" not in _upd, "prd Update mode prints no next line (the caller owns what follows)"
+ok("prd: repo copy canonical; --update appends decisions, resolves open questions, mirrors to Obsidian")
 
 _s8_184 = _ws(_key183(_skill_sections("skills/prd/SKILL.md"), "Step 8"))
 assert f"End with the line `{NEXT}/gh-issue <prd-path>`" in _s8_184, "#184 prd Step 8 lacks the next line"

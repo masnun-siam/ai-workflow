@@ -54,7 +54,7 @@ What `/dump` writes for a feature, change request or bug: Problem, Who, Evidence
 _Avoid_: Raw dump, brief (a brief is what `/intake` returns)
 
 **PRD**:
-The product requirements for one feature (the what and why, never the how), written by `/prd` after an interview. A `status: seed` PRD is a placeholder from `/dump` that `/prd` fills.
+The product requirements for one feature (the what and why, never the how), written by `/prd` after an interview. The canonical copy is the repo's `docs/prd/<slug>.md`; the vault `PRD.md` mirrors it. A `status: seed` PRD is a placeholder from `/dump` that `/prd` fills. `/prd --update` appends decisions made later.
 _Avoid_: Spec, design doc
 
 **Refined**:
