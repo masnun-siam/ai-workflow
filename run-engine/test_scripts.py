@@ -4318,12 +4318,13 @@ ok("#183 /prd on a non-seed PRD still stops and asks")
 
 # AC4: default --to is obsidian only; Step 6 no longer asks about extra destinations.
 _a4_183 = next(ln for ln in _args183.splitlines() if ln.startswith("- `--to`"))
-assert "Default `obsidian`" in _a4_183 and "Default `local`" not in _a4_183, "#183 default --to must be obsidian"
+# ADR-era change: the repo copy (docs/prd/<slug>.md) is canonical, mirrored to Obsidian.
+assert "Default `local,obsidian`" in _a4_183, "--to default must be local,obsidian (repo canonical + vault mirror)"
 assert "(Step 6)" not in _a4_183, "#183 Arguments must not defer a destination question to Step 6"
 _s6_183 = _key183(_prd183, "Step 6")
 assert "ask here whether to also save" not in _s6_183, "#183 Step 6 still asks about extra destinations"
 assert "aiw ask" in _s6_183, "#183 Step 6 must keep its aiw ask branch"
-ok("#183 /prd default --to is obsidian; Step 6 asks no destination question")
+ok("/prd default --to is local,obsidian; Step 6 asks no destination question")
 
 
 # Issue #184: `→ next:` handoff lines on dump, prd and gh-issue (parsed by the UI stepper).
@@ -4347,6 +4348,21 @@ assert "no `\u2192 next:` line" in _ws(_key183(_dump184, "Programmatic invocatio
     "#184 dump: programmatic run omits next line"
 )
 ok("#184 /dump Step 5 ends with the routed \u2192 next: line; programmatic runs omit it")
+
+# Six-flow step 2: the repo PRD is canonical, and --update appends downstream decisions to it.
+_prd_all = _skill_sections("skills/prd/SKILL.md")
+_canon = _ws(_prd183["Arguments"]) + " " + _ws(_key183(_prd_all, "Step 7"))
+assert re.search(r"canonical", _canon) and "docs/prd/<slug>.md" in _canon, "prd: docs/prd/<slug>.md must be canonical"
+_upd = _ws(_key183(_prd_all, "Update mode"))
+assert "--update" in _ws(_prd183["Arguments"]), "prd Arguments must document --update"
+for _w in ("## Decisions", "Open questions", "mirror", "no grilling"):
+    assert _w.lower() in _upd.lower(), f"prd Update mode lacks {_w!r}"
+assert re.search(r"already (there|present|recorded)", _upd), "prd Update mode must skip a decision already recorded"
+assert "never overwrite with partial content" in (_upd + _ws(_key183(_prd_all, "Step 7"))).lower(), (
+    "prd: overwrite guard"
+)
+assert "\u2192 next:" not in _upd, "prd Update mode prints no next line (the caller owns what follows)"
+ok("prd: repo copy canonical; --update appends decisions, resolves open questions, mirrors to Obsidian")
 
 _s8_184 = _ws(_key183(_skill_sections("skills/prd/SKILL.md"), "Step 8"))
 assert f"End with the line `{NEXT}/gh-issue <prd-path>`" in _s8_184, "#184 prd Step 8 lacks the next line"

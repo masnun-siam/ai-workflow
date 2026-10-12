@@ -20,10 +20,11 @@ Why this order matters: scanning before interviewing means the questions are inf
 ## Arguments
 
 `/prd <requirement | feature-folder> [--to local,obsidian,wiki]`
+`/prd --update <prd-path> <decisions>` (see **Update mode**)
 
 - `<requirement>`: free text, a BRD file, an Obsidian note, a Sentry link or a GitHub issue URL.
 - `<feature-folder>`: a vault path `05-Work/<Project>/<Feature>` that holds a `Dump.md` (as left by `/dump`). `/prd` fills that folder's seeded `PRD.md`.
-- `--to`: one or more destinations. Default `obsidian`, and nothing is asked about other destinations: `local` and `wiki` are written only when named here. If the Obsidian project can't be resolved (Step 2), ask which project to use and offer `local` instead; never leave the run with no destination.
+- `--to`: one or more destinations. Default `local,obsidian`, and nothing is asked about other destinations: `wiki` is written only when named here. The repo's `docs/prd/<slug>.md` (`local`) is the canonical copy; the Obsidian `PRD.md` is a mirror of it. If the Obsidian project can't be resolved (Step 2), ask which project to use and offer `local` instead; never leave the run with no destination.
 
 ### Asking the user
 
@@ -65,7 +66,7 @@ ask nothing at all, so this interview is the only chance to settle anything. Cha
   meant for the later technical spec may stay, and each must say so.
 - **No other question is asked.** Existing PRD (Step 2): update it in place. No matching
   project (Step 2): use the project and feature folder from the input path, creating the feature
-  folder if needed. Destinations: Obsidian only, whatever `--to` says. Review gate (Step 6):
+  folder if needed. Destinations: `local` and Obsidian, whatever `--to` says. Review gate (Step 6):
   approved automatically once Open questions is empty. The wiki is never pushed.
 - Report the destination path in Step 8 as usual; the `→ next:` line is unchanged.
 
@@ -87,7 +88,7 @@ Interviewing for ten minutes and then discovering a PRD already exists wastes th
 
 Exception: an Obsidian `PRD.md` with frontmatter `status: seed` is the input, not a collision — continue without asking and fill that same file. Read the status with `obsidian vault=notes property:read path="05-Work/<Project>/<Feature>/PRD.md" name=status` (the existence check above does not show frontmatter); only output that is exactly `seed` counts. Anything else (another value, empty output, an error) means any other existing PRD, including finished PRDs and ones seeded before the marker existed, and still stops here.
 
-If a PRD already exists anywhere: **stop and ask the user** (headless: `aiw ask`, then end your turn) what to do (read it and update it, pick a new name, skip that destination). Never overwrite silently. If they choose to update, read the existing PRD before Step 4 so the interview builds on it and keeps earlier decisions.
+If a PRD already exists anywhere: **stop and ask the user** (headless: `aiw ask`, then end your turn) what to do (read it and update it, pick a new name, skip that destination). Never overwrite silently. If they choose to update, read the existing PRD before Step 4 so the interview builds on it and keeps earlier decisions. When both a repo copy and a vault copy exist, read the repo copy: it is canonical, and Step 7 rewrites the vault copy as its mirror.
 
 For Obsidian, also resolve the project and feature folder here, the same way `dump` does:
 
@@ -153,9 +154,9 @@ Nothing is written anywhere before this approval. The wiki push needs its own ex
 
 ## Step 7: Save
 
-**local** — write `docs/prd/<slug>.md` with the Write tool (create `docs/prd/` if needed). Do not `git add` or commit; the user decides.
+**local** — the canonical copy. Write `docs/prd/<slug>.md` with the Write tool (create `docs/prd/` if needed). Do not `git add` or commit; the user decides.
 
-**obsidian** — always through the `obsidian` CLI with `vault=notes`, never plain file writes, so the index stays in sync. Follow `skills/dump/SKILL.md` ("Tagging and linking" and "New feature") for the exact commands:
+**obsidian** — the mirror: the same PRD as the local copy, plus the tags and wikilinks below. Always through the `obsidian` CLI with `vault=notes`, never plain file writes, so the index stays in sync. Follow `skills/dump/SKILL.md` ("Tagging and linking" and "New feature") for the exact commands:
 
 ```
 obsidian vault=notes create path="05-Work/<Project>/<Feature>/PRD.md" content="<PRD>"
@@ -165,6 +166,9 @@ obsidian vault=notes append path="05-Work/<Project>/Index.md" content="- [[05-Wo
 ```
 
 If the target was a seed (Step 2): replace the `create` line above with `obsidian vault=notes create path="05-Work/<Project>/<Feature>/PRD.md" content="<PRD>" overwrite`, skip the project-index `append` (`/dump` already added it), and after the `tags` line run `obsidian vault=notes property:set path="05-Work/<Project>/<Feature>/PRD.md" name=status value=draft`. Overwriting re-creates the file, so keep the `tags` and `## Related` lines; the `## Related` block must list `Dump` again (see the next paragraph).
+
+Every `overwrite` here replaces the whole note. If a read of a file you know exists fails or
+comes back empty (vault not open, wrong path), stop and report: never overwrite with partial content.
 
 Read a sibling's tags first to reuse the feature slug, and list existing siblings (Dump, Decisions, SRS…) in `## Related`. Add the PRD line to existing siblings' Related blocks as dump does. The project tag table lives in dump's SKILL.md.
 
@@ -179,7 +183,28 @@ If any save step fails, report which destinations succeeded and which didn't. Do
 
 ## Step 8: Report and hand off
 
-One line per destination with its final path or URL. End with the line `→ next: /gh-issue <prd-path>`, where `<prd-path>` is the Obsidian `PRD.md` path, or the first written destination when Obsidian was not chosen. It is the last line of your output; the Guided Flow parses it. Do nothing further.
+One line per destination with its final path or URL. End with the line `→ next: /gh-issue <prd-path>`, where `<prd-path>` is the canonical `docs/prd/<slug>.md`, or the first written destination when `local` was not chosen. It is the last line of your output; the Guided Flow parses it. Do nothing further.
+
+## Update mode
+
+`/prd --update <prd-path> <decisions>` records decisions made after the PRD was written. A
+later step (`/gh-issue` refining tasks) settles questions the interview missed, and those answers
+belong in the PRD. `<prd-path>` is the canonical `docs/prd/<slug>.md`. `<decisions>` is one line
+per decision: `<decision> — <why> (<source>)`, where the source is the issue or task that raised it.
+
+There is no grilling, no codebase scan and no review gate here: the user already answered each
+question where it came up. For each decision:
+
+1. Read the PRD. If `## Decisions` already records it (same meaning, not just the same words),
+   skip it; it is already there.
+2. Otherwise append `- <decision> — <why> (<source>)` to `## Decisions`.
+3. If it answers an item in `## Open questions`, remove that item. If it changes a requirement or
+   its acceptance check, edit that requirement to match.
+
+Write the canonical copy back, then apply the same edits to the Obsidian mirror when one exists
+(read it, edit it, write it back with `obsidian vault=notes create ... overwrite`, keeping its
+tags and `## Related`; the Step 7 rule applies: never overwrite with partial content). Report which decisions were added and which were already there. Print no
+next line: the calling command owns what happens next.
 
 ## Guardrails
 
