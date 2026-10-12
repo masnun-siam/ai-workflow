@@ -4353,6 +4353,9 @@ _ps = _ws(_key183(_dump184, "Problem statement"))
 for _f in ("**Problem:**", "**Who:**", "**Evidence:**", "**Expected:**", "### Raw input"):
     assert _f in _ps, f"dump Problem statement format lacks {_f}"
 assert re.search(r"never invent|do not invent|don't invent", _ps, re.I), "dump: problem statement must not invent facts"
+assert "just above `## Related`" in _ps and "overwrite" in _ps, "dump: a problem statement goes above ## Related"
+assert "content=\"$(cat <<'EOF'" in _ps, "dump: problem statement text goes through a quoted heredoc"
+assert "/create-tasks" not in _ps, "dump: describe only routing this branch makes true"
 _s4 = _ws(_dump184["Step 4: File it"])
 for _route in ("**New feature**", "**Change request**", "**Bug report**"):
     _body = _s4.split(_route, 1)[1][:1800]  # the route's own instructions

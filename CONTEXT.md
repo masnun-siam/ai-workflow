@@ -50,7 +50,7 @@ A capture filed into the Obsidian vault by `/dump` (new feature, change request,
 _Avoid_: Note, intake (intake normalises a source into a brief; it files nothing)
 
 **Problem statement**:
-What `/dump` writes for a feature, change request or bug: Problem, Who, Evidence, Expected and Open questions, taken only from the input, followed by the raw input verbatim. `/prd` builds a PRD from it; a bug goes from its problem statement straight to `/create-tasks`.
+What `/dump` writes for a feature, change request or bug: Problem, Who, Evidence, Expected and Open questions, taken only from the input, followed by the raw input verbatim. `/prd` builds a PRD from it; a bug goes from its problem statement to `/gh-issue`.
 _Avoid_: Raw dump, brief (a brief is what `/intake` returns)
 
 **PRD**:

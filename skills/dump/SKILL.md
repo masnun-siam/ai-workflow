@@ -187,7 +187,7 @@ wikilinks, never as backticked filenames.
 ## Problem statement
 
 A new feature, change request or bug is filed as a problem statement, not as raw text. `/prd`
-reads it for a feature, and `/create-tasks` reads it directly for a bug. Write it from the
+reads it for a feature or change request, and `/gh-issue` for a bug. Write it from the
 input only: never invent a user, a number or a cause the input doesn't give. Anything missing
 goes under **Open questions** for the next step to ask.
 
@@ -204,6 +204,15 @@ dumped text verbatim:
 
 The heading is `Problem statement — <YYYY-MM-DD>` in `Dump.md`, and `<YYYY-MM-DD>: <short bug
 title>` in `Bugs.md`. Tasks, meeting notes and unclassifiable input stay verbatim.
+
+Two rules for writing it:
+
+- **Keep `## Related` last.** When the file already exists, don't `append` (that lands below
+  `## Related`). Read it, insert the new block just above `## Related`, and write the whole file
+  back with `obsidian vault=notes create ... overwrite`, the same way a change request edits the PRD.
+- **Pass the text through a quoted heredoc.** Evidence often holds quotes, `$` or backticks, and
+  the `obsidian` CLI takes content only as an argument. Use `content="$(cat <<'EOF'` … `EOF` `)"`
+  so the shell never expands the input.
 
 ## Step 4: File it
 
@@ -238,7 +247,7 @@ obsidian vault=notes read path="05-Work/<Project>/<Feature>/PRD.md"
 ```
 Edit the relevant section of the PRD/SRS content in place to reflect the new reality (rewrite via `obsidian vault=notes create ... overwrite` with the full updated content, since there's no partial-replace CLI command — always read first, edit the text yourself, then write the whole file back).
 ```
-obsidian vault=notes append path="05-Work/<Project>/<Feature>/Dump.md" content="<the change request as a problem statement (see Problem statement), raw input included>"
+<add the change request as a problem statement to Dump.md, above its ## Related (see Problem statement)>
 obsidian vault=notes append path="05-Work/<Project>/<Feature>/Decisions.md" content="- <YYYY-MM-DD>: <what changed> because <reason from the dump text>"
 ```
 Reference sibling docs from the decision line as `[[05-Work/<Project>/<Feature>/PRD|PRD]]`
@@ -269,10 +278,7 @@ obsidian vault=notes property:set path="05-Work/<Project>/<Feature>/Bugs.md" nam
 obsidian vault=notes append path="05-Work/<Project>/<Feature>/Bugs.md" content="\n## Related\n<sibling links per the Tagging and linking section>"
 ```
 Then add a `[[…/Bugs|Bugs]]` line to the `## Related` block of every existing sibling.
-If it exists:
-```
-obsidian vault=notes append path="05-Work/<Project>/<Feature>/Bugs.md" content="<the bug as a problem statement (see Problem statement), headed <YYYY-MM-DD>: <short bug title>>"
-```
+If it exists, add the bug's problem statement above its `## Related` (see Problem statement).
 
 **Feature-scoped task** — same existence check/pattern as Bugs.md, but against `Tasks.md` and content is a checklist item:
 ```
