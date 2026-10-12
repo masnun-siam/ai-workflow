@@ -20,7 +20,6 @@ import threading
 import time
 
 from shared import (
-    OVERLAY_NAME,
     data_dir,
     die,
     load_config,
@@ -323,9 +322,24 @@ COMPOSE_CANDIDATES = (
 # treated as a datastore: under-provisioning a sidecar is recoverable, and the
 # failure this file exists to prevent is one container eating the host.
 DATASTORE_HINTS = (
-    "postgres", "pgsql", "mysql", "mariadb", "redis", "mongo", "elastic",
-    "rabbit", "memcach", "minio", "mailhog", "mailpit", "meilisearch",
-    "clickhouse", "kafka", "zookeeper", "selenium", "chrome",
+    "postgres",
+    "pgsql",
+    "mysql",
+    "mariadb",
+    "redis",
+    "mongo",
+    "elastic",
+    "rabbit",
+    "memcach",
+    "minio",
+    "mailhog",
+    "mailpit",
+    "meilisearch",
+    "clickhouse",
+    "kafka",
+    "zookeeper",
+    "selenium",
+    "chrome",
 )
 APP_HINTS = ("app", "web", "php", "api", "laravel", "node", "server", "backend", "frontend")
 API_HINTS = ("api", "php", "laravel", "backend", "server")
@@ -630,15 +644,23 @@ def cmd_up(args) -> None:
     if not compose_file or not runner:
         # Not a degraded state: most repos have no test compose file, and the run is
         # expected to work exactly as well on them.
-        print_written(record(
-            args.run_dir, ledger,
-            stack="none", test_cmd_host=runner or "", test_cmd=override or runner or "",
-            # source_mounted=yes with no stack is not a claim about a mount: it is what
-            # makes `stack rebuild` a no-op, so no phase has to special-case "no Docker".
-            app_url="none", api_url="none", web_url="none",
-            source_mounted="yes", compose_prefix="",
-            tests_unverified="" if (runner or override) else "no test runner detected on the host",
-        ))
+        print_written(
+            record(
+                args.run_dir,
+                ledger,
+                stack="none",
+                test_cmd_host=runner or "",
+                test_cmd=override or runner or "",
+                # source_mounted=yes with no stack is not a claim about a mount: it is what
+                # makes `stack rebuild` a no-op, so no phase has to special-case "no Docker".
+                app_url="none",
+                api_url="none",
+                web_url="none",
+                source_mounted="yes",
+                compose_prefix="",
+                tests_unverified="" if (runner or override) else "no test runner detected on the host",
+            )
+        )
         return
 
     lock_timeout = getattr(args, "lock_timeout", LOCK_TIMEOUT)
@@ -646,12 +668,21 @@ def cmd_up(args) -> None:
     if not acquire_lock(args.run_dir, ledger.issue, repo, lock_timeout):
         holder = _read_holder(lock_path(project)) or {}
         who = holder.get("run_dir") or "another run"
-        print_written(record(
-            args.run_dir, ledger,
-            stack="failed", compose_prefix="", test_cmd=override or prior, test_cmd_host=runner,
-            app_url="none", api_url="none", web_url="none", source_mounted="no",
-            tests_unverified=f"stack lock held by {who}; timed out after {lock_timeout}s",
-        ))
+        print_written(
+            record(
+                args.run_dir,
+                ledger,
+                stack="failed",
+                compose_prefix="",
+                test_cmd=override or prior,
+                test_cmd_host=runner,
+                app_url="none",
+                api_url="none",
+                web_url="none",
+                source_mounted="no",
+                tests_unverified=f"stack lock held by {who}; timed out after {lock_timeout}s",
+            )
+        )
         # Exit 0 on purpose, same contract as every other degraded stack state.
         return
 
@@ -670,12 +701,21 @@ def cmd_up(args) -> None:
         shell(f"{prefix} down -v --remove-orphans", cwd=repo, timeout=UP_TIMEOUT)
         release_lock(args.run_dir, ledger.issue, repo)
         reason = (proc.stderr or proc.stdout or "unknown").strip().splitlines()
-        print_written(record(
-            args.run_dir, ledger,
-            stack="failed", compose_prefix=prefix, test_cmd=override or prior, test_cmd_host=runner,
-            app_url="none", api_url="none", web_url="none", source_mounted="no",
-            tests_unverified="docker stack would not come up: " + (reason[-1] if reason else "?"),
-        ))
+        print_written(
+            record(
+                args.run_dir,
+                ledger,
+                stack="failed",
+                compose_prefix=prefix,
+                test_cmd=override or prior,
+                test_cmd_host=runner,
+                app_url="none",
+                api_url="none",
+                web_url="none",
+                source_mounted="no",
+                tests_unverified="docker stack would not come up: " + (reason[-1] if reason else "?"),
+            )
+        )
         # Exit 0 on purpose: a stack that will not come up is a documented run state
         # that every station knows how to report, not a failure of this command.
         return
@@ -685,12 +725,21 @@ def cmd_up(args) -> None:
         warn("stack is up but no app service could be identified; treating tests as unrunnable")
         shell(f"{prefix} down -v --remove-orphans", cwd=repo, timeout=UP_TIMEOUT)
         release_lock(args.run_dir, ledger.issue, repo)
-        print_written(record(
-            args.run_dir, ledger, stack="failed", compose_prefix=prefix, test_cmd=override or prior,
-            test_cmd_host=runner, app_url="none", api_url="none", web_url="none",
-            source_mounted="no",
-            tests_unverified="no app service found in the test compose file",
-        ))
+        print_written(
+            record(
+                args.run_dir,
+                ledger,
+                stack="failed",
+                compose_prefix=prefix,
+                test_cmd=override or prior,
+                test_cmd_host=runner,
+                app_url="none",
+                api_url="none",
+                web_url="none",
+                source_mounted="no",
+                tests_unverified="no app service found in the test compose file",
+            )
+        )
         return
 
     app_port = container_ports(config, app)
@@ -702,29 +751,34 @@ def cmd_up(args) -> None:
     api_service, web_service = pick_api_web_services(config)
     api_container_port = container_ports(config, api_service)
     web_container_port = container_ports(config, web_service)
-    api_port = resolve_port(prefix, repo, api_service, api_container_port[0]) \
-        if api_service and api_container_port else port
-    web_port = resolve_port(prefix, repo, web_service, web_container_port[0]) \
-        if web_service and web_container_port else port
+    api_port = (
+        resolve_port(prefix, repo, api_service, api_container_port[0]) if api_service and api_container_port else port
+    )
+    web_port = (
+        resolve_port(prefix, repo, web_service, web_container_port[0]) if web_service and web_container_port else port
+    )
 
     app_url = f"http://localhost:{port}" if port else "none"
     api_url = f"http://localhost:{api_port}" if api_port else app_url
     web_url = f"http://localhost:{web_port}" if web_port else app_url
 
-    print_written(record(
-        args.run_dir, ledger,
-        stack="up",
-        compose_prefix=prefix,
-        compose_project=project,
-        app_service=app,
-        test_cmd=override or build_test_cmd(prefix, app, runner),
-        test_cmd_host=runner,
-        source_mounted="yes" if source_is_mounted(config, app, repo) else "no",
-        app_url=app_url,
-        api_url=api_url,
-        web_url=web_url,
-        tests_unverified="",
-    ))
+    print_written(
+        record(
+            args.run_dir,
+            ledger,
+            stack="up",
+            compose_prefix=prefix,
+            compose_project=project,
+            app_service=app,
+            test_cmd=override or build_test_cmd(prefix, app, runner),
+            test_cmd_host=runner,
+            source_mounted="yes" if source_is_mounted(config, app, repo) else "no",
+            app_url=app_url,
+            api_url=api_url,
+            web_url=web_url,
+            tests_unverified="",
+        )
+    )
 
 
 def cmd_down(args) -> None:
@@ -822,7 +876,10 @@ def register(sub, add) -> None:
         q.add_argument("--repo", help="repo/worktree root (default: ledger context, else cwd)")
         if name == "up":
             q.add_argument(
-                "--lock-timeout", type=int, default=LOCK_TIMEOUT, dest="lock_timeout",
+                "--lock-timeout",
+                type=int,
+                default=LOCK_TIMEOUT,
+                dest="lock_timeout",
                 help="seconds to wait for the stack lock before degrading (default: 900)",
             )
         q.set_defaults(func=fn)

@@ -32,9 +32,7 @@ def data_dir() -> str:
     Read at call time, not cached at import time — a test that sets
     $CLAUDE_PLUGIN_DATA after this module is imported must still see it honoured.
     """
-    return os.environ.get("CLAUDE_PLUGIN_DATA") or os.path.expanduser(
-        "~/.claude/plugins/data/ai-workflow"
-    )
+    return os.environ.get("CLAUDE_PLUGIN_DATA") or os.path.expanduser("~/.claude/plugins/data/ai-workflow")
 
 
 def die(code: int, message: str):
@@ -108,6 +106,7 @@ def write_json(path: str, data) -> None:
 def atomic_write_text(path: str, text: str) -> None:
     """tmp file + fsync + os.replace: readers never see a partial file."""
     import tempfile
+
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
@@ -222,9 +221,7 @@ def repo_of(ledger, override: str | None = None) -> str:
 def run(argv, cwd=None, timeout=None, env=None):
     """Run a command with no shell. Never raises on a nonzero exit — callers decide."""
     try:
-        return subprocess.run(
-            argv, cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env
-        )
+        return subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env)
     except FileNotFoundError as exc:
         return subprocess.CompletedProcess(argv, 127, "", str(exc))
     except subprocess.TimeoutExpired:
@@ -240,9 +237,7 @@ def shell(cmd: str, cwd=None, timeout=None):
     that runs something different from what every station ran.
     """
     try:
-        return subprocess.run(
-            cmd, cwd=cwd, shell=True, capture_output=True, text=True, timeout=timeout
-        )
+        return subprocess.run(cmd, cwd=cwd, shell=True, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         return subprocess.CompletedProcess(cmd, 124, "", f"timed out after {timeout}s")
 

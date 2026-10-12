@@ -24,11 +24,11 @@ data_dir = tempfile.mkdtemp()
 os.environ["CLAUDE_PLUGIN_DATA"] = data_dir
 ORIG_PATH = os.environ.get("PATH", "")
 
-import ui_board
-import ui_repos
-import ui_runner
-import ui_server
-import ui_sessions
+import ui_board  # noqa: E402
+import ui_repos  # noqa: E402
+import ui_runner  # noqa: E402
+import ui_server  # noqa: E402
+import ui_sessions  # noqa: E402
 
 passed = 0
 
@@ -73,8 +73,10 @@ def reset_sessions():
     shutil.rmtree(ui_sessions.sessions_dir(), ignore_errors=True)
 
 
-set_registry({"o/r": REPO_A, "z/last": REPO_B, "a/first": REPO_A},
-             {"o/r": "Orange Repo", "z/last": "Zed", "only/proj": "Only In Projects"})
+set_registry(
+    {"o/r": REPO_A, "z/last": REPO_B, "a/first": REPO_A},
+    {"o/r": "Orange Repo", "z/last": "Zed", "only/proj": "Only In Projects"},
+)
 
 srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, [], boom)
 threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -169,8 +171,13 @@ try:
     assert ui_repos.build_command("pr-grind", "") == "/pr-grind"
     assert ui_repos.build_command("pr-review", "5960") == "/pr-review 5960"
     assert ui_repos.build_command("pr-fix-comments", "o/r#5960") == "/pr-fix-comments o/r#5960"
-    assert ui_repos.build_command("issue-to-pr", "https://github.com/o/r/issues/7") == "/issue-to-pr https://github.com/o/r/issues/7"
-    assert ui_repos.build_command("day", "") == "/day" and ui_repos.build_command("day", "call Abir") == "/day call Abir"
+    assert (
+        ui_repos.build_command("issue-to-pr", "https://github.com/o/r/issues/7")
+        == "/issue-to-pr https://github.com/o/r/issues/7"
+    )
+    assert (
+        ui_repos.build_command("day", "") == "/day" and ui_repos.build_command("day", "call Abir") == "/day call Abir"
+    )
     assert ui_repos.MAX_PROMPT_CHARS == 32000
     ok("build_command units, MAX_PROMPT_CHARS")
 
@@ -179,8 +186,11 @@ try:
     s, p = post({"repo": "o/r", "command": "run-issue", "args": "7"})
     assert s == 201, (s, p)
     assert calls == [("/run-issue 7", REPO_A, {"owner": "o", "repo": "r", "issue": 7})] or (
-        len(calls) == 1 and calls[0][0] == "/run-issue 7" and rp(calls[0][1]) == rp(REPO_A)
-        and calls[0][2] == {"owner": "o", "repo": "r", "issue": 7}), calls
+        len(calls) == 1
+        and calls[0][0] == "/run-issue 7"
+        and rp(calls[0][1]) == rp(REPO_A)
+        and calls[0][2] == {"owner": "o", "repo": "r", "issue": 7}
+    ), calls
     assert p == ui_server._public(ui_sessions.load(p["id"])), p
     ok("run-issue o/r 7 -> 201 public record; start gets command, checkout cwd, link")
 
@@ -205,9 +215,12 @@ try:
     bindir = os.path.join(fake_dir, "bin")
     os.mkdir(bindir)
     exe = os.path.join(bindir, "claude")
-    write(exe, '#!/bin/sh\nif [ "$1" = "auth" ]; then echo \'{"loggedIn": true}\'; exit 0; fi\n'
-               'pwd > "$FAKE_DIR/pwd"\nprintf \'%s\\n\' "$@" > "$FAKE_DIR/argv"\n'
-               'echo \'{"type":"result","is_error":false,"total_cost_usd":0}\'\n')
+    write(
+        exe,
+        '#!/bin/sh\nif [ "$1" = "auth" ]; then echo \'{"loggedIn": true}\'; exit 0; fi\n'
+        'pwd > "$FAKE_DIR/pwd"\nprintf \'%s\\n\' "$@" > "$FAKE_DIR/argv"\n'
+        'echo \'{"type":"result","is_error":false,"total_cost_usd":0}\'\n',
+    )
     os.chmod(exe, 0o755)
     os.environ["FAKE_DIR"] = fake_dir
     os.environ["PATH"] = bindir + os.pathsep + ORIG_PATH
@@ -265,11 +278,13 @@ try:
 
     reset_sessions()
     calls.clear()
-    s, data, _ = req("/api/sessions", "POST", json.dumps(
-        {"repo": "o/r", "command": "run-issue", "args": "7 \u0000"}).encode())
+    s, data, _ = req(
+        "/api/sessions", "POST", json.dumps({"repo": "o/r", "command": "run-issue", "args": "7 \u0000"}).encode()
+    )
     assert s == 400, (s, data)
-    assert not [r for r in ui_sessions.list_sessions()
-                if r.get("status") in ("starting", "running")], ui_sessions.list_sessions()
+    assert not [r for r in ui_sessions.list_sessions() if r.get("status") in ("starting", "running")], (
+        ui_sessions.list_sessions()
+    )
     s, p = post({"repo": "o/r", "command": "run-issue", "args": "7"})
     assert s == 201, (s, p)
     ok("NUL in args -> 400, no stuck record, next run-issue 7 -> 201")
@@ -315,8 +330,9 @@ try:
     results = []
 
     def go():
-        s, data, _ = req("/api/sessions", "POST", json.dumps(
-            {"repo": "o/r", "command": "run-issue", "args": "7"}).encode())
+        s, data, _ = req(
+            "/api/sessions", "POST", json.dumps({"repo": "o/r", "command": "run-issue", "args": "7"}).encode()
+        )
         results.append(s)
 
     with mock.patch.object(ui_runner, "start", slow_start):
@@ -416,6 +432,7 @@ try:
     ok("RunnerError -> 502 {error}")
 
     import ui_flows
+
     fl = ui_flows.create({"repo": "o/r", "text": "idea"})
     s, body = post({**good, "flow_id": fl["id"]})
     assert s == 201 and ui_sessions.load(body["id"])["flow_id"] == fl["id"], (s, body)
@@ -439,7 +456,10 @@ try:
     with mock.patch.object(sys, "platform", "linux"):
         s, _, _ = req("/api/repos/browse", "POST", b"{}")
     assert s == 403, s
-    with mock.patch.object(sys, "platform", "darwin"), mock.patch.object(ui_repos, "browse_folder", lambda st: f"picked:{st}"):
+    with (
+        mock.patch.object(sys, "platform", "darwin"),
+        mock.patch.object(ui_repos, "browse_folder", lambda st: f"picked:{st}"),
+    ):
         s, data, _ = req("/api/repos/browse", "POST", json.dumps({"start": "/x"}).encode())
     assert s == 200 and json.loads(data) == {"path": "picked:/x"}, (s, data)
     ok("can_browse only on darwin + localhost Host; browse -> 403 otherwise, path when allowed")
@@ -467,7 +487,9 @@ try:
     post({"repo": remote, "text": "hello"})  # already registered: left alone
     assert list(ui_repos.dispatch.read_checkouts()) == ["o/r", "new/thing"]
     s, _ = post({"repo": PLAIN, "text": "hello"})  # not a repo: rejected, nothing registered
-    assert s == 400 and "new/thing" in ui_repos.dispatch.read_checkouts() and len(ui_repos.dispatch.read_checkouts()) == 2
+    assert (
+        s == 400 and "new/thing" in ui_repos.dispatch.read_checkouts() and len(ui_repos.dispatch.read_checkouts()) == 2
+    )
     nourl = git_repo()
     post({"repo": nourl, "text": "hello"})  # no origin -> no slug -> nothing to register
     assert len(ui_repos.dispatch.read_checkouts()) == 2
@@ -519,11 +541,22 @@ try:
     ssh443 = clone("work/ssh443", "ssh://git@ssh.github.com:443/acme/ssh443.git")
 
     found = {c["path"]: c["slug"] for c in ui_repos.find_clones([root, os.path.join(root, "work")])}
-    assert found == {a: "Acme/App", os.path.join(root, "work", "acme-app-copy"): "acme/app", b: "acme/other", ssh443: "acme/ssh443"}, found
-    ok("find_clones: GitHub-origin clones only (incl. ssh.github.com:443 remotes); no-remote, node_modules, too-deep skipped; overlapping roots do not repeat")
+    assert found == {
+        a: "Acme/App",
+        os.path.join(root, "work", "acme-app-copy"): "acme/app",
+        b: "acme/other",
+        ssh443: "acme/ssh443",
+    }, found
+    ok(
+        "find_clones: GitHub-origin clones only (incl. ssh.github.com:443 remotes); no-remote, node_modules, too-deep skipped; overlapping roots do not repeat"
+    )
     assert [c["path"] for c in ui_repos.find_clones([root], "ACME/app")] == sorted(
-        [a, os.path.join(root, "work", "acme-app-copy")], key=lambda p: p) or True
-    assert {c["path"] for c in ui_repos.find_clones([root], "ACME/app")} == {a, os.path.join(root, "work", "acme-app-copy")}
+        [a, os.path.join(root, "work", "acme-app-copy")], key=lambda p: p
+    ) or True
+    assert {c["path"] for c in ui_repos.find_clones([root], "ACME/app")} == {
+        a,
+        os.path.join(root, "work", "acme-app-copy"),
+    }
     ok("find_clones filters by slug, case-insensitively")
 
     assert ui_repos.is_unregistered_slug("acme/other") and not ui_repos.is_unregistered_slug("/abs/path")

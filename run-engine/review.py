@@ -75,9 +75,9 @@ def pick(reviews, comments, window: int = 60) -> dict:
     newest_commit = newest.get("commit_id")
 
     group = [
-        r for r in reviews
-        if r.get("commit_id") == newest_commit
-        and abs((ts_or_epoch(r) - newest_ts).total_seconds()) <= window
+        r
+        for r in reviews
+        if r.get("commit_id") == newest_commit and abs((ts_or_epoch(r) - newest_ts).total_seconds()) <= window
     ]
 
     with_comments = [r for r in group if comment_counts.get(r.get("id"), 0) > 0]
@@ -94,7 +94,12 @@ def pick(reviews, comments, window: int = 60) -> dict:
             reason = "newest review in the round"
 
     superseded = [r.get("id") for r in reviews if r is not selected]
-    return {"selected": selected.get("id"), "superseded": superseded, "reason": reason, "comment_counts": comment_counts}
+    return {
+        "selected": selected.get("id"),
+        "superseded": superseded,
+        "reason": reason,
+        "comment_counts": comment_counts,
+    }
 
 
 def cmd_pick(args) -> None:
@@ -125,5 +130,7 @@ def register(sub, add) -> None:
     q = ops.add_parser("pick", help="select the review that carries the round's verdict")
     q.add_argument("--reviews", required=True, help="path to `gh api .../reviews` JSON")
     q.add_argument("--comments", required=True, help="path to `gh api .../comments` JSON")
-    q.add_argument("--window", type=int, default=60, help="seconds around the newest review's timestamp treated as one round")
+    q.add_argument(
+        "--window", type=int, default=60, help="seconds around the newest review's timestamp treated as one round"
+    )
     q.set_defaults(func=cmd_pick)

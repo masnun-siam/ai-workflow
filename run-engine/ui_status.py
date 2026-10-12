@@ -42,8 +42,14 @@ def summarize(issue, pr):
         checks = [_check(c) for c in pr.get("statusCheckRollup") or []]
         failing = [{"name": n, "link": link} for n, link, b in checks if b == "red"]
         ci = "red" if failing else "pending" if any(b == "pending" for *_, b in checks) else "green" if checks else None
-        out["pr"] = {"url": pr.get("url"), "number": pr.get("number"), "state": pr.get("state"),
-                     "approval": pr.get("reviewDecision") or None, "ci": ci, "failing": failing}
+        out["pr"] = {
+            "url": pr.get("url"),
+            "number": pr.get("number"),
+            "state": pr.get("state"),
+            "approval": pr.get("reviewDecision") or None,
+            "ci": ci,
+            "failing": failing,
+        }
     return out
 
 
@@ -58,8 +64,10 @@ def _fetch(owner, repo, issue, pr_url, branch):
     target = pr_url or branch
     pr = None
     if target:
-        pr, proc = gh_json(["pr", "view", target, "-R", slug, "--json",
-                            "url,number,state,reviewDecision,statusCheckRollup"], timeout=30)
+        pr, proc = gh_json(
+            ["pr", "view", target, "-R", slug, "--json", "url,number,state,reviewDecision,statusCheckRollup"],
+            timeout=30,
+        )
         if pr is None and "no pull requests found" in (proc.stderr or ""):
             target = None  # a branch with no PR yet is a normal state, not a failed fetch
     if not isinstance(iss, dict) or (target and not isinstance(pr, dict)):
@@ -69,10 +77,10 @@ def _fetch(owner, repo, issue, pr_url, branch):
 
 def _fill(key, pr_url, branch):
     try:
-        value, stale = _fetch(*key, pr_url, branch), False
+        value = _fetch(*key, pr_url, branch)
     except Exception as exc:  # logged, last good value stays
         print(f"ui_status: {exc}", file=sys.stderr)
-        value, stale = None, True
+        value = None
     with _lock:
         old = _cache.get(key)
         if value is not None:

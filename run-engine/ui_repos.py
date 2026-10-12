@@ -21,7 +21,19 @@ import ui_runner
 import ui_sessions
 import ui_settings
 
-NAMED = ("run-issue", "pr-grind", "prd", "intake", "dump", "worklog", "gh-issue", "pr-review", "pr-fix-comments", "issue-to-pr", "day")
+NAMED = (
+    "run-issue",
+    "pr-grind",
+    "prd",
+    "intake",
+    "dump",
+    "worklog",
+    "gh-issue",
+    "pr-review",
+    "pr-fix-comments",
+    "issue-to-pr",
+    "day",
+)
 MAX_PROMPT_CHARS = 32000
 _TERMINAL = ("done", "failed", "stopped")
 _ORIGIN_RE = re.compile(r"github\.com(?::\d+)?[:/]([^/\s]+)/([^/\s]+?)(?:\.git)?/?$")  # (?::\d+): ssh.github.com:443
@@ -49,7 +61,7 @@ def list_repos() -> list:
     return sorted(repos, key=lambda r: r["slug"])
 
 
-_PICK = 'on run argv\nPOSIX path of (choose folder default location (POSIX file (item 1 of argv)))\nend run'
+_PICK = "on run argv\nPOSIX path of (choose folder default location (POSIX file (item 1 of argv)))\nend run"
 
 
 def browse_folder(start):
@@ -89,14 +101,20 @@ _SCAN_SKIP = {"node_modules", "vendor", "venv", "dist", "build", "target", "Libr
 def is_unregistered_slug(repo: str) -> bool:
     """True for an owner/repo string with no registered clone. Only callers that take slugs
     (Dispatch) ask this; resolve_repo keeps treating unknown strings as paths."""
-    return bool(_SLUG_RE.match(repo)) and not os.path.isabs(repo) and not any(
-        k.lower() == repo.lower() for k in dispatch.read_checkouts())
+    return (
+        bool(_SLUG_RE.match(repo))
+        and not os.path.isabs(repo)
+        and not any(k.lower() == repo.lower() for k in dispatch.read_checkouts())
+    )
 
 
 def default_roots() -> list:
     """Existing folders where people usually keep clones; the Settings scan starts here."""
     home = os.path.expanduser("~")
-    cands = [os.path.join(home, p) for p in ("Documents/Projects", "Projects", "Developer", "code", "work", "dev", "src", "Documents")]
+    cands = [
+        os.path.join(home, p)
+        for p in ("Documents/Projects", "Projects", "Developer", "code", "work", "dev", "src", "Documents")
+    ]
     return [p for p in cands if os.path.isdir(p)]
 
 
@@ -200,9 +218,12 @@ def find_live(fam: str, link: dict):
             continue
         if rec.get("pid") and ui_runner._group_gone(rec["pid"], None):
             continue  # crashed record: process group is gone
-        if family(rec.get("command") or "") == fam and other.get("issue") == link["issue"] and (
-            str(other.get("owner")).lower(), str(other.get("repo")).lower()
-        ) == (link["owner"].lower(), link["repo"].lower()):
+        if (
+            family(rec.get("command") or "") == fam
+            and other.get("issue") == link["issue"]
+            and (str(other.get("owner")).lower(), str(other.get("repo")).lower())
+            == (link["owner"].lower(), link["repo"].lower())
+        ):
             return rec
     return None
 
@@ -253,7 +274,9 @@ def start_session(body: dict):
         if url_slug and any(k.lower() == url_slug.lower() for k in dispatch.read_checkouts()):
             repo = url_slug
         if not repo:
-            raise ValueError("repo is required" + (f" (no local checkout registered for {url_slug})" if url_slug else ""))
+            raise ValueError(
+                "repo is required" + (f" (no local checkout registered for {url_slug})" if url_slug else "")
+            )
         cwd, slug = resolve_repo(repo)
     except ValueError as exc:
         return 400, {"error": str(exc)}
@@ -292,7 +315,7 @@ def start_session(body: dict):
             dup = find_live(fam, link)
             if dup:
                 return 409, {
-                    "error": f"{fam} already running for {link["owner"]}/{link["repo"]}#{issue} (session {dup['id']})",
+                    "error": f"{fam} already running for {link['owner']}/{link['repo']}#{issue} (session {dup['id']})",
                     "id": dup["id"],
                     "link": link,
                     "href": f"/api/sessions/{dup['id']}",
@@ -300,7 +323,9 @@ def start_session(body: dict):
         try:
             res = ui_runner.start(text, cwd, link, claude_cmd=claude_cmd, gate_questions=True, flow_id=flow_id)
             if fam == "run-issue" and link and body.get("auto_grind", ui_settings.load()["auto_grind"]) is True:
-                res = ui_sessions.update(res["id"], auto_grind=True)  # ui_grind.autostart queues it when the run finishes
+                res = ui_sessions.update(
+                    res["id"], auto_grind=True
+                )  # ui_grind.autostart queues it when the run finishes
             _remember(slug, cwd)
             return 201, res
         except ValueError as exc:

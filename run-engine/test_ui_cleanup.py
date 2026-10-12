@@ -30,8 +30,18 @@ def ok(label: str) -> None:
 
 
 def git(cwd, *a):
-    subprocess.run(["git", "-C", cwd, *a], check=True, capture_output=True,
-                   env={**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"})
+    subprocess.run(
+        ["git", "-C", cwd, *a],
+        check=True,
+        capture_output=True,
+        env={
+            **os.environ,
+            "GIT_AUTHOR_NAME": "t",
+            "GIT_AUTHOR_EMAIL": "t@t",
+            "GIT_COMMITTER_NAME": "t",
+            "GIT_COMMITTER_EMAIL": "t@t",
+        },
+    )
 
 
 def setup(issue: int, status: str):
@@ -50,8 +60,13 @@ def setup(issue: int, status: str):
     git(main, "worktree", "add", "-q", wt, "-b", branch)
     run_dir = os.path.join(root, "data", "runs", f"acme-widgets-issue-{issue}")
     os.makedirs(run_dir)
-    ledger = {"issue": issue, "status": status, "stations": ["dev"], "currentIndex": 0,
-              "context": {"main_checkout": main, "worktree": wt, "branch": branch}}
+    ledger = {
+        "issue": issue,
+        "status": status,
+        "stations": ["dev"],
+        "currentIndex": 0,
+        "context": {"main_checkout": main, "worktree": wt, "branch": branch},
+    }
     json.dump(ledger, open(os.path.join(run_dir, "run.json"), "w"))
     s = ui_sessions.create("/run-issue", main, link={"owner": "acme", "repo": "widgets", "issue": issue})
     ui_sessions.update(s["id"], status="stopped")
@@ -139,6 +154,7 @@ t = next(t for t in ui_cleanup.find_targets() if t["key"] == f"session:{loose['i
 assert ui_cleanup.clean(t, False)["ok"] and ui_sessions.load(loose["id"]) is None
 ok("link-less session cleaned alone")
 
+
 # main-tree run: nothing removed; base checked out when clean; a done run's branch is deleted
 def setup_main(issue: int, status: str):
     main, wt, branch, run_dir, sid = setup(issue, status)
@@ -151,7 +167,9 @@ def setup_main(issue: int, status: str):
 
 
 def head(main):
-    return subprocess.run(["git", "-C", main, "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True).stdout.strip()
+    return subprocess.run(
+        ["git", "-C", main, "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True
+    ).stdout.strip()
 
 
 main, branch, run_dir = setup_main(12, "done")

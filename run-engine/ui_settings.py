@@ -49,12 +49,21 @@ def load() -> dict:
     alias = data.get("claude_label")
     alias = alias if isinstance(alias, str) and alias.strip() else DEFAULT_CMD
     cmds = [{"label": alias, "cmd": DEFAULT_CMD, "builtin": True}]
-    cmds += [{"label": c["label"], "cmd": c["cmd"]} for c in data.get("commands") or []
-             if isinstance(c, dict) and isinstance(c.get("label"), str) and isinstance(c.get("cmd"), str)
-             and c["label"] != alias]
+    cmds += [
+        {"label": c["label"], "cmd": c["cmd"]}
+        for c in data.get("commands") or []
+        if isinstance(c, dict)
+        and isinstance(c.get("label"), str)
+        and isinstance(c.get("cmd"), str)
+        and c["label"] != alias
+    ]
     default = data.get("default")
-    return {"commands": cmds, "default": default if any(c["label"] == default for c in cmds) else alias,
-            "auto_grind": data.get("auto_grind") is True, "vault_dir": vault_dir()}
+    return {
+        "commands": cmds,
+        "default": default if any(c["label"] == default for c in cmds) else alias,
+        "auto_grind": data.get("auto_grind") is True,
+        "vault_dir": vault_dir(),
+    }
 
 
 def argv(cmd: str) -> list:
@@ -114,8 +123,13 @@ def validate(body) -> dict:
         vault = vault.strip() or None
         if vault and not os.path.isabs(os.path.expanduser(vault)):
             raise ValueError("vault_dir must be an absolute path (or start with ~)")
-    return {"claude_label": alias, "commands": cmds, "default": None if default == alias else default,
-            "auto_grind": body.get("auto_grind") is True, "vault_dir": vault}
+    return {
+        "claude_label": alias,
+        "commands": cmds,
+        "default": None if default == alias else default,
+        "auto_grind": body.get("auto_grind") is True,
+        "vault_dir": vault,
+    }
 
 
 def save(body) -> dict:
@@ -131,8 +145,7 @@ def default_cmd() -> str:
 def check_login(cmd: str) -> dict:
     """Run `<cmd> auth status --json`; {"ok": bool, "message": str}. Never raises."""
     try:
-        p = subprocess.run([*argv(cmd), "auth", "status", "--json"], capture_output=True,
-                           text=True, timeout=30)
+        p = subprocess.run([*argv(cmd), "auth", "status", "--json"], capture_output=True, text=True, timeout=30)
         status = json.loads(p.stdout)
     except (ValueError, subprocess.TimeoutExpired, OSError) as e:
         return {"ok": False, "message": f"auth status check failed: {e}"}

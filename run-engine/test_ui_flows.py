@@ -43,7 +43,11 @@ s_other = session("/prd something else", "→ next: /gh-issue x.md")
 flows = ui_flows.list_all()
 assert len(flows) == 1, flows
 f = flows[0]
-assert (f["folder"], f["prd"], f["issues"]) == ("05-Work/P/Bookings Export", "05-Work/P/Bookings Export/PRD.md", [41, 42]), f
+assert (f["folder"], f["prd"], f["issues"]) == (
+    "05-Work/P/Bookings Export",
+    "05-Work/P/Bookings Export/PRD.md",
+    [41, 42],
+), f
 assert f["sessions"] == [s_dump, s_prd, s_iss], f["sessions"]
 assert ui_sessions.load(s_prd)["flow_id"] == f["id"] and "flow_id" not in ui_sessions.load(s_other)
 assert ui_flows.summary(f)["name"] == "Bookings Export" and ui_flows.summary(f)["step"] == "dispatch"
@@ -73,39 +77,75 @@ assert os.path.exists(ui_flows._path(e["id"]))
 ui_flows.list_all(now=e["updated"] + ui_flows.EMPTY_TTL + 1)
 assert not os.path.exists(ui_flows._path(e["id"]))
 t0 = ui_flows.load(g["id"])["updated"]
-assert ui_flows.update(g["id"], {"repo": "/abs/path", "text": g["text"]})["updated"] == t0  # same work, new repo spelling
+assert (
+    ui_flows.update(g["id"], {"repo": "/abs/path", "text": g["text"]})["updated"] == t0
+)  # same work, new repo spelling
 print("ok create, update, archive, prune empty")
 
 # ---- issue progress from raw stream lines
 
 
 def use(i, name, inp):
-    return json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": i, "name": name, "input": inp}]}})
+    return json.dumps(
+        {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": i, "name": name, "input": inp}]}}
+    )
 
 
 def res(i, text, err=False):
-    return json.dumps({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": i, "content": [{"type": "text", "text": text}], "is_error": err}]}})
+    return json.dumps(
+        {
+            "type": "user",
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": i,
+                        "content": [{"type": "text", "text": text}],
+                        "is_error": err,
+                    }
+                ]
+            },
+        }
+    )
 
 
 lines = [
-    use("a", "Bash", {"command": 'gh issue create --title "Tool runtime permissions" --label refined --body-file /tmp/b.md'}),
+    use(
+        "a",
+        "Bash",
+        {"command": 'gh issue create --title "Tool runtime permissions" --label refined --body-file /tmp/b.md'},
+    ),
 ]
 p = ui_flows.issue_progress(lines)
-assert p["reading"] is False and p["rows"] == [{"number": None, "title": "Tool runtime permissions", "state": "creating"}]
+assert p["reading"] is False and p["rows"] == [
+    {"number": None, "title": "Tool runtime permissions", "state": "creating"}
+]
 lines += [
     res("a", "https://github.com/o/r/issues/214\n"),
     use("b", "Bash", {"command": "gh issue create --title 'Rate limits' --body-file x"}),
     res("b", "https://github.com/o/r/issues/215"),
-    use("c", "Agent", {"subagent_type": "ai-workflow:gh-issue-factchecker", "prompt": "Check https://github.com/o/r/issues/214"}),
+    use(
+        "c",
+        "Agent",
+        {"subagent_type": "ai-workflow:gh-issue-factchecker", "prompt": "Check https://github.com/o/r/issues/214"},
+    ),
     res("c", "PASS"),
     use("d", "Agent", {"subagent_type": "ai-workflow:gh-issue-factchecker", "prompt": "Check issue #215"}),
     res("d", "ISSUES FOUND: wrong path"),
 ]
 p = ui_flows.issue_progress(lines)
 assert [(r["number"], r["state"]) for r in p["rows"]] == [(214, "checked"), (215, "fixing")], p
-lines += [use("e", "Bash", {"command": "gh issue edit 215 --body-file /tmp/b.md"}), res("e", "https://github.com/o/r/issues/215")]
+lines += [
+    use("e", "Bash", {"command": "gh issue edit 215 --body-file /tmp/b.md"}),
+    res("e", "https://github.com/o/r/issues/215"),
+]
 assert [r["state"] for r in ui_flows.issue_progress(lines)["rows"]] == ["checked", "fixed"]
-assert ui_flows.issue_progress([use("x", "Bash", {"command": 'gh issue create --title "X"'}), res("x", "error", True)])["rows"][0]["state"] == "failed"
+assert (
+    ui_flows.issue_progress([use("x", "Bash", {"command": 'gh issue create --title "X"'}), res("x", "error", True)])[
+        "rows"
+    ][0]["state"]
+    == "failed"
+)
 assert ui_flows.issue_progress([])["reading"] is True
 print("ok issue progress: creating, created, checking, checked, fixing, fixed, failed")
 
@@ -130,25 +170,42 @@ print("ok notes read-only inside the vault; traversal, absolute paths, symlinks 
 
 # ---- sessions started from a flow get the Flow auto mode line; others don't
 import ui_runner  # noqa: E402
-assert "Flow auto mode" in ui_runner._system({"flow_id": "f-1"}) and ui_runner.HEADLESS_PROMPT in ui_runner._system({"flow_id": "f-1"})
+
+assert "Flow auto mode" in ui_runner._system({"flow_id": "f-1"}) and ui_runner.HEADLESS_PROMPT in ui_runner._system(
+    {"flow_id": "f-1"}
+)
 assert ui_runner._system({}) == ui_runner._system(None) == ui_runner.HEADLESS_PROMPT
 assert "Never run herdr" in ui_runner._system({"flow_id": "f-1"})
 print("ok Flow auto mode prompt only for flow sessions")
 
 # ---- a create loop: one command, a shell-variable title, several URLs -> one row per issue
-loop = [use("L", "Bash", {"command": 'for k in 0 1 2; do gh issue create --title "${titles[$k]}" --body-file b$k; done'}),
-        res("L", "https://github.com/o/r/issues/64\nhttps://github.com/o/r/issues/65\nhttps://github.com/o/r/issues/66\n")]
+loop = [
+    use("L", "Bash", {"command": 'for k in 0 1 2; do gh issue create --title "${titles[$k]}" --body-file b$k; done'}),
+    res("L", "https://github.com/o/r/issues/64\nhttps://github.com/o/r/issues/65\nhttps://github.com/o/r/issues/66\n"),
+]
 rows = ui_flows.issue_progress(loop)["rows"]
-assert [(r["number"], r["title"], r["state"]) for r in rows] == [(64, "", "created"), (65, "", "created"), (66, "", "created")], rows
+assert [(r["number"], r["title"], r["state"]) for r in rows] == [
+    (64, "", "created"),
+    (65, "", "created"),
+    (66, "", "created"),
+], rows
 print("ok a create loop gives one row per issue, titles left for the UI to look up")
 
 # ---- one factcheck over several issues, per-issue verdicts; background factcheck; edit that landed despite a failing shell
-base = [use("c", "Bash", {"command": 'gh issue create --title "A"'}),
-        res("c", "https://github.com/o/r/issues/7\nhttps://github.com/o/r/issues/8\n")]
-multi = base + [use("f", "Agent", {"prompt": "factcheck #7 and #8"}), res("f", "#7: PASS\n#8: ISSUES FOUND, wrong file")]
+base = [
+    use("c", "Bash", {"command": 'gh issue create --title "A"'}),
+    res("c", "https://github.com/o/r/issues/7\nhttps://github.com/o/r/issues/8\n"),
+]
+multi = base + [
+    use("f", "Agent", {"prompt": "factcheck #7 and #8"}),
+    res("f", "#7: PASS\n#8: ISSUES FOUND, wrong file"),
+]
 assert [r["state"] for r in ui_flows.issue_progress(multi)["rows"]] == ["checked", "fixing"]
 bg = base + [use("f", "Agent", {"prompt": "factcheck #7"}), res("f", "Async agent launched successfully. agentId: x")]
 assert [r["state"] for r in ui_flows.issue_progress(bg)["rows"]] == ["checking", "created"]
-landed = multi + [use("e", "Bash", {"command": "gh issue edit 8 --body-file b; rm -r /tmp/x"}), res("e", "Exit code 1\nhttps://github.com/o/r/issues/8\nblocked", True)]
+landed = multi + [
+    use("e", "Bash", {"command": "gh issue edit 8 --body-file b; rm -r /tmp/x"}),
+    res("e", "Exit code 1\nhttps://github.com/o/r/issues/8\nblocked", True),
+]
 assert [r["state"] for r in ui_flows.issue_progress(landed)["rows"]] == ["checked", "fixed"]
 print("ok multi-issue factcheck verdicts, background factcheck, edit that landed despite a shell error")

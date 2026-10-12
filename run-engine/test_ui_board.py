@@ -29,8 +29,14 @@ def ok(label: str) -> None:
 
 
 def ledger(
-    issue, stations, current_index, status="running",
-    bounce_counts=None, trace=None, classification=None, **context_extra,
+    issue,
+    stations,
+    current_index,
+    status="running",
+    bounce_counts=None,
+    trace=None,
+    classification=None,
+    **context_extra,
 ):
     return {
         "issue": issue,
@@ -69,7 +75,9 @@ def no_title(owner, repo, issue):
 # --- 1. normal progression places the card in its current station's column --
 
 led = ledger(
-    1, FULL, FULL.index("reviewer"),
+    1,
+    FULL,
+    FULL.index("reviewer"),
     pr="https://github.com/masnun-siam/ai-workflow/pull/55",
 )
 board = build_board([record(led)], {}, lambda o, r, i: "A title")
@@ -116,12 +124,8 @@ ok("done status: card placed in the done column regardless of currentIndex")
 
 older = ledger(5, FULL, FULL.index("planner"))
 newer = ledger(5, FULL, FULL.index("reviewer"))
-board = build_board(
-    [record(older, mtime=100.0), record(newer, mtime=200.0)], {}, lambda o, r, i: "A title"
-)
-matches = [
-    (col["key"], card) for col in board["columns"] for card in col["cards"] if card["issue"] == 5
-]
+board = build_board([record(older, mtime=100.0), record(newer, mtime=200.0)], {}, lambda o, r, i: "A title")
+matches = [(col["key"], card) for col in board["columns"] for card in col["cards"] if card["issue"] == 5]
 assert len(matches) == 1, matches
 assert matches[0][0] == "reviewer", matches
 ok("dedup: only the highest-mtime run's card survives")
@@ -130,7 +134,9 @@ ok("dedup: only the highest-mtime run's card survives")
 # --- 6. owner/repo resolution: context.pr wins when present -----------------
 
 led = ledger(
-    6, FULL, FULL.index("dev"),
+    6,
+    FULL,
+    FULL.index("dev"),
     pr="https://github.com/acme/widgets/pull/9",
     plan_comment="https://github.com/wrong-owner/wrong-repo/issues/6#issuecomment-1",
 )
@@ -143,7 +149,9 @@ ok("owner/repo: context.pr URL takes priority")
 # --- 7. owner/repo resolution: plan_comment used when no pr yet -------------
 
 led = ledger(
-    7, FULL, FULL.index("dev"),
+    7,
+    FULL,
+    FULL.index("dev"),
     plan_comment="https://github.com/acme/widgets/issues/7#issuecomment-1",
 )
 board = build_board([record(led, dir_name="totally-unrelated-issue-7")], {}, lambda o, r, i: "t")
@@ -186,7 +194,9 @@ ok("project name: falls back to raw owner/repo slug when unmapped")
 # --- 11. card carries full popup detail: trace, PR/branch/CI, classification, bounces --
 
 led = ledger(
-    11, FULL, FULL.index("reviewer"),
+    11,
+    FULL,
+    FULL.index("reviewer"),
     trace=["init: mode=full", "advance->planner", "advance->reviewer"],
     bounce_counts={"dev->reviewer": 1},
     classification={"ticket_type": "feature", "risk_score": 39, "risk_band": "medium", "blast_radius": "unknown"},
@@ -200,7 +210,10 @@ _, card = card_for(board, 11)
 assert card["trace"] == ["init: mode=full", "advance->planner", "advance->reviewer"], card
 assert card["bounceCounts"] == {"dev->reviewer": 1}, card
 assert card["classification"] == {
-    "ticket_type": "feature", "risk_score": 39, "risk_band": "medium", "blast_radius": "unknown",
+    "ticket_type": "feature",
+    "risk_score": 39,
+    "risk_band": "medium",
+    "blast_radius": "unknown",
 }, card
 assert card["pr"] == "https://github.com/acme/widgets/pull/9", card
 assert card["branch"] == "issue-11-thing", card
@@ -244,8 +257,8 @@ ok("memoize_title_fetcher: repeat calls for the same key hit the cache, new keys
 
 # --- 13b. async mode: miss returns None at once, later call sees the title; junk repos skipped ----
 
-import threading
-from concurrent.futures import ThreadPoolExecutor
+import threading  # noqa: E402
+from concurrent.futures import ThreadPoolExecutor  # noqa: E402
 
 gate = threading.Event()
 async_calls = []
@@ -281,7 +294,9 @@ ok("memoize_title_fetcher: implausible owner/repo pairs never reach gh")
 HERE = os.path.dirname(os.path.abspath(__file__))
 proc = subprocess.run(
     [sys.executable, os.path.join(HERE, "route.py"), "kanban", "--help"],
-    capture_output=True, text=True, timeout=30,
+    capture_output=True,
+    text=True,
+    timeout=30,
 )
 assert proc.returncode != 0, proc.returncode
 assert "invalid choice: 'kanban'" in proc.stderr, proc.stderr
@@ -369,8 +384,7 @@ led = ledger(8, FULL, 0)
 board = build_board([record(led, dir_name="acme-widgets-issue-99")], {}, lambda o, r, i: "t")
 _, card = card_for(board, 8)
 assert (card["owner"], card["repo"]) == ("acme", "widgets-issue-99"), card
-assert ui_board._guess_owner_repo_from_dir_name("acme-widgets-issue-99", 8, {}) == (
-    "acme", "widgets-issue-99")
+assert ui_board._guess_owner_repo_from_dir_name("acme-widgets-issue-99", 8, {}) == ("acme", "widgets-issue-99")
 ok("mismatched issue suffix is not stripped; first-dash partition")
 
 # --- 21. fetch_title degrades without gh ------------------------------------
@@ -402,9 +416,9 @@ ok("cards: note trimmed to 200 chars, updated mtime, columns sorted newest first
 
 # --- 23. load_run exposes pr/branch, but only https PR links ----------------
 
-import tempfile
-from shared import run_dir_for
-from ui_board import load_run
+import tempfile  # noqa: E402
+from shared import run_dir_for  # noqa: E402
+from ui_board import load_run  # noqa: E402
 
 with tempfile.TemporaryDirectory() as runs:
     for issue, pr in ((5, "https://github.com/acme/widgets/pull/9"), (6, "javascript:alert(1)")):
@@ -430,8 +444,25 @@ with tempfile.TemporaryDirectory() as runs:
     with open(os.path.join(d, "run.json"), "w", encoding="utf-8") as fh:
         json.dump(ledger(7, ["researcher", "planner", "dev"], 3, status="done"), fh)
     for name, env in (
-        ("00-readiness.json", {"station": "researcher", "status": "passed", "summary": "skipped — refined", "evidence": {"skipped": True}}),
-        ("10-plan.json", {"station": "planner", "status": "passed", "summary": "skipped — refined", "evidence": {"skipped": True}, "handoff": {"plan_md": "# p"}}),
+        (
+            "00-readiness.json",
+            {
+                "station": "researcher",
+                "status": "passed",
+                "summary": "skipped — refined",
+                "evidence": {"skipped": True},
+            },
+        ),
+        (
+            "10-plan.json",
+            {
+                "station": "planner",
+                "status": "passed",
+                "summary": "skipped — refined",
+                "evidence": {"skipped": True},
+                "handoff": {"plan_md": "# p"},
+            },
+        ),
         ("30-build.json", {"station": "dev", "status": "passed", "summary": "built it", "evidence": {}}),
     ):
         with open(os.path.join(d, name), "w", encoding="utf-8") as fh:
@@ -440,7 +471,10 @@ with tempfile.TemporaryDirectory() as runs:
         fh.write("{not json")
     r7 = load_run("acme", "widgets", "7", runs_dir=runs)
 assert [(e["station"], e["summary"]) for e in r7["log"]] == [
-    ("researcher", "skipped — refined"), ("planner", "skipped — refined"), ("dev", "built it")], r7["log"]
+    ("researcher", "skipped — refined"),
+    ("planner", "skipped — refined"),
+    ("dev", "built it"),
+], r7["log"]
 assert [s.get("skipped", False) for s in r7["stations"]] == [True, True, False], r7["stations"]
 assert all(s["status"] == "done" for s in r7["stations"]) and r7["totals"]["done"] == 3, r7
 assert r7["plan"] == "# p"
@@ -449,8 +483,10 @@ ok("load_run: envelopes in file order as log, unreadable ones skipped, skipped s
 print(f"\n{passed} passed")
 
 # --- titles persisted for a warm restart
-import json as _json2, tempfile as _tf
-from concurrent.futures import ThreadPoolExecutor as _TPE
+import json as _json2  # noqa: E402
+import tempfile as _tf  # noqa: E402
+from concurrent.futures import ThreadPoolExecutor as _TPE  # noqa: E402
+
 _store = os.path.join(_tf.mkdtemp(), "titles.json")
 _pool = _TPE(max_workers=1)
 _f = memoize_title_fetcher(lambda o, r, n: f"Title {n}", _pool, _store)

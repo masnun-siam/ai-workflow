@@ -47,26 +47,37 @@ def list_threads(owner: str, repo: str, number: int, cwd=None) -> list[dict]:
     out: list[dict] = []
     cursor = None
     while True:
-        args = ["api", "graphql", "-f", f"query={LIST_QUERY}",
-                "-f", f"owner={owner}", "-f", f"repo={repo}", "-F", f"number={number}"]
+        args = [
+            "api",
+            "graphql",
+            "-f",
+            f"query={LIST_QUERY}",
+            "-f",
+            f"owner={owner}",
+            "-f",
+            f"repo={repo}",
+            "-F",
+            f"number={number}",
+        ]
         if cursor:
             args += ["-f", f"cursor={cursor}"]
         data, proc = gh_json(args, cwd=cwd)
         if data is None:
             die(1, "could not read review threads: " + (proc.stderr or proc.stdout or "").strip()[:300])
-        block = (((data.get("data") or {}).get("repository") or {})
-                 .get("pullRequest") or {}).get("reviewThreads") or {}
+        block = (((data.get("data") or {}).get("repository") or {}).get("pullRequest") or {}).get("reviewThreads") or {}
         for node in block.get("nodes") or []:
             first = ((node.get("comments") or {}).get("nodes") or [{}])[0]
-            out.append({
-                "node_id": node.get("id"),
-                "is_resolved": bool(node.get("isResolved")),
-                "is_outdated": bool(node.get("isOutdated")),
-                "comment_id": first.get("databaseId"),
-                "url": first.get("url"),
-                "path": node.get("path"),
-                "line": node.get("line"),
-            })
+            out.append(
+                {
+                    "node_id": node.get("id"),
+                    "is_resolved": bool(node.get("isResolved")),
+                    "is_outdated": bool(node.get("isOutdated")),
+                    "comment_id": first.get("databaseId"),
+                    "url": first.get("url"),
+                    "path": node.get("path"),
+                    "line": node.get("line"),
+                }
+            )
         page = block.get("pageInfo") or {}
         if not page.get("hasNextPage"):
             return out
@@ -87,12 +98,10 @@ def thread_for_comment(threads: list[dict], comment_id) -> dict | None:
 
 
 def resolve_thread(node_id: str, cwd=None) -> tuple[bool, str]:
-    data, proc = gh_json(
-        ["api", "graphql", "-f", f"query={RESOLVE_MUTATION}", "-f", f"id={node_id}"], cwd=cwd
-    )
+    data, proc = gh_json(["api", "graphql", "-f", f"query={RESOLVE_MUTATION}", "-f", f"id={node_id}"], cwd=cwd)
     if data is None or (data.get("errors")):
         return False, (proc.stderr or json.dumps(data or {}))[:200]
-    thread = (((data.get("data") or {}).get("resolveReviewThread") or {}).get("thread") or {})
+    thread = ((data.get("data") or {}).get("resolveReviewThread") or {}).get("thread") or {}
     return bool(thread.get("isResolved")), ""
 
 
@@ -129,8 +138,7 @@ def register(sub, add) -> None:
     q = ops.add_parser("list", help="print every review thread as JSON")
     q.add_argument("pr", help="PR url, owner/repo#N, or N")
     q.add_argument("--open-only", action="store_true", help="only threads that are still open")
-    q.add_argument("--for-comment", type=int, default=None,
-                   help="only the thread whose first comment has this REST id")
+    q.add_argument("--for-comment", type=int, default=None, help="only the thread whose first comment has this REST id")
     q.set_defaults(func=cmd_list)
 
     q = ops.add_parser("resolve", help="resolve one or more threads by node id")

@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ci  # noqa: E402
 import dispatch  # noqa: E402
 import epic  # noqa: E402
+import gitnexus  # noqa: E402
 import project  # noqa: E402
 import review  # noqa: E402
 import shared  # noqa: E402
@@ -98,8 +99,11 @@ ok("limits override gives the app more than a datastore and never omits a servic
 CONFIG = {
     "services": {
         "postgres": {"image": "postgres:16"},
-        "laravel.test": {"build": {"context": "."}, "ports": [{"published": "8080", "target": 80}],
-                         "volumes": [{"type": "bind", "source": "/repo", "target": "/var/www"}]},
+        "laravel.test": {
+            "build": {"context": "."},
+            "ports": [{"published": "8080", "target": 80}],
+            "volumes": [{"type": "bind", "source": "/repo", "target": "/var/www"}],
+        },
         "redis": {"image": "redis"},
     }
 }
@@ -117,19 +121,22 @@ MULTI_PORT_CONFIG = {
         "app": {"build": {"context": "."}, "ports": ["8080:80", "9000:9090/tcp"]},
     }
 }
-assert stack.container_ports(MULTI_PORT_CONFIG, "app") == ["80", "9090"], \
+assert stack.container_ports(MULTI_PORT_CONFIG, "app") == ["80", "9090"], (
     "both published ports must resolve, not just the first"
+)
 ok("container_ports resolves every published port for a service, not just the first")
 
 with_ports_override = stack.limits_override(["app", "postgres"], MULTI_PORT_CONFIG)["services"]
-assert with_ports_override["app"]["ports"] == ["0:80", "0:9090"], \
+assert with_ports_override["app"]["ports"] == ["0:80", "0:9090"], (
     "every declared port is force-published to 0 so a second stack can't collide on it"
-assert "ports" not in with_ports_override["postgres"], \
-    "a service with no declared ports gets no ports override at all"
+)
+assert "ports" not in with_ports_override["postgres"], "a service with no declared ports gets no ports override at all"
 ok("limits_override force-publishes every declared port to an OS-chosen host port")
 
-assert stack.build_test_cmd("docker compose -p runissue-9 -f c.yml", "app", "npx vitest") == \
-    "docker compose -p runissue-9 -f c.yml exec -T app npx vitest --maxWorkers=2"
+assert (
+    stack.build_test_cmd("docker compose -p runissue-9 -f c.yml", "app", "npx vitest")
+    == "docker compose -p runissue-9 -f c.yml exec -T app npx vitest --maxWorkers=2"
+)
 ok("test_cmd execs against the running container with the worker cap applied")
 
 # --------------------------------------------------------------------------- api/web split
@@ -142,8 +149,9 @@ MONOREPO = {
     }
 }
 assert stack.pick_api_web_services(MONOREPO) == ("api", "web")
-assert stack.pick_api_web_services(CONFIG) == (None, None), \
+assert stack.pick_api_web_services(CONFIG) == (None, None), (
     "a single buildable app service must not be split — app_url alone covers it"
+)
 assert stack.pick_api_web_services({"services": {"postgres": {"image": "postgres"}}}) == (None, None)
 ok("two distinct buildable services split into (api, web); one service never does")
 
@@ -159,8 +167,7 @@ with tempfile.TemporaryDirectory() as d:
     with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
         json.dump(ledger.to_dict(), fh)
 
-    proc = subprocess.run([sys.executable, ROUTE, "stack", "up", run_dir],
-                          capture_output=True, text=True)
+    proc = subprocess.run([sys.executable, ROUTE, "stack", "up", run_dir], capture_output=True, text=True)
     assert proc.returncode == 0, proc.stderr
     ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
     assert ctx["stack"] == "none"
@@ -169,11 +176,9 @@ with tempfile.TemporaryDirectory() as d:
 
     # Teardown on a repo that never had a stack is a no-op, not an error — it is
     # called from every exit path and none of them guards it.
-    down = subprocess.run([sys.executable, ROUTE, "stack", "down", run_dir],
-                          capture_output=True, text=True)
+    down = subprocess.run([sys.executable, ROUTE, "stack", "down", run_dir], capture_output=True, text=True)
     assert down.returncode == 0, down.stderr
-    rebuild = subprocess.run([sys.executable, ROUTE, "stack", "rebuild", run_dir],
-                             capture_output=True, text=True)
+    rebuild = subprocess.run([sys.executable, ROUTE, "stack", "rebuild", run_dir], capture_output=True, text=True)
     assert rebuild.returncode == 0, rebuild.stderr
 ok("no compose file -> stack=none, test_cmd==test_cmd_host, and teardown still exits 0")
 
@@ -191,8 +196,9 @@ ok("a review thread is matched by its first comment's REST id, string or int")
 
 # --------------------------------------------------------------------------- ci
 
-assert ci.state_of([{"bucket": "pass"}, {"bucket": "fail"}, {"bucket": "pending"}]) == "pending", \
+assert ci.state_of([{"bucket": "pass"}, {"bucket": "fail"}, {"bucket": "pending"}]) == "pending", (
     "a still-running check is not a verdict"
+)
 assert ci.state_of([{"bucket": "pass"}, {"bucket": "fail"}]) == "red"
 assert ci.state_of([{"bucket": "pass"}, {"bucket": "skipping"}]) == "green"
 assert ci.state_of([]) == "green"
@@ -203,8 +209,7 @@ ok("ci state puts pending ahead of failing, and the run id comes out of the chec
 
 # --------------------------------------------------------------------------- project
 
-OPTIONS = [{"id": "o1", "name": "Todo"}, {"id": "o2", "name": "On Review"},
-           {"id": "o3", "name": "In Progress"}]
+OPTIONS = [{"id": "o1", "name": "Todo"}, {"id": "o2", "name": "On Review"}, {"id": "o3", "name": "In Progress"}]
 assert project.match_option(OPTIONS, "Todo")["id"] == "o1"
 # neither string contains the other, which is why a plain substring test is not enough
 assert project.match_option(OPTIONS, "In Review")["id"] == "o2"
@@ -212,26 +217,6 @@ assert project.match_option(OPTIONS, "In Progress")["id"] == "o3"
 assert project.match_option(OPTIONS, "Blocked") is None
 assert project.match_option(OPTIONS, "In") is None, "a filler-only target must not match everything"
 ok("project status matches the exact option, then the best significant-word overlap")
-
-# --------------------------------------------------------------------------- epic board
-
-VIEWS = [{"id": "V1", "name": "Board"}, {"id": "V2", "name": "Epic #42 — Billing"}]
-assert project.find_view(VIEWS, "Epic #42 — Billing")["id"] == "V2"
-assert project.find_view(VIEWS, "Epic #43 — Other") is None
-assert project.find_view([], "Epic #42 — Billing") is None
-ok("an existing epic board is found by name, so a resume never creates a second")
-
-assert project.board_name(42, "Billing overhaul") == "Epic #42 — Billing overhaul"
-assert project.board_name(42, "x" * 200).startswith("Epic #42 — ")
-assert len(project.board_name(42, "x" * 200)) <= 80, "view names must stay readable"
-ok("board names are derived from the parent and bounded in length")
-
-# project-board exits 0 even with a malformed slug (no `/`)
-env = dict(os.environ, PATH="/nonexistent")
-proc = subprocess.run([sys.executable, ROUTE, "project-board", "no-slash", "42", "--title", "x"],
-                      capture_output=True, text=True, env=env)
-assert proc.returncode == 0, f"project-board must exit 0 on bad slug, got {proc.returncode}: {proc.stderr}"
-ok("project-board exits 0 on malformed slug with gh unavailable")
 
 # --------------------------------------------------------------------------- worktree
 
@@ -253,11 +238,28 @@ ok("install command is chosen by lockfile precedence")
 
 with tempfile.TemporaryDirectory() as d:
     env = dict(os.environ, PATH="/nonexistent")
-    for argv in (["project-status", "o/r", "1", "In Review"],
-                 ["gitnexus", "sync", d]):
+    for argv in (["project-status", "o/r", "1", "In Review"], ["gitnexus", "sync", d]):
         proc = subprocess.run([sys.executable, ROUTE, *argv], capture_output=True, text=True, env=env)
         assert proc.returncode == 0, f"{argv} exited {proc.returncode}: {proc.stderr}"
 ok("best-effort subcommands exit 0 even with gh/node missing from PATH")
+
+# gitnexus analyze must never write its block into CLAUDE.md/AGENTS.md (issue #260)
+_calls = []
+_orig_run = gitnexus.run
+gitnexus.run = lambda argv, **kw: (
+    _calls.append(argv) or subprocess.CompletedProcess(argv, 1, "", "error: unknown option")
+)
+try:
+    with tempfile.TemporaryDirectory() as d:
+        os.makedirs(os.path.join(d, ".gitnexus"))
+        open(os.path.join(d, ".gitnexus", "run.cjs"), "w").close()
+        gitnexus.analyze(d)
+finally:
+    gitnexus.run = _orig_run
+assert len(_calls) == 2, _calls
+assert all("--skip-agents-md" in c for c in _calls), _calls
+assert _calls[1][:2] == ["npx", "gitnexus@latest"], "an old runner falls through to a pinned fallback"
+ok("gitnexus analyze passes --skip-agents-md on both paths; fallback pins @latest")
 
 # --------------------------------------------------------------------------- epic DAG
 
@@ -267,9 +269,9 @@ assert epic.parse_depends("No dependency line here") == []
 assert epic.parse_depends("Depends on: none") == []
 assert epic.parse_depends("Depends on: #9, #9") == [9], "duplicates collapse"
 assert epic.parse_depends(None) == []
-assert epic.parse_depends(
-    "Depends on: #4 in passing\n\n## Dependencies\nDepends on: #12, #13\n"
-) == [4, 12, 13], "every Depends on line is unioned — the first does not win"
+assert epic.parse_depends("Depends on: #4 in passing\n\n## Dependencies\nDepends on: #12, #13\n") == [4, 12, 13], (
+    "every Depends on line is unioned — the first does not win"
+)
 ok("Depends on: parses to sorted unique issue numbers, absent means []")
 
 dag = epic.build_dag({10: [], 11: [10], 12: [10], 13: [11, 12]})
@@ -334,9 +336,20 @@ with tempfile.TemporaryDirectory() as tmp:
     run_dir = os.path.join(tmp, "o-r-issue-10")
     os.makedirs(run_dir)
     with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
-        json.dump({"issue": 10, "stations": ["dev"], "currentIndex": 0, "bounceCounts": {},
-                   "status": "running", "trace": [], "context": {"stack": "failed"},
-                   "classification": None, "specialists": []}, fh)
+        json.dump(
+            {
+                "issue": 10,
+                "stations": ["dev"],
+                "currentIndex": 0,
+                "bounceCounts": {},
+                "status": "running",
+                "trace": [],
+                "context": {"stack": "failed"},
+                "classification": None,
+                "specialists": [],
+            },
+            fh,
+        )
     st = epic.child_state(tmp, "o/r", 10)
     assert st["needs_stack"] is False, st
 ok("a child whose stack failed to come up does not hold a budget slot")
@@ -347,24 +360,41 @@ with tempfile.TemporaryDirectory() as tmp:
     epic_dir = os.path.join(tmp, "epic")
     os.makedirs(epic_dir)
     with open(os.path.join(epic_dir, "epic.json"), "w", encoding="utf-8") as fh:
-        json.dump({
-            "parent": 42, "slug": "o/r", "children": [10, 11],
-            "dag": {"order": [10, 11], "deps": {"10": [], "11": [10]}},
-            "max_stacks": 2,
-        }, fh)
+        json.dump(
+            {
+                "parent": 42,
+                "slug": "o/r",
+                "children": [10, 11],
+                "dag": {"order": [10, 11], "deps": {"10": [], "11": [10]}},
+                "max_stacks": 2,
+            },
+            fh,
+        )
 
     runs = os.path.join(tmp, "runs")
     for issue, ctx in ((10, {"pr": "https://x/1"}), (11, {})):
         d = os.path.join(runs, f"o-r-issue-{issue}")
         os.makedirs(d)
         with open(os.path.join(d, "run.json"), "w", encoding="utf-8") as fh:
-            json.dump({"issue": issue, "stations": ["dev"], "currentIndex": 0,
-                       "bounceCounts": {}, "status": "running", "trace": [],
-                       "context": ctx, "classification": None, "specialists": []}, fh)
+            json.dump(
+                {
+                    "issue": issue,
+                    "stations": ["dev"],
+                    "currentIndex": 0,
+                    "bounceCounts": {},
+                    "status": "running",
+                    "trace": [],
+                    "context": ctx,
+                    "classification": None,
+                    "specialists": [],
+                },
+                fh,
+            )
 
     proc = subprocess.run(
         [sys.executable, ROUTE, "epic", "next", epic_dir, "--runs-dir", runs],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert proc.returncode == 0, proc.stderr
     got = json.loads(proc.stdout)
@@ -373,15 +403,24 @@ ok("aiw epic next reads every child ledger and prints who may advance")
 
 with tempfile.TemporaryDirectory() as tmp:
     epic_dir, runs, repo = os.path.join(tmp, "e"), os.path.join(tmp, "runs"), os.path.join(tmp, "repo")
-    os.makedirs(epic_dir); os.makedirs(repo)
+    os.makedirs(epic_dir)
+    os.makedirs(repo)
     with open(os.path.join(epic_dir, "epic.json"), "w", encoding="utf-8") as fh:
-        json.dump({"parent": 42, "slug": "o/r", "children": [10, 11],
-                   "dag": {"order": [10, 11], "deps": {"10": [], "11": [10]}},
-                   "max_stacks": 2}, fh)
+        json.dump(
+            {
+                "parent": 42,
+                "slug": "o/r",
+                "children": [10, 11],
+                "dag": {"order": [10, 11], "deps": {"10": [], "11": [10]}},
+                "max_stacks": 2,
+            },
+            fh,
+        )
 
     proc = subprocess.run(
         [sys.executable, ROUTE, "epic", "init", epic_dir, "--runs-dir", runs, "--repo", repo],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert proc.returncode == 0, proc.stderr
     for issue in (10, 11):
@@ -395,7 +434,8 @@ with tempfile.TemporaryDirectory() as tmp:
     # re-running must not clobber a ledger that already exists
     again = subprocess.run(
         [sys.executable, ROUTE, "epic", "init", epic_dir, "--runs-dir", runs, "--repo", repo],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert again.returncode == 0, again.stderr
     assert "already" in again.stdout.lower(), again.stdout
@@ -407,15 +447,21 @@ FULL_STATIONS = ["researcher", "planner", "sdet", "dev", "verifier", "reviewer",
 
 
 def epic_init_argv(tmp, *extra):
-    epic_dir, runs, repo = (os.path.join(tmp, "e"), os.path.join(tmp, "runs"),
-                             os.path.join(tmp, "repo"))
-    os.makedirs(epic_dir); os.makedirs(repo)
+    epic_dir, runs, repo = (os.path.join(tmp, "e"), os.path.join(tmp, "runs"), os.path.join(tmp, "repo"))
+    os.makedirs(epic_dir)
+    os.makedirs(repo)
     with open(os.path.join(epic_dir, "epic.json"), "w", encoding="utf-8") as fh:
-        json.dump({"parent": 99, "slug": "o/r", "children": [11, 12],
-                   "dag": {"order": [11, 12], "deps": {"11": [], "12": []}},
-                   "max_stacks": 2}, fh)
-    return runs, [sys.executable, ROUTE, "epic", "init", epic_dir, "--runs-dir", runs,
-                  "--repo", repo, *extra]
+        json.dump(
+            {
+                "parent": 99,
+                "slug": "o/r",
+                "children": [11, 12],
+                "dag": {"order": [11, 12], "deps": {"11": [], "12": []}},
+                "max_stacks": 2,
+            },
+            fh,
+        )
+    return runs, [sys.executable, ROUTE, "epic", "init", epic_dir, "--runs-dir", runs, "--repo", repo, *extra]
 
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -457,8 +503,9 @@ body_no_section = "Some intro text.\n\nMore text."
 out = epic.upsert_tasks_section(body_no_section, section)
 assert out.count("## Tasks") == 1, out
 assert "Some intro text." in out and "More text." in out, out
-assert out.index("More text.") < out.index("## Tasks"), \
+assert out.index("More text.") < out.index("## Tasks"), (
     "the section must be appended after the existing body, not before"
+)
 assert out.rstrip("\n").endswith(section.rstrip("\n")), out
 ok("upsert_tasks_section appends a fresh section when the body has none")
 
@@ -497,8 +544,9 @@ backslash_title = "Handle C:\\new\\path \\d"
 sec = epic.render_tasks_section([10], {10: backslash_title})
 assert f"#10 {backslash_title}" in sec, sec
 roundtrip = epic.upsert_tasks_section("Intro", sec)
-assert f"#10 {backslash_title}" in roundtrip, \
+assert f"#10 {backslash_title}" in roundtrip, (
     "backslashes must round-trip verbatim — re.sub's replacement escaping would corrupt them: " + repr(roundtrip)
+)
 ok("a title containing backslashes round-trips through render+upsert without re.error or corruption")
 
 special_title = "Do [X] not #1 | keep this"
@@ -559,24 +607,23 @@ def gh_stub(tmp, **cfg):
     cfg_path, log = os.path.join(tmp, "cfg.json"), os.path.join(tmp, "gh.log")
     with open(cfg_path, "w", encoding="utf-8") as fh:
         json.dump(cfg, fh)
-    return dict(os.environ, PATH=bindir + os.pathsep + os.environ["PATH"],
-                GH_STUB_CFG=cfg_path, GH_STUB_LOG=log), log
+    return dict(os.environ, PATH=bindir + os.pathsep + os.environ["PATH"], GH_STUB_CFG=cfg_path, GH_STUB_LOG=log), log
 
 
 def split(tmp, env, children="10,11,12"):
     epic_dir = os.path.join(tmp, "e")
     os.makedirs(epic_dir, exist_ok=True)
     proc = subprocess.run(
-        [sys.executable, ROUTE, "epic", "split", epic_dir,
-         "--parent", "42", "--slug", "o/r", "--children", children],
-        capture_output=True, text=True, env=env,
+        [sys.executable, ROUTE, "epic", "split", epic_dir, "--parent", "42", "--slug", "o/r", "--children", children],
+        capture_output=True,
+        text=True,
+        env=env,
     )
     return proc, os.path.join(epic_dir, "epic.json")
 
 
 with tempfile.TemporaryDirectory() as tmp:
-    env, log = gh_stub(tmp, linked=[11], bodies={
-        "10": "no deps", "11": "Depends on: #10", "12": "Depends on: #10"})
+    env, log = gh_stub(tmp, linked=[11], bodies={"10": "no deps", "11": "Depends on: #10", "12": "Depends on: #10"})
     proc, path = split(tmp, env)
     assert proc.returncode == 0, proc.stderr
     logged = open(log).read()
@@ -586,8 +633,9 @@ with tempfile.TemporaryDirectory() as tmp:
     assert "sub_issue_id=9011" not in logged, "#11 was already linked and must be skipped"
     epic_json = json.load(open(path))
     assert epic_json["dag"]["order"] == [10, 11, 12], epic_json
-    assert epic_json["max_stacks"] == 3, \
+    assert epic_json["max_stacks"] == 3, (
         "default raised now that stack.py keys Compose projects and ports per (repo, issue)"
+    )
 ok("epic split links by database id with -F, skips what is linked, and defaults stacks to 3")
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -616,10 +664,17 @@ ok("a sub-issue link failure kills the split rather than warning past it")
 # `gh issue edit --body-file`, sourced from the children's titles and the DAG order.
 
 with tempfile.TemporaryDirectory() as tmp:
-    env, log = gh_stub(tmp, linked=[], bodies={
-        "42": "Parent intro.\n\nSome context.",
-        "10": "no deps", "11": "Depends on: #10", "12": "Depends on: #10",
-    }, titles={"10": "t10", "11": "t11", "12": "t12"})
+    env, log = gh_stub(
+        tmp,
+        linked=[],
+        bodies={
+            "42": "Parent intro.\n\nSome context.",
+            "10": "no deps",
+            "11": "Depends on: #10",
+            "12": "Depends on: #10",
+        },
+        titles={"10": "t10", "11": "t11", "12": "t12"},
+    )
     proc, path = split(tmp, env)
     assert proc.returncode == 0, proc.stderr
     cfg_after = json.load(open(os.path.join(tmp, "cfg.json")))
@@ -627,16 +682,22 @@ with tempfile.TemporaryDirectory() as tmp:
     assert parent_body.count("## Tasks") == 1, parent_body
     assert "Parent intro." in parent_body, parent_body
     order_in_body = re.findall(r"- \[ \] #(\d+)", parent_body)
-    assert order_in_body == ["10", "11", "12"], \
-        "checklist must follow the DAG's topological order: " + parent_body
+    assert order_in_body == ["10", "11", "12"], "checklist must follow the DAG's topological order: " + parent_body
     assert "t10" in parent_body and "t11" in parent_body and "t12" in parent_body, parent_body
 ok("epic split writes a single Tasks checklist onto the parent, in topological order")
 
 with tempfile.TemporaryDirectory() as tmp:
-    env, log = gh_stub(tmp, linked=[], bodies={
-        "42": "Parent intro.",
-        "10": "no deps", "11": "Depends on: #10", "12": "Depends on: #10",
-    }, titles={"10": "t10", "11": "t11", "12": "t12"})
+    env, log = gh_stub(
+        tmp,
+        linked=[],
+        bodies={
+            "42": "Parent intro.",
+            "10": "no deps",
+            "11": "Depends on: #10",
+            "12": "Depends on: #10",
+        },
+        titles={"10": "t10", "11": "t11", "12": "t12"},
+    )
     first, _ = split(tmp, env)
     assert first.returncode == 0, first.stderr
     body_after_first = json.load(open(os.path.join(tmp, "cfg.json")))["bodies"]["42"]
@@ -645,27 +706,47 @@ with tempfile.TemporaryDirectory() as tmp:
     second, _ = split(tmp, env)
     assert second.returncode == 0, second.stderr
     body_after_second = json.load(open(os.path.join(tmp, "cfg.json")))["bodies"]["42"]
-    assert body_after_second == body_after_first, \
+    assert body_after_second == body_after_first, (
         "re-running split must not duplicate the Tasks section: " + body_after_second
+    )
     assert body_after_second.count("## Tasks") == 1, body_after_second
 ok("re-running epic split against the same parent is idempotent — no duplicate Tasks section")
 
 with tempfile.TemporaryDirectory() as tmp:
-    env, log = gh_stub(tmp, linked=[], view_fail=["11"], bodies={
-        "42": "Parent intro.", "10": "", "11": "", "12": "",
-    }, titles={"10": "t10", "12": "t12"})
+    env, log = gh_stub(
+        tmp,
+        linked=[],
+        view_fail=["11"],
+        bodies={
+            "42": "Parent intro.",
+            "10": "",
+            "11": "",
+            "12": "",
+        },
+        titles={"10": "t10", "12": "t12"},
+    )
     proc, path = split(tmp, env)
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "#11" in proc.stderr, proc.stderr
-    assert "edit" not in open(log).read(), \
+    assert "edit" not in open(log).read(), (
         "a child view failure must abort before the parent is ever edited: " + open(log).read()
+    )
     assert not os.path.isfile(path), "no epic.json when a child's title/body fetch fails"
 ok("a child's issue-view failure during the title fetch dies naming that child")
 
 with tempfile.TemporaryDirectory() as tmp:
-    env, log = gh_stub(tmp, linked=[], no_title=["11"], bodies={
-        "42": "Parent intro.", "10": "", "11": "Depends on: #10", "12": "",
-    }, titles={"10": "t10", "12": "t12"})
+    env, log = gh_stub(
+        tmp,
+        linked=[],
+        no_title=["11"],
+        bodies={
+            "42": "Parent intro.",
+            "10": "",
+            "11": "Depends on: #10",
+            "12": "",
+        },
+        titles={"10": "t10", "12": "t12"},
+    )
     proc, path = split(tmp, env)
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "#11" in proc.stderr, proc.stderr
@@ -673,30 +754,48 @@ with tempfile.TemporaryDirectory() as tmp:
 ok("a child view response with no title field dies naming that child")
 
 with tempfile.TemporaryDirectory() as tmp:
-    env, log = gh_stub(tmp, linked=[], view_fail=["42"], bodies={
-        "10": "", "11": "", "12": "",
-    }, titles={"10": "t10", "11": "t11", "12": "t12"})
+    env, log = gh_stub(
+        tmp,
+        linked=[],
+        view_fail=["42"],
+        bodies={
+            "10": "",
+            "11": "",
+            "12": "",
+        },
+        titles={"10": "t10", "11": "t11", "12": "t12"},
+    )
     proc, path = split(tmp, env)
     assert proc.returncode == 1, proc.stdout + proc.stderr
-    assert "edit" not in open(log).read(), \
+    assert "edit" not in open(log).read(), (
         "the parent body read failed — gh issue edit must never be called: " + open(log).read()
+    )
     assert not os.path.isfile(path), "no epic.json when the parent body read fails"
 ok("a failed parent body read dies without ever calling gh issue edit")
 
 with tempfile.TemporaryDirectory() as tmp:
-    env, log = gh_stub(tmp, linked=[], edit_fail=True, bodies={
-        "42": "Parent intro.", "10": "", "11": "", "12": "",
-    }, titles={"10": "t10", "11": "t11", "12": "t12"})
+    env, log = gh_stub(
+        tmp,
+        linked=[],
+        edit_fail=True,
+        bodies={
+            "42": "Parent intro.",
+            "10": "",
+            "11": "",
+            "12": "",
+        },
+        titles={"10": "t10", "11": "t11", "12": "t12"},
+    )
     proc, path = split(tmp, env)
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert not os.path.isfile(path), "no epic.json when gh issue edit fails"
     leftover = [f for f in os.listdir(tmp) if f.startswith("tmp") and f not in ("e", "bin")]
-    assert not [f for f in leftover if os.path.isfile(os.path.join(tmp, f))], \
+    assert not [f for f in leftover if os.path.isfile(os.path.join(tmp, f))], (
         "a failed gh issue edit should not leave a temp body file behind: " + str(leftover)
+    )
 ok("a failed gh issue edit dies without writing epic.json")
 
-proc = subprocess.run([sys.executable, ROUTE, "epic", "next", "/nonexistent"],
-                      capture_output=True, text=True)
+proc = subprocess.run([sys.executable, ROUTE, "epic", "next", "/nonexistent"], capture_output=True, text=True)
 assert proc.returncode == 2 and "runs-dir" in proc.stderr, proc.stderr
 ok("epic next requires --runs-dir instead of advertising a default it does not have")
 
@@ -705,13 +804,15 @@ with tempfile.TemporaryDirectory() as tmp:
     os.makedirs(epic_dir)
     env = dict(os.environ, PATH="/nonexistent")
     proc = subprocess.run(
-        [sys.executable, ROUTE, "epic", "split", epic_dir,
-         "--parent", "42", "--slug", "o/r", "--children", "10,11"],
-        capture_output=True, text=True, env=env,
+        [sys.executable, ROUTE, "epic", "split", epic_dir, "--parent", "42", "--slug", "o/r", "--children", "10,11"],
+        capture_output=True,
+        text=True,
+        env=env,
     )
     assert proc.returncode != 0, "gh is unreachable — split must not report success"
-    assert not os.path.isfile(os.path.join(epic_dir, "epic.json")), \
+    assert not os.path.isfile(os.path.join(epic_dir, "epic.json")), (
         "a failed gh call must not produce a DAG, wrong or otherwise"
+    )
 ok("aiw epic split dies rather than recording an empty dependency list when gh fails")
 
 # --------------------------------------------------------------------------- data_dir()
@@ -755,14 +856,18 @@ ok("aiw paths prints unchanged data_dir/runs_dir/pr_grind_dir/channels after the
 
 # --------------------------------------------------------------------------- stack lock primitives
 
-assert stack.compose_project("/repos/a", 5) != stack.compose_project("/repos/b", 5), \
+assert stack.compose_project("/repos/a", 5) != stack.compose_project("/repos/b", 5), (
     "same issue number, different repos, must be different projects"
-assert stack.compose_project("/repos/a", 5) != stack.compose_project("/repos/a", 6), \
+)
+assert stack.compose_project("/repos/a", 5) != stack.compose_project("/repos/a", 6), (
     "different issues in the same repo must be different projects"
-assert stack.compose_project("/repos/a", 5) == stack.compose_project("/repos/a", 5), \
+)
+assert stack.compose_project("/repos/a", 5) == stack.compose_project("/repos/a", 5), (
     "deterministic: the same (repo, issue) always yields the same project"
-assert re.fullmatch(r"[a-z0-9-]+", stack.compose_project("/Repos/My App!", 5)), \
+)
+assert re.fullmatch(r"[a-z0-9-]+", stack.compose_project("/Repos/My App!", 5)), (
     "a project name must be Compose-safe regardless of what's in the repo path"
+)
 ok("compose_project keys uniquely on (repo, issue) and is always Compose-safe")
 
 with tempfile.TemporaryDirectory() as d:
@@ -788,10 +893,12 @@ with tempfile.TemporaryDirectory() as d:
     with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
         run_a, run_b = os.path.join(d, "a"), os.path.join(d, "b")
         assert stack.acquire_lock(run_a, 5, "/repos/x", 5) is True
-        assert stack.acquire_lock(run_b, 5, "/repos/y", 0) is True, \
+        assert stack.acquire_lock(run_b, 5, "/repos/y", 0) is True, (
             "same issue number in a different repo must not contend"
-        assert stack.acquire_lock(run_b, 6, "/repos/x", 0) is True, \
+        )
+        assert stack.acquire_lock(run_b, 6, "/repos/x", 0) is True, (
             "a different issue in the same repo must not contend"
+        )
 ok("acquire_lock never blocks across different (repo, issue) projects")
 
 with tempfile.TemporaryDirectory() as d:
@@ -814,8 +921,10 @@ with tempfile.TemporaryDirectory() as d:
         assert holder["run_dir"] == run_dir_a, "the first holder must still be recorded"
         stack.release_lock(run_dir_a, 1, "o/r")
         assert stack.acquire_lock(run_dir_b, 1, "o/r", 0) is True
-ok("a second acquire for a different run_dir returns False without disturbing the first "
-   "holder, and succeeds cleanly once the first releases")
+ok(
+    "a second acquire for a different run_dir returns False without disturbing the first "
+    "holder, and succeeds cleanly once the first releases"
+)
 
 with tempfile.TemporaryDirectory() as d:
     with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
@@ -864,8 +973,9 @@ with tempfile.TemporaryDirectory() as d:
     os.makedirs(esc_run)
     with open(os.path.join(esc_run, "run.json"), "w", encoding="utf-8") as fh:
         json.dump(escalated.to_dict(), fh)
-    assert stack.lock_stale({"run_dir": esc_run, "acquired_at": now}, now) is True, \
+    assert stack.lock_stale({"run_dir": esc_run, "acquired_at": now}, now) is True, (
         "escalated is reclaimed immediately, not grace-gated"
+    )
 ok("a done/escalated holder is reclaimed immediately regardless of LOCK_GRACE")
 
 with tempfile.TemporaryDirectory() as d:
@@ -916,7 +1026,10 @@ ok("--lock-timeout exists on the `up` subparser with default 900")
 # `/run-issue` run's dirty-worktree guard to trip over.
 RACE_TMP = tempfile.mkdtemp(prefix="aiw-race-")
 RACER = os.path.join(RACE_TMP, "_race_acquire_lock_helper.py")
-write(RACE_TMP, os.path.basename(RACER), f"""\
+write(
+    RACE_TMP,
+    os.path.basename(RACER),
+    f"""\
 import json, os, sys, time
 sys.path.insert(0, {HERE!r})
 import stack
@@ -928,14 +1041,18 @@ with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
 while time.time() < start_at:
     pass
 print("True" if stack.acquire_lock(run_dir, 0, "o/r", 0) else "False")
-""")
+""",
+)
 
 # The release-side racer for the release_lock blocker (round-3 review): a
 # separate subprocess that calls release_lock(run_dir) at the same shared
 # start timestamp the acquire contenders use, so it hits the sentinel gate
 # concurrently with them instead of running safely before/after the race.
 RELEASER = os.path.join(RACE_TMP, "_race_release_lock_helper.py")
-write(RACE_TMP, os.path.basename(RELEASER), f"""\
+write(
+    RACE_TMP,
+    os.path.basename(RELEASER),
+    f"""\
 import sys, time
 sys.path.insert(0, {HERE!r})
 import stack
@@ -944,7 +1061,8 @@ run_dir, start_at = sys.argv[1], float(sys.argv[2])
 while time.time() < start_at:
     pass
 stack.release_lock(run_dir, 0, "o/r")
-""")
+""",
+)
 
 
 def _race(d: str, data_d: str, n: int = 12) -> list[str]:
@@ -960,7 +1078,10 @@ def _race(d: str, data_d: str, n: int = 12) -> list[str]:
     procs = [
         subprocess.Popen(
             [sys.executable, RACER, os.path.join(d, f"run{i}"), str(start_at)],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=env,
         )
         for i in range(n)
     ]
@@ -982,13 +1103,19 @@ def _race_with_release(d: str, data_d: str, holder_run: str, n: int = 10) -> lis
     procs = [
         subprocess.Popen(
             [sys.executable, RACER, os.path.join(d, f"run{i}"), str(start_at)],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=env,
         )
         for i in range(n)
     ]
     releaser = subprocess.Popen(
         [sys.executable, RELEASER, holder_run, str(start_at)],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
     )
     outs = [p.communicate()[0].strip() for p in procs]
     releaser.communicate()
@@ -1008,17 +1135,14 @@ def _plant_stale_holder(data_d: str, status: str, acquired_at: float) -> None:
     lock_file = os.path.join(data_d, "locks", f"{stack.compose_project('o/r', 0)}.lock")
     os.makedirs(os.path.dirname(lock_file), exist_ok=True)
     with open(lock_file, "w", encoding="utf-8") as fh:
-        json.dump(
-            {"run_dir": holder_run, "issue": 0, "repo": "o/r", "acquired_at": acquired_at}, fh
-        )
+        json.dump({"run_dir": holder_run, "issue": 0, "repo": "o/r", "acquired_at": acquired_at}, fh)
 
 
 try:
     with tempfile.TemporaryDirectory() as d:
         outs = _race(d, os.path.join(d, "data"))
         assert outs.count("True") == 1, outs
-    ok("N concurrent `aiw stack up`-shaped subprocesses racing for the same lockfile "
-       "produce exactly one winner")
+    ok("N concurrent `aiw stack up`-shaped subprocesses racing for the same lockfile produce exactly one winner")
 
     # The reclaim path: every contender independently reads the same stale
     # holder and independently agrees it's stale — the read-check-write race
@@ -1032,8 +1156,7 @@ try:
             _plant_stale_holder(data_d, status, acquired_at)
             outs = _race(d, data_d)
             assert outs.count("True") == 1, (label, outs)
-        ok(f"N concurrent processes racing to reclaim a stale lock ({label}) "
-           "produce exactly one winner")
+        ok(f"N concurrent processes racing to reclaim a stale lock ({label}) produce exactly one winner")
 
     # The release_lock blocker (round-3 review): a stale holder calling
     # release_lock() concurrently with N contenders reclaiming that same
@@ -1054,8 +1177,10 @@ try:
             if outs.count("True") > 1:
                 double_holder_events += 1
     assert double_holder_events == 0, f"{double_holder_events}/40 trials produced a double-holder"
-    ok("release_lock() called by a stale holder concurrently with N contenders reclaiming its lock "
-       "never produces a double-holder (40 trials, 10 contenders each)")
+    ok(
+        "release_lock() called by a stale holder concurrently with N contenders reclaiming its lock "
+        "never produces a double-holder (40 trials, 10 contenders each)"
+    )
 finally:
     shutil.rmtree(RACE_TMP, ignore_errors=True)
 
@@ -1107,10 +1232,13 @@ with tempfile.TemporaryDirectory() as d:
         finally:
             t.join()
             stack.RELEASE_SENTINEL_RETRIES, stack.RELEASE_SENTINEL_BACKOFF = orig_retries, orig_backoff
-        assert not os.path.isfile(stack.lock_path(project)), \
+        assert not os.path.isfile(stack.lock_path(project)), (
             "release_lock must retry through transient sentinel contention, not no-op"
-ok("release_lock retries through transient `.break` sentinel contention instead of "
-   "silently no-op'ing (round-4 regression)")
+        )
+ok(
+    "release_lock retries through transient `.break` sentinel contention instead of "
+    "silently no-op'ing (round-4 regression)"
+)
 
 with tempfile.TemporaryDirectory() as d:
     # The other half: if the sentinel stays held for the whole retry window
@@ -1134,10 +1262,13 @@ with tempfile.TemporaryDirectory() as d:
         finally:
             os.remove(break_path)
             stack.RELEASE_SENTINEL_RETRIES, stack.RELEASE_SENTINEL_BACKOFF = orig_retries, orig_backoff
-        assert os.path.isfile(stack.lock_path(project)), \
+        assert os.path.isfile(stack.lock_path(project)), (
             "the lock must survive when every retry loses the sentinel to a live holder"
-ok("release_lock gives up gracefully (never hangs, exits cleanly) when the `.break` sentinel "
-   "stays held for the entire retry window")
+        )
+ok(
+    "release_lock gives up gracefully (never hangs, exits cleanly) when the `.break` sentinel "
+    "stays held for the entire retry window"
+)
 
 with tempfile.TemporaryDirectory() as d:
     with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
@@ -1166,13 +1297,16 @@ with tempfile.TemporaryDirectory() as d:
         try:
             started = time.time()
             assert stack.acquire_lock(os.path.join(d, "run"), 7, "o/r", 5) is True
-            assert time.time() - started < 2, \
+            assert time.time() - started < 2, (
                 "an abandoned .break sentinel must be reclaimed promptly, not wedge the full timeout"
+            )
         finally:
             stack.LOCK_POLL = orig_poll
         assert not os.path.exists(break_path), "the abandoned sentinel itself is cleared, not left behind"
-ok("an abandoned `.break` sentinel older than BREAK_SENTINEL_STALE is reclaimed during a stale-lock "
-   "acquire (crash-recovery path), instead of wedging every future reclaim")
+ok(
+    "an abandoned `.break` sentinel older than BREAK_SENTINEL_STALE is reclaimed during a stale-lock "
+    "acquire (crash-recovery path), instead of wedging every future reclaim"
+)
 
 # --------------------------------------------------------------------------- stack lock, via the CLI
 
@@ -1187,8 +1321,7 @@ with tempfile.TemporaryDirectory() as d:
         json.dump(ledger.to_dict(), fh)
     data_d = os.path.join(d, "data")
     env = dict(os.environ, CLAUDE_PLUGIN_DATA=data_d)
-    proc = subprocess.run([sys.executable, ROUTE, "stack", "up", run_dir],
-                          capture_output=True, text=True, env=env)
+    proc = subprocess.run([sys.executable, ROUTE, "stack", "up", run_dir], capture_output=True, text=True, env=env)
     assert proc.returncode == 0, proc.stderr
     ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
     assert ctx["stack"] == "none"
@@ -1224,7 +1357,9 @@ with tempfile.TemporaryDirectory() as d:
     env = dict(os.environ, CLAUDE_PLUGIN_DATA=data_d, PATH="/nonexistent")
     proc = subprocess.run(
         [sys.executable, ROUTE, "stack", "up", run_dir, "--lock-timeout", "0"],
-        capture_output=True, text=True, env=env,
+        capture_output=True,
+        text=True,
+        env=env,
     )
     assert proc.returncode == 0, proc.stderr
     ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
@@ -1232,9 +1367,11 @@ with tempfile.TemporaryDirectory() as d:
     assert other_run in ctx["tests_unverified"]
     assert ctx["test_cmd_host"] == "go test ./..."
     assert json.load(open(lock_file))["run_dir"] == other_run
-ok("`stack up` behind a non-stale foreign lock on the SAME project, with --lock-timeout 0, "
-   "degrades to stack=failed naming the holder, keeps test_cmd_host, exits 0, and never "
-   "invokes Docker")
+ok(
+    "`stack up` behind a non-stale foreign lock on the SAME project, with --lock-timeout 0, "
+    "degrades to stack=failed naming the holder, keeps test_cmd_host, exits 0, and never "
+    "invokes Docker"
+)
 
 with tempfile.TemporaryDirectory() as d:
     repo, run_dir, other_run = os.path.join(d, "repo"), os.path.join(d, "run"), os.path.join(d, "other")
@@ -1259,14 +1396,18 @@ with tempfile.TemporaryDirectory() as d:
     env = dict(os.environ, CLAUDE_PLUGIN_DATA=data_d, PATH="/nonexistent")
     proc = subprocess.run(
         [sys.executable, ROUTE, "stack", "up", run_dir, "--lock-timeout", "0"],
-        capture_output=True, text=True, env=env,
+        capture_output=True,
+        text=True,
+        env=env,
     )
     assert proc.returncode == 0, proc.stderr
     ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
-    assert ctx["stack"] != "failed" or "lock held by" not in ctx.get("tests_unverified", ""), \
+    assert ctx["stack"] != "failed" or "lock held by" not in ctx.get("tests_unverified", ""), (
         "a live lock on an unrelated project must never be treated as a blocker"
-    assert json.load(open(other_lock))["run_dir"] == other_run, \
+    )
+    assert json.load(open(other_lock))["run_dir"] == other_run, (
         "the unrelated project's own lock must be left untouched"
+    )
 ok("`stack up` is never blocked by a live lock belonging to a different issue in the same repo")
 
 with tempfile.TemporaryDirectory() as d:
@@ -1284,8 +1425,7 @@ with tempfile.TemporaryDirectory() as d:
     with open(lock_file, "w", encoding="utf-8") as fh:
         json.dump({"run_dir": run_dir, "issue": 24, "repo": repo, "acquired_at": time.time()}, fh)
     env = dict(os.environ, CLAUDE_PLUGIN_DATA=data_d)
-    proc = subprocess.run([sys.executable, ROUTE, "stack", "down", run_dir],
-                          capture_output=True, text=True, env=env)
+    proc = subprocess.run([sys.executable, ROUTE, "stack", "down", run_dir], capture_output=True, text=True, env=env)
     assert proc.returncode == 0, proc.stderr
     assert not os.path.isfile(lock_file)
 ok("`stack down` releases the lock after a successful teardown, exit 0")
@@ -1305,11 +1445,9 @@ with tempfile.TemporaryDirectory() as d:
     with open(lock_file, "w", encoding="utf-8") as fh:
         json.dump({"run_dir": run_dir, "issue": 25, "repo": repo, "acquired_at": time.time()}, fh)
     env = dict(os.environ, CLAUDE_PLUGIN_DATA=data_d)
-    proc = subprocess.run([sys.executable, ROUTE, "stack", "down", run_dir],
-                          capture_output=True, text=True, env=env)
+    proc = subprocess.run([sys.executable, ROUTE, "stack", "down", run_dir], capture_output=True, text=True, env=env)
     assert proc.returncode == 0, proc.stderr
-    assert not os.path.isfile(lock_file), \
-        "the lock must release even when teardown fails"
+    assert not os.path.isfile(lock_file), "the lock must release even when teardown fails"
 ok("`stack down` releases the lock even when compose teardown fails, still exits 0")
 
 with tempfile.TemporaryDirectory() as d:
@@ -1339,8 +1477,7 @@ with tempfile.TemporaryDirectory() as d:
             stack.shell, stack.write_override = real_shell, real_write_override
 
         project = stack.compose_project(repo, 26)
-        assert not os.path.isfile(stack.lock_path(project)), \
-            "the up-failed branch must release the lock"
+        assert not os.path.isfile(stack.lock_path(project)), "the up-failed branch must release the lock"
         ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
         assert ctx["stack"] == "failed"
 ok("cmd_up's up-failed branch releases the stack lock")
@@ -1383,15 +1520,14 @@ with tempfile.TemporaryDirectory() as d:
             stack.write_override = real_write_override
 
         project = stack.compose_project(repo, 27)
-        assert not os.path.isfile(stack.lock_path(project)), \
-            "the no-app-service branch must release the lock"
-        assert any("down -v --remove-orphans" in c for c in shell_calls), \
+        assert not os.path.isfile(stack.lock_path(project)), "the no-app-service branch must release the lock"
+        assert any("down -v --remove-orphans" in c for c in shell_calls), (
             "the no-app-service branch must tear down the stack it just brought up"
+        )
         ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
         assert ctx["stack"] == "failed"
         assert "no app service" in ctx["tests_unverified"]
-ok("cmd_up's no-app-service branch tears the stack down and releases the lock "
-   "(closed leak, stack.py:594-602)")
+ok("cmd_up's no-app-service branch tears the stack down and releases the lock (closed leak, stack.py:594-602)")
 
 _real_shell = stack.shell
 stack.shell = lambda cmd, **kw: subprocess.CompletedProcess([], 0, "0.0.0.0:34521\n", "")
@@ -1405,8 +1541,7 @@ try:
     assert stack.resolve_port("docker compose -p x -f c.yml", "/repo", "app", "80") is None
 finally:
     stack.shell = _real_shell
-ok("resolve_port reads the live kernel-assigned port back from `docker compose port`, "
-   "None when the lookup fails")
+ok("resolve_port reads the live kernel-assigned port back from `docker compose port`, None when the lookup fails")
 
 # --------------------------------------------------------------------------- dispatch: roster
 
@@ -1422,7 +1557,7 @@ for bad in ("", ",,"):
         raise AssertionError(f"expected error for {bad!r}")
     except ValueError:
         pass
-ok("--issues \"\" and \",,\" raise, distinct from a valid-but-empty roster")
+ok('--issues "" and ",," raise, distinct from a valid-but-empty roster')
 
 for bad in ("abc", "-5"):
     try:
@@ -1463,9 +1598,7 @@ assert len(dispatch.dor_gaps(None)) == 6
 assert len(dispatch.dor_gaps("")) == 6
 ok("a None or empty body reports all six DoR items as gaps and never raises")
 
-MISSING_SCOPE = READY_BODY.replace(
-    "## Scope\nIn scope: CSV export. Out of scope: PDF export.\n\n", ""
-)
+MISSING_SCOPE = READY_BODY.replace("## Scope\nIn scope: CSV export. Out of scope: PDF export.\n\n", "")
 gaps = dispatch.dor_gaps(MISSING_SCOPE)
 assert len(gaps) == 1 and "scope" in gaps[0].lower(), gaps
 ok("a body missing exactly one section names that specific gap")
@@ -1523,13 +1656,20 @@ ok("'None' as the literal body under Non-functional Constraints satisfies that i
 # gh-issue.md itself, rather than hand-copying it here where it could drift.
 GH_ISSUE_MD = os.path.join(HERE, "..", "commands", "gh-issue.md")
 with open(GH_ISSUE_MD, encoding="utf-8") as fh:
-    body_sections_line = next(
-        line for line in fh if line.strip().startswith("- Body sections:")
-    )
+    body_sections_line = next(line for line in fh if line.strip().startswith("- Body sections:"))
 section_names = re.findall(r"\*\*([^*]+)\*\*", body_sections_line)
 EXPECTED_SECTIONS = [
-    "What", "Why", "Out of Scope", "Context / Affected Code", "Acceptance Criteria", "How",
-    "Non-functional Constraints", "Assumptions", "Dependencies / Blockers", "Proposed Fix", "Notes",
+    "What",
+    "Why",
+    "Out of Scope",
+    "Context / Affected Code",
+    "Acceptance Criteria",
+    "How",
+    "Non-functional Constraints",
+    "Assumptions",
+    "Dependencies / Blockers",
+    "Proposed Fix",
+    "Notes",
 ]
 assert section_names == EXPECTED_SECTIONS, section_names
 ok("gh-issue.md's Body sections list is What/Why/.../How/.../Notes exactly")
@@ -1570,17 +1710,13 @@ step5_flat_start = next(
 assert step5_flat_start is not None, "jira-to-gh.md has no '### 5-FLAT' section yet (issue #84 not implemented)"
 
 jira_to_gh_body_sections_line = next(
-    line
-    for line in jira_to_gh_lines[step5_flat_start:]
-    if line.strip().startswith("- Body sections:")
+    line for line in jira_to_gh_lines[step5_flat_start:] if line.strip().startswith("- Body sections:")
 )
 jira_to_gh_section_names = re.findall(r"\*\*([^*]+)\*\*", jira_to_gh_body_sections_line)
 assert jira_to_gh_section_names == section_names, (jira_to_gh_section_names, section_names)
 ok("jira-to-gh.md's Step 5-FLAT Body sections list exactly matches gh-issue.md's Body sections list")
 
-jira_to_gh_child_body = "\n\n".join(
-    f"## {name}\nSome real content for {name}." for name in jira_to_gh_section_names
-)
+jira_to_gh_child_body = "\n\n".join(f"## {name}\nSome real content for {name}." for name in jira_to_gh_section_names)
 assert dispatch.dor_gaps(jira_to_gh_child_body) == [], dispatch.dor_gaps(jira_to_gh_child_body)
 ok("a jira-to-gh.md task body built from Step 5-FLAT's own section headings screens ready with zero gaps")
 
@@ -1590,9 +1726,7 @@ ok("a jira-to-gh.md task body built from Step 5-FLAT's own section headings scre
 # that actually exists in jira-to-gh.md, so a future renumbering can't leave a
 # dangling cross-reference.
 jira_to_gh_step_numbers = {
-    m.group(1)
-    for line in jira_to_gh_lines
-    if (m := re.match(r"^#{1,3}\s+Step\s+(\d+(?:\.\d+)?)", line.strip()))
+    m.group(1) for line in jira_to_gh_lines if (m := re.match(r"^#{1,3}\s+Step\s+(\d+(?:\.\d+)?)", line.strip()))
 }
 referenced_step_numbers = set(re.findall(r"Step\s+(\d+(?:\.\d+)?)", jira_to_gh_body_sections_line))
 assert referenced_step_numbers, "expected at least one Step N cross-reference in the parentheticals"
@@ -1601,6 +1735,7 @@ assert referenced_step_numbers <= jira_to_gh_step_numbers, (
     jira_to_gh_step_numbers,
 )
 ok("every 'Step N' cross-reference in jira-to-gh.md's Body sections parentheticals names a real step heading")
+
 
 # Issue #71: jira-to-gh Step 3 mapping, Implementation Guide removal, `refined` label.
 def _slice(text, start, end):
@@ -1611,6 +1746,11 @@ def _slice(text, start, end):
 def _read(*parts):
     with open(os.path.join(HERE, "..", *parts), encoding="utf-8") as fh:
         return fh.read()
+
+
+def _user_docs():
+    # README is a link hub; what it used to say now lives in docs/INSTALL.md + docs/REFERENCE.md.
+    return "\n".join((_read("README.md"), _read("docs", "INSTALL.md"), _read("docs", "REFERENCE.md")))
 
 
 gh_text = _read("commands", "gh-issue.md")
@@ -1625,8 +1765,10 @@ for old in ("**Summary**", "**Specific Business Requirements**", "**Steps to Rep
 ok("jira-to-gh.md Step 3 mapping names What and Why, not the pre-#71 sections")
 
 for name, text in (
-    ("run-planner.md", planner_text), ("gh-issue-factchecker.md", checker_text),
-    ("gh-issue.md", gh_text), ("jira-to-gh.md", jira_text),
+    ("run-planner.md", planner_text),
+    ("gh-issue-factchecker.md", checker_text),
+    ("gh-issue.md", gh_text),
+    ("jira-to-gh.md", jira_text),
 ):
     assert "Implementation Guide" not in text, name
 assert "How" in planner_text and "How" in checker_text
@@ -1645,7 +1787,7 @@ for name, sect in (
     ("gh-issue.md step 4", _slice(gh_text, "4. Then create a GitHub issue", "### 4-FLAT")),
     ("jira-to-gh.md Step 5", _slice(jira_text, "## Step 5", "### 5-FLAT")),
     ("gh-issue.md 4-FLAT", _slice(gh_text, "### 4-FLAT", "\n4.5.")),
-    ("jira-to-gh.md 5-FLAT", jira_text[jira_text.index("### 5-FLAT"):]),
+    ("jira-to-gh.md 5-FLAT", jira_text[jira_text.index("### 5-FLAT") :]),
 ):
     m = re.search(LABEL_RE, sect)
     assert m, (name, "no refined ensure-create")
@@ -1751,12 +1893,6 @@ with tempfile.TemporaryDirectory() as d:
         assert json.loads(raw) == {"o-r-issue-9": "/c/9"}
 ok("registry content is only slug->path pairs; no os.environ value or .env-shaped content lands in it")
 
-# --------------------------------------------------------------------------- dispatch: CLI wiring (RED until run-dev updates route.py)
-
-proc = subprocess.run([sys.executable, ROUTE, "dispatch", "plan", "--help"],
-                      capture_output=True, text=True)
-assert proc.returncode == 0, proc.stderr
-ok("aiw dispatch plan --help exits 0 once dispatch is registered in route.py")
 
 with tempfile.TemporaryDirectory() as d:
     dd = os.path.join(d, "data")
@@ -1789,9 +1925,7 @@ with open(PR_GRIND_SKILL_MD, encoding="utf-8") as fh:
     pr_grind_text = fh.read()
 
 # run-ci.md's outcome enum line, e.g. "outcome: fixed | flake-rerun | cannot-fix"
-outcome_line = next(
-    line for line in run_ci_text.splitlines() if line.strip().startswith("outcome:")
-)
+outcome_line = next(line for line in run_ci_text.splitlines() if line.strip().startswith("outcome:"))
 outcome_tokens = [t.strip() for t in outcome_line.split(":", 1)[1].split("|")]
 assert "rerun-denied" in outcome_tokens, outcome_tokens
 assert set(outcome_tokens) >= {"fixed", "flake-rerun", "cannot-fix", "rerun-denied"}, outcome_tokens
@@ -1804,10 +1938,12 @@ for token in outcome_tokens:
     assert token in pr_grind_text, f"SKILL.md never branches on outcome {token!r}"
 ok("every outcome token parsed from run-ci.md is branched on in both run-issue.md phase 8.5 and SKILL.md rail 2")
 
+
 # Both rails' fallback uses git commit --allow-empty with an identical retrigger
 # message, compared across files rather than hand-copied.
 def _allow_empty_commit_lines(text: str) -> list[str]:
     return [line.strip() for line in text.splitlines() if "--allow-empty" in line]
+
 
 run_issue_allow_empty = _allow_empty_commit_lines(run_issue_text)
 pr_grind_allow_empty = _allow_empty_commit_lines(pr_grind_text)
@@ -1820,7 +1956,7 @@ def _retrigger_message(lines: list[str]) -> str:
         m = re.search(r'-m\s+"([^"]+)"', line)
         if m:
             return m.group(1)
-    raise AssertionError(f"no -m \"...\" message found in {lines}")
+    raise AssertionError(f'no -m "..." message found in {lines}')
 
 
 run_issue_msg = _retrigger_message(run_issue_allow_empty)
@@ -1883,7 +2019,7 @@ ok("both rails document a retrigger-commit guard via git log -1 --pretty=%s mark
 # pinned to the text that immediately follows the --allow-empty retrigger line, so this
 # would fail if the rerun-denied fallback (and its push-refused handling) were deleted.
 allow_empty_idx_85 = phase_85_text.index("--allow-empty")
-after_allow_empty_85 = phase_85_text[allow_empty_idx_85: allow_empty_idx_85 + 400]
+after_allow_empty_85 = phase_85_text[allow_empty_idx_85 : allow_empty_idx_85 + 400]
 assert "push" in after_allow_empty_85.lower(), "phase 8.5 --allow-empty line has no nearby push-refused wording"
 assert "fall" in after_allow_empty_85.lower() or "RED —" in after_allow_empty_85, (
     "phase 8.5 --allow-empty line has no nearby fallback wording"
@@ -1894,19 +2030,21 @@ rail2_start = pr_grind_text.index("2. **CI red**")
 rail3_start = pr_grind_text.index("3. **Third-party human comment**")
 rail2_text = pr_grind_text[rail2_start:rail3_start]
 allow_empty_idx_rail2 = rail2_text.index("--allow-empty")
-after_allow_empty_rail2 = rail2_text[allow_empty_idx_rail2: allow_empty_idx_rail2 + 400]
+after_allow_empty_rail2 = rail2_text[allow_empty_idx_rail2 : allow_empty_idx_rail2 + 400]
 assert "push" in after_allow_empty_rail2.lower(), "SKILL.md --allow-empty line has no nearby push-refused wording"
 assert "refused" in after_allow_empty_rail2.lower(), "SKILL.md does not mention the push being refused"
 assert "fall" in after_allow_empty_rail2.lower() or "stop" in after_allow_empty_rail2.lower(), (
     "SKILL.md --allow-empty line has no nearby fallback wording"
 )
-ok("both rails document the push-refused path falling through to the existing outcome, "
-   "pinned near the --allow-empty retrigger line")
+ok(
+    "both rails document the push-refused path falling through to the existing outcome, "
+    "pinned near the --allow-empty retrigger line"
+)
 
 # The --allow-empty line sits inside the rerun-denied branch only; cannot-fix branch
 # unchanged (no --allow-empty anywhere near the cannot-fix wording in either rail).
 cannot_fix_idx = rail2_text.index("`outcome: cannot-fix`")
-cannot_fix_tail = rail2_text[cannot_fix_idx: cannot_fix_idx + 200]
+cannot_fix_tail = rail2_text[cannot_fix_idx : cannot_fix_idx + 200]
 assert "--allow-empty" not in cannot_fix_tail, cannot_fix_tail
 ok("the --allow-empty line sits inside the rerun-denied branch only; cannot-fix branch unchanged")
 
@@ -1944,7 +2082,9 @@ result = review.pick(
 )
 assert result["selected"] == 1
 assert result["superseded"] == [2]
-ok("older COMMENTED review with 4 inline comments beats a newer rubber-stamp APPROVED review, same commit within window")
+ok(
+    "older COMMENTED review with 4 inline comments beats a newer rubber-stamp APPROVED review, same commit within window"
+)
 
 result = review.pick(
     reviews=[
@@ -1991,15 +2131,19 @@ with tempfile.TemporaryDirectory() as d:
     reviews_path = os.path.join(d, "reviews.json")
     comments_path = os.path.join(d, "comments.json")
     with open(reviews_path, "w", encoding="utf-8") as fh:
-        json.dump([
-            _review(1, "sha1", "2026-09-23T10:00:00", state="COMMENTED", body="fix this"),
-            _review(2, "sha1", "2026-09-23T10:00:40", state="APPROVED", body="looks good"),
-        ], fh)
+        json.dump(
+            [
+                _review(1, "sha1", "2026-09-23T10:00:00", state="COMMENTED", body="fix this"),
+                _review(2, "sha1", "2026-09-23T10:00:40", state="APPROVED", body="looks good"),
+            ],
+            fh,
+        )
     with open(comments_path, "w", encoding="utf-8") as fh:
         json.dump([_comment(1), _comment(1)], fh)
     proc = subprocess.run(
         [sys.executable, ROUTE, "review", "pick", "--reviews", reviews_path, "--comments", comments_path],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert proc.returncode == 0, proc.stderr
     out = json.loads(proc.stdout)
@@ -2056,7 +2200,9 @@ result = review.pick(
 )
 assert result["selected"] == 2
 assert sorted(result["superseded"]) == [1, 3]
-ok("three reviews same commit in window, two zero-comment stamps and one with comments: comment-carrying wins, both stamps superseded")
+ok(
+    "three reviews same commit in window, two zero-comment stamps and one with comments: comment-carrying wins, both stamps superseded"
+)
 
 result = review.pick(
     reviews=[
@@ -2095,7 +2241,9 @@ result = review.pick(
 assert isinstance(result["selected"], int)
 non_selected = {1, 2} - {result["selected"]}
 assert set(result["superseded"]) == non_selected
-ok("review dicts missing/null commit_id and submitted_at: no KeyError/TypeError, every non-selected review still in superseded[]")
+ok(
+    "review dicts missing/null commit_id and submitted_at: no KeyError/TypeError, every non-selected review still in superseded[]"
+)
 
 result = review.pick(
     reviews=[
@@ -2120,12 +2268,22 @@ assert result["comment_counts"].get(2, 0) == 0
 ok("inline comments with null or foreign pull_request_review_id are not counted toward any review")
 
 proc = subprocess.run(
-    [sys.executable, ROUTE, "review", "pick", "--reviews", "/nonexistent/reviews.json", "--comments", "/nonexistent/comments.json"],
-    capture_output=True, text=True,
+    [
+        sys.executable,
+        ROUTE,
+        "review",
+        "pick",
+        "--reviews",
+        "/nonexistent/reviews.json",
+        "--comments",
+        "/nonexistent/comments.json",
+    ],
+    capture_output=True,
+    text=True,
 )
 assert proc.returncode != 0
 assert "Traceback" not in proc.stderr
-assert len([l for l in proc.stderr.splitlines() if l.strip()]) <= 1
+assert len([ln for ln in proc.stderr.splitlines() if ln.strip()]) <= 1
 ok("aiw review pick with a missing file exits nonzero with a one-line message, no Python traceback")
 
 with tempfile.TemporaryDirectory() as d:
@@ -2137,7 +2295,8 @@ with tempfile.TemporaryDirectory() as d:
         fh.write("[]")
     proc = subprocess.run(
         [sys.executable, ROUTE, "review", "pick", "--reviews", reviews_path, "--comments", comments_path],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert proc.returncode != 0
     assert "Traceback" not in proc.stderr
@@ -2152,11 +2311,14 @@ with tempfile.TemporaryDirectory() as d:
         fh.write("[]")
     proc = subprocess.run(
         [sys.executable, ROUTE, "review", "pick", "--reviews", reviews_path, "--comments", comments_path],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert proc.returncode == 1
     assert "Traceback" not in proc.stderr
-ok("aiw review pick with a truncated JSON array exits code 1, no Python traceback (guards against a partial-dict recovery fallback that would feed pick() string keys)")
+ok(
+    "aiw review pick with a truncated JSON array exits code 1, no Python traceback (guards against a partial-dict recovery fallback that would feed pick() string keys)"
+)
 
 with tempfile.TemporaryDirectory() as d:
     reviews_dir = os.path.join(d, "reviews.json")
@@ -2166,17 +2328,22 @@ with tempfile.TemporaryDirectory() as d:
         fh.write("[]")
     proc = subprocess.run(
         [sys.executable, ROUTE, "review", "pick", "--reviews", reviews_dir, "--comments", comments_path],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert proc.returncode == 1
     assert "Traceback" not in proc.stderr
-ok("aiw review pick with a directory passed as --reviews exits code 1, no Python traceback (guards against an uncaught IsADirectoryError)")
+ok(
+    "aiw review pick with a directory passed as --reviews exits code 1, no Python traceback (guards against an uncaught IsADirectoryError)"
+)
 
 with open(os.path.join(HERE, "..", "skills", "pr-grind", "SKILL.md"), encoding="utf-8") as fh:
     skill_text = fh.read()
 assert "aiw review pick" in skill_text
 assert "take the newest only" not in skill_text
-ok("skills/pr-grind/SKILL.md Step 1 references `aiw review pick` and no longer states bare 'take the newest only' as the whole rule")
+ok(
+    "skills/pr-grind/SKILL.md Step 1 references `aiw review pick` and no longer states bare 'take the newest only' as the whole rule"
+)
 
 # --------------------------------------------------------------------------- decouple CI-red handling from the review-fix loop (issue #52)
 
@@ -2193,11 +2360,10 @@ assert "ci-attempt:" in pr_grind_state_section
 assert "paused:" in pr_grind_state_section
 ok("skills/pr-grind/SKILL.md State file section documents queued-push: next to ci-attempt: and paused:")
 
-pr_grind_rail2 = _pr_grind_section(
-    skill_text, "2. **CI red**", "3. **Third-party human comment**"
-)
-assert "run-fixer` is still **never** dispatched while CI is red" not in pr_grind_rail2, \
+pr_grind_rail2 = _pr_grind_section(skill_text, "2. **CI red**", "3. **Third-party human comment**")
+assert "run-fixer` is still **never** dispatched while CI is red" not in pr_grind_rail2, (
     "rail 2 must no longer say run-fixer is never dispatched while CI is red"
+)
 assert "hold_push" in pr_grind_rail2
 ok("skills/pr-grind/SKILL.md Step 3 rail 2 no longer bars run-fixer outright and mentions hold_push")
 
@@ -2257,14 +2423,17 @@ assert "queued-push" in pr_grind_step2
 ok("skills/pr-grind/SKILL.md Step 2 section contains queued-push")
 
 pr_grind_step8 = _pr_grind_section(skill_text, "## Step 8", "## On wake")
-step8_intro = pr_grind_step8[:pr_grind_step8.index("\n\n", pr_grind_step8.index("\n"))]
+step8_intro = pr_grind_step8[: pr_grind_step8.index("\n\n", pr_grind_step8.index("\n"))]
 assert "rails 1/2/3" not in step8_intro
 ok("skills/pr-grind/SKILL.md Step 8 intro no longer contains the literal string 'rails 1/2/3'")
 
-assert "run-ci` is the only agent dispatched while CI is red" not in skill_text, \
+assert "run-ci` is the only agent dispatched while CI is red" not in skill_text, (
     "old Rules line about run-ci being the only agent dispatched while CI is red must be gone"
+)
 assert "one attempt per head SHA" in skill_text
-ok("skills/pr-grind/SKILL.md Rules section no longer claims run-ci is the only agent dispatched while CI is red, and still has 'one attempt per head SHA'")
+ok(
+    "skills/pr-grind/SKILL.md Rules section no longer claims run-ci is the only agent dispatched while CI is red, and still has 'one attempt per head SHA'"
+)
 
 with open(os.path.join(HERE, "..", "docs", "HOW-IT-WORKS.md"), encoding="utf-8") as fh:
     how_it_works_rails_text = fh.read()
@@ -2313,15 +2482,20 @@ ok("commands/gh-issue.md step 3.5 routes 1 task to step 4 / 4-FLAT, not 4-EPIC")
 assert "No round limit" in step35 and re.search(r"re-apply the (layer )?rubric", step35, re.I)
 ok("commands/gh-issue.md step 3.5 keeps 'No round limit' and re-applies the rubric on edit")
 
-with open(os.path.join(HERE, "..", "README.md"), encoding="utf-8") as fh:
-    readme_text = fh.read()
-assert "splits a large brief" not in readme_text, "README.md must no longer describe gh-issue as splitting a large brief"
-ok("README.md no longer contains 'splits a large brief'")
+readme_text = _user_docs()
+assert "splits a large brief" not in readme_text, (
+    "README/INSTALL/REFERENCE must not describe gh-issue as splitting a large brief"
+)
+ok("README/INSTALL/REFERENCE do not contain 'splits a large brief'")
 
 with open(os.path.join(HERE, "..", "docs", "HOW-IT-WORKS.md"), encoding="utf-8") as fh:
     how_it_works_text = fh.read()
-assert "can split a large brief" not in how_it_works_text, "HOW-IT-WORKS.md must no longer say 'can split a large brief'"
-assert "For work too big for one pull request" not in how_it_works_text, "HOW-IT-WORKS.md must no longer say 'For work too big for one pull request'"
+assert "can split a large brief" not in how_it_works_text, (
+    "HOW-IT-WORKS.md must no longer say 'can split a large brief'"
+)
+assert "For work too big for one pull request" not in how_it_works_text, (
+    "HOW-IT-WORKS.md must no longer say 'For work too big for one pull request'"
+)
 ok("docs/HOW-IT-WORKS.md no longer contains 'can split a large brief' or 'For work too big for one pull request'")
 
 # --------------------------------------------------------------------------- checks.suite_timeout / run_suite timeout override (issue #25)
@@ -2342,6 +2516,7 @@ def _stub_shell(calls):
     def fake(cmd, cwd=None, timeout=None, **kw):
         calls.append({"cmd": cmd, "cwd": cwd, "timeout": timeout})
         return subprocess.CompletedProcess([], 0, "ok\n", "")
+
     return fake
 
 
@@ -2375,8 +2550,10 @@ finally:
 ok("an overlay {checks: {suite_timeout: 2400}} deep-merges via route.load_config and reaches shell")
 
 try:
+
     def _timeout_shell(cmd, cwd=None, timeout=None, **kw):
         return subprocess.CompletedProcess([], 124, "", "")
+
     checks.shell = _timeout_shell
     with tempfile.TemporaryDirectory() as d:
         write(d, ".run-issue.json", json.dumps({"checks": {"suite_timeout": 2400}}))
@@ -2452,8 +2629,10 @@ assert code is None and detail == "no runner (stack=none)", detail
 ok("run_suite's pre-shell bail-outs (no runner / no test_cmd) are unaffected by a suite_timeout override")
 
 try:
+
     def _timeout_shell(cmd, cwd=None, timeout=None, **kw):
         return subprocess.CompletedProcess([], 124, "", "")
+
     checks.shell = _timeout_shell
     ledger = _FakeLedger(stack="none", test_cmd="pytest")
     envelope = {"handoff": {"test_files": ["run-engine/test_scripts.py"], "red_confirmed": True}}
@@ -2470,8 +2649,10 @@ finally:
 ok("check_sdet_post still wraps as 'could not verify RED: suite timed out after 2400s' with an override")
 
 try:
+
     def _timeout_shell(cmd, cwd=None, timeout=None, **kw):
         return subprocess.CompletedProcess([], 124, "", "")
+
     checks.shell = _timeout_shell
     ledger = _FakeLedger(stack="none", test_cmd="pytest")
     envelope = {"handoff": {}}
@@ -2528,35 +2709,31 @@ def _seed_run(d, issue, repo_rel="repo", run_rel="run", extra_context=None):
 # -- override-reader helper: '' with no overlay, override string with one ----------
 
 with tempfile.TemporaryDirectory() as d:
-    assert stack.read_test_cmd_override(d) == "", \
-        "no .run-issue.json at all must read back as absent, not raise"
+    assert stack.read_test_cmd_override(d) == "", "no .run-issue.json at all must read back as absent, not raise"
     write(d, ".run-issue.json", json.dumps({"test_cmd": "php artisan test --configuration=x.xml"}))
     assert stack.read_test_cmd_override(d) == "php artisan test --configuration=x.xml"
-ok("stack.read_test_cmd_override reads the top-level .run-issue.json test_cmd key, "
-   "'' when there is none")
+ok("stack.read_test_cmd_override reads the top-level .run-issue.json test_cmd key, '' when there is none")
 
 # -- null / blank / non-string values are all treated as absent --------------------
 
 for bad_value in (None, "", "   ", 5, ["php", "artisan", "test"], {"cmd": "x"}, True):
     with tempfile.TemporaryDirectory() as d:
         write(d, ".run-issue.json", json.dumps({"test_cmd": bad_value}))
-        assert stack.read_test_cmd_override(d) == "", \
+        assert stack.read_test_cmd_override(d) == "", (
             f"test_cmd={bad_value!r} must read back as absent, not crash or leak through"
-ok("null, blank/whitespace-only, and non-string test_cmd overlay values are all "
-   "treated as absent, no crash")
+        )
+ok("null, blank/whitespace-only, and non-string test_cmd overlay values are all treated as absent, no crash")
 
 # -- no overlay, no compose file: unchanged derivation ------------------------------
 
 with tempfile.TemporaryDirectory() as d:
     repo, run_dir = _seed_run(d, 30)
     write(repo, "go.mod", "module x")
-    proc = subprocess.run([sys.executable, ROUTE, "stack", "up", run_dir],
-                          capture_output=True, text=True)
+    proc = subprocess.run([sys.executable, ROUTE, "stack", "up", run_dir], capture_output=True, text=True)
     assert proc.returncode == 0, proc.stderr
     ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
     assert ctx["test_cmd"] == ctx["test_cmd_host"] == "go test ./..."
-ok("no overlay, no compose file: test_cmd == test_cmd_host == derived host runner "
-   "(existing behavior unchanged)")
+ok("no overlay, no compose file: test_cmd == test_cmd_host == derived host runner (existing behavior unchanged)")
 
 # -- overlay on the no-compose-file path: test_cmd is the override, test_cmd_host derived
 
@@ -2564,15 +2741,14 @@ with tempfile.TemporaryDirectory() as d:
     repo, run_dir = _seed_run(d, 31)
     write(repo, "go.mod", "module x")
     write(repo, ".run-issue.json", json.dumps({"test_cmd": "go test -run TestFoo ./..."}))
-    proc = subprocess.run([sys.executable, ROUTE, "stack", "up", run_dir],
-                          capture_output=True, text=True)
+    proc = subprocess.run([sys.executable, ROUTE, "stack", "up", run_dir], capture_output=True, text=True)
     assert proc.returncode == 0, proc.stderr
     ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
     assert ctx["test_cmd"] == "go test -run TestFoo ./...", ctx["test_cmd"]
-    assert ctx["test_cmd_host"] == "go test ./...", \
+    assert ctx["test_cmd_host"] == "go test ./...", (
         "the override must not leak into test_cmd_host, which stays the raw derivation"
-ok("overlay test_cmd on the no-compose-file path is recorded verbatim; test_cmd_host "
-   "stays derived")
+    )
+ok("overlay test_cmd on the no-compose-file path is recorded verbatim; test_cmd_host stays derived")
 
 # -- overlay on the full success path: override wins over build_test_cmd -----------
 
@@ -2600,10 +2776,10 @@ with tempfile.TemporaryDirectory() as d:
             stack.write_override = real_write_override
     ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
     assert ctx["stack"] == "up", ctx
-    assert ctx["test_cmd"] == "custom exec cmd", \
+    assert ctx["test_cmd"] == "custom exec cmd", (
         f"override must win over build_test_cmd's derivation, got {ctx['test_cmd']!r}"
-ok("overlay test_cmd on the full success path is recorded instead of the "
-   "build_test_cmd-derived command")
+    )
+ok("overlay test_cmd on the full success path is recorded instead of the build_test_cmd-derived command")
 
 # -- two consecutive `stack up` calls with the same override still honor it --------
 
@@ -2612,8 +2788,7 @@ with tempfile.TemporaryDirectory() as d:
     write(repo, "go.mod", "module x")
     write(repo, ".run-issue.json", json.dumps({"test_cmd": "go test -short ./..."}))
     for _ in range(2):
-        proc = subprocess.run([sys.executable, ROUTE, "stack", "up", run_dir],
-                              capture_output=True, text=True)
+        proc = subprocess.run([sys.executable, ROUTE, "stack", "up", run_dir], capture_output=True, text=True)
         assert proc.returncode == 0, proc.stderr
         ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
         assert ctx["test_cmd"] == "go test -short ./...", ctx["test_cmd"]
@@ -2646,13 +2821,16 @@ with tempfile.TemporaryDirectory() as d:
     env = dict(os.environ, CLAUDE_PLUGIN_DATA=data_d, PATH="/nonexistent")
     proc = subprocess.run(
         [sys.executable, ROUTE, "stack", "up", run_dir, "--lock-timeout", "0"],
-        capture_output=True, text=True, env=env,
+        capture_output=True,
+        text=True,
+        env=env,
     )
     assert proc.returncode == 0, proc.stderr
     ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
     assert ctx["stack"] == "failed"
-    assert ctx["test_cmd"] == "preexisting --configuration=x.xml", \
+    assert ctx["test_cmd"] == "preexisting --configuration=x.xml", (
         f"lock-held degraded path must preserve the prior test_cmd, got {ctx['test_cmd']!r}"
+    )
 ok("cmd_up's lock-held degraded path preserves a prior test_cmd instead of erasing it")
 
 with tempfile.TemporaryDirectory() as d:
@@ -2677,8 +2855,9 @@ with tempfile.TemporaryDirectory() as d:
             stack.shell, stack.write_override = real_shell, real_write_override
     ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
     assert ctx["stack"] == "failed"
-    assert ctx["test_cmd"] == "preexisting --configuration=x.xml", \
+    assert ctx["test_cmd"] == "preexisting --configuration=x.xml", (
         f"up-failed degraded path must preserve the prior test_cmd, got {ctx['test_cmd']!r}"
+    )
 ok("cmd_up's up-failed degraded path preserves a prior test_cmd instead of erasing it")
 
 with tempfile.TemporaryDirectory() as d:
@@ -2708,8 +2887,9 @@ with tempfile.TemporaryDirectory() as d:
             stack.write_override = real_write_override
     ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
     assert ctx["stack"] == "failed"
-    assert ctx["test_cmd"] == "preexisting --configuration=x.xml", \
+    assert ctx["test_cmd"] == "preexisting --configuration=x.xml", (
         f"no-app-service degraded path must preserve the prior test_cmd, got {ctx['test_cmd']!r}"
+    )
 ok("cmd_up's no-app-service degraded path preserves a prior test_cmd instead of erasing it")
 
 # -- degraded path on a fresh ledger (no prior, no override) still records '' ------
@@ -2736,8 +2916,10 @@ with tempfile.TemporaryDirectory() as d:
     ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
     assert ctx["stack"] == "failed"
     assert ctx["test_cmd"] == "", ctx["test_cmd"]
-ok("a degraded path with no prior test_cmd and no override still records '' "
-   "(nothing to preserve, no regression to a stale value either)")
+ok(
+    "a degraded path with no prior test_cmd and no override still records '' "
+    "(nothing to preserve, no regression to a stale value either)"
+)
 
 # -- override + a different prior value on a degraded path: override wins ----------
 
@@ -2763,8 +2945,7 @@ with tempfile.TemporaryDirectory() as d:
             stack.shell, stack.write_override = real_shell, real_write_override
     ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
     assert ctx["test_cmd"] == "the override wins", ctx["test_cmd"]
-ok("an override on a degraded path wins over both the derived value and the prior "
-   "ledger value")
+ok("an override on a degraded path wins over both the derived value and the prior ledger value")
 
 # -- malformed .run-issue.json: `stack up` still exits 0, derives test_cmd, warns --
 
@@ -2772,15 +2953,14 @@ with tempfile.TemporaryDirectory() as d:
     repo, run_dir = _seed_run(d, 39)
     write(repo, "go.mod", "module x")
     write(repo, ".run-issue.json", "{ not valid json")
-    proc = subprocess.run([sys.executable, ROUTE, "stack", "up", run_dir],
-                          capture_output=True, text=True)
+    proc = subprocess.run([sys.executable, ROUTE, "stack", "up", run_dir], capture_output=True, text=True)
     assert proc.returncode == 0, proc.stderr
     ctx = json.load(open(os.path.join(run_dir, "run.json")))["context"]
-    assert ctx["test_cmd"] == "go test ./...", \
+    assert ctx["test_cmd"] == "go test ./...", (
         "a malformed overlay must fall back to the derived test_cmd, not crash the run"
+    )
     assert proc.stderr.strip() != "", "a malformed overlay must warn on stderr"
-ok("a malformed .run-issue.json leaves `stack up` exiting 0 with a derived test_cmd, "
-   "warning on stderr")
+ok("a malformed .run-issue.json leaves `stack up` exiting 0 with a derived test_cmd, warning on stderr")
 
 # --------------------------------------------------------------------------- run_suite: stack=failed is unconditionally unrunnable
 
@@ -2792,11 +2972,12 @@ try:
     code, detail = checks.run_suite(ledger, "/repo")
 finally:
     checks.shell = real_checks_shell
-assert code is None, \
-    "stack=failed with a non-empty test_cmd must still be unrunnable, never a real exit code"
+assert code is None, "stack=failed with a non-empty test_cmd must still be unrunnable, never a real exit code"
 assert not shell_calls, "stack=failed must never shell out, override test_cmd or not"
-ok("run_suite treats stack=failed as unconditionally unrunnable, even with a non-empty "
-   "test_cmd left over from a prior successful run")
+ok(
+    "run_suite treats stack=failed as unconditionally unrunnable, even with a non-empty "
+    "test_cmd left over from a prior successful run"
+)
 
 # -- regression guard: stack=none with a non-empty test_cmd still runs (host runner) --
 
@@ -2808,10 +2989,13 @@ try:
 finally:
     checks.shell = real_checks_shell
 assert code == 0 and detail == "ok", (code, detail)
-assert shell_calls and shell_calls[0]["cmd"] == "go test ./...", \
+assert shell_calls and shell_calls[0]["cmd"] == "go test ./...", (
     "the new stack=failed guard must not swallow the legitimate stack=none host-runner case"
-ok("run_suite with stack=none and a non-empty test_cmd still runs it — the new "
-   "stack=failed guard must not catch this legitimate host-runner case")
+)
+ok(
+    "run_suite with stack=none and a non-empty test_cmd still runs it — the new "
+    "stack=failed guard must not catch this legitimate host-runner case"
+)
 
 # --------------------------------------------------------------------------- /intake --whole passthrough for a multi-outcome BRD (issue #41)
 
@@ -2821,9 +3005,8 @@ with open(INTAKE_MD, encoding="utf-8") as fh:
 
 assert "--whole" in intake_text, "commands/intake.md must document a --whole flag"
 decomp_idx = intake_text.index("**Decomposition check**")
-decomp_section = intake_text[decomp_idx:decomp_idx + 2000]
-assert "--whole" in decomp_section, \
-    "the BRD adapter's Decomposition check section must have a branch for --whole"
+decomp_section = intake_text[decomp_idx : decomp_idx + 2000]
+assert "--whole" in decomp_section, "the BRD adapter's Decomposition check section must have a branch for --whole"
 ok("commands/intake.md documents a --whole flag and the Decomposition check has a --whole branch")
 
 # Split the Decomposition-check section into its --whole branch and its no-flag branch,
@@ -2831,42 +3014,50 @@ ok("commands/intake.md documents a --whole flag and the Decomposition check has 
 whole_marker_idx = decomp_section.index("--whole")
 before_whole = decomp_section[:whole_marker_idx]
 after_whole = decomp_section[whole_marker_idx:]
-assert "AskUserQuestion" in before_whole or "AskUserQuestion" in intake_text[decomp_idx:decomp_idx + 200], \
+assert "AskUserQuestion" in before_whole or "AskUserQuestion" in intake_text[decomp_idx : decomp_idx + 200], (
     "no-flag branch of the Decomposition check must still contain AskUserQuestion (regression: standalone /intake must still ask)"
+)
 # The --whole branch itself (from the --whole marker to the next AskUserQuestion mention,
 # or to the end of the section if none) must not fire AskUserQuestion.
 whole_branch_end = after_whole.find("AskUserQuestion")
 whole_branch = after_whole if whole_branch_end == -1 else after_whole[:whole_branch_end]
-assert "AskUserQuestion" not in whole_branch, \
+assert "AskUserQuestion" not in whole_branch, (
     "the --whole branch must not contain AskUserQuestion — no question fires when --whole is set"
+)
 ok("commands/intake.md --whole branch skips AskUserQuestion while the no-flag branch still asks")
 
 # Regression for PR #45 review thread: the Note adapter's search-query line and the
 # Text adapter's `## Summary` template must use the stripped-argument placeholder
 # (`<argument>`), never a literal `$ARGUMENTS` token that would leak the raw,
 # un-stripped (still containing `--whole`) argument into the brief.
-note_search_idx = intake_text.index('obsidian vault=notes search query=')
-note_search_line = intake_text[note_search_idx:intake_text.index("\n", note_search_idx)]
-assert "<argument>" in note_search_line and "$ARGUMENTS" not in note_search_line, \
+note_search_idx = intake_text.index("obsidian vault=notes search query=")
+note_search_line = intake_text[note_search_idx : intake_text.index("\n", note_search_idx)]
+assert "<argument>" in note_search_line and "$ARGUMENTS" not in note_search_line, (
     "the Note adapter's search-query line must use the stripped <argument> placeholder, not $ARGUMENTS"
+)
 
 text_summary_idx = intake_text.rindex("## Summary")
-text_summary_block = intake_text[text_summary_idx:text_summary_idx + 200]
-assert "<argument>" in text_summary_block and "$ARGUMENTS" not in text_summary_block, \
+text_summary_block = intake_text[text_summary_idx : text_summary_idx + 200]
+assert "<argument>" in text_summary_block and "$ARGUMENTS" not in text_summary_block, (
     "the Text adapter's ## Summary template must use the stripped <argument> placeholder, not $ARGUMENTS"
-ok("the Note adapter's search query and the Text adapter's ## Summary template use the "
-   "stripped <argument> placeholder, never a literal $ARGUMENTS")
+)
+ok(
+    "the Note adapter's search query and the Text adapter's ## Summary template use the "
+    "stripped <argument> placeholder, never a literal $ARGUMENTS"
+)
 
 with open(GH_ISSUE_MD, encoding="utf-8") as fh:
     gh_issue_text = fh.read()
-assert "/intake $@ --whole" in gh_issue_text, \
+assert "/intake $@ --whole" in gh_issue_text, (
     "commands/gh-issue.md step 0 must invoke /intake with --whole, not bare /intake $@"
+)
 ok("commands/gh-issue.md invokes `/intake $@ --whole`")
 
 with open(os.path.join(HERE, "..", "commands", "run-issue.md"), encoding="utf-8") as fh:
     run_issue_text = fh.read()
-assert "/intake <stripped argument> --whole" in run_issue_text, \
+assert "/intake <stripped argument> --whole" in run_issue_text, (
     "commands/run-issue.md Preflight step 2 must invoke /intake with --whole"
+)
 ok("commands/run-issue.md invokes `/intake <stripped argument> --whole`")
 
 # Every OTHER "invoke `/intake" call site (outside intake.md itself) must also carry --whole.
@@ -2892,8 +3083,9 @@ for _path, _lineno, _line in _intake_call_sites:
 ok(f"every 'invoke `/intake' call site outside commands/intake.md ({len(_intake_call_sites)} found) carries --whole")
 
 detect_idx = intake_text.index("**Detect the source**")
-assert "strip" in intake_text[:detect_idx].lower() or "--whole" in intake_text[:detect_idx], \
+assert "strip" in intake_text[:detect_idx].lower() or "--whole" in intake_text[:detect_idx], (
     "commands/intake.md must document stripping --whole from the arguments before step 1's 'Detect the source'"
+)
 ok("commands/intake.md documents stripping --whole before step 1's 'Detect the source'")
 
 # --------------------------------------------------------------------------- epic blocker_ask (issue #53)
@@ -2906,10 +3098,20 @@ def _write_child_ledger(runs_dir, issue, status="running", context=None):
     d = os.path.join(runs_dir, f"o-r-issue-{issue}")
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, "run.json"), "w", encoding="utf-8") as fh:
-        json.dump({"issue": issue, "stations": ["dev"], "currentIndex": 0,
-                   "bounceCounts": {}, "status": status, "trace": [],
-                   "context": context or {}, "classification": None,
-                   "specialists": []}, fh)
+        json.dump(
+            {
+                "issue": issue,
+                "stations": ["dev"],
+                "currentIndex": 0,
+                "bounceCounts": {},
+                "status": status,
+                "trace": [],
+                "context": context or {},
+                "classification": None,
+                "specialists": [],
+            },
+            fh,
+        )
 
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -2931,16 +3133,24 @@ with tempfile.TemporaryDirectory() as tmp:
     epic_dir = os.path.join(tmp, "epic")
     os.makedirs(epic_dir)
     with open(os.path.join(epic_dir, "epic.json"), "w", encoding="utf-8") as fh:
-        json.dump({"parent": 42, "slug": "o/r", "children": [10, 11],
-                   "dag": {"order": [10, 11], "deps": {"10": [], "11": []}},
-                   "max_stacks": 2}, fh)
+        json.dump(
+            {
+                "parent": 42,
+                "slug": "o/r",
+                "children": [10, 11],
+                "dag": {"order": [10, 11], "deps": {"10": [], "11": []}},
+                "max_stacks": 2,
+            },
+            fh,
+        )
     runs = os.path.join(tmp, "runs")
     _write_child_ledger(runs, 10, context={"blocked_on": "stuck", "blocker_ask": "pending"})
     _write_child_ledger(runs, 11, context={})
 
     proc = subprocess.run(
         [sys.executable, ROUTE, "epic", "status", epic_dir, "--runs-dir", runs],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert proc.returncode == 0, proc.stderr
     lines = {int(line.split()[0].lstrip("#")): line for line in proc.stdout.splitlines()}
@@ -2952,18 +3162,25 @@ with tempfile.TemporaryDirectory() as tmp:
     epic_dir = os.path.join(tmp, "epic")
     os.makedirs(epic_dir)
     with open(os.path.join(epic_dir, "epic.json"), "w", encoding="utf-8") as fh:
-        json.dump({"parent": 42, "slug": "o/r", "children": [10, 11, 12],
-                   "dag": {"order": [10, 11, 12], "deps": {"10": [], "11": [], "12": []}},
-                   "max_stacks": 3}, fh)
+        json.dump(
+            {
+                "parent": 42,
+                "slug": "o/r",
+                "children": [10, 11, 12],
+                "dag": {"order": [10, 11, 12], "deps": {"10": [], "11": [], "12": []}},
+                "max_stacks": 3,
+            },
+            fh,
+        )
     runs = os.path.join(tmp, "runs")
-    _write_child_ledger(runs, 10, status="escalated",
-                        context={"blocked_on": "needs a human", "blocker_ask": "pending"})
+    _write_child_ledger(runs, 10, status="escalated", context={"blocked_on": "needs a human", "blocker_ask": "pending"})
     _write_child_ledger(runs, 11, status="running")
     _write_child_ledger(runs, 12, status="running")
 
     proc = subprocess.run(
         [sys.executable, ROUTE, "epic", "next", epic_dir, "--runs-dir", runs],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert proc.returncode == 0, proc.stderr
     got = json.loads(proc.stdout)
@@ -2976,18 +3193,26 @@ with tempfile.TemporaryDirectory() as tmp:
     epic_dir = os.path.join(tmp, "epic")
     os.makedirs(epic_dir)
     with open(os.path.join(epic_dir, "epic.json"), "w", encoding="utf-8") as fh:
-        json.dump({"parent": 42, "slug": "o/r", "children": [10, 11],
-                   "dag": {"order": [10, 11], "deps": {"10": [], "11": []}},
-                   "max_stacks": 2}, fh)
+        json.dump(
+            {
+                "parent": 42,
+                "slug": "o/r",
+                "children": [10, 11],
+                "dag": {"order": [10, 11], "deps": {"10": [], "11": []}},
+                "max_stacks": 2,
+            },
+            fh,
+        )
     runs = os.path.join(tmp, "runs")
-    _write_child_ledger(runs, 10, status="escalated",
-                        context={"blocked_on": "first blocker", "blocker_ask": "pending"})
-    _write_child_ledger(runs, 11, status="escalated",
-                        context={"blocked_on": "second blocker", "blocker_ask": "pending"})
+    _write_child_ledger(runs, 10, status="escalated", context={"blocked_on": "first blocker", "blocker_ask": "pending"})
+    _write_child_ledger(
+        runs, 11, status="escalated", context={"blocked_on": "second blocker", "blocker_ask": "pending"}
+    )
 
     proc = subprocess.run(
         [sys.executable, ROUTE, "epic", "next", epic_dir, "--runs-dir", runs],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert proc.returncode == 0, proc.stderr
     got = json.loads(proc.stdout)
@@ -3000,17 +3225,30 @@ with tempfile.TemporaryDirectory() as tmp:
     run_dir = os.path.join(tmp, "o-r-issue-10")
     os.makedirs(run_dir)
     with open(os.path.join(run_dir, "run.json"), "w", encoding="utf-8") as fh:
-        json.dump({"issue": 10, "stations": ["dev"], "currentIndex": 0, "bounceCounts": {},
-                   "status": "escalated", "trace": [], "context": {}, "classification": None,
-                   "specialists": []}, fh)
+        json.dump(
+            {
+                "issue": 10,
+                "stations": ["dev"],
+                "currentIndex": 0,
+                "bounceCounts": {},
+                "status": "escalated",
+                "trace": [],
+                "context": {},
+                "classification": None,
+                "specialists": [],
+            },
+            fh,
+        )
     proc = subprocess.run(
         [sys.executable, ROUTE, "set", run_dir, "blocked_on=first", "blocker_ask=answered"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert proc.returncode == 0, proc.stderr
     proc2 = subprocess.run(
         [sys.executable, ROUTE, "set", run_dir, "blocked_on=second", "blocker_ask=pending"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert proc2.returncode == 0, proc2.stderr
     led = json.load(open(os.path.join(run_dir, "run.json")))
@@ -3027,84 +3265,87 @@ def _run_issue_section(text: str, start_heading: str, end_heading: str) -> str:
     return text[start:end]
 
 
-run_issue_step4 = _run_issue_section(
-    run_issue_text, "4. **The relay.**", "5. **A blocker")
+run_issue_step4 = _run_issue_section(run_issue_text, "4. **The relay.**", "5. **A blocker")
 assert "escalate" in run_issue_step4, run_issue_step4
-assert "needs_confirmation" in run_issue_step4, \
+assert "needs_confirmation" in run_issue_step4, (
     "step 4 must name both park causes: aiw route printing escalate, and a non-empty needs_confirmation"
+)
 ok("run-issue.md Epic step 4 names both park causes: escalate and needs_confirmation")
 
 assert "blocked_on=" in run_issue_step4, run_issue_step4
 assert "blocker_ask=pending" in run_issue_step4, run_issue_step4
 set_idx = run_issue_step4.index("blocked_on=")
 ask_idx = run_issue_step4.index("AskUserQuestion")
-assert set_idx < ask_idx, \
-    "the ledger write (blocked_on=/blocker_ask=pending) must happen before AskUserQuestion"
+assert set_idx < ask_idx, "the ledger write (blocked_on=/blocker_ask=pending) must happen before AskUserQuestion"
 ok("run-issue.md Epic step 4 writes blocked_on=/blocker_ask=pending before AskUserQuestion")
 
 assert "epic next" in run_issue_step4, run_issue_step4
-assert "before dispatching the next" in run_issue_step4, \
+assert "before dispatching the next" in run_issue_step4, (
     "step 4 must say the ask fires before dispatching the next aiw epic next call"
-assert "#<child>" in run_issue_step4, \
-    "step 4 must name the child issue number as #<child>"
-assert "the blocking station" in run_issue_step4, \
-    "step 4 must name the blocking station"
-assert "the one-line\n   reason" in run_issue_step4 or "the one-line reason" in run_issue_step4, \
+)
+assert "#<child>" in run_issue_step4, "step 4 must name the child issue number as #<child>"
+assert "the blocking station" in run_issue_step4, "step 4 must name the blocking station"
+assert "the one-line\n   reason" in run_issue_step4 or "the one-line reason" in run_issue_step4, (
     "step 4 must name the one-line reason"
+)
 ok("run-issue.md Epic step 4 says the ask fires before dispatching the next epic next, naming the child/station/reason")
 
 assert "AskUserQuestion" in run_issue_step4
-assert "one `AskUserQuestion` per parked child" in run_issue_step4 or \
-    "never batched" in run_issue_step4, \
+assert "one `AskUserQuestion` per parked child" in run_issue_step4 or "never batched" in run_issue_step4, (
     "step 4 must say one AskUserQuestion per parked child, never batched"
+)
 ok("run-issue.md Epic step 4 says one AskUserQuestion per parked child, never batched")
 
 assert "blocker_ask=answered" in run_issue_step4, run_issue_step4
 assert "blocker_ask=deferred" in run_issue_step4, run_issue_step4
-assert "7b" in run_issue_step4 and "8.5" in run_issue_step4, \
+assert "7b" in run_issue_step4 and "8.5" in run_issue_step4, (
     "step 4 must say a deferred needs_confirmation child does not proceed to 7b/8.5"
-assert "Degraded finish" in run_issue_step4, \
-    "step 4 must say the escalate path still goes to Degraded finish"
+)
+assert "Degraded finish" in run_issue_step4, "step 4 must say the escalate path still goes to Degraded finish"
 ok("run-issue.md Epic step 4 covers blocker_ask=answered/deferred and both park paths' downstream routing")
 
-run_issue_step6 = _run_issue_section(
-    run_issue_text, "6. **GATE 2a", "7. **GATE 2")
+run_issue_step6 = _run_issue_section(run_issue_text, "6. **GATE 2a", "7. **GATE 2")
 assert "blocker_ask" in run_issue_step6, run_issue_step6
 assert "pending" in run_issue_step6 and "deferred" in run_issue_step6, run_issue_step6
 assert "epic status" in run_issue_step6, run_issue_step6
 assert "once" in run_issue_step6.lower(), run_issue_step6
-assert "Once 2a has fired it does not fire again." not in run_issue_step6, \
+assert "Once 2a has fired it does not fire again." not in run_issue_step6, (
     "the old unqualified sentence must be gone now that step 6 reads blocker_ask"
-ok("run-issue.md Epic step 6 reads blocker_ask via aiw epic status, still fires once, "
-   "drops the old unqualified sentence")
+)
+ok(
+    "run-issue.md Epic step 6 reads blocker_ask via aiw epic status, still fires once, "
+    "drops the old unqualified sentence"
+)
 
-assert re.search(r"skip.*gate|no.*blocker_ask.*pending", run_issue_step6, re.I), \
+assert re.search(r"skip.*gate|no.*blocker_ask.*pending", run_issue_step6, re.I), (
     "step 6 must say to skip the gate when no child has a pending or deferred blocker_ask"
+)
 ok("run-issue.md Epic step 6 says to skip the gate when nothing has a pending/deferred blocker_ask")
 
-gates_section = _run_issue_section(
-    run_issue_text, "### Gates — exactly three", "### Test ownership")
+gates_section = _run_issue_section(run_issue_text, "### Gates — exactly three", "### Test ownership")
 assert "epic" in gates_section.lower() and "Gate 2a" in gates_section, gates_section
-assert "not a fourth gate" in gates_section or "still Gate 2a" in gates_section, \
+assert "not a fourth gate" in gates_section or "still Gate 2a" in gates_section, (
     "the Gates section must state the per-blocker asks are a use of Gate 2a, not a fourth gate"
+)
 ok("run-issue.md Gates section states the per-blocker asks are Gate 2a, not a fourth gate")
 
-gate2a_span = _run_issue_section(
-    run_issue_text, "### GATE 2a — human confirmation on blockers", "## 7b.")
+gate2a_span = _run_issue_section(run_issue_text, "### GATE 2a — human confirmation on blockers", "## 7b.")
 assert "**Confirmed, continue**" in gate2a_span, gate2a_span
 assert "**Hold here**" in gate2a_span, gate2a_span
 ok("run-issue.md phase 7's GATE 2a still contains Confirmed, continue and Hold here, unchanged")
 
 routing_rules = _run_issue_section(run_issue_text, "### Routing", "### Gates — exactly three")
-assert "not a stop-and-ask" in routing_rules or "not a stop-and-ask" in run_issue_text, \
+assert "not a stop-and-ask" in routing_rules or "not a stop-and-ask" in run_issue_text, (
     "the engine's escalate bullet must still contain 'not a stop-and-ask'"
+)
 assert "Degraded finish" in routing_rules
 ok("run-issue.md engine escalate bullet still says not a stop-and-ask and routes to Degraded finish")
 
 with open(os.path.join(HERE, "..", "docs", "HOW-IT-WORKS.md"), encoding="utf-8") as fh:
     how_it_works_text = fh.read()
-assert "immediate" in how_it_works_text.lower() or "as soon as" in how_it_works_text.lower(), \
+assert "immediate" in how_it_works_text.lower() or "as soon as" in how_it_works_text.lower(), (
     "docs/HOW-IT-WORKS.md must mention the immediate per-blocker ask in its epic Gate 2a description"
+)
 assert "sole channel" not in how_it_works_text.lower(), how_it_works_text
 ok("docs/HOW-IT-WORKS.md mentions the immediate per-blocker ask, not just the once-at-the-end description")
 
@@ -3116,8 +3357,13 @@ for needle in ("docs/tasks/", "Obsidian", "wiki"):
 assert "only when" in _hr79.lower() and ("sole" in _hr79.lower() or "nothing else" in _hr79.lower()), _hr79
 ok("gh-issue.md HARD RULE carves out docs/tasks/ (Obsidian/wiki only when chosen) as the sole exception")
 
-for needle in ("NEVER use Write, Edit, or NotebookEdit", "NEVER run a mutating shell command",
-               "/tmp/gh-issue-body.md", "/dump", '"It\'s trivial" is not an exception'):
+for needle in (
+    "NEVER use Write, Edit, or NotebookEdit",
+    "NEVER run a mutating shell command",
+    "/tmp/gh-issue-body.md",
+    "/dump",
+    '"It\'s trivial" is not an exception',
+):
     assert needle in _hr79, f"earlier HARD RULE text lost: {needle!r}"
 ok("gh-issue.md HARD RULE block keeps every earlier prohibition")
 assert "**Scope.**" in _g79
@@ -3133,13 +3379,28 @@ ok("gh-issue.md has step 3.6 between 3.5 and 4")
 _raw36 = _slice(_g79, "3.6.", "4. Then create a GitHub issue")
 _s36 = " ".join(_raw36.split())
 _low36 = _s36.lower()
-for f in ("sequence number", "title", "outcome", "files", "symbols", "acceptance criteria",
-          "verify command", "Depends on: task <k>", "issue-number"):
+for f in (
+    "sequence number",
+    "title",
+    "outcome",
+    "files",
+    "symbols",
+    "acceptance criteria",
+    "verify command",
+    "Depends on: task <k>",
+    "issue-number",
+):
     assert f.lower() in _low36, f"step 3.6 missing per-task field {f!r}"
 ok("step 3.6 names every per-task field")
 
-for needle in ("docs/tasks/<slug>.md", "obsidian vault=notes", "05-Work/<Project>/<Feature>/Tasks.md",
-               "Tasks-<Title-With-Dashes>.md", "on demand", "separate"):
+for needle in (
+    "docs/tasks/<slug>.md",
+    "obsidian vault=notes",
+    "05-Work/<Project>/<Feature>/Tasks.md",
+    "Tasks-<Title-With-Dashes>.md",
+    "on demand",
+    "separate",
+):
     assert needle.lower() in _low36, f"step 3.6 missing {needle!r}"
 assert "never" in _low36 and "git add" in _low36 and "commit" in _low36
 assert "confirmation" in _low36 or "confirm" in _low36
@@ -3158,10 +3419,17 @@ ok("step 3.6 proposes a slug for title-less free text")
 assert "overwrit" in _low36 and "ask" in _low36
 ok("step 3.6 never silently overwrites an existing file")
 
-for bad in ("4-EPIC", "three choices", "coarser", "~8", "more-than-8",
-            "4. Then create a GitHub issue", "3.5. **Decompose.**"):
+for bad in (
+    "4-EPIC",
+    "three choices",
+    "coarser",
+    "~8",
+    "more-than-8",
+    "4. Then create a GitHub issue",
+    "3.5. **Decompose.**",
+):
     assert bad not in _s36, f"step 3.6 slice must not contain {bad!r}"
-assert not any(l.lstrip().startswith("- Body sections:") for l in _raw36.splitlines())
+assert not any(ln.lstrip().startswith("- Body sections:") for ln in _raw36.splitlines())
 ok("step 3.6 slice stays scoped (no 4-EPIC / 3.5 / step 4 leakage)")
 
 # Issue #80: flat creation loop (4-FLAT) replaces 4-EPIC in gh-issue.md.
@@ -3173,8 +3441,8 @@ ok("gh-issue.md has the 4-FLAT heading exactly once")
 
 _create = flat.index("gh issue create")
 assert "--body-file /tmp/gh-issue-body.md" in flat and "--body " not in flat
-_lab = [l for l in flat.splitlines() if "--label" in l and ("gh issue create" in l or "--label" in l)]
-assert any("refined" in l and "prd-<slug>" in l for l in _lab), _lab
+_lab = [ln for ln in flat.splitlines() if "--label" in ln and ("gh issue create" in ln or "--label" in ln)]
+assert any("refined" in ln and "prd-<slug>" in ln for ln in _lab), _lab
 ok("4-FLAT creates with --label refined,prd-<slug> and --body-file, never --body")
 
 _prd = re.search(r"gh label create prd-<slug>\s[^\n]*2>/dev/null \|\| true", flat)
@@ -3200,7 +3468,7 @@ assert "one at a time" in flat_ws and "list order" in flat_ws
 ok("4-FLAT creates issues one at a time in list order")
 
 assert "gh label create lean" not in flat
-assert not any("--label" in l and "lean" in l for l in flat.splitlines())
+assert not any("--label" in ln and "lean" in ln for ln in flat.splitlines())
 assert "`lean` is never applied here." in flat_ws
 ok("4-FLAT never applies lean")
 
@@ -3214,7 +3482,7 @@ assert "4-FLAT" in _hr80 and "4-EPIC" not in _hr80
 assert "Issue:" in _hr80 and "docs/tasks/<slug>.md" in _hr80
 ok("gh-issue.md HARD RULE names 4-FLAT and the Issue: slot write-back")
 
-assert not any(l.lstrip().startswith("- Body sections:") for l in flat.splitlines())
+assert not any(ln.lstrip().startswith("- Body sections:") for ln in flat.splitlines())
 ok("4-FLAT adds no '- Body sections:' line")
 
 # Issue #80 review: pin each 4-FLAT rule sentence so a single-edit reversal fails.
@@ -3224,7 +3492,10 @@ ok("4-FLAT preflight rejects forward Depends on edges before creating anything")
 assert "already exists, stop and ask for a new slug" in flat_ws
 ok("4-FLAT stops for a new slug when step 3.6 skipped the save (collision)")
 assert "never `replace_all` and never Edit on that line alone" in flat_ws
-assert "Edit with an `old_string` that starts at the task's own `## Task <k> \u2014 <title>` heading and runs through its `Issue: \u2014` line (unique), setting `Issue: #<n>`" in flat_ws
+assert (
+    "Edit with an `old_string` that starts at the task's own `## Task <k> \u2014 <title>` heading and runs through its `Issue: \u2014` line (unique), setting `Issue: #<n>`"
+    in flat_ws
+)
 assert "Right after each successful create" in flat_ws and "Skip when step 3.6 saved no local file" in flat_ws
 ok("4-FLAT write-back is a per-task heading-anchored Edit, never replace_all")
 assert "Check each create's and each write-back's exit status. On failure, stop like a failed create" in flat_ws
@@ -3246,7 +3517,9 @@ assert _g81.count(_choices) == 1
 assert _g81.count('**"Stop here"**') >= 1 and _g81.count('**"Retry the missing ones"**') >= 1
 ok("4-FLAT failure prompt offers exactly the two choices Retry the missing ones / Stop here")
 
-assert flat_ws.index("Check each create's and each write-back's exit status") < flat_ws.index('**"Retry the missing ones"**')
+assert flat_ws.index("Check each create's and each write-back's exit status") < flat_ws.index(
+    '**"Retry the missing ones"**'
+)
 assert flat.index("gh issue create") < flat_ws.index('**"Retry the missing ones"**')
 assert flat_ws.index("gh issue create") < flat_ws.index('**"Stop here"**')
 ok("4-FLAT failure prompt sits after the create call inside the failure sub-step")
@@ -3260,9 +3533,12 @@ assert '**"Stop here"**: end the run and report the partial state' in flat_ws
 assert "the created issues (number and URL)" in flat_ws and "the missing ones (by planned title)" in flat_ws
 ok("4-FLAT Stop ends the run and reports created and missing tasks")
 
-for _p in ('**"Resume this list"**', "read it, show which tasks have no issue number yet",
-           "create only tasks without an issue number, in list order",
-           "reuse the existing `Issue: #<n>` numbers for their `Depends on:` lines"):
+for _p in (
+    '**"Resume this list"**',
+    "read it, show which tasks have no issue number yet",
+    "create only tasks without an issue number, in list order",
+    "reuse the existing `Issue: #<n>` numbers for their `Depends on:` lines",
+):
     assert _p in flat_ws, _p
 assert flat_ws.index("Resume this list") < flat_ws.index("gh label create refined")
 ok("4-FLAT resume uses the saved list and runs in the preflight before any create")
@@ -3291,14 +3567,16 @@ assert not re.search(r"gh issue (close|delete)", _g81)
 ok("4-FLAT never closes or deletes created issues")
 
 assert "three choices" not in flat_ws
-assert "Retry the missing one\"" not in _g81 and "Stop now" not in _g81
+assert 'Retry the missing one"' not in _g81 and "Stop now" not in _g81
 ok("4-FLAT choice labels have no variants")
 
 assert "epic" not in _g81.lower()
 assert flat.count("gh label create refined") == 1
 assert "already exists, stop and ask for a new slug" in flat_ws
 assert "Skip when step 3.6 saved no local file" in flat_ws
-assert "edited only to fill `Issue:` slots in `4-FLAT`" in " ".join(_slice(_g81, "**HARD RULE", "Do the following:").split())
+assert "edited only to fill `Issue:` slots in `4-FLAT`" in " ".join(
+    _slice(_g81, "**HARD RULE", "Do the following:").split()
+)
 ok("#81 keeps the #80 regression guards")
 
 # Review round: pin the wording whose single-edit reversals survived mutation testing.
@@ -3308,12 +3586,21 @@ _ch = flat[flat.index("exactly these two choices") : flat.index("Never close or 
 assert len(re.findall(r'^\s*- \*\*"', _ch, re.M)) == 2, "failure prompt must have exactly two option bullets"
 assert "This resume branch overrides the new-slug stop above" in flat_ws
 assert "Apply the duplicate guard above before every create after a failure" in flat_ws
-assert flat_ws.count("--json number,url,title,body") == 2 and "whose title also matches that task's planned title" in flat_ws
+assert (
+    flat_ws.count("--json number,url,title,body") == 2
+    and "whose title also matches that task's planned title" in flat_ws
+)
 assert "the `j < k` check runs on the saved list" in flat_ws
-ok("#81 pins resume-as-is, two-choice bullets, new-slug carve-out, retry duplicate guard, title match, saved-list edge check")
+ok(
+    "#81 pins resume-as-is, two-choice bullets, new-slug carve-out, retry duplicate guard, title match, saved-list edge check"
+)
+
 
 # Issue #82: per-issue factcheck, one-time assignees/project, ordered list return.
-_n = lambda t: " ".join(t.split())
+def _n(t):
+    return " ".join(t.split())
+
+
 g = _read("commands", "gh-issue.md")
 flat = _slice(g, "### 4-FLAT", "\n4.5.")
 flat_ws = _n(flat)
@@ -3321,39 +3608,57 @@ s4 = _n(_slice(g, "4. Then create a GitHub issue", "### 4-FLAT"))
 s45 = _n(_slice(g, "\n4.5.", "\n5. Assign"))
 s5 = _n(_slice(g, "\n5. Assign", "\n6. Add to a GitHub Project"))
 s6 = _n(_slice(g, "\n6. Add to a GitHub Project", "\n7. Dump"))
-close = _n(g[g.rindex("Return the issue URL"):])
+close = _n(g[g.rindex("Return the issue URL") :])
 
-for _p in ("once per issue created in this run (one from step 4, each one from `4-FLAT`)",
-           "each time with just that issue's number/URL and `owner/repo`"):
+for _p in (
+    "once per issue created in this run (one from step 4, each one from `4-FLAT`)",
+    "each time with just that issue's number/URL and `owner/repo`",
+):
     assert _p in s45, _p
 ok("#82 factcheck runs once per created issue")
 
-for _p in ("a `Source:` line in the Notes section pointing outside the repo",
-           "is expected traceability from `/intake`", "PASS", "ISSUES FOUND",
-           "gh issue edit <n> --body-file /tmp/gh-issue-body.md",
-           "Do not silently ignore a flagged discrepancy"):
+for _p in (
+    "a `Source:` line in the Notes section pointing outside the repo",
+    "is expected traceability from `/intake`",
+    "PASS",
+    "ISSUES FOUND",
+    "gh issue edit <n> --body-file /tmp/gh-issue-body.md",
+    "Do not silently ignore a flagged discrepancy",
+):
     assert _p in s45, _p
 ok("#82 factcheck keeps its existing rules")
 
-for _p in ("Ask this once per run, never per issue, and apply the chosen logins to every issue this run creates",
-           "multiSelect: true", "(as `@me`) recommended first", "on every `gh issue create`"):
+for _p in (
+    "Ask this once per run, never per issue, and apply the chosen logins to every issue this run creates",
+    "multiSelect: true",
+    "(as `@me`) recommended first",
+    "on every `gh issue create`",
+):
     assert _p in s5, _p
 assert s5.count("AskUserQuestion") == 1
 ok("#82 assignees are asked once and applied to every create")
 
-for _p in ("Ask the project and field questions once per run and apply the answers to every issue this run creates",
-           "Add every issue to each chosen project at creation time",
-           "Set each chosen field on every issue"):
+for _p in (
+    "Ask the project and field questions once per run and apply the answers to every issue this run creates",
+    "Add every issue to each chosen project at creation time",
+    "Set each chosen field on every issue",
+):
     assert _p in s6, _p
 ok("#82 projects are asked once and applied to every issue")
 
-for _p in ("If any `gh project` call fails, don't abort", "keep going with the remaining issues and fields",
-           "Report each affected issue URL and state plainly which fields couldn't be set and why",
-           "gh auth refresh -s project"):
+for _p in (
+    "If any `gh project` call fails, don't abort",
+    "keep going with the remaining issues and fields",
+    "Report each affected issue URL and state plainly which fields couldn't be set and why",
+    "gh auth refresh -s project",
+):
     assert _p in s6, _p
 ok("#82 a project failure does not abort the remaining issues")
 
-assert "Verify project fields landed on every issue with `gh issue view <n> --repo <owner>/<repo> --json projectItems`" in s6
+assert (
+    "Verify project fields landed on every issue with `gh issue view <n> --repo <owner>/<repo> --json projectItems`"
+    in s6
+)
 assert "Do NOT verify by paginating `gh project item-list`" in s6
 ok("#82 project fields are verified on every issue")
 
@@ -3375,29 +3680,36 @@ _add = "Add step 5's `--assignee` flags and step 6's `--project` flags from the 
 assert _add in flat_ws and flat_ws.index(_add) > flat_ws.index("gh issue create")
 ok("#82 preflight answers reach every flat create")
 
-for _p in ("When `4-FLAT` ran (2 or more tasks), return the ordered list of issue URLs, one per task in list order",
-           "hand control back to its Preflight step 3",
-           "with that ordered list of issue URLs for 2 or more"):
+for _p in (
+    "When `4-FLAT` ran (2 or more tasks), return the ordered list of issue URLs, one per task in list order",
+    "hand control back to its Preflight step 3",
+    "with that ordered list of issue URLs for 2 or more",
+):
     assert _p in close, _p
 ok("#82 the ordered list is returned and handed back")
 
 assert "Return the issue URL when step 4 created one issue" in close
 assert "with that issue number for one issue" in close
 assert 'gh issue create --title "..." --label "refined,..." --body-file /tmp/gh-issue-body.md' in s4
-assert "ask step 5's assignee question and step 6's project and field questions first, and add their `--assignee` / `--project` flags to this create" in s4
+assert (
+    "ask step 5's assignee question and step 6's project and field questions first, and add their `--assignee` / `--project` flags to this create"
+    in s4
+)
 
-assert "one `--project \"<title>\"` flag per project on every create (same call as step 4/5)" in s6
+assert 'one `--project "<title>"` flag per project on every create (same call as step 4/5)' in s6
 assert "Retry reuses the preflight answers and does not re-ask." in s6
-_ps = flat_ws[flat_ws.index("0. Preflight"):flat_ws.index("1. Ensure the labels")]
+_ps = flat_ws[flat_ws.index("0. Preflight") : flat_ws.index("1. Ensure the labels")]
 assert _ps.index("once for the whole list") > _ps.index("This resume branch overrides")
 assert _ps.index("once for the whole list") > _ps.index("If every slot is filled, create nothing")
-_f5 = flat_ws[flat_ws.index("5. Check each create"):]
+_f5 = flat_ws[flat_ws.index("5. Check each create") :]
 assert _f5.count("stop") == 1 and "first failure" not in _f5
 assert "On failure, stop like a failed create: report the created issues (number and URL)" in _f5
 assert "(including issues reused on resume)" in close
 assert "`PASS` \u2192 continue with the next issue's factcheck, then step 5" in s45
-_rt = ("retry that create once without `--project`, then after the loop add the issue to the chosen projects with "
-       "`gh project item-add <number> --owner <owner> --url <issue-url>` and report it as a project failure in step 6")
+_rt = (
+    "retry that create once without `--project`, then after the loop add the issue to the chosen projects with "
+    "`gh project item-add <number> --owner <owner> --url <issue-url>` and report it as a project failure in step 6"
+)
 assert _rt in flat_ws
 assert "On the `4-FLAT` path this skips only the project questions; the run goes on to the first create." in s6
 assert "Zero projects \u2192 skip this step entirely, go straight to returning the URL(s)." in s6
@@ -3413,7 +3725,7 @@ assert not re.search(r"gh issue (close|delete)", g)
 assert "--body " not in flat
 assert flat.count("gh label create refined") == 1
 assert g.count('exactly these two choices: **"Retry the missing ones"**, **"Stop here"**') == 1
-assert not any(l.lstrip().startswith("- Body sections:") for l in flat.splitlines())
+assert not any(ln.lstrip().startswith("- Body sections:") for ln in flat.splitlines())
 assert "`lean` is never applied here." in flat_ws
 ok("#82 keeps the #80 and #81 guards")
 
@@ -3445,28 +3757,44 @@ def _mirror_span(src, dest, first, last, sub=None):
 s45n, s46n = _n(s45), _n(s46)
 _mirror_span(gh35, s45n, "Every task is one layer-scoped deliverable", "No round limit.")
 ok("#83 Step 4.5 mirrors rubric, choices, edit loop (whole span)")
-assert ("**\"Create as shown\"**: route on the approved list's task count \u2014 1 task goes to Step 5 (single-task path); "
-        "2 or more tasks go to `5-FLAT`, in the list's dependency order, after Step 4.6 saves the list.") in s45n
+assert (
+    '**"Create as shown"**: route on the approved list\'s task count \u2014 1 task goes to Step 5 (single-task path); '
+    "2 or more tasks go to `5-FLAT`, in the list's dependency order, after Step 4.6 saves the list."
+) in s45n
 assert len(re.findall(r'^\s*- \*\*"', s45, re.M)) == 2
 assert "Build a numbered task list seeded from Step 3's field mapping" in s45n
 assert "jira-to-gh has no grilling step" in s45n
 assert "Use GitNexus MCP (`gitnexus_query`, `gitnexus_context`) to find the relevant code" in s45n
 assert "each task's issue needs this for its Context / Affected Code and How path:line references" in s45n
 assert not re.search(r"child", s45 + s46, re.I)
-assert jira_cmd.index("## Step 4.5 \u2014 Decompose") < jira_cmd.index("## Step 4.6 \u2014 Save the task list") < jira_cmd.index("## Step 5 \u2014 Create GitHub issue (single-task path)")
+assert (
+    jira_cmd.index("## Step 4.5 \u2014 Decompose")
+    < jira_cmd.index("## Step 4.6 \u2014 Save the task list")
+    < jira_cmd.index("## Step 5 \u2014 Create GitHub issue (single-task path)")
+)
 ok("#83 routing, two bullets, Jira intake kept, heading order")
-assert ("Runs once, right after Step 4.5's \"Create as shown\" and before its routing creates any issue. "
-        "Slug: kebab-case from the Jira ticket's summary (Step 3's title).") in s46n
-assert ("This step is skipped when exactly 1 task was approved: Step 5 files it as a single issue "
-        "and no task list is saved.") in s46n
-_mirror_span(gh36, s46n, "Ask ONE `AskUserQuestion` (multiSelect)", "stop before creating any issue.", ("`4-FLAT`", "`5-FLAT`"))
+assert (
+    'Runs once, right after Step 4.5\'s "Create as shown" and before its routing creates any issue. '
+    "Slug: kebab-case from the Jira ticket's summary (Step 3's title)."
+) in s46n
+assert (
+    "This step is skipped when exactly 1 task was approved: Step 5 files it as a single issue "
+    "and no task list is saved."
+) in s46n
+_mirror_span(
+    gh36, s46n, "Ask ONE `AskUserQuestion` (multiSelect)", "stop before creating any issue.", ("`4-FLAT`", "`5-FLAT`")
+)
 assert "stop before creating any issue. Remove any temp files this skill created before stopping." in s46n
-assert "\n\nRemove any temp files this skill created before stopping." in s46 and s46.rstrip().endswith("before stopping.")
+assert "\n\nRemove any temp files this skill created before stopping." in s46 and s46.rstrip().endswith(
+    "before stopping."
+)
 assert s46.count("Remove any temp files this skill created before stopping.") == 1
 ok("#83 Step 4.6 mirrors gh-issue 3.6")
 assert not any(w in s45n for w in ("~8", "more-than-8", "three choices", "coarser", "bigger epic"))
 assert "File as one issue" not in _n(jira_cmd)
-assert "This step runs only when exactly 1 task was approved in Step 4.5." in _n(_slice(jira_cmd, "## Step 5 \u2014", "### 5-FLAT"))
+assert "This step runs only when exactly 1 task was approved in Step 4.5." in _n(
+    _slice(jira_cmd, "## Step 5 \u2014", "### 5-FLAT")
+)
 assert "epic" not in s45.lower() and "epic" not in s46.lower()
 jl = jira_cmd.splitlines()
 assert jl[22] == "- Issue type (bug, story, task, epic)"
@@ -3484,17 +3812,20 @@ _SPAN_TAILS = {
     'description "task from docs/tasks/<slug>.md" 2>/dev/null || true': " ``` 2. Write one",
     "`lean` is never applied here.": " 4. Write-back: every",
     "Skip when Step 4.6 saved no local file.": " 5. Check each create's",
-    "not created twice.": " - **\"Stop here\"**: first",
+    "not created twice.": ' - **"Stop here"**: first',
 }
 for first, last in (
     ("Preflight, before anything is created", "create nothing and report the existing issues."),
-    ("Ensure the labels once, before the first create", 'description "task from docs/tasks/<slug>.md" 2>/dev/null || true'),
+    (
+        "Ensure the labels once, before the first create",
+        'description "task from docs/tasks/<slug>.md" 2>/dev/null || true',
+    ),
     ("Create the issues one at a time in list order.", "`lean` is never applied here."),
     ("Write-back: every task block ends", "Skip when Step 4.6 saved no local file."),
     ("Check each create's and each write-back's exit status.", "not created twice."),
 ):
     _mirror_span(ghf, jf, first, last)
-    tail = jf[jf.index(last, jf.index(first)) + len(last):][:40]
+    tail = jf[jf.index(last, jf.index(first)) + len(last) :][:40]
     assert tail.startswith(_SPAN_TAILS[last]), (last, tail)
 ok("#84 5-FLAT mirrors gh-issue 4-FLAT preflight, labels, create, write-back, failure (whole spans)")
 assert "Skip when Step 4.6 saved no local file." in jf and "create nothing and report the existing issues." in jf
@@ -3509,17 +3840,29 @@ for sent in (
 ):
     assert ghf.count(sent) == 1 and sent in jf, sent
 ok("#84 verbatim inlined-context, Stop-here tail and never-close sentences")
-order = ["Preflight", "gh label create refined", "gh label create prd-<slug>", "gh issue create", "Write-back:",
-         "Check each create's", "gh-issue-factchecker"]
+order = [
+    "Preflight",
+    "gh label create refined",
+    "gh label create prd-<slug>",
+    "gh issue create",
+    "Write-back:",
+    "Check each create's",
+    "gh-issue-factchecker",
+]
 idx = [jf.index(x) for x in order]
 assert idx == sorted(idx) and len(set(idx)) == len(idx), idx
 ok("#84 ordering inside 5-FLAT")
 assert "Jira context from Step 3 inlined" in jf
 assert "a Jira key/URL in the **Notes** section is expected traceability from `$1`" in jf
 assert "once per issue" in jf and "reused on resume" in jf
-stop = next(l for l in jf.split("- **\"Stop here\"**")[1:2])
-assert "first run Step 6's attachment upload against the issues created so far (skip it if none were created), then Step 7's cleanup, then end the run" in stop, stop[:400]
-assert jf.startswith("### 5-FLAT. Create the flat issues This section runs only when Step 4.5 routed 2 or more tasks here \u2014 it is an alternate path to Step 5 above, not a sub-case nested under it. One issue per task")
+stop = next(ln for ln in jf.split('- **"Stop here"**')[1:2])
+assert (
+    "first run Step 6's attachment upload against the issues created so far (skip it if none were created), then Step 7's cleanup, then end the run"
+    in stop
+), stop[:400]
+assert jf.startswith(
+    "### 5-FLAT. Create the flat issues This section runs only when Step 4.5 routed 2 or more tasks here \u2014 it is an alternate path to Step 5 above, not a sub-case nested under it. One issue per task"
+)
 assert "`commands/gh-issue.md`" in jf and "`4-FLAT`" in jf and "Assignees and project-board questions" in jf
 assert "deliberately NOT mirrored" in jf
 ok("#84 Jira adaptations pinned")
@@ -3529,9 +3872,14 @@ assert not re.search(r"5-EPIC|parent|child", step3_84)
 step6_84 = _slice(jira_cmd, "## Step 6", "## Step 7")
 tgt = _n(step6_84)
 assert "<TARGET_ISSUE>" in tgt and "`5-FLAT`" in tgt and not re.search(r"parent|child", tgt)
-assert "or each issue created by `5-FLAT` on the multi-task path (every issue created in this run, not re-attached on resume)." in tgt
-closing = _n(jira_cmd[jira_cmd.rindex("Return the issue URL"):])
-assert "return the ordered list of issue URLs, one per task in list order (including issues reused on resume)" in closing
+assert (
+    "or each issue created by `5-FLAT` on the multi-task path (every issue created in this run, not re-attached on resume)."
+    in tgt
+)
+closing = _n(jira_cmd[jira_cmd.rindex("Return the issue URL") :])
+assert (
+    "return the ordered list of issue URLs, one per task in list order (including issues reused on resume)" in closing
+)
 assert "parent URL" not in closing and "child URLs" not in closing
 ok("#84 Step 3 note, Step 6 target and closing paragraph")
 heads = set(re.findall(r"^#{1,3} Step (\d+(?:\.\d+)?)", jira_cmd, re.M))
@@ -3541,20 +3889,25 @@ assert "Step 5-" not in jira_cmd
 assert set(re.findall(r"`(\d+-[A-Z]+)`", jira_cmd)) == {"4-FLAT", "5-FLAT"}
 assert jira_cmd.count("4-FLAT") == 1 and "4-FLAT" in jf
 assert not re.search(r"(?<![-\w])step \d", jira_cmd)
-ok("#84 whole-file Step N refs resolve; backticked N-XXX refs are only 5-FLAT plus the single 4-FLAT scope-note mention")
+ok(
+    "#84 whole-file Step N refs resolve; backticked N-XXX refs are only 5-FLAT plus the single 4-FLAT scope-note mention"
+)
 for bad in ("5-EPIC", "4-EPIC", "aiw epic split", "epic-<parent>", "gh label create epic"):
     assert bad not in jira_cmd, bad
-assert not any("--label" in l and "epic" in l.lower() for l in jira_cmd.splitlines())
+assert not any("--label" in ln and "epic" in ln.lower() for ln in jira_cmd.splitlines())
 assert not re.search(r"gh issue (close|delete)", jf) and "--body " not in jf and "gh label create lean" not in jf
 assert not re.search(r"child|sibling", jira_cmd, re.I)
-assert [l.strip() for l in jira_cmd.splitlines() if "epic" in l.lower()] == ["- Issue type (bug, story, task, epic)", "- Linked issues / parent epic"]
+assert [ln.strip() for ln in jira_cmd.splitlines() if "epic" in ln.lower()] == [
+    "- Issue type (bug, story, task, epic)",
+    "- Linked issues / parent epic",
+]
 assert not any(w in jf for w in ("assignee", "--project", "gh project"))
 ok("#84 negative guards: no epic, parent, child, close/delete, assignee or project")
-lab = re.compile(r'gh label create prd-<slug>[^\n]*2>/dev/null \|\| true')
+lab = re.compile(r"gh label create prd-<slug>[^\n]*2>/dev/null \|\| true")
 assert len(lab.findall(jira_cmd)) == 1
 assert lab.search(jfr).start() < jfr.index("gh issue create")
 assert re.search(LABEL_RE, jfr).start() < jfr.index("gh issue create")
-cl = next(l for l in jfr.splitlines() if "gh issue create" in l and "--label" in l)
+cl = next(ln for ln in jfr.splitlines() if "gh issue create" in ln and "--label" in ln)
 assert "refined" in cl and "prd-<slug>" in cl, cl
 ok("#84 5-FLAT ensure-creates refined and prd-<slug> before create and applies both")
 
@@ -3568,7 +3921,7 @@ for stale in ("a parent plus child URLs", "**parent** issue number specifically"
     assert stale not in st2, stale
 assert "parent plus child URLs" not in ri85
 ok("#85 step 2 has no stale epic wording")
-NOURL = "**No issue URL** (it failed, the human cancelled, or a `4-FLAT` run ended on **\"Stop here\"**, whatever partial list it reported): stop and say so \u2014 do not continue to step 3."
+NOURL = '**No issue URL** (it failed, the human cancelled, or a `4-FLAT` run ended on **"Stop here"**, whatever partial list it reported): stop and say so \u2014 do not continue to step 3.'
 LIST1 = "**An ordered list of 2 or more issue URLs** (its `4-FLAT` return; flat issues have no parent, and `/gh-issue` no longer files epics): print the issue URLs in list order and end the run here."
 LIST2 = "This is a clean stop, not an escalation: no Ledger, no worktree, no `aiw init`, and no further Preflight step."
 LIST3 = "Tell the user to run `/run-issue <n>` for each issue in list order; each issue's `Depends on:` line names the issue it builds on, so run those first \u2014 `/run-issue` bases a flat issue on the default branch unless its plan says otherwise."
@@ -3586,18 +3939,34 @@ assert st2[_a:_b].rstrip(" -") == f"{LIST1} {LIST2} {LIST3} {LIST4}"
 assert st2[_b:_h].strip() == ONE
 assert "2 or more issue URLs" in st2 and "3 or more" not in st2 and "more than 2" not in st2
 ok("#85 list branch stops the run and the threshold is literally 2")
-pos = [st2.index(m) for m in ("invoke `/intake <stripped argument> --whole`", "**No issue URL**", "**An ordered list of 2 or more", "**Exactly one issue URL**", HARD)]
+pos = [
+    st2.index(m)
+    for m in (
+        "invoke `/intake <stripped argument> --whole`",
+        "**No issue URL**",
+        "**An ordered list of 2 or more",
+        "**Exactly one issue URL**",
+        HARD,
+    )
+]
 assert pos == sorted(pos) and len(set(pos)) == 5, pos
 ok("#85 step 2 branch order: intake, no URL, list, one URL, HARD RULE")
-assert "Argument is a bare number, or a `github.com/.../issues/<n>` URL \u2192 resolve to `<n>`, unchanged from before." in st2
-assert "A non-empty array means this is an epic parent \u2014 go to **Epic mode** below instead of the single-issue phases; keep the child numbers it returned, Epic mode step 0 needs them." in st35
+assert (
+    "Argument is a bare number, or a `github.com/.../issues/<n>` URL \u2192 resolve to `<n>`, unchanged from before."
+    in st2
+)
+assert (
+    "A non-empty array means this is an epic parent \u2014 go to **Epic mode** below instead of the single-issue phases; keep the child numbers it returned, Epic mode step 0 needs them."
+    in st35
+)
 assert "An empty array is the ordinary path." in st35
 ok("#85 bare-number bullet and step 3.5 epic routing sentences intact")
 # both pins below hash/compare whitespace-normalised text (_n), so reflowing lines does not trip them
 # sha256 of whitespace-normalised text on base 0ff5687 (pre-#85): step 3.5 slice, and "## Epic mode" up to "\n## Rules"
 S35_SHA = "6e1464ddf2883001109064bba0ffcef2471985262dca9d9d1d470eacb25258c5"
 EPIC_SHA = "e301c4367ff0d14d1316064fc35316c6b90cac928af03f5040fb791edefdb253"  # re-pinned: epic init passes --mode full, lean is an alias of default
-import hashlib
+import hashlib  # noqa: E402
+
 _ep = ri85[ri85.index("## Epic mode") :]
 _ep = _ep[: _ep.index("\n## ", 5)]
 assert len(_ep) > 1000 and ri85.count("## Epic mode") == 1
@@ -3606,9 +3975,9 @@ assert hashlib.sha256(_n(_ep).encode()).hexdigest() == EPIC_SHA
 ok("#85 step 3.5 and Epic mode are unchanged")
 
 # Issue #86: docs describe the flat task-list flow (README, HOW-IT-WORKS Layer 5 + glossary, CHANGELOG).
-import hashlib as _hl86
+import hashlib as _hl86  # noqa: E402
 
-rd86, hw86, cl86 = _read("README.md"), _read("docs", "HOW-IT-WORKS.md"), _read("CHANGELOG.md")
+rd86, hw86, cl86 = _user_docs(), _read("docs", "HOW-IT-WORKS.md"), _read("CHANGELOG.md")
 rdn86, hwn86 = _n(rd86), _n(hw86)
 ROW86 = (
     "| `/ai-workflow:gh-issue` | file a well-formed issue; always decomposes first \u2014 one task files one issue; "
@@ -3631,43 +4000,43 @@ H5 = "## Layer 5 \u2014 Task lists and epics"
 assert hw86.count(H5) == 1 and "## Layer 5 \u2014 Epics" not in hw86
 l5 = _n(_slice(hw86, "## Layer 5", "\n---"))
 P1 = (
-    '`/gh-issue` always breaks a request into a numbered task list before filing anything. Each task is one '
-    'layer-scoped deliverable: 3 or fewer production files, 1-4 acceptance criteria, one verify command. '
+    "`/gh-issue` always breaks a request into a numbered task list before filing anything. Each task is one "
+    "layer-scoped deliverable: 3 or fewer production files, 1-4 acceptance criteria, one verify command. "
     'You approve the list with **"Create as shown"** or revise it with **"Let me edit the list"**. '
-    'One task files one issue as before. Two or more tasks save the list to `docs/tasks/<slug>.md` first '
-    '(optionally also to Obsidian or the GitHub wiki), then file one **flat** issue per task: no parent issue, '
-    'no sub-issues. Each is a complete, independently-readable issue labelled `prd-<slug>`, and declares its '
-    'order in plain text:'
+    "One task files one issue as before. Two or more tasks save the list to `docs/tasks/<slug>.md` first "
+    "(optionally also to Obsidian or the GitHub wiki), then file one **flat** issue per task: no parent issue, "
+    "no sub-issues. Each is a complete, independently-readable issue labelled `prd-<slug>`, and declares its "
+    "order in plain text:"
 )
 P2 = (
-    'Each new issue number is written back into the saved list. A create failure partway through is a '
-    'recoverable state, not a failure state: `/gh-issue` reports which issues exist and which are missing, '
+    "Each new issue number is written back into the saved list. A create failure partway through is a "
+    "recoverable state, not a failure state: `/gh-issue` reports which issues exist and which are missing, "
     'then asks **"Retry the missing ones"** or **"Stop here"**, and nothing already created is closed or '
     'deleted. Re-running it on the same list offers **"Resume this list"**, which files only the missing '
-    'tasks. `/jira-to-gh` decomposes, saves and files a Jira ticket the same way.'
+    "tasks. `/jira-to-gh` decomposes, saves and files a Jira ticket the same way."
 )
 P3 = (
-    '`/gh-issue` returns the issue URLs in list order. Run `/run-issue <n>` on each, dependencies first. '
-    'If you hand `/run-issue` a source that is not an issue yet, it calls `/gh-issue` for you; when that returns '
-    'two or more issues, `/run-issue` prints the list and stops \u2014 run `/run-issue <n>` on each issue, '
-    'dependencies first.'
+    "`/gh-issue` returns the issue URLs in list order. Run `/run-issue <n>` on each, dependencies first. "
+    "If you hand `/run-issue` a source that is not an issue yet, it calls `/gh-issue` for you; when that returns "
+    "two or more issues, `/run-issue` prints the list and stops \u2014 run `/run-issue <n>` on each issue, "
+    "dependencies first."
 )
 P4 = (
-    '**Epic mode** still exists for epics that already exist: a parent issue with sub-issues, filed by hand '
-    'or before this change. `/run-issue <parent>` drives all its children. The rules:'
+    "**Epic mode** still exists for epics that already exist: a parent issue with sub-issues, filed by hand "
+    "or before this change. `/run-issue <parent>` drives all its children. The rules:"
 )
 for para in (P1, P2, P3, P4):
     assert l5.count(para) == 1, para[:50]
 assert l5.count("``` Depends on: #12, #13 ```") == 1
 assert l5.index(P1) < l5.index("Depends on: #12, #13") < l5.index(P2) < l5.index(P3) < l5.index(P4)
 for b in (
-    "**Independent children run at the same time.** Dependent ones cannot, by definition \u2014 a child stacks its branch on top of the branch it depends on, so it waits for that one to reach \"PR open\" first.",
+    '**Independent children run at the same time.** Dependent ones cannot, by definition \u2014 a child stacks its branch on top of the branch it depends on, so it waits for that one to reach "PR open" first.',
     "**Still three gates, for the whole epic.** Gate 1 shows you the split and *every* child's plan at once. "
     "A blocker in one child parks that child and the others keep going; Gate 2a covers both an immediate, "
     "per-blocker ask fired as soon as that child parks (so you are not left waiting until the end to hear about it) "
     "and an end-of-run closer that fires once, collecting whatever is still pending or deferred when nothing more "
     "can proceed without you. Gate 3 is one report covering everything, including the order you must merge in.",
-    "**A failed child with dependents is reported by name.** \"Never started, blocked by #14\" \u2014 because a child "
+    '**A failed child with dependents is reported by name.** "Never started, blocked by #14" \u2014 because a child '
     "silently missing from a list of twelve is how you discover a month later that a third of the epic was never built.",
 ):
     assert b in l5, b
@@ -3694,31 +4063,40 @@ assert "\n## " not in _top86 and "\n### Changed\n" in _top86
 cln86 = _n(_top86)
 assert _top86.count("\n- **") == 4  # 3 "Changed" bullets (#86) + the /prd "Added" bullet (1.9.0 release)
 CB1 = (
-    '- **`/gh-issue` and `/jira-to-gh` file flat issues instead of a parent plus children (#78, #79, #80, #81, #83, #84).** '
-    'Decomposition applies a size rubric (one layer-scoped deliverable, 3 or fewer production files, 1-4 acceptance criteria, '
+    "- **`/gh-issue` and `/jira-to-gh` file flat issues instead of a parent plus children (#78, #79, #80, #81, #83, #84).** "
+    "Decomposition applies a size rubric (one layer-scoped deliverable, 3 or fewer production files, 1-4 acceptance criteria, "
     'one verify command) and asks "Create as shown" or "Let me edit the list". Two or more tasks save the approved list to '
-    '`docs/tasks/<slug>.md` (optionally also Obsidian or the GitHub wiki), then create one standalone issue per task, labelled '
-    '`prd-<slug>` and ordered by `Depends on: #n` lines, writing each number back into the list. A partial failure offers '
+    "`docs/tasks/<slug>.md` (optionally also Obsidian or the GitHub wiki), then create one standalone issue per task, labelled "
+    "`prd-<slug>` and ordered by `Depends on: #n` lines, writing each number back into the list. A partial failure offers "
     '"Retry the missing ones" or "Stop here", and "Resume this list" picks a saved list back up without duplicating issues. '
-    '`4-EPIC` and `5-EPIC` are gone.'
+    "`4-EPIC` and `5-EPIC` are gone."
 )
 CB2 = (
-    '- **`/gh-issue` asks the assignee and project questions once per run, factchecks every created issue, and returns '
-    'the ordered list of issue URLs (#82).**'
+    "- **`/gh-issue` asks the assignee and project questions once per run, factchecks every created issue, and returns "
+    "the ordered list of issue URLs (#82).**"
 )
 CB3 = (
-    '- **`/run-issue` lists the issues and stops when `/gh-issue` returns two or more (#85).** Run `/run-issue <n>` on each, '
-    'dependencies first. Epic mode is unchanged for epics that already exist.'
+    "- **`/run-issue` lists the issues and stops when `/gh-issue` returns two or more (#85).** Run `/run-issue <n>` on each, "
+    "dependencies first. Epic mode is unchanged for epics that already exist."
 )
 CB4 = (
-    '- **`/prd` turns a rough requirement into a reviewed PRD (#100).** It scans the codebase first, interviews you with the '
-    '`grilling` skill, shows the full draft for approval, then saves it to `docs/prd/<slug>.md`, the Obsidian vault and/or the '
-    'GitHub wiki. Run `/gh-issue` on the saved PRD to file its tasks.'
+    "- **`/prd` turns a rough requirement into a reviewed PRD (#100).** It scans the codebase first, interviews you with the "
+    "`grilling` skill, shows the full draft for approval, then saves it to `docs/prd/<slug>.md`, the Obsidian vault and/or the "
+    "GitHub wiki. Run `/gh-issue` on the saved PRD to file its tasks."
 )
 for cb in (CB1, CB2, CB3, CB4):
     assert cln86.count(cb) == 1, cb[:50]
-for frag in ("docs/tasks/<slug>.md", "prd-<slug>", "Depends on: #n", "Retry the missing ones", "Stop here",
-             "Resume this list", "Create as shown", "Let me edit the list", "Epic mode"):
+for frag in (
+    "docs/tasks/<slug>.md",
+    "prd-<slug>",
+    "Depends on: #n",
+    "Retry the missing ones",
+    "Stop here",
+    "Resume this list",
+    "Create as shown",
+    "Let me edit the list",
+    "Epic mode",
+):
     assert frag in cln86, frag
 ok("#86 CHANGELOG Unreleased entry pinned")
 
@@ -3734,7 +4112,7 @@ ok("#86 earlier doc regressions still hold")
 
 
 # Issue #130: docs describe `aiw ui` (CONTEXT Session, run-issue.md invariant, README section).
-rd130, cx130, ri130 = _read("README.md"), _read("CONTEXT.md"), _read("commands", "run-issue.md")
+rd130, cx130, ri130 = _user_docs(), _read("CONTEXT.md"), _read("commands", "run-issue.md")
 _lang130 = cx130[cx130.index("## Language") :]
 _lang130 = _lang130[: _lang130.index("\n## ", 5)] if "\n## " in _lang130[5:] else _lang130
 assert "**Session**:" in _lang130, "CONTEXT.md Language lacks **Session**:"
@@ -3747,8 +4125,11 @@ assert "no daemon, no ledger service, no dashboard" not in ri130
 _st130 = ri130[ri130.index("### State") :]
 _st130 = _st130[: _st130.index("\n### ", 5)]
 _st130n = " ".join(_st130.split())
-for frag in ("is the only state", "never invent a second state file",
-             "one local JSON file written by a script that exits"):
+for frag in (
+    "is the only state",
+    "never invent a second state file",
+    "one local JSON file written by a script that exits",
+):
     assert frag in _st130n, frag
 ok("#130 run-issue.md State invariant reworded, anchors kept")
 
@@ -3761,8 +4142,19 @@ _ui130 = rd130[_m130.end() :]
 _nx130 = re.search(r"^#{1,%d} " % len(_m130.group(0).split()[0]), _ui130, re.M)
 _ui130 = _ui130[: _nx130.start()] if _nx130 else _ui130
 _ui130n = " ".join(_ui130.split())
-for frag in ("--port", "8420", "--allow-host", "tailscale serve", "ui.json", "0600", "ntfy",
-             "server", "topic", "token", "public_url"):
+for frag in (
+    "--port",
+    "8420",
+    "--allow-host",
+    "tailscale serve",
+    "ui.json",
+    "0600",
+    "ntfy",
+    "server",
+    "topic",
+    "token",
+    "public_url",
+):
     assert frag in _ui130, frag
 low130 = _ui130n.lower()
 assert "auth" in low130 and "tailnet" in low130 and "acl" in low130
@@ -3788,7 +4180,9 @@ for _n in ("Context", "Evidence", "Consequences"):
     _m = re.search(r"^#+\s*" + _n + r"\b", _t103, re.M)
     assert _m, "#103 missing heading " + _n
     _h103[_n] = _m
-assert _t103.index("Decision:") < _h103["Context"].start() < _h103["Evidence"].start() < _h103["Consequences"].start(), "#103 heading order"
+assert (
+    _t103.index("Decision:") < _h103["Context"].start() < _h103["Evidence"].start() < _h103["Consequences"].start()
+), "#103 heading order"
 
 
 def _sec103(name, nxt):
@@ -3827,8 +4221,10 @@ for _n in ("Context", "Evidence", "Consequences"):
     _m = re.search(r"^#+\s*" + _n + r"\b", _t104, re.M)
     assert _m, "#104 missing heading " + _n
     _h104[_n] = _m
-assert _t104.index("Decision:") < _h104["Context"].start() < _h104["Evidence"].start() < _h104["Consequences"].start(), "#104 heading order"
-_co104 = _t104[_h104["Consequences"].end():]
+assert (
+    _t104.index("Decision:") < _h104["Context"].start() < _h104["Evidence"].start() < _h104["Consequences"].start()
+), "#104 heading order"
+_co104 = _t104[_h104["Consequences"].end() :]
 assert "aiw ui" in _t104 and "timer" in _lo104, "#104 UI-side timer option"
 assert "launchd" in _lo104 or "cron" in _lo104, "#104 external scheduler option"
 assert re.search(r"reject", _t104, re.I), "#104 states a rejected option"
@@ -3861,7 +4257,9 @@ for _f in ("resolve.sh", "poll.sh"):
     assert "bash " + _pre185 + "scripts/" + _f in _t185, "#185 SKILL.md does not call " + _f + " via plugin_root"
 # structural: every `scripts/` reference must be preceded by the plugin_root prefix
 for _m in re.finditer(r"scripts/", _t185):
-    assert _t185[max(0, _m.start() - len(_pre185)):_m.start()] == _pre185, "#185 bare relative scripts/ ref at offset %d" % _m.start()
+    assert _t185[max(0, _m.start() - len(_pre185)) : _m.start()] == _pre185, (
+        "#185 bare relative scripts/ ref at offset %d" % _m.start()
+    )
 ok("#185 herdr-dispatch skill in plugin")
 
 # --------------------------------------------------------------------------- #183 /prd fills dump's seed
@@ -3880,35 +4278,46 @@ _key183 = lambda secs, pre: next(v for k, v in secs.items() if k.startswith(pre)
 
 # AC1: new-feature route marks the seeded PRD.md as a seed.
 _nf183 = _dump183["Step 4: File it"].split("**Change request**")[0]
-assert re.search(r'property:set path="05-Work/<Project>/<Feature>/PRD\.md" name=status value=seed', _nf183), \
+assert re.search(r'property:set path="05-Work/<Project>/<Feature>/PRD\.md" name=status value=seed', _nf183), (
     "#183 dump New feature route must set status=seed on PRD.md"
+)
 assert "/prd" in _nf183, "#183 dump New feature route must say the marker tells /prd it is a seed"
 ok("#183 dump New feature route sets status: seed on the seeded PRD.md")
 
 # AC2: /prd takes a feature folder, accepts a seed, fills it and flips to draft.
 _args183 = _prd183["Arguments"]
-assert "05-Work/<Project>/<Feature>" in _args183 and "feature-folder" in _args183, "#183 Arguments lacks /prd <feature-folder>"
+assert "05-Work/<Project>/<Feature>" in _args183 and "feature-folder" in _args183, (
+    "#183 Arguments lacks /prd <feature-folder>"
+)
 _s1_183 = _key183(_prd183, "Step 1")
-assert "Dump.md" in _s1_183 and "PRD.md" in _s1_183 and "feature folder" in _s1_183, "#183 Step 1 lacks feature-folder branch"
-assert _s1_183.index("Dump.md") < _s1_183.index("/intake"), "#183 feature-folder branch must precede the /intake routing"
+assert "Dump.md" in _s1_183 and "PRD.md" in _s1_183 and "feature folder" in _s1_183, (
+    "#183 Step 1 lacks feature-folder branch"
+)
+assert _s1_183.index("Dump.md") < _s1_183.index("/intake"), (
+    "#183 feature-folder branch must precede the /intake routing"
+)
 _s2_183 = _key183(_prd183, "Step 2")
 assert "status: seed" in _s2_183 and "not a collision" in _s2_183, "#183 Step 2 lacks the seed exception"
 _s7_183 = _key183(_prd183, "Step 7")
-assert "overwrite" in _s7_183 and "status" in _s7_183 and "draft" in _s7_183 and "seed" in _s7_183, \
+assert "overwrite" in _s7_183 and "status" in _s7_183 and "draft" in _s7_183 and "seed" in _s7_183, (
     "#183 Step 7 must overwrite the seed and set status: draft"
+)
 assert "stop and ask" in _s2_183.split("For Obsidian, also resolve")[1], "#183 Step 2 must ask when no project resolves"
 ok("#183 /prd feature-folder input, seed exception, overwrite + status: draft")
 
 # AC3: anything that is not a seed still stops and asks.
 assert "**stop and ask the user**" in _s2_183 and "Never overwrite silently" in _s2_183, "#183 Step 2 lost stop-and-ask"
 assert re.search(r"any other existing PRD|not .{0,20}seed", _s2_183), "#183 Step 2 must say non-seed PRDs still stop"
-assert re.search(r"property:read path=.{0,60}PRD\.md. name=status", _s2_183) and "exactly `seed`" in _s2_183, \
+assert re.search(r"property:read path=.{0,60}PRD\.md. name=status", _s2_183) and "exactly `seed`" in _s2_183, (
     "#183 Step 2 must name how the seed status is read (property:read, exactly seed)"
-assert re.search(r"Anything else.{0,220}still stops here", _s2_183), "#183 Step 2: anything other than seed must still stop"
+)
+assert re.search(r"Anything else.{0,220}still stops here", _s2_183), (
+    "#183 Step 2: anything other than seed must still stop"
+)
 ok("#183 /prd on a non-seed PRD still stops and asks")
 
 # AC4: default --to is obsidian only; Step 6 no longer asks about extra destinations.
-_a4_183 = next(l for l in _args183.splitlines() if l.startswith("- `--to`"))
+_a4_183 = next(ln for ln in _args183.splitlines() if ln.startswith("- `--to`"))
 assert "Default `obsidian`" in _a4_183 and "Default `local`" not in _a4_183, "#183 default --to must be obsidian"
 assert "(Step 6)" not in _a4_183, "#183 Arguments must not defer a destination question to Step 6"
 _s6_183 = _key183(_prd183, "Step 6")
@@ -3924,12 +4333,19 @@ _dump184 = _skill_sections("skills/dump/SKILL.md")
 _s5_184 = _ws(_key183(_dump184, "Step 5"))
 for _p in (f"`{NEXT}/prd <feature-folder>`", f"`{NEXT}/gh-issue <note-path>`"):
     assert _p in _s5_184, f"#184 dump Step 5 lacks {_p}"
-assert re.search(r"new feature.{0,40}change request.{0,80}/prd <feature-folder>", _s5_184, re.I), "#184 dump: prd line routes"
-assert re.search(r"bug report.{0,40}feature-scoped task.{0,80}/gh-issue <note-path>", _s5_184, re.I), "#184 dump: gh-issue line routes"
-assert re.search(r"standalone task.{0,40}meeting notes.{0,40}unclassifiable.{0,60}no `\u2192 next:` line", _s5_184, re.I), \
-    "#184 dump: no line for standalone/meeting/unclassifiable"
+assert re.search(r"new feature.{0,40}change request.{0,80}/prd <feature-folder>", _s5_184, re.I), (
+    "#184 dump: prd line routes"
+)
+assert re.search(r"bug report.{0,40}feature-scoped task.{0,80}/gh-issue <note-path>", _s5_184, re.I), (
+    "#184 dump: gh-issue line routes"
+)
+assert re.search(
+    r"standalone task.{0,40}meeting notes.{0,40}unclassifiable.{0,60}no `\u2192 next:` line", _s5_184, re.I
+), "#184 dump: no line for standalone/meeting/unclassifiable"
 assert "last line of your output" in _s5_184, "#184 dump: next line must be the last line"
-assert "no `\u2192 next:` line" in _ws(_key183(_dump184, "Programmatic invocation")), "#184 dump: programmatic run omits next line"
+assert "no `\u2192 next:` line" in _ws(_key183(_dump184, "Programmatic invocation")), (
+    "#184 dump: programmatic run omits next line"
+)
 ok("#184 /dump Step 5 ends with the routed \u2192 next: line; programmatic runs omit it")
 
 _s8_184 = _ws(_key183(_skill_sections("skills/prd/SKILL.md"), "Step 8"))
@@ -3938,7 +4354,7 @@ assert "offer, in one line" not in _s8_184, "#184 prd Step 8 still has the prose
 ok("#184 /prd Step 8 ends with \u2192 next: /gh-issue <prd-path>")
 
 _close184 = _ws(_read("commands", "gh-issue.md"))
-_close184 = _close184[_close184.rindex("Return the issue URL"):]
+_close184 = _close184[_close184.rindex("Return the issue URL") :]
 assert f"End with the line `{NEXT}herdr-dispatch <n> <n> \u2026`" in _close184, "#184 gh-issue lacks the next line"
 assert "hand control back to its Preflight step 3" in _close184
 assert _close184.index("hand control back") < _close184.index(NEXT), "#184 hand-back sentence stays first"
@@ -3955,17 +4371,28 @@ for _t in ("Skill", "AskUserQuestion", "Bash"):
     assert f"  - {_t}" in _flow_front, f"#187 allowed-tools lacks {_t}"
 _fs = _skill_sections("skills/flow/SKILL.md")
 _args187 = _ws(_key183(_fs, "Arguments"))
-for _shape, _stage in (("Raw text", "dump"), ("feature folder", "prd"), ("PRD path", "gh-issue"), ("Issue numbers", "dispatch")):
+for _shape, _stage in (
+    ("Raw text", "dump"),
+    ("feature folder", "prd"),
+    ("PRD path", "gh-issue"),
+    ("Issue numbers", "dispatch"),
+):
     assert re.search(rf"{_shape}.{{0,160}}\| {_stage} \|", _args187, re.I), f"#187 entry shape {_shape} -> {_stage}"
 assert "Dump.md" in _args187, "#187 Dump.md path enters at prd"
 ok("#187 /flow exists and names the four entry shapes")
 _route187 = _ws(_key183(_fs, "Routing after dump"))
-for _cls, _path in (("New feature", "prd \u2192 gh-issue \u2192 dispatch"), ("Change request", "prd"),
-                    ("Bug report", "gh-issue \u2192 dispatch"), ("Unclassifiable", "stop")):
+for _cls, _path in (
+    ("New feature", "prd \u2192 gh-issue \u2192 dispatch"),
+    ("Change request", "prd"),
+    ("Bug report", "gh-issue \u2192 dispatch"),
+    ("Unclassifiable", "stop"),
+):
     assert re.search(rf"{_cls}.{{0,120}}{_path}", _route187, re.I), f"#187 routing {_cls}"
 ok("#187 /flow routes by dump classification and stops after filing for the rest")
 _flow_ws = _ws(_flow)
-assert f"`{NEXT}" in _flow_ws and "take the next stage's argument from that line" in _flow_ws, "#187 \u2192 next: handoff rule"
+assert f"`{NEXT}" in _flow_ws and "take the next stage's argument from that line" in _flow_ws, (
+    "#187 \u2192 next: handoff rule"
+)
 _cp187 = _ws(_key183(_fs, "Checkpoints"))
 assert "AskUserQuestion" in _cp187 and "(Recommended)" in _cp187 and "Stop here" in _cp187, "#187 checkpoint question"
 _dp187 = _ws(_key183(_fs, "Dispatch"))

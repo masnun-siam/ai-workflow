@@ -19,7 +19,7 @@ import threading
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-import ui_server
+import ui_server  # noqa: E402
 
 passed = 0
 REPO = os.path.dirname(HERE)
@@ -562,9 +562,24 @@ def run_checks():
     js = read(os.path.join(STATIC, "run.js")).decode()
     css = read(os.path.join(STATIC, "app.css")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./fmt.js", "./toast.js", "./ghstatus.js", "./cleanup.js", "./limits.js", "./issue.js", "./pr.js"}, specs
+    assert specs and set(specs) <= {
+        "./vendor/preact.mjs",
+        "./vendor/htm.mjs",
+        "./app.js",
+        "./fmt.js",
+        "./toast.js",
+        "./ghstatus.js",
+        "./cleanup.js",
+        "./limits.js",
+        "./issue.js",
+        "./pr.js",
+    }, specs
     assert not re.search(r"https?://", js), "no absolute URLs"
-    assert "console.log" not in js and "debugger" not in js and "innerHTML" not in js.replace("dangerouslySetInnerHTML", "")
+    assert (
+        "console.log" not in js
+        and "debugger" not in js
+        and "innerHTML" not in js.replace("dangerouslySetInnerHTML", "")
+    )
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
     names = {x.split(" as ")[-1].strip() for x in exports.split(",")}
@@ -581,17 +596,27 @@ def run_checks():
     for m in re.finditer(r"(?<![\w-])(?:min-)?width\s*:\s*(\d+)px", css):
         assert int(m.group(1)) <= 390, m.group(0)
     out_rule = re.search(r"\.output\s*\{([^}]*)\}", css)
-    assert out_rule and "overflow-y: auto" in out_rule.group(1).replace(":auto", ": auto") and "max-height" in out_rule.group(1)
-    assert re.search(r"\[role=tab\][^{]*\{[^}]*min-height\s*:\s*44px|\.run button[^{]*\{[^}]*min-height\s*:\s*44px", css)
+    assert (
+        out_rule
+        and "overflow-y: auto" in out_rule.group(1).replace(":auto", ": auto")
+        and "max-height" in out_rule.group(1)
+    )
+    assert re.search(
+        r"\[role=tab\][^{]*\{[^}]*min-height\s*:\s*44px|\.run button[^{]*\{[^}]*min-height\s*:\s*44px", css
+    )
     ok("css run layout wraps, 44px targets, bounded scrolling output")
 
     if not shutil.which("node"):
         print("note: node not found, skipping run logic checks")
         return
-    env = dict(os.environ, RUN_URL=pathlib.Path(os.path.join(STATIC, "run.js")).as_uri(),
-               APP_URL=pathlib.Path(os.path.join(STATIC, "app.js")).as_uri())
-    p = subprocess.run(["node", "--input-type=module", "-e", RUN_JS], env=env,
-                       capture_output=True, text=True, timeout=120)
+    env = dict(
+        os.environ,
+        RUN_URL=pathlib.Path(os.path.join(STATIC, "run.js")).as_uri(),
+        APP_URL=pathlib.Path(os.path.join(STATIC, "app.js")).as_uri(),
+    )
+    p = subprocess.run(
+        ["node", "--input-type=module", "-e", RUN_JS], env=env, capture_output=True, text=True, timeout=120
+    )
     assert p.returncode == 0, p.stderr[-2500:]
     for line in p.stdout.splitlines():
         if line.startswith("ok "):
@@ -1032,7 +1057,9 @@ def shell_checks():
     ok("index.html links app.js/app.css, no CDN")
 
     s, r, body = req(port, "/sw.js")
-    assert s == 200 and r.getheader("Content-Type").startswith("text/javascript") and b"addEventListener('fetch'" in body
+    assert (
+        s == 200 and r.getheader("Content-Type").startswith("text/javascript") and b"addEventListener('fetch'" in body
+    )
     s, r, body = req(port, "/static/manifest.webmanifest")
     assert s == 200 and r.getheader("Content-Type").startswith("application/manifest+json")
     man = json.loads(body)
@@ -1053,10 +1080,38 @@ def shell_checks():
     css = read(os.path.join(STATIC, "app.css")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
     assert specs, "no imports found"
-    assert set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./board.js", "./run.js", "./history.js", "./answer.js", "./notify.js", "./launcher.js", "./session.js", "./keys.js", "./toast.js", "./settings.js", "./dispatch.js", "./fmt.js", "./cleanup.js", "./issue.js", "./pr.js", "./afk.js", "./flow.js"}, specs
+    assert set(specs) <= {
+        "./vendor/preact.mjs",
+        "./vendor/htm.mjs",
+        "./board.js",
+        "./run.js",
+        "./history.js",
+        "./answer.js",
+        "./notify.js",
+        "./launcher.js",
+        "./session.js",
+        "./keys.js",
+        "./toast.js",
+        "./settings.js",
+        "./dispatch.js",
+        "./fmt.js",
+        "./cleanup.js",
+        "./issue.js",
+        "./pr.js",
+        "./afk.js",
+        "./flow.js",
+    }, specs
     fjs = read(os.path.join(STATIC, "flow.js")).decode()
     fspecs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", fjs)
-    assert fspecs and set(fspecs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./launcher.js", "./dispatch.js", "./answer.js", "./flowside.js"}, fspecs
+    assert fspecs and set(fspecs) <= {
+        "./vendor/preact.mjs",
+        "./vendor/htm.mjs",
+        "./app.js",
+        "./launcher.js",
+        "./dispatch.js",
+        "./answer.js",
+        "./flowside.js",
+    }, fspecs
     assert "innerHTML" not in fjs and "console.log" not in fjs
     ok("flow.js imports only preact, htm, app.js, launcher.js, dispatch.js, answer.js and flowside.js; no innerHTML")
     assert not re.search(r"https?://", js), "no absolute URLs"
@@ -1089,8 +1144,9 @@ def shell_checks():
         print("note: node not found, skipping shell logic checks")
         return
     env = dict(os.environ, APP_URL=pathlib.Path(os.path.join(STATIC, "app.js")).as_uri())
-    p = subprocess.run(["node", "--input-type=module", "-e", NODE_JS], env=env,
-                       capture_output=True, text=True, timeout=60)
+    p = subprocess.run(
+        ["node", "--input-type=module", "-e", NODE_JS], env=env, capture_output=True, text=True, timeout=60
+    )
     assert p.returncode == 0, p.stderr[-1500:]
     for line in p.stdout.splitlines():
         if line.startswith("ok "):
@@ -1215,6 +1271,7 @@ def board_checks():
     os.environ["CLAUDE_PLUGIN_DATA"] = data
     srv.fetch_title = lambda o, r_, i: "A title"
     try:
+
         def board():
             s, _, b = req(port, "/board.json")
             assert s == 200
@@ -1228,9 +1285,17 @@ def board_checks():
         assert all(c["cards"] == [] for c in bd["columns"])
         ok("empty board has every column")
 
-        led = {"issue": 42, "stations": ["researcher", "planner", "sdet", "dev"], "currentIndex": 1,
-               "bounceCounts": {}, "status": "in_progress", "trace": [], "specialists": [],
-               "classification": None, "context": {"pr": "https://github.com/acme/web/pull/9"}}
+        led = {
+            "issue": 42,
+            "stations": ["researcher", "planner", "sdet", "dev"],
+            "currentIndex": 1,
+            "bounceCounts": {},
+            "status": "in_progress",
+            "trace": [],
+            "specialists": [],
+            "classification": None,
+            "context": {"pr": "https://github.com/acme/web/pull/9"},
+        }
         mkrun(data, "acme-web-issue-42", led)
         bd = board()
         assert where(bd, 42) == ["planner"], where(bd, 42)
@@ -1267,7 +1332,15 @@ def board_checks():
     css = read(os.path.join(STATIC, "app.css")).decode()
     app = read(os.path.join(STATIC, "app.js")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./app.js", "./fmt.js", "./toast.js", "./cleanup.js", "./ghstatus.js"}, specs
+    assert specs and set(specs) <= {
+        "./vendor/preact.mjs",
+        "./vendor/htm.mjs",
+        "./app.js",
+        "./fmt.js",
+        "./toast.js",
+        "./cleanup.js",
+        "./ghstatus.js",
+    }, specs
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
     names = {x.split(" as ")[-1].strip() for x in exports.split(",")}
@@ -1297,10 +1370,14 @@ def board_checks():
     if not shutil.which("node"):
         print("note: node not found, skipping board logic checks")
         return
-    env = dict(os.environ, APP_URL=pathlib.Path(os.path.join(STATIC, "app.js")).as_uri(),
-               BOARD_URL=pathlib.Path(js_path).as_uri())
-    p = subprocess.run(["node", "--input-type=module", "-e", BOARD_JS], env=env,
-                       capture_output=True, text=True, timeout=60)
+    env = dict(
+        os.environ,
+        APP_URL=pathlib.Path(os.path.join(STATIC, "app.js")).as_uri(),
+        BOARD_URL=pathlib.Path(js_path).as_uri(),
+    )
+    p = subprocess.run(
+        ["node", "--input-type=module", "-e", BOARD_JS], env=env, capture_output=True, text=True, timeout=60
+    )
     assert p.returncode == 0, p.stderr[-1500:]
     for line in p.stdout.splitlines():
         if line.startswith("ok "):
@@ -1532,16 +1609,22 @@ def launcher_checks():
     css = read(os.path.join(STATIC, "app.css")).decode()
     for m in re.finditer(r"(?<![\w-])(?:min-)?width\s*:\s*(\d+)px", css):
         assert int(m.group(1)) <= 390, m.group(0)
-    assert re.search(r"(?:input|select|button|textarea)[^{}]*\{[^}]*min-height\s*:\s*(?:4[4-9]|[5-9]\d)px", css), "form controls need min-height >= 44px"
+    assert re.search(r"(?:input|select|button|textarea)[^{}]*\{[^}]*min-height\s*:\s*(?:4[4-9]|[5-9]\d)px", css), (
+        "form controls need min-height >= 44px"
+    )
     ok("css: no wide fixed widths, form controls >= 44px")
 
     if not shutil.which("node"):
         print("note: node not found, skipping launcher logic checks")
         return
-    env = dict(os.environ, LAUNCHER_URL=pathlib.Path(lp).as_uri(),
-               LAUNCHER_FIX=json.dumps({"repos": repos, "bad_repo": bad, "dup": dup}))
-    p = subprocess.run(["node", "--input-type=module", "-e", LAUNCHER_JS], env=env,
-                       capture_output=True, text=True, timeout=60)
+    env = dict(
+        os.environ,
+        LAUNCHER_URL=pathlib.Path(lp).as_uri(),
+        LAUNCHER_FIX=json.dumps({"repos": repos, "bad_repo": bad, "dup": dup}),
+    )
+    p = subprocess.run(
+        ["node", "--input-type=module", "-e", LAUNCHER_JS], env=env, capture_output=True, text=True, timeout=60
+    )
     for line in p.stdout.splitlines():
         if line.startswith("ok "):
             ok(line[3:])
@@ -1733,7 +1816,9 @@ def launcher_all_checks():
         s, lst = call(None, "GET")
         assert s == 200, s
         items = {i["id"]: i for i in lst["sessions"]}
-        assert items[rec["id"]]["waiting"] is True and items[rec["id"]]["command"] == "/pr-fix-comments 42", items[rec["id"]]
+        assert items[rec["id"]]["waiting"] is True and items[rec["id"]]["command"] == "/pr-fix-comments 42", items[
+            rec["id"]
+        ]
         assert items[rec["id"]]["waiting"] == items[named["id"]]["waiting"]
         ok("custom-text session surfaced waiting exactly like a named one")
         live = ui_sessions.create("/run-issue 7", repo, link={"owner": "o", "repo": "r", "issue": 7})
@@ -1749,7 +1834,19 @@ def launcher_all_checks():
     lp = os.path.join(STATIC, "launcher.js")
     assert os.path.exists(lp), "launcher.js missing"
     js = read(lp).decode()
-    for name in ("run-issue", "pr-grind", "prd", "intake", "dump", "worklog", "gh-issue", "pr-review", "pr-fix-comments", "issue-to-pr", "day"):
+    for name in (
+        "run-issue",
+        "pr-grind",
+        "prd",
+        "intake",
+        "dump",
+        "worklog",
+        "gh-issue",
+        "pr-review",
+        "pr-fix-comments",
+        "issue-to-pr",
+        "day",
+    ):
         assert name in js, name
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
     assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./toast.js", "./fmt.js"}, specs
@@ -1778,16 +1875,22 @@ def launcher_all_checks():
         "if(b.href!=='#/answer/'+process.env.SID)throw new Error('id '+b.href);"
         "console.log('ok custom waiting session routes to #/answer/<id>');"
     )
-    p = subprocess.run(["node", "--input-type=module", "-e", chk],
-                       env=dict(os.environ, APP_URL=appjs, SID=rec["id"]),
-                       capture_output=True, text=True, timeout=60)
+    p = subprocess.run(
+        ["node", "--input-type=module", "-e", chk],
+        env=dict(os.environ, APP_URL=appjs, SID=rec["id"]),
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
     assert p.returncode == 0, p.stderr[-1500:]
     ok("custom waiting session routes to #/answer/<id>")
 
-    env = dict(os.environ, LAUNCHER_URL=pathlib.Path(lp).as_uri(),
-               LAUNCHER_FIX=json.dumps({"bad_repo": bad, "dup": dup}))
-    p = subprocess.run(["node", "--input-type=module", "-e", LAUNCHER_ALL_JS], env=env,
-                       capture_output=True, text=True, timeout=60)
+    env = dict(
+        os.environ, LAUNCHER_URL=pathlib.Path(lp).as_uri(), LAUNCHER_FIX=json.dumps({"bad_repo": bad, "dup": dup})
+    )
+    p = subprocess.run(
+        ["node", "--input-type=module", "-e", LAUNCHER_ALL_JS], env=env, capture_output=True, text=True, timeout=60
+    )
     for line in p.stdout.splitlines():
         if line.startswith("ok "):
             ok(line[3:])
@@ -1826,19 +1929,31 @@ def answer_checks():
             assert n.strip().split(" as ")[0].strip() in names, n
     ok("answer.js imports only vendored modules, real names")
 
-    assert re.search(r"import\s*\{[^}]*\bAnswer\b[^}]*\}\s*from\s*['\"]\./answer\.js['\"]", app), "app.js imports Answer"
+    assert re.search(r"import\s*\{[^}]*\bAnswer\b[^}]*\}\s*from\s*['\"]\./answer\.js['\"]", app), (
+        "app.js imports Answer"
+    )
     assert re.search(r"<\$\{Answer\}\s+session=\$\{route\.params\.session\}", app), "answer route renders Answer"
     ok("app.js imports and renders Answer")
 
     # the plan goes through run.js mdToHtml (escape-first), the only innerHTML sink here
     assert js.count("dangerouslySetInnerHTML") == 1 and "__html: mdToHtml(plan)" in js
-    for bad in ("outerHTML", "insertAdjacentHTML",
-                "http://", "https://", "console.log", "debugger"):
+    for bad in ("outerHTML", "insertAdjacentHTML", "http://", "https://", "console.log", "debugger"):
         assert bad not in js, bad
     ok("answer.js security/hygiene")
 
-    for tok in ("<fieldset", "<legend", 'role="alert"', 'role="status"', 'maxlength="4000"', "mdToHtml",
-                "Session not found", "#/sessions", "Continue in terminal", "Copy failed", "disabled"):
+    for tok in (
+        "<fieldset",
+        "<legend",
+        'role="alert"',
+        'role="status"',
+        'maxlength="4000"',
+        "mdToHtml",
+        "Session not found",
+        "#/sessions",
+        "Continue in terminal",
+        "Copy failed",
+        "disabled",
+    ):
         assert tok in js, tok
     assert "/api/sessions/" in js and "/api/runs/" in js
     ok("answer.js markup: fieldset/legend/alert/status/maxlength/pre/not-found/copy/disabled")
@@ -1847,6 +1962,7 @@ def answer_checks():
         m = re.search(re.escape(sel) + r"[^{]*\{([^}]*)\}", css)
         assert m, sel
         return m.group(1)
+
     for sel in (".opt", "button"):
         mh = re.search(r"min-height\s*:\s*(\d+)px", block(sel))
         assert mh and int(mh.group(1)) >= 44, sel
@@ -1861,13 +1977,13 @@ def answer_checks():
         print("note: node not found, skipping answer logic checks")
         return
     env = dict(os.environ, ANSWER_URL=pathlib.Path(os.path.join(STATIC, "answer.js")).as_uri())
-    p = subprocess.run(["node", "--input-type=module", "-e", ANSWER_NODE_JS], env=env,
-                       capture_output=True, text=True, timeout=60)
+    p = subprocess.run(
+        ["node", "--input-type=module", "-e", ANSWER_NODE_JS], env=env, capture_output=True, text=True, timeout=60
+    )
     assert p.returncode == 0, p.stderr[-1500:]
     for line in p.stdout.splitlines():
         if line.startswith("ok "):
             ok(line[3:])
-
 
 
 NOTIFY_NODE_JS = r"""
@@ -2089,10 +2205,14 @@ def notify_checks():
     if not shutil.which("node"):
         print("note: node not found, skipping notify logic checks")
         return
-    env = dict(os.environ, NOTIFY_URL=pathlib.Path(os.path.join(STATIC, "notify.js")).as_uri(),
-               APP_URL=pathlib.Path(os.path.join(STATIC, "app.js")).as_uri())
-    p = subprocess.run(["node", "--input-type=module", "-e", NOTIFY_NODE_JS], env=env,
-                       capture_output=True, text=True, timeout=60)
+    env = dict(
+        os.environ,
+        NOTIFY_URL=pathlib.Path(os.path.join(STATIC, "notify.js")).as_uri(),
+        APP_URL=pathlib.Path(os.path.join(STATIC, "app.js")).as_uri(),
+    )
+    p = subprocess.run(
+        ["node", "--input-type=module", "-e", NOTIFY_NODE_JS], env=env, capture_output=True, text=True, timeout=60
+    )
     assert p.returncode == 0, p.stderr[-1500:]
     for line in p.stdout.splitlines():
         if line.startswith("ok "):
@@ -2319,7 +2439,13 @@ def history_checks():
 
     js = read(os.path.join(STATIC, "history.js")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./fmt.js", "./toast.js", "./cleanup.js"}, specs
+    assert specs and set(specs) <= {
+        "./vendor/preact.mjs",
+        "./vendor/htm.mjs",
+        "./fmt.js",
+        "./toast.js",
+        "./cleanup.js",
+    }, specs
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
     names = {x.split(" as ")[-1].strip() for x in exports.split(",")}
@@ -2350,9 +2476,19 @@ def history_checks():
     css = read(os.path.join(STATIC, "app.css")).decode()
     blocks = re.findall(r"([^{}]+)\{([^}]*)\}", css)
     cmd = [b for sel, b in blocks if re.search(r"\.cmd\b|\.history\s+td", sel)]
-    assert any(all(re.search(p, b) for p in (r"white-space\s*:\s*nowrap", r"overflow\s*:\s*hidden", r"text-overflow\s*:\s*ellipsis")) for b in cmd), "cmd truncation css"
-    assert any("table-wrap" in sel and re.search(r"overflow-x\s*:\s*auto", b) for sel, b in blocks), "table-wrap overflow-x"
-    assert any("history" in sel and re.search(r"min-width\s*:\s*[\d.]+(rem|ch)", b) for sel, b in blocks), "table min-width in rem/ch"
+    assert any(
+        all(
+            re.search(p, b)
+            for p in (r"white-space\s*:\s*nowrap", r"overflow\s*:\s*hidden", r"text-overflow\s*:\s*ellipsis")
+        )
+        for b in cmd
+    ), "cmd truncation css"
+    assert any("table-wrap" in sel and re.search(r"overflow-x\s*:\s*auto", b) for sel, b in blocks), (
+        "table-wrap overflow-x"
+    )
+    assert any("history" in sel and re.search(r"min-width\s*:\s*[\d.]+(rem|ch)", b) for sel, b in blocks), (
+        "table min-width in rem/ch"
+    )
     tap = [b for sel, b in blocks if "history" in sel and re.search(r"\b(a|button|summary)\b", sel)]
     assert any(re.search(r"min-height\s*:\s*44px", b) for b in tap), "44px tap targets"
     assert any("select" in sel and re.search(r"min-height\s*:\s*44px", b) for sel, b in blocks), "select 44px"
@@ -2363,10 +2499,14 @@ def history_checks():
     if not shutil.which("node"):
         print("note: node not found, skipping history logic checks")
         return
-    env = dict(os.environ, HISTORY_URL=pathlib.Path(os.path.join(STATIC, "history.js")).as_uri(),
-               PREACT_URL=pathlib.Path(os.path.join(VENDOR, "preact.mjs")).as_uri())
-    p = subprocess.run(["node", "--input-type=module", "-e", HISTORY_JS], env=env,
-                       capture_output=True, text=True, timeout=60)
+    env = dict(
+        os.environ,
+        HISTORY_URL=pathlib.Path(os.path.join(STATIC, "history.js")).as_uri(),
+        PREACT_URL=pathlib.Path(os.path.join(VENDOR, "preact.mjs")).as_uri(),
+    )
+    p = subprocess.run(
+        ["node", "--input-type=module", "-e", HISTORY_JS], env=env, capture_output=True, text=True, timeout=60
+    )
     assert p.returncode == 0, p.stderr[-1500:]
     for line in p.stdout.splitlines():
         if line.startswith("ok "):
@@ -2417,10 +2557,11 @@ out('palette offers Go AFK or I\'m back');
 
 def afk_checks():
     import subprocess
+
     css = read(os.path.join(STATIC, "app.css")).decode()
     app = read(os.path.join(STATIC, "app.js")).decode()
     assert "#7ff0dd" not in css.split(":root", 1)[1].split("}", 1)[1], "accent hover goes through --accent-hover"
-    afk = css[css.index("html[data-afk] {"):]
+    afk = css[css.index("html[data-afk] {") :]
     for tok in ("--accent:", "--accent-bg:", "--on-accent:", "--accent-hover:"):
         assert tok in afk.split("}", 1)[0], tok
     for sel in (".needs-you", ".strip-wait", ".pcard-attn", ".grind-needs"):
@@ -2432,10 +2573,14 @@ def afk_checks():
     if not shutil.which("node"):
         print("note: node not found, skipping afk logic checks")
         return
-    env = dict(os.environ, AFK_URL=pathlib.Path(os.path.join(STATIC, "afk.js")).as_uri(),
-               KEYS_URL=pathlib.Path(os.path.join(STATIC, "keys.js")).as_uri())
-    p = subprocess.run(["node", "--input-type=module", "-e", AFK_NODE_JS], env=env,
-                       capture_output=True, text=True, timeout=60)
+    env = dict(
+        os.environ,
+        AFK_URL=pathlib.Path(os.path.join(STATIC, "afk.js")).as_uri(),
+        KEYS_URL=pathlib.Path(os.path.join(STATIC, "keys.js")).as_uri(),
+    )
+    p = subprocess.run(
+        ["node", "--input-type=module", "-e", AFK_NODE_JS], env=env, capture_output=True, text=True, timeout=60
+    )
     assert p.returncode == 0, p.stderr[-1500:]
     for line in p.stdout.splitlines():
         if line.startswith("ok "):
@@ -2475,9 +2620,14 @@ try:
         assert s == 404 and b"preact.mjs" not in body, p
     ok("directories 404, no listing")
     for p in (
-        "/static/../route.py", "/static/../../etc/passwd", "/static/%2e%2e/route.py",
-        "/static/%2E%2E/route.py", "/static/..%2froute.py", "/static/%252e%252e/route.py",
-        "/static//etc/passwd", "/static/vendor/../../ui_server.py",
+        "/static/../route.py",
+        "/static/../../etc/passwd",
+        "/static/%2e%2e/route.py",
+        "/static/%2E%2E/route.py",
+        "/static/..%2froute.py",
+        "/static/%252e%252e/route.py",
+        "/static//etc/passwd",
+        "/static/vendor/../../ui_server.py",
     ):
         s, _, body = req(port, p)
         assert s == 404 and b"def " not in body and b"root:" not in body, (p, s)
@@ -2486,8 +2636,11 @@ try:
     ok("NUL byte 404")
 
     # guard
-    for p, kw in (("/", {"host": "evil.example"}), ("/", {"host": ""}),
-                  ("/static/vendor/preact.mjs", {"origin": "http://evil.example"})):
+    for p, kw in (
+        ("/", {"host": "evil.example"}),
+        ("/", {"host": ""}),
+        ("/static/vendor/preact.mjs", {"origin": "http://evil.example"}),
+    ):
         s, r, _ = req(port, p, **kw)
         assert s == 403, (p, kw, s)
         assert not any(k.lower().startswith("access-control-") for k, _ in r.getheaders())
@@ -2542,7 +2695,7 @@ try:
                 while depth and k < len(text):
                     depth += {"{": 1, "}": -1}.get(text[k], 0)
                     k += 1
-                inner = text[j + 1:k - 1]
+                inner = text[j + 1 : k - 1]
                 if head.startswith("@media"):
                     walk(inner, re.sub(r"\s+", " ", head[6:].strip()))
                 elif not head.startswith("@"):
@@ -2561,14 +2714,20 @@ try:
     # the Flow side panel and the Run output no longer size themselves from 100vh
     assert "vh" not in decl(rules, None, ".flow-side"), "flow-side must not be sized from vh"
     wide_flow = decl(rules, "(min-width: 1200px)", "body:has(.flow--side) #app")
-    assert re.search(r"height\s*:\s*100dvh", wide_flow) and re.search(r"flex-direction\s*:\s*column", wide_flow), wide_flow
+    assert re.search(r"height\s*:\s*100dvh", wide_flow) and re.search(r"flex-direction\s*:\s*column", wide_flow), (
+        wide_flow
+    )
     wide_run = decl(rules, "(min-width: 961px)", "body:has(.run .output) #app")
     assert re.search(r"height\s*:\s*100dvh", wide_run) and re.search(r"flex-direction\s*:\s*column", wide_run), wide_run
     # Flow: the main column is the scroll area (a size container), the sticky panel is bounded by it
     flow_main = decl(rules, "(min-width: 1200px)", "main:has(.flow--side)")
-    assert re.search(r"container-type\s*:\s*size", flow_main) and re.search(r"overflow-y\s*:\s*auto", flow_main), flow_main
+    assert re.search(r"container-type\s*:\s*size", flow_main) and re.search(r"overflow-y\s*:\s*auto", flow_main), (
+        flow_main
+    )
     side = decl(rules, None, ".flow-side")
-    assert re.search(r"max-height\s*:[^;]*100cqh", side) and re.search(r"overflow-y\s*:\s*auto", side) and "sticky" in side, side
+    assert (
+        re.search(r"max-height\s*:[^;]*100cqh", side) and re.search(r"overflow-y\s*:\s*auto", side) and "sticky" in side
+    ), side
     # Run: the output shrinks to the room left under the header, and no longer carries its own cap there
     run_out = decl(rules, "(min-width: 961px)", ".run:has(.output) .output")
     assert re.search(r"max-height\s*:\s*none", run_out), run_out
@@ -2599,7 +2758,10 @@ try:
         assert name in head and lic in head and re.search(r"\d+\.\d+\.\d+", head), name
         assert "sourceMappingURL" not in src, name
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
-    assert re.search(r"export\s*\{", pre) and all(re.search(rf"\bas\s+{n}\b", pre) or re.search(rf"export\s*\{{[^}}]*\b{n}\b", pre) for n in ("h", "render", "Component"))
+    assert re.search(r"export\s*\{", pre) and all(
+        re.search(rf"\bas\s+{n}\b", pre) or re.search(rf"export\s*\{{[^}}]*\b{n}\b", pre)
+        for n in ("h", "render", "Component")
+    )
     htm = read(os.path.join(VENDOR, "htm.mjs")).decode()
     assert "export default" in htm or re.search(r"export\s*\{", htm)
     ok("vendored headers and exports")
@@ -2607,6 +2769,7 @@ try:
     # hygiene
     assert not os.path.exists(os.path.join(VENDOR, "package.json"))
     import subprocess
+
     g = subprocess.run(["git", "-C", REPO, "ls-files"], capture_output=True, text=True)
     if g.returncode:
         print("note: not a git checkout, skipping tracked-file hygiene check")

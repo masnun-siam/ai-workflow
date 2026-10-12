@@ -2,6 +2,7 @@
 
 A fake `tailscale` on PATH records its argv and answers from env, so no real tailnet config is touched.
 """
+
 import http.client
 import io
 import json
@@ -31,7 +32,7 @@ tmp = tempfile.mkdtemp()
 LOG = os.path.join(tmp, "calls.log")
 FAKE = os.path.join(tmp, "tailscale")
 with open(FAKE, "w") as f:
-    f.write('''#!/usr/bin/env python3
+    f.write("""#!/usr/bin/env python3
 import os, sys
 a = sys.argv[1:]
 open(os.environ["FAKE_TS_LOG"], "a").write(" ".join(a) + "\\n")
@@ -41,11 +42,16 @@ elif a[:3] == ["serve", "status", "--json"]:
     print(os.environ.get("FAKE_TS_SERVE", "{}"))
 else:
     sys.exit(int(os.environ.get("FAKE_TS_RC", "0")))
-''')
+""")
 os.chmod(FAKE, os.stat(FAKE).st_mode | stat.S_IXUSR)
 
-RUNNING = json.dumps({"BackendState": "Running", "Self": {"DNSName": "mac.tail.ts.net.", "UserID": 7},
-                      "User": {"7": {"LoginName": "Owner@Example.com"}}})
+RUNNING = json.dumps(
+    {
+        "BackendState": "Running",
+        "Self": {"DNSName": "mac.tail.ts.net.", "UserID": 7},
+        "User": {"7": {"LoginName": "Owner@Example.com"}},
+    }
+)
 OLD = os.environ["PATH"]
 
 
@@ -79,7 +85,12 @@ ok("node: DNS name without the trailing dot, owner login")
 
 # --- up()
 r, _ = quiet(ts.up, 8420)
-assert r == {"url": "https://mac.tail.ts.net", "hosts": {"mac.tail.ts.net"}, "login": "Owner@Example.com", "https_port": 443}, r
+assert r == {
+    "url": "https://mac.tail.ts.net",
+    "hosts": {"mac.tail.ts.net"},
+    "login": "Owner@Example.com",
+    "https_port": 443,
+}, r
 assert "serve --bg --https=443 http://127.0.0.1:8420" in calls()
 ok("serves 127.0.0.1:<port> on 443 by default, tailnet-only (no funnel)")
 assert not any("funnel" in c for c in calls())
@@ -91,7 +102,9 @@ ok("another port gives a :port URL and Host")
 busy = json.dumps({"Web": {"mac.tail.ts.net:443": {"Handlers": {"/": {"Proxy": "http://127.0.0.1:8787"}}}}})
 env(serve=busy)
 r, err = quiet(ts.up, 8420)
-assert r is None and "already serves http://127.0.0.1:8787" in err and not any(c.startswith("serve --bg") for c in calls()), calls()
+assert (
+    r is None and "already serves http://127.0.0.1:8787" in err and not any(c.startswith("serve --bg") for c in calls())
+), calls()
 ok("an occupied port is never overwritten")
 mine = json.dumps({"Web": {"mac.tail.ts.net:443": {"Handlers": {"/": {"Proxy": "http://127.0.0.1:8420"}}}}})
 env(serve=mine)

@@ -130,8 +130,11 @@ def _carried_guard(ledger, repo) -> CheckResult:
     changed = {os.path.normpath(f) for f in diff.stdout.split()}
     hit = sorted((carried & changed) | {f for f in changed if any(f.startswith(d) for d in dirs)})
     if hit:
-        return failed("committed the owner's uncommitted work carried into the main tree: "
-                      + ", ".join(hit[:8]) + " — drop it from the commit; if the issue needs that file, stop and ask")
+        return failed(
+            "committed the owner's uncommitted work carried into the main tree: "
+            + ", ".join(hit[:8])
+            + " — drop it from the commit; if the issue needs that file, stop and ask"
+        )
     return passed()
 
 
@@ -161,6 +164,7 @@ def check_sdet_post(ledger, envelope, repo, config) -> CheckResult:
     if code == 0:
         return failed("the suite is GREEN — there is no red to prove")
     return passed()
+
 
 # KNOWN HOLE, deliberate: this inverts the WHOLE suite, with no known-red baseline. A
 # repo whose suite is already red for unrelated reasons passes check_sdet_post trivially.
@@ -201,9 +205,7 @@ def check_dev_post(ledger, envelope, repo, config) -> CheckResult:
                 actual = {f for f in actual if not f.startswith(os.path.normpath(test_root))}
             undeclared = sorted(actual - claimed)
             if undeclared:
-                return failed(
-                    "changed files missing from handoff.files_changed[]: " + ", ".join(undeclared[:8])
-                )
+                return failed("changed files missing from handoff.files_changed[]: " + ", ".join(undeclared[:8]))
 
     code, detail = run_suite(ledger, repo, config=config)
     if code is None:
@@ -230,15 +232,21 @@ def _dev_owns_tests_and_verify(ledger, handoff, repo, config) -> CheckResult:
         return failed(f"tests_sha {tests_sha} changes no files")
     outside = [f for f in touched if test_root != "." and not os.path.normpath(f).startswith(test_root)]
     if outside:
-        return failed(f"tests_sha {tests_sha} touches files outside the test root {test_root}: " + ", ".join(outside[:5]))
+        return failed(
+            f"tests_sha {tests_sha} touches files outside the test root {test_root}: " + ", ".join(outside[:5])
+        )
 
     verify = handoff.get("verify")
     if not isinstance(verify, dict):
         return failed("no handoff.verify — runtime verification (or its skip reason) is part of dev's job here")
     if (verify.get("verdict") or "").lower() == "fail":
         return failed("handoff.verify says FAIL but dev reported passed — escalate instead")
-    as_verifier = {"handoff": verify, "modes": verify.get("modes"), "verdict": verify.get("verdict"),
-                   "evidence": verify.get("evidence")}
+    as_verifier = {
+        "handoff": verify,
+        "modes": verify.get("modes"),
+        "verdict": verify.get("verdict"),
+        "evidence": verify.get("evidence"),
+    }
     result = check_verifier_post(ledger, as_verifier, repo, config)
     return result if not result.ok else passed()
 
@@ -259,8 +267,9 @@ def _mode_verdict_ok(mode_block: dict) -> CheckResult:
     if verdict == "pass":
         unmet = [c.get("criterion") for c in criteria if isinstance(c, dict) and c.get("met") is False]
         if unmet:
-            return failed("mode verdict is pass but these criteria are not met: " + "; ".join(
-                str(u)[:60] for u in unmet[:5]))
+            return failed(
+                "mode verdict is pass but these criteria are not met: " + "; ".join(str(u)[:60] for u in unmet[:5])
+            )
         if not criteria:
             return failed("mode verdict is pass with no criteria[] — nothing was actually checked")
     return passed()
@@ -302,13 +311,15 @@ def check_verifier_post(ledger, envelope, repo, config) -> CheckResult:
             return result
 
     text = " ".join(
-        str(c.get("excerpt", "")) for c in ((envelope.get("evidence") or {}).get("commands") or [])
+        str(c.get("excerpt", ""))
+        for c in ((envelope.get("evidence") or {}).get("commands") or [])
         if isinstance(c, dict)
     )
     for name, block in (modes or {}).items():
         if isinstance(block, dict):
             text += " " + " ".join(
-                str(c.get("excerpt", "")) for c in ((block.get("evidence") or {}).get("commands") or [])
+                str(c.get("excerpt", ""))
+                for c in ((block.get("evidence") or {}).get("commands") or [])
                 if isinstance(c, dict)
             )
     for candidate in set(PATH_RE.findall(text)):
@@ -327,9 +338,7 @@ def check_reviewer_post(ledger, envelope, repo, config) -> CheckResult:
     expected = resolve_review_panel(ledger.classification or {}, config.get("review_policy") or {})
     claimed = handoff.get("panel")
     if claimed is not None and sorted(claimed) != sorted(expected):
-        return failed(
-            f"handoff.panel {sorted(claimed)} is not the policy panel {sorted(expected)}"
-        )
+        return failed(f"handoff.panel {sorted(claimed)} is not the policy panel {sorted(expected)}")
 
     url = handoff.get("review_url") or ""
     m = re.search(r"#pullrequestreview-(\d+)", url)
@@ -382,8 +391,7 @@ def check_fixer_post(ledger, envelope, repo, config) -> CheckResult:
         return unrunnable("could not resolve owner/repo from the checkout")
     owner, _, name = slug.partition("/")
     try:
-        open_threads = [t for t in threads_mod.list_threads(owner, name, int(pr), cwd=repo)
-                        if not t["is_resolved"]]
+        open_threads = [t for t in threads_mod.list_threads(owner, name, int(pr), cwd=repo) if not t["is_resolved"]]
     except SystemExit:
         return unrunnable("could not read the PR's review threads")
 

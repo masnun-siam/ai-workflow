@@ -43,8 +43,9 @@ class Fake:
         class H(BaseHTTPRequestHandler):
             def do_POST(self):
                 body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
-                outer.reqs.append({"path": self.path, "headers": {k.lower(): v for k, v in self.headers.items()},
-                                   "body": body})
+                outer.reqs.append(
+                    {"path": self.path, "headers": {k.lower(): v for k, v in self.headers.items()}, "body": body}
+                )
                 if outer.delay:
                     time.sleep(outer.delay)
                 out = (self.headers.get("Authorization") or "").encode() if outer.echo else b"ok"
@@ -95,8 +96,13 @@ def captured(fn):
     return res, err.getvalue()
 
 
-REC = {"id": "sid1", "command": "/run-issue 5", "repo": "o/r", "link": {"owner": "o", "repo": "r", "issue": 5},
-       "pending_question": None}
+REC = {
+    "id": "sid1",
+    "command": "/run-issue 5",
+    "repo": "o/r",
+    "link": {"owner": "o", "repo": "r", "issue": 5},
+    "pending_question": None,
+}
 
 
 def rec(**kw):
@@ -113,7 +119,8 @@ def new_session(command="/run-issue 5", link=None):
 
 
 # 1 normal waiting
-f = Fake(); fresh(conf(f))
+f = Fake()
+fresh(conf(f))
 _, err = captured(lambda: ui_notify.notify("waiting", rec()))
 assert len(f.reqs) == 1, f.reqs
 r = f.reqs[0]
@@ -123,30 +130,38 @@ assert r["headers"]["priority"] and r["headers"]["click"] == "https://box.ts.net
 assert r["headers"]["authorization"] == f"Bearer {SECRET}"
 assert b"/run-issue 5" in r["body"] and b"o/r" in r["body"]
 assert SECRET not in err
-f.close(); ok("waiting push")
+f.close()
+ok("waiting push")
 
 # 2 done/failed click and priority
-f = Fake(); fresh(conf(f))
+f = Fake()
+fresh(conf(f))
 for ev in ("done", "failed", "waiting"):
     ui_notify.notify(ev, rec())
 done, failed, waiting = f.reqs
 assert done["headers"]["click"] == failed["headers"]["click"] == "https://box.ts.net/#/run/o/r/5"
 assert waiting["headers"]["priority"] == failed["headers"]["priority"] != done["headers"]["priority"]
 assert waiting["headers"]["priority"] in ("high", "urgent", "4", "5")
-f.close(); ok("done/failed click + priority")
+f.close()
+ok("done/failed click + priority")
 
 # 3 store e2e
-f = Fake(); d = fresh(conf(f))
+f = Fake()
+d = fresh(conf(f))
 sid = new_session()
 ui_sessions.update(sid, status="running")
 assert not f.reqs
 ui_sessions.update(sid, status="done")
 assert len(f.reqs) == 1 and "done" in meta(d, sid)["notified"]
-f.close(); ok("update hook done once; running silent")
+f.close()
+ok("update hook done once; running silent")
 
 # 4 runner e2e
-f = Fake(); d = fresh(conf(f))
-empty = tempfile.mkdtemp(); old = os.environ["PATH"]; os.environ["PATH"] = empty
+f = Fake()
+d = fresh(conf(f))
+empty = tempfile.mkdtemp()
+old = os.environ["PATH"]
+os.environ["PATH"] = empty
 try:
     try:
         ui_runner.start("/run-issue 1", tempfile.mkdtemp())
@@ -156,10 +171,13 @@ try:
 finally:
     os.environ["PATH"] = old
 assert len(f.reqs) == 1 and "fail" in f.reqs[0]["headers"]["title"].lower(), f.reqs
-f.close(); ok("runner preflight failure pushes")
+f.close()
+ok("runner preflight failure pushes")
 
 # 5 env overrides
-f = Fake(); g = Fake(); fresh(conf(f))
+f = Fake()
+g = Fake()
+fresh(conf(f))
 os.environ.update(AIW_NTFY_SERVER=g.url, AIW_NTFY_TOPIC="envtopic", AIW_NTFY_TOKEN="tk_ENV")
 ui_notify.notify("done", rec())
 assert not f.reqs and g.reqs[0]["path"] == "/envtopic" and g.reqs[0]["headers"]["authorization"] == "Bearer tk_ENV"
@@ -168,11 +186,15 @@ os.environ.update(AIW_NTFY_SERVER=g.url, AIW_NTFY_TOPIC="only")
 ui_notify.notify("done", rec())
 assert g.reqs[-1]["path"] == "/only"
 assert "authorization" not in g.reqs[-1]["headers"]  # 6 no token
-f.close(); g.close(); ok("env overrides, env-only, no token")
+f.close()
+g.close()
+ok("env overrides, env-only, no token")
 
 # 6b basic auth: user+password -> Basic, token wins, password never logged on failure
-import base64
-f = Fake(); fresh({"ntfy": {"server": f.url, "topic": "t", "user": "alice", "password": "s3cret"}})
+import base64  # noqa: E402
+
+f = Fake()
+fresh({"ntfy": {"server": f.url, "topic": "t", "user": "alice", "password": "s3cret"}})
 ui_notify.notify("done", rec())
 assert f.reqs[-1]["headers"]["authorization"] == "Basic " + base64.b64encode(b"alice:s3cret").decode()
 fresh({"ntfy": {"server": f.url, "topic": "t", "user": "alice", "password": "s3cret", "token": "tk_X"}})
@@ -182,10 +204,16 @@ fresh({"ntfy": {"server": f.url, "topic": "t", "user": "alice"}})
 ui_notify.notify("done", rec())
 assert "authorization" not in f.reqs[-1]["headers"]  # a user without a password sends nothing
 assert f.reqs[-1]["headers"]["user-agent"].startswith("aiw-ui")  # not urllib's default, which Cloudflare blocks
-f.close(); ok("basic auth from user+password; token wins; incomplete pair sends no auth; own User-Agent")
+f.close()
+ok("basic auth from user+password; token wins; incomplete pair sends no auth; own User-Agent")
 
 # 6c presentation: icon + context tags, issue in title, question/error first, action button
-q = {"id": "r1", "questions": [{"header": "Plan", "question": "Approve the plan?\nSecond line", "recommended": "Approve (Recommended)"}]}
+q = {
+    "id": "r1",
+    "questions": [
+        {"header": "Plan", "question": "Approve the plan?\nSecond line", "recommended": "Approve (Recommended)"}
+    ],
+}
 h, body = ui_notify.compose("waiting", rec(pending_question=q), "https://box.ts.net")
 assert h["Title"] == "aiw: #5 waiting on you" and h["Tags"] == "speech_balloon,run-issue,r,#5", h
 assert h["Actions"] == "view, Answer, https://box.ts.net/#/answer/sid1" and h["Click"].endswith("/#/answer/sid1")
@@ -194,14 +222,21 @@ h, body = ui_notify.compose("failed", rec(error="claude exited 1\ntraceback...")
 assert h["Title"] == "aiw: #5 failed" and h["Tags"].startswith("x,") and h["Priority"] == "high"
 assert body.splitlines() == ["claude exited 1", "o/r · /run-issue 5"] and h["Actions"].startswith("view, Open run,")
 h, body = ui_notify.compose("done", rec(), None)
-assert h["Tags"].startswith("white_check_mark,") and h["Priority"] == "default" and "Actions" not in h and "Click" not in h
+assert (
+    h["Tags"].startswith("white_check_mark,") and h["Priority"] == "default" and "Actions" not in h and "Click" not in h
+)
 h, _ = ui_notify.compose("done", rec(link=None, command="/prd x"), None)
 assert h["Title"] == "aiw: run done" and h["Tags"] == "white_check_mark,prd,r", h
 h, _ = ui_notify.compose("pipeline", {"id": "p-1", "repo": "o/r", "command": "pipeline x"}, "https://box.ts.net")
-assert h["Tags"].startswith("checkered_flag") and h["Actions"] == "view, Open pipeline, https://box.ts.net/#/dispatch/p-1"
+assert (
+    h["Tags"].startswith("checkered_flag") and h["Actions"] == "view, Open pipeline, https://box.ts.net/#/dispatch/p-1"
+)
 h, body = ui_notify.compose("done", rec(repo="o/r\r\nX-Evil: 1", command="/run-issue 5\r\nX-Evil: 1"), None)
-assert all("\n" not in v and "\r" not in v for v in h.values()) and "X-Evil: 1" not in h["Tags"].replace("X-Evil1", ""), h
-h["Title"].encode("ascii"); h["Tags"].encode("ascii")
+assert all("\n" not in v and "\r" not in v for v in h.values()) and "X-Evil: 1" not in h["Tags"].replace(
+    "X-Evil1", ""
+), h
+h["Title"].encode("ascii")
+h["Tags"].encode("ascii")
 ok("compose: icon tags, titles, question/error body, action button, header-safe")
 
 # 7 empty configs
@@ -215,23 +250,30 @@ for kind in ("missing", "zero", "{}", '{"ntfy":{}}', "notopic"):
         fresh(raw=kind if kind != "zero" else "")
     _, err = captured(lambda: ui_notify.notify("done", rec()))
     assert not f.reqs and err == "", (kind, err)
-f.close(); ok("empty configs silent")
+f.close()
+ok("empty configs silent")
 
 # 8 public_url variants
-f = Fake(); c = conf(f); del c["public_url"]; fresh(c)
+f = Fake()
+c = conf(f)
+del c["public_url"]
+fresh(c)
 ui_notify.notify("done", rec())
 assert len(f.reqs) == 1 and "click" not in f.reqs[0]["headers"]
 fresh(conf(f, public_url="https://box.ts.net/"))
 ui_notify.notify("waiting", rec())
 assert f.reqs[-1]["headers"]["click"] == "https://box.ts.net/#/answer/sid1"
-f.close(); ok("public_url missing / trailing slash")
+f.close()
+ok("public_url missing / trailing slash")
 
 # 9 link fallback
-f = Fake(); fresh(conf(f))
+f = Fake()
+fresh(conf(f))
 for link in (None, {"owner": "o"}):
     ui_notify.notify("done", rec(link=link))
     assert f.reqs[-1]["headers"]["click"] == "https://box.ts.net/#/sessions", link
-f.close(); ok("link fallback")
+f.close()
+ok("link fallback")
 
 # 10 modes
 f = Fake()
@@ -241,26 +283,32 @@ for m in (0o644, 0o640, 0o604):
     assert not f.reqs and "ui.json" in err and oct(m)[2:] in err and "0600" in err, (oct(m), err)
 for m in (0o600, 0o400):
     fresh(conf(f), mode=m)
-    n = len(f.reqs); ui_notify.notify("done", rec())
+    n = len(f.reqs)
+    ui_notify.notify("done", rec())
     assert len(f.reqs) == n + 1, oct(m)
-f.close(); ok("file modes")
+f.close()
+ok("file modes")
 
 # 11 non-ASCII
-f = Fake(); fresh(conf(f))
+f = Fake()
+fresh(conf(f))
 ui_notify.notify("done", rec(command="/run-issue 修正"))
 f.reqs[0]["headers"]["title"].encode("ascii")
 assert "修正".encode() in f.reqs[0]["body"]
-f.close(); ok("non-ASCII command")
+f.close()
+ok("non-ASCII command")
 
 # 12 quoting
-f = Fake(); fresh(conf(f))
+f = Fake()
+fresh(conf(f))
 ui_notify.notify("done", rec(link={"owner": "a b", "repo": "c/d", "issue": 5}))
 c = f.reqs[-1]["headers"]["click"]
 assert "a%20b" in c and "c%2Fd" in c, c
 ui_notify.notify("waiting", rec(id="x y/z"))
 c = f.reqs[-1]["headers"]["click"]
 assert "x%20y" in c and "x y" not in c, c
-f.close(); ok("url quoting")
+f.close()
+ok("url quoting")
 
 # 13 malformed
 f = Fake()
@@ -268,39 +316,60 @@ for raw in ("{not json", "[1,2]"):
     fresh(raw=raw)
     _, err = captured(lambda: ui_notify.notify("done", rec()))
     assert not f.reqs and err.strip(), raw
-f.close(); ok("malformed json")
+f.close()
+ok("malformed json")
 
 # 14 bad scheme
-f = Fake(); fresh({"ntfy": {"server": "file:///etc/passwd", "topic": "t"}})
+f = Fake()
+fresh({"ntfy": {"server": "file:///etc/passwd", "topic": "t"}})
 _, err = captured(lambda: ui_notify.notify("done", rec()))
 assert err.strip() and not f.reqs
-f.close(); ok("non-http server")
+f.close()
+ok("non-http server")
 
 # 15 dedupe
-f = Fake(); d = fresh(conf(f)); sid = new_session()
-ui_sessions.update(sid, status="done"); ui_sessions.update(sid, status="done")
+f = Fake()
+d = fresh(conf(f))
+sid = new_session()
+ui_sessions.update(sid, status="done")
+ui_sessions.update(sid, status="done")
 assert len(f.reqs) == 1
 sid = new_session()
 ts = [threading.Thread(target=ui_sessions.update, args=(sid,), kwargs={"status": "failed"}) for _ in range(2)]
-[t.start() for t in ts]; [t.join() for t in ts]
+[t.start() for t in ts]
+[t.join() for t in ts]
 assert len(f.reqs) == 2 and meta(d, sid)["notified"].count("failed") == 1
-f.close(); ok("dedupe done / concurrent failed")
+f.close()
+ok("dedupe done / concurrent failed")
 
 # 16 waiting rounds
-f = Fake(); d = fresh(conf(f)); sid = new_session()
+f = Fake()
+d = fresh(conf(f))
+sid = new_session()
 for q in ("r1", "r1", "r2"):
     ui_sessions.update(sid, status="waiting", pending_question={"id": q})
 assert len(f.reqs) == 2
-f.close(); ok("waiting per round")
+f.close()
+ok("waiting per round")
+
 
 # 17 error paths + 18 token redaction
 def closed_port():
-    s = socket.socket(); s.bind(("127.0.0.1", 0)); p = s.getsockname()[1]; s.close(); return f"http://127.0.0.1:{p}"
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    p = s.getsockname()[1]
+    s.close()
+    return f"http://127.0.0.1:{p}"
 
 
 old_t = ui_notify.TIMEOUT_SECONDS
-cases = [("401", Fake(401, echo_auth=True)), ("403", Fake(403)), ("500", Fake(500)),
-         ("closed", None), ("slow", Fake(200, delay=2.0))]
+cases = [
+    ("401", Fake(401, echo_auth=True)),
+    ("403", Fake(403)),
+    ("500", Fake(500)),
+    ("closed", None),
+    ("slow", Fake(200, delay=2.0)),
+]
 for name, fk in cases:
     c = {"ntfy": {"server": fk.url if fk else closed_port(), "topic": "t", "token": SECRET}}
     d = fresh(c)

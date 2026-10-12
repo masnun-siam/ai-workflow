@@ -145,21 +145,37 @@ def cmd_main(args, ledger, main_checkout: str, base: str) -> None:
     if proc.returncode != 0:
         die(1, f"git fetch origin {base} failed: " + (proc.stderr or "").strip()[:300])
     if run(["git", "diff", "--cached", "--quiet"], cwd=main_checkout).returncode != 0:
-        die(1, "you have staged changes: unstage them (git restore --staged .) or commit them first — "
-               "a station's commit would otherwise sweep them into the PR")
+        die(
+            1,
+            "you have staged changes: unstage them (git restore --staged .) or commit them first — "
+            "a station's commit would otherwise sweep them into the PR",
+        )
     carried = porcelain_paths(run(["git", "status", "--porcelain"], cwd=main_checkout).stdout)
     proc = run(["git", "checkout", "-b", branch, f"origin/{base}"], cwd=main_checkout)
     if proc.returncode != 0:
-        die(1, f"your uncommitted changes conflict with origin/{base} — commit or move them, then retry:\n"
-               + (proc.stderr or "").strip()[:600])
+        die(
+            1,
+            f"your uncommitted changes conflict with origin/{base} — commit or move them, then retry:\n"
+            + (proc.stderr or "").strip()[:600],
+        )
     install = _install(main_checkout, ledger)
     _exclude_override(main_checkout)
-    print(f"main tree on {branch}; carried {len(carried)} uncommitted path(s); "
-          f"install: {' '.join(install) if install else 'skipped'}")
-    print_written(record(
-        args.run_dir, ledger, worktree=main_checkout, branch=branch, main_checkout=main_checkout,
-        repo=main_checkout, tree="main", carried=carried,
-    ))
+    print(
+        f"main tree on {branch}; carried {len(carried)} uncommitted path(s); "
+        f"install: {' '.join(install) if install else 'skipped'}"
+    )
+    print_written(
+        record(
+            args.run_dir,
+            ledger,
+            worktree=main_checkout,
+            branch=branch,
+            main_checkout=main_checkout,
+            repo=main_checkout,
+            tree="main",
+            carried=carried,
+        )
+    )
 
 
 def cmd_create(args) -> None:
@@ -184,8 +200,7 @@ def cmd_create(args) -> None:
     if proc.returncode != 0:
         die(1, f"git fetch origin {base} failed: " + (proc.stderr or "").strip()[:300])
 
-    proc = run(["git", "worktree", "add", worktree, "-b", branch, f"origin/{base}"],
-               cwd=main_checkout, timeout=600)
+    proc = run(["git", "worktree", "add", worktree, "-b", branch, f"origin/{base}"], cwd=main_checkout, timeout=600)
     if proc.returncode != 0:
         die(1, "git worktree add failed: " + (proc.stderr or "").strip()[:300])
 
@@ -203,10 +218,16 @@ def cmd_create(args) -> None:
     _exclude_override(worktree)
 
     print(f"copied {copied} gitignored file(s); install: {' '.join(install) if install else 'skipped'}")
-    print_written(record(
-        args.run_dir, ledger,
-        worktree=worktree, branch=branch, main_checkout=main_checkout, repo=worktree,
-    ))
+    print_written(
+        record(
+            args.run_dir,
+            ledger,
+            worktree=worktree,
+            branch=branch,
+            main_checkout=main_checkout,
+            repo=worktree,
+        )
+    )
 
 
 def register(sub, add) -> None:
@@ -217,6 +238,7 @@ def register(sub, add) -> None:
     q.add_argument("--title", default="", help="issue title, for the branch slug")
     q.add_argument("--base", help="base branch (default: base_branch from the ledger)")
     q.add_argument("--repo", help="main checkout (default: ledger context, else cwd)")
-    q.add_argument("--main-tree", action="store_true",
-                   help="branch inside the main checkout instead of adding a worktree")
+    q.add_argument(
+        "--main-tree", action="store_true", help="branch inside the main checkout instead of adding a worktree"
+    )
     q.set_defaults(func=cmd_create)

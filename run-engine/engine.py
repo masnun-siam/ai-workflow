@@ -244,9 +244,7 @@ class Ledger:
         led = cls(int(data.get("issue", 0)), stations, int(data.get("currentIndex", 0)))
         led.status = data.get("status", "running")
         led.trace = [t for t in data.get("trace", []) if isinstance(t, str)]
-        led.bounce_counts = {
-            str(k): int(v) for k, v in (data.get("bounceCounts") or {}).items() if isinstance(v, int)
-        }
+        led.bounce_counts = {str(k): int(v) for k, v in (data.get("bounceCounts") or {}).items() if isinstance(v, int)}
         led.context = data.get("context") or {}
         led.classification = data.get("classification")
         led.specialists = [s for s in (data.get("specialists") or []) if isinstance(s, str)]
@@ -284,7 +282,7 @@ class Router:
     def _on_bounce(self, ledger: Ledger, envelope: dict) -> RouteAction:
         bounce = envelope.get("bounce")
         if not isinstance(bounce, dict) or not isinstance(bounce.get("to"), str):
-            raise ValueError('bounce status requires a string bounce.to')
+            raise ValueError("bounce status requires a string bounce.to")
 
         frm = envelope.get("station")
         target = bounce["to"]
@@ -345,9 +343,7 @@ def validate_envelope(envelope: dict, ledger: Ledger, config: dict) -> list[str]
 
     station = envelope.get("station")
     if isinstance(station, str) and ledger.stations and station not in ledger.stations:
-        errors.append(
-            f"station {station!r} is not in this run's roster (" + " -> ".join(ledger.stations) + ")"
-        )
+        errors.append(f"station {station!r} is not in this run's roster (" + " -> ".join(ledger.stations) + ")")
 
     if status == "bounce":
         bounce = envelope.get("bounce")
@@ -371,7 +367,7 @@ def validate_envelope(envelope: dict, ledger: Ledger, config: dict) -> list[str]
                 errors.append(
                     f'station "{station}" reported passed with no evidence.commands[] — '
                     "record the real commands you ran (cmd + exit + a one-line excerpt), "
-                    'or set evidence.skipped for a station that was never dispatched'
+                    "or set evidence.skipped for a station that was never dispatched"
                 )
 
     return errors
@@ -395,11 +391,9 @@ def classify(changed_files: list[str], meta: dict, config: dict) -> dict:
     severity = cfg.get("signal_severity") or {}
     weights = cfg.get("risk_weights") or {}
     bands = cfg.get("bands") or {}
-    labels = [l for l in (meta.get("labels") or []) if isinstance(l, str)]
+    labels = [lab for lab in (meta.get("labels") or []) if isinstance(lab, str)]
 
-    signals = sorted(
-        name for name, globs in signal_globs.items() if any(matches_any(f, globs) for f in changed_files)
-    )
+    signals = sorted(name for name, globs in signal_globs.items() if any(matches_any(f, globs) for f in changed_files))
 
     # Blast radius. A missing graph is reported as "unknown" and scored as the WIDE
     # case, not silently as d1 — gitnexus is best-effort in this pipeline, and
@@ -450,7 +444,7 @@ def classify(changed_files: list[str], meta: dict, config: dict) -> dict:
         if paths_any and any(matches_any(f, paths_any) for f in changed_files):
             ticket_type = rule["type"]
             break
-        if labels_any and any(l in labels_any for l in labels):
+        if labels_any and any(lab in labels_any for lab in labels):
             ticket_type = rule["type"]
             break
 

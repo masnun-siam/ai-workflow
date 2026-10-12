@@ -23,8 +23,8 @@ from contextlib import redirect_stderr
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-import ui_board
-import ui_server
+import ui_board  # noqa: E402
+import ui_server  # noqa: E402
 
 passed = 0
 
@@ -85,8 +85,15 @@ def runs_section():
                 f.write(plan if isinstance(plan, str) else json.dumps(plan))
 
     def L(n, stations, idx, status="running", trace=()):
-        return {"issue": n, "stations": stations, "currentIndex": idx, "status": status,
-                "trace": list(trace), "context": {}, "bounceCounts": {}}
+        return {
+            "issue": n,
+            "stations": stations,
+            "currentIndex": idx,
+            "status": status,
+            "trace": list(trace),
+            "context": {},
+            "bounceCounts": {},
+        }
 
     PLAN = {"handoff": {"plan_md": "## Plan\nbody"}}
     adv = ["init: x", "advance->planner", "advance->sdet", "advance->dev"]
@@ -140,8 +147,15 @@ def runs_section():
         b = get(1)
         assert isinstance(b["issue"], int) and b["issue"] == 1
         assert b["owner"] == "acme" and b["repo"] == "widgets"
-        assert sts(b) == {"researcher": "done", "planner": "done", "sdet": "done", "dev": "running",
-                          "verifier": "pending", "reviewer": "pending", "fixer": "pending"}, sts(b)
+        assert sts(b) == {
+            "researcher": "done",
+            "planner": "done",
+            "sdet": "done",
+            "dev": "running",
+            "verifier": "pending",
+            "reviewer": "pending",
+            "fixer": "pending",
+        }, sts(b)
         assert b["status"] == "running" and b["currentStation"] == "dev"
         assert b["trace"] == adv and b["plan"] == "## Plan\nbody" and b["errors"] == {}
         assert b["totals"] == {"stations": 7, "done": 3, "bounces": 0}, b["totals"]
@@ -347,13 +361,16 @@ try:
     assert res == [200, 200]
     ok("concurrent health")
 finally:
-    srv.shutdown(); tail.shutdown()
-    srv.server_close(); tail.server_close()
+    srv.shutdown()
+    tail.shutdown()
+    srv.server_close()
+    tail.server_close()
     shutil.rmtree(data_dir, ignore_errors=True)
     if old_data is None:
         os.environ.pop("CLAUDE_PLUGIN_DATA", None)
     else:
         os.environ["CLAUDE_PLUGIN_DATA"] = old_data
+
 
 # port in use
 def free_port():
@@ -406,8 +423,7 @@ assert e.code not in (0, None) and "70000" in buf.getvalue() + (e.code if isinst
 ok("out-of-range port -> SystemExit naming port")
 
 # CLI wiring
-out = subprocess.run([sys.executable, os.path.join(HERE, "route.py"), "ui", "--help"],
-                     capture_output=True, text=True)
+out = subprocess.run([sys.executable, os.path.join(HERE, "route.py"), "ui", "--help"], capture_output=True, text=True)
 assert out.returncode == 0 and "--port" in out.stdout and "--allow-host" in out.stdout
 ok("route.py ui --help")
 parser = argparse.ArgumentParser()

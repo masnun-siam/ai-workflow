@@ -46,15 +46,17 @@ def fetch(cmd: str, now: float | None = None) -> dict:
     """{five_hour, seven_day} or {"error": str}. Never raises."""
     now = now or time.time()
     try:
-        p = subprocess.run(["security", "find-generic-password", "-s", service(cmd), "-w"],
-                           capture_output=True, text=True, timeout=15)
+        p = subprocess.run(
+            ["security", "find-generic-password", "-s", service(cmd), "-w"], capture_output=True, text=True, timeout=15
+        )
         if p.returncode:
             return {"error": "usage unavailable (keychain read denied or no login)"}
         oauth = json.loads(p.stdout)["claudeAiOauth"]
         if (oauth.get("expiresAt") or 0) / 1000 < now:
             return {"error": "re-login needed"}
-        req = urllib.request.Request(URL, headers={"Authorization": "Bearer " + oauth["accessToken"],
-                                                   "anthropic-beta": "oauth-2025-04-20"})
+        req = urllib.request.Request(
+            URL, headers={"Authorization": "Bearer " + oauth["accessToken"], "anthropic-beta": "oauth-2025-04-20"}
+        )
         with urllib.request.urlopen(req, timeout=15) as r:
             data = json.load(r)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as e:
@@ -97,6 +99,7 @@ def start_timer(interval: float = 5.0) -> threading.Thread:
                 except Exception as exc:  # the header chip must never take the server down
                     warn(f"ui_usage tick failed: {exc}")
             time.sleep(interval)
+
     t = threading.Thread(target=loop, name="ui-usage", daemon=True)
     t.start()
     return t

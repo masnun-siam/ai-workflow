@@ -69,9 +69,7 @@ import worktree  # noqa: E402
 import maintree  # noqa: E402
 from shared import (  # noqa: E402
     GLOBAL_CONFIG,
-    OVERLAY_NAME,
     data_dir,
-    deep_merge,
     die,
     ledger_lock,
     ledger_path,
@@ -193,8 +191,11 @@ def cmd_route(args) -> None:
     if station == "dev" and status == "passed" and sdet_sha and test_root:
         violations = test_root_violations(repo, sdet_sha, test_root)
         if owner == "dev":
-            justified = {c.get("file") for c in handoff.get("test_changes") or []
-                         if isinstance(c, dict) and str(c.get("reason") or "").strip()}
+            justified = {
+                c.get("file")
+                for c in handoff.get("test_changes") or []
+                if isinstance(c, dict) and str(c.get("reason") or "").strip()
+            }
             violations = [v for v in violations if v not in justified]
         if violations:
             # Route the bounce HERE rather than telling the orchestrator to rewrite the
@@ -209,10 +210,16 @@ def cmd_route(args) -> None:
                 "bounce": {
                     "to": owner,
                     "reason": f"dev changed test files after the {'SDET' if owner == 'sdet' else 'RED-tests'} commit; reverted",
-                    "findings": [{"file": f, "severity": "blocker",
-                                  "note": "changed since the SDET commit; the SDET owns this file" if owner == "sdet"
-                                  else "changed since tests_sha with no handoff.test_changes[] reason"}
-                                 for f in violations],
+                    "findings": [
+                        {
+                            "file": f,
+                            "severity": "blocker",
+                            "note": "changed since the SDET commit; the SDET owns this file"
+                            if owner == "sdet"
+                            else "changed since tests_sha with no handoff.test_changes[] reason",
+                        }
+                        for f in violations
+                    ],
                 },
             }
             action = router.next(ledger, envelope)
@@ -259,9 +266,7 @@ def cmd_route(args) -> None:
                 # Cap exhausted ADVANCES rather than halting: existing doctrine is that a
                 # spent budget opens a draft PR and reports at the final gate rather than
                 # stopping mid-flow. This adds no fourth human gate.
-                ledger.context.setdefault("check_failures", []).append(
-                    {"station": station, "reason": result.reason}
-                )
+                ledger.context.setdefault("check_failures", []).append({"station": station, "reason": result.reason})
                 sys.stderr.write(
                     f"post-check failed again for {station} (cap {cap} spent): {result.reason}"
                     " — advancing; this is reported at the final gate.\n"
@@ -318,7 +323,7 @@ def cmd_classify(args) -> None:
 
     meta = {
         "loc_changed": args.loc,
-        "labels": [l.strip() for l in (args.labels or "").split(",") if l.strip()],
+        "labels": [lab.strip() for lab in (args.labels or "").split(",") if lab.strip()],
     }
     # Absent --depth stays absent, so the classifier reports blast_radius "unknown"
     # and scores it wide. Do not default it to 0.
@@ -442,7 +447,21 @@ def main(argv=None) -> None:
 
     # The mechanical phases. Each module owns its own argparse wiring so adding one
     # is a file plus a line, not a surgery on this function.
-    for module in (stack, worktree, maintree, threads, pr, ci, gitnexus, project, epic, dispatch, review, ui_server, ask, refined):
+    for module in (
+        stack,
+        worktree,
+        maintree,
+        threads,
+        pr,
+        ci,
+        gitnexus,
+        project,
+        epic,
+        review,
+        ui_server,
+        ask,
+        refined,
+    ):
         module.register(sub, add)
 
     args = parser.parse_args(argv)

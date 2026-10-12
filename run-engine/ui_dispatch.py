@@ -16,7 +16,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
-from urllib.parse import parse_qs, unquote_plus, urlsplit
+from urllib.parse import parse_qs, unquote_plus
 
 import dispatch
 import epic
@@ -62,10 +62,15 @@ def parse_input(text: str):
         slug = next(iter(slugs.values()))
         if len(urls) == 1 and not urls[0][2]:
             q = parse_qs(urls[0][3] or "").get("q", [""])[0]
-            tokens = [t for t in shlex.split(unquote_plus(q), posix=False)
-                      if t.lower() not in _DROP_TOKENS and not t.lower().startswith("sort:")]
+            tokens = [
+                t
+                for t in shlex.split(unquote_plus(q), posix=False)
+                if t.lower() not in _DROP_TOKENS and not t.lower().startswith("sort:")
+            ]
             if not tokens:
-                raise ValueError("that search matches every open issue — add a filter such as label:ready or in:title ui")
+                raise ValueError(
+                    "that search matches every open issue — add a filter such as label:ready or in:title ui"
+                )
             return slug, "query", " ".join(tokens)
         nums = [int(n) for _, _, n, _ in urls if n]
         if not nums:
@@ -82,7 +87,7 @@ def order_of(items: list) -> list[int]:
 
 def item_state(sess_status, ledger_status):
     """Pipeline-item state from a session's status + the run Ledger's status (None = no ledger). A session that
-exited cleanly is only done when its Ledger says so: a run that stopped at preflight leaves none."""
+    exited cleanly is only done when its Ledger says so: a run that stopped at preflight leaves none."""
     if sess_status in ("starting", "running"):
         return "running"
     if sess_status in ("waiting", "limited", "failed", "stopped"):
@@ -105,7 +110,9 @@ def advance(pipe: dict, observed: dict):
             if st:
                 it["state"] = st
                 if st == "failed" and observed[n][0] == "done":  # the session ended but the run never completed
-                    it["reason"] = {"escalated": "run escalated", None: "run did not start"}.get(observed[n][1], "run ended before finishing")
+                    it["reason"] = {"escalated": "run escalated", None: "run did not start"}.get(
+                        observed[n][1], "run ended before finishing"
+                    )
     for n in order_of(pipe["items"]):
         it = by[n]
         if it["state"] not in ("queued", "skipped") or it.get("reason") == "manual":
@@ -176,7 +183,8 @@ def summary(pipe: dict) -> dict:
     for it in pipe["items"]:
         counts[it["state"]] = counts.get(it["state"], 0) + 1
     return {k: pipe[k] for k in ("id", "name", "slug", "mode", "max", "status", "created", "claude_cmd")} | {
-        "total": len(pipe["items"]), "counts": counts,
+        "total": len(pipe["items"]),
+        "counts": counts,
         "issues": [{"issue": it["issue"], "state": it["state"]} for it in pipe["items"]],
     }
 
@@ -199,8 +207,12 @@ def wants_grind() -> set:
     """{"owner/repo#n"} of issues in unfinished pipelines that grind when they finish: the pipeline's own
     flag, else the Settings default (so a pipeline made before the option existed follows the default)."""
     default = ui_settings.load()["auto_grind"]
-    return {f"{p['slug'].lower()}#{it['issue']}" for p in list_all()
-            if p["status"] != "done" and p.get("auto_grind", default) is True for it in p["items"]}
+    return {
+        f"{p['slug'].lower()}#{it['issue']}"
+        for p in list_all()
+        if p["status"] != "done" and p.get("auto_grind", default) is True
+        for it in p["items"]
+    }
 
 
 # --------------------------------------------------------------------------- GitHub edge
@@ -208,8 +220,24 @@ def wants_grind() -> set:
 
 def _issue_numbers(slug: str, kind: str, value) -> list[int]:
     if kind == "query":
-        data, proc = gh_json(["issue", "list", "--repo", slug, "--search", value, "--state", "open",
-                              "--json", "number", "--jq", "[.[].number]", "--limit", str(MAX_ISSUES)])
+        data, proc = gh_json(
+            [
+                "issue",
+                "list",
+                "--repo",
+                slug,
+                "--search",
+                value,
+                "--state",
+                "open",
+                "--json",
+                "number",
+                "--jq",
+                "[.[].number]",
+                "--limit",
+                str(MAX_ISSUES),
+            ]
+        )
         if proc.returncode != 0:
             raise ValueError(f"search failed: {(proc.stderr or '').strip()[:200]}")
         return dispatch.dedupe([int(n) for n in (data or [])])
@@ -274,10 +302,14 @@ def preview(text: str, repo) -> dict:
         elif r.get("closed"):
             row |= {"problem": "issue is closed", "ready": False}
         else:
-            row |= {"gaps": r["gaps"], "lane": r["mode"], "skip": r["skip_reason"],
-                    "deps": [d for d in r["deps"] if d in known],
-                    "ext_deps": [d for d in r["deps"] if d not in known],
-                    "ready": not r["gaps"] and not r["skip_reason"]}
+            row |= {
+                "gaps": r["gaps"],
+                "lane": r["mode"],
+                "skip": r["skip_reason"],
+                "deps": [d for d in r["deps"] if d in known],
+                "ext_deps": [d for d in r["deps"] if d not in known],
+                "ready": not r["gaps"] and not r["skip_reason"],
+            }
         items.append(row)
     try:  # execution order, top to bottom: dependencies first, then oldest issue first
         rank = {n: i for i, n in enumerate(epic.build_dag({r["issue"]: r.get("deps", []) for r in items})["order"])}
@@ -291,20 +323,36 @@ def preview(text: str, repo) -> dict:
 
 
 def _new_item(row: dict) -> dict:
-    return {"issue": row["issue"], "title": row.get("title", ""), "deps": row.get("deps", []),
-            "ext_deps": row.get("ext_deps", []), "state": "queued", "session_id": None, "reason": None}
+    return {
+        "issue": row["issue"],
+        "title": row.get("title", ""),
+        "deps": row.get("deps", []),
+        "ext_deps": row.get("ext_deps", []),
+        "state": "queued",
+        "session_id": None,
+        "reason": None,
+    }
 
 
 def create(body: dict) -> dict:
     """Build + persist a pipeline from the form. ValueError carries a user-facing message."""
     issues = body.get("issues")
-    if not isinstance(issues, list) or not issues or not all(isinstance(n, int) and not isinstance(n, bool) and n > 0 for n in issues):
+    if (
+        not isinstance(issues, list)
+        or not issues
+        or not all(isinstance(n, int) and not isinstance(n, bool) and n > 0 for n in issues)
+    ):
         raise ValueError("issues must be a non-empty list of issue numbers")
     if len(issues) > MAX_ISSUES:
         raise ValueError(f"at most {MAX_ISSUES} issues per pipeline")
     mode = body.get("mode", "parallel")
     cap = body.get("max", 2)
-    if mode not in ("parallel", "sequential") or not isinstance(cap, int) or isinstance(cap, bool) or not 1 <= cap <= 10:
+    if (
+        mode not in ("parallel", "sequential")
+        or not isinstance(cap, int)
+        or isinstance(cap, bool)
+        or not 1 <= cap <= 10
+    ):
         raise ValueError("mode must be parallel|sequential and max an integer 1-10")
     worktree = body.get("worktree", True)
     if not isinstance(worktree, bool):
@@ -324,14 +372,36 @@ def create(body: dict) -> dict:
     nums = dispatch.dedupe(issues)
     known = set(nums)
     rows = _screen_open(slug, nums)
-    items = [_new_item({"issue": r["issue"], "title": r.get("title", ""),
-                        "deps": [d for d in r.get("deps", []) if d in known and d != r["issue"]],
-                        "ext_deps": [d for d in r.get("deps", []) if d not in known]}) for r in rows]
+    items = [
+        _new_item(
+            {
+                "issue": r["issue"],
+                "title": r.get("title", ""),
+                "deps": [d for d in r.get("deps", []) if d in known and d != r["issue"]],
+                "ext_deps": [d for d in r.get("deps", []) if d not in known],
+            }
+        )
+        for r in rows
+    ]
     order_of(items)  # cycle -> ValueError before anything is written
     pid = f"p-{time.strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(3)}"
     name = (body.get("name") or "").strip()[:80] or f"{slug} · {len(items)} issue{'s' * (len(items) != 1)}"
-    pipe = {"id": pid, "name": name, "slug": slug, "repo_path": cwd, "mode": mode, "max": cap,
-            "claude_cmd": label, "auto_grind": body.get("auto_grind") is True, "worktree": worktree, "review": review, "status": "active", "created": time.time(), "notified": False, "items": items}
+    pipe = {
+        "id": pid,
+        "name": name,
+        "slug": slug,
+        "repo_path": cwd,
+        "mode": mode,
+        "max": cap,
+        "claude_cmd": label,
+        "auto_grind": body.get("auto_grind") is True,
+        "worktree": worktree,
+        "review": review,
+        "status": "active",
+        "created": time.time(),
+        "notified": False,
+        "items": items,
+    }
     with _lock:
         save(pipe)
     tick(pid)
@@ -386,7 +456,11 @@ def _observe(pipe: dict) -> dict:
         except ValueError:
             rec = None
         run, loc = _run_of(owner, repo, it)
-        if loc != (owner, repo, it["issue"]) and it.get("moved_to") != {"owner": loc[0], "repo": loc[1], "issue": loc[2]}:
+        if loc != (owner, repo, it["issue"]) and it.get("moved_to") != {
+            "owner": loc[0],
+            "repo": loc[1],
+            "issue": loc[2],
+        }:
             it["moved_to"] = {"owner": loc[0], "repo": loc[1], "issue": loc[2]}
             if rec:  # the run page of the new number finds this session through its link
                 try:
@@ -410,8 +484,14 @@ def tick(pid: str) -> None:
         if finished and not pipe.get("notified"):
             pipe["notified"] = True
             c = summary(pipe)["counts"]
-            ui_notify.notify("pipeline", {"id": pid, "repo": pipe["slug"], "command": "pipeline " + pipe["name"] + ": " + ", ".join(
-                f"{v} {k}" for k, v in sorted(c.items()))})
+            ui_notify.notify(
+                "pipeline",
+                {
+                    "id": pid,
+                    "repo": pipe["slug"],
+                    "command": "pipeline " + pipe["name"] + ": " + ", ".join(f"{v} {k}" for k, v in sorted(c.items())),
+                },
+            )
         if json.dumps(pipe, sort_keys=True) != before:
             save(pipe)
 
@@ -430,6 +510,7 @@ def start_timer(interval: float = 5.0) -> threading.Thread:
         while True:
             tick_all()
             time.sleep(interval)
+
     t = threading.Thread(target=loop, daemon=True)
     t.start()
     return t
@@ -551,14 +632,25 @@ def act(pid: str, action: str, body: dict | None = None, issue=None) -> dict:
                     raise ValueError("auto_grind must be true or false")
                 applied.update(_apply_options(pipe, edit))
             if body.get("add"):
-                add = [n for n in dispatch.dedupe([int(n) for n in body["add"]]) if all(i["issue"] != n for i in pipe["items"])]
+                add = [
+                    n
+                    for n in dispatch.dedupe([int(n) for n in body["add"]])
+                    if all(i["issue"] != n for i in pipe["items"])
+                ]
                 if len(pipe["items"]) + len(add) > MAX_ISSUES:
                     raise ValueError(f"at most {MAX_ISSUES} issues per pipeline")
                 known = {i["issue"] for i in pipe["items"]} | set(add)
-                new = [_new_item({"issue": r["issue"], "title": r.get("title", ""),
-                                  "deps": [d for d in r.get("deps", []) if d in known and d != r["issue"]],
-                                  "ext_deps": [d for d in r.get("deps", []) if d not in known]})
-                       for r in _screen_open(pipe["slug"], add)]
+                new = [
+                    _new_item(
+                        {
+                            "issue": r["issue"],
+                            "title": r.get("title", ""),
+                            "deps": [d for d in r.get("deps", []) if d in known and d != r["issue"]],
+                            "ext_deps": [d for d in r.get("deps", []) if d not in known],
+                        }
+                    )
+                    for r in _screen_open(pipe["slug"], add)
+                ]
                 items = pipe["items"] + new
                 order_of(items)
                 pipe["items"] = items
@@ -610,6 +702,12 @@ def detail(pid: str, gh_status=None) -> dict | None:
     except ValueError:
         order = [it["issue"] for it in pipe["items"]]
     by = {r["issue"]: r for r in rows}
-    return {**{k: pipe[k] for k in ("id", "name", "slug", "mode", "max", "status", "created", "claude_cmd")},
-            "auto_grind": pipe.get("auto_grind") is True, "worktree": pipe.get("worktree", True), "review": pipe.get("review", True), "items": rows, "order": order,
-            "merge_order": [n for n in order if (by[n].get("run") or {}).get("pr")]}
+    return {
+        **{k: pipe[k] for k in ("id", "name", "slug", "mode", "max", "status", "created", "claude_cmd")},
+        "auto_grind": pipe.get("auto_grind") is True,
+        "worktree": pipe.get("worktree", True),
+        "review": pipe.get("review", True),
+        "items": rows,
+        "order": order,
+        "merge_order": [n for n in order if (by[n].get("run") or {}).get("pr")],
+    }

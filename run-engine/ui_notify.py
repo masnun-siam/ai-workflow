@@ -41,7 +41,7 @@ def _tag(text) -> str:
 
 
 def _first_line(text, limit=200) -> str:
-    line = next((l.strip() for l in str(text or "").splitlines() if l.strip()), "")
+    line = next((ln.strip() for ln in str(text or "").splitlines() if ln.strip()), "")
     return line if len(line) <= limit else line[: limit - 1] + "…"
 
 
@@ -53,11 +53,16 @@ def compose(event: str, rec: dict, public_url=None) -> tuple[dict, str]:
     link = rec.get("link") if isinstance(rec.get("link"), dict) else {}
     issue = link.get("issue") if isinstance(link.get("issue"), int) else None
     family = (str(rec.get("command") or "").lstrip("/").split(None, 1) or [""])[0].split(":")[-1]
-    tags = [icon] + [t for t in (_tag(family), _tag(str(rec.get("repo") or "").rsplit("/", 1)[-1]),
-                                 f"#{issue}" if issue else "") if t]
-    headers = {"Title": (with_n.replace("{n}", str(issue)) if issue else without_n),
-               "Priority": "default" if event in ("done", "pipeline", "grind-done", "afk") else "high",
-               "Tags": ",".join(tags)}
+    tags = [icon] + [
+        t
+        for t in (_tag(family), _tag(str(rec.get("repo") or "").rsplit("/", 1)[-1]), f"#{issue}" if issue else "")
+        if t
+    ]
+    headers = {
+        "Title": (with_n.replace("{n}", str(issue)) if issue else without_n),
+        "Priority": "default" if event in ("done", "pipeline", "grind-done", "afk") else "high",
+        "Tags": ",".join(tags),
+    }
     lines = []
     if event == "waiting":
         q = next(iter((rec.get("pending_question") or {}).get("questions") or []), None) or {}
@@ -74,7 +79,7 @@ def compose(event: str, rec: dict, public_url=None) -> tuple[dict, str]:
         headers["Click"] = click
         if click.isascii():
             headers["Actions"] = f"view, {action}, {click}"
-    return headers, "\n".join(l for l in lines if l)
+    return headers, "\n".join(ln for ln in lines if ln)
 
 
 def load_config() -> dict:
@@ -120,8 +125,10 @@ def click_url(event: str, rec: dict, public_url) -> str | None:
         return f"{base}/#/answer/{quote(str(rec['id']), safe='')}"
     link = rec.get("link")
     if isinstance(link, dict) and all(link.get(k) for k in ("owner", "repo", "issue")):
-        return (f"{base}/#/run/{quote(str(link['owner']), safe='')}/"
-                f"{quote(str(link['repo']), safe='')}/{quote(str(link['issue']), safe='')}")
+        return (
+            f"{base}/#/run/{quote(str(link['owner']), safe='')}/"
+            f"{quote(str(link['repo']), safe='')}/{quote(str(link['issue']), safe='')}"
+        )
     return f"{base}/#/sessions"
 
 
@@ -141,6 +148,7 @@ def notify(event: str, rec: dict) -> None:
         return
     if event in _AFK_MUTED:
         import ui_afk  # lazy: ui_afk imports the session store, which imports this module
+
         if ui_afk.active():
             return
     try:
@@ -161,8 +169,9 @@ def notify(event: str, rec: dict) -> None:
         elif user and password:
             headers["Authorization"] = "Basic " + base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
         body = text.encode("utf-8")
-        req = urllib.request.Request(str(server).rstrip("/") + "/" + quote(str(topic), safe=""),
-                                     data=body, headers=headers, method="POST")
+        req = urllib.request.Request(
+            str(server).rstrip("/") + "/" + quote(str(topic), safe=""), data=body, headers=headers, method="POST"
+        )
         urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS).close()
     except urllib.error.HTTPError as e:
         warn(f"ntfy push failed ({event} {rec.get('id')}): HTTP {e.code}")

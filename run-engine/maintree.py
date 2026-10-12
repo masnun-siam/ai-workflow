@@ -62,6 +62,7 @@ def _ledger(slug: str, issue: int):
 
 def _grind_header(owner: str, repo: str, number: int):
     import ui_runner  # lazy: the UI module is heavy and only its header parser is needed
+
     path = os.path.join(data_dir(), "pr-grind", f"{owner}-{repo}-{number}.md")
     return ui_runner._header(path) if os.path.isfile(path) else None
 
@@ -121,8 +122,13 @@ def acquire(slug: str, issue: int, grind: bool) -> dict:
             return {"granted": True}
         _save(slug, rec)
         ahead = h["issue"] if h else rec["queue"][0]["issue"]
-        return {"granted": False, "ahead": ahead, "phase": ph if h else "queued", "reason": why,
-                "position": rec["queue"].index(mine) + 1}
+        return {
+            "granted": False,
+            "ahead": ahead,
+            "phase": ph if h else "queued",
+            "reason": why,
+            "position": rec["queue"].index(mine) + 1,
+        }
 
 
 def release(slug: str, issue: int | None = None) -> bool:

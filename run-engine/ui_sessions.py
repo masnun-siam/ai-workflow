@@ -82,9 +82,17 @@ def create(command: str, repo: str, link=None, claude_cmd=None) -> dict:
             continue
     open(os.path.join(session_dir(sid), "stream.jsonl"), "a").close()
     record = {
-        "id": sid, "command": command, "repo": repo, "link": link,
-        "session_id": None, "pid": None, "status": "starting", "cost": None,
-        "started_at": now.isoformat(), "ended_at": None, "pending_question": None,
+        "id": sid,
+        "command": command,
+        "repo": repo,
+        "link": link,
+        "session_id": None,
+        "pid": None,
+        "status": "starting",
+        "cost": None,
+        "started_at": now.isoformat(),
+        "ended_at": None,
+        "pending_question": None,
         "claude_cmd": claude_cmd,
     }
     _atomic_write_json(os.path.join(session_dir(sid), "meta.json"), record)
@@ -153,12 +161,16 @@ def set_pending(sid: str, round) -> dict:
                 raise ValueError(f"duplicate option label: {label!r}")
             seen.add(label)
             options.append({"label": label, "description": o.get("description")})
-        questions.append({
-            "header": q.get("header"), "question": q.get("question"), "multiSelect": multi,
-            "options": options,
-            "recommended": next((o["label"] for o in options if o["label"].endswith("(Recommended)")), None),
-            "allowFreeText": free,
-        })
+        questions.append(
+            {
+                "header": q.get("header"),
+                "question": q.get("question"),
+                "multiSelect": multi,
+                "options": options,
+                "recommended": next((o["label"] for o in options if o["label"].endswith("(Recommended)")), None),
+                "allowFreeText": free,
+            }
+        )
     rec = {"id": rid, "status": "pending", "allowFreeText": True, "questions": questions}
     return update(sid, pending_question=rec, status="waiting")
 
@@ -179,13 +191,13 @@ def answer_text(pending: dict, answers) -> str:
         if "labels" in a:
             labels = a["labels"]
             valid = {o["label"] for o in q["options"]}
-            if not isinstance(labels, list) or not labels or not all(isinstance(l, str) for l in labels):
+            if not isinstance(labels, list) or not labels or not all(isinstance(lab, str) for lab in labels):
                 raise ValueError(f"answer {i}: labels must be a non-empty list of strings")
             if len(set(labels)) != len(labels):
                 raise ValueError(f"answer {i}: duplicate labels")
             if not q["multiSelect"] and len(labels) > 1:
                 raise ValueError(f"answer {i}: only one label allowed")
-            if any(l not in valid or "\0" in l for l in labels):
+            if any(lab not in valid or "\0" in lab for lab in labels):
                 raise ValueError(f"answer {i}: label is not an option of this question")
             out[str(i)] = {"labels": labels}
         else:
@@ -216,8 +228,12 @@ def claim_answer(sid: str, round_id: str):
         if record is None:
             raise ValueError(f"corrupt session record: {path}")
         pq = record.get("pending_question")
-        if (record.get("status") != "waiting" or not isinstance(pq, dict)
-                or pq.get("status") != "pending" or pq.get("id") != round_id):
+        if (
+            record.get("status") != "waiting"
+            or not isinstance(pq, dict)
+            or pq.get("status") != "pending"
+            or pq.get("id") != round_id
+        ):
             return None
         record.update(pending_question=None, status="starting")
         _atomic_write_json(path, record)

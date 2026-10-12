@@ -116,4 +116,3 @@ Developers who use ai-workflow to turn a PRD, BRD, Obsidian note, Jira ticket or
 - `commands/run-issue.md`
 - `skills/prd/SKILL.md`
 - `skills/dump/SKILL.md`
-- `docs/superpowers/specs/2026-09-19-epic-decomposition-design.md`

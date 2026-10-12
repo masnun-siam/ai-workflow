@@ -1,4 +1,5 @@
 """Tests for maintree: plain asserts, run with `python3 test_maintree.py`."""
+
 import json
 import os
 import sys
@@ -124,7 +125,10 @@ m.release(SLUG)
 m.acquire(SLUG, 20, grind=True)
 d = shared.run_dir_for(os.path.join(shared.data_dir(), "runs"), SLUG, 20)
 os.makedirs(d, exist_ok=True)
-json.dump({"issue": 20, "status": "done", "context": {"pr": PR.format(20), "grind": "skipped"}}, open(os.path.join(d, "run.json"), "w"))
+json.dump(
+    {"issue": 20, "status": "done", "context": {"pr": PR.format(20), "grind": "skipped"}},
+    open(os.path.join(d, "run.json"), "w"),
+)
 h = m.status(SLUG)["holder"]
 assert h["phase"] == "blocked" and "skipped" in h["reason"], h
 ok("a run that skipped phase 10 blocks the tree instead of reading as grinding")

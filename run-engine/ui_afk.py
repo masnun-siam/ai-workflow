@@ -34,7 +34,9 @@ MAX_SECONDS = 24 * 3600  # "until HH:MM" may roll into tomorrow; never longer th
 RETRY_DELAYS = (120, 600, 1800, 3600)
 MAX_LOG = 500
 TICK_SECONDS = 5
-SKIP_CI_REPLY = "Skip CI for now, complete the grind, then come back and fix the CI"  # keep in step with ui_static/run.js
+SKIP_CI_REPLY = (
+    "Skip CI for now, complete the grind, then come back and fix the CI"  # keep in step with ui_static/run.js
+)
 _CI_REASON = re.compile(r"\b(ci|gate\s*2|checks?)\b", re.I)  # same test as pausedOnCi in ui_static/run.js
 _lock = threading.Lock()
 
@@ -74,8 +76,13 @@ def _held(sessions: list, started) -> int:
     n += sum(1 for v in ui_grind.index()["pr"].values() if v["state"] == "paused")
     for r in sessions:
         ended = _epoch(r.get("ended_at"))
-        if r.get("status") == "failed" and ended and started and ended >= started and \
-                (not r.get("session_id") or (r.get("afk_retries") or 0) >= len(RETRY_DELAYS)):
+        if (
+            r.get("status") == "failed"
+            and ended
+            and started
+            and ended >= started
+            and (not r.get("session_id") or (r.get("afk_retries") or 0) >= len(RETRY_DELAYS))
+        ):
             n += 1
     return n
 
@@ -85,13 +92,23 @@ def public(sessions=None, now=None) -> dict:
     now = now or time.time()
     st = load()
     on = active(now)
-    out = {"active": on, "until": st.get("until") if on else None, "started": st.get("started") if on else None,
-           "decisions": len(st.get("log") or []), "held": 0, "summary": None}
+    out = {
+        "active": on,
+        "until": st.get("until") if on else None,
+        "started": st.get("started") if on else None,
+        "decisions": len(st.get("log") or []),
+        "held": 0,
+        "summary": None,
+    }
     if on:
         out["held"] = _held(ui_sessions.list_sessions() if sessions is None else sessions, st.get("started"))
     elif st.get("ended") and not st.get("dismissed") and st.get("started"):
-        out["summary"] = {"started": st["started"], "ended": st.get("until"), "log": st.get("log") or [],
-                          "held": st.get("held_at_end", 0)}
+        out["summary"] = {
+            "started": st["started"],
+            "ended": st.get("until"),
+            "log": st.get("log") or [],
+            "held": st.get("held_at_end", 0),
+        }
     return out
 
 
@@ -131,9 +148,16 @@ def dismiss() -> dict:
 
 
 def _entry(kind: str, rec: dict, now: float, question, picked) -> dict:
-    return {"at": now, "kind": kind, "sid": rec.get("id"), "link": rec.get("link"), "repo": rec.get("repo"),
-            "command": str(rec.get("command") or "")[:200], "question": str(question or "")[:500],
-            "picked": str(picked or "")[:500]}
+    return {
+        "at": now,
+        "kind": kind,
+        "sid": rec.get("id"),
+        "link": rec.get("link"),
+        "repo": rec.get("repo"),
+        "command": str(rec.get("command") or "")[:200],
+        "question": str(question or "")[:500],
+        "picked": str(picked or "")[:500],
+    }
 
 
 # #188: these interviews are the user's product decisions, so they always wait for a human.
@@ -155,8 +179,13 @@ def _answer(rec: dict, now: float) -> dict | None:
     if ui_sessions.claim_answer(rec["id"], pq["id"]) is None:
         return None
     ui_runner.resume(rec["id"], text)
-    return _entry("answer", rec, now, " / ".join(str(q.get("question") or q.get("header") or "") for q in qs),
-                  " / ".join(q["recommended"].removesuffix("(Recommended)").strip() for q in qs))
+    return _entry(
+        "answer",
+        rec,
+        now,
+        " / ".join(str(q.get("question") or q.get("header") or "") for q in qs),
+        " / ".join(q["recommended"].removesuffix("(Recommended)").strip() for q in qs),
+    )
 
 
 def _retry(rec: dict, now: float, started) -> dict | None:
@@ -202,9 +231,19 @@ def _skip_ci(skipped: list, now: float) -> list:
         if status != 200:  # e.g. the round that paused is still exiting: try again next tick
             continue
         skipped.append(key)
-        out.append(_entry("skip-ci", {"link": {"owner": h["owner"], "repo": h["repo"], "issue": issue},
-                                      "repo": f"{h['owner']}/{h['repo']}", "command": f"/pr-grind {h['thread']}"},
-                          now, h["paused"], "Skip CI for now"))
+        out.append(
+            _entry(
+                "skip-ci",
+                {
+                    "link": {"owner": h["owner"], "repo": h["repo"], "issue": issue},
+                    "repo": f"{h['owner']}/{h['repo']}",
+                    "command": f"/pr-grind {h['thread']}",
+                },
+                now,
+                h["paused"],
+                "Skip CI for now",
+            )
+        )
     return out
 
 
@@ -217,8 +256,9 @@ def _finish(now: float) -> None:
         st.update(ended=True, held_at_end=held)
         _save(st)
     n = len(st.get("log") or [])
-    ui_notify.notify("afk", {"id": f"afk-{st['started']}",
-                             "note": f"{n} decision{'s' * (n != 1)} made, {held} waiting on you"})
+    ui_notify.notify(
+        "afk", {"id": f"afk-{st['started']}", "note": f"{n} decision{'s' * (n != 1)} made, {held} waiting on you"}
+    )
 
 
 def tick(now=None) -> None:
@@ -262,6 +302,7 @@ def start_timer(interval: float = TICK_SECONDS) -> threading.Thread:
             except Exception as e:  # noqa: BLE001 - keep the timer alive
                 warn(f"afk tick failed: {type(e).__name__}: {e}")
             time.sleep(interval)
+
     t = threading.Thread(target=loop, daemon=True)
     t.start()
     return t

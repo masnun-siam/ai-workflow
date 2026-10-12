@@ -34,8 +34,10 @@ def cmd_ask(args) -> None:
     else:
         rid = f"q-{secrets.token_hex(4)}"
         ui_sessions.set_pending(sid, {"id": rid, "questions": payload.get("questions")})
-    print(f"RECORDED {rid}. The question is now with the human. End your turn immediately; "
-          f"the answer arrives as your next message: Answer to {rid}: {{...}}")
+    print(
+        f"RECORDED {rid}. The question is now with the human. End your turn immediately; "
+        f"the answer arrives as your next message: Answer to {rid}: {{...}}"
+    )
 
 
 def register(sub, add) -> None:

@@ -27,9 +27,7 @@ def build_board(records, projects, fetch_title):
     """
     columns = {station: [] for station in STATIONS}
 
-    resolved = [
-        (rec, *_resolve_owner_repo(rec["ledger"], rec["dir_name"], projects)) for rec in records
-    ]
+    resolved = [(rec, *_resolve_owner_repo(rec["ledger"], rec["dir_name"], projects)) for rec in records]
     latest = {}
     for rec, owner, repo in resolved:
         key = (owner, repo, rec["ledger"]["issue"])
@@ -157,7 +155,11 @@ def memoize_title_fetcher(fetch_title, pool=None, store=None):
         try:
             with open(store, encoding="utf-8") as fh:
                 loaded = json.load(fh)
-            disk = {k: v for k, v in loaded.items() if isinstance(k, str) and isinstance(v, str)} if isinstance(loaded, dict) else {}
+            disk = (
+                {k: v for k, v in loaded.items() if isinstance(k, str) and isinstance(v, str)}
+                if isinstance(loaded, dict)
+                else {}
+            )
         except (OSError, ValueError):
             disk = {}
     pending: set = set()
@@ -283,10 +285,23 @@ def load_run(owner: str, repo: str, n: str, runs_dir=None):
     if not os.path.isfile(run_json):
         return None
     errors = {}
-    body = {"owner": owner, "repo": repo, "issue": int(n), "status": None, "currentStation": None,
-            "stations": [], "trace": [], "plan": None, "pr": None, "branch": None, "title": None, "reviewSkipped": False,
-            "totals": {"stations": 0, "done": 0, "bounces": 0}, "errors": errors,
-            "updated": os.path.getmtime(run_json)}
+    body = {
+        "owner": owner,
+        "repo": repo,
+        "issue": int(n),
+        "status": None,
+        "currentStation": None,
+        "stations": [],
+        "trace": [],
+        "plan": None,
+        "pr": None,
+        "branch": None,
+        "title": None,
+        "reviewSkipped": False,
+        "totals": {"stations": 0, "done": 0, "bounces": 0},
+        "errors": errors,
+        "updated": os.path.getmtime(run_json),
+    }
     data, err = _read_part(run_json)
     if data is not None:
         from engine import Ledger
@@ -299,8 +314,11 @@ def load_run(owner: str, repo: str, n: str, runs_dir=None):
             rows, current, totals = run_timeline(led.stations, led.current_index, led.status, led.trace)
             body.update(status=led.status, currentStation=current, stations=rows, trace=led.trace, totals=totals)
             context = data.get("context") if isinstance(data.get("context"), dict) else {}
-            body.update(pr=_https_url(context.get("pr")), branch=context.get("branch") if isinstance(context.get("branch"), str) else None,
-                        reviewSkipped=context.get("review") == "skipped")
+            body.update(
+                pr=_https_url(context.get("pr")),
+                branch=context.get("branch") if isinstance(context.get("branch"), str) else None,
+                reviewSkipped=context.get("review") == "skipped",
+            )
     if err:
         errors["ledger"] = err
     plan_path = os.path.join(run_dir, "10-plan.json")
@@ -334,8 +352,14 @@ def _run_log(run_dir):
         env, err = _read_part(os.path.join(run_dir, name))
         if err or not isinstance(env.get("station"), str):
             continue
-        log.append({"file": name, "station": env["station"], "status": env.get("status"),
-                    "summary": env.get("summary") if isinstance(env.get("summary"), str) else ""})
+        log.append(
+            {
+                "file": name,
+                "station": env["station"],
+                "status": env.get("status"),
+                "summary": env.get("summary") if isinstance(env.get("summary"), str) else "",
+            }
+        )
         evidence = env.get("evidence")
         if isinstance(evidence, dict) and evidence.get("skipped") is True:
             skipped.add(env["station"])
