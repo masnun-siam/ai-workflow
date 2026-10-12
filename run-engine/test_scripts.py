@@ -3307,10 +3307,26 @@ assert "Resume skips the Obsidian/wiki destination writes" in s36
 _ch = flat[flat.index("exactly these two choices") : flat.index("Never close or delete an issue already created")]
 assert len(re.findall(r'^\s*- \*\*"', _ch, re.M)) == 2, "failure prompt must have exactly two option bullets"
 assert "This resume branch overrides the new-slug stop above" in flat_ws
-assert "Apply the duplicate guard above before every create after a failure" in flat_ws
-assert flat_ws.count("--json number,url,title,body") == 2 and "whose title also matches that task's planned title" in flat_ws
+assert "After a failure, refresh sub-step 0's known-issues list with the same" in flat_ws
+assert flat_ws.count("--json number,url,title,body") == 2 and "and a title that also matches the task's planned title" in flat_ws
 assert "the `j < k` check runs on the saved list" in flat_ws
 ok("#81 pins resume-as-is, two-choice bullets, new-slug carve-out, retry duplicate guard, title match, saved-list edge check")
+
+# Issue #238: the duplicate guard runs before every create, not only on resume.
+_pre = flat_ws[flat_ws.index("0. Preflight") : flat_ws.index("1. Ensure the labels")]
+_guard238 = _pre.index("**Duplicate guard (every run, not only a resume).**")
+assert _guard238 < _pre.index('If the user chose **"Resume this list"**'), "AC1: guard precedes the Resume paragraph"
+assert _guard238 < _pre.index("This resume branch overrides") < _pre.index('If the user chose **"Resume this list"**')
+assert "once here, before the first create" in _pre
+ok("#238 AC1 guard runs in sub-step 0 on every run, before the Resume paragraph")
+_create238 = flat_ws[flat_ws.index("3. Create the issues one at a time") : flat_ws.index("4. Write-back")]
+assert "Before each create, check task k against sub-step 0's known-issues list" in _create238
+assert "After each successful create, add the new issue (number, url, title, Notes) to that list." in _create238
+ok("#238 AC1/AC4 sub-step 3 checks the known-issues list before each create and extends it")
+assert "A Notes-only match with a different title may belong to another list sharing the slug: report it and leave it for the user, and the task is still created." in _pre
+ok("#238 AC2 Notes-only match is reported, left alone, and the task still created")
+assert "Two tasks with the same title (compared case-insensitively) also fail the rubric: rename or merge them before presenting." in step35
+ok("#238 AC3 step 3.5 rejects duplicate task titles")
 
 # Issue #82: per-issue factcheck, one-time assignees/project, ordered list return.
 _n = lambda t: " ".join(t.split())
