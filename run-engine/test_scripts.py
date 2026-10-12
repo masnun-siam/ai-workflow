@@ -4356,6 +4356,7 @@ assert re.search(r"never invent|do not invent|don't invent", _ps, re.I), "dump: 
 assert "just above `## Related`" in _ps and "overwrite" in _ps, "dump: a problem statement goes above ## Related"
 assert "content=\"$(cat <<'EOF'" in _ps, "dump: problem statement text goes through a quoted heredoc"
 assert "/create-tasks" not in _ps, "dump: describe only routing this branch makes true"
+assert "never overwrite with partial content" in _ps.lower(), "dump: overwrite guard"
 _s4 = _ws(_dump184["Step 4: File it"])
 for _route in ("**New feature**", "**Change request**", "**Bug report**"):
     _body = _s4.split(_route, 1)[1][:1800]  # the route's own instructions

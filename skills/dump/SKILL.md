@@ -205,14 +205,19 @@ dumped text verbatim:
 The heading is `Problem statement — <YYYY-MM-DD>` in `Dump.md`, and `<YYYY-MM-DD>: <short bug
 title>` in `Bugs.md`. Tasks, meeting notes and unclassifiable input stay verbatim.
 
-Two rules for writing it:
+Rules for writing it:
 
 - **Keep `## Related` last.** When the file already exists, don't `append` (that lands below
   `## Related`). Read it, insert the new block just above `## Related`, and write the whole file
   back with `obsidian vault=notes create ... overwrite`, the same way a change request edits the PRD.
 - **Pass the text through a quoted heredoc.** Evidence often holds quotes, `$` or backticks, and
   the `obsidian` CLI takes content only as an argument. Use `content="$(cat <<'EOF'` … `EOF` `)"`
-  so the shell never expands the input.
+  so the shell never expands the input. The CLI itself turns `\n`-style escapes into
+  characters, so a literal backslash in the input (`C:\new`, a `\t` in a stack trace) may not
+  survive exactly.
+- **Never overwrite with partial content.** If a read of a file you know exists fails or comes
+  back empty (vault not open, wrong path), stop and report. This also applies to the change
+  request's PRD edit below.
 
 ## Step 4: File it
 
