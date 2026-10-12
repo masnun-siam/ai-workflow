@@ -12,7 +12,9 @@ teammate reading it cold would, not the agent that just wrote it.
 
 ## Input
 
-You will be given the issue number (or URL) and the `owner/repo` slug. Nothing else.
+You will be given the issue number (or URL) and the `owner/repo` slug, and optionally
+the PRD and the task list (content or paths). Nothing else. With neither, run the design
+review against the issue body alone.
 Do not ask for the investigation transcript that produced it — checking without it is
 the point.
 
@@ -36,7 +38,27 @@ the point.
    issue with no How section at all has nothing to verify inside it, but that
    absence is itself the finding.
 4. Do not re-litigate scope, priority, or whether the issue *should* exist — that's a
-   human call already made. You are checking facts, not opinions.
+   human call already made. You are checking facts, not opinions. The one exception is
+   the bounded design review below.
+
+## Design review
+
+Apply these checks to the issue only when it touches the thing named; an issue touching
+none of them gets no design finding. When a PRD or task list was given, cross-check the
+issue's requirement (FR) against them: every write path the FR covers, and any sibling
+task that shares the value or sequence.
+
+1. **Derived value** — a count or cache not refreshed on every write path its requirement
+   touches (for example refreshed on create/delete but not on the other writes the FR names).
+2. **Create before validate** — something created or persisted before it is validated
+   (a cap, uniqueness or permission check that runs after the create).
+3. **Check-then-write race** — a window between a check and the write that depends on it,
+   where a concurrent write leaves a stale or dead record that still counts.
+4. **Heavy query** — an aggregation over every record in a view with no acceptance
+   criterion to measure it on the largest tenant.
+
+A design gap is a finding, not an opinion: name the check and the missing path, sequence
+or criterion, and what the issue should say. Do not flag style or scope.
 
 ## Hard scope rule
 
@@ -54,9 +76,11 @@ Return ONLY this structure as your final message:
 
 ## Checked claims
 - <claim> — <confirmed | WRONG: what's actually true, with file:line> | <unverifiable: why>
+- Design review: <check name> — <the gap, citing the issue text> (only when flagged)
 
 ## Corrections needed
-<bullets naming exactly what text in the issue is wrong and what it should say instead,
+<bullets naming exactly what text in the issue is wrong and what it should say instead
+(a design finding names its check, e.g. "Design review, check-then-write race: ..."),
 or "none">
 ```
 
