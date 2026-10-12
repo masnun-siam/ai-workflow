@@ -276,8 +276,8 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
      - **No issue URL** (it failed, the human cancelled, or a `4-FLAT` run ended on
        **"Stop here"**, whatever partial list it reported): stop and say so — do not
        continue to step 3.
-     - **An ordered list of 2 or more issue URLs** (its `4-FLAT` return; flat issues have
-       no parent, and `/gh-issue` no longer files epics): print the issue URLs in list
+     - **An ordered list of 2 or more issue URLs** (its `4-FLAT` return: standalone tasks grouped under a
+       `tracking` parent that is not in the list; `/gh-issue` no longer files epics): print the issue URLs in list
        order and end the run here. This is a clean stop, not an escalation: no Ledger, no
        worktree, no `aiw init`, and no further Preflight step. Tell the user to run
        `/run-issue <n>` for each issue in list order; each issue's `Depends on:` line names

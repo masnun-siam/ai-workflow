@@ -3569,7 +3569,7 @@ for stale in ("a parent plus child URLs", "**parent** issue number specifically"
 assert "parent plus child URLs" not in ri85
 ok("#85 step 2 has no stale epic wording")
 NOURL = "**No issue URL** (it failed, the human cancelled, or a `4-FLAT` run ended on **\"Stop here\"**, whatever partial list it reported): stop and say so \u2014 do not continue to step 3."
-LIST1 = "**An ordered list of 2 or more issue URLs** (its `4-FLAT` return; flat issues have no parent, and `/gh-issue` no longer files epics): print the issue URLs in list order and end the run here."
+LIST1 = "**An ordered list of 2 or more issue URLs** (its `4-FLAT` return: standalone tasks grouped under a `tracking` parent that is not in the list; `/gh-issue` no longer files epics): print the issue URLs in list order and end the run here."
 LIST2 = "This is a clean stop, not an escalation: no Ledger, no worktree, no `aiw init`, and no further Preflight step."
 LIST3 = "Tell the user to run `/run-issue <n>` for each issue in list order; each issue's `Depends on:` line names the issue it builds on, so run those first \u2014 `/run-issue` bases a flat issue on the default branch unless its plan says otherwise."
 LIST4 = "End with the line `\u2192 next: herdr-dispatch <n> <n> \u2026` (every created issue number, in list order); `herdr-dispatch` runs them in that dependency order."  # #186
@@ -3612,8 +3612,8 @@ rd86, hw86, cl86 = _read("README.md"), _read("docs", "HOW-IT-WORKS.md"), _read("
 rdn86, hwn86 = _n(rd86), _n(hw86)
 ROW86 = (
     "| `/ai-workflow:gh-issue` | file a well-formed issue; always decomposes first \u2014 one task files one issue; "
-    "two or more save the task list to `docs/tasks/<slug>.md` and file one flat issue per task, "
-    "ordered by `Depends on: #n` lines, with no parent issue |"
+    "two or more save the task list to `docs/tasks/<slug>.md` and file one standalone issue per task "
+    "under a `tracking` parent (native sub-issues), ordered by `Depends on: #n` lines and native blocked-by links |"
 )
 assert rdn86.count(ROW86) == 1
 assert "parent plus children" not in rdn86 and "parent plus children" not in hwn86
@@ -3622,7 +3622,7 @@ JROW86 = (
     "(one issue for a single task; two or more saved to `docs/tasks/<slug>.md` and filed flat) |"
 )
 assert rdn86.count(JROW86) == 1
-assert "flat issue per task" in ROW86 and "no parent issue" in ROW86 and "`docs/tasks/<slug>.md`" in ROW86
+assert "standalone issue per task" in ROW86 and "`tracking` parent" in ROW86 and "`docs/tasks/<slug>.md`" in ROW86
 assert "Accepts an epic parent." in rdn86
 assert "aiw epic split|init|next|status    epic decomposition and sequencing" in rd86
 ok("#86 README gh-issue row pinned whole; Epic-mode README lines intact")
@@ -3635,8 +3635,8 @@ P1 = (
     'layer-scoped deliverable: 3 or fewer production files, 1-4 acceptance criteria, one verify command. '
     'You approve the list with **"Create as shown"** or revise it with **"Let me edit the list"**. '
     'One task files one issue as before. Two or more tasks save the list to `docs/tasks/<slug>.md` first '
-    '(optionally also to Obsidian or the GitHub wiki), then file one **flat** issue per task: no parent issue, '
-    'no sub-issues. Each is a complete, independently-readable issue labelled `prd-<slug>`, and declares its '
+    '(optionally also to Obsidian or the GitHub wiki), then file one **flat** issue per task, grouped by a `tracking` parent '
+    '(native sub-issues) that only holds the checklist and is never run. Each is a complete, independently-readable issue labelled `prd-<slug>`, and declares its '
     'order in plain text:'
 )
 P2 = (
@@ -4028,5 +4028,10 @@ assert "No epics or parent tracking issues" not in _read237("skills/flow/SKILL.m
 assert re.search(r"blocked-by", _read237("skills/herdr-dispatch/SKILL.md")), "#237 herdr-dispatch lacks blocked-by ordering"
 assert re.search(r"tracking", _read237("CHANGELOG.md").split("## 1.12.0")[0]), "#237 CHANGELOG lacks the entry"
 ok("#237 flow no longer forbids a parent; herdr-dispatch and CHANGELOG updated")
+
+# review follow-up: label/search dispatch input never picks up the tracking parent
+assert _read237("skills/herdr-dispatch/scripts/resolve.sh").count("-label:tracking") == 2, "#237 resolve.sh label and search paths must skip tracking"
+assert "-label:tracking" in _read237("run-engine/ui_dispatch.py") and "-label:tracking" in _read237("run-engine/dispatch.py"), "#237 dispatch search must skip tracking"
+ok("#237 label/search dispatch input skips the tracking parent")
 
 print(f"\n{passed} checks passed")

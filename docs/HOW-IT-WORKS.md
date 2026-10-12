@@ -336,7 +336,7 @@ task is one layer-scoped deliverable: 3 or fewer production files, 1-4 acceptanc
 one verify command. You approve the list with **"Create as shown"** or revise it with **"Let
 me edit the list"**. One task files one issue as before. Two or more tasks save the list to
 `docs/tasks/<slug>.md` first (optionally also to Obsidian or the GitHub wiki), then file one
-**flat** issue per task: no parent issue, no sub-issues. Each is a complete,
+**flat** issue per task, grouped by a `tracking` parent (native sub-issues) that only holds the checklist and is never run. Each is a complete,
 independently-readable issue labelled `prd-<slug>`, and declares its order in plain text:
 
 ```
