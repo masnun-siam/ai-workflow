@@ -11,7 +11,7 @@ handoff contract, run the guards, decide the next action, persist, and print the
 action. The orchestrator acts on what this prints; it never eyeballs the routing.
 
 Usage:
-  aiw init <runDir> --issue N [--mode full|lean] [--no-review] [--repo PATH]
+  aiw init <runDir> --issue N [--no-review] [--repo PATH]
   aiw route <runDir> <artifact.json> [--repo PATH]
   aiw classify <runDir> [--loc N] [--labels a,b] [--depth N] < changed-paths
   aiw resolve-review <runDir>
@@ -45,6 +45,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -108,7 +109,13 @@ def test_root_violations(repo: str, sdet_sha: str, test_root: str) -> list[str]:
         # continue rather than halting on a guard that could not run.
         sys.stderr.write(f"warning: test-root guard could not run: {proc.stderr.strip()}\n")
         return []
-    return [line for line in proc.stdout.splitlines() if line.strip()]
+    changed = [line for line in proc.stdout.splitlines() if line.strip()]
+    # A test root that is a whole package (`run-engine`) holds product code beside its
+    # tests; only test-named files are the guard's business there. A dedicated test
+    # directory (`tests/`, `__tests__/`) keeps every file under it guarded.
+    if re.search(r"(^|/)(tests?|__tests__|specs?)$", test_root.rstrip("/")):
+        return changed
+    return [f for f in changed if re.search(r"(^|/)(test_[^/]*|[^/]*_test\.[^/]*|[^/]*\.(test|spec)\.[^/]*)$", f)]
 
 
 def apply_action(ledger: Ledger, action: RouteAction, station) -> None:
@@ -131,11 +138,10 @@ def run_dir_for(args) -> str:
 
 def cmd_init(args) -> None:
     config = load_config(args.repo)
-    mode = args.mode or config.get("default_mode", "full")
+    mode = config["default_mode"]
     modes = config.get("modes") or {}
     if mode not in modes:
         die(2, f"unknown mode: {mode} (have: {', '.join(sorted(modes)) or 'none'})")
-    mode = modes[mode].get("alias_of", mode)
 
     stations = modes[mode].get("stations") or config.get("stations") or []
     if args.no_review:
@@ -404,7 +410,6 @@ def main(argv=None) -> None:
 
     p_init = add("init", "create run.json")
     p_init.add_argument("--issue", type=int, required=True)
-    p_init.add_argument("--mode")
     p_init.add_argument("--no-review", action="store_true")
     p_init.set_defaults(func=cmd_init)
 

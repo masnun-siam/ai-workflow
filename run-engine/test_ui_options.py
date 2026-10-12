@@ -30,11 +30,11 @@ print("  ok  validate: review can only go off, auto_grind is a bool, unknown key
 assert o.skip_review("o", "r", 5) == "not_started"
 run_dir = run_dir_for(os.path.join(data_dir(), "runs"), "o/r", 5)
 route = os.path.join(os.path.dirname(os.path.abspath(__file__)), "route.py")
-subprocess.run([sys.executable, route, "init", run_dir, "--issue", "5", "--mode", "default"], check=True, capture_output=True)
+subprocess.run([sys.executable, route, "init", run_dir, "--issue", "5"], check=True, capture_output=True)
 assert o.skip_review("o", "r", 5) == "applied"
 assert o.skip_review("o", "r", 5) == "unchanged"
 late = run_dir_for(os.path.join(data_dir(), "runs"), "o/r", 6)
-subprocess.run([sys.executable, route, "init", late, "--issue", "6", "--mode", "default"], check=True, capture_output=True)
+subprocess.run([sys.executable, route, "init", late, "--issue", "6"], check=True, capture_output=True)
 led = json.load(open(os.path.join(late, "run.json")))
 led["currentIndex"] = led["stations"].index("reviewer")
 json.dump(led, open(os.path.join(late, "run.json"), "w"))
