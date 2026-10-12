@@ -3324,9 +3324,18 @@ s6 = _n(_slice(g, "\n6. Add to a GitHub Project", "\n7. Dump"))
 close = _n(g[g.rindex("Return the issue URL"):])
 
 for _p in ("once per issue created in this run (one from step 4, each one from `4-FLAT`)",
-           "each time with just that issue's number/URL and `owner/repo`"):
+           "each time with that issue's number/URL and `owner/repo`",
+           "the PRD (or its path)", "`docs/tasks/<slug>.md`",
+           "a single-issue run with neither passes the issue alone"):
     assert _p in s45, _p
 ok("#82 factcheck runs once per created issue")
+
+_ct = _n(checker_text)
+for _p in ("## Design review", "**Derived value**", "**Create before validate**",
+           "**Check-then-write race**", "**Heavy query**",
+           "Any design finding makes the verdict `ISSUES FOUND`", "`Design review: PRD unreadable`"):
+    assert _p in _ct, _p
+ok("#239 factchecker design review: four checks, ISSUES FOUND verdict, unreadable-PRD report")
 
 for _p in ("a `Source:` line in the Notes section pointing outside the repo",
            "is expected traceability from `/intake`", "PASS", "ISSUES FOUND",

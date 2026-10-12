@@ -14,7 +14,9 @@ teammate reading it cold would, not the agent that just wrote it.
 
 You will be given the issue number (or URL) and the `owner/repo` slug, and optionally
 the PRD and the task list (content or paths). Nothing else. With neither, run the design
-review against the issue body alone.
+review against the issue body alone. If a PRD or task list was given but you cannot read it
+(a vault note or wiki page is not reachable with your tools), say so under Checked claims
+(`Design review: PRD unreadable`) rather than skipping the cross-check silently.
 Do not ask for the investigation transcript that produced it — checking without it is
 the point.
 
@@ -58,7 +60,8 @@ task that shares the value or sequence.
    criterion to measure it on the largest tenant.
 
 A design gap is a finding, not an opinion: name the check and the missing path, sequence
-or criterion, and what the issue should say. Do not flag style or scope.
+or criterion, and what the issue should say. Do not flag style or scope. Any design finding
+makes the verdict `ISSUES FOUND`, even when every fact is confirmed.
 
 ## Hard scope rule
 
