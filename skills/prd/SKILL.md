@@ -19,7 +19,7 @@ Why this order matters: scanning before interviewing means the questions are inf
 
 ## Arguments
 
-`/prd <requirement | feature-folder> [--to local,obsidian,wiki]`
+`/prd <requirement | feature-folder> [--to local,obsidian,wiki] [--flow-auto]`
 
 - `<requirement>`: free text, a BRD file, an Obsidian note, a Sentry link or a GitHub issue URL.
 - `<feature-folder>`: a vault path `05-Work/<Project>/<Feature>` that holds a `Dump.md` (as left by `/dump`). `/prd` fills that folder's seeded `PRD.md`.
@@ -52,8 +52,8 @@ are used either way; only the transport differs.
 
 ### Flow auto mode
 
-When the system prompt contains `Flow auto mode`, this run is the PRD step of the aiw ui guided
-Flow. The user answers grilling questions and nothing else, and the next step (`/gh-issue`) will
+When the system prompt contains `Flow auto mode`, or the invoking `/flow` passed `--flow-auto`
+in the arguments, this run is the PRD step of the guided Flow. The user answers grilling questions and nothing else, and the next step (`/gh-issue`) will
 ask nothing at all, so this interview is the only chance to settle anything. Changes:
 
 - **Grilling (Step 4)** also covers what `/gh-issue` would otherwise grill on: acceptance criteria
@@ -87,7 +87,7 @@ Interviewing for ten minutes and then discovering a PRD already exists wastes th
 
 Exception: an Obsidian `PRD.md` with frontmatter `status: seed` is the input, not a collision — continue without asking and fill that same file. Read the status with `obsidian vault=notes property:read path="05-Work/<Project>/<Feature>/PRD.md" name=status` (the existence check above does not show frontmatter); only output that is exactly `seed` counts. Anything else (another value, empty output, an error) means any other existing PRD, including finished PRDs and ones seeded before the marker existed, and still stops here.
 
-If a PRD already exists anywhere: **stop and ask the user** (headless: `aiw ask`, then end your turn) what to do (read it and update it, pick a new name, skip that destination). Never overwrite silently. If they choose to update, read the existing PRD before Step 4 so the interview builds on it and keeps earlier decisions.
+If a PRD already exists anywhere: in Flow auto mode, update it in place without asking (read it first). Otherwise **stop and ask the user** (headless: `aiw ask`, then end your turn) what to do (read it and update it, pick a new name, skip that destination). Never overwrite silently. If they choose to update, read the existing PRD before Step 4 so the interview builds on it and keeps earlier decisions.
 
 For Obsidian, also resolve the project and feature folder here, the same way `dump` does:
 

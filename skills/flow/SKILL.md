@@ -33,11 +33,11 @@ A vault path starts with `05-Work/`. When an input fits no row cleanly, ask whic
 
 ### dump
 
-Invoke the `ai-workflow:dump` skill with the raw text. Its own Step 3 confirmation still applies. When it finishes, read its classification and its final `→ next:` line, then go to **Routing after dump**.
+Invoke the `ai-workflow:dump` skill with the raw text and `--flow-auto`, so its Step 3 routing confirmation resolves itself (it picks the target and shows the choice in its report). When it finishes, read its classification and its final `→ next:` line, then go to **Routing after dump**.
 
 ### prd
 
-Invoke the `ai-workflow:prd` skill with the feature folder (`/prd <feature-folder>`). It fills the folder's seeded `PRD.md`, or, on a PRD that is already finished (a change request), asks and updates it. Its final line is `→ next: /gh-issue <prd-path>`.
+Invoke the `ai-workflow:prd` skill with the feature folder and `--flow-auto` (`/prd <feature-folder> --flow-auto`). It fills the folder's seeded `PRD.md`, or updates an already finished PRD (a change request) in place without asking; the review gate approves itself once Open questions is empty. Its final line is `→ next: /gh-issue <prd-path>`.
 
 ### gh-issue
 
