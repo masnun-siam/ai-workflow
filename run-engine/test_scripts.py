@@ -2309,7 +2309,7 @@ proc = subprocess.run(
 )
 assert proc.returncode != 0
 assert "Traceback" not in proc.stderr
-assert len([l for l in proc.stderr.splitlines() if l.strip()]) <= 1
+assert len([ln for ln in proc.stderr.splitlines() if ln.strip()]) <= 1
 ok("aiw review pick with a missing file exits nonzero with a one-line message, no Python traceback")
 
 with tempfile.TemporaryDirectory() as d:
@@ -3455,7 +3455,7 @@ for bad in (
     "3.5. **Decompose.**",
 ):
     assert bad not in _s36, f"step 3.6 slice must not contain {bad!r}"
-assert not any(l.lstrip().startswith("- Body sections:") for l in _raw36.splitlines())
+assert not any(ln.lstrip().startswith("- Body sections:") for ln in _raw36.splitlines())
 ok("step 3.6 slice stays scoped (no 4-EPIC / 3.5 / step 4 leakage)")
 
 # Issue #80: flat creation loop (4-FLAT) replaces 4-EPIC in gh-issue.md.
@@ -3467,8 +3467,8 @@ ok("gh-issue.md has the 4-FLAT heading exactly once")
 
 _create = flat.index("gh issue create")
 assert "--body-file /tmp/gh-issue-body.md" in flat and "--body " not in flat
-_lab = [l for l in flat.splitlines() if "--label" in l and ("gh issue create" in l or "--label" in l)]
-assert any("refined" in l and "prd-<slug>" in l for l in _lab), _lab
+_lab = [ln for ln in flat.splitlines() if "--label" in ln and ("gh issue create" in ln or "--label" in ln)]
+assert any("refined" in ln and "prd-<slug>" in ln for ln in _lab), _lab
 ok("4-FLAT creates with --label refined,prd-<slug> and --body-file, never --body")
 
 _prd = re.search(r"gh label create prd-<slug>\s[^\n]*2>/dev/null \|\| true", flat)
@@ -3494,7 +3494,7 @@ assert "one at a time" in flat_ws and "list order" in flat_ws
 ok("4-FLAT creates issues one at a time in list order")
 
 assert "gh label create lean" not in flat
-assert not any("--label" in l and "lean" in l for l in flat.splitlines())
+assert not any("--label" in ln and "lean" in ln for ln in flat.splitlines())
 assert "`lean` is never applied here." in flat_ws
 ok("4-FLAT never applies lean")
 
@@ -3508,7 +3508,7 @@ assert "4-FLAT" in _hr80 and "4-EPIC" not in _hr80
 assert "Issue:" in _hr80 and "docs/tasks/<slug>.md" in _hr80
 ok("gh-issue.md HARD RULE names 4-FLAT and the Issue: slot write-back")
 
-assert not any(l.lstrip().startswith("- Body sections:") for l in flat.splitlines())
+assert not any(ln.lstrip().startswith("- Body sections:") for ln in flat.splitlines())
 ok("4-FLAT adds no '- Body sections:' line")
 
 # Issue #80 review: pin each 4-FLAT rule sentence so a single-edit reversal fails.
@@ -3621,8 +3621,12 @@ ok(
     "#81 pins resume-as-is, two-choice bullets, new-slug carve-out, retry duplicate guard, title match, saved-list edge check"
 )
 
+
 # Issue #82: per-issue factcheck, one-time assignees/project, ordered list return.
-_n = lambda t: " ".join(t.split())
+def _n(t):
+    return " ".join(t.split())
+
+
 g = _read("commands", "gh-issue.md")
 flat = _slice(g, "### 4-FLAT", "\n4.5.")
 flat_ws = _n(flat)
@@ -3747,7 +3751,7 @@ assert not re.search(r"gh issue (close|delete)", g)
 assert "--body " not in flat
 assert flat.count("gh label create refined") == 1
 assert g.count('exactly these two choices: **"Retry the missing ones"**, **"Stop here"**') == 1
-assert not any(l.lstrip().startswith("- Body sections:") for l in flat.splitlines())
+assert not any(ln.lstrip().startswith("- Body sections:") for ln in flat.splitlines())
 assert "`lean` is never applied here." in flat_ws
 ok("#82 keeps the #80 and #81 guards")
 
@@ -3877,7 +3881,7 @@ ok("#84 ordering inside 5-FLAT")
 assert "Jira context from Step 3 inlined" in jf
 assert "a Jira key/URL in the **Notes** section is expected traceability from `$1`" in jf
 assert "once per issue" in jf and "reused on resume" in jf
-stop = next(l for l in jf.split('- **"Stop here"**')[1:2])
+stop = next(ln for ln in jf.split('- **"Stop here"**')[1:2])
 assert (
     "first run Step 6's attachment upload against the issues created so far (skip it if none were created), then Step 7's cleanup, then end the run"
     in stop
@@ -3916,10 +3920,10 @@ ok(
 )
 for bad in ("5-EPIC", "4-EPIC", "aiw epic split", "epic-<parent>", "gh label create epic"):
     assert bad not in jira_cmd, bad
-assert not any("--label" in l and "epic" in l.lower() for l in jira_cmd.splitlines())
+assert not any("--label" in ln and "epic" in ln.lower() for ln in jira_cmd.splitlines())
 assert not re.search(r"gh issue (close|delete)", jf) and "--body " not in jf and "gh label create lean" not in jf
 assert not re.search(r"child|sibling", jira_cmd, re.I)
-assert [l.strip() for l in jira_cmd.splitlines() if "epic" in l.lower()] == [
+assert [ln.strip() for ln in jira_cmd.splitlines() if "epic" in ln.lower()] == [
     "- Issue type (bug, story, task, epic)",
     "- Linked issues / parent epic",
 ]
@@ -3929,7 +3933,7 @@ lab = re.compile(r"gh label create prd-<slug>[^\n]*2>/dev/null \|\| true")
 assert len(lab.findall(jira_cmd)) == 1
 assert lab.search(jfr).start() < jfr.index("gh issue create")
 assert re.search(LABEL_RE, jfr).start() < jfr.index("gh issue create")
-cl = next(l for l in jfr.splitlines() if "gh issue create" in l and "--label" in l)
+cl = next(ln for ln in jfr.splitlines() if "gh issue create" in ln and "--label" in ln)
 assert "refined" in cl and "prd-<slug>" in cl, cl
 ok("#84 5-FLAT ensure-creates refined and prd-<slug> before create and applies both")
 
@@ -3987,7 +3991,7 @@ ok("#85 bare-number bullet and step 3.5 epic routing sentences intact")
 # sha256 of whitespace-normalised text on base 0ff5687 (pre-#85): step 3.5 slice, and "## Epic mode" up to "\n## Rules"
 S35_SHA = "6e1464ddf2883001109064bba0ffcef2471985262dca9d9d1d470eacb25258c5"
 EPIC_SHA = "e301c4367ff0d14d1316064fc35316c6b90cac928af03f5040fb791edefdb253"  # re-pinned: epic init passes --mode full, lean is an alias of default
-import hashlib
+import hashlib  # noqa: E402
 
 _ep = ri85[ri85.index("## Epic mode") :]
 _ep = _ep[: _ep.index("\n## ", 5)]
@@ -3997,7 +4001,7 @@ assert hashlib.sha256(_n(_ep).encode()).hexdigest() == EPIC_SHA
 ok("#85 step 3.5 and Epic mode are unchanged")
 
 # Issue #86: docs describe the flat task-list flow (README, HOW-IT-WORKS Layer 5 + glossary, CHANGELOG).
-import hashlib as _hl86
+import hashlib as _hl86  # noqa: E402
 
 rd86, hw86, cl86 = _user_docs(), _read("docs", "HOW-IT-WORKS.md"), _read("CHANGELOG.md")
 rdn86, hwn86 = _n(rd86), _n(hw86)
@@ -4339,7 +4343,7 @@ assert re.search(r"Anything else.{0,220}still stops here", _s2_183), (
 ok("#183 /prd on a non-seed PRD still stops and asks")
 
 # AC4: default --to is obsidian only; Step 6 no longer asks about extra destinations.
-_a4_183 = next(l for l in _args183.splitlines() if l.startswith("- `--to`"))
+_a4_183 = next(ln for ln in _args183.splitlines() if ln.startswith("- `--to`"))
 assert "Default `obsidian`" in _a4_183 and "Default `local`" not in _a4_183, "#183 default --to must be obsidian"
 assert "(Step 6)" not in _a4_183, "#183 Arguments must not defer a destination question to Step 6"
 _s6_183 = _key183(_prd183, "Step 6")

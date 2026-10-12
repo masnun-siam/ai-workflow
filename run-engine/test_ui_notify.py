@@ -191,7 +191,7 @@ g.close()
 ok("env overrides, env-only, no token")
 
 # 6b basic auth: user+password -> Basic, token wins, password never logged on failure
-import base64
+import base64  # noqa: E402
 
 f = Fake()
 fresh({"ntfy": {"server": f.url, "topic": "t", "user": "alice", "password": "s3cret"}})

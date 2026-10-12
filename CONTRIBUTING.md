@@ -8,8 +8,8 @@
 - **Install or setup change:** update `docs/INSTALL.md`.
 - **New domain term:** define it in `CONTEXT.md`.
 - **Hard-to-reverse design decision:** add an ADR under `docs/adr/`.
-- **`CLAUDE.md`:** a stable baseline. Change it only when the user explicitly asks. The
-  pre-commit hook below is a reminder, not a gate.
+- **`CLAUDE.md`:** a stable baseline. Change it only when the user explicitly asks. Its
+  pre-commit hook is a reminder, not a gate.
 - **`AGENTS.md`:** a symlink to `CLAUDE.md`, so edit `CLAUDE.md`. On Windows with
   `core.symlinks=false`, AGENTS.md checks out as a plain file containing the text `CLAUDE.md`.
 - **`README.md`:** a link hub only. New content goes in the docs it links.
@@ -19,14 +19,29 @@
 Tests in `run-engine/test_scripts.py` pin some doc text (README, INSTALL and REFERENCE
 together, `HOW-IT-WORKS.md`, `CONTEXT.md`, `CHANGELOG.md`). Run them after editing docs.
 
-## Pre-commit reminder
+## Pre-commit hooks
 
 ```bash
 pip install pre-commit   # once per machine
 pre-commit install       # once per clone
+git config blame.ignoreRevsFile .git-blame-ignore-revs   # optional: skip the reformat in blame
 ```
 
-When `CLAUDE.md` is staged, the hook prints a warning and lets the commit through.
+`.pre-commit-config.yaml` runs, on staged files:
+
+- file hygiene: YAML/JSON syntax, merge-conflict markers, large files, broken symlinks,
+  trailing whitespace, final newline
+- `gitleaks` secret scan
+- `ruff` lint and format, configured by `ruff.toml` (the repo's own config, so a
+  machine-level ruff config never changes the result)
+- `shellcheck`
+- `run-engine/test_engine.py` when a `run-engine/*.py` file is staged
+
+All of these block the commit. The one exception is the `CLAUDE.md` hook, which prints a
+warning and lets the commit through. Run `pre-commit run --all-files` to check the whole
+repo. When `/run-issue` runs on this repo with the hooks installed, an agent's commit
+can be aborted by a fixer hook (whitespace, final newline, ruff-format) or a failing
+`test_engine.py`. Re-stage the fixed files and commit again, or fix the failure first. The full test suites (`run-engine/test_*.py`) are not in the hook; run them by hand.
 
 ## Process
 

@@ -391,7 +391,7 @@ def classify(changed_files: list[str], meta: dict, config: dict) -> dict:
     severity = cfg.get("signal_severity") or {}
     weights = cfg.get("risk_weights") or {}
     bands = cfg.get("bands") or {}
-    labels = [l for l in (meta.get("labels") or []) if isinstance(l, str)]
+    labels = [lab for lab in (meta.get("labels") or []) if isinstance(lab, str)]
 
     signals = sorted(name for name, globs in signal_globs.items() if any(matches_any(f, globs) for f in changed_files))
 
@@ -444,7 +444,7 @@ def classify(changed_files: list[str], meta: dict, config: dict) -> dict:
         if paths_any and any(matches_any(f, paths_any) for f in changed_files):
             ticket_type = rule["type"]
             break
-        if labels_any and any(l in labels_any for l in labels):
+        if labels_any and any(lab in labels_any for lab in labels):
             ticket_type = rule["type"]
             break
 

@@ -9,21 +9,28 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ui_status
 from ui_status import summarize
 
-run = lambda name, status, conclusion=None: {
-    "__typename": "CheckRun",
-    "name": name,
-    "status": status,
-    "conclusion": conclusion,
-    "detailsUrl": "https://x/" + name,
-}
-pr = lambda *checks, **kw: {
-    "url": "https://github.com/o/r/pull/1",
-    "number": 1,
-    "state": "OPEN",
-    "reviewDecision": "APPROVED",
-    "statusCheckRollup": list(checks),
-    **kw,
-}
+
+def run(name, status, conclusion=None):
+    return {
+        "__typename": "CheckRun",
+        "name": name,
+        "status": status,
+        "conclusion": conclusion,
+        "detailsUrl": "https://x/" + name,
+    }
+
+
+def pr(*checks, **kw):
+    return {
+        "url": "https://github.com/o/r/pull/1",
+        "number": 1,
+        "state": "OPEN",
+        "reviewDecision": "APPROVED",
+        "statusCheckRollup": list(checks),
+        **kw,
+    }
+
+
 iss = {"state": "OPEN", "labels": [{"name": "ready-for-agent"}]}
 
 s = summarize(iss, pr(run("a", "COMPLETED", "SUCCESS")))

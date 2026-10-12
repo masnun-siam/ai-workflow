@@ -30,6 +30,10 @@
   `--skip-agents-md` (gitnexus 1.5.0+), and its npx fallback pins `gitnexus@latest`. Repos
   indexed by a run no longer get the GitNexus block added to their agent docs; a block
   already there stays as-is and is no longer refreshed, so its symbol counts go stale.
+- **Pre-commit hooks.** File hygiene, gitleaks, ruff (lint and format, via the repo's own
+  `ruff.toml`), shellcheck, and `test_engine.py` on engine changes, all blocking. The
+  Python sources were reformatted once (listed in `.git-blame-ignore-revs`), and the
+  existing lint findings were fixed.
 
 ## 1.12.0 — 2026-10-09
 

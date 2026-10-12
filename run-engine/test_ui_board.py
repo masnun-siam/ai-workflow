@@ -257,8 +257,8 @@ ok("memoize_title_fetcher: repeat calls for the same key hit the cache, new keys
 
 # --- 13b. async mode: miss returns None at once, later call sees the title; junk repos skipped ----
 
-import threading
-from concurrent.futures import ThreadPoolExecutor
+import threading  # noqa: E402
+from concurrent.futures import ThreadPoolExecutor  # noqa: E402
 
 gate = threading.Event()
 async_calls = []
@@ -416,9 +416,9 @@ ok("cards: note trimmed to 200 chars, updated mtime, columns sorted newest first
 
 # --- 23. load_run exposes pr/branch, but only https PR links ----------------
 
-import tempfile
-from shared import run_dir_for
-from ui_board import load_run
+import tempfile  # noqa: E402
+from shared import run_dir_for  # noqa: E402
+from ui_board import load_run  # noqa: E402
 
 with tempfile.TemporaryDirectory() as runs:
     for issue, pr in ((5, "https://github.com/acme/widgets/pull/9"), (6, "javascript:alert(1)")):
@@ -483,8 +483,9 @@ ok("load_run: envelopes in file order as log, unreadable ones skipped, skipped s
 print(f"\n{passed} passed")
 
 # --- titles persisted for a warm restart
-import json as _json2, tempfile as _tf
-from concurrent.futures import ThreadPoolExecutor as _TPE
+import json as _json2  # noqa: E402
+import tempfile as _tf  # noqa: E402
+from concurrent.futures import ThreadPoolExecutor as _TPE  # noqa: E402
 
 _store = os.path.join(_tf.mkdtemp(), "titles.json")
 _pool = _TPE(max_workers=1)

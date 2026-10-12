@@ -116,7 +116,7 @@ def dor_gaps(body: str | None) -> list[str]:
 
 def lane_mode(labels: list[str]) -> str:
     """ "lean" if a `lean` label (case-insensitive) is present, else "full"."""
-    return "lean" if any((l or "").strip().lower() == "lean" for l in labels or []) else "full"
+    return "lean" if any((lab or "").strip().lower() == "lean" for lab in labels or []) else "full"
 
 
 # --------------------------------------------------------------------------- skip detection
@@ -362,7 +362,7 @@ def _issue_readiness(args, number: int) -> dict:
         return {"issue": number, "closed": True, "title": data.get("title") or ""}
 
     body = data.get("body") if isinstance(data, dict) else None
-    labels = [l.get("name", "") for l in (data.get("labels") or [])] if isinstance(data, dict) else []
+    labels = [lab.get("name", "") for lab in (data.get("labels") or [])] if isinstance(data, dict) else []
     gaps = dor_gaps(body)
     mode = lane_mode(labels)
 

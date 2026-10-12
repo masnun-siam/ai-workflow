@@ -20,9 +20,9 @@ LOGIN="${4:?reviewer or author login}"; LAST="${5:?last seen ISO8601}"
 MODE="${6:-reviewer}"; INTERVAL="${7:-60}"
 
 if [ "$MODE" = "not-author" ]; then
-  MATCH='select(.user.login != $ENV.LOGIN)'
+  MATCH="select(.user.login != \$ENV.LOGIN)"
 else
-  MATCH='select(.user.login == $ENV.LOGIN)'
+  MATCH="select(.user.login == \$ENV.LOGIN)"
 fi
 
 export LOGIN LAST

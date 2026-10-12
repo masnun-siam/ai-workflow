@@ -412,7 +412,7 @@ def answer_checks():
         sid, fk, work = mk(mode="ask")
         ui_sessions.update(sid, status="waiting", error="old", ended_at="2020-01-01T00:00:00Z")
         t = text("q-1", GOOD)
-        out = ui_runner.resume(sid, t)
+        ui_runner.resume(sid, t)
         r = ui_sessions.load(sid)
         assert r["status"] == "running" and r["ended_at"] is None and r["error"] is None, r
         wait_for(lambda: spawned(fk) and lines(fk, "argv").endswith(t + "\n"))
@@ -1549,7 +1549,6 @@ def prgrind_cases() -> int:
 
     def heartbeat_rewrite():
         d, fk, work = pset("sleep")
-        extra = "paused-note: x\nqueued-push: abc\nci-attempt: 2 — red"
         path = mkpr(d, **{"queued-push": "abc", "ci-attempt": "2 — red"})
         prior(work)
         before = open(path).read()

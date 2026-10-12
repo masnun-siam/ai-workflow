@@ -69,9 +69,7 @@ import worktree  # noqa: E402
 import maintree  # noqa: E402
 from shared import (  # noqa: E402
     GLOBAL_CONFIG,
-    OVERLAY_NAME,
     data_dir,
-    deep_merge,
     die,
     ledger_lock,
     ledger_path,
@@ -325,7 +323,7 @@ def cmd_classify(args) -> None:
 
     meta = {
         "loc_changed": args.loc,
-        "labels": [l.strip() for l in (args.labels or "").split(",") if l.strip()],
+        "labels": [lab.strip() for lab in (args.labels or "").split(",") if lab.strip()],
     }
     # Absent --depth stays absent, so the classifier reports blast_radius "unknown"
     # and scores it wide. Do not default it to 0.

@@ -23,8 +23,8 @@ from contextlib import redirect_stderr
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-import ui_board
-import ui_server
+import ui_board  # noqa: E402
+import ui_server  # noqa: E402
 
 passed = 0
 

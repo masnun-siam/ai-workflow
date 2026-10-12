@@ -41,7 +41,7 @@ def _tag(text) -> str:
 
 
 def _first_line(text, limit=200) -> str:
-    line = next((l.strip() for l in str(text or "").splitlines() if l.strip()), "")
+    line = next((ln.strip() for ln in str(text or "").splitlines() if ln.strip()), "")
     return line if len(line) <= limit else line[: limit - 1] + "…"
 
 
@@ -79,7 +79,7 @@ def compose(event: str, rec: dict, public_url=None) -> tuple[dict, str]:
         headers["Click"] = click
         if click.isascii():
             headers["Actions"] = f"view, {action}, {click}"
-    return headers, "\n".join(l for l in lines if l)
+    return headers, "\n".join(ln for ln in lines if ln)
 
 
 def load_config() -> dict:

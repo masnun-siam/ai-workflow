@@ -1,12 +1,44 @@
-# Reminders only. Nothing here blocks a commit. See CONTRIBUTING.md.
+# Lint, secret and test hooks block the commit; the CLAUDE.md hook is a reminder only.
+# See CONTRIBUTING.md.
+exclude: ^run-engine/ui_static/vendor/
 repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: check-symlinks
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.0
+    hooks:
+      - id: ruff-check
+        types_or: [python, pyi]
+      - id: ruff-format
+        types_or: [python, pyi]  # not Markdown: docs keep their code samples as written
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1-1
+    hooks:
+      - id: shellcheck
   - repo: local
     hooks:
+      - id: engine-tests
+        name: run-engine/test_engine.py
+        language: system
+        entry: python3 run-engine/test_engine.py
+        files: ^run-engine/.*\.py$
+        pass_filenames: false
       - id: claude-md-reminder
         name: CLAUDE.md is a stable baseline
         language: system
         entry: echo "WARNING - CLAUDE.md changed. It should change only when the user explicitly asked for it."
         files: ^CLAUDE\.md$
         pass_filenames: false
-        always_run: false
         verbose: true

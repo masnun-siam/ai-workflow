@@ -186,4 +186,3 @@ Tell the user, in this order:
 
 Do not run a pipeline yourself to "test the install". `/run-issue` opens pull requests and
 comments on issues. That is the user's call on their repo, not a smoke test.
-

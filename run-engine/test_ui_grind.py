@@ -94,7 +94,7 @@ freed[0] += 5
 ui_grind.autostart()
 assert ui_sessions.load(rec["id"]).get("auto_grind") is False
 ui_grind.drain()
-assert any(l and l["issue"] == 11 for _, l in started)
+assert any(led and led["issue"] == 11 for _, led in started)
 # notifications: first scan records history silently, later changes push once
 sent.clear()
 ui_grind.notify_changes()

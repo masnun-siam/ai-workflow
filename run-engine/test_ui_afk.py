@@ -42,17 +42,19 @@ ui_notify.urllib.request.urlopen = lambda req, timeout=None: (
     pushed.append((req.headers.get("Title"), req.data.decode())) or _Resp()
 )
 
-Q = lambda label="Approve and start (Recommended)", rec=True: {
-    "id": "q-1",
-    "questions": [
-        {
-            "header": "Plan",
-            "question": "Approve the plan?",
-            "multiSelect": False,
-            "options": [{"label": label if rec else "Approve"}, {"label": "Abort"}],
-        }
-    ],
-}
+
+def Q(label="Approve and start (Recommended)", rec=True):
+    return {
+        "id": "q-1",
+        "questions": [
+            {
+                "header": "Plan",
+                "question": "Approve the plan?",
+                "multiSelect": False,
+                "options": [{"label": label if rec else "Approve"}, {"label": "Abort"}],
+            }
+        ],
+    }
 
 
 def waiting(rec=True, sid_ok=True, command="/run-issue 1"):

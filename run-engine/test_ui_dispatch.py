@@ -3,14 +3,12 @@
 import os
 import sys
 import tempfile
-import time
 
 os.environ["CLAUDE_PLUGIN_DATA"] = tempfile.mkdtemp()
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ui_dispatch as d  # noqa: E402
 import ui_notify  # noqa: E402
-import ui_repos  # noqa: E402
 
 n_ok = 0
 

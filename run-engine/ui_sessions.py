@@ -191,13 +191,13 @@ def answer_text(pending: dict, answers) -> str:
         if "labels" in a:
             labels = a["labels"]
             valid = {o["label"] for o in q["options"]}
-            if not isinstance(labels, list) or not labels or not all(isinstance(l, str) for l in labels):
+            if not isinstance(labels, list) or not labels or not all(isinstance(lab, str) for lab in labels):
                 raise ValueError(f"answer {i}: labels must be a non-empty list of strings")
             if len(set(labels)) != len(labels):
                 raise ValueError(f"answer {i}: duplicate labels")
             if not q["multiSelect"] and len(labels) > 1:
                 raise ValueError(f"answer {i}: only one label allowed")
-            if any(l not in valid or "\0" in l for l in labels):
+            if any(lab not in valid or "\0" in lab for lab in labels):
                 raise ValueError(f"answer {i}: label is not an option of this question")
             out[str(i)] = {"labels": labels}
         else:

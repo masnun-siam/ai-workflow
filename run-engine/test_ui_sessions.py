@@ -179,7 +179,7 @@ with open(meta_path(d, bad), "w") as f:
     f.write('{"id": ')
 res, err = captured(ui_sessions.list_sessions)
 assert [x["id"] for x in res] == [good["id"]]
-assert any(l.startswith("warning:") and bad in l for l in err.splitlines()), err
+assert any(ln.startswith("warning:") and bad in ln for ln in err.splitlines()), err
 res, err = captured(lambda: ui_sessions.load(bad))
 assert res is None and "warning:" in err, err
 ok("invalid JSON skipped with warning")
@@ -192,7 +192,7 @@ for i, body in enumerate(("[]", '"x"')):
         f.write(body)
     res, err = captured(ui_sessions.list_sessions)
     assert [x["id"] for x in res] == [good["id"]]
-    assert any(l.startswith("warning:") and sid in l for l in err.splitlines()), err
+    assert any(ln.startswith("warning:") and sid in ln for ln in err.splitlines()), err
     res, err = captured(lambda: ui_sessions.load(sid))
     assert res is None and "warning:" in err
 ok("non-object JSON skipped with warning")

@@ -16,7 +16,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
-from urllib.parse import parse_qs, unquote_plus, urlsplit
+from urllib.parse import parse_qs, unquote_plus
 
 import dispatch
 import epic

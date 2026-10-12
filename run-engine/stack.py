@@ -20,7 +20,6 @@ import threading
 import time
 
 from shared import (
-    OVERLAY_NAME,
     data_dir,
     die,
     load_config,

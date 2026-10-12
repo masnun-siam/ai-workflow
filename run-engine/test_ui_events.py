@@ -21,9 +21,9 @@ data_dir = tempfile.mkdtemp()
 old_data = os.environ.get("CLAUDE_PLUGIN_DATA")
 os.environ["CLAUDE_PLUGIN_DATA"] = data_dir
 
-import ui_events
-import ui_server
-import ui_sessions
+import ui_events  # noqa: E402
+import ui_server  # noqa: E402
+import ui_sessions  # noqa: E402
 
 passed = 0
 

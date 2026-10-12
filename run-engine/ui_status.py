@@ -77,10 +77,10 @@ def _fetch(owner, repo, issue, pr_url, branch):
 
 def _fill(key, pr_url, branch):
     try:
-        value, stale = _fetch(*key, pr_url, branch), False
+        value = _fetch(*key, pr_url, branch)
     except Exception as exc:  # logged, last good value stays
         print(f"ui_status: {exc}", file=sys.stderr)
-        value, stale = None, True
+        value = None
     with _lock:
         old = _cache.get(key)
         if value is not None:

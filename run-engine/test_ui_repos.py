@@ -24,11 +24,11 @@ data_dir = tempfile.mkdtemp()
 os.environ["CLAUDE_PLUGIN_DATA"] = data_dir
 ORIG_PATH = os.environ.get("PATH", "")
 
-import ui_board
-import ui_repos
-import ui_runner
-import ui_server
-import ui_sessions
+import ui_board  # noqa: E402
+import ui_repos  # noqa: E402
+import ui_runner  # noqa: E402
+import ui_server  # noqa: E402
+import ui_sessions  # noqa: E402
 
 passed = 0
 

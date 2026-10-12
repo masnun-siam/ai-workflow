@@ -101,11 +101,13 @@ candidates="$(printf '%s\n%s\n' "$(pr_search --updated)" "$(pr_search --merged)"
 # Commits authored by AUTHOR, in-window, that are not administrative merges.
 # A co-authored commit lists several authors, so match with `index` over all
 # of them rather than only the first.
-TODAYS_COMMITS_FILTER='
+TODAYS_COMMITS_FILTER=$(cat <<'JQ'
   [ .commits[]?
     | select(.authoredDate >= $s and .authoredDate < $e)
     | select(.messageHeadline | startswith("Merge ") | not)
-    | select([.authors[]?.login] | index($a) != null) ]'
+    | select([.authors[]?.login] | index($a) != null) ]
+JQ
+)
 
 prs="$(echo "$candidates" | jq -c '.[]' | while read -r c; do
   repo="$(echo "$c" | jq -r '.repository.nameWithOwner')"

@@ -139,7 +139,10 @@ with tempfile.TemporaryDirectory() as tmp:
     repo = os.path.join(tmp, "repo")
     run_dir = os.path.join(tmp, "run")
     os.makedirs(os.path.join(repo, "tests"))
-    git = lambda *a: subprocess.run(["git", *a], cwd=repo, check=True, capture_output=True)
+
+    def git(*a):
+        return subprocess.run(["git", *a], cwd=repo, check=True, capture_output=True)
+
     git("init", "-q", "-b", "main")
     git("config", "user.email", "t@t")
     git("config", "user.name", "t")
@@ -652,7 +655,10 @@ def default_mode_repo(tmp):
     """tests_sha = a RED-tests commit; HEAD = dev's commit that also edits that test."""
     repo, run_dir = os.path.join(tmp, "repo"), os.path.join(tmp, "run")
     os.makedirs(os.path.join(repo, "tests"))
-    git = lambda *a: subprocess.run(["git", *a], cwd=repo, check=True, capture_output=True, text=True)
+
+    def git(*a):
+        return subprocess.run(["git", *a], cwd=repo, check=True, capture_output=True, text=True)
+
     git("init", "-q", "-b", "main")
     git("config", "user.email", "t@t")
     git("config", "user.name", "t")

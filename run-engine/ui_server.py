@@ -12,7 +12,6 @@ import http.server
 import json
 import mimetypes
 import os
-import re
 import shlex
 import signal
 import socket
