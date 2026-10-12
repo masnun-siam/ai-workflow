@@ -220,7 +220,7 @@ One issue per task from the step 3.6 list, each standalone.
    ```
 2. Write one complete, DoR-passing body per task, using the same section list as step 4.
    Context is inlined, never referenced: a task body must stand alone. Each How covers
-   only its own task. Notes links `Task <n> of <wiki URL>` when step 3.6 pushed a wiki copy (the page URL it reported), else `Task <n> of <parent issue URL>` when a parent issue exists, else `Task <n> of this task list` with no link. Never link `docs/tasks/<slug>.md` or any other local path: it is never committed, so the link is dead on GitHub.
+   only its own task. Notes links `Task <n> of <wiki URL>` when step 3.6 pushed a wiki copy (the page URL it reported), else `Task <n> of <parent issue URL>` when #237's tracking parent was created in this run (inert until #237 lands: never search for one), else `Task <n> of this task list` with no link. Never link `docs/tasks/<slug>.md` or any other local path: it is never committed, so the link is dead on GitHub.
 3. Create the issues one at a time in list order. Before writing task k's body, replace
    each `Depends on: task <k>` line (k = an earlier task's number) with `Depends on: #<n>`, using the number already returned
    for that task (or already in its `Issue:` slot) (edges only point at earlier tasks). Write the body to
@@ -237,15 +237,18 @@ One issue per task from the step 3.6 list, each standalone.
 
    Then fill the same `Issue: #<n>` in the other destinations step 3.6 wrote, each with
    its own task-anchored edit and in the same order as the local one:
-   - **Obsidian** (only if chosen): via `obsidian vault=notes`, `read` the `Tasks.md`, set the
-     slot in the text yourself (anchor on the task heading as above, within this run's
-     block when the note holds earlier lists), and write the whole note back with
-     `create ... overwrite`; there is no partial-replace command.
+   - **Obsidian** (only if chosen): via `obsidian vault=notes`, `read` the note step 3.6 wrote,
+     set the slot in the text yourself (anchor on the task heading as above), and write the
+     whole note back with `create ... overwrite`; there is no partial-replace command.
+     Overwriting re-creates the file, so keep the frontmatter and the `## Related` block
+     byte-for-byte and re-apply `tags` with `property:set` if the overwrite dropped it.
    - **Wiki** (only if chosen and pushed): make the same edit in the scratchpad wiki clone
-     from step 3.6. Commit nothing per issue; after the last create, make one plain commit
-     and push, never `--no-verify`.
+     from step 3.6. Commit nothing per issue; after the last create, or when step 5's
+     "Stop here" ends the run, make one plain commit and push of the slots filled so
+     far, never `--no-verify`, because the clone is gone once the run ends.
    - **Resume**: step 3.6's Resume wrote neither copy, so update the local file only and
-     report Obsidian and the wiki as `not synced`.
+     report Obsidian and the wiki as `not synced` (never `updated`: the wiki keeps only the
+     slots an earlier run pushed).
 
    A destination that fails to update does not stop the run: report it by name as
    `failed — <reason>`; the run continues with the next issue. Step 5's stop covers creates and the

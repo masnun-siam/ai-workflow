@@ -3487,7 +3487,7 @@ _SPAN_TAILS = {
     "not created twice.": " - **\"Stop here\"**: first",
 }
 for first, last in (
-    # #236 diverged gh-issue's preflight guard and write-back from jira-to-gh (follow-up: mirror them there).
+    # #236 diverged gh-issue's preflight guard and write-back from jira-to-gh (follow-up: #256 mirrors them into jira-to-gh 5-FLAT, https://github.com/masnun-siam/ai-workflow/issues/256).
     ("Ensure the labels once, before the first create", 'description "task from docs/tasks/<slug>.md" 2>/dev/null || true'),
     ("Create the issues one at a time in list order.", "`lean` is never applied here."),
     ("Check each create's and each write-back's exit status.", "not created twice."),
@@ -3983,13 +3983,18 @@ assert "Never link `docs/tasks/<slug>.md` or any other local path" in _f236
 assert not re.search(r"Notes links `Task <n> of docs/tasks", _g236) and "Notes wrap the path in backticks" not in _g236
 ok("#236 Notes link the wiki URL, else the parent issue URL, never a local path")
 _pre236 = _f236[: _f236.index("1. Ensure the labels")]
-assert "`prd-<slug>` label" in _pre236 and "`Task <n> of` text" in _pre236 and "title" in _pre236
+assert "`prd-<slug>` label" in _pre236 and "`Task <n> of` text" in _pre236 and "whose title also matches" in _pre236
 assert "match on the `Task <n> of` text and the slug" not in _g236
 ok("#236 duplicate guard matches label + Task <n> of text + title, not the slug in a path")
 _wb236 = _f236[_f236.index("4. Write-back:") : _f236.index("5. Check each create")]
 for _p in ("`obsidian vault=notes`", "wiki clone", "one plain commit and push", "never `--no-verify`",
            "failed \u2014 <reason>", "the run continues", "not synced", "Resume"):
     assert _p in _wb236, f"#236 write-back missing {_p!r}"
+for _p in ("keep the frontmatter and the `## Related` block byte-for-byte", "re-apply `tags` with `property:set`",
+           "when step 5's \"Stop here\" ends the run", "slots filled so far", "never `updated`"):
+    assert _p in _wb236, f"#236 write-back missing {_p!r}"
+assert "the `Tasks.md`" not in _wb236 and "earlier lists" not in _wb236 and "the note step 3.6 wrote" in _wb236
+assert "inert until #237 lands" in _f236 and "when a parent issue exists" not in _f236
 ok("#236 write-back fills Issue: in local, Obsidian and wiki; failures reported by name; Resume local-only")
 for _p in ("`obsidian vault=notes`", "one plain commit and push", "step 3.6 confirmation"):
     assert _p in _hr236 and "4-FLAT" in _hr236, f"#236 HARD RULE missing {_p!r}"
