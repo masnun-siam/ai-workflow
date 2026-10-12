@@ -103,6 +103,12 @@ by file group (e.g. route+controller, then request+resource) rather than waiving
 cap. Non-layered work (docs, config) uses the same limits, split by file or section. If any task fails the rubric,
 create nothing and don't ask yet: split the failing task and rebuild the list before presenting it.
 
+The rubric also requires the following; a failure is handled like any other rubric failure:
+- **Covers.** Every task has a `Covers: FR-n` line citing the PRD requirement(s) it delivers. Inline check: if any PRD `FR-n` is covered by no task, stop and rebuild the list. With no PRD, the check is skipped.
+- **Deploy/ops.** When any task adds an index, a migration, a scheduler/cron, an env var, or a command that must run in production (anything a human must run on deploy that is not part of the normal release), the list needs one `deploy/ops` task, labelled `infra`, that depends on the tasks introducing them.
+- **User-visible.** Every task has `User-visible: yes|no`. The list header names the first user-visible task and any independent slice that could ship earlier. Tasks are not reordered.
+- **Unique titles.** Two tasks with the same title fail the rubric: rename or merge them before the list is shown.
+
 Present the list in exactly one `AskUserQuestion` call (if headless, one `aiw ask`, then end your turn) with two choices, verbatim:
 **"Create as shown"** and **"Let me edit the list"**.
 Style this like Gate 1's revise loop in `commands/run-issue.md`:
@@ -126,9 +132,9 @@ on, not a choice).
 If `docs/tasks/<slug>.md` already exists, stop and ask (new slug, skip the save, or **"Resume this list"**); never
 overwrite silently. Show the existing file's title, source and how many `Issue:` slots are filled, so the user can tell a resume from an unrelated collision. **"Resume this list"** leaves the file as is and goes to `5-FLAT`, which then uses the saved list instead of the one just approved. Resume skips the Obsidian/wiki destination writes: the saved list is only read, not rewritten.
 
-File shape: a header (title, source, date, owner/repo), then one block per task in the
+File shape: a header (title, source, date, owner/repo; the first user-visible task and any independent slice that could ship earlier; `Design: <url>` when the PRD has a `Design:` URL, nothing when it is `none` or absent), then one block per task in the
 approved dependency order: `## Task <n> — <title>` (n is the task's sequence number),
-Outcome, Files/symbols, Acceptance criteria, Verify command, `Depends on: task <k>` (or
+Outcome, `Covers: FR-n`, `User-visible: yes|no`, Files/symbols, Acceptance criteria, Verify command, `Depends on: task <k>` (or
 none), and `Issue: —` (the issue-number slot, filled in later). Only when a task genuinely cannot be split further, and so still fails
 the size rubric, it gets a `Rubric: flagged — <limit broken>` line.
 
@@ -201,7 +207,7 @@ One issue per task from the Step 4.6 list, each standalone.
    ```
 2. Write one complete, DoR-passing body per task, with Jira context from Step 3 inlined.
    Context is inlined, never referenced: a task body must stand alone. Each How covers
-   only its own task. Notes links `Task <n> of docs/tasks/<slug>.md`.
+   only its own task. Notes links `Task <n> of docs/tasks/<slug>.md`. For a task with a `frontend` scope, Context / Affected Code also carries the list's `Design: <url>` (nothing when the list has none).
    - Body sections: **What** (the change: the business requirements, plus repro steps for a bug or requirements for a feature), **Why** (the problem and *why it matters* — not a restatement of the fix), **Out of Scope**, **Context / Affected Code** (file paths and symbols from Step 4.5's GitNexus lookup), **Acceptance Criteria** (include every corner case surfaced in Step 4's clarifying Q&A as its own explicit criterion), **How** (ordered numbered steps; exact path:line/symbol references reusing the GitNexus lookup from Step 4.5; an existing pattern to copy, or "no existing pattern — net-new"; the exact test/verify command(s); a one-line done-check; a `Test root: <repo-relative dir>` line naming where this issue's tests live, plus `Base branch: <branch>` when the PR should not target the default branch — `/run-issue` reads both to skip its researcher and planner), **Non-functional Constraints**, **Assumptions**, **Dependencies / Blockers**, **Proposed Fix** (only if a concrete fix is obvious — describe it, do NOT apply it), **Notes** (include the Jira key/URL here as traceability)
 3. Create the issues one at a time in list order. Before writing task k's body, replace
    each `Depends on: task <k>` line (k = an earlier task's number) with `Depends on: #<n>`, using the number already returned
