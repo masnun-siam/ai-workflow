@@ -111,7 +111,7 @@ Do the following:
    by file group (e.g. route+controller, then request+resource) rather than waiving the
    cap. Non-layered work (docs, config) uses the same limits, split by file or section. If any task fails the rubric,
    create nothing and don't ask yet: split the failing task and rebuild the list before
-   presenting it.
+   presenting it. Two tasks with the same title (compared case-insensitively) also fail the rubric: rename or merge them before presenting.
 
    Present the list in exactly one `AskUserQuestion` call (if headless, one `aiw ask`, then end your turn) with two choices, verbatim:
    **"Create as shown"** and **"Let me edit the list"**.
@@ -210,7 +210,8 @@ One issue per task from the step 3.6 list, each standalone.
    every `Depends on: task <j>` in task k has j < k; otherwise stop, report the offending
    task, and let the user fix the list via step 3.5's edit loop.
    This resume branch overrides the new-slug stop above: choosing **"Resume this list"** is not skipping the save, and the `j < k` check runs on the saved list (the one Resume uses), not the approved one it discards.
-   If the user chose **"Resume this list"** in step 3.6, the saved `docs/tasks/<slug>.md` is the list: read it, show which tasks have no issue number yet, and create only tasks without an issue number, in list order; reuse the existing `Issue: #<n>` numbers for their `Depends on:` lines. First run `gh issue list --label prd-<slug> --state all --limit 200 --json number,url,title,body` (the guard runs before the show step is final, so that list reflects its findings); an issue whose Notes says `Task <n> of docs/tasks/<slug>.md` (Notes wrap the path in backticks, so match on the `Task <n> of` text and the slug) for a task with an empty slot, and whose title also matches that task's planned title, was created but never recorded, so fill that slot with the sub-step 4 write-back instead of creating it again. A Notes-only match with a different title may belong to another list sharing the slug: report it and leave it for the user. If every slot is filled, create nothing and report the existing issues.
+   **Duplicate guard (every run, not only a resume).** Run `gh issue list --label prd-<slug> --state all --limit 200 --json number,url,title,body` once here, before the first create, and keep the result as the run's known-issues list (the guard runs before the resume show step is final, so that list reflects its findings). A task with an empty `Issue:` slot is a duplicate when an issue in that list has Notes saying `Task <n> of docs/tasks/<slug>.md` (Notes wrap the path in backticks, so match on the `Task <n> of` text and the slug) and a title that also matches the task's planned title: it was created but never recorded, so fill that slot with the sub-step 4 write-back instead of creating it again. A Notes-only match with a different title may belong to another list sharing the slug: report it and leave it for the user, and the task is still created. Sub-step 3 consults this list before every create and adds each issue it creates to it, so the lookup is not repeated per task; the retry in sub-step 5 re-runs it fresh.
+   If the user chose **"Resume this list"** in step 3.6, the saved `docs/tasks/<slug>.md` is the list: read it, show which tasks have no issue number yet, and create only tasks without an issue number, in list order; reuse the existing `Issue: #<n>` numbers for their `Depends on:` lines, after applying the duplicate guard above. If every slot is filled, create nothing and report the existing issues.
    Ask step 5's assignee question and step 6's project and field questions here, once for the whole list and before the first create; skip them when nothing is left to create.
 1. Ensure the labels once, before the first create (`<slug>` is the step 3.6 slug):
 
@@ -221,7 +222,7 @@ One issue per task from the step 3.6 list, each standalone.
 2. Write one complete, DoR-passing body per task, using the same section list as step 4.
    Context is inlined, never referenced: a task body must stand alone. Each How covers
    only its own task. Notes links `Task <n> of docs/tasks/<slug>.md`.
-3. Create the issues one at a time in list order. Before writing task k's body, replace
+3. Create the issues one at a time in list order. Before each create, check task k against sub-step 0's known-issues list: a match on `Task <k> of` and title is recorded with the sub-step 4 write-back (`Issue: #<n>`, and `<n>` serves later `Depends on:` lines) and not created again; only an unmatched task goes on to be created. After each successful create, add the new issue (number, url, title, Notes) to that list. Before writing task k's body, replace
    each `Depends on: task <k>` line (k = an earlier task's number) with `Depends on: #<n>`, using the number already returned
    for that task (or already in its `Issue:` slot) (edges only point at earlier tasks). Write the body to
    `/tmp/gh-issue-body.md`, then run
@@ -238,7 +239,7 @@ One issue per task from the step 3.6 list, each standalone.
    create: report the created issues (number and URL), the missing ones (by planned title),
    and any issue that exists but is unrecorded in the file; never delete created issues.
    Then `AskUserQuestion` with exactly these two choices: **"Retry the missing ones"**, **"Stop here"** (if headless, `aiw ask`, then end your turn).
-   - **"Retry the missing ones"**: re-enter the loop at the failed task, reusing the already-known issue numbers of earlier tasks for their `Depends on:` lines; never re-create a task that already has an issue (an unrecorded one gets its write-back retried, not a second create). Apply the duplicate guard above before every create after a failure: run the same `gh issue list --label prd-<slug> --state all --limit 200 --json number,url,title,body` lookup, so an issue GitHub accepted but whose create reported no number is recorded, not created twice.
+   - **"Retry the missing ones"**: re-enter the loop at the failed task, reusing the already-known issue numbers of earlier tasks for their `Depends on:` lines; never re-create a task that already has an issue (an unrecorded one gets its write-back retried, not a second create). After a failure, refresh sub-step 0's known-issues list with the same `gh issue list --label prd-<slug> --state all --limit 200 --json number,url,title,body` lookup before the next create, so an issue GitHub accepted but whose create reported no number is recorded, not created twice.
    - **"Stop here"**: end the run and report the partial state (created vs. missing); the filled `Issue:` slots let a later run resume the list.
    Never close or delete an issue already created — a partial list is a recoverable state.
 
