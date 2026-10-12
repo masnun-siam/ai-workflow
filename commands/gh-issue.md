@@ -7,7 +7,13 @@ argument-hint: "[bug | feature | task | improvement] <details | sentry-url | fil
 > on `PATH` via the plugin's `bin/`). Substitute the printed value; never guess a path.
 I have a ${1:-bug / feature request / task / improvement} to log as a GitHub issue.
 
-0. **Source check.** If `$@` matches one of `/intake`'s detectable source shapes — a
+0. **Source check.** First, a saved task list: if `$@` is a `docs/tasks/<slug>.md` file whose
+   tasks are `## Task <n>` blocks (what `/create-tasks` or step 3.6 saved), the list is already
+   decomposed and approved. Skip `/intake` and steps 1–3.6, and take `<slug>` from the file name.
+   With one task, file it through step 4 as a single issue built from that task's block. With two
+   or more, go to `4-FLAT` exactly as if the user had chosen **"Resume this list"** at step 3.6's
+   collision prompt.
+   Otherwise, if `$@` matches one of `/intake`'s detectable source shapes — a
    `sentry.io` URL, an existing `.md`/`.txt`/`.pdf`/`.docx` file path, or a vault note
    title that exactly matches one note — invoke `/intake $@ --whole` and wait for its `## Intake
    result` block. Use its `type:` value in place of

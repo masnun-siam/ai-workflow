@@ -4,6 +4,10 @@
 
 ### Added
 
+- **`/create-tasks`.** Breaks a problem statement and its PRD into a saved task list
+  (`docs/tasks/<slug>.md`) without filing anything, using `/gh-issue`'s own decomposition and
+  save rules. The PRD stands in for grilling; open questions are asked before decomposing.
+  `/gh-issue docs/tasks/<slug>.md` now files issues straight from a saved list.
 - **Full test suite on push and in CI.** `run-engine/run_tests.sh` runs every
   `run-engine/test_*.py`. `pre-commit install` now also installs a pre-push hook that runs it,
   and a `Tests` GitHub Actions job runs it on pull requests and on pushes to `master`. Fixes the
