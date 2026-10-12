@@ -104,7 +104,7 @@ cap. Non-layered work (docs, config) uses the same limits, split by file or sect
 create nothing and don't ask yet: split the failing task and rebuild the list before presenting it.
 
 The rubric also requires the following; a failure is handled like any other rubric failure:
-- **Covers.** Every task has a `Covers: FR-n` line citing the PRD requirement(s) it delivers. Inline check: if any PRD `FR-n` is covered by no task, stop and rebuild the list. With no PRD, the check is skipped.
+- **Covers.** Every task has a `Covers: FR-n` line citing the PRD requirement(s) it delivers. Inline check: if any PRD `FR-n` is covered by no task, stop and rebuild the list. With no PRD (always the case for Jira-sourced lists), write `Covers: none` and skip the check. A `deploy/ops` task writes `Covers:` the FRs of the tasks it deploys (or `none`).
 - **Deploy/ops.** When any task adds an index, a migration, a scheduler/cron, an env var, or a command that must run in production (anything a human must run on deploy that is not part of the normal release), the list needs one `deploy/ops` task, labelled `infra`, that depends on the tasks introducing them.
 - **User-visible.** Every task has `User-visible: yes|no`. The list header names the first user-visible task and any independent slice that could ship earlier. Tasks are not reordered.
 - **Unique titles.** Two tasks with the same title fail the rubric: rename or merge them before the list is shown.
@@ -132,7 +132,7 @@ on, not a choice).
 If `docs/tasks/<slug>.md` already exists, stop and ask (new slug, skip the save, or **"Resume this list"**); never
 overwrite silently. Show the existing file's title, source and how many `Issue:` slots are filled, so the user can tell a resume from an unrelated collision. **"Resume this list"** leaves the file as is and goes to `5-FLAT`, which then uses the saved list instead of the one just approved. Resume skips the Obsidian/wiki destination writes: the saved list is only read, not rewritten.
 
-File shape: a header (title, source, date, owner/repo; the first user-visible task and any independent slice that could ship earlier; `Design: <url>` when the PRD has a `Design:` URL, nothing when it is `none` or absent), then one block per task in the
+File shape: a header (title, source, date, owner/repo; the first user-visible task and any independent slice that could ship earlier; `Design: <url>` when the source (the PRD, or the Jira ticket) has a design URL, nothing when it has none), then one block per task in the
 approved dependency order: `## Task <n> — <title>` (n is the task's sequence number),
 Outcome, `Covers: FR-n`, `User-visible: yes|no`, Files/symbols, Acceptance criteria, Verify command, `Depends on: task <k>` (or
 none), and `Issue: —` (the issue-number slot, filled in later). Only when a task genuinely cannot be split further, and so still fails
