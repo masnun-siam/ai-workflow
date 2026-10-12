@@ -170,8 +170,11 @@ If the target was a seed (Step 2): replace the `create` line above with `obsidia
 
 Every `overwrite` here replaces the whole note. If a read of a file you know exists fails or
 comes back empty (vault not open, wrong path), stop and report: never overwrite with partial content.
+An overwrite also drops the note's frontmatter. So read the note's `tags`, `status` and
+`canonical` properties before any overwrite, and re-run `property:set` for each of them right
+after it; never rely on the content to carry frontmatter.
 
-When `local` was also written, link the mirror back to it:
+When `local` was also written, link the mirror back to it, after the `create` (or `create ... overwrite`) and never before it:
 `obsidian vault=notes property:set path="05-Work/<Project>/<Feature>/PRD.md" name=canonical value="<owner/repo>:docs/prd/<slug>.md"`.
 
 Read a sibling's tags first to reuse the feature slug, and list existing siblings (Dump, Decisions, SRS…) in `## Related`. Add the PRD line to existing siblings' Related blocks as dump does. The project tag table lives in dump's SKILL.md.
@@ -215,7 +218,8 @@ question where it came up. For each decision:
 
 Write the canonical copy back, then apply the same edits to the Obsidian mirror when one exists
 (read it, edit it, write it back with `obsidian vault=notes create ... overwrite`, keeping its
-tags and `## Related`; the Step 7 rule applies: never overwrite with partial content). Report which decisions were added and which were already there, and every requirement or acceptance check you edited as before → after, so no requirement changes without someone seeing it. Print no
+tags and `## Related`; the Step 7 rules apply: never overwrite with partial content, and re-set
+`tags`, `status` and `canonical` after the overwrite). Report which decisions were added and which were already there, and every requirement or acceptance check you edited as before → after, so no requirement changes without someone seeing it. Print no
 next line: the calling command owns what happens next.
 
 ## Guardrails

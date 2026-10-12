@@ -4365,6 +4365,10 @@ assert "never by matching names" in _ws(_key183(_prd_all, "Step 2")), "prd: Step
 assert "no canonical copy" in _upd and "Never create a repo file during an update" in _upd, "prd: vault-only update"
 assert "before \u2192 after" in _upd, "prd: Update mode reports edited requirements as before -> after"
 assert "not inside a git repo" in _ws(_key183(_prd_all, "Step 1")), "prd: no repo -> Obsidian only"
+assert re.search(r"re-run `property:set` for each of them right after it", _s7) and "`canonical`" in _s7, (
+    "prd: frontmatter (incl. canonical) must be re-set after every overwrite"
+)
+assert "and re-set `tags`, `status` and `canonical` after the overwrite" in _upd, "prd: Update mode re-sets canonical"
 assert "never overwrite with partial content" in (_upd + _ws(_key183(_prd_all, "Step 7"))).lower(), (
     "prd: overwrite guard"
 )
