@@ -138,3 +138,36 @@
   history: https://github.com/masnun-siam/ai-workflow/pull/17 (3 reviewer rounds, bounce
   budget of 2 exhausted, degraded finish).
   **Date**: 2026-09-22
+
+## Git & Verification Hygiene
+- **Pattern**: Commits on F1–F3 were reported as "commit hooks passed" while `.git/hooks`
+  held no hooks: `pre-commit install` had never run in this clone. Once installed, ruff-format
+  reformatted two files that had already been "verified".
+  **Rule**: Before claiming hooks passed, check `ls .git/hooks | grep -v sample` and paste the
+  raw `pre-commit run --files <changed>` output. A summary is not evidence.
+  **Evidence**: `run-engine/refined.py:25` and `run-engine/test_refined.py:106` failed
+  `ruff format --check` at 3264711 although that commit's report said the hooks passed.
+  **Date**: 2026-10-13
+- **Pattern**: `git branch -d X && git checkout -b integration/flows` stopped at the failed
+  `-d`, so six `--no-ff` merges ran on local `master` instead of a new branch.
+  **Rule**: Never chain a branch-switching command after a step that can fail. Run
+  `git branch --show-current` before every merge or commit.
+  **Evidence**: master reflog `master@{1..6}` were the merges, `master@{0}` the reset to
+  495db00; nothing was pushed (`git ls-remote origin master` = 495db00).
+  **Date**: 2026-10-13
+- **Pattern**: The test suite only ran under the local Python 3.14 although the repo pins
+  3.10+, so `ui_afk._epoch` (`datetime.fromisoformat` on a trailing `Z`) silently never fired
+  AFK retries on 3.10.
+  **Rule**: Run `run-engine/run_tests.sh` under Python 3.10 as well as the local Python before
+  reporting a change green.
+  **Evidence**: `test_ui_afk.py:130` IndexError on 3.10 at 13fed37; fixed in b1ee1da by reusing
+  `review._ts`.
+  **Date**: 2026-10-13
+- **Pattern**: Under `git commit -a`, git hands hooks a temporary `GIT_INDEX_FILE`; the
+  `test_engine.py` hook's temp repos inherited it and wrote `pkg/mod.py` into this repo's
+  commit index ("invalid object … for 'pkg/mod.py'").
+  **Rule**: Hooks that run tests which create git repos must unset `GIT_INDEX_FILE`,
+  `GIT_DIR` and `GIT_WORK_TREE` at the hook boundary.
+  **Evidence**: `.pre-commit-config.yaml` engine-tests entry and `run-engine/run_tests.sh`,
+  commit 936f8e6.
+  **Date**: 2026-10-13
