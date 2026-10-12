@@ -1,6 +1,6 @@
 ---
 description: Run an existing GitHub issue end-to-end to a reviewed PR, stopping for a human exactly three times — plan approval, an escalated review finding, and the final ready-to-merge handback
-argument-hint: "<issue-number-or-url | sentry-url | file-path | vault-note | text> [--full] [--no-worktree] [--no-grind] [--no-review]"
+argument-hint: "<issue-number-or-url | sentry-url | file-path | vault-note | text> [--full] [--no-worktree] [--grind] [--no-review]"
 allowed-tools: Bash(aiw:*), Bash(gh:*), Bash(git:*), Bash(docker:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(composer:*), Bash(pnpm:*), Bash(yarn:*), Bash(go:*), Bash(python:*), Bash(python3:*), Bash(pip:*), Bash(pip3:*), Bash(dart:*), Bash(flutter:*), Bash(obsidian:*), Read, Write, Agent, Skill, AskUserQuestion, mcp__plugin_sentry_sentry__*, mcp__gitnexus__query, mcp__gitnexus__context, Grep, Glob
 ---
 
@@ -258,9 +258,10 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
    this run writes lands in the checkout, so there is no pipeline file to exempt. This check runs first,
    unconditionally — step 2 below can create a real GitHub issue, and issue creation must
    stay behind this abort so a retry after stashing never files a duplicate.
-2. Strip `--lean`, `--full`, `--no-worktree`, `--no-grind` and `--no-review` off `$ARGUMENTS` (note which were
+2. Strip `--lean`, `--full`, `--no-worktree`, `--grind`, `--no-grind` and `--no-review` off `$ARGUMENTS` (note which were
    passed — `--lean`/`--full` are mutually exclusive intent, resolved in phase 4 below;
-   `--no-worktree` runs in the main checkout, phase 2; `--no-grind` skips phase 10;
+   `--no-worktree` runs in the main checkout, phase 2; `--grind` runs phase 10, which is off by default;
+   `--no-grind` is deprecated and does nothing (grinding is already off unless `--grind` is given);
    `--no-review` drops the reviewer and fixer stations, so phases 5.5–7b are skipped) so every source below sees
    only the issue reference. Resolve `<owner>/<repo>` from the git remote.
 
@@ -337,7 +338,7 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
    aiw maintree acquire <owner>/<repo> <n> --wait 540 [--grind]
    ```
 
-   Pass `--grind` unless `--no-grind` was given. If the first line is
+   Pass `--grind` only when `--grind` was given. If the first line is
    `waiting for #N (…) — position k`, show it to the user and run the same command again;
    repeat until it prints `granted`. That is the queue, not a failure: never skip it and never
    start work while waiting. A blocked holder is freed by its owner with
@@ -1039,10 +1040,10 @@ a defect ships.
   `aiw stack rebuild "$RUN_DIR"` first. Route dev's envelope as always — the ownership guard applies here too — then
   `git push --force-with-lease` and let CI re-run. **One attempt.**
 - **Still red after that one attempt, or the wall-clock cap expires** → set
-  `ci='RED — <run url>'` and continue to 9.5. Do **not** loop here: phase 10's `pr-grind`
-  already owns the long CI loop, escalating to `run-ci` once per head SHA, and a second
-  long-lived loop beside the one that works is how you get two budgets disagreeing about
-  the same rerun. Carry the red status into the Gate 2 report, prominently — an unmerged
+  `ci='RED — <run url>'` and continue to 9.5. Do **not** loop here. With `--grind`, phase 10's `pr-grind`
+  owns the long CI loop, escalating to `run-ci` once per head SHA, and a second long-lived
+  loop beside it is how you get two budgets disagreeing about the same rerun. Without
+  `--grind`, the red PR goes to the human in Gate 2. Carry the red status into the Gate 2 report, prominently — an unmerged
   red PR handed to a human is a fine outcome; a red PR reported as done is not.
 
 ## 9.1 Dump the run into the notes vault — no gate
@@ -1165,7 +1166,7 @@ Then run Teardown, then Phase 10 (see below).
 
 ## 10. Grind the review — no gate
 
-Skipped entirely when `--no-grind` was passed. On the Degraded-finish and Gate 2a "Hold here"
+Runs only when `--grind` was passed; without it, skip this phase entirely. On the Degraded-finish and Gate 2a "Hold here"
 paths of a main-tree run, first `aiw set "$RUN_DIR" grind=skipped`, so the main-tree queue shows
 the holder as blocked (release it with `aiw maintree release <owner>/<repo>`), not grinding.
 

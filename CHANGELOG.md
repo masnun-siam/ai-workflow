@@ -20,6 +20,13 @@
 
 ### Changed
 
+- **Grinding is opt-in.** `/run-issue` runs phase 10 (`pr-grind`) only with `--grind`;
+  without it the run ends at the Gate 2 handback. Breaking: a run that used to grind by
+  default no longer does. `--no-grind` still parses but does nothing. `herdr-dispatch` and
+  `/flow` pass `--grind` through. This also fixes `aiw ui` runs in a worktree, which grinded
+  in-session even with auto-grind off; the UI's auto-grind setting is now the only switch
+  for them.
+
 - **Docs restructure.** `README.md` is now a short link hub. The agent setup protocol moved to
   `docs/INSTALL.md`, and commands, the `aiw` CLI, `aiw ui`, state and layout moved to
   `docs/REFERENCE.md`. `CLAUDE.md` is a stable, agent-first overview of the project that

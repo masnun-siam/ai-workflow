@@ -117,7 +117,7 @@ installation.**
 |---|---|---|
 | `docker info` | the per-issue test stack (phase 2.5) | `stack=none`; tests run on the host runner instead |
 | `node --version` + `npx gitnexus --help` | code-graph lookups in several agents | agents fall back to grep/glob, slower but correct |
-| `command -v slackcli` | the Slack review-trigger loop (phase 10) | no grind loop; the PR still lands at Gate 2 |
+| `command -v slackcli` | the Slack review-trigger loop (phase 10, `--grind`) | no grind loop; the PR still lands at Gate 2 |
 | `ls ~/.claude/skills/gstack` | runtime verification (phase 4.5) | phase 4.5 returns `UNVERIFIABLE` and the run continues |
 
 Present it as findings, not as a shopping list. "Docker is not running, so runs on this

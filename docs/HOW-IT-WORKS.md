@@ -108,8 +108,8 @@ flowchart TD
     fail: the run gets summarised into your notes vault, and any durable lesson is appended
     to the repo's `tasks/lessons.md` — evidence-backed only, and left uncommitted so it
     lands in a commit a human read.
-15. **Tear down, then grind.** The Docker stack comes down, and *then* the review loop
-    starts. See Layer 4 — Gate 3 is where the pipeline hands you the PR, not where the work
+15. **Tear down, then grind.** The Docker stack comes down, and *then*, if you passed
+    `--grind`, the review loop starts. See Layer 4 — Gate 3 is where the pipeline hands you the PR, not where the work
     stops.
 
 ---
@@ -261,7 +261,8 @@ folded together afterwards.
 
 Gate 3 gives you a reviewed PR. But a PR usually gets reviewed *again* — by a bot in a Slack
 thread, by a person, by CI. `pr-grind` is the loop that works those rounds without you
-sitting in it.
+sitting in it. It is opt-in: `/run-issue <n> --grind` runs it, and without the flag the run ends at
+the handback. The `aiw ui` grinds a finished run when its auto-grind setting is on.
 
 It runs **in your session**, not as a sub-agent, because it needs to sleep and wake for
 hours, and the tools that let it do that die with a sub-agent. And it runs **after** the
