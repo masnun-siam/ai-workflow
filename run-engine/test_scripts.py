@@ -4390,6 +4390,28 @@ assert "never overwrite with partial content" in (_upd + _ws(_key183(_prd_all, "
 assert "\u2192 next:" not in _upd, "prd Update mode prints no next line (the caller owns what follows)"
 ok("prd: repo copy canonical; --update appends decisions, resolves open questions, mirrors to Obsidian")
 
+# Six-flow step 3: /create-tasks is a standalone entry over gh-issue's own 3.5/3.6 (one source of truth).
+_ct_path = os.path.join(HERE, "..", "skills", "create-tasks", "SKILL.md")
+assert os.path.isfile(_ct_path), "skills/create-tasks/SKILL.md missing"
+_ct = _ws(open(_ct_path, encoding="utf-8").read())
+_ghi = _read("commands", "gh-issue.md")
+for _h in ("3.5. **Decompose.**", "3.6. **Save the task list.**"):
+    assert _h in _ghi, f"gh-issue.md lost the heading create-tasks points at: {_h}"
+    assert _h in _ct, f"create-tasks must name gh-issue's {_h}"
+for _w in ("Save as shown", "creates nothing on GitHub", "even a single task", "Open questions", "stack"):
+    assert _w.lower() in _ct.lower(), f"create-tasks lacks {_w!r}"
+assert "\u2192 next: /gh-issue docs/tasks/<slug>.md" in _ct, "create-tasks next line"
+assert "aiw paths" in _ct and "<plugin_root>/commands/gh-issue.md" in _ct, (
+    "create-tasks resolves gh-issue via aiw paths"
+)
+assert "`Problem statement: <path>`" in _ct and "`PRD: <path>`" in _ct, "create-tasks header names its inputs"
+_g0 = _ws(_slice(_ghi, "0. **Source check.**", "Details: $@"))
+assert "docs/tasks/<slug>.md" in _g0 and "## Task <n>" in _g0, "gh-issue step 0 must take a saved task list"
+assert re.search(r"one task.{0,80}step 4", _g0) and "Resume this list" in _g0, (
+    "gh-issue saved list: 1 task -> step 4, 2+ -> 4-FLAT resume"
+)
+ok("create-tasks: standalone entry over gh-issue 3.5/3.6; gh-issue takes a saved task list")
+
 _s8_184 = _ws(_key183(_skill_sections("skills/prd/SKILL.md"), "Step 8"))
 assert f"End with the line `{NEXT}/gh-issue <prd-path>`" in _s8_184, "#184 prd Step 8 lacks the next line"
 assert "offer, in one line" not in _s8_184, "#184 prd Step 8 still has the prose offer"
