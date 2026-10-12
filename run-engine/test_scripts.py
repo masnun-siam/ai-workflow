@@ -4348,6 +4348,18 @@ assert "no `\u2192 next:` line" in _ws(_key183(_dump184, "Programmatic invocatio
 )
 ok("#184 /dump Step 5 ends with the routed \u2192 next: line; programmatic runs omit it")
 
+# Six-flow step 1: /dump writes a problem statement, not raw text, for features, change requests and bugs.
+_ps = _ws(_key183(_dump184, "Problem statement"))
+for _f in ("**Problem:**", "**Who:**", "**Evidence:**", "**Expected:**", "### Raw input"):
+    assert _f in _ps, f"dump Problem statement format lacks {_f}"
+assert re.search(r"never invent|do not invent|don't invent", _ps, re.I), "dump: problem statement must not invent facts"
+_s4 = _ws(_dump184["Step 4: File it"])
+for _route in ("**New feature**", "**Change request**", "**Bug report**"):
+    _body = _s4.split(_route, 1)[1][:1800]  # the route's own instructions
+    assert "problem statement" in _body.lower(), f"dump {_route} route must write a problem statement"
+assert "<the raw, unedited dump text, verbatim>" not in _s4, "dump New feature still writes raw text as Dump.md"
+ok("dump writes a problem statement (Problem/Who/Evidence/Expected + raw input) for features, changes, bugs")
+
 _s8_184 = _ws(_key183(_skill_sections("skills/prd/SKILL.md"), "Step 8"))
 assert f"End with the line `{NEXT}/gh-issue <prd-path>`" in _s8_184, "#184 prd Step 8 lacks the next line"
 assert "offer, in one line" not in _s8_184, "#184 prd Step 8 still has the prose offer"

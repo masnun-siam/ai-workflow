@@ -46,8 +46,12 @@ _Avoid_: Run (a Run is the pipeline for one Issue; a Session is a single UI-star
 One Issue's current-progress tile on the Board: Project, Issue number, and title. Represents the Issue via its latest Run only, not every Run.
 
 **Dump**:
-A raw capture filed into the Obsidian vault by `/dump` (new feature, change request, bug, task or meeting notes). For a new feature it seeds a `PRD.md` with `status: seed` next to the verbatim `Dump.md`.
+A capture filed into the Obsidian vault by `/dump` (new feature, change request, bug, task or meeting notes). A feature, change request or bug is written as a Problem statement; for a new feature it also seeds a `PRD.md` with `status: seed` next to `Dump.md`.
 _Avoid_: Note, intake (intake normalises a source into a brief; it files nothing)
+
+**Problem statement**:
+What `/dump` writes for a feature, change request or bug: Problem, Who, Evidence, Expected and Open questions, taken only from the input, followed by the raw input verbatim. `/prd` builds a PRD from it; a bug goes from its problem statement straight to `/create-tasks`.
+_Avoid_: Raw dump, brief (a brief is what `/intake` returns)
 
 **PRD**:
 The product requirements for one feature (the what and why, never the how), written by `/prd` after an interview. A `status: seed` PRD is a placeholder from `/dump` that `/prd` fills.

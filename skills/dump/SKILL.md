@@ -170,7 +170,7 @@ own line, project index last. Full-path wikilinks with aliases:
 - [[05-Work/<Project>/<Feature>/Decisions|Decisions]]
 - [[05-Work/<Project>/<Feature>/Bugs|Bugs]]
 - [[05-Work/<Project>/<Feature>/Tasks|Tasks]]
-- [[05-Work/<Project>/<Feature>/Dump|Dump]] — raw capture
+- [[05-Work/<Project>/<Feature>/Dump|Dump]] — problem statement
 - [[05-Work/<Project>/Index|<Project> Project Index]]
 ```
 
@@ -184,6 +184,27 @@ sibling to add the new line — read the file, replace its `## Related` section,
 Reference sibling docs from prose (e.g. a `Decisions.md` line) as `[[05-Work/<Project>/<Feature>/PRD|PRD]]`
 wikilinks, never as backticked filenames.
 
+## Problem statement
+
+A new feature, change request or bug is filed as a problem statement, not as raw text. `/prd`
+reads it for a feature, and `/create-tasks` reads it directly for a bug. Write it from the
+input only: never invent a user, a number or a cause the input doesn't give. Anything missing
+goes under **Open questions** for the next step to ask.
+
+Under a level-2 heading, write these five lines, then a `### Raw input` subsection holding the
+dumped text verbatim:
+
+```
+**Problem:** what is wrong or missing, in one or two sentences, in the user's terms. Not a solution.
+**Who:** who hits it or who asked for it.
+**Evidence:** what the input shows: quotes, links, error text, and repro steps for a bug.
+**Expected:** what is true once it is solved. For a bug, expected vs actual.
+**Open questions:** what the input leaves unsaid. Omit when there is none.
+```
+
+The heading is `Problem statement — <YYYY-MM-DD>` in `Dump.md`, and `<YYYY-MM-DD>: <short bug
+title>` in `Bugs.md`. Tasks, meeting notes and unclassifiable input stay verbatim.
+
 ## Step 4: File it
 
 Act only after confirmation, using the exact `obsidian` CLI invocation for the type. Apply the
@@ -192,7 +213,7 @@ Act only after confirmation, using the exact `obsidian` CLI invocation for the t
 **New feature** — project `<Project>`, new feature name `<Feature>`:
 ```
 obsidian vault=notes create path="05-Work/<Project>/<Feature>/PRD.md" content="<PRD seeded from the dump text, structured under headings like Overview / Requirements / Open Questions>"
-obsidian vault=notes create path="05-Work/<Project>/<Feature>/Dump.md" content="<the raw, unedited dump text, verbatim>"
+obsidian vault=notes create path="05-Work/<Project>/<Feature>/Dump.md" content="<the problem statement (see Problem statement), raw input included>"
 ```
 Then add a line for it to the project index and top-level index:
 ```
@@ -206,7 +227,7 @@ plus the project index:
 obsidian vault=notes property:set path="05-Work/<Project>/<Feature>/PRD.md" name=tags value="work,<project-tag>,type/feature,<feature-slug>" type=list
 obsidian vault=notes property:set path="05-Work/<Project>/<Feature>/Dump.md" name=tags value="work,<project-tag>,type/dump,<feature-slug>" type=list
 obsidian vault=notes property:set path="05-Work/<Project>/<Feature>/PRD.md" name=status value=seed
-obsidian vault=notes append path="05-Work/<Project>/<Feature>/PRD.md" content="\n## Related\n- [[05-Work/<Project>/<Feature>/Dump|Dump]] — raw capture\n- [[05-Work/<Project>/Index|<Project> Project Index]]"
+obsidian vault=notes append path="05-Work/<Project>/<Feature>/PRD.md" content="\n## Related\n- [[05-Work/<Project>/<Feature>/Dump|Dump]] — problem statement\n- [[05-Work/<Project>/Index|<Project> Project Index]]"
 obsidian vault=notes append path="05-Work/<Project>/<Feature>/Dump.md" content="\n## Related\n- [[05-Work/<Project>/<Feature>/PRD|PRD]] — requirements\n- [[05-Work/<Project>/Index|<Project> Project Index]]"
 ```
 The `status: seed` marker tells `/prd` this `PRD.md` is only a seed it may fill in, not a finished PRD.
@@ -217,7 +238,7 @@ obsidian vault=notes read path="05-Work/<Project>/<Feature>/PRD.md"
 ```
 Edit the relevant section of the PRD/SRS content in place to reflect the new reality (rewrite via `obsidian vault=notes create ... overwrite` with the full updated content, since there's no partial-replace CLI command — always read first, edit the text yourself, then write the whole file back).
 ```
-obsidian vault=notes append path="05-Work/<Project>/<Feature>/Dump.md" content="<raw change-request text, verbatim, with a date>"
+obsidian vault=notes append path="05-Work/<Project>/<Feature>/Dump.md" content="<the change request as a problem statement (see Problem statement), raw input included>"
 obsidian vault=notes append path="05-Work/<Project>/<Feature>/Decisions.md" content="- <YYYY-MM-DD>: <what changed> because <reason from the dump text>"
 ```
 Reference sibling docs from the decision line as `[[05-Work/<Project>/<Feature>/PRD|PRD]]`
@@ -243,14 +264,14 @@ If it doesn't exist:
 ```
 obsidian vault=notes create path="05-Work/<Project>/<Feature>/Bugs.md" content="# Bugs
 
-- <YYYY-MM-DD>: <bug description, verbatim from the dump>"
+<the bug as a problem statement (see Problem statement), headed <YYYY-MM-DD>: <short bug title>>"
 obsidian vault=notes property:set path="05-Work/<Project>/<Feature>/Bugs.md" name=tags value="work,<project-tag>,type/bug,<feature-slug>" type=list
 obsidian vault=notes append path="05-Work/<Project>/<Feature>/Bugs.md" content="\n## Related\n<sibling links per the Tagging and linking section>"
 ```
 Then add a `[[…/Bugs|Bugs]]` line to the `## Related` block of every existing sibling.
 If it exists:
 ```
-obsidian vault=notes append path="05-Work/<Project>/<Feature>/Bugs.md" content="- <YYYY-MM-DD>: <bug description, verbatim from the dump>"
+obsidian vault=notes append path="05-Work/<Project>/<Feature>/Bugs.md" content="<the bug as a problem statement (see Problem statement), headed <YYYY-MM-DD>: <short bug title>>"
 ```
 
 **Feature-scoped task** — same existence check/pattern as Bugs.md, but against `Tasks.md` and content is a checklist item:

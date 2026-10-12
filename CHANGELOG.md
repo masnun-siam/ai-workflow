@@ -20,6 +20,10 @@
 
 ### Changed
 
+- **`/dump` writes a problem statement.** A new feature, change request or bug is filed as
+  Problem / Who / Evidence / Expected / Open questions, taken only from the input, followed by
+  the raw text verbatim. Bugs in `Bugs.md` get the same block instead of a one-line bullet.
+  Tasks, meeting notes and unclassifiable input are still filed verbatim.
 - **Docs restructure.** `README.md` is now a short link hub. The agent setup protocol moved to
   `docs/INSTALL.md`, and commands, the `aiw` CLI, `aiw ui`, state and layout moved to
   `docs/REFERENCE.md`. `CLAUDE.md` is a stable, agent-first overview of the project that
