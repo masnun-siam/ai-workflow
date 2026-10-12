@@ -13,8 +13,13 @@
   issue as `/gh-issue` creates, fact-checks and fixes it. Click a done step to show its output.
 - **Flow auto mode.** Sessions started from Flow ask only `/prd`'s grilling questions, which now
   cover acceptance criteria, priority, users and corner cases and run until the PRD has no open
-  questions. `/dump` picks the folder itself, and `/gh-issue` assigns you, adds issues to the
+  questions, except technical-spec and `Owner: stakeholder` items, which may stay open.
+  `/dump` picks the folder itself, and `/gh-issue` assigns you, adds issues to the
   repo's linked project and fills its fields without asking.
+- **PRD Design link and stakeholder-owned open questions.** `/prd` now requires a Design link
+  (or an explicit "none"), grills on destructive or automatic behaviour (auto-delete, expiry,
+  missing admin UI), and tags product decisions the user cannot settle as `Owner: stakeholder`
+  in Open questions.
 - **Questions answered in Flow.** A step's question opens beside the steps (in the step on narrow
   screens), and answering from the Answer page returns to the flow or the session.
 

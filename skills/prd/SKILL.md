@@ -60,7 +60,7 @@ ask nothing at all, so this interview is the only chance to settle anything. Cha
   for every requirement, priority, affected users, and every corner case (empty/null input,
   concurrency, permissions, error and failure paths, boundary values, existing-data migration).
   Add these as branches of the starting tree.
-- **Open questions must be empty.** Before Step 6, if the draft's `## Open questions` lists
+- **Open questions: only spec and stakeholder items may stay.** Before Step 6, if the draft's `## Open questions` lists
   anything, keep grilling on exactly those items until none remain; only implementation choices
   meant for the later technical spec and `Owner: stakeholder` items may stay, and each must say
   which it is. An `Owner: stakeholder` item is a product decision the user cannot settle (for
