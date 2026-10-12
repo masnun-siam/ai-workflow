@@ -457,7 +457,6 @@ def main(argv=None) -> None:
         gitnexus,
         project,
         epic,
-        dispatch,
         review,
         ui_server,
         ask,

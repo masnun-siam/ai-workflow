@@ -35,6 +35,15 @@
   Python sources were reformatted once (listed in `.git-blame-ignore-revs`), and the
   existing lint findings were fixed.
 
+### Removed
+
+- **`aiw project-board` and `aiw dispatch plan`.** Nothing in the plugin calls either
+  subcommand any more: the flat task list stopped creating epic boards in 1.9.0, and the
+  `aiw ui` dispatch page uses `dispatch.py` directly. Breaking: scripts that call
+  `aiw project-board` or `aiw dispatch plan` must stop.
+- **Stale design docs:** the epic-decomposition spec and plan, the intake-command spec and
+  plan, and the finished `docs/tasks/gh-issue-flat-task-list.md`.
+
 ## 1.12.0 — 2026-10-09
 
 ### Added

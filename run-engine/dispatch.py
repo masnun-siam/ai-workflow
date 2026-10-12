@@ -1,9 +1,7 @@
-"""Roster resolution for `aiw dispatch plan`.
+"""Roster resolution and DoR screening for the `aiw ui` dispatch page.
 
 Pure logic only — parsing, DoR screening, lane detection, dedup, skip checks —
 lives at the top, exactly as `epic.py` separates its DAG math from its I/O.
-This PR (B1) resolves the roster and reports readiness; it does not dispatch
-any station (that's PR-B2's `dispatch start`).
 """
 
 from __future__ import annotations
@@ -123,7 +121,6 @@ def lane_mode(labels: list[str]) -> str:
 
 import json  # noqa: E402
 import os  # noqa: E402
-import subprocess  # noqa: E402
 
 
 def skip_reason(run_json_path: str | None, has_open_pr: bool) -> str | None:
@@ -193,118 +190,7 @@ def register_checkout(slug: str, path: str) -> None:
     _write_holder(out_path, current)
 
 
-def _looks_like_checkout(path: str, slug: str) -> bool:
-    """True only if `path` is an actual git checkout, and (best-effort) its
-    `origin` remote plausibly matches `slug`. Guards against auto-registering
-    a bogus path (e.g. an empty tmpdir run with `--slug totally/bogus`) into
-    checkouts.json — a mapping that would otherwise persist permanently."""
-    try:
-        proc = subprocess.run(
-            ["git", "-C", path, "rev-parse", "--is-inside-work-tree"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-    except OSError:
-        return False
-    if proc.returncode != 0 or proc.stdout.strip() != "true":
-        return False
-    remote = subprocess.run(
-        ["git", "-C", path, "remote", "get-url", "origin"],
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    if remote.returncode == 0 and slug.lower() not in (remote.stdout or "").strip().lower():
-        return False  # a real git checkout, but of something else
-    return True
-
-
-# --------------------------------------------------------------------------- cmd_plan (I/O)
-
-from shared import die, gh_json  # noqa: E402
-
-
-def _resolve_issue_numbers(args) -> list[int]:
-    """Resolve the roster from exactly one of --issues/--query/--project+--status/--epic."""
-    modes_given = [
-        bool(args.issues),
-        bool(args.query),
-        bool(args.project is not None or args.status is not None),
-        bool(args.epic is not None),
-    ]
-    if sum(modes_given) != 1:
-        die(2, "exactly one of --issues, --query, --project/--status, or --epic is required")
-
-    if args.issues:
-        return dedupe(parse_issue_list(args.issues))
-
-    if args.query:
-        data, proc = gh_json(
-            [
-                "issue",
-                "list",
-                "--repo",
-                args.slug,
-                "--search",
-                args.query,
-                "--json",
-                "number",
-                "--jq",
-                "[.[].number]",
-                "--limit",
-                "1000",
-            ]
-        )
-        if proc.returncode != 0:
-            die(1, f"--query failed: {(proc.stderr or '').strip()[:200]}")
-        return dedupe([int(n) for n in (data or [])])
-
-    if args.project is not None or args.status is not None:
-        if args.project is None or args.status is None:
-            die(2, "--project and --status must be given together")
-        return dedupe(_project_issue_numbers(args.slug, args.project, args.status))
-
-    # --epic
-    linked, proc = gh_json(
-        ["api", f"repos/{args.slug}/issues/{args.epic}/sub_issues", "--jq", "[.[].number]"],
-    )
-    if proc.returncode != 0:
-        die(1, f"could not read #{args.epic}'s sub-issues: {(proc.stderr or '').strip()[:200]}")
-    return dedupe([int(n) for n in (linked or [])])
-
-
-PROJECT_ITEMS_QUERY = """
-query($o:String!,$n:Int!){ organization(login:$o){ projectV2(number:$n){
-  items(first:100){ nodes{ content{ ... on Issue{ number } }
-    fieldValueByName(name:"Status"){ ... on ProjectV2ItemFieldSingleSelectValue{ name } } } } } } }
-"""
-
-# Same repo-owned board shape, tried when the org query above finds nothing —
-# a project can be owned by a user account rather than an organization.
-PROJECT_ITEMS_QUERY_USER = PROJECT_ITEMS_QUERY.replace("organization", "user")
-
-
-def _project_issue_numbers(slug: str, number: int, status: str) -> list[int]:
-    owner = slug.partition("/")[0]
-    for query in (PROJECT_ITEMS_QUERY, PROJECT_ITEMS_QUERY_USER):
-        data, proc = gh_json(["api", "graphql", "-f", f"query={query}", "-f", f"o={owner}", "-F", f"n={number}"])
-        if proc.returncode != 0:
-            continue
-        root = (data or {}).get("data") or {}
-        holder = root.get("organization") or root.get("user")
-        items = (((holder or {}).get("projectV2") or {}).get("items") or {}).get("nodes") or []
-        if items:
-            out = []
-            for item in items:
-                field = item.get("fieldValueByName") or {}
-                if (field.get("name") or "").strip().lower() != status.strip().lower():
-                    continue
-                content = item.get("content") or {}
-                if content.get("number") is not None:
-                    out.append(int(content["number"]))
-            return out
-    return []
+from shared import gh_json  # noqa: E402
 
 
 def _has_open_linked_pr(slug: str, linked_numbers: list[int]) -> tuple[bool | None, str | None]:
@@ -385,49 +271,3 @@ def _issue_readiness(args, number: int) -> dict:
         "title": data.get("title") or "",
         "deps": parse_depends(body),
     }
-
-
-def cmd_plan(args) -> None:
-    numbers = _resolve_issue_numbers(args)
-
-    # First use of this checkout for this repo: register it once, and only
-    # if it's actually a git checkout of (plausibly) this slug.
-    checkouts = read_checkouts()
-    if args.slug not in checkouts:
-        candidate = os.path.abspath(args.repo or os.getcwd())
-        if _looks_like_checkout(candidate, args.slug):
-            register_checkout(args.slug, candidate)
-
-    if not numbers:
-        print("nothing to dispatch")
-        return
-
-    for number in numbers:
-        report = _issue_readiness(args, number)
-        if "error" in report:
-            print(f"#{number}: could not resolve ({report['error']})")
-            continue
-        if report.get("closed"):
-            print(f"#{number}: closed  SKIP: issue is closed")
-            continue
-        ready = not report["gaps"]
-        status = "ready" if ready else f"not ready: {'; '.join(report['gaps'])}"
-        line = f"#{number}: {status}  lane={report['mode']}"
-        if report["skip_reason"]:
-            line += f"  SKIP: {report['skip_reason']}"
-        print(line)
-
-
-def register(sub, add) -> None:
-    p = sub.add_parser("dispatch", help="resolve a roster and screen it before dispatching")
-    ops = p.add_subparsers(dest="op", required=True)
-
-    q = ops.add_parser("plan", help="resolve a roster, run the DoR screen, and report")
-    q.add_argument("--slug", required=True, help="owner/repo")
-    q.add_argument("--repo", help="checkout path to register in checkouts.json (default: cwd)")
-    q.add_argument("--issues", help="comma-separated issue numbers")
-    q.add_argument("--query", help="search query passed to `gh issue list --search`")
-    q.add_argument("--project", type=int, help="Projects v2 board number")
-    q.add_argument("--status", help="Projects v2 Status column name")
-    q.add_argument("--epic", type=int, help="parent issue number; resolves its sub-issues")
-    q.set_defaults(func=cmd_plan)

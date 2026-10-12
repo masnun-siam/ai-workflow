@@ -36,7 +36,7 @@ aiw pr open                        link the branch to the issue, push, open the 
 aiw threads list|resolve           PR review threads
 aiw ci status                      check state plus the failing job's log
 aiw gitnexus sync|index|clean      the code graph (best-effort)
-aiw project-status | project-board GitHub Projects (best-effort)
+aiw project-status                 GitHub Projects (best-effort)
 aiw epic split|init|next|status    epic decomposition and sequencing
 aiw ui [--port N] [--allow-host HOST]  local web UI to start and track sessions
 ```
@@ -89,7 +89,7 @@ run-engine/   engine.py (pure) · route.py (CLI) · checks.py (station post-chec
               stack/worktree/threads/pr/ci/gitnexus/project/epic (mechanical phases)
               config.json (policy) · test_engine.py + test_scripts.py
 bin/aiw       PATH shim. NOT named `route` — see INSTALL.md Step 3.
-docs/         HOW-IT-WORKS, INSTALL, REFERENCE, adr/, prd/, tasks/, specs and plans under superpowers/
+docs/         HOW-IT-WORKS, INSTALL, REFERENCE, adr/, prd/, tasks/
 ```
 
 ## Tests

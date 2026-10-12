@@ -52,7 +52,7 @@ agents/        run-* pipeline stations, plus agents for standalone commands
 skills/        review, grind, dispatch, intake/PRD/flow, worklog, stack-specific reviewers
 run-engine/    engine, aiw CLI, mechanical phases, policy config, ui server + static, tests
 bin/aiw        PATH shim to the CLI
-docs/          guides, ADRs, PRDs, task lists, design specs and plans
+docs/          guides, ADRs, PRDs, task lists
 tasks/         lessons.md: patterns learned from past issues and reviews
 .claude-plugin/  plugin and marketplace manifests
 .github/       workflows (GitHub Pages deploy)
@@ -72,5 +72,4 @@ Core guides:
 
 Design history (read when you need the reasoning behind a feature):
 - `docs/prd/`: product requirement docs
-- `docs/superpowers/specs/`, `docs/superpowers/plans/`: design specs and implementation plans
 - `docs/tasks/`: task lists behind multi-issue features

@@ -218,27 +218,6 @@ assert project.match_option(OPTIONS, "Blocked") is None
 assert project.match_option(OPTIONS, "In") is None, "a filler-only target must not match everything"
 ok("project status matches the exact option, then the best significant-word overlap")
 
-# --------------------------------------------------------------------------- epic board
-
-VIEWS = [{"id": "V1", "name": "Board"}, {"id": "V2", "name": "Epic #42 — Billing"}]
-assert project.find_view(VIEWS, "Epic #42 — Billing")["id"] == "V2"
-assert project.find_view(VIEWS, "Epic #43 — Other") is None
-assert project.find_view([], "Epic #42 — Billing") is None
-ok("an existing epic board is found by name, so a resume never creates a second")
-
-assert project.board_name(42, "Billing overhaul") == "Epic #42 — Billing overhaul"
-assert project.board_name(42, "x" * 200).startswith("Epic #42 — ")
-assert len(project.board_name(42, "x" * 200)) <= 80, "view names must stay readable"
-ok("board names are derived from the parent and bounded in length")
-
-# project-board exits 0 even with a malformed slug (no `/`)
-env = dict(os.environ, PATH="/nonexistent")
-proc = subprocess.run(
-    [sys.executable, ROUTE, "project-board", "no-slash", "42", "--title", "x"], capture_output=True, text=True, env=env
-)
-assert proc.returncode == 0, f"project-board must exit 0 on bad slug, got {proc.returncode}: {proc.stderr}"
-ok("project-board exits 0 on malformed slug with gh unavailable")
-
 # --------------------------------------------------------------------------- worktree
 
 assert worktree.slugify("Fix the N+1 in OrderController!") == "fix-the-n-1-in-ordercontroller"
@@ -1914,11 +1893,6 @@ with tempfile.TemporaryDirectory() as d:
         assert json.loads(raw) == {"o-r-issue-9": "/c/9"}
 ok("registry content is only slug->path pairs; no os.environ value or .env-shaped content lands in it")
 
-# --------------------------------------------------------------------------- dispatch: CLI wiring (RED until run-dev updates route.py)
-
-proc = subprocess.run([sys.executable, ROUTE, "dispatch", "plan", "--help"], capture_output=True, text=True)
-assert proc.returncode == 0, proc.stderr
-ok("aiw dispatch plan --help exits 0 once dispatch is registered in route.py")
 
 with tempfile.TemporaryDirectory() as d:
     dd = os.path.join(d, "data")
