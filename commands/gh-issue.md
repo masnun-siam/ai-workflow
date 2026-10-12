@@ -70,6 +70,9 @@ decided in the final report:
   gets its first option. Every other single-select field gets the option that best fits the
   issue's content and the PRD (for example Priority from the PRD's priority). Never invent option
   names. List every value set, per issue, in the report.
+- **Step 3.7 (PRD write-back):** runs without a question. Resolved items come from the approved
+  task list alone (step 3 is skipped); the wiki is never pushed. Report, per destination, the
+  items moved or `failed — <reason>`.
 - **Step 7:** the `/dump` it invokes runs in Flow auto mode too, so its confirmation is skipped.
 - **Hand-off line:** print the `→ next: herdr-dispatch <n> …` line as text only. Never invoke the
   `herdr-dispatch` skill or the `herdr` CLI or open tabs; the UI's Dispatch step starts the runs.
@@ -82,7 +85,8 @@ ever creates a GitHub issue. It never touches code.**
 - NEVER use Write, Edit, or NotebookEdit on any file in the repo.
 - NEVER run a mutating shell command (`git commit`, `git checkout -b`, package installs, formatters, codemods, etc.).
 - The ONLY writes permitted are the temp body file at `/tmp/gh-issue-body.md`, the `gh issue create` / `gh issue edit` / `gh project` calls below, `aiw ask` when headless (records the question in the UI session, outside the repo), and the notes-vault dump in step 7 (that's a different vault, not the repo, and goes through the `dump` skill's own confirmation).
-- The sole exception to the rules above is the step 3.6 task-list save, and only when its conditions hold: (a) `docs/tasks/<slug>.md` written via the Write tool in step 3.6 and edited only to fill `Issue:` slots in `4-FLAT` (an override of the no-Write/no-Edit rule for that one path only); (b) the Obsidian `Tasks.md` via `obsidian vault=notes`, only when the user chose Obsidian, placed the way `/dump` does, plus the vault sibling writes `/dump`'s linking rules produce (the Index append and Related link); (c) the wiki clone/commit/push of `Tasks-<Title>.md` in a scratchpad clone, only when the user chose the wiki and confirmed the push (an override of the no-mutating-shell rule for that clone only). It covers nothing else: no other repo file, and no `git add` or commit of `docs/tasks/`.
+- The only exceptions to the rules above are the step 3.6 task-list save and the step 3.7 PRD write-back. The step 3.6 save applies only when its conditions hold: (a) `docs/tasks/<slug>.md` written via the Write tool in step 3.6 and edited only to fill `Issue:` slots in `4-FLAT` (an override of the no-Write/no-Edit rule for that one path only); (b) the Obsidian `Tasks.md` via `obsidian vault=notes`, only when the user chose Obsidian, placed the way `/dump` does, plus the vault sibling writes `/dump`'s linking rules produce (the Index append and Related link); (c) the wiki clone/commit/push of `Tasks-<Title>.md` in a scratchpad clone, only when the user chose the wiki and confirmed the push (an override of the no-mutating-shell rule for that clone only). It covers nothing else: no other repo file, and no `git add` or commit of `docs/tasks/`.
+  The step 3.7 PRD write-back is a second, equally narrow exception: (d) Edit on the existing local `docs/prd/<slug>.md`; (e) `obsidian vault=notes` on the existing feature `PRD.md`; (f) a plain wiki commit and push (never `--no-verify`) of an existing PRD page in a scratchpad clone, only after the user confirmed the push. It only moves resolved items from `## Open questions` to `## Decisions`, never creates a PRD, and never `git add`s or commits a repo file.
 - This holds even for a one-character fix. "It's trivial" is not an exception — the whole point of filing an issue is that a human decides whether and how to make the change.
 - If a fix is obvious from your investigation, do NOT apply it. Record it under a **Proposed Fix** section in the issue body instead (file path, symbol, and the change in prose or a fenced diff).
 - **Scope.** These constraints bind steps 0–7 of this skill only, including everything
@@ -158,6 +162,46 @@ Do the following:
      destination on its own line with its path/URL, or `failed — <reason>` naming the
      destination by name, then continue. If the local write itself fails, stop before
      creating any issue.
+3.7. **Write resolved decisions back into the PRD.** Runs once, right after step 3.6 and
+   before step 4's routing creates any issue, including when step 3.6 resumed a list. A
+   decision made while grilling or decomposing otherwise lives only in a chat transcript;
+   this puts it where the next reader of the PRD looks.
+
+   1. **Locate the PRD.** When step 0 ran, it is the `/intake` brief's source if that is a
+      PRD. Otherwise look for these, each of which counts only when it exists:
+      - local: `docs/prd/<slug>.md` (the step 3.6 slug)
+      - Obsidian: `obsidian vault=notes read path="05-Work/<Project>/<Feature>/PRD.md"`
+        (the feature folder step 2.5's brief named, else the one step 3.6 resolved; it
+        prints `Error: ... not found` when missing)
+      - wiki: only after a shallow clone of `.wiki.git` into the scratchpad shows a
+        `PRD-<Title-With-Dashes>.md` page. Never create a page, a clone target or a wiki.
+
+      None found anywhere → skip this step with a one-line note and go on to step 4. Never
+      create a PRD here.
+   2. **Collect the resolved items.** Read each found copy's `## Open questions`. An item is
+      resolved when the step 3 grilling answers or the approved task list (titles,
+      outcomes, acceptance criteria) settle it. Write each as `<decision> — <why>`, the
+      same shape as the PRD's `## Decisions` lines. An item neither source settles is
+      unresolved and stays exactly where it is. Nothing resolved, or `## Open questions`
+      empty or `None` → skip with a one-line note. Do not add a Decisions line to step
+      3.6's task-list header.
+   3. **Write each destination that exists.** Move the item: add it under `## Decisions`
+      (create that heading if missing) and delete it from `## Open questions`; leave every
+      other line byte-for-byte unchanged. If that leaves Open questions empty, write `None`
+      under it.
+      - **Local**: the Edit tool on `docs/prd/<slug>.md`. Never `git add` or commit it.
+      - **Obsidian**: `obsidian vault=notes` only, never plain file writes. Read `PRD.md`,
+        apply the move to the text, then `create ... overwrite` with the whole updated
+        text. Overwriting re-creates the file, so read its `tags` property first and
+        `property:set` it again afterwards if it is gone.
+      - **Wiki**: ask a separate "push the PRD update to the wiki?" confirmation. If yes,
+        edit the page in the clone, make a plain commit (`docs: PRD decisions — <Title>`)
+        and push. Never `--no-verify`.
+   4. **Failures.** One destination failing (Obsidian down, no wiki, no local file) never
+      stops the others and never stops issue creation: report it as `failed — <reason>`
+      naming the destination, and go on. Report each destination that was written on its
+      own line with its path/URL and the items moved, in the closing return block (see the
+      end of this file). Remove any scratchpad clone this step created.
 4. Then create a GitHub issue on the current repo:
    - Write the full body to `/tmp/gh-issue-body.md` using the write tool
    - Every issue this command creates carries the `refined` label (unconditional). Ensure it
@@ -275,6 +319,11 @@ One issue per task from the step 3.6 list, each standalone.
 
    Best-effort: if the vault is unreachable or `/dump` is cancelled, say so in one line.
    The issue already exists and is the deliverable; the dump is not worth failing over.
+
+Before the return, report step 3.7's result for the run, one line per PRD destination: its
+path/URL and the items moved (by decision text), `none resolved`, `skipped — no PRD found`, or
+`failed — <reason>` naming the destination. Print these lines before the `→ next:` line, never
+after it.
 
 Return the issue URL when step 4 created one issue. When `4-FLAT` ran (2 or more tasks),
 return the ordered list of issue URLs, one per task in list order (including issues reused

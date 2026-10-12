@@ -154,6 +154,17 @@ the size rubric, it gets a `Rubric: flagged — <limit broken>` line.
 
 Remove any temp files this skill created before stopping.
 
+## Step 4.7 — Write resolved decisions back into the PRD
+
+Required, not conditional: runs once, right after Step 4.6 (or right after Step 4.5 when exactly 1 task was approved and Step 4.6 was skipped) and before Step 5 or `5-FLAT` creates any issue. Same procedure as `commands/gh-issue.md` step 3.7, with Step 4's clarifying answers in place of the grilling answers:
+
+1. **Locate the PRD.** Slug: the Step 4.6 slug (kebab-case from the ticket's summary). Look for `docs/prd/<slug>.md`, `obsidian vault=notes read path="05-Work/<Project>/<Feature>/PRD.md"` (resolved the way `/dump` does; prints `Error: ... not found` when missing), and a `PRD-<Title-With-Dashes>.md` page in a shallow clone of `.wiki.git` in the scratchpad. A destination counts only when it exists. None found → skip with a one-line note; never create a PRD.
+2. **Collect the resolved items.** Compare each found copy's `## Open questions` with Step 4's answers and the approved task list (titles, outcomes, acceptance criteria). A resolved item becomes `<decision> — <why>`; an unresolved one stays untouched. Nothing resolved → skip with a one-line note.
+3. **Write each destination that exists.** Add the item under `## Decisions` (create the heading if missing), delete it from `## Open questions` (write `None` if it empties), change no other line. Local: the Edit tool, never `git add` or commit. Obsidian: `obsidian vault=notes` only; read `PRD.md`, `create ... overwrite` with the updated text, and re-set its `tags` property if the overwrite dropped it. Wiki: only after a separate "push the PRD update to the wiki?" confirmation (if headless, `aiw ask`, then end your turn); plain commit and push, never `--no-verify`.
+4. **Failures.** A destination that cannot be written (Obsidian down, no wiki, no local file) is reported as `failed — <reason>` naming the destination, and never stops the others or issue creation. Remove any scratchpad clone this step created.
+
+The final report lists, per destination, its path/URL and the items moved (or `none resolved`, `skipped — no PRD found`, `failed — <reason>`).
+
 ## Step 5 — Create GitHub issue (single-task path)
 
 This step runs only when exactly 1 task was approved in Step 4.5.
@@ -274,5 +285,5 @@ Note: GitHub issue comments don't support arbitrary file uploads. For images, ba
 [ -n "$TMPDIR" ] && rm -rf "$TMPDIR"
 ```
 
-Return the issue URL and list of uploaded attachments when done on the single-task
+Report Step 4.7's per-destination result lines first, then return the issue URL and list of uploaded attachments when done on the single-task
 path. On the multi-task path, return the ordered list of issue URLs, one per task in list order (including issues reused on resume), plus the list of uploaded attachments.
