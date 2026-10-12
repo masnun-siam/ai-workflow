@@ -277,13 +277,14 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
      - **No issue URL** (it failed, the human cancelled, or a `4-FLAT` run ended on
        **"Stop here"**, whatever partial list it reported): stop and say so — do not
        continue to step 3.
-     - **An ordered list of 2 or more issue URLs** (its `4-FLAT` return; flat issues have
-       no parent, and `/gh-issue` no longer files epics): print the issue URLs in list
+     - **An ordered list of 2 or more issue URLs** (its `4-FLAT` return, after the URL of
+       the epic parent it filed over them): print the parent and the issue URLs in list
        order and end the run here. This is a clean stop, not an escalation: no Ledger, no
        worktree, no `aiw init`, and no further Preflight step. Tell the user to run
        `/run-issue <n>` for each issue in list order; each issue's `Depends on:` line names
        the issue it builds on, so run those first — `/run-issue` bases a flat issue on the
-       default branch unless its plan says otherwise. End with the line
+       default branch unless its plan says otherwise. `/run-issue <parent>` runs them all in
+       one session instead (Epic mode). End with the line
        `→ next: herdr-dispatch <n> <n> …` (every created issue number, in list order);
        `herdr-dispatch` runs them in that dependency order.
      - **Exactly one issue URL**: parse the created issue number `<n>` from it and
@@ -297,7 +298,10 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
    repos/{owner}/{repo}/issues/<n>/sub_issues`. A non-empty array means this is an epic
    parent — go to **Epic mode** below instead of the single-issue phases; keep the
    child numbers it returned, Epic mode step 0 needs them. An empty array is the
-   ordinary path.
+   ordinary path, except for an issue labelled `epic` (step 3 returned its labels): that is a
+   parent whose children were never linked. Stop and say so; never run it as one issue. Its
+   children get linked by re-running `/gh-issue` on its saved task list, or by
+   `aiw epic split` with the children named.
 
    This runs **before** step 4 because step 4 would otherwise get there first. A second
    `/run-issue <parent>` — a resume, which is the common case — would find the stray

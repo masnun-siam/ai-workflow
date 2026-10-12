@@ -62,7 +62,7 @@ The product requirements for one feature (the what and why, never the how), writ
 _Avoid_: Spec, design doc
 
 **Refined**:
-The label `/gh-issue` puts on an issue that meets the definition of ready: flat, independently readable, with acceptance criteria, a How and a verify command, and its order declared by `Depends on: #n`.
+The label `/gh-issue` puts on an issue that meets the definition of ready: independently readable, with acceptance criteria, a How and a verify command, and its order declared by `Depends on: #n`.
 _Avoid_: Groomed, ready (ready is the Gate 2 verdict on a PR)
 
 **Dispatch**:
