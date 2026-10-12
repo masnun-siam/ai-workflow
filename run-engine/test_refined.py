@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -81,5 +82,32 @@ with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as tmp
     for artifact in ("00-readiness.json", "10-plan.json"):
         p = run("route", run_dir, artifact)
         assert p.returncode == 0, (artifact, p.stdout, p.stderr)
+
+# Contract: a body built from the section list /gh-issue actually emits must parse as refined,
+# so its issues take the fast path instead of silently falling back to the planner.
+GH_ISSUE_MD = os.path.join(HERE, "..", "commands", "gh-issue.md")
+with open(GH_ISSUE_MD, encoding="utf-8") as fh:
+    sections_line = next(line for line in fh if line.strip().startswith("- Body sections:"))
+names = re.findall(r"\*\*([^*]+)\*\*", sections_line)
+assert {"Acceptance Criteria", "How"} <= set(names), names
+# The fast path also needs the literal field names refined.field() looks for in How.
+assert "Test root:" in sections_line and "Base branch:" in sections_line, sections_line
+filled = {
+    "Acceptance Criteria": "- [ ] Creates a product\n- [ ] Corner: duplicate SKU returns 422",
+    "How": "1. Add the migration, see [the PRD](https://github.com/o/r/blob/master/docs/prd/p.md).\n"
+    "2. Verify: `php artisan test`.\nTest root: tests/Feature/\nBase branch: develop",
+    "Notes": "Task 2 of [docs/tasks/p.md](https://github.com/o/r/blob/master/docs/tasks/p.md)",
+}
+contract = "\n\n".join(f"## {n}\n{filled.get(n, 'Some text.')}" for n in names)
+with tempfile.TemporaryDirectory() as repo:
+    h, why = refined.parse(["refined"], contract, repo)
+    assert why == "" and h["test_root"] == "tests/Feature/" and h["base_branch"] == "develop", why
+    assert h["acceptance_criteria"] == ["Creates a product", "Corner: duplicate SKU returns 422"]
+    # Hyperlink trap: a linked field value yields the link text, not the markdown.
+    linked = contract.replace(
+        "Test root: tests/Feature/", "Test root: [tests/Feature/](https://github.com/o/r/tree/master/tests/Feature)"
+    )
+    h, why = refined.parse(["refined"], linked, repo)
+    assert why == "" and h["test_root"] == "tests/Feature/", (why, h and h["test_root"])
 
 print("test_refined: ok")

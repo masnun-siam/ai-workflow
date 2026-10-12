@@ -44,6 +44,12 @@
 - **Stale design docs:** the epic-decomposition spec and plan, the intake-command spec and
   plan, and the finished `docs/tasks/gh-issue-flat-task-list.md`.
 
+### Fixed
+
+- **`aiw refined` reads a linked `Test root:` / `Base branch:`.** A value written as a markdown
+  link (`[tests/](https://…)`) used to become the test root verbatim; it now takes the link
+  text. A new contract test pins the `/gh-issue` body format to what `aiw refined` parses.
+
 ## 1.12.0 — 2026-10-09
 
 ### Added

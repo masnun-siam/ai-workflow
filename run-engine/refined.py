@@ -21,6 +21,7 @@ SECTION_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 BULLET_RE = re.compile(r"^\s*(?:[-*]|\d+[.)])\s+(?:\[[ xX]\]\s+)?(.+?)\s*$", re.MULTILINE)
 STEP_RE = re.compile(r"^\s*\d+\.\s+\S", re.MULTILINE)
 FIELD_RE = r"^\s*[-*]?\s*\**{}\**\s*:\s*`?([^`\s]+)`?\s*$"
+LINK_RE = re.compile(r"\[`?([^\]`]+)`?\]\([^)\s]*\)")
 CONVENTIONAL_ROOTS = ("tests", "test", "__tests__", "spec")
 
 
@@ -36,7 +37,11 @@ def sections(body: str) -> dict[str, str]:
 
 def field(text: str, name: str) -> str | None:
     m = re.search(FIELD_RE.format(re.escape(name)), text, re.IGNORECASE | re.MULTILINE)
-    return m.group(1).strip() if m else None
+    if not m:
+        return None
+    value = m.group(1).strip()
+    link = LINK_RE.fullmatch(value)  # `[tests/](https://…)`: keep the link text
+    return link.group(1) if link else value
 
 
 def safe_rel(path: str) -> bool:
