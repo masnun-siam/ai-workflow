@@ -53,6 +53,9 @@
 - **AFK failed-run retries on Python 3.10.** `ui_afk` parsed the runner's `…Z` timestamps
   with `datetime.fromisoformat`, which rejects a trailing `Z` before 3.11, so on 3.10 the
   retry never fired. It now uses the same tolerant parser as `review.py`.
+- **`aiw refined` reads a linked `Test root:` / `Base branch:`.** A value written as a markdown
+  link (`[tests/](https://…)`) used to become the test root verbatim; it now takes the link
+  text. A new contract test pins the `/gh-issue` body format to what `aiw refined` parses.
 
 ## 1.12.0 — 2026-10-09
 
