@@ -74,7 +74,7 @@ ask nothing at all, so this interview is the only chance to settle anything. Cha
 
 A vault feature folder (`05-Work/<Project>/<Feature>`) that contains `Dump.md` → read `Dump.md` and `PRD.md` with `obsidian vault=notes read` and use both as the requirement; take the project and feature from the path (skip the folder resolution at the end of Step 2). Free text → use as is. Anything else (file path, Obsidian note, URL) → run `/intake` on it and use its brief as the requirement. Don't re-implement parsing here.
 
-Derive a short **title** and kebab-case **slug** from the requirement. Detect the repo with `gh repo view --json nameWithOwner,name` (fall back to the git remote).
+Derive a short **title** and kebab-case **slug** from the requirement. Detect the repo with `gh repo view --json nameWithOwner,name` (fall back to the git remote). If the working directory is not inside a git repo (`git rev-parse --show-toplevel` fails), drop `local` from the destinations, write Obsidian only, and say so in Step 8.
 
 ## Step 2: Check for an existing PRD at every chosen destination — before any interviewing
 
@@ -88,7 +88,7 @@ Interviewing for ten minutes and then discovering a PRD already exists wastes th
 
 Exception: an Obsidian `PRD.md` with frontmatter `status: seed` is the input, not a collision — continue without asking and fill that same file. Read the status with `obsidian vault=notes property:read path="05-Work/<Project>/<Feature>/PRD.md" name=status` (the existence check above does not show frontmatter); only output that is exactly `seed` counts. Anything else (another value, empty output, an error) means any other existing PRD, including finished PRDs and ones seeded before the marker existed, and still stops here.
 
-If a PRD already exists anywhere: **stop and ask the user** (headless: `aiw ask`, then end your turn) what to do (read it and update it, pick a new name, skip that destination). Never overwrite silently. If they choose to update, read the existing PRD before Step 4 so the interview builds on it and keeps earlier decisions. When both a repo copy and a vault copy exist, read the repo copy: it is canonical, and Step 7 rewrites the vault copy as its mirror.
+If a PRD already exists anywhere: **stop and ask the user** (headless: `aiw ask`, then end your turn) what to do (read it and update it, pick a new name, skip that destination). Never overwrite silently. If they choose to update, read the existing PRD before Step 4 so the interview builds on it and keeps earlier decisions. When both a repo copy and a vault copy exist, read the repo copy: it is canonical, and Step 7 rewrites the vault copy as its mirror. Find the pair through the links Step 7 records (the repo copy's `**Mirror:**` line, the vault note's `canonical` property), never by matching names.
 
 For Obsidian, also resolve the project and feature folder here, the same way `dump` does:
 
@@ -125,6 +125,7 @@ Fill this template with what was agreed. Keep the user's decisions and their one
 # PRD — <Title>
 
 **Status:** Draft · **Date:** YYYY-MM-DD · **Repo:** <owner/repo>
+**Mirror:** 05-Work/<Project>/<Feature>/PRD.md
 
 ## Overview
 <2–4 sentences. Then "Codebase context:" with 2–5 bullets from the scan, with file paths.>
@@ -154,7 +155,7 @@ Nothing is written anywhere before this approval. The wiki push needs its own ex
 
 ## Step 7: Save
 
-**local** — the canonical copy. Write `docs/prd/<slug>.md` with the Write tool (create `docs/prd/` if needed). Do not `git add` or commit; the user decides.
+**local** — the canonical copy. Write `docs/prd/<slug>.md` with the Write tool (create `docs/prd/` if needed). Its `**Mirror:**` line names the vault `PRD.md`; drop the line when Obsidian is not written. Do not `git add` or commit; the user decides.
 
 **obsidian** — the mirror: the same PRD as the local copy, plus the tags and wikilinks below. Always through the `obsidian` CLI with `vault=notes`, never plain file writes, so the index stays in sync. Follow `skills/dump/SKILL.md` ("Tagging and linking" and "New feature") for the exact commands:
 
@@ -170,6 +171,9 @@ If the target was a seed (Step 2): replace the `create` line above with `obsidia
 Every `overwrite` here replaces the whole note. If a read of a file you know exists fails or
 comes back empty (vault not open, wrong path), stop and report: never overwrite with partial content.
 
+When `local` was also written, link the mirror back to it:
+`obsidian vault=notes property:set path="05-Work/<Project>/<Feature>/PRD.md" name=canonical value="<owner/repo>:docs/prd/<slug>.md"`.
+
 Read a sibling's tags first to reuse the feature slug, and list existing siblings (Dump, Decisions, SRS…) in `## Related`. Add the PRD line to existing siblings' Related blocks as dump does. The project tag table lives in dump's SKILL.md.
 
 **wiki** — only after a final "push to the wiki?" confirmation (if headless, `aiw ask` it, then end your turn):
@@ -183,14 +187,22 @@ If any save step fails, report which destinations succeeded and which didn't. Do
 
 ## Step 8: Report and hand off
 
-One line per destination with its final path or URL. End with the line `→ next: /gh-issue <prd-path>`, where `<prd-path>` is the canonical `docs/prd/<slug>.md`, or the first written destination when `local` was not chosen. It is the last line of your output; the Guided Flow parses it. Do nothing further.
+One line per destination with its final path or URL. End with the line `→ next: /gh-issue <prd-path>`, where `<prd-path>` is the Obsidian `PRD.md` path, or the first written destination when Obsidian was not written. The guided Flow opens that path as a vault note; whoever reads it follows its `canonical` property to the repo copy. It is the last line of your output; the Guided Flow parses it. Do nothing further.
 
 ## Update mode
 
 `/prd --update <prd-path> <decisions>` records decisions made after the PRD was written. A
-later step (`/gh-issue` refining tasks) settles questions the interview missed, and those answers
-belong in the PRD. `<prd-path>` is the canonical `docs/prd/<slug>.md`. `<decisions>` is one line
-per decision: `<decision> — <why> (<source>)`, where the source is the issue or task that raised it.
+later step, such as task refinement, may settle questions the interview missed, and those answers
+belong in the PRD. `<decisions>` is one line per decision: `<decision> — <why> (<source>)`, where
+the source is the issue or task that raised it.
+
+`<prd-path>` is either copy. Resolve the canonical one first:
+
+- A repo `docs/prd/<slug>.md`: it is canonical. Its `**Mirror:**` line names the vault copy.
+- A vault `PRD.md` with a `canonical` property (`obsidian vault=notes property:read ... name=canonical`)
+  naming this repo: edit that repo copy as canonical, and this note as its mirror.
+- A vault `PRD.md` with no `canonical` property, or one naming another repo: edit the vault
+  copy alone and report "no canonical copy". Never create a repo file during an update.
 
 There is no grilling, no codebase scan and no review gate here: the user already answered each
 question where it came up. For each decision:
@@ -203,7 +215,7 @@ question where it came up. For each decision:
 
 Write the canonical copy back, then apply the same edits to the Obsidian mirror when one exists
 (read it, edit it, write it back with `obsidian vault=notes create ... overwrite`, keeping its
-tags and `## Related`; the Step 7 rule applies: never overwrite with partial content). Report which decisions were added and which were already there. Print no
+tags and `## Related`; the Step 7 rule applies: never overwrite with partial content). Report which decisions were added and which were already there, and every requirement or acceptance check you edited as before → after, so no requirement changes without someone seeing it. Print no
 next line: the calling command owns what happens next.
 
 ## Guardrails

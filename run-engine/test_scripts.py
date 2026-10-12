@@ -4358,6 +4358,13 @@ assert "--update" in _ws(_prd183["Arguments"]), "prd Arguments must document --u
 for _w in ("## Decisions", "Open questions", "mirror", "no grilling"):
     assert _w.lower() in _upd.lower(), f"prd Update mode lacks {_w!r}"
 assert re.search(r"already (there|present|recorded)", _upd), "prd Update mode must skip a decision already recorded"
+# The pair is linked both ways at save time and followed, never guessed from names.
+_s7 = _ws(_key183(_prd_all, "Step 7"))
+assert "**Mirror:**" in _s7 and "name=canonical" in _s7, "prd: Step 7 must record the mirror/canonical links"
+assert "never by matching names" in _ws(_key183(_prd_all, "Step 2")), "prd: Step 2 follows the links"
+assert "no canonical copy" in _upd and "Never create a repo file during an update" in _upd, "prd: vault-only update"
+assert "before \u2192 after" in _upd, "prd: Update mode reports edited requirements as before -> after"
+assert "not inside a git repo" in _ws(_key183(_prd_all, "Step 1")), "prd: no repo -> Obsidian only"
 assert "never overwrite with partial content" in (_upd + _ws(_key183(_prd_all, "Step 7"))).lower(), (
     "prd: overwrite guard"
 )

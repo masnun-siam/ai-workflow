@@ -22,9 +22,11 @@
 
 - **The repo PRD is canonical.** `/prd` now saves to `docs/prd/<slug>.md` and the Obsidian
   vault by default (`--to local,obsidian`), and the vault copy is a mirror of the repo copy.
-  Its `→ next:` line names the repo copy. New `/prd --update <prd> <decisions>` appends
-  decisions made later to `## Decisions`, resolves the open questions they answer, and mirrors
-  the edit to the vault.
+  The two are linked at save time (a `**Mirror:**` line in the repo copy, a `canonical`
+  property on the vault note). Outside a git repo it writes the vault only. New
+  `/prd --update <prd> <decisions>` appends decisions made later to `## Decisions`, resolves
+  the open questions they answer, reports every edited requirement as before → after, and
+  mirrors the edit; a vault PRD with no canonical copy is updated alone.
 - **Docs restructure.** `README.md` is now a short link hub. The agent setup protocol moved to
   `docs/INSTALL.md`, and commands, the `aiw` CLI, `aiw ui`, state and layout moved to
   `docs/REFERENCE.md`. `CLAUDE.md` is a stable, agent-first overview of the project that
