@@ -18,8 +18,8 @@ import os
 import re
 import threading
 import time
-from datetime import datetime
 
+import review
 import shared
 import ui_board
 import ui_grind
@@ -64,10 +64,8 @@ def active(now=None) -> bool:
 
 
 def _epoch(iso) -> float | None:
-    try:
-        return datetime.fromisoformat(iso).timestamp()
-    except (TypeError, ValueError):
-        return None
+    parsed = review._ts(iso)  # handles the trailing `Z` that 3.10's fromisoformat rejects
+    return parsed.timestamp() if parsed else None
 
 
 def _held(sessions: list, started) -> int:

@@ -4,6 +4,10 @@
 
 ### Added
 
+- **Full test suite on push and in CI.** `run-engine/run_tests.sh` runs every
+  `run-engine/test_*.py`. `pre-commit install` now also installs a pre-push hook that runs it,
+  and a `Tests` GitHub Actions job runs it on pull requests and on pushes to `master`. Fixes the
+  stale `test_ui_events.py` assertions this exposed (`flow_id`, the `usage`/`afk` keys).
 - **Flow history.** Every flow is saved on the aiw server at `#/flow/<id>`. **Flows** lists
   earlier ones with their step and last activity, archive hides one, and **New flow** starts
   another. A draft is saved as you type. Past `/dump`, `/prd` and `/gh-issue` sessions are
@@ -43,6 +47,12 @@
   `aiw project-board` or `aiw dispatch plan` must stop.
 - **Stale design docs:** the epic-decomposition spec and plan, the intake-command spec and
   plan, and the finished `docs/tasks/gh-issue-flat-task-list.md`.
+
+### Fixed
+
+- **AFK failed-run retries on Python 3.10.** `ui_afk` parsed the runner's `…Z` timestamps
+  with `datetime.fromisoformat`, which rejects a trailing `Z` before 3.11, so on 3.10 the
+  retry never fired. It now uses the same tolerant parser as `review.py`.
 
 ## 1.12.0 — 2026-10-09
 
