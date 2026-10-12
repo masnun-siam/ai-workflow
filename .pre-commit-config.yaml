@@ -1,6 +1,8 @@
 # Lint, secret and test hooks block the commit; the CLAUDE.md hook is a reminder only.
 # See CONTRIBUTING.md.
 exclude: ^run-engine/ui_static/vendor/
+default_install_hook_types: [pre-commit, pre-push]  # `pre-commit install` sets up both
+default_stages: [pre-commit]  # only all-tests runs on push
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -34,6 +36,13 @@ repos:
         language: system
         entry: python3 run-engine/test_engine.py
         files: ^run-engine/.*\.py$
+        pass_filenames: false
+      - id: all-tests
+        name: run-engine/test_*.py (all, ~2 min)
+        language: system
+        entry: bash run-engine/run_tests.sh
+        stages: [pre-push]
+        always_run: true
         pass_filenames: false
       - id: claude-md-reminder
         name: CLAUDE.md is a stable baseline

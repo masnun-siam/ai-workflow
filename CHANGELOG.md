@@ -4,6 +4,10 @@
 
 ### Added
 
+- **Full test suite on push and in CI.** `run-engine/run_tests.sh` runs every
+  `run-engine/test_*.py`. `pre-commit install` now also installs a pre-push hook that runs it,
+  and a `Tests` GitHub Actions job runs it on pull requests and on pushes to `master`. Fixes the
+  stale `test_ui_events.py` assertions this exposed (`flow_id`, the `usage`/`afk` keys).
 - **Flow history.** Every flow is saved on the aiw server at `#/flow/<id>`. **Flows** lists
   earlier ones with their step and last activity, archive hides one, and **New flow** starts
   another. A draft is saved as you type. Past `/dump`, `/prd` and `/gh-issue` sessions are

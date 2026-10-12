@@ -97,6 +97,7 @@ docs/         HOW-IT-WORKS, INSTALL, REFERENCE, adr/, prd/, tasks/
 ```bash
 python3 run-engine/test_engine.py     # the pure engine: routing, caps, contracts
 python3 run-engine/test_scripts.py    # the mechanical phases
+bash run-engine/run_tests.sh          # every test_*.py (~2 min); also the pre-push hook and CI
 ```
 
 No network, no Docker, no install step.
