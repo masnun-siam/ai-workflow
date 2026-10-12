@@ -25,7 +25,9 @@ import ui_status  # noqa: E402
 
 resumed, retried, replies, pushed = [], [], [], []
 ui_runner.resume = lambda sid, text: resumed.append((sid, text)) or ui_sessions.update(sid, status="running")
-ui_runner.resume_stopped = lambda sid, cmd=None: retried.append(sid) or ui_sessions.update(sid, status="running", ended_at=None)
+ui_runner.resume_stopped = lambda sid, cmd=None: (
+    retried.append(sid) or ui_sessions.update(sid, status="running", ended_at=None)
+)
 ui_grind.reply = lambda o, r, n, text: replies.append((o, r, n, text)) or (200, {"state": "running"})
 ui_board.issue_for_pr = lambda url: 7 if url.endswith("/pull/70") else 8 if url.endswith("/pull/80") else None
 ui_notify.load_config = lambda: {"ntfy": {"server": "https://ntfy.example", "topic": "t"}}
@@ -36,12 +38,21 @@ class _Resp:
         pass
 
 
-ui_notify.urllib.request.urlopen = lambda req, timeout=None: pushed.append(
-    (req.headers.get("Title"), req.data.decode())) or _Resp()
+ui_notify.urllib.request.urlopen = lambda req, timeout=None: (
+    pushed.append((req.headers.get("Title"), req.data.decode())) or _Resp()
+)
 
 Q = lambda label="Approve and start (Recommended)", rec=True: {
-    "id": "q-1", "questions": [{"header": "Plan", "question": "Approve the plan?", "multiSelect": False,
-                                "options": [{"label": label if rec else "Approve"}, {"label": "Abort"}]}]}
+    "id": "q-1",
+    "questions": [
+        {
+            "header": "Plan",
+            "question": "Approve the plan?",
+            "multiSelect": False,
+            "options": [{"label": label if rec else "Approve"}, {"label": "Abort"}],
+        }
+    ],
+}
 
 
 def waiting(rec=True, sid_ok=True, command="/run-issue 1"):
@@ -97,7 +108,11 @@ nosid = ui_sessions.create("/run-issue 4", d)["id"]
 
 
 def fail(sid, t):
-    ui_sessions.update(sid, status="failed", ended_at=ui_runner._iso(__import__("datetime").datetime.fromtimestamp(t, __import__("datetime").timezone.utc)))
+    ui_sessions.update(
+        sid,
+        status="failed",
+        ended_at=ui_runner._iso(__import__("datetime").datetime.fromtimestamp(t, __import__("datetime").timezone.utc)),
+    )
 
 
 ui_sessions.update(f, session_id="s3")
@@ -128,7 +143,9 @@ os.makedirs(os.path.join(d, "pr-grind"), exist_ok=True)
 
 def grind(n, paused):
     with open(os.path.join(d, "pr-grind", f"o-r-{n}.md"), "w") as fh:
-        fh.write(f"owner: o\nrepo: r\nnumber: {n}\nthread: https://x.slack.com/archives/C1/p{n}\npaused: {paused}\n\n## Round 1\n")
+        fh.write(
+            f"owner: o\nrepo: r\nnumber: {n}\nthread: https://x.slack.com/archives/C1/p{n}\npaused: {paused}\n\n## Round 1\n"
+        )
 
 
 grind(70, "2026-10-09T00:00:00Z — Gate 2 failed: CI red")

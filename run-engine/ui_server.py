@@ -40,7 +40,15 @@ import ui_tailscale
 import ui_usage
 import shared
 from shared import die
-from ui_board import build_board, fetch_title, load_projects, plausible_repo, load_run, memoize_title_fetcher, scan_records
+from ui_board import (
+    build_board,
+    fetch_title,
+    load_projects,
+    plausible_repo,
+    load_run,
+    memoize_title_fetcher,
+    scan_records,
+)
 
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
@@ -148,7 +156,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/sw.js":  # served at the root so its scope covers the whole app
             _serve_static(self, "sw.js")
         elif path.startswith("/static/"):
-            _serve_static(self, path[len("/static/"):])
+            _serve_static(self, path[len("/static/") :])
         elif path == "/api/health":
             self._send(200, "application/json; charset=utf-8", b'{"ok": true}')
         elif path == "/board.json":
@@ -162,7 +170,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                     card["pipeline"] = member.get(f"{card['owner']}/{card['repo']}#{card['issue']}".lower())
             self._send(200, "application/json; charset=utf-8", json.dumps(board).encode("utf-8"))
         elif path == "/api/repos":
-            self._json(200, {"repos": ui_repos.list_repos(), "can_browse": _can_browse(self), "scan_roots": ui_repos.default_roots()})
+            self._json(
+                200,
+                {
+                    "repos": ui_repos.list_repos(),
+                    "can_browse": _can_browse(self),
+                    "scan_roots": ui_repos.default_roots(),
+                },
+            )
         elif path == "/api/settings":
             self._json(200, ui_settings.load())
         elif path == "/api/cleanup":
@@ -196,11 +211,20 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json(200, body) if body else self._json(404, {"error": "not found"})
         elif path == "/api/sessions":
             recs = ui_sessions.list_sessions()
-            body = {"sessions": [_public(r) for r in recs], "limits": ui_runner.limits(), "usage": ui_usage.snapshot(), "afk": ui_afk.public(recs)}
+            body = {
+                "sessions": [_public(r) for r in recs],
+                "limits": ui_runner.limits(),
+                "usage": ui_usage.snapshot(),
+                "afk": ui_afk.public(recs),
+            }
             self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
         else:
             parts = path.split("/")
-            if len(parts) in (4, 5) and parts[:3] == ["", "api", "sessions"] and (len(parts) == 4 or parts[4] == "stream"):
+            if (
+                len(parts) in (4, 5)
+                and parts[:3] == ["", "api", "sessions"]
+                and (len(parts) == 4 or parts[4] == "stream")
+            ):
                 self._session(parts[3], len(parts) == 5)
             elif len(parts) == 6 and parts[:3] == ["", "api", "runs"]:
                 self._run(parts[3], parts[4], parts[5])
@@ -295,7 +319,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif parts in (["", "api", "afk", "stop"], ["", "api", "afk", "dismiss"]):
             self._dispatch(lambda b: ui_afk.stop() if parts[3] == "stop" else ui_afk.dismiss())
         elif parts == ["", "api", "repos", "register"]:
-            self._dispatch(lambda b: {"path": ui_repos.register(b.get("slug"), b.get("path")), "repos": ui_repos.list_repos()})
+            self._dispatch(
+                lambda b: {"path": ui_repos.register(b.get("slug"), b.get("path")), "repos": ui_repos.list_repos()}
+            )
         elif parts == ["", "api", "repos", "scan"]:
             self._dispatch(self._scan)
         elif parts[:3] == ["", "api", "dispatch"] and parts[3:] == ["preview"]:
@@ -303,8 +329,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif parts == ["", "api", "flows"]:
             self._dispatch(ui_flows.create, 201)
         elif len(parts) == 5 and parts[:3] == ["", "api", "flows"] and parts[4] in ("update", "archive", "unarchive"):
-            self._dispatch(lambda b: ui_flows.update(parts[3], b) if parts[4] == "update"
-                           else ui_flows.set_archived(parts[3], parts[4] == "archive"))
+            self._dispatch(
+                lambda b: (
+                    ui_flows.update(parts[3], b)
+                    if parts[4] == "update"
+                    else ui_flows.set_archived(parts[3], parts[4] == "archive")
+                )
+            )
         elif parts == ["", "api", "pipelines"]:
             self._dispatch(ui_dispatch.create, 201)
         elif len(parts) == 5 and parts[:3] == ["", "api", "pipelines"] and parts[4] == "delete":
@@ -317,14 +348,22 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._maintree_release()
         elif len(parts) == 7 and parts[:3] == ["", "api", "runs"] and parts[6] == "options" and parts[5].isdigit():
             self._run_options(parts[3], parts[4], int(parts[5]))
-        elif len(parts) == 4 and parts[:3] == ["", "api", "grind"] and parts[3] in ("start", "pause", "resume", "rerun-ci", "reply"):
+        elif (
+            len(parts) == 4
+            and parts[:3] == ["", "api", "grind"]
+            and parts[3] in ("start", "pause", "resume", "rerun-ci", "reply")
+        ):
             self._grind(parts[3])
         elif parts == ["", "api", "settings", "test"]:
             body = self._read_body()
             if body is not None:
                 cmd = body.get("cmd")
-                self._json(200, ui_settings.check_login(cmd) if isinstance(cmd, str) and cmd.strip()
-                           else {"ok": False, "message": "cmd required"})
+                self._json(
+                    200,
+                    ui_settings.check_login(cmd)
+                    if isinstance(cmd, str) and cmd.strip()
+                    else {"ok": False, "message": "cmd required"},
+                )
         elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] == "answer":
             self._answer(parts[3])
         elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] == "prompt":
@@ -358,14 +397,21 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if body is None:
             return
         owner, repo, issue = body.get("owner"), body.get("repo"), body.get("issue")
-        if not (isinstance(owner, str) and isinstance(repo, str) and isinstance(issue, int) and not isinstance(issue, bool)):
+        if not (
+            isinstance(owner, str) and isinstance(repo, str) and isinstance(issue, int) and not isinstance(issue, bool)
+        ):
             self._json(400, {"error": "owner, repo and issue are required"})
             return
         try:
-            status, res = (ui_grind.request(owner, repo, issue) if action == "start"
-                           else ui_grind.rerun_ci(owner, repo, issue) if action == "rerun-ci"
-                           else ui_grind.reply(owner, repo, issue, body.get("text")) if action == "reply"
-                           else ui_grind.control(owner, repo, issue, action))
+            status, res = (
+                ui_grind.request(owner, repo, issue)
+                if action == "start"
+                else ui_grind.rerun_ci(owner, repo, issue)
+                if action == "rerun-ci"
+                else ui_grind.reply(owner, repo, issue, body.get("text"))
+                if action == "reply"
+                else ui_grind.control(owner, repo, issue, action)
+            )
         except ValueError as e:
             status, res = 400, {"error": str(e)}
         self._json(status, res)
@@ -373,7 +419,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     @staticmethod
     def _scan(body: dict) -> dict:
         roots = body.get("roots") or ui_repos.default_roots()
-        if not isinstance(roots, list) or not all(isinstance(r, str) and os.path.isabs(r) and ".." not in r.split(os.sep) for r in roots):
+        if not isinstance(roots, list) or not all(
+            isinstance(r, str) and os.path.isabs(r) and ".." not in r.split(os.sep) for r in roots
+        ):
             raise ValueError("roots must be a list of absolute folders")
         res = ui_repos.scan_and_register([r for r in roots if os.path.isdir(r)])
         return {**res, "repos": ui_repos.list_repos()}
@@ -404,7 +452,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         targets = {t["key"]: t for t in ui_cleanup.find_targets()}  # re-derived: the client never names paths
         results = [
-            ui_cleanup.clean(targets[a["key"]], a.get("force") is True) if a["key"] in targets
+            ui_cleanup.clean(targets[a["key"]], a.get("force") is True)
+            if a["key"] in targets
             else {"key": a["key"], "ok": False, "error": "not cleanable (gone, live, or escalated)"}
             for a in asked
         ]
@@ -434,8 +483,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         try:
             state = ui_runner.send_prompt(sid, body.get("text"))
         except (FileNotFoundError, ValueError) as e:
-            self._json(404 if isinstance(e, FileNotFoundError) else 400,
-                       {"error": "not found" if isinstance(e, FileNotFoundError) else str(e)})
+            self._json(
+                404 if isinstance(e, FileNotFoundError) else 400,
+                {"error": "not found" if isinstance(e, FileNotFoundError) else str(e)},
+            )
             return
         except ui_runner.Conflict as e:
             self._json(409, {"error": str(e)})
@@ -455,7 +506,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
     def _resume(self, sid: str) -> None:
         cmd = None
-        if (self.headers.get("Content-Length") or "0").strip() not in ("", "0"):  # optional {"claude_cmd": <saved label>}
+        if (self.headers.get("Content-Length") or "0").strip() not in (
+            "",
+            "0",
+        ):  # optional {"claude_cmd": <saved label>}
             body = self._read_body()
             if body is None:
                 return
@@ -652,7 +706,12 @@ def cmd_serve(args) -> None:
     try:
         if _port_answers(port):
             raise OSError(errno.EADDRINUSE, "address in use")
-        server = _Server(("127.0.0.1", port), _Handler, extras, memoize_title_fetcher(fetch_title, _TITLE_POOL, os.path.join(shared.data_dir(), "titles.json")))
+        server = _Server(
+            ("127.0.0.1", port),
+            _Handler,
+            extras,
+            memoize_title_fetcher(fetch_title, _TITLE_POOL, os.path.join(shared.data_dir(), "titles.json")),
+        )
     except (OSError, OverflowError) as exc:
         if getattr(exc, "errno", None) != errno.EADDRINUSE:
             die(1, f"cannot bind 127.0.0.1:{port}: {exc}")
@@ -701,8 +760,16 @@ def register(sub, add) -> None:
         help="extra accepted Host header, exact match (repeatable); give name:port unless the proxy serves "
         "the default port, e.g. a tailscale serve name on 443 is passed bare",
     )
-    p.add_argument("--no-tailscale", action="store_true",
-                   help="do not serve on the tailnet (default: serve there when tailscale is running)")
-    p.add_argument("--tailscale-port", type=int, default=ui_tailscale.DEFAULT_HTTPS_PORT, metavar="PORT",
-                   help="HTTPS port on the tailnet name: 443, 8443 or 10000 (default 443; an occupied port is never overwritten)")
+    p.add_argument(
+        "--no-tailscale",
+        action="store_true",
+        help="do not serve on the tailnet (default: serve there when tailscale is running)",
+    )
+    p.add_argument(
+        "--tailscale-port",
+        type=int,
+        default=ui_tailscale.DEFAULT_HTTPS_PORT,
+        metavar="PORT",
+        help="HTTPS port on the tailnet name: 443, 8443 or 10000 (default 443; an occupied port is never overwritten)",
+    )
     p.set_defaults(func=cmd_serve)

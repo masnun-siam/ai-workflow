@@ -1,4 +1,5 @@
 """Tests for `worktree create --main-tree`: plain asserts, run with `python3 test_worktree_main.py`."""
+
 import json
 import os
 import subprocess

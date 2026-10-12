@@ -73,11 +73,7 @@ def parse_depends(body: str | None) -> list[int]:
     otherwise silently win, and the edge that governs the base branch would be
     decided by paragraph order.
     """
-    return sorted({
-        int(n)
-        for match in DEPENDS_RE.finditer(body or "")
-        for n in re.findall(r"#(\d+)", match.group(1))
-    })
+    return sorted({int(n) for match in DEPENDS_RE.finditer(body or "") for n in re.findall(r"#(\d+)", match.group(1))})
 
 
 def render_tasks_section(order: list[int], titles: dict[int, str]) -> str:
@@ -115,8 +111,7 @@ def build_dag(deps: dict[int, list[int]]) -> dict:
                 raise ValueError(f"#{child} depends on itself")
             if dep not in known:
                 raise ValueError(
-                    f"#{child} depends on #{dep}, which is not in this epic — "
-                    "edges may only point at siblings"
+                    f"#{child} depends on #{dep}, which is not in this epic — edges may only point at siblings"
                 )
 
     indegree = {child: len(declared) for child, declared in deps.items()}
@@ -170,7 +165,14 @@ import os  # noqa: E402
 import tempfile  # noqa: E402
 
 from shared import (  # noqa: E402
-    die, gh_json, ledger_path, load_ledger, read_json, run_dir_for, save_ledger, write_json,
+    die,
+    gh_json,
+    ledger_path,
+    load_ledger,
+    read_json,
+    run_dir_for,
+    save_ledger,
+    write_json,
 )
 
 
@@ -186,8 +188,7 @@ def child_state(runs_dir: str, slug: str, issue: int) -> dict:
     """
     path = ledger_path(run_dir_for(runs_dir, slug, issue))
     if not os.path.isfile(path):
-        return {"status": "running", "pr": False, "stack_up": False, "needs_stack": True,
-                "blocker_ask": None}
+        return {"status": "running", "pr": False, "stack_up": False, "needs_stack": True, "blocker_ask": None}
     led = read_json(path)
     ctx = led.get("context") or {}
     return {
@@ -225,8 +226,7 @@ def cmd_split(args) -> None:
         ["api", f"repos/{args.slug}/issues/{args.parent}/sub_issues", "--jq", "[.[].number]"],
     )
     if proc.returncode != 0:
-        die(1, f"could not read #{args.parent}'s existing sub-issues: "
-               f"{(proc.stderr or '').strip()[:160]}")
+        die(1, f"could not read #{args.parent}'s existing sub-issues: {(proc.stderr or '').strip()[:160]}")
     already = set(linked or [])
 
     for child in children:
@@ -237,27 +237,25 @@ def cmd_split(args) -> None:
         # field must be an integer — `-f` would send a string and 422.
         child_id, proc = gh_json(["api", f"repos/{args.slug}/issues/{child}", "--jq", ".id"])
         if proc.returncode != 0:
-            die(1, f"could not resolve #{child}'s issue id: "
-                   f"{(proc.stderr or '').strip()[:160]}")
+            die(1, f"could not resolve #{child}'s issue id: {(proc.stderr or '').strip()[:160]}")
         _, proc = gh_json(
-            ["api", f"repos/{args.slug}/issues/{args.parent}/sub_issues",
-             "-F", f"sub_issue_id={child_id}"],
+            ["api", f"repos/{args.slug}/issues/{args.parent}/sub_issues", "-F", f"sub_issue_id={child_id}"],
         )
         # Dying rather than warning: a parent with no sub-issues is indistinguishable from
         # a non-epic to run-issue's epic check, so a warned-past link failure would run the
         # whole BRD as one issue — the exact outcome this decomposition exists to prevent.
         if proc.returncode != 0:
-            die(1, f"could not link #{child} as a sub-issue of #{args.parent}: "
-                   f"{(proc.stderr or '').strip()[:160]}")
+            die(1, f"could not link #{child} as a sub-issue of #{args.parent}: {(proc.stderr or '').strip()[:160]}")
 
     deps = {}
     titles: dict[int, str] = {}
     for child in children:
-        resp, proc = gh_json(["issue", "view", str(child), "--repo", args.slug,
-                              "--json", "body,title"])
+        resp, proc = gh_json(["issue", "view", str(child), "--repo", args.slug, "--json", "body,title"])
         if proc.returncode != 0:
-            die(1, f"could not read #{child}'s body/title to parse its dependencies: "
-                   f"{(proc.stderr or '').strip()[:160]}")
+            die(
+                1,
+                f"could not read #{child}'s body/title to parse its dependencies: {(proc.stderr or '').strip()[:160]}",
+            )
         data = resp if isinstance(resp, dict) else {}
         title = data.get("title")
         if not isinstance(title, str):
@@ -273,33 +271,36 @@ def cmd_split(args) -> None:
     except ValueError as exc:
         die(1, f"invalid epic: {exc}")
 
-    parent_body, proc = gh_json(["issue", "view", str(args.parent), "--repo", args.slug,
-                                 "--json", "body"])
+    parent_body, proc = gh_json(["issue", "view", str(args.parent), "--repo", args.slug, "--json", "body"])
     if proc.returncode != 0:
-        die(1, f"could not read #{args.parent}'s body to write its Tasks checklist: "
-               f"{(proc.stderr or '').strip()[:160]}")
+        die(
+            1, f"could not read #{args.parent}'s body to write its Tasks checklist: {(proc.stderr or '').strip()[:160]}"
+        )
     if not isinstance(parent_body, dict) or "body" not in parent_body:
         die(1, f"#{args.parent}'s issue view response has no body")
     body = parent_body.get("body") or ""
     new_body = upsert_tasks_section(body, render_tasks_section(dag["order"], titles))
 
-    tmp_fh = tempfile.NamedTemporaryFile(
-        mode="w", suffix=".md", delete=False, encoding="utf-8")
+    tmp_fh = tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8")
     try:
         tmp_fh.write(new_body)
         tmp_fh.close()
-        _, proc = gh_json(["issue", "edit", str(args.parent), "--repo", args.slug,
-                           "--body-file", tmp_fh.name])
+        _, proc = gh_json(["issue", "edit", str(args.parent), "--repo", args.slug, "--body-file", tmp_fh.name])
         if proc.returncode != 0:
-            die(1, f"could not write #{args.parent}'s Tasks checklist: "
-                   f"{(proc.stderr or '').strip()[:160]}")
+            die(1, f"could not write #{args.parent}'s Tasks checklist: {(proc.stderr or '').strip()[:160]}")
     finally:
         os.unlink(tmp_fh.name)
 
-    write_json(epic_path(args.epic_dir), {
-        "parent": args.parent, "slug": args.slug, "children": children,
-        "dag": dag, "max_stacks": args.max_stacks,
-    })
+    write_json(
+        epic_path(args.epic_dir),
+        {
+            "parent": args.parent,
+            "slug": args.slug,
+            "children": children,
+            "dag": dag,
+            "max_stacks": args.max_stacks,
+        },
+    )
     print(json.dumps(dag, indent=2))
 
 
@@ -337,10 +338,15 @@ def cmd_next(args) -> None:
     epic = load_epic(args.epic_dir)
     runs_dir = args.runs_dir
     states = {c: child_state(runs_dir, epic["slug"], c) for c in epic["children"]}
-    print(json.dumps({
-        "ready": ready(epic["dag"], states, epic.get("max_stacks", 3)),
-        "states": {str(k): v for k, v in states.items()},
-    }, indent=2))
+    print(
+        json.dumps(
+            {
+                "ready": ready(epic["dag"], states, epic.get("max_stacks", 3)),
+                "states": {str(k): v for k, v in states.items()},
+            },
+            indent=2,
+        )
+    )
 
 
 def cmd_status(args) -> None:
@@ -350,8 +356,10 @@ def cmd_status(args) -> None:
         st = child_state(runs_dir, epic["slug"], child)
         blocked = f"  blocked_on={st['blocked_on']}" if st.get("blocked_on") else ""
         blocker_ask = f"  blocker_ask={st['blocker_ask']}" if st.get("blocker_ask") else ""
-        print(f"#{child}  {st['status']:<10} station={st.get('station')}  "
-              f"pr={'yes' if st['pr'] else 'no'}{blocked}{blocker_ask}")
+        print(
+            f"#{child}  {st['status']:<10} station={st.get('station')}  "
+            f"pr={'yes' if st['pr'] else 'no'}{blocked}{blocker_ask}"
+        )
 
 
 def register(sub, add) -> None:
@@ -363,9 +371,13 @@ def register(sub, add) -> None:
     q.add_argument("--parent", type=int, required=True)
     q.add_argument("--slug", required=True, help="owner/repo")
     q.add_argument("--children", required=True, help="comma-separated issue numbers")
-    q.add_argument("--max-stacks", type=int, default=3,
-               help="concurrent Docker stacks; each gets its own Compose project "
-                    "and ephemeral host ports (stack.py), so they no longer collide")
+    q.add_argument(
+        "--max-stacks",
+        type=int,
+        default=3,
+        help="concurrent Docker stacks; each gets its own Compose project "
+        "and ephemeral host ports (stack.py), so they no longer collide",
+    )
     q.set_defaults(func=cmd_split)
 
     q = ops.add_parser("init", help="create one run directory per child")

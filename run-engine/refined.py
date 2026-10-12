@@ -30,7 +30,7 @@ def sections(body: str) -> dict[str, str]:
     marks = list(SECTION_RE.finditer(body))
     for i, m in enumerate(marks):
         end = marks[i + 1].start() if i + 1 < len(marks) else len(body)
-        out[m.group(1).strip().lower()] = body[m.end():end].strip()
+        out[m.group(1).strip().lower()] = body[m.end() : end].strip()
     return out
 
 
@@ -53,7 +53,9 @@ def detect_test_root(repo: str) -> str | None:
 def default_branch(repo: str) -> str | None:
     proc = subprocess.run(
         ["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
-        cwd=repo, capture_output=True, text=True,
+        cwd=repo,
+        capture_output=True,
+        text=True,
     )
     ref = proc.stdout.strip()
     return ref.split("/", 1)[1] if proc.returncode == 0 and "/" in ref else None
@@ -75,7 +77,10 @@ def parse(labels: list[str], body: str, repo: str) -> tuple[dict | None, str]:
 
     test_root = field(how, "Test root") or detect_test_root(repo)
     if not test_root:
-        return None, "no `Test root:` line in How and no single conventional test dir (tests/, test/, __tests__/, spec/)"
+        return (
+            None,
+            "no `Test root:` line in How and no single conventional test dir (tests/, test/, __tests__/, spec/)",
+        )
     if not safe_rel(test_root):
         return None, f"test root {test_root!r} is not a repo-relative path"
     base = field(how, "Base branch") or default_branch(repo)
@@ -83,18 +88,31 @@ def parse(labels: list[str], body: str, repo: str) -> tuple[dict | None, str]:
         return None, "no `Base branch:` line in How and origin/HEAD is unset"
 
     test_cases = [f"[acceptance] {c}" for c in ac]
-    plan_md = "\n".join([
-        "## Test root", test_root, "",
-        "## PR base branch", base, "",
-        "## Test cases", *[f"- {c}" for c in test_cases], "",
-        "## Implementation approach", how, "",
-        "## Risks / open questions",
-        "- Plan taken verbatim from the refined issue body; run-planner did not run, so no "
-        "drift between the How section and the current code was checked.",
-    ])
+    plan_md = "\n".join(
+        [
+            "## Test root",
+            test_root,
+            "",
+            "## PR base branch",
+            base,
+            "",
+            "## Test cases",
+            *[f"- {c}" for c in test_cases],
+            "",
+            "## Implementation approach",
+            how,
+            "",
+            "## Risks / open questions",
+            "- Plan taken verbatim from the refined issue body; run-planner did not run, so no "
+            "drift between the How section and the current code was checked.",
+        ]
+    )
     return {
-        "plan_md": plan_md, "test_root": test_root, "base_branch": base,
-        "test_cases": test_cases, "acceptance_criteria": ac,
+        "plan_md": plan_md,
+        "test_root": test_root,
+        "base_branch": base,
+        "test_cases": test_cases,
+        "acceptance_criteria": ac,
     }, ""
 
 
@@ -107,17 +125,34 @@ def cmd_refined(args) -> None:
     if handoff is None:
         die(1, f"not refined: {reason}")
     skip = "skipped — refined issue, plan taken from the issue body"
-    write_json(os.path.join(args.run_dir, "00-readiness.json"), {
-        "issue": ledger.issue, "station": "researcher", "status": "passed", "attempt": 1,
-        "summary": skip, "evidence": {"skipped": True},
-        "handoff": {"brief": "", "gaps": [], "assumptions": []},
-    })
-    write_json(os.path.join(args.run_dir, "10-plan.json"), {
-        "issue": ledger.issue, "station": "planner", "status": "passed", "attempt": 1,
-        "summary": skip, "evidence": {"skipped": True}, "handoff": handoff,
-    })
-    print(f"refined: test_root={handoff['test_root']} base_branch={handoff['base_branch']} "
-          f"acceptance_criteria={len(handoff['acceptance_criteria'])}")
+    write_json(
+        os.path.join(args.run_dir, "00-readiness.json"),
+        {
+            "issue": ledger.issue,
+            "station": "researcher",
+            "status": "passed",
+            "attempt": 1,
+            "summary": skip,
+            "evidence": {"skipped": True},
+            "handoff": {"brief": "", "gaps": [], "assumptions": []},
+        },
+    )
+    write_json(
+        os.path.join(args.run_dir, "10-plan.json"),
+        {
+            "issue": ledger.issue,
+            "station": "planner",
+            "status": "passed",
+            "attempt": 1,
+            "summary": skip,
+            "evidence": {"skipped": True},
+            "handoff": handoff,
+        },
+    )
+    print(
+        f"refined: test_root={handoff['test_root']} base_branch={handoff['base_branch']} "
+        f"acceptance_criteria={len(handoff['acceptance_criteria'])}"
+    )
 
 
 def register(sub, add) -> None:

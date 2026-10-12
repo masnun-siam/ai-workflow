@@ -1,4 +1,5 @@
 """Tests for ui_dispatch: plain asserts, run with `python3 test_ui_dispatch.py`."""
+
 import os
 import sys
 import tempfile
@@ -29,23 +30,51 @@ def raises(fn, *a):
 
 
 def pipe(items, mode="parallel", cap=2, status="active"):
-    return {"id": "p-20260101000000-abcdef", "name": "t", "slug": "o/r", "repo_path": "/x", "mode": mode,
-            "max": cap, "claude_cmd": None, "status": status, "created": 1.0, "notified": False,
-            "items": [{"issue": n, "title": "", "deps": deps, "ext_deps": [], "state": "queued",
-                       "session_id": None, "reason": None} for n, deps in items]}
+    return {
+        "id": "p-20260101000000-abcdef",
+        "name": "t",
+        "slug": "o/r",
+        "repo_path": "/x",
+        "mode": mode,
+        "max": cap,
+        "claude_cmd": None,
+        "status": status,
+        "created": 1.0,
+        "notified": False,
+        "items": [
+            {
+                "issue": n,
+                "title": "",
+                "deps": deps,
+                "ext_deps": [],
+                "state": "queued",
+                "session_id": None,
+                "reason": None,
+            }
+            for n, deps in items
+        ],
+    }
 
 
 # --- parse_input
-assert d.parse_input("https://github.com/o/r/issues?q=is%3Aissue+is%3Aopen+label%3Abug+sort%3Acreated-asc") == ("o/r", "query", "label:bug")
+assert d.parse_input("https://github.com/o/r/issues?q=is%3Aissue+is%3Aopen+label%3Abug+sort%3Acreated-asc") == (
+    "o/r",
+    "query",
+    "label:bug",
+)
 ok("search URL drops is:/sort: tokens and keeps the repo")
-assert d.parse_input('https://github.com/o/r/issues?q=label%3A%22good+first+issue%22')[2] == 'label:"good first issue"'
+assert d.parse_input("https://github.com/o/r/issues?q=label%3A%22good+first+issue%22")[2] == 'label:"good first issue"'
 ok("quoted label survives")
 assert d.parse_input("#12, 14 15 12") == (None, "issues", [12, 14, 15])
 ok("number list: # prefixes, commas/whitespace, dedupe")
 assert d.parse_input("https://github.com/o/r/issues/3\nhttps://github.com/o/r/issues/4") == ("o/r", "issues", [3, 4])
 ok("issue URLs")
-assert raises(d.parse_input, "") and raises(d.parse_input, "https://github.com/o/r/issues") \
-    and raises(d.parse_input, "https://github.com/o/r/issues/1 https://github.com/o/x/issues/2") and raises(d.parse_input, "12 abc")
+assert (
+    raises(d.parse_input, "")
+    and raises(d.parse_input, "https://github.com/o/r/issues")
+    and raises(d.parse_input, "https://github.com/o/r/issues/1 https://github.com/o/x/issues/2")
+    and raises(d.parse_input, "12 abc")
+)
 ok("empty / no-query / mixed repos / junk rejected")
 
 # --- advance: cap, order, dependency gate
@@ -128,7 +157,7 @@ d.ui_repos.is_unregistered_slug = lambda r: False
 d._screen = lambda slug, nums: [{"issue": n, "title": f"T{n}", "deps": {2: [1]}.get(n, [])} for n in nums]
 d.ui_sessions.load = lambda sid: sessions.get(sid)
 ledgers = {}  # issue -> ledger status; absent = the run never created a ledger
-d.ui_board.load_run = lambda o, r, n: ({"status": ledgers[int(n)]} if int(n) in ledgers else None)
+d.ui_board.load_run = lambda o, r, n: {"status": ledgers[int(n)]} if int(n) in ledgers else None
 ledgers.update({1: "done", 2: "done", 3: "done"})
 d.ui_runner.stop = lambda sid: sessions[sid].update(status="stopped")
 notes = []
@@ -155,8 +184,12 @@ ledgers.pop(1)  # a finished run whose ledger was cleaned up (PR merged + cleanu
 d.tick(created["id"])
 assert d.load(created["id"])["items"][0]["state"] == "done"
 ok("done item stays done when its ledger is cleaned up")
-pp = {"status": "active", "mode": "parallel", "max": 3, "items": [
-    {"issue": 1, "state": "running", "session_id": "s", "deps": []}]}
+pp = {
+    "status": "active",
+    "mode": "parallel",
+    "max": 3,
+    "items": [{"issue": 1, "state": "running", "session_id": "s", "deps": []}],
+}
 d.advance(pp, {1: ("done", None)})  # a session that exited cleanly without ever writing a ledger
 assert pp["items"][0]["state"] == "failed" and pp["items"][0]["reason"] == "run did not start"
 d.advance(pp, {1: ("done", "done")})
@@ -249,8 +282,11 @@ ok("finished pipelines drop out of board membership; summary counts")
 # unknown repo -> NeedsCheckout carrying the clones found on disk
 d.ui_repos.is_unregistered_slug = lambda r: r == "acme/new"
 d.ui_repos.find_clones = lambda roots, slug=None, **k: [{"slug": slug, "path": "/home/me/new"}]
-for call in (lambda: d.preview("#1", "acme/new"), lambda: d.preview("https://github.com/acme/new/issues?q=label%3Aready", None),
-             lambda: d.create({"repo": "acme/new", "issues": [1]})):
+for call in (
+    lambda: d.preview("#1", "acme/new"),
+    lambda: d.preview("https://github.com/acme/new/issues?q=label%3Aready", None),
+    lambda: d.create({"repo": "acme/new", "issues": [1]}),
+):
     try:
         call()
         raise AssertionError("expected NeedsCheckout")
@@ -264,7 +300,14 @@ print(f"\n{n_ok} passed")
 # an issue transferred to another repo: the run's Ledger lives under the new number and links back
 tp = d.create({"repo": "o/r", "issues": [77, 78]})
 ledgers.pop(77, None)
-moved_run = {"status": "done", "pr": "https://github.com/o/new/pull/9", "stations": [], "totals": {}, "branch": "b", "currentStation": None}
+moved_run = {
+    "status": "done",
+    "pr": "https://github.com/o/new/pull/9",
+    "stations": [],
+    "totals": {},
+    "branch": "b",
+    "currentStation": None,
+}
 d.ui_board.transferred_run = lambda slug, n: ("o", "new", 12) if (slug, n) == ("o/r", 77) else None
 real_load_run = d.ui_board.load_run
 d.ui_board.load_run = lambda o, r, n: moved_run if (o, r, n) == ("o", "new", "12") else real_load_run(o, r, n)
@@ -272,7 +315,9 @@ sessions[d.load(tp["id"])["items"][0]["session_id"]] = {"status": "done"}
 d.tick(tp["id"])
 it0 = d.load(tp["id"])["items"][0]
 assert it0["state"] == "done" and it0["moved_to"] == {"owner": "o", "repo": "new", "issue": 12}, it0
-_pp = d.load(tp['id']); _pp['status'] = 'active'; d.save(_pp)  # membership only lists unfinished pipelines
+_pp = d.load(tp["id"])
+_pp["status"] = "active"
+d.save(_pp)  # membership only lists unfinished pipelines
 assert d.membership().get("o/new#12") == tp["id"]
 assert d.detail(tp["id"])["items"][0]["run"]["pr"].endswith("/o/new/pull/9")
 d.ui_board.load_run = real_load_run

@@ -34,8 +34,13 @@ def _worktree_plan(ledger: dict) -> dict:
     out = {"main": None, "worktree": None, "branch": None, "pr": ctx.get("pr")}
     if ctx.get("tree") == "main" and isinstance(main, str) and os.path.isdir(main):
         ok_branch = isinstance(branch, str) and isinstance(issue, int) and branch.startswith(f"issue-{issue}-")
-        return {**out, "main": main, "tree": "main", "base": ctx.get("base_branch"),
-                "branch": branch if ok_branch else None}
+        return {
+            **out,
+            "main": main,
+            "tree": "main",
+            "base": ctx.get("base_branch"),
+            "branch": branch if ok_branch else None,
+        }
     if isinstance(main, str) and isinstance(wt, str) and isinstance(issue, int) and os.path.isdir(main):
         expect = os.path.abspath(os.path.join(main, "..", f"wt-issue-{issue}"))
         if os.path.abspath(wt) == expect:
@@ -102,18 +107,34 @@ def find_targets() -> list:
             done = True
         if not done and not g["sessions"] and time.time() - max(x["mtime"] for x in g["records"]) < STALE_SECONDS:
             continue  # unfinished ledger with no UI session: a CLI run may still be live until it goes quiet
-        out.append({
-            "key": f"{o}/{r}#{n}", "owner": o, "repo": r, "issue": n, "label": None,
-            "status": "done" if done else "stopped",
-            "sessions": [s["id"] for s in g["sessions"]],
-            "run_dirs": [os.path.join(runs_dir, x["dir_name"]) for x in g["records"]],
-            "plan": _worktree_plan(latest) if latest else None,
-        })
+        out.append(
+            {
+                "key": f"{o}/{r}#{n}",
+                "owner": o,
+                "repo": r,
+                "issue": n,
+                "label": None,
+                "status": "done" if done else "stopped",
+                "sessions": [s["id"] for s in g["sessions"]],
+                "run_dirs": [os.path.join(runs_dir, x["dir_name"]) for x in g["records"]],
+                "plan": _worktree_plan(latest) if latest else None,
+            }
+        )
     for s in loose:
         if s.get("status") not in LIVE:
-            out.append({"key": f"session:{s['id']}", "owner": None, "repo": None, "issue": None,
-                        "label": s.get("command") or "session", "status": "stopped",
-                        "sessions": [s["id"]], "run_dirs": [], "plan": None})
+            out.append(
+                {
+                    "key": f"session:{s['id']}",
+                    "owner": None,
+                    "repo": None,
+                    "issue": None,
+                    "label": s.get("command") or "session",
+                    "status": "stopped",
+                    "sessions": [s["id"]],
+                    "run_dirs": [],
+                    "plan": None,
+                }
+            )
     return out
 
 
@@ -121,7 +142,11 @@ def describe(t: dict) -> dict:
     """Preview shape for the dialog: adds the dirty/unpushed flags and PR merge state."""
     plan, done = t["plan"], t["status"] == "done"
     return {
-        "key": t["key"], "owner": t["owner"], "repo": t["repo"], "issue": t["issue"], "label": t["label"],
+        "key": t["key"],
+        "owner": t["owner"],
+        "repo": t["repo"],
+        "issue": t["issue"],
+        "label": t["label"],
         "status": t["status"],
         "branch": plan["branch"] if plan else None,
         "has_worktree": bool(plan and plan["worktree"] and os.path.isdir(plan["worktree"])),
@@ -142,11 +167,28 @@ def clean(t: dict, force: bool) -> dict:
         merged = _pr_merged(plan["pr"])
         if merged:
             slug = f"{t['owner']}/{t['repo']}"
-            state, _ = gh_json(["issue", "view", str(t["issue"]), "-R", slug, "--json", "state", "-q", ".state"], timeout=30)
+            state, _ = gh_json(
+                ["issue", "view", str(t["issue"]), "-R", slug, "--json", "state", "-q", ".state"], timeout=30
+            )
             if state == "OPEN":
-                p = run(["gh", "issue", "close", str(t["issue"]), "-R", slug, "--reason", "completed",
-                         "--comment", "Closed by aiw ui cleanup: the linked PR is merged."], timeout=30)
-                notes.append("issue closed" if p.returncode == 0 else "could not close issue: " + (p.stderr or "").strip()[:200])
+                p = run(
+                    [
+                        "gh",
+                        "issue",
+                        "close",
+                        str(t["issue"]),
+                        "-R",
+                        slug,
+                        "--reason",
+                        "completed",
+                        "--comment",
+                        "Closed by aiw ui cleanup: the linked PR is merged.",
+                    ],
+                    timeout=30,
+                )
+                notes.append(
+                    "issue closed" if p.returncode == 0 else "could not close issue: " + (p.stderr or "").strip()[:200]
+                )
         else:
             notes.append("issue left open: PR " + ("not merged" if merged is False else "state unknown"))
 
@@ -158,8 +200,11 @@ def clean(t: dict, force: bool) -> dict:
         clean_tree = not (_git(main, "status", "--porcelain").stdout or "").strip()
         if br and head == br and plan.get("base") and clean_tree:
             p = _git(main, "checkout", plan["base"])
-            notes.append(f"checked out {plan['base']}" if p.returncode == 0
-                         else "could not check out the base: " + (p.stderr or "").strip()[:200])
+            notes.append(
+                f"checked out {plan['base']}"
+                if p.returncode == 0
+                else "could not check out the base: " + (p.stderr or "").strip()[:200]
+            )
             head = plan["base"] if p.returncode == 0 else head
         if done and br and head != br and _git(main, "rev-parse", "--verify", "-q", f"refs/heads/{br}").returncode == 0:
             p = _git(main, "branch", "-D", br)
@@ -171,10 +216,18 @@ def clean(t: dict, force: bool) -> dict:
         if os.path.isdir(wt):
             p = _git(main, "worktree", "remove", "--force", wt)
             if p.returncode != 0:
-                return {"key": key, "ok": False, "notes": notes,
-                        "error": "git worktree remove failed: " + (p.stderr or "").strip()[:300]}
+                return {
+                    "key": key,
+                    "ok": False,
+                    "notes": notes,
+                    "error": "git worktree remove failed: " + (p.stderr or "").strip()[:300],
+                }
         _git(main, "worktree", "prune")
-        if done and plan["branch"] and _git(main, "rev-parse", "--verify", "-q", f"refs/heads/{plan['branch']}").returncode == 0:
+        if (
+            done
+            and plan["branch"]
+            and _git(main, "rev-parse", "--verify", "-q", f"refs/heads/{plan['branch']}").returncode == 0
+        ):
             p = _git(main, "branch", "-D", plan["branch"])
             if p.returncode != 0:
                 notes.append("could not delete branch: " + (p.stderr or "").strip()[:200])

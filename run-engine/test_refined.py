@@ -39,7 +39,9 @@ with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as tmp
     run_dir = os.path.join(tmp, "run")
     os.makedirs(os.path.join(repo, "tests"))
     subprocess.run(["git", "init", "-q", repo], check=True)
-    subprocess.run(["git", "-C", repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"], check=True)
+    subprocess.run(
+        ["git", "-C", repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"], check=True
+    )
     assert run("init", run_dir, "--issue", "7", "--repo", repo).returncode == 0
 
     # parse(): the happy path, every fallback reason, and explicit overrides.

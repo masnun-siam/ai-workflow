@@ -40,6 +40,7 @@ def seed_full_ledger(run_dir, repo):
     led.context.update(mode="full", repo=os.path.abspath(repo))
     save_ledger(run_dir, led)
 
+
 passed = 0
 
 
@@ -140,16 +141,17 @@ with tempfile.TemporaryDirectory() as tmp:
     os.makedirs(os.path.join(repo, "tests"))
     git = lambda *a: subprocess.run(["git", *a], cwd=repo, check=True, capture_output=True)
     git("init", "-q", "-b", "main")
-    git("config", "user.email", "t@t"); git("config", "user.name", "t")
+    git("config", "user.email", "t@t")
+    git("config", "user.name", "t")
     open(os.path.join(repo, "tests", "a.test.js"), "w").write("expect(1).toBe(2)\n")
-    git("add", "-A"); git("commit", "-qm", "sdet: red tests")
-    sdet_sha = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True
-    ).stdout.strip()
+    git("add", "-A")
+    git("commit", "-qm", "sdet: red tests")
+    sdet_sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True).stdout.strip()
 
     # dev weakens the test AND COMMITS it — invisible to a worktree diff.
     open(os.path.join(repo, "tests", "a.test.js"), "w").write("expect(1).toBe(1)\n")
-    git("add", "-A"); git("commit", "-qm", "dev: implement")
+    git("add", "-A")
+    git("commit", "-qm", "dev: implement")
 
     stale = subprocess.run(
         ["git", "diff", "--name-only", "--", "tests"], cwd=repo, capture_output=True, text=True
@@ -159,12 +161,14 @@ with tempfile.TemporaryDirectory() as tmp:
     seed_full_ledger(run_dir, repo)
     subprocess.run(
         [sys.executable, ROUTE, "set", run_dir, f"sdet_sha={sdet_sha}", "test_root=tests"],
-        check=True, capture_output=True,
+        check=True,
+        capture_output=True,
     )
     json.dump(envelope("dev"), open(os.path.join(run_dir, "30-build.json"), "w"))
     proc = subprocess.run(
         [sys.executable, ROUTE, "route", run_dir, "30-build.json", "--repo", repo],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert proc.returncode == 6, f"expected exit 6, got {proc.returncode}: {proc.stdout}{proc.stderr}"
     assert "tests/a.test.js" in proc.stderr, proc.stderr
@@ -190,18 +194,35 @@ ok("exit-6 stderr mirrors the git-show fallback")
 
 led = ledger_at("dev")
 assert validate_envelope(envelope("dev"), led, CONFIG) == []
-assert any("missing required field: summary" in e for e in
-           validate_envelope({k: v for k, v in envelope("dev").items() if k != "summary"}, led, CONFIG))
-assert any("evidence.commands" in e for e in
-           validate_envelope(envelope("dev", evidence={}), led, CONFIG)), "dev must record evidence"
-assert validate_envelope(
-    {"issue": 41, "station": "verifier", "status": "passed", "attempt": 1,
-     "summary": "skipped — no app-url", "evidence": {"skipped": True}}, led, CONFIG
-) == [], "an orchestrator-authored skip must pass the evidence gate"
-assert any("invalid status" in e for e in validate_envelope(envelope("researcher", "blocked"), led, CONFIG)), \
+assert any(
+    "missing required field: summary" in e
+    for e in validate_envelope({k: v for k, v in envelope("dev").items() if k != "summary"}, led, CONFIG)
+)
+assert any("evidence.commands" in e for e in validate_envelope(envelope("dev", evidence={}), led, CONFIG)), (
+    "dev must record evidence"
+)
+assert (
+    validate_envelope(
+        {
+            "issue": 41,
+            "station": "verifier",
+            "status": "passed",
+            "attempt": 1,
+            "summary": "skipped — no app-url",
+            "evidence": {"skipped": True},
+        },
+        led,
+        CONFIG,
+    )
+    == []
+), "an orchestrator-authored skip must pass the evidence gate"
+assert any("invalid status" in e for e in validate_envelope(envelope("researcher", "blocked"), led, CONFIG)), (
     "there is no `blocked` status — a station may not invent a fourth human gate"
-assert any("bounce.to and bounce.reason" in e for e in
-           validate_envelope(envelope("dev", "bounce", bounce={"to": "sdet"}), led, CONFIG))
+)
+assert any(
+    "bounce.to and bounce.reason" in e
+    for e in validate_envelope(envelope("dev", "bounce", bounce={"to": "sdet"}), led, CONFIG)
+)
 ok("envelope contract: required fields, evidence gate + skip exemption, 3-status vocabulary")
 
 
@@ -237,7 +258,8 @@ policy = CONFIG["review_policy"]
 assert resolve_review_panel({"signals": [], "risk_band": "low"}, policy) == [], "low + no signals = generalist only"
 assert resolve_review_panel({"signals": ["auth"], "risk_band": "low"}, policy) == ["security"]
 assert resolve_review_panel({"signals": ["auth", "dependency"], "risk_band": "high"}, policy) == [
-    "security", "performance"
+    "security",
+    "performance",
 ], "a specialist fired twice appears once, in policy order"
 assert policy["generalist"] not in resolve_review_panel(
     {"signals": ["auth", "api-contract"], "risk_band": "high"}, policy
@@ -268,35 +290,42 @@ assert extract_json_object("{not: valid}") is None
 ok("envelope reader recovers a fenced/prose-wrapped object, rejects genuine garbage")
 
 
-
 # --- 9. station post-checks -------------------------------------------------
 # No stubbing and no network: every case below is refuted by something local — a file
 # that is not on disk, a branch with no upstream.
+
 
 def post_check_repo(tmp):
     """A git repo + an initialised run dir, baton parked on sdet."""
     repo, run_dir = os.path.join(tmp, "repo"), os.path.join(tmp, "run")
     os.makedirs(os.path.join(repo, "tests"))
+
     def git(*a):
         subprocess.run(["git", *a], cwd=repo, check=True, capture_output=True)
+
     git("init", "-q", "-b", "base")
-    git("config", "user.email", "a@b"); git("config", "user.name", "a")
+    git("config", "user.email", "a@b")
+    git("config", "user.name", "a")
     open(os.path.join(repo, "tests", "a.test.js"), "w").write("x\n")
-    git("add", "-A"); git("commit", "-qm", "init")
+    git("add", "-A")
+    git("commit", "-qm", "init")
     seed_full_ledger(run_dir, repo)
-    subprocess.run([sys.executable, ROUTE, "set", run_dir, "test_root=tests"],
-                   check=True, capture_output=True)
+    subprocess.run([sys.executable, ROUTE, "set", run_dir, "test_root=tests"], check=True, capture_output=True)
     return repo, run_dir
 
 
 def route_it(run_dir, repo, name, env):
     json.dump(env, open(os.path.join(run_dir, name), "w"))
-    return subprocess.run([sys.executable, ROUTE, "route", run_dir, name, "--repo", repo],
-                          capture_output=True, text=True)
+    return subprocess.run(
+        [sys.executable, ROUTE, "route", run_dir, name, "--repo", repo], capture_output=True, text=True
+    )
 
 
 SDET_ENV = {
-    "issue": 41, "station": "sdet", "status": "passed", "attempt": 1,
+    "issue": 41,
+    "station": "sdet",
+    "status": "passed",
+    "attempt": 1,
     "summary": "6 RED tests authored",
     "evidence": {"commands": [{"cmd": "pytest", "exit": 1, "excerpt": "6 failed"}]},
     "handoff": {"test_files": ["tests/does-not-exist.js"], "red_confirmed": True},
@@ -331,14 +360,18 @@ with tempfile.TemporaryDirectory() as tmp:
 
 with tempfile.TemporaryDirectory() as tmp:
     repo, run_dir = post_check_repo(tmp)
-    subprocess.run([sys.executable, ROUTE, "set", run_dir, "pr_number=88"],
-                   check=True, capture_output=True)
+    subprocess.run([sys.executable, ROUTE, "set", run_dir, "pr_number=88"], check=True, capture_output=True)
     # fixer's branch has no upstream, so the push check cannot run at all. fixer is in
     # FATAL_WHEN_UNRUNNABLE: a check that cannot run IS the finding there.
-    fix = {"issue": 41, "station": "fixer", "status": "passed", "attempt": 1,
-           "summary": "3 findings applied",
-           "evidence": {"commands": [{"cmd": "pytest", "exit": 0, "excerpt": "ok"}]},
-           "handoff": {"commits": [], "report": "x"}}
+    fix = {
+        "issue": 41,
+        "station": "fixer",
+        "status": "passed",
+        "attempt": 1,
+        "summary": "3 findings applied",
+        "evidence": {"commands": [{"cmd": "pytest", "exit": 0, "excerpt": "ok"}]},
+        "handoff": {"commits": [], "report": "x"},
+    }
     proc = route_it(run_dir, repo, "60-fix.json", fix)
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.startswith("escalate:"), proc.stdout
@@ -352,7 +385,10 @@ with tempfile.TemporaryDirectory() as tmp:
     # looked at handoff.verdict would miss a mode-level failure hiding under a green
     # top-level claim.
     both_env = {
-        "issue": 41, "station": "verifier", "status": "bounce", "attempt": 1,
+        "issue": 41,
+        "station": "verifier",
+        "status": "bounce",
+        "attempt": 1,
         "summary": "backend ok, frontend fails",
         "verdict": "FAIL",
         "modes": {
@@ -361,13 +397,16 @@ with tempfile.TemporaryDirectory() as tmp:
         },
         "evidence": {"commands": [{"cmd": "curl /x", "exit": 0, "excerpt": "200 ok"}]},
         "handoff": {"verdict": "fail", "criteria": [], "report": "x"},
-        "bounce": {"to": "dev", "reason": "frontend empty state",
-                   "findings": [{"mode": "frontend", "where": "OrderList", "observed": "crash",
-                                 "expected": "empty message"}]},
+        "bounce": {
+            "to": "dev",
+            "reason": "frontend empty state",
+            "findings": [{"mode": "frontend", "where": "OrderList", "observed": "crash", "expected": "empty message"}],
+        },
     }
     proc = route_it(run_dir, repo, "40-verify.json", both_env)
-    assert proc.returncode == 0 and proc.stdout.strip() == "bounce(dev)", \
+    assert proc.returncode == 0 and proc.stdout.strip() == "bounce(dev)", (
         f"{proc.returncode}: {proc.stdout}{proc.stderr}"
+    )
     ok("verifier rollup: one FAILing mode bounces even though the other mode passed")
 
     # the rollup claim has to match the worst mode's verdict — a station cannot say
@@ -385,7 +424,10 @@ with tempfile.TemporaryDirectory() as tmp:
     # repo/run_dir: the verifier->verifier check-bounce cap (1) must not already be
     # spent from an earlier case.
     empty_criteria_env = {
-        "issue": 41, "station": "verifier", "status": "passed", "attempt": 1,
+        "issue": 41,
+        "station": "verifier",
+        "status": "passed",
+        "attempt": 1,
         "summary": "backend claims pass with nothing checked",
         "verdict": "PASS",
         "modes": {"backend": {"verdict": "PASS", "criteria": []}},
@@ -400,11 +442,18 @@ with tempfile.TemporaryDirectory() as tmp:
 with tempfile.TemporaryDirectory() as tmp:
     repo, run_dir = post_check_repo(tmp)
     # researcher has no post-check, so it routes exactly as it always did.
-    res = {"issue": 41, "station": "researcher", "status": "passed", "attempt": 1,
-           "summary": "brief written", "handoff": {"brief": "..."}}
+    res = {
+        "issue": 41,
+        "station": "researcher",
+        "status": "passed",
+        "attempt": 1,
+        "summary": "brief written",
+        "handoff": {"brief": "..."},
+    }
     proc = route_it(run_dir, repo, "00-readiness.json", res)
-    assert proc.returncode == 0 and proc.stdout.strip() == "advance(planner)", \
+    assert proc.returncode == 0 and proc.stdout.strip() == "advance(planner)", (
         f"{proc.returncode}: {proc.stdout}{proc.stderr}"
+    )
     led = json.load(open(os.path.join(run_dir, "run.json")))
     assert "check_failures" not in led["context"] and "check_notes" not in led["context"]
     ok("a station with no post-check routes exactly as it does today")
@@ -433,8 +482,9 @@ def _exit6_bullet():
 
 bullet = _exit6_bullet()
 assert "git show" in bullet, "fallback for hook-blocked git checkout/restore is missing"
-assert _re.search(r"<sdet_sha>\s*:", bullet) or _re.search(r"<[a-zA-Z_]*sha>\s*:", bullet), \
+assert _re.search(r"<sdet_sha>\s*:", bullet) or _re.search(r"<[a-zA-Z_]*sha>\s*:", bullet), (
     "fallback must reference a sha:path pattern (e.g. <sdet_sha>:<path>)"
+)
 assert "/tmp/" in bullet, "fallback must write to a /tmp/ destination"
 ok("exit-6 bullet documents a git-show + /tmp fallback for hook-blocked checkout")
 
@@ -444,12 +494,12 @@ assert checkout_idx < show_idx, "primary `git checkout` instruction must precede
 ok("primary git-checkout instruction still appears, and precedes the git-show fallback")
 
 normalized_bullet = " ".join(bullet.split())
-assert normalized_bullet.rstrip(".").endswith(
-    "Never re-dispatch `run-dev` with tampered tests still on disk"
-), "the invariant sentence must remain the LAST sentence of the exit-6 bullet"
+assert normalized_bullet.rstrip(".").endswith("Never re-dispatch `run-dev` with tampered tests still on disk"), (
+    "the invariant sentence must remain the LAST sentence of the exit-6 bullet"
+)
 ok("the 'never re-dispatch run-dev with tampered tests' invariant survives as the last sentence")
 
-assert ("stderr" in bullet), "fallback must reference stderr / paths from stderr"
+assert "stderr" in bullet, "fallback must reference stderr / paths from stderr"
 # Scope the wildcard check to the fallback text itself (after the primary
 # `git checkout` instruction), not the whole bullet — the bullet's own
 # markdown bold header (`**exit 6 ...**`) contains literal asterisks that
@@ -474,6 +524,7 @@ ok("git-show fallback appears exactly once within the exit-6 bullet")
 # hardcoded here — pinning their exact prose would make this suite fail on any future,
 # unrelated reword of those bullets; the PR's own diff is the cheaper collateral-scope
 # check for those.)
+
 
 def _normalize(s):
     return " ".join(s.split())
@@ -503,8 +554,9 @@ EXPECTED_TEST_OWNERSHIP = _normalize("""
 
 """)
 
-assert EXPECTED_TEST_OWNERSHIP == _normalize(full_md[test_ownership_start:test_ownership_end]), \
+assert EXPECTED_TEST_OWNERSHIP == _normalize(full_md[test_ownership_start:test_ownership_end]), (
     "the ### Test ownership section must be unchanged by the exit-6 doc fix"
+)
 ok("### Test ownership section is unchanged")
 
 
@@ -512,8 +564,7 @@ ok("### Test ownership section is unchanged")
 
 with tempfile.TemporaryDirectory() as tmp:
     run_dir = os.path.join(tmp, "bare")
-    proc = subprocess.run([sys.executable, ROUTE, "init", run_dir, "--issue", "41"],
-                          capture_output=True, text=True)
+    proc = subprocess.run([sys.executable, ROUTE, "init", run_dir, "--issue", "41"], capture_output=True, text=True)
     assert proc.returncode == 0 and proc.stdout.startswith("initialised default:"), proc
     led = json.load(open(os.path.join(run_dir, "run.json")))
     assert led["stations"] == CONFIG["modes"]["default"]["stations"], led["stations"]
@@ -524,8 +575,9 @@ ok("bare `aiw init` writes the default roster")
 for flag in ("default", "full", "lean"):
     with tempfile.TemporaryDirectory() as tmp:
         run_dir = os.path.join(tmp, "nomode")
-        proc = subprocess.run([sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--mode", flag],
-                              capture_output=True, text=True)
+        proc = subprocess.run(
+            [sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--mode", flag], capture_output=True, text=True
+        )
         assert proc.returncode == 2 and "unrecognized arguments" in proc.stderr, proc
         assert not os.path.exists(os.path.join(run_dir, "run.json"))
 ok("`aiw init --mode X` is rejected as an unknown option and writes nothing")
@@ -538,8 +590,9 @@ with tempfile.TemporaryDirectory() as tmp:
     repo, run_dir = os.path.join(tmp, "repo"), os.path.join(tmp, "run")
     os.makedirs(repo)
     json.dump({"default_mode": "lean"}, open(os.path.join(repo, ".run-issue.json"), "w"))
-    proc = subprocess.run([sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--repo", repo],
-                          capture_output=True, text=True)
+    proc = subprocess.run(
+        [sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--repo", repo], capture_output=True, text=True
+    )
     assert proc.returncode == 2 and "unknown mode: lean (have: default)" in proc.stderr, proc
     assert "Traceback" not in proc.stderr, proc.stderr
 ok("a stale overlay default_mode fails cleanly with `unknown mode`")
@@ -547,8 +600,7 @@ ok("a stale overlay default_mode fails cleanly with `unknown mode`")
 with tempfile.TemporaryDirectory() as tmp:
     run_dir = os.path.join(tmp, "legacy")
     seed_full_ledger(run_dir, tmp)
-    proc = subprocess.run([sys.executable, ROUTE, "set", run_dir, "test_root=tests"],
-                          capture_output=True, text=True)
+    proc = subprocess.run([sys.executable, ROUTE, "set", run_dir, "test_root=tests"], capture_output=True, text=True)
     assert proc.returncode == 0, proc
     led = json.load(open(os.path.join(run_dir, "run.json")))
     assert led["stations"] == FULL and led["context"]["mode"] == "full", led
@@ -556,8 +608,9 @@ ok("a legacy full-roster ledger still loads and `aiw set` works on it")
 
 with tempfile.TemporaryDirectory() as tmp:
     run_dir = os.path.join(tmp, "noreview")
-    subprocess.run([sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--no-review"],
-                   check=True, capture_output=True)
+    subprocess.run(
+        [sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--no-review"], check=True, capture_output=True
+    )
     led = json.load(open(os.path.join(run_dir, "run.json")))
     want = [s for s in CONFIG["modes"]["default"]["stations"] if s not in ("reviewer", "fixer")]
     assert led["stations"] == want and led["stations"][-1] == "dev", led["stations"]
@@ -566,8 +619,10 @@ ok("--no-review drops reviewer and fixer from the roster and records review=skip
 
 # --- aiw skip-review: edit a live run before its reviewer is current ---------
 
+
 def aiw(*a):
     return subprocess.run([sys.executable, ROUTE, *a], capture_output=True, text=True)
+
 
 with tempfile.TemporaryDirectory() as tmp:
     run_dir = os.path.join(tmp, "live")
@@ -599,19 +654,25 @@ def default_mode_repo(tmp):
     os.makedirs(os.path.join(repo, "tests"))
     git = lambda *a: subprocess.run(["git", *a], cwd=repo, check=True, capture_output=True, text=True)
     git("init", "-q", "-b", "main")
-    git("config", "user.email", "t@t"); git("config", "user.name", "t")
+    git("config", "user.email", "t@t")
+    git("config", "user.name", "t")
     open(os.path.join(repo, "README"), "w").write("x\n")
-    git("add", "-A"); git("commit", "-qm", "base")
+    git("add", "-A")
+    git("commit", "-qm", "base")
     open(os.path.join(repo, "tests", "a.test.js"), "w").write("expect(1).toBe(2)\n")
-    git("add", "-A"); git("commit", "-qm", "red tests")
+    git("add", "-A")
+    git("commit", "-qm", "red tests")
     tests_sha = git("rev-parse", "HEAD").stdout.strip()
     open(os.path.join(repo, "tests", "a.test.js"), "w").write("expect(1).toBe(1)\n")
     open(os.path.join(repo, "app.js"), "w").write("y\n")
-    git("add", "-A"); git("commit", "-qm", "implement")
-    subprocess.run([sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--repo", repo],
-                   check=True, capture_output=True)
-    subprocess.run([sys.executable, ROUTE, "set", run_dir, "test_root=tests", "stack=failed"],
-                   check=True, capture_output=True)
+    git("add", "-A")
+    git("commit", "-qm", "implement")
+    subprocess.run(
+        [sys.executable, ROUTE, "init", run_dir, "--issue", "41", "--repo", repo], check=True, capture_output=True
+    )
+    subprocess.run(
+        [sys.executable, ROUTE, "set", run_dir, "test_root=tests", "stack=failed"], check=True, capture_output=True
+    )
     led = json.load(open(os.path.join(run_dir, "run.json")))
     led["currentIndex"] = led["stations"].index("dev")
     json.dump(led, open(os.path.join(run_dir, "run.json"), "w"))
@@ -619,11 +680,20 @@ def default_mode_repo(tmp):
 
 
 def dev_env(tests_sha, **handoff):
-    return {"issue": 41, "station": "dev", "status": "passed", "attempt": 1, "summary": "done",
-            "evidence": {"commands": [{"cmd": "npm test", "exit": 0, "excerpt": "1 passed"}]},
-            "handoff": {"tests_sha": tests_sha, "files_changed": ["app.js", "tests/a.test.js"],
-                        "verify": {"verdict": "skipped", "reason": "no backend/frontend signal"},
-                        **handoff}}
+    return {
+        "issue": 41,
+        "station": "dev",
+        "status": "passed",
+        "attempt": 1,
+        "summary": "done",
+        "evidence": {"commands": [{"cmd": "npm test", "exit": 0, "excerpt": "1 passed"}]},
+        "handoff": {
+            "tests_sha": tests_sha,
+            "files_changed": ["app.js", "tests/a.test.js"],
+            "verify": {"verdict": "skipped", "reason": "no backend/frontend signal"},
+            **handoff,
+        },
+    }
 
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -642,9 +712,11 @@ with tempfile.TemporaryDirectory() as tmp:
     assert proc.returncode == 0 and proc.stdout.strip() == "advance(reviewer)", f"{proc.stdout}{proc.stderr}"
 ok("default mode: a test change with a test_changes[] reason passes the guard")
 
-for bad, needle in (({"tests_sha": None}, "tests_sha"),
-                    ({"verify": None}, "handoff.verify"),
-                    ({"verify": {"verdict": "fail", "modes": {}}}, "FAIL")):
+for bad, needle in (
+    ({"tests_sha": None}, "tests_sha"),
+    ({"verify": None}, "handoff.verify"),
+    ({"verify": {"verdict": "fail", "modes": {}}}, "FAIL"),
+):
     with tempfile.TemporaryDirectory() as tmp:
         repo, run_dir, tests_sha = default_mode_repo(tmp)
         env = dev_env(tests_sha, test_changes=[{"file": "tests/a.test.js", "reason": "r"}])
@@ -655,13 +727,21 @@ ok("default mode: dev's post-check refuses a missing tests_sha, a missing verify
 
 
 import route as _route  # noqa: E402
+
 with tempfile.TemporaryDirectory() as g:
-    def _git(*a): subprocess.run(["git", "-C", g, *a], check=True, capture_output=True)
-    _git("init", "-q"); _git("config", "user.email", "a@b"); _git("config", "user.name", "a")
-    os.makedirs(os.path.join(g, "pkg")); os.makedirs(os.path.join(g, "tests"))
+
+    def _git(*a):
+        subprocess.run(["git", "-C", g, *a], check=True, capture_output=True)
+
+    _git("init", "-q")
+    _git("config", "user.email", "a@b")
+    _git("config", "user.name", "a")
+    os.makedirs(os.path.join(g, "pkg"))
+    os.makedirs(os.path.join(g, "tests"))
     for f in ("pkg/mod.py", "pkg/test_mod.py", "tests/fixture.json"):
         open(os.path.join(g, f), "w").write("1")
-    _git("add", "."); _git("commit", "-qm", "base")
+    _git("add", ".")
+    _git("commit", "-qm", "base")
     base = subprocess.run(["git", "-C", g, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
     for f in ("pkg/mod.py", "pkg/test_mod.py", "tests/fixture.json"):
         open(os.path.join(g, f), "w").write("2")

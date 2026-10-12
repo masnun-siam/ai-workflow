@@ -261,15 +261,31 @@ def answer_checks():
         return req("POST", f"/api/sessions/{sid}/answer", {"round_id": rid, "answers": answers}, **kw)
 
     def rnd(rid="q-1", free=None):
-        q1 = {"header": "Branch", "question": "Which branch?", "multiSelect": True,
-              "options": [{"label": "master", "description": "main"}, {"label": "staging", "description": "stage"}]}
+        q1 = {
+            "header": "Branch",
+            "question": "Which branch?",
+            "multiSelect": True,
+            "options": [{"label": "master", "description": "main"}, {"label": "staging", "description": "stage"}],
+        }
         if free is not None:
             q1["allowFreeText"] = free
-        return {"id": rid, "status": "pending", "questions": [
-            {"header": "Gate 1", "question": "Proceed?", "multiSelect": False,
-             "options": [{"label": "Approve and start (Recommended)", "description": "go"},
-                         {"label": "Revise", "description": "rework"},
-                         {"label": "Abort", "description": "stop"}]}, q1]}
+        return {
+            "id": rid,
+            "status": "pending",
+            "questions": [
+                {
+                    "header": "Gate 1",
+                    "question": "Proceed?",
+                    "multiSelect": False,
+                    "options": [
+                        {"label": "Approve and start (Recommended)", "description": "go"},
+                        {"label": "Revise", "description": "rework"},
+                        {"label": "Abort", "description": "stop"},
+                    ],
+                },
+                q1,
+            ],
+        }
 
     GOOD = {"0": {"labels": ["Revise"]}, "1": {"labels": ["master"]}}
 
@@ -295,8 +311,11 @@ def answer_checks():
 
     def intact(sid, fk, rid="q-1"):
         r = ui_sessions.load(sid)
-        assert r["status"] == "waiting" and r["pending_question"]["id"] == rid \
-            and r["pending_question"]["status"] == "pending", r
+        assert (
+            r["status"] == "waiting"
+            and r["pending_question"]["id"] == rid
+            and r["pending_question"]["status"] == "pending"
+        ), r
         assert not spawned(fk)
 
     try:
@@ -362,8 +381,10 @@ def answer_checks():
         wait_status(sid, {"done", "failed"})
         wait_finished(sid)
         assert lines(fk, "argv").split("\n")[:-1] == argv_of(fk, text("q-1", ans)), lines(fk, "argv")
-        assert lines(fk, "argv").split("\n")[:-1][-1] == \
-            'Answer to q-1: {"0":{"labels":["Revise"]},"1":{"other":"drop task 3"}}'
+        assert (
+            lines(fk, "argv").split("\n")[:-1][-1]
+            == 'Answer to q-1: {"0":{"labels":["Revise"]},"1":{"other":"drop task 3"}}'
+        )
         assert real(lines(fk, "pwd")) == real(work)
         after = read(sid, "stream.jsonl")
         assert after.startswith(before) and len(after) > len(before) and after.count(b'"init"') == 2
@@ -405,7 +426,11 @@ def answer_checks():
         # -- 400s leave the round intact (one session), then boundary 4000 ok
         sid, fk, work = mk()
         bad_answers = [
-            None, {}, [], "x", {"0": {"labels": ["Revise"]}},
+            None,
+            {},
+            [],
+            "x",
+            {"0": {"labels": ["Revise"]}},
             {"1": {"labels": ["master"]}},
             {**GOOD, "2": {"labels": ["master"]}},
             {"0": {"labels": ["Revise"], "other": "x"}, "1": GOOD["1"]},
@@ -450,8 +475,7 @@ def answer_checks():
 
         # -- lone surrogate in free text: 400, round intact, then valid answer 200
         sid, fk, work = mk()
-        body = ('{"round_id":"q-1","answers":{"0":{"labels":["Revise"]},'
-                '"1":{"other":"x\\ud800y"}}}').encode()
+        body = ('{"round_id":"q-1","answers":{"0":{"labels":["Revise"]},"1":{"other":"x\\ud800y"}}}').encode()
         s, _, b = req("POST", f"/api/sessions/{sid}/answer", body)
         assert s == 400 and "error" in b, (s, b)
         intact(sid, fk)
@@ -554,14 +578,21 @@ def answer_checks():
             fn(r)
             return r
 
-        bads = [None, [], "x", mut(lambda r: r.pop("id")), mut(lambda r: r.update(id="")),
-                mut(lambda r: r.update(questions=[])), mut(lambda r: r.update(questions="x")),
-                mut(lambda r: r["questions"][0].update(options=[])),
-                mut(lambda r: r["questions"][0]["options"][0].pop("label")),
-                mut(lambda r: r["questions"][0]["options"][0].update(label="")),
-                mut(lambda r: r["questions"][0]["options"][0].update(label=5)),
-                mut(lambda r: r["questions"][0]["options"][1].update(label="Abort")),
-                mut(lambda r: r["questions"][0].update(multiSelect="no"))]
+        bads = [
+            None,
+            [],
+            "x",
+            mut(lambda r: r.pop("id")),
+            mut(lambda r: r.update(id="")),
+            mut(lambda r: r.update(questions=[])),
+            mut(lambda r: r.update(questions="x")),
+            mut(lambda r: r["questions"][0].update(options=[])),
+            mut(lambda r: r["questions"][0]["options"][0].pop("label")),
+            mut(lambda r: r["questions"][0]["options"][0].update(label="")),
+            mut(lambda r: r["questions"][0]["options"][0].update(label=5)),
+            mut(lambda r: r["questions"][0]["options"][1].update(label="Abort")),
+            mut(lambda r: r["questions"][0].update(multiSelect="no")),
+        ]
         for b_ in bads:
             try:
                 ui_sessions.set_pending(sid, b_)
@@ -622,10 +653,13 @@ def answer_checks():
             "import os,sys,time\nsys.path.insert(0,%r)\nimport ui_sessions\n"
             "sid,go=sys.argv[1],sys.argv[2]\n"
             "while not os.path.exists(go): time.sleep(0.001)\n"
-            "print(1 if ui_sessions.claim_answer(sid,'q-1') else 0)\n" % HERE)
+            "print(1 if ui_sessions.claim_answer(sid,'q-1') else 0)\n" % HERE
+        )
         go = os.path.join(tempfile.mkdtemp(), "go")
-        procs = [subprocess.Popen([sys.executable, "-c", child, sid, go], stdout=subprocess.PIPE, text=True)
-                 for _ in range(8)]
+        procs = [
+            subprocess.Popen([sys.executable, "-c", child, sid, go], stdout=subprocess.PIPE, text=True)
+            for _ in range(8)
+        ]
         open(go, "w").close()
         wins = [p.communicate(timeout=60)[0].strip() for p in procs]
         assert wins.count("1") == 1 and wins.count("0") == 7, wins
@@ -714,7 +748,9 @@ def fallback_checks():
         return " ".join(ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, f"{cmd} {ans}"])
 
     def resume_args(ans, sess="sess-abc"):
-        return " ".join(ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, "--resume", sess, ans])
+        return " ".join(
+            ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, "--resume", sess, ans]
+        )
 
     def terminal(r, fk, n_calls=1, kept="the answer"):
         assert r["status"] == "failed" and r.get("terminal_handoff") is True, r
@@ -724,15 +760,27 @@ def fallback_checks():
     try:
         # -- through the answer API, exposed via GET
         sid, d, fk, work = mk()
-        rid = {"id": "q-1", "status": "pending", "questions": [
-            {"header": "G", "question": "Go?", "multiSelect": False,
-             "options": [{"label": "Yes", "description": "y"}, {"label": "No", "description": "n"}]}]}
+        rid = {
+            "id": "q-1",
+            "status": "pending",
+            "questions": [
+                {
+                    "header": "G",
+                    "question": "Go?",
+                    "multiSelect": False,
+                    "options": [{"label": "Yes", "description": "y"}, {"label": "No", "description": "n"}],
+                }
+            ],
+        }
         ui_sessions.set_pending(sid, rid)
         os.environ["FAKE_CLAUDE_MODE"], os.environ["FAKE_SID"] = "badresume", "sess-new"
         c = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
-        c.request("POST", f"/api/sessions/{sid}/answer",
-                  body=json.dumps({"round_id": "q-1", "answers": {"0": {"labels": ["Yes"]}}}).encode(),
-                  headers={"Content-Type": "application/json"})
+        c.request(
+            "POST",
+            f"/api/sessions/{sid}/answer",
+            body=json.dumps({"round_id": "q-1", "answers": {"0": {"labels": ["Yes"]}}}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
         resp = c.getresponse()
         resp.read()
         c.close()
@@ -778,8 +826,12 @@ def fallback_checks():
         ok("run-issue without Ledger: terminal handoff, no second spawn")
 
         # -- command parsing
-        for cmd, fresh in (("/run-issue --lean 42", True), ("/run-issue #42", True),
-                           ("/run-issue", False), ("/run-issuex 42", False)):
+        for cmd, fresh in (
+            ("/run-issue --lean 42", True),
+            ("/run-issue #42", True),
+            ("/run-issue", False),
+            ("/run-issuex 42", False),
+        ):
             sid, d, fk, work = mk(cmd)
             go(sid, "badresume")
             r = end(sid)
@@ -963,8 +1015,13 @@ def stop_checks():
 
     def cheap(command="/run-issue 42", work=None, status="stopped", sess="sess-abc"):
         rec = ui_sessions.create(command, SLUG)
-        ui_sessions.update(rec["id"], session_id=sess, status=status, cwd_path=work,
-                           **({"ended_at": "2026-01-01T00:00:00+00:00"} if status in ("stopped", "done", "failed") else {}))
+        ui_sessions.update(
+            rec["id"],
+            session_id=sess,
+            status=status,
+            cwd_path=work,
+            **({"ended_at": "2026-01-01T00:00:00+00:00"} if status in ("stopped", "done", "failed") else {}),
+        )
         return rec["id"]
 
     def lst(fk, name):
@@ -972,7 +1029,10 @@ def stop_checks():
         return open(p).read().split() if os.path.exists(p) else []
 
     def cont_args(sess="sess-abc"):
-        return " ".join(ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, "--resume", sess, ui_runner.CONTINUE_PROMPT])
+        return " ".join(
+            ui_runner.CLAUDE_ARGS
+            + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, "--resume", sess, ui_runner.CONTINUE_PROMPT]
+        )
 
     def end(sid):
         wait_status(sid, {"done", "failed", "stopped"})
@@ -1018,7 +1078,10 @@ def stop_checks():
         sid, fk, work, r = stations_run("stations_badresume")
         cl = calls(fk)
         assert len(cl) == 3, cl
-        assert cl[2] == (real(work), " ".join(ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, "/run-issue 42"])), cl
+        assert cl[2] == (
+            real(work),
+            " ".join(ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, "/run-issue 42"]),
+        ), cl
         assert r["resumed_fresh"] is True and "resumed fresh" in r["note"], r
         assert not r.get("pending_answer"), r
         ok("stop then resume via fallback: fresh /run-issue 42 with no answer text, resumed_fresh, Ledger untouched")
@@ -1031,7 +1094,9 @@ def stop_checks():
         end(sid)
         st, pub = http_("GET", f"/api/sessions/{sid}")
         assert st == 200 and real(pub["repo_path"]) == real(work), pub
-        assert pub["resume_command"] == "cd " + shlex.quote(pub["repo_path"]) + " && claude --resume " + shlex.quote("sess-abc"), pub
+        assert pub["resume_command"] == "cd " + shlex.quote(pub["repo_path"]) + " && claude --resume " + shlex.quote(
+            "sess-abc"
+        ), pub
         st, lst_ = http_("GET", "/api/sessions")
         item = [x for x in lst_["sessions"] if x["id"] == sid][0]
         assert item["repo_path"] == pub["repo_path"] and item["resume_command"] == pub["resume_command"], item
@@ -1054,7 +1119,9 @@ def stop_checks():
         r = end(sid)
         cl = calls(fk)
         assert r["status"] == "done" and len(cl) == 1 and "--resume" not in cl[0][1], (r, cl)
-        assert cl[0][1] == " ".join(ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, "/run-issue 42"]), cl
+        assert cl[0][1] == " ".join(
+            ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, "/run-issue 42"]
+        ), cl
         d, fk, work = setup_("crash")
         rec = ui_runner.start("/prd x", SLUG)
         live.append(rec)
@@ -1084,8 +1151,9 @@ def stop_checks():
             f.write("#!/bin/sh\nexit 0\n")
         os.chmod(os.path.join(stub, "claude"), 0o755)
         elsewhere = tempfile.mkdtemp()
-        subprocess.run(["sh", "-c", cmd], cwd=elsewhere, check=True,
-                       env={**os.environ, "PATH": stub + os.pathsep + ORIG_PATH})
+        subprocess.run(
+            ["sh", "-c", cmd], cwd=elsewhere, check=True, env={**os.environ, "PATH": stub + os.pathsep + ORIG_PATH}
+        )
         for dd in (bad, elsewhere, work):
             assert not os.path.exists(os.path.join(dd, "PWNED")), dd
         ok("resume_command with spaces/metacharacters round-trips through shlex and runs without injection")
@@ -1121,7 +1189,21 @@ def stop_checks():
 
         # -- stop on waiting without a live process
         sid = cheap(work=work, status="done")
-        ui_sessions.set_pending(sid, {"id": "q-1", "status": "pending", "questions": [{"header": "G", "question": "Proceed?", "multiSelect": False, "options": [{"label": "Go", "description": "go"}, {"label": "No", "description": "no"}]}]})
+        ui_sessions.set_pending(
+            sid,
+            {
+                "id": "q-1",
+                "status": "pending",
+                "questions": [
+                    {
+                        "header": "G",
+                        "question": "Proceed?",
+                        "multiSelect": False,
+                        "options": [{"label": "Go", "description": "go"}, {"label": "No", "description": "no"}],
+                    }
+                ],
+            },
+        )
         ui_sessions.update(sid, status="waiting")
         assert sid not in ui_runner._procs
         with mock.patch("os.killpg") as kp, mock.patch("os.kill") as k:
@@ -1129,7 +1211,9 @@ def stop_checks():
         assert st == 200 and body["outcome"] == "stopped" and body["ended_at"], (st, body)
         assert body["waiting"] is False and body["pending_question"] is None, body
         assert not kp.called and not k.called
-        st, _b = http_("POST", f"/api/sessions/{sid}/answer", body={"round_id": "q-1", "answers": {"0": {"labels": ["Go"]}}})
+        st, _b = http_(
+            "POST", f"/api/sessions/{sid}/answer", body={"round_id": "q-1", "answers": {"0": {"labels": ["Go"]}}}
+        )
         assert st == 409, st
         ok("stop on waiting without process: stopped, pending cleared, no signal, later answer 409")
 
@@ -1139,7 +1223,21 @@ def stop_checks():
         live.append(rec)
         sid = rec["id"]
         wait_for(lambda: (ui_sessions.load(sid) or {}).get("session_id"))
-        ui_sessions.set_pending(sid, {"id": "q-1", "status": "pending", "questions": [{"header": "G", "question": "Proceed?", "multiSelect": False, "options": [{"label": "Go", "description": "go"}, {"label": "No", "description": "no"}]}]})
+        ui_sessions.set_pending(
+            sid,
+            {
+                "id": "q-1",
+                "status": "pending",
+                "questions": [
+                    {
+                        "header": "G",
+                        "question": "Proceed?",
+                        "multiSelect": False,
+                        "options": [{"label": "Go", "description": "go"}, {"label": "No", "description": "no"}],
+                    }
+                ],
+            },
+        )
         assert sid in ui_runner._procs
         st, body = http_("POST", f"/api/sessions/{sid}/stop")
         assert st == 200 and body["outcome"] == "stopped", (st, body)
@@ -1212,7 +1310,9 @@ def stop_checks():
         d, fk, work = setup_("normal")
         sid = cheap(work=work)
         with concurrent.futures.ThreadPoolExecutor(2) as ex:
-            res = sorted(f.result()[0] for f in [ex.submit(http_, "POST", f"/api/sessions/{sid}/resume") for _ in range(2)])
+            res = sorted(
+                f.result()[0] for f in [ex.submit(http_, "POST", f"/api/sessions/{sid}/resume") for _ in range(2)]
+            )
         assert res == [200, 409], res
         end(sid)
         assert len(calls(fk)) == 1, calls(fk)
@@ -1356,8 +1456,17 @@ def prgrind_cases() -> int:
         return d, fk, work
 
     def mkpr(d, name="p1", thread=THREAD, body=BODY, **kv):
-        h = {"owner": "o", "repo": "r", "number": "7", "thread": thread, "reviewer": "alice",
-             "author": "bob", "next-poll": PAST, "poll-since": SINCE, "ci-seen": "abc green"}
+        h = {
+            "owner": "o",
+            "repo": "r",
+            "number": "7",
+            "thread": thread,
+            "reviewer": "alice",
+            "author": "bob",
+            "next-poll": PAST,
+            "poll-since": SINCE,
+            "ci-seen": "abc green",
+        }
         h.update(kv)
         os.makedirs(os.path.join(d, "pr-grind"), exist_ok=True)
         path = os.path.join(d, "pr-grind", name + ".md")
@@ -1492,12 +1601,18 @@ def prgrind_cases() -> int:
     def poll_once():
         d, fk, work = pset()
         os.environ["FAKE_GH_REVIEWS"] = REV_NEW + "\n2030-06-01T11:30:00Z id=10 state=COMMENTED"
+
         def run(extra):
-            p = subprocess.Popen(["bash", POLL, "o", "r", "7", "alice", SINCE, *extra],
-                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                                 start_new_session=True)
+            p = subprocess.Popen(
+                ["bash", POLL, "o", "r", "7", "alice", SINCE, *extra],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                start_new_session=True,
+            )
             extra_procs.append(p)
             return p
+
         p = run(["reviewer", "once"])
         out, _ = p.communicate(timeout=10)
         assert p.returncode == 0 and "id=9" in out and "id=10" in out, (p.returncode, out)
@@ -1590,9 +1705,11 @@ def prgrind_cases() -> int:
         prior(work)
         bar = threading.Barrier(2)
         out = []
+
         def go():
             bar.wait()
             out.append(tick(path)[0])
+
         ts_ = [threading.Thread(target=go) for _ in range(2)]
         [t.start() for t in ts_]
         [t.join(30) for t in ts_]
@@ -1630,8 +1747,7 @@ def prgrind_cases() -> int:
         d, fk, work = pset("sleep")
         path = mkpr(d, **{"next-poll": REAL_PAST})
         prior(work)
-        code = ("import sys; sys.path.insert(0, %r); import ui_runner; "
-                "print(ui_runner.prgrind_tick(%r))" % (HERE, path))
+        code = "import sys; sys.path.insert(0, %r); import ui_runner; print(ui_runner.prgrind_tick(%r))" % (HERE, path)
         out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
         assert out.stdout.strip() == "started", (out.stdout, out.stderr)
         kid = [r for r in ui_sessions.list_sessions() if r["pid"]][-1]
@@ -1686,6 +1802,7 @@ def prgrind_cases() -> int:
         path = mkpr(d, "q", **{"next-poll": FUTURE})
         assert tick(path)[0] == "idle" and header(path)["poll-since"] == SINCE
         import ci
+
         with mock.patch.object(ci, "snapshot", side_effect=RuntimeError("ci boom")):
             path = mkpr(d, "r", **{"next-poll": FUTURE})
             act, err = tick(path)
@@ -1713,10 +1830,19 @@ def prgrind_cases() -> int:
     def untrusted_headers():
         d, fk, work = pset()
         prior(work)
-        bad = [{"repo": "../../x"}, {"owner": "a/b"}, {"repo": ".."}, {"owner": "o;rm"},
-               {"number": "7x"}, {"number": "-1"}, {"thread": "http://acme.slack.com/archives/C0123/p1"},
-               {"thread": "https://x/y z"}, {"thread": "-https://x/y"}, {"thread": "https://x/y\x07z"},
-               {"thread": "https://x/y\tz"}]
+        bad = [
+            {"repo": "../../x"},
+            {"owner": "a/b"},
+            {"repo": ".."},
+            {"owner": "o;rm"},
+            {"number": "7x"},
+            {"number": "-1"},
+            {"thread": "http://acme.slack.com/archives/C0123/p1"},
+            {"thread": "https://x/y z"},
+            {"thread": "-https://x/y"},
+            {"thread": "https://x/y\x07z"},
+            {"thread": "https://x/y\tz"},
+        ]
         for i, kv in enumerate(bad):
             act, _ = tick(mkpr(d, f"u{i}", **kv))
             assert act == "invalid", (kv, act)
@@ -1729,26 +1855,53 @@ def prgrind_cases() -> int:
         body = text.split("\n---\n", 1)[1]
         blocks, cur = [], []
         for ln in body.split("\n"):
-            if not ln.strip() or ln.lstrip().startswith("#") or (cur and (ln[:1].isdigit() or ln.lstrip().startswith("- ")) and not ln.startswith("   ")):
+            if (
+                not ln.strip()
+                or ln.lstrip().startswith("#")
+                or (cur and (ln[:1].isdigit() or ln.lstrip().startswith("- ")) and not ln.startswith("   "))
+            ):
                 if cur:
                     blocks.append("\n".join(cur))
                 cur = [ln] if ln.strip() and not ln.lstrip().startswith("#") else []
             else:
                 cur.append(ln)
         blocks.append("\n".join(cur))
-        sites = [b for b in blocks if "ScheduleWakeup(" in b
-                 or ("Monitor" in b and any(w in b for w in ("armed", "arming", "arm ")))]
+        sites = [
+            b
+            for b in blocks
+            if "ScheduleWakeup(" in b or ("Monitor" in b and any(w in b for w in ("armed", "arming", "arm ")))
+        ]
         assert len(sites) >= 8, len(sites)
         bare = [b.strip().split("\n")[0][:70] for b in sites if "headless" not in b.lower()]
         assert not bare, bare
         assert text.count("ScheduleWakeup({delaySeconds: 1500") == 1
         assert text.count("ScheduleWakeup({stop: true})") >= 2
 
-    for fn in (due_start, interactive_unchanged, heartbeat_rewrite, review_trigger, ci_trigger,
-               idle_releases, poll_once, tick_all_scan, timer_catchup, run_issue_origin, empty_and_invalid,
-               boundaries, unresolved_reviewer, race, lock_handoff, restart_survival,
-               busy_and_stale, merged_closed, gh_errors, runner_error, paused,
-               untrusted_headers, skill_sites):
+    for fn in (
+        due_start,
+        interactive_unchanged,
+        heartbeat_rewrite,
+        review_trigger,
+        ci_trigger,
+        idle_releases,
+        poll_once,
+        tick_all_scan,
+        timer_catchup,
+        run_issue_origin,
+        empty_and_invalid,
+        boundaries,
+        unresolved_reviewer,
+        race,
+        lock_handoff,
+        restart_survival,
+        busy_and_stale,
+        merged_closed,
+        gh_errors,
+        runner_error,
+        paused,
+        untrusted_headers,
+        skill_sites,
+    ):
         case(fn)
     os.environ["PATH"] = ORIG_PATH
     if fails:
@@ -1758,6 +1911,7 @@ def prgrind_cases() -> int:
 
 if "--prgrind" in sys.argv:
     sys.exit(1 if prgrind_cases() else 0)
+
 
 def meta_bytes(sid):
     return read(sid, "meta.json")
@@ -1792,6 +1946,7 @@ def detached(work):
 
 def restart_cases():
     import threading
+
     OLD = "Thu Jan  1 00:00:00 1970"
     S = INIT + "\n"
 
@@ -1808,8 +1963,7 @@ def restart_cases():
         with open(os.path.join(fk, "finish"), "w") as f:
             f.write("ok")
         r = wait_status(sid, {"done", "failed"})
-        assert r["status"] == "done" and r["cost"] == 0.0421 and r["session_id"] == "sess-abc" \
-            and r["ended_at"], r
+        assert r["status"] == "done" and r["cost"] == 0.0421 and r["session_id"] == "sess-abc" and r["ended_at"], r
         ok("live re-attach: LATE lands, finish -> done with cost/session_id/ended_at")
     finally:
         reap({"pid": pid})
@@ -1857,8 +2011,7 @@ def restart_cases():
     ui_runner.reconcile()
     ra, rb = ui_sessions.load(a), ui_sessions.load(b)
     assert ra["status"] == "done" and ra["ended_at"] and ra["cost"] == 0.0421, ra
-    assert rb["status"] == "failed" and "stderr.log" in rb["error"] \
-        and "exit code None" not in rb["error"], rb
+    assert rb["status"] == "failed" and "stderr.log" in rb["error"] and "exit code None" not in rb["error"], rb
     assert a not in ui_runner._procs and b not in ui_runner._procs
     assert threading.active_count() == base
     ended = ra["ended_at"]
@@ -1909,8 +2062,11 @@ def restart_cases():
     w2 = mk("waiting", os.getpid())
     t = [mk(st, os.getpid(), S + RESULT + "\n", pid_started=OLD) for st in ("done", "failed", "stopped")]
     before = {x: meta_bytes(x) for x in [w1, w2] + t}
-    with mock.patch("subprocess.run", side_effect=AssertionError("ps called")), \
-            mock.patch("os.kill") as k, mock.patch("os.killpg") as kg:
+    with (
+        mock.patch("subprocess.run", side_effect=AssertionError("ps called")),
+        mock.patch("os.kill") as k,
+        mock.patch("os.killpg") as kg,
+    ):
         ui_runner.reconcile()
         assert not k.called and not kg.called
     assert before == {x: meta_bytes(x) for x in before}
@@ -1968,6 +2124,7 @@ def restart_cases():
 
     # legacy record (None / missing pid_started) + dead pid: returns promptly, closes from stream
     import threading as _th
+
     a = mk("running", dead_pid(), S + RESULT + "\n", pid_started=None)
     b = mk("running", dead_pid(), S + RESULT_ERR + "\n")
     t = _th.Thread(target=ui_runner.reconcile, daemon=True)
@@ -1981,10 +2138,11 @@ def restart_cases():
     # transient ps errors while following a LIVE re-attached process: not failed, bounded
     def follow_with(seq, sid_):
         it = iter(seq)
-        with mock.patch.object(ui_runner, "POLL_SECONDS", 0.001), \
-                mock.patch.object(ui_runner, "_proc_start", lambda pid: next(it, None)):
-            t_ = _th.Thread(target=ui_runner._follow, args=(sid_, None, os.getpid(), "STARTED"),
-                            daemon=True)
+        with (
+            mock.patch.object(ui_runner, "POLL_SECONDS", 0.001),
+            mock.patch.object(ui_runner, "_proc_start", lambda pid: next(it, None)),
+        ):
+            t_ = _th.Thread(target=ui_runner._follow, args=(sid_, None, os.getpid(), "STARTED"), daemon=True)
             t_.start()
             t_.join(15)
             assert not t_.is_alive(), "follower hung"
@@ -1998,8 +2156,10 @@ def restart_cases():
     y = mk("running", os.getpid(), S + "\n")
     seen = []
     it = iter([E] * 100)
-    with mock.patch.object(ui_runner, "POLL_SECONDS", 0.001), \
-            mock.patch.object(ui_runner, "_proc_start", lambda pid: seen.append(1) or next(it)):
+    with (
+        mock.patch.object(ui_runner, "POLL_SECONDS", 0.001),
+        mock.patch.object(ui_runner, "_proc_start", lambda pid: seen.append(1) or next(it)),
+    ):
         t = _th.Thread(target=ui_runner._follow, args=(y, None, os.getpid(), "STARTED"), daemon=True)
         t.start()
         t.join(15)
@@ -2008,8 +2168,10 @@ def restart_cases():
     ok("persistent ps errors: bounded at 25, then treated as gone")
 
     z = mk("running", os.getpid(), S + RESULT + "\n", pid_started="STARTED")
-    with mock.patch.object(ui_runner, "POLL_SECONDS", 0.001), \
-            mock.patch("subprocess.run", side_effect=OSError("no ps")):
+    with (
+        mock.patch.object(ui_runner, "POLL_SECONDS", 0.001),
+        mock.patch("subprocess.run", side_effect=OSError("no ps")),
+    ):
         t = _th.Thread(target=ui_runner._follow, args=(z, None, os.getpid(), "STARTED"), daemon=True)
         t.start()
         t.join(15)
@@ -2038,10 +2200,20 @@ try:
     assert isinstance(final.get("pid_started"), str) and final["pid_started"], final
     ok("normal run: stream bytes, session_id, cost, done, ended_at")
     assert lines(fk, "argv").split("\n")[:-1] == [
-        "--print", "--output-format", "stream-json", "--verbose",
-        "--dangerously-skip-permissions", "/run-issue 42"], lines(fk, "argv")
-    assert ui_runner.CLAUDE_ARGS == ["--print", "--output-format", "stream-json", "--verbose",
-                                     "--dangerously-skip-permissions"]
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--dangerously-skip-permissions",
+        "/run-issue 42",
+    ], lines(fk, "argv")
+    assert ui_runner.CLAUDE_ARGS == [
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--dangerously-skip-permissions",
+    ]
     assert real(lines(fk, "pwd")) == real(work)
     ok("argv exact, cwd is checkout")
     assert b"some warning" in read(sid, "stderr.log")
@@ -2177,8 +2349,9 @@ try:
 finally:
     os.environ["PATH"] = ORIG_PATH
 ss = all_sessions()
-assert len(ss) == 1 and ss[0]["status"] == "failed" and ss[0]["error"] \
-    and ss[0]["ended_at"] and ss[0]["pid"] is None, ss
+assert len(ss) == 1 and ss[0]["status"] == "failed" and ss[0]["error"] and ss[0]["ended_at"] and ss[0]["pid"] is None, (
+    ss
+)
 ok("missing claude: RunnerError, failed record, no spawn")
 
 # ---- logged out / garbage auth ---------------------------------------------

@@ -9,10 +9,21 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ui_status
 from ui_status import summarize
 
-run = lambda name, status, conclusion=None: {"__typename": "CheckRun", "name": name, "status": status,
-                                              "conclusion": conclusion, "detailsUrl": "https://x/" + name}
-pr = lambda *checks, **kw: {"url": "https://github.com/o/r/pull/1", "number": 1, "state": "OPEN",
-                            "reviewDecision": "APPROVED", "statusCheckRollup": list(checks), **kw}
+run = lambda name, status, conclusion=None: {
+    "__typename": "CheckRun",
+    "name": name,
+    "status": status,
+    "conclusion": conclusion,
+    "detailsUrl": "https://x/" + name,
+}
+pr = lambda *checks, **kw: {
+    "url": "https://github.com/o/r/pull/1",
+    "number": 1,
+    "state": "OPEN",
+    "reviewDecision": "APPROVED",
+    "statusCheckRollup": list(checks),
+    **kw,
+}
 iss = {"state": "OPEN", "labels": [{"name": "ready-for-agent"}]}
 
 s = summarize(iss, pr(run("a", "COMPLETED", "SUCCESS")))
@@ -33,14 +44,24 @@ print("  ok  frozen only when PR merged/closed and issue closed")
 
 # get(): stale-keeps-last-good-value and no refetch inside TTL
 calls = []
+
+
 class Inline:
-    def submit(self, fn, *a): fn(*a)
+    def submit(self, fn, *a):
+        fn(*a)
+
+
 ui_status._fetch = lambda *a: (calls.append(a), summarize(iss, None))[1]
 assert ui_status.get("o", "r", 1, None, None, Inline())["issue"]["state"] == "OPEN"
 ui_status.get("o", "r", 1, None, None, Inline())
 assert len(calls) == 1
 ui_status._cache[("o", "r", 1)]["at"] = 0
-def boom(*a): raise RuntimeError("gh down")
+
+
+def boom(*a):
+    raise RuntimeError("gh down")
+
+
 ui_status._fetch = boom
 got = ui_status.get("o", "r", 1, None, None, Inline())
 assert got["stale"] is True and got["issue"]["state"] == "OPEN"

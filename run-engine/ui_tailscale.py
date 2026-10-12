@@ -73,8 +73,10 @@ def up(local_port: int, https_port: int = DEFAULT_HTTPS_PORT):
                 # terminal): it already points here, so adopt it instead of refusing and serving a 403
                 target = None
         if taken and target:
-            warn(f"tailscale: https port {https_port} already serves {target}; not overwriting "
-                 f"(pass --tailscale-port to use another, or --no-tailscale)")
+            warn(
+                f"tailscale: https port {https_port} already serves {target}; not overwriting "
+                f"(pass --tailscale-port to use another, or --no-tailscale)"
+            )
             return None
         if not taken:
             proc = _run(["serve", "--bg", f"--https={https_port}", f"http://127.0.0.1:{local_port}"])
@@ -85,8 +87,12 @@ def up(local_port: int, https_port: int = DEFAULT_HTTPS_PORT):
         warn(f"tailscale: serve failed: {(proc.stderr or proc.stdout or '').strip()[:200]}")
         return None
     suffix = "" if https_port == 443 else f":{https_port}"
-    return {"url": f"https://{me['dns']}{suffix}", "hosts": hosts(me["dns"], https_port),
-            "login": me["login"], "https_port": https_port}
+    return {
+        "url": f"https://{me['dns']}{suffix}",
+        "hosts": hosts(me["dns"], https_port),
+        "login": me["login"],
+        "https_port": https_port,
+    }
 
 
 def down(https_port: int) -> None:
@@ -94,5 +100,7 @@ def down(https_port: int) -> None:
     try:
         _run(["serve", f"--https={https_port}", "off"])
     except (OSError, subprocess.SubprocessError) as exc:
-        warn(f"tailscale: could not remove the serve handler on {https_port} ({type(exc).__name__}); "
-             f"run `tailscale serve --https={https_port} off`")
+        warn(
+            f"tailscale: could not remove the serve handler on {https_port} ({type(exc).__name__}); "
+            f"run `tailscale serve --https={https_port} off`"
+        )

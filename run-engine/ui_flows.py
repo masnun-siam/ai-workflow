@@ -23,6 +23,8 @@ _ID_RE = re.compile(r"f-[0-9]{14}-[0-9a-f]{6}")
 
 class NotFound(Exception):
     pass
+
+
 FIELDS = ("repo", "text", "folder", "prd", "issues", "sid", "dispatched")
 MAX_TEXT = 20000
 EMPTY_TTL = 86400  # a flow that never ran and holds no text is pruned a day after its last edit
@@ -84,8 +86,19 @@ def _clean(body: dict) -> dict:
 def create(body: dict) -> dict:
     now = _now()
     fid = "f-" + time.strftime("%Y%m%d%H%M%S", time.gmtime(now)) + "-" + secrets.token_hex(3)
-    flow = {"id": fid, "created": now, "updated": now, "archived": False, "sessions": [],
-            "repo": "", "text": "", "folder": "", "prd": "", "issues": [], "sid": ""}
+    flow = {
+        "id": fid,
+        "created": now,
+        "updated": now,
+        "archived": False,
+        "sessions": [],
+        "repo": "",
+        "text": "",
+        "folder": "",
+        "prd": "",
+        "issues": [],
+        "sid": "",
+    }
     flow.update(_clean(body))
     _attach(flow, flow["sid"])
     return _save(flow)
@@ -105,7 +118,9 @@ def update(fid: str, body: dict) -> dict:
     before = {k: flow.get(k) for k in FIELDS if k != "repo"}
     flow.update(_clean(body))
     _attach(flow, flow["sid"])
-    if {k: flow.get(k) for k in FIELDS if k != "repo"} != before:  # opening a flow or re-picking its repo isn't activity
+    if {
+        k: flow.get(k) for k in FIELDS if k != "repo"
+    } != before:  # opening a flow or re-picking its repo isn't activity
         flow["updated"] = _now()
     return _save(flow)
 
@@ -139,13 +154,22 @@ def name(flow: dict) -> str:
 
 
 def _empty(flow: dict) -> bool:
-    return not (flow["sessions"] or flow.get("text", "").strip() or flow.get("folder") or flow.get("prd") or flow.get("issues"))
+    return not (
+        flow["sessions"] or flow.get("text", "").strip() or flow.get("folder") or flow.get("prd") or flow.get("issues")
+    )
 
 
 def summary(flow: dict) -> dict:
-    return {"id": flow["id"], "name": name(flow), "repo": flow.get("repo", ""), "step": step(flow),
-            "updated": flow["updated"], "archived": flow.get("archived", False), "dispatched": flow.get("dispatched", False),
-            "running": bool(flow.get("sid"))}
+    return {
+        "id": flow["id"],
+        "name": name(flow),
+        "repo": flow.get("repo", ""),
+        "step": step(flow),
+        "updated": flow["updated"],
+        "archived": flow.get("archived", False),
+        "dispatched": flow.get("dispatched", False),
+        "running": bool(flow.get("sid")),
+    }
 
 
 def list_all(include_archived: bool = False, now=None) -> list:
@@ -223,8 +247,9 @@ def import_once() -> None:
     if os.path.exists(marker):
         return
     os.makedirs(_dir(), exist_ok=True)
-    recs = sorted((r for r in ui_sessions.list_sessions() if not r.get("flow_id")),
-                  key=lambda r: r.get("started_at") or "")
+    recs = sorted(
+        (r for r in ui_sessions.list_sessions() if not r.get("flow_id")), key=lambda r: r.get("started_at") or ""
+    )
     flows: list = []
     for r in recs:
         fam, sid, arg = _family(r.get("command", "")), r.get("id"), _args(r.get("command", ""))
@@ -318,8 +343,9 @@ def issue_progress(lines) -> dict:
                     reading = False
                     # A title built from a shell variable (a create loop) is unknown here; the UI looks it up.
                     titles = [(t[0] or t[1]).replace('\\"', '"') for t in _TITLE_RE.findall(cmd)]
-                    new = [{"number": None, "title": "" if "$" in t else t, "state": "creating"} for t in titles] \
-                        or [{"number": None, "title": "", "state": "creating"}]
+                    new = [{"number": None, "title": "" if "$" in t else t, "state": "creating"} for t in titles] or [
+                        {"number": None, "title": "", "state": "creating"}
+                    ]
                     rows.extend(new)
                     pending[b.get("id")] = ("create", new)
                 elif b.get("name") == "Bash" and _EDIT_RE.search(cmd):
@@ -330,8 +356,9 @@ def issue_progress(lines) -> dict:
                 elif b.get("name") in ("Agent", "Task") and "factcheck" in json.dumps(inp).lower():
                     # one factcheck may cover several issues ("#67, #68 and #69")
                     ns = dict.fromkeys(int(n) for n in re.findall(r"(?:#|issues/)(\d+)", json.dumps(inp)))
-                    targets = [by_number(n) for n in ns if by_number(n)] \
-                        or [x for x in rows if x["state"] == "created"][:1]
+                    targets = [by_number(n) for n in ns if by_number(n)] or [
+                        x for x in rows if x["state"] == "created"
+                    ][:1]
                     for r in targets:
                         r["state"] = "checking"
                     pending[b.get("id")] = ("check", targets)
@@ -350,15 +377,22 @@ def issue_progress(lines) -> dict:
                             r["state"] = "failed" if err or nums else r["state"]
                     # one command can create several issues (a loop): a row per issue URL it printed
                     at = rows.index(target[-1]) + 1
-                    rows[at:at] = [{"number": n, "title": "", "state": "created"} for n in nums[len(target):]]
+                    rows[at:at] = [{"number": n, "title": "", "state": "created"} for n in nums[len(target) :]]
                 elif kind == "check":
                     up = text.upper()
                     if "PASS" not in up and "ISSUES FOUND" not in up:
                         continue  # launched in the background: the verdict isn't in this result
                     for r in target:
                         # a per-issue verdict line ("#68: ISSUES FOUND") wins over the overall one
-                        line = next((ln for ln in up.splitlines() if re.search(rf"(?:#|ISSUES/){r['number']}\b", ln)
-                                     and ("PASS" in ln or "ISSUES FOUND" in ln)), up)
+                        line = next(
+                            (
+                                ln
+                                for ln in up.splitlines()
+                                if re.search(rf"(?:#|ISSUES/){r['number']}\b", ln)
+                                and ("PASS" in ln or "ISSUES FOUND" in ln)
+                            ),
+                            up,
+                        )
                         r["state"] = "fixing" if "ISSUES FOUND" in line else "checked"
                 elif kind == "edit":
                     # GitHub printing the issue URL means the edit landed, even if a later command in the
@@ -373,8 +407,14 @@ def issues_for(fid: str):
     flow = load(fid)
     if flow is None:
         return None
-    sid = next((x for x in reversed(flow["sessions"])
-                if _family((ui_sessions.load(x) or {}).get("command", "")) == "gh-issue"), None)
+    sid = next(
+        (
+            x
+            for x in reversed(flow["sessions"])
+            if _family((ui_sessions.load(x) or {}).get("command", "")) == "gh-issue"
+        ),
+        None,
+    )
     return progress_for(sid) if sid else {"reading": True, "rows": []}
 
 
@@ -419,5 +459,9 @@ def read_note(rel) -> dict:
     except IsADirectoryError:
         raise ValueError("path is a folder, not a note") from None
     vault = os.path.basename(root)
-    return {"path": rel, "text": text, "mtime": mtime,
-            "url": f"obsidian://open?vault={quote(vault)}&file={quote(rel[:-3])}"}
+    return {
+        "path": rel,
+        "text": text,
+        "mtime": mtime,
+        "url": f"obsidian://open?vault={quote(vault)}&file={quote(rel[:-3])}",
+    }

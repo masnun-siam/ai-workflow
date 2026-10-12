@@ -1,4 +1,5 @@
 """Tests for ui_options: plain asserts, run with `python3 test_ui_options.py`."""
+
 import json
 import os
 import subprocess
@@ -46,5 +47,8 @@ assert o.session_of("o", "r", 5)["id"] == rec["id"] and o.session_of("o", "r", 9
 assert o.apply("o", "r", 5, {"auto_grind": False}) == {"auto_grind": "applied"}
 assert ui_sessions.load(rec["id"])["auto_grind"] is False
 assert o.apply("o", "r", 9, {"auto_grind": False}) == {"auto_grind": "no_session"}
-assert o.apply("o", "r", 5, {"review": False, "auto_grind": True}, session_id=rec["id"]) == {"review": "unchanged", "auto_grind": "applied"}
+assert o.apply("o", "r", 5, {"review": False, "auto_grind": True}, session_id=rec["id"]) == {
+    "review": "unchanged",
+    "auto_grind": "applied",
+}
 print("  ok  apply: explicit auto_grind on the newest run-issue session, per-field outcome")

@@ -38,12 +38,13 @@ import ui_runner  # noqa: E402
 import ui_sessions  # noqa: E402
 
 INIT = '{"type":"system","subtype":"init","session_id":"sess-1"}'
-REJECT = ('{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":%d,'
-          '"rateLimitType":"five_hour"}}')
+REJECT = '{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":%d,"rateLimitType":"five_hour"}}'
 ERR = '{"type":"result","is_error":true,"result":"You\'ve hit your limit"}'
 OK = '{"type":"result","is_error":false,"total_cost_usd":0.1}'
-WARN = ('{"type":"rate_limit_event","rate_limit_info":{"status":"allowed_warning",'
-        '"resetsAt":%d,"rateLimitType":"seven_day","utilization":0.95}}')
+WARN = (
+    '{"type":"rate_limit_event","rate_limit_info":{"status":"allowed_warning",'
+    '"resetsAt":%d,"rateLimitType":"seven_day","utilization":0.95}}'
+)
 
 
 def stream(name, *lines):

@@ -86,10 +86,15 @@ def index() -> dict:
             st = "idle"
         rounds = sum(1 for ln in ui_runner._read_lines(path) if ln.startswith("## Round "))
         by_pr[(h["owner"].lower(), h["repo"].lower(), int(h["number"]))] = (
-            {"state": st, "round": rounds, "reason": h["paused"]} if st == "paused" else {"state": st, "round": rounds})
+            {"state": st, "round": rounds, "reason": h["paused"]} if st == "paused" else {"state": st, "round": rounds}
+        )
     for r in sessions:  # the first-grind session runs before any state file exists
         link = r.get("link")
-        if isinstance(link, dict) and str(r.get("command", "")).startswith(ui_runner.GRIND_PREFIX) and ui_runner._live(r):
+        if (
+            isinstance(link, dict)
+            and str(r.get("command", "")).startswith(ui_runner.GRIND_PREFIX)
+            and ui_runner._live(r)
+        ):
             by_issue[(str(link.get("owner")).lower(), str(link.get("repo")).lower(), link.get("issue"))] = "running"
     for q in _load(_REQUESTS, []):
         by_issue.setdefault((q["owner"].lower(), q["repo"].lower(), q["issue"]), "queued")
@@ -121,16 +126,25 @@ def _spawn(q: dict) -> None:
     slug = f"{owner}/{repo}"
     cwd, _ = ui_repos.resolve_repo(slug)
     run_dir = shared.run_dir_for(os.path.join(shared.data_dir(), "runs"), slug, issue)
-    acct = next((r["claude_cmd"] for r in ui_sessions.list_sessions()
-                 if r.get("claude_cmd") and isinstance(r.get("link"), dict)
-                 and (str(r["link"].get("owner")).lower(), str(r["link"].get("repo")).lower(), r["link"].get("issue"))
-                 == (owner.lower(), repo.lower(), issue)), None)
-    text = (f"{ui_runner.GRIND_PREFIX}{run['pr']} ({slug}#{issue}). This is the one session that does "
-            f"/run-issue phase 10, and nothing else of that command. Run dir: {run_dir}. Bring the stack back with "
-            f"`aiw stack up \"{run_dir}\"` as phase 10 describes, dispatch the ai-workflow:run-grinder agent in open mode "
-            f"with the PR URL and {slug}, run `aiw set \"{run_dir}\" grind_thread=<thread url>`, then invoke the "
-            f"ai-workflow:pr-grind skill with that thread URL in this session. If the run's context already has "
-            f"grind_thread, skip the trigger post and go straight to the skill.")
+    acct = next(
+        (
+            r["claude_cmd"]
+            for r in ui_sessions.list_sessions()
+            if r.get("claude_cmd")
+            and isinstance(r.get("link"), dict)
+            and (str(r["link"].get("owner")).lower(), str(r["link"].get("repo")).lower(), r["link"].get("issue"))
+            == (owner.lower(), repo.lower(), issue)
+        ),
+        None,
+    )
+    text = (
+        f"{ui_runner.GRIND_PREFIX}{run['pr']} ({slug}#{issue}). This is the one session that does "
+        f"/run-issue phase 10, and nothing else of that command. Run dir: {run_dir}. Bring the stack back with "
+        f'`aiw stack up "{run_dir}"` as phase 10 describes, dispatch the ai-workflow:run-grinder agent in open mode '
+        f'with the PR URL and {slug}, run `aiw set "{run_dir}" grind_thread=<thread url>`, then invoke the '
+        f"ai-workflow:pr-grind skill with that thread URL in this session. If the run's context already has "
+        f"grind_thread, skip the trigger post and go straight to the skill."
+    )
     ui_runner.start(text, cwd, {"owner": owner, "repo": repo, "issue": issue}, gate_questions=True, claude_cmd=acct)
 
 
@@ -195,10 +209,15 @@ def control(owner: str, repo: str, issue: int, action: str) -> tuple[int, dict]:
 
 def _grind_sessions(owner: str, repo: str, issue: int) -> list:
     """The run's grind sessions, newest first: /pr-grind rounds, then the first-grind session."""
-    out = [r for r in ui_sessions.list_sessions()
-           if isinstance(r.get("link"), dict) and str(r["link"].get("owner")).lower() == owner.lower()
-           and str(r["link"].get("repo")).lower() == repo.lower() and r["link"].get("issue") == issue
-           and str(r.get("command", "")).startswith(("/pr-grind ", ui_runner.GRIND_PREFIX))]
+    out = [
+        r
+        for r in ui_sessions.list_sessions()
+        if isinstance(r.get("link"), dict)
+        and str(r["link"].get("owner")).lower() == owner.lower()
+        and str(r["link"].get("repo")).lower() == repo.lower()
+        and r["link"].get("issue") == issue
+        and str(r.get("command", "")).startswith(("/pr-grind ", ui_runner.GRIND_PREFIX))
+    ]
     return sorted(out, key=lambda r: not str(r["command"]).startswith("/pr-grind "))
 
 
@@ -207,7 +226,9 @@ def last_message(owner: str, repo: str, issue: int, limit: int = 6000) -> str | 
     for rec in _grind_sessions(owner, repo, issue)[:1]:
         text = None
         try:
-            with open(os.path.join(ui_sessions.session_dir(rec["id"]), "stream.jsonl"), encoding="utf-8", errors="replace") as f:
+            with open(
+                os.path.join(ui_sessions.session_dir(rec["id"]), "stream.jsonl"), encoding="utf-8", errors="replace"
+            ) as f:
                 for line in f:
                     if '"type":"result"' in line.replace(" ", ""):
                         try:
@@ -233,8 +254,14 @@ def reply(owner: str, repo: str, issue: int, text) -> tuple[int, dict]:
         return 404, {"error": "no grind for this run"}
     if "paused" not in ui_runner._header(path):
         return 409, {"error": "this grind is not paused"}
-    target = next((r for r in _grind_sessions(owner, repo, issue) if r.get("session_id")
-                   and r.get("status") in ("done", "failed", "stopped")), None)
+    target = next(
+        (
+            r
+            for r in _grind_sessions(owner, repo, issue)
+            if r.get("session_id") and r.get("status") in ("done", "failed", "stopped")
+        ),
+        None,
+    )
     if not target:
         return 409, {"error": "no finished grind session to reply to; use Resume instead"}
     try:
@@ -256,7 +283,10 @@ def rerun_ci(owner: str, repo: str, issue: int) -> tuple[int, dict]:
     slug = f"{owner}/{repo}"
     head, _ = shared.gh_json(["pr", "view", str(pr), "-R", slug, "--json", "headRefOid"], timeout=30)
     sha = head.get("headRefOid") if isinstance(head, dict) else None
-    runs, _ = shared.gh_json(["run", "list", "-R", slug, "--commit", sha or "", "--json", "databaseId,status,conclusion", "-L", "10"], timeout=30)
+    runs, _ = shared.gh_json(
+        ["run", "list", "-R", slug, "--commit", sha or "", "--json", "databaseId,status,conclusion", "-L", "10"],
+        timeout=30,
+    )
     if not sha or not isinstance(runs, list):
         return 502, {"error": "could not read the PR's CI runs from GitHub"}
     if any(r.get("status") != "completed" for r in runs):
@@ -266,7 +296,11 @@ def rerun_ci(owner: str, repo: str, issue: int) -> tuple[int, dict]:
         return 409, {"error": "no failed CI run at the head commit"}
     p = shared.run(["gh", "run", "rerun", str(failed["databaseId"]), "--failed", "-R", slug], timeout=60)
     if p.returncode != 0:
-        return 502, {"error": ((p.stderr or p.stdout or "gh run rerun failed").strip().splitlines() or ["gh run rerun failed"])[-1]}
+        return 502, {
+            "error": ((p.stderr or p.stdout or "gh run rerun failed").strip().splitlines() or ["gh run rerun failed"])[
+                -1
+            ]
+        }
     return 200, {"run": failed["databaseId"]}
 
 
@@ -278,8 +312,10 @@ def autostart() -> None:
         if rec.get("status") != "done" or not isinstance(link, dict):
             continue
         if rec.get("auto_grind") is None:  # started before the option existed: follow its pipeline
-            if not str(rec.get("command", "")).startswith("/run-issue") or \
-                    f"{link.get('owner')}/{link.get('repo')}#{link.get('issue')}".lower() not in wants:
+            if (
+                not str(rec.get("command", "")).startswith("/run-issue")
+                or f"{link.get('owner')}/{link.get('repo')}#{link.get('issue')}".lower() not in wants
+            ):
                 continue
         elif rec.get("auto_grind") is not True:
             continue
@@ -316,8 +352,16 @@ def notify_changes() -> None:
         issue = ui_board.issue_for_pr(f"https://github.com/{h['owner']}/{h['repo']}/pull/{h['number']}")
         if issue:
             link["issue"] = issue
-        ui_notify.notify(event, {"id": k, "link": link, "repo": f"{h['owner']}/{h['repo']}",
-                                 "command": f"/pr-grind {h['thread']}", "note": note})
+        ui_notify.notify(
+            event,
+            {
+                "id": k,
+                "link": link,
+                "repo": f"{h['owner']}/{h['repo']}",
+                "command": f"/pr-grind {h['thread']}",
+                "note": note,
+            },
+        )
     _save(_NOTIFIED, sorted(set(seen) | set(fresh)))
 
 
@@ -334,6 +378,7 @@ def start_timer(interval: float = 30.0) -> threading.Thread:
         while True:
             tick()
             time.sleep(interval)
+
     t = threading.Thread(target=loop, daemon=True)
     t.start()
     return t

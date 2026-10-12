@@ -25,8 +25,20 @@ import ui_sessions  # noqa: E402
 
 passed = 0
 ID_RE = re.compile(r"[0-9]{8}T[0-9]{12}Z-[0-9a-f]{8}")
-KEYS = {"id", "command", "repo", "link", "session_id", "pid", "status",
-        "cost", "started_at", "ended_at", "pending_question", "claude_cmd"}
+KEYS = {
+    "id",
+    "command",
+    "repo",
+    "link",
+    "session_id",
+    "pid",
+    "status",
+    "cost",
+    "started_at",
+    "ended_at",
+    "pending_question",
+    "claude_cmd",
+}
 NEVER = "20990101T000000000000Z-deadbeef"
 
 
@@ -125,10 +137,17 @@ ok("list_sessions newest first")
 
 # 7. restart
 out = subprocess.run(
-    [sys.executable, "-c",
-     f"import sys,json; sys.path.insert(0,{HERE!r}); import ui_sessions; "
-     "print(json.dumps(ui_sessions.list_sessions()))"],
-    env=dict(os.environ), capture_output=True, text=True, check=True).stdout
+    [
+        sys.executable,
+        "-c",
+        f"import sys,json; sys.path.insert(0,{HERE!r}); import ui_sessions; "
+        "print(json.dumps(ui_sessions.list_sessions()))",
+    ],
+    env=dict(os.environ),
+    capture_output=True,
+    text=True,
+    check=True,
+).stdout
 assert json.loads(out) == ui_sessions.list_sessions() and len(json.loads(out)) == 3
 ok("fresh interpreter lists same sessions")
 
@@ -213,8 +232,7 @@ ok("id is immutable")
 d = fresh()
 ui_sessions.create("c", "/r")
 sib = os.path.join(d, "x")
-for bad_id in ("", ".", "..", "../x", "a/b", "a\\b", "/etc", "x\x00",
-               ui_sessions.create("c", "/r")["id"] + "/"):
+for bad_id in ("", ".", "..", "../x", "a/b", "a\\b", "/etc", "x\x00", ui_sessions.create("c", "/r")["id"] + "/"):
     raises(ValueError, lambda: ui_sessions.load(bad_id))
     raises(ValueError, lambda: ui_sessions.update(bad_id, status="x"))
     raises(ValueError, lambda: ui_sessions.session_dir(bad_id))
@@ -240,8 +258,7 @@ child = (
     "for i in range(%d): ui_sessions.update(sid, writer=k, n=i)\n" % (HERE, ITER)
 )
 go = os.path.join(tempfile.mkdtemp(), "go")
-procs = [subprocess.Popen([sys.executable, "-c", child, r["id"], str(k), go],
-                          env=dict(os.environ)) for k in range(N)]
+procs = [subprocess.Popen([sys.executable, "-c", child, r["id"], str(k), go], env=dict(os.environ)) for k in range(N)]
 open(go, "w").close()
 loads = 0
 while any(p.poll() is None for p in procs):

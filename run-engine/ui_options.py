@@ -4,6 +4,7 @@ Both are flags read at a boundary, never an interruption. Review goes through `a
 (the CLI is the only writer of run.json); auto-grind is a flag on the session record that
 `ui_grind.autostart` reads once, when the run finishes.
 """
+
 from __future__ import annotations
 
 import os

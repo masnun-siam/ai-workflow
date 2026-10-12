@@ -115,7 +115,7 @@ def dor_gaps(body: str | None) -> list[str]:
 
 
 def lane_mode(labels: list[str]) -> str:
-    """"lean" if a `lean` label (case-insensitive) is present, else "full"."""
+    """ "lean" if a `lean` label (case-insensitive) is present, else "full"."""
     return "lean" if any((l or "").strip().lower() == "lean" for l in labels or []) else "full"
 
 
@@ -201,7 +201,9 @@ def _looks_like_checkout(path: str, slug: str) -> bool:
     try:
         proc = subprocess.run(
             ["git", "-C", path, "rev-parse", "--is-inside-work-tree"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
     except OSError:
         return False
@@ -209,7 +211,9 @@ def _looks_like_checkout(path: str, slug: str) -> bool:
         return False
     remote = subprocess.run(
         ["git", "-C", path, "remote", "get-url", "origin"],
-        capture_output=True, text=True, timeout=10,
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     if remote.returncode == 0 and slug.lower() not in (remote.stdout or "").strip().lower():
         return False  # a real git checkout, but of something else
@@ -237,8 +241,20 @@ def _resolve_issue_numbers(args) -> list[int]:
 
     if args.query:
         data, proc = gh_json(
-            ["issue", "list", "--repo", args.slug, "--search", args.query,
-             "--json", "number", "--jq", "[.[].number]", "--limit", "1000"]
+            [
+                "issue",
+                "list",
+                "--repo",
+                args.slug,
+                "--search",
+                args.query,
+                "--json",
+                "number",
+                "--jq",
+                "[.[].number]",
+                "--limit",
+                "1000",
+            ]
         )
         if proc.returncode != 0:
             die(1, f"--query failed: {(proc.stderr or '').strip()[:200]}")
@@ -254,8 +270,7 @@ def _resolve_issue_numbers(args) -> list[int]:
         ["api", f"repos/{args.slug}/issues/{args.epic}/sub_issues", "--jq", "[.[].number]"],
     )
     if proc.returncode != 0:
-        die(1, f"could not read #{args.epic}'s sub-issues: "
-               f"{(proc.stderr or '').strip()[:200]}")
+        die(1, f"could not read #{args.epic}'s sub-issues: {(proc.stderr or '').strip()[:200]}")
     return dedupe([int(n) for n in (linked or [])])
 
 
@@ -273,11 +288,10 @@ PROJECT_ITEMS_QUERY_USER = PROJECT_ITEMS_QUERY.replace("organization", "user")
 def _project_issue_numbers(slug: str, number: int, status: str) -> list[int]:
     owner = slug.partition("/")[0]
     for query in (PROJECT_ITEMS_QUERY, PROJECT_ITEMS_QUERY_USER):
-        data, proc = gh_json(["api", "graphql", "-f", f"query={query}",
-                              "-f", f"o={owner}", "-F", f"n={number}"])
+        data, proc = gh_json(["api", "graphql", "-f", f"query={query}", "-f", f"o={owner}", "-F", f"n={number}"])
         if proc.returncode != 0:
             continue
-        root = ((data or {}).get("data") or {})
+        root = (data or {}).get("data") or {}
         holder = root.get("organization") or root.get("user")
         items = (((holder or {}).get("projectV2") or {}).get("items") or {}).get("nodes") or []
         if items:
@@ -304,10 +318,20 @@ def _has_open_linked_pr(slug: str, linked_numbers: list[int]) -> tuple[bool | No
     deliberately does NOT use --search at all."""
     if not linked_numbers:
         return False, None
-    pr_data, proc = gh_json([
-        "pr", "list", "--repo", slug, "--state", "open",
-        "--json", "number", "--limit", "1000",
-    ])
+    pr_data, proc = gh_json(
+        [
+            "pr",
+            "list",
+            "--repo",
+            slug,
+            "--state",
+            "open",
+            "--json",
+            "number",
+            "--limit",
+            "1000",
+        ]
+    )
     if proc.returncode != 0:
         return None, (proc.stderr or "").strip()[:200] or "gh pr list failed"
     open_numbers = {n.get("number") for n in (pr_data or []) if isinstance(n, dict)}
@@ -319,10 +343,17 @@ def _issue_readiness(args, number: int) -> dict:
     failure (bad number, gh error) is reported, not raised — the rest of the
     roster must still be screened. A closed issue is reported as closed rather
     than silently screening ready or silently vanishing from the report."""
-    data, proc = gh_json([
-        "issue", "view", str(number), "--repo", args.slug,
-        "--json", "title,body,labels,state,closedByPullRequestsReferences",
-    ])
+    data, proc = gh_json(
+        [
+            "issue",
+            "view",
+            str(number),
+            "--repo",
+            args.slug,
+            "--json",
+            "title,body,labels,state,closedByPullRequestsReferences",
+        ]
+    )
     if proc.returncode != 0:
         return {"issue": number, "error": (proc.stderr or "").strip()[:200] or "gh issue view failed"}
 
@@ -346,8 +377,14 @@ def _issue_readiness(args, number: int) -> dict:
 
     from epic import parse_depends  # local: epic imports shared, dispatch is imported early
 
-    return {"issue": number, "gaps": gaps, "mode": mode, "skip_reason": reason,
-            "title": data.get("title") or "", "deps": parse_depends(body)}
+    return {
+        "issue": number,
+        "gaps": gaps,
+        "mode": mode,
+        "skip_reason": reason,
+        "title": data.get("title") or "",
+        "deps": parse_depends(body),
+    }
 
 
 def cmd_plan(args) -> None:

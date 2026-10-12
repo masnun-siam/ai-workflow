@@ -33,19 +33,42 @@ def _files(raw: list) -> list:
         else:
             truncated = False
             budget -= len(patch or "")
-        out.append({"name": f.get("filename"), "from": f.get("previous_filename"), "status": f.get("status"),
-                    "additions": f.get("additions", 0), "deletions": f.get("deletions", 0),
-                    "patch": patch, "patch_cut": truncated})
+        out.append(
+            {
+                "name": f.get("filename"),
+                "from": f.get("previous_filename"),
+                "status": f.get("status"),
+                "additions": f.get("additions", 0),
+                "deletions": f.get("deletions", 0),
+                "patch": patch,
+                "patch_cut": truncated,
+            }
+        )
     return out
 
 
 def _conversation(comments: list, reviews: list) -> list:
     """Comments and review verdicts interleaved by time; an empty 'commented' review is just inline noise."""
-    items = [{"kind": "comment", "author": _user(c.get("user")), "at": c.get("created_at"), "body_html": _links_out(c.get("body_html"))}
-             for c in comments]
-    items += [{"kind": "review", "verdict": r.get("state"), "author": _user(r.get("user")), "at": r.get("submitted_at"),
-               "body_html": _links_out(r.get("body_html"))}
-              for r in reviews if r.get("state") != "PENDING" and (r.get("body_html") or r.get("state") != "COMMENTED")]
+    items = [
+        {
+            "kind": "comment",
+            "author": _user(c.get("user")),
+            "at": c.get("created_at"),
+            "body_html": _links_out(c.get("body_html")),
+        }
+        for c in comments
+    ]
+    items += [
+        {
+            "kind": "review",
+            "verdict": r.get("state"),
+            "author": _user(r.get("user")),
+            "at": r.get("submitted_at"),
+            "body_html": _links_out(r.get("body_html")),
+        }
+        for r in reviews
+        if r.get("state") != "PENDING" and (r.get("body_html") or r.get("state") != "COMMENTED")
+    ]
     return sorted(items, key=lambda i: i["at"] or "")
 
 
@@ -63,19 +86,36 @@ def shape(pr: dict, files: list, commits: list, comments: list, reviews: list, r
     """Pure: the REST payloads -> the dict the popup renders."""
     ms = pr.get("milestone") or {}
     return {
-        "number": pr.get("number"), "title": pr.get("title"), "url": pr.get("html_url"), "state": _state(pr),
-        "author": _user(pr.get("user")), "created_at": pr.get("created_at"),
-        "head": (pr.get("head") or {}).get("ref"), "base": (pr.get("base") or {}).get("ref"),
-        "labels": [{"name": x.get("name"), "color": x.get("color")} for x in pr.get("labels") or [] if isinstance(x, dict)],
+        "number": pr.get("number"),
+        "title": pr.get("title"),
+        "url": pr.get("html_url"),
+        "state": _state(pr),
+        "author": _user(pr.get("user")),
+        "created_at": pr.get("created_at"),
+        "head": (pr.get("head") or {}).get("ref"),
+        "base": (pr.get("base") or {}).get("ref"),
+        "labels": [
+            {"name": x.get("name"), "color": x.get("color")} for x in pr.get("labels") or [] if isinstance(x, dict)
+        ],
         "assignees": [_user(a) for a in pr.get("assignees") or []],
         "milestone": ms.get("title"),
         "body_html": _links_out(pr.get("body_html")),
-        "additions": pr.get("additions", 0), "deletions": pr.get("deletions", 0),
-        "file_count": pr.get("changed_files", len(files)), "files": _files(files),
+        "additions": pr.get("additions", 0),
+        "deletions": pr.get("deletions", 0),
+        "file_count": pr.get("changed_files", len(files)),
+        "files": _files(files),
         "commit_count": pr.get("commits", len(commits)),
-        "commits": [{"sha": (c.get("sha") or "")[:7], "subject": ((c.get("commit") or {}).get("message") or "").split("\n", 1)[0],
-                     "author": _user(c.get("author")) if c.get("author") else ((c.get("commit") or {}).get("author") or {}).get("name") or "ghost",
-                     "at": ((c.get("commit") or {}).get("author") or {}).get("date")} for c in commits],
+        "commits": [
+            {
+                "sha": (c.get("sha") or "")[:7],
+                "subject": ((c.get("commit") or {}).get("message") or "").split("\n", 1)[0],
+                "author": _user(c.get("author"))
+                if c.get("author")
+                else ((c.get("commit") or {}).get("author") or {}).get("name") or "ghost",
+                "at": ((c.get("commit") or {}).get("author") or {}).get("date"),
+            }
+            for c in commits
+        ],
         "conversation": _conversation(comments, reviews),
         "checks": _checks(rollup),
     }

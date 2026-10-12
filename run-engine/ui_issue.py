@@ -40,13 +40,21 @@ def shape(issue: dict, comments: list) -> dict:
         "is_pr": "pull_request" in issue,
         "author": _user(issue.get("user")),
         "created_at": issue.get("created_at"),
-        "labels": [{"name": x.get("name"), "color": x.get("color")} for x in issue.get("labels") or [] if isinstance(x, dict)],
+        "labels": [
+            {"name": x.get("name"), "color": x.get("color")} for x in issue.get("labels") or [] if isinstance(x, dict)
+        ],
         "assignees": [_user(a) for a in issue.get("assignees") or []],
         "milestone": ms.get("title"),
         "body_html": _links_out(issue.get("body_html")),
         "comment_count": issue.get("comments", len(comments)),
-        "comments": [{"author": _user(c.get("user")), "created_at": c.get("created_at"), "body_html": _links_out(c.get("body_html"))}
-                     for c in comments],
+        "comments": [
+            {
+                "author": _user(c.get("user")),
+                "created_at": c.get("created_at"),
+                "body_html": _links_out(c.get("body_html")),
+            }
+            for c in comments
+        ],
     }
 
 

@@ -40,9 +40,15 @@ def boom(*_a, **_k):
 
 INIT = {"type": "system", "subtype": "init", "session_id": "abc"}
 A1 = {"type": "assistant", "message": {"content": [{"type": "text", "text": "hi"}]}}
-A2 = {"type": "assistant", "message": {"content": [
-    {"type": "text", "text": "running"},
-    {"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "ls"}}]}}
+A2 = {
+    "type": "assistant",
+    "message": {
+        "content": [
+            {"type": "text", "text": "running"},
+            {"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "ls"}},
+        ]
+    },
+}
 UR = {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "content": "x"}]}}
 RES = {"type": "result", "subtype": "success", "is_error": False, "total_cost_usd": 0.0421, "result": "done"}
 FIXTURE = "".join(json.dumps(o) + "\n" for o in (INIT, A1, A2, UR, RES))
@@ -70,14 +76,21 @@ ok("result is_error true")
 assert ui_events.parse_line(json.dumps(A1).encode()) == [{"kind": "text", "text": "hi"}]
 ok("parse bytes input")
 for label, o in [
-    ("system/init", INIT), ("user tool_result", UR), ("unknown type", {"type": "zzz"}),
+    ("system/init", INIT),
+    ("user tool_result", UR),
+    ("unknown type", {"type": "zzz"}),
     ("thinking block", {"type": "assistant", "message": {"content": [{"type": "thinking", "thinking": "x"}]}}),
 ]:
     assert pl(o) == [], label
 ok("ignored event types -> []")
 for label, raw in [
-    ("invalid json", "{nope"), ("array", "[1]"), ("number", "5"), ("string", '"s"'),
-    ("bad utf8", b"\xff\xfe{\n"), ("blank", ""), ("blank nl", "\n"),
+    ("invalid json", "{nope"),
+    ("array", "[1]"),
+    ("number", "5"),
+    ("string", '"s"'),
+    ("bad utf8", b"\xff\xfe{\n"),
+    ("blank", ""),
+    ("blank nl", "\n"),
 ]:
     assert ui_events.parse_line(raw) == [], label
 for label, o in [
@@ -150,11 +163,31 @@ srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, (), boom)
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 port = srv.server_address[1]
 HOST = f"127.0.0.1:{port}"
-ALLOWED = {"id", "command", "repo", "link", "session_id", "outcome", "cost",
-           "started_at", "ended_at", "waiting", "pending_question", "error",
-           "resumed_fresh", "note", "terminal_handoff", "pending_answer", "queued_prompt",
-           "repo_path", "resume_command", "claude_cmd", "limit_resets_at", "limit_type",
-           "auto_resume"}
+ALLOWED = {
+    "id",
+    "command",
+    "repo",
+    "link",
+    "session_id",
+    "outcome",
+    "cost",
+    "started_at",
+    "ended_at",
+    "waiting",
+    "pending_question",
+    "error",
+    "resumed_fresh",
+    "note",
+    "terminal_handoff",
+    "pending_answer",
+    "queued_prompt",
+    "repo_path",
+    "resume_command",
+    "claude_cmd",
+    "limit_resets_at",
+    "limit_type",
+    "auto_resume",
+}
 
 
 def req(path, method="GET", host=HOST, origin=None):
@@ -187,10 +220,10 @@ try:
 
     old = ui_sessions.create("/run-issue", "r/old")
     new = ui_sessions.create("/run-issue", "r/new", link="http://x")
-    ui_sessions.update(old["id"], status="done", cost=0.0421, pid=4242, token="SECRET-META",
-                       ended_at="2026-01-01T00:00:00+00:00")
-    ui_sessions.update(new["id"], status="waiting", pid=999,
-                       pending_question={"q": "ok?"}, session_id="sess-1")
+    ui_sessions.update(
+        old["id"], status="done", cost=0.0421, pid=4242, token="SECRET-META", ended_at="2026-01-01T00:00:00+00:00"
+    )
+    ui_sessions.update(new["id"], status="waiting", pid=999, pending_question={"q": "ok?"}, session_id="sess-1")
     with open(os.path.join(data_dir, "ui.json"), "w") as f:
         json.dump({"ntfy": {"token": "SECRET-TOKEN-XYZ"}}, f)
     os.makedirs(os.path.join(ui_sessions.sessions_dir(), "20200101T000000000000Z-00000000"))
@@ -243,16 +276,23 @@ try:
     assert req(f"/api/sessions/{unknown}/stream")[0] == 404
     ok("unknown id -> 404")
     v = old["id"]
-    for p in ["/api/sessions/nope", "/api/sessions/..", "/api/sessions/%2e%2e", "/api/sessions/a%2Fb",
-              "/api/sessions/../sessions", "/api/sessions/x/y/stream", f"/api/sessions/{v}/other",
-              "/api/sessions/", f"/api/sessions/{v}/stream/"]:
+    for p in [
+        "/api/sessions/nope",
+        "/api/sessions/..",
+        "/api/sessions/%2e%2e",
+        "/api/sessions/a%2Fb",
+        "/api/sessions/../sessions",
+        "/api/sessions/x/y/stream",
+        f"/api/sessions/{v}/other",
+        "/api/sessions/",
+        f"/api/sessions/{v}/stream/",
+    ]:
         s, _, _, _ = req(p)
         assert s == 404, (p, s)
     ok("malformed ids / paths -> 404")
 
     for p in ("/api/sessions", f"/api/sessions/{v}", f"/api/sessions/{v}/stream"):
-        for label, kw in (("host", dict(host="evil.example")),
-                          ("origin", dict(origin="http://evil.example"))):
+        for label, kw in (("host", dict(host="evil.example")), ("origin", dict(origin="http://evil.example"))):
             s, _, _, h = req(p, **kw)
             assert s == 403 and no_cors(h), (p, label, s)
         assert no_cors(req(p)[3])
@@ -274,9 +314,10 @@ try:
             assert st == {"events": [], "offset": 0}, st
     ok("stream: terminal parses unterminated last line; running holds it back")
 
-    bodies = b"".join(req(p)[2] for p in ("/api/sessions", f"/api/sessions/{v}",
-                                          f"/api/sessions/{new['id']}",
-                                          f"/api/sessions/{v}/stream"))
+    bodies = b"".join(
+        req(p)[2]
+        for p in ("/api/sessions", f"/api/sessions/{v}", f"/api/sessions/{new['id']}", f"/api/sessions/{v}/stream")
+    )
     for secret in (b"SECRET-TOKEN-XYZ", b"SECRET-META"):
         assert secret not in bodies, secret
     assert all("pid" not in x for x in rows) and "pid" not in d

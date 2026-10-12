@@ -63,10 +63,10 @@ def match_option(options: list[dict], target: str) -> dict | None:
 
 def cmd_set(args) -> None:
     owner, _, repo = args.slug.partition("/")
-    data, proc = gh_json(["api", "graphql", "-f", f"query={ITEMS_QUERY}", "-f", f"o={owner}",
-                          "-f", f"r={repo}", "-F", f"n={args.issue}"])
-    items = ((((data or {}).get("data") or {}).get("repository") or {})
-             .get("issue") or {}).get("projectItems") or {}
+    data, proc = gh_json(
+        ["api", "graphql", "-f", f"query={ITEMS_QUERY}", "-f", f"o={owner}", "-f", f"r={repo}", "-F", f"n={args.issue}"]
+    )
+    items = ((((data or {}).get("data") or {}).get("repository") or {}).get("issue") or {}).get("projectItems") or {}
     nodes = items.get("nodes") or []
     if not nodes:
         print("issue is not on any project — nothing to update")
@@ -81,9 +81,22 @@ def cmd_set(args) -> None:
         if not spec.get("id") or not option:
             warn(f"no Status option matching {args.status!r} on {project.get('title')!r}")
             continue
-        _, mproc = gh_json(["api", "graphql", "-f", f"query={SET_MUTATION}", "-f", f"p={pid}",
-                            "-f", f"i={item['id']}", "-f", f"f={spec['id']}",
-                            "-f", f"o={option['id']}"])
+        _, mproc = gh_json(
+            [
+                "api",
+                "graphql",
+                "-f",
+                f"query={SET_MUTATION}",
+                "-f",
+                f"p={pid}",
+                "-f",
+                f"i={item['id']}",
+                "-f",
+                f"f={spec['id']}",
+                "-f",
+                f"o={option['id']}",
+            ]
+        )
         if mproc.returncode != 0:
             warn(f"could not set status on {project.get('title')!r}: {(mproc.stderr or '').strip()[:160]}")
         else:
@@ -131,19 +144,29 @@ def cmd_board(args) -> None:
     board, which is indistinguishable from an epic where nothing has started.
     """
     owner, _, repo = args.slug.partition("/")
-    data, proc = gh_json(["api", "graphql", "-f", f"query={ITEMS_QUERY}",
-                          "-f", f"o={owner}",
-                          "-f", f"r={repo}", "-F", f"n={args.parent}"])
+    data, proc = gh_json(
+        [
+            "api",
+            "graphql",
+            "-f",
+            f"query={ITEMS_QUERY}",
+            "-f",
+            f"o={owner}",
+            "-f",
+            f"r={repo}",
+            "-F",
+            f"n={args.parent}",
+        ]
+    )
     if proc.returncode != 0:
         warn(f"could not find parent issue: {(proc.stderr or '').strip()[:200]}")
         return
-    items = ((((data or {}).get("data") or {}).get("repository") or {})
-             .get("issue") or {}).get("projectItems") or {}
+    items = ((((data or {}).get("data") or {}).get("repository") or {}).get("issue") or {}).get("projectItems") or {}
     nodes = items.get("nodes") or []
     if not nodes:
         print("parent is not on any project — no board")
         return
-    project_id = ((nodes[0].get("project") or {}).get("id"))
+    project_id = (nodes[0].get("project") or {}).get("id")
 
     name = board_name(args.parent, args.title)
     views, proc = gh_json(["api", "graphql", "-f", f"query={VIEWS_QUERY}", "-f", f"p={project_id}"])
@@ -158,16 +181,18 @@ def cmd_board(args) -> None:
         print(f"board already exists: {name}")
         return
 
-    created, proc = gh_json(["api", "graphql", "-f", f"query={CREATE_VIEW}",
-                             "-f", f"p={project_id}", "-f", f"n={name}"])
+    created, proc = gh_json(
+        ["api", "graphql", "-f", f"query={CREATE_VIEW}", "-f", f"p={project_id}", "-f", f"n={name}"]
+    )
     view = (((created or {}).get("data") or {}).get("createProjectV2View") or {}).get("projectV2View")
     if not view:
         # A closed project reports UNPROCESSABLE here. That is a normal state, not a bug.
         warn(f"could not create the epic board: {(proc.stderr or '').strip()[:200]}")
         return
 
-    _, fproc = gh_json(["api", "graphql", "-f", f"query={SET_FILTER}",
-                        "-f", f"v={view['id']}", "-f", f"f=label:epic-{args.parent}"])
+    _, fproc = gh_json(
+        ["api", "graphql", "-f", f"query={SET_FILTER}", "-f", f"v={view['id']}", "-f", f"f=label:epic-{args.parent}"]
+    )
     if fproc.returncode != 0:
         # An unfiltered view shows the ENTIRE project under an epic's name, which is
         # worse than no board. Remove it rather than leave it misleading.

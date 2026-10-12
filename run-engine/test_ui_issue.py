@@ -8,12 +8,26 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ui_issue
 
 assert ui_issue.valid("masnun-siam", "ai-workflow", "12")
-assert not ui_issue.valid("-x", "repo", "1") and not ui_issue.valid("o", "r/../x", "1") and not ui_issue.valid("o", "r", "1a")
+assert (
+    not ui_issue.valid("-x", "repo", "1")
+    and not ui_issue.valid("o", "r/../x", "1")
+    and not ui_issue.valid("o", "r", "1a")
+)
 
 d = ui_issue.shape(
-    {"number": 3, "title": "T", "html_url": "u", "state": "closed", "state_reason": "not_planned", "user": None,
-     "labels": [{"name": "bug", "color": "f00"}], "assignees": [{"login": "a"}], "milestone": {"title": "v1"},
-     "body_html": '<p><a href="x">l</a></p>', "comments": 2},
+    {
+        "number": 3,
+        "title": "T",
+        "html_url": "u",
+        "state": "closed",
+        "state_reason": "not_planned",
+        "user": None,
+        "labels": [{"name": "bug", "color": "f00"}],
+        "assignees": [{"login": "a"}],
+        "milestone": {"title": "v1"},
+        "body_html": '<p><a href="x">l</a></p>',
+        "comments": 2,
+    },
     [{"user": {"login": "bob"}, "created_at": "t", "body_html": "<p>hi</p>"}],
 )
 assert d["author"] == "ghost" and d["assignees"] == ["a"] and d["milestone"] == "v1" and not d["is_pr"]

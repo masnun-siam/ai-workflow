@@ -33,10 +33,8 @@ def run_id_of(link: str) -> str:
 
 def snapshot(owner: str, repo: str, number: int) -> dict:
     slug = f"{owner}/{repo}"
-    head, _ = gh_json(["pr", "view", str(number), "--repo", slug, "--json", "headRefOid",
-                       "--jq", ".headRefOid"])
-    rows, proc = gh_json(["pr", "checks", str(number), "--repo", slug, "--json",
-                          "name,state,bucket,link"])
+    head, _ = gh_json(["pr", "view", str(number), "--repo", slug, "--json", "headRefOid", "--jq", ".headRefOid"])
+    rows, proc = gh_json(["pr", "checks", str(number), "--repo", slug, "--json", "name,state,bucket,link"])
     if rows is None:
         # `gh pr checks` exits nonzero when checks are red AND when none exist.
         # "no checks configured" is green for our purposes; anything else is an error.
@@ -57,8 +55,7 @@ def failing_detail(slug: str, failing: list[dict]) -> list[dict]:
         if run_id:
             proc = run(["gh", "run", "view", run_id, "--repo", slug, "--log-failed"], timeout=300)
             excerpt = (proc.stdout or proc.stderr or "").strip()[-4000:]
-        out.append({"name": check.get("name"), "run_id": run_id, "link": link,
-                    "log_excerpt": excerpt})
+        out.append({"name": check.get("name"), "run_id": run_id, "link": link, "log_excerpt": excerpt})
     return out
 
 

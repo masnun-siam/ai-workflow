@@ -39,8 +39,20 @@ def link_branch(repo_dir: str, issue: int, branch: str) -> bool:
         warn("could not resolve issue/repo node ids or head oid; skipping branch link")
         return False
     data, proc = gh_json(
-        ["api", "graphql", "-f", f"query={LINK_MUTATION}", "-f", f"i={issue_id}",
-         "-f", f"b={branch}", "-f", f"r={repo_id}", "-f", f"o={head.stdout.strip()}"],
+        [
+            "api",
+            "graphql",
+            "-f",
+            f"query={LINK_MUTATION}",
+            "-f",
+            f"i={issue_id}",
+            "-f",
+            f"b={branch}",
+            "-f",
+            f"r={repo_id}",
+            "-f",
+            f"o={head.stdout.strip()}",
+        ],
         cwd=repo_dir,
     )
     linked = (((data or {}).get("data") or {}).get("createLinkedBranch") or {}).get("linkedBranch")
@@ -52,10 +64,21 @@ def link_branch(repo_dir: str, issue: int, branch: str) -> bool:
 
 def linked_ok(repo_dir: str, owner: str, name: str, issue: int) -> bool:
     data, _ = gh_json(
-        ["api", "graphql", "-f", f"query={VERIFY_QUERY}", "-f", f"owner={owner}",
-         "-f", f"repo={name}", "-F", f"number={issue}"], cwd=repo_dir)
-    nodes = ((((data or {}).get("data") or {}).get("repository") or {})
-             .get("issue") or {}).get("linkedBranches") or {}
+        [
+            "api",
+            "graphql",
+            "-f",
+            f"query={VERIFY_QUERY}",
+            "-f",
+            f"owner={owner}",
+            "-f",
+            f"repo={name}",
+            "-F",
+            f"number={issue}",
+        ],
+        cwd=repo_dir,
+    )
+    nodes = ((((data or {}).get("data") or {}).get("repository") or {}).get("issue") or {}).get("linkedBranches") or {}
     return bool(nodes.get("nodes"))
 
 

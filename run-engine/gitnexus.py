@@ -53,12 +53,14 @@ def cmd_run(args) -> None:
         runner = _runner(repo)
         if runner:
             status = run([*runner, "status"], cwd=repo, timeout=300)
-            if status.returncode == 0 and "stale" not in status.stdout.lower() \
-               and "missing" not in status.stdout.lower():
+            if (
+                status.returncode == 0
+                and "stale" not in status.stdout.lower()
+                and "missing" not in status.stdout.lower()
+            ):
                 print("index is current")
                 if args.run_dir:
-                    record(args.run_dir, load_ledger(args.run_dir),
-                           gitnexus=os.path.basename(repo.rstrip("/")))
+                    record(args.run_dir, load_ledger(args.run_dir), gitnexus=os.path.basename(repo.rstrip("/")))
                 return
 
     ok, detail = analyze(repo)

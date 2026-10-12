@@ -40,7 +40,8 @@ u.refresh(now=1100.0)  # inside POLL: cached, no refetch
 assert len(calls) == n
 ok("refresh caches per account and respects the poll interval")
 
-res.clear(); res["error"] = "re-login needed"
+res.clear()
+res["error"] = "re-login needed"
 u.refresh(now=1000.0 + u.POLL + 1)
 snap = u.snapshot()
 assert snap["claude"]["error"] == "re-login needed" and snap["claude"]["five_hour"]["pct"] == 10

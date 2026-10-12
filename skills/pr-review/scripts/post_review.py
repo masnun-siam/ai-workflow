@@ -39,8 +39,9 @@ def sh(args, check=True, stdin=None):
     try:
         p = subprocess.run(args, capture_output=True, text=True, input=stdin)
     except FileNotFoundError:
-        sys.exit(f"error: {args[0]!r} not found on PATH. "
-                 "This skill requires an authenticated gh CLI — run 'gh auth login'.")
+        sys.exit(
+            f"error: {args[0]!r} not found on PATH. This skill requires an authenticated gh CLI — run 'gh auth login'."
+        )
     if check and p.returncode != 0:
         sys.exit(f"error: {' '.join(args[:3])}... failed:\n{p.stderr.strip()}")
     return p
@@ -70,8 +71,7 @@ def is_self_authored(slug, number):
     comments on your own PR are fine.
     """
     me = sh(["gh", "api", "user", "-q", ".login"], check=False).stdout.strip()
-    author = sh(["gh", "api", f"repos/{slug}/pulls/{number}",
-                 "-q", ".user.login"], check=False).stdout.strip()
+    author = sh(["gh", "api", f"repos/{slug}/pulls/{number}", "-q", ".user.login"], check=False).stdout.strip()
     return bool(me) and me == author, me
 
 
@@ -85,9 +85,9 @@ def already_reviewed(slug, number, head, me):
     if p.returncode != 0:
         return False
     try:
-        return any(r.get("commit_id") == head
-                   and (r.get("user") or {}).get("login") == me
-                   for r in json.loads(p.stdout))
+        return any(
+            r.get("commit_id") == head and (r.get("user") or {}).get("login") == me for r in json.loads(p.stdout)
+        )
     except Exception:
         return False
 
@@ -120,14 +120,18 @@ def commentable_lines(patch):
         if path is None:
             continue
         if line.startswith("+"):
-            files[path]["RIGHT"].add(new_n); new_n += 1
+            files[path]["RIGHT"].add(new_n)
+            new_n += 1
         elif line.startswith("-"):
-            files[path]["LEFT"].add(old_n); old_n += 1
+            files[path]["LEFT"].add(old_n)
+            old_n += 1
         elif line.startswith("\\"):
             continue
         else:  # context line: addressable on both sides
-            files[path]["RIGHT"].add(new_n); files[path]["LEFT"].add(old_n)
-            new_n += 1; old_n += 1
+            files[path]["RIGHT"].add(new_n)
+            files[path]["LEFT"].add(old_n)
+            new_n += 1
+            old_n += 1
     return files
 
 
@@ -156,8 +160,7 @@ def escalation_banner(findings, handles):
     handle is mentioned, even if one of them authored the PR. An escalation
     signal that silently drops a recipient is worse than a redundant ping.
     """
-    triggers = [c for c in findings.get("comments", [])
-                if c.get("severity") == "critical" or c.get("escalate")]
+    triggers = [c for c in findings.get("comments", []) if c.get("severity") == "critical" or c.get("escalate")]
     reasons = list(findings.get("escalation_reasons") or [])
     if findings.get("escalate") and not triggers and not reasons:
         reasons.append("Flagged as needing human judgment.")
@@ -167,10 +170,12 @@ def escalation_banner(findings, handles):
         return None
 
     mentions = " ".join(f"@{h}" for h in handles)
-    out = ["> [!CAUTION]",
-           f"> **Human review needed** — {mentions}",
-           ">",
-           "> This PR changes something an automated review shouldn't be the last word on:"]
+    out = [
+        "> [!CAUTION]",
+        f"> **Human review needed** — {mentions}",
+        ">",
+        "> This PR changes something an automated review shouldn't be the last word on:",
+    ]
     for c in triggers:
         loc = c.get("path") or "general"
         if c.get("line"):
@@ -190,16 +195,24 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pr", required=True)
     ap.add_argument("--findings", required=True)
-    ap.add_argument("--reviewers", default=None,
-                    help="Comma-separated handles to mention on critical findings. "
-                         f"Default: {','.join(DEFAULT_ESCALATION_HANDLES)}")
-    ap.add_argument("--escalation-comment", action="store_true",
-                    help="Also post the escalation as a standalone PR comment (second notification).")
-    ap.add_argument("--no-approve", action="store_true",
-                    help="Never APPROVE; post a clean review as COMMENT instead. Use where "
-                         "a bot approval would satisfy a branch-protection rule.")
-    ap.add_argument("--force", action="store_true",
-                    help="Review again even if this commit was already reviewed.")
+    ap.add_argument(
+        "--reviewers",
+        default=None,
+        help="Comma-separated handles to mention on critical findings. "
+        f"Default: {','.join(DEFAULT_ESCALATION_HANDLES)}",
+    )
+    ap.add_argument(
+        "--escalation-comment",
+        action="store_true",
+        help="Also post the escalation as a standalone PR comment (second notification).",
+    )
+    ap.add_argument(
+        "--no-approve",
+        action="store_true",
+        help="Never APPROVE; post a clean review as COMMENT instead. Use where "
+        "a bot approval would satisfy a branch-protection rule.",
+    )
+    ap.add_argument("--force", action="store_true", help="Review again even if this commit was already reviewed.")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
@@ -289,25 +302,30 @@ def main():
         if was == "REQUEST_CHANGES":
             sev = "blocker" if any(c.get("severity") == "blocker" for c in comments_in) else None
             sev = "critical" if any(c.get("severity") == "critical" for c in comments_in) else sev
-            note = ("> [!WARNING]\n> Self-review: GitHub won't let a PR's author request "
-                    "changes, so this is posted as a comment."
-                    + (f" It contains **{sev}** findings — treat it as blocking anyway."
-                       if sev else " Human review was requested above."))
+            note = (
+                "> [!WARNING]\n> Self-review: GitHub won't let a PR's author request "
+                "changes, so this is posted as a comment."
+                + (
+                    f" It contains **{sev}** findings — treat it as blocking anyway."
+                    if sev
+                    else " Human review was requested above."
+                )
+            )
             summary = note + "\n\n" + summary if summary else note
 
     if not args.force and already_reviewed(slug, number, head, me):
-        print(f"{slug}#{number} @ {head[:8]} already reviewed by @{me} at this commit; "
-              "skipping. Pass --force to review again.")
+        print(
+            f"{slug}#{number} @ {head[:8]} already reviewed by @{me} at this commit; "
+            "skipping. Pass --force to review again."
+        )
         return
 
-    payload = {"commit_id": head, "body": summary or "Automated review.",
-               "event": verdict, "comments": inline}
+    payload = {"commit_id": head, "body": summary or "Automated review.", "event": verdict, "comments": inline}
 
     counts = defaultdict(int)
     for c in comments_in:
         counts[c.get("severity", "unspecified")] += 1
-    print(f"{slug}#{number} @ {head[:8]}  verdict={verdict}"
-          + ("  (self-authored)" if self_authored else ""))
+    print(f"{slug}#{number} @ {head[:8]}  verdict={verdict}" + ("  (self-authored)" if self_authored else ""))
     print(f"  inline: {len(inline)}   relocated to summary: {len(relocated)}")
     print("  severities: " + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "  none")
     if banner:
@@ -323,8 +341,9 @@ def main():
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
             json.dump(pl, f)
             tmp = f.name
-        return sh(["gh", "api", "--method", "POST",
-                   f"repos/{slug}/pulls/{number}/reviews", "--input", tmp], check=False)
+        return sh(
+            ["gh", "api", "--method", "POST", f"repos/{slug}/pulls/{number}/reviews", "--input", tmp], check=False
+        )
 
     r = post(payload)
     if r.returncode != 0 and payload["event"] in ("REQUEST_CHANGES", "APPROVE"):
@@ -356,13 +375,11 @@ def main():
     # The banner already notifies via the review body. This is for teams who want
     # a distinct, harder-to-miss ping in the conversation timeline as well.
     if banner and args.escalation_comment:
-        c = sh(["gh", "pr", "comment", str(number), "--repo", slug, "--body", banner],
-               check=False)
+        c = sh(["gh", "pr", "comment", str(number), "--repo", slug, "--body", banner], check=False)
         if c.returncode == 0:
             print("escalation comment posted")
         else:
-            print("warning: escalation comment failed; the review body still has "
-                  "the mentions", file=sys.stderr)
+            print("warning: escalation comment failed; the review body still has the mentions", file=sys.stderr)
 
 
 if __name__ == "__main__":

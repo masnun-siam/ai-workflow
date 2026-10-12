@@ -20,7 +20,11 @@ import ui_runner  # noqa: E402
 import ui_sessions  # noqa: E402
 
 PR = "https://github.com/o/r/pull/7"
-RUNS = {7: {"status": "done", "pr": PR}, 8: {"status": "running", "pr": None}, 9: {"status": "done", "pr": "https://github.com/o/r/pull/9"}}
+RUNS = {
+    7: {"status": "done", "pr": PR},
+    8: {"status": "running", "pr": None},
+    9: {"status": "done", "pr": "https://github.com/o/r/pull/9"},
+}
 ui_board.load_run = lambda o, r, n, runs_dir=None: RUNS.get(int(n))
 ui_repos.resolve_repo = lambda slug: (d, slug)
 started, sent = [], []
@@ -80,7 +84,9 @@ code, body = ui_grind.request("o", "r", 10)
 assert code == 202 and body["state"] == "queued" and len(started) == n0 + 1 or ui_runner.MAX_GRINDS > 2
 freed[0] += 1
 ui_grind.drain()
-assert len(started) == n0 + 2 and ui_grind.for_card(ui_grind.index(), "o", "r", 10, RUNS[10]["pr"])["state"] == "running"
+assert (
+    len(started) == n0 + 2 and ui_grind.for_card(ui_grind.index(), "o", "r", 10, RUNS[10]["pr"])["state"] == "running"
+)
 # autostart queues only finished runs that asked, once
 rec = ui_sessions.create("/run-issue 11", d, {"owner": "o", "repo": "r", "issue": 11})
 ui_sessions.update(rec["id"], status="done", auto_grind=True)
@@ -116,7 +122,10 @@ def replay(events):
 
 
 init = {"type": "system", "subtype": "init", "session_id": "s"}
-ask = {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash", "input": {"command": "aiw ask <<'EOF'\n{}\nEOF"}}]}}
+ask = {
+    "type": "assistant",
+    "message": {"content": [{"type": "tool_use", "name": "Bash", "input": {"command": "aiw ask <<'EOF'\n{}\nEOF"}}]},
+}
 res = {"type": "result", "is_error": False, "total_cost_usd": 1}
 assert replay([init, ask, res, init, res]) == "done"  # ask answered, run resumed and finished
 assert replay([init, ask, res]) == "failed"  # ask with nothing recorded still fails
@@ -140,7 +149,10 @@ ui_runner.resume = lambda sid, text: sent_prompts.append((sid, text))
 rec = ui_sessions.create("/run-issue 31", d, {"owner": "o", "repo": "r", "issue": 31})
 sid = rec["id"]
 ui_sessions.update(sid, status="running", pid=os.getpgrp(), session_id="claude-1")
-assert ui_runner.send_prompt(sid, "  skip the migration  ") == "queued" and ui_sessions.load(sid)["queued_prompt"] == "skip the migration"
+assert (
+    ui_runner.send_prompt(sid, "  skip the migration  ") == "queued"
+    and ui_sessions.load(sid)["queued_prompt"] == "skip the migration"
+)
 ui_runner._deliver_queued(sid)  # still running: nothing goes out
 assert not sent_prompts
 ui_sessions.update(sid, status="done")
@@ -222,9 +234,18 @@ ui_settings.save({"commands": [], "default": None, "auto_grind": True})
 RUNS[40] = {"status": "done", "pr": "https://github.com/o/r/pull/40"}
 RUNS[41] = {"status": "done", "pr": "https://github.com/o/r/pull/41"}
 RUNS[42] = {"status": "done", "pr": "https://github.com/o/r/pull/42"}
-legacy = {"id": "p-20260101000000-aaaaaa", "name": "n", "slug": "o/r", "repo_path": d, "mode": "parallel", "max": 2,
-          "status": "active", "created": 1.0, "notified": False,
-          "items": [{"issue": 40, "state": "done"}, {"issue": 41, "state": "queued"}]}
+legacy = {
+    "id": "p-20260101000000-aaaaaa",
+    "name": "n",
+    "slug": "o/r",
+    "repo_path": d,
+    "mode": "parallel",
+    "max": 2,
+    "status": "active",
+    "created": 1.0,
+    "notified": False,
+    "items": [{"issue": 40, "state": "done"}, {"issue": 41, "state": "queued"}],
+}
 explicit = {**legacy, "id": "p-20260101000001-bbbbbb", "auto_grind": False, "items": [{"issue": 42, "state": "done"}]}
 ui_dispatch.save(legacy)
 ui_dispatch.save(explicit)
