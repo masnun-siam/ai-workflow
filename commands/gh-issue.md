@@ -167,17 +167,26 @@ Do the following:
    decision made while grilling or decomposing otherwise lives only in a chat transcript;
    this puts it where the next reader of the PRD looks.
 
-   1. **Locate the PRD.** When step 0 ran, it is the `/intake` brief's source if that is a
-      PRD. Otherwise look for these, each of which counts only when it exists:
-      - local: `docs/prd/<slug>.md` (the step 3.6 slug)
-      - Obsidian: `obsidian vault=notes read path="05-Work/<Project>/<Feature>/PRD.md"`
-        (the feature folder step 2.5's brief named, else the one step 3.6 resolved; it
-        prints `Error: ... not found` when missing)
-      - wiki: only after a shallow clone of `.wiki.git` into the scratchpad shows a
-        `PRD-<Title-With-Dashes>.md` page. Never create a page, a clone target or a wiki.
+   1. **Locate the PRD.** Find a first copy, then use it to find the rest. Start from:
+      - the `/intake` brief's source, when step 0 ran and the source is a PRD;
+      - local: `docs/prd/<slug>.md` (the step 3.6 slug);
+      - Obsidian: `obsidian vault=notes read path="05-Work/<Project>/<Feature>/PRD.md"` (the
+        feature folder step 2.5's brief named, else the one step 3.6 resolved; it prints
+        `Error: ... not found` when missing).
 
-      None found anywhere → skip this step with a one-line note and go on to step 4. Never
-      create a PRD here.
+      Read the first copy's `# PRD — <Title>` heading. `<Title>` is that heading text; the
+      PRD's own slug is its kebab-case and `<Title-With-Dashes>` is its words joined by
+      dashes (how `/prd` Step 1 names them). Do not reuse the step 3.6 slug past this point;
+      the task list's slug can differ from the PRD's. Then check all three destinations with
+      those names; a copy counts only when it exists:
+      - local: `docs/prd/<slug>.md`
+      - Obsidian: the feature folder's `PRD.md`
+      - wiki: `git ls-remote` on `.wiki.git` first (the cheap existence check `/prd` uses);
+        only when the wiki exists, shallow-clone it into the scratchpad and look for
+        `PRD-<Title-With-Dashes>.md`. Never create a page, a clone target or a wiki.
+
+      No copy found at the starting points, or none anywhere → skip this step with a
+      one-line note and go on to step 4. Never create a PRD here.
    2. **Collect the resolved items.** Read each found copy's `## Open questions`. An item is
       resolved when the step 3 grilling answers or the approved task list (titles,
       outcomes, acceptance criteria) settle it. Write each as `<decision> — <why>`, the
@@ -192,14 +201,15 @@ Do the following:
       - **Local**: the Edit tool on `docs/prd/<slug>.md`. Never `git add` or commit it.
       - **Obsidian**: `obsidian vault=notes` only, never plain file writes. Read `PRD.md`,
         apply the move to the text, then `create ... overwrite` with the whole updated
-        text. Overwriting re-creates the file, so read its `tags` property first and
-        `property:set` it again afterwards if it is gone.
+        text, frontmatter included. Overwriting re-creates the file, so read its properties
+        (`tags`, `status`) first and `property:set` each one again afterwards if it is gone.
       - **Wiki**: ask a separate "push the PRD update to the wiki?" confirmation. If yes,
         edit the page in the clone, make a plain commit (`docs: PRD decisions — <Title>`)
         and push. Never `--no-verify`.
-   4. **Failures.** One destination failing (Obsidian down, no wiki, no local file) never
-      stops the others and never stops issue creation: report it as `failed — <reason>`
-      naming the destination, and go on. Report each destination that was written on its
+   4. **Failures.** A destination with no PRD copy (no local file, no wiki, no note) is
+      `skipped — no PRD found`, not a failure. One destination failing to write (Obsidian
+      down, push rejected) never stops the others and never stops issue creation: report it
+      as `failed — <reason>` naming the destination, and go on. Report each destination that was written on its
       own line with its path/URL and the items moved, in the closing return block (see the
       end of this file). Remove any scratchpad clone this step created.
 4. Then create a GitHub issue on the current repo:
