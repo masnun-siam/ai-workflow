@@ -237,7 +237,7 @@ def _resolve_issue_numbers(args) -> list[int]:
 
     if args.query:
         data, proc = gh_json(
-            ["issue", "list", "--repo", args.slug, "--search", args.query,
+            ["issue", "list", "--repo", args.slug, "--search", f"{args.query} -label:tracking",
              "--json", "number", "--jq", "[.[].number]", "--limit", "1000"]
         )
         if proc.returncode != 0:

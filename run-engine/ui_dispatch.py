@@ -208,7 +208,8 @@ def wants_grind() -> set:
 
 def _issue_numbers(slug: str, kind: str, value) -> list[int]:
     if kind == "query":
-        data, proc = gh_json(["issue", "list", "--repo", slug, "--search", value, "--state", "open",
+        # a `tracking` parent only groups sub-issues and /run-issue refuses it: never a dispatch item
+        data, proc = gh_json(["issue", "list", "--repo", slug, "--search", f"{value} -label:tracking", "--state", "open",
                               "--json", "number", "--jq", "[.[].number]", "--limit", str(MAX_ISSUES)])
         if proc.returncode != 0:
             raise ValueError(f"search failed: {(proc.stderr or '').strip()[:200]}")

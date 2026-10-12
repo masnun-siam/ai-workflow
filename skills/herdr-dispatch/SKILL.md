@@ -16,7 +16,7 @@ You are the **controller**. Each issue runs in its own herdr tab as an independe
 ## Flow
 
 1. **Context.** `herdr pane current` → `workspace_id` (tabs open here). `gh repo view --json nameWithOwner -q .nameWithOwner` → `<repo>`.
-2. **Resolve.** `bash <plugin_root>/skills/herdr-dispatch/scripts/resolve.sh <repo> <input>` prints `n<TAB>title<TAB>deps` (deps = native blocked-by links plus "Depends on #N" text refs, inside the set; the text line is the fallback when the blocked-by call fails). Print the order once: independent issues can run together; an issue starts only after all its deps reach Gate 2 **Ready**. `--sequential` chains everything oldest-first. No confirmation prompt.
+2. **Resolve.** `bash <plugin_root>/skills/herdr-dispatch/scripts/resolve.sh <repo> <input>` prints `n<TAB>title<TAB>deps` (deps = native blocked-by links plus "Depends on #N" text refs, inside the set; the text line is the fallback when the blocked-by call fails). Print the order once: independent issues can run together; an issue starts only after all its deps reach Gate 2 **Ready**. `--sequential` chains everything in dependency order (oldest-first among the issues whose deps are done), not raw number order: a blocked-by link can point at a higher number. No confirmation prompt.
 3. **Skip what is already running or done** (stateless resume): `herdr tab list` has a label ending `issue-<n>`, or the issue already has a `🤖 /run-issue report` comment. State lives in GitHub and herdr, not in a file of yours.
 4. **`--dry-run` stops here** after printing the order, the launch commands and the poll plan.
 5. **Launch** each startable issue while running < `--max`:
