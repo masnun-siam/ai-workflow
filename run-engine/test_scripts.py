@@ -3185,8 +3185,8 @@ assert flat.count("gh label create prd-<slug>") == 1 and flat.count("gh label cr
 ok("4-FLAT ensure-creates prd-<slug> and refined once each before the first create")
 
 assert "same section list as step 4" in flat_ws and "inlined, never referenced" in flat_ws
-assert "docs/tasks/<slug>.md" in flat
-ok("4-FLAT bodies reuse step 4 sections, inline context, and link docs/tasks/<slug>.md in Notes")
+assert "Notes links `Task <n> of <wiki URL>`" in flat_ws
+ok("4-FLAT bodies reuse step 4 sections, inline context, and link the published task list in Notes (#236)")
 
 assert "Depends on: task <k>" in flat and "Depends on: #<n>" in flat and "earlier" in flat
 ok("4-FLAT resolves Depends on: task <k> to Depends on: #<n> from earlier tasks")
@@ -3278,7 +3278,7 @@ assert "Depends on: task <k>" in flat and "Depends on: #<n>" in flat and "earlie
 ok("4-FLAT resume of a complete list creates nothing and reuses slot numbers for dependencies")
 
 assert "gh issue list --label prd-<slug> --state all --limit 200" in flat
-assert "Task <n> of docs/tasks/<slug>.md" in flat_ws
+assert "`Task <n> of` text" in flat_ws
 assert "instead of creating it again" in flat_ws
 assert "gets its write-back retried, not a second create" in flat_ws
 assert flat_ws.index("gh issue list --label prd-<slug>") < flat_ws.index("gh label create refined")
@@ -3487,10 +3487,9 @@ _SPAN_TAILS = {
     "not created twice.": " - **\"Stop here\"**: first",
 }
 for first, last in (
-    ("Preflight, before anything is created", "create nothing and report the existing issues."),
+    # #236 diverged gh-issue's preflight guard and write-back from jira-to-gh (follow-up: mirror them there).
     ("Ensure the labels once, before the first create", 'description "task from docs/tasks/<slug>.md" 2>/dev/null || true'),
     ("Create the issues one at a time in list order.", "`lean` is never applied here."),
-    ("Write-back: every task block ends", "Skip when Step 4.6 saved no local file."),
     ("Check each create's and each write-back's exit status.", "not created twice."),
 ):
     _mirror_span(ghf, jf, first, last)
@@ -3503,7 +3502,7 @@ guard = "gh issue list --label prd-<slug> --state all --limit 200 --json number,
 assert ghf.count(guard) == 2 and jf.count(guard) == 2
 ok("#84 duplicate guard appears as often as in 4-FLAT")
 for sent in (
-    "Context is inlined, never referenced: a task body must stand alone. Each How covers only its own task. Notes links `Task <n> of docs/tasks/<slug>.md`.",
+    "Context is inlined, never referenced: a task body must stand alone. Each How covers only its own task.",
     "end the run and report the partial state (created vs. missing); the filled `Issue:` slots let a later run resume the list.",
     "Never close or delete an issue already created \u2014 a partial list is a recoverable state.",
 ):
@@ -3973,5 +3972,30 @@ assert "--dry-run" in _dp187 and "--max 2" in _dp187 and "Launch" in _dp187, "#1
 assert _dp187.index("--dry-run") < _dp187.index("Launch"), "#187 dry-run is shown before the launch question"
 assert re.search(r"[Nn]ever (launch|dispatch).{0,60}without an explicit", _flow_ws), "#187 never dispatch without a go"
 ok("#187 /flow checkpoints every boundary; dispatch shows --dry-run (--max 2) and launches only on an explicit go")
+
+# Issue #236: gh-issue links the published task list and syncs Issue: slots everywhere.
+_g236 = _read("commands", "gh-issue.md")
+_f236 = _n(_slice(_g236, "### 4-FLAT", "\n4.5."))
+_hr236 = _n(_slice(_g236, "**HARD RULE", "Do the following:"))
+assert "Notes links `Task <n> of <wiki URL>`" in _f236 and "`Task <n> of <parent issue URL>`" in _f236
+assert "never link `docs/tasks/<slug>.md` or any other local path" in _f236
+assert not re.search(r"Notes links `Task <n> of docs/tasks", _g236) and "Notes wrap the path in backticks" not in _g236
+ok("#236 Notes link the wiki URL, else the parent issue URL, never a local path")
+_pre236 = _f236[: _f236.index("1. Ensure the labels")]
+assert "`prd-<slug>` label" in _pre236 and "`Task <n> of` text" in _pre236 and "title" in _pre236
+assert "match on the `Task <n> of` text and the slug" not in _g236
+ok("#236 duplicate guard matches label + Task <n> of text + title, not the slug in a path")
+_wb236 = _f236[_f236.index("4. Write-back:") : _f236.index("5. Check each create")]
+for _p in ("`obsidian vault=notes`", "wiki clone", "one plain commit and push", "never `--no-verify`",
+           "failed \u2014 <reason>", "the run continues", "not synced", "Resume"):
+    assert _p in _wb236, f"#236 write-back missing {_p!r}"
+ok("#236 write-back fills Issue: in local, Obsidian and wiki; failures reported by name; Resume local-only")
+for _p in ("`obsidian vault=notes`", "one plain commit and push", "step 3.6 confirmation"):
+    assert _p in _hr236 and "4-FLAT" in _hr236, f"#236 HARD RULE missing {_p!r}"
+assert "edited only to fill `Issue:` slots in `4-FLAT`" in _hr236 and "no other repo file" in _hr236
+ok("#236 HARD RULE exception covers the Obsidian and wiki Issue: write-back and stays narrow")
+_links236 = [l for l in _g236.splitlines() if "Task <n> of docs/tasks" in l]
+assert not _links236, _links236
+ok("#236 no sentence links a local path from an issue")
 
 print(f"\n{passed} checks passed")
