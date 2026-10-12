@@ -3974,4 +3974,59 @@ assert _dp187.index("--dry-run") < _dp187.index("Launch"), "#187 dry-run is show
 assert re.search(r"[Nn]ever (launch|dispatch).{0,60}without an explicit", _flow_ws), "#187 never dispatch without a go"
 ok("#187 /flow checkpoints every boundary; dispatch shows --dry-run (--max 2) and launches only on an explicit go")
 
+# --- #237: tracking parent with native sub-issues and blocked-by -------------
+_root237 = os.path.join(HERE, "..")
+_read237 = lambda rel: open(os.path.join(_root237, *rel.split("/")), encoding="utf-8").read()  # noqa: E731
+
+
+def _resolve237(blocked_by_fails: bool) -> dict:
+    """Run resolve.sh against a fake `gh`: parent 100 -> sub-issues 11, 12, 13.
+
+    11 is natively blocked by 13 (a higher number: number order alone gets it wrong);
+    12 says `Depends on: #11` in its body only; 13 has neither.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        gh = os.path.join(d, "gh")
+        with open(gh, "w", encoding="utf-8") as fh:
+            fh.write(r"""#!/usr/bin/env bash
+case "$*" in
+  *"issues/100/sub_issues"*) printf '11\n12\n13\n' ;;
+  *"issues/11/dependencies/blocked_by"*) %s ;;
+  *"dependencies/blocked_by"*) ;;
+  *"issue view 12 "*"--json body"*) echo "Depends on: #11" ;;
+  *"--json body"*) echo "no deps" ;;
+  *"--json title"*) echo "title-$3" ;;
+esac
+""" % ("exit 1" if blocked_by_fails else "echo 13"))
+        os.chmod(gh, 0o755)
+        env = dict(os.environ, PATH=d + os.pathsep + os.environ["PATH"])
+        out = subprocess.run(
+            ["bash", os.path.join(_root237, "skills", "herdr-dispatch", "scripts", "resolve.sh"), "o/r", "100"],
+            capture_output=True, text=True, env=env, check=True).stdout
+    return {ln.split("\t")[0]: ln.split("\t")[2] for ln in out.splitlines()}
+
+
+_deps237 = _resolve237(False)
+assert _deps237 == {"11": "13", "12": "11", "13": ""}, f"#237 native blocked-by must feed deps, got {_deps237}"
+_deps237 = _resolve237(True)
+assert _deps237 == {"11": "", "12": "11", "13": ""}, f"#237 a failing blocked-by call must fall back to the text line, got {_deps237}"
+ok("#237 resolve.sh: deps come from native blocked-by plus the text line, and survive an API failure")
+
+_gi237 = _read237("commands/gh-issue.md")
+_flat237 = _gi237[_gi237.index("### 4-FLAT"):_gi237.index("4.5. Dispatch")]
+for _needle in ("tracking", "prd-<slug>", "sub_issues", "dependencies/blocked_by"):
+    assert _needle in _flat237, f"#237 4-FLAT lacks {_needle}"
+assert re.search(r"(fail|error).{0,200}(report|continue)", _flat237, re.I | re.S), "#237 4-FLAT must report and continue when the link calls fail"
+ok("#237 4-FLAT creates a tracking parent and links sub-issues and blocked-by")
+
+_ri237 = _read237("commands/run-issue.md")
+assert re.search(r"`tracking`", _ri237), "#237 run-issue lacks the tracking refusal"
+assert _ri237.index("`tracking`") < _ri237.index("3.5. **Epic check"), "#237 tracking refusal must precede step 3.5"
+ok("#237 /run-issue refuses a tracking parent before the epic check")
+
+assert "No epics or parent tracking issues" not in _read237("skills/flow/SKILL.md"), "#237 flow still forbids a parent"
+assert re.search(r"blocked-by", _read237("skills/herdr-dispatch/SKILL.md")), "#237 herdr-dispatch lacks blocked-by ordering"
+assert re.search(r"tracking", _read237("CHANGELOG.md").split("## 1.12.0")[0]), "#237 CHANGELOG lacks the entry"
+ok("#237 flow no longer forbids a parent; herdr-dispatch and CHANGELOG updated")
+
 print(f"\n{passed} checks passed")
