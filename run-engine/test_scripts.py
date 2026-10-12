@@ -3975,10 +3975,11 @@ ok("#187 /flow checkpoints every boundary; dispatch shows --dry-run (--max 2) an
 
 # Issue #236: gh-issue links the published task list and syncs Issue: slots everywhere.
 _g236 = _read("commands", "gh-issue.md")
-_f236 = _n(_slice(_g236, "### 4-FLAT", "\n4.5."))
-_hr236 = _n(_slice(_g236, "**HARD RULE", "Do the following:"))
+_w236 = lambda t: " ".join(t.split())
+_f236 = _w236(_slice(_g236, "### 4-FLAT", "\n4.5."))
+_hr236 = _w236(_slice(_g236, "**HARD RULE", "Do the following:"))
 assert "Notes links `Task <n> of <wiki URL>`" in _f236 and "`Task <n> of <parent issue URL>`" in _f236
-assert "never link `docs/tasks/<slug>.md` or any other local path" in _f236
+assert "Never link `docs/tasks/<slug>.md` or any other local path" in _f236
 assert not re.search(r"Notes links `Task <n> of docs/tasks", _g236) and "Notes wrap the path in backticks" not in _g236
 ok("#236 Notes link the wiki URL, else the parent issue URL, never a local path")
 _pre236 = _f236[: _f236.index("1. Ensure the labels")]

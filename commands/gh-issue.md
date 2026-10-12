@@ -82,7 +82,7 @@ ever creates a GitHub issue. It never touches code.**
 - NEVER use Write, Edit, or NotebookEdit on any file in the repo.
 - NEVER run a mutating shell command (`git commit`, `git checkout -b`, package installs, formatters, codemods, etc.).
 - The ONLY writes permitted are the temp body file at `/tmp/gh-issue-body.md`, the `gh issue create` / `gh issue edit` / `gh project` calls below, `aiw ask` when headless (records the question in the UI session, outside the repo), and the notes-vault dump in step 7 (that's a different vault, not the repo, and goes through the `dump` skill's own confirmation).
-- The sole exception to the rules above is the step 3.6 task-list save, and only when its conditions hold: (a) `docs/tasks/<slug>.md` written via the Write tool in step 3.6 and edited only to fill `Issue:` slots in `4-FLAT` (an override of the no-Write/no-Edit rule for that one path only); (b) the Obsidian `Tasks.md` via `obsidian vault=notes`, only when the user chose Obsidian, placed the way `/dump` does, plus the vault sibling writes `/dump`'s linking rules produce (the Index append and Related link); (c) the wiki clone/commit/push of `Tasks-<Title>.md` in a scratchpad clone, only when the user chose the wiki and confirmed the push (an override of the no-mutating-shell rule for that clone only). It covers nothing else: no other repo file, and no `git add` or commit of `docs/tasks/`.
+- The sole exception to the rules above is the step 3.6 task-list save and its `4-FLAT` `Issue:` write-back, and only when their conditions hold: (a) `docs/tasks/<slug>.md` written via the Write tool in step 3.6 and edited only to fill `Issue:` slots in `4-FLAT` (an override of the no-Write/no-Edit rule for that one path only); (b) the Obsidian `Tasks.md` via `obsidian vault=notes`, only when the user chose Obsidian, placed the way `/dump` does, plus the vault sibling writes `/dump`'s linking rules produce (the Index append and Related link), and in `4-FLAT` the same `Issue:` slots filled in that note via `obsidian vault=notes`; (c) the wiki clone/commit/push of `Tasks-<Title>.md` in a scratchpad clone, only when the user chose the wiki and confirmed the push (an override of the no-mutating-shell rule for that clone only), and in `4-FLAT` one plain commit and push of the `Issue:` slot edits in that same clone, covered by the step 3.6 confirmation. It covers nothing else: no other repo file, and no `git add` or commit of `docs/tasks/`.
 - This holds even for a one-character fix. "It's trivial" is not an exception — the whole point of filing an issue is that a human decides whether and how to make the change.
 - If a fix is obvious from your investigation, do NOT apply it. Record it under a **Proposed Fix** section in the issue body instead (file path, symbol, and the change in prose or a fenced diff).
 - **Scope.** These constraints bind steps 0–7 of this skill only, including everything
@@ -210,7 +210,7 @@ One issue per task from the step 3.6 list, each standalone.
    every `Depends on: task <j>` in task k has j < k; otherwise stop, report the offending
    task, and let the user fix the list via step 3.5's edit loop.
    This resume branch overrides the new-slug stop above: choosing **"Resume this list"** is not skipping the save, and the `j < k` check runs on the saved list (the one Resume uses), not the approved one it discards.
-   If the user chose **"Resume this list"** in step 3.6, the saved `docs/tasks/<slug>.md` is the list: read it, show which tasks have no issue number yet, and create only tasks without an issue number, in list order; reuse the existing `Issue: #<n>` numbers for their `Depends on:` lines. First run `gh issue list --label prd-<slug> --state all --limit 200 --json number,url,title,body` (the guard runs before the show step is final, so that list reflects its findings); an issue whose Notes says `Task <n> of docs/tasks/<slug>.md` (Notes wrap the path in backticks, so match on the `Task <n> of` text and the slug) for a task with an empty slot, and whose title also matches that task's planned title, was created but never recorded, so fill that slot with the sub-step 4 write-back instead of creating it again. A Notes-only match with a different title may belong to another list sharing the slug: report it and leave it for the user. If every slot is filled, create nothing and report the existing issues.
+   If the user chose **"Resume this list"** in step 3.6, the saved `docs/tasks/<slug>.md` is the list: read it, show which tasks have no issue number yet, and create only tasks without an issue number, in list order; reuse the existing `Issue: #<n>` numbers for their `Depends on:` lines. First run `gh issue list --label prd-<slug> --state all --limit 200 --json number,url,title,body` (the guard runs before the show step is final, so that list reflects its findings); an issue that carries the `prd-<slug>` label (the list query already filters on it), whose Notes has the `Task <n> of` text for a task with an empty slot, and whose title also matches that task's planned title, was created but never recorded, so fill that slot with the sub-step 4 write-back instead of creating it again. The Notes link is a wiki or parent issue URL, never the slug, so never match on a path. A label-and-`Task <n> of` match with a different title may belong to another list sharing the slug: report it and leave it for the user. If every slot is filled, create nothing and report the existing issues.
    Ask step 5's assignee question and step 6's project and field questions here, once for the whole list and before the first create; skip them when nothing is left to create.
 1. Ensure the labels once, before the first create (`<slug>` is the step 3.6 slug):
 
@@ -220,7 +220,7 @@ One issue per task from the step 3.6 list, each standalone.
    ```
 2. Write one complete, DoR-passing body per task, using the same section list as step 4.
    Context is inlined, never referenced: a task body must stand alone. Each How covers
-   only its own task. Notes links `Task <n> of docs/tasks/<slug>.md`.
+   only its own task. Notes links `Task <n> of <wiki URL>` when step 3.6 pushed a wiki copy (the page URL it reported), else `Task <n> of <parent issue URL>` when a parent issue exists, else `Task <n> of this task list` with no link. Never link `docs/tasks/<slug>.md` or any other local path: it is never committed, so the link is dead on GitHub.
 3. Create the issues one at a time in list order. Before writing task k's body, replace
    each `Depends on: task <k>` line (k = an earlier task's number) with `Depends on: #<n>`, using the number already returned
    for that task (or already in its `Issue:` slot) (edges only point at earlier tasks). Write the body to
@@ -234,6 +234,23 @@ One issue per task from the step 3.6 list, each standalone.
    Edit with an `old_string` that starts at the task's own `## Task <k> — <title>` heading
    and runs through its `Issue: —` line (unique), setting `Issue: #<n>`. Skip when
    step 3.6 saved no local file.
+
+   Then fill the same `Issue: #<n>` in the other destinations step 3.6 wrote, each with
+   its own task-anchored edit and in the same order as the local one:
+   - **Obsidian** (only if chosen): via `obsidian vault=notes`, `read` the `Tasks.md`, set the
+     slot in the text yourself (anchor on the task heading as above, within this run's
+     block when the note holds earlier lists), and write the whole note back with
+     `create ... overwrite`; there is no partial-replace command.
+   - **Wiki** (only if chosen and pushed): make the same edit in the scratchpad wiki clone
+     from step 3.6. Commit nothing per issue; after the last create, make one plain commit
+     and push, never `--no-verify`.
+   - **Resume**: step 3.6's Resume wrote neither copy, so update the local file only and
+     report Obsidian and the wiki as `not synced`.
+
+   A destination that fails to update does not stop the run: report it by name as
+   `failed — <reason>`; the run continues with the next issue. Step 5's stop covers creates and the
+   local write-back only. End the run with one line per destination: updated, `not synced`,
+   or `failed — <reason>`.
 5. Check each create's and each write-back's exit status. On failure, stop like a failed
    create: report the created issues (number and URL), the missing ones (by planned title),
    and any issue that exists but is unrecorded in the file; never delete created issues.
