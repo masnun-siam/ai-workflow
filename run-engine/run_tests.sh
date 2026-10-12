@@ -2,6 +2,8 @@
 # Run every run-engine/test_*.py; exit nonzero if any fails. Used by the pre-push hook and CI.
 # ponytail: serial (~2 min); run the files in parallel if this starts getting skipped.
 set -u
+# Called from git hooks: keep the tests' temp repos from writing into this repo's index.
+unset GIT_INDEX_FILE GIT_DIR GIT_WORK_TREE
 cd "$(dirname "$0")" || exit 1
 failed=()
 for t in test_*.py; do
