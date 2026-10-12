@@ -4401,6 +4401,10 @@ for _h in ("3.5. **Decompose.**", "3.6. **Save the task list.**"):
 for _w in ("Save as shown", "creates nothing on GitHub", "even a single task", "Open questions", "stack"):
     assert _w.lower() in _ct.lower(), f"create-tasks lacks {_w!r}"
 assert "\u2192 next: /gh-issue docs/tasks/<slug>.md" in _ct, "create-tasks next line"
+assert "aiw paths" in _ct and "<plugin_root>/commands/gh-issue.md" in _ct, (
+    "create-tasks resolves gh-issue via aiw paths"
+)
+assert "`Problem statement: <path>`" in _ct and "`PRD: <path>`" in _ct, "create-tasks header names its inputs"
 _g0 = _ws(_slice(_ghi, "0. **Source check.**", "Details: $@"))
 assert "docs/tasks/<slug>.md" in _g0 and "## Task <n>" in _g0, "gh-issue step 0 must take a saved task list"
 assert re.search(r"one task.{0,80}step 4", _g0) and "Resume this list" in _g0, (

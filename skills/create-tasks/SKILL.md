@@ -14,9 +14,13 @@ allowed-tools:
 
 # /create-tasks — problem statement + PRD → saved task list
 
-The decomposition rules live in one place: `commands/gh-issue.md` steps `3.5. **Decompose.**` and
-`3.6. **Save the task list.**`. Read both and apply them as written, with the changes below. Do not
-copy them here; a rule changed there applies here too.
+> **Paths.** This skill runs in the user's repo, not the plugin's. Run `aiw paths` and use its
+> `plugin_root` value for `<plugin_root>` below; never guess a path. If `aiw paths` does not print
+> JSON whose first key is `plugin_root`, stop and report that the plugin is not installed.
+
+The decomposition rules live in one place: `<plugin_root>/commands/gh-issue.md` steps
+`3.5. **Decompose.**` and `3.6. **Save the task list.**`. Read both and apply them as written, with
+the changes below. Do not copy them here; a rule changed there applies here too.
 
 ## Arguments
 
@@ -58,6 +62,10 @@ Apply gh-issue's 3.5 and then 3.6 to what Step 1 gathered, with these changes:
 - **Order follows the stack.** Dependency order comes from this repo's own layers. A Laravel-style
   stack might run migration → model → service → controller with its request and resource; that is
   an example, not a rule.
+
+- **Two more header lines.** Below 3.6's header (title, source, date, owner/repo), add
+  `Problem statement: <path>` and `PRD: <path>` (`PRD: none` when there is none), naming the
+  inputs as given. `/gh-issue` reads them to build the epic and to record decisions in the PRD.
 
 3.6's slug, destination, collision and failure rules apply unchanged.
 
