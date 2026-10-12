@@ -62,11 +62,14 @@ ask nothing at all, so this interview is the only chance to settle anything. Cha
   Add these as branches of the starting tree.
 - **Open questions must be empty.** Before Step 6, if the draft's `## Open questions` lists
   anything, keep grilling on exactly those items until none remain; only implementation choices
-  meant for the later technical spec may stay, and each must say so.
+  meant for the later technical spec and `Owner: stakeholder` items may stay, and each must say
+  which it is. An `Owner: stakeholder` item is a product decision the user cannot settle (for
+  example whether expired data is auto-deleted, or whether an admin screen is in scope); tag it
+  even when no owner name is known.
 - **No other question is asked.** Existing PRD (Step 2): update it in place. No matching
   project (Step 2): use the project and feature folder from the input path, creating the feature
   folder if needed. Destinations: Obsidian only, whatever `--to` says. Review gate (Step 6):
-  approved automatically once Open questions is empty. The wiki is never pushed.
+  approved automatically once only technical-spec and `Owner: stakeholder` items remain in Open questions. The wiki is never pushed.
 - Report the destination path in Step 8 as usual; the `→ next:` line is unchanged.
 
 ## Step 1: Normalise the input
@@ -109,10 +112,11 @@ Starting tree. Each branch unlocks the ones below it, so ask the top ones first:
 
 1. **Problem and users** — who has the problem, what happens today, why now.
 2. **Goals and non-goals** — what done looks like; what is deliberately excluded.
-3. **Requirements** — each behaviour as something testable, with acceptance criteria. Reconcile against what the scan found.
+3. **Requirements** — each behaviour as something testable, with acceptance criteria. Reconcile against what the scan found. Also ask for the design link (Figma or similar); `none` is a valid answer.
 4. **Edge cases** — failure paths, permissions, tenancy, empty/limit states, migration of existing data.
 5. **Success metrics** — how anyone will know it worked.
 6. **Rollout and dependencies** — flags, phasing, other teams, external services.
+7. **Destructive or automatic behaviour** — auto-delete or expiry timers, irreversible actions, missing admin or management UI. Anything the user cannot settle goes in Open questions as `Owner: stakeholder`.
 
 Skip branches the requirement already settles. Do not drift into implementation choices; if one comes up, record it in Open questions for the later technical spec.
 
@@ -124,6 +128,7 @@ Fill this template with what was agreed. Keep the user's decisions and their one
 # PRD — <Title>
 
 **Status:** Draft · **Date:** YYYY-MM-DD · **Repo:** <owner/repo>
+**Design:** <URL or none>
 
 ## Overview
 <2–4 sentences. Then "Codebase context:" with 2–5 bullets from the scan, with file paths.>

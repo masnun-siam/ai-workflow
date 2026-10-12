@@ -37,7 +37,7 @@ Invoke the `ai-workflow:dump` skill with the raw text and `--flow-auto`, so its 
 
 ### prd
 
-Invoke the `ai-workflow:prd` skill with the feature folder and `--flow-auto` (`/prd <feature-folder> --flow-auto`). It fills the folder's seeded `PRD.md`, or updates an already finished PRD (a change request) in place without asking; the review gate approves itself once Open questions is empty. Its final line is `→ next: /gh-issue <prd-path>`.
+Invoke the `ai-workflow:prd` skill with the feature folder and `--flow-auto` (`/prd <feature-folder> --flow-auto`). It fills the folder's seeded `PRD.md`, or updates an already finished PRD (a change request) in place without asking; the review gate approves itself once only technical-spec and `Owner: stakeholder` items remain in Open questions. Before the checkpoint that follows, print every `Owner: stakeholder` item from the PRD's Open questions so the user sees them. Its final line is `→ next: /gh-issue <prd-path>`.
 
 ### gh-issue
 
