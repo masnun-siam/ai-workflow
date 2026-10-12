@@ -45,7 +45,8 @@ can be aborted by a fixer hook (whitespace, final newline, ruff-format) or a fai
 
 On `git push`, `run-engine/run_tests.sh` runs every `run-engine/test_*.py` (about 2 minutes)
 and blocks the push if any file fails. The `Tests` GitHub Actions job runs the same script on
-every pull request and on pushes to `master`. Run it by hand with `bash run-engine/run_tests.sh`.
+every pull request and on pushes to `master`. Run it by hand with `bash run-engine/run_tests.sh`. A clone set up before
+the pre-push hook existed must run `pre-commit install` again to get it.
 
 ## Process
 

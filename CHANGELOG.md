@@ -48,6 +48,12 @@
 - **Stale design docs:** the epic-decomposition spec and plan, the intake-command spec and
   plan, and the finished `docs/tasks/gh-issue-flat-task-list.md`.
 
+### Fixed
+
+- **AFK failed-run retries on Python 3.10.** `ui_afk` parsed the runner's `…Z` timestamps
+  with `datetime.fromisoformat`, which rejects a trailing `Z` before 3.11, so on 3.10 the
+  retry never fired. It now uses the same tolerant parser as `review.py`.
+
 ## 1.12.0 — 2026-10-09
 
 ### Added
