@@ -18,6 +18,19 @@
 - **Questions answered in Flow.** A step's question opens beside the steps (in the step on narrow
   screens), and answering from the Answer page returns to the flow or the session.
 
+### Changed
+
+- **Docs restructure.** `README.md` is now a short link hub. The agent setup protocol moved to
+  `docs/INSTALL.md`, and commands, the `aiw` CLI, `aiw ui`, state and layout moved to
+  `docs/REFERENCE.md`. `CLAUDE.md` is a stable, agent-first overview of the project that
+  changes only on explicit request, and `AGENTS.md` is a symlink to it. New `CONTRIBUTING.md`
+  says which docs to update. A pre-commit hook warns, without blocking, when `CLAUDE.md`
+  changes. `docs/agents/` was removed.
+- **`aiw gitnexus` no longer writes into CLAUDE.md/AGENTS.md.** `analyze` passes
+  `--skip-agents-md` (gitnexus 1.5.0+), and its npx fallback pins `gitnexus@latest`. Repos
+  indexed by a run no longer get the GitNexus block added to their agent docs; a block
+  already there stays as-is and is no longer refreshed, so its symbol counts go stale.
+
 ## 1.12.0 — 2026-10-09
 
 ### Added

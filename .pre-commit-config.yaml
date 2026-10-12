@@ -1,0 +1,12 @@
+# Reminders only. Nothing here blocks a commit. See CONTRIBUTING.md.
+repos:
+  - repo: local
+    hooks:
+      - id: claude-md-reminder
+        name: CLAUDE.md is a stable baseline
+        language: system
+        entry: echo "WARNING - CLAUDE.md changed. It should change only when the user explicitly asked for it."
+        files: ^CLAUDE\.md$
+        pass_filenames: false
+        always_run: false
+        verbose: true

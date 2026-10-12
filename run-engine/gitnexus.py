@@ -21,12 +21,15 @@ def _runner(repo: str) -> list[str] | None:
 def analyze(repo: str) -> tuple[bool, str]:
     runner = _runner(repo)
     if runner:
-        proc = run([*runner, "analyze"], cwd=repo, timeout=TIMEOUT)
+        proc = run([*runner, "analyze", "--skip-agents-md"], cwd=repo, timeout=TIMEOUT)
         if proc.returncode == 0:
             return True, os.path.basename(repo.rstrip("/"))
     # No runner, or the local one failed: the first `npx gitnexus analyze` is also
     # what GENERATES .gitnexus/run.cjs, so this is the bootstrap path too.
-    proc = run(["npx", "gitnexus", "analyze"], cwd=repo, timeout=TIMEOUT)
+    # --skip-agents-md keeps gitnexus from writing its block into CLAUDE.md/AGENTS.md.
+    # It needs gitnexus >= 1.5.0: a runner that resolves an older global CLI rejects
+    # the flag and lands here, so this fallback pins @latest.
+    proc = run(["npx", "gitnexus@latest", "analyze", "--skip-agents-md"], cwd=repo, timeout=TIMEOUT)
     if proc.returncode == 0:
         return True, os.path.basename(repo.rstrip("/"))
     return False, (proc.stderr or proc.stdout or "gitnexus unavailable").strip().splitlines()[-1][:160]

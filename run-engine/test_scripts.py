@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ci  # noqa: E402
 import dispatch  # noqa: E402
 import epic  # noqa: E402
+import gitnexus  # noqa: E402
 import project  # noqa: E402
 import review  # noqa: E402
 import shared  # noqa: E402
@@ -258,6 +259,22 @@ with tempfile.TemporaryDirectory() as d:
         proc = subprocess.run([sys.executable, ROUTE, *argv], capture_output=True, text=True, env=env)
         assert proc.returncode == 0, f"{argv} exited {proc.returncode}: {proc.stderr}"
 ok("best-effort subcommands exit 0 even with gh/node missing from PATH")
+
+# gitnexus analyze must never write its block into CLAUDE.md/AGENTS.md (issue #260)
+_calls = []
+_orig_run = gitnexus.run
+gitnexus.run = lambda argv, **kw: _calls.append(argv) or subprocess.CompletedProcess(argv, 1, "", "error: unknown option")
+try:
+    with tempfile.TemporaryDirectory() as d:
+        os.makedirs(os.path.join(d, ".gitnexus"))
+        open(os.path.join(d, ".gitnexus", "run.cjs"), "w").close()
+        gitnexus.analyze(d)
+finally:
+    gitnexus.run = _orig_run
+assert len(_calls) == 2, _calls
+assert all("--skip-agents-md" in c for c in _calls), _calls
+assert _calls[1][:2] == ["npx", "gitnexus@latest"], "an old runner falls through to a pinned fallback"
+ok("gitnexus analyze passes --skip-agents-md on both paths; fallback pins @latest")
 
 # --------------------------------------------------------------------------- epic DAG
 
@@ -1613,6 +1630,11 @@ def _read(*parts):
         return fh.read()
 
 
+def _user_docs():
+    # README is a link hub; what it used to say now lives in docs/INSTALL.md + docs/REFERENCE.md.
+    return "\n".join((_read("README.md"), _read("docs", "INSTALL.md"), _read("docs", "REFERENCE.md")))
+
+
 gh_text = _read("commands", "gh-issue.md")
 jira_text = _read("commands", "jira-to-gh.md")
 planner_text = _read("agents", "run-planner.md")
@@ -2313,10 +2335,9 @@ ok("commands/gh-issue.md step 3.5 routes 1 task to step 4 / 4-FLAT, not 4-EPIC")
 assert "No round limit" in step35 and re.search(r"re-apply the (layer )?rubric", step35, re.I)
 ok("commands/gh-issue.md step 3.5 keeps 'No round limit' and re-applies the rubric on edit")
 
-with open(os.path.join(HERE, "..", "README.md"), encoding="utf-8") as fh:
-    readme_text = fh.read()
-assert "splits a large brief" not in readme_text, "README.md must no longer describe gh-issue as splitting a large brief"
-ok("README.md no longer contains 'splits a large brief'")
+readme_text = _user_docs()
+assert "splits a large brief" not in readme_text, "README/INSTALL/REFERENCE must not describe gh-issue as splitting a large brief"
+ok("README/INSTALL/REFERENCE do not contain 'splits a large brief'")
 
 with open(os.path.join(HERE, "..", "docs", "HOW-IT-WORKS.md"), encoding="utf-8") as fh:
     how_it_works_text = fh.read()
@@ -3608,7 +3629,7 @@ ok("#85 step 3.5 and Epic mode are unchanged")
 # Issue #86: docs describe the flat task-list flow (README, HOW-IT-WORKS Layer 5 + glossary, CHANGELOG).
 import hashlib as _hl86
 
-rd86, hw86, cl86 = _read("README.md"), _read("docs", "HOW-IT-WORKS.md"), _read("CHANGELOG.md")
+rd86, hw86, cl86 = _user_docs(), _read("docs", "HOW-IT-WORKS.md"), _read("CHANGELOG.md")
 rdn86, hwn86 = _n(rd86), _n(hw86)
 ROW86 = (
     "| `/ai-workflow:gh-issue` | file a well-formed issue; always decomposes first \u2014 one task files one issue; "
@@ -3734,7 +3755,7 @@ ok("#86 earlier doc regressions still hold")
 
 
 # Issue #130: docs describe `aiw ui` (CONTEXT Session, run-issue.md invariant, README section).
-rd130, cx130, ri130 = _read("README.md"), _read("CONTEXT.md"), _read("commands", "run-issue.md")
+rd130, cx130, ri130 = _user_docs(), _read("CONTEXT.md"), _read("commands", "run-issue.md")
 _lang130 = cx130[cx130.index("## Language") :]
 _lang130 = _lang130[: _lang130.index("\n## ", 5)] if "\n## " in _lang130[5:] else _lang130
 assert "**Session**:" in _lang130, "CONTEXT.md Language lacks **Session**:"
