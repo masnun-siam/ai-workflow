@@ -183,9 +183,10 @@ export function buildCustomBody({ repo, text }) {
   return { repo, text: String(text).trim() };
 }
 
-export function buildBody({ repo, command, args }) {
+export function buildBody({ repo, command, args, peerReview }) {
   const a = String(args).trim();
   const body = { repo, command, args: a };
+  if (command === 'prd' && peerReview === true) body.peer_review = true; // the server appends --review
   const issue = command === 'pr-grind' ? argIssue(command, a) : null;
   if (issue) body.issue = issue;
   return body;
@@ -310,7 +311,7 @@ export class Launcher extends Component {
     this.setState({ [k]: v, ...(hit ? { repo: hit, manual: false, repoQuery: null } : {}) });
   };
 
-  onSubmit = (ev) => this.start(ev, 'named', validate(this.state), (repo) => buildBody({ repo, command: this.state.command, args: this.state.args }));
+  onSubmit = (ev) => this.start(ev, 'named', validate(this.state), (repo) => buildBody({ repo, command: this.state.command, args: this.state.args, peerReview: this.state.peerReview }));
 
   onCustom = (ev) => this.start(ev, 'custom', validateCustom(this.state), (repo) => buildCustomBody({ repo, text: this.state.text }));
 
@@ -343,6 +344,7 @@ export class Launcher extends Component {
               aria-invalid=${errors.args ? 'true' : undefined} aria-describedby=${errors.args ? 'args-error' : undefined} />`}
         ${errors.args ? html`<p id="args-error" role="alert" class="error">${errors.args}</p>` : null}
         ${limitedUntil(cmds, claudeLabel, limits) ? html`<p class="note">This account is rate limited: the run is queued and starts automatically at reset.</p>` : null}
+        ${command === 'prd' && html`<label class="check" for="peer-review"><input id="peer-review" type="checkbox" checked=${this.state.peerReview === true} onChange=${(e) => this.setState({ peerReview: e.target.checked })} /> Peer review: critical, CEO, CTO and security reviewers check the PRD until critical approves</label>`}
         ${command === 'run-issue' && html`<label class="check" for="auto-grind"><input id="auto-grind" type="checkbox" checked=${autoGrind === true} onChange=${(e) => this.setState({ autoGrind: e.target.checked })} /> Start review grinding when the run finishes</label>`}
         ${command === 'run-issue' && html`<label class="check" for="worktree"><input id="worktree" type="checkbox" checked=${worktree !== false} onChange=${(e) => this.setState({ worktree: e.target.checked })} /> Run in a worktree (off: the main checkout, waiting for any main-tree run already there)</label>`}
         ${command === 'run-issue' && html`<label class="check" for="review"><input id="review" type="checkbox" checked=${review !== false} onChange=${(e) => this.setState({ review: e.target.checked })} /> Run the review and fix steps (off: the dev step completes the run)</label>`}

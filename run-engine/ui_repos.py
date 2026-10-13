@@ -297,7 +297,12 @@ def start_session(body: dict):
     flow_id = body.get("flow_id")
     if flow_id is not None and (not isinstance(flow_id, str) or ui_flows.load(flow_id) is None):
         return 400, {"error": "flow_id must name an existing flow"}
+    peer_review = body.get("peer_review", False)
+    if not isinstance(peer_review, bool):
+        return 400, {"error": "peer_review must be true or false"}
     fam = family(text)
+    if fam == "prd" and peer_review:
+        text += " --review"
     if fam == "run-issue" and not review:
         text += " --no-review"
     if fam == "run-issue" and not worktree:
