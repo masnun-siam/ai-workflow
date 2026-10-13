@@ -588,6 +588,22 @@ elif argv[0] == "issue" and argv[1] == "edit":
     cfg.setdefault("bodies", {})[argv[2]] = new_body
     with open(os.environ["GH_STUB_CFG"], "w") as fh:
         json.dump(cfg, fh)
+elif argv[1].endswith("/dependencies/blocked_by") and any(a.startswith("-F") for a in argv):
+    num = argv[1].split("/issues/")[1].split("/")[0]
+    dep = int(next(argv[i + 1] for i, a in enumerate(argv) if a == "-F").split("=")[1]) - 9000
+    dup = dep in cfg.get("blocked_by", {}).get(num, []) or f"{num}:{dep}" in cfg.get("post_dup", [])
+    if dup:  # GitHub answers a duplicate edge with 422
+        msg = "An error occurred while adding the blocking issue to the issue. Validation failed: Target issue has already been taken"
+        print(json.dumps({"message": msg, "status": "422"}))  # real gh: JSON on stdout, "gh: … (HTTP 422)" on stderr
+        sys.stderr.write(f"gh: {msg} (HTTP 422)")
+        sys.exit(1)
+    if cfg.get("dep_exit"):
+        sys.stderr.write("HTTP 500")
+        sys.exit(cfg["dep_exit"])
+    print(json.dumps({"number": int(num)}))
+elif argv[1].endswith("/dependencies/blocked_by"):  # GET: a list of issue objects, [] when none
+    num = argv[1].split("/issues/")[1].split("/")[0]
+    print(json.dumps([{"number": n, "id": 9000 + n} for n in cfg.get("blocked_by", {}).get(num, [])]))
 elif argv[1].endswith("/sub_issues") and any(a.startswith("-F") or a.startswith("-f") for a in argv):
     sys.exit(cfg.get("link_exit", 0))
 elif argv[1].endswith("/sub_issues"):
@@ -658,6 +674,76 @@ with tempfile.TemporaryDirectory() as tmp:
     assert proc.returncode == 1, proc.stdout
     assert not os.path.isfile(path), "a link failure must not leave a valid-looking epic.json"
 ok("a sub-issue link failure kills the split rather than warning past it")
+
+# --- aiw epic blockers: native blocked-by edges DERIVED from the children's `Depends on:` lines (ADR 0003).
+import epic as _epic  # noqa: E402
+
+assert _epic.missing_edges({11: [10], 12: [10, 11]}, {11: {10}, 12: set()}) == [(12, 10), (12, 11)]
+assert _epic.missing_edges({10: []}, {}) == []
+assert _epic.extra_edges({11: [10], 12: []}, {11: {10}, 12: {11, 99}}, {10, 11, 12}) == [(12, 11)]
+ok("missing_edges/extra_edges: only body edges are written; GitHub-only edges inside the epic are reported")
+
+
+def blockers(tmp, env, *extra):
+    epic_dir = os.path.join(tmp, "e")
+    os.makedirs(epic_dir, exist_ok=True)
+    with open(os.path.join(epic_dir, "epic.json"), "w", encoding="utf-8") as fh:
+        json.dump({"parent": 42, "slug": "o/r", "children": [10, 11, 12]}, fh)
+    return subprocess.run(
+        [sys.executable, ROUTE, "epic", "blockers", epic_dir, *extra], capture_output=True, text=True, env=env
+    )
+
+
+_B = {"10": "no deps", "11": "Depends on: #10", "12": "Depends on: #10, #11"}
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, bodies=_B, blocked_by={"11": [10]})
+    proc = blockers(tmp, env, "--dry-run")
+    assert proc.returncode == 0, proc.stderr
+    assert "-F" not in open(log).read(), "a dry run must not POST"
+    assert "#12 blocked by #10" in proc.stdout and "#12 blocked by #11" in proc.stdout, proc.stdout
+    assert "#11 blocked by #10" not in proc.stdout.split("already")[0], proc.stdout
+ok("epic blockers --dry-run prints the missing edges and writes nothing")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, bodies=_B, blocked_by={"11": [10], "10": [12]})
+    proc = blockers(tmp, env)
+    assert proc.returncode == 0, proc.stderr
+    posts = [ln for ln in open(log).read().splitlines() if "/dependencies/blocked_by" in ln and "-F" in ln]
+    assert sorted(posts) == sorted(
+        [
+            "api repos/o/r/issues/12/dependencies/blocked_by -F issue_id=9010",
+            "api repos/o/r/issues/12/dependencies/blocked_by -F issue_id=9011",
+        ]
+    ), posts
+    assert "#10 blocked by #12" in proc.stdout and "not in any Depends on" in proc.stdout, proc.stdout
+ok("epic blockers POSTs only missing edges by database id, and reports (never deletes) a GitHub-only edge")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, bodies=_B, blocked_by={"11": [10], "12": [10, 11]})
+    proc = blockers(tmp, env)
+    assert proc.returncode == 0, proc.stderr
+    assert not [ln for ln in open(log).read().splitlines() if "-F" in ln], (
+        "a re-run with every edge present POSTs nothing"
+    )
+ok("epic blockers is idempotent: a second run writes nothing")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, _ = gh_stub(tmp, bodies=_B, dep_exit=1)
+    proc = blockers(tmp, env)
+    assert proc.returncode == 1 and "#11 blocked by #10" in proc.stderr, proc.stderr
+ok("epic blockers stops on a failed POST and names the edge")
+
+with tempfile.TemporaryDirectory() as tmp:  # crash between POSTs: GET missed the edge, POST finds it
+    env, _ = gh_stub(tmp, bodies=_B, blocked_by={"11": [10]}, post_dup=["12:10"])
+    proc = blockers(tmp, env)
+    assert proc.returncode == 0 and "added: #12 blocked by #11" in proc.stdout, proc.stdout + proc.stderr
+ok("epic blockers counts GitHub's 422 'already been taken' as done")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, _ = gh_stub(tmp, bodies={"10": "Depends on: #12", "11": "", "12": "Depends on: #10"})
+    proc = blockers(tmp, env)
+    assert proc.returncode == 1 and "-F" not in open(os.path.join(tmp, "gh.log")).read(), proc.stderr
+ok("epic blockers refuses a cycle in Depends on before writing any edge")
 
 # ----------------------------------------------------------------- parent Tasks checklist
 # `epic split` must also splice a "## Tasks" checklist into the PARENT issue's body via

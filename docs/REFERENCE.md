@@ -39,6 +39,7 @@ aiw ci status                      check state plus the failing job's log
 aiw gitnexus sync|index|clean      the code graph (best-effort)
 aiw project-status                 GitHub Projects (best-effort)
 aiw epic split|init|next|status    epic decomposition and sequencing
+aiw epic blockers <dir> [--dry-run]   GitHub blocked-by edges from the children's Depends on lines
 aiw ui [--port N] [--allow-host HOST]  local web UI to start and track sessions
 ```
 

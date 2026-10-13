@@ -4,6 +4,11 @@
 
 ### Added
 
+- **`aiw epic blockers <epic_dir> [--dry-run]`.** Sets GitHub's native "blocked by" relation
+  between an epic's children, derived from their `Depends on:` lines (the single source,
+  ADR 0003). It checks the dependency graph first, writes only the edges GitHub lacks (so a
+  re-run writes nothing twice), and reports, never deletes, an edge that no `Depends on:` line
+  names. `--dry-run` prints the edges it would add.
 - **`/create-tasks`.** Breaks a problem statement and its PRD into a saved task list
   (`docs/tasks/<slug>.md`) without filing anything, using `/gh-issue`'s own decomposition and
   save rules. The PRD stands in for grilling; open questions are asked before decomposing.
