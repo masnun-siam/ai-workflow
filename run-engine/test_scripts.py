@@ -3472,10 +3472,13 @@ assert not any("--label" in ln and "lean" in ln for ln in flat.splitlines())
 assert "`lean` is never applied here." in flat_ws
 ok("4-FLAT never applies lean")
 
-for bad in ("4-EPIC", "aiw epic split", "project-board", "sub_issues", "epic-<parent>"):
+# ADR 0003 brought the parent epic back, but only through "Saved task list and the epic".
+_pre80 = _g80[: _g80.index("## Saved task list and the epic")]
+for bad in ("4-EPIC", "project-board"):
     assert bad not in _g80, bad
-assert "epic" not in _g80.lower()
-ok("gh-issue.md has no epic machinery")
+for bad in ("sub_issues", "epic-<parent>", "gh label create epic"):
+    assert bad not in _pre80, bad
+ok("gh-issue.md: epic machinery only in 'Saved task list and the epic'; no 4-EPIC or board")
 
 _hr80 = " ".join(_slice(_g80, "**HARD RULE", "Do the following:").split())
 assert "4-FLAT" in _hr80 and "4-EPIC" not in _hr80
@@ -3570,7 +3573,7 @@ assert "three choices" not in flat_ws
 assert 'Retry the missing one"' not in _g81 and "Stop now" not in _g81
 ok("4-FLAT choice labels have no variants")
 
-assert "epic" not in _g81.lower()
+assert "4-epic" not in _g81.lower()  # ADR 0003: the parent epic is back, the old 4-EPIC flow is not
 assert flat.count("gh label create refined") == 1
 assert "already exists, stop and ask for a new slug" in flat_ws
 assert "Skip when step 3.6 saved no local file" in flat_ws
@@ -3681,9 +3684,9 @@ assert _add in flat_ws and flat_ws.index(_add) > flat_ws.index("gh issue create"
 ok("#82 preflight answers reach every flat create")
 
 for _p in (
-    "When `4-FLAT` ran (2 or more tasks), return the ordered list of issue URLs, one per task in list order",
+    "then return the epic parent's URL followed by the ordered list of issue URLs, one per task in list order",
     "hand control back to its Preflight step 3",
-    "with that ordered list of issue URLs for 2 or more",
+    "with the parent URL and that ordered list of issue URLs for 2 or more",
 ):
     assert _p in close, _p
 ok("#82 the ordered list is returned and handed back")
@@ -3720,7 +3723,7 @@ _sp = "on the step 4 path before its create"
 assert _sp in s5 and _sp in s6
 ok("#82 single-issue path is unchanged")
 
-assert "epic" not in g.lower()
+assert "4-epic" not in g.lower()  # ADR 0003
 assert not re.search(r"gh issue (close|delete)", g)
 assert "--body " not in flat
 assert flat.count("gh label create refined") == 1
@@ -3799,7 +3802,7 @@ assert "epic" not in s45.lower() and "epic" not in s46.lower()
 jl = jira_cmd.splitlines()
 assert jl[22] == "- Issue type (bug, story, task, epic)"
 assert jl[27] == "- Linked issues / parent epic"
-assert "epic" not in gh_cmd.lower()
+assert "4-epic" not in gh_cmd.lower()  # ADR 0003
 ok("#83 old guard gone, Step 5 single-task, epic lines untouched")
 
 # Issue #84
@@ -3922,20 +3925,21 @@ for stale in ("a parent plus child URLs", "**parent** issue number specifically"
 assert "parent plus child URLs" not in ri85
 ok("#85 step 2 has no stale epic wording")
 NOURL = '**No issue URL** (it failed, the human cancelled, or a `4-FLAT` run ended on **"Stop here"**, whatever partial list it reported): stop and say so \u2014 do not continue to step 3.'
-LIST1 = "**An ordered list of 2 or more issue URLs** (its `4-FLAT` return; flat issues have no parent, and `/gh-issue` no longer files epics): print the issue URLs in list order and end the run here."
+LIST1 = "**An ordered list of 2 or more issue URLs** (its `4-FLAT` return, after the URL of the epic parent it filed over them): print the parent and the issue URLs in list order and end the run here."  # ADR 0003
 LIST2 = "This is a clean stop, not an escalation: no Ledger, no worktree, no `aiw init`, and no further Preflight step."
 LIST3 = "Tell the user to run `/run-issue <n>` for each issue in list order; each issue's `Depends on:` line names the issue it builds on, so run those first \u2014 `/run-issue` bases a flat issue on the default branch unless its plan says otherwise."
 LIST4 = "End with the line `\u2192 next: herdr-dispatch <n> <n> \u2026` (every created issue number, in list order); `herdr-dispatch` runs them in that dependency order."  # #186
 ONE = "**Exactly one issue URL**: parse the created issue number `<n>` from it and continue to Preflight step 3 with that `<n>` as though it had been passed to `/run-issue` directly."
 HARD = "`/gh-issue`'s HARD RULE is scoped to issue creation and does not bind any later phase of this run."
-for sent in (NOURL, LIST1, LIST2, LIST3, LIST4, ONE, HARD):
+LIST3E = "`/run-issue <parent>` runs them all in one session instead (Epic mode)."  # ADR 0003
+for sent in (NOURL, LIST1, LIST2, LIST3, LIST3E, LIST4, ONE, HARD):
     assert st2.count(sent) == 1, sent
 assert _n(ri85).count(HARD) == 1 and st2.endswith(HARD)
 ok("#85 step 2 pins the three branches and the HARD RULE sentence whole")
 _a, _b, _h = st2.index("**An ordered list"), st2.index("**Exactly one issue URL**"), st2.index(HARD)
 # whole-bullet pins: appended text or an inserted bullet inside a branch fails
 assert st2[st2.index("**No issue URL**") : _a].rstrip(" -") == NOURL
-assert st2[_a:_b].rstrip(" -") == f"{LIST1} {LIST2} {LIST3} {LIST4}"
+assert st2[_a:_b].rstrip(" -") == f"{LIST1} {LIST2} {LIST3} {LIST3E} {LIST4}"
 assert st2[_b:_h].strip() == ONE
 assert "2 or more issue URLs" in st2 and "3 or more" not in st2 and "more than 2" not in st2
 ok("#85 list branch stops the run and the threshold is literally 2")
@@ -3959,11 +3963,13 @@ assert (
     "A non-empty array means this is an epic parent \u2014 go to **Epic mode** below instead of the single-issue phases; keep the child numbers it returned, Epic mode step 0 needs them."
     in st35
 )
-assert "An empty array is the ordinary path." in st35
+assert "An empty array is the ordinary path, except for an issue labelled both `epic` and `prd-<slug>`" in st35
+assert "An `epic` label without a `prd-<slug>` label is a team's own label: the ordinary path." in st35
+assert "never run it as one issue" in st35  # ADR 0003: a parent with no sub-issues stops
 ok("#85 bare-number bullet and step 3.5 epic routing sentences intact")
 # both pins below hash/compare whitespace-normalised text (_n), so reflowing lines does not trip them
 # sha256 of whitespace-normalised text on base 0ff5687 (pre-#85): step 3.5 slice, and "## Epic mode" up to "\n## Rules"
-S35_SHA = "6e1464ddf2883001109064bba0ffcef2471985262dca9d9d1d470eacb25258c5"
+S35_SHA = "832218eabfdea18a2037abe13ae33f67f6519aac71098622ab253d51b36d8323"  # re-pinned (ADR 0003): an `epic`-labelled parent with no sub-issues stops
 EPIC_SHA = "e301c4367ff0d14d1316064fc35316c6b90cac928af03f5040fb791edefdb253"  # re-pinned: epic init passes --mode full, lean is an alias of default
 import hashlib  # noqa: E402
 
@@ -3981,8 +3987,9 @@ rd86, hw86, cl86 = _user_docs(), _read("docs", "HOW-IT-WORKS.md"), _read("CHANGE
 rdn86, hwn86 = _n(rd86), _n(hw86)
 ROW86 = (
     "| `/ai-workflow:gh-issue` | file a well-formed issue; always decomposes first \u2014 one task files one issue; "
-    "two or more save the task list to `docs/tasks/<slug>.md` and file one flat issue per task, "
-    "ordered by `Depends on: #n` lines, with no parent issue |"
+    "two or more save the task list to `docs/tasks/<slug>.md` and file one refined issue per task, "
+    "ordered by `Depends on: #n` lines, under an `epic` parent; `/gh-issue docs/tasks/<slug>.md` files a saved list, "
+    "one question round per task |"
 )
 assert rdn86.count(ROW86) == 1
 assert "parent plus children" not in rdn86 and "parent plus children" not in hwn86
@@ -3991,7 +3998,9 @@ JROW86 = (
     "(one issue for a single task; two or more saved to `docs/tasks/<slug>.md` and filed flat) |"
 )
 assert rdn86.count(JROW86) == 1
-assert "flat issue per task" in ROW86 and "no parent issue" in ROW86 and "`docs/tasks/<slug>.md`" in ROW86
+assert (
+    "refined issue per task" in ROW86 and "under an `epic` parent" in ROW86 and "`docs/tasks/<slug>.md`" in ROW86
+)  # ADR 0003
 assert "Accepts an epic parent." in rdn86
 assert "aiw epic split|init|next|status    epic decomposition and sequencing" in rd86
 ok("#86 README gh-issue row pinned whole; Epic-mode README lines intact")
@@ -4004,9 +4013,9 @@ P1 = (
     "layer-scoped deliverable: 3 or fewer production files, 1-4 acceptance criteria, one verify command. "
     'You approve the list with **"Create as shown"** or revise it with **"Let me edit the list"**. '
     "One task files one issue as before. Two or more tasks save the list to `docs/tasks/<slug>.md` first "
-    "(optionally also to Obsidian or the GitHub wiki), then file one **flat** issue per task: no parent issue, "
-    "no sub-issues. Each is a complete, independently-readable issue labelled `prd-<slug>`, and declares its "
-    "order in plain text:"
+    "(optionally also to Obsidian or the GitHub wiki), then file one refined issue per task, each asked about in "
+    "its own question round, and one **epic** parent over them, linked as sub-issues (ADR 0003). Each task issue "
+    "is complete and independently readable, labelled `prd-<slug>`, and declares its order in plain text:"
 )
 P2 = (
     "Each new issue number is written back into the saved list. A create failure partway through is a "
@@ -4016,14 +4025,16 @@ P2 = (
     "tasks. `/jira-to-gh` decomposes, saves and files a Jira ticket the same way."
 )
 P3 = (
-    "`/gh-issue` returns the issue URLs in list order. Run `/run-issue <n>` on each, dependencies first. "
-    "If you hand `/run-issue` a source that is not an issue yet, it calls `/gh-issue` for you; when that returns "
-    "two or more issues, `/run-issue` prints the list and stops \u2014 run `/run-issue <n>` on each issue, "
-    "dependencies first."
+    "`/gh-issue` returns the parent and the issue URLs in list order. Run `/run-issue <n>` on each, dependencies "
+    "first, or `/run-issue <parent>` for all of them. If you hand `/run-issue` a source that is not an issue yet, "
+    "it calls `/gh-issue` for you; when that returns two or more issues, `/run-issue` prints the list and stops "
+    "\u2014 run `/run-issue <n>` on each issue, dependencies first. Answers given in the per-task question rounds "
+    "are recorded in the PRD (`/prd --update`)."
 )
 P4 = (
-    "**Epic mode** still exists for epics that already exist: a parent issue with sub-issues, filed by hand "
-    "or before this change. `/run-issue <parent>` drives all its children. The rules:"
+    "**Epic mode** runs a parent issue with sub-issues: one `/gh-issue` filed, or one filed by hand. "
+    "`/run-issue <parent>` drives all its children. A `/gh-issue` parent (labelled `epic` and `prd-<slug>`) "
+    "with no sub-issues is refused, never run as one issue. The rules:"
 )
 for para in (P1, P2, P3, P4):
     assert l5.count(para) == 1, para[:50]
@@ -4050,7 +4061,7 @@ for gone in (
     assert gone not in l5, gone
 ok("#86 Layer 5 heading, flat-flow paragraphs, Epic-mode lead-in and kept bullets pinned")
 
-GL86 = "- **Epic** \u2014 an existing parent issue with sub-issues, run by `/run-issue` Epic mode; `/gh-issue` and `/jira-to-gh` no longer create one."
+GL86 = "- **Epic** \u2014 a parent issue with sub-issues, run by `/run-issue` Epic mode. `/gh-issue` files one over every task list it files; `/jira-to-gh` does not."  # ADR 0003
 assert hwn86.count(GL86) == 1
 assert "- **Epic** \u2014 a parent issue with dependent children." not in hwn86
 ok("#86 glossary Epic line pinned")
@@ -4411,6 +4422,46 @@ assert re.search(r"one task.{0,80}step 4", _g0) and "Resume this list" in _g0, (
     "gh-issue saved list: 1 task -> step 4, 2+ -> 4-FLAT resume"
 )
 ok("create-tasks: standalone entry over gh-issue 3.5/3.6; gh-issue takes a saved task list")
+
+# Six-flow step 4: /gh-issue refines a saved list task by task, files an epic parent, records decisions.
+_g8 = _read("commands", "gh-issue.md")
+assert _g8.count("## Saved task list and the epic") == 1
+_sec8 = _ws(_g8[_g8.index("## Saved task list and the epic") :])
+for _w in (
+    "`Problem statement: <path>`",
+    "`PRD: <path>`",
+    "name=canonical",
+    "read that repo copy instead",
+    '**"File these"**',
+    "One question round per task",
+    "`Test root:` and `Base branch:` values stay plain",
+    "/blob/<base>/<path>",
+    '--label "epic,prd-<slug>"',
+    "never `refined`",
+    'aiw epic split "<runs_dir>/<owner>-<repo>-epic-<parent>"',
+    "Re-run safety",
+    "--update <prd>",
+):
+    assert _w in _sec8, f"gh-issue Saved task list section lacks {_w!r}"
+assert _sec8.index('--label "epic,prd-<slug>"') < _sec8.index("aiw epic split"), (
+    "parent is linked right after it is created"
+)
+assert "|| true" not in _sec8 and "only when no line is exactly `epic`" in _sec8, (
+    "epic label: no || true, never recolour"
+)
+assert "children may already be linked while no `epic.json` exists" in _sec8, "split failure state described truthfully"
+assert "Saved task list and the epic" in _ws(_slice(_g8, "0. **Source check.**", "Details: $@")), "step 0 routes there"
+_hr8 = _ws(_slice(_g8, "**HARD RULE", "Do the following:"))
+assert "`aiw epic split`" in _hr8 and "`/prd --update`" in _hr8, "HARD RULE carves out the split and the PRD update"
+_ri8 = _read("commands", "run-issue.md")
+assert "labelled both `epic` and `prd-<slug>`" in _ws(_slice(_ri8, "3.5. **Epic check", "4. **Resume check.**")), (
+    "run-issue epic guard"
+)
+# The split's epic dir is the one Epic mode step 0 reads, so `/run-issue <parent>` finds epic.json and never re-splits.
+assert '"<runs_dir>/<owner>-<repo>-epic-<n>"' in _ri8 and '"<runs_dir>/<owner>-<repo>-epic-<parent>"' in _g8
+assert "No epics" not in _read("skills", "flow", "SKILL.md"), "flow: stale no-epics rule"
+assert "flat, independently readable" not in _read("CONTEXT.md"), "CONTEXT: refined is no longer flat"
+ok("gh-issue: saved list refined per task, epic parent linked at birth, decisions to the PRD; run-issue guard")
 
 _s8_184 = _ws(_key183(_skill_sections("skills/prd/SKILL.md"), "Step 8"))
 assert f"End with the line `{NEXT}/gh-issue <prd-path>`" in _s8_184, "#184 prd Step 8 lacks the next line"

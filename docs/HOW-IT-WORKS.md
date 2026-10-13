@@ -337,8 +337,9 @@ task is one layer-scoped deliverable: 3 or fewer production files, 1-4 acceptanc
 one verify command. You approve the list with **"Create as shown"** or revise it with **"Let
 me edit the list"**. One task files one issue as before. Two or more tasks save the list to
 `docs/tasks/<slug>.md` first (optionally also to Obsidian or the GitHub wiki), then file one
-**flat** issue per task: no parent issue, no sub-issues. Each is a complete,
-independently-readable issue labelled `prd-<slug>`, and declares its order in plain text:
+refined issue per task, each asked about in its own question round, and one **epic** parent over
+them, linked as sub-issues (ADR 0003). Each task issue is complete and independently readable,
+labelled `prd-<slug>`, and declares its order in plain text:
 
 ```
 Depends on: #12, #13
@@ -351,13 +352,15 @@ created is closed or deleted. Re-running it on the same list offers **"Resume th
 which files only the missing tasks. `/jira-to-gh` decomposes, saves and files a Jira ticket
 the same way.
 
-`/gh-issue` returns the issue URLs in list order. Run `/run-issue <n>` on each, dependencies
-first. If you hand `/run-issue` a source that is not an issue yet, it calls `/gh-issue` for
-you; when that returns two or more issues, `/run-issue` prints the list and stops — run
-`/run-issue <n>` on each issue, dependencies first.
+`/gh-issue` returns the parent and the issue URLs in list order. Run `/run-issue <n>` on each,
+dependencies first, or `/run-issue <parent>` for all of them. If you hand `/run-issue` a source
+that is not an issue yet, it calls `/gh-issue` for you; when that returns two or more issues,
+`/run-issue` prints the list and stops — run `/run-issue <n>` on each issue, dependencies first.
+Answers given in the per-task question rounds are recorded in the PRD (`/prd --update`).
 
-**Epic mode** still exists for epics that already exist: a parent issue with sub-issues,
-filed by hand or before this change. `/run-issue <parent>` drives all its children. The rules:
+**Epic mode** runs a parent issue with sub-issues: one `/gh-issue` filed, or one filed by hand.
+`/run-issue <parent>` drives all its children. A `/gh-issue` parent (labelled `epic` and
+`prd-<slug>`) with no sub-issues is refused, never run as one issue. The rules:
 
 - **Independent children run at the same time.** Dependent ones cannot, by definition — a
   child stacks its branch on top of the branch it depends on, so it waits for that one to
@@ -394,7 +397,7 @@ flowchart TD
     C1 -->|bug, feature-scoped task| G
     C1 -->|anything else| S["stop after filing"]
     P --> C2{{"checkpoint"}}
-    C2 --> G["/gh-issue<br/>flat refined issues"]
+    C2 --> G["/gh-issue<br/>refined issues + epic"]
     G --> C3{{"checkpoint"}}
     C3 --> X["dispatch<br/>herdr-dispatch or #/dispatch"]
     X --> R["/run-issue × N,<br/>dependencies first"]
@@ -414,8 +417,8 @@ meeting notes or anything unclassifiable stops once it is filed.
 **The `→ next:` contract.** `/dump`, `/prd` and `/gh-issue` each end with one line,
 `→ next: <command> <argument>`, naming the next stage and the artifact it should take. `/flow`
 and the UI stepper read the next stage's input from that line, and you see exactly what to
-run if you are going by hand. No line means the flow stops there. `/gh-issue` files flat
-`refined` issues ordered by `Depends on: #n`, and `/run-issue`'s multi-issue stop ends with
+run if you are going by hand. No line means the flow stops there. `/gh-issue` files
+`refined` issues ordered by `Depends on: #n` under an `epic` parent, and `/run-issue`'s multi-issue stop ends with
 the same `→ next: herdr-dispatch …` line.
 
 **Dispatch.** In the terminal, `/flow` shows a `herdr-dispatch <numbers> --dry-run` plan
@@ -466,8 +469,8 @@ Anything skipped is named in the final report.
 - **Degraded finish** — the ending where the work is not done: draft PR, reason attached,
   still one report.
 - **Worktree** — the throwaway checkout a run works in.
-- **Epic** — an existing parent issue with sub-issues, run by `/run-issue` Epic mode;
-  `/gh-issue` and `/jira-to-gh` no longer create one.
+- **Epic** — a parent issue with sub-issues, run by `/run-issue` Epic mode. `/gh-issue` files
+  one over every task list it files; `/jira-to-gh` does not.
 - **Grind** — the post-handback loop that works repeated review rounds on an open PR.
 - **Rail** — a condition that stops the grind rather than letting it push another fix.
 - **Fingerprint** — how a finding is recognised across rounds, so a repeat is visible.

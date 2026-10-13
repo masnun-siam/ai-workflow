@@ -70,5 +70,5 @@ At every boundary between stages, ask one AskUserQuestion: "Continue to <next st
 
 - No stage logic copied here: classification, PRD writing, issue splitting and dispatch belong to their own skills.
 - No state file. The artifacts (vault note, PRD, issues) are the state, which is why `/flow <argument>` can resume.
-- One feature per run. No epics or parent tracking issues.
+- One feature per run. The parent epic `/gh-issue` files over the tasks is the only tracking issue; this skill never creates another.
 - Never launch a dispatch without an explicit "Launch", and never create issues without the user's "Continue" into the gh-issue stage.

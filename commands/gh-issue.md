@@ -10,9 +10,10 @@ I have a ${1:-bug / feature request / task / improvement} to log as a GitHub iss
 0. **Source check.** First, a saved task list: if `$@` is a `docs/tasks/<slug>.md` file whose
    tasks are `## Task <n>` blocks (what `/create-tasks` or step 3.6 saved), the list is already
    decomposed and approved. Skip `/intake` and steps 1–3.6, and take `<slug>` from the file name.
-   With one task, file it through step 4 as a single issue built from that task's block. With two
-   or more, go to `4-FLAT` exactly as if the user had chosen **"Resume this list"** at step 3.6's
-   collision prompt.
+   Follow **Saved task list and the epic** at the end of this file first (inputs, preview, and
+   one question round per task). Then, with one task, file it through step 4 as a single issue
+   built from that task's block. With two or more, go to `4-FLAT` exactly as if the user had
+   chosen **"Resume this list"** at step 3.6's collision prompt.
    Otherwise, if `$@` matches one of `/intake`'s detectable source shapes — a
    `sentry.io` URL, an existing `.md`/`.txt`/`.pdf`/`.docx` file path, or a vault note
    title that exactly matches one note — invoke `/intake $@ --whole` and wait for its `## Intake
@@ -89,6 +90,10 @@ ever creates a GitHub issue. It never touches code.**
 - NEVER run a mutating shell command (`git commit`, `git checkout -b`, package installs, formatters, codemods, etc.).
 - The ONLY writes permitted are the temp body file at `/tmp/gh-issue-body.md`, the `gh issue create` / `gh issue edit` / `gh project` calls below, `aiw ask` when headless (records the question in the UI session, outside the repo), and the notes-vault dump in step 7 (that's a different vault, not the repo, and goes through the `dump` skill's own confirmation).
 - The sole exception to the rules above is the step 3.6 task-list save, and only when its conditions hold: (a) `docs/tasks/<slug>.md` written via the Write tool in step 3.6 and edited only to fill `Issue:` slots in `4-FLAT` (an override of the no-Write/no-Edit rule for that one path only); (b) the Obsidian `Tasks.md` via `obsidian vault=notes`, only when the user chose Obsidian, placed the way `/dump` does, plus the vault sibling writes `/dump`'s linking rules produce (the Index append and Related link); (c) the wiki clone/commit/push of `Tasks-<Title>.md` in a scratchpad clone, only when the user chose the wiki and confirmed the push (an override of the no-mutating-shell rule for that clone only). It covers nothing else: no other repo file, and no `git add` or commit of `docs/tasks/`.
+- **Saved task list and the epic** adds exactly two more: `aiw epic split` when `4-FLAT` ran
+  (sub-issue links, the parent's `## Tasks` checklist, and `epic.json` under `<runs_dir>`, outside
+  the repo), and, only for a saved task list, the `/prd --update` it invokes on the PRD the list's
+  header names.
 - This holds even for a one-character fix. "It's trivial" is not an exception — the whole point of filing an issue is that a human decides whether and how to make the change.
 - If a fix is obvious from your investigation, do NOT apply it. Record it under a **Proposed Fix** section in the issue body instead (file path, symbol, and the change in prose or a fenced diff).
 - **Scope.** These constraints bind steps 0–7 of this skill only, including everything
@@ -283,10 +288,74 @@ One issue per task from the step 3.6 list, each standalone.
    The issue already exists and is the deliverable; the dump is not worth failing over.
 
 Return the issue URL when step 4 created one issue. When `4-FLAT` ran (2 or more tasks),
-return the ordered list of issue URLs, one per task in list order (including issues reused
-on resume). If `/run-issue` invoked this skill, hand control back to its Preflight step 3
-— with that issue number for one issue, or with that ordered list of issue URLs for 2 or
+first run **Epic parent** (and, for a saved list, **Decisions to the PRD**; both in **Saved task list and the epic**),
+then return the epic parent's URL followed by the ordered list of issue URLs, one per task in
+list order (including issues reused on resume). If `/run-issue` invoked this skill, hand control back to its Preflight step 3
+— with that issue number for one issue, or with the parent URL and that ordered list of issue URLs for 2 or
 more — and continue the run; the HARD RULE above no longer applies.
 On a standalone run there is nothing to hand back to. End with the line
 `→ next: herdr-dispatch <n> <n> …` listing every returned issue number in list order (one
 number for a single issue). It is the last line of your output; the Guided Flow parses it.
+
+## Saved task list and the epic
+
+Step 0 sends a saved `docs/tasks/<slug>.md` here before anything is filed. **Epic parent** runs
+whenever `4-FLAT` filed the issues, on the step 3.5 path too. **Decisions to the PRD** runs only for
+a saved list, after step 4 or `4-FLAT`; on the step 3.5 path, step 3's decisions go to step 7's
+`/dump` as before.
+
+**Inputs.** The list's header names `Problem statement: <path>` and `PRD: <path>` (or `PRD: none`).
+Read both. When the PRD is a vault note with a `canonical` property naming this repo
+(`obsidian vault=notes property:read path="<prd>" name=canonical`), read that repo copy instead:
+it is the canonical one, and the vault note may be stale. A list saved without these lines: ask
+for the two paths once (`none` is a valid answer for the PRD).
+
+**Preview, once.** Before the first create, show every task title in list order with its
+`Depends on:` lines, which tasks already have an issue (a resume), the epic parent's title, and
+the labels. Ask one question with the choices **"File these"** and **"Stop"** (headless: `aiw ask`,
+then end your turn). "Stop" files nothing. In Flow auto mode, skip this question: there the user
+already confirmed the writes with Flow's "Continue" into the gh-issue stage (see
+`skills/flow/SKILL.md` Guardrails).
+
+**One question round per task.** In list order, before writing a task's body in `4-FLAT` sub-step 2
+(or step 4 for a single task), compare the task with the PRD, the problem statement and the code.
+Ask only what is still unclear about that task, in one round; skip the round when nothing is.
+Fold each answer into that task's body, and keep it as a decision line
+`<decision> — <why> (Task <n>)` for **Decisions to the PRD**. Flow auto mode asks nothing: an
+open point goes into that issue's Notes as an assumption.
+
+**Links.** Every doc a body mentions is a link the reader can open. A repo file links to
+`https://github.com/<owner>/<repo>/blob/<base>/<path>` only when it exists on that branch
+(`gh api "repos/<owner>/<repo>/contents/<path>?ref=<base>"` succeeds); otherwise keep it as a
+backticked path (`docs/tasks/` and `docs/prd/` are often uncommitted). External URLs are markdown
+links. The `Test root:` and `Base branch:` values stay plain text, because `aiw refined` reads them.
+
+**Epic parent.** After `4.5`, file one parent over the issues `4-FLAT` filed.
+
+1. Re-run safety: `gh issue list --label epic --label prd-<slug> --state all --json number,title`.
+   If a parent exists, reuse it and skip to sub-step 3. A closed one is reused too: say
+   "reusing closed parent #N" in the preview.
+2. Ensure the label once, without touching a repo's own `epic` label (`--force` would recolour it):
+   run `gh label list --search epic --json name --jq '.[].name'`, and only when no line is exactly
+   `epic`, run `gh label create epic --color 0E8A16 --description "parent of a task list"`. A
+   failure here stops the run with gh's error. Then create the parent with `--label "epic,prd-<slug>"` (never `refined`; it is not runnable as
+   one issue) and step 5/6's assignee and project flags. Its body: `## Problem statement` (the
+   problem statement's content, or the intake brief on the step 3.5 path), `## PRD` (a link or
+   path, or "none"), and `## Tasks` (left for the split to fill).
+3. Right away, link the children, so the parent is never an epic without sub-issues:
+
+   ```bash
+   aiw epic split "<runs_dir>/<owner>-<repo>-epic-<parent>" \
+     --parent <parent> --slug <owner>/<repo> --children <n>,<n>,…
+   ```
+
+   Children in list order. It links them as sub-issues, checks that `Depends on:` forms a DAG,
+   writes the parent's `## Tasks` checklist, and writes the `epic.json` that `/run-issue <parent>`
+   Epic mode reads. It is idempotent, so a re-run is safe. Exit 1: report its message and stop.
+   It links the children before it checks `Depends on:`, so on a cycle or a bad `Depends on:` the
+   children may already be linked while no `epic.json` exists; `/run-issue <parent>` Epic mode
+   then re-runs the split in its step 0 and stops on the same error until the lines are fixed.
+
+**Decisions to the PRD.** When the question rounds produced decisions and the header names a PRD,
+invoke the `ai-workflow:prd` skill with `--update <prd> <decision lines>`. With `PRD: none`, pass
+them to step 7's `/dump` instead, as today.

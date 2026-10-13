@@ -65,7 +65,7 @@ Apply gh-issue's 3.5 and then 3.6 to what Step 1 gathered, with these changes:
 
 - **Two more header lines.** Below 3.6's header (title, source, date, owner/repo), add
   `Problem statement: <path>` and `PRD: <path>` (`PRD: none` when there is none), naming the
-  inputs as given, so the issue-filing step can find them.
+  inputs as given. `/gh-issue` reads them to build the epic and to record decisions in the PRD.
 
 3.6's slug, destination, collision and failure rules apply unchanged.
 
