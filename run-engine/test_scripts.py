@@ -4568,6 +4568,7 @@ for _w in (
     assert _w in _fb, f"fix-blockers lacks {_w!r}"
 assert _fb.index("--dry-run") < _fb.index('**"Add these"**'), "preview before the one confirmation"
 assert "\u2192 next: herdr-dispatch <parent>" in _fb, "fix-blockers next line"
+assert "This split writes to GitHub before Step 3's question" in _fb, "fix-blockers names the split's unconfirmed write"
 ok("fix-blockers: split if needed, preview, one confirmation, apply; Depends on stays the source")
 
 _s8_184 = _ws(_key183(_skill_sections("skills/prd/SKILL.md"), "Step 8"))
