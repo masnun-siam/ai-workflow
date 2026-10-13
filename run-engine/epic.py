@@ -160,6 +160,20 @@ def ready(dag: dict, states: dict, max_stacks: int) -> list[int]:
     return out
 
 
+def missing_edges(deps: dict[int, list[int]], existing: dict[int, set[int]]) -> list[tuple[int, int]]:
+    """(child, dep) blocked-by edges the `Depends on:` lines ask for that GitHub does not have yet."""
+    return [(c, d) for c in sorted(deps) for d in deps[c] if d not in existing.get(c, set())]
+
+
+def extra_edges(deps: dict[int, list[int]], existing: dict[int, set[int]], children: set[int]) -> list[tuple[int, int]]:
+    """GitHub blocked-by edges between this epic's children that no `Depends on:` line names.
+
+    Reported, never deleted: the body is the source of truth, but a person may have added the
+    edge on purpose. Edges to issues outside the epic are not ours to judge.
+    """
+    return [(c, d) for c in sorted(existing) for d in sorted(existing[c]) if d in children and d not in deps.get(c, [])]
+
+
 import json  # noqa: E402  (kept beside the I/O half, the top of this file is pure)
 import os  # noqa: E402
 import tempfile  # noqa: E402
@@ -362,6 +376,50 @@ def cmd_status(args) -> None:
         )
 
 
+def cmd_blockers(args) -> None:
+    """Write GitHub's native blocked-by edges, derived from the children's `Depends on:` lines.
+
+    Reads the bodies fresh (like split) and validates the DAG before any write. Only missing
+    edges are POSTed, so a re-run after a crash writes nothing twice; an edge GitHub already
+    has (422 "already been taken", from a crash between POSTs) counts as done.
+    """
+    epic = load_epic(args.epic_dir)
+    slug, children = epic["slug"], [int(c) for c in epic["children"]]
+    deps: dict[int, list[int]] = {}
+    existing: dict[int, set[int]] = {}
+    for child in children:
+        resp, proc = gh_json(["issue", "view", str(child), "--repo", slug, "--json", "body,title"])
+        if proc.returncode != 0 or not isinstance(resp, dict):
+            die(1, f"could not read #{child}'s body: {(proc.stderr or '').strip()[:160]}")
+        deps[child] = parse_depends(resp.get("body") if isinstance(resp.get("body"), str) else "")
+        have, proc = gh_json(["api", f"repos/{slug}/issues/{child}/dependencies/blocked_by"])
+        if proc.returncode != 0 or not isinstance(have, list):
+            die(1, f"could not read #{child}'s blocked-by list: {(proc.stderr or '').strip()[:160]}")
+        existing[child] = {i["number"] for i in have if isinstance(i, dict) and isinstance(i.get("number"), int)}
+    try:
+        build_dag(deps)
+    except ValueError as exc:
+        die(1, f"invalid epic: {exc}")
+
+    todo = missing_edges(deps, existing)
+    for c, d in extra_edges(deps, existing, set(children)):
+        print(f"#{c} blocked by #{d}: on GitHub but not in any Depends on line (left as is)")
+    if args.dry_run:
+        for c, d in todo:
+            print(f"would add: #{c} blocked by #{d}")
+        print(f"{len(todo)} edge(s) to add; already present edges are not listed")
+        return
+    for c, d in todo:
+        dep_id, proc = gh_json(["api", f"repos/{slug}/issues/{d}", "--jq", ".id"])
+        if proc.returncode != 0:
+            die(1, f"could not resolve #{d}'s issue id for #{c} blocked by #{d}: {(proc.stderr or '').strip()[:160]}")
+        # The id must be the DATABASE id sent as an integer (-F); -f sends a string and 422s.
+        _, proc = gh_json(["api", f"repos/{slug}/issues/{c}/dependencies/blocked_by", "-F", f"issue_id={dep_id}"])
+        if proc.returncode != 0 and "already been taken" not in (proc.stderr or ""):
+            die(1, f"could not add #{c} blocked by #{d}: {(proc.stderr or '').strip()[:160]}")
+        print(f"added: #{c} blocked by #{d}")
+
+
 def register(sub, add) -> None:
     p = sub.add_parser("epic", help="decompose and drive a parent issue's children")
     ops = p.add_subparsers(dest="op", required=True)
@@ -379,6 +437,11 @@ def register(sub, add) -> None:
         "and ephemeral host ports (stack.py), so they no longer collide",
     )
     q.set_defaults(func=cmd_split)
+
+    q = ops.add_parser("blockers", help="write native blocked-by edges from the children's Depends on lines")
+    q.add_argument("epic_dir")
+    q.add_argument("--dry-run", action="store_true", help="print the edges to add; write nothing")
+    q.set_defaults(func=cmd_blockers)
 
     q = ops.add_parser("init", help="create one run directory per child")
     q.add_argument("epic_dir")
