@@ -1,6 +1,6 @@
 # Task list — Workflow Control UI
 
-- **Source:** `docs/prd/workflow-control-ui.md` + the "Workflow Control UI" design canvas (claude.ai artifact KTawSxehhAR3hjUWwEmbxw, private)
+- **Source:** `docs/prds/workflow-control-ui.md` + the "Workflow Control UI" design canvas (claude.ai artifact KTawSxehhAR3hjUWwEmbxw, private)
 - **Date:** 2026-10-07
 - **Repo:** masnun-siam/ai-workflow
 - **Label:** `prd-workflow-control-ui`

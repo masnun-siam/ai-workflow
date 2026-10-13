@@ -178,7 +178,8 @@ try:
     assert (
         ui_repos.build_command("day", "") == "/day" and ui_repos.build_command("day", "call Abir") == "/day call Abir"
     )
-    assert ui_repos.build_command("create-tasks", "docs/prd/x.md") == "/create-tasks docs/prd/x.md"
+    assert ui_repos.build_command("create-tasks", "docs/prds/x.md") == "/create-tasks docs/prds/x.md"
+    assert "refine-issues" in ui_repos.NAMED and "create-prd" in ui_repos.NAMED and "prd" not in ui_repos.NAMED
     assert ui_repos.build_command("fix-blockers", "40") == "/fix-blockers 40"
     assert ui_repos.MAX_PROMPT_CHARS == 32000
     ok("build_command units, MAX_PROMPT_CHARS")
@@ -606,22 +607,24 @@ try:
     assert s == 400 and "review" in err(p)
     ok("review:false appends --no-review; non-bool rejected")
     # --- peer review: a list of lenses; doc commands get --review <list>, a custom prompt a review line
-    s, p = post({"repo": "o/r", "command": "prd", "args": "05-Work/P/F", "peer_review": ["critical", "qa", "critical"]})
-    assert s == 201 and calls[-1][0] == "/prd 05-Work/P/F --review critical,qa", (s, p, calls)
+    s, p = post(
+        {"repo": "o/r", "command": "create-prd", "args": "05-Work/P/F", "peer_review": ["critical", "qa", "critical"]}
+    )
+    assert s == 201 and calls[-1][0] == "/create-prd 05-Work/P/F --review critical,qa", (s, p, calls)
     for cmd in ("intake", "dump", "gh-issue"):
         s, p = post({"repo": "o/r", "command": cmd, "args": "x", "peer_review": ["critical"]})
         assert s == 201 and calls[-1][0] == f"/{cmd} x --review critical", (cmd, s, p, calls)
-    s, p = post({"repo": "o/r", "command": "prd", "args": "05-Work/P/G"})
-    assert s == 201 and calls[-1][0] == "/prd 05-Work/P/G" and p.get("peer_review") is None, (s, p, calls)
+    s, p = post({"repo": "o/r", "command": "create-prd", "args": "05-Work/P/G"})
+    assert s == 201 and calls[-1][0] == "/create-prd 05-Work/P/G" and p.get("peer_review") is None, (s, p, calls)
     s, p = post({"repo": "o/r", "command": "dump", "args": "x", "peer_review": ["critical", "cto"]})
     assert s == 400 and "dump offers" in err(p) and not calls, "a lens the command doesn't offer is refused"
     s, p = post({"repo": "o/r", "command": "run-issue", "args": "49", "peer_review": ["critical"]})
     assert s == 400 and "no peer review" in err(p) and not calls, "run-issue has its own review"
     for bad in (True, "yes", [], [1]):
-        s, p = post({"repo": "o/r", "command": "prd", "args": "x", "peer_review": bad})
+        s, p = post({"repo": "o/r", "command": "create-prd", "args": "x", "peer_review": bad})
         assert s == 400 and "peer_review" in err(p), bad
     ok(
-        "peer_review: lens list appended as --review <list> to prd/intake/dump/gh-issue; not-offered, run-issue, non-list refused"
+        "peer_review: lens list appended as --review <list> to create-prd/intake/dump/gh-issue; not-offered, run-issue, non-list refused"
     )
 
     pr_root = os.path.join(data_dir, "peer-review", "custom")
@@ -643,7 +646,7 @@ try:
         check=True,
     )
     head = subprocess.run(["git", "-C", REPO_A, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
-    s, p = post({"repo": "o/r", "text": "/prd an idea", "peer_review": ["performance"]})
+    s, p = post({"repo": "o/r", "text": "/create-prd an idea", "peer_review": ["performance"]})
     assert s == 201 and f"--since {head}." in calls[-1][0] and "--review" not in calls[-1][0], (
         "custom: HEAD at spawn; never --review"
     )

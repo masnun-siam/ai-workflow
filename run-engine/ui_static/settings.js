@@ -151,7 +151,7 @@ export class Settings extends Component {
           </section>
           <form class="panel" aria-labelledby="vault-h" onSubmit=${this.saveVault} noValidate>
             <h2 id="vault-h">Notes vault</h2>
-            <p class="note">Flow shows the Dump and PRD notes from this Obsidian vault, read-only. It's the vault <code>/dump</code> and <code>/prd</code> write to.</p>
+            <p class="note">Flow shows the Dump and PRD notes from this Obsidian vault, read-only. It's the vault <code>/dump</code> and <code>/create-prd</code> write to.</p>
             <label for="vault-dir">Vault folder</label>
             <input id="vault-dir" type="text" class="field mono" spellcheck="false" placeholder="~/Documents/notes" value=${vault}
               aria-invalid=${vaultMsg ? 'true' : undefined} aria-describedby=${vaultMsg ? 'vault-err' : undefined}

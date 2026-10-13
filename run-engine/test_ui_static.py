@@ -142,7 +142,7 @@ out('keys: moveTarget walks cards, skips empty columns, clamps row');
 
 const items = K.paletteItems({
   board: { columns: [{ key: 'dev', cards: [{ owner: 'o', repo: 'r', issue: 7, title: 'Fix login' }] }] },
-  sessions: [{ id: 's1', command: '/prd', repo: '/x/proj', outcome: 'waiting' }, { id: 's2', command: '/gh-issue', repo: 'o/r', outcome: 'done' }],
+  sessions: [{ id: 's1', command: '/create-prd', repo: '/x/proj', outcome: 'waiting' }, { id: 's2', command: '/gh-issue', repo: 'o/r', outcome: 'done' }],
 });
 assert.deepEqual(items.map((i) => i.group), ['Go to', 'Go to', 'Go to', 'Go to', 'Go to', 'Autopilot', 'Run', 'Session', 'Session']);
 assert.equal(items.find((i) => i.id === 'session-s1').href, '#/answer/s1');
@@ -1419,7 +1419,7 @@ const find = (t, root) => { nodes.length = 0; walk(root); return nodes.filter((n
 let tree = render({});
 assert.equal(find('input', tree).filter((i) => i.props.role === 'combobox').length, 1);
 const radios = find('input', tree).filter((i) => i.props.type === 'radio');
-assert.deepEqual(radios.map((r) => r.props.value).sort(), ['day', 'dump', 'gh-issue', 'intake', 'issue-to-pr', 'pr-fix-comments', 'pr-grind', 'pr-review', 'prd', 'run-issue', 'worklog']);
+assert.deepEqual(radios.map((r) => r.props.value).sort(), ['create-prd', 'day', 'dump', 'gh-issue', 'intake', 'issue-to-pr', 'pr-fix-comments', 'pr-grind', 'pr-review', 'refine-issues', 'run-issue', 'worklog']);
 const lab = (t) => find('label', render({ command: t })).map((l) => text(l)).join('|');
 assert.match(lab('run-issue'), /issue/i); assert.match(lab('pr-grind'), /PR|pull/i);
 assert.notEqual(lab('run-issue'), lab('pr-grind'));
@@ -1570,7 +1570,7 @@ const out = (n) => console.log('ok ' + n);
 const tick = () => new Promise((r) => setImmediate(r));
 const plain = (x) => JSON.parse(JSON.stringify(x));
 const { validate, buildBody, makeSubmitter, Launcher } = L;
-const ALL = ['day', 'dump', 'gh-issue', 'intake', 'issue-to-pr', 'pr-fix-comments', 'pr-grind', 'pr-review', 'prd', 'run-issue', 'worklog'];
+const ALL = ['create-prd', 'day', 'dump', 'gh-issue', 'intake', 'issue-to-pr', 'pr-fix-comments', 'pr-grind', 'pr-review', 'refine-issues', 'run-issue', 'worklog'];
 assert.equal(typeof L.validateCustom, 'function', 'validateCustom export');
 assert.equal(typeof L.buildCustomBody, 'function', 'buildCustomBody export');
 
@@ -1594,7 +1594,7 @@ assert.ok(hints.every((h) => h.length > 0)); assert.equal(new Set(hints).size, A
 assert.match(hint('run-issue'), /issue/i); assert.match(hint('pr-grind'), /PR|pull/i);
 out('per-command hints distinct');
 
-for (const c of ['prd', 'intake', 'dump', 'worklog', 'gh-issue']) {
+for (const c of ['create-prd', 'intake', 'dump', 'worklog', 'gh-issue', 'refine-issues']) {
   const b = plain(buildBody({ repo: 'o/r', command: c, args: '  some text ' }));
   assert.deepEqual(b, { repo: 'o/r', command: c, args: 'some text' }, c);
 }
@@ -1613,7 +1613,7 @@ assert.ok(find('label', tree).some((l) => (l.props.htmlFor ?? l.props['for']) ==
 assert.ok(find('button', tree).some((b) => text(b).trim() === 'Run in selected repo'));
 assert.match(text(tree), /skip-permissions/i);
 out('custom box: textarea, label, button, skip-permissions note');
-for (const c of ['prd', 'intake', 'dump', 'gh-issue', 'day']) assert.equal(find('textarea', render({ command: c })).filter((t) => t.props.id === 'args').length, 1, c);
+for (const c of ['create-prd', 'intake', 'dump', 'gh-issue', 'day']) assert.equal(find('textarea', render({ command: c })).filter((t) => t.props.id === 'args').length, 1, c);
 for (const c of ['run-issue', 'pr-grind', 'worklog']) assert.equal(find('textarea', render({ command: c })).filter((t) => t.props.id === 'args').length, 0, c);
 out('free-text commands get a textarea, number/link commands a single line');
 {
@@ -1716,9 +1716,9 @@ def launcher_all_checks():
         assert not captured
         s, b = call({"repo": "o/r", "text": "/pr-fix-comments 42"})
         assert s == 201 and captured[-1] == ("/pr-fix-comments 42", repo), (s, b, captured)
-        s, b = call({"repo": "o/r", "command": "prd", "args": "x"})
-        assert s == 201 and captured[-1][0] == "/prd x", (s, b, captured)
-        ok("real server (runner stubbed): custom text verbatim, named prd -> '/prd x'")
+        s, b = call({"repo": "o/r", "command": "create-prd", "args": "x"})
+        assert s == 201 and captured[-1][0] == "/create-prd x", (s, b, captured)
+        ok("real server (runner stubbed): custom text verbatim, named create-prd -> '/create-prd x'")
         n = len(captured)
         s, b = call({"repo": "o/r", "text": "/no-such-command 1"})
         assert s == 201 and captured[-1][0] == "/no-such-command 1", (s, b)
@@ -1730,7 +1730,7 @@ def launcher_all_checks():
 
         rec = ui_sessions.create("/pr-fix-comments 42", repo)
         ui_sessions.update(rec["id"], status="waiting", pending_question={"text": "q?"})
-        named = ui_sessions.create("/prd x", repo)
+        named = ui_sessions.create("/create-prd x", repo)
         ui_sessions.update(named["id"], status="waiting", pending_question={"text": "q?"})
         s, lst = call(None, "GET")
         assert s == 200, s
@@ -1756,7 +1756,8 @@ def launcher_all_checks():
     for name in (
         "run-issue",
         "pr-grind",
-        "prd",
+        "create-prd",
+        "refine-issues",
         "intake",
         "dump",
         "worklog",
@@ -2005,11 +2006,11 @@ notifyWaiting({ ...sess, pending_question: { ...sess.pending_question, id: 'r2' 
 assert.equal(made.at(-1).opts.tag, 'aiw-a b-r2');
 assert.notEqual(made.at(-1).opts.tag, made[0].opts.tag);
 out('tag includes round id: new round gives a different tag');
-notifyWaiting({ id: 'p', command: '/prd secret idea here', repo: '/Users/me/private/deep/proj',
+notifyWaiting({ id: 'p', command: '/create-prd secret idea here', repo: '/Users/me/private/deep/proj',
   pending_question: { id: 'rp', questions: [{ question: 'Q?' }] } });
 const pv = made.at(-1);
 const ptxt = String(pv.title) + ' ' + String(pv.opts.body);
-assert.equal(String(pv.opts.body), '/prd \u00b7 proj');
+assert.equal(String(pv.opts.body), '/create-prd \u00b7 proj');
 for (const leak of ['secret', 'idea', 'here', '/Users', 'private']) assert.ok(!ptxt.includes(leak), leak);
 out('privacy: free-text args and absolute path never reach the body');
 made[0].onclick();
@@ -2702,7 +2703,7 @@ finally:
     shutil.rmtree(tmp, ignore_errors=True)
 
 _fl, _la = read(os.path.join(STATIC, "flow.js")).decode(), read(os.path.join(STATIC, "launcher.js")).decode()
-assert "id: 'flow-peer-review'" in _fl and "kinds.prd" in _fl and "/api/peer-review" in _fl, (
+assert "id: 'flow-peer-review'" in _fl and "kinds['create-prd']" in _fl and "/api/peer-review" in _fl, (
     "Flow PRD step offers the lens picker"
 )
 assert "id: 'peer-review'" in _la and "id: 'custom-review'" in _la and "/api/peer-review" in _la, "both New run forms"
@@ -2742,6 +2743,22 @@ assert.ok(F.handoff('prd', { kind: 'result', text: '\u2192 next: /gh-issue PRD.m
 assert.ok(F.handoff('dump', { kind: 'result', text: 'Standalone task filed.' }).error);
 assert.ok(F.handoff('prd', { kind: 'result', text: '\u2192 next: herdr-dispatch 1' }).error);
 assert.ok(F.handoff('issues', null).error);
+// Old next lines keep working; new ones route the same.
+assert.deepEqual(F.handoff('dump', { kind: 'result', text: '→ next: /ai-workflow:create-prd 05-Work/P/F' }), { folder: '05-Work/P/F' });
+assert.deepEqual(F.handoff('prd', { kind: 'result', text: '→ next: /create-tasks docs/prds/f.md' }), { prd: 'docs/prds/f.md' });
+assert.deepEqual(F.handoff('tasks', { kind: 'result', text: '→ next: /refine-issues docs/tasks/f.md' }), { tasks: 'docs/tasks/f.md' });
+assert.deepEqual(F.handoff('dump', { kind: 'result', text: '→ next: /gh-issue 05-Work/P/F/Bugs.md' }), { tasks: '05-Work/P/F/Bugs.md' });
+// gh-issue stopping on a multi-task note hands back to the PRD step, clearing the later fields.
+assert.deepEqual(F.handoff('issues', { kind: 'result', text: '\u2192 next: /create-prd 05-Work/P/F' }), { folder: '05-Work/P/F', prd: '', tasks: '' });
+assert.equal(F.stepFromState({ folder: '05-Work/P/F', prd: '', tasks: '' }), 'prd');
+assert.ok(F.handoff('issues', { kind: 'result', text: '\u2192 next: /create-prd' }).error);
+assert.ok(F.handoff('blockers', { kind: 'result', text: '\u2192 next: /create-prd x' }).error);
+assert.equal(F.issuesCommand('docs/tasks/f.md'), 'refine-issues');
+assert.equal(F.issuesCommand(' docs/tasks/f.md '), 'refine-issues');
+assert.equal(F.issuesCommand('05-Work/P/F/Bugs.md'), 'gh-issue');
+assert.equal(F.sessionStep('/ai-workflow:create-prd 05-Work/P/F'), 'prd');
+assert.equal(F.sessionStep('/ai-workflow:refine-issues docs/tasks/f.md'), 'issues');
+assert.equal(F.sessionStep('/ai-workflow:prd 05-Work/P/F'), 'prd'); // old sessions
 out('flow: parseNext and handoff (valid, last of several, missing, error result, wrong stage)');
 for (const t of ['`\u2192 next: /prd 05-Work/P/F`', '**\u2192 next: /prd 05-Work/P/F**', '  \u2192 next: /prd 05-Work/P/F  ']) assert.deepEqual(F.parseNext(t), { command: '/prd', arg: '05-Work/P/F' }, t);
 assert.deepEqual(F.handoff('issues', { kind: 'result', text: '\u2192 next: herdr-dispatch #12 #13' }), { issues: [12, 13] });
@@ -2813,8 +2830,8 @@ assert.equal(FS.mergeRows(null, [7]).reading, false);
 assert.equal(FS.mergeRows(null, []).reading, true);
 out('flowside: relative time, issue track states, frontmatter stripped');
 const L = await import(process.env.APP_URL.replace('app.js', 'launcher.js'));
-assert.deepEqual(L.buildBody({ repo: 'o/r', command: 'prd', args: ' 05-Work/P/F ', lenses: ['critical', 'qa'] }), { repo: 'o/r', command: 'prd', args: '05-Work/P/F', peer_review: ['critical', 'qa'] });
-assert.deepEqual(L.buildBody({ repo: 'o/r', command: 'prd', args: 'x', lenses: null }), { repo: 'o/r', command: 'prd', args: 'x' });
+assert.deepEqual(L.buildBody({ repo: 'o/r', command: 'create-prd', args: ' 05-Work/P/F ', lenses: ['critical', 'qa'] }), { repo: 'o/r', command: 'create-prd', args: '05-Work/P/F', peer_review: ['critical', 'qa'] });
+assert.deepEqual(L.buildBody({ repo: 'o/r', command: 'create-prd', args: 'x', lenses: null }), { repo: 'o/r', command: 'create-prd', args: 'x' });
 assert.deepEqual(L.buildCustomBody({ repo: 'o/r', text: ' fix it ', lenses: ['ux'] }), { repo: 'o/r', text: 'fix it', peer_review: ['ux'] });
 assert.deepEqual(L.buildCustomBody({ repo: 'o/r', text: 'fix it' }), { repo: 'o/r', text: 'fix it' });
 const OFF = { default: ['critical'], max_rounds: 3, kinds: { dump: ['critical', 'ceo', 'qa'] } };

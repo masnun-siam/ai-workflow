@@ -187,24 +187,24 @@ claude plugin install ai-workflow@ai-workflow</pre><button class="btn" data-copy
 <section class="tab" id="tab-planning" role="tabpanel" hidden>
   <div class="block">
     <h1>From a rough request to buildable tickets</h1>
-    <p>The pipeline only works if the issue is clear. Before <code>/run-issue</code> ever runs, three commands turn whatever you have into well-specified, small, ordered GitHub issues. This is where most of the quality is decided.</p>
+    <p>The pipeline only works if the issue is clear. Before <code>/run-issue</code> ever runs, a handful of commands turn whatever you have into well-specified, small, ordered GitHub issues. This is where most of the quality is decided.</p>
     <figure>
-      <div class="diagram"><svg id="svg-plan" role="img" aria-label="Refinement flow: raw input, /intake brief, optional /prd, grilling interview, task list, flat issues, fact-check, ready for run-issue. You approve at the PRD, the task list and the interview."></svg></div>
-      <figcaption>Amber "YOU" badges are the points where the commands stop and ask you. <code>/gh-issue</code> covers the grill, task list, issues and fact-check. Click a step for what it does.</figcaption>
+      <div class="diagram"><svg id="svg-plan" role="img" aria-label="Refinement flow: raw input, /intake brief, /create-prd with its epics, grilling interview, /create-tasks task list, /refine-issues sub-issues, fact-check, ready for run-issue. You approve the PRD and the issue list."></svg></div>
+      <figcaption>Amber "YOU" badges are the points where the commands stop and ask you. <code>/create-prd</code> covers the grill and the epics, <code>/create-tasks</code> the task list, and <code>/refine-issues</code> the issues. Single-issue work goes straight to <code>/gh-issue</code>. Click a step for what it does.</figcaption>
     </figure>
   </div>
 
   <div class="block">
     <h2>Ticket refinement</h2>
-    <p><code>/gh-issue</code> never writes code. It only ever creates an issue, even for a one-character fix. If a fix is obvious, it goes into a <b>Proposed Fix</b> section of the issue instead of being applied.</p>
+    <p><code>/gh-issue</code> never writes code. It only ever creates exactly one issue, even for a one-character fix. If a fix is obvious, it goes into a <b>Proposed Fix</b> section of the issue instead of being applied.</p>
     <div class="tbl"><table>
       <tr><th>Step</th><th>What happens</th></tr>
       <tr><td>Source check</td><td>If the input is a Sentry URL, a .md/.txt/.pdf/.docx file or an exact-match Obsidian note, <code>/intake</code> normalises it into a brief first. Plain text skips this.</td></tr>
       <tr><td>Look at the code</td><td>Code-graph lookup for the relevant flows, symbols and files, plus a check of git status and recent commits for in-progress work in the same area.</td></tr>
       <tr><td>Gather outside context</td><td><code>run-researcher</code> collects prior issues and PRs, the project wiki and public docs. Its findings feed the interview and the body.</td></tr>
       <tr><td>Grill you</td><td>An interview about anything unclear: acceptance criteria, priority, affected users. It also enumerates every corner case it can find (empty input, concurrency, permissions, failure paths, boundary values, existing data) and validates each with you instead of assuming it is out of scope.</td></tr>
-      <tr><td>Break it down</td><td>See task breakdown below. Always runs, with no size test deciding whether to skip it.</td></tr>
-      <tr><td>Create issues</td><td>One body per task using the structure below. Assignees and GitHub Project fields are asked once per run, then applied to every issue.</td></tr>
+      <tr><td>Break it down</td><td>See task breakdown below. Always runs. When the input splits into 2 or more tasks, it creates nothing and ends with <code>→ next: /create-prd &lt;input&gt;</code>.</td></tr>
+      <tr><td>Create the issue</td><td>One body using the structure below. Assignees and GitHub Project fields are asked once per run.</td></tr>
       <tr><td>Fact-check</td><td><code>gh-issue-factchecker</code> re-reads each created issue cold and checks file paths, symbols, described behaviour and the proposed fix against the real repo. Wrong text is corrected with <code>gh issue edit</code> and you are told what changed.</td></tr>
       <tr><td>Save context</td><td>The grilling decisions that did not fit the body (rejected alternatives, ruled-out corner cases) go to the Obsidian vault via <code>/dump</code>. Best effort.</td></tr>
     </table></div>
@@ -234,17 +234,18 @@ claude plugin install ai-workflow@ai-workflow</pre><button class="btn" data-copy
     <h2>Labels</h2>
     <div class="tbl"><table>
       <tr><th>Label</th><th>Meaning</th></tr>
-      <tr><td><code>refined</code></td><td>On every issue the command creates. It is properly specified and passes the issue template.</td></tr>
+      <tr><td><code>refined</code></td><td>On every issue <code>/gh-issue</code> or <code>/refine-issues</code> creates. It is properly specified and passes the issue template.</td></tr>
       <tr><td>type</td><td><code>bug</code>, <code>enhancement</code>, <code>feature</code> or <code>chore</code>.</td></tr>
       <tr><td>scope</td><td><code>backend</code>, <code>frontend</code> or <code>infra</code>, as applicable.</td></tr>
-      <tr><td><code>prd-&lt;slug&gt;</code></td><td>Groups the issues that came from one task list.</td></tr>
+      <tr><td><code>epic</code></td><td>On each epic <code>/create-prd approve</code> files, one per <code>## Epics</code> entry of the PRD.</td></tr>
+      <tr><td><code>prd-&lt;slug&gt;</code></td><td>Groups a PRD's epics and the issues filed from its task list.</td></tr>
       <tr><td><code>lean</code></td><td>Deprecated: <code>/run-issue</code> now treats it as the default roster. Applied only to single issues, and only when every condition holds: one shippable outcome, about one to two files or symbols, no new dependency, no new public API, and none of auth, data migration, payments or a public contract change. Any doubt means no label.</td></tr>
     </table></div>
   </div>
 
   <div class="block">
     <h2>Task breakdown</h2>
-    <p>Every request is decomposed after the interview, whatever its size. A task is a single-layer deliverable: a database migration, service logic, one API endpoint (request and resource count as one unit) or one UI unit. Docs and config work follow the same limits, split by file or section.</p>
+    <p><code>/create-tasks</code> splits an Approved PRD into one-PR tasks, and <code>/gh-issue</code> uses the same rubric to decide whether its input is one issue. A task is a single-layer deliverable: a database migration, service logic, one API endpoint (request and resource count as one unit) or one UI unit. Docs and config work follow the same limits, split by file or section.</p>
     <div class="tbl"><table>
       <tr><th>Size rule for each task</th></tr>
       <tr><td>Touches 3 or fewer production files (tests do not count)</td></tr>
@@ -257,24 +258,29 @@ claude plugin install ai-workflow@ai-workflow</pre><button class="btn" data-copy
     <div class="two">
       <div class="stack">
         <h3>One task</h3>
-        <p style="color:var(--muted)">It becomes a single issue, and nothing is saved to disk.</p>
+        <p style="color:var(--muted)"><code>/gh-issue</code> files it as a single issue, and nothing is saved to disk.</p>
         <h3>Two or more tasks</h3>
-        <p style="color:var(--muted)">The list is saved, then filed as flat issues, one per task, each standalone and created in dependency order. Context is inlined, so a task body never needs another issue to be understood. Each issue is labelled <code>refined</code> and <code>prd-&lt;slug&gt;</code>.</p>
+        <p style="color:var(--muted)"><code>/gh-issue</code> creates nothing and hands the input to <code>/create-prd</code>. The PRD names its epics; <code>/create-prd approve</code> files them, <code>/create-tasks</code> saves the task list, and <code>/refine-issues</code> files one sub-issue per task under its epic, in dependency order. Context is inlined, so a task body never needs another issue to be understood. Each issue is labelled <code>refined</code> and <code>prd-&lt;slug&gt;</code>.</p>
         <h3>Dependencies</h3>
-        <p style="color:var(--muted)">Edges are written as <code>Depends on: task k</code> and can only point at earlier tasks. At creation each one is rewritten as <code>Depends on: #n</code> using the real issue number. <code>/run-issue</code> is then run on each issue, dependencies first.</p>
+        <p style="color:var(--muted)">Edges are written as <code>Depends on: task k</code>, only to earlier tasks in the same epic. At creation each one is rewritten as <code>Depends on: #n</code> using the real issue number, and a native blocked-by link is added. <code>/run-issue</code> is then run on each issue, dependencies first, or on the epic.</p>
       </div>
       <div class="stack">
         <h3>Saved task list shape</h3>
         <pre>docs/tasks/&lt;slug&gt;.md
 
-# header: title, source, date, owner/repo
+# header: source PRD, epic, date, owner/repo
+
+## Shared files
+## Waves
 
 ## Task 1 — &lt;title&gt;
 Outcome: ...
+Area: backend
 Files/symbols: ...
 Acceptance criteria: ...
 Verify command: ...
 Depends on: none
+Parallel: yes
 Issue: #101      (filled after creation)
 
 ## Task 2 — &lt;title&gt;
@@ -284,11 +290,10 @@ Depends on: task 1   becomes   #101</pre>
     </div>
     <details><summary>Where the task list is saved, and what happens on failure</summary><div>
       <ul>
-        <li><b>Local</b> (always): <code>docs/tasks/&lt;slug&gt;.md</code>, never committed by the command.</li>
-        <li><b>Obsidian</b> (optional): a <code>Tasks.md</code> note under the project and feature folder, never overwriting an existing one.</li>
-        <li><b>GitHub wiki</b> (optional): <code>Tasks-&lt;Title&gt;.md</code>, pushed only after a separate confirmation.</li>
-        <li>If the file already exists you choose a new slug, skip the save, or <b>Resume this list</b>. Resume creates only the tasks without an issue number and checks existing <code>prd-&lt;slug&gt;</code> issues first, so nothing is created twice.</li>
-        <li>If a create fails, the command reports what exists and what is missing, then offers <b>Retry the missing ones</b> or <b>Stop here</b>. Created issues are never closed or deleted, so a partial list is recoverable.</li>
+        <li><b>Local only</b>: <code>docs/tasks/&lt;slug&gt;.md</code>, never committed by the command. The PRD at <code>docs/prds/&lt;slug&gt;.md</code> holds every decision; the task list holds none.</li>
+        <li>When the PRD changes, tasks are never renumbered. A changed task gets a <code>Changed:</code> line and a removed one is marked <code>Dropped</code>.</li>
+        <li><code>/refine-issues</code> matches each task against existing issues first (its <code>Issue:</code> field, then the <code>prd-&lt;slug&gt;</code> label and <code>Task n</code> note, then the epic's sub-issues), so a re-run creates nothing twice.</li>
+        <li>It stops at the first failed create. Created issues are never closed or deleted, so a partial list is recoverable by running it again.</li>
       </ul>
     </div></details>
   </div>
@@ -308,7 +313,7 @@ Depends on: task 1   becomes   #101</pre>
     <p>A borderline issue can be <b>normalised</b>: gaps filled with explicitly stated assumptions that Gate 1 shows you. An assumption is always recorded and shown, never silently adopted. If one search of the code answers a missing item, that is an assumption, not a gap.</p>
   </div>
 
-  <details><summary>What /intake and /prd each produce</summary><div>
+  <details><summary>What /intake and /create-prd each produce</summary><div>
     <p><b>/intake</b> returns a brief and a type (bug, feature, task or improvement). It never creates issues.</p>
     <ul>
       <li><b>Sentry link:</b> title, culprit and stack trace, occurrence counts (first and last seen, events, users, release), and an optional root-cause hypothesis labelled unverified.</li>
@@ -316,7 +321,7 @@ Depends on: task 1   becomes   #101</pre>
       <li><b>Obsidian note:</b> the note body verbatim, only on an exact title match.</li>
       <li><b>Free text:</b> wrapped as a summary with a source line.</li>
     </ul>
-    <p><b>/prd</b> covers the what and why only. It scans the code first, so its questions are informed, then interviews you across: problem and users, goals and non-goals, testable requirements with acceptance criteria, edge cases, success metrics, rollout and dependencies. The PRD has Overview (with codebase context), Problem, Users, Goals, Non-goals, Requirements (FR-1, FR-2 each with an acceptance check), Edge cases, Success metrics, Decisions, Open questions and Related. You review the full draft before anything is saved to <code>docs/prd/&lt;slug&gt;.md</code>, the vault or the wiki. The next step it offers is <code>/gh-issue</code>.</p>
+    <p><b>/create-prd</b> covers the what and why, plus a technical design made of contracts (data shapes, endpoints, fields), never code. It scans the code first, so its questions are informed, then interviews you until no question is open. The PRD has Overview, Problem, Users, Goals, Non-goals, Requirements, Edge cases, Technical design, Rollout and cost, Success metrics, Epics, Decisions, Open questions, Change log and Related. It is saved to <code>docs/prds/&lt;slug&gt;.md</code> with the status Draft, and mirrored to the vault. <code>/create-prd approve</code> sets Approved and files one epic per <code>## Epics</code> entry. The next step it offers is <code>/create-tasks</code>.</p>
   </div></details>
 </section>
 
@@ -362,7 +367,7 @@ Depends on: task 1   becomes   #101</pre>
 
   <details><summary>What the first phases do</summary><div>
     <ul>
-      <li><b>Preflight.</b> Stops if the checkout has uncommitted changes. If you passed free text, a Sentry link or a file instead of an issue, it runs <code>/intake</code> and <code>/gh-issue</code> first. If that files two or more issues, it prints them and stops cleanly. You then run each one, dependencies first.</li>
+      <li><b>Preflight.</b> Stops if the checkout has uncommitted changes. If you passed free text, a Sentry link or a file instead of an issue, it runs <code>/intake</code> and <code>/gh-issue</code> first. If the input splits into 2 or more tasks, <code>/gh-issue</code> files nothing; the run prints its <code>→ next: /create-prd …</code> line, says the input needs a PRD first, and makes no ledger.</li>
       <li><b>Researcher.</b> Scores the issue against a Definition of Ready. Gaps are shown at Gate 1 and never stop the run.</li>
       <li><b>Worktree and stack.</b> A sibling checkout on a new branch, plus (if the repo has a test compose file) a capped, locked Docker stack, one per project at a time.</li>
     </ul>
@@ -502,15 +507,15 @@ const I = {
  // planning
  p_input:{n:"Raw input",k:"Input",o:"A Sentry link, requirements file, Obsidian note, Jira key or plain text.",t:"<p>No need to write a perfect ticket first. Jira keys go through <code>/jira-to-gh</code>, which files the issue the same way as <code>/gh-issue</code>.</p>"},
  p_brief:{n:"/intake",k:"Command",p:"commands/intake.md",o:"Normalises the input into a brief with a type.",t:"<p>Detects the source, runs the matching adapter and returns an <code>## Intake result</code> block. A requirements file that holds several shippable outcomes triggers a decomposition check. Never creates issues.</p>"},
- p_prd:{n:"/prd",k:"Skill",p:"skills/prd/SKILL.md",o:"Optional. Pins the what and why into a reviewed PRD.",t:"<p>Checks for an existing PRD first, scans the code, interviews you, shows the full draft, then saves to <code>docs/prd/&lt;slug&gt;.md</code> and optionally the vault and wiki. No architecture or API design here.</p>"},
+ p_prd:{n:"/create-prd",k:"Skill",p:"skills/create-prd/SKILL.md",o:"Pins the what, the why and the epics into an approved PRD.",t:"<p>Checks for an existing PRD first, scans the code, interviews you, shows the full draft, then saves to <code>docs/prds/&lt;slug&gt;.md</code> (status Draft) and the vault. Its technical design holds contracts, never code. <code>/create-prd approve</code> files one epic per <code>## Epics</code> entry.</p>"},
  p_grill:{n:"Grill",k:"Interview",o:"Questions, corner cases and decisions, with you.",t:"<p>Asks about acceptance criteria, priority, affected users and edge cases. Every corner case it finds is validated with you rather than assumed out of scope. Facts the code can answer are looked up, not asked.</p>"},
- p_tasks:{n:"Task list",k:"Decomposition",p:"docs/tasks/<slug>.md",o:"Small, single-layer, ordered tasks that you approve.",t:"<p>Each task touches 3 or fewer production files, has 1 to 4 acceptance criteria, one verify command and no new dependency. You choose <b>Create as shown</b> or <b>Let me edit the list</b>.</p>"},
- p_issues:{n:"Issues",k:"GitHub",o:"One standalone issue per task, in dependency order.",t:"<p>Labelled <code>refined</code> and <code>prd-&lt;slug&gt;</code>. Dependency edges become real <code>Depends on: #n</code> lines. Body sections map to the Definition of Ready.</p>"},
- p_check:{n:"Fact-check",k:"Agent",m:"sonnet",a:"Read-only",p:"agents/gh-issue-factchecker.md",o:"A fresh agent verifies every claim in each created issue.",t:"<p>Checks file paths, symbols, behaviour and the proposed fix against the repo. Wrong text is corrected in place and you are told.</p>"},
+ p_tasks:{n:"/create-tasks",k:"Skill",p:"skills/create-tasks/SKILL.md",o:"Small, single-layer, ordered tasks from an Approved PRD.",t:"<p>Each task touches 3 or fewer production files, has 1 to 4 acceptance criteria, one verify command and no new dependency. Each names its Area and whether it can run in parallel; the list adds Waves and Shared files. Saved to <code>docs/tasks/&lt;slug&gt;.md</code>.</p>"},
+ p_issues:{n:"/refine-issues",k:"Skill",p:"skills/refine-issues/SKILL.md",o:"One refined sub-issue per task under its epic, in dependency order.",t:"<p>Labelled <code>refined</code> and <code>prd-&lt;slug&gt;</code>. Dependency edges become real <code>Depends on: #n</code> lines and native blocked-by links, and <code>aiw epic split</code> runs per epic. Body sections map to the Definition of Ready.</p>"},
+ p_check:{n:"Fact-check",k:"Agent",m:"sonnet",a:"Read-only",p:"agents/gh-issue-factchecker.md",o:"Every cited path and claim is checked against the repo.",t:"<p><code>/refine-issues</code> checks each cited path against the code before filing. On <code>/gh-issue</code>, a fresh agent checks file paths, symbols, behaviour and the proposed fix in the created issue; wrong text is corrected in place and you are told.</p>"},
  p_ready:{n:"Ready",k:"Output",o:"Issues that pass the Definition of Ready.",t:"<p>Run <code>/run-issue</code> on each, dependencies first.</p>"},
  // pipeline phases
  idea:{n:"The idea",k:"Input",o:"A request, in whatever form it arrives.",t:"<p>A Sentry error link, a requirements file (.md, .txt, .pdf, .docx), an Obsidian note, a Jira key, or plain text. You do not need to write a perfect ticket first.</p>"},
- preflight:{n:"Preflight",k:"Phase 0",o:"Safety checks before anything runs.",t:"<p>Stops if the checkout has uncommitted changes. If the argument is not an issue number or URL, it runs <code>/intake</code> then <code>/gh-issue</code> to make one. If that produces two or more issues, it prints them and stops cleanly.</p>"},
+ preflight:{n:"Preflight",k:"Phase 0",o:"Safety checks before anything runs.",t:"<p>Stops if the checkout has uncommitted changes. If the argument is not an issue number or URL, it runs <code>/intake</code> then <code>/gh-issue</code> to make one. If the input splits into 2 or more tasks, it prints the <code>→ next: /create-prd …</code> line, says the input needs a PRD first, and makes no ledger.</p>"},
  worktree:{n:"Worktree + test stack",k:"Phases 2 and 2.5",o:"A throwaway checkout and, if available, a Docker test stack.",t:"<p>A sibling checkout on a new branch with gitignored files such as <code>.env</code> copied in. If the repo has a test compose file, a stack named <code>runissue-&lt;slug&gt;-&lt;digest&gt;-&lt;issue&gt;</code> starts with CPU and memory caps and a lockfile so only one runs per project. The test command is resolved once and every Station uses that exact string.</p>",c:"aiw worktree create, aiw stack up|down|rebuild|status"},
  pr:{n:"Open PR + classify",k:"Phases 5 and 5.5",o:"Push, open the PR, score the diff, pick reviewers.",t:"<p><code>aiw pr open</code> links the branch to the issue, pushes and opens the PR. <code>aiw classify</code> scores the diff (risk score and band, signals like migration or auth). <code>aiw resolve-review</code> then picks which specialist lenses to run.</p>"},
  final:{n:"Final report",k:"Gate 3",o:"Handback to a human.",t:"<p>First it dumps a run summary to the Obsidian vault and appends lessons to <code>tasks/lessons.md</code> (left uncommitted, in the main checkout). Then the report: the PR, CI verdict, open threads, failed checks, lessons added, and anything carried here instead of asked. Project status moves to \"In Review\". A degraded finish (work not done) lands here as a draft PR with the reason.</p>"},
@@ -532,9 +537,9 @@ const I = {
  // commands / skills
  runissue:{n:"/run-issue",k:"Command",m:"orchestrator",a:"Drives the whole pipeline",p:"commands/run-issue.md",o:"Issue number in, reviewed PR out.",t:"<p>Usage: <code>/ai-workflow:run-issue &lt;n|url|text&gt; [--full]</code>. About 1,350 lines of instructions across phases 0 to 10, plus Epic mode. Stops for you exactly three times.</p>"},
  issue2pr:{n:"/issue-to-pr",k:"Command",m:"interactive",a:"Asks before commit, push, PR",p:"commands/issue-to-pr.md",o:"The hands-on variant of run-issue.",t:"<p>Interviews you, plans, executes, pauses for a manual end-to-end test, and asks before committing. Not meant for unattended use.</p>"},
- intake:{n:"/intake · /prd",k:"Command + skill",a:"Writes a brief or a PRD",p:"commands/intake.md, skills/prd/SKILL.md",o:"Turns rough input into something buildable.",t:"<p><b>/intake</b> normalises a Sentry URL, requirements file, Obsidian note or free text into a brief ready for an issue.</p><p><b>/prd</b> (new in 1.9.0) scans the codebase, interviews you, and saves a PRD to <code>docs/prd/&lt;slug&gt;.md</code>, the vault and/or the GitHub wiki. The next step is <code>/gh-issue</code>.</p>"},
- ghissue:{n:"/gh-issue",k:"Command",a:"Creates GitHub issues",p:"commands/gh-issue.md",o:"Files issues with codebase context.",t:"<p>Always splits the request into tasks first. One task becomes one issue. Two or more are saved to <code>docs/tasks/&lt;slug&gt;.md</code> and filed as flat issues labelled <code>prd-&lt;slug&gt;</code>, ordered by <code>Depends on: #n</code> lines. Bodies use What / Why / How and get the <code>refined</code> label, plus <code>lean</code> when it qualifies.</p>"},
- jira2gh:{n:"/jira-to-gh",k:"Command",a:"Creates GitHub issues",p:"commands/jira-to-gh.md",o:"Pulls a Jira ticket and files it as a GitHub issue.",t:"<p>Fetches with <code>acli jira workitem view &lt;KEY&gt;</code>, then files it the same way as <code>/gh-issue</code>.</p>"},
+ intake:{n:"/intake · /create-prd",k:"Command + skill",a:"Writes a brief or a PRD",p:"commands/intake.md, skills/create-prd/SKILL.md",o:"Turns rough input into something buildable.",t:"<p><b>/intake</b> normalises a Sentry URL, requirements file, Obsidian note or free text into a brief ready for an issue.</p><p><b>/create-prd</b> scans the codebase, interviews you, and saves a PRD to <code>docs/prds/&lt;slug&gt;.md</code>, the vault and/or the GitHub wiki. <code>/create-prd approve</code> files its epics. The next step is <code>/create-tasks</code>.</p>"},
+ ghissue:{n:"/gh-issue",k:"Command",a:"Creates one GitHub issue",p:"commands/gh-issue.md",o:"Files one issue with codebase context.",t:"<p>Always splits the request into tasks first. One task becomes one issue. Two or more create nothing and hand the input to <code>/create-prd</code>. Bodies use What / Why / How and get the <code>refined</code> label, plus <code>lean</code> when it qualifies.</p>"},
+ jira2gh:{n:"/jira-to-gh",k:"Command",a:"Creates GitHub issues",p:"commands/jira-to-gh.md",o:"Pulls a Jira ticket and files it as a GitHub issue.",t:"<p>Fetches with <code>acli jira workitem view &lt;KEY&gt;</code>, then files exactly one issue the same way as <code>/gh-issue</code>; a ticket that splits into 2 or more tasks goes to <code>/create-prd</code>.</p>"},
  factchecker:{n:"gh-issue-factchecker",k:"Agent",m:"sonnet",a:"Read-only",p:"agents/gh-issue-factchecker.md",o:"Fresh-eyes check of a just-created issue.",t:"<p>Checks every file path, symbol and described behaviour in the issue against the repo, with no memory of how it was drafted.</p>"},
  prreview:{n:"pr-review",k:"Skill",a:"Posts inline review comments",p:"skills/pr-review/",o:"Evidence-based review of a pull request.",t:"<p>Reads the description, every commit, linked issues and the full diff. Checks intent against the issues, DRY across the whole repo (not just the diff), SOLID and security. Escalates to humans when a change is too consequential.</p>"},
  prgrind:{n:"pr-grind",k:"Skill",a:"Loops over review rounds",p:"skills/pr-grind/",o:"Automates review, fix and re-trigger.",t:"<p>Posts the Slack trigger, waits for the bot's review, splits findings into fix or rebut, dispatches <code>run-fixer</code>, verifies CI and repeats until approved or a rail stops it.</p>"},
@@ -603,13 +608,13 @@ const GLOSS=[
  ["testroot","The directory the SDET owns and dev may not edit."],
  ["worktree","The throwaway checkout a run works in."],
  ["degraded","The work is not done, so a draft PR with the reason lands at the final gate."],
- ["epic","An existing parent issue with sub-issues."],
+ ["epic","A parent issue with sub-issues. /create-prd approve files one per ## Epics entry of a PRD."],
  ["grind","The review loop that runs after the handback."],
  ["rail","A condition that stops the grind."],
  ["fingerprint","A finding's identity across grind rounds: file, line and the start of its text."],
  ["project","A friendly name for an owner/repo, from skills/worklog/projects.json."],
  ["dor","Definition of Ready. Six items an issue is scored against before a pipeline is spent on it: problem and why, scope, acceptance criteria, affected surface, non-functional constraints, dependencies. Advisory only."],
- ["tasklist","The approved breakdown of a request into small single-layer tasks, saved as docs/tasks/<slug>.md when there are two or more."],
+ ["tasklist","The breakdown of an Approved PRD into small one-PR tasks, saved by /create-tasks as docs/tasks/<slug>.md and filed by /refine-issues."],
  ["lean","Deprecated alias of the default /run-issue roster. Use the full label to force the seven-station roster."],
  ["board","The kanban view: one column per Station, one card per issue from its latest run."]
 ];
@@ -640,14 +645,14 @@ function flow(svgId,rows,extra=""){
   const s=document.getElementById(svgId);s.setAttribute("viewBox",`0 0 ${W} ${H}`);s.innerHTML=out+(extra?extra.svg:"");
 }
 function drawAll(){
-  flow("svg-life",[[{id:"idea",sub:"Sentry, BRD, note, text"},{id:"intake",sub:"clarify + PRD"},{id:"ghissue",sub:"split into issues"},{id:"runissue",sub:"the pipeline"},{id:"prready",label:"Reviewed PR",sub:"CI green"},{id:"prgrind",label:"/pr-grind",sub:"bot review loop"},{id:"merge",gate:"HUMAN",sub:"always manual"}]]);
+  flow("svg-life",[[{id:"idea",sub:"Sentry, BRD, note, text"},{id:"intake",sub:"clarify + PRD"},{id:"ghissue",sub:"one issue, or to /create-prd"},{id:"runissue",sub:"the pipeline"},{id:"prready",label:"Reviewed PR",sub:"CI green"},{id:"prgrind",label:"/pr-grind",sub:"bot review loop"},{id:"merge",gate:"HUMAN",sub:"always manual"}]]);
   flow("svg-pipe",[
     [{id:"preflight",sub:"clean checkout?"},{id:"researcher",sub:"haiku"},{id:"planner",sub:"opus",gate:"GATE 1"},{id:"worktree",label:"Worktree + stack",sub:"isolated"},{id:"sdet",label:"SDET",sub:"failing tests"},{id:"dev",label:"Dev",sub:"make them pass"},{id:"verifier",label:"Verifier",sub:"runs the feature"}],
     [{id:"pr",label:"Open PR",sub:"classify risk"},{id:"reviewer",label:"Reviewer",sub:"+ specialists"},{id:"fixer",label:"Fixer",sub:"apply findings",gate:"GATE 2a"},{id:"runci",label:"CI gate",sub:"merge base, go green"},{id:"final",label:"Final report",sub:"you decide",gate:"GATE 3"},{id:"prgrind",label:"Grind",sub:"Slack review loop"}]
   ]);
   flow("svg-plan",[
-    [{id:"p_input",label:"Raw input",sub:"text, BRD, Sentry"},{id:"p_brief",label:"/intake",sub:"normalise to a brief"},{id:"p_prd",label:"/prd",sub:"optional: what + why",gate:"YOU",cls:"dim"},{id:"p_grill",label:"Grill",sub:"questions, corner cases",gate:"YOU"}],
-    [{id:"p_tasks",label:"Task list",sub:"small, ordered",gate:"YOU"},{id:"p_issues",label:"Issues",sub:"flat, one per task"},{id:"p_check",label:"Fact-check",sub:"fresh-eyes agent"},{id:"p_ready",label:"Ready",sub:"passes DoR"}]
+    [{id:"p_input",label:"Raw input",sub:"text, BRD, Sentry"},{id:"p_brief",label:"/intake",sub:"normalise to a brief"},{id:"p_prd",label:"/create-prd",sub:"what, why, epics",gate:"YOU"},{id:"p_grill",label:"Grill",sub:"questions, corner cases",gate:"YOU"}],
+    [{id:"p_tasks",label:"/create-tasks",sub:"small, ordered"},{id:"p_issues",label:"/refine-issues",sub:"sub-issues of the epic",gate:"YOU"},{id:"p_check",label:"Fact-check",sub:"fresh-eyes agent"},{id:"p_ready",label:"Ready",sub:"passes DoR"}]
   ]);
   bounce();grind();
 }

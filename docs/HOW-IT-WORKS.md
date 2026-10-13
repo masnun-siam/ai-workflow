@@ -330,36 +330,41 @@ correctly invisible to it.
 
 And still: **merging is manual.** The grind ends by @-mentioning you to do it.
 
-## Layer 5 — Task lists and epics
+## Layer 5 — PRDs, task lists and epics
 
-`/gh-issue` always breaks a request into a numbered task list before filing anything. Each
-task is one layer-scoped deliverable: 3 or fewer production files, 1-4 acceptance criteria,
-one verify command. You approve the list with **"Create as shown"** or revise it with **"Let
-me edit the list"**. One task files one issue as before. Two or more tasks save the list to
-`docs/tasks/<slug>.md` first (optionally also to Obsidian or the GitHub wiki), then file one
-refined issue per task, each asked about in its own question round, and one **epic** parent over
-them, linked as sub-issues (ADR 0003). Each task issue is complete and independently readable,
-labelled `prd-<slug>`, and declares its order in plain text:
+`/create-prd` interviews you into a PRD and saves it to `docs/prds/<slug>.md` with the status
+**Draft**. It holds the what and why, a technical design (contracts such as data shapes and
+endpoints, never code), the epics the work splits into, the decisions and a change log.
+`--review` puts a reviewer panel on the draft before it is saved. The status becomes **In review**
+when you open a PR for the PRD. `/create-prd approve <prd>` sets **Approved** and files one **epic** issue per `## Epics` entry, labelled `epic` and
+`prd-<slug>`, then writes each epic's number back into the PRD.
+
+`/create-tasks` splits an Approved PRD into one-PR tasks and saves them to
+`docs/tasks/<slug>.md`. Each task fits the size rubric: 3 or fewer production files, 1-4
+acceptance criteria, one verify command, no new dependency. Each names its Area, whether it can
+run in parallel, and the tasks it depends on, which are only tasks in its own epic. The list adds
+Waves (the tasks that can run together) and Shared files. A later edit never renumbers a task; it
+marks it Changed or Dropped. When the split shows the PRD is silent or wrong about a decision,
+`/create-tasks` asks you and records the answer with `/create-prd --update` first.
+
+`/refine-issues` files each task as a `refined` sub-issue of its epic, after you confirm the full
+list. Each issue number is written back into the task list. When the PRD and the task list
+disagree, it stops and asks. It then runs one `aiw epic split` per epic, which
+writes the epic's `## Tasks` checklist and the `epic.json` that Epic mode reads. Each issue gets a
+native blocked-by link (on an older `gh`, `/fix-blockers` writes them) and declares its order in
+plain text:
 
 ```
 Depends on: #12, #13
 ```
 
-Each new issue number is written back into the saved list. A create failure partway through
-is a recoverable state, not a failure state: `/gh-issue` reports which issues exist and which
-are missing, then asks **"Retry the missing ones"** or **"Stop here"**, and nothing already
-created is closed or deleted. Re-running it on the same list offers **"Resume this list"**,
-which files only the missing tasks. `/jira-to-gh` decomposes, saves and files a Jira ticket
-the same way.
+`/gh-issue` and `/jira-to-gh` file exactly one issue. They still break the request down first;
+when it splits into 2 or more tasks they create nothing and end with
+`→ next: /create-prd <input>`, because work that size needs a PRD. `/run-issue` does the same in
+Preflight: a source that needs a PRD stops the run with that hand-off, and no ledger is made.
 
-`/gh-issue` returns the parent and the issue URLs in list order. Run `/run-issue <n>` on each,
-dependencies first, or `/run-issue <parent>` for all of them. If you hand `/run-issue` a source
-that is not an issue yet, it calls `/gh-issue` for you; when that returns two or more issues,
-`/run-issue` prints the list and stops — run `/run-issue <n>` on each issue, dependencies first.
-Answers given in the per-task question rounds are recorded in the PRD (`/prd --update`).
-
-**Epic mode** runs a parent issue with sub-issues: one `/gh-issue` filed, or one filed by hand.
-`/run-issue <parent>` drives all its children. A `/gh-issue` parent (labelled `epic` and
+**Epic mode** runs a parent issue with sub-issues: one `/create-prd approve` filed, or one filed
+by hand. `/run-issue <parent>` drives all its children. A `/create-prd` epic (labelled `epic` and
 `prd-<slug>`) with no sub-issues is refused, never run as one issue. The rules:
 
 - **Independent children run at the same time.** Dependent ones cannot, by definition — a
@@ -392,57 +397,66 @@ flowchart TD
     E -->|feature folder| P
     E -->|PRD path| T
     E -->|task list| G
+    E -->|bug note| BG
     E -->|epic parent| B
     E -->|issue numbers| X
     D --> C1{{"checkpoint"}}
-    C1 -->|new feature, change request| P["/prd<br/>grill and fill the PRD"]
-    C1 -->|bug| T
-    C1 -->|feature-scoped task| G
+    C1 -->|new feature, change request| P["/create-prd<br/>grill and fill the PRD"]
+    C1 -->|bug, feature-scoped task| BG["/gh-issue<br/>one refined issue"]
     C1 -->|anything else| S["stop after filing"]
-    P --> C2{{"checkpoint"}}
+    P --> C2{{"checkpoint:<br/>Continue approves the PRD<br/>and files its epics"}}
     C2 --> T["/create-tasks<br/>save the task list"]
     T --> C4{{"checkpoint"}}
-    C4 --> G["/gh-issue<br/>refined issues + epic"]
+    C4 --> G["/refine-issues<br/>sub-issues of each epic"]
     G --> C3{{"checkpoint"}}
-    C3 -->|epic| B["/fix-blockers<br/>blocked-by relations"]
-    C3 -->|single issue| X
+    C3 --> B["/fix-blockers<br/>blocked-by relations"]
+    BG -->|2 or more tasks| P
+    BG -->|one issue| X
     B --> C5{{"checkpoint"}}
     C5 --> X["dispatch<br/>herdr-dispatch or #/dispatch"]
     X --> R["/run-issue × N,<br/>dependencies first"]
 ```
 
 **Entry detection.** `/flow` reads its argument and starts where the work already is: raw
-text starts at `/dump`, a vault feature folder (or its `Dump.md`) at `/prd`, a PRD path at
-`/create-tasks`, a task list at `/gh-issue`, an epic parent at `/fix-blockers`, and issue
-numbers at dispatch. There is no state file; the vault note, the PRD
-and the issues are the state, so half-done work resumes instead of starting over.
+text starts at `/dump`, a vault feature folder (or its `Dump.md`) at `/create-prd`, a PRD path at
+`/create-tasks`, a task list at `/refine-issues`, a `Bugs.md` or `Tasks.md` note at `/gh-issue`,
+an epic parent at `/fix-blockers`, and issue numbers at dispatch. There is no state file; the
+vault note, the PRD and the issues are the state, so half-done work resumes instead of starting
+over.
 
-**Routing by dump class.** A new feature or change request goes on to `/prd`, which fills the
-`status: seed` PRD that `/dump` left (or updates a finished one). The PRD it saves to the repo's
-`docs/prd/<slug>.md` is the canonical copy; the vault `PRD.md` is a mirror. A bug report skips the
-PRD and goes to `/create-tasks` with its problem statement; a feature-scoped task goes straight to
-`/gh-issue`. A standalone task, weekly
-meeting notes or anything unclassifiable stops once it is filed.
+**Routing by dump class.** A new feature or change request goes on to `/create-prd`, which fills
+the `status: seed` PRD that `/dump` left (or updates a finished one). The PRD it saves to the
+repo's `docs/prds/<slug>.md` is the canonical copy; the vault `PRD.md` is a mirror. A bug report
+or a feature-scoped task skips the PRD and goes to `/gh-issue`, which files one issue for
+dispatch; if it splits into 2 or more tasks, `/gh-issue` hands it back to `/create-prd`. A
+standalone task, weekly meeting notes or anything unclassifiable stops once it is filed.
 
-**The `→ next:` contract.** `/dump`, `/prd`, `/create-tasks`, `/gh-issue` and `/fix-blockers` each end with one line,
-`→ next: <command> <argument>`, naming the next stage and the artifact it should take. `/flow`
-and the UI stepper read the next stage's input from that line, and you see exactly what to
-run if you are going by hand. No line means the flow stops there. `/gh-issue` files
-`refined` issues ordered by `Depends on: #n` under an `epic` parent and hands the parent to
-`/fix-blockers`; `/run-issue`'s multi-issue stop ends with a `→ next: herdr-dispatch …` line.
+**Approval.** The PRD is approved at the boundary after `/create-prd`: the terminal asks
+**"Approve the PRD, file its epics, and continue to create-tasks"**, and Continue runs
+`/create-prd approve`. In the UI, starting the Tasks step is the approval.
+
+**The `→ next:` contract.** `/dump`, `/create-prd`, `/create-tasks`, `/refine-issues`,
+`/gh-issue` and `/fix-blockers` each end with one line, `→ next: <command> <argument>`, naming
+the next stage and the artifact it should take. `/flow` and the UI stepper read the next stage's
+input from that line, and you see exactly what to run if you are going by hand. No line means
+the flow stops there. `/refine-issues` hands the epic to `/fix-blockers`; `/gh-issue` ends
+`→ next: herdr-dispatch <n>`, or `→ next: /create-prd <input>` when the work needs a PRD, which
+the UI Flow turns into a return to the PRD step.
 
 **Dispatch.** In the terminal, `/flow` shows a `herdr-dispatch <numbers> --dry-run` plan
 (`--max 2`) and launches only when you say **Launch**. In the UI, the last step links to
 `#/dispatch?issues=<numbers>`, where you preview and start the pipeline yourself. AFK mode
-never auto-answers a `/prd` or `/dump` question: those answers are your product decisions.
+never auto-answers a `/create-prd` or `/dump` question: those answers are your product decisions.
 
 **The Flow page.** Each flow is a record on the aiw server (`<data_dir>/flows/`, one JSON file
 per flow) at `#/flow/<id>`; the bare `#/flow` opens the most recently active one, and **Flows**
 lists earlier ones (archive hides a flow, nothing is deleted). Typing an idea creates the record,
 so a draft survives leaving the page. Sessions started from Flow carry the flow's id and run in
-**Flow auto mode**: the only questions are `/prd`'s grilling, which keeps going until the PRD has
-no open questions. `/dump` picks the folder itself, and `/gh-issue` asks nothing: it assigns you,
-adds issues to the repo's linked project and fills its fields. Each command's "Flow auto mode"
+**Flow auto mode**: the only questions are grilling ones: `/create-prd`'s, which keep going until the
+PRD has no open questions, and `/gh-issue`'s on a bug's or task's open questions. `/dump` picks the
+folder itself, `/create-tasks` approves a Draft PRD only after its readiness checks pass, and
+`/refine-issues` asks nothing. `/gh-issue` assigns you and `/refine-issues` leaves them unassigned;
+both add issues to the repo's linked project and fill its fields. Each command's "Flow auto mode"
 section lists the defaults. Beside the steps, the page shows a waiting question, else the selected
 step's output: `Dump.md` or `PRD.md` read from the notes vault (Settings, read-only), or one row
 per issue as `/gh-issue` creates, fact-checks and fixes it.
@@ -479,13 +493,13 @@ Anything skipped is named in the final report.
 - **Degraded finish** — the ending where the work is not done: draft PR, reason attached,
   still one report.
 - **Worktree** — the throwaway checkout a run works in.
-- **Epic** — a parent issue with sub-issues, run by `/run-issue` Epic mode. `/gh-issue` files
-  one over every task list it files; `/jira-to-gh` does not.
+- **Epic** — a parent issue with sub-issues, run by `/run-issue` Epic mode. `/create-prd approve`
+  files one per `## Epics` entry of a PRD; `/refine-issues` files its tasks under it.
 - **Grind** — the post-handback loop that works repeated review rounds on an open PR.
 - **Rail** — a condition that stops the grind rather than letting it push another fix.
 - **Fingerprint** — how a finding is recognised across rounds, so a repeat is visible.
 - **Paused stop** — the grind ended and is not watching. Only you can restart it.
-- **Guided flow** — `/flow` or `#/flow`: dump → PRD → issues → dispatch for one feature, with a
+- **Guided flow** — `/flow` or `#/flow`: dump → PRD → tasks → issues → dispatch for one feature, with a
   checkpoint at every stage (see **Idea to PRs**; terms in `CONTEXT.md`).
 
 ---

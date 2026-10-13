@@ -4,22 +4,22 @@
 
 ### Added
 
-- **Peer review picker in `aiw ui`.** New run's named form (for `prd`, `intake`, `dump` and
+- **Peer review picker in `aiw ui`.** New run's named form (for `create-prd`, `intake`, `dump` and
   `gh-issue`), its Custom command form, and the Flow's PRD step each have a Peer review box. Tick
   it to pick the reviewers the command offers; critical starts ticked. A custom prompt is asked to
   run `/peer-review` when it's done, against a fresh review dir holding the prompt verbatim. The
   session page then shows whether the review approved, reached the round cap, didn't finish, or never
   ran, read from the review's own rounds, not from what the session claims.
 - **`/peer-review` and `--review` on `/intake`, `/dump` and `/gh-issue`.** The reviewer panel
-  `/prd --review` uses is now the `peer-review` skill. Run it on its own after any work and it
+  `/create-prd --review` uses is now the `peer-review` skill. Run it on its own after any work and it
   reviews the change (the diff since a point you choose, plus the final answer) against what you
   asked. The diff never includes secret-like files, binaries or lockfiles. `/intake`, `/dump` and
-  `/gh-issue` review their draft before anything is saved or filed (`/gh-issue` reviews every
-  issue body and the epic parent in one pass, then its factchecker still runs). A programmatic
+  `/gh-issue` review their draft before anything is saved or filed (`/gh-issue` reviews its
+  issue body, then its factchecker still runs). A programmatic
   call (`/gh-issue` and `/run-issue` running `/intake --whole`) never reviews. The reviewers run on
   Opus, in subagents and in herdr tabs (checked: the tab's init event reports `claude-opus-5-5`);
   `/run-issue`'s code-review specialists stay on Sonnet.
-- **`/prd --review [<lens,lens>]`: a reviewer panel before the review gate.** You pick the
+- **`/create-prd --review [<lens,lens>]`: a reviewer panel before the review gate.** You pick the
   lenses from a pool of seven: critical (completeness), CEO (product value), CTO (feasibility
   against the repo), security, QA (testability), UX (design) and performance. Bare `--review`
   runs critical alone. Every picked lens must approve. They review the draft in parallel as
@@ -33,13 +33,13 @@
   no file-editing tools, but its shell is not narrowed (a probe's `touch` ran), so shell commands
   follow your normal permissions; it is not read-only. Code search works through `rg`. Tabs
   are reused across rounds, so a reviewer remembers its earlier rounds. In `aiw ui`, a **Peer
-  review** checkbox on the Flow's PRD step and on New run for `prd` adds `--review` (critical;
+  review** checkbox on the Flow's PRD step and on New run for `create-prd` adds `--review` (critical;
   the UI always uses subagents).
 - **`aiw peer-review new|next|verdict|diff`.** The engine for peer review. `new <kind>` makes a
   fresh review directory for one run (never reused, so a second review of the same PRD starts at
   round 1). `next` opens and decides rounds for a panel picked per run from the lenses the kind
   offers (`peer_review` in `config.json`: the lens pool, two severity rubrics, `doc` and `change`,
-  and per-kind offers for `prd`, `intake`, `dump`, `gh-issue` and `custom`). `verdict` refuses a
+  and per-kind offers for `create-prd`, `intake`, `dump`, `gh-issue` and `custom`). `verdict` refuses a
   finding that neither quotes the artifact nor names one of its headings, a stale artifact hash,
   an old round, more than 8 findings, or a blocker/major that doesn't say whether it re-raises a
   prior finding. `next` decides: every picked lens blocks, a finding that needs a product decision
@@ -47,7 +47,7 @@
   exactly one more round), never auto-approving. `diff --since <sha|@{u}>` prints the change to
   review, with secret-like files (tracked or not), binaries and lockfiles dropped and named, and
   a long diff capped with a note. The other commands and custom prompts get `--review` in later
-  releases. A `/prd` review that was mid-round under the earlier `aiw prd-review` can't resume:
+  releases. A PRD review that was mid-round under the earlier `aiw prd-review` can't resume:
   start the review again.
 - **`/fix-blockers <parent>`.** Previews and then sets an epic's GitHub "blocked by" relations
   through `aiw epic blockers`, after one confirmation. A parent filed on another machine is split
@@ -57,10 +57,10 @@
   ADR 0003). It checks the dependency graph first, writes only the edges GitHub lacks (so a
   re-run writes nothing twice), and reports, never deletes, an edge that no `Depends on:` line
   names. `--dry-run` prints the edges it would add.
-- **`/create-tasks`.** Breaks a problem statement and its PRD into a saved task list
-  (`docs/tasks/<slug>.md`) without filing anything, using `/gh-issue`'s own decomposition and
-  save rules. The PRD stands in for grilling; open questions are asked before decomposing.
-  `/gh-issue docs/tasks/<slug>.md` now files issues straight from a saved list.
+- **`/create-tasks` and `/refine-issues`.** `/create-tasks` splits an Approved PRD into a saved
+  list of one-PR tasks (`docs/tasks/<slug>.md`) with Area, Parallel, Waves and Shared files,
+  without filing anything. `/refine-issues` files that list as `refined` sub-issues of the PRD's
+  epics (ADR 0004).
 - **Full test suite on push and in CI.** `run-engine/run_tests.sh` runs every
   `run-engine/test_*.py`. `pre-commit install` now also installs a pre-push hook that runs it,
   and a `Tests` GitHub Actions job runs it on pull requests and on pushes to `master`. Fixes the
@@ -72,32 +72,46 @@
 - **Step output beside the steps.** With no question waiting, the Flow page shows the selected
   step's `Dump.md` or `PRD.md` (read-only, from the new **Notes vault** setting) or one row per
   issue as `/gh-issue` creates, fact-checks and fixes it. Click a done step to show its output.
-- **Flow auto mode.** Sessions started from Flow ask only `/prd`'s grilling questions, which now
-  cover acceptance criteria, priority, users and corner cases and run until the PRD has no open
-  questions. `/dump` picks the folder itself, and `/gh-issue` assigns you, adds issues to the
-  repo's linked project and fills its fields without asking.
+- **Flow auto mode.** Sessions started from Flow ask only grilling questions: `/create-prd`'s, which
+  now cover acceptance criteria, priority, users and corner cases and run until the PRD has no open
+  questions, and `/gh-issue`'s on a bug's or task's open questions. `/dump` picks the folder itself.
+  `/gh-issue` assigns you and `/refine-issues` leaves them unassigned; both add issues to the repo's
+  linked project and fill its fields without asking.
 - **Questions answered in Flow.** A step's question opens beside the steps (in the step on narrow
   screens), and answering from the Answer page returns to the flow or the session.
 
 ### Changed
 
-- **Bare `/prd --review` runs the critical reviewer alone.** It used to run critical, CEO, CTO
+- **`/prd` is now `/create-prd`, and planning runs `/create-prd` → `/create-tasks` → `/refine-issues` (ADR 0004).**
+  Breaking: a hard rename with no `/prd` alias, and PRDs move from `docs/prd/` to
+  `docs/prds/<slug>.md`. A PRD has a technical design (contracts allowed, code not), its epics
+  and a change log, and a status of Draft, In review or Approved. `/create-prd approve <prd>`
+  sets Approved and files one epic per `## Epics` entry, labelled `epic` + `prd-<slug>`.
+  `/create-tasks` works only from an Approved PRD and adds Area, Parallel, Waves and Shared
+  files. `/refine-issues` files each task as a `refined` sub-issue of its epic with
+  `Depends on: #n` and blocked-by links, then runs `aiw epic split` per epic. `/gh-issue` and
+  `/jira-to-gh` now file exactly one issue: input that splits into 2 or more tasks creates
+  nothing and ends `→ next: /create-prd <input>`, and `/run-issue` Preflight stops there too.
+  `/dump` sends bugs to `/gh-issue <Bugs.md>`, which files the one bug you pick (newest first).
+  `/create-prd` offers to `git mv` a legacy `docs/prd/<slug>.md` to `docs/prds/`. The peer-review
+  kind `prd` is now `create-prd`; an in-flight `prd` review stops with a clear error.
+  `aiw refined` also rejects a `<placeholder>` Test root or Base branch. Old `/prd` sessions in
+  `aiw ui` still map to the PRD step.
+- **Bare `/create-prd --review` runs the critical reviewer alone.** It used to run critical, CEO, CTO
   and security, with only critical able to hold the PRD. Pick more lenses with
   `--review critical,ceo,cto,security`; every picked lens now has to approve.
-- **The Guided Flow has six steps.** `/flow` and the `aiw ui` Flow page run dump → PRD →
-  tasks (`/create-tasks`) → issues (`/gh-issue`, with an epic) → blockers (`/fix-blockers`) →
-  dispatch. The `→ next:` lines follow: `/prd` hands off to `/create-tasks`, a bug's dump goes to
-  `/create-tasks`, and `/gh-issue` hands an epic parent to `/fix-blockers` (a single issue still
-  goes to `herdr-dispatch`). A flow saved mid-way at the old Issues step with a PRD now resumes at
-  Tasks. Both new commands can be started from the UI and are never auto-answered in AFK mode.
-- **`/gh-issue` files an epic parent again (ADR 0003).** On a saved task list it reads the
-  problem statement and the PRD (the repo copy when the vault note links one), shows one preview
-  and asks **"File these"**, then asks one question round per task before writing its issue.
-  Doc references become links when the file is on the base branch. When two or more issues are
-  filed it creates a parent labelled `epic` and links them at once with `aiw epic split`, which
-  also writes the `epic.json` Epic mode reads. Answers from the question rounds go to the PRD
-  through `/prd --update`. `/run-issue` refuses a `/gh-issue` parent (labelled `epic` and
-  `prd-<slug>`) that has no sub-issues; a team's own `epic` label runs as before.
+- **The Guided Flow has six steps.** `/flow` and the `aiw ui` Flow page run dump → PRD
+  (`/create-prd`) → tasks (`/create-tasks`) → issues (`/refine-issues`) → blockers
+  (`/fix-blockers`) → dispatch. The `→ next:` lines follow: `/create-prd` hands off to
+  `/create-tasks`, `/create-tasks` to `/refine-issues`, and `/refine-issues` hands an epic to
+  `/fix-blockers`. A bug's dump goes to `/gh-issue`, which files one issue for `herdr-dispatch`.
+  A flow saved mid-way at the old Issues step with a PRD now resumes at Tasks. The new commands
+  can be started from the UI and are never auto-answered in AFK mode.
+- **Epics are linked and blocked natively (ADR 0003).** An epic's children are linked as
+  sub-issues by `aiw epic split`, which also writes the `epic.json` Epic mode reads, and their
+  `Depends on:` lines become GitHub blocked-by relations. `/create-prd approve` files the epics
+  and `/refine-issues` files their children (ADR 0004). `/run-issue` refuses an epic labelled
+  `epic` and `prd-<slug>` that has no sub-issues; a team's own `epic` label runs as before.
 - **Grinding is opt-in.** `/run-issue` runs phase 10 (`pr-grind`) only with `--grind`;
   without it the run ends at the Gate 2 handback. Breaking: a run that used to grind by
   default no longer does. `--no-grind` still parses but does nothing. `herdr-dispatch` and
@@ -109,11 +123,11 @@
   Problem / Who / Evidence / Expected / Open questions, taken only from the input, followed by
   the raw text verbatim. Bugs in `Bugs.md` get the same block instead of a one-line bullet.
   Tasks, meeting notes and unclassifiable input are still filed verbatim.
-- **The repo PRD is canonical.** `/prd` now saves to `docs/prd/<slug>.md` and the Obsidian
+- **The repo PRD is canonical.** `/create-prd` saves to `docs/prds/<slug>.md` and the Obsidian
   vault by default (`--to local,obsidian`), and the vault copy is a mirror of the repo copy.
   The two are linked at save time (a `**Mirror:**` line in the repo copy, a `canonical`
   property on the vault note). Outside a git repo it writes the vault only. New
-  `/prd --update <prd> <decisions>` appends decisions made later to `## Decisions`, resolves
+  `/create-prd --update <prd> <decisions>` appends decisions made later to `## Decisions`, resolves
   the open questions they answer, reports every edited requirement as before → after, and
   mirrors the edit; a vault PRD with no canonical copy is updated alone.
 - **Docs restructure.** `README.md` is now a short link hub. The agent setup protocol moved to

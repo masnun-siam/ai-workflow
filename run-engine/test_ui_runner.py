@@ -811,7 +811,7 @@ def fallback_checks():
         ok("successful resume: one spawn, no fallback flags, pending_answer cleared")
 
         # -- non-run-issue commands: terminal handoff
-        for cmd in ("/prd x", "/intake x", "/dump x", "/worklog", "/gh-issue 3", "/pr-grind 12"):
+        for cmd in ("/create-prd x", "/intake x", "/dump x", "/worklog", "/gh-issue 3", "/pr-grind 12"):
             sid, d, fk, work = mk(cmd)
             go(sid, "badresume")
             r = end(sid)
@@ -1123,7 +1123,7 @@ def stop_checks():
             ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, "/run-issue 42"]
         ), cl
         d, fk, work = setup_("crash")
-        rec = ui_runner.start("/prd x", SLUG)
+        rec = ui_runner.start("/create-prd x", SLUG)
         live.append(rec)
         sid = end(rec["id"])["id"]
         ui_sessions.update(sid, status="stopped")
@@ -1267,7 +1267,7 @@ def stop_checks():
         assert st == 409 and live_rec["id"] in json.dumps(body), (st, body)
         assert len(calls(fk)) == n0 and ui_sessions.load(sid)["status"] == "stopped"
         os.environ["FAKE_CLAUDE_MODE"] = "normal"
-        for cmd_other in ("/run-issue 43", "/prd x"):
+        for cmd_other in ("/run-issue 43", "/create-prd x"):
             sid2 = cheap(command=cmd_other, work=work)
             st, _b = http_("POST", f"/api/sessions/{sid2}/resume")
             assert st == 200, (cmd_other, st, _b)

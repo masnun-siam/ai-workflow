@@ -228,7 +228,7 @@
     }
   },
   "peer_review": {
-    "_doc": "Peer review (--review on /prd, /intake, /dump, /gh-issue, and custom prompts): one single-lens reviewer per picked lens, prompt = the kind's rubric + the lens prompt. Every picked lens blocks. aiw peer-review validates verdicts and decides.",
+    "_doc": "Peer review (--review on /create-prd, /intake, /dump, /gh-issue, and custom prompts): one single-lens reviewer per picked lens, prompt = the kind's rubric + the lens prompt. Every picked lens blocks. aiw peer-review validates verdicts and decides.",
     "max_rounds": 3,
     "default_lenses": [
       "critical"
@@ -236,6 +236,7 @@
     "diff_max_lines": 3000,
     "rubric": {
       "doc": "The artifact is a doc: a PRD, a brief, or a batch of issue drafts. In the lens prompts, an FR is any requirement it states (a PRD's FR, a brief's requirement, an issue's acceptance criterion), and a section the prompt names (Problem, Goals, Non-goals, Decisions, Open questions) is checked only where the artifact has it. Severity: blocker = two statements that cannot both hold, or a requirement that cannot be tested as written. major = the artifact leaves behaviour undefined for an input or state a requirement will certainly meet. minor = everything else. At most 8 findings, most severe first. Every finding quotes the artifact line it is about (4+ words; whitespace and emphasis ignored), or names the ##/### heading under which something is missing. Every blocker or major sets reraises: the id of your own prior-round finding it raises again, or null. A finding the worker dismissed with a reason is raised again only with new evidence, and the user then decides it; a finding the user decided is raised again only with the new evidence quoted in new_evidence; a same-quote finding that is genuinely new says how it differs in distinct_because. A fix changes the artifact's wording; it never adds implementation (modules, tables, endpoints): a doc is the what and why, never the how. A finding that needs a fact only the user has (evidence, priority, a product choice) is needs_decision, never an edit.",
+      "prd-doc": "The artifact is a doc: a PRD, a brief, or a batch of issue drafts. In the lens prompts, an FR is any requirement it states (a PRD's FR, a brief's requirement, an issue's acceptance criterion), and a section the prompt names (Problem, Goals, Non-goals, Technical design, Decisions, Open questions) is checked only where the artifact has it. Severity: blocker = two statements that cannot both hold, or a requirement that cannot be tested as written. major = the artifact leaves behaviour undefined for an input or state a requirement will certainly meet. minor = everything else. At most 8 findings, most severe first. Every finding quotes the artifact line it is about (4+ words; whitespace and emphasis ignored), or names the ##/### heading under which something is missing. Every blocker or major sets reraises: the id of your own prior-round finding it raises again, or null. A finding the worker dismissed with a reason is raised again only with new evidence, and the user then decides it; a finding the user decided is raised again only with the new evidence quoted in new_evidence; a same-quote finding that is genuinely new says how it differs in distinct_because. A fix changes the artifact's wording. A PRD's `## Technical design` may state contracts (data shape, tables or collections and their fields, endpoints and their fields, events, sync or queued), and a finding asks for one where a requirement needs it; a fix never adds file paths, class or method names, signatures or step-by-step logic, and a finding flags any that are there. A finding that needs a fact only the user has (evidence, priority, a product choice) is needs_decision, never an edit.",
       "change": "The artifact is a change: ## Ask (what the user asked, verbatim), ## Answer (the worker's final answer) and ## Diff (the code change; secrets, binaries and lockfiles are dropped and a long diff is truncated, both noted at the top of the Diff). Judge the change against the Ask. Severity: blocker = the change does not do what the Ask asks, breaks existing behaviour, or the Answer claims something the Diff does not do. major = a defect normal use will certainly hit (an unhandled input or state, an error swallowed, new logic with no test). minor = everything else. At most 8 findings, most severe first. Every finding quotes one line of the artifact (4+ words from a single Diff or Answer line; whitespace and emphasis ignored), or names the ##/### heading under which something is missing. Every blocker or major sets reraises: the id of your own prior-round finding it raises again, or null. A finding the worker dismissed with a reason is raised again only with new evidence, and the user then decides it; a finding the user decided is raised again only with the new evidence quoted in new_evidence; a same-quote finding that is genuinely new says how it differs in distinct_because. A fix may change code: say what to change and where (file:line). Never guess at a dropped or truncated file; name it in a minor finding only when the omission hides something your lens must check. A finding that needs a fact only the user has (intent, priority, a product choice) is needs_decision, never a fix."
     },
     "lenses": {
@@ -269,8 +270,8 @@
       }
     },
     "kinds": {
-      "prd": {
-        "rubric": "doc",
+      "create-prd": {
+        "rubric": "prd-doc",
         "offer": [
           "critical",
           "ceo",

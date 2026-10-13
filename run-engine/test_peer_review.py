@@ -168,10 +168,12 @@ def write(path, data):
 
 with tempfile.TemporaryDirectory() as tmp:
     env = {**os.environ, "CLAUDE_PLUGIN_DATA": tmp}
-    rc, a, err = aiw("peer-review", "new", "prd", "--slug", "o/r export", env=env)
-    rc2, b, _ = aiw("peer-review", "new", "prd", "--slug", "o/r export", env=env)
+    rc, a, err = aiw("peer-review", "new", "create-prd", "--slug", "o/r export", env=env)
+    rc2, b, _ = aiw("peer-review", "new", "create-prd", "--slug", "o/r export", env=env)
     a, b = a.strip(), b.strip()
-    assert rc == 0 and a.startswith(os.path.join(tmp, "peer-review", "prd", "o-r-export-")) and os.path.isdir(a), a
+    assert (
+        rc == 0 and a.startswith(os.path.join(tmp, "peer-review", "create-prd", "o-r-export-")) and os.path.isdir(a)
+    ), a
     assert rc2 in (0, 1), "the same second can collide; a collision is refused, never reused"
     assert rc2 == 1 or b != a
     rc, out, _ = aiw("peer-review", "new", "custom", "--id", "sess-42", env=env)
@@ -189,17 +191,22 @@ with tempfile.TemporaryDirectory() as tmp:
     assert rc == 2 and "--kind" in err, "round 1 needs the kind"
     rc, _, err = aiw("peer-review", "next", rd, "--artifact", prd, "--kind", "dump", "--lenses", "critical,cto")
     assert rc == 2 and "dump offers" in err and "cto" in err, "a lens the kind doesn't offer is refused"
-    rc, out, err = aiw("peer-review", "next", rd, "--artifact", prd, "--kind", "prd")
+    rc, out, err = aiw("peer-review", "next", rd, "--artifact", prd, "--kind", "create-prd")
     assert rc == 0 and out["action"] == "review" and out["lenses"] == ["critical"], (out, err)
     req = json.load(open(os.path.join(rd, "round-1", "request.json")))
-    assert req["kind"] == "prd" and req["rubric"] == "doc" and req["lenses"] == ["critical"], req
+    assert req["kind"] == "create-prd" and req["rubric"] == "prd-doc" and req["lenses"] == ["critical"], req
 
 with tempfile.TemporaryDirectory() as tmp:
     art = write(os.path.join(tmp, "a.md"), PRD)
     rc, out, _ = aiw("peer-review", "next", os.path.join(tmp, "r"), "--artifact", art, "--kind", "custom")
     assert json.load(open(os.path.join(tmp, "r", "round-1", "request.json")))["rubric"] == "change"
 cfg = load_config(None)["peer_review"]
-assert set(cfg["rubric"]) == {"doc", "change"} and "never adds implementation" in cfg["rubric"]["doc"]
+assert set(cfg["rubric"]) == {"doc", "prd-doc", "change"} and "never adds implementation" in cfg["rubric"]["doc"]
+# prd-doc: a PRD's Technical design states contracts, never code.
+assert (
+    "never adds implementation" not in cfg["rubric"]["prd-doc"] and "never adds file paths" in cfg["rubric"]["prd-doc"]
+)
+assert "(Problem, Goals, Non-goals, Technical design, Decisions, Open questions)" in cfg["rubric"]["prd-doc"]
 assert "never adds implementation" not in cfg["rubric"]["change"] and "may change code" in cfg["rubric"]["change"]
 for kind, spec in cfg["kinds"].items():
     assert spec["rubric"] in cfg["rubric"] and set(spec["offer"]) <= set(cfg["lenses"]), kind
@@ -222,7 +229,9 @@ ok("next: round 1 needs --kind, refuses lenses the kind doesn't offer, records k
 with tempfile.TemporaryDirectory() as tmp:
     prd = write(os.path.join(tmp, "prd.md"), PRD)
     rd = os.path.join(tmp, "review")
-    rc, out, err = aiw("peer-review", "next", rd, "--artifact", prd, "--kind", "prd", "--lenses", "critical,ceo,cto")
+    rc, out, err = aiw(
+        "peer-review", "next", rd, "--artifact", prd, "--kind", "create-prd", "--lenses", "critical,ceo,cto"
+    )
     assert rc == 0 and out["lenses"] == ["critical", "ceo", "cto"], (out, err)
     rc, out, _ = aiw("peer-review", "next", rd, "--artifact", prd)
     assert rc == 0 and out["action"] == "wait" and out["missing"] == ["critical", "ceo", "cto"], out
@@ -259,7 +268,7 @@ with tempfile.TemporaryDirectory() as tmp:
     rc, out, err = aiw("peer-review", "next", rd, "--artifact", prd, "--prior", prior)
     assert rc == 0 and out["action"] == "review" and out["round"] == 2 and out["lenses"] == ["critical", "ceo", "cto"]
     req2 = json.load(open(os.path.join(rd, "round-2", "request.json")))
-    assert req2["prior"][0]["quote"] == QUOTE and req2["kind"] == "prd", "the dismissed quote rides along"
+    assert req2["prior"][0]["quote"] == QUOTE and req2["kind"] == "create-prd", "the dismissed quote rides along"
     rc, _, err = put("ceo", verdict("ceo", status="approve", rnd=1))
     assert rc == 5 and "round" in err, "a verdict for an old round is refused"
     sha2 = req2["artifact_sha256"]
@@ -276,15 +285,26 @@ ok("CLI: panel of 3, bad quote refused, revise + decision.json, prior opens roun
 with tempfile.TemporaryDirectory() as tmp:
     env = {**os.environ, "CLAUDE_PLUGIN_DATA": tmp}
     prd = write(os.path.join(tmp, "prd.md"), PRD)
-    first = aiw("peer-review", "new", "prd", "--slug", "export", env=env)[1].strip()
-    aiw("peer-review", "next", first, "--artifact", prd, "--kind", "prd", env=env)
+    first = aiw("peer-review", "new", "create-prd", "--slug", "export", env=env)[1].strip()
+    aiw("peer-review", "next", first, "--artifact", prd, "--kind", "create-prd", env=env)
     os.makedirs(os.path.join(first, "round-3"))
     write(os.path.join(first, "round-3", "request.json"), {"stale": True})  # an old run that went to the cap
     time.sleep(1.1)  # the stamp has 1s resolution
-    second = aiw("peer-review", "new", "prd", "--slug", "export", env=env)[1].strip()
-    rc, out, err = aiw("peer-review", "next", second, "--artifact", prd, "--kind", "prd", env=env)
+    second = aiw("peer-review", "new", "create-prd", "--slug", "export", env=env)[1].strip()
+    rc, out, err = aiw("peer-review", "next", second, "--artifact", prd, "--kind", "create-prd", env=env)
     assert second != first and rc == 0 and out["action"] == "review" and out["round"] == 1, (out, err)
 ok("a second run on the same slug starts at round 1 (the old fixed-per-slug dir inherited stale rounds)")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env = {**os.environ, "CLAUDE_PLUGIN_DATA": tmp}
+    prd = write(os.path.join(tmp, "prd.md"), PRD)
+    rd = os.path.join(tmp, "old-prd-review")
+    os.makedirs(os.path.join(rd, "round-1"))
+    req = {"round": 1, "kind": "prd", "rubric": "prd-doc", "artifact_sha256": "0", "max_rounds": 3}
+    write(os.path.join(rd, "round-1", "request.json"), {**req, "lenses": [], "prior": []})
+    rc, out, err = aiw("peer-review", "next", rd, "--artifact", prd, env=env)
+    assert rc == 2 and "unknown kind 'prd'" in err and "create-prd" in err and "Traceback" not in err, (rc, err)
+ok("next: an in-flight review of a renamed kind (prd) dies cleanly, naming the valid kinds")
 
 assert (
     pr.check_prior([{"lens": "critical", "id": "f1", "disposition": "fixed", "reason": "r"}], {("critical", "f1")})
@@ -311,7 +331,7 @@ with tempfile.TemporaryDirectory() as tmp:
     for rnd in (1, 2, 3):
         write(prd, text)
         rc, out, err = aiw(
-            "peer-review", "next", rd, "--artifact", prd, "--kind", "prd", "--max-rounds", "3", "--prior", pri
+            "peer-review", "next", rd, "--artifact", prd, "--kind", "create-prd", "--max-rounds", "3", "--prior", pri
         )
         assert out["action"] == "review" and out["round"] == rnd, (rnd, out, err)
         v = verdict("critical", [finding(reraises="f1" if rnd > 1 else None)])
@@ -392,8 +412,8 @@ ok("status: not run / unfinished / approved / cap reached, from the last round's
 
 offers = pr.offers()
 assert offers["default"] == ["critical"] and offers["kinds"]["dump"] == ["critical", "ceo", "qa"], offers
-assert pr.check_lenses("prd", ["qa", "critical", "qa"]) == ["qa", "critical"]
-for kind, picked in (("dump", ["cto"]), ("run-issue", ["critical"]), ("prd", [])):
+assert pr.check_lenses("create-prd", ["qa", "critical", "qa"]) == ["qa", "critical"]
+for kind, picked in (("dump", ["cto"]), ("run-issue", ["critical"]), ("create-prd", [])):
     try:
         pr.check_lenses(kind, picked)
         raise AssertionError((kind, picked))

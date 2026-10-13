@@ -253,12 +253,15 @@ def status(review_dir: str) -> str:
 
 
 def _open(review_dir: str, rnd: int, path: str, text: str, prior, max_rounds: int, kind: str, lenses: list) -> None:
+    kinds = _policy()["kinds"]
+    if kind not in kinds:  # e.g. an in-flight review dir of a kind since renamed (prd -> create-prd)
+        die(2, f"unknown kind {kind!r}; one of {', '.join(kinds)}")
     write_json(
         os.path.join(review_dir, f"round-{rnd}", "request.json"),
         {
             "round": rnd,
             "kind": kind,
-            "rubric": _policy()["kinds"][kind]["rubric"],
+            "rubric": kinds[kind]["rubric"],
             "artifact_path": os.path.abspath(path),
             "artifact_sha256": sha(text),
             "max_rounds": max_rounds,
@@ -423,7 +426,7 @@ def register(sub, add) -> None:
     q = ops.add_parser("next", help="open the next round, or decide the open one (JSON on stdout)")
     q.add_argument("review_dir")
     q.add_argument("--artifact", required=True, help="the file under review")
-    q.add_argument("--kind", help="round 1 only: prd, intake, dump, gh-issue or custom")
+    q.add_argument("--kind", help="round 1 only: create-prd, intake, dump, gh-issue or custom")
     q.add_argument("--lenses", help="round 1 only: comma-separated lenses (default from config)")
     q.add_argument("--prior", help="JSON list of {lens, id, disposition, reason} for the last round's findings")
     q.add_argument("--max-rounds", type=int, help="round budget for a new review (default from config)")

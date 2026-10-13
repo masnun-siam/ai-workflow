@@ -1,7 +1,7 @@
 """`aiw refined` — take the plan straight from a refined issue body, skipping researcher + planner.
 
-A `refined` issue (filed by /gh-issue or /jira-to-gh) already carries Acceptance Criteria and a
-numbered How — the planner's own starting point. When the label AND the body both check out, this
+A `refined` issue (filed by /gh-issue, /jira-to-gh or /refine-issues) already carries Acceptance
+Criteria and a numbered How — the planner's own starting point. When the label AND the body both check out, this
 writes the two envelopes those stations would have produced (researcher as an orchestrator skip,
 planner synthesized from the body) so the run routes them like any other. Exit 1 with a reason
 means "not actually refined": the orchestrator runs phases 0.5 and 1 as usual.
@@ -79,6 +79,10 @@ def parse(labels: list[str], body: str, repo: str) -> tuple[dict | None, str]:
         return None, "`## How` is missing or has no numbered steps"
     if re.search(r"\[[^\]\n]*placeholder[^\]\n]*\]|\[TBD\]|\[TODO\]", body, re.IGNORECASE):
         return None, "body still contains a [bracketed placeholder]"
+
+    for name in ("Test root", "Base branch"):
+        if re.fullmatch(r"<[^>]*>", field(how, name) or ""):
+            return None, f"`{name}:` is still a <placeholder>"
 
     test_root = field(how, "Test root") or detect_test_root(repo)
     if not test_root:

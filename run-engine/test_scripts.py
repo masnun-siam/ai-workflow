@@ -1781,30 +1781,31 @@ for heading in ("How", "What"):
     ]
 ok("no DOR_ITEMS pattern matches the How or What heading, keeping them non-DoR sections")
 
-# Regression for issue #42: jira-to-gh.md's Step 5-FLAT (mirroring gh-issue.md's
-# 4-FLAT) must define each task issue's "Body sections:" list with the exact same
-# section names, in the exact same order, as gh-issue.md's own list — copied
-# literally, not hand-maintained separately where it could drift.
+# Regression for issue #42: jira-to-gh.md's Step 5 must define the issue's "Body sections:"
+# list with the exact same section names, in the exact same order, as gh-issue.md's own
+# list — copied literally, not hand-maintained separately where it could drift.
 JIRA_TO_GH_MD = os.path.join(HERE, "..", "commands", "jira-to-gh.md")
 with open(JIRA_TO_GH_MD, encoding="utf-8") as fh:
     jira_to_gh_lines = fh.readlines()
 
-step5_flat_start = next(
-    (i for i, line in enumerate(jira_to_gh_lines) if line.strip().startswith("### 5-FLAT")),
+step5_start = next(
+    (i for i, line in enumerate(jira_to_gh_lines) if line.startswith("## Step 5")),
     None,
 )
-assert step5_flat_start is not None, "jira-to-gh.md has no '### 5-FLAT' section yet (issue #84 not implemented)"
+step6_start = next(i for i, line in enumerate(jira_to_gh_lines) if line.startswith("## Step 6"))
+assert step5_start is not None, "jira-to-gh.md has no '## Step 5' section"
 
 jira_to_gh_body_sections_line = next(
-    line for line in jira_to_gh_lines[step5_flat_start:] if line.strip().startswith("- Body sections:")
+    (line for line in jira_to_gh_lines[step5_start:step6_start] if line.strip().startswith("- Body sections:")),
+    "",
 )
 jira_to_gh_section_names = re.findall(r"\*\*([^*]+)\*\*", jira_to_gh_body_sections_line)
 assert jira_to_gh_section_names == section_names, (jira_to_gh_section_names, section_names)
-ok("jira-to-gh.md's Step 5-FLAT Body sections list exactly matches gh-issue.md's Body sections list")
+ok("jira-to-gh.md's Step 5 Body sections list exactly matches gh-issue.md's Body sections list")
 
-jira_to_gh_child_body = "\n\n".join(f"## {name}\nSome real content for {name}." for name in jira_to_gh_section_names)
-assert dispatch.dor_gaps(jira_to_gh_child_body) == [], dispatch.dor_gaps(jira_to_gh_child_body)
-ok("a jira-to-gh.md task body built from Step 5-FLAT's own section headings screens ready with zero gaps")
+jira_to_gh_issue_body = "\n\n".join(f"## {name}\nSome real content for {name}." for name in jira_to_gh_section_names)
+assert dispatch.dor_gaps(jira_to_gh_issue_body) == [], dispatch.dor_gaps(jira_to_gh_issue_body)
+ok("a jira-to-gh.md issue body built from Step 5's own section headings screens ready with zero gaps")
 
 # The parentheticals were legitimately adapted from gh-issue.md's own step numbering
 # to jira-to-gh.md's step numbering (issue #42 PR review). Pin that any "Step N"
@@ -1870,17 +1871,15 @@ for name, text in (("gh-issue.md", gh_text), ("jira-to-gh.md", jira_text)):
 ok("both commands ensure-create the refined label")
 
 for name, sect in (
-    ("gh-issue.md step 4", _slice(gh_text, "4. Then create a GitHub issue", "### 4-FLAT")),
-    ("jira-to-gh.md Step 5", _slice(jira_text, "## Step 5", "### 5-FLAT")),
-    ("gh-issue.md 4-FLAT", _slice(gh_text, "### 4-FLAT", "\n4.5.")),
-    ("jira-to-gh.md 5-FLAT", jira_text[jira_text.index("### 5-FLAT") :]),
+    ("gh-issue.md step 4", _slice(gh_text, "4. Then create a GitHub issue", "\n4.5.")),
+    ("jira-to-gh.md Step 5", _slice(jira_text, "## Step 5", "## Step 6")),
 ):
     m = re.search(LABEL_RE, sect)
     assert m, (name, "no refined ensure-create")
     first_create = sect.index("gh issue create")
     assert m.start() < first_create, (name, "refined ensure-create must precede gh issue create")
     assert "refined" in sect[first_create:], (name, "refined not applied at create")
-ok("refined is ensure-created before first gh issue create and applied on single and flat paths")
+ok("refined is ensure-created before the gh issue create in both commands and applied there")
 
 # --------------------------------------------------------------------------- dispatch: lane mode
 
@@ -2538,7 +2537,7 @@ assert "3.5. **Decompose.**" in gh_issue_text, "expected the renamed step headin
 assert "Epic check" not in gh_issue_text, "old 'Epic check' heading text must be gone"
 ok("commands/gh-issue.md step 3.5 is headed 'Decompose.' and no longer says 'Epic check'")
 
-step35 = " ".join(_slice(gh_issue_text, "3.5. **Decompose.**", "3.6.").split())
+step35 = " ".join(_slice(gh_issue_text, "3.5. **Decompose.**", "\n4. ").split())
 
 for choice in ("Create as shown", "Let me edit the list"):
     assert choice in step35, f"step 3.5 missing AskUserQuestion choice label: {choice!r}"
@@ -2562,11 +2561,52 @@ ok("commands/gh-issue.md step 3.5 splits a failing task rather than going coarse
 assert "~8" not in step35 and "more-than-8" not in step35, "old ~8 threshold must be gone"
 ok("commands/gh-issue.md step 3.5 no longer uses the ~8 threshold")
 
-assert "1 task" in step35 and "step 4" in step35 and "4-FLAT" in step35 and "4-EPIC" not in step35
-ok("commands/gh-issue.md step 3.5 routes 1 task to step 4 / 4-FLAT, not 4-EPIC")
+assert "1 task" in step35 and "step 4" in step35 and "4-EPIC" not in step35
+assert "2 or more tasks" in step35 and "/create-prd" in step35 and "creates nothing" in step35, (
+    "gh-issue 3.5: 2+ tasks stop and route to /create-prd"
+)
+ok("commands/gh-issue.md step 3.5 routes 1 task to step 4; 2 or more stop and route to /create-prd")
 
 assert "No round limit" in step35 and re.search(r"re-apply the (layer )?rubric", step35, re.I)
 ok("commands/gh-issue.md step 3.5 keeps 'No round limit' and re-applies the rubric on edit")
+
+_gh = _read("commands", "gh-issue.md")
+for _gone in (
+    "4-FLAT",
+    "3.6. **Save the task list.**",
+    "## Saved task list and the epic",
+    "Resume this list",
+    "docs/tasks/<slug>.md",
+    "aiw epic split",
+    "/prd --update",
+    "## Epic parent",
+):
+    assert _gone not in _gh, f"gh-issue still has {_gone!r}"
+assert "→ next: /create-prd <input>" in _gh and "→ next: herdr-dispatch <n>" in _gh, "gh-issue next lines"
+assert "→ next: /fix-blockers" not in _gh, "gh-issue files no epic now"
+assert "ai-workflow:prd" not in _gh and not re.search(r"`/prd\b", _gh), "gh-issue still names the old /prd"
+ok("gh-issue: one issue per run; 2+ tasks stop and route to /create-prd")
+
+# gh-issue's HARD RULE keeps every prohibition, its permitted-writes list and its Scope lapse (was #79).
+_hr = " ".join(_slice(_gh, "**HARD RULE", "Do the following:").split())
+for needle in (
+    "this skill only ever creates a GitHub issue. It never touches code.",
+    "NEVER use Write, Edit, or NotebookEdit",
+    "NEVER run a mutating shell command",
+    "The ONLY writes permitted are the **Peer review** draft under `<data_dir>` (outside the repo), "
+    "the temp body file at `/tmp/gh-issue-body.md`, the `gh issue create` / `gh issue edit` / `gh project` calls below, "
+    "`aiw ask` when headless",
+    "the notes-vault dump in step 7",
+    '"It\'s trivial" is not an exception',
+    "do NOT apply it. Record it under a **Proposed Fix** section",
+    "**Scope.** These constraints bind steps 0\u20137 of this skill only.",
+    "they lapse the moment the issue URL is returned",
+    "this rule must not be carried into them",
+):
+    assert needle in _hr, f"gh-issue HARD RULE lost {needle!r}"
+for _gone in ("sole exception", "docs/tasks/", "aiw epic split", "Issue:` slots"):
+    assert _gone not in _hr, f"gh-issue HARD RULE still carves out {_gone!r}"
+ok("gh-issue HARD RULE keeps its prohibitions, permitted writes and Scope lapse; no task-list or epic exception")
 
 readme_text = _user_docs()
 assert "splits a large brief" not in readme_text, (
@@ -3435,396 +3475,63 @@ assert "immediate" in how_it_works_text.lower() or "as soon as" in how_it_works_
 assert "sole channel" not in how_it_works_text.lower(), how_it_works_text
 ok("docs/HOW-IT-WORKS.md mentions the immediate per-blocker ask, not just the once-at-the-end description")
 
-# Issue #79: gh-issue step 3.6 saves the approved task list; HARD RULE gets one exception.
-_g79 = _read("commands", "gh-issue.md")
-_hr79 = " ".join(_slice(_g79, "**HARD RULE", "Do the following:").split())
-for needle in ("docs/tasks/", "Obsidian", "wiki"):
-    assert needle in _hr79, f"HARD RULE missing {needle!r}"
-assert "only when" in _hr79.lower() and ("sole" in _hr79.lower() or "nothing else" in _hr79.lower()), _hr79
-ok("gh-issue.md HARD RULE carves out docs/tasks/ (Obsidian/wiki only when chosen) as the sole exception")
 
-for needle in (
-    "NEVER use Write, Edit, or NotebookEdit",
-    "NEVER run a mutating shell command",
-    "/tmp/gh-issue-body.md",
-    "/dump",
-    '"It\'s trivial" is not an exception',
-):
-    assert needle in _hr79, f"earlier HARD RULE text lost: {needle!r}"
-ok("gh-issue.md HARD RULE block keeps every earlier prohibition")
-assert "**Scope.**" in _g79
-ok("gh-issue.md still has its Scope paragraph (whole-file check)")
-
-_i35 = _g79.index("3.5. **Decompose.**")
-assert "3.6." in _g79[_i35:], "step 3.6 missing"
-_i36 = _g79.index("3.6.", _i35 + 5)
-_i4 = _g79.index("4. Then create a GitHub issue")
-assert _i35 < _i36 < _i4, "step 3.6 must sit between 3.5 and 4"
-ok("gh-issue.md has step 3.6 between 3.5 and 4")
-
-_raw36 = _slice(_g79, "3.6.", "4. Then create a GitHub issue")
-_s36 = " ".join(_raw36.split())
-_low36 = _s36.lower()
-for f in (
-    "sequence number",
-    "title",
-    "outcome",
-    "files",
-    "symbols",
-    "acceptance criteria",
-    "verify command",
-    "Depends on: task <k>",
-    "issue-number",
-):
-    assert f.lower() in _low36, f"step 3.6 missing per-task field {f!r}"
-ok("step 3.6 names every per-task field")
-
-for needle in (
-    "docs/tasks/<slug>.md",
-    "obsidian vault=notes",
-    "05-Work/<Project>/<Feature>/Tasks.md",
-    "Tasks-<Title-With-Dashes>.md",
-    "on demand",
-    "separate",
-):
-    assert needle.lower() in _low36, f"step 3.6 missing {needle!r}"
-assert "never" in _low36 and "git add" in _low36 and "commit" in _low36
-assert "confirmation" in _low36 or "confirm" in _low36
-ok("step 3.6 covers local save, Obsidian path, wiki page and separate push confirmation")
-
-assert "fail" in _low36 and "by name" in _low36 and "local" in _low36
-assert "no wiki" in _low36 and "failed destination" in _low36
-ok("step 3.6 keeps local save on failure, names failed destination, no-wiki counts as failed")
-
-assert "size rubric" in _low36 and "flag" in _low36
-ok("step 3.6 flags tasks that still fail the size rubric")
-
-assert "no title" in _low36 and "slug" in _low36 and "confirm" in _low36
-ok("step 3.6 proposes a slug for title-less free text")
-
-assert "overwrit" in _low36 and "ask" in _low36
-ok("step 3.6 never silently overwrites an existing file")
-
-for bad in (
-    "4-EPIC",
-    "three choices",
-    "coarser",
-    "~8",
-    "more-than-8",
-    "4. Then create a GitHub issue",
-    "3.5. **Decompose.**",
-):
-    assert bad not in _s36, f"step 3.6 slice must not contain {bad!r}"
-assert not any(ln.lstrip().startswith("- Body sections:") for ln in _raw36.splitlines())
-ok("step 3.6 slice stays scoped (no 4-EPIC / 3.5 / step 4 leakage)")
-
-# Issue #80: flat creation loop (4-FLAT) replaces 4-EPIC in gh-issue.md.
-_g80 = _read("commands", "gh-issue.md")
-flat = _slice(_g80, "### 4-FLAT", "\n4.5.")
-flat_ws = " ".join(flat.split())
-assert _g80.count("### 4-FLAT. Create the flat issues") == 1
-ok("gh-issue.md has the 4-FLAT heading exactly once")
-
-_create = flat.index("gh issue create")
-assert "--body-file /tmp/gh-issue-body.md" in flat and "--body " not in flat
-_lab = [ln for ln in flat.splitlines() if "--label" in ln and ("gh issue create" in ln or "--label" in ln)]
-assert any("refined" in ln and "prd-<slug>" in ln for ln in _lab), _lab
-ok("4-FLAT creates with --label refined,prd-<slug> and --body-file, never --body")
-
-_prd = re.search(r"gh label create prd-<slug>\s[^\n]*2>/dev/null \|\| true", flat)
-assert _prd and _prd.start() < _create
-_ref = re.search(LABEL_RE, flat)
-assert _ref and _ref.start() < _create
-assert flat.count("gh label create prd-<slug>") == 1 and flat.count("gh label create refined") == 1
-ok("4-FLAT ensure-creates prd-<slug> and refined once each before the first create")
-
-assert "same section list as step 4" in flat_ws and "inlined, never referenced" in flat_ws
-assert "docs/tasks/<slug>.md" in flat
-ok("4-FLAT bodies reuse step 4 sections, inline context, and link docs/tasks/<slug>.md in Notes")
-
-assert "Depends on: task <k>" in flat and "Depends on: #<n>" in flat and "earlier" in flat
-ok("4-FLAT resolves Depends on: task <k> to Depends on: #<n> from earlier tasks")
-
-assert "Issue:" in flat and "docs/tasks/<slug>.md" in flat and "#<n>" in flat
-assert re.search(r"write.?back", flat, re.I)
-assert re.search(r"no local file|skip the save", flat_ws, re.I)
-ok("4-FLAT writes #<n> back into the Issue: slot and skips when no local file was saved")
-
-assert "one at a time" in flat_ws and "list order" in flat_ws
-ok("4-FLAT creates issues one at a time in list order")
-
-assert "gh label create lean" not in flat
-assert not any("--label" in ln and "lean" in ln for ln in flat.splitlines())
-assert "`lean` is never applied here." in flat_ws
-ok("4-FLAT never applies lean")
-
-# ADR 0003 brought the parent epic back, but only through "Saved task list and the epic".
-_pre80 = _g80[: _g80.index("## Saved task list and the epic")]
-for bad in ("4-EPIC", "project-board"):
-    assert bad not in _g80, bad
-for bad in ("sub_issues", "epic-<parent>", "gh label create epic"):
-    assert bad not in _pre80, bad
-ok("gh-issue.md: epic machinery only in 'Saved task list and the epic'; no 4-EPIC or board")
-
-_hr80 = " ".join(_slice(_g80, "**HARD RULE", "Do the following:").split())
-assert "4-FLAT" in _hr80 and "4-EPIC" not in _hr80
-assert "Issue:" in _hr80 and "docs/tasks/<slug>.md" in _hr80
-ok("gh-issue.md HARD RULE names 4-FLAT and the Issue: slot write-back")
-
-assert not any(ln.lstrip().startswith("- Body sections:") for ln in flat.splitlines())
-ok("4-FLAT adds no '- Body sections:' line")
-
-# Issue #80 review: pin each 4-FLAT rule sentence so a single-edit reversal fails.
-assert flat_ws.index("Preflight, before anything is created") < flat_ws.index("gh label create refined")
-assert "check every `Depends on: task <j>` in task k has j < k; otherwise stop, report the offending task" in flat_ws
-ok("4-FLAT preflight rejects forward Depends on edges before creating anything")
-assert "already exists, stop and ask for a new slug" in flat_ws
-ok("4-FLAT stops for a new slug when step 3.6 skipped the save (collision)")
-assert "never `replace_all` and never Edit on that line alone" in flat_ws
-assert (
-    "Edit with an `old_string` that starts at the task's own `## Task <k> \u2014 <title>` heading and runs through its `Issue: \u2014` line (unique), setting `Issue: #<n>`"
-    in flat_ws
-)
-assert "Right after each successful create" in flat_ws and "Skip when step 3.6 saved no local file" in flat_ws
-ok("4-FLAT write-back is a per-task heading-anchored Edit, never replace_all")
-assert "Check each create's and each write-back's exit status. On failure, stop like a failed create" in flat_ws
-assert "never delete created issues" in flat_ws and "unrecorded in the file" in flat_ws
-ok("4-FLAT stops on a failed create or write-back and never deletes created issues")
-assert "edited only to fill `Issue:` slots in `4-FLAT`" in _hr80
-assert "for that one path only" in _hr80 and "no other repo file" in _hr80
-assert not re.search(r"edit(ed)?\s+(freely|any|anything)", _hr80, re.I) and "freely" not in _hr80
-ok("HARD RULE edit exception is narrow: Issue: slots in the one saved file only")
-
-# Issue #81: resume from the saved list and partial-failure retry in gh-issue.md.
-_g81 = _read("commands", "gh-issue.md")
-flat = _slice(_g81, "### 4-FLAT", "\n4.5.")
-flat_ws = " ".join(flat.split())
-s36 = " ".join(_slice(_g81, "3.6.", "4. Then create a GitHub issue").split())
-_choices = 'exactly these two choices: **"Retry the missing ones"**, **"Stop here"**'
-assert _choices in flat_ws and "AskUserQuestion" in flat_ws
-assert _g81.count(_choices) == 1
-assert _g81.count('**"Stop here"**') >= 1 and _g81.count('**"Retry the missing ones"**') >= 1
-ok("4-FLAT failure prompt offers exactly the two choices Retry the missing ones / Stop here")
-
-assert flat_ws.index("Check each create's and each write-back's exit status") < flat_ws.index(
-    '**"Retry the missing ones"**'
-)
-assert flat.index("gh issue create") < flat_ws.index('**"Retry the missing ones"**')
-assert flat_ws.index("gh issue create") < flat_ws.index('**"Stop here"**')
-ok("4-FLAT failure prompt sits after the create call inside the failure sub-step")
-
-assert "re-enter the loop at the failed task" in flat_ws
-assert "reusing the already-known issue numbers of earlier tasks for their `Depends on:` lines" in flat_ws
-assert "never re-create a task that already has an issue" in flat_ws
-ok("4-FLAT Retry re-enters at the failed task and never re-creates an existing issue")
-
-assert '**"Stop here"**: end the run and report the partial state' in flat_ws
-assert "the created issues (number and URL)" in flat_ws and "the missing ones (by planned title)" in flat_ws
-ok("4-FLAT Stop ends the run and reports created and missing tasks")
-
-for _p in (
-    '**"Resume this list"**',
-    "read it, show which tasks have no issue number yet",
-    "create only tasks without an issue number, in list order",
-    "reuse the existing `Issue: #<n>` numbers for their `Depends on:` lines",
-):
-    assert _p in flat_ws, _p
-assert flat_ws.index("Resume this list") < flat_ws.index("gh label create refined")
-ok("4-FLAT resume uses the saved list and runs in the preflight before any create")
-
-for _p in ('**"Resume this list"**', "never overwrite silently", "filled"):
-    assert _p in s36, _p
-assert "overwrit" in s36 and "ask" in s36
-ok("step 3.6 offers Resume this list on a collision and never overwrites silently")
-
-assert "If every slot is filled, create nothing" in flat_ws
-assert "or already in its `Issue:` slot" in flat_ws
-assert "Depends on: task <k>" in flat and "Depends on: #<n>" in flat and "earlier" in flat
-ok("4-FLAT resume of a complete list creates nothing and reuses slot numbers for dependencies")
-
-assert "gh issue list --label prd-<slug> --state all --limit 200" in flat
-assert "Task <n> of docs/tasks/<slug>.md" in flat_ws
-assert "instead of creating it again" in flat_ws
-assert "gets its write-back retried, not a second create" in flat_ws
-assert flat_ws.index("gh issue list --label prd-<slug>") < flat_ws.index("gh label create refined")
-ok("4-FLAT resume and retry never duplicate a created-but-unrecorded issue")
-
-assert "Never close or delete an issue already created" in flat_ws
-assert "a partial list is a recoverable state" in flat_ws
-assert "never delete created issues" in flat_ws
-assert not re.search(r"gh issue (close|delete)", _g81)
-ok("4-FLAT never closes or deletes created issues")
-
-assert "three choices" not in flat_ws
-assert 'Retry the missing one"' not in _g81 and "Stop now" not in _g81
-ok("4-FLAT choice labels have no variants")
-
-assert "4-epic" not in _g81.lower()  # ADR 0003: the parent epic is back, the old 4-EPIC flow is not
-assert flat.count("gh label create refined") == 1
-assert "already exists, stop and ask for a new slug" in flat_ws
-assert "Skip when step 3.6 saved no local file" in flat_ws
-assert "edited only to fill `Issue:` slots in `4-FLAT`" in " ".join(
-    _slice(_g81, "**HARD RULE", "Do the following:").split()
-)
-ok("#81 keeps the #80 regression guards")
-
-# Review round: pin the wording whose single-edit reversals survived mutation testing.
-assert "leaves the file as is" in s36 and "uses the saved list instead of the one just approved" in s36
-assert "Resume skips the Obsidian/wiki destination writes" in s36
-_ch = flat[flat.index("exactly these two choices") : flat.index("Never close or delete an issue already created")]
-assert len(re.findall(r'^\s*- \*\*"', _ch, re.M)) == 2, "failure prompt must have exactly two option bullets"
-assert "This resume branch overrides the new-slug stop above" in flat_ws
-assert "Apply the duplicate guard above before every create after a failure" in flat_ws
-assert (
-    flat_ws.count("--json number,url,title,body") == 2
-    and "whose title also matches that task's planned title" in flat_ws
-)
-assert "the `j < k` check runs on the saved list" in flat_ws
-ok(
-    "#81 pins resume-as-is, two-choice bullets, new-slug carve-out, retry duplicate guard, title match, saved-list edge check"
-)
-
-
-# Issue #82: per-issue factcheck, one-time assignees/project, ordered list return.
+# Issue #82 (single-issue part): factcheck the created issue, ask assignees/project once before the create.
 def _n(t):
     return " ".join(t.split())
 
 
 g = _read("commands", "gh-issue.md")
-flat = _slice(g, "### 4-FLAT", "\n4.5.")
-flat_ws = _n(flat)
-s4 = _n(_slice(g, "4. Then create a GitHub issue", "### 4-FLAT"))
+s4 = _n(_slice(g, "4. Then create a GitHub issue", "\n4.5."))
 s45 = _n(_slice(g, "\n4.5.", "\n5. Assign"))
 s5 = _n(_slice(g, "\n5. Assign", "\n6. Add to a GitHub Project"))
 s6 = _n(_slice(g, "\n6. Add to a GitHub Project", "\n7. Dump"))
-close = _n(g[g.rindex("Return the issue URL") :])
 
-for _p in (
-    "once per issue created in this run (one from step 4, each one from `4-FLAT`)",
-    "each time with just that issue's number/URL and `owner/repo`",
-):
-    assert _p in s45, _p
-ok("#82 factcheck runs once per created issue")
-
+assert "with just the created issue's number/URL and `owner/repo`" in s45
 for _p in (
     "a `Source:` line in the Notes section pointing outside the repo",
     "is expected traceability from `/intake`",
-    "PASS",
+    "`PASS` \u2192 continue with step 5",
     "ISSUES FOUND",
     "gh issue edit <n> --body-file /tmp/gh-issue-body.md",
     "Do not silently ignore a flagged discrepancy",
 ):
     assert _p in s45, _p
-ok("#82 factcheck keeps its existing rules")
+ok("#82 factcheck runs on the created issue and keeps its rules")
 
-for _p in (
-    "Ask this once per run, never per issue, and apply the chosen logins to every issue this run creates",
-    "multiSelect: true",
-    "(as `@me`) recommended first",
-    "on every `gh issue create`",
-):
+for _p in ("Ask this once, before step 4's create", "multiSelect: true", "(as `@me`) recommended first"):
     assert _p in s5, _p
 assert s5.count("AskUserQuestion") == 1
-ok("#82 assignees are asked once and applied to every create")
+ok("#82 assignees are asked once, before the create")
 
 for _p in (
-    "Ask the project and field questions once per run and apply the answers to every issue this run creates",
-    "Add every issue to each chosen project at creation time",
-    "Set each chosen field on every issue",
-):
-    assert _p in s6, _p
-ok("#82 projects are asked once and applied to every issue")
-
-for _p in (
+    "Ask the project and field questions once, before step 4's create",
+    'one `--project "<title>"` flag per project on the create (same call as step 4/5)',
     "If any `gh project` call fails, don't abort",
-    "keep going with the remaining issues and fields",
-    "Report each affected issue URL and state plainly which fields couldn't be set and why",
+    "state plainly which fields couldn't be set and why",
     "gh auth refresh -s project",
+    "`gh issue view <n> --repo <owner>/<repo> --json projectItems`",
+    "Do NOT verify by paginating `gh project item-list`",
+    "Zero projects \u2192 skip this step entirely, go straight to returning the URL.",
 ):
     assert _p in s6, _p
-ok("#82 a project failure does not abort the remaining issues")
+ok("#82 projects are asked once, set on the issue, verified, and a failure does not abort")
 
-assert (
-    "Verify project fields landed on every issue with `gh issue view <n> --repo <owner>/<repo> --json projectItems`"
-    in s6
-)
-assert "Do NOT verify by paginating `gh project item-list`" in s6
-ok("#82 project fields are verified on every issue")
-
-assert "Zero projects \u2192 skip this step entirely, go straight to returning the URL(s)." in s6
-ok("#82 a repo with no projects is skipped silently")
-
-_ask = "Ask step 5's assignee question and step 6's project and field questions here, once for the whole list and before the first create"
-assert _ask in flat_ws
-assert flat_ws.index("once for the whole list") < flat_ws.index("gh label create refined")
-assert flat_ws.index("once for the whole list") < flat_ws.index("gh issue create")
-_pre = "on the `4-FLAT` path in its sub-step 0 preflight, before the first create"
-assert _pre in s5 and _pre in s6
-ok("#82 questions are asked in the preflight before the first create")
-
-assert "skip them when nothing is left to create" in flat_ws
-ok("#82 nothing left to create means no questions")
-
-_add = "Add step 5's `--assignee` flags and step 6's `--project` flags from the preflight answers to every create."
-assert _add in flat_ws and flat_ws.index(_add) > flat_ws.index("gh issue create")
-ok("#82 preflight answers reach every flat create")
-
-for _p in (
-    "then return the epic parent's URL followed by the ordered list of issue URLs, one per task in list order",
-    "hand control back to its Preflight step 3",
-    "with the parent URL and that ordered list of issue URLs for 2 or more",
-):
-    assert _p in close, _p
-ok("#82 the ordered list is returned and handed back")
-
-assert "Return the issue URL when step 4 created one issue" in close
-assert "with that issue number for one issue" in close
 assert 'gh issue create --title "..." --label "refined,..." --body-file /tmp/gh-issue-body.md' in s4
 assert (
     "ask step 5's assignee question and step 6's project and field questions first, and add their `--assignee` / `--project` flags to this create"
     in s4
 )
-
-assert 'one `--project "<title>"` flag per project on every create (same call as step 4/5)' in s6
-assert "Retry reuses the preflight answers and does not re-ask." in s6
-_ps = flat_ws[flat_ws.index("0. Preflight") : flat_ws.index("1. Ensure the labels")]
-assert _ps.index("once for the whole list") > _ps.index("This resume branch overrides")
-assert _ps.index("once for the whole list") > _ps.index("If every slot is filled, create nothing")
-_f5 = flat_ws[flat_ws.index("5. Check each create") :]
-assert _f5.count("stop") == 1 and "first failure" not in _f5
-assert "On failure, stop like a failed create: report the created issues (number and URL)" in _f5
-assert "(including issues reused on resume)" in close
-assert "`PASS` \u2192 continue with the next issue's factcheck, then step 5" in s45
-_rt = (
-    "retry that create once without `--project`, then after the loop add the issue to the chosen projects with "
-    "`gh project item-add <number> --owner <owner> --url <issue-url>` and report it as a project failure in step 6"
-)
-assert _rt in flat_ws
-assert "On the `4-FLAT` path this skips only the project questions; the run goes on to the first create." in s6
-assert "Zero projects \u2192 skip this step entirely, go straight to returning the URL(s)." in s6
-assert "once per issue created in this run (one from step 4, each one from `4-FLAT`)" in s45
-assert "On a resume, also apply 4.5 and step 6 to reused issues never factchecked in an earlier run" in s45
-ok("#82 review-fix wording pinned")
-_sp = "on the step 4 path before its create"
-assert _sp in s5 and _sp in s6
-ok("#82 single-issue path is unchanged")
-
-assert "4-epic" not in g.lower()  # ADR 0003
-assert not re.search(r"gh issue (close|delete)", g)
-assert "--body " not in flat
-assert flat.count("gh label create refined") == 1
-assert g.count('exactly these two choices: **"Retry the missing ones"**, **"Stop here"**') == 1
-assert not any(ln.lstrip().startswith("- Body sections:") for ln in flat.splitlines())
-assert "`lean` is never applied here." in flat_ws
-ok("#82 keeps the #80 and #81 guards")
+assert "4-epic" not in g.lower() and not re.search(r"gh issue (close|delete)", g)
+for _gone in ("every issue this run creates", "ordered list", "reused issues", "on a resume"):
+    assert _gone not in g.lower(), f"gh-issue still has multi-issue wording {_gone!r}"
+ok("#82 single-issue path: one create carries the assignee and project flags")
 
 # Issue #83
 jira_cmd = _read("commands", "jira-to-gh.md")
 gh_cmd = _read("commands", "gh-issue.md")
-gh35 = _n(_slice(gh_cmd, "3.5. **Decompose.**", "3.6."))
-gh36 = _n(_slice(gh_cmd, "3.6.", "4. Then create a GitHub issue"))
-s45 = _slice(jira_cmd, "## Step 4.5 \u2014 Decompose", "## Step 4.6")
-s46 = _slice(jira_cmd, "## Step 4.6 \u2014 Save the task list", "## Step 5 \u2014")
+gh35 = _n(_slice(gh_cmd, "3.5. **Decompose.**", "\n4. "))
+s45 = _slice(jira_cmd, "## Step 4.5 \u2014 Decompose", "## Step 5")
 
 
 def _span(t, first, last):
@@ -3843,162 +3550,45 @@ def _mirror_span(src, dest, first, last, sub=None):
     assert want == _span(dest, first, last), first
 
 
-s45n, s46n = _n(s45), _n(s46)
+s45n = _n(s45)
 _mirror_span(gh35, s45n, "Every task is one layer-scoped deliverable", "No round limit.")
+# The rubric lives in gh-issue 3.5, jira-to-gh 4.5 and create-tasks step 5; they must not drift.
+_ct_raw = _read("skills", "create-tasks", "SKILL.md")
+_mirror_span(gh35, _n(_ct_raw), "Every task is one layer-scoped deliverable", "split the failing task")
 ok("#83 Step 4.5 mirrors rubric, choices, edit loop (whole span)")
-assert (
-    '**"Create as shown"**: route on the approved list\'s task count \u2014 1 task goes to Step 5 (single-task path); '
-    "2 or more tasks go to `5-FLAT`, in the list's dependency order, after Step 4.6 saves the list."
-) in s45n
 assert len(re.findall(r'^\s*- \*\*"', s45, re.M)) == 2
 assert "Build a numbered task list seeded from Step 3's field mapping" in s45n
 assert "jira-to-gh has no grilling step" in s45n
 assert "Use GitNexus MCP (`gitnexus_query`, `gitnexus_context`) to find the relevant code" in s45n
 assert "each task's issue needs this for its Context / Affected Code and How path:line references" in s45n
-assert not re.search(r"child", s45 + s46, re.I)
-assert (
-    jira_cmd.index("## Step 4.5 \u2014 Decompose")
-    < jira_cmd.index("## Step 4.6 \u2014 Save the task list")
-    < jira_cmd.index("## Step 5 \u2014 Create GitHub issue (single-task path)")
-)
-ok("#83 routing, two bullets, Jira intake kept, heading order")
-assert (
-    'Runs once, right after Step 4.5\'s "Create as shown" and before its routing creates any issue. '
-    "Slug: kebab-case from the Jira ticket's summary (Step 3's title)."
-) in s46n
-assert (
-    "This step is skipped when exactly 1 task was approved: Step 5 files it as a single issue "
-    "and no task list is saved."
-) in s46n
-_mirror_span(
-    gh36, s46n, "Ask ONE `AskUserQuestion` (multiSelect)", "stop before creating any issue.", ("`4-FLAT`", "`5-FLAT`")
-)
-assert "stop before creating any issue. Remove any temp files this skill created before stopping." in s46n
-assert "\n\nRemove any temp files this skill created before stopping." in s46 and s46.rstrip().endswith(
-    "before stopping."
-)
-assert s46.count("Remove any temp files this skill created before stopping.") == 1
-ok("#83 Step 4.6 mirrors gh-issue 3.6")
+assert not re.search(r"child", s45, re.I) and "epic" not in s45.lower().replace("so they get an epic", "")
+assert jira_cmd.index("## Step 4.5 \u2014 Decompose") < jira_cmd.index("## Step 5 \u2014 Create GitHub issue")
+ok("#83 two bullets, Jira intake kept, heading order")
 assert not any(w in s45n for w in ("~8", "more-than-8", "three choices", "coarser", "bigger epic"))
 assert "File as one issue" not in _n(jira_cmd)
-assert "This step runs only when exactly 1 task was approved in Step 4.5." in _n(
-    _slice(jira_cmd, "## Step 5 \u2014", "### 5-FLAT")
+assert "This step runs when exactly 1 task was approved in Step 4.5." in _n(
+    _slice(jira_cmd, "## Step 5 \u2014", "## Step 6")
 )
-assert "epic" not in s45.lower() and "epic" not in s46.lower()
 jl = jira_cmd.splitlines()
 assert jl[22] == "- Issue type (bug, story, task, epic)"
 assert jl[27] == "- Linked issues / parent epic"
 assert "4-epic" not in gh_cmd.lower()  # ADR 0003
 ok("#83 old guard gone, Step 5 single-task, epic lines untouched")
 
-# Issue #84
-ghf = _n(_slice(gh_cmd, "### 4-FLAT", "\n4.5.")).replace("step 3.6", "Step 4.6").replace("step 3.5", "Step 4.5")
-jfr = _slice(jira_cmd, "### 5-FLAT", "## Step 6")
-jf = _n(jfr)
-assert jira_cmd.count("### 5-FLAT. Create the flat issues") == 1 and len(jf) > 1000
-_SPAN_TAILS = {
-    "create nothing and report the existing issues.": " 1. Ensure the labels",
-    'description "task from docs/tasks/<slug>.md" 2>/dev/null || true': " ``` 2. Write one",
-    "`lean` is never applied here.": " 4. Write-back: every",
-    "Skip when Step 4.6 saved no local file.": " 5. Check each create's",
-    "not created twice.": ' - **"Stop here"**: first',
-}
-for first, last in (
-    ("Preflight, before anything is created", "create nothing and report the existing issues."),
-    (
-        "Ensure the labels once, before the first create",
-        'description "task from docs/tasks/<slug>.md" 2>/dev/null || true',
-    ),
-    ("Create the issues one at a time in list order.", "`lean` is never applied here."),
-    ("Write-back: every task block ends", "Skip when Step 4.6 saved no local file."),
-    ("Check each create's and each write-back's exit status.", "not created twice."),
-):
-    _mirror_span(ghf, jf, first, last)
-    tail = jf[jf.index(last, jf.index(first)) + len(last) :][:40]
-    assert tail.startswith(_SPAN_TAILS[last]), (last, tail)
-ok("#84 5-FLAT mirrors gh-issue 4-FLAT preflight, labels, create, write-back, failure (whole spans)")
-assert "Skip when Step 4.6 saved no local file." in jf and "create nothing and report the existing issues." in jf
-ok("#84 resume-all-filled and no-local-file write-back skip are present")
-guard = "gh issue list --label prd-<slug> --state all --limit 200 --json number,url,title,body"
-assert ghf.count(guard) == 2 and jf.count(guard) == 2
-ok("#84 duplicate guard appears as often as in 4-FLAT")
-for sent in (
-    "Context is inlined, never referenced: a task body must stand alone. Each How covers only its own task. Notes links `Task <n> of docs/tasks/<slug>.md`.",
-    "end the run and report the partial state (created vs. missing); the filled `Issue:` slots let a later run resume the list.",
-    "Never close or delete an issue already created \u2014 a partial list is a recoverable state.",
-):
-    assert ghf.count(sent) == 1 and sent in jf, sent
-ok("#84 verbatim inlined-context, Stop-here tail and never-close sentences")
-order = [
-    "Preflight",
-    "gh label create refined",
-    "gh label create prd-<slug>",
-    "gh issue create",
-    "Write-back:",
-    "Check each create's",
-    "gh-issue-factchecker",
-]
-idx = [jf.index(x) for x in order]
-assert idx == sorted(idx) and len(set(idx)) == len(idx), idx
-ok("#84 ordering inside 5-FLAT")
-assert "Jira context from Step 3 inlined" in jf
-assert "a Jira key/URL in the **Notes** section is expected traceability from `$1`" in jf
-assert "once per issue" in jf and "reused on resume" in jf
-stop = next(ln for ln in jf.split('- **"Stop here"**')[1:2])
-assert (
-    "first run Step 6's attachment upload against the issues created so far (skip it if none were created), then Step 7's cleanup, then end the run"
-    in stop
-), stop[:400]
-assert jf.startswith(
-    "### 5-FLAT. Create the flat issues This section runs only when Step 4.5 routed 2 or more tasks here \u2014 it is an alternate path to Step 5 above, not a sub-case nested under it. One issue per task"
-)
-assert "`commands/gh-issue.md`" in jf and "`4-FLAT`" in jf and "Assignees and project-board questions" in jf
-assert "deliberately NOT mirrored" in jf
-ok("#84 Jira adaptations pinned")
-step3_84 = _slice(jira_cmd, "## Step 3", "## Step 4")
-assert "5-FLAT" in step3_84 and "`lean` is never applied" in step3_84
-assert not re.search(r"5-EPIC|parent|child", step3_84)
-step6_84 = _slice(jira_cmd, "## Step 6", "## Step 7")
-tgt = _n(step6_84)
-assert "<TARGET_ISSUE>" in tgt and "`5-FLAT`" in tgt and not re.search(r"parent|child", tgt)
-assert (
-    "or each issue created by `5-FLAT` on the multi-task path (every issue created in this run, not re-attached on resume)."
-    in tgt
-)
-closing = _n(jira_cmd[jira_cmd.rindex("Return the issue URL") :])
-assert (
-    "return the ordered list of issue URLs, one per task in list order (including issues reused on resume)" in closing
-)
-assert "parent URL" not in closing and "child URLs" not in closing
-ok("#84 Step 3 note, Step 6 target and closing paragraph")
-heads = set(re.findall(r"^#{1,3} Step (\d+(?:\.\d+)?)", jira_cmd, re.M))
-assert set(re.findall(r"\bStep (\d+(?:\.\d+)?)", jira_cmd)) <= heads
-assert "Step 5-" not in jira_cmd
-# 4-FLAT is legitimately named once, in the 5-FLAT scope note (gh-issue.md's flat flow); 5-FLAT is the only other backticked ref.
-assert set(re.findall(r"`(\d+-[A-Z]+)`", jira_cmd)) == {"4-FLAT", "5-FLAT"}
-assert jira_cmd.count("4-FLAT") == 1 and "4-FLAT" in jf
-assert not re.search(r"(?<![-\w])step \d", jira_cmd)
-ok(
-    "#84 whole-file Step N refs resolve; backticked N-XXX refs are only 5-FLAT plus the single 4-FLAT scope-note mention"
-)
-for bad in ("5-EPIC", "4-EPIC", "aiw epic split", "epic-<parent>", "gh label create epic"):
-    assert bad not in jira_cmd, bad
-assert not any("--label" in ln and "epic" in ln.lower() for ln in jira_cmd.splitlines())
-assert not re.search(r"gh issue (close|delete)", jf) and "--body " not in jf and "gh label create lean" not in jf
-assert not re.search(r"child|sibling", jira_cmd, re.I)
-assert [ln.strip() for ln in jira_cmd.splitlines() if "epic" in ln.lower()] == [
-    "- Issue type (bug, story, task, epic)",
-    "- Linked issues / parent epic",
-]
-assert not any(w in jf for w in ("assignee", "--project", "gh project"))
-ok("#84 negative guards: no epic, parent, child, close/delete, assignee or project")
-lab = re.compile(r"gh label create prd-<slug>[^\n]*2>/dev/null \|\| true")
-assert len(lab.findall(jira_cmd)) == 1
-assert lab.search(jfr).start() < jfr.index("gh issue create")
-assert re.search(LABEL_RE, jfr).start() < jfr.index("gh issue create")
-cl = next(ln for ln in jfr.splitlines() if "gh issue create" in ln and "--label" in ln)
-assert "refined" in cl and "prd-<slug>" in cl, cl
-ok("#84 5-FLAT ensure-creates refined and prd-<slug> before create and applies both")
+# jira-to-gh files one issue; 2 or more tasks route to /create-prd (as gh-issue 3.5 does).
+_jc = _read("commands", "jira-to-gh.md")
+for _gone in ("5-FLAT", "4-FLAT", "## Step 4.6", "docs/tasks/"):
+    assert _gone not in _jc, f"jira-to-gh still has {_gone!r}"
+assert "\u2192 next: /create-prd" in _jc and "creates nothing" in _jc, "jira-to-gh 2+ tasks route to /create-prd"
+assert "\u2192 next: /create-prd <jira-key-or-url>" in s45n, "jira-to-gh 4.5 next line"
+# The 2+ branch says the same thing as gh-issue 3.5's, from "this is PRD-sized work" to the next line.
+_mirror_span(gh35, s45n, "this is PRD-sized work", "end with `\u2192 next: /create-prd ")
+_jheads = set(re.findall(r"^#{1,3} Step (\d+(?:\.\d+)?)", _jc, re.M))
+assert set(re.findall(r"\bStep (\d+(?:\.\d+)?)", _jc)) <= _jheads, "jira-to-gh: every Step N names a real step"
+assert "ai-workflow:prd" not in _jc and not re.search(r"`/prd\b", _jc), "jira-to-gh still names the old /prd"
+_jclose = _n(_jc[_jc.rindex("Return the issue URL") :])
+assert "ordered list" not in _jclose and "multi-task" not in _n(_jc), "jira-to-gh returns one URL"
+ok("jira-to-gh: one issue; 2+ tasks route to /create-prd")
 
 # Issue #85
 ri85 = _read("commands", "run-issue.md")
@@ -4010,37 +3600,36 @@ for stale in ("a parent plus child URLs", "**parent** issue number specifically"
     assert stale not in st2, stale
 assert "parent plus child URLs" not in ri85
 ok("#85 step 2 has no stale epic wording")
-NOURL = '**No issue URL** (it failed, the human cancelled, or a `4-FLAT` run ended on **"Stop here"**, whatever partial list it reported): stop and say so \u2014 do not continue to step 3.'
-LIST1 = "**An ordered list of 2 or more issue URLs** (its `4-FLAT` return, after the URL of the epic parent it filed over them): print the parent and the issue URLs in list order and end the run here."  # ADR 0003
-LIST2 = "This is a clean stop, not an escalation: no Ledger, no worktree, no `aiw init`, and no further Preflight step."
-LIST3 = "Tell the user to run `/run-issue <n>` for each issue in list order; each issue's `Depends on:` line names the issue it builds on, so run those first \u2014 `/run-issue` bases a flat issue on the default branch unless its plan says otherwise."
-LIST4 = "End with the line `\u2192 next: herdr-dispatch <n> <n> \u2026` (every created issue number, in list order); `herdr-dispatch` runs them in that dependency order."  # #186
+NOURL = "**No issue URL** (it failed or the human cancelled): stop and say so \u2014 do not continue to step 3."
+LISTPRD = (
+    "**No issue, and its last line is `\u2192 next: /create-prd \u2026`** (the input splits into 2 or more tasks): "
+    "print that line, say the input needs a PRD first, and end the run here. The run made no Ledger, no worktree and no `aiw init`."
+)
 ONE = "**Exactly one issue URL**: parse the created issue number `<n>` from it and continue to Preflight step 3 with that `<n>` as though it had been passed to `/run-issue` directly."
 HARD = "`/gh-issue`'s HARD RULE is scoped to issue creation and does not bind any later phase of this run."
-LIST3E = "`/run-issue <parent>` runs them all in one session instead (Epic mode)."  # ADR 0003
-for sent in (NOURL, LIST1, LIST2, LIST3, LIST3E, LIST4, ONE, HARD):
+for sent in (NOURL, LISTPRD, ONE, HARD):
     assert st2.count(sent) == 1, sent
 assert _n(ri85).count(HARD) == 1 and st2.endswith(HARD)
+for gone in ("4-FLAT", "herdr-dispatch", "ordered list", "Epic mode"):
+    assert gone not in st2, gone
 ok("#85 step 2 pins the three branches and the HARD RULE sentence whole")
-_a, _b, _h = st2.index("**An ordered list"), st2.index("**Exactly one issue URL**"), st2.index(HARD)
-# whole-bullet pins: appended text or an inserted bullet inside a branch fails
+_a, _b, _h = st2.index("**No issue, and its last line"), st2.index("**Exactly one issue URL**"), st2.index(HARD)
 assert st2[st2.index("**No issue URL**") : _a].rstrip(" -") == NOURL
-assert st2[_a:_b].rstrip(" -") == f"{LIST1} {LIST2} {LIST3} {LIST3E} {LIST4}"
+assert st2[_a:_b].rstrip(" -") == LISTPRD
 assert st2[_b:_h].strip() == ONE
-assert "2 or more issue URLs" in st2 and "3 or more" not in st2 and "more than 2" not in st2
-ok("#85 list branch stops the run and the threshold is literally 2")
+ok("#85 split branch ends the run with the /create-prd line")
 pos = [
     st2.index(m)
     for m in (
         "invoke `/intake <stripped argument> --whole`",
         "**No issue URL**",
-        "**An ordered list of 2 or more",
+        "**No issue, and its last line",
         "**Exactly one issue URL**",
         HARD,
     )
 ]
 assert pos == sorted(pos) and len(set(pos)) == 5, pos
-ok("#85 step 2 branch order: intake, no URL, list, one URL, HARD RULE")
+ok("#85 step 2 branch order: intake, no URL, split, one URL, HARD RULE")
 assert (
     "Argument is a bare number, or a `github.com/.../issues/<n>` URL \u2192 resolve to `<n>`, unchanged from before."
     in st2
@@ -4051,12 +3640,18 @@ assert (
 )
 assert "An empty array is the ordinary path, except for an issue labelled both `epic` and `prd-<slug>`" in st35
 assert "An `epic` label without a `prd-<slug>` label is a team's own label: the ordinary path." in st35
+assert (
+    "Its children get linked by `/refine-issues` on its task list, or by `aiw epic split` with the children named."
+    in st35
+)
+assert "re-running `/gh-issue`" not in st35
+assert "how `/gh-issue` labels" not in st35
 assert "never run it as one issue" in st35  # ADR 0003: a parent with no sub-issues stops
 ok("#85 bare-number bullet and step 3.5 epic routing sentences intact")
 # both pins below hash/compare whitespace-normalised text (_n), so reflowing lines does not trip them
 # sha256 of whitespace-normalised text on base 0ff5687 (pre-#85): step 3.5 slice, and "## Epic mode" up to "\n## Rules"
-S35_SHA = "832218eabfdea18a2037abe13ae33f67f6519aac71098622ab253d51b36d8323"  # re-pinned (ADR 0003): an `epic`-labelled parent with no sub-issues stops
-EPIC_SHA = "e301c4367ff0d14d1316064fc35316c6b90cac928af03f5040fb791edefdb253"  # re-pinned: epic init passes --mode full, lean is an alias of default
+S35_SHA = "32d8c7add6435bd075d5b3b489fb73f1779b32bafded77f9d6e403a4e13afb12"  # re-pinned: 3.5 names /refine-issues for unlinked children and /create-prd approve as the epic labeller
+EPIC_SHA = "ba15c1aafd301927d27ab95b030c0a8b36fb378da9646ac383ad66b6151f7795"  # re-pinned: epic.json is written by /refine-issues (aiw epic split), not /gh-issue
 import hashlib  # noqa: E402
 
 _ep = ri85[ri85.index("## Epic mode") :]
@@ -4066,74 +3661,85 @@ assert hashlib.sha256(st35.encode()).hexdigest() == S35_SHA
 assert hashlib.sha256(_n(_ep).encode()).hexdigest() == EPIC_SHA
 ok("#85 step 3.5 and Epic mode are unchanged")
 
-# Issue #86: docs describe the flat task-list flow (README, HOW-IT-WORKS Layer 5 + glossary, CHANGELOG).
+# Issue #86, rewritten by ADR 0004: docs describe create-prd / create-tasks / refine-issues
+# (README, HOW-IT-WORKS Layer 5 + glossary, CHANGELOG).
 import hashlib as _hl86  # noqa: E402
 
 rd86, hw86, cl86 = _user_docs(), _read("docs", "HOW-IT-WORKS.md"), _read("CHANGELOG.md")
 rdn86, hwn86 = _n(rd86), _n(hw86)
 ROW86 = (
-    "| `/ai-workflow:gh-issue [--review [<lens,lens>] [--herdr]]` | file a well-formed issue; always decomposes first \u2014 one task files one issue; "
-    "two or more save the task list to `docs/tasks/<slug>.md` and file one refined issue per task, "
-    "ordered by `Depends on: #n` lines, under an `epic` parent; `/gh-issue docs/tasks/<slug>.md` files a saved list, "
-    "one question round per task |"
+    "| `/ai-workflow:gh-issue [--review [<lens,lens>] [--herdr]]` | file exactly one well-formed issue. It decomposes "
+    "first; when the input splits into 2 or more tasks it creates nothing and ends `→ next: /create-prd <input>`. "
+    "A standalone run ends `→ next: herdr-dispatch <n>` |"
 )
 assert rdn86.count(ROW86) == 1
 assert "parent plus children" not in rdn86 and "parent plus children" not in hwn86
 JROW86 = (
-    "| `/ai-workflow:jira-to-gh <KEY>` | decompose a Jira ticket and file flat issues the same way as `/gh-issue` "
-    "(one issue for a single task; two or more saved to `docs/tasks/<slug>.md` and filed flat) |"
+    "| `/ai-workflow:jira-to-gh <KEY>` | turn a Jira ticket into exactly one issue the same way as `/gh-issue`; "
+    "2 or more tasks create nothing and end `→ next: /create-prd <jira-key-or-url>` |"
 )
 assert rdn86.count(JROW86) == 1
-assert (
-    "refined issue per task" in ROW86 and "under an `epic` parent" in ROW86 and "`docs/tasks/<slug>.md`" in ROW86
-)  # ADR 0003
+assert "exactly one" in ROW86 and "/create-prd <input>" in ROW86 and "docs/tasks/" not in ROW86  # ADR 0004
 assert "Accepts an epic parent." in rdn86
 assert "aiw epic split|init|next|status    epic decomposition and sequencing" in rd86
-ok("#86 README gh-issue row pinned whole; Epic-mode README lines intact")
+for _row in (
+    "| `/ai-workflow:create-prd ",
+    "| `/ai-workflow:create-tasks <prd>` |",
+    "| `/ai-workflow:refine-issues docs/tasks/<slug>.md` |",
+):
+    assert rdn86.count(_row) == 1, f"REFERENCE lacks the {_row!r} row"
+assert "| `/ai-workflow:prd " not in rdn86, "REFERENCE still has the /prd row"
+ok("#86 README gh-issue and jira rows pinned whole; create-prd / create-tasks / refine-issues rows; Epic-mode lines")
 
-H5 = "## Layer 5 \u2014 Task lists and epics"
-assert hw86.count(H5) == 1 and "## Layer 5 \u2014 Epics" not in hw86
+H5 = "## Layer 5 — PRDs, task lists and epics"
+assert hw86.count(H5) == 1 and "## Layer 5 — Task lists and epics" not in hw86
 l5 = _n(_slice(hw86, "## Layer 5", "\n---"))
 P1 = (
-    "`/gh-issue` always breaks a request into a numbered task list before filing anything. Each task is one "
-    "layer-scoped deliverable: 3 or fewer production files, 1-4 acceptance criteria, one verify command. "
-    'You approve the list with **"Create as shown"** or revise it with **"Let me edit the list"**. '
-    "One task files one issue as before. Two or more tasks save the list to `docs/tasks/<slug>.md` first "
-    "(optionally also to Obsidian or the GitHub wiki), then file one refined issue per task, each asked about in "
-    "its own question round, and one **epic** parent over them, linked as sub-issues (ADR 0003). Each task issue "
-    "is complete and independently readable, labelled `prd-<slug>`, and declares its order in plain text:"
+    "`/create-prd` interviews you into a PRD and saves it to `docs/prds/<slug>.md` with the status **Draft**. "
+    "It holds the what and why, a technical design (contracts such as data shapes and endpoints, never code), "
+    "the epics the work splits into, the decisions and a change log. `--review` puts a reviewer panel on the "
+    "draft before it is saved. The status becomes **In review** when you open a PR for the PRD. "
+    "`/create-prd approve <prd>` sets **Approved** and files one **epic** issue "
+    "per `## Epics` entry, labelled `epic` and `prd-<slug>`, then writes each epic's number back into the PRD."
 )
 P2 = (
-    "Each new issue number is written back into the saved list. A create failure partway through is a "
-    "recoverable state, not a failure state: `/gh-issue` reports which issues exist and which are missing, "
-    'then asks **"Retry the missing ones"** or **"Stop here"**, and nothing already created is closed or '
-    'deleted. Re-running it on the same list offers **"Resume this list"**, which files only the missing '
-    "tasks. `/jira-to-gh` decomposes, saves and files a Jira ticket the same way."
+    "`/create-tasks` splits an Approved PRD into one-PR tasks and saves them to `docs/tasks/<slug>.md`. Each "
+    "task fits the size rubric: 3 or fewer production files, 1-4 acceptance criteria, one verify command, no new "
+    "dependency. Each names its Area, whether it can run in parallel, and the tasks it depends on, which are "
+    "only tasks in its own epic. The list adds Waves (the tasks that can run together) and Shared files. A later "
+    "edit never renumbers a task; it marks it Changed or Dropped. When the split shows the PRD is silent or "
+    "wrong about a decision, `/create-tasks` asks you and records the answer with `/create-prd --update` first."
 )
 P3 = (
-    "`/gh-issue` returns the parent and the issue URLs in list order. Run `/run-issue <n>` on each, dependencies "
-    "first, or `/run-issue <parent>` for all of them. If you hand `/run-issue` a source that is not an issue yet, "
-    "it calls `/gh-issue` for you; when that returns two or more issues, `/run-issue` prints the list and stops "
-    "\u2014 run `/run-issue <n>` on each issue, dependencies first. Answers given in the per-task question rounds "
-    "are recorded in the PRD (`/prd --update`)."
+    "`/refine-issues` files each task as a `refined` sub-issue of its epic, after you confirm the full list. "
+    "Each issue number is written back into the task list. When the PRD and the task list disagree, it stops "
+    "and asks. It then runs one `aiw epic split` per epic, which writes the epic's "
+    "`## Tasks` checklist and the `epic.json` that Epic mode reads. Each issue gets a native blocked-by link "
+    "(on an older `gh`, `/fix-blockers` writes them) and declares its order in plain text:"
 )
 P4 = (
-    "**Epic mode** runs a parent issue with sub-issues: one `/gh-issue` filed, or one filed by hand. "
-    "`/run-issue <parent>` drives all its children. A `/gh-issue` parent (labelled `epic` and `prd-<slug>`) "
+    "`/gh-issue` and `/jira-to-gh` file exactly one issue. They still break the request down first; when it "
+    "splits into 2 or more tasks they create nothing and end with `→ next: /create-prd <input>`, because "
+    "work that size needs a PRD. `/run-issue` does the same in Preflight: a source that needs a PRD stops the "
+    "run with that hand-off, and no ledger is made."
+)
+P5 = (
+    "**Epic mode** runs a parent issue with sub-issues: one `/create-prd approve` filed, or one filed by hand. "
+    "`/run-issue <parent>` drives all its children. A `/create-prd` epic (labelled `epic` and `prd-<slug>`) "
     "with no sub-issues is refused, never run as one issue. The rules:"
 )
-for para in (P1, P2, P3, P4):
+for para in (P1, P2, P3, P4, P5):
     assert l5.count(para) == 1, para[:50]
 assert l5.count("``` Depends on: #12, #13 ```") == 1
-assert l5.index(P1) < l5.index("Depends on: #12, #13") < l5.index(P2) < l5.index(P3) < l5.index(P4)
+assert l5.index(P1) < l5.index(P2) < l5.index(P3) < l5.index("Depends on: #12, #13") < l5.index(P4) < l5.index(P5)
 for b in (
-    '**Independent children run at the same time.** Dependent ones cannot, by definition \u2014 a child stacks its branch on top of the branch it depends on, so it waits for that one to reach "PR open" first.',
+    '**Independent children run at the same time.** Dependent ones cannot, by definition — a child stacks its branch on top of the branch it depends on, so it waits for that one to reach "PR open" first.',
     "**Still three gates, for the whole epic.** Gate 1 shows you the split and *every* child's plan at once. "
     "A blocker in one child parks that child and the others keep going; Gate 2a covers both an immediate, "
     "per-blocker ask fired as soon as that child parks (so you are not left waiting until the end to hear about it) "
     "and an end-of-run closer that fires once, collecting whatever is still pending or deferred when nothing more "
     "can proceed without you. Gate 3 is one report covering everything, including the order you must merge in.",
-    '**A failed child with dependents is reported by name.** "Never started, blocked by #14" \u2014 because a child '
+    '**A failed child with dependents is reported by name.** "Never started, blocked by #14" — because a child '
     "silently missing from a list of twelve is how you discover a month later that a third of the epic was never built.",
 ):
     assert b in l5, b
@@ -4143,14 +3749,34 @@ for gone in (
     "Kanban",
     "board view",
     "parent plus children",
+    "Resume this list",
 ):
     assert gone not in l5, gone
-ok("#86 Layer 5 heading, flat-flow paragraphs, Epic-mode lead-in and kept bullets pinned")
+ok(
+    "#86 Layer 5 heading, create-prd / create-tasks / refine-issues paragraphs, Epic-mode lead-in and kept bullets pinned"
+)
 
-GL86 = "- **Epic** \u2014 a parent issue with sub-issues, run by `/run-issue` Epic mode. `/gh-issue` files one over every task list it files; `/jira-to-gh` does not."  # ADR 0003
+GL86 = (
+    "- **Epic** — a parent issue with sub-issues, run by `/run-issue` Epic mode. `/create-prd approve` files "
+    "one per `## Epics` entry of a PRD; `/refine-issues` files its tasks under it."
+)  # ADR 0004
 assert hwn86.count(GL86) == 1
-assert "- **Epic** \u2014 a parent issue with dependent children." not in hwn86
+assert "- **Epic** — a parent issue with dependent children." not in hwn86
 ok("#86 glossary Epic line pinned")
+
+_docs = _user_docs() + _read("docs", "HOW-IT-WORKS.md") + _read("CONTEXT.md") + _read("docs", "overview.html")
+for _old in ("prints them and stops cleanly", "two or more issues, it prints"):
+    assert _old not in _docs, f"docs still describe the old /run-issue Preflight: {_old!r}"
+assert _docs.count("makes no ledger") >= 2, "overview.html: Preflight stops with the /create-prd hand-off, no ledger"
+for _gone in ("/prd ", "`/prd`", "docs/prd/", "4-FLAT", "step 3.6"):
+    assert _gone not in _docs, f"docs still say {_gone!r}"
+assert not re.search(r"(?<![-\w])/prd\b", _docs), "docs still name the old /prd"
+for _new in ("/create-prd", "/refine-issues", "docs/prds/<slug>.md", "/create-prd approve"):
+    assert _new in _docs, f"docs lack {_new!r}"
+assert os.path.isfile(os.path.join(HERE, "..", "docs", "adr", "0004-wasensi-planning-skills.md")), "ADR 0004"
+assert not os.path.exists(os.path.join(HERE, "..", "docs", "prd")), "docs/prd moved to docs/prds"
+assert os.path.isfile(os.path.join(HERE, "..", "docs", "prds", "workflow-control-ui.md")), "docs/prds holds the PRDs"
+ok("docs: create-prd / refine-issues; no /prd or 4-FLAT left")
 
 _T86 = "# Changelog\n\n"
 _E86 = "## 1.8.0 \u2014 2026-09-30"
@@ -4359,7 +3985,7 @@ for _m in re.finditer(r"scripts/", _t185):
     )
 ok("#185 herdr-dispatch skill in plugin")
 
-# --------------------------------------------------------------------------- #183 /prd fills dump's seed
+# --------------------------------------------------------------------------- #183 /create-prd fills dump's seed
 
 
 def _skill_sections(rel: str) -> dict:
@@ -4370,7 +3996,7 @@ def _skill_sections(rel: str) -> dict:
 
 
 _dump183 = _skill_sections("skills/dump/SKILL.md")
-_prd183 = _skill_sections("skills/prd/SKILL.md")
+_prd183 = _skill_sections("skills/create-prd/SKILL.md")
 _key183 = lambda secs, pre: next(v for k, v in secs.items() if k.startswith(pre))  # noqa: E731
 
 # AC1: new-feature route marks the seeded PRD.md as a seed.
@@ -4378,13 +4004,13 @@ _nf183 = _dump183["Step 4: File it"].split("**Change request**")[0]
 assert re.search(r'property:set path="05-Work/<Project>/<Feature>/PRD\.md" name=status value=seed', _nf183), (
     "#183 dump New feature route must set status=seed on PRD.md"
 )
-assert "/prd" in _nf183, "#183 dump New feature route must say the marker tells /prd it is a seed"
+assert "/create-prd" in _nf183, "#183 dump New feature route must say the marker tells /prd it is a seed"
 ok("#183 dump New feature route sets status: seed on the seeded PRD.md")
 
-# AC2: /prd takes a feature folder, accepts a seed, fills it and flips to draft.
+# AC2: /create-prd takes a feature folder, accepts a seed, fills it and flips to draft.
 _args183 = _prd183["Arguments"]
 assert "05-Work/<Project>/<Feature>" in _args183 and "feature-folder" in _args183, (
-    "#183 Arguments lacks /prd <feature-folder>"
+    "#183 Arguments lacks /create-prd <feature-folder>"
 )
 _s1_183 = _key183(_prd183, "Step 1")
 assert "Dump.md" in _s1_183 and "PRD.md" in _s1_183 and "feature folder" in _s1_183, (
@@ -4400,7 +4026,7 @@ assert "overwrite" in _s7_183 and "status" in _s7_183 and "draft" in _s7_183 and
     "#183 Step 7 must overwrite the seed and set status: draft"
 )
 assert "stop and ask" in _s2_183.split("For Obsidian, also resolve")[1], "#183 Step 2 must ask when no project resolves"
-ok("#183 /prd feature-folder input, seed exception, overwrite + status: draft")
+ok("#183 /create-prd feature-folder input, seed exception, overwrite + status: draft")
 
 # AC3: anything that is not a seed still stops and asks.
 assert "**stop and ask the user**" in _s2_183 and "Never overwrite silently" in _s2_183, "#183 Step 2 lost stop-and-ask"
@@ -4411,17 +4037,17 @@ assert re.search(r"property:read path=.{0,60}PRD\.md. name=status", _s2_183) and
 assert re.search(r"Anything else.{0,220}still stops here", _s2_183), (
     "#183 Step 2: anything other than seed must still stop"
 )
-ok("#183 /prd on a non-seed PRD still stops and asks")
+ok("#183 /create-prd on a non-seed PRD still stops and asks")
 
 # AC4: default --to is obsidian only; Step 6 no longer asks about extra destinations.
 _a4_183 = next(ln for ln in _args183.splitlines() if ln.startswith("- `--to`"))
-# ADR-era change: the repo copy (docs/prd/<slug>.md) is canonical, mirrored to Obsidian.
+# ADR-era change: the repo copy (docs/prds/<slug>.md) is canonical, mirrored to Obsidian.
 assert "Default `local,obsidian`" in _a4_183, "--to default must be local,obsidian (repo canonical + vault mirror)"
 assert "(Step 6)" not in _a4_183, "#183 Arguments must not defer a destination question to Step 6"
 _s6_183 = _key183(_prd183, "Step 6")
 assert "ask here whether to also save" not in _s6_183, "#183 Step 6 still asks about extra destinations"
 assert "aiw ask" in _s6_183, "#183 Step 6 must keep its aiw ask branch"
-ok("/prd default --to is local,obsidian; Step 6 asks no destination question")
+ok("/create-prd default --to is local,obsidian; Step 6 asks no destination question")
 
 
 # Issue #184: `→ next:` handoff lines on dump, prd and gh-issue (parsed by the UI stepper).
@@ -4429,12 +4055,13 @@ NEXT = "\u2192 next: "
 _ws = lambda t: " ".join(t.split())  # noqa: E731  (_n is rebound by loops above)
 _dump184 = _skill_sections("skills/dump/SKILL.md")
 _s5_184 = _ws(_key183(_dump184, "Step 5"))
-for _p in (f"`{NEXT}/prd <feature-folder>`", f"`{NEXT}/create-tasks <note-path>`", f"`{NEXT}/gh-issue <note-path>`"):
+for _p in (f"`{NEXT}/create-prd <feature-folder>`", f"`{NEXT}/gh-issue <note-path>`"):
     assert _p in _s5_184, f"#184 dump Step 5 lacks {_p}"
-assert re.search(r"new feature.{0,40}change request.{0,80}/prd <feature-folder>", _s5_184, re.I), (
+assert re.search(r"new feature.{0,40}change request.{0,80}/create-prd <feature-folder>", _s5_184, re.I), (
     "#184 dump: prd line routes"
 )
-assert re.search(r"bug report.{0,20}/create-tasks <note-path>", _s5_184, re.I), "dump: a bug goes to /create-tasks"
+assert re.search(r"bug report.{0,20}/gh-issue <note-path>", _s5_184, re.I), "dump: a bug goes to /gh-issue"
+assert f"{NEXT}/create-tasks <note-path>" not in _s5_184, "dump: no route sends a note to /create-tasks"
 assert re.search(r"feature-scoped task.{0,20}/gh-issue <note-path>", _s5_184, re.I), "#184 dump: gh-issue line routes"
 assert re.search(
     r"standalone task.{0,40}meeting notes.{0,40}unclassifiable.{0,60}no `\u2192 next:` line", _s5_184, re.I
@@ -4452,7 +4079,7 @@ for _f in ("**Problem:**", "**Who:**", "**Evidence:**", "**Expected:**", "### Ra
 assert re.search(r"never invent|do not invent|don't invent", _ps, re.I), "dump: problem statement must not invent facts"
 assert "just above `## Related`" in _ps and "overwrite" in _ps, "dump: a problem statement goes above ## Related"
 assert "content=\"$(cat <<'EOF'" in _ps, "dump: problem statement text goes through a quoted heredoc"
-assert "`/create-tasks` for a bug" in _ps, "dump: a bug's problem statement goes to /create-tasks (F11 routing)"
+assert "`/gh-issue` for a bug" in _ps, "dump: a bug's problem statement goes to /gh-issue"
 assert "never overwrite with partial content" in _ps.lower(), "dump: overwrite guard"
 _s4 = _ws(_dump184["Step 4: File it"])
 for _route in ("**New feature**", "**Change request**", "**Bug report**"):
@@ -4460,97 +4087,296 @@ for _route in ("**New feature**", "**Change request**", "**Bug report**"):
     assert "problem statement" in _body.lower(), f"dump {_route} route must write a problem statement"
 assert "<the raw, unedited dump text, verbatim>" not in _s4, "dump New feature still writes raw text as Dump.md"
 ok("dump writes a problem statement (Problem/Who/Evidence/Expected + raw input) for features, changes, bugs")
-# Six-flow step 2: the repo PRD is canonical, and --update appends downstream decisions to it.
-_prd_all = _skill_sections("skills/prd/SKILL.md")
+# create-prd: the wasensi PRD skill, made generic, plus our Flow/review/mirror features.
+assert not os.path.exists(os.path.join(HERE, "..", "skills", "prd")), "skills/prd must be gone (hard rename)"
+_cp = _ws(_read("skills", "create-prd", "SKILL.md"))
+assert _cp.startswith("--- name: create-prd "), "create-prd frontmatter name"
+for _w in (
+    "docs/prds/<slug>.md",
+    "`Draft`",
+    "`In review`",
+    "`Approved`",
+    "/create-prd approve <prd-path | slug>",
+    "Decisions, not code",
+    "Mermaid",
+    "Refuse while `## Open questions` has an entry",
+    '--label "epic,prd-<slug>"',
+    "aiw peer-review new create-prd",
+    "--kind create-prd --dir <review_dir>",
+    "Flow auto mode",
+    "status: seed",
+    "name=canonical",
+    "## Change log",
+    "docs/templates/prd.md",
+    "<skill_dir>/templates/prd.md",
+    "multi-tenant",
+):
+    assert _w in _cp, f"create-prd lacks {_w!r}"
+assert "End with the line `→ next: /create-tasks <prd-path>`" in _cp, "create-prd next line"
+_te = _read("skills", "create-prd", "templates", "epic.md")
+_tp = _read("skills", "create-prd", "templates", "prd.md")
+for _name, _txt in (("SKILL.md", _cp), ("templates/prd.md", _tp), ("templates/epic.md", _te)):
+    for _bad in ("wasensi", "staging", "webhook-receiver", "Pest", "MongoDB", "/implement-issue", "/verifier-locally"):
+        assert _bad not in _txt, f"create-prd {_name} still names {_bad!r}"
+# Tenant wording only for multi-tenant repos.
+for _ln in _tp.splitlines():
+    assert "tenant" not in _ln.lower() or "multi-tenant" in _ln, f"PRD template: unconditional tenant line {_ln!r}"
+_tp = _read("skills", "create-prd", "templates", "prd.md")
+_hs = re.findall(r"^##+ .+$", _tp, re.M)
+assert _hs == [
+    "## Overview",
+    "## Problem",
+    "## Users",
+    "## Goals",
+    "## Non-goals",
+    "## Requirements",
+    "## Edge cases",
+    "## Technical design",
+    "### Data",
+    "### API",
+    "### Backend",
+    "### Frontend",
+    "### Integrations and realtime",
+    "### Non-functional",
+    "### Testing",
+    "## Rollout and cost",
+    "## Success metrics",
+    "## Epics",
+    "## Decisions",
+    "## Open questions",
+    "## Change log",
+    "## Related",
+], f"PRD template headings drifted: {_hs}"
+assert "**Status:** Draft" in _tp and "**Mirror:**" in _tp, "PRD template header"
+_te = _read("skills", "create-prd", "templates", "epic.md")
+assert re.findall(r"^## .+$", _te, re.M) == [
+    "## What",
+    "## Why",
+    "## Requirements covered",
+    "## Out of Scope",
+    "## Acceptance Criteria",
+    "## Notes",
+    "## Tasks",
+], "epic template headings (## Tasks last: aiw epic split fills it)"
+ok("create-prd: wasensi structure, approve creates epics, generic, templates shipped")
+
+# Improve-this-skill footer: on the three new skills only, always an issue, never an edit.
+for _sk in ("create-prd", "create-tasks", "refine-issues"):
+    _p = os.path.join(HERE, "..", "skills", _sk, "SKILL.md")
+    _f = _ws(open(_p, encoding="utf-8").read().split("## Improve this skill", 1)[-1].split("\n## ", 1)[0])
+    assert "gh issue create --repo <plugin_repo>" in _f and "Never edit this skill file" in _f, (
+        f"{_sk}: footer must file an issue, never edit"
+    )
+ok("improve-this-skill footer files an issue on the plugin repo")
+
+# The repo PRD is canonical, and --update appends downstream decisions to it.
+_prd_all = _skill_sections("skills/create-prd/SKILL.md")
 _canon = _ws(_prd183["Arguments"]) + " " + _ws(_key183(_prd_all, "Step 7"))
-assert re.search(r"canonical", _canon) and "docs/prd/<slug>.md" in _canon, "prd: docs/prd/<slug>.md must be canonical"
+assert re.search(r"canonical", _canon) and "docs/prds/<slug>.md" in _canon, (
+    "create-prd: docs/prds/<slug>.md is canonical"
+)
 _upd = _ws(_key183(_prd_all, "Update mode"))
-assert "--update" in _ws(_prd183["Arguments"]), "prd Arguments must document --update"
+assert "--update" in _ws(_prd183["Arguments"]), "create-prd Arguments must document --update"
 for _w in ("## Decisions", "Open questions", "mirror", "no grilling"):
-    assert _w.lower() in _upd.lower(), f"prd Update mode lacks {_w!r}"
-assert re.search(r"already (there|present|recorded)", _upd), "prd Update mode must skip a decision already recorded"
+    assert _w.lower() in _upd.lower(), f"create-prd Update mode lacks {_w!r}"
+assert re.search(r"already (there|present|recorded)", _upd), "create-prd Update mode must skip a recorded decision"
 # The pair is linked both ways at save time and followed, never guessed from names.
 _s7 = _ws(_key183(_prd_all, "Step 7"))
-assert "**Mirror:**" in _s7 and "name=canonical" in _s7, "prd: Step 7 must record the mirror/canonical links"
-assert "never by matching names" in _ws(_key183(_prd_all, "Step 2")), "prd: Step 2 follows the links"
-assert "no canonical copy" in _upd and "Never create a repo file during an update" in _upd, "prd: vault-only update"
-assert "before \u2192 after" in _upd, "prd: Update mode reports edited requirements as before -> after"
-assert "not inside a git repo" in _ws(_key183(_prd_all, "Step 1")), "prd: no repo -> Obsidian only"
+assert "**Mirror:**" in _s7 and "name=canonical" in _s7, "create-prd: Step 7 must record the mirror/canonical links"
+assert "never by matching names" in _ws(_key183(_prd_all, "Step 2")), "create-prd: Step 2 follows the links"
+assert "no canonical copy" in _upd and "Never create a repo file during an update" in _upd, (
+    "create-prd: vault-only update"
+)
+assert "before \u2192 after" in _upd, "create-prd: Update mode reports edited requirements as before -> after"
+assert "not inside a git repo" in _ws(_key183(_prd_all, "Step 1")), "create-prd: no repo -> Obsidian only"
 assert re.search(r"re-run `property:set` for each of them right after it", _s7) and "`canonical`" in _s7, (
-    "prd: frontmatter (incl. canonical) must be re-set after every overwrite"
+    "create-prd: frontmatter (incl. canonical) must be re-set after every overwrite"
 )
-assert "and re-set `tags`, `status` and `canonical` after the overwrite" in _upd, "prd: Update mode re-sets canonical"
-assert "never overwrite with partial content" in (_upd + _ws(_key183(_prd_all, "Step 7"))).lower(), (
-    "prd: overwrite guard"
+assert "and re-set `tags`, `status` and `canonical` after the overwrite" in _upd, (
+    "create-prd: Update mode re-sets canonical"
 )
-assert "\u2192 next:" not in _upd, "prd Update mode prints no next line (the caller owns what follows)"
-ok("prd: repo copy canonical; --update appends decisions, resolves open questions, mirrors to Obsidian")
+assert "never overwrite with partial content" in (_upd + _s7).lower(), "create-prd: overwrite guard"
+# Approve prints a next line elsewhere in the file; Update mode itself never does.
+assert "\u2192 next:" not in _upd, "create-prd Update mode prints no next line (the caller owns what follows)"
+ok("create-prd: repo copy canonical; --update appends decisions, resolves open questions, mirrors to Obsidian")
 
-# Six-flow step 3: /create-tasks is a standalone entry over gh-issue's own 3.5/3.6 (one source of truth).
-_ct_path = os.path.join(HERE, "..", "skills", "create-tasks", "SKILL.md")
-assert os.path.isfile(_ct_path), "skills/create-tasks/SKILL.md missing"
-_ct = _ws(open(_ct_path, encoding="utf-8").read())
-_ghi = _read("commands", "gh-issue.md")
-for _h in ("3.5. **Decompose.**", "3.6. **Save the task list.**"):
-    assert _h in _ghi, f"gh-issue.md lost the heading create-tasks points at: {_h}"
-    assert _h in _ct, f"create-tasks must name gh-issue's {_h}"
-for _w in ("Save as shown", "creates nothing on GitHub", "even a single task", "Open questions", "stack"):
-    assert _w.lower() in _ct.lower(), f"create-tasks lacks {_w!r}"
-assert "\u2192 next: /gh-issue docs/tasks/<slug>.md" in _ct, "create-tasks next line"
-assert "aiw paths" in _ct and "<plugin_root>/commands/gh-issue.md" in _ct, (
-    "create-tasks resolves gh-issue via aiw paths"
-)
-assert "`Problem statement: <path>`" in _ct and "`PRD: <path>`" in _ct, "create-tasks header names its inputs"
-assert "ask which one, newest first" in _ct and "take the newest without asking" in _ct, "create-tasks picks one bug"
-assert "resumed only when its `Problem statement:` and `PRD:` header lines match" in _ct and "`<slug>-2`" in _ct, (
-    "create-tasks auto mode never resumes an unrelated list"
-)
-_g0 = _ws(_slice(_ghi, "0. **Source check.**", "Details: $@"))
-assert "docs/tasks/<slug>.md" in _g0 and "## Task <n>" in _g0, "gh-issue step 0 must take a saved task list"
-assert re.search(r"one task.{0,80}step 4", _g0) and "Resume this list" in _g0, (
-    "gh-issue saved list: 1 task -> step 4, 2+ -> 4-FLAT resume"
-)
-ok("create-tasks: standalone entry over gh-issue 3.5/3.6; gh-issue takes a saved task list")
-
-# Six-flow step 4: /gh-issue refines a saved list task by task, files an epic parent, records decisions.
-_g8 = _read("commands", "gh-issue.md")
-assert _g8.count("## Saved task list and the epic") == 1
-_sec8 = _ws(_g8[_g8.index("## Saved task list and the epic") :])
+# create-tasks: wasensi structure, our size rubric, Approved PRD only.
+_ct = _ws(_read("skills", "create-tasks", "SKILL.md"))
 for _w in (
-    "`Problem statement: <path>`",
-    "`PRD: <path>`",
-    "name=canonical",
-    "read that repo copy instead",
-    '**"File these"**',
-    "One question round per task",
-    "`Test root:` and `Base branch:` values stay plain",
-    "/blob/<base>/<path>",
-    '--label "epic,prd-<slug>"',
-    "never `refined`",
-    'aiw epic split "<runs_dir>/<owner>-<repo>-epic-<parent>"',
-    "Re-run safety",
-    "--update <prd>",
+    "Approved",
+    "/create-prd approve",
+    "docs/prds/<slug>.md",
+    "docs/tasks/<slug>.md",
+    "Shared files",
+    "Waves",
+    "Parallel",
+    "Area",
+    "(new)",
+    "Dropped",
+    "Changed:",
+    "Never renumber",
+    "No design decisions here",
+    "Flow auto mode",
+    "docs/templates/task-list.md",
+    "<skill_dir>/templates/task-list.md",
 ):
-    assert _w in _sec8, f"gh-issue Saved task list section lacks {_w!r}"
-assert _sec8.index('--label "epic,prd-<slug>"') < _sec8.index("aiw epic split"), (
-    "parent is linked right after it is created"
+    assert _w in _ct, f"create-tasks lacks {_w!r}"
+assert "\u2192 next: /refine-issues docs/tasks/<slug>.md" in _ct, "create-tasks next line"
+for _bad in (
+    "Bugs.md",
+    "Problem statement: <path>",
+    "3.6. **Save the task list.**",
+    "wasensi",
+    "staging",
+    "Pest",
+    "webhook-receiver",
+):
+    assert _bad not in _ct, f"create-tasks still names {_bad!r}"
+_tt = _read("skills", "create-tasks", "templates", "task-list.md")
+for _f in (
+    "Outcome:",
+    "Area:",
+    "Files/symbols:",
+    "Acceptance criteria:",
+    "Verify command:",
+    "Depends on:",
+    "Parallel:",
+    "Issue: \u2014",
+):
+    assert _f in _tt, f"task-list template lacks {_f}"
+assert re.findall(r"^## (Shared files|Waves)$", _tt, re.M) == ["Shared files", "Waves"], "task-list template sections"
+for _name, _txt in (("SKILL.md", _ct), ("templates/task-list.md", _tt)):
+    for _bad in (
+        "wasensi",
+        "staging",
+        "webhook-receiver",
+        "Pest",
+        "Pint",
+        "PostgreSQL",
+        "MongoDB",
+        "/implement-issue",
+        "/verifier-locally",
+        "#651",
+    ):
+        assert _bad not in _txt, f"create-tasks {_name} still names {_bad!r}"
+for _ln in (_read("skills", "create-tasks", "SKILL.md") + "\n" + _tt).splitlines():
+    assert "tenant" not in _ln.lower() or "multi-tenant" in _ln, f"create-tasks: unconditional tenant line {_ln!r}"
+ok("create-tasks: Approved PRD only, waves and shared files, next is /refine-issues")
+# Flow auto mode approves a Draft PRD only after every other readiness check passed.
+_ct_auto = _ws(_slice(_read("skills", "create-tasks", "SKILL.md"), "### Flow auto mode", "## Steps"))
+_ap = _ct_auto.index("`approve <prd>`")
+for _w in ("acceptance line", "technical design", "`## Open questions` is empty", "`Draft`"):
+    assert -1 < _ct_auto.find(_w) < _ap, f"create-tasks auto mode: {_w!r} must be checked before approve"
+_ct_s2 = _ws(_slice(_read("skills", "create-tasks", "SKILL.md"), "2. **Check it is ready", "3. **Ground"))
+assert _ct_s2.index("technical design") < _ct_s2.index("/create-prd approve <prd>"), "create-tasks step 2 order"
+_ct_tools = _read("skills", "create-tasks", "SKILL.md").split("---", 2)[1]
+assert re.search(r"^  - Skill$", _ct_tools, re.M), "create-tasks allowed-tools needs Skill (it runs create-prd)"
+ok("create-tasks: auto-approve runs after the readiness checks; Skill is allowed")
+
+# refine-issues: files a task list as sub-issues; engine contracts preserved.
+_ri_raw = _read("skills", "refine-issues", "SKILL.md")
+_ri = _ws(_ri_raw)
+for _w in (
+    "docs/tasks/<slug>.md",
+    "Approved",
+    "--parent",
+    "--blocked-by",
+    "Depends on: #",
+    "aiw epic split",
+    "one `aiw epic split` per epic",
+    "Task <n> of docs/tasks/<slug>.md",
+    "`refined`",
+    "prd-<slug>",
+    "gh label list",
+    "Stop at the first failure",
+    "Issue:",
+    "Changed:",
+    "Dropped",
+    "explicit yes",
+    "Flow auto mode",
+    "Test root:",
+    "Base branch:",
+    "aiw refined",
+    "/create-prd approve",
+    "unknown flag",
+):
+    assert _w in _ri, f"refine-issues lacks {_w!r}"
+_mo = _ri.index("5. **Match against what already exists.**")
+for _w in ("its `Issue:` field", "the label `prd-<slug>`", "same `Task <n>` note", "sub-issues", "same title"):
+    _mo = _ri.find(_w, _mo)
+    assert _mo != -1, (
+        f"refine-issues match order: {_w!r} missing or out of order (Issue, label+note, sub-issues, title)"
+    )
+assert "\u2192 next: /fix-blockers <epic>" in _ri, "refine-issues next line"
+# gh-issue's Flow auto mode project/fields bullets, copied verbatim. The epic-split paragraph now lives
+# only here (gh-issue files no epic), so pin its failure-state sentence directly.
+_gh_raw = _read("commands", "gh-issue.md")
+_blk = _slice(_gh_raw, "- **Project (step 6):**", "- **Step 7:**").split("(step 6):** ", 1)[1]
+assert _ws(_blk) in _ri, f"refine-issues must copy gh-issue verbatim: {_ws(_blk)[:60]!r}"
+_split_para = (
+    "Children in list order. It links them as sub-issues, checks that `Depends on:` forms a DAG, "
+    "writes the parent's `## Tasks` checklist, and writes the `epic.json` that `/run-issue <parent>` "
+    "Epic mode reads. It is idempotent, so a re-run is safe. Exit 1: report its message and stop. "
+    "It links the children before it checks `Depends on:`, so on a cycle or a bad `Depends on:` the "
+    "children may already be linked while no `epic.json` exists; `/run-issue <parent>` Epic mode "
+    "then re-runs the split in its step 0 and stops on the same error until the lines are fixed."
 )
-assert "|| true" not in _sec8 and "only when no line is exactly `epic`" in _sec8, (
-    "epic label: no || true, never recolour"
-)
-assert "children may already be linked while no `epic.json` exists" in _sec8, "split failure state described truthfully"
-assert "Saved task list and the epic" in _ws(_slice(_g8, "0. **Source check.**", "Details: $@")), "step 0 routes there"
-_hr8 = _ws(_slice(_g8, "**HARD RULE", "Do the following:"))
-assert "`aiw epic split`" in _hr8 and "`/prd --update`" in _hr8, "HARD RULE carves out the split and the PRD update"
-_ri8 = _read("commands", "run-issue.md")
-assert "labelled both `epic` and `prd-<slug>`" in _ws(_slice(_ri8, "3.5. **Epic check", "4. **Resume check.**")), (
-    "run-issue epic guard"
-)
-# The split's epic dir is the one Epic mode step 0 reads, so `/run-issue <parent>` finds epic.json and never re-splits.
-assert '"<runs_dir>/<owner>-<repo>-epic-<n>"' in _ri8 and '"<runs_dir>/<owner>-<repo>-epic-<parent>"' in _g8
+assert _split_para in _ri, "refine-issues epic-split paragraph drifted"
+# The split's epic dir is the one run-issue Epic mode reads, so `/run-issue <parent>` finds epic.json.
+_ri_dir = re.search(r'aiw epic split "(<runs_dir>/<owner>-<repo>-epic-)<epic>"', _ri)
+_ru_dir = re.search(r'aiw epic split "(<runs_dir>/<owner>-<repo>-epic-)<n>"', _read("commands", "run-issue.md"))
+assert _ri_dir and _ru_dir and _ri_dir.group(1) == _ru_dir.group(1), "refine-issues and run-issue epic dirs drifted"
 assert "No epics" not in _read("skills", "flow", "SKILL.md"), "flow: stale no-epics rule"
 assert "flat, independently readable" not in _read("CONTEXT.md"), "CONTEXT: refined is no longer flat"
-ok("gh-issue: saved list refined per task, epic parent linked at birth, decisions to the PRD; run-issue guard")
+_ri_tools = _ri_raw.split("---", 2)[1]
+for _t in ("Bash", "Read", "Write", "Edit", "Grep", "Glob", "Agent", "AskUserQuestion"):
+    assert re.search(rf"^  - {_t}$", _ri_tools, re.M), f"refine-issues allowed-tools lacks {_t}"
+_ti = _read("skills", "refine-issues", "templates", "issue.md")
+for _name, _txt in (("SKILL.md", _ri_raw), ("templates/issue.md", _ti)):
+    for _bad in (
+        "wasensi",
+        "staging",
+        "webhook-receiver",
+        "Pest",
+        "Pint",
+        "PostgreSQL",
+        "MongoDB",
+        "/implement-issue",
+        "/verifier-locally",
+        "#651",
+        "#643",
+        "Depends on #",
+    ):
+        assert _bad not in _txt, f"refine-issues {_name} still names {_bad!r}"
+    for _ln in _txt.splitlines():
+        assert "tenant" not in _ln.lower() or "multi-tenant" in _ln, f"refine-issues {_name}: tenant line {_ln!r}"
+# Template sections == gh-issue step 4's Body sections, in order.
+_gh_body = re.search(r"- Body sections: (.+)", _gh_raw).group(1)
+_got = re.findall(r"^## (.+)$", _ti, re.M)
+assert _got == re.findall(r"\*\*([A-Z][^*]+)\*\*", _gh_body), (
+    f"issue template sections {_got} != gh-issue body sections"
+)
+assert re.search(r"^Depends on: <", _ti, re.M) and re.search(r"^Test root: <", _ti, re.M), "issue template fields"
+ok("refine-issues: sub-issues + Depends on + epic split; template matches gh-issue's sections")
+# Fix round 1: epic split gets every child of the epic; no cross-epic Depends on; old-gh read-back.
+_ri_s7 = _ws(_slice(_ri_raw, "7. **Create**", "8. **Write back.**"))
+for _w in ("every issue of that epic's tasks", "matched or skipped in step 5", "never a `Dropped` task's"):
+    assert _w in _ri_s7, f"refine-issues step 7: --children must include {_w!r}"
+assert "When `--blocked-by` was unavailable, check the sub-issues only" in _ri_s7, (
+    "refine-issues step 7: an old gh skips the blocked-by read-back"
+)
+_ri_s2 = _ws(_slice(_ri_raw, "2. **Check it is ready.**", "3. **Gather"))
+assert re.search(r"/create-tasks` when .*depends on a task in another epic", _ri_s2), (
+    "refine-issues step 2: a cross-epic dependency goes back to /create-tasks"
+)
+_ct_raw2 = _read("skills", "create-tasks", "SKILL.md")
+assert "A task depends only on tasks of its own epic." in _ws(_slice(_ct_raw2, "5. **Split", "6. **Check")), (
+    "create-tasks step 5: same-epic dependencies only"
+)
+assert "depend on a task in another epic?" in _ws(_slice(_ct_raw2, "6. **Check", "7. **Save")), (
+    "create-tasks step 6: self-check for cross-epic dependencies"
+)
+ok("refine-issues: split gets all of an epic's children, same-epic deps only, old gh skips blocked-by read-back")
 
 # Six-flow step 5: /fix-blockers previews and applies `aiw epic blockers`, splitting first when no epic.json is here.
 _fb_path = os.path.join(HERE, "..", "skills", "fix-blockers", "SKILL.md")
@@ -4632,14 +4458,19 @@ assert re.search(r"[Hh]eadless.{0,80}--herdr", _pk), "peer-review: --herdr is ig
 assert "remembers its earlier rounds" in _pk, "peer-review: reused tabs keep context, said plainly"
 assert "that is not read-only" in _pk, "peer-review: --herdr tabs are not over-promised as read-only"
 
-_pr_all = _skill_sections("skills/prd/SKILL.md")
+_pr_all = _skill_sections("skills/create-prd/SKILL.md")
 assert "--review [<lens,lens>]" in _ws(_pr_all["Arguments"]) and "--herdr" in _ws(_pr_all["Arguments"])
 _rv = _ws(_key183(_pr_all, "Step 5.5"))
-for _w in ("aiw peer-review new prd", "never reuse one", "ai-workflow:peer-review", "--kind prd --dir <review_dir>"):
-    assert _w in _rv, f"prd Step 5.5 lacks {_w!r}"
-assert "save nothing" in _rv and "## Open questions" in _rv and "never accepts gaps" in _rv, "prd: finish line handled"
+for _w in (
+    "aiw peer-review new create-prd",
+    "never reuse one",
+    "ai-workflow:peer-review",
+    "--kind create-prd --dir <review_dir>",
+):
+    assert _w in _rv, f"create-prd Step 5.5 lacks {_w!r}"
+assert "save nothing" in _rv and "## Open questions" in _rv and "never accepts gaps" in _rv, "create-prd: finish line"
 assert "Peer review decisions (Step 5.5)" in _ws(_key183(_pr_all, "Flow auto mode")), (
-    "prd auto mode: review decisions are asked"
+    "create-prd auto mode: review decisions are asked"
 )
 _sp = _ws(_read("agents", "run-specialist.md"))
 assert "## Peer review mode" in _read("agents", "run-specialist.md") and "peer_review.rubric" in _sp
@@ -4654,6 +4485,10 @@ for _t in (_sp, _rv, _pk):
 assert "never put implementation" in _sp.lower() or "never adds implementation" in _sp.lower(), (
     "specialist: a doc fix is what, not how"
 )
+assert "(kind `create-prd`, rubric `prd-doc`)" in _sp and "may state contracts" in _sp, (
+    "specialist: a PRD's Technical design may state contracts"
+)
+assert "only code-level detail is banned" in _sp, "specialist: prd-doc bans only code-level detail"
 assert "--file - <<'EOF'" in _sp and "Ignore any checklist text in the dispatch" in _sp, (
     "the reviewer records its own verdict"
 )
@@ -4669,11 +4504,8 @@ assert "## Step 2.5: Peer review" in _read("skills", "dump", "SKILL.md") and "--
 assert "write nothing" in _du and "- Skill" in _read("skills", "dump", "SKILL.md"), "dump can invoke the skill"
 _gi = _ws(_read("commands", "gh-issue.md"))
 assert "## Peer review (only with `--review`)" in _read("commands", "gh-issue.md")
-assert (
-    "--kind gh-issue --dir <review_dir>" in _gi
-    and "## Epic parent: <title>" in _gi
-    and "before the first `gh issue create`" in _gi
-)
+assert "--kind gh-issue --dir <review_dir>" in _gi and "before the first `gh issue create`" in _gi
+assert "## Epic parent: <title>" not in _gi, "gh-issue files no epic parent, so the review draft has none"
 assert "factchecker" in _gi.split("## Peer review")[1][:2000], "gh-issue: the factchecker still runs after the panel"
 assert _gi.index("remove `--review`") < _gi.index("/intake $@ --whole"), (
     "gh-issue strips --review before calling /intake"
@@ -4689,18 +4521,20 @@ assert "--review" not in _ws(_key183(_skill_sections("skills/dump/SKILL.md"), "P
 ), "dump's programmatic path never reviews"
 ok("--review: peer-review skill loop on Opus; /prd, /intake, /dump, /gh-issue call it; programmatic calls never review")
 
-_s8_184 = _ws(_key183(_skill_sections("skills/prd/SKILL.md"), "Step 8"))
-assert f"End with the line `{NEXT}/create-tasks <prd-path>`" in _s8_184, "#184 prd Step 8 lacks the next line"
-assert "offer, in one line" not in _s8_184, "#184 prd Step 8 still has the prose offer"
-ok("#184 /prd Step 8 ends with \u2192 next: /create-tasks <prd-path>")
-
 _close184 = _ws(_read("commands", "gh-issue.md"))
 _close184 = _close184[_close184.rindex("Return the issue URL") :]
-assert f"`{NEXT}/fix-blockers <parent>` when an epic parent was filed, or `{NEXT}herdr-dispatch <n>`" in _close184, (
-    "#184 gh-issue lacks the next line"
-)
+assert (
+    f"Return the issue URL. On a standalone run, end with `{NEXT}herdr-dispatch <n>`; it is the last line of "
+    "your output and the Guided Flow parses it. If `/run-issue` invoked this skill, print no "
+    f"`{NEXT}herdr-dispatch` line: hand control back to its Preflight step 3" in _close184
+), "#184 gh-issue lacks the standalone-only next line"
 assert "hand control back to its Preflight step 3" in _close184
-assert _close184.index("hand control back") < _close184.index(NEXT), "#184 hand-back sentence stays first"
+# the 2+ tasks stop prints its /create-prd line even under /run-issue, which branches on it
+assert (
+    "(printed under `/run-issue` too, which branches on it;"
+    in " ".join(_read("commands", "gh-issue.md").split()).split("3.5. **Decompose.**")[1].split("4. Then create")[0]
+), "gh-issue /create-prd line must be printed under /run-issue"
+assert "fix-blockers" not in _close184 and "epic parent" not in _close184, "#184 gh-issue files no epic parent"
 ok("#184 /gh-issue ends with \u2192 next: herdr-dispatch; /run-issue hand-back unchanged")
 
 
@@ -4716,24 +4550,42 @@ _fs = _skill_sections("skills/flow/SKILL.md")
 _args187 = _ws(_key183(_fs, "Arguments"))
 for _shape, _stage in (
     ("Raw text", "dump"),
-    ("feature folder", "prd"),
+    ("feature folder", "create-prd"),
     ("PRD path", "create-tasks"),
-    ("task list", "gh-issue"),
+    ("task list", "refine-issues"),
+    ("Bugs.md", "gh-issue"),
     ("epic parent", "fix-blockers"),
     ("Issue numbers", "dispatch"),
 ):
     assert re.search(rf"{_shape}.{{0,160}}\| {_stage} \|", _args187, re.I), f"#187 entry shape {_shape} -> {_stage}"
-assert "Dump.md" in _args187, "#187 Dump.md path enters at prd"
+assert "Dump.md" in _args187, "#187 Dump.md path enters at create-prd"
 ok("#187 /flow exists and names its six entry shapes")
 _route187 = _ws(_key183(_fs, "Routing after dump"))
 for _cls, _path in (
-    ("New feature", "prd \u2192 create-tasks \u2192 gh-issue \u2192 fix-blockers \u2192 dispatch"),
-    ("Change request", "prd"),
-    ("Bug report", "create-tasks \u2192 gh-issue \u2192 fix-blockers \u2192 dispatch"),
+    ("New feature", "create-prd \u2192 create-tasks \u2192 refine-issues \u2192 fix-blockers \u2192 dispatch"),
+    ("Change request", "create-prd"),
+    ("Bug report", "gh-issue \u2192 dispatch"),
     ("Feature-scoped task", "gh-issue \u2192 dispatch"),
     ("Unclassifiable", "stop"),
 ):
     assert re.search(rf"{_cls}.{{0,120}}{_path}", _route187, re.I), f"#187 routing {_cls}"
+assert "| Bug report | gh-issue \u2192 dispatch |" in _route187, "#187 a bug goes straight to gh-issue"
+assert "`approve <prd-path>`" in _ws(_flow), "#187 approve takes the PRD path"
+assert "Approve the PRD, file its epics, and continue to create-tasks (Recommended)" in _flow, (
+    "#187 the create-prd boundary names the approval"
+)
+assert "into the create-tasks (it runs the approve that files epics), gh-issue or refine-issues stage" in _flow, (
+    "#187 guardrail names create-tasks"
+)
+assert "/create-prd approve" in _flow, "#187 flow must invoke create-prd approve after Continue"
+assert not re.search(r"(?<![-\w])/prd\b", _flow) and "ai-workflow:prd" not in _flow, "flow: no /prd left"
+assert not re.search(r"(?<![-\w])/prd\b", _read("skills", "dump", "SKILL.md")), "dump: no /prd left"
+assert re.search(
+    r"gh-issue.{0,400}\u2192 next: /create-prd", _ws(_flow.split("### gh-issue")[1].split("###")[0]), re.I
+), "flow: a gh-issue stop routes back to create-prd"
+assert "The epics `/create-prd approve` files are the only tracking issues" in _ws(_flow), (
+    "flow guardrail: epics are the only tracking issues"
+)
 ok("#187 /flow routes by dump classification and stops after filing for the rest")
 _flow_ws = _ws(_flow)
 assert f"`{NEXT}" in _flow_ws and "take the next stage's argument from that line" in _flow_ws, (
@@ -4746,5 +4598,109 @@ assert "--dry-run" in _dp187 and "--max 2" in _dp187 and "Launch" in _dp187, "#1
 assert _dp187.index("--dry-run") < _dp187.index("Launch"), "#187 dry-run is shown before the launch question"
 assert re.search(r"[Nn]ever (launch|dispatch).{0,60}without an explicit", _flow_ws), "#187 never dispatch without a go"
 ok("#187 /flow checkpoints every boundary; dispatch shows --dry-run (--max 2) and launches only on an explicit go")
+
+# Final-review fix wave (wasensi planning skills): one check per finding.
+_gh_fw = _read("commands", "gh-issue.md")
+_s0 = _ws(_slice(_gh_fw, "0. **Source check.**", "Details: $@"))
+for _w in (
+    "Bugs.md",
+    "Tasks.md",
+    'obsidian vault=notes read path="<path>"',
+    "## <date>: <title>",
+    "right above `## Related`",
+    "newest first",
+    "Flow auto mode",
+    "Source: <path> — <block heading>",
+    "only the chosen block",
+):
+    assert _w in _s0, f"C1 gh-issue step 0 lacks {_w!r}"
+assert _s0.index("Bugs.md") < _s0.index("detectable source shapes"), "C1 the vault-note rule precedes the /intake check"
+ok("C1 gh-issue step 0 reads one block of a vault Bugs.md/Tasks.md note before the /intake shape check")
+
+_cpa = _skill_sections("skills/create-prd/SKILL.md")
+_s2p = _ws(_key183(_cpa, "Step 2"))
+assert "Step 8" in _s2p and "→ next: /create-tasks <prd-path>" in _s2p, "I2 a Step 2 update ends with Step 8"
+_updp = _ws(_key183(_cpa, "Update mode"))
+assert re.search(r"[Cc]alled explicitly as `/create-prd --update`.{0,40}print no next line", _updp), "I2 explicit only"
+assert "reached from Step 2" in _updp, "I2 Update mode: an update reached from Step 2 still hands off"
+assert "→ next: /create-tasks <prd-path>" in _ws(_key183(_cpa, "Changing an approved PRD")), "I2 change -> next"
+ok("I2 an interactive update of an Approved PRD ends with the create-tasks next line; only --update prints none")
+
+_ri_fw = _read("skills", "refine-issues", "SKILL.md")
+_s7r = _ws(_slice(_ri_fw, "7. **Create**", "8. **Write back.**"))
+for _w in ("gh label create refined", "gh label create prd-<slug>", "Flow auto mode", "never `--force`"):
+    assert _w in _s7r, f"I3 refine-issues step 7 lacks {_w!r}"
+assert re.search(r"gh label create refined\b[^\n]*2>/dev/null \|\| true", _ri_fw), "I3 gh-issue's ensure-create idiom"
+assert _s7r.index("gh label create") < _s7r.index("gh issue create"), "I3 labels exist before the first create"
+assert re.search(r"[Aa]rea and priority labels.{0,80}never (create|invent)", _s7r), "I3 never invent area/priority"
+ok("I3 refine-issues creates missing refined/prd-<slug> labels before the first create, never recolours")
+
+_gfa = _ws(_slice(_gh_fw, "### Flow auto mode", "**HARD RULE"))
+assert "already grilled" not in _gfa and "Bugs.md" in _gfa and "no PRD" in _gfa, "I4 gh-issue auto mode input"
+assert "**Open questions**" in _gfa and "Assumptions" in _gfa, "I4 open questions asked, else Assumptions"
+_cpf = _ws(_key183(_cpa, "Flow auto mode"))
+assert "(`/create-tasks`, `/refine-issues`)" in _cpf and "/gh-issue" not in _cpf, "I4 create-prd names the later steps"
+ok("I4 gh-issue Flow auto mode grills the block's open questions; create-prd names create-tasks/refine-issues")
+
+assert "docs/prd/<slug>.md" in _key183(_cpa, "Step 2") and "git mv docs/prd/<slug>.md docs/prds/<slug>.md" in _s2p, (
+    "I5 create-prd Step 2 finds and moves a legacy PRD"
+)
+assert "just do it and say so" in _s2p, "I5 Flow auto mode moves without asking"
+_ct_fw = _ws(_read("skills", "create-tasks", "SKILL.md"))
+assert "docs/prd/<slug>.md" in _ct_fw and "→ next: /create-prd docs/prd/<slug>.md" in _ct_fw, "I5 create-tasks"
+assert "never move it here" in _ct_fw, "I5 create-tasks does not move the legacy PRD"
+ok("I5 legacy docs/prd/<slug>.md: create-prd offers git mv; create-tasks points at /create-prd")
+
+_apv = _ws(_key183(_cpa, "Approve"))
+assert _apv.index("Write `Issue: #<n>` back") < _apv.index("Only now set `**Status:** Approved`"), (
+    "M1 status after epics"
+)
+assert "Stop leaves the status unchanged" in _apv, "M1 Stop leaves the PRD unapproved"
+ok("M1 approve sets Approved only after its epics are created and written back")
+
+assert "reads only `None` is empty" in _apv, "M2 create-prd approve"
+_ct_s2fw = _ws(_slice(_read("skills", "create-tasks", "SKILL.md"), "2. **Check it is ready", "3. **Ground"))
+_ct_autofw = _ws(_slice(_read("skills", "create-tasks", "SKILL.md"), "### Flow auto mode", "## Steps"))
+assert "reads only `None`" in _ct_s2fw and "reads only `None`" in _ct_autofw, "M2 create-tasks gate + auto mode"
+ok("M2 an Open questions section reading only None counts as empty")
+
+_tt_fw = _read("skills", "create-tasks", "templates", "task-list.md")
+_deps = {
+    int(n): re.findall(r"task (\d+)", d)
+    for n, d in re.findall(r"^## Task (\d+) .*?^Depends on: ([^\n]*)$", _tt_fw, re.M | re.S)
+}
+_wave = {}
+for _i, _line in enumerate(re.findall(r"^- Wave \d+ .*$", _tt_fw, re.M), 1):
+    for _t in re.findall(r"task (\d+)", _line):
+        _wave[int(_t)] = _i
+assert set(_wave) == set(_deps), f"M3 waves name tasks {sorted(_wave)} but the template has {sorted(_deps)}"
+for _t, _ds in _deps.items():
+    assert all(_wave[int(_d)] < _wave[_t] for _d in _ds), f"M3 task {_t} sits in a wave with or before its dependency"
+ok("M3 task-list template: waves agree with Depends on")
+
+_fb = _read("skills", "fix-blockers", "SKILL.md")
+assert "/gh-issue" not in _fb and "/refine-issues" in _fb, "M4 fix-blockers names /refine-issues"
+assert "/refine-issues" in _read("run-engine", "refined.py").split('"""')[1], "M4 refined.py docstring"
+assert "create-prd, intake" in _read("run-engine", "peer_review.py"), "M4 peer_review --kind help"
+assert "/create-prd" in _read("run-engine", "ui_settings.py") and not re.search(
+    r"(?<![-\w])/prd\b", _read("run-engine", "ui_settings.py")
+), "M4 ui_settings comment"
+ok("M4 no stale /gh-issue-epic or /prd references")
+
+for _name, _txt in (("HOW-IT-WORKS", _read("docs", "HOW-IT-WORKS.md")), ("CHANGELOG", _read("CHANGELOG.md"))):
+    assert "assign you" not in _txt and "they assign" not in _txt, f"M5 {_name} still says refine-issues assigns you"
+    assert "`/refine-issues` leaves them unassigned" in _ws(_txt), f"M5 {_name} must say refine-issues assigns no one"
+assert "**Assignees:** none." in _ri_fw, "M5 the skill is the source"
+ok("M5 docs match refine-issues: Flow auto mode assigns no one")
+
+_fct = _ws(_flow.split("### create-tasks")[1].split("###")[0])
+assert (
+    "not `Approved`" in _fct and "Approve the PRD, file its epics, and continue to create-tasks (Recommended)" in _fct
+)
+assert "approve <prd-path>" in _fct and "Stop here" in _fct, "M6 flow create-tasks entry runs the approve checkpoint"
+ok("M6 /flow entering at create-tasks with an unapproved PRD asks the approve checkpoint first")
+
+assert re.search(r"`prd-<slug>`.{0,120}`\*\*Slug:\*\*` header.{0,80}never the task-list file name", _ws(_ri_fw)), "M7"
+ok("M7 refine-issues takes prd-<slug> from the PRD's Slug header")
 
 print(f"\n{passed} checks passed")

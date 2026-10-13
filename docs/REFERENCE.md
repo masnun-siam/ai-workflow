@@ -7,15 +7,16 @@
 | `/ai-workflow:run-issue <n> [--full] [--no-review] [--grind]` | the full pipeline: issue → reviewed PR (`--no-review` skips review and fix; `--grind` keeps working the PR's review rounds after the handback, off by default). Accepts an epic parent. |
 | `/ai-workflow:intake <source> [--review [<lens,lens>] [--herdr]]` | normalize a Sentry link, BRD file, or vault note into an issue brief — used internally by `/gh-issue` and `/run-issue` (which never pass `--review`) |
 | `/ai-workflow:dump <text> [--review [<lens,lens>] [--herdr]]` | file free-form input into the Obsidian vault's Project → Feature structure, after one confirmation |
-| `/ai-workflow:gh-issue [--review [<lens,lens>] [--herdr]]` | file a well-formed issue; always decomposes first — one task files one issue; two or more save the task list to `docs/tasks/<slug>.md` and file one refined issue per task, ordered by `Depends on: #n` lines, under an `epic` parent; `/gh-issue docs/tasks/<slug>.md` files a saved list, one question round per task |
-| `/ai-workflow:prd <requirement \| feature-folder> [--review [<lens,lens>] [--herdr]]` | grill a requirement into a PRD saved to `docs/prd/<slug>.md` and the vault; `--review` runs the picked reviewer lenses (default critical; also CEO, CTO, security, QA, UX, performance) until every one approves (`--herdr`: one herdr tab per reviewer, terminal only); `--update` records later decisions |
-| `/ai-workflow:peer-review [--lenses <lens,lens>] [--since <sha\|@{u}>] [--herdr]` | a reviewer panel on Opus (critical, CEO, CTO, security, QA, UX, performance; default critical) on the session's change: the diff plus your final answer, checked against what you asked, until every picked lens approves. `--review` on `/prd`, `/intake`, `/dump` and `/gh-issue` runs the same loop on their draft before anything is saved or filed |
-| `/ai-workflow:create-tasks <prd \| problem-statement>` | break a problem statement and its PRD into a saved, ordered task list (`docs/tasks/<slug>.md`) using `/gh-issue`'s decomposition rules; files no issues. `/gh-issue docs/tasks/<slug>.md` then files them |
+| `/ai-workflow:gh-issue [--review [<lens,lens>] [--herdr]]` | file exactly one well-formed issue. It decomposes first; when the input splits into 2 or more tasks it creates nothing and ends `→ next: /create-prd <input>`. A standalone run ends `→ next: herdr-dispatch <n>` |
+| `/ai-workflow:create-prd <requirement \| feature-folder> [--to <local,obsidian,wiki>] [--review [<lens,lens>] [--herdr]]` | grill a requirement into a PRD with its technical design (contracts, never code) and its epics, saved to `docs/prds/<slug>.md` (status Draft, In review, then Approved) and mirrored to the vault; `--review` runs the picked reviewer lenses (default critical; also CEO, CTO, security, QA, UX, performance) until every one approves (`--herdr`: one herdr tab per reviewer, terminal only); `--update <prd> <decisions>` records later decisions (plus a `## Change log` line once Approved); `/create-prd approve <prd-path \| slug>` sets Approved, files one epic per `## Epics` entry labelled `epic` + `prd-<slug>`, and writes the numbers back |
+| `/ai-workflow:peer-review [--lenses <lens,lens>] [--since <sha\|@{u}>] [--herdr]` | a reviewer panel on Opus (critical, CEO, CTO, security, QA, UX, performance; default critical) on the session's change: the diff plus your final answer, checked against what you asked, until every picked lens approves. `--review` on `/create-prd`, `/intake`, `/dump` and `/gh-issue` runs the same loop on their draft before anything is saved or filed |
+| `/ai-workflow:create-tasks <prd>` | split an Approved PRD into a saved, ordered list of one-PR tasks (`docs/tasks/<slug>.md`): each with an Area, a Parallel flag and dependencies inside its own epic, plus Waves and Shared files; tasks are never renumbered, only marked Changed or Dropped. Files no issues; ends `→ next: /refine-issues docs/tasks/<slug>.md` |
+| `/ai-workflow:refine-issues docs/tasks/<slug>.md` | file each task as a `refined` sub-issue of its epic, after one confirmation, with `Depends on: #n` in the body and native blocked-by links (on an older `gh`, `/fix-blockers` sets them); runs one `aiw epic split` per epic; ends `→ next: /fix-blockers <epic>` |
 | `/ai-workflow:fix-blockers <parent>` | set GitHub's native "blocked by" relations between an epic's children from their `Depends on:` lines: previews, asks once, writes only the missing edges, reports (never deletes) edges no line names |
-| `/ai-workflow:jira-to-gh <KEY>` | decompose a Jira ticket and file flat issues the same way as `/gh-issue` (one issue for a single task; two or more saved to `docs/tasks/<slug>.md` and filed flat) |
+| `/ai-workflow:jira-to-gh <KEY>` | turn a Jira ticket into exactly one issue the same way as `/gh-issue`; 2 or more tasks create nothing and end `→ next: /create-prd <jira-key-or-url>` |
 | `/ai-workflow:pr-fix-comments <pr>` | work through a PR's review comments, confirming each |
 | `/ai-workflow:issue-to-pr` | the interactive, non-unattended variant |
-| `/ai-workflow:flow <idea \| folder \| PRD \| task list \| parent \| issue numbers>` | the guided flow (`/flow` for short): dump → PRD → task list → issues under an epic → blockers → herdr-dispatch for one feature, starting at whichever stage the input implies and stopping for your go at each boundary |
+| `/ai-workflow:flow <idea \| folder \| PRD \| task list \| parent \| issue numbers>` | the guided flow (`/flow` for short): dump → create-prd → (Continue approves the PRD and files its epics) → create-tasks → refine-issues → fix-blockers → herdr-dispatch for one feature; a bug goes gh-issue → dispatch. It starts at whichever stage the input implies and stops for your go at each boundary |
 
 The default roster is researcher → planner → dev → reviewer → fixer. `run-dev` writes the
 RED tests first, implements, and runtime-verifies in one dispatch, and also applies the
@@ -98,12 +99,12 @@ plugin upgrades** — in-flight runs are not lost when you update.
 ```
 commands/     run-issue (the orchestrator) + 5 intake commands
 agents/       12 run-* pipeline agents + ship, worklog-runner, gh-issue-factchecker
-skills/       pr-review, pr-grind, herdr-dispatch, worklog, dump, prd, create-tasks, fix-blockers, flow, 7 Laravel reviewers
+skills/       pr-review, pr-grind, herdr-dispatch, worklog, dump, create-prd, create-tasks, refine-issues, fix-blockers, flow, peer-review, 7 Laravel reviewers
 run-engine/   engine.py (pure) · route.py (CLI) · checks.py (station post-checks)
               stack/worktree/threads/pr/ci/gitnexus/project/epic (mechanical phases)
               config.json (policy) · test_engine.py + test_scripts.py
 bin/aiw       PATH shim. NOT named `route` — see INSTALL.md Step 3.
-docs/         HOW-IT-WORKS, INSTALL, REFERENCE, adr/, prd/, tasks/
+docs/         HOW-IT-WORKS, INSTALL, REFERENCE, adr/, prds/, tasks/
 ```
 
 ## Tests

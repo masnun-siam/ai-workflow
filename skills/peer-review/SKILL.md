@@ -1,6 +1,6 @@
 ---
 name: peer-review
-description: "Run a panel of single-lens reviewers (critical, CEO, CTO, security, QA, UX, performance) on one artifact until every picked lens approves, on Opus, in parallel. Called by /prd, /intake, /dump and /gh-issue when they get --review, and runnable on its own after any work: /peer-review reviews the session's change (diff plus final answer) against what the user asked. Use whenever the user says /peer-review, 'peer review this', 'get the panel to review it', or asks for critical/CEO/CTO/security/QA/UX/performance reviewers on the work just done."
+description: "Run a panel of single-lens reviewers (critical, CEO, CTO, security, QA, UX, performance) on one artifact until every picked lens approves, on Opus, in parallel. Called by /create-prd, /intake, /dump and /gh-issue when they get --review, and runnable on its own after any work: /peer-review reviews the session's change (diff plus final answer) against what the user asked. Use whenever the user says /peer-review, 'peer review this', 'get the panel to review it', or asks for critical/CEO/CTO/security/QA/UX/performance reviewers on the work just done."
 allowed-tools:
   - Bash
   - Read
@@ -17,7 +17,7 @@ allowed-tools:
 > **Paths.** `<...>` placeholders below are keys from `aiw paths` (run it; `aiw` is
 > on `PATH` via the plugin's `bin/`). Substitute the printed value; never guess a path.
 
-A panel of single-lens reviewers checks one artifact in rounds: a draft doc (`prd`, `intake`,
+A panel of single-lens reviewers checks one artifact in rounds: a draft doc (`create-prd`, `intake`,
 `dump`, `gh-issue`), or a change (`custom`: the Ask, your Answer and the Diff in one file). The
 lens pool, what each kind offers, the checklists and the two severity rubrics are `peer_review`
 in `<config>`. **Every picked lens blocks:** the artifact is done when all of them approve.
@@ -139,7 +139,7 @@ Print `review dir: <review_dir>` with every round's outcome, so a session resume
 <n> round(s); review dir: <review_dir>`, then the lenses, each lens's last verdict, each advisory
 finding with its disposition, the decisions recorded and any known gaps. A caller reads this
 line: on `stopped` it files nothing; on `known gaps accepted` it records the gaps where its own
-instructions say (for `/prd`, under `## Open questions`). Standalone, the gaps go in your final
+instructions say (for `/create-prd`, under `## Open questions`). Standalone, the gaps go in your final
 answer to the user.
 
 ## With `--herdr`
