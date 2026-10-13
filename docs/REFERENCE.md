@@ -41,6 +41,7 @@ aiw gitnexus sync|index|clean      the code graph (best-effort)
 aiw project-status                 GitHub Projects (best-effort)
 aiw epic split|init|next|status    epic decomposition and sequencing
 aiw epic blockers <dir> [--dry-run]   GitHub blocked-by edges from the children's Depends on lines
+aiw prd-review next|verdict <dir>     PRD peer review: open/decide rounds, record a checked verdict
 aiw ui [--port N] [--allow-host HOST]  local web UI to start and track sessions
 ```
 

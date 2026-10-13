@@ -226,5 +226,32 @@
         "prompt": "Review this diff through exactly one lens: API CONTRACT. (a) Breaking changes — a removed or renamed field, a narrowed type, a changed status code, a newly-required request parameter, a changed default. (b) Consistency — the new shape matches the response/error envelope every neighbouring endpoint already uses. (c) Documentation drift — the OpenAPI/schema/generated-doc artifact in the repo matches what the code now returns. (d) Versioning — a breaking change ships behind a version or a deprecation, not silently. Name the exact consumer-visible difference; a change no client can observe is not a finding."
       }
     }
+  },
+  "prd_review": {
+    "_doc": "PRD peer review (/prd --review): one single-lens reviewer per lens, prompt = rubric + the lens prompt. Only a blocking lens can hold the PRD; the rest are advisory. aiw prd-review validates verdicts and decides.",
+    "max_rounds": 3,
+    "rubric": "Severity: blocker = two statements that cannot both hold, or an FR that cannot be tested as written. major = the PRD leaves behaviour undefined for an input or state the FR will certainly meet. minor = everything else. At most 8 findings, most severe first. Every finding quotes the PRD line it is about (whitespace and emphasis ignored), or names the ##/### heading under which something is missing. A finding the prior round dismissed with a reason is not raised again unless you quote new evidence. A fix changes the PRD's wording; it never adds implementation (modules, tables, endpoints): a PRD is the what and why, never the how. A finding that needs a fact only the user has (evidence, priority, a product choice) is needs_decision, never an edit.",
+    "lenses": {
+      "critical": {
+        "blocking": true,
+        "focus": "completeness: testable requirements, edge cases, contradictions, undefined terms",
+        "prompt": "Review this PRD through exactly one lens: COMPLETENESS. (a) Every FR has an observable acceptance check; 'fast', 'easy', 'robust' or 'as needed' left undefined is a finding. (b) Edge cases, only the categories that apply to the FR's own inputs: empty or null, boundary values, permission denied, concurrent change, partial failure and retry, existing data under the new rule. A missing one is major only if the FR will certainly meet it, otherwise minor. (c) Contradictions between two FRs, an FR and a Non-goal, or a Decision and an FR; quote both. (d) Undefined terms: a noun the PRD relies on but never defines, or uses in two senses. (e) An Open question that blocks an FR without saying which."
+      },
+      "ceo": {
+        "blocking": false,
+        "focus": "product value: evidence, metrics, traceability, implied scope",
+        "prompt": "Review this PRD through exactly one lens: PRODUCT VALUE. (a) The Problem has evidence (a user, a number, a report); if it is missing, that is needs_decision, never written in. (b) Each success metric has a baseline, a target and a way to measure it now; 'no metric, because <reason>' is a valid answer. (c) Traceability: each FR traces to the stated Problem or a Goal; an FR that traces to neither is a cut candidate (quote it). (d) Implied capability: for each FR, a capability its own wording implies but neither specifies nor rules out ('export' -> which formats, 'notify' -> which channel); quote the word. (e) Who loses: a user group or workflow named in the PRD or found in the code (cite file:line) that a quoted FR makes worse, with no mention in the PRD. Never invent a persona."
+      },
+      "cto": {
+        "blocking": false,
+        "focus": "feasibility against this repo, with code as evidence only",
+        "prompt": "Review this PRD through exactly one lens: FEASIBILITY against this repo. Search the code for evidence; never put implementation into the PRD. (a) An FR that contradicts existing behaviour, or is infeasible as stated, that the PRD does not acknowledge; cite file:line and fix the FR's wording. (b) Data: the PRD does not acknowledge that existing records fall under a new or changed rule (cite where they live). (c) An FR with no stated behaviour when its external dependency fails, or whose effect on existing users cannot be undone and the PRD does not say so. (d) Scale: an FR whose cost grows with data or users and has no bound in its wording. (e) Hidden coupling: the PRD does not acknowledge that an FR changes a shared component other callers use (cite the callers)."
+      },
+      "security": {
+        "blocking": false,
+        "focus": "authorization, untrusted input, data exposure, PII, abuse",
+        "prompt": "Review this PRD through exactly one lens: SECURITY. Search the code for evidence and cite file:line. (a) Each FR that exposes or changes data says who may do it. (b) Each new entry point (form, API, import, webhook) says how untrusted input is bounded. (c) Data exposure: every existing surface that can render the changed data, found by search and cited, where the PRD does not say who may see it. (d) PII: new personal data without a stated retention and deletion rule. (e) Abuse: an action a user can repeat or enumerate (send, export, look up) with no stated limit."
+      }
+    }
   }
 }

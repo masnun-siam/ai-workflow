@@ -27,6 +27,7 @@ Mechanical subcommands (the phases that used to be prose in commands/run-issue.m
   aiw ci status <pr-ref> [--watch]
   aiw gitnexus sync|index|clean <repo> [--run-dir <runDir>]
   aiw project-status <owner/repo> <issue> "<status>"
+  aiw prd-review next <dir> --prd <path> [--prior F] [--more] | verdict <dir> --lens L --file F
   aiw precheck <runDir> <station>      # sdet | reviewer | fixer
 
 Exit codes for `route`: 0 ok · 2 usage · 3 unreadable artifact · 4 artifact is not a
@@ -56,6 +57,7 @@ import checks as checks_mod  # noqa: E402
 import ci  # noqa: E402
 import dispatch  # noqa: E402
 import epic  # noqa: E402
+import prd_review  # noqa: E402
 import gitnexus  # noqa: E402
 import ui_server  # noqa: E402
 import ask  # noqa: E402
@@ -461,6 +463,7 @@ def main(argv=None) -> None:
         ui_server,
         ask,
         refined,
+        prd_review,
     ):
         module.register(sub, add)
 
