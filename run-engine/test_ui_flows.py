@@ -198,6 +198,7 @@ assert "Flow auto mode" in ui_runner._system({"flow_id": "f-1"}) and ui_runner.H
     {"flow_id": "f-1"}
 )
 assert ui_runner._system({}) == ui_runner._system(None) == ui_runner.HEADLESS_PROMPT
+assert "Never call ScheduleWakeup" in ui_runner._system({})
 assert "Never run herdr" in ui_runner._system({"flow_id": "f-1"})
 print("ok Flow auto mode prompt only for flow sessions")
 

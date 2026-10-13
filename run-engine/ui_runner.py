@@ -32,6 +32,8 @@ import ui_events
 HEADLESS_PROMPT = (
     "Headless run: ask via aiw ask, never AskUserQuestion. Gate questions go through "
     "`aiw ask --json '<AskUserQuestion input>'`; then end your turn. "
+    "Never call ScheduleWakeup: a pending wakeup keeps this process alive, and the UI cannot take "
+    "an answer until it exits. "
     "When running /run-issue, skip phase 10 (grinding): the aiw ui starts it on request."
 )
 # Sessions started from the guided Flow carry flow_id; skills read this line as their "Flow auto mode".
@@ -557,6 +559,10 @@ def reconcile() -> None:
     for rec in ui_sessions.list_sessions():
         sid = rec["id"]
         try:
+            if rec.get("status") == "waiting" and rec.get("pid_started") and not rec.get("ended_at"):
+                if sid not in _procs:
+                    _watch_waiting(sid, rec["pid"], rec["pid_started"])
+                continue
             if rec.get("status") not in ("starting", "running") or sid in _procs:
                 continue
             pid, started = rec.get("pid"), rec.get("pid_started")
@@ -572,6 +578,40 @@ def reconcile() -> None:
                 _follow(sid, None, pid, started)  # not ours/dead: loop exits, closes from stream
         except Exception as e:
             warn(f"ui_runner reconcile of {sid} failed: {e}")
+
+
+def _watch_waiting(sid: str, pid, started) -> None:
+    """A waiting session's claude can outlive a UI restart (e.g. a pending wakeup). Hold it in _procs
+    so no answer resumes a second process, and stamp ended_at once it exits: that unlocks the form.
+    Never touches status or the pending round."""
+
+    def close() -> None:
+        if (ui_sessions.load(sid) or {}).get("status") == "waiting":
+            ui_sessions.update(sid, ended_at=_now())
+
+    cur = _proc_start(pid)
+    if cur is not _PS_ERROR and cur != started:
+        close()
+        return
+
+    def watch() -> None:
+        errors = 0
+        try:
+            while True:
+                cur = _proc_start(pid)
+                errors = errors + 1 if cur is _PS_ERROR else 0
+                if (cur is not _PS_ERROR and cur != started) or errors > 25:
+                    break
+                time.sleep(1)
+            close()
+        except Exception as e:  # keep the daemon thread from dying silently
+            warn(f"ui_runner waiting watcher for {sid} failed: {e}")
+        finally:
+            if sid in _procs and _procs[sid] is None:
+                _procs.pop(sid, None)
+
+    _procs[sid] = None
+    threading.Thread(target=watch, daemon=True).start()
 
 
 def _group_gone(pgid: int, proc) -> bool:

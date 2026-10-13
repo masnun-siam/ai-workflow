@@ -159,6 +159,12 @@
 
 ### Fixed
 
+- **A waiting session's answer form no longer gets stuck.** A headless session that scheduled a
+  wakeup stayed alive after `aiw ask`, so every Submit got "session process is still running". The
+  headless prompt now forbids ScheduleWakeup, and the answer form disables Submit with a note while
+  the process runs, then unlocks itself when it exits. A UI restart while such a process is alive
+  now watches it and stamps `ended_at` when it exits; before, nothing did, and the form stayed
+  locked for good.
 - **The flow.js stepper checks run again.** They sat in a `test_ui_static.py --view` block that
   nothing runs (and that fails earlier on unrelated stale checks); they now run in its default
   mode, so in the pre-push hook and CI.

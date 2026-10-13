@@ -811,7 +811,7 @@ const A = await import(process.env.ANSWER_URL);
 const assert = (await import('node:assert')).strict;
 const out = (n) => console.log('ok ' + n);
 const { viewMode, displayLabel, initialAnswers, toggle, buildBody, startSubmit, afterSubmit,
-  submitAnswer, runHash, doneHash, planRun, planText, resumeCommand } = A;
+  submitAnswer, runHash, doneHash, planRun, planText, resumeCommand, processLive } = A;
 out('import without document does not throw');
 
 const waiting = { waiting: true, outcome: 'waiting', pending_question: { id: 'q1', status: 'pending' } };
@@ -825,6 +825,12 @@ assert.equal(viewMode({ outcome: 'done' }), 'state');
 assert.equal(viewMode(null), 'state');
 assert.equal(viewMode({}), 'state');
 out('viewMode');
+
+assert.equal(processLive(waiting), true);
+assert.equal(processLive({ ...waiting, ended_at: '2026-10-14T00:00:00Z' }), false);
+assert.equal(processLive({ outcome: 'running' }), false);
+assert.equal(processLive(null), false);
+out('processLive: waiting with no ended_at blocks submit');
 
 const REC = 'Approve (Recommended)';
 const pending = { id: 'r9', status: 'pending', questions: [
