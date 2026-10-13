@@ -2587,6 +2587,27 @@ assert "→ next: /fix-blockers" not in _gh, "gh-issue files no epic now"
 assert "ai-workflow:prd" not in _gh and not re.search(r"`/prd\b", _gh), "gh-issue still names the old /prd"
 ok("gh-issue: one issue per run; 2+ tasks stop and route to /create-prd")
 
+# gh-issue's HARD RULE keeps every prohibition, its permitted-writes list and its Scope lapse (was #79).
+_hr = " ".join(_slice(_gh, "**HARD RULE", "Do the following:").split())
+for needle in (
+    "this skill only ever creates a GitHub issue. It never touches code.",
+    "NEVER use Write, Edit, or NotebookEdit",
+    "NEVER run a mutating shell command",
+    "The ONLY writes permitted are the **Peer review** draft under `<data_dir>` (outside the repo), "
+    "the temp body file at `/tmp/gh-issue-body.md`, the `gh issue create` / `gh issue edit` / `gh project` calls below, "
+    "`aiw ask` when headless",
+    "the notes-vault dump in step 7",
+    '"It\'s trivial" is not an exception',
+    "do NOT apply it. Record it under a **Proposed Fix** section",
+    "**Scope.** These constraints bind steps 0\u20137 of this skill only.",
+    "they lapse the moment the issue URL is returned",
+    "this rule must not be carried into them",
+):
+    assert needle in _hr, f"gh-issue HARD RULE lost {needle!r}"
+for _gone in ("sole exception", "docs/tasks/", "aiw epic split", "Issue:` slots"):
+    assert _gone not in _hr, f"gh-issue HARD RULE still carves out {_gone!r}"
+ok("gh-issue HARD RULE keeps its prohibitions, permitted writes and Scope lapse; no task-list or epic exception")
+
 readme_text = _user_docs()
 assert "splits a large brief" not in readme_text, (
     "README/INSTALL/REFERENCE must not describe gh-issue as splitting a large brief"
@@ -4255,7 +4276,21 @@ assert "\u2192 next: /fix-blockers <epic>" in _ri, "refine-issues next line"
 _gh_raw = _read("commands", "gh-issue.md")
 _blk = _slice(_gh_raw, "- **Project (step 6):**", "- **Step 7:**").split("(step 6):** ", 1)[1]
 assert _ws(_blk) in _ri, f"refine-issues must copy gh-issue verbatim: {_ws(_blk)[:60]!r}"
-assert "children may already be linked while no `epic.json` exists" in _ri, "refine-issues split failure state"
+_split_para = (
+    "Children in list order. It links them as sub-issues, checks that `Depends on:` forms a DAG, "
+    "writes the parent's `## Tasks` checklist, and writes the `epic.json` that `/run-issue <parent>` "
+    "Epic mode reads. It is idempotent, so a re-run is safe. Exit 1: report its message and stop. "
+    "It links the children before it checks `Depends on:`, so on a cycle or a bad `Depends on:` the "
+    "children may already be linked while no `epic.json` exists; `/run-issue <parent>` Epic mode "
+    "then re-runs the split in its step 0 and stops on the same error until the lines are fixed."
+)
+assert _split_para in _ri, "refine-issues epic-split paragraph drifted"
+# The split's epic dir is the one run-issue Epic mode reads, so `/run-issue <parent>` finds epic.json.
+_ri_dir = re.search(r'aiw epic split "(<runs_dir>/<owner>-<repo>-epic-)<epic>"', _ri)
+_ru_dir = re.search(r'aiw epic split "(<runs_dir>/<owner>-<repo>-epic-)<n>"', _read("commands", "run-issue.md"))
+assert _ri_dir and _ru_dir and _ri_dir.group(1) == _ru_dir.group(1), "refine-issues and run-issue epic dirs drifted"
+assert "No epics" not in _read("skills", "flow", "SKILL.md"), "flow: stale no-epics rule"
+assert "flat, independently readable" not in _read("CONTEXT.md"), "CONTEXT: refined is no longer flat"
 _ri_tools = _ri_raw.split("---", 2)[1]
 for _t in ("Bash", "Read", "Write", "Edit", "Grep", "Glob", "Agent", "AskUserQuestion"):
     assert re.search(rf"^  - {_t}$", _ri_tools, re.M), f"refine-issues allowed-tools lacks {_t}"
