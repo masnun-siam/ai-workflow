@@ -4639,9 +4639,19 @@ for _name, _txt in (("SKILL.md", _ct), ("templates/task-list.md", _tt)):
         "#651",
     ):
         assert _bad not in _txt, f"create-tasks {_name} still names {_bad!r}"
-for _ln in (_ct + "\n" + _tt).splitlines():
+for _ln in (_read("skills", "create-tasks", "SKILL.md") + "\n" + _tt).splitlines():
     assert "tenant" not in _ln.lower() or "multi-tenant" in _ln, f"create-tasks: unconditional tenant line {_ln!r}"
 ok("create-tasks: Approved PRD only, waves and shared files, next is /refine-issues")
+# Flow auto mode approves a Draft PRD only after every other readiness check passed.
+_ct_auto = _ws(_slice(_read("skills", "create-tasks", "SKILL.md"), "### Flow auto mode", "## Steps"))
+_ap = _ct_auto.index("`approve <prd>`")
+for _w in ("acceptance line", "technical design", "`## Open questions` is empty", "`Draft`"):
+    assert -1 < _ct_auto.find(_w) < _ap, f"create-tasks auto mode: {_w!r} must be checked before approve"
+_ct_s2 = _ws(_slice(_read("skills", "create-tasks", "SKILL.md"), "2. **Check it is ready", "3. **Ground"))
+assert _ct_s2.index("technical design") < _ct_s2.index("/create-prd approve <prd>"), "create-tasks step 2 order"
+_ct_tools = _read("skills", "create-tasks", "SKILL.md").split("---", 2)[1]
+assert re.search(r"^  - Skill$", _ct_tools, re.M), "create-tasks allowed-tools needs Skill (it runs create-prd)"
+ok("create-tasks: auto-approve runs after the readiness checks; Skill is allowed")
 
 # Six-flow step 4: /gh-issue refines a saved list task by task, files an epic parent, records decisions.
 _g8 = _read("commands", "gh-issue.md")

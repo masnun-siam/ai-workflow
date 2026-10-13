@@ -7,6 +7,7 @@ allowed-tools:
   - Write
   - Grep
   - Glob
+  - Skill
   - AskUserQuestion
   - mcp__gitnexus__query
   - mcp__gitnexus__context
@@ -48,9 +49,11 @@ your turn; the answer arrives as your next message. Otherwise use AskUserQuestio
 ### Flow auto mode
 
 When the system prompt contains `Flow auto mode`, this run is the Tasks step of the aiw ui guided
-Flow and asks nothing. When the PRD's status is `Draft` and its `## Open questions` is empty, run
-the `ai-workflow:create-prd` skill with `approve <prd>` first (starting this step was the user's
-approval), then continue. Any other gap in step 2 still stops the run. The list is saved as shown,
+Flow and asks nothing. Step 2's readiness checks run first: the PRD exists, every requirement
+has an acceptance line, the technical design is present and `## Open questions` is empty. Any gap
+stops the run. Only a PRD that passes all of them and whose status is `Draft` is then approved, by
+running the `ai-workflow:create-prd` skill with `approve <prd>` (starting this step was the user's
+approval), before step 2's last check. The list is saved as shown,
 under the proposed slug, to `docs/tasks/<slug>.md` only. An existing file with that slug is resumed
 only when its `Source PRD:` header line matches this run's PRD; otherwise it is another list, so
 save under `<slug>-2` (or the next free number) and say so. Never overwrite either.
@@ -62,11 +65,12 @@ save under `<slug>-2` (or the next free number) and say so. Never overwrite eith
    is copied to `docs/prds/<slug>.md` first, after asking; the slug is the file name. List its
    `FR-n` requirements, edge cases, technical design, epics and decisions.
 
-2. **Check it is ready.** Stop and send the user back to `/create-prd` when the PRD is missing, a
-   requirement has no acceptance line, `## Open questions` has an entry, or the technical design is
-   missing. When its status is not `Approved`, or an epic in `## Epics` still reads `Issue: —`,
-   send them to `/create-prd approve <prd>`. If `docs/tasks/<slug>.md` already exists, you are
-   updating it: follow "Updating a task list" below.
+2. **Check it is ready,** in this order. First stop and send the user back to `/create-prd` when
+   the PRD is missing, a requirement has no acceptance line, `## Open questions` has an entry, or
+   the technical design is missing. Only then check approval: when its status is not `Approved`,
+   or an epic in `## Epics` still reads `Issue: —`, send them to `/create-prd approve <prd>` (in
+   Flow auto mode, a `Draft` PRD is approved here instead; see Flow auto mode). If
+   `docs/tasks/<slug>.md` already exists, you are updating it: follow "Updating a task list" below.
 
 3. **Ground every requirement in the code.** For each FR find the files and symbols it will touch
    and the closest existing feature to copy: GitNexus when indexed (`gitnexus_query`,
