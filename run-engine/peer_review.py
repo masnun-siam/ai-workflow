@@ -248,7 +248,7 @@ def status(review_dir: str) -> str:
     if d.get("action") == "done":
         return "approved"
     if d.get("reason") == "cap":
-        return "stopped at cap"
+        return "cap reached"
     return "unfinished"
 
 

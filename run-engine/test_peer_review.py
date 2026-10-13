@@ -382,13 +382,13 @@ with tempfile.TemporaryDirectory() as tmp:
     write(os.path.join(rd, "round-1", "decision.json"), {"action": "done"})
     assert pr.status(rd) == "approved"
     write(os.path.join(rd, "round-1", "decision.json"), {"action": "ask", "reason": "cap"})
-    assert pr.status(rd) == "stopped at cap"
+    assert pr.status(rd) == "cap reached"
     write(os.path.join(rd, "round-1", "decision.json"), {"action": "ask", "reason": "decision"})
     assert pr.status(rd) == "unfinished", "ended while a question was open"
     os.makedirs(os.path.join(rd, "round-2"))
     assert pr.status(rd) == "unfinished", "a newer round with no decision yet"
     assert pr.status(os.path.join(tmp, "missing")) == "not run"
-ok("status: not run / unfinished / approved / stopped at cap, from the last round's decision.json")
+ok("status: not run / unfinished / approved / cap reached, from the last round's decision.json")
 
 offers = pr.offers()
 assert offers["default"] == ["critical"] and offers["kinds"]["dump"] == ["critical", "ceo", "qa"], offers

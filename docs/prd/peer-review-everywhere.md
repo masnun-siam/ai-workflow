@@ -167,7 +167,7 @@ rejects unknown and not-offered lenses.
   server reads the round state in `<data_dir>/peer-review/custom/<session-id>/`, never just
   whether the dir exists (it always does, because `ask.md` is written at spawn). No
   `round-1/request.json` → "not run"; the last `next` decided `done` → "approved"; it decided
-  `cap` → "stopped at cap"; rounds but no final decision → "unfinished". `next` records each
+  `cap` → "cap reached" (the files can't tell an accepted gap from a stop; the session's finish line says which); rounds but no final decision → "unfinished". `next` records each
   decision in `round-<n>/decision.json` so the server doesn't have to recompute it.
 - Flow page: the PRD step's box becomes the same lens picker. In Flow auto mode, a cap still
   stops the flow, as today.

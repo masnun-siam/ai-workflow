@@ -8,7 +8,7 @@
   `gh-issue`), its Custom command form, and the Flow's PRD step each have a Peer review box. Tick
   it to pick the reviewers the command offers; critical starts ticked. A custom prompt is asked to
   run `/peer-review` when it's done, against a fresh review dir holding the prompt verbatim. The
-  session page then shows whether the review approved, stopped at the cap, didn't finish, or never
+  session page then shows whether the review approved, reached the round cap, didn't finish, or never
   ran, read from the review's own rounds, not from what the session claims.
 - **`/peer-review` and `--review` on `/intake`, `/dump` and `/gh-issue`.** The reviewer panel
   `/prd --review` uses is now the `peer-review` skill. Run it on its own after any work and it

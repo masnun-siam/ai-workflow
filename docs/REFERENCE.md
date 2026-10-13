@@ -62,7 +62,7 @@ it shows the reviewers the command offers (from `GET /api/peer-review`, read fro
 with critical ticked. A doc command gets `--review <lenses>`. A custom prompt gets a fresh review
 dir holding the prompt as `ask.md`, plus one line asking the session to run `/peer-review` with
 that dir, the lenses and the HEAD at start. That line is not a gate. The session page shows
-**peer review: approved / stopped at cap / unfinished / not run**, read from the review's rounds.
+**peer review: approved / cap reached / unfinished / not run**, read from the review's rounds.
 
 Optional push notifications and links live in `<data_dir>/ui.json` (the data dir is
 `$CLAUDE_PLUGIN_DATA`, default `~/.claude/plugins/data/ai-workflow`):
