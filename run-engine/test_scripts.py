@@ -588,6 +588,22 @@ elif argv[0] == "issue" and argv[1] == "edit":
     cfg.setdefault("bodies", {})[argv[2]] = new_body
     with open(os.environ["GH_STUB_CFG"], "w") as fh:
         json.dump(cfg, fh)
+elif argv[1].endswith("/dependencies/blocked_by") and any(a.startswith("-F") for a in argv):
+    num = argv[1].split("/issues/")[1].split("/")[0]
+    dep = int(next(argv[i + 1] for i, a in enumerate(argv) if a == "-F").split("=")[1]) - 9000
+    dup = dep in cfg.get("blocked_by", {}).get(num, []) or f"{num}:{dep}" in cfg.get("post_dup", [])
+    if dup:  # GitHub answers a duplicate edge with 422
+        msg = "An error occurred while adding the blocking issue to the issue. Validation failed: Target issue has already been taken"
+        print(json.dumps({"message": msg, "status": "422"}))  # real gh: JSON on stdout, "gh: … (HTTP 422)" on stderr
+        sys.stderr.write(f"gh: {msg} (HTTP 422)")
+        sys.exit(1)
+    if cfg.get("dep_exit"):
+        sys.stderr.write("HTTP 500")
+        sys.exit(cfg["dep_exit"])
+    print(json.dumps({"number": int(num)}))
+elif argv[1].endswith("/dependencies/blocked_by"):  # GET: a list of issue objects, [] when none
+    num = argv[1].split("/issues/")[1].split("/")[0]
+    print(json.dumps([{"number": n, "id": 9000 + n} for n in cfg.get("blocked_by", {}).get(num, [])]))
 elif argv[1].endswith("/sub_issues") and any(a.startswith("-F") or a.startswith("-f") for a in argv):
     sys.exit(cfg.get("link_exit", 0))
 elif argv[1].endswith("/sub_issues"):
@@ -658,6 +674,76 @@ with tempfile.TemporaryDirectory() as tmp:
     assert proc.returncode == 1, proc.stdout
     assert not os.path.isfile(path), "a link failure must not leave a valid-looking epic.json"
 ok("a sub-issue link failure kills the split rather than warning past it")
+
+# --- aiw epic blockers: native blocked-by edges DERIVED from the children's `Depends on:` lines (ADR 0003).
+import epic as _epic  # noqa: E402
+
+assert _epic.missing_edges({11: [10], 12: [10, 11]}, {11: {10}, 12: set()}) == [(12, 10), (12, 11)]
+assert _epic.missing_edges({10: []}, {}) == []
+assert _epic.extra_edges({11: [10], 12: []}, {11: {10}, 12: {11, 99}}, {10, 11, 12}) == [(12, 11)]
+ok("missing_edges/extra_edges: only body edges are written; GitHub-only edges inside the epic are reported")
+
+
+def blockers(tmp, env, *extra):
+    epic_dir = os.path.join(tmp, "e")
+    os.makedirs(epic_dir, exist_ok=True)
+    with open(os.path.join(epic_dir, "epic.json"), "w", encoding="utf-8") as fh:
+        json.dump({"parent": 42, "slug": "o/r", "children": [10, 11, 12]}, fh)
+    return subprocess.run(
+        [sys.executable, ROUTE, "epic", "blockers", epic_dir, *extra], capture_output=True, text=True, env=env
+    )
+
+
+_B = {"10": "no deps", "11": "Depends on: #10", "12": "Depends on: #10, #11"}
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, bodies=_B, blocked_by={"11": [10]})
+    proc = blockers(tmp, env, "--dry-run")
+    assert proc.returncode == 0, proc.stderr
+    assert "-F" not in open(log).read(), "a dry run must not POST"
+    assert "#12 blocked by #10" in proc.stdout and "#12 blocked by #11" in proc.stdout, proc.stdout
+    assert "#11 blocked by #10" not in proc.stdout.split("already")[0], proc.stdout
+ok("epic blockers --dry-run prints the missing edges and writes nothing")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, bodies=_B, blocked_by={"11": [10], "10": [12]})
+    proc = blockers(tmp, env)
+    assert proc.returncode == 0, proc.stderr
+    posts = [ln for ln in open(log).read().splitlines() if "/dependencies/blocked_by" in ln and "-F" in ln]
+    assert sorted(posts) == sorted(
+        [
+            "api repos/o/r/issues/12/dependencies/blocked_by -F issue_id=9010",
+            "api repos/o/r/issues/12/dependencies/blocked_by -F issue_id=9011",
+        ]
+    ), posts
+    assert "#10 blocked by #12" in proc.stdout and "not in any Depends on" in proc.stdout, proc.stdout
+ok("epic blockers POSTs only missing edges by database id, and reports (never deletes) a GitHub-only edge")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, log = gh_stub(tmp, bodies=_B, blocked_by={"11": [10], "12": [10, 11]})
+    proc = blockers(tmp, env)
+    assert proc.returncode == 0, proc.stderr
+    assert not [ln for ln in open(log).read().splitlines() if "-F" in ln], (
+        "a re-run with every edge present POSTs nothing"
+    )
+ok("epic blockers is idempotent: a second run writes nothing")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, _ = gh_stub(tmp, bodies=_B, dep_exit=1)
+    proc = blockers(tmp, env)
+    assert proc.returncode == 1 and "#11 blocked by #10" in proc.stderr, proc.stderr
+ok("epic blockers stops on a failed POST and names the edge")
+
+with tempfile.TemporaryDirectory() as tmp:  # crash between POSTs: GET missed the edge, POST finds it
+    env, _ = gh_stub(tmp, bodies=_B, blocked_by={"11": [10]}, post_dup=["12:10"])
+    proc = blockers(tmp, env)
+    assert proc.returncode == 0 and "added: #12 blocked by #11" in proc.stdout, proc.stdout + proc.stderr
+ok("epic blockers counts GitHub's 422 'already been taken' as done")
+
+with tempfile.TemporaryDirectory() as tmp:
+    env, _ = gh_stub(tmp, bodies={"10": "Depends on: #12", "11": "", "12": "Depends on: #10"})
+    proc = blockers(tmp, env)
+    assert proc.returncode == 1 and "-F" not in open(os.path.join(tmp, "gh.log")).read(), proc.stderr
+ok("epic blockers refuses a cycle in Depends on before writing any edge")
 
 # ----------------------------------------------------------------- parent Tasks checklist
 # `epic split` must also splice a "## Tasks" checklist into the PARENT issue's body via
@@ -3472,10 +3558,13 @@ assert not any("--label" in ln and "lean" in ln for ln in flat.splitlines())
 assert "`lean` is never applied here." in flat_ws
 ok("4-FLAT never applies lean")
 
-for bad in ("4-EPIC", "aiw epic split", "project-board", "sub_issues", "epic-<parent>"):
+# ADR 0003 brought the parent epic back, but only through "Saved task list and the epic".
+_pre80 = _g80[: _g80.index("## Saved task list and the epic")]
+for bad in ("4-EPIC", "project-board"):
     assert bad not in _g80, bad
-assert "epic" not in _g80.lower()
-ok("gh-issue.md has no epic machinery")
+for bad in ("sub_issues", "epic-<parent>", "gh label create epic"):
+    assert bad not in _pre80, bad
+ok("gh-issue.md: epic machinery only in 'Saved task list and the epic'; no 4-EPIC or board")
 
 _hr80 = " ".join(_slice(_g80, "**HARD RULE", "Do the following:").split())
 assert "4-FLAT" in _hr80 and "4-EPIC" not in _hr80
@@ -3570,7 +3659,7 @@ assert "three choices" not in flat_ws
 assert 'Retry the missing one"' not in _g81 and "Stop now" not in _g81
 ok("4-FLAT choice labels have no variants")
 
-assert "epic" not in _g81.lower()
+assert "4-epic" not in _g81.lower()  # ADR 0003: the parent epic is back, the old 4-EPIC flow is not
 assert flat.count("gh label create refined") == 1
 assert "already exists, stop and ask for a new slug" in flat_ws
 assert "Skip when step 3.6 saved no local file" in flat_ws
@@ -3681,9 +3770,9 @@ assert _add in flat_ws and flat_ws.index(_add) > flat_ws.index("gh issue create"
 ok("#82 preflight answers reach every flat create")
 
 for _p in (
-    "When `4-FLAT` ran (2 or more tasks), return the ordered list of issue URLs, one per task in list order",
+    "then return the epic parent's URL followed by the ordered list of issue URLs, one per task in list order",
     "hand control back to its Preflight step 3",
-    "with that ordered list of issue URLs for 2 or more",
+    "with the parent URL and that ordered list of issue URLs for 2 or more",
 ):
     assert _p in close, _p
 ok("#82 the ordered list is returned and handed back")
@@ -3720,7 +3809,7 @@ _sp = "on the step 4 path before its create"
 assert _sp in s5 and _sp in s6
 ok("#82 single-issue path is unchanged")
 
-assert "epic" not in g.lower()
+assert "4-epic" not in g.lower()  # ADR 0003
 assert not re.search(r"gh issue (close|delete)", g)
 assert "--body " not in flat
 assert flat.count("gh label create refined") == 1
@@ -3799,7 +3888,7 @@ assert "epic" not in s45.lower() and "epic" not in s46.lower()
 jl = jira_cmd.splitlines()
 assert jl[22] == "- Issue type (bug, story, task, epic)"
 assert jl[27] == "- Linked issues / parent epic"
-assert "epic" not in gh_cmd.lower()
+assert "4-epic" not in gh_cmd.lower()  # ADR 0003
 ok("#83 old guard gone, Step 5 single-task, epic lines untouched")
 
 # Issue #84
@@ -3922,20 +4011,21 @@ for stale in ("a parent plus child URLs", "**parent** issue number specifically"
 assert "parent plus child URLs" not in ri85
 ok("#85 step 2 has no stale epic wording")
 NOURL = '**No issue URL** (it failed, the human cancelled, or a `4-FLAT` run ended on **"Stop here"**, whatever partial list it reported): stop and say so \u2014 do not continue to step 3.'
-LIST1 = "**An ordered list of 2 or more issue URLs** (its `4-FLAT` return; flat issues have no parent, and `/gh-issue` no longer files epics): print the issue URLs in list order and end the run here."
+LIST1 = "**An ordered list of 2 or more issue URLs** (its `4-FLAT` return, after the URL of the epic parent it filed over them): print the parent and the issue URLs in list order and end the run here."  # ADR 0003
 LIST2 = "This is a clean stop, not an escalation: no Ledger, no worktree, no `aiw init`, and no further Preflight step."
 LIST3 = "Tell the user to run `/run-issue <n>` for each issue in list order; each issue's `Depends on:` line names the issue it builds on, so run those first \u2014 `/run-issue` bases a flat issue on the default branch unless its plan says otherwise."
 LIST4 = "End with the line `\u2192 next: herdr-dispatch <n> <n> \u2026` (every created issue number, in list order); `herdr-dispatch` runs them in that dependency order."  # #186
 ONE = "**Exactly one issue URL**: parse the created issue number `<n>` from it and continue to Preflight step 3 with that `<n>` as though it had been passed to `/run-issue` directly."
 HARD = "`/gh-issue`'s HARD RULE is scoped to issue creation and does not bind any later phase of this run."
-for sent in (NOURL, LIST1, LIST2, LIST3, LIST4, ONE, HARD):
+LIST3E = "`/run-issue <parent>` runs them all in one session instead (Epic mode)."  # ADR 0003
+for sent in (NOURL, LIST1, LIST2, LIST3, LIST3E, LIST4, ONE, HARD):
     assert st2.count(sent) == 1, sent
 assert _n(ri85).count(HARD) == 1 and st2.endswith(HARD)
 ok("#85 step 2 pins the three branches and the HARD RULE sentence whole")
 _a, _b, _h = st2.index("**An ordered list"), st2.index("**Exactly one issue URL**"), st2.index(HARD)
 # whole-bullet pins: appended text or an inserted bullet inside a branch fails
 assert st2[st2.index("**No issue URL**") : _a].rstrip(" -") == NOURL
-assert st2[_a:_b].rstrip(" -") == f"{LIST1} {LIST2} {LIST3} {LIST4}"
+assert st2[_a:_b].rstrip(" -") == f"{LIST1} {LIST2} {LIST3} {LIST3E} {LIST4}"
 assert st2[_b:_h].strip() == ONE
 assert "2 or more issue URLs" in st2 and "3 or more" not in st2 and "more than 2" not in st2
 ok("#85 list branch stops the run and the threshold is literally 2")
@@ -3959,11 +4049,13 @@ assert (
     "A non-empty array means this is an epic parent \u2014 go to **Epic mode** below instead of the single-issue phases; keep the child numbers it returned, Epic mode step 0 needs them."
     in st35
 )
-assert "An empty array is the ordinary path." in st35
+assert "An empty array is the ordinary path, except for an issue labelled both `epic` and `prd-<slug>`" in st35
+assert "An `epic` label without a `prd-<slug>` label is a team's own label: the ordinary path." in st35
+assert "never run it as one issue" in st35  # ADR 0003: a parent with no sub-issues stops
 ok("#85 bare-number bullet and step 3.5 epic routing sentences intact")
 # both pins below hash/compare whitespace-normalised text (_n), so reflowing lines does not trip them
 # sha256 of whitespace-normalised text on base 0ff5687 (pre-#85): step 3.5 slice, and "## Epic mode" up to "\n## Rules"
-S35_SHA = "6e1464ddf2883001109064bba0ffcef2471985262dca9d9d1d470eacb25258c5"
+S35_SHA = "832218eabfdea18a2037abe13ae33f67f6519aac71098622ab253d51b36d8323"  # re-pinned (ADR 0003): an `epic`-labelled parent with no sub-issues stops
 EPIC_SHA = "e301c4367ff0d14d1316064fc35316c6b90cac928af03f5040fb791edefdb253"  # re-pinned: epic init passes --mode full, lean is an alias of default
 import hashlib  # noqa: E402
 
@@ -3981,8 +4073,9 @@ rd86, hw86, cl86 = _user_docs(), _read("docs", "HOW-IT-WORKS.md"), _read("CHANGE
 rdn86, hwn86 = _n(rd86), _n(hw86)
 ROW86 = (
     "| `/ai-workflow:gh-issue` | file a well-formed issue; always decomposes first \u2014 one task files one issue; "
-    "two or more save the task list to `docs/tasks/<slug>.md` and file one flat issue per task, "
-    "ordered by `Depends on: #n` lines, with no parent issue |"
+    "two or more save the task list to `docs/tasks/<slug>.md` and file one refined issue per task, "
+    "ordered by `Depends on: #n` lines, under an `epic` parent; `/gh-issue docs/tasks/<slug>.md` files a saved list, "
+    "one question round per task |"
 )
 assert rdn86.count(ROW86) == 1
 assert "parent plus children" not in rdn86 and "parent plus children" not in hwn86
@@ -3991,7 +4084,9 @@ JROW86 = (
     "(one issue for a single task; two or more saved to `docs/tasks/<slug>.md` and filed flat) |"
 )
 assert rdn86.count(JROW86) == 1
-assert "flat issue per task" in ROW86 and "no parent issue" in ROW86 and "`docs/tasks/<slug>.md`" in ROW86
+assert (
+    "refined issue per task" in ROW86 and "under an `epic` parent" in ROW86 and "`docs/tasks/<slug>.md`" in ROW86
+)  # ADR 0003
 assert "Accepts an epic parent." in rdn86
 assert "aiw epic split|init|next|status    epic decomposition and sequencing" in rd86
 ok("#86 README gh-issue row pinned whole; Epic-mode README lines intact")
@@ -4004,9 +4099,9 @@ P1 = (
     "layer-scoped deliverable: 3 or fewer production files, 1-4 acceptance criteria, one verify command. "
     'You approve the list with **"Create as shown"** or revise it with **"Let me edit the list"**. '
     "One task files one issue as before. Two or more tasks save the list to `docs/tasks/<slug>.md` first "
-    "(optionally also to Obsidian or the GitHub wiki), then file one **flat** issue per task: no parent issue, "
-    "no sub-issues. Each is a complete, independently-readable issue labelled `prd-<slug>`, and declares its "
-    "order in plain text:"
+    "(optionally also to Obsidian or the GitHub wiki), then file one refined issue per task, each asked about in "
+    "its own question round, and one **epic** parent over them, linked as sub-issues (ADR 0003). Each task issue "
+    "is complete and independently readable, labelled `prd-<slug>`, and declares its order in plain text:"
 )
 P2 = (
     "Each new issue number is written back into the saved list. A create failure partway through is a "
@@ -4016,14 +4111,16 @@ P2 = (
     "tasks. `/jira-to-gh` decomposes, saves and files a Jira ticket the same way."
 )
 P3 = (
-    "`/gh-issue` returns the issue URLs in list order. Run `/run-issue <n>` on each, dependencies first. "
-    "If you hand `/run-issue` a source that is not an issue yet, it calls `/gh-issue` for you; when that returns "
-    "two or more issues, `/run-issue` prints the list and stops \u2014 run `/run-issue <n>` on each issue, "
-    "dependencies first."
+    "`/gh-issue` returns the parent and the issue URLs in list order. Run `/run-issue <n>` on each, dependencies "
+    "first, or `/run-issue <parent>` for all of them. If you hand `/run-issue` a source that is not an issue yet, "
+    "it calls `/gh-issue` for you; when that returns two or more issues, `/run-issue` prints the list and stops "
+    "\u2014 run `/run-issue <n>` on each issue, dependencies first. Answers given in the per-task question rounds "
+    "are recorded in the PRD (`/prd --update`)."
 )
 P4 = (
-    "**Epic mode** still exists for epics that already exist: a parent issue with sub-issues, filed by hand "
-    "or before this change. `/run-issue <parent>` drives all its children. The rules:"
+    "**Epic mode** runs a parent issue with sub-issues: one `/gh-issue` filed, or one filed by hand. "
+    "`/run-issue <parent>` drives all its children. A `/gh-issue` parent (labelled `epic` and `prd-<slug>`) "
+    "with no sub-issues is refused, never run as one issue. The rules:"
 )
 for para in (P1, P2, P3, P4):
     assert l5.count(para) == 1, para[:50]
@@ -4050,7 +4147,7 @@ for gone in (
     assert gone not in l5, gone
 ok("#86 Layer 5 heading, flat-flow paragraphs, Epic-mode lead-in and kept bullets pinned")
 
-GL86 = "- **Epic** \u2014 an existing parent issue with sub-issues, run by `/run-issue` Epic mode; `/gh-issue` and `/jira-to-gh` no longer create one."
+GL86 = "- **Epic** \u2014 a parent issue with sub-issues, run by `/run-issue` Epic mode. `/gh-issue` files one over every task list it files; `/jira-to-gh` does not."  # ADR 0003
 assert hwn86.count(GL86) == 1
 assert "- **Epic** \u2014 a parent issue with dependent children." not in hwn86
 ok("#86 glossary Epic line pinned")
@@ -4318,12 +4415,13 @@ ok("#183 /prd on a non-seed PRD still stops and asks")
 
 # AC4: default --to is obsidian only; Step 6 no longer asks about extra destinations.
 _a4_183 = next(ln for ln in _args183.splitlines() if ln.startswith("- `--to`"))
-assert "Default `obsidian`" in _a4_183 and "Default `local`" not in _a4_183, "#183 default --to must be obsidian"
+# ADR-era change: the repo copy (docs/prd/<slug>.md) is canonical, mirrored to Obsidian.
+assert "Default `local,obsidian`" in _a4_183, "--to default must be local,obsidian (repo canonical + vault mirror)"
 assert "(Step 6)" not in _a4_183, "#183 Arguments must not defer a destination question to Step 6"
 _s6_183 = _key183(_prd183, "Step 6")
 assert "ask here whether to also save" not in _s6_183, "#183 Step 6 still asks about extra destinations"
 assert "aiw ask" in _s6_183, "#183 Step 6 must keep its aiw ask branch"
-ok("#183 /prd default --to is obsidian; Step 6 asks no destination question")
+ok("/prd default --to is local,obsidian; Step 6 asks no destination question")
 
 
 # Issue #184: `→ next:` handoff lines on dump, prd and gh-issue (parsed by the UI stepper).
@@ -4331,14 +4429,13 @@ NEXT = "\u2192 next: "
 _ws = lambda t: " ".join(t.split())  # noqa: E731  (_n is rebound by loops above)
 _dump184 = _skill_sections("skills/dump/SKILL.md")
 _s5_184 = _ws(_key183(_dump184, "Step 5"))
-for _p in (f"`{NEXT}/prd <feature-folder>`", f"`{NEXT}/gh-issue <note-path>`"):
+for _p in (f"`{NEXT}/prd <feature-folder>`", f"`{NEXT}/create-tasks <note-path>`", f"`{NEXT}/gh-issue <note-path>`"):
     assert _p in _s5_184, f"#184 dump Step 5 lacks {_p}"
 assert re.search(r"new feature.{0,40}change request.{0,80}/prd <feature-folder>", _s5_184, re.I), (
     "#184 dump: prd line routes"
 )
-assert re.search(r"bug report.{0,40}feature-scoped task.{0,80}/gh-issue <note-path>", _s5_184, re.I), (
-    "#184 dump: gh-issue line routes"
-)
+assert re.search(r"bug report.{0,20}/create-tasks <note-path>", _s5_184, re.I), "dump: a bug goes to /create-tasks"
+assert re.search(r"feature-scoped task.{0,20}/gh-issue <note-path>", _s5_184, re.I), "#184 dump: gh-issue line routes"
 assert re.search(
     r"standalone task.{0,40}meeting notes.{0,40}unclassifiable.{0,60}no `\u2192 next:` line", _s5_184, re.I
 ), "#184 dump: no line for standalone/meeting/unclassifiable"
@@ -4348,14 +4445,145 @@ assert "no `\u2192 next:` line" in _ws(_key183(_dump184, "Programmatic invocatio
 )
 ok("#184 /dump Step 5 ends with the routed \u2192 next: line; programmatic runs omit it")
 
+# Six-flow step 1: /dump writes a problem statement, not raw text, for features, change requests and bugs.
+_ps = _ws(_key183(_dump184, "Problem statement"))
+for _f in ("**Problem:**", "**Who:**", "**Evidence:**", "**Expected:**", "### Raw input"):
+    assert _f in _ps, f"dump Problem statement format lacks {_f}"
+assert re.search(r"never invent|do not invent|don't invent", _ps, re.I), "dump: problem statement must not invent facts"
+assert "just above `## Related`" in _ps and "overwrite" in _ps, "dump: a problem statement goes above ## Related"
+assert "content=\"$(cat <<'EOF'" in _ps, "dump: problem statement text goes through a quoted heredoc"
+assert "`/create-tasks` for a bug" in _ps, "dump: a bug's problem statement goes to /create-tasks (F11 routing)"
+assert "never overwrite with partial content" in _ps.lower(), "dump: overwrite guard"
+_s4 = _ws(_dump184["Step 4: File it"])
+for _route in ("**New feature**", "**Change request**", "**Bug report**"):
+    _body = _s4.split(_route, 1)[1][:1800]  # the route's own instructions
+    assert "problem statement" in _body.lower(), f"dump {_route} route must write a problem statement"
+assert "<the raw, unedited dump text, verbatim>" not in _s4, "dump New feature still writes raw text as Dump.md"
+ok("dump writes a problem statement (Problem/Who/Evidence/Expected + raw input) for features, changes, bugs")
+# Six-flow step 2: the repo PRD is canonical, and --update appends downstream decisions to it.
+_prd_all = _skill_sections("skills/prd/SKILL.md")
+_canon = _ws(_prd183["Arguments"]) + " " + _ws(_key183(_prd_all, "Step 7"))
+assert re.search(r"canonical", _canon) and "docs/prd/<slug>.md" in _canon, "prd: docs/prd/<slug>.md must be canonical"
+_upd = _ws(_key183(_prd_all, "Update mode"))
+assert "--update" in _ws(_prd183["Arguments"]), "prd Arguments must document --update"
+for _w in ("## Decisions", "Open questions", "mirror", "no grilling"):
+    assert _w.lower() in _upd.lower(), f"prd Update mode lacks {_w!r}"
+assert re.search(r"already (there|present|recorded)", _upd), "prd Update mode must skip a decision already recorded"
+# The pair is linked both ways at save time and followed, never guessed from names.
+_s7 = _ws(_key183(_prd_all, "Step 7"))
+assert "**Mirror:**" in _s7 and "name=canonical" in _s7, "prd: Step 7 must record the mirror/canonical links"
+assert "never by matching names" in _ws(_key183(_prd_all, "Step 2")), "prd: Step 2 follows the links"
+assert "no canonical copy" in _upd and "Never create a repo file during an update" in _upd, "prd: vault-only update"
+assert "before \u2192 after" in _upd, "prd: Update mode reports edited requirements as before -> after"
+assert "not inside a git repo" in _ws(_key183(_prd_all, "Step 1")), "prd: no repo -> Obsidian only"
+assert re.search(r"re-run `property:set` for each of them right after it", _s7) and "`canonical`" in _s7, (
+    "prd: frontmatter (incl. canonical) must be re-set after every overwrite"
+)
+assert "and re-set `tags`, `status` and `canonical` after the overwrite" in _upd, "prd: Update mode re-sets canonical"
+assert "never overwrite with partial content" in (_upd + _ws(_key183(_prd_all, "Step 7"))).lower(), (
+    "prd: overwrite guard"
+)
+assert "\u2192 next:" not in _upd, "prd Update mode prints no next line (the caller owns what follows)"
+ok("prd: repo copy canonical; --update appends decisions, resolves open questions, mirrors to Obsidian")
+
+# Six-flow step 3: /create-tasks is a standalone entry over gh-issue's own 3.5/3.6 (one source of truth).
+_ct_path = os.path.join(HERE, "..", "skills", "create-tasks", "SKILL.md")
+assert os.path.isfile(_ct_path), "skills/create-tasks/SKILL.md missing"
+_ct = _ws(open(_ct_path, encoding="utf-8").read())
+_ghi = _read("commands", "gh-issue.md")
+for _h in ("3.5. **Decompose.**", "3.6. **Save the task list.**"):
+    assert _h in _ghi, f"gh-issue.md lost the heading create-tasks points at: {_h}"
+    assert _h in _ct, f"create-tasks must name gh-issue's {_h}"
+for _w in ("Save as shown", "creates nothing on GitHub", "even a single task", "Open questions", "stack"):
+    assert _w.lower() in _ct.lower(), f"create-tasks lacks {_w!r}"
+assert "\u2192 next: /gh-issue docs/tasks/<slug>.md" in _ct, "create-tasks next line"
+assert "aiw paths" in _ct and "<plugin_root>/commands/gh-issue.md" in _ct, (
+    "create-tasks resolves gh-issue via aiw paths"
+)
+assert "`Problem statement: <path>`" in _ct and "`PRD: <path>`" in _ct, "create-tasks header names its inputs"
+assert "ask which one, newest first" in _ct and "take the newest without asking" in _ct, "create-tasks picks one bug"
+assert "resumed only when its `Problem statement:` and `PRD:` header lines match" in _ct and "`<slug>-2`" in _ct, (
+    "create-tasks auto mode never resumes an unrelated list"
+)
+_g0 = _ws(_slice(_ghi, "0. **Source check.**", "Details: $@"))
+assert "docs/tasks/<slug>.md" in _g0 and "## Task <n>" in _g0, "gh-issue step 0 must take a saved task list"
+assert re.search(r"one task.{0,80}step 4", _g0) and "Resume this list" in _g0, (
+    "gh-issue saved list: 1 task -> step 4, 2+ -> 4-FLAT resume"
+)
+ok("create-tasks: standalone entry over gh-issue 3.5/3.6; gh-issue takes a saved task list")
+
+# Six-flow step 4: /gh-issue refines a saved list task by task, files an epic parent, records decisions.
+_g8 = _read("commands", "gh-issue.md")
+assert _g8.count("## Saved task list and the epic") == 1
+_sec8 = _ws(_g8[_g8.index("## Saved task list and the epic") :])
+for _w in (
+    "`Problem statement: <path>`",
+    "`PRD: <path>`",
+    "name=canonical",
+    "read that repo copy instead",
+    '**"File these"**',
+    "One question round per task",
+    "`Test root:` and `Base branch:` values stay plain",
+    "/blob/<base>/<path>",
+    '--label "epic,prd-<slug>"',
+    "never `refined`",
+    'aiw epic split "<runs_dir>/<owner>-<repo>-epic-<parent>"',
+    "Re-run safety",
+    "--update <prd>",
+):
+    assert _w in _sec8, f"gh-issue Saved task list section lacks {_w!r}"
+assert _sec8.index('--label "epic,prd-<slug>"') < _sec8.index("aiw epic split"), (
+    "parent is linked right after it is created"
+)
+assert "|| true" not in _sec8 and "only when no line is exactly `epic`" in _sec8, (
+    "epic label: no || true, never recolour"
+)
+assert "children may already be linked while no `epic.json` exists" in _sec8, "split failure state described truthfully"
+assert "Saved task list and the epic" in _ws(_slice(_g8, "0. **Source check.**", "Details: $@")), "step 0 routes there"
+_hr8 = _ws(_slice(_g8, "**HARD RULE", "Do the following:"))
+assert "`aiw epic split`" in _hr8 and "`/prd --update`" in _hr8, "HARD RULE carves out the split and the PRD update"
+_ri8 = _read("commands", "run-issue.md")
+assert "labelled both `epic` and `prd-<slug>`" in _ws(_slice(_ri8, "3.5. **Epic check", "4. **Resume check.**")), (
+    "run-issue epic guard"
+)
+# The split's epic dir is the one Epic mode step 0 reads, so `/run-issue <parent>` finds epic.json and never re-splits.
+assert '"<runs_dir>/<owner>-<repo>-epic-<n>"' in _ri8 and '"<runs_dir>/<owner>-<repo>-epic-<parent>"' in _g8
+assert "No epics" not in _read("skills", "flow", "SKILL.md"), "flow: stale no-epics rule"
+assert "flat, independently readable" not in _read("CONTEXT.md"), "CONTEXT: refined is no longer flat"
+ok("gh-issue: saved list refined per task, epic parent linked at birth, decisions to the PRD; run-issue guard")
+
+# Six-flow step 5: /fix-blockers previews and applies `aiw epic blockers`, splitting first when no epic.json is here.
+_fb_path = os.path.join(HERE, "..", "skills", "fix-blockers", "SKILL.md")
+assert os.path.isfile(_fb_path), "skills/fix-blockers/SKILL.md missing"
+_fb = _ws(open(_fb_path, encoding="utf-8").read())
+for _w in (
+    "aiw paths",
+    "<runs_dir>/<owner>-<repo>-epic-<parent>",
+    "aiw epic split",
+    "/sub_issues",
+    "aiw epic blockers",
+    "--dry-run",
+    '**"Add these"**',
+    "aiw ask",
+    "Depends on:",
+    "never deleted",
+):
+    assert _w in _fb, f"fix-blockers lacks {_w!r}"
+assert _fb.index("--dry-run") < _fb.index('**"Add these"**'), "preview before the one confirmation"
+assert "\u2192 next: herdr-dispatch <parent>" in _fb, "fix-blockers next line"
+assert "This split writes to GitHub before Step 3's question" in _fb, "fix-blockers names the split's unconfirmed write"
+ok("fix-blockers: split if needed, preview, one confirmation, apply; Depends on stays the source")
+
 _s8_184 = _ws(_key183(_skill_sections("skills/prd/SKILL.md"), "Step 8"))
-assert f"End with the line `{NEXT}/gh-issue <prd-path>`" in _s8_184, "#184 prd Step 8 lacks the next line"
+assert f"End with the line `{NEXT}/create-tasks <prd-path>`" in _s8_184, "#184 prd Step 8 lacks the next line"
 assert "offer, in one line" not in _s8_184, "#184 prd Step 8 still has the prose offer"
-ok("#184 /prd Step 8 ends with \u2192 next: /gh-issue <prd-path>")
+ok("#184 /prd Step 8 ends with \u2192 next: /create-tasks <prd-path>")
 
 _close184 = _ws(_read("commands", "gh-issue.md"))
 _close184 = _close184[_close184.rindex("Return the issue URL") :]
-assert f"End with the line `{NEXT}herdr-dispatch <n> <n> \u2026`" in _close184, "#184 gh-issue lacks the next line"
+assert f"`{NEXT}/fix-blockers <parent>` when an epic parent was filed, or `{NEXT}herdr-dispatch <n>`" in _close184, (
+    "#184 gh-issue lacks the next line"
+)
 assert "hand control back to its Preflight step 3" in _close184
 assert _close184.index("hand control back") < _close184.index(NEXT), "#184 hand-back sentence stays first"
 ok("#184 /gh-issue ends with \u2192 next: herdr-dispatch; /run-issue hand-back unchanged")
@@ -4374,17 +4602,20 @@ _args187 = _ws(_key183(_fs, "Arguments"))
 for _shape, _stage in (
     ("Raw text", "dump"),
     ("feature folder", "prd"),
-    ("PRD path", "gh-issue"),
+    ("PRD path", "create-tasks"),
+    ("task list", "gh-issue"),
+    ("epic parent", "fix-blockers"),
     ("Issue numbers", "dispatch"),
 ):
     assert re.search(rf"{_shape}.{{0,160}}\| {_stage} \|", _args187, re.I), f"#187 entry shape {_shape} -> {_stage}"
 assert "Dump.md" in _args187, "#187 Dump.md path enters at prd"
-ok("#187 /flow exists and names the four entry shapes")
+ok("#187 /flow exists and names its six entry shapes")
 _route187 = _ws(_key183(_fs, "Routing after dump"))
 for _cls, _path in (
-    ("New feature", "prd \u2192 gh-issue \u2192 dispatch"),
+    ("New feature", "prd \u2192 create-tasks \u2192 gh-issue \u2192 fix-blockers \u2192 dispatch"),
     ("Change request", "prd"),
-    ("Bug report", "gh-issue \u2192 dispatch"),
+    ("Bug report", "create-tasks \u2192 gh-issue \u2192 fix-blockers \u2192 dispatch"),
+    ("Feature-scoped task", "gh-issue \u2192 dispatch"),
     ("Unclassifiable", "stop"),
 ):
     assert re.search(rf"{_cls}.{{0,120}}{_path}", _route187, re.I), f"#187 routing {_cls}"

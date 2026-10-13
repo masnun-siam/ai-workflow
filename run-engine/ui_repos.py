@@ -29,6 +29,8 @@ NAMED = (
     "dump",
     "worklog",
     "gh-issue",
+    "create-tasks",
+    "fix-blockers",
     "pr-review",
     "pr-fix-comments",
     "issue-to-pr",
@@ -300,7 +302,7 @@ def start_session(body: dict):
         text += " --no-review"
     if fam == "run-issue" and not worktree:
         grind = body.get("auto_grind", ui_settings.load()["auto_grind"]) is True
-        text += " --no-worktree" + ("" if grind else " --no-grind")
+        text += " --no-worktree" + (" --grind" if grind else "")  # main tree: grind in-session to keep holding it
     if issue is None and fam == "run-issue":
         issue = issue_from_args((text.split(None, 1) + [""])[1])
     link = None

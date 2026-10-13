@@ -4,6 +4,22 @@
 
 ### Added
 
+- **`/fix-blockers <parent>`.** Previews and then sets an epic's GitHub "blocked by" relations
+  through `aiw epic blockers`, after one confirmation. A parent filed on another machine is split
+  first, as Epic mode does.
+- **`aiw epic blockers <epic_dir> [--dry-run]`.** Sets GitHub's native "blocked by" relation
+  between an epic's children, derived from their `Depends on:` lines (the single source,
+  ADR 0003). It checks the dependency graph first, writes only the edges GitHub lacks (so a
+  re-run writes nothing twice), and reports, never deletes, an edge that no `Depends on:` line
+  names. `--dry-run` prints the edges it would add.
+- **`/create-tasks`.** Breaks a problem statement and its PRD into a saved task list
+  (`docs/tasks/<slug>.md`) without filing anything, using `/gh-issue`'s own decomposition and
+  save rules. The PRD stands in for grilling; open questions are asked before decomposing.
+  `/gh-issue docs/tasks/<slug>.md` now files issues straight from a saved list.
+- **Full test suite on push and in CI.** `run-engine/run_tests.sh` runs every
+  `run-engine/test_*.py`. `pre-commit install` now also installs a pre-push hook that runs it,
+  and a `Tests` GitHub Actions job runs it on pull requests and on pushes to `master`. Fixes the
+  stale `test_ui_events.py` assertions this exposed (`flow_id`, the `usage`/`afk` keys).
 - **Flow history.** Every flow is saved on the aiw server at `#/flow/<id>`. **Flows** lists
   earlier ones with their step and last activity, archive hides one, and **New flow** starts
   another. A draft is saved as you type. Past `/dump`, `/prd` and `/gh-issue` sessions are
@@ -20,6 +36,38 @@
 
 ### Changed
 
+- **The Guided Flow has six steps.** `/flow` and the `aiw ui` Flow page run dump → PRD →
+  tasks (`/create-tasks`) → issues (`/gh-issue`, with an epic) → blockers (`/fix-blockers`) →
+  dispatch. The `→ next:` lines follow: `/prd` hands off to `/create-tasks`, a bug's dump goes to
+  `/create-tasks`, and `/gh-issue` hands an epic parent to `/fix-blockers` (a single issue still
+  goes to `herdr-dispatch`). A flow saved mid-way at the old Issues step with a PRD now resumes at
+  Tasks. Both new commands can be started from the UI and are never auto-answered in AFK mode.
+- **`/gh-issue` files an epic parent again (ADR 0003).** On a saved task list it reads the
+  problem statement and the PRD (the repo copy when the vault note links one), shows one preview
+  and asks **"File these"**, then asks one question round per task before writing its issue.
+  Doc references become links when the file is on the base branch. When two or more issues are
+  filed it creates a parent labelled `epic` and links them at once with `aiw epic split`, which
+  also writes the `epic.json` Epic mode reads. Answers from the question rounds go to the PRD
+  through `/prd --update`. `/run-issue` refuses a `/gh-issue` parent (labelled `epic` and
+  `prd-<slug>`) that has no sub-issues; a team's own `epic` label runs as before.
+- **Grinding is opt-in.** `/run-issue` runs phase 10 (`pr-grind`) only with `--grind`;
+  without it the run ends at the Gate 2 handback. Breaking: a run that used to grind by
+  default no longer does. `--no-grind` still parses but does nothing. `herdr-dispatch` and
+  `/flow` pass `--grind` through. This also fixes `aiw ui` runs in a worktree, which grinded
+  in-session even with auto-grind off; the UI's auto-grind setting is now the only switch
+  for them.
+
+- **`/dump` writes a problem statement.** A new feature, change request or bug is filed as
+  Problem / Who / Evidence / Expected / Open questions, taken only from the input, followed by
+  the raw text verbatim. Bugs in `Bugs.md` get the same block instead of a one-line bullet.
+  Tasks, meeting notes and unclassifiable input are still filed verbatim.
+- **The repo PRD is canonical.** `/prd` now saves to `docs/prd/<slug>.md` and the Obsidian
+  vault by default (`--to local,obsidian`), and the vault copy is a mirror of the repo copy.
+  The two are linked at save time (a `**Mirror:**` line in the repo copy, a `canonical`
+  property on the vault note). Outside a git repo it writes the vault only. New
+  `/prd --update <prd> <decisions>` appends decisions made later to `## Decisions`, resolves
+  the open questions they answer, reports every edited requirement as before → after, and
+  mirrors the edit; a vault PRD with no canonical copy is updated alone.
 - **Docs restructure.** `README.md` is now a short link hub. The agent setup protocol moved to
   `docs/INSTALL.md`, and commands, the `aiw` CLI, `aiw ui`, state and layout moved to
   `docs/REFERENCE.md`. `CLAUDE.md` is a stable, agent-first overview of the project that
@@ -43,6 +91,18 @@
   `aiw project-board` or `aiw dispatch plan` must stop.
 - **Stale design docs:** the epic-decomposition spec and plan, the intake-command spec and
   plan, and the finished `docs/tasks/gh-issue-flat-task-list.md`.
+
+### Fixed
+
+- **The flow.js stepper checks run again.** They sat in a `test_ui_static.py --view` block that
+  nothing runs (and that fails earlier on unrelated stale checks); they now run in its default
+  mode, so in the pre-push hook and CI.
+- **AFK failed-run retries on Python 3.10.** `ui_afk` parsed the runner's `…Z` timestamps
+  with `datetime.fromisoformat`, which rejects a trailing `Z` before 3.11, so on 3.10 the
+  retry never fired. It now uses the same tolerant parser as `review.py`.
+- **`aiw refined` reads a linked `Test root:` / `Base branch:`.** A value written as a markdown
+  link (`[tests/](https://…)`) used to become the test root verbatim; it now takes the link
+  text. A new contract test pins the `/gh-issue` body format to what `aiw refined` parses.
 
 ## 1.12.0 — 2026-10-09
 

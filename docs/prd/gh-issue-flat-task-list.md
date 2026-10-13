@@ -1,6 +1,6 @@
 # PRD — gh-issue: PRD to flat task list
 
-**Status:** Draft · **Date:** 2026-10-02 · **Repo:** masnun-siam/ai-workflow
+**Status:** Draft, superseded in part by [ADR 0003](../adr/0003-epics-return.md) (parent epics and blocked-by return) · **Date:** 2026-10-02 · **Repo:** masnun-siam/ai-workflow
 
 ## Overview
 `/gh-issue` (and its mirror `/jira-to-gh`) will stop creating epic parents with sub-issues. When an input breaks down into 2 or more tasks, the command first writes a detailed, ordered list of small tasks to a saved doc. It then creates one flat, refined GitHub issue per task. Each issue is small enough for `/run-issue <n>` in full mode to reach the reviewed-PR handback (before pr-grind) within 30 minutes.

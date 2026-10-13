@@ -1,6 +1,7 @@
 """Guided Flow records for the aiw ui: one JSON file per flow under <data_dir>/flows/.
 
-A flow is one feature taken from a raw idea to dispatched runs (Dump -> PRD -> Issues -> Dispatch).
+A flow is one feature taken from a raw idea to dispatched runs
+(Dump -> PRD -> Tasks -> Issues -> Blockers -> Dispatch).
 The browser owns the step logic (ui_static/flow.js); this module only stores what it hands over,
 lists flows for the switcher, imports flows from sessions that ran before flows were stored, and
 reads an Issues session's stream into per-issue progress rows.
@@ -25,7 +26,8 @@ class NotFound(Exception):
     pass
 
 
-FIELDS = ("repo", "text", "folder", "prd", "issues", "sid", "dispatched")
+# Each step's input: prd <- folder, tasks <- prd, issues <- tasks, blockers <- parent, dispatch <- issues.
+FIELDS = ("repo", "text", "folder", "prd", "tasks", "parent", "issues", "sid", "dispatched")
 MAX_TEXT = 20000
 EMPTY_TTL = 86400  # a flow that never ran and holds no text is pruned a day after its last edit
 
@@ -96,6 +98,8 @@ def create(body: dict) -> dict:
         "text": "",
         "folder": "",
         "prd": "",
+        "tasks": "",
+        "parent": "",
         "issues": [],
         "sid": "",
     }
@@ -137,25 +141,34 @@ def step(flow: dict) -> str:
     """Mirror of stepFromState in flow.js: the first step whose input is known but output isn't."""
     if flow.get("issues"):
         return "dispatch"
-    if flow.get("prd"):
+    if flow.get("parent"):
+        return "blockers"
+    if flow.get("tasks"):
         return "issues"
+    if flow.get("prd"):
+        return "tasks"
     if flow.get("folder"):
         return "prd"
     return "dump"
 
 
 def name(flow: dict) -> str:
-    folder = (flow.get("folder") or flow.get("prd") or "").rstrip("/")
+    folder = (flow.get("folder") or flow.get("prd") or flow.get("tasks") or "").rstrip("/")
     if folder:
-        last = folder.split("/")[-1]
-        return folder.split("/")[-2] if last.lower().endswith(".md") and "/" in folder else last
+        parts = folder.split("/")
+        if not parts[-1].lower().endswith(".md") or len(parts) == 1:
+            return parts[-1]
+        # docs/prd/<slug>.md and docs/tasks/<slug>.md name the feature by file; a vault note by its folder
+        return parts[-1][:-3] if parts[-2] in ("prd", "tasks") else parts[-2]
     text = " ".join((flow.get("text") or "").split())
     return (text[:60] + "…") if len(text) > 60 else (text or "Untitled flow")
 
 
 def _empty(flow: dict) -> bool:
     return not (
-        flow["sessions"] or flow.get("text", "").strip() or flow.get("folder") or flow.get("prd") or flow.get("issues")
+        flow["sessions"]
+        or flow.get("text", "").strip()
+        or any(flow.get(k) for k in ("folder", "prd", "tasks", "parent", "issues"))
     )
 
 

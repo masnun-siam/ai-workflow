@@ -4,13 +4,15 @@
 
 | Command | Does |
 |---|---|
-| `/ai-workflow:run-issue <n> [--full] [--no-review]` | the full pipeline: issue → reviewed PR (`--no-review` skips review and fix). Accepts an epic parent. |
+| `/ai-workflow:run-issue <n> [--full] [--no-review] [--grind]` | the full pipeline: issue → reviewed PR (`--no-review` skips review and fix; `--grind` keeps working the PR's review rounds after the handback, off by default). Accepts an epic parent. |
 | `/ai-workflow:intake <source>` | normalize a Sentry link, BRD file, or vault note into an issue brief — used internally by `/gh-issue` and `/run-issue` |
-| `/ai-workflow:gh-issue` | file a well-formed issue; always decomposes first — one task files one issue; two or more save the task list to `docs/tasks/<slug>.md` and file one flat issue per task, ordered by `Depends on: #n` lines, with no parent issue |
+| `/ai-workflow:gh-issue` | file a well-formed issue; always decomposes first — one task files one issue; two or more save the task list to `docs/tasks/<slug>.md` and file one refined issue per task, ordered by `Depends on: #n` lines, under an `epic` parent; `/gh-issue docs/tasks/<slug>.md` files a saved list, one question round per task |
+| `/ai-workflow:create-tasks <prd \| problem-statement>` | break a problem statement and its PRD into a saved, ordered task list (`docs/tasks/<slug>.md`) using `/gh-issue`'s decomposition rules; files no issues. `/gh-issue docs/tasks/<slug>.md` then files them |
+| `/ai-workflow:fix-blockers <parent>` | set GitHub's native "blocked by" relations between an epic's children from their `Depends on:` lines: previews, asks once, writes only the missing edges, reports (never deletes) edges no line names |
 | `/ai-workflow:jira-to-gh <KEY>` | decompose a Jira ticket and file flat issues the same way as `/gh-issue` (one issue for a single task; two or more saved to `docs/tasks/<slug>.md` and filed flat) |
 | `/ai-workflow:pr-fix-comments <pr>` | work through a PR's review comments, confirming each |
 | `/ai-workflow:issue-to-pr` | the interactive, non-unattended variant |
-| `/ai-workflow:flow <idea \| folder \| PRD \| issue numbers>` | the guided flow (`/flow` for short): dump → PRD → flat issues → herdr-dispatch for one feature, starting at whichever stage the input implies and stopping for your go at each boundary |
+| `/ai-workflow:flow <idea \| folder \| PRD \| task list \| parent \| issue numbers>` | the guided flow (`/flow` for short): dump → PRD → task list → issues under an epic → blockers → herdr-dispatch for one feature, starting at whichever stage the input implies and stopping for your go at each boundary |
 
 The default roster is researcher → planner → dev → reviewer → fixer. `run-dev` writes the
 RED tests first, implements, and runtime-verifies in one dispatch, and also applies the
@@ -38,6 +40,7 @@ aiw ci status                      check state plus the failing job's log
 aiw gitnexus sync|index|clean      the code graph (best-effort)
 aiw project-status                 GitHub Projects (best-effort)
 aiw epic split|init|next|status    epic decomposition and sequencing
+aiw epic blockers <dir> [--dry-run]   GitHub blocked-by edges from the children's Depends on lines
 aiw ui [--port N] [--allow-host HOST]  local web UI to start and track sessions
 ```
 
@@ -84,7 +87,7 @@ plugin upgrades** — in-flight runs are not lost when you update.
 ```
 commands/     run-issue (the orchestrator) + 5 intake commands
 agents/       12 run-* pipeline agents + ship, worklog-runner, gh-issue-factchecker
-skills/       pr-review, pr-grind, herdr-dispatch, worklog, dump, prd, flow, 7 Laravel reviewers
+skills/       pr-review, pr-grind, herdr-dispatch, worklog, dump, prd, create-tasks, fix-blockers, flow, 7 Laravel reviewers
 run-engine/   engine.py (pure) · route.py (CLI) · checks.py (station post-checks)
               stack/worktree/threads/pr/ci/gitnexus/project/epic (mechanical phases)
               config.json (policy) · test_engine.py + test_scripts.py
@@ -97,6 +100,7 @@ docs/         HOW-IT-WORKS, INSTALL, REFERENCE, adr/, prd/, tasks/
 ```bash
 python3 run-engine/test_engine.py     # the pure engine: routing, caps, contracts
 python3 run-engine/test_scripts.py    # the mechanical phases
+bash run-engine/run_tests.sh          # every test_*.py (~2 min); also the pre-push hook and CI
 ```
 
 No network, no Docker, no install step.

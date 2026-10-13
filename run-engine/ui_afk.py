@@ -18,8 +18,8 @@ import os
 import re
 import threading
 import time
-from datetime import datetime
 
+import review
 import shared
 import ui_board
 import ui_grind
@@ -64,10 +64,8 @@ def active(now=None) -> bool:
 
 
 def _epoch(iso) -> float | None:
-    try:
-        return datetime.fromisoformat(iso).timestamp()
-    except (TypeError, ValueError):
-        return None
+    parsed = review._ts(iso)  # handles the trailing `Z` that 3.10's fromisoformat rejects
+    return parsed.timestamp() if parsed else None
 
 
 def _held(sessions: list, started) -> int:
@@ -161,7 +159,8 @@ def _entry(kind: str, rec: dict, now: float, question, picked) -> dict:
 
 
 # #188: these interviews are the user's product decisions, so they always wait for a human.
-NEVER_AUTO = ("prd", "dump")
+# create-tasks asks about scope; fix-blockers confirms writes to GitHub.
+NEVER_AUTO = ("prd", "dump", "create-tasks", "fix-blockers")
 
 
 def _answer(rec: dict, now: float) -> dict | None:

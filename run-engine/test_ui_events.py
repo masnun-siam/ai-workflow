@@ -187,6 +187,7 @@ ALLOWED = {
     "limit_resets_at",
     "limit_type",
     "auto_resume",
+    "flow_id",
 }
 
 
@@ -215,7 +216,8 @@ def jget(path):
 
 
 try:
-    assert jget("/api/sessions") == {"sessions": [], "limits": {}}
+    r = jget("/api/sessions")  # usage/afk are machine-dependent; pin only the stable keys
+    assert {k: r[k] for k in ("sessions", "limits")} == {"sessions": [], "limits": {}}, r
     ok("no sessions dir -> empty list")
 
     old = ui_sessions.create("/run-issue", "r/old")

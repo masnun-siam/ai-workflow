@@ -23,7 +23,7 @@ together, `HOW-IT-WORKS.md`, `CONTEXT.md`, `CHANGELOG.md`). Run them after editi
 
 ```bash
 pip install pre-commit   # once per machine
-pre-commit install       # once per clone
+pre-commit install       # once per clone; installs the pre-commit and pre-push hooks
 git config blame.ignoreRevsFile .git-blame-ignore-revs   # optional: skip the reformat in blame
 ```
 
@@ -41,7 +41,12 @@ All of these block the commit. The one exception is the `CLAUDE.md` hook, which 
 warning and lets the commit through. Run `pre-commit run --all-files` to check the whole
 repo. When `/run-issue` runs on this repo with the hooks installed, an agent's commit
 can be aborted by a fixer hook (whitespace, final newline, ruff-format) or a failing
-`test_engine.py`. Re-stage the fixed files and commit again, or fix the failure first. The full test suites (`run-engine/test_*.py`) are not in the hook; run them by hand.
+`test_engine.py`. Re-stage the fixed files and commit again, or fix the failure first.
+
+On `git push`, `run-engine/run_tests.sh` runs every `run-engine/test_*.py` (about 2 minutes)
+and blocks the push if any file fails. The `Tests` GitHub Actions job runs the same script on
+every pull request and on pushes to `master`. Run it by hand with `bash run-engine/run_tests.sh`. A clone set up before
+the pre-push hook existed must run `pre-commit install` again to get it.
 
 ## Process
 
