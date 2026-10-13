@@ -1,7 +1,7 @@
 """`aiw refined` — take the plan straight from a refined issue body, skipping researcher + planner.
 
-A `refined` issue (filed by /gh-issue or /jira-to-gh) already carries Acceptance Criteria and a
-numbered How — the planner's own starting point. When the label AND the body both check out, this
+A `refined` issue (filed by /gh-issue, /jira-to-gh or /refine-issues) already carries Acceptance
+Criteria and a numbered How — the planner's own starting point. When the label AND the body both check out, this
 writes the two envelopes those stations would have produced (researcher as an orchestrator skip,
 planner synthesized from the body) so the run routes them like any other. Exit 1 with a reason
 means "not actually refined": the orchestrator runs phases 0.5 and 1 as usual.

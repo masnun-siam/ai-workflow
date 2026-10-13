@@ -11,7 +11,18 @@ I have a ${1:-bug / feature request / task / improvement} to log as a GitHub iss
    doesn't start with `--` (the picked lenses), and `--herdr` from `$@`, and remember them for
    **Peer review** below. Every later `$@` in this file, including the `/intake` call, means the
    stripped value, so `/intake` never reviews the brief a second time.
-   If `$@` matches one of `/intake`'s detectable source shapes — a
+   **A vault `Bugs.md` or `Tasks.md` note** (a path ending in `/Bugs.md` or `/Tasks.md`, as
+   `/dump` names it in `→ next: /gh-issue <note-path>`) is handled here and never sent to `/intake`.
+   Read it with `obsidian vault=notes read path="<path>"`. `Bugs.md` holds every bug of the feature,
+   one `## <date>: <title>` block each; `Tasks.md` holds every task, one `- [ ] <date>: <text>` line
+   each (unchecked lines only). Work on one: with one, take it; with more, ask which one (see
+   **Asking the user**), newest first (the newest is the one right above `## Related`); in Flow auto
+   mode take the newest without asking. Use only the chosen block as `Details:` below, and its type
+   (`bug` from `Bugs.md`, `task` from `Tasks.md`) in place of
+   `${1:-bug / feature request / task / improvement}`. Record
+   `Source: <path> — <block heading>` in the created issue's **Notes**. Then skip the `/intake`
+   check below.
+   Otherwise, if `$@` matches one of `/intake`'s detectable source shapes — a
    `sentry.io` URL, an existing `.md`/`.txt`/`.pdf`/`.docx` file path, or a vault note
    title that exactly matches one note — invoke `/intake $@ --whole` and wait for its `## Intake
    result` block. Use its `type:` value in place of
@@ -53,13 +64,14 @@ are used either way; only the transport differs.
 ### Flow auto mode
 
 When the system prompt contains `Flow auto mode`, this run is the Issues step of the aiw ui
-guided Flow. Its input PRD was already grilled until no open question remained, and the user has
-chosen to answer no questions here. Ask nothing; settle every choice as follows and list what you
-decided in the final report:
+guided Flow. Its input is a `Bugs.md` or `Tasks.md` note (step 0); there is no PRD. Ask only
+grilling questions; settle every other choice as follows and list what you decided in the final
+report:
 
-- **Step 3 (grilling):** skipped. Take requirements, acceptance criteria, priority, users and
-  corner cases from the PRD. Anything the PRD leaves undecided is written into the issue's Notes
-  as an assumption, never asked.
+- **Step 3 (grilling):** take requirements, acceptance criteria, priority, users and corner cases
+  from the chosen block. Ask its **Open questions** as grilling questions. One that cannot be
+  asked (it needs someone not in the session) is written into the issue's Assumptions, never
+  guessed silently.
 - **Task list (3.5):** 2 or more tasks stop as 3.5 says; Flow auto mode never files a partial list.
 - **Assignee (step 5):** only the authenticated user (`gh api user --jq .login`).
 - **Project (step 6):** the project(s) linked to the repo

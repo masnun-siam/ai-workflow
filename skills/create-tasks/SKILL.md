@@ -35,7 +35,9 @@ refs/remotes/origin/HEAD`); never assume either.
 ## Arguments
 
 `/create-tasks <prd-path | slug>`: the PRD the previous step's `→ next:` line named. A slug means
-`docs/prds/<slug>.md`. If it is a vault `PRD.md` with a `canonical` property
+`docs/prds/<slug>.md`. A PRD found only at the legacy `docs/prd/<slug>.md` stops the run: tell the
+user `/create-prd` moves it to `docs/prds/<slug>.md` (never move it here) and end with
+`→ next: /create-prd docs/prd/<slug>.md`. If it is a vault `PRD.md` with a `canonical` property
 (`obsidian vault=notes property:read path="<prd>" name=canonical`) naming this repo, read that
 repo copy instead: it is the canonical one.
 
@@ -50,7 +52,8 @@ your turn; the answer arrives as your next message. Otherwise use AskUserQuestio
 
 When the system prompt contains `Flow auto mode`, this run is the Tasks step of the aiw ui guided
 Flow and asks nothing. Step 2's readiness checks run first: the PRD exists, every requirement
-has an acceptance line, the technical design is present and `## Open questions` is empty. Any gap
+has an acceptance line, the technical design is present and `## Open questions` is empty (a
+section that reads only `None` is empty). Any gap
 stops the run. Only a PRD that passes all of them and whose status is `Draft` is then approved, by
 running the `ai-workflow:create-prd` skill with `approve <prd>` (starting this step was the user's
 approval), before step 2's last check. The list is saved as shown,
@@ -66,7 +69,8 @@ save under `<slug>-2` (or the next free number) and say so. Never overwrite eith
    `FR-n` requirements, edge cases, technical design, epics and decisions.
 
 2. **Check it is ready,** in this order. First stop and send the user back to `/create-prd` when
-   the PRD is missing, a requirement has no acceptance line, `## Open questions` has an entry, or
+   the PRD is missing, a requirement has no acceptance line, `## Open questions` has an entry (a
+   section that reads only `None` is empty), or
    the technical design is missing. Only then check approval: when its status is not `Approved`,
    or an epic in `## Epics` still reads `Issue: —`, send them to `/create-prd approve <prd>` (in
    Flow auto mode, a `Draft` PRD is approved here instead; see Flow auto mode). If

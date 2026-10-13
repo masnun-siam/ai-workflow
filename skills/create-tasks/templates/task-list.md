@@ -11,8 +11,8 @@
 
 ## Waves
 
-- Wave 1 (can start now): backend task 1 · frontend task 2
-- Wave 2 (after wave 1 is merged): backend task 3
+- Wave 1 (can start now): backend task 1
+- Wave 2 (after wave 1 is merged): frontend task 2
 
 ## Task 1 — <Short title>
 Outcome: one sentence, observable, deliverable in one pull request.

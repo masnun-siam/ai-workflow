@@ -4599,4 +4599,108 @@ assert _dp187.index("--dry-run") < _dp187.index("Launch"), "#187 dry-run is show
 assert re.search(r"[Nn]ever (launch|dispatch).{0,60}without an explicit", _flow_ws), "#187 never dispatch without a go"
 ok("#187 /flow checkpoints every boundary; dispatch shows --dry-run (--max 2) and launches only on an explicit go")
 
+# Final-review fix wave (wasensi planning skills): one check per finding.
+_gh_fw = _read("commands", "gh-issue.md")
+_s0 = _ws(_slice(_gh_fw, "0. **Source check.**", "Details: $@"))
+for _w in (
+    "Bugs.md",
+    "Tasks.md",
+    'obsidian vault=notes read path="<path>"',
+    "## <date>: <title>",
+    "right above `## Related`",
+    "newest first",
+    "Flow auto mode",
+    "Source: <path> — <block heading>",
+    "only the chosen block",
+):
+    assert _w in _s0, f"C1 gh-issue step 0 lacks {_w!r}"
+assert _s0.index("Bugs.md") < _s0.index("detectable source shapes"), "C1 the vault-note rule precedes the /intake check"
+ok("C1 gh-issue step 0 reads one block of a vault Bugs.md/Tasks.md note before the /intake shape check")
+
+_cpa = _skill_sections("skills/create-prd/SKILL.md")
+_s2p = _ws(_key183(_cpa, "Step 2"))
+assert "Step 8" in _s2p and "→ next: /create-tasks <prd-path>" in _s2p, "I2 a Step 2 update ends with Step 8"
+_updp = _ws(_key183(_cpa, "Update mode"))
+assert re.search(r"[Cc]alled explicitly as `/create-prd --update`.{0,40}print no next line", _updp), "I2 explicit only"
+assert "reached from Step 2" in _updp, "I2 Update mode: an update reached from Step 2 still hands off"
+assert "→ next: /create-tasks <prd-path>" in _ws(_key183(_cpa, "Changing an approved PRD")), "I2 change -> next"
+ok("I2 an interactive update of an Approved PRD ends with the create-tasks next line; only --update prints none")
+
+_ri_fw = _read("skills", "refine-issues", "SKILL.md")
+_s7r = _ws(_slice(_ri_fw, "7. **Create**", "8. **Write back.**"))
+for _w in ("gh label create refined", "gh label create prd-<slug>", "Flow auto mode", "never `--force`"):
+    assert _w in _s7r, f"I3 refine-issues step 7 lacks {_w!r}"
+assert re.search(r"gh label create refined\b[^\n]*2>/dev/null \|\| true", _ri_fw), "I3 gh-issue's ensure-create idiom"
+assert _s7r.index("gh label create") < _s7r.index("gh issue create"), "I3 labels exist before the first create"
+assert re.search(r"[Aa]rea and priority labels.{0,80}never (create|invent)", _s7r), "I3 never invent area/priority"
+ok("I3 refine-issues creates missing refined/prd-<slug> labels before the first create, never recolours")
+
+_gfa = _ws(_slice(_gh_fw, "### Flow auto mode", "**HARD RULE"))
+assert "already grilled" not in _gfa and "Bugs.md" in _gfa and "no PRD" in _gfa, "I4 gh-issue auto mode input"
+assert "**Open questions**" in _gfa and "Assumptions" in _gfa, "I4 open questions asked, else Assumptions"
+_cpf = _ws(_key183(_cpa, "Flow auto mode"))
+assert "(`/create-tasks`, `/refine-issues`)" in _cpf and "/gh-issue" not in _cpf, "I4 create-prd names the later steps"
+ok("I4 gh-issue Flow auto mode grills the block's open questions; create-prd names create-tasks/refine-issues")
+
+assert "docs/prd/<slug>.md" in _key183(_cpa, "Step 2") and "git mv docs/prd/<slug>.md docs/prds/<slug>.md" in _s2p, (
+    "I5 create-prd Step 2 finds and moves a legacy PRD"
+)
+assert "just do it and say so" in _s2p, "I5 Flow auto mode moves without asking"
+_ct_fw = _ws(_read("skills", "create-tasks", "SKILL.md"))
+assert "docs/prd/<slug>.md" in _ct_fw and "→ next: /create-prd docs/prd/<slug>.md" in _ct_fw, "I5 create-tasks"
+assert "never move it here" in _ct_fw, "I5 create-tasks does not move the legacy PRD"
+ok("I5 legacy docs/prd/<slug>.md: create-prd offers git mv; create-tasks points at /create-prd")
+
+_apv = _ws(_key183(_cpa, "Approve"))
+assert _apv.index("Write `Issue: #<n>` back") < _apv.index("Only now set `**Status:** Approved`"), (
+    "M1 status after epics"
+)
+assert "Stop leaves the status unchanged" in _apv, "M1 Stop leaves the PRD unapproved"
+ok("M1 approve sets Approved only after its epics are created and written back")
+
+assert "reads only `None` is empty" in _apv, "M2 create-prd approve"
+_ct_s2fw = _ws(_slice(_read("skills", "create-tasks", "SKILL.md"), "2. **Check it is ready", "3. **Ground"))
+_ct_autofw = _ws(_slice(_read("skills", "create-tasks", "SKILL.md"), "### Flow auto mode", "## Steps"))
+assert "reads only `None`" in _ct_s2fw and "reads only `None`" in _ct_autofw, "M2 create-tasks gate + auto mode"
+ok("M2 an Open questions section reading only None counts as empty")
+
+_tt_fw = _read("skills", "create-tasks", "templates", "task-list.md")
+_deps = {
+    int(n): re.findall(r"task (\d+)", d)
+    for n, d in re.findall(r"^## Task (\d+) .*?^Depends on: ([^\n]*)$", _tt_fw, re.M | re.S)
+}
+_wave = {}
+for _i, _line in enumerate(re.findall(r"^- Wave \d+ .*$", _tt_fw, re.M), 1):
+    for _t in re.findall(r"task (\d+)", _line):
+        _wave[int(_t)] = _i
+assert set(_wave) == set(_deps), f"M3 waves name tasks {sorted(_wave)} but the template has {sorted(_deps)}"
+for _t, _ds in _deps.items():
+    assert all(_wave[int(_d)] < _wave[_t] for _d in _ds), f"M3 task {_t} sits in a wave with or before its dependency"
+ok("M3 task-list template: waves agree with Depends on")
+
+_fb = _read("skills", "fix-blockers", "SKILL.md")
+assert "/gh-issue" not in _fb and "/refine-issues" in _fb, "M4 fix-blockers names /refine-issues"
+assert "/refine-issues" in _read("run-engine", "refined.py").split('"""')[1], "M4 refined.py docstring"
+assert "create-prd, intake" in _read("run-engine", "peer_review.py"), "M4 peer_review --kind help"
+assert "/create-prd" in _read("run-engine", "ui_settings.py") and not re.search(
+    r"(?<![-\w])/prd\b", _read("run-engine", "ui_settings.py")
+), "M4 ui_settings comment"
+ok("M4 no stale /gh-issue-epic or /prd references")
+
+for _name, _txt in (("HOW-IT-WORKS", _read("docs", "HOW-IT-WORKS.md")), ("CHANGELOG", _read("CHANGELOG.md"))):
+    assert "assign you" not in _txt and "they assign" not in _txt, f"M5 {_name} still says refine-issues assigns you"
+    assert "`/refine-issues` leaves them unassigned" in _ws(_txt), f"M5 {_name} must say refine-issues assigns no one"
+assert "**Assignees:** none." in _ri_fw, "M5 the skill is the source"
+ok("M5 docs match refine-issues: Flow auto mode assigns no one")
+
+_fct = _ws(_flow.split("### create-tasks")[1].split("###")[0])
+assert (
+    "not `Approved`" in _fct and "Approve the PRD, file its epics, and continue to create-tasks (Recommended)" in _fct
+)
+assert "approve <prd-path>" in _fct and "Stop here" in _fct, "M6 flow create-tasks entry runs the approve checkpoint"
+ok("M6 /flow entering at create-tasks with an unapproved PRD asks the approve checkpoint first")
+
+assert re.search(r"`prd-<slug>`.{0,120}`\*\*Slug:\*\*` header.{0,80}never the task-list file name", _ws(_ri_fw)), "M7"
+ok("M7 refine-issues takes prd-<slug> from the PRD's Slug header")
+
 print(f"\n{passed} checks passed")

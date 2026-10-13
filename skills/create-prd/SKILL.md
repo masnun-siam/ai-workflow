@@ -34,6 +34,7 @@ epic template" below mean the resolved file.
 `/create-prd approve <prd-path | slug>` (see **Approve**)
 
 - `<requirement>`: free text, a BRD file, an Obsidian note, a Sentry link or a GitHub issue URL.
+- A legacy `docs/prd/<slug>.md` path is not a requirement: it is the existing PRD, handled as Step 2 says.
 - `<feature-folder>`: a vault path `05-Work/<Project>/<Feature>` that holds a `Dump.md` (as left by `/dump`). `/create-prd` fills that folder's seeded `PRD.md`.
 - `--review [<lens,lens>]`: before the Step 6 review gate, a reviewer panel checks the draft until
   every picked lens approves (see **Step 5.5: Peer review**). The token after `--review` is a lens
@@ -70,9 +71,9 @@ are used either way; only the transport differs.
 
 When the system prompt contains `Flow auto mode`, this run is the PRD step of the aiw ui guided
 Flow. The user answers grilling questions and nothing else, and the next steps (`/create-tasks`,
-`/gh-issue`) will ask nothing at all, so this interview is the only chance to settle anything. Changes:
+`/refine-issues`) will ask nothing at all, so this interview is the only chance to settle anything. Changes:
 
-- **Grilling (Step 4)** also covers what `/gh-issue` would otherwise grill on: acceptance criteria
+- **Grilling (Step 4)** also covers what an issue would otherwise be grilled on: acceptance criteria
   for every requirement, priority, affected users, and every corner case (empty/null input,
   concurrency, permissions, error and failure paths, boundary values, existing-data migration).
   Add these as branches of the starting tree.
@@ -101,13 +102,15 @@ Interviewing for ten minutes and then discovering a PRD already exists wastes th
 
 | Destination | Existence check |
 |---|---|
-| local | `docs/prds/<slug>.md` in the repo root |
+| local | `docs/prds/<slug>.md` in the repo root, then the legacy `docs/prd/<slug>.md` |
 | obsidian | `obsidian vault=notes file path="05-Work/<Project>/<Feature>/PRD.md"` — prints `Error: ... not found` (exit code 0) when missing, so read the output text |
 | wiki | after cloning (Step 7), look for `PRD-<Title-With-Dashes>.md`; for an early check use `git ls-remote` only to confirm the wiki exists, and defer the page check to the clone |
 
 Exception: an Obsidian `PRD.md` with frontmatter `status: seed` is the input, not a collision — continue without asking and fill that same file. Read the status with `obsidian vault=notes property:read path="05-Work/<Project>/<Feature>/PRD.md" name=status` (the existence check above does not show frontmatter); only output that is exactly `seed` counts. Anything else (another value, empty output, an error) means any other existing PRD, including finished PRDs and ones seeded before the marker existed, and still stops here.
 
-If a PRD already exists anywhere: **stop and ask the user** (headless: `aiw ask`, then end your turn) what to do (read it and update it, pick a new name, skip that destination). Never overwrite silently. If they choose to update, read the existing PRD before Step 4 so the interview builds on it and keeps earlier decisions. When its status is `Approved`, the update follows **Changing an approved PRD**. When both a repo copy and a vault copy exist, read the repo copy: it is canonical, and Step 7 rewrites the vault copy as its mirror. Find the pair through the links Step 7 records (the repo copy's `**Mirror:**` line, the vault note's `canonical` property), never by matching names.
+If a PRD already exists anywhere: **stop and ask the user** (headless: `aiw ask`, then end your turn) what to do (read it and update it, pick a new name, skip that destination). Never overwrite silently. If they choose to update, read the existing PRD before Step 4 so the interview builds on it and keeps earlier decisions. When its status is `Approved`, the update follows **Changing an approved PRD**; an update reached from here is interactive, so it still ends with Step 8's `→ next: /create-tasks <prd-path>` line. When both a repo copy and a vault copy exist, read the repo copy: it is canonical, and Step 7 rewrites the vault copy as its mirror. Find the pair through the links Step 7 records (the repo copy's `**Mirror:**` line, the vault note's `canonical` property), never by matching names.
+
+A legacy `docs/prd/<slug>.md` is the existing PRD. Offer to move it (ask; in Flow auto mode, just do it and say so) with `git mv docs/prd/<slug>.md docs/prds/<slug>.md`, then carry on with it at its new path. Declined: work on it where it is and say that `/create-tasks` reads only `docs/prds/`.
 
 For Obsidian, also resolve the project and feature folder here, the same way `dump` does:
 
@@ -235,13 +238,12 @@ One line per destination with its final path or URL. End with the line `→ next
 `/create-prd approve <prd-path | slug>` runs when the user says the team has reviewed the PRD.
 Approval is the user's call, never yours. A slug resolves to `docs/prds/<slug>.md`.
 
-1. Resolve the canonical copy by the **Update mode** rules, and fold in any review changes the
+1. Resolve the canonical copy by the **Update mode** rules (a slug may also find a legacy
+   `docs/prd/<slug>.md`: offer the Step 2 move first), and fold in any review changes the
    user names.
-2. Refuse while `## Open questions` has an entry, and say which ones; resolve those first.
-3. Set `**Status:** Approved` in the canonical copy, and run
-   `obsidian vault=notes property:set path="<mirror>" name=status value=approved` on the mirror
-   when one exists (keep its content in step with the canonical copy, by the Step 7 rules).
-4. For each `## Epics` entry whose `Issue:` is `—`, draft an epic from the epic template.
+2. Refuse while `## Open questions` has an entry, and say which ones; resolve those first. A
+   section that reads only `None` is empty.
+3. For each `## Epics` entry whose `Issue:` is `—`, draft an epic from the epic template.
    - **Re-run safety** first: `gh issue list --label epic --label prd-<slug> --state all --json number,title`.
      Reuse an existing epic with the same title instead of drafting a new one.
    - **Labels.** Ensure the label once, without touching a repo's own `epic` label (`--force` would recolour it):
@@ -256,9 +258,12 @@ Approval is the user's call, never yours. A slug resolves to `docs/prds/<slug>.m
      4. None in use: check `gh project list --owner <owner>`. Propose a project if exactly one is open; otherwise skip the project step and say so in the report. Do not create a project.
 
      Project commands need the `project` scope on the `gh` token (`gh auth refresh -s project`). If it is missing, say so and carry on without the project step instead of failing.
-5. Show each epic's title, labels and project, and ask (AskUserQuestion, headless: `aiw ask`, then end your turn) with the options "Create these epics (Recommended)" / "Stop". Create nothing without the yes. **Flow auto mode, or `/flow` calling approve after its checkpoint, skips this question**, because the user already confirmed.
-6. For each new epic: `gh issue create --title "Epic: <title>" --label "epic,prd-<slug>" --body-file <file>` (plus `--project "<title>"` when step 4 found one), the body written to a scratch file with the Write tool.
-7. Write `Issue: #<n>` back into each `## Epics` line, in the canonical copy and then the mirror.
+4. Show each epic's title, labels and project, and ask (AskUserQuestion, headless: `aiw ask`, then end your turn) with the options "Create these epics (Recommended)" / "Stop". Create nothing without the yes: Stop leaves the status unchanged. **Flow auto mode, or `/flow` calling approve after its checkpoint, skips this question**, because the user already confirmed.
+5. For each new epic: `gh issue create --title "Epic: <title>" --label "epic,prd-<slug>" --body-file <file>` (plus `--project "<title>"` when step 3 found one), the body written to a scratch file with the Write tool.
+6. Write `Issue: #<n>` back into each `## Epics` line, in the canonical copy and then the mirror.
+7. Only now set `**Status:** Approved` in the canonical copy, and run
+   `obsidian vault=notes property:set path="<mirror>" name=status value=approved` on the mirror
+   when one exists (keep its content in step with the canonical copy, by the Step 7 rules).
 8. Report each epic's number and URL, and any reused. The last line is `→ next: /create-tasks <prd-path>`.
 
 ## Update mode
@@ -290,12 +295,13 @@ question where it came up. For each decision:
 Write the canonical copy back, then apply the same edits to the Obsidian mirror when one exists
 (read it, edit it, write it back with `obsidian vault=notes create ... overwrite`, keeping its
 tags and `## Related`; the Step 7 rules apply: never overwrite with partial content, and re-set
-`tags`, `status` and `canonical` after the overwrite). Report which decisions were added and which were already there, and every requirement or acceptance check you edited as before → after, so no requirement changes without someone seeing it. Print no
-next line: the calling command owns what happens next.
+`tags`, `status` and `canonical` after the overwrite). Report which decisions were added and which were already there, and every requirement or acceptance check you edited as before → after, so no requirement changes without someone seeing it. Called explicitly as `/create-prd --update`, print no
+next line: the calling command owns what happens next. An update reached from Step 2 (an
+interactive run on an existing PRD) ends with Step 8's next line instead.
 
 ## Changing an approved PRD
 
-A decision that changes after approval is changed here first, never only in an issue or a pull request. Update the affected sections through **Update mode**, which adds a `## Change log` line with the date, the reason and the issues affected, then tell the user which tasks and issues must be updated to match. Ask before editing any issue.
+A decision that changes after approval is changed here first, never only in an issue or a pull request. Update the affected sections through **Update mode**, which adds a `## Change log` line with the date, the reason and the issues affected, then tell the user which tasks and issues must be updated to match. Ask before editing any issue. Reached from Step 2, finish with Step 8: its last line is `→ next: /create-tasks <prd-path>`, so `/create-tasks` revises the task list.
 
 ## Stop and ask when
 

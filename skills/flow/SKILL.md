@@ -44,7 +44,7 @@ Invoke the `ai-workflow:create-prd` skill with the feature folder (`/create-prd 
 
 ### create-tasks
 
-Invoke the `ai-workflow:create-tasks` skill with the PRD path. It works only from an Approved PRD and saves a small, ordered task list. Its final line is `→ next: /refine-issues docs/tasks/<slug>.md`.
+Invoke the `ai-workflow:create-tasks` skill with the PRD path. It works only from an Approved PRD and saves a small, ordered task list. When `/flow` enters here with a PRD path whose status is not `Approved` (its `**Status:**` line, or a vault mirror's `status` property), first ask the create-prd boundary's checkpoint, "Approve the PRD, file its epics, and continue to create-tasks (Recommended)" / "Stop here". On Continue invoke `ai-workflow:create-prd` with `approve <prd-path>`, then create-tasks; on "Stop here", print `→ next: /create-tasks <prd-path>` and stop. Its final line is `→ next: /refine-issues docs/tasks/<slug>.md`.
 
 ### refine-issues
 

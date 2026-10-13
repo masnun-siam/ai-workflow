@@ -16,7 +16,7 @@ import subprocess
 import shared
 
 DEFAULT_CMD = "claude"
-DEFAULT_VAULT = os.path.join("~", "Documents", "notes")  # the `notes` vault /dump and /prd write to
+DEFAULT_VAULT = os.path.join("~", "Documents", "notes")  # the `notes` vault /dump and /create-prd write to
 MAX_COMMANDS = 20
 
 

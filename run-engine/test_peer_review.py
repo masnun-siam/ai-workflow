@@ -295,6 +295,17 @@ with tempfile.TemporaryDirectory() as tmp:
     assert second != first and rc == 0 and out["action"] == "review" and out["round"] == 1, (out, err)
 ok("a second run on the same slug starts at round 1 (the old fixed-per-slug dir inherited stale rounds)")
 
+with tempfile.TemporaryDirectory() as tmp:
+    env = {**os.environ, "CLAUDE_PLUGIN_DATA": tmp}
+    prd = write(os.path.join(tmp, "prd.md"), PRD)
+    rd = os.path.join(tmp, "old-prd-review")
+    os.makedirs(os.path.join(rd, "round-1"))
+    req = {"round": 1, "kind": "prd", "rubric": "prd-doc", "artifact_sha256": "0", "max_rounds": 3}
+    write(os.path.join(rd, "round-1", "request.json"), {**req, "lenses": [], "prior": []})
+    rc, out, err = aiw("peer-review", "next", rd, "--artifact", prd, env=env)
+    assert rc == 2 and "unknown kind 'prd'" in err and "create-prd" in err and "Traceback" not in err, (rc, err)
+ok("next: an in-flight review of a renamed kind (prd) dies cleanly, naming the valid kinds")
+
 assert (
     pr.check_prior([{"lens": "critical", "id": "f1", "disposition": "fixed", "reason": "r"}], {("critical", "f1")})
     == []

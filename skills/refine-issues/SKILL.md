@@ -121,7 +121,8 @@ its confirmation list goes in the final report instead. Every other gate still s
    - **Proposed Fix** only for a bug with an obvious fix; otherwise delete the section.
    - **Notes** carries `Task <n> of docs/tasks/<slug>.md` and `Epic #<n>`.
    - Labels: `refined`, `prd-<slug>`, the area label for the task's `Area` and the PRD's
-     `priority:` label. Use only labels that exist (`gh label list`); `refined` and `prd-<slug>`
+     `priority:` label. In `prd-<slug>`, `<slug>` is the PRD's `**Slug:**` header field, never the
+     task-list file name (which may be `<slug>-2`); step 5's label search uses the same value. Use only labels that exist (`gh label list`); `refined` and `prd-<slug>`
      are proposed for creation in step 6 when missing.
    - Before moving on, read the draft as the implementer: is there anything they would have to
      look up or ask? If so, it is not finished.
@@ -148,7 +149,18 @@ its confirmation list goes in the final report instead. Every other gate still s
    create them, "Create these issues (Recommended)" / "Stop". If the answer is anything other than
    an explicit yes, write nothing and stop. In Flow auto mode, skip the question (see above).
 
-7. **Create** in dependency order. Write each body to a scratch file with the Write tool, replacing
+7. **Create** in dependency order. Before the first create, ensure each missing `refined` and
+   `prd-<slug>` label the confirmed list uses (in Flow auto mode, without asking), the way
+   `/gh-issue` does; `gh label create` without `--force` leaves an existing label as it is, and
+   never `--force` it, which would recolour it:
+
+   ```bash
+   gh label create refined --color 1D76DB --description "properly specified: passes the issue template" 2>/dev/null || true
+   gh label create prd-<slug> --color 5319E7 --description "tasks of docs/prds/<slug>.md" 2>/dev/null || true
+   ```
+
+   Area and priority labels are used only when they already exist; never create or invent them.
+   Then write each body to a scratch file with the Write tool, replacing
    each `Depends on:` with the real numbers, then:
 
    ```bash

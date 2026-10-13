@@ -1,6 +1,6 @@
 ---
 name: fix-blockers
-description: "Set GitHub's native 'blocked by' relations between an epic's child issues, derived from their 'Depends on: #n' lines, so a task whose dependency is not merged yet shows as blocked on GitHub. Previews the edges, asks once, then writes only the missing ones. Use whenever the user says /fix-blockers, 'set the blockers', 'link the dependencies', or has just filed an epic with /gh-issue and wants its dependency order visible on GitHub."
+description: "Set GitHub's native 'blocked by' relations between an epic's child issues, derived from their 'Depends on: #n' lines, so a task whose dependency is not merged yet shows as blocked on GitHub. Previews the edges, asks once, then writes only the missing ones. Use whenever the user says /fix-blockers, 'set the blockers', 'link the dependencies', or has just filed an epic's sub-issues with /refine-issues and wants its dependency order visible on GitHub."
 allowed-tools:
   - Bash
   - AskUserQuestion
@@ -49,7 +49,7 @@ An empty sub-issue list means `<parent>` is not an epic: stop and say so. A spli
 names the bad `Depends on:` line: report it and stop.
 
 This split writes to GitHub before Step 3's question, because Step 2's preview needs the
-`epic.json` it builds. Its write is the one `/gh-issue` already made when it filed the epic:
+`epic.json` it builds. Its write is the one `/refine-issues` already made when it ran `aiw epic split`:
 already-linked children are skipped, and the parent's `## Tasks` checklist is rewritten from the
 children's current titles and order. Say so in the report; a hand-edited `## Tasks` section on
 that parent is replaced.

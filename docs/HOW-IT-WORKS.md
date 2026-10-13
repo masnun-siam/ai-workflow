@@ -452,10 +452,11 @@ never auto-answers a `/create-prd` or `/dump` question: those answers are your p
 per flow) at `#/flow/<id>`; the bare `#/flow` opens the most recently active one, and **Flows**
 lists earlier ones (archive hides a flow, nothing is deleted). Typing an idea creates the record,
 so a draft survives leaving the page. Sessions started from Flow carry the flow's id and run in
-**Flow auto mode**: the only questions are `/create-prd`'s grilling, which keeps going until the PRD has
-no open questions. `/dump` picks the folder itself, `/create-tasks` approves a Draft PRD only
-after its readiness checks pass, and `/gh-issue` and `/refine-issues` ask nothing: they assign you,
-add issues to the repo's linked project and fill its fields. Each command's "Flow auto mode"
+**Flow auto mode**: the only questions are grilling ones: `/create-prd`'s, which keep going until the
+PRD has no open questions, and `/gh-issue`'s on a bug's or task's open questions. `/dump` picks the
+folder itself, `/create-tasks` approves a Draft PRD only after its readiness checks pass, and
+`/refine-issues` asks nothing. `/gh-issue` assigns you and `/refine-issues` leaves them unassigned;
+both add issues to the repo's linked project and fill its fields. Each command's "Flow auto mode"
 section lists the defaults. Beside the steps, the page shows a waiting question, else the selected
 step's output: `Dump.md` or `PRD.md` read from the notes vault (Settings, read-only), or one row
 per issue as `/gh-issue` creates, fact-checks and fixes it.

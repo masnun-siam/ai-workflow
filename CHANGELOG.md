@@ -72,10 +72,11 @@
 - **Step output beside the steps.** With no question waiting, the Flow page shows the selected
   step's `Dump.md` or `PRD.md` (read-only, from the new **Notes vault** setting) or one row per
   issue as `/gh-issue` creates, fact-checks and fixes it. Click a done step to show its output.
-- **Flow auto mode.** Sessions started from Flow ask only `/create-prd`'s grilling questions, which now
-  cover acceptance criteria, priority, users and corner cases and run until the PRD has no open
-  questions. `/dump` picks the folder itself, and `/gh-issue` and `/refine-issues` assign you, add
-  issues to the repo's linked project and fill its fields without asking.
+- **Flow auto mode.** Sessions started from Flow ask only grilling questions: `/create-prd`'s, which
+  now cover acceptance criteria, priority, users and corner cases and run until the PRD has no open
+  questions, and `/gh-issue`'s on a bug's or task's open questions. `/dump` picks the folder itself.
+  `/gh-issue` assigns you and `/refine-issues` leaves them unassigned; both add issues to the repo's
+  linked project and fill its fields without asking.
 - **Questions answered in Flow.** A step's question opens beside the steps (in the step on narrow
   screens), and answering from the Answer page returns to the flow or the session.
 
@@ -91,7 +92,9 @@
   `Depends on: #n` and blocked-by links, then runs `aiw epic split` per epic. `/gh-issue` and
   `/jira-to-gh` now file exactly one issue: input that splits into 2 or more tasks creates
   nothing and ends `→ next: /create-prd <input>`, and `/run-issue` Preflight stops there too.
-  `/dump` sends bugs to `/gh-issue`. The peer-review kind `prd` is now `create-prd`.
+  `/dump` sends bugs to `/gh-issue <Bugs.md>`, which files the one bug you pick (newest first).
+  `/create-prd` offers to `git mv` a legacy `docs/prd/<slug>.md` to `docs/prds/`. The peer-review
+  kind `prd` is now `create-prd`; an in-flight `prd` review stops with a clear error.
   `aiw refined` also rejects a `<placeholder>` Test root or Base branch. Old `/prd` sessions in
   `aiw ui` still map to the PRD step.
 - **Bare `/create-prd --review` runs the critical reviewer alone.** It used to run critical, CEO, CTO
