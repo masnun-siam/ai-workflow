@@ -335,8 +335,8 @@ And still: **merging is manual.** The grind ends by @-mentioning you to do it.
 `/create-prd` interviews you into a PRD and saves it to `docs/prds/<slug>.md` with the status
 **Draft**. It holds the what and why, a technical design (contracts such as data shapes and
 endpoints, never code), the epics the work splits into, the decisions and a change log.
-`--review` puts a reviewer panel on the draft (status **In review**). `/create-prd approve <prd>`
-sets **Approved** and files one **epic** issue per `## Epics` entry, labelled `epic` and
+`--review` puts a reviewer panel on the draft before it is saved. The status becomes **In review**
+when you open a PR for the PRD. `/create-prd approve <prd>` sets **Approved** and files one **epic** issue per `## Epics` entry, labelled `epic` and
 `prd-<slug>`, then writes each epic's number back into the PRD.
 
 `/create-tasks` splits an Approved PRD into one-PR tasks and saves them to
@@ -344,11 +344,12 @@ sets **Approved** and files one **epic** issue per `## Epics` entry, labelled `e
 acceptance criteria, one verify command, no new dependency. Each names its Area, whether it can
 run in parallel, and the tasks it depends on, which are only tasks in its own epic. The list adds
 Waves (the tasks that can run together) and Shared files. A later edit never renumbers a task; it
-marks it Changed or Dropped.
+marks it Changed or Dropped. When the split shows the PRD is silent or wrong about a decision,
+`/create-tasks` asks you and records the answer with `/create-prd --update` first.
 
 `/refine-issues` files each task as a `refined` sub-issue of its epic, after you confirm the full
-list. Each issue number is written back into the task list, and a decision found while refining
-goes into the PRD with `/create-prd --update`. It then runs one `aiw epic split` per epic, which
+list. Each issue number is written back into the task list. When the PRD and the task list
+disagree, it stops and asks. It then runs one `aiw epic split` per epic, which
 writes the epic's `## Tasks` checklist and the `epic.json` that Epic mode reads. Each issue gets a
 native blocked-by link (on an older `gh`, `/fix-blockers` writes them) and declares its order in
 plain text:
