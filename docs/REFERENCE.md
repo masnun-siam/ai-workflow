@@ -8,6 +8,7 @@
 | `/ai-workflow:intake <source>` | normalize a Sentry link, BRD file, or vault note into an issue brief — used internally by `/gh-issue` and `/run-issue` |
 | `/ai-workflow:gh-issue` | file a well-formed issue; always decomposes first — one task files one issue; two or more save the task list to `docs/tasks/<slug>.md` and file one refined issue per task, ordered by `Depends on: #n` lines, under an `epic` parent; `/gh-issue docs/tasks/<slug>.md` files a saved list, one question round per task |
 | `/ai-workflow:create-tasks <problem-statement> [<prd>]` | break a problem statement and its PRD into a saved, ordered task list (`docs/tasks/<slug>.md`) using `/gh-issue`'s decomposition rules; files no issues. `/gh-issue docs/tasks/<slug>.md` then files them |
+| `/ai-workflow:fix-blockers <parent>` | set GitHub's native "blocked by" relations between an epic's children from their `Depends on:` lines: previews, asks once, writes only the missing edges, reports (never deletes) edges no line names |
 | `/ai-workflow:jira-to-gh <KEY>` | decompose a Jira ticket and file flat issues the same way as `/gh-issue` (one issue for a single task; two or more saved to `docs/tasks/<slug>.md` and filed flat) |
 | `/ai-workflow:pr-fix-comments <pr>` | work through a PR's review comments, confirming each |
 | `/ai-workflow:issue-to-pr` | the interactive, non-unattended variant |
@@ -86,7 +87,7 @@ plugin upgrades** — in-flight runs are not lost when you update.
 ```
 commands/     run-issue (the orchestrator) + 5 intake commands
 agents/       12 run-* pipeline agents + ship, worklog-runner, gh-issue-factchecker
-skills/       pr-review, pr-grind, herdr-dispatch, worklog, dump, prd, create-tasks, flow, 7 Laravel reviewers
+skills/       pr-review, pr-grind, herdr-dispatch, worklog, dump, prd, create-tasks, fix-blockers, flow, 7 Laravel reviewers
 run-engine/   engine.py (pure) · route.py (CLI) · checks.py (station post-checks)
               stack/worktree/threads/pr/ci/gitnexus/project/epic (mechanical phases)
               config.json (policy) · test_engine.py + test_scripts.py
