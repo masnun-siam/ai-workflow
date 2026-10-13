@@ -67,6 +67,9 @@ Flow. The user answers grilling questions and nothing else, and the next steps (
 - **Open questions must be empty.** Before Step 6, if the draft's `## Open questions` lists
   anything, keep grilling on exactly those items until none remain; only implementation choices
   meant for the later technical spec may stay, and each must say so.
+- **Peer review decisions (Step 5.5)**, with `--review`, are asked like grilling questions: they
+  are the only other questions, because this step is the last chance to settle anything. A
+  cap-reached block stops the flow here (Step 5.5, item 6).
 - **No other question is asked.** Existing PRD (Step 2): update it in place. No matching
   project (Step 2): use the project and feature folder from the input path, creating the feature
   folder if needed. Destinations: `local` and Obsidian, whatever `--to` says. Review gate (Step 6):
