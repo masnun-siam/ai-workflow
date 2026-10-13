@@ -3645,11 +3645,12 @@ assert (
     in st35
 )
 assert "re-running `/gh-issue`" not in st35
+assert "how `/gh-issue` labels" not in st35
 assert "never run it as one issue" in st35  # ADR 0003: a parent with no sub-issues stops
 ok("#85 bare-number bullet and step 3.5 epic routing sentences intact")
 # both pins below hash/compare whitespace-normalised text (_n), so reflowing lines does not trip them
 # sha256 of whitespace-normalised text on base 0ff5687 (pre-#85): step 3.5 slice, and "## Epic mode" up to "\n## Rules"
-S35_SHA = "48e0f1f6094664beab5ce4dff1a52183ff9bbe5dee1c4bb69e4bde54c13dffe9"  # re-pinned: 3.5 names /refine-issues for unlinked children
+S35_SHA = "32d8c7add6435bd075d5b3b489fb73f1779b32bafded77f9d6e403a4e13afb12"  # re-pinned: 3.5 names /refine-issues for unlinked children and /create-prd approve as the epic labeller
 EPIC_SHA = "ba15c1aafd301927d27ab95b030c0a8b36fb378da9646ac383ad66b6151f7795"  # re-pinned: epic.json is written by /refine-issues (aiw epic split), not /gh-issue
 import hashlib  # noqa: E402
 

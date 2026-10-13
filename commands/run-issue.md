@@ -291,7 +291,7 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
    parent — go to **Epic mode** below instead of the single-issue phases; keep the
    child numbers it returned, Epic mode step 0 needs them. An empty array is the
    ordinary path, except for an issue labelled both `epic` and `prd-<slug>` (step 3 returned
-   its labels), which is how `/gh-issue` labels its parents: that is a parent whose children
+   its labels), which is how `/create-prd approve` labels the epics it files: that is a parent whose children
    were never linked. Stop and say so; never run it as one issue. Its children get linked by
    `/refine-issues` on its task list, or by `aiw epic split` with the children
    named. An `epic` label without a `prd-<slug>` label is a team's own label: the ordinary path.
