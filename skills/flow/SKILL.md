@@ -76,7 +76,7 @@ See **Dispatch** below.
 
 At every boundary between stages, ask one AskUserQuestion: "Continue to <next stage> (Recommended)" / "Stop here", naming the argument the `→ next:` line gave. On "Stop here", print that `→ next:` line and tell the user they can resume later with `/flow <that argument>`. Never advance past a boundary without the user's "Continue".
 
-When the user answers Continue at the boundary after `create-prd`, first invoke `ai-workflow:create-prd` with `approve <prd-path>` (the Continue is the approval; it creates the epics without asking again), then invoke `create-tasks`.
+The boundary after `create-prd` asks "Approve the PRD, file its epics, and continue to create-tasks (Recommended)" / "Stop here", because Continue is the approval and files GitHub epics. When the user answers Continue at the boundary after `create-prd`, first invoke `ai-workflow:create-prd` with `approve <prd-path>` (the Continue is the approval; it creates the epics without asking again), then invoke `create-tasks`.
 
 ## Dispatch
 
@@ -89,4 +89,4 @@ When the user answers Continue at the boundary after `create-prd`, first invoke 
 - No stage logic copied here: classification, PRD writing, task splitting and dispatch belong to their own skills.
 - No state file. The artifacts (vault note, PRD, issues) are the state, which is why `/flow <argument>` can resume.
 - One feature per run. The epics `/create-prd approve` files are the only tracking issues; this skill never creates another.
-- Never launch a dispatch without an explicit "Launch", and never create issues without the user's "Continue" into the gh-issue or refine-issues stage.
+- Never launch a dispatch without an explicit "Launch", and never create GitHub issues without the user's "Continue" into the create-tasks (it runs the approve that files epics), gh-issue or refine-issues stage.

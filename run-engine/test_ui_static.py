@@ -2748,6 +2748,11 @@ assert.deepEqual(F.handoff('dump', { kind: 'result', text: '→ next: /ai-workfl
 assert.deepEqual(F.handoff('prd', { kind: 'result', text: '→ next: /create-tasks docs/prds/f.md' }), { prd: 'docs/prds/f.md' });
 assert.deepEqual(F.handoff('tasks', { kind: 'result', text: '→ next: /refine-issues docs/tasks/f.md' }), { tasks: 'docs/tasks/f.md' });
 assert.deepEqual(F.handoff('dump', { kind: 'result', text: '→ next: /gh-issue 05-Work/P/F/Bugs.md' }), { tasks: '05-Work/P/F/Bugs.md' });
+// gh-issue stopping on a multi-task note hands back to the PRD step, clearing the later fields.
+assert.deepEqual(F.handoff('issues', { kind: 'result', text: '\u2192 next: /create-prd 05-Work/P/F' }), { folder: '05-Work/P/F', prd: '', tasks: '' });
+assert.equal(F.stepFromState({ folder: '05-Work/P/F', prd: '', tasks: '' }), 'prd');
+assert.ok(F.handoff('issues', { kind: 'result', text: '\u2192 next: /create-prd' }).error);
+assert.ok(F.handoff('blockers', { kind: 'result', text: '\u2192 next: /create-prd x' }).error);
 assert.equal(F.issuesCommand('docs/tasks/f.md'), 'refine-issues');
 assert.equal(F.issuesCommand(' docs/tasks/f.md '), 'refine-issues');
 assert.equal(F.issuesCommand('05-Work/P/F/Bugs.md'), 'gh-issue');

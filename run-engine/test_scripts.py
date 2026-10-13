@@ -4540,6 +4540,12 @@ for _cls, _path in (
     assert re.search(rf"{_cls}.{{0,120}}{_path}", _route187, re.I), f"#187 routing {_cls}"
 assert "| Bug report | gh-issue \u2192 dispatch |" in _route187, "#187 a bug goes straight to gh-issue"
 assert "`approve <prd-path>`" in _ws(_flow), "#187 approve takes the PRD path"
+assert "Approve the PRD, file its epics, and continue to create-tasks (Recommended)" in _flow, (
+    "#187 the create-prd boundary names the approval"
+)
+assert "into the create-tasks (it runs the approve that files epics), gh-issue or refine-issues stage" in _flow, (
+    "#187 guardrail names create-tasks"
+)
 assert "/create-prd approve" in _flow, "#187 flow must invoke create-prd approve after Continue"
 assert not re.search(r"(?<![-\w])/prd\b", _flow) and "ai-workflow:prd" not in _flow, "flow: no /prd left"
 assert not re.search(r"(?<![-\w])/prd\b", _read("skills", "dump", "SKILL.md")), "dump: no /prd left"

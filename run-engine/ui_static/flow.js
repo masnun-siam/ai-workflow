@@ -45,7 +45,8 @@ const NEXT = {
   dump: { prd: 'folder', 'create-prd': 'folder', 'create-tasks': 'prd', 'gh-issue': 'tasks' },
   prd: { 'create-tasks': 'prd' },
   tasks: { 'refine-issues': 'tasks', 'gh-issue': 'tasks' },
-  issues: { 'fix-blockers': 'parent', 'herdr-dispatch': 'issues' },
+  // `create-prd` here is /gh-issue stopping on input that needs a PRD: back to the PRD step.
+  issues: { 'fix-blockers': 'parent', 'herdr-dispatch': 'issues', 'create-prd': 'restart' },
   blockers: { 'herdr-dispatch': 'issues' },
 };
 
@@ -57,6 +58,7 @@ export function handoff(step, result) {
   if (!next) return { error: step === 'dump' ? 'No → next: line found: dump ends the flow for a standalone task, meeting notes or unclassifiable.' : 'The result has no → next: line.' };
   const field = (NEXT[step] || {})[next.command.replace(/^\//, '').split(':').pop()];
   if (!field) return { error: `Unexpected next command: ${next.command}` };
+  if (field === 'restart') return next.arg ? { folder: next.arg, prd: '', tasks: '' } : { error: 'The → next: line has no argument.' };
   if (field === 'issues') {
     const issues = issueNumbers(next.arg);
     return issues.length ? { issues } : { error: 'The → next: line lists no issue numbers.' };
