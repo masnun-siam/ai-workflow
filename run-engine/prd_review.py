@@ -78,9 +78,12 @@ def validate(v, prd: str, request: dict, lenses: dict) -> list[str]:
 
 
 def check_prior(prior, finding_ids: set) -> list[str]:
-    """The worker's answer to every finding of the round being closed, so none is dropped."""
+    """The worker's answer to every finding of the round being closed, so none is dropped.
+
+    Keyed on (lens, id): reviewers pick their own ids, so two lenses can both say "f1".
+    """
     if not isinstance(prior, list):
-        return ["--prior must be a JSON list of {id, disposition, reason}"]
+        return ["--prior must be a JSON list of {lens, id, disposition, reason}"]
     errs, seen = [], set()
     for p in prior:
         if not isinstance(p, dict) or p.get("disposition") not in DISPOSITIONS:
@@ -88,8 +91,8 @@ def check_prior(prior, finding_ids: set) -> list[str]:
         elif not (isinstance(p.get("reason"), str) and p["reason"].strip()):
             errs.append(f"{p.get('id')!r}: needs a reason")
         else:
-            seen.add(p.get("id"))
-    errs += [f"no disposition for finding {i}" for i in sorted(finding_ids - seen)]
+            seen.add((p.get("lens"), p.get("id")))
+    errs += [f"no disposition for {lens} finding {i}" for lens, i in sorted(finding_ids - seen)]
     return errs
 
 
@@ -184,7 +187,7 @@ def cmd_next(args) -> None:
     max_rounds = req["max_rounds"] + (1 if args.more else 0)
     d = decide(verdicts, {k: lenses.get(k, {}) for k in req["lenses"]}, n, req["max_rounds"])
     if sha(text) != req["prd_sha256"] and (n < max_rounds):
-        ids = {f["id"] for v in verdicts.values() for f in v["findings"]}
+        ids = {(lens, f["id"]) for lens, v in verdicts.items() for f in v["findings"]}
         if ids and not args.prior:
             die(2, f"round {n} had findings; pass --prior <dispositions.json> so the next round sees them")
         errs = check_prior(prior, ids)
@@ -218,7 +221,7 @@ def register(sub, add) -> None:
     q = ops.add_parser("next", help="open the next round, or decide the open one (JSON on stdout)")
     q.add_argument("review_dir")
     q.add_argument("--prd", required=True, help="the PRD under review")
-    q.add_argument("--prior", help="JSON list of {id, disposition, reason} for the last round's findings")
+    q.add_argument("--prior", help="JSON list of {lens, id, disposition, reason} for the last round's findings")
     q.add_argument("--max-rounds", type=int, help="round budget for a new review (default from config)")
     q.add_argument("--more", action="store_true", help="the user chose one more round past the budget")
     q.set_defaults(func=cmd_next)

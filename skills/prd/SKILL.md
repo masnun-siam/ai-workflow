@@ -19,11 +19,13 @@ Why this order matters: scanning before interviewing means the questions are inf
 
 ## Arguments
 
-`/prd <requirement | feature-folder> [--to local,obsidian,wiki]`
+`/prd <requirement | feature-folder> [--to local,obsidian,wiki] [--review]`
 `/prd --update <prd-path> <decisions>` (see **Update mode**)
 
 - `<requirement>`: free text, a BRD file, an Obsidian note, a Sentry link or a GitHub issue URL.
 - `<feature-folder>`: a vault path `05-Work/<Project>/<Feature>` that holds a `Dump.md` (as left by `/dump`). `/prd` fills that folder's seeded `PRD.md`.
+- `--review`: before the Step 6 review gate, a reviewer panel checks the draft until it has no gaps
+  (see **Step 5.5: Peer review**).
 - `--to`: one or more destinations. Default `local,obsidian`, and nothing is asked about other destinations: `wiki` is written only when named here. The repo's `docs/prd/<slug>.md` (`local`) is the canonical copy; the Obsidian `PRD.md` is a mirror of it. If the Obsidian project can't be resolved (Step 2), ask which project to use and offer `local` instead; never leave the run with no destination.
 
 ### Asking the user
@@ -146,6 +148,49 @@ Fill this template with what was agreed. Keep the user's decisions and their one
 ```
 
 The Obsidian copy additionally gets tag frontmatter and full-path wikilinks in `## Related` (Step 7). Local and wiki copies use plain links.
+
+## Step 5.5: Peer review (only with `--review`)
+
+A panel of single-lens reviewers checks the draft: **critical** (completeness), **CEO** (product
+value), **CTO** (feasibility against this repo) and **security**. Only critical can hold the PRD;
+the others advise. Their checklists and the shared severity rubric are `prd_review` in `<config>`
+(from `aiw paths`). `aiw prd-review` checks every verdict and decides each round; you never decide
+it yourself, and you never write a verdict yourself.
+
+Setup: `<review_dir>` is `<data_dir>/prd-review/<owner>-<repo>-<slug>` (from `aiw paths`). Write the
+draft to `<review_dir>/draft.md` with the Write tool; it lives outside the repo. Every edit below is
+made to that file, and Step 6 shows it.
+
+Loop:
+
+1. `aiw prd-review next <review_dir> --prd <review_dir>/draft.md` (plus `--prior <file>` and
+   `--more` when the steps below say so). It prints one JSON object; act on its `action`.
+2. **`review`**: dispatch one `ai-workflow:run-specialist` per lens in its `lenses`, in one message
+   so they run in parallel. Each dispatch says `artifact: prd`, the lens name, the rubric plus that
+   lens's prompt from `<config>` `prd_review`, the path `<review_dir>/round-<n>/request.json`, and
+   the repo path. Save each returned JSON object to `<review_dir>/round-<n>/<lens>.in.json`, then
+   `aiw prd-review verdict <review_dir> --lens <lens> --file <that file>`. On exit 5, dispatch that
+   lens once more with the printed reasons; refused twice, stop and report it. Then go to 1.
+3. **`wait`**: dispatch the lenses it lists as in 2.
+4. **`revise`**: fix every finding in `blockers` by editing the draft's wording. Then answer every
+   finding of the round (`blockers`, `advisory_blockers`, `advisory`): `fixed`, or `dismissed` with
+   a one-line reason. Write that list (`[{lens, id, disposition, reason}]`) to
+   `<review_dir>/round-<n>/prior.json` and go to 1 with `--prior` naming it.
+5. **`ask`, reason `decision`**: ask the user each finding in `decisions` (headless: `aiw ask`, one
+   question per finding, then end your turn). Record each answer in the draft's `## Decisions` as
+   `- <decision> — <why> (review: <lens> <id>)`, with disposition `decided`. A round can carry both
+   decisions and blockers: ask first, then fix the blockers as in 4, then go to 1 with `--prior`.
+6. **`ask`, reason `cap`**: the round budget is spent and critical still blocks. Ask one question:
+   "Critical still blocks on: <items>." with the choices **"Accept as known gaps"** (add each item
+   under `## Open questions`, then go to Step 6), **"One more round"** (revise as in 4, then go to 1
+   with `--prior` and `--more`) and **"Stop"** (save nothing). In Flow auto mode, stop here and
+   report: the run never accepts gaps on the user's behalf.
+7. **`done`**: list `advisory_blockers` first, then `advisory`. Answer each as in 4; an advisory
+   blocker always needs a fix or a one-line reason. If you edited the draft, go to 1 with `--prior`
+   so the edit is reviewed too; past the budget, say in Step 6 that those edits were not reviewed.
+
+Step 6 then shows, above the draft: the rounds run, critical's verdict, each advisory blocker with
+its disposition, the decisions recorded, and any known gaps.
 
 ## Step 6: Review gate — always
 

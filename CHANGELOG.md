@@ -4,6 +4,12 @@
 
 ### Added
 
+- **`/prd --review`: a reviewer panel before the review gate.** Critical (completeness, the only
+  lens that can hold the PRD), CEO (product value), CTO (feasibility against the repo) and
+  security review the draft in parallel as `run-specialist` in its new PRD mode. `aiw prd-review`
+  checks every verdict and decides each round: blockers are fixed and every finding gets a
+  recorded disposition, product decisions are asked of you and written into `## Decisions`, and
+  after the round budget you choose to accept known gaps, run one more round, or stop.
 - **`aiw prd-review next|verdict`.** The engine for PRD peer review. A panel of single-lens
   reviewers (`prd_review.lenses` in `config.json`: critical, CEO, CTO, security, sharing one
   severity rubric) reviews a PRD in rounds. `verdict` refuses a finding that neither quotes the

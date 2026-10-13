@@ -4574,6 +4574,36 @@ assert "\u2192 next: herdr-dispatch <parent>" in _fb, "fix-blockers next line"
 assert "This split writes to GitHub before Step 3's question" in _fb, "fix-blockers names the split's unconfirmed write"
 ok("fix-blockers: split if needed, preview, one confirmation, apply; Depends on stays the source")
 
+# /prd --review: a reviewer panel (run-specialist in PRD mode) loops through aiw prd-review until critical approves.
+_pr_all = _skill_sections("skills/prd/SKILL.md")
+assert "--review" in _ws(_pr_all["Arguments"]), "prd Arguments documents --review"
+_rv = _ws(_key183(_pr_all, "Step 5.5"))
+for _w in (
+    "aiw prd-review next",
+    "aiw prd-review verdict",
+    "ai-workflow:run-specialist",
+    "artifact: prd",
+    "in one message",
+    "advisory_blockers",
+    "--prior",
+    "--more",
+    "Accept as known gaps",
+    "One more round",
+    "never write a verdict yourself",
+    "## Decisions",
+):
+    assert _w in _rv, f"prd Peer review lacks {_w!r}"
+assert "Flow auto mode" in _rv and "never accepts" in _rv, "prd: auto mode stops at the cap, never accepts gaps"
+assert "both decisions and blockers" in _rv, (
+    "prd: an ask that also carries blockers is answered, then revised, in one round"
+)
+_sp = _ws(_read("agents", "run-specialist.md"))
+assert "## PRD mode" in _read("agents", "run-specialist.md") and "prd_review" in _sp and "request.json" in _sp
+assert "never put implementation" in _sp.lower() or "never adds implementation" in _sp.lower(), (
+    "specialist PRD mode: what not how"
+)
+ok("prd --review: panel loop via aiw prd-review, run-specialist PRD mode, cap and decisions go to the user")
+
 _s8_184 = _ws(_key183(_skill_sections("skills/prd/SKILL.md"), "Step 8"))
 assert f"End with the line `{NEXT}/create-tasks <prd-path>`" in _s8_184, "#184 prd Step 8 lacks the next line"
 assert "offer, in one line" not in _s8_184, "#184 prd Step 8 still has the prose offer"
