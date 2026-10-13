@@ -4721,6 +4721,25 @@ assert _got == re.findall(r"\*\*([A-Z][^*]+)\*\*", _gh_body), (
 )
 assert re.search(r"^Depends on: <", _ti, re.M) and re.search(r"^Test root: <", _ti, re.M), "issue template fields"
 ok("refine-issues: sub-issues + Depends on + epic split; template matches gh-issue's sections")
+# Fix round 1: epic split gets every child of the epic; no cross-epic Depends on; old-gh read-back.
+_ri_s7 = _ws(_slice(_ri_raw, "7. **Create**", "8. **Write back.**"))
+for _w in ("every issue of that epic's tasks", "matched or skipped in step 5", "never a `Dropped` task's"):
+    assert _w in _ri_s7, f"refine-issues step 7: --children must include {_w!r}"
+assert "When `--blocked-by` was unavailable, check the sub-issues only" in _ri_s7, (
+    "refine-issues step 7: an old gh skips the blocked-by read-back"
+)
+_ri_s2 = _ws(_slice(_ri_raw, "2. **Check it is ready.**", "3. **Gather"))
+assert re.search(r"/create-tasks` when .*depends on a task in another epic", _ri_s2), (
+    "refine-issues step 2: a cross-epic dependency goes back to /create-tasks"
+)
+_ct_raw2 = _read("skills", "create-tasks", "SKILL.md")
+assert "A task depends only on tasks of its own epic." in _ws(_slice(_ct_raw2, "5. **Split", "6. **Check")), (
+    "create-tasks step 5: same-epic dependencies only"
+)
+assert "depend on a task in another epic?" in _ws(_slice(_ct_raw2, "6. **Check", "7. **Save")), (
+    "create-tasks step 6: self-check for cross-epic dependencies"
+)
+ok("refine-issues: split gets all of an epic's children, same-epic deps only, old gh skips blocked-by read-back")
 
 # Six-flow step 4: /gh-issue refines a saved list task by task, files an epic parent, records decisions.
 _g8 = _read("commands", "gh-issue.md")

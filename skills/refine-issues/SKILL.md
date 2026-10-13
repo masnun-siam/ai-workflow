@@ -71,7 +71,8 @@ its confirmation list goes in the final report instead. Every other gate still s
 
 2. **Check it is ready.** Stop and send the user back to `/create-tasks` when the task list is
    missing, or a task lacks an outcome, files and symbols, acceptance criteria, a verify command,
-   `Depends on` or `Parallel`. Stop as well when the PRD's status is not `Approved`, an epic in its
+   `Depends on` or `Parallel`, or when any task depends on a task in another epic (`aiw epic
+   split` rejects an edge to an issue outside the epic). Stop as well when the PRD's status is not `Approved`, an epic in its
    `## Epics` still reads `Issue: —`, or that epic issue is closed
    (`gh issue view <epic> --json state`); send the user back to `/create-prd approve <prd>`.
    Find the GitHub project (in Flow auto mode, as above). Never hard-code a project name or
@@ -163,12 +164,17 @@ its confirmation list goes in the final report instead. Every other gate still s
    missing, say so and carry on without the project step.
    - If this `gh` lacks `--parent` or `--blocked-by` (exit 1 with "unknown flag"), create the issue
      without them. `aiw epic split` below links the sub-issues and `/fix-blockers` sets the
-     blocked-by edges from `Depends on:`. Say so in the report.
+     blocked-by edges from `Depends on:`. Say so in the report, and skip the blocked-by part of
+     the read-back below.
    - Apply the confirmed updates with `gh issue edit` and add a comment to each updated issue
      saying what changed and why.
    - Record each number as you go.
 
-   Then run **one `aiw epic split` per epic**, passing that epic's children only:
+   Then run **one `aiw epic split` per epic**. Its `--children` are every issue of that epic's
+   tasks, in task-list order: the ones created now and the ones matched or skipped in step 5,
+   never a `Dropped` task's. The split rewrites `epic.json` from that list, so passing only the
+   new issues drops earlier children and turns their `Depends on:` lines into edges outside the
+   epic, which exits 1.
 
    ```bash
    aiw epic split "<runs_dir>/<owner>-<repo>-epic-<epic>" \
@@ -183,7 +189,8 @@ its confirmation list goes in the final report instead. Every other gate still s
    then re-runs the split in its step 0 and stops on the same error until the lines are fixed.
 
    Read each epic back (`gh issue view <epic> --json subIssues`, and `blockedBy` on each child)
-   and check its sub-issues and every blocked-by link match the task list. Stop at the first
+   and check its sub-issues and every blocked-by link match the task list. When `--blocked-by`
+   was unavailable, check the sub-issues only: `/fix-blockers` sets the blocked-by links. Stop at the first
    failure, write back the numbers recorded so far (step 8), and report what exists and what does
    not; do not retry blindly.
 

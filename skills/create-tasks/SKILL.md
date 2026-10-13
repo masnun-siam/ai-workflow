@@ -113,6 +113,9 @@ save under `<slug>-2` (or the next free number) and say so. Never overwrite eith
        without, not on everything listed above it.
      - The PRD fixes the API contract, so a frontend task whose tests mock that contract can run
        at the same time as the backend task behind it.
+   - A task depends only on tasks of its own epic. A cross-epic need means the work belongs in
+     one epic, or the epics merge in order (the later epic starts after the earlier one is
+     merged), never a `Depends on` across epics.
    - Every FR and edge case lands in at least one task's acceptance criteria. Nothing is added that
      the PRD does not ask for.
    - Each task has an outcome, files and symbols, acceptance criteria, a verify command that proves
@@ -130,7 +133,8 @@ save under `<slug>-2` (or the next free number) and say so. Never overwrite eith
    - Does every FR appear in some task? Is any task not traceable to an FR?
    - Is every cited path real, or marked `(new)`?
    - Could a test be written from each acceptance line alone?
-   - Does any dependency point downward, or form a cycle?
+   - Does any dependency point downward, or form a cycle? Does any task depend on a task in
+     another epic?
    - Do two tasks in the same wave touch the same file? Is any dependency there only because of
      list order, not because the task needs it?
    - Is wave 1 wide enough for the team to start together? If one task blocks everything, try to
