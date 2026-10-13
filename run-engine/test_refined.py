@@ -110,4 +110,21 @@ with tempfile.TemporaryDirectory() as repo:
     h, why = refined.parse(["refined"], linked, repo)
     assert why == "" and h["test_root"] == "tests/Feature/", (why, h and h["test_root"])
 
+# The refine-issues template, filled in, is a refined issue; left unfilled, it is not.
+with open(os.path.join(HERE, "..", "skills", "refine-issues", "templates", "issue.md"), encoding="utf-8") as fh:
+    TPL = fh.read()
+with tempfile.TemporaryDirectory() as repo:
+    subprocess.run(["git", "init", "-q", repo], check=True)
+    subprocess.run(
+        ["git", "-C", repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"], check=True
+    )
+    filled = re.sub(r"<[^>\n]+>", "x", TPL).replace("Test root: x", "Test root: tests/")
+    h, why = refined.parse(["refined"], filled, repo)
+    assert why == "" and h["test_root"] == "tests/" and h["base_branch"] == "main", why
+    h, why = refined.parse(["refined"], TPL, repo)
+    assert h is None and "placeholder" in why, f"unfilled refine-issues template must not pass: {why!r}"
+    unset_base = filled.replace("Test root: tests/", "Test root: tests/\nBase branch: <branch>")
+    assert "`Base branch:` is still a <placeholder>" == refined.parse(["refined"], unset_base, repo)[1]
+print("ok  refine-issues template passes aiw refined only when filled in")
+
 print("test_refined: ok")

@@ -4539,10 +4539,6 @@ ok("create-prd: wasensi structure, approve creates epics, generic, templates shi
 # Improve-this-skill footer: on the three new skills only, always an issue, never an edit.
 for _sk in ("create-prd", "create-tasks", "refine-issues"):
     _p = os.path.join(HERE, "..", "skills", _sk, "SKILL.md")
-    if not os.path.isfile(_p) or (
-        _sk == "refine-issues" and "## Improve this skill" not in open(_p, encoding="utf-8").read()
-    ):
-        continue  # refine-issues gets the footer in Task 4; Task 4 removes this guard
     _f = _ws(open(_p, encoding="utf-8").read().split("## Improve this skill", 1)[-1].split("\n## ", 1)[0])
     assert "gh issue create --repo <plugin_repo>" in _f and "Never edit this skill file" in _f, (
         f"{_sk}: footer must file an issue, never edit"
@@ -4652,6 +4648,79 @@ assert _ct_s2.index("technical design") < _ct_s2.index("/create-prd approve <prd
 _ct_tools = _read("skills", "create-tasks", "SKILL.md").split("---", 2)[1]
 assert re.search(r"^  - Skill$", _ct_tools, re.M), "create-tasks allowed-tools needs Skill (it runs create-prd)"
 ok("create-tasks: auto-approve runs after the readiness checks; Skill is allowed")
+
+# refine-issues: files a task list as sub-issues; engine contracts preserved.
+_ri_raw = _read("skills", "refine-issues", "SKILL.md")
+_ri = _ws(_ri_raw)
+for _w in (
+    "docs/tasks/<slug>.md",
+    "Approved",
+    "--parent",
+    "--blocked-by",
+    "Depends on: #",
+    "aiw epic split",
+    "one `aiw epic split` per epic",
+    "Task <n> of docs/tasks/<slug>.md",
+    "`refined`",
+    "prd-<slug>",
+    "gh label list",
+    "Stop at the first failure",
+    "Issue:",
+    "Changed:",
+    "Dropped",
+    "explicit yes",
+    "Flow auto mode",
+    "Test root:",
+    "Base branch:",
+    "aiw refined",
+    "/create-prd approve",
+    "unknown flag",
+):
+    assert _w in _ri, f"refine-issues lacks {_w!r}"
+_mo = _ri.index("5. **Match against what already exists.**")
+for _w in ("its `Issue:` field", "the label `prd-<slug>`", "same `Task <n>` note", "sub-issues", "same title"):
+    _mo = _ri.find(_w, _mo)
+    assert _mo != -1, (
+        f"refine-issues match order: {_w!r} missing or out of order (Issue, label+note, sub-issues, title)"
+    )
+assert "\u2192 next: /fix-blockers <epic>" in _ri, "refine-issues next line"
+# gh-issue's Flow auto mode project/fields bullets and its epic-split paragraph, copied verbatim.
+_gh_raw = _read("commands", "gh-issue.md")
+for _blk in (
+    _slice(_gh_raw, "- **Project (step 6):**", "- **Step 7:**").split("(step 6):** ", 1)[1],
+    _slice(_gh_raw, "   Children in list order.", "**Decisions to the PRD.**"),
+):
+    assert _ws(_blk) in _ri, f"refine-issues must copy gh-issue verbatim: {_ws(_blk)[:60]!r}"
+_ri_tools = _ri_raw.split("---", 2)[1]
+for _t in ("Bash", "Read", "Write", "Edit", "Grep", "Glob", "Agent", "AskUserQuestion"):
+    assert re.search(rf"^  - {_t}$", _ri_tools, re.M), f"refine-issues allowed-tools lacks {_t}"
+_ti = _read("skills", "refine-issues", "templates", "issue.md")
+for _name, _txt in (("SKILL.md", _ri_raw), ("templates/issue.md", _ti)):
+    for _bad in (
+        "wasensi",
+        "staging",
+        "webhook-receiver",
+        "Pest",
+        "Pint",
+        "PostgreSQL",
+        "MongoDB",
+        "/implement-issue",
+        "/verifier-locally",
+        "#651",
+        "#643",
+        "Depends on #",
+    ):
+        assert _bad not in _txt, f"refine-issues {_name} still names {_bad!r}"
+    for _ln in _txt.splitlines():
+        assert "tenant" not in _ln.lower() or "multi-tenant" in _ln, f"refine-issues {_name}: tenant line {_ln!r}"
+# Template sections == gh-issue step 4's Body sections, in order.
+_gh_body = re.search(r"- Body sections: (.+)", _gh_raw).group(1)
+_got = re.findall(r"^## (.+)$", _ti, re.M)
+assert _got == re.findall(r"\*\*([A-Z][^*]+)\*\*", _gh_body), (
+    f"issue template sections {_got} != gh-issue body sections"
+)
+assert re.search(r"^Depends on: <", _ti, re.M) and re.search(r"^Test root: <", _ti, re.M), "issue template fields"
+ok("refine-issues: sub-issues + Depends on + epic split; template matches gh-issue's sections")
 
 # Six-flow step 4: /gh-issue refines a saved list task by task, files an epic parent, records decisions.
 _g8 = _read("commands", "gh-issue.md")

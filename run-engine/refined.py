@@ -80,6 +80,10 @@ def parse(labels: list[str], body: str, repo: str) -> tuple[dict | None, str]:
     if re.search(r"\[[^\]\n]*placeholder[^\]\n]*\]|\[TBD\]|\[TODO\]", body, re.IGNORECASE):
         return None, "body still contains a [bracketed placeholder]"
 
+    for name in ("Test root", "Base branch"):
+        if re.fullmatch(r"<[^>]*>", field(how, name) or ""):
+            return None, f"`{name}:` is still a <placeholder>"
+
     test_root = field(how, "Test root") or detect_test_root(repo)
     if not test_root:
         return (
