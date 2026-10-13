@@ -3845,6 +3845,9 @@ def _mirror_span(src, dest, first, last, sub=None):
 
 s45n, s46n = _n(s45), _n(s46)
 _mirror_span(gh35, s45n, "Every task is one layer-scoped deliverable", "No round limit.")
+# The rubric lives in gh-issue 3.5, jira-to-gh 4.5 and create-tasks step 5; they must not drift.
+_ct_raw = _read("skills", "create-tasks", "SKILL.md")
+_mirror_span(gh35, _n(_ct_raw), "Every task is one layer-scoped deliverable", "split the failing task")
 ok("#83 Step 4.5 mirrors rubric, choices, edit loop (whole span)")
 assert (
     '**"Create as shown"**: route on the approved list\'s task count \u2014 1 task goes to Step 5 (single-task path); '
@@ -4537,9 +4540,9 @@ ok("create-prd: wasensi structure, approve creates epics, generic, templates shi
 for _sk in ("create-prd", "create-tasks", "refine-issues"):
     _p = os.path.join(HERE, "..", "skills", _sk, "SKILL.md")
     if not os.path.isfile(_p) or (
-        _sk != "create-prd" and "## Improve this skill" not in open(_p, encoding="utf-8").read()
+        _sk == "refine-issues" and "## Improve this skill" not in open(_p, encoding="utf-8").read()
     ):
-        continue  # create-tasks / refine-issues get the footer in Tasks 3 and 4; Task 4 removes this guard
+        continue  # refine-issues gets the footer in Task 4; Task 4 removes this guard
     _f = _ws(open(_p, encoding="utf-8").read().split("## Improve this skill", 1)[-1].split("\n## ", 1)[0])
     assert "gh issue create --repo <plugin_repo>" in _f and "Never edit this skill file" in _f, (
         f"{_sk}: footer must file an issue, never edit"
@@ -4577,31 +4580,68 @@ assert "never overwrite with partial content" in (_upd + _s7).lower(), "create-p
 assert "\u2192 next:" not in _upd, "create-prd Update mode prints no next line (the caller owns what follows)"
 ok("create-prd: repo copy canonical; --update appends decisions, resolves open questions, mirrors to Obsidian")
 
-# Six-flow step 3: /create-tasks is a standalone entry over gh-issue's own 3.5/3.6 (one source of truth).
-_ct_path = os.path.join(HERE, "..", "skills", "create-tasks", "SKILL.md")
-assert os.path.isfile(_ct_path), "skills/create-tasks/SKILL.md missing"
-_ct = _ws(open(_ct_path, encoding="utf-8").read())
-_ghi = _read("commands", "gh-issue.md")
-for _h in ("3.5. **Decompose.**", "3.6. **Save the task list.**"):
-    assert _h in _ghi, f"gh-issue.md lost the heading create-tasks points at: {_h}"
-    assert _h in _ct, f"create-tasks must name gh-issue's {_h}"
-for _w in ("Save as shown", "creates nothing on GitHub", "even a single task", "Open questions", "stack"):
-    assert _w.lower() in _ct.lower(), f"create-tasks lacks {_w!r}"
-assert "\u2192 next: /gh-issue docs/tasks/<slug>.md" in _ct, "create-tasks next line"
-assert "aiw paths" in _ct and "<plugin_root>/commands/gh-issue.md" in _ct, (
-    "create-tasks resolves gh-issue via aiw paths"
-)
-assert "`Problem statement: <path>`" in _ct and "`PRD: <path>`" in _ct, "create-tasks header names its inputs"
-assert "ask which one, newest first" in _ct and "take the newest without asking" in _ct, "create-tasks picks one bug"
-assert "resumed only when its `Problem statement:` and `PRD:` header lines match" in _ct and "`<slug>-2`" in _ct, (
-    "create-tasks auto mode never resumes an unrelated list"
-)
-_g0 = _ws(_slice(_ghi, "0. **Source check.**", "Details: $@"))
-assert "docs/tasks/<slug>.md" in _g0 and "## Task <n>" in _g0, "gh-issue step 0 must take a saved task list"
-assert re.search(r"one task.{0,80}step 4", _g0) and "Resume this list" in _g0, (
-    "gh-issue saved list: 1 task -> step 4, 2+ -> 4-FLAT resume"
-)
-ok("create-tasks: standalone entry over gh-issue 3.5/3.6; gh-issue takes a saved task list")
+# create-tasks: wasensi structure, our size rubric, Approved PRD only.
+_ct = _ws(_read("skills", "create-tasks", "SKILL.md"))
+for _w in (
+    "Approved",
+    "/create-prd approve",
+    "docs/prds/<slug>.md",
+    "docs/tasks/<slug>.md",
+    "Shared files",
+    "Waves",
+    "Parallel",
+    "Area",
+    "(new)",
+    "Dropped",
+    "Changed:",
+    "Never renumber",
+    "No design decisions here",
+    "Flow auto mode",
+    "docs/templates/task-list.md",
+    "<skill_dir>/templates/task-list.md",
+):
+    assert _w in _ct, f"create-tasks lacks {_w!r}"
+assert "\u2192 next: /refine-issues docs/tasks/<slug>.md" in _ct, "create-tasks next line"
+for _bad in (
+    "Bugs.md",
+    "Problem statement: <path>",
+    "3.6. **Save the task list.**",
+    "wasensi",
+    "staging",
+    "Pest",
+    "webhook-receiver",
+):
+    assert _bad not in _ct, f"create-tasks still names {_bad!r}"
+_tt = _read("skills", "create-tasks", "templates", "task-list.md")
+for _f in (
+    "Outcome:",
+    "Area:",
+    "Files/symbols:",
+    "Acceptance criteria:",
+    "Verify command:",
+    "Depends on:",
+    "Parallel:",
+    "Issue: \u2014",
+):
+    assert _f in _tt, f"task-list template lacks {_f}"
+assert re.findall(r"^## (Shared files|Waves)$", _tt, re.M) == ["Shared files", "Waves"], "task-list template sections"
+for _name, _txt in (("SKILL.md", _ct), ("templates/task-list.md", _tt)):
+    for _bad in (
+        "wasensi",
+        "staging",
+        "webhook-receiver",
+        "Pest",
+        "Pint",
+        "PostgreSQL",
+        "MongoDB",
+        "/implement-issue",
+        "/verifier-locally",
+        "#651",
+    ):
+        assert _bad not in _txt, f"create-tasks {_name} still names {_bad!r}"
+for _ln in (_ct + "\n" + _tt).splitlines():
+    assert "tenant" not in _ln.lower() or "multi-tenant" in _ln, f"create-tasks: unconditional tenant line {_ln!r}"
+ok("create-tasks: Approved PRD only, waves and shared files, next is /refine-issues")
 
 # Six-flow step 4: /gh-issue refines a saved list task by task, files an epic parent, records decisions.
 _g8 = _read("commands", "gh-issue.md")
