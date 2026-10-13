@@ -75,6 +75,9 @@ errs = pr.validate(verdict("critical", [finding(quote="", section="Rollout")]), 
 assert any("heading" in e for e in errs), errs
 errs = pr.validate(verdict("critical", [finding(quote="", section="")]), PRD, REQ, LENSES)
 assert errs, "a finding with neither quote nor heading is rejected"
+errs = pr.validate(verdict("critical", [finding(quote="the")]), PRD, REQ, LENSES)
+assert any("4 words" in e for e in errs), "a one-word quote proves nothing"
+assert pr.validate(verdict("critical", [finding(quote="the bookings table as")]), PRD, REQ, LENSES) == []
 ok("validate: quote must be in the PRD (normalised) or section a real heading")
 
 errs = pr.validate(verdict("critical", [finding()], sha="0" * 64), PRD, REQ, LENSES)
@@ -155,6 +158,8 @@ with tempfile.TemporaryDirectory() as tmp:
 
     with open(prd, "a", encoding="utf-8") as fh:
         fh.write("\n- **FR-2** Exports over 10,000 rows are refused with a message.\n")
+    rc, _, err = aiw("prd-review", "next", rd, "--prd", prd)
+    assert rc == 2 and "--prior" in err, "round 1 had findings: opening round 2 needs their dispositions"
     prior = os.path.join(tmp, "prior.json")
     with open(prior, "w", encoding="utf-8") as fh:
         json.dump([{"id": "f1", "disposition": "fixed", "reason": "added FR-2"}], fh)
@@ -166,14 +171,24 @@ with tempfile.TemporaryDirectory() as tmp:
     assert rc == 5 and "round" in err, "a verdict for an old round is refused"
 ok("CLI: round 1 opens, bad quote refused, revise, unchanged PRD repeats the decision, edit + prior opens round 2")
 
+assert pr.check_prior([{"id": "f1", "disposition": "fixed", "reason": "r"}], {"f1"}) == []
+assert any("f2" in e for e in pr.check_prior([{"id": "f1", "disposition": "fixed", "reason": "r"}], {"f1", "f2"}))
+assert pr.check_prior([{"id": "f1", "disposition": "maybe", "reason": "r"}], {"f1"})
+assert pr.check_prior([{"id": "f1", "disposition": "dismissed", "reason": ""}], {"f1"})
+assert pr.check_prior({"id": "f1"}, {"f1"})
+ok("check_prior: every prior finding needs {id, disposition fixed|dismissed|decided, reason}")
+
 with tempfile.TemporaryDirectory() as tmp:
     prd = os.path.join(tmp, "prd.md")
     rd = os.path.join(tmp, "review")
     text = PRD
+    pri = os.path.join(tmp, "prior.json")
+    with open(pri, "w", encoding="utf-8") as fh:
+        json.dump([{"id": "f1", "disposition": "fixed", "reason": "edited"}], fh)
     for rnd in (1, 2, 3):
         with open(prd, "w", encoding="utf-8") as fh:
             fh.write(text)
-        rc, out, err = aiw("prd-review", "next", rd, "--prd", prd, "--max-rounds", "3")
+        rc, out, err = aiw("prd-review", "next", rd, "--prd", prd, "--max-rounds", "3", "--prior", pri)
         assert out["action"] == "review" and out["round"] == rnd, (rnd, out, err)
         for lens in out["lenses"]:
             v = verdict(lens, [finding()] if lens == "critical" else [], "changes" if lens == "critical" else "approve")
@@ -189,7 +204,7 @@ with tempfile.TemporaryDirectory() as tmp:
         fh.write(text)
     rc, out, _ = aiw("prd-review", "next", rd, "--prd", prd)
     assert out["action"] == "ask" and out["reason"] == "cap", "past the cap, an edit alone opens no round"
-    rc, out, _ = aiw("prd-review", "next", rd, "--prd", prd, "--more")
+    rc, out, _ = aiw("prd-review", "next", rd, "--prd", prd, "--more", "--prior", pri)
     assert out["action"] == "review" and out["round"] == 4, out
 ok("CLI: the cap hands over (ask), an edit alone cannot pass it, --more opens exactly one more round")
 

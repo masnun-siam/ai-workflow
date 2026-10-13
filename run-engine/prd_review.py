@@ -17,6 +17,8 @@ import re
 
 SEVERITIES = ("blocker", "major", "minor")
 MAX_FINDINGS = 8
+MIN_QUOTE_WORDS = 4  # a shorter quote ("the") matches almost any PRD and proves nothing
+DISPOSITIONS = ("fixed", "dismissed", "decided")
 
 
 def sha(text: str) -> str:
@@ -29,6 +31,7 @@ def norm(text: str) -> str:
 
 
 def headings(prd: str) -> set[str]:
+    # ponytail: also matches ## lines inside fenced code; PRDs rarely fence headings
     return {norm(m) for m in re.findall(r"^#{2,3}\s+(.+?)\s*$", prd, re.M)}
 
 
@@ -63,12 +66,30 @@ def validate(v, prd: str, request: dict, lenses: dict) -> list[str]:
         if not isinstance(f.get("needs_decision", False), bool):
             errs.append(f"{tag}: needs_decision must be true or false")
         quote, section = norm(f.get("quote") or ""), norm(f.get("section") or "")
-        if quote and quote not in body:
+        if quote and len(quote.split()) < MIN_QUOTE_WORDS:
+            errs.append(f"{tag}: quote at least {MIN_QUOTE_WORDS} words, or use the section fallback")
+        elif quote and quote not in body:
             errs.append(f"{tag}: quote not found in the PRD")
         elif not quote and section not in heads:
             errs.append(f"{tag}: without a quote, section must be one of the PRD's ##/### headings")
         if v.get("verdict") == "approve" and f.get("severity") in ("blocker", "major"):
             errs.append(f"{tag}: an approve verdict cannot carry a {f['severity']}")
+    return errs
+
+
+def check_prior(prior, finding_ids: set) -> list[str]:
+    """The worker's answer to every finding of the round being closed, so none is dropped."""
+    if not isinstance(prior, list):
+        return ["--prior must be a JSON list of {id, disposition, reason}"]
+    errs, seen = [], set()
+    for p in prior:
+        if not isinstance(p, dict) or p.get("disposition") not in DISPOSITIONS:
+            errs.append(f"{p!r}: disposition must be one of {', '.join(DISPOSITIONS)}")
+        elif not (isinstance(p.get("reason"), str) and p["reason"].strip()):
+            errs.append(f"{p.get('id')!r}: needs a reason")
+        else:
+            seen.add(p.get("id"))
+    errs += [f"no disposition for finding {i}" for i in sorted(finding_ids - seen)]
     return errs
 
 
@@ -163,6 +184,12 @@ def cmd_next(args) -> None:
     max_rounds = req["max_rounds"] + (1 if args.more else 0)
     d = decide(verdicts, {k: lenses.get(k, {}) for k in req["lenses"]}, n, req["max_rounds"])
     if sha(text) != req["prd_sha256"] and (n < max_rounds):
+        ids = {f["id"] for v in verdicts.values() for f in v["findings"]}
+        if ids and not args.prior:
+            die(2, f"round {n} had findings; pass --prior <dispositions.json> so the next round sees them")
+        errs = check_prior(prior, ids)
+        if errs:
+            die(5, "--prior refused:\n- " + "\n- ".join(errs))
         _open(args.review_dir, n + 1, args.prd, text, prior, max_rounds, lenses)
         return
     print(json.dumps(d))
