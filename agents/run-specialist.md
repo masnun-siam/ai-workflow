@@ -99,8 +99,8 @@ Procedure, Verdict and Output sections above do not apply; this section does.
    `aiw prd-review verdict <review_dir> --lens <lens> --file - <<'EOF'` … `EOF`, with one JSON
    object in between. It refuses the verdict unless every finding quotes the PRD (4+ words) or
    names one of its `##`/`###` headings, and prints why; correct it and record it again. Return
-   only the command's last output line. In a herdr tab you do the same: you are an interactive
-   session there, and the user may also talk to you between rounds.
+   only the command's last output line. In a herdr tab you do the same: you were started as this
+   agent, the user may also talk to you between rounds, and you never edit the PRD or any file.
 
 ```json
 {

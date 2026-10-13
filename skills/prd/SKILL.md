@@ -19,13 +19,14 @@ Why this order matters: scanning before interviewing means the questions are inf
 
 ## Arguments
 
-`/prd <requirement | feature-folder> [--to local,obsidian,wiki] [--review]`
+`/prd <requirement | feature-folder> [--to local,obsidian,wiki] [--review [--herdr]]`
 `/prd --update <prd-path> <decisions>` (see **Update mode**)
 
 - `<requirement>`: free text, a BRD file, an Obsidian note, a Sentry link or a GitHub issue URL.
 - `<feature-folder>`: a vault path `05-Work/<Project>/<Feature>` that holds a `Dump.md` (as left by `/dump`). `/prd` fills that folder's seeded `PRD.md`.
 - `--review`: before the Step 6 review gate, a reviewer panel checks the draft until it has no gaps
-  (see **Step 5.5: Peer review**).
+  (see **Step 5.5: Peer review**). `--herdr` (terminal only) gives each reviewer its own herdr tab
+  you can watch and talk to.
 - `--to`: one or more destinations. Default `local,obsidian`, and nothing is asked about other destinations: `wiki` is written only when named here. The repo's `docs/prd/<slug>.md` (`local`) is the canonical copy; the Obsidian `PRD.md` is a mirror of it. If the Obsidian project can't be resolved (Step 2), ask which project to use and offer `local` instead; never leave the run with no destination.
 
 ### Asking the user
@@ -188,6 +189,23 @@ Loop:
 7. **`done`**: list `advisory_blockers` first, then `advisory`. Answer each as in 4; an advisory
    blocker always needs a fix or a one-line reason. If you edited the draft, go to 1 with `--prior`
    so the edit is reviewed too; past the budget, say in Step 6 that those edits were not reviewed.
+
+**With `--herdr`.** The reviewers run in herdr tabs instead of subagents; everything else above
+is the same, including the verdict path (`aiw prd-review verdict --file -`) and every rule. Headless
+runs (the web UI) ignore `--herdr` and use subagents. If `command -v herdr` fails, use subagents
+and say so.
+
+- Once, before round 1: `herdr pane current` for the workspace id, then for each lens
+  `herdr tab create --workspace <ws> --cwd <repo> --label prd-<lens>` and
+  `herdr agent start prd-<lens> --kind claude --pane <pane> -- --agent ai-workflow:run-specialist --disallowedTools "Write,Edit,NotebookEdit"`,
+  so each tab runs as the read-only reviewer agent.
+- Each round, step 2 becomes: `herdr agent prompt prd-<lens> "<the same dispatch text>"` for every
+  lens (no `--wait`, so they work in parallel), then for each lens
+  `herdr agent wait prd-<lens> --until idle --until done --until blocked`. On `blocked`, tell the
+  user which tab needs them (usually a permission prompt) and wait again; it does not count as a
+  missing verdict.
+- The tabs stay open across rounds, so a reviewer remembers its earlier rounds; `prior` stays the
+  record of what was settled. The user can talk to any tab between rounds.
 
 Step 6 then shows, above the draft: the rounds run, critical's verdict, each advisory blocker with
 its disposition, the decisions recorded, and any known gaps.
