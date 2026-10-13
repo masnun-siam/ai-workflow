@@ -14,7 +14,7 @@ Facts the design must respect:
 - The skill's argument is the Slack thread URL, not a PR number. The headless invocation is `/pr-grind <thread url>`.
 - State already lives in a file, `<pr_grind_dir>/<owner>-<repo>-<pr>.md`, with header keys `paused:`, `queued-push:` and `ci-attempt:`. Step 0 reads it (at item 5, after the earlier checks), so a fresh process can pick up where a previous one stopped.
 - The skill says a human re-invoking `/pr-grind` clears `paused:`, while an automated wake never clears it. A headless re-entry looks like a re-invocation unless it is marked.
-- FR-16 (`docs/prd/workflow-control-ui.md`, line 65): "Server-independent sessions — sessions are detached and write their stream/state to the data dir. A UI restart picks them up again." Acceptance: "killing and restarting `aiw ui` mid-run loses no session, and live output resumes."
+- FR-16 (`docs/prds/workflow-control-ui.md`, line 65): "Server-independent sessions — sessions are detached and write their stream/state to the data dir. A UI restart picks them up again." Acceptance: "killing and restarting `aiw ui` mid-run loses no session, and live output resumes."
 
 ## Evidence
 

@@ -31,4 +31,4 @@ is needed only at plan approval, at an escalated review finding, and at the fina
 - Glossary → `CONTEXT.md`
 - Which docs to update → `CONTRIBUTING.md`
 - Slash commands → `commands/`. Agents → `agents/`. Skills → `skills/`.
-- Design history → `docs/adr/`, `docs/prd/`, `docs/tasks/`, `CHANGELOG.md`
+- Design history → `docs/adr/`, `docs/prds/`, `docs/tasks/`, `CHANGELOG.md`

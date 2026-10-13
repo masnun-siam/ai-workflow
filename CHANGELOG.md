@@ -81,6 +81,19 @@
 
 ### Changed
 
+- **`/prd` is now `/create-prd`, joined by `/create-tasks` and a new `/refine-issues` (ADR 0004).**
+  Breaking: a hard rename with no `/prd` alias, and PRDs move from `docs/prd/` to
+  `docs/prds/<slug>.md`. A PRD has a technical design (contracts allowed, code not), its epics
+  and a change log, and a status of Draft, In review or Approved. `/create-prd approve <prd>`
+  sets Approved and files one epic per `## Epics` entry, labelled `epic` + `prd-<slug>`.
+  `/create-tasks` works only from an Approved PRD and adds Area, Parallel, Waves and Shared
+  files. `/refine-issues` files each task as a `refined` sub-issue of its epic with
+  `Depends on: #n` and blocked-by links, then runs `aiw epic split` per epic. `/gh-issue` and
+  `/jira-to-gh` now file exactly one issue: input that splits into 2 or more tasks creates
+  nothing and ends `→ next: /create-prd <input>`, and `/run-issue` Preflight stops there too.
+  `/dump` sends bugs to `/gh-issue`. The peer-review kind `prd` is now `create-prd`.
+  `aiw refined` also rejects a `<placeholder>` Test root or Base branch. Old `/prd` sessions in
+  `aiw ui` still map to the PRD step.
 - **Bare `/prd --review` runs the critical reviewer alone.** It used to run critical, CEO, CTO
   and security, with only critical able to hold the PRD. Pick more lenses with
   `--review critical,ceo,cto,security`; every picked lens now has to approve.

@@ -3661,74 +3661,83 @@ assert hashlib.sha256(st35.encode()).hexdigest() == S35_SHA
 assert hashlib.sha256(_n(_ep).encode()).hexdigest() == EPIC_SHA
 ok("#85 step 3.5 and Epic mode are unchanged")
 
-# Issue #86: docs describe the flat task-list flow (README, HOW-IT-WORKS Layer 5 + glossary, CHANGELOG).
+# Issue #86, rewritten by ADR 0004: docs describe create-prd / create-tasks / refine-issues
+# (README, HOW-IT-WORKS Layer 5 + glossary, CHANGELOG).
 import hashlib as _hl86  # noqa: E402
 
 rd86, hw86, cl86 = _user_docs(), _read("docs", "HOW-IT-WORKS.md"), _read("CHANGELOG.md")
 rdn86, hwn86 = _n(rd86), _n(hw86)
 ROW86 = (
-    "| `/ai-workflow:gh-issue [--review [<lens,lens>] [--herdr]]` | file a well-formed issue; always decomposes first \u2014 one task files one issue; "
-    "two or more save the task list to `docs/tasks/<slug>.md` and file one refined issue per task, "
-    "ordered by `Depends on: #n` lines, under an `epic` parent; `/gh-issue docs/tasks/<slug>.md` files a saved list, "
-    "one question round per task |"
+    "| `/ai-workflow:gh-issue [--review [<lens,lens>] [--herdr]]` | file exactly one well-formed issue. It decomposes "
+    "first; when the input splits into 2 or more tasks it creates nothing and ends `→ next: /create-prd <input>`. "
+    "A standalone run ends `→ next: herdr-dispatch <n>` |"
 )
 assert rdn86.count(ROW86) == 1
 assert "parent plus children" not in rdn86 and "parent plus children" not in hwn86
 JROW86 = (
-    "| `/ai-workflow:jira-to-gh <KEY>` | decompose a Jira ticket and file flat issues the same way as `/gh-issue` "
-    "(one issue for a single task; two or more saved to `docs/tasks/<slug>.md` and filed flat) |"
+    "| `/ai-workflow:jira-to-gh <KEY>` | turn a Jira ticket into exactly one issue the same way as `/gh-issue`; "
+    "2 or more tasks create nothing and end `→ next: /create-prd <jira-key-or-url>` |"
 )
 assert rdn86.count(JROW86) == 1
-assert (
-    "refined issue per task" in ROW86 and "under an `epic` parent" in ROW86 and "`docs/tasks/<slug>.md`" in ROW86
-)  # ADR 0003
+assert "exactly one" in ROW86 and "/create-prd <input>" in ROW86 and "docs/tasks/" not in ROW86  # ADR 0004
 assert "Accepts an epic parent." in rdn86
 assert "aiw epic split|init|next|status    epic decomposition and sequencing" in rd86
-ok("#86 README gh-issue row pinned whole; Epic-mode README lines intact")
+for _row in (
+    "| `/ai-workflow:create-prd ",
+    "| `/ai-workflow:create-tasks <prd>` |",
+    "| `/ai-workflow:refine-issues docs/tasks/<slug>.md` |",
+):
+    assert rdn86.count(_row) == 1, f"REFERENCE lacks the {_row!r} row"
+assert "| `/ai-workflow:prd " not in rdn86, "REFERENCE still has the /prd row"
+ok("#86 README gh-issue and jira rows pinned whole; create-prd / create-tasks / refine-issues rows; Epic-mode lines")
 
-H5 = "## Layer 5 \u2014 Task lists and epics"
-assert hw86.count(H5) == 1 and "## Layer 5 \u2014 Epics" not in hw86
+H5 = "## Layer 5 — PRDs, task lists and epics"
+assert hw86.count(H5) == 1 and "## Layer 5 — Task lists and epics" not in hw86
 l5 = _n(_slice(hw86, "## Layer 5", "\n---"))
 P1 = (
-    "`/gh-issue` always breaks a request into a numbered task list before filing anything. Each task is one "
-    "layer-scoped deliverable: 3 or fewer production files, 1-4 acceptance criteria, one verify command. "
-    'You approve the list with **"Create as shown"** or revise it with **"Let me edit the list"**. '
-    "One task files one issue as before. Two or more tasks save the list to `docs/tasks/<slug>.md` first "
-    "(optionally also to Obsidian or the GitHub wiki), then file one refined issue per task, each asked about in "
-    "its own question round, and one **epic** parent over them, linked as sub-issues (ADR 0003). Each task issue "
-    "is complete and independently readable, labelled `prd-<slug>`, and declares its order in plain text:"
+    "`/create-prd` interviews you into a PRD and saves it to `docs/prds/<slug>.md` with the status **Draft**. "
+    "It holds the what and why, a technical design (contracts such as data shapes and endpoints, never code), "
+    "the epics the work splits into, the decisions and a change log. `--review` puts a reviewer panel on the "
+    "draft (status **In review**). `/create-prd approve <prd>` sets **Approved** and files one **epic** issue "
+    "per `## Epics` entry, labelled `epic` and `prd-<slug>`, then writes each epic's number back into the PRD."
 )
 P2 = (
-    "Each new issue number is written back into the saved list. A create failure partway through is a "
-    "recoverable state, not a failure state: `/gh-issue` reports which issues exist and which are missing, "
-    'then asks **"Retry the missing ones"** or **"Stop here"**, and nothing already created is closed or '
-    'deleted. Re-running it on the same list offers **"Resume this list"**, which files only the missing '
-    "tasks. `/jira-to-gh` decomposes, saves and files a Jira ticket the same way."
+    "`/create-tasks` splits an Approved PRD into one-PR tasks and saves them to `docs/tasks/<slug>.md`. Each "
+    "task fits the size rubric: 3 or fewer production files, 1-4 acceptance criteria, one verify command, no new "
+    "dependency. Each names its Area, whether it can run in parallel, and the tasks it depends on, which are "
+    "only tasks in its own epic. The list adds Waves (the tasks that can run together) and Shared files. A later "
+    "edit never renumbers a task; it marks it Changed or Dropped."
 )
 P3 = (
-    "`/gh-issue` returns the parent and the issue URLs in list order. Run `/run-issue <n>` on each, dependencies "
-    "first, or `/run-issue <parent>` for all of them. If you hand `/run-issue` a source that is not an issue yet, "
-    "it calls `/gh-issue` for you; when that returns two or more issues, `/run-issue` prints the list and stops "
-    "\u2014 run `/run-issue <n>` on each issue, dependencies first. Answers given in the per-task question rounds "
-    "are recorded in the PRD (`/prd --update`)."
+    "`/refine-issues` files each task as a `refined` sub-issue of its epic, after you confirm the full list. "
+    "Each issue number is written back into the task list, and a decision found while refining goes into the "
+    "PRD with `/create-prd --update`. It then runs one `aiw epic split` per epic, which writes the epic's "
+    "`## Tasks` checklist and the `epic.json` that Epic mode reads. Each issue gets a native blocked-by link "
+    "(on an older `gh`, `/fix-blockers` writes them) and declares its order in plain text:"
 )
 P4 = (
-    "**Epic mode** runs a parent issue with sub-issues: one `/gh-issue` filed, or one filed by hand. "
-    "`/run-issue <parent>` drives all its children. A `/gh-issue` parent (labelled `epic` and `prd-<slug>`) "
+    "`/gh-issue` and `/jira-to-gh` file exactly one issue. They still break the request down first; when it "
+    "splits into 2 or more tasks they create nothing and end with `→ next: /create-prd <input>`, because "
+    "work that size needs a PRD. `/run-issue` does the same in Preflight: a source that needs a PRD stops the "
+    "run with that hand-off, and no ledger is made."
+)
+P5 = (
+    "**Epic mode** runs a parent issue with sub-issues: one `/create-prd approve` filed, or one filed by hand. "
+    "`/run-issue <parent>` drives all its children. A `/create-prd` epic (labelled `epic` and `prd-<slug>`) "
     "with no sub-issues is refused, never run as one issue. The rules:"
 )
-for para in (P1, P2, P3, P4):
+for para in (P1, P2, P3, P4, P5):
     assert l5.count(para) == 1, para[:50]
 assert l5.count("``` Depends on: #12, #13 ```") == 1
-assert l5.index(P1) < l5.index("Depends on: #12, #13") < l5.index(P2) < l5.index(P3) < l5.index(P4)
+assert l5.index(P1) < l5.index(P2) < l5.index(P3) < l5.index("Depends on: #12, #13") < l5.index(P4) < l5.index(P5)
 for b in (
-    '**Independent children run at the same time.** Dependent ones cannot, by definition \u2014 a child stacks its branch on top of the branch it depends on, so it waits for that one to reach "PR open" first.',
+    '**Independent children run at the same time.** Dependent ones cannot, by definition — a child stacks its branch on top of the branch it depends on, so it waits for that one to reach "PR open" first.',
     "**Still three gates, for the whole epic.** Gate 1 shows you the split and *every* child's plan at once. "
     "A blocker in one child parks that child and the others keep going; Gate 2a covers both an immediate, "
     "per-blocker ask fired as soon as that child parks (so you are not left waiting until the end to hear about it) "
     "and an end-of-run closer that fires once, collecting whatever is still pending or deferred when nothing more "
     "can proceed without you. Gate 3 is one report covering everything, including the order you must merge in.",
-    '**A failed child with dependents is reported by name.** "Never started, blocked by #14" \u2014 because a child '
+    '**A failed child with dependents is reported by name.** "Never started, blocked by #14" — because a child '
     "silently missing from a list of twelve is how you discover a month later that a third of the epic was never built.",
 ):
     assert b in l5, b
@@ -3738,14 +3747,31 @@ for gone in (
     "Kanban",
     "board view",
     "parent plus children",
+    "Resume this list",
 ):
     assert gone not in l5, gone
-ok("#86 Layer 5 heading, flat-flow paragraphs, Epic-mode lead-in and kept bullets pinned")
+ok(
+    "#86 Layer 5 heading, create-prd / create-tasks / refine-issues paragraphs, Epic-mode lead-in and kept bullets pinned"
+)
 
-GL86 = "- **Epic** \u2014 a parent issue with sub-issues, run by `/run-issue` Epic mode. `/gh-issue` files one over every task list it files; `/jira-to-gh` does not."  # ADR 0003
+GL86 = (
+    "- **Epic** — a parent issue with sub-issues, run by `/run-issue` Epic mode. `/create-prd approve` files "
+    "one per `## Epics` entry of a PRD; `/refine-issues` files its tasks under it."
+)  # ADR 0004
 assert hwn86.count(GL86) == 1
-assert "- **Epic** \u2014 a parent issue with dependent children." not in hwn86
+assert "- **Epic** — a parent issue with dependent children." not in hwn86
 ok("#86 glossary Epic line pinned")
+
+_docs = _user_docs() + _read("docs", "HOW-IT-WORKS.md") + _read("CONTEXT.md")
+for _gone in ("/prd ", "`/prd`", "docs/prd/", "4-FLAT", "step 3.6"):
+    assert _gone not in _docs, f"docs still say {_gone!r}"
+assert not re.search(r"(?<![-\w])/prd\b", _docs), "docs still name the old /prd"
+for _new in ("/create-prd", "/refine-issues", "docs/prds/<slug>.md", "/create-prd approve"):
+    assert _new in _docs, f"docs lack {_new!r}"
+assert os.path.isfile(os.path.join(HERE, "..", "docs", "adr", "0004-wasensi-planning-skills.md")), "ADR 0004"
+assert not os.path.exists(os.path.join(HERE, "..", "docs", "prd")), "docs/prd moved to docs/prds"
+assert os.path.isfile(os.path.join(HERE, "..", "docs", "prds", "workflow-control-ui.md")), "docs/prds holds the PRDs"
+ok("docs: create-prd / refine-issues; no /prd or 4-FLAT left")
 
 _T86 = "# Changelog\n\n"
 _E86 = "## 1.8.0 \u2014 2026-09-30"

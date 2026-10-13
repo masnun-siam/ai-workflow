@@ -1,4 +1,4 @@
-Decision: `/gh-issue` again files a parent epic over its refined task issues, and GitHub's native blocked-by relations are written between those issues. This supersedes, in part, `docs/prd/gh-issue-flat-task-list.md`: its problem statement (line 16, the parent/child hierarchy "adds machinery … that the user no longer wants"), its goal "No parent issues and no hierarchy" (line 25), and its decision "No parent and no hierarchy: flat issues only" (line 94). The rest of that PRD stands: the saved, ordered task list, small layer-scoped tasks, and one refined issue per task.
+Decision: `/gh-issue` again files a parent epic over its refined task issues, and GitHub's native blocked-by relations are written between those issues. This supersedes, in part, `docs/prds/gh-issue-flat-task-list.md`: its problem statement (line 16, the parent/child hierarchy "adds machinery … that the user no longer wants"), its goal "No parent issues and no hierarchy" (line 25), and its decision "No parent and no hierarchy: flat issues only" (line 94). The rest of that PRD stands: the saved, ordered task list, small layer-scoped tasks, and one refined issue per task.
 
 ## Context
 
