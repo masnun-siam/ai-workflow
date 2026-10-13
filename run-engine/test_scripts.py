@@ -4359,7 +4359,7 @@ for _m in re.finditer(r"scripts/", _t185):
     )
 ok("#185 herdr-dispatch skill in plugin")
 
-# --------------------------------------------------------------------------- #183 /prd fills dump's seed
+# --------------------------------------------------------------------------- #183 /create-prd fills dump's seed
 
 
 def _skill_sections(rel: str) -> dict:
@@ -4370,7 +4370,7 @@ def _skill_sections(rel: str) -> dict:
 
 
 _dump183 = _skill_sections("skills/dump/SKILL.md")
-_prd183 = _skill_sections("skills/prd/SKILL.md")
+_prd183 = _skill_sections("skills/create-prd/SKILL.md")
 _key183 = lambda secs, pre: next(v for k, v in secs.items() if k.startswith(pre))  # noqa: E731
 
 # AC1: new-feature route marks the seeded PRD.md as a seed.
@@ -4381,10 +4381,10 @@ assert re.search(r'property:set path="05-Work/<Project>/<Feature>/PRD\.md" name=
 assert "/prd" in _nf183, "#183 dump New feature route must say the marker tells /prd it is a seed"
 ok("#183 dump New feature route sets status: seed on the seeded PRD.md")
 
-# AC2: /prd takes a feature folder, accepts a seed, fills it and flips to draft.
+# AC2: /create-prd takes a feature folder, accepts a seed, fills it and flips to draft.
 _args183 = _prd183["Arguments"]
 assert "05-Work/<Project>/<Feature>" in _args183 and "feature-folder" in _args183, (
-    "#183 Arguments lacks /prd <feature-folder>"
+    "#183 Arguments lacks /create-prd <feature-folder>"
 )
 _s1_183 = _key183(_prd183, "Step 1")
 assert "Dump.md" in _s1_183 and "PRD.md" in _s1_183 and "feature folder" in _s1_183, (
@@ -4400,7 +4400,7 @@ assert "overwrite" in _s7_183 and "status" in _s7_183 and "draft" in _s7_183 and
     "#183 Step 7 must overwrite the seed and set status: draft"
 )
 assert "stop and ask" in _s2_183.split("For Obsidian, also resolve")[1], "#183 Step 2 must ask when no project resolves"
-ok("#183 /prd feature-folder input, seed exception, overwrite + status: draft")
+ok("#183 /create-prd feature-folder input, seed exception, overwrite + status: draft")
 
 # AC3: anything that is not a seed still stops and asks.
 assert "**stop and ask the user**" in _s2_183 and "Never overwrite silently" in _s2_183, "#183 Step 2 lost stop-and-ask"
@@ -4411,17 +4411,17 @@ assert re.search(r"property:read path=.{0,60}PRD\.md. name=status", _s2_183) and
 assert re.search(r"Anything else.{0,220}still stops here", _s2_183), (
     "#183 Step 2: anything other than seed must still stop"
 )
-ok("#183 /prd on a non-seed PRD still stops and asks")
+ok("#183 /create-prd on a non-seed PRD still stops and asks")
 
 # AC4: default --to is obsidian only; Step 6 no longer asks about extra destinations.
 _a4_183 = next(ln for ln in _args183.splitlines() if ln.startswith("- `--to`"))
-# ADR-era change: the repo copy (docs/prd/<slug>.md) is canonical, mirrored to Obsidian.
+# ADR-era change: the repo copy (docs/prds/<slug>.md) is canonical, mirrored to Obsidian.
 assert "Default `local,obsidian`" in _a4_183, "--to default must be local,obsidian (repo canonical + vault mirror)"
 assert "(Step 6)" not in _a4_183, "#183 Arguments must not defer a destination question to Step 6"
 _s6_183 = _key183(_prd183, "Step 6")
 assert "ask here whether to also save" not in _s6_183, "#183 Step 6 still asks about extra destinations"
 assert "aiw ask" in _s6_183, "#183 Step 6 must keep its aiw ask branch"
-ok("/prd default --to is local,obsidian; Step 6 asks no destination question")
+ok("/create-prd default --to is local,obsidian; Step 6 asks no destination question")
 
 
 # Issue #184: `→ next:` handoff lines on dump, prd and gh-issue (parsed by the UI stepper).
@@ -4460,31 +4460,85 @@ for _route in ("**New feature**", "**Change request**", "**Bug report**"):
     assert "problem statement" in _body.lower(), f"dump {_route} route must write a problem statement"
 assert "<the raw, unedited dump text, verbatim>" not in _s4, "dump New feature still writes raw text as Dump.md"
 ok("dump writes a problem statement (Problem/Who/Evidence/Expected + raw input) for features, changes, bugs")
-# Six-flow step 2: the repo PRD is canonical, and --update appends downstream decisions to it.
-_prd_all = _skill_sections("skills/prd/SKILL.md")
-_canon = _ws(_prd183["Arguments"]) + " " + _ws(_key183(_prd_all, "Step 7"))
-assert re.search(r"canonical", _canon) and "docs/prd/<slug>.md" in _canon, "prd: docs/prd/<slug>.md must be canonical"
-_upd = _ws(_key183(_prd_all, "Update mode"))
-assert "--update" in _ws(_prd183["Arguments"]), "prd Arguments must document --update"
-for _w in ("## Decisions", "Open questions", "mirror", "no grilling"):
-    assert _w.lower() in _upd.lower(), f"prd Update mode lacks {_w!r}"
-assert re.search(r"already (there|present|recorded)", _upd), "prd Update mode must skip a decision already recorded"
-# The pair is linked both ways at save time and followed, never guessed from names.
-_s7 = _ws(_key183(_prd_all, "Step 7"))
-assert "**Mirror:**" in _s7 and "name=canonical" in _s7, "prd: Step 7 must record the mirror/canonical links"
-assert "never by matching names" in _ws(_key183(_prd_all, "Step 2")), "prd: Step 2 follows the links"
-assert "no canonical copy" in _upd and "Never create a repo file during an update" in _upd, "prd: vault-only update"
-assert "before \u2192 after" in _upd, "prd: Update mode reports edited requirements as before -> after"
-assert "not inside a git repo" in _ws(_key183(_prd_all, "Step 1")), "prd: no repo -> Obsidian only"
-assert re.search(r"re-run `property:set` for each of them right after it", _s7) and "`canonical`" in _s7, (
-    "prd: frontmatter (incl. canonical) must be re-set after every overwrite"
-)
-assert "and re-set `tags`, `status` and `canonical` after the overwrite" in _upd, "prd: Update mode re-sets canonical"
-assert "never overwrite with partial content" in (_upd + _ws(_key183(_prd_all, "Step 7"))).lower(), (
-    "prd: overwrite guard"
-)
-assert "\u2192 next:" not in _upd, "prd Update mode prints no next line (the caller owns what follows)"
-ok("prd: repo copy canonical; --update appends decisions, resolves open questions, mirrors to Obsidian")
+# create-prd: the wasensi PRD skill, made generic, plus our Flow/review/mirror features.
+assert not os.path.exists(os.path.join(HERE, "..", "skills", "prd")), "skills/prd must be gone (hard rename)"
+_cp = _ws(_read("skills", "create-prd", "SKILL.md"))
+assert _cp.startswith("--- name: create-prd "), "create-prd frontmatter name"
+for _w in (
+    "docs/prds/<slug>.md",
+    "`Draft`",
+    "`In review`",
+    "`Approved`",
+    "/create-prd approve <prd-path | slug>",
+    "Decisions, not code",
+    "Mermaid",
+    "Refuse while `## Open questions` has an entry",
+    '--label "epic,prd-<slug>"',
+    "aiw peer-review new create-prd",
+    "--kind create-prd --dir <review_dir>",
+    "Flow auto mode",
+    "status: seed",
+    "name=canonical",
+    "## Change log",
+    "docs/templates/prd.md",
+    "<skill_dir>/templates/prd.md",
+    "multi-tenant",
+):
+    assert _w in _cp, f"create-prd lacks {_w!r}"
+assert "End with the line `→ next: /create-tasks <prd-path>`" in _cp, "create-prd next line"
+for _bad in ("wasensi", "staging", "webhook-receiver", "Pest", "MongoDB", "/implement-issue", "/verifier-locally"):
+    assert _bad not in _cp, f"create-prd still names {_bad!r}"
+_tp = _read("skills", "create-prd", "templates", "prd.md")
+_hs = re.findall(r"^##+ .+$", _tp, re.M)
+assert _hs == [
+    "## Overview",
+    "## Problem",
+    "## Users",
+    "## Goals",
+    "## Non-goals",
+    "## Requirements",
+    "## Edge cases",
+    "## Technical design",
+    "### Data",
+    "### API",
+    "### Backend",
+    "### Frontend",
+    "### Integrations and realtime",
+    "### Non-functional",
+    "### Testing",
+    "## Rollout and cost",
+    "## Success metrics",
+    "## Epics",
+    "## Decisions",
+    "## Open questions",
+    "## Change log",
+    "## Related",
+], f"PRD template headings drifted: {_hs}"
+assert "**Status:** Draft" in _tp and "**Mirror:**" in _tp, "PRD template header"
+_te = _read("skills", "create-prd", "templates", "epic.md")
+assert re.findall(r"^## .+$", _te, re.M) == [
+    "## What",
+    "## Why",
+    "## Requirements covered",
+    "## Out of Scope",
+    "## Acceptance Criteria",
+    "## Notes",
+    "## Tasks",
+], "epic template headings (## Tasks last: aiw epic split fills it)"
+ok("create-prd: wasensi structure, approve creates epics, generic, templates shipped")
+
+# Improve-this-skill footer: on the three new skills only, always an issue, never an edit.
+for _sk in ("create-prd", "create-tasks", "refine-issues"):
+    _p = os.path.join(HERE, "..", "skills", _sk, "SKILL.md")
+    if not os.path.isfile(_p) or (
+        _sk != "create-prd" and "## Improve this skill" not in open(_p, encoding="utf-8").read()
+    ):
+        continue  # create-tasks / refine-issues get the footer in Tasks 3 and 4; Task 4 removes this guard
+    _f = _ws(open(_p, encoding="utf-8").read().split("## Improve this skill", 1)[-1].split("\n## ", 1)[0])
+    assert "gh issue create --repo <plugin_repo>" in _f and "Never edit this skill file" in _f, (
+        f"{_sk}: footer must file an issue, never edit"
+    )
+ok("improve-this-skill footer files an issue on the plugin repo")
 
 # Six-flow step 3: /create-tasks is a standalone entry over gh-issue's own 3.5/3.6 (one source of truth).
 _ct_path = os.path.join(HERE, "..", "skills", "create-tasks", "SKILL.md")
@@ -4632,15 +4686,7 @@ assert re.search(r"[Hh]eadless.{0,80}--herdr", _pk), "peer-review: --herdr is ig
 assert "remembers its earlier rounds" in _pk, "peer-review: reused tabs keep context, said plainly"
 assert "that is not read-only" in _pk, "peer-review: --herdr tabs are not over-promised as read-only"
 
-_pr_all = _skill_sections("skills/prd/SKILL.md")
-assert "--review [<lens,lens>]" in _ws(_pr_all["Arguments"]) and "--herdr" in _ws(_pr_all["Arguments"])
-_rv = _ws(_key183(_pr_all, "Step 5.5"))
-for _w in ("aiw peer-review new prd", "never reuse one", "ai-workflow:peer-review", "--kind prd --dir <review_dir>"):
-    assert _w in _rv, f"prd Step 5.5 lacks {_w!r}"
-assert "save nothing" in _rv and "## Open questions" in _rv and "never accepts gaps" in _rv, "prd: finish line handled"
-assert "Peer review decisions (Step 5.5)" in _ws(_key183(_pr_all, "Flow auto mode")), (
-    "prd auto mode: review decisions are asked"
-)
+_rv = _ws(_key183(_skill_sections("skills/create-prd/SKILL.md"), "Step 5.5"))
 _sp = _ws(_read("agents", "run-specialist.md"))
 assert "## Peer review mode" in _read("agents", "run-specialist.md") and "peer_review.rubric" in _sp
 assert "request.json" in _sp and "reraises" in _sp and "distinct_because" in _sp and "new_evidence" in _sp, (
@@ -4688,11 +4734,6 @@ assert "--review" not in _ws(_key183(_skill_sections("skills/dump/SKILL.md"), "P
     "never passes `--review`", ""
 ), "dump's programmatic path never reviews"
 ok("--review: peer-review skill loop on Opus; /prd, /intake, /dump, /gh-issue call it; programmatic calls never review")
-
-_s8_184 = _ws(_key183(_skill_sections("skills/prd/SKILL.md"), "Step 8"))
-assert f"End with the line `{NEXT}/create-tasks <prd-path>`" in _s8_184, "#184 prd Step 8 lacks the next line"
-assert "offer, in one line" not in _s8_184, "#184 prd Step 8 still has the prose offer"
-ok("#184 /prd Step 8 ends with \u2192 next: /create-tasks <prd-path>")
 
 _close184 = _ws(_read("commands", "gh-issue.md"))
 _close184 = _close184[_close184.rindex("Return the issue URL") :]

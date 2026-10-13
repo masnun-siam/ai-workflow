@@ -180,11 +180,19 @@ assert ui_afk.dismiss()["summary"] is None
 ui_afk.start(t + 3600, t)
 assert ui_afk.load()["log"] == [] and ui_afk.load()["skipped_ci"] == []
 
-# #188: prd and dump interviews are never auto-answered (also plugin-prefixed); other families still are
+# #188: create-prd (and old prd) and dump interviews are never auto-answered (also plugin-prefixed); other families still are
 resumed.clear()
 held = [
     waiting(command=c)
-    for c in ("/prd x", "/dump x", "/ai-workflow:prd x", "/create-tasks p", "/ai-workflow:fix-blockers 40")
+    for c in (
+        "/prd x",
+        "/create-prd x",
+        "/dump x",
+        "/ai-workflow:prd x",
+        "/create-tasks p",
+        "/refine-issues docs/tasks/x.md",
+        "/ai-workflow:fix-blockers 40",
+    )
 ]
 gi = waiting(command="/gh-issue x")
 ui_afk.tick(t + 1)

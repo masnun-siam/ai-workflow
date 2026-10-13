@@ -492,7 +492,7 @@ R_WORK = {
     ]
 }
 ROUNDS = {
-    "/prd x": R_PRD,
+    "/create-prd x": R_PRD,
     "/intake brd.md": R_INTAKE,
     "/gh-issue feature x": R_GHI,
     "/dump x": R_DUMP,
@@ -544,12 +544,12 @@ def t_iv_first_rounds():
 
 def t_iv_resume_done_and_next_round():
     sid, first, _, _ = interview_e2e(
-        "/prd x", R_PRD, {"0": {"labels": ["Postgres"]}, "1": {"labels": ["The owner (Recommended)"]}}, "normal"
+        "/create-prd x", R_PRD, {"0": {"labels": ["Postgres"]}, "1": {"labels": ["The owner (Recommended)"]}}, "normal"
     )
     r = ui_sessions.load(sid)
     assert r["status"] == "done" and r["pending_question"] is None, r
     sid, first, _, _ = interview_e2e(
-        "/prd x", R_PRD, {"0": {"labels": ["Postgres"]}, "1": {"labels": ["The owner (Recommended)"]}}, "aiwask"
+        "/create-prd x", R_PRD, {"0": {"labels": ["Postgres"]}, "1": {"labels": ["The owner (Recommended)"]}}, "aiwask"
     )
     r = ui_sessions.load(sid)
     assert r["status"] == "waiting" and r["pending_question"]["id"] != first, r
@@ -558,7 +558,7 @@ def t_iv_resume_done_and_next_round():
 
 def t_iv_mixed_free_text():
     interview_e2e(
-        "/prd x", R_PRD, {"0": {"labels": ["SQLite (Recommended)"]}, "1": {"other": "someone else"}}, "normal"
+        "/create-prd x", R_PRD, {"0": {"labels": ["SQLite (Recommended)"]}, "1": {"other": "someone else"}}, "normal"
     )
     assert '"0":' in lines(os.environ["FAKE_DIR"], "argv") and '"1":{"other":"someone else"}' in lines(
         os.environ["FAKE_DIR"], "argv"
@@ -597,12 +597,12 @@ def t_iv_answered_after_days():
 
 def t_iv_aiwaskfail():
     fk, work = setup("aiwaskfail")
-    sid = ui_runner.start("/prd x", work)["id"]
+    sid = ui_runner.start("/create-prd x", work)["id"]
     wait_status(sid, {"done", "failed", "waiting"})
     wait_finished(sid)
     r = ui_sessions.load(sid)
     assert r["status"] == "failed" and "no question" in r["error"], r
-    ok("iv: /prd with aiwaskfail ends failed, no recorded question")
+    ok("iv: /create-prd with aiwaskfail ends failed, no recorded question")
 
 
 def t_iv_concurrent_ask():
@@ -615,7 +615,7 @@ def t_iv_concurrent_ask():
 
 
 IV_SITES = {
-    "skills/prd/SKILL.md": [
+    "skills/create-prd/SKILL.md": [
         "Invoke the `grilling` skill",
         "Show the **full** draft",
         '"push to the wiki?" confirmation',
@@ -676,7 +676,7 @@ def t_iv_interactive_unchanged():
         for e in re.findall(r"^\s*(\S*\s*aiw ask\b.*)$", d, re.M):
             if "--json" in e or "<<" in e:
                 assert e.strip().startswith("aiw ") and "|" not in e.split("aiw ask")[0], (path, e)
-    assert "AskUserQuestion" in rd("skills", "prd", "SKILL.md").split("---")[1]
+    assert "AskUserQuestion" in rd("skills", "create-prd", "SKILL.md").split("---")[1]
     assert re.search(r"^tools:.*AskUserQuestion", rd("agents", "worklog-runner.md"), re.M)
     assert not bad, "\n    ".join(bad)
     ok("iv: interactive branch retained; tool lists keep AskUserQuestion")

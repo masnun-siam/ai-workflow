@@ -40,9 +40,13 @@ s_dump = session("/dump export bookings as csv", "Filed.\n→ next: /ai-workflow
 s_prd = session("/prd 05-Work/P/Bookings Export", "PRD written.\n`→ next: /gh-issue 05-Work/P/Bookings Export/PRD.md`")
 s_iss = session("/gh-issue 05-Work/P/Bookings Export/PRD.md", "Created.\n→ next: herdr-dispatch 41 42")
 s_other = session("/prd something else", "→ next: /gh-issue x.md")
+s_dump2 = session("/dump csv export", "Filed.\n→ next: /ai-workflow:create-prd 05-Work/P/CSV Export")
+s_prd2 = session("/create-prd 05-Work/P/CSV Export", "PRD saved.\n→ next: /create-tasks docs/prds/csv-export.md")
 flows = ui_flows.list_all()
-assert len(flows) == 1, flows
-f = flows[0]
+assert len(flows) == 2, flows
+f = next(x for x in flows if x["folder"] == "05-Work/P/Bookings Export")
+f2 = next(x for x in flows if x["folder"] == "05-Work/P/CSV Export")
+assert f2["prd"] == "docs/prds/csv-export.md" and f2["sessions"] == [s_dump2, s_prd2], f2
 assert (f["folder"], f["prd"], f["issues"]) == (
     "05-Work/P/Bookings Export",
     "05-Work/P/Bookings Export/PRD.md",
@@ -53,8 +57,8 @@ assert ui_sessions.load(s_prd)["flow_id"] == f["id"] and "flow_id" not in ui_ses
 assert ui_flows.summary(f)["name"] == "Bookings Export" and ui_flows.summary(f)["step"] == "dispatch"
 assert f["updated"] == 1791558000.0  # the last session's ended_at, in UTC
 session("/dump later idea", "→ next: /prd 05-Work/P/Later")
-assert len(ui_flows.list_all()) == 1  # import runs once
-print("ok import chains dump/prd/gh-issue sessions once")
+assert len(ui_flows.list_all()) == 2  # import runs once
+print("ok import chains dump/prd/gh-issue and dump/create-prd sessions once")
 
 # ---- create / update / archive; empty never-run flows hidden then pruned
 g = ui_flows.create({"repo": "o/r", "text": "  "})
@@ -93,6 +97,7 @@ assert (
 h = ui_flows.create({"repo": "o/r", "tasks": "docs/tasks/csv-export.md", "parent": "40"})
 assert (h["tasks"], h["parent"]) == ("docs/tasks/csv-export.md", "40") and not ui_flows._empty(h)
 assert ui_flows.name({"prd": "docs/prd/csv-export.md"}) == "csv-export"
+assert ui_flows.name({"prd": "docs/prds/csv-export.md"}) == "csv-export"
 assert ui_flows.name({"tasks": "docs/tasks/csv-export.md"}) == "csv-export"
 assert ui_flows.name({"prd": "05-Work/P/Bookings Export/PRD.md"}) == "Bookings Export"
 print("ok six steps: tasks and parent fields, step order, names from repo doc paths")

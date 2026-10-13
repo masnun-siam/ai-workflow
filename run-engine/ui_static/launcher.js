@@ -8,12 +8,13 @@ const KEY = 'aiw.lastRepo';
 const LABELS = {
   'run-issue': 'Issue number or URL',
   'pr-grind': 'PR number or URL',
-  prd: 'Requirement: free text, file path, vault note or issue URL',
+  'create-prd': 'Requirement: free text, file path, vault note or issue URL',
   intake: 'Sentry URL, file path, vault note or free text',
   dump: 'What to capture: feature, change, bug or task',
   worklog: 'Date (optional, defaults to today)',
   day: 'What to capture: a task, follow-up or meeting notes (leave empty to plan, shut down or review the week)',
   'gh-issue': 'Type (bug, feature, task, improvement) and details',
+  'refine-issues': 'Task list: docs/tasks/<slug>.md',
   'pr-review': 'PR number or URL to review',
   'pr-fix-comments': 'PR URL or owner/repo#123',
   'issue-to-pr': 'Issue URL',
@@ -29,7 +30,7 @@ const HINTS = {
 };
 const OPTIONAL_ARGS = new Set(['worklog', 'day']);
 // These take a written description rather than a number or link, so they get room to write.
-export const FREE_TEXT = new Set(['prd', 'intake', 'dump', 'gh-issue', 'day']);
+export const FREE_TEXT = new Set(['create-prd', 'intake', 'dump', 'gh-issue', 'day']);
 const URL_KIND = { 'run-issue': 'issues', 'pr-grind': 'pull' };
 
 export function repoOptions(body) {

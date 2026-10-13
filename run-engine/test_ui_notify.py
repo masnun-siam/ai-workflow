@@ -225,8 +225,8 @@ h, body = ui_notify.compose("done", rec(), None)
 assert (
     h["Tags"].startswith("white_check_mark,") and h["Priority"] == "default" and "Actions" not in h and "Click" not in h
 )
-h, _ = ui_notify.compose("done", rec(link=None, command="/prd x"), None)
-assert h["Title"] == "aiw: run done" and h["Tags"] == "white_check_mark,prd,r", h
+h, _ = ui_notify.compose("done", rec(link=None, command="/create-prd x"), None)
+assert h["Title"] == "aiw: run done" and h["Tags"] == "white_check_mark,create-prd,r", h
 h, _ = ui_notify.compose("pipeline", {"id": "p-1", "repo": "o/r", "command": "pipeline x"}, "https://box.ts.net")
 assert (
     h["Tags"].startswith("checkered_flag") and h["Actions"] == "view, Open pipeline, https://box.ts.net/#/dispatch/p-1"

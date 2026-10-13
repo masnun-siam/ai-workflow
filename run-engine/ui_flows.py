@@ -158,8 +158,9 @@ def name(flow: dict) -> str:
         parts = folder.split("/")
         if not parts[-1].lower().endswith(".md") or len(parts) == 1:
             return parts[-1]
-        # docs/prd/<slug>.md and docs/tasks/<slug>.md name the feature by file; a vault note by its folder
-        return parts[-1][:-3] if parts[-2] in ("prd", "tasks") else parts[-2]
+        # docs/prds/<slug>.md (docs/prd/ before the rename) and docs/tasks/<slug>.md name the feature by file;
+        # a vault note by its folder
+        return parts[-1][:-3] if parts[-2] in ("prd", "prds", "tasks") else parts[-2]
     text = " ".join((flow.get("text") or "").split())
     return (text[:60] + "…") if len(text) > 60 else (text or "Untitled flow")
 
@@ -254,7 +255,7 @@ def _issue_numbers(text: str) -> list:
 
 
 def import_once() -> None:
-    """One flow per /dump session that ran before flows were stored; later /prd and /gh-issue
+    """One flow per /dump session that ran before flows were stored; later /create-prd (or /prd) and /gh-issue
     sessions whose argument matches the flow's folder or PRD path join it. Runs once per data dir."""
     marker = os.path.join(_dir(), ".imported")
     if os.path.exists(marker):
@@ -272,18 +273,18 @@ def import_once() -> None:
         if fam == "dump":
             f = create({"repo": r.get("repo") or "", "text": arg})
             f["sessions"].append(sid)
-            if nxt and nxt[0] == "prd" and nxt[1]:
+            if nxt and nxt[0] in ("prd", "create-prd") and nxt[1]:
                 f["folder"] = nxt[1]
-            elif nxt and nxt[0] == "gh-issue" and nxt[1]:
+            elif nxt and nxt[0] in ("create-tasks", "gh-issue") and nxt[1]:
                 f["prd"] = nxt[1]
             flows.append(f)
-        elif fam == "prd":
+        elif fam in ("prd", "create-prd"):
             f = next((f for f in reversed(flows) if f["folder"] and f["folder"].rstrip("/") == arg.rstrip("/")), None)
             if f is not None:
                 f["sessions"].append(sid)
-                if nxt and nxt[0] == "gh-issue" and nxt[1]:
+                if nxt and nxt[0] in ("create-tasks", "gh-issue") and nxt[1]:
                     f["prd"] = nxt[1]
-        elif fam == "gh-issue":
+        elif fam in ("gh-issue", "refine-issues"):
             f = next((f for f in reversed(flows) if f["prd"] and f["prd"] == arg), None)
             if f is not None:
                 f["sessions"].append(sid)
@@ -424,7 +425,7 @@ def issues_for(fid: str):
         (
             x
             for x in reversed(flow["sessions"])
-            if _family((ui_sessions.load(x) or {}).get("command", "")) == "gh-issue"
+            if _family((ui_sessions.load(x) or {}).get("command", "")) in ("gh-issue", "refine-issues")
         ),
         None,
     )

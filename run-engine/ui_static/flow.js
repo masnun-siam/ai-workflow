@@ -15,12 +15,12 @@ const STEPS = [
   { key: 'dump', label: 'Dump', command: 'dump', action: 'File the idea', input: 'What do you want built or fixed?',
     placeholder: 'e.g. Admins can export the bookings table as CSV, filtered by date range',
     produces: 'Files the idea into a feature folder in your notes.' },
-  { key: 'prd', label: 'PRD', command: 'prd', action: 'Write the PRD', input: 'Feature folder (05-Work/<Project>/<Feature>)',
+  { key: 'prd', label: 'PRD', command: 'create-prd', action: 'Write the PRD', input: 'Feature folder (05-Work/<Project>/<Feature>)',
     produces: 'Writes a reviewed PRD for the feature.' },
-  { key: 'tasks', label: 'Tasks', command: 'create-tasks', action: 'Break it into tasks', input: 'PRD path, or the Bugs.md note',
-    produces: 'Saves a small, ordered task list to docs/tasks/.' },
-  { key: 'issues', label: 'Issues', command: 'gh-issue', action: 'Create the issues', input: 'Task list (docs/tasks/<slug>.md), or the Tasks.md note',
-    produces: 'Files a refined issue per task under an epic parent.' },
+  { key: 'tasks', label: 'Tasks', command: 'create-tasks', action: 'Approve it and break it into tasks', input: 'PRD path',
+    produces: 'Approves the PRD, files its epic, and saves a parallel task list to docs/tasks/.' },
+  { key: 'issues', label: 'Issues', command: 'refine-issues', action: 'Create the issues', input: 'Task list (docs/tasks/<slug>.md), or a Bugs.md / Tasks.md note',
+    produces: 'Files a refined sub-issue per task under the epic.' },
   { key: 'blockers', label: 'Blockers', command: 'fix-blockers', action: 'Set the blockers', input: 'Epic parent issue number',
     produces: 'Marks each issue blocked by the ones it depends on.' },
   { key: 'dispatch', label: 'Dispatch', input: 'Issue numbers', produces: 'Starts a run for each issue.' },
@@ -36,11 +36,15 @@ export function parseNext(text) {
   return m ? { command: m[1], arg: m[2].trim() } : null;
 }
 
+// ponytail: one issues step, two commands — a docs/tasks list goes to /refine-issues, a vault note to /gh-issue.
+export const issuesCommand = (input) => (/(^|\/)docs\/tasks\/[^/]+\.md$/.test(String(input || '').trim()) ? 'refine-issues' : 'gh-issue');
+
 // Which fields a step's `→ next:` line may fill; a line naming any other command does not unlock.
+// Old next lines (`/prd`, `/gh-issue`) keep working alongside the new ones.
 const NEXT = {
-  dump: { prd: 'folder', 'create-tasks': 'prd', 'gh-issue': 'tasks' },
+  dump: { prd: 'folder', 'create-prd': 'folder', 'create-tasks': 'prd', 'gh-issue': 'tasks' },
   prd: { 'create-tasks': 'prd' },
-  tasks: { 'gh-issue': 'tasks' },
+  tasks: { 'refine-issues': 'tasks', 'gh-issue': 'tasks' },
   issues: { 'fix-blockers': 'parent', 'herdr-dispatch': 'issues' },
   blockers: { 'herdr-dispatch': 'issues' },
 };
@@ -86,10 +90,13 @@ export const dispatchHref = (issues) => `#/dispatch?issues=${issues.join(',')}`;
 
 export const flowHref = (id) => `#/flow/${encodeURIComponent(id)}`;
 
+// Old sessions and the vault-note branch of the issues step.
+const ALIAS = { prd: 'prd', 'gh-issue': 'issues' };
+
 // The step a session ran, from its command (`/ai-workflow:gh-issue …` → issues), or null.
 export function sessionStep(command) {
   const cmd = (/^\/(?:[\w-]+:)?([\w-]+)/.exec(command || '') || [])[1];
-  return (STEPS.find((s) => s.command === cmd) || {}).key || null;
+  return (STEPS.find((s) => s.command === cmd) || {}).key ?? ALIAS[cmd] ?? null;
 }
 
 // Nav progress for a flow summary from /api/flows: steps passed, or null when nothing has run.
@@ -246,7 +253,7 @@ export class Flow extends Component {
     const flowId = await this.persist(true);
     let r;
     try {
-      const body = buildBody({ repo, command: step.command, args, lenses });
+      const body = buildBody({ repo, command: step.key === 'issues' ? issuesCommand(args) : step.command, args, lenses });
       r = await api('POST', '/api/sessions', { ...body, ...(flowId ? { flow_id: flowId } : {}) });
     } catch {
       this.setState({ busy: false, why: 'Could not reach the aiw server.' });
@@ -339,7 +346,7 @@ export class Flow extends Component {
       <${Tag} id=${id} class=${prose ? 'field flow-prose' : 'field mono'} rows=${prose ? 6 : undefined} type=${prose ? undefined : 'text'}
         placeholder=${step.placeholder} aria-describedby=${this.state.why ? 'flow-why' : undefined} aria-invalid=${this.state.why ? 'true' : undefined}
         value=${this.state[field]} disabled=${this.running()} onInput=${(e) => this.setState({ [field]: e.target.value })} />
-      ${step.key === 'prd' && lensPicker({ id: 'flow-peer-review', offer: this.state.offers && this.state.offers.kinds.prd, on: this.state.peerReview,
+      ${step.key === 'prd' && lensPicker({ id: 'flow-peer-review', offer: this.state.offers && this.state.offers.kinds['create-prd'], on: this.state.peerReview,
         picked: pickedLenses(true, this.state.lenses, this.state.offers), rounds: this.state.offers && this.state.offers.max_rounds, disabled: this.running(),
         onToggle: (on) => this.setState({ peerReview: on }), onPick: (lenses) => this.setState({ lenses }) })}
       ${this.state.why && html`<p id="flow-why" role="alert" class="error">${this.state.why}</p>`}`;
