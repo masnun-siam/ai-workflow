@@ -198,7 +198,9 @@ and say so.
 - Once, before round 1: `herdr pane current` for the workspace id, then for each lens
   `herdr tab create --workspace <ws> --cwd <repo> --label prd-<lens>` and
   `herdr agent start prd-<lens> --kind claude --pane <pane> -- --agent ai-workflow:run-specialist --disallowedTools "Write,Edit,NotebookEdit"`,
-  so each tab runs as the read-only reviewer agent.
+  so each tab runs as the reviewer agent with no file-editing tools. Its shell commands follow your
+  normal permissions, so a shell can still write files; that is not read-only. It searches code
+  with `rg` through the shell.
 - Each round, step 2 becomes: `herdr agent prompt prd-<lens> "<the same dispatch text>"` for every
   lens (no `--wait`, so they work in parallel), then for each lens
   `herdr agent wait prd-<lens> --until idle --until done --until blocked`. On `blocked`, tell the

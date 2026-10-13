@@ -4623,6 +4623,7 @@ for _w in (
     assert _w in _rv, f"prd --herdr lacks {_w!r}"
 assert re.search(r"[Hh]eadless.{0,80}--herdr", _rv), "prd: --herdr is ignored headless"
 assert "remembers its earlier rounds" in _rv, "prd: reused tabs keep context, said plainly"
+assert "that is not read-only" in _rv, "prd: --herdr tabs are not over-promised as read-only"
 assert "In a herdr tab" in _sp, "run-specialist PRD mode covers the tab case"
 ok("prd --review: panel loop via aiw prd-review, run-specialist PRD mode, cap and decisions go to the user")
 

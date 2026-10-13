@@ -11,9 +11,9 @@
   recorded disposition, product decisions are asked of you and written into `## Decisions`, and
   after the round budget you choose to accept known gaps, run one more round, or stop.
   `--herdr` (terminal) opens one herdr tab per reviewer that you can watch and talk to, started
-  as `claude --agent ai-workflow:run-specialist` with Write/Edit disallowed (checked: the session
-  then has no Write or Edit tool; whether its Bash is limited to `aiw`/`gh`/`git` is not
-  verified). Tabs are reused across rounds, so a reviewer remembers its earlier rounds.
+  as `claude --agent ai-workflow:run-specialist` with Write/Edit disallowed. Checked: the tab has
+  no file-editing tools, but its shell is not narrowed (a probe's `touch` ran), so shell commands
+  follow your normal permissions; it is not read-only. Code search works through `rg`. Tabs are reused across rounds, so a reviewer remembers its earlier rounds.
 - **`aiw prd-review next|verdict`.** The engine for PRD peer review. A panel of single-lens
   reviewers (`prd_review.lenses` in `config.json`: critical, CEO, CTO, security, sharing one
   severity rubric) reviews a PRD in rounds. `verdict` refuses a finding that neither quotes the
