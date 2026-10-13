@@ -371,4 +371,34 @@ for key in ("id_rsa", "id_rsa.pub", "id_ed25519", "id_ecdsa", "id_dsa"):
     assert pr._drop_reason(f".ssh/{key}", False) == "secret-like", key
 ok("diff: tracked .env, secret-named, .gitignored, binary and lockfiles dropped and named; cap notes cut files")
 
+with tempfile.TemporaryDirectory() as tmp:
+    rd = os.path.join(tmp, "r")
+    os.makedirs(rd)
+    write(os.path.join(rd, "ask.md"), "x")
+    assert pr.status(rd) == "not run", "the dir always exists (ask.md at spawn): read round state"
+    os.makedirs(os.path.join(rd, "round-1"))
+    write(os.path.join(rd, "round-1", "request.json"), {})
+    assert pr.status(rd) == "unfinished"
+    write(os.path.join(rd, "round-1", "decision.json"), {"action": "done"})
+    assert pr.status(rd) == "approved"
+    write(os.path.join(rd, "round-1", "decision.json"), {"action": "ask", "reason": "cap"})
+    assert pr.status(rd) == "stopped at cap"
+    write(os.path.join(rd, "round-1", "decision.json"), {"action": "ask", "reason": "decision"})
+    assert pr.status(rd) == "unfinished", "ended while a question was open"
+    os.makedirs(os.path.join(rd, "round-2"))
+    assert pr.status(rd) == "unfinished", "a newer round with no decision yet"
+    assert pr.status(os.path.join(tmp, "missing")) == "not run"
+ok("status: not run / unfinished / approved / stopped at cap, from the last round's decision.json")
+
+offers = pr.offers()
+assert offers["default"] == ["critical"] and offers["kinds"]["dump"] == ["critical", "ceo", "qa"], offers
+assert pr.check_lenses("prd", ["qa", "critical", "qa"]) == ["qa", "critical"]
+for kind, picked in (("dump", ["cto"]), ("run-issue", ["critical"]), ("prd", [])):
+    try:
+        pr.check_lenses(kind, picked)
+        raise AssertionError((kind, picked))
+    except ValueError:
+        pass
+ok("offers / check_lenses: what the UI draws and the server enforces")
+
 print("test_peer_review: ok")

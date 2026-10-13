@@ -9,12 +9,15 @@ from __future__ import annotations
 
 import os
 import re
+import secrets
+import shutil
 import subprocess
 import sys
 import threading
 import time
 
 import dispatch
+import peer_review as peer_review_mod
 import ui_board
 import ui_flows
 import ui_runner
@@ -247,6 +250,22 @@ def _prompt(body: dict) -> str:
     return text
 
 
+def _custom_review(text: str, cwd: str, lenses: list) -> tuple[str, str]:
+    """A fresh review dir holding the prompt verbatim as ask.md, and the prompt with one line asking for the review.
+
+    The line is not a gate (the session skips permissions and could ignore it); the session's
+    peer_review post-check reads the dir's round state to show whether the review ran.
+    """
+    name = f"ui-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}-{secrets.token_hex(3)}"
+    review_dir = peer_review_mod.make_dir("custom", name)
+    with open(os.path.join(review_dir, "ask.md"), "w", encoding="utf-8") as fh:
+        fh.write(text)
+    sha = _git(cwd, "rev-parse", "HEAD")
+    since = f" --since {sha}" if sha else ""
+    line = f"When the work is done, run the ai-workflow:peer-review skill with --dir {review_dir} --lenses {','.join(lenses)}{since}."
+    return f"{text}\n\n{line}", review_dir
+
+
 def _remember(slug, cwd) -> None:
     """Register a manually entered checkout so it shows in the repo list next time."""
     if not slug or any(k.lower() == slug.lower() for k in dispatch.read_checkouts()):
@@ -297,12 +316,21 @@ def start_session(body: dict):
     flow_id = body.get("flow_id")
     if flow_id is not None and (not isinstance(flow_id, str) or ui_flows.load(flow_id) is None):
         return 400, {"error": "flow_id must name an existing flow"}
-    peer_review = body.get("peer_review", False)
-    if not isinstance(peer_review, bool):
-        return 400, {"error": "peer_review must be true or false"}
+    peer_review = body.get("peer_review")
+    if peer_review is not None and not (
+        isinstance(peer_review, list) and peer_review and all(isinstance(x, str) for x in peer_review)
+    ):
+        return 400, {"error": "peer_review must be a non-empty list of lens names"}
     fam = family(text)
-    if fam == "prd" and peer_review:
-        text += " --review"
+    kind = "custom" if body.get("text") is not None else fam
+    lenses = None
+    if peer_review is not None:
+        try:
+            lenses = peer_review_mod.check_lenses(kind, peer_review)
+        except ValueError as exc:
+            return 400, {"error": str(exc)}
+        if kind != "custom":
+            text += " --review " + ",".join(lenses)
     if fam == "run-issue" and not review:
         text += " --no-review"
     if fam == "run-issue" and not worktree:
@@ -327,15 +355,20 @@ def start_session(body: dict):
                     "link": link,
                     "href": f"/api/sessions/{dup['id']}",
                 }
+        review_dir = None
+        if lenses and kind == "custom":
+            text, review_dir = _custom_review(text, cwd, lenses)
         try:
             res = ui_runner.start(text, cwd, link, claude_cmd=claude_cmd, gate_questions=True, flow_id=flow_id)
+            if review_dir:
+                res = ui_sessions.update(res["id"], peer_review_dir=review_dir)  # the post-check reads it
             if fam == "run-issue" and link and body.get("auto_grind", ui_settings.load()["auto_grind"]) is True:
                 res = ui_sessions.update(
                     res["id"], auto_grind=True
                 )  # ui_grind.autostart queues it when the run finishes
             _remember(slug, cwd)
             return 201, res
-        except ValueError as exc:
-            return 400, {"error": str(exc)}
-        except ui_runner.RunnerError as exc:
-            return 502, {"error": str(exc)}
+        except (ValueError, ui_runner.RunnerError) as exc:
+            if review_dir:
+                shutil.rmtree(review_dir, ignore_errors=True)
+            return (400 if isinstance(exc, ValueError) else 502), {"error": str(exc)}

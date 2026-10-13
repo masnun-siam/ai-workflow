@@ -57,6 +57,13 @@ aiw ui [--port N] [--allow-host HOST]  local web UI to start and track sessions
 - To reach it over a tailnet: `tailscale serve --bg 8420`, then
   `aiw ui --allow-host <machine>.<tailnet>.ts.net`.
 
+**Peer review.** New run (both forms) and the Flow's PRD step have a **Peer review** box. Ticking
+it shows the reviewers the command offers (from `GET /api/peer-review`, read from `config.json`),
+with critical ticked. A doc command gets `--review <lenses>`. A custom prompt gets a fresh review
+dir holding the prompt as `ask.md`, plus one line asking the session to run `/peer-review` with
+that dir, the lenses and the HEAD at start. That line is not a gate. The session page shows
+**peer review: approved / stopped at cap / unfinished / not run**, read from the review's rounds.
+
 Optional push notifications and links live in `<data_dir>/ui.json` (the data dir is
 `$CLAUDE_PLUGIN_DATA`, default `~/.claude/plugins/data/ai-workflow`):
 

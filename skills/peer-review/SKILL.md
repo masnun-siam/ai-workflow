@@ -55,7 +55,10 @@ are used either way; only the transport differs.
 
 ## Setup
 
-- **Called with `--dir`:** use that `<review_dir>`. A doc kind's artifact is `<review_dir>/draft.md`.
+- **Called with `--dir`:** use that `<review_dir>`; never mint another. A doc kind's artifact is
+  `<review_dir>/draft.md`. With no `--kind` (the web UI's custom prompt) the kind is `custom`:
+  build `<review_dir>/artifact.md` there, from the `ask.md` the server wrote, because the
+  session's peer review status is read from that dir.
 - **Standalone (`custom`):** `aiw peer-review new custom --slug <repo-name>` prints a fresh
   `<review_dir>`; never reuse one from an earlier run. Then build `<review_dir>/artifact.md`
   (below); it is the artifact.

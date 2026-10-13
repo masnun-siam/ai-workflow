@@ -143,6 +143,10 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); width
 .chip-failed { color: var(--error); background: var(--error-bg); }
 .chip.escalated, .chip.bounced { color: var(--waiting); background: var(--waiting-bg); }
 .chip-done, .chip.done { color: var(--done); background: var(--done-bg); }
+.chip-review-approved { color: var(--done); background: var(--done-bg); }
+.chip-review-stopped-at-cap, .chip-review-not-run { color: var(--error); background: var(--error-bg); }
+.lens-pick .lenses { display: flex; flex-direction: row; flex-wrap: wrap; gap: 4px 16px; border: 0; padding: 0 0 0 24px; margin: 0; }
+.lens-pick .lenses label { width: auto; }
 .tag { color: var(--accent); background: var(--accent-bg); border-radius: 999px; padding: 2px 8px; font-size: 12px; }
 .empty { color: var(--faint); }
 .muted { color: var(--muted); }

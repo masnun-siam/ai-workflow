@@ -158,6 +158,11 @@ rejects unknown and not-offered lenses.
   `When the work is done, run the ai-workflow:peer-review skill with --lenses <list> --since <sha>.`
 - The offer lists come from config through the existing options endpoint, so the UI never
   hardcodes them.
+- **As built:** the custom review dir is `custom/ui-<UTC stamp>-<hex>`, minted through the same
+  never-reuse `make_dir` as `aiw peer-review new`, not the session id: the session id only exists
+  after spawn, and the prompt line needs the concrete `--dir` before it. The record stores
+  `peer_review_dir`. The offers come from a new read-only `GET /api/peer-review`
+  (`{default, max_rounds, kinds}`), since there was no options endpoint.
 - **Post-check for custom sessions** (the line is not a gate): when the session ends, the
   server reads the round state in `<data_dir>/peer-review/custom/<session-id>/`, never just
   whether the dir exists (it always does, because `ask.md` is written at spawn). No

@@ -172,21 +172,53 @@ export function validate({ repo, path, manual, command, args }) {
   return Object.keys(errors).length ? errors : null;
 }
 
-export function validateCustom({ repo, path, manual, text }) {
+export function validateCustom({ repo, path, manual, text }, lenses) {
   const errors = {};
   if (!String((manual ? path : repo) ?? '').trim()) errors.repo = 'Choose a repo or enter a path';
   if (!String(text ?? '').trim()) errors.text = 'Enter a command or prompt';
+  if (lenses && !lenses.length) errors.customLenses = 'Tick at least one reviewer';
   return Object.keys(errors).length ? errors : null;
 }
 
-export function buildCustomBody({ repo, text }) {
-  return { repo, text: String(text).trim() };
+// Peer review: the lenses each command offers come from GET /api/peer-review, never hardcoded.
+const LENS_NAMES = { ceo: 'CEO', cto: 'CTO', qa: 'QA', ux: 'UX' };
+export const lensName = (l) => LENS_NAMES[l] || l.charAt(0).toUpperCase() + l.slice(1);
+
+export function toggleLens(picked, lens, on, offer) {
+  const s = new Set(picked);
+  if (on) s.add(lens);
+  else s.delete(lens);
+  return offer.filter((l) => s.has(l)); // keep the config's order
 }
 
-export function buildBody({ repo, command, args, peerReview }) {
+// null when review is off; otherwise the lenses to send (an empty list is a validation error)
+export function pickedLenses(on, picked, offers) {
+  return on === true ? picked || (offers && offers.default) || [] : null;
+}
+
+export function lensPicker({ id, offer, on, picked, rounds, disabled, onToggle, onPick }) {
+  if (!offer || !offer.length) return null;
+  return html`<div class="lens-pick">
+    <label class="check" for=${id}><input id=${id} type="checkbox" checked=${on === true} disabled=${disabled}
+      onChange=${(e) => onToggle(e.target.checked)} /> Peer review: each ticked reviewer must approve (up to ${rounds || 3} rounds, on Opus)</label>
+    ${on === true && html`<fieldset class="lenses"><legend>Reviewers</legend>
+      ${offer.map((l) => html`<label class="check" for=${id + '-' + l}><input id=${id + '-' + l} type="checkbox"
+        checked=${(picked || []).includes(l)} disabled=${disabled}
+        onChange=${(e) => onPick(toggleLens(picked || [], l, e.target.checked, offer))} /> ${lensName(l)}</label>`)}
+    </fieldset>`}
+  </div>`;
+}
+
+export function buildCustomBody({ repo, text, lenses }) {
+  const body = { repo, text: String(text).trim() };
+  if (lenses) body.peer_review = lenses; // the server adds a review line to the prompt
+  return body;
+}
+
+export function buildBody({ repo, command, args, lenses }) {
   const a = String(args).trim();
   const body = { repo, command, args: a };
-  if (command === 'prd' && peerReview === true) body.peer_review = true; // the server appends --review
+  if (lenses) body.peer_review = lenses; // the server appends --review <lenses>
   const issue = command === 'pr-grind' ? argIssue(command, a) : null;
   if (issue) body.issue = issue;
   return body;
@@ -258,6 +290,10 @@ export class Launcher extends Component {
       .then((r) => (r.ok ? r.json() : null))
       .then((s) => s && this.setState({ cmds: s.commands || [], claudeLabel: s.default || '', autoGrind: !!s.auto_grind }))
       .catch(() => {}); // no picker without settings: runs use claude
+    fetch('/api/peer-review', { headers: { Accept: 'application/json' } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((o) => o && this.setState({ offers: o }))
+      .catch(() => {}); // no peer review picker without offers
     let repos = [];
     let failed = false;
     let canBrowse = false;
@@ -311,11 +347,24 @@ export class Launcher extends Component {
     this.setState({ [k]: v, ...(hit ? { repo: hit, manual: false, repoQuery: null } : {}) });
   };
 
-  onSubmit = (ev) => this.start(ev, 'named', validate(this.state), (repo) => buildBody({ repo, command: this.state.command, args: this.state.args, peerReview: this.state.peerReview }));
+  reviewOffer = (kind) => (this.state.offers && this.state.offers.kinds[kind]) || null;
 
-  onCustom = (ev) => this.start(ev, 'custom', validateCustom(this.state), (repo) => buildCustomBody({ repo, text: this.state.text }));
+  namedLenses = () => (this.reviewOffer(this.state.command) ? pickedLenses(this.state.peerReview, this.state.lenses, this.state.offers) : null);
 
-  render({ limits }, { canBrowse, browsing, cmds, claudeLabel, autoGrind, worktree, review, repos, repo, manual, path, command, args, text, pending, form, errors, result, repoQuery, repoOpen, repoActive }) {
+  customLenses = () => pickedLenses(this.state.customReview, this.state.customPicked, this.state.offers);
+
+  onSubmit = (ev) => {
+    const lenses = this.namedLenses();
+    const errors = validate(this.state) || (lenses && !lenses.length ? { lenses: 'Tick at least one reviewer' } : null);
+    return this.start(ev, 'named', errors, (repo) => buildBody({ repo, command: this.state.command, args: this.state.args, lenses }));
+  };
+
+  onCustom = (ev) => {
+    const lenses = this.customLenses();
+    return this.start(ev, 'custom', validateCustom(this.state, lenses), (repo) => buildCustomBody({ repo, text: this.state.text, lenses }));
+  };
+
+  render({ limits }, { canBrowse, browsing, cmds, claudeLabel, autoGrind, worktree, review, repos, repo, manual, path, command, args, text, pending, form, errors, result, repoQuery, repoOpen, repoActive, offers }) {
     const set = (k) => (e) => this.setState({ [k]: e.target.value });
     const mine = (f) => (result && (form || 'named') === f ? result : null);
     const outcomeMsg = (f) => { const r = mine(f); return r && r.kind === 'duplicate'
@@ -344,7 +393,9 @@ export class Launcher extends Component {
               aria-invalid=${errors.args ? 'true' : undefined} aria-describedby=${errors.args ? 'args-error' : undefined} />`}
         ${errors.args ? html`<p id="args-error" role="alert" class="error">${errors.args}</p>` : null}
         ${limitedUntil(cmds, claudeLabel, limits) ? html`<p class="note">This account is rate limited: the run is queued and starts automatically at reset.</p>` : null}
-        ${command === 'prd' && html`<label class="check" for="peer-review"><input id="peer-review" type="checkbox" checked=${this.state.peerReview === true} onChange=${(e) => this.setState({ peerReview: e.target.checked })} /> Peer review: the critical reviewer checks the PRD until it approves</label>`}
+        ${lensPicker({ id: 'peer-review', offer: this.reviewOffer(command), on: this.state.peerReview, picked: pickedLenses(true, this.state.lenses, offers), rounds: offers && offers.max_rounds,
+          onToggle: (on) => this.setState({ peerReview: on }), onPick: (lenses) => this.setState({ lenses }) })}
+        ${errors.lenses ? html`<p role="alert" class="error">${errors.lenses}</p>` : null}
         ${command === 'run-issue' && html`<label class="check" for="auto-grind"><input id="auto-grind" type="checkbox" checked=${autoGrind === true} onChange=${(e) => this.setState({ autoGrind: e.target.checked })} /> Start review grinding when the run finishes</label>`}
         ${command === 'run-issue' && html`<label class="check" for="worktree"><input id="worktree" type="checkbox" checked=${worktree !== false} onChange=${(e) => this.setState({ worktree: e.target.checked })} /> Run in a worktree (off: the main checkout, waiting for any main-tree run already there)</label>`}
         ${command === 'run-issue' && html`<label class="check" for="review"><input id="review" type="checkbox" checked=${review !== false} onChange=${(e) => this.setState({ review: e.target.checked })} /> Run the review and fix steps (off: the dev step completes the run)</label>`}
@@ -372,6 +423,10 @@ export class Launcher extends Component {
           aria-invalid=${errors.text ? 'true' : undefined} aria-describedby=${errors.text ? 'custom-error' : undefined}></textarea>
         ${errors.text ? html`<p id="custom-error" role="alert" class="error">${errors.text}</p>` : null}
         <p class="note danger">Runs with --dangerously-skip-permissions: the command or prompt is not gated.</p>
+        ${lensPicker({ id: 'custom-review', offer: this.reviewOffer('custom'), on: this.state.customReview, picked: pickedLenses(true, this.state.customPicked, offers), rounds: offers && offers.max_rounds,
+          onToggle: (on) => this.setState({ customReview: on }), onPick: (customPicked) => this.setState({ customPicked }) })}
+        ${this.state.customReview === true && html`<p class="note">The session is asked to run the review when it's done; it isn't forced. The session shows whether it ran.</p>`}
+        ${errors.customLenses ? html`<p role="alert" class="error">${errors.customLenses}</p>` : null}
         ${outcomeMsg('custom')}
         <button type="submit" disabled=${pending}>${pending && form === 'custom' ? 'Starting...' : 'Run in selected repo'}</button>
       </form>

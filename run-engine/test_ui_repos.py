@@ -605,16 +605,69 @@ try:
     s, p = post({"repo": "o/r", "command": "run-issue", "args": "48", "review": "no"})
     assert s == 400 and "review" in err(p)
     ok("review:false appends --no-review; non-bool rejected")
-    # --- peer review: /prd gets --review; other commands ignore it
-    s, p = post({"repo": "o/r", "command": "prd", "args": "05-Work/P/F", "peer_review": True})
-    assert s == 201 and calls[-1][0] == "/prd 05-Work/P/F --review", (s, p, calls)
-    s, p = post({"repo": "o/r", "command": "prd", "args": "05-Work/P/G", "peer_review": False})
-    assert s == 201 and calls[-1][0] == "/prd 05-Work/P/G", (s, p, calls)
-    s, p = post({"repo": "o/r", "command": "run-issue", "args": "49", "peer_review": True})
-    assert s == 201 and calls[-1][0] == "/run-issue 49", (s, p, calls)
-    s, p = post({"repo": "o/r", "command": "prd", "args": "x", "peer_review": "yes"})
-    assert s == 400 and "peer_review" in err(p)
-    ok("peer_review:true appends --review to /prd only; non-bool rejected")
+    # --- peer review: a list of lenses; doc commands get --review <list>, a custom prompt a review line
+    s, p = post({"repo": "o/r", "command": "prd", "args": "05-Work/P/F", "peer_review": ["critical", "qa", "critical"]})
+    assert s == 201 and calls[-1][0] == "/prd 05-Work/P/F --review critical,qa", (s, p, calls)
+    for cmd in ("intake", "dump", "gh-issue"):
+        s, p = post({"repo": "o/r", "command": cmd, "args": "x", "peer_review": ["critical"]})
+        assert s == 201 and calls[-1][0] == f"/{cmd} x --review critical", (cmd, s, p, calls)
+    s, p = post({"repo": "o/r", "command": "prd", "args": "05-Work/P/G"})
+    assert s == 201 and calls[-1][0] == "/prd 05-Work/P/G" and p.get("peer_review") is None, (s, p, calls)
+    s, p = post({"repo": "o/r", "command": "dump", "args": "x", "peer_review": ["critical", "cto"]})
+    assert s == 400 and "dump offers" in err(p) and not calls, "a lens the command doesn't offer is refused"
+    s, p = post({"repo": "o/r", "command": "run-issue", "args": "49", "peer_review": ["critical"]})
+    assert s == 400 and "no peer review" in err(p) and not calls, "run-issue has its own review"
+    for bad in (True, "yes", [], [1]):
+        s, p = post({"repo": "o/r", "command": "prd", "args": "x", "peer_review": bad})
+        assert s == 400 and "peer_review" in err(p), bad
+    ok(
+        "peer_review: lens list appended as --review <list> to prd/intake/dump/gh-issue; not-offered, run-issue, non-list refused"
+    )
+
+    pr_root = os.path.join(data_dir, "peer-review", "custom")
+    s, p = post({"repo": "o/r", "text": "tidy the README", "peer_review": ["critical", "ux"]})
+    sent = calls[-1][0]
+    assert s == 201 and sent.startswith(
+        "tidy the README\n\nWhen the work is done, run the ai-workflow:peer-review skill"
+    ), sent
+    rd = sent.split("--dir ", 1)[1].split(" ", 1)[0]
+    assert os.path.dirname(rd) == pr_root and "--lenses critical,ux" in sent and "--since" not in sent, sent
+    assert open(os.path.join(rd, "ask.md"), encoding="utf-8").read() == "tidy the README", (
+        "the prompt verbatim, by the server"
+    )
+    rec = ui_sessions.load(p["id"])
+    assert rec["peer_review_dir"] == rd, rec
+    assert json.loads(req(f"/api/sessions/{p['id']}")[1])["peer_review"] == "not run", "post-check reads round state"
+    subprocess.run(
+        ["git", "-C", REPO_A, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "c"],
+        check=True,
+    )
+    head = subprocess.run(["git", "-C", REPO_A, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    s, p = post({"repo": "o/r", "text": "/prd an idea", "peer_review": ["performance"]})
+    assert s == 201 and f"--since {head}." in calls[-1][0] and "--review" not in calls[-1][0], (
+        "custom: HEAD at spawn; never --review"
+    )
+    s, p = post({"repo": "o/r", "text": "x", "peer_review": ["nope"]})
+    assert s == 400 and "custom offers" in err(p)
+    before = set(os.listdir(pr_root))
+    with mock.patch.object(ui_runner, "start", side_effect=ui_runner.RunnerError("boom")):
+        s, _, _ = req(
+            "/api/sessions", "POST", json.dumps({"repo": "o/r", "text": "x", "peer_review": ["critical"]}).encode()
+        )
+    assert s == 502 and set(os.listdir(pr_root)) == before, "a failed spawn leaves no review dir behind"
+    s, data, _ = req("/api/peer-review")
+    offers = json.loads(data)
+    assert s == 200 and offers["default"] == ["critical"] and "cto" not in offers["kinds"]["dump"], offers
+    assert len(offers["kinds"]["custom"]) == 7 and offers["max_rounds"] == 3, offers
+    assert set(offers) == {"default", "max_rounds", "kinds"} and all(
+        isinstance(v, list) for v in offers["kinds"].values()
+    )
+    assert "prompt" not in data.decode() and "rubric" not in data.decode(), "offers only: no lens prompts or rubric"
+    assert req("/api/peer-review", "POST", b"{}")[0] in (404, 405), "read-only"
+    assert req("/api/peer-review", host="evil.example")[0] == 403, "behind the same Host guard as every /api route"
+    ok(
+        "custom prompt: fresh review dir, ask.md verbatim, review line with --dir/--lenses/--since HEAD, post-check, offers"
+    )
     s, body, _ = req("/api/maintree/release", "POST", json.dumps({"owner": "o", "repo": "r"}).encode())
     assert s == 200 and json.loads(body) == {"released": False}, (s, body)
     s, body, _ = req("/api/maintree/release", "POST", json.dumps({"owner": "o"}).encode())

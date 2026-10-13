@@ -196,13 +196,60 @@ def _read(path: str) -> str:
         die(3, f"cannot read the artifact: {exc}")
 
 
-def _lenses(raw: str | None, kind: str, policy: dict) -> list[str]:
-    picked = [x.strip() for x in raw.split(",") if x.strip()] if raw else list(policy["default_lenses"])
-    offer = policy["kinds"][kind]["offer"]
+def offers() -> dict:
+    """What the web UI needs to draw the lens picker: no lens is hardcoded in the frontend."""
+    policy = _policy()
+    return {
+        "default": list(policy["default_lenses"]),
+        "max_rounds": policy["max_rounds"],
+        "kinds": {k: list(v["offer"]) for k, v in policy["kinds"].items()},
+    }
+
+
+def check_lenses(kind: str, picked: list) -> list[str]:
+    """The picked lenses, deduplicated; ValueError names the offered set when one isn't offered."""
+    kinds = _policy()["kinds"]
+    if kind not in kinds:
+        raise ValueError(f"{kind or 'this command'} has no peer review; one of {', '.join(kinds)}")
+    offer = kinds[kind]["offer"]
     bad = [x for x in picked if x not in offer]
     if bad or not picked:
-        die(2, f"{kind} offers the lenses {', '.join(offer)}; got {', '.join(bad) or 'none'}")
+        raise ValueError(f"{kind} offers the lenses {', '.join(offer)}; got {', '.join(map(str, bad)) or 'none'}")
     return list(dict.fromkeys(picked))
+
+
+def _lenses(raw: str | None, kind: str, policy: dict) -> list[str]:
+    picked = [x.strip() for x in raw.split(",") if x.strip()] if raw else list(policy["default_lenses"])
+    try:
+        return check_lenses(kind, picked)
+    except ValueError as exc:
+        die(2, str(exc))
+
+
+def make_dir(kind: str, name: str) -> str:
+    """One review dir per run: FileExistsError rather than reuse."""
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name):
+        raise ValueError(f"{name!r}: letters, digits, '.', '_' and '-' only")
+    path = os.path.join(data_dir(), "peer-review", kind, name)
+    os.makedirs(path)
+    return path
+
+
+def status(review_dir: str) -> str:
+    """The post-check a session shows: read from round state, never from the dir existing."""
+    n = _rounds(review_dir)
+    if n == 0:
+        return "not run"
+    try:
+        with open(os.path.join(review_dir, f"round-{n}", "decision.json"), encoding="utf-8") as fh:
+            d = json.load(fh)
+    except (OSError, ValueError):
+        return "unfinished"
+    if d.get("action") == "done":
+        return "approved"
+    if d.get("reason") == "cap":
+        return "stopped at cap"
+    return "unfinished"
 
 
 def _open(review_dir: str, rnd: int, path: str, text: str, prior, max_rounds: int, kind: str, lenses: list) -> None:
@@ -231,14 +278,12 @@ def cmd_new(args) -> None:
     else:
         slug = re.sub(r"[^A-Za-z0-9._-]+", "-", args.slug or "").strip("-.") or "run"
         name = f"{slug}-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name):
-        die(2, f"--id {name!r}: letters, digits, '.', '_' and '-' only")
-    path = os.path.join(data_dir(), "peer-review", args.kind, name)
     try:
-        os.makedirs(path)
-    except FileExistsError:
-        die(1, f"{path} already exists: one review dir per run, never reused")
-    print(path)
+        print(make_dir(args.kind, name))
+    except ValueError as exc:
+        die(2, f"--id {exc}")
+    except FileExistsError as exc:
+        die(1, f"{exc.filename} already exists: one review dir per run, never reused")
 
 
 def cmd_next(args) -> None:

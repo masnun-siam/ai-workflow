@@ -4604,6 +4604,8 @@ for _w in (
     "## Answer",
     "## Diff",
     "ask.md",
+    "never mint another",
+    "the kind is `custom`",
     "Never pick a start point yourself",
     "Uncommitted changes only",
     "(@{u})",
