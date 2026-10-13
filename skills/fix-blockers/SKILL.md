@@ -26,12 +26,6 @@ with `aiw ask`, passing the JSON through a quoted heredoc (`aiw ask <<'EOF'` …
 option first with `(Recommended)` on its label, then end your turn; the answer arrives as your next
 message. Otherwise use AskUserQuestion.
 
-### Flow auto mode
-
-When the system prompt contains `Flow auto mode`, this run is the Blockers step of the aiw ui
-guided Flow. Starting that step was the user's confirmation, so Step 3 asks nothing and applies
-the edges. Print the `→ next:` line as text only.
-
 ## Step 1: Find the epic
 
 Resolve `<owner>/<repo>` with `gh repo view --json nameWithOwner -q .nameWithOwner`. The epic

@@ -16,8 +16,9 @@ I have a ${1:-bug / feature request / task / improvement} to log as a GitHub iss
    Read it with `obsidian vault=notes read path="<path>"`. `Bugs.md` holds every bug of the feature,
    one `## <date>: <title>` block each; `Tasks.md` holds every task, one `- [ ] <date>: <text>` line
    each (unchecked lines only). Work on one: with one, take it; with more, ask which one (see
-   **Asking the user**), newest first (the newest is the one right above `## Related`); in Flow auto
-   mode take the newest without asking. Use only the chosen block as `Details:` below, and its type
+   **Asking the user**), newest first (in `Bugs.md` the newest is the block right above `## Related`;
+   in `Tasks.md` it is the last unchecked `- [ ]` line, since `/dump` appends below `## Related`); in
+   Flow auto mode take the newest without asking. Use only the chosen block as `Details:` below, and its type
    (`bug` from `Bugs.md`, `task` from `Tasks.md`) in place of
    `${1:-bug / feature request / task / improvement}`. Record
    `Source: <path> — <block heading>` in the created issue's **Notes**. Then skip the `/intake`

@@ -35,3 +35,7 @@ The wasensi skills are tied to that project (its stack, its staging branch, its 
 - The peer-review kind was renamed `prd` → `create-prd`, so `aiw peer-review new prd` no longer works; anything that passes the old kind must change.
 - Old `/prd` sessions in `aiw ui` still map to the Flow's PRD step, and an old `docs/prd/` path still names its flow.
 - The fork is one-off, not tracked. The ported sources are pinned at wasensi `staging` commit `051e5b8304605c5e9147394d66fbf2dd3818b90a`; a later improvement in wasensi is ported by hand, diffing from that sha.
+
+## Later change, 2026-10-14
+
+The Guided Flow's Blockers step was removed. `/refine-issues` already sets the native blocked-by links when it creates the issues (`gh issue create --blocked-by`), so the step did almost nothing. Decision 6's next line is now `→ next: herdr-dispatch <epic>`; when this `gh` lacks `--blocked-by`, the report says to run `/fix-blockers <epic>` first. `/flow` and the UI Flow run Dump → PRD → Tasks → Issues → Dispatch, and `/fix-blockers` stays a standalone command. The decisions above are otherwise unchanged.

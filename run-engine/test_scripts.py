@@ -4307,7 +4307,17 @@ for _w in ("its `Issue:` field", "the label `prd-<slug>`", "same `Task <n>` note
     assert _mo != -1, (
         f"refine-issues match order: {_w!r} missing or out of order (Issue, label+note, sub-issues, title)"
     )
-assert "\u2192 next: /fix-blockers <epic>" in _ri, "refine-issues next line"
+# The Blockers step is gone: refine-issues hands the epic straight to dispatch; on an old gh it
+# names /fix-blockers in the report, before that last line.
+_ri_s9 = _slice(_ri_raw, "9. **Report**", "## Stop and ask when").strip().splitlines()
+assert _ri_s9[-1].strip() == "`\u2192 next: herdr-dispatch <epic>`", f"refine-issues last line: {_ri_s9[-1]!r}"
+assert "\u2192 next: /fix-blockers" not in _ri, "refine-issues no longer hands off to /fix-blockers"
+_ri_fb = "Run `/fix-blockers <epic>` first: this gh could not set the blocked-by links."
+_ri_s9w = _ws("\n".join(_ri_s9))
+assert _ri_fb in _ri_s9w, "refine-issues report names /fix-blockers when --blocked-by fell back"
+assert _ri_s9w.index(_ri_fb) < _ri_s9w.index("\u2192 next: herdr-dispatch <epic>"), (
+    "fallback sentence before the last line"
+)
 # gh-issue's Flow auto mode project/fields bullets, copied verbatim. The epic-split paragraph now lives
 # only here (gh-issue files no epic), so pin its failure-state sentence directly.
 _gh_raw = _read("commands", "gh-issue.md")
@@ -4378,7 +4388,7 @@ assert "depend on a task in another epic?" in _ws(_slice(_ct_raw2, "6. **Check",
 )
 ok("refine-issues: split gets all of an epic's children, same-epic deps only, old gh skips blocked-by read-back")
 
-# Six-flow step 5: /fix-blockers previews and applies `aiw epic blockers`, splitting first when no epic.json is here.
+# Standalone /fix-blockers (no longer a Flow step) previews and applies `aiw epic blockers`, splitting first when no epic.json is here.
 _fb_path = os.path.join(HERE, "..", "skills", "fix-blockers", "SKILL.md")
 assert os.path.isfile(_fb_path), "skills/fix-blockers/SKILL.md missing"
 _fb = _ws(open(_fb_path, encoding="utf-8").read())
@@ -4554,7 +4564,7 @@ for _shape, _stage in (
     ("PRD path", "create-tasks"),
     ("task list", "refine-issues"),
     ("Bugs.md", "gh-issue"),
-    ("epic parent", "fix-blockers"),
+    ("epic parent", "dispatch"),
     ("Issue numbers", "dispatch"),
 ):
     assert re.search(rf"{_shape}.{{0,160}}\| {_stage} \|", _args187, re.I), f"#187 entry shape {_shape} -> {_stage}"
@@ -4562,14 +4572,22 @@ assert "Dump.md" in _args187, "#187 Dump.md path enters at create-prd"
 ok("#187 /flow exists and names its six entry shapes")
 _route187 = _ws(_key183(_fs, "Routing after dump"))
 for _cls, _path in (
-    ("New feature", "create-prd \u2192 create-tasks \u2192 refine-issues \u2192 fix-blockers \u2192 dispatch"),
-    ("Change request", "create-prd"),
+    ("New feature", "create-prd \u2192 create-tasks \u2192 refine-issues \u2192 dispatch"),
+    ("Change request", r"create-prd \(update path\) \u2192 create-tasks \u2192 refine-issues \u2192 dispatch"),
     ("Bug report", "gh-issue \u2192 dispatch"),
     ("Feature-scoped task", "gh-issue \u2192 dispatch"),
     ("Unclassifiable", "stop"),
 ):
     assert re.search(rf"{_cls}.{{0,120}}{_path}", _route187, re.I), f"#187 routing {_cls}"
 assert "| Bug report | gh-issue \u2192 dispatch |" in _route187, "#187 a bug goes straight to gh-issue"
+assert "### fix-blockers" not in _flow and "fix-blockers \u2192" not in _flow, "flow: no Blockers stage"
+assert "\u2192 next: /fix-blockers" not in _flow and "| fix-blockers |" not in _flow, "flow: no fix-blockers entry"
+assert "Its final line is `\u2192 next: herdr-dispatch <epic>`" in _ws(
+    _flow.split("### refine-issues")[1].split("###")[0]
+)
+assert re.search(r"epic parent.{0,80}\u2192 next: herdr-dispatch.{0,40}\| dispatch \|", _args187), (
+    "flow: epic parent enters at dispatch"
+)
 assert "`approve <prd-path>`" in _ws(_flow), "#187 approve takes the PRD path"
 assert "Approve the PRD, file its epics, and continue to create-tasks (Recommended)" in _flow, (
     "#187 the create-prd boundary names the approval"
@@ -4607,7 +4625,8 @@ for _w in (
     "Tasks.md",
     'obsidian vault=notes read path="<path>"',
     "## <date>: <title>",
-    "right above `## Related`",
+    "in `Bugs.md` the newest is the block right above `## Related`",
+    "in `Tasks.md` it is the last unchecked `- [ ]` line",
     "newest first",
     "Flow auto mode",
     "Source: <path> — <block heading>",
@@ -4615,6 +4634,7 @@ for _w in (
 ):
     assert _w in _s0, f"C1 gh-issue step 0 lacks {_w!r}"
 assert _s0.index("Bugs.md") < _s0.index("detectable source shapes"), "C1 the vault-note rule precedes the /intake check"
+assert "the newest is the one right above `## Related`" not in _s0, "C1 /dump appends Tasks.md lines after ## Related"
 ok("C1 gh-issue step 0 reads one block of a vault Bugs.md/Tasks.md note before the /intake shape check")
 
 _cpa = _skill_sections("skills/create-prd/SKILL.md")

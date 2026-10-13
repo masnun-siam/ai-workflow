@@ -2713,6 +2713,10 @@ assert "'critical'" not in _la and "'critical'" not in _fl, "no lens is hardcode
 _se = read(os.path.join(STATIC, "session.js")).decode()
 assert "meta.peer_review" in _se and "peer review: ${meta.peer_review}" in _se, "a session shows its peer review status"
 ok("Flow PRD step and both New run forms offer the lens picker from /api/peer-review; session shows the post-check")
+assert "blockers" not in _fl and "fix-blockers" not in _fl, (
+    "flow.js: no Blockers step (refine-issues sets blocked-by links)"
+)
+ok("flow.js has no Blockers step")
 
 # The flow.js stepper checks run in the default mode (so in run_tests.sh and CI). The other
 # --view blocks are not run by the suite; ponytail: moving each back in means repairing it first.
@@ -2736,9 +2740,11 @@ assert.deepEqual(F.handoff('dump', { kind: 'result', text: '\u2192 next: /create
 assert.deepEqual(F.handoff('dump', { kind: 'result', text: '\u2192 next: /gh-issue 05-Work/P/F/Tasks.md' }), { tasks: '05-Work/P/F/Tasks.md' });
 assert.deepEqual(F.handoff('prd', { kind: 'result', text: '\u2192 next: /ai-workflow:create-tasks 05-Work/P/F/PRD.md' }), { prd: '05-Work/P/F/PRD.md' });
 assert.deepEqual(F.handoff('tasks', { kind: 'result', text: '\u2192 next: /gh-issue docs/tasks/f.md' }), { tasks: 'docs/tasks/f.md' });
-assert.deepEqual(F.handoff('issues', { kind: 'result', text: '\u2192 next: /fix-blockers #40' }), { parent: '40' });
+// The Blockers step is gone (refine-issues sets blocked-by links itself): refine-issues hands the epic to dispatch.
+assert.deepEqual(F.handoff('issues', { kind: 'result', text: '\u2192 next: herdr-dispatch 12' }), { issues: [12] });
+assert.ok(F.handoff('issues', { kind: 'result', text: '\u2192 next: /fix-blockers #40' }).error);
 assert.deepEqual(F.handoff('issues', { kind: 'result', text: '\u2192 next: herdr-dispatch 12 13' }), { issues: [12, 13] });
-assert.deepEqual(F.handoff('blockers', { kind: 'result', text: '\u2192 next: herdr-dispatch 40' }), { issues: [40] });
+assert.ok(F.handoff('blockers', { kind: 'result', text: '\u2192 next: herdr-dispatch 40' }).error);
 assert.ok(F.handoff('prd', { kind: 'result', text: '\u2192 next: /gh-issue PRD.md' }).error);
 assert.ok(F.handoff('dump', { kind: 'result', text: 'Standalone task filed.' }).error);
 assert.ok(F.handoff('prd', { kind: 'result', text: '\u2192 next: herdr-dispatch 1' }).error);
@@ -2767,7 +2773,9 @@ assert.equal(F.stepFromState({}), 'dump');
 assert.equal(F.stepFromState({ folder: 'f' }), 'prd');
 assert.equal(F.stepFromState({ folder: 'f', prd: 'p' }), 'tasks');
 assert.equal(F.stepFromState({ folder: 'f', prd: 'p', tasks: 't' }), 'issues');
-assert.equal(F.stepFromState({ folder: 'f', prd: 'p', tasks: 't', parent: '40' }), 'blockers');
+// An old saved flow with a parent field lands where its other fields say.
+assert.equal(F.stepFromState({ folder: 'f', prd: 'p', tasks: 't', parent: '40' }), 'issues');
+assert.notEqual(F.stepFromState({ parent: '12' }), 'blockers');
 assert.equal(F.stepFromState({ folder: 'f', prd: 'p', tasks: 't', parent: '40', issues: [40] }), 'dispatch');
 assert.equal(F.stepFromState({ folder: 'f', prd: 'p', issues: [1] }), 'dispatch');
 assert.equal(F.stepFromState({ issues: [] }), 'dump');
@@ -2787,11 +2795,11 @@ assert.deepEqual(parseRoute(F.dispatchHref([12, 13])).issues, [12, 13]);
 out('flow: flowHash round-trips through parseRoute; dispatch link carries the issues');
 assert.equal(F.flowProgress(null), null);
 assert.equal(F.flowProgress({ step: 'dump', running: false }), null);
-assert.deepEqual(F.flowProgress({ step: 'dump', running: true }), { done: 0, total: 6 });
-assert.deepEqual(F.flowProgress({ step: 'issues', running: false }), { done: 3, total: 6 });
-assert.deepEqual(F.flowProgress({ step: 'dispatch', running: false }), { done: 5, total: 6 });
+assert.deepEqual(F.flowProgress({ step: 'dump', running: true }), { done: 0, total: 5 });
+assert.deepEqual(F.flowProgress({ step: 'issues', running: false }), { done: 3, total: 5 });
+assert.deepEqual(F.flowProgress({ step: 'dispatch', running: false }), { done: 4, total: 5 });
 assert.equal(F.sessionStep('/ai-workflow:create-tasks PRD.md'), 'tasks');
-assert.equal(F.sessionStep('/fix-blockers 40'), 'blockers');
+assert.equal(F.sessionStep('/fix-blockers 40'), null);
 assert.equal(F.sessionStep('/ai-workflow:gh-issue PRD.md'), 'issues');
 assert.equal(F.sessionStep('/dump x'), 'dump');
 assert.equal(F.sessionStep('/dumpster'), null);

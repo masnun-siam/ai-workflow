@@ -86,10 +86,13 @@ assert (
 )  # same work, new repo spelling
 print("ok create, update, archive, prune empty")
 
-# ---- six steps: dump -> prd -> tasks -> issues -> blockers -> dispatch (mirror of flow.js stepFromState)
+# ---- five steps: dump -> prd -> tasks -> issues -> dispatch (mirror of flow.js stepFromState)
 assert ui_flows.step({"folder": "f", "prd": "p"}) == "tasks"
 assert ui_flows.step({"folder": "f", "prd": "p", "tasks": "docs/tasks/t.md"}) == "issues"
-assert ui_flows.step({"folder": "f", "prd": "p", "tasks": "t", "parent": "40"}) == "blockers"
+assert (
+    ui_flows.step({"folder": "f", "prd": "p", "tasks": "t", "parent": "40"}) == "issues"
+)  # an old record with a parent
+assert ui_flows.step({"parent": "12"}) != "blockers"
 assert ui_flows.step({"parent": "40", "issues": [40]}) == "dispatch"
 assert (
     ui_flows.step({"folder": "f", "prd": "p", "issues": [41, 42]}) == "dispatch"
@@ -100,7 +103,7 @@ assert ui_flows.name({"prd": "docs/prd/csv-export.md"}) == "csv-export"
 assert ui_flows.name({"prd": "docs/prds/csv-export.md"}) == "csv-export"
 assert ui_flows.name({"tasks": "docs/tasks/csv-export.md"}) == "csv-export"
 assert ui_flows.name({"prd": "05-Work/P/Bookings Export/PRD.md"}) == "Bookings Export"
-print("ok six steps: tasks and parent fields, step order, names from repo doc paths")
+print("ok five steps: tasks and parent fields, step order, names from repo doc paths")
 
 # ---- issue progress from raw stream lines
 
