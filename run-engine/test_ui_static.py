@@ -2701,6 +2701,11 @@ finally:
     srv.shutdown()
     shutil.rmtree(tmp, ignore_errors=True)
 
+_fl, _la = read(os.path.join(STATIC, "flow.js")).decode(), read(os.path.join(STATIC, "launcher.js")).decode()
+assert "flow-peer-review" in _fl and "peerReview: this.state.peerReview" in _fl, "Flow PRD step offers peer review"
+assert 'id="peer-review"' in _la and "peerReview: this.state.peerReview" in _la, "New run offers peer review for prd"
+ok("Flow PRD step and New run (prd) offer the peer-review checkbox")
+
 # The flow.js stepper checks run in the default mode (so in run_tests.sh and CI). The other
 # --view blocks are not run by the suite; ponytail: moving each back in means repairing it first.
 FLOW_JS = r"""
@@ -2800,6 +2805,11 @@ assert.deepEqual(FS.mergeRows({ reading: false, rows: [{ number: 64, title: 'A',
 assert.equal(FS.mergeRows(null, [7]).reading, false);
 assert.equal(FS.mergeRows(null, []).reading, true);
 out('flowside: relative time, issue track states, frontmatter stripped');
+const L = await import(process.env.APP_URL.replace('app.js', 'launcher.js'));
+assert.deepEqual(L.buildBody({ repo: 'o/r', command: 'prd', args: ' 05-Work/P/F ', peerReview: true }), { repo: 'o/r', command: 'prd', args: '05-Work/P/F', peer_review: true });
+assert.deepEqual(L.buildBody({ repo: 'o/r', command: 'prd', args: 'x' }), { repo: 'o/r', command: 'prd', args: 'x' });
+assert.deepEqual(L.buildBody({ repo: 'o/r', command: 'dump', args: 'x', peerReview: true }), { repo: 'o/r', command: 'dump', args: 'x' });
+out('launcher: buildBody sends peer_review only for prd, only when asked');
 """
 if shutil.which("node"):
     import subprocess

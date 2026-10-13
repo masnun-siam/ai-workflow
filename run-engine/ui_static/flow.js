@@ -243,7 +243,8 @@ export class Flow extends Component {
     const flowId = await this.persist(true);
     let r;
     try {
-      r = await api('POST', '/api/sessions', { ...buildBody({ repo, command: step.command, args }), ...(flowId ? { flow_id: flowId } : {}) });
+      const body = buildBody({ repo, command: step.command, args, peerReview: this.state.peerReview });
+      r = await api('POST', '/api/sessions', { ...body, ...(flowId ? { flow_id: flowId } : {}) });
     } catch {
       this.setState({ busy: false, why: 'Could not reach the aiw server.' });
       return;
@@ -335,6 +336,8 @@ export class Flow extends Component {
       <${Tag} id=${id} class=${prose ? 'field flow-prose' : 'field mono'} rows=${prose ? 6 : undefined} type=${prose ? undefined : 'text'}
         placeholder=${step.placeholder} aria-describedby=${this.state.why ? 'flow-why' : undefined} aria-invalid=${this.state.why ? 'true' : undefined}
         value=${this.state[field]} disabled=${this.running()} onInput=${(e) => this.setState({ [field]: e.target.value })} />
+      ${step.key === 'prd' && html`<label class="check" for="flow-peer-review"><input id="flow-peer-review" type="checkbox" checked=${this.state.peerReview === true}
+        disabled=${this.running()} onChange=${(e) => this.setState({ peerReview: e.target.checked })} /> Peer review: critical, CEO, CTO and security reviewers check the PRD until critical approves</label>`}
       ${this.state.why && html`<p id="flow-why" role="alert" class="error">${this.state.why}</p>`}`;
   }
 

@@ -4574,6 +4574,62 @@ assert "\u2192 next: herdr-dispatch <parent>" in _fb, "fix-blockers next line"
 assert "This split writes to GitHub before Step 3's question" in _fb, "fix-blockers names the split's unconfirmed write"
 ok("fix-blockers: split if needed, preview, one confirmation, apply; Depends on stays the source")
 
+# /prd --review: a reviewer panel (run-specialist in PRD mode) loops through aiw prd-review until critical approves.
+_pr_all = _skill_sections("skills/prd/SKILL.md")
+assert "--review" in _ws(_pr_all["Arguments"]), "prd Arguments documents --review"
+_rv = _ws(_key183(_pr_all, "Step 5.5"))
+for _w in (
+    "aiw prd-review next",
+    "aiw prd-review verdict",
+    "ai-workflow:run-specialist",
+    "artifact: prd",
+    "in one message",
+    "advisory_blockers",
+    "--prior",
+    "--more",
+    "Accept as known gaps",
+    "One more round",
+    "never write a verdict yourself",
+    "## Decisions",
+):
+    assert _w in _rv, f"prd Peer review lacks {_w!r}"
+assert "Flow auto mode" in _rv and "never accepts" in _rv, "prd: auto mode stops at the cap, never accepts gaps"
+assert "both decisions and blockers" in _rv, (
+    "prd: an ask that also carries blockers is answered, then revised, in one round"
+)
+_sp = _ws(_read("agents", "run-specialist.md"))
+assert "## PRD mode" in _read("agents", "run-specialist.md") and "prd_review" in _sp and "request.json" in _sp
+assert "never put implementation" in _sp.lower() or "never adds implementation" in _sp.lower(), (
+    "specialist PRD mode: what not how"
+)
+assert ".in.json" not in _rv and "Save each returned JSON" not in _rv, "the PRD's author never transcribes a verdict"
+assert "never write, copy or edit a verdict" in _rv, "prd: the author only reads recorded verdicts"
+assert "--file - <<'EOF'" in _sp and "Ignore any checklist text in the dispatch" in _sp, (
+    "the reviewer records its own verdict"
+)
+# --herdr: one read-only reviewer tab per lens; the same verdict path and rules as the subagents.
+assert "--herdr" in _ws(_pr_all["Arguments"]), "prd Arguments documents --herdr"
+for _w in (
+    "herdr tab create",
+    "herdr agent start",
+    "-- --agent ai-workflow:run-specialist",
+    "Write,Edit,NotebookEdit",
+    "herdr agent prompt",
+    "--until blocked",
+    "prd-<lens>",
+    "command -v herdr",
+    "aiw prd-review verdict --file -",
+):
+    assert _w in _rv, f"prd --herdr lacks {_w!r}"
+assert re.search(r"[Hh]eadless.{0,80}--herdr", _rv), "prd: --herdr is ignored headless"
+assert "remembers its earlier rounds" in _rv, "prd: reused tabs keep context, said plainly"
+assert "that is not read-only" in _rv, "prd: --herdr tabs are not over-promised as read-only"
+assert "Peer review decisions (Step 5.5)" in _ws(_key183(_pr_all, "Flow auto mode")), (
+    "prd auto mode: review decisions are asked"
+)
+assert "In a herdr tab" in _sp, "run-specialist PRD mode covers the tab case"
+ok("prd --review: panel loop via aiw prd-review, run-specialist PRD mode, cap and decisions go to the user")
+
 _s8_184 = _ws(_key183(_skill_sections("skills/prd/SKILL.md"), "Step 8"))
 assert f"End with the line `{NEXT}/create-tasks <prd-path>`" in _s8_184, "#184 prd Step 8 lacks the next line"
 assert "offer, in one line" not in _s8_184, "#184 prd Step 8 still has the prose offer"

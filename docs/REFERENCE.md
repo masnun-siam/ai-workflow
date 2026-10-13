@@ -7,6 +7,7 @@
 | `/ai-workflow:run-issue <n> [--full] [--no-review] [--grind]` | the full pipeline: issue → reviewed PR (`--no-review` skips review and fix; `--grind` keeps working the PR's review rounds after the handback, off by default). Accepts an epic parent. |
 | `/ai-workflow:intake <source>` | normalize a Sentry link, BRD file, or vault note into an issue brief — used internally by `/gh-issue` and `/run-issue` |
 | `/ai-workflow:gh-issue` | file a well-formed issue; always decomposes first — one task files one issue; two or more save the task list to `docs/tasks/<slug>.md` and file one refined issue per task, ordered by `Depends on: #n` lines, under an `epic` parent; `/gh-issue docs/tasks/<slug>.md` files a saved list, one question round per task |
+| `/ai-workflow:prd <requirement \| feature-folder> [--review [--herdr]]` | grill a requirement into a PRD saved to `docs/prd/<slug>.md` and the vault; `--review` runs the critical/CEO/CTO/security panel until critical approves (`--herdr`: one herdr tab per reviewer, terminal only); `--update` records later decisions |
 | `/ai-workflow:create-tasks <prd \| problem-statement>` | break a problem statement and its PRD into a saved, ordered task list (`docs/tasks/<slug>.md`) using `/gh-issue`'s decomposition rules; files no issues. `/gh-issue docs/tasks/<slug>.md` then files them |
 | `/ai-workflow:fix-blockers <parent>` | set GitHub's native "blocked by" relations between an epic's children from their `Depends on:` lines: previews, asks once, writes only the missing edges, reports (never deletes) edges no line names |
 | `/ai-workflow:jira-to-gh <KEY>` | decompose a Jira ticket and file flat issues the same way as `/gh-issue` (one issue for a single task; two or more saved to `docs/tasks/<slug>.md` and filed flat) |
@@ -41,6 +42,7 @@ aiw gitnexus sync|index|clean      the code graph (best-effort)
 aiw project-status                 GitHub Projects (best-effort)
 aiw epic split|init|next|status    epic decomposition and sequencing
 aiw epic blockers <dir> [--dry-run]   GitHub blocked-by edges from the children's Depends on lines
+aiw prd-review next|verdict <dir>     PRD peer review: open/decide rounds, record a checked verdict
 aiw ui [--port N] [--allow-host HOST]  local web UI to start and track sessions
 ```
 

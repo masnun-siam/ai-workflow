@@ -4,6 +4,26 @@
 
 ### Added
 
+- **`/prd --review`: a reviewer panel before the review gate.** Critical (completeness, the only
+  lens that can hold the PRD), CEO (product value), CTO (feasibility against the repo) and
+  security review the draft in parallel as `run-specialist` in its new PRD mode. `aiw prd-review`
+  checks every verdict and decides each round: blockers are fixed and every finding gets a
+  recorded disposition, product decisions are asked of you and written into `## Decisions`, and
+  after the round budget you choose to accept known gaps, run one more round, or stop.
+  `--herdr` (terminal) opens one herdr tab per reviewer that you can watch and talk to, started
+  as `claude --agent ai-workflow:run-specialist` with Write/Edit disallowed. Checked: the tab has
+  no file-editing tools, but its shell is not narrowed (a probe's `touch` ran), so shell commands
+  follow your normal permissions; it is not read-only. Code search works through `rg`. Tabs
+  are reused across rounds, so a reviewer remembers its earlier rounds. In `aiw ui`, a **Peer
+  review** checkbox on the Flow's PRD step and on New run for `prd` adds `--review` (the UI always
+  uses subagents).
+- **`aiw prd-review next|verdict`.** The engine for PRD peer review. A panel of single-lens
+  reviewers (`prd_review.lenses` in `config.json`: critical, CEO, CTO, security, sharing one
+  severity rubric) reviews a PRD in rounds. `verdict` refuses a finding that neither quotes the
+  PRD nor names one of its headings, a stale PRD hash, an old round, or more than 8 findings.
+  `next` decides: only the blocking (critical) lens holds the PRD, a finding that needs a product
+  decision goes to the user, an advisory blocker is listed on its own, and a spent round budget
+  asks the user (`--more` opens exactly one more round), never auto-approving.
 - **`/fix-blockers <parent>`.** Previews and then sets an epic's GitHub "blocked by" relations
   through `aiw epic blockers`, after one confirmation. A parent filed on another machine is split
   first, as Epic mode does.
