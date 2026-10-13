@@ -1,13 +1,16 @@
 ---
 description: Create a GitHub issue with codebase context
-argument-hint: "[bug | feature | task | improvement] <details | sentry-url | file-path | vault-note>"
+argument-hint: "[bug | feature | task | improvement] <details | sentry-url | file-path | vault-note> [--review [<lens,lens>] [--herdr]]"
 ---
 
 > **Paths.** `<...>` placeholders below are keys from `aiw paths` (run it; `aiw` is
 > on `PATH` via the plugin's `bin/`). Substitute the printed value; never guess a path.
 I have a ${1:-bug / feature request / task / improvement} to log as a GitHub issue.
 
-0. **Source check.** First, a saved task list: if `$@` is a `docs/tasks/<slug>.md` file whose
+0. **Source check.** Before anything else, remove `--review`, the token after it when that token
+   doesn't start with `--` (the picked lenses), and `--herdr` from `$@`, and remember them for
+   **Peer review** below. Every later `$@` in this file, including the `/intake` call, means the
+   stripped value, so `/intake` never reviews the brief a second time. Then, first, a saved task list: if `$@` is a `docs/tasks/<slug>.md` file whose
    tasks are `## Task <n>` blocks (what `/create-tasks` or step 3.6 saved), the list is already
    decomposed and approved. Skip `/intake` and steps 1–3.6, and take `<slug>` from the file name.
    Follow **Saved task list and the epic** at the end of this file first (inputs, preview, and
@@ -88,7 +91,7 @@ step 4, not a separate range, and it is still fully bound by this rule), this sk
 ever creates a GitHub issue. It never touches code.**
 - NEVER use Write, Edit, or NotebookEdit on any file in the repo.
 - NEVER run a mutating shell command (`git commit`, `git checkout -b`, package installs, formatters, codemods, etc.).
-- The ONLY writes permitted are the temp body file at `/tmp/gh-issue-body.md`, the `gh issue create` / `gh issue edit` / `gh project` calls below, `aiw ask` when headless (records the question in the UI session, outside the repo), and the notes-vault dump in step 7 (that's a different vault, not the repo, and goes through the `dump` skill's own confirmation).
+- The ONLY writes permitted are the **Peer review** draft under `<data_dir>` (outside the repo), the temp body file at `/tmp/gh-issue-body.md`, the `gh issue create` / `gh issue edit` / `gh project` calls below, `aiw ask` when headless (records the question in the UI session, outside the repo), and the notes-vault dump in step 7 (that's a different vault, not the repo, and goes through the `dump` skill's own confirmation).
 - The sole exception to the rules above is the step 3.6 task-list save, and only when its conditions hold: (a) `docs/tasks/<slug>.md` written via the Write tool in step 3.6 and edited only to fill `Issue:` slots in `4-FLAT` (an override of the no-Write/no-Edit rule for that one path only); (b) the Obsidian `Tasks.md` via `obsidian vault=notes`, only when the user chose Obsidian, placed the way `/dump` does, plus the vault sibling writes `/dump`'s linking rules produce (the Index append and Related link); (c) the wiki clone/commit/push of `Tasks-<Title>.md` in a scratchpad clone, only when the user chose the wiki and confirmed the push (an override of the no-mutating-shell rule for that clone only). It covers nothing else: no other repo file, and no `git add` or commit of `docs/tasks/`.
 - **Saved task list and the epic** adds exactly two more: `aiw epic split` when `4-FLAT` ran
   (sub-issue links, the parent's `## Tasks` checklist, and `epic.json` under `<runs_dir>`, outside
@@ -170,6 +173,7 @@ Do the following:
      destination by name, then continue. If the local write itself fails, stop before
      creating any issue.
 4. Then create a GitHub issue on the current repo:
+   - With `--review`, run **Peer review** (below) on the body before this create, and file the reviewed body.
    - Write the full body to `/tmp/gh-issue-body.md` using the write tool
    - Every issue this command creates carries the `refined` label (unconditional). Ensure it
      exists once per run, before the first create (idempotent, cheap):
@@ -232,7 +236,8 @@ One issue per task from the step 3.6 list, each standalone.
 2. Write one complete, DoR-passing body per task, using the same section list as step 4.
    Context is inlined, never referenced: a task body must stand alone. Each How covers
    only its own task. Notes links `Task <n> of docs/tasks/<slug>.md`.
-3. Create the issues one at a time in list order. Before writing task k's body, replace
+3. With `--review`, run **Peer review** (below) first; every body here is then its reviewed
+   section. Create the issues one at a time in list order. Before writing task k's body, replace
    each `Depends on: task <k>` line (k = an earlier task's number) with `Depends on: #<n>`, using the number already returned
    for that task (or already in its `Issue:` slot) (edges only point at earlier tasks). Write the body to
    `/tmp/gh-issue-body.md`, then run
@@ -296,6 +301,30 @@ more — and continue the run; the HARD RULE above no longer applies.
 On a standalone run there is nothing to hand back to. End with the line
 `→ next: /fix-blockers <parent>` when an epic parent was filed, or `→ next: herdr-dispatch <n>`
 for a single issue. It is the last line of your output; the Guided Flow parses it.
+
+## Peer review (only with `--review`)
+
+One review covers the whole batch, before the first `gh issue create`: on the step 4 path once
+its body is written, on the `4-FLAT` path once sub-step 2 has written every task's body. Nothing
+reaches GitHub unreviewed.
+
+1. `aiw peer-review new gh-issue --slug <owner>-<repo>-<slug>` prints `<review_dir>`.
+2. Write `<review_dir>/draft.md` with the Write tool: one `## Issue <k>: <title>` section per
+   task in list order (on a **"Resume this list"** run, only the tasks with no issue yet),
+   holding that task's full body (its `Depends on: task <j>` lines as
+   ordinals, since no numbers exist yet), then, when `4-FLAT` will file an epic parent, a
+   `## Epic parent: <title>` section with the parent's body as **Epic parent** sub-step 2
+   describes it.
+3. Invoke the `ai-workflow:peer-review` skill with
+   `--kind gh-issue --dir <review_dir> --lenses <picked>` (plus `--herdr`). It revises
+   `draft.md` in place and asks the user any decisions.
+4. On its `stopped` finish, create nothing and report. Otherwise file the reviewed bodies: each
+   create (and the epic parent's) uses its section of `draft.md`, with the ordinals replaced by
+   real numbers as `4-FLAT` sub-step 3 says. Accepted gaps go into the matching issue's Notes as
+   known gaps.
+
+The post-create factchecker (step 4.5) still runs: the panel checks the drafts, the factchecker
+checks each filed issue's claims against the repo.
 
 ## Saved task list and the epic
 

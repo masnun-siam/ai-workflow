@@ -152,6 +152,7 @@ export class Session extends Component {
             <h1>${meta.command || 'Session'}</h1>
           </div>
           <span class=${`chip chip-${meta.outcome}`}>${meta.outcome}</span>
+          ${meta.peer_review && html`<span class=${`chip chip-review-${meta.peer_review.replace(/ /g, '-')}`} title="Read from the review's rounds, not from what the session said">peer review: ${meta.peer_review}</span>`}
           ${link && html`<a class="btn" href=${runHash(meta)}>Open run</a>`}
           ${flowLink(meta) && html`<a class="btn" href=${flowLink(meta)}>Continue in Flow</a>`}
           ${meta.outcome === 'waiting' && html`<a class="btn btn--primary" href=${`#/answer/${encodeURIComponent(meta.id)}`}>Answer</a>`}

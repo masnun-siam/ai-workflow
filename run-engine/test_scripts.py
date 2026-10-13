@@ -4072,7 +4072,7 @@ import hashlib as _hl86  # noqa: E402
 rd86, hw86, cl86 = _user_docs(), _read("docs", "HOW-IT-WORKS.md"), _read("CHANGELOG.md")
 rdn86, hwn86 = _n(rd86), _n(hw86)
 ROW86 = (
-    "| `/ai-workflow:gh-issue` | file a well-formed issue; always decomposes first \u2014 one task files one issue; "
+    "| `/ai-workflow:gh-issue [--review [<lens,lens>] [--herdr]]` | file a well-formed issue; always decomposes first \u2014 one task files one issue; "
     "two or more save the task list to `docs/tasks/<slug>.md` and file one refined issue per task, "
     "ordered by `Depends on: #n` lines, under an `epic` parent; `/gh-issue docs/tasks/<slug>.md` files a saved list, "
     "one question round per task |"
@@ -4574,61 +4574,120 @@ assert "\u2192 next: herdr-dispatch <parent>" in _fb, "fix-blockers next line"
 assert "This split writes to GitHub before Step 3's question" in _fb, "fix-blockers names the split's unconfirmed write"
 ok("fix-blockers: split if needed, preview, one confirmation, apply; Depends on stays the source")
 
-# /prd --review: a reviewer panel (run-specialist in PRD mode) loops through aiw prd-review until critical approves.
-_pr_all = _skill_sections("skills/prd/SKILL.md")
-assert "--review" in _ws(_pr_all["Arguments"]), "prd Arguments documents --review"
-_rv = _ws(_key183(_pr_all, "Step 5.5"))
+# --review: a reviewer panel (run-specialist in peer review mode, on Opus) loops through aiw peer-review until
+# every picked lens approves. The loop lives in skills/peer-review; /prd, /intake, /dump and /gh-issue call it.
+_pk = _ws(_read("skills", "peer-review", "SKILL.md"))
 for _w in (
-    "aiw prd-review next",
-    "aiw prd-review verdict",
+    "aiw peer-review new custom",
+    "aiw peer-review next",
+    "aiw peer-review verdict",
+    "aiw peer-review diff --since",
+    "--kind <kind> --lenses <picked>",
+    "Every picked lens blocks",
+    "never reuse one from an earlier run",
+    "review dir: <review_dir>",
     "ai-workflow:run-specialist",
-    "artifact: prd",
+    'model: "opus"',
+    "artifact: peer-review",
     "in one message",
-    "advisory_blockers",
+    "disputes",
+    "a dispute the user settles either way is `decided`",
+    "answering every finding of the round",
     "--prior",
     "--more",
     "Accept as known gaps",
     "One more round",
     "never write a verdict yourself",
+    "never write, copy or edit a verdict",
     "## Decisions",
+    "## Ask",
+    "## Answer",
+    "## Diff",
+    "ask.md",
+    "never mint another",
+    "the kind is `custom`",
+    "Never pick a start point yourself",
+    "Uncommitted changes only",
+    "(@{u})",
+    "peer review: <approved | known gaps accepted | stopped>",
 ):
-    assert _w in _rv, f"prd Peer review lacks {_w!r}"
-assert "Flow auto mode" in _rv and "never accepts" in _rv, "prd: auto mode stops at the cap, never accepts gaps"
-assert "both decisions and blockers" in _rv, (
-    "prd: an ask that also carries blockers is answered, then revised, in one round"
-)
-_sp = _ws(_read("agents", "run-specialist.md"))
-assert "## PRD mode" in _read("agents", "run-specialist.md") and "prd_review" in _sp and "request.json" in _sp
-assert "never put implementation" in _sp.lower() or "never adds implementation" in _sp.lower(), (
-    "specialist PRD mode: what not how"
-)
-assert ".in.json" not in _rv and "Save each returned JSON" not in _rv, "the PRD's author never transcribes a verdict"
-assert "never write, copy or edit a verdict" in _rv, "prd: the author only reads recorded verdicts"
-assert "--file - <<'EOF'" in _sp and "Ignore any checklist text in the dispatch" in _sp, (
-    "the reviewer records its own verdict"
-)
-# --herdr: one read-only reviewer tab per lens; the same verdict path and rules as the subagents.
-assert "--herdr" in _ws(_pr_all["Arguments"]), "prd Arguments documents --herdr"
+    assert _w in _pk, f"peer-review skill lacks {_w!r}"
+assert "Flow auto mode" in _pk and "never accepts" in _pk, "peer-review: auto mode stops at the cap, never accepts gaps"
+assert "both decisions and blockers" in _pk, "an ask that also carries blockers is answered, then revised, in one round"
+assert ".in.json" not in _pk and "Save each returned JSON" not in _pk, "the author never transcribes a verdict"
+assert "advisory_blockers" not in _pk, "every picked lens blocks: no advisory blockers"
 for _w in (
     "herdr tab create",
     "herdr agent start",
-    "-- --agent ai-workflow:run-specialist",
+    "-- --agent ai-workflow:run-specialist --model opus",
     "Write,Edit,NotebookEdit",
     "herdr agent prompt",
     "--until blocked",
-    "prd-<lens>",
+    "rv-<lens>",
     "command -v herdr",
-    "aiw prd-review verdict --file -",
+    "aiw peer-review verdict --file -",
 ):
-    assert _w in _rv, f"prd --herdr lacks {_w!r}"
-assert re.search(r"[Hh]eadless.{0,80}--herdr", _rv), "prd: --herdr is ignored headless"
-assert "remembers its earlier rounds" in _rv, "prd: reused tabs keep context, said plainly"
-assert "that is not read-only" in _rv, "prd: --herdr tabs are not over-promised as read-only"
+    assert _w in _pk, f"peer-review --herdr lacks {_w!r}"
+assert re.search(r"[Hh]eadless.{0,80}--herdr", _pk), "peer-review: --herdr is ignored headless"
+assert "remembers its earlier rounds" in _pk, "peer-review: reused tabs keep context, said plainly"
+assert "that is not read-only" in _pk, "peer-review: --herdr tabs are not over-promised as read-only"
+
+_pr_all = _skill_sections("skills/prd/SKILL.md")
+assert "--review [<lens,lens>]" in _ws(_pr_all["Arguments"]) and "--herdr" in _ws(_pr_all["Arguments"])
+_rv = _ws(_key183(_pr_all, "Step 5.5"))
+for _w in ("aiw peer-review new prd", "never reuse one", "ai-workflow:peer-review", "--kind prd --dir <review_dir>"):
+    assert _w in _rv, f"prd Step 5.5 lacks {_w!r}"
+assert "save nothing" in _rv and "## Open questions" in _rv and "never accepts gaps" in _rv, "prd: finish line handled"
 assert "Peer review decisions (Step 5.5)" in _ws(_key183(_pr_all, "Flow auto mode")), (
     "prd auto mode: review decisions are asked"
 )
-assert "In a herdr tab" in _sp, "run-specialist PRD mode covers the tab case"
-ok("prd --review: panel loop via aiw prd-review, run-specialist PRD mode, cap and decisions go to the user")
+_sp = _ws(_read("agents", "run-specialist.md"))
+assert "## Peer review mode" in _read("agents", "run-specialist.md") and "peer_review.rubric" in _sp
+assert "request.json" in _sp and "reraises" in _sp and "distinct_because" in _sp and "new_evidence" in _sp, (
+    "specialist: explicit re-raises"
+)
+assert "model: sonnet" in _read("agents", "run-specialist.md"), (
+    "run-issue's specialists stay on Sonnet; peer review overrides"
+)
+for _t in (_sp, _rv, _pk):
+    assert "prd_review" not in _t and "prd-review" not in _t
+assert "never put implementation" in _sp.lower() or "never adds implementation" in _sp.lower(), (
+    "specialist: a doc fix is what, not how"
+)
+assert "--file - <<'EOF'" in _sp and "Ignore any checklist text in the dispatch" in _sp, (
+    "the reviewer records its own verdict"
+)
+assert "In a herdr tab" in _sp, "run-specialist peer review mode covers the tab case"
+
+# /intake, /dump and /gh-issue take --review; a programmatic call never passes it (D15), so nothing is reviewed twice.
+_in = _ws(_read("commands", "intake.md"))
+assert (
+    "aiw peer-review new intake" in _in and "--kind intake --dir <review_dir>" in _in and "never with `--whole`" in _in
+)
+_du = _ws(_read("skills", "dump", "SKILL.md"))
+assert "## Step 2.5: Peer review" in _read("skills", "dump", "SKILL.md") and "--kind dump --dir <review_dir>" in _du
+assert "write nothing" in _du and "- Skill" in _read("skills", "dump", "SKILL.md"), "dump can invoke the skill"
+_gi = _ws(_read("commands", "gh-issue.md"))
+assert "## Peer review (only with `--review`)" in _read("commands", "gh-issue.md")
+assert (
+    "--kind gh-issue --dir <review_dir>" in _gi
+    and "## Epic parent: <title>" in _gi
+    and "before the first `gh issue create`" in _gi
+)
+assert "factchecker" in _gi.split("## Peer review")[1][:2000], "gh-issue: the factchecker still runs after the panel"
+assert _gi.index("remove `--review`") < _gi.index("/intake $@ --whole"), (
+    "gh-issue strips --review before calling /intake"
+)
+for _rel, _call in (
+    ("commands/gh-issue.md", "/intake $@ --whole"),
+    ("commands/run-issue.md", "/intake <stripped argument> --whole"),
+):
+    _line = next(_l for _l in _read(*_rel.split("/")).splitlines() if _call in _l)
+    assert "--review" not in _line, f"{_rel}: a programmatic /intake call never passes --review"
+assert "--review" not in _ws(_key183(_skill_sections("skills/dump/SKILL.md"), "Programmatic invocation")).replace(
+    "never passes `--review`", ""
+), "dump's programmatic path never reviews"
+ok("--review: peer-review skill loop on Opus; /prd, /intake, /dump, /gh-issue call it; programmatic calls never review")
 
 _s8_184 = _ws(_key183(_skill_sections("skills/prd/SKILL.md"), "Step 8"))
 assert f"End with the line `{NEXT}/create-tasks <prd-path>`" in _s8_184, "#184 prd Step 8 lacks the next line"

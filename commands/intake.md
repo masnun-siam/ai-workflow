@@ -1,6 +1,6 @@
 ---
 description: Normalize a Sentry link, a BRD file, an Obsidian note, or free text into a GitHub-issue-ready brief
-argument-hint: "<sentry-url | file-path | vault-note | free text>"
+argument-hint: "<sentry-url | file-path | vault-note | free text> [--review [<lens,lens>] [--herdr]]"
 ---
 
 > **Paths.** `<...>` placeholders below are keys from `aiw paths` (run it; `aiw` is
@@ -37,7 +37,8 @@ are used either way; only the transport differs.
 **HARD RULE — while producing the brief below, this skill only ever produces a brief. It never creates a GitHub issue and
 never dispatches `/run-issue` or any pipeline station.**
 - NEVER run `gh issue create`, `gh issue edit`, or any other mutating command.
-- NEVER use Write, Edit, or NotebookEdit on any file in the repo.
+- NEVER use Write, Edit, or NotebookEdit on any file in the repo. The one write allowed is the
+  peer-review draft in step 3.5, which lives under `<data_dir>`, outside the repo.
 - The only output is the `## Intake result` block described at the end of this file.
 - **Scope.** This rule lapses once the `## Intake result` block is returned — a caller
   such as `/run-issue` may act on that result afterward without violating it.
@@ -50,6 +51,11 @@ Do the following:
    stripped value, never the raw `$ARGUMENTS`. `--whole` is passed only by `/gh-issue`
    step 0 and `/run-issue` Preflight step 2 — a human typing `/intake` directly never
    passes it.
+
+   **Strip `--review`.** Likewise remove `--review` and the token after it when that token
+   doesn't start with `--` (the picked lenses, e.g. `critical,qa`), and `--herdr`; remember
+   them for step 3.5. A programmatic call never passes `--review`, and with `--whole` set it is
+   ignored, so a brief is never reviewed twice (the caller reviews its own result).
 
 2. **Detect the source**, testing in this order, first match wins:
    - Argument matches `*sentry.io/*` or contains `/organizations/*/issues/` → **Sentry**.
@@ -184,6 +190,15 @@ Do the following:
      ## Notes
      Source: raw text from /intake invocation
      ```
+
+3.5. **Peer review (only with `--review`, never with `--whole`).** `aiw peer-review new intake --slug
+   <a short slug from the brief's summary>` prints `<review_dir>`. Write the brief to
+   `<review_dir>/draft.md`, then invoke the `ai-workflow:peer-review` skill with
+   `--kind intake --dir <review_dir> --lenses <picked>` (plus `--herdr`). It revises `draft.md`
+   in place and asks the user any decisions. On its `stopped` finish, return no result: say the
+   review stopped and why. Otherwise the reviewed `draft.md` is the brief for step 4, with any
+   accepted gaps listed under a `## Known gaps` section and the skill's finish line kept in
+   `## Notes`.
 
 4. **Return the result** as the final message, exactly in this shape (no other text
    after it):

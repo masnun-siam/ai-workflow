@@ -188,6 +188,7 @@ ALLOWED = {
     "limit_type",
     "auto_resume",
     "flow_id",
+    "peer_review",
 }
 
 

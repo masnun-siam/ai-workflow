@@ -4,26 +4,51 @@
 
 ### Added
 
-- **`/prd --review`: a reviewer panel before the review gate.** Critical (completeness, the only
-  lens that can hold the PRD), CEO (product value), CTO (feasibility against the repo) and
-  security review the draft in parallel as `run-specialist` in its new PRD mode. `aiw prd-review`
-  checks every verdict and decides each round: blockers are fixed and every finding gets a
-  recorded disposition, product decisions are asked of you and written into `## Decisions`, and
-  after the round budget you choose to accept known gaps, run one more round, or stop.
+- **Peer review picker in `aiw ui`.** New run's named form (for `prd`, `intake`, `dump` and
+  `gh-issue`), its Custom command form, and the Flow's PRD step each have a Peer review box. Tick
+  it to pick the reviewers the command offers; critical starts ticked. A custom prompt is asked to
+  run `/peer-review` when it's done, against a fresh review dir holding the prompt verbatim. The
+  session page then shows whether the review approved, reached the round cap, didn't finish, or never
+  ran, read from the review's own rounds, not from what the session claims.
+- **`/peer-review` and `--review` on `/intake`, `/dump` and `/gh-issue`.** The reviewer panel
+  `/prd --review` uses is now the `peer-review` skill. Run it on its own after any work and it
+  reviews the change (the diff since a point you choose, plus the final answer) against what you
+  asked. The diff never includes secret-like files, binaries or lockfiles. `/intake`, `/dump` and
+  `/gh-issue` review their draft before anything is saved or filed (`/gh-issue` reviews every
+  issue body and the epic parent in one pass, then its factchecker still runs). A programmatic
+  call (`/gh-issue` and `/run-issue` running `/intake --whole`) never reviews. The reviewers run on
+  Opus, in subagents and in herdr tabs (checked: the tab's init event reports `claude-opus-5-5`);
+  `/run-issue`'s code-review specialists stay on Sonnet.
+- **`/prd --review [<lens,lens>]`: a reviewer panel before the review gate.** You pick the
+  lenses from a pool of seven: critical (completeness), CEO (product value), CTO (feasibility
+  against the repo), security, QA (testability), UX (design) and performance. Bare `--review`
+  runs critical alone. Every picked lens must approve. They review the draft in parallel as
+  `run-specialist` in its peer review mode, and `aiw peer-review` checks every verdict and decides
+  each round: blockers are fixed and every finding gets a recorded disposition, product decisions
+  are asked of you and written into `## Decisions`, a finding you dismissed that its lens raises
+  again is yours to settle, and after the round budget you choose to accept known gaps, run one
+  more round, or stop.
   `--herdr` (terminal) opens one herdr tab per reviewer that you can watch and talk to, started
   as `claude --agent ai-workflow:run-specialist` with Write/Edit disallowed. Checked: the tab has
   no file-editing tools, but its shell is not narrowed (a probe's `touch` ran), so shell commands
   follow your normal permissions; it is not read-only. Code search works through `rg`. Tabs
   are reused across rounds, so a reviewer remembers its earlier rounds. In `aiw ui`, a **Peer
-  review** checkbox on the Flow's PRD step and on New run for `prd` adds `--review` (the UI always
-  uses subagents).
-- **`aiw prd-review next|verdict`.** The engine for PRD peer review. A panel of single-lens
-  reviewers (`prd_review.lenses` in `config.json`: critical, CEO, CTO, security, sharing one
-  severity rubric) reviews a PRD in rounds. `verdict` refuses a finding that neither quotes the
-  PRD nor names one of its headings, a stale PRD hash, an old round, or more than 8 findings.
-  `next` decides: only the blocking (critical) lens holds the PRD, a finding that needs a product
-  decision goes to the user, an advisory blocker is listed on its own, and a spent round budget
-  asks the user (`--more` opens exactly one more round), never auto-approving.
+  review** checkbox on the Flow's PRD step and on New run for `prd` adds `--review` (critical;
+  the UI always uses subagents).
+- **`aiw peer-review new|next|verdict|diff`.** The engine for peer review. `new <kind>` makes a
+  fresh review directory for one run (never reused, so a second review of the same PRD starts at
+  round 1). `next` opens and decides rounds for a panel picked per run from the lenses the kind
+  offers (`peer_review` in `config.json`: the lens pool, two severity rubrics, `doc` and `change`,
+  and per-kind offers for `prd`, `intake`, `dump`, `gh-issue` and `custom`). `verdict` refuses a
+  finding that neither quotes the artifact nor names one of its headings, a stale artifact hash,
+  an old round, more than 8 findings, or a blocker/major that doesn't say whether it re-raises a
+  prior finding. `next` decides: every picked lens blocks, a finding that needs a product decision
+  or re-raises one you dismissed goes to you, and a spent round budget asks you (`--more` opens
+  exactly one more round), never auto-approving. `diff --since <sha|@{u}>` prints the change to
+  review, with secret-like files (tracked or not), binaries and lockfiles dropped and named, and
+  a long diff capped with a note. The other commands and custom prompts get `--review` in later
+  releases. A `/prd` review that was mid-round under the earlier `aiw prd-review` can't resume:
+  start the review again.
 - **`/fix-blockers <parent>`.** Previews and then sets an epic's GitHub "blocked by" relations
   through `aiw epic blockers`, after one confirmation. A parent filed on another machine is split
   first, as Epic mode does.
@@ -56,6 +81,9 @@
 
 ### Changed
 
+- **Bare `/prd --review` runs the critical reviewer alone.** It used to run critical, CEO, CTO
+  and security, with only critical able to hold the PRD. Pick more lenses with
+  `--review critical,ceo,cto,security`; every picked lens now has to approve.
 - **The Guided Flow has six steps.** `/flow` and the `aiw ui` Flow page run dump → PRD →
   tasks (`/create-tasks`) → issues (`/gh-issue`, with an epic) → blockers (`/fix-blockers`) →
   dispatch. The `→ next:` lines follow: `/prd` hands off to `/create-tasks`, a bug's dump goes to

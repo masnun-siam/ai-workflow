@@ -1,7 +1,7 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { poll } from './app.js';
-import { buildBody, loadLastRepo, repoCombo, repoOptions } from './launcher.js';
+import { buildBody, lensPicker, loadLastRepo, pickedLenses, repoCombo, repoOptions } from './launcher.js';
 import { issueNumbers } from './dispatch.js';
 import { Answer } from './answer.js';
 import { FlowSwitcher, IssueRows, NotePane, mergeRows } from './flowside.js';
@@ -146,6 +146,7 @@ export class Flow extends Component {
     this.mq = globalThis.matchMedia?.('(min-width: 1200px)');
     if (this.mq) { this.onMq = () => this.setState({ wide: this.mq.matches }); this.mq.addEventListener('change', this.onMq); this.onMq(); }
     this.loadRepos();
+    api('GET', '/api/peer-review').then((r) => r.ok && this.setState({ offers: r.data })).catch(() => {}); // no picker without offers
     const p = this.props.route.params;
     try {
       if (p.id && p.id !== 'new') await this.open(p.id);
@@ -237,13 +238,15 @@ export class Flow extends Component {
     const { text, folder, prd, tasks, parent } = this.state;
     const { repo } = this.fields();
     const args = { dump: text, prd: folder, tasks: prd, issues: tasks, blockers: parent }[step.key].trim();
+    const lenses = step.key === 'prd' ? pickedLenses(this.state.peerReview, this.state.lenses, this.state.offers) : null;
     if (!repo || !args) { this.setState({ why: !repo ? 'Pick a repo first.' : 'Fill in the field above first.' }); return; }
+    if (lenses && !lenses.length) { this.setState({ why: 'Tick at least one reviewer.' }); return; }
     this.setState({ busy: true, why: null, meta: null, view: null });
     clearTimeout(this.timer);
     const flowId = await this.persist(true);
     let r;
     try {
-      const body = buildBody({ repo, command: step.command, args, peerReview: this.state.peerReview });
+      const body = buildBody({ repo, command: step.command, args, lenses });
       r = await api('POST', '/api/sessions', { ...body, ...(flowId ? { flow_id: flowId } : {}) });
     } catch {
       this.setState({ busy: false, why: 'Could not reach the aiw server.' });
@@ -336,8 +339,9 @@ export class Flow extends Component {
       <${Tag} id=${id} class=${prose ? 'field flow-prose' : 'field mono'} rows=${prose ? 6 : undefined} type=${prose ? undefined : 'text'}
         placeholder=${step.placeholder} aria-describedby=${this.state.why ? 'flow-why' : undefined} aria-invalid=${this.state.why ? 'true' : undefined}
         value=${this.state[field]} disabled=${this.running()} onInput=${(e) => this.setState({ [field]: e.target.value })} />
-      ${step.key === 'prd' && html`<label class="check" for="flow-peer-review"><input id="flow-peer-review" type="checkbox" checked=${this.state.peerReview === true}
-        disabled=${this.running()} onChange=${(e) => this.setState({ peerReview: e.target.checked })} /> Peer review: critical, CEO, CTO and security reviewers check the PRD until critical approves</label>`}
+      ${step.key === 'prd' && lensPicker({ id: 'flow-peer-review', offer: this.state.offers && this.state.offers.kinds.prd, on: this.state.peerReview,
+        picked: pickedLenses(true, this.state.lenses, this.state.offers), rounds: this.state.offers && this.state.offers.max_rounds, disabled: this.running(),
+        onToggle: (on) => this.setState({ peerReview: on }), onPick: (lenses) => this.setState({ lenses }) })}
       ${this.state.why && html`<p id="flow-why" role="alert" class="error">${this.state.why}</p>`}`;
   }
 

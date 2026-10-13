@@ -5,9 +5,11 @@
 | Command | Does |
 |---|---|
 | `/ai-workflow:run-issue <n> [--full] [--no-review] [--grind]` | the full pipeline: issue → reviewed PR (`--no-review` skips review and fix; `--grind` keeps working the PR's review rounds after the handback, off by default). Accepts an epic parent. |
-| `/ai-workflow:intake <source>` | normalize a Sentry link, BRD file, or vault note into an issue brief — used internally by `/gh-issue` and `/run-issue` |
-| `/ai-workflow:gh-issue` | file a well-formed issue; always decomposes first — one task files one issue; two or more save the task list to `docs/tasks/<slug>.md` and file one refined issue per task, ordered by `Depends on: #n` lines, under an `epic` parent; `/gh-issue docs/tasks/<slug>.md` files a saved list, one question round per task |
-| `/ai-workflow:prd <requirement \| feature-folder> [--review [--herdr]]` | grill a requirement into a PRD saved to `docs/prd/<slug>.md` and the vault; `--review` runs the critical/CEO/CTO/security panel until critical approves (`--herdr`: one herdr tab per reviewer, terminal only); `--update` records later decisions |
+| `/ai-workflow:intake <source> [--review [<lens,lens>] [--herdr]]` | normalize a Sentry link, BRD file, or vault note into an issue brief — used internally by `/gh-issue` and `/run-issue` (which never pass `--review`) |
+| `/ai-workflow:dump <text> [--review [<lens,lens>] [--herdr]]` | file free-form input into the Obsidian vault's Project → Feature structure, after one confirmation |
+| `/ai-workflow:gh-issue [--review [<lens,lens>] [--herdr]]` | file a well-formed issue; always decomposes first — one task files one issue; two or more save the task list to `docs/tasks/<slug>.md` and file one refined issue per task, ordered by `Depends on: #n` lines, under an `epic` parent; `/gh-issue docs/tasks/<slug>.md` files a saved list, one question round per task |
+| `/ai-workflow:prd <requirement \| feature-folder> [--review [<lens,lens>] [--herdr]]` | grill a requirement into a PRD saved to `docs/prd/<slug>.md` and the vault; `--review` runs the picked reviewer lenses (default critical; also CEO, CTO, security, QA, UX, performance) until every one approves (`--herdr`: one herdr tab per reviewer, terminal only); `--update` records later decisions |
+| `/ai-workflow:peer-review [--lenses <lens,lens>] [--since <sha\|@{u}>] [--herdr]` | a reviewer panel on Opus (critical, CEO, CTO, security, QA, UX, performance; default critical) on the session's change: the diff plus your final answer, checked against what you asked, until every picked lens approves. `--review` on `/prd`, `/intake`, `/dump` and `/gh-issue` runs the same loop on their draft before anything is saved or filed |
 | `/ai-workflow:create-tasks <prd \| problem-statement>` | break a problem statement and its PRD into a saved, ordered task list (`docs/tasks/<slug>.md`) using `/gh-issue`'s decomposition rules; files no issues. `/gh-issue docs/tasks/<slug>.md` then files them |
 | `/ai-workflow:fix-blockers <parent>` | set GitHub's native "blocked by" relations between an epic's children from their `Depends on:` lines: previews, asks once, writes only the missing edges, reports (never deletes) edges no line names |
 | `/ai-workflow:jira-to-gh <KEY>` | decompose a Jira ticket and file flat issues the same way as `/gh-issue` (one issue for a single task; two or more saved to `docs/tasks/<slug>.md` and filed flat) |
@@ -42,7 +44,7 @@ aiw gitnexus sync|index|clean      the code graph (best-effort)
 aiw project-status                 GitHub Projects (best-effort)
 aiw epic split|init|next|status    epic decomposition and sequencing
 aiw epic blockers <dir> [--dry-run]   GitHub blocked-by edges from the children's Depends on lines
-aiw prd-review next|verdict <dir>     PRD peer review: open/decide rounds, record a checked verdict
+aiw peer-review new|next|verdict|diff   peer review: a fresh dir per run, open/decide rounds, record a checked verdict, the change to review
 aiw ui [--port N] [--allow-host HOST]  local web UI to start and track sessions
 ```
 
@@ -54,6 +56,13 @@ aiw ui [--port N] [--allow-host HOST]  local web UI to start and track sessions
 - `--allow-host HOST` is repeatable and matches exactly: use `name:port`, or the bare name for the default 443 serve.
 - To reach it over a tailnet: `tailscale serve --bg 8420`, then
   `aiw ui --allow-host <machine>.<tailnet>.ts.net`.
+
+**Peer review.** New run (both forms) and the Flow's PRD step have a **Peer review** box. Ticking
+it shows the reviewers the command offers (from `GET /api/peer-review`, read from `config.json`),
+with critical ticked. A doc command gets `--review <lenses>`. A custom prompt gets a fresh review
+dir holding the prompt as `ask.md`, plus one line asking the session to run `/peer-review` with
+that dir, the lenses and the HEAD at start. That line is not a gate. The session page shows
+**peer review: approved / cap reached / unfinished / not run**, read from the review's rounds.
 
 Optional push notifications and links live in `<data_dir>/ui.json` (the data dir is
 `$CLAUDE_PLUGIN_DATA`, default `~/.claude/plugins/data/ai-workflow`):

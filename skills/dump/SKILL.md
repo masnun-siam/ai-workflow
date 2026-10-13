@@ -6,13 +6,19 @@ allowed-tools:
   - Read
   - Grep
   - Glob
+  - Write
+  - Skill
 ---
 
 # /dump — Structured Capture
 
 Files free-form input into this vault's existing Project → Feature structure. See `08-Resources/Reference/Dump Capture System.md` for the full spec this skill implements.
 
-Reads/writes the vault via the `obsidian` CLI (`obsidian <command> key=value ...`). Never write a file with plain filesystem tools — always go through the CLI so Obsidian's index stays in sync.
+Reads/writes the vault via the `obsidian` CLI (`obsidian <command> key=value ...`). Never write a file with plain filesystem tools — always go through the CLI so Obsidian's index stays in sync. The one exception is the Step 2.5 peer-review draft, which lives under `<data_dir>` (from `aiw paths`), outside the vault.
+
+**`--review [<lens,lens>] [--herdr]`.** Remove these from the input before Step 1 (the token after
+`--review` is a lens list only if it doesn't start with `--`) and run Step 2.5. A programmatic
+call (below) never passes `--review`.
 
 This skill targets a specific vault (`Documents/notes`) regardless of which project directory Claude is running in — every `obsidian` invocation below passes `vault=notes` explicitly so it resolves correctly even when the current working directory isn't the vault itself.
 
@@ -73,6 +79,17 @@ are used either way; only the transport differs.
   the same branch the interactive answer would. Free text that names no option is feedback for
   that question, never an approval.
 - **Otherwise:** not headless, so skip `aiw ask` and ask the Step 3 block in prose, or call AskUserQuestion exactly as written wherever a step names it.
+
+## Step 2.5: Peer review (only with `--review`)
+
+Before Step 3, draft exactly what Step 4 would write: each file's path as a `## <vault path>`
+heading, with its content under it (the problem statement, the seeded PRD, the task or meeting
+lines). `aiw peer-review new dump --slug <project>-<feature>` prints `<review_dir>`; write the
+draft to `<review_dir>/draft.md` with the Write tool, then invoke the `ai-workflow:peer-review`
+skill with `--kind dump --dir <review_dir> --lenses <picked>` (plus `--herdr`). It revises
+`draft.md` in place and asks the user any decisions. On its `stopped` finish, write nothing.
+Otherwise Step 3 shows the reviewed content and Step 4 files it as reviewed; accepted gaps go
+under the problem statement's **Open questions**.
 
 ## Step 3: Propose and confirm — ALWAYS, no exceptions
 

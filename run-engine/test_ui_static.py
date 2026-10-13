@@ -2702,9 +2702,16 @@ finally:
     shutil.rmtree(tmp, ignore_errors=True)
 
 _fl, _la = read(os.path.join(STATIC, "flow.js")).decode(), read(os.path.join(STATIC, "launcher.js")).decode()
-assert "flow-peer-review" in _fl and "peerReview: this.state.peerReview" in _fl, "Flow PRD step offers peer review"
-assert 'id="peer-review"' in _la and "peerReview: this.state.peerReview" in _la, "New run offers peer review for prd"
-ok("Flow PRD step and New run (prd) offer the peer-review checkbox")
+assert "id: 'flow-peer-review'" in _fl and "kinds.prd" in _fl and "/api/peer-review" in _fl, (
+    "Flow PRD step offers the lens picker"
+)
+assert "id: 'peer-review'" in _la and "id: 'custom-review'" in _la and "/api/peer-review" in _la, "both New run forms"
+assert "reviewOffer(command)" in _la and "reviewOffer('custom')" in _la, "offers come from config, keyed by command"
+assert "up to ${rounds || 3} rounds, on Opus" in _la and "isn't forced" in _la, "cost and the not-a-gate note, said"
+assert "'critical'" not in _la and "'critical'" not in _fl, "no lens is hardcoded in the frontend"
+_se = read(os.path.join(STATIC, "session.js")).decode()
+assert "meta.peer_review" in _se and "peer review: ${meta.peer_review}" in _se, "a session shows its peer review status"
+ok("Flow PRD step and both New run forms offer the lens picker from /api/peer-review; session shows the post-check")
 
 # The flow.js stepper checks run in the default mode (so in run_tests.sh and CI). The other
 # --view blocks are not run by the suite; ponytail: moving each back in means repairing it first.
@@ -2806,10 +2813,21 @@ assert.equal(FS.mergeRows(null, [7]).reading, false);
 assert.equal(FS.mergeRows(null, []).reading, true);
 out('flowside: relative time, issue track states, frontmatter stripped');
 const L = await import(process.env.APP_URL.replace('app.js', 'launcher.js'));
-assert.deepEqual(L.buildBody({ repo: 'o/r', command: 'prd', args: ' 05-Work/P/F ', peerReview: true }), { repo: 'o/r', command: 'prd', args: '05-Work/P/F', peer_review: true });
-assert.deepEqual(L.buildBody({ repo: 'o/r', command: 'prd', args: 'x' }), { repo: 'o/r', command: 'prd', args: 'x' });
-assert.deepEqual(L.buildBody({ repo: 'o/r', command: 'dump', args: 'x', peerReview: true }), { repo: 'o/r', command: 'dump', args: 'x' });
-out('launcher: buildBody sends peer_review only for prd, only when asked');
+assert.deepEqual(L.buildBody({ repo: 'o/r', command: 'prd', args: ' 05-Work/P/F ', lenses: ['critical', 'qa'] }), { repo: 'o/r', command: 'prd', args: '05-Work/P/F', peer_review: ['critical', 'qa'] });
+assert.deepEqual(L.buildBody({ repo: 'o/r', command: 'prd', args: 'x', lenses: null }), { repo: 'o/r', command: 'prd', args: 'x' });
+assert.deepEqual(L.buildCustomBody({ repo: 'o/r', text: ' fix it ', lenses: ['ux'] }), { repo: 'o/r', text: 'fix it', peer_review: ['ux'] });
+assert.deepEqual(L.buildCustomBody({ repo: 'o/r', text: 'fix it' }), { repo: 'o/r', text: 'fix it' });
+const OFF = { default: ['critical'], max_rounds: 3, kinds: { dump: ['critical', 'ceo', 'qa'] } };
+assert.equal(L.pickedLenses(false, ['qa'], OFF), null, 'review off sends nothing');
+assert.deepEqual(L.pickedLenses(true, undefined, OFF), ['critical'], 'ticking review starts with the default');
+assert.deepEqual(L.pickedLenses(true, [], OFF), [], 'all unticked: a validation error, never a silent default');
+assert.deepEqual(L.toggleLens(['qa'], 'critical', true, OFF.kinds.dump), ['critical', 'qa'], 'config order kept');
+assert.deepEqual(L.toggleLens(['critical', 'qa'], 'critical', false, OFF.kinds.dump), ['qa']);
+assert.equal(L.lensName('ceo'), 'CEO'); assert.equal(L.lensName('critical'), 'Critical');
+assert.deepEqual(L.validateCustom({ repo: 'o/r', text: 'x' }, []), { customLenses: 'Tick at least one reviewer' });
+assert.equal(L.validateCustom({ repo: 'o/r', text: 'x' }, ['ux']), null);
+assert.equal(L.lensPicker({ id: 'p', offer: null }), null, 'a command with no offer shows no picker');
+out('launcher: lens lists in the body (named and custom), default critical, empty is an error, config order');
 """
 if shutil.which("node"):
     import subprocess

@@ -20,6 +20,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qs, unquote, urlsplit
 
+import peer_review
 import ui_afk
 import ui_cleanup
 import ui_dispatch
@@ -128,6 +129,7 @@ def _public(rec: dict) -> dict:
         "limit_type": rec.get("limit_type"),
         "auto_resume": rec.get("auto_resume"),
         "flow_id": rec.get("flow_id"),
+        "peer_review": peer_review.status(rec["peer_review_dir"]) if rec.get("peer_review_dir") else None,
         "repo_path": p,
         "resume_command": f"cd {shlex.quote(p)} && claude --resume {shlex.quote(sid)}" if p and sid else None,
     }
@@ -179,6 +181,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             )
         elif path == "/api/settings":
             self._json(200, ui_settings.load())
+        elif path == "/api/peer-review":
+            self._json(200, peer_review.offers())
         elif path == "/api/cleanup":
             self._json(200, {"items": list(_TITLE_POOL.map(ui_cleanup.describe, ui_cleanup.find_targets()))})
         elif path == "/api/flows":

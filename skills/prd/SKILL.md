@@ -19,13 +19,14 @@ Why this order matters: scanning before interviewing means the questions are inf
 
 ## Arguments
 
-`/prd <requirement | feature-folder> [--to local,obsidian,wiki] [--review [--herdr]]`
+`/prd <requirement | feature-folder> [--to local,obsidian,wiki] [--review [<lens,lens>] [--herdr]]`
 `/prd --update <prd-path> <decisions>` (see **Update mode**)
 
 - `<requirement>`: free text, a BRD file, an Obsidian note, a Sentry link or a GitHub issue URL.
 - `<feature-folder>`: a vault path `05-Work/<Project>/<Feature>` that holds a `Dump.md` (as left by `/dump`). `/prd` fills that folder's seeded `PRD.md`.
-- `--review`: before the Step 6 review gate, a reviewer panel checks the draft until it has no gaps
-  (see **Step 5.5: Peer review**). `--herdr` (terminal only) gives each reviewer its own herdr tab
+- `--review [<lens,lens>]`: before the Step 6 review gate, a reviewer panel checks the draft until
+  every picked lens approves (see **Step 5.5: Peer review**). The token after `--review` is a lens
+  list only if it doesn't start with `--`, so `--review --herdr` means the default lens (critical). `--herdr` (terminal only) gives each reviewer its own herdr tab
   you can watch and talk to.
 - `--to`: one or more destinations. Default `local,obsidian`, and nothing is asked about other destinations: `wiki` is written only when named here. The repo's `docs/prd/<slug>.md` (`local`) is the canonical copy; the Obsidian `PRD.md` is a mirror of it. If the Obsidian project can't be resolved (Step 2), ask which project to use and offer `local` instead; never leave the run with no destination.
 
@@ -69,7 +70,7 @@ Flow. The user answers grilling questions and nothing else, and the next steps (
   meant for the later technical spec may stay, and each must say so.
 - **Peer review decisions (Step 5.5)**, with `--review`, are asked like grilling questions: they
   are the only other questions, because this step is the last chance to settle anything. A
-  cap-reached block stops the flow here (Step 5.5, item 6).
+  cap-reached block stops the flow here (Step 5.5, item 4).
 - **No other question is asked.** Existing PRD (Step 2): update it in place. No matching
   project (Step 2): use the project and feature folder from the input path, creating the feature
   folder if needed. Destinations: `local` and Obsidian, whatever `--to` says. Review gate (Step 6):
@@ -155,66 +156,25 @@ The Obsidian copy additionally gets tag frontmatter and full-path wikilinks in `
 
 ## Step 5.5: Peer review (only with `--review`)
 
-A panel of single-lens reviewers checks the draft: **critical** (completeness), **CEO** (product
-value), **CTO** (feasibility against this repo) and **security**. Only critical can hold the PRD;
-the others advise. Their checklists and the shared severity rubric are `prd_review` in `<config>`
-(from `aiw paths`). `aiw prd-review` checks every verdict and decides each round; you never decide
-it yourself, and you never write a verdict yourself.
+A panel of single-lens reviewers checks the draft; the loop lives in the `ai-workflow:peer-review`
+skill. The user picks the lenses with `--review <lens,lens>` from those `/prd` offers
+(`peer_review.kinds.prd` in `<config>`, from `aiw paths`); bare `--review` runs the default
+(critical). **Every picked lens blocks.**
 
-Setup: `<review_dir>` is `<data_dir>/prd-review/<owner>-<repo>-<slug>` (from `aiw paths`). Write the
-draft to `<review_dir>/draft.md` with the Write tool; it lives outside the repo. Every edit below is
-made to that file, and Step 6 shows it.
+1. `aiw peer-review new prd --slug <owner>-<repo>-<slug>` prints `<review_dir>`, a fresh
+   directory for this run; never reuse one from an earlier run.
+2. Write the draft to `<review_dir>/draft.md` with the Write tool; it lives outside the repo.
+3. Invoke the `ai-workflow:peer-review` skill with
+   `--kind prd --dir <review_dir> --lenses <picked>` (plus `--herdr` if given). It edits
+   `draft.md` in place, asks the user the decisions and disputes, and records rulings in its
+   `## Decisions`.
+4. Read its finish line. **`stopped`**: save nothing. **`known gaps accepted`**: add each gap under
+   the draft's `## Open questions`. In Flow auto mode a cap stops here, as the skill says: the run
+   never accepts gaps on the user's behalf.
 
-Loop:
-
-1. `aiw prd-review next <review_dir> --prd <review_dir>/draft.md` (plus `--prior <file>` and
-   `--more` when the steps below say so). It prints one JSON object; act on its `action`.
-2. **`review`**: dispatch one `ai-workflow:run-specialist` per lens in its `lenses`, in one message
-   so they run in parallel. Each dispatch says `artifact: prd`, the lens name, `<review_dir>`, the
-   round number and the repo path. Each reviewer reads its own checklist from `<config>` and records
-   its own verdict with `aiw prd-review verdict`; you only read `round-<n>/<lens>.json` afterwards.
-   You are the PRD's author, so you never write, copy or edit a verdict. Then go to 1.
-3. **`wait`**: a reviewer returned without a recorded verdict. Dispatch the lenses it lists once
-   more; if `next` still says `wait` for a lens, stop and report which one.
-4. **`revise`**: fix every finding in `blockers` by editing the draft's wording. Then answer every
-   finding of the round (`blockers`, `advisory_blockers`, `advisory`): `fixed`, or `dismissed` with
-   a one-line reason. Write that list (`[{lens, id, disposition, reason}]`) to
-   `<review_dir>/round-<n>/prior.json` and go to 1 with `--prior` naming it.
-5. **`ask`, reason `decision`**: ask the user each finding in `decisions` (headless: `aiw ask`, one
-   question per finding, then end your turn). Record each answer in the draft's `## Decisions` as
-   `- <decision> — <why> (review: <lens> <id>)`, with disposition `decided`. A round can carry both
-   decisions and blockers: ask first, then fix the blockers as in 4, then go to 1 with `--prior`.
-6. **`ask`, reason `cap`**: the round budget is spent and critical still blocks. Ask one question:
-   "Critical still blocks on: <items>." with the choices **"Accept as known gaps"** (add each item
-   under `## Open questions`, then go to Step 6), **"One more round"** (revise as in 4, then go to 1
-   with `--prior` and `--more`) and **"Stop"** (save nothing). In Flow auto mode, stop here and
-   report: the run never accepts gaps on the user's behalf.
-7. **`done`**: list `advisory_blockers` first, then `advisory`. Answer each as in 4; an advisory
-   blocker always needs a fix or a one-line reason. If you edited the draft, go to 1 with `--prior`
-   so the edit is reviewed too; past the budget, say in Step 6 that those edits were not reviewed.
-
-**With `--herdr`.** The reviewers run in herdr tabs instead of subagents; everything else above
-is the same, including the verdict path (`aiw prd-review verdict --file -`) and every rule. Headless
-runs (the web UI) ignore `--herdr` and use subagents. If `command -v herdr` fails, use subagents
-and say so.
-
-- Once, before round 1: `herdr pane current` for the workspace id, then for each lens
-  `herdr tab create --workspace <ws> --cwd <repo> --label prd-<lens>` and
-  `herdr agent start prd-<lens> --kind claude --pane <pane> -- --agent ai-workflow:run-specialist --disallowedTools "Write,Edit,NotebookEdit"`,
-  so each tab runs as the reviewer agent with no file-editing tools. Its shell commands follow your
-  normal permissions, so a shell can still write files (in bypass mode, without asking); that is
-  not read-only. It searches code
-  with `rg` through the shell.
-- Each round, step 2 becomes: `herdr agent prompt prd-<lens> "<the same dispatch text>"` for every
-  lens (no `--wait`, so they work in parallel), then for each lens
-  `herdr agent wait prd-<lens> --until idle --until done --until blocked`. On `blocked`, tell the
-  user which tab needs them (usually a permission prompt) and wait again; it does not count as a
-  missing verdict.
-- The tabs stay open across rounds, so a reviewer remembers its earlier rounds; `prior` stays the
-  record of what was settled. The user can talk to any tab between rounds.
-
-Step 6 then shows, above the draft: the rounds run, critical's verdict, each advisory blocker with
-its disposition, the decisions recorded, and any known gaps.
+Step 6 then shows `draft.md` and, above it, the skill's summary: the lenses picked, the rounds
+run, each lens's last verdict, each advisory finding with its disposition, the decisions
+recorded, and any known gaps.
 
 ## Step 6: Review gate — always
 
