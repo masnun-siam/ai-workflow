@@ -4,6 +4,15 @@
 
 ### Added
 
+- **`/peer-review` and `--review` on `/intake`, `/dump` and `/gh-issue`.** The reviewer panel
+  `/prd --review` uses is now the `peer-review` skill. Run it on its own after any work and it
+  reviews the change (the diff since a point you choose, plus the final answer) against what you
+  asked. The diff never includes secret-like files, binaries or lockfiles. `/intake`, `/dump` and
+  `/gh-issue` review their draft before anything is saved or filed (`/gh-issue` reviews every
+  issue body and the epic parent in one pass, then its factchecker still runs). A programmatic
+  call (`/gh-issue` and `/run-issue` running `/intake --whole`) never reviews. The reviewers run on
+  Opus, in subagents and in herdr tabs (checked: the tab's init event reports `claude-opus-5-5`);
+  `/run-issue`'s code-review specialists stay on Sonnet.
 - **`/prd --review [<lens,lens>]`: a reviewer panel before the review gate.** You pick the
   lenses from a pool of seven: critical (completeness), CEO (product value), CTO (feasibility
   against the repo), security, QA (testability), UX (design) and performance. Bare `--review`

@@ -27,7 +27,7 @@ pick the lenses per run, and wants the reviewers (not the worker) on Opus.
 | D11 | `/prd` moves onto the shared mechanism. With only critical ticked it behaves as today; any other ticked lens now blocks too (D4). |
 | D12 | Flow page: the PRD step's single "Peer review" box becomes lens checkboxes. The other Flow steps don't change. |
 | D13 | Offer lists as in P2. |
-| D14 | `/gh-issue` reviews the whole batch (every drafted body plus the epic parent) as one artifact, before its "Preview" gate, so nothing reaches GitHub unreviewed. Its post-create factchecker stays: it checks claims against the repo, the panel checks the drafts. |
+| D14 | `/gh-issue` reviews the whole batch (every drafted body plus the epic parent) as one artifact, once every body is written and before the first `gh issue create`, so nothing reaches GitHub unreviewed. ("Preview" shows only titles, before any body exists, so the review sits after it.) Its post-create factchecker stays: it checks claims against the repo, the panel checks the drafts. |
 | D15 | The panel runs only when the user invoked the command, so nothing is reviewed twice. A skill can't tell who invoked it, so this holds by construction: the panel runs only when `--review` is in the arguments, and programmatic callers (gh-issue step 0, run-issue's `/intake --whole`) never pass it. Tests pin that those call sites contain no `--review`. |
 | D16 | Standalone `/peer-review` without `--since` asks one question: uncommitted only / since upstream (`@{u}`) / since a SHA you give. It never picks a start point silently. |
 
