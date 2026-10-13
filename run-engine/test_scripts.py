@@ -4602,6 +4602,11 @@ assert "## PRD mode" in _read("agents", "run-specialist.md") and "prd_review" in
 assert "never put implementation" in _sp.lower() or "never adds implementation" in _sp.lower(), (
     "specialist PRD mode: what not how"
 )
+assert ".in.json" not in _rv and "Save each returned JSON" not in _rv, "the PRD's author never transcribes a verdict"
+assert "never write, copy or edit a verdict" in _rv, "prd: the author only reads recorded verdicts"
+assert "--file - <<'EOF'" in _sp and "Ignore any checklist text in the dispatch" in _sp, (
+    "the reviewer records its own verdict"
+)
 ok("prd --review: panel loop via aiw prd-review, run-specialist PRD mode, cap and decisions go to the user")
 
 _s8_184 = _ws(_key183(_skill_sections("skills/prd/SKILL.md"), "Step 8"))

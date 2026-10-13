@@ -166,12 +166,12 @@ Loop:
 1. `aiw prd-review next <review_dir> --prd <review_dir>/draft.md` (plus `--prior <file>` and
    `--more` when the steps below say so). It prints one JSON object; act on its `action`.
 2. **`review`**: dispatch one `ai-workflow:run-specialist` per lens in its `lenses`, in one message
-   so they run in parallel. Each dispatch says `artifact: prd`, the lens name, the rubric plus that
-   lens's prompt from `<config>` `prd_review`, the path `<review_dir>/round-<n>/request.json`, and
-   the repo path. Save each returned JSON object to `<review_dir>/round-<n>/<lens>.in.json`, then
-   `aiw prd-review verdict <review_dir> --lens <lens> --file <that file>`. On exit 5, dispatch that
-   lens once more with the printed reasons; refused twice, stop and report it. Then go to 1.
-3. **`wait`**: dispatch the lenses it lists as in 2.
+   so they run in parallel. Each dispatch says `artifact: prd`, the lens name, `<review_dir>`, the
+   round number and the repo path. Each reviewer reads its own checklist from `<config>` and records
+   its own verdict with `aiw prd-review verdict`; you only read `round-<n>/<lens>.json` afterwards.
+   You are the PRD's author, so you never write, copy or edit a verdict. Then go to 1.
+3. **`wait`**: a reviewer returned without a recorded verdict. Dispatch the lenses it lists once
+   more; if `next` still says `wait` for a lens, stop and report which one.
 4. **`revise`**: fix every finding in `blockers` by editing the draft's wording. Then answer every
    finding of the round (`blockers`, `advisory_blockers`, `advisory`): `fixed`, or `dismissed` with
    a one-line reason. Write that list (`[{lens, id, disposition, reason}]`) to

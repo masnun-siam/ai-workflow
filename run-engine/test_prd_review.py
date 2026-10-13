@@ -147,7 +147,13 @@ with tempfile.TemporaryDirectory() as tmp:
 
     rc, _, err = put("critical", verdict("critical", [finding(quote="not in the prd")]))
     assert rc == 5 and "quote" in err, err
-    assert put("critical", verdict("critical", [finding()]))[0] == 0
+    p = subprocess.run(  # the reviewer records its own verdict from stdin; the PRD's author never transcribes it
+        [AIW, "prd-review", "verdict", rd, "--lens", "critical", "--file", "-"],
+        input=json.dumps(verdict("critical", [finding()])),
+        capture_output=True,
+        text=True,
+    )
+    assert p.returncode == 0 and "critical changes" in p.stdout, p.stderr
     for lens in lenses:
         if lens != "critical":
             assert put(lens, verdict(lens, status="approve"))[0] == 0

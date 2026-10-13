@@ -126,7 +126,9 @@ def decide(verdicts: dict, lenses: dict, rnd: int, max_rounds: int) -> dict:
 import json  # noqa: E402  (kept beside the I/O half, the top of this file is pure)
 import os  # noqa: E402
 
-from shared import die, load_config, read_json, write_json  # noqa: E402
+import sys  # noqa: E402
+
+from shared import die, extract_json_object, load_config, read_json, write_json  # noqa: E402
 
 
 def _policy() -> dict:
@@ -204,7 +206,8 @@ def cmd_verdict(args) -> None:
         die(3, "no review round is open: run `aiw prd-review next` first")
     rd = os.path.join(args.review_dir, f"round-{n}")
     req = read_json(os.path.join(rd, "request.json"))
-    v = read_json(args.file)
+    # `-`: the reviewer pipes its own verdict in, so the PRD's author never transcribes it.
+    v = extract_json_object(sys.stdin.read()) if args.file == "-" else read_json(args.file)
     lenses = {k: {} for k in req["lenses"]}
     if isinstance(v, dict) and v.get("lens") != args.lens:
         die(5, f"the file is lens {v.get('lens')!r}, not --lens {args.lens}")
@@ -228,5 +231,5 @@ def register(sub, add) -> None:
     q = ops.add_parser("verdict", help="validate and record one lens's verdict for the open round")
     q.add_argument("review_dir")
     q.add_argument("--lens", required=True)
-    q.add_argument("--file", required=True, help="the verdict JSON")
+    q.add_argument("--file", required=True, help="the verdict JSON, or - for stdin")
     q.set_defaults(func=cmd_verdict)
