@@ -95,7 +95,8 @@ one paragraph for a change artifact. No `.run-issue.json` override (D3 picks per
 - **Doc kinds** (`prd`, `intake`, `dump`): the draft, written to `<review_dir>/draft.md` as `/prd`
   does today.
 - **`gh-issue`** (D14): `<review_dir>/draft.md` holds every drafted body plus the parent, each
-  under a `## Issue <n>: <title>` heading, reviewed before "Preview".
+  under a `## Issue <n>: <title>` heading (on a resume, only tasks with no issue yet), reviewed
+  once every body is written and before the first `gh issue create`.
 - **`custom`** (D9): `<review_dir>/artifact.md` with `## Ask`, `## Answer`, `## Diff`. Quotes are
   validated against this one file, so the quote rule works unchanged.
   - `## Ask`: in a UI session, the server writes `<review_dir>/ask.md` with the prompt verbatim

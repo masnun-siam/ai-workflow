@@ -310,7 +310,8 @@ reaches GitHub unreviewed.
 
 1. `aiw peer-review new gh-issue --slug <owner>-<repo>-<slug>` prints `<review_dir>`.
 2. Write `<review_dir>/draft.md` with the Write tool: one `## Issue <k>: <title>` section per
-   task in list order, holding that task's full body (its `Depends on: task <j>` lines as
+   task in list order (on a **"Resume this list"** run, only the tasks with no issue yet),
+   holding that task's full body (its `Depends on: task <j>` lines as
    ordinals, since no numbers exist yet), then, when `4-FLAT` will file an epic parent, a
    `## Epic parent: <title>` section with the parent's body as **Epic parent** sub-step 2
    describes it.

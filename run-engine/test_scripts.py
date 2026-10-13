@@ -4592,6 +4592,7 @@ for _w in (
     "in one message",
     "disputes",
     "a dispute the user settles either way is `decided`",
+    "answering every finding of the round",
     "--prior",
     "--more",
     "Accept as known gaps",

@@ -120,8 +120,10 @@ Print `review dir: <review_dir>` with every round's outcome, so a session resume
    settles either way is `decided` too, and if they side with the reviewer, also fix it. The
    recorded ruling changes the artifact, which opens the next round, and a reviewer can't
    re-raise a decided finding without new evidence. A round can carry both decisions and
-   blockers (or disputes and blockers): ask first, then fix the blockers as in 4, then go to 1
-   with `--prior`.
+   blockers (or disputes and blockers): ask first, then fix the blockers as in 4. Then write
+   `round-<n>/prior.json` answering every finding of the round (decisions and disputes
+   `decided`, blockers and advisory as in 4) and go to 1 with `--prior`; `next` refuses a new
+   round that leaves any finding unanswered.
 6. **`ask`, reason `cap`**: the round budget is spent and a lens still blocks. Ask one question:
    "<lens> still blocks on: <items>." with the choices **"Accept as known gaps"**, **"One more
    round"** (revise as in 4, then go to 1 with `--prior` and `--more`) and **"Stop"**. In Flow
