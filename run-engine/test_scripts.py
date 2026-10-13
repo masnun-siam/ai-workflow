@@ -591,8 +591,11 @@ elif argv[0] == "issue" and argv[1] == "edit":
 elif argv[1].endswith("/dependencies/blocked_by") and any(a.startswith("-F") for a in argv):
     num = argv[1].split("/issues/")[1].split("/")[0]
     dep = int(next(argv[i + 1] for i, a in enumerate(argv) if a == "-F").split("=")[1]) - 9000
-    if dep in cfg.get("blocked_by", {}).get(num, []):  # GitHub answers a duplicate edge with 422
-        sys.stderr.write("Validation failed: Target issue has already been taken (HTTP 422)")
+    dup = dep in cfg.get("blocked_by", {}).get(num, []) or f"{num}:{dep}" in cfg.get("post_dup", [])
+    if dup:  # GitHub answers a duplicate edge with 422
+        msg = "An error occurred while adding the blocking issue to the issue. Validation failed: Target issue has already been taken"
+        print(json.dumps({"message": msg, "status": "422"}))  # real gh: JSON on stdout, "gh: … (HTTP 422)" on stderr
+        sys.stderr.write(f"gh: {msg} (HTTP 422)")
         sys.exit(1)
     if cfg.get("dep_exit"):
         sys.stderr.write("HTTP 500")
@@ -729,6 +732,12 @@ with tempfile.TemporaryDirectory() as tmp:
     proc = blockers(tmp, env)
     assert proc.returncode == 1 and "#11 blocked by #10" in proc.stderr, proc.stderr
 ok("epic blockers stops on a failed POST and names the edge")
+
+with tempfile.TemporaryDirectory() as tmp:  # crash between POSTs: GET missed the edge, POST finds it
+    env, _ = gh_stub(tmp, bodies=_B, blocked_by={"11": [10]}, post_dup=["12:10"])
+    proc = blockers(tmp, env)
+    assert proc.returncode == 0 and "added: #12 blocked by #11" in proc.stdout, proc.stdout + proc.stderr
+ok("epic blockers counts GitHub's 422 'already been taken' as done")
 
 with tempfile.TemporaryDirectory() as tmp:
     env, _ = gh_stub(tmp, bodies={"10": "Depends on: #12", "11": "", "12": "Depends on: #10"})

@@ -392,6 +392,7 @@ def cmd_blockers(args) -> None:
         if proc.returncode != 0 or not isinstance(resp, dict):
             die(1, f"could not read #{child}'s body: {(proc.stderr or '').strip()[:160]}")
         deps[child] = parse_depends(resp.get("body") if isinstance(resp.get("body"), str) else "")
+        # ponytail: first page only (GitHub's default page size); add --paginate if a child ever has that many blockers.
         have, proc = gh_json(["api", f"repos/{slug}/issues/{child}/dependencies/blocked_by"])
         if proc.returncode != 0 or not isinstance(have, list):
             die(1, f"could not read #{child}'s blocked-by list: {(proc.stderr or '').strip()[:160]}")
@@ -415,7 +416,8 @@ def cmd_blockers(args) -> None:
             die(1, f"could not resolve #{d}'s issue id for #{c} blocked by #{d}: {(proc.stderr or '').strip()[:160]}")
         # The id must be the DATABASE id sent as an integer (-F); -f sends a string and 422s.
         _, proc = gh_json(["api", f"repos/{slug}/issues/{c}/dependencies/blocked_by", "-F", f"issue_id={dep_id}"])
-        if proc.returncode != 0 and "already been taken" not in (proc.stderr or ""):
+        # gh prints the 422 JSON on stdout and a "gh: …" line on stderr; both carry the text (probed).
+        if proc.returncode != 0 and "already been taken" not in (proc.stdout or "") + (proc.stderr or ""):
             die(1, f"could not add #{c} blocked by #{d}: {(proc.stderr or '').strip()[:160]}")
         print(f"added: #{c} blocked by #{d}")
 
