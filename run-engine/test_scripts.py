@@ -4486,8 +4486,14 @@ for _w in (
 ):
     assert _w in _cp, f"create-prd lacks {_w!r}"
 assert "End with the line `→ next: /create-tasks <prd-path>`" in _cp, "create-prd next line"
-for _bad in ("wasensi", "staging", "webhook-receiver", "Pest", "MongoDB", "/implement-issue", "/verifier-locally"):
-    assert _bad not in _cp, f"create-prd still names {_bad!r}"
+_te = _read("skills", "create-prd", "templates", "epic.md")
+_tp = _read("skills", "create-prd", "templates", "prd.md")
+for _name, _txt in (("SKILL.md", _cp), ("templates/prd.md", _tp), ("templates/epic.md", _te)):
+    for _bad in ("wasensi", "staging", "webhook-receiver", "Pest", "MongoDB", "/implement-issue", "/verifier-locally"):
+        assert _bad not in _txt, f"create-prd {_name} still names {_bad!r}"
+# Tenant wording only for multi-tenant repos.
+for _ln in _tp.splitlines():
+    assert "tenant" not in _ln.lower() or "multi-tenant" in _ln, f"PRD template: unconditional tenant line {_ln!r}"
 _tp = _read("skills", "create-prd", "templates", "prd.md")
 _hs = re.findall(r"^##+ .+$", _tp, re.M)
 assert _hs == [
@@ -4539,6 +4545,37 @@ for _sk in ("create-prd", "create-tasks", "refine-issues"):
         f"{_sk}: footer must file an issue, never edit"
     )
 ok("improve-this-skill footer files an issue on the plugin repo")
+
+# The repo PRD is canonical, and --update appends downstream decisions to it.
+_prd_all = _skill_sections("skills/create-prd/SKILL.md")
+_canon = _ws(_prd183["Arguments"]) + " " + _ws(_key183(_prd_all, "Step 7"))
+assert re.search(r"canonical", _canon) and "docs/prds/<slug>.md" in _canon, (
+    "create-prd: docs/prds/<slug>.md is canonical"
+)
+_upd = _ws(_key183(_prd_all, "Update mode"))
+assert "--update" in _ws(_prd183["Arguments"]), "create-prd Arguments must document --update"
+for _w in ("## Decisions", "Open questions", "mirror", "no grilling"):
+    assert _w.lower() in _upd.lower(), f"create-prd Update mode lacks {_w!r}"
+assert re.search(r"already (there|present|recorded)", _upd), "create-prd Update mode must skip a recorded decision"
+# The pair is linked both ways at save time and followed, never guessed from names.
+_s7 = _ws(_key183(_prd_all, "Step 7"))
+assert "**Mirror:**" in _s7 and "name=canonical" in _s7, "create-prd: Step 7 must record the mirror/canonical links"
+assert "never by matching names" in _ws(_key183(_prd_all, "Step 2")), "create-prd: Step 2 follows the links"
+assert "no canonical copy" in _upd and "Never create a repo file during an update" in _upd, (
+    "create-prd: vault-only update"
+)
+assert "before \u2192 after" in _upd, "create-prd: Update mode reports edited requirements as before -> after"
+assert "not inside a git repo" in _ws(_key183(_prd_all, "Step 1")), "create-prd: no repo -> Obsidian only"
+assert re.search(r"re-run `property:set` for each of them right after it", _s7) and "`canonical`" in _s7, (
+    "create-prd: frontmatter (incl. canonical) must be re-set after every overwrite"
+)
+assert "and re-set `tags`, `status` and `canonical` after the overwrite" in _upd, (
+    "create-prd: Update mode re-sets canonical"
+)
+assert "never overwrite with partial content" in (_upd + _s7).lower(), "create-prd: overwrite guard"
+# Approve prints a next line elsewhere in the file; Update mode itself never does.
+assert "\u2192 next:" not in _upd, "create-prd Update mode prints no next line (the caller owns what follows)"
+ok("create-prd: repo copy canonical; --update appends decisions, resolves open questions, mirrors to Obsidian")
 
 # Six-flow step 3: /create-tasks is a standalone entry over gh-issue's own 3.5/3.6 (one source of truth).
 _ct_path = os.path.join(HERE, "..", "skills", "create-tasks", "SKILL.md")
@@ -4686,7 +4723,20 @@ assert re.search(r"[Hh]eadless.{0,80}--herdr", _pk), "peer-review: --herdr is ig
 assert "remembers its earlier rounds" in _pk, "peer-review: reused tabs keep context, said plainly"
 assert "that is not read-only" in _pk, "peer-review: --herdr tabs are not over-promised as read-only"
 
-_rv = _ws(_key183(_skill_sections("skills/create-prd/SKILL.md"), "Step 5.5"))
+_pr_all = _skill_sections("skills/create-prd/SKILL.md")
+assert "--review [<lens,lens>]" in _ws(_pr_all["Arguments"]) and "--herdr" in _ws(_pr_all["Arguments"])
+_rv = _ws(_key183(_pr_all, "Step 5.5"))
+for _w in (
+    "aiw peer-review new create-prd",
+    "never reuse one",
+    "ai-workflow:peer-review",
+    "--kind create-prd --dir <review_dir>",
+):
+    assert _w in _rv, f"create-prd Step 5.5 lacks {_w!r}"
+assert "save nothing" in _rv and "## Open questions" in _rv and "never accepts gaps" in _rv, "create-prd: finish line"
+assert "Peer review decisions (Step 5.5)" in _ws(_key183(_pr_all, "Flow auto mode")), (
+    "create-prd auto mode: review decisions are asked"
+)
 _sp = _ws(_read("agents", "run-specialist.md"))
 assert "## Peer review mode" in _read("agents", "run-specialist.md") and "peer_review.rubric" in _sp
 assert "request.json" in _sp and "reraises" in _sp and "distinct_because" in _sp and "new_evidence" in _sp, (
@@ -4700,6 +4750,10 @@ for _t in (_sp, _rv, _pk):
 assert "never put implementation" in _sp.lower() or "never adds implementation" in _sp.lower(), (
     "specialist: a doc fix is what, not how"
 )
+assert "(kind `create-prd`, rubric `prd-doc`)" in _sp and "may state contracts" in _sp, (
+    "specialist: a PRD's Technical design may state contracts"
+)
+assert "only code-level detail is banned" in _sp, "specialist: prd-doc bans only code-level detail"
 assert "--file - <<'EOF'" in _sp and "Ignore any checklist text in the dispatch" in _sp, (
     "the reviewer records its own verdict"
 )

@@ -53,7 +53,7 @@ Keep it at the level of contracts and behaviour. Names that are part of a contra
 
 ### Data
 
-Which store, the tables or collections, their fields and types, indexes, tenant scoping, and the migration or backfill for existing data.
+Which store, the tables or collections, their fields and types, indexes, data scoping (multi-tenant repos only), and the migration or backfill for existing data.
 
 ### API
 
@@ -81,7 +81,7 @@ Which kind of test (API, unit, component, end to end, manual) proves which requi
 
 ## Rollout and cost
 
-All tenants at once or gated, billing or provider-cost impact, and anything operations must do before or after release.
+All users at once or gated, billing or provider-cost impact, and anything operations must do before or after release.
 
 ## Success metrics
 

@@ -98,7 +98,11 @@ this section does.
    dispatch changes nothing. A lens that searches the code uses it as **evidence** for a finding
    and cites file:line. For a doc (rubric `doc`) you never put implementation into it: a doc is
    the what and why, never the how, so a fix rewords a requirement and never adds a module, table
-   or endpoint. For a change (rubric `change`) a fix may name code to change.
+   or endpoint. A PRD (kind `create-prd`, rubric `prd-doc`) is the exception: its `## Technical design`
+   may state contracts (data shape, tables or collections and their fields, endpoints and their
+   fields, events, sync or queued), so a finding may ask for one; only code-level detail is banned
+   (file paths, class or method names, signatures, step-by-step logic), and a finding flags any that
+   is there. For a change (rubric `change`) a fix may name code to change.
 3. Every blocker or major sets `reraises`: the id of your own finding in `prior` that it raises
    again, or `null`. Raise again a finding the author `dismissed` only with new evidence; the user
    then decides it. A `decided` finding is the user's ruling: re-raise it only with a quote of the
