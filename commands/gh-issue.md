@@ -10,14 +10,8 @@ I have a ${1:-bug / feature request / task / improvement} to log as a GitHub iss
 0. **Source check.** Before anything else, remove `--review`, the token after it when that token
    doesn't start with `--` (the picked lenses), and `--herdr` from `$@`, and remember them for
    **Peer review** below. Every later `$@` in this file, including the `/intake` call, means the
-   stripped value, so `/intake` never reviews the brief a second time. Then, first, a saved task list: if `$@` is a `docs/tasks/<slug>.md` file whose
-   tasks are `## Task <n>` blocks (what `/create-tasks` or step 3.6 saved), the list is already
-   decomposed and approved. Skip `/intake` and steps 1–3.6, and take `<slug>` from the file name.
-   Follow **Saved task list and the epic** at the end of this file first (inputs, preview, and
-   one question round per task). Then, with one task, file it through step 4 as a single issue
-   built from that task's block. With two or more, go to `4-FLAT` exactly as if the user had
-   chosen **"Resume this list"** at step 3.6's collision prompt.
-   Otherwise, if `$@` matches one of `/intake`'s detectable source shapes — a
+   stripped value, so `/intake` never reviews the brief a second time.
+   If `$@` matches one of `/intake`'s detectable source shapes — a
    `sentry.io` URL, an existing `.md`/`.txt`/`.pdf`/`.docx` file path, or a vault note
    title that exactly matches one note — invoke `/intake $@ --whole` and wait for its `## Intake
    result` block. Use its `type:` value in place of
@@ -66,11 +60,7 @@ decided in the final report:
 - **Step 3 (grilling):** skipped. Take requirements, acceptance criteria, priority, users and
   corner cases from the PRD. Anything the PRD leaves undecided is written into the issue's Notes
   as an assumption, never asked.
-- **Task list (3.5):** created as shown. **Slug and destinations (3.6):** the proposed slug;
-  save to `docs/tasks/<slug>.md` and the feature's Obsidian `Tasks.md` (no wiki). An existing
-  `docs/tasks/<slug>.md` is resumed; an existing `Tasks.md` gets this run's list appended.
-  A new feature folder is fine to create.
-- **Create failure (4-FLAT step 5):** retry the missing ones once, then stop and report.
+- **Task list (3.5):** 2 or more tasks stop as 3.5 says; Flow auto mode never files a partial list.
 - **Assignee (step 5):** only the authenticated user (`gh api user --jq .login`).
 - **Project (step 6):** the project(s) linked to the repo
   (`gh repo view <owner>/<repo> --json projectsV2 --jq '.projectsV2.Nodes'`); if several,
@@ -81,28 +71,20 @@ decided in the final report:
   issue's content and the PRD (for example Priority from the PRD's priority). Never invent option
   names. List every value set, per issue, in the report.
 - **Step 7:** the `/dump` it invokes runs in Flow auto mode too, so its confirmation is skipped.
-- **Hand-off line:** print the `→ next:` line as text only. Never invoke `/fix-blockers`, the
+- **Hand-off line:** print the `→ next:` line as text only. Never invoke `/create-prd`, the
   `herdr-dispatch` skill or the `herdr` CLI, or open tabs; the UI's next steps do that.
 
 
-**HARD RULE — while executing steps 0–7 below, including everything under `4-FLAT`
-(note: `4-FLAT` has its own internal 1–5 numbering; that's a sub-branch of top-level
-step 4, not a separate range, and it is still fully bound by this rule), this skill only
-ever creates a GitHub issue. It never touches code.**
+**HARD RULE — while executing steps 0–7 below, this skill only ever creates a GitHub issue.
+It never touches code.**
 - NEVER use Write, Edit, or NotebookEdit on any file in the repo.
 - NEVER run a mutating shell command (`git commit`, `git checkout -b`, package installs, formatters, codemods, etc.).
 - The ONLY writes permitted are the **Peer review** draft under `<data_dir>` (outside the repo), the temp body file at `/tmp/gh-issue-body.md`, the `gh issue create` / `gh issue edit` / `gh project` calls below, `aiw ask` when headless (records the question in the UI session, outside the repo), and the notes-vault dump in step 7 (that's a different vault, not the repo, and goes through the `dump` skill's own confirmation).
-- The sole exception to the rules above is the step 3.6 task-list save, and only when its conditions hold: (a) `docs/tasks/<slug>.md` written via the Write tool in step 3.6 and edited only to fill `Issue:` slots in `4-FLAT` (an override of the no-Write/no-Edit rule for that one path only); (b) the Obsidian `Tasks.md` via `obsidian vault=notes`, only when the user chose Obsidian, placed the way `/dump` does, plus the vault sibling writes `/dump`'s linking rules produce (the Index append and Related link); (c) the wiki clone/commit/push of `Tasks-<Title>.md` in a scratchpad clone, only when the user chose the wiki and confirmed the push (an override of the no-mutating-shell rule for that clone only). It covers nothing else: no other repo file, and no `git add` or commit of `docs/tasks/`.
-- **Saved task list and the epic** adds exactly two more: `aiw epic split` when `4-FLAT` ran
-  (sub-issue links, the parent's `## Tasks` checklist, and `epic.json` under `<runs_dir>`, outside
-  the repo), and, only for a saved task list, the `/prd --update` it invokes on the PRD the list's
-  header names.
 - This holds even for a one-character fix. "It's trivial" is not an exception — the whole point of filing an issue is that a human decides whether and how to make the change.
 - If a fix is obvious from your investigation, do NOT apply it. Record it under a **Proposed Fix** section in the issue body instead (file path, symbol, and the change in prose or a fenced diff).
-- **Scope.** These constraints bind steps 0–7 of this skill only, including everything
-  under `4-FLAT`. When `/run-issue` invoked this skill, they lapse the moment the issue
-  URL (or the ordered URL list) is returned — the caller's later phases write code by design, and this rule must
-  not be carried into them.
+- **Scope.** These constraints bind steps 0–7 of this skill only. When `/run-issue` invoked
+  this skill, they lapse the moment the issue URL is returned — the caller's later phases write
+  code by design, and this rule must not be carried into them.
 
 Do the following:
 
@@ -135,43 +117,13 @@ Do the following:
      the rubric (a requested merge that would break a limit is declined, with the reason
      shown), and present the same question again. Loop until **"Create as shown"**
      is picked. No round limit.
-   - **"Create as shown"**: route on the approved list's task count — 1 task goes to
-     step 4 (single issue, unchanged); 2 or more tasks go to `4-FLAT`, in the list's dependency order, after step 3.6 saves the list.
-3.6. **Save the task list.** Runs once, right after step 3.5's "Create as shown" and
-   before its routing creates any issue. Slug: kebab-case from the PRD/source title (the
-   `/intake` brief's title when step 0 ran). For free text with no title, propose a slug
-   and have the user confirm it. Ask ONE `AskUserQuestion` (multiSelect) (if headless, one `aiw ask`, then end your turn) that shows the
-   proposed slug as the recommended answer (the user edits it via Other) and offers the optional destinations Obsidian and/or GitHub wiki (local is always
-   on, not a choice).
-
-   If `docs/tasks/<slug>.md` already exists, stop and ask (new slug, skip the save, or **"Resume this list"**); never
-   overwrite silently. Show the existing file's title, source and how many `Issue:` slots are filled, so the user can tell a resume from an unrelated collision. **"Resume this list"** leaves the file as is and goes to `4-FLAT`, which then uses the saved list instead of the one just approved. Resume skips the Obsidian/wiki destination writes: the saved list is only read, not rewritten.
-
-   File shape: a header (title, source, date, owner/repo), then one block per task in the
-   approved dependency order: `## Task <n> — <title>` (n is the task's sequence number),
-   Outcome, Files/symbols, Acceptance criteria, Verify command, `Depends on: task <k>` (or
-   none), and `Issue: —` (the issue-number slot, filled in later). Only when a task genuinely cannot be split further, and so still fails
-   the size rubric, it gets a `Rubric: flagged — <limit broken>` line.
-
-   - **Local** (always): write via the Write tool, creating `docs/tasks/` on demand. Never
-     `git add` or commit it.
-   - **Obsidian** (only if chosen): resolve `05-Work/<Project>/<Feature>/` the way `/dump`
-     does (a new feature folder needs explicit OK). First run
-     `obsidian vault=notes read path="05-Work/<Project>/<Feature>/Tasks.md"`; it prints
-     `Error: ... not found` when missing. If the note exists, stop and ask (new name such
-     as `Task List.md`, or skip Obsidian); never overwrite. Then
-     `obsidian vault=notes create path="05-Work/<Project>/<Feature>/Tasks.md" ...`, tags via
-     `property:set`, and a `## Related` append per `skills/dump/SKILL.md` "Tagging and
-     linking". Never plain file writes.
-   - **Wiki** (only if chosen): ask a separate "push the task list to the wiki?"
-     confirmation. If yes, shallow-clone `.wiki.git` into the scratchpad, write
-     `Tasks-<Title-With-Dashes>.md` (stop and ask if it exists), make a plain commit, and
-     push. Never `--no-verify`. A repo with no wiki counts as a failed destination; do not
-     create one.
-   - **Failures**: an Obsidian or wiki failure keeps the local file. Report each
-     destination on its own line with its path/URL, or `failed — <reason>` naming the
-     destination by name, then continue. If the local write itself fails, stop before
-     creating any issue.
+   - **"Create as shown"**: route on the approved list's task count. 1 task goes to step 4.
+     2 or more tasks: this is PRD-sized work, so this command creates nothing. Print the
+     approved list (it is the starting point for the PRD), say "This splits into <k> tasks;
+     write a PRD first so they get an epic, waves and refined sub-issues", and end with
+     `→ next: /create-prd <input>` (the original argument: a path or URL as given; for free
+     text, the vault feature folder when one is already known, such as from step 2.5's
+     research brief, otherwise the text in double quotes). Skip steps 4–7 and the return below.
 4. Then create a GitHub issue on the current repo:
    - With `--review`, run **Peer review** (below) on the body before this create, and file the reviewed body.
    - Write the full body to `/tmp/gh-issue-body.md` using the write tool
@@ -215,70 +167,27 @@ Do the following:
      gh label create lean --color 0E8A16 --description "small, well-specified: run lean roster" 2>/dev/null || true
      ```
 
-### 4-FLAT. Create the flat issues
-
-One issue per task from the step 3.6 list, each standalone.
-
-0. Preflight, before anything is created. If step 3.6 skipped the save because
-   `docs/tasks/<slug>.md` already exists, stop and ask for a new slug by step 3.6's
-   existing rule, so the `prd-<slug>` label and Notes links never mix two lists. Then check
-   every `Depends on: task <j>` in task k has j < k; otherwise stop, report the offending
-   task, and let the user fix the list via step 3.5's edit loop.
-   This resume branch overrides the new-slug stop above: choosing **"Resume this list"** is not skipping the save, and the `j < k` check runs on the saved list (the one Resume uses), not the approved one it discards.
-   If the user chose **"Resume this list"** in step 3.6, the saved `docs/tasks/<slug>.md` is the list: read it, show which tasks have no issue number yet, and create only tasks without an issue number, in list order; reuse the existing `Issue: #<n>` numbers for their `Depends on:` lines. First run `gh issue list --label prd-<slug> --state all --limit 200 --json number,url,title,body` (the guard runs before the show step is final, so that list reflects its findings); an issue whose Notes says `Task <n> of docs/tasks/<slug>.md` (Notes wrap the path in backticks, so match on the `Task <n> of` text and the slug) for a task with an empty slot, and whose title also matches that task's planned title, was created but never recorded, so fill that slot with the sub-step 4 write-back instead of creating it again. A Notes-only match with a different title may belong to another list sharing the slug: report it and leave it for the user. If every slot is filled, create nothing and report the existing issues.
-   Ask step 5's assignee question and step 6's project and field questions here, once for the whole list and before the first create; skip them when nothing is left to create.
-1. Ensure the labels once, before the first create (`<slug>` is the step 3.6 slug):
-
-   ```bash
-   gh label create refined --color 1D76DB --description "properly specified: passes the issue template" 2>/dev/null || true
-   gh label create prd-<slug> --color 5319E7 --description "task from docs/tasks/<slug>.md" 2>/dev/null || true
-   ```
-2. Write one complete, DoR-passing body per task, using the same section list as step 4.
-   Context is inlined, never referenced: a task body must stand alone. Each How covers
-   only its own task. Notes links `Task <n> of docs/tasks/<slug>.md`.
-3. With `--review`, run **Peer review** (below) first; every body here is then its reviewed
-   section. Create the issues one at a time in list order. Before writing task k's body, replace
-   each `Depends on: task <k>` line (k = an earlier task's number) with `Depends on: #<n>`, using the number already returned
-   for that task (or already in its `Issue:` slot) (edges only point at earlier tasks). Write the body to
-   `/tmp/gh-issue-body.md`, then run
-   `gh issue create --title "..." --label "refined,prd-<slug>,<type>,<scope...>" --body-file /tmp/gh-issue-body.md`
-   and delete the temp file. Labels are set at creation time: exactly `refined`,
-   `prd-<slug>`, the type and the scope labels. `lean` is never applied here.
-   Add step 5's `--assignee` flags and step 6's `--project` flags from the preflight answers to every create. If a create fails and the error names the project (e.g. missing `project` scope), retry that create once without `--project`, then after the loop add the issue to the chosen projects with `gh project item-add <number> --owner <owner> --url <issue-url>` and report it as a project failure in step 6 (don't abort). This applies on both paths.
-4. Write-back: every task block ends with an identical `Issue: —` line, so never
-   `replace_all` and never Edit on that line alone. Right after each successful create,
-   Edit with an `old_string` that starts at the task's own `## Task <k> — <title>` heading
-   and runs through its `Issue: —` line (unique), setting `Issue: #<n>`. Skip when
-   step 3.6 saved no local file.
-5. Check each create's and each write-back's exit status. On failure, stop like a failed
-   create: report the created issues (number and URL), the missing ones (by planned title),
-   and any issue that exists but is unrecorded in the file; never delete created issues.
-   Then `AskUserQuestion` with exactly these two choices: **"Retry the missing ones"**, **"Stop here"** (if headless, `aiw ask`, then end your turn).
-   - **"Retry the missing ones"**: re-enter the loop at the failed task, reusing the already-known issue numbers of earlier tasks for their `Depends on:` lines; never re-create a task that already has an issue (an unrecorded one gets its write-back retried, not a second create). Apply the duplicate guard above before every create after a failure: run the same `gh issue list --label prd-<slug> --state all --limit 200 --json number,url,title,body` lookup, so an issue GitHub accepted but whose create reported no number is recorded, not created twice.
-   - **"Stop here"**: end the run and report the partial state (created vs. missing); the filled `Issue:` slots let a later run resume the list.
-   Never close or delete an issue already created — a partial list is a recoverable state.
-
-4.5. Dispatch the `gh-issue-factchecker` agent (fresh context, no memory of the steps above) once per issue created in this run (one from step 4, each one from `4-FLAT`), each time with just that issue's number/URL and `owner/repo`. It re-reads the created issue cold and checks every concrete claim (file paths, symbols, described behavior, the proposed fix) against the real repo. Tell it explicitly: a `Source:` line in the Notes section pointing outside the repo (a Sentry permalink, an absolute file path, or a vault note path) is expected traceability from `/intake`, not a claim about this repo, and must not be flagged as an unverifiable claim. On a resume, also apply 4.5 and step 6 to reused issues never factchecked in an earlier run: every issue the resume run returns, created now or reused.
-   - `PASS` → continue with the next issue's factcheck, then step 5, no mention needed.
+4.5. Dispatch the `gh-issue-factchecker` agent (fresh context, no memory of the steps above) with just the created issue's number/URL and `owner/repo`. It re-reads the created issue cold and checks every concrete claim (file paths, symbols, described behavior, the proposed fix) against the real repo. Tell it explicitly: a `Source:` line in the Notes section pointing outside the repo (a Sentry permalink, an absolute file path, or a vault note path) is expected traceability from `/intake`, not a claim about this repo, and must not be flagged as an unverifiable claim.
+   - `PASS` → continue with step 5, no mention needed.
    - `ISSUES FOUND` → fix the flagged text yourself, write the corrected body to `/tmp/gh-issue-body.md`, run `gh issue edit <n> --body-file /tmp/gh-issue-body.md`, delete the temp file, and briefly tell me what was wrong and corrected. Do not silently ignore a flagged discrepancy.
-5. Assign the issues:
-   - Ask this once per run, never per issue, and apply the chosen logins to every issue this run creates: on the step 4 path before its create, on the `4-FLAT` path in its sub-step 0 preflight, before the first create.
+5. Assign the issue:
+   - Ask this once, before step 4's create.
    - Get the default assignee: `gh api user --jq .login`.
    - Confirm via AskUserQuestion (`multiSelect: true`), with that login (as `@me`) recommended first, alongside other repo collaborators from `gh api repos/{owner}/{repo}/assignees --jq '.[].login'` (if headless, `aiw ask`, then end your turn).
-   - Pass each chosen login as its own `--assignee <login>` flag on every `gh issue create` (combine with the create call in step 4 or `4-FLAT` sub-step 3 rather than a separate call).
+   - Pass each chosen login as its own `--assignee <login>` flag on the `gh issue create` (combine with the create call in step 4 rather than a separate call).
 6. Add to a GitHub Project and fill its fields, discovered at runtime — never assume a project or field schema:
-   - Ask the project and field questions once per run and apply the answers to every issue this run creates: on the step 4 path before its create, on the `4-FLAT` path in its sub-step 0 preflight, before the first create.
+   - Ask the project and field questions once, before step 4's create.
    - `gh project list --owner <repo-owner> --format json`
-     - Zero projects → skip this step entirely, go straight to returning the URL(s). On the `4-FLAT` path this skips only the project questions; the run goes on to the first create.
+     - Zero projects → skip this step entirely, go straight to returning the URL.
      - One project → use it.
      - Multiple → ask via AskUserQuestion (`multiSelect: true`) which ones (if headless, `aiw ask`, then end your turn).
-   - Add every issue to each chosen project at creation time, one `--project "<title>"` flag per project on every create (same call as step 4/5). Retry reuses the preflight answers and does not re-ask.
+   - Add the issue to each chosen project at creation time, one `--project "<title>"` flag per project on the create (same call as step 4/5).
    - For each chosen project, read its fields: `gh project field-list <number> --owner <owner> --format json`.
    - For each `ProjectV2SingleSelectField` on each project, ask the user to pick from that field's real `options` (never invent option names) — batch into as few AskUserQuestion calls as possible (max 4 questions per call). Skip any field the user declines to set. If headless, use `aiw ask` (one round, up to 4 questions), then end your turn.
-   - Set each chosen field on every issue — **one field per `item-edit` call** (the CLI only supports single-field updates on non-draft issues):
+   - Set each chosen field on the issue — **one field per `item-edit` call** (the CLI only supports single-field updates on non-draft issues):
      `gh project item-edit <number> --owner <owner> --url <issue-url> --field "<name>" --value "<option>"`
-   - If any `gh project` call fails, don't abort — the issue already exists and is assigned; keep going with the remaining issues and fields. Report each affected issue URL and state plainly which fields couldn't be set and why (a missing `project` token scope is the likely cause; fix with `gh auth refresh -s project`).
-   - Verify project fields landed on every issue with `gh issue view <n> --repo <owner>/<repo> --json projectItems` — cheap, and confirms per-project field values (e.g. Status) directly on the issue. Do NOT verify by paginating `gh project item-list` (projects can hold hundreds/thousands of items — pulling the full list to find one issue wastes time and burns context).
+   - If any `gh project` call fails, don't abort — the issue already exists and is assigned; keep going with the remaining fields. Report the issue URL and state plainly which fields couldn't be set and why (a missing `project` token scope is the likely cause; fix with `gh auth refresh -s project`).
+   - Verify project fields landed on the issue with `gh issue view <n> --repo <owner>/<repo> --json projectItems` — cheap, and confirms per-project field values (e.g. Status) directly on the issue. Do NOT verify by paginating `gh project item-list` (projects can hold hundreds/thousands of items — pulling the full list to find one issue wastes time and burns context).
 7. Dump the gathered context into the notes vault so it's there next time. Invoke the
    `ai-workflow:dump` skill, passing it: the issue title and URL, the final issue body, and the
    decisions from the step-3 grilling that did NOT make it into the body verbatim
@@ -292,99 +201,24 @@ One issue per task from the step 3.6 list, each standalone.
    Best-effort: if the vault is unreachable or `/dump` is cancelled, say so in one line.
    The issue already exists and is the deliverable; the dump is not worth failing over.
 
-Return the issue URL when step 4 created one issue. When `4-FLAT` ran (2 or more tasks),
-first run **Epic parent** (and, for a saved list, **Decisions to the PRD**; both in **Saved task list and the epic**),
-then return the epic parent's URL followed by the ordered list of issue URLs, one per task in
-list order (including issues reused on resume). If `/run-issue` invoked this skill, hand control back to its Preflight step 3
-— with that issue number for one issue, or with the parent URL and that ordered list of issue URLs for 2 or
-more — and continue the run; the HARD RULE above no longer applies.
-On a standalone run there is nothing to hand back to. End with the line
-`→ next: /fix-blockers <parent>` when an epic parent was filed, or `→ next: herdr-dispatch <n>`
-for a single issue. It is the last line of your output; the Guided Flow parses it.
+Return the issue URL. End with `→ next: herdr-dispatch <n>`. It is the last line of your output;
+the Guided Flow parses it. If `/run-issue` invoked this skill, hand control back to its Preflight
+step 3 with that issue number and continue the run; the HARD RULE above no longer applies.
 
 ## Peer review (only with `--review`)
 
-One review covers the whole batch, before the first `gh issue create`: on the step 4 path once
-its body is written, on the `4-FLAT` path once sub-step 2 has written every task's body. Nothing
-reaches GitHub unreviewed.
+One review covers the issue, before the first `gh issue create`, once step 4 has written its body.
+Nothing reaches GitHub unreviewed.
 
-1. `aiw peer-review new gh-issue --slug <owner>-<repo>-<slug>` prints `<review_dir>`.
-2. Write `<review_dir>/draft.md` with the Write tool: one `## Issue <k>: <title>` section per
-   task in list order (on a **"Resume this list"** run, only the tasks with no issue yet),
-   holding that task's full body (its `Depends on: task <j>` lines as
-   ordinals, since no numbers exist yet), then, when `4-FLAT` will file an epic parent, a
-   `## Epic parent: <title>` section with the parent's body as **Epic parent** sub-step 2
-   describes it.
+1. `aiw peer-review new gh-issue --slug <owner>-<repo>-<slug>` (`<slug>`: kebab-case from the
+   issue title) prints `<review_dir>`.
+2. Write `<review_dir>/draft.md` with the Write tool: one `## Issue 1: <title>` section holding
+   the issue's full body.
 3. Invoke the `ai-workflow:peer-review` skill with
    `--kind gh-issue --dir <review_dir> --lenses <picked>` (plus `--herdr`). It revises
    `draft.md` in place and asks the user any decisions.
-4. On its `stopped` finish, create nothing and report. Otherwise file the reviewed bodies: each
-   create (and the epic parent's) uses its section of `draft.md`, with the ordinals replaced by
-   real numbers as `4-FLAT` sub-step 3 says. Accepted gaps go into the matching issue's Notes as
-   known gaps.
+4. On its `stopped` finish, create nothing and report. Otherwise file the reviewed body from
+   `draft.md`. Accepted gaps go into the issue's Notes as known gaps.
 
-The post-create factchecker (step 4.5) still runs: the panel checks the drafts, the factchecker
-checks each filed issue's claims against the repo.
-
-## Saved task list and the epic
-
-Step 0 sends a saved `docs/tasks/<slug>.md` here before anything is filed. **Epic parent** runs
-whenever `4-FLAT` filed the issues, on the step 3.5 path too. **Decisions to the PRD** runs only for
-a saved list, after step 4 or `4-FLAT`; on the step 3.5 path, step 3's decisions go to step 7's
-`/dump` as before.
-
-**Inputs.** The list's header names `Problem statement: <path>` and `PRD: <path>` (or `PRD: none`).
-Read both. When the PRD is a vault note with a `canonical` property naming this repo
-(`obsidian vault=notes property:read path="<prd>" name=canonical`), read that repo copy instead:
-it is the canonical one, and the vault note may be stale. A list saved without these lines: ask
-for the two paths once (`none` is a valid answer for the PRD).
-
-**Preview, once.** Before the first create, show every task title in list order with its
-`Depends on:` lines, which tasks already have an issue (a resume), the epic parent's title, and
-the labels. Ask one question with the choices **"File these"** and **"Stop"** (headless: `aiw ask`,
-then end your turn). "Stop" files nothing. In Flow auto mode, skip this question: there the user
-already confirmed the writes with Flow's "Continue" into the gh-issue stage (see
-`skills/flow/SKILL.md` Guardrails).
-
-**One question round per task.** In list order, before writing a task's body in `4-FLAT` sub-step 2
-(or step 4 for a single task), compare the task with the PRD, the problem statement and the code.
-Ask only what is still unclear about that task, in one round; skip the round when nothing is.
-Fold each answer into that task's body, and keep it as a decision line
-`<decision> — <why> (Task <n>)` for **Decisions to the PRD**. Flow auto mode asks nothing: an
-open point goes into that issue's Notes as an assumption.
-
-**Links.** Every doc a body mentions is a link the reader can open. A repo file links to
-`https://github.com/<owner>/<repo>/blob/<base>/<path>` only when it exists on that branch
-(`gh api "repos/<owner>/<repo>/contents/<path>?ref=<base>"` succeeds); otherwise keep it as a
-backticked path (`docs/tasks/` and `docs/prd/` are often uncommitted). External URLs are markdown
-links. The `Test root:` and `Base branch:` values stay plain text, because `aiw refined` reads them.
-
-**Epic parent.** After `4.5`, file one parent over the issues `4-FLAT` filed.
-
-1. Re-run safety: `gh issue list --label epic --label prd-<slug> --state all --json number,title`.
-   If a parent exists, reuse it and skip to sub-step 3. A closed one is reused too: say
-   "reusing closed parent #N" in the preview.
-2. Ensure the label once, without touching a repo's own `epic` label (`--force` would recolour it):
-   run `gh label list --search epic --json name --jq '.[].name'`, and only when no line is exactly
-   `epic`, run `gh label create epic --color 0E8A16 --description "parent of a task list"`. A
-   failure here stops the run with gh's error. Then create the parent with `--label "epic,prd-<slug>"` (never `refined`; it is not runnable as
-   one issue) and step 5/6's assignee and project flags. Its body: `## Problem statement` (the
-   problem statement's content, or the intake brief on the step 3.5 path), `## PRD` (a link or
-   path, or "none"), and `## Tasks` (left for the split to fill).
-3. Right away, link the children, so the parent is never an epic without sub-issues:
-
-   ```bash
-   aiw epic split "<runs_dir>/<owner>-<repo>-epic-<parent>" \
-     --parent <parent> --slug <owner>/<repo> --children <n>,<n>,…
-   ```
-
-   Children in list order. It links them as sub-issues, checks that `Depends on:` forms a DAG,
-   writes the parent's `## Tasks` checklist, and writes the `epic.json` that `/run-issue <parent>`
-   Epic mode reads. It is idempotent, so a re-run is safe. Exit 1: report its message and stop.
-   It links the children before it checks `Depends on:`, so on a cycle or a bad `Depends on:` the
-   children may already be linked while no `epic.json` exists; `/run-issue <parent>` Epic mode
-   then re-runs the split in its step 0 and stops on the same error until the lines are fixed.
-
-**Decisions to the PRD.** When the question rounds produced decisions and the header names a PRD,
-invoke the `ai-workflow:prd` skill with `--update <prd> <decision lines>`. With `PRD: none`, pass
-them to step 7's `/dump` instead, as today.
+The post-create factchecker (step 4.5) still runs: the panel checks the draft, the factchecker
+checks the filed issue's claims against the repo.

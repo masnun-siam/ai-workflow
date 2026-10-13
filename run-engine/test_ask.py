@@ -624,8 +624,6 @@ IV_SITES = {
     "commands/gh-issue.md": [
         "Use the grill-me skill",
         "Present the list in exactly one",
-        "Ask ONE `AskUserQuestion` (multiSelect)",
-        "Then `AskUserQuestion` with exactly these two choices",
         "Confirm via AskUserQuestion",
         "ask via AskUserQuestion (`multiSelect: true`) which ones",
         "ask the user to pick from that field's real",
