@@ -159,7 +159,8 @@ def _entry(kind: str, rec: dict, now: float, question, picked) -> dict:
 
 
 # #188: these interviews are the user's product decisions, so they always wait for a human.
-NEVER_AUTO = ("prd", "dump")
+# create-tasks asks about scope; fix-blockers confirms writes to GitHub.
+NEVER_AUTO = ("prd", "dump", "create-tasks", "fix-blockers")
 
 
 def _answer(rec: dict, now: float) -> dict | None:

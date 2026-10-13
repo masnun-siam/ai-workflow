@@ -24,12 +24,18 @@ the changes below. Do not copy them here; a rule changed there applies here too.
 
 ## Arguments
 
-`/create-tasks <problem-statement> [<prd>]`
+`/create-tasks <prd | problem-statement>`: one path, the one the previous step's `→ next:` line named.
 
-- `<problem-statement>`: what `/dump` filed (a vault `Dump.md`, or a bug in `Bugs.md`), or free text.
-- `<prd>`: the PRD, a repo `docs/prd/<slug>.md` or a vault `PRD.md`. If it is a vault note with a
+- **A PRD** (a vault `PRD.md` or a repo `docs/prd/<slug>.md`). If it is a vault note with a
   `canonical` property (`obsidian vault=notes property:read path="<prd>" name=canonical`) naming
-  this repo, read that repo copy instead: it is the canonical one. A bug usually has no PRD.
+  this repo, read that repo copy instead: it is the canonical one. Its problem statement is the
+  `Dump.md` in the same vault folder (for a repo copy, the folder its `**Mirror:**` line names).
+  No `Dump.md` there: use the PRD's `## Problem` section and record `Problem statement: none`.
+- **A problem statement** (a bug in `Bugs.md`, a vault `Dump.md`, or free text). There is no PRD:
+  record `PRD: none`. `Bugs.md` holds every bug of the feature, one `## <date>: <title>` block each:
+  work on one bug. With one block, take it. With more, ask which one, newest first (the newest is
+  the block right above `## Related`). In Flow auto mode, take the newest without asking. Record
+  the chosen block as `Problem statement: <path> — <block heading>`.
 
 Read vault notes with `obsidian vault=notes read path="..."` and repo files with Read.
 
@@ -39,6 +45,15 @@ Headless (your system prompt contains `Headless run: ask via aiw ask`): ask ever
 with one `aiw ask` call per round, passing the JSON through a quoted heredoc
 (`aiw ask <<'EOF'` … `EOF`), recommended option first with `(Recommended)` on its label, then end
 your turn; the answer arrives as your next message. Otherwise use AskUserQuestion.
+
+### Flow auto mode
+
+When the system prompt contains `Flow auto mode`, this run is the Tasks step of the aiw ui guided
+Flow and asks nothing. An open point becomes an assumption written into that task's block. The
+list is saved as shown, under the proposed slug, to `docs/tasks/<slug>.md` only. An existing file
+with that slug is resumed only when its `Problem statement:` and `PRD:` header lines match this
+run's inputs; otherwise it is another list, so save under `<slug>-2` (or the next free number)
+and say so. Never overwrite either.
 
 ## Step 1: Gather
 

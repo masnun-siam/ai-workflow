@@ -182,7 +182,10 @@ assert ui_afk.load()["log"] == [] and ui_afk.load()["skipped_ci"] == []
 
 # #188: prd and dump interviews are never auto-answered (also plugin-prefixed); other families still are
 resumed.clear()
-held = [waiting(command=c) for c in ("/prd x", "/dump x", "/ai-workflow:prd x")]
+held = [
+    waiting(command=c)
+    for c in ("/prd x", "/dump x", "/ai-workflow:prd x", "/create-tasks p", "/ai-workflow:fix-blockers 40")
+]
 gi = waiting(command="/gh-issue x")
 ui_afk.tick(t + 1)
 assert all(ui_sessions.load(h)["status"] == "waiting" for h in held), [ui_sessions.load(h)["status"] for h in held]

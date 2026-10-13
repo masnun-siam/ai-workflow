@@ -36,6 +36,12 @@
 
 ### Changed
 
+- **The Guided Flow has six steps.** `/flow` and the `aiw ui` Flow page run dump → PRD →
+  tasks (`/create-tasks`) → issues (`/gh-issue`, with an epic) → blockers (`/fix-blockers`) →
+  dispatch. The `→ next:` lines follow: `/prd` hands off to `/create-tasks`, a bug's dump goes to
+  `/create-tasks`, and `/gh-issue` hands an epic parent to `/fix-blockers` (a single issue still
+  goes to `herdr-dispatch`). A flow saved mid-way at the old Issues step with a PRD now resumes at
+  Tasks. Both new commands can be started from the UI and are never auto-answered in AFK mode.
 - **`/gh-issue` files an epic parent again (ADR 0003).** On a saved task list it reads the
   problem statement and the PRD (the repo copy when the vault note links one), shows one preview
   and asks **"File these"**, then asks one question round per task before writing its issue.
@@ -88,6 +94,9 @@
 
 ### Fixed
 
+- **The flow.js stepper checks run again.** They sat in a `test_ui_static.py --view` block that
+  nothing runs (and that fails earlier on unrelated stale checks); they now run in its default
+  mode, so in the pre-push hook and CI.
 - **AFK failed-run retries on Python 3.10.** `ui_afk` parsed the runner's `…Z` timestamps
   with `datetime.fromisoformat`, which rejects a trailing `Z` before 3.11, so on 3.10 the
   retry never fired. It now uses the same tolerant parser as `review.py`.

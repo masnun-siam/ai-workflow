@@ -178,6 +178,8 @@ try:
     assert (
         ui_repos.build_command("day", "") == "/day" and ui_repos.build_command("day", "call Abir") == "/day call Abir"
     )
+    assert ui_repos.build_command("create-tasks", "docs/prd/x.md") == "/create-tasks docs/prd/x.md"
+    assert ui_repos.build_command("fix-blockers", "40") == "/fix-blockers 40"
     assert ui_repos.MAX_PROMPT_CHARS == 32000
     ok("build_command units, MAX_PROMPT_CHARS")
 

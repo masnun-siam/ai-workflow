@@ -4429,14 +4429,13 @@ NEXT = "\u2192 next: "
 _ws = lambda t: " ".join(t.split())  # noqa: E731  (_n is rebound by loops above)
 _dump184 = _skill_sections("skills/dump/SKILL.md")
 _s5_184 = _ws(_key183(_dump184, "Step 5"))
-for _p in (f"`{NEXT}/prd <feature-folder>`", f"`{NEXT}/gh-issue <note-path>`"):
+for _p in (f"`{NEXT}/prd <feature-folder>`", f"`{NEXT}/create-tasks <note-path>`", f"`{NEXT}/gh-issue <note-path>`"):
     assert _p in _s5_184, f"#184 dump Step 5 lacks {_p}"
 assert re.search(r"new feature.{0,40}change request.{0,80}/prd <feature-folder>", _s5_184, re.I), (
     "#184 dump: prd line routes"
 )
-assert re.search(r"bug report.{0,40}feature-scoped task.{0,80}/gh-issue <note-path>", _s5_184, re.I), (
-    "#184 dump: gh-issue line routes"
-)
+assert re.search(r"bug report.{0,20}/create-tasks <note-path>", _s5_184, re.I), "dump: a bug goes to /create-tasks"
+assert re.search(r"feature-scoped task.{0,20}/gh-issue <note-path>", _s5_184, re.I), "#184 dump: gh-issue line routes"
 assert re.search(
     r"standalone task.{0,40}meeting notes.{0,40}unclassifiable.{0,60}no `\u2192 next:` line", _s5_184, re.I
 ), "#184 dump: no line for standalone/meeting/unclassifiable"
@@ -4453,7 +4452,7 @@ for _f in ("**Problem:**", "**Who:**", "**Evidence:**", "**Expected:**", "### Ra
 assert re.search(r"never invent|do not invent|don't invent", _ps, re.I), "dump: problem statement must not invent facts"
 assert "just above `## Related`" in _ps and "overwrite" in _ps, "dump: a problem statement goes above ## Related"
 assert "content=\"$(cat <<'EOF'" in _ps, "dump: problem statement text goes through a quoted heredoc"
-assert "/create-tasks" not in _ps, "dump: describe only routing this branch makes true"
+assert "`/create-tasks` for a bug" in _ps, "dump: a bug's problem statement goes to /create-tasks (F11 routing)"
 assert "never overwrite with partial content" in _ps.lower(), "dump: overwrite guard"
 _s4 = _ws(_dump184["Step 4: File it"])
 for _route in ("**New feature**", "**Change request**", "**Bug report**"):
@@ -4502,6 +4501,10 @@ assert "aiw paths" in _ct and "<plugin_root>/commands/gh-issue.md" in _ct, (
     "create-tasks resolves gh-issue via aiw paths"
 )
 assert "`Problem statement: <path>`" in _ct and "`PRD: <path>`" in _ct, "create-tasks header names its inputs"
+assert "ask which one, newest first" in _ct and "take the newest without asking" in _ct, "create-tasks picks one bug"
+assert "resumed only when its `Problem statement:` and `PRD:` header lines match" in _ct and "`<slug>-2`" in _ct, (
+    "create-tasks auto mode never resumes an unrelated list"
+)
 _g0 = _ws(_slice(_ghi, "0. **Source check.**", "Details: $@"))
 assert "docs/tasks/<slug>.md" in _g0 and "## Task <n>" in _g0, "gh-issue step 0 must take a saved task list"
 assert re.search(r"one task.{0,80}step 4", _g0) and "Resume this list" in _g0, (
@@ -4572,13 +4575,15 @@ assert "This split writes to GitHub before Step 3's question" in _fb, "fix-block
 ok("fix-blockers: split if needed, preview, one confirmation, apply; Depends on stays the source")
 
 _s8_184 = _ws(_key183(_skill_sections("skills/prd/SKILL.md"), "Step 8"))
-assert f"End with the line `{NEXT}/gh-issue <prd-path>`" in _s8_184, "#184 prd Step 8 lacks the next line"
+assert f"End with the line `{NEXT}/create-tasks <prd-path>`" in _s8_184, "#184 prd Step 8 lacks the next line"
 assert "offer, in one line" not in _s8_184, "#184 prd Step 8 still has the prose offer"
-ok("#184 /prd Step 8 ends with \u2192 next: /gh-issue <prd-path>")
+ok("#184 /prd Step 8 ends with \u2192 next: /create-tasks <prd-path>")
 
 _close184 = _ws(_read("commands", "gh-issue.md"))
 _close184 = _close184[_close184.rindex("Return the issue URL") :]
-assert f"End with the line `{NEXT}herdr-dispatch <n> <n> \u2026`" in _close184, "#184 gh-issue lacks the next line"
+assert f"`{NEXT}/fix-blockers <parent>` when an epic parent was filed, or `{NEXT}herdr-dispatch <n>`" in _close184, (
+    "#184 gh-issue lacks the next line"
+)
 assert "hand control back to its Preflight step 3" in _close184
 assert _close184.index("hand control back") < _close184.index(NEXT), "#184 hand-back sentence stays first"
 ok("#184 /gh-issue ends with \u2192 next: herdr-dispatch; /run-issue hand-back unchanged")
@@ -4597,17 +4602,20 @@ _args187 = _ws(_key183(_fs, "Arguments"))
 for _shape, _stage in (
     ("Raw text", "dump"),
     ("feature folder", "prd"),
-    ("PRD path", "gh-issue"),
+    ("PRD path", "create-tasks"),
+    ("task list", "gh-issue"),
+    ("epic parent", "fix-blockers"),
     ("Issue numbers", "dispatch"),
 ):
     assert re.search(rf"{_shape}.{{0,160}}\| {_stage} \|", _args187, re.I), f"#187 entry shape {_shape} -> {_stage}"
 assert "Dump.md" in _args187, "#187 Dump.md path enters at prd"
-ok("#187 /flow exists and names the four entry shapes")
+ok("#187 /flow exists and names its six entry shapes")
 _route187 = _ws(_key183(_fs, "Routing after dump"))
 for _cls, _path in (
-    ("New feature", "prd \u2192 gh-issue \u2192 dispatch"),
+    ("New feature", "prd \u2192 create-tasks \u2192 gh-issue \u2192 fix-blockers \u2192 dispatch"),
     ("Change request", "prd"),
-    ("Bug report", "gh-issue \u2192 dispatch"),
+    ("Bug report", "create-tasks \u2192 gh-issue \u2192 fix-blockers \u2192 dispatch"),
+    ("Feature-scoped task", "gh-issue \u2192 dispatch"),
     ("Unclassifiable", "stop"),
 ):
     assert re.search(rf"{_cls}.{{0,120}}{_path}", _route187, re.I), f"#187 routing {_cls}"

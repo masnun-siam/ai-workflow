@@ -390,36 +390,46 @@ flowchart TD
     UI["#/flow (aiw ui)"] --> D
     E -->|raw text| D["/dump<br/>file it in the vault"]
     E -->|feature folder| P
-    E -->|PRD path| G
+    E -->|PRD path| T
+    E -->|task list| G
+    E -->|epic parent| B
     E -->|issue numbers| X
     D --> C1{{"checkpoint"}}
     C1 -->|new feature, change request| P["/prd<br/>grill and fill the PRD"]
-    C1 -->|bug, feature-scoped task| G
+    C1 -->|bug| T
+    C1 -->|feature-scoped task| G
     C1 -->|anything else| S["stop after filing"]
     P --> C2{{"checkpoint"}}
-    C2 --> G["/gh-issue<br/>refined issues + epic"]
+    C2 --> T["/create-tasks<br/>save the task list"]
+    T --> C4{{"checkpoint"}}
+    C4 --> G["/gh-issue<br/>refined issues + epic"]
     G --> C3{{"checkpoint"}}
-    C3 --> X["dispatch<br/>herdr-dispatch or #/dispatch"]
+    C3 -->|epic| B["/fix-blockers<br/>blocked-by relations"]
+    C3 -->|single issue| X
+    B --> C5{{"checkpoint"}}
+    C5 --> X["dispatch<br/>herdr-dispatch or #/dispatch"]
     X --> R["/run-issue × N,<br/>dependencies first"]
 ```
 
 **Entry detection.** `/flow` reads its argument and starts where the work already is: raw
 text starts at `/dump`, a vault feature folder (or its `Dump.md`) at `/prd`, a PRD path at
-`/gh-issue`, and issue numbers at dispatch. There is no state file; the vault note, the PRD
+`/create-tasks`, a task list at `/gh-issue`, an epic parent at `/fix-blockers`, and issue
+numbers at dispatch. There is no state file; the vault note, the PRD
 and the issues are the state, so half-done work resumes instead of starting over.
 
 **Routing by dump class.** A new feature or change request goes on to `/prd`, which fills the
 `status: seed` PRD that `/dump` left (or updates a finished one). The PRD it saves to the repo's
-`docs/prd/<slug>.md` is the canonical copy; the vault `PRD.md` is a mirror. A bug report or
-feature-scoped task skips the PRD and goes straight to `/gh-issue`. A standalone task, weekly
+`docs/prd/<slug>.md` is the canonical copy; the vault `PRD.md` is a mirror. A bug report skips the
+PRD and goes to `/create-tasks` with its problem statement; a feature-scoped task goes straight to
+`/gh-issue`. A standalone task, weekly
 meeting notes or anything unclassifiable stops once it is filed.
 
-**The `→ next:` contract.** `/dump`, `/prd` and `/gh-issue` each end with one line,
+**The `→ next:` contract.** `/dump`, `/prd`, `/create-tasks`, `/gh-issue` and `/fix-blockers` each end with one line,
 `→ next: <command> <argument>`, naming the next stage and the artifact it should take. `/flow`
 and the UI stepper read the next stage's input from that line, and you see exactly what to
 run if you are going by hand. No line means the flow stops there. `/gh-issue` files
-`refined` issues ordered by `Depends on: #n` under an `epic` parent, and `/run-issue`'s multi-issue stop ends with
-the same `→ next: herdr-dispatch …` line.
+`refined` issues ordered by `Depends on: #n` under an `epic` parent and hands the parent to
+`/fix-blockers`; `/run-issue`'s multi-issue stop ends with a `→ next: herdr-dispatch …` line.
 
 **Dispatch.** In the terminal, `/flow` shows a `herdr-dispatch <numbers> --dry-run` plan
 (`--max 2`) and launches only when you say **Launch**. In the UI, the last step links to
