@@ -227,30 +227,100 @@
       }
     }
   },
-  "prd_review": {
-    "_doc": "PRD peer review (/prd --review): one single-lens reviewer per lens, prompt = rubric + the lens prompt. Only a blocking lens can hold the PRD; the rest are advisory. aiw prd-review validates verdicts and decides.",
+  "peer_review": {
+    "_doc": "Peer review (--review on /prd, /intake, /dump, /gh-issue, and custom prompts): one single-lens reviewer per picked lens, prompt = the kind's rubric + the lens prompt. Every picked lens blocks. aiw peer-review validates verdicts and decides.",
     "max_rounds": 3,
-    "rubric": "Severity: blocker = two statements that cannot both hold, or an FR that cannot be tested as written. major = the PRD leaves behaviour undefined for an input or state the FR will certainly meet. minor = everything else. At most 8 findings, most severe first. Every finding quotes the PRD line it is about (whitespace and emphasis ignored), or names the ##/### heading under which something is missing. A finding the prior round dismissed with a reason is not raised again unless you quote new evidence. A fix changes the PRD's wording; it never adds implementation (modules, tables, endpoints): a PRD is the what and why, never the how. A finding that needs a fact only the user has (evidence, priority, a product choice) is needs_decision, never an edit.",
+    "default_lenses": [
+      "critical"
+    ],
+    "diff_max_lines": 3000,
+    "rubric": {
+      "doc": "The artifact is a doc: a PRD, a brief, or a batch of issue drafts. In the lens prompts, an FR is any requirement it states (a PRD's FR, a brief's requirement, an issue's acceptance criterion), and a section the prompt names (Problem, Goals, Non-goals, Decisions, Open questions) is checked only where the artifact has it. Severity: blocker = two statements that cannot both hold, or a requirement that cannot be tested as written. major = the artifact leaves behaviour undefined for an input or state a requirement will certainly meet. minor = everything else. At most 8 findings, most severe first. Every finding quotes the artifact line it is about (4+ words; whitespace and emphasis ignored), or names the ##/### heading under which something is missing. Every blocker or major sets reraises: the id of your own prior-round finding it raises again, or null. A finding the worker dismissed with a reason is raised again only with new evidence, and the user then decides it; a same-quote finding that is genuinely new says how it differs in distinct_because. A fix changes the artifact's wording; it never adds implementation (modules, tables, endpoints): a doc is the what and why, never the how. A finding that needs a fact only the user has (evidence, priority, a product choice) is needs_decision, never an edit.",
+      "change": "The artifact is a change: ## Ask (what the user asked, verbatim), ## Answer (the worker's final answer) and ## Diff (the code change; secrets, binaries and lockfiles are dropped and a long diff is truncated, both noted at the top of the Diff). Judge the change against the Ask. Severity: blocker = the change does not do what the Ask asks, breaks existing behaviour, or the Answer claims something the Diff does not do. major = a defect normal use will certainly hit (an unhandled input or state, an error swallowed, new logic with no test). minor = everything else. At most 8 findings, most severe first. Every finding quotes one line of the artifact (4+ words from a single Diff or Answer line; whitespace and emphasis ignored), or names the ##/### heading under which something is missing. Every blocker or major sets reraises: the id of your own prior-round finding it raises again, or null. A finding the worker dismissed with a reason is raised again only with new evidence, and the user then decides it; a same-quote finding that is genuinely new says how it differs in distinct_because. A fix may change code: say what to change and where (file:line). Never guess at a dropped or truncated file; name it in a minor finding only when the omission hides something your lens must check. A finding that needs a fact only the user has (intent, priority, a product choice) is needs_decision, never a fix."
+    },
     "lenses": {
       "critical": {
-        "blocking": true,
         "focus": "completeness: testable requirements, edge cases, contradictions, undefined terms",
-        "prompt": "Review this PRD through exactly one lens: COMPLETENESS. (a) Every FR has an observable acceptance check; 'fast', 'easy', 'robust' or 'as needed' left undefined is a finding. (b) Edge cases, only the categories that apply to the FR's own inputs: empty or null, boundary values, permission denied, concurrent change, partial failure and retry, existing data under the new rule. A missing one is major only if the FR will certainly meet it, otherwise minor. (c) Contradictions between two FRs, an FR and a Non-goal, or a Decision and an FR; quote both. (d) Undefined terms: a noun the PRD relies on but never defines, or uses in two senses. (e) An Open question that blocks an FR without saying which."
+        "prompt": "For a doc, review it through exactly one lens: COMPLETENESS. (a) Every FR has an observable acceptance check; 'fast', 'easy', 'robust' or 'as needed' left undefined is a finding. (b) Edge cases, only the categories that apply to the FR's own inputs: empty or null, boundary values, permission denied, concurrent change, partial failure and retry, existing data under the new rule. A missing one is major only if the FR will certainly meet it, otherwise minor. (c) Contradictions between two FRs, an FR and a Non-goal, or a Decision and an FR; quote both. (d) Undefined terms: a noun the artifact relies on but never defines, or uses in two senses. (e) An Open question that blocks an FR without saying which. For a change: (a) every part of the Ask is done, or the Answer says why not; (b) every claim in the Answer matches the Diff; (c) the same edge-case categories, for the changed code's own inputs; (d) the Diff changes existing behaviour the Ask did not ask to change."
       },
       "ceo": {
-        "blocking": false,
         "focus": "product value: evidence, metrics, traceability, implied scope",
-        "prompt": "Review this PRD through exactly one lens: PRODUCT VALUE. (a) The Problem has evidence (a user, a number, a report); if it is missing, that is needs_decision, never written in. (b) Each success metric has a baseline, a target and a way to measure it now; 'no metric, because <reason>' is a valid answer. (c) Traceability: each FR traces to the stated Problem or a Goal; an FR that traces to neither is a cut candidate (quote it). (d) Implied capability: for each FR, a capability its own wording implies but neither specifies nor rules out ('export' -> which formats, 'notify' -> which channel); quote the word. (e) Who loses: a user group or workflow named in the PRD or found in the code (cite file:line) that a quoted FR makes worse, with no mention in the PRD. Never invent a persona."
+        "prompt": "For a doc, review it through exactly one lens: PRODUCT VALUE. (a) The Problem has evidence (a user, a number, a report); if it is missing, that is needs_decision, never written in. (b) Each success metric has a baseline, a target and a way to measure it now; 'no metric, because <reason>' is a valid answer. (c) Traceability: each FR traces to the stated Problem or a Goal; an FR that traces to neither is a cut candidate (quote it). (d) Implied capability: for each FR, a capability its own wording implies but neither specifies nor rules out ('export' -> which formats, 'notify' -> which channel); quote the word. (e) Who loses: a user group or workflow named in the artifact or found in the code (cite file:line) that a quoted FR makes worse, with no mention in the artifact. Never invent a persona. For a change: (a) the change solves the problem the Ask states, not a neighbouring one; (b) scope creep: a quoted Diff line no part of the Ask needs; (c) who loses, as above, from a behaviour change in the Diff."
       },
       "cto": {
-        "blocking": false,
         "focus": "feasibility against this repo, with code as evidence only",
-        "prompt": "Review this PRD through exactly one lens: FEASIBILITY against this repo. Search the code for evidence; never put implementation into the PRD. (a) An FR that contradicts existing behaviour, or is infeasible as stated, that the PRD does not acknowledge; cite file:line and fix the FR's wording. (b) Data: the PRD does not acknowledge that existing records fall under a new or changed rule (cite where they live). (c) An FR with no stated behaviour when its external dependency fails, or whose effect on existing users cannot be undone and the PRD does not say so. (d) Scale: an FR whose cost grows with data or users and has no bound in its wording. (e) Hidden coupling: the PRD does not acknowledge that an FR changes a shared component other callers use (cite the callers)."
+        "prompt": "For a doc, review it through exactly one lens: FEASIBILITY against this repo. Search the code for evidence; never put implementation into the artifact. (a) An FR that contradicts existing behaviour, or is infeasible as stated, that the artifact does not acknowledge; cite file:line and fix the FR's wording. (b) Data: the artifact does not acknowledge that existing records fall under a new or changed rule (cite where they live). (c) An FR with no stated behaviour when its external dependency fails, or whose effect on existing users cannot be undone and the artifact does not say so. (d) Scale: an FR whose cost grows with data or users and has no bound in its wording. (e) Hidden coupling: the artifact does not acknowledge that an FR changes a shared component other callers use (cite the callers). For a change: (a) it follows the patterns the surrounding code already uses, or re-implements a helper that exists (cite it); (b) existing data or callers the change breaks (cite them); (c) an external call with no timeout or failure path; (d) cost that grows with data or users, unbounded."
       },
       "security": {
-        "blocking": false,
         "focus": "authorization, untrusted input, data exposure, PII, abuse",
-        "prompt": "Review this PRD through exactly one lens: SECURITY. Search the code for evidence and cite file:line. (a) Each FR that exposes or changes data says who may do it. (b) Each new entry point (form, API, import, webhook) says how untrusted input is bounded. (c) Data exposure: every existing surface that can render the changed data, found by search and cited, where the PRD does not say who may see it. (d) PII: new personal data without a stated retention and deletion rule. (e) Abuse: an action a user can repeat or enumerate (send, export, look up) with no stated limit."
+        "prompt": "For a doc, review it through exactly one lens: SECURITY. Search the code for evidence and cite file:line. (a) Each FR that exposes or changes data says who may do it. (b) Each new entry point (form, API, import, webhook) says how untrusted input is bounded. (c) Data exposure: every existing surface that can render the changed data, found by search and cited, where the artifact does not say who may see it. (d) PII: new personal data without a stated retention and deletion rule. (e) Abuse: an action a user can repeat or enumerate (send, export, look up) with no stated limit. For a change: (a) every new or changed entry point enforces access control the way this codebase already does; (b) untrusted input validated at the trust boundary, no string-built SQL, shell or template; (c) no secret hardcoded or logged; (d) every surface that can now serialize changed data, found by search, shows it only to who may see it."
+      },
+      "qa": {
+        "focus": "testability: observable acceptance, test coverage, regression risk",
+        "prompt": "Review this artifact through exactly one lens: QA / TESTABILITY. For a doc: (a) every requirement, task or issue has acceptance criteria a tester can check without asking the author, with concrete inputs and expected outputs; (b) the failure behaviour of each requirement is stated (what the user sees when it fails); (c) a requirement that changes existing behaviour names what must keep working (the regression to check); (d) test data or setup a check depends on and the artifact never mentions. For a change: (a) new or changed logic in the Diff with no test in the Diff; (b) a test that cannot fail (asserts nothing, or asserts the mock); (c) a branch, error path or boundary in the changed code no test reaches; (d) a test that depends on time, order, network or shared state. Cite the Diff line."
+      },
+      "ux": {
+        "focus": "user flows, empty, loading and error states, accessibility, copy",
+        "prompt": "Review this artifact through exactly one lens: UX / DESIGN. Only judge what a user sees or does; skip a backend-only artifact with no findings. For a doc: (a) each user-facing requirement names the flow: where the user starts, what they do, what they see on success; (b) empty, loading and error states for each new screen or list; (c) what happens on a slow or failed action (feedback, retry, no double submit); (d) accessibility: keyboard use, labels, contrast, focus after an action; (e) copy the user must read (errors, confirmations) is stated or explicitly left to design. For a change: the same five, checked against the changed UI code in the Diff, plus (f) a destructive action with no confirm or undo."
+      },
+      "performance": {
+        "focus": "load, data volume, query cost, slow paths",
+        "prompt": "Review this artifact through exactly one lens: PERFORMANCE. Search the code for evidence and cite file:line. For a doc: (a) a requirement whose cost grows with data or users and has no stated bound (rows per export, items per page, request rate); (b) a latency or throughput expectation users will rely on that is not stated; (c) work the requirement implies on a hot path (every request, every page load) that the artifact does not acknowledge. For a change: (a) a query or call inside a loop (N+1); (b) an unbounded read: no limit, pagination or streaming; (c) a missing index for a new filter or join (cite the schema); (d) blocking or heavy work on a request path that could be deferred; (e) a cache that is never invalidated, or invalidated on every write."
+      }
+    },
+    "kinds": {
+      "prd": {
+        "rubric": "doc",
+        "offer": [
+          "critical",
+          "ceo",
+          "cto",
+          "security",
+          "qa",
+          "ux",
+          "performance"
+        ]
+      },
+      "intake": {
+        "rubric": "doc",
+        "offer": [
+          "critical",
+          "ceo",
+          "cto",
+          "security",
+          "qa"
+        ]
+      },
+      "dump": {
+        "rubric": "doc",
+        "offer": [
+          "critical",
+          "ceo",
+          "qa"
+        ]
+      },
+      "gh-issue": {
+        "rubric": "doc",
+        "offer": [
+          "critical",
+          "cto",
+          "security",
+          "qa",
+          "ux",
+          "performance"
+        ]
+      },
+      "custom": {
+        "rubric": "change",
+        "offer": [
+          "critical",
+          "ceo",
+          "cto",
+          "security",
+          "qa",
+          "ux",
+          "performance"
+        ]
       }
     }
   }

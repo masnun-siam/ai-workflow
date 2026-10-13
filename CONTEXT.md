@@ -49,8 +49,8 @@ One Issue's current-progress tile on the Board: Project, Issue number, and title
 A capture filed into the Obsidian vault by `/dump` (new feature, change request, bug, task or meeting notes). A feature, change request or bug is written as a Problem statement; for a new feature it also seeds a `PRD.md` with `status: seed` next to `Dump.md`.
 _Avoid_: Note, intake (intake normalises a source into a brief; it files nothing)
 
-**PRD review panel**:
-The single-lens reviewers `/prd --review` runs on a draft PRD (critical, CEO, CTO, security; `prd_review` in `config.json`). Only the critical lens can hold the PRD; the others advise. `aiw prd-review` validates each verdict and decides each round.
+**Peer review panel**:
+The single-lens reviewers a `--review` run puts on one artifact (a draft doc, or for a custom prompt a change: Ask, Answer and Diff), picked per run from the **lens pool** (critical, CEO, CTO, security, QA, UX, performance; `peer_review` in `config.json`). Each artifact kind **offers** only the lenses that fit it. Every picked lens blocks. A **dispute** is a finding the author dismissed that its lens raises again; the user settles it. `aiw peer-review` validates each verdict and decides each round.
 _Avoid_: Review (on its own, that means the PR review in `/run-issue`)
 
 **Problem statement**:

@@ -4574,17 +4574,22 @@ assert "\u2192 next: herdr-dispatch <parent>" in _fb, "fix-blockers next line"
 assert "This split writes to GitHub before Step 3's question" in _fb, "fix-blockers names the split's unconfirmed write"
 ok("fix-blockers: split if needed, preview, one confirmation, apply; Depends on stays the source")
 
-# /prd --review: a reviewer panel (run-specialist in PRD mode) loops through aiw prd-review until critical approves.
+# /prd --review: a reviewer panel (run-specialist in peer review mode) loops through aiw peer-review until every picked lens approves.
 _pr_all = _skill_sections("skills/prd/SKILL.md")
 assert "--review" in _ws(_pr_all["Arguments"]), "prd Arguments documents --review"
 _rv = _ws(_key183(_pr_all, "Step 5.5"))
 for _w in (
-    "aiw prd-review next",
-    "aiw prd-review verdict",
+    "aiw peer-review new prd",
+    "aiw peer-review next",
+    "aiw peer-review verdict",
+    "--kind prd --lenses",
+    "Every picked lens blocks",
+    "never reuse one from an earlier run",
+    "review dir: <review_dir>",
     "ai-workflow:run-specialist",
-    "artifact: prd",
+    "artifact: peer-review",
     "in one message",
-    "advisory_blockers",
+    "disputes",
     "--prior",
     "--more",
     "Accept as known gaps",
@@ -4598,7 +4603,9 @@ assert "both decisions and blockers" in _rv, (
     "prd: an ask that also carries blockers is answered, then revised, in one round"
 )
 _sp = _ws(_read("agents", "run-specialist.md"))
-assert "## PRD mode" in _read("agents", "run-specialist.md") and "prd_review" in _sp and "request.json" in _sp
+assert "## Peer review mode" in _read("agents", "run-specialist.md") and "peer_review.rubric" in _sp
+assert "request.json" in _sp and "reraises" in _sp and "distinct_because" in _sp, "specialist: explicit re-raises"
+assert "prd_review" not in _sp and "prd-review" not in _sp and "prd_review" not in _rv and "prd-review" not in _rv
 assert "never put implementation" in _sp.lower() or "never adds implementation" in _sp.lower(), (
     "specialist PRD mode: what not how"
 )
@@ -4618,7 +4625,7 @@ for _w in (
     "--until blocked",
     "prd-<lens>",
     "command -v herdr",
-    "aiw prd-review verdict --file -",
+    "aiw peer-review verdict --file -",
 ):
     assert _w in _rv, f"prd --herdr lacks {_w!r}"
 assert re.search(r"[Hh]eadless.{0,80}--herdr", _rv), "prd: --herdr is ignored headless"
@@ -4628,7 +4635,8 @@ assert "Peer review decisions (Step 5.5)" in _ws(_key183(_pr_all, "Flow auto mod
     "prd auto mode: review decisions are asked"
 )
 assert "In a herdr tab" in _sp, "run-specialist PRD mode covers the tab case"
-ok("prd --review: panel loop via aiw prd-review, run-specialist PRD mode, cap and decisions go to the user")
+assert "advisory_blockers" not in _rv, "every picked lens blocks: no advisory blockers"
+ok("prd --review: panel loop via aiw peer-review, run-specialist peer review mode, cap/decision/dispute to the user")
 
 _s8_184 = _ws(_key183(_skill_sections("skills/prd/SKILL.md"), "Step 8"))
 assert f"End with the line `{NEXT}/create-tasks <prd-path>`" in _s8_184, "#184 prd Step 8 lacks the next line"

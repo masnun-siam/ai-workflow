@@ -337,7 +337,7 @@ export class Flow extends Component {
         placeholder=${step.placeholder} aria-describedby=${this.state.why ? 'flow-why' : undefined} aria-invalid=${this.state.why ? 'true' : undefined}
         value=${this.state[field]} disabled=${this.running()} onInput=${(e) => this.setState({ [field]: e.target.value })} />
       ${step.key === 'prd' && html`<label class="check" for="flow-peer-review"><input id="flow-peer-review" type="checkbox" checked=${this.state.peerReview === true}
-        disabled=${this.running()} onChange=${(e) => this.setState({ peerReview: e.target.checked })} /> Peer review: critical, CEO, CTO and security reviewers check the PRD until critical approves</label>`}
+        disabled=${this.running()} onChange=${(e) => this.setState({ peerReview: e.target.checked })} /> Peer review: the critical reviewer checks the PRD until it approves</label>`}
       ${this.state.why && html`<p id="flow-why" role="alert" class="error">${this.state.why}</p>`}`;
   }
 
