@@ -298,10 +298,11 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
    repos/{owner}/{repo}/issues/<n>/sub_issues`. A non-empty array means this is an epic
    parent — go to **Epic mode** below instead of the single-issue phases; keep the
    child numbers it returned, Epic mode step 0 needs them. An empty array is the
-   ordinary path, except for an issue labelled `epic` (step 3 returned its labels): that is a
-   parent whose children were never linked. Stop and say so; never run it as one issue. Its
-   children get linked by re-running `/gh-issue` on its saved task list, or by
-   `aiw epic split` with the children named.
+   ordinary path, except for an issue labelled both `epic` and `prd-<slug>` (step 3 returned
+   its labels), which is how `/gh-issue` labels its parents: that is a parent whose children
+   were never linked. Stop and say so; never run it as one issue. Its children get linked by
+   re-running `/gh-issue` on its saved task list, or by `aiw epic split` with the children
+   named. An `epic` label without a `prd-<slug>` label is a team's own label: the ordinary path.
 
    This runs **before** step 4 because step 4 would otherwise get there first. A second
    `/run-issue <parent>` — a resume, which is the common case — would find the stray

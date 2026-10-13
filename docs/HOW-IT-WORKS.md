@@ -359,8 +359,8 @@ that is not an issue yet, it calls `/gh-issue` for you; when that returns two or
 Answers given in the per-task question rounds are recorded in the PRD (`/prd --update`).
 
 **Epic mode** runs a parent issue with sub-issues: one `/gh-issue` filed, or one filed by hand.
-`/run-issue <parent>` drives all its children. A parent labelled `epic` with no sub-issues is
-refused, never run as one issue. The rules:
+`/run-issue <parent>` drives all its children. A `/gh-issue` parent (labelled `epic` and
+`prd-<slug>`) with no sub-issues is refused, never run as one issue. The rules:
 
 - **Independent children run at the same time.** Dependent ones cannot, by definition — a
   child stacks its branch on top of the branch it depends on, so it waits for that one to

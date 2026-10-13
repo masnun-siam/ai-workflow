@@ -34,7 +34,8 @@
   Doc references become links when the file is on the base branch. When two or more issues are
   filed it creates a parent labelled `epic` and links them at once with `aiw epic split`, which
   also writes the `epic.json` Epic mode reads. Answers from the question rounds go to the PRD
-  through `/prd --update`. `/run-issue` refuses a parent labelled `epic` with no sub-issues.
+  through `/prd --update`. `/run-issue` refuses a `/gh-issue` parent (labelled `epic` and
+  `prd-<slug>`) that has no sub-issues; a team's own `epic` label runs as before.
 - **Grinding is opt-in.** `/run-issue` runs phase 10 (`pr-grind`) only with `--grind`;
   without it the run ends at the Gate 2 handback. Breaking: a run that used to grind by
   default no longer does. `--no-grind` still parses but does nothing. `herdr-dispatch` and

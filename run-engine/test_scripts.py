@@ -3963,12 +3963,13 @@ assert (
     "A non-empty array means this is an epic parent \u2014 go to **Epic mode** below instead of the single-issue phases; keep the child numbers it returned, Epic mode step 0 needs them."
     in st35
 )
-assert "An empty array is the ordinary path, except for an issue labelled `epic`" in st35
+assert "An empty array is the ordinary path, except for an issue labelled both `epic` and `prd-<slug>`" in st35
+assert "An `epic` label without a `prd-<slug>` label is a team's own label: the ordinary path." in st35
 assert "never run it as one issue" in st35  # ADR 0003: a parent with no sub-issues stops
 ok("#85 bare-number bullet and step 3.5 epic routing sentences intact")
 # both pins below hash/compare whitespace-normalised text (_n), so reflowing lines does not trip them
 # sha256 of whitespace-normalised text on base 0ff5687 (pre-#85): step 3.5 slice, and "## Epic mode" up to "\n## Rules"
-S35_SHA = "26b4109ad2ffe644d7aeff324a776625d33b9ebf583e9e830d7da9c43a8423e7"  # re-pinned (ADR 0003): an `epic`-labelled parent with no sub-issues stops
+S35_SHA = "832218eabfdea18a2037abe13ae33f67f6519aac71098622ab253d51b36d8323"  # re-pinned (ADR 0003): an `epic`-labelled parent with no sub-issues stops
 EPIC_SHA = "e301c4367ff0d14d1316064fc35316c6b90cac928af03f5040fb791edefdb253"  # re-pinned: epic init passes --mode full, lean is an alias of default
 import hashlib  # noqa: E402
 
@@ -4032,8 +4033,8 @@ P3 = (
 )
 P4 = (
     "**Epic mode** runs a parent issue with sub-issues: one `/gh-issue` filed, or one filed by hand. "
-    "`/run-issue <parent>` drives all its children. A parent labelled `epic` with no sub-issues is refused, "
-    "never run as one issue. The rules:"
+    "`/run-issue <parent>` drives all its children. A `/gh-issue` parent (labelled `epic` and `prd-<slug>`) "
+    "with no sub-issues is refused, never run as one issue. The rules:"
 )
 for para in (P1, P2, P3, P4):
     assert l5.count(para) == 1, para[:50]
@@ -4445,11 +4446,17 @@ for _w in (
 assert _sec8.index('--label "epic,prd-<slug>"') < _sec8.index("aiw epic split"), (
     "parent is linked right after it is created"
 )
+assert "|| true" not in _sec8 and "only when no line is exactly `epic`" in _sec8, (
+    "epic label: no || true, never recolour"
+)
+assert "children may already be linked while no `epic.json` exists" in _sec8, "split failure state described truthfully"
 assert "Saved task list and the epic" in _ws(_slice(_g8, "0. **Source check.**", "Details: $@")), "step 0 routes there"
 _hr8 = _ws(_slice(_g8, "**HARD RULE", "Do the following:"))
 assert "`aiw epic split`" in _hr8 and "`/prd --update`" in _hr8, "HARD RULE carves out the split and the PRD update"
 _ri8 = _read("commands", "run-issue.md")
-assert "labelled `epic`" in _ws(_slice(_ri8, "3.5. **Epic check", "4. **Resume check.**")), "run-issue epic guard"
+assert "labelled both `epic` and `prd-<slug>`" in _ws(_slice(_ri8, "3.5. **Epic check", "4. **Resume check.**")), (
+    "run-issue epic guard"
+)
 # The split's epic dir is the one Epic mode step 0 reads, so `/run-issue <parent>` finds epic.json and never re-splits.
 assert '"<runs_dir>/<owner>-<repo>-epic-<n>"' in _ri8 and '"<runs_dir>/<owner>-<repo>-epic-<parent>"' in _g8
 assert "No epics" not in _read("skills", "flow", "SKILL.md"), "flow: stale no-epics rule"

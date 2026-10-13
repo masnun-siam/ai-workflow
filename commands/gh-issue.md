@@ -313,7 +313,9 @@ for the two paths once (`none` is a valid answer for the PRD).
 **Preview, once.** Before the first create, show every task title in list order with its
 `Depends on:` lines, which tasks already have an issue (a resume), the epic parent's title, and
 the labels. Ask one question with the choices **"File these"** and **"Stop"** (headless: `aiw ask`,
-then end your turn). "Stop" files nothing. In Flow auto mode, skip this question.
+then end your turn). "Stop" files nothing. In Flow auto mode, skip this question: there the user
+already confirmed the writes with Flow's "Continue" into the gh-issue stage (see
+`skills/flow/SKILL.md` Guardrails).
 
 **One question round per task.** In list order, before writing a task's body in `4-FLAT` sub-step 2
 (or step 4 for a single task), compare the task with the PRD, the problem statement and the code.
@@ -331,9 +333,12 @@ links. The `Test root:` and `Base branch:` values stay plain text, because `aiw 
 **Epic parent.** After `4.5`, file one parent over the issues `4-FLAT` filed.
 
 1. Re-run safety: `gh issue list --label epic --label prd-<slug> --state all --json number,title`.
-   If a parent exists, reuse it and skip to sub-step 3.
-2. Ensure the label once (`gh label create epic --color 0E8A16 --description "parent of a task list" 2>/dev/null || true`),
-   then create the parent with `--label "epic,prd-<slug>"` (never `refined`; it is not runnable as
+   If a parent exists, reuse it and skip to sub-step 3. A closed one is reused too: say
+   "reusing closed parent #N" in the preview.
+2. Ensure the label once, without touching a repo's own `epic` label (`--force` would recolour it):
+   run `gh label list --search epic --json name --jq '.[].name'`, and only when no line is exactly
+   `epic`, run `gh label create epic --color 0E8A16 --description "parent of a task list"`. A
+   failure here stops the run with gh's error. Then create the parent with `--label "epic,prd-<slug>"` (never `refined`; it is not runnable as
    one issue) and step 5/6's assignee and project flags. Its body: `## Problem statement` (the
    problem statement's content, or the intake brief on the step 3.5 path), `## PRD` (a link or
    path, or "none"), and `## Tasks` (left for the split to fill).
@@ -346,9 +351,10 @@ links. The `Test root:` and `Base branch:` values stay plain text, because `aiw 
 
    Children in list order. It links them as sub-issues, checks that `Depends on:` forms a DAG,
    writes the parent's `## Tasks` checklist, and writes the `epic.json` that `/run-issue <parent>`
-   Epic mode reads. It is idempotent, so a re-run is safe. Exit 1: report its message and stop;
-   the parent stays labelled `epic` with no sub-issues, which `/run-issue` refuses to run, until
-   the `Depends on:` lines are fixed and the split is run again.
+   Epic mode reads. It is idempotent, so a re-run is safe. Exit 1: report its message and stop.
+   It links the children before it checks `Depends on:`, so on a cycle or a bad `Depends on:` the
+   children may already be linked while no `epic.json` exists; `/run-issue <parent>` Epic mode
+   then re-runs the split in its step 0 and stops on the same error until the lines are fixed.
 
 **Decisions to the PRD.** When the question rounds produced decisions and the header names a PRD,
 invoke the `ai-workflow:prd` skill with `--update <prd> <decision lines>`. With `PRD: none`, pass
