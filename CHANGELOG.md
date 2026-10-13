@@ -4,6 +4,9 @@
 
 ### Added
 
+- **`/fix-blockers <parent>`.** Previews and then sets an epic's GitHub "blocked by" relations
+  through `aiw epic blockers`, after one confirmation. A parent filed on another machine is split
+  first, as Epic mode does.
 - **`aiw epic blockers <epic_dir> [--dry-run]`.** Sets GitHub's native "blocked by" relation
   between an epic's children, derived from their `Depends on:` lines (the single source,
   ADR 0003). It checks the dependency graph first, writes only the edges GitHub lacks (so a

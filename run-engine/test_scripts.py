@@ -4549,6 +4549,28 @@ assert "No epics" not in _read("skills", "flow", "SKILL.md"), "flow: stale no-ep
 assert "flat, independently readable" not in _read("CONTEXT.md"), "CONTEXT: refined is no longer flat"
 ok("gh-issue: saved list refined per task, epic parent linked at birth, decisions to the PRD; run-issue guard")
 
+# Six-flow step 5: /fix-blockers previews and applies `aiw epic blockers`, splitting first when no epic.json is here.
+_fb_path = os.path.join(HERE, "..", "skills", "fix-blockers", "SKILL.md")
+assert os.path.isfile(_fb_path), "skills/fix-blockers/SKILL.md missing"
+_fb = _ws(open(_fb_path, encoding="utf-8").read())
+for _w in (
+    "aiw paths",
+    "<runs_dir>/<owner>-<repo>-epic-<parent>",
+    "aiw epic split",
+    "/sub_issues",
+    "aiw epic blockers",
+    "--dry-run",
+    '**"Add these"**',
+    "aiw ask",
+    "Depends on:",
+    "never deleted",
+):
+    assert _w in _fb, f"fix-blockers lacks {_w!r}"
+assert _fb.index("--dry-run") < _fb.index('**"Add these"**'), "preview before the one confirmation"
+assert "\u2192 next: herdr-dispatch <parent>" in _fb, "fix-blockers next line"
+assert "This split writes to GitHub before Step 3's question" in _fb, "fix-blockers names the split's unconfirmed write"
+ok("fix-blockers: split if needed, preview, one confirmation, apply; Depends on stays the source")
+
 _s8_184 = _ws(_key183(_skill_sections("skills/prd/SKILL.md"), "Step 8"))
 assert f"End with the line `{NEXT}/gh-issue <prd-path>`" in _s8_184, "#184 prd Step 8 lacks the next line"
 assert "offer, in one line" not in _s8_184, "#184 prd Step 8 still has the prose offer"
