@@ -45,8 +45,12 @@ def _check_reraise(f: dict, lens, prior: list, tag: str) -> list[str]:
     mine = [p for p in prior if isinstance(p, dict) and p.get("lens") == lens]
     rer = f["reraises"]
     if rer is not None:
-        if not isinstance(rer, str) or rer not in {p.get("id") for p in mine}:
+        target = next((p for p in mine if p.get("id") == rer), None) if isinstance(rer, str) else None
+        if target is None:
             return [f"{tag}: reraises {rer!r} is not one of your findings from the prior round"]
+        evidence = f.get("new_evidence")
+        if target.get("disposition") == "decided" and not (isinstance(evidence, str) and evidence.strip()):
+            return [f"{tag}: the user decided {rer}; not re-raisable without new_evidence"]
         return []
     quote = norm(f.get("quote") or "")
     same = [
@@ -126,7 +130,8 @@ def decide(verdicts: dict, lenses: list, rnd: int, max_rounds: int, prior=()) ->
     missing = [lens for lens in lenses if lens not in verdicts]
     if missing:
         raise ValueError(f"round {rnd} is missing verdicts from: {', '.join(missing)}")
-    dismissed = {(p.get("lens"), p.get("id")) for p in prior if p.get("disposition") == "dismissed"}
+    # re-raising what the worker dismissed, or what the user already ruled on, is the user's call again
+    settled = {(p.get("lens"), p.get("id")) for p in prior if p.get("disposition") in ("dismissed", "decided")}
     out = {"round": rnd, "blockers": [], "decisions": [], "disputes": [], "advisory": []}
     for lens in lenses:
         for f in verdicts[lens]["findings"]:
@@ -135,7 +140,7 @@ def decide(verdicts: dict, lenses: list, rnd: int, max_rounds: int, prior=()) ->
                 out["decisions"].append(f)
             elif f["severity"] == "minor":
                 out["advisory"].append(f)
-            elif (lens, f.get("reraises")) in dismissed:
+            elif (lens, f.get("reraises")) in settled:
                 out["disputes"].append(f)
             else:
                 out["blockers"].append(f)
@@ -158,8 +163,8 @@ from datetime import datetime, timezone  # noqa: E402
 from shared import data_dir, die, extract_json_object, load_config, read_json, write_json  # noqa: E402
 
 # Never sent to a reviewer, tracked or not: a committed .env is common.
-DENY = (".env*", "*.pem", "*.key", "id_*", "*.p12", "*.keystore", "*.sqlite*", "*.db", "credentials*.json")
-DENY += (".npmrc", ".pypirc")
+DENY = (".env*", "*.pem", "*.key", "*.p12", "*.keystore", "*.sqlite*", "*.db", "credentials*.json", ".npmrc", ".pypirc")
+DENY += ("id_rsa*", "id_dsa*", "id_ecdsa*", "id_ed25519*")  # ssh keys only: id_generator.ts is code
 LOCKFILES = {
     "package-lock.json",
     "yarn.lock",
@@ -354,6 +359,7 @@ def cmd_diff(args) -> None:
     for path in filter(None, _git(cwd, "ls-files", "--others", "--exclude-standard", "-z").stdout.split("\0")):
         why = _drop_reason(path, _is_binary(os.path.join(cwd, path)))
         (dropped.setdefault(why, []) if why else untracked).append(path)
+    # ponytail: one argv entry per kept path; past ARG_MAX (tens of thousands of files), switch to :(exclude) pathspecs
     body = _git(cwd, "diff", "--no-renames", base, "--", *tracked).stdout if tracked else ""
     for path in untracked:
         body += _git(cwd, "diff", "--no-index", "--", "/dev/null", path).stdout

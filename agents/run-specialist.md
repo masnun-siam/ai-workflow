@@ -101,8 +101,10 @@ this section does.
    or endpoint. For a change (rubric `change`) a fix may name code to change.
 3. Every blocker or major sets `reraises`: the id of your own finding in `prior` that it raises
    again, or `null`. Raise again a finding the author `dismissed` only with new evidence; the user
-   then decides it. A new finding on the same quote as a dismissed one sets `reraises: null` and
-   says how it differs in `distinct_because`.
+   then decides it. A `decided` finding is the user's ruling: re-raise it only with a quote of the
+   new evidence in `new_evidence`, and it goes back to the user, never to the author. A new finding
+   on the same quote as a dismissed one sets `reraises: null` and says how it differs in
+   `distinct_because`.
 4. Record your verdict yourself, so the artifact's author never handles it:
    `aiw peer-review verdict <review_dir> --lens <lens> --file - <<'EOF'` … `EOF`, with one JSON
    object in between. It refuses the verdict unless every finding quotes the artifact (4+ words)

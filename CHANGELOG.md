@@ -66,6 +66,9 @@
 
 ### Changed
 
+- **Bare `/prd --review` runs the critical reviewer alone.** It used to run critical, CEO, CTO
+  and security, with only critical able to hold the PRD. Pick more lenses with
+  `--review critical,ceo,cto,security`; every picked lens now has to approve.
 - **The Guided Flow has six steps.** `/flow` and the `aiw ui` Flow page run dump → PRD →
   tasks (`/create-tasks`) → issues (`/gh-issue`, with an epic) → blockers (`/fix-blockers`) →
   dispatch. The `→ next:` lines follow: `/prd` hands off to `/create-tasks`, a bug's dump goes to

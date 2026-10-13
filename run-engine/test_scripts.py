@@ -4590,6 +4590,7 @@ for _w in (
     "artifact: peer-review",
     "in one message",
     "disputes",
+    "a dispute the user settles either way is `decided`",
     "--prior",
     "--more",
     "Accept as known gaps",
@@ -4604,7 +4605,9 @@ assert "both decisions and blockers" in _rv, (
 )
 _sp = _ws(_read("agents", "run-specialist.md"))
 assert "## Peer review mode" in _read("agents", "run-specialist.md") and "peer_review.rubric" in _sp
-assert "request.json" in _sp and "reraises" in _sp and "distinct_because" in _sp, "specialist: explicit re-raises"
+assert "request.json" in _sp and "reraises" in _sp and "distinct_because" in _sp and "new_evidence" in _sp, (
+    "specialist: explicit re-raises"
+)
 assert "prd_review" not in _sp and "prd-review" not in _sp and "prd_review" not in _rv and "prd-review" not in _rv
 assert "never put implementation" in _sp.lower() or "never adds implementation" in _sp.lower(), (
     "specialist PRD mode: what not how"

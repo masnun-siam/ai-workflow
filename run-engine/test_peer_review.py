@@ -108,6 +108,12 @@ errs = pr.validate(verdict("critical", [finding("n1")], rnd=2), PRD, REQ2)
 assert any("same quote as dismissed c1" in e for e in errs), "same quote as a dismissed finding, null, no reason"
 assert pr.validate(verdict("critical", [finding("n1", distinct_because="a different gap")], rnd=2), PRD, REQ2) == []
 assert pr.validate(verdict("ceo", [finding("n1")], rnd=2), PRD, REQ2) == [], "another lens's dismissal is not mine"
+DECIDED = [{"lens": "critical", "id": "d1", "disposition": "decided", "reason": "user: CSV only", "quote": QUOTE}]
+REQ3 = {**REQ, "round": 2, "prior": DECIDED}
+errs = pr.validate(verdict("critical", [finding("n1", reraises="d1")], rnd=2), PRD, REQ3)
+assert any("the user decided d1" in e for e in errs), "a reviewer cannot re-block on the user's ruling"
+ev = finding("n1", reraises="d1", new_evidence="Admins can export the bookings")
+assert pr.validate(verdict("critical", [ev], rnd=2), PRD, REQ3) == [], "new evidence reopens it, as a dispute"
 ok("validate: reraises required on blocker/major, names my own prior finding; same dismissed quote needs a reason")
 
 
@@ -138,6 +144,8 @@ assert d["reason"] == "dispute", "a dispute is the user's call even at the cap"
 d = pr.decide(panel(critical=verdict("critical", [finding("n2", reraises="c2")], rnd=2)), LENSES, 2, 3, PRIOR)
 assert d["action"] == "revise" and not d["disputes"], "re-raising a fixed finding (the fix didn't work) is a revise"
 assert "advisory_blockers" not in d
+d = pr.decide(panel(critical=verdict("critical", [ev], rnd=2)), LENSES, 2, 3, DECIDED)
+assert d["action"] == "ask" and d["reason"] == "dispute" and not d["blockers"], "re-raised ruling goes back to the user"
 try:
     pr.decide({"critical": verdict("critical")}, LENSES, rnd=1, max_rounds=3)
     raise AssertionError("missing verdicts must raise")
@@ -358,6 +366,9 @@ with tempfile.TemporaryDirectory() as repo:
     assert rc == 1 and "no upstream" in err, "@{u} with no upstream exits non-zero, never falls back"
     rc, _, err = aiw("peer-review", "diff", "--since", "nope", "--repo", repo)
     assert rc == 1 and "not a commit" in err, err
+assert pr._drop_reason("src/id_generator.ts", False) is None and pr._drop_reason("lib/id_utils.py", False) is None
+for key in ("id_rsa", "id_rsa.pub", "id_ed25519", "id_ecdsa", "id_dsa"):
+    assert pr._drop_reason(f".ssh/{key}", False) == "secret-like", key
 ok("diff: tracked .env, secret-named, .gitignored, binary and lockfiles dropped and named; cap notes cut files")
 
 print("test_peer_review: ok")

@@ -186,11 +186,13 @@ Loop:
    reason. Write that list (`[{lens, id, disposition, reason}]`) to
    `<review_dir>/round-<n>/prior.json` and go to 1 with `--prior` naming it.
 5. **`ask`, reason `decision` or `dispute`**: ask the user each finding in `decisions`, and each in
-   `disputes` (a finding you dismissed that its lens raised again: show your reason and the
-   reviewer's, and ask which holds). Headless: `aiw ask`, one question per finding, then end your
-   turn. Record each decision in the draft's `## Decisions` as
+   `disputes` (a finding you dismissed, or the user already decided, that its lens raised again:
+   show your reason and the reviewer's, and ask which holds). Headless: `aiw ask`, one question per
+   finding, then end your turn. Record each answer in the draft's `## Decisions` as
    `- <decision> — <why> (review: <lens> <id>)`, with disposition `decided`; a dispute the user
-   settles your way is `dismissed` with their reason, otherwise fix it. A round can carry both
+   settles either way is `decided` too, and if they side with the reviewer, also fix it. The
+   recorded ruling changes the draft, which opens the next round, and a reviewer can't re-raise a
+   decided finding without new evidence. A round can carry both
    decisions and blockers (or disputes and blockers): ask first, then fix the blockers as in 4,
    then go to 1 with `--prior`.
 6. **`ask`, reason `cap`**: the round budget is spent and a lens still blocks. Ask one question:
