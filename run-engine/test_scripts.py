@@ -3973,7 +3973,7 @@ _nf183 = _dump183["Step 4: File it"].split("**Change request**")[0]
 assert re.search(r'property:set path="05-Work/<Project>/<Feature>/PRD\.md" name=status value=seed', _nf183), (
     "#183 dump New feature route must set status=seed on PRD.md"
 )
-assert "/prd" in _nf183, "#183 dump New feature route must say the marker tells /prd it is a seed"
+assert "/create-prd" in _nf183, "#183 dump New feature route must say the marker tells /prd it is a seed"
 ok("#183 dump New feature route sets status: seed on the seeded PRD.md")
 
 # AC2: /create-prd takes a feature folder, accepts a seed, fills it and flips to draft.
@@ -4024,12 +4024,13 @@ NEXT = "\u2192 next: "
 _ws = lambda t: " ".join(t.split())  # noqa: E731  (_n is rebound by loops above)
 _dump184 = _skill_sections("skills/dump/SKILL.md")
 _s5_184 = _ws(_key183(_dump184, "Step 5"))
-for _p in (f"`{NEXT}/prd <feature-folder>`", f"`{NEXT}/create-tasks <note-path>`", f"`{NEXT}/gh-issue <note-path>`"):
+for _p in (f"`{NEXT}/create-prd <feature-folder>`", f"`{NEXT}/gh-issue <note-path>`"):
     assert _p in _s5_184, f"#184 dump Step 5 lacks {_p}"
-assert re.search(r"new feature.{0,40}change request.{0,80}/prd <feature-folder>", _s5_184, re.I), (
+assert re.search(r"new feature.{0,40}change request.{0,80}/create-prd <feature-folder>", _s5_184, re.I), (
     "#184 dump: prd line routes"
 )
-assert re.search(r"bug report.{0,20}/create-tasks <note-path>", _s5_184, re.I), "dump: a bug goes to /create-tasks"
+assert re.search(r"bug report.{0,20}/gh-issue <note-path>", _s5_184, re.I), "dump: a bug goes to /gh-issue"
+assert f"{NEXT}/create-tasks <note-path>" not in _s5_184, "dump: no route sends a note to /create-tasks"
 assert re.search(r"feature-scoped task.{0,20}/gh-issue <note-path>", _s5_184, re.I), "#184 dump: gh-issue line routes"
 assert re.search(
     r"standalone task.{0,40}meeting notes.{0,40}unclassifiable.{0,60}no `\u2192 next:` line", _s5_184, re.I
@@ -4047,7 +4048,7 @@ for _f in ("**Problem:**", "**Who:**", "**Evidence:**", "**Expected:**", "### Ra
 assert re.search(r"never invent|do not invent|don't invent", _ps, re.I), "dump: problem statement must not invent facts"
 assert "just above `## Related`" in _ps and "overwrite" in _ps, "dump: a problem statement goes above ## Related"
 assert "content=\"$(cat <<'EOF'" in _ps, "dump: problem statement text goes through a quoted heredoc"
-assert "`/create-tasks` for a bug" in _ps, "dump: a bug's problem statement goes to /create-tasks (F11 routing)"
+assert "`/gh-issue` for a bug" in _ps, "dump: a bug's problem statement goes to /gh-issue"
 assert "never overwrite with partial content" in _ps.lower(), "dump: overwrite guard"
 _s4 = _ws(_dump184["Step 4: File it"])
 for _route in ("**New feature**", "**Change request**", "**Bug report**"):
@@ -4518,24 +4519,36 @@ _fs = _skill_sections("skills/flow/SKILL.md")
 _args187 = _ws(_key183(_fs, "Arguments"))
 for _shape, _stage in (
     ("Raw text", "dump"),
-    ("feature folder", "prd"),
+    ("feature folder", "create-prd"),
     ("PRD path", "create-tasks"),
-    ("task list", "gh-issue"),
+    ("task list", "refine-issues"),
+    ("Bugs.md", "gh-issue"),
     ("epic parent", "fix-blockers"),
     ("Issue numbers", "dispatch"),
 ):
     assert re.search(rf"{_shape}.{{0,160}}\| {_stage} \|", _args187, re.I), f"#187 entry shape {_shape} -> {_stage}"
-assert "Dump.md" in _args187, "#187 Dump.md path enters at prd"
+assert "Dump.md" in _args187, "#187 Dump.md path enters at create-prd"
 ok("#187 /flow exists and names its six entry shapes")
 _route187 = _ws(_key183(_fs, "Routing after dump"))
 for _cls, _path in (
-    ("New feature", "prd \u2192 create-tasks \u2192 gh-issue \u2192 fix-blockers \u2192 dispatch"),
-    ("Change request", "prd"),
-    ("Bug report", "create-tasks \u2192 gh-issue \u2192 fix-blockers \u2192 dispatch"),
+    ("New feature", "create-prd \u2192 create-tasks \u2192 refine-issues \u2192 fix-blockers \u2192 dispatch"),
+    ("Change request", "create-prd"),
+    ("Bug report", "gh-issue \u2192 dispatch"),
     ("Feature-scoped task", "gh-issue \u2192 dispatch"),
     ("Unclassifiable", "stop"),
 ):
     assert re.search(rf"{_cls}.{{0,120}}{_path}", _route187, re.I), f"#187 routing {_cls}"
+assert "| Bug report | gh-issue \u2192 dispatch |" in _route187, "#187 a bug goes straight to gh-issue"
+assert "`approve <prd-path>`" in _ws(_flow), "#187 approve takes the PRD path"
+assert "/create-prd approve" in _flow, "#187 flow must invoke create-prd approve after Continue"
+assert not re.search(r"(?<![-\w])/prd\b", _flow) and "ai-workflow:prd" not in _flow, "flow: no /prd left"
+assert not re.search(r"(?<![-\w])/prd\b", _read("skills", "dump", "SKILL.md")), "dump: no /prd left"
+assert re.search(
+    r"gh-issue.{0,400}\u2192 next: /create-prd", _ws(_flow.split("### gh-issue")[1].split("###")[0]), re.I
+), "flow: a gh-issue stop routes back to create-prd"
+assert "The epics `/create-prd approve` files are the only tracking issues" in _ws(_flow), (
+    "flow guardrail: epics are the only tracking issues"
+)
 ok("#187 /flow routes by dump classification and stops after filing for the rest")
 _flow_ws = _ws(_flow)
 assert f"`{NEXT}" in _flow_ws and "take the next stage's argument from that line" in _flow_ws, (

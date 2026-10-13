@@ -203,8 +203,8 @@ wikilinks, never as backticked filenames.
 
 ## Problem statement
 
-A new feature, change request or bug is filed as a problem statement, not as raw text. `/prd`
-reads it for a feature or change request, and `/create-tasks` for a bug. Write it from the
+A new feature, change request or bug is filed as a problem statement, not as raw text. `/create-prd`
+reads it for a feature or change request, and `/gh-issue` for a bug. Write it from the
 input only: never invent a user, a number or a cause the input doesn't give. Anything missing
 goes under **Open questions** for the next step to ask.
 
@@ -261,7 +261,7 @@ obsidian vault=notes property:set path="05-Work/<Project>/<Feature>/PRD.md" name
 obsidian vault=notes append path="05-Work/<Project>/<Feature>/PRD.md" content="\n## Related\n- [[05-Work/<Project>/<Feature>/Dump|Dump]] — problem statement\n- [[05-Work/<Project>/Index|<Project> Project Index]]"
 obsidian vault=notes append path="05-Work/<Project>/<Feature>/Dump.md" content="\n## Related\n- [[05-Work/<Project>/<Feature>/PRD|PRD]] — requirements\n- [[05-Work/<Project>/Index|<Project> Project Index]]"
 ```
-The `status: seed` marker tells `/prd` this `PRD.md` is only a seed it may fill in, not a finished PRD.
+The `status: seed` marker tells `/create-prd` this `PRD.md` is only a seed it may fill in, not a finished PRD.
 
 **Change request** — target feature already has `PRD.md`/`SRS.md`:
 ```
@@ -398,8 +398,8 @@ Then end with the `→ next:` line for the type. It is the last line of your out
 
 | Type | Final line |
 |---|---|
-| New feature request, change request | `→ next: /prd <feature-folder>` (the `05-Work/<Project>/<Feature>` folder) |
-| Bug report | `→ next: /create-tasks <note-path>` (the `Bugs.md` you appended to) |
+| New feature request, change request | `→ next: /create-prd <feature-folder>` (the `05-Work/<Project>/<Feature>` folder) |
+| Bug report | `→ next: /gh-issue <note-path>` (the `Bugs.md` you appended to) |
 | Feature-scoped task | `→ next: /gh-issue <note-path>` (the `Tasks.md` you appended to) |
 | Standalone task, weekly meeting notes, unclassifiable | no `→ next:` line — the flow stops here |
 

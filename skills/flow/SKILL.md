@@ -1,6 +1,6 @@
 ---
 name: flow
-description: "Guide one feature from raw input to dispatched /run-issue runs: /dump (Obsidian) → /prd → /create-tasks → /gh-issue (refined issues under an epic) → /fix-blockers → herdr-dispatch, stopping for the user's go-ahead at every stage boundary. Picks the entry stage from the input, so half-done work (a PRD, existing issues) resumes where it is. Use whenever the user says /flow, 'take this idea to PRs', 'guided flow', or wants an idea carried through capture, PRD, issues and dispatch in one go."
+description: "Guide one feature from raw input to dispatched /run-issue runs: /dump (Obsidian) → /create-prd → /create-tasks → /refine-issues → /fix-blockers → herdr-dispatch, stopping for the user's go-ahead at every stage boundary. Picks the entry stage from the input, so half-done work (a PRD, existing issues) resumes where it is. Use whenever the user says /flow, 'take this idea to PRs', 'guided flow', or wants an idea carried through capture, PRD, tasks, issues and dispatch in one go."
 allowed-tools:
   - Skill
   - AskUserQuestion
@@ -8,7 +8,7 @@ allowed-tools:
   - Read
 ---
 
-# /flow — Idea → PRD → tasks → issues → blockers → dispatch
+# /flow — Idea → PRD → tasks → refined issues → blockers → dispatch
 
 `/flow` holds the user's place in the Guided Flow. It owns no stage logic: each stage is the existing skill, invoked through the Skill tool in this same session. Its whole job is picking the entry stage, routing, carrying each stage's output into the next, and asking before every boundary.
 
@@ -23,9 +23,10 @@ A stage's own "last line of your output" or "do nothing further" ends that stage
 | Input | Entry stage |
 |---|---|
 | Raw text (anything that is not one of the shapes below) | dump |
-| A vault feature folder `05-Work/<Project>/<Feature>`, or its `Dump.md` path (use the folder) | prd |
-| A PRD path (a vault `…/PRD.md` or a repo `docs/prd/<slug>.md`), or the `Bugs.md` note a `→ next: /create-tasks` line named | create-tasks |
-| A task list `docs/tasks/<slug>.md`, or the `Tasks.md` note a `→ next: /gh-issue` line named | gh-issue |
+| A vault feature folder `05-Work/<Project>/<Feature>`, or its `Dump.md` path (use the folder) | create-prd |
+| A PRD path (a vault `…/PRD.md` or a repo `docs/prds/<slug>.md`) | create-tasks |
+| A task list `docs/tasks/<slug>.md` | refine-issues |
+| A `Bugs.md` or `Tasks.md` note a `→ next: /gh-issue` line named | gh-issue |
 | An epic parent a `→ next: /fix-blockers` line named | fix-blockers |
 | Issue numbers: bare integers or GitHub issue URLs, one or more | dispatch |
 
@@ -37,21 +38,25 @@ A vault path starts with `05-Work/`. When an input fits no row cleanly, ask whic
 
 Invoke the `ai-workflow:dump` skill with the raw text. Its own Step 3 confirmation still applies. When it finishes, read its classification and its final `→ next:` line, then go to **Routing after dump**.
 
-### prd
+### create-prd
 
-Invoke the `ai-workflow:prd` skill with the feature folder (`/prd <feature-folder>`). It fills the folder's seeded `PRD.md`, or, on a PRD that is already finished (a change request), asks and updates it. Its final line is `→ next: /create-tasks <prd-path>`.
+Invoke the `ai-workflow:create-prd` skill with the feature folder (`/create-prd <feature-folder>`). It fills the folder's seeded `PRD.md`, or, on a PRD that is already finished (a change request), asks and updates it. Its final line is `→ next: /create-tasks <prd-path>`. The same skill is the target when `gh-issue` stops with `→ next: /create-prd <input>`: the input needs a PRD, so run create-prd on that input.
 
 ### create-tasks
 
-Invoke the `ai-workflow:create-tasks` skill with the PRD path or the bug's note path. It saves a small, ordered task list. Its final line is `→ next: /gh-issue docs/tasks/<slug>.md`.
+Invoke the `ai-workflow:create-tasks` skill with the PRD path. It works only from an Approved PRD and saves a small, ordered task list. Its final line is `→ next: /refine-issues docs/tasks/<slug>.md`.
+
+### refine-issues
+
+Invoke the `ai-workflow:refine-issues` skill with the task list path. It files one refined sub-issue per task under the PRD's epic, with `Depends on:` lines. Its final line is `→ next: /fix-blockers <epic>`.
 
 ### gh-issue
 
-Invoke the `ai-workflow:gh-issue` skill with the task list or note path. It asks one question round per task, files one `refined` issue per task with `Depends on: #n` lines, and an `epic` parent over two or more. Its final line is `→ next: /fix-blockers <parent>`, or `→ next: herdr-dispatch <n>` for a single issue.
+Invoke the `ai-workflow:gh-issue` skill with the note path. It files exactly one issue. Its final line is `→ next: herdr-dispatch <n>`, or `→ next: /create-prd <input>` when it stopped because the input splits into 2 or more tasks. That is not an error: go to the create-prd stage with that argument.
 
 ### fix-blockers
 
-Invoke the `ai-workflow:fix-blockers` skill with the parent number. It sets GitHub's blocked-by relations from the `Depends on:` lines. Its final line is `→ next: herdr-dispatch <parent>`.
+Invoke the `ai-workflow:fix-blockers` skill with the epic number. It sets GitHub's blocked-by relations from the `Depends on:` lines. Its final line is `→ next: herdr-dispatch <epic>`.
 
 ### dispatch
 
@@ -61,15 +66,17 @@ See **Dispatch** below.
 
 | Dump classification | Path |
 |---|---|
-| New feature request | prd → create-tasks → gh-issue → fix-blockers → dispatch |
-| Change request | prd (update path) → create-tasks → gh-issue → fix-blockers → dispatch |
-| Bug report | create-tasks → gh-issue → fix-blockers → dispatch |
+| New feature request | create-prd → create-tasks → refine-issues → fix-blockers → dispatch |
+| Change request | create-prd (update path) → create-tasks → refine-issues → fix-blockers → dispatch |
+| Bug report | gh-issue → dispatch |
 | Feature-scoped task | gh-issue → dispatch |
 | Standalone task, weekly meeting notes, unclassifiable | stop after filing; there is no next stage |
 
 ## Checkpoints
 
 At every boundary between stages, ask one AskUserQuestion: "Continue to <next stage> (Recommended)" / "Stop here", naming the argument the `→ next:` line gave. On "Stop here", print that `→ next:` line and tell the user they can resume later with `/flow <that argument>`. Never advance past a boundary without the user's "Continue".
+
+When the user answers Continue at the boundary after `create-prd`, first invoke `ai-workflow:create-prd` with `approve <prd-path>` (the Continue is the approval; it creates the epics without asking again), then invoke `create-tasks`.
 
 ## Dispatch
 
@@ -79,7 +86,7 @@ At every boundary between stages, ask one AskUserQuestion: "Continue to <next st
 
 ## Guardrails
 
-- No stage logic copied here: classification, PRD writing, issue splitting and dispatch belong to their own skills.
+- No stage logic copied here: classification, PRD writing, task splitting and dispatch belong to their own skills.
 - No state file. The artifacts (vault note, PRD, issues) are the state, which is why `/flow <argument>` can resume.
-- One feature per run. The parent epic `/gh-issue` files over the tasks is the only tracking issue; this skill never creates another.
-- Never launch a dispatch without an explicit "Launch", and never create issues without the user's "Continue" into the gh-issue stage.
+- One feature per run. The epics `/create-prd approve` files are the only tracking issues; this skill never creates another.
+- Never launch a dispatch without an explicit "Launch", and never create issues without the user's "Continue" into the gh-issue or refine-issues stage.
