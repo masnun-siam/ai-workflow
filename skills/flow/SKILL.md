@@ -1,6 +1,6 @@
 ---
 name: flow
-description: "Guide one feature from raw input to dispatched /run-issue runs: /dump (Obsidian) → /prd → /gh-issue (flat refined issues) → herdr-dispatch, stopping for the user's go-ahead at every stage boundary. Picks the entry stage from the input, so half-done work (a PRD, existing issues) resumes where it is. Use whenever the user says /flow, 'take this idea to PRs', 'guided flow', or wants an idea carried through capture, PRD, issues and dispatch in one go."
+description: "Guide one feature from raw input to dispatched /run-issue runs: /dump (Obsidian) → /prd → /create-tasks → /gh-issue (refined issues under an epic) → /fix-blockers → herdr-dispatch, stopping for the user's go-ahead at every stage boundary. Picks the entry stage from the input, so half-done work (a PRD, existing issues) resumes where it is. Use whenever the user says /flow, 'take this idea to PRs', 'guided flow', or wants an idea carried through capture, PRD, issues and dispatch in one go."
 allowed-tools:
   - Skill
   - AskUserQuestion
@@ -8,7 +8,7 @@ allowed-tools:
   - Read
 ---
 
-# /flow — Idea → PRD → issues → dispatch
+# /flow — Idea → PRD → tasks → issues → blockers → dispatch
 
 `/flow` holds the user's place in the Guided Flow. It owns no stage logic: each stage is the existing skill, invoked through the Skill tool in this same session. Its whole job is picking the entry stage, routing, carrying each stage's output into the next, and asking before every boundary.
 
@@ -18,13 +18,15 @@ A stage's own "last line of your output" or "do nothing further" ends that stage
 
 ## Arguments
 
-`/flow <raw text | feature folder | Dump.md path | PRD path | issue numbers>`
+`/flow <raw text | feature folder | Dump.md path | PRD path | task list | epic parent | issue numbers>`
 
 | Input | Entry stage |
 |---|---|
 | Raw text (anything that is not one of the shapes below) | dump |
 | A vault feature folder `05-Work/<Project>/<Feature>`, or its `Dump.md` path (use the folder) | prd |
-| A PRD path (a vault `…/PRD.md` or a local PRD file), or the `Bugs.md` / `Tasks.md` note a `→ next: /gh-issue` line named | gh-issue |
+| A PRD path (a vault `…/PRD.md` or a repo `docs/prd/<slug>.md`), or the `Bugs.md` note a `→ next: /create-tasks` line named | create-tasks |
+| A task list `docs/tasks/<slug>.md`, or the `Tasks.md` note a `→ next: /gh-issue` line named | gh-issue |
+| An epic parent a `→ next: /fix-blockers` line named | fix-blockers |
 | Issue numbers: bare integers or GitHub issue URLs, one or more | dispatch |
 
 A vault path starts with `05-Work/`. When an input fits no row cleanly, ask which stage to start at (AskUserQuestion) rather than guessing.
@@ -37,11 +39,19 @@ Invoke the `ai-workflow:dump` skill with the raw text. Its own Step 3 confirmati
 
 ### prd
 
-Invoke the `ai-workflow:prd` skill with the feature folder (`/prd <feature-folder>`). It fills the folder's seeded `PRD.md`, or, on a PRD that is already finished (a change request), asks and updates it. Its final line is `→ next: /gh-issue <prd-path>`.
+Invoke the `ai-workflow:prd` skill with the feature folder (`/prd <feature-folder>`). It fills the folder's seeded `PRD.md`, or, on a PRD that is already finished (a change request), asks and updates it. Its final line is `→ next: /create-tasks <prd-path>`.
+
+### create-tasks
+
+Invoke the `ai-workflow:create-tasks` skill with the PRD path or the bug's note path. It saves a small, ordered task list. Its final line is `→ next: /gh-issue docs/tasks/<slug>.md`.
 
 ### gh-issue
 
-Invoke the `ai-workflow:gh-issue` skill with the PRD path or note path. It splits the work into flat `refined` issues with `Depends on: #n` lines, under its own confirmations. Its final line is `→ next: herdr-dispatch <n> <n> …`.
+Invoke the `ai-workflow:gh-issue` skill with the task list or note path. It asks one question round per task, files one `refined` issue per task with `Depends on: #n` lines, and an `epic` parent over two or more. Its final line is `→ next: /fix-blockers <parent>`, or `→ next: herdr-dispatch <n>` for a single issue.
+
+### fix-blockers
+
+Invoke the `ai-workflow:fix-blockers` skill with the parent number. It sets GitHub's blocked-by relations from the `Depends on:` lines. Its final line is `→ next: herdr-dispatch <parent>`.
 
 ### dispatch
 
@@ -51,9 +61,10 @@ See **Dispatch** below.
 
 | Dump classification | Path |
 |---|---|
-| New feature request | prd → gh-issue → dispatch |
-| Change request | prd (update path) → gh-issue → dispatch |
-| Bug report, feature-scoped task | gh-issue → dispatch |
+| New feature request | prd → create-tasks → gh-issue → fix-blockers → dispatch |
+| Change request | prd (update path) → create-tasks → gh-issue → fix-blockers → dispatch |
+| Bug report | create-tasks → gh-issue → fix-blockers → dispatch |
+| Feature-scoped task | gh-issue → dispatch |
 | Standalone task, weekly meeting notes, unclassifiable | stop after filing; there is no next stage |
 
 ## Checkpoints

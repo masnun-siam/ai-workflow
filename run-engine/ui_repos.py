@@ -29,6 +29,8 @@ NAMED = (
     "dump",
     "worklog",
     "gh-issue",
+    "create-tasks",
+    "fix-blockers",
     "pr-review",
     "pr-fix-comments",
     "issue-to-pr",

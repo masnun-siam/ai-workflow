@@ -8,7 +8,7 @@ import { FlowSwitcher, IssueRows, NotePane, mergeRows } from './flowside.js';
 
 const html = htm.bind(h);
 
-// Guided Flow (#190): Dump → PRD → Issues → Dispatch. Each step runs its command as a headless
+// Guided Flow (#190): Dump → PRD → Tasks → Issues → Blockers → Dispatch. Each step runs its command as a headless
 // session; its final `→ next:` line pre-fills the next step. Each flow is a server record
 // (ui_flows.py) at #/flow/<id>; the bare #/flow opens the most recently active one.
 const STEPS = [
@@ -17,8 +17,12 @@ const STEPS = [
     produces: 'Files the idea into a feature folder in your notes.' },
   { key: 'prd', label: 'PRD', command: 'prd', action: 'Write the PRD', input: 'Feature folder (05-Work/<Project>/<Feature>)',
     produces: 'Writes a reviewed PRD for the feature.' },
-  { key: 'issues', label: 'Issues', command: 'gh-issue', action: 'Create the issues', input: 'PRD path, or the Bugs.md / Tasks.md note',
-    produces: 'Creates GitHub issues from the PRD.' },
+  { key: 'tasks', label: 'Tasks', command: 'create-tasks', action: 'Break it into tasks', input: 'PRD path, or the Bugs.md note',
+    produces: 'Saves a small, ordered task list to docs/tasks/.' },
+  { key: 'issues', label: 'Issues', command: 'gh-issue', action: 'Create the issues', input: 'Task list (docs/tasks/<slug>.md), or the Tasks.md note',
+    produces: 'Files a refined issue per task under an epic parent.' },
+  { key: 'blockers', label: 'Blockers', command: 'fix-blockers', action: 'Set the blockers', input: 'Epic parent issue number',
+    produces: 'Marks each issue blocked by the ones it depends on.' },
   { key: 'dispatch', label: 'Dispatch', input: 'Issue numbers', produces: 'Starts a run for each issue.' },
 ];
 const STATE_TEXT = { done: 'Done', skipped: 'Skipped', active: 'Current step', locked: 'Not started' };
@@ -33,7 +37,13 @@ export function parseNext(text) {
 }
 
 // Which fields a step's `→ next:` line may fill; a line naming any other command does not unlock.
-const NEXT = { dump: { prd: 'folder', 'gh-issue': 'prd' }, prd: { 'gh-issue': 'prd' }, issues: { 'herdr-dispatch': 'issues' } };
+const NEXT = {
+  dump: { prd: 'folder', 'create-tasks': 'prd', 'gh-issue': 'tasks' },
+  prd: { 'create-tasks': 'prd' },
+  tasks: { 'gh-issue': 'tasks' },
+  issues: { 'fix-blockers': 'parent', 'herdr-dispatch': 'issues' },
+  blockers: { 'herdr-dispatch': 'issues' },
+};
 
 // Turn a step's final `result` event into a state patch, or {error} saying why the next step stays locked.
 export function handoff(step, result) {
@@ -47,13 +57,19 @@ export function handoff(step, result) {
     const issues = issueNumbers(next.arg);
     return issues.length ? { issues } : { error: 'The → next: line lists no issue numbers.' };
   }
+  if (field === 'parent') {
+    const [parent] = issueNumbers(next.arg);
+    return parent ? { parent: String(parent) } : { error: 'The → next: line names no parent issue.' };
+  }
   return next.arg ? { [field]: next.arg } : { error: 'The → next: line has no argument.' };
 }
 
 // The first step whose input is known but whose output isn't.
-export function stepFromState({ folder, prd, issues } = {}) {
+export function stepFromState({ folder, prd, tasks, parent, issues } = {}) {
   if (issues && issues.length) return 'dispatch';
-  if (prd) return 'issues';
+  if (parent) return 'blockers';
+  if (tasks) return 'issues';
+  if (prd) return 'tasks';
   if (folder) return 'prd';
   return 'dump';
 }
@@ -95,7 +111,7 @@ export function flowLink(meta) {
 export function sideView({ view, at, runStep, folder, prd }) {
   const key = view || runStep || (at > 0 ? STEPS[at - 1].key : null);
   if (!key) return null;
-  if (key === 'issues' || key === 'dispatch') return { kind: 'issues' };
+  if (key === 'issues' || key === 'blockers' || key === 'dispatch') return { kind: 'issues' };
   if (key === 'dump') {
     if (runStep === 'dump') return { kind: 'filing' };
     return folder ? { kind: 'note', path: `${folder.replace(/\/+$/, '')}/Dump.md` } : prd ? { kind: 'note', path: prd } : null;
@@ -116,7 +132,7 @@ export class Flow extends Component {
     const p = props.route.params;
     const repo = p.repo || loadLastRepo(globalThis.localStorage) || '';
     this.state = { id: null, loaded: false, missing: false, ...this.repoState(repo), repos: [], canBrowse: false, repoQuery: null,
-      repoOpen: false, repoActive: 0, browsing: false, text: '', folder: p.folder || '', prd: p.prd || '', issues: (p.issues || []).join(' '),
+      repoOpen: false, repoActive: 0, browsing: false, text: '', folder: p.folder || '', prd: p.prd || '', tasks: '', parent: '', issues: (p.issues || []).join(' '),
       sid: p.sid || '', meta: null, why: null, busy: false, wide: false, view: null, progress: null };
   }
 
@@ -162,7 +178,7 @@ export class Flow extends Component {
     if (!r.ok) { this.setState({ missing: true }); return; }
     const f = r.data;
     this.setState({ id: f.id, ...this.repoState(f.repo || this.fields().repo), text: f.text || '', folder: f.folder || '', prd: f.prd || '',
-      issues: (f.issues || []).join(' '), sid: f.sid || '' });
+      tasks: f.tasks || '', parent: f.parent || '', issues: (f.issues || []).join(' '), sid: f.sid || '' });
   }
 
   loadRepos() {
@@ -177,7 +193,8 @@ export class Flow extends Component {
     }).catch(() => {});
   }
 
-  fields = (s = this.state) => ({ repo: (s.manual ? s.path : s.repo).trim(), folder: s.folder, prd: s.prd, issues: issueNumbers(s.issues), sid: s.sid });
+  fields = (s = this.state) => ({ repo: (s.manual ? s.path : s.repo).trim(), folder: s.folder, prd: s.prd, tasks: s.tasks, parent: s.parent,
+    issues: issueNumbers(s.issues), sid: s.sid });
 
   persisted = (s = this.state) => ({ ...this.fields(s), text: s.text });
 
@@ -197,7 +214,7 @@ export class Flow extends Component {
     this.dirty = false;
     const body = this.persisted();
     if (!this.state.id) {
-      if (!force && !body.text.trim() && !body.folder && !body.prd && !body.issues.length && !body.sid) return null;
+      if (!force && !body.text.trim() && !body.folder && !body.prd && !body.tasks && !body.parent && !body.issues.length && !body.sid) return null;
       if (!this.creating) {
         this.creating = api('POST', '/api/flows', body).then((r) => {
           if (!r.ok || !r.data) return null;
@@ -217,9 +234,9 @@ export class Flow extends Component {
   }
 
   start = async (step) => {
-    const { text, folder, prd } = this.state;
+    const { text, folder, prd, tasks, parent } = this.state;
     const { repo } = this.fields();
-    const args = { dump: text, prd: folder, issues: prd }[step.key].trim();
+    const args = { dump: text, prd: folder, tasks: prd, issues: tasks, blockers: parent }[step.key].trim();
     if (!repo || !args) { this.setState({ why: !repo ? 'Pick a repo first.' : 'Fill in the field above first.' }); return; }
     this.setState({ busy: true, why: null, meta: null, view: null });
     clearTimeout(this.timer);
@@ -311,7 +328,7 @@ export class Flow extends Component {
 
   input(step) {
     const id = `flow-${step.key}`;
-    const field = { dump: 'text', prd: 'folder', issues: 'prd', dispatch: 'issues' }[step.key];
+    const field = { dump: 'text', prd: 'folder', tasks: 'prd', issues: 'tasks', blockers: 'parent', dispatch: 'issues' }[step.key];
     const prose = step.key === 'dump';
     const Tag = prose ? 'textarea' : 'input';
     return html`<label for=${id}>${step.input}</label>
@@ -366,8 +383,9 @@ export class Flow extends Component {
       ${this.combo.render(st, { id: 'flow-repo', error: why === 'Pick a repo first.' ? 'flow-why' : null })}
       <ol class="flow-steps">
         ${STEPS.map((step, i) => {
-          const state = i < at ? (step.key === 'prd' && !folder ? 'skipped' : 'done') : i === at ? 'active' : 'locked';
-          const shown = side && current && (current.kind === 'issues' ? ['issues', 'dispatch'].includes(step.key) && state === 'done' : st.view === step.key);
+          const skipped = (step.key === 'prd' && !folder) || (step.key === 'tasks' && !st.prd) || (step.key === 'blockers' && !st.parent);
+          const state = i < at ? (skipped ? 'skipped' : 'done') : i === at ? 'active' : 'locked';
+          const shown = side && current && (current.kind === 'issues' ? ['issues', 'blockers', 'dispatch'].includes(step.key) && state === 'done' : st.view === step.key);
           return html`<li class=${`flow-step flow-${state}`} aria-current=${state === 'active' ? 'step' : undefined}>
             <span class="flow-mark" aria-hidden="true">${state === 'done' ? '✓' : i + 1}</span>
             <div class="flow-body">
@@ -385,7 +403,8 @@ export class Flow extends Component {
               ${state === 'active' && step.key === 'dispatch' && html`
                 ${this.input(step)}
                 ${issues.length ? html`<a class="btn btn--primary" href=${dispatchHref(issues)} onClick=${this.dispatched}>Open Dispatch with ${issues.join(', ')}</a>` : null}`}
-              ${state === 'done' && html`<p class="note mono">${{ dump: folder || st.prd, prd: st.prd, issues: issues.join(', ') }[step.key]}</p>`}
+              ${state === 'done' && html`<p class="note mono">${{ dump: folder || st.prd || st.tasks, prd: st.prd, tasks: st.tasks,
+                issues: st.parent ? `#${st.parent}` : issues.join(', '), blockers: issues.join(', ') }[step.key]}</p>`}
             </div>
           </li>`;
         })}

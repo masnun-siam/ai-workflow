@@ -7,12 +7,12 @@
 | `/ai-workflow:run-issue <n> [--full] [--no-review] [--grind]` | the full pipeline: issue → reviewed PR (`--no-review` skips review and fix; `--grind` keeps working the PR's review rounds after the handback, off by default). Accepts an epic parent. |
 | `/ai-workflow:intake <source>` | normalize a Sentry link, BRD file, or vault note into an issue brief — used internally by `/gh-issue` and `/run-issue` |
 | `/ai-workflow:gh-issue` | file a well-formed issue; always decomposes first — one task files one issue; two or more save the task list to `docs/tasks/<slug>.md` and file one refined issue per task, ordered by `Depends on: #n` lines, under an `epic` parent; `/gh-issue docs/tasks/<slug>.md` files a saved list, one question round per task |
-| `/ai-workflow:create-tasks <problem-statement> [<prd>]` | break a problem statement and its PRD into a saved, ordered task list (`docs/tasks/<slug>.md`) using `/gh-issue`'s decomposition rules; files no issues. `/gh-issue docs/tasks/<slug>.md` then files them |
+| `/ai-workflow:create-tasks <prd \| problem-statement>` | break a problem statement and its PRD into a saved, ordered task list (`docs/tasks/<slug>.md`) using `/gh-issue`'s decomposition rules; files no issues. `/gh-issue docs/tasks/<slug>.md` then files them |
 | `/ai-workflow:fix-blockers <parent>` | set GitHub's native "blocked by" relations between an epic's children from their `Depends on:` lines: previews, asks once, writes only the missing edges, reports (never deletes) edges no line names |
 | `/ai-workflow:jira-to-gh <KEY>` | decompose a Jira ticket and file flat issues the same way as `/gh-issue` (one issue for a single task; two or more saved to `docs/tasks/<slug>.md` and filed flat) |
 | `/ai-workflow:pr-fix-comments <pr>` | work through a PR's review comments, confirming each |
 | `/ai-workflow:issue-to-pr` | the interactive, non-unattended variant |
-| `/ai-workflow:flow <idea \| folder \| PRD \| issue numbers>` | the guided flow (`/flow` for short): dump → PRD → flat issues → herdr-dispatch for one feature, starting at whichever stage the input implies and stopping for your go at each boundary |
+| `/ai-workflow:flow <idea \| folder \| PRD \| task list \| parent \| issue numbers>` | the guided flow (`/flow` for short): dump → PRD → task list → issues under an epic → blockers → herdr-dispatch for one feature, starting at whichever stage the input implies and stopping for your go at each boundary |
 
 The default roster is researcher → planner → dev → reviewer → fixer. `run-dev` writes the
 RED tests first, implements, and runtime-verifies in one dispatch, and also applies the

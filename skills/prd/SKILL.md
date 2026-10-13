@@ -54,8 +54,8 @@ are used either way; only the transport differs.
 ### Flow auto mode
 
 When the system prompt contains `Flow auto mode`, this run is the PRD step of the aiw ui guided
-Flow. The user answers grilling questions and nothing else, and the next step (`/gh-issue`) will
-ask nothing at all, so this interview is the only chance to settle anything. Changes:
+Flow. The user answers grilling questions and nothing else, and the next steps (`/create-tasks`,
+`/gh-issue`) will ask nothing at all, so this interview is the only chance to settle anything. Changes:
 
 - **Grilling (Step 4)** also covers what `/gh-issue` would otherwise grill on: acceptance criteria
   for every requirement, priority, affected users, and every corner case (empty/null input,
@@ -190,7 +190,7 @@ If any save step fails, report which destinations succeeded and which didn't. Do
 
 ## Step 8: Report and hand off
 
-One line per destination with its final path or URL. End with the line `→ next: /gh-issue <prd-path>`, where `<prd-path>` is the Obsidian `PRD.md` path, or the first written destination when Obsidian was not written. The guided Flow opens that path as a vault note; whoever reads it follows its `canonical` property to the repo copy. It is the last line of your output; the Guided Flow parses it. Do nothing further.
+One line per destination with its final path or URL. End with the line `→ next: /create-tasks <prd-path>`, where `<prd-path>` is the Obsidian `PRD.md` path, or the first written destination when Obsidian was not written. The guided Flow opens that path as a vault note; whoever reads it follows its `canonical` property to the repo copy. It is the last line of your output; the Guided Flow parses it. Do nothing further.
 
 ## Update mode
 

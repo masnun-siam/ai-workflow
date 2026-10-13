@@ -78,8 +78,8 @@ decided in the final report:
   issue's content and the PRD (for example Priority from the PRD's priority). Never invent option
   names. List every value set, per issue, in the report.
 - **Step 7:** the `/dump` it invokes runs in Flow auto mode too, so its confirmation is skipped.
-- **Hand-off line:** print the `→ next: herdr-dispatch <n> …` line as text only. Never invoke the
-  `herdr-dispatch` skill or the `herdr` CLI or open tabs; the UI's Dispatch step starts the runs.
+- **Hand-off line:** print the `→ next:` line as text only. Never invoke `/fix-blockers`, the
+  `herdr-dispatch` skill or the `herdr` CLI, or open tabs; the UI's next steps do that.
 
 
 **HARD RULE — while executing steps 0–7 below, including everything under `4-FLAT`
@@ -294,8 +294,8 @@ list order (including issues reused on resume). If `/run-issue` invoked this ski
 — with that issue number for one issue, or with the parent URL and that ordered list of issue URLs for 2 or
 more — and continue the run; the HARD RULE above no longer applies.
 On a standalone run there is nothing to hand back to. End with the line
-`→ next: herdr-dispatch <n> <n> …` listing every returned issue number in list order (one
-number for a single issue). It is the last line of your output; the Guided Flow parses it.
+`→ next: /fix-blockers <parent>` when an epic parent was filed, or `→ next: herdr-dispatch <n>`
+for a single issue. It is the last line of your output; the Guided Flow parses it.
 
 ## Saved task list and the epic
 

@@ -187,7 +187,7 @@ wikilinks, never as backticked filenames.
 ## Problem statement
 
 A new feature, change request or bug is filed as a problem statement, not as raw text. `/prd`
-reads it for a feature or change request, and `/gh-issue` for a bug. Write it from the
+reads it for a feature or change request, and `/create-tasks` for a bug. Write it from the
 input only: never invent a user, a number or a cause the input doesn't give. Anything missing
 goes under **Open questions** for the next step to ask.
 
@@ -382,7 +382,8 @@ Then end with the `→ next:` line for the type. It is the last line of your out
 | Type | Final line |
 |---|---|
 | New feature request, change request | `→ next: /prd <feature-folder>` (the `05-Work/<Project>/<Feature>` folder) |
-| Bug report, feature-scoped task | `→ next: /gh-issue <note-path>` (the `Bugs.md` / `Tasks.md` you appended to) |
+| Bug report | `→ next: /create-tasks <note-path>` (the `Bugs.md` you appended to) |
+| Feature-scoped task | `→ next: /gh-issue <note-path>` (the `Tasks.md` you appended to) |
 | Standalone task, weekly meeting notes, unclassifiable | no `→ next:` line — the flow stops here |
 
 ## Notes
