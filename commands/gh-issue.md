@@ -121,7 +121,7 @@ Do the following:
      2 or more tasks: this is PRD-sized work, so this command creates nothing. Print the
      approved list (it is the starting point for the PRD), say "This splits into <k> tasks;
      write a PRD first so they get an epic, waves and refined sub-issues", and end with
-     `→ next: /create-prd <input>` (the original argument: a path or URL as given; for free
+     `→ next: /create-prd <input>` (printed under `/run-issue` too, which branches on it; the original argument: a path or URL as given; for free
      text, the vault feature folder when one is already known, such as from step 2.5's
      research brief, otherwise the text in double quotes). Skip steps 4–7 and the return below.
 4. Then create a GitHub issue on the current repo:
@@ -201,8 +201,9 @@ Do the following:
    Best-effort: if the vault is unreachable or `/dump` is cancelled, say so in one line.
    The issue already exists and is the deliverable; the dump is not worth failing over.
 
-Return the issue URL. End with `→ next: herdr-dispatch <n>`. It is the last line of your output;
-the Guided Flow parses it. If `/run-issue` invoked this skill, hand control back to its Preflight
+Return the issue URL. On a standalone run, end with `→ next: herdr-dispatch <n>`; it is the last line of
+your output and the Guided Flow parses it. If `/run-issue` invoked this skill, print no
+`→ next: herdr-dispatch` line: hand control back to its Preflight
 step 3 with that issue number and continue the run; the HARD RULE above no longer applies.
 
 ## Peer review (only with `--review`)

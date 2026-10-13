@@ -274,19 +274,11 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
      brief through exactly as `/gh-issue`'s own step 0 does — substitute directly into
      step 1 rather than re-running step 0's detection. Branch on what `/gh-issue` returns:
 
-     - **No issue URL** (it failed, the human cancelled, or a `4-FLAT` run ended on
-       **"Stop here"**, whatever partial list it reported): stop and say so — do not
+     - **No issue URL** (it failed or the human cancelled): stop and say so — do not
        continue to step 3.
-     - **An ordered list of 2 or more issue URLs** (its `4-FLAT` return, after the URL of
-       the epic parent it filed over them): print the parent and the issue URLs in list
-       order and end the run here. This is a clean stop, not an escalation: no Ledger, no
-       worktree, no `aiw init`, and no further Preflight step. Tell the user to run
-       `/run-issue <n>` for each issue in list order; each issue's `Depends on:` line names
-       the issue it builds on, so run those first — `/run-issue` bases a flat issue on the
-       default branch unless its plan says otherwise. `/run-issue <parent>` runs them all in
-       one session instead (Epic mode). End with the line
-       `→ next: herdr-dispatch <n> <n> …` (every created issue number, in list order);
-       `herdr-dispatch` runs them in that dependency order.
+     - **No issue, and its last line is `→ next: /create-prd …`** (the input splits into 2 or
+       more tasks): print that line, say the input needs a PRD first, and end the run here.
+       The run made no Ledger, no worktree and no `aiw init`.
      - **Exactly one issue URL**: parse the created issue number `<n>` from it and
        continue to Preflight step 3 with that `<n>` as though it had been passed to
        `/run-issue` directly.
@@ -301,7 +293,7 @@ Write context with `aiw set <run-dir> key=value …`. Never hand-edit `run.json`
    ordinary path, except for an issue labelled both `epic` and `prd-<slug>` (step 3 returned
    its labels), which is how `/gh-issue` labels its parents: that is a parent whose children
    were never linked. Stop and say so; never run it as one issue. Its children get linked by
-   re-running `/gh-issue` on its saved task list, or by `aiw epic split` with the children
+   `/refine-issues` on its task list, or by `aiw epic split` with the children
    named. An `epic` label without a `prd-<slug>` label is a team's own label: the ordinary path.
 
    This runs **before** step 4 because step 4 would otherwise get there first. A second
@@ -1253,8 +1245,8 @@ subagents do not nest — so this session walks the roster across all ready chil
 once, exactly as phase 6 spawns the specialist panel in one message.
 
 0. **Split, if it has not been split here.** Epic mode needs
-   `<runs_dir>/<owner>-<repo>-epic-<n>/epic.json`, and only `/gh-issue` writes it — on
-   the machine that filed the epic. A parent filed by hand, filed elsewhere, or whose
+   `<runs_dir>/<owner>-<repo>-epic-<n>/epic.json`, and only `/refine-issues` writes it (via
+   `aiw epic split`) — on the machine that refined the epic. A parent filed by hand, filed elsewhere, or whose
    run directory has been cleaned has no epic.json, and `aiw epic init` exits 3 with
    `cannot read: …/epic.json` and no instruction. So if that file is missing, build it
    from the children phase 0 step 3.5 already returned:
@@ -1265,8 +1257,8 @@ once, exactly as phase 6 spawns the specialist panel in one message.
    ```
 
    It is idempotent on the linkage — children already linked as sub-issues are skipped —
-   so running it on an epic `/gh-issue` created is harmless. Exit 1 means the edges do
-   not form a DAG; print the message and stop, as `/gh-issue` does.
+   so running it on an epic `/refine-issues` split is harmless. Exit 1 means the edges do
+   not form a DAG; print the message and stop, as `/refine-issues` does.
 1. **Init.**
 
    ```bash

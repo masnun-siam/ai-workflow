@@ -3600,37 +3600,36 @@ for stale in ("a parent plus child URLs", "**parent** issue number specifically"
     assert stale not in st2, stale
 assert "parent plus child URLs" not in ri85
 ok("#85 step 2 has no stale epic wording")
-NOURL = '**No issue URL** (it failed, the human cancelled, or a `4-FLAT` run ended on **"Stop here"**, whatever partial list it reported): stop and say so \u2014 do not continue to step 3.'
-LIST1 = "**An ordered list of 2 or more issue URLs** (its `4-FLAT` return, after the URL of the epic parent it filed over them): print the parent and the issue URLs in list order and end the run here."  # ADR 0003
-LIST2 = "This is a clean stop, not an escalation: no Ledger, no worktree, no `aiw init`, and no further Preflight step."
-LIST3 = "Tell the user to run `/run-issue <n>` for each issue in list order; each issue's `Depends on:` line names the issue it builds on, so run those first \u2014 `/run-issue` bases a flat issue on the default branch unless its plan says otherwise."
-LIST4 = "End with the line `\u2192 next: herdr-dispatch <n> <n> \u2026` (every created issue number, in list order); `herdr-dispatch` runs them in that dependency order."  # #186
+NOURL = "**No issue URL** (it failed or the human cancelled): stop and say so \u2014 do not continue to step 3."
+LISTPRD = (
+    "**No issue, and its last line is `\u2192 next: /create-prd \u2026`** (the input splits into 2 or more tasks): "
+    "print that line, say the input needs a PRD first, and end the run here. The run made no Ledger, no worktree and no `aiw init`."
+)
 ONE = "**Exactly one issue URL**: parse the created issue number `<n>` from it and continue to Preflight step 3 with that `<n>` as though it had been passed to `/run-issue` directly."
 HARD = "`/gh-issue`'s HARD RULE is scoped to issue creation and does not bind any later phase of this run."
-LIST3E = "`/run-issue <parent>` runs them all in one session instead (Epic mode)."  # ADR 0003
-for sent in (NOURL, LIST1, LIST2, LIST3, LIST3E, LIST4, ONE, HARD):
+for sent in (NOURL, LISTPRD, ONE, HARD):
     assert st2.count(sent) == 1, sent
 assert _n(ri85).count(HARD) == 1 and st2.endswith(HARD)
+for gone in ("4-FLAT", "herdr-dispatch", "ordered list", "Epic mode"):
+    assert gone not in st2, gone
 ok("#85 step 2 pins the three branches and the HARD RULE sentence whole")
-_a, _b, _h = st2.index("**An ordered list"), st2.index("**Exactly one issue URL**"), st2.index(HARD)
-# whole-bullet pins: appended text or an inserted bullet inside a branch fails
+_a, _b, _h = st2.index("**No issue, and its last line"), st2.index("**Exactly one issue URL**"), st2.index(HARD)
 assert st2[st2.index("**No issue URL**") : _a].rstrip(" -") == NOURL
-assert st2[_a:_b].rstrip(" -") == f"{LIST1} {LIST2} {LIST3} {LIST3E} {LIST4}"
+assert st2[_a:_b].rstrip(" -") == LISTPRD
 assert st2[_b:_h].strip() == ONE
-assert "2 or more issue URLs" in st2 and "3 or more" not in st2 and "more than 2" not in st2
-ok("#85 list branch stops the run and the threshold is literally 2")
+ok("#85 split branch ends the run with the /create-prd line")
 pos = [
     st2.index(m)
     for m in (
         "invoke `/intake <stripped argument> --whole`",
         "**No issue URL**",
-        "**An ordered list of 2 or more",
+        "**No issue, and its last line",
         "**Exactly one issue URL**",
         HARD,
     )
 ]
 assert pos == sorted(pos) and len(set(pos)) == 5, pos
-ok("#85 step 2 branch order: intake, no URL, list, one URL, HARD RULE")
+ok("#85 step 2 branch order: intake, no URL, split, one URL, HARD RULE")
 assert (
     "Argument is a bare number, or a `github.com/.../issues/<n>` URL \u2192 resolve to `<n>`, unchanged from before."
     in st2
@@ -3641,12 +3640,17 @@ assert (
 )
 assert "An empty array is the ordinary path, except for an issue labelled both `epic` and `prd-<slug>`" in st35
 assert "An `epic` label without a `prd-<slug>` label is a team's own label: the ordinary path." in st35
+assert (
+    "Its children get linked by `/refine-issues` on its task list, or by `aiw epic split` with the children named."
+    in st35
+)
+assert "re-running `/gh-issue`" not in st35
 assert "never run it as one issue" in st35  # ADR 0003: a parent with no sub-issues stops
 ok("#85 bare-number bullet and step 3.5 epic routing sentences intact")
 # both pins below hash/compare whitespace-normalised text (_n), so reflowing lines does not trip them
 # sha256 of whitespace-normalised text on base 0ff5687 (pre-#85): step 3.5 slice, and "## Epic mode" up to "\n## Rules"
-S35_SHA = "832218eabfdea18a2037abe13ae33f67f6519aac71098622ab253d51b36d8323"  # re-pinned (ADR 0003): an `epic`-labelled parent with no sub-issues stops
-EPIC_SHA = "e301c4367ff0d14d1316064fc35316c6b90cac928af03f5040fb791edefdb253"  # re-pinned: epic init passes --mode full, lean is an alias of default
+S35_SHA = "48e0f1f6094664beab5ce4dff1a52183ff9bbe5dee1c4bb69e4bde54c13dffe9"  # re-pinned: 3.5 names /refine-issues for unlinked children
+EPIC_SHA = "ba15c1aafd301927d27ab95b030c0a8b36fb378da9646ac383ad66b6151f7795"  # re-pinned: epic.json is written by /refine-issues (aiw epic split), not /gh-issue
 import hashlib  # noqa: E402
 
 _ep = ri85[ri85.index("## Epic mode") :]
@@ -4487,10 +4491,16 @@ ok("--review: peer-review skill loop on Opus; /prd, /intake, /dump, /gh-issue ca
 _close184 = _ws(_read("commands", "gh-issue.md"))
 _close184 = _close184[_close184.rindex("Return the issue URL") :]
 assert (
-    f"Return the issue URL. End with `{NEXT}herdr-dispatch <n>`. It is the last line of your output; "
-    "the Guided Flow parses it." in _close184
-), "#184 gh-issue lacks the next line"
+    f"Return the issue URL. On a standalone run, end with `{NEXT}herdr-dispatch <n>`; it is the last line of "
+    "your output and the Guided Flow parses it. If `/run-issue` invoked this skill, print no "
+    f"`{NEXT}herdr-dispatch` line: hand control back to its Preflight step 3" in _close184
+), "#184 gh-issue lacks the standalone-only next line"
 assert "hand control back to its Preflight step 3" in _close184
+# the 2+ tasks stop prints its /create-prd line even under /run-issue, which branches on it
+assert (
+    "(printed under `/run-issue` too, which branches on it;"
+    in " ".join(_read("commands", "gh-issue.md").split()).split("3.5. **Decompose.**")[1].split("4. Then create")[0]
+), "gh-issue /create-prd line must be printed under /run-issue"
 assert "fix-blockers" not in _close184 and "epic parent" not in _close184, "#184 gh-issue files no epic parent"
 ok("#184 /gh-issue ends with \u2192 next: herdr-dispatch; /run-issue hand-back unchanged")
 
