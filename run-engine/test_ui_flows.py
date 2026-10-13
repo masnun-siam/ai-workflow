@@ -87,6 +87,9 @@ assert ui_flows.step({"folder": "f", "prd": "p"}) == "tasks"
 assert ui_flows.step({"folder": "f", "prd": "p", "tasks": "docs/tasks/t.md"}) == "issues"
 assert ui_flows.step({"folder": "f", "prd": "p", "tasks": "t", "parent": "40"}) == "blockers"
 assert ui_flows.step({"parent": "40", "issues": [40]}) == "dispatch"
+assert (
+    ui_flows.step({"folder": "f", "prd": "p", "issues": [41, 42]}) == "dispatch"
+)  # a pre-six-step flow that filed issues
 h = ui_flows.create({"repo": "o/r", "tasks": "docs/tasks/csv-export.md", "parent": "40"})
 assert (h["tasks"], h["parent"]) == ("docs/tasks/csv-export.md", "40") and not ui_flows._empty(h)
 assert ui_flows.name({"prd": "docs/prd/csv-export.md"}) == "csv-export"

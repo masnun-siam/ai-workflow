@@ -4501,6 +4501,10 @@ assert "aiw paths" in _ct and "<plugin_root>/commands/gh-issue.md" in _ct, (
     "create-tasks resolves gh-issue via aiw paths"
 )
 assert "`Problem statement: <path>`" in _ct and "`PRD: <path>`" in _ct, "create-tasks header names its inputs"
+assert "ask which one, newest first" in _ct and "take the newest without asking" in _ct, "create-tasks picks one bug"
+assert "resumed only when its `Problem statement:` and `PRD:` header lines match" in _ct and "`<slug>-2`" in _ct, (
+    "create-tasks auto mode never resumes an unrelated list"
+)
 _g0 = _ws(_slice(_ghi, "0. **Source check.**", "Details: $@"))
 assert "docs/tasks/<slug>.md" in _g0 and "## Task <n>" in _g0, "gh-issue step 0 must take a saved task list"
 assert re.search(r"one task.{0,80}step 4", _g0) and "Resume this list" in _g0, (
