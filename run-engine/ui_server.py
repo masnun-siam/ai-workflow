@@ -260,6 +260,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                     self._json(*ui_issue.open_items(parts[3], parts[4], kind))
                 else:
                     self._json(400, {"error": "bad repo"})
+            elif len(parts) == 7 and parts[:3] == ["", "api", "pulls"] and parts[6] == "merge":
+                if ui_pr.valid(*parts[3:6]):
+                    self._json(*ui_pr.readiness(*parts[3:6]))
+                else:
+                    self._json(400, {"error": "bad pull request id"})
             elif len(parts) == 6 and parts[:3] == ["", "api", "pulls"]:
                 if ui_pr.valid(*parts[3:]):
                     self._json(*ui_pr.fetch(*parts[3:]))
@@ -331,6 +336,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         parts = urlsplit(self.path).path.split("/")
         if parts == ["", "api", "sessions"]:
             self._start()
+        elif len(parts) == 7 and parts[:3] == ["", "api", "pulls"] and parts[6] == "merge":
+            # squash-merges a PR the user confirmed in the UI's merge dialog
+            if ui_pr.valid(*parts[3:6]):
+                self._json(*ui_pr.merge(*parts[3:6]))
+            else:
+                self._json(400, {"error": "bad pull request id"})
         elif parts == ["", "api", "repos", "browse"]:
             body = self._read_body()
             if body is None:

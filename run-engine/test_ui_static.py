@@ -735,6 +735,15 @@ assert.equal(D.progressText([{ state: 'done' }, { state: 'running' }, { state: '
   const rf = Object.fromEntries(D.ROW_FILTERS.map(([k, , t]) => [k, t]));
   assert.ok(rf.attention({ state: 'failed' }) && !rf.attention(M('failed')) && rf.attention({ state: 'done', grind: { state: 'paused' } }));
   assert.ok(rf.merged(M('failed')) && rf['open-pr']({ state: 'done', gh: { pr: { state: 'OPEN' } } }) && !rf['open-pr'](M('done')));
+  assert.deepEqual(D.prParts('https://github.com/o/r/pull/12'), ['o', 'r', '12']); assert.equal(D.prParts('https://x/o/r/issues/1'), null);
+  const PR = await import(process.env.APP_URL.replace('app.js', 'pr.js'));
+  const ready = { state: 'open', draft: false, mergeable: 'MERGEABLE', merge_state: 'CLEAN', review: 'APPROVED', ci: 'green', failing: [], base: 'main' };
+  assert.deepEqual(PR.mergeWarnings(ready), [], 'green + approved: no warnings');
+  const w = PR.mergeWarnings({ ...ready, draft: true, mergeable: 'CONFLICTING', ci: 'red', failing: ['lint', 'test'], review: null }, [7]);
+  assert.equal(w.length, 5, w.join(' | ')); assert.match(w.join(' '), /draft/); assert.match(w.join(' '), /conflicts with main/); assert.match(w.join(' '), /failing: lint, test/);
+  assert.match(w.join(' '), /not approved/); assert.match(w.join(' '), /stacked on #7/);
+  assert.match(PR.mergeWarnings({ ...ready, ci: 'pending', review: 'CHANGES_REQUESTED' }).join(' '), /still running.*requested changes/);
+  assert.deepEqual(PR.mergeWarnings(null), []);
   out('dispatch: merged outranks a failed attempt, merge queue marks the next PR, row filters');
   const C = await import(process.env.APP_URL.replace('app.js', 'cleanup.js'));
   const ci = [{ key: 'a', owner: 'o', repo: 'r', flags: [], pr_merged: true }, { key: 'b', owner: 'o', repo: 'r', flags: ['dirty'], pr_merged: true },

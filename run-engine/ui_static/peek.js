@@ -20,6 +20,9 @@ export function PeekLink({ kind, owner, repo, n, href, children, ...rest }) {
   return html`<a href=${href} target="_blank" rel="noopener noreferrer" onClick=${onClick} ...${rest}>${children}</a>`;
 }
 
+// Drop a cached popup body (e.g. a PR just merged), so the next open reads GitHub again.
+export const forgetPeek = (api) => cache.delete(api);
+
 async function load(api, fresh) {
   const hit = cache.get(api);
   if (hit && !fresh && Date.now() - hit.at < TTL) return hit.data;

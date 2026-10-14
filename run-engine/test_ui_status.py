@@ -73,3 +73,25 @@ ui_status._fetch = boom
 got = ui_status.get("o", "r", 1, None, None, Inline())
 assert got["stale"] is True and got["issue"]["state"] == "OPEN"
 print("  ok  get: cached within TTL, last good value kept and flagged stale on failure")
+
+import time  # noqa: E402
+
+# a PR merged from the UI shows merged at once and is refetched on the next read
+ui_status._cache[("o", "r", 9)] = {
+    "value": {"issue": {"state": "OPEN"}, "pr": {"url": "https://github.com/O/R/pull/3", "state": "OPEN"}},
+    "at": time.time(),
+    "stale": False,
+}
+ui_status._cache[("o", "r", 10)] = {
+    "value": {"issue": None, "pr": {"url": "https://github.com/o/r/pull/4", "state": "OPEN"}},
+    "at": 5.0,
+    "stale": False,
+}
+ui_status.mark_merged("https://github.com/o/r/pull/3")
+assert (
+    ui_status._cache[("o", "r", 9)]["value"]["pr"]["state"] == "MERGED" and ui_status._cache[("o", "r", 9)]["at"] == 0
+)
+assert (
+    ui_status._cache[("o", "r", 10)]["value"]["pr"]["state"] == "OPEN" and ui_status._cache[("o", "r", 10)]["at"] == 5.0
+)
+print("ok  mark_merged: the merged PR's cards flip to merged and refetch; others untouched")

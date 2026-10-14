@@ -110,6 +110,17 @@ def get(owner, repo, issue, pr_url, branch, pool):
     return {**entry["value"], "stale": entry["stale"]}
 
 
+def mark_merged(pr_url) -> None:
+    """A PR just merged from the UI: every cached card with that PR shows it merged now (GitHub said
+    so) and refetches on its next read, instead of showing "open" until the TTL runs out."""
+    with _lock:
+        for entry in _cache.values():
+            pr = (entry.get("value") or {}).get("pr")
+            if pr and str(pr.get("url") or "").lower() == str(pr_url).lower():
+                pr["state"] = "MERGED"
+                entry["at"] = 0
+
+
 def cached(owner, repo, issue):
     """The last fetched status for a Card, or None; never starts a fetch."""
     with _lock:

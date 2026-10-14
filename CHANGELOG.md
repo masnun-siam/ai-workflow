@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Merge PRs from the UI.** Squash and merge from the PR popup or a pipeline's merge order, after
+  a confirm that lists what isn't ready (CI, review, conflicts, draft, unmerged PRs before it).
 - **No repo yet: start from an idea.** New run and Flow can run create-prd, dump, intake or a custom
   prompt in the notes vault, with the vault folder suggested from your text (keywords, or Claude
   on request) and confirmed by the session. Create repo turns an approved idea into a local git
@@ -192,6 +194,9 @@
 
 ### Fixed
 
+- **Flow's Issues pane showed a phantom "#42 Untitled issue"**: it took `gh issue create --help`
+  for a create and its help text's example URL for a new issue. Help runs no longer count, and only
+  issue URLs of the flow's own repo do.
 - **Flow stalled after Create repo**: Tasks needs a GitHub repo for the epic, but a local repo let it
   run and fail with "Unexpected next command". Flow now offers **Publish to GitHub** (first commit,
   `gh repo create`, re-registered) before Tasks; a step that stops itself shows its own reason; the

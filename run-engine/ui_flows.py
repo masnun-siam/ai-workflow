@@ -312,7 +312,10 @@ def _epoch(ts) -> float | None:
 
 _TITLE_RE = re.compile(r"""gh issue create\b[^\n]*?--title[ =](?:"((?:[^"\\]|\\.)*)"|'([^']*)')""")
 _EDIT_RE = re.compile(r"gh issue edit\s+#?(\d+)")
-_URL_RE = re.compile(r"github\.com/[^/\s]+/[^/\s]+/issues/(\d+)")
+_URL_RE = re.compile(r"github\.com/([^/\s]+/[^/\s]+)/issues/(\d+)")
+# `gh issue create --help` (a model checking the flags) creates nothing, and its help text even
+# contains an example issue URL.
+_CREATE_RE = re.compile(r"gh issue create\b(?![^\n;&|]*(?:--help|\s-h\b))")
 
 
 def _result_text(block: dict) -> str:
@@ -324,8 +327,9 @@ def _result_text(block: dict) -> str:
     return ""
 
 
-def issue_progress(lines) -> dict:
-    """Per-issue rows from an Issues session's raw stream-json lines.
+def issue_progress(lines, slug=None) -> dict:
+    """Per-issue rows from an Issues session's raw stream-json lines. With `slug` (owner/repo), only
+    issue URLs of that repo count as created issues.
 
     States: creating -> created -> checking -> checked | fixing -> fixed; failed if a create errors.
     `reading` is true until the first `gh issue create` starts.
@@ -352,7 +356,7 @@ def issue_progress(lines) -> dict:
                     continue
                 inp = b.get("input") if isinstance(b.get("input"), dict) else {}
                 cmd = inp.get("command") if isinstance(inp.get("command"), str) else ""
-                if b.get("name") == "Bash" and "gh issue create" in cmd:
+                if b.get("name") == "Bash" and _CREATE_RE.search(cmd):
                     reading = False
                     # A title built from a shell variable (a create loop) is unknown here; the UI looks it up.
                     titles = [(t[0] or t[1]).replace('\\"', '"') for t in _TITLE_RE.findall(cmd)]
@@ -382,7 +386,11 @@ def issue_progress(lines) -> dict:
                 kind, target = pending.pop(b.get("tool_use_id"))
                 text, err = _result_text(b), b.get("is_error") is True
                 if kind == "create":
-                    nums = list(dict.fromkeys(int(n) for n in _URL_RE.findall(text)))
+                    nums = list(
+                        dict.fromkeys(
+                            int(n) for repo, n in _URL_RE.findall(text) if not slug or repo.lower() == slug.lower()
+                        )
+                    )
                     for i, r in enumerate(target):
                         if i < len(nums):
                             r["number"], r["state"] = nums[i], "created"
@@ -428,13 +436,18 @@ def issues_for(fid: str):
         ),
         None,
     )
-    return progress_for(sid) if sid else {"reading": True, "rows": []}
+    repo = flow.get("repo") or ""
+    return (
+        progress_for(sid, repo if re.fullmatch(r"[\w.-]+/[\w.-]+", repo) else None)
+        if sid
+        else {"reading": True, "rows": []}
+    )
 
 
-def progress_for(sid: str) -> dict:
+def progress_for(sid: str, slug=None) -> dict:
     try:
         with open(os.path.join(ui_sessions.session_dir(sid), "stream.jsonl"), "rb") as f:
-            return issue_progress(f)
+            return issue_progress(f, slug)
     except (OSError, ValueError):
         return {"reading": True, "rows": []}
 

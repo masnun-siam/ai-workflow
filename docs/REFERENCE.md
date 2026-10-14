@@ -123,6 +123,13 @@ All, Needs attention, In progress, Open PRs and Merged. **Merge order** lists ea
 CI and review, highlights the first unmerged one as **Merge next**, and sits above the rows while any
 PR is unmerged (collapsed at the bottom once all are merged).
 
+**Merge.** The PR popup (any PR link) and each open PR in a pipeline's Merge order have a merge
+button. It always squash-merges (`gh pr merge --squash`; the branch is kept, nothing else happens
+after). A confirm comes first (focus on Cancel) and lists what is not ready: draft, conflicts,
+failing or running CI, no approval or changes requested, behind the base, and, in a merge order,
+earlier PRs not merged yet; merging anyway is allowed and GitHub still enforces its own rules
+(`GET`/`POST /api/pulls/<owner>/<repo>/<n>/merge`).
+
 **Clean up.** The dialog lists runs by repo with their issue titles; a repo's box ticks all its
 runs. Quick picks: Safe (nothing unsaved, the default), Merged PRs, None. Neither a quick pick nor a
 repo's box ever ticks a run with unsaved work: each needs its own tick, and the footer says how
