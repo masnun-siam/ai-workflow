@@ -185,6 +185,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             )
         elif path == "/api/settings":
             self._json(200, ui_settings.load())
+        elif path == "/api/github/owners":
+            self._json(*ui_vault.github_owners())
         elif path == "/api/vault/folders":
             self._json(200, {"vault": ui_vault.vault(), "folders": ui_vault.folders()})
         elif path == "/api/vault/prd":
@@ -343,6 +345,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             body = self._read_body()
             if body is not None:
                 self._json(*ui_vault.suggest(body.get("text")))
+        elif parts == ["", "api", "repos", "publish"]:
+            self._dispatch(
+                lambda b: ui_vault.publish_repo(b.get("slug"), b.get("owner"), b.get("name"), b.get("private", True)),
+                ok=201,
+            )
         elif parts == ["", "api", "repos", "create"]:
             # Also from a tailnet browser: the parent is typed there (the folder dialog is local only),
             # and create_repo still requires an existing absolute folder and a new name.

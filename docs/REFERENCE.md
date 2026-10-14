@@ -73,9 +73,13 @@ to the vault only (`--to obsidian`).
 the folders your repos already live in, or, in a browser on the Mac itself, use **Choose…** for
 the macOS folder dialog. Over the tailnet only the node owner reaches it. It then makes `<parent>/<name>` with `git init`, a README (the PRD's
 title and Overview, or just the name) and the PRD in `docs/prds/<feature>.md`. Nothing is committed
-or pushed, and no GitHub repo is made. It is registered as `local/<name>`; GitHub commands refuse a
-`local/` repo until it has a GitHub `origin`, and the next repo listing re-registers it under that
-`owner/repo`. Routes: `GET /api/vault/folders`, `POST /api/vault/suggest`,
+or pushed, and no GitHub repo is made. It is registered as `local/<name>`; GitHub commands (create-tasks included, since it files the
+epic) refuse a `local/` repo until it has a GitHub `origin`, and the next repo listing re-registers it
+under that `owner/repo`. In Flow, Tasks and Issues on a `local/` repo show **Publish to GitHub…**:
+pick the owner (your account or an org, from `gh`), name and visibility (private by default); it
+makes the first commit (README and PRD) if there is none, runs `gh repo create --source --push`,
+re-registers the repo as `owner/name`, and the flow carries on (`POST /api/repos/publish`,
+`GET /api/github/owners`). Routes: `GET /api/vault/folders`, `POST /api/vault/suggest`,
 `GET /api/vault/prd?folder=`, `POST /api/repos/create`.
 
 **Tokens.** Wherever a session's cost shows (board cards, the board's today total, Sessions, the

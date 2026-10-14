@@ -202,3 +202,64 @@ def create_repo(parent: str, name: str, prd_folder=None, root=None) -> dict:
         shutil.rmtree(path, ignore_errors=True)  # nothing half-made stays behind
         raise
     return {"slug": slug, "path": path, "files": files}
+
+
+def github_owners():
+    """(status, body): the gh login and its orgs, the owners Publish can create a repo under."""
+    me = run(["gh", "api", "user", "--jq", ".login"], timeout=30)
+    if me.returncode != 0 or not me.stdout.strip():
+        return 502, {"error": ((me.stderr or "").strip().splitlines() or ["gh is not logged in"])[-1]}
+    orgs = run(["gh", "api", "user/orgs", "--jq", ".[].login"], timeout=30)
+    names = (
+        [me.stdout.strip()] + [o for o in (orgs.stdout or "").split() if o]
+        if orgs.returncode == 0
+        else [me.stdout.strip()]
+    )
+    return 200, {"owners": names}
+
+
+def publish_repo(slug, owner, name, private=True) -> dict:
+    """Make a local/<name> repo a GitHub one: commit what is there (README, PRD) if nothing is
+    committed yet, `gh repo create owner/name --source --push`, then re-register it as owner/name.
+    ValueError on bad input or a failed step, with git's or gh's own message."""
+    if not isinstance(slug, str) or not slug.startswith("local/"):
+        raise ValueError("only a local/<name> repo can be published")
+    path = dispatch.read_checkouts().get(slug)
+    if not isinstance(path, str) or not os.path.isdir(path):
+        raise ValueError(f"{slug} is not a registered checkout")
+    for label, v in (("owner", owner), ("name", name)):
+        if not isinstance(v, str) or not _NAME_RE.fullmatch(v):
+            raise ValueError(f"{label}: letters, digits, '.', '_' and '-' only")
+    target = f"{owner}/{name}"
+    if any(k.lower() == target.lower() for k in dispatch.read_checkouts()):
+        raise ValueError(f"{target} is already registered to another checkout")
+
+    def must(argv, what, timeout=60):
+        r = run(argv, cwd=path, timeout=timeout)
+        if r.returncode != 0:
+            raise ValueError(
+                f"{what} failed: {((r.stderr or r.stdout or '').strip().splitlines() or ['no output'])[-1]}"
+            )
+        return r
+
+    if run(["git", "rev-parse", "--verify", "HEAD"], cwd=path, timeout=10).returncode != 0:
+        must(["git", "add", "-A"], "git add")
+        must(["git", "commit", "-q", "-m", "Initial commit: README and PRD"], "git commit")
+    must(
+        [
+            "gh",
+            "repo",
+            "create",
+            target,
+            "--private" if private is not False else "--public",
+            "--source",
+            ".",
+            "--remote",
+            "origin",
+            "--push",
+        ],
+        "gh repo create",
+        timeout=120,
+    )
+    dispatch.rename_checkout(slug, target)
+    return {"slug": target, "path": path, "url": f"https://github.com/{target}"}

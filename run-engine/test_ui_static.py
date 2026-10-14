@@ -2887,6 +2887,14 @@ assert.equal(F.sessionStep('/ai-workflow:create-prd 05-Work/P/F'), 'prd');
 assert.equal(F.sessionStep('/ai-workflow:refine-issues docs/tasks/f.md'), 'issues');
 assert.equal(F.sessionStep('/ai-workflow:prd 05-Work/P/F'), 'prd'); // old sessions
 out('flow: parseNext and handoff (valid, last of several, missing, error result, wrong stage)');
+{
+  const stop = F.handoff('tasks', { is_error: false, text: 'I stopped without creating `docs/tasks/x.md`: the repo has no GitHub remote.\n\n- details\n\n→ next: /create-tasks docs/prds/x.md' });
+  assert.match(stop.error, /^The step stopped before finishing: I stopped without creating docs\/tasks\/x.md: the repo has no GitHub remote\./, stop.error);
+  assert.equal(F.notePath('docs/prds/x.md', '05-Work/P/F'), '05-Work/P/F/PRD.md', 'a repo PRD shows its vault copy');
+  assert.equal(F.notePath('05-Work/P/F/PRD.md', '05-Work/P/F'), '05-Work/P/F/PRD.md'); assert.equal(F.notePath('docs/prds/x.md', ''), 'docs/prds/x.md');
+  assert.ok(F.isLocalRepo({ repo: 'local/x' }) && !F.isLocalRepo({ repo: 'local/x', vault: true }) && !F.isLocalRepo({ repo: 'acme/x' }) && !F.isLocalRepo({ repo: 'local/x', manual: true }));
+  out('flow: a step that asks to be re-run shows its reason; repo PRDs show the vault copy; local repos detected');
+}
 for (const t of ['`\u2192 next: /prd 05-Work/P/F`', '**\u2192 next: /prd 05-Work/P/F**', '  \u2192 next: /prd 05-Work/P/F  ']) assert.deepEqual(F.parseNext(t), { command: '/prd', arg: '05-Work/P/F' }, t);
 assert.deepEqual(F.handoff('issues', { kind: 'result', text: '\u2192 next: herdr-dispatch #12 #13' }), { issues: [12, 13] });
 out('flow: parseNext tolerates code spans, bold and indentation; issue refs with # parse');

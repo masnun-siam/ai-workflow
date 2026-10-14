@@ -192,6 +192,10 @@
 
 ### Fixed
 
+- **Flow stalled after Create repo**: Tasks needs a GitHub repo for the epic, but a local repo let it
+  run and fail with "Unexpected next command". Flow now offers **Publish to GitHub** (first commit,
+  `gh repo create`, re-registered) before Tasks; a step that stops itself shows its own reason; the
+  PRD pane shows the vault copy once the PRD lives in a repo.
 - **Create repo failed over the tailnet** ("folder picker is only available locally on macOS"):
   the parent folder can now be typed or picked from where your repos live; Choose… shows only
   where the Mac's folder dialog can open.

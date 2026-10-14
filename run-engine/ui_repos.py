@@ -296,7 +296,16 @@ def _remember(slug, cwd) -> None:
         print(f"ui_repos: could not register checkout {slug}: {exc}", file=sys.stderr)
 
 
-_GITHUB_COMMANDS = ("run-issue", "pr-grind", "pr-review", "pr-fix-comments", "gh-issue", "issue-to-pr", "refine-issues")
+_GITHUB_COMMANDS = (
+    "create-tasks",
+    "run-issue",
+    "pr-grind",
+    "pr-review",
+    "pr-fix-comments",
+    "gh-issue",
+    "issue-to-pr",
+    "refine-issues",
+)
 
 
 def _vault_hint(folder) -> str:

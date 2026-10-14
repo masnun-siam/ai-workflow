@@ -2,7 +2,7 @@ import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { poll } from './app.js';
 import { adoptCreatedRepo, buildBody, hostRepoPicker, lensPicker, loadLastRepo, pickedLenses, repoOptions } from './launcher.js';
-import { CreateRepoDialog } from './vault.js';
+import { CreateRepoDialog, PublishDialog } from './vault.js';
 import { issueNumbers } from './dispatch.js';
 import { Answer } from './answer.js';
 import { FlowSwitcher, IssueRows, NotePane, mergeRows } from './flowside.js';
@@ -24,6 +24,8 @@ const STEPS = [
     produces: 'Files a refined sub-issue per task under the epic, blocked by the ones it depends on.' },
   { key: 'dispatch', label: 'Dispatch', input: 'Issue numbers', produces: 'Starts a run for each issue.' },
 ];
+// A repo made by Create repo, not on GitHub yet: Tasks and Issues need it published first.
+export const isLocalRepo = (s) => !s.vault && !s.manual && /^local\//.test(s.repo || '');
 const VAULT = '@vault'; // a flow's repo when the idea has no repo yet
 const VAULT_FOLDER = /^05-Work\/[^/]+(\/[^/]+)?$/;
 const STATE_TEXT = { done: 'Done', skipped: 'Skipped', active: 'Current step', locked: 'Not started' };
@@ -56,7 +58,13 @@ export function handoff(step, result) {
   if (result.is_error) return { error: 'The session failed. Continue in terminal.' };
   const next = parseNext(result.text);
   if (!next) return { error: step === 'dump' ? 'No → next: line found: dump ends the flow for a standalone task, meeting notes or unclassifiable.' : 'The result has no → next: line.' };
-  const field = (NEXT[step] || {})[next.command.replace(/^\//, '').split(':').pop()];
+  const cmd = next.command.replace(/^\//, '').split(':').pop();
+  const field = (NEXT[step] || {})[cmd];
+  // A step that names itself as next stopped short and asks to be run again: show its own reason.
+  if (!field && STEPS.some((s) => s.key === step && s.command === cmd)) {
+    const why = String(result.text || '').split(/\n\s*\n/).map((p) => p.trim()).find((p) => p && !p.startsWith('→')) || '';
+    return { error: `The step stopped before finishing${why ? `: ${why.replace(/[*`]/g, '')}` : '.'} Fix that, then run it again.` };
+  }
   if (!field) return { error: `Unexpected next command: ${next.command}` };
   if (field === 'restart') return next.arg ? { folder: next.arg, prd: '', tasks: '' } : { error: 'The → next: line has no argument.' };
   if (field === 'issues') {
@@ -111,6 +119,10 @@ export function flowLink(meta) {
   return meta.flow_id ? flowHref(meta.flow_id) : flowHash({ repo: meta.repo, sid: meta.id });
 }
 
+// The pane reads vault notes only; a PRD path inside a repo (docs/prds/… after Create repo) shows
+// the vault copy in the feature folder instead.
+export const notePath = (prd, folder) => (/^docs\//.test(prd) && folder ? `${folder.replace(/\/+$/, '')}/PRD.md` : prd);
+
 // What the right column shows when no question is waiting: the selected step's output.
 // `view` is a step the user clicked on the rail; otherwise the running step, else the last done one.
 export function sideView({ view, at, runStep, folder, prd }) {
@@ -119,10 +131,10 @@ export function sideView({ view, at, runStep, folder, prd }) {
   if (key === 'issues' || key === 'dispatch') return { kind: 'issues' };
   if (key === 'dump') {
     if (runStep === 'dump') return { kind: 'filing' };
-    return folder ? { kind: 'note', path: `${folder.replace(/\/+$/, '')}/Dump.md` } : prd ? { kind: 'note', path: prd } : null;
+    return folder ? { kind: 'note', path: `${folder.replace(/\/+$/, '')}/Dump.md` } : prd ? { kind: 'note', path: notePath(prd, folder) } : null;
   }
   if (runStep === 'prd' && folder) return { kind: 'note', path: `${folder.replace(/\/+$/, '')}/PRD.md`, stale: true };
-  return prd ? { kind: 'note', path: prd } : null;
+  return prd ? { kind: 'note', path: notePath(prd, folder) } : null;
 }
 
 const api = async (method, url, body) => {
@@ -248,6 +260,7 @@ export class Flow extends Component {
     if (!repo || !args) { this.setState({ why: !repo ? 'Pick a repo first.' : 'Fill in the field above first.' }); return; }
     if (lenses && !lenses.length) { this.setState({ why: 'Tick at least one reviewer.' }); return; }
     if (this.state.vault && !['dump', 'prd'].includes(step.key)) { this.setState({ why: 'Create the code repo first.' }); return; }
+    if (isLocalRepo(this.state) && !['dump', 'prd'].includes(step.key)) { this.setState({ why: 'Publish the repo to GitHub first.' }); return; }
     this.setState({ busy: true, why: null, meta: null, view: null });
     clearTimeout(this.timer);
     const flowId = await this.persist(true);
@@ -399,6 +412,8 @@ export class Flow extends Component {
       <label for="flow-repo">Repo</label>
       ${hostRepoPicker(this, st, { id: 'flow-repo', error: why === 'Pick a repo first.' ? 'flow-why' : null, allowVault: true, allowCreate: true, after: () => this.setState({ why: null }) })}
       ${st.vault && html`<p class="note">No repo yet: Dump and PRD run in your notes vault. After the PRD, the flow makes the code repo, then carries on with Tasks.</p>`}
+      ${st.publishing && html`<${PublishDialog} slug=${st.repo} onClose=${() => this.setState({ publishing: false })}
+        onDone=${(made) => adoptCreatedRepo(this, made).then(() => this.setState({ publishing: false, why: null }))} />`}
       ${st.creating && html`<${CreateRepoDialog} withPrd=${!!st.vault && VAULT_FOLDER.test(folder)} prdFolder=${st.vault && VAULT_FOLDER.test(folder) ? folder : ''} name=${String(folder || '').split('/').pop()}
         onClose=${() => this.setState({ creating: false })}
         onDone=${async (made) => { const prdFile = (made.files || []).find((f) => f.startsWith('docs/prds/')); await adoptCreatedRepo(this, made); if (prdFile) this.setState({ prd: prdFile }); }} />`}
@@ -418,7 +433,10 @@ export class Flow extends Component {
               ${state === 'active' && st.vault && step.key === 'tasks' && html`
                 <p>The PRD is in your vault. Make the code repo for it first: a local git repo with the PRD in docs/prds/ and a README. Tasks then run there.</p>
                 <button type="button" class="primary" onClick=${() => this.setState({ creating: true })}>Create the code repo…</button>`}
-              ${state === 'active' && !(st.vault && step.key === 'tasks') && step.key !== 'dispatch' && html`
+              ${state === 'active' && isLocalRepo(st) && ['tasks', 'issues'].includes(step.key) && html`
+                <p>The repo <span class="mono">${st.repo}</span> is only on this Mac. ${step.label} files GitHub issues, so publish it first: it gets a first commit and a GitHub repo, then the flow carries on.</p>
+                <button type="button" class="primary" onClick=${() => this.setState({ publishing: true })}>Publish to GitHub…</button>`}
+              ${state === 'active' && !(st.vault && step.key === 'tasks') && !(isLocalRepo(st) && ['tasks', 'issues'].includes(step.key)) && step.key !== 'dispatch' && html`
                 ${this.input(step)}
                 ${sid ? html`<p class="note" role="status">${waiting ? 'Session waiting for your answer' : `Session ${meta ? meta.outcome : 'starting'}`} · <a href=${`#/session/${encodeURIComponent(sid)}`}>Open session</a></p>` : null}
                 ${!st.wide && ask}
