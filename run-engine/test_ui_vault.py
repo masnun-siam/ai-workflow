@@ -112,6 +112,11 @@ for args, why in (
     except ValueError:
         pass
 assert not os.path.exists(os.path.join(parent, "z")), "a failed create leaves nothing behind"
+home = os.environ.get("HOME")
+os.environ["HOME"] = parent
+tilde = ui_vault.create_repo("~", "from-tilde")
+os.environ["HOME"] = home
+assert tilde["path"] == os.path.join(os.path.realpath(parent), "from-tilde"), "a typed ~ is the home folder"
 bare = ui_vault.create_repo(parent, "empty")
 with open(os.path.join(bare["path"], "README.md")) as fh:
     assert fh.read() == "# empty\n" and bare["files"] == ["README.md"]

@@ -1424,7 +1424,7 @@ const RP = await import(process.env.LAUNCHER_URL.replace('launcher.js', 'repopic
   assert.deepEqual(RP.loadRecent({ getItem: () => 'not json' }), []); assert.deepEqual(RP.loadRecent({ getItem: () => { throw new Error('x'); } }), []);
   assert.deepEqual(vals(RP.pickerRows({ repos, query: '', allowVault: true, allowCreate: true, canBrowse: true })), ['vault', 'a/web', 'a/api', 'b/webhooks', 'create'], 'no repo first, create last');
   assert.deepEqual(vals(RP.pickerRows({ repos, query: 'new', allowVault: true })), ['vault'], 'typing "new" finds the no-repo row');
-  assert.deepEqual(vals(RP.pickerRows({ repos, query: '', allowCreate: true })), ['a/web', 'a/api', 'b/webhooks'], 'create needs the local folder dialog');
+  assert.deepEqual(vals(RP.pickerRows({ repos, query: '', allowCreate: true })), ['a/web', 'a/api', 'b/webhooks', 'create'], 'create works without the folder dialog: the folder is typed');
   out('repo picker: search ranking, recent first, all/path/browse rows, recent list persistence');
 }
 for (const bad of [null, undefined, {}, { repos: 5 }, [], { repos: [{ name: 'x' }, { slug: 'a/b' }, null] }])
@@ -3024,6 +3024,7 @@ out('launcher: lens lists in the body (named and custom), default critical, empt
     assert.equal(V.folderOf({ project: 'Gym', feature: 'Check/ins' }), '05-Work/Gym/Check ins'); assert.equal(V.folderOf({ project: 'Gym' }), '05-Work/Gym');
     assert.equal(V.folderOf({ project: '' }), null); assert.equal(V.folderOf({ project: '..' }), null);
     assert.equal(V.repoName('Gym App: Check-ins!'), 'gym-app-check-ins');
+    assert.deepEqual(V.parentFolders([{ path: '/u/P/a' }, { path: '/u/P/b/' }, { path: '/u/Q/c' }, { path: 'rel/x' }, {}]), ['/u/P', '/u/Q'], 'most used first; relative paths skipped');
     assert.ok(L.validate({ vault: true, command: 'dump', args: 'x' }) === null, 'dump runs with no repo');
     assert.match(L.validate({ vault: true, command: 'run-issue', args: '7' }).repo, /needs a repo/);
     assert.equal(L.validateCustom({ vault: true, text: 'x' }), null);

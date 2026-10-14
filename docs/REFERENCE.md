@@ -69,8 +69,9 @@ to the vault only (`--to obsidian`).
 
 **Create repo.** Once a no-repo create-prd's PRD is **Approved**, its session page offers
 **Create repo…**; Flow shows the same step before Tasks when it has no repo; and the repo picker has
-**Create a new repo…** at any time. It asks for a name and a parent folder (the macOS folder
-dialog, so only on this Mac), then makes `<parent>/<name>` with `git init`, a README (the PRD's
+**Create a new repo…** at any time. It asks for a name and a parent folder: type or paste it (`~` works), pick one of
+the folders your repos already live in, or, in a browser on the Mac itself, use **Choose…** for
+the macOS folder dialog. Over the tailnet only the node owner reaches it. It then makes `<parent>/<name>` with `git init`, a README (the PRD's
 title and Overview, or just the name) and the PRD in `docs/prds/<feature>.md`. Nothing is committed
 or pushed, and no GitHub repo is made. It is registered as `local/<name>`; GitHub commands refuse a
 `local/` repo until it has a GitHub `origin`, and the next repo listing re-registers it under that

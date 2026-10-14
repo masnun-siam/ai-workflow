@@ -119,6 +119,16 @@ export class FolderChooser extends Component {
 
 // Turns an idea into a code repo: a folder picked with the macOS dialog, git init, a README and,
 // given a vault PRD, docs/prds/<slug>.md. Registered as local/<name> until it has a GitHub remote.
+// Folders the registered repos live in, most used first: likely homes for a new one.
+export function parentFolders(repos, n = 5) {
+  const count = new Map();
+  for (const r of repos || []) {
+    const dir = String(r.path || '').replace(/\/+$/, '').replace(/\/[^/]+$/, '');
+    if (dir.startsWith('/')) count.set(dir, (count.get(dir) || 0) + 1);
+  }
+  return [...count].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, n).map(([d]) => d);
+}
+
 export const repoName = (s) => String(s || '').trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100);
 
 export class CreateRepoDialog extends Component {
@@ -127,6 +137,12 @@ export class CreateRepoDialog extends Component {
   componentDidMount() {
     this.opener = document.activeElement; // focus goes back here on close
     this.checkPrd();
+    // The folder dialog opens on the Mac's own screen, so a tailnet browser types the folder instead;
+    // the folders existing repos live in are offered either way.
+    fetch('/api/repos', { headers: { Accept: 'application/json' } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b) => b && this.setState({ canBrowse: b.can_browse === true, homes: parentFolders(b.repos) }))
+      .catch(() => {});
     setTimeout(() => this.root && this.root.querySelector('#cr-name')?.focus(), 0);
   }
 
@@ -199,10 +215,15 @@ export class CreateRepoDialog extends Component {
         <input id="cr-name" type="text" class="field" value=${name} autocomplete="off" onInput=${(e) => this.setState({ name: repoName(e.target.value) })} placeholder="gym-app" />
         <label for="cr-parent">Create it in</label>
         <div class="repo-row">
-          <input id="cr-parent" type="text" class="field" readonly value=${parent} placeholder="Choose a folder…" onClick=${this.pickParent} />
-          <button type="button" class="btn" onClick=${this.pickParent}>Choose…</button>
+          <input id="cr-parent" type="text" class="field" value=${parent} autocomplete="off" spellcheck="false" placeholder="/Users/you/Projects or ~/Projects"
+            onInput=${(e) => this.setState({ parent: e.target.value, error: '' })} />
+          ${this.state.canBrowse && html`<button type="button" class="btn" onClick=${this.pickParent}>Choose…</button>`}
         </div>
-        ${parent && name && html`<p class="note mono">${parent.replace(/\/+$/, '')}/${name}</p>`}
+        ${(this.state.homes || []).length > 0 && html`<div class="vf-picks" role="group" aria-label="Where your repos live">
+          <span class="muted">Where your repos live:</span>
+          ${this.state.homes.map((d) => html`<button type="button" class="fchip" aria-pressed=${parent === d ? 'true' : 'false'} onClick=${() => this.setState({ parent: d, error: '' })}>${d.replace(/^\/Users\/[^/]+/, '~')}</button>`)}
+        </div>`}
+        ${parent && name && html`<p class="note mono">${parent.trim().replace(/\/+$/, '')}/${name}</p>`}
         ${withPrd && html`<label for="cr-prd">PRD from the vault folder</label>
           <input id="cr-prd" type="text" class="field" value=${prdFolder} onInput=${(e) => this.setState({ prdFolder: e.target.value, prd: null })} onBlur=${this.checkPrd} placeholder="05-Work/<Project>/<Feature>" />
           ${prd && (prd.exists

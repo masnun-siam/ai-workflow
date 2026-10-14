@@ -165,8 +165,9 @@ def create_repo(parent: str, name: str, prd_folder=None, root=None) -> dict:
     README), register it as local/<name>. Nothing is committed or pushed. ValueError on bad input."""
     if not isinstance(name, str) or not _NAME_RE.fullmatch(name) or name in (".", ".."):
         raise ValueError("name: letters, digits, '.', '_' and '-' only")
+    parent = os.path.expanduser(parent.strip()) if isinstance(parent, str) else parent  # "~/Projects" works when typed
     if not isinstance(parent, str) or not os.path.isabs(parent) or not os.path.isdir(parent):
-        raise ValueError("parent must be an existing absolute folder")
+        raise ValueError("parent must be an existing absolute folder (e.g. ~/Projects)")
     if prd_folder is not None and not valid_folder(prd_folder):
         raise ValueError("prd_folder must be 05-Work/<Project>/<Feature>")
     slug = f"local/{name}"

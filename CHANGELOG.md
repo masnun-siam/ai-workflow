@@ -192,6 +192,9 @@
 
 ### Fixed
 
+- **Create repo failed over the tailnet** ("folder picker is only available locally on macOS"):
+  the parent folder can now be typed or picked from where your repos live; Choose… shows only
+  where the Mac's folder dialog can open.
 - **Run page overflowed sideways** when a main-tree run was blocked: the chip carried the whole pause
   reason on one line. The chip now says only "Main tree: blocked" (the reason is in its tooltip and
   the grind panel). "Skip CI for now" no longer shows for a grind paused by a "stall check".
