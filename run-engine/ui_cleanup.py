@@ -16,11 +16,11 @@ import shutil
 import maintree
 import ui_sessions
 from shared import data_dir, gh_json, run
-from ui_board import _resolve_owner_repo, load_projects, scan_records
+from ui_board import _resolve_owner_repo, known_projects, scan_records
 
 # A ledger with no UI session may belong to a live CLI run; only offer it once untouched this long.
 STALE_SECONDS = 3600
-LIVE = ("starting", "running", "waiting", "limited")
+LIVE = ("starting", "running", "waiting", "limited", "queued")  # queued: a batch day not started yet
 
 
 def _git(cwd: str, *args: str):
@@ -81,7 +81,7 @@ def _link_key(s: dict):
 def find_targets() -> list:
     """Eligible targets: [{key, owner, repo, issue, status, sessions, run_dirs, plan, label}]."""
     runs_dir = os.path.join(data_dir(), "runs")
-    projects = load_projects()
+    projects = known_projects()
     by_key = {}  # (owner, repo, issue) -> {"sessions": [...], "records": [...]}
     loose = []
     for s in ui_sessions.list_sessions():

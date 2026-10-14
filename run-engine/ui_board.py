@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import threading
+import time
 
 from shared import atomic_write_text, data_dir, extract_json_object, run_dir_for
 
@@ -134,6 +135,9 @@ def plausible_repo(owner, repo):
     return bool(owner and repo and _SLUG_RE.match(owner) and _SLUG_RE.match(repo) and "-issue-" not in repo)
 
 
+RETRY_FAILED_TITLE_S = 300
+
+
 def memoize_title_fetcher(fetch_title, pool=None, store=None):
     """Wrap a (owner, repo, issue) -> title function with an in-memory cache.
 
@@ -163,6 +167,7 @@ def memoize_title_fetcher(fetch_title, pool=None, store=None):
         except (OSError, ValueError):
             disk = {}
     pending: set = set()
+    retry_at: dict = {}  # key -> monotonic time a failed fetch may be tried again
     lock = threading.Lock()
 
     def fill(key):
@@ -171,8 +176,14 @@ def memoize_title_fetcher(fetch_title, pool=None, store=None):
         except Exception:
             title = None
         with lock:
+            # A failed refresh never replaces a title we already had (a deleted or transferred
+            # issue still has a name worth showing).
+            if title is not None and title.endswith("(title unavailable)") and disk.get("%s/%s#%s" % key):
+                title = disk["%s/%s#%s" % key]
             if title is not None:
                 cache[key] = title
+                if title.endswith("(title unavailable)"):
+                    retry_at[key] = time.monotonic() + RETRY_FAILED_TITLE_S  # e.g. a gh rate limit passes
                 if store and not title.endswith("(title unavailable)") and disk.get("%s/%s#%s" % key) != title:
                     disk["%s/%s#%s" % key] = title
                     try:
@@ -187,6 +198,10 @@ def memoize_title_fetcher(fetch_title, pool=None, store=None):
         key = (owner, repo, issue)
         with lock:
             if key in cache:
+                if pool is not None and key in retry_at and time.monotonic() >= retry_at[key] and key not in pending:
+                    del retry_at[key]
+                    pending.add(key)
+                    pool.submit(fill, key)
                 return cache[key]
             warm = disk.get("%s/%s#%s" % key)  # read before the fetch can overwrite it
             if pool is None:
@@ -256,7 +271,7 @@ def transferred_run(slug: str, issue: int):
     """(owner, repo, issue) of the run an issue was transferred into, matched on the new Ledger's
     `transferred_from` (`owner/repo#n` of the old issue), or None."""
     want = f"{slug}#{issue}".lower()
-    projects = load_projects()
+    projects = known_projects()
     for rec in scan_records():
         ctx = rec["ledger"].get("context")
         if isinstance(ctx, dict) and str(ctx.get("transferred_from") or "").strip().lower() == want:
@@ -371,6 +386,15 @@ def load_projects() -> dict:
         return {}
     with open(PROJECTS_PATH, encoding="utf-8") as fh:
         return json.load(fh)
+
+
+def known_projects() -> dict:
+    """Worklog projects plus every registered checkout, so a run dir name like
+    `masnun-siam-typevocal-issue-70` resolves to the real `masnun-siam/typevocal` instead of the
+    first-dash guess `masnun/siam-typevocal`."""
+    import dispatch  # deferred: dispatch pulls in stack, which the pure core never needs
+
+    return {**{slug: slug for slug in dispatch.read_checkouts()}, **load_projects()}
 
 
 def fetch_title(owner: str, repo: str, issue: int) -> str:

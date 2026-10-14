@@ -62,3 +62,41 @@ export function linkParts(text) {
   out.push(s.slice(last));
   return out;
 }
+
+// "now", "12m", "3h", "4d" since an epoch-seconds time: compact enough for a card corner.
+export function ago(epochSec, nowMs = Date.now()) {
+  if (typeof epochSec !== 'number' || !Number.isFinite(epochSec)) return '';
+  const s = Math.max(0, nowMs / 1000 - epochSec);
+  return s < 60 ? 'now' : s < 3600 ? `${Math.floor(s / 60)}m` : s < 86400 ? `${Math.floor(s / 3600)}h` : `${Math.floor(s / 86400)}d`;
+}
+
+// localStorage that may be missing or throw (private mode, blocked site data): '' and a no-op then.
+export function loadPref(storage, key) {
+  try {
+    return storage.getItem(key) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function savePref(storage, key, value) {
+  try {
+    storage.setItem(key, value);
+  } catch {
+    // best-effort: the preference just won't stick
+  }
+}
+
+// Token counts beside costs. t is { input, cached, output } as the server records it (input already
+// includes the cached part).
+export function fmtTokens(n) {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return '';
+  return n < 1000 ? String(n) : n < 1e6 ? `${(n / 1000).toFixed(n < 1e4 ? 1 : 0)}k` : `${(n / 1e6).toFixed(n < 1e7 ? 2 : 1)}M`;
+}
+const validTokens = (t) => !!t && typeof t.input === 'number' && typeof t.output === 'number';
+export const tokensText = (t) => (validTokens(t) ? `${fmtTokens(t.input + t.output)} tok` : '');
+export const tokensTitle = (t) => (validTokens(t) ? `${t.input.toLocaleString()} in (${(t.cached || 0).toLocaleString()} cached) · ${t.output.toLocaleString()} out` : '');
+export function addTokens(a, b) {
+  if (!validTokens(b)) return a;
+  return { input: (a?.input || 0) + b.input, cached: (a?.cached || 0) + (b.cached || 0), output: (a?.output || 0) + b.output };
+}

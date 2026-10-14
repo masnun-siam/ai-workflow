@@ -4,6 +4,34 @@
 
 ### Added
 
+- **No repo yet: start from an idea.** New run and Flow can run create-prd, dump, intake or a custom
+  prompt in the notes vault, with the vault folder suggested from your text (keywords, or Claude
+  on request) and confirmed by the session. Create repo turns an approved idea into a local git
+  repo with its PRD and README, registered as `local/<name>` until it gets a GitHub remote.
+- **Token use beside every cost.** Board cards and today's total, Sessions, the run page and
+  transcripts show tokens next to the cost; hover for in/cached/out. Older sessions are filled in
+  once from their transcripts.
+- **Worklog date picker.** New run picks today, yesterday, a day or a date range for `worklog`;
+  a range starts one run per day (up to 31), 3 at a time with the rest queued on the server.
+- **Board filters.** Status, PR, CI and grind filters with live counts, combinable, shown as
+  removable chips, and remembered.
+- **Dispatch pipeline page.** A merged PR shows as Merged even when the pipeline's own attempt
+  failed; rows filter by attention, progress, open PRs or merged; the merge order shows each PR's
+  state, CI and review and marks the one to merge next.
+- **Clean up dialog.** Runs grouped by repo with titles, a box per repo, and Safe / Merged PRs /
+  None quick picks; nothing with unsaved work is ever ticked in bulk.
+- **One repo picker everywhere.** New run, Flow, Dispatch and the Board filter now pick a repo the
+  same way: a searchable list with recently used repos first, each repo shown by its own name, its
+  owner and its path (so two repos sharing a project name no longer look alike), keyboard support,
+  and, where any checkout is allowed, a typed path or the folder dialog. It replaces a text
+  combobox with a separate folder button, a plain dropdown on Dispatch, and one on the Board.
+- **New run lists the repo's open issues and PRs.** Pick one instead of looking up its number;
+  typing filters by number, title words or labels. Commands are grouped with a one-line
+  description each, and the last one used is remembered.
+- **Board filter and "need you" toggle.** Filter cards by `#N`, title or repo; click the
+  need-you count to show only the runs waiting on you. Cards show how long ago they changed.
+- **Flow in the command palette** (`g f`).
+
 - **Skills improve themselves with approval.** Every skill under `skills/` now ends with a
   `## Self-improve` pointer to `self-improve.md`. During a run the skill notes what its
   instructions got wrong or left out. When the run finishes it asks once which fixes to write
@@ -164,6 +192,23 @@
 
 ### Fixed
 
+- **Run page overflowed sideways** when a main-tree run was blocked: the chip carried the whole pause
+  reason on one line. The chip now says only "Main tree: blocked" (the reason is in its tooltip and
+  the grind panel). "Skip CI for now" no longer shows for a grind paused by a "stall check".
+- **Repo picker focus, Board card animation and the Flows list's arrow keys did nothing**: they used
+  `this.base`, which the vendored preact 11 no longer sets. They use refs now.
+- **Board cards under a guessed repo.** A run dir like `masnun-siam-typevocal-issue-70` with no PR
+  link showed as `masnun/siam-typevocal` with no title; registered checkouts now resolve it.
+- **Titles stuck on "(title unavailable)".** A failed `gh` fetch (a rate limit, say) is retried
+  after 5 minutes instead of cached until restart, and never replaces a title already known.
+- **Run output put a list above its heading** when the list started right under a paragraph line
+  (`**What you need to do:**` then `- …`).
+- **Run page said "running" for a run queued behind another in the main checkout**; it says
+  "queued" now. Board cards keep their Issue/PR links inside the card, and a missing title no
+  longer repeats `#N`. The header says "No questions waiting" so it no longer reads as
+  contradicting the board's need-you count. New run fits on one header row on a phone.
+- **`test_ui_static.py` skipped most of its checks.** The per-view suites only ran with
+  `--view`, which CI never passed, and seven of nine had gone stale. The plain run now runs them all.
 - **`aiw gitnexus` no longer installs gitnexus skills into the repo.** `analyze` now passes
   `--skip-skills` alongside `--skip-agents-md`, so it stops writing `.claude/skills/gitnexus/`.
 - **A waiting session's answer form no longer gets stuck.** A headless session that scheduled a

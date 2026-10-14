@@ -23,6 +23,7 @@ import ui_flows
 import ui_runner
 import ui_sessions
 import ui_settings
+import ui_vault
 
 NAMED = (
     "run-issue",
@@ -41,6 +42,7 @@ NAMED = (
     "day",
 )
 MAX_PROMPT_CHARS = 32000
+BATCH_MAX = 3  # sessions of one batch (a worklog date range) running at once
 _TERMINAL = ("done", "failed", "stopped")
 _ORIGIN_RE = re.compile(r"github\.com(?::\d+)?[:/]([^/\s]+)/([^/\s]+?)(?:\.git)?/?$")  # (?::\d+): ssh.github.com:443
 _ISSUE_RE = re.compile(r"^(?:#|.*/issues/)?(\d+)$")
@@ -51,7 +53,24 @@ _ISSUE_URL_RE = re.compile(r"github\.com/([\w.-]+)/([\w.-]+)/issues/(\d+)")
 _start_lock = threading.Lock()
 
 
+def promote_local() -> None:
+    """A local/<name> repo (made by Create repo) that has since got a GitHub origin is re-registered
+    under its real owner/repo, so GitHub steps work without the user touching the registry."""
+    for slug, path in list(dispatch.read_checkouts().items()):
+        if slug.startswith("local/") and isinstance(path, str) and os.path.isdir(path):
+            new = origin_slug(path)
+            if new:
+                dispatch.rename_checkout(slug, new)  # no-op when that name is already another checkout
+
+
+def origin_slug(path: str):
+    """owner/repo of a checkout's GitHub origin, or None."""
+    m = _ORIGIN_RE.search(_git(path, "remote", "get-url", "origin"))
+    return f"{m.group(1)}/{m.group(2)}" if m else None
+
+
 def list_repos() -> list:
+    promote_local()
     try:
         projects = ui_board.load_projects()
     except (OSError, ValueError):
@@ -277,6 +296,23 @@ def _remember(slug, cwd) -> None:
         print(f"ui_repos: could not register checkout {slug}: {exc}", file=sys.stderr)
 
 
+_GITHUB_COMMANDS = ("run-issue", "pr-grind", "pr-review", "pr-fix-comments", "gh-issue", "issue-to-pr", "refine-issues")
+
+
+def _vault_hint(folder) -> str:
+    """What a no-repo session is told: where it is, and where the idea was suggested to go."""
+    where = (
+        f"The suggested vault folder is {folder} (it may not exist yet: create it if the user confirms)."
+        if folder
+        else "No vault folder was chosen: pick one under 05-Work/<Project>/<Feature> from 05-Work/Index.md."
+    )
+    return (
+        "\n\nThis is a new idea with no code repo yet; you are running in the notes vault. "
+        + where
+        + " Confirm the folder with the user before writing anything."
+    )
+
+
 def start_session(body: dict):
     repo = body.get("repo")
     if repo is not None and not isinstance(repo, str):
@@ -295,11 +331,28 @@ def start_session(body: dict):
         # the issue URL names the repo: prefer its registered checkout over the picked one
         if url_slug and any(k.lower() == url_slug.lower() for k in dispatch.read_checkouts()):
             repo = url_slug
-        if not repo:
+        if body.get("no_repo") is True:  # a new idea: no code yet, so it runs in the notes vault
+            fam0 = "custom" if body.get("text") is not None else family(text)
+            if fam0 not in (*ui_vault.NO_REPO_COMMANDS, "custom"):
+                raise ValueError(
+                    f"{fam0} needs a repo; only create-prd, dump, intake and a custom prompt run without one"
+                )
+            cwd, slug = ui_vault.vault(), None
+            if not os.path.isdir(cwd):
+                raise ValueError(f"the notes vault folder does not exist: {cwd} (set it in Settings)")
+        elif not repo:
             raise ValueError(
                 "repo is required" + (f" (no local checkout registered for {url_slug})" if url_slug else "")
             )
-        cwd, slug = resolve_repo(repo)
+        else:
+            cwd, slug = resolve_repo(repo)
+            if slug and slug.startswith("local/") and family(text) in _GITHUB_COMMANDS:
+                taken = origin_slug(cwd)  # set means promote_local found that name already registered
+                raise ValueError(
+                    f"{slug}'s origin {taken} is already registered to another checkout: remove one, then run {family(text)}"
+                    if taken
+                    else f"{slug} has no GitHub remote yet: add one (git remote add origin …), then run {family(text)}"
+                )
     except ValueError as exc:
         return 400, {"error": str(exc)}
     claude_cmd = body.get("claude_cmd")  # a saved label; raw command strings are never accepted
@@ -314,6 +367,13 @@ def start_session(body: dict):
     review = body.get("review", True)
     if not isinstance(review, bool):
         return 400, {"error": "review must be true or false"}
+    no_repo = body.get("no_repo") is True
+    vault_folder = body.get("vault_folder")
+    if vault_folder is not None and not ui_vault.valid_folder(vault_folder):
+        return 400, {"error": "vault_folder must be 05-Work/<Project>/<Feature>"}
+    batch = body.get("batch")
+    if batch is not None and not (isinstance(batch, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", batch)):
+        return 400, {"error": "batch must be a short id (letters, digits, - and _)"}
     flow_id = body.get("flow_id")
     if flow_id is not None and (not isinstance(flow_id, str) or ui_flows.load(flow_id) is None):
         return 400, {"error": "flow_id must name an existing flow"}
@@ -324,6 +384,10 @@ def start_session(body: dict):
         return 400, {"error": "peer_review must be a non-empty list of lens names"}
     fam = family(text)
     kind = "custom" if body.get("text") is not None else fam
+    if no_repo:
+        text += _vault_hint(vault_folder)
+        if fam == "create-prd" and "--to" not in text:
+            text += " --to obsidian"  # no repo to write docs/prds/ into; Create repo copies it there later
     lenses = None
     if peer_review is not None:
         try:
@@ -360,9 +424,19 @@ def start_session(body: dict):
         if lenses and kind == "custom":
             text, review_dir = _custom_review(text, cwd, lenses)
         try:
-            res = ui_runner.start(text, cwd, link, claude_cmd=claude_cmd, gate_questions=True, flow_id=flow_id)
+            res = ui_runner.start(
+                text,
+                cwd,
+                link,
+                claude_cmd=claude_cmd,
+                gate_questions=True,
+                flow_id=flow_id,
+                **({"batch": (batch, BATCH_MAX)} if batch else {}),
+            )
             if review_dir:
                 res = ui_sessions.update(res["id"], peer_review_dir=review_dir)  # the post-check reads it
+            if no_repo:
+                res = ui_sessions.update(res["id"], no_repo=True, vault_folder=vault_folder)
             if fam == "run-issue" and link and body.get("auto_grind", ui_settings.load()["auto_grind"]) is True:
                 res = ui_sessions.update(
                     res["id"], auto_grind=True

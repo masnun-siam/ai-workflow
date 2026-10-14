@@ -58,6 +58,80 @@ aiw ui [--port N] [--allow-host HOST]  local web UI to start and track sessions
 - To reach it over a tailnet: `tailscale serve --bg 8420`, then
   `aiw ui --allow-host <machine>.<tailnet>.ts.net`.
 
+**No repo yet.** For a new idea, the repo picker on New run and Flow has **No repo yet**: the
+session runs in the notes vault (Settings → Notes vault) instead of a checkout. It works for
+create-prd, dump, intake and a custom prompt; other commands say they need a repo. New run then
+shows a **Vault folder** (`05-Work/<Project>/<Feature>`): it follows the best match of your text
+against the existing folders as you type, **Suggest with Claude** asks Haiku (with your default
+account) for an existing or new project and feature, and you can type either name. The session
+gets the folder as a suggestion and confirms it with you before writing; create-prd writes its PRD
+to the vault only (`--to obsidian`).
+
+**Create repo.** Once a no-repo create-prd's PRD is **Approved**, its session page offers
+**Create repo…**; Flow shows the same step before Tasks when it has no repo; and the repo picker has
+**Create a new repo…** at any time. It asks for a name and a parent folder (the macOS folder
+dialog, so only on this Mac), then makes `<parent>/<name>` with `git init`, a README (the PRD's
+title and Overview, or just the name) and the PRD in `docs/prds/<feature>.md`. Nothing is committed
+or pushed, and no GitHub repo is made. It is registered as `local/<name>`; GitHub commands refuse a
+`local/` repo until it has a GitHub `origin`, and the next repo listing re-registers it under that
+`owner/repo`. Routes: `GET /api/vault/folders`, `POST /api/vault/suggest`,
+`GET /api/vault/prd?folder=`, `POST /api/repos/create`.
+
+**Tokens.** Wherever a session's cost shows (board cards, the board's today total, Sessions, the
+run page and its sessions tab, a transcript's result), its token use shows beside it, e.g.
+`$0.44 · 703k tok`; hover for input (with the cached part) and output. The count comes from the
+same `result` event as the cost; sessions recorded before this get theirs once from their stream.
+
+**Repo picker.** New run, Flow, Dispatch and the Board filter share one repo picker
+(`ui_static/repopicker.js`). It shows the repo's name and owner; click it (or press ↓) to open a
+search box over the registered repos. Recently picked repos come first. Words match the repo name,
+owner, project name or path. ↑/↓, Home/End, Enter and Esc work as in a menu. Where a run can use
+any checkout (New run, Flow), typing an absolute path offers **Use this path**, and **Browse for a
+folder…** opens the macOS folder dialog; a path that is a registered checkout becomes that repo.
+
+**New run.** Commands are grouped (Build, Review, Plan, Capture), each with a one-line
+description; the last one started is remembered. For `run-issue`, `issue-to-pr`, `pr-review` and
+`pr-fix-comments`, the selected repo's open issues or PRs are listed under the input
+(`GET /api/repos/<owner>/<repo>/open?kind=issue|pr`, one `gh` page of 100). Typing filters the list
+by number or by words in the title and labels; clicking one fills the input in the form that
+command takes. A typed number or URL still works when `gh` cannot answer.
+
+**Worklog dates.** For `worklog`, New run offers Today, Yesterday, A day (a date picker) or A range
+(from/to, at most 31 days, none in the future). A range starts one worklog run per day, since each
+run writes that day's daily note. The runs share a batch (`batch` in POST /api/sessions), and the
+server runs 3 of a batch at once: the rest wait as `queued` and start as earlier ones end, even with
+the page closed (the limit timer also releases them after a UI restart). Stopping a queued run takes
+it out of the queue. If some days fail to start, Start becomes **Retry N failed days**.
+
+**Board.** A search box (`/` focuses it) matches `#N`, the title or the repo. **need you** counts
+runs waiting on an answer, escalated, or with a paused grind; click it to show only those.
+**Filters** adds Status (in progress, done), PR (none, open, merged, closed), CI (passing,
+failing, running) and Grind (not started, grinding, paused, done); each option shows how many cards
+it would leave, filters combine, and the active ones show as removable chips with "Showing N of M".
+The repo and these filters are remembered; the search is not. A run whose Ledger lacks a PR or plan link is matched to its repo from the
+registered checkouts, not guessed from the run dir name. A title `gh` could not fetch is retried
+after 5 minutes, and a title fetched before is kept.
+
+**Dispatch pipeline page.** A row whose PR GitHub reports merged shows **Merged**, whatever this
+pipeline's own attempt did (a retry that could not start, say), and offers no Retry. Rows filter by
+All, Needs attention, In progress, Open PRs and Merged. **Merge order** lists each PR with its state,
+CI and review, highlights the first unmerged one as **Merge next**, and sits above the rows while any
+PR is unmerged (collapsed at the bottom once all are merged).
+
+**Clean up.** The dialog lists runs by repo with their issue titles; a repo's box ticks all its
+runs. Quick picks: Safe (nothing unsaved, the default), Merged PRs, None. Neither a quick pick nor a
+repo's box ever ticks a run with unsaved work: each needs its own tick, and the footer says how
+many ticked ones will lose it.
+
+**Running it as a service.** `aiw ui` under supervisord or launchd (e.g. `brew services`) runs as
+that daemon's process, not your terminal. On macOS, if the plugin or your repos live under
+`~/Documents`, `~/Desktop` or `~/Downloads`, the daemon needs **Full Disk Access** or every start
+fails with `Operation not permitted` (supervisord shows exit status 126). Grant it to the binary
+that runs the daemon (for Homebrew supervisord, the `Python.app` of its Python, shown by
+`ps -o command -p $(cat /opt/homebrew/var/run/supervisord.pid)`) in System Settings → Privacy &
+Security → Full Disk Access, then `supervisorctl restart aiw-ui`. Keep `stderr_logfile` set in the
+program's ini, or such a failure leaves no trace.
+
 **Peer review.** New run (both forms) and the Flow's PRD step have a **Peer review** box. Ticking
 it shows the reviewers the command offers (from `GET /api/peer-review`, read from `config.json`),
 with critical ticked. A doc command gets `--review <lenses>`. A custom prompt gets a fresh review

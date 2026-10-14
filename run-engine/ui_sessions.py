@@ -16,6 +16,7 @@ import secrets
 import tempfile
 from datetime import datetime, timezone
 
+import ui_events
 import ui_notify
 from shared import data_dir, warn
 
@@ -90,6 +91,7 @@ def create(command: str, repo: str, link=None, claude_cmd=None) -> dict:
         "pid": None,
         "status": "starting",
         "cost": None,
+        "tokens": None,
         "started_at": now.isoformat(),
         "ended_at": None,
         "pending_question": None,
@@ -251,5 +253,37 @@ def list_sessions() -> list:
             continue
         record = _read_meta(os.path.join(sessions_dir(), name, "meta.json"))
         if record is not None:
-            records.append(record)
+            records.append(_with_tokens(record))
     return records
+
+
+_LIVE = ("starting", "running", "waiting", "limited", "queued")
+
+
+def last_tokens(sid: str):
+    """Token use from the stream's last result event, the same one `cost` came from; None if none."""
+    last = None
+    try:
+        with open(os.path.join(session_dir(sid), "stream.jsonl"), "rb") as f:
+            for line in f:
+                if b'"type":"result"' in line:
+                    last = line
+    except OSError:
+        return None
+    try:
+        ev = json.loads(last) if last else None
+    except ValueError:
+        return None
+    return ui_events.tokens_of(ev.get("usage")) if isinstance(ev, dict) else None
+
+
+def _with_tokens(record: dict) -> dict:
+    """Sessions from before tokens were recorded get them once from their stream, then keep them
+    (the key is written even when there were none, so a stream is scanned at most once)."""
+    if "tokens" in record or record.get("status") in _LIVE or not record.get("id"):
+        return record
+    tokens = last_tokens(record["id"])
+    try:
+        return update(record["id"], tokens=tokens)
+    except (OSError, ValueError):
+        return {**record, "tokens": tokens}

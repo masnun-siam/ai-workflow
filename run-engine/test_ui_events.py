@@ -56,7 +56,7 @@ EXPECTED = [
     {"kind": "text", "text": "hi"},
     {"kind": "text", "text": "running"},
     {"kind": "tool", "name": "Bash", "input": {"command": "ls"}},
-    {"kind": "result", "cost": 0.0421, "is_error": False, "text": "done"},
+    {"kind": "result", "cost": 0.0421, "is_error": False, "text": "done", "tokens": None},
 ]
 
 
@@ -170,7 +170,10 @@ ALLOWED = {
     "link",
     "session_id",
     "outcome",
+    "no_repo",
+    "vault_folder",
     "cost",
+    "tokens",
     "started_at",
     "ended_at",
     "waiting",
@@ -333,5 +336,13 @@ finally:
         os.environ.pop("CLAUDE_PLUGIN_DATA", None)
     else:
         os.environ["CLAUDE_PLUGIN_DATA"] = old_data
+
+assert pl({**RES, "usage": {"input_tokens": 3, "cache_read_input_tokens": 40, "output_tokens": 5}})[0]["tokens"] == {
+    "input": 43,
+    "cached": 40,
+    "output": 5,
+}
+assert ui_events.tokens_of({"input_tokens": True, "output_tokens": -1}) is None, "bools and negatives are not counts"
+print("ok  result tokens: input counts cache reads; junk is ignored")
 
 print(f"{passed} checks passed")

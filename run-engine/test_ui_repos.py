@@ -108,8 +108,12 @@ def req(path, method="GET", body=None, host=HOST, origin=None, headers=None):
 calls = []
 
 
-def fake_start(command_text, cwd, link=None, claude_cmd=None, gate_questions=False, flow_id=None):
+batches: list = []
+
+
+def fake_start(command_text, cwd, link=None, claude_cmd=None, gate_questions=False, flow_id=None, **kw):
     calls.append((command_text, cwd, link))
+    batches.append(kw.get("batch"))
     rec = ui_sessions.create(command_text, cwd, link, claude_cmd=claude_cmd)
     return ui_sessions.update(rec["id"], flow_id=flow_id) if flow_id else rec
 
@@ -186,6 +190,14 @@ try:
 
     # ------------------------------------------------------------ normal POSTs
     reset_sessions()
+    batches.clear()
+    s, p = post({"repo": "o/r", "command": "worklog", "args": "2026-10-01", "batch": "wl-x1"})
+    assert s == 201 and batches == [("wl-x1", 3)], (s, batches)
+    s, p = post({"repo": "o/r", "command": "worklog", "args": "2026-10-01", "batch": "../x"})
+    assert s == 400 and "batch" in p["error"], p
+    s, p = post({"repo": "o/r", "command": "worklog", "args": "today"})
+    assert s == 201 and batches[-1] is None, "no batch unless asked"
+    print("  ok  batch: passed to the runner with the 3-at-once cap; validated")
     s, p = post({"repo": "o/r", "command": "run-issue", "args": "7"})
     assert s == 201, (s, p)
     assert calls == [("/run-issue 7", REPO_A, {"owner": "o", "repo": "r", "issue": 7})] or (

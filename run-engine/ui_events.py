@@ -27,6 +27,7 @@ def parse_line(line) -> list:
         return out
     if ev.get("type") == "result":
         cost = ev.get("total_cost_usd")
+        tokens = tokens_of(ev.get("usage"))
         text = ev.get("result")
         return [
             {
@@ -34,9 +35,26 @@ def parse_line(line) -> list:
                 "cost": cost if isinstance(cost, (int, float)) and not isinstance(cost, bool) else None,
                 "is_error": bool(ev.get("is_error")),
                 "text": text if isinstance(text, str) else None,
+                "tokens": tokens,
             }
         ]
     return []
+
+
+def _n(v) -> int:
+    return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else 0
+
+
+def tokens_of(usage):
+    """A result event's `usage` -> {input, cached, output}, or None. `input` counts every prompt token
+    (fresh + cache writes + cache reads), so it matches what the cost was charged on; `cached` is
+    the cache-read part of it."""
+    if not isinstance(usage, dict):
+        return None
+    cached = _n(usage.get("cache_read_input_tokens"))
+    total_in = _n(usage.get("input_tokens")) + _n(usage.get("cache_creation_input_tokens")) + cached
+    out = _n(usage.get("output_tokens"))
+    return {"input": total_in, "cached": cached, "output": out} if total_in or out else None
 
 
 def read_from(path: str, offset: int):

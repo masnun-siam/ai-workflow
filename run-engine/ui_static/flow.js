@@ -1,7 +1,8 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { poll } from './app.js';
-import { buildBody, lensPicker, loadLastRepo, pickedLenses, repoCombo, repoOptions } from './launcher.js';
+import { adoptCreatedRepo, buildBody, hostRepoPicker, lensPicker, loadLastRepo, pickedLenses, repoOptions } from './launcher.js';
+import { CreateRepoDialog } from './vault.js';
 import { issueNumbers } from './dispatch.js';
 import { Answer } from './answer.js';
 import { FlowSwitcher, IssueRows, NotePane, mergeRows } from './flowside.js';
@@ -23,6 +24,8 @@ const STEPS = [
     produces: 'Files a refined sub-issue per task under the epic, blocked by the ones it depends on.' },
   { key: 'dispatch', label: 'Dispatch', input: 'Issue numbers', produces: 'Starts a run for each issue.' },
 ];
+const VAULT = '@vault'; // a flow's repo when the idea has no repo yet
+const VAULT_FOLDER = /^05-Work\/[^/]+(\/[^/]+)?$/;
 const STATE_TEXT = { done: 'Done', skipped: 'Skipped', active: 'Current step', locked: 'Not started' };
 const TERMINAL = ['done', 'failed', 'stopped'];
 
@@ -133,15 +136,15 @@ export class Flow extends Component {
     super(props);
     const p = props.route.params;
     const repo = p.repo || loadLastRepo(globalThis.localStorage) || '';
-    this.state = { id: null, loaded: false, missing: false, ...this.repoState(repo), repos: [], canBrowse: false, repoQuery: null,
-      repoOpen: false, repoActive: 0, browsing: false, text: '', folder: p.folder || '', prd: p.prd || '', tasks: '', parent: '', issues: (p.issues || []).join(' '),
+    this.state = { id: null, loaded: false, missing: false, ...this.repoState(repo), repos: [], canBrowse: false,
+      text: '', folder: p.folder || '', prd: p.prd || '', tasks: '', parent: '', issues: (p.issues || []).join(' '),
       sid: p.sid || '', meta: null, why: null, busy: false, wide: false, view: null, progress: null };
   }
 
-  // The repo is a registered slug or, like New run, an absolute path to a checkout.
-  repoState = (repo) => (repo.startsWith('/') ? { repo: '', manual: true, path: repo } : { repo, manual: false, path: '' });
-
-  combo = repoCombo(this, () => this.setState({ why: null }));
+  // The repo is a registered slug, an absolute path to a checkout, or VAULT: a new idea with no repo
+  // yet, whose Dump and PRD steps run in the notes vault until Create repo makes one.
+  repoState = (repo) => (repo === VAULT ? { vault: true, repo: '', manual: false, path: '' }
+    : repo.startsWith('/') ? { vault: false, repo: '', manual: true, path: repo } : { vault: false, repo, manual: false, path: '' });
 
   async componentDidMount() {
     // Wide screens give the question and the step's output a column beside the steps.
@@ -189,6 +192,7 @@ export class Flow extends Component {
       if (this.gone) return;
       const repos = repoOptions(b);
       const { repo, manual, path } = this.state;
+      if (this.state.vault) return this.setState({ repos, canBrowse: !!b && b.can_browse === true }, () => this.track());
       // A checkout path that is a registered repo (a session's repo, say) shows as that repo.
       const known = manual && repos.find((r) => r.path === path);
       this.setState({ repos, canBrowse: !!b && b.can_browse === true, repo: known ? known.value : repo || manual ? repo : (repos[0] || {}).value || '',
@@ -196,7 +200,7 @@ export class Flow extends Component {
     }).catch(() => {});
   }
 
-  fields = (s = this.state) => ({ repo: (s.manual ? s.path : s.repo).trim(), folder: s.folder, prd: s.prd, tasks: s.tasks, parent: s.parent,
+  fields = (s = this.state) => ({ repo: s.vault ? VAULT : (s.manual ? s.path : s.repo).trim(), folder: s.folder, prd: s.prd, tasks: s.tasks, parent: s.parent,
     issues: issueNumbers(s.issues), sid: s.sid });
 
   persisted = (s = this.state) => ({ ...this.fields(s), text: s.text });
@@ -243,12 +247,16 @@ export class Flow extends Component {
     const lenses = step.key === 'prd' ? pickedLenses(this.state.peerReview, this.state.lenses, this.state.offers) : null;
     if (!repo || !args) { this.setState({ why: !repo ? 'Pick a repo first.' : 'Fill in the field above first.' }); return; }
     if (lenses && !lenses.length) { this.setState({ why: 'Tick at least one reviewer.' }); return; }
+    if (this.state.vault && !['dump', 'prd'].includes(step.key)) { this.setState({ why: 'Create the code repo first.' }); return; }
     this.setState({ busy: true, why: null, meta: null, view: null });
     clearTimeout(this.timer);
     const flowId = await this.persist(true);
     let r;
     try {
-      const body = buildBody({ repo, command: step.key === 'issues' ? issuesCommand(args) : step.command, args, lenses });
+      const body = {
+        ...buildBody({ repo: this.state.vault ? '' : repo, command: step.key === 'issues' ? issuesCommand(args) : step.command, args, lenses }),
+        ...(this.state.vault ? { no_repo: true, ...(VAULT_FOLDER.test(folder) ? { vault_folder: folder } : {}) } : {}),
+      };
       r = await api('POST', '/api/sessions', { ...body, ...(flowId ? { flow_id: flowId } : {}) });
     } catch {
       this.setState({ busy: false, why: 'Could not reach the aiw server.' });
@@ -389,7 +397,11 @@ export class Flow extends Component {
       </div>
       <p class="note">Turn a raw idea into dispatched issue runs. Each step stops for you only when it has a question.</p>
       <label for="flow-repo">Repo</label>
-      ${this.combo.render(st, { id: 'flow-repo', error: why === 'Pick a repo first.' ? 'flow-why' : null })}
+      ${hostRepoPicker(this, st, { id: 'flow-repo', error: why === 'Pick a repo first.' ? 'flow-why' : null, allowVault: true, allowCreate: true, after: () => this.setState({ why: null }) })}
+      ${st.vault && html`<p class="note">No repo yet: Dump and PRD run in your notes vault. After the PRD, the flow makes the code repo, then carries on with Tasks.</p>`}
+      ${st.creating && html`<${CreateRepoDialog} withPrd=${!!st.vault && VAULT_FOLDER.test(folder)} prdFolder=${st.vault && VAULT_FOLDER.test(folder) ? folder : ''} name=${String(folder || '').split('/').pop()}
+        onClose=${() => this.setState({ creating: false })}
+        onDone=${async (made) => { const prdFile = (made.files || []).find((f) => f.startsWith('docs/prds/')); await adoptCreatedRepo(this, made); if (prdFile) this.setState({ prd: prdFile }); }} />`}
       <ol class="flow-steps">
         ${STEPS.map((step, i) => {
           const skipped = (step.key === 'prd' && !folder) || (step.key === 'tasks' && !st.prd);
@@ -403,7 +415,10 @@ export class Flow extends Component {
                     onClick=${() => this.setState({ view: st.view === step.key ? null : step.key })}>${step.label}</button>`
                 : step.label} <span class="sr-only">(${STATE_TEXT[state]})</span>${state === 'skipped' && html` <span class="flow-tag">Skipped</span>`}</h2>
               ${state !== 'done' && html`<p class="note">${step.produces}</p>`}
-              ${state === 'active' && step.key !== 'dispatch' && html`
+              ${state === 'active' && st.vault && step.key === 'tasks' && html`
+                <p>The PRD is in your vault. Make the code repo for it first: a local git repo with the PRD in docs/prds/ and a README. Tasks then run there.</p>
+                <button type="button" class="primary" onClick=${() => this.setState({ creating: true })}>Create the code repo…</button>`}
+              ${state === 'active' && !(st.vault && step.key === 'tasks') && step.key !== 'dispatch' && html`
                 ${this.input(step)}
                 ${sid ? html`<p class="note" role="status">${waiting ? 'Session waiting for your answer' : `Session ${meta ? meta.outcome : 'starting'}`} · <a href=${`#/session/${encodeURIComponent(sid)}`}>Open session</a></p>` : null}
                 ${!st.wide && ask}

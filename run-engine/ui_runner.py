@@ -169,7 +169,10 @@ def start(
     gate_questions=False,
     claude_cmd=None,
     flow_id=None,
+    batch=None,
 ) -> dict:
+    """batch: (id, max) runs at most `max` sessions of that batch at once; the rest wait as "queued"
+    and start, oldest first, as earlier ones end (see release_batch)."""
     if not isinstance(command_text, str) or not command_text.strip():
         raise ValueError("command_text must be a non-empty string")
     if command_text.startswith("-"):
@@ -182,6 +185,18 @@ def start(
     sid = ui_sessions.create(command_text, cwd, link, claude_cmd=claude_cmd)["id"]
     if flow_id:
         ui_sessions.update(sid, flow_id=flow_id)
+    if batch:
+        with _batch_lock:
+            busy = _batch_live(batch[0]) >= batch[1]
+            ui_sessions.update(
+                sid,
+                batch=batch[0],
+                batch_max=batch[1],
+                cwd_path=path,
+                **({"status": "queued", "note": f"queued: {batch[1]} of this batch run at once"} if busy else {}),
+            )
+        if busy:
+            return ui_sessions.load(sid)
     until = limits().get(claude_cmd, {}).get("limited_until")
     if until and not (extra_args or env_extra or pass_fds):  # queue: the limit timer starts it at reset
         return ui_sessions.update(
@@ -202,6 +217,48 @@ def start(
         env_extra=env_extra,
         pass_fds=pass_fds,
     )
+
+
+_batch_lock = threading.Lock()
+_BATCH_BUSY = ("starting", "running")
+
+
+def _batch_live(batch: str) -> int:
+    return sum(1 for r in ui_sessions.list_sessions() if r.get("batch") == batch and r.get("status") in _BATCH_BUSY)
+
+
+def release_batch(batch) -> list:
+    """Start a batch's queued sessions, oldest first, while fewer than its max are running."""
+    if not batch:
+        return []
+    started = []
+    with _batch_lock:
+        recs = ui_sessions.list_sessions()
+        mine = [r for r in recs if r.get("batch") == batch]
+        free = max((r.get("batch_max") or 1 for r in mine), default=1) - sum(
+            1 for r in mine if r.get("status") in _BATCH_BUSY
+        )
+        for rec in sorted((r for r in mine if r.get("status") == "queued"), key=lambda r: r.get("started_at") or ""):
+            if free <= 0:
+                break
+            ui_sessions.update(rec["id"], status="starting", note=None)  # claim under the lock
+            free -= 1
+            started.append(rec)
+    for rec in started:
+        sid = rec["id"]
+        try:
+            exe = _preflight(sid)
+            _spawn(
+                sid,
+                [*exe, *CLAUDE_ARGS, "--append-system-prompt", _system(rec), rec["command"]],
+                rec["cwd_path"],
+                cwd_path=rec["cwd_path"],
+            )
+        except Exception as e:  # noqa: BLE001 - one bad session must not strand the rest of the batch
+            warn(f"batch {batch}: starting {sid} failed: {e}")
+            if (ui_sessions.load(sid) or {}).get("status") == "starting":
+                ui_sessions.update(sid, status="failed", ended_at=_now(), error=f"could not start: {e}")
+    return [r["id"] for r in started]
 
 
 def resume(sid: str, answer_text) -> dict:
@@ -383,7 +440,7 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
                     if isinstance(errs, list) and errs
                     else str(ev.get("result") or "claude reported an error")
                 )
-            ui_sessions.update(sid, cost=ev.get("total_cost_usd"))
+            ui_sessions.update(sid, cost=ev.get("total_cost_usd"), tokens=ui_events.tokens_of(ev.get("usage")))
 
     def drain() -> None:
         nonlocal offset, buf
@@ -463,6 +520,10 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
         if _procs.get(sid) is proc:  # a fallback may have replaced it with a newer process
             _procs.pop(sid, None)
             _stopping.discard(sid)
+        try:  # however it ended (done, failed, stopped): a queued session of its batch may start now
+            release_batch((ui_sessions.load(sid) or {}).get("batch"))
+        except Exception as e:  # noqa: BLE001 - never let the follower thread die here
+            warn(f"batch release after {sid} failed: {e}")
 
 
 def _mark_limited(sid: str, info, err) -> None:
@@ -523,9 +584,14 @@ def cancel_auto(sid: str) -> dict:
 
 
 def limit_tick(now=None, stagger=2) -> list:
-    """Resume every auto-resume limited session whose limit has reset."""
+    """Resume every auto-resume limited session whose limit has reset, and start queued batch
+    sessions that have a free slot (after a UI restart nothing else would)."""
     now = now or time.time()
     out = []
+    for batch in {
+        r.get("batch") for r in ui_sessions.list_sessions() if r.get("status") == "queued" and r.get("batch")
+    }:
+        out += release_batch(batch)
     for rec in ui_sessions.list_sessions():
         until = rec.get("limit_resets_at")
         if rec.get("status") == "limited" and rec.get("auto_resume") and until and until + LIMIT_BUFFER_SECONDS <= now:
@@ -631,6 +697,8 @@ def stop(sid: str) -> dict:
     proc = _procs.get(sid)
     if rec["status"] == "limited":
         return ui_sessions.update(sid, status="stopped", ended_at=_now(), auto_resume=False)
+    if rec["status"] == "queued":  # never started: it just leaves the batch queue
+        return ui_sessions.update(sid, status="stopped", ended_at=_now(), note=None)
     if rec["status"] == "waiting" and (proc is None or proc.poll() is not None):
         return ui_sessions.update(sid, status="stopped", ended_at=_now(), pending_question=None)
     if rec["status"] not in ("starting", "running", "waiting") or not rec.get("pid"):

@@ -5,12 +5,13 @@ import { toast } from './toast.js';
 import { GhChips } from './ghstatus.js';
 import { PrLink } from './pr.js';
 import { formatWhen, grindLabel } from './fmt.js';
+import { RepoPicker } from './repopicker.js';
 
 const html = htm.bind(h);
 
 export const STATE_LABEL = {
   queued: 'Queued', running: 'Running', waiting: 'Waiting on you', limited: 'Limited',
-  done: 'Done', failed: 'Failed', stopped: 'Stopped', skipped: 'Skipped',
+  done: 'Done', failed: 'Failed', stopped: 'Stopped', skipped: 'Skipped', merged: 'Merged',
 };
 const STATIONS = ['researcher', 'planner', 'sdet', 'dev', 'verifier', 'reviewer', 'fixer', 'done'];
 const STATION_LABEL = { researcher: 'Research', planner: 'Plan', sdet: 'SDET', dev: 'Dev', verifier: 'Verify', reviewer: 'Review', fixer: 'Fix', done: 'Done' };
@@ -34,7 +35,15 @@ export function startBody(preview, selected, { mode, max, claude, grind, worktre
   return body;
 }
 
+// What a row shows: a PR that GitHub says merged outranks this pipeline's own attempt (a retry that
+// failed to start, say), because the work is in. Live states stay as they are.
+export function shownState(item) {
+  const merged = item.gh?.pr?.state === 'MERGED';
+  return merged && !LIVE.includes(item.state) && item.state !== 'queued' ? 'merged' : item.state;
+}
+
 export function itemActions(item) {
+  if (shownState(item) === 'merged') return [];
   if (item.state === 'failed' || item.state === 'stopped') return ['retry', 'skip'];
   if (item.state === 'skipped') return item.reason === 'manual' ? ['retry'] : [];
   if (item.state === 'queued') return ['skip'];
@@ -47,16 +56,39 @@ export function pipelineActions(status) {
 
 export function counts(items) {
   const out = {};
-  for (const i of items || []) out[i.state] = (out[i.state] || 0) + 1;
+  for (const i of items || []) out[shownState(i)] = (out[shownState(i)] || 0) + 1;
   return out;
 }
 
-// "3 of 6 done · 2 running · 1 failed"
+// "3 of 6 done (2 merged) · 2 running · 1 failed"
 export function progressText(items) {
   const c = counts(items);
-  const bits = [`${c.done || 0} of ${(items || []).length} done`];
+  const bits = [`${(c.done || 0) + (c.merged || 0)} of ${(items || []).length} done${c.merged ? ` (${c.merged} merged)` : ''}`];
   for (const k of ['running', 'waiting', 'limited', 'failed', 'stopped', 'skipped']) if (c[k]) bits.push(`${c[k]} ${k}`);
   return bits.join(' · ');
+}
+
+// The detail page's row filter.
+export const ROW_FILTERS = [
+  ['all', 'All', () => true],
+  ['attention', 'Needs attention', (i) => ['failed', 'stopped', 'waiting', 'limited'].includes(shownState(i)) || i.grind?.state === 'paused'],
+  ['active', 'In progress', (i) => ['queued', 'running'].includes(shownState(i))],
+  ['open-pr', 'Open PRs', (i) => i.gh?.pr?.state === 'OPEN' || (!!i.run?.pr && !i.gh?.pr && shownState(i) !== 'merged')],
+  ['merged', 'Merged', (i) => shownState(i) === 'merged' || i.gh?.pr?.state === 'MERGED'],
+];
+
+// Merge order rows, with where each PR stands: merged, open (and its CI/review), or closed. The
+// first open one is next to merge; a later open PR waits on the ones before it.
+export function mergeQueue(order, items) {
+  let next = null;
+  return order.map((n, i) => {
+    const it = items.find((x) => x.issue === n) || { issue: n };
+    const pr = it.gh?.pr || {};
+    // No GitHub state yet (cold cache): say so rather than guess, and never call it "next".
+    const state = pr.state === 'MERGED' ? 'merged' : pr.state === 'CLOSED' ? 'closed' : pr.state === 'OPEN' ? 'open' : 'unknown';
+    if (state === 'open' && next === null) next = n;
+    return { n, pos: i + 1, title: it.title || '', url: pr.url || it.run?.pr, num: pr.number, state, ci: pr.ci, approval: pr.approval, next: next === n };
+  });
 }
 
 // Issue numbers out of free text: "#12, 14" or a list of issue URLs.
@@ -89,8 +121,8 @@ async function api(path, body) {
 function Bar({ issues, onPick }) {
   return html`<div class="bar" role="img" aria-label=${progressText(issues)}>
     ${issues.map((i) => onPick
-      ? html`<button type="button" class=${`seg-i s-${i.state}`} title=${`#${i.issue} · ${STATE_LABEL[i.state]}`} aria-label=${`#${i.issue} ${STATE_LABEL[i.state]}`} onClick=${() => onPick(i.issue)}></button>`
-      : html`<i class=${`seg-i s-${i.state}`} title=${`#${i.issue} · ${STATE_LABEL[i.state]}`}></i>`)}
+      ? html`<button type="button" class=${`seg-i s-${shownState(i)}`} title=${`#${i.issue} · ${STATE_LABEL[shownState(i)]}`} aria-label=${`#${i.issue} ${STATE_LABEL[shownState(i)]}`} onClick=${() => onPick(i.issue)}></button>`
+      : html`<i class=${`seg-i s-${shownState(i)}`} title=${`#${i.issue} · ${STATE_LABEL[shownState(i)]}`}></i>`)}
   </div>`;
 }
 
@@ -199,9 +231,8 @@ export class Dispatch extends Component {
             placeholder="A search URL, issue URLs, or numbers: #12, 14, 15"></textarea>
           <p class="note">A search URL, issue URLs, issue numbers, or a single epic number to run its sub-issues.</p>
           ${!hasUrl(text) && html`<label for="dp-repo">Repo for plain issue numbers</label>
-            <select id="dp-repo" value=${repo} onChange=${(e) => this.setState({ repo: e.target.value, preview: null })}>
-              ${repos.length ? repos.map((r) => html`<option value=${r.slug}>${r.slug}</option>`) : html`<option value="">No repos yet — start a run once to register one</option>`}
-            </select>`}
+            <${RepoPicker} id="dp-repo" label="Repo for plain issue numbers" repos=${repos.map((r) => ({ value: r.slug, name: r.name || r.slug, path: r.path || '' }))} value=${{ repo, path: '' }}
+              placeholder="No repos yet: start a run once to register one" onPick=${(sel) => this.setState({ repo: sel.repo, preview: null })} />`}
           <div class="dp-row">
             <button type="button" class="primary" disabled=${busy === 'preview'} onClick=${() => this.runPreview()}>${busy === 'preview' ? 'Reading issues…' : 'Preview issues'} <kbd>⌘↵</kbd></button>
           </div>
@@ -291,7 +322,7 @@ export class Dispatch extends Component {
 // ---- PipelineDetail ----------------------------------------------------------------------------
 
 export class PipelineDetail extends Component {
-  state = { data: null, gone: false, offline: false, confirm: null, busy: false, adding: false, addText: '', showDone: null };
+  state = { data: null, gone: false, offline: false, confirm: null, busy: false, adding: false, addText: '', showDone: null, rows: 'all' };
 
   componentDidMount() {
     this.stop = poll(`/api/pipelines/${encodeURIComponent(this.props.id)}`, 3000, (r) => {
@@ -349,13 +380,31 @@ export class PipelineDetail extends Component {
     if (await this.act('/update', { add }, `Added ${add.length} issue${add.length === 1 ? '' : 's'}`)) this.setState({ adding: false, addText: '' });
   };
 
-  render({ id }, { data, gone, offline, confirm, busy, adding, addText, showDone }) {
+  render({ id }, { data, gone, offline, confirm, busy, adding, addText, showDone, rows }) {
     if (gone) return html`<h1>Pipeline not found</h1><p><a href="#/dispatch">Back to Dispatch</a></p>`;
     if (!data) return html`<p class="empty">${offline ? 'Offline: retrying' : 'Loading…'}</p>`;
     const items = data.items;
     // Finished issues fold away while others are still going, so what needs attention stays on screen.
-    const finished = items.filter((i) => i.state === 'done' && !(i.grind && ['running', 'paused', 'queued'].includes(i.grind.state)));
-    const fold = showDone === null ? finished.length > 0 && finished.length < items.length : !showDone;
+    const finished = items.filter((i) => ['done', 'merged'].includes(shownState(i)) && !(i.grind && ['running', 'paused', 'queued'].includes(i.grind.state)));
+    // A chosen filter shows exactly its rows; only "All" folds the finished ones away.
+    const fold = rows === 'all' && (showDone === null ? finished.length > 0 && finished.length < items.length : !showDone);
+    const rowTest = (ROW_FILTERS.find(([k]) => k === rows) || ROW_FILTERS[0])[2];
+    const queue = mergeQueue(data.merge_order, items);
+    const unmerged = queue.filter((q) => q.state !== 'merged').length;
+    const mergePanel = queue.length > 0 && html`<details class="panel pd-merge" open=${unmerged > 0}>
+      <summary><h2>Merge order</h2><span class="muted">${queue.length - unmerged} of ${queue.length} merged</span></summary>
+      <p class="note">PRs are stacked on their dependencies, so merge them top to bottom.</p>
+      <ol class="mq">${queue.map((q) => html`<li class=${`mq-row mq-${q.state}${q.next ? ' mq-next' : ''}`}>
+        <span class="mq-pos" aria-hidden="true">${q.state === 'merged' ? '✓' : q.pos}</span>
+        <a class="mq-title" href=${`#it-${q.n}`} onClick=${(e) => { e.preventDefault(); this.jump(q.n); }}><span class="mono">#${q.n}</span> ${q.title}</a>
+        ${q.next && html`<span class="chip mq-badge">Merge next</span>`}
+        ${q.state === 'open' && q.ci && html`<span class=${`chip gh-${q.ci === 'green' ? 'ok' : q.ci === 'red' ? 'bad' : 'warn'}`}>${q.ci === 'green' ? 'ci passing' : q.ci === 'red' ? 'ci failing' : 'ci running'}</span>`}
+        ${q.state === 'open' && q.approval === 'APPROVED' && html`<span class="chip gh-ok">approved</span>`}
+        ${q.state === 'open' && q.approval === 'CHANGES_REQUESTED' && html`<span class="chip gh-bad">changes requested</span>`}
+        <span class=${`chip mq-state mq-s-${q.state}`}>${q.state}</span>
+        ${q.url && html`<${PrLink} class="chip" url=${q.url}>PR${q.num ? ` #${q.num}` : ''} ↗<//>`}
+      </li>`)}</ol>
+    </details>`;
     const acts = pipelineActions(data.status);
     const live = items.some((i) => LIVE.includes(i.state));
     return html`
@@ -394,16 +443,24 @@ export class PipelineDetail extends Component {
           </form>`}
         </section>
 
-        ${finished.length > 0 && finished.length < items.length && html`<button type="button" class="btn pd-fold" aria-expanded=${!fold} onClick=${() => this.setState({ showDone: fold })}>${finished.length} finished · ${fold ? 'show' : 'hide'}</button>`}
+        ${unmerged > 0 && mergePanel}
+        <div class="pd-filter">
+          <div class="seg" role="radiogroup" aria-label="Show">
+            ${ROW_FILTERS.map(([k, label, test]) => { const c = items.filter(test).length; return (k === 'all' || c > 0 || rows === k) && html`<button type="button" role="radio" aria-checked=${rows === k} class=${rows === k ? 'on' : ''} onClick=${() => this.setState({ rows: k })}>${label} <span class="muted">${c}</span></button>`; })}
+          </div>
+          ${rows === 'all' && finished.length > 0 && finished.length < items.length && html`<button type="button" class="btn pd-fold" aria-expanded=${!fold} onClick=${() => this.setState({ showDone: fold })}>${finished.length} finished · ${fold ? 'show' : 'hide'}</button>`}
+        </div>
         <ul class="pd-items">
-          ${[...items].filter((it) => !(fold && finished.includes(it))).sort((a, b) => data.order.indexOf(a.issue) - data.order.indexOf(b.issue)).map((it) => {
+          ${rows !== 'all' && !items.some(rowTest) && html`<li class="pd-none">No issues in this view. <button type="button" class="linkish" onClick=${() => this.setState({ rows: 'all' })}>Show all</button></li>`}
+          ${[...items].filter((it) => rowTest(it) && !(fold && finished.includes(it))).sort((a, b) => data.order.indexOf(a.issue) - data.order.indexOf(b.issue)).map((it) => {
             const run = it.run;
             const sess = it.session;
             const at = it.moved_to || { owner: data.slug.split('/')[0], repo: data.slug.split('/')[1], issue: it.issue }; // a transferred issue's run lives under its new repo and number
             const runHref = `#/run/${encodeURIComponent(at.owner)}/${encodeURIComponent(at.repo)}/${at.issue}`;
             const ia = itemActions(it);
             const grindStuck = it.grind && it.grind.state === 'paused';
-            return html`<li id=${`it-${it.issue}`} class=${`pd-item s-${it.state}${grindStuck ? ' attn' : ''}`}>
+            const shown = shownState(it);
+            return html`<li id=${`it-${it.issue}`} class=${`pd-item s-${shown}${grindStuck ? ' attn' : ''}`}>
               <div class="pd-main">
                 <div class="pd-title">
                   <span class="mono">#${it.issue}</span>
@@ -412,15 +469,16 @@ export class PipelineDetail extends Component {
                 </div>
                 <div class="pd-sub">
                   ${(it.deps || []).map((d) => html`<a class="chip dp-queued" href=${`#it-${d}`} onClick=${(e) => { e.preventDefault(); this.jump(d); }}>after #${d}</a>`)}
-                  ${it.reason && html`<span class="muted">${it.reason}</span>`}
+                  ${it.reason && !['done', 'merged'].includes(shown) && html`<span class="muted">${it.reason}</span>`}
+                  ${it.reason && shown === 'merged' && it.state !== 'done' && html`<span class="muted" title=${it.reason}>merged outside this pipeline's last attempt</span>`}
                   ${sess && sess.status === 'limited' && html`<span class="muted">${sess.auto_resume ? 'resumes automatically' : 'usage limit'}</span>`}
-                  ${sess && sess.error && html`<span class="error">${sess.error}</span>`}
+                  ${sess && sess.error && !['done', 'merged'].includes(shown) && html`<span class="error">${sess.error}</span>`}
                   ${grindStuck && it.grind.reason && html`<span class="pd-why" title=${it.grind.reason}>${it.grind.reason}</span>`}
                 </div>
               </div>
               <${Rail} run=${run} state=${it.state} />
               <div class="pd-gh">${it.grind && grindLabel(it.grind) && html`<span class=${'chip chip-grind-' + it.grind.state}>${grindLabel(it.grind)}</span>`}${run && it.gh && html`<${GhChips} gh=${it.gh} />`}${run && run.pr && html`<${PrLink} class="chip" url=${run.pr}>PR ↗<//>`}</div>
-              <div class="pd-state"><${StatePill} state=${it.state} /></div>
+              <div class="pd-state"><${StatePill} state=${shown} /></div>
               <div class="pd-acts">
                 ${it.state === 'waiting' && sess && html`<a class="btn btn-sm btn--primary needs-you" href=${`#/answer/${encodeURIComponent(sess.id)}`}>Answer</a>`}
                 ${grindStuck && html`<a class="btn btn-sm btn--primary needs-you" href=${runHref}>Unblock grind</a>`}
@@ -432,11 +490,7 @@ export class PipelineDetail extends Component {
           })}
         </ul>
 
-        ${data.merge_order.length > 0 && html`<details class="panel pd-merge" open=${data.merge_order.length <= 5}>
-          <summary><h2>Merge order · ${data.merge_order.length} PR${data.merge_order.length === 1 ? '' : 's'}</h2></summary>
-          <p class="note">PRs are stacked on their dependencies, so merge them in this order.</p>
-          <ol>${data.merge_order.map((n) => { const it = items.find((i) => i.issue === n); return html`<li><${PrLink} url=${it.run.pr}>#${n} ${it.title || ''}<//></li>`; })}</ol>
-        </details>`}
+        ${unmerged === 0 && mergePanel}
       </div>`;
   }
 }

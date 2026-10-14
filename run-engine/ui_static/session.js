@@ -3,10 +3,11 @@ import htm from './vendor/htm.mjs';
 import { poll } from './app.js';
 import { mergeStream } from './run.js';
 import { runLink, runHash } from './answer.js';
-import { shortRepo, toolSummary } from './fmt.js';
+import { shortRepo, tokensText, toolSummary } from './fmt.js';
 import { LimitBanner } from './limits.js';
 import { Linked } from './linked.js';
 import { flowLink } from './flow.js';
+import { NewIdeaPanel, ideaPrdSession } from './vault.js';
 
 export { toolSummary };
 
@@ -40,7 +41,7 @@ function Message({ e, open }) {
   }
   if (e.kind === 'result') {
     return html`<div class=${e.is_error ? 'msg msg-result error' : 'msg msg-result'}>
-      <div class="msg-role mono">${e.is_error ? 'failed' : 'result'}${typeof e.cost === 'number' ? ` · $${e.cost.toFixed(2)}` : ''}</div>
+      <div class="msg-role mono">${e.is_error ? 'failed' : 'result'}${typeof e.cost === 'number' ? ` · $${e.cost.toFixed(2)}` : ''}${tokensText(e.tokens) ? ` · ${tokensText(e.tokens)}` : ''}</div>
       ${e.text ? html`<p><${Linked} text=${e.text} /></p>` : null}
     </div>`;
   }
@@ -159,6 +160,7 @@ export class Session extends Component {
           ${retry && html`<span role="status" class="offline">Retrying…</span>`}
         </div>
         ${meta.outcome === 'limited' && html`<${LimitBanner} key=${meta.id} s=${meta} />`}
+        ${ideaPrdSession(meta) && html`<${NewIdeaPanel} key=${meta.id} meta=${meta} />`}
         <div class="tbar">
           <input type="search" data-search class="field" aria-label="Search transcript" placeholder="Search messages and tool calls" value=${q}
             onInput=${(e) => this.setState({ q: e.target.value })} />

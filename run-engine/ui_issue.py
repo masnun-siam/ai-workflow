@@ -71,3 +71,38 @@ def fetch(owner: str, repo: str, n: str):
     if not isinstance(comments, list):
         return 502, {"error": ((proc.stderr or "").strip().splitlines() or ["gh could not read the comments"])[-1]}
     return 200, shape(issue, comments)
+
+
+_LIST_FIELDS = {"issue": "number,title,labels,updatedAt,url", "pr": "number,title,labels,updatedAt,url,isDraft"}
+
+
+def shape_open(rows) -> list:
+    """Pure: `gh issue|pr list --json` rows -> the New run picker's items."""
+    return [
+        {
+            "number": r.get("number"),
+            "title": r.get("title") or "",
+            "labels": [x.get("name") for x in r.get("labels") or [] if isinstance(x, dict) and x.get("name")],
+            "updated_at": r.get("updatedAt"),
+            "draft": r.get("isDraft") is True,
+            "url": r["url"] if str(r.get("url") or "").startswith("https://") else None,
+        }
+        for r in rows or []
+        if isinstance(r, dict) and isinstance(r.get("number"), int)
+    ]
+
+
+def open_items(owner: str, repo: str, kind: str):
+    """(status, body): the repo's open issues or PRs, most recently updated first, for New run."""
+    if kind not in _LIST_FIELDS:
+        return 400, {"error": "kind must be issue or pr"}
+    # ponytail: one page of 100, no paging; the picker also takes a typed number or URL.
+    rows, proc = gh_json(
+        [kind, "list", "--repo", f"{owner}/{repo}", "--state", "open", "--limit", "100", "--json", _LIST_FIELDS[kind]],
+        timeout=30,
+    )
+    if not isinstance(rows, list):
+        return 502, {"error": ((proc.stderr or "").strip().splitlines() or ["gh could not list them"])[-1]}
+    items = shape_open(rows)
+    items.sort(key=lambda x: x["updated_at"] or "", reverse=True)
+    return 200, {"items": items}

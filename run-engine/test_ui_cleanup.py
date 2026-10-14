@@ -154,6 +154,11 @@ t = next(t for t in ui_cleanup.find_targets() if t["key"] == f"session:{loose['i
 assert ui_cleanup.clean(t, False)["ok"] and ui_sessions.load(loose["id"]) is None
 ok("link-less session cleaned alone")
 
+queued = ui_sessions.create("/worklog 2026-10-01", "/tmp")
+ui_sessions.update(queued["id"], status="queued", batch="wl-x")
+assert f"session:{queued['id']}" not in {t["key"] for t in ui_cleanup.find_targets()}
+ok("a queued batch session is never offered for cleanup")
+
 
 # main-tree run: nothing removed; base checked out when clean; a done run's branch is deleted
 def setup_main(issue: int, status: str):
