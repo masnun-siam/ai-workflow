@@ -80,3 +80,7 @@ Schema::table('orders', function (Blueprint $table) {
 ## Smoke test
 
 Provide a Laravel migration that adds foreign keys and common filter columns without useful indexes, plus a model or controller that queries them. Verify that the response ties every recommendation to a real query pattern and returns a short, concrete set of migration changes.
+
+## Self-improve
+
+After the task, follow `../../self-improve.md` (relative to this skill's directory).

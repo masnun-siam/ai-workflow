@@ -184,3 +184,7 @@ Each use of this skill is also a test of it.
 - **Before you finish**, keep only findings backed by what happened in this session that would recur for the next person. Facts about the user's repo go to its `tasks/lessons.md`, not here.
 - **If anything is left**, tell the user what happened and ask (AskUserQuestion, headless: `aiw ask`) whether to file it, recommended option first. On yes, resolve `<plugin_repo>` from the `repository` (else `homepage`) field of `<plugin_root>/.claude-plugin/plugin.json`, falling back to `masnun-siam/ai-workflow`, and run `gh issue create --repo <plugin_repo> --title "skill(create-tasks): <what to change>" --body-file <file>` with what happened and the exact proposed edit as a diff.
 - **Never edit this skill file**, even when the plugin root is a git checkout. Never propose an edit that weakens a gate.
+
+## Self-improve
+
+After the task, follow `../../self-improve.md` (relative to this skill's directory).

@@ -34,3 +34,7 @@ You are the **controller**. Each issue runs in its own herdr tab as an independe
 - Never answer a gate, merge, or comment on GitHub from here.
 - Cap concurrency: each run raises its own Docker test stack and uncapped stacks have pegged the machine.
 - A Gate 2 verdict is read from the report comment, not inferred from the pane. A new push re-runs CI, so `poll.sh` reports `working` again until checks settle; that is expected.
+
+## Self-improve
+
+After the task, follow `../../self-improve.md` (relative to this skill's directory).

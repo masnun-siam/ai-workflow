@@ -73,3 +73,7 @@ JSON:
 ## Smoke test
 
 Feed the skill a Laravel app with an older `composer.json`, published config, and a few first-party packages. Verify that the response identifies real dependency blockers, highlights Laravel-specific risk areas, and returns a short phased upgrade plan instead of a generic package-update checklist.
+
+## Self-improve
+
+After the task, follow `../../self-improve.md` (relative to this skill's directory).

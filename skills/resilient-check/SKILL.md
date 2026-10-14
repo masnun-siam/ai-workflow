@@ -79,3 +79,7 @@ final class SyncInvoiceJob implements ShouldQueue
 ## Smoke test
 
 Use the skill on a Laravel queue-driven integration flow with synchronous API calls, naive retries, and no deduplication. Verify that the response references job-level settings like `tries`, `backoff`, and timeouts, flags idempotency gaps, and recommends concrete Laravel resilience fixes instead of general reliability advice.
+
+## Self-improve
+
+After the task, follow `../../self-improve.md` (relative to this skill's directory).

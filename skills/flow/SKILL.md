@@ -86,3 +86,7 @@ The boundary after `create-prd` asks "Approve the PRD, file its epics, and conti
 - No state file. The artifacts (vault note, PRD, issues) are the state, which is why `/flow <argument>` can resume.
 - One feature per run. The epics `/create-prd approve` files are the only tracking issues; this skill never creates another.
 - Never launch a dispatch without an explicit "Launch", and never create GitHub issues without the user's "Continue" into the create-tasks (it runs the approve that files epics), gh-issue or refine-issues stage.
+
+## Self-improve
+
+After the task, follow `../../self-improve.md` (relative to this skill's directory).

@@ -631,3 +631,7 @@ Every site above that would call ScheduleWakeup or arm a Monitor has its own hea
   report what it is waiting on and stop unless a human just re-invoked you.
 - If any `gh`/`git` call fails unexpectedly (not a designed stop), retry once;
   a second failure is a stop-and-report, not a silent skip.
+
+## Self-improve
+
+After the task, follow `../../self-improve.md` (relative to this skill's directory).

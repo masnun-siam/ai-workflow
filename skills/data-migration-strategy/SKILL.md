@@ -96,3 +96,7 @@ DB::transaction(function () use ($user, $payload): void {
 ## Smoke test
 
 Run the skill on a Laravel migration scenario that requires a new table, a large backfill, and staged cutover from old reads and writes to new ones. Verify that the response recommends an appropriate expand-contract or double-write strategy, includes verification and rollback steps, and delays destructive cleanup until after validation.
+
+## Self-improve
+
+After the task, follow `../../self-improve.md` (relative to this skill's directory).

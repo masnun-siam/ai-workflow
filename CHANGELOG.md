@@ -4,6 +4,11 @@
 
 ### Added
 
+- **Skills improve themselves with approval.** Every skill under `skills/` now ends with a
+  `## Self-improve` pointer to `self-improve.md`. During a run the skill notes what its
+  instructions got wrong or left out. When the run finishes it asks once which fixes to write
+  back to its SKILL.md. Unattended runs (headless, `/run-issue`, `/pr-grind`, `/flow`, herdr)
+  never ask: they append to `~/.claude/skills/_shared/pending-improvements.md` instead.
 - **Peer review picker in `aiw ui`.** New run's named form (for `create-prd`, `intake`, `dump` and
   `gh-issue`), its Custom command form, and the Flow's PRD step each have a Peer review box. Tick
   it to pick the reviewers the command offers; critical starts ticked. A custom prompt is asked to
@@ -159,6 +164,8 @@
 
 ### Fixed
 
+- **`aiw gitnexus` no longer installs gitnexus skills into the repo.** `analyze` now passes
+  `--skip-skills` alongside `--skip-agents-md`, so it stops writing `.claude/skills/gitnexus/`.
 - **A waiting session's answer form no longer gets stuck.** A headless session that scheduled a
   wakeup stayed alive after `aiw ask`, so every Submit got "session process is still running". The
   headless prompt now forbids ScheduleWakeup, and the answer form disables Submit with a note while

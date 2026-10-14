@@ -324,3 +324,7 @@ Each use of this skill is also a test of it.
 - No customer PII, secrets or production data in the PRD. If the interview surfaces any, refer to it generically.
 - The PRD is a deliverable for the user. Don't add session URLs, local absolute paths or "Claude-Session" lines to it.
 - Don't commit or push the repo; the only push this skill ever performs is the confirmed wiki push.
+
+## Self-improve
+
+After the task, follow `../../self-improve.md` (relative to this skill's directory).

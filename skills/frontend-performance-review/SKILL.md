@@ -75,3 +75,7 @@ const AnalyticsPage = defineAsyncComponent(() =>
 ## Smoke test
 
 Run the skill on a Laravel frontend that uses large images, shared JS entrypoints, and mobile-heavy layouts. Verify that the response flags concrete performance bottlenecks, responsive UX issues, and Laravel-specific improvements such as Vite code splitting, lazy loading, or Livewire/Inertia payload reductions.
+
+## Self-improve
+
+After the task, follow `../../self-improve.md` (relative to this skill's directory).
