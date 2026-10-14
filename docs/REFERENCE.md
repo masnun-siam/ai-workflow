@@ -58,6 +58,12 @@ aiw ui [--port N] [--allow-host HOST]  local web UI to start and track sessions
 - To reach it over a tailnet: `tailscale serve --bg 8420`, then
   `aiw ui --allow-host <machine>.<tailnet>.ts.net`.
 
+**Flow and an approved PRD.** When the PRD step's feature folder already has an Approved PRD, Flow
+doesn't rerun create-prd on it: it runs `create-prd --update "<folder>/PRD.md" <your request>` (the
+request is added as a decision and, when it adds scope, a new FR) and then Tasks, which adds only
+the new tasks and keeps existing issue numbers. When Dump files the input as a task and Flow skips
+PRD and Tasks, those steps say so and offer **Write a PRD instead**.
+
 **No repo yet.** For a new idea, the repo picker on New run and Flow has **No repo yet**: the
 session runs in the notes vault (Settings → Notes vault) instead of a checkout. It works for
 create-prd, dump, intake and a custom prompt; other commands say they need a repo. New run then

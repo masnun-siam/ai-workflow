@@ -36,8 +36,23 @@ const TERMINAL = ['done', 'failed', 'stopped'];
 export function parseNext(text) {
   const all = [...String(text || '').matchAll(/^[ \t]*[`*]*→ next: (\S+)[ \t]*(.*?)[`*]*[ \t]*$/gm)];
   const m = all.at(-1);
-  return m ? { command: m[1], arg: m[2].trim() } : null;
+  // A quoted argument ("05-Work/A B/C") is the path inside the quotes.
+  return m ? { command: m[1], arg: m[2].trim().replace(/^(["'])(.*)\1$/, '$2') } : null;
 }
+
+// An approved PRD is not rewritten: the flow's new request is added to it with create-prd --update
+// (one decision line), and Tasks then adds only what changed, keeping existing issue numbers.
+export function prdUpdateArgs(folder, text, today = new Date().toISOString().slice(0, 10)) {
+  const ask = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+  return `--update "${String(folder).replace(/\/+$/, '')}/PRD.md" ${ask} — requested in Flow on ${today}, add it to the scope (Flow dump)`;
+}
+
+// Dump filed the input as a task in a note (Tasks.md, Bugs.md), so Flow went straight to Issues.
+// The feature folder the note lives in, for "Write a PRD instead"; null when tasks is not such a note.
+export const taskNoteFolder = (tasks) => {
+  const m = /^(05-Work\/[^/]+\/[^/]+)\/[^/]+\.md$/.exec(String(tasks || '').trim());
+  return m ? m[1] : null;
+};
 
 // ponytail: one issues step, two commands — a docs/tasks list goes to /refine-issues, a vault note to /gh-issue.
 export const issuesCommand = (input) => (/(^|\/)docs\/tasks\/[^/]+\.md$/.test(String(input || '').trim()) ? 'refine-issues' : 'gh-issue');
@@ -53,10 +68,13 @@ const NEXT = {
 };
 
 // Turn a step's final `result` event into a state patch, or {error} saying why the next step stays locked.
-export function handoff(step, result) {
+export function handoff(step, result, command = '') {
   if (!result) return { error: 'The session ended without a final result.' };
   if (result.is_error) return { error: 'The session failed. Continue in terminal.' };
   const next = parseNext(result.text);
+  // `create-prd --update <prd> …` prints no next line by design: the PRD it updated is Tasks' input.
+  const upd = step === 'prd' && !next && /^\/(?:[\w-]+:)?create-prd\s+--update\s+(?:"([^"]+)"|(\S+))/.exec(String(command));
+  if (upd) return { prd: upd[1] || upd[2] };
   if (!next) return { error: step === 'dump' ? 'No → next: line found: dump ends the flow for a standalone task, meeting notes or unclassifiable.' : 'The result has no → next: line.' };
   const cmd = next.command.replace(/^\//, '').split(':').pop();
   const field = (NEXT[step] || {})[cmd];
@@ -255,7 +273,8 @@ export class Flow extends Component {
   start = async (step) => {
     const { text, folder, prd, tasks } = this.state;
     const { repo } = this.fields();
-    const args = { dump: text, prd: folder, tasks: prd, issues: tasks }[step.key].trim();
+    const updating = step.key === 'prd' && this.approvedPrd(folder);
+    const args = updating ? prdUpdateArgs(folder, text) : { dump: text, prd: folder, tasks: prd, issues: tasks }[step.key].trim();
     const lenses = step.key === 'prd' ? pickedLenses(this.state.peerReview, this.state.lenses, this.state.offers) : null;
     if (!repo || !args) { this.setState({ why: !repo ? 'Pick a repo first.' : 'Fill in the field above first.' }); return; }
     if (lenses && !lenses.length) { this.setState({ why: 'Tick at least one reviewer.' }); return; }
@@ -301,7 +320,7 @@ export class Flow extends Component {
       result = ((body && body.events) || []).filter((e) => e && e.kind === 'result').at(-1) || null;
     } catch { /* falls through to "no final result" */ }
     if (this.gone) return;
-    const out = meta.outcome === 'done' ? handoff(step, result) : { error: `The session ${meta.outcome}. Continue in terminal.` };
+    const out = meta.outcome === 'done' ? handoff(step, result, meta.command) : { error: `The session ${meta.outcome}. Continue in terminal.` };
     if (out.error) { this.setState({ why: out.error }); return; }
     if (out.issues) out.issues = out.issues.join(' ');
     this.setState({ ...out, sid: '', meta: null, why: null, lastSid: sid });
@@ -353,6 +372,20 @@ export class Flow extends Component {
     return sideView({ view: s.view, at, runStep, folder: s.folder, prd: s.prd });
   }
 
+  // The vault PRD status of a feature folder, fetched once per folder: true when it is Approved.
+  approvedPrd(folder) {
+    const f = String(folder || '').trim();
+    if (!/^05-Work\/[^/]+\/[^/]+$/.test(f)) return false;
+    this.prdStatus = this.prdStatus || new Map();
+    if (!this.prdStatus.has(f)) {
+      this.prdStatus.set(f, null);
+      api('GET', `/api/vault/prd?folder=${encodeURIComponent(f)}`)
+        .then((r) => { this.prdStatus.set(f, r.ok && r.data && r.data.status); if (!this.gone) this.setState({ prdTick: (this.state.prdTick || 0) + 1 }); })
+        .catch(() => {});
+    }
+    return this.prdStatus.get(f) === 'Approved';
+  }
+
   input(step) {
     const id = `flow-${step.key}`;
     const field = { dump: 'text', prd: 'folder', tasks: 'prd', issues: 'tasks', dispatch: 'issues' }[step.key];
@@ -362,6 +395,7 @@ export class Flow extends Component {
       <${Tag} id=${id} class=${prose ? 'field flow-prose' : 'field mono'} rows=${prose ? 6 : undefined} type=${prose ? undefined : 'text'}
         placeholder=${step.placeholder} aria-describedby=${this.state.why ? 'flow-why' : undefined} aria-invalid=${this.state.why ? 'true' : undefined}
         value=${this.state[field]} disabled=${this.running()} onInput=${(e) => this.setState({ [field]: e.target.value })} />
+      ${step.key === 'prd' && this.approvedPrd(this.state.folder) && html`<p class="note">This feature's PRD is already approved. Flow adds your request to it (create-prd --update), and Tasks then adds only the new tasks, keeping existing issue numbers.</p>`}
       ${step.key === 'prd' && lensPicker({ id: 'flow-peer-review', offer: this.state.offers && this.state.offers.kinds['create-prd'], on: this.state.peerReview,
         picked: pickedLenses(true, this.state.lenses, this.state.offers), rounds: this.state.offers && this.state.offers.max_rounds, disabled: this.running(),
         onToggle: (on) => this.setState({ peerReview: on }), onPick: (lenses) => this.setState({ lenses }) })}
@@ -429,6 +463,8 @@ export class Flow extends Component {
                 ? html`<button type="button" class="flow-name-btn" aria-pressed=${shown ? 'true' : 'false'} title="Show this step's output"
                     onClick=${() => this.setState({ view: st.view === step.key ? null : step.key })}>${step.label}</button>`
                 : step.label} <span class="sr-only">(${STATE_TEXT[state]})</span>${state === 'skipped' && html` <span class="flow-tag">Skipped</span>`}</h2>
+              ${state === 'skipped' && taskNoteFolder(st.tasks) && html`<p class="note">Skipped: Dump filed this as a task in <span class="mono">${st.tasks}</span>, so it goes straight to Issues.${step.key === 'prd' && !this.running()
+                ? html` <button type="button" class="linkish" onClick=${() => this.setState({ folder: taskNoteFolder(st.tasks), prd: '', tasks: '', why: null })}>Write a PRD instead</button>` : ''}</p>`}
               ${state !== 'done' && html`<p class="note">${step.produces}</p>`}
               ${state === 'active' && st.vault && step.key === 'tasks' && html`
                 <p>The PRD is in your vault. Make the code repo for it first: a local git repo with the PRD in docs/prds/ and a README. Tasks then run there.</p>

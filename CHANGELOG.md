@@ -194,6 +194,12 @@
 
 ### Fixed
 
+- **Flow lost a new request routed into an approved feature.** Dump filed it as a task, Issues sent
+  it back to PRD, and create-prd/create-tasks found the old approved PRD and task list unchanged.
+  Now Flow's PRD step adds the request to an approved PRD (`create-prd --update`, which may add a
+  new FR) and moves on to Tasks, which adds only the new tasks. A skipped PRD/Tasks step says why
+  (Dump filed it as a task) and offers **Write a PRD instead**; a quoted `→ next:` path no longer
+  keeps its quotes.
 - **Flow's Issues pane showed a phantom "#42 Untitled issue"**: it took `gh issue create --help`
   for a create and its help text's example URL for a new issue. Help runs no longer count, and only
   issue URLs of the flow's own repo do.
