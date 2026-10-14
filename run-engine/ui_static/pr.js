@@ -2,7 +2,7 @@ import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { formatWhen } from './fmt.js';
 import { toast } from './toast.js';
-import { Peek, PeekLink, Md, Labels, Who } from './peek.js';
+import { Peek, PeekLink, Md, Labels, Who, forgetPeek } from './peek.js';
 
 const html = htm.bind(h);
 
@@ -166,6 +166,7 @@ export class MergeDialog extends Component {
       const res = await fetch(`/api/pulls/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${n}/merge`, { method: 'POST' });
       const b = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(b.error || `HTTP ${res.status}`);
+      forgetPeek(`/api/pulls/${owner}/${repo}/${n}`); // the popup must not reopen on the pre-merge state
       toast(`Merged #${n}`);
       this.props.onDone();
     } catch (err) {

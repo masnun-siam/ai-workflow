@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from shared import gh_json, run
 from ui_issue import _HTML, _links_out, _user, valid  # noqa: F401  (valid is re-exported for the server route)
+import ui_status
 from ui_status import _check
 
 PAGE = 100  # one page of files / commits / comments; a longer list says so and points at GitHub
@@ -192,4 +193,6 @@ def merge(owner: str, repo: str, n: str):
     p = run(["gh", "pr", "merge", n, "-R", f"{owner}/{repo}", "--squash"], timeout=120)
     if p.returncode != 0:
         return 409, {"error": ((p.stderr or p.stdout or "").strip().splitlines() or ["gh pr merge failed"])[-1]}
-    return 200, {"merged": True, "url": f"https://github.com/{owner}/{repo}/pull/{n}"}
+    url = f"https://github.com/{owner}/{repo}/pull/{n}"
+    ui_status.mark_merged(url)
+    return 200, {"merged": True, "url": url}
