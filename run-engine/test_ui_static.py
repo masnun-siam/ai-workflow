@@ -753,6 +753,20 @@ assert.equal(D.progressText([{ state: 'done' }, { state: 'running' }, { state: '
   assert.deepEqual([...C.quickPick(ci, 'safe')], ['a', 'c', 'd']); assert.equal(C.quickPick(ci, 'none').size, 0);
   for (const k of ['safe', 'merged', 'all', 'none']) assert.ok(!C.quickPick(ci, k).has('b'), `${k} never ticks unsaved work`);
   out('cleanup: grouped by repo; safe/merged/none quick picks never tick unsaved work');
+  {
+    let polls = 0; const prog = [];
+    const fake = async (url, opts) => {
+      if (opts && opts.method === 'POST') return { ok: true, status: 202, json: async () => ({ job: { id: 'j1', total: 2, done: 0, finished: false } }) };
+      polls++;
+      if (polls === 1) throw new Error('network blip');
+      return { ok: true, status: 200, json: async () => (polls < 3 ? { id: 'j1', total: 2, done: 1, finished: false } : { id: 'j1', total: 2, done: 2, finished: true, results: [{ key: 'a', ok: true }] }) };
+    };
+    const res = await C.send([{ key: 'a' }], (d, t) => prog.push(`${d}/${t}`), fake, async () => {});
+    assert.deepEqual(res, [{ key: 'a', ok: true }]); assert.deepEqual(prog, ['0/2', '0/2', '1/2'], 'progress per poll; a failed poll is retried');
+    const lost = async (url, opts) => (opts && opts.method === 'POST' ? { ok: true, status: 202, json: async () => ({ job: { id: 'j', total: 1, done: 0, finished: false } }) } : { ok: false, status: 404, json: async () => ({}) });
+    await assert.rejects(C.send([{ key: 'a' }], () => {}, lost, async () => {}), /lost/);
+    out('cleanup dialog: starts the job, polls progress, survives a blip, reports a lost job');
+  }
 }
 out('dispatch: actions and progress text');
 
