@@ -194,6 +194,9 @@
 
 ### Fixed
 
+- **Clean up failed with "HTTP 502" over the tailnet**: cleaning many runs in one request outlived
+  the proxy's timeout. Clean up is now a background job; the dialog shows "Cleaning 12 of 160…" and
+  polls until it finishes.
 - **Flow lost a new request routed into an approved feature.** Dump filed it as a task, Issues sent
   it back to PRD, and create-prd/create-tasks found the old approved PRD and task list unchanged.
   Now Flow's PRD step adds the request to an approved PRD (`create-prd --update`, which may add a

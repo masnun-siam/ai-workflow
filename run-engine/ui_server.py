@@ -203,6 +203,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 title = self.server.fetch_title(it["owner"], it["repo"], it["issue"]) if it.get("owner") else None
                 it["title"] = None if not title or title.endswith("(title unavailable)") else title
             self._json(200, {"items": items})
+        elif path.startswith("/api/cleanup/jobs/") and len(path.split("/")) == 5:
+            job = ui_cleanup.job_status(path.split("/")[4])
+            self._json(200, job) if job else self._json(404, {"error": "no such cleanup job"})
         elif path == "/api/flows":
             q = parse_qs(urlsplit(self.path).query)
             self._json(200, {"flows": [ui_flows.summary(f) for f in ui_flows.list_all(q.get("archived") == ["1"])]})
@@ -501,14 +504,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if not isinstance(asked, list) or not all(isinstance(a, dict) and isinstance(a.get("key"), str) for a in asked):
             self._json(400, {"error": "items must be a list of {key, force?}"})
             return
-        targets = {t["key"]: t for t in ui_cleanup.find_targets()}  # re-derived: the client never names paths
-        results = [
-            ui_cleanup.clean(targets[a["key"]], a.get("force") is True)
-            if a["key"] in targets
-            else {"key": a["key"], "ok": False, "error": "not cleanable (gone, live, or escalated)"}
-            for a in asked
-        ]
-        self._json(200, {"results": results})
+        # A job: cleaning many runs takes minutes, past a proxy's timeout. The dialog polls it.
+        self._json(202, {"job": ui_cleanup.start_job(asked)})
 
     def _stop(self, sid: str) -> None:
         try:

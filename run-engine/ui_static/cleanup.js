@@ -41,10 +41,28 @@ async function load() {
   return (await res.json()).items;
 }
 
-async function send(items) {
-  const res = await fetch('/api/cleanup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) });
+// Cleanup runs as a server job (many runs take minutes, longer than a proxy waits): start it, then
+// poll until it finishes. onProgress(done, total) after each poll.
+export async function send(items, onProgress = () => {}, fetchImpl = fetch, wait = (ms) => new Promise((r) => setTimeout(r, ms))) {
+  const res = await fetchImpl('/api/cleanup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return (await res.json()).results;
+  let job = (await res.json()).job;
+  let misses = 0;
+  while (!job.finished) {
+    onProgress(job.done, job.total);
+    await wait(1000);
+    try {
+      const r = await fetchImpl(`/api/cleanup/jobs/${job.id}`, { headers: { Accept: 'application/json' } });
+      if (r.status === 404) throw new Error('the cleanup job was lost (the UI restarted?)');
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      job = await r.json();
+      misses = 0;
+    } catch (e) {
+      if (/lost/.test(e.message) || ++misses > 10) throw e; // a few failed polls (a flaky tailnet) are retried
+    }
+  }
+  if (job.error) throw new Error(job.error);
+  return job.results;
 }
 
 export class CleanupDialog extends Component {
@@ -87,7 +105,7 @@ export class CleanupDialog extends Component {
     this.setState({ busy: true, error: '', failed: {} });
     let results;
     try {
-      results = await send(chosen.map((i) => ({ key: i.key, force: i.flags.length > 0 })));
+      results = await send(chosen.map((i) => ({ key: i.key, force: i.flags.length > 0 })), (done, total) => !this.gone && this.setState({ progress: `${done} of ${total}` }));
     } catch (e) {
       this.setState({ busy: false, error: `Cleanup failed: ${e.message}` });
       toast(`Cleanup failed: ${e.message}`, 'error');
@@ -144,7 +162,7 @@ export class CleanupDialog extends Component {
         <div class="cleanup-actions">
           ${forced > 0 && html`<span class="cleanup-warn">${forced} with unsaved work will be discarded</span>`}
           <button type="button" class="btn" onClick=${onClose}>Cancel</button>
-          <button type="button" class="btn btn--danger" disabled=${busy || n === 0} onClick=${this.confirm}>${busy ? 'Cleaning…' : items === null ? 'Clean up' : `Clean up ${n} run${n === 1 ? '' : 's'}`}</button>
+          <button type="button" class="btn btn--danger" disabled=${busy || n === 0} onClick=${this.confirm}>${busy ? `Cleaning${this.state.progress ? ` ${this.state.progress}` : ''}…` : items === null ? 'Clean up' : `Clean up ${n} run${n === 1 ? '' : 's'}`}</button>
         </div>
       </div>
     </div>`;

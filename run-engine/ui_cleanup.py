@@ -10,8 +10,10 @@ PR is merged. The main clone, checkouts.json and remote branches are never touch
 from __future__ import annotations
 
 import os
-import time
+import secrets
 import shutil
+import threading
+import time
 
 import maintree
 import ui_sessions
@@ -237,3 +239,56 @@ def clean(t: dict, force: bool) -> dict:
     for d in t["run_dirs"]:
         shutil.rmtree(d, ignore_errors=True)
     return {"key": key, "ok": True, "notes": notes}
+
+
+# --------------------------------------------------------------------------- background jobs
+# Cleaning many runs (git worktree removal, gh calls per merged PR) takes minutes; done inside one
+# request it outlives a proxy's timeout (tailscale serve answers 502). So a cleanup is a job: the
+# POST returns at once and the dialog polls its progress.
+
+_jobs: dict = {}
+_jobs_lock = threading.Lock()
+KEEP_JOBS = 20
+
+
+def start_job(asked: list, clean_one=None) -> dict:
+    """Start cleaning `asked` ([{key, force?}]) in a background thread; returns the job's first snapshot.
+    Targets are re-derived from disk in the thread: the client never names paths."""
+    job = {"id": secrets.token_hex(6), "total": len(asked), "done": 0, "results": [], "finished": False}
+    with _jobs_lock:
+        _jobs[job["id"]] = job
+        for old in list(_jobs)[:-KEEP_JOBS]:
+            _jobs.pop(old, None)
+
+    def work():
+        try:
+            targets = {t["key"]: t for t in find_targets()}
+            for a in asked:
+                r = (
+                    (clean_one or clean)(targets[a["key"]], a.get("force") is True)
+                    if a["key"] in targets
+                    else {
+                        "key": a["key"],
+                        "ok": False,
+                        "error": "not cleanable (gone, live, or escalated)",
+                    }
+                )
+                with _jobs_lock:
+                    job["results"].append(r)
+                    job["done"] += 1
+        except Exception as e:  # noqa: BLE001 - the dialog must hear about it, not poll forever
+            with _jobs_lock:
+                job["error"] = str(e)
+        finally:
+            with _jobs_lock:
+                job["finished"] = True
+
+    threading.Thread(target=work, daemon=True, name=f"cleanup-{job['id']}").start()
+    return job_status(job["id"])
+
+
+def job_status(jid: str):
+    """A copy of the job, or None."""
+    with _jobs_lock:
+        j = _jobs.get(jid)
+        return {**j, "results": list(j["results"])} if j else None

@@ -205,3 +205,30 @@ assert maintree.load("acme/widgets")["holder"] is None
 ok("main-tree cleanup releases the holder so the queue cannot wedge")
 
 print(f"{passed} passed")
+
+# a cleanup is a background job: the call returns at once, progress and results are polled
+import time as _t  # noqa: E402
+
+seen = []
+real_find = ui_cleanup.find_targets
+ui_cleanup.find_targets = lambda: [{"key": "a"}, {"key": "b"}]
+first = ui_cleanup.start_job(
+    [{"key": "a"}, {"key": "b", "force": True}, {"key": "gone"}],
+    clean_one=lambda t, force: (seen.append((t["key"], force)), _t.sleep(0.05), {"key": t["key"], "ok": True})[-1],
+)
+assert first["total"] == 3 and first["finished"] is False, first
+end = _t.time() + 5
+while not ui_cleanup.job_status(first["id"])["finished"] and _t.time() < end:
+    _t.sleep(0.02)
+job = ui_cleanup.job_status(first["id"])
+assert job["done"] == 3 and seen == [("a", False), ("b", True)], job
+assert [r["ok"] for r in job["results"]] == [True, True, False] and "not cleanable" in job["results"][2]["error"]
+assert ui_cleanup.job_status("nope") is None
+ui_cleanup.find_targets = lambda: (_ for _ in ()).throw(RuntimeError("disk gone"))
+boom = ui_cleanup.start_job([{"key": "a"}])
+end = _t.time() + 5
+while not ui_cleanup.job_status(boom["id"])["finished"] and _t.time() < end:
+    _t.sleep(0.02)
+assert ui_cleanup.job_status(boom["id"])["error"] == "disk gone"
+ui_cleanup.find_targets = real_find
+print("ok  cleanup job: returns at once, cleans in order, reports progress, results and errors")
