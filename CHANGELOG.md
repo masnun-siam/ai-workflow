@@ -100,12 +100,15 @@
 - **Bare `/create-prd --review` runs the critical reviewer alone.** It used to run critical, CEO, CTO
   and security, with only critical able to hold the PRD. Pick more lenses with
   `--review critical,ceo,cto,security`; every picked lens now has to approve.
-- **The Guided Flow has six steps.** `/flow` and the `aiw ui` Flow page run dump → PRD
-  (`/create-prd`) → tasks (`/create-tasks`) → issues (`/refine-issues`) → blockers
-  (`/fix-blockers`) → dispatch. The `→ next:` lines follow: `/create-prd` hands off to
-  `/create-tasks`, `/create-tasks` to `/refine-issues`, and `/refine-issues` hands an epic to
-  `/fix-blockers`. A bug's dump goes to `/gh-issue`, which files one issue for `herdr-dispatch`.
-  A flow saved mid-way at the old Issues step with a PRD now resumes at Tasks. The new commands
+- **The Guided Flow has five steps.** `/flow` and the `aiw ui` Flow page run dump → PRD
+  (`/create-prd`) → tasks (`/create-tasks`) → issues (`/refine-issues`) → dispatch. The `→ next:`
+  lines follow: `/create-prd` hands off to `/create-tasks`, `/create-tasks` to `/refine-issues`,
+  and `/refine-issues` hands an epic to `herdr-dispatch`. There is no Blockers step:
+  `/refine-issues` sets the blocked-by links itself, and on an older `gh` its report says to run
+  `/fix-blockers <epic>` first, which stays a standalone command. A bug's dump goes to
+  `/gh-issue`, which files one issue for `herdr-dispatch`.
+  A flow saved mid-way at the old Issues step with a PRD now resumes at Tasks, and one saved at
+  the old Blockers step resumes at Issues (a re-run matches the existing issues). The new commands
   can be started from the UI and are never auto-answered in AFK mode.
 - **Epics are linked and blocked natively (ADR 0003).** An epic's children are linked as
   sub-issues by `aiw epic split`, which also writes the `epic.json` Epic mode reads, and their
@@ -156,6 +159,12 @@
 
 ### Fixed
 
+- **A waiting session's answer form no longer gets stuck.** A headless session that scheduled a
+  wakeup stayed alive after `aiw ask`, so every Submit got "session process is still running". The
+  headless prompt now forbids ScheduleWakeup, and the answer form disables Submit with a note while
+  the process runs, then unlocks itself when it exits. A UI restart while such a process is alive
+  now watches it and stamps `ended_at` when it exits; before, nothing did, and the form stayed
+  locked for good.
 - **The flow.js stepper checks run again.** They sat in a `test_ui_static.py --view` block that
   nothing runs (and that fails earlier on unrelated stale checks); they now run in its default
   mode, so in the pre-push hook and CI.

@@ -1,7 +1,7 @@
 """Guided Flow records for the aiw ui: one JSON file per flow under <data_dir>/flows/.
 
 A flow is one feature taken from a raw idea to dispatched runs
-(Dump -> PRD -> Tasks -> Issues -> Blockers -> Dispatch).
+(Dump -> PRD -> Tasks -> Issues -> Dispatch).
 The browser owns the step logic (ui_static/flow.js); this module only stores what it hands over,
 lists flows for the switcher, imports flows from sessions that ran before flows were stored, and
 reads an Issues session's stream into per-issue progress rows.
@@ -26,7 +26,8 @@ class NotFound(Exception):
     pass
 
 
-# Each step's input: prd <- folder, tasks <- prd, issues <- tasks, blockers <- parent, dispatch <- issues.
+# Each step's input: prd <- folder, tasks <- prd, issues <- tasks, dispatch <- issues.
+# `parent` fed the removed Blockers step; it stays so an old record round-trips unchanged.
 FIELDS = ("repo", "text", "folder", "prd", "tasks", "parent", "issues", "sid", "dispatched")
 MAX_TEXT = 20000
 EMPTY_TTL = 86400  # a flow that never ran and holds no text is pruned a day after its last edit
@@ -141,8 +142,6 @@ def step(flow: dict) -> str:
     """Mirror of stepFromState in flow.js: the first step whose input is known but output isn't."""
     if flow.get("issues"):
         return "dispatch"
-    if flow.get("parent"):
-        return "blockers"
     if flow.get("tasks"):
         return "issues"
     if flow.get("prd"):

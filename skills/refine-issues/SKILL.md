@@ -61,7 +61,7 @@ its confirmation list goes in the final report instead. Every other gate still s
   gets its first option. Every other single-select field gets the option that best fits the
   issue's content and the PRD (for example Priority from the PRD's priority). Never invent option
   names. List every value set, per issue, in the report.
-- **Hand-off line:** print the `→ next:` line as text only. Never invoke `/fix-blockers`; the
+- **Hand-off line:** print the `→ next:` line as text only. Never invoke `herdr-dispatch`; the
   UI's next steps do that.
 
 ## Steps
@@ -213,9 +213,11 @@ its confirmation list goes in the final report instead. Every other gate still s
 9. **Report** the epic, the created, updated, closed and skipped issues with links, and the waves:
    which issues can be picked up now by different engineers and which are blocked by what. Do not
    start implementing. When the list spans several epics, name every epic and put the first in the
-   next line. End with this line, as the last line of your output:
+   next line. When the `--blocked-by` fallback was used, say before that line: "Run
+   `/fix-blockers <epic>` first: this gh could not set the blocked-by links." End with this line,
+   as the last line of your output:
 
-   `→ next: /fix-blockers <epic>`
+   `→ next: herdr-dispatch <epic>`
 
 ## Stop and ask when
 

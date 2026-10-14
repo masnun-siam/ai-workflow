@@ -14,6 +14,11 @@ export function viewMode(s) {
   return s.outcome === 'failed' ? 'failed' : 'state';
 }
 
+// The server takes an answer only once claude has exited (ui_runner stamps ended_at then).
+export function processLive(s) {
+  return !!s && s.outcome === 'waiting' && !s.ended_at;
+}
+
 export function displayLabel(label) {
   const l = String(label);
   return l.endsWith(REC_SUFFIX) ? l.slice(0, -REC_SUFFIX.length) : l;
@@ -142,6 +147,7 @@ export class Answer extends Component {
     const pending = session.pending_question;
     const form = viewMode(session) === 'form' ? { answers: initialAnswers(pending), sending: false, error: null } : null;
     this.setState({ loaded: true, notFound: false, loadError: false, session, form });
+    if (form && processLive(session)) this.watchExit(pending.id);
     const pr = form && planRun(session, pending);
     if (!pr) return;
     try {
@@ -152,8 +158,27 @@ export class Answer extends Component {
     }
   }
 
+  // Re-check until claude exits; the picks survive because only the session is replaced.
+  watchExit(round) {
+    clearTimeout(this.exitTimer);
+    this.exitTimer = setTimeout(async () => {
+      let r;
+      try {
+        r = await getJson(`/api/sessions/${encodeURIComponent(this.props.session)}`);
+      } catch {
+        r = { data: null };
+      }
+      if (this.gone) return;
+      const s = r.data;
+      if (!s || viewMode(s) !== 'form' || s.pending_question.id !== round) return this.load();
+      this.setState({ session: s });
+      if (processLive(s)) this.watchExit(round);
+    }, 3000);
+  }
+
   componentWillUnmount() {
     this.gone = true;
+    clearTimeout(this.exitTimer);
   }
 
   setOther(i, other) {
@@ -168,6 +193,7 @@ export class Answer extends Component {
   submit = async (e) => {
     e.preventDefault();
     const { session, form } = this.state;
+    if (processLive(session)) return;
     const pending = session.pending_question;
     const body = buildBody(pending, form);
     if (body.error) return this.setState({ form: { ...form, error: body.error } });
@@ -224,7 +250,8 @@ export class Answer extends Component {
             ${!embedded && html`<div class="waiting-line"><span class="dot"></span>Waiting on you${session.ended_at ? ' · no process running' : ''}</div>`}
             ${plan || embedded ? null : html`<div><div class="mono muted">${where} · ${String(session.command || '')}</div><h1>${n > 1 ? `${n} questions, answered together` : 'Answer needed'}</h1></div>`}
             ${qs.map((q, i) => this.renderQuestion(q, i, form.answers[i], form.sending, n === 1))}
-            <button type="submit" class="btn--primary" disabled=${form.sending}>${form.sending ? 'Sending' : n > 1 ? `Submit all ${n} and resume` : 'Submit and resume session'}</button>
+            <button type="submit" class="btn--primary" disabled=${form.sending || processLive(session)}>${form.sending ? 'Sending' : n > 1 ? `Submit all ${n} and resume` : 'Submit and resume session'}</button>
+            ${processLive(session) ? html`<p role="status" class="muted">The session is still running. Submit unlocks when it exits.</p>` : null}
             ${form.error ? html`<p role="alert">${form.stale ? html`<strong>Already answered.</strong> ` : null}${form.error}</p>` : null}
             ${form.stale ? html`<button type="button" onClick=${() => this.load()}>Reload question</button>` : null}
             ${!embedded && session.session_id ? html`<p class="muted fine">Resumes with <span class="mono">--resume ${String(session.session_id).slice(0, 8)}…</span>. If that session is gone, run-issue re-enters from the Ledger.</p>` : null}

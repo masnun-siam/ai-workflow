@@ -2018,6 +2018,29 @@ def restart_cases():
     assert ui_sessions.load(a)["ended_at"] == ended
     ok("dead pid: done / failed from stream, no _procs entry, no thread, ended_at stable")
 
+    # waiting session whose claude exited while the UI was down: ended_at stamped, round kept
+    w = mk(
+        "waiting", dead_pid(), S + RESULT + "\n", pid_started=OLD, pending_question={"id": "q-1", "status": "pending"}
+    )
+    ui_runner.reconcile()
+    rw = ui_sessions.load(w)
+    assert rw["status"] == "waiting" and rw["ended_at"] and rw["pending_question"]["id"] == "q-1", rw
+    assert w not in ui_runner._procs
+    ended = rw["ended_at"]
+    ui_runner.reconcile()
+    assert ui_sessions.load(w)["ended_at"] == ended
+    ok("dead pid, waiting: ended_at stamped, pending round kept, reconcile idempotent")
+
+    # waiting session whose claude is still alive: held in _procs (answers refused), nothing stamped
+    me = os.getpid()
+    w = mk("waiting", me, S, pid_started=ui_runner._proc_start(me), pending_question={"id": "q-1", "status": "pending"})
+    ui_runner.reconcile()
+    rw = ui_sessions.load(w)
+    assert w in ui_runner._procs and ui_runner._procs[w] is None and not rw["ended_at"], rw
+    assert rw["status"] == "waiting" and rw["pending_question"]["id"] == "q-1", rw
+    ui_runner._procs.pop(w, None)
+    ok("live pid, waiting: held in _procs, ended_at unset, round kept")
+
     # empty / null / junk
     cases = {"empty": "", "junk": "garbage\n[1,2,3]\n42\n", "missing": None}
     ids = {k: mk("running", dead_pid(), v, pid_started=OLD) for k, v in cases.items()}

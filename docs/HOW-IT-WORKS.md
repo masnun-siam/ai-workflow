@@ -398,7 +398,7 @@ flowchart TD
     E -->|PRD path| T
     E -->|task list| G
     E -->|bug note| BG
-    E -->|epic parent| B
+    E -->|epic parent| X
     E -->|issue numbers| X
     D --> C1{{"checkpoint"}}
     C1 -->|new feature, change request| P["/create-prd<br/>grill and fill the PRD"]
@@ -409,18 +409,16 @@ flowchart TD
     T --> C4{{"checkpoint"}}
     C4 --> G["/refine-issues<br/>sub-issues of each epic"]
     G --> C3{{"checkpoint"}}
-    C3 --> B["/fix-blockers<br/>blocked-by relations"]
+    C3 --> X["dispatch<br/>herdr-dispatch or #/dispatch"]
     BG -->|2 or more tasks| P
     BG -->|one issue| X
-    B --> C5{{"checkpoint"}}
-    C5 --> X["dispatch<br/>herdr-dispatch or #/dispatch"]
     X --> R["/run-issue × N,<br/>dependencies first"]
 ```
 
 **Entry detection.** `/flow` reads its argument and starts where the work already is: raw
 text starts at `/dump`, a vault feature folder (or its `Dump.md`) at `/create-prd`, a PRD path at
 `/create-tasks`, a task list at `/refine-issues`, a `Bugs.md` or `Tasks.md` note at `/gh-issue`,
-an epic parent at `/fix-blockers`, and issue numbers at dispatch. There is no state file; the
+and an epic parent or issue numbers at dispatch. There is no state file; the
 vault note, the PRD and the issues are the state, so half-done work resumes instead of starting
 over.
 
@@ -435,11 +433,13 @@ standalone task, weekly meeting notes or anything unclassifiable stops once it i
 **"Approve the PRD, file its epics, and continue to create-tasks"**, and Continue runs
 `/create-prd approve`. In the UI, starting the Tasks step is the approval.
 
-**The `→ next:` contract.** `/dump`, `/create-prd`, `/create-tasks`, `/refine-issues`,
-`/gh-issue` and `/fix-blockers` each end with one line, `→ next: <command> <argument>`, naming
+**The `→ next:` contract.** `/dump`, `/create-prd`, `/create-tasks`, `/refine-issues` and
+`/gh-issue` each end with one line, `→ next: <command> <argument>`, naming
 the next stage and the artifact it should take. `/flow` and the UI stepper read the next stage's
 input from that line, and you see exactly what to run if you are going by hand. No line means
-the flow stops there. `/refine-issues` hands the epic to `/fix-blockers`; `/gh-issue` ends
+the flow stops there. `/refine-issues` sets the blocked-by links itself and ends
+`→ next: herdr-dispatch <epic>`, so there is no Blockers step; on an older `gh` its report asks
+you to run `/fix-blockers <epic>` first. `/gh-issue` ends
 `→ next: herdr-dispatch <n>`, or `→ next: /create-prd <input>` when the work needs a PRD, which
 the UI Flow turns into a return to the PRD step.
 

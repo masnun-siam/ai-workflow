@@ -8,7 +8,7 @@ import { FlowSwitcher, IssueRows, NotePane, mergeRows } from './flowside.js';
 
 const html = htm.bind(h);
 
-// Guided Flow (#190): Dump → PRD → Tasks → Issues → Blockers → Dispatch. Each step runs its command as a headless
+// Guided Flow (#190): Dump → PRD → Tasks → Issues → Dispatch. Each step runs its command as a headless
 // session; its final `→ next:` line pre-fills the next step. Each flow is a server record
 // (ui_flows.py) at #/flow/<id>; the bare #/flow opens the most recently active one.
 const STEPS = [
@@ -20,9 +20,7 @@ const STEPS = [
   { key: 'tasks', label: 'Tasks', command: 'create-tasks', action: 'Approve it and break it into tasks', input: 'PRD path',
     produces: 'Approves the PRD, files its epic, and saves a parallel task list to docs/tasks/.' },
   { key: 'issues', label: 'Issues', command: 'refine-issues', action: 'Create the issues', input: 'Task list (docs/tasks/<slug>.md), or a Bugs.md / Tasks.md note',
-    produces: 'Files a refined sub-issue per task under the epic.' },
-  { key: 'blockers', label: 'Blockers', command: 'fix-blockers', action: 'Set the blockers', input: 'Epic parent issue number',
-    produces: 'Marks each issue blocked by the ones it depends on.' },
+    produces: 'Files a refined sub-issue per task under the epic, blocked by the ones it depends on.' },
   { key: 'dispatch', label: 'Dispatch', input: 'Issue numbers', produces: 'Starts a run for each issue.' },
 ];
 const STATE_TEXT = { done: 'Done', skipped: 'Skipped', active: 'Current step', locked: 'Not started' };
@@ -46,8 +44,7 @@ const NEXT = {
   prd: { 'create-tasks': 'prd' },
   tasks: { 'refine-issues': 'tasks', 'gh-issue': 'tasks' },
   // `create-prd` here is /gh-issue stopping on input that needs a PRD: back to the PRD step.
-  issues: { 'fix-blockers': 'parent', 'herdr-dispatch': 'issues', 'create-prd': 'restart' },
-  blockers: { 'herdr-dispatch': 'issues' },
+  issues: { 'herdr-dispatch': 'issues', 'create-prd': 'restart' },
 };
 
 // Turn a step's final `result` event into a state patch, or {error} saying why the next step stays locked.
@@ -63,17 +60,13 @@ export function handoff(step, result) {
     const issues = issueNumbers(next.arg);
     return issues.length ? { issues } : { error: 'The → next: line lists no issue numbers.' };
   }
-  if (field === 'parent') {
-    const [parent] = issueNumbers(next.arg);
-    return parent ? { parent: String(parent) } : { error: 'The → next: line names no parent issue.' };
-  }
   return next.arg ? { [field]: next.arg } : { error: 'The → next: line has no argument.' };
 }
 
-// The first step whose input is known but whose output isn't.
-export function stepFromState({ folder, prd, tasks, parent, issues } = {}) {
+// The first step whose input is known but whose output isn't. An old flow's `parent` (the removed
+// Blockers step) is ignored: it lands on Dispatch or Issues as its other fields say.
+export function stepFromState({ folder, prd, tasks, issues } = {}) {
   if (issues && issues.length) return 'dispatch';
-  if (parent) return 'blockers';
   if (tasks) return 'issues';
   if (prd) return 'tasks';
   if (folder) return 'prd';
@@ -120,7 +113,7 @@ export function flowLink(meta) {
 export function sideView({ view, at, runStep, folder, prd }) {
   const key = view || runStep || (at > 0 ? STEPS[at - 1].key : null);
   if (!key) return null;
-  if (key === 'issues' || key === 'blockers' || key === 'dispatch') return { kind: 'issues' };
+  if (key === 'issues' || key === 'dispatch') return { kind: 'issues' };
   if (key === 'dump') {
     if (runStep === 'dump') return { kind: 'filing' };
     return folder ? { kind: 'note', path: `${folder.replace(/\/+$/, '')}/Dump.md` } : prd ? { kind: 'note', path: prd } : null;
@@ -244,9 +237,9 @@ export class Flow extends Component {
   }
 
   start = async (step) => {
-    const { text, folder, prd, tasks, parent } = this.state;
+    const { text, folder, prd, tasks } = this.state;
     const { repo } = this.fields();
-    const args = { dump: text, prd: folder, tasks: prd, issues: tasks, blockers: parent }[step.key].trim();
+    const args = { dump: text, prd: folder, tasks: prd, issues: tasks }[step.key].trim();
     const lenses = step.key === 'prd' ? pickedLenses(this.state.peerReview, this.state.lenses, this.state.offers) : null;
     if (!repo || !args) { this.setState({ why: !repo ? 'Pick a repo first.' : 'Fill in the field above first.' }); return; }
     if (lenses && !lenses.length) { this.setState({ why: 'Tick at least one reviewer.' }); return; }
@@ -341,7 +334,7 @@ export class Flow extends Component {
 
   input(step) {
     const id = `flow-${step.key}`;
-    const field = { dump: 'text', prd: 'folder', tasks: 'prd', issues: 'tasks', blockers: 'parent', dispatch: 'issues' }[step.key];
+    const field = { dump: 'text', prd: 'folder', tasks: 'prd', issues: 'tasks', dispatch: 'issues' }[step.key];
     const prose = step.key === 'dump';
     const Tag = prose ? 'textarea' : 'input';
     return html`<label for=${id}>${step.input}</label>
@@ -399,9 +392,9 @@ export class Flow extends Component {
       ${this.combo.render(st, { id: 'flow-repo', error: why === 'Pick a repo first.' ? 'flow-why' : null })}
       <ol class="flow-steps">
         ${STEPS.map((step, i) => {
-          const skipped = (step.key === 'prd' && !folder) || (step.key === 'tasks' && !st.prd) || (step.key === 'blockers' && !st.parent);
+          const skipped = (step.key === 'prd' && !folder) || (step.key === 'tasks' && !st.prd);
           const state = i < at ? (skipped ? 'skipped' : 'done') : i === at ? 'active' : 'locked';
-          const shown = side && current && (current.kind === 'issues' ? ['issues', 'blockers', 'dispatch'].includes(step.key) && state === 'done' : st.view === step.key);
+          const shown = side && current && (current.kind === 'issues' ? ['issues', 'dispatch'].includes(step.key) && state === 'done' : st.view === step.key);
           return html`<li class=${`flow-step flow-${state}`} aria-current=${state === 'active' ? 'step' : undefined}>
             <span class="flow-mark" aria-hidden="true">${state === 'done' ? '✓' : i + 1}</span>
             <div class="flow-body">
@@ -420,7 +413,7 @@ export class Flow extends Component {
                 ${this.input(step)}
                 ${issues.length ? html`<a class="btn btn--primary" href=${dispatchHref(issues)} onClick=${this.dispatched}>Open Dispatch with ${issues.join(', ')}</a>` : null}`}
               ${state === 'done' && html`<p class="note mono">${{ dump: folder || st.prd || st.tasks, prd: st.prd, tasks: st.tasks,
-                issues: st.parent ? `#${st.parent}` : issues.join(', '), blockers: issues.join(', ') }[step.key]}</p>`}
+                issues: issues.join(', ') }[step.key]}</p>`}
             </div>
           </li>`;
         })}
