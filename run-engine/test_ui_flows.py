@@ -202,6 +202,19 @@ assert "Never call ScheduleWakeup" in ui_runner._system({})
 assert "Never run herdr" in ui_runner._system({"flow_id": "f-1"})
 print("ok Flow auto mode prompt only for flow sessions")
 
+# ---- `gh issue create --help` creates nothing; only the flow repo's issue URLs count
+helped = [
+    use("H", "Bash", {"command": "cd x; gh issue list; gh issue create --help | grep -E 'parent|blocked'"}),
+    res("H", "  $ gh issue create --parent https://github.com/cli/go-gh/issues/42"),
+]
+assert ui_flows.issue_progress(helped) == {"reading": True, "rows": []}
+mixed = [
+    use("M", "Bash", {"command": 'gh issue create --title "A" --body x'}),
+    res("M", "see https://github.com/cli/go-gh/issues/42\nhttps://github.com/o/r/issues/7\n"),
+]
+assert [(r["number"], r["state"]) for r in ui_flows.issue_progress(mixed, "O/R")["rows"]] == [(7, "created")]
+print("ok issue progress: --help is not a create; other repos' issue URLs are ignored")
+
 # ---- a create loop: one command, a shell-variable title, several URLs -> one row per issue
 loop = [
     use("L", "Bash", {"command": 'for k in 0 1 2; do gh issue create --title "${titles[$k]}" --body-file b$k; done'}),
