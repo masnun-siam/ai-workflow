@@ -177,6 +177,17 @@ def read_checkouts() -> dict:
     return data if isinstance(data, dict) else {}
 
 
+def rename_checkout(old: str, new: str) -> bool:
+    """Re-key one registry entry (old -> new), keeping its path. False when old is missing or new
+    is already registered, so nothing is overwritten."""
+    current = read_checkouts()
+    if old not in current or any(k.lower() == new.lower() for k in current):
+        return False
+    current[new] = current.pop(old)
+    _write_holder(checkouts_path(), current)
+    return True
+
+
 def register_checkout(slug: str, path: str) -> None:
     """Atomically add slug -> path to the registry. Writes only the slug/path
     pair given — never os.environ, never .env content."""

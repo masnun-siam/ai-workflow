@@ -257,7 +257,7 @@ def list_sessions() -> list:
     return records
 
 
-_LIVE = ("starting", "running", "waiting", "limited")
+_LIVE = ("starting", "running", "waiting", "limited", "queued")
 
 
 def last_tokens(sid: str):

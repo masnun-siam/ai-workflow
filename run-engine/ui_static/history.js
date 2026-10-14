@@ -8,7 +8,7 @@ import { openCleanup } from './cleanup.js';
 const html = htm.bind(h);
 
 const DASH = '—';
-const OUTCOMES = ['starting', 'running', 'waiting', 'limited', 'done', 'failed', 'stopped'];
+const OUTCOMES = ['queued', 'starting', 'running', 'waiting', 'limited', 'done', 'failed', 'stopped'];
 
 export function rowOutcome(s) {
   return s.outcome === 'waiting' || s.waiting === true ? 'waiting' : s.outcome;
@@ -36,6 +36,7 @@ export function rowAction(s) {
       return { kind: 'post', label: 'Resume now', method: 'POST', url: `/api/sessions/${encodeURIComponent(s.id)}/resume` };
     case 'stopped':
       return { kind: 'post', label: 'Resume', method: 'POST', url: `/api/sessions/${encodeURIComponent(s.id)}/resume` };
+    case 'queued':
     case 'running':
     case 'starting':
       return { kind: 'link', label: 'Open', href: transcriptHref(s) };

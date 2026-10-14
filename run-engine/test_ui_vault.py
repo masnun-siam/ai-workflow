@@ -124,6 +124,14 @@ co = dispatch.read_checkouts()
 assert "local/shop" not in co and co["acme/shop"] == made["path"] and co["local/empty"] == bare["path"]
 ok("promote: local/<name> becomes owner/repo when an origin appears; others untouched")
 
+# a local repo whose origin name is already another checkout stays local and says why
+taken = ui_vault.create_repo(parent, "dup")
+subprocess.run(["git", "-C", taken["path"], "remote", "add", "origin", "https://github.com/acme/shop.git"], check=True)
+ui_repos.promote_local()
+assert dispatch.read_checkouts()["local/dup"] == taken["path"], "nothing overwritten"
+assert not dispatch.rename_checkout("local/dup", "ACME/shop") and not dispatch.rename_checkout("gone/x", "a/b")
+ok("promote: a taken owner/repo is never overwritten")
+
 # --- no-repo sessions run in the vault, only for the commands that allow it
 started = []
 ui_runner.start = lambda text, cwd, link=None, **kw: started.append((text, cwd, link)) or {"id": "x"}
@@ -145,6 +153,8 @@ s, res = ui_repos.start_session({"no_repo": True, "command": "dump", "args": "x"
 assert s == 400, res
 s, res = ui_repos.start_session({"repo": "local/empty", "command": "run-issue", "args": "7"})
 assert s == 400 and "GitHub remote" in res["error"], res
+s, res = ui_repos.start_session({"repo": "local/dup", "command": "run-issue", "args": "7"})
+assert s == 400 and "already registered to another checkout" in res["error"], res
 assert json.dumps(started)  # nothing odd went to the runner
 ok("no-repo sessions: vault cwd, folder hint, create-prd --to obsidian; other commands and local repos refused")
 

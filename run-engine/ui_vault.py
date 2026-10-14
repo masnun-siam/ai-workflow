@@ -17,6 +17,7 @@ import subprocess
 
 import dispatch
 import ui_settings
+from shared import run
 
 WORK = "05-Work"
 NO_REPO_COMMANDS = ("create-prd", "dump", "intake")  # plus the custom prompt
@@ -183,7 +184,7 @@ def create_repo(parent: str, name: str, prd_folder=None, root=None) -> dict:
             raise ValueError(f"no PRD.md in {prd_folder}") from e
     os.makedirs(path)
     try:
-        r = subprocess.run(["git", "init", "-q", "-b", "main", path], capture_output=True, text=True, timeout=30)
+        r = run(["git", "init", "-q", "-b", "main", path], timeout=30)  # never raises: a missing git is a 400
         if r.returncode != 0:
             raise ValueError(f"git init failed: {(r.stderr or '').strip()}")
         files = ["README.md"]

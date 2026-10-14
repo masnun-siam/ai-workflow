@@ -125,17 +125,38 @@ export class CreateRepoDialog extends Component {
   state = { name: repoName(this.props.name), parent: '', prdFolder: this.props.prdFolder || '', prd: null, busy: false, error: '' };
 
   componentDidMount() {
+    this.opener = document.activeElement; // focus goes back here on close
     this.checkPrd();
+    setTimeout(() => this.root && this.root.querySelector('#cr-name')?.focus(), 0);
   }
 
+  componentWillUnmount() {
+    if (this.opener && this.opener.isConnected) this.opener.focus();
+  }
+
+  // Esc closes this dialog only: the page's own Esc (go back) must not see it.
+  keys = (e) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation();
+    this.props.onClose();
+  };
+
+  // The PRD folder's status, for the folder as typed now: {exists, status, title, folder} or null.
   checkPrd = async () => {
     const folder = this.state.prdFolder.trim();
-    if (!folder) return this.setState({ prd: null });
+    if (!folder) {
+      this.setState({ prd: null });
+      return null;
+    }
     try {
       const r = await fetch(`/api/vault/prd?folder=${encodeURIComponent(folder)}`, { headers: { Accept: 'application/json' } });
-      this.setState({ prd: r.ok ? await r.json() : { exists: false } });
+      const prd = r.ok ? await r.json() : { exists: false, folder };
+      this.setState({ prd });
+      return prd;
     } catch {
       this.setState({ prd: null });
+      return null;
     }
   };
 
@@ -152,8 +173,10 @@ export class CreateRepoDialog extends Component {
 
   create = async (e) => {
     e.preventDefault();
-    const { name, parent, prdFolder, prd } = this.state;
+    const { name, parent, prdFolder } = this.state;
     if (!name || !parent) return this.setState({ error: !name ? 'Name the repo' : 'Choose the folder to create it in' });
+    // Check the folder as typed now, not a status fetched for an earlier value.
+    const prd = prdFolder && (this.state.prd?.folder === prdFolder.trim() ? this.state.prd : await this.checkPrd());
     if (prdFolder && !(prd && prd.exists)) return this.setState({ error: 'No PRD.md in that vault folder' });
     this.setState({ busy: true, error: '' });
     try {
@@ -168,7 +191,7 @@ export class CreateRepoDialog extends Component {
   };
 
   render({ onClose, withPrd }, { name, parent, prdFolder, prd, busy, error }) {
-    return html`<div class="overlay" onMouseDown=${(e) => e.target === e.currentTarget && onClose()}>
+    return html`<div class="overlay" ref=${(el) => { this.root = el; }} onKeyDown=${this.keys} onMouseDown=${(e) => e.target === e.currentTarget && onClose()}>
       <form class="dialog create-repo" role="dialog" aria-modal="true" aria-labelledby="cr-h" onSubmit=${this.create}>
         <h2 id="cr-h">Create a repo</h2>
         <p class="muted">Makes a local git repo with a README${withPrd ? ' and the PRD in docs/prds/' : ''} and adds it to your repos as ${'local/<name>'}. Nothing is committed or pushed; once you add a GitHub remote, aiw picks up its real name.</p>
@@ -181,7 +204,7 @@ export class CreateRepoDialog extends Component {
         </div>
         ${parent && name && html`<p class="note mono">${parent.replace(/\/+$/, '')}/${name}</p>`}
         ${withPrd && html`<label for="cr-prd">PRD from the vault folder</label>
-          <input id="cr-prd" type="text" class="field" value=${prdFolder} onInput=${(e) => this.setState({ prdFolder: e.target.value })} onBlur=${this.checkPrd} placeholder="05-Work/<Project>/<Feature>" />
+          <input id="cr-prd" type="text" class="field" value=${prdFolder} onInput=${(e) => this.setState({ prdFolder: e.target.value, prd: null })} onBlur=${this.checkPrd} placeholder="05-Work/<Project>/<Feature>" />
           ${prd && (prd.exists
             ? html`<p class="note">${prd.title || 'PRD'} · <span class=${prd.status === 'Approved' ? 'chip chip-done' : 'chip chip-waiting'}>${prd.status || 'no status'}</span>${prd.status !== 'Approved' ? ' The PRD is not approved yet; you can still create the repo.' : ''}</p>`
             : html`<p class="note error">No PRD.md in that folder.</p>`)}`}
@@ -202,13 +225,18 @@ export class NewIdeaPanel extends Component {
   state = { prd: null, creating: false, made: null };
 
   componentDidMount() {
+    this.load();
+  }
+
+  load = () => {
     const folder = this.props.meta.vault_folder;
     if (!folder) return;
+    this.setState({ prd: null });
     fetch(`/api/vault/prd?folder=${encodeURIComponent(folder)}`, { headers: { Accept: 'application/json' } })
-      .then((r) => (r.ok ? r.json() : null))
+      .then((r) => (r.ok ? r.json() : { error: true }))
       .then((prd) => !this.gone && this.setState({ prd }))
-      .catch(() => {});
-  }
+      .catch(() => !this.gone && this.setState({ prd: { error: true } }));
+  };
 
   componentWillUnmount() {
     this.gone = true;
@@ -222,6 +250,7 @@ export class NewIdeaPanel extends Component {
       ${made ? html`<p>Created <b class="mono">${made.slug}</b> at <span class="mono">${made.path}</span>. It's in your repos now; start a run there from <a href="#/new">New run</a>.</p>`
         : !folder ? html`<p class="muted">This session ran without a suggested vault folder. Create the repo once its PRD is approved, and name the PRD's folder in the dialog.</p>`
         : !prd ? html`<p class="muted">Checking the PRD in <span class="mono">${folder}</span>…</p>`
+        : prd.error ? html`<p class="error">Could not read the PRD in <span class="mono">${folder}</span>. <button type="button" class="linkish" onClick=${this.load}>Retry</button></p>`
         : !prd.exists ? html`<p class="muted">No PRD.md in <span class="mono">${folder}</span> yet. If the session filed it elsewhere, name that folder in the dialog.</p>`
         : approved ? html`<p>The PRD <b>${prd.title}</b> is approved. Make its code repo: a local git repo with the PRD in docs/prds/ and a README.</p>`
         : html`<p class="muted">The PRD <b>${prd.title}</b> is ${prd.status || 'not approved'}. Once it's approved, create its repo here.</p>`}

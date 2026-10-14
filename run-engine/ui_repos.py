@@ -24,7 +24,6 @@ import ui_runner
 import ui_sessions
 import ui_settings
 import ui_vault
-from stack import _write_holder
 
 NAMED = (
     "run-issue",
@@ -57,18 +56,17 @@ _start_lock = threading.Lock()
 def promote_local() -> None:
     """A local/<name> repo (made by Create repo) that has since got a GitHub origin is re-registered
     under its real owner/repo, so GitHub steps work without the user touching the registry."""
-    current = dispatch.read_checkouts()
-    changed = False
-    for slug, path in list(current.items()):
-        if not (slug.startswith("local/") and isinstance(path, str) and os.path.isdir(path)):
-            continue
-        m = _ORIGIN_RE.search(_git(path, "remote", "get-url", "origin"))
-        new = f"{m.group(1)}/{m.group(2)}" if m else None
-        if new and not any(k.lower() == new.lower() for k in current):
-            current[new] = current.pop(slug)
-            changed = True
-    if changed:
-        _write_holder(dispatch.checkouts_path(), current)
+    for slug, path in list(dispatch.read_checkouts().items()):
+        if slug.startswith("local/") and isinstance(path, str) and os.path.isdir(path):
+            new = origin_slug(path)
+            if new:
+                dispatch.rename_checkout(slug, new)  # no-op when that name is already another checkout
+
+
+def origin_slug(path: str):
+    """owner/repo of a checkout's GitHub origin, or None."""
+    m = _ORIGIN_RE.search(_git(path, "remote", "get-url", "origin"))
+    return f"{m.group(1)}/{m.group(2)}" if m else None
 
 
 def list_repos() -> list:
@@ -349,8 +347,11 @@ def start_session(body: dict):
         else:
             cwd, slug = resolve_repo(repo)
             if slug and slug.startswith("local/") and family(text) in _GITHUB_COMMANDS:
+                taken = origin_slug(cwd)  # set means promote_local found that name already registered
                 raise ValueError(
-                    f"{slug} has no GitHub remote yet: add one (git remote add origin …), then run {family(text)}"
+                    f"{slug}'s origin {taken} is already registered to another checkout: remove one, then run {family(text)}"
+                    if taken
+                    else f"{slug} has no GitHub remote yet: add one (git remote add origin …), then run {family(text)}"
                 )
     except ValueError as exc:
         return 400, {"error": str(exc)}
