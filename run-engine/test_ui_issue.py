@@ -34,3 +34,35 @@ assert d["author"] == "ghost" and d["assignees"] == ["a"] and d["milestone"] == 
 assert 'target="_blank"' in d["body_html"] and d["comment_count"] == 2 and len(d["comments"]) == 1
 assert ui_issue.shape({"pull_request": {}}, [])["is_pr"]
 print("  ok  ui_issue")
+
+rows = [
+    {
+        "number": 4,
+        "title": "Old",
+        "labels": [{"name": "bug"}],
+        "updatedAt": "2026-01-01T00:00:00Z",
+        "url": "https://g/4",
+    },
+    {
+        "number": 9,
+        "title": "PR",
+        "labels": [],
+        "updatedAt": "2026-02-01T00:00:00Z",
+        "isDraft": True,
+        "url": "javascript:x",
+    },
+    {"title": "no number"},
+]
+assert ui_issue.shape_open(rows) == [
+    {
+        "number": 4,
+        "title": "Old",
+        "labels": ["bug"],
+        "updated_at": "2026-01-01T00:00:00Z",
+        "draft": False,
+        "url": "https://g/4",
+    },
+    {"number": 9, "title": "PR", "labels": [], "updated_at": "2026-02-01T00:00:00Z", "draft": True, "url": None},
+]
+assert ui_issue.open_items("o", "r", "nope")[0] == 400
+print("ok  open issue/PR list shaping")

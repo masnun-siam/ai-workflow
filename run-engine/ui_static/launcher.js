@@ -1,7 +1,9 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { toast } from './toast.js';
-import { clockText } from './fmt.js';
+import { clockText, loadPref, savePref } from './fmt.js';
+import { RepoPicker } from './repopicker.js';
+import { CreateRepoDialog, FolderChooser, NO_REPO_COMMANDS, folderOf } from './vault.js';
 
 const html = htm.bind(h);
 const KEY = 'aiw.lastRepo';
@@ -20,6 +22,59 @@ const LABELS = {
   'issue-to-pr': 'Issue URL',
 };
 const COMMANDS = Object.keys(LABELS);
+// What each command does, grouped by the job it serves, so nobody has to know the slugs by heart.
+export const GROUPS = [
+  ['Build', [['run-issue', 'Issue to a tested, reviewed PR'], ['issue-to-pr', 'Guided: interview, plan, then PR']]],
+  ['Review', [['pr-review', 'Review a PR, post inline comments'], ['pr-fix-comments', "Fix a PR's review comments"], ['pr-grind', 'Loop review and fix on a stuck PR']]],
+  ['Plan', [['create-prd', 'Idea to a PRD with technical design'], ['refine-issues', 'Task list to refined GitHub issues'], ['gh-issue', 'File an issue with code context']]],
+  ['Capture', [['intake', 'Sentry link, BRD or note to a brief'], ['dump', 'File an idea into your notes vault'], ['day', 'Tasks and follow-ups into Todoist'], ['worklog', "A day's worklog from GitHub activity"]]],
+];
+// Worklog's day: today, yesterday, one picked day, or a range. The skill writes one daily note per
+// day, so a range starts one worklog run per day. Dates are local YYYY-MM-DD.
+export const WORKLOG_MAX_DAYS = 31;
+export const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const dayAfter = (iso) => { const [y, m, d] = iso.split('-').map(Number); return isoDay(new Date(y, m - 1, d + 1)); };
+
+// { dates } to run, or { error }. `today` is the local date, passed in for tests.
+export function worklogDates({ mode = 'today', day = '', from = '', to = '' }, today) {
+  if (mode === 'today' || mode === 'yesterday') return { dates: [mode] };
+  if (mode === 'day') {
+    if (!day) return { error: 'Pick a day' };
+    return day > today ? { error: 'Pick a day that has happened' } : { dates: [day] };
+  }
+  if (!from || !to) return { error: 'Pick both the first and the last day' };
+  if (from > to) return { error: 'The first day must come before the last' };
+  if (to > today) return { error: 'The last day cannot be in the future' };
+  const dates = [];
+  for (let d = from; d <= to && dates.length <= WORKLOG_MAX_DAYS; d = dayAfter(d)) dates.push(d);
+  return dates.length > WORKLOG_MAX_DAYS ? { error: `Pick at most ${WORKLOG_MAX_DAYS} days` } : { dates };
+}
+
+// Commands whose argument is one of the repo's open issues or PRs: New run lists them to pick from.
+export const PICK = { 'run-issue': 'issue', 'issue-to-pr': 'issue', 'pr-review': 'pr', 'pr-fix-comments': 'pr' };
+const CMD_KEY = 'aiw.lastCommand';
+
+// The argument text a picked issue/PR fills in, in the form each command takes (the URL is gh's).
+export function pickValue(command, slug, item) {
+  if (command === 'issue-to-pr') return item.url || `${slug}#${item.number}`;
+  if (command === 'pr-fix-comments') return `${slug}#${item.number}`;
+  return String(item.number);
+}
+
+// The number the typed argument names, in any form pickValue writes (or a pasted issue/PR URL).
+export function typedNumber(args) {
+  const m = /^#?(\d+)$/.exec(String(args ?? '').trim()) || /(?:#|\/(?:issues|pull)\/)(\d+)\/?$/.exec(String(args ?? '').trim());
+  return m ? Number(m[1]) : null;
+}
+
+// Typing filters the list: a number matches by prefix, words match the title or a label.
+export function matchItems(items, args) {
+  const q = String(args ?? '').trim().toLowerCase();
+  if (!q || typedNumber(q) && !/^#?\d+$/.test(q)) return items || [];
+  const num = /^#?(\d+)$/.exec(q);
+  return (items || []).filter((it) => (num ? String(it.number).startsWith(num[1])
+    : q.split(/\s+/).every((w) => it.title.toLowerCase().includes(w) || it.labels.some((l) => l.toLowerCase().includes(w)))));
+}
 const HINTS = {
   'run-issue': '5940, or an issue URL',
   'pr-grind': 'The Slack link of the review thread',
@@ -40,111 +95,28 @@ export function repoOptions(body) {
     .map((r) => ({ value: r.slug, label: `${r.name || r.slug} - ${r.path}`, name: r.name || r.slug, path: r.path }));
 }
 
-// A typed absolute path is usable as-is; the server validates that it is a git checkout.
-export function pathOption(query) {
-  const q = String(query ?? '').trim();
-  return q.startsWith('/') ? q : null;
+// New run and Flow keep { repos, repo, manual, path, canBrowse } in their state; this renders the
+// shared RepoPicker over it. A picked path sets manual mode; a picked repo clears it.
+// allowVault adds "No repo yet" (state.vault); allowCreate adds "Create a new repo…" (state.creating).
+export function hostRepoPicker(host, s, { id, error, after, allowVault = false, allowCreate = false }) {
+  return html`<${RepoPicker} id=${id} repos=${s.repos} value=${{ repo: s.manual ? '' : s.repo, path: s.manual ? s.path : '', vault: !!(allowVault && s.vault) }}
+    allowPath=${true} canBrowse=${s.canBrowse} error=${error} allowVault=${allowVault} allowCreate=${allowCreate}
+    onCreate=${() => host.setState({ creating: true })}
+    onPick=${(sel) => host.setState(sel.vault ? { vault: true } : sel.path ? { vault: false, manual: true, path: sel.path } : { vault: false, manual: false, repo: sel.repo, path: '' }, after)} />`;
 }
 
-// Options for the repo combobox: repos matching the query, a "use this path" entry for a typed
-// absolute path, and a closing "Other path" entry that switches to free entry.
-export function comboOptions(repos, query) {
-  const q = String(query ?? '').trim().toLowerCase();
-  const out = repos
-    .filter((r) => !q || r.label.toLowerCase().includes(q) || r.value.toLowerCase().includes(q))
-    .map((r) => ({ kind: 'repo', value: r.value, name: r.name, path: r.path }));
-  const path = pathOption(query);
-  if (path) out.push({ kind: 'path', path });
-  out.push({ kind: 'other' });
-  return out;
+// A repo made by Create repo joins the list and becomes the choice.
+export async function adoptCreatedRepo(host, made) {
+  let repos = host.state.repos;
+  try {
+    const r = await fetch('/api/repos', { headers: { Accept: 'application/json' } });
+    if (r.ok) repos = repoOptions(await r.json());
+  } catch { /* keep the old list; the new slug is still selected */ }
+  host.setState({ repos, repo: made.slug, manual: false, path: '', vault: false, creating: false });
 }
 
-// The repo combobox shared by New run and Flow: one input that filters repos as you type, also
-// takes an absolute path, plus the native folder picker. It is a render helper, not a component,
-// so its state (repo, manual, path, repoQuery, repoOpen, repoActive, browsing) lives on the host
-// and the host's own render tree contains the input. onPick runs after a repo or path is chosen.
-export function repoCombo(host, onPick = () => {}) {
-  const pick = (opt) => {
-    const patch = opt.kind === 'repo' ? { repo: opt.value, manual: false }
-      : opt.kind === 'path' ? { manual: true, path: opt.path } : { manual: true, path: '' };
-    host.setState({ ...patch, repoQuery: opt.kind === 'other' ? '' : null, repoOpen: false }, onPick);
-  };
-  // Native folder dialog opened by the server on this Mac; the server still validates the git checkout.
-  const browse = async () => {
-    const s = host.state;
-    const start = s.manual ? s.path : (s.repos.find((r) => r.value === s.repo) || {}).path;
-    host.setState({ browsing: true });
-    try {
-      const res = await fetch('/api/repos/browse', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ start: start || '' }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const { path } = await res.json();
-      if (path) host.setState({ manual: true, path, repoQuery: null, repoOpen: false }, onPick);
-    } catch {
-      toast('Could not open the folder picker');
-    } finally {
-      host.setState({ browsing: false });
-    }
-  };
-  const input = (e) => {
-    const q = e.target.value;
-    const path = pathOption(q);
-    host.setState({ repoQuery: q, repoOpen: true, repoActive: 0, ...(path ? { manual: true, path } : {}) }, path ? onPick : undefined);
-  };
-  const key = (e) => {
-    const s = host.state;
-    const opts = comboOptions(s.repos, s.repoQuery);
-    const n = opts.length;
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      e.preventDefault();
-      host.setState({ repoOpen: true, repoActive: ((s.repoActive || 0) + (e.key === 'ArrowDown' ? 1 : n - 1)) % n });
-    } else if (e.key === 'Enter' && s.repoOpen && n) {
-      e.preventDefault();
-      pick(opts[Math.min(s.repoActive || 0, n - 1)]);
-    } else if (e.key === 'Escape' && s.repoOpen) {
-      e.preventDefault();
-      host.setState({ repoOpen: false, repoQuery: null });
-    }
-  };
-  const render = ({ repos, repo, manual, path, repoQuery, repoOpen, repoActive, canBrowse, browsing }, { id, error }) => {
-    const list = `${id}-list`;
-    const known = repos.find((r) => r.value === repo) || {};
-    return html`<div class="repo-row">
-      ${repos.length
-      ? html`<div class="combo">
-          <input id=${id} type="text" class="combo-input" role="combobox" autocomplete="off" spellcheck="false"
-            aria-expanded=${repoOpen ? 'true' : 'false'} aria-controls=${list} aria-autocomplete="list"
-            aria-activedescendant=${repoOpen ? `${id}-opt-${repoActive || 0}` : undefined}
-            placeholder="Search repos or type an absolute path"
-            value=${repoQuery != null ? repoQuery : manual ? path : known.name || repo || ''}
-            title=${manual ? path : known.path || ''}
-            onInput=${input} onKeyDown=${key}
-            onFocus=${(e) => { e.target.select(); host.setState({ repoOpen: true }); }}
-            onBlur=${() => host.setState({ repoOpen: false, repoQuery: null })}
-            aria-invalid=${error ? 'true' : undefined} aria-describedby=${error || undefined} />
-          ${repoOpen && html`<ul id=${list} class="combo-list" role="listbox" aria-label="Repos">
-            ${comboOptions(repos, repoQuery).map((o, i) => html`<li id=${`${id}-opt-${i}`} role="option" key=${i}
-              aria-selected=${i === (repoActive || 0) ? 'true' : 'false'} class=${o.kind === 'repo' && !manual && o.value === repo ? 'current' : ''}
-              onMouseDown=${(e) => e.preventDefault()} onMouseEnter=${() => host.setState({ repoActive: i })} onClick=${() => pick(o)}>
-              ${o.kind === 'repo' ? html`<span>${o.name}</span><small class="mono">${o.path}</small>`
-                : o.kind === 'path' ? html`<span>Use path</span><small class="mono">${o.path}</small>`
-                : html`<span>Other path…</span><small>Type an absolute path to a git checkout</small>`}
-            </li>`)}
-          </ul>`}
-        </div>`
-      : html`<input id=${id} type="text" value=${path} onInput=${(e) => host.setState({ path: e.target.value }, onPick)}
-          aria-invalid=${error ? 'true' : undefined} aria-describedby=${error || undefined} />`}
-      ${canBrowse && html`<button type="button" class="browse-btn" aria-label="Browse for a folder" title="Browse for a folder"
-        disabled=${browsing} onClick=${browse}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-      </button>`}
-    </div>`;
-  };
-  return { render, pick };
-}
+// The no-repo fields a request carries when "No repo yet" is chosen.
+export const vaultBody = (s) => (s.vault ? { repo: '', no_repo: true, ...(folderOf(s.vf) ? { vault_folder: folderOf(s.vf) } : {}) } : {});
 
 // Reset time (epoch s) of the chosen account when it is rate limited, else null.
 export function limitedUntil(cmds, label, limits) {
@@ -166,16 +138,17 @@ export function argIssue(command, args) {
   return n > 0 ? n : null;
 }
 
-export function validate({ repo, path, manual, command, args }) {
+export function validate({ repo, path, manual, command, args, vault }) {
   const errors = {};
-  if (!String((manual ? path : repo) ?? '').trim()) errors.repo = 'Choose a repo or enter a path';
+  if (vault && !NO_REPO_COMMANDS.has(command)) errors.repo = `${command} needs a repo: pick one, or use create-prd, dump, intake or a custom prompt for a new idea`;
+  else if (!vault && !String((manual ? path : repo) ?? '').trim()) errors.repo = 'Choose a repo or enter a path';
   if (!OPTIONAL_ARGS.has(command) && !String(args ?? '').trim()) errors.args = `Enter ${LABELS[command].toLowerCase()}`;
   return Object.keys(errors).length ? errors : null;
 }
 
-export function validateCustom({ repo, path, manual, text }, lenses) {
+export function validateCustom({ repo, path, manual, text, vault }, lenses) {
   const errors = {};
-  if (!String((manual ? path : repo) ?? '').trim()) errors.repo = 'Choose a repo or enter a path';
+  if (!vault && !String((manual ? path : repo) ?? '').trim()) errors.repo = 'Choose a repo or enter a path';
   if (!String(text ?? '').trim()) errors.text = 'Enter a command or prompt';
   if (lenses && !lenses.length) errors.customLenses = 'Tick at least one reviewer';
   return Object.keys(errors).length ? errors : null;
@@ -241,20 +214,23 @@ export function outcome(status, body, command) {
   return { kind: 'error', message: err };
 }
 
-export function loadLastRepo(storage) {
-  try {
-    return storage.getItem(KEY) || null;
-  } catch {
-    return null;
-  }
-}
+export const loadLastRepo = (storage) => loadPref(storage, KEY) || null;
+export const saveLastRepo = (storage, value) => savePref(storage, KEY, value);
 
-export function saveLastRepo(storage, value) {
-  try {
-    storage.setItem(KEY, value);
-  } catch {
-    // storage unavailable: remembering the repo is best-effort
-  }
+// The argument after switching command. Free text carries over to free text. An issue or PR
+// carries over to a command taking the same kind, rewritten in that command's form (12, o/r#12 or
+// the URL); search words carry over as typed. Anything else would not parse, so it is cleared.
+export function switchArgs(from, to, args, slug, items) {
+  if (FREE_TEXT.has(from) && FREE_TEXT.has(to)) return args;
+  if (!PICK[from] || PICK[from] !== PICK[to]) return '';
+  const n = typedNumber(args);
+  if (n == null) return args;
+  // A reference to another repo is kept exactly as typed, never moved onto the selected repo.
+  const named = /(?:\/\/[^/\s]+\/|^)([\w.-]+\/[\w.-]+)(?:\/(?:issues|pull)\/\d+|#\d+)\/?$/.exec(String(args).trim());
+  if (named && named[1].toLowerCase() !== String(slug).toLowerCase()) return args;
+  // No repo to rewrite against (a manual path): keep it only if the new command takes the same form.
+  if (!slug) return pickValue(to, 'x/x', { number: n }) === pickValue(from, 'x/x', { number: n }) ? args : '';
+  return pickValue(to, slug, (items || []).find((it) => it.number === n) || { number: n });
 }
 
 export function makeSubmitter(fetchImpl) {
@@ -284,7 +260,7 @@ export function makeSubmitter(fetchImpl) {
 }
 
 export class Launcher extends Component {
-  state = { repos: [], repo: '', manual: false, path: '', command: 'run-issue', args: '', text: '', pending: false, errors: {}, result: null, form: 'named', repoQuery: null, repoOpen: false, repoActive: 0, canBrowse: false, browsing: false };
+  state = { repos: [], repo: '', manual: false, path: '', command: COMMANDS.includes(loadPref(globalThis.localStorage, CMD_KEY)) ? loadPref(globalThis.localStorage, CMD_KEY) : 'run-issue', args: '', text: '', pending: false, errors: {}, result: null, form: 'named', canBrowse: false };
 
   async componentDidMount() {
     fetch('/api/settings', { headers: { Accept: 'application/json' } })
@@ -326,26 +302,122 @@ export class Launcher extends Component {
       this.setState({ errors, result: null });
       return;
     }
-    this.submit = this.submit || makeSubmitter((...a) => fetch(...a));
-    const repo = (s.manual || !s.repos.length ? s.path : s.repo).trim();
+    const repo = this.repoValue();
     this.setState({ pending: true, form, errors: {}, result: null });
-    const r = await this.submit({ ...mkBody(repo), ...(s.claudeLabel ? { claude_cmd: s.claudeLabel } : {}), auto_grind: s.autoGrind === true, worktree: s.worktree !== false, review: s.review !== false });
+    const r = await this.post(mkBody(repo));
     if (!r) return;
     this.setState({ pending: false, result: r.kind === 'open' ? null : r });
     if (r.kind === 'open') {
-      saveLastRepo(globalThis.localStorage, repo);
+      this.remember(repo, form);
       toast('Session started');
       location.hash = r.href;
     }
   };
 
-  combo = repoCombo(this, () => this.setState({ errors: { ...this.state.errors, repo: undefined }, result: null }));
+  repoValue = () => (this.state.manual || !this.state.repos.length ? this.state.path : this.state.repo).trim();
+
+  // The one way a New run body goes out: the form's run options added, through one in-flight guard.
+  post = (body) => {
+    const s = this.state;
+    this.submit = this.submit || makeSubmitter((...a) => fetch(...a));
+    return this.submit({ ...body, ...vaultBody(s), ...(s.claudeLabel ? { claude_cmd: s.claudeLabel } : {}), auto_grind: s.autoGrind === true, worktree: s.worktree !== false, review: s.review !== false });
+  };
+
+  remember = (repo, form) => {
+    if (repo) saveLastRepo(globalThis.localStorage, repo);
+    if (form === 'named') savePref(globalThis.localStorage, CMD_KEY, this.state.command);
+  };
+
+  openCache = new Map();
+
+  componentDidUpdate() {
+    this.loadOpen();
+  }
+
+  // The selected repo's open issues or PRs for the picker, fetched once per repo and kind.
+  loadOpen = (force = false) => {
+    const { command, repo, manual } = this.state;
+    const kind = PICK[command];
+    if (!kind || manual || !repo) return;
+    const key = `${repo}|${kind}`;
+    if (!force && this.openCache.has(key)) return;
+    this.openCache.set(key, { status: 'loading', items: (this.openCache.get(key) || {}).items || [] });
+    if (this.state.openKey !== key || force) this.setState({ openKey: key });
+    const [owner, name] = repo.split('/');
+    fetch(`/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/open?kind=${kind}`, { headers: { Accept: 'application/json' } })
+      .then(async (r) => {
+        const body = await r.json().catch(() => ({}));
+        this.openCache.set(key, r.ok ? { status: 'ok', items: body.items || [] } : { status: 'error', items: [], error: body.error || `HTTP ${r.status}` });
+      })
+      .catch(() => this.openCache.set(key, { status: 'error', items: [], error: 'could not reach the aiw server' }))
+      .finally(() => this.setState({ openTick: (this.state.openTick || 0) + 1 }));
+  };
+
+  worklogPicker() {
+    const { wlMode = 'today', wlDay = '', wlFrom = '', wlTo = '', errors } = this.state;
+    const today = isoDay(new Date());
+    const set = (patch) => this.setState({ ...patch, wlFailed: null, errors: { ...errors, args: undefined } });
+    const wl = worklogDates({ mode: wlMode, day: wlDay, from: wlFrom, to: wlTo }, today);
+    const aria = { 'aria-invalid': errors.args ? 'true' : undefined, 'aria-describedby': errors.args ? 'args-error' : undefined };
+    return html`<fieldset class="wl">
+      <legend>Which day</legend>
+      <div class="seg" role="radiogroup" aria-label="Which day">
+        ${[['today', 'Today'], ['yesterday', 'Yesterday'], ['day', 'A day'], ['range', 'A range']].map(([m, l]) => html`<button type="button" role="radio"
+          aria-checked=${wlMode === m} class=${wlMode === m ? 'on' : ''} onClick=${() => set({ wlMode: m })}>${l}</button>`)}
+      </div>
+      ${wlMode === 'day' && html`<label class="wl-date" for="args">Day <input id="args" type="date" max=${today} value=${wlDay} onInput=${(e) => set({ wlDay: e.target.value })} ...${aria} /></label>`}
+      ${wlMode === 'range' && html`<div class="wl-range">
+        <label class="wl-date" for="args">From <input id="args" type="date" max=${wlTo || today} value=${wlFrom} onInput=${(e) => set({ wlFrom: e.target.value })} ...${aria} /></label>
+        <label class="wl-date" for="wl-to">To <input id="wl-to" type="date" min=${wlFrom || undefined} max=${today} value=${wlTo} onInput=${(e) => set({ wlTo: e.target.value })} ...${aria} /></label>
+      </div>`}
+      ${wlMode === 'range' && wl.dates && html`<p class="note">${wl.dates.length} day${wl.dates.length === 1 ? '' : 's'}: ${wl.dates.length === 1 ? 'one worklog run' : `${wl.dates.length} worklog runs, 3 at a time (the rest start as those finish)`}, one daily note each.</p>`}
+    </fieldset>`;
+  }
+
+  pickList() {
+    const { command, repo, manual, args } = this.state;
+    const kind = PICK[command];
+    if (!kind || manual || !repo) return null;
+    const got = this.openCache.get(`${repo}|${kind}`) || { status: 'loading', items: [] };
+    const noun = kind === 'pr' ? 'PRs' : 'issues';
+    const chosen = typedNumber(args);
+    const shown = matchItems(got.items, args);
+    const hit = got.items.find((it) => it.number === chosen);
+    // One tab stop for the whole list; arrows move between rows, as in the repo picker.
+    const pickKeys = (e) => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      const li = e.target.closest('li');
+      const next = li && (e.key === 'ArrowDown' ? li.nextElementSibling : li.previousElementSibling);
+      if (next) {
+        e.preventDefault();
+        next.querySelector('button').focus();
+      }
+    };
+    return html`<div class="pick">
+      <div class="pick-head"><span>${got.status === 'ok' ? `Open ${noun} · ${got.items.length}` : `Open ${noun}`}</span>
+        <button type="button" class="linkish" disabled=${got.status === 'loading'} onClick=${() => this.loadOpen(true)}>${got.status === 'loading' ? 'Loading…' : 'Refresh'}</button></div>
+      ${hit && html`<p class="pick-chosen" role="status">Selected <b>#${hit.number}</b> ${hit.title}</p>`}
+      ${got.status === 'error' ? html`<p class="note">Could not list ${noun}: ${String(got.error).replace(/\.+$/, '')}. Type a number or URL instead.</p>`
+        : got.status === 'ok' && !got.items.length ? html`<p class="note">No open ${noun} in ${repo}.</p>`
+        : got.items.length && !shown.length ? html`<p class="note">No open ${noun} match. A number or URL still works.</p>`
+        : got.items.length > 0 && html`<ul class="pick-list" aria-label=${`Open ${noun}`} onKeyDown=${pickKeys}>
+          ${shown.slice(0, 50).map((it, i) => html`<li key=${it.number}><button type="button" class=${it.number === chosen ? 'pick-item on' : 'pick-item'} aria-pressed=${it.number === chosen ? 'true' : 'false'}
+            tabIndex=${(shown.some((x) => x.number === chosen) ? it.number === chosen : i === 0) ? 0 : -1}
+            onClick=${() => this.setState({ args: pickValue(command, repo, it), errors: { ...this.state.errors, args: undefined } }, () => document.getElementById('args')?.focus())}>
+            <span class="mono">#${it.number}</span><span class="pick-title">${it.title}</span>
+            ${it.draft && html`<span class="chip other">draft</span>`}
+            ${it.labels.slice(0, 3).map((l) => html`<span class="pick-label">${l}</span>`)}
+          </button></li>`)}
+        </ul>`}
+    </div>`;
+  }
+
 
   // Typing an issue/PR link picks its repo from the dropdown when it is registered.
   setText = (k) => (e) => {
     const v = e.target.value;
     const hit = repoFromText(this.state.repos, v);
-    this.setState({ [k]: v, ...(hit ? { repo: hit, manual: false, repoQuery: null } : {}) });
+    this.setState({ [k]: v, ...(hit ? { repo: hit, manual: false } : {}) });
   };
 
   reviewOffer = (kind) => (this.state.offers && this.state.offers.kinds[kind]) || null;
@@ -354,7 +426,42 @@ export class Launcher extends Component {
 
   customLenses = () => pickedLenses(this.state.customReview, this.state.customPicked, this.state.offers);
 
+  // Worklog: one run, or one per day of a range (each writes its own daily note). A range shares a
+  // batch id, so the server runs 3 days at a time and starts the rest as those finish.
+  onWorklog = async (ev) => {
+    ev.preventDefault();
+    const s = this.state;
+    if (s.pending) return;
+    const repoErr = validate({ ...s, args: 'x' });
+    const wl = s.wlFailed?.length ? { dates: s.wlFailed } : worklogDates({ mode: s.wlMode, day: s.wlDay, from: s.wlFrom, to: s.wlTo }, isoDay(new Date()));
+    if (repoErr || wl.error) return this.setState({ errors: { ...(repoErr || {}), ...(wl.error ? { args: wl.error } : {}) }, result: null });
+    if (wl.dates.length === 1 && !s.wlFailed?.length) return this.start(ev, 'named', null, (repo) => buildBody({ repo, command: 'worklog', args: wl.dates[0] }));
+    const repo = this.repoValue();
+    const batch = `wl-${Date.now().toString(36)}`;
+    this.setState({ pending: true, form: 'named', errors: {}, result: null });
+    let ok = 0;
+    const failed = [];
+    for (const [i, date] of wl.dates.entries()) {
+      this.setState({ progress: `Starting ${i + 1} of ${wl.dates.length}…` });
+      const r = await this.post({ ...buildBody({ repo, command: 'worklog', args: date }), batch });
+      if (r && r.kind === 'open') ok++;
+      else failed.push({ date, why: (r && r.message) || 'failed' });
+    }
+    this.setState({
+      pending: false,
+      progress: null,
+      wlFailed: failed.map((f) => f.date),
+      result: failed.length ? { kind: 'error', message: `${failed.length} of ${wl.dates.length} did not start: ${failed.map((f) => `${f.date} (${f.why})`).join('; ')}` } : null,
+    });
+    if (ok) {
+      this.remember(repo, 'named');
+      toast(`Started ${ok} worklog run${ok === 1 ? '' : 's'}, 3 at a time`);
+      if (!failed.length) location.hash = '#/sessions';
+    }
+  };
+
   onSubmit = (ev) => {
+    if (this.state.command === 'worklog') return this.onWorklog(ev);
     const lenses = this.namedLenses();
     const errors = validate(this.state) || (lenses && !lenses.length ? { lenses: 'Tick at least one reviewer' } : null);
     return this.start(ev, 'named', errors, (repo) => buildBody({ repo, command: this.state.command, args: this.state.args, lenses }));
@@ -365,8 +472,7 @@ export class Launcher extends Component {
     return this.start(ev, 'custom', validateCustom(this.state, lenses), (repo) => buildCustomBody({ repo, text: this.state.text, lenses }));
   };
 
-  render({ limits }, { canBrowse, browsing, cmds, claudeLabel, autoGrind, worktree, review, repos, repo, manual, path, command, args, text, pending, form, errors, result, repoQuery, repoOpen, repoActive, offers }) {
-    const set = (k) => (e) => this.setState({ [k]: e.target.value });
+  render({ limits }, { canBrowse, cmds, claudeLabel, autoGrind, worktree, review, repos, repo, manual, path, command, args, text, pending, form, errors, result, offers }) {
     const mine = (f) => (result && (form || 'named') === f ? result : null);
     const outcomeMsg = (f) => { const r = mine(f); return r && r.kind === 'duplicate'
       ? html`<p role="alert" class="error">${r.message} <a href=${r.href}>Open that run</a></p>`
@@ -377,32 +483,42 @@ export class Launcher extends Component {
       <form class="launcher panel" onSubmit=${this.onSubmit} noValidate>
         <h1>New run</h1>
         <label for="repo-path">${repos.length ? 'Repo' : 'Repo path'}</label>
-        ${this.combo.render({ repos, repo, manual, path, repoQuery, repoOpen, repoActive, canBrowse, browsing }, { id: 'repo-path', error: repoMsg ? 'repo-error' : null })}
+        ${hostRepoPicker(this, { repos, repo, manual, path, canBrowse, vault: this.state.vault }, { id: 'repo-path', error: repoMsg ? 'repo-error' : null, allowVault: true, allowCreate: true, after: () => this.setState({ errors: { ...this.state.errors, repo: undefined }, result: null }) })}
         ${repoMsg ? html`<p id="repo-error" role="alert" class="error">${repoMsg}</p>` : null}
-        <fieldset>
+        ${this.state.vault && !NO_REPO_COMMANDS.has(command) && !repoMsg && html`<p class="note">${command} needs a repo. With no repo yet, use create-prd, dump or intake here, or the custom prompt.</p>`}
+        ${this.state.vault && html`<${FolderChooser} id="vf" text=${NO_REPO_COMMANDS.has(command) && args.trim() ? args : text} value=${this.state.vf || { project: '', feature: '' }}
+          onChange=${(vf) => this.setState({ vf })} />`}
+        ${this.state.creating && html`<${CreateRepoDialog} withPrd=${false} onClose=${() => this.setState({ creating: false })} onDone=${(made) => adoptCreatedRepo(this, made)} />`}
+        <fieldset class="cmds">
           <legend>Command</legend>
-          ${COMMANDS.map((c) => html`<label for=${'cmd-' + c} class="radio">
-            <input id=${'cmd-' + c} type="radio" name="command" value=${c} checked=${command === c} onChange=${set('command')} />
-            ${c}</label>`)}
+          ${GROUPS.map(([group, cmds]) => html`<div class="cmd-group" role="group" aria-label=${group}>
+            <span class="cmd-group-name" aria-hidden="true">${group}</span>
+            ${cmds.map(([c, desc]) => html`<label for=${'cmd-' + c} class="radio cmd-opt">
+              <input id=${'cmd-' + c} type="radio" name="command" value=${c} checked=${command === c} onChange=${(e) => this.setState({ command: e.target.value, args: switchArgs(command, e.target.value, args, manual ? '' : repo, (this.openCache.get(`${repo}|${PICK[command]}`) || {}).items), errors: { ...errors, args: undefined } })} />
+              <span class="cmd-text"><span class="cmd-name">${c}</span><span class="cmd-desc">${desc}</span></span></label>`)}
+          </div>`)}
         </fieldset>
-        <label for="args">${LABELS[command]}</label>
-        ${FREE_TEXT.has(command)
+        ${command === 'worklog' ? this.worklogPicker() : html`<label for="args">${LABELS[command]}</label>`}
+        ${command === 'worklog' ? null : FREE_TEXT.has(command)
           ? html`<textarea id="args" class="args-text" rows="8" value=${args} onInput=${this.setText('args')}
               onKeyDown=${(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); e.target.form.requestSubmit(); } }}
               aria-invalid=${errors.args ? 'true' : undefined} aria-describedby=${errors.args ? 'args-error' : undefined}></textarea>`
-          : html`<input id="args" type="text" placeholder=${HINTS[command] || ''} value=${args} onInput=${this.setText('args')}
+          : html`<input id="args" type="text" autocomplete="off" placeholder=${PICK[command] && !manual ? `${HINTS[command] || ''}, or type to search the list below` : HINTS[command] || ''} value=${args} onInput=${this.setText('args')}
               aria-invalid=${errors.args ? 'true' : undefined} aria-describedby=${errors.args ? 'args-error' : undefined} />`}
         ${errors.args ? html`<p id="args-error" role="alert" class="error">${errors.args}</p>` : null}
+        ${this.pickList()}
         ${limitedUntil(cmds, claudeLabel, limits) ? html`<p class="note">This account is rate limited: the run is queued and starts automatically at reset.</p>` : null}
         ${lensPicker({ id: 'peer-review', offer: this.reviewOffer(command), on: this.state.peerReview, picked: pickedLenses(true, this.state.lenses, offers), rounds: offers && offers.max_rounds,
           onToggle: (on) => this.setState({ peerReview: on }), onPick: (lenses) => this.setState({ lenses }) })}
         ${errors.lenses ? html`<p role="alert" class="error">${errors.lenses}</p>` : null}
-        ${command === 'run-issue' && html`<label class="check" for="auto-grind"><input id="auto-grind" type="checkbox" checked=${autoGrind === true} onChange=${(e) => this.setState({ autoGrind: e.target.checked })} /> Start review grinding when the run finishes</label>`}
-        ${command === 'run-issue' && html`<label class="check" for="worktree"><input id="worktree" type="checkbox" checked=${worktree !== false} onChange=${(e) => this.setState({ worktree: e.target.checked })} /> Run in a worktree (off: the main checkout, waiting for any main-tree run already there)</label>`}
-        ${command === 'run-issue' && html`<label class="check" for="review"><input id="review" type="checkbox" checked=${review !== false} onChange=${(e) => this.setState({ review: e.target.checked })} /> Run the review and fix steps (off: the dev step completes the run)</label>`}
+        ${command === 'run-issue' && html`<fieldset class="opts"><legend>Options</legend>
+        <label class="check" for="auto-grind"><input id="auto-grind" type="checkbox" checked=${autoGrind === true} onChange=${(e) => this.setState({ autoGrind: e.target.checked })} /> Start review grinding when the run finishes</label>
+        <label class="check" for="worktree"><input id="worktree" type="checkbox" checked=${worktree !== false} onChange=${(e) => this.setState({ worktree: e.target.checked })} /> Run in a worktree (off: the main checkout, waiting for any main-tree run already there)</label>
+        <label class="check" for="review"><input id="review" type="checkbox" checked=${review !== false} onChange=${(e) => this.setState({ review: e.target.checked })} /> Run the review and fix steps (off: the dev step completes the run)</label>
+        </fieldset>`}
         ${outcomeMsg('named')}
         <div class="launch-actions">
-          <button type="submit" disabled=${pending}>${pending && (form || 'named') === 'named' ? 'Starting...' : 'Start'}${FREE_TEXT.has(command) && html` <kbd>⌘↵</kbd>`}</button>
+          <button type="submit" disabled=${pending}>${pending && (form || 'named') === 'named' ? this.state.progress || 'Starting...' : command === 'worklog' && this.state.wlFailed?.length ? `Retry ${this.state.wlFailed.length} failed day${this.state.wlFailed.length === 1 ? '' : 's'}` : 'Start'}${FREE_TEXT.has(command) && html` <kbd>⌘↵</kbd>`}</button>
           ${cmds && cmds.length > 1 && html`<div class="runas" role="radiogroup" aria-label="Run as">
             <span class="runas-label" aria-hidden="true">Run as</span>
             <div class="seg">

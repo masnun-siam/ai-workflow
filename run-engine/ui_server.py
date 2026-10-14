@@ -38,12 +38,13 @@ import ui_settings
 import ui_status
 import ui_tailscale
 import ui_usage
+import ui_vault
 import shared
 from shared import die
 from ui_board import (
     build_board,
     fetch_title,
-    load_projects,
+    known_projects,
     plausible_repo,
     load_run,
     memoize_title_fetcher,
@@ -114,6 +115,7 @@ def _public(rec: dict) -> dict:
         "session_id": rec.get("session_id"),
         "outcome": rec.get("status"),
         "cost": rec.get("cost"),
+        "tokens": rec.get("tokens"),
         "started_at": rec.get("started_at"),
         "ended_at": rec.get("ended_at"),
         "waiting": rec.get("pending_question") is not None,
@@ -129,6 +131,8 @@ def _public(rec: dict) -> dict:
         "limit_type": rec.get("limit_type"),
         "auto_resume": rec.get("auto_resume"),
         "flow_id": rec.get("flow_id"),
+        "no_repo": rec.get("no_repo") is True,
+        "vault_folder": rec.get("vault_folder"),
         "peer_review": peer_review.status(rec["peer_review_dir"]) if rec.get("peer_review_dir") else None,
         "repo_path": p,
         "resume_command": f"cd {shlex.quote(p)} && claude --resume {shlex.quote(sid)}" if p and sid else None,
@@ -161,7 +165,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/api/health":
             self._send(200, "application/json; charset=utf-8", b'{"ok": true}')
         elif path == "/board.json":
-            board = build_board(scan_records(), load_projects(), self.server.fetch_title)
+            board = build_board(scan_records(), known_projects(), self.server.fetch_title)
             member = ui_dispatch.membership()
             gidx = ui_grind.index()
             for column in board["columns"]:
@@ -181,10 +185,22 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             )
         elif path == "/api/settings":
             self._json(200, ui_settings.load())
+        elif path == "/api/vault/folders":
+            self._json(200, {"vault": ui_vault.vault(), "folders": ui_vault.folders()})
+        elif path == "/api/vault/prd":
+            folder = (parse_qs(urlsplit(self.path).query).get("folder") or [""])[0]
+            try:
+                self._json(200, ui_vault.prd_info(folder))
+            except ValueError as e:
+                self._json(400, {"error": str(e)})
         elif path == "/api/peer-review":
             self._json(200, peer_review.offers())
         elif path == "/api/cleanup":
-            self._json(200, {"items": list(_TITLE_POOL.map(ui_cleanup.describe, ui_cleanup.find_targets()))})
+            items = list(_TITLE_POOL.map(ui_cleanup.describe, ui_cleanup.find_targets()))
+            for it in items:  # the cached title, so the list reads as work, not as owner/repo#N
+                title = self.server.fetch_title(it["owner"], it["repo"], it["issue"]) if it.get("owner") else None
+                it["title"] = None if not title or title.endswith("(title unavailable)") else title
+            self._json(200, {"items": items})
         elif path == "/api/flows":
             q = parse_qs(urlsplit(self.path).query)
             self._json(200, {"flows": [ui_flows.summary(f) for f in ui_flows.list_all(q.get("archived") == ["1"])]})
@@ -236,6 +252,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                     self._json(*ui_issue.fetch(*parts[3:]))
                 else:
                     self._json(400, {"error": "bad issue id"})
+            elif len(parts) == 6 and parts[:3] == ["", "api", "repos"] and parts[5] == "open":
+                if ui_issue.valid(parts[3], parts[4], "1"):
+                    kind = (parse_qs(urlsplit(self.path).query).get("kind") or ["issue"])[0]
+                    self._json(*ui_issue.open_items(parts[3], parts[4], kind))
+                else:
+                    self._json(400, {"error": "bad repo"})
             elif len(parts) == 6 and parts[:3] == ["", "api", "pulls"]:
                 if ui_pr.valid(*parts[3:]):
                     self._json(*ui_pr.fetch(*parts[3:]))
@@ -317,6 +339,17 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 self._json(403, {"error": "folder picker is only available locally on macOS"})
         elif parts == ["", "api", "cleanup"]:
             self._cleanup()
+        elif parts == ["", "api", "vault", "suggest"]:
+            body = self._read_body()
+            if body is not None:
+                self._json(*ui_vault.suggest(body.get("text")))
+        elif parts == ["", "api", "repos", "create"]:
+            if not _can_browse(self):  # it writes a new folder on this Mac, picked with its folder dialog
+                self._json(403, {"error": "creating a repo is only available locally on macOS"})
+            else:
+                self._dispatch(
+                    lambda b: ui_vault.create_repo(b.get("parent"), b.get("name"), b.get("prd_folder")), ok=201
+                )
         elif parts == ["", "api", "afk"]:
             self._dispatch(lambda b: ui_afk.start(b.get("until")))
         elif parts in (["", "api", "afk", "stop"], ["", "api", "afk", "dismiss"]):

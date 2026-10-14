@@ -34,6 +34,7 @@ KEYS = {
     "pid",
     "status",
     "cost",
+    "tokens",
     "started_at",
     "ended_at",
     "pending_question",
@@ -278,6 +279,28 @@ ok(f"concurrent writers never corrupt meta ({loads} reads)")
 with open(meta_path(d, r["id"])) as f:
     assert set(json.load(f)) == KEYS | {"writer", "n"}
 ok("meta.json holds only written fields")
+
+# 20. tokens: an old session (no "tokens" key) gets them once from its stream's last result
+d = fresh()
+old = ui_sessions.create("worklog", "/r")
+ui_sessions.update(old["id"], status="done")
+meta = meta_path(d, old["id"])
+with open(meta) as f:
+    m = json.load(f)
+del m["tokens"]
+with open(meta, "w") as f:
+    json.dump(m, f)
+res = '{"type":"result","usage":{"input_tokens":10,"cache_creation_input_tokens":90,"cache_read_input_tokens":900,"output_tokens":7}}'
+with open(os.path.join(d, "sessions", old["id"], "stream.jsonl"), "w") as f:
+    f.write('{"type":"result","usage":{"input_tokens":1,"output_tokens":1}}\n' + res + "\n")
+got = [x for x in ui_sessions.list_sessions() if x["id"] == old["id"]][0]
+assert got["tokens"] == {"input": 1000, "cached": 900, "output": 7}, got.get("tokens")
+with open(meta) as f:
+    assert json.load(f)["tokens"] == got["tokens"], "persisted, so the stream is read once"
+live = ui_sessions.create("worklog", "/r")  # still starting: never backfilled, the runner fills it
+assert [x for x in ui_sessions.list_sessions() if x["id"] == live["id"]][0]["tokens"] is None
+assert ui_sessions.ui_events.tokens_of(None) is None and ui_sessions.ui_events.tokens_of({"input_tokens": 0}) is None
+ok("tokens: backfilled once from the last result (input counts cache reads and writes)")
 
 print(f"\n{passed} checks passed")
 sys.exit(0)

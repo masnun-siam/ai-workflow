@@ -4,7 +4,7 @@ import { PrLink } from './pr.js';
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { poll } from './app.js';
-import { formatWhen, grindLabel, toolSummary, sessionLabel } from './fmt.js';
+import { fmtTokens, formatWhen, grindLabel, toolSummary, sessionLabel, tokensText, tokensTitle } from './fmt.js';
 import { toast } from './toast.js';
 import { openCleanup } from './cleanup.js';
 import { LimitBanner } from './limits.js';
@@ -53,8 +53,8 @@ export function totals(events, session) {
   const results = (events || []).filter((e) => e && e.kind === 'result');
   const costed = results.filter((e) => typeof e.cost === 'number').at(-1);
   const cost = costed ? costed.cost : typeof session?.cost === 'number' ? session.cost : null;
-  const u = results.at(-1)?.usage;
-  const tokens = u && typeof u.input === 'number' && typeof u.output === 'number' ? { input: u.input, output: u.output } : null;
+  const tokened = results.filter((e) => e.tokens).at(-1);
+  const tokens = (tokened && tokened.tokens) || session?.tokens || null;
   return { cost, tokens };
 }
 
@@ -123,6 +123,7 @@ export function mdToHtml(md) {
       flush();
       out.push(`<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`);
     } else if ((m = /^(\s*)(?:([-*])|\d+\.)\s+(.*)$/.exec(line))) {
+      if (para.length) flush(); // a list may start right under a paragraph line ("**Next:**\n- a")
       const kind = m[2] ? 'ul' : 'ol';
       const indent = m[1].length;
       if (list && !nest.length && kind !== list && indent <= base) flush();
@@ -178,7 +179,9 @@ export async function postAction(id, action) {
 export const SKIP_CI_REPLY = 'Skip CI for now, complete the grind, then come back and fix the CI';
 
 // A grind paused because of CI (red head commit, Gate 2, a failing check), not because of a review decision.
-export const pausedOnCi = (run) => !!run?.grind && run.grind.state === 'paused' && (run.gh?.pr?.ci === 'red' || /\b(ci|gate\s*2|checks?)\b/i.test(run.grind.reason || ''));
+// A bare "check" is not CI: a reason like "stall check: …" pauses for a review decision.
+const CI_REASON = /\b(?:ci|gate\s*2)\b|\bfailing checks?\b|\bchecks? (?:are |is )?(?:red|failing|failed)\b/i;
+export const pausedOnCi = (run) => !!run?.grind && run.grind.state === 'paused' && (run.gh?.pr?.ci === 'red' || CI_REASON.test(run.grind.reason || ''));
 
 // A merged or closed PR has nothing left to review, so it never offers a grind.
 // Review can still be turned off while the baton is before the reviewer; auto-grind until a grind exists.
@@ -189,6 +192,8 @@ export function reviewEditable(run) {
   const cur = names.indexOf(run.currentStation);
   return r >= 0 && cur >= 0 && cur < r;
 }
+// A main-tree run queued behind another is "running" in its Ledger but has not started anything.
+export const shownStatus = (run) => (run.status === 'running' && run.maintree?.role === 'queued' ? 'queued' : run.status);
 export const grindEditable = (run) => run?.autoGrind != null && !run.grind;
 
 export const canStartGrind = (run) => run?.status === 'done' && !!run.pr && !run.grind && !['MERGED', 'CLOSED'].includes(run.gh?.pr?.state);
@@ -447,7 +452,7 @@ export class RunDetail extends Component {
               <span class="mono">${sessionLabel(x.command)}</span>
               <span class=${`chip chip-${x.outcome}`}>${x.outcome}</span>
               <span class="muted">${formatWhen(x.started_at)}</span>
-              <span class="mono muted">${money(x.cost)}</span>
+              <span class="mono muted" title=${tokensTitle(x.tokens)}>${money(x.cost)}${tokensText(x.tokens) && ` · ${tokensText(x.tokens)}`}</span>
               <a href=${`#/session/${encodeURIComponent(x.id)}`}>Transcript</a>
             </li>`)}</ul>`
         : html`<p class="muted">No UI sessions for this run</p>`;
@@ -471,7 +476,7 @@ export class RunDetail extends Component {
             </div>
             <h1>${run.title || `Issue #${n}`}</h1>
             <div class="run-chips">
-              <span class=${chip(run.status)}>${run.status}</span>
+              <span class=${chip(shownStatus(run))} title=${shownStatus(run) === 'queued' ? 'Waiting for the main checkout; nothing runs yet' : ''}>${shownStatus(run)}</span>
               ${run.status === 'done' && s && ['running', 'starting'].includes(s.outcome) && html`<span class="chip chip-running" title="The session is still working after the last station finished">session live</span>`}
               <${GhChips} gh=${run.gh} labels=${true} />
               ${retry && html`<span role="status" class="offline">Retrying…</span>`}
@@ -485,7 +490,8 @@ export class RunDetail extends Component {
             ${run.reviewSkipped && html`<span class="chip" title="The dev step completes the run: no review or fix step">No review</span>`}
             ${!run.reviewSkipped && html`<label class="check" title=${reviewEditable(run) ? 'Turn off to let the dev step complete the run' : 'Review already started or finished'}><input type="checkbox" checked disabled=${busy === 'options' || !reviewEditable(run)} onChange=${() => this.options({ review: false }, 'Review turned off')} /> Review</label>`}
             ${run.autoGrind != null && html`<label class="check" title=${grindEditable(run) ? 'Start grinding when the run finishes' : 'Grinding already started'}><input type="checkbox" checked=${run.autoGrind} disabled=${busy === 'options' || !grindEditable(run)} onChange=${(e) => this.options({ auto_grind: e.target.checked }, e.target.checked ? 'Auto-grind on' : 'Auto-grind off')} /> Auto-grind</label>`}
-            ${run.maintree && html`<span class=${'chip chip-maintree-' + (run.maintree.phase || 'queued')} title="This run works in the main checkout">${run.maintree.role === 'queued' ? `Main tree: waiting for #${run.maintree.ahead} (position ${run.maintree.position})` : `Main tree: ${run.maintree.phase}${run.maintree.reason ? ' — ' + run.maintree.reason : ''}`}</span>`}
+            ${run.maintree && html`<span class=${'chip chip-maintree-' + (run.maintree.phase || 'queued')} title=${`This run works in the main checkout${run.maintree.reason ? `: ${run.maintree.phase} — ${run.maintree.reason}` : ''}`}>${run.maintree.role === 'queued' ? `Main tree: waiting for #${run.maintree.ahead} (position ${run.maintree.position})` : `Main tree: ${run.maintree.phase}`}</span>`}
+            ${run.maintree && run.maintree.reason && !(run.grind && run.grind.state === 'paused') && html`<p class="note run-why">${run.maintree.reason}</p>`}
             ${run.maintree && run.maintree.role === 'holder' && run.maintree.phase !== 'done' && html`<button type="button" class="btn" disabled=${busy === 'maintree'} onClick=${this.releaseMainTree} title="Lets the next main-tree run start on top of this one's branch">Release main tree</button>`}
             ${canStartGrind(run) && html`<button type="button" class="btn btn--primary" disabled=${busy === 'grind'} onClick=${() => this.grind('start')} title="Posts a trigger to the repo's Slack review channel">Start grinding</button>`}
             ${run.grind && ['running', 'idle'].includes(run.grind.state) && html`<button type="button" class="btn" disabled=${busy === 'grind'} onClick=${() => this.grind('pause')}>Pause grind</button>`}
@@ -528,7 +534,7 @@ export class RunDetail extends Component {
             </ol>
             <div class="stats">
               <div><div class="muted">Cost</div><div class="mono big">${money(t.cost)}</div></div>
-              ${t.tokens && html`<div><div class="muted">Tokens</div><div class="mono big">${`${t.tokens.input} in / ${t.tokens.output} out`}</div></div>`}
+              ${t.tokens && html`<div title=${tokensTitle(t.tokens)}><div class="muted">Tokens</div><div class="mono big">${tokensText(t.tokens)}</div><div class="muted mono">${fmtTokens(t.tokens.input)} in (${fmtTokens(t.tokens.cached || 0)} cached) · ${fmtTokens(t.tokens.output)} out</div></div>`}
             </div>
             ${stationNote(rt, stations) && html`<p class="muted">${stationNote(rt, stations)}</p>`}
           </div>

@@ -158,13 +158,13 @@ export class FlowSwitcher extends Component {
       e.preventDefault();
       const active = (this.state.active + (e.key === 'ArrowDown' ? 1 : n - 1)) % n;
       this.setState({ active });
-      const a = this.base && this.base.querySelectorAll('.fs-row > a')[active];
+      const a = this.root && this.root.querySelectorAll('.fs-row > a')[active]; // a ref: preact 11 has no this.base
       if (a) a.focus();
     }
   };
 
   render({ current }, { open, flows, archived }) {
-    return html`<div class="fs" onKeyDown=${this.key}>
+    return html`<div class="fs" ref=${(el) => { this.root = el; }} onKeyDown=${this.key}>
       <button type="button" class="btn" aria-expanded=${open ? 'true' : 'false'} aria-controls="fs-list" ref=${(b) => { this.btn = b; }} onClick=${this.toggle}>Flows</button>
       ${open && html`<div class="fs-pop" id="fs-list" role="dialog" aria-label="Previous flows">
         ${flows === null && html`<p class="note" role="status">Loading flows…</p>`}

@@ -500,3 +500,54 @@ _pool2.shutdown(wait=True)
 assert _g("o", "r", 1) == "Renamed"
 _bad = memoize_title_fetcher(lambda o, r, n: f"Issue #{n} (title unavailable)", None, _store)
 print("ok  titles persist across a restart; unavailable placeholders are not stored")
+
+_pool3 = _TPE(max_workers=1)
+_h = memoize_title_fetcher(lambda o, r, n: f"Issue #{n} (title unavailable)", _pool3, _store)
+assert _h("o", "r", 1) == "Renamed"
+_pool3.shutdown(wait=True)
+assert _h("o", "r", 1) == "Renamed"  # a failed refresh keeps the last good title
+print("ok  a failed title refresh keeps the stored title")
+
+# --- known_projects: registered checkouts resolve a dashed owner from the run dir name
+import ui_board as _ub  # noqa: E402
+
+_saved_data = os.environ.get("CLAUDE_PLUGIN_DATA")
+_dd = _tf.mkdtemp()
+os.environ["CLAUDE_PLUGIN_DATA"] = _dd
+with open(os.path.join(_dd, "checkouts.json"), "w") as _fh:
+    _json2.dump({"masnun-siam/typevocal": "/x/typevocal"}, _fh)
+_rec = {
+    "ledger": {"issue": 70, "status": "running", "stations": ["dev"], "currentIndex": 0},
+    "mtime": 1.0,
+    "dir_name": "masnun-siam-typevocal-issue-70",
+}
+_col = build_board([_rec], _ub.known_projects(), lambda *a: "t")["columns"]
+_card = next(c for col in _col for c in col["cards"])
+assert (_card["owner"], _card["repo"]) == ("masnun-siam", "typevocal"), _card
+print("ok  known_projects: a registered checkout beats the first-dash guess")
+
+# --- a failed fetch is retried once RETRY_FAILED_TITLE_S has passed, not cached for the server's life
+_answers = ["Issue #5 (title unavailable)", "Back"]
+_pool4 = _TPE(max_workers=1)
+_r = memoize_title_fetcher(lambda o, r, n: _answers.pop(0), _pool4, None)
+_r("o", "r", 5)
+_pool4.shutdown(wait=True)
+assert _r("o", "r", 5) == "Issue #5 (title unavailable)"
+_saved_retry, _ub.RETRY_FAILED_TITLE_S = _ub.RETRY_FAILED_TITLE_S, 0
+_pool5 = _TPE(max_workers=1)
+_r2 = memoize_title_fetcher(lambda o, r, n: _answers2.pop(0), _pool5, None)
+_answers2 = ["Issue #5 (title unavailable)", "Back"]
+_r2("o", "r", 5)
+import time as _time  # noqa: E402
+
+_deadline = _time.time() + 5
+while _r2("o", "r", 5) != "Back" and _time.time() < _deadline:
+    _time.sleep(0.01)
+assert _r2("o", "r", 5) == "Back"
+_pool5.shutdown(wait=True)
+_ub.RETRY_FAILED_TITLE_S = _saved_retry
+if _saved_data is None:
+    os.environ.pop("CLAUDE_PLUGIN_DATA", None)
+else:
+    os.environ["CLAUDE_PLUGIN_DATA"] = _saved_data
+print("ok  a failed title fetch is retried later")

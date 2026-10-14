@@ -308,7 +308,7 @@ export class App extends Component {
     let badge = null;
     if (b?.kind === 'offline') badge = html`<span role="status" class="offline">Offline: retrying</span>`;
     else if (b?.kind === 'waiting') badge = html`<a class="badge waiting" href=${b.href}>${BELL}Waiting on you · ${b.count}</a>`;
-    else if (b?.kind === 'idle') badge = html`<span class="muted">Nothing waiting</span>`;
+    else if (b?.kind === 'idle') badge = html`<span class="muted" title="No session is waiting on an answer">No questions waiting</span>`;
     return html`
       <header>
         <a class="brand" href="#/">aiw ui</a>
@@ -329,7 +329,7 @@ export class App extends Component {
         ${!afk?.active && badge}
         <a class="icon-btn" href="#/settings" aria-label="Settings" title="Settings" aria-current=${route.name === 'settings' ? 'page' : undefined}>${GEAR}</a>
         ${notif === 'default' && html`<button type="button" class="icon-btn" aria-label="Enable notifications" title="Enable desktop notifications" onClick=${this.enableNotify}>${BELL}</button>`}
-        <a class="btn btn--primary" href="#/new" aria-current=${route.name === 'new' ? 'page' : undefined}>New run</a>
+        <a class="btn btn--primary" href="#/new" aria-label="New run" aria-current=${route.name === 'new' ? 'page' : undefined}><span>New<span class="nr-word"> run</span></span></a>
       </header>
       <main>
         ${afk?.summary && html`<${AfkSummary} summary=${afk.summary} onDismiss=${this.dismissAfk} />`}

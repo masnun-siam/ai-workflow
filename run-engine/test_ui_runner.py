@@ -2512,6 +2512,25 @@ try:
 finally:
     reap(*recs)
 
+# ---- batch: at most N of a batch run at once; the rest queue and start as slots free -----------
+d, fk, work = setup("sleep")
+recs = []
+try:
+    recs = [ui_runner.start(f"/worklog 2026-10-0{i}", work, batch=("wl-test", 2)) for i in range(1, 5)]
+    st = lambda: [(ui_sessions.load(r["id"]) or {}).get("status") for r in recs]  # noqa: E731
+    wait_for(lambda: st()[:2] == ["running", "running"])
+    assert st()[2:] == ["queued", "queued"], st()
+    assert all((ui_sessions.load(r["id"]) or {}).get("batch") == "wl-test" for r in recs)
+    ui_runner.stop(recs[3]["id"])  # a queued one leaves the queue without ever starting
+    assert st()[3] == "stopped" and not (ui_sessions.load(recs[3]["id"]) or {}).get("pid")
+    ui_runner.stop(recs[0]["id"])  # a slot frees: the oldest queued one starts
+    wait_for(lambda: st()[2] == "running")
+    assert st()[1] == "running" and st()[3] == "stopped", st()
+    assert ui_runner.release_batch("wl-test") == [] and ui_runner.release_batch(None) == []
+    ok("batch: 2 at once, the rest queued; a stopped run frees a slot; a stopped queued one never starts")
+finally:
+    reap(*recs)
+
 answer_checks()
 fallback_checks()
 stop_checks()

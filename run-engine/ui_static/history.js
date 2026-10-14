@@ -1,7 +1,7 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 
-import { formatWhen, shortRepo, sessionLabel } from './fmt.js';
+import { formatWhen, shortRepo, sessionLabel, tokensText, tokensTitle } from './fmt.js';
 import { toast } from './toast.js';
 import { openCleanup } from './cleanup.js';
 
@@ -126,6 +126,7 @@ export class History extends Component {
         <td>${fmtTime(s.ended_at)}</td>
         <td><span class=${'chip chip-' + known}>${known}</span></td>
         <td>${fmtCost(s.cost)}</td>
+        <td class="mono" title=${tokensTitle(s.tokens)}>${tokensText(s.tokens) || '—'}</td>
         <td>${this.action(s)}</td>
       </tr>
     `;
@@ -150,6 +151,7 @@ export class History extends Component {
                   <th scope="col">Ended</th>
                   <th scope="col">Outcome</th>
                   <th scope="col">Cost</th>
+                  <th scope="col">Tokens</th>
                   <th scope="col">Action</th>
                 </tr>
               </thead>
