@@ -192,6 +192,9 @@
 
 ### Fixed
 
+- **Flow's Issues pane showed a phantom "#42 Untitled issue"**: it took `gh issue create --help`
+  for a create and its help text's example URL for a new issue. Help runs no longer count, and only
+  issue URLs of the flow's own repo do.
 - **Flow stalled after Create repo**: Tasks needs a GitHub repo for the epic, but a local repo let it
   run and fail with "Unexpected next command". Flow now offers **Publish to GitHub** (first commit,
   `gh repo create`, re-registered) before Tasks; a step that stops itself shows its own reason; the
