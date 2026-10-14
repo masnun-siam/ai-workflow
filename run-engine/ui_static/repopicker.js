@@ -57,7 +57,7 @@ export function pickerRows({ repos, query, recent = [], allLabel, allowPath, can
   const path = allowPath ? pathOption(q) : null;
   if (path && !repos.some((r) => r.path === path)) rows.push({ kind: 'path', path });
   if (allowPath && canBrowse) rows.push({ kind: 'browse' });
-  if (allowCreate && canBrowse) rows.push({ kind: 'create' });
+  if (allowCreate) rows.push({ kind: 'create' });
   return rows;
 }
 

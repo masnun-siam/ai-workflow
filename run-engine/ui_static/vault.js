@@ -119,6 +119,16 @@ export class FolderChooser extends Component {
 
 // Turns an idea into a code repo: a folder picked with the macOS dialog, git init, a README and,
 // given a vault PRD, docs/prds/<slug>.md. Registered as local/<name> until it has a GitHub remote.
+// Folders the registered repos live in, most used first: likely homes for a new one.
+export function parentFolders(repos, n = 5) {
+  const count = new Map();
+  for (const r of repos || []) {
+    const dir = String(r.path || '').replace(/\/+$/, '').replace(/\/[^/]+$/, '');
+    if (dir.startsWith('/')) count.set(dir, (count.get(dir) || 0) + 1);
+  }
+  return [...count].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, n).map(([d]) => d);
+}
+
 export const repoName = (s) => String(s || '').trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100);
 
 export class CreateRepoDialog extends Component {
@@ -127,6 +137,12 @@ export class CreateRepoDialog extends Component {
   componentDidMount() {
     this.opener = document.activeElement; // focus goes back here on close
     this.checkPrd();
+    // The folder dialog opens on the Mac's own screen, so a tailnet browser types the folder instead;
+    // the folders existing repos live in are offered either way.
+    fetch('/api/repos', { headers: { Accept: 'application/json' } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b) => b && this.setState({ canBrowse: b.can_browse === true, homes: parentFolders(b.repos) }))
+      .catch(() => {});
     setTimeout(() => this.root && this.root.querySelector('#cr-name')?.focus(), 0);
   }
 
@@ -199,10 +215,15 @@ export class CreateRepoDialog extends Component {
         <input id="cr-name" type="text" class="field" value=${name} autocomplete="off" onInput=${(e) => this.setState({ name: repoName(e.target.value) })} placeholder="gym-app" />
         <label for="cr-parent">Create it in</label>
         <div class="repo-row">
-          <input id="cr-parent" type="text" class="field" readonly value=${parent} placeholder="Choose a folder…" onClick=${this.pickParent} />
-          <button type="button" class="btn" onClick=${this.pickParent}>Choose…</button>
+          <input id="cr-parent" type="text" class="field" value=${parent} autocomplete="off" spellcheck="false" placeholder="/Users/you/Projects or ~/Projects"
+            onInput=${(e) => this.setState({ parent: e.target.value, error: '' })} />
+          ${this.state.canBrowse && html`<button type="button" class="btn" onClick=${this.pickParent}>Choose…</button>`}
         </div>
-        ${parent && name && html`<p class="note mono">${parent.replace(/\/+$/, '')}/${name}</p>`}
+        ${(this.state.homes || []).length > 0 && html`<div class="vf-picks" role="group" aria-label="Where your repos live">
+          <span class="muted">Where your repos live:</span>
+          ${this.state.homes.map((d) => html`<button type="button" class="fchip" aria-pressed=${parent === d ? 'true' : 'false'} onClick=${() => this.setState({ parent: d, error: '' })}>${d.replace(/^\/Users\/[^/]+/, '~')}</button>`)}
+        </div>`}
+        ${parent && name && html`<p class="note mono">${parent.trim().replace(/\/+$/, '')}/${name}</p>`}
         ${withPrd && html`<label for="cr-prd">PRD from the vault folder</label>
           <input id="cr-prd" type="text" class="field" value=${prdFolder} onInput=${(e) => this.setState({ prdFolder: e.target.value, prd: null })} onBlur=${this.checkPrd} placeholder="05-Work/<Project>/<Feature>" />
           ${prd && (prd.exists
@@ -258,5 +279,69 @@ export class NewIdeaPanel extends Component {
       ${creating && html`<${CreateRepoDialog} withPrd=${true} prdFolder=${folder} name=${(prd && prd.title) || folder.split('/').pop()}
         onClose=${() => this.setState({ creating: false })} onDone=${(m) => this.setState({ creating: false, made: m })} />`}
     </section>`;
+  }
+}
+
+// Publish a local/<name> repo to GitHub: first commit if there is none, gh repo create
+// --source --push, then it is registered as owner/name and the GitHub steps can run.
+export class PublishDialog extends Component {
+  state = { owners: null, owner: '', name: String(this.props.slug || '').replace(/^local\//, ''), priv: true, busy: false, error: '' };
+
+  componentDidMount() {
+    this.opener = document.activeElement;
+    fetch('/api/github/owners', { headers: { Accept: 'application/json' } })
+      .then(async (r) => ({ ok: r.ok, b: await r.json().catch(() => ({})) }))
+      .then(({ ok, b }) => (ok ? this.setState({ owners: b.owners, owner: b.owners[0] || '' }) : this.setState({ owners: [], error: `Could not list your GitHub accounts: ${b.error || 'gh failed'}` })))
+      .catch(() => this.setState({ owners: [], error: 'Could not reach the aiw server' }));
+    setTimeout(() => this.root && this.root.querySelector('#pub-name')?.focus(), 0);
+  }
+
+  componentWillUnmount() {
+    if (this.opener && this.opener.isConnected) this.opener.focus();
+  }
+
+  keys = (e) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation();
+    this.props.onClose();
+  };
+
+  publish = async (e) => {
+    e.preventDefault();
+    const { owner, name, priv } = this.state;
+    if (!owner || !name) return this.setState({ error: !owner ? 'Pick an owner' : 'Name the repo' });
+    this.setState({ busy: true, error: '' });
+    try {
+      const r = await fetch('/api/repos/publish', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slug: this.props.slug, owner, name, private: priv }) });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(b.error || `HTTP ${r.status}`);
+      toast(`Published ${b.slug}`);
+      this.props.onDone(b);
+    } catch (err) {
+      this.setState({ busy: false, error: err.message });
+    }
+  };
+
+  render({ slug, onClose }, { owners, owner, name, priv, busy, error }) {
+    return html`<div class="overlay" ref=${(el) => { this.root = el; }} onKeyDown=${this.keys} onMouseDown=${(e) => e.target === e.currentTarget && onClose()}>
+      <form class="dialog create-repo" role="dialog" aria-modal="true" aria-labelledby="pub-h" onSubmit=${this.publish}>
+        <h2 id="pub-h">Publish to GitHub</h2>
+        <p class="muted">Creates the GitHub repo for <span class="mono">${slug}</span>, makes the first commit (README and PRD) if there is none, and pushes it. aiw then knows it as owner/name, so Tasks, Issues and Dispatch can run.</p>
+        <label for="pub-owner">Owner</label>
+        <select id="pub-owner" class="field" value=${owner} disabled=${!owners || !owners.length} onChange=${(e) => this.setState({ owner: e.target.value })}>
+          ${owners === null ? html`<option>Loading…</option>` : owners.map((o) => html`<option value=${o}>${o}</option>`)}
+        </select>
+        <label for="pub-name">Name</label>
+        <input id="pub-name" type="text" class="field" value=${name} autocomplete="off" onInput=${(e) => this.setState({ name: repoName(e.target.value) })} />
+        <label class="check" for="pub-private"><input id="pub-private" type="checkbox" checked=${priv} onChange=${(e) => this.setState({ priv: e.target.checked })} /> Private</label>
+        ${owner && name && html`<p class="note mono">github.com/${owner}/${name} · ${priv ? 'private' : 'public'}</p>`}
+        ${error && html`<p role="alert" class="error">${error}</p>`}
+        <div class="cleanup-actions">
+          <button type="button" class="btn" onClick=${onClose}>Cancel</button>
+          <button type="submit" class="btn btn--primary" disabled=${busy || !owners || !owners.length}>${busy ? 'Publishing…' : 'Publish'}</button>
+        </div>
+      </form>
+    </div>`;
   }
 }

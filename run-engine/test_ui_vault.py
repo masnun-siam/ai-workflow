@@ -112,6 +112,11 @@ for args, why in (
     except ValueError:
         pass
 assert not os.path.exists(os.path.join(parent, "z")), "a failed create leaves nothing behind"
+home = os.environ.get("HOME")
+os.environ["HOME"] = parent
+tilde = ui_vault.create_repo("~", "from-tilde")
+os.environ["HOME"] = home
+assert tilde["path"] == os.path.join(os.path.realpath(parent), "from-tilde"), "a typed ~ is the home folder"
 bare = ui_vault.create_repo(parent, "empty")
 with open(os.path.join(bare["path"], "README.md")) as fh:
     assert fh.read() == "# empty\n" and bare["files"] == ["README.md"]
@@ -131,6 +136,54 @@ ui_repos.promote_local()
 assert dispatch.read_checkouts()["local/dup"] == taken["path"], "nothing overwritten"
 assert not dispatch.rename_checkout("local/dup", "ACME/shop") and not dispatch.rename_checkout("gone/x", "a/b")
 ok("promote: a taken owner/repo is never overwritten")
+
+# --- publish: commit what is there, gh repo create --source --push, re-register as owner/name
+fakebin = tempfile.mkdtemp()
+with open(os.path.join(fakebin, "gh"), "w") as fh:
+    fh.write(
+        '#!/bin/sh\necho "$*" >> "$FAKE_GH_LOG"\n[ "$FAKE_GH_FAIL" = 1 ] && { echo "HTTP 422: name already exists" >&2; exit 1; }\nexit 0\n'
+    )
+os.chmod(os.path.join(fakebin, "gh"), 0o755)
+os.environ["PATH"] = fakebin + os.pathsep + os.environ["PATH"]
+os.environ["FAKE_GH_LOG"] = os.path.join(fakebin, "log")
+for k, v in (
+    ("GIT_AUTHOR_NAME", "t"),
+    ("GIT_AUTHOR_EMAIL", "t@t"),
+    ("GIT_COMMITTER_NAME", "t"),
+    ("GIT_COMMITTER_EMAIL", "t@t"),
+):
+    os.environ[k] = v
+pub = ui_vault.create_repo(parent, "pubme", "05-Work/Shop/Checkout")
+os.environ["FAKE_GH_FAIL"] = "1"
+try:
+    ui_vault.publish_repo("local/pubme", "acme", "pubme")
+    raise AssertionError("a failed gh must raise")
+except ValueError as e:
+    assert "name already exists" in str(e), e
+assert "local/pubme" in dispatch.read_checkouts(), "a failed publish keeps the local registration"
+os.environ["FAKE_GH_FAIL"] = "0"
+out = ui_vault.publish_repo("local/pubme", "acme", "pubme", private=True)
+assert (
+    out["slug"] == "acme/pubme"
+    and dispatch.read_checkouts()["acme/pubme"] == pub["path"]
+    and "local/pubme" not in dispatch.read_checkouts()
+)
+log = subprocess.run(["git", "-C", pub["path"], "log", "--oneline"], capture_output=True, text=True).stdout
+assert log.count("\n") == 1 and "Initial commit" in log, "committed once, even across the retry"
+with open(os.environ["FAKE_GH_LOG"]) as fh:
+    assert fh.read().splitlines()[-1] == "repo create acme/pubme --private --source . --remote origin --push"
+for bad in (
+    ("acme/x", "o", "n"),
+    ("local/nope", "o", "n"),
+    ("local/empty", "../o", "n"),
+    ("local/empty", "acme", "shop"),
+):
+    try:
+        ui_vault.publish_repo(*bad)
+        raise AssertionError(bad)
+    except ValueError:
+        pass
+ok("publish: first commit, gh repo create --source --push, re-registered; failures keep it local; bad input refused")
 
 # --- no-repo sessions run in the vault, only for the commands that allow it
 started = []
