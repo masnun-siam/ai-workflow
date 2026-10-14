@@ -3,7 +3,7 @@ import htm from './vendor/htm.mjs';
 import { poll } from './app.js';
 import { toast } from './toast.js';
 import { GhChips } from './ghstatus.js';
-import { PrLink } from './pr.js';
+import { MergeDialog, PrLink } from './pr.js';
 import { formatWhen, grindLabel } from './fmt.js';
 import { RepoPicker } from './repopicker.js';
 
@@ -67,6 +67,12 @@ export function progressText(items) {
   for (const k of ['running', 'waiting', 'limited', 'failed', 'stopped', 'skipped']) if (c[k]) bits.push(`${c[k]} ${k}`);
   return bits.join(' · ');
 }
+
+// [owner, repo, number] of a GitHub PR URL, or null.
+export const prParts = (url) => {
+  const m = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/.exec(url || '');
+  return m ? [m[1], m[2], m[3]] : null;
+};
 
 // The detail page's row filter.
 export const ROW_FILTERS = [
@@ -403,7 +409,15 @@ export class PipelineDetail extends Component {
         ${q.state === 'open' && q.approval === 'CHANGES_REQUESTED' && html`<span class="chip gh-bad">changes requested</span>`}
         <span class=${`chip mq-state mq-s-${q.state}`}>${q.state}</span>
         ${q.url && html`<${PrLink} class="chip" url=${q.url}>PR${q.num ? ` #${q.num}` : ''} ↗<//>`}
+        ${q.state === 'open' && prParts(q.url) && html`<button type="button" class=${q.next ? 'btn-sm primary' : 'btn-sm'} onClick=${() => this.setState({ merging: q })}>Merge</button>`}
       </li>`)}</ol>
+      ${this.state.merging && (() => {
+        const q = this.state.merging;
+        const [owner, repo, n] = prParts(q.url);
+        const earlier = queue.filter((x) => x.pos < q.pos && x.state !== 'merged').map((x) => x.num || x.n);
+        return html`<${MergeDialog} owner=${owner} repo=${repo} n=${n} earlier=${earlier}
+          onClose=${() => this.setState({ merging: null })} onDone=${() => { this.setState({ merging: null }); this.refresh(); }} />`;
+      })()}
     </details>`;
     const acts = pipelineActions(data.status);
     const live = items.some((i) => LIVE.includes(i.state));

@@ -246,6 +246,12 @@ main > h1, .history-page > h1 { margin-bottom: 20px; }
 .idea-panel { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; margin: 12px 0; }
 .idea-panel h2 { margin: 0; font-size: 15px; }
 .idea-panel p { margin: 0; }
+.pk-merge { display: flex; justify-content: flex-end; margin: 0 0 8px; }
+.merge-dialog { max-width: 520px; }
+.merge-dialog p { margin: 0; }
+.merge-warn { padding: 10px 12px; border-radius: 8px; color: var(--waiting); background: var(--waiting-bg); border: 1px solid var(--waiting-border); }
+.merge-warn ul { margin: 6px 0; padding-left: 18px; }
+.merge-ok { color: var(--done); }
 .dialog.create-repo { max-width: 560px; }
 .dialog.create-repo label { font-size: 13px; color: var(--muted); }
 .launcher .wl { display: flex; flex-direction: column; gap: 10px; }

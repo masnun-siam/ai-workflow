@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 
-from shared import gh_json
+from shared import gh_json, run
 from ui_issue import _HTML, _links_out, _user, valid  # noqa: F401  (valid is re-exported for the server route)
 from ui_status import _check
 
@@ -147,3 +147,49 @@ def fetch(owner: str, repo: str, n: str):
             return 502, {"error": ((p.stderr or "").strip().splitlines() or [f"gh could not read the {key}"])[-1]}
         lists[key] = value
     return 200, shape(pr, lists["files"], lists["commits"], lists["comments"], lists["reviews"], got["checks"][0])
+
+
+_READY_FIELDS = "number,title,url,state,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,baseRefName"
+
+
+def shape_readiness(pr: dict) -> dict:
+    """Pure: `gh pr view --json` -> what the merge confirm shows: state, draft, conflicts, review, CI."""
+    checks = [_check(c) for c in pr.get("statusCheckRollup") or [] if isinstance(c, dict)]
+    ci = (
+        "red"
+        if any(b == "red" for *_, b in checks)
+        else "pending"
+        if any(b == "pending" for *_, b in checks)
+        else "green"
+        if checks
+        else None
+    )
+    return {
+        "number": pr.get("number"),
+        "title": pr.get("title"),
+        "url": pr.get("url"),
+        "state": (pr.get("state") or "").lower(),  # open | merged | closed
+        "draft": pr.get("isDraft") is True,
+        "mergeable": pr.get("mergeable"),  # MERGEABLE | CONFLICTING | UNKNOWN
+        "merge_state": pr.get("mergeStateStatus"),  # CLEAN | BLOCKED | BEHIND | DIRTY | UNSTABLE | ...
+        "review": pr.get("reviewDecision") or None,
+        "ci": ci,
+        "failing": [n for n, _, b in checks if b == "red"],
+        "base": pr.get("baseRefName"),
+    }
+
+
+def readiness(owner: str, repo: str, n: str):
+    pr, proc = gh_json(["pr", "view", n, "-R", f"{owner}/{repo}", "--json", _READY_FIELDS], timeout=30)
+    if not isinstance(pr, dict):
+        return 502, {"error": ((proc.stderr or "").strip().splitlines() or ["gh could not read the PR"])[-1]}
+    return 200, shape_readiness(pr)
+
+
+def merge(owner: str, repo: str, n: str):
+    """(status, body): squash-merge the PR (the user confirmed it in the UI). No branch deletion,
+    no auto-merge: GitHub refuses what it won't merge and its reason is passed back."""
+    p = run(["gh", "pr", "merge", n, "-R", f"{owner}/{repo}", "--squash"], timeout=120)
+    if p.returncode != 0:
+        return 409, {"error": ((p.stderr or p.stdout or "").strip().splitlines() or ["gh pr merge failed"])[-1]}
+    return 200, {"merged": True, "url": f"https://github.com/{owner}/{repo}/pull/{n}"}

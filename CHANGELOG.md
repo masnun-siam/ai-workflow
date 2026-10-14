@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Merge PRs from the UI.** Squash and merge from the PR popup or a pipeline's merge order, after
+  a confirm that lists what isn't ready (CI, review, conflicts, draft, unmerged PRs before it).
 - **No repo yet: start from an idea.** New run and Flow can run create-prd, dump, intake or a custom
   prompt in the notes vault, with the vault folder suggested from your text (keywords, or Claude
   on request) and confirmed by the session. Create repo turns an approved idea into a local git
