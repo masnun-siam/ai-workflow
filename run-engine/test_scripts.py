@@ -243,7 +243,7 @@ with tempfile.TemporaryDirectory() as d:
         assert proc.returncode == 0, f"{argv} exited {proc.returncode}: {proc.stderr}"
 ok("best-effort subcommands exit 0 even with gh/node missing from PATH")
 
-# gitnexus analyze must never write its block into CLAUDE.md/AGENTS.md (issue #260)
+# gitnexus analyze must never write its block into CLAUDE.md/AGENTS.md (issue #260) or install skills
 _calls = []
 _orig_run = gitnexus.run
 gitnexus.run = lambda argv, **kw: (
@@ -257,9 +257,9 @@ try:
 finally:
     gitnexus.run = _orig_run
 assert len(_calls) == 2, _calls
-assert all("--skip-agents-md" in c for c in _calls), _calls
+assert all("--skip-agents-md" in c and "--skip-skills" in c for c in _calls), _calls
 assert _calls[1][:2] == ["npx", "gitnexus@latest"], "an old runner falls through to a pinned fallback"
-ok("gitnexus analyze passes --skip-agents-md on both paths; fallback pins @latest")
+ok("gitnexus analyze passes --skip-agents-md and --skip-skills on both paths; fallback pins @latest")
 
 # --------------------------------------------------------------------------- epic DAG
 
