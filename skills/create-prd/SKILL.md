@@ -288,7 +288,9 @@ question where it came up. For each decision:
    skip it; it is already there.
 2. Otherwise append `- <decision> — <why> (<source>)` to `## Decisions`.
 3. If it answers an item in `## Open questions`, remove that item. If it changes a requirement or
-   its acceptance check, edit that requirement to match.
+   its acceptance check, edit that requirement to match. If it adds scope no requirement covers yet
+   (Flow passes a new request this way when the feature's PRD is already approved), add it as the
+   next `FR-n` with its acceptance line, in the epic it belongs to.
 4. When the PRD is `Approved`, also append `- YYYY-MM-DD — <decision>; issues affected: <list or none>`
    to `## Change log`, and tell the user which tasks and issues must change. Never edit an issue here.
 

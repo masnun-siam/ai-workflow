@@ -2903,6 +2903,15 @@ out('flow: parseNext and handoff (valid, last of several, missing, error result,
   assert.equal(F.notePath('05-Work/P/F/PRD.md', '05-Work/P/F'), '05-Work/P/F/PRD.md'); assert.equal(F.notePath('docs/prds/x.md', ''), 'docs/prds/x.md');
   assert.ok(F.isLocalRepo({ repo: 'local/x' }) && !F.isLocalRepo({ repo: 'local/x', vault: true }) && !F.isLocalRepo({ repo: 'acme/x' }) && !F.isLocalRepo({ repo: 'local/x', manual: true }));
   out('flow: a step that asks to be re-run shows its reason; repo PRDs show the vault copy; local repos detected');
+  assert.deepEqual(F.parseNext('→ next: /create-prd "05-Work/Office Snacks/Snack Voting"'), { command: '/create-prd', arg: '05-Work/Office Snacks/Snack Voting' }, 'quotes stripped');
+  assert.deepEqual(F.handoff('issues', { text: 'x\n→ next: /create-prd "05-Work/A B/C"' }), { folder: '05-Work/A B/C', prd: '', tasks: '' });
+  const ua = F.prdUpdateArgs('05-Work/Office Snacks/Snack Voting/', 'Update  the docs\nand README', '2026-10-15');
+  assert.equal(ua, '--update "05-Work/Office Snacks/Snack Voting/PRD.md" Update the docs and README — requested in Flow on 2026-10-15, add it to the scope (Flow dump)');
+  assert.deepEqual(F.handoff('prd', { text: 'Added FR-12.' }, '/create-prd ' + ua), { prd: '05-Work/Office Snacks/Snack Voting/PRD.md' }, 'an update hands its PRD to Tasks');
+  assert.ok(F.handoff('prd', { text: 'no next' }, '/create-prd 05-Work/A/B').error, 'a normal create-prd still needs its next line');
+  assert.equal(F.taskNoteFolder('05-Work/Office Snacks/Snack Voting/Tasks.md'), '05-Work/Office Snacks/Snack Voting');
+  assert.equal(F.taskNoteFolder('docs/tasks/x.md'), null);
+  out('flow: quoted next args, approved PRD updated with the request, task-note folder for Write a PRD instead');
 }
 for (const t of ['`\u2192 next: /prd 05-Work/P/F`', '**\u2192 next: /prd 05-Work/P/F**', '  \u2192 next: /prd 05-Work/P/F  ']) assert.deepEqual(F.parseNext(t), { command: '/prd', arg: '05-Work/P/F' }, t);
 assert.deepEqual(F.handoff('issues', { kind: 'result', text: '\u2192 next: herdr-dispatch #12 #13' }), { issues: [12, 13] });
