@@ -27,6 +27,8 @@ you never write a verdict yourself. You are the artifact's author.
 ## Arguments
 
 `/peer-review [--lenses <lens,lens>] [--since <sha|@{u}>] [--herdr]`: standalone, kind `custom`.
+Argument text that is not a flag is a task: do that work first, then review it as `custom`,
+with that text as the Ask.
 
 A command calling this skill passes `--kind <kind> --dir <review_dir> [--lenses <lens,lens>] [--herdr]`
 after writing its draft to `<review_dir>/draft.md`; that draft is the artifact. With no
@@ -159,6 +161,12 @@ say so.
   every lens (no `--wait`, so they work in parallel), then for each lens
   `herdr agent wait rv-<lens> --until idle --until done --until blocked`. On `blocked`, tell the
   user which tab needs them (usually a permission prompt) and wait again; it does not count as
-  a missing verdict.
+  a missing verdict. Right after the prompt the tab can still read `idle`, so `wait` may return
+  before the reviewer starts: if `round-<n>/<lens>.json` is missing, wait again before
+  re-dispatching.
 - The tabs stay open across rounds, so a reviewer remembers its earlier rounds; `prior` stays
   the record of what was settled. The user can talk to any tab between rounds.
+
+## Self-improve
+
+After the task, follow `../../self-improve.md` (relative to this skill's directory).

@@ -69,3 +69,7 @@ JSON:
 ## Smoke test
 
 Ask the agent to run the skill against a Laravel app that has Redis queues, a scheduler, and a deployment workflow. Verify that the response references specific Laravel config files, identifies real release blockers or warnings, includes pre-deploy checks, and ends with a deployment verdict.
+
+## Self-improve
+
+After the task, follow `../../self-improve.md` (relative to this skill's directory).

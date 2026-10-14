@@ -410,3 +410,7 @@ Then end with the `→ next:` line for the type. It is the last line of your out
   a folder, rewrite the `## Related` block of every existing sibling to add the new line, so the
   older docs link to the new one (see **Tagging and linking**).
 - Never skip Step 3's confirmation for a human-invoked `/dump`, even for a bug report that obviously names its feature. This is the one rule this skill must never bend on for interactive use — the only exceptions are the programmatic `auto-confirm: yes` path above, which never creates new vault structure, and **Flow auto mode**, where the user opted out of the confirmation in the UI.
+
+## Self-improve
+
+After the task, follow `../../self-improve.md` (relative to this skill's directory).

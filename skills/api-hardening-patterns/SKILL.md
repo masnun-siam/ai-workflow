@@ -79,3 +79,7 @@ public function store(StorePostRequest $request): PostResource
 ## Smoke test
 
 Run the skill on a Laravel API controller with inline validation, missing policy checks, unsafe resource serialization, and unlimited pagination. Verify that the response returns concrete Laravel fixes such as `FormRequest`, policy, middleware, resource, or model-visibility changes instead of generic security advice.
+
+## Self-improve
+
+After the task, follow `../../self-improve.md` (relative to this skill's directory).

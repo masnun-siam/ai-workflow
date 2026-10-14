@@ -77,3 +77,7 @@ herdr-dispatch, or one session with `/run-issue <parent>` (Epic mode). End with 
 last line of your output:
 
 `→ next: herdr-dispatch <parent>`
+
+## Self-improve
+
+After the task, follow `../../self-improve.md` (relative to this skill's directory).

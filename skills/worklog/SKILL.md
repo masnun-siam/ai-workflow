@@ -29,3 +29,7 @@ AskUserQuestion exactly as written.
 
 After the subagent returns, relay its report (the rendered markdown and the
 Obsidian link) to the user.
+
+## Self-improve
+
+After the task, follow `../../self-improve.md` (relative to this skill's directory).

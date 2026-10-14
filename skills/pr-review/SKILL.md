@@ -125,3 +125,7 @@ Everything else is unchanged. Don't soften findings because the user wrote the c
 ## Tone of the comments themselves
 
 These are read by a human being whose work is being critiqued, in public, by a bot operating under a colleague's name. Be specific, be short, and be kind — describe the problem and its cost, propose a direction, and leave room to be wrong. "This duplicates `parse_duration` in `utils/time.py:31`; worth reusing it so the two don't drift" beats "DRY violation." Skip praise-padding, skip lectures, and never moralize about a principle when you can point at a consequence.
+
+## Self-improve
+
+After the task, follow `../../self-improve.md` (relative to this skill's directory).

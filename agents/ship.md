@@ -93,16 +93,6 @@ Print the detected base branch name. In every subsequent `git diff`, `git log`, 
 
 3. Run `git diff <base>...HEAD --stat` and `git log <base>..HEAD --oneline` to understand what's being shipped.
 
-4. Check review readiness:
-
-## Review Readiness Dashboard
-
-After completing the review, read the review log and config to display the dashboard.
-
-```bash
-$GSTACK_ROOT/bin/gstack-review-read
-```
-
 ## Step 2: Sync with base branch
 
 1. Fetch the latest changes: `git fetch origin <base>`
