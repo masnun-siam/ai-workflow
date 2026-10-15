@@ -45,7 +45,7 @@ export function shownState(item) {
 export function itemActions(item) {
   if (shownState(item) === 'merged') return [];
   if (item.state === 'failed' || item.state === 'stopped') return ['retry', 'skip'];
-  if (item.state === 'skipped') return item.reason === 'manual' ? ['retry'] : [];
+  if (item.state === 'skipped') return ['retry'];
   if (item.state === 'queued') return ['skip'];
   return [];
 }
