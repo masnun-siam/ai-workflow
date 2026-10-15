@@ -4,6 +4,9 @@
 
 ### Added
 
+- **`/release-pr`.** Opens or refreshes the staging → master release PR with a summary built from
+  the PRs really on staging since the last release, a deploy checklist and env/migration notes,
+  then posts the Slack trigger and hands off to `/pr-grind`. Supports partial releases and `--dry-run`.
 - **Merge PRs from the UI.** Squash and merge from the PR popup or a pipeline's merge order, after
   a confirm that lists what isn't ready (CI, review, conflicts, draft, unmerged PRs before it).
 - **No repo yet: start from an idea.** New run and Flow can run create-prd, dump, intake or a custom
