@@ -107,6 +107,11 @@ case "$FAKE_CLAUDE_MODE" in
     while [ ! -f "$FAKE_DIR/exit" ]; do sleep 0.1; done
     printf '%s\n' "$RESULT"
     exit 0;;
+  askhang)
+    printf '%s\n' "$INIT" '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"aiw ask <<EOF"}}]}}'
+    while [ ! -f "$FAKE_DIR/exit" ]; do sleep 0.1; done
+    printf '%s\n' "$RESULT"
+    while :; do sleep 0.2; done;;
   askfail)
     printf '%s\n' "$INIT"
     while [ ! -f "$FAKE_DIR/exit" ]; do sleep 0.1; done
@@ -356,6 +361,20 @@ def answer_checks():
         r = ui_sessions.load(rec["id"])
         assert r["status"] == "waiting" and r["pending_question"] == pend, r
         ok("clean exit during waiting keeps status waiting and the round")
+
+        # -- turn ended on a recorded question but a background task keeps claude alive: ended after the grace
+        d, fk, work = setup("askhang")
+        grace, ui_runner.ASKED_EXIT_GRACE_SECONDS = ui_runner.ASKED_EXIT_GRACE_SECONDS, 0.5
+        rec = ui_runner.start("/run-issue 1", work)
+        live.append(rec)
+        wait_for(lambda: b"aiw ask" in read(rec["id"], "stream.jsonl"))
+        pend = ui_sessions.set_pending(rec["id"], rnd())["pending_question"]
+        open(os.path.join(fk, "exit"), "w").close()
+        wait_finished(rec["id"])
+        ui_runner.ASKED_EXIT_GRACE_SECONDS = grace
+        r = ui_sessions.load(rec["id"])
+        assert r["status"] == "waiting" and r["pending_question"] == pend and r["ended_at"] and not alive(r["pid"]), r
+        ok("a claude lingering after asking is ended, and the question stays answerable")
 
         # -- process still alive: 409, nothing spawned
         d, fk, work = setup("ask")

@@ -1,22 +1,31 @@
 """GitHub status for Cards: issue state/labels plus PR state, approval and CI (read-only, cached).
 
 A live server polls /board.json every few seconds; `gh` is only run when an entry is older
-than TTL, on a pool, so a request never waits on it. A failed fetch keeps the last good value
-and marks it stale. Once the PR is merged/closed and the issue closed the entry is frozen.
+than its TTL, on a pool, so a request never waits on it. A failed fetch keeps the last good value
+and marks it stale. An entry is frozen (never refetched) once its PR is merged, its issue is
+closed with no open PR, or the issue is gone from GitHub. The cache lives on disk too, so a
+restart does not refetch every card at once.
 """
 
 from __future__ import annotations
 
+import json
+import os
 import sys
 import threading
 import time
 
-from shared import gh_json
+from shared import atomic_write_text, data_dir, gh_json
 
-TTL = 45
+TTL = 45  # a PR whose CI is still running
+IDLE_TTL = 300  # any other card not yet frozen: two GraphQL calls per card add up across a full board
+RATE_LIMIT_PAUSE = 600  # GitHub said the rate limit is spent: no fetches, last values shown stale
 _FAILING = {"FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE", "ERROR"}
 
 _cache: dict = {}
+_loaded = False
+_paused_until = 0.0
+_GONE = ("could not resolve to an issue", "was deleted")
 _pending: set = set()
 _lock = threading.Lock()
 
@@ -54,13 +63,66 @@ def summarize(issue, pr):
 
 
 def _frozen(value):
-    pr, issue = value["pr"], value["issue"]
-    return bool(issue and issue["state"] == "CLOSED" and (pr is None or pr["state"] in ("MERGED", "CLOSED")))
+    pr, issue = value.get("pr"), value.get("issue")
+    if issue and issue.get("state") == "DELETED" or pr and pr.get("state") == "MERGED":
+        return True  # a merge into a non-default branch leaves the issue open for good
+    return bool(issue and issue.get("state") == "CLOSED" and (pr is None or pr.get("state") == "CLOSED"))
+
+
+def _path() -> str:
+    return os.path.join(data_dir(), "gh-status.json")
+
+
+def _load() -> None:
+    """Fill the cache from disk once per process. Caller holds _lock."""
+    global _loaded
+    if _loaded:
+        return
+    _loaded = True
+    try:
+        with open(_path(), encoding="utf-8") as f:
+            rows = json.load(f)
+    except (OSError, ValueError):
+        return
+    for row in rows if isinstance(rows, list) else []:
+        if isinstance(row, dict) and isinstance(row.get("value"), dict):
+            key = (row.get("owner"), row.get("repo"), row.get("issue"))
+            _cache.setdefault(key, {"value": row["value"], "at": row.get("at") or 0, "stale": False})
+
+
+def _save() -> None:
+    """Caller holds _lock."""
+    rows = [
+        {"owner": k[0], "repo": k[1], "issue": k[2], "value": e["value"], "at": e["at"]}
+        for k, e in _cache.items()
+        if e.get("value")
+    ]
+    try:
+        atomic_write_text(_path(), json.dumps(rows))
+    except OSError as exc:
+        print(f"ui_status: could not save the status cache: {exc}", file=sys.stderr)
+
+
+def _ttl(value):
+    pr = (value or {}).get("pr")
+    return TTL if pr and pr.get("state") == "OPEN" and pr.get("ci") == "pending" else IDLE_TTL
+
+
+class RateLimited(RuntimeError):
+    pass
+
+
+def _rate_limited(proc) -> None:
+    if "rate limit" in (proc.stderr or "").lower():
+        raise RateLimited((proc.stderr or "").strip()[:200])
 
 
 def _fetch(owner, repo, issue, pr_url, branch):
     slug = f"{owner}/{repo}"
-    iss, _ = gh_json(["issue", "view", str(issue), "-R", slug, "--json", "state,labels"], timeout=30)
+    iss, proc = gh_json(["issue", "view", str(issue), "-R", slug, "--json", "state,labels"], timeout=30)
+    _rate_limited(proc)
+    if iss is None and any(g in (proc.stderr or "").lower() for g in _GONE):
+        return {"issue": {"state": "DELETED", "labels": []}, "pr": None}
     target = pr_url or branch
     pr = None
     if target:
@@ -68,6 +130,7 @@ def _fetch(owner, repo, issue, pr_url, branch):
             ["pr", "view", target, "-R", slug, "--json", "url,number,state,reviewDecision,statusCheckRollup"],
             timeout=30,
         )
+        _rate_limited(proc)
         if pr is None and "no pull requests found" in (proc.stderr or ""):
             target = None  # a branch with no PR yet is a normal state, not a failed fetch
     if not isinstance(iss, dict) or (target and not isinstance(pr, dict)):
@@ -76,8 +139,13 @@ def _fetch(owner, repo, issue, pr_url, branch):
 
 
 def _fill(key, pr_url, branch):
+    global _paused_until
     try:
         value = _fetch(*key, pr_url, branch)
+    except RateLimited as exc:
+        print(f"ui_status: GitHub rate limit, pausing status fetches {RATE_LIMIT_PAUSE}s: {exc}", file=sys.stderr)
+        _paused_until = time.time() + RATE_LIMIT_PAUSE
+        value = None
     except Exception as exc:  # logged, last good value stays
         print(f"ui_status: {exc}", file=sys.stderr)
         value = None
@@ -85,6 +153,7 @@ def _fill(key, pr_url, branch):
         old = _cache.get(key)
         if value is not None:
             _cache[key] = {"value": value, "at": time.time(), "stale": False}
+            _save()
         elif old:
             old["stale"], old["at"] = True, time.time()
         else:
@@ -96,9 +165,12 @@ def get(owner, repo, issue, pr_url, branch, pool):
     """Cached status dict for a Card, or None until first fetched. Refreshes in the background."""
     key = (owner, repo, int(issue))
     with _lock:
+        _load()
         entry = _cache.get(key)
-        fresh = entry and (time.time() - entry["at"] < TTL or (entry["value"] and _frozen(entry["value"])))
-        start = not fresh and key not in _pending
+        fresh = entry and (
+            time.time() - entry["at"] < _ttl(entry["value"]) or (entry["value"] and _frozen(entry["value"]))
+        )
+        start = not fresh and key not in _pending and time.time() >= _paused_until
         if start:
             _pending.add(key)
     if start:
@@ -124,5 +196,6 @@ def mark_merged(pr_url) -> None:
 def cached(owner, repo, issue):
     """The last fetched status for a Card, or None; never starts a fetch."""
     with _lock:
+        _load()
         entry = _cache.get((owner, repo, int(issue)))
     return entry["value"] if entry else None

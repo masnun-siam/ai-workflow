@@ -107,6 +107,7 @@ out('session.js: eventText, filterEvents, toolSummary');
 const GH = await import(new URL('./ghstatus.js', process.env.RUN_URL).href);
 assert.deepEqual(GH.ghChips({ issue: { state: 'OPEN', labels: ['bug'] } }), []);
 assert.deepEqual(GH.ghChips({ issue: { state: 'CLOSED', labels: ['bug'] } }, true).map((c) => c.tone), ['ok', 'label']);
+assert.deepEqual(GH.ghChips({ issue: { state: 'DELETED', labels: [] } }), [{ text: 'issue deleted', tone: 'bad' }]);
 assert.deepEqual(GH.ghChips({ issue: { state: 'OPEN', labels: ['a', 'b', 'c', 'd', 'e'] } }, true).map((c) => c.text), ['a', 'b', 'c', '+2 more']);
 out('ghstatus: no chip for an open issue, labels get their own tone');
 

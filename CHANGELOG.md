@@ -194,6 +194,12 @@
 
 ### Fixed
 
+- **Board status stays under GitHub's rate limit.** Cards refetch every 5 min (45 s only while a
+  PR's CI runs), stop for good once the PR is merged or the issue is deleted (shown as "issue
+  deleted"), survive a server restart from a cache on disk, and pause all fetches for 10 min when
+  GitHub reports the rate limit spent.
+- **A question no longer locks for minutes.** When a session asked a question but a background
+  task kept `claude` alive, it is ended 30 s later so the answer form unlocks.
 - **Default-mode dev no longer escalates.** A test that already failed on the base branch made dev
   escalate, which left a draft PR and a failed pipeline item. Dev now always reports passed with what
   is unmet in its summary; the post-check and the final report carry it, and `aiw route` rejects a

@@ -54,6 +54,9 @@ GRIND_PREFIX = "Start the review grind for PR "
 CLAUDE_ARGS = ["--print", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"]
 STOP_GRACE_SECONDS = 10
 POLL_SECONDS = 0.2
+# After a turn ends on a recorded question, claude --print still waits for its background tasks
+# (a hung CLI call kept one alive 10 min); past this it is ended so the answer form unlocks.
+ASKED_EXIT_GRACE_SECONDS = 30
 
 # session id -> Popen for sessions started here; None for sessions re-attached by reconcile().
 _procs: dict = {}
@@ -467,9 +470,20 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
         ps_errors[0] = 0
         return cur == started
 
+    turn_ended, reaped = None, False
     try:
         while alive():
             drain()
+            if saw_result and asked and not is_error and not reaped:
+                turn_ended = turn_ended or time.time()
+                if time.time() - turn_ended > ASKED_EXIT_GRACE_SECONDS and (
+                    (ui_sessions.load(sid) or {}).get("status") == "waiting"
+                ):
+                    reaped = True
+                    try:
+                        os.killpg(pid or proc.pid, signal.SIGTERM)
+                    except (ProcessLookupError, PermissionError):
+                        pass
             time.sleep(POLL_SECONDS)
         try:
             drain()
@@ -478,7 +492,7 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
                 raise  # re-attached sessions may legitimately have no stream
         if buf.strip():
             handle(buf)  # final line without trailing newline
-        rc = proc.returncode if proc is not None else None
+        rc = 0 if reaped else proc.returncode if proc is not None else None
         status = (ui_sessions.load(sid) or {}).get("status")
         if sid not in _stopping and status != "stopped":
             if is_error and (limit or _LIMIT_RE.search(first_err or "")):
