@@ -20,6 +20,7 @@ export function ghChips(gh, labels = false) {
   if (gh.issue && gh.issue.state) {
     // Open is the normal case, so only a closed issue earns a chip.
     if (gh.issue.state === 'CLOSED') chips.push({ text: 'issue closed', tone: 'ok' });
+    if (gh.issue.state === 'DELETED') chips.push({ text: 'issue deleted', tone: 'bad' });
     if (labels) {
       const all = gh.issue.labels || [];
       for (const label of all.slice(0, 3)) chips.push({ text: label, tone: 'label' });
