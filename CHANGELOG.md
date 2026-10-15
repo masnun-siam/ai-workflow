@@ -194,6 +194,12 @@
 
 ### Fixed
 
+- **Default-mode dev no longer escalates.** A test that already failed on the base branch made dev
+  escalate, which left a draft PR and a failed pipeline item. Dev now always reports passed with what
+  is unmet in its summary; the post-check and the final report carry it, and `aiw route` rejects a
+  dev bounce or escalate there.
+- **Retry a blocked pipeline item.** A row skipped because its blocker failed now has Retry: a
+  blocker whose PR you merged by hand counts as done, so the item starts.
 - **Flow lost a new request routed into an approved feature.** Dump filed it as a task, Issues sent
   it back to PRD, and create-prd/create-tasks found the old approved PRD and task list unchanged.
   Now Flow's PRD step adds the request to an approved PRD (`create-prd --update`, which may add a

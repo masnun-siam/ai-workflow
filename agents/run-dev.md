@@ -48,11 +48,18 @@ Three steps, in this order, in one dispatch:
    Put the result in `handoff.verify`, shaped exactly like run-verifier's envelope fields
    (`verdict`, `modes`, per-mode `criteria[]` and `evidence`), or
    `{"verdict": "skipped", "reason": "..."}`. On **FAIL**, fix and re-verify only the
-   failed mode, at most twice. Still FAIL → return `status: "escalate"` naming the unmet
-   criterion; never `passed` with a FAIL verify. The engine's post-check refuses that.
+   failed mode, at most twice. Still FAIL → keep the FAIL verdict as it is.
 
-Where the sections below talk about bouncing `to: "sdet"`: in default mode there is no
-sdet. A wrong test is a `test_changes[]` entry instead.
+**Always return `status: "passed"` in default mode.** You are the only build station, so
+there is nobody to bounce to and nothing to escalate: `aiw route` rejects either status
+from you (exit 5). Whatever is still unmet (a FAIL verify, a red test you could not fix, a
+test that already fails on the base branch and is outside this issue's scope) goes in
+`summary` and `handoff.report`, naming the test or criterion and why. The post-check then
+gives you one more try, and after that the run carries it to the PR and the final report.
+Never weaken or skip a test to make the suite green.
+
+Where the sections below talk about bouncing `to: "sdet"` or returning `escalate`: in
+default mode neither applies. A wrong test is a `test_changes[]` entry instead.
 
 ## Fix mode
 

@@ -345,6 +345,15 @@ def validate_envelope(envelope: dict, ledger: Ledger, config: dict) -> list[str]
     if isinstance(station, str) and ledger.stations and station not in ledger.stations:
         errors.append(f"station {station!r} is not in this run's roster (" + " -> ".join(ledger.stations) + ")")
 
+    # Default mode: dev writes the tests, implements and verifies in one station, so there is
+    # nobody to bounce to and nothing to escalate. Whatever is still red goes in the summary;
+    # dev's post-check and Gate 2 carry it, and the run still reaches a PR.
+    if station == "dev" and status in ("bounce", "escalate") and "sdet" not in ledger.stations:
+        errors.append(
+            f'default-mode dev must report "passed", not {status!r}: put what is still unmet in summary '
+            "and handoff.report; the post-check and Gate 2 carry it"
+        )
+
     if status == "bounce":
         bounce = envelope.get("bounce")
         if not isinstance(bounce, dict) or "to" not in bounce or "reason" not in bounce:

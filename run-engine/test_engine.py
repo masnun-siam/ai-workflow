@@ -228,6 +228,14 @@ assert any(
 )
 ok("envelope contract: required fields, evidence gate + skip exemption, 3-status vocabulary")
 
+lean = Ledger(41, CONFIG["modes"]["default"]["stations"], 2)
+lean.current_index = lean.stations.index("dev")
+for status, kw in (("escalate", {}), ("bounce", {"bounce": {"to": "dev", "reason": "x"}})):
+    assert any("default-mode dev" in e for e in validate_envelope(envelope("dev", status, **kw), lean, CONFIG)), status
+full = Ledger(41, ["researcher", "planner", "sdet", "dev", "verifier", "reviewer", "fixer"], 2)
+assert not any("default-mode dev" in e for e in validate_envelope(envelope("dev", "escalate"), full, CONFIG))
+ok("default-mode dev may only report passed; full-mode dev may still escalate")
+
 
 # --- 8. globs do not let `*` cross a `/` ------------------------------------
 
