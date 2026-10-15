@@ -713,7 +713,7 @@ assert.equal(new D.Dispatch({}).state.text, '');
 out('dispatch: issues prop prefills the input');
 
 assert.deepEqual(D.itemActions({ state: 'failed' }), ['retry', 'skip']);
-assert.deepEqual(D.itemActions({ state: 'skipped', reason: 'blocked by #3' }), []);
+assert.deepEqual(D.itemActions({ state: 'skipped', reason: 'blocked by #3' }), ['retry']);
 assert.deepEqual(D.itemActions({ state: 'skipped', reason: 'manual' }), ['retry']);
 assert.deepEqual(D.itemActions({ state: 'running' }), []);
 assert.deepEqual(D.pipelineActions('active'), ['pause', 'stop']);

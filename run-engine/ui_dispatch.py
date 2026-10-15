@@ -21,6 +21,7 @@ from urllib.parse import parse_qs, unquote_plus
 import dispatch
 import epic
 import ui_board
+import ui_cleanup
 import ui_notify
 import ui_options
 import ui_repos
@@ -104,7 +105,8 @@ def advance(pipe: dict, observed: dict):
     by = {it["issue"]: it for it in pipe["items"]}
     for n, it in by.items():
         if it.get("session_id") and n in observed:
-            if it["state"] == "done" and observed[n][1] is None:  # ledger cleaned up after the run finished
+            # done sticks once the ledger is cleaned up, or once a human merged the PR of a run that escalated
+            if it["state"] == "done" and (observed[n][1] is None or it.get("reason") == "merged"):
                 continue
             st = item_state(*observed[n])
             if st:
@@ -542,9 +544,26 @@ def _item(pipe: dict, n) -> dict:
     return it
 
 
+def _clear_merged_blockers(pipe: dict, it: dict) -> None:
+    """A blocker whose run escalated or failed but whose PR a human merged is done: mark it so, or
+    Conflict naming the first blocker that is not. Checked on Retry only, so no gh calls per tick."""
+    owner, _, repo = pipe["slug"].partition("/")
+    by = {i["issue"]: i for i in pipe["items"]}
+    for d in it["deps"]:
+        dep = by[d]
+        if dep["state"] not in BAD:
+            continue
+        run, _ = _run_of(owner, repo, dep)
+        if not ui_cleanup._pr_merged((run or {}).get("pr")):
+            raise Conflict(f"#{it['issue']} is blocked by #{d}, which has no merged PR: retry or merge #{d} first")
+        dep["state"], dep["reason"] = "done", "merged"
+
+
 def retry(pipe: dict, it: dict) -> None:
     if it["state"] not in ("failed", "stopped", "skipped"):
         raise Conflict(f"#{it['issue']} is {it['state']}, nothing to retry")
+    if it["state"] == "skipped" and it.get("reason") != "manual":
+        _clear_merged_blockers(pipe, it)
     sid, it["reason"] = it.get("session_id"), None
     if it["state"] == "stopped" and sid:
         try:

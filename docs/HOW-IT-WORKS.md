@@ -141,6 +141,10 @@ Every station returns exactly one JSON object. Always these fields:
 - `bounce` — I found a defect in someone *else's* work; send it back to them.
 - `escalate` — I hit a wall I cannot get around.
 
+In the default mode `dev` only ever returns `passed`: it writes the tests, implements and
+verifies alone, so it has nobody to bounce to. What it could not finish goes in its summary,
+and the post-check and Gate 3 carry it.
+
 There is deliberately **no `blocked`**. A station cannot invent a fourth thing for you to
 answer. That is how "exactly three gates" is enforced structurally rather than by asking
 everyone to behave.

@@ -292,6 +292,29 @@ for call in (
         assert e.slug == "acme/new" and e.candidates == ["/home/me/new"] and "no local clone registered" in str(e)
 ok("an unregistered repo asks for a clone (preview by number, preview by URL, create) with candidates")
 
+# a blocker that escalated but whose PR a human merged unblocks its dependent on Retry
+_real_run_of, _real_merged = d._run_of, d.ui_cleanup._pr_merged
+d._run_of = lambda o, r, it: ({"pr": f"https://x/pull/{it['issue']}"}, (o, r, it["issue"]))
+merged = {"https://x/pull/1"}
+d.ui_cleanup._pr_merged = lambda pr: pr in merged
+p = pipe([(1, []), (2, []), (3, [1, 2])])
+p.update(status="done", slug="o/r")
+p["items"][0].update(state="failed", reason="run escalated")
+p["items"][1].update(state="failed", reason="run escalated")
+p["items"][2].update(state="skipped", reason="blocked by #1")
+try:
+    d.retry(p, p["items"][2])
+    assert False
+except d.Conflict as e:
+    assert "#2" in str(e) and p["items"][0]["state"] == "done"
+merged.add("https://x/pull/2")
+d.retry(p, p["items"][2])
+assert [i["state"] for i in p["items"]] == ["done", "done", "queued"] and p["status"] == "active"
+p["items"][0]["session_id"] = "s1"
+assert d.advance(p, {1: ("done", "escalated")})[0] == [3] and p["items"][0]["state"] == "done"
+d._run_of, d.ui_cleanup._pr_merged = _real_run_of, _real_merged
+ok("retry on a blocked item marks merged blockers done, refuses while one is unmerged")
+
 print(f"\n{n_ok} passed")
 
 
