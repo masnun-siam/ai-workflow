@@ -1,0 +1,7 @@
+{
+  "skill_name": "release-pr",
+  "evals": [
+    {"id": 0, "prompt": "/release-pr --dry-run — cut the staging → master release for bop-bd and get it reviewed", "expected_output": "PR body + title + Slack trigger message written to the dry-run dir; detects open #5999 and says it would update it; includes #5876 and #5877; excludes impersonation stack and #5990 sync; no secrets; merge-commit note", "files": []},
+    {"id": 1, "prompt": "release staging to master and start the review grind, but don't actually create or post anything yet — dry run. heads up: arena sms on staging only got verified this morning, and order-confirmation emails seem flaky on staging", "expected_output": "Same as eval 0, plus surfaces the email flakiness as a possible blocker and asks/notes rather than deciding silently", "files": []}
+  ]
+}

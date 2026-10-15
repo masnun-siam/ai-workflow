@@ -12,6 +12,7 @@
 | `/ai-workflow:peer-review [--lenses <lens,lens>] [--since <sha\|@{u}>] [--herdr]` | a reviewer panel on Opus (critical, CEO, CTO, security, QA, UX, performance; default critical) on the session's change: the diff plus your final answer, checked against what you asked, until every picked lens approves. `--review` on `/create-prd`, `/intake`, `/dump` and `/gh-issue` runs the same loop on their draft before anything is saved or filed |
 | `/ai-workflow:create-tasks <prd>` | split an Approved PRD into a saved, ordered list of one-PR tasks (`docs/tasks/<slug>.md`): each with an Area, a Parallel flag and dependencies inside its own epic, plus Waves and Shared files; tasks are never renumbered, only marked Changed or Dropped. Files no issues; ends `→ next: /refine-issues docs/tasks/<slug>.md` |
 | `/ai-workflow:refine-issues docs/tasks/<slug>.md` | file each task as a `refined` sub-issue of its epic, after one confirmation, with `Depends on: #n` in the body and native blocked-by links (on an older `gh`, `/fix-blockers` sets them); runs one `aiw epic split` per epic; ends `→ next: herdr-dispatch <epic>` (when `--blocked-by` fell back, the report says to run `/fix-blockers <epic>` first) |
+| `/ai-workflow:release-pr [--dry-run] [head=staging] [base=master]` | open or refresh the `staging` → `master` release PR: PRs since the last release (squash history and syncs dropped), a deploy checklist from env vars, migrations, scheduler and queue changes, then the Slack trigger and a hand-off to `/pr-grind`. Builds a cherry-picked `release/<date>` branch when part of staging is held back. Never merges. `--dry-run` writes the body and Slack message under the data dir instead |
 | `/ai-workflow:fix-blockers <parent>` | set GitHub's native "blocked by" relations between an epic's children from their `Depends on:` lines: previews, asks once, writes only the missing edges, reports (never deletes) edges no line names. A standalone command, not a Flow step |
 | `/ai-workflow:jira-to-gh <KEY>` | turn a Jira ticket into exactly one issue the same way as `/gh-issue`; 2 or more tasks create nothing and end `→ next: /create-prd <jira-key-or-url>` |
 | `/ai-workflow:pr-fix-comments <pr>` | work through a PR's review comments, confirming each |
@@ -191,7 +192,7 @@ plugin upgrades** — in-flight runs are not lost when you update.
 ```
 commands/     run-issue (the orchestrator) + 5 intake commands
 agents/       12 run-* pipeline agents + ship, worklog-runner, gh-issue-factchecker
-skills/       pr-review, pr-grind, herdr-dispatch, worklog, dump, create-prd, create-tasks, refine-issues, fix-blockers, flow, peer-review, 7 Laravel reviewers
+skills/       pr-review, pr-grind, herdr-dispatch, worklog, dump, create-prd, create-tasks, refine-issues, fix-blockers, flow, peer-review, release-pr, 7 Laravel reviewers
 run-engine/   engine.py (pure) · route.py (CLI) · checks.py (station post-checks)
               stack/worktree/threads/pr/ci/gitnexus/project/epic (mechanical phases)
               config.json (policy) · test_engine.py + test_scripts.py
