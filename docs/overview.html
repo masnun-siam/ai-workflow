@@ -178,7 +178,7 @@ dl.gloss dt:last-of-type,dl.gloss dd:last-of-type{border-bottom:0}
       <div class="copyrow"><pre id="try1">claude plugin marketplace add &lt;path-to-this-repo&gt;
 claude plugin install ai-workflow@ai-workflow</pre><button class="btn" data-copy="try1">Copy</button></div>
       <div class="copyrow"><pre id="try2">/ai-workflow:run-issue 42</pre><button class="btn" data-copy="try2">Copy</button></div>
-      <p class="hint">Needs an authenticated <code>gh</code> CLI and Python 3.10+. Docker, Slack, GitNexus and Obsidian are optional extras. <code>docs/INSTALL.md</code> is written so you can hand the repo to Claude Code and say "set this up".</p>
+      <p class="hint">Needs an authenticated <code>gh</code> CLI and Python 3.10+. Docker, Slack, GitNexus and Obsidian are optional extras. <code>docs/features/setup.md</code> is written so you can hand the repo to Claude Code and say "set this up".</p>
     </div>
   </div>
 </section>
@@ -447,7 +447,7 @@ Depends on: task 1   becomes   #101</pre>
     <p>Plain assert scripts, no framework, no network, no Docker: <code>python3 run-engine/test_engine.py</code>, <code>test_scripts.py</code>, <code>test_ui_board.py</code>.</p>
   </div>
 
-  <div class="note"><b>Known doc drift.</b> The final gate is "Gate 3" in <code>docs/HOW-IT-WORKS.md</code> but "GATE 2" in <code>commands/run-issue.md</code> section 9.3. <code>plugin.json</code> says 14 agents and <code>docs/REFERENCE.md</code> says 12 <code>run-*</code> plus 3. The repo has 15 agent files (12 <code>run-*</code>, plus <code>ship</code>, <code>worklog-runner</code> and <code>gh-issue-factchecker</code>). Also, <code>commands/gh-issue.md</code> says the readiness check "blocks the run" on a gap, while <code>definition-of-ready.md</code> says it is advisory and only surfaces at Gate 1. This page follows <code>definition-of-ready.md</code>. This page uses the actual values.</div>
+  <div class="note"><b>Known doc drift.</b> The final gate is "GATE 2" in <code>commands/run-issue.md</code> section 9.3; this page calls it Gate 3. <code>plugin.json</code> says 14 agents, but the repo has 15 agent files (12 <code>run-*</code>, plus <code>ship</code>, <code>worklog-runner</code> and <code>gh-issue-factchecker</code>). This page uses the actual values.</div>
 </section>
 
 <!-- 5 GUARDRAILS -->

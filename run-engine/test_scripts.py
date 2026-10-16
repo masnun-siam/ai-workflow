@@ -9,6 +9,7 @@ best-effort subcommands cannot stop a run. Nothing here touches Docker or the ne
 
 from __future__ import annotations
 
+import glob
 import json
 import os
 import re
@@ -1836,8 +1837,10 @@ def _read(*parts):
 
 
 def _user_docs():
-    # README is a link hub; what it used to say now lives in docs/INSTALL.md + docs/REFERENCE.md.
-    return "\n".join((_read("README.md"), _read("docs", "INSTALL.md"), _read("docs", "REFERENCE.md")))
+    # README is a link hub; the docs live in docs/*.md and docs/features/*.md (index: docs/README.md).
+    docs = os.path.join(HERE, "..", "docs")
+    names = sorted(glob.glob(os.path.join(docs, "*.md")) + glob.glob(os.path.join(docs, "features", "*.md")))
+    return "\n".join([_read("README.md")] + [_read(os.path.relpath(n, os.path.join(HERE, ".."))) for n in names])
 
 
 gh_text = _read("commands", "gh-issue.md")
@@ -2520,14 +2523,13 @@ ok(
     "skills/pr-grind/SKILL.md Rules section no longer claims run-ci is the only agent dispatched while CI is red, and still has 'one attempt per head SHA'"
 )
 
-with open(os.path.join(HERE, "..", "docs", "HOW-IT-WORKS.md"), encoding="utf-8") as fh:
-    how_it_works_rails_text = fh.read()
-how_it_works_rails_start = how_it_works_rails_text.index("### The four rails")
+how_it_works_rails_text = _read("docs", "features", "review.md")
+how_it_works_rails_start = how_it_works_rails_text.index("### The rails")
 how_it_works_rails_end = how_it_works_rails_text.index("### The stall detector", how_it_works_rails_start)
 how_it_works_rails_section = how_it_works_rails_text[how_it_works_rails_start:how_it_works_rails_end]
 assert "queued" in how_it_works_rails_section
 assert "one attempt per head SHA" in how_it_works_rails_section
-ok("docs/HOW-IT-WORKS.md rails-table section contains 'queued' and 'one attempt per head SHA'")
+ok("docs/features/review.md rails section contains 'queued' and 'one attempt per head SHA'")
 
 # --------------------------------------------------------------------------- gh-issue always decomposes before creating any issue (issue #38)
 
@@ -2610,19 +2612,16 @@ ok("gh-issue HARD RULE keeps its prohibitions, permitted writes and Scope lapse;
 
 readme_text = _user_docs()
 assert "splits a large brief" not in readme_text, (
-    "README/INSTALL/REFERENCE must not describe gh-issue as splitting a large brief"
+    "README and docs must not describe gh-issue as splitting a large brief"
 )
-ok("README/INSTALL/REFERENCE do not contain 'splits a large brief'")
+ok("README and docs do not contain 'splits a large brief'")
 
-with open(os.path.join(HERE, "..", "docs", "HOW-IT-WORKS.md"), encoding="utf-8") as fh:
-    how_it_works_text = fh.read()
-assert "can split a large brief" not in how_it_works_text, (
-    "HOW-IT-WORKS.md must no longer say 'can split a large brief'"
-)
+how_it_works_text = _user_docs()
+assert "can split a large brief" not in how_it_works_text, "docs must no longer say 'can split a large brief'"
 assert "For work too big for one pull request" not in how_it_works_text, (
-    "HOW-IT-WORKS.md must no longer say 'For work too big for one pull request'"
+    "docs must no longer say 'For work too big for one pull request'"
 )
-ok("docs/HOW-IT-WORKS.md no longer contains 'can split a large brief' or 'For work too big for one pull request'")
+ok("docs no longer contain 'can split a large brief' or 'For work too big for one pull request'")
 
 # --------------------------------------------------------------------------- checks.suite_timeout / run_suite timeout override (issue #25)
 
@@ -3467,13 +3466,12 @@ assert "not a stop-and-ask" in routing_rules or "not a stop-and-ask" in run_issu
 assert "Degraded finish" in routing_rules
 ok("run-issue.md engine escalate bullet still says not a stop-and-ask and routes to Degraded finish")
 
-with open(os.path.join(HERE, "..", "docs", "HOW-IT-WORKS.md"), encoding="utf-8") as fh:
-    how_it_works_text = fh.read()
-assert "immediate" in how_it_works_text.lower() or "as soon as" in how_it_works_text.lower(), (
-    "docs/HOW-IT-WORKS.md must mention the immediate per-blocker ask in its epic Gate 2a description"
+how_it_works_text = _read("docs", "features", "epic-mode.md")
+assert "as soon as that child parks" in how_it_works_text and "end-of-run closer" in how_it_works_text, (
+    "docs/features/epic-mode.md must mention the immediate per-blocker ask in its Gate 2a description"
 )
-assert "sole channel" not in how_it_works_text.lower(), how_it_works_text
-ok("docs/HOW-IT-WORKS.md mentions the immediate per-blocker ask, not just the once-at-the-end description")
+assert "sole channel" not in _user_docs().lower()
+ok("docs/features/epic-mode.md mentions the immediate per-blocker ask, not just the once-at-the-end description")
 
 
 # Issue #82 (single-issue part): factcheck the created issue, ask assignees/project once before the create.
@@ -3662,10 +3660,11 @@ assert hashlib.sha256(_n(_ep).encode()).hexdigest() == EPIC_SHA
 ok("#85 step 3.5 and Epic mode are unchanged")
 
 # Issue #86, rewritten by ADR 0004: docs describe create-prd / create-tasks / refine-issues
-# (README, HOW-IT-WORKS Layer 5 + glossary, CHANGELOG).
+# (docs/plugin.md, docs/features/planning.md + epic-mode.md, CONTEXT.md, CHANGELOG).
 import hashlib as _hl86  # noqa: E402
 
-rd86, hw86, cl86 = _user_docs(), _read("docs", "HOW-IT-WORKS.md"), _read("CHANGELOG.md")
+rd86, cl86 = _user_docs(), _read("CHANGELOG.md")
+hw86 = rd86
 rdn86, hwn86 = _n(rd86), _n(hw86)
 ROW86 = (
     "| `/ai-workflow:gh-issue [--review [<lens,lens>] [--herdr]]` | file exactly one well-formed issue. It decomposes "
@@ -3673,7 +3672,7 @@ ROW86 = (
     "A standalone run ends `→ next: herdr-dispatch <n>` |"
 )
 assert rdn86.count(ROW86) == 1
-assert "parent plus children" not in rdn86 and "parent plus children" not in hwn86
+assert "parent plus children" not in rdn86
 JROW86 = (
     "| `/ai-workflow:jira-to-gh <KEY>` | turn a Jira ticket into exactly one issue the same way as `/gh-issue`; "
     "2 or more tasks create nothing and end `→ next: /create-prd <jira-key-or-url>` |"
@@ -3681,90 +3680,67 @@ JROW86 = (
 assert rdn86.count(JROW86) == 1
 assert "exactly one" in ROW86 and "/create-prd <input>" in ROW86 and "docs/tasks/" not in ROW86  # ADR 0004
 assert "Accepts an epic parent." in rdn86
-assert "aiw epic split|init|next|status    epic decomposition and sequencing" in rd86
+_cli86 = _read("docs", "cli.md")
+for _sub in ("split", "init", "next", "status", "blockers"):
+    assert f"| `aiw epic {_sub}` |" in _cli86, f"cli.md lacks aiw epic {_sub}"
 for _row in (
     "| `/ai-workflow:create-prd ",
     "| `/ai-workflow:create-tasks <prd>` |",
     "| `/ai-workflow:refine-issues docs/tasks/<slug>.md` |",
 ):
-    assert rdn86.count(_row) == 1, f"REFERENCE lacks the {_row!r} row"
-assert "| `/ai-workflow:prd " not in rdn86, "REFERENCE still has the /prd row"
-ok("#86 README gh-issue and jira rows pinned whole; create-prd / create-tasks / refine-issues rows; Epic-mode lines")
+    assert rdn86.count(_row) == 1, f"docs/plugin.md lacks the {_row!r} row"
+assert "| `/ai-workflow:prd " not in rdn86, "docs still have the /prd row"
+ok("#86 plugin.md gh-issue and jira rows pinned whole; create-prd / create-tasks / refine-issues rows; aiw epic rows")
 
-H5 = "## Layer 5 — PRDs, task lists and epics"
-assert hw86.count(H5) == 1 and "## Layer 5 — Task lists and epics" not in hw86
-l5 = _n(_slice(hw86, "## Layer 5", "\n---"))
-P1 = (
-    "`/create-prd` interviews you into a PRD and saves it to `docs/prds/<slug>.md` with the status **Draft**. "
-    "It holds the what and why, a technical design (contracts such as data shapes and endpoints, never code), "
-    "the epics the work splits into, the decisions and a change log. `--review` puts a reviewer panel on the "
-    "draft before it is saved. The status becomes **In review** when you open a PR for the PRD. "
-    "`/create-prd approve <prd>` sets **Approved** and files one **epic** issue "
-    "per `## Epics` entry, labelled `epic` and `prd-<slug>`, then writes each epic's number back into the PRD."
-)
-P2 = (
-    "`/create-tasks` splits an Approved PRD into one-PR tasks and saves them to `docs/tasks/<slug>.md`. Each "
-    "task fits the size rubric: 3 or fewer production files, 1-4 acceptance criteria, one verify command, no new "
-    "dependency. Each names its Area, whether it can run in parallel, and the tasks it depends on, which are "
-    "only tasks in its own epic. The list adds Waves (the tasks that can run together) and Shared files. A later "
-    "edit never renumbers a task; it marks it Changed or Dropped. When the split shows the PRD is silent or "
-    "wrong about a decision, `/create-tasks` asks you and records the answer with `/create-prd --update` first."
-)
-P3 = (
-    "`/refine-issues` files each task as a `refined` sub-issue of its epic, after you confirm the full list. "
-    "Each issue number is written back into the task list. When the PRD and the task list disagree, it stops "
-    "and asks. It then runs one `aiw epic split` per epic, which writes the epic's "
-    "`## Tasks` checklist and the `epic.json` that Epic mode reads. Each issue gets a native blocked-by link "
-    "(on an older `gh`, `/fix-blockers` writes them) and declares its order in plain text:"
-)
-P4 = (
-    "`/gh-issue` and `/jira-to-gh` file exactly one issue. They still break the request down first; when it "
-    "splits into 2 or more tasks they create nothing and end with `→ next: /create-prd <input>`, because "
-    "work that size needs a PRD. `/run-issue` does the same in Preflight: a source that needs a PRD stops the "
-    "run with that hand-off, and no ledger is made."
-)
-P5 = (
-    "**Epic mode** runs a parent issue with sub-issues: one `/create-prd approve` filed, or one filed by hand. "
-    "`/run-issue <parent>` drives all its children. A `/create-prd` epic (labelled `epic` and `prd-<slug>`) "
-    "with no sub-issues is refused, never run as one issue. The rules:"
-)
-for para in (P1, P2, P3, P4, P5):
-    assert l5.count(para) == 1, para[:50]
-assert l5.count("``` Depends on: #12, #13 ```") == 1
-assert l5.index(P1) < l5.index(P2) < l5.index(P3) < l5.index("Depends on: #12, #13") < l5.index(P4) < l5.index(P5)
-for b in (
-    '**Independent children run at the same time.** Dependent ones cannot, by definition — a child stacks its branch on top of the branch it depends on, so it waits for that one to reach "PR open" first.',
-    "**Still three gates, for the whole epic.** Gate 1 shows you the split and *every* child's plan at once. "
-    "A blocker in one child parks that child and the others keep going; Gate 2a covers both an immediate, "
-    "per-blocker ask fired as soon as that child parks (so you are not left waiting until the end to hear about it) "
-    "and an end-of-run closer that fires once, collecting whatever is still pending or deferred when nothing more "
-    "can proceed without you. Gate 3 is one report covering everything, including the order you must merge in.",
-    '**A failed child with dependents is reported by name.** "Never started, blocked by #14" — because a child '
-    "silently missing from a list of twelve is how you discover a month later that a third of the epic was never built.",
+l5 = _n(_read("docs", "features", "planning.md"))
+for frag in (
+    "`docs/prds/<slug>.md`",
+    "**Draft**",
+    "In review",
+    "Approved",
+    "`prd-<slug>`",
+    "`docs/tasks/<slug>.md`",
+    "Changed",
+    "Dropped",
+    "Waves",
+    "Shared files",
+    "`Depends on: #12, #13`",
+    "`epic.json`",
+    "/fix-blockers",
+    "leaves them unassigned",
 ):
-    assert b in l5, b
+    assert frag in l5, frag
+ep86 = _n(_read("docs", "features", "epic-mode.md"))
+for frag in (
+    "Independent children run at the same time.",
+    "A dependent child stacks its branch on the branch it depends on",
+    '"PR open"',
+    "as soon as that child parks",
+    "end-of-run closer",
+    "Never started, blocked by #14",
+    "merge order",
+    "`prd-<slug>`",
+):
+    assert frag in ep86, frag
 for gone in (
     "a **parent** issue plus several",
     "A child-create failure partway through is a recoverable state, not a failure state.**",
     "Kanban",
-    "board view",
     "parent plus children",
     "Resume this list",
 ):
-    assert gone not in l5, gone
-ok(
-    "#86 Layer 5 heading, create-prd / create-tasks / refine-issues paragraphs, Epic-mode lead-in and kept bullets pinned"
-)
+    assert gone not in l5 and gone not in ep86, gone
+ok("#86 planning.md and epic-mode.md carry the create-prd / create-tasks / refine-issues and Epic-mode facts")
 
 GL86 = (
-    "- **Epic** — a parent issue with sub-issues, run by `/run-issue` Epic mode. `/create-prd approve` files "
-    "one per `## Epics` entry of a PRD; `/refine-issues` files its tasks under it."
+    "A parent issue whose sub-issues are the tasks of one `## Epics` entry of a PRD, filed by `/create-prd approve` "
+    "and labelled `epic` + `prd-<slug>`."
 )  # ADR 0004
-assert hwn86.count(GL86) == 1
+assert _n(_read("CONTEXT.md")).count(GL86) == 1
 assert "- **Epic** — a parent issue with dependent children." not in hwn86
-ok("#86 glossary Epic line pinned")
+ok("#86 CONTEXT.md Epic definition pinned")
 
-_docs = _user_docs() + _read("docs", "HOW-IT-WORKS.md") + _read("CONTEXT.md") + _read("docs", "overview.html")
+_docs = _user_docs() + _read("CONTEXT.md") + _read("docs", "overview.html")
 for _old in ("prints them and stops cleanly", "two or more issues, it prints"):
     assert _old not in _docs, f"docs still describe the old /run-issue Preflight: {_old!r}"
 assert _docs.count("makes no ledger") >= 2, "overview.html: Preflight stops with the /create-prd hand-off, no ledger"
@@ -3856,14 +3832,8 @@ for frag in (
     assert frag in _st130n, frag
 ok("#130 run-issue.md State invariant reworded, anchors kept")
 
-_cli130 = rd130[rd130.index("## The `aiw` CLI") :]
-_cli130 = _cli130[: _cli130.index("\n## ", 5)]
-assert "aiw ui" in _cli130, "aiw CLI block lacks aiw ui"
-_m130 = re.search(r"^#{2,4} .*aiw ui.*$", rd130, re.M)
-assert _m130, "README has no aiw ui section heading"
-_ui130 = rd130[_m130.end() :]
-_nx130 = re.search(r"^#{1,%d} " % len(_m130.group(0).split()[0]), _ui130, re.M)
-_ui130 = _ui130[: _nx130.start()] if _nx130 else _ui130
+assert "| `aiw ui` |" in _read("docs", "cli.md"), "cli.md lacks aiw ui"
+_ui130 = _read("docs", "ui.md")
 _ui130n = " ".join(_ui130.split())
 for frag in (
     "--port",
@@ -3891,7 +3861,7 @@ for host in re.findall(r"[\w.<>-]+\.ts\.net", rd130):
     assert host.startswith("<") and ".<tailnet>.ts.net" in host, host
 assert "allowed_hosts" not in rd130
 assert "--allow-host" in _ui130
-ok("#130 README aiw ui section pinned")
+ok("#130 docs/ui.md aiw ui facts pinned")
 # ---- #103 ADR: headless question pause ----
 _adr103 = os.path.join(HERE, "..", "docs", "adr", "0001-headless-question-pause.md")
 assert os.path.isfile(_adr103), "#103 ADR missing: docs/adr/0001-headless-question-pause.md"
@@ -4707,7 +4677,7 @@ assert "/create-prd" in _read("run-engine", "ui_settings.py") and not re.search(
 ), "M4 ui_settings comment"
 ok("M4 no stale /gh-issue-epic or /prd references")
 
-for _name, _txt in (("HOW-IT-WORKS", _read("docs", "HOW-IT-WORKS.md")), ("CHANGELOG", _read("CHANGELOG.md"))):
+for _name, _txt in (("docs", _user_docs()), ("CHANGELOG", _read("CHANGELOG.md"))):
     assert "assign you" not in _txt and "they assign" not in _txt, f"M5 {_name} still says refine-issues assigns you"
     assert "`/refine-issues` leaves them unassigned" in _ws(_txt), f"M5 {_name} must say refine-issues assigns no one"
 assert "**Assignees:** none." in _ri_fw, "M5 the skill is the source"

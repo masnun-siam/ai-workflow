@@ -120,6 +120,11 @@
 
 ### Changed
 
+- **Docs rewritten for AI agents.** `docs/HOW-IT-WORKS.md`, `docs/REFERENCE.md` and `docs/INSTALL.md` are replaced by
+  an index (`docs/README.md`, with a sync marker), `architecture.md`, `development.md`, `engine.md`, `cli.md`,
+  `plugin.md`, `ui.md`, `ui-api.md`, `ui-frontend.md` and one doc per feature under `docs/features/`. Each doc
+  starts with a `Covers:` line naming the paths it describes. `CONTRIBUTING.md` now points to `docs/development.md`.
+
 - **`/prd` is now `/create-prd`, and planning runs `/create-prd` → `/create-tasks` → `/refine-issues` (ADR 0004).**
   Breaking: a hard rename with no `/prd` alias, and PRDs move from `docs/prd/` to
   `docs/prds/<slug>.md`. A PRD has a technical design (contracts allowed, code not), its epics
