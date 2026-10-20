@@ -28,6 +28,10 @@
 
 ### Fixed
 
+- Autopilot started more implement-issue sessions every poll (60 s) beyond its cap: live sessions
+  were never counted, because a session's `repo` is its checkout path, not `owner/repo`. The
+  Delivery board's running count and the start guard had the same blind spot.
+
 - UI: a Planning card in Tasks filed whose issues have no epic now offers **Refine** with the
   unrefined issue numbers. Boards no longer render before the first GitHub fetch, where every
   PRD looked unstarted and offered Create tasks.

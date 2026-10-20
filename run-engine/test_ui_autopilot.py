@@ -98,6 +98,17 @@ assert ui_autopilot.tick("o/r", s, [sess(2), sess(3, "done"), other], {**on, "au
 assert L.issues == [3, 4]  # 2 live (counts), other repo's 9 does not, 3's session is done
 print("  ok  running sessions count against the cap")
 
+# real session records: `repo` is the checkout path and `link` names owner/repo (the regression that
+# let autopilot start 2 more issues every poll while 2 were still running)
+L = fresh()
+real = [
+    {**sess(2), "repo": checkout, "link": {"owner": "o", "repo": "r", "issue": 2}},
+    {**sess(3, "waiting"), "repo": checkout + "/", "link": None},  # no link: the checkouts registry names it
+]
+assert ui_autopilot.tick("o/r", s, real, on, launch=L) == [] and L.bodies == []
+assert ui_autopilot.tick("o/r", s, real, {**on, "autopilot_cap": 3}, launch=L) == [4]
+print("  ok  live sessions with a checkout path and a link dict count against the cap")
+
 # stale, no epic on, blocked, open PR, epic off
 L = fresh()
 assert ui_autopilot.tick("o/r", snap([EPIC, issue(2)], stale=True), [], on, launch=L) == []
