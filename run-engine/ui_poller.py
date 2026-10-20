@@ -1,6 +1,8 @@
 """Board poller: one `gh api graphql` call per repo per poll, last result kept in memory (FR-17).
 
-`snapshot(repo)` never touches GitHub: it returns `{data, stale, fetched_at}` from memory.
+`snapshot(repo)` never touches GitHub: it returns `{data, stale, fetched_at, error, retry_at}` from memory.
+`error` says why the last poll failed ("rate limited" or gh's message), None after a good one;
+`retry_at` is the end of a rate-limit pause, else None.
 `poll(repo)` does the single GraphQL call. Cadence is 60 s, or 15 s while any PR's CI is pending.
 A rate-limit response keeps the last data, marks it stale and pauses fetching for 600 s.
 Any other failure keeps the last data and marks it stale (retry on the normal cadence).
@@ -172,18 +174,26 @@ class Poller:
     def __init__(self, runner=_gh, clock=time.time, on_fresh=None):
         self.runner, self.clock, self.on_fresh = runner, clock, on_fresh
         self._lock = threading.Lock()
-        self._state: dict = {}  # repo -> {data, stale, fetched_at, next_due, paused_until}
+        self._state: dict = {}  # repo -> {data, stale, fetched_at, error, next_due, paused_until}
 
     def _entry(self, repo: str) -> dict:
         return self._state.setdefault(
-            repo, {"data": empty(), "stale": True, "fetched_at": None, "next_due": 0.0, "paused_until": 0.0}
+            repo,
+            {"data": empty(), "stale": True, "fetched_at": None, "error": None, "next_due": 0.0, "paused_until": 0.0},
         )
 
     def snapshot(self, repo: str) -> dict:
         """From memory; never waits on GitHub."""
         with self._lock:
             e = self._entry(repo)
-            return {"data": e["data"], "stale": e["stale"], "fetched_at": e["fetched_at"]}
+            paused = e["paused_until"] if self.clock() < e["paused_until"] else None
+            return {
+                "data": e["data"],
+                "stale": e["stale"],
+                "fetched_at": e["fetched_at"],
+                "error": e["error"],
+                "retry_at": paused,
+            }
 
     def due(self, repo: str) -> bool:
         with self._lock:
@@ -205,7 +215,7 @@ class Poller:
         data = None
         if _rate_limited(proc):
             with self._lock:
-                e["stale"], e["paused_until"] = True, self.clock() + RATE_LIMIT_PAUSE
+                e["stale"], e["error"], e["paused_until"] = True, "rate limited", self.clock() + RATE_LIMIT_PAUSE
             print(f"ui_poller: rate limit on {repo}, pausing {RATE_LIMIT_PAUSE}s", file=sys.stderr)
         else:
             try:
@@ -216,13 +226,13 @@ class Poller:
             except (ValueError, KeyError, TypeError, AttributeError) as exc:
                 print(f"ui_poller: {repo}: {exc}", file=sys.stderr)
                 with self._lock:
-                    e["stale"] = True
+                    e["stale"], e["error"] = True, str(exc)[:200] or type(exc).__name__
         with self._lock:
             now = self.clock()
             if data is not None:
                 pending = any(p["ci"] == "pending" for i in data["issues"] for p in i["prs"] if p["state"] == "OPEN")
                 pending = pending or any(p["ci"] == "pending" for p in data["open_prs"])
-                e.update(data=data, stale=False, fetched_at=now)
+                e.update(data=data, stale=False, fetched_at=now, error=None)
                 e["next_due"] = now + (FAST_POLL_SECONDS if pending else POLL_SECONDS)
             elif now >= e["paused_until"]:
                 e["next_due"] = now + POLL_SECONDS

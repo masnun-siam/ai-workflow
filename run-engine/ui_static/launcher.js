@@ -19,6 +19,7 @@ const LABELS = {
   'verifier-locally': 'What to verify (optional, defaults to the current change)',
   'docs-updater': 'Focus (optional, defaults to what changed since the last docs update)',
   'sync-from-wasensi': 'Focus (optional, defaults to everything that changed upstream)',
+  'skill-feedback': 'Feedback on a skill or guide, or reconcile to mine the learning logs of closed PRs',
   'create-tasks': 'PRD file path, or a finding to file as one issue',
   'herdr-dispatch': 'Epic number, issue numbers, a label or an issue-search URL',
   flow: 'An idea, a PRD path or an epic number',
@@ -33,7 +34,7 @@ export const GROUPS = [
   ['Plan', [['flow', 'Idea to running issues, stage by stage'], ['create-prd', 'Idea to a PRD with technical design'], ['create-tasks', 'PRD to tasks and child issues of its epic'], ['refine-issues', 'Write WHAT, WHY and HOW into issues']]],
   ['Ship', [['release-pr', 'Staging to master release PR, then grind']]],
   ['Capture', [['dump', 'File an idea into your notes vault'], ['day', 'Tasks and follow-ups into Todoist'], ['worklog', "A day's worklog from GitHub activity"]]],
-  ['Maintain', [['docs-updater', 'Bring docs/ in line with the code'], ['sync-from-wasensi', 'Port upstream skill changes into the plugin']]],
+  ['Maintain', [['docs-updater', 'Bring docs/ in line with the code'], ['sync-from-wasensi', 'Port upstream skill changes into the plugin'], ['skill-feedback', 'Turn feedback into skill and guide edits']]],
 ];
 // Worklog's day: today, yesterday, one picked day, or a range. The skill writes one daily note per
 // day, so a range starts one worklog run per day. Dates are local YYYY-MM-DD.
@@ -87,7 +88,7 @@ const HINTS = {
 };
 const OPTIONAL_ARGS = new Set(['worklog', 'day', 'verifier-locally', 'docs-updater', 'sync-from-wasensi', 'peer-review', 'release-pr']);
 // These take a written description rather than a number or link, so they get room to write.
-export const FREE_TEXT = new Set(['create-prd', 'dump', 'day', 'flow']);
+export const FREE_TEXT = new Set(['create-prd', 'dump', 'day', 'flow', 'skill-feedback']);
 const URL_KIND = { 'implement-issue': 'issues', 'pr-grind': 'pull' };
 
 export function repoOptions(body) {

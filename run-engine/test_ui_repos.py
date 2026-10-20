@@ -186,6 +186,7 @@ try:
         "peer-review",
         "release-pr",
         "sync-from-wasensi",
+        "skill-feedback",
     ):
         assert ui_repos.build_command(kept, "x") == f"/{kept} x", kept
     assert (

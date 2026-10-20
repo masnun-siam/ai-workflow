@@ -43,10 +43,11 @@ Paths below starting `../../` are relative to this skill's folder, at the plugin
    - Parallel sessions: test runs isolated per worktree (their own containers or compose project) can run at once and only compete for CPU and memory. A dev stack is not shared safely: use one of your own if the repo supports it, never the default stack or another session's.
    - Processes you start for a check (a second server, a listener, a fake tree): record their PIDs (`$!`, `pgrep -P`) and stop only those, after checking each one's command. Never kill a computed PID list unchecked, never PID 0, never `pkill` by name; other sessions run on the same machine.
    - A fresh worktree has no installed dependencies: install them first (`/implement-issue` step 3), or hooks and tests fail with missing-file or missing-module errors that have nothing to do with the change.
+   - On a loaded machine (other sessions' suites or stacks), tests with short timeouts fail at random, a different set each run. Check `uptime`; if load is well above the core count, wait for it to settle and retry rather than chasing those tests.
    - A dev stack can export environment variables that override the repo's `.env` files. To verify a change to an env file or its example, run that part with those variables unset.
    - Local caches from a running dev stack (compiled routes, config, build output) can leak into test runs. If a test fails on something the change did not touch, suspect them first.
 
-5. **Check the behaviour, not only the checks.** For each acceptance criterion in the issue, name the test that proves it, or exercise it against the local app (started the way the repo's docs say) and record what you observed. Where data isolation applies, confirm a second tenant or user cannot see or change the data. After the run, look at the application log and the browser console for new errors.
+5. **Check the behaviour, not only the checks.** For each acceptance criterion in the issue, name the test that proves it, or exercise it against the local app (started the way the repo's docs say, seeded with the repo's seed or demo-data command when it has one) and record what you observed. Where data isolation applies, confirm a second tenant or user cannot see or change the data. After the run, look at the application log and the browser console for new errors.
 
 6. **Check what tools cannot.** No debug output left behind, no new lint or type suppressions, no secrets or customer data in the diff, no committed plans or generated docs, and nothing outside the issue's scope.
 

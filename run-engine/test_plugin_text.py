@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""E1 guard: the run-issue system stays gone and the dev-workflow import stays faithful.
-`python3 test_plugin_text.py` — exit 0 = green. No network; the source comparison is skipped
-when the Shahria-skills checkout is absent (CI)."""
+"""E1 guard: the run-issue system stays gone and the imported scripts stay executable.
+`python3 test_plugin_text.py` — exit 0 = green. No network."""
 
 from __future__ import annotations
 
@@ -12,8 +11,6 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SELF = os.path.relpath(os.path.abspath(__file__), ROOT)
-SRC = os.path.expanduser("~/Documents/Projects/Personal/Shahria-skills")
-IMPORT_COMMIT = "0a487c6"
 KEPT_VERBS = {"ui", "paths", "ask", "ci", "threads", "autopilot"}
 REMOVED_VERBS = (
     "init|route|precheck|classify|resolve-review|skip-review|set|stack|worktree|maintree|pr|gitnexus"
@@ -21,18 +18,6 @@ REMOVED_VERBS = (
 )
 # Allowed to name the old system: the record of what was removed, and the PRD/task list for it.
 EXEMPT = {"CHANGELOG.md", "docs/prds/dev-workflow-replacement.md", "docs/tasks/dev-workflow-replacement.md", SELF}
-# FR-2: the only edits allowed against the source, as (file, source text, our text).
-SUBS = [
-    ("guides/skills.md", "/dev-workflow:<name>", "/ai-workflow:<name>"),
-    ("guides/skills.md", "~/Documents/Projects/Personal/Shahria-skills", "~/Documents/Projects/Personal/ai-workflow"),
-    ("skills/sync-from-wasensi/SKILL.md", "this dev-workflow plugin", "this ai-workflow plugin"),
-    (
-        "skills/sync-from-wasensi/references/generalisation-rules.md",
-        "~/Documents/Projects/Personal/Shahria-skills",
-        "~/Documents/Projects/Personal/ai-workflow",
-    ),
-]
-
 fails = []
 
 
@@ -87,26 +72,10 @@ ok(
 )
 ok("commands/ is gone", not os.path.exists(os.path.join(ROOT, "commands")))
 
-# 4. Imported files match the source at the import commit, apart from the FR-2 substitutions.
-if os.path.isdir(os.path.join(SRC, ".git")):
-    names = subprocess.run(
-        ["git", "-C", SRC, "ls-tree", "-r", "--name-only", IMPORT_COMMIT], capture_output=True, text=True, check=True
-    ).stdout.split()
-    diffs = []
-    for f in (n for n in names if n.startswith(("guides/", "templates/", "skills/"))):
-        want = subprocess.run(["git", "-C", SRC, "show", f"{IMPORT_COMMIT}:{f}"], capture_output=True, text=True).stdout
-        for sf, a, b in SUBS:
-            if sf == f:
-                want = want.replace(a, b)
-        if text(f) != want:
-            diffs.append(f)
-    ok("imported files match the source apart from FR-2 substitutions", not diffs, diffs)
-    ok(
-        "set-status.sh keeps its executable bit",
-        os.access(os.path.join(ROOT, "skills/implement-issue/set-status.sh"), os.X_OK),
-    )
-else:
-    print("skip source comparison: Shahria-skills checkout absent")
+# 4. Imported scripts keep their executable bit (skills call them directly). The byte-compare against
+# the import commit was dropped: /sync-from-wasensi and the improve loop change these files by design.
+for script in ("skills/implement-issue/set-status.sh", "skills/skill-feedback/collect.sh"):
+    ok(f"{script} keeps its executable bit", os.access(os.path.join(ROOT, script), os.X_OK))
 
 if fails:
     print(f"{len(fails)} check(s) failed")

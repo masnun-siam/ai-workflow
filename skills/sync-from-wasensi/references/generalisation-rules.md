@@ -17,9 +17,13 @@ Not ported:
 - `docs/templates/task-list.md`: the plugin has no task-list file (see Workflow). Removed upstream too.
 - Any other `docs/guides/*.md` (stack guides such as backend conventions or frontend): repo-specific. Propose a new guide only if it is about the workflow, not the stack.
 
+Ported with a new file:
+- `.claude/skills/skill-feedback/collect.sh` → `skills/skill-feedback/collect.sh`, verbatim (it only uses `gh`, `jq` and the given repo).
+
 Plugin-only files (no upstream source):
 - `.claude-plugin/plugin.json` and `skills/sync-from-wasensi/`: never changed by a sync, except the rules file in step 11.
-- `README.md`: its wording is plugin-only, but its stage table is kept in step with the skills (step 5).
+- The plugin's own tools: `skills/dump`, `flow`, `herdr-dispatch`, `peer-review`, `pr-grind`, `release-pr`, `worklog`, and `agents/`, `run-engine/`, `bin/`, `self-improve.md`. A sync never changes them, and the leak scan skips them (they name Wasensi, Blubird, `staging` and `master` on purpose).
+- `README.md` is a link hub with no stage table. `docs/HOW-IT-WORKS.md` (stage table, implement-issue steps), `docs/REFERENCE.md` (commands table, layout) and `CHANGELOG.md` (`## Unreleased`) are kept in step with the skills (step 5). `CLAUDE.md` lists the skills too, but changes only on an explicit request: tell the user when a new skill leaves it behind.
 
 Plugin-only lines inside ported files (keep them; they are not upstream drift):
 - Each skill's "Paths below starting `../../`..." line and its "Read first" line naming plugin guide sections.
@@ -74,6 +78,13 @@ Plugin-only lines inside ported files (keep them; they are not upstream drift):
 - **SSH push drop**: "while the pre-push suite runs" becomes "while a long pre-push hook runs".
 - **Also dropped**: `scripts/tests/makefile-targets.sh`; the dev Mongo database name (`wasensi_messages`); the React Query `mutate()` per-call callbacks bullet in the code review guide (stack-specific, like the data-flow line); the "second Vite" in the PID trap becomes "a second server".
 - **Deleted-file review bullet**: "the `Covers:` lines in `docs/features/`" becomes "any `Covers:` lines in `docs/`" (`/docs-updater` puts one on every doc).
+- **Demo data**: `make seed-demo AGENT=<name>` becomes "the repo's seed or demo-data command if it has one", in `/implement-issue` step 10 and `/verifier-locally`'s behaviour check.
+- **Route cache before push** (`/implement-issue` step 10) becomes "clear the local caches a dev stack leaves before pushing, when a push hook runs the tests".
+- **Dropped as Wasensi tooling traps**: "send push and hook output to a file, never into a pipe" (its pre-push hook crashes when piped); PHPStan's `--memory-limit=2G`; "frontend tests related to staged files" in the Gates table (the plugin's Gates section is discovery-based).
+- **Fragment lint** (`/refine-issues` step 5): Biome, `biome.json`, `.tsx` under `src/` and the `react` `package.json` become "lint it in a scratch directory with a copy of the repo's linter config and whatever the linter needs to enable its framework rules". The `docs/frontend.md`/`backend.md`/`webhook-receiver.md` list becomes "the repo's docs for its area", and "§5 Correctness and §9 Conventions" is named by section title.
+- **Mutation in a scratch copy** (`/pr-review` step 4): "a scratchpad copy of `frontend/` with `node_modules` symlinked" becomes "a scratch copy of the code (dependencies symlinked)".
+- **Scribe spec** in `/pr-review` fix mode becomes "a generated API spec".
+- **`ContactInfoPanel`** is dropped from the code review guide's stale-async-result bullet; the rule is kept.
 - **Routes-cache trap** (`bootstrap/cache/routes-v7.php`, `ScribeDocsAuthTest`) becomes the verifier's generic "local caches from a running dev stack can leak into test runs" trap.
 
 ## Skill-specific
@@ -85,6 +96,10 @@ Plugin-only lines inside ported files (keep them; they are not upstream drift):
 - **`guides/skills.md`** says "Skills that end with an 'Improve this skill' section", not "Every skill ends with": `/sync-from-wasensi` and some ported skills have none.
 - **"Improve this skill" sections**: approved edits go to the plugin source repo (`~/Documents/Projects/Personal/ai-workflow`), committed as `chore: update /<name> skill - <what changed>`, never in the project being worked on. "Facts about one codebase go to its `tasks/lessons.md` or docs" and "in any repository" wording is plugin-only.
 - **Epic template** also lists the PRD's `priority:` label: plugin-only.
+- **Plugin-only improve-loop edits** (keep): `/create-prd` step 2's "When the request names an existing feature to match, record how it behaves … ask once whether to mirror it exactly before asking about any extras"; `/pr-review` step 4's "first confirm the break actually applied, for example by searching for the changed text, since a no-op edit also stays green".
+- **`/skill-feedback`**: edits split by target. A plugin skill or guide is edited in the plugin source repo (as `guides/skills.md` step 4), one commit per file, no tracking issue or PR. The repo's own `.claude/skills/` or `docs/guides/` go through Wasensi's tracking-issue, branch and draft-PR flow. `collect.sh` is called "in this skill's folder". Reconcile step 4 checks the plugin's `git log -- skills guides` as well as the repo's, and for another repository checks the plugin only.
+- **Closing on merge**: "a PR into `staging` does not close it" and "gets no closing-issue link" become "a PR into a base branch that is not the default branch …"; `/implement-issue` closes the issue only if it is still open.
+- **`/refine-issues`** calls the board script as `../implement-issue/set-status.sh`.
 - **`/create-prd`** interview bullet giving visual or layout options an ASCII mockup in the `AskUserQuestion` preview: plugin-only.
 - **`/create-prd`** "Stop and ask" also names security rules ("a data-isolation, security or billing rule"): plugin-only.
 - **`/docs-updater`** plugin-only additions: fold `docs/<component>.md` into `docs/architecture.md` in a single-component repo; ask before removing a doc you are not sure was generated; the "(CI requires it)" reason for the issue reference is dropped.
@@ -94,7 +109,7 @@ Plugin-only lines inside ported files (keep them; they are not upstream drift):
 - The guide's stage 2 is "Tasks" (child issues), not "Task list". Its "Tasks" section keeps the size limits, shared-file ownership, short dependency chains, shown in the breakdown before issues are created. Waves are not ported (removed upstream in 68dce995). `Parallel: yes/no`, `Area`, `Changed`/`Dropped` markers and `docs/tasks/<slug>.md` are not ported.
 - An agent never merges a PR and never opens the release PR.
 - The guide's Implementation section has a "Data isolation" bullet: plugin-only, since Wasensi states that rule in its `CLAUDE.md`, which the plugin cannot ship.
-- Project status for a new issue is copied from the team's other *unstarted* issues, not "refined, unstarted": in the plugin, issues join the project at `/create-tasks`, before they are refined.
+- Project status: a new issue or epic goes to Backlog; **Ready** (open, `refined`, every `blockedBy` closed) is defined once in the guide's "Project fields", and `/refine-issues` and `/implement-issue` point at it. Upstream adopted this in #761/#829, replacing the plugin's "copy the other unstarted issues' status".
 - "Each push, and each edit to a PR's title or body, starts a full CI run" is ported hedged: "and so may each edit", since PR-edit triggers depend on the repo's workflows.
 
 ## Leak scan
@@ -102,5 +117,5 @@ Plugin-only lines inside ported files (keep them; they are not upstream drift):
 Run from the plugin root after applying changes. Expected hits only: the base-branch lookup line (`staging`, `stage`, `dev`), "for example `master` or `main`", and the `/sync-from-wasensi` rows in `README.md` and `guides/skills.md`.
 
 ```
-grep -rniE --exclude-dir=sync-from-wasensi 'wasensi|blubird|gupshup|\bstaging\b|\bmaster\b|webhook-receiver|\b(pest|pint|phpstan|rector|scribe|biome|mongodb|postgresql|laravel)\b|AGENT=|make (up|down|dev)|gate [0-9]|#[67][0-9]{2}\b|8010|5173' skills guides templates README.md
+grep -rniE --exclude-dir={sync-from-wasensi,dump,flow,herdr-dispatch,peer-review,pr-grind,release-pr,worklog} 'wasensi|blubird|gupshup|\bstaging\b|\bmaster\b|webhook-receiver|\b(pest|pint|phpstan|rector|scribe|biome|mongodb|postgresql|laravel)\b|AGENT=|make (up|down|dev)|gate [0-9]|#[67][0-9]{2}\b|8010|5173' skills guides templates README.md
 ```

@@ -5,11 +5,12 @@
 | Command | Does |
 |---|---|
 | `/ai-workflow:create-prd <requirement>` | interview a requirement into a PRD with its technical design, saved to `docs/prds/<slug>.md`; `--update` records later decisions; `approve` files one epic per `## Epics` entry |
-| `/ai-workflow:create-tasks <prd>` | split an Approved PRD into `docs/tasks/<slug>.md`: one-PR tasks with dependencies and waves |
-| `/ai-workflow:refine-issues <epic or issues>` | write a WHAT, WHY and HOW into each child issue and label it `refined` |
-| `/ai-workflow:implement-issue <n>` | one refined issue to a Ready PR: worktree, local checks, draft PR, CI, review comments |
+| `/ai-workflow:create-tasks <prd \| finding>` | split an Approved PRD into one-PR tasks, created as child issues of the epic with blocked-by links; or file one issue for a finding |
+| `/ai-workflow:refine-issues <epic or issues>` | write a WHAT, WHY and HOW into each child issue, label it `refined` and move it to Ready on the board once unblocked |
+| `/ai-workflow:implement-issue <n \| epic>` | one refined issue (or an epic's next Ready one) to a Ready PR: worktree, local checks, draft PR, CI, review comments; after the merge, close and clean up |
 | `/ai-workflow:verifier-locally` | run the checks CI would run and exercise the change against its acceptance criteria |
-| `/ai-workflow:pr-review <pr or branch>` | review against the issue, the repo's rules and `guides/code-review.md`; report findings and a verdict |
+| `/ai-workflow:pr-review <pr or branch> [--fix]` | review against the issue, the repo's rules and `guides/code-review.md`; report findings and a verdict. `--fix` fixes the review feedback on a PR through to green CI, replies and ready |
+| `/ai-workflow:skill-feedback <feedback \| reconcile>` | turn feedback, or the learning logs of closed PRs, into approved edits to the skills and guides |
 | `/ai-workflow:docs-updater` | bring `docs/` in line with the code |
 | `/ai-workflow:sync-from-wasensi` | port Wasensi's skill, guide and template changes into this plugin |
 | `/ai-workflow:pr-grind <pr>` | the Slack reviewer-bot loop on a PR; fixes inline, verifies before each push |
@@ -60,7 +61,8 @@ otherwise the card is flagged and **Clean** lists what would be lost first.
 
 **Board data.** One GitHub GraphQL call per repo per poll, every 60 s (15 s while a PR's CI is
 pending), kept in memory; a rate limit pauses fetching for 10 minutes and the boards show the last
-data as stale. After each fresh poll the UI runs autopilot (refined, unblocked issues of switched-on
+data as stale. The stale banner says why (rate limit and its retry time, or gh's error) and has a
+**Refresh** (`?refresh=1` on the board GET fetches now). No board shows before the first fetch. After each fresh poll the UI runs autopilot (refined, unblocked issues of switched-on
 epics, by `priority:` label then number, up to the repo's cap), merge cleanup, and grind autostart
 (a PR that turned ready on a repo with auto-grind on). Nothing runs on stale data, and the UI never
 merges a PR.
@@ -73,7 +75,8 @@ page of 100); typing filters them. `worklog` offers Today, Yesterday, A day or A
 
 **Sessions.** Every session with its status, cost and token use (`$0.44 · 703k tok`, hover for
 input and output), the transcript, and its answer page when it asked a question. Sessions
-auto-resume after a rate limit, and the limit timer releases queued ones after a restart.
+auto-resume after a rate limit, and the limit timer releases queued ones after a restart. A session
+that has not finished has **Stop** on its page (`POST /api/sessions/<id>/stop`, after a confirm).
 
 **Repo picker.** One picker for the registered checkouts (`checkouts.json`), searchable by name,
 owner, project or path, recent first. A typed absolute path or **Browse for a folder…** registers a
@@ -154,8 +157,8 @@ The work's own state is on GitHub and in the repo's `docs/prds/` and `docs/tasks
 
 ```
 skills/       create-prd, create-tasks, refine-issues, implement-issue, verifier-locally,
-              pr-review, docs-updater, sync-from-wasensi, pr-grind, peer-review, dump,
-              release-pr, worklog, flow, herdr-dispatch
+              pr-review, docs-updater, skill-feedback, sync-from-wasensi, pr-grind,
+              peer-review, dump, release-pr, worklog, flow, herdr-dispatch
 agents/       peer-reviewer, worklog-runner
 guides/       engineering-workflow, code-review, skills
 templates/    prd, epic, issue

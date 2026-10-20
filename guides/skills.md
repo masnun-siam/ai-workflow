@@ -7,9 +7,10 @@ A skill is a short procedure an AI agent loads for one kind of task. The skills 
 | `/create-prd` | Turn a feature idea into a PRD with its technical design and no open questions, and create its epic on approval |
 | `/create-tasks` | Split an approved PRD into small parallel tasks and create them as child issues of the epic, with blocked-by links |
 | `/refine-issues` | Write WHAT, WHY and HOW into each issue so it can be implemented without asking anything |
-| `/implement-issue` | Implement a refined issue in its own worktree through to a ready PR into the base branch, and clean up after the merge |
+| `/implement-issue` | Implement a refined issue (or the next Ready one of an epic) in its own worktree through to a ready PR into the base branch, then close it and clean up after the merge |
 | `/verifier-locally` | Prove a change passes every relevant check before it is pushed |
-| `/pr-review` | Review a pull request or a local branch against its issue and the project rules |
+| `/pr-review` | Review a pull request or a local branch against its issue and the project rules; with `--fix`, fix the review feedback on a pull request through to green CI, replies and ready |
+| `/skill-feedback` | Turn feedback on a skill, guide or the process into approved edits; `reconcile` mines the learning logs of closed PRs and their issues for improvements |
 | `/docs-updater` | Bring the repo's `docs/` in line with the code |
 | `/sync-from-wasensi` | Maintain this plugin: port Wasensi's latest skill, guide and template changes in repo-agnostic form |
 
