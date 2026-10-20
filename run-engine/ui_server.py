@@ -27,6 +27,7 @@ import ui_actions
 import ui_afk
 import ui_autopilot
 import ui_cleanup
+import ui_config
 import ui_delivery
 import ui_events
 import ui_grind
@@ -302,6 +303,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json(*_board(path, urlsplit(self.path).query))
         elif path == "/api/settings":
             self._json(200, ui_settings.load())
+        elif path == "/api/settings/notify":
+            self._json(200, ui_config.notify_public())
+        elif path == "/api/settings/review":
+            self._json(200, ui_config.review_public())
         elif path == "/api/github/owners":
             self._json(*ui_vault.github_owners())
         elif path == "/api/vault/folders":
@@ -444,6 +449,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._dispatch(
                 lambda b: {"path": ui_repos.register(b.get("slug"), b.get("path")), "repos": ui_repos.list_repos()}
             )
+        elif parts == ["", "api", "settings", "notify"]:
+            self._dispatch(ui_config.save_notify)
+        elif parts == ["", "api", "settings", "review"]:
+            self._dispatch(ui_config.save_review)
+        elif parts == ["", "api", "repos", "remove"]:
+            self._dispatch(lambda b: {**ui_config.remove_repo(b.get("slug")), "repos": ui_repos.list_repos()})
+        elif parts == ["", "api", "repos", "check"]:
+            self._dispatch(lambda b: {"problems": ui_config.check_repos()})
         elif parts == ["", "api", "repos", "scan"]:
             self._dispatch(self._scan)
         elif parts == ["", "api", "settings", "test"]:

@@ -101,6 +101,15 @@ checkout. **No repo yet** runs a session in the notes vault for create-prd and d
 vault path, the checkout list, the plan-usage (5h / 7d) per account shown in the header, and per
 repo: auto-grind (default off), autopilot cap (1–5, default 2) and the Slack review channel grind
 posts to (`repos[owner/repo]` in `ui_settings.json`; `autopilot` maps a repo to its epics).
+The per-repo list filters by name or path and shows 8 until **Show all**. **Check remotes** runs
+`gh repo view` on every registered repo and lists the ones that fail first; **Remove** unregisters a
+repo (its clone is untouched). **Notifications** edits `ui.json` (written mode 0600; a token or
+password is never sent back to the browser, and an empty box keeps the saved one). **Peer review**
+sets the rounds cap, the lenses ticked by default and each lens prompt; the changes are saved to
+`<data_dir>/config.json` and laid over the shipped `run-engine/config.json`, so **Reset to
+defaults** just removes that file.
+`GET|POST /api/settings/notify`, `GET|POST /api/settings/review`, `POST /api/repos/remove`,
+`POST /api/repos/check`.
 
 **Notes vault.** With **No repo yet** and a new idea, New shows a **Vault folder**
 (`05-Work/<Project>/<Feature>`) that follows the best match of your text as you type; **Suggest with
@@ -164,6 +173,7 @@ Nothing stateful lives in this repo. `aiw paths` resolves it under `$CLAUDE_PLUG
 | `peer-review/` | one directory per panel: `panel.json` and `round-<n>/<lens>.md` verdicts |
 | `afk.json` | the AFK window and its log |
 | `ui.json` | push notifications and `public_url` (mode 0600) |
+| `config.json` | peer-review overrides from Settings, laid over `run-engine/config.json` |
 | `channels.json` | Slack ids and trigger templates for grind and release-pr |
 
 The work's own state is on GitHub and in the repo's `docs/prds/` and `docs/tasks/`.

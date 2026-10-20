@@ -109,8 +109,21 @@ def atomic_write_text(path: str, text: str) -> None:
 
 
 def load_config(repo: str | None = None) -> dict:
-    """Global config.json only (`repo` is accepted for old callers and ignored)."""
-    return read_json(GLOBAL_CONFIG)
+    """Global config.json, with `peer_review` overrides from `<data_dir>/config.json` (written by the
+    UI's Settings) laid over it key by key, and each lens field by field. `repo` is ignored."""
+    cfg = read_json(GLOBAL_CONFIG)
+    path = os.path.join(data_dir(), "config.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            over = json.load(fh).get("peer_review")
+    except (OSError, ValueError, AttributeError):  # missing or broken: the shipped defaults stand
+        over = None
+    if isinstance(over, dict):
+        pr = cfg["peer_review"] = {**cfg["peer_review"], **{k: v for k, v in over.items() if k != "lenses"}}
+        if isinstance(over.get("lenses"), dict):
+            base = pr.get("lenses", {})
+            pr["lenses"] = {k: {**v, **(over["lenses"].get(k) or {})} for k, v in base.items()}
+    return cfg
 
 
 # --------------------------------------------------------------------------- process

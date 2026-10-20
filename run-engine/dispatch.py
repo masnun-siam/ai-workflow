@@ -43,6 +43,16 @@ def rename_checkout(old: str, new: str) -> bool:
     return True
 
 
+def remove_checkout(slug: str) -> bool:
+    """Unregister one repo (its clone on disk is untouched). False when it was not registered."""
+    current = read_checkouts()
+    if slug not in current:
+        return False
+    del current[slug]
+    atomic_write_text(checkouts_path(), json.dumps(current))
+    return True
+
+
 def register_checkout(slug: str, path: str) -> None:
     """Atomically add slug -> path to the registry. Writes only the slug/path
     pair given — never os.environ, never .env content."""
