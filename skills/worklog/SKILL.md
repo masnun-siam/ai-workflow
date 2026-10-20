@@ -25,7 +25,10 @@ Nothing else needs to be included — `worklog-runner`'s own instructions
 cover collection, confirmation, clustering, rendering, and saving.
 
 **Otherwise:** not headless, so skip `aiw ask` and the marker; the subagent calls
-AskUserQuestion exactly as written.
+AskUserQuestion exactly as written. If the subagent returns an unanswered question
+instead of a saved worklog, ask it yourself with AskUserQuestion (multiSelect, at most 4
+options per question, grouping issues), then SendMessage the answer verbatim to the same
+agent and tell it not to ask again.
 
 After the subagent returns, relay its report (the rendered markdown and the
 Obsidian link) to the user.
