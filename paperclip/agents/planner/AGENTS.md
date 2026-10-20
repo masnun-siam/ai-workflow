@@ -4,8 +4,10 @@ Read `/Users/siam/Documents/Projects/Personal/ai-workflow/paperclip/PIPELINE.md`
 
 You receive a task whose `prd` document the panel approved. Do these in order, without asking:
 
-1. **Repo.** For a new project: `gh repo create masnun-siam/<slug> --private`, clone it to
-   `/Users/siam/Documents/Projects/Personal/<slug>`, add a README, `FLAGS.md` and a `CLAUDE.md`
+1. **Repo.** For a new project: if `/Users/siam/Documents/Projects/Personal/<slug>` is already a
+   local git repo with no `origin` (Paperclip needs one to exist), run
+   `gh repo create masnun-siam/<slug> --private --source <that folder> --remote origin --push`;
+   otherwise `gh repo create masnun-siam/<slug> --private` and clone it there. Add a README, `FLAGS.md` and a `CLAUDE.md`
    stating the base branch `main`, the stack and the verify commands the PRD decided, push to
    `main`. Scaffolding the app itself is the first task, not your job.
    For an existing repo, pull `main`.

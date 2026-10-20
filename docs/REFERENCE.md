@@ -49,12 +49,19 @@ PRD draft → In review → Approved → Tasks filed → Refined. The epic is th
 offers the next step: a lens picker and panel progress on drafts, **Create tasks**, **Refine**, or
 **Autopilot**. `GET /api/planning?repo=owner/repo`.
 
-**Delivery.** One swimlane per open epic plus **No epic**, in columns Ready → In progress → Draft
+**Planning card tools.** A draft or in-review PRD has **Approve PRD** (`/create-prd <path> approve…`,
+after a confirm). A PRD with child issues lists them, each refined or with its own **Refine**, plus
+**Refine N picked**. With an epic: a box files **one more task** (`/create-tasks` with the text as a
+finding for that epic) and **Close epic** closes the epic and every open child as completed
+(`POST /api/epics/close`). `/api/start` takes several issue numbers for `refine-issues`.
+
+**Delivery.** One swimlane per open epic plus **No epic**, in columns Needs refinement (an epic's
+unrefined children, with **Refine**) → Ready → In progress → Draft
 PR → In review → Grinding → Merged (7 days). Only refined issues, or ones with a PR or live
 session, show. A blocked card shows a lock with its open blockers and cannot start. Unblocked Ready
 cards have **Start** (headless `/implement-issue`) and **Start in herdr**; In review cards have
 **Grind** when the repo's auto-grind is off. Each lane has an **Autopilot** switch and shows
-`running/cap`; a lane with nothing open (only merged cards) starts collapsed, and an **Epic** filter
+`running/cap` and a **Close epic** button; a lane with nothing open (only merged cards) starts collapsed, and an **Epic** filter
 shows one lane. On a phone each board shows one column at a time with a tab strip of column counts.
 A merged issue's worktree under `.worktrees/` and its branch are removed when clean;
 otherwise the card is flagged and **Clean** lists what would be lost first.

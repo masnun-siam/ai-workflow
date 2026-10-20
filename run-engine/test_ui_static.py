@@ -2034,6 +2034,18 @@ out('launcher: lens lists in the body (named and custom), default critical, empt
   assert.deepEqual(its[2].peek, { kind: 'prd', repo: 'o/r', path: 'docs/prds/x.md', title: 'Export' }); assert.equal(its[3].repo, 'o/z');
   assert.deepEqual(K.filterItems(its, 'bug').map((i) => i.id), ['issue-7'], 'labels are searchable');
   out('palette: issues, PRs and PRDs of the repo open their drawer; other repos switch');
+  const PL = await import(process.env.APP_URL.replace('app.js', 'planning.js'));
+  assert.deepEqual(PL.refineBody('o/r', [7, 9]), { repo: 'o/r', skill: 'refine-issues', arg: '7 9', via: 'headless' });
+  assert.match(PL.approveBody('o/r', 'docs/prds/x.md').args, /^docs\/prds\/x\.md approve: /);
+  assert.deepEqual(PL.taskBody('o/r', { epic: 5, path: 'docs/prds/x.md' }, ' add  CSV\nexport '), { repo: 'o/r', skill: 'create-tasks', arg: 'A finding for epic #5 (PRD docs/prds/x.md): add CSV export', via: 'headless' });
+  assert.deepEqual(PL.closeEpicBody('o/r', 5), { repo: 'o/r', epic: 5 });
+  const DA = await import(process.env.APP_URL.replace('app.js', 'delivery_actions.js'));
+  assert.deepEqual(DA.refineCardBody('o/r', { n: 12 }), { repo: 'o/r', skill: 'refine-issues', arg: '12', via: 'headless' });
+  const I2 = await import(process.env.APP_URL.replace('app.js', 'issue.js'));
+  const rb = I2.issueButtons({ state: 'open', number: 7, labels: [{ name: 'refined' }] }, 'o/r')[0];
+  assert.equal(rb.label, 'Refine again'); assert.equal(rb.url, '/api/start'); assert.equal(rb.body.arg, '7');
+  assert.equal(I2.issueButtons({ state: 'open', number: 7, labels: [] }, 'o/r')[0].label, 'Refine');
+  out('refine by child (card, Delivery, drawer), add task, approve PRD and close epic bodies');
   const L2 = await import(process.env.APP_URL.replace('app.js', 'launcher.js'));
   assert.equal(L2.pickValue('pr-grind', 'o/r', { number: 9, url: 'https://github.com/o/r/pull/9' }), 'https://github.com/o/r/pull/9', '/pr-grind takes a PR URL');
   assert.equal(L2.pickValue('pr-review', 'o/r', { number: 9 }), '9');

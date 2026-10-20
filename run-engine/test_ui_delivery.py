@@ -95,4 +95,7 @@ mp = {"n": 41, "url": "u41", "draft": False, "state": "MERGED", "merged_at": "x"
 m = [{"n": 41, "title": "t", "url": "u41", "merged_at": "x", "head": "h", "closes": [8], "epic": 10}]
 r = build(snap([epic, issue(8, parent=10, prs=[mp])], m))
 assert [c["column"] for c in cards(r, 10).values() if c["n"] == 8] == ["merged"], cards(r, 10)
+# an epic's unrefined child is in Needs refinement; a loose unrefined issue is not on the board
+r = build(snap([epic, issue(12, labels=(), parent=10), issue(13, labels=())]))
+assert cards(r, 10)[12]["column"] == "unrefined" and 13 not in cards(r, None)
 print("ok")

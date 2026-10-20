@@ -102,3 +102,25 @@ def save_prd(checkout: str, rel, text) -> dict:
         raise RuntimeError(f"saved, but git commit failed: {(proc.stderr or proc.stdout).strip()[:300]}")
     sha = (run(["git", "rev-parse", "--short", "HEAD"], cwd=checkout).stdout or "").strip()
     return {"ok": True, "committed": True, "branch": _branch(checkout), "commit": sha}
+
+
+def open_children(snapshot: dict, epic: int) -> list:
+    """Open child issues of an epic in the poller snapshot: parent is the epic, or listed as its sub-issue."""
+    issues = (snapshot.get("data") or {}).get("issues") or []
+    ep = next((i for i in issues if i["n"] == epic), None)
+    subs = set(ep["sub_issues"]) if ep else set()
+    return sorted(i["n"] for i in issues if i["n"] != epic and (i["parent"] == epic or i["n"] in subs))
+
+
+def close_epic(owner, repo, epic, children, runner=gh_json) -> dict:
+    """Close every open child (as completed) and then the epic. Stops at the first failure, saying what closed."""
+    _ids(owner, repo, epic)
+    closed = []
+    for n in [*children, int(epic)]:
+        try:
+            set_state(owner, repo, n, "closed", "completed", runner)
+        except RuntimeError as e:
+            done = ", ".join(f"#{x}" for x in closed) or "nothing"
+            raise RuntimeError(f"closing #{n} failed ({e}); closed so far: {done}") from None
+        closed.append(n)
+    return {"ok": True, "closed": closed}

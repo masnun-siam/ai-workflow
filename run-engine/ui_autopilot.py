@@ -118,10 +118,14 @@ def start(
     arg = str(arg if arg is not None else "").strip()
     if not arg or arg.startswith("-") or any(c in arg for c in "\x00\n"):
         raise ValueError("arg is required")
-    if skill in ("implement-issue", "refine-issues"):
+    if skill == "implement-issue":
         if not re.fullmatch(r"#?\d+", arg):
             raise ValueError(f"{skill} takes an issue number")
         arg = arg.lstrip("#")
+    elif skill == "refine-issues":  # an epic number, or several issue numbers
+        if not re.fullmatch(r"#?\d+(?:[\s,]+#?\d+)*", arg):
+            raise ValueError("refine-issues takes an epic or issue numbers")
+        arg = " ".join(n.lstrip("#") for n in re.split(r"[\s,]+", arg))
     elif skill == "pr-grind" and not re.fullmatch(r"#?\d+|https://\S+", arg):
         raise ValueError("pr-grind takes a PR number or URL")
     if skill == "peer-review" and via == "herdr":

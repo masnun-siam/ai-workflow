@@ -6,6 +6,7 @@ import { toast } from './toast.js';
 const html = htm.bind(h);
 
 export const isBlocked = (c) => (c.blocked_by || []).length > 0;
+export const refineCardBody = (repo, c) => ({ repo, skill: 'refine-issues', arg: String(c.n), via: 'headless' });
 export const startBody = (repo, c, via) => ({ repo, skill: 'implement-issue', arg: String(c.n), via });
 export const grindBody = (repo, c) => ({ repo, skill: 'pr-grind', arg: c.pr.url, via: 'headless' });
 // Grind is offered on In review cards only while the repo's auto-grind is off (FR-10).
@@ -26,6 +27,7 @@ export class CardActions extends Component {
   };
 
   start = (via) => this.post('/api/start', startBody(this.props.repo, this.props.card, via), 'Started');
+  refine = () => this.post('/api/start', refineCardBody(this.props.repo, this.props.card), 'Refine started');
   grind = () => this.post('/api/start', grindBody(this.props.repo, this.props.card), 'Grind started');
   clean = () => this.post('/api/cleanup', { repo: this.props.repo, issue: this.props.card.n, confirm: true }, 'Cleaned up');
 
@@ -35,6 +37,7 @@ export class CardActions extends Component {
     const why = blocked ? 'Blocked: its blockers must close first' : undefined;
     const nc = card.needs_cleanup;
     return html`<div class="bcard-actions">
+      ${card.column === 'unrefined' && btn('Refine', this.refine)}
       ${card.column === 'ready' && btn('Start', () => this.start('headless'), blocked, why)}
       ${card.column === 'ready' && btn('Start in herdr', () => this.start('herdr'), blocked, why)}
       ${canGrind(card, autoGrind) && btn('Grind', this.grind)}
@@ -69,5 +72,25 @@ export class LaneAutopilot extends Component {
   render({ lane }, { busy }) {
     if (!lane.epic) return null;
     return html`<label class="check"><input type="checkbox" role="switch" checked=${lane.autopilot} disabled=${busy} onChange=${this.toggle} /> Autopilot</label>`;
+  }
+}
+
+// Close an epic with its open children (POST /api/epics/close), after a confirm naming how many.
+export class CloseEpic extends Component {
+  state = { busy: false };
+
+  close = async () => {
+    const { repo, lane } = this.props;
+    const open = (lane.cards || []).filter((c) => c.column !== 'merged').length;
+    if (globalThis.confirm && !globalThis.confirm(`Close epic #${lane.epic} and its open child issues (${open} on this board) as completed?`)) return;
+    this.setState({ busy: true });
+    const r = await sendJson('POST', '/api/epics/close', { repo, epic: lane.epic });
+    this.setState({ busy: false });
+    if (r.ok) { toast(`Closed ${r.data.closed.length} issue${r.data.closed.length === 1 ? '' : 's'}`); if (this.props.onChange) this.props.onChange(); } else toast(r.error, 'error');
+  };
+
+  render({ lane }, { busy }) {
+    if (!lane.epic) return null;
+    return html`<button type="button" class="btn-sm" disabled=${busy} onClick=${(e) => { e.preventDefault(); this.close(); }}>${busy ? 'Closing…' : 'Close epic'}</button>`;
   }
 }

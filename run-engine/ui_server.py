@@ -481,6 +481,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._dispatch(lambda b: ui_actions.set_state(*parts[3:6], b.get("state"), b.get("reason")))
         elif len(parts) == 7 and parts[1:3] == ["api", "pulls"] and parts[6] == "merge":
             self._dispatch(lambda b: ui_actions.merge(*parts[3:6]))
+        elif parts == ["", "api", "epics", "close"]:
+            self._dispatch(self._close_epic)
         elif parts == ["", "api", "prd"]:
             self._dispatch(
                 lambda b: ui_actions.save_prd(
@@ -491,6 +493,17 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(404, "text/plain; charset=utf-8", b"not found")
         else:
             self._method_not_allowed(guarded=True)
+
+    @staticmethod
+    def _close_epic(body: dict) -> dict:
+        repo = _registered(body.get("repo"))
+        epic = body.get("epic")
+        if not isinstance(epic, int) or isinstance(epic, bool) or epic < 1:
+            raise ValueError("epic must be an issue number")
+        owner, _, name = repo.partition("/")
+        out = ui_actions.close_epic(owner, name, epic, ui_actions.open_children(POLLER.snapshot(repo), epic))
+        threading.Thread(target=POLLER.poll, args=(repo,), daemon=True).start()  # the boards catch up now
+        return out
 
     @staticmethod
     def _board_start(body: dict) -> dict:

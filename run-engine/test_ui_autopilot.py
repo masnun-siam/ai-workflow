@@ -162,6 +162,9 @@ conflict = lambda b: (409, {"error": "pr-grind already running"})  # noqa: E731
 refuses("pr-grind", "12", ui_autopilot.Conflict, launch=conflict)
 assert ui_autopilot.start("o/r", "pr-grind", "13", launch=L, channel="C1")["session"] == "S3"
 assert L.bodies[2]["text"] == "/pr-grind 13 --channel C1"
+assert ui_autopilot.start("o/r", "refine-issues", "#7, 9  11", launch=L)["session"] == "S4"
+assert L.bodies[3]["text"] == "/refine-issues 7 9 11", "several issue numbers, normalised"
+refuses("refine-issues", "7 and 9", ValueError)
 print("  ok  start guards and launch")
 
 # herdr: tab create -> agent start -> agent prompt, in the checkout
