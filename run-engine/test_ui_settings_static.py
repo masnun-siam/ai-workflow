@@ -106,6 +106,15 @@ puts.length = 0;
 await s.saveVault({ preventDefault() {} }); await s.save({ preventDefault() {} });
 assert.equal(puts.length, 2); for (const p of puts) assert.ok(!('auto_grind' in p), JSON.stringify(p));
 out('settings: vault and accounts saves drop auto_grind');
+const R = Array.from({ length: 12 }, (_, i) => ({ slug: `o/r${i}`, path: `/p/r${i}` }));
+assert.equal(S.visibleRepos(R, '', false).length, S.REPO_PREVIEW); assert.equal(S.visibleRepos(R, '', true).length, 12);
+assert.deepEqual(S.visibleRepos(R, 'R11', false).map((r) => r.slug), ['o/r11'], 'search is case-insensitive and ignores the preview cap');
+assert.deepEqual(S.visibleRepos(R, '/p/r3', false).map((r) => r.slug), ['o/r3'], 'path matches too');
+const f = { server: 'https://ntfy.sh', topic: 't', user: '', public_url: '', token: '', password: '' };
+assert.deepEqual(S.notifyBody(f), { server: 'https://ntfy.sh', topic: 't', user: '', public_url: '' }, 'empty secret boxes keep the stored ones');
+assert.equal(S.notifyBody({ ...f, token: 'new' }).token, 'new');
+assert.equal(S.notifyBody({ ...f, token: 'new', clear_token: true }).token, '', 'clear wins');
+out('settings: repo filter with a preview of 8; notify body never sends an empty secret unless clearing');
 """
 )
 

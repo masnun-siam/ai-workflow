@@ -31,9 +31,107 @@ export function repoSection(slug, row, err, save) {
   </div>`;
 }
 
+// Per-repo rows: a search narrows them; without one only the first few show until "Show all".
+export const REPO_PREVIEW = 8;
+export function visibleRepos(repos, q, all) {
+  const n = q.trim().toLowerCase();
+  const hit = n ? repos.filter((r) => `${r.slug} ${r.path || ''}`.toLowerCase().includes(n)) : repos;
+  return n || all ? hit : hit.slice(0, REPO_PREVIEW);
+}
+
+// Only the fields the user touched go out; an empty secret box means "keep the stored one".
+export function notifyBody(form) {
+  const body = { server: form.server, topic: form.topic, user: form.user, public_url: form.public_url };
+  for (const k of ['token', 'password']) {
+    if (form[`clear_${k}`]) body[k] = '';
+    else if (form[k]) body[k] = form[k];
+  }
+  return body;
+}
+
+class NotifyPanel extends Component {
+  state = { form: null, msg: '', busy: false };
+
+  async componentDidMount() {
+    try { this.setState({ form: { ...(await api('GET', '/api/settings/notify')), token: '', password: '' } }); } catch (e) { this.setState({ msg: e.message }); }
+  }
+
+  set = (k) => (e) => this.setState(({ form }) => ({ form: { ...form, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value } }));
+
+  save = async (e) => {
+    e.preventDefault();
+    this.setState({ busy: true, msg: '' });
+    try {
+      const r = await api('POST', '/api/settings/notify', notifyBody(this.state.form));
+      this.setState({ form: { ...r, token: '', password: '' } });
+      toast('Notifications saved');
+    } catch (er) { this.setState({ msg: er.message }); }
+    this.setState({ busy: false });
+  };
+
+  render(_, { form, msg, busy }) {
+    const field = (k, label, type = 'text', ph = '') => html`<label for=${`ntfy-${k}`}>${label}</label>
+      <input id=${`ntfy-${k}`} type=${type} class="field" autocomplete="off" spellcheck="false" placeholder=${ph} value=${form[k]} onInput=${this.set(k)} />`;
+    const secret = (k, label) => html`${field(k, label, 'password', form[`${k}_set`] ? 'Set (leave empty to keep)' : 'Not set')}
+      ${form[`${k}_set`] && html`<label class="check"><input type="checkbox" checked=${!!form[`clear_${k}`]} onChange=${this.set(`clear_${k}`)} /> Remove the saved ${label.toLowerCase()}</label>`}`;
+    return html`<form class="panel" aria-labelledby="ntfy-h" onSubmit=${this.save} noValidate>
+      <h2 id="ntfy-h">Notifications</h2>
+      <p class="note">Push a phone notification through <a href="https://ntfy.sh" target="_blank" rel="noopener noreferrer">ntfy</a> when a session waits on you, finishes or fails. Saved to <code>ui.json</code> (mode 0600); a token or password never comes back to the browser.</p>
+      ${!form && !msg && html`<p role="status" class="muted">Loading…</p>`}
+      ${form && html`${form.env.length > 0 && html`<p class="note">Set by environment, which wins over this form: ${form.env.join(', ')}.</p>`}
+        ${field('server', 'Server', 'url', 'https://ntfy.sh')}
+        ${field('topic', 'Topic')}
+        ${secret('token', 'Token')}
+        ${field('user', 'User (instead of a token)')}
+        ${secret('password', 'Password')}
+        ${field('public_url', 'Public URL of this UI (notification links open it)', 'url', 'https://mac.tailnet.ts.net')}
+        <div class="launch-actions"><button type="submit" disabled=${busy}>${busy ? 'Saving…' : 'Save notifications'}</button></div>`}
+      ${msg && html`<p role="alert" class="error">${msg}</p>`}
+    </form>`;
+  }
+}
+
+class ReviewPanel extends Component {
+  state = { cfg: null, msg: '', busy: false };
+
+  async componentDidMount() {
+    try { this.setState({ cfg: await api('GET', '/api/settings/review') }); } catch (e) { this.setState({ msg: e.message }); }
+  }
+
+  patch = (p) => this.setState(({ cfg }) => ({ cfg: { ...cfg, ...p } }));
+
+  send = async (body, done) => {
+    this.setState({ busy: true, msg: '' });
+    try { this.setState({ cfg: await api('POST', '/api/settings/review', body) }); toast(done); } catch (er) { this.setState({ msg: er.message }); }
+    this.setState({ busy: false });
+  };
+
+  render(_, { cfg, msg, busy }) {
+    if (!cfg) return html`<section class="panel"><h2>Peer review</h2>${msg ? html`<p role="alert" class="error">${msg}</p>` : html`<p class="muted" role="status">Loading…</p>`}</section>`;
+    const names = Object.keys(cfg.lenses);
+    return html`<form class="panel" aria-labelledby="pr-h" onSubmit=${(e) => { e.preventDefault(); this.send({ max_rounds: Number(cfg.max_rounds), default_lenses: cfg.default_lenses, lenses: cfg.lenses }, 'Peer review saved'); }} noValidate>
+      <h2 id="pr-h">Peer review</h2>
+      <p class="note">How a review panel runs. Your changes are kept apart from the plugin's defaults, so an update still brings new defaults for anything you didn't change.</p>
+      <label for="pr-rounds">Rounds before a panel stops (1 to 10)</label>
+      <input id="pr-rounds" type="number" min="1" max="10" step="1" value=${cfg.max_rounds} onInput=${(e) => this.patch({ max_rounds: e.target.value })} />
+      <fieldset class="lens-picks"><legend>Ticked by default</legend>
+        ${names.map((n) => html`<label class="check"><input type="checkbox" checked=${cfg.default_lenses.includes(n)}
+          onChange=${(e) => this.patch({ default_lenses: e.target.checked ? [...cfg.default_lenses, n] : cfg.default_lenses.filter((x) => x !== n) })} /> ${n}</label>`)}
+      </fieldset>
+      ${names.map((n) => html`<details class="lens-prompt"><summary>${n} prompt${cfg.lenses[n] !== cfg.shipped.lenses[n] ? ' (edited)' : ''}</summary>
+        <textarea class="field" rows="6" aria-label=${`${n} prompt`} value=${cfg.lenses[n]} onInput=${(e) => this.patch({ lenses: { ...cfg.lenses, [n]: e.target.value } })}></textarea></details>`)}
+      <div class="launch-actions">
+        <button type="submit" disabled=${busy}>${busy ? 'Saving…' : 'Save peer review'}</button>
+        ${cfg.overridden && html`<button type="button" disabled=${busy} onClick=${() => globalThis.confirm('Go back to the plugin defaults for peer review?') && this.send({ reset: true }, 'Peer review reset')}>Reset to defaults</button>`}
+      </div>
+      ${msg && html`<p role="alert" class="error">${msg}</p>`}
+    </form>`;
+  }
+}
+
 export class Settings extends Component {
   saved = { commands: [], default: null };
-  state = { commands: null, def: '', cfg: {}, rowErr: {}, tests: {}, err: '', saving: false, repos: [], roots: '', scanning: false, scanMsg: '', vault: '', vaultMsg: '' };
+  state = { commands: null, def: '', cfg: {}, rowErr: {}, tests: {}, err: '', saving: false, repos: [], roots: '', scanning: false, scanMsg: '', vault: '', vaultMsg: '', repoQ: '', allRepos: false, problems: null, checking: false };
 
   async componentDidMount() {
     try {
@@ -64,6 +162,29 @@ export class Settings extends Component {
       this.setState({ scanMsg: e.message });
     }
     this.setState({ scanning: false });
+  };
+
+  removeRepo = async (slug) => {
+    if (!globalThis.confirm(`Unregister ${slug}? Its clone on disk is not touched; Find my repos adds it back.`)) return;
+    try {
+      const r = await api('POST', '/api/repos/remove', { slug });
+      this.setState({ repos: r.repos });
+      toast(`Removed ${slug}`);
+    } catch (e) {
+      this.setState({ scanMsg: e.message });
+    }
+  };
+
+  checkRepos = async () => {
+    this.setState({ checking: true, scanMsg: '' });
+    try {
+      const { problems } = await api('POST', '/api/repos/check', {});
+      const bad = Object.values(problems).filter(Boolean).length;
+      this.setState({ problems, scanMsg: bad ? `${bad} repo${bad === 1 ? '' : 's'} with a problem, listed first.` : 'Every remote is reachable.' });
+    } catch (e) {
+      this.setState({ scanMsg: e.message });
+    }
+    this.setState({ checking: false });
   };
 
   // Renaming the default keeps it the default.
@@ -133,7 +254,9 @@ export class Settings extends Component {
     this.setState({ saving: false });
   };
 
-  render(_, { commands, def, cfg, rowErr, tests, err, saving, repos, roots, scanning, scanMsg, vault, vaultMsg }) {
+  render(_, { commands, def, cfg, rowErr, tests, err, saving, repos, roots, scanning, scanMsg, vault, vaultMsg, repoQ, allRepos, problems, checking }) {
+    const shownRepos = visibleRepos(repos, repoQ, allRepos);
+    const listed = problems ? [...repos].sort((a, b) => !!problems[b.slug] - !!problems[a.slug]) : repos;
     if (!commands) return html`<h1>Settings</h1><p role="status">Loading…</p>`;
     return html`
       <section class="settings">
@@ -164,7 +287,10 @@ export class Settings extends Component {
             <h2 id="grind-h">Per-repo settings</h2>
             <p class="note">Auto-grind starts a grind when a PR turns ready. The autopilot cap is how many implement-issue sessions run at once (1 to 5). A grind posts to the repo's Slack review channel. Each row saves as soon as you change it.</p>
             ${repos.length === 0 && html`<p class="muted">No repos registered yet.</p>`}
-            ${repos.map((r) => repoSection(r.slug, repoRow(cfg, r.slug), rowErr[r.slug], this.saveRepo))}
+            ${repos.length > REPO_PREVIEW && html`<input type="search" class="field" aria-label="Filter repos" placeholder=${`Filter ${repos.length} repos`} value=${repoQ} onInput=${(e) => this.setState({ repoQ: e.target.value })} />`}
+            ${shownRepos.map((r) => repoSection(r.slug, repoRow(cfg, r.slug), rowErr[r.slug], this.saveRepo))}
+            ${!repoQ.trim() && !allRepos && repos.length > REPO_PREVIEW && html`<button type="button" onClick=${() => this.setState({ allRepos: true })}>Show all ${repos.length}</button>`}
+            ${repoQ.trim() && shownRepos.length === 0 && html`<p class="muted">No repo matches.</p>`}
           </section>
           <form class="panel" aria-labelledby="vault-h" onSubmit=${this.saveVault} noValidate>
             <h2 id="vault-h">Notes vault</h2>
@@ -183,13 +309,18 @@ export class Settings extends Component {
             <textarea id="scan-roots" class="field mono" rows="3" spellcheck="false" value=${roots} onInput=${(e) => this.setState({ roots: e.target.value })}></textarea>
             <div class="launch-actions">
               <button type="button" disabled=${scanning} onClick=${this.scan}>${scanning ? 'Scanning…' : 'Find my repos'}</button>
+              <button type="button" disabled=${checking || !repos.length} onClick=${this.checkRepos}>${checking ? 'Checking…' : 'Check remotes'}</button>
               ${scanMsg && html`<span class="muted" role="status">${scanMsg}</span>`}
             </div>
             ${repos.length > 0 && html`<ul class="repo-list" aria-label="Known repos">
-              ${repos.map((r) => html`<li><span>${r.slug}</span><span class="mono muted" title=${r.path}>${r.path}</span></li>`)}
+              ${listed.map((r) => html`<li key=${r.slug}><span>${r.slug}</span><span class="mono muted" title=${r.path}>${r.path}</span>
+                ${problems && problems[r.slug] && html`<span class="error">${problems[r.slug]}</span>`}
+                <button type="button" class="btn-sm btn--danger" aria-label=${`Remove ${r.slug}`} onClick=${() => this.removeRepo(r.slug)}>Remove</button></li>`)}
             </ul>`}
             ${repos.length === 0 && html`<p class="muted">No repos registered yet.</p>`}
           </section>
+          <${NotifyPanel} />
+          <${ReviewPanel} />
         </div>
       </section>`;
   }

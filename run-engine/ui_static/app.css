@@ -813,3 +813,7 @@ header .ugauge:hover { background: var(--raised); }
 .panel-control button, .clean-dialog button { min-height: 36px; font-size: 13px; }
 .clean-dialog { flex-basis: 100%; display: grid; gap: 4px; border: 1px solid var(--line, currentColor); border-radius: 8px; padding: 8px; }
 .clean-dialog ul { margin: 0; padding-left: 18px; }
+.lens-picks { display: flex; flex-wrap: wrap; gap: 4px 16px; border: 0; padding: 0; margin: 0; }
+.lens-picks legend { margin-bottom: 4px; color: var(--muted); font-size: 13px; }
+.lens-prompt summary { cursor: pointer; min-height: 36px; display: flex; align-items: center; }
+.lens-prompt textarea { width: 100%; font: 12.5px/1.5 var(--mono); }

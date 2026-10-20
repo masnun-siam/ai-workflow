@@ -13,6 +13,9 @@
 - UI: **Stop** on a session page for a session that has not finished. `skill-feedback` in New run.
   The board's stale banner says why (rate limit with retry time, or the fetch error) and has a
   **Refresh**.
+- UI: Settings edits notifications (`ui.json`) and peer review (rounds, default lenses, lens
+  prompts, saved as overrides in the data dir), filters the per-repo list, checks every repo's
+  GitHub remote and removes a repo from the registry.
 - UI: Sessions has Stop and Rerun per row (Rerun on the session page too), a repo filter, search,
   cost totals (today, 7 days, current filters), paging and grouping by issue or PR.
 - UI: a card opens in a side drawer. Comment on issues and PRs, close (completed or not planned)
