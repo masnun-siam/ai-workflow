@@ -1954,7 +1954,7 @@ out('launcher: lens lists in the body (named and custom), default critical, empt
   assert.deepEqual(nums(''), [12, 120, 7]); assert.deepEqual(nums('12'), [12, 120], 'number prefix');
   assert.deepEqual(nums('login fix'), [12], 'every word in the title'); assert.deepEqual(nums('feature'), [120], 'labels match');
   assert.deepEqual(nums('o/r#12'), [12, 120, 7], 'a filled-in reference keeps the whole list visible');
-  assert.deepEqual(L.GROUPS.flatMap(([, c]) => c.map(([n]) => n)).sort(), Object.keys(L.PICK).concat(['pr-grind', 'create-prd', 'refine-issues', 'dump', 'day', 'worklog', 'verifier-locally', 'docs-updater', 'sync-from-wasensi', 'skill-feedback', 'create-tasks', 'herdr-dispatch', 'flow', 'peer-review', 'release-pr']).sort(), 'every command is grouped once');
+  assert.deepEqual(L.GROUPS.flatMap(([, c]) => c.map(([n]) => n)).sort(), Object.keys(L.PICK).concat(['create-prd', 'refine-issues', 'dump', 'day', 'worklog', 'verifier-locally', 'docs-updater', 'sync-from-wasensi', 'skill-feedback', 'create-tasks', 'herdr-dispatch', 'flow', 'peer-review', 'release-pr']).sort(), 'every command is grouped once');
   assert.equal(L.switchArgs('dump', 'create-prd', 'long idea', 'o/r'), 'long idea', 'free text carries over');
   assert.equal(L.switchArgs('implement-issue', 'pr-review', '12', 'o/r'), '', 'issue to PR clears');
   assert.equal(L.switchArgs('dump', 'implement-issue', 'idea', 'o/r'), '');
@@ -2027,6 +2027,17 @@ out('launcher: lens lists in the body (named and custom), default critical, empt
   assert.deepEqual(D.askBody('o/r', 'docs/prds/x.md', ' add CSV export '), { repo: 'o/r', command: 'create-prd', args: 'docs/prds/x.md add CSV export' });
   assert.equal(D.savedText({ committed: true, commit: 'abc1234', branch: 'main' }), 'Committed abc1234 on main (not pushed)');
   assert.equal(D.savedText({ committed: false }), 'No changes to save');
+  const K = await import(process.env.APP_URL.replace('app.js', 'keys.js'));
+  const its = K.repoItems({ repo: 'o/r', repos: [{ slug: 'o/r' }, { slug: 'o/z', path: '/p/z' }], issues: [{ number: 7, title: 'Fix login', labels: ['bug'] }], prs: [{ number: 9, title: 'Add CSV' }], prds: [{ path: 'docs/prds/x.md', title: 'Export', status: 'Approved' }] });
+  assert.deepEqual(its.map((i) => i.group), ['Issue', 'PR', 'PRD', 'Switch repo'], 'the current repo is not offered as a switch');
+  assert.deepEqual(its[0].peek, { kind: 'issue', owner: 'o', repo: 'r', n: 7 }); assert.deepEqual(its[1].peek, { kind: 'pr', owner: 'o', repo: 'r', n: 9 });
+  assert.deepEqual(its[2].peek, { kind: 'prd', repo: 'o/r', path: 'docs/prds/x.md', title: 'Export' }); assert.equal(its[3].repo, 'o/z');
+  assert.deepEqual(K.filterItems(its, 'bug').map((i) => i.id), ['issue-7'], 'labels are searchable');
+  out('palette: issues, PRs and PRDs of the repo open their drawer; other repos switch');
+  const L2 = await import(process.env.APP_URL.replace('app.js', 'launcher.js'));
+  assert.equal(L2.pickValue('pr-grind', 'o/r', { number: 9, url: 'https://github.com/o/r/pull/9' }), 'https://github.com/o/r/pull/9', '/pr-grind takes a PR URL');
+  assert.equal(L2.pickValue('pr-review', 'o/r', { number: 9 }), '9');
+  out('launcher: pr-grind picks from the open PRs and fills the PR URL');
   out('drawer: close/reopen with a reason, merge always offered on an open PR but warns on red CI or no approval; PRD edit and Ask Claude bodies');
 }
 """

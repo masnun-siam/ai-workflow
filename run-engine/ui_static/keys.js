@@ -1,6 +1,7 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
-import { shortRepo } from './fmt.js';
+import { shortRepo, currentRepo, setRepo } from './fmt.js';
+import { loadRepoList } from './repopicker.js';
 
 const html = htm.bind(h);
 
@@ -88,11 +89,25 @@ export function paletteItems({ sessions, afk }) {
   return items;
 }
 
+// The selected repo's open issues, PRs and PRDs (each opens its drawer), and every other repo to switch to.
+export function repoItems({ repo, repos, issues, prs, prds }) {
+  const [owner, name] = String(repo || '').split('/');
+  const peek = (kind, n) => ({ kind, owner, repo: name, n });
+  return [
+    ...(issues || []).map((i) => ({ id: `issue-${i.number}`, group: 'Issue', label: i.title, detail: `#${i.number}`, search: (i.labels || []).join(' '), peek: peek('issue', i.number) })),
+    ...(prs || []).map((p) => ({ id: `pr-${p.number}`, group: 'PR', label: p.title, detail: `#${p.number}`, peek: peek('pr', p.number) })),
+    ...(prds || []).map((p) => ({ id: `prd-${p.path}`, group: 'PRD', label: p.title || p.slug, detail: p.status || '', peek: { kind: 'prd', repo, path: p.path, title: p.title || p.slug } })),
+    ...(repos || []).filter((r) => r.slug !== repo).map((r) => ({ id: `repo-${r.slug}`, group: 'Switch repo', label: r.slug, detail: r.path || '', repo: r.slug })),
+  ];
+}
+
+const getJson = (url) => fetch(url, { headers: { Accept: 'application/json' } }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+
 // Every whitespace-separated word must appear somewhere in the item; capped so the list stays short.
 export function filterItems(items, query, limit = 8) {
   const words = String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
   const hit = (it) => {
-    const hay = `${it.label} ${it.detail} ${it.group}`.toLowerCase();
+    const hay = `${it.label} ${it.detail} ${it.group} ${it.search || ''}`.toLowerCase();
     return words.every((w) => hay.includes(w));
   };
   return items.filter(hit).slice(0, limit);
@@ -111,19 +126,32 @@ export const SHORTCUTS = [
 ];
 
 export class Palette extends Component {
-  state = { q: '', active: 0 };
+  state = { q: '', active: 0, extra: [] };
+
+  // Loaded when the palette opens: the repo list is cached, boards are served from memory, and the
+  // open issues and PRs are one gh call each.
+  componentDidMount() {
+    const repo = currentRepo();
+    const [owner, name] = repo.split('/');
+    const open = (kind) => (owner && name ? getJson(`/api/repos/${owner}/${name}/open?kind=${kind}`) : null);
+    Promise.all([loadRepoList(), open('issue'), open('pr'), repo ? getJson(`/api/planning?repo=${encodeURIComponent(repo)}`) : null])
+      .then(([repos, iss, pr, plan]) => !this.gone && this.setState({ extra: repoItems({ repo, repos, issues: iss?.items, prs: pr?.items, prds: plan?.prds }) }))
+      .catch(() => {});
+  }
 
   componentWillUnmount() {
     this.gone = true;
   }
 
   items() {
-    return filterItems(paletteItems({ sessions: this.props.sessions, afk: this.props.afk }), this.state.q);
+    return filterItems([...paletteItems({ sessions: this.props.sessions, afk: this.props.afk }), ...this.state.extra], this.state.q);
   }
 
   pick = (item) => {
     this.props.onClose();
-    if (item.event) dispatchEvent(new CustomEvent(item.event));
+    if (item.repo) setRepo(item.repo);
+    else if (item.peek) dispatchEvent(new CustomEvent('aiw:peek', { detail: item.peek }));
+    else if (item.event) dispatchEvent(new CustomEvent(item.event));
     else location.hash = item.href;
   };
 
@@ -145,7 +173,7 @@ export class Palette extends Component {
       <div class="dialog palette" role="dialog" aria-modal="true" aria-label="Command palette">
         <input class="field" autofocus role="combobox" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list"
           aria-activedescendant=${items.length ? 'pal-' + Math.min(active, items.length - 1) : undefined}
-          placeholder="Jump to a run, session or page…" value=${q}
+          placeholder="Jump to a session, issue, PR, PRD, repo or page…" value=${q}
           onInput=${(e) => this.setState({ q: e.target.value, active: 0 })} onKeyDown=${this.onKey}
           ref=${(el) => el && !this.focused && ((this.focused = true), el.focus())} />
         <ul id="palette-list" role="listbox" aria-label="Results">

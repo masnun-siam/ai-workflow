@@ -11,6 +11,13 @@ const html = htm.bind(h);
 // ponytail: one cadence. The server polls GitHub at 60s/15s but serves boards from memory, so a flat 15s costs nothing.
 export const BOARD_POLL_MS = 15000;
 
+// Column tabs for a phone: one column fills the screen (CSS), and a tab scrolls its column into view.
+// cols: [[key, label, count]]. Hidden on wider screens, where every column shows.
+export function colTabs(prefix, cols) {
+  const go = (k) => globalThis.document?.getElementById(`${prefix}-${k}`)?.scrollIntoView({ inline: 'start', block: 'nearest', behavior: 'smooth' });
+  return html`<div class="col-tabs" role="toolbar" aria-label="Columns">${cols.map(([k, label, n]) => html`<button type="button" class=${n ? '' : 'is-empty'} onClick=${() => go(k)}>${label} <span>${n}</span></button>`)}</div>`;
+}
+
 export const boardUrl = (path, repo, refresh) => `${path}?repo=${encodeURIComponent(repo)}${refresh ? '&refresh=1' : ''}`;
 
 // Stale banner text: still loading, rate limited (and until when), or the fetch error.

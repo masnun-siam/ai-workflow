@@ -54,7 +54,9 @@ PR → In review → Grinding → Merged (7 days). Only refined issues, or ones 
 session, show. A blocked card shows a lock with its open blockers and cannot start. Unblocked Ready
 cards have **Start** (headless `/implement-issue`) and **Start in herdr**; In review cards have
 **Grind** when the repo's auto-grind is off. Each lane has an **Autopilot** switch and shows
-`running/cap`. A merged issue's worktree under `.worktrees/` and its branch are removed when clean;
+`running/cap`; a lane with nothing open (only merged cards) starts collapsed, and an **Epic** filter
+shows one lane. On a phone each board shows one column at a time with a tab strip of column counts.
+A merged issue's worktree under `.worktrees/` and its branch are removed when clean;
 otherwise the card is flagged and **Clean** lists what would be lost first.
 `GET /api/delivery`, `POST /api/start` (409 for a live session, open PR or blocked issue),
 `POST /api/autopilot`, `POST /api/cleanup`.
@@ -91,6 +93,10 @@ has **Rerun**, which starts its recorded command again in the same repo with the
 list filters by repo (shared with the boards, or All repos), outcome and a search over the command
 and its link, shows 50 rows at a time, totals cost for today, the last 7 days and the current
 filters, and can group the sessions of one issue or PR under it.
+
+**Command palette** (⌘K / Ctrl+K). Pages, AFK, sessions, and for the selected repo its open
+issues and PRs (searchable by label) and PRDs, each opening its drawer; another repo's name
+switches every page to it.
 
 **Repo picker.** One picker for the registered checkouts (`checkouts.json`), searchable by name,
 owner, project or path, recent first. The picked repo is shared by Planning, Delivery and New run

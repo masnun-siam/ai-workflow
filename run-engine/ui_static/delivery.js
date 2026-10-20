@@ -1,6 +1,6 @@
-import { h } from './vendor/preact.mjs';
+import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
-import { BoardShell } from './boardshell.js';
+import { BoardShell, colTabs } from './boardshell.js';
 import { ghChips } from './ghstatus.js';
 import { CardActions, LaneAutopilot } from './delivery_actions.js';
 import { IssueLink } from './issue.js';
@@ -47,31 +47,58 @@ export function deliveryCard(c, ctx = {}) {
   </article>`;
 }
 
+// Open work in a lane: everything not yet merged. A lane without any starts collapsed.
+export const openCount = (l) => (l.cards || []).filter((c) => c.column !== 'merged').length;
+
 export function lane(l, ctx = {}) {
   const by = laneGroups(l.cards);
   const atCap = l.running >= l.cap;
-  return html`<section class="lane" aria-label=${l.epic ? `Epic #${l.epic}` : 'No epic'} key=${l.epic || 'none'}>
-    <div class="lane-head">
+  const key = `lane-${l.epic || 'none'}`;
+  const open = openCount(l);
+  return html`<details class="lane" aria-label=${l.epic ? `Epic #${l.epic}` : 'No epic'} key=${l.epic || 'none'} open=${open > 0 || !!ctx.only}>
+    <summary class="lane-head">
       <h2>${l.epic ? `#${l.epic} ${l.title || ''}` : 'No epic'}</h2>
       <span class=${atCap ? 'lane-running at-cap' : 'lane-running'}>${runningText(l.running, l.cap)}</span>
       ${l.autopilot && html`<span class="chip chip-running">autopilot on</span>`}
+      ${!open && html`<span class="muted lane-empty">nothing open</span>`}
       <span data-slot="lane-actions"><${LaneAutopilot} lane=${l} repo=${ctx.repo} onChange=${ctx.reload} /></span>
-    </div>
+    </summary>
+    ${colTabs(key, COLUMNS.map(([k, label]) => [k, label, by[k].length]))}
     <div class="cols">
-      ${COLUMNS.map(([k, label]) => html`<section class="bcol" aria-label=${label} key=${k}>
+      ${COLUMNS.map(([k, label]) => html`<section class="bcol" id=${`${key}-${k}`} aria-label=${label} key=${k}>
         <h2>${label}<span>${by[k].length}</span></h2>
         ${by[k].length ? by[k].map((c) => deliveryCard(c, ctx)) : html`<p class="empty">None</p>`}
       </section>`)}
     </div>
-  </section>`;
+  </details>`;
 }
 
 export function board(data, ctx = {}) {
   const lanes = data.lanes || [];
   if (!lanes.length) return html`<p class="board-empty" role="status">Nothing to deliver yet. Refined issues appear here.</p>`;
-  return html`${lanes.map((l) => lane(l, { ...ctx, autoGrind: data.auto_grind }))}`;
+  const only = ctx.epic ? lanes.filter((l) => String(l.epic || 'none') === ctx.epic) : lanes;
+  return html`${only.map((l) => lane(l, { ...ctx, autoGrind: data.auto_grind, only: !!ctx.epic }))}`;
+}
+
+export const epicLabel = (l) => (l.epic ? `#${l.epic} ${l.title || ''}`.trim() : 'No epic');
+
+// The board plus an epic filter (kept per page visit; "All epics" by default).
+class DeliveryBoard extends Component {
+  state = { epic: '' };
+
+  render({ data, ctx }, { epic }) {
+    const lanes = data.lanes || [];
+    const known = lanes.some((l) => String(l.epic || 'none') === epic) ? epic : '';
+    return html`${lanes.length > 1 && html`<label class="epic-filter">Epic
+        <select onChange=${(e) => this.setState({ epic: e.target.value })}>
+          <option value="" selected=${!known}>All epics (${lanes.length})</option>
+          ${lanes.map((l) => html`<option value=${String(l.epic || 'none')} selected=${known === String(l.epic || 'none')}>${epicLabel(l)} · ${openCount(l)} open</option>`)}
+        </select></label>`}
+      ${board(data, { ...ctx, epic: known })}`;
+  }
 }
 
 export function Delivery() {
-  return html`<${BoardShell} title="Delivery" path="/api/delivery" render=${board} />`;
+  return html`<${BoardShell} title="Delivery" path="/api/delivery" render=${(data, ctx) => html`<${DeliveryBoard} data=${data} ctx=${ctx} />`} />`;
 }
+export { DeliveryBoard };

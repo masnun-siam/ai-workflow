@@ -70,7 +70,7 @@ globalThis.fetch = async (u, o = {}) => { posts.push([u, JSON.parse(o.body)]); r
 let reloads = 0;
 const ctx = { repo: 'o/r', reload: () => { reloads++; } };
 const t = D.board(data, ctx);
-const lanes = find('section', t).filter((s) => String(s.props['aria-label']).match(/^(Epic|No epic)/));
+const lanes = find('details', t).filter((s) => String(s.props['aria-label']).match(/^(Epic|No epic)/));
 assert.deepEqual(lanes.map((l) => l.props['aria-label']), ['Epic #40', 'No epic']);
 const cols = find('section', lanes[0]).filter((s) => s.props['aria-label'] !== 'Epic #40');
 assert.deepEqual(cols.map((c) => c.props['aria-label']), ['Ready', 'In progress', 'Draft PR', 'In review', 'Grinding', 'Merged']);
@@ -100,9 +100,19 @@ assert.equal(byClass('bcard-slot', lanes[0]).length, 6, 'every card has an actio
 out('delivery: grind round, session chip link, CI chips from ghstatus, cleanup flag');
 
 const noEpic = D.board({ ...data, lanes: [data.lanes[1]] });
-assert.deepEqual(find('section', noEpic).filter((s) => /^(Epic|No epic)/.test(s.props['aria-label'])).map((s) => s.props['aria-label']), ['No epic']);
+assert.deepEqual(find('details', noEpic).filter((s) => /^(Epic|No epic)/.test(s.props['aria-label'])).map((s) => s.props['aria-label']), ['No epic']);
 assert.match(text(D.board({ ...data, lanes: [] })), /Nothing to deliver/);
 out('delivery: a repo with no epics shows only the No epic lane');
+
+const shipped = { epic: 50, title: 'Shipped', autopilot: false, cap: 2, running: 0, cards: [card({ n: 12, title: 'Merged one', column: 'merged' })] };
+assert.equal(D.openCount(shipped), 0); assert.equal(D.openCount(data.lanes[0]), 5, 'merged cards are not open work');
+const both = D.board({ ...data, lanes: [data.lanes[0], shipped] }, ctx);
+assert.deepEqual(find('details', both).map((d) => [d.props['aria-label'], d.props.open]), [['Epic #40', true], ['Epic #50', false]]);
+assert.match(text(find('details', both)[1]), /nothing open/);
+const only = D.board({ ...data, lanes: [data.lanes[0], shipped] }, { ...ctx, epic: '50' });
+assert.deepEqual(find('details', only).map((d) => [d.props['aria-label'], d.props.open]), [['Epic #50', true]], 'a filtered epic shows open');
+assert.equal(byClass('col-tabs', lanes[0]).length, 1, 'each lane has column tabs for phones');
+out('delivery: a lane with nothing open starts collapsed; the epic filter shows one lane; column tabs');
 
 const top = D.Delivery(); assert.equal(top.type, B.BoardShell); assert.equal(top.props.path, '/api/delivery');
 const A = await import(U('delivery_actions.js'));

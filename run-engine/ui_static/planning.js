@@ -1,6 +1,6 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
-import { BoardShell, sendJson } from './boardshell.js';
+import { BoardShell, sendJson, colTabs } from './boardshell.js';
 import { toast } from './toast.js';
 import { PanelControl } from './panel.js';
 import { openPrd } from './prd.js';
@@ -93,8 +93,8 @@ class PlanningBoard extends Component {
     const prds = data.prds || [];
     if (!prds.length) return html`<p class="board-empty hint" role="status">No PRDs in this repo yet. Run <code>/create-prd</code> to write one.</p>`;
     const by = groupPrds(prds);
-    return html`<div class="cols">
-      ${COLUMNS.map(([k, label]) => html`<section class="bcol" aria-label=${label} key=${k}>
+    return html`${colTabs('pcol', COLUMNS.map(([k, label]) => [k, label, by[k].length]))}<div class="cols">
+      ${COLUMNS.map(([k, label]) => html`<section class="bcol" id=${`pcol-${k}`} aria-label=${label} key=${k}>
         <h2>${label}<span>${by[k].length}</span></h2>
         ${by[k].length ? by[k].map((p) => prdCard(p, ctx.repo, { busy: !!busy[p.path || p.slug], err: err[p.path || p.slug], session: sessions[p.path || p.slug], onAct: this.act, offers, onChange: ctx.reload })) : html`<p class="empty">None</p>`}
       </section>`)}

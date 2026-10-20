@@ -78,9 +78,10 @@ assert.match(c['Approved'], /Approved one[\s\S]*Epic #40/); assert.match(c['Task
 assert.match(c['Refined'], /Refined one[\s\S]*4\/4 refined/);
 out('planning: PRDs land in their stage columns with stage detail; 3/8 refined is under Tasks filed');
 
-const btn = (label) => find('button', view()).find((b) => text(b) === label);
+const cardButtons = () => find('section', view()).flatMap((sec) => find('button', sec));
+const btn = (label) => cardButtons().find((b) => text(b) === label);
 assert.ok(btn('Create tasks') && btn('Refine') && btn('Autopilot'), 'one action per stage');
-assert.equal(find('button', view()).length, 3, 'draft and in-review cards have no start button here');
+assert.equal(new Set(cardButtons()).size, 3, 'draft and in-review cards have no start button here');
 assert.equal(byClass('bcard-slot', find('section', view())[0]).length, 1, 'draft card has the panel slot');
 out('planning: Create tasks (approved, no issues), Refine (not all refined), Autopilot (all refined), draft panel slot');
 

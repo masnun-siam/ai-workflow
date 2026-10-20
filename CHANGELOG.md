@@ -13,6 +13,9 @@
 - UI: **Stop** on a session page for a session that has not finished. `skill-feedback` in New run.
   The board's stale banner says why (rate limit with retry time, or the fetch error) and has a
   **Refresh**.
+- UI: Delivery collapses lanes with nothing open and has an epic filter; boards show one column at a
+  time on a phone with column tabs. The palette finds the repo's issues, PRs and PRDs and switches
+  repo. New run lists open PRs for `pr-grind` and fills the PR URL.
 - UI: Settings edits notifications (`ui.json`) and peer review (rounds, default lenses, lens
   prompts, saved as overrides in the data dir), filters the per-repo list, checks every repo's
   GitHub remote and removes a repo from the registry.

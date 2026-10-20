@@ -453,7 +453,7 @@ header .kbd-hint { color: var(--muted); font-size: 13px; gap: 10px; }
 .palette li { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 6px 12px; border-radius: 8px; cursor: pointer; }
 .palette li[aria-selected="true"] { background: var(--raised); }
 .pal-label { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pal-detail { color: var(--muted); font-size: 12px; flex: none; }
+.pal-detail { color: var(--muted); font-size: 12px; flex: 0 1 auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pal-group { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; flex: none; width: 56px; text-align: right; }
 .pal-empty { color: var(--muted); cursor: default; }
 .keys { display: grid; grid-template-columns: max-content 1fr; gap: 10px 16px; margin: 0; align-items: center; }
@@ -817,3 +817,22 @@ header .ugauge:hover { background: var(--raised); }
 .lens-picks legend { margin-bottom: 4px; color: var(--muted); font-size: 13px; }
 .lens-prompt summary { cursor: pointer; min-height: 36px; display: flex; align-items: center; }
 .lens-prompt textarea { width: 100%; font: 12.5px/1.5 var(--mono); }
+/* Delivery: a lane is a <details>; one without open work starts collapsed */
+details.lane > summary.lane-head { cursor: pointer; list-style: none; }
+details.lane > summary.lane-head::-webkit-details-marker { display: none; }
+details.lane > summary.lane-head::before { content: '▸'; color: var(--faint); transition: transform 0.12s; }
+details.lane > summary.lane-head h2 { flex: 1 1 12rem; min-width: 0; }
+details.lane[open] > summary.lane-head::before { transform: rotate(90deg); }
+.lane-empty { font-size: 12px; }
+.epic-filter { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+.epic-filter select { min-height: 40px; width: auto; max-width: min(520px, 100%); }
+/* Column tabs: phones see one column at a time; a tab jumps to it */
+.col-tabs { display: none; }
+@media (max-width: 640px) {
+  .col-tabs { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 8px; scrollbar-width: none; }
+  .col-tabs button { flex: none; min-height: 36px; padding: 0 10px; font-size: 12.5px; border-radius: 999px; }
+  .col-tabs button span { margin-left: 4px; color: var(--muted); }
+  .col-tabs button.is-empty { opacity: 0.55; }
+  .cols { scroll-snap-type: x mandatory; }
+  .bcol { flex: 0 0 calc(100% - 4px); min-width: 0; }
+}

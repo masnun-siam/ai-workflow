@@ -160,7 +160,7 @@ function View({ route, sessions, limits }) {
 export class App extends Component {
   state = { route: parseRoute(globalThis.location?.hash), sessions: null, limits: {}, usage: {}, afk: null, commands: [], offline: false, notif: notifyState(), palette: false, sheet: false, cleanup: null, peek: null };
 
-  onRepo = () => this.forceUpdate(); // nav links carry the picked repo
+  onRepo = () => this.setState({ route: parseRoute(location.hash) }); // nav links follow; a board remounts on its new ?repo=
 
   onHash = () => {
     const route = parseRoute(location.hash);
