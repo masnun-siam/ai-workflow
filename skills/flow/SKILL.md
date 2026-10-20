@@ -1,6 +1,6 @@
 ---
 name: flow
-description: "Guide one feature from raw input to dispatched /run-issue runs: /dump (Obsidian) → /create-prd → /create-tasks → /refine-issues → herdr-dispatch, stopping for the user's go-ahead at every stage boundary. Picks the entry stage from the input, so half-done work (a PRD, existing issues) resumes where it is. Use whenever the user says /flow, 'take this idea to PRs', 'guided flow', or wants an idea carried through capture, PRD, tasks, issues and dispatch in one go."
+description: "Guide one feature from raw input to dispatched implement-issue runs: /dump (Obsidian) → /create-prd → /create-tasks → /refine-issues → herdr-dispatch, stopping for the user's go-ahead at every stage boundary. Picks the entry stage from the input, so half-done work (a PRD, existing issues) resumes where it is. Use whenever the user says /flow, 'take this idea to PRs', 'guided flow', or wants an idea carried through capture, PRD, tasks, issues and dispatch in one go."
 allowed-tools:
   - Skill
   - AskUserQuestion
@@ -26,7 +26,6 @@ A stage's own "last line of your output" or "do nothing further" ends that stage
 | A vault feature folder `05-Work/<Project>/<Feature>`, or its `Dump.md` path (use the folder) | create-prd |
 | A PRD path (a vault `…/PRD.md` or a repo `docs/prds/<slug>.md`) | create-tasks |
 | A task list `docs/tasks/<slug>.md` | refine-issues |
-| A `Bugs.md` or `Tasks.md` note a `→ next: /gh-issue` line named | gh-issue |
 | An epic parent a `→ next: herdr-dispatch` line named | dispatch |
 | Issue numbers: bare integers or GitHub issue URLs, one or more | dispatch |
 
@@ -40,7 +39,7 @@ Invoke the `ai-workflow:dump` skill with the raw text. Its own Step 3 confirmati
 
 ### create-prd
 
-Invoke the `ai-workflow:create-prd` skill with the feature folder (`/create-prd <feature-folder>`). It fills the folder's seeded `PRD.md`, or, on a PRD that is already finished (a change request), asks and updates it. Its final line is `→ next: /create-tasks <prd-path>`. The same skill is the target when `gh-issue` stops with `→ next: /create-prd <input>`: the input needs a PRD, so run create-prd on that input.
+Invoke the `ai-workflow:create-prd` skill with the feature folder (`/create-prd <feature-folder>`). It fills the folder's seeded `PRD.md`, or, on a PRD that is already finished (a change request), asks and updates it. Its final line is `→ next: /create-tasks <prd-path>`.
 
 ### create-tasks
 
@@ -49,10 +48,6 @@ Invoke the `ai-workflow:create-tasks` skill with the PRD path. It works only fro
 ### refine-issues
 
 Invoke the `ai-workflow:refine-issues` skill with the task list path. It files one refined sub-issue per task under the PRD's epic, with `Depends on:` lines and native blocked-by links. Its final line is `→ next: herdr-dispatch <epic>`.
-
-### gh-issue
-
-Invoke the `ai-workflow:gh-issue` skill with the note path. It files exactly one issue. Its final line is `→ next: herdr-dispatch <n>`, or `→ next: /create-prd <input>` when it stopped because the input splits into 2 or more tasks. That is not an error: go to the create-prd stage with that argument.
 
 ### dispatch
 
@@ -64,9 +59,7 @@ See **Dispatch** below.
 |---|---|
 | New feature request | create-prd → create-tasks → refine-issues → dispatch |
 | Change request | create-prd (update path) → create-tasks → refine-issues → dispatch |
-| Bug report | gh-issue → dispatch |
-| Feature-scoped task | gh-issue → dispatch |
-| Standalone task, weekly meeting notes, unclassifiable | stop after filing; there is no next stage |
+| Bug report, feature-scoped task, standalone task, weekly meeting notes, unclassifiable | stop after filing; there is no next stage |
 
 ## Checkpoints
 
@@ -78,14 +71,14 @@ The boundary after `create-prd` asks "Approve the PRD, file its epics, and conti
 
 1. Convert any issue URLs to their numbers (`herdr-dispatch` takes numbers, not URLs). Invoke the `ai-workflow:herdr-dispatch` skill with `<numbers> --max 2 --dry-run` and show the user its order and launch plan.
 2. Ask one AskUserQuestion: "Launch" / "Stop here".
-3. On "Launch", invoke `ai-workflow:herdr-dispatch` with `<numbers> --max 2`. If the user asked for the main tree (`/flow … --no-worktree`), use `<numbers> --sequential --no-worktree` instead of `--max 2`, in both the dry run and the launch. If the user passed `--no-review`, append `--no-review` to the herdr-dispatch arguments too, and likewise `--grind`. On "Stop here", print `→ next: herdr-dispatch <numbers>` and stop.
+3. On "Launch", invoke `ai-workflow:herdr-dispatch` with `<numbers> --max 2`; each tab runs `/ai-workflow:implement-issue {n}`. On "Stop here", print `→ next: herdr-dispatch <numbers>` and stop.
 
 ## Guardrails
 
 - No stage logic copied here: classification, PRD writing, task splitting and dispatch belong to their own skills.
 - No state file. The artifacts (vault note, PRD, issues) are the state, which is why `/flow <argument>` can resume.
 - One feature per run. The epics `/create-prd approve` files are the only tracking issues; this skill never creates another.
-- Never launch a dispatch without an explicit "Launch", and never create GitHub issues without the user's "Continue" into the create-tasks (it runs the approve that files epics), gh-issue or refine-issues stage.
+- Never launch a dispatch without an explicit "Launch", and never create GitHub issues without the user's "Continue" into the create-tasks (it runs the approve that files epics) or refine-issues stage.
 
 ## Self-improve
 

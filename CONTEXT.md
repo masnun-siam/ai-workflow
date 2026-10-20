@@ -1,78 +1,60 @@
 # ai-workflow
 
-A Claude Code plugin that drives GitHub issues through an automated pipeline (`/run-issue`) to a reviewed PR, and provides supporting tooling (worklog, PR review, etc.) around that pipeline.
+A Claude Code plugin that carries the team's dev process (PRD → tasks → refined issues → implement → review) plus the tools around it (dump, worklog, release PR, grind, peer review) and a web UI that runs them.
 
 ## Language
 
-**Run**:
-A single execution of `/run-issue` against one Issue, tracked by a Ledger. An Issue may have multiple Runs (e.g. retries); only the latest Run is considered current.
-_Avoid_: Task, job, execution
-
-**Ledger**:
-The persisted state of a Run, stored as `run.json` under the plugin data directory. Records the Station roster, current Station index, bounce counts, overall Status, trace log, and free-form context (repo path, branch, PR link, CI result, etc.).
-_Avoid_: State file, run data
-
-**Station**:
-One stage in the `/run-issue` pipeline (researcher, planner, sdet, dev, verifier, reviewer, fixer, done). A Ledger advances through its Station roster in order; default-mode Runs skip the sdet and verifier Stations (run-dev does both jobs), and only "full" mode Runs include them.
-_Avoid_: Stage, step, phase
-
-**Status** (Ledger):
-The Ledger's overall state: `running`, `done`, or `escalated`. Distinct from a Station's per-turn outcome.
-_Avoid_: State
-
-**Escalated**:
-A Ledger Status meaning a Station bounced in a way that needs a human, rather than the automated pipeline continuing.
-_Avoid_: Blocked, stuck
-
-**Bounce**:
-A Station rejecting its input and sending the Run back to an earlier Station, tracked in the Ledger's bounce counts and trace log.
-
-**Classification**:
-A one-time assessment of an Issue recorded on its Ledger — ticket type, risk score, risk band, and blast radius — set early in a Run and not updated afterward.
-
-**Project**:
-The human-friendly name for a GitHub `owner/repo`, looked up from `skills/worklog/projects.json`. Falls back to the raw `owner/repo` slug when unmapped.
-_Avoid_: Repo (when referring to the display name — "repo" is fine for the raw owner/repo slug itself)
-
-**Board** (kanban):
-The generated visual page showing every Issue's current progress. Composed of Columns (one per Station, plus done) and Cards (one per Issue, sourced from its latest Run's Ledger).
-_Avoid_: Dashboard
-
-**Session**:
-A headless Claude invocation started and tracked by the UI (`aiw ui`), recorded under `<data_dir>/sessions/<id>/`. A Session may or may not link to a Run.
-_Avoid_: Run (a Run is the pipeline for one Issue; a Session is a single UI-started invocation)
-
-**Card** (kanban):
-One Issue's current-progress tile on the Board: Project, Issue number, and title. Represents the Issue via its latest Run only, not every Run.
-
-**Dump**:
-A capture filed into the Obsidian vault by `/dump` (new feature, change request, bug, task or meeting notes). A feature, change request or bug is written as a Problem statement; for a new feature it also seeds a `PRD.md` with `status: seed` next to `Dump.md`.
-_Avoid_: Note, intake (intake normalises a source into a brief; it files nothing)
-
-**Peer review panel**:
-The single-lens reviewers a `--review` run puts on one artifact (a draft doc, or for a custom prompt a change: Ask, Answer and Diff), picked per run from the **lens pool** (critical, CEO, CTO, security, QA, UX, performance; `peer_review` in `config.json`). Each artifact kind **offers** only the lenses that fit it. Every picked lens blocks. A **dispute** is a finding the author dismissed that its lens raises again; the user settles it. `aiw peer-review` validates each verdict and decides each round.
-_Avoid_: Review (on its own, that means the PR review in `/run-issue`)
-
-**Problem statement**:
-What `/dump` writes for a feature, change request or bug: Problem, Who, Evidence, Expected and Open questions, taken only from the input, followed by the raw input verbatim. `/create-prd` builds a PRD from it; a bug goes from its problem statement to `/gh-issue`.
-_Avoid_: Raw dump, brief (a brief is what `/intake` returns)
-
-**Task list**:
-The saved, ordered decomposition of one PRD into small one-PR tasks, at `docs/tasks/<slug>.md`, one `## Task <n>` block each with its outcome, Area, files, acceptance criteria, verify command, `Depends on:`, Parallel and `Issue:` slot, plus Waves and Shared files. Written by `/create-tasks` from an Approved PRD; `/refine-issues docs/tasks/<slug>.md` files issues from it. Tasks are never renumbered; a later edit marks one Changed or Dropped.
-_Avoid_: Plan (the planner's output), backlog
-
 **PRD**:
-The product requirements for one feature (the what and why, with a technical design of contracts but never code), written by `/create-prd` after an interview. The canonical copy is the repo's `docs/prds/<slug>.md`; the vault `PRD.md` mirrors it. Its status is Draft, In review or Approved; only an Approved PRD can be split into tasks. A `status: seed` PRD is a placeholder from `/dump` that `/create-prd` fills. `/create-prd --update` appends decisions made later.
+The product requirements for one feature (the what and why, with a technical design of contracts but never code), written by `/create-prd` after an interview. The canonical copy is the repo's `docs/prds/<slug>.md`. Its status is Draft, In review or Approved; only an Approved PRD can be split into tasks. `/create-prd --update` records later decisions.
 _Avoid_: Spec, design doc
 
 **Epic**:
-A parent issue whose sub-issues are the tasks of one `## Epics` entry of a PRD, filed by `/create-prd approve` and labelled `epic` + `prd-<slug>`. `/refine-issues` files its sub-issues; `/run-issue <epic>` runs it in Epic mode.
+A parent issue whose sub-issues are the tasks of one `## Epics` entry of a PRD, filed when the PRD is approved and labelled `epic` + `prd-<slug>`.
 _Avoid_: Parent ticket, umbrella issue
 
-**Refined**:
-The label `/gh-issue` and `/refine-issues` put on an issue that meets the definition of ready: independently readable, with acceptance criteria, a How and a verify command, and its order declared by `Depends on: #n`.
-_Avoid_: Groomed, ready (ready is the Gate 2 verdict on a PR)
+**Task list**:
+The saved, ordered decomposition of one PRD into small one-PR tasks, at `docs/tasks/<slug>.md`: outcome, Area, files, acceptance criteria, verify command, `Depends on:` and Parallel per task, plus Waves. Written by `/create-tasks`; tasks are never renumbered, only marked Changed or Dropped.
+_Avoid_: Plan, backlog
+
+**Refined issue**:
+A task filed as a child issue of its epic, with a WHAT, WHY and HOW written from the PRD and the code, native blocked-by links, and the `refined` label. `/refine-issues` writes it. Only a refined issue is ready to implement.
+_Avoid_: Groomed, ready
+
+**implement-issue**:
+The skill that takes one refined issue to a Ready PR in a single session: stop if blocked, work in its own worktree, run every check locally, verify in the running app, open a draft PR, and mark it ready only when CI is green and every review comment is handled.
+
+**verifier-locally**:
+The skill that proves a change works before it is pushed: it finds the repo's checks from CI, hooks and build files, runs the ones matching the changed paths, and reports each result with evidence. `implement-issue` and grind both call it.
+
+**pr-review**:
+The skill that reviews a PR or local branch against its issue, the repo's rules and `guides/code-review.md`, and reports evidence-backed findings with a verdict.
+
+**Grind**:
+`/pr-grind`: the loop on a ready PR that posts the Slack reviewer-bot trigger, waits for a round, fixes the findings inline in its own session, runs `/verifier-locally`, pushes, re-triggers, and repeats until approved or a rail stops it. Each round re-enters as a fresh headless session that reads the PR's grind state file.
+_Avoid_: Review loop
+
+**Lens**:
+One review angle (critical, CEO, CTO, security, QA, UX, performance). The `peer-reviewer` agent is a lens: read-only, on Opus, one lens per instance.
+
+**Peer review panel**:
+The lenses picked for one artifact (a draft PRD, or a change: Ask, Answer and Diff), run by `/peer-review` until every picked lens approves or the round cap is reached. A **dispute** is a finding the author dismissed that its lens raises again; the user settles it.
+_Avoid_: Review (on its own, that means a PR review)
+
+**Dump**:
+A capture filed into the Obsidian vault by `/dump` (new feature, change request, bug, task or meeting notes). A feature, change request or bug is written as a Problem statement; for a new feature it also seeds a `PRD.md` with `status: seed` next to `Dump.md`.
+_Avoid_: Note
+
+**Problem statement**:
+What `/dump` writes for a feature, change request or bug: Problem, Who, Evidence, Expected and Open questions, taken only from the input, followed by the raw input verbatim. `/create-prd` builds a PRD from it.
+
+**Session**:
+A headless Claude invocation started and tracked by the UI (`aiw ui`), recorded under `<data_dir>/sessions/<id>/`. It exits after each turn and comes back via `--resume` with an answer or after a rate limit.
+_Avoid_: Run, job
+
+**Project**:
+The human-friendly name for a GitHub `owner/repo`, looked up from `skills/worklog/projects.json`. Falls back to the raw `owner/repo` slug when unmapped.
+_Avoid_: Repo (when referring to the display name; "repo" is fine for the raw slug)
 
 **Dispatch**:
-Launching `/run-issue` over a batch of Issues in dependency order with a concurrency cap, via `herdr-dispatch` in the terminal or the `#/dispatch` page in the UI.
+Opening several refined issues in separate herdr tabs, one `/implement-issue <n>` each, in dependency order with a concurrency cap, via `herdr-dispatch`.
 _Avoid_: Batch run, fan-out

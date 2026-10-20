@@ -34,10 +34,10 @@ repos:
   - repo: local
     hooks:
       - id: engine-tests
-        name: run-engine/test_engine.py
+        name: run-engine/run_tests.sh
         language: system
         # `git commit -a` hands hooks a temp GIT_INDEX_FILE; the tests' own temp repos must not write into it
-        entry: env -u GIT_INDEX_FILE -u GIT_DIR -u GIT_WORK_TREE python3 run-engine/test_engine.py
+        entry: env -u GIT_INDEX_FILE -u GIT_DIR -u GIT_WORK_TREE bash run-engine/run_tests.sh
         files: ^run-engine/.*\.py$
         pass_filenames: false
       - id: all-tests

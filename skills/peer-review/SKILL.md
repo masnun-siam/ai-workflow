@@ -1,6 +1,6 @@
 ---
 name: peer-review
-description: "Run a panel of single-lens reviewers (critical, CEO, CTO, security, QA, UX, performance) on one artifact until every picked lens approves, on Opus, in parallel. Called by /create-prd, /intake, /dump and /gh-issue when they get --review, and runnable on its own after any work: /peer-review reviews the session's change (diff plus final answer) against what the user asked. Use whenever the user says /peer-review, 'peer review this', 'get the panel to review it', or asks for critical/CEO/CTO/security/QA/UX/performance reviewers on the work just done."
+description: "Run a panel of single-lens reviewers (critical, CEO, CTO, security, QA, UX, performance) on one artifact until every picked lens approves, on Opus, in parallel. Called by /create-prd when it gets --review, and runnable on its own after any work: /peer-review reviews the session's change (diff plus final answer) against what the user asked. Use whenever the user says /peer-review, 'peer review this', 'get the panel to review it', or asks for critical/CEO/CTO/security/QA/UX/performance reviewers on the work just done."
 allowed-tools:
   - Bash
   - Read
@@ -17,8 +17,7 @@ allowed-tools:
 > **Paths.** `<...>` placeholders below are keys from `aiw paths` (run it; `aiw` is
 > on `PATH` via the plugin's `bin/`). Substitute the printed value; never guess a path.
 
-A panel of single-lens reviewers checks one artifact in rounds: a draft doc (`create-prd`, `intake`,
-`dump`, `gh-issue`), or a change (`custom`: the Ask, your Answer and the Diff in one file). The
+A panel of single-lens reviewers checks one artifact in rounds: a draft doc (`create-prd`), or a change (`custom`: the Ask, your Answer and the Diff in one file). The
 lens pool, what each kind offers, the checklists and the two severity rubrics are `peer_review`
 in `<config>`. **Every picked lens blocks:** the artifact is done when all of them approve.
 `aiw peer-review` checks every verdict and decides each round; you never decide it yourself, and
@@ -104,7 +103,7 @@ Print `review dir: <review_dir>` with every round's outcome, so a session resume
 1. `aiw peer-review next <review_dir> --artifact <artifact> --kind <kind> --lenses <picked>`
    (the first time; `--kind` and `--lenses` are ignored after round 1), plus `--prior <file>`
    and `--more` when the steps below say so. It prints one JSON object; act on its `action`.
-2. **`review`**: dispatch one `ai-workflow:run-specialist` per lens in its `lenses`, in one
+2. **`review`**: dispatch one `ai-workflow:peer-reviewer` per lens in its `lenses`, in one
    message so they run in parallel, each with `model: "opus"` (the reviewers run on Opus; you
    keep your own model). Each dispatch says `artifact: peer-review`, the lens name,
    `<review_dir>`, the round number and the repo path. Each reviewer reads its own checklist
@@ -154,7 +153,7 @@ say so.
 
 - Once, before round 1: `herdr pane current` for the workspace id, then for each lens
   `herdr tab create --workspace <ws> --cwd <repo> --label rv-<lens>` and
-  `herdr agent start rv-<lens> --kind claude --pane <pane> -- --agent ai-workflow:run-specialist --model opus --disallowedTools "Write,Edit,NotebookEdit"`,
+  `herdr agent start rv-<lens> --kind claude --pane <pane> -- --agent ai-workflow:peer-reviewer --model opus --disallowedTools "Write,Edit,NotebookEdit"`,
   so each tab runs as the reviewer agent on Opus with no file-editing tools. Its shell commands
   follow your normal permissions, so a shell can still write files (in bypass mode, without
   asking); that is not read-only. It searches code with `rg` through the shell.

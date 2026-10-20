@@ -1,515 +1,93 @@
-# How ai-workflow works
+# How it works
 
-Read this before your first run. It goes from "what is this" down to the individual
-mechanisms, one layer at a time. You can stop at any layer and still understand enough to
-use it.
-
----
-
-## Layer 0 — The idea in one paragraph
-
-You hand it a GitHub issue. It writes the tests, writes the code, checks the feature
-actually works, opens a pull request, reviews that pull request, fixes what the review
-found, and hands it back to you ready to merge. It stops to ask you something **exactly
-three times**. Everything else it either fixes itself or writes down and tells you about at
-the end.
-
-The thing that makes it different from "an AI that writes code" is that **no step is
-trusted on its word**. Each step has to produce evidence, and the evidence is checked by
-something that has no reason to be generous.
-
----
-
-## Layer 1 — The five pieces
-
-| Piece | Plain English | Where |
-|---|---|---|
-| **The orchestrator** | The to-do list for the whole job. Runs in your session, talks to you. | `commands/run-issue.md` |
-| **Stations** | Specialists. One writes tests, one writes code, one reviews. Each gets a fresh mind — no memory of the others. | `agents/run-*.md` |
-| **The envelope** | The form a station fills in when it finishes. Always the same shape. | defined in `run-engine/engine.py` |
-| **The engine** | The traffic controller. Reads the envelope, decides who goes next. Never guesses. | `run-engine/` |
-| **The ledger** | One JSON file per run. What has happened, who holds the baton, what budgets are left. | `run.json` |
-
-The important relationship: **the orchestrator does not decide what happens next.** It hands
-the envelope to the engine and does what the engine prints. That is why a run behaves the
-same on Tuesday as it did on Monday.
-
----
-
-## Layer 2 — One run, start to finish
-
-```mermaid
-flowchart TD
-    A["You: /run-issue 41"] --> B["Read the issue,<br/>score it for readiness"]
-    B --> C["Planner writes a plan"]
-    C --> G1{{"GATE 1<br/>you approve the plan"}}
-    G1 --> D["Make a worktree,<br/>start the test stack"]
-    D --> E["SDET writes tests<br/>that FAIL on purpose"]
-    E --> F["Dev writes code<br/>until they pass"]
-    F --> H["Verifier checks it really works:<br/>HTTP for backend, Playwright+mocks for frontend"]
-    H --> I["Open the pull request"]
-    I --> J["Reviewer reviews it<br/>with fresh eyes"]
-    J --> K["Fixer applies what<br/>the review found"]
-    K --> G2{{"GATE 2a<br/>only if something<br/>needs your judgement"}}
-    G2 --> L["Sync with the base branch,<br/>wait for CI to go green"]
-    L --> G3{{"GATE 3<br/>here is your PR"}}
-    G3 --> M["You merge. Always you."]
-```
-
-**Nothing in this pipeline ever merges.** That is yours, every time.
-
-### What actually happens at each step
-
-1. **Read the issue.** A researcher reads the issue, its comments, related past issues, and
-   your notes. It also scores the issue against a *Definition of Ready* — six questions like
-   "is there a testable acceptance criterion?". A thin issue does not stop the run; the gaps
-   get shown to you at Gate 1, next to the plan, where you can actually act on them.
-2. **Plan.** A planner reads the issue and the codebase and writes one document: which tests
-   to write, where they go, how to build it, what could go wrong.
-3. **GATE 1.** You read the plan and approve, revise, or abort. Revising loops as many times
-   as you like — it is the one unbounded loop in the system, and a human is present for it.
-4. **Worktree and stack.** A separate checkout on a new branch, so your working copy is
-   untouched. If the repo has a test compose file, a Docker stack comes up under its own
-   name (`runissue-41`), capped so it cannot eat your machine.
-5. **SDET.** Writes the tests *first*, and has to prove they **fail** — a test that passes
-   before the feature exists is testing nothing.
-6. **Dev.** Writes code until the tests pass. **It is not allowed to touch the tests.** More
-   on that below; it is enforced, not requested.
-7. **Verifier.** Checks the feature works for real, on whichever side of the stack the diff
-   touched. A backend change is hit over real HTTP — login, then every response state the
-   route can return, not just the happy path. A frontend change is driven with Playwright
-   against a mocked API, so every state (loading, empty, error, permission-denied, success)
-   can be forced instead of hoped for. A PR touching both gets both, backend first — its
-   captured responses become the frontend's mocks, so the two halves can't quietly disagree.
-   Unit tests prove the parts behave; this asks whether the thing does what the issue asked
-   for, from outside the process.
-   Steps 5–7 are three agents only in **full mode** (`--full` or a `full` label). By
-   default one `run-dev` dispatch does all three in order — commits the failing tests,
-   implements, then verifies — which saves two agent spawns per issue. The tests are still
-   guarded: after the RED commit, dev may change a test only with a written reason that
-   lands in the PR body. The same agent also stands in for the fixer at step 10. A
-   `refined` issue whose body already holds acceptance criteria and a numbered How skips
-   the research and planning agents and Gate 1 too: the refined body is the approved plan.
-8. **PR.** Links the branch to the issue, pushes, opens the pull request.
-9. **Review** (skipped with `--no-review`: steps 9–11 are left out, so the dev step completes the
-   run and the PR goes straight on to sync and CI; the run page and pipeline page can also turn it
-   off for a run that has not reached review yet). A reviewer with **no memory of the plan or the code being written** reviews
-   the diff. On a risky diff, extra single-lens specialists (security, performance, API
-   contract) review in parallel and the generalist folds their verdicts into one review.
-10. **Fix.** A fixer applies every actionable finding, replies on each thread, resolves it,
-    and pushes once.
-11. **GATE 2a** — *only if* the review raised something an automated pass should not be the
-    last word on. Often this never fires.
-12. **Sync and CI.** Merge the base branch in, re-run the tests, and wait for CI to be
-    actually green. A local pass is necessary and not sufficient.
-13. **GATE 3.** One report: the PR, what the review caught, what is still open, whether CI
-    is green, and anything it would have asked you about but wrote down instead.
-14. **Write it down.** Two side-channels, both best-effort, both one warning line if they
-    fail: the run gets summarised into your notes vault, and any durable lesson is appended
-    to the repo's `tasks/lessons.md` — evidence-backed only, and left uncommitted so it
-    lands in a commit a human read.
-15. **Tear down, then grind.** The Docker stack comes down, and *then*, if you passed
-    `--grind`, the review loop starts. See Layer 4 — Gate 3 is where the pipeline hands you the PR, not where the work
-    stops.
-
----
-
-## Layer 3 — The mechanisms, one at a time
-
-This is the part that makes the difference between "an agent wrote some code" and something
-you can leave alone.
-
-### 3.1 The envelope — one shape, always
-
-Every station returns exactly one JSON object. Always these fields:
-
-```json
-{
-  "issue": 41,
-  "station": "dev",
-  "status": "passed",
-  "attempt": 1,
-  "summary": "implemented per plan; suite green",
-  "evidence": { "commands": [ { "cmd": "...", "exit": 0, "excerpt": "42 passed" } ] },
-  "handoff": { "...station-specific..." }
-}
-```
-
-**`status` has exactly three values, on purpose:**
-
-- `passed` — I did my job.
-- `bounce` — I found a defect in someone *else's* work; send it back to them.
-- `escalate` — I hit a wall I cannot get around.
-
-In the default mode `dev` only ever returns `passed`: it writes the tests, implements and
-verifies alone, so it has nobody to bounce to. What it could not finish goes in its summary,
-and the post-check and Gate 3 carry it.
-
-There is deliberately **no `blocked`**. A station cannot invent a fourth thing for you to
-answer. That is how "exactly three gates" is enforced structurally rather than by asking
-everyone to behave.
-
-**`evidence.commands[]` is required** from any station claiming `passed`. It records what it
-actually ran. This catches a *skipped* step. It does not catch a determined liar — a pasted
-command looks identical to a real one — which is why the next mechanism exists.
-
-### 3.2 Post-checks — don't trust, verify
-
-A `passed` envelope is a *claim*. Before routing it, the engine tries to **refute** it using
-something with no incentive to agree:
-
-| Station | Its claim | What actually checks it |
-|---|---|---|
-| SDET | "the tests are red" | run the suite. **If it is green, refuse** — there is no red to prove. |
-| Dev | "implemented, suite green" | the commit resolves in git; no undeclared files in the diff; the suite really exits 0 |
-| Verifier | "the feature works" | its verdict must agree with its own criteria; any screenshot it names must exist on disk |
-| Reviewer | "review posted" | fetch that review from GitHub; the panel must match what policy chose |
-| Fixer | "all findings applied" | **every review thread must actually be resolved**, and the push must have happened |
-
-The fixer one is the motivating case. Before this existed, a fixer could report success with
-three threads still open and nothing pushed, and the run would carry on.
-
-**When a check refutes a claim**, the station is sent back to redo its own work — once. If it
-fails again, the run *continues anyway* and the failure is written into the final report.
-That is deliberate: a spent budget is something to tell you about, not a reason to abandon
-the work done so far.
-
-### 3.3 The test-ownership guard
-
-The SDET owns the tests. The dev makes them pass by writing *product* code.
-
-The tempting cheat is to edit the test. So after every dev step, the engine runs:
-
-```
-git diff <the SDET's commit>..HEAD -- <the test directory>
-```
-
-Anything there is a violation. Note it diffs **commits**, not the working copy — an earlier
-version checked the working copy, and committing the edit hid it completely.
-
-On a violation the engine sends it back to the SDET automatically, spends one of the retry
-budget, and tells the orchestrator to revert the files first. Tampering therefore cannot
-loop forever.
-
-### 3.4 Budgets, and why they are per-pair
-
-When one station sends work back to another, that is a **bounce**. Bounces are counted per
-*pair*, not per station:
-
-```
-"verifier->dev": 1
-"dev->sdet":     1
-```
-
-Keeping them separate matters. If the verifier sends work back to dev twice, that must not
-eat the budget dev needs to dispute a wrong test. Merging them would make one station's bad
-day silently spend another's allowance.
-
-Default cap is 2 per pair. Exceeding it escalates.
-
-### 3.5 The three gates, and the rule behind them
-
-1. **Gate 1 — the plan.** Always fires.
-2. **Gate 2a — a finding that needs your judgement.** Fires only if one is raised.
-3. **Gate 3 — here is your PR.** Always fires, and it is the only ending.
-
-**The rule:** anything else the pipeline is tempted to ask you gets *recorded and carried to
-Gate 3 instead*. A spent budget, a failed verification, a stack that would not start, an
-unpushable branch — none of those is a question. They are outcomes, and the final report has
-to state them plainly.
-
-When something goes wrong badly enough that the work is not finished, the run still lands at
-Gate 3 — with a **draft** PR and the reason attached. A draft cannot be merged by accident,
-and it gives you a diff to read instead of a half-finished worktree to find later.
-
-### 3.6 Fresh eyes are a feature
-
-The reviewer is given the PR and **not** the plan, and not the conversation in which the code
-was written. Someone who just watched code being written cannot review it — they already
-believe it. The specialists work the same way: one lens each, no shared context, results
-folded together afterwards.
-
-### 3.7 The worktree and the stack
-
-- **Worktree** — a second checkout in a sibling directory on a new branch. Your working copy
-  is never touched. Gitignored files the tests need (`.env`, key material) are copied in,
-  because a fresh checkout does not have them and their absence shows up much later as
-  confusing test failures.
-- **Stack** — if the repo has a test compose file, one Docker stack comes up per run, named
-  `runissue-<repo-slug>-<digest>-<issue>` and with every port force-published to an
-  OS-chosen host port, with CPU and memory caps. One command string (`test_cmd`) is
-  resolved once and **every station runs that exact string, unchanged**. Nobody
-  re-detects it, and no station is allowed to start its own stack. Three phases each
-  starting an uncapped stack is what pegged a developer's machine once.
-- **No compose file?** Then `stack=none`, the host test runner is used, and everything else
-  works identically. Most repos take this path.
-- **One stack at a time per project.** `stack up` takes a lockfile keyed to the repo+issue's
-  Compose project before starting Docker and holds it for as long as the stack is up; a
-  second run *on the same project* waits (`--lock-timeout`, default 900s) and then degrades
-  to `stack=failed` naming the holder rather than starting a second stack alongside it. A run
-  on a different project (a different issue, or the same issue in a different repo) never
-  contends for that lock at all. Acquiring a *free* lock is a single OS-level atomic create
-  (`O_CREAT | O_EXCL`), so it holds across separate `aiw stack up` processes, not just threads within
-  one. Staleness is ledger-status-based, not pid-based: a holder whose run has reached `done`
-  or `escalated` is reclaimed immediately, and a holder still `running` (or whose ledger
-  can't be read at all) is reclaimed once past a bounded grace window instead of blocking
-  forever. Reclaiming a *stale* lock is a second, separately-guarded exclusion problem — every
-  contender that sees the same stale holder would otherwise agree it's stale and race to
-  replace it — so the break itself is gated behind its own `O_EXCL`-created sentinel file:
-  only the one process that creates the sentinel is allowed to remove the stale lock and
-  retry, everyone else backs off untouched and retries against the fresh lock instead.
-
----
-
-## Layer 4 — After the handback: the grind
-
-Gate 3 gives you a reviewed PR. But a PR usually gets reviewed *again* — by a bot in a Slack
-thread, by a person, by CI. `pr-grind` is the loop that works those rounds without you
-sitting in it. It is opt-in: `/run-issue <n> --grind` runs it, and without the flag the run ends at
-the handback. The `aiw ui` grinds a finished run when its auto-grind setting is on.
-
-It runs **in your session**, not as a sub-agent, because it needs to sleep and wake for
-hours, and the tools that let it do that die with a sub-agent. And it runs **after** the
-Docker stack comes down, so a loop that might live all afternoon is not holding a stack open.
-
-### One round
+One process takes a feature from idea to merged PR. Each stage is a skill with a clear input
+and output; GitHub and the repo's `docs/prds/` hold the state. The `aiw ui` web app starts a
+stage as a headless session, and `herdr-dispatch` starts it in a terminal tab.
 
 ```mermaid
 flowchart LR
-    A["Post the trigger<br/>in the Slack thread"] --> B["Wait for the bot's<br/>review to land"]
-    B --> C{"Any blockers<br/>or should-fixes?"}
-    C -->|no| D["Ping you to merge.<br/>Done."]
-    C -->|yes| E{"Any rail<br/>tripped?"}
-    E -->|yes| F["Stop. Say why,<br/>and how to resume."]
-    E -->|no| G["Decide fix vs rebut,<br/>per finding"]
-    G --> H["Fixer applies them,<br/>pushes once"]
-    H --> I["CI green?"]
-    I --> A
+    X[/dump, idea/] --> A[PRD draft]
+    A -->|peer review, optional| B[In review]
+    B -->|approve: files the epic| C[Approved]
+    C -->|/create-tasks| D[Task list]
+    D -->|/refine-issues| E[Refined issues]
+    E -->|/implement-issue| F[Draft PR]
+    F -->|CI green, /pr-review, fixes| G[Ready PR]
+    G -->|/pr-grind| H[Approved]
+    H -->|human merges| I[Merged]
+    I -->|unblocks| E
 ```
 
-**Triage is the loop's job, not the fixer's.** `run-fixer` auto-applies everything it is
-handed and cannot decline a finding — so something upstream has to decide what it is handed.
-The default is *fix*. A **rebuttal** needs concrete evidence the finding is wrong: the
-concern is already handled elsewhere in the diff, the suggested change would break a passing
-test, the premise is factually incorrect about the code. **Unsure is not a rebuttal** — it
-goes on the fix list.
+A human decides at three points: approving the PRD, settling a peer-review dispute, and merging.
+Nothing in this plugin merges a PR.
 
-### The four rails
+## Stages
 
-A rail firing means *stop this round*. First one to fire wins.
-
-| Rail | Why it exists |
-|---|---|
-| **10 rounds** | A loop that has gone ten rounds is not converging. |
-| **CI is red** | Never push review fixes onto a broken branch. `run-ci` gets exactly one attempt per head SHA — never two, here or anywhere else. A `fixed`/`flake-rerun` outcome does not stop the round: review triage keeps going, and any new fix commits are queued rather than pushed until CI goes green. Only a terminal outcome (cannot-fix, needs human confirmation, or the one attempt already spent and still red) stops the round. |
-| **A real person commented** | Automation ends when a human weighs in. A *bot* commenting doesn't count, and an unknown named account is treated as a person, which is the safe default. |
-| **You said hold** | Said to the session, not in Slack. Nothing you post in the thread reaches it. |
-
-### The stall detector
-
-Each finding gets a fingerprint — its file and line plus the first stretch of its text — so
-the loop can tell when the reviewer is asking for the same thing twice.
-
-- **New** → fix it normally.
-- **Seen once before** → fix it, but with a more capable model, explicitly told to work out
-  *why the last fix did not satisfy the reviewer* before writing another one. Repeating the
-  same fix harder is the failure this catches.
-- **Seen twice before** → stop the whole loop. It is stuck, and one stuck finding halts the
-  round rather than being quietly left behind while everything else proceeds.
-
-### Nothing is listening
-
-This is the part worth internalising. When the loop stops for you, **it is not waiting** —
-it is over. There is no webhook from Slack back to Claude, and the sleep-and-wake machinery
-dies with the session. A reply you post in the thread reaches nothing.
-
-So a paused stop does three things and no more: records why, posts the reason ending in a
-literal resume instruction, and stops. It never implies it is watching. You restart it by
-re-running `/pr-grind <thread url>` yourself.
-
-One quirk you will see: **the bot replies to any message in the thread**, mention or not —
-including a post announcing the loop has stopped. That is not a new round. The loop only
-counts entries from GitHub's reviews API at the current head SHA, so a chatty bot is
-correctly invisible to it.
-
-And still: **merging is manual.** The grind ends by @-mentioning you to do it.
-
-## Layer 5 — PRDs, task lists and epics
-
-`/create-prd` interviews you into a PRD and saves it to `docs/prds/<slug>.md` with the status
-**Draft**. It holds the what and why, a technical design (contracts such as data shapes and
-endpoints, never code), the epics the work splits into, the decisions and a change log.
-`--review` puts a reviewer panel on the draft before it is saved. The status becomes **In review**
-when you open a PR for the PRD. `/create-prd approve <prd>` sets **Approved** and files one **epic** issue per `## Epics` entry, labelled `epic` and
-`prd-<slug>`, then writes each epic's number back into the PRD.
-
-`/create-tasks` splits an Approved PRD into one-PR tasks and saves them to
-`docs/tasks/<slug>.md`. Each task fits the size rubric: 3 or fewer production files, 1-4
-acceptance criteria, one verify command, no new dependency. Each names its Area, whether it can
-run in parallel, and the tasks it depends on, which are only tasks in its own epic. The list adds
-Waves (the tasks that can run together) and Shared files. A later edit never renumbers a task; it
-marks it Changed or Dropped. When the split shows the PRD is silent or wrong about a decision,
-`/create-tasks` asks you and records the answer with `/create-prd --update` first.
-
-`/refine-issues` files each task as a `refined` sub-issue of its epic, after you confirm the full
-list. Each issue number is written back into the task list. When the PRD and the task list
-disagree, it stops and asks. It then runs one `aiw epic split` per epic, which
-writes the epic's `## Tasks` checklist and the `epic.json` that Epic mode reads. Each issue gets a
-native blocked-by link (on an older `gh`, `/fix-blockers` writes them) and declares its order in
-plain text:
-
-```
-Depends on: #12, #13
-```
-
-`/gh-issue` and `/jira-to-gh` file exactly one issue. They still break the request down first;
-when it splits into 2 or more tasks they create nothing and end with
-`→ next: /create-prd <input>`, because work that size needs a PRD. `/run-issue` does the same in
-Preflight: a source that needs a PRD stops the run with that hand-off, and no ledger is made.
-
-**Epic mode** runs a parent issue with sub-issues: one `/create-prd approve` filed, or one filed
-by hand. `/run-issue <parent>` drives all its children. A `/create-prd` epic (labelled `epic` and
-`prd-<slug>`) with no sub-issues is refused, never run as one issue. The rules:
-
-- **Independent children run at the same time.** Dependent ones cannot, by definition — a
-  child stacks its branch on top of the branch it depends on, so it waits for that one to
-  reach "PR open" first.
-- **Still three gates, for the whole epic.** Gate 1 shows you the split and *every* child's
-  plan at once. A blocker in one child parks that child and the others keep going; Gate 2a
-  covers both an immediate, per-blocker ask fired as soon as that child parks (so you are
-  not left waiting until the end to hear about it) and an end-of-run closer that fires once,
-  collecting whatever is still pending or deferred when nothing more can proceed without
-  you. Gate 3 is one report covering everything, including the order you must merge in.
-- **A failed child with dependents is reported by name.** "Never started, blocked by #14" —
-  because a child silently missing from a list of twelve is how you discover a month later
-  that a third of the epic was never built.
-
----
-
-## Idea to PRs
-
-The Guided Flow takes one feature from a raw idea to a batch of dispatched runs. Each stage is
-an existing skill; the flow only orders them, carries one stage's output into the next, and
-stops for you at every boundary. Start it with `/flow` in the terminal or the **Flow** page
-(`#/flow`) in `aiw ui`.
-
-```mermaid
-flowchart TD
-    CLI["/flow (terminal)"] --> E{"Entry stage<br/>from the input"}
-    UI["#/flow (aiw ui)"] --> D
-    E -->|raw text| D["/dump<br/>file it in the vault"]
-    E -->|feature folder| P
-    E -->|PRD path| T
-    E -->|task list| G
-    E -->|bug note| BG
-    E -->|epic parent| X
-    E -->|issue numbers| X
-    D --> C1{{"checkpoint"}}
-    C1 -->|new feature, change request| P["/create-prd<br/>grill and fill the PRD"]
-    C1 -->|bug, feature-scoped task| BG["/gh-issue<br/>one refined issue"]
-    C1 -->|anything else| S["stop after filing"]
-    P --> C2{{"checkpoint:<br/>Continue approves the PRD<br/>and files its epics"}}
-    C2 --> T["/create-tasks<br/>save the task list"]
-    T --> C4{{"checkpoint"}}
-    C4 --> G["/refine-issues<br/>sub-issues of each epic"]
-    G --> C3{{"checkpoint"}}
-    C3 --> X["dispatch<br/>herdr-dispatch or #/dispatch"]
-    BG -->|2 or more tasks| P
-    BG -->|one issue| X
-    X --> R["/run-issue × N,<br/>dependencies first"]
-```
-
-**Entry detection.** `/flow` reads its argument and starts where the work already is: raw
-text starts at `/dump`, a vault feature folder (or its `Dump.md`) at `/create-prd`, a PRD path at
-`/create-tasks`, a task list at `/refine-issues`, a `Bugs.md` or `Tasks.md` note at `/gh-issue`,
-and an epic parent or issue numbers at dispatch. There is no state file; the
-vault note, the PRD and the issues are the state, so half-done work resumes instead of starting
-over.
-
-**Routing by dump class.** A new feature or change request goes on to `/create-prd`, which fills
-the `status: seed` PRD that `/dump` left (or updates a finished one). The PRD it saves to the
-repo's `docs/prds/<slug>.md` is the canonical copy; the vault `PRD.md` is a mirror. A bug report
-or a feature-scoped task skips the PRD and goes to `/gh-issue`, which files one issue for
-dispatch; if it splits into 2 or more tasks, `/gh-issue` hands it back to `/create-prd`. A
-standalone task, weekly meeting notes or anything unclassifiable stops once it is filed.
-
-**Approval.** The PRD is approved at the boundary after `/create-prd`: the terminal asks
-**"Approve the PRD, file its epics, and continue to create-tasks"**, and Continue runs
-`/create-prd approve`. In the UI, starting the Tasks step is the approval.
-
-**The `→ next:` contract.** `/dump`, `/create-prd`, `/create-tasks`, `/refine-issues` and
-`/gh-issue` each end with one line, `→ next: <command> <argument>`, naming
-the next stage and the artifact it should take. `/flow` and the UI stepper read the next stage's
-input from that line, and you see exactly what to run if you are going by hand. No line means
-the flow stops there. `/refine-issues` sets the blocked-by links itself and ends
-`→ next: herdr-dispatch <epic>`, so there is no Blockers step; on an older `gh` its report asks
-you to run `/fix-blockers <epic>` first. `/gh-issue` ends
-`→ next: herdr-dispatch <n>`, or `→ next: /create-prd <input>` when the work needs a PRD, which
-the UI Flow turns into a return to the PRD step.
-
-**Dispatch.** In the terminal, `/flow` shows a `herdr-dispatch <numbers> --dry-run` plan
-(`--max 2`) and launches only when you say **Launch**. In the UI, the last step links to
-`#/dispatch?issues=<numbers>`, where you preview and start the pipeline yourself. AFK mode
-never auto-answers a `/create-prd` or `/dump` question: those answers are your product decisions.
-
-**The Flow page.** Each flow is a record on the aiw server (`<data_dir>/flows/`, one JSON file
-per flow) at `#/flow/<id>`; the bare `#/flow` opens the most recently active one, and **Flows**
-lists earlier ones (archive hides a flow, nothing is deleted). Typing an idea creates the record,
-so a draft survives leaving the page. Sessions started from Flow carry the flow's id and run in
-**Flow auto mode**: the only questions are grilling ones: `/create-prd`'s, which keep going until the
-PRD has no open questions, and `/gh-issue`'s on a bug's or task's open questions. `/dump` picks the
-folder itself, `/create-tasks` approves a Draft PRD only after its readiness checks pass, and
-`/refine-issues` asks nothing. `/gh-issue` assigns you and `/refine-issues` leaves them unassigned;
-both add issues to the repo's linked project and fill its fields. Each command's "Flow auto mode"
-section lists the defaults. Beside the steps, the page shows a waiting question, else the selected
-step's output: `Dump.md` or `PRD.md` read from the notes vault (Settings, read-only), or one row
-per issue as `/gh-issue` creates, fact-checks and fixes it.
-
----
-
-## Layer 6 — When things go wrong
-
-| You see | It means | What happens |
+| Stage | Skill | In → out |
 |---|---|---|
-| `bounce(sdet)` with exit code 6 | dev edited a test | files reverted, sent back to the SDET, one retry spent |
-| `bounce(dev)` with exit code 6 | default mode: dev changed a test after its RED commit without a reason | files reverted, dev re-dispatched, one retry spent |
-| exit code 7 | a post-check refuted a `passed` claim | that station redoes its own work, once |
-| `escalate: ...` | a budget is spent or a wall was hit | draft PR opened, reason recorded, lands at Gate 3 |
-| `stack=failed` | Docker would not come up | run continues, tests unverified, **said loudly** in the report |
-| `stack=none` | no test compose file | normal; the host runner is used |
-| `api_url=none` / `web_url=none` | nothing to hit over HTTP / nothing to open in a browser | that mode's runtime verification skipped, and the report says so |
-| `UNVERIFIABLE` (a mode) | the verifier could not see that side | a pass with a note, never a stop |
-| `FAIL` in either mode | the rollup verdict for the whole station | worst-of-both-modes; one bounce carries both modes' findings |
+| Capture | `/dump` | free-form input → a Problem statement filed in the Obsidian vault |
+| PRD | `/create-prd` | a requirement → `docs/prds/<slug>.md`, every decision settled by interview. Approving it files one epic per `## Epics` entry |
+| Tasks | `/create-tasks` | an Approved PRD → `docs/tasks/<slug>.md`: small one-PR tasks, grouped in waves, with `Depends on:` |
+| Refine | `/refine-issues` | the epic's child issues → each carries a WHAT, WHY, HOW and the `refined` label |
+| Implement | `/implement-issue <n>` | one refined issue → a Ready PR (below) |
+| Review | `/pr-review` | a PR or branch → findings with evidence and a verdict |
+| Grind | `/pr-grind` | a Ready PR → the Slack reviewer-bot loop until approved |
+| Docs | `/docs-updater` | the code's changes → `docs/` brought in line |
 
-The pattern: **a gate that silently stops running is worse than one that runs and fails.**
-Anything skipped is named in the final report.
+The planning skills read `templates/` (PRD, epic, issue) and follow `guides/engineering-workflow.md`;
+review follows `guides/code-review.md`. The skills are imported as they are, so read them for
+the exact steps.
 
----
+## implement-issue
 
-## Glossary
+One session, start to Ready:
 
-- **Station** — one specialist agent with one job and a fresh context.
-- **Envelope** — the fixed-shape JSON a station returns.
-- **Ledger** (`run.json`) — the single source of truth for a run. Never hand-edited.
-- **Bounce** — sending work back to an earlier station.
-- **Post-check** — code that tries to disprove a station's claim before the run moves on.
-- **Test root** — the directory the SDET owns and the dev may not touch.
-- **Degraded finish** — the ending where the work is not done: draft PR, reason attached,
-  still one report.
-- **Worktree** — the throwaway checkout a run works in.
-- **Epic** — a parent issue with sub-issues, run by `/run-issue` Epic mode. `/create-prd approve`
-  files one per `## Epics` entry of a PRD; `/refine-issues` files its tasks under it.
-- **Grind** — the post-handback loop that works repeated review rounds on an open PR.
-- **Rail** — a condition that stops the grind rather than letting it push another fix.
-- **Fingerprint** — how a finding is recognised across rounds, so a repeat is visible.
-- **Paused stop** — the grind ended and is not watching. Only you can restart it.
-- **Guided flow** — `/flow` or `#/flow`: dump → PRD → tasks → issues → dispatch for one feature, with a
-  checkpoint at every stage (see **Idea to PRs**; terms in `CONTEXT.md`).
+1. Stop if any blocking issue is still open.
+2. Read the issue, its comments, the PRD and the epic.
+3. Work in a new worktree under `.worktrees/`, branched from the latest base.
+4. Implement, write the tests, update the docs in the same PR.
+5. `/verifier-locally`: run the checks CI runs, then exercise the behaviour against the acceptance criteria.
+6. Open a draft PR. Mark it Ready only when CI is green and every review comment is handled.
+7. Log learnings on the issue.
 
----
+Independent refined issues run in parallel, each in its own worktree. `herdr-dispatch` fans a
+batch out into herdr tabs, one `/implement-issue <n>` per tab, in dependency order under a
+concurrency cap; a tab is done when its issue has a non-draft PR.
 
-## The one-line version
+## Grind
 
-Every claim is checked by something that does not want it to be true, and you are
-interrupted exactly three times. Everything else it handles, writes down, and tells you
-about at the end.
+`/pr-grind` works a Ready PR through the Slack reviewer bot:
+
+1. Post the trigger in the repo's review channel (`channels.json`); the thread is the loop's anchor.
+2. Wait for the bot's round, then split findings into fix and rebut.
+3. Fix inline, in the grind session itself: commit, reply on and resolve the thread.
+4. Run `/verifier-locally` before every push. A failing CI check gets one fix attempt per head commit.
+5. Push, re-trigger, repeat until approved or a rail stops it (round cap, stall, rate limit).
+6. Post the closing summary and mention the owner.
+
+Each round re-enters as a fresh headless session that reads the PR's state file under
+`pr-grind/`, so a crash or a rate limit loses nothing.
+
+## Peer review
+
+`/peer-review` runs a panel on one artifact: a draft PRD, or the session's change (the diff plus
+the final answer, checked against what was asked). Each picked lens (critical, CEO, CTO,
+security, QA, UX, performance) is a read-only `peer-reviewer` agent on Opus. The author revises
+and the lenses re-review until every one approves. `aiw peer-review` opens each round and
+records each verdict. A finding the author dismissed that its lens raises again is a dispute;
+the user settles it. The UI starts a panel from its **Peer review** box.
+
+## The UI
+
+`aiw ui` starts these as sessions and keeps them going: it answers `aiw ask` questions through
+the answer page, resumes after a rate limit, and notifies you. AFK mode answers recommended
+options and retries failures while you are away. Details are in [REFERENCE.md](REFERENCE.md).
+
+## State
+
+| Where | What |
+|---|---|
+| GitHub | issues, labels, blocked-by links, PRs, review threads, CI |
+| `docs/prds/`, `docs/tasks/` in the repo | the PRD and the task list |
+| the Obsidian vault | `/dump` captures and the PRD mirror |
+| plugin data dir | UI sessions, settings, grind and peer-review state: nothing here is a source of truth for the work |

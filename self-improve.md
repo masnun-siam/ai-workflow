@@ -24,7 +24,7 @@ Never stop the task to discuss candidates. Finish the user's work first.
 If the list is empty, say nothing and stop.
 
 **Unattended:** the run is headless (your system prompt contains `Headless run: ask via aiw
-ask`), runs inside `/run-issue`, `/pr-grind` or `/flow`, or was dispatched by herdr. Do not
+ask`), runs inside `/pr-grind` or `/flow`, or was dispatched by herdr. Do not
 ask: this would add a gate, and those flows stop for a human only at their fixed gates.
 Append the candidates to `~/.claude/skills/_shared/pending-improvements.md`, one block per
 run under a heading `## <skill> · <YYYY-MM-DD>`, using the label and description format
