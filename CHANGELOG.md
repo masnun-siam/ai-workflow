@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.2.0 — 2026-10-20
+
+### Added
+
+- **Planning board.** One card per PRD (drafts included), PRD draft → In review → Approved → Tasks
+  filed → Refined, with the next step on each card: lens-panel review with progress, Create tasks,
+  Refine, Autopilot.
+- **Delivery board.** Epic swimlanes × Ready, In progress, Draft PR, In review, Grinding, Merged
+  (7 days); blocked cards show their blockers; Start (headless or herdr), Grind, Clean.
+- **Autopilot** per epic: starts refined, unblocked issues by priority then number, up to the
+  repo's cap (default 2), re-evaluated every poll. `aiw autopilot <owner/repo> <epic> on|off`.
+- **Merge-detect cleanup**: a merged issue's clean worktree under `.worktrees/` and its branch are
+  removed; otherwise the card is flagged and Clean lists what would be lost.
+- **Grind autostart** when a PR turns ready on a repo with auto-grind on; `/pr-grind` refuses a
+  draft PR and takes `--channel`.
+- **Per-repo settings**: auto-grind, autopilot cap, Slack channel. The global auto-grind toggle is
+  gone; its value seeded every registered repo.
+- Notifications for a PR turning ready, needs-cleanup, and a panel reaching its cap.
+
+### Changed
+
+- Boards read GitHub with one GraphQL call per repo per poll (60 s, 15 s while CI is pending) and
+  pause 10 minutes on a rate limit, showing the last data as stale.
+- `/flow` runs dump → create-prd (with the panel) → approval → create-tasks → refine-issues →
+  autopilot, confirming at each stage.
+
 ## 2.1.0 — 2026-10-20
 
 ### Added

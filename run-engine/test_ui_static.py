@@ -78,7 +78,7 @@ const tick = () => new Promise((r) => setImmediate(r));
 out('import without document does not throw');
 
 const nm = (h) => parseRoute(h).name;
-assert.equal(nm('#/'), 'sessions');
+assert.equal(nm('#/'), 'planning');
 const ans = parseRoute('#/answer/abc123');
 assert.equal(ans.name, 'answer');
 assert.equal(ans.params.session, 'abc123');
@@ -87,9 +87,9 @@ assert.equal(nm('#/settings'), 'settings');
 assert.equal(nm('#/sessions'), 'sessions');
 out('parseRoute normal routes');
 
-assert.equal(nm(''), 'sessions');
-assert.equal(nm('#'), 'sessions');
-out('parseRoute empty hash is sessions');
+assert.equal(nm(''), 'planning');
+assert.equal(nm('#'), 'planning');
+out('parseRoute empty hash is planning');
 
 for (const h of ['#/run/acme/web/42', '#/flow', '#/flow/x', '#/dispatch', '#/dispatch/p-20261007120000-aaaaaa', '#/board',
   '#/answer/', '#/bogus']) assert.equal(nm(h), 'notfound', h);
@@ -428,6 +428,8 @@ def shell_checks():
         "./keys.js",
         "./toast.js",
         "./settings.js",
+        "./planning.js",
+        "./delivery.js",
         "./fmt.js",
         "./cleanup.js",
         "./issue.js",
@@ -1890,12 +1892,13 @@ FLOW_JS = r"""
 const assert = (await import('node:assert')).strict;
 const out = (n) => console.log('ok ' + n);
 const { parseRoute, NAV } = await import(process.env.APP_URL);
-assert.deepEqual(NAV.map(([, , label]) => label), ['Sessions']);
-out('NAV: Sessions only');
-for (const h of ['', '#', '#/', '#/sessions']) assert.equal(parseRoute(h).name, 'sessions', h);
+assert.deepEqual(NAV.map(([, , label]) => label), ['Planning', 'Delivery', 'Sessions']);
+out('NAV: Planning, Delivery, Sessions');
+for (const h of ['', '#', '#/']) assert.equal(parseRoute(h).name, 'planning', h);
+assert.equal(parseRoute('#/sessions').name, 'sessions');
 assert.equal(parseRoute('#/new').name, 'new'); assert.equal(parseRoute('#/settings').name, 'settings');
 for (const h of ['#/run/o/r/1', '#/flow/x', '#/flow', '#/dispatch', '#/dispatch/p-20261007120000-aaaaaa', '#/board']) assert.equal(parseRoute(h).name, 'notfound', h);
-out('routes: / and /sessions land on Sessions; removed pages are not found');
+out('routes: / lands on Planning, /sessions on Sessions; removed pages are not found');
 const L = await import(process.env.APP_URL.replace('app.js', 'launcher.js'));
 assert.deepEqual(L.buildBody({ repo: 'o/r', command: 'create-prd', args: ' 05-Work/P/F ', lenses: ['critical', 'qa'] }), { repo: 'o/r', command: 'create-prd', args: '05-Work/P/F', peer_review: ['critical', 'qa'] });
 assert.deepEqual(L.buildBody({ repo: 'o/r', command: 'create-prd', args: 'x', lenses: null }), { repo: 'o/r', command: 'create-prd', args: 'x' });

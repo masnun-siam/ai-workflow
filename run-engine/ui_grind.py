@@ -2,8 +2,8 @@
 pauses or finishes. Stdlib only.
 
 State lives where pr-grind already keeps it: <pr_grind_dir>/<owner>-<repo>-<pr>.md (headers
-`paused:` / `done:`, one `## Round n` heading per round). Starting a grind is the pr-grind skill's job and
-re-entering an existing loop is ui_runner.prgrind_tick's; grind autostart returns in E3.
+`paused:` / `done:`, one `## Round n` heading per round). Re-entering an existing loop is
+ui_runner.prgrind_tick's; `autostart` begins a loop when a PR turns ready (FR-10).
 """
 
 from __future__ import annotations
@@ -71,6 +71,59 @@ def index() -> dict:
             {"state": st, "round": rounds, "reason": h["paused"]} if st == "paused" else {"state": st, "round": rounds}
         )
     return {"pr": by_pr}
+
+
+def _data(snap) -> dict:
+    """Accepts a poller snapshot ({data, ...}) or bare snapshot data."""
+    snap = snap or {}
+    return snap.get("data") if isinstance(snap.get("data"), dict) else snap
+
+
+def _prs(data: dict) -> dict:
+    """{pr number: pr} over every open PR the snapshot knows (issue-linked and bare)."""
+    out = {p["n"]: p for p in data.get("open_prs") or []}
+    for i in data.get("issues") or []:
+        for p in i.get("prs") or []:
+            if p.get("state", "OPEN") == "OPEN":
+                out.setdefault(p["n"], p)
+    return out
+
+
+def turned_ready(snapshot, prev) -> list:
+    """Open PRs that were drafts in `prev` and are not now. A PR first seen ready is not "turned"."""
+    before = _prs(_data(prev))
+    return [p for n, p in _prs(_data(snapshot)).items() if not p.get("draft") and before.get(n, {}).get("draft")]
+
+
+def autostart(repo: str, snapshot: dict, prev_snapshot: dict, settings: dict, start=None) -> list:
+    """Start `/pr-grind <pr url>` (plus the repo's Slack channel) for each PR that turned ready since the
+    previous poll, when the repo has auto_grind on. Returns the PR numbers started. Nothing on stale data,
+    nothing for a PR with a grind state file (any state) or a live grind (start_session answers 409)."""
+    if not (settings or {}).get("auto_grind") or (snapshot or {}).get("stale", True):
+        return []
+    if start is None:
+        import ui_repos
+
+        start = ui_repos.start_session
+    owner, _, name = repo.lower().partition("/")
+    have = {(h["owner"].lower(), h["repo"].lower(), int(h["number"])) for _, h in _state_files()}
+    started = []
+    for p in turned_ready(snapshot, prev_snapshot):
+        if (owner, name, p["n"]) in have:
+            continue
+        text = grind_text(p["url"], (settings or {}).get("slack_channel"))
+        status, body = start({"repo": repo, "text": text})
+        if status == 201:
+            started.append(p["n"])
+        elif status != 409:
+            warn(f"grind autostart {repo}#{p['n']}: {status} {body.get('error') if isinstance(body, dict) else body}")
+    return started
+
+
+def grind_text(pr_url: str, channel) -> str:
+    """The /pr-grind prompt; `--channel <id>` names the repo's Slack channel (pr-grind's channels config otherwise)."""
+    ch = str(channel or "").strip()
+    return f"/pr-grind {pr_url}" + (f" --channel {ch}" if ch and ch.replace("_", "").isalnum() else "")
 
 
 def notify_changes() -> None:

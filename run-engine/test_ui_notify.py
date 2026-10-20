@@ -389,4 +389,11 @@ for name, fk in cases:
         fk.close()
 ok("errors logged, never raised, token redacted")
 
+for ev, word in (("pr-ready", "ready"), ("needs-cleanup", "cleanup"), ("panel-cap", "cap")):
+    h, body = ui_notify.compose(
+        ev, {"repo": "o/r", "link": {"owner": "o", "repo": "r", "issue": 7}, "note": "the note"}, "https://x.ts.net"
+    )
+    assert word in h["Title"] and "the note" in body and h["Click"] == "https://x.ts.net/#/", (ev, h)
+ok("pr-ready, needs-cleanup and panel-cap compose")
+
 print(f"\n{passed} passed")

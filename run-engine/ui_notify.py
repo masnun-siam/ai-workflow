@@ -30,7 +30,11 @@ _LOOK = {
     "grind-done": ("mag", "aiw: #{n} grind finished", "aiw: grind finished", "Open run"),
     "pipeline": ("checkered_flag", "aiw: pipeline finished", "aiw: pipeline finished", "Open pipeline"),
     "afk": ("robot", "aiw: autopilot ended", "aiw: autopilot ended", "Open board"),
+    "pr-ready": ("eyes", "aiw: #{n} PR is ready", "aiw: PR is ready", "Open board"),
+    "needs-cleanup": ("broom", "aiw: #{n} needs cleanup", "aiw: needs cleanup", "Open board"),
+    "panel-cap": ("no_entry", "aiw: review panel hit its cap", "aiw: review panel hit its cap", "Open board"),
 }
+_BOARD = ("afk", "pr-ready", "needs-cleanup", "panel-cap")  # no run page: the click lands on the board
 # While AFK mode runs, autopilot handles or holds these; the one "afk" push at the end sums them up.
 _AFK_MUTED = ("waiting", "failed", "grind-paused")
 _TAG_SAFE = re.compile(r"[^A-Za-z0-9._#/-]+")
@@ -71,7 +75,7 @@ def compose(event: str, rec: dict, public_url=None) -> tuple[dict, str]:
             lines.append(f"Suggested: {_first_line(q['recommended'], 80)}")
     elif event == "failed":
         lines.append(_first_line(rec.get("error")))
-    elif event.startswith("grind-") or event == "afk":
+    elif event.startswith("grind-") or event in _BOARD:
         lines.append(_first_line(rec.get("note")))
     lines.append(f"{rec.get('repo', '')} · {_first_line(rec.get('command'), 120)}".strip(" ·"))
     click = click_url(event, rec, public_url)
@@ -119,7 +123,7 @@ def click_url(event: str, rec: dict, public_url) -> str | None:
     base = str(public_url).rstrip("/")
     if event == "pipeline":
         return f"{base}/#/dispatch/{quote(str(rec['id']), safe='')}"
-    if event == "afk":
+    if event in _BOARD:
         return f"{base}/#/"
     if event == "waiting":
         return f"{base}/#/answer/{quote(str(rec['id']), safe='')}"

@@ -10,6 +10,7 @@ Usage:
   aiw ask ...          # record a gate question for a headless run
   aiw ci status <pr-ref> [--watch]
   aiw threads list|resolve <pr-ref|node-id...>
+  aiw autopilot <owner/repo> <epic> on|off
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ import ask  # noqa: E402
 import ci  # noqa: E402
 import dispatch  # noqa: E402
 import threads  # noqa: E402
+import ui_settings  # noqa: E402
 import ui_server  # noqa: E402
 from shared import data_dir, die  # noqa: E402
 
@@ -46,6 +48,15 @@ def cmd_paths(args):
     print(json.dumps(out, indent=2))
 
 
+def cmd_autopilot(args) -> None:
+    try:
+        epic = int(args.epic)
+    except ValueError:
+        raise ValueError(f"epic must be a number, got {args.epic!r}") from None
+    epics = ui_settings.set_autopilot(args.repo, epic, args.state == "on")
+    print(json.dumps({"repo": args.repo, "autopilot": epics}))
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(
         prog="aiw", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -60,6 +71,12 @@ def main(argv=None) -> None:
 
     p_paths = sub.add_parser("paths", help="print resolved plugin/data paths as JSON")
     p_paths.set_defaults(func=cmd_paths)
+
+    p_ap = sub.add_parser("autopilot", help="switch autopilot on or off for an epic")
+    p_ap.add_argument("repo", help="owner/repo")
+    p_ap.add_argument("epic", help="epic issue number")
+    p_ap.add_argument("state", choices=("on", "off"))
+    p_ap.set_defaults(func=cmd_autopilot)
 
     # Each module owns its own argparse wiring.
     for module in (threads, ci, ui_server, ask):

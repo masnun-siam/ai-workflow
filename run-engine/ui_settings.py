@@ -9,15 +9,19 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
 
+import dispatch
 import shared
 
 DEFAULT_CMD = "claude"
 DEFAULT_VAULT = os.path.join("~", "Documents", "notes")  # the `notes` vault /dump and /create-prd write to
 MAX_COMMANDS = 20
+DEFAULT_CAP = 2
+SLUG_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
 
 def _path() -> str:
@@ -38,14 +42,63 @@ def vault_dir() -> str:
     return os.path.expanduser(_stored().get("vault_dir") or DEFAULT_VAULT)
 
 
-def load() -> dict:
+def _repo(d) -> dict:
+    d = d if isinstance(d, dict) else {}
+    cap = d.get("autopilot_cap")
+    ch = d.get("slack_channel")
+    return {
+        "auto_grind": d.get("auto_grind") is True,
+        "autopilot_cap": cap if type(cap) is int and 1 <= cap <= 5 else DEFAULT_CAP,
+        "slack_channel": ch if isinstance(ch, str) else "",
+    }
+
+
+def _epics(v) -> list:
+    return sorted({e for e in v if type(e) is int and e > 0}) if isinstance(v, list) else []
+
+
+def _migrate(data: dict) -> dict:
+    """Drop the legacy global auto_grind, seeding it onto every registered repo once."""
+    if "auto_grind" not in data:
+        return data
+    legacy = data.pop("auto_grind") is True
+    repos = data["repos"] = dict(data.get("repos") or {})
+    for slug in dispatch.read_checkouts():
+        repos.setdefault(slug, {"auto_grind": legacy})
     try:
-        with open(_path(), encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, ValueError):
-        data = None
-    if not isinstance(data, dict):
-        data = {}
+        shared.atomic_write_text(_path(), json.dumps(data, indent=2))
+    except OSError:
+        pass
+    return data
+
+
+def repo_settings(slug: str) -> dict:
+    """Per-repo settings with defaults, plus its autopilot epic list."""
+    d = _migrate(_stored())
+    return {**_repo((d.get("repos") or {}).get(slug)), "autopilot": _epics((d.get("autopilot") or {}).get(slug))}
+
+
+def set_autopilot(slug: str, epic: int, on: bool) -> list:
+    """Add or remove an epic from a repo's autopilot list; returns the new list."""
+    if not isinstance(slug, str) or not SLUG_RE.match(slug):
+        raise ValueError("repo must be owner/repo")
+    if type(epic) is not int or epic < 1:
+        raise ValueError("epic must be a number")
+    d = _migrate(_stored())
+    ap = d["autopilot"] = dict(d.get("autopilot") or {})
+    epics = set(_epics(ap.get(slug)))
+    epics.add(epic) if on else epics.discard(epic)
+    ap[slug] = sorted(epics)
+    shared.atomic_write_text(_path(), json.dumps(d, indent=2))
+    return ap[slug]
+
+
+def load() -> dict:
+    data = _migrate(_stored())
+    stored_repos = data.get("repos") if isinstance(data.get("repos"), dict) else {}
+    registered = dispatch.read_checkouts()
+    slugs = [*registered, *(k for k in stored_repos if k not in registered)]
+    ap = data.get("autopilot") if isinstance(data.get("autopilot"), dict) else {}
     alias = data.get("claude_label")
     alias = alias if isinstance(alias, str) and alias.strip() else DEFAULT_CMD
     cmds = [{"label": alias, "cmd": DEFAULT_CMD, "builtin": True}]
@@ -61,7 +114,8 @@ def load() -> dict:
     return {
         "commands": cmds,
         "default": default if any(c["label"] == default for c in cmds) else alias,
-        "auto_grind": data.get("auto_grind") is True,
+        "repos": {k: _repo(stored_repos.get(k)) for k in slugs},
+        "autopilot": {k: _epics(v) for k, v in ap.items()},
         "vault_dir": vault_dir(),
     }
 
@@ -86,6 +140,9 @@ def argv(cmd: str) -> list:
 
 def validate(body) -> dict:
     """Return the cleaned settings dict, or raise ValueError."""
+    if isinstance(body, dict) and "commands" not in body:  # a partial save (a board's per-repo PUT) keeps the rest
+        cur = load()
+        body = {"commands": cur["commands"], "default": cur["default"], **body}
     if not isinstance(body, dict) or not isinstance(body.get("commands"), list):
         raise ValueError("commands must be a list")
     if len(body["commands"]) > MAX_COMMANDS:
@@ -123,11 +180,38 @@ def validate(body) -> dict:
         vault = vault.strip() or None
         if vault and not os.path.isabs(os.path.expanduser(vault)):
             raise ValueError("vault_dir must be an absolute path (or start with ~)")
+    stored = _migrate(_stored())
+    sent = body.get("repos", {})
+    if not isinstance(sent, dict):
+        raise ValueError("repos must be an object")
+    repos = {**(stored.get("repos") or {}), **sent}  # an entry replaces that repo's; the others stay
+    clean_repos = {}
+    for slug, r in repos.items():
+        if not SLUG_RE.match(str(slug)) or not isinstance(r, dict):
+            raise ValueError("repos must map owner/repo to an object")
+        cap = r.get("autopilot_cap", DEFAULT_CAP)
+        if type(cap) is not int or not 1 <= cap <= 5:
+            raise ValueError("autopilot_cap must be an integer from 1 to 5")
+        ch = r.get("slack_channel", "")
+        if not isinstance(ch, str) or len(ch) > 100:
+            raise ValueError("slack_channel must be a string of at most 100 characters")
+        clean_repos[slug] = {
+            "auto_grind": r.get("auto_grind") is True,
+            "autopilot_cap": cap,
+            "slack_channel": ch.strip(),
+        }
+    autopilot = body.get("autopilot", stored.get("autopilot") or {})
+    if not isinstance(autopilot, dict) or not all(
+        SLUG_RE.match(str(k)) and isinstance(v, list) and all(type(e) is int and e > 0 for e in v)
+        for k, v in autopilot.items()
+    ):
+        raise ValueError("autopilot must map owner/repo to a list of epic numbers")
     return {
         "claude_label": alias,
         "commands": cmds,
         "default": None if default == alias else default,
-        "auto_grind": body.get("auto_grind") is True,
+        "repos": clean_repos,
+        "autopilot": {k: _epics(v) for k, v in autopilot.items()},
         "vault_dir": vault,
     }
 

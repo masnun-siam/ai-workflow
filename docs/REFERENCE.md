@@ -28,6 +28,7 @@ aiw paths                               resolve every path, create the state dir
 aiw ask                                 a headless session asks the user a question and pauses
 aiw ci status                           check state plus the failing job's log
 aiw threads list|resolve                PR review threads
+aiw autopilot <owner/repo> <epic> on|off  switch autopilot for an epic (works without the UI)
 ```
 
 ## aiw ui
@@ -40,6 +41,29 @@ after an upgrade it deletes the old run data from the plugin data dir once and l
 - `--allow-host HOST` is repeatable and matches exactly: use `name:port`, or the bare name for the default 443 serve.
 - To reach it over a tailnet: `tailscale serve --bg 8420`, then
   `aiw ui --allow-host <machine>.<tailnet>.ts.net`. It installs as a PWA.
+
+**Planning.** One repo at a time; one card per PRD in `docs/prds/` (drafts included), in columns
+PRD draft → In review → Approved → Tasks filed → Refined. The epic is the open issue labelled
+`epic` and `prd-<slug>`; cards show its number, child-issue count and "x/y refined". Each card
+offers the next step: a lens picker and panel progress on drafts, **Create tasks**, **Refine**, or
+**Autopilot**. `GET /api/planning?repo=owner/repo`.
+
+**Delivery.** One swimlane per open epic plus **No epic**, in columns Ready → In progress → Draft
+PR → In review → Grinding → Merged (7 days). Only refined issues, or ones with a PR or live
+session, show. A blocked card shows a lock with its open blockers and cannot start. Unblocked Ready
+cards have **Start** (headless `/implement-issue`) and **Start in herdr**; In review cards have
+**Grind** when the repo's auto-grind is off. Each lane has an **Autopilot** switch and shows
+`running/cap`. A merged issue's worktree under `.worktrees/` and its branch are removed when clean;
+otherwise the card is flagged and **Clean** lists what would be lost first.
+`GET /api/delivery`, `POST /api/start` (409 for a live session, open PR or blocked issue),
+`POST /api/autopilot`, `POST /api/cleanup`.
+
+**Board data.** One GitHub GraphQL call per repo per poll, every 60 s (15 s while a PR's CI is
+pending), kept in memory; a rate limit pauses fetching for 10 minutes and the boards show the last
+data as stale. After each fresh poll the UI runs autopilot (refined, unblocked issues of switched-on
+epics, by `priority:` label then number, up to the repo's cap), merge cleanup, and grind autostart
+(a PR that turned ready on a repo with auto-grind on). Nothing runs on stale data, and the UI never
+merges a PR.
 
 **New.** Pick a skill (grouped, each with a one-line description; the last one is remembered),
 a repo and the input. For `implement-issue`, `pr-review` and `pr-grind` the repo's open issues
@@ -56,7 +80,9 @@ owner, project or path, recent first. A typed absolute path or **Browse for a fo
 checkout. **No repo yet** runs a session in the notes vault for create-prd and dump.
 
 **Settings.** Named `claude` commands a session can launch with (one per account), the notes
-vault path, the checkout list, and the plan-usage (5h / 7d) per account shown in the header.
+vault path, the checkout list, the plan-usage (5h / 7d) per account shown in the header, and per
+repo: auto-grind (default off), autopilot cap (1–5, default 2) and the Slack review channel grind
+posts to (`repos[owner/repo]` in `ui_settings.json`; `autopilot` maps a repo to its epics).
 
 **Notes vault.** With **No repo yet** and a new idea, New shows a **Vault folder**
 (`05-Work/<Project>/<Feature>`) that follows the best match of your text as you type; **Suggest with
