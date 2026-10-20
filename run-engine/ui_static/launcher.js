@@ -9,7 +9,7 @@ const html = htm.bind(h);
 const KEY = 'aiw.lastRepo';
 const LABELS = {
   'implement-issue': 'Issue number or URL',
-  'pr-grind': 'PR number or URL',
+  'pr-grind': 'PR URL or Slack review thread',
   'create-prd': 'Requirement: free text, file path, vault note or issue URL',
   dump: 'What to capture: feature, change, bug or task',
   worklog: 'Date (optional, defaults to today)',
@@ -58,12 +58,13 @@ export function worklogDates({ mode = 'today', day = '', from = '', to = '' }, t
 }
 
 // Commands whose argument is one of the repo's open issues or PRs: New run lists them to pick from.
-export const PICK = { 'implement-issue': 'issue', 'pr-review': 'pr' };
+export const PICK = { 'implement-issue': 'issue', 'pr-review': 'pr', 'pr-grind': 'pr' };
 const CMD_KEY = 'aiw.lastCommand';
 
 // The argument text a picked issue/PR fills in, in the form each command takes (the URL is gh's).
 export function pickValue(command, slug, item) {
-  return String(item.number);
+  // /pr-grind takes a PR URL (or a Slack thread), not a bare number: the listed PR's own url
+  return command === 'pr-grind' && item.url ? item.url : String(item.number);
 }
 
 // The number the typed argument names, in any form pickValue writes (or a pasted issue/PR URL).
@@ -82,7 +83,7 @@ export function matchItems(items, args) {
 }
 const HINTS = {
   'implement-issue': '5940, or an issue URL',
-  'pr-grind': 'The Slack link of the review thread',
+  'pr-grind': 'A PR URL, or the Slack link of the review thread',
   worklog: '2026-10-08',
   'pr-review': '5960, or a PR URL',
 };
