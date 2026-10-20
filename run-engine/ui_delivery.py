@@ -20,11 +20,27 @@ ignored, so its issue falls back to Ready. `blocked_by` lists open blockers only
 
 from __future__ import annotations
 
+import os
+
+import dispatch
 import ui_runner
 import ui_sessions
 
 DEFAULT_CAP = 2
 COLUMNS = ("ready", "in_progress", "draft_pr", "in_review", "grinding", "merged")
+
+
+def _slug(rec) -> str:
+    """owner/repo of a session. `repo` holds the checkout *path* for sessions started from the UI, so the
+    link (or the checkouts registry, for a session without one) names it; a bare owner/repo is used as is."""
+    link = rec.get("link") if isinstance(rec.get("link"), dict) else {}
+    if link.get("owner") and link.get("repo"):
+        return f"{link['owner']}/{link['repo']}"
+    repo = str(rec.get("repo") or "")
+    if repo.startswith("/"):
+        path = os.path.realpath(repo)
+        return next((k for k, v in dispatch.read_checkouts().items() if os.path.realpath(str(v)) == path), "")
+    return repo
 
 
 def _live_sessions(repo: str, sessions) -> dict:
@@ -34,8 +50,7 @@ def _live_sessions(repo: str, sessions) -> dict:
         if rec.get("status") not in ui_sessions._LIVE:
             continue
         key = ui_runner._issue_key(rec)
-        link = rec.get("link") if isinstance(rec.get("link"), dict) else {}
-        slug = rec.get("repo") if "/" in str(rec.get("repo") or "") else f"{link.get('owner')}/{link.get('repo')}"
+        slug = _slug(rec)
         if key and key[1].startswith("implement-issue:") and str(slug).lower() == repo.lower():
             out[int(key[1].split(":")[1])] = rec
     return out
