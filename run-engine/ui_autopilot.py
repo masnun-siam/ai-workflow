@@ -68,6 +68,8 @@ def _guard_implement(repo, n, snapshot, sessions) -> None:
         return  # not in the snapshot (closed, or nothing fetched yet): the session itself will sort it out
     if any(p["state"] == "OPEN" for p in i["prs"]):
         raise Conflict(f"#{n} already has an open PR")
+    if any(p["state"] == "MERGED" for p in i["prs"]):
+        raise Conflict(f"#{n}'s PR is already merged")
     blockers = [b["n"] for b in i["blocked_by"] if b["state"] == "OPEN"]
     if blockers:
         raise Conflict(f"#{n} is blocked by " + ", ".join(f"#{b}" for b in blockers))
@@ -186,7 +188,7 @@ def _tick(repo, snapshot, sessions, epics, cap, kw) -> list:
             and i["parent"] in epics
             and i["n"] not in live
             and not any(b["state"] == "OPEN" for b in i["blocked_by"])
-            and not any(p["state"] == "OPEN" for p in i["prs"])
+            and not any(p["state"] in ("OPEN", "MERGED") for p in i["prs"])
         ),
         key=_rank,
     )

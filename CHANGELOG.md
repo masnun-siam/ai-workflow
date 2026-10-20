@@ -28,6 +28,10 @@
 
 ### Fixed
 
+- Delivery cards did not move past Ready in a repo whose PRs target a non-default branch (staging):
+  GitHub only links "Closes #n" for the default branch. The poller now also links a PR to its issue
+  by a closing keyword in the body or an `issue-<n>-` branch; an issue whose PR merged into staging
+  shows only in Merged and autopilot does not start it again.
 - Autopilot started more implement-issue sessions every poll (60 s) beyond its cap: live sessions
   were never counted, because a session's `repo` is its checkout path, not `owner/repo`. The
   Delivery board's running count and the start guard had the same blind spot.

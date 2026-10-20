@@ -177,4 +177,44 @@ clock4.t += 60
 s = p4.poll("o/r")
 assert s["stale"] and len(s["data"]["issues"]) == 20
 assert s["error"] and s["retry_at"] is None  # gh's failure text, shown on the board's stale banner
+
+# PRs into a non-default branch (staging): GitHub does not link "Closes #n", so the body and branch do
+f = fixture()
+f["data"]["repository"]["openPrs"]["nodes"] = [
+    dict(
+        pr(60, ci="SUCCESS"),
+        title="fix",
+        body="Closes #6\n\nmore",
+        headRefName="feat-x",
+        closingIssuesReferences={"nodes": []},
+    ),
+    dict(
+        pr(61, draft=True, ci="PENDING"),
+        title="wip",
+        body="",
+        headRefName="issue-7-thing",
+        closingIssuesReferences={"nodes": []},
+    ),
+]
+f["data"]["repository"]["issues"]["nodes"][7]["parent"] = {"number": 1}  # issue 8, an epic child
+f["data"]["repository"]["mergedPrs"]["nodes"].append(
+    {
+        "number": 62,
+        "title": "m",
+        "url": "u62",
+        "mergedAt": ts(1),
+        "headRefName": "x",
+        "body": "Fixes #8",
+        "closingIssuesReferences": {"nodes": []},
+    }
+)
+d = ui_poller.normalize(f, now=NOW)
+by = {i["n"]: i for i in d["issues"]}
+assert [p["n"] for p in by[6]["prs"]] == [60] and by[6]["prs"][0]["state"] == "OPEN", by[6]["prs"]
+assert [(p["n"], p["draft"]) for p in by[7]["prs"]] == [(61, True)], "branch issue-7-… links the draft PR"
+assert [(p["n"], p["state"]) for p in by[8]["prs"]] == [(62, "MERGED")]
+m62 = next(m for m in d["merged"] if m["n"] == 62)
+assert m62["closes"] == [8] and m62["epic"] == 1, m62
+assert [p["n"] for p in d["open_prs"]] == [60, 61] and "state" not in d["open_prs"][0]
+print("ok  PRs into staging link to their issue by body keyword and issue-<n> branch")
 print("ok")

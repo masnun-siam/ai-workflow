@@ -77,6 +77,8 @@ def build(repo, snapshot, sessions, grind_index, settings, cleanup_flags) -> dic
     for i in data.get("issues") or []:
         if "epic" in i["labels"]:
             continue
+        if any(p["state"] == "MERGED" for p in i["prs"]):
+            continue  # merged into a non-default branch, so still open: its card is in Merged
         pr = next((p for p in i["prs"] if p["state"] == "OPEN"), None)
         sess = live.get(i["n"])
         grind = grinds.get((owner.lower(), name.lower(), pr["n"])) if pr else None

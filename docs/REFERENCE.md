@@ -61,7 +61,9 @@ otherwise the card is flagged and **Clean** lists what would be lost first.
 `GET /api/delivery`, `POST /api/start` (409 for a live session, open PR or blocked issue),
 `POST /api/autopilot`, `POST /api/cleanup`.
 
-**Board data.** One GitHub GraphQL call per repo per poll, every 60 s (15 s while a PR's CI is
+**Board data.** A PR belongs to an issue when GitHub links it, when its body says Closes, Fixes or
+Resolves #n, or when its branch starts `issue-<n>-` (GitHub links closing keywords only for PRs into
+the default branch, so a staging-based repo needs the last two). One GitHub GraphQL call per repo per poll, every 60 s (15 s while a PR's CI is
 pending), kept in memory; a rate limit pauses fetching for 10 minutes and the boards show the last
 data as stale. The stale banner says why (rate limit and its retry time, or gh's error) and has a
 **Refresh** (`?refresh=1` on the board GET fetches now). No board shows before the first fetch. After each fresh poll the UI runs autopilot (refined, unblocked issues of switched-on
