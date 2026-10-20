@@ -26,6 +26,7 @@ import ui_events
 import ui_grind
 import ui_issue
 import ui_migrate
+import ui_panel
 import ui_pr
 import ui_repos
 import ui_runner
@@ -91,6 +92,16 @@ def _can_browse(handler) -> bool:
 MAX_BODY = 65536
 
 
+def _panel_of(rec: dict):
+    """The panel a session roots or reviews for: its status plus the session's part in it."""
+    if not rec.get("panel"):
+        return None
+    try:
+        return {**ui_panel.public(rec["panel"]), "role": rec.get("panel_role"), "lens": rec.get("panel_lens")}
+    except (FileNotFoundError, ValueError):
+        return None
+
+
 def _public(rec: dict) -> dict:
     p, sid = rec.get("cwd_path"), rec.get("session_id")
     return {
@@ -118,7 +129,7 @@ def _public(rec: dict) -> dict:
         "auto_resume": rec.get("auto_resume"),
         "no_repo": rec.get("no_repo") is True,
         "vault_folder": rec.get("vault_folder"),
-        "peer_review": peer_review.status(rec["peer_review_dir"]) if rec.get("peer_review_dir") else None,
+        "peer_review": _panel_of(rec),
         "repo_path": p,
         "resume_command": f"cd {shlex.quote(p)} && claude --resume {shlex.quote(sid)}" if p and sid else None,
     }
@@ -281,6 +292,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             # Also from a tailnet browser: the parent is typed there (the folder dialog is local only),
             # and create_repo still requires an existing absolute folder and a new name.
             self._dispatch(lambda b: ui_vault.create_repo(b.get("parent"), b.get("name"), b.get("prd_folder")), ok=201)
+        elif parts == ["", "api", "review"]:
+            self._dispatch(self._review)
+        elif len(parts) == 5 and parts[:3] == ["", "api", "review"] and parts[4] == "lens":
+            self._review_lens(parts[3])
         elif parts == ["", "api", "afk"]:
             self._dispatch(lambda b: ui_afk.start(b.get("until")))
         elif parts in (["", "api", "afk", "stop"], ["", "api", "afk", "dismiss"]):
@@ -311,6 +326,27 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(404, "text/plain; charset=utf-8", b"not found")
         else:
             self._method_not_allowed(guarded=True)
+
+    @staticmethod
+    def _review(body: dict) -> dict:
+        try:
+            panel = ui_panel.start(body.get("repo"), body.get("artifact"), body.get("lenses"), body.get("root_session"))
+        except ui_runner.RunnerError as e:
+            raise ValueError(str(e))
+        return {"panel": panel}
+
+    def _review_lens(self, panel: str) -> None:
+        body = self._read_body()
+        if body is None:
+            return
+        try:
+            ui_panel.lens_action(panel, body.get("lens"), body.get("action"))
+            self._json(200, {"panel": panel})
+        except (FileNotFoundError, ValueError) as e:
+            missing = isinstance(e, FileNotFoundError) or str(e).startswith("invalid panel id")
+            self._json(404 if missing else 400, {"error": "not found" if missing else str(e)})
+        except ui_panel.Conflict as e:
+            self._json(409, {"error": str(e)})
 
     @staticmethod
     def _scan(body: dict) -> dict:
@@ -600,6 +636,7 @@ def cmd_serve(args) -> None:
     ui_grind.start_timer()  # ntfy on grind pause/finish
     ui_runner.start_prgrind_timer()  # re-enter pr-grind loops whose session ended (reviews, CI, heartbeat)
     ui_runner.start_limit_timer()  # auto-resume limited runs, incl. catch-up of resets missed while down
+    ui_panel.start_timer()  # lens verdicts -> root, rounds, cap
     ui_usage.start_timer()  # 5h/7d usage per account, only while the UI is open
     ui_afk.start_timer()  # AFK mode: auto-answer, skip CI on paused grinds, retry failures; ends the window
     print(f"serving http://127.0.0.1:{server.server_address[1]}/ — Ctrl+C to stop")

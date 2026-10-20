@@ -28,7 +28,6 @@ aiw paths                               resolve every path, create the state dir
 aiw ask                                 a headless session asks the user a question and pauses
 aiw ci status                           check state plus the failing job's log
 aiw threads list|resolve                PR review threads
-aiw peer-review new|next|verdict|diff   peer review: a fresh dir per run, open and decide rounds, record a verdict, the change to review
 ```
 
 ## aiw ui
@@ -65,10 +64,15 @@ Claude** asks Haiku for an existing or new project and feature. create-prd write
 vault only (`--to obsidian`) there.
 
 **Peer review.** New has a **Peer review** box. Ticking it shows the lenses the command offers
-(`GET /api/peer-review`, from `config.json`), with critical ticked. A custom prompt gets a fresh
-review dir holding the prompt as `ask.md`, plus one line asking the session to run `/peer-review`
-with that dir and the lenses. The session page shows **peer review: approved / cap reached /
-unfinished / not run**.
+(`GET /api/peer-review`, from `config.json`), with critical ticked. A custom prompt becomes the
+root session; its Ask file is the artifact. When the root ends its turn, the UI starts one
+`peer-reviewer` session (Opus) per lens (`POST /api/review`, body `repo`, `artifact`, `lenses`,
+optional `root_session`), each told to end with `Verdict: approve` or `Verdict: changes`. The UI
+relays the verdicts to the root session, which revises and ends its turn, and the same lens sessions
+re-review. A panel stops when every lens approves, or as **cap reached** after `peer_review.max_rounds`
+(5) rounds; nothing auto-approves and nothing validates a verdict beyond that closing line (a missing
+line counts as `changes`). `POST /api/review/<panel>/lens` drops or retries a lens. The session page
+shows the panel's status; verdicts live under `peer-review/<panel>/round-<n>/<lens>.md`.
 
 **AFK mode.** A timed autopilot run by the server, so it works with no browser open. Each tick it
 answers every `aiw ask` round whose questions all carry a "(Recommended)" option, sends "Skip CI
@@ -113,7 +117,7 @@ Nothing stateful lives in this repo. `aiw paths` resolves it under `$CLAUDE_PLUG
 | `ui_settings.json` | the named `claude` commands, the vault path |
 | `checkouts.json` | the registered repo checkouts |
 | `pr-grind/` | one markdown state file per PR under grind |
-| `peer-review/` | one directory per peer-review run: rounds and verdicts |
+| `peer-review/` | one directory per panel: `panel.json` and `round-<n>/<lens>.md` verdicts |
 | `afk.json` | the AFK window and its log |
 | `ui.json` | push notifications and `public_url` (mode 0600) |
 | `channels.json` | Slack ids and trigger templates for grind and release-pr |

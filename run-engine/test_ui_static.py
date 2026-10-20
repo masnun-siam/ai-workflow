@@ -1878,7 +1878,7 @@ finally:
 _la = read(os.path.join(STATIC, "launcher.js")).decode()
 assert "id: 'peer-review'" in _la and "id: 'custom-review'" in _la and "/api/peer-review" in _la, "both New run forms"
 assert "reviewOffer(command)" in _la and "reviewOffer('custom')" in _la, "offers come from config, keyed by command"
-assert "up to ${rounds || 3} rounds, on Opus" in _la and "isn't forced" in _la, "cost and the not-a-gate note, said"
+assert "up to ${rounds || 5} rounds, on Opus" in _la and "isn't forced" in _la, "cost and the not-a-gate note, said"
 assert "'critical'" not in _la, "no lens is hardcoded in the frontend"
 _se = read(os.path.join(STATIC, "session.js")).decode()
 assert "meta.peer_review" in _se and "peer review: ${meta.peer_review}" in _se, "a session shows its peer review status"

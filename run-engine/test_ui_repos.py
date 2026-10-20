@@ -25,6 +25,7 @@ os.environ["CLAUDE_PLUGIN_DATA"] = data_dir
 ORIG_PATH = os.environ.get("PATH", "")
 
 import ui_board  # noqa: E402
+import ui_panel  # noqa: E402
 import ui_repos  # noqa: E402
 import ui_runner  # noqa: E402
 import ui_server  # noqa: E402
@@ -630,41 +631,37 @@ try:
         "peer_review: lens list appended as --review <list> to create-prd/dump; not-offered, implement-issue, non-list refused"
     )
 
-    pr_root = os.path.join(data_dir, "peer-review", "custom")
-    s, p = post({"repo": "o/r", "text": "tidy the README", "peer_review": ["critical", "ux"]})
+    asks = os.path.join(data_dir, "peer-review", "asks")
+    s, p = post({"repo": "o/r", "text": "tidy the README", "peer_review": ["critical", "cto"]})
     sent = calls[-1][0]
-    assert s == 201 and sent.startswith(
-        "tidy the README\n\nWhen the work is done, run the ai-workflow:peer-review skill"
-    ), sent
-    rd = sent.split("--dir ", 1)[1].split(" ", 1)[0]
-    assert os.path.dirname(rd) == pr_root and "--lenses critical,ux" in sent and "--since" not in sent, sent
-    assert open(os.path.join(rd, "ask.md"), encoding="utf-8").read() == "tidy the README", (
-        "the prompt verbatim, by the server"
-    )
+    assert s == 201 and sent.startswith("tidy the README\n\nWhen the work is done, append `## Answer`"), sent
+    art = sent.split(" to ", 1)[1].split(":", 1)[0]
+    assert os.path.dirname(art) == asks and "critical, cto review panel" in sent, sent
+    assert open(art, encoding="utf-8").read() == "## Ask\n\ntidy the README\n", "the prompt verbatim, by the server"
     rec = ui_sessions.load(p["id"])
-    assert rec["peer_review_dir"] == rd, rec
-    assert json.loads(req(f"/api/sessions/{p['id']}")[1])["peer_review"] == "not run", "post-check reads round state"
-    subprocess.run(
-        ["git", "-C", REPO_A, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "c"],
-        check=True,
-    )
-    head = subprocess.run(["git", "-C", REPO_A, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    assert rec["panel_role"] == "root", rec
+    pan = ui_panel.peer_review.load_panel(rec["panel"])
+    assert pan["lenses"] == ["critical", "cto"] and pan["root_session"] == p["id"], pan
+    assert pan["artifact"] == art and pan["phase"] == "waiting_root", pan
+    assert p["peer_review"]["total"] == 2 and p["peer_review"]["role"] == "root", p["peer_review"]
+    n = len(os.listdir(os.path.join(data_dir, "peer-review")))
+    s, p = post({"repo": "o/r", "text": "plain prompt"})
+    assert s == 201 and p["peer_review"] is None and "review panel" not in calls[-1][0], (s, p)
+    assert len(os.listdir(os.path.join(data_dir, "peer-review"))) == n, "no lenses: no panel"
     s, p = post({"repo": "o/r", "text": "/create-prd an idea", "peer_review": ["performance"]})
-    assert s == 201 and f"--since {head}." in calls[-1][0] and "--review" not in calls[-1][0], (
-        "custom: HEAD at spawn; never --review"
-    )
+    assert s == 201 and "--review" not in calls[-1][0] and "review panel" in calls[-1][0], "custom: never --review"
     s, p = post({"repo": "o/r", "text": "x", "peer_review": ["nope"]})
     assert s == 400 and "custom offers" in err(p)
-    before = set(os.listdir(pr_root))
+    before = set(os.listdir(asks))
     with mock.patch.object(ui_runner, "start", side_effect=ui_runner.RunnerError("boom")):
         s, _, _ = req(
             "/api/sessions", "POST", json.dumps({"repo": "o/r", "text": "x", "peer_review": ["critical"]}).encode()
         )
-    assert s == 502 and set(os.listdir(pr_root)) == before, "a failed spawn leaves no review dir behind"
+    assert s == 502 and set(os.listdir(asks)) == before, "a failed spawn leaves no ask file behind"
     s, data, _ = req("/api/peer-review")
     offers = json.loads(data)
     assert s == 200 and offers["default"] == ["critical"] and "cto" not in offers["kinds"]["dump"], offers
-    assert len(offers["kinds"]["custom"]) == 7 and offers["max_rounds"] == 3, offers
+    assert len(offers["kinds"]["custom"]) == 7 and offers["max_rounds"] == 5, offers
     assert set(offers) == {"default", "max_rounds", "kinds"} and all(
         isinstance(v, list) for v in offers["kinds"].values()
     )
@@ -672,7 +669,7 @@ try:
     assert req("/api/peer-review", "POST", b"{}")[0] in (404, 405), "read-only"
     assert req("/api/peer-review", host="evil.example")[0] == 403, "behind the same Host guard as every /api route"
     ok(
-        "custom prompt: fresh review dir, ask.md verbatim, review line with --dir/--lenses/--since HEAD, post-check, offers"
+        "custom prompt: ask file verbatim, answer/diff line, 2-lens panel rooted at the session; none without lenses; offers"
     )
 finally:
     srv.shutdown()

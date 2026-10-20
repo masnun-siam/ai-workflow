@@ -1,16 +1,60 @@
 {
-  "_note": "Global defaults for the plugin. Only peer review is configured here.",
+  "_note": "Global defaults for the plugin. Only the peer-review panel is configured here.",
   "peer_review": {
-    "_doc": "Peer review (--review on /create-prd, /intake, /dump, /gh-issue, and custom prompts): one single-lens reviewer per picked lens, prompt = the kind's rubric + the lens prompt. Every picked lens blocks. aiw peer-review validates verdicts and decides.",
-    "max_rounds": 3,
+    "_doc": "Peer review panel (--review on /create-prd, /intake, /dump, /gh-issue, and custom prompts; POST /api/review): the UI starts one single-lens peer-reviewer session per picked lens, prompt = the lens prompt below plus a findings line. Every picked lens blocks. Verdicts are free text ending in `Verdict: approve|changes`; the UI relays them to the root session, which revises, for up to max_rounds rounds before the panel stops as `cap reached`.",
+    "max_rounds": 5,
     "default_lenses": [
       "critical"
     ],
-    "diff_max_lines": 3000,
-    "rubric": {
-      "doc": "The artifact is a doc: a PRD, a brief, or a batch of issue drafts. In the lens prompts, an FR is any requirement it states (a PRD's FR, a brief's requirement, an issue's acceptance criterion), and a section the prompt names (Problem, Goals, Non-goals, Decisions, Open questions) is checked only where the artifact has it. Severity: blocker = two statements that cannot both hold, or a requirement that cannot be tested as written. major = the artifact leaves behaviour undefined for an input or state a requirement will certainly meet. minor = everything else. At most 8 findings, most severe first. Every finding quotes the artifact line it is about (4+ words; whitespace and emphasis ignored), or names the ##/### heading under which something is missing. Every blocker or major sets reraises: the id of your own prior-round finding it raises again, or null. A finding the worker dismissed with a reason is raised again only with new evidence, and the user then decides it; a finding the user decided is raised again only with the new evidence quoted in new_evidence; a same-quote finding that is genuinely new says how it differs in distinct_because. A fix changes the artifact's wording; it never adds implementation (modules, tables, endpoints): a doc is the what and why, never the how. A finding that needs a fact only the user has (evidence, priority, a product choice) is needs_decision, never an edit.",
-      "prd-doc": "The artifact is a doc: a PRD, a brief, or a batch of issue drafts. In the lens prompts, an FR is any requirement it states (a PRD's FR, a brief's requirement, an issue's acceptance criterion), and a section the prompt names (Problem, Goals, Non-goals, Technical design, Decisions, Open questions) is checked only where the artifact has it. Severity: blocker = two statements that cannot both hold, or a requirement that cannot be tested as written. major = the artifact leaves behaviour undefined for an input or state a requirement will certainly meet. minor = everything else. At most 8 findings, most severe first. Every finding quotes the artifact line it is about (4+ words; whitespace and emphasis ignored), or names the ##/### heading under which something is missing. Every blocker or major sets reraises: the id of your own prior-round finding it raises again, or null. A finding the worker dismissed with a reason is raised again only with new evidence, and the user then decides it; a finding the user decided is raised again only with the new evidence quoted in new_evidence; a same-quote finding that is genuinely new says how it differs in distinct_because. A fix changes the artifact's wording. A PRD's `## Technical design` may state contracts (data shape, tables or collections and their fields, endpoints and their fields, events, sync or queued), and a finding asks for one where a requirement needs it; a fix never adds file paths, class or method names, signatures or step-by-step logic, and a finding flags any that are there. A finding that needs a fact only the user has (evidence, priority, a product choice) is needs_decision, never an edit.",
-      "change": "The artifact is a change: ## Ask (what the user asked, verbatim), ## Answer (the worker's final answer) and ## Diff (the code change; secrets, binaries and lockfiles are dropped and a long diff is truncated, both noted at the top of the Diff). Judge the change against the Ask. Severity: blocker = the change does not do what the Ask asks, breaks existing behaviour, or the Answer claims something the Diff does not do. major = a defect normal use will certainly hit (an unhandled input or state, an error swallowed, new logic with no test). minor = everything else. At most 8 findings, most severe first. Every finding quotes one line of the artifact (4+ words from a single Diff or Answer line; whitespace and emphasis ignored), or names the ##/### heading under which something is missing. Every blocker or major sets reraises: the id of your own prior-round finding it raises again, or null. A finding the worker dismissed with a reason is raised again only with new evidence, and the user then decides it; a finding the user decided is raised again only with the new evidence quoted in new_evidence; a same-quote finding that is genuinely new says how it differs in distinct_because. A fix may change code: say what to change and where (file:line). Never guess at a dropped or truncated file; name it in a minor finding only when the omission hides something your lens must check. A finding that needs a fact only the user has (intent, priority, a product choice) is needs_decision, never a fix."
+    "kinds": {
+      "create-prd": {
+        "offer": [
+          "critical",
+          "ceo",
+          "cto",
+          "security",
+          "qa",
+          "ux",
+          "performance"
+        ]
+      },
+      "intake": {
+        "offer": [
+          "critical",
+          "ceo",
+          "cto",
+          "security",
+          "qa"
+        ]
+      },
+      "dump": {
+        "offer": [
+          "critical",
+          "ceo",
+          "qa"
+        ]
+      },
+      "gh-issue": {
+        "offer": [
+          "critical",
+          "cto",
+          "security",
+          "qa",
+          "ux",
+          "performance"
+        ]
+      },
+      "custom": {
+        "offer": [
+          "critical",
+          "ceo",
+          "cto",
+          "security",
+          "qa",
+          "ux",
+          "performance"
+        ]
+      }
     },
     "lenses": {
       "critical": {
@@ -19,7 +63,7 @@
       },
       "ceo": {
         "focus": "product value: evidence, metrics, traceability, implied scope",
-        "prompt": "For a doc, review it through exactly one lens: PRODUCT VALUE. (a) The Problem has evidence (a user, a number, a report); if it is missing, that is needs_decision, never written in. (b) Each success metric has a baseline, a target and a way to measure it now; 'no metric, because <reason>' is a valid answer. (c) Traceability: each FR traces to the stated Problem or a Goal; an FR that traces to neither is a cut candidate (quote it). (d) Implied capability: for each FR, a capability its own wording implies but neither specifies nor rules out ('export' -> which formats, 'notify' -> which channel); quote the word. (e) Who loses: a user group or workflow named in the artifact or found in the code (cite file:line) that a quoted FR makes worse, with no mention in the artifact. Never invent a persona. For a change: (a) the change solves the problem the Ask states, not a neighbouring one; (b) scope creep: a quoted Diff line no part of the Ask needs; (c) who loses, as above, from a behaviour change in the Diff."
+        "prompt": "For a doc, review it through exactly one lens: PRODUCT VALUE. (a) The Problem has evidence (a user, a number, a report); if it is missing, that is a question for the user, never written in. (b) Each success metric has a baseline, a target and a way to measure it now; 'no metric, because <reason>' is a valid answer. (c) Traceability: each FR traces to the stated Problem or a Goal; an FR that traces to neither is a cut candidate (quote it). (d) Implied capability: for each FR, a capability its own wording implies but neither specifies nor rules out ('export' -> which formats, 'notify' -> which channel); quote the word. (e) Who loses: a user group or workflow named in the artifact or found in the code (cite file:line) that a quoted FR makes worse, with no mention in the artifact. Never invent a persona. For a change: (a) the change solves the problem the Ask states, not a neighbouring one; (b) scope creep: a quoted Diff line no part of the Ask needs; (c) who loses, as above, from a behaviour change in the Diff."
       },
       "cto": {
         "focus": "feasibility against this repo, with code as evidence only",
@@ -40,61 +84,6 @@
       "performance": {
         "focus": "load, data volume, query cost, slow paths",
         "prompt": "Review this artifact through exactly one lens: PERFORMANCE. Search the code for evidence and cite file:line. For a doc: (a) a requirement whose cost grows with data or users and has no stated bound (rows per export, items per page, request rate); (b) a latency or throughput expectation users will rely on that is not stated; (c) work the requirement implies on a hot path (every request, every page load) that the artifact does not acknowledge. For a change: (a) a query or call inside a loop (N+1); (b) an unbounded read: no limit, pagination or streaming; (c) a missing index for a new filter or join (cite the schema); (d) blocking or heavy work on a request path that could be deferred; (e) a cache that is never invalidated, or invalidated on every write."
-      }
-    },
-    "kinds": {
-      "create-prd": {
-        "rubric": "prd-doc",
-        "offer": [
-          "critical",
-          "ceo",
-          "cto",
-          "security",
-          "qa",
-          "ux",
-          "performance"
-        ]
-      },
-      "intake": {
-        "rubric": "doc",
-        "offer": [
-          "critical",
-          "ceo",
-          "cto",
-          "security",
-          "qa"
-        ]
-      },
-      "dump": {
-        "rubric": "doc",
-        "offer": [
-          "critical",
-          "ceo",
-          "qa"
-        ]
-      },
-      "gh-issue": {
-        "rubric": "doc",
-        "offer": [
-          "critical",
-          "cto",
-          "security",
-          "qa",
-          "ux",
-          "performance"
-        ]
-      },
-      "custom": {
-        "rubric": "change",
-        "offer": [
-          "critical",
-          "ceo",
-          "cto",
-          "security",
-          "qa",
-          "ux",
-          "performance"
-        ]
       }
     }
   }

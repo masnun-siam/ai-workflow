@@ -18,7 +18,7 @@ flowchart LR
     I -->|unblocks| E
 ```
 
-A human decides at three points: approving the PRD, settling a peer-review dispute, and merging.
+A human decides at three points: approving the PRD, deciding what to do at a peer-review cap, and merging.
 Nothing in this plugin merges a PR.
 
 ## Stages
@@ -72,10 +72,12 @@ Each round re-enters as a fresh headless session that reads the PR's state file 
 
 `/peer-review` runs a panel on one artifact: a draft PRD, or the session's change (the diff plus
 the final answer, checked against what was asked). Each picked lens (critical, CEO, CTO,
-security, QA, UX, performance) is a read-only `peer-reviewer` agent on Opus. The author revises
-and the lenses re-review until every one approves. `aiw peer-review` opens each round and
-records each verdict. A finding the author dismissed that its lens raises again is a dispute;
-the user settles it. The UI starts a panel from its **Peer review** box.
+security, QA, UX, performance) is a read-only `peer-reviewer` session on Opus. The UI starts one
+session per lens, collects each lens's closing `Verdict: approve|changes` line, and relays the
+verdicts to the root session, which revises the artifact. The same lens sessions then re-review,
+for up to 5 rounds. A panel that still has a `changes` after round 5 stops as "cap reached" and
+the user decides. Verdicts are free text: nothing checks them beyond the verdict line. The UI
+starts a panel from its **Peer review** box.
 
 ## The UI
 

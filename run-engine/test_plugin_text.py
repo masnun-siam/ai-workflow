@@ -14,10 +14,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SELF = os.path.relpath(os.path.abspath(__file__), ROOT)
 SRC = os.path.expanduser("~/Documents/Projects/Personal/Shahria-skills")
 IMPORT_COMMIT = "0a487c6"
-KEPT_VERBS = {"ui", "paths", "ask", "ci", "threads", "peer-review"}  # peer-review goes in E2
+KEPT_VERBS = {"ui", "paths", "ask", "ci", "threads"}
 REMOVED_VERBS = (
     "init|route|precheck|classify|resolve-review|skip-review|set|stack|worktree|maintree|pr|gitnexus"
-    "|epic|refined|project-status|review"
+    "|epic|refined|project-status|review|peer-review"
 )
 # Allowed to name the old system: the record of what was removed, and the PRD/task list for it.
 EXEMPT = {"CHANGELOG.md", "docs/prds/dev-workflow-replacement.md", "docs/tasks/dev-workflow-replacement.md", SELF}
