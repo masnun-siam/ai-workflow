@@ -2,13 +2,14 @@ import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { BoardShell, colTabs } from './boardshell.js';
 import { ghChips } from './ghstatus.js';
-import { CardActions, LaneAutopilot } from './delivery_actions.js';
+import { CardActions, LaneAutopilot, CloseEpic } from './delivery_actions.js';
 import { IssueLink } from './issue.js';
 import { PrLink } from './pr.js';
 
 const html = htm.bind(h);
 
 export const COLUMNS = [
+  ['unrefined', 'Needs refinement'],
   ['ready', 'Ready'],
   ['in_progress', 'In progress'],
   ['draft_pr', 'Draft PR'],
@@ -61,7 +62,7 @@ export function lane(l, ctx = {}) {
       <span class=${atCap ? 'lane-running at-cap' : 'lane-running'}>${runningText(l.running, l.cap)}</span>
       ${l.autopilot && html`<span class="chip chip-running">autopilot on</span>`}
       ${!open && html`<span class="muted lane-empty">nothing open</span>`}
-      <span data-slot="lane-actions"><${LaneAutopilot} lane=${l} repo=${ctx.repo} onChange=${ctx.reload} /></span>
+      <span data-slot="lane-actions"><${LaneAutopilot} lane=${l} repo=${ctx.repo} onChange=${ctx.reload} /><${CloseEpic} lane=${l} repo=${ctx.repo} onChange=${ctx.reload} /></span>
     </summary>
     ${colTabs(key, COLUMNS.map(([k, label]) => [k, label, by[k].length]))}
     <div class="cols">

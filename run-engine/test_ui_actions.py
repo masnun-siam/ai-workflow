@@ -84,3 +84,32 @@ with tempfile.TemporaryDirectory() as co:
         except ValueError:
             pass
 print("ok  PRD: read with branch, save commits only that file, unchanged is a no-op, paths outside docs/prds refused")
+
+snap = {
+    "data": {
+        "issues": [
+            {"n": 1, "parent": None, "sub_issues": [4]},
+            {"n": 2, "parent": 1, "sub_issues": []},
+            {"n": 3, "parent": 9, "sub_issues": []},
+            {"n": 4, "parent": None, "sub_issues": []},
+        ]
+    }
+}
+assert ui_actions.open_children(snap, 1) == [2, 4]
+calls.clear()
+assert ui_actions.close_epic("o", "r", 1, [2, 4], ok_runner) == {"ok": True, "closed": [2, 4, 1]}
+assert [c[:3] for c in calls] == [["issue", "close", "2"], ["issue", "close", "4"], ["issue", "close", "1"]]
+n = {"i": 0}
+
+
+def fail_second(args):
+    n["i"] += 1
+    return ok_runner(args) if n["i"] != 2 else bad_runner(args)
+
+
+try:
+    ui_actions.close_epic("o", "r", 1, [2, 4], fail_second)
+    raise AssertionError("expected RuntimeError")
+except RuntimeError as e:
+    assert "#4" in str(e) and "closed so far: #2" in str(e), e
+print("ok  close epic: children (parent or sub-issue) first, then the epic; a failure says what closed")

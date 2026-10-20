@@ -121,7 +121,7 @@ export class Actions extends Component {
         onKeyDown=${(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && text.trim()) { e.preventDefault(); this.run('Comment', `${api}/comment`, { text }); } }}></textarea>
       <div class="iss-act-row">
         <button type="button" class="btn" disabled=${!text.trim() || !!busy} onClick=${() => this.run('Comment', `${api}/comment`, { text })}>${busy === 'Comment' ? 'Posting…' : 'Comment'}</button>
-        ${buttons.map((b) => html`<button type="button" class=${b.primary ? 'btn btn--primary' : 'btn'} disabled=${!!busy} onClick=${() => this.run(b.label, api + b.path, b.body || {}, b.confirm)}>${busy === b.label ? 'Working…' : b.label}</button>`)}
+        ${buttons.map((b) => html`<button type="button" class=${b.primary ? 'btn btn--primary' : 'btn'} disabled=${!!busy} onClick=${() => this.run(b.label, b.url || api + b.path, b.body || {}, b.confirm)}>${busy === b.label ? 'Working…' : b.label}</button>`)}
         ${err && html`<span role="alert" class="error">${err}</span>`}
         ${note && html`<span role="status" class="muted">${note}</span>`}
       </div>

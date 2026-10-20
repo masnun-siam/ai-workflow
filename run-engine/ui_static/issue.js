@@ -20,13 +20,15 @@ const info = (d) => ({ title: d.title, state: stateLabel(d), stateClass: `iss-${
 export const IssueDialog = ({ owner, repo, issue, onClose }) => html`
   <${Peek} api=${`/api/issues/${owner}/${repo}/${issue}`} refText=${`${owner}/${repo} #${issue}`} fallbackTitle=${`Issue #${issue}`}
     fallbackUrl=${issueUrl(owner, repo, issue)} info=${info} onClose=${onClose}>${(d, reload) => html`<${IssueBody} d=${d} />
-    <${Actions} api=${`/api/issues/${owner}/${repo}/${issue}`} reload=${reload} buttons=${issueButtons(d)} />`}<//>`;
+    <${Actions} api=${`/api/issues/${owner}/${repo}/${issue}`} reload=${reload} buttons=${issueButtons(d, `${owner}/${repo}`)} />`}<//>`;
 
 // Close or reopen; a PR's issue view only comments (merge lives in the PR drawer).
-export function issueButtons(d) {
+export function issueButtons(d, slug) {
   if (d.is_pr) return [];
   if (d.state === 'open') {
+    const refined = (d.labels || []).some((l) => l.name === 'refined');
     return [
+      ...(slug ? [{ label: refined ? 'Refine again' : 'Refine', url: '/api/start', body: { repo: slug, skill: 'refine-issues', arg: String(d.number), via: 'headless' } }] : []),
       { label: 'Close as completed', path: '/state', body: { state: 'closed', reason: 'completed' } },
       { label: 'Close as not planned', path: '/state', body: { state: 'closed', reason: 'not_planned' } },
     ];

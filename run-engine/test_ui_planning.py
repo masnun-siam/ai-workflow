@@ -76,6 +76,8 @@ assert by["appr"]["column"] == "tasks_filed" and (by["appr"]["issues"], by["appr
 )
 assert by["done"]["column"] == "refined" and by["done"]["unrefined"] == []
 assert len(by["appr"]["unrefined"]) == 5
+assert len(by["appr"]["children"]) == 8 and sum(c["refined"] for c in by["appr"]["children"]) == 3
+assert set(by["appr"]["children"][0]) == {"n", "title", "refined"}
 assert by["fresh"]["column"] == "approved" and by["fresh"]["epic"] is None and by["fresh"]["panel"] is None
 
 os.remove(os.path.join(co, "docs", "prds", "drft.md"))  # deleted draft: card gone next build

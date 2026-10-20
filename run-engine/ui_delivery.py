@@ -91,8 +91,10 @@ def build(repo, snapshot, sessions, grind_index, settings, cleanup_flags) -> dic
             column = "in_progress"
         elif "refined" in i["labels"]:
             column = "ready"
+        elif i["parent"] in epics:
+            column = "unrefined"  # an epic's child still to refine
         else:
-            continue  # non-refined, no PR, no session: the Planning board covers it
+            continue  # a loose non-refined issue: not on the board
         lanes[i["parent"] if i["parent"] in epics else None].append(
             {
                 "n": i["n"],

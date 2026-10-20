@@ -73,7 +73,7 @@ const t = D.board(data, ctx);
 const lanes = find('details', t).filter((s) => String(s.props['aria-label']).match(/^(Epic|No epic)/));
 assert.deepEqual(lanes.map((l) => l.props['aria-label']), ['Epic #40', 'No epic']);
 const cols = find('section', lanes[0]).filter((s) => s.props['aria-label'] !== 'Epic #40');
-assert.deepEqual(cols.map((c) => c.props['aria-label']), ['Ready', 'In progress', 'Draft PR', 'In review', 'Grinding', 'Merged']);
+assert.deepEqual(cols.map((c) => c.props['aria-label']), ['Needs refinement', 'Ready', 'In progress', 'Draft PR', 'In review', 'Grinding', 'Merged']);
 const inCol = (name) => text(cols.find((c) => c.props['aria-label'] === name));
 assert.match(inCol('Ready'), /Blocked one/); assert.match(inCol('In progress'), /Running one/); assert.match(inCol('Draft PR'), /Draft/);
 assert.match(inCol('In review'), /Review/); assert.match(inCol('Grinding'), /Grind/); assert.match(inCol('Merged'), /Done/);
