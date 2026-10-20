@@ -413,7 +413,7 @@ ok("status: not run / unfinished / approved / cap reached, from the last round's
 offers = pr.offers()
 assert offers["default"] == ["critical"] and offers["kinds"]["dump"] == ["critical", "ceo", "qa"], offers
 assert pr.check_lenses("create-prd", ["qa", "critical", "qa"]) == ["qa", "critical"]
-for kind, picked in (("dump", ["cto"]), ("run-issue", ["critical"]), ("create-prd", [])):
+for kind, picked in (("dump", ["cto"]), ("implement-issue", ["critical"]), ("create-prd", [])):
     try:
         pr.check_lenses(kind, picked)
         raise AssertionError((kind, picked))

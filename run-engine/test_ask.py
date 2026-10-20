@@ -138,7 +138,7 @@ def ask(sid, args=(), stdin=None, env_extra=None, drop=()):
 
 def new_sid():
     os.environ["CLAUDE_PLUGIN_DATA"] = tempfile.mkdtemp()
-    return ui_sessions.create("/run-issue 1", tempfile.mkdtemp())["id"]
+    return ui_sessions.create("/implement-issue 1", tempfile.mkdtemp())["id"]
 
 
 def meta_bytes(sid):
@@ -272,12 +272,12 @@ def env_has(fk, sid, prompt=True):
 def t_spawn_env_argv():
     assert "--append-system-prompt" not in ui_runner.CLAUDE_ARGS, ui_runner.CLAUDE_ARGS
     fk, work = setup("normal")
-    sid = ui_runner.start("/run-issue 1", work)["id"]
+    sid = ui_runner.start("/implement-issue 1", work)["id"]
     wait_status(sid, {"done", "failed"})
     wait_finished(sid)
     env_has(fk, sid, prompt=False)
-    assert lines(fk, "argv").split("\n")[:-1] == ui_runner.CLAUDE_ARGS + ["/run-issue 1"]
-    sid = ui_runner.start("/run-issue 1", work, gate_questions=True)["id"]
+    assert lines(fk, "argv").split("\n")[:-1] == ui_runner.CLAUDE_ARGS + ["/implement-issue 1"]
+    sid = ui_runner.start("/implement-issue 1", work, gate_questions=True)["id"]
     wait_status(sid, {"done", "failed"})
     wait_finished(sid)
     env_has(fk, sid)
@@ -311,7 +311,7 @@ def post_answer(sid, round_id, answers):
 
 def e2e(answers, resume_mode):
     fk, work = setup("aiwask")
-    rec = ui_runner.start("/run-issue 1", work, gate_questions=True)
+    rec = ui_runner.start("/implement-issue 1", work, gate_questions=True)
     sid = rec["id"]
     wait_status(sid, {"waiting", "failed", "done"})
     wait_finished(sid)
@@ -355,13 +355,13 @@ def t_e2e_revise_free_text():
 
 def t_e2e_abort():
     fk, work = setup("aiwask")
-    run_json = os.path.join(work, "run.json")
+    run_json = os.path.join(work, "state.json")
     with open(run_json, "w") as f:
         f.write('{"ledger": "untouched"}')
     with open(run_json, "rb") as f:
         before = f.read()
     os.environ["FAKE_CLAUDE_MODE"] = "aiwask"
-    rec = ui_runner.start("/run-issue 1", work, gate_questions=True)
+    rec = ui_runner.start("/implement-issue 1", work, gate_questions=True)
     sid = rec["id"]
     wait_status(sid, {"waiting", "failed", "done"})
     wait_finished(sid)
@@ -374,12 +374,12 @@ def t_e2e_abort():
     assert ui_sessions.load(sid)["status"] == "done"
     with open(run_json, "rb") as f:
         assert f.read() == before
-    ok("Abort: resume exits without asking, session done, run.json untouched")
+    ok("Abort: resume exits without asking, session done, state.json untouched")
 
 
 def t_missing_record():
     fk, work = setup("aiwaskfail")
-    sid = ui_runner.start("/run-issue 1", work, gate_questions=True)["id"]
+    sid = ui_runner.start("/implement-issue 1", work, gate_questions=True)["id"]
     wait_status(sid, {"done", "failed", "waiting"})
     wait_finished(sid)
     r = ui_sessions.load(sid)
@@ -390,70 +390,24 @@ def t_missing_record():
 
 def t_interactive_unchanged():
     fk, work = setup("normal")
-    sid = ui_runner.start("/run-issue 1", work)["id"]
+    sid = ui_runner.start("/implement-issue 1", work)["id"]
     wait_status(sid, {"done", "failed", "waiting"})
     wait_finished(sid)
     assert ui_sessions.load(sid)["status"] == "done"
     ok("clean run without aiw ask still ends done")
 
 
-# ---- commands/run-issue.md structure ------------------------------------------
-with open(os.path.join(ROOT, "commands", "run-issue.md")) as _f:
-    DOC = _f.read()
-
-
-def blocks(doc=None):
+def blocks(doc):
     """Paragraphs, further split at list-item starts, whitespace-normalised."""
     out = []
-    for para in re.split(r"\n\s*\n", DOC if doc is None else doc):
+    for para in re.split(r"\n\s*\n", doc):
         for item in re.split(r"\n(?=\s*(?:\d+\.|-)\s)", para):
             out.append(" ".join(item.split()))
     return out
 
 
-SITES = {
-    "Gate 1 (phase 1)": "Then gate with `AskUserQuestion`",
-    "Gate 2a (phase 7)": "**Confirmed, continue**, **Hold here**",
-    "epic step 3": "GATE 1 — the decomposition",
-    "epic step 4 per-child": "Fire exactly one",
-    "epic step 6 closer": "then gates as phase 7 does",
-}
-
-
 def headless_branch(b):
     return "aiw ask" in b and re.search(r"headless", b, re.I) and re.search(r"end (your|the) turn", b, re.I)
-
-
-def t_doc_sites():
-    bs = blocks()
-    for name, anchor in SITES.items():
-        hits = [b for b in bs if anchor in b]
-        assert len(hits) == 1, (name, len(hits))
-        assert headless_branch(hits[0]), f"{name}: no same-paragraph headless `aiw ask` + end-turn branch"
-    ok("all 5 gate sites carry a same-paragraph headless aiw ask + end-turn branch")
-
-
-def t_doc_no_unbranched_ask():
-    bs = [
-        b
-        for b in blocks()
-        if "AskUserQuestion" in b and not b.startswith("allowed-tools:") and "allowed-tools:" not in b
-    ]
-    bare = [b[:70] for b in bs if "aiw ask" not in b]
-    assert len(bs) >= 5 and not bare, bare
-    ok("no AskUserQuestion paragraph lacks an aiw ask branch")
-
-
-def t_doc_permissions():
-    front = DOC.split("---")[1]
-    allowed = next(line for line in front.splitlines() if line.startswith("allowed-tools:"))
-    assert "AskUserQuestion" in allowed and "Bash(aiw:*)" in allowed
-    cmds = re.findall(r"`((?:\w[^`]*?)?aiw ask[^`]*)`|^\s*((?:\S.*?)?aiw ask.*)$", DOC, re.M)
-    examples = [a or b for a, b in cmds if "--json" in (a or b) or "<<" in (a or b)]
-    assert examples, "no example aiw ask command in run-issue.md"
-    assert all(e.strip().startswith("aiw ") for e in examples), examples
-    assert not re.search(r"\|\s*aiw ask", DOC)
-    ok("example aiw ask starts with `aiw `, no pipe prefix; allowed-tools keeps both")
 
 
 # ---- #128 interview rounds (prd, intake, gh-issue, dump, worklog) --------------
@@ -615,19 +569,7 @@ def t_iv_concurrent_ask():
 
 
 IV_SITES = {
-    "skills/create-prd/SKILL.md": [
-        "Invoke the `grilling` skill",
-        "Show the **full** draft",
-        '"push to the wiki?" confirmation',
-    ],
-    "commands/intake.md": ["Decomposition check"],
-    "commands/gh-issue.md": [
-        "Use the grill-me skill",
-        "Present the list in exactly one",
-        "Confirm via AskUserQuestion",
-        "ask via AskUserQuestion (`multiSelect: true`) which ones",
-        "ask the user to pick from that field's real",
-    ],
+    # imported dev-workflow skills carry no per-site branch; the runner's HEADLESS_PROMPT covers them
     "skills/dump/SKILL.md": ["Proceed? [y"],
     "agents/worklog-runner.md": ["If `needsConfirm` is non-empty", "reference any issue or PR"],
 }
@@ -674,7 +616,6 @@ def t_iv_interactive_unchanged():
         for e in re.findall(r"^\s*(\S*\s*aiw ask\b.*)$", d, re.M):
             if "--json" in e or "<<" in e:
                 assert e.strip().startswith("aiw ") and "|" not in e.split("aiw ask")[0], (path, e)
-    assert "AskUserQuestion" in rd("skills", "create-prd", "SKILL.md").split("---")[1]
     assert re.search(r"^tools:.*AskUserQuestion", rd("agents", "worklog-runner.md"), re.M)
     assert not bad, "\n    ".join(bad)
     ok("iv: interactive branch retained; tool lists keep AskUserQuestion")
@@ -710,9 +651,6 @@ BASE = (
     t_e2e_abort,
     t_missing_record,
     t_interactive_unchanged,
-    t_doc_sites,
-    t_doc_no_unbranched_ask,
-    t_doc_permissions,
 )
 for _fn in INTERVIEWS if "--interviews" in sys.argv else BASE + INTERVIEWS:
     check(_fn)

@@ -1,6 +1,5 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
-import { runHref, stationLabel } from './board.js';
 import { shortRepo } from './fmt.js';
 
 const html = htm.bind(h);
@@ -18,7 +17,7 @@ export function keyIntent(e, chord = false) {
   if (e.metaKey || e.ctrlKey || e.altKey) return null;
   if (key === 'Escape') return { type: 'escape' };
   if (isTyping(e.target)) return null;
-  if (chord) return { b: go('#/'), s: go('#/sessions'), d: go('#/dispatch'), f: go('#/flow'), n: go('#/new') }[key] || null;
+  if (chord) return { s: go('#/sessions'), n: go('#/new') }[key] || null;
   switch (key) {
     case 'g': return { type: 'chord' };
     case 'n': return go('#/new');
@@ -68,29 +67,15 @@ export function moveFocus(dir, doc = document) {
   return true;
 }
 
-export function paletteItems({ board, sessions, afk }) {
+export function paletteItems({ sessions, afk }) {
   const items = [
-    { id: 'nav-board', group: 'Go to', label: 'Board', detail: 'g b', href: '#/' },
     { id: 'nav-sessions', group: 'Go to', label: 'Sessions', detail: 'g s', href: '#/sessions' },
-    { id: 'nav-flow', group: 'Go to', label: 'Flow', detail: 'g f · idea to dispatched runs', href: '#/flow' },
-    { id: 'nav-dispatch', group: 'Go to', label: 'Dispatch', detail: 'g d · run a batch of issues', href: '#/dispatch' },
     { id: 'nav-new', group: 'Go to', label: 'New run', detail: 'n', href: '#/new' },
     { id: 'nav-settings', group: 'Go to', label: 'Settings', detail: 'Claude commands', href: '#/settings' },
     afk?.active
       ? { id: 'afk', group: 'Autopilot', label: "I'm back", detail: 'end AFK mode now', event: 'aiw:afk-back' }
       : { id: 'afk', group: 'Autopilot', label: 'Go AFK…', detail: 'autopilot for 30 min to 4 hours', event: 'aiw:afk' },
   ];
-  for (const col of (board && board.columns) || []) {
-    for (const card of col.cards || []) {
-      items.push({
-        id: `run-${card.owner}/${card.repo}#${card.issue}`,
-        group: 'Run',
-        label: `#${card.issue} ${card.title || card.repo}`,
-        detail: `${card.repo} · ${stationLabel(col.key)}`,
-        href: runHref(card),
-      });
-    }
-  }
   for (const s of sessions || []) {
     items.push({
       id: `session-${s.id}`,
@@ -115,10 +100,7 @@ export function filterItems(items, query, limit = 8) {
 
 export const SHORTCUTS = [
   ['⌘K / Ctrl+K', 'Command palette'],
-  ['g then b', 'Go to Board'],
   ['g then s', 'Go to Sessions'],
-  ['g then d', 'Go to Dispatch'],
-  ['g then f', 'Go to Flow'],
   ['n', 'New run'],
   ['j / k', 'Next / previous card'],
   ['h / l', 'Previous / next column'],
@@ -129,23 +111,14 @@ export const SHORTCUTS = [
 ];
 
 export class Palette extends Component {
-  state = { q: '', active: 0, board: null };
-
-  async componentDidMount() {
-    try {
-      const res = await fetch('/board.json', { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(8000) });
-      if (res.ok && !this.gone) this.setState({ board: await res.json() });
-    } catch {
-      // palette still offers navigation and sessions without board data
-    }
-  }
+  state = { q: '', active: 0 };
 
   componentWillUnmount() {
     this.gone = true;
   }
 
   items() {
-    return filterItems(paletteItems({ board: this.state.board, sessions: this.props.sessions, afk: this.props.afk }), this.state.q);
+    return filterItems(paletteItems({ sessions: this.props.sessions, afk: this.props.afk }), this.state.q);
   }
 
   pick = (item) => {

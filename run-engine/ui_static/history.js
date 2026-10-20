@@ -15,10 +15,6 @@ export function rowOutcome(s) {
 }
 
 export function transcriptHref(s) {
-  const l = s.link;
-  if (l && l.owner && l.repo && Number.isInteger(l.issue) && l.issue >= 1) {
-    return `#/run/${encodeURIComponent(l.owner)}/${encodeURIComponent(l.repo)}/${l.issue}`;
-  }
   return sessionHref(s);
 }
 

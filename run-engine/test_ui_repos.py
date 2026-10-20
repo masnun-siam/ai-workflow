@@ -78,7 +78,7 @@ set_registry(
     {"o/r": "Orange Repo", "z/last": "Zed", "only/proj": "Only In Projects"},
 )
 
-srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, [], boom)
+srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, [])
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 port = srv.server_address[1]
 HOST = f"127.0.0.1:{port}"
@@ -111,11 +111,11 @@ calls = []
 batches: list = []
 
 
-def fake_start(command_text, cwd, link=None, claude_cmd=None, gate_questions=False, flow_id=None, **kw):
+def fake_start(command_text, cwd, link=None, claude_cmd=None, gate_questions=False, **kw):
     calls.append((command_text, cwd, link))
     batches.append(kw.get("batch"))
     rec = ui_sessions.create(command_text, cwd, link, claude_cmd=claude_cmd)
-    return ui_sessions.update(rec["id"], flow_id=flow_id) if flow_id else rec
+    return rec
 
 
 def post(obj, raw=None, **kw):
@@ -171,20 +171,27 @@ try:
     set_registry({"o/r": REPO_A, "z/last": REPO_B}, {"o/r": "Orange Repo"})
 
     # ------------------------------------------------------------ build_command
-    assert ui_repos.build_command("run-issue", "116") == "/run-issue 116"
+    assert ui_repos.build_command("implement-issue", "116") == "/implement-issue 116"
     assert ui_repos.build_command("pr-grind", "") == "/pr-grind"
     assert ui_repos.build_command("pr-review", "5960") == "/pr-review 5960"
-    assert ui_repos.build_command("pr-fix-comments", "o/r#5960") == "/pr-fix-comments o/r#5960"
-    assert (
-        ui_repos.build_command("issue-to-pr", "https://github.com/o/r/issues/7")
-        == "/issue-to-pr https://github.com/o/r/issues/7"
-    )
+    for gone in ("run-" + "issue", "gh-issue", "fix-blockers", "pr-fix-comments", "issue-to-pr", "intake"):
+        assert gone not in ui_repos.NAMED, gone
+    for kept in (
+        "implement-issue",
+        "verifier-locally",
+        "docs-updater",
+        "flow",
+        "herdr-dispatch",
+        "peer-review",
+        "release-pr",
+        "sync-from-wasensi",
+    ):
+        assert ui_repos.build_command(kept, "x") == f"/{kept} x", kept
     assert (
         ui_repos.build_command("day", "") == "/day" and ui_repos.build_command("day", "call Abir") == "/day call Abir"
     )
     assert ui_repos.build_command("create-tasks", "docs/prds/x.md") == "/create-tasks docs/prds/x.md"
     assert "refine-issues" in ui_repos.NAMED and "create-prd" in ui_repos.NAMED and "prd" not in ui_repos.NAMED
-    assert ui_repos.build_command("fix-blockers", "40") == "/fix-blockers 40"
     assert ui_repos.MAX_PROMPT_CHARS == 32000
     ok("build_command units, MAX_PROMPT_CHARS")
 
@@ -198,16 +205,16 @@ try:
     s, p = post({"repo": "o/r", "command": "worklog", "args": "today"})
     assert s == 201 and batches[-1] is None, "no batch unless asked"
     print("  ok  batch: passed to the runner with the 3-at-once cap; validated")
-    s, p = post({"repo": "o/r", "command": "run-issue", "args": "7"})
+    s, p = post({"repo": "o/r", "command": "implement-issue", "args": "7"})
     assert s == 201, (s, p)
-    assert calls == [("/run-issue 7", REPO_A, {"owner": "o", "repo": "r", "issue": 7})] or (
+    assert calls == [("/implement-issue 7", REPO_A, {"owner": "o", "repo": "r", "issue": 7})] or (
         len(calls) == 1
-        and calls[0][0] == "/run-issue 7"
+        and calls[0][0] == "/implement-issue 7"
         and rp(calls[0][1]) == rp(REPO_A)
         and calls[0][2] == {"owner": "o", "repo": "r", "issue": 7}
     ), calls
     assert p == ui_server._public(ui_sessions.load(p["id"])), p
-    ok("run-issue o/r 7 -> 201 public record; start gets command, checkout cwd, link")
+    ok("implement-issue o/r 7 -> 201 public record; start gets command, checkout cwd, link")
 
     reset_sessions()
     for text in ("explain this repo", "/prd foo", "  spaced \n text  "):
@@ -265,28 +272,28 @@ try:
         return rec
 
     for status in ("starting", "running"):
-        rec = live("/run-issue 7", status)
-        s, p = post({"repo": "o/r", "command": "run-issue", "args": "7"})
+        rec = live("/implement-issue 7", status)
+        s, p = post({"repo": "o/r", "command": "implement-issue", "args": "7"})
         assert s == 409 and calls == [], (status, s, p, calls)
         assert "o/r#7" in err(p), p
         text = json.dumps(p)
         assert rec["id"] in text and "/api/sessions/" + rec["id"] in text, p
         assert p.get("link") == {"owner": "o", "repo": "r", "issue": 7}, p
-    ok("live run-issue -> 409 naming o/r#7, existing id, link, href; start not called")
+    ok("live implement-issue -> 409 naming o/r#7, existing id, link, href; start not called")
 
     rec = live("/pr-grind", "running")
     s, p = post({"repo": "o/r", "command": "pr-grind", "issue": 7})
     assert s == 409 and calls == [], (s, p)
     ok("pr-grind with explicit issue vs live pr-grind -> 409")
 
-    for text in ("/run-issue 7", "/ai-workflow:run-issue 7"):
-        live("/run-issue 7")
+    for text in ("/implement-issue 7", "/ai-workflow:implement-issue 7"):
+        live("/implement-issue 7")
         s, p = post({"repo": "o/r", "text": text})
         assert s == 409 and calls == [], (text, s, p)
-    ok("custom text spelling a run-issue command -> 409")
+    ok("custom text spelling a implement-issue command -> 409")
 
-    for text in ("/run-issue\n7", "/run-issue\t7"):
-        live("/run-issue 7")
+    for text in ("/implement-issue\n7", "/implement-issue\t7"):
+        live("/implement-issue 7")
         s, p = post({"repo": "o/r", "text": text})
         assert s == 409 and calls == [], (repr(text), s, p)
     ok("whitespace-variant custom text (newline/tab) -> 409, dup-check not bypassed")
@@ -294,41 +301,41 @@ try:
     reset_sessions()
     calls.clear()
     s, data, _ = req(
-        "/api/sessions", "POST", json.dumps({"repo": "o/r", "command": "run-issue", "args": "7 \u0000"}).encode()
+        "/api/sessions", "POST", json.dumps({"repo": "o/r", "command": "implement-issue", "args": "7 \u0000"}).encode()
     )
     assert s == 400, (s, data)
     assert not [r for r in ui_sessions.list_sessions() if r.get("status") in ("starting", "running")], (
         ui_sessions.list_sessions()
     )
-    s, p = post({"repo": "o/r", "command": "run-issue", "args": "7"})
+    s, p = post({"repo": "o/r", "command": "implement-issue", "args": "7"})
     assert s == 201, (s, p)
-    ok("NUL in args -> 400, no stuck record, next run-issue 7 -> 201")
+    ok("NUL in args -> 400, no stuck record, next implement-issue 7 -> 201")
 
     reset_sessions()
     dead = subprocess.Popen(["true"], start_new_session=True)
     dead.wait()
-    rec = ui_sessions.create("/run-issue 7", REPO_A, link={"owner": "o", "repo": "r", "issue": 7})
+    rec = ui_sessions.create("/implement-issue 7", REPO_A, link={"owner": "o", "repo": "r", "issue": 7})
     ui_sessions.update(rec["id"], status="running", pid=dead.pid)
-    s, p = post({"repo": "o/r", "command": "run-issue", "args": "7"})
+    s, p = post({"repo": "o/r", "command": "implement-issue", "args": "7"})
     assert s == 201, (s, p)
     ok("stale running record with gone process group does not block")
 
-    live("/run-issue 7")
-    s, p = post({"repo": "O/R", "command": "run-issue", "args": "7"})
+    live("/implement-issue 7")
+    s, p = post({"repo": "O/R", "command": "implement-issue", "args": "7"})
     assert s == 409, (s, p)
     ok("owner/repo compare is case-insensitive")
 
     for status in ("done", "failed", "stopped"):
-        live("/run-issue 7", status)
-        s, p = post({"repo": "o/r", "command": "run-issue", "args": "7"})
+        live("/implement-issue 7", status)
+        s, p = post({"repo": "o/r", "command": "implement-issue", "args": "7"})
         assert s == 201, (status, s, p)
     ok("terminal records never block")
 
-    live("/run-issue 7")
+    live("/implement-issue 7")
     for label, body in [
         ("other family", {"repo": "o/r", "command": "pr-grind", "issue": 7}),
-        ("other issue", {"repo": "o/r", "command": "run-issue", "args": "8"}),
-        ("other repo", {"repo": "z/last", "command": "run-issue", "args": "7"}),
+        ("other issue", {"repo": "o/r", "command": "implement-issue", "args": "8"}),
+        ("other repo", {"repo": "z/last", "command": "implement-issue", "args": "7"}),
     ]:
         s, p = post(body)
         assert s == 201, (label, s, p)
@@ -338,7 +345,7 @@ try:
     reset_sessions()
     calls.clear()
 
-    def slow_start(command_text, cwd, link=None, claude_cmd=None, gate_questions=False, flow_id=None):
+    def slow_start(command_text, cwd, link=None, claude_cmd=None, gate_questions=False):
         time.sleep(0.3)
         return ui_sessions.create(command_text, cwd, link)
 
@@ -346,7 +353,7 @@ try:
 
     def go():
         s, data, _ = req(
-            "/api/sessions", "POST", json.dumps({"repo": "o/r", "command": "run-issue", "args": "7"}).encode()
+            "/api/sessions", "POST", json.dumps({"repo": "o/r", "command": "implement-issue", "args": "7"}).encode()
         )
         results.append(s)
 
@@ -355,7 +362,7 @@ try:
         [t.start() for t in ts]
         [t.join() for t in ts]
     assert sorted(results) == [201, 409], results
-    ok("two simultaneous run-issue o/r#7 -> exactly one 201 and one 409")
+    ok("two simultaneous implement-issue o/r#7 -> exactly one 201 and one 409")
 
     # ------------------------------------------------------------ validation
     reset_sessions()
@@ -371,7 +378,7 @@ try:
         ("repo non-str", {"repo": 5, "text": "hi"}, None),
         ("text empty", {"repo": "o/r", "text": ""}, None),
         ("text whitespace", {"repo": "o/r", "text": " \n\t"}, None),
-        ("args non-str", {"repo": "o/r", "command": "run-issue", "args": 7}, None),
+        ("args non-str", {"repo": "o/r", "command": "implement-issue", "args": 7}, None),
         ("issue 0", {"repo": "o/r", "command": "pr-grind", "issue": 0}, None),
         ("issue -1", {"repo": "o/r", "command": "pr-grind", "issue": -1}, None),
         ("issue True", {"repo": "o/r", "command": "pr-grind", "issue": True}, None),
@@ -407,9 +414,9 @@ try:
 
     for args in ("#7", "7 --lean", "https://github.com/o/r/issues/7"):
         reset_sessions()
-        s, p = post({"repo": "o/r", "command": "run-issue", "args": args})
+        s, p = post({"repo": "o/r", "command": "implement-issue", "args": args})
         assert s == 201 and calls[0][2]["issue"] == 7, (args, s, p, calls)
-    ok("run-issue args '#7' / '7 --lean' / issue URL parse to issue 7")
+    ok("implement-issue args '#7' / '7 --lean' / issue URL parse to issue 7")
 
     # repo validation
     link = os.path.join(tmp, "link-to-plain")
@@ -446,15 +453,16 @@ try:
     assert s == 502 and "claude CLI not found" in err(json.loads(data)), (s, data)
     ok("RunnerError -> 502 {error}")
 
-    import ui_flows
-
-    fl = ui_flows.create({"repo": "o/r", "text": "idea"})
-    s, body = post({**good, "flow_id": fl["id"]})
-    assert s == 201 and ui_sessions.load(body["id"])["flow_id"] == fl["id"], (s, body)
-    for bad in ("f-00000000000000-000000", "../x", 5):
-        s, body = post({**good, "flow_id": bad})
-        assert s == 400 and "flow_id" in err(body), (bad, s, body)
-    ok("flow_id: an existing flow is passed to the runner; unknown or malformed ids are 400")
+    # pr-grind is keyed by PR (number or URL), separately from implement-issue on the same number
+    reset_sessions()
+    s, p = post({"repo": "o/r", "command": "pr-grind", "args": "https://github.com/o/r/pull/9"})
+    assert s == 201 and calls[0][0] == "/pr-grind https://github.com/o/r/pull/9" and calls[0][2]["issue"] == 9, (s, p)
+    ui_sessions.update(p["id"], status="running")
+    s, p2 = post({"repo": "o/r", "command": "pr-grind", "args": "9"})
+    assert s == 409 and p2["id"] == p["id"], (s, p2)
+    s, p3 = post({"repo": "o/r", "command": "implement-issue", "args": "9"})
+    assert s == 201, (s, p3)
+    ok("pr-grind: live grind for the PR -> 409; implement-issue with the same number is a different key")
 
     # ------------------------------------------------- folder picker + remember
     for plat, host, want in [("darwin", HOST, True), ("darwin", f"localhost:{port}", True), ("linux", HOST, False)]:
@@ -595,48 +603,31 @@ try:
     s, body, _ = req("/api/repos/register", "POST", json.dumps({"slug": "acme/other", "path": a}).encode())
     assert s == 400 and "origin" in json.loads(body)["error"], (s, body)
     ok("API: scan refuses non-absolute roots; register refuses an origin mismatch")
-    # --- grinding is opt-in: only worktree-off runs carry --grind (they grind in-session to hold the main
-    # tree); worktree-on runs never carry a grind flag, ui_grind.autostart grinds them when auto_grind is set
-    s, p = post({"repo": "o/r", "command": "run-issue", "args": "42", "worktree": False, "auto_grind": False})
-    assert s == 201 and calls[-1][0] == "/run-issue 42 --no-worktree", (s, p, calls)
-    s, p = post({"repo": "o/r", "command": "run-issue", "args": "43", "worktree": False, "auto_grind": True})
-    assert s == 201 and calls[-1][0] == "/run-issue 43 --no-worktree --grind", (s, p, calls)
-    s, p = post({"repo": "o/r", "command": "run-issue", "args": "44"})
-    assert s == 201 and calls[-1][0] == "/run-issue 44", (s, p, calls)
-    s, p = post({"repo": "o/r", "command": "run-issue", "args": "146", "auto_grind": False})
-    assert s == 201 and calls[-1][0] == "/run-issue 146", (s, p, calls)
-    s, p = post({"repo": "o/r", "command": "run-issue", "args": "147", "auto_grind": True})
-    assert s == 201 and calls[-1][0] == "/run-issue 147", (s, p, calls)
-    s, p = post({"repo": "o/r", "command": "run-issue", "args": "45", "worktree": "no"})
-    assert s == 400 and "worktree" in err(p)
-    ok("worktree:false appends --no-worktree (and --grind with auto_grind); worktree-on never carries a grind flag")
-    # --- review off: the prompt carries --no-review; on (the default) leaves it alone
-    s, p = post({"repo": "o/r", "command": "run-issue", "args": "46", "review": False})
-    assert s == 201 and calls[-1][0] == "/run-issue 46 --no-review", (s, p, calls)
-    s, p = post({"repo": "o/r", "command": "run-issue", "args": "47", "review": True})
-    assert s == 201 and calls[-1][0] == "/run-issue 47", (s, p, calls)
-    s, p = post({"repo": "o/r", "command": "run-issue", "args": "48", "review": "no"})
-    assert s == 400 and "review" in err(p)
-    ok("review:false appends --no-review; non-bool rejected")
+    # --- no legacy options: worktree / review / auto_grind never reach the prompt
+    for extra in ({"worktree": False}, {"review": False}, {"auto_grind": True}, {"flow_id": "f-1"}):
+        s, p = post({"repo": "o/r", "command": "implement-issue", "args": "42", **extra})
+        assert s == 201 and calls[-1][0] == "/implement-issue 42", (extra, s, p, calls)
+        reset_sessions()
+    ok("implement-issue builds /implement-issue <args> only; old engine options are ignored")
     # --- peer review: a list of lenses; doc commands get --review <list>, a custom prompt a review line
     s, p = post(
         {"repo": "o/r", "command": "create-prd", "args": "05-Work/P/F", "peer_review": ["critical", "qa", "critical"]}
     )
     assert s == 201 and calls[-1][0] == "/create-prd 05-Work/P/F --review critical,qa", (s, p, calls)
-    for cmd in ("intake", "dump", "gh-issue"):
+    for cmd in ("dump",):
         s, p = post({"repo": "o/r", "command": cmd, "args": "x", "peer_review": ["critical"]})
         assert s == 201 and calls[-1][0] == f"/{cmd} x --review critical", (cmd, s, p, calls)
     s, p = post({"repo": "o/r", "command": "create-prd", "args": "05-Work/P/G"})
     assert s == 201 and calls[-1][0] == "/create-prd 05-Work/P/G" and p.get("peer_review") is None, (s, p, calls)
     s, p = post({"repo": "o/r", "command": "dump", "args": "x", "peer_review": ["critical", "cto"]})
     assert s == 400 and "dump offers" in err(p) and not calls, "a lens the command doesn't offer is refused"
-    s, p = post({"repo": "o/r", "command": "run-issue", "args": "49", "peer_review": ["critical"]})
-    assert s == 400 and "no peer review" in err(p) and not calls, "run-issue has its own review"
+    s, p = post({"repo": "o/r", "command": "implement-issue", "args": "49", "peer_review": ["critical"]})
+    assert s == 400 and "no peer review" in err(p) and not calls, "implement-issue has its own review"
     for bad in (True, "yes", [], [1]):
         s, p = post({"repo": "o/r", "command": "create-prd", "args": "x", "peer_review": bad})
         assert s == 400 and "peer_review" in err(p), bad
     ok(
-        "peer_review: lens list appended as --review <list> to create-prd/intake/dump/gh-issue; not-offered, run-issue, non-list refused"
+        "peer_review: lens list appended as --review <list> to create-prd/dump; not-offered, implement-issue, non-list refused"
     )
 
     pr_root = os.path.join(data_dir, "peer-review", "custom")
@@ -683,11 +674,6 @@ try:
     ok(
         "custom prompt: fresh review dir, ask.md verbatim, review line with --dir/--lenses/--since HEAD, post-check, offers"
     )
-    s, body, _ = req("/api/maintree/release", "POST", json.dumps({"owner": "o", "repo": "r"}).encode())
-    assert s == 200 and json.loads(body) == {"released": False}, (s, body)
-    s, body, _ = req("/api/maintree/release", "POST", json.dumps({"owner": "o"}).encode())
-    assert s == 400, (s, body)
-    ok("API: maintree release answers {released}, 400 without owner/repo")
 finally:
     srv.shutdown()
     srv.server_close()

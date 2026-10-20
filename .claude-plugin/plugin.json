@@ -1,7 +1,7 @@
 {
   "name": "ai-workflow",
-  "version": "1.12.0",
-  "description": "Issue-to-reviewed-PR pipeline: /run-issue, 14 agents, a deterministic routing engine, and the review/grind/QA skills around it.",
+  "version": "2.0.0",
+  "description": "The dev-workflow process in one plugin: PRD, tasks, refined issues, /implement-issue, /pr-review, plus grind, peer review, herdr dispatch and the aiw ui.",
   "author": {
     "name": "Blubird Interactive"
   },
@@ -17,7 +17,7 @@
     "slack_owner_uid": {
       "type": "string",
       "title": "Slack owner user id",
-      "description": "Slack user id of the run owner \u2014 the @-mention target on the terminal message, e.g. U01ABCDEF23. Used for nothing else."
+      "description": "Slack user id of the PR owner \u2014 the @-mention target on grind's closing message, e.g. U01ABCDEF23. Used for nothing else."
     },
     "slack_review_channel": {
       "type": "string",

@@ -20,35 +20,19 @@ import time
 from datetime import datetime, timedelta, timezone
 
 import ci
-import review
 import shared
 import ui_sessions
 import ui_settings
 from dispatch import read_checkouts
-from shared import data_dir, ledger_path, run_dir_for, warn
-import ui_board
+from shared import data_dir, warn
 import ui_events
 
 HEADLESS_PROMPT = (
     "Headless run: ask via aiw ask, never AskUserQuestion. Gate questions go through "
     "`aiw ask --json '<AskUserQuestion input>'`; then end your turn. "
     "Never call ScheduleWakeup: a pending wakeup keeps this process alive, and the UI cannot take "
-    "an answer until it exits. "
-    "When running /run-issue, skip phase 10 (grinding): the aiw ui starts it on request."
+    "an answer until it exits."
 )
-# Sessions started from the guided Flow carry flow_id; skills read this line as their "Flow auto mode".
-FLOW_PROMPT = (
-    "Flow auto mode: this session is a step of the aiw ui guided Flow. Ask only grilling "
-    "questions; settle every other choice yourself as the command's 'Flow auto mode' section says. "
-    "Never run herdr or the herdr-dispatch skill and open no terminal tabs: dispatching is the "
-    "UI's own Dispatch step, and a trailing '→ next: herdr-dispatch …' line is only text the UI parses."
-)
-
-
-def _system(rec) -> str:
-    return HEADLESS_PROMPT + ("\n" + FLOW_PROMPT if (rec or {}).get("flow_id") else "")
-
-
 MAX_GRINDS = 2  # grind rounds running at once; idle loops cost nothing
 GRIND_PREFIX = "Start the review grind for PR "
 CLAUDE_ARGS = ["--print", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"]
@@ -171,7 +155,6 @@ def start(
     pass_fds=(),
     gate_questions=False,
     claude_cmd=None,
-    flow_id=None,
     batch=None,
 ) -> dict:
     """batch: (id, max) runs at most `max` sessions of that batch at once; the rest wait as "queued"
@@ -186,8 +169,6 @@ def start(
 
     claude_cmd = claude_cmd or ui_settings.default_cmd()
     sid = ui_sessions.create(command_text, cwd, link, claude_cmd=claude_cmd)["id"]
-    if flow_id:
-        ui_sessions.update(sid, flow_id=flow_id)
     if batch:
         with _batch_lock:
             busy = _batch_live(batch[0]) >= batch[1]
@@ -211,7 +192,7 @@ def start(
             note="queued: account is rate limited",
         )
     exe = _preflight(sid)
-    gate = ["--append-system-prompt", _system({"flow_id": flow_id})] if gate_questions else []
+    gate = ["--append-system-prompt", HEADLESS_PROMPT] if gate_questions else []
     return _spawn(
         sid,
         [*exe, *CLAUDE_ARGS, *gate, *extra_args, command_text],
@@ -253,7 +234,7 @@ def release_batch(batch) -> list:
             exe = _preflight(sid)
             _spawn(
                 sid,
-                [*exe, *CLAUDE_ARGS, "--append-system-prompt", _system(rec), rec["command"]],
+                [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, rec["command"]],
                 rec["cwd_path"],
                 cwd_path=rec["cwd_path"],
             )
@@ -277,11 +258,11 @@ def resume(sid: str, answer_text) -> dict:
     repo = rec.get("repo")
     path = read_checkouts().get(repo, repo)
     if not isinstance(path, str) or not os.path.isdir(path):
-        return _fallback(sid, answer_text, f"cwd is not a directory: {repo!r}")
+        _fail(sid, f"cannot resume: cwd is not a directory: {repo!r}")
     exe = _preflight(sid)
     return _spawn(
         sid,
-        [*exe, *CLAUDE_ARGS, "--append-system-prompt", _system(rec), "--resume", rec["session_id"], answer_text],
+        [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, "--resume", rec["session_id"], answer_text],
         path,
         answer=answer_text,
         ended_at=None,
@@ -340,66 +321,10 @@ def _deliver_queued(sid: str) -> None:
 
 
 def _issue_key(rec: dict):
-    """(repo, issue number) of a /run-issue session, else None."""
-    m = re.match(r"/(?:[\w-]+:)?run-issue\s+(.*)", rec.get("command") or "")
-    n = re.search(r"(?:^|\s|/issues/)#?(\d+)(?=\s|$)", m.group(1)) if m else None
-    return (rec.get("repo"), n.group(1)) if n else None
-
-
-def _fallback(sid: str, answer, reason: str) -> dict:
-    """A resume that could not start: re-enter a /run-issue run fresh from the Ledger, else hand off.
-
-    Reads run.json leniently (shared.read_json would die()); never writes the Ledger.
-    """
-    rec = ui_sessions.load(sid) or {}
-    repo = rec.get("repo")
-    key = _issue_key(rec)
-    checkouts = read_checkouts()
-    path = checkouts.get(repo)
-    if key and repo in checkouts and "/" in repo:
-        run_json = ledger_path(run_dir_for(os.path.join(data_dir(), "runs"), repo, int(key[1])))
-        if os.path.isfile(run_json):
-            if not (isinstance(path, str) and os.path.isdir(path)):
-                try:
-                    with open(run_json, encoding="utf-8") as f:
-                        ctx = json.load(f).get("context")
-                    path = ctx.get("repo")
-                except (OSError, ValueError, AttributeError):
-                    path = None
-            if isinstance(path, str) and os.path.isdir(path):
-                old = rec.get("cwd_path")
-                note = "resumed fresh from the Ledger: the previous claude session could not be resumed"
-                if old and old != path:
-                    note += f" (working directory changed from {old} to {path})"
-                exe = _preflight(sid)
-                return _spawn(
-                    sid,
-                    [
-                        *exe,
-                        *CLAUDE_ARGS,
-                        "--append-system-prompt",
-                        HEADLESS_PROMPT,
-                        f"/run-issue {key[1]}" + (f" {answer}" if answer else ""),
-                    ],
-                    path,
-                    cwd_path=path,
-                    ended_at=None,
-                    error=None,
-                    resumed_fresh=True,
-                    note=note,
-                    terminal_handoff=None,
-                    pending_answer=answer,
-                )
-    ui_sessions.update(
-        sid,
-        status="failed",
-        ended_at=_now(),
-        pending_question=None,
-        terminal_handoff=True,
-        pending_answer=answer,
-        error=f"cannot resume: {reason}",
-    )
-    return ui_sessions.load(sid)
+    """(repo, "<command>:<number>") of an /implement-issue or /pr-grind session, else None."""
+    m = re.match(r"/(?:[\w-]+:)?(implement-issue|pr-grind)\s+(.*)", rec.get("command") or "")
+    n = re.search(r"(?:^|\s|/issues/|/pull/)#?(\d+)(?=\s|$)", m.group(2)) if m else None
+    return (rec.get("repo"), f"{m.group(1)}:{n.group(1)}") if n else None
 
 
 def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None, resuming=False) -> None:
@@ -498,7 +423,9 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
             if is_error and (limit or _LIMIT_RE.search(first_err or "")):
                 _mark_limited(sid, limit, first_err)
             elif (answer or resuming) and rc != 0 and not saw_init and first_err is not None:
-                _fallback(sid, answer, first_err)  # resume itself failed; nothing was applied
+                ui_sessions.update(  # resume itself failed; nothing was applied
+                    sid, status="failed", ended_at=_now(), pending_question=None, error=f"cannot resume: {first_err}"
+                )
             elif proc is None and not (saw_result and not is_error):
                 ui_sessions.update(
                     sid,
@@ -742,7 +669,7 @@ def stop(sid: str) -> dict:
 
 
 def resume_stopped(sid: str, claude_cmd=None) -> dict:
-    """Continue a stopped, limited or failed session via --resume (Ledger fallback if that fails).
+    """Continue a stopped, limited or failed session via --resume (fails the session if that cannot continue).
 
     A limited session resumes with its unanswered answer, if any; claude_cmd rebinds it to another
     account first (its transcript is copied into that account's config dir).
@@ -776,23 +703,23 @@ def resume_stopped(sid: str, claude_cmd=None) -> dict:
         _stopping.discard(sid)
     prompt = (rec.get("pending_answer") if rec.get("status") == "limited" else None) or CONTINUE_PROMPT
     if not isinstance(path, str) or not os.path.isdir(path):
-        return _fallback(sid, None, f"cwd is not a directory: {repo!r}")
+        _fail(sid, f"cannot resume: cwd is not a directory: {repo!r}")
     if not rec.get("session_id"):
         if rec.get("status") == "limited":  # limited before claude ever reported a session: start over
             exe = _preflight(sid)
             return _spawn(
                 sid,
-                [*exe, *CLAUDE_ARGS, "--append-system-prompt", _system(rec), rec["command"]],
+                [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, rec["command"]],
                 path,
                 cwd_path=path,
                 ended_at=None,
                 error=None,
             )
-        return _fallback(sid, None, "no claude session_id")
+        _fail(sid, "cannot resume: session has no claude session_id")
     exe = _preflight(sid)
     return _spawn(
         sid,
-        [*exe, *CLAUDE_ARGS, "--append-system-prompt", _system(rec), "--resume", rec["session_id"], prompt],
+        [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, "--resume", rec["session_id"], prompt],
         path,
         resuming=True,
         cwd_path=path,
@@ -947,8 +874,8 @@ def prgrind_tick(path: str, now=None) -> str:
         due = True
         if "next-poll" in h:
             try:
-                due = review._ts(h["next-poll"]) <= now
-            except TypeError:
+                due = datetime.fromisoformat(h["next-poll"].replace("Z", "+00:00")) <= now
+            except (TypeError, ValueError, AttributeError):
                 warn(f"pr-grind tick: unparseable next-poll {h['next-poll']!r} in {path}")
         trigger = due
         try:
@@ -973,7 +900,7 @@ def prgrind_tick(path: str, now=None) -> str:
         if not trigger:
             return "idle"
 
-        # a grind begun inside /run-issue has no /pr-grind session: take the checkout from any session on this repo
+        # a grind begun elsewhere has no /pr-grind session: take the checkout from any session on this repo
         same = recs or [
             r
             for r in ui_sessions.list_sessions()
@@ -989,11 +916,10 @@ def prgrind_tick(path: str, now=None) -> str:
             return "queued"  # next-poll is untouched, so the next tick retries
         _set_header(path, "next-poll", _iso(now + timedelta(seconds=PRGRIND_HEARTBEAT)))
         try:
-            issue = ui_board.issue_for_pr(pr_url)  # a link naming the issue puts the round in that run's Sessions tab
             start(
                 cmd,
                 cwd,
-                link={"owner": h["owner"], "repo": h["repo"], "issue": issue} if issue else pr_url,
+                link=pr_url,
                 extra_args=["--append-system-prompt", REENTRY_PROMPT],
                 env_extra={"AIW_HEADLESS": "1"},
                 pass_fds=[lock.fileno()],

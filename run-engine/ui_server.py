@@ -17,39 +17,25 @@ import signal
 import socket
 import subprocess
 import sys
-from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qs, unquote, urlsplit
 
 import peer_review
 import ui_afk
 import ui_cleanup
-import ui_dispatch
-import ui_flows
 import ui_events
-import maintree
-import ui_options
 import ui_grind
 import ui_issue
+import ui_migrate
 import ui_pr
 import ui_repos
 import ui_runner
 import ui_sessions
 import ui_settings
-import ui_status
 import ui_tailscale
 import ui_usage
 import ui_vault
 import shared
 from shared import die
-from ui_board import (
-    build_board,
-    fetch_title,
-    known_projects,
-    plausible_repo,
-    load_run,
-    memoize_title_fetcher,
-    scan_records,
-)
 
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
@@ -130,13 +116,16 @@ def _public(rec: dict) -> dict:
         "limit_resets_at": rec.get("limit_resets_at"),
         "limit_type": rec.get("limit_type"),
         "auto_resume": rec.get("auto_resume"),
-        "flow_id": rec.get("flow_id"),
         "no_repo": rec.get("no_repo") is True,
         "vault_folder": rec.get("vault_folder"),
         "peer_review": peer_review.status(rec["peer_review_dir"]) if rec.get("peer_review_dir") else None,
         "repo_path": p,
         "resume_command": f"cd {shlex.quote(p)} && claude --resume {shlex.quote(sid)}" if p and sid else None,
     }
+
+
+# engine-era API prefixes that no longer exist (POST answers 404, not 405); the PR merge endpoint is gone too
+_REMOVED = [["api", p] for p in ("runs", "pipelines", "flows", "notes", "dispatch", "maintree", "grind", "cleanup")]
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
@@ -164,16 +153,6 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             _serve_static(self, path[len("/static/") :])
         elif path == "/api/health":
             self._send(200, "application/json; charset=utf-8", b'{"ok": true}')
-        elif path == "/board.json":
-            board = build_board(scan_records(), known_projects(), self.server.fetch_title)
-            member = ui_dispatch.membership()
-            gidx = ui_grind.index()
-            for column in board["columns"]:
-                for card in column["cards"]:
-                    card["grind"] = ui_grind.for_card(gidx, card["owner"], card["repo"], card["issue"], card["pr"])
-                    card["gh"] = _gh_status(card["owner"], card["repo"], card["issue"], card["pr"], card["branch"])
-                    card["pipeline"] = member.get(f"{card['owner']}/{card['repo']}#{card['issue']}".lower())
-            self._send(200, "application/json; charset=utf-8", json.dumps(board).encode("utf-8"))
         elif path == "/api/repos":
             self._json(
                 200,
@@ -197,39 +176,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 self._json(400, {"error": str(e)})
         elif path == "/api/peer-review":
             self._json(200, peer_review.offers())
-        elif path == "/api/cleanup":
-            items = list(_TITLE_POOL.map(ui_cleanup.describe, ui_cleanup.find_targets()))
-            for it in items:  # the cached title, so the list reads as work, not as owner/repo#N
-                title = self.server.fetch_title(it["owner"], it["repo"], it["issue"]) if it.get("owner") else None
-                it["title"] = None if not title or title.endswith("(title unavailable)") else title
-            self._json(200, {"items": items})
-        elif path == "/api/flows":
-            q = parse_qs(urlsplit(self.path).query)
-            self._json(200, {"flows": [ui_flows.summary(f) for f in ui_flows.list_all(q.get("archived") == ["1"])]})
-        elif path.startswith("/api/flows/") and path.endswith("/issues") and len(path.split("/")) == 5:
-            body = ui_flows.issues_for(path.split("/")[3])
-            self._json(200, body) if body is not None else self._json(404, {"error": "not found"})
-        elif path.startswith("/api/flows/") and len(path.split("/")) == 4:
-            f = ui_flows.load(path.split("/")[3])
-            self._json(200, f) if f else self._json(404, {"error": "not found"})
-        elif path == "/api/notes":
-            q = parse_qs(urlsplit(self.path).query)
-            try:
-                self._json(200, ui_flows.read_note((q.get("path") or [""])[0]))
-            except ui_flows.NotFound:
-                self._json(404, {"error": "note not found"})
-            except ValueError as e:
-                self._json(400, {"error": str(e)})
-        elif path == "/api/pipelines":
-            self._json(200, {"pipelines": [ui_dispatch.summary(p) for p in ui_dispatch.list_all()]})
-        elif path.startswith("/api/pipelines/"):
-            body = ui_dispatch.detail(path.split("/")[3], _gh_status) if len(path.split("/")) == 4 else None
-            if body:
-                owner, _, repo = body["slug"].partition("/")
-                gidx = ui_grind.index()
-                for it in body["items"]:
-                    it["grind"] = ui_grind.for_card(gidx, owner, repo, it["issue"], (it.get("run") or {}).get("pr"))
-            self._json(200, body) if body else self._json(404, {"error": "not found"})
+        elif path == "/api/sessions/cleanup":
+            self._json(200, {"items": ui_cleanup.find_targets()})
         elif path == "/api/sessions":
             recs = ui_sessions.list_sessions()
             body = {
@@ -247,8 +195,6 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 and (len(parts) == 4 or parts[4] == "stream")
             ):
                 self._session(parts[3], len(parts) == 5)
-            elif len(parts) == 6 and parts[:3] == ["", "api", "runs"]:
-                self._run(parts[3], parts[4], parts[5])
             elif len(parts) == 6 and parts[:3] == ["", "api", "issues"]:
                 if ui_issue.valid(*parts[3:]):
                     self._json(*ui_issue.fetch(*parts[3:]))
@@ -260,11 +206,6 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                     self._json(*ui_issue.open_items(parts[3], parts[4], kind))
                 else:
                     self._json(400, {"error": "bad repo"})
-            elif len(parts) == 7 and parts[:3] == ["", "api", "pulls"] and parts[6] == "merge":
-                if ui_pr.valid(*parts[3:6]):
-                    self._json(*ui_pr.readiness(*parts[3:6]))
-                else:
-                    self._json(400, {"error": "bad pull request id"})
             elif len(parts) == 6 and parts[:3] == ["", "api", "pulls"]:
                 if ui_pr.valid(*parts[3:]):
                     self._json(*ui_pr.fetch(*parts[3:]))
@@ -272,25 +213,6 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                     self._json(400, {"error": "bad pull request id"})
             else:
                 self._send(404, "text/plain; charset=utf-8", b"not found")
-
-    def _run(self, owner: str, repo: str, n: str) -> None:
-        try:
-            body = load_run(owner, repo, n)
-        except ValueError:
-            self._send(400, "text/plain; charset=utf-8", b"bad run id")
-            return
-        if body is None:
-            self._send(404, "text/plain; charset=utf-8", b"not found")
-            return
-        body["title"] = self.server.fetch_title(owner, repo, int(n))
-        body["gh"] = _gh_status(owner, repo, int(n), body["pr"], body["branch"])
-        body["grind"] = ui_grind.for_card(ui_grind.index(), owner, repo, int(n), body["pr"])
-        body["maintree"] = maintree.for_issue(owner, repo, int(n))
-        sess = ui_options.session_of(owner, repo, int(n))
-        body["autoGrind"] = None if sess is None else sess.get("auto_grind") is True
-        if body["grind"] and body["grind"]["state"] == "paused":
-            body["grind"] = {**body["grind"], "message": ui_grind.last_message(owner, repo, int(n))}
-        self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
 
     def _session(self, sid: str, stream: bool) -> None:
         try:
@@ -336,12 +258,6 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         parts = urlsplit(self.path).path.split("/")
         if parts == ["", "api", "sessions"]:
             self._start()
-        elif len(parts) == 7 and parts[:3] == ["", "api", "pulls"] and parts[6] == "merge":
-            # squash-merges a PR the user confirmed in the UI's merge dialog
-            if ui_pr.valid(*parts[3:6]):
-                self._json(*ui_pr.merge(*parts[3:6]))
-            else:
-                self._json(400, {"error": "bad pull request id"})
         elif parts == ["", "api", "repos", "browse"]:
             body = self._read_body()
             if body is None:
@@ -350,7 +266,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 self._json(200, {"path": ui_repos.browse_folder(body.get("start"))})
             else:
                 self._json(403, {"error": "folder picker is only available locally on macOS"})
-        elif parts == ["", "api", "cleanup"]:
+        elif parts == ["", "api", "sessions", "cleanup"]:
             self._cleanup()
         elif parts == ["", "api", "vault", "suggest"]:
             body = self._read_body()
@@ -375,36 +291,6 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             )
         elif parts == ["", "api", "repos", "scan"]:
             self._dispatch(self._scan)
-        elif parts[:3] == ["", "api", "dispatch"] and parts[3:] == ["preview"]:
-            self._dispatch(lambda b: ui_dispatch.preview(b.get("input"), b.get("repo")))
-        elif parts == ["", "api", "flows"]:
-            self._dispatch(ui_flows.create, 201)
-        elif len(parts) == 5 and parts[:3] == ["", "api", "flows"] and parts[4] in ("update", "archive", "unarchive"):
-            self._dispatch(
-                lambda b: (
-                    ui_flows.update(parts[3], b)
-                    if parts[4] == "update"
-                    else ui_flows.set_archived(parts[3], parts[4] == "archive")
-                )
-            )
-        elif parts == ["", "api", "pipelines"]:
-            self._dispatch(ui_dispatch.create, 201)
-        elif len(parts) == 5 and parts[:3] == ["", "api", "pipelines"] and parts[4] == "delete":
-            self._dispatch(lambda b: ui_dispatch.delete(parts[3]) or {"ok": True})
-        elif len(parts) == 5 and parts[:3] == ["", "api", "pipelines"]:
-            self._dispatch(lambda b: ui_dispatch.act(parts[3], parts[4], b))
-        elif len(parts) == 7 and parts[:3] == ["", "api", "pipelines"] and parts[4] == "items" and parts[5].isdigit():
-            self._dispatch(lambda b: ui_dispatch.act(parts[3], parts[6], b, issue=int(parts[5])))
-        elif parts == ["", "api", "maintree", "release"]:
-            self._maintree_release()
-        elif len(parts) == 7 and parts[:3] == ["", "api", "runs"] and parts[6] == "options" and parts[5].isdigit():
-            self._run_options(parts[3], parts[4], int(parts[5]))
-        elif (
-            len(parts) == 4
-            and parts[:3] == ["", "api", "grind"]
-            and parts[3] in ("start", "pause", "resume", "rerun-ci", "reply")
-        ):
-            self._grind(parts[3])
         elif parts == ["", "api", "settings", "test"]:
             body = self._read_body()
             if body is not None:
@@ -421,51 +307,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._prompt(parts[3])
         elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] in ("stop", "resume", "cancel-auto"):
             {"stop": self._stop, "resume": self._resume, "cancel-auto": self._cancel_auto}[parts[4]](parts[3])
+        elif parts[1:3] in _REMOVED or (parts[1:3] == ["api", "pulls"] and parts[-1:] == ["merge"]):
+            self._send(404, "text/plain; charset=utf-8", b"not found")
         else:
             self._method_not_allowed(guarded=True)
-
-    def _run_options(self, owner: str, repo: str, n: int) -> None:
-        body = self._read_body()
-        if body is None:
-            return
-        try:
-            self._json(200, ui_options.apply(owner, repo, n, body))
-        except ValueError as e:
-            self._json(400, {"error": str(e)})
-
-    def _maintree_release(self) -> None:
-        body = self._read_body()
-        if body is None:
-            return
-        owner, repo = body.get("owner"), body.get("repo")
-        if not (isinstance(owner, str) and isinstance(repo, str) and owner and repo):
-            self._json(400, {"error": "owner and repo are required"})
-            return
-        self._json(200, {"released": maintree.release(f"{owner}/{repo}")})
-
-    def _grind(self, action: str) -> None:
-        body = self._read_body()
-        if body is None:
-            return
-        owner, repo, issue = body.get("owner"), body.get("repo"), body.get("issue")
-        if not (
-            isinstance(owner, str) and isinstance(repo, str) and isinstance(issue, int) and not isinstance(issue, bool)
-        ):
-            self._json(400, {"error": "owner, repo and issue are required"})
-            return
-        try:
-            status, res = (
-                ui_grind.request(owner, repo, issue)
-                if action == "start"
-                else ui_grind.rerun_ci(owner, repo, issue)
-                if action == "rerun-ci"
-                else ui_grind.reply(owner, repo, issue, body.get("text"))
-                if action == "reply"
-                else ui_grind.control(owner, repo, issue, action)
-            )
-        except ValueError as e:
-            status, res = 400, {"error": str(e)}
-        self._json(status, res)
 
     @staticmethod
     def _scan(body: dict) -> dict:
@@ -478,18 +323,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         return {**res, "repos": ui_repos.list_repos()}
 
     def _dispatch(self, fn, ok: int = 200) -> None:
-        """Run a ui_dispatch call on the JSON body, mapping its errors to HTTP statuses."""
+        """Run a call on the JSON body, mapping its errors to HTTP statuses."""
         body = self._read_body()
         if body is None:
             return
         try:
             self._json(ok, fn(body))
-        except ui_dispatch.NeedsCheckout as e:
-            self._json(409, {"error": str(e), "code": "no_checkout", "slug": e.slug, "candidates": e.candidates})
-        except (ui_dispatch.NotFound, ui_flows.NotFound):
-            self._json(404, {"error": "not found"})
-        except ui_dispatch.Conflict as e:
-            self._json(409, {"error": str(e)})
         except (ValueError, TypeError) as e:
             self._json(400, {"error": str(e)})
 
@@ -497,18 +336,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         body = self._read_body()
         if body is None:
             return
-        asked = body.get("items")
-        if not isinstance(asked, list) or not all(isinstance(a, dict) and isinstance(a.get("key"), str) for a in asked):
-            self._json(400, {"error": "items must be a list of {key, force?}"})
+        keys = body.get("keys")
+        if not isinstance(keys, list) or not all(isinstance(k, str) for k in keys):
+            self._json(400, {"error": "keys must be a list of session keys"})
             return
-        targets = {t["key"]: t for t in ui_cleanup.find_targets()}  # re-derived: the client never names paths
-        results = [
-            ui_cleanup.clean(targets[a["key"]], a.get("force") is True)
-            if a["key"] in targets
-            else {"key": a["key"], "ok": False, "error": "not cleanable (gone, live, or escalated)"}
-            for a in asked
-        ]
-        self._json(200, {"results": results})
+        self._json(200, {"removed": ui_cleanup.clean(keys)})
 
     def _stop(self, sid: str) -> None:
         try:
@@ -701,19 +533,6 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     do_DELETE = do_PATCH = do_HEAD = do_OPTIONS = do_TRACE = do_CONNECT = _method_not_allowed
 
 
-# Bounded so a cold /board.json can't fan out unbounded `gh` processes.
-_TITLE_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="title")
-
-
-def _gh_status(owner, repo, issue, pr, branch):
-    if not plausible_repo(owner, repo):
-        return None
-    # ledger values reach `gh` argv: only https PR URLs and non-option branch names
-    pr = pr if isinstance(pr, str) and pr.startswith("https://") else None
-    branch = branch if isinstance(branch, str) and branch and not branch.startswith("-") else None
-    return ui_status.get(owner, repo, issue, pr, branch, _TITLE_POOL)
-
-
 class _Server(http.server.ThreadingHTTPServer):
     # Reuse is on so a restart is not refused while closed connections sit in TIME_WAIT; cmd_serve probes
     # the port first because macOS would otherwise let a 127.0.0.1 bind succeed over a 0.0.0.0 holder.
@@ -725,11 +544,12 @@ class _Server(http.server.ThreadingHTTPServer):
     tailnet_hosts: frozenset = frozenset()
     tailnet_login = None
 
-    def __init__(self, address, handler, allowed_hosts, fetch_title):
+    def __init__(
+        self, address, handler, allowed_hosts, *_title_fetcher
+    ):  # ponytail: legacy 4th arg ignored until test_ui_static drops it
         super().__init__(address, handler)
         port = self.server_address[1]
         self.allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"} | {h.strip().lower() for h in allowed_hosts}
-        self.fetch_title = fetch_title
 
 
 def _port_holder(port: int):
@@ -752,6 +572,7 @@ def _port_answers(port: int) -> bool:
 
 
 def cmd_serve(args) -> None:
+    ui_migrate.clear_old_data(shared.data_dir())  # before any timer starts or module reads the data dir
     port = args.port
     extras = args.allow_host or []
     try:
@@ -761,7 +582,6 @@ def cmd_serve(args) -> None:
             ("127.0.0.1", port),
             _Handler,
             extras,
-            memoize_title_fetcher(fetch_title, _TITLE_POOL, os.path.join(shared.data_dir(), "titles.json")),
         )
     except (OSError, OverflowError) as exc:
         if getattr(exc, "errno", None) != errno.EADDRINUSE:
@@ -777,8 +597,7 @@ def cmd_serve(args) -> None:
             server.allowed_hosts |= ts["hosts"]
             server.tailnet_hosts, server.tailnet_login = frozenset(ts["hosts"]), ts["login"]
     ui_runner.reconcile()  # re-attach sessions that outlived the last UI, close the ones that died
-    ui_dispatch.start_timer()  # advance dispatch pipelines (needs reconciled session states)
-    ui_grind.start_timer()  # queued/auto grinds, ntfy on pause/finish
+    ui_grind.start_timer()  # ntfy on grind pause/finish
     ui_runner.start_prgrind_timer()  # re-enter pr-grind loops whose session ended (reviews, CI, heartbeat)
     ui_runner.start_limit_timer()  # auto-resume limited runs, incl. catch-up of resets missed while down
     ui_usage.start_timer()  # 5h/7d usage per account, only while the UI is open

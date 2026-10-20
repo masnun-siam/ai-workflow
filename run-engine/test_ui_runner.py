@@ -297,7 +297,7 @@ def answer_checks():
     def mk(rid="q-1", free=None, mode="normal", pending=True):
         """Cheap waiting session: recorded INIT stream, session_id set, no live process."""
         d, fk, work = setup(mode)
-        sid = ui_sessions.create("/run-issue 1", work)["id"]
+        sid = ui_sessions.create("/implement-issue 1", work)["id"]
         with open(os.path.join(sdir(sid), "stream.jsonl"), "ab") as f:
             f.write((INIT + "\n").encode())
         ui_sessions.update(sid, session_id="sess-abc", status="done")
@@ -341,7 +341,7 @@ def answer_checks():
 
         # -- waiting after a real finished run, no process alive
         d, fk, work = setup("normal")
-        rec = ui_runner.start("/run-issue 1", work)
+        rec = ui_runner.start("/implement-issue 1", work)
         live.append(rec)
         wait_status(rec["id"], {"done", "failed"})
         wait_finished(rec["id"])
@@ -352,7 +352,7 @@ def answer_checks():
 
         # -- ask mode: set_pending mid-run survives clean exit
         d, fk, work = setup("ask")
-        rec = ui_runner.start("/run-issue 1", work)
+        rec = ui_runner.start("/implement-issue 1", work)
         live.append(rec)
         wait_for(lambda: b"init" in read(rec["id"], "stream.jsonl"))
         pend = ui_sessions.set_pending(rec["id"], rnd())["pending_question"]
@@ -365,7 +365,7 @@ def answer_checks():
         # -- turn ended on a recorded question but a background task keeps claude alive: ended after the grace
         d, fk, work = setup("askhang")
         grace, ui_runner.ASKED_EXIT_GRACE_SECONDS = ui_runner.ASKED_EXIT_GRACE_SECONDS, 0.5
-        rec = ui_runner.start("/run-issue 1", work)
+        rec = ui_runner.start("/implement-issue 1", work)
         live.append(rec)
         wait_for(lambda: b"aiw ask" in read(rec["id"], "stream.jsonl"))
         pend = ui_sessions.set_pending(rec["id"], rnd())["pending_question"]
@@ -378,7 +378,7 @@ def answer_checks():
 
         # -- process still alive: 409, nothing spawned
         d, fk, work = setup("ask")
-        rec = ui_runner.start("/run-issue 1", work)
+        rec = ui_runner.start("/implement-issue 1", work)
         live.append(rec)
         wait_for(lambda: b"init" in read(rec["id"], "stream.jsonl"))
         ui_sessions.set_pending(rec["id"], rnd())
@@ -505,7 +505,7 @@ def answer_checks():
 
         # -- run that recorded a round then exits non-zero: failed, round cleared
         d, fk, work = setup("askfail")
-        rec = ui_runner.start("/run-issue 1", work)
+        rec = ui_runner.start("/implement-issue 1", work)
         live.append(rec)
         wait_for(lambda: b"init" in read(rec["id"], "stream.jsonl"))
         ui_sessions.set_pending(rec["id"], rnd())
@@ -710,273 +710,6 @@ def answer_checks():
         reap(*live)
 
 
-# ---- resume fallback from the Ledger (issue #119) ---------------------------
-def fallback_checks():
-    def boom(*_a, **_k):
-        raise AssertionError("fetch_title must not be called")
-
-    srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, (), boom)
-    port = srv.server_address[1]
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    live = []
-    SLUG = "own/repo"
-
-    def calls(fk):
-        p = os.path.join(fk, "calls")
-        if not os.path.exists(p):
-            return []
-        out = []
-        for ln in lines(fk, "calls").splitlines():
-            cwd, _, args = ln.partition("|")
-            out.append((real(cwd), args))
-        return out
-
-    def ledger(d, issue, body=None, raw=None):
-        rd = os.path.join(d, "runs", f"own-repo-issue-{issue}")
-        os.makedirs(rd, exist_ok=True)
-        path = os.path.join(rd, "run.json")
-        with open(path, "wb") as f:
-            f.write(raw if raw is not None else json.dumps(body or {"context": {}}).encode())
-        return path
-
-    def mk(command="/run-issue 42", slug=True, led=True):
-        """Finished first run (session_id sess-abc, cwd_path recorded), calls log cleared."""
-        d, fk, work = setup("normal")
-        with open(os.path.join(d, "checkouts.json"), "w") as f:
-            json.dump({SLUG: work} if slug else {}, f)
-        rec = ui_runner.start(command, SLUG if slug else work)
-        live.append(rec)
-        wait_status(rec["id"], {"done", "failed"})
-        wait_finished(rec["id"])
-        os.remove(os.path.join(fk, "calls"))
-        if led:
-            ledger(d, 42)
-        return rec["id"], d, fk, work
-
-    def go(sid, mode, ans="the answer", sess="sess-new"):
-        os.environ["FAKE_CLAUDE_MODE"] = mode
-        os.environ["FAKE_SID"] = sess
-        ui_runner.resume(sid, ans)
-
-    def end(sid):
-        wait_status(sid, {"done", "failed", "stopped"})
-        wait_finished(sid)
-        return ui_sessions.load(sid)
-
-    def fresh_args(cmd, ans):
-        return " ".join(ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, f"{cmd} {ans}"])
-
-    def resume_args(ans, sess="sess-abc"):
-        return " ".join(
-            ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, "--resume", sess, ans]
-        )
-
-    def terminal(r, fk, n_calls=1, kept="the answer"):
-        assert r["status"] == "failed" and r.get("terminal_handoff") is True, r
-        assert r.get("pending_answer") == kept, r
-        assert len(calls(fk)) == n_calls, calls(fk)
-
-    try:
-        # -- through the answer API, exposed via GET
-        sid, d, fk, work = mk()
-        rid = {
-            "id": "q-1",
-            "status": "pending",
-            "questions": [
-                {
-                    "header": "G",
-                    "question": "Go?",
-                    "multiSelect": False,
-                    "options": [{"label": "Yes", "description": "y"}, {"label": "No", "description": "n"}],
-                }
-            ],
-        }
-        ui_sessions.set_pending(sid, rid)
-        os.environ["FAKE_CLAUDE_MODE"], os.environ["FAKE_SID"] = "badresume", "sess-new"
-        c = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
-        c.request(
-            "POST",
-            f"/api/sessions/{sid}/answer",
-            body=json.dumps({"round_id": "q-1", "answers": {"0": {"labels": ["Yes"]}}}).encode(),
-            headers={"Content-Type": "application/json"},
-        )
-        resp = c.getresponse()
-        resp.read()
-        c.close()
-        assert resp.status == 200, resp.status
-        r = end(sid)
-        ans = 'Answer to q-1: {"0":{"labels":["Yes"]}}'
-        cl = calls(fk)
-        assert len(cl) == 2, cl
-        assert cl[0] == (real(work), resume_args(ans)), cl
-        assert cl[1] == (real(work), fresh_args("/run-issue 42", ans)), cl
-        assert r["status"] == "done" and r["resumed_fresh"] is True and "resumed fresh" in r["note"], r
-        assert r["session_id"] == "sess-new" and r.get("terminal_handoff") in (None, False), r
-        c = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
-        c.request("GET", f"/api/sessions/{sid}")
-        pub = json.loads(c.getresponse().read())
-        c.close()
-        assert pub["resumed_fresh"] is True and "resumed fresh" in pub["note"], pub
-        assert "terminal_handoff" in pub and "pending_answer" in pub, pub
-        ok("run-issue answer with dead resume: fresh spawn, resumed_fresh, note, new session_id, in GET")
-
-        # -- successful resume: no fallback
-        sid, d, fk, work = mk()
-        go(sid, "normal")
-        r = end(sid)
-        assert [a for _, a in calls(fk)] == [resume_args("the answer")], calls(fk)
-        assert r["status"] == "done" and not r.get("resumed_fresh") and not r.get("terminal_handoff"), r
-        assert not r.get("pending_answer"), r
-        ok("successful resume: one spawn, no fallback flags, pending_answer cleared")
-
-        # -- non-run-issue commands: terminal handoff
-        for cmd in ("/create-prd x", "/intake x", "/dump x", "/worklog", "/gh-issue 3", "/pr-grind 12"):
-            sid, d, fk, work = mk(cmd)
-            go(sid, "badresume")
-            r = end(sid)
-            terminal(r, fk)
-            assert "No conversation found" in (r["error"] or ""), r
-        ok("non-run-issue failed resume: failed + terminal_handoff, one spawn, answer kept, claude error")
-
-        # -- no run.json
-        sid, d, fk, work = mk(led=False)
-        go(sid, "badresume")
-        terminal(end(sid), fk)
-        ok("run-issue without Ledger: terminal handoff, no second spawn")
-
-        # -- command parsing
-        for cmd, fresh in (
-            ("/run-issue --lean 42", True),
-            ("/run-issue #42", True),
-            ("/run-issue", False),
-            ("/run-issuex 42", False),
-        ):
-            sid, d, fk, work = mk(cmd)
-            go(sid, "badresume")
-            r = end(sid)
-            if fresh:
-                assert r["status"] == "done" and r["resumed_fresh"] is True, (cmd, r)
-                assert calls(fk)[1][1] == fresh_args("/run-issue 42", "the answer"), (cmd, calls(fk))
-            else:
-                terminal(r, fk)
-        ok("issue parsing: --lean/# forms fall back as '/run-issue 42'; no-number/-issuex do not")
-
-        # -- init then non-zero exit: existing failed path
-        sid, d, fk, work = mk()
-        go(sid, "resumecrash_afterinit")
-        r = end(sid)
-        assert r["status"] == "failed" and len(calls(fk)) == 1 and not r.get("resumed_fresh"), r
-        ok("resume emitted init then exited non-zero: failed, no fallback")
-
-        # -- zero events non-zero exit
-        sid, d, fk, work = mk()
-        go(sid, "resumesilent")
-        r = end(sid)
-        assert r["status"] == "failed" and len(calls(fk)) == 1 and not r.get("resumed_fresh"), r
-        assert r.get("pending_answer") == "the answer", r
-        ok("resume exit non-zero with zero events: failed, no fallback, answer kept")
-
-        # -- fallback spawn also fails
-        sid, d, fk, work = mk()
-        go(sid, "badresume_freshfail")
-        r = end(sid)
-        assert r["status"] == "failed" and r["resumed_fresh"] is True, r
-        assert r.get("pending_answer") == "the answer" and len(calls(fk)) == 2, (r, calls(fk))
-        ok("fallback also fails: failed, resumed_fresh, answer kept, exactly two spawns")
-
-        # -- changed cwd A -> B
-        sid, d, fk, work = mk()
-        B = tempfile.mkdtemp()
-        with open(os.path.join(d, "checkouts.json"), "w") as f:
-            json.dump({SLUG: B}, f)
-        go(sid, "badresume")
-        r = end(sid)
-        cl = calls(fk)
-        assert r["status"] == "done" and r["resumed_fresh"] is True, r
-        assert cl[-1][0] == real(B) and work in r["note"] and B in r["note"], (cl, r)
-        ok("changed cwd: fallback runs in new checkout, note names both")
-
-        # -- cwd gone + Ledger context.repo
-        sid, d, fk, work = mk()
-        C = tempfile.mkdtemp()
-        ledger(d, 42, {"context": {"repo": C}})
-        os.rmdir(work)
-        go(sid, "badresume")
-        r = end(sid)
-        assert r["status"] == "done" and r["resumed_fresh"] is True and r["note"], r
-        assert len(calls(fk)) == 1 and calls(fk)[0][0] == real(C), calls(fk)
-        ok("cwd gone + Ledger context.repo: fresh spawn there with note")
-
-        # -- cwd gone + Ledger context.repo + fresh fallback fails
-        sid, d, fk, work = mk()
-        C = tempfile.mkdtemp()
-        ledger(d, 42, {"context": {"repo": C}})
-        os.rmdir(work)
-        go(sid, "badresume_freshfail")
-        r = end(sid)
-        assert r["status"] == "failed" and r["resumed_fresh"] is True, r
-        assert r.get("pending_answer") == "the answer", r
-        assert len(calls(fk)) == 1 and calls(fk)[0][0] == real(C), calls(fk)
-        ok("cwd gone + Ledger + fallback fails: failed, resumed_fresh, answer kept")
-
-        # -- cwd gone, no Ledger
-        sid, d, fk, work = mk(led=False)
-        os.rmdir(work)
-        go(sid, "badresume")
-        terminal(end(sid), fk, n_calls=0)
-        ok("cwd gone + no Ledger: failed + terminal_handoff, no spawn")
-
-        # -- corrupt run.json
-        sid, d, fk, work = mk()
-        ledger(d, 42, raw=b"{not json")
-        go(sid, "badresume")
-        r = end(sid)
-        assert r["status"] == "done" and r["resumed_fresh"] is True and len(calls(fk)) == 2, r
-        ok("corrupt run.json: fallback still spawns, no SystemExit")
-
-        # -- run.json untouched
-        sid, d, fk, work = mk()
-        path = ledger(d, 42, {"context": {"a": 1}, "k": [1, 2]})
-        before = open(path, "rb").read()
-        go(sid, "badresume")
-        end(sid)
-        assert open(path, "rb").read() == before
-        ok("run.json bytes unchanged after fallback")
-
-        # -- stop during fallback
-        sid, d, fk, work = mk()
-        old_pid = ui_sessions.load(sid)["pid"]
-        go(sid, "badresume_freshsleep")
-        wait_for(lambda: len(calls(fk)) == 2)
-        proc = wait_for(lambda: (p := ui_runner._procs.get(sid)) and p.args[-1].startswith("/run-issue") and p)
-        assert proc.pid != old_pid
-        ui_runner.stop(sid)
-        r = end(sid)
-        assert r["status"] == "stopped" and len(calls(fk)) == 2 and proc.poll() is not None, r
-        ok("stop during fallback kills the new process: stopped, no further spawn")
-
-        # -- stop during failing resume
-        sid, d, fk, work = mk()
-        open(os.path.join(fk, "hold"), "w").close()
-        go(sid, "badresume")
-        wait_for(lambda: len(calls(fk)) == 1)
-        ui_runner.stop(sid)
-        os.remove(os.path.join(fk, "hold"))
-        r = end(sid)
-        time.sleep(0.5)
-        assert r["status"] == "stopped" and len(calls(fk)) == 1 and not r.get("resumed_fresh"), r
-        ok("stop during failing resume: stopped, no fallback")
-    finally:
-        srv.shutdown()
-        srv.server_close()
-        reap(*live)
-        for p in list(ui_runner._procs.values()):
-            try:
-                os.killpg(p.pid, signal.SIGKILL)
-            except (ProcessLookupError, PermissionError):
-                pass
-
-
 # ---- stop + resume API (issue #120) -----------------------------------------
 def stop_checks():
     def boom(*_a, **_k):
@@ -1018,21 +751,13 @@ def stop_checks():
             out.append((real(cwd), args))
         return out
 
-    def ledger(d, issue):
-        rd = os.path.join(d, "runs", f"own-repo-issue-{issue}")
-        os.makedirs(rd, exist_ok=True)
-        path = os.path.join(rd, "run.json")
-        with open(path, "wb") as f:
-            f.write(json.dumps({"context": {}, "status": "running"}).encode())
-        return path
-
     def setup_(mode):
         d, fk, work = setup(mode)
         with open(os.path.join(d, "checkouts.json"), "w") as f:
             json.dump({SLUG: work}, f)
         return d, fk, work
 
-    def cheap(command="/run-issue 42", work=None, status="stopped", sess="sess-abc"):
+    def cheap(command="/implement-issue 42", work=None, status="stopped", sess="sess-abc"):
         rec = ui_sessions.create(command, SLUG)
         ui_sessions.update(
             rec["id"],
@@ -1060,9 +785,7 @@ def stop_checks():
 
     def stations_run(mode):
         d, fk, work = setup_(mode)
-        ledger_p = ledger(d, 42)
-        before = (open(ledger_p, "rb").read(), os.stat(ledger_p).st_mtime_ns)
-        rec = ui_runner.start("/run-issue 42", SLUG)
+        rec = ui_runner.start("/implement-issue 42", SLUG)
         live.append(rec)
         sid = rec["id"]
         wait_for(lambda: lst(fk, "ran") == ["planner"])
@@ -1082,8 +805,6 @@ def stop_checks():
         assert r["status"] == "done", r
         assert lst(fk, "ran") == ["planner", "sdet", "sdet", "dev", "review"], lst(fk, "ran")
         assert lst(fk, "done") == ROSTER, lst(fk, "done")
-        after = (open(ledger_p, "rb").read(), os.stat(ledger_p).st_mtime_ns)
-        assert before == after, "Ledger was touched"
         return sid, fk, work, r
 
     try:
@@ -1091,23 +812,27 @@ def stop_checks():
         sid, fk, work, r = stations_run("stations")
         cl = calls(fk)
         assert len(cl) == 2 and cl[1] == (real(work), cont_args()), cl
-        ok("stop then resume via --resume: continue prompt, no repeated stations, Ledger untouched")
+        ok("stop then resume via --resume: continue prompt, no repeated stations")
 
-        # -- stop then resume via fallback
-        sid, fk, work, r = stations_run("stations_badresume")
-        cl = calls(fk)
-        assert len(cl) == 3, cl
-        assert cl[2] == (
-            real(work),
-            " ".join(ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, "/run-issue 42"]),
-        ), cl
-        assert r["resumed_fresh"] is True and "resumed fresh" in r["note"], r
-        assert not r.get("pending_answer"), r
-        ok("stop then resume via fallback: fresh /run-issue 42 with no answer text, resumed_fresh, Ledger untouched")
+        # -- a resume that cannot continue fails the session with a reason
+        d, fk, work = setup_("stations_badresume")
+        rec = ui_runner.start("/implement-issue 42", SLUG)
+        live.append(rec)
+        sid = rec["id"]
+        wait_for(lambda: lst(fk, "ran") == ["planner"])
+        st, body_ = http_("POST", f"/api/sessions/{sid}/stop")
+        assert st == 200, (st, body_)
+        wait_finished(sid)
+        st, body_ = http_("POST", f"/api/sessions/{sid}/resume")
+        assert st == 200, (st, body_)
+        r = end(sid)
+        assert r["status"] == "failed" and r["error"].startswith("cannot resume"), r
+        assert len(calls(fk)) == 2 and not r.get("resumed_fresh"), calls(fk)
+        ok("failed resume: session failed with a 'cannot resume' reason, no fresh respawn")
 
         # -- detail + list fields
         d, fk, work = setup_("normal")
-        rec = ui_runner.start("/run-issue 42", SLUG)
+        rec = ui_runner.start("/implement-issue 42", SLUG)
         live.append(rec)
         sid = rec["id"]
         end(sid)
@@ -1121,10 +846,9 @@ def stop_checks():
         assert item["repo_path"] == pub["repo_path"] and item["resume_command"] == pub["resume_command"], item
         ok("session detail and list expose repo_path and resume_command")
 
-        # -- no session_id: null resume_command, fallback only
+        # -- no session_id: null resume_command, resume fails the session
         d, fk, work = setup_("crash")
-        ledger(d, 42)
-        rec = ui_runner.start("/run-issue 42", SLUG)
+        rec = ui_runner.start("/implement-issue 42", SLUG)
         live.append(rec)
         sid = end(rec["id"])["id"]
         ui_sessions.update(sid, status="stopped")
@@ -1132,26 +856,11 @@ def stop_checks():
         st, pub = http_("GET", f"/api/sessions/{sid}")
         assert pub["resume_command"] is None, pub
         os.remove(os.path.join(fk, "calls"))
-        os.environ["FAKE_CLAUDE_MODE"] = "normal"
-        st, _b = http_("POST", f"/api/sessions/{sid}/resume")
-        assert st == 200, (st, _b)
-        r = end(sid)
-        cl = calls(fk)
-        assert r["status"] == "done" and len(cl) == 1 and "--resume" not in cl[0][1], (r, cl)
-        assert cl[0][1] == " ".join(
-            ui_runner.CLAUDE_ARGS + ["--append-system-prompt", ui_runner.HEADLESS_PROMPT, "/run-issue 42"]
-        ), cl
-        d, fk, work = setup_("crash")
-        rec = ui_runner.start("/create-prd x", SLUG)
-        live.append(rec)
-        sid = end(rec["id"])["id"]
-        ui_sessions.update(sid, status="stopped")
-        os.remove(os.path.join(fk, "calls"))
         http_("POST", f"/api/sessions/{sid}/resume")
         r = ui_sessions.load(sid)
-        assert r["status"] == "failed" and r.get("terminal_handoff") is True, r
+        assert r["status"] == "failed" and "cannot resume" in r["error"], r
         assert not os.path.exists(os.path.join(fk, "calls")), "must not spawn"
-        ok("no session_id: resume_command null, run-issue falls back fresh, others terminal_handoff, never --resume")
+        ok("no session_id: resume_command null, resume fails the session, never --resume")
 
         # -- metacharacter path
         d, fk, work = setup_("normal")
@@ -1159,7 +868,7 @@ def stop_checks():
         os.mkdir(bad)
         with open(os.path.join(d, "checkouts.json"), "w") as f:
             json.dump({SLUG: bad}, f)
-        rec = ui_runner.start("/run-issue 42", SLUG)
+        rec = ui_runner.start("/implement-issue 42", SLUG)
         live.append(rec)
         sid = end(rec["id"])["id"]
         st, pub = http_("GET", f"/api/sessions/{sid}")
@@ -1179,7 +888,7 @@ def stop_checks():
 
         # -- stuck: SIGKILL after grace
         d, fk, work = setup_("stuck")
-        rec = ui_runner.start("/run-issue 42", SLUG)
+        rec = ui_runner.start("/implement-issue 42", SLUG)
         live.append(rec)
         sid = rec["id"]
         wait_for(lambda: (ui_sessions.load(sid) or {}).get("session_id"))
@@ -1238,7 +947,7 @@ def stop_checks():
 
         # -- stop on waiting with a live process
         d, fk, work = setup_("ask")
-        rec = ui_runner.start("/run-issue 42", SLUG)
+        rec = ui_runner.start("/implement-issue 42", SLUG)
         live.append(rec)
         sid = rec["id"]
         wait_for(lambda: (ui_sessions.load(sid) or {}).get("session_id"))
@@ -1277,7 +986,7 @@ def stop_checks():
 
         # -- resume blocked by live session for same issue
         d, fk, work = setup_("sleep")
-        live_rec = ui_runner.start("/run-issue 42", SLUG)
+        live_rec = ui_runner.start("/implement-issue 42", SLUG)
         live.append(live_rec)
         wait_for(lambda: (ui_sessions.load(live_rec["id"]) or {}).get("session_id"))
         n0 = len(calls(fk))
@@ -1286,12 +995,39 @@ def stop_checks():
         assert st == 409 and live_rec["id"] in json.dumps(body), (st, body)
         assert len(calls(fk)) == n0 and ui_sessions.load(sid)["status"] == "stopped"
         os.environ["FAKE_CLAUDE_MODE"] = "normal"
-        for cmd_other in ("/run-issue 43", "/create-prd x"):
+        for cmd_other in ("/implement-issue 43", "/create-prd x"):
             sid2 = cheap(command=cmd_other, work=work)
             st, _b = http_("POST", f"/api/sessions/{sid2}/resume")
             assert st == 200, (cmd_other, st, _b)
             assert end(sid2)["status"] == "done"
-        ok("resume blocked by live same-issue session (named); other issue / non-run-issue not blocked")
+        ok("resume blocked by live same-issue session (named); other issue / non-implement-issue not blocked")
+
+        # -- double /implement-issue 7 and double /pr-grind on one PR: Conflict
+        d, fk, work = setup_("sleep")
+        for cmd in ("/implement-issue 7", "/pr-grind 9"):
+            live_rec = ui_runner.start(cmd, SLUG)
+            live.append(live_rec)
+            wait_for(lambda: (ui_sessions.load(live_rec["id"]) or {}).get("session_id"))
+            other = cheap(command=cmd, work=work)
+            try:
+                ui_runner.resume_stopped(other)
+                raise AssertionError("resume_stopped must raise Conflict")
+            except ui_runner.Conflict:
+                pass
+            ui_sessions.update(other, status="done")
+            try:
+                ui_runner.send_prompt(other, "hello")
+                raise AssertionError("send_prompt must raise Conflict")
+            except ui_runner.Conflict:
+                pass
+        assert ui_runner._issue_key({"repo": "r", "command": "/implement-issue 7"}) != ui_runner._issue_key(
+            {"repo": "r", "command": "/pr-grind 7"}
+        )
+        assert ui_runner._issue_key({"repo": "r", "command": "/run-" + "issue 7"}) is None
+        ok("double /implement-issue 7 and double /pr-grind on one PR raise Conflict; the old command is not keyed")
+        assert not any(w in ui_runner.HEADLESS_PROMPT for w in ("run-" + "issue", "/flow", "herdr"))
+        ok("headless prompt carries no old-command, flow or herdr-dispatch text")
+        os.environ["FAKE_CLAUDE_MODE"] = "normal"
 
         # -- preflight failure
         d, fk, work = setup_("normal")
@@ -1339,7 +1075,6 @@ def stop_checks():
 
         # -- stop during failing resume
         d, fk, work = setup_("badresume")
-        ledger(d, 42)
         sid = cheap(work=work)
         open(os.path.join(fk, "hold"), "w").close()
         st, _b = http_("POST", f"/api/sessions/{sid}/resume")
@@ -1416,12 +1151,6 @@ def stop_checks():
 
 if "--stop" in sys.argv:
     stop_checks()
-    print(f"\n{passed} checks passed")
-    sys.exit(0)
-
-
-if "--fallback" in sys.argv:
-    fallback_checks()
     print(f"\n{passed} checks passed")
     sys.exit(0)
 
@@ -1560,9 +1289,9 @@ def prgrind_cases() -> int:
     def interactive_unchanged():
         d, fk, work = pset()
         os.environ.pop("AIW_HEADLESS", None)
-        rec = ui_runner.start("/run-issue 1", work)
+        rec = ui_runner.start("/implement-issue 1", work)
         wait_status(rec["id"], {"done", "failed"})
-        assert lines(fk, "argv").split("\n")[:-1] == ui_runner.CLAUDE_ARGS + ["/run-issue 1"]
+        assert lines(fk, "argv").split("\n")[:-1] == ui_runner.CLAUDE_ARGS + ["/implement-issue 1"]
         assert lines(fk, "headless") == "UNSET"
         assert ui_runner.PRGRIND_HEARTBEAT == 1500
 
@@ -1668,7 +1397,7 @@ def prgrind_cases() -> int:
     def run_issue_origin():
         d, fk, work = pset()
         path = mkpr(d)
-        r = ui_sessions.create("/run-issue 7", work, {"owner": "o", "repo": "r", "issue": 7})
+        r = ui_sessions.create("/implement-issue 7", work, {"owner": "o", "repo": "r", "issue": 7})
         ui_sessions.update(r["id"], status="done")
         act, _ = tick(path)
         assert act == "started", act
@@ -1869,7 +1598,6 @@ def prgrind_cases() -> int:
 
     def skill_sites():
         text = open(SKILL).read()
-        assert "## Headless mode" in text, "no Headless mode section"
         body = text.split("\n---\n", 1)[1]
         blocks, cur = [], []
         for ln in body.split("\n"):
@@ -1889,8 +1617,12 @@ def prgrind_cases() -> int:
             for b in blocks
             if "ScheduleWakeup(" in b or ("Monitor" in b and any(w in b for w in ("armed", "arming", "arm ")))
         ]
-        assert len(sites) >= 8, len(sites)
-        bare = [b.strip().split("\n")[0][:70] for b in sites if "headless" not in b.lower()]
+        assert len(sites) >= 2, len(sites)  # the inline grind has fewer wake sites
+        bare = [
+            b.strip().split("\n")[0][:70]
+            for b in sites
+            if not any(w in b.lower() for w in ("headless", "interactive only"))
+        ]
         assert not bare, bare
         assert text.count("ScheduleWakeup({delaySeconds: 1500") == 1
         assert text.count("ScheduleWakeup({stop: true})") >= 2
@@ -1954,7 +1686,7 @@ def dead_pid():
 def detached(work):
     helper = (
         "import sys; sys.path.insert(0, %r); import ui_runner; "
-        "r = ui_runner.start('/run-issue 5', %r); print(r['id'], r['pid'])" % (HERE, work)
+        "r = ui_runner.start('/implement-issue 5', %r); print(r['id'], r['pid'])" % (HERE, work)
     )
     out = subprocess.run([sys.executable, "-c", helper], capture_output=True, text=True, timeout=60)
     assert out.returncode == 0, out.stderr
@@ -2227,7 +1959,7 @@ if "--restart" in sys.argv:
 
 # ---- normal: full run -------------------------------------------------------
 d, fk, work = setup("normal")
-rec = ui_runner.start("/run-issue 42", work)
+rec = ui_runner.start("/implement-issue 42", work)
 sid = rec["id"]
 try:
     assert rec["status"] == "running" and rec["pid"], rec
@@ -2246,7 +1978,7 @@ try:
         "stream-json",
         "--verbose",
         "--dangerously-skip-permissions",
-        "/run-issue 42",
+        "/implement-issue 42",
     ], lines(fk, "argv")
     assert ui_runner.CLAUDE_ARGS == [
         "--print",
@@ -2267,7 +1999,7 @@ finally:
 d, fk, work = setup("normal")
 with open(os.path.join(d, "checkouts.json"), "w") as f:
     json.dump({"my-slug": work}, f)
-rec = ui_runner.start("/run-issue 1", "my-slug")
+rec = ui_runner.start("/implement-issue 1", "my-slug")
 try:
     wait_status(rec["id"], {"done", "failed"})
     assert real(lines(fk, "pwd")) == real(work)
@@ -2280,7 +2012,7 @@ finally:
 d, fk, work = setup("sleep")
 helper = (
     "import sys; sys.path.insert(0, %r); import ui_runner; "
-    "r = ui_runner.start('/run-issue 5', %r); print(r['id'], r['pid'])" % (HERE, work)
+    "r = ui_runner.start('/implement-issue 5', %r); print(r['id'], r['pid'])" % (HERE, work)
 )
 out = subprocess.run([sys.executable, "-c", helper], capture_output=True, text=True, timeout=60)
 assert out.returncode == 0, out.stderr
@@ -2298,7 +2030,7 @@ finally:
 
 # ---- stop graceful ----------------------------------------------------------
 d, fk, work = setup("sleep")
-rec = ui_runner.start("/run-issue 6", work)
+rec = ui_runner.start("/implement-issue 6", work)
 sid, pid = rec["id"], rec["pid"]
 try:
     wait_for(lambda: b"init" in read(sid, "stream.jsonl"))
@@ -2320,7 +2052,7 @@ finally:
 # ---- stop SIGKILL path ------------------------------------------------------
 assert ui_runner.STOP_GRACE_SECONDS == 10
 d, fk, work = setup("stuck")
-rec = ui_runner.start("/run-issue 7", work)
+rec = ui_runner.start("/implement-issue 7", work)
 sid, pid = rec["id"], rec["pid"]
 try:
     wait_for(lambda: b"init" in read(sid, "stream.jsonl"))
@@ -2338,7 +2070,7 @@ finally:
 
 # ---- stop kills whole group -------------------------------------------------
 d, fk, work = setup("spawn")
-rec = ui_runner.start("/run-issue 8", work)
+rec = ui_runner.start("/implement-issue 8", work)
 sid = rec["id"]
 try:
     gc = int(wait_for(lambda: os.path.exists(os.path.join(fk, "gc")) and lines(fk, "gc").strip()))
@@ -2382,7 +2114,7 @@ os.environ["PATH"] = empty
 try:
     with mock.patch.object(subprocess, "Popen") as po:
         try:
-            ui_runner.start("/run-issue 9", work)
+            ui_runner.start("/implement-issue 9", work)
             raise AssertionError("expected RunnerError")
         except ui_runner.RunnerError as e:
             assert "claude" in str(e) and "PATH" in str(e), e
@@ -2398,7 +2130,7 @@ ok("missing claude: RunnerError, failed record, no spawn")
 # ---- logged out / garbage auth ---------------------------------------------
 d, fk, work = setup(auth="out")
 try:
-    ui_runner.start("/run-issue 9", work)
+    ui_runner.start("/implement-issue 9", work)
     raise AssertionError("expected RunnerError")
 except ui_runner.RunnerError as e:
     assert "claude auth login" in str(e), e
@@ -2409,7 +2141,7 @@ ok("logged out: RunnerError mentions claude auth login, command never ran")
 
 d, fk, work = setup(auth="garbage")
 try:
-    ui_runner.start("/run-issue 9", work)
+    ui_runner.start("/implement-issue 9", work)
     raise AssertionError("expected RunnerError")
 except ui_runner.RunnerError:
     pass
@@ -2420,7 +2152,7 @@ ok("garbage auth status is not treated as logged in")
 
 # ---- crash / is_error -------------------------------------------------------
 d, fk, work = setup("crash")
-rec = ui_runner.start("/run-issue 10", work)
+rec = ui_runner.start("/implement-issue 10", work)
 try:
     wait_status(rec["id"], {"done", "failed"})
     wait_finished(rec["id"])
@@ -2432,7 +2164,7 @@ finally:
     reap(rec)
 
 d, fk, work = setup("iserror")
-rec = ui_runner.start("/run-issue 10", work)
+rec = ui_runner.start("/implement-issue 10", work)
 try:
     wait_status(rec["id"], {"done", "failed"})
     wait_finished(rec["id"])
@@ -2456,7 +2188,7 @@ def picky(args, *a, **kw):
 before = len(os.listdir("/dev/fd"))
 with mock.patch.object(subprocess, "Popen", side_effect=picky):
     try:
-        ui_runner.start("/run-issue 11", work)
+        ui_runner.start("/implement-issue 11", work)
         raise AssertionError("expected RunnerError")
     except ui_runner.RunnerError as e:
         assert "exec format boom" in str(e), e
@@ -2467,7 +2199,7 @@ ok("Popen OSError: failed with OS error text, RunnerError, no fd leak")
 
 # ---- bad stream lines -------------------------------------------------------
 d, fk, work = setup("junk")
-rec = ui_runner.start("/run-issue 12", work)
+rec = ui_runner.start("/implement-issue 12", work)
 try:
     wait_status(rec["id"], {"done", "failed"})
     wait_finished(rec["id"])
@@ -2491,7 +2223,7 @@ assert no_sessions(d)
 ok("empty/None/dash-leading command raises ValueError, no session")
 for bad in (os.path.join(work, "nope"), "unknown-slug"):
     try:
-        ui_runner.start("/run-issue 1", bad)
+        ui_runner.start("/implement-issue 1", bad)
         raise AssertionError("expected ValueError")
     except ValueError:
         pass
@@ -2500,7 +2232,7 @@ ok("bad cwd raises ValueError, no session")
 
 # ---- shell metacharacters ---------------------------------------------------
 d, fk, work = setup()
-cmd = "/run-issue 1; touch PWNED"
+cmd = "/implement-issue 1; touch PWNED"
 rec = ui_runner.start(cmd, work)
 try:
     wait_status(rec["id"], {"done", "failed"})
@@ -2516,10 +2248,10 @@ d, fk, work = setup("sleep")
 recs = []
 try:
     os.environ["FAKE_SID"], os.environ["FAKE_COST"] = "sess-A", "0.1"
-    a = ui_runner.start("/run-issue 1", work)
+    a = ui_runner.start("/implement-issue 1", work)
     recs.append(a)
     os.environ["FAKE_SID"], os.environ["FAKE_COST"] = "sess-B", "0.2"
-    b = ui_runner.start("/run-issue 2", tempfile.mkdtemp())
+    b = ui_runner.start("/implement-issue 2", tempfile.mkdtemp())
     recs.append(b)
     assert a["id"] != b["id"] and a["pid"] != b["pid"]
     assert os.getpgid(a["pid"]) != os.getpgid(b["pid"])
@@ -2551,7 +2283,6 @@ finally:
     reap(*recs)
 
 answer_checks()
-fallback_checks()
 stop_checks()
 if prgrind_cases():
     sys.exit(1)

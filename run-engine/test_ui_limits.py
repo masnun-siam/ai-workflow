@@ -78,7 +78,7 @@ past = int(time.time()) - 60
 # rejected event + error result -> limited with reset time, auto-resume on
 stream("limit", INIT, REJECT % future, ERR)
 mode("limit")
-a = ui_runner.start("/run-issue 1", work)
+a = ui_runner.start("/implement-issue 1", work)
 rec = wait(a["id"], "limited")
 assert rec["limit_resets_at"] == future and rec["auto_resume"] is True and rec["limit_type"] == "five_hour"
 assert rec["session_id"] == "sess-1" and rec["claude_cmd"] == "claude"
@@ -95,7 +95,7 @@ assert any("--resume sess-1" in c and ui_runner.CONTINUE_PROMPT in c for c in ca
 
 # cancel-auto stops the timer; manual resume still works; stop works on a limited run
 mode("limit")
-b = ui_runner.start("/run-issue 2", work)
+b = ui_runner.start("/implement-issue 2", work)
 wait(b["id"], "limited")
 ui_sessions.update(b["id"], limit_resets_at=past)
 ui_runner.cancel_auto(b["id"])
@@ -105,7 +105,7 @@ assert ui_runner.stop(b["id"])["status"] == "stopped"
 # limit text without a reset time -> limited, no auto-resume
 stream("nolimit_time", INIT, ERR)
 mode("nolimit_time")
-c = ui_runner.start("/run-issue 3", work)
+c = ui_runner.start("/implement-issue 3", work)
 rec = wait(c["id"], "limited")
 assert rec["limit_resets_at"] is None and rec["auto_resume"] is False
 assert ui_runner.limit_tick(stagger=0) == []
@@ -113,15 +113,15 @@ assert ui_runner.limit_tick(stagger=0) == []
 # plain failure stays failed
 stream("boom", INIT, '{"type":"result","is_error":true,"result":"boom"}')
 mode("boom")
-d = ui_runner.start("/run-issue 4", work)
+d = ui_runner.start("/implement-issue 4", work)
 assert wait(d["id"], "failed")["status"] == "failed"
 
 # new run on a limited account is queued, then started by the timer at reset
 mode("limit")
-e = ui_runner.start("/run-issue 5", work)
+e = ui_runner.start("/implement-issue 5", work)
 wait(e["id"], "limited")
 n_calls = len(calls())
-q = ui_runner.start("/run-issue 6", work)
+q = ui_runner.start("/implement-issue 6", work)
 assert q["status"] == "limited" and q["auto_resume"] and q["limit_resets_at"] >= future - 5
 assert len(calls()) == n_calls  # nothing spawned
 stream("ok", INIT, OK)
@@ -129,7 +129,7 @@ mode("ok")
 ui_sessions.update(q["id"], limit_resets_at=past)
 ui_runner.limit_tick(stagger=0)
 wait(q["id"], "done")
-assert any(c.endswith("/run-issue 6") for c in calls()), calls()  # no session_id -> fresh start
+assert any(c.endswith("/implement-issue 6") for c in calls()), calls()  # no session_id -> fresh start
 
 # resume on another account: transcript copied into that profile, run rebound
 slug = re.sub(r"[^A-Za-z0-9]", "-", os.path.realpath(work))
@@ -138,7 +138,7 @@ os.makedirs(src)
 with open(os.path.join(src, "sess-1.jsonl"), "w") as f:
     f.write("{}\n")
 os.environ.pop("CLAUDE_CONFIG_DIR", None)
-f_ = ui_runner.start("/run-issue 7", work, claude_cmd="cc other")
+f_ = ui_runner.start("/implement-issue 7", work, claude_cmd="cc other")
 wait(f_["id"], "done")
 while f_["id"] in ui_runner._procs:
     time.sleep(0.05)

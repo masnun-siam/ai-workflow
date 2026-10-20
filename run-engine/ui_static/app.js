@@ -2,15 +2,10 @@ import { h, render, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { Answer } from './answer.js';
 import { isWaiting, waitingWatcher, notifyState, requestNotify, notifyWaiting, pageTitle, answerHash } from './notify.js';
-import { Board } from './board.js';
-// ponytail: import cycle with run.js (it imports poll); safe, neither uses the other at top level.
-import { RunDetail } from './run.js';
 import { Launcher } from './launcher.js';
 import { History } from './history.js';
 import { Session } from './session.js';
 import { Settings } from './settings.js';
-import { Dispatch, PipelineDetail } from './dispatch.js';
-import { Flow, flowProgress } from './flow.js';
 import { clockText } from './fmt.js';
 import { UsageGauge } from './usage.js';
 import { toast } from './toast.js';
@@ -23,9 +18,6 @@ import { AfkControl, AfkSummary, afkPost } from './afk.js';
 const html = htm.bind(h);
 
 // Hooks are not vendored, so routing and polling are plain functions plus one class component.
-// Issue numbers from a `?issues=1,2` query; hash input is untrusted, so only plain digits pass.
-const queryIssues = (q) => (q.get('issues') || '').split(',').filter((s) => /^\d+$/.test(s)).map(Number);
-
 export function parseRoute(hash) {
   let path = String(hash || '').replace(/^#/, '');
   const qi = path.indexOf('?');
@@ -38,29 +30,13 @@ export function parseRoute(hash) {
   } catch {
     return { name: 'notfound', params: {} };
   }
-  if (path === '' || path === '/') return { name: 'board', params: {} };
+  if (path === '' || path === '/') return { name: 'sessions', params: {} };
   const [a, ...rest] = seg;
   if (a === 'new' && !rest.length) return { name: 'new', params: {} };
   if (a === 'sessions' && !rest.length) return { name: 'sessions', params: {} };
   if (a === 'settings' && !rest.length) return { name: 'settings', params: {} };
-  if (a === 'dispatch' && !rest.length) {
-    const issues = queryIssues(query);
-    return issues.length ? { name: 'dispatch', params: {}, issues } : { name: 'dispatch', params: {} };
-  }
-  if (a === 'flow' && rest.length === 1 && (rest[0] === 'new' || /^f-\d{14}-[0-9a-f]{6}$/.test(rest[0]))) {
-    return { name: 'flow', params: { id: rest[0], repo: '', folder: '', prd: '', issues: [], sid: '' } };
-  }
-  if (a === 'flow' && !rest.length) {
-    // folder/prd become headless session args: one line, bounded, so the input shows all that is sent
-    const get = (k) => (query.get(k) || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').slice(0, 500);
-    return { name: 'flow', params: { repo: get('repo'), folder: get('folder'), prd: get('prd'), issues: queryIssues(query), sid: get('sid') } };
-  }
-  if (a === 'dispatch' && rest.length === 1 && /^p-\d{14}-[0-9a-f]{6}$/.test(rest[0])) return { name: 'pipeline', params: { id: rest[0] } };
   if (a === 'session' && rest.length === 1 && rest[0]) return { name: 'session', params: { id: rest[0] } };
   if (a === 'answer' && rest.length === 1 && rest[0]) return { name: 'answer', params: { session: rest[0] } };
-  if (a === 'run' && rest.length === 3 && rest[0] && rest[1] && /^[1-9]\d*$/.test(rest[2])) {
-    return { name: 'run', params: { owner: rest[0], repo: rest[1], n: Number(rest[2]) } };
-  }
   return { name: 'notfound', params: {} };
 }
 
@@ -129,9 +105,6 @@ export function poll(url, ms, onResult, keepAlive = () => false) {
 }
 
 export const NAV = [
-  ['board', '#/', 'Board'],
-  ['flow', '#/flow', 'Flow'],
-  ['dispatch', '#/dispatch', 'Dispatch'],
   ['sessions', '#/sessions', 'Sessions'],
 ];
 
@@ -152,12 +125,6 @@ const GEAR = html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" st
 
 function View({ route, sessions, limits }) {
   switch (route.name) {
-    case 'board':
-      return html`<${Board} sessions=${sessions} />`;
-    case 'run': {
-      const { owner, repo, n } = route.params;
-      return html`<${RunDetail} key=${`${owner}/${repo}/${n}`} owner=${owner} repo=${repo} n=${n} sessions=${sessions} />`;
-    }
     case 'answer':
       return html`<${Answer} session=${route.params.session} key=${route.params.session} />`;
     case 'session':
@@ -166,16 +133,10 @@ function View({ route, sessions, limits }) {
       return html`<${Launcher} limits=${limits} />`;
     case 'settings':
       return html`<${Settings} />`;
-    case 'flow':
-      return html`<${Flow} key=${JSON.stringify(route.params)} route=${route} />`;
-    case 'dispatch':
-      return html`<${Dispatch} key=${(route.issues || []).join(',')} issues=${route.issues} />`;
-    case 'pipeline':
-      return html`<${PipelineDetail} key=${route.params.id} id=${route.params.id} />`;
     case 'sessions':
       return html`<${History} sessions=${sessions} />`;
     default:
-      return html`<h1>Page not found</h1><p><a href="#/">Back to Board</a></p>`;
+      return html`<h1>Page not found</h1><p><a href="#/sessions">Back to Sessions</a></p>`;
   }
 }
 
@@ -185,7 +146,6 @@ export class App extends Component {
   onHash = () => {
     this.setState({ route: parseRoute(location.hash) });
     this.loadCommands();
-    this.onFlow(); // a step may have started or finished while you were elsewhere
   };
 
   // Account labels for the header chips; reloaded on navigation so Settings edits show up.
@@ -221,7 +181,7 @@ export class App extends Component {
       case 'move': if (!palette && !sheet && !cleanup && !peek && moveFocus(intent.dir)) e.preventDefault(); break;
       case 'escape':
         if (palette || sheet || cleanup || peek) this.closeDialogs();
-        else if (['run', 'session', 'answer', 'pipeline'].includes(route.name)) history.length > 1 ? history.back() : (location.hash = '#/');
+        else if (['session', 'answer'].includes(route.name)) history.length > 1 ? history.back() : (location.hash = '#/sessions');
         break;
     }
   };
@@ -239,10 +199,6 @@ export class App extends Component {
 
   onPeek = (e) => this.openDialog({ palette: false, sheet: false, cleanup: null, peek: e.detail });
 
-  // The nav rail follows the most recently active flow; Flow fires aiw:flow whenever it saves.
-  onFlow = () => fetch('/api/flows', { headers: { Accept: 'application/json' } }).then((r) => (r.ok ? r.json() : null))
-    .then((b) => { if (!this.gone) this.setState({ flowNav: (b && b.flows && b.flows[0]) || null }); }).catch(() => {});
-
   onCleanup = (e) => this.openDialog({ palette: false, sheet: false, cleanup: { only: e.detail?.key || null } });
 
   componentDidMount() {
@@ -250,8 +206,6 @@ export class App extends Component {
     addEventListener('keydown', this.onKey);
     addEventListener('aiw:cleanup', this.onCleanup);
     addEventListener('aiw:peek', this.onPeek);
-    addEventListener('aiw:flow', this.onFlow);
-    this.onFlow();
     addEventListener('aiw:afk-back', this.onAfkBack);
     this.watch = waitingWatcher();
     this.loadCommands();
@@ -298,7 +252,6 @@ export class App extends Component {
     removeEventListener('keydown', this.onKey);
     removeEventListener('aiw:cleanup', this.onCleanup);
     removeEventListener('aiw:peek', this.onPeek);
-    removeEventListener('aiw:flow', this.onFlow);
     removeEventListener('aiw:afk-back', this.onAfkBack);
     if (this.stop) this.stop();
   }
@@ -311,15 +264,9 @@ export class App extends Component {
     else if (b?.kind === 'idle') badge = html`<span class="muted" title="No session is waiting on an answer">No questions waiting</span>`;
     return html`
       <header>
-        <a class="brand" href="#/">aiw ui</a>
+        <a class="brand" href="#/sessions">aiw ui</a>
         <nav aria-label="Main">
-          ${NAV.map(([name, href, label]) => {
-            // The Flow link carries a flow in progress as a small rail of its steps: the way back to it.
-            const fp = name === 'flow' ? flowProgress(this.state.flowNav) : null;
-            return html`<a href=${href} aria-current=${route.name === name ? 'page' : undefined}
-              aria-label=${fp ? `${label}, ${fp.done} of ${fp.total} steps done` : undefined}>${label}${fp && html`<span class="nav-rail" aria-hidden="true">
-                ${Array.from({ length: fp.total }, (_, i) => html`<i class=${i < fp.done ? 'on' : ''}></i>`)}</span>`}</a>`;
-          })}
+          ${NAV.map(([name, href, label]) => html`<a href=${href} aria-current=${route.name === name ? 'page' : undefined}>${label}</a>`)}
         </nav>
         <span class="spacer"></span>
         <button type="button" class="btn kbd-hint" aria-label="Open command palette" onClick=${() => this.openDialog({ palette: true, sheet: false })}>Search <kbd>⌘K</kbd></button>

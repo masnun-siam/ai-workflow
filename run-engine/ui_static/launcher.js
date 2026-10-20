@@ -8,26 +8,32 @@ import { CreateRepoDialog, FolderChooser, NO_REPO_COMMANDS, folderOf } from './v
 const html = htm.bind(h);
 const KEY = 'aiw.lastRepo';
 const LABELS = {
-  'run-issue': 'Issue number or URL',
+  'implement-issue': 'Issue number or URL',
   'pr-grind': 'PR number or URL',
   'create-prd': 'Requirement: free text, file path, vault note or issue URL',
-  intake: 'Sentry URL, file path, vault note or free text',
   dump: 'What to capture: feature, change, bug or task',
   worklog: 'Date (optional, defaults to today)',
   day: 'What to capture: a task, follow-up or meeting notes (leave empty to plan, shut down or review the week)',
-  'gh-issue': 'Type (bug, feature, task, improvement) and details',
-  'refine-issues': 'Task list: docs/tasks/<slug>.md',
+  'refine-issues': 'Epic number or issue numbers',
   'pr-review': 'PR number or URL to review',
-  'pr-fix-comments': 'PR URL or owner/repo#123',
-  'issue-to-pr': 'Issue URL',
+  'verifier-locally': 'What to verify (optional, defaults to the current change)',
+  'docs-updater': 'Focus (optional, defaults to what changed since the last docs update)',
+  'sync-from-wasensi': 'Focus (optional, defaults to everything that changed upstream)',
+  'create-tasks': 'PRD file path, or a finding to file as one issue',
+  'herdr-dispatch': 'Epic number, issue numbers, a label or an issue-search URL',
+  flow: 'An idea, a PRD path or an epic number',
+  'peer-review': 'What to review (optional, defaults to this session\'s change)',
+  'release-pr': 'Options (optional): --dry-run, or what to hold back',
 };
 const COMMANDS = Object.keys(LABELS);
 // What each command does, grouped by the job it serves, so nobody has to know the slugs by heart.
 export const GROUPS = [
-  ['Build', [['run-issue', 'Issue to a tested, reviewed PR'], ['issue-to-pr', 'Guided: interview, plan, then PR']]],
-  ['Review', [['pr-review', 'Review a PR, post inline comments'], ['pr-fix-comments', "Fix a PR's review comments"], ['pr-grind', 'Loop review and fix on a stuck PR']]],
-  ['Plan', [['create-prd', 'Idea to a PRD with technical design'], ['refine-issues', 'Task list to refined GitHub issues'], ['gh-issue', 'File an issue with code context']]],
-  ['Capture', [['intake', 'Sentry link, BRD or note to a brief'], ['dump', 'File an idea into your notes vault'], ['day', 'Tasks and follow-ups into Todoist'], ['worklog', "A day's worklog from GitHub activity"]]],
+  ['Build', [['implement-issue', 'Issue to a verified, reviewed ready PR'], ['herdr-dispatch', 'Run several issues in herdr tabs'], ['verifier-locally', 'Run the checks that match the change']]],
+  ['Review', [['pr-review', 'Review a PR or branch, with a verdict'], ['pr-grind', 'Loop the Slack reviewer bot on a ready PR'], ['peer-review', 'Panel of lens reviewers on an artifact']]],
+  ['Plan', [['flow', 'Idea to running issues, stage by stage'], ['create-prd', 'Idea to a PRD with technical design'], ['create-tasks', 'PRD to tasks and child issues of its epic'], ['refine-issues', 'Write WHAT, WHY and HOW into issues']]],
+  ['Ship', [['release-pr', 'Staging to master release PR, then grind']]],
+  ['Capture', [['dump', 'File an idea into your notes vault'], ['day', 'Tasks and follow-ups into Todoist'], ['worklog', "A day's worklog from GitHub activity"]]],
+  ['Maintain', [['docs-updater', 'Bring docs/ in line with the code'], ['sync-from-wasensi', 'Port upstream skill changes into the plugin']]],
 ];
 // Worklog's day: today, yesterday, one picked day, or a range. The skill writes one daily note per
 // day, so a range starts one worklog run per day. Dates are local YYYY-MM-DD.
@@ -51,13 +57,11 @@ export function worklogDates({ mode = 'today', day = '', from = '', to = '' }, t
 }
 
 // Commands whose argument is one of the repo's open issues or PRs: New run lists them to pick from.
-export const PICK = { 'run-issue': 'issue', 'issue-to-pr': 'issue', 'pr-review': 'pr', 'pr-fix-comments': 'pr' };
+export const PICK = { 'implement-issue': 'issue', 'pr-review': 'pr' };
 const CMD_KEY = 'aiw.lastCommand';
 
 // The argument text a picked issue/PR fills in, in the form each command takes (the URL is gh's).
 export function pickValue(command, slug, item) {
-  if (command === 'issue-to-pr') return item.url || `${slug}#${item.number}`;
-  if (command === 'pr-fix-comments') return `${slug}#${item.number}`;
   return String(item.number);
 }
 
@@ -76,17 +80,15 @@ export function matchItems(items, args) {
     : q.split(/\s+/).every((w) => it.title.toLowerCase().includes(w) || it.labels.some((l) => l.toLowerCase().includes(w)))));
 }
 const HINTS = {
-  'run-issue': '5940, or an issue URL',
+  'implement-issue': '5940, or an issue URL',
   'pr-grind': 'The Slack link of the review thread',
   worklog: '2026-10-08',
   'pr-review': '5960, or a PR URL',
-  'pr-fix-comments': 'owner/repo#5960, or a PR URL',
-  'issue-to-pr': 'An issue URL',
 };
-const OPTIONAL_ARGS = new Set(['worklog', 'day']);
+const OPTIONAL_ARGS = new Set(['worklog', 'day', 'verifier-locally', 'docs-updater', 'sync-from-wasensi', 'peer-review', 'release-pr']);
 // These take a written description rather than a number or link, so they get room to write.
-export const FREE_TEXT = new Set(['create-prd', 'intake', 'dump', 'gh-issue', 'day']);
-const URL_KIND = { 'run-issue': 'issues', 'pr-grind': 'pull' };
+export const FREE_TEXT = new Set(['create-prd', 'dump', 'day', 'flow']);
+const URL_KIND = { 'implement-issue': 'issues', 'pr-grind': 'pull' };
 
 export function repoOptions(body) {
   const list = body && Array.isArray(body.repos) ? body.repos : [];
@@ -140,7 +142,7 @@ export function argIssue(command, args) {
 
 export function validate({ repo, path, manual, command, args, vault }) {
   const errors = {};
-  if (vault && !NO_REPO_COMMANDS.has(command)) errors.repo = `${command} needs a repo: pick one, or use create-prd, dump, intake or a custom prompt for a new idea`;
+  if (vault && !NO_REPO_COMMANDS.has(command)) errors.repo = `${command} needs a repo: pick one, or use create-prd, dump or a custom prompt for a new idea`;
   else if (!vault && !String((manual ? path : repo) ?? '').trim()) errors.repo = 'Choose a repo or enter a path';
   if (!OPTIONAL_ARGS.has(command) && !String(args ?? '').trim()) errors.args = `Enter ${LABELS[command].toLowerCase()}`;
   return Object.keys(errors).length ? errors : null;
@@ -198,12 +200,9 @@ export function buildBody({ repo, command, args, lenses }) {
   return body;
 }
 
-export function sessionHref(body, command) {
-  // pr-grind has no per-session route yet (#126); #/run/ is the issue-keyed ledger
-  if (command === 'pr-grind') return '#/sessions';
-  const l = body && body.link;
-  if (!l || !l.owner || !l.repo || !Number.isInteger(l.issue) || l.issue < 1) return '#/sessions';
-  return `#/run/${encodeURIComponent(l.owner)}/${encodeURIComponent(l.repo)}/${l.issue}`;
+// Every start lands on the sessions list: the run page is gone and a session has no id until it lists.
+export function sessionHref() {
+  return '#/sessions';
 }
 
 export function outcome(status, body, command) {
@@ -260,12 +259,12 @@ export function makeSubmitter(fetchImpl) {
 }
 
 export class Launcher extends Component {
-  state = { repos: [], repo: '', manual: false, path: '', command: COMMANDS.includes(loadPref(globalThis.localStorage, CMD_KEY)) ? loadPref(globalThis.localStorage, CMD_KEY) : 'run-issue', args: '', text: '', pending: false, errors: {}, result: null, form: 'named', canBrowse: false };
+  state = { repos: [], repo: '', manual: false, path: '', command: COMMANDS.includes(loadPref(globalThis.localStorage, CMD_KEY)) ? loadPref(globalThis.localStorage, CMD_KEY) : 'implement-issue', args: '', text: '', pending: false, errors: {}, result: null, form: 'named', canBrowse: false };
 
   async componentDidMount() {
     fetch('/api/settings', { headers: { Accept: 'application/json' } })
       .then((r) => (r.ok ? r.json() : null))
-      .then((s) => s && this.setState({ cmds: s.commands || [], claudeLabel: s.default || '', autoGrind: !!s.auto_grind }))
+      .then((s) => s && this.setState({ cmds: s.commands || [], claudeLabel: s.default || '' }))
       .catch(() => {}); // no picker without settings: runs use claude
     fetch('/api/peer-review', { headers: { Accept: 'application/json' } })
       .then((r) => (r.ok ? r.json() : null))
@@ -320,7 +319,7 @@ export class Launcher extends Component {
   post = (body) => {
     const s = this.state;
     this.submit = this.submit || makeSubmitter((...a) => fetch(...a));
-    return this.submit({ ...body, ...vaultBody(s), ...(s.claudeLabel ? { claude_cmd: s.claudeLabel } : {}), auto_grind: s.autoGrind === true, worktree: s.worktree !== false, review: s.review !== false });
+    return this.submit({ ...body, ...vaultBody(s), ...(s.claudeLabel ? { claude_cmd: s.claudeLabel } : {}) });
   };
 
   remember = (repo, form) => {
@@ -472,7 +471,7 @@ export class Launcher extends Component {
     return this.start(ev, 'custom', validateCustom(this.state, lenses), (repo) => buildCustomBody({ repo, text: this.state.text, lenses }));
   };
 
-  render({ limits }, { canBrowse, cmds, claudeLabel, autoGrind, worktree, review, repos, repo, manual, path, command, args, text, pending, form, errors, result, offers }) {
+  render({ limits }, { canBrowse, cmds, claudeLabel, repos, repo, manual, path, command, args, text, pending, form, errors, result, offers }) {
     const mine = (f) => (result && (form || 'named') === f ? result : null);
     const outcomeMsg = (f) => { const r = mine(f); return r && r.kind === 'duplicate'
       ? html`<p role="alert" class="error">${r.message} <a href=${r.href}>Open that run</a></p>`
@@ -485,7 +484,7 @@ export class Launcher extends Component {
         <label for="repo-path">${repos.length ? 'Repo' : 'Repo path'}</label>
         ${hostRepoPicker(this, { repos, repo, manual, path, canBrowse, vault: this.state.vault }, { id: 'repo-path', error: repoMsg ? 'repo-error' : null, allowVault: true, allowCreate: true, after: () => this.setState({ errors: { ...this.state.errors, repo: undefined }, result: null }) })}
         ${repoMsg ? html`<p id="repo-error" role="alert" class="error">${repoMsg}</p>` : null}
-        ${this.state.vault && !NO_REPO_COMMANDS.has(command) && !repoMsg && html`<p class="note">${command} needs a repo. With no repo yet, use create-prd, dump or intake here, or the custom prompt.</p>`}
+        ${this.state.vault && !NO_REPO_COMMANDS.has(command) && !repoMsg && html`<p class="note">${command} needs a repo. With no repo yet, use create-prd or dump here, or the custom prompt.</p>`}
         ${this.state.vault && html`<${FolderChooser} id="vf" text=${NO_REPO_COMMANDS.has(command) && args.trim() ? args : text} value=${this.state.vf || { project: '', feature: '' }}
           onChange=${(vf) => this.setState({ vf })} />`}
         ${this.state.creating && html`<${CreateRepoDialog} withPrd=${false} onClose=${() => this.setState({ creating: false })} onDone=${(made) => adoptCreatedRepo(this, made)} />`}
@@ -511,11 +510,6 @@ export class Launcher extends Component {
         ${lensPicker({ id: 'peer-review', offer: this.reviewOffer(command), on: this.state.peerReview, picked: pickedLenses(true, this.state.lenses, offers), rounds: offers && offers.max_rounds,
           onToggle: (on) => this.setState({ peerReview: on }), onPick: (lenses) => this.setState({ lenses }) })}
         ${errors.lenses ? html`<p role="alert" class="error">${errors.lenses}</p>` : null}
-        ${command === 'run-issue' && html`<fieldset class="opts"><legend>Options</legend>
-        <label class="check" for="auto-grind"><input id="auto-grind" type="checkbox" checked=${autoGrind === true} onChange=${(e) => this.setState({ autoGrind: e.target.checked })} /> Start review grinding when the run finishes</label>
-        <label class="check" for="worktree"><input id="worktree" type="checkbox" checked=${worktree !== false} onChange=${(e) => this.setState({ worktree: e.target.checked })} /> Run in a worktree (off: the main checkout, waiting for any main-tree run already there)</label>
-        <label class="check" for="review"><input id="review" type="checkbox" checked=${review !== false} onChange=${(e) => this.setState({ review: e.target.checked })} /> Run the review and fix steps (off: the dev step completes the run)</label>
-        </fieldset>`}
         ${outcomeMsg('named')}
         <div class="launch-actions">
           <button type="submit" disabled=${pending}>${pending && (form || 'named') === 'named' ? this.state.progress || 'Starting...' : command === 'worklog' && this.state.wlFailed?.length ? `Retry ${this.state.wlFailed.length} failed day${this.state.wlFailed.length === 1 ? '' : 's'}` : 'Start'}${FREE_TEXT.has(command) && html` <kbd>⌘↵</kbd>`}</button>
@@ -536,7 +530,7 @@ export class Launcher extends Component {
       <form class="launcher panel" onSubmit=${this.onCustom} noValidate>
         <h2>Custom command</h2>
         <label for="custom">Custom command or prompt</label>
-        <textarea id="custom" placeholder="/pr-fix-comments 42" value=${text} onInput=${this.setText('text')}
+        <textarea id="custom" placeholder="/pr-review 42" value=${text} onInput=${this.setText('text')}
           aria-invalid=${errors.text ? 'true' : undefined} aria-describedby=${errors.text ? 'custom-error' : undefined}></textarea>
         ${errors.text ? html`<p id="custom-error" role="alert" class="error">${errors.text}</p>` : null}
         <p class="note danger">Runs with --dangerously-skip-permissions: the command or prompt is not gated.</p>

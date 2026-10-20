@@ -200,13 +200,13 @@ assert (
 assert res["no_repo"] is True and res["vault_folder"] == "05-Work/Gym/Check-ins"
 s, res = ui_repos.start_session({"no_repo": True, "text": "sketch a pricing page"})
 assert s == 201 and "No vault folder was chosen" in started[-1][0]
-s, res = ui_repos.start_session({"no_repo": True, "command": "run-issue", "args": "7"})
+s, res = ui_repos.start_session({"no_repo": True, "command": "implement-issue", "args": "7"})
 assert s == 400 and "needs a repo" in res["error"], res
 s, res = ui_repos.start_session({"no_repo": True, "command": "dump", "args": "x", "vault_folder": "05-Work/../etc"})
 assert s == 400, res
-s, res = ui_repos.start_session({"repo": "local/empty", "command": "run-issue", "args": "7"})
+s, res = ui_repos.start_session({"repo": "local/empty", "command": "implement-issue", "args": "7"})
 assert s == 400 and "GitHub remote" in res["error"], res
-s, res = ui_repos.start_session({"repo": "local/dup", "command": "run-issue", "args": "7"})
+s, res = ui_repos.start_session({"repo": "local/dup", "command": "implement-issue", "args": "7"})
 assert s == 400 and "already registered to another checkout" in res["error"], res
 assert json.dumps(started)  # nothing odd went to the runner
 ok("no-repo sessions: vault cwd, folder hint, create-prd --to obsidian; other commands and local repos refused")

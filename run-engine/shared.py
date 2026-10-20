@@ -1,15 +1,4 @@
-"""I/O helpers shared by route.py and the mechanical subcommands.
-
-route.py is the router; the modules beside it (stack, worktree, ghops, gitnexus)
-are the mechanical phases that used to live as prose in commands/run-issue.md.
-Everything they have in common — reading the ledger, writing it back, running a
-subprocess, talking to `gh` — lives here so there is exactly one of each.
-
-Exit-code doctrine for the mechanical subcommands: 0 ok · 1 the operation failed
-· 2 usage. This is NOT `route route`'s vocabulary (0/2/3/4/5/6/7), which is the
-only one that means "Teardown and report". Best-effort subcommands never exit
-nonzero at all — see warn_only().
-"""
+"""I/O helpers shared by the `aiw` subcommands and the UI server."""
 
 from __future__ import annotations
 
@@ -18,11 +7,10 @@ import os
 import subprocess
 import sys
 
-OK, FAILED, USAGE = 0, 1, 2
+USAGE = 2
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GLOBAL_CONFIG = os.path.join(HERE, "config.json")
-OVERLAY_NAME = ".run-issue.json"
 
 
 def data_dir() -> str:
@@ -120,99 +108,9 @@ def atomic_write_text(path: str, text: str) -> None:
         raise
 
 
-def deep_merge(base: dict, overlay: dict) -> dict:
-    """Dicts merge; lists (and scalars) REPLACE.
-
-    Lists replace deliberately: a repo overlay that narrows a signal's globs must
-    narrow it, not union with the global defaults and silently widen it.
-    """
-    out = dict(base)
-    for key, value in overlay.items():
-        if isinstance(value, dict) and isinstance(out.get(key), dict):
-            out[key] = deep_merge(out[key], value)
-        else:
-            out[key] = value
-    return out
-
-
-def load_config(repo: str | None) -> dict:
-    config = read_json(GLOBAL_CONFIG)
-    if repo:
-        overlay_path = os.path.join(repo, OVERLAY_NAME)
-        if os.path.isfile(overlay_path):
-            config = deep_merge(config, read_json(overlay_path))
-    return config
-
-
-# --------------------------------------------------------------------------- ledger
-
-
-def ledger_path(run_dir: str) -> str:
-    return os.path.join(run_dir, "run.json")
-
-
-def run_dir_for(runs_dir: str, slug: str, issue: int) -> str:
-    """The per-issue run directory under `runs_dir` for `slug`'s issue #`issue` —
-    the `<owner>-<repo>-issue-<n>` naming every run-directory consumer shares."""
-    owner, _, repo = slug.partition("/")
-    return os.path.join(runs_dir, f"{owner}-{repo}-issue-{issue}")
-
-
-def load_ledger(run_dir: str):
-    from engine import Ledger
-
-    return Ledger.from_dict(read_json(ledger_path(run_dir)))
-
-
-def save_ledger(run_dir: str, ledger) -> None:
-    # atomic: the UI reads run.json while a run writes it
-    path = ledger_path(run_dir)
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    atomic_write_text(path, json.dumps(ledger.to_dict(), indent=2, ensure_ascii=False) + "\n")
-
-
-def ledger_lock(run_dir: str):
-    """Exclusive flock on the run dir, for the short load -> mutate -> save commands
-    (set, route, skip-review) so a UI-triggered edit cannot interleave with them."""
-    import contextlib
-    import fcntl
-
-    @contextlib.contextmanager
-    def held():
-        os.makedirs(run_dir, exist_ok=True)
-        with open(os.path.join(run_dir, ".run.lock"), "a") as fh:
-            fcntl.flock(fh, fcntl.LOCK_EX)
-            yield
-
-    return held()
-
-
-def record(run_dir: str, ledger, **pairs) -> dict:
-    """Write context keys and persist. The subcommands call this instead of asking
-    the orchestrator to follow up with `route set` — a step in prose is a step that
-    gets skipped, and every key written here is load-bearing for a later phase."""
-    written = {k: v for k, v in pairs.items() if v is not None}
-    ledger.context.update(written)
-    save_ledger(run_dir, ledger)
-    return written
-
-
-def print_written(written: dict) -> None:
-    for key in sorted(written):
-        print(f"{key}={written[key]}")
-
-
-def porcelain_paths(text: str) -> list[str]:
-    """Paths named by `git status --porcelain` (v1); a rename names its new path."""
-    out = []
-    for line in (text or "").splitlines():
-        if len(line) > 3:
-            out.append(line[3:].split(" -> ")[-1].strip().strip('"'))
-    return out
-
-
-def repo_of(ledger, override: str | None = None) -> str:
-    return override or ledger.context.get("repo") or os.getcwd()
+def load_config(repo: str | None = None) -> dict:
+    """Global config.json only (`repo` is accepted for old callers and ignored)."""
+    return read_json(GLOBAL_CONFIG)
 
 
 # --------------------------------------------------------------------------- process

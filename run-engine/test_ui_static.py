@@ -63,593 +63,9 @@ port = srv.server_address[1]
 tmp = tempfile.mkdtemp()
 real_static = getattr(ui_server, "STATIC_DIR", None)
 SHELL = sys.argv[1:3] == ["--view", "shell"]
-RUN = sys.argv[1:3] == ["--view", "run"]
 
-RUN_JS = r"""
-const M = await import(process.env.RUN_URL);
-const { sessionForRun, sessionsForRun, actionsFor, mergeStream, totals, nearBottom, mdToHtml, visibleEvents, copyCommand, postAction, RunDetail } = M;
-const A = await import(process.env.APP_URL);
-const assert = (await import('node:assert')).strict;
-const out = (n) => console.log('ok ' + n);
-const tick = () => new Promise((r) => setImmediate(r));
-const settle = async () => { for (let i = 0; i < 8; i++) await tick(); };
-out('run.js imports without a document');
-
-const stations = ['researcher', 'planner', 'dev', 'reviewer', 'fixer'].map((name) => ({ name, status: 'pending' }));
-assert.equal(M.reviewEditable({ status: 'running', stations, currentStation: 'dev' }), true);
-assert.equal(M.reviewEditable({ status: 'running', stations, currentStation: 'reviewer' }), false);
-assert.equal(M.reviewEditable({ status: 'running', stations, currentStation: 'dev', reviewSkipped: true }), false);
-assert.equal(M.reviewEditable({ status: 'done', stations, currentStation: null }), false);
-assert.equal(M.grindEditable({ autoGrind: true }), true);
-assert.equal(M.grindEditable({ autoGrind: false, grind: { state: 'running' } }), false);
-assert.equal(M.grindEditable({ autoGrind: null }), false);
-assert.equal(M.canStartGrind({ status: 'done', pr: 'https://x/pull/1', gh: { pr: { state: 'OPEN' } } }), true);
-assert.equal(M.canStartGrind({ status: 'done', pr: 'https://x/pull/1' }), true);
-for (const state of ['MERGED', 'CLOSED']) assert.equal(M.canStartGrind({ status: 'done', pr: 'https://x/pull/1', gh: { pr: { state } } }), false);
-assert.equal(M.canStartGrind({ status: 'done', pr: 'https://x/pull/1', grind: { state: 'idle' } }), false);
-assert.equal(M.canStartGrind({ status: 'running', pr: 'https://x/pull/1' }), false);
-out('Start grinding only on a finished run whose PR is still open');
-
-const SS = await import(new URL('./session.js', process.env.RUN_URL).href);
-assert.equal(SS.eventText({ kind: 'text', text: 'hi' }), 'hi');
-assert.equal(SS.eventText({ kind: 'tool', name: 'Bash', input: { command: 'ls' } }), 'Bash {"command":"ls"}');
-assert.equal(SS.eventText({ kind: 'result', text: null }), ''); assert.equal(SS.eventText(null), '');
-const evs = [{ kind: 'text', text: 'Hello World' }, { kind: 'tool', name: 'Bash', input: { command: 'git status' } }, { kind: 'result', text: 'ok' }];
-assert.deepEqual(SS.filterEvents(evs, '').map((x) => x.i), [0, 1, 2]);
-assert.deepEqual(SS.filterEvents(evs, ' GIT ').map((x) => x.i), [1]);
-assert.deepEqual(SS.filterEvents(evs, 'nomatch'), []); assert.deepEqual(SS.filterEvents(null, 'x'), []);
-assert.equal(SS.toolSummary({ input: { command: 'ls   -la\n/tmp' } }), 'ls -la /tmp');
-assert.equal(SS.toolSummary({ input: { file_path: '/a/b.js', other: 1 } }), '/a/b.js');
-assert.equal(SS.toolSummary({ input: { weird: 1 } }), '{"weird":1}');
-assert.equal(SS.toolSummary({ input: { command: 'x'.repeat(300) } }).length, 110);
-assert.equal(SS.toolSummary({}), '');
-out('session.js: eventText, filterEvents, toolSummary');
-const GH = await import(new URL('./ghstatus.js', process.env.RUN_URL).href);
-assert.deepEqual(GH.ghChips({ issue: { state: 'OPEN', labels: ['bug'] } }), []);
-assert.deepEqual(GH.ghChips({ issue: { state: 'CLOSED', labels: ['bug'] } }, true).map((c) => c.tone), ['ok', 'label']);
-assert.deepEqual(GH.ghChips({ issue: { state: 'DELETED', labels: [] } }), [{ text: 'issue deleted', tone: 'bad' }]);
-assert.deepEqual(GH.ghChips({ issue: { state: 'OPEN', labels: ['a', 'b', 'c', 'd', 'e'] } }, true).map((c) => c.text), ['a', 'b', 'c', '+2 more']);
-out('ghstatus: no chip for an open issue, labels get their own tone');
-
-const K = await import(new URL('./keys.js', process.env.RUN_URL).href);
-const ev = (key, extra = {}) => ({ key, target: { tagName: 'BODY' }, ...extra });
-assert.deepEqual(K.keyIntent(ev('k', { metaKey: true })), { type: 'palette' });
-assert.deepEqual(K.keyIntent(ev('K', { ctrlKey: true, target: { tagName: 'INPUT' } })), { type: 'palette' });
-assert.equal(K.keyIntent(ev('n', { metaKey: true })), null);
-assert.deepEqual(K.keyIntent(ev('n')), { type: 'goto', hash: '#/new' });
-assert.equal(K.keyIntent(ev('n', { target: { tagName: 'TEXTAREA' } })), null);
-assert.equal(K.keyIntent(ev('j', { target: { tagName: 'DIV', isContentEditable: true } })), null);
-assert.deepEqual(K.keyIntent(ev('Escape', { target: { tagName: 'INPUT' } })), { type: 'escape' });
-assert.deepEqual(K.keyIntent(ev('g')), { type: 'chord' });
-assert.deepEqual(K.keyIntent(ev('s'), true), { type: 'goto', hash: '#/sessions' });
-assert.deepEqual(K.keyIntent(ev('b'), true), { type: 'goto', hash: '#/' });
-assert.equal(K.keyIntent(ev('x'), true), null); assert.equal(K.keyIntent(ev('q')), null);
-assert.deepEqual(K.keyIntent(ev('ArrowDown')), { type: 'move', dir: 'down' });
-assert.deepEqual(K.keyIntent(ev('h')), { type: 'move', dir: 'left' });
-assert.deepEqual(K.keyIntent(ev('?')), { type: 'sheet' }); assert.deepEqual(K.keyIntent(ev('/')), { type: 'search' });
-out('keys: keyIntent ignores typing except palette/escape, chords, arrows');
-
-assert.equal(K.moveTarget([0, 0], null, 'down'), null);
-assert.deepEqual(K.moveTarget([0, 3, 2], null, 'down'), [1, 0]);
-assert.deepEqual(K.moveTarget([0, 3, 2], [1, 0], 'down'), [1, 1]);
-assert.deepEqual(K.moveTarget([0, 3, 2], [1, 2], 'down'), [1, 2]);
-assert.deepEqual(K.moveTarget([0, 3, 2], [1, 0], 'up'), [1, 0]);
-assert.deepEqual(K.moveTarget([0, 3, 2], [1, 2], 'right'), [2, 1]);
-assert.deepEqual(K.moveTarget([0, 3, 2], [1, 1], 'right'), [2, 1]);
-assert.deepEqual(K.moveTarget([0, 3, 2], [2, 0], 'right'), [2, 0]);
-assert.deepEqual(K.moveTarget([0, 3, 2], [1, 0], 'left'), [1, 0]);
-assert.deepEqual(K.moveTarget([4, 0, 2], [0, 3], 'right'), [2, 1]);
-out('keys: moveTarget walks cards, skips empty columns, clamps row');
-
-const items = K.paletteItems({
-  board: { columns: [{ key: 'dev', cards: [{ owner: 'o', repo: 'r', issue: 7, title: 'Fix login' }] }] },
-  sessions: [{ id: 's1', command: '/create-prd', repo: '/x/proj', outcome: 'waiting' }, { id: 's2', command: '/gh-issue', repo: 'o/r', outcome: 'done' }],
-});
-assert.deepEqual(items.map((i) => i.group), ['Go to', 'Go to', 'Go to', 'Go to', 'Go to', 'Go to', 'Autopilot', 'Run', 'Session', 'Session']);
-assert.equal(items.find((i) => i.id === 'session-s1').href, '#/answer/s1');
-assert.equal(items.find((i) => i.id === 'session-s2').href, '#/session/s2');
-assert.equal(items.find((i) => i.group === 'Run').href, '#/run/o/r/7');
-assert.deepEqual(K.filterItems(items, 'login').map((i) => i.group), ['Run']);
-assert.deepEqual(K.filterItems(items, 'dev fix').length, 1);
-assert.equal(K.filterItems(items, '').length, 8); assert.equal(K.filterItems(items, '', 2).length, 2);
-assert.equal(K.filterItems(items, 'zzz').length, 0);
-assert.equal(K.paletteItems({ board: null, sessions: null }).length, 7);  // six pages + Go AFK
-out('keys: paletteItems and filterItems');
-
-const TOAST = await import(new URL('./toast.js', process.env.RUN_URL).href);
-const prevDoc = globalThis.document;
-globalThis.document = undefined; TOAST.toast('no document is fine'); globalThis.document = {}; TOAST.toast('no body is fine');
-const made = []; const host = { appendChild: (c) => made.push(c), setAttribute() {} };
-globalThis.document = { body: { appendChild() {} }, getElementById: () => host, createElement: () => ({ remove() {}, className: '', textContent: '' }) };
-TOAST.toast('hello', 'error');
-assert.equal(made.length, 1); assert.equal(made[0].textContent, 'hello'); assert.equal(made[0].className, 'toast toast-error');
-globalThis.document = prevDoc;
-out('toast: no-ops without a document, appends a kinded message');
-
-const { formatWhen, shortRepo } = await import(new URL('./fmt.js', process.env.RUN_URL).href);
-const noon = new Date(2026, 9, 7, 12, 0);
-assert.match(formatWhen(new Date(2026, 9, 7, 9, 5).toISOString(), noon), /^Today 09:05$/);
-assert.match(formatWhen(new Date(2026, 9, 6, 17, 40).toISOString(), noon), /^Yesterday 17:40$/);
-assert.match(formatWhen(new Date(2026, 9, 1, 8, 0).toISOString(), noon), /^Oct 1 08:00$/);
-assert.equal(formatWhen(null, noon), '—'); assert.equal(formatWhen('garbage', noon), '—');
-assert.equal(shortRepo('/Users/x/Projects/ai-workflow/'), 'ai-workflow'); assert.equal(shortRepo('o/r'), 'r'); assert.equal(shortRepo(''), '—');
-out('fmt: formatWhen and shortRepo');
-
-// ---- sessionForRun
-const S = (id, command, extra = {}) => ({ id, repo: 'own/repo', command, outcome: 'done', ...extra });
-const forms = ['/run-issue 42', '/ai-workflow:run-issue 42', '/run-issue #42', '/run-issue https://github.com/own/repo/issues/42'];
-for (const f of forms) assert.equal(sessionForRun([S('x', f)], 'own', 'repo', 42)?.id, 'x', f);
-assert.equal(sessionForRun([S('x', 'whatever', { link: 'https://github.com/own/repo/issues/42' })], 'own', 'repo', 42)?.id, 'x');
-assert.equal(sessionForRun([S('new', '/run-issue 42'), S('old', '/run-issue 42')], 'own', 'repo', 42).id, 'new');
-assert.equal(sessionForRun([S('o', '/run-issue 7'), S('m', '/run-issue 42')], 'own', 'repo', 42).id, 'm');
-out('sessionForRun matches command forms and link, newest first');
-assert.deepEqual(sessionsForRun([S('a', '/run-issue 42'), S('b', '/run-issue 7'), S('c', '/run-issue 42')], 'own', 'repo', 42).map((x) => x.id), ['a', 'c']);
-assert.deepEqual(sessionsForRun(null, 'own', 'repo', 42), []);
-out('sessionsForRun returns every matching session');
-assert.equal(sessionForRun([{ id: 'p', repo: '/Users/x/own-repo', command: '/run-issue 42', link: { owner: 'own', repo: 'repo', issue: 42 } }], 'own', 'repo', 42)?.id, 'p');
-assert.equal(sessionForRun([{ id: 'p', repo: '/Users/x/own-repo', command: '/run-issue 42', link: { owner: 'own', repo: 'repo', issue: 7 } }], 'own', 'repo', 42), null);
-out('sessionForRun matches a path-repo session by its link object');
-for (const c of ['/run-issue 420', '/run-issue 4', '/pr-grind 42', '/run-issue 42x'])
-  assert.equal(sessionForRun([S('x', c)], 'own', 'repo', 42), null, c);
-assert.equal(sessionForRun([S('x', '/run-issue 42', { repo: 'other/repo' })], 'own', 'repo', 42), null);
-for (const bad of [[], null, {}, 'x', undefined, 5]) assert.equal(sessionForRun(bad, 'own', 'repo', 42), null);
-out('sessionForRun boundaries and bad input');
-
-// ---- mergeStream
-const st0 = { events: [], offset: 0 };
-const e1 = { kind: 'text', text: 'a' }, e2 = { kind: 'text', text: 'b' };
-let st = mergeStream(st0, { events: [e1], offset: 10 });
-assert.equal(st.offset, 10); assert.deepEqual(st.events, [e1]);
-st = mergeStream(st, { events: [e2], offset: 20 });
-assert.deepEqual(st.events, [e1, e2]); assert.equal(st.offset, 20);
-st = mergeStream(st, { events: [], offset: 25 });
-assert.deepEqual(st.events, [e1, e2]); assert.equal(st.offset, 25);
-out('mergeStream appends and advances offset');
-const dup = mergeStream(st, { events: [e1, e2], offset: 25 });
-assert.deepEqual(dup.events, [e1, e2]); assert.equal(dup.offset, 25);
-const old = mergeStream(st, { events: [e1], offset: 5 });
-assert.deepEqual(old.events, [e1, e2]); assert.equal(old.offset, 25);
-out('mergeStream drops stale or duplicate responses');
-
-// ---- totals
-const res = (cost, extra = {}) => ({ kind: 'result', cost, is_error: false, text: 't', ...extra });
-assert.equal(totals([res(0.1), res(0.7)], { cost: 9 }).cost, 0.7);
-assert.equal(totals([res(null)], { cost: 3 }).cost, 3);
-assert.equal(totals([], { cost: 2 }).cost, 2);
-assert.equal(totals([], null).cost, null);
-assert.equal(totals([res(1)], null).tokens, null);
-assert.deepEqual({ ...totals([res(1, { tokens: { input: 1200, cached: 0, output: 300 } })], null).tokens }, { input: 1200, cached: 0, output: 300 });
-assert.deepEqual(totals([res(1)], { tokens: { input: 5, cached: 0, output: 1 } }).tokens, { input: 5, cached: 0, output: 1 }, 'falls back to the session record');
-out('totals: cost and tokens from the last result, else the session record');
-
-// ---- nearBottom
-assert.equal(nearBottom({ scrollHeight: 1000, scrollTop: 600, clientHeight: 400 }), true);
-assert.equal(nearBottom({ scrollHeight: 1000, scrollTop: 590, clientHeight: 400 }), true);
-assert.equal(nearBottom({ scrollHeight: 1000, scrollTop: 100, clientHeight: 400 }), false);
-out('nearBottom');
-
-// ---- actionsFor
-const O = (outcome, rc = null) => ({ id: 'x', outcome, resume_command: rc });
-for (const o of ['starting', 'running', 'waiting']) assert.deepEqual([...actionsFor(O(o))], ['stop'], o);
-assert.deepEqual([...actionsFor(O('stopped', 'claude -r x'))], ['resume', 'terminal']);
-assert.deepEqual([...actionsFor(O('stopped'))], ['resume']);
-for (const o of ['done', 'failed']) { assert.deepEqual([...actionsFor(O(o, 'claude -r x'))], ['terminal']); assert.deepEqual([...actionsFor(O(o))], []); }
-assert.deepEqual([...actionsFor(O('running', 'claude -r x'))], ['stop', 'terminal']);
-assert.deepEqual([...actionsFor(null)], []);
-out('actionsFor');
-
-// ---- mdToHtml
-let h = mdToHtml('# Title\n\nsome **bold** and `code`\n\n- a\n- b\n\n1. one\n2. two\n\n```\n# not heading\n**raw**\n```');
-assert.match(h, /<h1>Title<\/h1>/); assert.match(h, /<strong>bold<\/strong>/); assert.match(h, /<code>code<\/code>/);
-assert.match(h, /<ul>\s*<li>a<\/li>\s*<li>b<\/li>\s*<\/ul>/); assert.match(h, /<ol>\s*<li>one<\/li>\s*<li>two<\/li>\s*<\/ol>/);
-assert.match(h, /<p>some /); assert.match(h, /<pre>[\s\S]*# not heading[\s\S]*\*\*raw\*\*[\s\S]*<\/pre>/);
-assert.doesNotMatch(h, /<h1>not heading/); assert.doesNotMatch(h, /<strong>raw/);
-out('mdToHtml renders blocks and inline');
-for (const bad of ['<img src=x onerror=alert(1)>', '<script>alert(1)</script>', '"><svg onload=alert(1)>', '[x](javascript:alert(1))', "a & b 'q'"]) {
-  const r = mdToHtml(bad);
-  assert.doesNotMatch(r, /<(img|script|svg)/i, bad); assert.doesNotMatch(r, /<a[\s>]/i); assert.doesNotMatch(r, /href/i);
-  assert.doesNotMatch(r, /<[a-z]+[^>]*\s(on\w+|src)=/i, bad);
-}
-assert.match(mdToHtml('a & <b> "q" \'s\''), /a &amp; &lt;b&gt; &quot;q&quot; &#0?39;s&#0?39;|a &amp; &lt;b&gt; &quot;q&quot; &#x27;s&#x27;/);
-assert.equal(mdToHtml(''), ''); assert.equal(mdToHtml(null), '');
-out('mdToHtml escapes hostile input; empty is empty');
-assert.equal(mdToHtml('**Next:**\n- a\n- b'), '<p><strong>Next:</strong></p>\n<ul>\n<li>a</li>\n<li>b</li>\n</ul>');
-out('mdToHtml: a list straight under a paragraph line renders after it');
-assert.equal(M.shownStatus({ status: 'running', maintree: { role: 'queued' } }), 'queued');
-assert.equal(M.shownStatus({ status: 'running', maintree: { role: 'holder' } }), 'running');
-assert.equal(M.shownStatus({ status: 'done', maintree: { role: 'queued' } }), 'done');
-out('shownStatus: a main-tree run queued behind another shows queued');
-{
-  const P = (reason, ci) => M.pausedOnCi({ grind: { state: 'paused', reason }, gh: { pr: { ci } } });
-  assert.ok(!P('stall check: runtime-verification blocker repeated 5 rounds', 'green'), 'a stall check is not CI');
-  assert.ok(P('CI is red at the head commit', 'green') && P('Gate 2 failed', null) && P('failing checks: lint', null) && P('checks are red', null));
-  assert.ok(P('anything', 'red'), 'red CI always counts');
-  out('pausedOnCi: only CI reasons offer Skip CI');
-}
-const sameText = { kind: 'text', text: ' same ' };
-assert.deepEqual(visibleEvents([sameText, { kind: 'result', text: 'same' }, { kind: 'text', text: 'x' }, { kind: 'result', text: 'y' }, { kind: 'result', text: 'same', is_error: true }]).map((e) => e.kind), ['text', 'turn', 'text', 'result', 'result']);
-assert.deepEqual(visibleEvents(null), []);
-out('visibleEvents folds a result that repeats the message above it into a turn divider');
-
-// ---- copyCommand / postAction
-assert.deepEqual({ ...(await copyCommand('c', { clipboard: { writeText: async () => {} } })) }, { ok: true });
-assert.equal((await copyCommand('c', {})).ok, false);
-assert.equal((await copyCommand('c', undefined)).ok, false);
-assert.equal((await copyCommand('c', { clipboard: { writeText: async () => { throw new Error('no'); } } })).ok, false);
-out('copyCommand');
-
-const jr = (ok, status, body) => ({ ok, status, json: async () => { if (body instanceof Error) throw body; return body; } });
-let calls = [], timers = [], tid = 0, routes = [];
-const doc = { hidden: false, ls: {}, addEventListener(t, f) { (this.ls[t] ||= []).push(f); },
-  removeEventListener(t, f) { this.ls[t] = (this.ls[t] || []).filter((x) => x !== f); } };
-globalThis.document = doc;
-globalThis.confirm = () => true;
-globalThis.setTimeout = (fn, ms) => { const t = { id: ++tid, fn, ms }; timers.push(t); return t.id; };
-globalThis.clearTimeout = (id) => { timers = timers.filter((t) => t.id !== id); };
-globalThis.fetch = (u, o) => {
-  calls.push({ u, o });
-  for (const r of routes) if (r.test(u, o)) return typeof r.reply === 'function' ? r.reply(u, o) : Promise.resolve(r.reply);
-  return Promise.resolve(jr(false, 500, {}));
-};
-const reset = () => { calls = []; timers = []; routes = []; };
-const when = (re, reply) => routes.unshift({ test: (u) => re.test(u), reply });
-
-reset(); when(/./, jr(true, 200, { ok: 1 }));
-assert.deepEqual({ ...(await postAction('a b', 'stop')) }, { ok: true });
-assert.equal(calls[0].u, '/api/sessions/a%20b/stop'); assert.equal(calls[0].o.method, 'POST');
-reset(); when(/./, jr(false, 409, { error: 'already stopped' }));
-assert.deepEqual({ ...(await postAction('s', 'resume')) }, { ok: false, error: 'already stopped' });
-reset(); when(/./, jr(false, 502, new SyntaxError('x')));
-assert.deepEqual({ ...(await postAction('s', 'stop')) }, { ok: false, error: 'HTTP 502' });
-reset(); when(/./, () => Promise.reject(new Error('net down')));
-const nr = await postAction('s', 'stop'); assert.equal(nr.ok, false); assert.ok(nr.error);
-out('postAction');
-
-// ---- poll extensions in app.js
-reset(); let offs = 0; let got = [];
-when(/^\/x\?o=\d+$/, jr(false, 404, {}));
-const stopP = A.poll(() => '/x?o=' + offs++, 1000, (r) => got.push(r));
-await settle();
-assert.equal(calls[0].u, '/x?o=0'); assert.equal(got[0].ok, false); assert.equal(got[0].status, 404);
-timers.shift().fn(); await settle(); assert.equal(calls[1].u, '/x?o=1');
-stopP();
-out('poll accepts a url function and reports status on failure');
-
-// ---- vnode walker
-const norm = (v) => {
-  if (v == null || typeof v === 'boolean') return null;
-  if (typeof v === 'string' || typeof v === 'number') return String(v);
-  if (Array.isArray(v)) return { type: null, props: {}, kids: v.map(norm).filter((x) => x !== null) };
-  if (typeof v.type === 'function' && !v.type.prototype?.render) return norm(v.type({ ...v.props, children: v.props.children }));
-  const c = v.props?.children;
-  return { type: v.type, props: v.props || {}, key: v.key, kids: c == null ? [] : [].concat(c).flatMap((x) => (Array.isArray(x) ? x : [x])).map(norm).filter((x) => x !== null) };
-};
-// innerHTML (mdToHtml output) counts as its visible text: tags dropped, entities decoded.
-const unhtml = (s) => String(s).replace(/<[^>]+>/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&amp;/g, '&');
-const text = (n) => (typeof n === 'string' ? n : n.props?.dangerouslySetInnerHTML ? unhtml(n.props.dangerouslySetInnerHTML.__html) : n.kids.map(text).join(' ')).replace(/\s+/g, ' ');
-const all = (n, acc = []) => { if (typeof n === 'string') return acc; acc.push(n); n.kids.forEach((k) => all(k, acc)); return acc; };
-const find = (n, f) => all(n).filter(f);
-const T = (c) => norm(c.render(c.props, c.state));
-const txt = (c) => text(T(c)).trim();
-
-const RUN = { owner: 'own', repo: 'repo', issue: 42, status: 'running', currentStation: 'dev',
-  stations: [{ name: 'plan', status: 'done', bounces: 0 }, { name: 'dev', status: 'running', bounces: 2 }, { name: 'verify', status: 'pending', bounces: 0 }, { name: 'ship', status: 'bounced', bounces: 0 }],
-  trace: [], plan: '# Plan title\n\n- step one', totals: { stations: 4, done: 1, bounces: 2 }, errors: {} };
-const sess = (o = {}) => ({ id: 's1', repo: 'own/repo', command: '/run-issue 42', outcome: 'running', cost: null, resume_command: null, resumed_fresh: false, note: null, ...o });
-const RUNURL = /^\/api\/runs\/own\/repo\/42$/;
-const STREAM = (id = 's1', off = '\\d+') => new RegExp('^/api/sessions/' + id + '/stream\\?offset=' + off + '$');
-const streamCalls = () => calls.filter((c) => /\/stream/.test(c.u));
-
-async function mount(sessions, runReply = jr(true, 200, RUN), props = {}) {
-  const c = new RunDetail({ owner: 'own', repo: 'repo', n: 42, sessions, ...props });
-  c.state = c.state || {};
-  c.setState = (p, cb) => { c.state = { ...c.state, ...(typeof p === 'function' ? p(c.state, c.props) : p) }; if (cb) cb(); };
-  if (runReply) when(RUNURL, runReply);
-  c.componentDidMount && c.componentDidMount();
-  await settle();
-  return c;
-}
-async function update(c, sessions) {
-  const prev = c.props; c.props = { ...prev, sessions };
-  c.componentDidUpdate && c.componentDidUpdate(prev, c.state);
-  await settle();
-}
-const fireTimers = async (ms) => { for (const t of timers.filter((x) => x.ms === ms)) { timers = timers.filter((x) => x !== t); t.fn(); } await settle(); };
-const btns = (c) => find(T(c), (n) => n.type === 'button' && n.props.role !== 'tab');
-const btn = (c, re) => btns(c).find((b) => re.test(text(b)));
-const status = (c) => find(T(c), (n) => n.props.role === 'status').map(text).join(' ');
-const tab = (c, re) => find(T(c), (n) => n.props.role === 'tab' && re.test(text(n)))[0];
-
-// ---- timeline
-reset(); when(STREAM(), jr(true, 200, { events: [], offset: 0 }));
-let c = await mount([sess()]);
-let tl = find(T(c), (n) => n.type === 'ol')[0];
-assert.ok(tl, 'ol timeline');
-let rows = tl.kids.filter((k) => k.type === 'li');
-assert.equal(rows.length, 4);
-['plan', 'dev', 'verify', 'ship'].forEach((nm, i) => assert.match(text(rows[i]), new RegExp(nm)));
-['done', 'running', 'pending', 'bounced'].forEach((st, i) => assert.match(text(rows[i]), new RegExp(st)));
-const cur = find(tl, (n) => n.props['aria-current'] === 'step');
-assert.equal(cur.length, 1); assert.match(text(cur[0]), /dev/); assert.match(text(cur[0]), /2/);
-assert.doesNotMatch(text(tl), /\d\s*(ms|sec|seconds|min|minutes|hours?)\b|\bago\b|\d:\d\d/i);
-const all0 = txt(c); assert.match(all0, /4/); assert.match(all0, /own\/repo#42/);
-out('timeline order, status, aria-current, bounces, totals, no time text');
-c.componentWillUnmount && c.componentWillUnmount();
-
-reset(); when(/./, jr(true, 200, {}));
-c = await mount([sess({ outcome: 'done' })], jr(true, 200, { ...RUN, status: 'done', currentStation: null, stations: [{ name: 'plan', status: 'done', bounces: 0 }, { name: 'weird', status: 'zzz-unknown', bounces: 0 }] }));
-assert.equal(find(T(c), (n) => n.props['aria-current'] === 'step').length, 0);
-assert.match(txt(c), /zzz-unknown/);
-out('timeline done run has no current row; unknown status shown');
-
-// ---- polling schedule
-reset(); when(STREAM(), jr(true, 200, { events: [], offset: 0 }));
-c = await mount([sess({ outcome: 'running' })]);
-assert.ok(timers.some((t) => t.ms === 3000), 'run endpoint 3s'); assert.ok(calls.some((x) => RUNURL.test(x.u)));
-assert.ok(timers.some((t) => t.ms === 1000), 'stream 1s while running');
-assert.match(streamCalls()[0].u, /s1\/stream\?offset=0$/);
-c.componentWillUnmount && c.componentWillUnmount();
-assert.equal(timers.length, 0, 'unmount stops all polls');
-for (const o of ['done', 'failed', 'stopped', 'waiting']) {
-  reset(); when(STREAM(), jr(true, 200, { events: [], offset: 0 }));
-  c = await mount([sess({ outcome: o, ...(o === 'waiting' ? { ended_at: '2026-01-01T00:00:00Z' } : {}) })]);
-  assert.equal(streamCalls().length, 1, o); assert.match(streamCalls()[0].u, /offset=0$/);
-  assert.ok(!timers.some((t) => t.ms === 1000), o + ' no stream timer');
-  c.componentWillUnmount && c.componentWillUnmount();
-}
-reset(); when(STREAM(), jr(true, 200, { events: [], offset: 0 }));
-c = await mount([sess({ outcome: 'starting' })]); assert.ok(timers.some((t) => t.ms === 1000), 'starting polls');
-c.componentWillUnmount && c.componentWillUnmount();
-reset(); when(STREAM(), jr(true, 200, { events: [], offset: 0 }));
-c = await mount([sess({ outcome: 'waiting', ended_at: null })]);
-assert.ok(timers.some((t) => t.ms === 1000), 'waiting + process alive (ended_at null) keeps 1s stream poll');
-c.componentWillUnmount && c.componentWillUnmount();
-reset(); when(STREAM(), jr(true, 200, { events: [], offset: 0 }));
-c = await mount([sess({ outcome: 'waiting', ended_at: '2026-01-01T00:00:00Z' })]);
-assert.equal(streamCalls().length, 1); assert.ok(!timers.some((t) => t.ms === 1000), 'waiting + ended_at set: one fetch, no timer');
-c.componentWillUnmount && c.componentWillUnmount();
-out('stream poll only while starting/running or live waiting; terminal fetched once; run endpoint 3s');
-
-// ---- output pane, offsets, terminal transition, id change
-const EV = [{ kind: 'text', text: 'hello <b>x</b>' }, { kind: 'tool', name: 'Bash', input: { command: 'ls -la' } }, { kind: 'result', cost: 0.5, is_error: false, text: 'finished ok' }];
-reset(); let step = 0;
-when(STREAM(), () => { step++; return Promise.resolve(jr(true, 200, step === 1 ? { events: EV, offset: 100 } : { events: [], offset: 100 })); });
-c = await mount([sess()]);
-let t0 = txt(c);
-assert.ok(t0.includes('hello <b>x</b>'), 'text event as literal text'); assert.match(t0, /Bash/); assert.match(t0, /ls -la/); assert.match(t0, /finished ok/);
-assert.equal(find(T(c), (n) => n.type === 'b').length, 0);
-assert.match(t0, /0\.5/);
-assert.doesNotMatch(t0, /token/i);
-await fireTimers(1000);
-assert.match(streamCalls().at(-1).u, /offset=100$/);
-assert.equal(txt(c).split('hello').length, 2, 'no duplicates');
-out('output pane renders events as text, polls from saved offset, no duplicates');
-
-when(STREAM(), jr(true, 200, { events: [{ kind: 'text', text: 'LASTLINE' }], offset: 130 }));
-const before = streamCalls().length;
-await update(c, [sess({ outcome: 'done' })]);
-assert.equal(streamCalls().length, before + 1); assert.match(streamCalls().at(-1).u, /offset=100$/);
-assert.match(txt(c), /LASTLINE/);
-assert.ok(!timers.some((t) => t.ms === 1000));
-await fireTimers(3000);
-assert.equal(streamCalls().length, before + 1, 'no further stream fetches');
-out('terminal transition stops poll and fetches the tail once');
-
-reset(); when(STREAM(), jr(true, 200, { events: [], offset: 7 }));
-c = await mount([sess({ outcome: 'waiting', ended_at: null })]);
-assert.ok(timers.some((t) => t.ms === 1000), 'live waiting polls');
-when(STREAM(), jr(true, 200, { events: [{ kind: 'text', text: 'TAIL2' }], offset: 20 }));
-const before2 = streamCalls().length;
-await update(c, [sess({ outcome: 'done', ended_at: '2026-01-01T00:00:00Z' })]);
-assert.equal(streamCalls().length, before2 + 1); assert.match(streamCalls().at(-1).u, /offset=7$/);
-assert.match(txt(c), /TAIL2/); assert.ok(!timers.some((t) => t.ms === 1000));
-out('waiting-live to done does the final fetch and stops the poll');
-
-reset(); when(STREAM('s1'), jr(true, 200, { events: [{ kind: 'text', text: 'OLDSTREAM' }], offset: 50 }));
-when(STREAM('s2'), jr(true, 200, { events: [{ kind: 'text', text: 'NEWSTREAM' }], offset: 7 }));
-c = await mount([sess()]);
-assert.match(txt(c), /OLDSTREAM/);
-await update(c, [sess({ id: 's2' }), sess()]);
-assert.match(streamCalls().at(-1).u, /s2\/stream\?offset=0$/);
-assert.doesNotMatch(txt(c), /OLDSTREAM/); assert.match(txt(c), /NEWSTREAM/);
-out('session id change resets stream and restarts at offset 0');
-
-// ---- no session / not found / retry
-reset();
-c = await mount([]);
-assert.match(txt(c), /No UI session for this run/);
-assert.equal(btns(c).length, 0); assert.equal(streamCalls().length, 0);
-assert.equal(find(T(c), (n) => n.type === 'ol').length, 1);
-await tab(c, /plan/i).props.onClick({}); await settle();
-assert.ok(find(T(c), (n) => n.props.dangerouslySetInnerHTML).length === 1);
-out('no matching session: timeline and plan render, no buttons, no stream fetch');
-
-reset(); c = await mount([], jr(false, 404, {}));
-assert.match(txt(c), /not found/i);
-assert.ok(find(T(c), (n) => n.type === 'a' && n.props.href === '#/').length >= 1);
-reset(); c = await mount([]);
-when(RUNURL, jr(false, 500, {}));
-await fireTimers(3000);
-assert.match(txt(c), /retrying/i); assert.doesNotMatch(txt(c), /not found/i); assert.match(txt(c), /verify/);
-out('404 shows not-found with Board link; other failures keep data and retry');
-
-// ---- plan tab and tabs aria
-reset(); c = await mount([]);
-const tabs = find(T(c), (n) => n.props.role === 'tablist')[0];
-assert.ok(tabs); const tt = find(tabs, (n) => n.props.role === 'tab');
-assert.equal(tt.length, 3);
-for (const t of tt) { assert.equal(t.type, 'button'); assert.ok(t.props['aria-controls']); assert.ok(t.props.id); }
-assert.equal(tt.filter((t) => t.props['aria-selected'] === true || t.props['aria-selected'] === 'true').length, 1);
-let panel = find(T(c), (n) => n.props.role === 'tabpanel');
-assert.equal(panel.length, 1);
-const selId = (cc) => find(T(cc), (n) => n.props.role === 'tab' && String(n.props['aria-selected']) === 'true')[0];
-assert.equal(panel[0].props['aria-labelledby'], selId(c).props.id); assert.equal(panel[0].props.id, selId(c).props['aria-controls']);
-const first = selId(c).props.id;
-await tab(c, /plan/i).props.onClick({}); await settle();
-assert.notEqual(selId(c).props.id, first); assert.match(text(selId(c)), /plan/i);
-panel = find(T(c), (n) => n.props.role === 'tabpanel');
-assert.equal(panel[0].props['aria-labelledby'], selId(c).props.id);
-await tab(c, /sessions/i).props.onClick({}); await settle();
-assert.match(text(tab(c, /sessions/i)), /Sessions \(0\)/);
-assert.match(txt(c), /No UI sessions for this run/);
-await tab(c, /plan/i).props.onClick({}); await settle();
-const dsh = find(panel[0], (n) => n.props.dangerouslySetInnerHTML)[0];
-assert.match(dsh.props.dangerouslySetInnerHTML.__html, /<h1>Plan title<\/h1>/);
-out('tabs aria and plan rendering via mdToHtml');
-
-reset(); c = await mount([], jr(true, 200, { ...RUN, plan: null }));
-await tab(c, /plan/i).props.onClick({}); await settle();
-assert.match(txt(c), /No plan yet/); assert.doesNotMatch(txt(c), /could not be read/);
-reset(); c = await mount([], jr(true, 200, { ...RUN, plan: null, errors: { plan: 'bad json' } }));
-await tab(c, /plan/i).props.onClick({}); await settle();
-assert.match(txt(c), /Plan could not be read/); assert.doesNotMatch(txt(c), /No plan yet/);
-out('plan empty vs unreadable states');
-
-// ---- action buttons
-const label = (c) => btns(c).map((b) => text(b));
-reset(); when(STREAM(), jr(true, 200, { events: [], offset: 0 }));
-c = await mount([sess({ outcome: 'running' })]);
-assert.equal(btns(c).length, 1); assert.match(label(c)[0], /stop/i);
-assert.ok(btns(c).every((b) => b.props.type === 'button'));
-reset(); c = await mount([sess({ outcome: 'stopped', resume_command: 'claude -r s1' })]);
-assert.ok(btn(c, /^resume/i)); assert.ok(btn(c, /terminal/i)); assert.ok(!btn(c, /stop/i));
-reset(); c = await mount([sess({ outcome: 'done', resume_command: 'claude -r s1' })]);
-assert.deepEqual(label(c).length, 1); assert.match(label(c)[0], /terminal/i);
-out('buttons per outcome are real type=button');
-
-reset(); let release; when(STREAM(), jr(true, 200, { events: [], offset: 0 }));
-c = await mount([sess({ outcome: 'running' })]);
-when(/\/stop$/, () => new Promise((r) => { release = r; }));
-const clicked = btn(c, /stop/i).props.onClick({ preventDefault() {} });
-await settle();
-assert.ok(btn(c, /stop/i).props.disabled, 'disabled while in flight');
-assert.equal(calls.find((x) => /\/stop$/.test(x.u)).o.method, 'POST');
-release(jr(true, 200, { ok: true })); await clicked; await settle();
-assert.match(status(c), /Stopped/); assert.ok(!btn(c, /stop/i)?.props.disabled);
-when(/\/stop$/, jr(false, 409, { error: 'not running' }));
-await btn(c, /stop/i).props.onClick({ preventDefault() {} }); await settle();
-assert.match(status(c), /Stop failed: not running/);
-out('stop button disabled in flight, status region reports result');
-
-reset(); c = await mount([sess({ outcome: 'stopped' })]);
-when(/\/resume$/, jr(true, 200, { ok: true }));
-await btn(c, /^resume/i).props.onClick({ preventDefault() {} }); await settle();
-assert.match(status(c), /Resumed/);
-out('resume button reports Resumed');
-
-reset(); Object.defineProperty(globalThis, 'navigator', { value: { clipboard: { writeText: async () => {} } }, configurable: true });
-c = await mount([sess({ outcome: 'done', resume_command: 'claude -r s1' })]);
-await btn(c, /terminal/i).props.onClick({ preventDefault() {} }); await settle();
-assert.match(status(c), /Copied/);
-Object.defineProperty(globalThis, 'navigator', { value: {}, configurable: true });
-reset(); c = await mount([sess({ outcome: 'done', resume_command: 'claude -r s1' })]);
-await btn(c, /terminal/i).props.onClick({ preventDefault() {} }); await settle();
-assert.match(status(c), /Copy failed: select the command below/);
-const box = find(T(c), (n) => n.type === 'input' && (n.props.readOnly || n.props.readonly))[0];
-assert.ok(box); assert.equal(box.props.value, 'claude -r s1'); assert.ok(box.props['aria-label']);
-out('copy success and readonly fallback box');
-
-reset(); c = await mount([sess({ outcome: 'stopped', resumed_fresh: true, note: 'context was lost' })]);
-assert.match(txt(c), /resumed fresh/i); assert.match(txt(c), /context was lost/);
-reset(); c = await mount([sess({ outcome: 'stopped' })]);
-assert.doesNotMatch(txt(c), /resumed fresh/i);
-out('resumed fresh note');
-
-// ---- App routing
-const app = new A.App();
-app.state = { route: A.parseRoute('#/run/a/b/1'), sessions: [sess()], offline: false };
-const tree = norm(app.render(app.props, app.state));
-const rd = find(tree, (n) => n.type === RunDetail)[0];
-assert.ok(rd, 'RunDetail routed');
-assert.equal(rd.props.owner, 'a'); assert.equal(rd.props.repo, 'b'); assert.equal(rd.props.n, 1);
-assert.equal(rd.props.sessions.length, 1); assert.equal(rd.key, 'a/b/1');
-out('App routes #/run to RunDetail keyed by owner/repo/n');
-"""
-
-
-def run_checks():
-    import subprocess
-
-    for name, t in (("run.js", "text/javascript"), ("app.css", "text/css")):
-        s, r, _ = req(port, f"/static/{name}")
-        assert s == 200 and r.getheader("Content-Type", "").startswith(t), (name, s)
-    ok("run.js/app.css served with correct types")
-
-    js = read(os.path.join(STATIC, "run.js")).decode()
-    css = read(os.path.join(STATIC, "app.css")).decode()
-    specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {
-        "./vendor/preact.mjs",
-        "./vendor/htm.mjs",
-        "./app.js",
-        "./fmt.js",
-        "./toast.js",
-        "./ghstatus.js",
-        "./cleanup.js",
-        "./limits.js",
-        "./issue.js",
-        "./pr.js",
-    }, specs
-    assert not re.search(r"https?://", js), "no absolute URLs"
-    assert (
-        "console.log" not in js
-        and "debugger" not in js
-        and "innerHTML" not in js.replace("dangerouslySetInnerHTML", "")
-    )
-    pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
-    exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
-    names = {x.split(" as ")[-1].strip() for x in exports.split(",")}
-    for m in re.finditer(r"import\s*\{([^}]*)\}\s*from\s*['\"]\./vendor/preact\.mjs", js):
-        for n in m.group(1).split(","):
-            assert n.strip().split(" as ")[0].strip() in names, n
-    for m in re.finditer(r"dangerouslySetInnerHTML\s*=\s*\$\{\s*\{\s*__html\s*:\s*([^}]*)\}", js):
-        assert m.group(1).strip().startswith("mdToHtml("), m.group(1)
-    assert len(re.findall(r"dangerouslySetInnerHTML", js)) == len(re.findall(r"__html\s*:\s*mdToHtml\(", js))
-    ok("run.js imports, no innerHTML/absolute URLs, html only via mdToHtml")
-
-    assert re.search(r"flex-wrap\s*:\s*wrap", css)
-    assert re.search(r"min-height\s*:\s*44px", css)
-    for m in re.finditer(r"(?<![\w(-])(?:min-)?width\s*:\s*(\d+)px", css):
-        assert int(m.group(1)) <= 390, m.group(0)
-    out_rule = re.search(r"\.output\s*\{([^}]*)\}", css)
-    assert (
-        out_rule
-        and "overflow-y: auto" in out_rule.group(1).replace(":auto", ": auto")
-        and "max-height" in out_rule.group(1)
-    )
-    assert re.search(
-        r"\[role=tab\][^{]*\{[^}]*min-height\s*:\s*44px|\.run button[^{]*\{[^}]*min-height\s*:\s*44px", css
-    )
-    ok("css run layout wraps, 44px targets, bounded scrolling output")
-
-    if not shutil.which("node"):
-        print("note: node not found, skipping run logic checks")
-        return
-    env = dict(
-        os.environ,
-        RUN_URL=pathlib.Path(os.path.join(STATIC, "run.js")).as_uri(),
-        APP_URL=pathlib.Path(os.path.join(STATIC, "app.js")).as_uri(),
-    )
-    p = subprocess.run(
-        ["node", "--input-type=module", "-e", RUN_JS], env=env, capture_output=True, text=True, timeout=120
-    )
-    assert p.returncode == 0, p.stderr[-2500:]
-    for line in p.stdout.splitlines():
-        if line.startswith("ok "):
-            ok(line[3:])
-
-
-if RUN:
-    try:
-        run_checks()
-    finally:
-        srv.shutdown()
-        shutil.rmtree(tmp, ignore_errors=True)
-    print(f"{passed} checks passed")
-    sys.exit(0)
 LAUNCHER = sys.argv[1:3] == ["--view", "launcher"]
 LAUNCHER_ALL = sys.argv[1:3] == ["--view", "launcher-all"]
-BOARD = sys.argv[1:3] == ["--view", "board"]
 ANSWER = sys.argv[1:3] == ["--view", "answer"]
 NOTIFY = sys.argv[1:3] == ["--view", "notify"]
 HISTORY = sys.argv[1:3] == ["--view", "history"]
@@ -662,100 +78,32 @@ const tick = () => new Promise((r) => setImmediate(r));
 out('import without document does not throw');
 
 const nm = (h) => parseRoute(h).name;
-assert.equal(nm('#/'), 'board');
-const run = parseRoute('#/run/acme/web/42');
-assert.equal(run.name, 'run');
-assert.deepEqual({ ...run.params }, { owner: 'acme', repo: 'web', n: 42 });
+assert.equal(nm('#/'), 'sessions');
 const ans = parseRoute('#/answer/abc123');
 assert.equal(ans.name, 'answer');
 assert.equal(ans.params.session, 'abc123');
 assert.equal(nm('#/new'), 'new');
+assert.equal(nm('#/settings'), 'settings');
 assert.equal(nm('#/sessions'), 'sessions');
 out('parseRoute normal routes');
 
-assert.equal(nm(''), 'board');
-assert.equal(nm('#'), 'board');
-out('parseRoute empty hash is board');
+assert.equal(nm(''), 'sessions');
+assert.equal(nm('#'), 'sessions');
+out('parseRoute empty hash is sessions');
 
-for (const h of ['#/run/acme/web', '#/run/acme/web/0', '#/run/acme/web/-1', '#/run/acme/web/4x',
-  '#/run/a/b/1/extra', '#/answer/', '#/bogus']) assert.equal(nm(h), 'notfound', h);
-out('parseRoute boundary routes are notfound');
+for (const h of ['#/run/acme/web/42', '#/flow', '#/flow/x', '#/dispatch', '#/dispatch/p-20261007120000-aaaaaa', '#/board',
+  '#/answer/', '#/bogus']) assert.equal(nm(h), 'notfound', h);
+out('parseRoute removed pages and boundary routes are notfound');
 
-assert.equal(nm('#/dispatch'), 'dispatch');
-assert.deepEqual({ ...parseRoute('#/dispatch/p-20261007120000-aaaaaa') }, { name: 'pipeline', params: { id: 'p-20261007120000-aaaaaa' } });
-for (const h of ['#/dispatch/nope', '#/dispatch/p-1-a', '#/dispatch/p-20261007120000-aaaaaa/x']) assert.equal(nm(h), 'notfound', h);
-out('parseRoute dispatch routes');
-
-// #189: #/dispatch?issues= prefill; digits only, empty/invalid behaves like plain #/dispatch
-assert.deepEqual({ ...parseRoute('#/dispatch?issues=12,13') }, { name: 'dispatch', params: {}, issues: [12, 13] });
-assert.deepEqual({ ...parseRoute('#/dispatch?issues=12,x,1e3,,-4,13') }, { name: 'dispatch', params: {}, issues: [12, 13] });
-for (const h of ['#/dispatch', '#/dispatch?issues=', '#/dispatch?issues=a,b', '#/dispatch?other=1']) assert.deepEqual({ ...parseRoute(h) }, { name: 'dispatch', params: {} }, h);
-assert.deepEqual({ ...parseRoute('#/dispatch/p-20261007120000-aaaaaa?issues=1') }, { name: 'pipeline', params: { id: 'p-20261007120000-aaaaaa' } });
-out('parseRoute dispatch ?issues= prefill');
-
-
-const D = await import(process.env.APP_URL.replace('app.js', 'dispatch.js'));
-assert.equal(D.hasUrl('see https://github.com/o/r/issues?q=x'), true);
-assert.equal(D.hasUrl('#12, 14'), false);
-assert.deepEqual(D.issueNumbers('#12, 14 15 12'), [12, 14, 15]);
-assert.deepEqual(D.issueNumbers('https://github.com/o/r2/issues/7\nhttps://github.com/o/r2/issues/9'), [7, 9]);
-assert.deepEqual([...D.defaultSelection([{ issue: 1, ready: true }, { issue: 2, ready: false }])], [1]);
-const pv = { slug: 'o/r', repo_path: '/x', items: [{ issue: 1 }, { issue: 2 }, { issue: 3 }] };
-assert.deepEqual(D.startBody(pv, new Set([3, 1]), { mode: 'parallel', max: 2, claude: 'work' }),
-  { slug: 'o/r', repo: '/x', issues: [1, 3], mode: 'parallel', max: 2, claude_cmd: 'work', auto_grind: false, worktree: true, review: true });
-assert.equal(D.startBody(pv, new Set([1]), { mode: 'sequential', max: 1, worktree: false }).worktree, false);
-assert.equal(D.startBody(pv, new Set([1]), { mode: 'parallel', max: 2, worktree: false }).worktree, true);
-assert.equal(D.startBody(pv, new Set([1]), { mode: 'parallel', max: 2 }).worktree, true);
-assert.equal(D.startBody(pv, new Set([1]), { mode: 'parallel', max: 2, review: false }).review, false);
-assert.equal('claude_cmd' in D.startBody(pv, new Set([1]), { mode: 'sequential', max: 1, claude: '' }), false);
-out('dispatch: input, selection and start body helpers');
-assert.equal(new D.Dispatch({ issues: [12, 13] }).state.text, '12 13');
-assert.equal(new D.Dispatch({}).state.text, '');
-out('dispatch: issues prop prefills the input');
-
-assert.deepEqual(D.itemActions({ state: 'failed' }), ['retry', 'skip']);
-assert.deepEqual(D.itemActions({ state: 'skipped', reason: 'blocked by #3' }), ['retry']);
-assert.deepEqual(D.itemActions({ state: 'skipped', reason: 'manual' }), ['retry']);
-assert.deepEqual(D.itemActions({ state: 'running' }), []);
-assert.deepEqual(D.pipelineActions('active'), ['pause', 'stop']);
-assert.deepEqual(D.pipelineActions('done'), []);
-assert.equal(D.progressText([{ state: 'done' }, { state: 'running' }, { state: 'failed' }]), '1 of 3 done · 1 running · 1 failed');
 {
-  const M = (state, extra = {}) => ({ state, gh: { pr: { state: 'MERGED' } }, ...extra });
-  assert.equal(D.shownState(M('failed')), 'merged', 'a merged PR outranks a failed attempt');
-  assert.equal(D.shownState(M('running')), 'running', 'live states stay');
-  assert.equal(D.shownState({ state: 'failed' }), 'failed');
-  assert.deepEqual(D.itemActions(M('failed')), [], 'no retry for merged work');
-  assert.equal(D.progressText([M('failed'), { state: 'done' }, { state: 'failed' }]), '2 of 3 done (1 merged) · 1 failed');
-  const its = [{ issue: 1, title: 'a', gh: { pr: { state: 'MERGED', url: 'u1', number: 11 } } }, { issue: 2, title: 'b', gh: { pr: { state: 'OPEN', url: 'u2', ci: 'green' } } },
-    { issue: 3, title: 'c', run: { pr: 'u3' } }];
-  const q = D.mergeQueue([1, 2, 3], its);
-  assert.deepEqual(q.map((x) => [x.n, x.state, x.next]), [[1, 'merged', false], [2, 'open', true], [3, 'unknown', false]], 'first open is next; no state loaded is unknown');
-  assert.equal(D.mergeQueue([3], its)[0].next, false, 'an unknown PR is never next');
-  assert.equal(q[2].url, 'u3', 'falls back to the run PR link'); assert.equal(q[0].num, 11);
-  const rf = Object.fromEntries(D.ROW_FILTERS.map(([k, , t]) => [k, t]));
-  assert.ok(rf.attention({ state: 'failed' }) && !rf.attention(M('failed')) && rf.attention({ state: 'done', grind: { state: 'paused' } }));
-  assert.ok(rf.merged(M('failed')) && rf['open-pr']({ state: 'done', gh: { pr: { state: 'OPEN' } } }) && !rf['open-pr'](M('done')));
-  assert.deepEqual(D.prParts('https://github.com/o/r/pull/12'), ['o', 'r', '12']); assert.equal(D.prParts('https://x/o/r/issues/1'), null);
-  const PR = await import(process.env.APP_URL.replace('app.js', 'pr.js'));
-  const ready = { state: 'open', draft: false, mergeable: 'MERGEABLE', merge_state: 'CLEAN', review: 'APPROVED', ci: 'green', failing: [], base: 'main' };
-  assert.deepEqual(PR.mergeWarnings(ready), [], 'green + approved: no warnings');
-  const w = PR.mergeWarnings({ ...ready, draft: true, mergeable: 'CONFLICTING', ci: 'red', failing: ['lint', 'test'], review: null }, [7]);
-  assert.equal(w.length, 5, w.join(' | ')); assert.match(w.join(' '), /draft/); assert.match(w.join(' '), /conflicts with main/); assert.match(w.join(' '), /failing: lint, test/);
-  assert.match(w.join(' '), /not approved/); assert.match(w.join(' '), /stacked on #7/);
-  assert.match(PR.mergeWarnings({ ...ready, ci: 'pending', review: 'CHANGES_REQUESTED' }).join(' '), /still running.*requested changes/);
-  assert.deepEqual(PR.mergeWarnings(null), []);
-  out('dispatch: merged outranks a failed attempt, merge queue marks the next PR, row filters');
   const C = await import(process.env.APP_URL.replace('app.js', 'cleanup.js'));
-  const ci = [{ key: 'a', owner: 'o', repo: 'r', flags: [], pr_merged: true }, { key: 'b', owner: 'o', repo: 'r', flags: ['dirty'], pr_merged: true },
-    { key: 'c', owner: 'o', repo: 's', flags: [], pr_merged: false }, { key: 'd', label: 'x', flags: [] }];
+  const ci = [{ key: 'a', label: '/x', repo: 'o/r', flags: [] }, { key: 'b', label: '/x', repo: 'o/r', flags: ['dirty'] },
+    { key: 'c', label: '/x', repo: 'o/s', flags: [] }, { key: 'd', label: 'x', flags: [] }];
   assert.deepEqual(C.groupByRepo(ci).map(([r, g]) => [r, g.length]), [['o/r', 2], ['o/s', 1], ['Other', 1]]);
-  assert.deepEqual([...C.quickPick(ci, 'merged')], ['a'], 'merged never picks unsaved work');
   assert.deepEqual([...C.quickPick(ci, 'safe')], ['a', 'c', 'd']); assert.equal(C.quickPick(ci, 'none').size, 0);
-  for (const k of ['safe', 'merged', 'all', 'none']) assert.ok(!C.quickPick(ci, k).has('b'), `${k} never ticks unsaved work`);
-  out('cleanup: grouped by repo; safe/merged/none quick picks never tick unsaved work');
+  for (const k of ['safe', 'none']) assert.ok(!C.quickPick(ci, k).has('b'), `${k} never ticks unsaved work`);
+  out('cleanup: grouped by repo; safe/none quick picks never tick unsaved work');
 }
-out('dispatch: actions and progress text');
 
 assert.equal(nm('#/sessions/'), 'sessions');
 assert.equal(parseRoute('#/answer/a%20b').params.session, 'a b');
@@ -859,10 +207,11 @@ out('poll stop clears timer and listener');
 
 ANSWER_NODE_JS = r"""
 const A = await import(process.env.ANSWER_URL);
+const { mergeStream, mdToHtml } = await import(process.env.MD_URL);
 const assert = (await import('node:assert')).strict;
 const out = (n) => console.log('ok ' + n);
 const { viewMode, displayLabel, initialAnswers, toggle, buildBody, startSubmit, afterSubmit,
-  submitAnswer, runHash, doneHash, planRun, planText, resumeCommand, processLive } = A;
+  submitAnswer, doneHash, resumeCommand, processLive } = A;
 out('import without document does not throw');
 
 const waiting = { waiting: true, outcome: 'waiting', pending_question: { id: 'q1', status: 'pending' } };
@@ -987,36 +336,48 @@ assert.equal((await pj).ok, false);
 assert.match(afterSubmit(typed, rf).error, /Could not reach|error|failed/i);
 out('submitAnswer network/non-JSON errors resolve ok:false');
 
-const L = { owner: 'o w', repo: 'r', issue: 5 };
-assert.equal(runHash({ link: L }), '#/run/' + encodeURIComponent('o w') + '/r/5');
-assert.equal(doneHash({ id: 's1', link: L, flow_id: 'f-1' }), runHash({ link: L }));
-assert.equal(doneHash({ id: 's1', flow_id: 'f-20261010000000-abcdef' }), '#/flow/f-20261010000000-abcdef');
 assert.equal(doneHash({ id: 's 2' }), '#/session/s%202');
 assert.equal(doneHash(undefined), '#/sessions');
-out('doneHash: run, then the flow waiting on it, then the session itself');
-for (const bad of [{}, null, { link: { owner: 'o', repo: 'r', issue: 0 } }, { link: { owner: 'o', repo: 'r', issue: 1.5 } },
-  { link: { owner: 'o', repo: 'r', issue: '5' } }, { link: { owner: 'o' } }]) assert.equal(runHash(bad), '#/sessions');
-out('runHash');
-
-const gate = { questions: [{ options: [{ label: 'Approve plan (Recommended)' }, { label: 'Revise' }] }] };
-const g2a = { questions: [{ options: [{ label: 'Confirmed, continue' }, { label: 'Revise' }] }] };
-const sess = (c) => ({ command: c, link: { owner: 'o', repo: 'r', issue: 7 } });
-assert.deepEqual({ ...planRun(sess('/run-issue 7'), gate) }, { owner: 'o', repo: 'r', n: 7 });
-assert.deepEqual({ ...planRun(sess('/ai-workflow:run-issue 7'), gate) }, { owner: 'o', repo: 'r', n: 7 });
-assert.equal(planRun(sess('/run-issue 7'), g2a), null);
-assert.equal(planRun(sess('/other 7'), gate), null);
-assert.equal(planRun({ command: '/run-issue 7' }, gate), null);
-assert.equal(planRun({ command: '/run-issue 7', link: { owner: 'o' } }, gate), null);
-out('planRun gate detection');
-assert.equal(planText({ plan: 'hello' }), 'hello');
-for (const d of [{ plan: null }, { plan: '' }, { plan: 5 }, {}, null, undefined]) assert.equal(planText(d), null);
-out('planText');
+out('doneHash: the session itself, else the list');
 
 assert.equal(resumeCommand({ repo: '/tmp/x', session_id: 'abc' }), "cd '/tmp/x' && claude --resume 'abc'");
 assert.equal(resumeCommand({ repo: "/tmp/it's", session_id: 'abc' }), "cd '/tmp/it'\\''s' && claude --resume 'abc'");
 assert.equal(resumeCommand({ repo: '/tmp/x', session_id: "a'b" }), "cd '/tmp/x' && claude --resume 'a'\\''b'");
 assert.equal(resumeCommand({ repo: '/tmp/x' }), null);
 out('resumeCommand quoting');
+
+// ---- mergeStream
+const mst0 = { events: [], offset: 0 };
+const me1 = { kind: 'text', text: 'a' }, me2 = { kind: 'text', text: 'b' };
+let mst = mergeStream(mst0, { events: [me1], offset: 10 });
+assert.equal(mst.offset, 10); assert.deepEqual(mst.events, [me1]);
+mst = mergeStream(mst, { events: [me2], offset: 20 });
+assert.deepEqual(mst.events, [me1, me2]); assert.equal(mst.offset, 20);
+mst = mergeStream(mst, { events: [], offset: 25 });
+assert.deepEqual(mst.events, [me1, me2]); assert.equal(mst.offset, 25);
+out('mergeStream appends and advances offset');
+const mdup = mergeStream(mst, { events: [me1, me2], offset: 25 });
+assert.deepEqual(mdup.events, [me1, me2]); assert.equal(mdup.offset, 25);
+const mold = mergeStream(mst, { events: [me1], offset: 5 });
+assert.deepEqual(mold.events, [me1, me2]); assert.equal(mold.offset, 25);
+out('mergeStream drops stale or duplicate responses');
+// ---- mdToHtml
+let mh = mdToHtml('# Title\n\nsome **bold** and `code`\n\n- a\n- b\n\n1. one\n2. two\n\n```\n# not heading\n**raw**\n```');
+assert.match(mh, /<h1>Title<\/h1>/); assert.match(mh, /<strong>bold<\/strong>/); assert.match(mh, /<code>code<\/code>/);
+assert.match(mh, /<ul>\s*<li>a<\/li>\s*<li>b<\/li>\s*<\/ul>/); assert.match(mh, /<ol>\s*<li>one<\/li>\s*<li>two<\/li>\s*<\/ol>/);
+assert.match(mh, /<p>some /); assert.match(mh, /<pre>[\s\S]*# not heading[\s\S]*\*\*raw\*\*[\s\S]*<\/pre>/);
+assert.doesNotMatch(mh, /<h1>not heading/); assert.doesNotMatch(mh, /<strong>raw/);
+out('mdToHtml renders blocks and inline');
+for (const bad of ['<img src=x onerror=alert(1)>', '<script>alert(1)</script>', '"><svg onload=alert(1)>', '[x](javascript:alert(1))', "a & b 'q'"]) {
+  const r = mdToHtml(bad);
+  assert.doesNotMatch(r, /<(img|script|svg)/i, bad); assert.doesNotMatch(r, /<a[\s>]/i); assert.doesNotMatch(r, /href/i);
+  assert.doesNotMatch(r, /<[a-z]+[^>]*\s(on\w+|src)=/i, bad);
+}
+assert.match(mdToHtml('a & <b> "q" \'s\''), /a &amp; &lt;b&gt; &quot;q&quot; &#0?39;s&#0?39;|a &amp; &lt;b&gt; &quot;q&quot; &#x27;s&#x27;/);
+assert.equal(mdToHtml(''), ''); assert.equal(mdToHtml(null), '');
+out('mdToHtml escapes hostile input; empty is empty');
+assert.equal(mdToHtml('**Next:**\n- a\n- b'), '<p><strong>Next:</strong></p>\n<ul>\n<li>a</li>\n<li>b</li>\n</ul>');
+out('mdToHtml: a list straight under a paragraph line renders after it');
 """
 
 
@@ -1059,8 +420,6 @@ def shell_checks():
     assert set(specs) <= {
         "./vendor/preact.mjs",
         "./vendor/htm.mjs",
-        "./board.js",
-        "./run.js",
         "./history.js",
         "./answer.js",
         "./notify.js",
@@ -1069,29 +428,13 @@ def shell_checks():
         "./keys.js",
         "./toast.js",
         "./settings.js",
-        "./dispatch.js",
         "./fmt.js",
         "./cleanup.js",
         "./issue.js",
         "./pr.js",
         "./afk.js",
-        "./flow.js",
         "./usage.js",
     }, specs
-    fjs = read(os.path.join(STATIC, "flow.js")).decode()
-    fspecs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", fjs)
-    assert fspecs and set(fspecs) <= {
-        "./vendor/preact.mjs",
-        "./vendor/htm.mjs",
-        "./vault.js",
-        "./app.js",
-        "./launcher.js",
-        "./dispatch.js",
-        "./answer.js",
-        "./flowside.js",
-    }, fspecs
-    assert "innerHTML" not in fjs and "console.log" not in fjs
-    ok("flow.js imports only preact, htm, app.js, launcher.js, dispatch.js, answer.js and flowside.js; no innerHTML")
     assert not re.search(r"https?://", js), "no absolute URLs"
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
@@ -1124,273 +467,6 @@ def shell_checks():
     env = dict(os.environ, APP_URL=pathlib.Path(os.path.join(STATIC, "app.js")).as_uri())
     p = subprocess.run(
         ["node", "--input-type=module", "-e", NODE_JS], env=env, capture_output=True, text=True, timeout=60
-    )
-    assert p.returncode == 0, p.stderr[-1500:]
-    for line in p.stdout.splitlines():
-        if line.startswith("ok "):
-            ok(line[3:])
-
-
-BOARD_JS = r"""
-const B = await import(process.env.BOARD_URL);
-const { parseRoute } = await import(process.env.APP_URL);
-const assert = (await import('node:assert')).strict;
-const out = (n) => console.log('ok ' + n);
-const { cardTitle, runHref, matchSession, cardChips, formatCost, filterColumns, repoOptions, boardChanged, stationLabel, visibleCards, boardSummary, DONE_LIMIT, flipDeltas } = B;
-const card = { owner: 'acme', repo: 'web', issue: 42 };
-const S = (owner, repo, issue, status, extra = {}) => ({ id: owner + repo + issue, link: { owner, repo, issue }, status, ...extra });
-
-const a = S('acme', 'web', 42, 'running'), b = S('acme', 'web', '42', 'stopped');
-assert.equal(matchSession(card, [a, b]), a);
-assert.equal(matchSession(card, [S('acme', 'web2', 42, 'running'), S('acme', 'web', 4, 'running')]), null);
-for (const bad of [null, undefined, [], [{ id: 1, link: null }], [{ id: 1, link: 'x' }], [null], [S('acme', 'web', 43, 'running')]])
-  assert.equal(matchSession(card, bad), null);
-out('matchSession join and corners');
-
-assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, 'running')), ['running']);
-assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, 'waiting')), ['waiting']);
-assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, 'stopped')), ['stopped']);
-assert.deepEqual(cardChips({ ...card, escalated: true }, 'dev', null), ['escalated']);
-assert.deepEqual(cardChips({ ...card, escalated: true }, 'dev', S('a', 'b', 1, 'waiting')), ['waiting']);
-assert.deepEqual(cardChips(card, 'done', S('a', 'b', 1, 'running')), ['done']);
-assert.deepEqual(cardChips({ ...card, escalated: true }, 'done', null), ['done']);
-assert.deepEqual(cardChips({ ...card, gh: { pr: { state: 'MERGED' } } }, 'done', null), ['merged']);
-assert.deepEqual(cardChips({ ...card, gh: { pr: { state: 'OPEN' } } }, 'done', null), ['done']);
-assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, 'running', { resumed_fresh: true })), ['running', 'resumed fresh']);
-assert.deepEqual(cardChips(card, 'dev', null), []);
-assert.deepEqual(cardChips(card, 'done', null), ['done']);
-for (const st of ['done', 'failed', 'starting', undefined]) assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, st)), []);
-assert.deepEqual(cardChips(card, 'dev', S('a', 'b', 1, 'done', { resumed_fresh: true })), ['resumed fresh']);
-out('cardChips');
-
-assert.equal(formatCost(0.4213), '$0.42'); assert.equal(formatCost(0), '$0.00');
-assert.equal(formatCost(null), ''); assert.equal(formatCost(undefined), '');
-out('formatCost');
-
-assert.equal(runHref(card), '#/run/acme/web/42');
-assert.deepEqual({ ...parseRoute(runHref(card)).params }, { owner: 'acme', repo: 'web', n: 42 });
-const odd = { owner: 'a b', repo: 'r', issue: 1 };
-assert.equal(runHref(odd), '#/run/a%20b/r/1');
-assert.equal(parseRoute(runHref(odd)).params.owner, 'a b');
-out('runHref');
-
-const cols = [{ key: 'dev', cards: [card, { owner: 'z', repo: 'q', issue: 1 }] }, { key: 'done', cards: [] }];
-const f = filterColumns(cols, { repo: 'acme/web' });
-assert.deepEqual(f.map((c) => c.key), ['dev', 'done']);
-assert.deepEqual(f[0].cards, [card]); assert.deepEqual(f[1].cards, []);
-assert.deepEqual(filterColumns(cols, {}), cols);
-assert.deepEqual(filterColumns(cols, { repo: 'gone/repo' }).map((c) => c.cards.length), [0, 0]);
-assert.deepEqual(repoOptions(cols, ''), ['acme/web', 'z/q']);
-assert.ok(repoOptions(cols, 'gone/repo').includes('gone/repo'));
-out('filterColumns, repoOptions');
-
-for (const t of ['', null, undefined, 'Issue #7 (title unavailable)']) assert.equal(cardTitle({ issue: 7, title: t }), 'Title unavailable');
-assert.equal(cardTitle({ issue: 7, title: 'Hi' }), 'Hi');
-out('cardTitle: a missing title says so instead of repeating #N');
-{
-  const cols = [{ key: 'dev', cards: [{ owner: 'a', repo: 'web', issue: 12, title: 'Fix login' }, { owner: 'b', repo: 'api', issue: 3, title: 'Issue #3 (title unavailable)', escalated: true }] }];
-  const n = (c) => c[0].cards.map((k) => k.issue);
-  assert.deepEqual(n(filterColumns(cols, { query: '#12' })), [12]);
-  assert.deepEqual(n(filterColumns(cols, { query: 'LOGIN' })), [12]);
-  assert.deepEqual(n(filterColumns(cols, { query: 'api' })), [3]);
-  assert.deepEqual(n(filterColumns(cols, { query: 'unavailable' })), [], 'the placeholder title never matches');
-  assert.deepEqual(n(filterColumns(cols, { needs: true }, [])), [3], 'needs-you keeps escalated only');
-  assert.deepEqual(n(filterColumns(cols, { repo: 'a/web', query: 'fix' })), [12]);
-  const fc = [{ key: 'dev', cards: [
-    { owner: 'a', repo: 'r', issue: 1, pr: 'u', gh: { pr: { state: 'OPEN', ci: 'red' } }, grind: { state: 'paused' } },
-    { owner: 'a', repo: 'r', issue: 2, pr: 'u', gh: { pr: { state: 'MERGED' } }, grind: { state: 'done' } },
-    { owner: 'a', repo: 'r', issue: 3 },
-    { owner: 'a', repo: 'r', issue: 4, pr: 'u' },
-  ] }, { key: 'done', cards: [{ owner: 'a', repo: 'r', issue: 5, pr: 'u', gh: { pr: { state: 'OPEN', ci: 'green' } }, grind: { state: 'running' } }] }];
-  const ids = (f) => B.filterColumns(fc, f).flatMap((c) => c.cards.map((k) => k.issue));
-  assert.deepEqual(ids({ pr: 'merged' }), [2]); assert.deepEqual(ids({ pr: 'open' }), [1, 5]); assert.deepEqual(ids({ pr: 'none' }), [3]);
-  assert.deepEqual(ids({ ci: 'red' }), [1]); assert.deepEqual(ids({ grind: 'active' }), [5]); assert.deepEqual(ids({ grind: 'none' }), [3, 4]);
-  assert.deepEqual(ids({ run: 'done' }), [5]); assert.deepEqual(ids({ run: 'active', pr: 'open' }), [1], 'filters combine');
-  assert.equal(B.cardFacets(fc[0].cards[3], 'dev').pr, 'unknown', 'a PR not yet loaded matches only Any');
-  assert.equal(B.activeFacets({ pr: 'open', needs: true }), 2); assert.equal(B.countCards(fc), 5);
-  out('board facets: status, PR, CI and grind filters combine; counts');
-  out('filterColumns: #N, title and repo search; needs-you toggle');
-  const F = await import(process.env.BOARD_URL.replace('board.js', 'fmt.js'));
-  assert.equal(F.ago(1000, 1000_000 + 30_000), 'now'); assert.equal(F.ago(0, 7_200_000), '2h'); assert.equal(F.ago(0, 3 * 86_400_000), '3d'); assert.equal(F.ago(null), '');
-  out('ago: compact relative time');
-  assert.equal(F.fmtTokens(842), '842'); assert.equal(F.fmtTokens(2940), '2.9k'); assert.equal(F.fmtTokens(702389), '702k'); assert.equal(F.fmtTokens(1234567), '1.23M'); assert.equal(F.fmtTokens(null), '');
-  const tk = { input: 699772, cached: 612433, output: 2940 };
-  assert.equal(F.tokensText(tk), '703k tok'); assert.equal(F.tokensText(null), ''); assert.equal(F.tokensText({ input: 1 }), '');
-  assert.match(F.tokensTitle(tk), /699,772 in \(612,433 cached\) · 2,940 out/);
-  assert.deepEqual(F.addTokens(F.addTokens(null, tk), { input: 1, output: 2 }), { input: 699773, cached: 612433, output: 2942 });
-  assert.equal(F.addTokens(null, undefined), null);
-  const sm = B.boardSummary([], [{ cost: 1, tokens: tk, started_at: new Date().toISOString() }, { cost: 2, started_at: new Date().toISOString() }]);
-  assert.equal(sm.today, 3); assert.deepEqual(sm.todayTokens, tk);
-  out('tokens: compact counts, hover breakdown, summed for today');
-}
-
-assert.equal(stationLabel('researcher'), 'Research'); assert.equal(stationLabel('sdet'), 'SDET'); assert.equal(stationLabel('nope'), 'nope');
-out('stationLabel');
-
-const many = { key: 'done', cards: Array.from({ length: 25 }, (_, i) => ({ issue: i })) };
-assert.equal(visibleCards(many, false).length, DONE_LIMIT);
-assert.equal(visibleCards(many, true).length, 25);
-assert.equal(visibleCards({ ...many, key: 'dev' }, false).length, 25);
-out('visibleCards collapses only the done column');
-
-const day = new Date('2026-10-07T12:00:00');
-const sum = boardSummary(
-  [{ key: 'dev', cards: [{ owner: 'a', repo: 'b', issue: 1 }, { owner: 'a', repo: 'b', issue: 2, escalated: true }] },
-   { key: 'done', cards: [{ owner: 'a', repo: 'b', issue: 3, escalated: true }] }],
-  [S('a', 'b', 1, 'running', { cost: 1.5, started_at: '2026-10-07T09:00:00' }), S('x', 'y', 9, 'done', { cost: 2, started_at: '2026-10-06T09:00:00' })],
-  day,
-);
-assert.deepEqual(sum, { live: 1, waiting: 1, today: 1.5, todayTokens: null });
-assert.deepEqual(boardSummary([], null, day), { live: 0, waiting: 0, today: 0, todayTokens: null });
-out('boardSummary');
-
-const rect = (x, y) => ({ x, y });
-assert.deepEqual(
-  flipDeltas(new Map([['a', rect(0, 0)], ['b', rect(10, 10)], ['gone', rect(1, 1)]]), new Map([['a', rect(0, 0.5)], ['b', rect(110, 40)], ['new', rect(5, 5)]])),
-  [['b', -100, -30]],
-);
-out('flipDeltas only reports cards that moved and still exist');
-
-const d = { columns: [] };
-assert.equal(boardChanged(JSON.stringify(d), d), false);
-assert.equal(boardChanged(JSON.stringify(d), { columns: [1] }), true);
-out('boardChanged');
-"""
-
-
-def mkrun(base, name, ledger):
-    import json
-
-    d = os.path.join(base, "runs", name)
-    os.makedirs(d, exist_ok=True)
-    with open(os.path.join(d, "run.json"), "w") as f:
-        json.dump(ledger, f)
-
-
-def board_checks():
-    import json
-    import subprocess
-
-    import ui_board
-
-    js_path = os.path.join(STATIC, "board.js")
-    assert os.path.isfile(js_path), "ui_static/board.js missing"
-    s, r, body = req(port, "/static/board.js")
-    assert s == 200 and r.getheader("Content-Type", "").startswith("text/javascript"), s
-    assert body == read(js_path)
-    ok("board.js served")
-
-    data = os.path.join(tmp, "plugindata")
-    old_env, old_fetch = os.environ.get("CLAUDE_PLUGIN_DATA"), srv.fetch_title
-    os.environ["CLAUDE_PLUGIN_DATA"] = data
-    srv.fetch_title = lambda o, r_, i: "A title"
-    try:
-
-        def board():
-            s, _, b = req(port, "/board.json")
-            assert s == 200
-            return json.loads(b)
-
-        def where(bd, issue):
-            return [c["key"] for c in bd["columns"] if any(x["issue"] == issue for x in c["cards"])]
-
-        bd = board()
-        assert [c["key"] for c in bd["columns"]] == ui_board.STATIONS
-        assert all(c["cards"] == [] for c in bd["columns"])
-        ok("empty board has every column")
-
-        led = {
-            "issue": 42,
-            "stations": ["researcher", "planner", "sdet", "dev"],
-            "currentIndex": 1,
-            "bounceCounts": {},
-            "status": "in_progress",
-            "trace": [],
-            "specialists": [],
-            "classification": None,
-            "context": {"pr": "https://github.com/acme/web/pull/9"},
-        }
-        mkrun(data, "acme-web-issue-42", led)
-        bd = board()
-        assert where(bd, 42) == ["planner"], where(bd, 42)
-        c = next(x for c in bd["columns"] for x in c["cards"])
-        assert (c["owner"], c["repo"], c["issue"]) == ("acme", "web", 42)
-        led["currentIndex"] = 3
-        mkrun(data, "acme-web-issue-42", led)
-        assert where(board(), 42) == ["dev"]
-        ok("card moves between columns without caching")
-
-        led["status"] = "done"
-        mkrun(data, "acme-web-issue-42", led)
-        assert where(board(), 42) == ["done"]
-        led["status"] = "escalated"
-        mkrun(data, "acme-web-issue-42", led)
-        bd = board()
-        assert where(bd, 42) == ["dev"]
-        assert next(x for c in bd["columns"] for x in c["cards"])["escalated"] is True
-        ok("done and escalated placement")
-
-        srv.fetch_title = lambda o, r_, i: ""
-        mkrun(data, "acme-web-issue-43", dict(led, issue=43, status="in_progress"))
-        bd = board()
-        assert next(x for c in bd["columns"] for x in c["cards"] if x["issue"] == 43)["title"] == ""
-        ok("empty title passes through")
-    finally:
-        srv.fetch_title = old_fetch
-        if old_env is None:
-            os.environ.pop("CLAUDE_PLUGIN_DATA", None)
-        else:
-            os.environ["CLAUDE_PLUGIN_DATA"] = old_env
-
-    js = read(js_path).decode()
-    css = read(os.path.join(STATIC, "app.css")).decode()
-    app = read(os.path.join(STATIC, "app.js")).decode()
-    specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {
-        "./vendor/preact.mjs",
-        "./vendor/htm.mjs",
-        "./app.js",
-        "./fmt.js",
-        "./toast.js",
-        "./cleanup.js",
-        "./ghstatus.js",
-        "./repopicker.js",
-    }, specs
-    pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
-    exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
-    names = {x.split(" as ")[-1].strip() for x in exports.split(",")}
-    for m in re.finditer(r"import\s*\{([^}]*)\}\s*from\s*['\"]\./vendor/preact\.mjs", js):
-        for n in m.group(1).split(","):
-            assert n.strip().split(" as ")[0].strip() in names, n
-    assert not re.search(r"https?://", js) and "console.log" not in js and "debugger" not in js
-    ok("board.js imports and hygiene")
-
-    assert re.search(r"poll\(\s*['\"]/board\.json['\"]\s*,\s*3000", js) and "fetch(" not in js
-    assert re.search(r"ok\s*\)\s*return|!\s*\w+\.ok", js), "onResult must ignore ok:false"
-    ok("board.js polls /board.json every 3s via poll")
-
-    assert re.search(r"import\s*\{[^}]*\bBoard\b[^}]*\}\s*from\s*['\"]\./board\.js['\"]", app)
-    assert "Runs will appear here." not in app
-    ok("app.js renders Board")
-
-    assert "display: grid" in css or "display:grid" in css
-    assert re.search(r"minmax\(\s*250px|min-width\s*:\s*250px", css)
-    assert re.search(r"scroll-snap-type\s*:\s*x", css) and "scroll-snap-align" in css
-    assert re.search(r"overflow-x\s*:\s*(auto|scroll)", css)
-    for m in re.finditer(r"(?<![\w(-])(?:min-)?width\s*:\s*(\d+)px", css.replace("250px", "0px")):
-        assert int(m.group(1)) <= 390, m.group(0)
-    ok("board css")
-
-    if not shutil.which("node"):
-        print("note: node not found, skipping board logic checks")
-        return
-    env = dict(
-        os.environ,
-        APP_URL=pathlib.Path(os.path.join(STATIC, "app.js")).as_uri(),
-        BOARD_URL=pathlib.Path(js_path).as_uri(),
-    )
-    p = subprocess.run(
-        ["node", "--input-type=module", "-e", BOARD_JS], env=env, capture_output=True, text=True, timeout=60
     )
     assert p.returncode == 0, p.stderr[-1500:]
     for line in p.stdout.splitlines():
@@ -1442,7 +518,7 @@ for (const bad of [null, undefined, {}, { repos: 5 }, [], { repos: [{ name: 'x' 
 out('repoOptions empty/malformed -> []');
 
 // buildBody
-assert.deepEqual(plain(buildBody({ repo: 'o/r', command: 'run-issue', args: ' 7 ' })), { repo: 'o/r', command: 'run-issue', args: '7' });
+assert.deepEqual(plain(buildBody({ repo: 'o/r', command: 'implement-issue', args: ' 7 ' })), { repo: 'o/r', command: 'implement-issue', args: '7' });
 for (const a of ['#12', 'https://github.com/o/r/pull/12'])
   assert.deepEqual(plain(buildBody({ repo: 'o/r', command: 'pr-grind', args: a })), { repo: 'o/r', command: 'pr-grind', args: a, issue: 12 });
 out('buildBody trims; pr-grind adds issue');
@@ -1456,27 +532,25 @@ out('buildBody trims; pr-grind adds issue');
   assert.equal(repoFromText(rs, '42'), null);
 }
 // argIssue
-for (const a of ['7', '#7', 'https://github.com/o/r/issues/7']) assert.equal(argIssue('run-issue', a), 7, a);
+for (const a of ['7', '#7', 'https://github.com/o/r/issues/7']) assert.equal(argIssue('implement-issue', a), 7, a);
 for (const a of ['12', '#12', 'https://github.com/o/r/pull/12']) assert.equal(argIssue('pr-grind', a), 12, a);
 out('argIssue accepted forms');
-for (const a of ['0', '-1', '7.5', '7x', '', 'abc']) { assert.equal(argIssue('run-issue', a), null, a); assert.equal(argIssue('pr-grind', a), null, a); }
+for (const a of ['0', '-1', '7.5', '7x', '', 'abc']) { assert.equal(argIssue('implement-issue', a), null, a); assert.equal(argIssue('pr-grind', a), null, a); }
 assert.equal(argIssue('pr-grind', 'https://github.com/o/r/issues/7'), null);
-assert.equal(argIssue('run-issue', 'https://github.com/o/r/pull/7'), null);
+assert.equal(argIssue('implement-issue', 'https://github.com/o/r/pull/7'), null);
 out('argIssue boundary -> null');
 
 // outcome / sessionHref
-assert.deepEqual(plain(outcome(201, { id: 'x', link: { owner: 'o', repo: 'r', issue: 7 } })), { kind: 'open', href: '#/run/o/r/7' });
+assert.deepEqual(plain(outcome(201, { id: 'x', link: { owner: 'o', repo: 'r', issue: 7 } })), { kind: 'open', href: '#/sessions' });
 assert.deepEqual(plain(outcome(201, { id: 'x', link: null })), { kind: 'open', href: '#/sessions' });
 out('outcome 201');
-for (const l of [{ owner: 'o', repo: 'r', issue: 0 }, { owner: 'o', repo: 'r', issue: '7' }, { repo: 'r', issue: 7 }, { owner: 'o', issue: 7 }, null, undefined])
-  assert.equal(sessionHref({ link: l }), '#/sessions', JSON.stringify(l));
-assert.equal(sessionHref({ link: { owner: 'a b', repo: 'c/d', issue: 3 } }), '#/run/a%20b/c%2Fd/3');
-out('sessionHref fallback and percent-encoding');
+assert.equal(sessionHref({ link: { owner: 'a b', repo: 'c/d', issue: 3 } }), '#/sessions');
+out('sessionHref always lands on the sessions list');
 const o400 = outcome(400, fix.bad_repo);
 assert.equal(o400.kind, 'repo'); assert.ok(o400.message.startsWith('not a git repository'), o400.message);
 out('outcome 400 not a git repository (real body)');
 const o409 = outcome(409, fix.dup);
-assert.equal(o409.kind, 'duplicate'); assert.equal(o409.message, fix.dup.error); assert.equal(o409.href, '#/run/o/r/7');
+assert.equal(o409.kind, 'duplicate'); assert.equal(o409.message, fix.dup.error); assert.equal(o409.href, '#/sessions');
 assert.ok(!o409.href.includes('/api/'));
 out('outcome 409 duplicate (real body) links to UI route');
 for (const [st, b] of [[413, { error: 'too big' }], [502, { error: 'bad gw' }], [400, { error: 'other' }]]) {
@@ -1488,11 +562,11 @@ for (const [st, b] of [[502, null], [413, 'not json'], [500, {}], [400, undefine
 out('outcome other errors never throw');
 
 // validate
-for (const c of ['run-issue', 'pr-grind']) for (const a of ['', '   ', '\n']) {
+for (const c of ['implement-issue', 'pr-grind']) for (const a of ['', '   ', '\n']) {
   const e = validate({ repo: 'o/r', command: c, args: a }); assert.ok(e && e.args, `${c} ${JSON.stringify(a)}`);
 }
-assert.ok(validate({ repo: '', path: '', command: 'run-issue', args: '7' }).repo);
-assert.ok(validate({ repo: '', path: '  ', manual: true, command: 'run-issue', args: '7' }).repo);
+assert.ok(validate({ repo: '', path: '', command: 'implement-issue', args: '7' }).repo);
+assert.ok(validate({ repo: '', path: '  ', manual: true, command: 'implement-issue', args: '7' }).repo);
 out('validate empty args/repo');
 
 // storage
@@ -1507,7 +581,7 @@ out('storage helpers tolerate failure, round-trip');
 let calls = 0, pend = [];
 const fetchStub = () => { calls++; return new Promise((res) => pend.push(res)); };
 const submit = makeSubmitter(fetchStub);
-const b = { repo: 'o/r', command: 'run-issue', args: '7' };
+const b = { repo: 'o/r', command: 'implement-issue', args: '7' };
 const p1 = submit(b); const p2 = submit(b);
 assert.equal(calls, 1);
 pend.shift()({ status: 201, json: async () => ({ id: 'x', link: null }) });
@@ -1522,7 +596,7 @@ assert.equal(rr.kind, 'error'); assert.match(rr.message, /could not reach the ai
 out('network failure -> generic error, no throw');
 
 // render tree
-const base = { repos: opts, repo: 'o/r', manual: false, path: '', command: 'run-issue', args: '', pending: false, errors: {}, result: null };
+const base = { repos: opts, repo: 'o/r', manual: false, path: '', command: 'implement-issue', args: '', pending: false, errors: {}, result: null };
 const render = (st) => new Launcher({}).render({}, { ...base, ...st });
 const nodes = [];
 const walk = (n) => { if (n == null || typeof n === 'boolean') return; if (Array.isArray(n)) return n.forEach(walk);
@@ -1532,10 +606,10 @@ const find = (t, root) => { nodes.length = 0; walk(root); return nodes.filter((n
 let tree = render({});
 assert.equal(find(RP.RepoPicker, tree).length, 1, 'the shared repo picker'); assert.equal(find(RP.RepoPicker, tree)[0].props.allowPath, true);
 const radios = find('input', tree).filter((i) => i.props.type === 'radio');
-assert.deepEqual(radios.map((r) => r.props.value).sort(), ['create-prd', 'day', 'dump', 'gh-issue', 'intake', 'issue-to-pr', 'pr-fix-comments', 'pr-grind', 'pr-review', 'refine-issues', 'run-issue', 'worklog']);
+assert.deepEqual(radios.map((r) => r.props.value).sort(), ['create-prd', 'create-tasks', 'day', 'docs-updater', 'dump', 'flow', 'herdr-dispatch', 'implement-issue', 'peer-review', 'pr-grind', 'pr-review', 'refine-issues', 'release-pr', 'sync-from-wasensi', 'verifier-locally', 'worklog']);
 const lab = (t) => find('label', render({ command: t })).map((l) => text(l)).join('|');
-assert.match(lab('run-issue'), /issue/i); assert.match(lab('pr-grind'), /PR|pull/i);
-assert.notEqual(lab('run-issue'), lab('pr-grind'));
+assert.match(lab('implement-issue'), /issue/i); assert.match(lab('pr-grind'), /PR|pull/i);
+assert.notEqual(lab('implement-issue'), lab('pr-grind'));
 out('render: repo combobox, seven command radios, command-specific args label');
 const fs = find('fieldset', tree); assert.ok(fs.length >= 1); assert.ok(find('legend', fs[0]).length === 1);
 tree = render({});
@@ -1569,10 +643,10 @@ const trig = new RP.RepoPicker({}).render({ id: 'x', repos: [], value: { repo: '
 const tb = find('button', trig)[0];
 assert.equal(tb.props['aria-invalid'], 'true'); assert.equal(tb.props['aria-describedby'], 'repo-error'); assert.equal(tb.props.id, 'x');
 out('render: repo error alert tied to the repo picker');
-const t4 = render({ result: { kind: 'duplicate', message: fix.dup.error, href: '#/run/o/r/7' } });
+const t4 = render({ result: { kind: 'duplicate', message: fix.dup.error, href: '#/sessions' } });
 const al4 = find('div', t4).concat(find('p', t4)).filter((n) => n.props.role === 'alert');
 assert.ok(al4.length);
-assert.ok(find('a', al4[0]).some((a) => a.props.href === '#/run/o/r/7'));
+assert.ok(find('a', al4[0]).some((a) => a.props.href === '#/sessions'));
 out('render: duplicate alert links to run view');
 """
 
@@ -1623,11 +697,11 @@ def launcher_checks():
 
     s, r, repos = call("GET", "/api/repos")
     assert s == 200 and repos["repos"][0]["slug"] == "o/r", (s, repos)
-    s, r, bad = call("POST", "/api/sessions", {"repo": plain, "command": "run-issue", "args": "7"})
+    s, r, bad = call("POST", "/api/sessions", {"repo": plain, "command": "implement-issue", "args": "7"})
     assert s == 400 and bad["error"].startswith("not a git repository"), (s, bad)
-    rec = ui_sessions.create("/run-issue 7", repo, link={"owner": "o", "repo": "r", "issue": 7})
+    rec = ui_sessions.create("/implement-issue 7", repo, link={"owner": "o", "repo": "r", "issue": 7})
     ui_sessions.update(rec["id"], status="running")
-    s, r, dup = call("POST", "/api/sessions", {"repo": "o/r", "command": "run-issue", "args": "7"})
+    s, r, dup = call("POST", "/api/sessions", {"repo": "o/r", "command": "implement-issue", "args": "7"})
     assert s == 409 and dup["link"]["issue"] == 7 and dup["id"] == rec["id"], (s, dup)
     ok("real server: /api/repos, 400 non-git, 409 duplicate bodies captured")
 
@@ -1694,11 +768,11 @@ const out = (n) => console.log('ok ' + n);
 const tick = () => new Promise((r) => setImmediate(r));
 const plain = (x) => JSON.parse(JSON.stringify(x));
 const { validate, buildBody, makeSubmitter, Launcher } = L;
-const ALL = ['create-prd', 'day', 'dump', 'gh-issue', 'intake', 'issue-to-pr', 'pr-fix-comments', 'pr-grind', 'pr-review', 'refine-issues', 'run-issue', 'worklog'];
+const ALL = ['create-prd', 'create-tasks', 'day', 'docs-updater', 'dump', 'flow', 'herdr-dispatch', 'implement-issue', 'peer-review', 'pr-grind', 'pr-review', 'refine-issues', 'release-pr', 'sync-from-wasensi', 'verifier-locally', 'worklog'];
 assert.equal(typeof L.validateCustom, 'function', 'validateCustom export');
 assert.equal(typeof L.buildCustomBody, 'function', 'buildCustomBody export');
 
-const base = { repos: [{ value: 'o/r', label: 'o/r' }], repo: 'o/r', manual: false, path: '', command: 'run-issue', args: '', text: '', pending: false, errors: {}, result: null };
+const base = { repos: [{ value: 'o/r', label: 'o/r' }], repo: 'o/r', manual: false, path: '', command: 'implement-issue', args: '', text: '', pending: false, errors: {}, result: null };
 const render = (st) => new Launcher({}).render({}, { ...base, ...st });
 const nodes = [];
 const walk = (n) => { if (n == null || typeof n === 'boolean') return; if (Array.isArray(n)) return n.forEach(walk);
@@ -1711,24 +785,26 @@ let tree = render({});
 const fs = find('fieldset', tree);
 const radios = find('input', fs[0]).filter((i) => i.props.type === 'radio');
 assert.deepEqual(radios.map((r) => r.props.value).sort(), ALL);
-out('one radio per command');
+for (const c of ALL) assert.ok(!find('legend', render({ command: c })).some((l) => /Options/.test(text(l))), c);
+out('one radio per command, no Options fieldset for any command');
 const hint = (c) => find('label', render({ command: c })).map((l) => text(l)).join('|');
 const hints = ALL.map(hint);
 assert.ok(hints.every((h) => h.length > 0)); assert.equal(new Set(hints).size, ALL.length, 'hints pairwise distinct');
-assert.match(hint('run-issue'), /issue/i); assert.match(hint('pr-grind'), /PR|pull/i);
+assert.match(hint('implement-issue'), /issue/i); assert.match(hint('pr-grind'), /PR|pull/i);
 out('per-command hints distinct');
 
-for (const c of ['create-prd', 'intake', 'dump', 'worklog', 'gh-issue', 'refine-issues']) {
+for (const c of ['create-prd', 'dump', 'worklog', 'refine-issues']) {
   const b = plain(buildBody({ repo: 'o/r', command: c, args: '  some text ' }));
   assert.deepEqual(b, { repo: 'o/r', command: c, args: 'some text' }, c);
 }
 assert.deepEqual(plain(buildBody({ repo: 'o/r', command: 'pr-grind', args: '#12' })), { repo: 'o/r', command: 'pr-grind', args: '#12', issue: 12 });
 out('buildBody for new commands has no issue key');
-for (const c of ['worklog', 'day']) assert.equal(validate({ repo: 'o/r', command: c, args: '' }), null, c);
-for (const c of ALL.filter((c) => c !== 'worklog' && c !== 'day')) for (const a of ['', '  ', '\n']) {
+const OPT = ['worklog', 'day', 'verifier-locally', 'docs-updater', 'sync-from-wasensi', 'peer-review', 'release-pr'];
+for (const c of OPT) assert.equal(validate({ repo: 'o/r', command: c, args: '' }), null, c);
+for (const c of ALL.filter((c) => !OPT.includes(c))) for (const a of ['', '  ', '\n']) {
   const e = validate({ repo: 'o/r', command: c, args: a }); assert.ok(e && e.args, c + JSON.stringify(a));
 }
-out('worklog and day args optional, others required');
+out('worklog, day and the skill-sweep commands take optional args, others required');
 
 tree = render({});
 const ta = find('textarea', tree);
@@ -1737,8 +813,8 @@ assert.ok(find('label', tree).some((l) => (l.props.htmlFor ?? l.props['for']) ==
 assert.ok(find('button', tree).some((b) => text(b).trim() === 'Run in selected repo'));
 assert.match(text(tree), /skip-permissions/i);
 out('custom box: textarea, label, button, skip-permissions note');
-for (const c of ['create-prd', 'intake', 'dump', 'gh-issue', 'day']) assert.equal(find('textarea', render({ command: c })).filter((t) => t.props.id === 'args').length, 1, c);
-for (const c of ['run-issue', 'pr-grind', 'worklog']) assert.equal(find('textarea', render({ command: c })).filter((t) => t.props.id === 'args').length, 0, c);
+for (const c of ['create-prd', 'dump', 'day']) assert.equal(find('textarea', render({ command: c })).filter((t) => t.props.id === 'args').length, 1, c);
+for (const c of ['implement-issue', 'pr-grind', 'worklog']) assert.equal(find('textarea', render({ command: c })).filter((t) => t.props.id === 'args').length, 0, c);
 out('free-text commands get a textarea, number/link commands a single line');
 {
   const cmds = [{ label: 'Work', cmd: 'claude', builtin: true }, { label: 'Masum', cmd: 'cc masum' }];
@@ -1751,8 +827,8 @@ out('free-text commands get a textarea, number/link commands a single line');
 }
 out('Run as: one radio per account, chosen one checked, limited reset lookup');
 
-assert.deepEqual(plain(L.buildCustomBody({ repo: 'o/r', text: '/pr-fix-comments 42' })), { repo: 'o/r', text: '/pr-fix-comments 42' });
-assert.equal(L.buildCustomBody({ repo: 'o/r', text: '  /pr-fix-comments 42\n' }).text, '/pr-fix-comments 42');
+assert.deepEqual(plain(L.buildCustomBody({ repo: 'o/r', text: '/pr-review 42' })), { repo: 'o/r', text: '/pr-review 42' });
+assert.equal(L.buildCustomBody({ repo: 'o/r', text: '  /pr-review 42\n' }).text, '/pr-review 42');
 assert.equal(L.buildCustomBody({ repo: 'o/r', text: ' a\nb \n' }).text, 'a\nb');
 out('buildCustomBody exact shape, outer trim only');
 for (const t of ['', '   ', '\n\t', null, undefined]) {
@@ -1778,7 +854,7 @@ out('empty custom submit blocked, error tied to textarea');
 // single flight across both forms
 let calls = 0, pend = [];
 globalThis.fetch = (...a) => { calls++; return new Promise((res) => pend.push(res)); };
-const sf = new Launcher({}); sf.state = { ...base, args: '7', text: '/pr-fix-comments 42' };
+const sf = new Launcher({}); sf.state = { ...base, args: '7', text: '/pr-review 42' };
 sf.setState = (p) => { sf.state = { ...sf.state, ...(typeof p === 'function' ? p(sf.state) : p) }; };
 const named = sf.onSubmit({ preventDefault() {} }); await tick();
 await sf.onCustom({ preventDefault() {} }); await tick();
@@ -1790,7 +866,7 @@ pend.shift()({ status: 400, json: async () => ({ error: 'x' }) }); await named;
 out('single-flight spans named and custom forms');
 
 // custom outcomes
-async function custom(status, body, text = '/run-issue 7') {
+async function custom(status, body, text = '/implement-issue 7') {
   globalThis.fetch = async () => ({ status, json: async () => body });
   const i = new Launcher({}); i.state = { ...base, text };
   i.setState = (p) => { i.state = { ...i.state, ...p }; };
@@ -1801,7 +877,7 @@ let st = await custom(400, fix.bad_repo);
 assert.equal(st.result.kind, 'repo'); assert.ok(alerts(render({ result: st.result })).some((n) => text(n).startsWith('not a git repository')));
 st = await custom(409, fix.dup);
 assert.equal(st.result.kind, 'duplicate');
-assert.ok(find('a', alerts(render({ result: st.result }))[0]).some((a) => a.props.href === '#/run/o/r/7'));
+assert.ok(find('a', alerts(render({ result: st.result }))[0]).some((a) => a.props.href === '#/sessions'));
 st = await custom(502, null); assert.equal(st.result.kind, 'error');
 globalThis.fetch = async () => { throw new Error('net'); };
 const ni = new Launcher({}); ni.state = { ...base, text: '/x' }; ni.setState = (p) => { ni.state = { ...ni.state, ...p }; };
@@ -1864,9 +940,9 @@ def launcher_all_checks():
         ]
         assert items[rec["id"]]["waiting"] == items[named["id"]]["waiting"]
         ok("custom-text session surfaced waiting exactly like a named one")
-        live = ui_sessions.create("/run-issue 7", repo, link={"owner": "o", "repo": "r", "issue": 7})
+        live = ui_sessions.create("/implement-issue 7", repo, link={"owner": "o", "repo": "r", "issue": 7})
         ui_sessions.update(live["id"], status="running")
-        s, dup = call({"repo": "o/r", "command": "run-issue", "args": "7"})
+        s, dup = call({"repo": "o/r", "command": "implement-issue", "args": "7"})
         assert s == 409 and dup["link"]["issue"] == 7, (s, dup)
         s, lst = call(None, "GET")
         sj = json.dumps(lst)
@@ -1878,20 +954,31 @@ def launcher_all_checks():
     assert os.path.exists(lp), "launcher.js missing"
     js = read(lp).decode()
     for name in (
-        "run-issue",
+        "implement-issue",
+        "verifier-locally",
+        "pr-review",
+        "docs-updater",
+        "sync-from-wasensi",
         "pr-grind",
         "create-prd",
         "refine-issues",
-        "intake",
         "dump",
         "worklog",
-        "gh-issue",
-        "pr-review",
-        "pr-fix-comments",
-        "issue-to-pr",
         "day",
     ):
         assert name in js, name
+    for gone in (
+        "run-" + "issue",
+        "gh-issue",
+        "intake",
+        "jira-to-gh",
+        "pr-fix-comments",
+        "issue-to-pr",
+        "fix-blockers",
+        "autoGrind",
+        "<legend>Options",
+    ):
+        assert gone not in js, gone
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
     assert specs and set(specs) <= {
         "./vendor/preact.mjs",
@@ -1904,7 +991,7 @@ def launcher_all_checks():
     assert not re.search(r"console\.log|debugger|https?://", js)
     s, r, _ = req(port, "/static/launcher.js")
     assert s == 200 and r.getheader("Content-Type", "").startswith("text/javascript"), s
-    ok("launcher.js served, names all seven commands, hygiene")
+    ok("launcher.js served, names the kept and imported commands, no removed-command Options, hygiene")
 
     css = read(os.path.join(STATIC, "app.css")).decode()
     assert re.search(r"textarea[^{}]*\{[^}]*min-height\s*:\s*(?:4[4-9]|[5-9]\d)px", css), "textarea min-height >= 44px"
@@ -1971,7 +1058,7 @@ def answer_checks():
     app = read(os.path.join(STATIC, "app.js")).decode()
     css = read(os.path.join(STATIC, "app.css")).decode()
     specs = re.findall(r"""(?:^|\n)\s*import\b[^'"]*?from\s*['"]([^'"]+)['"]""", js)
-    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./toast.js", "./run.js"}, specs
+    assert specs and set(specs) <= {"./vendor/preact.mjs", "./vendor/htm.mjs", "./toast.js"}, specs
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
     names = {x.split(" as ")[-1].strip() for x in exports.split(",")}
@@ -1986,8 +1073,7 @@ def answer_checks():
     assert re.search(r"<\$\{Answer\}\s+session=\$\{route\.params\.session\}", app), "answer route renders Answer"
     ok("app.js imports and renders Answer")
 
-    # the plan goes through run.js mdToHtml (escape-first), the only innerHTML sink here
-    assert js.count("dangerouslySetInnerHTML") == 1 and "__html: mdToHtml(plan)" in js
+    assert "dangerouslySetInnerHTML" not in js
     for bad in ("outerHTML", "insertAdjacentHTML", "http://", "https://", "console.log", "debugger"):
         assert bad not in js, bad
     ok("answer.js security/hygiene")
@@ -1998,7 +1084,6 @@ def answer_checks():
         'role="alert"',
         'role="status"',
         'maxlength="4000"',
-        "mdToHtml",
         "Session not found",
         "#/sessions",
         "Continue in terminal",
@@ -2006,7 +1091,7 @@ def answer_checks():
         "disabled",
     ):
         assert tok in js, tok
-    assert "/api/sessions/" in js and "/api/runs/" in js
+    assert "/api/sessions/" in js and "/api/runs/" not in js
     ok("answer.js markup: fieldset/legend/alert/status/maxlength/pre/not-found/copy/disabled")
 
     def block(sel):
@@ -2027,7 +1112,11 @@ def answer_checks():
     if not shutil.which("node"):
         print("note: node not found, skipping answer logic checks")
         return
-    env = dict(os.environ, ANSWER_URL=pathlib.Path(os.path.join(STATIC, "answer.js")).as_uri())
+    env = dict(
+        os.environ,
+        ANSWER_URL=pathlib.Path(os.path.join(STATIC, "answer.js")).as_uri(),
+        MD_URL=pathlib.Path(os.path.join(STATIC, "md.js")).as_uri(),
+    )
     p = subprocess.run(
         ["node", "--input-type=module", "-e", ANSWER_NODE_JS], env=env, capture_output=True, text=True, timeout=60
     )
@@ -2122,14 +1211,14 @@ let focused = 0;
 globalThis.location = loc;
 globalThis.focus = () => { focused++; };
 
-const sess = { id: 'a b', session_id: 'SESSIONXYZ', command: '/run-issue 124', repo: '/tmp/myrepo',
+const sess = { id: 'a b', session_id: 'SESSIONXYZ', command: '/implement-issue 124', repo: '/tmp/myrepo',
   pending_question: { id: 'r1', questions: [{ question: 'SECRETQ?', options: [{ label: 'SECRETOPT' }] }] } };
 install('granted');
 const nn = notifyWaiting(sess);
 assert.ok(nn, 'returns the notification');
 assert.equal(made.length, 1);
 const txt = String(made[0].title) + ' ' + String(made[0].opts && made[0].opts.body);
-assert.equal(String(made[0].opts.body), '/run-issue \u00b7 myrepo');
+assert.equal(String(made[0].opts.body), '/implement-issue \u00b7 myrepo');
 for (const leak of ['SECRETQ', 'SECRETOPT', 'SESSIONXYZ']) assert.ok(!txt.includes(leak), leak);
 out('granted: one notification with command and repo only');
 assert.equal(made[0].opts.tag, 'aiw-a b-r1');
@@ -2290,16 +1379,6 @@ if ANSWER:
     sys.exit(0)
 
 
-if BOARD:
-    try:
-        board_checks()
-    finally:
-        srv.shutdown()
-        shutil.rmtree(tmp, ignore_errors=True)
-    print(f"{passed} checks passed")
-    sys.exit(0)
-
-
 if SHELL:
     try:
         shell_checks()
@@ -2336,15 +1415,14 @@ assert.equal(st.label, 'Resume'); assert.equal(st.method, 'POST'); assert.equal(
 const link = { owner: 'o', repo: 'r', issue: 7 };
 for (const o of ['running', 'starting']) {
   const a = rowAction(S({ outcome: o, link }));
-  assert.equal(a.label, 'Open'); assert.equal(a.href, '#/run/o/r/7');
+  assert.equal(a.label, 'Open'); assert.equal(a.href, '#/session/s1');
 }
 assert.deepEqual(rowAction(S({ outcome: 'done' })), { kind: 'link', label: 'Open', href: '#/session/s1' });
 assert.equal(rowAction(S({ outcome: 'weird' })), null);
 assert.equal(rowAction(S({ outcome: undefined })), null);
 out('rowAction mapping');
 
-assert.equal(transcriptHref(S({ link })), '#/run/o/r/7');
-assert.equal(transcriptHref(S({ link: { owner: 'a b', repo: 'c/d', issue: 1 } })), '#/run/a%20b/c%2Fd/1');
+assert.equal(transcriptHref(S({ link })), '#/session/s1');
 for (const l of [null, undefined, { owner: 'o', repo: 'r', issue: 0 }, { owner: 'o', repo: 'r', issue: 1.5 },
   { owner: 'o', repo: 'r', issue: '3' }, { owner: 'o', repo: 'r' }]) {
   assert.equal(transcriptHref(S({ id: 'x y', link: l })), '#/session/x%20y');
@@ -2379,7 +1457,7 @@ assert.match(fmtTime(new Date().toISOString()), /^Today \d\d:\d\d$/);
 assert.equal(fmtTime('not-a-date'), 'not-a-date'); assert.equal(fmtTime(null), '—');
 out('fmtCost/fmtTime');
 assert.equal(H.cmdLabel({ command: '/pr-grind https://x.slack.com/a', link: { issue: 7 } }), 'pr-grind round #7');
-assert.equal(H.cmdLabel({ command: '/run-issue 7', link: { issue: 7 } }), '/run-issue 7');
+assert.equal(H.cmdLabel({ command: '/implement-issue 7', link: { issue: 7 } }), '/implement-issue 7');
 out('cmdLabel shortens grind commands and names the issue');
 
 // mini renderer: vnode -> html string, plus element lookup
@@ -2590,7 +1668,7 @@ assert.equal(untilClock('15:00', now), Math.floor(new Date(2026, 9, 9, 15, 0).ge
 assert.equal(untilClock('14:30', now), Math.floor(new Date(2026, 9, 10, 14, 30).getTime() / 1000));
 for (const bad of ['', '25:00', '9', 'ab:cd', '12:60']) assert.equal(untilClock(bad, now), null);
 out('untilClock rolls to tomorrow and rejects bad input');
-assert.equal(entryHref({ link: { owner: 'o', repo: 'r', issue: 7 }, sid: 'x' }), '#/run/o/r/7');
+assert.equal(entryHref({ link: { owner: 'o', repo: 'r', issue: 7 }, sid: 'x' }), '#/session/x');
 assert.equal(entryHref({ link: null, sid: 'a b' }), '#/session/a%20b');
 assert.equal(entryHref({}), null);
 assert.equal(plural(1, 'decision'), '1 decision');
@@ -2615,9 +1693,7 @@ def afk_checks():
     afk = css[css.index("html[data-afk] {") :]
     for tok in ("--accent:", "--accent-bg:", "--on-accent:", "--accent-hover:"):
         assert tok in afk.split("}", 1)[0], tok
-    for sel in (".needs-you", ".strip-wait", ".pcard-attn", ".grind-needs"):
-        assert re.search(r"html\[data-afk\] " + re.escape(sel) + r"[ ,{]", css), sel
-    ok("AFK theme swaps accent tokens and hides needs-you surfaces")
+    ok("AFK theme swaps accent tokens")
     assert "toggleAttribute('data-afk'" in app and "headerBadge(offline, afk?.active ? [] : sessions)" in app
     assert "if (!away) notifyWaiting(s)" in app
     ok("app.js themes on data-afk and mutes the badge and pings while away")
@@ -2762,43 +1838,9 @@ try:
         return " ".join(got)
 
     rules = css_rules(read(os.path.join(STATIC, "app.css")).decode())
-    # the Flow side panel and the Run output no longer size themselves from 100vh
-    assert "vh" not in decl(rules, None, ".flow-side"), "flow-side must not be sized from vh"
-    wide_flow = decl(rules, "(min-width: 1200px)", "body:has(.flow--side) #app")
-    assert re.search(r"height\s*:\s*100dvh", wide_flow) and re.search(r"flex-direction\s*:\s*column", wide_flow), (
-        wide_flow
-    )
-    wide_run = decl(rules, "(min-width: 961px)", "body:has(.run .output) #app")
-    assert re.search(r"height\s*:\s*100dvh", wide_run) and re.search(r"flex-direction\s*:\s*column", wide_run), wide_run
-    # Flow: the main column is the scroll area (a size container), the sticky panel is bounded by it
-    flow_main = decl(rules, "(min-width: 1200px)", "main:has(.flow--side)")
-    assert re.search(r"container-type\s*:\s*size", flow_main) and re.search(r"overflow-y\s*:\s*auto", flow_main), (
-        flow_main
-    )
-    side = decl(rules, None, ".flow-side")
-    assert (
-        re.search(r"max-height\s*:[^;]*100cqh", side) and re.search(r"overflow-y\s*:\s*auto", side) and "sticky" in side
-    ), side
-    # Run: the output shrinks to the room left under the header, and no longer carries its own cap there
-    run_out = decl(rules, "(min-width: 961px)", ".run:has(.output) .output")
-    assert re.search(r"max-height\s*:\s*none", run_out), run_out
-    run_panel = decl(rules, "(min-width: 961px)", ".run:has(.output) .panel.main")
-    assert re.search(r"max-height\s*:\s*max\(100%", run_panel), run_panel
-    ok("css flow side and run output are bounded by the viewport layout, not 100vh")
-
-    # below the wide layouts the page scrolls as before (#221)
-    assert re.search(r"position\s*:\s*static", decl(rules, "(max-width: 1199px)", ".flow-side"))
-    assert re.search(r"max-height\s*:\s*none", decl(rules, "(max-width: 1199px)", ".flow-side"))
-    assert re.search(r"max-height\s*:\s*none", decl(rules, "(max-width: 640px)", ".output"))
-    assert re.search(r"overflow\s*:\s*visible", decl(rules, "(max-width: 640px)", ".output"))
-    base_out = decl(rules, None, ".output")
-    assert "overflow-y: auto" in base_out and "max-height" in base_out
-    ok("css narrow layouts keep page-level scrolling")
-
     # every remaining vh-sized scroll box is an overlay that starts near the top (audited in #221)
-    # (.output keeps its vh cap only where the stations stack above it and the page scrolls: under 961px)
     vh_boxes = sorted({sel for m, sel, b in rules if re.search(r"max-height\s*:[^;]*\dvh\b", b)})
-    assert vh_boxes == [".dialog", ".dialog.issue", ".fs-pop", ".output"], vh_boxes
+    assert vh_boxes == [".dialog", ".dialog.issue"], vh_boxes
     ok("css only audited overlays keep a vh max-height")
 
     # vendoring
@@ -2833,158 +1875,27 @@ finally:
     srv.shutdown()
     shutil.rmtree(tmp, ignore_errors=True)
 
-_fl, _la = read(os.path.join(STATIC, "flow.js")).decode(), read(os.path.join(STATIC, "launcher.js")).decode()
-assert "id: 'flow-peer-review'" in _fl and "kinds['create-prd']" in _fl and "/api/peer-review" in _fl, (
-    "Flow PRD step offers the lens picker"
-)
+_la = read(os.path.join(STATIC, "launcher.js")).decode()
 assert "id: 'peer-review'" in _la and "id: 'custom-review'" in _la and "/api/peer-review" in _la, "both New run forms"
 assert "reviewOffer(command)" in _la and "reviewOffer('custom')" in _la, "offers come from config, keyed by command"
 assert "up to ${rounds || 3} rounds, on Opus" in _la and "isn't forced" in _la, "cost and the not-a-gate note, said"
-assert "'critical'" not in _la and "'critical'" not in _fl, "no lens is hardcoded in the frontend"
+assert "'critical'" not in _la, "no lens is hardcoded in the frontend"
 _se = read(os.path.join(STATIC, "session.js")).decode()
 assert "meta.peer_review" in _se and "peer review: ${meta.peer_review}" in _se, "a session shows its peer review status"
-ok("Flow PRD step and both New run forms offer the lens picker from /api/peer-review; session shows the post-check")
-assert "blockers" not in _fl and "fix-blockers" not in _fl, (
-    "flow.js: no Blockers step (refine-issues sets blocked-by links)"
-)
-ok("flow.js has no Blockers step")
+ok("both New run forms offer the lens picker from /api/peer-review; session shows the post-check")
 
-# The flow.js stepper checks run in the default mode (so in run_tests.sh and CI); every --view
+# The launcher picker and routing checks run in the default mode (so in run_tests.sh and CI); every --view
 # block runs too, from the loop at the end of this file.
 FLOW_JS = r"""
 const assert = (await import('node:assert')).strict;
 const out = (n) => console.log('ok ' + n);
-const { parseRoute } = await import(process.env.APP_URL);
-// #190: #/flow stepper helpers, hash round-trip and nav order
-const F = await import(process.env.APP_URL.replace('app.js', 'flow.js'));
-const { NAV } = await import(process.env.APP_URL);
-assert.deepEqual(NAV.map(([, , label]) => label), ['Board', 'Flow', 'Dispatch', 'Sessions']);
-assert.deepEqual(NAV.find(([n]) => n === 'flow'), ['flow', '#/flow', 'Flow']);
-out('NAV order: Board, Flow, Dispatch, Sessions');
-assert.deepEqual(F.parseNext('Filed it.\n\u2192 next: /prd 05-Work/P/F'), { command: '/prd', arg: '05-Work/P/F' });
-assert.deepEqual(F.parseNext('\u2192 next: /prd a\nmore\n\u2192 next: herdr-dispatch 12 13 14'), { command: 'herdr-dispatch', arg: '12 13 14' });
-assert.equal(F.parseNext('Classified as a standalone task. 00-Quick/x.md'), null);
-assert.equal(F.parseNext(''), null); assert.equal(F.parseNext(undefined), null);
-assert.equal(F.handoff('dump', { kind: 'result', is_error: true, text: '\u2192 next: /prd a' }).error.length > 0, true);
-assert.deepEqual(F.handoff('dump', { kind: 'result', is_error: false, text: '\u2192 next: /prd 05-Work/P/F' }), { folder: '05-Work/P/F' });
-assert.deepEqual(F.handoff('dump', { kind: 'result', text: '\u2192 next: /create-tasks 05-Work/P/F/Bugs.md' }), { prd: '05-Work/P/F/Bugs.md' });
-assert.deepEqual(F.handoff('dump', { kind: 'result', text: '\u2192 next: /gh-issue 05-Work/P/F/Tasks.md' }), { tasks: '05-Work/P/F/Tasks.md' });
-assert.deepEqual(F.handoff('prd', { kind: 'result', text: '\u2192 next: /ai-workflow:create-tasks 05-Work/P/F/PRD.md' }), { prd: '05-Work/P/F/PRD.md' });
-assert.deepEqual(F.handoff('tasks', { kind: 'result', text: '\u2192 next: /gh-issue docs/tasks/f.md' }), { tasks: 'docs/tasks/f.md' });
-// The Blockers step is gone (refine-issues sets blocked-by links itself): refine-issues hands the epic to dispatch.
-assert.deepEqual(F.handoff('issues', { kind: 'result', text: '\u2192 next: herdr-dispatch 12' }), { issues: [12] });
-assert.ok(F.handoff('issues', { kind: 'result', text: '\u2192 next: /fix-blockers #40' }).error);
-assert.deepEqual(F.handoff('issues', { kind: 'result', text: '\u2192 next: herdr-dispatch 12 13' }), { issues: [12, 13] });
-assert.ok(F.handoff('blockers', { kind: 'result', text: '\u2192 next: herdr-dispatch 40' }).error);
-assert.ok(F.handoff('prd', { kind: 'result', text: '\u2192 next: /gh-issue PRD.md' }).error);
-assert.ok(F.handoff('dump', { kind: 'result', text: 'Standalone task filed.' }).error);
-assert.ok(F.handoff('prd', { kind: 'result', text: '\u2192 next: herdr-dispatch 1' }).error);
-assert.ok(F.handoff('issues', null).error);
-// Old next lines keep working; new ones route the same.
-assert.deepEqual(F.handoff('dump', { kind: 'result', text: '→ next: /ai-workflow:create-prd 05-Work/P/F' }), { folder: '05-Work/P/F' });
-assert.deepEqual(F.handoff('prd', { kind: 'result', text: '→ next: /create-tasks docs/prds/f.md' }), { prd: 'docs/prds/f.md' });
-assert.deepEqual(F.handoff('tasks', { kind: 'result', text: '→ next: /refine-issues docs/tasks/f.md' }), { tasks: 'docs/tasks/f.md' });
-assert.deepEqual(F.handoff('dump', { kind: 'result', text: '→ next: /gh-issue 05-Work/P/F/Bugs.md' }), { tasks: '05-Work/P/F/Bugs.md' });
-// gh-issue stopping on a multi-task note hands back to the PRD step, clearing the later fields.
-assert.deepEqual(F.handoff('issues', { kind: 'result', text: '\u2192 next: /create-prd 05-Work/P/F' }), { folder: '05-Work/P/F', prd: '', tasks: '' });
-assert.equal(F.stepFromState({ folder: '05-Work/P/F', prd: '', tasks: '' }), 'prd');
-assert.ok(F.handoff('issues', { kind: 'result', text: '\u2192 next: /create-prd' }).error);
-assert.ok(F.handoff('blockers', { kind: 'result', text: '\u2192 next: /create-prd x' }).error);
-assert.equal(F.issuesCommand('docs/tasks/f.md'), 'refine-issues');
-assert.equal(F.issuesCommand(' docs/tasks/f.md '), 'refine-issues');
-assert.equal(F.issuesCommand('05-Work/P/F/Bugs.md'), 'gh-issue');
-assert.equal(F.sessionStep('/ai-workflow:create-prd 05-Work/P/F'), 'prd');
-assert.equal(F.sessionStep('/ai-workflow:refine-issues docs/tasks/f.md'), 'issues');
-assert.equal(F.sessionStep('/ai-workflow:prd 05-Work/P/F'), 'prd'); // old sessions
-out('flow: parseNext and handoff (valid, last of several, missing, error result, wrong stage)');
-{
-  const stop = F.handoff('tasks', { is_error: false, text: 'I stopped without creating `docs/tasks/x.md`: the repo has no GitHub remote.\n\n- details\n\n→ next: /create-tasks docs/prds/x.md' });
-  assert.match(stop.error, /^The step stopped before finishing: I stopped without creating docs\/tasks\/x.md: the repo has no GitHub remote\./, stop.error);
-  assert.equal(F.notePath('docs/prds/x.md', '05-Work/P/F'), '05-Work/P/F/PRD.md', 'a repo PRD shows its vault copy');
-  assert.equal(F.notePath('05-Work/P/F/PRD.md', '05-Work/P/F'), '05-Work/P/F/PRD.md'); assert.equal(F.notePath('docs/prds/x.md', ''), 'docs/prds/x.md');
-  assert.ok(F.isLocalRepo({ repo: 'local/x' }) && !F.isLocalRepo({ repo: 'local/x', vault: true }) && !F.isLocalRepo({ repo: 'acme/x' }) && !F.isLocalRepo({ repo: 'local/x', manual: true }));
-  out('flow: a step that asks to be re-run shows its reason; repo PRDs show the vault copy; local repos detected');
-  assert.deepEqual(F.parseNext('→ next: /create-prd "05-Work/Office Snacks/Snack Voting"'), { command: '/create-prd', arg: '05-Work/Office Snacks/Snack Voting' }, 'quotes stripped');
-  assert.deepEqual(F.handoff('issues', { text: 'x\n→ next: /create-prd "05-Work/A B/C"' }), { folder: '05-Work/A B/C', prd: '', tasks: '' });
-  const ua = F.prdUpdateArgs('05-Work/Office Snacks/Snack Voting/', 'Update  the docs\nand README', '2026-10-15');
-  assert.equal(ua, '--update "05-Work/Office Snacks/Snack Voting/PRD.md" Update the docs and README — requested in Flow on 2026-10-15, add it to the scope (Flow dump)');
-  assert.deepEqual(F.handoff('prd', { text: 'Added FR-12.' }, '/create-prd ' + ua), { prd: '05-Work/Office Snacks/Snack Voting/PRD.md' }, 'an update hands its PRD to Tasks');
-  assert.ok(F.handoff('prd', { text: 'no next' }, '/create-prd 05-Work/A/B').error, 'a normal create-prd still needs its next line');
-  assert.equal(F.taskNoteFolder('05-Work/Office Snacks/Snack Voting/Tasks.md'), '05-Work/Office Snacks/Snack Voting');
-  assert.equal(F.taskNoteFolder('docs/tasks/x.md'), null);
-  out('flow: quoted next args, approved PRD updated with the request, task-note folder for Write a PRD instead');
-}
-for (const t of ['`\u2192 next: /prd 05-Work/P/F`', '**\u2192 next: /prd 05-Work/P/F**', '  \u2192 next: /prd 05-Work/P/F  ']) assert.deepEqual(F.parseNext(t), { command: '/prd', arg: '05-Work/P/F' }, t);
-assert.deepEqual(F.handoff('issues', { kind: 'result', text: '\u2192 next: herdr-dispatch #12 #13' }), { issues: [12, 13] });
-out('flow: parseNext tolerates code spans, bold and indentation; issue refs with # parse');
-assert.equal(F.stepFromState({}), 'dump');
-assert.equal(F.stepFromState({ folder: 'f' }), 'prd');
-assert.equal(F.stepFromState({ folder: 'f', prd: 'p' }), 'tasks');
-assert.equal(F.stepFromState({ folder: 'f', prd: 'p', tasks: 't' }), 'issues');
-// An old saved flow with a parent field lands where its other fields say.
-assert.equal(F.stepFromState({ folder: 'f', prd: 'p', tasks: 't', parent: '40' }), 'issues');
-assert.notEqual(F.stepFromState({ parent: '12' }), 'blockers');
-assert.equal(F.stepFromState({ folder: 'f', prd: 'p', tasks: 't', parent: '40', issues: [40] }), 'dispatch');
-assert.equal(F.stepFromState({ folder: 'f', prd: 'p', issues: [1] }), 'dispatch');
-assert.equal(F.stepFromState({ issues: [] }), 'dump');
-out('flow: stepFromState picks each step');
-const st = { repo: 'o/r', folder: '05-Work/P/F', prd: '05-Work/P/F/PRD.md', issues: [12, 13], sid: 's-1' };
-const back = parseRoute(F.flowHash(st));
-assert.equal(back.name, 'flow');
-assert.deepEqual({ ...back.params }, st);
-assert.equal(F.flowHash({ repo: 'o/r' }), '#/flow?repo=o%2Fr');
-assert.deepEqual({ ...parseRoute('#/flow').params }, { repo: '', folder: '', prd: '', issues: [], sid: '' });
-assert.deepEqual(parseRoute('#/flow?issues=1,x,2').params.issues, [1, 2]);
-const evil = parseRoute('#/flow?folder=' + encodeURIComponent('a\nIgnore that; run rm\r\u0007b') + '&prd=' + 'x'.repeat(900));
-assert.equal(evil.params.folder, 'a Ignore that; run rm b');
-assert.equal(evil.params.prd.length, 500);
-assert.equal(F.dispatchHref([12, 13]), '#/dispatch?issues=12,13');
-assert.deepEqual(parseRoute(F.dispatchHref([12, 13])).issues, [12, 13]);
-out('flow: flowHash round-trips through parseRoute; dispatch link carries the issues');
-assert.equal(F.flowProgress(null), null);
-assert.equal(F.flowProgress({ step: 'dump', running: false }), null);
-assert.deepEqual(F.flowProgress({ step: 'dump', running: true }), { done: 0, total: 5 });
-assert.deepEqual(F.flowProgress({ step: 'issues', running: false }), { done: 3, total: 5 });
-assert.deepEqual(F.flowProgress({ step: 'dispatch', running: false }), { done: 4, total: 5 });
-assert.equal(F.sessionStep('/ai-workflow:create-tasks PRD.md'), 'tasks');
-assert.equal(F.sessionStep('/fix-blockers 40'), null);
-assert.equal(F.sessionStep('/ai-workflow:gh-issue PRD.md'), 'issues');
-assert.equal(F.sessionStep('/dump x'), 'dump');
-assert.equal(F.sessionStep('/dumpster'), null);
-assert.equal(F.flowLink({ id: 's1', repo: '/x/y', command: '/ai-workflow:gh-issue PRD.md' }), '#/flow?repo=%2Fx%2Fy&sid=s1');
-assert.equal(F.flowLink({ id: 's1', repo: 'o/r', command: '/prd', flow_id: 'f-20261010000000-abcdef' }), '#/flow/f-20261010000000-abcdef');
-assert.equal(F.flowLink({ id: 's1', repo: 'o/r', command: '/run-issue 7' }), null);
-assert.equal(F.flowLink({ id: 's1', repo: 'o/r', command: '/dumpster' }), null);
-assert.equal(parseRoute('#/flow/f-20261010000000-abcdef').params.id, 'f-20261010000000-abcdef');
-assert.equal(parseRoute('#/flow/new').params.id, 'new');
-assert.equal(parseRoute('#/flow/../x').name, 'notfound');
-out('flow: nav progress from a summary, session step, Continue in Flow opens the session\'s own flow, #/flow/<id> routes');
-const sv = (o) => F.sideView({ view: null, at: 0, runStep: null, folder: '', prd: '', ...o });
-assert.equal(sv({}), null);
-assert.deepEqual(sv({ runStep: 'dump' }), { kind: 'filing' });
-assert.deepEqual(sv({ at: 1, folder: '05-Work/P/F/' }), { kind: 'note', path: '05-Work/P/F/Dump.md' });
-assert.deepEqual(sv({ at: 1, runStep: 'prd', folder: '05-Work/P/F' }), { kind: 'note', path: '05-Work/P/F/PRD.md', stale: true });
-assert.deepEqual(sv({ at: 2, folder: 'f', prd: 'f/PRD.md' }), { kind: 'note', path: 'f/PRD.md' });
-assert.deepEqual(sv({ at: 3, prd: 'f/PRD.md' }), { kind: 'note', path: 'f/PRD.md' });
-assert.deepEqual(sv({ at: 4, prd: 'f/PRD.md' }), { kind: 'issues' });
-assert.deepEqual(sv({ at: 5, prd: 'f/PRD.md' }), { kind: 'issues' });
-assert.deepEqual(sv({ at: 3, view: 'dump', folder: 'f' }), { kind: 'note', path: 'f/Dump.md' });
-out('flow: the right column shows the running step, else the last done one, else the step clicked on the rail');
-const FS = await import(process.env.APP_URL.replace('app.js', 'flowside.js'));
-const now = 1_800_000_000_000;
-assert.deepEqual([30, 300, 7200, 200000].map((s) => FS.ago(now / 1000 - s, now)), ['now', '5m', '2h', '2d']);
-assert.deepEqual(FS.issueTrack('fixing', false), { on: 2, now: 2, tone: 'warn', label: 'fixing…' });
-assert.equal(FS.issueTrack('checked', true).on, 4);
-assert.equal(FS.issueTrack('created', true).label, 'done');
-assert.deepEqual(FS.issueTrack('checking', true), { on: 4, now: null, label: 'done' });
-assert.equal(FS.issueTrack('failed', true).tone, 'error');
-assert.equal(FS.stripFrontmatter('---\ntags: [a]\n---\n# T\n'), '# T\n');
-assert.equal(FS.stripFrontmatter('# no fm'), '# no fm');
-assert.deepEqual(FS.mergeRows({ reading: false, rows: [{ number: 64, title: 'A', state: 'checked' }] }, [64, 65]).rows,
-  [{ number: 64, title: 'A', state: 'checked' }, { number: 65, title: '', state: 'created' }]);
-assert.equal(FS.mergeRows(null, [7]).reading, false);
-assert.equal(FS.mergeRows(null, []).reading, true);
-out('flowside: relative time, issue track states, frontmatter stripped');
+const { parseRoute, NAV } = await import(process.env.APP_URL);
+assert.deepEqual(NAV.map(([, , label]) => label), ['Sessions']);
+out('NAV: Sessions only');
+for (const h of ['', '#', '#/', '#/sessions']) assert.equal(parseRoute(h).name, 'sessions', h);
+assert.equal(parseRoute('#/new').name, 'new'); assert.equal(parseRoute('#/settings').name, 'settings');
+for (const h of ['#/run/o/r/1', '#/flow/x', '#/flow', '#/dispatch', '#/dispatch/p-20261007120000-aaaaaa', '#/board']) assert.equal(parseRoute(h).name, 'notfound', h);
+out('routes: / and /sessions land on Sessions; removed pages are not found');
 const L = await import(process.env.APP_URL.replace('app.js', 'launcher.js'));
 assert.deepEqual(L.buildBody({ repo: 'o/r', command: 'create-prd', args: ' 05-Work/P/F ', lenses: ['critical', 'qa'] }), { repo: 'o/r', command: 'create-prd', args: '05-Work/P/F', peer_review: ['critical', 'qa'] });
 assert.deepEqual(L.buildBody({ repo: 'o/r', command: 'create-prd', args: 'x', lenses: null }), { repo: 'o/r', command: 'create-prd', args: 'x' });
@@ -3004,28 +1915,17 @@ out('launcher: lens lists in the body (named and custom), default critical, empt
 {
   const it = { number: 12, title: 'Fix login redirect', labels: ['bug'], url: 'https://x/o/r/issues/12' };
   const items = [it, { number: 120, title: 'Export CSV', labels: ['feature'] }, { number: 7, title: 'Docs', labels: [] }];
-  assert.equal(L.pickValue('run-issue', 'o/r', it), '12'); assert.equal(L.pickValue('pr-review', 'o/r', it), '12');
-  assert.equal(L.pickValue('pr-fix-comments', 'o/r', it), 'o/r#12'); assert.equal(L.pickValue('issue-to-pr', 'o/r', it), it.url);
+  assert.equal(L.pickValue('implement-issue', 'o/r', it), '12'); assert.equal(L.pickValue('pr-review', 'o/r', it), '12');
   assert.equal(L.typedNumber('#12'), 12); assert.equal(L.typedNumber('o/r#12'), 12); assert.equal(L.typedNumber(it.url), 12); assert.equal(L.typedNumber('fix'), null);
   const nums = (q) => L.matchItems(items, q).map((x) => x.number);
   assert.deepEqual(nums(''), [12, 120, 7]); assert.deepEqual(nums('12'), [12, 120], 'number prefix');
   assert.deepEqual(nums('login fix'), [12], 'every word in the title'); assert.deepEqual(nums('feature'), [120], 'labels match');
   assert.deepEqual(nums('o/r#12'), [12, 120, 7], 'a filled-in reference keeps the whole list visible');
-  assert.deepEqual(L.GROUPS.flatMap(([, c]) => c.map(([n]) => n)).sort(), Object.keys(L.PICK).concat(['pr-grind', 'create-prd', 'refine-issues', 'gh-issue', 'intake', 'dump', 'day', 'worklog']).sort(), 'every command is grouped once');
-  assert.equal(L.pickValue('issue-to-pr', 'o/r', { number: 5, url: null }), 'o/r#5', 'no https URL: a reference, never an empty fill');
-  assert.equal(L.switchArgs('dump', 'intake', 'long idea', 'o/r'), 'long idea', 'free text carries over');
-  assert.equal(L.switchArgs('run-issue', 'issue-to-pr', '12', 'o/r'), 'o/r#12', 'rewritten in the target form');
-  assert.equal(L.switchArgs('run-issue', 'issue-to-pr', '12', 'o/r', [it]), it.url, 'the listed URL when known');
-  assert.equal(L.switchArgs('pr-review', 'pr-fix-comments', '12', 'o/r'), 'o/r#12');
-  assert.equal(L.switchArgs('pr-fix-comments', 'pr-review', 'o/r#12', 'o/r'), '12');
-  assert.equal(L.switchArgs('issue-to-pr', 'run-issue', it.url, 'o/r'), '12');
-  assert.equal(L.switchArgs('run-issue', 'issue-to-pr', 'login', 'o/r'), 'login', 'search words stay');
-  assert.equal(L.switchArgs('run-issue', 'pr-review', '12', 'o/r'), '', 'issue to PR clears');
-  assert.equal(L.switchArgs('dump', 'run-issue', 'idea', 'o/r'), '');
-  assert.equal(L.switchArgs('issue-to-pr', 'run-issue', 'https://x/a/b/issues/12', 'o/r'), 'https://x/a/b/issues/12', 'another repo stays as typed');
-  assert.equal(L.switchArgs('pr-fix-comments', 'pr-review', 'a/b#12', 'o/r'), 'a/b#12');
-  assert.equal(L.switchArgs('run-issue', 'issue-to-pr', '12', ''), '', 'manual path: a bare number cannot become a URL');
-  assert.equal(L.switchArgs('run-issue', 'pr-review', '12', ''), '');
+  assert.deepEqual(L.GROUPS.flatMap(([, c]) => c.map(([n]) => n)).sort(), Object.keys(L.PICK).concat(['pr-grind', 'create-prd', 'refine-issues', 'dump', 'day', 'worklog', 'verifier-locally', 'docs-updater', 'sync-from-wasensi', 'create-tasks', 'herdr-dispatch', 'flow', 'peer-review', 'release-pr']).sort(), 'every command is grouped once');
+  assert.equal(L.switchArgs('dump', 'create-prd', 'long idea', 'o/r'), 'long idea', 'free text carries over');
+  assert.equal(L.switchArgs('implement-issue', 'pr-review', '12', 'o/r'), '', 'issue to PR clears');
+  assert.equal(L.switchArgs('dump', 'implement-issue', 'idea', 'o/r'), '');
+  assert.equal(L.switchArgs('implement-issue', 'implement-issue', 'login', 'o/r'), 'login', 'search words stay');
   assert.equal(L.switchArgs('worklog', 'pr-grind', '2026-10-08', 'o/r'), '');
   {
     const W = (o) => L.worklogDates(o, '2026-10-15');
@@ -3053,7 +1953,7 @@ out('launcher: lens lists in the body (named and custom), default critical, empt
     assert.equal(V.repoName('Gym App: Check-ins!'), 'gym-app-check-ins');
     assert.deepEqual(V.parentFolders([{ path: '/u/P/a' }, { path: '/u/P/b/' }, { path: '/u/Q/c' }, { path: 'rel/x' }, {}]), ['/u/P', '/u/Q'], 'most used first; relative paths skipped');
     assert.ok(L.validate({ vault: true, command: 'dump', args: 'x' }) === null, 'dump runs with no repo');
-    assert.match(L.validate({ vault: true, command: 'run-issue', args: '7' }).repo, /needs a repo/);
+    assert.match(L.validate({ vault: true, command: 'implement-issue', args: '7' }).repo, /needs a repo/);
     assert.equal(L.validateCustom({ vault: true, text: 'x' }), null);
     assert.deepEqual(L.vaultBody({ vault: true, vf: { project: 'Gym', feature: 'Check-ins' } }), { repo: '', no_repo: true, vault_folder: '05-Work/Gym/Check-ins' });
     assert.deepEqual(L.vaultBody({ vault: true }), { repo: '', no_repo: true }); assert.deepEqual(L.vaultBody({}), {});
@@ -3080,7 +1980,7 @@ else:
 # run_tests.sh and CI call, must cover them all or they rot unseen.
 import subprocess  # noqa: E402
 
-for _view in ("shell", "run", "launcher", "launcher-all", "board", "answer", "notify", "history", "afk"):
+for _view in ("shell", "launcher", "launcher-all", "answer", "notify", "history", "afk"):
     _v = subprocess.run([sys.executable, __file__, "--view", _view], capture_output=True, text=True, timeout=300)
     assert _v.returncode == 0, f"--view {_view} failed:\n{(_v.stdout + _v.stderr)[-2500:]}"
     ok(f"--view {_view}")
