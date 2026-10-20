@@ -16,20 +16,15 @@ for k in [k for k in os.environ if k.startswith("AIW_NTFY_")]:
     del os.environ[k]
 
 import ui_afk  # noqa: E402
-import ui_board  # noqa: E402
-import ui_grind  # noqa: E402
 import ui_notify  # noqa: E402
 import ui_runner  # noqa: E402
 import ui_sessions  # noqa: E402
-import ui_status  # noqa: E402
 
-resumed, retried, replies, pushed = [], [], [], []
+resumed, retried, pushed = [], [], []
 ui_runner.resume = lambda sid, text: resumed.append((sid, text)) or ui_sessions.update(sid, status="running")
 ui_runner.resume_stopped = lambda sid, cmd=None: (
     retried.append(sid) or ui_sessions.update(sid, status="running", ended_at=None)
 )
-ui_grind.reply = lambda o, r, n, text: replies.append((o, r, n, text)) or (200, {"state": "running"})
-ui_board.issue_for_pr = lambda url: 7 if url.endswith("/pull/70") else 8 if url.endswith("/pull/80") else None
 ui_notify.load_config = lambda: {"ntfy": {"server": "https://ntfy.example", "topic": "t"}}
 
 
@@ -57,7 +52,7 @@ def Q(label="Approve and start (Recommended)", rec=True):
     }
 
 
-def waiting(rec=True, sid_ok=True, command="/run-issue 1"):
+def waiting(rec=True, sid_ok=True, command="/implement-issue 1"):
     s = ui_sessions.create(command, d, {"owner": "o", "repo": "r", "issue": 1})
     if sid_ok:
         ui_sessions.update(s["id"], session_id="abc")
@@ -103,10 +98,10 @@ ui_afk.start(now + 80000, now + 10)
 assert ui_afk.load()["started"] == now and len(ui_afk.load()["log"]) == 1
 
 # failed retries: only failures from this window, on the 2m/10m/30m/1h ladder, then held
-old = ui_sessions.create("/run-issue 2", d)["id"]
+old = ui_sessions.create("/implement-issue 2", d)["id"]
 ui_sessions.update(old, status="failed", session_id="x", ended_at="2020-01-01T00:00:00+00:00")
-f = ui_sessions.create("/run-issue 3", d, {"owner": "o", "repo": "r", "issue": 3})["id"]
-nosid = ui_sessions.create("/run-issue 4", d)["id"]
+f = ui_sessions.create("/implement-issue 3", d, {"owner": "o", "repo": "r", "issue": 3})["id"]
+nosid = ui_sessions.create("/implement-issue 4", d)["id"]
 
 
 def fail(sid, t):
@@ -139,7 +134,7 @@ ui_sessions.update(f, status="done")
 ui_afk.tick(t)
 assert ui_sessions.load(f).get("afk_retries") is None
 
-# grind paused on CI: one Skip-CI reply per PR per window; other pauses are held
+# a grind paused on CI is never answered with a skip-CI reply, and is not counted as held
 os.makedirs(os.path.join(d, "pr-grind"), exist_ok=True)
 
 
@@ -151,15 +146,10 @@ def grind(n, paused):
 
 
 grind(70, "2026-10-09T00:00:00Z — Gate 2 failed: CI red")
-grind(80, "2026-10-09T00:00:00Z — round cap reached")
+held_before = ui_afk.public(now=t)["held"]
 ui_afk.tick(t)
-ui_afk.tick(t)
-assert replies == [("o", "r", 7, ui_afk.SKIP_CI_REPLY)], replies
-# a red head commit counts even when the reason does not say so
-ui_status._cache[("o", "r", 8)] = {"value": {"pr": {"ci": "red"}}, "at": t, "stale": False}
-ui_afk.tick(t)
-assert replies[-1] == ("o", "r", 8, ui_afk.SKIP_CI_REPLY) and len(replies) == 2
-assert [e["kind"] for e in ui_afk.load()["log"]].count("skip-ci") == 2
+assert not any(e["kind"] == "skip-ci" for e in ui_afk.load()["log"])
+assert ui_afk.public(now=t)["held"] == held_before
 
 # outside AFK nothing retries or answers, and the end push fires exactly once
 pushed.clear()
@@ -176,9 +166,9 @@ ui_afk.tick(t + 7)
 assert all(s != c for s, _ in resumed) and len(retried) == len(ui_afk.RETRY_DELAYS)
 assert ui_afk.dismiss()["summary"] is None
 
-# a new window starts a fresh log and skip list
+# a new window starts a fresh log
 ui_afk.start(t + 3600, t)
-assert ui_afk.load()["log"] == [] and ui_afk.load()["skipped_ci"] == []
+assert ui_afk.load()["log"] == []
 
 # #188: create-prd (and old prd) and dump interviews are never auto-answered (also plugin-prefixed); other families still are
 resumed.clear()
@@ -191,13 +181,12 @@ held = [
         "/ai-workflow:prd x",
         "/create-tasks p",
         "/refine-issues docs/tasks/x.md",
-        "/ai-workflow:fix-blockers 40",
     )
 ]
-gi = waiting(command="/gh-issue x")
+gi = waiting(command="/implement-issue 9")
 ui_afk.tick(t + 1)
 assert all(ui_sessions.load(h)["status"] == "waiting" for h in held), [ui_sessions.load(h)["status"] for h in held]
-assert sorted(sid for sid, _ in resumed) == sorted([c, gi]), resumed  # c: the /run-issue left waiting above
+assert sorted(sid for sid, _ in resumed) == sorted([c, gi]), resumed  # c: the /implement-issue left waiting above
 assert sorted(e["sid"] for e in ui_afk.load()["log"] if e["kind"] == "answer") == sorted([c, gi])
 
 print("test_ui_afk: ok")

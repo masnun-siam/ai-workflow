@@ -29,10 +29,8 @@ export function untilClock(value, now = new Date()) {
   return Math.floor(t.getTime() / 1000);
 }
 
-// Where a log entry links: its run when it has one, else its session.
+// Where a log entry links: its session.
 export function entryHref(e) {
-  const l = e && e.link;
-  if (l && l.owner && l.repo && l.issue) return `#/run/${encodeURIComponent(l.owner)}/${encodeURIComponent(l.repo)}/${l.issue}`;
   return e && e.sid ? `#/session/${encodeURIComponent(e.sid)}` : null;
 }
 
@@ -107,7 +105,7 @@ export class AfkControl extends Component {
                 <button type="button" class="btn btn--primary" onClick=${() => this.go('/stop')}>I'm back</button>
               </div>`
           : html`<h2 id="afk-pop-h">Go AFK</h2>
-              <p class="note">Until you're back, plans are approved, recommended answers are picked, grinds stuck on CI skip it, and failed runs are retried. Anything without a recommendation waits for you.</p>
+              <p class="note">Until you're back, recommended answers are picked for you. Anything without a recommendation waits for you.</p>
               <div class="afk-row">
                 ${PRESETS.map(([min, label]) => html`<button type="button" class="btn" onClick=${() => this.startFor(min)}>${label}</button>`)}
               </div>

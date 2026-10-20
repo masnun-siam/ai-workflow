@@ -1,12 +1,10 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { poll } from './app.js';
-import { mergeStream } from './run.js';
-import { runLink, runHash } from './answer.js';
+import { mergeStream } from './md.js';
 import { shortRepo, tokensText, toolSummary } from './fmt.js';
 import { LimitBanner } from './limits.js';
 import { Linked } from './linked.js';
-import { flowLink } from './flow.js';
 import { NewIdeaPanel, ideaPrdSession } from './vault.js';
 
 export { toolSummary };
@@ -143,7 +141,6 @@ export class Session extends Component {
     if (notFound) return html`<h1>Session not found</h1><p><a href="#/sessions">Back to sessions</a></p>`;
     if (!meta) return html`<h1>Transcript</h1><p role="status">Loading…</p>`;
     const shown = filterEvents(stream.events, q);
-    const link = runLink(meta);
     const live = isLive(meta);
     return html`
       <section class="transcript">
@@ -154,8 +151,6 @@ export class Session extends Component {
           </div>
           <span class=${`chip chip-${meta.outcome}`}>${meta.outcome}</span>
           ${meta.peer_review && html`<span class=${`chip chip-review-${meta.peer_review.replace(/ /g, '-')}`} title="Read from the review's rounds, not from what the session said">peer review: ${meta.peer_review}</span>`}
-          ${link && html`<a class="btn" href=${runHash(meta)}>Open run</a>`}
-          ${flowLink(meta) && html`<a class="btn" href=${flowLink(meta)}>Continue in Flow</a>`}
           ${meta.outcome === 'waiting' && html`<a class="btn btn--primary" href=${`#/answer/${encodeURIComponent(meta.id)}`}>Answer</a>`}
           ${retry && html`<span role="status" class="offline">Retrying…</span>`}
         </div>

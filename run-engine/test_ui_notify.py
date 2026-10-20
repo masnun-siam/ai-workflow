@@ -98,7 +98,7 @@ def captured(fn):
 
 REC = {
     "id": "sid1",
-    "command": "/run-issue 5",
+    "command": "/implement-issue 5",
     "repo": "o/r",
     "link": {"owner": "o", "repo": "r", "issue": 5},
     "pending_question": None,
@@ -114,7 +114,7 @@ def meta(d, sid):
         return json.load(f)
 
 
-def new_session(command="/run-issue 5", link=None):
+def new_session(command="/implement-issue 5", link=None):
     return ui_sessions.create(command, "o/r", link)["id"]
 
 
@@ -128,7 +128,7 @@ assert r["path"] == "/aiw-test"
 r["headers"]["title"].encode("ascii")
 assert r["headers"]["priority"] and r["headers"]["click"] == "https://box.ts.net/#/answer/sid1"
 assert r["headers"]["authorization"] == f"Bearer {SECRET}"
-assert b"/run-issue 5" in r["body"] and b"o/r" in r["body"]
+assert b"/implement-issue 5" in r["body"] and b"o/r" in r["body"]
 assert SECRET not in err
 f.close()
 ok("waiting push")
@@ -164,7 +164,7 @@ old = os.environ["PATH"]
 os.environ["PATH"] = empty
 try:
     try:
-        ui_runner.start("/run-issue 1", tempfile.mkdtemp())
+        ui_runner.start("/implement-issue 1", tempfile.mkdtemp())
         raise AssertionError("expected RunnerError")
     except ui_runner.RunnerError:
         pass
@@ -215,12 +215,14 @@ q = {
     ],
 }
 h, body = ui_notify.compose("waiting", rec(pending_question=q), "https://box.ts.net")
-assert h["Title"] == "aiw: #5 waiting on you" and h["Tags"] == "speech_balloon,run-issue,r,#5", h
+assert h["Title"] == "aiw: #5 waiting on you" and h["Tags"] == "speech_balloon,implement-issue,r,#5", h
 assert h["Actions"] == "view, Answer, https://box.ts.net/#/answer/sid1" and h["Click"].endswith("/#/answer/sid1")
-assert body.splitlines() == ["Approve the plan?", "Suggested: Approve (Recommended)", "o/r · /run-issue 5"], body
+assert body.splitlines() == ["Approve the plan?", "Suggested: Approve (Recommended)", "o/r · /implement-issue 5"], body
 h, body = ui_notify.compose("failed", rec(error="claude exited 1\ntraceback..."), "https://box.ts.net")
 assert h["Title"] == "aiw: #5 failed" and h["Tags"].startswith("x,") and h["Priority"] == "high"
-assert body.splitlines() == ["claude exited 1", "o/r · /run-issue 5"] and h["Actions"].startswith("view, Open run,")
+assert body.splitlines() == ["claude exited 1", "o/r · /implement-issue 5"] and h["Actions"].startswith(
+    "view, Open run,"
+)
 h, body = ui_notify.compose("done", rec(), None)
 assert (
     h["Tags"].startswith("white_check_mark,") and h["Priority"] == "default" and "Actions" not in h and "Click" not in h
@@ -231,7 +233,7 @@ h, _ = ui_notify.compose("pipeline", {"id": "p-1", "repo": "o/r", "command": "pi
 assert (
     h["Tags"].startswith("checkered_flag") and h["Actions"] == "view, Open pipeline, https://box.ts.net/#/dispatch/p-1"
 )
-h, body = ui_notify.compose("done", rec(repo="o/r\r\nX-Evil: 1", command="/run-issue 5\r\nX-Evil: 1"), None)
+h, body = ui_notify.compose("done", rec(repo="o/r\r\nX-Evil: 1", command="/implement-issue 5\r\nX-Evil: 1"), None)
 assert all("\n" not in v and "\r" not in v for v in h.values()) and "X-Evil: 1" not in h["Tags"].replace(
     "X-Evil1", ""
 ), h
@@ -292,7 +294,7 @@ ok("file modes")
 # 11 non-ASCII
 f = Fake()
 fresh(conf(f))
-ui_notify.notify("done", rec(command="/run-issue 修正"))
+ui_notify.notify("done", rec(command="/implement-issue 修正"))
 f.reqs[0]["headers"]["title"].encode("ascii")
 assert "修正".encode() in f.reqs[0]["body"]
 f.close()

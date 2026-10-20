@@ -190,7 +190,6 @@ ALLOWED = {
     "limit_resets_at",
     "limit_type",
     "auto_resume",
-    "flow_id",
     "peer_review",
 }
 
@@ -224,8 +223,8 @@ try:
     assert {k: r[k] for k in ("sessions", "limits")} == {"sessions": [], "limits": {}}, r
     ok("no sessions dir -> empty list")
 
-    old = ui_sessions.create("/run-issue", "r/old")
-    new = ui_sessions.create("/run-issue", "r/new", link="http://x")
+    old = ui_sessions.create("/implement-issue", "r/old")
+    new = ui_sessions.create("/implement-issue", "r/new", link="http://x")
     ui_sessions.update(
         old["id"], status="done", cost=0.0421, pid=4242, token="SECRET-META", ended_at="2026-01-01T00:00:00+00:00"
     )
@@ -309,7 +308,7 @@ try:
 
     tail = json.dumps(RES).encode()  # unterminated final line
     for status, expect in (("done", True), ("running", False)):
-        t = ui_sessions.create("/run-issue", "r/tail")
+        t = ui_sessions.create("/implement-issue", "r/tail")
         ui_sessions.update(t["id"], status=status)
         with open(os.path.join(ui_sessions.session_dir(t["id"]), "stream.jsonl"), "wb") as f:
             f.write(tail)

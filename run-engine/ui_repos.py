@@ -19,33 +19,34 @@ import time
 import dispatch
 import peer_review as peer_review_mod
 import ui_board
-import ui_flows
 import ui_runner
 import ui_sessions
 import ui_settings
 import ui_vault
 
 NAMED = (
-    "run-issue",
-    "pr-grind",
     "create-prd",
-    "intake",
-    "dump",
-    "worklog",
-    "gh-issue",
     "create-tasks",
     "refine-issues",
-    "fix-blockers",
+    "implement-issue",
+    "verifier-locally",
     "pr-review",
-    "pr-fix-comments",
-    "issue-to-pr",
+    "docs-updater",
+    "sync-from-wasensi",
+    "dump",
+    "flow",
+    "herdr-dispatch",
+    "peer-review",
+    "pr-grind",
+    "release-pr",
+    "worklog",
     "day",
 )
 MAX_PROMPT_CHARS = 32000
 BATCH_MAX = 3  # sessions of one batch (a worklog date range) running at once
 _TERMINAL = ("done", "failed", "stopped")
 _ORIGIN_RE = re.compile(r"github\.com(?::\d+)?[:/]([^/\s]+)/([^/\s]+?)(?:\.git)?/?$")  # (?::\d+): ssh.github.com:443
-_ISSUE_RE = re.compile(r"^(?:#|.*/issues/)?(\d+)$")
+_ISSUE_RE = re.compile(r"^(?:#|.*/(?:issues|pull)/)?(\d+)$")
 _ISSUE_URL_RE = re.compile(r"github\.com/([\w.-]+)/([\w.-]+)/issues/(\d+)")
 
 # ponytail: one global in-process lock, held across start's auth preflight (~30s); per-key locks
@@ -298,13 +299,11 @@ def _remember(slug, cwd) -> None:
 
 _GITHUB_COMMANDS = (
     "create-tasks",
-    "run-issue",
+    "refine-issues",
+    "implement-issue",
     "pr-grind",
     "pr-review",
-    "pr-fix-comments",
-    "gh-issue",
-    "issue-to-pr",
-    "refine-issues",
+    "release-pr",
 )
 
 
@@ -370,12 +369,6 @@ def start_session(body: dict):
         if not isinstance(claude_cmd, str) or claude_cmd not in saved:
             return 400, {"error": "claude_cmd must be a label saved in Settings"}
         claude_cmd = saved[claude_cmd]
-    worktree = body.get("worktree", True)
-    if not isinstance(worktree, bool):
-        return 400, {"error": "worktree must be true or false"}
-    review = body.get("review", True)
-    if not isinstance(review, bool):
-        return 400, {"error": "review must be true or false"}
     no_repo = body.get("no_repo") is True
     vault_folder = body.get("vault_folder")
     if vault_folder is not None and not ui_vault.valid_folder(vault_folder):
@@ -383,9 +376,6 @@ def start_session(body: dict):
     batch = body.get("batch")
     if batch is not None and not (isinstance(batch, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", batch)):
         return 400, {"error": "batch must be a short id (letters, digits, - and _)"}
-    flow_id = body.get("flow_id")
-    if flow_id is not None and (not isinstance(flow_id, str) or ui_flows.load(flow_id) is None):
-        return 400, {"error": "flow_id must name an existing flow"}
     peer_review = body.get("peer_review")
     if peer_review is not None and not (
         isinstance(peer_review, list) and peer_review and all(isinstance(x, str) for x in peer_review)
@@ -405,13 +395,8 @@ def start_session(body: dict):
             return 400, {"error": str(exc)}
         if kind != "custom":
             text += " --review " + ",".join(lenses)
-    if fam == "run-issue" and not review:
-        text += " --no-review"
-    if fam == "run-issue" and not worktree:
-        grind = body.get("auto_grind", ui_settings.load()["auto_grind"]) is True
-        text += " --no-worktree" + (" --grind" if grind else "")  # main tree: grind in-session to keep holding it
-    if issue is None and fam == "run-issue":
-        issue = issue_from_args((text.split(None, 1) + [""])[1])
+    if issue is None and fam in ("implement-issue", "pr-grind"):
+        issue = issue_from_args((text.split(None, 1) + [""])[1])  # the issue number, or the PR for pr-grind
     link = None
     url = _ISSUE_URL_RE.search(text)  # the URL names the real repo; the checkout may be a different one
     if url and int(url.group(3)) == issue:
@@ -420,7 +405,7 @@ def start_session(body: dict):
         owner, _, name = slug.partition("/")
         link = {"owner": owner, "repo": name, "issue": issue}
     with _start_lock:
-        if link and fam in ("run-issue", "pr-grind"):
+        if link and fam in ("implement-issue", "pr-grind"):
             dup = find_live(fam, link)
             if dup:
                 return 409, {
@@ -439,17 +424,12 @@ def start_session(body: dict):
                 link,
                 claude_cmd=claude_cmd,
                 gate_questions=True,
-                flow_id=flow_id,
                 **({"batch": (batch, BATCH_MAX)} if batch else {}),
             )
             if review_dir:
                 res = ui_sessions.update(res["id"], peer_review_dir=review_dir)  # the post-check reads it
             if no_repo:
                 res = ui_sessions.update(res["id"], no_repo=True, vault_folder=vault_folder)
-            if fam == "run-issue" and link and body.get("auto_grind", ui_settings.load()["auto_grind"]) is True:
-                res = ui_sessions.update(
-                    res["id"], auto_grind=True
-                )  # ui_grind.autostart queues it when the run finishes
             _remember(slug, cwd)
             return 201, res
         except (ValueError, ui_runner.RunnerError) as exc:

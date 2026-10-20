@@ -41,8 +41,8 @@ gh --version
 gh auth status
 ```
 
-- **Python 3.10+** — the routing engine. It is stdlib-only; there is nothing to `pip install`.
-- **`gh`, authenticated** — every phase reads or writes GitHub through it.
+- **Python 3.10+** — the `aiw` CLI and UI. It is stdlib-only; there is nothing to `pip install`.
+- **`gh`, authenticated** — the process reads and writes issues and PRs through it.
 
 If `gh auth status` fails, tell the user to run `gh auth login` themselves and come back.
 Do not run it for them.
@@ -53,7 +53,7 @@ While you are here, check the scope that the Projects integration needs:
 gh auth status 2>&1 | grep -i 'token scopes'
 ```
 
-If `project` is absent, the board and status features will warn and skip. That is not a
+If `project` is absent, features that touch GitHub Projects will warn and skip. That is not a
 blocker. Tell the user they can add it later with `gh auth refresh -s project`.
 
 ## Step 2 — Install the plugin
@@ -61,6 +61,14 @@ blocker. Tell the user they can add it later with `gh auth refresh -s project`.
 ```bash
 claude plugin marketplace add <repo>
 claude plugin install ai-workflow@ai-workflow
+```
+
+**Upgrading from an older version:** reinstall after upgrading (`claude plugin marketplace update`,
+then `claude plugin install ai-workflow@ai-workflow` again), and remove the old `shahria-skills`
+local marketplace so the separate `dev-workflow` plugin stops shadowing these skills:
+
+```bash
+claude plugin marketplace remove shahria-skills
 ```
 
 **Expect this to succeed. If it fails with a manifest validation error, stop and report it**
@@ -97,16 +105,14 @@ If `aiw` is not found at all, the plugin's `bin/` is not on `PATH`. Plugin bins 
 when a Claude Code session starts, so the usual cause is simply that this session began
 before the install. Tell the user to restart their session and re-run `aiw paths`.
 
-## Step 4 — Run the test suites
+## Step 4 — Run the test suite
 
 ```bash
-python3 <repo>/run-engine/test_engine.py
-python3 <repo>/run-engine/test_scripts.py
+bash <repo>/run-engine/run_tests.sh
 ```
 
-Both must exit 0. Expect 17 and 35 checks respectively at time of writing; a higher number
-is fine, a failure is not. These need no network and no Docker. If either fails, stop and
-report the output — something is wrong with the checkout, not with their setup.
+It must exit 0. It needs no network. If it fails, stop and report the output: something is
+wrong with the checkout, not with their setup.
 
 ## Step 5 — Optional dependencies
 
@@ -115,21 +121,20 @@ installation.**
 
 | Check | Enables | Without it |
 |---|---|---|
-| `docker info` | the per-issue test stack (phase 2.5) | `stack=none`; tests run on the host runner instead |
-| `node --version` + `npx gitnexus --help` | code-graph lookups in several agents | agents fall back to grep/glob, slower but correct |
-| `command -v slackcli` | the Slack review-trigger loop (phase 10, `--grind`) | no grind loop; the PR still lands at Gate 2 |
-| `ls ~/.claude/skills/gstack` | runtime verification (phase 4.5) | phase 4.5 returns `UNVERIFIABLE` and the run continues |
+| `node --version` + `npx gitnexus --help` | code-graph lookups in `implement-issue` and `pr-review` | grep and glob, slower but correct |
+| `command -v slackcli` | the Slack reviewer-bot loop (`/pr-grind`, `/release-pr`) | no grind loop |
+| `command -v herdr` | `herdr-dispatch`: issues in separate terminal tabs | start issues from the UI or one session at a time |
+| `command -v tailscale` | reaching `aiw ui` from your phone | the UI stays on loopback |
 
-Present it as findings, not as a shopping list. "Docker is not running, so runs on this
-machine will use the host test runner" is more useful than "please install Docker".
+Present it as findings, not as a shopping list. "slackcli is missing, so PRs land without the review loop" is more useful than "please install slackcli".
 
 ## Step 6 — Configure
 
-Two things are configurable. Both are optional; ask before writing either.
+One thing is configurable, and it is optional; ask before writing it.
 
-### 6a. Slack review loop
+### Slack review loop
 
-Only if the user wants the phase-10 grind loop. Resolve the data directory first:
+Only if the user wants the grind loop (`/pr-grind`, `/release-pr`). Resolve the data directory first:
 
 ```bash
 aiw paths     # read the `channels` key from the JSON
@@ -155,34 +160,22 @@ Create that file with this shape:
 These are workspace identifiers, not secrets, but ask before writing the file and show them
 its contents.
 
-### 6b. Per-repo policy
-
-Any repo can override the engine's policy with a `.run-issue.json` at its root, deep-merged
-over `run-engine/config.json`. Do not create one during setup. Mention it exists and move on
-— the defaults are stack-neutral and the override only earns its keep once they have run
-something and found a rule they want changed.
-
-A repo may also pin a top-level `test_cmd` string in `.run-issue.json` to override the
-derived test command outright — useful when the derivation can't express a repo's real
-invocation (e.g. an extra flag a host or container runner needs). An invalid value (not a
-non-empty string) is ignored with a warning; it never fails `stack up`.
-
 ## Step 7 — Report and hand back
 
 Tell the user, in this order:
 
 1. **Ready or not**, and if not, exactly what is missing.
-2. **What will be degraded** and what that costs them concretely — "no Docker, so tests run
-   on the host runner; on a repo whose tests need a database that will fail."
-3. **The first command to try**, with a real issue number if they have one:
+2. **What will be degraded** and what that costs them concretely — "no slackcli, so PRs
+   land without the reviewer-bot loop."
+3. **The first command to try**, on a repo of theirs:
 
    ```
-   /ai-workflow:run-issue <issue-number-or-url> [--full] [--no-review]
+   /ai-workflow:create-prd <requirement>
    ```
 
-4. **Point them at [HOW-IT-WORKS.md](HOW-IT-WORKS.md)** before their first run —
-   the three gates are the part worth understanding in advance, because everything else
-   happens without them.
+   or, for an issue that is already refined, `/ai-workflow:implement-issue <issue-number>`.
 
-Do not run a pipeline yourself to "test the install". `/run-issue` opens pull requests and
+4. **Point them at [HOW-IT-WORKS.md](HOW-IT-WORKS.md)** before their first run.
+
+Do not run a stage yourself to "test the install". `/implement-issue` opens pull requests and
 comments on issues. That is the user's call on their repo, not a smoke test.

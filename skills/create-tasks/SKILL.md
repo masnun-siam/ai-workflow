@@ -1,190 +1,52 @@
 ---
 name: create-tasks
-description: "Turn an Approved PRD into an ordered task list (docs/tasks/<slug>.md) that covers every requirement, split so several engineers can work in parallel, with an area, files, acceptance criteria, a verify command and dependencies per task, grouped into waves. Use whenever the user says /create-tasks, 'break this PRD into tasks', 'make a task list from this PRD', 'plan the work for this PRD', or wants a task list written before issues are created. Creates no issues: /refine-issues files them from the saved list."
-allowed-tools:
-  - Bash
-  - Read
-  - Write
-  - Grep
-  - Glob
-  - Skill
-  - AskUserQuestion
-  - mcp__gitnexus__query
-  - mcp__gitnexus__context
+description: Break a PRD file into small, easy-to-verify tasks that several engineers can work on in parallel, then create every task as a child issue of the PRD's GitHub epic with native blocked-by links between them. Takes the PRD file path as its argument, or a finding (a bug or follow-up found during other work) to create a single issue for. Use when asked to break a PRD into tasks, create the issues for a PRD, or file an issue for something found mid-task.
+argument-hint: <path to PRD file | finding>
 ---
 
-# /create-tasks — Approved PRD → saved task list
+# Create tasks
 
-Produces `docs/tasks/<slug>.md`: tasks small enough to review and verify in one sitting, each
-deliverable as one pull request into the repo's base branch, ordered so work can start at the top
-and split so several engineers can work at once without editing the same files. The PRD already
-decided what is built and how; this skill makes no design decisions.
+Input: the path to a PRD file, or a finding from other work (then follow "A finding from other work" below, not steps 1–11). Output: every task as a child issue of the PRD's GitHub epic, linked by GitHub's native blocked-by relationships so the order of work is clear. One PRD has one epic unless the PRD says otherwise. `/refine-issues` later writes the full WHAT/WHY/HOW into each issue; this skill creates them.
 
-> **Paths.** This skill runs in the user's repo, not the plugin's. Run `aiw paths` and use its
-> `plugin_root` value for `<plugin_root>` below; never guess a path. If `aiw paths` does not print
-> JSON whose first key is `plugin_root`, stop and report that the plugin is not installed.
+The PRD is the source of truth. This skill decides how the work is split, never what is built.
 
-`<skill_dir>` is `<plugin_root>/skills/create-tasks`. **Template:** use the repo's own
-`docs/templates/task-list.md` when it exists; otherwise `<skill_dir>/templates/task-list.md`.
-"The template" below means the resolved file.
-
-Read the repo's `CLAUDE.md` and the template first. Detect the repo (`gh repo view --json
-nameWithOwner`) and its base branch (`gh repo view --json defaultBranchRef`, else `git symbolic-ref
-refs/remotes/origin/HEAD`); never assume either.
-
-## Arguments
-
-`/create-tasks <prd-path | slug>`: the PRD the previous step's `→ next:` line named. A slug means
-`docs/prds/<slug>.md`. A PRD found only at the legacy `docs/prd/<slug>.md` stops the run: tell the
-user `/create-prd` moves it to `docs/prds/<slug>.md` (never move it here) and end with
-`→ next: /create-prd docs/prd/<slug>.md`. If it is a vault `PRD.md` with a `canonical` property
-(`obsidian vault=notes property:read path="<prd>" name=canonical`) naming this repo, read that
-repo copy instead: it is the canonical one.
-
-### Asking the user
-
-Headless (your system prompt contains `Headless run: ask via aiw ask`): ask every question below
-with one `aiw ask` call per round, passing the JSON through a quoted heredoc
-(`aiw ask <<'EOF'` … `EOF`), recommended option first with `(Recommended)` on its label, then end
-your turn; the answer arrives as your next message. Otherwise use AskUserQuestion.
-
-### Flow auto mode
-
-When the system prompt contains `Flow auto mode`, this run is the Tasks step of the aiw ui guided
-Flow and asks nothing. Step 2's readiness checks run first: the PRD exists, every requirement
-has an acceptance line, the technical design is present and `## Open questions` is empty (a
-section that reads only `None` is empty). Any gap
-stops the run. Only a PRD that passes all of them and whose status is `Draft` is then approved, by
-running the `ai-workflow:create-prd` skill with `approve <prd>` (starting this step was the user's
-approval), before step 2's last check. The list is saved as shown,
-under the proposed slug, to `docs/tasks/<slug>.md` only. An existing file with that slug is resumed
-only when its `Source PRD:` header line matches this run's PRD; otherwise it is another list, so
-save under `<slug>-2` (or the next free number) and say so. Never overwrite either.
+Paths below starting `../../` are relative to this skill's folder, at the plugin root. Read first: `../../guides/engineering-workflow.md` ("Repository settings", "Tasks" for the size and split rules, and "GitHub: project, epics and dependencies" for titles and labels).
 
 ## Steps
 
-1. **Read the PRD** at `docs/prds/<slug>.md`. If you were not given a slug, ask which one;
-   `docs/prds/` may not exist yet, so list it only if it does. A PRD that exists only on the wiki
-   is copied to `docs/prds/<slug>.md` first, after asking; the slug is the file name. List its
-   `FR-n` requirements, edge cases, technical design, epics and decisions.
+1. **Read the PRD** at the path given. If no path was given, ask for it. List every requirement and decision in it.
 
-2. **Check it is ready,** in this order. First stop and send the user back to `/create-prd` when
-   the PRD is missing, a requirement has no acceptance line, `## Open questions` has an entry (a
-   section that reads only `None` is empty), or
-   the technical design is missing. Only then check approval: when its status is not `Approved`,
-   or an epic in `## Epics` still reads `Issue: —`, send them to `/create-prd approve <prd>` (in
-   Flow auto mode, a `Draft` PRD is approved here instead; see Flow auto mode). If
-   `docs/tasks/<slug>.md` already exists, you are updating it: follow "Updating a task list" below.
+2. **Make sure the PRD answers everything** the split needs. For each gap or open question, ask the user with `AskUserQuestion`: recommended option first, with the reason. Write each answer into the PRD file, so the PRD stays the source of truth and nothing is decided mid-execution. Tell the user the PRD changed.
 
-3. **Ground every requirement in the code.** For each FR find the files and symbols it will touch
-   and the closest existing feature to copy: GitNexus when indexed (`gitnexus_query`,
-   `gitnexus_context`), otherwise Grep/Glob. Open every path you will cite; note whether another
-   service writing the same data also needs changing. Mark every file and every symbol that does
-   not exist yet `(new)`, including new methods and constants in existing files. The PRD names no
-   files or classes, so this is where they are worked out: follow `CLAUDE.md` and the closest
-   existing feature. List the existing files more than one part of the work must edit; these are
-   the shared files.
+3. **Read the code the work touches**, with GitNexus or another code-graph tool when its index is available, and any repo documentation relevant to it, only to split the work well: which parts of the code each piece touches, and which files more than one piece would edit.
 
-4. **No design decisions here.** Where code goes and what it is called follows `CLAUDE.md` and the
-   precedent, and is yours to settle. What the feature does, its data, its API contract and its
-   behaviour are the PRD's. When the split shows the PRD is silent or wrong about one of those,
-   stop. Ask the user, recommended option first and the reason in the description, record the
-   answer with `/create-prd --update <prd> <decision lines>` and only then carry on. The task list
-   never holds a decision the PRD does not.
+4. **Split into tasks.**
+   - **Small.** Each task is a small chunk, one pull request with one outcome, so it is easy to verify. If you cannot state its outcome in one sentence, split it. Apply the size limits in the guide.
+   - **Verifiable.** Each task says how to prove it is done.
+   - **Parallel.** Several engineers work at once, so prefer independent tasks they can take at the same time, with as little conflict and overlap as possible. Avoid two parallel tasks editing the same file.
+   - **Dependencies.** A task is blocked by another only when it cannot start without it. No cycles.
+   - **Covered.** Every requirement in the PRD lands in a task, and no task adds anything the PRD does not ask for.
 
-5. **Split into tasks** from the template.
-   - One task is one pull request: a layer or a slice a reviewer can hold in their head. Split by
-     layer (model, service, endpoint, resource, hook, component) rather than by file.
-   - Every task is one layer-scoped deliverable: a DB migration, service logic, an API
-     endpoint (its request and resource count as one unit), or one UI unit. Each task
-     touches 3 or fewer production files (tests not counted), has 1-4 acceptance
-     criteria, has one verify command, and adds no new dependency. If an endpoint unit
-     (controller, request, resource, routes) needs more than 3 production files, split it
-     by file group (e.g. route+controller, then request+resource) rather than waiving the
-     cap. Non-layered work (docs, config) uses the same limits, split by file or section. If any task fails the rubric,
-     create nothing and don't ask yet: split the failing task and rebuild the list before
-     presenting it.
-   - When you cannot say in one sentence what a task delivers, it is two tasks. Do not split below
-     the point where the task can be merged alone with the build green and proven by its own test.
-   - Split for parallel work. The goal is the widest set of tasks that can be in progress at once
-     without two pull requests editing the same file:
-     - Put what everything else builds on (schema, shared types, the API contract's route and
-       resource) in the smallest possible first tasks, so the rest can fan out behind them.
-     - List the shared files under "Shared files" and give each to exactly one task, or order the
-       tasks that need it with a dependency. Two tasks that could run at once must not edit the
-       same file.
-     - Prefer short dependency chains. A task depends only on the tasks it cannot be merged
-       without, not on everything listed above it.
-     - The PRD fixes the API contract, so a frontend task whose tests mock that contract can run
-       at the same time as the backend task behind it.
-   - A task depends only on tasks of its own epic. A cross-epic need means the work belongs in
-     one epic, or the epics merge in order (the later epic starts after the earlier one is
-     merged), never a `Depends on` across epics.
-   - Every FR and edge case lands in at least one task's acceptance criteria. Nothing is added that
-     the PRD does not ask for.
-   - Each task has an outcome, files and symbols, acceptance criteria, a verify command that proves
-     that task alone (the repo's own test command scoped to this task's tests), `Area`,
-     `Depends on`, `Parallel` and, when the PRD has more than one epic, its `Epic`.
-   - `Area` values come from the repo's top-level layout (for example `backend`/`frontend`), one
-     per task. A task that needs two areas is two tasks.
-   - Only when the repo is multi-tenant (its `CLAUDE.md` or the code says so), keep data isolation
-     in the acceptance criteria of anything that reads or writes that data.
-   - Order dependencies-first. `Parallel: yes` marks a task that no task outside its own
-     dependency chain shares a file with; otherwise `Parallel: no`. Then group the tasks into
-     "Waves": a task is in the first wave in which all its dependencies are in earlier waves.
+5. **Show the user the breakdown** before creating anything: each task's title, outcome, how to verify and what blocks it, and which tasks can start in parallel. Ask with `AskUserQuestion` whether to create the issues, adjust, or stop; recommended option first. Create nothing without a yes.
 
-6. **Check it before showing it.**
-   - Does every FR appear in some task? Is any task not traceable to an FR?
-   - Is every cited path real, or marked `(new)`?
-   - Could a test be written from each acceptance line alone?
-   - Does any dependency point downward, or form a cycle? Does any task depend on a task in
-     another epic?
-   - Do two tasks in the same wave touch the same file? Is any dependency there only because of
-     list order, not because the task needs it?
-   - Is wave 1 wide enough for the team to start together? If one task blocks everything, try to
-     make it smaller.
-   - Does any task fail the rubric in step 5, or span more than one area?
-   - Does anything contradict `CLAUDE.md`?
+6. **Find the GitHub Project** from the projects existing issues in this repo are assigned to, by the rule in the guide. If they use more than one, ask which. If none, skip project steps and say so.
 
-7. **Save it** as `docs/tasks/<slug>.md` with `Issue: —` on every task, filling the template's
-   header with the PRD path, one `Epic: #<n>` line per epic, today's date and the detected repo.
-   Local only: no vault or wiki copy. Show the user the path, the task count, the waves broken down
-   by area (which tasks can start now, and how many engineers that keeps busy), and any file two
-   tasks still share. Do not commit, push or publish it unless asked.
+7. **Do not duplicate.** Find the epic `/create-prd` created on approval (the number in the PRD's "Epics" section, or the PRD path in an issue body). If child issues for this PRD already exist, update them instead of creating new ones.
 
-8. **Hand off.** Report the path and the next stage, `/refine-issues`, which creates each task as a
-   sub-issue of its epic with its blocked-by links. Do not start it unless asked. End with this
-   line, as the last line of your output:
+8. **Create the epic only if it is missing**, from `../../templates/epic.md`, with the `epic` label, a body that says what the feature is and why, and the PRD path. Add it to the project and write its number into the PRD's "Epics" section.
 
-   `→ next: /refine-issues docs/tasks/<slug>.md`
+9. **Create one child issue per task**, blockers first, with `gh issue create --parent <epic> --blocked-by <numbers>` and `--project <title>` when there is a project, titled and labelled as the guide says. Body: the outcome, how to verify, and the PRD path.
 
-## Updating a task list
+10. **Verify on GitHub** that every task is a child of the epic (`gh issue view <epic> --json subIssues`) and every blocked-by link matches the breakdown (`--json blockedBy`). Fix anything missing.
 
-A task list is revised when its PRD has a "Change log" line newer than the list, or the user asks.
+11. **Report and hand off.** Give the epic link and the issues, showing which can start now. The next step is `/refine-issues <epic number>`. Do not start it unless asked.
 
-- Change only the tasks the PRD change affects. Never renumber: issues point at their task by
-  number, so a new task takes the next free number and a removed one stays in place marked
-  `Dropped` with the reason.
-- A changed task that already has an issue keeps its `Issue:` number and gets
-  `Changed: YYYY-MM-DD <what changed>`, so `/refine-issues` knows to update that issue.
-- Recompute the waves, then show the user what was added, changed and dropped, and which issues
-  are affected. Ask before changing a task whose issue is closed or has a pull request open.
+## A finding from other work
 
-## Stop and ask when
+Input: what was found, where (file and line, command output), and the issue or pull request being worked on. Output: one issue, created here and then filled by `/refine-issues <n>`. Steps 1–11 do not apply.
 
-- The PRD and the code disagree about what exists today.
-- A gap in the PRD changes scope rather than design.
-- A requirement cannot be split below one pull request without breaking the build between tasks.
-
-## Improve this skill
-
-Each use of this skill is also a test of it.
-
-- **While working**, note privately any step here that was wrong, outdated, missing, unclear or unnecessary, and anything the user had to explain or correct that this file could have said.
-- **Before you finish**, keep only findings backed by what happened in this session that would recur for the next person. Facts about the user's repo go to its `tasks/lessons.md`, not here.
-- **If anything is left**, tell the user what happened and ask (AskUserQuestion, headless: `aiw ask`) whether to file it, recommended option first. On yes, resolve `<plugin_repo>` from the `repository` (else `homepage`) field of `<plugin_root>/.claude-plugin/plugin.json`, falling back to `masnun-siam/ai-workflow`, and run `gh issue create --repo <plugin_repo> --title "skill(create-tasks): <what to change>" --body-file <file>` with what happened and the exact proposed edit as a diff.
-- **Never edit this skill file**, even when the plugin root is a git checkout. Never propose an edit that weakens a gate.
-
-## Self-improve
-
-After the task, follow `../../self-improve.md` (relative to this skill's directory).
+1. **Do not duplicate.** Search open issues (`gh issue list --search`). If one already covers the finding, comment the new evidence there and hand that number to `/refine-issues` instead.
+2. **Find its PRD**: the PRD of the epic or issue it came from, or one that covers the area. If none is found or linked, ask the user with `AskUserQuestion`, recommended option first: link an existing PRD, file a separate issue to create that PRD (through this section), or go on without one.
+3. **Show the user** the title, the outcome in one sentence, the evidence, where it was found and its PRD, and ask with `AskUserQuestion` whether to create it; recommended option first. Create nothing without a yes.
+4. **Create the issue** with `gh issue create`: a body with the finding, the evidence, a link to where it was found and the PRD path when there is one; the labels the guide lists for an issue (area, type, priority, and `prd-<slug>` when there is a PRD); `--parent <epic>` when it belongs to that epic; and the project found as in step 6. Comment its number on the issue it came from.
+5. **Hand off.** The next step is `/refine-issues <new issue number>`, which writes the WHAT/WHY/HOW and adds the `refined` label.

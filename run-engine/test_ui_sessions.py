@@ -82,10 +82,10 @@ def raises(exc, fn):
 
 # 1. create defaults
 d = fresh()
-r = ui_sessions.create("run-issue", "/tmp/repo")
+r = ui_sessions.create("implement-issue", "/tmp/repo")
 assert set(r) == KEYS, set(r) ^ KEYS
 assert ID_RE.fullmatch(r["id"])
-assert r["command"] == "run-issue" and r["repo"] == "/tmp/repo"
+assert r["command"] == "implement-issue" and r["repo"] == "/tmp/repo"
 for k in ("link", "session_id", "pid", "cost", "ended_at", "pending_question"):
     assert r[k] is None, k
 assert r["status"] == "starting"
@@ -109,7 +109,7 @@ ok("meta.json and empty stream.jsonl created")
 
 # 4. update merges
 u = ui_sessions.update(r["id"], pid=123, session_id="abc", status="running", cost=0.42)
-assert u["pid"] == 123 and u["status"] == "running" and u["command"] == "run-issue"
+assert u["pid"] == 123 and u["status"] == "running" and u["command"] == "implement-issue"
 u = ui_sessions.update(r["id"], status="done", ended_at="2026-01-01T00:00:00Z")
 assert u["pid"] == 123 and u["session_id"] == "abc" and u["cost"] == 0.42
 assert ui_sessions.load(r["id"]) == u and u["status"] == "done"

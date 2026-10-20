@@ -1,11 +1,12 @@
 # ai-workflow
 
-GitHub issue → reviewed PR, as a Claude Code plugin. One orchestrator command drives a roster
-of specialised agents through a deterministic routing engine, and stops for a human only for
-plan approval, an escalated review finding, and the final ready-to-merge handback.
+The team's dev process as a Claude Code plugin: PRD → tasks → refined issues →
+`/implement-issue` → `/pr-review`, with a Slack-bot review grind and a local web UI
+(`aiw ui`) that starts each stage as a headless session.
 
 - [docs/INSTALL.md](docs/INSTALL.md): the setup protocol, written for an AI agent to follow
-- [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md): how a run works, layer by layer
+- [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md): the process, stage by stage
 - [docs/REFERENCE.md](docs/REFERENCE.md): commands, the `aiw` CLI, `aiw ui`, state, layout, tests
-- [CONTRIBUTING.md](CONTRIBUTING.md): which docs to update, and the process docs
+- [guides/](guides/): the engineering process and review standards the skills follow
+- [CONTRIBUTING.md](CONTRIBUTING.md): which docs to update, and the pre-commit hooks
 - [CHANGELOG.md](CHANGELOG.md)

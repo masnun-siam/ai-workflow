@@ -3,11 +3,10 @@
 While it runs, each tick:
 - answers every `aiw ask` round whose questions all carry a "(Recommended)" option, through the
   same claim + resume path as the answer page (rounds with any other question are held);
-- sends "Skip CI for now" to a grind paused on CI, at most once per PR per window;
 - retries sessions that failed during the window on a 2m/10m/30m/1h backoff, then holds them.
 When the window ends (expiry or "I'm back") one ntfy push sums it up and the UI shows the log.
 
-State: <data_dir>/afk.json {started, until, skipped_ci, log, ended, held_at_end, dismissed}.
+State: <data_dir>/afk.json {started, until, log, ended, held_at_end, dismissed}.
 Retry bookkeeping lives on the session record: afk_retries, afk_retry_at, afk_retry_for.
 """
 
@@ -15,29 +14,21 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import threading
 import time
+from datetime import datetime
 
-import review
 import shared
-import ui_board
-import ui_grind
 import ui_notify
 import ui_repos
 import ui_runner
 import ui_sessions
-import ui_status
 from shared import warn
 
 MAX_SECONDS = 24 * 3600  # "until HH:MM" may roll into tomorrow; never longer than a day
 RETRY_DELAYS = (120, 600, 1800, 3600)
 MAX_LOG = 500
 TICK_SECONDS = 5
-SKIP_CI_REPLY = (
-    "Skip CI for now, complete the grind, then come back and fix the CI"  # keep in step with ui_static/run.js
-)
-_CI_REASON = re.compile(r"\b(ci|gate\s*2|checks?)\b", re.I)  # same test as pausedOnCi in ui_static/run.js
 _lock = threading.Lock()
 
 
@@ -64,14 +55,17 @@ def active(now=None) -> bool:
 
 
 def _epoch(iso) -> float | None:
-    parsed = review._ts(iso)  # handles the trailing `Z` that 3.10's fromisoformat rejects
-    return parsed.timestamp() if parsed else None
+    if not isinstance(iso, str) or not iso:
+        return None
+    try:
+        return datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()  # 3.10's fromisoformat rejects `Z`
+    except ValueError:
+        return None
 
 
 def _held(sessions: list, started) -> int:
-    """What the owner will have to look at: waiting rounds, paused grinds, failures autopilot gave up on."""
+    """What the owner will have to look at: waiting rounds, failures autopilot gave up on."""
     n = sum(1 for r in sessions if r.get("status") == "waiting")
-    n += sum(1 for v in ui_grind.index()["pr"].values() if v["state"] == "paused")
     for r in sessions:
         ended = _epoch(r.get("ended_at"))
         if (
@@ -118,7 +112,7 @@ def start(until, now=None) -> dict:
     with _lock:
         st = load()
         if not active(now):
-            st = {"started": now, "skipped_ci": [], "log": [], "ended": False}
+            st = {"started": now, "log": [], "ended": False}
         st["until"] = until
         _save(st)
     return public(now=now)
@@ -159,9 +153,9 @@ def _entry(kind: str, rec: dict, now: float, question, picked) -> dict:
 
 
 # #188: these interviews are the user's product decisions, so they always wait for a human.
-# create-tasks asks about scope; refine-issues and fix-blockers confirm writes to GitHub.
+# create-tasks asks about scope; refine-issues confirms writes to GitHub.
 # "prd" stays so a session started before the rename stays held.
-NEVER_AUTO = ("create-prd", "prd", "dump", "create-tasks", "refine-issues", "fix-blockers")
+NEVER_AUTO = ("create-prd", "prd", "dump", "create-tasks", "refine-issues")
 
 
 def _answer(rec: dict, now: float) -> dict | None:
@@ -213,40 +207,6 @@ def _retry(rec: dict, now: float, started) -> dict | None:
     return _entry("retry", rec, now, rec.get("error"), f"retry {n + 1} of {len(RETRY_DELAYS)}")
 
 
-def _ci_red(owner: str, repo: str, issue: int) -> bool:
-    st = ui_status.cached(owner, repo, issue)
-    return bool(st and (st.get("pr") or {}).get("ci") == "red")
-
-
-def _skip_ci(skipped: list, now: float) -> list:
-    out = []
-    for _, h in ui_grind._state_files():
-        key = f"{h['owner']}/{h['repo']}#{h['number']}".lower()
-        if "done" in h or "paused" not in h or key in skipped:
-            continue
-        issue = ui_board.issue_for_pr(f"https://github.com/{h['owner']}/{h['repo']}/pull/{h['number']}")
-        if not issue or not (_CI_REASON.search(h["paused"] or "") or _ci_red(h["owner"], h["repo"], issue)):
-            continue
-        status, res = ui_grind.reply(h["owner"], h["repo"], issue, SKIP_CI_REPLY)
-        if status != 200:  # e.g. the round that paused is still exiting: try again next tick
-            continue
-        skipped.append(key)
-        out.append(
-            _entry(
-                "skip-ci",
-                {
-                    "link": {"owner": h["owner"], "repo": h["repo"], "issue": issue},
-                    "repo": f"{h['owner']}/{h['repo']}",
-                    "command": f"/pr-grind {h['thread']}",
-                },
-                now,
-                h["paused"],
-                "Skip CI for now",
-            )
-        )
-    return out
-
-
 def _finish(now: float) -> None:
     with _lock:
         st = load()
@@ -269,7 +229,7 @@ def tick(now=None) -> None:
     if not active(now):
         _finish(now)
         return
-    entries, skipped = [], list(st.get("skipped_ci") or [])
+    entries = []
     for rec in ui_sessions.list_sessions():
         for step in (_answer, lambda r, t: _retry(r, t, st["started"])):
             try:
@@ -279,18 +239,13 @@ def tick(now=None) -> None:
                 continue
             if e:
                 entries.append(e)
-    try:
-        entries += _skip_ci(skipped, now)
-    except Exception as exc:  # noqa: BLE001
-        warn(f"afk: skip ci: {type(exc).__name__}: {exc}")
-    if not entries and skipped == list(st.get("skipped_ci") or []):
+    if not entries:
         return
     with _lock:  # re-read: the owner may have extended or ended the window meanwhile
         cur = load()
         if cur.get("started") != st["started"]:
             return
         cur["log"] = ((cur.get("log") or []) + entries)[-MAX_LOG:]
-        cur["skipped_ci"] = skipped
         _save(cur)
 
 

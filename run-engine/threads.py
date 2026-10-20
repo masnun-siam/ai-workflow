@@ -1,13 +1,7 @@
 """PR review threads: `route threads list|resolve`.
 
-The `reviewThreads` query and the `resolveReviewThread` mutation were written out
-verbatim in four places — commands/pr-fix-comments.md, commands/run-issue.md (twice),
-skills/pr-grind/SKILL.md — with agents/run-fixer.md telling its agent to fetch node
-ids "alongside the comment". Four copies of a GraphQL query is four chances for one
-of them to drift from the schema.
-
-checks.py's check_fixer_post calls list_threads() directly; it must not become a
-fifth copy.
+One copy of the `reviewThreads` query and the `resolveReviewThread` mutation, so skills
+(pr-grind) call `aiw threads` instead of pasting GraphQL that can drift from the schema.
 """
 
 from __future__ import annotations

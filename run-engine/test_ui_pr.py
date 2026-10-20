@@ -61,29 +61,5 @@ assert d["checks"] == [{"name": "ci", "link": "l", "bucket": "red"}]
 assert ui_pr.shape({"state": "open", "draft": True}, [], [], [], [], None)["state"] == "draft"
 print("  ok  ui_pr")
 
-r = ui_pr.shape_readiness(
-    {
-        "number": 5,
-        "title": "T",
-        "url": "u",
-        "state": "OPEN",
-        "isDraft": False,
-        "mergeable": "MERGEABLE",
-        "mergeStateStatus": "CLEAN",
-        "reviewDecision": "",
-        "baseRefName": "main",
-        "statusCheckRollup": [
-            {"name": "lint", "status": "COMPLETED", "conclusion": "FAILURE"},
-            {"name": "test", "status": "IN_PROGRESS", "conclusion": None},
-        ],
-    }
-)
-assert (
-    r["state"] == "open"
-    and r["review"] is None
-    and r["ci"] == "red"
-    and r["failing"] == ["lint"]
-    and r["base"] == "main"
-), r
-assert ui_pr.shape_readiness({"statusCheckRollup": []})["ci"] is None
-print("ok  merge readiness: state, review, CI and failing checks from gh pr view")
+assert ui_pr._check({"__typename": "StatusContext", "context": "c", "state": "PENDING"})[2] == "pending"
+print("  ok  ui_pr check buckets")

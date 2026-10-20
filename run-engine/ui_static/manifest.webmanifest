@@ -1,7 +1,7 @@
 {
   "name": "aiw ui",
   "short_name": "aiw",
-  "description": "Watch and steer your run-issue pipelines.",
+  "description": "Watch and steer your Claude sessions.",
   "id": "/",
   "start_url": "/",
   "scope": "/",

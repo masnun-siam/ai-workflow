@@ -1,6 +1,55 @@
 # Changelog
 
-## Unreleased
+## 2.0.0 — 2026-10-20
+
+ai-workflow drops its own issue-to-PR machine and adopts the dev-workflow process:
+PRD → tasks → refined issues → `/implement-issue` → `/pr-review`. See
+`docs/prds/dev-workflow-replacement.md`.
+
+**Before upgrading:** finish or abandon any in-flight `/run-issue` run. Its PRs and branches stay
+on GitHub untouched, but nothing will resume it. After upgrading, reinstall the plugin and remove
+the `shahria-skills` local marketplace (`claude plugin marketplace remove shahria-skills`).
+
+### Added
+
+- **dev-workflow skills, imported as-is** from Shahria-skills `0a487c6`: `implement-issue`,
+  `verifier-locally`, `docs-updater`, `sync-from-wasensi`, plus `guides/` and `templates/`.
+  `create-prd`, `create-tasks`, `refine-issues` and `pr-review` are replaced wholesale by the
+  dev-workflow versions (`/pr-review` posting is now opt-in).
+- **`peer-reviewer` agent** (read-only, Opus) runs each `/peer-review` lens.
+- **First-start cleanup.** `aiw ui` deletes the old run-issue data from the plugin data dir once
+  (`runs/`, `pipelines/`, `flows/`, `maintree/`, `locks/`, `gh-status.json`, `titles.json`,
+  `grind_requests.json`, `grind_notified.json`) and logs what it removed.
+
+### Changed
+
+- **`/pr-grind` fixes inline:** fix → `/verifier-locally` → commit → reply/resolve → push → CI →
+  Slack, with no subagents. One CI fix attempt per head SHA, recorded in its state file.
+- **herdr-dispatch** runs `/ai-workflow:implement-issue {n}`; a tab is done when its PR is ready.
+- **`/flow`** ends at herdr-dispatch of implement-issue; **`/dump`** loses `--review`.
+- **`aiw ui`** is Sessions, New and Settings until the Planning and Delivery boards land. Session
+  cleanup moves to `/api/sessions/cleanup` and removes finished sessions' records only.
+- The engine-tests pre-commit hook runs the whole suite.
+
+### Removed
+
+- **Commands:** `/run-issue`, `/gh-issue`, `/intake`, `/jira-to-gh`, `/pr-fix-comments`, `/issue-to-pr`.
+- **Agents:** every `run-*` station (planner, researcher, sdet, dev, verifier, reviewer, specialist,
+  fixer, ci, grinder, lessons, laravel-review), `gh-issue-factchecker` and `ship`.
+- **Skills:** `fix-blockers`, `api-hardening-patterns`, `migration-index-reviewer`,
+  `resilient-check`, `deployment-readiness`, `frontend-performance-review`,
+  `data-migration-strategy`, `upgrade-assistant`.
+- **`aiw` verbs:** `init`, `route`, `precheck`, `classify`, `resolve-review`, `skip-review`, `set`,
+  `stack`, `worktree`, `maintree`, `pr`, `gitnexus`, `epic`, `refined`, `project-status`, `review`.
+  `aiw` keeps `ui`, `paths`, `ask`, `ci`, `threads` and `peer-review`.
+- **Engine and ledger:** the routing engine, `run.json`, post-checks, Docker stacks, worktree and
+  main-tree modules, the `.run-issue.json` overlay and the engine keys in `config.json`.
+- **UI:** the Board, Run, Flow, Dispatch and Pipeline pages, their endpoints, and the PR merge
+  endpoint and dialog (the UI never merges).
+- **Files:** `definition-of-done.md`, `definition-of-ready.md`, `kanban.html`, `docs/overview.html`
+  and its Pages workflow, old ADRs, PRDs, task docs and superpowers plans, and `tasks/lessons.md`.
+
+## 1.12.x — unreleased work, superseded by 2.0.0
 
 ### Added
 

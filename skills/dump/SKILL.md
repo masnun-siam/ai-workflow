@@ -14,11 +14,7 @@ allowed-tools:
 
 Files free-form input into this vault's existing Project → Feature structure. See `08-Resources/Reference/Dump Capture System.md` for the full spec this skill implements.
 
-Reads/writes the vault via the `obsidian` CLI (`obsidian <command> key=value ...`). Never write a file with plain filesystem tools — always go through the CLI so Obsidian's index stays in sync. The one exception is the Step 2.5 peer-review draft, which lives under `<data_dir>` (from `aiw paths`), outside the vault.
-
-**`--review [<lens,lens>] [--herdr]`.** Remove these from the input before Step 1 (the token after
-`--review` is a lens list only if it doesn't start with `--`) and run Step 2.5. A programmatic
-call (below) never passes `--review`.
+Reads/writes the vault via the `obsidian` CLI (`obsidian <command> key=value ...`). Never write a file with plain filesystem tools — always go through the CLI so Obsidian's index stays in sync.
 
 This skill targets a specific vault (`Documents/notes`) regardless of which project directory Claude is running in — every `obsidian` invocation below passes `vault=notes` explicitly so it resolves correctly even when the current working directory isn't the vault itself.
 
@@ -80,17 +76,6 @@ are used either way; only the transport differs.
   that question, never an approval.
 - **Otherwise:** not headless, so skip `aiw ask` and ask the Step 3 block in prose, or call AskUserQuestion exactly as written wherever a step names it.
 
-## Step 2.5: Peer review (only with `--review`)
-
-Before Step 3, draft exactly what Step 4 would write: each file's path as a `## <vault path>`
-heading, with its content under it (the problem statement, the seeded PRD, the task or meeting
-lines). `aiw peer-review new dump --slug <project>-<feature>` prints `<review_dir>`; write the
-draft to `<review_dir>/draft.md` with the Write tool, then invoke the `ai-workflow:peer-review`
-skill with `--kind dump --dir <review_dir> --lenses <picked>` (plus `--herdr`). It revises
-`draft.md` in place and asks the user any decisions. On its `stopped` finish, write nothing.
-Otherwise Step 3 shows the reviewed content and Step 4 files it as reviewed; accepted gaps go
-under the problem statement's **Open questions**.
-
 ## Step 3: Propose and confirm — ALWAYS, no exceptions
 
 Before writing anything, show the user a compact block:
@@ -108,36 +93,6 @@ Wait for the user's reply. Do this every single time, regardless of how confiden
 - If the user says yes → go to Step 4.
 - If the user picks a different feature/project → update Target and re-confirm once more, then proceed.
 - If the user cancels → stop, write nothing.
-
-### Flow auto mode
-
-When the system prompt contains `Flow auto mode`, this run is a step of the aiw ui guided Flow
-and the user has chosen to answer only grilling questions. Step 3 is not asked: take the proposed
-Target as confirmed and go straight to Step 4. When nothing matches, create the new project or
-feature folder you proposed (this is the one case where auto-confirm creates vault structure).
-Put the Step 3 block in your final report so the choice is visible; the user corrects a wrong
-folder in Flow's next step, not here. Everything else in this skill is unchanged.
-
-## Programmatic invocation (from /gh-issue and /run-issue)
-
-Another command may invoke this skill with a pre-resolved target and, in the unattended
-case, permission to skip the confirmation:
-
-- **`target: <vault path>` given** — skip Step 2's routing search; that work is already
-  done. Still show the Step 3 block and confirm, unless auto-confirm is also set.
-- **`auto-confirm: yes`** — the ONLY case where Step 3's confirmation is skipped. Valid
-  only when a target is given AND that target already exists. Never auto-create a feature
-  folder, a project folder, or a `05-Work/Index.md` entry; if the target doesn't exist,
-  stop and report instead of guessing. A human invoking `/dump` directly never gets this
-  path — Step 3 stays mandatory for them.
-
-The input is a structured brief (issue body, run outcome, decisions) rather than free-form
-text, so Step 1's classification is usually pre-decided. Treat an issue-creation dump as a
-new feature or change request, and a completed-run dump as a change request: append the
-brief verbatim to `Dump.md` and a dated line per decision to `Decisions.md`, and update
-`PRD.md`/`SRS.md` where the run changed what the feature actually does. Include the issue
-and PR URLs in the `Decisions.md` lines — they're the audit trail back out of the vault.
-Step 5 prints no `→ next:` line here; the calling command owns what happens next.
 
 ## Tagging and linking — applies to every file this skill creates
 
@@ -204,7 +159,7 @@ wikilinks, never as backticked filenames.
 ## Problem statement
 
 A new feature, change request or bug is filed as a problem statement, not as raw text. `/create-prd`
-reads it for a feature or change request, and `/gh-issue` for a bug. Write it from the
+reads it for a feature or change request. Write it from the
 input only: never invent a user, a number or a cause the input doesn't give. Anything missing
 goes under **Open questions** for the next step to ask.
 
@@ -394,14 +349,12 @@ Tell the user explicitly that this landed in `00-Quick` unsorted and why nothing
 
 After writing, give a one-line summary: what type it was classified as, and the exact final path(s) touched. Never end silently.
 
-Then end with the `→ next:` line for the type. It is the last line of your output, byte-for-byte in this form, because the Guided Flow (`/flow`, and the UI's `#/flow` stepper) parses it to start the next stage:
+Then end with the `→ next:` line for the type. It is the last line of your output, byte-for-byte in this form, because `/flow` parses it to start the next stage:
 
 | Type | Final line |
 |---|---|
 | New feature request, change request | `→ next: /create-prd <feature-folder>` (the `05-Work/<Project>/<Feature>` folder) |
-| Bug report | `→ next: /gh-issue <note-path>` (the `Bugs.md` you appended to) |
-| Feature-scoped task | `→ next: /gh-issue <note-path>` (the `Tasks.md` you appended to) |
-| Standalone task, weekly meeting notes, unclassifiable | no `→ next:` line — the flow stops here |
+| Bug report, feature-scoped task, standalone task, weekly meeting notes, unclassifiable | no `→ next:` line — the flow stops here |
 
 ## Notes
 
@@ -409,7 +362,7 @@ Then end with the `→ next:` line for the type. It is the last line of your out
 - The `## Related` block is the exception to "write once": when a new sibling doc first appears in
   a folder, rewrite the `## Related` block of every existing sibling to add the new line, so the
   older docs link to the new one (see **Tagging and linking**).
-- Never skip Step 3's confirmation for a human-invoked `/dump`, even for a bug report that obviously names its feature. This is the one rule this skill must never bend on for interactive use — the only exceptions are the programmatic `auto-confirm: yes` path above, which never creates new vault structure, and **Flow auto mode**, where the user opted out of the confirmation in the UI.
+- Never skip Step 3's confirmation for a human-invoked `/dump`, even for a bug report that obviously names its feature. This is the one rule this skill must never bend on for interactive use.
 
 ## Self-improve
 

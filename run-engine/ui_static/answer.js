@@ -1,7 +1,6 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { toast } from './toast.js';
-import { mdToHtml } from './run.js';
 
 const html = htm.bind(h);
 const MAX_OTHER = 4000;
@@ -60,21 +59,8 @@ export function startSubmit(state) {
   return state.sending ? null : { ...state, sending: true, error: null };
 }
 
-export function runLink(session) {
-  const l = session && session.link;
-  return l && l.owner && l.repo && Number.isInteger(l.issue) && l.issue >= 1 ? { owner: l.owner, repo: l.repo, n: l.issue } : null;
-}
-
-export function runHash(session) {
-  const l = runLink(session);
-  return l ? `#/run/${encodeURIComponent(l.owner)}/${encodeURIComponent(l.repo)}/${l.n}` : '#/sessions';
-}
-
-// Where answering lands: the run for /run-issue, the flow a Flow session belongs to, otherwise
-// the session itself (its transcript shows the answer being picked up).
+// Where answering lands: the session itself (its transcript shows the answer being picked up).
 export function doneHash(session) {
-  if (runLink(session)) return runHash(session);
-  if (session && session.flow_id) return `#/flow/${encodeURIComponent(session.flow_id)}`;
   return session && session.id ? `#/session/${encodeURIComponent(session.id)}` : '#/sessions';
 }
 
@@ -103,18 +89,6 @@ export async function submitAnswer(sid, body) {
   }
 }
 
-export function planRun(session, pending) {
-  const l = runLink(session);
-  if (!l) return null;
-  if (!/^\/(?:[\w.-]+:)?run-issue(?:\s|$)/.test(String(session.command || ''))) return null;
-  const approve = (pending.questions || []).some((q) => (q.options || []).some((o) => String(o.label).startsWith('Approve')));
-  return approve ? l : null;
-}
-
-export function planText(data) {
-  return data && typeof data.plan === 'string' && data.plan ? data.plan : null;
-}
-
 export function resumeCommand(session) {
   if (!session || !session.session_id) return null;
   return `cd '${String(session.repo || '').replace(/'/g, "'\\''")}' && claude --resume '${String(session.session_id).replace(/'/g, "'\\''")}'`;
@@ -126,7 +100,7 @@ async function getJson(url) {
 }
 
 export class Answer extends Component {
-  state = { loaded: false, notFound: false, loadError: false, session: null, plan: null, form: null, copied: null };
+  state = { loaded: false, notFound: false, loadError: false, session: null, form: null, copied: null };
 
   componentDidMount() {
     this.load();
@@ -148,14 +122,6 @@ export class Answer extends Component {
     const form = viewMode(session) === 'form' ? { answers: initialAnswers(pending), sending: false, error: null } : null;
     this.setState({ loaded: true, notFound: false, loadError: false, session, form });
     if (form && processLive(session)) this.watchExit(pending.id);
-    const pr = form && planRun(session, pending);
-    if (!pr) return;
-    try {
-      const p = await getJson(`/api/runs/${encodeURIComponent(pr.owner)}/${encodeURIComponent(pr.repo)}/${pr.n}`);
-      if (!this.gone) this.setState({ plan: planText(p.data) });
-    } catch {
-      // no plan panel when the run endpoint is absent or unreachable
-    }
   }
 
   // Re-check until claude exits; the picks survive because only the session is replaced.
@@ -242,41 +208,33 @@ export class Answer extends Component {
       </fieldset>`;
   }
 
-  renderForm(session, form, embedded, plan, where) {
+  renderForm(session, form, embedded, where) {
     const qs = session.pending_question.questions;
     const n = qs.length;
     return html`
           <form class=${embedded ? 'answer-form answer-inline' : 'panel answer-form'} onSubmit=${this.submit}>
             ${!embedded && html`<div class="waiting-line"><span class="dot"></span>Waiting on you${session.ended_at ? ' · no process running' : ''}</div>`}
-            ${plan || embedded ? null : html`<div><div class="mono muted">${where} · ${String(session.command || '')}</div><h1>${n > 1 ? `${n} questions, answered together` : 'Answer needed'}</h1></div>`}
+            ${embedded ? null : html`<div><div class="mono muted">${where} · ${String(session.command || '')}</div><h1>${n > 1 ? `${n} questions, answered together` : 'Answer needed'}</h1></div>`}
             ${qs.map((q, i) => this.renderQuestion(q, i, form.answers[i], form.sending, n === 1))}
             <button type="submit" class="btn--primary" disabled=${form.sending || processLive(session)}>${form.sending ? 'Sending' : n > 1 ? `Submit all ${n} and resume` : 'Submit and resume session'}</button>
             ${processLive(session) ? html`<p role="status" class="muted">The session is still running. Submit unlocks when it exits.</p>` : null}
             ${form.error ? html`<p role="alert">${form.stale ? html`<strong>Already answered.</strong> ` : null}${form.error}</p>` : null}
             ${form.stale ? html`<button type="button" onClick=${() => this.load()}>Reload question</button>` : null}
-            ${!embedded && session.session_id ? html`<p class="muted fine">Resumes with <span class="mono">--resume ${String(session.session_id).slice(0, 8)}…</span>. If that session is gone, run-issue re-enters from the Ledger.</p>` : null}
+            ${!embedded && session.session_id ? html`<p class="muted fine">Resumes with <span class="mono">--resume ${String(session.session_id).slice(0, 8)}…</span>.</p>` : null}
           </form>`;
   }
 
-  render(_, { loaded, notFound, loadError, session, plan, form, copied }) {
+  render(_, { loaded, notFound, loadError, session, form, copied }) {
     if (this.props.onSent) return loaded && session && viewMode(session) === 'form' ? this.renderForm(session, form, true) : null;
     if (!loaded) return html`<h1>Answer</h1><p role="status">Loading</p>`;
     if (notFound) return html`<h1>Answer</h1><p>Session not found. <a href="#/sessions">Back to sessions</a></p>`;
     if (loadError) return html`<h1>Answer</h1><p role="alert">Could not load the session.</p><button type="button" onClick=${() => this.load()}>Retry</button>`;
     const mode = viewMode(session);
-    const link = runLink(session);
-    const where = link ? `${link.repo} #${link.n}` : String(session.repo || '').split('/').pop();
+    const where = String(session.repo || '').split('/').pop();
     if (mode === 'form') {
       return html`
         <div class="answer">
-          ${plan ? html`
-            <section class="panel answer-context" aria-label="Plan">
-              <div class="mono muted">${where} · ${String(session.command || '')}</div>
-              <h1>Plan: test plan + implementation plan</h1>
-              <div class="md plan-md" dangerouslySetInnerHTML=${{ __html: mdToHtml(plan) }}></div>
-              ${link ? html`<a href=${runHash(session)}>Open run detail</a>` : null}
-            </section>` : null}
-          ${this.renderForm(session, form, false, plan, where)}
+          ${this.renderForm(session, form, false, where)}
         </div>`;
     }
     if (mode === 'failed') {
