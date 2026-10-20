@@ -2,7 +2,7 @@ import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { poll } from './app.js';
 import { mergeStream } from './md.js';
-import { shortRepo, tokensText, toolSummary } from './fmt.js';
+import { shortRepo, tokensText, toolSummary, sendJson } from './fmt.js';
 import { LimitBanner } from './limits.js';
 import { Linked } from './linked.js';
 import { NewIdeaPanel, ideaPrdSession } from './vault.js';
@@ -39,6 +39,19 @@ export async function stopSession(id, confirmFn = globalThis.confirm) {
   } catch (e) {
     return { ok: false, error: String(e?.message || e) };
   }
+}
+
+// Start the same thing again: the recorded command as a prompt, in the same place, with the same account.
+export function rerunBody(s) {
+  const body = { text: s.command, ...(s.claude_cmd ? { claude_cmd: s.claude_cmd } : {}) };
+  return s.no_repo ? { ...body, repo: '', no_repo: true, ...(s.vault_folder ? { vault_folder: s.vault_folder } : {}) } : { ...body, repo: s.repo_path || s.repo };
+}
+
+export const canRerun = (s) => !!s && !!s.command && !s.waiting && ['done', 'failed', 'stopped'].includes(s.outcome);
+
+export async function rerun(s) {
+  const r = await sendJson('POST', '/api/sessions', rerunBody(s));
+  return r.ok ? { ok: true, id: r.data.id } : r;
 }
 
 const isLive = (m) => !!m && (['starting', 'running'].includes(m.outcome) || (m.outcome === 'waiting' && !m.ended_at));
@@ -157,6 +170,14 @@ export class Session extends Component {
     if (!this.gone) this.setState({ stopping: false, stopErr: r.ok || r.cancelled ? '' : r.error });
   };
 
+  again = async () => {
+    this.setState({ stopping: true, stopErr: '' });
+    const r = await rerun(this.state.meta);
+    if (this.gone) return;
+    this.setState({ stopping: false, stopErr: r.ok ? '' : r.error });
+    if (r.ok) location.hash = `#/session/${encodeURIComponent(r.id)}`;
+  };
+
   render(_, { meta, notFound, retry, stream, q, follow, openAll, stopping, stopErr }) {
     if (notFound) return html`<h1>Session not found</h1><p><a href="#/sessions">Back to sessions</a></p>`;
     if (!meta) return html`<h1>Transcript</h1><p role="status">Loading…</p>`;
@@ -173,6 +194,7 @@ export class Session extends Component {
           ${meta.peer_review && html`<span class=${`chip chip-review-${meta.peer_review.replace(/ /g, '-')}`} title="Read from the review's rounds, not from what the session said">peer review: ${meta.peer_review}</span>`}
           ${meta.outcome === 'waiting' && html`<a class="btn btn--primary" href=${`#/answer/${encodeURIComponent(meta.id)}`}>Answer</a>`}
           ${canStop(meta) && html`<button type="button" class="btn" disabled=${stopping} onClick=${this.stop}>${stopping ? 'Stopping…' : 'Stop'}</button>`}
+          ${canRerun(meta) && html`<button type="button" class="btn" disabled=${stopping} onClick=${this.again}>Rerun</button>`}
           ${retry && html`<span role="status" class="offline">Retrying…</span>`}
         </div>
         ${stopErr && html`<p role="alert" class="error">${stopErr}</p>`}

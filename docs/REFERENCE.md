@@ -86,7 +86,11 @@ page of 100); typing filters them. `worklog` offers Today, Yesterday, A day or A
 **Sessions.** Every session with its status, cost and token use (`$0.44 · 703k tok`, hover for
 input and output), the transcript, and its answer page when it asked a question. Sessions
 auto-resume after a rate limit, and the limit timer releases queued ones after a restart. A session
-that has not finished has **Stop** on its page (`POST /api/sessions/<id>/stop`, after a confirm).
+that has not finished has **Stop** (`POST /api/sessions/<id>/stop`, after a confirm); a finished one
+has **Rerun**, which starts its recorded command again in the same repo with the same account. The
+list filters by repo (shared with the boards, or All repos), outcome and a search over the command
+and its link, shows 50 rows at a time, totals cost for today, the last 7 days and the current
+filters, and can group the sessions of one issue or PR under it.
 
 **Repo picker.** One picker for the registered checkouts (`checkouts.json`), searchable by name,
 owner, project or path, recent first. The picked repo is shared by Planning, Delivery and New run

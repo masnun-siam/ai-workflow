@@ -405,6 +405,13 @@ table.history { border-collapse: collapse; min-width: 64rem; width: 100%; }
 .history-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; color: var(--muted); }
 .history-filter label { display: flex; align-items: center; gap: 8px; }
 .history-filter select { min-height: 44px; width: auto; }
+.history-filter input[type=search] { min-height: 44px; flex: 1 1 200px; max-width: 320px; }
+.cost-strip { margin: -6px 0 12px; font-size: 13px; }
+.cost-strip b { color: var(--fg); font-weight: 500; }
+.row-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.grp-head td { padding-top: 14px; font-size: 13px; border-bottom: 0; }
+.grp-child td:first-child { padding-left: 22px; }
+.more { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 .history code { user-select: all; overflow-wrap: anywhere; }
 .history .error { color: var(--error); }
 
