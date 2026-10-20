@@ -14,19 +14,28 @@ import mimetypes
 import os
 import shlex
 import signal
+import glob
 import socket
 import subprocess
 import sys
+import threading
 from urllib.parse import parse_qs, unquote, urlsplit
 
 import peer_review
+import dispatch
 import ui_afk
+import ui_autopilot
 import ui_cleanup
+import ui_delivery
 import ui_events
 import ui_grind
 import ui_issue
+import ui_mergeclean
 import ui_migrate
+import ui_notify
 import ui_panel
+import ui_planning
+import ui_poller
 import ui_pr
 import ui_repos
 import ui_runner
@@ -136,7 +145,115 @@ def _public(rec: dict) -> dict:
 
 
 # engine-era API prefixes that no longer exist (POST answers 404, not 405); the PR merge endpoint is gone too
-_REMOVED = [["api", p] for p in ("runs", "pipelines", "flows", "notes", "dispatch", "maintree", "grind", "cleanup")]
+_REMOVED = [["api", p] for p in ("runs", "pipelines", "flows", "notes", "dispatch", "maintree", "grind")]
+
+
+# ---- boards: poller snapshots in memory, hooks after each fresh poll ----------------------------------
+
+POLLER = ui_poller._default
+_watched: set = set()  # repos a board was requested for: the poller thread keeps these fresh
+_watch_lock = threading.Lock()
+_flags: dict = {}  # repo -> {issue: {uncommitted, unpushed}}: merged issues whose cleanup was held back
+
+
+def _registered(repo) -> str:
+    """The registered slug for `repo` (case-insensitive); ValueError when it is not in the checkouts registry."""
+    slug = next((k for k in dispatch.read_checkouts() if isinstance(repo, str) and k.lower() == repo.lower()), None)
+    if not slug:
+        raise ValueError(f"unknown repo: {repo!r}")
+    return slug
+
+
+def _watch(repo: str) -> None:
+    with _watch_lock:
+        new = repo not in _watched
+        _watched.add(repo)
+    if new:  # first look at this repo: fetch now, off the request thread (reads never wait on GitHub)
+        threading.Thread(target=POLLER.poll, args=(repo,), daemon=True).start()
+
+
+def _watched_copy() -> list:
+    with _watch_lock:
+        return list(_watched)
+
+
+def _link(repo: str, n: int) -> dict:
+    owner, _, name = repo.partition("/")
+    return {"owner": owner, "repo": name, "issue": n}
+
+
+def _on_fresh(repo: str, snap: dict, prev: dict) -> None:
+    """After a fresh, non-stale poll: notify, clean merged worktrees, autopilot tick, grind autostart."""
+    if snap.get("stale") or snap.get("fetched_at") is None:
+        return
+    settings = ui_settings.repo_settings(repo)
+    first = prev == ui_poller.empty()  # nothing seen before: everything in the snapshot would look new
+    if not first:
+        for p in ui_grind.turned_ready(snap, {"data": prev}):
+            ui_notify.notify(
+                "pr-ready",
+                {
+                    "id": f"{repo}#{p['n']}:ready",
+                    "repo": repo,
+                    "link": _link(repo, p["n"]),
+                    "note": f"PR #{p['n']} is ready for review",
+                },
+            )
+        seen = {m["n"] for m in prev.get("merged") or []}
+        issues = [n for m in snap["data"]["merged"] if m["n"] not in seen for n in m["closes"]]
+        flagged = ui_mergeclean.on_merged(repo, issues) if issues else {}
+        for n, f in flagged.items():
+            if n not in _flags.setdefault(repo, {}):
+                ui_notify.notify(
+                    "needs-cleanup",
+                    {
+                        "id": f"{repo}#{n}:cleanup",
+                        "repo": repo,
+                        "link": _link(repo, n),
+                        "note": f"#{n} merged; its worktree holds uncommitted or unpushed work",
+                    },
+                )
+            _flags[repo][n] = f
+    ui_autopilot.tick(repo, snap, ui_sessions.list_sessions(), settings)
+    if not first:
+        ui_grind.autostart(repo, snap, {"data": prev}, settings)
+
+
+POLLER.on_fresh = _on_fresh
+
+
+def _panels(checkout: str) -> dict:
+    """PRD slug -> id of the newest peer-review panel whose artifact is that PRD file."""
+    base = os.path.join(peer_review.data_dir(), "peer-review")
+    by_artifact = {}
+    for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:  # ids start with a timestamp
+        try:
+            by_artifact[os.path.realpath(peer_review.load_panel(name)["artifact"])] = name
+        except (OSError, ValueError, KeyError):
+            continue
+    out = {}
+    for path in glob.glob(os.path.join(checkout, "docs", "prds", "*.md")):
+        meta, panel = ui_planning._parse(path), by_artifact.get(os.path.realpath(path))
+        if meta and panel:
+            out[meta["slug"]] = panel
+    return out
+
+
+def _board(path: str, query: str):
+    """(status, body) for GET /api/planning and /api/delivery."""
+    try:
+        repo = _registered((parse_qs(query).get("repo") or [""])[0])
+    except ValueError as e:
+        return 400, {"error": str(e)}
+    _watch(repo)
+    snap = POLLER.snapshot(repo)
+    if path == "/api/planning":
+        return 200, ui_planning.build(
+            repo, dispatch.read_checkouts()[repo], snap, _panels(dispatch.read_checkouts()[repo])
+        )
+    return 200, ui_delivery.build(
+        repo, snap, ui_sessions.list_sessions(), ui_grind.index(), ui_settings.repo_settings(repo), _flags.get(repo, {})
+    )
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
@@ -173,6 +290,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                     "scan_roots": ui_repos.default_roots(),
                 },
             )
+        elif path in ("/api/planning", "/api/delivery"):
+            self._json(*_board(path, urlsplit(self.path).query))
         elif path == "/api/settings":
             self._json(200, ui_settings.load())
         elif path == "/api/github/owners":
@@ -296,6 +415,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._dispatch(self._review)
         elif len(parts) == 5 and parts[:3] == ["", "api", "review"] and parts[4] == "lens":
             self._review_lens(parts[3])
+        elif parts == ["", "api", "start"]:
+            self._dispatch(self._board_start)
+        elif parts == ["", "api", "autopilot"]:
+            self._dispatch(self._autopilot)
+        elif parts == ["", "api", "cleanup"]:
+            self._dispatch(self._merge_cleanup)
         elif parts == ["", "api", "afk"]:
             self._dispatch(lambda b: ui_afk.start(b.get("until")))
         elif parts in (["", "api", "afk", "stop"], ["", "api", "afk", "dismiss"]):
@@ -326,6 +451,41 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(404, "text/plain; charset=utf-8", b"not found")
         else:
             self._method_not_allowed(guarded=True)
+
+    @staticmethod
+    def _board_start(body: dict) -> dict:
+        repo = _registered(body.get("repo"))
+        return ui_autopilot.start(
+            repo,
+            body.get("skill"),
+            body.get("arg"),
+            body.get("via") or "headless",
+            lenses=body.get("lenses"),
+            snapshot=POLLER.snapshot(repo),
+            channel=ui_settings.repo_settings(repo)["slack_channel"],
+        )
+
+    @staticmethod
+    def _autopilot(body: dict) -> dict:
+        repo, epic, on = _registered(body.get("repo")), body.get("epic"), body.get("on")
+        if type(epic) is not int or epic < 1 or type(on) is not bool:
+            raise ValueError("epic must be an issue number and on must be true or false")
+        if on and not any(epic == i["n"] and "epic" in i["labels"] for i in POLLER.snapshot(repo)["data"]["issues"]):
+            raise ValueError(f"#{epic} is not an open epic")
+        ui_settings.set_autopilot(repo, epic, on)
+        return {"repo": repo, "epic": epic, "on": on}
+
+    @staticmethod
+    def _merge_cleanup(body: dict) -> dict:
+        repo, issue = _registered(body.get("repo")), body.get("issue")
+        if type(issue) is not int or issue < 1 or body.get("confirm") is not True:
+            raise ValueError("issue must be a number and confirm must be true")
+        if not any(issue in m["closes"] or issue == m["n"] for m in POLLER.snapshot(repo)["data"]["merged"]):
+            raise ui_autopilot.Conflict(f"#{issue}'s PR is not merged")
+        checkout = dispatch.read_checkouts()[repo]
+        res = ui_mergeclean.clean(checkout, issue, confirm=True)
+        _flags.get(repo, {}).pop(issue, None)
+        return {"removed": res["removed"]}
 
     @staticmethod
     def _review(body: dict) -> dict:
@@ -367,6 +527,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json(ok, fn(body))
         except (ValueError, TypeError) as e:
             self._json(400, {"error": str(e)})
+        except ui_autopilot.Conflict as e:
+            self._json(409, {"error": str(e)})
+        except (RuntimeError, OSError, ui_runner.RunnerError) as e:  # RunnerError, a failed herdr call
+            self._json(502, {"error": str(e)})
 
     def _cleanup(self) -> None:
         body = self._read_body()
@@ -636,6 +800,7 @@ def cmd_serve(args) -> None:
     ui_grind.start_timer()  # ntfy on grind pause/finish
     ui_runner.start_prgrind_timer()  # re-enter pr-grind loops whose session ended (reviews, CI, heartbeat)
     ui_runner.start_limit_timer()  # auto-resume limited runs, incl. catch-up of resets missed while down
+    POLLER.start(_watched_copy)  # boards: poll every repo a board was opened for, run the hooks
     ui_panel.start_timer()  # lens verdicts -> root, rounds, cap
     ui_usage.start_timer()  # 5h/7d usage per account, only while the UI is open
     ui_afk.start_timer()  # AFK mode: auto-answer, skip CI on paused grinds, retry failures; ends the window

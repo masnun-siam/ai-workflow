@@ -15,15 +15,31 @@ async function api(method, url, body) {
   return data;
 }
 
+export const repoRow = (cfg, slug) => ({ auto_grind: false, autopilot_cap: 2, slack_channel: '', ...((cfg || {})[slug] || {}) });
+
+// One repo's row. Plain function so tests can walk the tree.
+export function repoSection(slug, row, err, save) {
+  const id = slug.replace(/\W/g, '-');
+  return html`<div class="settings-repo" key=${slug}>
+    <span class="repo-slug">${slug}</span>
+    <label class="check"><input type="checkbox" aria-label=${`Auto-grind ${slug}`} checked=${row.auto_grind} onChange=${(e) => save(slug, { auto_grind: e.target.checked })} /> Auto-grind</label>
+    <label for=${`cap-${id}`}>Autopilot cap</label>
+    <input id=${`cap-${id}`} type="number" min="1" max="5" step="1" aria-label=${`Autopilot cap ${slug}`} value=${row.autopilot_cap} onChange=${(e) => save(slug, { autopilot_cap: Number(e.target.value) })} />
+    <label for=${`slack-${id}`}>Slack channel</label>
+    <input id=${`slack-${id}`} type="text" class="field" aria-label=${`Slack channel ${slug}`} placeholder="#reviews" value=${row.slack_channel} onChange=${(e) => save(slug, { slack_channel: e.target.value.trim() })} />
+    ${err && html`<p role="alert" class="error">${err}</p>`}
+  </div>`;
+}
+
 export class Settings extends Component {
   saved = { commands: [], default: null };
-  state = { commands: null, def: '', autoGrind: false, tests: {}, err: '', saving: false, repos: [], roots: '', scanning: false, scanMsg: '', vault: '', vaultMsg: '' };
+  state = { commands: null, def: '', cfg: {}, rowErr: {}, tests: {}, err: '', saving: false, repos: [], roots: '', scanning: false, scanMsg: '', vault: '', vaultMsg: '' };
 
   async componentDidMount() {
     try {
       const s = await api('GET', '/api/settings');
       this.saved = { commands: s.commands, default: s.default };
-      this.setState({ commands: s.commands, def: s.default || '', autoGrind: !!s.auto_grind, vault: s.vault_dir || '' });
+      this.setState({ commands: s.commands, def: s.default || '', cfg: s.repos || {}, vault: s.vault_dir || '' });
     } catch (e) {
       this.setState({ commands: [], err: e.message });
     }
@@ -74,18 +90,18 @@ export class Settings extends Component {
     }
   };
 
-  // The grinding default saves on its own, with the last *saved* commands, so half-edited command rows stay put.
-  setAutoGrind = async (e) => {
-    const on = e.target.checked;
-    this.setState({ autoGrind: on, err: '', saving: true });
+  // One repo's row saves on its own and sends only that repo's entry; a rejected save puts the old value back.
+  saveRepo = async (slug, patch) => {
+    const before = repoRow(this.state.cfg, slug);
+    const next = { ...before, ...patch };
+    this.setState(({ cfg, rowErr }) => ({ cfg: { ...cfg, [slug]: next }, rowErr: { ...rowErr, [slug]: '' } }));
     try {
-      const s = await api('PUT', '/api/settings', { ...this.saved, auto_grind: on });
-      this.saved = { commands: s.commands, default: s.default };
-      toast(on ? 'Grinding will start automatically' : 'Grinding will wait for you to start it');
+      const s = await api('PUT', '/api/settings', { repos: { [slug]: next } });
+      this.setState(({ cfg }) => ({ cfg: { ...cfg, [slug]: { ...next, ...((s.repos || {})[slug] || {}) } } }));
+      toast(`Saved ${slug}`);
     } catch (er) {
-      this.setState({ autoGrind: !on, err: er.message });
+      this.setState(({ cfg, rowErr }) => ({ cfg: { ...cfg, [slug]: before }, rowErr: { ...rowErr, [slug]: er.message } }));
     }
-    this.setState({ saving: false });
   };
 
   // The notes vault saves on its own, with the last *saved* commands, like the grinding default.
@@ -93,7 +109,7 @@ export class Settings extends Component {
     e.preventDefault();
     this.setState({ saving: true, vaultMsg: '' });
     try {
-      const s = await api('PUT', '/api/settings', { ...this.saved, auto_grind: this.state.autoGrind, vault_dir: this.state.vault });
+      const s = await api('PUT', '/api/settings', { ...this.saved, vault_dir: this.state.vault });
       this.setState({ vault: s.vault_dir || '' });
       toast('Notes vault saved');
     } catch (er) {
@@ -104,12 +120,12 @@ export class Settings extends Component {
 
   save = async (e) => {
     e.preventDefault();
-    const { commands, def, autoGrind } = this.state;
+    const { commands, def } = this.state;
     this.setState({ saving: true, err: '' });
     try {
-      const s = await api('PUT', '/api/settings', { commands, default: def || null, auto_grind: autoGrind });
+      const s = await api('PUT', '/api/settings', { commands, default: def || null });
       this.saved = { commands: s.commands, default: s.default };
-      this.setState({ commands: s.commands, def: s.default || '', autoGrind: !!s.auto_grind });
+      this.setState({ commands: s.commands, def: s.default || '' });
       toast('Settings saved');
     } catch (er) {
       this.setState({ err: er.message });
@@ -117,7 +133,7 @@ export class Settings extends Component {
     this.setState({ saving: false });
   };
 
-  render(_, { commands, def, autoGrind, tests, err, saving, repos, roots, scanning, scanMsg, vault, vaultMsg }) {
+  render(_, { commands, def, cfg, rowErr, tests, err, saving, repos, roots, scanning, scanMsg, vault, vaultMsg }) {
     if (!commands) return html`<h1>Settings</h1><p role="status">Loading…</p>`;
     return html`
       <section class="settings">
@@ -145,9 +161,10 @@ export class Settings extends Component {
             </div>
           </form>
           <section class="panel" aria-labelledby="grind-h">
-            <h2 id="grind-h">Review grinding</h2>
-            <label class="check"><input type="checkbox" checked=${autoGrind} disabled=${saving} onChange=${this.setAutoGrind} /> Start grinding when a run finishes</label>
-            <p class="note">The default for new runs and pipelines; each can override it. A grind posts to the repo's Slack review channel. Saved as soon as you change it.</p>
+            <h2 id="grind-h">Per-repo settings</h2>
+            <p class="note">Auto-grind starts a grind when a PR turns ready. The autopilot cap is how many implement-issue sessions run at once (1 to 5). A grind posts to the repo's Slack review channel. Each row saves as soon as you change it.</p>
+            ${repos.length === 0 && html`<p class="muted">No repos registered yet.</p>`}
+            ${repos.map((r) => repoSection(r.slug, repoRow(cfg, r.slug), rowErr[r.slug], this.saveRepo))}
           </section>
           <form class="panel" aria-labelledby="vault-h" onSubmit=${this.saveVault} noValidate>
             <h2 id="vault-h">Notes vault</h2>

@@ -6,6 +6,8 @@ import { Launcher } from './launcher.js';
 import { History } from './history.js';
 import { Session } from './session.js';
 import { Settings } from './settings.js';
+import { Planning } from './planning.js';
+import { Delivery } from './delivery.js';
 import { clockText } from './fmt.js';
 import { UsageGauge } from './usage.js';
 import { toast } from './toast.js';
@@ -30,9 +32,11 @@ export function parseRoute(hash) {
   } catch {
     return { name: 'notfound', params: {} };
   }
-  if (path === '' || path === '/') return { name: 'sessions', params: {} };
+  if (path === '' || path === '/') return { name: 'planning', params: {} };
   const [a, ...rest] = seg;
   if (a === 'new' && !rest.length) return { name: 'new', params: {} };
+  if (a === 'planning' && !rest.length) return { name: 'planning', params: {} };
+  if (a === 'delivery' && !rest.length) return { name: 'delivery', params: {} };
   if (a === 'sessions' && !rest.length) return { name: 'sessions', params: {} };
   if (a === 'settings' && !rest.length) return { name: 'settings', params: {} };
   if (a === 'session' && rest.length === 1 && rest[0]) return { name: 'session', params: { id: rest[0] } };
@@ -105,6 +109,8 @@ export function poll(url, ms, onResult, keepAlive = () => false) {
 }
 
 export const NAV = [
+  ['planning', '#/planning', 'Planning'],
+  ['delivery', '#/delivery', 'Delivery'],
   ['sessions', '#/sessions', 'Sessions'],
 ];
 
@@ -133,6 +139,10 @@ function View({ route, sessions, limits }) {
       return html`<${Launcher} limits=${limits} />`;
     case 'settings':
       return html`<${Settings} />`;
+    case 'planning':
+      return html`<${Planning} />`;
+    case 'delivery':
+      return html`<${Delivery} />`;
     case 'sessions':
       return html`<${History} sessions=${sessions} />`;
     default:
@@ -264,7 +274,7 @@ export class App extends Component {
     else if (b?.kind === 'idle') badge = html`<span class="muted" title="No session is waiting on an answer">No questions waiting</span>`;
     return html`
       <header>
-        <a class="brand" href="#/sessions">aiw ui</a>
+        <a class="brand" href="#/">aiw ui</a>
         <nav aria-label="Main">
           ${NAV.map(([name, href, label]) => html`<a href=${href} aria-current=${route.name === name ? 'page' : undefined}>${label}</a>`)}
         </nav>

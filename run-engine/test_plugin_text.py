@@ -14,7 +14,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SELF = os.path.relpath(os.path.abspath(__file__), ROOT)
 SRC = os.path.expanduser("~/Documents/Projects/Personal/Shahria-skills")
 IMPORT_COMMIT = "0a487c6"
-KEPT_VERBS = {"ui", "paths", "ask", "ci", "threads"}
+KEPT_VERBS = {"ui", "paths", "ask", "ci", "threads", "autopilot"}
 REMOVED_VERBS = (
     "init|route|precheck|classify|resolve-review|skip-review|set|stack|worktree|maintree|pr|gitnexus"
     "|epic|refined|project-status|review|peer-review"

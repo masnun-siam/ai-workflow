@@ -37,7 +37,8 @@ BUILTIN = {"label": "claude", "cmd": "claude", "builtin": True}
 assert {k: v for k, v in ui_settings.load().items() if k != "vault_dir"} == {
     "commands": [BUILTIN],
     "default": "claude",
-    "auto_grind": False,
+    "repos": {},
+    "autopilot": {},
 }
 assert ui_settings.load()["vault_dir"] == os.path.expanduser("~/Documents/notes")
 assert ui_settings.default_cmd() == "claude"
@@ -71,4 +72,39 @@ assert raises(ui_settings.save, {"commands": [{"label": " ", "cmd": "claude", "b
 saved = ui_settings.load()
 assert ui_settings.check_login("claude")["ok"] and not ui_settings.check_login("cc x")["ok"]
 assert not ui_settings.check_login("nope-xyz")["ok"]
-print("ui_settings: 20 checks passed")
+
+# --- per-repo settings, autopilot map, legacy auto_grind migration
+import json  # noqa: E402
+
+import dispatch  # noqa: E402
+
+dispatch.register_checkout("o/a", "/x/a")
+dispatch.register_checkout("o/b", "/x/b")
+with open(ui_settings._path(), "w") as f:
+    json.dump({"auto_grind": True, "commands": []}, f)
+s3 = ui_settings.load()
+assert s3["repos"]["o/a"]["auto_grind"] and s3["repos"]["o/b"]["auto_grind"] and "auto_grind" not in s3
+assert "auto_grind" not in json.load(open(ui_settings._path()))
+assert ui_settings.repo_settings("o/a") == {
+    "auto_grind": True,
+    "autopilot_cap": 2,
+    "slack_channel": "",
+    "autopilot": [],
+}
+assert ui_settings.repo_settings("o/none")["auto_grind"] is False
+assert ui_settings.set_autopilot("o/a", 12, True) == [12] and ui_settings.set_autopilot("o/a", 12, False) == []
+ui_settings.set_autopilot("o/a", 7, True)
+assert ui_settings.load()["autopilot"] == {"o/a": [7]} and ui_settings.repo_settings("o/a")["autopilot"] == [7]
+assert raises(ui_settings.set_autopilot, "bad", 1, True) and raises(ui_settings.set_autopilot, "o/a", "x", True)
+cur = ui_settings.load()
+body = {"commands": [], "repos": {**cur["repos"], "o/a": {"autopilot_cap": 1}}}
+r = ui_settings.save(body)
+assert r["repos"]["o/a"]["autopilot_cap"] == 1 and r["repos"]["o/b"]["autopilot_cap"] == 2
+assert r["autopilot"] == {"o/a": [7]}  # a save that omits autopilot keeps it
+for bad in (6, 0, "3", True):
+    assert raises(ui_settings.save, {"commands": [], "repos": {"o/a": {"autopilot_cap": bad}}})
+r = ui_settings.save(
+    {"repos": {"o/a": {"autopilot_cap": 4, "slack_channel": "#x"}}}
+)  # partial PUT from the Settings page
+assert r["repos"]["o/a"]["autopilot_cap"] == 4 and r["repos"]["o/b"]["autopilot_cap"] == 2 and r["commands"]
+print("ui_settings: 32 checks passed")

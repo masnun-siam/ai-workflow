@@ -16,6 +16,7 @@ import time
 
 import peer_review
 import ui_events
+import ui_notify
 import ui_runner
 import ui_sessions
 from shared import warn
@@ -183,6 +184,15 @@ def _tick_panel(panel_id: str) -> None:
             ui_runner.resume(root, _root_message(before, before["round"] + 1))
         elif peer_review.load_panel(panel_id)["state"] != "running":
             peer_review.update_panel(panel_id, phase="done")
+            if peer_review.load_panel(panel_id)["state"] == "cap reached":  # one push: the state never re-runs
+                ui_notify.notify(
+                    "panel-cap",
+                    {
+                        "id": panel_id,
+                        "repo": p["repo"],
+                        "note": f"{os.path.basename(p['artifact'])}: round cap reached",
+                    },
+                )
 
 
 def tick() -> None:

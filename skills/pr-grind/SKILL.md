@@ -1,7 +1,7 @@
 ---
 name: pr-grind
 description: Automate the review-fix-retrigger loop on a PR that's stuck in CHANGES_REQUESTED — post the Slack thread trigger, wait for the reviewer bot's round, split findings into fix-vs-rebut, fix inline, verify locally, push, check CI, re-trigger, repeat until approved or a rail stops it. Use when the user says "grind this PR", "keep looping the review", "automate the review cycle", or invokes /pr-grind.
-argument-hint: <slack thread url | PR url>   # a PR url with no thread opens the thread first
+argument-hint: <slack thread url | PR url> [--channel <id>]   # a PR url with no thread opens the thread first; --channel replaces the channels lookup
 allowed-tools: Bash(aiw:*), Bash(gh:*), Bash(git:*), Bash(bash:*), Bash(slackcli:*), Read, Write, Edit, Grep, Glob, Skill, Monitor, ScheduleWakeup, AskUserQuestion
 ---
 
@@ -36,6 +36,10 @@ Header keys (lines above the first `## Round <n>`; names are pinned for the aiw 
 
 ## Step 0 — Resolve
 
+0. **Draft check, before any Slack post or fix.** Get the PR ref (a PR url as given; a thread
+   url → read the thread only to find its PR url), then `gh pr view <pr> --json isDraft`.
+   `isDraft: true` → stop with one line, `PR #<n> is a draft; mark it ready for review before grinding.`
+   Write no state file and post nothing.
 1. Read `<channels>` first: `bot_uid`, `owner_uid`, `channels` (exact `owner/repo` →
    channel id), `dm_fallback`, `known_bots`, and the `trigger`/`retrigger` templates
    (`{bot_uid}`, `{pr_url}` only). Missing or unparseable → stop. `owner_uid` is the only
@@ -43,8 +47,8 @@ Header keys (lines above the first `## Round <n>`; names are pinned for the aiw 
    `userEmail` in CLAUDE.md.
 2. Argument is a Slack thread URL → `slack_read_thread`, take the first GitHub PR URL
    (none → `AskUserQuestion`). Argument is a PR URL with no thread → **open the thread**:
-   post `trigger` as a new top-level message in the repo's channel (exact key match, else
-   `dm_fallback`), with `slack_send_message`, falling back to
+   post `trigger` as a new top-level message in the repo's channel (`--channel <id>` in the
+   arguments when given, else exact key match, else `dm_fallback`), with `slack_send_message`, falling back to
    `slackcli messages send --recipient-id <C|D> --message "..."`. The thread URL is
    `https://blubird-interactive.slack.com/archives/<channel>/p<ts without the dot>`; read
    it back to confirm it landed. Slack reads/posts use the Slack MCP tools first, `slackcli`

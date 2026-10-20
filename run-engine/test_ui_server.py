@@ -23,6 +23,7 @@ from contextlib import redirect_stderr
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
+import ui_autopilot  # noqa: E402
 import ui_server  # noqa: E402
 
 passed = 0
@@ -93,7 +94,6 @@ try:
         "/api/grind/start",
         "/api/maintree/release",
         "/api/runs/o/r/1/options",
-        "/api/cleanup",
     ):
         assert req(port, p, method="POST", host=me)[0] == 404, p
     s, _, body, _ = req(port, "/api/sessions/cleanup", host=me)
@@ -251,5 +251,229 @@ for t in threads:
 sv.shutdown()
 assert not failures, failures[:2]
 ok("burst of 60 simultaneous connections all served (listen backlog)")
+
+# ---- boards: /api/planning, /api/delivery, /api/start, /api/autopilot, /api/cleanup and the post-poll hooks
+import subprocess as sp  # noqa: E402
+
+import dispatch  # noqa: E402
+import ui_notify  # noqa: E402
+import ui_poller  # noqa: E402
+import ui_repos  # noqa: E402
+import ui_settings  # noqa: E402
+
+bd = tempfile.mkdtemp()
+os.environ["CLAUDE_PLUGIN_DATA"] = bd
+repo_dir = tempfile.mkdtemp()
+
+
+def git(*a):
+    return sp.run(
+        ["git", "-C", repo_dir, "-c", "user.email=t@t", "-c", "user.name=t", *a], capture_output=True, check=True
+    )
+
+
+git("init", "-q")
+git("commit", "-q", "--allow-empty", "-m", "init")
+git("worktree", "add", "-q", os.path.join(repo_dir, ".worktrees", "3-x"), "-b", "issue-3-x")
+with open(os.path.join(repo_dir, ".worktrees", "3-x", "dirty.txt"), "w") as f:
+    f.write("x")
+os.makedirs(os.path.join(repo_dir, "docs", "prds"))
+with open(os.path.join(repo_dir, "docs", "prds", "x.md"), "w") as f:
+    f.write("# PRD x\n\n**Status:** Draft · **Slug:** `x`\n")
+dispatch.register_checkout("o/r", repo_dir)
+ui_settings.set_autopilot("o/r", 1, True)
+
+_notes, _started = [], []
+ui_notify.notify = lambda event, rec: _notes.append((event, rec))
+ui_repos.start_session = lambda body: _started.append(body) or (201, {"id": f"S{len(_started)}"})
+
+
+def _pr(n, draft=False, state="OPEN", merged=None):
+    return {
+        "number": n,
+        "url": f"https://github.com/o/r/pull/{n}",
+        "isDraft": draft,
+        "state": state,
+        "mergedAt": merged,
+        "headRefName": f"issue-{n}",
+        "statusCheckRollup": None,
+    }
+
+
+def _issue(n, labels, parent=None, blockers=(), prs=()):
+    return {
+        "number": n,
+        "title": f"i{n}",
+        "state": "OPEN",
+        "labels": {"nodes": [{"name": x} for x in labels]},
+        "parent": {"number": parent} if parent else None,
+        "subIssues": {"nodes": []},
+        "blockedBy": {"nodes": [{"number": b, "state": st} for b, st in blockers]},
+        "closedByPullRequestsReferences": {"nodes": list(prs)},
+    }
+
+
+_resp = {}
+
+
+def _gh(argv):
+    return sp.CompletedProcess(argv, 0, json.dumps({"data": {"repository": _resp["r"]}}), "")
+
+
+def _gql(issues, merged=(), open_prs=()):
+    _resp["r"] = {
+        "issues": {"nodes": issues},
+        "mergedPrs": {"nodes": list(merged)},
+        "openPrs": {"nodes": [dict(p, title="t") for p in open_prs]},
+    }
+
+
+ui_server.POLLER = ui_poller.Poller(runner=_gh, on_fresh=ui_server._on_fresh)
+ui_server._watched.add("o/r")
+bs, bport = start()
+bme = f"127.0.0.1:{bport}"
+
+
+def call(method, path, body=None):
+    c = http.client.HTTPConnection("127.0.0.1", bport, timeout=5)
+    raw = json.dumps(body).encode() if body is not None else b""
+    c.request(method, path, body=raw or None, headers={"Host": bme, "Content-Length": str(len(raw))})
+    r = c.getresponse()
+    out = r.read()
+    c.close()
+    return r.status, json.loads(out)
+
+
+try:
+    # unknown repo -> 400 everywhere; nothing is fetched for it
+    for m, p, b in (
+        ("GET", "/api/planning?repo=x/y", None),
+        ("GET", "/api/delivery", None),
+        ("POST", "/api/start", {"repo": "x/y", "skill": "implement-issue", "arg": "2"}),
+        ("POST", "/api/autopilot", {"repo": "x/y", "epic": 1, "on": True}),
+        ("POST", "/api/cleanup", {"repo": "x/y", "issue": 3, "confirm": True}),
+    ):
+        assert call(m, p, b)[0] == 400, p
+    ok("boards: unknown repo is 400")
+
+    # before the first poll: stale, empty. Planning shows the PRD file.
+    st, body = call("GET", "/api/planning?repo=o/r")
+    assert st == 200 and body["stale"] and [c["slug"] for c in body["prds"]] == ["x"]
+    st, body = call("GET", "/api/delivery?repo=o/r")
+    assert st == 200 and body["stale"] and body["running"] == 0
+    # a stale poll runs no hook
+    ui_server.POLLER.runner = lambda argv: sp.CompletedProcess(argv, 1, "", "boom")
+    ui_server.POLLER.poll("o/r")
+    assert not _started and not _notes
+    ui_server.POLLER.runner = _gh
+    ok("boards: reads from memory, stale poll runs no hook")
+
+    # poll 1: epic 1 on autopilot; 2 refined but blocked by 3; 3 has a draft PR 30
+    _gql(
+        [
+            _issue(1, ["epic"]),
+            _issue(2, ["refined"], 1, [(3, "OPEN")]),
+            _issue(3, ["refined"], 1, prs=[_pr(30, draft=True)]),
+            _issue(4, ["refined"], 1),
+        ],
+        open_prs=[_pr(30, draft=True)],
+    )
+    ui_server.POLLER.poll("o/r")
+    assert [b["text"] for b in _started] == ["/implement-issue 4"], _started  # 3 has a PR, 2 is blocked
+    st, body = call("GET", "/api/delivery?repo=o/r")
+    assert not body["stale"] and any(lane["epic"] == 1 and lane["autopilot"] for lane in body["lanes"])
+    ok("boards: autopilot tick after a fresh poll")
+
+    # poll 2: PR 30 ready and merged-by-poll-3 later; first ready -> pr-ready notification + grind autostart
+    ui_settings.save({"repos": {"o/r": {"auto_grind": True, "slack_channel": "C9"}}})
+    _gql(
+        [
+            _issue(1, ["epic"]),
+            _issue(2, ["refined"], 1, [(3, "OPEN")]),
+            _issue(3, ["refined"], 1, prs=[_pr(30)]),
+            _issue(4, ["refined"], 1, prs=[_pr(40, draft=True)]),
+        ],
+        open_prs=[_pr(30)],
+    )
+    _started.clear()
+    ui_server.POLLER.poll("o/r")
+    assert [e for e, _ in _notes] == ["pr-ready"], _notes
+    assert [b["text"] for b in _started] == ["/pr-grind https://github.com/o/r/pull/30 --channel C9"], _started
+    ok("boards: PR turned ready notifies once and autostarts grind")
+
+    # poll 3: PR 30 merged -> 3 closed, 2 unblocked: autopilot starts 2; 3's dirty worktree is flagged + notified
+    _notes.clear()
+    _started.clear()
+    _gql(
+        [
+            _issue(1, ["epic"]),
+            _issue(2, ["refined"], 1, [(3, "CLOSED")]),
+            _issue(4, ["refined"], 1, prs=[_pr(40, draft=True)]),
+        ],
+        merged=[
+            {
+                "number": 30,
+                "title": "m",
+                "url": "u30",
+                "mergedAt": "2999-01-01T00:00:00Z",
+                "headRefName": "issue-3-x",
+                "closingIssuesReferences": {"nodes": [{"number": 3, "parent": {"number": 1}}]},
+            }
+        ],
+    )
+    ui_server.POLLER.poll("o/r")
+    assert [b["text"] for b in _started] == ["/implement-issue 2"], _started
+    assert [e for e, _ in _notes] == ["needs-cleanup"], _notes
+    ui_server.POLLER.poll("o/r")  # same merge again: not new, no second notification
+    assert [e for e, _ in _notes] == ["needs-cleanup"]
+    st, body = call("GET", "/api/delivery?repo=o/r")
+    flagged = [c for lane in body["lanes"] for c in lane["cards"] if c["needs_cleanup"]]
+    assert [c["n"] for c in flagged] == [3] and flagged[0]["needs_cleanup"]["uncommitted"] == ["dirty.txt"]
+    ok("boards: merge unblocks and starts; needs-cleanup flag + one notification")
+
+    # cleanup: 409 for an unmerged issue, 400 without confirm, removes the flagged worktree
+    assert call("POST", "/api/cleanup", {"repo": "o/r", "issue": 4, "confirm": True})[0] == 409
+    assert call("POST", "/api/cleanup", {"repo": "o/r", "issue": 3})[0] == 400
+    st, body = call("POST", "/api/cleanup", {"repo": "o/r", "issue": 3, "confirm": True})
+    assert st == 200 and body["removed"] and not os.path.exists(os.path.join(repo_dir, ".worktrees", "3-x"))
+    body = call("GET", "/api/delivery?repo=o/r")[1]
+    assert not [c for lane in body["lanes"] for c in lane["cards"] if c["needs_cleanup"]]
+    ok("boards: cleanup 409/400/200 and the flag clears")
+
+    # /api/autopilot
+    assert call("POST", "/api/autopilot", {"repo": "o/r", "epic": 4, "on": True})[0] == 400  # not an epic
+    assert call("POST", "/api/autopilot", {"repo": "o/r", "epic": 1, "on": "yes"})[0] == 400
+    assert call("POST", "/api/autopilot", {"repo": "o/r", "epic": 1, "on": False}) == (
+        200,
+        {"repo": "o/r", "epic": 1, "on": False},
+    )
+    assert ui_settings.repo_settings("o/r")["autopilot"] == []
+    assert call("POST", "/api/autopilot", {"repo": "o/r", "epic": 1, "on": True})[0] == 200
+    ok("boards: autopilot toggle")
+
+    # /api/start: headless, conflicts (open PR, blocked, live session), peer-review needs lenses
+    ui_autopilot._recent.clear()
+    _started.clear()
+    st, body = call(
+        "POST", "/api/start", {"repo": "o/r", "skill": "create-tasks", "arg": "docs/prds/x.md", "via": "headless"}
+    )
+    assert st == 200 and body == {"session": "S1"} and _started[0]["text"] == "/create-tasks docs/prds/x.md"
+    r4 = call("POST", "/api/start", {"repo": "o/r", "skill": "implement-issue", "arg": "4"})
+    assert r4[0] == 409, r4  # open PR 40
+    _gql([_issue(1, ["epic"]), _issue(5, ["refined"], 1, [(6, "OPEN")])])
+    ui_server.POLLER.poll("o/r")
+    assert call("POST", "/api/start", {"repo": "o/r", "skill": "implement-issue", "arg": "5"})[0] == 409  # blocked
+    assert (
+        call("POST", "/api/start", {"repo": "o/r", "skill": "pr-grind", "arg": "https://github.com/o/r/pull/9"})[0]
+        == 200
+    )
+    assert call("POST", "/api/start", {"repo": "o/r", "skill": "peer-review", "arg": "docs/prds/x.md"})[0] == 400
+    assert call("POST", "/api/start", {"repo": "o/r", "skill": "nope", "arg": "1"})[0] == 400
+    ui_repos.start_session = lambda body: (409, {"error": "live"})
+    assert call("POST", "/api/start", {"repo": "o/r", "skill": "refine-issues", "arg": "1"})[0] == 409
+    ok("boards: /api/start shapes and 409s")
+finally:
+    bs.shutdown()
+    os.environ["CLAUDE_PLUGIN_DATA"] = data_dir
 
 print(f"{passed} checks passed")
