@@ -23,6 +23,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 import peer_review
 import dispatch
+import ui_actions
 import ui_afk
 import ui_autopilot
 import ui_cleanup
@@ -144,7 +145,7 @@ def _public(rec: dict) -> dict:
     }
 
 
-# engine-era API prefixes that no longer exist (POST answers 404, not 405); the PR merge endpoint is gone too
+# engine-era API prefixes that no longer exist (POST answers 404, not 405)
 _REMOVED = [["api", p] for p in ("runs", "pipelines", "flows", "notes", "dispatch", "maintree", "grind")]
 
 
@@ -311,6 +312,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 self._json(200, ui_vault.prd_info(folder))
             except ValueError as e:
                 self._json(400, {"error": str(e)})
+        elif path == "/api/prd":
+            q = parse_qs(urlsplit(self.path).query)
+            try:
+                repo = _registered((q.get("repo") or [""])[0])
+                self._json(200, ui_actions.read_prd(dispatch.read_checkouts()[repo], (q.get("path") or [""])[0]))
+            except ValueError as e:
+                self._json(400, {"error": str(e)})
         elif path == "/api/peer-review":
             self._json(200, peer_review.offers())
         elif path == "/api/sessions/cleanup":
@@ -454,7 +462,19 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._prompt(parts[3])
         elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] in ("stop", "resume", "cancel-auto"):
             {"stop": self._stop, "resume": self._resume, "cancel-auto": self._cancel_auto}[parts[4]](parts[3])
-        elif parts[1:3] in _REMOVED or (parts[1:3] == ["api", "pulls"] and parts[-1:] == ["merge"]):
+        elif len(parts) == 7 and parts[1:3] in (["api", "issues"], ["api", "pulls"]) and parts[6] == "comment":
+            self._dispatch(lambda b: ui_actions.comment(*parts[3:6], b.get("text")))
+        elif len(parts) == 7 and parts[1:3] == ["api", "issues"] and parts[6] == "state":
+            self._dispatch(lambda b: ui_actions.set_state(*parts[3:6], b.get("state"), b.get("reason")))
+        elif len(parts) == 7 and parts[1:3] == ["api", "pulls"] and parts[6] == "merge":
+            self._dispatch(lambda b: ui_actions.merge(*parts[3:6]))
+        elif parts == ["", "api", "prd"]:
+            self._dispatch(
+                lambda b: ui_actions.save_prd(
+                    dispatch.read_checkouts()[_registered(b.get("repo"))], b.get("path"), b.get("text")
+                )
+            )
+        elif parts[1:3] in _REMOVED:
             self._send(404, "text/plain; charset=utf-8", b"not found")
         else:
             self._method_not_allowed(guarded=True)

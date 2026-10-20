@@ -3,6 +3,7 @@ import htm from './vendor/htm.mjs';
 import { BoardShell, sendJson } from './boardshell.js';
 import { toast } from './toast.js';
 import { PanelControl } from './panel.js';
+import { openPrd } from './prd.js';
 
 const html = htm.bind(h);
 
@@ -50,7 +51,7 @@ export function cardDetail(p) {
 export function prdCard(p, repo, { busy, err, session, onAct, offers, onChange }) {
   const act = actionFor(p, repo);
   return html`<article class="bcard" key=${p.path || p.slug}>
-    <div class="bcard-title">${p.title || p.slug}</div>
+    <div class="bcard-title"><a href=${`#/planning`} onClick=${(e) => { e.preventDefault(); openPrd(repo, p.path, p.title || p.slug); }}>${p.title || p.slug}</a></div>
     <div class="bcard-meta"><span>${p.status}</span>${cardDetail(p).map((t) => html`<span>${t}</span>`)}</div>
     ${columnOf(p) === 'draft' && html`<div class="bcard-slot" data-slot="panel"><${PanelControl} repo=${repo} artifact=${p.abs_path} panel=${p.panel} offers=${offers} onChange=${onChange} /></div>`}
     ${act && html`<div class="bcard-actions"><button type="button" disabled=${busy} onClick=${() => onAct(p, act)}>${busy ? 'Starting…' : act.label}</button></div>`}

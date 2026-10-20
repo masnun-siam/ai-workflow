@@ -539,9 +539,14 @@ a.chip:hover { color: var(--fg); }
 .repo-list li:last-child { border-bottom: 0; }
 .repo-list .mono { font-size: 12px; overflow-wrap: anywhere; }
 
-/* ---- issue popup ----------------------------------------------------------------------- */
-.dialog.issue { max-width: 760px; max-height: 80vh; overflow: hidden; gap: 10px; padding: 16px 0 0; }
-.overlay:has(.dialog.issue) { padding-top: 8vh; }
+/* ---- issue / PR / PRD drawer: slides in from the right, full screen on a phone ------------ */
+.dialog.issue { max-width: 760px; height: 100dvh; max-height: none; overflow: hidden; gap: 10px; padding: 16px 0 0; border-radius: 0; border-width: 0 0 0 1px; animation: drawer 0.18s var(--ease); }
+.overlay:has(.dialog.issue) { padding: 0; justify-content: flex-end; align-items: stretch; }
+@keyframes drawer { from { transform: translateX(32px); opacity: 0; } }
+.iss-act { display: flex; flex-direction: column; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
+.iss-act textarea { min-height: 64px; resize: vertical; }
+.iss-act-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.prd-edit { flex: 1 1 auto; min-height: 50vh; font: 13px/1.5 var(--mono); resize: none; }
 .iss-head, .iss-title, .iss-foot { padding-inline: 20px; }
 .iss-head { display: flex; align-items: center; gap: 10px; }
 .iss-ref { font-size: 12px; color: var(--faint); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -582,8 +587,7 @@ a.chip:hover { color: var(--fg); }
 .gh-md hr { border: 0; border-top: 1px solid var(--border); }
 .gh-md .anchor, .gh-md g-emoji { text-decoration: none; }
 @media (max-width: 640px) {
-  .overlay:has(.dialog.issue) { padding: 0; align-items: stretch; }
-  .dialog.issue { max-width: none; max-height: none; border-radius: 0; border-width: 0; }
+  .dialog.issue { max-width: none; border-width: 0; }
   .iss-foot { flex-wrap: wrap; }
 }
 
@@ -777,6 +781,8 @@ header .ugauge:hover { background: var(--raised); }
 .bcol h2 { margin: 0; display: flex; justify-content: space-between; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .bcard { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
 .bcard-title { font-weight: 500; line-height: 1.35; }
+.bcard-title a { color: inherit; text-decoration: none; }
+.bcard-title a:hover, .bcard-title a:focus-visible { text-decoration: underline; }
 .bcard-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font: 12px var(--mono); color: var(--muted); }
 .bcard-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .bcard-actions button { min-height: 36px; font-size: 13px; }

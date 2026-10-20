@@ -1,7 +1,9 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { poll } from './app.js';
-import { currentRepo, setRepo } from './fmt.js';
+import { currentRepo, setRepo, sendJson } from './fmt.js';
+
+export { sendJson };
 import { RepoPicker, loadRepoList } from './repopicker.js';
 
 const html = htm.bind(h);
@@ -26,18 +28,6 @@ export function boardView({ repo, data, error }) {
   return error ? 'unavailable' : 'skeleton';
 }
 
-// POST/PUT JSON; resolves { ok, data, error } and never throws.
-export async function sendJson(method, url, body) {
-  try {
-    const res = await fetch(url, { method, headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const data = await res.json().catch(() => ({}));
-    return res.ok ? { ok: true, data } : { ok: false, status: res.status, error: data.error || `HTTP ${res.status}` };
-  } catch {
-    return { ok: false, error: 'Could not reach the aiw server' };
-  }
-}
-
-// The poller sends Unix seconds; an ISO string also works.
 export const fetchedText = (t) => {
   const d = new Date(typeof t === 'number' ? t * 1000 : t);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });

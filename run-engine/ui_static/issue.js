@@ -2,7 +2,7 @@ import { h } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { formatWhen } from './fmt.js';
 import { issueUrl } from './ghstatus.js';
-import { Peek, PeekLink, Md, Labels, Who } from './peek.js';
+import { Peek, PeekLink, Md, Labels, Who, Actions } from './peek.js';
 
 const html = htm.bind(h);
 
@@ -19,7 +19,20 @@ const info = (d) => ({ title: d.title, state: stateLabel(d), stateClass: `iss-${
 
 export const IssueDialog = ({ owner, repo, issue, onClose }) => html`
   <${Peek} api=${`/api/issues/${owner}/${repo}/${issue}`} refText=${`${owner}/${repo} #${issue}`} fallbackTitle=${`Issue #${issue}`}
-    fallbackUrl=${issueUrl(owner, repo, issue)} info=${info} onClose=${onClose}>${(d) => html`<${IssueBody} d=${d} />`}<//>`;
+    fallbackUrl=${issueUrl(owner, repo, issue)} info=${info} onClose=${onClose}>${(d, reload) => html`<${IssueBody} d=${d} />
+    <${Actions} api=${`/api/issues/${owner}/${repo}/${issue}`} reload=${reload} buttons=${issueButtons(d)} />`}<//>`;
+
+// Close or reopen; a PR's issue view only comments (merge lives in the PR drawer).
+export function issueButtons(d) {
+  if (d.is_pr) return [];
+  if (d.state === 'open') {
+    return [
+      { label: 'Close as completed', path: '/state', body: { state: 'closed', reason: 'completed' } },
+      { label: 'Close as not planned', path: '/state', body: { state: 'closed', reason: 'not_planned' } },
+    ];
+  }
+  return [{ label: 'Reopen', path: '/state', body: { state: 'open' } }];
+}
 
 function IssueBody({ d }) {
   const people = [`${d.author} opened ${formatWhen(d.created_at)}`, d.assignees.length && `assigned to ${d.assignees.join(', ')}`, d.milestone && `milestone ${d.milestone}`].filter(Boolean);

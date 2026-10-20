@@ -14,6 +14,7 @@ import { toast } from './toast.js';
 import { CleanupDialog } from './cleanup.js';
 import { IssueDialog } from './issue.js';
 import { PrDialog } from './pr.js';
+import { PrdDialog, prdEdits } from './prd.js';
 import { keyIntent, moveFocus, Palette, Shortcuts } from './keys.js';
 import { AfkControl, AfkSummary, afkPost } from './afk.js';
 
@@ -200,6 +201,7 @@ export class App extends Component {
       }
       case 'move': if (!palette && !sheet && !cleanup && !peek && moveFocus(intent.dir)) e.preventDefault(); break;
       case 'escape':
+        if (peek && peek.kind === 'prd' && prdEdits.dirty && !confirm('Discard your unsaved edits?')) break;
         if (palette || sheet || cleanup || peek) this.closeDialogs();
         else if (['session', 'answer'].includes(route.name)) history.length > 1 ? history.back() : (location.hash = '#/sessions');
         break;
@@ -308,6 +310,7 @@ export class App extends Component {
       ${palette && html`<${Palette} sessions=${sessions} afk=${afk} onClose=${this.closeDialogs} />`}
       ${sheet && html`<${Shortcuts} onClose=${this.closeDialogs} />`}
       ${peek && peek.kind === 'issue' && html`<${IssueDialog} key=${`${peek.owner}/${peek.repo}#${peek.n}`} owner=${peek.owner} repo=${peek.repo} issue=${peek.n} onClose=${this.closeDialogs} />`}
+      ${peek && peek.kind === 'prd' && html`<${PrdDialog} key=${`${peek.repo}:${peek.path}`} repo=${peek.repo} path=${peek.path} title=${peek.title} onClose=${this.closeDialogs} />`}
       ${peek && peek.kind === 'pr' && html`<${PrDialog} key=${`${peek.owner}/${peek.repo}#${peek.n}`} owner=${peek.owner} repo=${peek.repo} pr=${peek.n} onClose=${this.closeDialogs} />`}
       ${cleanup && html`<${CleanupDialog} only=${cleanup.only} onClose=${this.closeDialogs} />`}
     `;

@@ -64,8 +64,18 @@ pending), kept in memory; a rate limit pauses fetching for 10 minutes and the bo
 data as stale. The stale banner says why (rate limit and its retry time, or gh's error) and has a
 **Refresh** (`?refresh=1` on the board GET fetches now). No board shows before the first fetch. After each fresh poll the UI runs autopilot (refined, unblocked issues of switched-on
 epics, by `priority:` label then number, up to the repo's cap), merge cleanup, and grind autostart
-(a PR that turned ready on a repo with auto-grind on). Nothing runs on stale data, and the UI never
-merges a PR.
+(a PR that turned ready on a repo with auto-grind on). Nothing runs on stale data, and nothing
+merges a PR without a click.
+
+**Drawer.** A card's title (an issue, a PR, a PRD) opens it in a side drawer, full screen on a
+phone. Issues and PRs show the body, comments, labels, and for a PR its checks, files and commits;
+both take a comment, an issue closes (completed or not planned) or reopens, and an open PR has
+**Merge** (a merge commit, never squash; the confirm warns about failing or running checks and a
+missing approval, but does not block). A PRD shows rendered, edits as raw markdown (**Save and
+commit** commits only that file on the checkout's current branch, not pushed) or takes a request
+for **Ask Claude**, which starts `/create-prd <path> <request>`.
+`POST /api/issues/<o>/<r>/<n>/comment|state`, `POST /api/pulls/<o>/<r>/<n>/comment|merge`,
+`GET /api/prd?repo=&path=`, `POST /api/prd`.
 
 **New.** Pick a skill (grouped, each with a one-line description; the last one is remembered),
 a repo and the input. For `implement-issue`, `pr-review` and `pr-grind` the repo's open issues
