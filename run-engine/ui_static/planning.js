@@ -27,7 +27,11 @@ export function groupPrds(prds) {
 export function actionFor(p, repo) {
   switch (columnOf(p)) {
     case 'approved': return { label: 'Create tasks', url: '/api/start', body: { repo, skill: 'create-tasks', arg: p.path, via: 'headless' } };
-    case 'tasks_filed': return p.epic ? { label: 'Refine', url: '/api/start', body: { repo, skill: 'refine-issues', arg: String(p.epic), via: 'headless' } } : null;
+    case 'tasks_filed': {
+      // No epic (issues only labelled prd-<slug>): refine-issues also takes the issue numbers.
+      const arg = p.epic ? String(p.epic) : (p.unrefined || []).join(' ');
+      return arg ? { label: 'Refine', url: '/api/start', body: { repo, skill: 'refine-issues', arg, via: 'headless' } } : null;
+    }
     case 'refined': return p.epic ? { label: 'Autopilot', url: '/api/autopilot', body: { repo, epic: p.epic, on: true } } : null;
     default: return null;
   }

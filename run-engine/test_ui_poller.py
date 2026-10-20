@@ -147,6 +147,7 @@ p3.poll("o/r")
 clock3.t += 60
 s = p3.poll("o/r")
 assert s["stale"] and len(s["data"]["issues"]) == 20 and len(calls3) == 2
+assert s["error"] == "rate limited" and s["retry_at"] == clock3.t + 600
 clock3.t += 599
 assert not p3.due("o/r")
 p3.poll("o/r")
@@ -154,7 +155,7 @@ assert len(calls3) == 2  # paused: no call
 clock3.t += 1
 assert p3.due("o/r")
 s = p3.poll("o/r")
-assert len(calls3) == 3 and not s["stale"]
+assert len(calls3) == 3 and not s["stale"] and s["error"] is None and s["retry_at"] is None
 
 # a payload that merely mentions "rate limit" (an issue title) is fresh data, not a pause
 f = fixture()
@@ -175,4 +176,5 @@ p4.poll("o/r")
 clock4.t += 60
 s = p4.poll("o/r")
 assert s["stale"] and len(s["data"]["issues"]) == 20
+assert s["error"] and s["retry_at"] is None  # gh's failure text, shown on the board's stale banner
 print("ok")

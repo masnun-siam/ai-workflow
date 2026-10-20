@@ -5,7 +5,8 @@ Each `docs/prds/*.md` in the checkout is a card. Status comes from the header li
 `epic` and `prd-<slug>` (guides/engineering-workflow.md); its children are the issues whose parent is
 the epic (or listed in its sub_issues), plus any issue labelled `prd-<slug>`.
 
-Card: {slug, title, status, path, abs_path, column, pr, epic, issues, refined, panel}. `column` is one of
+Card: {slug, title, status, path, abs_path, column, pr, epic, issues, refined, unrefined, panel}.
+`unrefined` lists the child issue numbers not yet labelled `refined`. `column` is one of
 draft | in_review | approved | tasks_filed | refined. `pr` is {n, url} for an In review PRD (an open PR
 whose branch or title mentions the slug; heuristic), else None. `panels` maps slug -> a panel id or an
 already-built panel_status dict.
@@ -98,6 +99,7 @@ def build(repo: str, checkout_path: str, snapshot: dict, panels: dict | None) ->
                 "epic": epic["n"] if epic else None,
                 "issues": len(kids),
                 "refined": refined,
+                "unrefined": sorted(i["n"] for i in kids if "refined" not in i["labels"]),
                 "panel": _panel(panels, slug),
             }
         )

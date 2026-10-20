@@ -246,14 +246,21 @@ def _board(path: str, query: str):
     except ValueError as e:
         return 400, {"error": str(e)}
     _watch(repo)
+    if (parse_qs(query).get("refresh") or [""])[0] == "1":  # the board's Refresh: fetch now, off this thread
+        threading.Thread(target=POLLER.poll, args=(repo,), daemon=True).start()
     snap = POLLER.snapshot(repo)
     if path == "/api/planning":
-        return 200, ui_planning.build(
-            repo, dispatch.read_checkouts()[repo], snap, _panels(dispatch.read_checkouts()[repo])
+        body = ui_planning.build(repo, dispatch.read_checkouts()[repo], snap, _panels(dispatch.read_checkouts()[repo]))
+    else:
+        body = ui_delivery.build(
+            repo,
+            snap,
+            ui_sessions.list_sessions(),
+            ui_grind.index(),
+            ui_settings.repo_settings(repo),
+            _flags.get(repo, {}),
         )
-    return 200, ui_delivery.build(
-        repo, snap, ui_sessions.list_sessions(), ui_grind.index(), ui_settings.repo_settings(repo), _flags.get(repo, {})
-    )
+    return 200, {**body, "error": snap.get("error"), "retry_at": snap.get("retry_at")}
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):

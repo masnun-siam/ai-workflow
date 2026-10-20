@@ -608,7 +608,7 @@ const find = (t, root) => { nodes.length = 0; walk(root); return nodes.filter((n
 let tree = render({});
 assert.equal(find(RP.RepoPicker, tree).length, 1, 'the shared repo picker'); assert.equal(find(RP.RepoPicker, tree)[0].props.allowPath, true);
 const radios = find('input', tree).filter((i) => i.props.type === 'radio');
-assert.deepEqual(radios.map((r) => r.props.value).sort(), ['create-prd', 'create-tasks', 'day', 'docs-updater', 'dump', 'flow', 'herdr-dispatch', 'implement-issue', 'peer-review', 'pr-grind', 'pr-review', 'refine-issues', 'release-pr', 'sync-from-wasensi', 'verifier-locally', 'worklog']);
+assert.deepEqual(radios.map((r) => r.props.value).sort(), ['create-prd', 'create-tasks', 'day', 'docs-updater', 'dump', 'flow', 'herdr-dispatch', 'implement-issue', 'peer-review', 'pr-grind', 'pr-review', 'refine-issues', 'release-pr', 'skill-feedback', 'sync-from-wasensi', 'verifier-locally', 'worklog']);
 const lab = (t) => find('label', render({ command: t })).map((l) => text(l)).join('|');
 assert.match(lab('implement-issue'), /issue/i); assert.match(lab('pr-grind'), /PR|pull/i);
 assert.notEqual(lab('implement-issue'), lab('pr-grind'));
@@ -770,7 +770,7 @@ const out = (n) => console.log('ok ' + n);
 const tick = () => new Promise((r) => setImmediate(r));
 const plain = (x) => JSON.parse(JSON.stringify(x));
 const { validate, buildBody, makeSubmitter, Launcher } = L;
-const ALL = ['create-prd', 'create-tasks', 'day', 'docs-updater', 'dump', 'flow', 'herdr-dispatch', 'implement-issue', 'peer-review', 'pr-grind', 'pr-review', 'refine-issues', 'release-pr', 'sync-from-wasensi', 'verifier-locally', 'worklog'];
+const ALL = ['create-prd', 'create-tasks', 'day', 'docs-updater', 'dump', 'flow', 'herdr-dispatch', 'implement-issue', 'peer-review', 'pr-grind', 'pr-review', 'refine-issues', 'release-pr', 'skill-feedback', 'sync-from-wasensi', 'verifier-locally', 'worklog'];
 assert.equal(typeof L.validateCustom, 'function', 'validateCustom export');
 assert.equal(typeof L.buildCustomBody, 'function', 'buildCustomBody export');
 
@@ -1924,7 +1924,7 @@ out('launcher: lens lists in the body (named and custom), default critical, empt
   assert.deepEqual(nums(''), [12, 120, 7]); assert.deepEqual(nums('12'), [12, 120], 'number prefix');
   assert.deepEqual(nums('login fix'), [12], 'every word in the title'); assert.deepEqual(nums('feature'), [120], 'labels match');
   assert.deepEqual(nums('o/r#12'), [12, 120, 7], 'a filled-in reference keeps the whole list visible');
-  assert.deepEqual(L.GROUPS.flatMap(([, c]) => c.map(([n]) => n)).sort(), Object.keys(L.PICK).concat(['pr-grind', 'create-prd', 'refine-issues', 'dump', 'day', 'worklog', 'verifier-locally', 'docs-updater', 'sync-from-wasensi', 'create-tasks', 'herdr-dispatch', 'flow', 'peer-review', 'release-pr']).sort(), 'every command is grouped once');
+  assert.deepEqual(L.GROUPS.flatMap(([, c]) => c.map(([n]) => n)).sort(), Object.keys(L.PICK).concat(['pr-grind', 'create-prd', 'refine-issues', 'dump', 'day', 'worklog', 'verifier-locally', 'docs-updater', 'sync-from-wasensi', 'skill-feedback', 'create-tasks', 'herdr-dispatch', 'flow', 'peer-review', 'release-pr']).sort(), 'every command is grouped once');
   assert.equal(L.switchArgs('dump', 'create-prd', 'long idea', 'o/r'), 'long idea', 'free text carries over');
   assert.equal(L.switchArgs('implement-issue', 'pr-review', '12', 'o/r'), '', 'issue to PR clears');
   assert.equal(L.switchArgs('dump', 'implement-issue', 'idea', 'o/r'), '');
@@ -1963,6 +1963,17 @@ out('launcher: lens lists in the body (named and custom), default critical, empt
     out('no repo yet: keyword folder suggestions, folder names, validation and request body');
   }
   out('launcher picker: fill forms per command, typed number parsing, search by number/words/labels; switching command keeps a compatible argument');
+}
+{
+  const S = await import(process.env.APP_URL.replace('app.js', 'session.js'));
+  for (const o of ['queued', 'starting', 'running', 'waiting', 'limited']) assert.ok(S.canStop({ outcome: o }), o);
+  for (const o of ['done', 'failed', 'stopped']) assert.ok(!S.canStop({ outcome: o }), o);
+  const calls = [];
+  globalThis.fetch = async (u, o) => { calls.push([u, o.method]); return { ok: false, status: 409, json: async () => ({ error: 'session already finished' }) }; };
+  assert.deepEqual(await S.stopSession('a b', () => false), { ok: false, cancelled: true }); assert.equal(calls.length, 0, 'cancel sends nothing');
+  assert.deepEqual(await S.stopSession('a b', () => true), { ok: false, error: 'session already finished' });
+  assert.deepEqual(calls, [['/api/sessions/a%20b/stop', 'POST']]);
+  out('session: Stop shows until the session ends, confirms, then POSTs /stop and surfaces its error');
 }
 """
 if shutil.which("node"):

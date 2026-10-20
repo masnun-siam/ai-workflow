@@ -74,7 +74,8 @@ assert by["appr"]["column"] == "tasks_filed" and (by["appr"]["issues"], by["appr
     3,
     100,
 )
-assert by["done"]["column"] == "refined"
+assert by["done"]["column"] == "refined" and by["done"]["unrefined"] == []
+assert len(by["appr"]["unrefined"]) == 5
 assert by["fresh"]["column"] == "approved" and by["fresh"]["epic"] is None and by["fresh"]["panel"] is None
 
 os.remove(os.path.join(co, "docs", "prds", "drft.md"))  # deleted draft: card gone next build

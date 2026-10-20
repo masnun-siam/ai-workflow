@@ -33,6 +33,7 @@ NAMED = (
     "pr-review",
     "docs-updater",
     "sync-from-wasensi",
+    "skill-feedback",
     "dump",
     "flow",
     "herdr-dispatch",

@@ -10,6 +10,15 @@
   closes the issue, sets it to Done, deletes the remote branch and moves unblocked issues to Ready.
 - `/pr-review <pr> --fix` fixes the review feedback already on a PR through to green CI, replies
   and ready.
+- UI: **Stop** on a session page for a session that has not finished. `skill-feedback` in New run.
+  The board's stale banner says why (rate limit with retry time, or the fetch error) and has a
+  **Refresh**.
+
+### Fixed
+
+- UI: a Planning card in Tasks filed whose issues have no epic now offers **Refine** with the
+  unrefined issue numbers. Boards no longer render before the first GitHub fetch, where every
+  PRD looked unstarted and offered Create tasks.
 
 ### Changed
 

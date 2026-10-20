@@ -168,7 +168,7 @@ export class Settings extends Component {
           </section>
           <form class="panel" aria-labelledby="vault-h" onSubmit=${this.saveVault} noValidate>
             <h2 id="vault-h">Notes vault</h2>
-            <p class="note">Flow shows the Dump and PRD notes from this Obsidian vault, read-only. It's the vault <code>/dump</code> and <code>/create-prd</code> write to.</p>
+            <p class="note">The Obsidian vault <code>/dump</code> and <code>/create-prd</code> write to. New run lists its project folders, so you can start those runs without a repo.</p>
             <label for="vault-dir">Vault folder</label>
             <input id="vault-dir" type="text" class="field mono" spellcheck="false" placeholder="~/Documents/notes" value=${vault}
               aria-invalid=${vaultMsg ? 'true' : undefined} aria-describedby=${vaultMsg ? 'vault-err' : undefined}
@@ -178,7 +178,7 @@ export class Settings extends Component {
           </form>
           <section class="panel" aria-labelledby="repos-h">
             <h2 id="repos-h">Repos</h2>
-            <p class="note">aiw works inside a local clone of each repo. Scan your project folders to register every clone that has a GitHub origin, so Dispatch and New run can find them.</p>
+            <p class="note">aiw works inside a local clone of each repo. Scan your project folders to register every clone that has a GitHub origin, so the boards and New run can find them.</p>
             <label for="scan-roots">Folders to scan, one per line</label>
             <textarea id="scan-roots" class="field mono" rows="3" spellcheck="false" value=${roots} onInput=${(e) => this.setState({ roots: e.target.value })}></textarea>
             <div class="launch-actions">

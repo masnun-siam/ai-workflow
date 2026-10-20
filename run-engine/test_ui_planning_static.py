@@ -93,6 +93,9 @@ assert.deepEqual(posts.at(-1), ['/api/autopilot', { repo: 'o/r', epic: 42, on: t
 assert.equal(reloads, 3);
 assert.ok(find('a', view()).some((a) => a.props.href === '#/session/sess1'), 'session link after start');
 out('planning: actions POST the PRD contract bodies and link the new session');
+assert.deepEqual(P.actionFor(prd({ column: 'tasks_filed', epic: null, unrefined: [7, 9] }), 'o/r').body, { repo: 'o/r', skill: 'refine-issues', arg: '7 9', via: 'headless' });
+assert.equal(P.actionFor(prd({ column: 'tasks_filed', epic: null, unrefined: [] }), 'o/r'), null);
+out('planning: Refine without an epic passes the unrefined issue numbers');
 
 fail = 'issue already has a live session';
 await btn('Refine').props.onClick();

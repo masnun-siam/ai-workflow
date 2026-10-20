@@ -85,11 +85,20 @@ assert.ok(!text(t).includes('DATA'));
 t = R({ repo: 'o/r' });
 assert.equal(byClass('board-skeleton', t).length, 1, 'skeleton on first fetch');
 t = R({ repo: 'o/r', error: true }); assert.match(text(t), /unavailable/);
-t = R({ repo: 'o/r', data: { repo: 'o/r', stale: false } });
+t = R({ repo: 'o/r', data: { repo: 'o/r', stale: false, fetched_at: 1792510132 } });
 assert.match(text(t), /DATA:o\/r/); assert.equal(byClass('stale-banner', t).length, 0);
 t = R({ repo: 'o/r', data: { repo: 'o/r', stale: true, fetched_at: '2026-10-20T09:05:00' } });
-assert.equal(byClass('stale-banner', t).length, 1); assert.match(text(byClass('stale-banner', t)), /stale[\s\S]*last fetched \d\d:\d\d/); assert.match(text(t), /DATA:o\/r/);
-t = R({ repo: 'o/r', data: { repo: 'o/r', stale: true } }); assert.match(text(byClass('stale-banner', t)), /stale/);
+assert.equal(byClass('stale-banner', t).length, 1); assert.match(text(byClass('stale-banner', t)), /Showing the board from \d\d:\d\d/); assert.match(text(t), /DATA:o\/r/);
+t = R({ repo: 'o/r', data: { repo: 'o/r', stale: true } }); assert.match(text(byClass('stale-banner', t)), /Loading from GitHub/);
+assert.doesNotMatch(text(t), /DATA:/, 'no board before the first fetch: empty issues would offer wrong actions'); assert.equal(byClass('board-skeleton', t).length, 1);
+assert.equal(find('button', byClass('stale-banner', t)).length, 0, 'no Refresh before the first fetch');
+t = R({ repo: 'o/r', data: { repo: 'o/r', stale: true, fetched_at: 1792510132, error: 'HTTP 502' } });
+assert.match(text(byClass('stale-banner', t)), /Could not refresh from GitHub: HTTP 502\. Showing the board from \d\d:\d\d/);
+assert.equal(text(find('button', byClass('stale-banner', t))[0]), 'Refresh');
+t = R({ repo: 'o/r', data: { repo: 'o/r', stale: true, fetched_at: 1792510132, error: 'rate limited', retry_at: 1792510732 } });
+assert.match(text(byClass('stale-banner', t)), /rate limit reached, retrying at \d\d:\d\d/);
+assert.equal(find('button', byClass('stale-banner', t)).length, 0, 'no Refresh while rate limited');
+assert.equal(B.boardUrl('/api/planning', 'o/r', true), '/api/planning?repo=o%2Fr&refresh=1');
 out('shell: pick-a-repo, skeleton, unavailable, stale banner with fetched_at, data');
 
 // persisted repo + keep-last-data poll

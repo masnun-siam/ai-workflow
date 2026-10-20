@@ -10,7 +10,15 @@ export const REPO_PREF = 'aiw.boardRepo';
 // ponytail: one cadence. The server polls GitHub at 60s/15s but serves boards from memory, so a flat 15s costs nothing.
 export const BOARD_POLL_MS = 15000;
 
-export const boardUrl = (path, repo) => `${path}?repo=${encodeURIComponent(repo)}`;
+export const boardUrl = (path, repo, refresh) => `${path}?repo=${encodeURIComponent(repo)}${refresh ? '&refresh=1' : ''}`;
+
+// Stale banner text: still loading, rate limited (and until when), or the fetch error.
+export function staleText({ fetched_at, error, retry_at }) {
+  if (!fetched_at && !error) return 'Loading from GitHub…';
+  const when = fetched_at ? ` Showing the board from ${fetchedText(fetched_at)}.` : '';
+  if (error === 'rate limited') return `GitHub rate limit reached${retry_at ? `, retrying at ${fetchedText(retry_at)}` : ''}.${when}`;
+  return `Could not refresh from GitHub${error ? `: ${error}` : ''}.${when}`;
+}
 
 // What the shell shows: pick a repo, a skeleton on the first fetch, an error with no data yet, or the board.
 export function boardView({ repo, data, error }) {
@@ -30,8 +38,9 @@ export async function sendJson(method, url, body) {
   }
 }
 
-export const fetchedText = (iso) => {
-  const d = new Date(iso);
+// The poller sends Unix seconds; an ISO string also works.
+export const fetchedText = (t) => {
+  const d = new Date(typeof t === 'number' ? t * 1000 : t);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 };
 
@@ -63,23 +72,36 @@ export class BoardShell extends Component {
 
   reload = () => this.start();
 
+  // Ask the server to fetch now, then poll as usual; the next poll picks up the fresh snapshot.
+  refresh = () => {
+    const { repo } = this.state;
+    if (!repo) return;
+    this.setState({ refreshing: true });
+    fetch(boardUrl(this.props.path, repo, true), { headers: { Accept: 'application/json' } })
+      .catch(() => {})
+      .finally(() => setTimeout(() => !this.gone && (this.setState({ refreshing: false }), this.start()), 2000));
+  };
+
   pick = ({ repo }) => {
     savePref(globalThis.localStorage, REPO_PREF, repo || '');
     this.setState({ repo: repo || '', data: null, error: false }, () => this.start());
   };
 
-  render({ title, render }, { repo, repos, data, error }) {
+  render({ title, render }, { repo, repos, data, error, refreshing }) {
     const view = boardView({ repo, data, error });
     const picker = html`<div class="board-bar"><${RepoPicker} id="board-repo" repos=${repos} value=${{ repo, path: '' }} onPick=${this.pick} placeholder="Choose a repo" /></div>`;
+    // Before the first GitHub fetch every PRD looks like it has no issues, so no board (and no wrong actions) yet.
+    const skeleton = html`<div class="board-skeleton" role="status" aria-label="Loading"><div class="skeleton-col"></div><div class="skeleton-col"></div><div class="skeleton-col"></div></div>`;
     let body;
     if (view === 'pick') body = html`<p class="board-empty" role="status">Pick a repo to see its ${title.toLowerCase()} board.</p>`;
-    else if (view === 'skeleton') body = html`<div class="board-skeleton" role="status" aria-label="Loading"><div class="skeleton-col"></div><div class="skeleton-col"></div><div class="skeleton-col"></div></div>`;
+    else if (view === 'skeleton') body = skeleton;
     else if (view === 'unavailable') body = html`<p class="board-empty" role="status">${title} unavailable, retrying…</p>`;
     else {
-      const when = data.fetched_at ? fetchedText(data.fetched_at) : '';
+      const limited = data.error === 'rate limited';
       body = html`
-        ${data.stale && html`<p class="stale-banner" role="status">GitHub data is stale${when ? ` (last fetched ${when})` : ''}. Showing the last known board.</p>`}
-        ${render(data, { repo, reload: this.reload })}`;
+        ${data.stale && html`<p class="stale-banner" role="status">${staleText(data)}
+          ${(data.fetched_at || data.error) && !limited && html` <button type="button" class="btn-link" disabled=${refreshing} onClick=${this.refresh}>${refreshing ? 'Refreshing…' : 'Refresh'}</button>`}</p>`}
+        ${data.fetched_at ? render(data, { repo, reload: this.reload }) : skeleton}`;
     }
     return html`<section class="board-page"><div class="board-head"><h1>${title}</h1>${picker}</div>${body}</section>`;
   }

@@ -27,6 +27,20 @@ export function filterEvents(events, query) {
   return q ? all.filter(({ e }) => eventText(e).toLowerCase().includes(q)) : all;
 }
 
+// Stoppable: anything not finished (POST /api/sessions/<id>/stop refuses done, failed and stopped).
+export const canStop = (m) => !!m && !['done', 'failed', 'stopped'].includes(m.outcome);
+
+export async function stopSession(id, confirmFn = globalThis.confirm) {
+  if (confirmFn && !confirmFn('Stop this session? It can be resumed later.')) return { ok: false, cancelled: true };
+  try {
+    const res = await fetch(`/api/sessions/${encodeURIComponent(id)}/stop`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    return res.ok ? { ok: true } : { ok: false, error: data.error || `HTTP ${res.status}` };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
 const isLive = (m) => !!m && (['starting', 'running'].includes(m.outcome) || (m.outcome === 'waiting' && !m.ended_at));
 
 function Message({ e, open }) {
@@ -137,7 +151,13 @@ export class Session extends Component {
     this.take(r);
   }
 
-  render(_, { meta, notFound, retry, stream, q, follow, openAll }) {
+  stop = async () => {
+    this.setState({ stopping: true, stopErr: '' });
+    const r = await stopSession(this.props.id);
+    if (!this.gone) this.setState({ stopping: false, stopErr: r.ok || r.cancelled ? '' : r.error });
+  };
+
+  render(_, { meta, notFound, retry, stream, q, follow, openAll, stopping, stopErr }) {
     if (notFound) return html`<h1>Session not found</h1><p><a href="#/sessions">Back to sessions</a></p>`;
     if (!meta) return html`<h1>Transcript</h1><p role="status">Loading…</p>`;
     const shown = filterEvents(stream.events, q);
@@ -152,8 +172,10 @@ export class Session extends Component {
           <span class=${`chip chip-${meta.outcome}`}>${meta.outcome}</span>
           ${meta.peer_review && html`<span class=${`chip chip-review-${meta.peer_review.replace(/ /g, '-')}`} title="Read from the review's rounds, not from what the session said">peer review: ${meta.peer_review}</span>`}
           ${meta.outcome === 'waiting' && html`<a class="btn btn--primary" href=${`#/answer/${encodeURIComponent(meta.id)}`}>Answer</a>`}
+          ${canStop(meta) && html`<button type="button" class="btn" disabled=${stopping} onClick=${this.stop}>${stopping ? 'Stopping…' : 'Stop'}</button>`}
           ${retry && html`<span role="status" class="offline">Retrying…</span>`}
         </div>
+        ${stopErr && html`<p role="alert" class="error">${stopErr}</p>`}
         ${meta.outcome === 'limited' && html`<${LimitBanner} key=${meta.id} s=${meta} />`}
         ${ideaPrdSession(meta) && html`<${NewIdeaPanel} key=${meta.id} meta=${meta} />`}
         <div class="tbar">
