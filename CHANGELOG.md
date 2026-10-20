@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `/skill-feedback`: turn feedback, or `reconcile` over closed PRs' learning logs, into approved
+  skill and guide edits (synced from Wasensi c6d1971f).
+- `/implement-issue <epic>` picks the epic's lowest-numbered Ready issue; after the merge it
+  closes the issue, sets it to Done, deletes the remote branch and moves unblocked issues to Ready.
+- `/pr-review <pr> --fix` fixes the review feedback already on a PR through to green CI, replies
+  and ready.
+
+### Changed
+
+- New issues and epics start in Backlog; `/refine-issues` moves an unblocked refined issue to
+  Ready. `/implement-issue` stops on an unrefined issue, merges the latest base before marking
+  ready and always logs a run over 50 minutes. Findings are reproduced before they are filed.
+
 ## 2.2.0 — 2026-10-20
 
 ### Added

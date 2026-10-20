@@ -27,12 +27,13 @@ Nothing in this plugin merges a PR.
 |---|---|---|
 | Capture | `/dump` | free-form input → a Problem statement filed in the Obsidian vault |
 | PRD | `/create-prd` | a requirement → `docs/prds/<slug>.md`, every decision settled by interview. Approving it files one epic per `## Epics` entry |
-| Tasks | `/create-tasks` | an Approved PRD → `docs/tasks/<slug>.md`: small one-PR tasks, grouped in waves, with `Depends on:` |
-| Refine | `/refine-issues` | the epic's child issues → each carries a WHAT, WHY, HOW and the `refined` label |
-| Implement | `/implement-issue <n>` | one refined issue → a Ready PR (below) |
-| Review | `/pr-review` | a PR or branch → findings with evidence and a verdict |
+| Tasks | `/create-tasks` | an Approved PRD → one child issue of the epic per small one-PR task, with native blocked-by links |
+| Refine | `/refine-issues` | the epic's child issues → each carries a WHAT, WHY, HOW and the `refined` label, and moves to Ready on the board once unblocked |
+| Implement | `/implement-issue <n \| epic>` | one refined issue (or an epic's next Ready one) → a Ready PR (below) |
+| Review | `/pr-review` | a PR or branch → findings with evidence and a verdict; `--fix` fixes the review feedback on a PR |
 | Grind | `/pr-grind` | a Ready PR → the Slack reviewer-bot loop until approved |
 | Docs | `/docs-updater` | the code's changes → `docs/` brought in line |
+| Feedback | `/skill-feedback` | feedback, or `reconcile` over closed PRs' learning logs → approved edits to the skills and guides |
 
 The planning skills read `templates/` (PRD, epic, issue) and follow `guides/engineering-workflow.md`;
 review follows `guides/code-review.md`. The skills are imported as they are, so read them for
@@ -42,13 +43,14 @@ the exact steps.
 
 One session, start to Ready:
 
-1. Stop if any blocking issue is still open.
+1. Given an epic, pick its lowest-numbered Ready issue. Stop if any blocking issue is still open, or the issue is not refined.
 2. Read the issue, its comments, the PRD and the epic.
 3. Work in a new worktree under `.worktrees/`, branched from the latest base.
 4. Implement, write the tests, update the docs in the same PR.
 5. `/verifier-locally`: run the checks CI runs, then exercise the behaviour against the acceptance criteria.
 6. Open a draft PR. Mark it Ready only when CI is green and every review comment is handled.
 7. Log learnings on the issue.
+8. After the merge: close the issue, set it to Done, clean up, and move the issues it unblocked to Ready.
 
 Independent refined issues run in parallel, each in its own worktree. `herdr-dispatch` fans a
 batch out into herdr tabs, one `/implement-issue <n>` per tab, in dependency order under a

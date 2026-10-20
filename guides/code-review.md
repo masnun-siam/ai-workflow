@@ -62,6 +62,7 @@ Applies when the project is multi-tenant or holds per-user data.
 - The change follows the repo's docs for its area and the sibling files next to it, including the documented data flow between layers.
 - Skills and guides: step numbers and cross-references still resolve, and no other skill, guide or `CLAUDE.md`/`AGENTS.md` now contradicts the change.
 - A tracked file deleted or untracked: `git grep` its path and any `Covers:` lines in `docs/`, and the PR says whether checkouts with local edits to it must discard them before pulling.
+- Frontend: a component that stays mounted while a prop changes does not apply a late async result, such as an error or a pending flag, from the previous value: it checks the id it captured against the current one.
 
 ## Severity
 
