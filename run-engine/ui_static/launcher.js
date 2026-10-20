@@ -176,7 +176,7 @@ export function lensPicker({ id, offer, on, picked, rounds, disabled, onToggle, 
   if (!offer || !offer.length) return null;
   return html`<div class="lens-pick">
     <label class="check" for=${id}><input id=${id} type="checkbox" checked=${on === true} disabled=${disabled}
-      onChange=${(e) => onToggle(e.target.checked)} /> Peer review: each ticked reviewer must approve (up to ${rounds || 3} rounds, on Opus)</label>
+      onChange=${(e) => onToggle(e.target.checked)} /> Peer review: each ticked reviewer must approve (up to ${rounds || 5} rounds, on Opus)</label>
     ${on === true && html`<fieldset class="lenses"><legend>Reviewers</legend>
       ${offer.map((l) => html`<label class="check" for=${id + '-' + l}><input id=${id + '-' + l} type="checkbox"
         checked=${(picked || []).includes(l)} disabled=${disabled}

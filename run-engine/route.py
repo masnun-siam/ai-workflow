@@ -10,7 +10,6 @@ Usage:
   aiw ask ...          # record a gate question for a headless run
   aiw ci status <pr-ref> [--watch]
   aiw threads list|resolve <pr-ref|node-id...>
-  aiw peer-review new|next|verdict|diff ...
 """
 
 from __future__ import annotations
@@ -25,7 +24,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ask  # noqa: E402
 import ci  # noqa: E402
 import dispatch  # noqa: E402
-import peer_review  # noqa: E402
 import threads  # noqa: E402
 import ui_server  # noqa: E402
 from shared import data_dir, die  # noqa: E402
@@ -64,7 +62,7 @@ def main(argv=None) -> None:
     p_paths.set_defaults(func=cmd_paths)
 
     # Each module owns its own argparse wiring.
-    for module in (threads, ci, ui_server, ask, peer_review):
+    for module in (threads, ci, ui_server, ask):
         module.register(sub, add)
 
     args = parser.parse_args(argv)

@@ -1,6 +1,6 @@
 ---
 name: peer-review
-description: "Run a panel of single-lens reviewers (critical, CEO, CTO, security, QA, UX, performance) on one artifact until every picked lens approves, on Opus, in parallel. Called by /create-prd when it gets --review, and runnable on its own after any work: /peer-review reviews the session's change (diff plus final answer) against what the user asked. Use whenever the user says /peer-review, 'peer review this', 'get the panel to review it', or asks for critical/CEO/CTO/security/QA/UX/performance reviewers on the work just done."
+description: "Run a panel of single-lens reviewers (critical, CEO, CTO, security, QA, UX, performance) on one artifact until every lens approves, on Opus. Normally the workflow UI runs the panel and this skill is the root's side: revise the artifact in place after each relayed round, stop at round 5. Also runnable by hand: /peer-review reviews the session's change, or the artifact you name, with one subagent per lens. Use whenever the user says /peer-review, 'peer review this', 'get the panel to review it', or asks for critical/CEO/CTO/security/QA/UX/performance reviewers on the work just done."
 allowed-tools:
   - Bash
   - Read
@@ -14,158 +14,70 @@ allowed-tools:
 
 # /peer-review: a reviewer panel on one artifact
 
-> **Paths.** `<...>` placeholders below are keys from `aiw paths` (run it; `aiw` is
-> on `PATH` via the plugin's `bin/`). Substitute the printed value; never guess a path.
-
-A panel of single-lens reviewers checks one artifact in rounds: a draft doc (`create-prd`), or a change (`custom`: the Ask, your Answer and the Diff in one file). The
-lens pool, what each kind offers, the checklists and the two severity rubrics are `peer_review`
-in `<config>`. **Every picked lens blocks:** the artifact is done when all of them approve.
-`aiw peer-review` checks every verdict and decides each round; you never decide it yourself, and
-you never write a verdict yourself. You are the artifact's author.
+A panel of single-lens reviewers checks one artifact (a PRD, a task list, or a change) in
+rounds. **Every lens blocks:** the artifact is done when all lenses approve on the same round.
+You are the artifact's author (the root). The lenses are read-only: they report only through
+their final message, which ends with exactly one line, `Verdict: approve` or `Verdict: changes`,
+with findings above it. You never write a verdict for a lens and never approve on a lens's behalf.
 
 ## Arguments
 
-`/peer-review [--lenses <lens,lens>] [--since <sha|@{u}>] [--herdr]`: standalone, kind `custom`.
-Argument text that is not a flag is a task: do that work first, then review it as `custom`,
-with that text as the Ask.
+`/peer-review [--lenses <lens,lens>] [<artifact>]`, or from the UI: `/ai-workflow:peer-review --root <panel_id> <artifact>`.
 
-A command calling this skill passes `--kind <kind> --dir <review_dir> [--lenses <lens,lens>] [--herdr]`
-after writing its draft to `<review_dir>/draft.md`; that draft is the artifact. With no
-`--lenses`, the panel is `peer_review.default_lenses` (critical).
+- `--root <panel_id> <artifact>`: the workflow UI runs the panel and you are its root (below).
+- Otherwise you run the panel by hand (below). Text that is not a flag or an existing file is a
+  task: do that work first, then review it.
 
-### Asking the user
+## As the root of a UI-run panel
 
-A headless run (started from the workflow UI) has no terminal to answer in, so
-`AskUserQuestion` is not available there. You are headless when your system prompt contains
-`Headless run: ask via aiw ask`. At every question below, the same header, question and options
-are used either way; only the transport differs.
+The UI starts one headless, read-only lens session per lens, each on Opus as
+`ai-workflow:peer-reviewer`. It copies each lens's final message into the panel folder, counts
+the rounds, and relays to you. Lenses never message each other or you; the UI is the only relay.
 
-- **Headless:** call `aiw ask` with a quoted heredoc (question text may embed arbitrary text):
+- **Started with `--root <panel_id> <artifact>`** (no authoring session existed): read the
+  artifact at that path; it is what the panel reviews. Then end your turn so the first round
+  runs. Do not review it yourself.
+- **Resumed with a round** (all lens verdicts of the round, each ending in its `Verdict:` line):
+  1. Read every lens's findings. Fix each blocker and major finding by editing the artifact
+     **in place**. For a doc, change the wording and never add implementation. For a change,
+     change the code, then update the artifact's Answer and Diff to match.
+  2. Answer each finding in a short list in your reply: `fixed`, or `dismissed` with a one-line
+     reason. A finding only the user can settle (evidence, priority, a product choice) is not
+     yours to decide: leave the artifact as is and list it for the user.
+  3. Address minor findings when cheap; the same list answers them.
+  4. End your turn. The UI then asks the same lenses to re-review the revised artifact. You do
+     not ask them, and you do not start another round yourself.
+- **Every lens says `Verdict: approve`:** say the panel approved, list any minor findings and what you
+  did with them, and end. If you changed the artifact after that, say the change was not reviewed.
+- **Cap reached** (the UI says the cap of 5 rounds was reached): stop. Do not revise further and
+  do not loop. List the open findings, per lens with its latest verdict, for the human. Say
+  plainly that the panel did not approve. Never approve anything yourself.
 
-  ```
-  aiw ask <<'EOF'
-  {"questions":[{"header":"...","question":"...","multiSelect":false,"options":[{"label":"...","description":"..."}]}]}
-  EOF
-  ```
+## Running it by hand (outside the UI)
 
-  List the recommended option first with `(Recommended)` on its label. Then end your turn
-  immediately and do nothing else; the answer arrives as your next message. Strip any
-  ` (Recommended)` suffix and take the same branch the interactive answer would. Free text that
-  names no option is feedback for that question, never an approval.
-- **Otherwise:** call AskUserQuestion exactly as written at the question.
+1. **Artifact.** Use the file named in the arguments. With none, build `peer-review-artifact.md`
+   in the scratchpad or a temp dir: `## Ask` (the user's request, verbatim), `## Answer`
+   (your final answer and anything you did not do), `## Diff` (`git diff` of the change; confirm
+   the start point with the user, never guess it, and leave out secret files and lockfiles).
+2. **Lenses.** `--lenses` if given, otherwise `critical`. The pool is critical, ceo, cto,
+   security, qa, ux, performance. For a doc a PRD offers all seven; pick the ones that fit. The
+   lens descriptions are `peer_review.lenses` in `run-engine/config.json`; paste each lens's
+   `prompt` into its subagent's prompt.
+3. **Round.** In one message, spawn one `ai-workflow:peer-reviewer` subagent per lens, in
+   parallel, each with `model: "opus"`. Each prompt names: the artifact path, the lens and its
+   description, the round number, and from round 2 on that the artifact was revised. Tell it to
+   end with `Verdict: approve` or `Verdict: changes`.
+4. **Read.** Take each subagent's final message; its last line is the verdict. A message with no
+   `Verdict:` line is not a verdict: re-spawn that lens once, and if it is still missing, stop and
+   say which lens.
+5. **Revise.** If any lens says `changes`, revise the artifact in place as in the root procedure
+   above, answer every finding, and go to 3 with the next round number.
+6. **Stop** when every lens approves in the same round, or after round 5. At the cap, list the
+   open findings for the user and do not approve anything. A finding only the user can settle
+   goes to the user, never into the artifact as a guess.
 
-## Setup
-
-- **Called with `--dir`:** use that `<review_dir>`; never mint another. A doc kind's artifact is
-  `<review_dir>/draft.md`. With no `--kind` (the web UI's custom prompt) the kind is `custom`:
-  build `<review_dir>/artifact.md` there, from the `ask.md` the server wrote, because the
-  session's peer review status is read from that dir.
-- **Standalone (`custom`):** `aiw peer-review new custom --slug <repo-name>` prints a fresh
-  `<review_dir>`; never reuse one from an earlier run. Then build `<review_dir>/artifact.md`
-  (below); it is the artifact.
-
-Print `review dir: <review_dir>` with every round's outcome, so a session resumed after a
-`/clear` or compaction can pass it back with `--dir`.
-
-### The change artifact (`custom`)
-
-`<review_dir>/artifact.md`, in this order:
-
-```
-# Change under review
-
-## Ask
-<what the user asked, verbatim>
-
-## Answer
-<your final answer: what you did and why, and any part of the Ask you did not do>
-
-## Decisions
-<the user's rulings on review findings, one line each; "None yet." at first>
-
-## Diff
-<the output of aiw peer-review diff, unedited>
-```
-
-- **Ask:** if `<review_dir>/ask.md` exists (the web UI wrote it at spawn), copy it verbatim.
-  Otherwise list the user's own prompts from this session that asked for the work, and confirm
-  them once: "Is this what you asked for?" with **"Yes, review against this (Recommended)"**
-  and **"Edit the Ask"** (a question needs two options or it is rejected unseen);
-  free text replaces it.
-- **Since:** use `--since` when given. Otherwise ask one question, "Review which changes?", with
-  **"Uncommitted changes only"** (`HEAD`), **"Everything not pushed (@{u})"** and **"Since a
-  commit I'll name"** (free text). Never pick a start point yourself.
-- **Diff:** `aiw peer-review diff --since <since> --repo <repo>`, pasted as printed. It already
-  drops secret-like files, binaries and lockfiles and caps a long diff; never add what it dropped.
-
-## Loop
-
-1. `aiw peer-review next <review_dir> --artifact <artifact> --kind <kind> --lenses <picked>`
-   (the first time; `--kind` and `--lenses` are ignored after round 1), plus `--prior <file>`
-   and `--more` when the steps below say so. It prints one JSON object; act on its `action`.
-2. **`review`**: dispatch one `ai-workflow:peer-reviewer` per lens in its `lenses`, in one
-   message so they run in parallel, each with `model: "opus"` (the reviewers run on Opus; you
-   keep your own model). Each dispatch says `artifact: peer-review`, the lens name,
-   `<review_dir>`, the round number and the repo path. Each reviewer reads its own checklist
-   from `<config>` and records its own verdict with `aiw peer-review verdict`; you only read
-   `round-<n>/<lens>.json` afterwards. You never write, copy or edit a verdict. Then go to 1.
-3. **`wait`**: a reviewer returned without a recorded verdict. Dispatch the lenses it lists once
-   more; if `next` still says `wait` for a lens, stop and report which one.
-4. **`revise`**: fix every finding in `blockers`. For a doc kind, edit the draft's wording. For
-   `custom`, change the code, then rebuild `artifact.md` (rerun `diff`, correct the Answer if
-   its claims changed, keep the Decisions). Then answer every finding of the round (`blockers`
-   and `advisory`): `fixed`, or `dismissed` with a one-line reason. Write that list
-   (`[{lens, id, disposition, reason}]`) to `<review_dir>/round-<n>/prior.json` and go to 1 with
-   `--prior` naming it.
-5. **`ask`, reason `decision` or `dispute`**: ask the user each finding in `decisions`, and each
-   in `disputes` (a finding you dismissed, or the user already decided, that its lens raised
-   again: show your reason and the reviewer's, and ask which holds). One question per finding.
-   Record each answer in the artifact's `## Decisions` as
-   `- <decision> — <why> (review: <lens> <id>)`, with disposition `decided`; a dispute the user
-   settles either way is `decided` too, and if they side with the reviewer, also fix it. The
-   recorded ruling changes the artifact, which opens the next round, and a reviewer can't
-   re-raise a decided finding without new evidence. A round can carry both decisions and
-   blockers (or disputes and blockers): ask first, then fix the blockers as in 4. Then write
-   `round-<n>/prior.json` answering every finding of the round (decisions and disputes
-   `decided`, blockers and advisory as in 4) and go to 1 with `--prior`; `next` refuses a new
-   round that leaves any finding unanswered.
-6. **`ask`, reason `cap`**: the round budget is spent and a lens still blocks. Ask one question:
-   "<lens> still blocks on: <items>." with the choices **"Accept as known gaps"**, **"One more
-   round"** (revise as in 4, then go to 1 with `--prior` and `--more`) and **"Stop"**. In Flow
-   auto mode, stop here and report: the run never accepts gaps on the user's behalf.
-7. **`done`**: list `advisory` (minor findings). Answer each as in 4. If you changed the
-   artifact, go to 1 with `--prior` so the change is reviewed too; past the budget, say that
-   those changes were not reviewed.
-
-**Finish.** End with one line, `peer review: <approved | known gaps accepted | stopped> after
-<n> round(s); review dir: <review_dir>`, then the lenses, each lens's last verdict, each advisory
-finding with its disposition, the decisions recorded and any known gaps. A caller reads this
-line: on `stopped` it files nothing; on `known gaps accepted` it records the gaps where its own
-instructions say (for `/create-prd`, under `## Open questions`). Standalone, the gaps go in your final
-answer to the user.
-
-## With `--herdr`
-
-The reviewers run in herdr tabs instead of subagents; everything else above is the same,
-including the verdict path (`aiw peer-review verdict --file -`) and every rule. Headless runs
-(the web UI) ignore `--herdr` and use subagents. If `command -v herdr` fails, use subagents and
-say so.
-
-- Once, before round 1: `herdr pane current` for the workspace id, then for each lens
-  `herdr tab create --workspace <ws> --cwd <repo> --label rv-<lens>` and
-  `herdr agent start rv-<lens> --kind claude --pane <pane> -- --agent ai-workflow:peer-reviewer --model opus --disallowedTools "Write,Edit,NotebookEdit"`,
-  so each tab runs as the reviewer agent on Opus with no file-editing tools. Its shell commands
-  follow your normal permissions, so a shell can still write files (in bypass mode, without
-  asking); that is not read-only. It searches code with `rg` through the shell.
-- Each round, step 2 becomes: `herdr agent prompt rv-<lens> "<the same dispatch text>"` for
-  every lens (no `--wait`, so they work in parallel), then for each lens
-  `herdr agent wait rv-<lens> --until idle --until done --until blocked`. On `blocked`, tell the
-  user which tab needs them (usually a permission prompt) and wait again; it does not count as
-  a missing verdict. Right after the prompt the tab can still read `idle`, so `wait` may return
-  before the reviewer starts: if `round-<n>/<lens>.json` is missing, wait again before
-  re-dispatching.
-- The tabs stay open across rounds, so a reviewer remembers its earlier rounds; `prior` stays
-  the record of what was settled. The user can talk to any tab between rounds.
+**Finish** with one line, `peer review: <approved | stopped> after <n> round(s)`, then each lens's
+last verdict, each minor finding and its disposition, and any open findings.
 
 ## Self-improve
 

@@ -10,7 +10,6 @@ from __future__ import annotations
 import os
 import re
 import secrets
-import shutil
 import subprocess
 import sys
 import threading
@@ -19,6 +18,7 @@ import time
 import dispatch
 import peer_review as peer_review_mod
 import ui_board
+import ui_panel
 import ui_runner
 import ui_sessions
 import ui_settings
@@ -271,20 +271,22 @@ def _prompt(body: dict) -> str:
     return text
 
 
-def _custom_review(text: str, cwd: str, lenses: list) -> tuple[str, str]:
-    """A fresh review dir holding the prompt verbatim as ask.md, and the prompt with one line asking for the review.
+def _custom_review(text: str, lenses: list) -> tuple[str, str]:
+    """The prompt plus one line, and the artifact file the panel's lenses will read.
 
-    The line is not a gate (the session skips permissions and could ignore it); the session's
-    peer_review post-check reads the dir's round state to show whether the review ran.
+    The file starts as `## Ask` (the prompt verbatim); the line tells the session to append its Answer and
+    Diff when done. The panel starts its lens sessions once that session's turn ends (ui_panel).
     """
     name = f"ui-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}-{secrets.token_hex(3)}"
-    review_dir = peer_review_mod.make_dir("custom", name)
-    with open(os.path.join(review_dir, "ask.md"), "w", encoding="utf-8") as fh:
-        fh.write(text)
-    sha = _git(cwd, "rev-parse", "HEAD")
-    since = f" --since {sha}" if sha else ""
-    line = f"When the work is done, run the ai-workflow:peer-review skill with --dir {review_dir} --lenses {','.join(lenses)}{since}."
-    return f"{text}\n\n{line}", review_dir
+    path = os.path.join(peer_review_mod.data_dir(), "peer-review", "asks", f"{name}.md")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(f"## Ask\n\n{text}\n")
+    line = (
+        f"When the work is done, append `## Answer` (what you did and why) and `## Diff` (the `git diff` of your "
+        f"change) to {path}: the {', '.join(lenses)} review panel reads that file."
+    )
+    return f"{text}\n\n{line}", path
 
 
 def _remember(slug, cwd) -> None:
@@ -414,9 +416,9 @@ def start_session(body: dict):
                     "link": link,
                     "href": f"/api/sessions/{dup['id']}",
                 }
-        review_dir = None
+        artifact = None
         if lenses and kind == "custom":
-            text, review_dir = _custom_review(text, cwd, lenses)
+            text, artifact = _custom_review(text, lenses)
         try:
             res = ui_runner.start(
                 text,
@@ -426,13 +428,19 @@ def start_session(body: dict):
                 gate_questions=True,
                 **({"batch": (batch, BATCH_MAX)} if batch else {}),
             )
-            if review_dir:
-                res = ui_sessions.update(res["id"], peer_review_dir=review_dir)  # the post-check reads it
+            if artifact:
+                try:
+                    ui_panel.start(cwd, artifact, lenses, root_session=res["id"], after_root=True)
+                except (ValueError, ui_runner.RunnerError, OSError):
+                    ui_runner.stop(res["id"])
+                    raise
+                res = ui_sessions.load(res["id"])  # now linked to its panel
             if no_repo:
                 res = ui_sessions.update(res["id"], no_repo=True, vault_folder=vault_folder)
             _remember(slug, cwd)
             return 201, res
         except (ValueError, ui_runner.RunnerError) as exc:
-            if review_dir:
-                shutil.rmtree(review_dir, ignore_errors=True)
+            if artifact:
+                if os.path.exists(artifact):
+                    os.unlink(artifact)
             return (400 if isinstance(exc, ValueError) else 502), {"error": str(exc)}

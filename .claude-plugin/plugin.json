@@ -1,6 +1,6 @@
 {
   "name": "ai-workflow",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "The dev-workflow process in one plugin: PRD, tasks, refined issues, /implement-issue, /pr-review, plus grind, peer review, herdr dispatch and the aiw ui.",
   "author": {
     "name": "Blubird Interactive"

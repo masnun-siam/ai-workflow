@@ -37,7 +37,7 @@ _Avoid_: Review loop
 One review angle (critical, CEO, CTO, security, QA, UX, performance). The `peer-reviewer` agent is a lens: read-only, on Opus, one lens per instance.
 
 **Peer review panel**:
-The lenses picked for one artifact (a draft PRD, or a change: Ask, Answer and Diff), run by `/peer-review` until every picked lens approves or the round cap is reached. A **dispute** is a finding the author dismissed that its lens raises again; the user settles it.
+The lenses picked for one artifact (a draft PRD, or a change: Ask, Answer and Diff), run by `/peer-review` until every picked lens approves or the round cap is reached. The UI starts one lens session per lens, relays verdicts to the root session and caps the loop at 5 rounds; the user decides after that.
 _Avoid_: Review (on its own, that means a PR review)
 
 **Dump**:

@@ -156,8 +156,11 @@ def start(
     gate_questions=False,
     claude_cmd=None,
     batch=None,
+    agent=None,
+    model=None,
 ) -> dict:
-    """batch: (id, max) runs at most `max` sessions of that batch at once; the rest wait as "queued"
+    """agent/model: `--agent` / `--model` for the session (peer-review lens sessions).
+    batch: (id, max) runs at most `max` sessions of that batch at once; the rest wait as "queued"
     and start, oldest first, as earlier ones end (see release_batch)."""
     if not isinstance(command_text, str) or not command_text.strip():
         raise ValueError("command_text must be a non-empty string")
@@ -167,6 +170,7 @@ def start(
     if not isinstance(path, str) or not os.path.isdir(path):
         raise ValueError(f"cwd is not a directory or known checkout slug: {cwd!r}")
 
+    extra_args = [*extra_args, *(["--agent", agent] if agent else []), *(["--model", model] if model else [])]
     claude_cmd = claude_cmd or ui_settings.default_cmd()
     sid = ui_sessions.create(command_text, cwd, link, claude_cmd=claude_cmd)["id"]
     if batch:

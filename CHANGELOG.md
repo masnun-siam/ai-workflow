@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.1.0 — 2026-10-20
+
+### Added
+
+- **Peer-review panels as lens sessions.** `POST /api/review` starts one read-only `peer-reviewer`
+  session (Opus) per picked lens, linked to a root session. When every lens has reported, the UI
+  resumes the root with the round's verdicts; the root revises the artifact in place and the same
+  lenses re-review. The panel ends `approved`, or `cap reached` after 5 rounds with the open
+  findings kept for you. A failed lens is re-run or dropped with `POST /api/review/<panel>/lens`.
+- The custom prompt box's lens picker starts such a panel with that session as root.
+
+### Changed
+
+- Lens verdicts reach the root through the UI (each lens's final message, ending
+  `Verdict: approve|changes`, is saved as `round-<n>/<lens>.md`). Built-in messaging between
+  `--print` sessions was tested and does not reach a session whose turn has ended.
+
+### Removed
+
+- `aiw peer-review` and verdict validation (quote, stale-sha and schema checks). The
+  `peer_review` config keeps only the lenses, their prompts, the offers per kind and the round cap.
+
 ## 2.0.0 — 2026-10-20
 
 ai-workflow drops its own issue-to-PR machine and adopts the dev-workflow process:

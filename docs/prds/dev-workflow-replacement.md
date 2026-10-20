@@ -473,6 +473,7 @@ None.
 - 2026-10-20 — FR-8 removes four more orphaned data paths; issues affected: #324
 - 2026-10-20 — Lens re-run/drop endpoint and fresh root session (FR-13); `aiw autopilot` verb (FR-11); `needs_cleanup` shape and non-refined issues off Delivery (FR-16, FR-20); issues affected: #325, #326
 - 2026-10-20 — Session cleanup moves to `/api/sessions/cleanup` (FR-22, done in E1); issues affected: #324, #326
+- 2026-10-20 — FR-14 spike (Claude Code 2.1.304): built-in messaging does not work for UI-started `--print` sessions. A `--print` session gets SendMessage/ListAgents and sees live peers, but once a session's turn ends it leaves the peer list, a message to it has no target and nothing is queued, and a `--resume` of it receives nothing. Transport chosen: UI relay — each lens writes `round-<n>/<lens>.md` and the UI resumes the root with the round's verdicts. Session start mode is unchanged (`--print`); issues affected: #325
 
 ## Related
 
