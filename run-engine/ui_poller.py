@@ -38,6 +38,7 @@ and 50 open PRs; add cursor paging if a repo outgrows them (it would break the o
 from __future__ import annotations
 
 import json
+import re
 import sys
 import threading
 import time
@@ -66,12 +67,12 @@ query($owner: String!, $name: String!) {{
     }}
     mergedPrs: pullRequests(states: MERGED, first: 50, orderBy: {{field: UPDATED_AT, direction: DESC}}) {{
       nodes {{
-        number title url mergedAt headRefName
+        number title url mergedAt headRefName body
         closingIssuesReferences(first: 10) {{ nodes {{ number parent {{ number }} }} }}
       }}
     }}
     openPrs: pullRequests(states: OPEN, first: 50, orderBy: {{field: UPDATED_AT, direction: DESC}}) {{
-      nodes {{ title {_PR} }}
+      nodes {{ title body {_PR} closingIssuesReferences(first: 10) {{ nodes {{ number }} }} }}
     }}
   }}
 }}
@@ -99,6 +100,22 @@ def _pr(n: dict) -> dict:
         "head": n.get("headRefName"),
         "ci": ci,
     }
+
+
+# GitHub links "Closes #n" to the issue only when the PR targets the default branch. A repo whose PRs go
+# to staging gets no link, so the board also reads the keyword in the body and an `issue-<n>-` branch.
+_CLOSES = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s+#(\d+)\b", re.I)
+_BRANCH = re.compile(r"^issue-(\d+)(?:-|$)")
+
+
+def _refs(p: dict) -> list:
+    """Issue numbers a PR is for: GitHub's closing links, closing keywords in its body, its branch name."""
+    out = [c["number"] for c in _nodes(p.get("closingIssuesReferences"))]
+    out += [int(n) for n in _CLOSES.findall(p.get("body") or "")]
+    m = _BRANCH.match(p.get("headRefName") or "")
+    if m:
+        out.append(int(m.group(1)))
+    return list(dict.fromkeys(out))
 
 
 def _parse_ts(s):
@@ -137,7 +154,11 @@ def normalize(response: dict, now: datetime | None = None) -> dict:
         at = _parse_ts(p.get("mergedAt"))
         if not at or at < cutoff:
             continue
-        closes = _nodes(p.get("closingIssuesReferences"))
+        linked = {c["number"]: c for c in _nodes(p.get("closingIssuesReferences"))}
+        closes = _refs(p)
+        parent = (linked.get(closes[0], {}).get("parent") or {}).get("number") if closes else None
+        if closes and parent is None:  # not linked by GitHub: the issue, still open, names its epic
+            parent = next((i["parent"] for i in issues if i["n"] == closes[0]), None)
         merged.append(
             {
                 "n": p["number"],
@@ -145,13 +166,34 @@ def normalize(response: dict, now: datetime | None = None) -> dict:
                 "url": p.get("url"),
                 "merged_at": p["mergedAt"],
                 "head": p.get("headRefName"),
-                "closes": [c["number"] for c in closes],
-                "epic": ((closes[0].get("parent") or {}).get("number") if closes else None),
+                "closes": closes,
+                "epic": parent,
             }
         )
-    open_prs = [{**_pr(p), "title": p.get("title") or ""} for p in _nodes(repo.get("openPrs"))]
-    for p in open_prs:
-        p.pop("merged_at"), p.pop("state")
+    by_n = {i["n"]: i for i in issues}
+    open_prs = []
+    for node in _nodes(repo.get("openPrs")):
+        pr = {**_pr(node), "state": "OPEN"}
+        for n in _refs(node):  # attach to its issue when GitHub did not
+            if n in by_n and not any(x["n"] == pr["n"] for x in by_n[n]["prs"]):
+                by_n[n]["prs"].append(dict(pr))
+        open_prs.append(
+            {k: v for k, v in pr.items() if k not in ("merged_at", "state")} | {"title": node.get("title") or ""}
+        )
+    for m in merged:  # a PR merged into a non-default branch leaves its issue open: mark it merged there
+        for n in m["closes"]:
+            if n in by_n and not any(x["n"] == m["n"] for x in by_n[n]["prs"]):
+                by_n[n]["prs"].append(
+                    {
+                        "n": m["n"],
+                        "url": m["url"],
+                        "draft": False,
+                        "state": "MERGED",
+                        "merged_at": m["merged_at"],
+                        "head": m["head"],
+                        "ci": "success",
+                    }
+                )
     return {"issues": issues, "merged": merged, "open_prs": open_prs}
 
 

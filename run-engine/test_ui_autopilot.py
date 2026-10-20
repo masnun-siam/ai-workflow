@@ -109,6 +109,12 @@ assert ui_autopilot.tick("o/r", s, real, on, launch=L) == [] and L.bodies == []
 assert ui_autopilot.tick("o/r", s, real, {**on, "autopilot_cap": 3}, launch=L) == [4]
 print("  ok  live sessions with a checkout path and a link dict count against the cap")
 
+# an issue whose PR merged into staging is still open: autopilot never starts it again
+L = fresh()
+merged_pr = {"n": 70, "state": "MERGED", "draft": False, "url": "u", "merged_at": "x", "head": "h", "ci": "success"}
+assert ui_autopilot.tick("o/r", snap([EPIC, issue(2, prs=[merged_pr]), issue(3)]), [], on, launch=L) == [3]
+print("  ok  an issue with a merged PR is not started again")
+
 # stale, no epic on, blocked, open PR, epic off
 L = fresh()
 assert ui_autopilot.tick("o/r", snap([EPIC, issue(2)], stale=True), [], on, launch=L) == []

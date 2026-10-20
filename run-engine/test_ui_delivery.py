@@ -90,4 +90,9 @@ m = [{"n": 40, "title": "t", "url": "u40", "merged_at": "x", "head": "h", "close
 flag = {"uncommitted": ["f"], "unpushed": []}
 r = build(snap([epic], m), flags={7: flag})
 assert cards(r, 10)[7]["column"] == "merged" and cards(r, 10)[7]["needs_cleanup"] == flag
+# merged into staging: the issue stays open but its card is only in Merged, never back in Ready
+mp = {"n": 41, "url": "u41", "draft": False, "state": "MERGED", "merged_at": "x", "head": "h", "ci": "success"}
+m = [{"n": 41, "title": "t", "url": "u41", "merged_at": "x", "head": "h", "closes": [8], "epic": 10}]
+r = build(snap([epic, issue(8, parent=10, prs=[mp])], m))
+assert [c["column"] for c in cards(r, 10).values() if c["n"] == 8] == ["merged"], cards(r, 10)
 print("ok")
