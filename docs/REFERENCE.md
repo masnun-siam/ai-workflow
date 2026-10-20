@@ -79,7 +79,8 @@ auto-resume after a rate limit, and the limit timer releases queued ones after a
 that has not finished has **Stop** on its page (`POST /api/sessions/<id>/stop`, after a confirm).
 
 **Repo picker.** One picker for the registered checkouts (`checkouts.json`), searchable by name,
-owner, project or path, recent first. A typed absolute path or **Browse for a folder…** registers a
+owner, project or path, recent first. The picked repo is shared by Planning, Delivery and New run
+and kept in the URL as `?repo=owner/name`, so a link opens on that repo. A typed absolute path or **Browse for a folder…** registers a
 checkout. **No repo yet** runs a session in the notes vault for create-prd and dump.
 
 **Settings.** Named `claude` commands a session can launch with (one per account), the notes

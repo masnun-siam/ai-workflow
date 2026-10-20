@@ -1,12 +1,11 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { poll } from './app.js';
-import { loadPref, savePref } from './fmt.js';
+import { currentRepo, setRepo } from './fmt.js';
 import { RepoPicker, loadRepoList } from './repopicker.js';
 
 const html = htm.bind(h);
 
-export const REPO_PREF = 'aiw.boardRepo';
 // ponytail: one cadence. The server polls GitHub at 60s/15s but serves boards from memory, so a flat 15s costs nothing.
 export const BOARD_POLL_MS = 15000;
 
@@ -46,7 +45,7 @@ export const fetchedText = (t) => {
 
 // <BoardShell title path render=${(data, { repo, reload }) => vnode}>. Keeps the last data when a poll fails.
 export class BoardShell extends Component {
-  state = { repo: loadPref(globalThis.localStorage, REPO_PREF), repos: [], data: null, error: false };
+  state = { repo: currentRepo(), repos: [], data: null, error: false };
 
   componentDidMount() {
     loadRepoList(true).then((list) => !this.gone && this.setState({ repos: list.map((r) => ({ value: r.slug, name: r.name || r.slug, path: r.path || '' })) }));
@@ -83,7 +82,7 @@ export class BoardShell extends Component {
   };
 
   pick = ({ repo }) => {
-    savePref(globalThis.localStorage, REPO_PREF, repo || '');
+    setRepo(repo || '');
     this.setState({ repo: repo || '', data: null, error: false }, () => this.start());
   };
 

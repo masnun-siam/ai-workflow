@@ -13,6 +13,7 @@
 - UI: **Stop** on a session page for a session that has not finished. `skill-feedback` in New run.
   The board's stale banner says why (rate limit with retry time, or the fetch error) and has a
   **Refresh**.
+- UI: one repo choice for every page, in the URL as `?repo=owner/name`; New run opens on it.
 
 ### Fixed
 

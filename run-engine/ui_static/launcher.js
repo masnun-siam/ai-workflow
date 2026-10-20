@@ -1,7 +1,7 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { toast } from './toast.js';
-import { clockText, loadPref, savePref } from './fmt.js';
+import { clockText, currentRepo, loadPref, savePref, setRepo } from './fmt.js';
 import { RepoPicker } from './repopicker.js';
 import { CreateRepoDialog, FolderChooser, NO_REPO_COMMANDS, folderOf } from './vault.js';
 
@@ -283,7 +283,7 @@ export class Launcher extends Component {
     } catch {
       failed = true;
     }
-    const last = loadLastRepo(globalThis.localStorage);
+    const last = currentRepo() || loadLastRepo(globalThis.localStorage);
     const known = repos.find((r) => r.value === last);
     this.setState({
       repos,
@@ -483,7 +483,7 @@ export class Launcher extends Component {
       <form class="launcher panel" onSubmit=${this.onSubmit} noValidate>
         <h1>New run</h1>
         <label for="repo-path">${repos.length ? 'Repo' : 'Repo path'}</label>
-        ${hostRepoPicker(this, { repos, repo, manual, path, canBrowse, vault: this.state.vault }, { id: 'repo-path', error: repoMsg ? 'repo-error' : null, allowVault: true, allowCreate: true, after: () => this.setState({ errors: { ...this.state.errors, repo: undefined }, result: null }) })}
+        ${hostRepoPicker(this, { repos, repo, manual, path, canBrowse, vault: this.state.vault }, { id: 'repo-path', error: repoMsg ? 'repo-error' : null, allowVault: true, allowCreate: true, after: () => { if (!this.state.manual && !this.state.vault && this.state.repo) setRepo(this.state.repo); this.setState({ errors: { ...this.state.errors, repo: undefined }, result: null }); } })}
         ${repoMsg ? html`<p id="repo-error" role="alert" class="error">${repoMsg}</p>` : null}
         ${this.state.vault && !NO_REPO_COMMANDS.has(command) && !repoMsg && html`<p class="note">${command} needs a repo. With no repo yet, use create-prd or dump here, or the custom prompt.</p>`}
         ${this.state.vault && html`<${FolderChooser} id="vf" text=${NO_REPO_COMMANDS.has(command) && args.trim() ? args : text} value=${this.state.vf || { project: '', feature: '' }}

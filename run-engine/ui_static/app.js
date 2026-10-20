@@ -8,7 +8,7 @@ import { Session } from './session.js';
 import { Settings } from './settings.js';
 import { Planning } from './planning.js';
 import { Delivery } from './delivery.js';
-import { clockText } from './fmt.js';
+import { clockText, currentRepo, withRepo, savePref, REPO_KEY } from './fmt.js';
 import { UsageGauge } from './usage.js';
 import { toast } from './toast.js';
 import { CleanupDialog } from './cleanup.js';
@@ -32,6 +32,12 @@ export function parseRoute(hash) {
   } catch {
     return { name: 'notfound', params: {} };
   }
+  const repo = query.get('repo') || '';
+  const r = parseRoutePath(path, seg);
+  return repo ? { ...r, repo } : r;
+}
+
+function parseRoutePath(path, seg) {
   if (path === '' || path === '/') return { name: 'planning', params: {} };
   const [a, ...rest] = seg;
   if (a === 'new' && !rest.length) return { name: 'new', params: {} };
@@ -139,10 +145,10 @@ function View({ route, sessions, limits }) {
       return html`<${Launcher} limits=${limits} />`;
     case 'settings':
       return html`<${Settings} />`;
-    case 'planning':
-      return html`<${Planning} />`;
+    case 'planning': // keyed by ?repo= so a pasted link for another repo remounts the board
+      return html`<${Planning} key=${route.repo || ''} />`;
     case 'delivery':
-      return html`<${Delivery} />`;
+      return html`<${Delivery} key=${route.repo || ''} />`;
     case 'sessions':
       return html`<${History} sessions=${sessions} />`;
     default:
@@ -153,8 +159,12 @@ function View({ route, sessions, limits }) {
 export class App extends Component {
   state = { route: parseRoute(globalThis.location?.hash), sessions: null, limits: {}, usage: {}, afk: null, commands: [], offline: false, notif: notifyState(), palette: false, sheet: false, cleanup: null, peek: null };
 
+  onRepo = () => this.forceUpdate(); // nav links carry the picked repo
+
   onHash = () => {
-    this.setState({ route: parseRoute(location.hash) });
+    const route = parseRoute(location.hash);
+    if (route.repo) savePref(globalThis.localStorage, REPO_KEY, route.repo); // a shared link becomes the pick
+    this.setState({ route });
     this.loadCommands();
   };
 
@@ -212,7 +222,9 @@ export class App extends Component {
   onCleanup = (e) => this.openDialog({ palette: false, sheet: false, cleanup: { only: e.detail?.key || null } });
 
   componentDidMount() {
+    if (this.state.route.repo) savePref(globalThis.localStorage, REPO_KEY, this.state.route.repo);
     addEventListener('hashchange', this.onHash);
+    addEventListener('aiw:repo', this.onRepo);
     addEventListener('keydown', this.onKey);
     addEventListener('aiw:cleanup', this.onCleanup);
     addEventListener('aiw:peek', this.onPeek);
@@ -259,6 +271,7 @@ export class App extends Component {
   componentWillUnmount() {
     this.gone = true;
     removeEventListener('hashchange', this.onHash);
+    removeEventListener('aiw:repo', this.onRepo);
     removeEventListener('keydown', this.onKey);
     removeEventListener('aiw:cleanup', this.onCleanup);
     removeEventListener('aiw:peek', this.onPeek);
@@ -276,7 +289,7 @@ export class App extends Component {
       <header>
         <a class="brand" href="#/">aiw ui</a>
         <nav aria-label="Main">
-          ${NAV.map(([name, href, label]) => html`<a href=${href} aria-current=${route.name === name ? 'page' : undefined}>${label}</a>`)}
+          ${NAV.map(([name, href, label]) => html`<a href=${withRepo(href, currentRepo())} aria-current=${route.name === name ? 'page' : undefined}>${label}</a>`)}
         </nav>
         <span class="spacer"></span>
         <button type="button" class="btn kbd-hint" aria-label="Open command palette" onClick=${() => this.openDialog({ palette: true, sheet: false })}>Search <kbd>⌘K</kbd></button>

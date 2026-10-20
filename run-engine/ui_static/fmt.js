@@ -79,6 +79,33 @@ export function loadPref(storage, key) {
   }
 }
 
+// The selected repo, shared by every page: `?repo=owner/name` in the hash wins (a bookmark or a
+// shared link), else the last pick. Older per-page keys are read once so nobody loses their choice.
+export const REPO_KEY = 'aiw.repo';
+export function hashRepo(hash) {
+  const q = String(hash || '').split('?')[1];
+  return (q && new URLSearchParams(q).get('repo')) || '';
+}
+export function currentRepo(storage = globalThis.localStorage, hash = globalThis.location?.hash) {
+  return hashRepo(hash) || loadPref(storage, REPO_KEY) || [loadPref(storage, 'aiw.boardRepo'), loadPref(storage, 'aiw.lastRepo')].find((v) => v && !v.startsWith('/')) || '';
+}
+// `hash` with its ?repo= set (or dropped for ''); the slash stays readable.
+export function withRepo(hash, repo) {
+  const [path, q = ''] = String(hash || '#/').split('?');
+  const sp = new URLSearchParams(q);
+  if (repo) sp.set('repo', repo);
+  else sp.delete('repo');
+  const s = sp.toString().replace(/%2F/gi, '/');
+  return s ? `${path}?${s}` : path;
+}
+// Pick a repo for every page: remember it and put it in the URL without a navigation.
+export function setRepo(repo, storage = globalThis.localStorage) {
+  savePref(storage, REPO_KEY, repo || '');
+  const loc = globalThis.location;
+  if (loc && globalThis.history) globalThis.history.replaceState(null, '', withRepo(loc.hash || '#/', repo));
+  globalThis.dispatchEvent?.(new Event('aiw:repo'));
+}
+
 export function savePref(storage, key, value) {
   try {
     storage.setItem(key, value);
