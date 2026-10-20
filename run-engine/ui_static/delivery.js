@@ -3,6 +3,8 @@ import htm from './vendor/htm.mjs';
 import { BoardShell } from './boardshell.js';
 import { ghChips } from './ghstatus.js';
 import { CardActions, LaneAutopilot } from './delivery_actions.js';
+import { IssueLink } from './issue.js';
+import { PrLink } from './pr.js';
 
 const html = htm.bind(h);
 
@@ -29,12 +31,13 @@ export const ciChip = (pr) => (pr && pr.ci ? ghChips({ pr: { state: 'OPEN', ci: 
 // Card. Plain function so tests can walk the tree. `ctx` = { repo, autoGrind, reload }.
 export function deliveryCard(c, ctx = {}) {
   const blocked = (c.blocked_by || []).length > 0;
+  const [owner, repo] = String(ctx.repo || '').split('/');
   return html`<article class=${blocked ? 'bcard is-blocked' : 'bcard'} key=${c.n}>
-    <div class="bcard-title">#${c.n} ${c.title}</div>
+    <div class="bcard-title">${owner && repo ? html`<${IssueLink} owner=${owner} repo=${repo} issue=${c.n}>#${c.n} ${c.title}<//>` : `#${c.n} ${c.title}`}</div>
     <div class="bcard-meta">
       ${c.priority && html`<span class="chip gh-label">${c.priority}</span>`}
       ${blocked && html`<span class="lock" title="Cannot start until these close"><span aria-hidden="true">🔒</span> Blocked by ${c.blocked_by.map((n) => `#${n}`).join(', ')}</span>`}
-      ${c.pr && html`<span>PR #${c.pr.n}${c.pr.draft ? ' (draft)' : ''}</span>`}
+      ${c.pr && html`<${PrLink} url=${c.pr.url}>PR #${c.pr.n}${c.pr.draft ? ' (draft)' : ''}<//>`}
       ${ciChip(c.pr).map((x) => html`<span class=${'chip gh-' + x.tone}>${x.text}</span>`)}
       ${c.session && html`<a class="chip chip-running" href=${`#/session/${encodeURIComponent(c.session.id)}`}>session</a>`}
       ${c.grind_round ? html`<span class="chip chip-grind-running">grind round ${c.grind_round}</span>` : null}

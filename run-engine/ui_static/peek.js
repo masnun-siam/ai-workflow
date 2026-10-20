@@ -1,6 +1,6 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
-import { formatWhen } from './fmt.js';
+import { formatWhen, sendJson } from './fmt.js';
 
 const html = htm.bind(h);
 
@@ -75,7 +75,7 @@ export class Peek extends Component {
           ${data && html`<span class=${`iss-state ${i.stateClass}`}>${i.state}</span>`}
         </div>
         <h2 id="iss-title" class="iss-title">${i.title}</h2>
-        ${data && children(data)}
+        ${data && children(data, () => this.fetch(true))}
         ${!data && html`<div class="iss-scroll" aria-busy=${busy}>
           ${busy && html`<p role="status" class="muted">Loading…</p>`}
           ${error && html`<p role="alert" class="error">${error} <button type="button" class="btn btn-sm" onClick=${() => this.fetch(true)}>Retry</button></p>`}
@@ -87,6 +87,43 @@ export class Peek extends Component {
           <button type="button" class="btn" onClick=${onClose}>Close <kbd>Esc</kbd></button>
           <a class="btn btn--primary" data-autofocus href=${i.url} target="_blank" rel="noopener noreferrer">Open on GitHub ↗</a>
         </div>
+      </div>
+    </div>`;
+  }
+}
+
+// The drawer's write bar: a comment box plus the item's buttons. Each button is {label, path, body,
+// confirm?, primary?}; `path` is appended to `api` (e.g. '/state'). On success the drawer re-reads GitHub.
+export class Actions extends Component {
+  state = { text: '', busy: '', err: '', note: '' };
+
+  run = async (label, url, body, confirmText) => {
+    if (confirmText && globalThis.confirm && !globalThis.confirm(confirmText)) return;
+    this.setState({ busy: label, err: '', note: '' });
+    const r = await sendJson('POST', url, body);
+    if (this.gone) return;
+    this.setState((s) => ({ busy: '', err: r.ok ? '' : r.error, note: r.ok ? `${label}: done` : '', text: r.ok && 'text' in body ? '' : s.text }));
+    if (r.ok) {
+      forgetPeek(this.props.api);
+      this.props.reload();
+    }
+  };
+
+  componentWillUnmount() {
+    this.gone = true;
+  }
+
+  render({ api, buttons }, { text, busy, err, note }) {
+    return html`<div class="iss-act">
+      <label class="sr-only" for="iss-comment">Comment</label>
+      <textarea id="iss-comment" class="field" placeholder="Leave a comment (markdown)" maxlength="65536" value=${text}
+        onInput=${(e) => this.setState({ text: e.target.value })}
+        onKeyDown=${(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && text.trim()) { e.preventDefault(); this.run('Comment', `${api}/comment`, { text }); } }}></textarea>
+      <div class="iss-act-row">
+        <button type="button" class="btn" disabled=${!text.trim() || !!busy} onClick=${() => this.run('Comment', `${api}/comment`, { text })}>${busy === 'Comment' ? 'Posting…' : 'Comment'}</button>
+        ${buttons.map((b) => html`<button type="button" class=${b.primary ? 'btn btn--primary' : 'btn'} disabled=${!!busy} onClick=${() => this.run(b.label, api + b.path, b.body || {}, b.confirm)}>${busy === b.label ? 'Working…' : b.label}</button>`)}
+        ${err && html`<span role="alert" class="error">${err}</span>`}
+        ${note && html`<span role="status" class="muted">${note}</span>`}
       </div>
     </div>`;
   }

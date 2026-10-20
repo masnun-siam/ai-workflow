@@ -1,7 +1,7 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
 import { formatWhen } from './fmt.js';
-import { Peek, PeekLink, Md, Labels, Who } from './peek.js';
+import { Peek, PeekLink, Md, Labels, Who, Actions } from './peek.js';
 
 const html = htm.bind(h);
 
@@ -22,7 +22,32 @@ const FILE_MARK = { added: ['new', 'ok'], removed: ['deleted', 'bad'], renamed: 
 
 export const PrDialog = ({ owner, repo, pr, onClose }) => html`
   <${Peek} api=${`/api/pulls/${owner}/${repo}/${pr}`} refText=${`${owner}/${repo} #${pr}`} fallbackTitle=${`Pull request #${pr}`}
-    fallbackUrl=${`https://github.com/${owner}/${repo}/pull/${pr}`} info=${info} wide onClose=${onClose}>${(d) => html`<${PrBody} d=${d} />`}<//>`;
+    fallbackUrl=${`https://github.com/${owner}/${repo}/pull/${pr}`} info=${info} wide onClose=${onClose}>${(d, reload) => html`<${PrBody} d=${d} />
+    <${Actions} api=${`/api/pulls/${owner}/${repo}/${pr}`} reload=${reload} buttons=${prButtons(d)} />`}<//>`;
+
+// What to warn about before a merge: failing or running checks, and the review state (each
+// reviewer's latest verdict counts). Merging is never blocked, only confirmed.
+export function mergeWarnings(d) {
+  const w = [];
+  const checks = d.checks || [];
+  const bad = checks.filter((c) => c.bucket === 'red').length;
+  const wait = checks.filter((c) => c.bucket === 'pending').length;
+  if (bad) w.push(`${bad} check${bad === 1 ? '' : 's'} failing`);
+  else if (wait) w.push(`${wait} check${wait === 1 ? '' : 's'} still running`);
+  const latest = {};
+  for (const c of d.conversation || []) if (c.kind === 'review' && ['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(c.verdict)) latest[c.author] = c.verdict;
+  const v = Object.values(latest);
+  if (v.includes('CHANGES_REQUESTED')) w.push('changes requested');
+  else if (!v.includes('APPROVED')) w.push('no approving review');
+  return w;
+}
+
+export function prButtons(d) {
+  if (d.state !== 'open') return []; // draft, merged and closed PRs cannot be merged
+  const w = mergeWarnings(d);
+  const confirm = `Merge PR #${d.number} into ${d.base} with a merge commit?${w.length ? `\n\nWarning: ${w.join(', ')}.` : ''}`;
+  return [{ label: 'Merge', path: '/merge', body: {}, confirm, primary: !w.length }];
+}
 
 const TABS = (d) => [
   ['overview', 'Overview'],

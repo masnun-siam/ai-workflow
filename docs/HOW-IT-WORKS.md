@@ -19,7 +19,7 @@ flowchart LR
 ```
 
 A human decides at three points: approving the PRD, deciding what to do at a peer-review cap, and merging.
-Nothing in this plugin merges a PR.
+Nothing in this plugin merges a PR on its own: the UI's **Merge** button is a human's click, behind a confirm.
 
 ## Stages
 

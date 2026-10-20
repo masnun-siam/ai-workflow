@@ -434,6 +434,7 @@ def shell_checks():
         "./cleanup.js",
         "./issue.js",
         "./pr.js",
+        "./prd.js",
         "./afk.js",
         "./usage.js",
     }, specs
@@ -1842,7 +1843,7 @@ try:
     rules = css_rules(read(os.path.join(STATIC, "app.css")).decode())
     # every remaining vh-sized scroll box is an overlay that starts near the top (audited in #221)
     vh_boxes = sorted({sel for m, sel, b in rules if re.search(r"max-height\s*:[^;]*\dvh\b", b)})
-    assert vh_boxes == [".dialog", ".dialog.issue"], vh_boxes
+    assert vh_boxes == [".dialog"], vh_boxes  # the issue/PR/PRD drawer is full height (100dvh)
     ok("css only audited overlays keep a vh max-height")
 
     # vendoring
@@ -1974,6 +1975,30 @@ out('launcher: lens lists in the body (named and custom), default critical, empt
   assert.deepEqual(await S.stopSession('a b', () => true), { ok: false, error: 'session already finished' });
   assert.deepEqual(calls, [['/api/sessions/a%20b/stop', 'POST']]);
   out('session: Stop shows until the session ends, confirms, then POSTs /stop and surfaces its error');
+}
+{
+  const I = await import(process.env.APP_URL.replace('app.js', 'issue.js'));
+  assert.deepEqual(I.issueButtons({ state: 'open' }).map((b) => [b.label, b.body.reason]), [['Close as completed', 'completed'], ['Close as not planned', 'not_planned']]);
+  assert.deepEqual(I.issueButtons({ state: 'closed' }).map((b) => b.body), [{ state: 'open' }]);
+  assert.deepEqual(I.issueButtons({ state: 'open', is_pr: true }), [], 'a PR is merged from its own drawer');
+  const P = await import(process.env.APP_URL.replace('app.js', 'pr.js'));
+  const rv = (author, verdict) => ({ kind: 'review', author, verdict });
+  const pr = (o) => ({ number: 9, base: 'master', state: 'open', checks: [{ bucket: 'green' }], conversation: [rv('a', 'APPROVED')], ...o });
+  assert.deepEqual(P.mergeWarnings(pr({})), []);
+  assert.deepEqual(P.mergeWarnings(pr({ checks: [{ bucket: 'red' }, { bucket: 'pending' }] })), ['1 check failing']);
+  assert.deepEqual(P.mergeWarnings(pr({ checks: [{ bucket: 'pending' }] })), ['1 check still running']);
+  assert.deepEqual(P.mergeWarnings(pr({ conversation: [] })), ['no approving review']);
+  assert.deepEqual(P.mergeWarnings(pr({ conversation: [rv('a', 'APPROVED'), rv('b', 'CHANGES_REQUESTED')] })), ['changes requested']);
+  assert.deepEqual(P.mergeWarnings(pr({ conversation: [rv('b', 'CHANGES_REQUESTED'), rv('b', 'APPROVED')] })), [], "a reviewer's latest verdict counts");
+  const [m] = P.prButtons(pr({ conversation: [] }));
+  assert.equal(m.path, '/merge'); assert.match(m.confirm, /merge commit\?[\s\S]*Warning: no approving review/); assert.equal(m.primary, false);
+  assert.equal(P.prButtons(pr({})).at(0).primary, true);
+  for (const st of ['draft', 'merged', 'closed']) assert.deepEqual(P.prButtons(pr({ state: st })), [], st);
+  const D = await import(process.env.APP_URL.replace('app.js', 'prd.js'));
+  assert.deepEqual(D.askBody('o/r', 'docs/prds/x.md', ' add CSV export '), { repo: 'o/r', command: 'create-prd', args: 'docs/prds/x.md add CSV export' });
+  assert.equal(D.savedText({ committed: true, commit: 'abc1234', branch: 'main' }), 'Committed abc1234 on main (not pushed)');
+  assert.equal(D.savedText({ committed: false }), 'No changes to save');
+  out('drawer: close/reopen with a reason, merge always offered on an open PR but warns on red CI or no approval; PRD edit and Ask Claude bodies');
 }
 """
 if shutil.which("node"):

@@ -127,3 +127,16 @@ export function addTokens(a, b) {
   if (!validTokens(b)) return a;
   return { input: (a?.input || 0) + b.input, cached: (a?.cached || 0) + (b.cached || 0), output: (a?.output || 0) + b.output };
 }
+
+// POST/PUT JSON; resolves { ok, data, error } and never throws.
+export async function sendJson(method, url, body) {
+  try {
+    const res = await fetch(url, { method, headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const data = await res.json().catch(() => ({}));
+    return res.ok ? { ok: true, data } : { ok: false, status: res.status, error: data.error || `HTTP ${res.status}` };
+  } catch {
+    return { ok: false, error: 'Could not reach the aiw server' };
+  }
+}
+
+// The poller sends Unix seconds; an ISO string also works.

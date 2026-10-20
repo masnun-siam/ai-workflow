@@ -89,7 +89,6 @@ try:
     ):
         assert req(port, p, host=me)[0] == 404, p
     for p in (
-        "/api/pulls/o/r/1/merge",
         "/api/dispatch/preview",
         "/api/grind/start",
         "/api/maintree/release",
