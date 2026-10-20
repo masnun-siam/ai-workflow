@@ -102,7 +102,7 @@ assert.equal(B.boardUrl('/api/planning', 'o/r', true), '/api/planning?repo=o%2Fr
 out('shell: pick-a-repo, skeleton, unavailable, stale banner with fetched_at, data');
 
 // persisted repo + keep-last-data poll
-mem.set(B.REPO_PREF, 'o/r');
+mem.set('aiw.repo', 'o/r');
 let timers = [], calls = [], mode = 'ok', docLs = {};
 globalThis.document = { hidden: false, addEventListener() {}, removeEventListener() {} };
 globalThis.setTimeout = (fn, ms) => { timers.push({ fn, ms }); return timers.length; };
@@ -122,9 +122,24 @@ assert.equal(sh.state.repos[0].value, 'o/r');
 assert.equal(timers.at(-1).ms, B.BOARD_POLL_MS);
 mode = 'fail'; timers.at(-1).fn(); await tick(); await tick(); await tick();
 assert.ok(sh.state.data, 'last data kept after a failed poll'); assert.equal(sh.state.error, false);
-sh.pick({ repo: 'o/other' }); assert.equal(mem.get(B.REPO_PREF), 'o/other'); assert.equal(sh.state.data, null, 'switching repos clears data');
+sh.pick({ repo: 'o/other' }); assert.equal(mem.get('aiw.repo'), 'o/other'); assert.equal(sh.state.data, null, 'switching repos clears data');
 sh.componentWillUnmount();
 out('shell: persisted repo, 15s poll, keeps last data on failure, picking saves and resets');
+{
+  const F = await import(U('fmt.js'));
+  const st = (o) => ({ getItem: (k) => o[k] ?? null, setItem: (k, v) => { o[k] = v; } });
+  assert.equal(F.hashRepo('#/delivery?repo=o/r'), 'o/r'); assert.equal(F.hashRepo('#/delivery'), '');
+  assert.equal(F.currentRepo(st({ 'aiw.repo': 'a/b' }), '#/planning?repo=o/r'), 'o/r', 'the URL wins');
+  assert.equal(F.currentRepo(st({ 'aiw.repo': 'a/b' }), '#/planning'), 'a/b');
+  assert.equal(F.currentRepo(st({ 'aiw.boardRepo': 'c/d' }), ''), 'c/d', 'old board key still read');
+  assert.equal(F.currentRepo(st({ 'aiw.lastRepo': '/abs/path' }), ''), '', 'a path is not a repo');
+  assert.equal(F.withRepo('#/sessions', 'o/r'), '#/sessions?repo=o/r');
+  assert.equal(F.withRepo('#/sessions?repo=o/r&x=1', ''), '#/sessions?x=1');
+  const A = await import(U('app.js'));
+  assert.deepEqual(A.parseRoute('#/delivery?repo=o/r'), { name: 'delivery', params: {}, repo: 'o/r' });
+  assert.deepEqual(A.parseRoute('#/delivery'), { name: 'delivery', params: {} });
+  out('repo: ?repo= in the URL wins over the remembered pick, shared by every page');
+}
 """
 )
 
