@@ -13,6 +13,8 @@
 - UI: **Stop** on a session page for a session that has not finished. `skill-feedback` in New run.
   The board's stale banner says why (rate limit with retry time, or the fetch error) and has a
   **Refresh**.
+- UI: Sessions has Stop and Rerun per row (Rerun on the session page too), a repo filter, search,
+  cost totals (today, 7 days, current filters), paging and grouping by issue or PR.
 - UI: a card opens in a side drawer. Comment on issues and PRs, close (completed or not planned)
   or reopen an issue, merge a PR (merge commit; warns on failing checks or no approval), read and
   edit a PRD (commits only that file, not pushed) or ask Claude to change it.

@@ -1540,7 +1540,8 @@ insts.clear();
 const SL = [S({ id: 'r1', outcome: 'stopped' })];
 calls = []; const pend = [];
 globalThis.fetch = (u, o) => { calls.push(u); return new Promise((res) => pend.push(res)); };
-const btn = () => find(render(SL), (n) => n.tag === 'button' && n.props.class !== 'btn')[0];
+const txt = (n) => (n == null ? '' : typeof n !== 'object' ? String(n) : n.kids.map(txt).join(''));
+const btn = () => find(render(SL), (n) => n.tag === 'button' && txt(n) === 'Resume')[0];
 const click = (b) => (b.props.onClick || b.props.onclick)({ preventDefault() {} });
 click(btn()); await tick();
 assert.equal(calls.length, 1);
@@ -1559,6 +1560,32 @@ globalThis.fetch = async () => { throw new Error('net down'); };
 click(btn()); await tick(); await tick(); await tick();
 assert.match(ser(render(SL)), /role="alert"/);
 out('network failure shown in alert');
+
+// repo + search filter, cost totals, grouping, rerun body, stop/rerun buttons
+const F = [S({ id: 'a', repo_path: '/p/a', command: '/implement-issue 7', link: 'https://github.com/o/r/issues/7', cost: 1 }),
+  S({ id: 'b', repo_path: '/p/b', command: '/pr-grind https://x', link: 'https://github.com/o/r/pull/9', cost: 2 }),
+  S({ id: 'c', repo_path: '/p/b', command: 'pr-grind round', link: 'https://github.com/o/r/pull/9', cost: 0.5 })];
+assert.deepEqual(filterSessions(F, 'all', { path: '/p/b' }).map((s) => s.id), ['b', 'c']);
+assert.deepEqual(filterSessions(F, 'all', { q: 'pull/9' }).map((s) => s.id), ['b', 'c'], 'search matches the link');
+assert.deepEqual(filterSessions(F, 'all', { q: 'IMPLEMENT' }).map((s) => s.id), ['a']);
+const now = Date.parse('2026-01-02T12:00:00Z');
+const T = H.costTotals([S({ cost: 1, started_at: '2026-01-02T10:00:00Z' }), S({ cost: 2, started_at: '2025-12-30T10:00:00Z' }), S({ cost: 4, started_at: '2025-12-01T00:00:00Z' })], F.slice(0, 1), now);
+assert.equal(T.week, 3); assert.equal(T.shown, 1); assert.ok(T.today === 1 || T.today === 0, 'today depends on the local zone');
+assert.deepEqual(H.groupSessions(F).map((g) => [g.link, g.items.length]), [['https://github.com/o/r/issues/7', 1], ['https://github.com/o/r/pull/9', 2]]);
+assert.equal(H.linkLabel('https://github.com/o/r/pull/9'), 'PR #9'); assert.equal(H.linkLabel('https://github.com/o/r/issues/7'), 'Issue #7');
+assert.deepEqual(H.rerunBody(S({ repo: '/p/a', repo_path: '/p/a', command: '/dump x', claude_cmd: 'work' })), { text: '/dump x', claude_cmd: 'work', repo: '/p/a' });
+assert.deepEqual(H.rerunBody(S({ no_repo: true, vault_folder: '05-Work/A', command: '/dump x' })), { text: '/dump x', repo: '', no_repo: true, vault_folder: '05-Work/A' });
+assert.ok(H.canRerun(S({ outcome: 'failed' })) && !H.canRerun(S({ outcome: 'running' })) && !H.canRerun(S({ command: null })));
+insts.clear();
+let labels = find(render([S({ id: 'x', outcome: 'running' })]), (n) => n.tag === 'button').map(txt);
+assert.ok(labels.includes('Stop') && !labels.includes('Rerun'), labels.join());
+labels = find(render([S({ id: 'y', outcome: 'done' })]), (n) => n.tag === 'button').map(txt);
+assert.ok(labels.includes('Rerun') && !labels.includes('Stop'), labels.join());
+const many = Array.from({ length: 120 }, (_, i) => S({ id: 'm' + i }));
+insts.clear();
+assert.equal(find(render(many), (n) => n.tag === 'tr').length, 51, 'first page of 50 + header');
+assert.match(ser(render(many)), /Show 50 more/);
+out('sessions: repo and search filters, cost totals, group by issue/PR, rerun body, Stop/Rerun per row, paging');
 """
 
 
@@ -1577,6 +1604,8 @@ def history_checks():
         "./fmt.js",
         "./toast.js",
         "./cleanup.js",
+        "./repopicker.js",
+        "./session.js",
     }, specs
     pre = read(os.path.join(VENDOR, "preact.mjs")).decode()
     exports = re.search(r"export\s*\{([^}]*)\}", pre).group(1)
