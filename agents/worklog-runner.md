@@ -2,7 +2,7 @@
 name: worklog-runner
 description: Executes the /worklog skill end-to-end — runs collect.sh, confirms ambiguous items with the user, clusters into tasks, and writes the Obsidian daily note. Dispatched by the worklog skill; not for direct use.
 tools: Bash, AskUserQuestion
-model: opus
+model: sonnet
 effort: medium
 ---
 

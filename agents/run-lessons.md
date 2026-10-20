@@ -2,7 +2,7 @@
 name: run-lessons
 description: Extracts durable, evidence-backed lessons from a finished /run-issue run or pr-grind loop and appends them to the repo's tasks/lessons.md. Every lesson must cite file:line or a review-comment id — never writes a claim it has not verified against the codebase, and never rewrites or deletes an existing lesson.
 tools: Read, Write, Edit, Grep, Glob, Bash(gh:*), Bash(git:*), mcp__gitnexus__context
-model: opus
+model: sonnet
 effort: medium
 ---
 

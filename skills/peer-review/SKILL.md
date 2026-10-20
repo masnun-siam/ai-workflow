@@ -90,7 +90,8 @@ Print `review dir: <review_dir>` with every round's outcome, so a session resume
 
 - **Ask:** if `<review_dir>/ask.md` exists (the web UI wrote it at spawn), copy it verbatim.
   Otherwise list the user's own prompts from this session that asked for the work, and confirm
-  them once: "Is this what you asked for?" with **"Yes, review against this (Recommended)"**;
+  them once: "Is this what you asked for?" with **"Yes, review against this (Recommended)"**
+  and **"Edit the Ask"** (a question needs two options or it is rejected unseen);
   free text replaces it.
 - **Since:** use `--since` when given. Otherwise ask one question, "Review which changes?", with
   **"Uncommitted changes only"** (`HEAD`), **"Everything not pushed (@{u})"** and **"Since a
