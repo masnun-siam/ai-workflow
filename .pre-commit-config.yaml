@@ -29,6 +29,8 @@ repos:
     rev: v0.11.0.1-1
     hooks:
       - id: shellcheck
+        # imported dev-workflow scripts stay byte-identical to the source; SC2016 flags GraphQL $vars
+        args: [--exclude=SC2016]
   - repo: local
     hooks:
       - id: engine-tests

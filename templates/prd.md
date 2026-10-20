@@ -1,9 +1,8 @@
 # PRD — <Feature name>
 
 **Status:** Draft · **Date:** YYYY-MM-DD · **Slug:** `<feature-slug>` · **Owner:** <name> · **Priority:** <critical, high, medium or low> · **Repo:** <owner/repo>
-**Mirror:** 05-Work/<Project>/<Feature>/PRD.md
 
-Status is `Draft`, `In review` or `Approved`. This document is the source of truth for the feature: the task list and every issue are derived from it, and a decision that is not written here has not been made.
+Status is `Draft`, `In review` or `Approved`. This document is the source of truth for the feature: every issue is derived from it, and a decision that is not written here has not been made.
 
 Diagrams (writer note, delete before saving): use a diagram wherever it makes a part easier to read or discuss than text alone, and always for a big feature. Draw them in Mermaid code blocks so they render on GitHub and are reviewed as text. Useful kinds: a flowchart for a user flow or a decision, a sequence diagram for an exchange between user, frontend, API and other services or for a race between two requests, a state diagram for a lifecycle, an entity diagram for the data model. Put each one next to the text it supports, with a one-line caption saying what it shows. A diagram adds to the text and never replaces a requirement or its acceptance line. A small change needs none.
 
@@ -12,7 +11,7 @@ Diagrams (writer note, delete before saving): use a diagram wherever it makes a 
 Two or three sentences a non-engineer can follow: what the feature is and who uses it. Link the design if there is one.
 
 Today:
-- What the product already does in this area, named the way a user or engineer would say it ("conversation notes", "the inbox list filters"), not as file paths.
+- What the product already does in this area, named the way a user or engineer would say it, not as file paths.
 - The closest existing feature, which sets the pattern to follow.
 - What does not exist yet.
 
@@ -22,7 +21,7 @@ What users cannot do today and what that costs them.
 
 ## Users
 
-Which roles (each role that uses it) and in which part of the product.
+Which roles and in which part of the product.
 
 ## Goals
 
@@ -42,7 +41,7 @@ Which roles (each role that uses it) and in which part of the product.
 ## Edge cases
 
 - Concurrency, empty states, limits reached, deleted or missing data.
-- Data isolation (multi-tenant repos only): what must never be visible to or counted for another tenant.
+- Data isolation, if the project is multi-tenant or has per-user data: what must never be visible to or counted for another tenant or user.
 - Existing data: whether anything needs migrating.
 
 ## Technical design
@@ -53,7 +52,7 @@ Keep it at the level of contracts and behaviour. Names that are part of a contra
 
 ### Data
 
-Which store, the tables or collections, their fields and types, indexes, data scoping (multi-tenant repos only), and the migration or backfill for existing data.
+Which store, the tables or collections, their fields and types, indexes, ownership scoping, and the migration or backfill for existing data.
 
 ### API
 
@@ -67,9 +66,9 @@ The moving parts that are added or changed and what each is responsible for (for
 
 The screens and components that are added or changed, what each shows and does, and its loading, empty and error states.
 
-### Integrations and realtime
+### Realtime and other services
 
-Events broadcast and who receives them, and other services that read or write the same data.
+Events that are broadcast and who receives them, and whether any other service in the system reads or writes the same data.
 
 ### Non-functional
 
@@ -81,7 +80,7 @@ Which kind of test (API, unit, component, end to end, manual) proves which requi
 
 ## Rollout and cost
 
-All users at once or gated, billing or provider-cost impact, and anything operations must do before or after release.
+Everyone at once or gated, billing or third-party cost impact, and anything operations must do before or after release.
 
 ## Success metrics
 

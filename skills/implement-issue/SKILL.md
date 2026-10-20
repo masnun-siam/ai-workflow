@@ -1,0 +1,52 @@
+---
+name: implement-issue
+description: Implement one refined GitHub issue end to end - stop if it is blocked, work in its own git worktree, run every check locally, verify in the running app, open a draft pull request and mark it ready only when CI is green and every review comment is handled, and log learnings on the issue. Takes the issue number as its argument. Use when asked to implement, work on, or pick up an issue.
+argument-hint: <issue number>
+---
+
+# Implement an issue
+
+Input: a GitHub issue number. Output: a pull request into the base branch that does what the issue says, verified locally and green in CI, marked Ready for review. The issue body (WHAT/WHY/HOW, written by `/refine-issues`) and the PRD it links are the source of truth.
+
+Paths below starting `../../` are relative to this skill's folder, at the plugin root. Read first: `../../guides/engineering-workflow.md` ("Repository settings" to resolve the base branch, "Implementation", and "Branches, commits and pull requests"), and the repo's `tasks/lessons.md` if it has one.
+
+## Steps
+
+1. **Stop if it is blocked.** Read the issue (`gh issue view <n> --json state,labels,body,comments,blockedBy,parent`). If any issue in `blockedBy` is still open, stop and tell the user in one or two lines which issue blocks it and what it waits for. Do nothing else. Otherwise move it to In progress on its project board: `set-status.sh <n> "In progress"` (in this skill's folder). If that fails (not on a board, no `project` token scope), carry on and say so in the report.
+
+2. **Read everything about it.** The issue body and every comment (a later comment can correct the body; follow the correction), the PRD it links, and its parent epic. If the issue has no WHAT/WHY/HOW, or something needed is undecided, stop and ask the user with `AskUserQuestion`, recommended option first with the reason; suggest `/refine-issues` when the gap is large. Never make a product or design decision yourself.
+
+3. **Work in its own worktree.** Fetch, then create a branch and worktree from the latest `origin/<base>`, named with the issue number, under `.worktrees/` (for example `git worktree add -b issue-<n>-<slug> .worktrees/<n>-<slug> origin/<base>`). Then install the repo's dependencies in it, since a fresh worktree has none, and run its setup or health check if it has one: fix what it lists, commit hooks included, before the first commit. Do all work there, so several issues can run on the same machine without conflict. Issues with no open blocker between them can be implemented at the same time, one session and worktree each; never touch another session's worktree, branch, stash or dev stack.
+
+4. **Understand the code before changing it.** Read the code the issue names, its callers and the closest existing feature, and check the impact of every symbol before editing it: with GitNexus impact analysis when its index is available, otherwise by searching for every caller. Read any repo documentation relevant to the area. Follow the surrounding code.
+
+5. **Implement with clean code.** Do what the issue asks, nothing more. Keep the code consistent with the codebase, maintainable and reliable: reuse what exists instead of duplicating it, keep functions small and named for what they do, handle errors and edge cases, and, where the project is multi-tenant or holds per-user data, keep every query scoped as its rules require.
+
+6. **Write the tests** the issue asks for, covering the acceptance criteria and the failure paths.
+
+7. **Keep documentation in step.** In the same pull request, add, update or remove whatever repo documentation this change makes new, wrong or obsolete.
+
+8. **Handle what you find on the way.**
+   - A bug, refactoring opportunity or other problem that can wait: stop, and file it in two steps. Create it with `/create-tasks` given what you found and where, then fill it with `/refine-issues <new issue number>`; never create one with a bare `gh issue create`. Then carry on.
+   - One that blocks this issue: fix it in this pull request, in its own commit, and say why in the pull request.
+   - Stale, outdated or wrong information in another issue of the same epic: comment on that issue with what is wrong and what is true (proven by a test or a run, not guessed), so the agent working on it knows.
+
+9. **Run every check locally before pushing.** CI is expensive, so nothing goes to CI that has not passed here. Run `/verifier-locally` and fix every failure it reports locally.
+
+10. **Verify it works in the app.** Start the app locally the way the repo's docs say. When other sessions may be running, use a dev stack of your own (own ports and data) if the repo supports one, and stop it when done; never use or restart a stack another session is using. For anything a user or API client can see, check each acceptance criterion in a browser with whatever browser tool you have, or against the API for backend-only changes. Check the failure paths too. If you cannot run it, say exactly what was not verified.
+
+11. **Commit.** Small commits with clear messages that reference the issue, in the format the guide gives unless the repo states its own. Let every hook run. Never use `--no-verify`; if a hook is broken rather than your code, stop and ask the user.
+
+12. **Open a draft pull request** into the base branch, with a body that links the issue (`Closes #<n>`), says what changed and why, how it was verified locally, and a **Learnings** section with the same points you log on the issue in step 15 (leave it out if there are none). Keep it a draft.
+
+13. **Get it green.** Watch CI (`gh pr checks <pr> --watch`). Fix every failure locally first, then push to the same branch. If an SSH push drops ("Broken pipe") while a long pre-push hook runs, push over HTTPS with `gh auth git-credential` as the credential helper; the hooks still run. Green is not enough on its own: read the test job log (`gh run view <run> --job <job> --log`) and confirm the new and changed tests appear as passed, not skipped. A pull request with failing or unfinished CI is not finished work and does not go to review.
+
+14. **Review it, then mark it ready.** Only once CI is green, run `/pr-review <pr>`. Fix every Critical and Major finding locally in new commits, re-run the affected checks, push and get CI green again (step 13); fix the rest or say in the pull request why not. Read every review comment and conversation on the pull request; fix it or reply with why not. Only when CI is green and every comment and `/pr-review` finding is handled, mark it ready (`gh pr ready <pr>`), then move the issue to In review (`set-status.sh <n> "In review"`; on failure carry on and say so in the report). Never merge it yourself.
+
+15. **Log learnings on the issue.** Add short, to-the-point comments on the issue for anything learned that the next person would want: a surprise in the code, a wrong assumption in the issue, a check that failed and why. Skip it if there is nothing.
+
+16. **Report** the pull request link, the `/pr-review` verdict and what was done with each finding, what was verified locally and how, follow-up issues created, comments left on other issues, any project board status that could not be set, and anything not done.
+
+## After the pull request is merged
+
+Stop and release its dev stack if it had one of its own, remove the worktree and its local branch, then in the main checkout fetch and check out the latest base branch. Tell the user which issues in the epic this merge unblocked.
