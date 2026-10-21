@@ -36,25 +36,30 @@ export function rowAction(s) {
       return { kind: 'post', label: 'Resume now', method: 'POST', url: `/api/sessions/${encodeURIComponent(s.id)}/resume` };
     case 'stopped':
       return { kind: 'post', label: 'Resume', method: 'POST', url: `/api/sessions/${encodeURIComponent(s.id)}/resume` };
-    case 'queued':
-    case 'running':
-    case 'starting':
-      return { kind: 'link', label: 'Open', href: transcriptHref(s) };
-    case 'done':
-      return { kind: 'link', label: 'Open', href: transcriptHref(s) };
-    default:
+    default: // the row itself opens the session
       return null;
   }
 }
 
 export const PAGE = 50;
 
-// Outcome, repo (a checkout path) and a text search over the command and its link.
+// `owner/repo#n` for a session's link (a GitHub issue/PR URL or an {owner, repo, issue} object), else null.
+// Issues and PRs share one number space, so a URL and an object for the same number are one item.
+export function linkKey(link) {
+  if (typeof link === 'string') {
+    const m = /^https?:\/\/(?:www\.)?github\.com\/([^/\s]+)\/([^/\s]+)\/(?:issues|pull)\/(\d+)(?:[/?#]|$)/.exec(link);
+    return m ? `${m[1]}/${m[2]}#${Number(m[3])}` : null;
+  }
+  if (link && typeof link === 'object' && link.owner && link.repo && Number.isInteger(link.issue) && link.issue > 0) return `${link.owner}/${link.repo}#${link.issue}`;
+  return null;
+}
+
+// Outcome, repo (a checkout path) and a text search over the command, its link and its `owner/repo#n` key.
 export function filterSessions(list, filter, { path = '', q = '' } = {}) {
   const needle = q.trim().toLowerCase();
   return list.filter((s) => (filter === 'all' || rowOutcome(s) === filter)
     && (!path || (s.repo_path || s.repo) === path)
-    && (!needle || `${s.command || ''} ${s.link || ''}`.toLowerCase().includes(needle)));
+    && (!needle || `${s.command || ''} ${typeof s.link === 'string' ? s.link : ''} ${linkKey(s.link) || ''}`.toLowerCase().includes(needle)));
 }
 
 // Cost of today, the last 7 days and the given list (the rows on screen). `now` in ms.
@@ -65,20 +70,53 @@ export function costTotals(all, shown, now = Date.now()) {
   return { today: sum(since(day.getTime())), week: sum(since(now - 7 * 86400000)), shown: sum(shown) };
 }
 
-// Sessions grouped by the issue or PR they worked on (their link), newest group first; unlinked ones stay alone.
-export function groupSessions(list) {
-  const groups = [];
-  const by = new Map();
-  for (const s of list) {
-    if (!s.link) { groups.push({ key: s.id, link: null, items: [s] }); continue; }
-    if (!by.has(s.link)) { const g = { key: s.link, link: s.link, items: [] }; by.set(s.link, g); groups.push(g); }
-    by.get(s.link).items.push(s);
-  }
-  return groups;
+// Oldest-first comparator on started_at; `dir` -1 flips it. Undated ones sort last either way.
+const startMs = (s) => { const t = Date.parse(s.started_at); return Number.isNaN(t) ? null : t; };
+const byStart = (dir) => (a, b) => { const x = startMs(a), y = startMs(b); return x === y ? 0 : x === null ? 1 : y === null ? -1 : (x - y) * dir; };
+
+// The pinned section: waiting (oldest first) and queued/limited (newest first), from the whole unfiltered list.
+export function pinnedSessions(list) {
+  const waiting = list.filter((s) => rowOutcome(s) === 'waiting').sort(byStart(1));
+  const queued = list.filter((s) => ['queued', 'limited'].includes(rowOutcome(s))).sort(byStart(-1));
+  return { waiting, queued };
 }
 
-export const linkLabel = (url) => { const m = /\/(issues|pull)\/(\d+)/.exec(url || ''); return m ? `${m[1] === 'pull' ? 'PR' : 'Issue'} #${m[2]}` : url; };
+// Sessions grouped by the issue or PR they worked on (linkKey), newest group first, then one Other group for the unlinked.
+export function groupSessions(list) {
+  const by = new Map();
+  const other = { key: 'other', link: null, other: true, items: [] };
+  for (const s of list) {
+    const k = linkKey(s.link);
+    if (!k) { other.items.push(s); continue; }
+    if (!by.has(k)) by.set(k, { key: k, link: k, items: [] });
+    by.get(k).items.push(s);
+  }
+  const latest = (g) => g.items.reduce((m, s) => Math.max(m, startMs(s) ?? -Infinity), -Infinity);
+  const groups = [...by.values()].sort((a, b) => latest(b) - latest(a) || 0);
+  return other.items.length ? [...groups, other] : groups;
+}
 
+// One page of rows: groups until `limit` rows show (an issue/PR group is never split; Other and flat rows are).
+export function pageRows(list, grouped, limit) {
+  if (!grouped) return { groups: [{ key: 'flat', link: null, flat: true, items: list.slice(0, limit), total: list.length }], shown: Math.min(limit, list.length) };
+  const groups = [];
+  let shown = 0;
+  for (const g of groupSessions(list)) {
+    if (shown >= limit) break;
+    const items = g.link ? g.items : g.items.slice(0, limit - shown);
+    groups.push({ ...g, items, total: g.items.length });
+    shown += items.length;
+  }
+  return { groups, shown };
+}
+
+// A click on the row opens the session, unless it is on a control, a modified click, or ends a text selection.
+export function rowClickOpens(e, selected = '') {
+  if (e.button > 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || selected) return false;
+  return !(e.target && e.target.closest && e.target.closest('a, button, input, select, summary, details, label'));
+}
+
+const ghUrl = (key) => { const [slug, n] = key.split('#'); return `https://github.com/${slug}/issues/${n}`; };
 
 export async function resumeSession(id) {
   try {
@@ -107,14 +145,19 @@ export function fmtTime(iso) {
 }
 
 // Grind commands are long instruction text; the short label plus the issue says more.
+// A linked session reads `<command> · #n`, e.g. `pr-grind · #832`.
 export function cmdLabel(s) {
   const label = sessionLabel(s.command);
-  return label !== s.command && s.link && s.link.issue ? `${label} #${s.link.issue}` : label;
+  const k = linkKey(s.link);
+  if (!k) return label;
+  const name = label === 'pr-grind round' ? 'pr-grind' : label !== s.command ? label
+    : /^\//.test(label) ? label.slice(1).split(/\s/)[0].replace(/^[\w-]+:/, '') : label.length > 40 ? `${label.slice(0, 40)}…` : label;
+  return `${name} · #${k.split('#')[1]}`;
 }
 
 
 export class History extends Component {
-  state = { filter: 'all', busy: {}, errors: {}, repo: currentRepo(), repos: [], q: '', limit: PAGE, grouped: false };
+  state = { filter: 'all', busy: {}, errors: {}, repo: currentRepo(), repos: [], q: '', limit: PAGE, grouped: true };
 
   componentDidMount() {
     loadRepoList().then((list) => !this.gone && this.setState({ repos: list.map((r) => ({ value: r.slug, name: r.name || r.slug, path: r.path || '' })) }));
@@ -167,7 +210,6 @@ export class History extends Component {
   primary(s) {
     const a = rowAction(s);
     if (!a) return null;
-    if (a.kind === 'link') return html`<a href=${a.href}>${a.label}</a>`;
     if (a.kind === 'terminal') {
       return a.command
         ? html`<details><summary>${a.label}</summary><code>${a.command}</code></details>`
@@ -180,8 +222,8 @@ export class History extends Component {
     const o = rowOutcome(s);
     const known = OUTCOMES.includes(o) ? o : 'unknown';
     return html`
-      <tr class=${child ? 'grp-child' : ''} key=${s.id}>
-        <td class="cmd" title=${s.command || ''}>${s.command ? html`<a href=${sessionHref(s)}>${cmdLabel(s)}</a>` : DASH}</td>
+      <tr class=${'row-open' + (child ? ' grp-child' : '')} key=${s.id} onClick=${(e) => rowClickOpens(e, globalThis.getSelection?.()?.toString()) && (location.hash = sessionHref(s))}>
+        <td class="cmd" title=${s.command || ''}><a href=${sessionHref(s)}>${s.command ? cmdLabel(s) : s.id}</a></td>
         <td title=${s.repo || ''}>${s.repo ? shortRepo(s.repo) : DASH}</td>
         <td>${fmtTime(s.started_at)}</td>
         <td>${fmtTime(s.ended_at)}</td>
@@ -193,47 +235,64 @@ export class History extends Component {
     `;
   }
 
-  rows(shown, grouped) {
-    if (!grouped) return shown.map((s) => this.row(s));
-    return groupSessions(shown).flatMap((g) => {
-      if (!g.link || g.items.length === 1) return g.items.map((s) => this.row(s));
+  rows({ groups }) {
+    const linked = groups.some((g) => g.link);
+    return groups.flatMap((g) => {
+      if (g.flat || (g.link && g.items.length === 1)) return g.items.map((s) => this.row(s));
+      if (g.other && !linked) return g.items.map((s) => this.row(s));
       const t = costTotals([], g.items).shown;
-      return [html`<tr class="grp-head" key=${`g:${g.key}`}><td colspan="8"><a href=${g.link} target="_blank" rel="noopener noreferrer">${linkLabel(g.link)}</a>
-        <span class="muted"> · ${g.items.length} sessions · ${fmtCost(t)} · latest ${rowOutcome(g.items[0])}</span></td></tr>`, ...g.items.map((s) => this.row(s, true))];
+      const head = g.link
+        ? html`<a href=${ghUrl(g.link)} target="_blank" rel="noopener noreferrer">${g.link}</a><span class="muted"> · ${g.items.length} sessions · ${fmtCost(t)} · latest ${rowOutcome(g.items[0])}</span>`
+        : html`Other<span class="muted"> · ${g.total} sessions</span>`;
+      return [html`<tr class="grp-head" key=${`g:${g.key}`}><td colspan="8">${head}</td></tr>`, ...g.items.map((s) => this.row(s, !!g.link))];
     });
+  }
+
+  table(rows) {
+    return html`
+      <div class="table-wrap">
+        <table class="history">
+          <thead>
+            <tr>
+              <th scope="col">Command</th>
+              <th scope="col">Repo</th>
+              <th scope="col">Started</th>
+              <th scope="col">Ended</th>
+              <th scope="col">Outcome</th>
+              <th scope="col">Cost</th>
+              <th scope="col">Tokens</th>
+              <th scope="col">Action</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  // Waiting and queued sessions, always visible: not filtered, grouped or paged.
+  pinned(sessions) {
+    const { waiting, queued } = pinnedSessions(sessions);
+    if (!waiting.length && !queued.length) return { ids: null, view: null };
+    const part = (title, list) => list.length > 0 && html`<h2>${title} <span class="muted">· ${list.length}</span></h2>${this.table(list.map((s) => this.row(s)))}`;
+    return { ids: new Set([...waiting, ...queued].map((s) => s.id)), view: html`<section class="pinned" aria-label="Needs attention">${part('Waiting on you', waiting)}${part('Queued / limited', queued)}</section>` };
   }
 
   render({ sessions }, { filter, repo, repos, q, limit, grouped }) {
     const path = (repos.find((r) => r.value === repo) || {}).path || '';
     let body;
     let totals = null;
+    const pin = sessions ? this.pinned(sessions) : { view: null };
     if (sessions == null) body = html`<p>Loading sessions…</p>`;
     else if (sessions.length === 0) body = html`<p>No sessions yet</p>`;
     else {
       const all = filterSessions(sessions, filter, { path, q });
-      const shown = all.slice(0, limit);
+      const rest = pin.ids ? all.filter((s) => !pin.ids.has(s.id)) : all;
+      const page = pageRows(rest, grouped, limit);
       totals = costTotals(sessions, all);
-      body = all.length === 0
-        ? html`<p>No sessions match these filters</p>`
-        : html`
-          <div class="table-wrap">
-            <table class="history">
-              <thead>
-                <tr>
-                  <th scope="col">Command</th>
-                  <th scope="col">Repo</th>
-                  <th scope="col">Started</th>
-                  <th scope="col">Ended</th>
-                  <th scope="col">Outcome</th>
-                  <th scope="col">Cost</th>
-                  <th scope="col">Tokens</th>
-                  <th scope="col">Action</th>
-                </tr>
-              </thead>
-              <tbody>${this.rows(shown, grouped)}</tbody>
-            </table>
-          </div>
-          ${all.length > shown.length && html`<p class="more"><button type="button" class="btn" onClick=${() => this.setState({ limit: limit + PAGE })}>Show ${Math.min(PAGE, all.length - shown.length)} more</button> <span class="muted">${shown.length} of ${all.length}</span></p>`}`;
+      if (all.length === 0) body = html`<p>No sessions match these filters</p>`;
+      else if (rest.length) body = html`
+          ${this.table(this.rows(page))}
+          ${rest.length > page.shown && html`<p class="more"><button type="button" class="btn" onClick=${() => this.setState({ limit: limit + PAGE })}>Show more</button> <span class="muted">${page.shown} of ${rest.length}</span></p>`}`;
     }
     return html`
       <section class="history-page">
@@ -251,6 +310,7 @@ export class History extends Component {
         <button type="button" class="btn" onClick=${() => openCleanup()}>Clean up…</button>
       </div>
       ${totals && html`<p class="cost-strip muted" role="status">Today <b>${fmtCost(totals.today)}</b> · last 7 days <b>${fmtCost(totals.week)}</b> · these filters <b>${fmtCost(totals.shown)}</b></p>`}
+      ${pin.view}
       ${body}
       </section>
     `;

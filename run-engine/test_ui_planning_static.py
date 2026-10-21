@@ -103,6 +103,16 @@ await btn('Refine').props.onClick();
 assert.match(text(find('p', view()).filter((p) => p.props.role === 'alert')), /live session/); assert.equal(reloads, 3);
 out('planning: a refused start shows its error');
 
+{
+  const bt = new P.PlanningBoard({ data, ctx }).render({ data, ctx }, { busy: {}, err: {}, sessions: {}, offers: null });
+  const secs = find('section', bt);
+  const full = P.groupPrds(data.prds);
+  assert.deepEqual(secs.filter((s) => s.props.class === 'bcol').map((s) => s.props['aria-label']), P.COLUMNS.filter(([k]) => full[k].length).map(([, l]) => l));
+  assert.equal(secs.filter((s) => s.props.class === 'bcol is-empty').length, P.COLUMNS.filter(([k]) => !full[k].length).length);
+  assert.equal(byClass('empty', bt).length, 0, 'no None box in a collapsed column');
+}
+out('planning: columns without PRDs collapse (is-empty, heading only)');
+
 const empty = new P.PlanningBoard({ data: { ...data, prds: [] }, ctx });
 const et = empty.render({ data: { ...data, prds: [] }, ctx }, empty.state);
 assert.match(text(et), /Run \/create-prd/); assert.equal(find('section', et).length, 0);

@@ -18,6 +18,15 @@ export function colTabs(prefix, cols) {
   return html`<div class="col-tabs" role="toolbar" aria-label="Columns">${cols.map(([k, label, n]) => html`<button type="button" class=${n ? '' : 'is-empty'} onClick=${() => go(k)}>${label} <span>${n}</span></button>`)}</div>`;
 }
 
+// One board column. Empty ones render the heading only (CSS collapses them to a strip; a phone shows "None").
+export function boardCol(id, key, label, items, renderItem) {
+  const n = items.length;
+  return html`<section class=${n ? 'bcol' : 'bcol is-empty'} id=${id} aria-label=${label} key=${key}>
+    <h2>${label}<span>${n}</span></h2>
+    ${n ? items.map(renderItem) : html`<p class="bcol-none">None</p>`}
+  </section>`;
+}
+
 export const boardUrl = (path, repo, refresh) => `${path}?repo=${encodeURIComponent(repo)}${refresh ? '&refresh=1' : ''}`;
 
 // Stale banner text: still loading, rate limited (and until when), or the fetch error.

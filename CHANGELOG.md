@@ -4,6 +4,12 @@
 
 ### Added
 
+- UI: a UX pass. Boards use the full window width and shrink empty columns to a strip; Delivery
+  has a Blocked column, one **Start** with a ▾ for herdr, and **Close epic** in a lane ⋯ menu. A
+  banner on every page shows the oldest waiting question. Sessions pins waiting and queued sessions,
+  groups by issue or PR by default (fixing groups that missed object links), names each row's issue
+  or PR and opens a session from its row. New run keeps the input and Start in a side panel, with
+  Custom as one more card. Settings shows one section at a time.
 - `/skill-feedback`: turn feedback, or `reconcile` over closed PRs' learning logs, into approved
   skill and guide edits (synced from Wasensi c6d1971f).
 - `/implement-issue <epic>` picks the epic's lowest-numbered Ready issue; after the merge it

@@ -56,13 +56,16 @@ finding for that epic) and **Close epic** closes the epic and every open child a
 (`POST /api/epics/close`). `/api/start` takes several issue numbers for `refine-issues`.
 
 **Delivery.** One swimlane per open epic plus **No epic**, in columns Needs refinement (an epic's
-unrefined children, with **Refine**) → Ready → In progress → Draft
+unrefined children, with **Refine**) → Blocked → Ready → In progress → Draft
 PR → In review → Grinding → Merged (7 days). Only refined issues, or ones with a PR or live
-session, show. A blocked card shows a lock with its open blockers and cannot start. Unblocked Ready
-cards have **Start** (headless `/implement-issue`) and **Start in herdr**; In review cards have
-**Grind** when the repo's auto-grind is off. Each lane has an **Autopilot** switch and shows
-`running/cap` and a **Close epic** button; a lane with nothing open (only merged cards) starts collapsed, and an **Epic** filter
-shows one lane. On a phone each board shows one column at a time with a tab strip of column counts.
+session, show. A ready issue with open blockers sits in Blocked with a lock naming them and cannot
+start. Ready cards have **Start** (headless `/implement-issue`) and a ▾ menu with **Start in herdr**;
+In review cards have **Grind** when the repo's auto-grind is off. Each lane header shows
+`running/cap`, an **Autopilot** switch and a ⋯ menu with **Close epic**; a lane with nothing open
+(only merged cards) starts collapsed, and an **Epic** filter shows one lane. Boards use the full
+window width; an empty column (on Planning too) shrinks to a thin strip with its name and 0, and the
+others share the rest at 220px or more. On a phone each board shows one column at a time with a tab
+strip of column counts.
 A merged issue's worktree under `.worktrees/` and its branch are removed when clean;
 otherwise the card is flagged and **Clean** lists what would be lost first.
 `GET /api/delivery`, `POST /api/start` (409 for a live session, open PR or blocked issue),
@@ -92,7 +95,13 @@ for **Ask Claude**, which starts `/create-prd <path> <request>`.
 a repo and the input. For `implement-issue`, `pr-review` and `pr-grind` the repo's open issues
 or PRs are listed under the input (`GET /api/repos/<owner>/<repo>/open?kind=issue|pr`, one `gh`
 page of 100); typing filters them. `worklog` offers Today, Yesterday, A day or A range (at most
-31 days, one session per day, 3 running at once, the rest `queued`).
+31 days, one session per day, 3 running at once, the rest `queued`). The skills are on the left
+and the picked skill's repo, input and **Start** in a panel on the right that stays in view; the
+**Custom** card takes any command or prompt. On a phone the panel opens under the picked card.
+
+**Waiting banner.** While a session waits on an answer (any repo, AFK off), a banner under the
+header on every page shows the oldest one's question with **Answer**, and "and N more"; the header
+badge opens the same session.
 
 **Sessions.** Every session with its status, cost and token use (`$0.44 · 703k tok`, hover for
 input and output), the transcript, and its answer page when it asked a question. Sessions
@@ -100,8 +109,11 @@ auto-resume after a rate limit, and the limit timer releases queued ones after a
 that has not finished has **Stop** (`POST /api/sessions/<id>/stop`, after a confirm); a finished one
 has **Rerun**, which starts its recorded command again in the same repo with the same account. The
 list filters by repo (shared with the boards, or All repos), outcome and a search over the command
-and its link, shows 50 rows at a time, totals cost for today, the last 7 days and the current
-filters, and can group the sessions of one issue or PR under it.
+and its link (`#832` finds it), shows 50 rows at a time, totals cost for today, the last 7 days and
+the current filters, and groups the sessions of one issue or PR under it by default (sessions with no
+issue or PR go in **Other**). **Waiting on you** and **Queued / limited** sessions are pinned above
+the list, whatever the filters. A row opens its session; rows name their issue or PR
+(`pr-grind · #832`).
 
 **Command palette** (⌘K / Ctrl+K). Pages, AFK, sessions, and for the selected repo its open
 issues and PRs (searchable by label) and PRDs, each opening its drawer; another repo's name
@@ -112,7 +124,8 @@ owner, project or path, recent first. The picked repo is shared by Planning, Del
 and kept in the URL as `?repo=owner/name`, so a link opens on that repo. A typed absolute path or **Browse for a folder…** registers a
 checkout. **No repo yet** runs a session in the notes vault for create-prd and dump.
 
-**Settings.** Named `claude` commands a session can launch with (one per account), the notes
+**Settings.** One section at a time (`#/settings/commands|repos|notifications|review|vault`),
+picked from a side nav or, on a phone, a tab strip. Named `claude` commands a session can launch with (one per account), the notes
 vault path, the checkout list, the plan-usage (5h / 7d) per account shown in the header, and per
 repo: auto-grind (default off), autopilot cap (1–5, default 2) and the Slack review channel grind
 posts to (`repos[owner/repo]` in `ui_settings.json`; `autopilot` maps a repo to its epics).

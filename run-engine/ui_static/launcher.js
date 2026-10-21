@@ -261,9 +261,17 @@ export function makeSubmitter(fetchImpl) {
 }
 
 export class Launcher extends Component {
-  state = { repos: [], repo: '', manual: false, path: '', command: COMMANDS.includes(loadPref(globalThis.localStorage, CMD_KEY)) ? loadPref(globalThis.localStorage, CMD_KEY) : 'implement-issue', args: '', text: '', pending: false, errors: {}, result: null, form: 'named', canBrowse: false };
+  state = { repos: [], repo: '', manual: false, path: '', command: COMMANDS.includes(loadPref(globalThis.localStorage, CMD_KEY)) ? loadPref(globalThis.localStorage, CMD_KEY) : 'implement-issue', args: '', text: '', custom: false, phone: false, pending: false, errors: {}, result: null, form: 'named', canBrowse: false };
 
   async componentDidMount() {
+    // Phone width puts the panel under the picked card instead of in the side column.
+    const mq = globalThis.matchMedia && globalThis.matchMedia('(max-width: 640px)');
+    if (mq) {
+      this.onMq = () => this.setState({ phone: mq.matches });
+      this.onMq();
+      mq.addEventListener('change', this.onMq);
+      this.mq = mq;
+    }
     fetch('/api/settings', { headers: { Accept: 'application/json' } })
       .then((r) => (r.ok ? r.json() : null))
       .then((s) => s && this.setState({ cmds: s.commands || [], claudeLabel: s.default || '' }))
@@ -329,6 +337,10 @@ export class Launcher extends Component {
     if (form === 'named') savePref(globalThis.localStorage, CMD_KEY, this.state.command);
   };
 
+  componentWillUnmount() {
+    if (this.mq) this.mq.removeEventListener('change', this.onMq);
+  }
+
   openCache = new Map();
 
   componentDidUpdate() {
@@ -337,9 +349,9 @@ export class Launcher extends Component {
 
   // The selected repo's open issues or PRs for the picker, fetched once per repo and kind.
   loadOpen = (force = false) => {
-    const { command, repo, manual } = this.state;
+    const { command, repo, manual, custom } = this.state;
     const kind = PICK[command];
-    if (!kind || manual || !repo) return;
+    if (!kind || custom || manual || !repo) return;
     const key = `${repo}|${kind}`;
     if (!force && this.openCache.has(key)) return;
     this.openCache.set(key, { status: 'loading', items: (this.openCache.get(key) || {}).items || [] });
@@ -376,9 +388,9 @@ export class Launcher extends Component {
   }
 
   pickList() {
-    const { command, repo, manual, args } = this.state;
+    const { command, repo, manual, args, custom } = this.state;
     const kind = PICK[command];
-    if (!kind || manual || !repo) return null;
+    if (!kind || custom || manual || !repo) return null;
     const got = this.openCache.get(`${repo}|${kind}`) || { status: 'loading', items: [] };
     const noun = kind === 'pr' ? 'PRs' : 'issues';
     const chosen = typedNumber(args);
@@ -468,69 +480,40 @@ export class Launcher extends Component {
     return this.start(ev, 'named', errors, (repo) => buildBody({ repo, command: this.state.command, args: this.state.args, lenses }));
   };
 
+  // A card was picked: the panel swaps to its input. A pointer pick moves focus to that input (the
+  // keyboard's arrow keys also click a radio, and must stay on the cards); on a phone the panel,
+  // which sits under the card, is scrolled into view first.
+  pick = (c, focus) => {
+    const { custom, command, args, repo, manual, errors } = this.state;
+    const next = c === 'custom'
+      ? { custom: true, errors: { ...errors, text: undefined } }
+      : { custom: false, command: c, args: custom ? args : switchArgs(command, c, args, manual ? '' : repo, (this.openCache.get(`${repo}|${PICK[command]}`) || {}).items), errors: { ...errors, args: undefined } };
+    this.setState(next, () => {
+      if (this.state.phone) document.getElementById('launch-panel')?.scrollIntoView({ block: 'nearest' });
+      const el = focus && document.getElementById(c === 'custom' ? 'custom' : 'args'); // keyboard picks stay in the radio group
+      if (el) el.focus({ preventScroll: this.state.phone });
+    });
+  };
+
+  onPanel = (ev) => (this.state.custom ? this.onCustom(ev) : this.onSubmit(ev));
+
+  card = (c, desc, on) => html`<label for=${'cmd-' + c} class="radio cmd-opt">
+    <input id=${'cmd-' + c} type="radio" name="command" value=${c} checked=${on} onClick=${(e) => this.pick(c, e.detail > 0)} />
+    <span class="cmd-text"><span class="cmd-name">${c === 'custom' ? 'Custom' : c}</span><span class="cmd-desc">${desc}</span></span></label>`;
+
   onCustom = (ev) => {
     const lenses = this.customLenses();
     return this.start(ev, 'custom', validateCustom(this.state, lenses), (repo) => buildCustomBody({ repo, text: this.state.text, lenses }));
   };
 
-  render({ limits }, { canBrowse, cmds, claudeLabel, repos, repo, manual, path, command, args, text, pending, form, errors, result, offers }) {
+  // The picked skill's input and options, or the Custom textarea and its warning.
+  fields({ limits }, { cmds, claudeLabel, repos, repo, manual, command, args, text, pending, form, errors, result, offers, custom }) {
     const mine = (f) => (result && (form || 'named') === f ? result : null);
     const outcomeMsg = (f) => { const r = mine(f); return r && r.kind === 'duplicate'
       ? html`<p role="alert" class="error">${r.message} <a href=${r.href}>Open that run</a></p>`
       : r && r.kind === 'error' ? html`<p role="alert" class="error">${r.message}</p>` : null; };
-    const repoMsg = errors.repo || (result && result.kind === 'repo' ? result.message : null);
-    return html`
-      <div class="launch">
-      <form class="launcher panel" onSubmit=${this.onSubmit} noValidate>
-        <h1>New run</h1>
-        <label for="repo-path">${repos.length ? 'Repo' : 'Repo path'}</label>
-        ${hostRepoPicker(this, { repos, repo, manual, path, canBrowse, vault: this.state.vault }, { id: 'repo-path', error: repoMsg ? 'repo-error' : null, allowVault: true, allowCreate: true, after: () => { if (!this.state.manual && !this.state.vault && this.state.repo) setRepo(this.state.repo); this.setState({ errors: { ...this.state.errors, repo: undefined }, result: null }); } })}
-        ${repoMsg ? html`<p id="repo-error" role="alert" class="error">${repoMsg}</p>` : null}
-        ${this.state.vault && !NO_REPO_COMMANDS.has(command) && !repoMsg && html`<p class="note">${command} needs a repo. With no repo yet, use create-prd or dump here, or the custom prompt.</p>`}
-        ${this.state.vault && html`<${FolderChooser} id="vf" text=${NO_REPO_COMMANDS.has(command) && args.trim() ? args : text} value=${this.state.vf || { project: '', feature: '' }}
-          onChange=${(vf) => this.setState({ vf })} />`}
-        ${this.state.creating && html`<${CreateRepoDialog} withPrd=${false} onClose=${() => this.setState({ creating: false })} onDone=${(made) => adoptCreatedRepo(this, made)} />`}
-        <fieldset class="cmds">
-          <legend>Command</legend>
-          ${GROUPS.map(([group, cmds]) => html`<div class="cmd-group" role="group" aria-label=${group}>
-            <span class="cmd-group-name" aria-hidden="true">${group}</span>
-            ${cmds.map(([c, desc]) => html`<label for=${'cmd-' + c} class="radio cmd-opt">
-              <input id=${'cmd-' + c} type="radio" name="command" value=${c} checked=${command === c} onChange=${(e) => this.setState({ command: e.target.value, args: switchArgs(command, e.target.value, args, manual ? '' : repo, (this.openCache.get(`${repo}|${PICK[command]}`) || {}).items), errors: { ...errors, args: undefined } })} />
-              <span class="cmd-text"><span class="cmd-name">${c}</span><span class="cmd-desc">${desc}</span></span></label>`)}
-          </div>`)}
-        </fieldset>
-        ${command === 'worklog' ? this.worklogPicker() : html`<label for="args">${LABELS[command]}</label>`}
-        ${command === 'worklog' ? null : FREE_TEXT.has(command)
-          ? html`<textarea id="args" class="args-text" rows="8" value=${args} onInput=${this.setText('args')}
-              onKeyDown=${(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); e.target.form.requestSubmit(); } }}
-              aria-invalid=${errors.args ? 'true' : undefined} aria-describedby=${errors.args ? 'args-error' : undefined}></textarea>`
-          : html`<input id="args" type="text" autocomplete="off" placeholder=${PICK[command] && !manual ? `${HINTS[command] || ''}, or type to search the list below` : HINTS[command] || ''} value=${args} onInput=${this.setText('args')}
-              aria-invalid=${errors.args ? 'true' : undefined} aria-describedby=${errors.args ? 'args-error' : undefined} />`}
-        ${errors.args ? html`<p id="args-error" role="alert" class="error">${errors.args}</p>` : null}
-        ${this.pickList()}
-        ${limitedUntil(cmds, claudeLabel, limits) ? html`<p class="note">This account is rate limited: the run is queued and starts automatically at reset.</p>` : null}
-        ${lensPicker({ id: 'peer-review', offer: this.reviewOffer(command), on: this.state.peerReview, picked: pickedLenses(true, this.state.lenses, offers), rounds: offers && offers.max_rounds,
-          onToggle: (on) => this.setState({ peerReview: on }), onPick: (lenses) => this.setState({ lenses }) })}
-        ${errors.lenses ? html`<p role="alert" class="error">${errors.lenses}</p>` : null}
-        ${outcomeMsg('named')}
-        <div class="launch-actions">
-          <button type="submit" disabled=${pending}>${pending && (form || 'named') === 'named' ? this.state.progress || 'Starting...' : command === 'worklog' && this.state.wlFailed?.length ? `Retry ${this.state.wlFailed.length} failed day${this.state.wlFailed.length === 1 ? '' : 's'}` : 'Start'}${FREE_TEXT.has(command) && html` <kbd>⌘↵</kbd>`}</button>
-          ${cmds && cmds.length > 1 && html`<div class="runas" role="radiogroup" aria-label="Run as">
-            <span class="runas-label" aria-hidden="true">Run as</span>
-            <div class="seg">
-              ${cmds.map((o) => {
-                const until = limitedUntil(cmds, o.label, limits);
-                return html`<button type="button" role="radio" aria-checked=${claudeLabel === o.label} class=${claudeLabel === o.label ? 'on' : ''}
-                  title=${until ? `Limited until ${clockText(until)}` : ''} onClick=${() => this.setState({ claudeLabel: o.label })}>
-                  ${until && html`<span class="runas-limited" aria-label="rate limited"></span>`}${o.label}</button>`;
-              })}
-            </div>
-          </div>`}
-        </div>
-      </form>
-      <aside class="launch-side">
-      <form class="launcher panel" onSubmit=${this.onCustom} noValidate>
-        <h2>Custom command</h2>
+    if (custom) {
+      return html`<h2>Custom command</h2>
         <label for="custom">Custom command or prompt</label>
         <textarea id="custom" placeholder="/pr-review 42" value=${text} onInput=${this.setText('text')}
           aria-invalid=${errors.text ? 'true' : undefined} aria-describedby=${errors.text ? 'custom-error' : undefined}></textarea>
@@ -540,10 +523,77 @@ export class Launcher extends Component {
           onToggle: (on) => this.setState({ customReview: on }), onPick: (customPicked) => this.setState({ customPicked }) })}
         ${this.state.customReview === true && html`<p class="note">The session is asked to run the review when it's done; it isn't forced. The session shows whether it ran.</p>`}
         ${errors.customLenses ? html`<p role="alert" class="error">${errors.customLenses}</p>` : null}
-        ${outcomeMsg('custom')}
-        <button type="submit" disabled=${pending}>${pending && form === 'custom' ? 'Starting...' : 'Run in selected repo'}</button>
-      </form>
-      </aside>
+        ${outcomeMsg('custom')}`;
+    }
+    return html`<h2 class="mono">${command}</h2>
+      ${command === 'worklog' ? this.worklogPicker() : html`<label for="args">${LABELS[command]}</label>`}
+      ${command === 'worklog' ? null : FREE_TEXT.has(command)
+        ? html`<textarea id="args" class="args-text" rows="8" value=${args} onInput=${this.setText('args')}
+            onKeyDown=${(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); e.target.form.requestSubmit(); } }}
+            aria-invalid=${errors.args ? 'true' : undefined} aria-describedby=${errors.args ? 'args-error' : undefined}></textarea>`
+        : html`<input id="args" type="text" autocomplete="off" placeholder=${PICK[command] && !manual ? `${HINTS[command] || ''}, or type to search the list below` : HINTS[command] || ''} value=${args} onInput=${this.setText('args')}
+            aria-invalid=${errors.args ? 'true' : undefined} aria-describedby=${errors.args ? 'args-error' : undefined} />`}
+      ${errors.args ? html`<p id="args-error" role="alert" class="error">${errors.args}</p>` : null}
+      ${this.pickList()}
+      ${limitedUntil(cmds, claudeLabel, limits) ? html`<p class="note">This account is rate limited: the run is queued and starts automatically at reset.</p>` : null}
+      ${lensPicker({ id: 'peer-review', offer: this.reviewOffer(command), on: this.state.peerReview, picked: pickedLenses(true, this.state.lenses, offers), rounds: offers && offers.max_rounds,
+        onToggle: (on) => this.setState({ peerReview: on }), onPick: (lenses) => this.setState({ lenses }) })}
+      ${errors.lenses ? html`<p role="alert" class="error">${errors.lenses}</p>` : null}
+      ${outcomeMsg('named')}`;
+  }
+
+  // The panel: repo picker, the picked card's fields and Start. One form for the named and custom paths.
+  panel(props, s) {
+    const { limits } = props;
+    const { cmds, claudeLabel, repos, repo, manual, path, command, args, text, pending, form, errors, result, custom } = s;
+    const repoMsg = errors.repo || (result && result.kind === 'repo' ? result.message : null);
+    const busy = pending && (form || 'named') === (custom ? 'custom' : 'named');
+    return html`<form id="launch-panel" class="launcher panel launch-panel" onSubmit=${this.onPanel} noValidate>
+      <label for="repo-path">${repos.length ? 'Repo' : 'Repo path'}</label>
+      ${hostRepoPicker(this, { repos, repo, manual, path, canBrowse: s.canBrowse, vault: s.vault }, { id: 'repo-path', error: repoMsg ? 'repo-error' : null, allowVault: true, allowCreate: true, after: () => { if (!this.state.manual && !this.state.vault && this.state.repo) setRepo(this.state.repo); this.setState({ errors: { ...this.state.errors, repo: undefined }, result: null }); } })}
+      ${repoMsg ? html`<p id="repo-error" role="alert" class="error">${repoMsg}</p>` : null}
+      ${s.vault && !custom && !NO_REPO_COMMANDS.has(command) && !repoMsg && html`<p class="note">${command} needs a repo. With no repo yet, use create-prd or dump here, or the custom prompt.</p>`}
+      ${s.vault && html`<${FolderChooser} id="vf" text=${!custom && NO_REPO_COMMANDS.has(command) && args.trim() ? args : text} value=${s.vf || { project: '', feature: '' }}
+        onChange=${(vf) => this.setState({ vf })} />`}
+      ${s.creating && html`<${CreateRepoDialog} withPrd=${false} onClose=${() => this.setState({ creating: false })} onDone=${(made) => adoptCreatedRepo(this, made)} />`}
+      ${this.fields(props, s)}
+      <div class="launch-actions">
+        <button type="submit" disabled=${pending}>${busy ? s.progress || 'Starting...' : !custom && command === 'worklog' && s.wlFailed?.length ? `Retry ${s.wlFailed.length} failed day${s.wlFailed.length === 1 ? '' : 's'}` : 'Start'}${!custom && FREE_TEXT.has(command) && html` <kbd>⌘↵</kbd>`}</button>
+        ${cmds && cmds.length > 1 && html`<div class="runas" role="radiogroup" aria-label="Run as">
+          <span class="runas-label" aria-hidden="true">Run as</span>
+          <div class="seg">
+            ${cmds.map((o) => {
+              const until = limitedUntil(cmds, o.label, limits);
+              return html`<button type="button" role="radio" aria-checked=${claudeLabel === o.label} class=${claudeLabel === o.label ? 'on' : ''}
+                title=${until ? `Limited until ${clockText(until)}` : ''} onClick=${() => this.setState({ claudeLabel: o.label })}>
+                ${until && html`<span class="runas-limited" aria-label="rate limited"></span>`}${o.label}</button>`;
+            })}
+          </div>
+        </div>`}
+      </div>
+    </form>`;
+  }
+
+  render(props, s) {
+    const { command, custom, phone } = s;
+    const panel = this.panel(props, s);
+    return html`
+      <div class="launch">
+        <div class="launch-main launcher">
+          <h1>New run</h1>
+          <fieldset class="cmds">
+            <legend>Command</legend>
+            ${GROUPS.map(([group, list]) => html`<div class="cmd-group" role="group" aria-label=${group}>
+              <span class="cmd-group-name" aria-hidden="true">${group}</span>
+              ${list.map(([c, desc]) => html`${this.card(c, desc, !custom && command === c)}${phone && !custom && command === c && panel}`)}
+            </div>`)}
+            <div class="cmd-group" role="group" aria-label="Custom">
+              <span class="cmd-group-name" aria-hidden="true">Custom</span>
+              ${this.card('custom', 'Any command or prompt, run with permissions skipped', custom)}${phone && custom && panel}
+            </div>
+          </fieldset>
+        </div>
+        ${!phone && html`<aside class="launch-side">${panel}</aside>`}
       </div>
     `;
   }
