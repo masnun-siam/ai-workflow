@@ -30,6 +30,7 @@ import ui_repos  # noqa: E402
 import ui_runner  # noqa: E402
 import ui_server  # noqa: E402
 import ui_sessions  # noqa: E402
+import ui_settings  # noqa: E402
 
 passed = 0
 
@@ -691,6 +692,8 @@ try:
     assert ui_sessions.load(p2["id"])["request"] == ui_sessions.load(p["id"])["request"]
     s, p = post({"repo": "o/r", "text": "hello", "batch": "wl-1", "issue": 5})
     assert ui_sessions.load(p["id"])["request"] == {"repo": "o/r", "text": "hello", "issue": 5, "batch": "wl-1"}
+    with open(ui_settings._path(), "w", encoding="utf-8") as f:  # a vault that exists off this machine too (CI)
+        json.dump({"vault_dir": tempfile.mkdtemp()}, f)
     s, p = post({"repo": "", "no_repo": True, "vault_folder": "05-Work/P/F", "command": "dump", "args": "idea"})
     assert s == 201 and ui_sessions.load(p["id"])["request"]["vault_folder"] == "05-Work/P/F"
     s, p3 = rerun(p["id"])
