@@ -71,7 +71,7 @@ NOTIFY = sys.argv[1:3] == ["--view", "notify"]
 HISTORY = sys.argv[1:3] == ["--view", "history"]
 
 NODE_JS = r"""
-const { parseRoute, waitingInfo, headerBadge, sessionList, poll } = await import(process.env.APP_URL);
+const { parseRoute, waitingInfo, headerBadge, bannerInfo, WaitingBanner, App, sessionList, poll } = await import(process.env.APP_URL);
 const assert = (await import('node:assert')).strict;
 const out = (n) => console.log('ok ' + n);
 const tick = () => new Promise((r) => setImmediate(r));
@@ -84,6 +84,9 @@ assert.equal(ans.name, 'answer');
 assert.equal(ans.params.session, 'abc123');
 assert.equal(nm('#/new'), 'new');
 assert.equal(nm('#/settings'), 'settings');
+assert.deepEqual({ ...parseRoute('#/settings').params }, { section: '' });
+assert.deepEqual({ ...parseRoute('#/settings/repos').params }, { section: 'repos' });
+assert.equal(nm('#/settings/repos/x'), 'notfound');
 assert.equal(nm('#/sessions'), 'sessions');
 out('parseRoute normal routes');
 
@@ -115,13 +118,110 @@ out('parseRoute trailing slash, decoding, malformed escape');
 // real _public() shape: outcome + waiting, never `status`
 const mk = (id, status) => (status === undefined ? { id } : { id, outcome: status, waiting: status === 'waiting' });
 const list = [mk('a', 'running'), mk('b', 'waiting'), mk('c', 'done'), mk('d', 'waiting')];
-assert.deepEqual({ ...waitingInfo(list) }, { count: 2, firstId: 'b' });
-out('waitingInfo counts waiting, first in API order');
-assert.deepEqual({ ...waitingInfo([]) }, { count: 0, firstId: null });
+assert.deepEqual([waitingInfo(list).count, waitingInfo(list).firstId], [2, 'b']);
+out('waitingInfo counts waiting, undated ones keep API order');
+{
+  const at = (id, t) => ({ ...mk(id, 'waiting'), started_at: t });
+  const two = [at('late', '2026-01-02T10:00:00Z'), at('early', '2026-01-02T09:00:00Z')];
+  assert.equal(waitingInfo(two).firstId, 'early');
+  assert.deepEqual(waitingInfo(two).sessions.map((s) => s.id), ['early', 'late']);
+  assert.equal(waitingInfo([mk('u', 'waiting'), at('d', '2026-01-02T09:00:00Z')]).firstId, 'd', 'undated sorts after dated');
+  assert.equal(headerBadge(false, two).href, '#/answer/early', 'badge points at the oldest');
+  assert.equal(headerBadge(false, two, waitingInfo(two)).href, '#/answer/early');
+  const q = (id, t, questions) => ({ ...at(id, t), command: '/implement-issue 7', pending_question: { id: 'r', questions } });
+  const bi = bannerInfo(waitingInfo([q('l', '2026-01-02T10:00:00Z', [{ question: 'Which?', header: 'H' }]), q('e', '2026-01-02T09:00:00Z', [{ header: 'Pick one' }])]), { name: 'planning', params: {} }, null);
+  assert.deepEqual({ ...bi }, { href: '#/answer/e', command: '/implement-issue 7', text: 'Pick one', more: 1 });
+  const one = waitingInfo([q('l', '2026-01-02T10:00:00Z', [{ question: 'Which?', header: 'H' }])]);
+  assert.equal(bannerInfo(one, { name: 'sessions', params: {} }, null).text, 'Which?');
+  assert.equal(bannerInfo(one, { name: 'sessions', params: {} }, null).more, 0);
+  assert.equal(bannerInfo(waitingInfo([q('n', 't', [])]), { name: 'sessions', params: {} }, null).text, '');
+  assert.equal(bannerInfo(one, { name: 'sessions', params: {} }, { active: true }), null, 'AFK hides it');
+  assert.equal(bannerInfo(waitingInfo([]), { name: 'sessions', params: {} }, null), null);
+  const both = waitingInfo([q('l', '2026-01-02T10:00:00Z', []), q('e', '2026-01-02T09:00:00Z', [])]);
+  assert.equal(bannerInfo(both, { name: 'answer', params: { session: 'e' } }, null).href, '#/answer/l', 'on the oldest answer page, names the other');
+  assert.equal(bannerInfo(one, { name: 'answer', params: { session: 'l' } }, null), null, 'nothing else waits');
+  const tree = WaitingBanner({ b: bi });
+  const ser = (n) => (n == null || n === false ? '' : typeof n !== 'object' ? String(n) : Array.isArray(n) ? n.map(ser).join('') : ser(n.props.children) + (n.props.href ? '[' + n.props.href + ']' : ''));
+  assert.equal(tree.props.role, 'status');
+  assert.match(ser(tree), /Pick one.*Answer\[#\/answer\/e\].*and 1 more\[#\/sessions\]/);
+  assert.ok(!/more/.test(ser(WaitingBanner({ b: { ...bi, more: 0 } }))), 'no "and N more" for one');
+}
+out('waiting banner: oldest wins, and N more, AFK, answer page, header fallback');
+{
+  const app = new App({});
+  let hash = '#/delivery', closed = 0, focused = 0, prevented = 0;
+  const summary = { focus: () => focused++ };
+  const menu = { removeAttribute: (a) => { if (a === 'open') closed++; }, querySelector: (sel) => (sel === 'summary' ? summary : null) };
+  globalThis.document = { querySelector: (sel) => (sel === 'details.menu[open]' ? menu : null) };
+  globalThis.location = { get hash() { return hash; }, set hash(v) { hash = v; } };
+  app.state.route = { name: 'session', params: { id: 'x' } };
+  app.onKey({ key: 'Escape', preventDefault: () => prevented++ });
+  assert.deepEqual([closed, focused, prevented, hash], [1, 1, 1, '#/delivery'], 'open menu closes first and Escape stops there');
+  globalThis.document = { querySelector: () => null };
+  globalThis.history = { length: 1 };
+  app.onKey({ key: 'Escape', preventDefault: () => prevented++ });
+  assert.equal(hash, '#/sessions', 'without a menu Escape keeps its old behaviour');
+  delete globalThis.document; delete globalThis.location; delete globalThis.history;
+}
+out('Escape closes an open details.menu before anything else');
+{
+  // a dialog is closed first; the open menu stays open
+  const app = new App({});
+  app.setState = (p) => { app.state = { ...app.state, ...(typeof p === 'function' ? p(app.state) : p) }; };
+  let closed = 0, focused = 0, prevented = 0, hash = '#/delivery';
+  const summary = { focus: () => focused++ };
+  const menu = { removeAttribute: () => closed++, querySelector: () => summary };
+  globalThis.document = { activeElement: null, querySelector: (sel) => (sel === 'details.menu[open]' ? menu : null) };
+  globalThis.location = { get hash() { return hash; }, set hash(v) { hash = v; } };
+  globalThis.history = { length: 5, back: () => { hash = 'BACK'; } };
+  for (const dlg of [{ palette: true }, { peek: { kind: 'issue' } }, { sheet: true }, { cleanup: [] }]) {
+    app.state = { ...app.state, palette: false, sheet: false, cleanup: null, peek: null, ...dlg, route: { name: 'session', params: { id: 'x' } } };
+    app.onKey({ key: 'Escape', preventDefault: () => prevented++ });
+    assert.deepEqual([app.state.palette, app.state.sheet, app.state.cleanup, app.state.peek], [false, false, null, null], 'dialog closed');
+  }
+  assert.deepEqual([closed, focused, hash], [0, 0, '#/delivery'], 'the menu stays open and nothing navigates while a dialog was open');
+  // no dialog: menu closes, focus returns to its summary, no navigation
+  app.onKey({ key: 'Escape', preventDefault: () => prevented++ });
+  assert.deepEqual([closed, focused, hash], [1, 1, '#/delivery']);
+  delete globalThis.document; delete globalThis.location; delete globalThis.history;
+}
+out('Escape: an open dialog closes first and leaves the menu open; then the menu closes with focus on its summary');
+{
+  const { closeMenusOutside } = await import(process.env.APP_URL);
+  const mkMenu = () => { const m = { open: true, removeAttribute() { m.open = false; }, contains: (t) => t === m || t === m.inner, inner: {} }; return m; };
+  const a = mkMenu();
+  globalThis.document = { querySelectorAll: (sel) => (sel === 'details.menu[open]' ? [a] : []) };
+  closeMenusOutside({ target: a.inner }); assert.equal(a.open, true, 'a click inside leaves it open');
+  closeMenusOutside({ target: a }); assert.equal(a.open, true);
+  closeMenusOutside({ target: {} }); assert.equal(a.open, false, 'a click outside closes it');
+  delete globalThis.document;
+}
+out('closeMenusOutside: outside click closes an open menu, inside click does not');
+{
+  const vtext = (n) => (n == null || typeof n === 'boolean') ? '' : Array.isArray(n) ? n.map(vtext).join('') : typeof n === 'object' ? vtext(n.props && n.props.children) : String(n);
+  const vnodes = (n, acc = []) => { if (n == null || typeof n === 'boolean') return acc; if (Array.isArray(n)) { n.forEach((c) => vnodes(c, acc)); return acc; }
+    if (typeof n === 'object') { acc.push(n); vnodes(n.props && n.props.children, acc); } return acc; };
+  const app = new App({});
+  const waitSess = { ...mk('w', 'waiting'), started_at: '2026-01-02T09:00:00Z', command: '/implement-issue 7' };
+  const st = (o) => ({ ...app.state, route: { name: 'sessions', params: {} }, sessions: [waitSess], wait: waitingInfo([waitSess]), ...o });
+  const badge = (t) => vnodes(t).filter((n) => n.type === 'a' && typeof n.props.class === 'string' && n.props.class.includes('badge'));
+  let t = app.render({}, st({}));
+  assert.equal(badge(t).length, 1); assert.match(vtext(badge(t)[0]), /Waiting on you · 1/);
+  assert.equal(vnodes(t).filter((n) => n.type === WaitingBanner).length, 1, 'banner shows for a waiting session');
+  assert.equal(vnodes(t).find((n) => n.type === 'main').props.class, 'page-sessions');
+  t = app.render({}, st({ afk: { active: true } }));
+  assert.ok(!/Waiting on you/.test(vnodes(t).map(vtext).join('')) && badge(t).every((b) => !/Waiting/.test(vtext(b))), 'AFK: no waiting count in the badge');
+  t = app.render({}, st({ offline: true }));
+  assert.equal(vnodes(t).filter((n) => n.type === WaitingBanner).length, 0, 'offline hides the banner');
+  t = app.render({}, st({ route: { name: 'delivery', params: {} } }));
+  assert.equal(vnodes(t).find((n) => n.type === 'main').props.class, 'page-delivery');
+}
+out('App render: AFK drops the waiting count, offline hides the banner, <main> carries page-<route>');
+assert.deepEqual({ ...waitingInfo([]) }, { count: 0, firstId: null, sessions: [] });
 assert.equal(waitingInfo([mk('x'), mk('y')]).count, 0);
 out('waitingInfo empty and missing status');
 for (const bad of [null, {}, { sessions: 5 }, 'str', undefined]) assert.equal(waitingInfo(bad).count, 0);
-assert.deepEqual({ ...waitingInfo({ sessions: list }) }, { count: 2, firstId: 'b' });
+assert.deepEqual([waitingInfo({ sessions: list }).count, waitingInfo({ sessions: list }).firstId], [2, 'b']);
 out('waitingInfo non-array bodies and {sessions:[]}');
 
 assert.deepEqual({ ...headerBadge(true, list) }, { kind: 'offline', count: 0, href: null });
@@ -608,7 +708,7 @@ const text = (n) => (n == null || typeof n === 'boolean') ? '' : Array.isArray(n
 const find = (t, root) => { nodes.length = 0; walk(root); return nodes.filter((n) => n.type === t); };
 let tree = render({});
 assert.equal(find(RP.RepoPicker, tree).length, 1, 'the shared repo picker'); assert.equal(find(RP.RepoPicker, tree)[0].props.allowPath, true);
-const radios = find('input', tree).filter((i) => i.props.type === 'radio');
+const radios = find('input', tree).filter((i) => i.props.type === 'radio' && i.props.value !== 'custom');
 assert.deepEqual(radios.map((r) => r.props.value).sort(), ['create-prd', 'create-tasks', 'day', 'docs-updater', 'dump', 'flow', 'herdr-dispatch', 'implement-issue', 'peer-review', 'pr-grind', 'pr-review', 'refine-issues', 'release-pr', 'skill-feedback', 'sync-from-wasensi', 'verifier-locally', 'worklog']);
 const lab = (t) => find('label', render({ command: t })).map((l) => text(l)).join('|');
 assert.match(lab('implement-issue'), /issue/i); assert.match(lab('pr-grind'), /PR|pull/i);
@@ -787,7 +887,9 @@ const alerts = (t) => find('p', t).concat(find('div', t)).filter((n) => n.props.
 let tree = render({});
 const fs = find('fieldset', tree);
 const radios = find('input', fs[0]).filter((i) => i.props.type === 'radio');
-assert.deepEqual(radios.map((r) => r.props.value).sort(), ALL);
+assert.deepEqual(radios.map((r) => r.props.value).filter((v) => v !== 'custom').sort(), ALL);
+assert.equal(radios.at(-1).props.value, 'custom', 'the Custom card comes after the groups');
+assert.ok(!find('input', render({})).some((i) => i.props.id === 'custom'), 'custom textarea only when Custom is picked');
 for (const c of ALL) assert.ok(!find('legend', render({ command: c })).some((l) => /Options/.test(text(l))), c);
 out('one radio per command, no Options fieldset for any command');
 const hint = (c) => find('label', render({ command: c })).map((l) => text(l)).join('|');
@@ -809,13 +911,40 @@ for (const c of ALL.filter((c) => !OPT.includes(c))) for (const a of ['', '  ', 
 }
 out('worklog, day and the skill-sweep commands take optional args, others required');
 
-tree = render({});
+tree = render({ custom: true });
 const ta = find('textarea', tree);
 assert.equal(ta.length, 1); assert.equal(ta[0].props.id, 'custom');
 assert.ok(find('label', tree).some((l) => (l.props.htmlFor ?? l.props['for']) === 'custom'));
-assert.ok(find('button', tree).some((b) => text(b).trim() === 'Run in selected repo'));
+assert.ok(find('button', tree).some((b) => text(b).trim() === 'Start'));
 assert.match(text(tree), /skip-permissions/i);
-out('custom box: textarea, label, button, skip-permissions note');
+assert.equal(find('textarea', tree).filter((t) => t.props.id === 'args').length, 0);
+out('Custom panel: textarea, label, Start, skip-permissions note');
+{
+  const picked = (st) => find('input', render(st)).filter((i) => i.props.type === 'radio' && i.props.checked).map((i) => i.props.value);
+  assert.deepEqual(picked({}), ['implement-issue']); assert.deepEqual(picked({ custom: true }), ['custom']);
+  assert.ok(find('input', render({ command: 'pr-review' })).some((i) => i.props.id === 'args'), 'pr-review panel has the PR input');
+  assert.ok(find('label', render({ command: 'pr-review' })).some((l) => /PR number or URL/.test(text(l))));
+  assert.equal(find('textarea', render({ command: 'pr-review' })).length, 0);
+  // an unknown remembered skill falls back to implement-issue
+  globalThis.localStorage = { getItem: () => JSON.stringify('nope'), setItem() {} };
+  assert.equal(new Launcher({}).state.command, 'implement-issue');
+  delete globalThis.localStorage;
+  // phone: the panel sits right after the picked card, not in the side column
+  const cardsAndPanel = (st) => { const t = render(st); return [find('aside', t).length, find('form', t).length]; };
+  assert.deepEqual(cardsAndPanel({}), [1, 1]); assert.deepEqual(cardsAndPanel({ phone: true }), [0, 1]);
+  const grp = (st) => find('div', render(st)).filter((d) => d.props.role === 'group' && find('form', d).length);
+  assert.deepEqual(grp({ phone: true }).map((g) => g.props['aria-label']), ['Build']);
+  assert.deepEqual(grp({ phone: true, custom: true }).map((g) => g.props['aria-label']), ['Custom']);
+  // picking: Custom shows the textarea, focus goes to the input on a pointer pick only
+  const li = new Launcher({}); li.state = { ...base, phone: false };
+  li.setState = (p, cb) => { li.state = { ...li.state, ...p }; cb && cb(); };
+  const focused = []; globalThis.document = { getElementById: (id) => ({ focus: () => focused.push(id) }) };
+  li.pick('custom', true); assert.equal(li.state.custom, true); assert.deepEqual(focused, ['custom']);
+  li.pick('pr-review', true); assert.equal(li.state.custom, false); assert.equal(li.state.command, 'pr-review'); assert.deepEqual(focused, ['custom', 'args']);
+  li.pick('dump', false); assert.equal(li.state.command, 'dump'); assert.equal(focused.length, 2, 'a keyboard pick keeps focus on the cards');
+  delete globalThis.document;
+}
+out('panel: picked card swaps the input, Custom card last, fallback skill, phone placement, focus');
 for (const c of ['create-prd', 'dump', 'day']) assert.equal(find('textarea', render({ command: c })).filter((t) => t.props.id === 'args').length, 1, c);
 for (const c of ['implement-issue', 'pr-grind', 'worklog']) assert.equal(find('textarea', render({ command: c })).filter((t) => t.props.id === 'args').length, 0, c);
 out('free-text commands get a textarea, number/link commands a single line');
@@ -847,7 +976,7 @@ const inst = new Launcher({}); inst.state = { ...base, text: ' \n' };
 let prevented = false;
 await inst.onCustom({ preventDefault() { prevented = true; } }); await tick();
 assert.ok(prevented); assert.equal(fetched, 0);
-const et = render({ errors: { text: 'enter a command' } });
+const et = render({ custom: true, errors: { text: 'enter a command' } });
 const ea = alerts(et).find((n) => /enter a command/.test(text(n)));
 assert.ok(ea && ea.props.id === 'custom-error');
 const ta2 = find('textarea', et)[0];
@@ -863,8 +992,10 @@ const named = sf.onSubmit({ preventDefault() {} }); await tick();
 await sf.onCustom({ preventDefault() {} }); await tick();
 assert.equal(calls, 1, 'custom must not fetch while named pending');
 assert.ok(sf.state.pending);
-const btns = find('button', new Launcher({}).render({}, sf.state));
-assert.ok(btns.length >= 2 && btns.every((b) => b.props.disabled));
+const btns = find('button', new Launcher({}).render({}, { ...sf.state }));
+assert.ok(btns.length >= 1 && btns.every((b) => b.props.disabled));
+const cbtn = find('button', new Launcher({}).render({}, { ...sf.state, custom: true })).filter((b) => text(b).trim().startsWith('Start'));
+assert.ok(cbtn.length >= 1 && cbtn.every((b) => b.props.disabled), 'the Custom Start is disabled while a named start is pending');
 pend.shift()({ status: 400, json: async () => ({ error: 'x' }) }); await named;
 out('single-flight spans named and custom forms');
 
@@ -1152,7 +1283,7 @@ out('pageTitle');
 const W = (id, round = 'r1') => ({ id, waiting: true, outcome: 'waiting', pending_question: { id: round } });
 const R = (id) => ({ id, waiting: false, outcome: 'running' });
 const pub = [R('a'), W('b'), R('c'), W('d')];
-assert.deepEqual({ ...waitingInfo(pub) }, { count: 2, firstId: 'b' });
+assert.deepEqual([waitingInfo(pub).count, waitingInfo(pub).firstId], [2, 'b']);
 assert.deepEqual({ ...headerBadge(false, pub) }, { kind: 'waiting', count: 2, href: '#/answer/b' });
 out('badge counts _public()-shaped waiting sessions');
 for (const bad of [{ id: 'x', status: 'waiting' }, { id: 'x', waiting: 'true' }, { id: 'x', waiting: 1 }])
@@ -1416,11 +1547,7 @@ assert.equal(w.label, 'Answer'); assert.equal(w.href, '#/answer/a%20b');
 const st = rowAction(S({ id: 'a/b', outcome: 'stopped' }));
 assert.equal(st.label, 'Resume'); assert.equal(st.method, 'POST'); assert.equal(st.url ?? st.href, '/api/sessions/a%2Fb/resume');
 const link = { owner: 'o', repo: 'r', issue: 7 };
-for (const o of ['running', 'starting']) {
-  const a = rowAction(S({ outcome: o, link }));
-  assert.equal(a.label, 'Open'); assert.equal(a.href, '#/session/s1');
-}
-assert.deepEqual(rowAction(S({ outcome: 'done' })), { kind: 'link', label: 'Open', href: '#/session/s1' });
+for (const o of ['running', 'starting', 'queued', 'done']) assert.equal(rowAction(S({ outcome: o, link })), null, o + ': the row opens the session, no Open link');
 assert.equal(rowAction(S({ outcome: 'weird' })), null);
 assert.equal(rowAction(S({ outcome: undefined })), null);
 out('rowAction mapping');
@@ -1459,9 +1586,29 @@ assert.match(fmtTime('2020-01-02T03:04:05Z'), /2020/);
 assert.match(fmtTime(new Date().toISOString()), /^Today \d\d:\d\d$/);
 assert.equal(fmtTime('not-a-date'), 'not-a-date'); assert.equal(fmtTime(null), '—');
 out('fmtCost/fmtTime');
-assert.equal(H.cmdLabel({ command: '/pr-grind https://x.slack.com/a', link: { issue: 7 } }), 'pr-grind round #7');
-assert.equal(H.cmdLabel({ command: '/implement-issue 7', link: { issue: 7 } }), '/implement-issue 7');
-out('cmdLabel shortens grind commands and names the issue');
+const L7 = { owner: 'o', repo: 'r', issue: 7 };
+assert.equal(H.cmdLabel({ command: '/pr-grind https://x.slack.com/a', link: L7 }), 'pr-grind · #7');
+assert.equal(H.cmdLabel({ command: '/ai-workflow:implement-issue 7', link: 'https://github.com/o/r/issues/7' }), 'implement-issue · #7');
+assert.equal(H.cmdLabel({ command: '/pr-grind https://x.slack.com/a', link: null }), 'pr-grind round');
+assert.equal(H.cmdLabel({ command: '/implement-issue 7', link: { issue: 7 } }), '/implement-issue 7', 'no owner/repo: no key, plain label');
+out('cmdLabel names the command and the issue/PR number');
+assert.equal(H.cmdLabel({ command: 'Start the review grind on this PR now', link: L7 }), 'pr-grind start · #7');
+assert.equal(H.cmdLabel({ command: 'Start the review grind on this PR now', link: null }), 'pr-grind start');
+assert.equal(H.cmdLabel({ command: 'pr-grind round', link: L7 }), 'pr-grind · #7', 'round drops its suffix when linked');
+{
+  const long = 'Please look at the failing build and fix it everywhere'; // > 40, not a slash command
+  assert.equal(H.cmdLabel({ command: long, link: L7 }), `${long.slice(0, 40)}… · #7`);
+  assert.equal(H.cmdLabel({ command: 'short words', link: L7 }), 'short words · #7');
+}
+out('cmdLabel: review grind start, round drops suffix, long linked prompt is cut');
+const K = H.linkKey;
+assert.equal(K('https://github.com/o/r/issues/832'), 'o/r#832');
+assert.equal(K('https://github.com/o/r/pull/832'), 'o/r#832');
+assert.equal(K(L7), 'o/r#7');
+assert.equal(K('https://x.slack.com/archives/C1/p1'), null);
+assert.equal(K({ owner: 'o', repo: 'r' }), null); assert.equal(K({ owner: 'o', repo: 'r', issue: 0 }), null);
+assert.equal(K(null), null); assert.equal(K('https://github.com/o/r'), null);
+out('linkKey: issue URL, PR URL, object, Slack URL, object without issue');
 
 // mini renderer: vnode -> html string, plus element lookup
 const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -1511,6 +1658,7 @@ assert.match(t, /unknown/);
 assert.ok(t.includes('not-a-date'));
 assert.ok(t.includes(`title="${longCmd}"`), 'full command in title');
 assert.ok(t.includes('#/session/s1'), 'Transcript links to the in-app viewer');
+assert.ok(/<td[^>]*class="cmd"[^>]*><a[^>]*href="#\/session\/s1"[^>]*>s1<\/a>/.test(t), 'a row with no command still has a first-cell link (its id)');
 out('null fields, unknown outcome, invalid date, long command title');
 
 t = html([S({ outcome: 'failed' })]);
@@ -1530,9 +1678,9 @@ const onch = sel.props.onChange || sel.props.onInput || sel.props.onchange;
 assert.ok(onch, 'select has change handler');
 onch({ target: { value: 'stopped' } });
 tree = render(L); t = ser(tree);
-assert.ok(!/<table/.test(t) && /[Nn]o .*match|[Nn]o sessions (match|with)/.test(t) && !/No sessions yet/.test(t));
+assert.ok(/[Nn]o .*match|[Nn]o sessions (match|with)/.test(t) && !/No sessions yet/.test(t) && !/Show \d+ more/.test(t));
 onch({ target: { value: 'failed' } });
-assert.equal(find(render(L), (n) => n.tag === 'tr').length, 3, 'header + 2 failed rows');
+assert.equal(find(render(L), (n) => n.tag === 'tr').length, 3 + 2, 'header + 2 failed rows, plus the pinned waiting row and its header');
 out('filter select narrows rows; no-match message');
 
 // resume: double click, busy survives re-render, 405 alert
@@ -1571,8 +1719,50 @@ assert.deepEqual(filterSessions(F, 'all', { q: 'IMPLEMENT' }).map((s) => s.id), 
 const now = Date.parse('2026-01-02T12:00:00Z');
 const T = H.costTotals([S({ cost: 1, started_at: '2026-01-02T10:00:00Z' }), S({ cost: 2, started_at: '2025-12-30T10:00:00Z' }), S({ cost: 4, started_at: '2025-12-01T00:00:00Z' })], F.slice(0, 1), now);
 assert.equal(T.week, 3); assert.equal(T.shown, 1); assert.ok(T.today === 1 || T.today === 0, 'today depends on the local zone');
-assert.deepEqual(H.groupSessions(F).map((g) => [g.link, g.items.length]), [['https://github.com/o/r/issues/7', 1], ['https://github.com/o/r/pull/9', 2]]);
-assert.equal(H.linkLabel('https://github.com/o/r/pull/9'), 'PR #9'); assert.equal(H.linkLabel('https://github.com/o/r/issues/7'), 'Issue #7');
+assert.deepEqual(H.groupSessions(F).map((g) => [g.link, g.items.length]), [['o/r#7', 1], ['o/r#9', 2]]);
+assert.deepEqual(filterSessions(F, 'all', { q: '#9' }).map((s) => s.id), ['b', 'c'], 'search matches the key');
+{
+  const mix = [S({ id: 'u', link: 'https://github.com/o/r/pull/832', started_at: '2026-01-02T03:00:00Z' }), S({ id: 'n1', started_at: '2026-01-05T00:00:00Z' }),
+    S({ id: 'o', link: { owner: 'o', repo: 'r', issue: 832 }, started_at: '2026-01-02T04:00:00Z' }), S({ id: 'n2', link: 'https://x.slack.com/a' })];
+  const gs = H.groupSessions(mix);
+  assert.deepEqual(gs.map((g) => [g.link, g.items.map((s) => s.id)]), [['o/r#832', ['u', 'o']], [null, ['n1', 'n2']]], 'URL and object group together; unlinked go last in Other');
+  assert.equal(gs[1].other, true);
+  assert.deepEqual(filterSessions(mix, 'all', { q: '#832' }).map((s) => s.id), ['u', 'o'], 'search #832 matches the object-linked row');
+  const g3 = Array.from({ length: 60 }, (_, i) => S({ id: 'g' + i, link: `https://github.com/o/r/issues/${1 + (i % 3)}` }));
+  const pg = H.pageRows(g3, true, 50);
+  assert.deepEqual([pg.groups.length, pg.shown], [3, 60], 'groups are never split: 3 groups of 20 all show');
+  const singles = Array.from({ length: 60 }, (_, i) => S({ id: 'o' + i, link: `https://github.com/o/r/issues/${100 + i}` }));
+  assert.equal(H.pageRows(singles, true, 50).shown, 50);
+  assert.equal(H.pageRows(singles, true, 50).groups.length, 50);
+  const oth = H.pageRows(Array.from({ length: 60 }, (_, i) => S({ id: 'n' + i })), true, 50);
+  assert.deepEqual([oth.shown, oth.groups[0].items.length, oth.groups[0].total], [50, 50, 60], 'Other splits at the limit');
+  assert.equal(H.pageRows(many60(), false, 50).shown, 50);
+  function many60() { return Array.from({ length: 60 }, (_, i) => S({ id: 'f' + i })); }
+
+  const P = [S({ id: 'w2', outcome: 'running', waiting: true, started_at: '2026-01-02T10:00:00Z' }), S({ id: 'w1', outcome: 'waiting', started_at: '2026-01-02T09:00:00Z' }),
+    S({ id: 'q1', outcome: 'queued', started_at: '2026-01-01T00:00:00Z' }), S({ id: 'q2', outcome: 'limited', started_at: '2026-01-03T00:00:00Z' }), S({ id: 'd', outcome: 'done' })];
+  const pn = H.pinnedSessions(P);
+  assert.deepEqual([pn.waiting.map((s) => s.id), pn.queued.map((s) => s.id)], [['w1', 'w2'], ['q2', 'q1']], 'waiting oldest first, queued newest first');
+  assert.deepEqual([H.pinnedSessions([S({})]).waiting.length, H.pinnedSessions([S({})]).queued.length], [0, 0]);
+  insts.clear();
+  expand(h(History, { sessions: P }), 'pin');
+  insts.get('pin').state = { ...insts.get('pin').state, repo: 'x/y', filter: 'done', repos: [{ value: 'x/y', name: 'y', path: '/elsewhere' }], q: 'nomatch' };
+  const pinned = ser(expand(h(History, { sessions: P }), 'pin'));
+  assert.match(pinned, /Waiting on you/); assert.match(pinned, /Queued \/ limited/); assert.match(pinned, /#\/session\/w1/);
+  assert.match(pinned, /No sessions match/, 'filters still apply to the table');
+  assert.ok(!/Waiting on you/.test(html([S({ id: 'x', outcome: 'running' })])) && !/Queued/.test(html([S({ id: 'x', outcome: 'running' })])), 'no pinned section when nothing waits or queues');
+  assert.ok(!/Queued/.test(html([S({ outcome: 'waiting' })])), 'empty subsection hidden');
+  // a pinned session is not repeated in the table
+  const ids = find(expand(h(History, { sessions: [S({ id: 'only', outcome: 'waiting' })] }), 'z'), (n) => n.tag === 'tr');
+  assert.equal(ids.length, 2, 'pinned header + one row, no second table');
+}
+// row click rules
+const tgt = (hit) => ({ closest: () => hit });
+assert.equal(H.rowClickOpens({ button: 0, target: tgt(null) }), true);
+assert.equal(H.rowClickOpens({ button: 0, target: tgt({}) }), false, 'link/button/input');
+assert.equal(H.rowClickOpens({ button: 1, target: tgt(null) }), false, 'middle button');
+for (const k of ['metaKey', 'ctrlKey', 'shiftKey', 'altKey']) assert.equal(H.rowClickOpens({ button: 0, [k]: true, target: tgt(null) }), false, k);
+assert.equal(H.rowClickOpens({ button: 0, target: tgt(null) }, 'some text'), false, 'ends a text selection');
 assert.deepEqual(H.rerunBody(S({ repo: '/p/a', repo_path: '/p/a', command: '/dump x', claude_cmd: 'work' })), { text: '/dump x', claude_cmd: 'work', repo: '/p/a' });
 assert.deepEqual(H.rerunBody(S({ no_repo: true, vault_folder: '05-Work/A', command: '/dump x' })), { text: '/dump x', repo: '', no_repo: true, vault_folder: '05-Work/A' });
 assert.ok(H.canRerun(S({ outcome: 'failed' })) && !H.canRerun(S({ outcome: 'running' })) && !H.canRerun(S({ command: null })));
@@ -1584,8 +1774,36 @@ assert.ok(labels.includes('Rerun') && !labels.includes('Stop'), labels.join());
 const many = Array.from({ length: 120 }, (_, i) => S({ id: 'm' + i }));
 insts.clear();
 assert.equal(find(render(many), (n) => n.tag === 'tr').length, 51, 'first page of 50 + header');
-assert.match(ser(render(many)), /Show 50 more/);
+assert.match(ser(render(many)), /Show more/);
 out('sessions: repo and search filters, cost totals, group by issue/PR, rerun body, Stop/Rerun per row, paging');
+{
+  // a session that waits is pinned, so the group counts and costs only the rest
+  const lk = 'https://github.com/o/r/issues/5';
+  const txt0 = (n) => (n == null ? '' : typeof n !== 'object' ? String(n) : n.kids.map(txt0).join(''));
+  const G = [S({ id: 'gw', outcome: 'waiting', cost: 5, link: lk, started_at: '2026-01-02T09:00:00Z' }),
+    S({ id: 'gd1', outcome: 'done', cost: 0.5, link: lk, started_at: '2026-01-02T08:00:00Z' }), S({ id: 'gd2', outcome: 'done', cost: 0.5, link: lk, started_at: '2026-01-02T07:00:00Z' })];
+  insts.clear();
+  const tr = render(G);
+  const head = find(tr, (n) => n.tag === 'tr' && /grp-head/.test(n.props.class || ''))[0];
+  assert.ok(head, 'group head'); assert.match(txt0(head), /2 sessions/); assert.ok(!/3 sessions/.test(txt0(head)));
+  assert.ok(txt0(head).includes(fmtCost(1)) && !txt0(head).includes(fmtCost(6)), 'cost excludes the pinned session');
+  const pinSec = find(tr, (n) => n.tag === 'section' && n.props.class === 'pinned')[0];
+  assert.ok(find(pinSec, (n) => n.tag === 'a' && n.props.href === '#/session/gw').length === 1, 'the waiting one sits in the pinned section');
+  assert.equal(find(tr, (n) => n.tag === 'a' && n.props.href === '#/session/gw').length, 1, 'and only there');
+}
+out('group summary excludes the pinned session from count and cost');
+{
+  const hashes = []; let hash = '';
+  globalThis.location = { get hash() { return hash; }, set hash(v) { hash = v; hashes.push(v); } };
+  insts.clear();
+  const tr = find(render([S({ id: 'row9' })]), (n) => n.tag === 'tr' && /row-open/.test(n.props.class || ''))[0];
+  tr.props.onClick({ button: 0, target: { closest: () => null } });
+  assert.equal(hash, '#/session/row9', 'a plain click on the row opens the session');
+  tr.props.onClick({ button: 0, target: { closest: () => ({}) } });
+  assert.deepEqual(hashes, ['#/session/row9'], 'a click on a control does not');
+  delete globalThis.location;
+}
+out('session row click sets location.hash to the session');
 """
 
 
@@ -1628,7 +1846,7 @@ def history_checks():
 
     for bad in ("innerHTML", "dangerouslySetInnerHTML", "console.log", "debugger"):
         assert bad not in js, bad
-    assert not re.search(r"https?://", js)
+    assert not re.search(r"https?://", js.replace("https://github.com/", ""))  # only the group header link
     assert "encodeURIComponent" in js
     assert re.search(r"title\s*=\s*\$\{[^}]*command", js), "full command in title="
     assert 'role="alert"' in js
@@ -1726,7 +1944,10 @@ def afk_checks():
     for tok in ("--accent:", "--accent-bg:", "--on-accent:", "--accent-hover:"):
         assert tok in afk.split("}", 1)[0], tok
     ok("AFK theme swaps accent tokens")
-    assert "toggleAttribute('data-afk'" in app and "headerBadge(offline, afk?.active ? [] : sessions)" in app
+    assert (
+        "toggleAttribute('data-afk'" in app
+        and "headerBadge(offline, sessions, afk?.active ? waitingInfo(null) : wait)" in app
+    )
     assert "if (!away) notifyWaiting(s)" in app
     ok("app.js themes on data-afk and mutes the badge and pings while away")
     if not shutil.which("node"):

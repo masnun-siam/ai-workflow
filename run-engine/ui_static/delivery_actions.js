@@ -14,7 +14,7 @@ export const canGrind = (c, autoGrind) => c.column === 'in_review' && !autoGrind
 
 // Start / Start in herdr / Grind / Clean for one card. A refused request (409) toasts and starts nothing.
 export class CardActions extends Component {
-  state = { busy: false, clean: false };
+  state = { busy: false, clean: false, menuOpen: false };
 
   post = async (url, body, done) => {
     this.setState({ busy: true });
@@ -31,15 +31,22 @@ export class CardActions extends Component {
   grind = () => this.post('/api/start', grindBody(this.props.repo, this.props.card), 'Grind started');
   clean = () => this.post('/api/cleanup', { repo: this.props.repo, issue: this.props.card.n, confirm: true }, 'Cleaned up');
 
-  render({ card, autoGrind }, { busy, clean }) {
+  render({ card, autoGrind }, { busy, clean, menuOpen }) {
     const btn = (label, onClick, disabled, title) => html`<button type="button" disabled=${busy || disabled} title=${title} onClick=${onClick}>${label}</button>`;
-    const blocked = isBlocked(card);
-    const why = blocked ? 'Blocked: its blockers must close first' : undefined;
     const nc = card.needs_cleanup;
+    if (card.column === 'ready' && isBlocked(card)) return null; // Blocked column: the lock line says why, nothing to press
+    // Either choice closes the menu; picking from it puts focus back on its ▾.
+    const shut = (back) => { if (this.menu?.open) { this.menu.open = false; if (back) this.menu.querySelector('summary')?.focus(); } };
+    const herdr = () => { shut(true); return this.start('herdr'); };
     return html`<div class="bcard-actions">
       ${card.column === 'unrefined' && btn('Refine', this.refine)}
-      ${card.column === 'ready' && btn('Start', () => this.start('headless'), blocked, why)}
-      ${card.column === 'ready' && btn('Start in herdr', () => this.start('herdr'), blocked, why)}
+      ${card.column === 'ready' && html`<div class="split">
+        ${btn('Start', () => { shut(false); return this.start('headless'); })}
+        <details class="menu start-menu" ref=${(el) => { this.menu = el; }} onToggle=${(e) => this.setState({ menuOpen: e.currentTarget.open })}>
+          <summary class="btn-sm" role="button" aria-label="More start options" aria-expanded=${!!menuOpen} aria-disabled=${busy} onClick=${(e) => busy && e.preventDefault()}>▾</summary>
+          <div class="menu-panel">${btn('Start in herdr', herdr)}</div>
+        </details>
+      </div>`}
       ${canGrind(card, autoGrind) && btn('Grind', this.grind)}
       ${card.column === 'merged' && nc && btn('Clean', () => this.setState({ clean: true }))}
       ${clean && nc && html`<div class="clean-dialog" role="dialog" aria-label=${`Clean up #${card.n}`}>
@@ -75,12 +82,14 @@ export class LaneAutopilot extends Component {
   }
 }
 
-// Close an epic with its open children (POST /api/epics/close), after a confirm naming how many.
+// The lane's ⋯ menu: Close an epic with its open children (POST /api/epics/close), after a confirm naming how many.
+// It sits inside the lane's <summary>, so its clicks preventDefault (the lane must not toggle) and it opens by hand.
 export class CloseEpic extends Component {
   state = { busy: false };
 
   close = async () => {
     const { repo, lane } = this.props;
+    if (this.menu) { this.menu.open = false; this.menu.querySelector('summary')?.focus(); }
     const open = (lane.cards || []).filter((c) => c.column !== 'merged').length;
     if (globalThis.confirm && !globalThis.confirm(`Close epic #${lane.epic} and its open child issues (${open} on this board) as completed?`)) return;
     this.setState({ busy: true });
@@ -89,8 +98,18 @@ export class CloseEpic extends Component {
     if (r.ok) { toast(`Closed ${r.data.closed.length} issue${r.data.closed.length === 1 ? '' : 's'}`); if (this.props.onChange) this.props.onChange(); } else toast(r.error, 'error');
   };
 
-  render({ lane }, { busy }) {
+  toggle = (e) => {
+    e.preventDefault();
+    if (!this.state.busy && this.menu) this.menu.open = !this.menu.open;
+  };
+
+  render({ lane }, { busy, open }) {
     if (!lane.epic) return null;
-    return html`<button type="button" class="btn-sm" disabled=${busy} onClick=${(e) => { e.preventDefault(); this.close(); }}>${busy ? 'Closing…' : 'Close epic'}</button>`;
+    return html`<details class="menu lane-menu" ref=${(el) => { this.menu = el; }} onToggle=${(e) => this.setState({ open: e.currentTarget.open })}>
+      <summary class="btn-sm" role="button" aria-label=${busy ? 'Closing epic' : 'Epic actions'} aria-expanded=${!!open} aria-disabled=${busy} onClick=${this.toggle}>${busy ? 'Closing…' : '⋯'}</summary>
+      <div class="menu-panel" onClick=${(e) => e.preventDefault()}>
+        <button type="button" class="btn-sm" disabled=${busy} onClick=${this.close}>Close epic</button>
+      </div>
+    </details>`;
   }
 }

@@ -156,7 +156,20 @@ blocks = re.findall(r"([^{}]+)\{([^}]*)\}", css)
 assert any(".cols" in s and re.search(r"overflow-x\s*:\s*auto", b) for s, b in blocks), (
     "columns scroll inside the board"
 )
-assert any(".bcol" in s and re.search(r"min-width\s*:\s*\d+px", b) for s, b in blocks)
+assert any(
+    ".bcol" in s and re.search(r"min-width\s*:\s*\d+px", b) and re.search(r"flex\s*:\s*1 1 0", b) for s, b in blocks
+)
+assert any(".bcol.is-empty" in s and re.search(r"flex\s*:\s*0 0 40px", b) for s, b in blocks), (
+    "empty columns collapse to a strip"
+)
+_i = css.index(".bcol.is-empty { flex: 0 0 40px")
+_m = re.search(r"@media[^{]*max-width\s*:\s*640px[^{]*\{(.*?\})\s*\}", css[_i:], re.S)
+assert _m and re.search(r"\.bcol\.is-empty\s*\{[^}]*flex\s*:\s*0 0 calc\(100% - 4px\)", _m.group(1)), (
+    "phones: an empty column fills the width again"
+)
+assert re.search(r"main\.page-delivery,\s*main\.page-planning\s*\{\s*max-width\s*:\s*none", css), (
+    "board pages use the full width"
+)
 for m in re.finditer(r"(?<![\w(-])(?:min-)?width\s*:\s*(\d+)px", css):
     assert int(m.group(1)) <= 390, m.group(0)
 ok("css: columns scroll horizontally inside the board, no wide fixed widths")

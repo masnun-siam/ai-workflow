@@ -115,6 +115,32 @@ assert.deepEqual(S.notifyBody(f), { server: 'https://ntfy.sh', topic: 't', user:
 assert.equal(S.notifyBody({ ...f, token: 'new' }).token, 'new');
 assert.equal(S.notifyBody({ ...f, token: 'new', clear_token: true }).token, '', 'clear wins');
 out('settings: repo filter with a preview of 8; notify body never sends an empty secret unless clearing');
+
+// sections: one shown, the rest hidden but mounted
+const secs = (section) => Object.fromEntries(byClass('settings-sec', s.render({ section }, s.state)).map((n) => [n.props['data-section'], n]));
+const shown = (section) => Object.entries(secs(section)).filter(([, n]) => !n.props.hidden).map(([k]) => k);
+assert.deepEqual(S.SECTIONS.map(([k]) => k), ['commands', 'repos', 'notifications', 'review', 'vault']);
+for (const k of S.SECTIONS.map(([k]) => k)) assert.deepEqual(shown(k), [k], `${k} alone is shown`);
+for (const bad of [undefined, '', 'nope']) assert.deepEqual(shown(bad), ['commands'], `${bad} falls back to commands`);
+out('settings: one section shown, the rest hidden; unknown or empty is Commands');
+const inSec = (section, k, tag, pred) => find(tag, secs(section)[k]).filter(pred);
+assert.match(text(secs('repos').commands), /Claude commands/); assert.ok(inSec('repos', 'commands', 'button', (b) => /Add command/.test(text(b))).length);
+assert.ok(inSec('repos', 'repos', 'input', (i) => i.props['aria-label'] === 'Autopilot cap o/a').length);
+assert.ok(inSec('repos', 'repos', 'textarea', (i) => i.props.id === 'scan-roots').length);
+assert.ok(inSec('vault', 'vault', 'input', (i) => i.props.id === 'vault-dir').length);
+const kid = (k) => { const root = secs('commands')[k]; nodes.length = 0; walk(root); return nodes.filter((n) => typeof n.type === 'function').map((n) => n.type.name); };
+assert.deepEqual(kid('notifications'), ['NotifyPanel']); assert.deepEqual(kid('review'), ['ReviewPanel']);
+assert.equal(inSec('commands', 'repos', 'button', (b) => /Add command/.test(text(b))).length, 0, 'commands form lives only in Commands');
+out('settings: each section holds its own fields');
+const navs = find('a', s.render({ section: 'repos' }, s.state)).filter((a) => /^#\/settings\//.test(a.props.href || ''));
+assert.deepEqual(navs.map((a) => a.props.href), S.SECTIONS.map(([k]) => `#/settings/${k}`));
+assert.deepEqual(navs.filter((a) => a.props['aria-current'] === 'page').map((a) => a.props.href), ['#/settings/repos']);
+out('settings: nav links, current one aria-current=page');
+// a typed vault value survives a section switch (same instance, state kept)
+s.setState({ vault: '~/typed' });
+const vaultVal = (section) => inSec(section, 'vault', 'input', (i) => i.props.id === 'vault-dir')[0].props.value;
+assert.equal(vaultVal('repos'), '~/typed'); assert.equal(vaultVal('vault'), '~/typed');
+out('settings: typed vault value survives switching to repos and back');
 """
 )
 

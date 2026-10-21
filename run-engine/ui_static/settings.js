@@ -129,6 +129,10 @@ class ReviewPanel extends Component {
   }
 }
 
+// Sections of the page, in nav order. Anything else (or none) is Commands.
+export const SECTIONS = [['commands', 'Commands'], ['repos', 'Repos'], ['notifications', 'Notifications'], ['review', 'Peer review'], ['vault', 'Vault']];
+export const sectionOf = (s) => (SECTIONS.some(([k]) => k === s) ? s : 'commands');
+
 export class Settings extends Component {
   saved = { commands: [], default: null };
   state = { commands: null, def: '', cfg: {}, rowErr: {}, tests: {}, err: '', saving: false, repos: [], roots: '', scanning: false, scanMsg: '', vault: '', vaultMsg: '', repoQ: '', allRepos: false, problems: null, checking: false };
@@ -254,15 +258,23 @@ export class Settings extends Component {
     this.setState({ saving: false });
   };
 
-  render(_, { commands, def, cfg, rowErr, tests, err, saving, repos, roots, scanning, scanMsg, vault, vaultMsg, repoQ, allRepos, problems, checking }) {
+  render({ section }, { commands, def, cfg, rowErr, tests, err, saving, repos, roots, scanning, scanMsg, vault, vaultMsg, repoQ, allRepos, problems, checking }) {
     const shownRepos = visibleRepos(repos, repoQ, allRepos);
     const listed = problems ? [...repos].sort((a, b) => !!problems[b.slug] - !!problems[a.slug]) : repos;
     if (!commands) return html`<h1>Settings</h1><p role="status">Loading…</p>`;
+    const cur = sectionOf(section);
+    // Every section stays mounted (hidden, not removed) so unsaved edits survive switching.
+    const sec = (k, ...kids) => html`<div class="settings-sec" data-section=${k} hidden=${k !== cur}>${kids}</div>`;
     return html`
       <section class="settings">
         <h1>Settings</h1>
+        <div class="settings-layout">
+        <nav class="settings-nav" aria-label="Settings sections">
+          ${SECTIONS.map(([k, label]) => html`<a href=${`#/settings/${k}`} aria-current=${k === cur ? 'page' : undefined}>${label}</a>`)}
+        </nav>
         <div class="settings-main">
-          <form class="panel" onSubmit=${this.save} noValidate>
+          ${sec('commands',
+          html`<form class="panel" onSubmit=${this.save} noValidate>
             <h2>Claude commands</h2>
             <p class="note">The command a run is launched with. Add one like <code>cc masum</code> to run under another account. The first row is plain <code>claude</code>: rename it to tell your accounts apart.</p>
             ${commands.map((c, i) => html`
@@ -282,8 +294,9 @@ export class Settings extends Component {
               <button type="button" onClick=${this.add}>Add command</button>
               <button type="submit" disabled=${saving}>${saving ? 'Saving…' : 'Save'}</button>
             </div>
-          </form>
-          <section class="panel" aria-labelledby="grind-h">
+          </form>`)}
+          ${sec('repos',
+          html`<section class="panel" aria-labelledby="grind-h">
             <h2 id="grind-h">Per-repo settings</h2>
             <p class="note">Auto-grind starts a grind when a PR turns ready. The autopilot cap is how many implement-issue sessions run at once (1 to 5). A grind posts to the repo's Slack review channel. Each row saves as soon as you change it.</p>
             ${repos.length === 0 && html`<p class="muted">No repos registered yet.</p>`}
@@ -291,18 +304,8 @@ export class Settings extends Component {
             ${shownRepos.map((r) => repoSection(r.slug, repoRow(cfg, r.slug), rowErr[r.slug], this.saveRepo))}
             ${!repoQ.trim() && !allRepos && repos.length > REPO_PREVIEW && html`<button type="button" onClick=${() => this.setState({ allRepos: true })}>Show all ${repos.length}</button>`}
             ${repoQ.trim() && shownRepos.length === 0 && html`<p class="muted">No repo matches.</p>`}
-          </section>
-          <form class="panel" aria-labelledby="vault-h" onSubmit=${this.saveVault} noValidate>
-            <h2 id="vault-h">Notes vault</h2>
-            <p class="note">The Obsidian vault <code>/dump</code> and <code>/create-prd</code> write to. New run lists its project folders, so you can start those runs without a repo.</p>
-            <label for="vault-dir">Vault folder</label>
-            <input id="vault-dir" type="text" class="field mono" spellcheck="false" placeholder="~/Documents/notes" value=${vault}
-              aria-invalid=${vaultMsg ? 'true' : undefined} aria-describedby=${vaultMsg ? 'vault-err' : undefined}
-              onInput=${(e) => this.setState({ vault: e.target.value })} />
-            ${vaultMsg && html`<p id="vault-err" role="alert" class="error">${vaultMsg}</p>`}
-            <div class="launch-actions"><button type="submit" disabled=${saving}>Save vault folder</button></div>
-          </form>
-          <section class="panel" aria-labelledby="repos-h">
+          </section>`,
+          html`<section class="panel" aria-labelledby="repos-h">
             <h2 id="repos-h">Repos</h2>
             <p class="note">aiw works inside a local clone of each repo. Scan your project folders to register every clone that has a GitHub origin, so the boards and New run can find them.</p>
             <label for="scan-roots">Folders to scan, one per line</label>
@@ -318,9 +321,21 @@ export class Settings extends Component {
                 <button type="button" class="btn-sm btn--danger" aria-label=${`Remove ${r.slug}`} onClick=${() => this.removeRepo(r.slug)}>Remove</button></li>`)}
             </ul>`}
             ${repos.length === 0 && html`<p class="muted">No repos registered yet.</p>`}
-          </section>
-          <${NotifyPanel} />
-          <${ReviewPanel} />
+          </section>`)}
+          ${sec('vault',
+          html`<form class="panel" aria-labelledby="vault-h" onSubmit=${this.saveVault} noValidate>
+            <h2 id="vault-h">Notes vault</h2>
+            <p class="note">The Obsidian vault <code>/dump</code> and <code>/create-prd</code> write to. New run lists its project folders, so you can start those runs without a repo.</p>
+            <label for="vault-dir">Vault folder</label>
+            <input id="vault-dir" type="text" class="field mono" spellcheck="false" placeholder="~/Documents/notes" value=${vault}
+              aria-invalid=${vaultMsg ? 'true' : undefined} aria-describedby=${vaultMsg ? 'vault-err' : undefined}
+              onInput=${(e) => this.setState({ vault: e.target.value })} />
+            ${vaultMsg && html`<p id="vault-err" role="alert" class="error">${vaultMsg}</p>`}
+            <div class="launch-actions"><button type="submit" disabled=${saving}>Save vault folder</button></div>
+          </form>`)}
+          ${sec('notifications', html`<${NotifyPanel} />`)}
+          ${sec('review', html`<${ReviewPanel} />`)}
+        </div>
         </div>
       </section>`;
   }

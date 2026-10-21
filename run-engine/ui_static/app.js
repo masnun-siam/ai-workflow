@@ -8,7 +8,7 @@ import { Session } from './session.js';
 import { Settings } from './settings.js';
 import { Planning } from './planning.js';
 import { Delivery } from './delivery.js';
-import { clockText, currentRepo, withRepo, savePref, REPO_KEY } from './fmt.js';
+import { clockText, currentRepo, withRepo, savePref, sessionLabel, REPO_KEY } from './fmt.js';
 import { UsageGauge } from './usage.js';
 import { toast } from './toast.js';
 import { CleanupDialog } from './cleanup.js';
@@ -45,7 +45,7 @@ function parseRoutePath(path, seg) {
   if (a === 'planning' && !rest.length) return { name: 'planning', params: {} };
   if (a === 'delivery' && !rest.length) return { name: 'delivery', params: {} };
   if (a === 'sessions' && !rest.length) return { name: 'sessions', params: {} };
-  if (a === 'settings' && !rest.length) return { name: 'settings', params: {} };
+  if (a === 'settings' && rest.length <= 1) return { name: 'settings', params: { section: rest[0] || '' } };
   if (a === 'session' && rest.length === 1 && rest[0]) return { name: 'session', params: { id: rest[0] } };
   if (a === 'answer' && rest.length === 1 && rest[0]) return { name: 'answer', params: { session: rest[0] } };
   return { name: 'notfound', params: {} };
@@ -57,16 +57,35 @@ export function sessionList(data) {
   return data && Array.isArray(data.sessions) ? data.sessions : null;
 }
 
+// The waiting sessions, oldest first (stable: undated ones keep API order, after the dated). One pass per poll.
 export function waitingInfo(data) {
-  const waiting = (sessionList(data) || []).filter((s) => isWaiting(s));
-  return { count: waiting.length, firstId: waiting.length ? waiting[0].id : null };
+  const at = (s) => { const t = Date.parse(s.started_at); return Number.isNaN(t) ? Infinity : t; };
+  const sessions = (sessionList(data) || []).filter((s) => isWaiting(s)).sort((a, b) => (at(a) === at(b) ? 0 : at(a) < at(b) ? -1 : 1));
+  return { count: sessions.length, firstId: sessions.length ? sessions[0].id : null, sessions };
 }
 
-export function headerBadge(offline, data) {
+export function headerBadge(offline, data, info = waitingInfo(data)) {
   if (offline) return { kind: 'offline', count: 0, href: null };
-  const { count, firstId } = waitingInfo(data);
+  const { count, firstId } = info;
   if (count > 0) return { kind: 'waiting', count, href: answerHash(firstId) };
   return sessionList(data) ? { kind: 'idle', count: 0, href: null } : null;
+}
+
+// What the waiting banner shows: the oldest waiting session (on its own Answer page, the next one), or null.
+export function bannerInfo(info, route, afk) {
+  if (afk?.active) return null;
+  const list = route.name === 'answer' ? info.sessions.filter((s) => s.id !== route.params.session) : info.sessions;
+  if (!list.length) return null;
+  const q = list[0].pending_question?.questions?.[0];
+  return { href: answerHash(list[0].id), command: sessionLabel(list[0].command || ''), text: q?.question || q?.header || '', more: list.length - 1 };
+}
+
+export function WaitingBanner({ b }) {
+  return html`<div class="waiting-banner" role="status">
+    <span class="wb-text"><b>${b.command}</b>${b.text && ` — ${b.text}`}</span>
+    <a class="btn btn--primary" href=${b.href}>Answer</a>
+    ${b.more > 0 && html`<a class="wb-more" href="#/sessions">and ${b.more} more</a>`}
+  </div>`;
 }
 
 const FETCH_TIMEOUT_MS = 8000;
@@ -115,6 +134,11 @@ export function poll(url, ms, onResult, keepAlive = () => false) {
   };
 }
 
+// A click outside an open card or lane menu closes it, like any dropdown.
+export function closeMenusOutside(e) {
+  for (const m of document.querySelectorAll('details.menu[open]')) if (!m.contains(e.target)) m.removeAttribute('open');
+}
+
 export const NAV = [
   ['planning', '#/planning', 'Planning'],
   ['delivery', '#/delivery', 'Delivery'],
@@ -145,7 +169,7 @@ function View({ route, sessions, limits }) {
     case 'new':
       return html`<${Launcher} limits=${limits} />`;
     case 'settings':
-      return html`<${Settings} />`;
+      return html`<${Settings} section=${route.params.section} />`;
     case 'planning': // keyed by ?repo= so a pasted link for another repo remounts the board
       return html`<${Planning} key=${route.repo || ''} />`;
     case 'delivery':
@@ -158,7 +182,7 @@ function View({ route, sessions, limits }) {
 }
 
 export class App extends Component {
-  state = { route: parseRoute(globalThis.location?.hash), sessions: null, limits: {}, usage: {}, afk: null, commands: [], offline: false, notif: notifyState(), palette: false, sheet: false, cleanup: null, peek: null };
+  state = { route: parseRoute(globalThis.location?.hash), sessions: null, wait: waitingInfo(null), limits: {}, usage: {}, afk: null, commands: [], offline: false, notif: notifyState(), palette: false, sheet: false, cleanup: null, peek: null };
 
   onRepo = () => this.setState({ route: parseRoute(location.hash) }); // nav links follow; a board remounts on its new ?repo=
 
@@ -200,11 +224,14 @@ export class App extends Component {
         break;
       }
       case 'move': if (!palette && !sheet && !cleanup && !peek && moveFocus(intent.dir)) e.preventDefault(); break;
-      case 'escape':
+      case 'escape': {
         if (peek && peek.kind === 'prd' && prdEdits.dirty && !confirm('Discard your unsaved edits?')) break;
-        if (palette || sheet || cleanup || peek) this.closeDialogs();
-        else if (['session', 'answer'].includes(route.name)) history.length > 1 ? history.back() : (location.hash = '#/sessions');
+        if (palette || sheet || cleanup || peek) { this.closeDialogs(); break; }
+        const menu = document.querySelector('details.menu[open]'); // then a card or lane menu, before leaving the page
+        if (menu) { menu.removeAttribute('open'); menu.querySelector('summary')?.focus(); e.preventDefault(); break; }
+        if (['session', 'answer'].includes(route.name)) history.length > 1 ? history.back() : (location.hash = '#/sessions');
         break;
+      }
     }
   };
 
@@ -228,6 +255,7 @@ export class App extends Component {
     addEventListener('hashchange', this.onHash);
     addEventListener('aiw:repo', this.onRepo);
     addEventListener('keydown', this.onKey);
+    addEventListener('pointerdown', closeMenusOutside);
     addEventListener('aiw:cleanup', this.onCleanup);
     addEventListener('aiw:peek', this.onPeek);
     addEventListener('aiw:afk-back', this.onAfkBack);
@@ -237,13 +265,14 @@ export class App extends Component {
       if (r.ok) {
         const list = sessionList(r.data);
         this.setAfk((r.data && r.data.afk) || null);
-        this.setState({ sessions: list, limits: (r.data && r.data.limits) || {}, usage: (r.data && r.data.usage) || {}, offline: false });
+        const wait = waitingInfo(list);
+        this.setState({ sessions: list, wait, limits: (r.data && r.data.limits) || {}, usage: (r.data && r.data.usage) || {}, offline: false });
         for (const s of list || []) {
           if (this.prev[s.id] === 'limited' && ['starting', 'running'].includes(s.outcome)) toast(`Resumed after limit: ${s.command || 'run'}`);
           this.prev[s.id] = s.outcome;
         }
         const away = !!this.state.afk?.active;  // autopilot handles or holds these; no badge count, no pings
-        document.title = pageTitle(away ? 0 : waitingInfo(list).count);
+        document.title = pageTitle(away ? 0 : wait.count);
         for (const s of this.watch(list)) if (!away) notifyWaiting(s);
       } else {
         this.setState({ offline: true });
@@ -275,14 +304,16 @@ export class App extends Component {
     removeEventListener('hashchange', this.onHash);
     removeEventListener('aiw:repo', this.onRepo);
     removeEventListener('keydown', this.onKey);
+    removeEventListener('pointerdown', closeMenusOutside);
     removeEventListener('aiw:cleanup', this.onCleanup);
     removeEventListener('aiw:peek', this.onPeek);
     removeEventListener('aiw:afk-back', this.onAfkBack);
     if (this.stop) this.stop();
   }
 
-  render(_, { route, sessions, limits, usage, afk, commands, offline, notif, palette, sheet, cleanup, peek }) {
-    const b = headerBadge(offline, afk?.active ? [] : sessions);
+  render(_, { route, sessions, wait, limits, usage, afk, commands, offline, notif, palette, sheet, cleanup, peek }) {
+    const b = headerBadge(offline, sessions, afk?.active ? waitingInfo(null) : wait); // AFK: no count
+    const banner = offline ? null : bannerInfo(wait, route, afk); // stale while offline
     let badge = null;
     if (b?.kind === 'offline') badge = html`<span role="status" class="offline">Offline: retrying</span>`;
     else if (b?.kind === 'waiting') badge = html`<a class="badge waiting" href=${b.href}>${BELL}Waiting on you · ${b.count}</a>`;
@@ -303,7 +334,8 @@ export class App extends Component {
         ${notif === 'default' && html`<button type="button" class="icon-btn" aria-label="Enable notifications" title="Enable desktop notifications" onClick=${this.enableNotify}>${BELL}</button>`}
         <a class="btn btn--primary" href="#/new" aria-label="New run" aria-current=${route.name === 'new' ? 'page' : undefined}><span>New<span class="nr-word"> run</span></span></a>
       </header>
-      <main>
+      ${banner && html`<${WaitingBanner} b=${banner} />`}
+      <main class=${'page-' + route.name}>
         ${afk?.summary && html`<${AfkSummary} summary=${afk.summary} onDismiss=${this.dismissAfk} />`}
         <${View} route=${route} sessions=${sessions} limits=${limits} />
       </main>

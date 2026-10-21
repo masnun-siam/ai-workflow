@@ -1,8 +1,8 @@
 import { h, Component } from './vendor/preact.mjs';
 import htm from './vendor/htm.mjs';
-import { BoardShell, colTabs } from './boardshell.js';
+import { BoardShell, colTabs, boardCol } from './boardshell.js';
 import { ghChips } from './ghstatus.js';
-import { CardActions, LaneAutopilot, CloseEpic } from './delivery_actions.js';
+import { CardActions, LaneAutopilot, CloseEpic, isBlocked } from './delivery_actions.js';
 import { IssueLink } from './issue.js';
 import { PrLink } from './pr.js';
 
@@ -10,6 +10,7 @@ const html = htm.bind(h);
 
 export const COLUMNS = [
   ['unrefined', 'Needs refinement'],
+  ['blocked', 'Blocked'],
   ['ready', 'Ready'],
   ['in_progress', 'In progress'],
   ['draft_pr', 'Draft PR'],
@@ -20,7 +21,8 @@ export const COLUMNS = [
 
 export function laneGroups(cards) {
   const by = Object.fromEntries(COLUMNS.map(([k]) => [k, []]));
-  for (const c of cards || []) (by[c.column] || by.ready).push(c);
+  // Only a Ready card with open blockers moves to Blocked; a blocked card in another column stays put.
+  for (const c of cards || []) (by[c.column === 'ready' && isBlocked(c) ? 'blocked' : c.column] || by.ready).push(c);
   return by;
 }
 
@@ -31,7 +33,7 @@ export const ciChip = (pr) => (pr && pr.ci ? ghChips({ pr: { state: 'OPEN', ci: 
 
 // Card. Plain function so tests can walk the tree. `ctx` = { repo, autoGrind, reload }.
 export function deliveryCard(c, ctx = {}) {
-  const blocked = (c.blocked_by || []).length > 0;
+  const blocked = isBlocked(c);
   const [owner, repo] = String(ctx.repo || '').split('/');
   return html`<article class=${blocked ? 'bcard is-blocked' : 'bcard'} key=${c.n}>
     <div class="bcard-title">${owner && repo ? html`<${IssueLink} owner=${owner} repo=${repo} issue=${c.n}>#${c.n} ${c.title}<//>` : `#${c.n} ${c.title}`}</div>
@@ -60,16 +62,12 @@ export function lane(l, ctx = {}) {
     <summary class="lane-head">
       <h2>${l.epic ? `#${l.epic} ${l.title || ''}` : 'No epic'}</h2>
       <span class=${atCap ? 'lane-running at-cap' : 'lane-running'}>${runningText(l.running, l.cap)}</span>
-      ${l.autopilot && html`<span class="chip chip-running">autopilot on</span>`}
       ${!open && html`<span class="muted lane-empty">nothing open</span>`}
       <span data-slot="lane-actions"><${LaneAutopilot} lane=${l} repo=${ctx.repo} onChange=${ctx.reload} /><${CloseEpic} lane=${l} repo=${ctx.repo} onChange=${ctx.reload} /></span>
     </summary>
     ${colTabs(key, COLUMNS.map(([k, label]) => [k, label, by[k].length]))}
     <div class="cols">
-      ${COLUMNS.map(([k, label]) => html`<section class="bcol" id=${`${key}-${k}`} aria-label=${label} key=${k}>
-        <h2>${label}<span>${by[k].length}</span></h2>
-        ${by[k].length ? by[k].map((c) => deliveryCard(c, ctx)) : html`<p class="empty">None</p>`}
-      </section>`)}
+      ${COLUMNS.map(([k, label]) => boardCol(`${key}-${k}`, k, label, by[k], (c) => deliveryCard(c, ctx)))}
     </div>
   </details>`;
 }

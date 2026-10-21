@@ -69,26 +69,55 @@ const posts = []; let status = 200;
 globalThis.fetch = async (u, o = {}) => { posts.push([u, JSON.parse(o.body)]); return status === 200 ? { ok: true, status, json: async () => ({ session: 's' }) } : { ok: false, status, json: async () => ({ error: 'issue is blocked' }) }; };
 let reloads = 0;
 const ctx = { repo: 'o/r', reload: () => { reloads++; } };
+const A0 = await import(U('delivery_actions.js'));
 const t = D.board(data, ctx);
 const lanes = find('details', t).filter((s) => String(s.props['aria-label']).match(/^(Epic|No epic)/));
 assert.deepEqual(lanes.map((l) => l.props['aria-label']), ['Epic #40', 'No epic']);
 const cols = find('section', lanes[0]).filter((s) => s.props['aria-label'] !== 'Epic #40');
-assert.deepEqual(cols.map((c) => c.props['aria-label']), ['Needs refinement', 'Ready', 'In progress', 'Draft PR', 'In review', 'Grinding', 'Merged']);
+assert.deepEqual(cols.map((c) => c.props['aria-label']), ['Needs refinement', 'Blocked', 'Ready', 'In progress', 'Draft PR', 'In review', 'Grinding', 'Merged']);
 const inCol = (name) => text(cols.find((c) => c.props['aria-label'] === name));
-assert.match(inCol('Ready'), /Blocked one/); assert.match(inCol('In progress'), /Running one/); assert.match(inCol('Draft PR'), /Draft/);
+assert.match(inCol('Blocked'), /Blocked one/); assert.ok(!/Blocked one/.test(inCol('Ready'))); assert.match(inCol('In progress'), /Running one/); assert.match(inCol('Draft PR'), /Draft/);
 assert.match(inCol('In review'), /Review/); assert.match(inCol('Grinding'), /Grind/); assert.match(inCol('Merged'), /Done/);
-out('delivery: epic lanes by six stage columns');
+out('delivery: epic lanes by eight stage columns');
 
-assert.match(inCol('Ready'), /Blocked by #3, #4/);
-assert.ok(!/Blocked/.test(inCol('In progress')));
+assert.match(inCol('Blocked'), /Blocked by #3, #4/);
+assert.ok(!/Blocked/.test(inCol('In progress')) && !/Blocked by/.test(inCol('Ready')));
 const blocked = byClass('is-blocked', lanes[0]); assert.equal(blocked.length, 1);
-out('delivery: blocked card shows the lock with blocker numbers');
+assert.equal(find(A0.CardActions, byClass('is-blocked', lanes[0])[0]).length, 1);
+{
+  const gl = D.laneGroups([card({ n: 1, blocked_by: [3, 4] }), card({ n: 2, column: 'unrefined', blocked_by: [3] }), card({ n: 3 })]);
+  assert.deepEqual([gl.blocked.map((c) => c.n), gl.unrefined.map((c) => c.n), gl.ready.map((c) => c.n)], [[1], [2], [3]]);
+}
+out('delivery: blocked card lands in Blocked with the lock line and blocker numbers');
+
+{
+  const L = D.lane(data.lanes[0], ctx);
+  const sec = find('section', L).filter((s) => s.props['aria-label'] !== 'Epic #40');
+  const empties = sec.filter((s) => s.props.class === 'bcol is-empty').map((s) => s.props['aria-label']);
+  assert.deepEqual(empties, ['Needs refinement', 'Ready'], 'columns without cards collapse');
+  assert.equal(byClass('empty', L).length, 0, 'no None box in a collapsed column');
+  const sparse = D.lane({ ...data.lanes[0], cards: [card({ n: 1 }), card({ n: 8, column: 'in_review' })] }, ctx);
+  const cl = find('section', sparse).filter((s) => s.props['aria-label'] !== 'Epic #40');
+  assert.deepEqual(cl.filter((s) => s.props.class === 'bcol').map((s) => s.props['aria-label']), ['Ready', 'In review']);
+  assert.equal(cl.filter((s) => s.props.class === 'bcol is-empty').length, 6);
+}
+out('delivery: columns without cards render is-empty with a heading only');
 
 const heads = lanes.map((l) => text(byClass('lane-running', l)));
 assert.deepEqual(heads, ['2/2 running', '2/2 running']); assert.equal(byClass('at-cap', lanes[0]).length, 1);
 const low = D.lane({ ...data.lanes[0], running: 1 }); assert.equal(text(byClass('lane-running', low)), '1/2 running'); assert.equal(byClass('at-cap', low).length, 0);
-assert.match(text(byClass('chip', lanes[0])), /autopilot on/);
-out('delivery: lane header shows running/cap, flagged at cap');
+{
+  const head = find('summary', lanes[0]).find((s) => s.props.class === 'lane-head');
+  assert.equal(find(A0.LaneAutopilot, head).length, 1); assert.equal(find(A0.CloseEpic, head).length, 1);
+  const mce = new A0.CloseEpic({ lane: data.lanes[0], repo: 'o/r' }); mce.state = { busy: false };
+  const mrender = mce.render({ lane: data.lanes[0], repo: 'o/r' }, mce.state);
+  const ceb = find('button', mrender);
+  assert.equal(ceb.length, 1, 'the mounted epic menu has exactly one button');
+  assert.ok(find('button', byClass('menu-panel', mrender)[0]).includes(ceb[0]) && text(ceb[0]) === 'Close epic', 'and it is inside .menu-panel, not the header');
+  const none = D.lane(data.lanes[1], ctx);
+  assert.ok(find(A0.CloseEpic, none).length === 1 && A0.CloseEpic.prototype.render.call({ state: {} }, { lane: data.lanes[1] }, { busy: false }) === null, 'No epic lane has no menu');
+}
+out('delivery: lane header holds the Autopilot switch and the epic menu');
 
 assert.match(inCol('Grinding'), /grind round 3/);
 const links = find('a', lanes[0]).map((a) => a.props.href);
@@ -122,10 +151,29 @@ const labels = (i) => find('button', view(i)).map((b) => text(b));
 const btnOf = (i, l) => find('button', view(i)).find((b) => text(b) === l);
 
 const blockedA = mount(A.CardActions, { card: card({ n: 5, blocked_by: [3] }), repo: 'o/r', onChange: ctx.reload });
-assert.deepEqual(labels(blockedA), ['Start', 'Start in herdr']);
-assert.ok(btnOf(blockedA, 'Start').props.disabled && btnOf(blockedA, 'Start in herdr').props.disabled, 'blocked card cannot start');
+assert.equal(view(blockedA), null, 'blocked card renders no buttons');
 const freeA = mount(A.CardActions, { card: card({ n: 6 }), repo: 'o/r', onChange: ctx.reload });
+assert.deepEqual(labels(freeA), ['Start', 'Start in herdr']);
 assert.ok(!btnOf(freeA, 'Start').props.disabled);
+{
+  const det = find('details', view(freeA))[0], sum = find('summary', det)[0];
+  assert.equal(sum.props['aria-label'], 'More start options'); assert.equal(sum.props['aria-expanded'], false);
+  det.props.onToggle({ currentTarget: { open: true } });
+  assert.equal(find('summary', view(freeA))[0].props['aria-expanded'], true); assert.match(text(find('details', view(freeA))[0]), /Start in herdr/);
+  freeA.setState({ busy: true });
+  assert.ok(btnOf(freeA, 'Start').props.disabled && btnOf(freeA, 'Start in herdr').props.disabled && find('summary', view(freeA))[0].props['aria-disabled'] === true, 'busy disables Start, the toggle and the item');
+  freeA.setState({ busy: false, menuOpen: false });
+}
+{
+  let f = 0; freeA.menu = { open: true, querySelector: () => ({ focus: () => f++ }) };
+  const mn = freeA.menu;
+  await btnOf(freeA, 'Start').props.onClick();
+  assert.equal(mn.open, false, 'headless Start closes the menu'); assert.equal(f, 0, 'and leaves focus alone');
+  mn.open = true;
+  await btnOf(freeA, 'Start in herdr').props.onClick();
+  assert.equal(mn.open, false, 'Start in herdr closes the menu'); assert.equal(f, 1, 'and focuses its summary');
+  posts.pop(); posts.pop(); reloads -= 2; freeA.menu = null;
+}
 await btnOf(freeA, 'Start').props.onClick();
 assert.deepEqual(posts.at(-1), ['/api/start', { repo: 'o/r', skill: 'implement-issue', arg: '6', via: 'headless' }]);
 await btnOf(freeA, 'Start in herdr').props.onClick();
@@ -166,6 +214,30 @@ assert.deepEqual(posts.at(-1), ['/api/cleanup', { repo: 'o/r', issue: 10, confir
 assert.equal(byClass('clean-dialog', view(cl)).length, 0, 'dialog closes after cleaning');
 assert.deepEqual(labels(mount(A.CardActions, { card: card({ n: 12, column: 'merged' }), repo: 'o/r' })), [], 'unflagged merged card has no Clean');
 out('delivery actions: Clean lists uncommitted paths and unpushed shas before POST /api/cleanup');
+
+{
+  // the ⋯ menu: toggling opens by hand and never toggles the lane; Close epic confirms, then posts
+  const ce = mount(A.CloseEpic, { lane: data.lanes[0], repo: 'o/r', onChange: ctx.reload });
+  let sumFocus = 0; const menu = { open: false, querySelector: (q) => (q === 'summary' ? { focus: () => sumFocus++ } : null) }; ce.menu = menu;
+  const sum = () => find('summary', view(ce))[0];
+  assert.equal(sum().props['aria-label'], 'Epic actions'); assert.equal(text(sum()), '⋯');
+  assert.equal(sum().props['aria-expanded'], false);
+  byClass('lane-menu', view(ce))[0].props.onToggle({ currentTarget: { open: true } }); assert.equal(sum().props['aria-expanded'], true, 'aria-expanded follows the toggle');
+  byClass('lane-menu', view(ce))[0].props.onToggle({ currentTarget: { open: false } });
+  let prevented = 0; const ev = { preventDefault: () => { prevented++; } };
+  sum().props.onClick(ev); assert.equal(menu.open, true); sum().props.onClick(ev); assert.equal(menu.open, false); assert.equal(prevented, 2);
+  const panel = byClass('menu-panel', view(ce))[0]; panel.props.onClick(ev); assert.equal(prevented, 3, 'clicks inside the menu do not toggle the lane');
+  globalThis.confirm = () => true; status = 200;
+  globalThis.fetch = async (u, o = {}) => { posts.push([u, JSON.parse(o.body)]); return { ok: true, status: 200, json: async () => ({ closed: [1, 2] }) }; };
+  menu.open = true;
+  const p = find('button', view(ce)).find((b) => text(b) === 'Close epic').props.onClick();
+  assert.equal(menu.open, false, 'the menu closes on choosing'); assert.equal(text(sum()), 'Closing…'); assert.equal(sum().props['aria-disabled'], true);
+  assert.equal(sumFocus, 1, 'focus returns to its summary'); assert.equal(sum().props['aria-label'], 'Closing epic');
+  sum().props.onClick(ev); assert.equal(menu.open, false, 'no toggling while closing');
+  await p;
+  assert.deepEqual(posts.at(-1), ['/api/epics/close', { repo: 'o/r', epic: 40 }]); assert.equal(text(sum()), '⋯');
+}
+out('delivery actions: epic menu opens by hand, Close epic confirms and shows Closing…');
 
 out('delivery: Delivery mounts inside BoardShell polling /api/delivery');
 """
