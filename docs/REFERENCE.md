@@ -34,132 +34,139 @@ aiw autopilot <owner/repo> <epic> on|off  switch autopilot for an epic (works wi
 
 ## aiw ui
 
-`aiw ui` serves a local web UI for starting and tracking headless Claude sessions. Until the
-board rewrite lands it has three pages: **Sessions**, **New** and **Settings**. On first start
+`aiw ui` serves a local web app for starting and tracking headless Claude sessions and for seeing
+what needs you across every watched repo. It is a React + TypeScript app (source in `ui/`) served
+from the committed build in `run-engine/ui_dist/`, so using it never needs Node. On first start
 after an upgrade it deletes the old run data from the plugin data dir once and logs what it removed.
 
 - It binds to loopback only. `--port` sets the port (default 8420).
 - `--allow-host HOST` is repeatable and matches exactly: use `name:port`, or the bare name for the default 443 serve.
 - To reach it over a tailnet: `tailscale serve --bg 8420`, then
   `aiw ui --allow-host <machine>.<tailnet>.ts.net`. It installs as a PWA.
+- `/` serves the app (`index.html`, never cached); `/assets/*` are hashed and cached for a year;
+  `/sw.js`, `/manifest.webmanifest` and `/icons/*` are served from the root. `/next/` serves the same
+  app for one more release.
 
-**Planning.** One repo at a time; one card per PRD in `docs/prds/` (drafts included), in columns
-PRD draft → In review → Approved → Tasks filed → Refined. The epic is the open issue labelled
-`epic` and `prd-<slug>`; cards show its number, child-issue count and "x/y refined". Each card
-offers the next step: a lens picker and panel progress on drafts, **Create tasks**, **Refine**, or
-**Autopilot**. `GET /api/planning?repo=owner/repo`.
+**Routes** (hash routes, each with an optional `?repo=owner/name` that a shared link keeps):
+`#/inbox` (default), `#/features`, `#/features/<slug>[/<tab>]`, `#/board`, `#/activity`,
+`#/sessions/<id>`, `#/settings[/<section>]`. Old routes still open the matching page, so old
+bookmarks and push-notification links work: `#/planning`, `#/delivery`, `#/answer/<id>`,
+`#/session/<id>`, `#/dispatch/<id>`, `#/sessions` and `#/new` (opens Start). **Shortcuts:** `N` Start,
+`G` then `I/F/B/A/S` to go to a page, `?` lists them, `Esc` closes the top panel. The palette
+(⌘K / Ctrl+K) finds pages, every Start command, features, issues, PRs, sessions, switches repo and
+turns Away mode on or off.
 
-**Planning card tools.** A draft or in-review PRD has **Approve PRD** (`/create-prd <path> approve…`,
-after a confirm). A PRD with child issues lists them, each refined or with its own **Refine**, plus
-**Refine N picked**. With an epic: a box files **one more task** (`/create-tasks` with the text as a
-finding for that epic) and **Close epic** closes the epic and every open child as completed
-(`POST /api/epics/close`). `/api/start` takes several issue numbers for `refine-issues`.
+**Inbox.** Everything that needs you, across repos, grouped Blocking everything, Answer Claude, Decide,
+Fix, Set up and Waiting (nothing to do); the rail badge and tab title count all but Waiting. Items: GitHub CLI
+signed out; a session asking a question (answered inline); a peer review at its round cap or with every
+lens approving (Approve PRD anyway, Run 2 more rounds); a PR that is approved with green checks (Review
+and merge); a paused grind (Skip CI and continue, Stop grind); a failed session (Retry, Continue in
+terminal); a merged issue whose worktree has unsaved work (Review and clean up); a `local/` repo with no
+GitHub remote (Publish to GitHub); a usage-limited session (Resume on another account); a queued session
+(Start now, Cancel). An item disappears within a poll after its condition clears.
+`GET /api/inbox[?repo=]` builds it on the server from sessions, panels, grind state, cleanup flags, the
+repo registry and the board polls; a repo whose board data is stale is listed in `stale` and contributes
+session items only.
 
-**Delivery.** One swimlane per open epic plus **No epic**, in columns Needs refinement (an epic's
-unrefined children, with **Refine**) → Blocked → Ready → In progress → Draft
-PR → In review → Grinding → Merged (7 days). Only refined issues, or ones with a PR or live
-session, show. A ready issue with open blockers sits in Blocked with a lock naming them and cannot
-start. Ready cards have **Start** (headless `/implement-issue`) and a ▾ menu with **Start in herdr**;
-In review cards have **Grind** when the repo's auto-grind is off. Each lane header shows
-`running/cap`, an **Autopilot** switch and a ⋯ menu with **Close epic**; a lane with nothing open
-(only merged cards) starts collapsed, and an **Epic** filter shows one lane. Boards use the full
-window width; an empty column (on Planning too) shrinks to a thin strip with its name and 0, and the
-others share the rest at 220px or more. On a phone each board shows one column at a time with a tab
-strip of column counts.
-A merged issue's worktree under `.worktrees/` and its branch are removed when clean;
-otherwise the card is flagged and **Clean** lists what would be lost first.
-`GET /api/delivery`, `POST /api/start` (409 for a live session, open PR or blocked issue),
-`POST /api/autopilot`, `POST /api/cleanup`.
+**Features.** One row per PRD in the current repo with its stage (PRD draft, PRD review, Approved,
+Tasks, Building, Shipped), progress and one next-step button. A feature page shows a stage stepper, a
+**Next step** box and tabs **Issues**, **PRD**, **Peer review** and **Sessions**. Issues: a table by
+status with signals (priority, PR, CI, review, grind, live session, failed last run, cleanup), one
+action per row (Refine, Start, Retry, Answer, Merge, Grind, Skip CI, Clean up), the **Auto-build**
+switch with the repo's cap, **Add task** (`/create-tasks` with the text as a finding) and refine-picked.
+PRD: rendered, **Edit** (**Save and commit** commits only that file on the checkout's current branch, not
+pushed; refused if the file changed on disk since it opened) or **Ask Claude** (`/create-prd <path>
+--update <request>`). The More menu has **Close epic** (closes the epic and every open child as
+completed, `POST /api/epics/close`). `GET /api/planning?repo=`.
+
+**Board.** Five columns: Needs refinement, Ready (blocked issues last, with a lock), Building (draft
+PRs included), In review (grinding included), Merged (7 days). Grouped by feature (each lane shows
+progress and its Auto-build switch) or All issues. Cards show their signals and one action; j/k and
+h/l move between cards and columns. A ready issue with open blockers cannot start. `GET
+/api/delivery`, `POST /api/start` (409 for a live session, open PR or blocked issue; herdr starts
+answer `{session: null, via: "herdr", tab}` because herdr tabs are not tracked), `POST
+/api/autopilot` (the Auto-build switch), `POST /api/cleanup`.
 
 **Board data.** A PR belongs to an issue when GitHub links it, when its body says Closes, Fixes or
 Resolves #n, or when its branch starts `issue-<n>-` (GitHub links closing keywords only for PRs into
-the default branch, so a staging-based repo needs the last two). One GitHub GraphQL call per repo per poll, every 60 s (15 s while a PR's CI is
-pending), kept in memory; a rate limit pauses fetching for 10 minutes and the boards show the last
-data as stale. The stale banner says why (rate limit and its retry time, or gh's error) and has a
-**Refresh** (`?refresh=1` on the board GET fetches now). No board shows before the first fetch. After each fresh poll the UI runs autopilot (refined, unblocked issues of switched-on
-epics, by `priority:` label then number, up to the repo's cap), merge cleanup, and grind autostart
-(a PR that turned ready on a repo with auto-grind on). Nothing runs on stale data, and nothing
-merges a PR without a click.
+the default branch, so a staging-based repo needs the last two). One GitHub GraphQL call per watched
+repo per poll, every 60 s (15 s while a PR's CI is pending), kept in memory. A repo is watched while it
+has a live session or was opened in the last 7 days. A rate limit pauses fetching for 10 minutes and
+the boards show the last data as stale with the reason and a **Refresh** (`?refresh=1` on the board GET
+fetches now). After each fresh poll the server runs Auto-build (refined, unblocked issues of
+switched-on epics, by `priority:` label then number, up to the repo's cap), merge cleanup, and grind
+autostart (a PR that turned ready on a repo with auto-grind on). Nothing runs on stale data, and
+nothing merges a PR without a click.
 
-**Drawer.** A card's title (an issue, a PR, a PRD) opens it in a side drawer, full screen on a
-phone. Issues and PRs show the body, comments, labels, and for a PR its checks, files and commits;
-both take a comment, an issue closes (completed or not planned) or reopens, and an open PR has
-**Merge** (a merge commit, never squash; the confirm warns about failing or running checks and a
-missing approval, but does not block). A PRD shows rendered, edits as raw markdown (**Save and
-commit** commits only that file on the checkout's current branch, not pushed) or takes a request
-for **Ask Claude**, which starts `/create-prd <path> <request>`.
+**Panels.** An issue or PR opens in a side panel (full screen on a phone). Issues show the body,
+comments (with a comment box), blockers and sessions, and close (completed or not planned) or reopen.
+A PR has Overview, Checks, Conversation, Files and Commits tabs, grind state with **Skip CI** and
+**Stop**, and **Merge** (a merge commit, never squash; the confirm lists failing or running checks,
+requested changes and a missing approval but does not block).
 `POST /api/issues/<o>/<r>/<n>/comment|state`, `POST /api/pulls/<o>/<r>/<n>/comment|merge`,
-`GET /api/prd?repo=&path=`, `POST /api/prd`.
+`POST /api/grind/skip-ci|stop` (`{repo, pr}`; 409 when there is nothing to skip or stop),
+`GET /api/prd?repo=&path=` (returns `sha`), `POST /api/prd` (takes `base_sha`; 409 when it changed).
 
-**New.** Pick a skill (grouped, each with a one-line description; the last one is remembered),
-a repo and the input. For `implement-issue`, `pr-review` and `pr-grind` the repo's open issues
-or PRs are listed under the input (`GET /api/repos/<owner>/<repo>/open?kind=issue|pr`, one `gh`
-page of 100); typing filters them. `worklog` offers Today, Yesterday, A day or A range (at most
-31 days, one session per day, 3 running at once, the rest `queued`). The skills are on the left
-and the picked skill's repo, input and **Start** in a panel on the right that stays in view; the
-**Custom** card takes any command or prompt. On a phone the panel opens under the picked card.
+**Start** (the New button, `N` or ⌘K). Commands grouped Plan, Build, Review, Ship, Capture and
+Maintain, each with a one-line description; the last one is remembered. Pick **Where** (a registered repo,
+or **No repo yet** for `create-prd`, `dump`, `day` and the custom prompt, which run in the notes vault
+with a **Vault folder**), the input, and **Run on** an account (a limited account says the run will
+queue). `implement-issue`, `pr-review` and `pr-grind` list the repo's open issues or PRs under the
+input (`GET /api/repos/<owner>/<repo>/open?kind=issue|pr`, one `gh` page of 100); a pasted issue or PR URL
+of a registered repo switches the repo. `worklog` offers Today, Yesterday, A day or A range (at most 31
+days, one session per day, 3 running at once, the rest `queued`). **Custom** takes any prompt and runs
+with permissions skipped. Starting anything opens its session page; a duplicate start (409) offers to
+open the running session.
 
-**Waiting banner.** While a session waits on an answer (any repo, AFK off), a banner under the
-header on every page shows the oldest one's question with **Answer**, and "and N more"; the header
-badge opens the same session.
+**Activity and sessions.** Live sessions as cards, history as a table with search, a result filter
+and cost today; **Clean up** lists finished sessions by repo before removing them. A session page
+has banners for waiting (inline answer), limited (reset time, **Resume on another account**, **Don't
+auto-resume**), failed (**Retry**, **Continue in terminal**) and queued (**Start now**), the transcript, a
+composer (a prompt queues while a turn runs), and a facts box with cost and tokens (`$0.44 · 703k tok`).
+Sessions auto-resume after a rate limit, and the limit timer releases queued ones after a restart.
+Actions: **Stop** (`POST /api/sessions/<id>/stop`, after a confirm), **Resume**, **Rerun** (replays the
+recorded start request, same repo and account; `POST /api/sessions/<id>/rerun`), and **Start now**
+(`POST /api/sessions/<id>/start-now`: starts a batch-queued session at once, past the batch cap; 409 when
+the session is not queued or is waiting on an account limit, which starts by itself at the reset).
 
-**Sessions.** Every session with its status, cost and token use (`$0.44 · 703k tok`, hover for
-input and output), the transcript, and its answer page when it asked a question. Sessions
-auto-resume after a rate limit, and the limit timer releases queued ones after a restart. A session
-that has not finished has **Stop** (`POST /api/sessions/<id>/stop`, after a confirm); a finished one
-has **Rerun**, which starts its recorded command again in the same repo with the same account. The
-list filters by repo (shared with the boards, or All repos), outcome and a search over the command
-and its link (`#832` finds it), shows 50 rows at a time, totals cost for today, the last 7 days and
-the current filters, and groups the sessions of one issue or PR under it by default (sessions with no
-issue or PR go in **Other**). **Waiting on you** and **Queued / limited** sessions are pinned above
-the list, whatever the filters. A row opens its session; rows name their issue or PR
-(`pr-grind · #832`).
+**Away mode.** A timed run by the server, so it works with no browser open (30 min to 4 h or an end
+time; **+30 min** and **I'm back** end or extend it). Each tick it answers every `aiw ask` round whose
+questions all carry a "(Recommended)" option, sends "Skip CI for now" to a grind paused on CI (at most
+once per PR per window), and retries failed sessions on a 2m/10m/30m/1h backoff. When the window ends
+one push sums it up and the Inbox shows a "While you were away" log until dismissed. State is
+`afk.json`. `POST /api/afk` (start), `POST /api/afk/stop|dismiss`.
 
-**Command palette** (⌘K / Ctrl+K). Pages, AFK, sessions, and for the selected repo its open
-issues and PRs (searchable by label) and PRDs, each opening its drawer; another repo's name
-switches every page to it.
-
-**Repo picker.** One picker for the registered checkouts (`checkouts.json`), searchable by name,
-owner, project or path, recent first. The picked repo is shared by Planning, Delivery and New run
-and kept in the URL as `?repo=owner/name`, so a link opens on that repo. A typed absolute path or **Browse for a folder…** registers a
-checkout. **No repo yet** runs a session in the notes vault for create-prd and dump.
-
-**Settings.** One section at a time (`#/settings/commands|repos|notifications|review|vault`),
-picked from a side nav or, on a phone, a tab strip. Named `claude` commands a session can launch with (one per account), the notes
-vault path, the checkout list, the plan-usage (5h / 7d) per account shown in the header, and per
-repo: auto-grind (default off), autopilot cap (1–5, default 2) and the Slack review channel grind
-posts to (`repos[owner/repo]` in `ui_settings.json`; `autopilot` maps a repo to its epics).
-The per-repo list filters by name or path and shows 8 until **Show all**. **Check remotes** runs
-`gh repo view` on every registered repo and lists the ones that fail first; **Remove** unregisters a
-repo (its clone is untouched). **Notifications** edits `ui.json` (written mode 0600; a token or
+**Settings** (`#/settings/repos|accounts|notifications|review|vault`). **Repositories**: one table of
+the registered checkouts (`checkouts.json`) with GitHub status or **Publish**, auto-grind (default off),
+Auto-build cap (1–5, default 2), the Slack review channel grind posts to (`repos[owner/repo]` in
+`ui_settings.json`; `autopilot` maps a repo to its epics) and **Remove** (its clone is untouched), plus
+scan folders, **Find repos** and **Check remotes** (`gh repo view` on every repo, failures first).
+**Claude accounts**: the named `claude` commands a session can launch with, one per account; their plan
+usage (5h / 7d) shows in the rail. **Notifications** edits `ui.json` (written mode 0600; a token or
 password is never sent back to the browser, and an empty box keeps the saved one). **Peer review**
-sets the rounds cap, the lenses ticked by default and each lens prompt; the changes are saved to
-`<data_dir>/config.json` and laid over the shipped `run-engine/config.json`, so **Reset to
-defaults** just removes that file.
+sets the rounds cap, the lenses ticked by default and each lens prompt; changes are saved to
+`<data_dir>/config.json` and laid over the shipped `run-engine/config.json`, so **Reset to defaults**
+just removes that file. **Notes vault** sets the vault path. With no repos registered the app opens
+an onboarding page that checks `gh` and a Claude account, then scans folders.
 `GET|POST /api/settings/notify`, `GET|POST /api/settings/review`, `POST /api/repos/remove`,
 `POST /api/repos/check`.
 
-**Notes vault.** With **No repo yet** and a new idea, New shows a **Vault folder**
+**Notes vault.** With **No repo yet** and a new idea, Start shows a **Vault folder**
 (`05-Work/<Project>/<Feature>`) that follows the best match of your text as you type; **Suggest with
 Claude** asks Haiku for an existing or new project and feature. create-prd writes its PRD to the
-vault only (`--to obsidian`) there.
+vault only (`--to obsidian`) there; **Create repo** later turns it into a repo.
 
-**Peer review.** New has a **Peer review** box. Ticking it shows the lenses the command offers
-(`GET /api/peer-review`, from `config.json`), with critical ticked. A custom prompt becomes the
-root session; its Ask file is the artifact. When the root ends its turn, the UI starts one
-`peer-reviewer` session (Opus) per lens (`POST /api/review`, body `repo`, `artifact`, `lenses`,
-optional `root_session`), each told to end with `Verdict: approve` or `Verdict: changes`. The UI
-relays the verdicts to the root session, which revises and ends its turn, and the same lens sessions
-re-review. A panel stops when every lens approves, or as **cap reached** after `peer_review.max_rounds`
-(5) rounds; nothing auto-approves and nothing validates a verdict beyond that closing line (a missing
-line counts as `changes`). `POST /api/review/<panel>/lens` drops or retries a lens. The session page
-shows the panel's status; verdicts live under `peer-review/<panel>/round-<n>/<lens>.md`.
-
-**AFK mode.** A timed autopilot run by the server, so it works with no browser open. Each tick it
-answers every `aiw ask` round whose questions all carry a "(Recommended)" option, sends "Skip CI
-for now" to a grind paused on CI (at most once per PR per window), and retries failed sessions on a
-2m/10m/30m/1h backoff. When the window ends one push sums it up and the UI shows the log.
-State is `afk.json`.
+**Peer review.** The feature page's **Peer review** tab (and Start's lens picker for `peer-review` and
+Custom) lists the lenses the command offers (`GET /api/peer-review`, from `config.json`), with
+critical ticked. A custom prompt becomes the root session; its Ask file is the artifact. When the
+root ends its turn, the UI starts one `peer-reviewer` session (Opus) per lens (`POST /api/review`, body
+`repo`, `artifact`, `lenses`, optional `root_session`), each told to end with `Verdict: approve` or
+`Verdict: changes`. The UI relays the verdicts to the root session, which revises and ends its turn,
+and the same lens sessions re-review. A panel stops when every lens approves, or as **cap reached**
+after `peer_review.max_rounds` (5) rounds; `POST /api/review/<panel>/rounds` (`{add: 1..5}`) raises
+a capped panel's limit. Nothing auto-approves and nothing validates a verdict beyond that closing
+line (a missing line counts as `changes`). `POST /api/review/<panel>/lens` drops or retries a lens.
+Verdicts live under `peer-review/<panel>/round-<n>/<lens>.md`.
 
 **Running it as a service.** `aiw ui` under supervisord or launchd (e.g. `brew services`) runs as
 that daemon's process, not your terminal. On macOS, if the plugin or your repos live under
@@ -199,7 +206,7 @@ Nothing stateful lives in this repo. `aiw paths` resolves it under `$CLAUDE_PLUG
 | `checkouts.json` | the registered repo checkouts |
 | `pr-grind/` | one markdown state file per PR under grind |
 | `peer-review/` | one directory per panel: `panel.json` and `round-<n>/<lens>.md` verdicts |
-| `afk.json` | the AFK window and its log |
+| `afk.json` | the Away mode window and its log |
 | `ui.json` | push notifications and `public_url` (mode 0600) |
 | `config.json` | peer-review overrides from Settings, laid over `run-engine/config.json` |
 | `channels.json` | Slack ids and trigger templates for grind and release-pr |
@@ -216,8 +223,9 @@ agents/       peer-reviewer, worklog-runner
 guides/       engineering-workflow, code-review, skills
 templates/    prd, epic, issue
 commands/     code-review (a slash command)
-run-engine/   route.py (the aiw CLI) · ui_*.py (the web UI) · peer_review, threads, ci, ask
-              ui_static/ (vendored Preact/htm) · config.json · test_*.py
+run-engine/   route.py (the aiw CLI) · ui_*.py (the web UI server) · peer_review, threads, ci, ask
+              ui_dist/ (the built UI, committed) · config.json · test_*.py
+ui/           the web UI source: React + TypeScript + Vite
 bin/aiw       PATH shim. NOT named `route`; see INSTALL.md Step 3.
 docs/         HOW-IT-WORKS, INSTALL, REFERENCE, prds/, tasks/
 ```
@@ -229,4 +237,12 @@ python3 run-engine/test_<name>.py     # one file
 bash run-engine/run_tests.sh          # every test_*.py; also the pre-commit hook, the pre-push hook and CI
 ```
 
-No network, no install step.
+No network, no install step. The UI has its own checks, in `ui/` (Node 20; plugin users never need it):
+
+```bash
+cd ui && npm ci && npm run typecheck && npm test && npm run build
+```
+
+The `ui` CI job runs those and fails if the committed `run-engine/ui_dist/` differs from the build.
+`run-engine/test_ui_static.py` checks the server's static serving, Host/Origin guard and cache headers
+against the committed build.

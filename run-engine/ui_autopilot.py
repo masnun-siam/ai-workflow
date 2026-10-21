@@ -93,7 +93,7 @@ def _via_herdr(repo, skill, arg, herdr) -> dict:
         res = herdr(argv)
         if res.returncode != 0:
             raise RuntimeError(f"herdr {argv[1]} failed: {(res.stderr or res.stdout or '').strip()[:200]}")
-    return {"session": f"herdr:{label}", "via": "herdr"}
+    return {"session": None, "via": "herdr", "tab": label}
 
 
 def start(
@@ -109,7 +109,8 @@ def start(
     herdr=None,
     channel=None,
 ) -> dict:
-    """{session} (headless: the session id; herdr: `herdr:<tab label>`) or {panel} for peer-review.
+    """{session} (headless: the session id) or {session: None, via: "herdr", tab: <label>} (herdr tabs are not
+    sessions) or {panel} for peer-review.
     ValueError -> 400, Conflict -> 409, RuntimeError -> 502."""
     if skill not in SKILLS:
         raise ValueError(f"skill must be one of {', '.join(SKILLS)}")

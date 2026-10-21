@@ -152,6 +152,23 @@ try:
         assert len(resumes) == n
         ok("round 5 with changes -> cap reached, nothing resumed")
 
+        # ---- more rounds: only at the cap; raises this panel's limit and hands the root the last verdicts
+        assert peer_review.panel_status(P)["max_rounds"] == 5
+        for bad in (0, 6, "1", True, None):
+            assert post(f"/api/review/{P}/rounds", {"add": bad})[0] == 400, bad
+        assert post("/api/review/p-20200101T000000Z-aaaaaa/rounds", {"add": 1})[0] == 404
+        n = len(resumes)
+        s, b = post(f"/api/review/{P}/rounds", {"add": 2})
+        assert s == 200 and (b["max_rounds"], b["round"], b["state"]) == (7, 6, "running"), b
+        assert len(resumes) == n + 1 and resumes[-1][0] == r and "round 5 verdicts" in resumes[-1][1], resumes[-1]
+        assert post(f"/api/review/{P}/rounds", {"add": 1})[0] == 409, "no longer at the cap"
+        finish(r, "revised")
+        ui_panel.tick()
+        finish(lens_sids(P)["critical"], "Verdict: approve")
+        ui_panel.tick()
+        assert peer_review.panel_status(P)["state"] == "approved"
+        ok("POST /api/review/<panel>/rounds: 400 bad add, 404 unknown, 409 unless capped; resumes the relay loop")
+
         # ---- failed lens: 409 unless failed; rerun / drop
         r = root()
         P = ui_panel.start(repo, artifact, ["critical", "cto"], root_session=r)

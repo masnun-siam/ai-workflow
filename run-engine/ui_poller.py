@@ -27,7 +27,9 @@ with `stale: True, fetched_at: None`):
          "epic": int | None}              # parent of the first closed issue
       ],
       "open_prs": [  # every open PR (to match PRD pull requests that close no issue)
-        {"n": int, "title": str, "url": str, "draft": bool, "head": str, "ci": ...}
+        {"n": int, "title": str, "url": str, "draft": bool, "head": str, "ci": ..., "review": ...,
+         "reviewer": str | None,          # login of the newest approving review
+         "checks": int}                   # status checks that ran
       ]
     }
 
@@ -51,7 +53,13 @@ FAST_POLL_SECONDS = 15  # any PR's CI still pending
 RATE_LIMIT_PAUSE = 600
 MERGED_DAYS = 7
 
-_PR = "number url isDraft state mergedAt headRefName statusCheckRollup { state }"
+_PR = "number url isDraft state mergedAt headRefName reviewDecision statusCheckRollup { state }"
+# open PRs also carry who approved and how many checks ran (the Inbox's "ready to merge" line)
+_PR_OPEN = (
+    _PR
+    + " latestOpinionatedReviews(first: 5) { nodes { state author { login } } }"
+    + " checks: statusCheckRollup { contexts(first: 1) { totalCount } }"
+)
 QUERY = f"""
 query($owner: String!, $name: String!) {{
   repository(owner: $owner, name: $name) {{
@@ -72,12 +80,13 @@ query($owner: String!, $name: String!) {{
       }}
     }}
     openPrs: pullRequests(states: OPEN, first: 50, orderBy: {{field: UPDATED_AT, direction: DESC}}) {{
-      nodes {{ title body {_PR} closingIssuesReferences(first: 10) {{ nodes {{ number }} }} }}
+      nodes {{ title body {_PR_OPEN} closingIssuesReferences(first: 10) {{ nodes {{ number }} }} }}
     }}
   }}
 }}
 """
 
+_REVIEW = {"APPROVED": "approved", "CHANGES_REQUESTED": "changes_requested", "REVIEW_REQUIRED": "review_required"}
 _CI = {"SUCCESS": "success", "FAILURE": "failure", "ERROR": "failure", "PENDING": "pending", "EXPECTED": "pending"}
 
 
@@ -99,7 +108,15 @@ def _pr(n: dict) -> dict:
         "merged_at": n.get("mergedAt"),
         "head": n.get("headRefName"),
         "ci": ci,
+        "review": _REVIEW.get(n.get("reviewDecision") or "", "none"),  # no review rule on the repo: none
     }
+
+
+def _open_extra(n: dict) -> dict:
+    """reviewer (login of the newest approval, else None) and checks (how many ran) of an open PR."""
+    ok = [r for r in _nodes(n.get("latestOpinionatedReviews")) if r.get("state") == "APPROVED"]
+    ctx = ((n.get("checks") or {}).get("contexts") or {}).get("totalCount")
+    return {"reviewer": ((ok[-1].get("author") or {}).get("login") if ok else None), "checks": ctx or 0}
 
 
 # GitHub links "Closes #n" to the issue only when the PR targets the default branch. A repo whose PRs go
@@ -174,11 +191,14 @@ def normalize(response: dict, now: datetime | None = None) -> dict:
     open_prs = []
     for node in _nodes(repo.get("openPrs")):
         pr = {**_pr(node), "state": "OPEN"}
+        extra = _open_extra(node)
         for n in _refs(node):  # attach to its issue when GitHub did not
             if n in by_n and not any(x["n"] == pr["n"] for x in by_n[n]["prs"]):
                 by_n[n]["prs"].append(dict(pr))
         open_prs.append(
-            {k: v for k, v in pr.items() if k not in ("merged_at", "state")} | {"title": node.get("title") or ""}
+            {k: v for k, v in pr.items() if k not in ("merged_at", "state")}
+            | {"title": node.get("title") or ""}
+            | extra
         )
     for m in merged:  # a PR merged into a non-default branch leaves its issue open: mark it merged there
         for n in m["closes"]:
@@ -192,6 +212,7 @@ def normalize(response: dict, now: datetime | None = None) -> dict:
                         "merged_at": m["merged_at"],
                         "head": m["head"],
                         "ci": "success",
+                        "review": "none",
                     }
                 )
     return {"issues": issues, "merged": merged, "open_prs": open_prs}

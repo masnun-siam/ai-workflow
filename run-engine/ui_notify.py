@@ -122,18 +122,15 @@ def click_url(event: str, rec: dict, public_url) -> str | None:
         return None
     base = str(public_url).rstrip("/")
     if event == "pipeline":
-        return f"{base}/#/dispatch/{quote(str(rec['id']), safe='')}"
+        return f"{base}/#/sessions/{quote(str(rec['id']), safe='')}"
     if event in _BOARD:
-        return f"{base}/#/"
+        return f"{base}/#/inbox"
     if event == "waiting":
-        return f"{base}/#/answer/{quote(str(rec['id']), safe='')}"
+        return f"{base}/#/sessions/{quote(str(rec['id']), safe='')}"
     link = rec.get("link")
     if isinstance(link, dict) and all(link.get(k) for k in ("owner", "repo", "issue")):
-        return (
-            f"{base}/#/run/{quote(str(link['owner']), safe='')}/"
-            f"{quote(str(link['repo']), safe='')}/{quote(str(link['issue']), safe='')}"
-        )
-    return f"{base}/#/sessions"
+        return f"{base}/#/board?repo={quote(str(link['owner']), safe='')}/{quote(str(link['repo']), safe='')}"
+    return f"{base}/#/activity"
 
 
 def dedupe_key(event, rec: dict):

@@ -1,0 +1,19 @@
+/* Settings (FR-28). Layout classes (.set-grid, .set-nav, .set-sec) live in global.css. */
+.set-sec h2{font-size:16px}
+.set-sec .tbl-wrap{max-width:100%}
+.set-sec .tbl select.f{width:70px}
+.set-sec .tbl input.f.slack{width:150px}
+.set-sec .tbl td{vertical-align:middle}
+.acct-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.acct-row input.f{width:150px;flex:none}
+.acct-row input.f.cmd{flex:1;min-width:160px}
+.acct-row .radio{display:flex;gap:6px;align-items:center;font-size:13px;font-weight:500}
+.set-form{display:flex;flex-direction:column;gap:12px;max-width:520px}
+.set-form .check-row{display:flex;gap:8px;align-items:center;font-size:13.5px;font-weight:400}
+.err-text{color:var(--bad);font-size:13px}
+.set-note{font-size:13px;color:var(--muted)}
+.lens-prompt summary{cursor:pointer;font-weight:600;display:flex;gap:8px;align-items:center}
+.lens-prompt textarea{margin-top:8px}
+.set-sec .lens{font:inherit;font-weight:600;font-size:12.5px;color:inherit}
+.set-sec .lens.on{color:var(--bg)}
+.set-nav .nav-a{font:inherit;font-weight:500}

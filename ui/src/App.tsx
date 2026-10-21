@@ -1,0 +1,76 @@
+import { useEffect } from 'react';
+import { HashRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { useRepos } from './api/hooks';
+import { ConfirmProvider } from './components';
+import { legacyRedirect } from './lib/routes';
+import { ActivityPage } from './pages/ActivityPage';
+import { BoardPage } from './pages/BoardPage';
+import { FeaturePage } from './pages/FeaturePage';
+import { FeaturesPage } from './pages/FeaturesPage';
+import { InboxPage } from './pages/InboxPage';
+import { NotFoundPage } from './pages/NotFoundPage';
+import { OnboardingPage } from './pages/OnboardingPage';
+import { SessionPage } from './pages/SessionPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { PanelProvider } from './panels/PanelContext';
+import { QueryProvider } from './QueryProvider';
+import { Shell } from './shell/Shell';
+import { StartProvider, useStart } from './start/StartContext';
+
+/** Old hash routes (FR-2) redirect; anything else is a 404 inside the shell. */
+function LegacyOrNotFound() {
+  const { pathname, search } = useLocation();
+  const start = useStart();
+  const r = legacyRedirect(pathname, search);
+  useEffect(() => {
+    if (r?.start) start.open();
+  }, [r?.start]); // eslint-disable-line react-hooks/exhaustive-deps
+  return r ? <Navigate to={r.to} replace /> : <NotFoundPage />;
+}
+
+/** No registered repos: everything but Settings sends the user to onboarding (FR-29). */
+function Gate() {
+  const { pathname } = useLocation();
+  const repos = useRepos();
+  const empty = repos.isSuccess && repos.data.repos.length === 0;
+  if (empty && !pathname.startsWith('/settings') && pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
+  return <Outlet />;
+}
+
+export function AppRoutes() {
+  return (
+    <Routes>
+      <Route element={<Shell />}>
+        <Route element={<Gate />}>
+          <Route path="/inbox" element={<InboxPage />} />
+          <Route path="/features" element={<FeaturesPage />} />
+          <Route path="/features/:slug" element={<FeaturePage />} />
+          <Route path="/features/:slug/:tab" element={<FeaturePage />} />
+          <Route path="/board" element={<BoardPage />} />
+          <Route path="/activity" element={<ActivityPage />} />
+          <Route path="/sessions/:id" element={<SessionPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings/:section" element={<SettingsPage />} />
+          <Route path="/onboarding" element={<OnboardingPage />} />
+          <Route path="*" element={<LegacyOrNotFound />} />
+        </Route>
+      </Route>
+    </Routes>
+  );
+}
+
+export function App() {
+  return (
+    <QueryProvider>
+      <ConfirmProvider>
+        <HashRouter>
+          <PanelProvider>
+            <StartProvider>
+              <AppRoutes />
+            </StartProvider>
+          </PanelProvider>
+        </HashRouter>
+      </ConfirmProvider>
+    </QueryProvider>
+  );
+}

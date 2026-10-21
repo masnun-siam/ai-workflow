@@ -1,0 +1,26 @@
+/* Start dialog (FR-22). Base .start / .start-list / .pick-list / .lens live in global.css. */
+.start{min-height:0;overflow:hidden;flex:1}
+.start-list{min-height:0}
+.start-list button{font:inherit;color:inherit}
+.start-form{padding:0;overflow:hidden;min-height:0;gap:0}
+.start-fields{padding:18px;overflow:auto;display:flex;flex-direction:column;gap:14px;flex:1;min-height:0}
+.start-form > .d-f{flex:none}
+.start-fields .lbl{display:flex;flex-direction:column;gap:6px;font-weight:600;font-size:13px}
+.start-fields .lbl .hint{font-weight:400;color:var(--muted)}
+.start-fields fieldset{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0;display:flex;flex-direction:column;gap:10px;min-width:0}
+.start-fields legend{font-weight:600;font-size:13px;padding:0 4px}
+.vf-row,.wl-range{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.vf-note{margin:0;font-size:13px}
+.err-text{color:var(--bad);font-size:13px}
+.chips-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.pill-btn{border:1px solid var(--line-strong);background:var(--surface);border-radius:999px;padding:3px 10px;cursor:pointer;font-size:12.5px;font-weight:600}
+.pill-btn:hover{border-color:var(--muted)}
+.pick .pick-list{margin-top:6px}
+.pick-list button .ref{flex:none}
+.seg{flex-wrap:wrap}
+@media (max-width:760px){
+  .start{overflow:auto;display:block}
+  .start-list{max-height:170px}
+  .start-fields{overflow:visible}
+  .vf-row,.wl-range{grid-template-columns:1fr}
+}

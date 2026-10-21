@@ -5,6 +5,9 @@
 - **User-facing change** (a command, flag, `aiw` subcommand, config key, or behaviour a user
   sees): update `docs/REFERENCE.md`, and `docs/HOW-IT-WORKS.md` if a mechanism changed.
   Add an entry under `## Unreleased` in `CHANGELOG.md`.
+- **Touching `ui/`:** rebuild with `npm run build` in `ui/` and commit `run-engine/ui_dist/` in the same
+  change (users never run Node; the `ui` CI job fails when the committed build is stale). Run
+  `npm run typecheck && npm test` first. Developer setup is in `docs/INSTALL.md`.
 - **Install or setup change:** update `docs/INSTALL.md`.
 - **New domain term:** define it in `CONTEXT.md`.
 - **Hard-to-reverse design decision:** record it in the feature's PRD (`docs/prds/`).

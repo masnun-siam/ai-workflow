@@ -239,10 +239,7 @@ def all_sessions():
 
 # ---- answer API (issue #117) ------------------------------------------------
 def answer_checks():
-    def boom(*_a, **_k):
-        raise AssertionError("fetch_title must not be called")
-
-    srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, (), boom)
+    srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, ())
     port = srv.server_address[1]
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     live = []
@@ -712,10 +709,7 @@ def answer_checks():
 
 # ---- stop + resume API (issue #120) -----------------------------------------
 def stop_checks():
-    def boom(*_a, **_k):
-        raise AssertionError("fetch_title must not be called")
-
-    srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, (), boom)
+    srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, ())
     port = srv.server_address[1]
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     live = []
@@ -2279,6 +2273,32 @@ try:
     assert st()[1] == "running" and st()[3] == "stopped", st()
     assert ui_runner.release_batch("wl-test") == [] and ui_runner.release_batch(None) == []
     ok("batch: 2 at once, the rest queued; a stopped run frees a slot; a stopped queued one never starts")
+    # start-now: the oldest queued one runs past the cap; a running one is not queued
+    over = ui_runner.start("/worklog 2026-10-09", work, batch=("wl-test", 2))
+    recs.append(over)
+    assert (ui_sessions.load(over["id"]) or {}).get("status") == "queued"
+    got = ui_runner.start_now(over["id"])
+    assert got["status"] in ("starting", "running") and got.get("note") is None, got
+    wait_for(lambda: (ui_sessions.load(over["id"]) or {}).get("status") == "running")
+    assert ui_runner._batch_live("wl-test") == 3, "past the batch max of 2"
+    try:
+        ui_runner.start_now(over["id"])
+        raise AssertionError("expected NotQueued")
+    except ui_runner.NotQueued:
+        pass
+    try:
+        ui_runner.start_now("nope")
+        raise AssertionError("expected an error")
+    except (FileNotFoundError, ValueError):
+        pass
+    lim = ui_sessions.create("/worklog x", work)
+    ui_sessions.update(lim["id"], status="limited", note="queued: account is rate limited")
+    try:
+        ui_runner.start_now(lim["id"])
+        raise AssertionError("expected NotQueued")
+    except ui_runner.NotQueued as e:
+        assert "limit resets" in str(e)
+    ok("start_now: starts a queued session past the batch cap; limited/running/unknown refuse")
 finally:
     reap(*recs)
 

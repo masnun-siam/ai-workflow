@@ -158,7 +158,9 @@ def advance(panel: str) -> str:
     if all(v == "approve" for v in verdicts):
         update_panel(panel, state="approved")
         return "approved"
-    if rec["round"] >= _policy()["max_rounds"]:  # last verdicts stay on disk for display; nothing auto-approves
+    if rec["round"] >= rec.get(
+        "max_rounds", _policy()["max_rounds"]
+    ):  # last verdicts stay on disk for display; nothing auto-approves
         update_panel(panel, state="cap reached")
         return "cap reached"
     update_panel(panel, round=rec["round"] + 1)
@@ -173,6 +175,7 @@ def panel_status(panel: str) -> dict:
         "approved": sum(v == "approve" for v in per.values()),
         "total": len(active),
         "round": rec["round"],
+        "max_rounds": rec.get("max_rounds", _policy()["max_rounds"]),  # raised per panel by "more rounds"
         "state": rec["state"],
         "reason": rec.get("reason"),
         "lenses": per,

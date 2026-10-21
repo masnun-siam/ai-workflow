@@ -114,6 +114,17 @@ bash <repo>/run-engine/run_tests.sh
 It must exit 0. It needs no network. If it fails, stop and report the output: something is
 wrong with the checkout, not with their setup.
 
+**Working on the web UI (developers only).** Using `aiw ui` needs no Node: its React app is built
+into the committed `run-engine/ui_dist/`. To change it you need Node 20 and the source in `ui/`:
+
+```bash
+cd <repo>/ui
+npm ci                 # once
+npm run dev            # Vite dev server; proxies /api to `aiw ui` on 127.0.0.1:8420, so run that too
+npm run typecheck && npm test
+npm run build          # writes run-engine/ui_dist/; commit it with the source change
+```
+
 ## Step 5 — Optional dependencies
 
 Check each, report the result as a table, and let the user decide. **None of these blocks

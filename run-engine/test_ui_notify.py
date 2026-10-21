@@ -126,7 +126,7 @@ assert len(f.reqs) == 1, f.reqs
 r = f.reqs[0]
 assert r["path"] == "/aiw-test"
 r["headers"]["title"].encode("ascii")
-assert r["headers"]["priority"] and r["headers"]["click"] == "https://box.ts.net/#/answer/sid1"
+assert r["headers"]["priority"] and r["headers"]["click"] == "https://box.ts.net/#/sessions/sid1"
 assert r["headers"]["authorization"] == f"Bearer {SECRET}"
 assert b"/implement-issue 5" in r["body"] and b"o/r" in r["body"]
 assert SECRET not in err
@@ -139,7 +139,7 @@ fresh(conf(f))
 for ev in ("done", "failed", "waiting"):
     ui_notify.notify(ev, rec())
 done, failed, waiting = f.reqs
-assert done["headers"]["click"] == failed["headers"]["click"] == "https://box.ts.net/#/run/o/r/5"
+assert done["headers"]["click"] == failed["headers"]["click"] == "https://box.ts.net/#/board?repo=o/r"
 assert waiting["headers"]["priority"] == failed["headers"]["priority"] != done["headers"]["priority"]
 assert waiting["headers"]["priority"] in ("high", "urgent", "4", "5")
 f.close()
@@ -216,7 +216,7 @@ q = {
 }
 h, body = ui_notify.compose("waiting", rec(pending_question=q), "https://box.ts.net")
 assert h["Title"] == "aiw: #5 waiting on you" and h["Tags"] == "speech_balloon,implement-issue,r,#5", h
-assert h["Actions"] == "view, Answer, https://box.ts.net/#/answer/sid1" and h["Click"].endswith("/#/answer/sid1")
+assert h["Actions"] == "view, Answer, https://box.ts.net/#/sessions/sid1" and h["Click"].endswith("/#/sessions/sid1")
 assert body.splitlines() == ["Approve the plan?", "Suggested: Approve (Recommended)", "o/r · /implement-issue 5"], body
 h, body = ui_notify.compose("failed", rec(error="claude exited 1\ntraceback..."), "https://box.ts.net")
 assert h["Title"] == "aiw: #5 failed" and h["Tags"].startswith("x,") and h["Priority"] == "high"
@@ -231,7 +231,7 @@ h, _ = ui_notify.compose("done", rec(link=None, command="/create-prd x"), None)
 assert h["Title"] == "aiw: run done" and h["Tags"] == "white_check_mark,create-prd,r", h
 h, _ = ui_notify.compose("pipeline", {"id": "p-1", "repo": "o/r", "command": "pipeline x"}, "https://box.ts.net")
 assert (
-    h["Tags"].startswith("checkered_flag") and h["Actions"] == "view, Open pipeline, https://box.ts.net/#/dispatch/p-1"
+    h["Tags"].startswith("checkered_flag") and h["Actions"] == "view, Open pipeline, https://box.ts.net/#/sessions/p-1"
 )
 h, body = ui_notify.compose("done", rec(repo="o/r\r\nX-Evil: 1", command="/implement-issue 5\r\nX-Evil: 1"), None)
 assert all("\n" not in v and "\r" not in v for v in h.values()) and "X-Evil: 1" not in h["Tags"].replace(
@@ -264,7 +264,7 @@ ui_notify.notify("done", rec())
 assert len(f.reqs) == 1 and "click" not in f.reqs[0]["headers"]
 fresh(conf(f, public_url="https://box.ts.net/"))
 ui_notify.notify("waiting", rec())
-assert f.reqs[-1]["headers"]["click"] == "https://box.ts.net/#/answer/sid1"
+assert f.reqs[-1]["headers"]["click"] == "https://box.ts.net/#/sessions/sid1"
 f.close()
 ok("public_url missing / trailing slash")
 
@@ -273,7 +273,7 @@ f = Fake()
 fresh(conf(f))
 for link in (None, {"owner": "o"}):
     ui_notify.notify("done", rec(link=link))
-    assert f.reqs[-1]["headers"]["click"] == "https://box.ts.net/#/sessions", link
+    assert f.reqs[-1]["headers"]["click"] == "https://box.ts.net/#/activity", link
 f.close()
 ok("link fallback")
 
@@ -393,7 +393,7 @@ for ev, word in (("pr-ready", "ready"), ("needs-cleanup", "cleanup"), ("panel-ca
     h, body = ui_notify.compose(
         ev, {"repo": "o/r", "link": {"owner": "o", "repo": "r", "issue": 7}, "note": "the note"}, "https://x.ts.net"
     )
-    assert word in h["Title"] and "the note" in body and h["Click"] == "https://x.ts.net/#/", (ev, h)
+    assert word in h["Title"] and "the note" in body and h["Click"] == "https://x.ts.net/#/inbox", (ev, h)
 ok("pr-ready, needs-cleanup and panel-cap compose")
 
 print(f"\n{passed} passed")

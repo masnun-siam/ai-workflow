@@ -10,8 +10,11 @@ Inputs (plain data, no I/O):
 
 Result: {repo, stale, fetched_at, cap, running, auto_grind, lanes: [{epic, title, autopilot, cap, running, cards}]},
 one lane per open epic plus a final "No epic" lane (epic None). Card:
-{n, title, column, priority, blocked_by: [n], pr: {n, draft, ci, url} | None,
- session: {id, status} | None, grind_round: int | None, needs_cleanup: None | {uncommitted, unpushed}}.
+{n, title, column, priority, blocked_by: [n], pr: {n, draft, ci, url, review} | None,
+ session: {id, status} | None, grind: {state, round, reason} | None,
+ needs_cleanup: None | {uncommitted, unpushed}}.
+`review` is approved | changes_requested | review_required | none. `grind` is the PR's loop (state running |
+idle | paused; reason only when paused), None when it has none or is done.
 `column` is ready | in_progress | draft_pr | in_review | grinding | merged. Placement of an open
 issue: an OPEN PR decides (grinding if its grind state is not done, else draft_pr / in_review); else a
 live session -> in_progress; else `refined` -> ready; else it is left out. A closed-unmerged PR is
@@ -23,6 +26,7 @@ from __future__ import annotations
 import os
 
 import dispatch
+import ui_inbox
 import ui_runner
 import ui_sessions
 
@@ -73,6 +77,19 @@ def build(repo, snapshot, sessions, grind_index, settings, cleanup_flags) -> dic
     epics = {i["n"]: i for i in data.get("issues") or [] if "epic" in i["labels"]}
     lanes = {n: [] for n in epics}
     lanes[None] = []
+    # an epic's children, as ui_planning counts them: parent, its sub_issues, or the `prd-<slug>` label
+    owner_of = {}
+    for e in epics.values():
+        for lab in (x for x in e["labels"] if x.startswith("prd-")):
+            owner_of[lab] = e["n"]
+        owner_of.update({s: e["n"] for s in e["sub_issues"]})
+
+    def epic_of(i):
+        if i["parent"] in epics:
+            return i["parent"]
+        return owner_of.get(i["n"]) or next(
+            (owner_of[x] for x in i["labels"] if x in owner_of and x.startswith("prd-")), None
+        )
 
     for i in data.get("issues") or []:
         if "epic" in i["labels"]:
@@ -91,20 +108,34 @@ def build(repo, snapshot, sessions, grind_index, settings, cleanup_flags) -> dic
             column = "in_progress"
         elif "refined" in i["labels"]:
             column = "ready"
-        elif i["parent"] in epics:
+        elif epic_of(i):
             column = "unrefined"  # an epic's child still to refine
         else:
             continue  # a loose non-refined issue: not on the board
-        lanes[i["parent"] if i["parent"] in epics else None].append(
+        lanes[epic_of(i)].append(
             {
                 "n": i["n"],
                 "title": i["title"],
                 "column": column,
                 "priority": i["priority"],
                 "blocked_by": [b["n"] for b in i["blocked_by"] if b["state"] == "OPEN"],
-                "pr": {"n": pr["n"], "draft": pr["draft"], "ci": pr["ci"], "url": pr["url"]} if pr else None,
+                "pr": {
+                    "n": pr["n"],
+                    "draft": pr["draft"],
+                    "ci": pr["ci"],
+                    "url": pr["url"],
+                    "review": pr.get("review", "none"),
+                }
+                if pr
+                else None,
                 "session": {"id": sess["id"], "status": sess["status"]} if sess else None,
-                "grind_round": grind.get("round") if column == "grinding" else None,
+                "grind": {
+                    "state": grind["state"],
+                    "round": grind["round"],
+                    "reason": ui_inbox.split_reason(grind.get("reason"))[1],
+                }
+                if grind and grind.get("state") != "done"
+                else None,
                 "needs_cleanup": None,
             }
         )
@@ -118,9 +149,9 @@ def build(repo, snapshot, sessions, grind_index, settings, cleanup_flags) -> dic
                 "column": "merged",
                 "priority": None,
                 "blocked_by": [],
-                "pr": {"n": m["n"], "draft": False, "ci": "success", "url": m["url"]},
+                "pr": {"n": m["n"], "draft": False, "ci": "success", "url": m["url"], "review": "none"},
                 "session": None,
-                "grind_round": None,
+                "grind": None,
                 "needs_cleanup": (cleanup_flags or {}).get(n),
             }
         )

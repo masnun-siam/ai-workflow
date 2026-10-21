@@ -10,6 +10,7 @@ checkout's current branch. It does not push.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 
@@ -19,6 +20,15 @@ from ui_issue import valid
 MAX_COMMENT = 65536  # GitHub's comment body limit
 MAX_PRD = 512 * 1024
 _PRD = re.compile(r"docs/prds/[A-Za-z0-9][A-Za-z0-9._-]*\.md")
+
+
+class Conflict(Exception):
+    """The file changed since the caller read it (HTTP 409)."""
+
+
+def _sha(raw: bytes) -> str:
+    """git's blob hash of the content."""
+    return hashlib.sha1(b"blob %d\0" % len(raw) + raw).hexdigest()
 
 
 def _ids(owner, repo, n):
@@ -80,20 +90,28 @@ def _branch(checkout: str) -> str:
 
 
 def read_prd(checkout: str, rel) -> dict:
-    with open(_prd_path(checkout, rel), encoding="utf-8") as f:
-        return {"path": rel, "text": f.read(), "branch": _branch(checkout)}
+    with open(_prd_path(checkout, rel), "rb") as f:
+        raw = f.read()
+    text = raw.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")  # as text mode reads it
+    return {"path": rel, "text": text, "sha": _sha(raw), "branch": _branch(checkout)}
 
 
-def save_prd(checkout: str, rel, text) -> dict:
-    """Write the PRD and commit only that file (`git commit -- <path>`), leaving anything else staged alone."""
+def save_prd(checkout: str, rel, text, base_sha=None) -> dict:
+    """Write the PRD and commit only that file (`git commit -- <path>`), leaving anything else staged alone.
+    base_sha (the `sha` of the read the edit started from): Conflict when the file has changed since."""
     path = _prd_path(checkout, rel)
     if not isinstance(text, str):
         raise ValueError("text is required")
+    if base_sha is not None and not isinstance(base_sha, str):
+        raise ValueError("base_sha must be a string")
     if len(text.encode("utf-8")) > MAX_PRD:
         raise ValueError("PRD is too large")
-    with open(path, encoding="utf-8") as f:
-        if f.read() == text:
-            return {"ok": True, "committed": False, "branch": _branch(checkout)}
+    with open(path, "rb") as f:
+        raw = f.read()
+    if base_sha is not None and base_sha != _sha(raw):
+        raise Conflict("changed on disk")
+    if raw.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n") == text:
+        return {"ok": True, "committed": False, "branch": _branch(checkout), "sha": _sha(raw)}
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
     slug = os.path.basename(rel)[:-3]
@@ -101,7 +119,9 @@ def save_prd(checkout: str, rel, text) -> dict:
     if proc.returncode != 0:
         raise RuntimeError(f"saved, but git commit failed: {(proc.stderr or proc.stdout).strip()[:300]}")
     sha = (run(["git", "rev-parse", "--short", "HEAD"], cwd=checkout).stdout or "").strip()
-    return {"ok": True, "committed": True, "branch": _branch(checkout), "commit": sha}
+    with open(path, "rb") as f:
+        new = _sha(f.read())
+    return {"ok": True, "committed": True, "branch": _branch(checkout), "commit": sha, "sha": new}
 
 
 def open_children(snapshot: dict, epic: int) -> list:

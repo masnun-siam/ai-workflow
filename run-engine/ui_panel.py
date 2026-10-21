@@ -236,6 +236,30 @@ def lens_action(panel_id: str, lens, action) -> dict:
         return public(panel_id)
 
 
+def add_rounds(panel_id: str, add) -> dict:
+    """Raise a capped panel's round limit by `add` (1..5) and send the root the last round's verdicts, as `tick`
+    does for a next round. ValueError: bad `add`; Conflict: not at its cap, or the root cannot take it."""
+    if type(add) is not int or not 1 <= add <= 5:
+        raise ValueError("add must be a whole number from 1 to 5")
+    with _lock:
+        p = peer_review.load_panel(panel_id)
+        if p["state"] != "cap reached":
+            raise Conflict("the panel is not at its round cap")
+        root = p.get("root_session")
+        if _status(root) in (*_BUSY, None):
+            raise Conflict("the root session is not idle")
+        cap = peer_review.panel_status(panel_id)["max_rounds"]
+        peer_review.update_panel(
+            panel_id, max_rounds=cap + add, round=p["round"] + 1, state="running", reason=None, phase="root"
+        )
+        try:
+            ui_runner.resume(root, _root_message(p, p["round"] + 1))
+        except (ValueError, FileNotFoundError, ui_runner.RunnerError, OSError) as e:
+            peer_review.update_panel(panel_id, max_rounds=cap, round=p["round"], state="cap reached", phase="done")
+            raise Conflict(f"could not resume the root session: {e}")
+        return public(panel_id)
+
+
 def public(panel_id: str) -> dict:
     return {"panel": panel_id, **peer_review.panel_status(panel_id)}
 

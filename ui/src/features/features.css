@@ -1,0 +1,8 @@
+.fnext{display:flex;justify-content:flex-end}
+.frow:focus-within{background:color-mix(in srgb,var(--sunk) 55%,transparent)}
+.frow .ftitle a{text-decoration:none}
+.frow .ftitle a:hover{text-decoration:underline}
+.issue-pick{accent-color:var(--accent)}
+.prd-edit{font-family:var(--mono);font-size:12.5px;min-height:320px}
+.tbl td.title{font-weight:600;min-width:160px}
+@media (max-width:760px){.frow .fnext{justify-content:flex-start}}

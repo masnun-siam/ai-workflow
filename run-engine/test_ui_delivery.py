@@ -12,8 +12,17 @@ os.environ["CLAUDE_PLUGIN_DATA"] = tempfile.mkdtemp()
 import ui_delivery  # noqa: E402
 
 
-def pr(n, state="OPEN", draft=False, ci="success"):
-    return {"n": n, "url": f"u{n}", "draft": draft, "state": state, "merged_at": None, "head": f"b{n}", "ci": ci}
+def pr(n, state="OPEN", draft=False, ci="success", review="none"):
+    return {
+        "n": n,
+        "url": f"u{n}",
+        "draft": draft,
+        "state": state,
+        "merged_at": None,
+        "head": f"b{n}",
+        "ci": ci,
+        "review": review,
+    }
 
 
 def issue(n, labels=("refined",), parent=None, blockers=(), prs=(), prio=None):
@@ -77,13 +86,36 @@ sess = [
 ]
 r = build(s, sess, {"pr": {("o", "r", 33): {"state": "running", "round": 2}}})
 c = cards(r)
-assert c[1]["column"] == "draft_pr" and c[1]["pr"] == {"n": 31, "draft": True, "ci": "success", "url": "u31"}
-assert c[2]["column"] == "in_review" and c[3]["column"] == "grinding" and c[3]["grind_round"] == 2
+assert c[1]["column"] == "draft_pr" and c[1]["pr"] == {
+    "n": 31,
+    "draft": True,
+    "ci": "success",
+    "url": "u31",
+    "review": "none",
+}
+assert c[2]["column"] == "in_review" and c[3]["column"] == "grinding" and c[3]["grind"]["round"] == 2
 assert c[4]["column"] == "ready" and c[4]["pr"] is None
 assert c[5]["column"] == "in_progress" and c[5]["session"] == {"id": "S1", "status": "running"}
 assert r["running"] == 1 and r["lanes"][0]["running"] == 1
 r = build(s, grind={"pr": {("o", "r", 33): {"state": "done", "round": 2}}})
 assert cards(r)[3]["column"] == "in_review"
+
+# card.grind: running | idle | paused (with its reason), None for no loop or a done one
+g = {
+    "pr": {
+        ("o", "r", 31): {"state": "idle", "round": 1},
+        ("o", "r", 32): {"state": "paused", "round": 3, "reason": "CI red"},
+        ("o", "r", 33): {"state": "done", "round": 2},
+    }
+}
+c = cards(build(s, grind=g))
+assert c[1]["grind"] == {"state": "idle", "round": 1, "reason": None}
+assert c[2]["grind"] == {"state": "paused", "round": 3, "reason": "CI red"}
+assert c[3]["grind"] is None and c[4]["grind"] is None
+# card.pr.review comes from the snapshot's PR
+s2 = snap([issue(1, prs=[pr(31, review="approved")]), issue(2, prs=[pr(32, review="changes_requested")])])
+c = cards(build(s2))
+assert c[1]["pr"]["review"] == "approved" and c[2]["pr"]["review"] == "changes_requested"
 
 # merged cards with cleanup flags, placed in their epic lane
 m = [{"n": 40, "title": "t", "url": "u40", "merged_at": "x", "head": "h", "closes": [7], "epic": 10}]
@@ -98,4 +130,13 @@ assert [c["column"] for c in cards(r, 10).values() if c["n"] == 8] == ["merged"]
 # an epic's unrefined child is in Needs refinement; a loose unrefined issue is not on the board
 r = build(snap([epic, issue(12, labels=(), parent=10), issue(13, labels=())]))
 assert cards(r, 10)[12]["column"] == "unrefined" and 13 not in cards(r, None)
+# lane membership matches ui_planning's children: sub_issues and the prd-<slug> label count too
+ep = {**issue(10, labels=("epic", "prd-x")), "sub_issues": [14]}
+r = build(snap([ep, issue(14, labels=()), issue(15, labels=("prd-x",)), issue(16, labels=("prd-y",))]))
+assert set(cards(r, 10)) == {14, 15} and 16 not in cards(r, None), r
+# a grind reason's leading "<ISO> — " stamp is not part of the reason
+g = {
+    "pr": {("o", "r", 31): {"state": "paused", "round": 3, "reason": "2026-10-06T15:54:44Z — owner decision needed: x"}}
+}
+assert cards(build(snap([issue(1, prs=[pr(31)])]), grind=g))[1]["grind"]["reason"] == "owner decision needed: x"
 print("ok")

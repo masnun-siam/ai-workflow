@@ -1,0 +1,18 @@
+.p-comment{display:flex;flex-direction:column;gap:6px}
+.p-comment .who{font-size:13px;color:var(--muted)}
+.p-html{line-height:1.55;overflow-wrap:anywhere}
+.p-html img{max-width:100%}
+.p-html pre{overflow:auto;background:var(--bg);padding:10px;border-radius:6px}
+.p-html table{display:block;overflow:auto}
+.p-add{color:var(--ship);font-weight:600}
+.p-del{color:var(--bad);font-weight:600}
+.p-file summary{cursor:pointer;display:flex;gap:8px;align-items:center;padding:6px 0;min-width:0}
+.p-file .name{font-family:var(--mono);font-size:12.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.p-diff{margin:0 0 8px;font-family:var(--mono);font-size:12px;border:1px solid var(--line);border-radius:8px;overflow:auto;max-height:420px}
+.p-diff span{display:block;padding:0 10px;white-space:pre}
+.p-diff .ln-add{background:var(--ship-soft)}
+.p-diff .ln-del{background:var(--bad-soft)}
+.p-diff .ln-hunk{background:var(--sunk);color:var(--muted)}
+.p-commit{display:grid;grid-template-columns:64px minmax(0,1fr);gap:2px 10px;padding:6px 0;border-bottom:1px solid var(--line)}
+.p-foot textarea{flex:1 1 100%}
+.panel .tabs-list{margin:0 -4px}

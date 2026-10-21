@@ -63,10 +63,19 @@ with tempfile.TemporaryDirectory() as co:
         f.write("staged, not ours")
     g("add", "other.txt")
     r = ui_actions.read_prd(co, "docs/prds/x.md")
-    assert r == {"path": "docs/prds/x.md", "text": "# X\n", "branch": "main"}
+    blob = g("hash-object", "docs/prds/x.md").stdout.strip()
+    assert r == {"path": "docs/prds/x.md", "text": "# X\n", "sha": blob, "branch": "main"}, "sha is git's blob hash"
     assert ui_actions.save_prd(co, "docs/prds/x.md", "# X\n")["committed"] is False
-    r = ui_actions.save_prd(co, "docs/prds/x.md", "# X\n\nmore\n")
+    for stale in ("0" * 40, 5):
+        try:
+            ui_actions.save_prd(co, "docs/prds/x.md", "# X\n\nmore\n", stale)
+            raise AssertionError("a stale base_sha must be refused")
+        except (ui_actions.Conflict, ValueError) as e:
+            assert (str(e) == "changed on disk") == (stale == "0" * 40)
+    assert open(os.path.join(co, "docs", "prds", "x.md")).read() == "# X\n", "refused save writes nothing"
+    r = ui_actions.save_prd(co, "docs/prds/x.md", "# X\n\nmore\n", blob)
     assert r["committed"] and r["branch"] == "main" and r["commit"]
+    assert r["sha"] == g("hash-object", "docs/prds/x.md").stdout.strip()
     assert g("show", "--name-only", "--format=%s", "HEAD").stdout.split() == [
         "docs(prd):",
         "edit",

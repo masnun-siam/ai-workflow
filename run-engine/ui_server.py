@@ -30,7 +30,9 @@ import ui_cleanup
 import ui_config
 import ui_delivery
 import ui_events
+import ui_gh
 import ui_grind
+import ui_inbox
 import ui_issue
 import ui_mergeclean
 import ui_migrate
@@ -46,16 +48,18 @@ import ui_settings
 import ui_tailscale
 import ui_usage
 import ui_vault
+import ui_watch
 import shared
 from shared import die
 
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
-STATIC_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ui_static")
+DIST_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ui_dist")  # the built app (committed; see ui/)
 
 
 def _serve_static(handler, rel: str) -> None:
-    root = os.path.realpath(STATIC_DIR)
+    """The built app: index.html and anything outside assets/ revalidate, hashed assets/* are immutable."""
+    root = os.path.realpath(DIST_DIR)
     try:
         # unquote once only: %252e stays literal; realpath containment (not string checks) blocks escapes
         full = os.path.realpath(os.path.join(root, unquote(rel).lstrip("/")))
@@ -74,7 +78,9 @@ def _serve_static(handler, rel: str) -> None:
     ctype = "text/javascript" if ext in (".js", ".mjs") else mimetypes.guess_type(full)[0] or "application/octet-stream"
     if ctype.startswith("text/"):
         ctype += "; charset=utf-8"
-    handler._send(200, ctype, body, {"Cache-Control": "no-cache"})
+    hashed = os.path.relpath(full, root).startswith("assets" + os.sep)
+    cache = "public, max-age=31536000, immutable" if hashed else "no-cache"
+    handler._send(200, ctype, body, {"Cache-Control": cache})
 
 
 def _guard(handler) -> bool:
@@ -153,7 +159,7 @@ _REMOVED = [["api", p] for p in ("runs", "pipelines", "flows", "notes", "dispatc
 # ---- boards: poller snapshots in memory, hooks after each fresh poll ----------------------------------
 
 POLLER = ui_poller._default
-_watched: set = set()  # repos a board was requested for: the poller thread keeps these fresh
+_watched: set = set()  # repos opened since start: only the first look (a poll now) hangs off this; see _watched_copy
 _watch_lock = threading.Lock()
 _flags: dict = {}  # repo -> {issue: {uncommitted, unpushed}}: merged issues whose cleanup was held back
 
@@ -167,6 +173,7 @@ def _registered(repo) -> str:
 
 
 def _watch(repo: str) -> None:
+    ui_watch.touch(repo)
     with _watch_lock:
         new = repo not in _watched
         _watched.add(repo)
@@ -175,8 +182,12 @@ def _watch(repo: str) -> None:
 
 
 def _watched_copy() -> list:
-    with _watch_lock:
-        return list(_watched)
+    """Repos the poller keeps fresh: registered, with a GitHub remote, and opened in the last 7 days or live."""
+    checkouts = dispatch.read_checkouts()
+    names = {k.lower(): k for k in checkouts if not k.startswith("local/")}
+    want = set(ui_watch.recent())
+    want |= {ui_delivery._slug(r) for r in ui_sessions.list_sessions() if r.get("status") in ui_sessions._LIVE}
+    return sorted({names[w.lower()] for w in want if w.lower() in names})
 
 
 def _link(repo: str, n: int) -> dict:
@@ -265,6 +276,61 @@ def _board(path: str, query: str):
     return 200, {**body, "error": snap.get("error"), "retry_at": snap.get("retry_at")}
 
 
+def _panel_rows() -> list:
+    """One row per peer-review panel for the Inbox (ui_inbox's `panels`)."""
+    base = os.path.join(peer_review.data_dir(), "peer-review")
+    rows = []
+    for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+        try:
+            p, st = peer_review.load_panel(name), peer_review.panel_status(name)
+        except (OSError, ValueError, KeyError):
+            continue
+        meta = ui_planning._parse(p["artifact"]) if "/docs/prds/" in p["artifact"] else None
+        rows.append(
+            {
+                "id": name,
+                "repo": p["repo"],
+                "artifact": p["artifact"],
+                "state": p["state"],
+                "round": st["round"],
+                "max_rounds": st["max_rounds"],
+                "approved": st["approved"],
+                "total": st["total"],
+                "prd_status": meta["status"] if meta else None,
+            }
+        )
+    return rows
+
+
+def _inbox(query: str):
+    """(status, body) for GET /api/inbox."""
+    repo = (parse_qs(query).get("repo") or [""])[0]
+    if repo:
+        try:
+            repo = _registered(repo)
+        except ValueError as e:
+            return 400, {"error": str(e)}
+        _watch(repo)
+    watched = [repo] if repo else _watched_copy()
+    recs = ui_sessions.list_sessions()
+    labels = {c["cmd"]: c["label"] for c in ui_settings.load()["commands"]}
+    body = ui_inbox.build(
+        sessions=recs,
+        panels=_panel_rows(),
+        grind_index=ui_grind.index(),
+        flags=_flags,
+        repos=ui_repos.list_repos(),
+        snapshots={r: POLLER.snapshot(r) for r in watched},
+        gh=ui_gh.status(),
+        alive=set(ui_runner._procs),
+        account_labels=labels,
+        slug=ui_delivery._slug,
+        watched=watched,
+        repo=repo or None,
+    )
+    return 200, {**body, "afk": ui_afk.public(recs), "gh": ui_gh.status()}
+
+
 class _Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
@@ -284,10 +350,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/":
             _serve_static(self, "index.html")
-        elif path == "/sw.js":  # served at the root so its scope covers the whole app
-            _serve_static(self, "sw.js")
-        elif path.startswith("/static/"):
-            _serve_static(self, path[len("/static/") :])
+        elif path in ("/next/", "/next") or path.startswith("/next/"):  # alias for one release
+            _serve_static(self, path[len("/next/") :] or "index.html")
+        elif path in ("/sw.js", "/manifest.webmanifest") or path.startswith(("/assets/", "/icons/")):
+            _serve_static(self, path)  # sw.js at the root so its scope covers the whole app
         elif path == "/api/health":
             self._send(200, "application/json; charset=utf-8", b'{"ok": true}')
         elif path == "/api/repos":
@@ -299,6 +365,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                     "scan_roots": ui_repos.default_roots(),
                 },
             )
+        elif path == "/api/inbox":
+            self._json(*_inbox(urlsplit(self.path).query))
         elif path in ("/api/planning", "/api/delivery"):
             self._json(*_board(path, urlsplit(self.path).query))
         elif path == "/api/settings":
@@ -335,6 +403,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 "limits": ui_runner.limits(),
                 "usage": ui_usage.snapshot(),
                 "afk": ui_afk.public(recs),
+                "gh": ui_gh.status(),
             }
             self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
         else:
@@ -435,8 +504,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._dispatch(self._review)
         elif len(parts) == 5 and parts[:3] == ["", "api", "review"] and parts[4] == "lens":
             self._review_lens(parts[3])
+        elif len(parts) == 5 and parts[:3] == ["", "api", "review"] and parts[4] == "rounds":
+            self._review_rounds(parts[3])
         elif parts == ["", "api", "start"]:
             self._dispatch(self._board_start)
+        elif parts in (["", "api", "grind", "skip-ci"], ["", "api", "grind", "stop"]):
+            self._dispatch(lambda b: self._grind(parts[3], b))
         elif parts == ["", "api", "autopilot"]:
             self._dispatch(self._autopilot)
         elif parts == ["", "api", "cleanup"]:
@@ -473,8 +546,25 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._answer(parts[3])
         elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] == "prompt":
             self._prompt(parts[3])
-        elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] in ("stop", "resume", "cancel-auto"):
-            {"stop": self._stop, "resume": self._resume, "cancel-auto": self._cancel_auto}[parts[4]](parts[3])
+        elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] == "rerun":
+            self._rerun(parts[3])
+        elif (
+            len(parts) == 5
+            and parts[:3] == ["", "api", "sessions"]
+            and parts[4]
+            in (
+                "stop",
+                "resume",
+                "cancel-auto",
+                "start-now",
+            )
+        ):
+            {
+                "stop": self._stop,
+                "resume": self._resume,
+                "cancel-auto": self._cancel_auto,
+                "start-now": self._start_now,
+            }[parts[4]](parts[3])
         elif len(parts) == 7 and parts[1:3] in (["api", "issues"], ["api", "pulls"]) and parts[6] == "comment":
             self._dispatch(lambda b: ui_actions.comment(*parts[3:6], b.get("text")))
         elif len(parts) == 7 and parts[1:3] == ["api", "issues"] and parts[6] == "state":
@@ -486,7 +576,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif parts == ["", "api", "prd"]:
             self._dispatch(
                 lambda b: ui_actions.save_prd(
-                    dispatch.read_checkouts()[_registered(b.get("repo"))], b.get("path"), b.get("text")
+                    dispatch.read_checkouts()[_registered(b.get("repo"))],
+                    b.get("path"),
+                    b.get("text"),
+                    b.get("base_sha"),
                 )
             )
         elif parts[1:3] in _REMOVED:
@@ -504,6 +597,36 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         out = ui_actions.close_epic(owner, name, epic, ui_actions.open_children(POLLER.snapshot(repo), epic))
         threading.Thread(target=POLLER.poll, args=(repo,), daemon=True).start()  # the boards catch up now
         return out
+
+    @staticmethod
+    def _grind(action: str, body: dict) -> dict:
+        repo, pr = _registered(body.get("repo")), body.get("pr")
+        if type(pr) is not int or pr < 1:
+            raise ValueError("pr must be a PR number")
+        return (ui_grind.skip_ci if action == "skip-ci" else ui_grind.stop)(repo, pr)
+
+    def _review_rounds(self, panel: str) -> None:
+        body = self._read_body()
+        if body is None:
+            return
+        try:
+            self._json(200, ui_panel.add_rounds(panel, body.get("add")))
+        except (FileNotFoundError, ValueError) as e:
+            missing = isinstance(e, FileNotFoundError) or str(e).startswith("invalid panel id")
+            self._json(404 if missing else 400, {"error": "not found" if missing else str(e)})
+        except ui_panel.Conflict as e:
+            self._json(409, {"error": str(e)})
+
+    def _rerun(self, sid: str) -> None:
+        try:
+            rec = ui_sessions.load(sid)
+        except ValueError:
+            rec = None
+        if rec is None:
+            self._json(404, {"error": "not found"})
+            return
+        status, payload = ui_repos.rerun(rec)
+        self._json(status, _public(payload) if status == 201 else payload)
 
     @staticmethod
     def _board_start(body: dict) -> dict:
@@ -580,7 +703,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json(ok, fn(body))
         except (ValueError, TypeError) as e:
             self._json(400, {"error": str(e)})
-        except ui_autopilot.Conflict as e:
+        except (ui_autopilot.Conflict, ui_grind.Conflict, ui_actions.Conflict) as e:
             self._json(409, {"error": str(e)})
         except (RuntimeError, OSError, ui_runner.RunnerError) as e:  # RunnerError, a failed herdr call
             self._json(502, {"error": str(e)})
@@ -611,6 +734,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json(409, {"error": "session is starting, retry"})
             return
         self._json(200, _public(rec))
+
+    def _start_now(self, sid: str) -> None:
+        try:
+            self._json(200, _public(ui_runner.start_now(sid)))
+        except (FileNotFoundError, ValueError):
+            self._json(404, {"error": "not found"})
+        except ui_runner.NotQueued as e:
+            self._json(409, {"error": str(e)})
 
     def _prompt(self, sid: str) -> None:
         body = self._read_body()
@@ -797,9 +928,7 @@ class _Server(http.server.ThreadingHTTPServer):
     tailnet_hosts: frozenset = frozenset()
     tailnet_login = None
 
-    def __init__(
-        self, address, handler, allowed_hosts, *_title_fetcher
-    ):  # ponytail: legacy 4th arg ignored until test_ui_static drops it
+    def __init__(self, address, handler, allowed_hosts):
         super().__init__(address, handler)
         port = self.server_address[1]
         self.allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"} | {h.strip().lower() for h in allowed_hosts}
