@@ -291,7 +291,7 @@ def t_spawn_env_argv():
 
 
 def post_answer(sid, round_id, answers):
-    srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, (), lambda *_: "t")
+    srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, ())
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
         c = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=30)

@@ -114,6 +114,31 @@ assert d["merged"] == [
 ]  # the 9-day-old merge is dropped
 assert d["open_prs"][0]["ci"] == "pending" and d["open_prs"][0]["title"] == "PRD x"
 
+# review decision on every PR; the approving reviewer and the check count on open PRs
+assert "reviewDecision" in ui_poller.QUERY and i3["prs"][0]["review"] == "none"
+assert d["open_prs"][0]["review"] == "none" and d["open_prs"][0]["reviewer"] is None and d["open_prs"][0]["checks"] == 0
+f = fixture()
+f["data"]["repository"]["openPrs"]["nodes"][0].update(
+    reviewDecision="APPROVED",
+    latestOpinionatedReviews={
+        "nodes": [
+            {"state": "CHANGES_REQUESTED", "author": {"login": "amy"}},
+            {"state": "APPROVED", "author": {"login": "bob"}},
+        ]
+    },
+    checks={"contexts": {"totalCount": 4}},
+)
+f["data"]["repository"]["issues"]["nodes"][2]["closedByPullRequestsReferences"]["nodes"][0]["reviewDecision"] = (
+    "CHANGES_REQUESTED"
+)
+f["data"]["repository"]["issues"]["nodes"][2]["closedByPullRequestsReferences"]["nodes"][1]["reviewDecision"] = (
+    "REVIEW_REQUIRED"
+)
+d2 = ui_poller.normalize(f, NOW)
+op = d2["open_prs"][0]
+assert (op["review"], op["reviewer"], op["checks"]) == ("approved", "bob", 4)
+assert [p["review"] for p in d2["issues"][2]["prs"]] == ["changes_requested", "review_required"]
+
 # one call per poll, cadence 60s, before first fetch is stale+empty
 clock, calls = Clock(), []
 fresh = []

@@ -324,6 +324,39 @@ def _vault_hint(folder) -> str:
     )
 
 
+_REQUEST_KEYS = ("repo", "no_repo", "vault_folder", "command", "args", "text", "issue", "claude_cmd", "batch")
+
+
+def _request(body: dict) -> dict:
+    """What a rerun replays: the start body as sent (peer_review is kept as `lenses`)."""
+    req = {k: body[k] for k in _REQUEST_KEYS if k in body}
+    if body.get("peer_review") is not None:
+        req["lenses"] = body["peer_review"]
+    return req
+
+
+def rerun(rec: dict):
+    """Start again what `rec` started: its stored request through start_session (guards included). A record
+    from before requests were stored replays its command as text. (status, body) like start_session."""
+    req = rec.get("request")
+    if isinstance(req, dict):
+        body = {k: v for k, v in req.items() if k != "lenses"}
+        if req.get("lenses") is not None:
+            body["peer_review"] = req["lenses"]
+    elif rec.get("command"):
+        label = next((c["label"] for c in ui_settings.load()["commands"] if c["cmd"] == rec.get("claude_cmd")), None)
+        body = {"text": rec["command"], **({"claude_cmd": label} if label else {})}
+        if rec.get("no_repo") is True:
+            body.update(repo="", no_repo=True)
+            if rec.get("vault_folder"):
+                body["vault_folder"] = rec["vault_folder"]
+        else:
+            body["repo"] = rec.get("cwd_path") or rec.get("repo")
+    else:
+        return 400, {"error": "nothing to rerun: the session has no stored request or command"}
+    return start_session(body)
+
+
 def start_session(body: dict):
     repo = body.get("repo")
     if repo is not None and not isinstance(repo, str):
@@ -436,8 +469,11 @@ def start_session(body: dict):
                     ui_runner.stop(res["id"])
                     raise
                 res = ui_sessions.load(res["id"])  # now linked to its panel
-            if no_repo:
-                res = ui_sessions.update(res["id"], no_repo=True, vault_folder=vault_folder)
+            res = ui_sessions.update(
+                res["id"],
+                request=_request(body),
+                **({"no_repo": True, "vault_folder": vault_folder} if no_repo else {}),
+            )
             _remember(slug, cwd)
             return 201, res
         except (ValueError, ui_runner.RunnerError) as exc:

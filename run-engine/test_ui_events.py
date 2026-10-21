@@ -34,10 +34,6 @@ def ok(label: str) -> None:
     print(f"  ok  {label}")
 
 
-def boom(*_a, **_k):
-    raise AssertionError("fetch_title must not be called")
-
-
 INIT = {"type": "system", "subtype": "init", "session_id": "abc"}
 A1 = {"type": "assistant", "message": {"content": [{"type": "text", "text": "hi"}]}}
 A2 = {
@@ -159,7 +155,7 @@ ok("empty / missing file")
 shutil.rmtree(tmp, ignore_errors=True)
 
 # ----------------------------------------------------------------------- HTTP
-srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, (), boom)
+srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, ())
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 port = srv.server_address[1]
 HOST = f"127.0.0.1:{port}"

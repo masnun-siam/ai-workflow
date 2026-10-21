@@ -1,0 +1,77 @@
+// Runs a Next-step action (lib/nextStep.ts StepAction) for a feature: the same wiring on the list rows and the feature page.
+import { useNavigate } from 'react-router-dom';
+import { useAutoBuild, useCloseEpic } from '../api/hooks';
+import { toast, useConfirm } from '../components';
+import { useStarter } from '../board/actions';
+import type { Feature } from '../lib/features';
+import type { StepAction } from '../lib/nextStep';
+import { routes } from '../lib/routes';
+import { usePanel } from '../panels/PanelContext';
+import { useRepo } from '../shell/useRepo';
+
+// The exact texts the old Planning board sent.
+export const approveArgs = (path: string) =>
+  `${path} approve: the team has reviewed this PRD. Fold in the review's changes, set the status to Approved and file the epic.`;
+export const taskArg = (epic: number, path: string, text: string) =>
+  `A finding for epic #${epic} (PRD ${path}): ${text.trim().replace(/\s+/g, ' ')}`;
+
+export function useStepRunner(f: Feature, repo: string) {
+  const navigate = useNavigate();
+  const { link } = useRepo();
+  const confirm = useConfirm();
+  const starter = useStarter();
+  const panel = usePanel();
+  const auto = useAutoBuild();
+  const close = useCloseEpic();
+  const go = (tab?: string) => navigate(link(routes.feature(f.slug, tab)));
+
+  const run = async (a: StepAction) => {
+    switch (a.kind) {
+      case 'startReview':
+        return go('review');
+      case 'tab':
+        return go(a.tab);
+      case 'board':
+        return navigate(link(routes.board));
+      case 'approve': {
+        const ok = await confirm({
+          title: 'Approve this PRD?',
+          okLabel: 'Approve PRD',
+          body: <p>Runs <code>/create-prd</code> to fold in the review, set the PRD to Approved and file its epic. Claude may ask you questions.</p>,
+        });
+        if (ok) await starter.startSession({ repo, command: 'create-prd', args: approveArgs(f.prd.path) });
+        return;
+      }
+      case 'createTasks':
+        await starter.startBoard({ repo, skill: 'create-tasks', arg: f.prd.path, via: 'headless' });
+        return;
+      case 'refine':
+        await starter.startBoard({ repo, skill: 'refine-issues', arg: a.issues.join(' '), via: 'headless' });
+        return;
+      case 'startReady': {
+        // one implement-issue session per issue; the first one opens, the rest just start
+        for (const [i, n] of a.issues.entries()) await starter.startBoard({ repo, skill: 'implement-issue', arg: String(n), via: 'headless' }, { nav: i === 0 && a.issues.length === 1 });
+        if (a.issues.length > 1) toast(`Started ${a.issues.length} issues`);
+        return;
+      }
+      case 'merge':
+        panel.open({ kind: 'pr', repo, n: a.pr });
+        return;
+      case 'toggleAuto':
+        if (f.epic) auto.mutate({ repo, epic: f.epic, on: !f.autobuild });
+        return;
+      case 'closeEpic': {
+        if (!f.epic) return;
+        const open = f.issues.filter((i) => i.status !== 'merged').length;
+        const ok = await confirm({
+          title: `Close epic #${f.epic}?`,
+          okLabel: 'Close epic',
+          danger: true,
+          body: <p>Closes the epic and its {open} open child issue{open === 1 ? '' : 's'} as completed.</p>,
+        });
+        if (ok) close.mutate({ repo, epic: f.epic }, { onSuccess: () => toast(`Closed epic #${f.epic}`) });
+      }
+    }
+  };
+  return { run, busy: starter.pending || auto.isPending || close.isPending };
+}

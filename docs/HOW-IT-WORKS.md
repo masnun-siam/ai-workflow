@@ -83,15 +83,17 @@ starts a panel from its **Peer review** box.
 
 ## The UI
 
-`aiw ui` shows the process as two boards, one repo at a time: **Planning** (a card per PRD, from
-draft to refined, each offering its next step) and **Delivery** (epic swimlanes from Ready to
-Merged). Autopilot starts refined, unblocked issues of an epic up to the repo's cap as merges unblock
-them, grind starts when a PR turns ready (per-repo setting), and a merged issue's clean worktree is
-removed. GitHub is read with one GraphQL call per repo per poll; nothing is written back.
+`aiw ui` shows the process around one question: what needs you. The **Inbox** collects, across
+repos, the questions to answer, PRs ready to merge, paused grinds, failed sessions and reviews at their
+cap. A **Feature** page follows one PRD from draft to shipped with one next step, and the **Board**
+shows its issues from Needs refinement to Merged. **Auto-build** starts refined, unblocked issues of an
+epic up to the repo's cap as merges unblock them, grind starts when a PR turns ready (per-repo
+setting), and a merged issue's clean worktree is removed. GitHub is read with one GraphQL call per
+watched repo per poll; nothing is written back.
 
-It starts these as sessions and keeps them going: it answers `aiw ask` questions through
-the answer page, resumes after a rate limit, and notifies you. AFK mode answers recommended
-options and retries failures while you are away. Details are in [REFERENCE.md](REFERENCE.md).
+It starts these as sessions and keeps them going: it takes your answers to `aiw ask` questions in the
+Inbox or the session page, resumes after a rate limit, and notifies you. **Away mode** answers
+recommended options and retries failures while you are away. Details are in [REFERENCE.md](REFERENCE.md).
 
 ## State
 

@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stderr
 
@@ -24,9 +25,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 import ui_autopilot  # noqa: E402
+import ui_gh  # noqa: E402
+import ui_grind  # noqa: E402
 import ui_server  # noqa: E402
+import ui_sessions  # noqa: E402
+import ui_watch  # noqa: E402
 
 passed = 0
+# no test touches the network: `gh api user` is stubbed for the whole file
+ui_gh.status = lambda *a, **k: {"ok": True, "login": "me", "error": None}
 
 
 def ok(label: str) -> None:
@@ -251,6 +258,45 @@ sv.shutdown()
 assert not failures, failures[:2]
 ok("burst of 60 simultaneous connections all served (listen backlog)")
 
+# ---- /next/: the built app from ui_dist/ (not built yet -> 404 with a short text body)
+ns, port = start()
+me = f"127.0.0.1:{port}"
+real_dist = ui_server.DIST_DIR
+dist = tempfile.mkdtemp()
+ui_server.DIST_DIR = os.path.join(dist, "missing")
+s_, r_, body, h_ = req(port, "/next/", host=me)
+assert s_ == 404 and r_.getheader("Content-Type").startswith("text/plain") and 0 < len(body) < 100, (s_, body)
+ui_server.DIST_DIR = os.path.join(dist, "ui_dist")
+os.makedirs(os.path.join(dist, "ui_dist", "assets"))
+for rel, text in (("index.html", "<html>new</html>"), ("assets/app-1a2b.js", "x()"), ("icon.txt", "i")):
+    with open(os.path.join(dist, "ui_dist", rel), "w") as f:
+        f.write(text)
+with open(os.path.join(dist, "secret.txt"), "w") as f:
+    f.write("secret")
+for p in ("/next/", "/next"):
+    s_, r_, body, h_ = req(port, p, host=me)
+    assert s_ == 200 and body == b"<html>new</html>" and r_.getheader("Cache-Control") == "no-cache", (p, s_, h_)
+assert r_.getheader("Content-Type").startswith("text/html")
+s_, r_, body, h_ = req(port, "/next/assets/app-1a2b.js", host=me)
+assert s_ == 200 and r_.getheader("Content-Type").startswith("text/javascript") and body == b"x()"
+assert "immutable" in r_.getheader("Cache-Control"), "hashed assets may be cached"
+assert req(port, "/next/icon.txt", host=me)[1].getheader("Cache-Control") == "no-cache"
+for p in (
+    "/next/nope.js",
+    "/next/assets",
+    "/next/%2e%2e/secret.txt",
+    "/next/..%2fsecret.txt",
+    "/next/%252e%252e/secret.txt",
+):
+    s_, r_, body, h_ = req(port, p, host=me)
+    assert s_ == 404 and b"secret" not in body, (p, s_)
+assert req(port, "/next/", host="evil.example")[0] == 403, "same Host guard"
+s_, r_, body, h_ = req(port, "/", host=me)
+assert s_ == 200 and body == b"<html>new</html>", "/ serves the same app as /next/"
+ui_server.DIST_DIR = real_dist
+ns.shutdown()
+ok("/next/ serves ui_dist: index no-cache, hashed assets cached, 404 when unbuilt, no escapes; / the same app")
+
 # ---- boards: /api/planning, /api/delivery, /api/start, /api/autopilot, /api/cleanup and the post-poll hooks
 import subprocess as sp  # noqa: E402
 
@@ -471,6 +517,108 @@ try:
     ui_repos.start_session = lambda body: (409, {"error": "live"})
     assert call("POST", "/api/start", {"repo": "o/r", "skill": "refine-issues", "arg": "1"})[0] == 409
     ok("boards: /api/start shapes and 409s")
+
+    # herdr start: no session to link to, so {session: None, via, tab}
+    ui_autopilot._recent.clear()
+    ui_autopilot._herdr = lambda argv: sp.CompletedProcess(argv, 0, "pane-1\n", "")
+    st, body = call("POST", "/api/start", {"repo": "o/r", "skill": "refine-issues", "arg": "1", "via": "herdr"})
+    assert st == 200 and body == {"session": None, "via": "herdr", "tab": "refine-issues-1"}, body
+    ok("boards: herdr start answers {session: null, via: herdr, tab}")
+
+    # /api/prd: sha of the file as read; base_sha guards the save
+    st, body = call("GET", "/api/prd?repo=o/r&path=docs/prds/x.md")
+    prd_file = os.path.join(repo_dir, "docs", "prds", "x.md")
+    assert st == 200 and body["sha"] == git("hash-object", prd_file).stdout.decode().strip(), body
+    st, out = call(
+        "POST", "/api/prd", {"repo": "o/r", "path": "docs/prds/x.md", "text": "# new\n", "base_sha": "0" * 40}
+    )
+    assert (st, out) == (409, {"error": "changed on disk"}), (st, out)
+    assert (
+        call("POST", "/api/prd", {"repo": "o/r", "path": "docs/prds/x.md", "text": "# new\n", "base_sha": 5})[0] == 400
+    )
+    with open(prd_file) as f:
+        assert f.read().startswith("# PRD x"), "a refused save writes nothing"
+    ok("prd: GET carries sha, POST base_sha mismatch -> 409 changed on disk")
+
+    # /api/grind/skip-ci and /stop
+    sent_prompts = []
+    ui_server.ui_runner.send_prompt = lambda sid, text: sent_prompts.append((sid, text)) or "sent"
+    for action in ("skip-ci", "stop"):
+        p = f"/api/grind/{action}"
+        assert call("POST", p, {"repo": "x/y", "pr": 9})[0] == 400
+        assert call("POST", p, {"repo": "o/r", "pr": "9"})[0] == 400
+        assert call("POST", p, {"repo": "o/r", "pr": True})[0] == 400
+        assert call("POST", p, {"repo": "o/r", "pr": 9})[0] == 409, "no loop"
+    os.makedirs(os.path.join(bd, "pr-grind"), exist_ok=True)
+    thread = "https://x.slack.com/archives/C1/p9"
+    state = os.path.join(bd, "pr-grind", "o-r-9.md")
+    with open(state, "w") as f:
+        f.write(
+            f"owner: o\nrepo: r\nnumber: 9\nthread: {thread}\npaused: 2026-10-08T00:00:00Z — CI red\n\n## Round 1\n"
+        )
+    assert call("POST", "/api/grind/skip-ci", {"repo": "o/r", "pr": 9})[0] == 409, "paused but no session to reply to"
+    gs = ui_sessions.create(f"/pr-grind {thread}", repo_dir)
+    ui_sessions.update(gs["id"], status="done", session_id="c-1")
+    assert call("POST", "/api/grind/skip-ci", {"repo": "o/r", "pr": 9}) == (200, {"state": "running"})
+    assert sent_prompts and sent_prompts[0][0] == gs["id"] and "Skip CI" in sent_prompts[0][1]
+    assert call("POST", "/api/grind/skip-ci", {"repo": "o/r", "pr": 9})[0] == 409, "not paused any more"
+    assert call("POST", "/api/grind/stop", {"repo": "o/r", "pr": 9}) == (200, {"ok": True, "state": "done"})
+    assert "stopped from the UI" in open(state).read() and ui_grind.index()["pr"][("o", "r", 9)]["state"] == "done"
+    ok("grind: skip-ci and stop validate, 409 without a loop / when not paused, stop marks it done")
+
+    # watch set: opened in the last 7 days (any ?repo= request) or live session; GitHub remotes only
+    other = tempfile.mkdtemp()
+    local = tempfile.mkdtemp()
+    dispatch.register_checkout("o/q", other)
+    dispatch.register_checkout("local/idea", local)
+    assert "o/q" not in ui_server._watched_copy()
+    ui_sessions.update(
+        ui_sessions.create("/implement-issue 3", other, {"owner": "o", "repo": "q", "issue": 3})["id"], status="running"
+    )
+    assert "o/q" in ui_server._watched_copy(), "a live session puts its repo in the set"
+    for s_ in ui_sessions.list_sessions():
+        ui_sessions.update(s_["id"], status="done")
+    assert "o/q" not in ui_server._watched_copy()
+    call("GET", "/api/delivery?repo=o/q")
+    assert "o/q" in ui_watch.recent() and "o/q" in ui_server._watched_copy(), "opened now"
+    dispatch.register_checkout("o/z", tempfile.mkdtemp())
+    for p_ in ("/api/repos?repo=o/z", "/api/sessions?repo=o/z", "/api/settings?repo=o/z"):
+        call("GET", p_)
+    assert "o/z" not in ui_watch.recent(), "only planning, delivery and inbox?repo= count as looking at a repo"
+    ui_watch.touch("local/idea")
+    assert "local/idea" not in ui_server._watched_copy(), "no GitHub remote: not watched"
+    with open(os.path.join(bd, "ui_opened.json")) as f:
+        opened = json.load(f)
+    old = time.time() - 8 * 86400
+    opened["o/q"] = old
+    with open(os.path.join(bd, "ui_opened.json"), "w") as f:
+        json.dump(opened, f)
+    assert "o/q" not in ui_server._watched_copy(), "opened 8 days ago: out"
+    ok("watch set: opened in 7 days or live, GitHub repos only, persisted in the data dir")
+
+    # /api/inbox and gh on /api/sessions
+    ui_gh.status = lambda *a, **k: {"ok": True, "login": "me", "error": None}
+    ready = dict(_pr(60), statusCheckRollup={"state": "SUCCESS"}, reviewDecision="APPROVED")
+    _gql([_issue(1, ["epic"])], open_prs=[ready])
+    ui_server.POLLER.poll("o/r")
+    st, body = call("GET", "/api/inbox?repo=o/r")
+    assert st == 200 and set(body) == {"items", "afk", "gh", "stale"} and body["gh"]["login"] == "me", body
+    assert [i["key"] for i in body["items"] if i["type"] == "pr_ready"] == ["pr_ready:o/r#60"] and body["stale"] == []
+    assert body["afk"]["active"] is False
+    ui_server.POLLER._state.pop("o/q", None)  # the first look at o/q polled it (the fake gh answers o/r's data)
+    live_q = ui_sessions.create("/implement-issue 3", other, {"owner": "o", "repo": "q", "issue": 3})
+    ui_sessions.update(live_q["id"], status="running")  # o/q is watched through its session, not yet polled
+    st, body = call("GET", "/api/inbox")
+    assert st == 200 and any(i["type"] == "pr_ready" for i in body["items"]) and "o/q" in body["stale"], body
+    assert call("GET", "/api/inbox?repo=x/y")[0] == 400
+    ui_gh.status = lambda *a, **k: {"ok": False, "login": None, "error": "not logged in"}
+    assert call("GET", "/api/inbox")[1]["items"][0]["type"] == "gh_auth"
+    assert call("GET", "/api/sessions")[1]["gh"] == {"ok": False, "login": None, "error": "not logged in"}
+    ok("inbox: items, afk, gh, stale; ?repo= filter and 400; gh on /api/sessions")
+    assert call("POST", "/api/sessions/nope/start-now")[0] == 404
+    st, body = call("POST", f"/api/sessions/{live_q['id']}/start-now")
+    assert st == 409 and body == {"error": "session is not queued"}, (st, body)
+    ok("start-now: 404 unknown, 409 when the session is not queued")
 finally:
     bs.shutdown()
     os.environ["CLAUDE_PLUGIN_DATA"] = data_dir

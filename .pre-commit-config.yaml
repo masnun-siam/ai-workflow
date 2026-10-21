@@ -1,6 +1,6 @@
 # Lint, secret and test hooks block the commit; the CLAUDE.md hook is a reminder only.
 # See CONTRIBUTING.md.
-exclude: ^run-engine/ui_static/vendor/
+exclude: ^run-engine/ui_dist/
 default_install_hook_types: [pre-commit, pre-push]  # `pre-commit install` sets up both
 default_stages: [pre-commit]  # only all-tests runs on push
 repos:

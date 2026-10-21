@@ -233,20 +233,45 @@ def release_batch(batch) -> list:
             free -= 1
             started.append(rec)
     for rec in started:
-        sid = rec["id"]
-        try:
-            exe = _preflight(sid)
-            _spawn(
-                sid,
-                [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, rec["command"]],
-                rec["cwd_path"],
-                cwd_path=rec["cwd_path"],
-            )
-        except Exception as e:  # noqa: BLE001 - one bad session must not strand the rest of the batch
-            warn(f"batch {batch}: starting {sid} failed: {e}")
-            if (ui_sessions.load(sid) or {}).get("status") == "starting":
-                ui_sessions.update(sid, status="failed", ended_at=_now(), error=f"could not start: {e}")
+        _start_claimed(rec, batch)
     return [r["id"] for r in started]
+
+
+def _start_claimed(rec: dict, batch=None) -> None:
+    """Spawn a queued session already claimed ("starting"); a failure marks it failed, never strands others."""
+    sid = rec["id"]
+    try:
+        exe = _preflight(sid)
+        _spawn(
+            sid,
+            [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, rec["command"]],
+            rec["cwd_path"],
+            cwd_path=rec["cwd_path"],
+        )
+    except Exception as e:  # noqa: BLE001 - one bad session must not strand the rest of the batch
+        warn(f"batch {batch}: starting {sid} failed: {e}")
+        if (ui_sessions.load(sid) or {}).get("status") == "starting":
+            ui_sessions.update(sid, status="failed", ended_at=_now(), error=f"could not start: {e}")
+
+
+class NotQueued(Exception):
+    """start_now on a session that is not waiting in a batch queue (the message says why)."""
+
+
+def start_now(sid: str) -> dict:
+    """Start a queued session at once, past its batch's cap. An account-limit queue starts at the reset."""
+    rec = ui_sessions.load(sid)
+    if rec is None:
+        raise FileNotFoundError(f"no such session: {sid}")
+    with _batch_lock:
+        rec = ui_sessions.load(sid)
+        if rec.get("status") == "limited" and not rec.get("session_id"):
+            raise NotQueued("this account is rate limited: the session starts by itself when the limit resets")
+        if rec.get("status") != "queued":
+            raise NotQueued("session is not queued")
+        ui_sessions.update(sid, status="starting", note=None)  # claim under the lock
+    _start_claimed(rec, rec.get("batch"))
+    return ui_sessions.load(sid)
 
 
 def resume(sid: str, answer_text) -> dict:

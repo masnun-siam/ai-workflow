@@ -51,6 +51,18 @@ What `/dump` writes for a feature, change request or bug: Problem, Who, Evidence
 A headless Claude invocation started and tracked by the UI (`aiw ui`), recorded under `<data_dir>/sessions/<id>/`. It exits after each turn and comes back via `--resume` with an answer or after a rate limit.
 _Avoid_: Run, job
 
+**Inbox**:
+The UI's list of everything that needs the user across repos (questions, PRs ready to merge, paused grinds, failed sessions, reviews at their cap), built on the server by `GET /api/inbox`. Items clear themselves when their condition does.
+_Avoid_: Notifications, queue
+
+**Away mode**:
+A timed run by the UI server that answers recommended `aiw ask` options, skips CI on paused grinds and retries failed sessions while the user is away. Formerly "AFK".
+_Avoid_: AFK, autopilot
+
+**Auto-build**:
+A per-epic switch that starts the epic's refined, unblocked issues as `/implement-issue` sessions, up to the repo's cap, as merges unblock them. Formerly "epic autopilot".
+_Avoid_: Autopilot
+
 **Project**:
 The human-friendly name for a GitHub `owner/repo`, looked up from `skills/worklog/projects.json`. Falls back to the raw `owner/repo` slug when unmapped.
 _Avoid_: Repo (when referring to the display name; "repo" is fine for the raw slug)

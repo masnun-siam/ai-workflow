@@ -1,0 +1,1368 @@
+<meta charset="utf-8">
+<title>aiw prototype</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: left rail (repo + nav + away/usage) | work area | optional right detail panel. The pipeline track is the one bold element. */
+:root{
+  --bg:#F2F3F5; --surface:#FFFFFF; --sunk:#E9EBEF; --line:#DCE0E6; --line-strong:#C6CBD3;
+  --ink:#151820; --muted:#5B6370; --faint:#8A919D;
+  --accent:#3247D1; --accent-ink:#FFFFFF; --accent-soft:#E5E8FB;
+  --plan:#7550CF; --plan-soft:#EEE8FA;
+  --build:#1C74CF; --build-soft:#E2EEFA;
+  --review:#A86C0E; --review-soft:#FAF0DC;
+  --ship:#17865A; --ship-soft:#DFF2E8;
+  --you:#CF4511; --you-soft:#FCE9DF;
+  --bad:#C22B2B; --bad-soft:#FADFDF;
+  --away:#2E6B66; --away-soft:#DDEFEC;
+  --shadow:0 12px 32px rgba(20,24,32,.14), 0 2px 6px rgba(20,24,32,.06);
+  --font:'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono:'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F1216; --surface:#161A20; --sunk:#1B2027; --line:#29303A; --line-strong:#3A4250;
+  --ink:#E6E9EE; --muted:#9AA3B0; --faint:#6D7582;
+  --accent:#8B98FF; --accent-ink:#0F1216; --accent-soft:#232A4D;
+  --plan:#AE93F2; --plan-soft:#2A2342; --build:#62AEF2; --build-soft:#162B40;
+  --review:#E4AC50; --review-soft:#3A2D16; --ship:#56C894; --ship-soft:#14301F;
+  --you:#FF8C55; --you-soft:#3E2216; --bad:#FF7070; --bad-soft:#3E1B1B;
+  --away:#6CC7BD; --away-soft:#163331;
+  --shadow:0 12px 32px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.3); color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#0F1216; --surface:#161A20; --sunk:#1B2027; --line:#29303A; --line-strong:#3A4250;
+  --ink:#E6E9EE; --muted:#9AA3B0; --faint:#6D7582;
+  --accent:#8B98FF; --accent-ink:#0F1216; --accent-soft:#232A4D;
+  --plan:#AE93F2; --plan-soft:#2A2342; --build:#62AEF2; --build-soft:#162B40;
+  --review:#E4AC50; --review-soft:#3A2D16; --ship:#56C894; --ship-soft:#14301F;
+  --you:#FF8C55; --you-soft:#3E2216; --bad:#FF7070; --bad-soft:#3E1B1B;
+  --away:#6CC7BD; --away-soft:#163331;
+  --shadow:0 12px 32px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.3); color-scheme:dark }
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--font);-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
+#root{height:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+h1,h2,h3{margin:0;text-wrap:balance}
+h1{font-size:24px;font-weight:700;letter-spacing:-.015em}
+h2{font-size:15px;font-weight:700}
+h3{font-size:14px;font-weight:600}
+p{margin:0}
+code,.mono{font-family:var(--mono);font-size:12.5px}
+.muted{color:var(--muted)} .faint{color:var(--faint)}
+.row{display:flex;align-items:center;gap:8px;min-width:0}
+.wrap{flex-wrap:wrap}
+.grow{flex:1;min-width:0}
+.stack{display:flex;flex-direction:column;gap:12px}
+.ellipsis{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* tones */
+.t-plan{--c:var(--plan);--cs:var(--plan-soft)} .t-build{--c:var(--build);--cs:var(--build-soft)}
+.t-review{--c:var(--review);--cs:var(--review-soft)} .t-ship{--c:var(--ship);--cs:var(--ship-soft)}
+.t-you{--c:var(--you);--cs:var(--you-soft)} .t-bad{--c:var(--bad);--cs:var(--bad-soft)}
+.t-muted{--c:var(--muted);--cs:var(--sunk)} .t-away{--c:var(--away);--cs:var(--away-soft)}
+.t-accent{--c:var(--accent);--cs:var(--accent-soft)}
+
+/* app frame */
+.app{display:grid;grid-template-columns:240px minmax(0,1fr);height:100%}
+.app.has-panel{grid-template-columns:240px minmax(0,1fr) min(480px,40vw)}
+.rail{background:var(--sunk);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:6px;padding:12px 10px;min-height:0;overflow:auto}
+.main{min-width:0;min-height:0;display:flex;flex-direction:column}
+.topbar{display:flex;align-items:center;gap:10px;padding-block:10px;padding-left:max(24px, env(safe-area-inset-left,0px));padding-right:max(24px, env(safe-area-inset-right,0px));border-bottom:1px solid var(--line);background:var(--bg);min-height:56px}
+.content{flex:1;min-height:0;overflow:auto;padding-block:24px 96px;padding-left:max(28px, env(safe-area-inset-left,0px));padding-right:max(28px, env(safe-area-inset-right,0px))}
+.content-inner{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+.panel{background:var(--surface);border-left:1px solid var(--line);min-height:0;display:flex;flex-direction:column}
+
+/* rail */
+.repo-btn{display:flex;align-items:center;gap:10px;width:100%;padding:8px;border:1px solid transparent;border-radius:10px;background:none;cursor:pointer;text-align:left}
+.repo-btn:hover{background:var(--surface);border-color:var(--line)}
+.repo-mark{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;background:var(--ink);color:var(--bg);font-weight:700;font-size:13px;flex:none}
+.nav{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+.nav-a{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;color:var(--muted);text-decoration:none;font-weight:500;cursor:pointer;border:0;background:none;width:100%;text-align:left}
+.nav-a:hover{background:var(--surface);color:var(--ink)}
+.nav-a.on{background:var(--surface);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
+.nav-a .count{margin-left:auto;font-size:12px;font-weight:700;min-width:20px;height:20px;padding:0 6px;border-radius:10px;display:grid;place-items:center;background:var(--you);color:#fff}
+.nav-a .count.quiet{background:var(--line);color:var(--muted)}
+.rail-sep{height:1px;background:var(--line);margin:8px 4px}
+.rail-label{font-size:12px;color:var(--faint);padding:4px 10px 2px;font-weight:600}
+.live-mini{display:flex;flex-direction:column;gap:2px}
+.live-mini button{display:flex;gap:8px;align-items:center;padding:5px 10px;border:0;background:none;border-radius:6px;cursor:pointer;text-align:left;font-size:13px;color:var(--muted);width:100%}
+.live-mini button:hover{background:var(--surface);color:var(--ink)}
+.rail-foot{margin-top:auto;display:flex;flex-direction:column;gap:8px;padding-top:10px}
+
+/* controls */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);cursor:pointer;font-weight:600;font-size:13px;white-space:nowrap;text-decoration:none;color:var(--ink)}
+.btn:hover{border-color:var(--muted)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.you{background:var(--you);color:#fff;border-color:var(--you)}
+.btn.danger{color:var(--bad);border-color:color-mix(in srgb, var(--bad) 45%, var(--line))}
+.btn.danger.solid{background:var(--bad);color:#fff;border-color:var(--bad)}
+.btn.ghost{border-color:transparent;background:none;color:var(--muted)}
+.btn.ghost:hover{background:var(--sunk);color:var(--ink)}
+.btn.sm{height:26px;padding:0 9px;font-size:12.5px;border-radius:7px}
+.btn.icon{width:32px;padding:0}
+.btn.sm.icon{width:26px}
+.split{display:inline-flex}
+.split .btn:first-child{border-top-right-radius:0;border-bottom-right-radius:0}
+.split .btn:last-child{border-top-left-radius:0;border-bottom-left-radius:0;border-left-color:color-mix(in srgb, var(--accent-ink) 30%, var(--accent));padding:0 6px}
+.split .btn:not(.primary):last-child{border-left-color:var(--line-strong)}
+input.f,select.f,textarea.f{width:100%;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 10px;min-height:34px}
+textarea.f{resize:vertical;line-height:1.5}
+input.f:focus,select.f:focus,textarea.f:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+label.lbl{display:flex;flex-direction:column;gap:6px;font-weight:600;font-size:13px}
+label.lbl .hint{font-weight:400;color:var(--muted)}
+.switch{position:relative;width:34px;height:20px;border-radius:10px;background:var(--line-strong);border:0;cursor:pointer;flex:none;transition:background .15s}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .15s;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.switch[aria-checked="true"]{background:var(--ship)}
+.switch[aria-checked="true"]::after{transform:translateX(14px)}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:8px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:none;padding:5px 11px;cursor:pointer;font-weight:600;font-size:13px;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on{background:var(--ink);color:var(--bg)}
+
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--cs,var(--sunk));color:var(--c,var(--muted));white-space:nowrap}
+.chip .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.live .dot{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.25}}
+.ref{font-family:var(--mono);font-size:12.5px;color:var(--muted)}
+.kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:4px;padding:0 4px;color:var(--muted);background:var(--surface)}
+
+/* banners */
+.banner{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:10px;background:var(--cs);color:var(--ink);border:1px solid color-mix(in srgb, var(--c) 30%, transparent)}
+.banner > svg{color:var(--c);flex:none;margin-top:2px}
+.banner .grow p+p{margin-top:2px}
+.top-banner{border-radius:0;border-width:0 0 1px 0;padding-left:max(24px, env(safe-area-inset-left,0px));padding-right:max(24px, env(safe-area-inset-right,0px))}
+
+/* page head */
+.page-head{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.page-head .sub{color:var(--muted);margin-top:4px}
+.crumbs{display:flex;gap:6px;align-items:center;color:var(--muted);font-size:13px}
+.crumbs button{border:0;background:none;padding:0;cursor:pointer;color:var(--muted)}
+.crumbs button:hover{color:var(--ink);text-decoration:underline}
+
+/* lists */
+.list{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.list > *+*{border-top:1px solid var(--line)}
+.group-h{display:flex;align-items:baseline;gap:8px;margin-bottom:8px}
+.group-h .n{color:var(--faint);font-weight:600}
+
+/* inbox item */
+.item{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:12px;padding:14px 16px;align-items:start}
+.item-ico{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;background:var(--cs);color:var(--c)}
+.item-title{font-weight:600}
+.item-meta{color:var(--muted);font-size:13px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:2px}
+.item-meta .sep{color:var(--faint)}
+.item-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.item-body{grid-column:2 / -1;margin-top:4px}
+.linkish{border:0;background:none;padding:0;cursor:pointer;color:inherit;text-align:left;font:inherit}
+.linkish:hover{text-decoration:underline}
+
+/* question */
+.qform{display:flex;flex-direction:column;gap:16px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:14px}
+.q-h{font-size:12px;font-weight:700;color:var(--you)}
+.q-text{font-weight:600;margin:2px 0 8px}
+.opts{display:flex;flex-direction:column;gap:6px}
+.opt{display:grid;grid-template-columns:18px 1fr;gap:10px;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--surface);cursor:pointer;align-items:start}
+.opt:hover{border-color:var(--line-strong)}
+.opt.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.opt input{margin:3px 0 0;accent-color:var(--accent)}
+.opt .d{color:var(--muted);font-size:13px}
+.rec{font-size:11.5px;font-weight:700;color:var(--ship);margin-left:6px}
+
+/* features */
+.frow{display:grid;grid-template-columns:minmax(0,1.6fr) 150px minmax(160px,1.2fr) auto;gap:18px;align-items:center;padding:14px 16px;cursor:pointer}
+.frow:hover{background:color-mix(in srgb, var(--sunk) 55%, transparent)}
+.ftitle{font-weight:650;font-size:15px}
+.fmeta{color:var(--muted);font-size:12.5px;margin-top:2px;display:flex;gap:8px;flex-wrap:wrap}
+
+/* track: the signature element */
+.track{display:flex;flex-direction:column;gap:6px;min-width:0}
+.track-bar{display:flex;gap:3px;height:8px}
+.track-bar > i{flex:1;border-radius:2px;background:var(--line)}
+.track-bar > i.done{background:var(--c)}
+.track-bar > i.now{background:repeating-linear-gradient(-45deg,var(--c) 0 3px,color-mix(in srgb,var(--c) 45%,transparent) 3px 6px)}
+.track-bar > .work{flex:3;display:flex;border-radius:2px;overflow:hidden;background:var(--line)}
+.track-bar > .work > span{height:100%}
+.track-cap{font-size:12px;color:var(--muted)}
+.stepper{display:grid;grid-template-columns:repeat(4,1fr) 3fr 1fr;gap:4px}
+.step{display:flex;flex-direction:column;gap:8px}
+.step .bar{height:10px;border-radius:3px;background:var(--line)}
+.step.done .bar{background:var(--c)}
+.step.now .bar{background:repeating-linear-gradient(-45deg,var(--c) 0 4px,color-mix(in srgb,var(--c) 40%,transparent) 4px 8px)}
+.step .lab{font-size:12.5px;color:var(--faint);font-weight:600}
+.step.done .lab{color:var(--muted)} .step.now .lab{color:var(--ink)}
+.step .work{display:flex;height:10px;border-radius:3px;overflow:hidden;background:var(--line)}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{width:8px;height:8px;border-radius:2px;display:inline-block}
+
+.next{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center;padding:16px 18px;border-radius:12px;background:var(--surface);border:1px solid var(--line)}
+.next .k{font-size:12.5px;font-weight:700;color:var(--muted)}
+.next .t{font-size:17px;font-weight:700;margin-top:2px}
+.next .h{color:var(--muted);margin-top:3px}
+
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tab{border:0;background:none;padding:9px 12px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.tab:hover{color:var(--ink)}
+.tab.on{color:var(--ink);border-bottom-color:var(--ink)}
+.tab .n{color:var(--faint);margin-left:4px;font-weight:500}
+
+/* tables */
+.tbl-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+table.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
+.tbl th{text-align:left;font-weight:600;color:var(--muted);font-size:12.5px;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surface)}
+.tbl td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:0}
+.tbl tbody tr.click{cursor:pointer}
+.tbl tbody tr.click:hover td{background:color-mix(in srgb, var(--sunk) 55%, transparent)}
+.tbl tr.sub td{background:var(--bg);font-weight:700;font-size:12.5px;color:var(--muted);padding:6px 12px}
+.tbl td.num{text-align:right}
+
+/* board */
+.board-scroll{overflow-x:auto;padding-bottom:6px}
+.board{display:grid;grid-template-columns:repeat(5, minmax(210px,1fr));gap:10px;min-width:1090px}
+.bcol-h{display:flex;align-items:center;gap:6px;font-weight:700;font-size:12.5px;color:var(--muted);padding:0 4px 6px}
+.bcol-h i{width:8px;height:8px;border-radius:2px;background:var(--c)}
+.bcol{display:flex;flex-direction:column;gap:8px;min-height:40px;padding:6px;border-radius:10px;background:var(--sunk)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:9px 10px;display:flex;flex-direction:column;gap:7px;cursor:pointer}
+.card:hover{border-color:var(--line-strong)}
+.card.you{border-color:var(--you);box-shadow:0 0 0 1px var(--you)}
+.card .t{font-weight:600;font-size:13px;line-height:1.35}
+.lane{display:flex;flex-direction:column;gap:10px}
+.lane-h{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.lane-h .name{font-weight:700;font-size:15px;border:0;background:none;padding:0;cursor:pointer}
+.lane-h .name:hover{text-decoration:underline}
+
+/* activity */
+.live-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px}
+.live-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;cursor:pointer}
+.live-card:hover{border-color:var(--line-strong)}
+.live-card.you{border-color:var(--you)}
+.live-card .cmd{font-family:var(--mono);font-size:13px;font-weight:500}
+
+/* session */
+.sess-grid{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:20px;align-items:start}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13px}
+.facts dt{color:var(--muted)} .facts dd{margin:0;min-width:0}
+.events{display:flex;flex-direction:column;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:8px}
+.ev{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;padding:7px 8px;border-radius:8px}
+.ev.tool{cursor:pointer}
+.ev.tool:hover{background:var(--bg)}
+.ev .ic{color:var(--faint);margin-top:2px}
+.ev.text .body{white-space:pre-wrap}
+.ev.tool .body{font-family:var(--mono);font-size:12.5px;color:var(--muted)}
+.ev.tool .body b{color:var(--ink);font-weight:500}
+.ev pre{margin:6px 0 0;padding:10px;background:var(--bg);border-radius:6px;font-family:var(--mono);font-size:12px;white-space:pre-wrap;color:var(--ink);max-height:240px;overflow:auto}
+.ev.result{background:var(--cs);color:var(--ink)}
+.composer{position:sticky;bottom:0;display:flex;gap:8px;align-items:flex-end;padding:10px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
+.composer textarea{border:0;background:none;resize:none;flex:1;min-height:36px;max-height:160px;padding:8px}
+.composer textarea:focus{outline:none}
+
+/* panel */
+.p-head{padding:14px 18px 12px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.p-body{flex:1;overflow:auto;padding:16px 18px 40px;display:flex;flex-direction:column;gap:18px}
+.p-foot{border-top:1px solid var(--line);padding:10px 18px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.box{border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.prose{line-height:1.6;max-width:72ch}
+.prose h2{font-size:16px;margin:18px 0 6px}
+.prose h3{margin:14px 0 4px}
+.prose p{margin:0 0 10px}
+.prose ul{margin:0 0 10px;padding-left:20px}
+.checks{display:flex;flex-direction:column;gap:4px}
+.check{display:flex;gap:8px;align-items:center;font-size:13px}
+.diff{font-family:var(--mono);font-size:12px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.diff div{padding:1px 10px;white-space:pre}
+.diff .a{background:var(--ship-soft)} .diff .r{background:var(--bad-soft)} .diff .h{background:var(--sunk);color:var(--muted)}
+.comment{display:grid;grid-template-columns:28px 1fr;gap:10px}
+.avatar{width:28px;height:28px;border-radius:50%;background:var(--sunk);display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--muted)}
+
+/* overlays */
+.scrim{position:fixed;inset:0;background:rgba(10,12,16,.38);z-index:40;display:flex;align-items:flex-start;justify-content:center;padding:10vh 16px 16px}
+.dialog{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);width:min(460px,100%);display:flex;flex-direction:column;max-height:80vh}
+.dialog.wide{width:min(920px,100%)}
+.dialog .d-h{padding:16px 18px 6px}
+.dialog .d-b{padding:8px 18px 16px;overflow:auto;display:flex;flex-direction:column;gap:12px}
+.dialog .d-f{padding:12px 18px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.palette input{border:0;border-bottom:1px solid var(--line);border-radius:14px 14px 0 0;padding:16px 18px;font-size:16px;background:none;width:100%}
+.palette input:focus{outline:none}
+.pal-list{overflow:auto;padding:6px}
+.pal-g{font-size:12px;font-weight:700;color:var(--faint);padding:8px 10px 4px}
+.pal-i{display:flex;gap:10px;align-items:center;padding:8px 10px;border-radius:8px;cursor:pointer;border:0;background:none;width:100%;text-align:left}
+.pal-i.on{background:var(--accent-soft)}
+.pal-i .r{margin-left:auto;color:var(--faint);font-size:12px}
+.menu{position:absolute;z-index:30;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:4px;min-width:220px}
+.menu button{display:flex;gap:8px;align-items:center;width:100%;padding:7px 10px;border:0;background:none;border-radius:6px;cursor:pointer;text-align:left}
+.menu button:hover{background:var(--sunk)}
+.toasts{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;z-index:60;align-items:center;width:max-content;max-width:calc(100vw - 32px)}
+.toast{background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;box-shadow:var(--shadow);display:flex;gap:12px;align-items:center;font-weight:500}
+.toast.bad{background:var(--bad);color:#fff}
+.toast button{border:0;background:none;color:inherit;font-weight:700;text-decoration:underline;cursor:pointer;padding:0}
+
+/* start dialog */
+.start{display:grid;grid-template-columns:260px minmax(0,1fr);min-height:440px;max-height:78vh}
+.start-list{border-right:1px solid var(--line);overflow:auto;padding:8px}
+.start-list .g{font-size:12px;font-weight:700;color:var(--faint);padding:10px 10px 4px}
+.start-list button{display:block;width:100%;text-align:left;border:0;background:none;padding:7px 10px;border-radius:8px;cursor:pointer}
+.start-list button:hover{background:var(--sunk)}
+.start-list button.on{background:var(--accent-soft)}
+.start-list .s{font-size:12px;color:var(--muted);font-family:var(--mono)}
+.start-form{padding:18px;overflow:auto;display:flex;flex-direction:column;gap:14px}
+.pick-list{max-height:180px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.pick-list button{display:flex;gap:8px;width:100%;text-align:left;border:0;background:none;padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--line)}
+.pick-list button:last-child{border-bottom:0}
+.pick-list button.on{background:var(--accent-soft)}
+.lens-row{display:flex;gap:6px;flex-wrap:wrap}
+.lens{border:1px solid var(--line-strong);background:var(--surface);border-radius:999px;padding:4px 11px;cursor:pointer;font-weight:600;font-size:12.5px}
+.lens.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+/* settings */
+.set-grid{display:grid;grid-template-columns:200px minmax(0,1fr);gap:28px;align-items:start}
+.set-nav{display:flex;flex-direction:column;gap:2px;position:sticky;top:0}
+.set-sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:14px}
+.set-sec + .set-sec{margin-top:16px}
+
+/* away */
+html[data-away] .rail{background:var(--away-soft)}
+.away-card{border-radius:12px;padding:12px;background:var(--surface);border:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+html[data-away] .away-card{border-color:var(--away);box-shadow:0 0 0 1px var(--away)}
+.meter{height:4px;border-radius:2px;background:var(--line);overflow:hidden}
+.meter > span{display:block;height:100%;background:var(--muted)}
+.meter.hot > span{background:var(--review)} .meter.full > span{background:var(--bad)}
+
+.empty{display:flex;flex-direction:column;gap:10px;align-items:flex-start;padding:28px;background:var(--surface);border:1px dashed var(--line-strong);border-radius:12px}
+
+.demo{position:fixed;right:max(16px, env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:50}
+.demo > button{border:1px dashed var(--line-strong);background:var(--surface);border-radius:999px;padding:7px 13px;cursor:pointer;font-weight:600;font-size:12.5px;box-shadow:var(--shadow);display:flex;gap:6px;align-items:center}
+.demo .menu{bottom:44px;right:0;width:280px}
+.demo .menu button.on{background:var(--accent-soft)}
+
+.mob-nav{display:none}
+.mob-only{display:none}
+
+@media (max-width:1180px){
+  .app.has-panel{grid-template-columns:240px minmax(0,1fr)}
+  .app.has-panel .panel{position:fixed;top:0;right:0;bottom:0;width:min(480px,100%);z-index:35;box-shadow:var(--shadow)}
+  .sess-grid{grid-template-columns:1fr}
+}
+@media (max-width:760px){
+  .app,.app.has-panel{grid-template-columns:1fr}
+  .rail{display:none}
+  .mob-only{display:flex}
+  .topbar{padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px))}
+  .content{padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px));padding-bottom:120px}
+  .top-banner{padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px))}
+  .mob-nav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--surface);border-top:1px solid var(--line);padding:6px max(8px, env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(8px, env(safe-area-inset-left,0px));justify-content:space-around}
+  .mob-nav button{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:600;color:var(--muted);padding:4px 8px;position:relative;cursor:pointer}
+  .mob-nav button.on{color:var(--ink)}
+  .mob-nav .count{position:absolute;top:0;right:4px;background:var(--you);color:#fff;border-radius:8px;font-size:10px;padding:0 5px}
+  .demo{bottom:calc(72px + env(safe-area-inset-bottom,0px))}
+  .frow{grid-template-columns:1fr;gap:10px}
+  .item{grid-template-columns:32px minmax(0,1fr)}
+  .item-actions{grid-column:2;justify-content:flex-start}
+  .next{grid-template-columns:1fr}
+  .stepper{grid-template-columns:repeat(6,1fr)}
+  .step .lab{font-size:11px}
+  .start{grid-template-columns:1fr}
+  .start-list{border-right:0;border-bottom:1px solid var(--line);max-height:200px}
+  .set-grid{grid-template-columns:1fr}
+  .set-nav{flex-direction:row;overflow-x:auto;position:static}
+  .hide-sm{display:none}
+  .scrim{padding:16px}
+}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js"></script>
+<script>
+const {useState,useEffect,useMemo,useRef,useContext,createContext}=React;
+const html=htm.bind(React.createElement);
+const Ctx=createContext(null); const useApp=()=>useContext(Ctx);
+
+/* ---------- icons ---------- */
+const P={
+ inbox:'M22 12h-6l-2 3h-4l-2-3H2 M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z',
+ layers:'m12 2 10 5-10 5L2 7z M2 17l10 5 10-5 M2 12l10 5 10-5',
+ board:'M3 3h5v18H3z M10 3h5v12h-5z M17 3h4v8h-4z',
+ activity:'M22 12h-4l-3 9L9 3l-3 9H2',
+ sliders:'M4 21v-7 M4 10V3 M12 21v-9 M12 8V3 M20 21v-5 M20 12V3 M1 14h6 M9 8h6 M17 16h6',
+ plus:'M12 5v14 M5 12h14', search:'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z M21 21l-4.3-4.3',
+ x:'M18 6 6 18 M6 6l12 12', check:'M20 6 9 17l-5-5', right:'m9 18 6-6-6-6', down:'m6 9 6 6 6-6', left:'m15 18-6-6 6-6',
+ play:'M7 4v16l13-8z', stop:'M6 6h12v12H6z', refresh:'M21 12a9 9 0 1 1-2.6-6.4L21 8 M21 3v5h-5',
+ msg:'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
+ merge:'M18 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M6 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M6 21V9a9 9 0 0 0 9 9',
+ pr:'M18 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M6 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M6 9v12 M13 6h3a2 2 0 0 1 2 2v7',
+ alert:'M12 9v4 M12 17h.01 M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
+ clock:'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M12 6v6l4 2',
+ moon:'M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z',
+ sun:'M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10z M12 1v2 M12 21v2 M4.2 4.2l1.4 1.4 M18.4 18.4l1.4 1.4 M1 12h2 M21 12h2 M4.2 19.8l1.4-1.4 M18.4 5.6l1.4-1.4',
+ monitor:'M3 4h18v12H3z M8 20h8 M12 16v4',
+ terminal:'m4 17 6-6-6-6 M12 19h8', lock:'M5 11h14v10H5z M8 11V7a4 4 0 0 1 8 0v4',
+ trash:'M3 6h18 M8 6V4h8v2 M19 6l-1 14H6L5 6', ext:'M15 3h6v6 M10 14 21 3 M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6',
+ bolt:'M13 2 3 14h9l-1 8 10-12h-9z', more:'M5 12h.01 M12 12h.01 M19 12h.01',
+ file:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6',
+ send:'M22 2 11 13 M22 2l-7 20-4-9-9-4z', folder:'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z',
+ pause:'M7 4h3v16H7z M14 4h3v16h-3z', help:'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3 M12 17h.01',
+ tool:'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z',
+ eye:'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+ github:'M9 19c-5 1.5-5-2.5-7-3 M16 22v-3.9a3.4 3.4 0 0 0-.9-2.6c3.1-.4 6.4-1.5 6.4-7a5.4 5.4 0 0 0-1.5-3.8 5 5 0 0 0-.1-3.8s-1.2-.3-3.9 1.5a13.4 13.4 0 0 0-7 0C6.3 1.6 5.1 1.9 5.1 1.9a5 5 0 0 0-.1 3.8A5.4 5.4 0 0 0 3.5 9.5c0 5.4 3.3 6.6 6.4 7a3.4 3.4 0 0 0-.9 2.6V22',
+ user:'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+ copy:'M9 9h11v11H9z M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1',
+ wifi:'M2 2l20 20 M8.5 16.5a5 5 0 0 1 7 0 M5 12.9a10 10 0 0 1 5.2-2.8 M19 12.9a10 10 0 0 0-2.3-1.6 M12 20h.01',
+};
+function Icon({n,s=16}){return html`<svg width=${s} height=${s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style=${{flex:'none'}}><path d=${P[n]}/></svg>`}
+
+/* ---------- vocabulary ---------- */
+const STAGES=[
+ {id:'draft',label:'PRD draft',tone:'plan'},{id:'review',label:'PRD review',tone:'plan'},
+ {id:'approved',label:'Approved',tone:'plan'},{id:'tasks',label:'Tasks',tone:'plan'},
+ {id:'building',label:'Building',tone:'build'},{id:'shipped',label:'Shipped',tone:'ship'}];
+const stageIdx=id=>STAGES.findIndex(s=>s.id===id);
+const ISSUE={
+ unrefined:{label:'Needs refinement',tone:'plan',col:'var(--plan)'},
+ blocked:{label:'Blocked',tone:'muted',col:'var(--faint)'},
+ ready:{label:'Ready',tone:'build',col:'color-mix(in srgb, var(--build) 45%, var(--line))'},
+ in_progress:{label:'Building',tone:'build',col:'var(--build)'},
+ draft_pr:{label:'Draft PR',tone:'build',col:'var(--build)'},
+ in_review:{label:'In review',tone:'review',col:'var(--review)'},
+ grinding:{label:'Grinding',tone:'review',col:'var(--review)'},
+ merged:{label:'Merged',tone:'ship',col:'var(--ship)'}};
+const ISSUE_ORDER=['unrefined','blocked','ready','in_progress','draft_pr','in_review','grinding','merged'];
+const SESS={
+ queued:{label:'Queued',tone:'muted'},starting:{label:'Starting',tone:'build',live:1},running:{label:'Running',tone:'build',live:1},
+ waiting:{label:'Needs your answer',tone:'you'},limited:{label:'Paused for limit',tone:'review'},
+ done:{label:'Done',tone:'ship'},failed:{label:'Failed',tone:'bad'},stopped:{label:'Stopped',tone:'muted'}};
+const LIVE=['queued','starting','running','waiting','limited'];
+const LENSES=['critical','ceo','cto','security','qa','ux','performance'];
+const LENS_NAME={critical:'Critical',ceo:'CEO',cto:'CTO',security:'Security',qa:'QA',ux:'UX',performance:'Performance'};
+const COMMANDS=[
+ {g:'Plan',items:[
+  {id:'create-prd',name:'Write a PRD',desc:'Claude interviews you about an idea and writes the PRD.',arg:'text',ph:'Describe the feature: who it is for, what problem it solves…',lenses:true,noRepo:true},
+  {id:'create-tasks',name:'Break a PRD into tasks',desc:'Splits an approved PRD into one-PR issues under its epic.',arg:'prd'},
+  {id:'refine-issues',name:'Refine issues',desc:'Writes WHAT, WHY and HOW into each issue so it is ready to build.',arg:'issues'},
+  {id:'flow',name:'Plan a flow',desc:'Talk through a multi-step change before writing anything.',arg:'text',ph:'What do you want to plan?'}]},
+ {g:'Build',items:[
+  {id:'implement-issue',name:'Implement an issue',desc:'Takes one refined issue to a ready PR in its own worktree.',arg:'issue'},
+  {id:'herdr-dispatch',name:'Dispatch to herdr tabs',desc:'Opens several issues in herdr, one tab each, in dependency order.',arg:'issues'},
+  {id:'verifier-locally',name:'Verify changes locally',desc:'Runs the checks that match the changed files.',arg:'none'}]},
+ {g:'Review',items:[
+  {id:'pr-review',name:'Review a PR',desc:'Evidence-backed review against the issue and the review guide.',arg:'pr'},
+  {id:'pr-grind',name:'Grind a PR to approval',desc:'Loops reviewer bot rounds, fixes findings, pushes, repeats.',arg:'pr'},
+  {id:'peer-review',name:'Peer review an artifact',desc:'Runs the lens panel until every lens approves.',arg:'text',ph:'Path or description of what to review',lenses:true}]},
+ {g:'Ship',items:[{id:'release-pr',name:'Open a release PR',desc:'Staging to master with a release summary and checklist.',arg:'none'}]},
+ {g:'Capture',items:[
+  {id:'dump',name:'Dump an idea or bug',desc:'Files it into your notes vault as a problem statement.',arg:'text',ph:'Paste anything',noRepo:true},
+  {id:'worklog',name:'Write a worklog',desc:'Builds a day’s worklog from GitHub activity.',arg:'day',noRepo:true}]},
+ {g:'Maintain',items:[
+  {id:'docs-updater',name:'Update docs',desc:'Brings docs in line with recent changes.',arg:'none'},
+  {id:'sync-from-wasensi',name:'Sync from Wasensi',desc:'Ports upstream skill and guide changes.',arg:'none'},
+  {id:'custom',name:'Custom prompt',desc:'Anything else. Runs with permissions skipped.',arg:'text',ph:'Prompt for Claude',lenses:true}]}];
+const CMD=Object.fromEntries(COMMANDS.flatMap(g=>g.items).map(c=>[c.id,c]));
+
+/* ---------- seed data (fake) ---------- */
+function I(n,title,status,x={}){return {n,title,status,blockedBy:[],pr:null,session:null,priority:null,cleanup:null,...x}}
+function seed(){
+ const issues={};
+ const add=(feature,repo,list)=>list.forEach(i=>{i.feature=feature;i.repo=repo;issues[i.n]=i});
+ add('roles','blubird/wasensi',[
+  I(790,'Role model and migration','merged',{pr:1270}),I(791,'Seed default roles','merged',{pr:1271}),
+  I(792,'Permission check middleware','merged',{pr:1272}),I(793,'Admin role assignment API','merged',{pr:1273}),
+  I(794,'Audit trail for role changes','merged',{pr:1274,cleanup:{uncommitted:['app/audit/notes.md'],unpushed:['a41c9e2 wip: audit filters']}}),
+  I(796,'Role list screen','merged',{pr:1276}),I(797,'Invite a user with a role','merged',{pr:1277}),
+  I(798,'Role badge in header','merged',{pr:1278}),I(804,'Permission cache invalidation','merged',{pr:1284}),
+  I(805,'Deny by default for new routes','merged',{pr:1285}),
+  I(799,'Permission-gated navigation','grinding',{pr:1290,priority:'high',grind:{round:3,paused:'CI failing on lint and unit (3.11)'}}),
+  I(800,'Role editor API','in_review',{pr:1289,priority:'high'}),
+  I(802,'Bulk role change','in_review',{pr:1291}),
+  I(801,'Role editor screen','in_progress',{session:'s1',priority:'high'}),
+  I(806,'Permission matrix docs page','in_progress',{session:'s3'}),
+  I(803,'Role-based report filters','ready',{session:'s6',lastFailed:true}),
+  I(808,'Import roles from CSV','ready',{session:'s9',queued:true}),
+  I(809,'Guest role','ready',{priority:'low'}),
+  I(807,'Remove legacy is_admin flag','blocked',{blockedBy:[801,802]}),
+  I(810,'End-to-end tests for roles','blocked',{blockedBy:[807]})]);
+ add('tags','blubird/wasensi',[I(813,'Tag model and API','ready'),I(814,'Note indicator on inbox rows','unrefined')]);
+ add('darkrep','blubird/wasensi',[I(781,'Theme tokens for charts','merged',{pr:1240}),I(782,'Dark table styles','merged',{pr:1241}),I(783,'PDF export keeps light theme','merged',{pr:1243}),I(784,'Theme toggle in report header','merged',{pr:1244})]);
+ return {
+  features:[
+   {id:'roles',repo:'blubird/wasensi',title:'Roles and permissions',stage:'building',epic:795,prd:'docs/prds/roles-and-permissions.md',autobuild:true,updated:'2 min ago'},
+   {id:'csv',repo:'blubird/wasensi',title:'Bulk CSV import',stage:'review',prd:'docs/prds/bulk-csv-import.md',updated:'4 min ago',root:'s2',
+    review:{round:2,max:5,state:'running',lenses:{critical:'approve',ceo:'approve',cto:'changes',security:'waiting',qa:'approve'}}},
+   {id:'audit',repo:'blubird/wasensi',title:'Audit log export',stage:'review',prd:'docs/prds/audit-log-export.md',updated:'1 h ago',root:'s11',
+    review:{round:5,max:5,state:'cap',lenses:{critical:'approve',cto:'approve',security:'changes',performance:'approve'},note:'Security still asks for row-level redaction of personal data in exports.'}},
+   {id:'tags',repo:'blubird/wasensi',title:'Inbox tags and note indicator',stage:'tasks',epic:812,prd:'docs/prds/inbox-tags.md',updated:'Yesterday'},
+   {id:'saved',repo:'blubird/wasensi',title:'Saved searches',stage:'approved',epic:820,prd:'docs/prds/saved-searches.md',updated:'Yesterday'},
+   {id:'darkrep',repo:'blubird/wasensi',title:'Dark mode for reports',stage:'shipped',epic:780,prd:'docs/prds/dark-mode-reports.md',updated:'Oct 14'},
+   {id:'shift',repo:'blubird/ops-portal',title:'Shift swap requests',stage:'draft',prd:'docs/prds/shift-swap.md',updated:'Oct 18'}],
+  issues,
+  prs:{
+   1289:{n:1289,issue:800,title:'Role editor API',branch:'feat/800-role-editor-api',base:'staging',draft:false,state:'open',ci:'success',review:'approved',reviewer:'nadia-k',add:412,del:38,
+    checks:[['lint','pass'],['unit (3.11)','pass'],['unit (3.12)','pass'],['e2e','pass']],
+    files:[['app/roles/api.py',188,12],['app/roles/schemas.py',64,0],['tests/test_role_api.py',160,0],['docs/api/roles.md',0,26]]},
+   1290:{n:1290,issue:799,title:'Permission-gated navigation',branch:'feat/799-gated-nav',base:'staging',draft:false,state:'open',ci:'failure',review:'changes',reviewer:'review-bot',add:236,del:91,
+    checks:[['lint','fail'],['unit (3.11)','fail'],['unit (3.12)','pass'],['e2e','pass']],
+    files:[['app/nav/menu.py',120,60],['app/nav/guards.py',80,31],['tests/test_nav.py',36,0]]},
+   1291:{n:1291,issue:802,title:'Bulk role change',branch:'feat/802-bulk-roles',base:'staging',draft:false,state:'open',ci:'pending',review:'none',add:301,del:12,
+    checks:[['lint','pass'],['unit (3.11)','running'],['unit (3.12)','running'],['e2e','queued']],
+    files:[['app/roles/bulk.py',190,0],['app/roles/api.py',41,12],['tests/test_bulk_roles.py',70,0]]}},
+  sessions:[
+   {id:'s1',cmd:'implement-issue',arg:'#801',repo:'blubird/wasensi',feature:'roles',issue:801,status:'running',started:'Today 13:41',dur:'21 min',cost:1.84,tokens:'412k',account:'personal',
+    events:[{k:'text',t:'Reading issue #801 and its parent epic #795. The issue is refined and not blocked.'},
+     {k:'tool',name:'Bash',sum:'git worktree add ../wasensi-801 -b feat/801-role-editor-screen',out:'Preparing worktree (new branch \'feat/801-role-editor-screen\')'},
+     {k:'tool',name:'Read',sum:'app/roles/api.py',out:'(188 lines)'},
+     {k:'text',t:'The editor screen needs the API from #800, which is in review. I will build against its branch contract and keep the client in one module.'},
+     {k:'tool',name:'Edit',sum:'web/src/roles/RoleEditor.tsx',out:'+142 −0'},
+     {k:'tool',name:'Bash',sum:'npm run test -- roles',out:'PASS web/src/roles/RoleEditor.test.tsx (12 tests)\nTests: 12 passed'}]},
+   {id:'s2',cmd:'create-prd',arg:'Bulk CSV import',repo:'blubird/wasensi',feature:'csv',status:'waiting',started:'Today 13:55',dur:'6 min',cost:0.62,tokens:'88k',account:'personal',
+    question:{items:[
+     {header:'Large files',q:'How should imports above 1,000 rows run?',multi:false,free:true,options:[
+      {label:'In the background, email when done',desc:'People can leave the page. Uses the existing job queue.',rec:true},
+      {label:'In the browser with a progress bar',desc:'Simpler, but the tab has to stay open.'},
+      {label:'Reject files above 1,000 rows',desc:'Smallest scope for the first release.'}]},
+     {header:'Required columns',q:'Which columns must every row have?',multi:true,free:false,options:[
+      {label:'Email',rec:true},{label:'Full name',rec:true},{label:'Phone'},{label:'Company'}]}]},
+    events:[{k:'text',t:'Read the problem statement from the vault and the existing import code in app/imports/.'},
+     {k:'tool',name:'Grep',sum:'"enqueue_job" app/',out:'app/jobs/queue.py:14\napp/exports/run.py:40'},
+     {k:'text',t:'Two decisions decide the scope. Asking now so the PRD does not guess.'}]},
+   {id:'s3',cmd:'implement-issue',arg:'#806',repo:'blubird/wasensi',feature:'roles',issue:806,status:'waiting',processAlive:true,started:'Today 13:48',dur:'14 min',cost:0.97,tokens:'190k',account:'personal',
+    question:{items:[{header:'Approach',q:'The can() helper caches per request. Extend it for the matrix page, or add a separate resolver?',multi:false,free:true,options:[
+     {label:'Extend can()',desc:'One code path. Every permission check benefits from the change.',rec:true},
+     {label:'Add a separate resolver',desc:'Isolated from live checks, but duplicates the rules.'}]}]},
+    events:[{k:'text',t:'Found the permission rules in app/permissions/can.py. The matrix page needs every rule for every role at once.'},
+     {k:'tool',name:'Read',sum:'app/permissions/can.py',out:'(96 lines)'}]},
+   {id:'s4',cmd:'pr-grind',arg:'PR #1290',repo:'blubird/wasensi',feature:'roles',issue:799,status:'done',started:'Today 13:20',dur:'9 min',cost:0.71,tokens:'140k',account:'personal',note:'Round 3 ended. Grind paused: CI failing.',
+    events:[{k:'text',t:'Round 3: fixed 4 of 5 findings. CI is red on lint and unit (3.11); pausing so a person can look.'},{k:'result',t:'Grind paused after round 3'}]},
+   {id:'s5',cmd:'refine-issues',arg:'epic #812',repo:'blubird/wasensi',feature:'tags',status:'done',started:'Yesterday 17:02',dur:'11 min',cost:0.88,tokens:'160k',account:'personal',events:[{k:'result',t:'Refined 1 of 2 issues. #814 needs a decision on the indicator design.'}]},
+   {id:'s6',cmd:'implement-issue',arg:'#803',repo:'blubird/wasensi',feature:'roles',issue:803,status:'failed',started:'Today 12:10',dur:'38 min',cost:2.41,tokens:'520k',account:'personal',
+    error:'3 tests still fail in tests/test_report_filters.py after 2 fix attempts.',
+    events:[{k:'tool',name:'Bash',sum:'pytest tests/test_report_filters.py -q',out:'FAILED test_filter_by_role_admin\nFAILED test_filter_by_role_guest\nFAILED test_filter_empty_role\n3 failed, 21 passed'},{k:'result',t:'Failed: tests still red after 2 attempts'}]},
+   {id:'s7',cmd:'pr-review',arg:'PR #1291',repo:'blubird/wasensi',feature:'roles',issue:802,status:'limited',started:'Today 13:30',dur:'4 min',cost:0.31,tokens:'60k',account:'work',resetsAt:'14:20',autoResume:true,
+    events:[{k:'text',t:'Reading the diff for PR #1291.'},{k:'result',t:'Paused: the work account hit its 5-hour limit'}]},
+   {id:'s9',cmd:'implement-issue',arg:'#808',repo:'blubird/wasensi',feature:'roles',issue:808,status:'queued',started:'Today 13:58',dur:'—',cost:0,tokens:'—',account:'personal',queueReason:'Auto-build runs 2 at a time. Starts when a slot frees up.',events:[]},
+   {id:'s8',cmd:'worklog',arg:'Yesterday',repo:null,status:'done',started:'Today 09:02',dur:'3 min',cost:0.12,tokens:'30k',account:'personal',events:[{k:'result',t:'Saved to the daily note'}]},
+   {id:'s10',cmd:'implement-issue',arg:'#797',repo:'blubird/wasensi',feature:'roles',issue:797,status:'done',started:'Yesterday 15:12',dur:'44 min',cost:2.02,tokens:'480k',account:'personal',events:[{k:'result',t:'PR #1277 ready, CI green'}]},
+   {id:'s11',cmd:'create-prd',arg:'Audit log export',repo:'blubird/wasensi',feature:'audit',status:'done',started:'Today 11:30',dur:'52 min',cost:1.40,tokens:'300k',account:'personal',events:[{k:'result',t:'Peer review stopped at round 5 of 5'}]},
+   {id:'s12',cmd:'create-prd',arg:'Shift swap requests',repo:'blubird/ops-portal',feature:'shift',status:'done',started:'Oct 18 10:04',dur:'31 min',cost:0.95,tokens:'210k',account:'personal',events:[{k:'result',t:'Wrote docs/prds/shift-swap.md'}]}],
+  repos:[
+   {slug:'blubird/wasensi',name:'Wasensi',path:'~/Projects/wasensi',remote:'ok',autoGrind:true,cap:2,slack:'#wasensi-dev'},
+   {slug:'blubird/ops-portal',name:'Ops portal',path:'~/Projects/ops-portal',remote:'ok',autoGrind:false,cap:2,slack:''},
+   {slug:'local/recipe-box',name:'recipe-box',path:'~/Projects/recipe-box',remote:'none',autoGrind:false,cap:1,slack:''}],
+  accounts:[{label:'personal',cmd:'claude',def:true,five:62,seven:41,resets:'16:40'},{label:'work',cmd:'cc work',five:100,seven:73,limitedUntil:'14:20'}],
+  away:null, awaySummary:null, seq:20,
+ };
+}
+const featureById=(db,id)=>db.features.find(f=>f.id===id);
+const issuesOf=(db,fid)=>Object.values(db.issues).filter(i=>i.feature===fid);
+const sessById=(db,id)=>db.sessions.find(s=>s.id===id);
+const repoBy=(db,slug)=>db.repos.find(r=>r.slug===slug);
+const prOf=(db,n)=>db.prs[n]||{n,title:'',state:'merged',ci:'success',review:'approved',checks:[],files:[],add:0,del:0,branch:'',base:'staging'};
+const countBy=list=>list.reduce((m,i)=>(m[i.status]=(m[i.status]||0)+1,m),{});
+const mergeable=pr=>pr&&pr.state==='open'&&!pr.draft&&pr.ci==='success'&&pr.review==='approved';
+
+/* ---------- derived: what needs you ---------- */
+function inboxItems(db,sc){
+ const out=[];
+ if(sc==='gh') out.push({key:'gh',kind:'block',icon:'github',tone:'bad',title:'GitHub CLI is not signed in',meta:['All repos'],detail:'Boards, issue actions and merges are paused until gh can reach GitHub.',acts:[{l:'Copy fix command',a:'copy',p:'gh auth login',primary:1},{l:'Check again',a:'recheck'}]});
+ db.sessions.filter(s=>s.status==='waiting').forEach(s=>out.push({key:s.id,kind:'answer',icon:'msg',tone:'you',session:s,
+   title:s.question.items.length>1?`${s.question.items.length} questions from ${s.cmd} ${s.arg}`:s.question.items[0].q,
+   meta:[repoBy(db,s.repo)?.name,s.feature&&featureById(db,s.feature)?.title,`asked ${s.id==='s2'?'2':'5'} min ago`]}));
+ db.features.forEach(f=>{
+  if(f.stage==='review'&&f.review?.state==='cap') out.push({key:'cap'+f.id,kind:'decide',icon:'eye',tone:'plan',title:`Peer review hit the round limit on “${f.title}”`,meta:[repoBy(db,f.repo).name,`round ${f.review.round} of ${f.review.max}`],detail:f.review.note,
+   acts:[{l:'Approve PRD anyway',a:'approve',p:f.id},{l:'Run 2 more rounds',a:'moreRounds',p:f.id},{l:'Open review',a:'openFeature',p:[f.id,'review'],primary:1}]});
+  if(f.stage==='review'&&f.review?.state==='approved') out.push({key:'appr'+f.id,kind:'decide',icon:'check',tone:'plan',title:`Every lens approves “${f.title}”`,meta:[repoBy(db,f.repo).name],detail:'Approving sets the PRD to Approved and files its epic on GitHub.',acts:[{l:'Approve PRD',a:'approve',p:f.id,primary:1},{l:'Read PRD',a:'openFeature',p:[f.id,'prd']}]});
+ });
+ Object.values(db.prs).filter(mergeable).forEach(pr=>{const i=db.issues[pr.issue];out.push({key:'m'+pr.n,kind:'decide',icon:'merge',tone:'ship',title:`PR #${pr.n} is ready to merge`,meta:[repoBy(db,i.repo).name,`#${i.n} ${i.title}`],detail:`Approved by ${pr.reviewer}. All ${pr.checks.length} checks pass.`,acts:[{l:'Review and merge',a:'pr',p:pr.n,primary:1}]})});
+ Object.values(db.issues).filter(i=>i.status==='grinding'&&i.grind?.paused).forEach(i=>out.push({key:'g'+i.n,kind:'fix',icon:'pause',tone:'review',title:`Grind paused on PR #${i.pr}`,meta:[repoBy(db,i.repo).name,`#${i.n} ${i.title}`,`round ${i.grind.round}`],detail:i.grind.paused+'.',
+   acts:[{l:'Skip CI and continue',a:'skipCi',p:i.n},{l:'Stop grind',a:'stopGrind',p:i.n},{l:'Open PR',a:'pr',p:i.pr,primary:1}]}));
+ db.sessions.filter(s=>s.status==='failed').forEach(s=>out.push({key:s.id,kind:'fix',icon:'alert',tone:'bad',title:`${s.cmd} ${s.arg} failed`,meta:[repoBy(db,s.repo)?.name,s.issue&&db.issues[s.issue].title,s.started],detail:s.error,
+   acts:[{l:'Continue in terminal',a:'terminal',p:s.id},{l:'Open session',a:'session',p:s.id},{l:'Retry',a:'retry',p:s.id,primary:1}]}));
+ Object.values(db.issues).filter(i=>i.cleanup).forEach(i=>out.push({key:'c'+i.n,kind:'fix',icon:'trash',tone:'muted',title:`Worktree for #${i.n} has unsaved work`,meta:[repoBy(db,i.repo).name,`merged ${i.title}`],detail:`${i.cleanup.uncommitted.length} uncommitted file, ${i.cleanup.unpushed.length} unpushed commit. Merged worktrees are removed automatically only when clean.`,
+   acts:[{l:'Review and clean up',a:'cleanup',p:i.n,primary:1}]}));
+ db.repos.filter(r=>r.remote==='none').forEach(r=>out.push({key:'pub'+r.slug,kind:'setup',icon:'github',tone:'muted',title:`${r.name} has no GitHub remote`,meta:[r.path],detail:'Planning, issues and PRs need a GitHub repo. Publishing creates a private repo and pushes main.',acts:[{l:'Publish to GitHub',a:'publish',p:r.slug,primary:1}]}));
+ db.sessions.filter(s=>s.status==='limited').forEach(s=>out.push({key:s.id,kind:'wait',icon:'clock',tone:'review',title:`${s.cmd} ${s.arg} paused by usage limit`,meta:[`${s.account} account`,s.autoResume?`resumes ${s.resetsAt}`:'auto-resume off'],
+   acts:[{l:'Resume on another account',a:'resumeOther',p:s.id},{l:'Open session',a:'session',p:s.id}]}));
+ db.sessions.filter(s=>s.status==='queued').forEach(s=>out.push({key:s.id,kind:'wait',icon:'clock',tone:'muted',title:`${s.cmd} ${s.arg} is queued`,meta:[s.queueReason],acts:[{l:'Start now',a:'startNow',p:s.id},{l:'Cancel',a:'stop',p:s.id}]}));
+ return out;
+}
+const needsYou=(db,sc)=>inboxItems(db,sc).filter(i=>i.kind!=='wait').length;
+
+function nextStep(db,f){
+ const iss=issuesOf(db,f.id), c=countBy(iss), repo=repoBy(db,f.repo);
+ switch(f.stage){
+  case 'draft':return {t:'Get the PRD reviewed',h:'Run the lens panel on the draft before you approve it.',btn:'Start peer review',a:'startReview',alt:{l:'Approve without review',a:'approve'}};
+  case 'review':
+   if(f.review.state==='cap')return {t:'Review stopped at the round limit',h:f.review.note,btn:'Decide',a:'tab:review',alt:{l:'Approve anyway',a:'approve'}};
+   if(f.review.state==='approved')return {t:'Every lens approves',h:'Approving files the epic and unlocks tasks.',btn:'Approve PRD',a:'approve'};
+   {const v=Object.values(f.review.lenses);return {t:`Peer review round ${f.review.round} of ${f.review.max} is running`,h:`${v.filter(x=>x==='approve').length} of ${v.length} lenses approve. You hear from it only if it needs you.`,btn:'Watch review',a:'tab:review',quiet:1,alt:{l:'Approve now',a:'approve'}}}
+  case 'approved':return {t:'Break it into tasks',h:`Creates small one-PR issues under epic #${f.epic}, with dependencies.`,btn:'Create tasks',a:'createTasks'};
+  case 'tasks':return {t:`${c.unrefined||0} issue${c.unrefined===1?'':'s'} need refinement`,h:'Refining writes WHAT, WHY and HOW so each issue can be built without guessing.',btn:`Refine ${c.unrefined||0}`,a:'refineAll',alt:c.ready?{l:`Start ${c.ready} ready`,a:'startReady'}:null};
+  case 'building':{
+   const m=iss.filter(i=>mergeable(db.prs[i.pr]));
+   if(m.length)return {t:`${m.length} PR ready to merge`,h:`#${m[0].n} ${m[0].title}: approved, checks green.`,btn:'Review and merge',a:'pr:'+m[0].pr,alt:f.autobuild?null:{l:'Turn on auto-build',a:'toggleAuto'}};
+   if(!f.autobuild&&c.ready)return {t:`${c.ready} issues ready to build`,h:'Start them yourself, or turn on auto-build to start them as slots free up.',btn:'Turn on auto-build',a:'toggleAuto',alt:{l:`Start ${c.ready} now`,a:'startReady'}};
+   return {t:'Building',h:`${c.merged||0} of ${iss.length} merged. Auto-build is ${f.autobuild?'on':'off'}.`,btn:'Open board',a:'board',quiet:1};}
+  case 'shipped':return {t:'Everything merged',h:'Close the epic to tidy GitHub. Its issues are already closed.',btn:'Close epic',a:'closeEpic'};
+ }
+}
+
+/* ---------- small pieces ---------- */
+const Chip=({tone='muted',live,children})=>html`<span className=${`chip t-${tone} ${live?'live':''}`}>${live?html`<span className="dot"></span>`:null}${children}</span>`;
+const IssueChip=({s})=>html`<${Chip} tone=${ISSUE[s].tone}>${ISSUE[s].label}<//>`;
+const SessChip=({s})=>html`<${Chip} tone=${SESS[s].tone} live=${SESS[s].live}>${SESS[s].label}<//>`;
+const CiChip=({ci})=>ci==='success'?html`<${Chip} tone="ship"><${Icon} n="check" s=${12}/>CI<//>`:ci==='failure'?html`<${Chip} tone="bad"><${Icon} n="x" s=${12}/>CI<//>`:ci==='pending'?html`<${Chip} tone="review" live=${1}>CI running<//>`:null;
+const Switch=({on,onChange,label})=>html`<button className="switch" role="switch" aria-checked=${!!on} aria-label=${label} onClick=${e=>{e.stopPropagation();onChange(!on)}}></button>`;
+
+function Track({db,f}){
+ const i=stageIdx(f.stage), iss=issuesOf(db,f.id), c=countBy(iss), n=iss.length||1;
+ const st=STAGES[i];
+ return html`<div className="track">
+  <div className="track-bar">
+   ${STAGES.slice(0,4).map((s,k)=>html`<i key=${s.id} className=${`t-${s.tone} ${k<i?'done':k===i?'now':''}`}></i>`)}
+   <span className="work">${i>=4?ISSUE_ORDER.filter(s=>c[s]).map(s=>html`<span key=${s} style=${{width:(c[s]/n*100)+'%',background:ISSUE[s].col}}></span>`):null}</span>
+  </div>
+  <div className="track-cap">${i>=4&&iss.length?`${c.merged||0} of ${iss.length} merged`:st.label}</div>
+ </div>`;
+}
+
+function Menu({items,onClose,style}){
+ const ref=useRef();
+ useEffect(()=>{const h=e=>{if(ref.current&&!ref.current.contains(e.target))onClose()};setTimeout(()=>document.addEventListener('click',h));return()=>document.removeEventListener('click',h)},[]);
+ return html`<div className="menu" ref=${ref} style=${style}>${items.filter(Boolean).map((it,k)=>html`<button key=${k} onClick=${e=>{e.stopPropagation();onClose();it.on()}} style=${it.danger?{color:'var(--bad)'}:null}>${it.icon&&html`<${Icon} n=${it.icon}/>`}<span>${it.l}</span></button>`)}</div>`;
+}
+function MoreBtn({items,sm}){
+ const [o,setO]=useState(false);
+ return html`<span style=${{position:'relative'}}><button className=${`btn ghost icon ${sm?'sm':''}`} aria-label="More actions" onClick=${e=>{e.stopPropagation();setO(!o)}}><${Icon} n="more"/></button>${o&&html`<${Menu} items=${items} onClose=${()=>setO(false)} style=${{right:0,top:'100%'}}/>`}</span>`;
+}
+
+/* ---------- question form (used in inbox, session page) ---------- */
+function QuestionForm({s}){
+ const {act}=useApp();
+ const [ans,setAns]=useState(()=>s.question.items.map(q=>({pick:q.options.filter(o=>o.rec).map(o=>o.label).slice(0,q.multi?9:1),other:'',useOther:false})));
+ const set=(k,v)=>setAns(a=>a.map((x,j)=>j===k?{...x,...v}:x));
+ const n=s.question.items.length;
+ const ok=ans.every(a=>a.useOther?a.other.trim():a.pick.length);
+ return html`<form className="qform" onSubmit=${e=>{e.preventDefault();if(ok&&!s.processAlive)act('answer',{id:s.id,ans})}}>
+  ${s.question.items.map((q,k)=>html`<fieldset key=${k} style=${{border:0,padding:0,margin:0}}>
+   <legend className="sr">${q.q}</legend>
+   <div className="q-h">${n>1?`${k+1} of ${n}  ·  `:''}${q.header}</div>
+   <div className="q-text">${q.q}</div>
+   <div className="opts">${q.options.map(o=>{const on=!ans[k].useOther&&ans[k].pick.includes(o.label);return html`<label key=${o.label} className=${`opt ${on?'on':''}`}>
+     <input type=${q.multi?'checkbox':'radio'} name=${s.id+'q'+k} checked=${on} onChange=${()=>set(k,{useOther:false,pick:q.multi?(on?ans[k].pick.filter(x=>x!==o.label):[...ans[k].pick,o.label]):[o.label]})}/>
+     <span><span style=${{fontWeight:600}}>${o.label}</span>${o.rec&&html`<span className="rec">Recommended</span>`}${o.desc&&html`<div className="d">${o.desc}</div>`}</span></label>`})}
+    ${q.free&&html`<label className=${`opt ${ans[k].useOther?'on':''}`}><input type="radio" name=${s.id+'q'+k} checked=${ans[k].useOther} onChange=${()=>set(k,{useOther:true})}/>
+     <span className="stack" style=${{gap:6}}><span style=${{fontWeight:600}}>Something else</span>${ans[k].useOther&&html`<textarea className="f" rows="2" maxLength="4000" autoFocus placeholder="Write your own answer" value=${ans[k].other} onInput=${e=>set(k,{other:e.target.value})}></textarea>`}</span></label>`}
+   </div></fieldset>`)}
+  <div className="row wrap">
+   <button className="btn you" disabled=${!ok||s.processAlive}><${Icon} n="send"/>${n>1?`Send ${n} answers and resume`:'Send answer and resume'}</button>
+   ${s.processAlive?html`<span className="muted" style=${{fontSize:13}}><${Icon} n="clock" s=${13}/> Claude is still finishing its turn. Sending unlocks when it exits.</span>`
+     :html`<span className="faint" style=${{fontSize:13}}>Recommended options are pre-selected.</span>`}
+  </div>
+ </form>`;
+}
+
+/* ---------- Inbox ---------- */
+function InboxView(){
+ const {db,scenario,act,go}=useApp();
+ const items=inboxItems(db,scenario);
+ const live=db.sessions.filter(s=>['running','starting'].includes(s.status)).length;
+ const groups=[['block','Blocking everything'],['answer','Answer Claude'],['decide','Decide'],['fix','Fix'],['setup','Set up'],['wait','Waiting, nothing to do']];
+ const count=items.filter(i=>i.kind!=='wait').length;
+ const [open,setOpen]=useState(()=>items.find(i=>i.kind==='answer')?.key);
+ return html`<div className="content-inner">
+  <div className="page-head"><div className="grow"><h1>Inbox</h1>
+   <p className="sub">${count?`${count} things need you across your repos. `:'Nothing needs you. '}${live===1?'1 session is working on its own.':`${live} sessions are working on their own.`}</p></div>
+   ${db.away&&html`<${Chip} tone="away">Away mode: answers held for review below<//>`}
+  </div>
+  ${db.awaySummary&&html`<${AwaySummary}/>`}
+  ${!count&&html`<div className="empty"><h2>All clear</h2><p className="muted">Questions, approvals, merges and failures show up here the moment they need you.</p><button className="btn" onClick=${()=>go('activity')}>See what is running</button></div>`}
+  ${groups.map(([k,label])=>{const g=items.filter(i=>i.kind===k);if(!g.length)return null;return html`<section key=${k}>
+   <div className="group-h"><h2>${label}</h2><span className="n">${g.length}</span></div>
+   <div className="list">${g.map(it=>html`<div className="item" key=${it.key}>
+    <div className=${`item-ico t-${it.tone}`}><${Icon} n=${it.icon}/></div>
+    <div style=${{minWidth:0}}>
+     <div className="item-title">${it.title}</div>
+     <div className="item-meta">${it.meta.filter(Boolean).map((m,j)=>html`${j?html`<span className="sep">/</span>`:null}<span key=${j}>${m}</span>`)}</div>
+     ${it.detail&&html`<p style=${{marginTop:6}}>${it.detail}</p>`}
+    </div>
+    <div className="item-actions">
+     ${it.kind==='answer'?html`<button className="btn ghost sm" onClick=${()=>act('session',it.session.id)}>Open session</button>
+       <button className=${`btn sm ${open===it.key?'':'you'}`} onClick=${()=>setOpen(open===it.key?null:it.key)}>${open===it.key?'Hide':'Answer'}</button>`
+      :it.acts.map((a,j)=>html`<button key=${j} className=${`btn sm ${a.primary?'primary':''}`} onClick=${()=>act(a.a,a.p)}>${a.l}</button>`)}
+    </div>
+    ${it.kind==='answer'&&open===it.key&&html`<div className="item-body"><${QuestionForm} s=${it.session}/></div>`}
+   </div>`)}</div></section>`})}
+ </div>`;
+}
+function AwaySummary(){
+ const {db,mut}=useApp(); const s=db.awaySummary;
+ return html`<div className="banner t-away"><${Icon} n="moon"/><div className="grow stack" style=${{gap:8}}>
+  <p><b>While you were away (${s.span})</b>: ${s.log.length} things handled, ${s.held} held for you.</p>
+  <ul style=${{margin:0,paddingLeft:18}}>${s.log.map((l,k)=>html`<li key=${k}><span className="faint">${l.at}</span> ${l.t}</li>`)}</ul>
+ </div><button className="btn sm" onClick=${()=>mut(d=>{d.awaySummary=null})}>Dismiss</button></div>`;
+}
+
+/* ---------- Features ---------- */
+function FeaturesView(){
+ const {db,repo,go,act,scenario}=useApp();
+ const [tab,setTab]=useState('active');
+ const all=scenario==='empty'?[]:db.features.filter(f=>f.repo===repo);
+ const list=all.filter(f=>tab==='active'?f.stage!=='shipped':f.stage==='shipped');
+ const order=['review','draft','approved','tasks','building'];
+ if(tab==='active')list.sort((a,b)=>order.indexOf(a.stage)-order.indexOf(b.stage));
+ return html`<div className="content-inner">
+  <div className="page-head"><div className="grow"><h1>Features</h1><p className="sub">Each feature is one PRD and everything built from it.</p></div>
+   <button className="btn primary" onClick=${()=>act('new',{cmd:'create-prd'})}><${Icon} n="plus"/>New feature</button></div>
+  <${GhState}/>
+  ${!all.length?html`<${IdeaBox}/>`:html`
+  <div className="tabs" role="tablist">
+   <button className=${`tab ${tab==='active'?'on':''}`} onClick=${()=>setTab('active')}>In progress<span className="n">${all.filter(f=>f.stage!=='shipped').length}</span></button>
+   <button className=${`tab ${tab==='shipped'?'on':''}`} onClick=${()=>setTab('shipped')}>Shipped<span className="n">${all.filter(f=>f.stage==='shipped').length}</span></button></div>
+  <div className="list">${list.map(f=>{const ns=nextStep(db,f);return html`<div className="frow" key=${f.id} onClick=${()=>go('feature',f.id)}>
+   <div style=${{minWidth:0}}><div className="ftitle">${f.title}</div><div className="fmeta"><span>${f.epic?`Epic #${f.epic}`:'No epic yet'}</span><span>Updated ${f.updated}</span></div></div>
+   <div><${Chip} tone=${STAGES[stageIdx(f.stage)].tone}>${STAGES[stageIdx(f.stage)].label}<//></div>
+   <${Track} db=${db} f=${f}/>
+   <div onClick=${e=>e.stopPropagation()}><button className=${`btn sm ${ns.quiet?'':'primary'}`} onClick=${()=>act('feature:'+ns.a,f.id)}>${ns.btn}</button></div>
+  </div>`})}</div>
+  ${!list.length&&html`<p className="muted">Nothing here yet.</p>`}`}
+ </div>`;
+}
+function IdeaBox(){
+ const {act,repo,db}=useApp(); const [t,setT]=useState('');
+ return html`<div className="empty" style=${{borderStyle:'solid'}}>
+  <h2>No features in ${repoBy(db,repo)?.name} yet</h2>
+  <p className="muted" style=${{maxWidth:'60ch'}}>Describe what you want to build. Claude asks you questions, writes the PRD, and it shows up here as a draft.</p>
+  <textarea className="f" rows="4" placeholder="Example: Let admins import users from a CSV, with a preview of errors before anything is saved." value=${t} onInput=${e=>setT(e.target.value)}></textarea>
+  <div className="row wrap"><button className="btn primary" disabled=${!t.trim()} onClick=${()=>act('startCmd',{cmd:'create-prd',arg:t})}>Write the PRD</button>
+   <span className="muted" style=${{fontSize:13}}>Not tied to a repo yet? Pick “No repo yet” in <button className="linkish" style=${{textDecoration:'underline'}} onClick=${()=>act('new',{cmd:'create-prd',arg:t,repo:'vault'})}>New</button> to write it in your notes vault.</span></div>
+ </div>`;
+}
+function GhState(){
+ const {scenario,act}=useApp();
+ if(scenario==='gh')return html`<div className="banner t-bad"><${Icon} n="github"/><div className="grow"><p><b>GitHub CLI is not signed in.</b> Showing nothing rather than guessing.</p><p className="muted">Run <code>gh auth login</code> in a terminal, then check again.</p></div><button className="btn sm" onClick=${()=>act('copy','gh auth login')}>Copy command</button><button className="btn sm" onClick=${()=>act('recheck')}>Check again</button></div>`;
+ if(scenario==='rate')return html`<div className="banner t-review"><${Icon} n="clock"/><div className="grow"><p><b>GitHub rate limit reached.</b> Showing data from 14:02. Refreshing again at 14:12.</p><p className="muted">Starting sessions still works. Board columns may be up to 10 minutes old.</p></div></div>`;
+ return null;
+}
+
+/* ---------- Feature page ---------- */
+function FeatureView({id,tab:initTab}){
+ const {db,act,go,openPanel}=useApp();
+ const f=featureById(db,id);
+ const [tab,setTab]=useState(initTab||(f.stage==='review'?'review':stageIdx(f.stage)>=3?'tasks':'prd'));
+ useEffect(()=>{if(initTab)setTab(initTab)},[initTab]);
+ const iss=issuesOf(db,f.id), c=countBy(iss), i=stageIdx(f.stage), ns=nextStep(db,f);
+ const sessions=db.sessions.filter(s=>s.feature===f.id);
+ const runAction=a=>a.startsWith('tab:')?setTab(a.slice(4)):act('feature:'+a,f.id);
+ return html`<div className="content-inner">
+  <div className="crumbs"><button onClick=${()=>go('features')}>Features</button><${Icon} n="right" s=${13}/><span>${f.title}</span></div>
+  <div className="page-head"><div className="grow"><h1>${f.title}</h1>
+   <p className="sub row wrap" style=${{gap:12}}><span className="mono">${f.prd}</span>${f.epic&&html`<span>Epic #${f.epic}</span>`}<span>${iss.length} issues</span></p></div>
+   <${MoreBtn} items=${[{l:'Open PRD on GitHub',icon:'ext',on:()=>act('toast','Opens GitHub')},{l:'Add a task',icon:'plus',on:()=>setTab('tasks')},f.epic&&{l:'Close epic and its issues',icon:'x',danger:1,on:()=>act('feature:closeEpic',f.id)}]}/>
+  </div>
+  <${GhState}/>
+  <div className="stack" style=${{gap:10}}>
+   <div className="stepper">${STAGES.map((s,k)=>html`<div key=${s.id} className=${`step t-${s.tone} ${k<i?'done':k===i?'now':''}`}>
+     ${s.id==='building'?html`<div className="work">${k<=i?ISSUE_ORDER.filter(x=>c[x]).map(x=>html`<span key=${x} style=${{width:(c[x]/iss.length*100)+'%',background:ISSUE[x].col}}></span>`):null}</div>`:html`<div className="bar"></div>`}
+     <div className="lab">${s.label}</div></div>`)}</div>
+   ${i>=3&&iss.length?html`<div className="legend">${ISSUE_ORDER.filter(x=>c[x]).map(x=>html`<span key=${x}><i style=${{background:ISSUE[x].col}}></i>${c[x]} ${ISSUE[x].label.toLowerCase()}</span>`)}</div>`:null}
+  </div>
+  <div className="next">
+   <div><div className="k">Next step</div><div className="t">${ns.t}</div><div className="h">${ns.h}</div></div>
+   <div className="row wrap">${ns.alt&&html`<button className="btn" onClick=${()=>runAction(ns.alt.a)}>${ns.alt.l}</button>`}<button className=${`btn ${ns.quiet?'':'primary'}`} onClick=${()=>runAction(ns.a)}>${ns.btn}</button></div>
+  </div>
+  <div className="tabs" role="tablist">
+   ${[['tasks','Issues',iss.length],['prd','PRD'],['review','Peer review'],['activity','Sessions',sessions.length]].map(([k,l,n])=>html`<button key=${k} className=${`tab ${tab===k?'on':''}`} onClick=${()=>setTab(k)}>${l}${n!=null&&html`<span className="n">${n}</span>`}</button>`)}
+  </div>
+  ${tab==='tasks'&&html`<${IssuesTab} f=${f}/>`}
+  ${tab==='prd'&&html`<${PrdTab} f=${f}/>`}
+  ${tab==='review'&&html`<${ReviewTab} f=${f}/>`}
+  ${tab==='activity'&&html`<${SessionTable} rows=${sessions}/>`}
+ </div>`;
+}
+function IssueAction({i}){
+ const {db,act}=useApp();
+ const s=i.session&&sessById(db,i.session), pr=i.pr&&db.prs[i.pr], repo=repoBy(db,i.repo);
+ const stop=e=>e.stopPropagation();
+ let el=null;
+ if(i.status==='unrefined')el=html`<button className="btn sm" onClick=${()=>act('refine',[i.n])}>Refine</button>`;
+ else if(i.status==='blocked')el=html`<span className="muted" style=${{fontSize:13}}><${Icon} n="lock" s=${13}/> after ${i.blockedBy.map(b=>'#'+b).join(', ')}</span>`;
+ else if(i.status==='ready'&&i.queued)el=html`<${Chip}>Queued<//>`;
+ else if(i.status==='ready')el=html`<span className="split"><button className="btn sm primary" onClick=${()=>act('startIssue',{n:i.n})}>${i.lastFailed?'Retry':'Start'}</button><${StartMenu} n=${i.n}/></span>`;
+ else if(i.status==='in_progress'&&s?.status==='waiting')el=html`<button className="btn sm you" onClick=${()=>act('session',s.id)}>Answer</button>`;
+ else if(i.status==='in_progress')el=html`<button className="btn sm" onClick=${()=>act('session',i.session)}>Watch</button>`;
+ else if(i.status==='in_review'&&mergeable(pr))el=html`<button className="btn sm primary" onClick=${()=>act('pr',i.pr)}>Merge</button>`;
+ else if(i.status==='in_review'&&!repo.autoGrind)el=html`<button className="btn sm" onClick=${()=>act('grind',i.n)}>Grind</button>`;
+ else if(i.status==='in_review')el=html`<button className="btn sm" onClick=${()=>act('pr',i.pr)}>Open PR</button>`;
+ else if(i.status==='grinding'&&i.grind?.paused)el=html`<button className="btn sm" onClick=${()=>act('skipCi',i.n)}>Skip CI</button>`;
+ else if(i.status==='grinding')el=html`<span className="muted" style=${{fontSize:13}}>round ${i.grind?.round}</span>`;
+ else if(i.cleanup)el=html`<button className="btn sm" onClick=${()=>act('cleanup',i.n)}>Clean up</button>`;
+ return html`<span onClick=${stop}>${el}</span>`;
+}
+function StartMenu({n}){
+ const {act}=useApp(); const [o,setO]=useState(false);
+ return html`<span style=${{position:'relative',display:'inline-flex'}}><button className="btn sm primary" aria-label="More ways to start" onClick=${e=>{e.stopPropagation();setO(!o)}}><${Icon} n="down" s=${13}/></button>
+  ${o&&html`<${Menu} onClose=${()=>setO(false)} style=${{right:0,top:'100%'}} items=${[{l:'Start here (tracked)',icon:'play',on:()=>act('startIssue',{n})},{l:'Start in a herdr tab',icon:'terminal',on:()=>act('startIssue',{n,herdr:1})},{l:'Start on the work account',icon:'user',on:()=>act('startIssue',{n,account:'work'})}]}/>`}</span>`;
+}
+function IssueSignals({i}){
+ const {db}=useApp(); const pr=i.pr&&db.prs[i.pr]; const s=i.session&&sessById(db,i.session);
+ return html`<span className="row wrap" style=${{gap:6}}>
+  ${i.priority==='high'&&html`<${Chip} tone="you">High<//>`}
+  ${pr&&html`<span className="ref">PR #${pr.n}</span>`}${pr&&html`<${CiChip} ci=${pr.ci}/>`}
+  ${pr?.review==='approved'&&html`<${Chip} tone="ship">Approved<//>`}${pr?.review==='changes'&&html`<${Chip} tone="review">Changes requested<//>`}
+  ${i.grind&&html`<${Chip} tone=${i.grind.paused?'bad':'review'}>${i.grind.paused?'Grind paused':'Round '+i.grind.round}<//>`}
+  ${s&&LIVE.includes(s.status)&&s.status!=='queued'&&html`<${SessChip} s=${s.status}/>`}  ${i.lastFailed&&html`<${Chip} tone="bad">Last run failed<//>`}
+  ${i.cleanup&&html`<${Chip}>Needs cleanup<//>`}
+ </span>`;
+}
+function IssuesTab({f}){
+ const {db,act,openPanel,mut}=useApp();
+ const iss=issuesOf(db,f.id); const repo=repoBy(db,f.repo);
+ const [t,setT]=useState('');
+ const groups=ISSUE_ORDER.map(s=>[s,iss.filter(i=>i.status===s)]).filter(([,l])=>l.length);
+ return html`<div className="stack">
+  ${f.epic&&html`<div className="row wrap" style=${{gap:14}}>
+   <label className="row" style=${{gap:10,fontWeight:600}}><${Switch} on=${f.autobuild} label="Auto-build" onChange=${()=>act('feature:toggleAuto',f.id)}/>Auto-build</label>
+   <span className="muted" style=${{fontSize:13}}>Starts ready, unblocked issues by priority, ${repo.cap} at a time. Never merges.</span>
+   <span className="grow"></span>
+   <form className="row" style=${{gap:6}} onSubmit=${e=>{e.preventDefault();if(t.trim()){act('addTask',{f:f.id,t});setT('')}}}><input className="f" style=${{width:260}} placeholder="Add a task to this epic" value=${t} onInput=${e=>setT(e.target.value)}/><button className="btn" disabled=${!t.trim()}>Add</button></form>
+  </div>`}
+  ${!iss.length?html`<div className="empty"><p>No issues yet. ${f.stage==='approved'?'Create tasks to split the PRD into issues.':'Issues appear after the PRD is approved and split into tasks.'}</p></div>`:html`
+  <div className="tbl-wrap"><table className="tbl"><thead><tr><th style=${{width:70}}>Issue</th><th>Title</th><th>Status</th><th className="hide-sm">Signals</th><th style=${{textAlign:'right'}}>Action</th></tr></thead>
+   <tbody>${groups.map(([s,l])=>html`<${React.Fragment} key=${s}><tr className="sub"><td colSpan="5">${ISSUE[s].label} · ${l.length}</td></tr>
+    ${l.map(i=>html`<tr key=${i.n} className="click" onClick=${()=>openPanel({kind:'issue',n:i.n})}>
+     <td className="ref">#${i.n}</td><td style=${{fontWeight:600}}>${i.title}</td><td><${IssueChip} s=${i.status}/></td>
+     <td className="hide-sm"><${IssueSignals} i=${i}/></td><td style=${{textAlign:'right'}}><${IssueAction} i=${i}/></td></tr>`)}<//>`)}</tbody></table></div>`}
+ </div>`;
+}
+function PrdTab({f}){
+ const {act}=useApp(); const [mode,setMode]=useState('read'); const [ask,setAsk]=useState('');
+ const [text,setText]=useState(`# ${f.title}\n\nStatus: ${f.stage==='draft'||f.stage==='review'?'Draft':'Approved'}\n\n## Problem\nAdmins cannot control who sees what…`);
+ return html`<div className="sess-grid">
+  <div className="stack">
+   <div className="row"><div className="seg"><button className=${mode==='read'?'on':''} onClick=${()=>setMode('read')}>Read</button><button className=${mode==='edit'?'on':''} onClick=${()=>setMode('edit')}>Edit</button></div>
+    <span className="grow"></span><span className="muted mono" style=${{fontSize:12}}>${f.prd} on main</span></div>
+   ${mode==='read'?html`<div className="prose box" style=${{padding:'18px 22px'}}>
+    <h2 style=${{marginTop:0}}>Problem</h2><p>Every signed-in user can open every admin screen. Customers with more than one office manager need to limit what each person can change, and today they share one admin login to work around it.</p>
+    <h2>Who</h2><p>Account owners who manage teams of 5 to 200 people, and the managers they delegate to.</p>
+    <h2>Goals</h2><ul><li>Owners assign one of four roles per user: Owner, Admin, Manager, Guest.</li><li>Every route is denied unless a role grants it.</li><li>Role changes are recorded in the audit trail.</li></ul>
+    <h2>Technical design</h2><p>Roles live in a <code>roles</code> table with a permission set per role. A single <code>can(user, action)</code> check guards routes and is cached per request.</p>
+   </div>`:html`<div className="stack"><textarea className="f mono" rows="16" value=${text} onInput=${e=>setText(e.target.value)}></textarea>
+    <div className="banner t-review"><${Icon} n="alert"/><div className="grow"><p>Saving commits this file to <b>feat/roles</b>, the branch the checkout is on. It is not pushed.</p></div></div>
+    <div className="row"><button className="btn primary" onClick=${()=>{act('toast','Committed docs/prds change on feat/roles');setMode('read')}}>Save and commit</button><button className="btn ghost" onClick=${()=>setMode('read')}>Discard</button></div></div>`}
+  </div>
+  <div className="box"><h3>Ask Claude to change it</h3><p className="muted" style=${{fontSize:13}}>Runs <code>/create-prd --update</code>, which records the decision in the PRD.</p>
+   <textarea className="f" rows="4" placeholder="Example: Guests should be able to see reports but not export them." value=${ask} onInput=${e=>setAsk(e.target.value)}></textarea>
+   <button className="btn" disabled=${!ask.trim()} onClick=${()=>{act('startCmd',{cmd:'create-prd',arg:`${f.prd} --update ${ask}`,feature:f.id});setAsk('')}}>Start update</button></div>
+ </div>`;
+}
+function ReviewTab({f}){
+ const {act,db}=useApp(); const r=f.review;
+ const [pick,setPick]=useState(['critical','cto','security','qa']);
+ if(!r)return html`<div className="box" style=${{maxWidth:640}}>
+  <h3>Run the peer review panel</h3><p className="muted">Each lens reviews the PRD on its own. Claude revises after every round until all approve, up to 5 rounds.</p>
+  <div className="lens-row">${LENSES.map(l=>html`<button key=${l} className=${`lens ${pick.includes(l)?'on':''}`} aria-pressed=${pick.includes(l)} onClick=${()=>setPick(p=>p.includes(l)?p.filter(x=>x!==l):[...p,l])}>${LENS_NAME[l]}</button>`)}</div>
+  <div><button className="btn primary" disabled=${!pick.length||!['draft'].includes(f.stage)} onClick=${()=>act('feature:startReview',{id:f.id,lenses:pick})}>Start review with ${pick.length} lenses</button></div>
+  ${f.stage!=='draft'&&html`<p className="faint" style=${{fontSize:13}}>Peer review runs on draft PRDs. This one is ${STAGES[stageIdx(f.stage)].label.toLowerCase()}.</p>`}
+ </div>`;
+ const V={approve:['ship','Approves','check'],changes:['review','Wants changes','alert'],waiting:['build','Reviewing','clock'],failed:['bad','Failed','x']};
+ return html`<div className="stack">
+  <div className="row wrap"><h2>Round ${r.round} of ${r.max}</h2>${r.state==='running'&&html`<${Chip} tone="build" live=${1}>Running<//>`}${r.state==='cap'&&html`<${Chip} tone="you">Needs your decision<//>`}${r.state==='approved'&&html`<${Chip} tone="ship">All approve<//>`}
+   <span className="grow"></span><button className="btn sm ghost" onClick=${()=>act('session',f.root)}>Open root session</button></div>
+  ${r.state==='cap'&&html`<div className="banner t-you"><${Icon} n="alert"/><div className="grow"><p><b>The panel did not converge in ${r.max} rounds.</b> ${r.note}</p></div>
+   <div className="row wrap"><button className="btn sm" onClick=${()=>act('feature:moreRounds',f.id)}>Run 2 more rounds</button><button className="btn sm" onClick=${()=>act('feature:approve',f.id)}>Approve anyway</button></div></div>`}
+  <div className="tbl-wrap"><table className="tbl"><thead><tr><th>Lens</th><th>Verdict</th><th className="hide-sm">Latest note</th><th></th></tr></thead><tbody>
+   ${Object.entries(r.lenses).map(([l,v])=>html`<tr key=${l}><td style=${{fontWeight:600}}>${LENS_NAME[l]}</td>
+    <td><${Chip} tone=${V[v][0]} live=${v==='waiting'}><${Icon} n=${V[v][2]} s=${12}/>${V[v][1]}<//></td>
+    <td className="hide-sm muted">${v==='changes'?(l==='security'?'Exports include personal data with no redaction.':'Import job has no retry policy for partial failures.'):v==='approve'?'No blocking issues.':'—'}</td>
+    <td style=${{textAlign:'right'}}>${v==='failed'?html`<button className="btn sm">Re-run</button> <button className="btn sm ghost">Drop</button>`:null}</td></tr>`)}
+  </tbody></table></div>
+ </div>`;
+}
+
+/* ---------- Board ---------- */
+function BoardView(){
+ const {db,repo,act,openPanel,go,scenario}=useApp();
+ const [flat,setFlat]=useState(false);
+ const feats=scenario==='empty'?[]:db.features.filter(f=>f.repo===repo&&issuesOf(db,f.id).some(i=>i.status!=='merged'));
+ // ponytail: 5 columns; blocked sits under Ready, draft PRs under Building, grinding under In review
+ const cols=[['Needs refinement',['unrefined'],'unrefined'],['Ready',['ready','blocked'],'ready'],['Building',['in_progress','draft_pr'],'in_progress'],['In review',['in_review','grinding'],'in_review'],['Merged',['merged'],'merged']];
+ const lane=(key,title,iss,f)=>html`<section className="lane" key=${key}>
+  ${title&&html`<div className="lane-h"><button className="name" onClick=${()=>go('feature',f.id)}>${title}</button>
+   <span className="muted" style=${{fontSize:13}}>${iss.filter(i=>i.status==='merged').length} of ${iss.length} merged</span>
+   <label className="row" style=${{gap:8,fontSize:13,fontWeight:600}}><${Switch} on=${f.autobuild} label=${'Auto-build '+title} onChange=${()=>act('feature:toggleAuto',f.id)}/>Auto-build</label></div>`}
+  <div className="board-scroll"><div className="board">${cols.map(([label,sts,c])=>{const l=iss.filter(i=>sts.includes(i.status)).sort((a,b)=>sts.indexOf(a.status)-sts.indexOf(b.status));return html`<div key=${c}>
+   <div className=${`bcol-h`} style=${{'--c':ISSUE[c].col}}><i></i>${label}<span className="faint">${l.length}</span></div>
+   <div className="bcol">${l.map(i=>{const s=i.session&&sessById(db,i.session);return html`<div key=${i.n} className=${`card ${s?.status==='waiting'||i.grind?.paused?'you':''}`} onClick=${()=>openPanel({kind:'issue',n:i.n})} tabIndex="0" onKeyDown=${e=>e.key==='Enter'&&openPanel({kind:'issue',n:i.n})}>
+    <div className="row"><span className="ref">#${i.n}</span><span className="grow"></span>${i.priority==='high'&&html`<${Chip} tone="you">High<//>`}</div>
+    <div className="t">${i.title}</div><${IssueSignals} i=${i}/><div><${IssueAction} i=${i}/></div></div>`})}</div></div>`})}</div></div>
+ </section>`;
+ return html`<div className="content-inner" style=${{maxWidth:'none'}}>
+  <div className="page-head"><div className="grow"><h1>Board</h1><p className="sub">Every open issue in ${repoBy(db,repo)?.name}, by where it is in the build.</p></div>
+   <div className="seg"><button className=${!flat?'on':''} onClick=${()=>setFlat(false)}>By feature</button><button className=${flat?'on':''} onClick=${()=>setFlat(true)}>All issues</button></div></div>
+  <${GhState}/>
+  ${!feats.length?html`<div className="empty"><h2>Nothing to build yet</h2><p className="muted">Issues land here once a PRD is approved and split into tasks.</p><button className="btn" onClick=${()=>go('features')}>Go to features</button></div>`
+   :flat?lane('all',null,feats.flatMap(f=>issuesOf(db,f.id)))
+   :feats.map(f=>lane(f.id,f.title,issuesOf(db,f.id),f))}
+ </div>`;
+}
+
+/* ---------- Activity ---------- */
+function ActivityView(){
+ const {db,act}=useApp();
+ const [q,setQ]=useState(''); const [st,setSt]=useState('all');
+ const live=db.sessions.filter(s=>LIVE.includes(s.status));
+ const hist=db.sessions.filter(s=>!LIVE.includes(s.status)&&(st==='all'||s.status===st)&&(`${s.cmd} ${s.arg}`.toLowerCase().includes(q.toLowerCase())));
+ const today=db.sessions.filter(s=>s.started.startsWith('Today')).reduce((a,s)=>a+s.cost,0);
+ return html`<div className="content-inner">
+  <div className="page-head"><div className="grow"><h1>Activity</h1><p className="sub">Every Claude session the UI started. $${today.toFixed(2)} spent today.</p></div>
+   <button className="btn" onClick=${()=>act('cleanSessions')}><${Icon} n="trash"/>Clean up old</button></div>
+  <section><div className="group-h"><h2>Live</h2><span className="n">${live.length}</span></div>
+   <div className="live-grid">${live.map(s=>html`<div key=${s.id} className=${`live-card ${s.status==='waiting'?'you':''}`} onClick=${()=>act('session',s.id)}>
+    <div className="row"><${SessChip} s=${s.status}/><span className="grow"></span><span className="faint" style=${{fontSize:12}}>${s.dur}</span></div>
+    <div className="cmd">${s.cmd} ${s.arg}</div>
+    <div className="muted" style=${{fontSize:13}}>${s.issue?db.issues[s.issue].title:s.feature?featureById(db,s.feature).title:'—'}</div>
+    <div className="muted" style=${{fontSize:12.5}}>${s.status==='limited'?`${s.account} account limited, resumes ${s.resetsAt}`:s.status==='queued'?s.queueReason:`${s.account} account · $${s.cost.toFixed(2)}`}</div>
+   </div>`)}</div></section>
+  <section className="stack" style=${{gap:10}}><div className="row wrap"><h2>History</h2><span className="grow"></span>
+   <input className="f" style=${{width:220}} placeholder="Search command or #issue" value=${q} onInput=${e=>setQ(e.target.value)}/>
+   <select className="f" style=${{width:140}} value=${st} onChange=${e=>setSt(e.target.value)}><option value="all">All results</option><option value="done">Done</option><option value="failed">Failed</option><option value="stopped">Stopped</option></select></div>
+   <${SessionTable} rows=${hist}/></section>
+ </div>`;
+}
+function SessionTable({rows}){
+ const {db,act}=useApp();
+ if(!rows.length)return html`<p className="muted">No sessions match.</p>`;
+ return html`<div className="tbl-wrap"><table className="tbl"><thead><tr><th>Session</th><th className="hide-sm">For</th><th>Started</th><th>Result</th><th className="num hide-sm">Cost</th><th style=${{textAlign:'right'}}>Action</th></tr></thead><tbody>
+  ${rows.map(s=>html`<tr key=${s.id} className="click" onClick=${()=>act('session',s.id)}>
+   <td className="mono">${s.cmd} ${s.arg}</td><td className="hide-sm muted">${s.issue?db.issues[s.issue].title:s.feature?featureById(db,s.feature).title:'Notes vault'}</td>
+   <td className="muted">${s.started}</td><td><${SessChip} s=${s.status}/></td><td className="num hide-sm">$${s.cost.toFixed(2)}</td>
+   <td style=${{textAlign:'right'}} onClick=${e=>e.stopPropagation()}><${SessionActions} s=${s} sm=${1}/></td></tr>`)}
+ </tbody></table></div>`;
+}
+function SessionActions({s,sm}){
+ const {act}=useApp(); const c=`btn ${sm?'sm':''}`;
+ const more=[LIVE.includes(s.status)&&{l:'Stop session',icon:'stop',danger:1,on:()=>act('stop',s.id)},
+  !LIVE.includes(s.status)&&{l:'Run again with the same input',icon:'refresh',on:()=>act('rerun',s.id)},
+  {l:'Copy terminal resume command',icon:'terminal',on:()=>act('terminal',s.id)}];
+ let main=null;
+ if(s.status==='waiting')main=html`<button className=${c+' you'} onClick=${()=>act('session',s.id)}>Answer</button>`;
+ else if(s.status==='failed')main=html`<button className=${c} onClick=${()=>act('retry',s.id)}>Retry</button>`;
+ else if(s.status==='stopped')main=html`<button className=${c} onClick=${()=>act('retry',s.id)}>Resume</button>`;
+ else if(s.status==='limited')main=html`<button className=${c} onClick=${()=>act('resumeOther',s.id)}>Resume elsewhere</button>`;
+ else if(s.status==='queued')main=html`<button className=${c} onClick=${()=>act('startNow',s.id)}>Start now</button>`;
+ return html`<span className="row" style=${{justifyContent:'flex-end',gap:4}}>${main}<${MoreBtn} sm=${sm} items=${more}/></span>`;
+}
+
+/* ---------- Session page ---------- */
+function SessionView({id}){
+ const {db,act,go}=useApp(); const s=sessById(db,id);
+ const [openEv,setOpenEv]=useState({}); const [msg,setMsg]=useState('');
+ const end=useRef();
+ useEffect(()=>{end.current?.scrollIntoView({block:'nearest'})},[s?.events.length]);
+ if(!s)return html`<div className="content-inner"><div className="empty"><h2>Session not found</h2><p className="muted">It may have been cleaned up.</p><button className="btn" onClick=${()=>go('activity')}>Back to activity</button></div></div>`;
+ const f=s.feature&&featureById(db,s.feature), i=s.issue&&db.issues[s.issue];
+ const live=LIVE.includes(s.status);
+ return html`<div className="content-inner">
+  <div className="crumbs"><button onClick=${()=>go('activity')}>Activity</button><${Icon} n="right" s=${13}/><span className="mono">${s.cmd} ${s.arg}</span></div>
+  <div className="page-head"><div className="grow"><div className="row wrap" style=${{gap:10}}><h1 className="mono" style=${{fontSize:21,fontWeight:500}}>${s.cmd} ${s.arg}</h1><${SessChip} s=${s.status}/></div>
+   <p className="sub">${i?html`<button className="linkish" onClick=${()=>act('issue',i.n)}>#${i.n} ${i.title}</button>`:f?html`<button className="linkish" onClick=${()=>go('feature',f.id)}>${f.title}</button>`:'Notes vault'}</p></div>
+   <${SessionActions} s=${s}/></div>
+  ${s.status==='waiting'&&html`<section className="stack" style=${{gap:8}}><h2 style=${{color:'var(--you)'}}>Claude is waiting on you</h2><${QuestionForm} s=${s}/></section>`}
+  ${s.status==='limited'&&html`<div className="banner t-review"><${Icon} n="clock"/><div className="grow"><p><b>Paused: the ${s.account} account hit its 5-hour limit.</b> ${s.autoResume?`Resumes on its own at ${s.resetsAt} (in 22 min).`:'Auto-resume is off.'}</p></div>
+   <div className="row wrap"><button className="btn sm" onClick=${()=>act('resumeOther',s.id)}>Resume on personal</button>${s.autoResume&&html`<button className="btn sm ghost" onClick=${()=>act('cancelAuto',s.id)}>Don't auto-resume</button>`}</div></div>`}
+  ${s.status==='failed'&&html`<div className="banner t-bad"><${Icon} n="alert"/><div className="grow"><p><b>Failed.</b> ${s.error}</p><p className="muted">Retry starts it again with the same input. Continue in terminal picks up this exact conversation.</p></div>
+   <div className="row wrap"><button className="btn sm" onClick=${()=>act('terminal',s.id)}>Continue in terminal</button><button className="btn sm primary" onClick=${()=>act('retry',s.id)}>Retry</button></div></div>`}
+  ${s.status==='queued'&&html`<div className="banner t-muted"><${Icon} n="clock"/><div className="grow"><p>${s.queueReason}</p></div><button className="btn sm" onClick=${()=>act('startNow',s.id)}>Start now</button></div>`}
+  <div className="sess-grid">
+   <div className="stack">
+    <div className="events">
+     ${!s.events.length&&html`<p className="muted" style=${{padding:10}}>Nothing yet. Events appear here as Claude works.</p>`}
+     ${s.events.map((e,k)=>e.k==='tool'?html`<div key=${k} className="ev tool" onClick=${()=>setOpenEv(o=>({...o,[k]:!o[k]}))}><span className="ic"><${Icon} n="tool" s=${14}/></span><div className="body"><b>${e.name}</b> ${e.sum}${openEv[k]&&html`<pre>${e.out}</pre>`}</div></div>`
+      :e.k==='result'?html`<div key=${k} className=${`ev result t-${s.status==='failed'?'bad':s.status==='done'?'ship':'muted'}`}><span className="ic"><${Icon} n="check" s=${14}/></span><div className="body">${e.t}</div></div>`
+      :html`<div key=${k} className=${`ev text`}><span className="ic"><${Icon} n=${e.you?'user':'msg'} s=${14}/></span><div className="body">${e.t}</div></div>`)}
+     ${['running','starting'].includes(s.status)&&html`<div className="ev"><span className="ic"><span className="chip t-build live" style=${{padding:0,background:'none'}}><span className="dot"></span></span></span><div className="muted">Working…</div></div>`}
+     <div ref=${end}></div>
+    </div>
+    <form className="composer" onSubmit=${e=>{e.preventDefault();if(msg.trim()){act('prompt',{id:s.id,t:msg});setMsg('')}}}>
+     <textarea rows="1" placeholder=${s.status==='waiting'?'Answer the question above first':live?'Send a message. It goes out when this turn ends.':'Send a message to continue this session'} disabled=${s.status==='waiting'} value=${msg} onInput=${e=>setMsg(e.target.value)} onKeyDown=${e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey))e.target.form.requestSubmit()}}></textarea>
+     <button className="btn primary icon" aria-label="Send" disabled=${!msg.trim()}><${Icon} n="send"/></button>
+    </form>
+   </div>
+   <aside className="box"><dl className="facts">
+    <dt>Repo</dt><dd>${repoBy(db,s.repo)?.name||'Notes vault'}</dd><dt>Account</dt><dd>${s.account}</dd><dt>Started</dt><dd>${s.started}</dd>
+    <dt>Duration</dt><dd>${s.dur}</dd><dt>Cost</dt><dd>$${s.cost.toFixed(2)}</dd><dt>Tokens</dt><dd>${s.tokens}</dd>
+    ${i?.pr&&html`<dt>PR</dt><dd><button className="linkish" onClick=${()=>act('pr',i.pr)}>#${i.pr}</button></dd>`}
+   </dl></aside>
+  </div>
+ </div>`;
+}
+
+/* ---------- Side panels ---------- */
+function IssuePanel({n}){
+ const {db,act,openPanel}=useApp(); const i=db.issues[n]; const pr=i.pr&&prOf(db,i.pr); const f=featureById(db,i.feature);
+ const sess=db.sessions.filter(s=>s.issue===n); const [c,setC]=useState('');
+ return html`<${React.Fragment}>
+  <div className="p-head"><div className="row"><span className="ref">${i.repo} #${i.n}</span><span className="grow"></span><button className="btn ghost icon sm" aria-label="Close" onClick=${()=>openPanel(null)}><${Icon} n="x"/></button></div>
+   <h2 style=${{fontSize:18}}>${i.title}</h2><div className="row wrap"><${IssueChip} s=${i.status}/><button className="linkish muted" style=${{fontSize:13}} onClick=${()=>act('feature',f.id)}>${f.title}</button></div></div>
+  <div className="p-body">
+   <div className="row wrap"><${IssueAction} i=${i}/><${IssueSignals} i=${i}/></div>
+   ${i.blockedBy.length>0&&html`<div className="banner t-muted"><${Icon} n="lock"/><div className="grow">Blocked by ${i.blockedBy.map((b,k)=>html`${k?', ':''}<button key=${b} className="linkish" style=${{textDecoration:'underline'}} onClick=${()=>openPanel({kind:'issue',n:b})}>#${b} ${db.issues[b].title}</button>`)}. It becomes ready when those merge.</div></div>`}
+   ${pr&&html`<button className="box linkish" style=${{display:'flex'}} onClick=${()=>openPanel({kind:'pr',n:pr.n})}>
+     <div className="row"><${Icon} n="pr"/><b>PR #${pr.n}</b><span className="grow"></span>${pr.state==='merged'?html`<${Chip} tone="ship">Merged<//>`:html`<${CiChip} ci=${pr.ci}/>`}</div>
+     ${pr.state!=='merged'&&html`<span className="muted" style=${{fontSize:13}}>${pr.branch} → ${pr.base} · +${pr.add} −${pr.del}</span>`}</button>`}
+   <section className="stack" style=${{gap:6}}><h3>Sessions</h3>${sess.length?sess.map(s=>html`<button key=${s.id} className="row linkish" style=${{justifyContent:'space-between'}} onClick=${()=>act('session',s.id)}><span className="mono">${s.cmd}</span><span className="row"><span className="faint" style=${{fontSize:12}}>${s.started}</span><${SessChip} s=${s.status}/></span></button>`):html`<p className="muted">None yet.</p>`}</section>
+   <section className="prose"><h3>What</h3><p>${i.title} for workspace admins, behind the existing <code>can()</code> check.</p><h3>Why</h3><p>Part of epic #${f.epic||'—'}: owners need to delegate without sharing a login.</p><h3>How</h3><ul><li>Touch <code>app/roles/</code> and its tests only.</li><li>Verify with <code>pytest tests/test_roles.py</code>.</li></ul></section>
+   <section className="stack" style=${{gap:10}}><h3>Comments</h3>
+    <div className="comment"><span className="avatar">NK</span><div><b>nadia-k</b> <span className="faint" style=${{fontSize:12}}>2 days ago</span><p>Keep the role names in one enum so the docs page can list them.</p></div></div>
+    <textarea className="f" rows="2" placeholder="Comment on GitHub" value=${c} onInput=${e=>setC(e.target.value)}></textarea><div><button className="btn sm" disabled=${!c.trim()} onClick=${()=>{act('toast','Comment posted');setC('')}}>Comment</button></div></section>
+  </div>
+  <div className="p-foot">${i.status!=='merged'&&i.status!=='unrefined'&&html`<button className="btn sm" onClick=${()=>act('refine',[i.n])}>Refine again</button>`}
+   <${MoreBtn} sm=${1} items=${[{l:'Close as completed',icon:'check',on:()=>act('toast','Closed #'+n)},{l:'Close as not planned',icon:'x',on:()=>act('toast','Closed #'+n+' as not planned')}]}/>
+   <span className="grow"></span><a className="btn sm ghost" href="#" onClick=${e=>{e.preventDefault();act('toast','Opens GitHub')}}><${Icon} n="ext"/>GitHub</a></div>
+ <//>`;
+}
+function PrPanel({n}){
+ const {db,act,openPanel}=useApp(); const pr=prOf(db,n); const i=db.issues[pr.issue];
+ const [tab,setTab]=useState('overview'); const [confirm,setConfirm]=useState(false);
+ const warns=[pr.ci==='failure'&&'Checks are failing.',pr.ci==='pending'&&'Checks are still running.',pr.review==='changes'&&'A reviewer requested changes.',pr.review==='none'&&'No approving review yet.'].filter(Boolean);
+ return html`<${React.Fragment}>
+  <div className="p-head"><div className="row"><span className="ref">PR #${pr.n}</span><span className="grow"></span><button className="btn ghost icon sm" aria-label="Close" onClick=${()=>openPanel(null)}><${Icon} n="x"/></button></div>
+   <h2 style=${{fontSize:18}}>${pr.title||i?.title}</h2>
+   <div className="row wrap">${pr.state==='merged'?html`<${Chip} tone="ship">Merged<//>`:html`<${Chip} tone="review">Open<//>`}<${CiChip} ci=${pr.ci}/>${pr.review==='approved'&&html`<${Chip} tone="ship">Approved by ${pr.reviewer}<//>`}${pr.review==='changes'&&html`<${Chip} tone="review">Changes requested<//>`}</div>
+   ${i&&html`<button className="linkish muted" style=${{fontSize:13}} onClick=${()=>openPanel({kind:'issue',n:i.n})}>Closes #${i.n} ${i.title}</button>`}</div>
+  <div className="tabs" style=${{padding:'0 10px'}}>${[['overview','Overview'],['checks','Checks',pr.checks.length],['files','Files',pr.files.length]].map(([k,l,c])=>html`<button key=${k} className=${`tab ${tab===k?'on':''}`} onClick=${()=>setTab(k)}>${l}${c!=null&&html`<span className="n">${c}</span>`}</button>`)}</div>
+  <div className="p-body">
+   ${tab==='overview'&&html`<p className="mono muted" style=${{fontSize:12.5}}>${pr.branch} → ${pr.base} · +${pr.add} −${pr.del}</p>
+    <div className="prose"><p>Implements #${pr.issue}. Adds the endpoint, schema validation and tests. Verified locally with the matching checks.</p></div>
+    ${i?.grind&&html`<div className=${`banner ${i.grind.paused?'t-bad':'t-review'}`}><${Icon} n=${i.grind.paused?'pause':'refresh'}/><div className="grow"><p><b>Grind round ${i.grind.round}</b>${i.grind.paused?`: paused. ${i.grind.paused}.`:': running.'}</p></div>${i.grind.paused&&html`<div className="row"><button className="btn sm" onClick=${()=>act('skipCi',i.n)}>Skip CI</button><button className="btn sm ghost" onClick=${()=>act('stopGrind',i.n)}>Stop</button></div>`}</div>`}
+    <div className="comment"><span className="avatar">RB</span><div><b>${pr.reviewer||'review-bot'}</b> <span className="faint" style=${{fontSize:12}}>1 h ago</span><p>${pr.review==='approved'?'Looks good. Tests cover the permission edges.':'Two findings: missing index on role_id; guard skips nested routes.'}</p></div></div>`}
+   ${tab==='checks'&&html`<div className="checks">${pr.checks.map(([nm,st])=>html`<div key=${nm} className="check"><${Chip} tone=${st==='pass'?'ship':st==='fail'?'bad':'review'} live=${st==='running'}>${st}<//><span className="mono">${nm}</span></div>`)}</div>`}
+   ${tab==='files'&&html`<div className="stack">${pr.files.map(([p,a,d])=>html`<details key=${p}><summary className="row" style=${{cursor:'pointer'}}><span className="mono grow ellipsis">${p}</span><span style=${{color:'var(--ship)'}}>+${a}</span><span style=${{color:'var(--bad)'}}>−${d}</span></summary>
+     <div className="diff" style=${{marginTop:8}}><div className="h">@@ -12,6 +12,14 @@</div><div className="r">- def list_roles(user):</div><div className="a">+ def list_roles(user, *, include_counts=False):</div><div className="a">+     if not can(user, "roles.read"):</div><div className="a">+         raise Forbidden()</div><div>      return Role.query.all()</div></div></details>`)}</div>`}
+  </div>
+  ${pr.state==='open'&&html`<div className="p-foot" style=${{flexDirection:'column',alignItems:'stretch'}}>
+   ${confirm?html`<div className="stack" style=${{gap:8}}>
+     ${warns.length?html`<div className="banner t-review"><${Icon} n="alert"/><div className="grow">${warns.map(w=>html`<p key=${w}>${w}</p>`)}</div></div>`:null}
+     <p>Merge PR #${pr.n} into <b>${pr.base}</b> with a merge commit. The worktree is removed if it is clean.</p>
+     <div className="row"><button className=${`btn ${warns.length?'danger solid':'primary'}`} onClick=${()=>{act('merge',pr.n);setConfirm(false)}}>${warns.length?'Merge anyway':'Confirm merge'}</button><button className="btn ghost" onClick=${()=>setConfirm(false)}>Cancel</button></div></div>`
+    :html`<div className="row"><button className=${`btn ${warns.length?'':'primary'}`} onClick=${()=>setConfirm(true)}><${Icon} n="merge"/>Merge</button>${warns.length?html`<span className="muted" style=${{fontSize:13}}>${warns[0]}</span>`:html`<span className="muted" style=${{fontSize:13}}>Approved and green.</span>`}</div>`}
+  </div>`}
+ <//>`;
+}
+
+/* ---------- Settings ---------- */
+function SettingsView(){
+ const {db,mut,act}=useApp(); const [sec,setSec]=useState('repos');
+ const secs=[['repos','Repositories'],['accounts','Claude accounts'],['notify','Notifications'],['review','Peer review'],['vault','Notes vault']];
+ return html`<div className="content-inner">
+  <div className="page-head"><h1>Settings</h1></div>
+  <div className="set-grid"><nav className="set-nav">${secs.map(([k,l])=>html`<button key=${k} className=${`nav-a ${sec===k?'on':''}`} onClick=${()=>setSec(k)}>${l}</button>`)}</nav>
+  <div>
+   ${sec==='repos'&&html`<div className="set-sec"><div className="row wrap"><div className="grow"><h2>Repositories</h2><p className="muted">Each repo's automation. Changes save as you make them.</p></div><button className="btn" onClick=${()=>act('toast','Scanning ~/Projects… found 0 new repos')}><${Icon} n="search"/>Find repos</button></div>
+    <div className="tbl-wrap"><table className="tbl"><thead><tr><th>Repo</th><th>GitHub</th><th>Auto-grind</th><th>Auto-build cap</th><th>Slack channel</th><th></th></tr></thead><tbody>
+     ${db.repos.map((r,k)=>html`<tr key=${r.slug}><td><b>${r.name}</b><div className="mono faint" style=${{fontSize:12}}>${r.path}</div></td>
+      <td>${r.remote==='ok'?html`<${Chip} tone="ship">Connected<//>`:html`<button className="btn sm" onClick=${()=>act('publish',r.slug)}>Publish</button>`}</td>
+      <td><${Switch} on=${r.autoGrind} label=${'Auto-grind '+r.name} onChange=${v=>{mut(d=>{d.repos[k].autoGrind=v});act('toast',`Auto-grind ${v?'on':'off'} for ${r.name}`)}}/></td>
+      <td><select className="f" style=${{width:70}} value=${r.cap} onChange=${e=>mut(d=>{d.repos[k].cap=+e.target.value})}>${[1,2,3,4,5].map(x=>html`<option key=${x}>${x}</option>`)}</select></td>
+      <td><input className="f" style=${{width:150}} placeholder="#channel" defaultValue=${r.slack}/></td>
+      <td><button className="btn ghost sm danger" onClick=${()=>act('removeRepo',r.slug)}>Remove</button></td></tr>`)}
+    </tbody></table></div>
+    <label className="lbl">Folders to scan<span className="hint">One per line. “Find repos” looks for git checkouts in these.</span><textarea className="f mono" rows="2" defaultValue=${'~/Projects\n~/Work'}></textarea></label></div>`}
+   ${sec==='accounts'&&html`<div className="set-sec"><h2>Claude accounts</h2><p className="muted">Each account is a command that starts Claude. Sessions can run on any of them; a limited account queues its sessions until reset.</p>
+    ${db.accounts.map(a=>html`<div key=${a.label} className="row wrap" style=${{gap:10}}><input className="f" style=${{width:130}} defaultValue=${a.label} aria-label="Label"/><input className="f mono grow" style=${{width:200}} defaultValue=${a.cmd} aria-label="Command" readOnly=${a.cmd==='claude'}/>
+     <label className="row" style=${{fontSize:13}}><input type="radio" name="def" defaultChecked=${a.def}/>Default</label><button className="btn sm" onClick=${()=>act('toast',`${a.cmd} works: signed in`)}>Test</button>${a.limitedUntil&&html`<${Chip} tone="review">Limited until ${a.limitedUntil}<//>`}</div>`)}
+    <div><button className="btn"><${Icon} n="plus"/>Add account</button></div></div>`}
+   ${sec==='notify'&&html`<div className="set-sec"><h2>Notifications</h2>
+    <div className="banner t-review"><${Icon} n="alert"/><div className="grow"><p>Browser notifications are blocked for this site. Allow them in the browser's site settings to get alerts while this tab is in the background.</p></div></div>
+    <h3>Phone push (ntfy)</h3><div className="stack" style=${{maxWidth:520}}>
+     <label className="lbl">Server<input className="f" defaultValue="https://ntfy.sh"/></label><label className="lbl">Topic<input className="f" defaultValue="aiw-siam-7f3"/></label>
+     <label className="lbl">Access token<span className="hint">Saved. Leave empty to keep it.</span><input className="f" type="password" placeholder="••••••••"/></label>
+     <label className="lbl">Public URL of this UI<span className="hint">Used for links in pushes, for example your tailnet address.</span><input className="f" defaultValue="https://mac.tail1234.ts.net"/></label>
+     <div className="row"><button className="btn primary" onClick=${()=>act('toast','Notification settings saved')}>Save</button><button className="btn" onClick=${()=>act('toast','Test push sent')}>Send test push</button></div></div>
+    <h3>Push me when</h3><div className="stack" style=${{gap:8}}>${['Claude asks a question','A session fails','A PR is ready to merge','A grind pauses','Away mode ends'].map(x=>html`<label key=${x} className="row"><input type="checkbox" defaultChecked/>${x}</label>`)}</div></div>`}
+   ${sec==='review'&&html`<div className="set-sec"><h2>Peer review</h2><label className="lbl" style=${{maxWidth:240}}>Rounds before it asks you<input className="f" type="number" min="1" max="10" defaultValue="5"/></label>
+    <div><h3 style=${{marginBottom:8}}>Lenses ticked by default</h3><div className="lens-row">${LENSES.map(l=>html`<button key=${l} className=${`lens ${['critical','cto','security','qa'].includes(l)?'on':''}`}>${LENS_NAME[l]}</button>`)}</div></div>
+    ${LENSES.slice(0,3).map(l=>html`<details key=${l}><summary style=${{cursor:'pointer',fontWeight:600}}>${LENS_NAME[l]} prompt ${l==='security'?html`<${Chip} tone="review">Edited<//>`:''}</summary><textarea className="f" rows="4" style=${{marginTop:8}} defaultValue=${`You are the ${LENS_NAME[l]} lens. Review the artifact only through this angle…`}></textarea></details>`)}
+    <div className="row"><button className="btn primary" onClick=${()=>act('toast','Peer review settings saved')}>Save</button><button className="btn ghost">Reset to defaults</button></div></div>`}
+   ${sec==='vault'&&html`<div className="set-sec"><h2>Notes vault</h2><p className="muted">Where “No repo yet” sessions, dumps and worklogs are written.</p><label className="lbl" style=${{maxWidth:520}}>Vault folder<input className="f mono" defaultValue="~/Obsidian/Main"/></label><div><button className="btn primary" onClick=${()=>act('toast','Vault folder saved')}>Save</button></div></div>`}
+  </div></div></div>`;
+}
+
+/* ---------- Onboarding ---------- */
+function Onboarding(){
+ const {setScenario,act}=useApp(); const [found,setFound]=useState(null);
+ return html`<div className="content-inner" style=${{maxWidth:720}}>
+  <div><h1>Set up aiw</h1><p className="sub muted" style=${{marginTop:4}}>Three checks, then pick the repos you want to run the process on.</p></div>
+  <div className="list">
+   <div className="item"><div className="item-ico t-ship"><${Icon} n="check"/></div><div><div className="item-title">GitHub CLI signed in</div><div className="item-meta">as masnun-siam</div></div><div></div></div>
+   <div className="item"><div className="item-ico t-ship"><${Icon} n="check"/></div><div><div className="item-title">Claude account found</div><div className="item-meta"><code>claude</code> runs and is signed in. Add more in Settings.</div></div><div></div></div>
+   <div className="item"><div className="item-ico t-accent"><${Icon} n="folder"/></div><div className="stack" style=${{gap:10}}><div><div className="item-title">Add your repositories</div><div className="item-meta">Folders to look in</div></div>
+    <textarea className="f mono" rows="2" defaultValue="~/Projects"></textarea>
+    ${found&&html`<div className="stack" style=${{gap:6}}>${found.map(r=>html`<label key=${r} className="row"><input type="checkbox" defaultChecked/><span className="mono">${r}</span></label>`)}</div>`}
+    <div className="row">${found?html`<button className="btn primary" onClick=${()=>{setScenario('normal');act('toast','Added 3 repositories')}}>Add 3 repositories</button>`:html`<button className="btn primary" onClick=${()=>setFound(['~/Projects/wasensi','~/Projects/ops-portal','~/Projects/recipe-box'])}>Find repos</button>`}</div></div><div></div></div>
+  </div></div>`;
+}
+
+/* ---------- Start dialog ---------- */
+function StartDialog({init,onClose}){
+ const {db,act,repo:cur,scenario}=useApp();
+ const [cmd,setCmd]=useState(init.cmd||'create-prd'); const c=CMD[cmd];
+ const [repo,setRepo]=useState(init.repo||cur); const [arg,setArg]=useState(init.arg||''); const [pick,setPick]=useState(init.n||null);
+ const [acct,setAcct]=useState('personal'); const [lenses,setLenses]=useState([]); const [day,setDay]=useState('today');
+ const limited=a=>scenario==='limited'||a.limitedUntil;
+ const issues=Object.values(db.issues).filter(i=>i.repo===repo&&i.status==='ready');
+ const prs=Object.values(db.prs).filter(p=>db.issues[p.issue].repo===repo&&p.state==='open');
+ const valid=c.arg==='none'||c.arg==='day'||(['issue','pr'].includes(c.arg)?pick:c.arg==='prd'||c.arg==='issues'?true:arg.trim());
+ const acc=db.accounts.find(a=>a.label===acct);
+ return html`<div className="scrim" onClick=${onClose}><div className="dialog wide" role="dialog" aria-label="Start a session" onClick=${e=>e.stopPropagation()}>
+  <div className="start">
+   <div className="start-list">${COMMANDS.map(g=>html`<div key=${g.g}><div className="g">${g.g}</div>${g.items.map(x=>html`<button key=${x.id} className=${cmd===x.id?'on':''} onClick=${()=>{setCmd(x.id);setPick(null)}}><div style=${{fontWeight:600}}>${x.name}</div><div className="s">/${x.id}</div></button>`)}</div>`)}</div>
+   <form className="start-form" onSubmit=${e=>{e.preventDefault();if(valid){onClose();act('startCmd',{cmd,arg:pick?('#'+pick):c.arg==='day'?day:arg,repo,account:acct,lenses})}}}>
+    <div><h2 style=${{fontSize:18}}>${c.name}</h2><p className="muted">${c.desc}</p></div>
+    <label className="lbl">Where<select className="f" value=${repo} onChange=${e=>{setRepo(e.target.value);setPick(null)}}>
+     ${db.repos.map(r=>html`<option key=${r.slug} value=${r.slug}>${r.name} (${r.slug})</option>`)}${c.noRepo&&html`<option value="vault">No repo yet: notes vault</option>`}</select></label>
+    ${c.arg==='text'&&html`<label className="lbl">${cmd==='create-prd'?'The idea':'Input'}<textarea className="f" rows="6" autoFocus placeholder=${c.ph} value=${arg} onInput=${e=>setArg(e.target.value)} onKeyDown=${e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey))e.target.form.requestSubmit()}}></textarea><span className="hint">⌘ Enter to start</span></label>`}
+    ${c.arg==='issue'&&html`<div className="lbl">Issue<span className="hint">Ready issues in ${repoBy(db,repo)?.name}. Or paste an issue URL.</span><div className="pick-list">${issues.length?issues.map(i=>html`<button type="button" key=${i.n} className=${pick===i.n?'on':''} onClick=${()=>setPick(i.n)}><span className="ref">#${i.n}</span><span>${i.title}</span></button>`):html`<p className="muted" style=${{padding:10}}>No ready issues.</p>`}</div></div>`}
+    ${c.arg==='pr'&&html`<div className="lbl">Pull request<div className="pick-list">${prs.length?prs.map(p=>html`<button type="button" key=${p.n} className=${pick===p.n?'on':''} onClick=${()=>setPick(p.n)}><span className="ref">#${p.n}</span><span className="grow">${p.title}</span><${CiChip} ci=${p.ci}/></button>`):html`<p className="muted" style=${{padding:10}}>No open PRs.</p>`}</div></div>`}
+    ${c.arg==='prd'&&html`<label className="lbl">PRD<select className="f">${db.features.filter(f=>f.repo===repo&&f.stage==='approved').map(f=>html`<option key=${f.id}>${f.prd}</option>`)}<option>Pick an approved PRD…</option></select></label>`}
+    ${c.arg==='issues'&&html`<label className="lbl">Issues or epic<input className="f" placeholder="#812, or #813 #814" value=${arg} onInput=${e=>setArg(e.target.value)}/></label>`}
+    ${c.arg==='day'&&html`<div className="lbl">Day<div className="seg">${[['today','Today'],['yesterday','Yesterday'],['range','A range']].map(([k,l])=>html`<button type="button" key=${k} className=${day===k?'on':''} onClick=${()=>setDay(k)}>${l}</button>`)}</div>${day==='range'&&html`<div className="row"><input className="f" type="date"/><span>to</span><input className="f" type="date"/></div><span className="hint">One session per day, 3 at a time.</span>`}</div>`}
+    ${c.lenses&&html`<div className="lbl">Peer review<span className="hint">Optional. Lenses review the result until all approve, up to 5 rounds.</span><div className="lens-row">${LENSES.map(l=>html`<button type="button" key=${l} className=${`lens ${lenses.includes(l)?'on':''}`} aria-pressed=${lenses.includes(l)} onClick=${()=>setLenses(p=>p.includes(l)?p.filter(x=>x!==l):[...p,l])}>${LENS_NAME[l]}</button>`)}</div></div>`}
+    ${cmd==='custom'&&html`<div className="banner t-review"><${Icon} n="alert"/><div className="grow"><p>Custom prompts run with permission checks skipped, like every session here.</p></div></div>`}
+    <div className="lbl">Run on<div className="seg">${db.accounts.map(a=>html`<button type="button" key=${a.label} className=${acct===a.label?'on':''} onClick=${()=>setAcct(a.label)}>${a.label}${limited(a)?' · limited':''}</button>`)}</div>
+     ${limited(acc)&&html`<span className="hint" style=${{color:'var(--review)'}}>This account is limited until ${acc.limitedUntil||'16:40'}. The session queues and starts at reset.</span>`}</div>
+    <div className="row" style=${{marginTop:'auto',justifyContent:'flex-end'}}><button type="button" className="btn ghost" onClick=${onClose}>Cancel</button><button className="btn primary" disabled=${!valid}>${limited(acc)?'Queue':'Start'}</button></div>
+   </form>
+  </div></div></div>`;
+}
+
+/* ---------- Palette ---------- */
+function Palette({onClose}){
+ const {db,go,act,repo,setRepo,openPanel}=useApp(); const [q,setQ]=useState(''); const [k,setK]=useState(0);
+ const all=useMemo(()=>[
+  ...[['inbox','Inbox'],['features','Features'],['board','Board'],['activity','Activity'],['settings','Settings']].map(([v,l])=>({g:'Go to',l,r:'',run:()=>go(v)})),
+  ...COMMANDS.flatMap(g=>g.items).map(c=>({g:'Start',l:c.name,r:'/'+c.id,run:()=>act('new',{cmd:c.id})})),
+  ...db.features.filter(f=>f.repo===repo).map(f=>({g:'Features',l:f.title,r:STAGES[stageIdx(f.stage)].label,run:()=>go('feature',f.id)})),
+  ...Object.values(db.issues).filter(i=>i.repo===repo&&i.status!=='merged').map(i=>({g:'Issues',l:`#${i.n} ${i.title}`,r:ISSUE[i.status].label,run:()=>openPanel({kind:'issue',n:i.n})})),
+  ...Object.values(db.prs).map(p=>({g:'Pull requests',l:`#${p.n} ${p.title}`,r:'PR',run:()=>openPanel({kind:'pr',n:p.n})})),
+  ...db.sessions.map(s=>({g:'Sessions',l:`${s.cmd} ${s.arg}`,r:SESS[s.status].label,run:()=>act('session',s.id)})),
+  ...db.repos.filter(r=>r.slug!==repo).map(r=>({g:'Switch repo',l:r.name,r:r.slug,run:()=>setRepo(r.slug)})),
+  {g:'Away',l:db.away?'I am back':'Go away for 2 hours',r:'',run:()=>act(db.away?'awayOff':'awayOn',120)},
+ ],[db,repo]);
+ const res=all.filter(x=>(x.g+' '+x.l+' '+x.r).toLowerCase().includes(q.toLowerCase())).slice(0,40);
+ const groups=[...new Set(res.map(r=>r.g))];
+ const run=x=>{onClose();x.run()};
+ return html`<div className="scrim" onClick=${onClose}><div className="dialog palette" style=${{width:'min(620px,100%)'}} role="dialog" aria-label="Search" onClick=${e=>e.stopPropagation()}>
+  <input autoFocus placeholder="Search features, issues, sessions, or start something…" value=${q} onInput=${e=>{setQ(e.target.value);setK(0)}}
+   onKeyDown=${e=>{if(e.key==='ArrowDown'){e.preventDefault();setK(Math.min(k+1,res.length-1))}if(e.key==='ArrowUp'){e.preventDefault();setK(Math.max(k-1,0))}if(e.key==='Enter'&&res[k])run(res[k])}}/>
+  <div className="pal-list">${groups.map(g=>html`<div key=${g}><div className="pal-g">${g}</div>${res.filter(r=>r.g===g).map(x=>{const idx=res.indexOf(x);return html`<button key=${idx} className=${`pal-i ${idx===k?'on':''}`} onMouseEnter=${()=>setK(idx)} onClick=${()=>run(x)}><span className="ellipsis">${x.l}</span><span className="r">${x.r}</span></button>`})}</div>`)}
+   ${!res.length&&html`<p className="muted" style=${{padding:14}}>Nothing matches “${q}”.</p>`}</div>
+ </div></div>`;
+}
+
+/* ---------- Confirm ---------- */
+function Confirm({c,onClose}){
+ return html`<div className="scrim" onClick=${onClose}><div className="dialog" role="alertdialog" aria-label=${c.title} onClick=${e=>e.stopPropagation()}>
+  <div className="d-h"><h2 style=${{fontSize:17}}>${c.title}</h2></div><div className="d-b">${c.body}</div>
+  <div className="d-f"><button className="btn ghost" onClick=${onClose}>Cancel</button><button className=${`btn ${c.danger?'danger solid':'primary'}`} autoFocus onClick=${()=>{onClose();c.ok()}}>${c.okLabel}</button></div></div></div>`;
+}
+
+/* ---------- Rail ---------- */
+function Rail(){
+ const {db,route,go,repo,setRepo,scenario,act}=useApp();
+ const [rm,setRm]=useState(false); const r=repoBy(db,repo);
+ const nY=needsYou(db,scenario); const live=db.sessions.filter(s=>['running','starting','waiting'].includes(s.status));
+ const nav=[['inbox','Inbox','inbox',nY],['features','Features','layers'],['board','Board','board'],['activity','Activity','activity',live.length,1]];
+ return html`<aside className="rail">
+  <div style=${{position:'relative'}}><button className="repo-btn" onClick=${()=>setRm(!rm)} aria-haspopup="menu"><span className="repo-mark">${r?.name[0]||'?'}</span><span className="grow"><b className="ellipsis" style=${{display:'block'}}>${r?.name||'No repo'}</b><span className="faint mono ellipsis" style=${{fontSize:11.5,display:'block'}}>${r?.slug||''}</span></span><${Icon} n="down" s=${14}/></button>
+   ${rm&&html`<${Menu} onClose=${()=>setRm(false)} style=${{left:0,right:0,top:'100%'}} items=${[...db.repos.map(x=>({l:x.name+(x.slug===repo?'  ✓':''),icon:'folder',on:()=>setRepo(x.slug)})),{l:'Add a repository',icon:'plus',on:()=>go('settings')}]}/>`}</div>
+  <nav className="nav">${nav.map(([v,l,ic,n,quiet])=>html`<button key=${v} className=${`nav-a ${route.view===v||(v==='features'&&route.view==='feature')||(v==='activity'&&route.view==='session')?'on':''}`} onClick=${()=>go(v)}><${Icon} n=${ic}/>${l}${n?html`<span className=${`count ${quiet?'quiet':''}`}>${n}</span>`:null}</button>`)}</nav>
+  ${live.length>0&&html`<div className="rail-sep"></div><div className="rail-label">Running now</div><div className="live-mini">${live.map(s=>html`<button key=${s.id} onClick=${()=>act('session',s.id)}><span className=${`chip ${s.status==='waiting'?'t-you':'t-build live'}`} style=${{padding:0,background:'none'}} title=${SESS[s.status].label}><span className="dot"></span></span><span className="ellipsis"><span className="mono" style=${{fontSize:12}}>${s.cmd}</span> ${s.arg}</span>${s.status==='waiting'&&html`<span style=${{marginLeft:'auto',color:'var(--you)',fontSize:12,fontWeight:700}}>answer</span>`}</button>`).slice(0,5)}</div>`}
+  <div className="rail-foot"><${AwayCard}/><${Usage}/>
+   <div className="row" style=${{gap:2}}><button className="nav-a" style=${{width:'auto',flex:1}} onClick=${()=>go('settings')}><${Icon} n="sliders"/>Settings</button><${ThemeBtn}/><button className="btn ghost icon" aria-label="Keyboard shortcuts" onClick=${()=>act('shortcuts')}><${Icon} n="help"/></button></div></div>
+ </aside>`;
+}
+function AwayCard(){
+ const {db,act}=useApp(); const [o,setO]=useState(false);
+ if(db.away)return html`<div className="away-card"><div className="row"><${Icon} n="moon"/><b className="grow">Away until ${db.away.until}</b></div>
+  <p className="muted" style=${{fontSize:12.5}}>Answering recommended options, retrying failures. ${db.away.held} held for you.</p>
+  <div className="row"><button className="btn sm" onClick=${()=>act('awayExtend')}>+30 min</button><button className="btn sm primary" onClick=${()=>act('awayOff')}>I'm back</button></div></div>`;
+ return html`<div className="away-card" style=${{gap:6}}><div className="row"><${Icon} n="moon"/><b className="grow">Away mode</b><button className="btn sm" onClick=${()=>setO(!o)}>${o?'Cancel':'Go away'}</button></div>
+  ${o?html`<div className="row wrap" style=${{gap:4}}>${[[30,'30 min'],[60,'1 h'],[120,'2 h'],[240,'4 h']].map(([m,l])=>html`<button key=${m} className="btn sm" onClick=${()=>{setO(false);act('awayOn',m)}}>${l}</button>`)}</div>`
+   :html`<p className="faint" style=${{fontSize:12.5}}>Claude keeps going without you and saves the rest.</p>`}</div>`;
+}
+function Usage(){
+ const {db,scenario}=useApp();
+ return html`<div className="stack" style=${{gap:8,padding:'0 4px'}}>${db.accounts.map(a=>{const lim=scenario==='limited'||a.limitedUntil;const five=lim?100:a.five;return html`<div key=${a.label} className="stack" style=${{gap:4}}>
+  <div className="row" style=${{fontSize:12}}><span className="grow"><b>${a.label}</b></span><span className=${lim?'':'faint'} style=${lim?{color:'var(--bad)',fontWeight:600}:null}>${lim?`limited until ${a.limitedUntil||'16:40'}`:`5h ${five}% · 7d ${a.seven}%`}</span></div>
+  <div className=${`meter ${five>=100?'full':five>=80?'hot':''}`}><span style=${{width:five+'%'}}></span></div></div>`})}</div>`;
+}
+function ThemeBtn(){
+ const [t,setT]=useState(()=>{try{return localStorage.getItem('aiw.theme')||'system'}catch(e){return 'system'}});
+ useEffect(()=>{const r=document.documentElement;if(t==='system')delete r.dataset.theme;else r.dataset.theme=t;try{localStorage.setItem('aiw.theme',t)}catch(e){}},[t]);
+ const next={system:'light',light:'dark',dark:'system'};
+ return html`<button className="btn ghost icon" aria-label=${'Theme: '+t} title=${'Theme: '+t} onClick=${()=>setT(next[t])}><${Icon} n=${t==='light'?'sun':t==='dark'?'moon':'monitor'}/></button>`;
+}
+
+/* ---------- demo switcher ---------- */
+const SCENARIOS=[['normal','Busy day (default)'],['onboarding','First run: no repos'],['empty','Repo with no features'],['gh','GitHub CLI signed out'],['rate','GitHub rate limited'],['offline','Server unreachable'],['limited','All accounts limited']];
+function Demo(){
+ const {scenario,setScenario,act,db}=useApp(); const [o,setO]=useState(false);
+ return html`<div className="demo">${o&&html`<${Menu} onClose=${()=>setO(false)} items=${[...SCENARIOS.map(([k,l])=>({l:(scenario===k?'● ':'○ ')+l,on:()=>setScenario(k)})),{l:db.away?'○ End away mode':'○ Away mode on',on:()=>act(db.away?'awayOff':'awayOn',120)},{l:'Reset all data',icon:'refresh',on:()=>act('reset')}]}/>`}
+  <button onClick=${()=>setO(!o)}><${Icon} n="eye" s=${14}/>Prototype states</button></div>`;
+}
+
+/* ---------- App ---------- */
+function App(){
+ const [db,setDb]=useState(seed);
+ const mut=fn=>setDb(d=>{const n=structuredClone(d);fn(n);return n});
+ const [route,setRoute]=useState({view:'inbox'});
+ const [repo,setRepo]=useState('blubird/wasensi');
+ const [panel,setPanel]=useState(null);
+ const [scenario,setScenario]=useState('normal');
+ const [palette,setPalette]=useState(false), [start,setStart]=useState(null), [confirm,setConfirm]=useState(null), [toasts,setToasts]=useState([]), [keys,setKeys]=useState(false);
+ const later=(ms,fn)=>setTimeout(()=>mut(fn),ms);
+ const toast=(msg,o={})=>{const id=Math.random();setToasts(t=>[...t,{id,msg,...o}]);setTimeout(()=>setToasts(t=>t.filter(x=>x.id!==id)),o.ms||4200)};
+ const go=(view,id,tab)=>{setRoute({view,id,tab});document.querySelector('.content')?.scrollTo(0,0)};
+ const ask=c=>setConfirm(c);
+ const newSession=(d,x)=>{const id='s'+(++d.seq);d.sessions.unshift({id,status:'running',started:'Today 14:0'+(d.seq%10),dur:'0 min',cost:0,tokens:'0',account:'personal',repo,events:[{k:'text',t:'Starting…'}],...x});return id};
+
+ // s3's claude process exits after a few seconds, unlocking its answer
+ useEffect(()=>{const t=setTimeout(()=>mut(d=>{const s=sessById(d,'s3');if(s)s.processAlive=false}),9000);return()=>clearTimeout(t)},[]);
+ // live sessions keep producing events
+ useEffect(()=>{const lines=[['Bash','npm run lint','✓ 0 problems'],['Edit','web/src/roles/RolePicker.tsx','+38 −4'],['Bash','npm run test -- roles','Tests: 15 passed'],['Read','app/roles/schemas.py','(64 lines)']];let k=0;
+  const t=setInterval(()=>mut(d=>{d.sessions.filter(s=>s.status==='running'&&s.events.length<14).forEach(s=>{const l=lines[k++%lines.length];s.events.push({k:'tool',name:l[0],sum:l[1],out:l[2]})})}),6000);return()=>clearInterval(t)},[]);
+ useEffect(()=>{if(db.away)document.documentElement.dataset.away='';else delete document.documentElement.dataset.away},[db.away]);
+ useEffect(()=>{const n=needsYou(db,scenario);document.title=(n?`(${n}) `:'')+'aiw prototype'},[db,scenario]);
+ const gRef=useRef(0);
+ useEffect(()=>{const h=e=>{
+  const typing=/INPUT|TEXTAREA|SELECT/.test(e.target.tagName);
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();setPalette(p=>!p);return}
+  if(e.key==='Escape'){if(palette)setPalette(false);else if(start)setStart(null);else if(confirm)setConfirm(null);else if(keys)setKeys(false);else setPanel(null);return}
+  if(typing||e.metaKey||e.ctrlKey||e.altKey)return;
+  if(Date.now()-gRef.current<900){const m={i:'inbox',f:'features',b:'board',a:'activity',s:'settings'}[e.key];gRef.current=0;if(m){go(m);return}}
+  if(e.key==='g'){gRef.current=Date.now();return}
+  if(e.key==='n'){e.preventDefault();setStart({})}
+  if(e.key==='?')setKeys(true);
+ };window.addEventListener('keydown',h);return()=>window.removeEventListener('keydown',h)},[palette,start,confirm,keys]);
+
+ const act=(a,p)=>{
+  const net=!['session','issue','pr','feature','new','toast','copy','terminal','shortcuts','reset','openFeature'].includes(a.split(':')[0]);
+  if(scenario==='offline'&&net){toast('Not sent: the aiw server is unreachable. Try again when it reconnects.',{bad:1});return}
+  if(scenario==='gh'&&['merge','refine','startIssue','feature:createTasks','feature:refineAll','skipCi','addTask','publish'].includes(a)){toast('Needs GitHub. Run gh auth login first.',{bad:1});return}
+  if(a.startsWith('feature:')){featureAct(a.slice(8),p);return}
+  if(a.startsWith('pr:')){setPanel({kind:'pr',n:+a.slice(3)});return}
+  switch(a){
+   case 'session':setPanel(null);go('session',p);break;
+   case 'issue':setPanel({kind:'issue',n:p});break;
+   case 'pr':setPanel({kind:'pr',n:p});break;
+   case 'feature':setPanel(null);go('feature',p);break;
+   case 'openFeature':go('feature',p[0],p[1]);break;
+   case 'new':setStart(p||{});break;
+   case 'toast':toast(p);break;
+   case 'shortcuts':setKeys(true);break;
+   case 'reset':setDb(seed());setScenario('normal');go('inbox');toast('Prototype data reset');break;
+   case 'copy':navigator.clipboard?.writeText(p).catch(()=>{});toast(`Copied: ${p}`);break;
+   case 'recheck':toast('Still signed out. Run gh auth login, then check again.',{bad:1});break;
+   case 'terminal':{const s=sessById(db,p);const cmd=`cd ${repoBy(db,s.repo)?.path||'~/Obsidian/Main'} && claude --resume 4f1c…`;navigator.clipboard?.writeText(cmd).catch(()=>{});toast('Copied the resume command. Paste it in a terminal.');break}
+   case 'answer':mut(d=>{const s=sessById(d,p.id);s.events.push({k:'text',you:1,t:'You answered: '+p.ans.map(x=>x.useOther?x.other:x.pick.join(', ')).join(' / ')});s.question=null;s.status='running'});toast('Answer sent. The session is running again.',{action:['Watch',()=>go('session',p.id)]});break;
+   case 'retry':mut(d=>{const s=sessById(d,p);s.status='running';s.error=null;s.events.push({k:'text',t:'Resumed.'});if(s.issue){d.issues[s.issue].status='in_progress';d.issues[s.issue].lastFailed=false}});toast('Session restarted');break;
+   case 'startNow':mut(d=>{const s=sessById(d,p);s.status='running';s.events.push({k:'text',t:'Started ahead of the queue.'});if(s.issue){d.issues[s.issue].status='in_progress';d.issues[s.issue].queued=false}});toast('Started. Auto-build cap ignored for this one.');break;
+   case 'stop':{const s=sessById(db,p);ask({title:`Stop ${s.cmd} ${s.arg}?`,body:html`<p>Claude stops after the current step. The worktree and any commits stay; you can resume later.</p>`,okLabel:'Stop session',danger:1,ok:()=>{mut(d=>{sessById(d,p).status='stopped'});toast('Stopped')}});break}
+   case 'rerun':{const s=sessById(db,p);const id=(()=>{let nid;mut(d=>{nid=newSession(d,{cmd:s.cmd,arg:s.arg,repo:s.repo,feature:s.feature,issue:s.issue})});return nid})();toast(`Started ${s.cmd} ${s.arg} again`);break}
+   case 'resumeOther':mut(d=>{const s=sessById(d,p);s.status='running';s.account='personal';s.events.push({k:'text',t:'Resumed on the personal account.'})});toast('Resumed on the personal account');break;
+   case 'cancelAuto':mut(d=>{sessById(d,p).autoResume=false});toast('Auto-resume off. Resume it yourself when ready.');break;
+   case 'prompt':mut(d=>{const s=sessById(d,p.id);s.events.push({k:'text',you:1,t:p.t});if(!LIVE.includes(s.status))s.status='running'});toast(LIVE.includes(sessById(db,p.id).status)?'Queued. It goes out when this turn ends.':'Sent');break;
+   case 'startIssue':{
+    if(p.herdr){mut(d=>{d.issues[p.n].status='in_progress'});toast(`Opened #${p.n} in a herdr tab. herdr tabs are not tracked here.`);break}
+    let id;mut(d=>{id=newSession(d,{cmd:'implement-issue',arg:'#'+p.n,issue:p.n,feature:d.issues[p.n].feature,account:p.account||'personal'});Object.assign(d.issues[p.n],{status:'in_progress',session:id,lastFailed:false})});
+    setPanel(null);setTimeout(()=>go('session','s'+(db.seq+1)));toast(`Started #${p.n}`);break}
+   case 'refine':{mut(d=>{newSession(d,{cmd:'refine-issues',arg:p.map(n=>'#'+n).join(' '),feature:d.issues[p[0]].feature})});toast(`Refining ${p.map(n=>'#'+n).join(', ')}`,{action:['Watch',()=>go('session','s'+(db.seq+1))]});
+    later(3500,d=>{p.forEach(n=>{if(d.issues[n].status==='unrefined')d.issues[n].status='ready'});const s=sessById(d,'s'+(db.seq+1));if(s){s.status='done';s.events.push({k:'result',t:'Refined '+p.length})}});break}
+   case 'grind':mut(d=>{const i=d.issues[p];i.status='grinding';i.grind={round:1};newSession(d,{cmd:'pr-grind',arg:'PR #'+i.pr,issue:p,feature:i.feature})});toast('Grind started');break;
+   case 'skipCi':mut(d=>{const i=d.issues[p];i.grind={round:i.grind.round+1};newSession(d,{cmd:'pr-grind',arg:'PR #'+i.pr+' --skip-ci',issue:p,feature:i.feature})});toast('Grind continues, skipping CI this round');break;
+   case 'stopGrind':ask({title:'Stop grinding this PR?',body:html`<p>The PR stays open in review. You can start grind again from the issue.</p>`,okLabel:'Stop grind',danger:1,ok:()=>{mut(d=>{const i=d.issues[p];i.status='in_review';i.grind=null});toast('Grind stopped')}});break;
+   case 'merge':mut(d=>{const pr=d.prs[p];pr.state='merged';const i=d.issues[pr.issue];i.status='merged';
+     Object.values(d.issues).forEach(x=>{x.blockedBy=x.blockedBy.filter(b=>d.issues[b].status!=='merged');if(x.status==='blocked'&&!x.blockedBy.length)x.status='ready'})});toast(`Merged PR #${p}. Worktree removed.`);break;
+   case 'cleanup':{const i=db.issues[p];ask({title:`Remove the worktree for #${p}?`,body:html`<div className="stack" style=${{gap:8}}><p>This work is not on GitHub and will be lost:</p><ul style=${{margin:0,paddingLeft:18}}>${i.cleanup.uncommitted.map(f=>html`<li key=${f}><span className="mono">${f}</span> (uncommitted)</li>`)}${i.cleanup.unpushed.map(f=>html`<li key=${f}><span className="mono">${f}</span> (not pushed)</li>`)}</ul></div>`,okLabel:'Delete worktree and branch',danger:1,ok:()=>{mut(d=>{d.issues[p].cleanup=null});toast('Worktree removed')}});break}
+   case 'publish':ask({title:`Publish ${p} to GitHub?`,body:html`<div className="stack"><label className="lbl">Owner<select className="f"><option>masnun-siam</option><option>blubird</option></select></label><label className="row"><input type="checkbox" defaultChecked/>Private repository</label></div>`,okLabel:'Create and push',ok:()=>{mut(d=>{const r=repoBy(d,p);r.remote='ok';r.slug='masnun-siam/recipe-box'});toast('Published recipe-box to GitHub')}});break;
+   case 'removeRepo':ask({title:'Stop tracking this repo?',body:html`<p>Nothing on disk or GitHub changes. Its sessions stay in Activity.</p>`,okLabel:'Remove',danger:1,ok:()=>toast('Removed')});break;
+   case 'addTask':mut(d=>{newSession(d,{cmd:'create-tasks',arg:'finding: '+p.t.slice(0,30),feature:p.f})});toast('Filing the task. It appears under the epic in a moment.');
+    later(3000,d=>{const n=Math.max(...Object.keys(d.issues).map(Number))+1;d.issues[n]=I(n,p.t,'unrefined',{feature:p.f,repo});});break;
+   case 'cleanSessions':ask({title:'Remove 7 finished sessions?',body:html`<p>Removes the transcripts of done, failed and stopped sessions older than 7 days. Nothing on GitHub changes.</p>`,okLabel:'Remove 7 sessions',danger:1,ok:()=>toast('Removed 7 sessions')});break;
+   case 'startCmd':{let id;mut(d=>{id=newSession(d,{cmd:p.cmd,arg:p.arg?(p.arg.length>40?p.arg.slice(0,40)+'…':p.arg):'',repo:p.repo==='vault'?null:(p.repo||repo),feature:p.feature,account:p.account||'personal',status:scenario==='limited'?'queued':'running',queueReason:'Account limited until 16:40. Starts at reset.'})});
+    setTimeout(()=>go('session','s'+(db.seq+1)));toast(scenario==='limited'?'Queued until the limit resets':`Started ${p.cmd}`);break}
+   case 'awayOn':mut(d=>{d.away={until:p>=120?'16:30':'15:00',held:2};d.awaySummary=null});toast('Away mode on. Your inbox collects what still needs you.');break;
+   case 'awayExtend':mut(d=>{d.away.until='17:00'});toast('Away until 17:00');break;
+   case 'awayOff':mut(d=>{d.away=null;d.awaySummary={span:'14:30 to 16:30',held:2,log:[{at:'14:41',t:'Answered “Extend can()” for implement-issue #806 (recommended option).'},{at:'15:05',t:'Retried implement-issue #803 after a failure. It passed.'},{at:'15:40',t:'Skipped CI once for the grind on PR #1290.'}]}});go('inbox');break;
+   case 'moreRounds':break;
+   default:toast(a);
+  }
+ };
+ const featureAct=(a,id)=>{
+  const fid=typeof id==='object'?id.id:id; const f=featureById(db,fid);
+  switch(a){
+   case 'approve':ask({title:`Approve “${f.title}”?`,body:html`<p>Sets the PRD to Approved and files its epic on GitHub. You can still change the PRD later with an update.</p>`,okLabel:'Approve PRD',ok:()=>{mut(d=>{const x=featureById(d,fid);x.stage='approved';x.epic=x.epic||830;x.review=x.review&&{...x.review,state:'approved'}});toast('Approved. Epic filed.')}});break;
+   case 'startReview':if(typeof id==='object'){mut(d=>{const x=featureById(d,fid);x.stage='review';x.review={round:1,max:5,state:'running',lenses:Object.fromEntries(id.lenses.map(l=>[l,'waiting']))}});toast('Peer review started')}else go('feature',fid,'review');break;
+   case 'moreRounds':mut(d=>{const x=featureById(d,fid);x.review={...x.review,max:x.review.max+2,round:x.review.round+1,state:'running',lenses:{...x.review.lenses,security:'waiting'}}});toast('Running 2 more rounds');break;
+   case 'createTasks':mut(d=>{newSession(d,{cmd:'create-tasks',arg:f.prd,feature:fid})});toast('Creating tasks…');
+    later(3500,d=>{const x=featureById(d,fid);x.stage='tasks';[['Saved search model','unrefined'],['Save search from the filter bar','unrefined'],['Saved searches sidebar','unrefined']].forEach(([t,s],k)=>{d.issues[821+k]=I(821+k,t,s,{feature:fid,repo:x.repo})})});break;
+   case 'refineAll':{const ns=issuesOf(db,fid).filter(i=>i.status==='unrefined').map(i=>i.n);act('refine',ns);later(3600,d=>{featureById(d,fid).stage='building'});break}
+   case 'startReady':issuesOf(db,fid).filter(i=>i.status==='ready'&&!i.queued).forEach(i=>mut(d=>{newSession(d,{cmd:'implement-issue',arg:'#'+i.n,issue:i.n,feature:fid});d.issues[i.n].status='in_progress'}));toast('Started every ready issue');break;
+   case 'toggleAuto':mut(d=>{const x=featureById(d,fid);x.autobuild=!x.autobuild});toast(f.autobuild?'Auto-build off':'Auto-build on. Ready issues start as slots free up.');break;
+   case 'closeEpic':ask({title:`Close epic #${f.epic}?`,body:html`<p>Closes the epic and its ${issuesOf(db,fid).filter(i=>i.status!=='merged').length} open issues as completed.</p>`,okLabel:'Close epic',danger:1,ok:()=>toast(`Closed epic #${f.epic}`)});break;
+   case 'board':go('board');break;
+   default:if(a.startsWith('pr:'))setPanel({kind:'pr',n:+a.slice(3)});else if(a.startsWith('tab:'))go('feature',fid,a.slice(4));
+  }
+ };
+ const ctx={db,mut,route,go,repo,setRepo:r=>{setRepo(r);if(route.view==='feature')go('features')},openPanel:setPanel,scenario,setScenario,act,toast};
+ const nY=needsYou(db,scenario);
+ let view;
+ if(scenario==='onboarding'&&route.view!=='settings')view=html`<${Onboarding}/>`;
+ else switch(route.view){
+  case 'features':view=html`<${FeaturesView}/>`;break;
+  case 'feature':view=html`<${FeatureView} key=${route.id} id=${route.id} tab=${route.tab}/>`;break;
+  case 'board':view=html`<${BoardView}/>`;break;
+  case 'activity':view=html`<${ActivityView}/>`;break;
+  case 'session':view=html`<${SessionView} key=${route.id} id=${route.id}/>`;break;
+  case 'settings':view=html`<${SettingsView}/>`;break;
+  default:view=html`<${InboxView}/>`;
+ }
+ const title={inbox:'Inbox',features:'Features',feature:'Feature',board:'Board',activity:'Activity',session:'Session',settings:'Settings'}[route.view];
+ return html`<${Ctx.Provider} value=${ctx}>
+  <div className=${`app ${panel?'has-panel':''}`}>
+   <${Rail}/>
+   <main className="main">
+    ${scenario==='offline'&&html`<div className="banner t-bad top-banner"><${Icon} n="wifi"/><div className="grow"><p><b>Can't reach the aiw server at localhost:8420.</b> Retrying every 3 seconds. Actions are paused; what you see may be out of date.</p></div></div>`}
+    ${db.away&&html`<div className="banner t-away top-banner"><${Icon} n="moon"/><div className="grow"><p><b>Away until ${db.away.until}.</b> Claude answers questions that have a recommended option and retries failures. The rest waits in your inbox.</p></div><button className="btn sm" onClick=${()=>act('awayOff')}>I'm back</button></div>`}
+    <div className="topbar">
+     <button className="repo-mark mob-only" style=${{width:26,height:26,fontSize:12,border:0,cursor:'pointer'}} aria-label="Switch repo" onClick=${()=>setPalette(true)}>${repoBy(db,repo)?.name[0]}</button>
+     <h2 className="mob-only" style=${{fontSize:16}}>${title}</h2>
+     <button className="btn grow" style=${{justifyContent:'flex-start',color:'var(--muted)',fontWeight:500,maxWidth:520}} onClick=${()=>setPalette(true)}><${Icon} n="search"/><span className="grow ellipsis" style=${{textAlign:'left'}}>Search or jump to…</span><span className="kbd hide-sm">⌘K</span></button>
+     <span className="grow hide-sm"></span>
+     <button className="btn primary" onClick=${()=>setStart({})}><${Icon} n="plus"/><span className="hide-sm">New</span><span className="kbd hide-sm" style=${{background:'transparent',color:'inherit',borderColor:'currentColor',opacity:.6}}>N</span></button>
+    </div>
+    <div className="content">${view}</div>
+   </main>
+   ${panel&&html`<aside className="panel" aria-label="Details">${panel.kind==='issue'?html`<${IssuePanel} key=${'i'+panel.n} n=${panel.n}/>`:html`<${PrPanel} key=${'p'+panel.n} n=${panel.n}/>`}</aside>`}
+  </div>
+  <nav className="mob-nav">${[['inbox','Inbox','inbox',nY],['features','Features','layers'],['board','Board','board'],['activity','Activity','activity'],['settings','More','sliders']].map(([v,l,ic,n])=>html`<button key=${v} className=${route.view===v?'on':''} onClick=${()=>go(v)}><${Icon} n=${ic} s=${20}/>${l}${n?html`<span className="count">${n}</span>`:null}</button>`)}</nav>
+  ${palette&&html`<${Palette} onClose=${()=>setPalette(false)}/>`}
+  ${start&&html`<${StartDialog} init=${start} onClose=${()=>setStart(null)}/>`}
+  ${confirm&&html`<${Confirm} c=${confirm} onClose=${()=>setConfirm(null)}/>`}
+  ${keys&&html`<${Confirm} c=${{title:'Keyboard shortcuts',okLabel:'Done',ok:()=>{},body:html`<dl className="facts">${[['⌘K','Search or jump anywhere'],['N','Start something new'],['G then I / F / B / A / S','Inbox, Features, Board, Activity, Settings'],['Esc','Close panel or dialog'],['⌘ Enter','Send a form']].map(([k,v])=>html`<${React.Fragment} key=${k}><dt><span className="kbd">${k}</span></dt><dd>${v}</dd><//>`)}</dl>`}} onClose=${()=>setKeys(false)}/>`}
+  <div className="toasts" role="status" aria-live="polite">${toasts.map(t=>html`<div key=${t.id} className=${`toast ${t.bad?'bad':''}`}>${t.msg}${t.action&&html`<button onClick=${t.action[1]}>${t.action[0]}</button>`}</div>`)}</div>
+  <${Demo}/>
+ <//>`;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(html`<${App}/>`);
+</script>

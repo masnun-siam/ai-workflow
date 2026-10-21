@@ -11,8 +11,10 @@ from __future__ import annotations
 import glob
 import json
 import os
+import re
 import threading
 import time
+from datetime import datetime, timezone
 
 import shared
 import ui_notify
@@ -71,6 +73,58 @@ def index() -> dict:
             {"state": st, "round": rounds, "reason": h["paused"]} if st == "paused" else {"state": st, "round": rounds}
         )
     return {"pr": by_pr}
+
+
+class Conflict(Exception):
+    """The loop is not in a state that allows the action (HTTP 409)."""
+
+
+SKIP_CI_REPLY = "Skip CI for now, complete the grind, then come back and fix the CI"
+
+
+def _loop(repo: str, pr) -> tuple:
+    """(state file, header) of the loop for `repo`'s PR; Conflict when there is none."""
+    owner, _, name = str(repo).lower().partition("/")
+    for path, h in _state_files():
+        if (h["owner"].lower(), h["repo"].lower(), int(h["number"])) == (owner, name, pr):
+            return path, h
+    raise Conflict(f"no grind loop for {repo}#{pr}")
+
+
+def skip_ci(repo: str, pr: int) -> dict:
+    """A paused loop's "Skip CI for now": the decision goes to its newest finished /pr-grind session, then the
+    pause is cleared so the re-entry timer takes the loop on. Conflict when it is not paused or has no session."""
+    path, h = _loop(repo, pr)
+    if "paused" not in h or "done" in h:
+        raise Conflict("this grind is not paused")
+    pat = re.compile(rf"/pull/{pr}\b")
+    target = next(
+        (
+            r
+            for r in ui_sessions.list_sessions()
+            if str(r.get("command", "")).startswith("/pr-grind ")
+            and (r["command"] == f"/pr-grind {h['thread']}" or pat.search(r["command"]))
+            and r.get("session_id")
+            and r.get("status") in ("done", "failed", "stopped")
+        ),
+        None,
+    )
+    if not target:
+        raise Conflict("no finished grind session to reply to")
+    try:
+        ui_runner.send_prompt(target["id"], f"Human decision on the paused grind (PR #{pr}): {SKIP_CI_REPLY}")
+    except (ui_runner.Conflict, ui_runner.RunnerError, OSError) as e:
+        raise Conflict(str(e))
+    ui_runner._set_header(path, "paused", None)
+    return {"state": "running"}
+
+
+def stop(repo: str, pr: int) -> dict:
+    """End the loop from the UI: `done:` in its header, which the re-entry timer skips. The PR stays open."""
+    path, h = _loop(repo, pr)
+    if "done" not in h:
+        ui_runner._set_header(path, "done", f"{ui_runner._iso(datetime.now(timezone.utc))} \u2014 stopped from the UI")
+    return {"ok": True, "state": "done"}
 
 
 def _data(snap) -> dict:

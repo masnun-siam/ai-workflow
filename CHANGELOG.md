@@ -2,7 +2,35 @@
 
 ## Unreleased
 
+### Changed
+
+- **UI rewrite.** `aiw ui` has a new interface, and it is organised around "what needs me". The
+  **Inbox** collects everything that needs you across repos: questions from Claude, PRs ready to
+  merge, paused grinds, failed sessions, reviews at their round cap, worklogs to clean up. You act on
+  each item in place. A **Feature** is now one page from PRD draft to shipped, with one obvious next
+  step; Planning and Delivery are gone (the **Board** keeps the issues, in five columns), and the
+  Answer page is part of the session page. **Start** (the New button, `N`, or ⌘K) replaces New run.
+  Issues and PRs open in a side panel with their comments, checks, files and merge.
+  "AFK" is now **Away mode** and epic autopilot is **Auto-build**, so the two no longer share a
+  name. Light and dark themes, a phone layout, and keyboard shortcuts (`?` lists them) are built in.
+  Old bookmarks and push-notification links still open the right page; push links now point at the
+  new routes. Plugin users do not need Node: the built app ships in `run-engine/ui_dist/`.
+- Developers: the UI source is in `ui/` (React, TypeScript, Vite). Rebuild with `npm run build` and
+  commit `run-engine/ui_dist/`; a new `ui` CI job checks the build is current. `run-engine/ui_static/`
+  and its source-reading tests are removed, and `run_tests.sh` now uses a throwaway plugin data dir.
+
 ### Added
+
+- UI: **Start now** on a queued session starts it at once past the batch cap
+  (`POST /api/sessions/<id>/start-now`). A session waiting on an account limit still starts at the reset.
+- UI: `day` and `skill-feedback` are in the Start dialog.
+- `GET /api/inbox`, `POST /api/sessions/<id>/rerun`, `POST /api/grind/skip-ci|stop` and
+  `POST /api/review/<panel>/rounds`; `GET /api/prd` returns a `sha` and a save is refused when the file
+  changed on disk.
+
+### Removed
+
+- The `grind_round` field on Delivery cards (use `grind.round`) and the `/static/` route.
 
 - UI: a UX pass. Boards use the full window width and shrink empty columns to a strip; Delivery
   has a Blocked column, one **Start** with a ▾ for herdr, and **Close epic** in a lane ⋯ menu. A

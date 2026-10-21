@@ -178,7 +178,7 @@ def herdr(argv):
 
 L = fresh()
 r = ui_autopilot.start("o/r", "implement-issue", "4", "herdr", snapshot=s, launch=L, herdr=herdr)
-assert r == {"session": "herdr:issue-4", "via": "herdr"} and not L.bodies
+assert r == {"session": None, "via": "herdr", "tab": "issue-4"} and not L.bodies
 assert calls == [
     ["tab", "create", "--cwd", checkout, "--label", "issue-4"],
     ["agent", "start", "issue-4", "--kind", "claude", "--pane", "pane-7"],

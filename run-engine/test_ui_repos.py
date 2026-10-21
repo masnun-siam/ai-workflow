@@ -30,6 +30,7 @@ import ui_repos  # noqa: E402
 import ui_runner  # noqa: E402
 import ui_server  # noqa: E402
 import ui_sessions  # noqa: E402
+import ui_settings  # noqa: E402
 
 passed = 0
 
@@ -672,6 +673,59 @@ try:
     ok(
         "custom prompt: ask file verbatim, answer/diff line, 2-lens panel rooted at the session; none without lenses; offers"
     )
+
+    # --- request: stored at start (both start bodies), replayed by POST /api/sessions/<id>/rerun
+    def rerun(sid):
+        calls.clear()
+        with mock.patch.object(ui_runner, "start", fake_start):
+            s, data, _ = req(f"/api/sessions/{sid}/rerun", "POST", b"")
+        return s, json.loads(data)
+
+    reset_sessions()
+    body = {"repo": "o/r", "command": "dump", "args": "x", "peer_review": ["critical"], "claude_cmd": "claude"}
+    s, p = post(body)
+    assert s == 201 and ui_sessions.load(p["id"])["request"] == {
+        "repo": "o/r", "command": "dump", "args": "x", "claude_cmd": "claude", "lenses": ["critical"],
+    }, ui_sessions.load(p["id"])  # fmt: skip
+    s, p2 = rerun(p["id"])
+    assert s == 201 and p2["id"] != p["id"] and calls[-1][0] == "/dump x --review critical", (s, p2, calls)
+    assert ui_sessions.load(p2["id"])["request"] == ui_sessions.load(p["id"])["request"]
+    s, p = post({"repo": "o/r", "text": "hello", "batch": "wl-1", "issue": 5})
+    assert ui_sessions.load(p["id"])["request"] == {"repo": "o/r", "text": "hello", "issue": 5, "batch": "wl-1"}
+    with open(ui_settings._path(), "w", encoding="utf-8") as f:  # a vault that exists off this machine too (CI)
+        json.dump({"vault_dir": tempfile.mkdtemp()}, f)
+    s, p = post({"repo": "", "no_repo": True, "vault_folder": "05-Work/P/F", "command": "dump", "args": "idea"})
+    assert s == 201 and ui_sessions.load(p["id"])["request"]["vault_folder"] == "05-Work/P/F"
+    s, p3 = rerun(p["id"])
+    assert s == 201 and ui_sessions.load(p3["id"])["no_repo"] is True and "05-Work/P/F" in calls[-1][0], (s, p3)
+    ok("session records keep the start request; rerun replays it (lenses, no-repo vault folder)")
+
+    # a live duplicate refuses the rerun: 409 with the running session, nothing started
+    reset_sessions()
+    s, p = post({"repo": "o/r", "command": "implement-issue", "args": "7"})
+    s, d = rerun(p["id"])
+    assert s == 409 and d["id"] == p["id"] and d["href"] == f"/api/sessions/{p['id']}" and "error" in d and not calls, (
+        s,
+        d,
+    )
+    ui_sessions.update(p["id"], status="done")
+    s, d = rerun(p["id"])
+    assert s == 201 and calls[-1][0] == "/implement-issue 7", (s, d)
+    ok("rerun: 409 {error, id, href} while the original runs, 201 once it is done")
+
+    # records from before requests were stored: the command is posted as text; nothing to rerun -> 400
+    reset_sessions()
+    old = ui_sessions.create("/dump y", REPO_A)
+    s, d = rerun(old["id"])
+    assert (
+        s == 201 and calls[-1][:2] == ("/dump y", REPO_A) and ui_sessions.load(d["id"])["request"]["text"] == "/dump y"
+    ), (s, d, calls)
+    old2 = ui_sessions.create("", REPO_A)
+    s, d = rerun(old2["id"])
+    assert s == 400 and "nothing to rerun" in err(d) and not calls, (s, d)
+    assert req("/api/sessions/20200101T000000000000Z-aaaaaaaa/rerun", "POST", b"")[0] == 404
+    assert req("/api/sessions/nope/rerun", "POST", b"")[0] == 404
+    ok("rerun: a record without a request replays its command as text; no command -> 400; unknown -> 404")
 finally:
     srv.shutdown()
     srv.server_close()
