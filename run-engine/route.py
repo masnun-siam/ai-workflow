@@ -11,7 +11,8 @@ Usage:
   aiw ci status <pr-ref> [--watch]
   aiw threads list|resolve <pr-ref|node-id...>
   aiw autopilot <owner/repo> <epic> on|off
-  aiw grind-mode       # print deep or simple (Settings -> Repositories), read by /pr-grind each round
+  aiw grind-mode [--pr <url>]  # deep or simple: the PR's dispatch decides, else Settings; read by /pr-grind each round
+  aiw dispatch ...     # run an epic's child issues as parallel lanes
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ask  # noqa: E402
 import ci  # noqa: E402
 import dispatch  # noqa: E402
+import dispatch_cli  # noqa: E402
 import threads  # noqa: E402
 import ui_settings  # noqa: E402
 import ui_server  # noqa: E402
@@ -59,7 +61,7 @@ def cmd_autopilot(args) -> None:
 
 
 def cmd_grind_mode(args) -> None:
-    print(ui_settings.grind_mode())
+    print(dispatch_cli.grind_mode(args.pr))
 
 
 def main(argv=None) -> None:
@@ -83,10 +85,12 @@ def main(argv=None) -> None:
     p_ap.add_argument("state", choices=("on", "off"))
     p_ap.set_defaults(func=cmd_autopilot)
 
-    sub.add_parser("grind-mode", help="print the grind mode: deep or simple").set_defaults(func=cmd_grind_mode)
+    p_gm = sub.add_parser("grind-mode", help="print the grind mode: deep or simple")
+    p_gm.add_argument("--pr", default=None, help="PR url: the mode of the dispatch that owns it")
+    p_gm.set_defaults(func=cmd_grind_mode)
 
     # Each module owns its own argparse wiring.
-    for module in (threads, ci, ui_server, ask):
+    for module in (threads, ci, ui_server, ask, dispatch_cli):
         module.register(sub, add)
 
     args = parser.parse_args(argv)

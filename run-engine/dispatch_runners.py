@@ -85,7 +85,7 @@ class Herdr:
             return p.stdout or ""
 
     def start(self, lane, prompt, d):
-        label = f"issue-{lane['n']}"
+        label = lane.get("label") or f"issue-{lane['n']}"
         made = self._ok(
             [
                 "tab",
@@ -102,7 +102,7 @@ class Herdr:
         pane = _find(made, "pane_id") if not isinstance(made, str) else (made.split() or [""])[-1]
         if not pane:
             raise RuntimeError("herdr tab create returned no pane id")
-        name = f"aiw-{d['id']}-{lane['n']}"
+        name = f"aiw-{d['id']}-{label}"
         self._ok(
             ["agent", "start", name, "--kind", "claude", "--pane", pane, "--timeout", "120000", "--", *claude_args(d)],
             timeout=150,

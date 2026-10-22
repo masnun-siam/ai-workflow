@@ -214,12 +214,67 @@ dr.lane_action(d3["id"], K(22), "skip")
 assert dr.load(d3["id"])["lanes"][K(22)]["skip_reason"] == "skipped by you"
 print("  ok  gone, retry, pause, skip")
 
+# --- send and skip go through the outbox; channel rides on the grind prompt
+dr.lane_action(d3["id"], K(20), "resume")
+dr.lane_action(d3["id"], K(20), "send", "please rebase")
+try:
+    dr.lane_action(d3["id"], K(21), "send", "x")  # queued, no session
+    raise AssertionError("send to a lane without a session")
+except ValueError:
+    pass
+d3 = dr.load(d3["id"])
+dr.tick(d3, {}, run3, merge, now=500)
+assert run3.sent[-1] == (20, "please rebase") and "outbox" not in d3["lanes"][K(20)]
+assert dr.grind_prompt("u", "C1") == "/ai-workflow:pr-grind u --channel C1"
+assert dr.grind_prompt("u", "") == "/ai-workflow:pr-grind u" == dr.grind_prompt("u", "a b")
+print("  ok  outbox, channel")
+
+# --- end actions: open-pr needs a feature branch; qa and grind-pr start sessions
+gh_calls = []
+
+
+def fake_gh(argv):
+    gh_calls.append(argv)
+    out = "master\n" if argv[:2] == ["repo", "view"] else "https://github.com/o/r/pull/900\n"
+    return subprocess.CompletedProcess(argv, 0, out, "")
+
+
+try:
+    dr.request_end(d3["id"], "open-pr")
+    raise AssertionError("open-pr without a feature branch")
+except ValueError:
+    pass
+d5 = dr.create("o/r#50", "headless", {"feature_branch": "feature/x"}, [child(51)])
+try:
+    dr.request_end(d5["id"], "grind-pr")
+    raise AssertionError("grind-pr before open-pr")
+except ValueError:
+    pass
+dr.request_end(d5["id"], "open-pr")
+dr.request_end(d5["id"], "qa")
+d5 = dr.load(d5["id"])
+run5 = FakeRunner()
+dr.tick(d5, {}, run5, merge, now=1, gh=fake_gh)
+assert d5["final_prs"] == {"o/r": "https://github.com/o/r/pull/900"}
+assert gh_calls[1][:8] == ["pr", "create", "-R", "o/r", "--base", "master", "--head", "feature/x"]
+assert (
+    run5.started[0][0] == 50
+    and "verifier-locally" in run5.started[0][1]
+    and "on branch feature/x" in run5.started[0][1]
+)
+dr.save(d5)
+dr.request_end(d5["id"], "grind-pr")
+d5 = dr.load(d5["id"])
+dr.tick(d5, {}, run5, merge, now=2, gh=fake_gh)
+assert run5.started[-1] == (900, "/ai-workflow:pr-grind https://github.com/o/r/pull/900")
+print("  ok  end actions")
+
 # --- live settings edit, dispatch pause stops launches
 dr.set_settings(d3["id"], grind="simple", auto_merge=True)
 assert dr.load(d3["id"])["settings"]["grind"] == "simple"
 dp = dr.set_state(d3["id"], "paused")
 assert dr.startable(dp, {}) == []
-assert [x["id"] for x in dr.list_all()][:1] == [d3["id"]]
+assert dr.list_all()[0]["id"] == d5["id"] and d3["id"] in [x["id"] for x in dr.list_all()]
 try:
     dr.load("../etc")
     raise AssertionError("bad id loaded")
@@ -262,10 +317,10 @@ hd = dispatch_runners.Herdr("w1", cli)
 h = hd.start(
     {"repo": R, "n": 5}, "/ai-workflow:implement-issue 5", {"id": "abc", "settings": {"model": "opus", "effort": None}}
 )
-assert h == {"tab": "t1", "pane": "p1", "agent": "aiw-abc-5"}
+assert h == {"tab": "t1", "pane": "p1", "agent": "aiw-abc-issue-5"}
 assert calls[0] == ["tab", "create", "--workspace", "w1", "--cwd", co, "--label", "issue-5", "--no-focus"]
 assert calls[1][-4:] == ["--", "--dangerously-skip-permissions", "--model", "opus"]
-assert calls[2] == ["agent", "prompt", "aiw-abc-5", "/ai-workflow:implement-issue 5"]
+assert calls[2] == ["agent", "prompt", "aiw-abc-issue-5", "/ai-workflow:implement-issue 5"]
 assert hd.status(h) == ("working", None)  # idle but waiting on its own monitors
 assert hd.status({"tab": "gone"}) == ("gone", None)
 hd.close(h)

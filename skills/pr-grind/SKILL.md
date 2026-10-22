@@ -76,7 +76,7 @@ Header keys (lines above the first `## Round <n>`; names are pinned for the aiw 
 
 ## Step 2 — Exit check
 
-**Mode, every round.** Run `aiw grind-mode` now, never from memory: the owner can switch it while
+**Mode, every round.** Run `aiw grind-mode --pr <pr url>` now, never from memory (a dispatch that owns the PR sets it, else Settings): the owner can switch it while
 the loop runs. `deep` (the default) → the rule below. `simple` → also done the moment the PR is
 approved: this round's review from the reviewer has state `APPROVED`, or
 `gh pr view <pr> --json reviewDecision` says `APPROVED`. Then stop right away: fix, rebut and reply to

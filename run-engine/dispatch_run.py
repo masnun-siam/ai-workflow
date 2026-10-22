@@ -22,10 +22,11 @@ saves. The record lives at <data_dir>/dispatches/<id>.json; GitHub stays the tru
 
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import json
 import os
 import re
-import threading
 import time
 import uuid
 
@@ -46,7 +47,7 @@ LIMIT_BUFFER_SECONDS = 60
 MAX_EVENTS = 500
 CONTINUE = "Continue from where you were stopped."
 
-_lock = threading.RLock()  # ponytail: one UI server ticks; flock the dir if a second writer appears
+END_ACTIONS = ("open-pr", "qa", "grind-pr")
 
 
 # --------------------------------------------------------------------------- prompts
@@ -58,8 +59,19 @@ def implement_prompt(n: int, base) -> str:
     )
 
 
-def grind_prompt(pr_url: str) -> str:
-    return f"/ai-workflow:pr-grind {pr_url}"
+def grind_prompt(pr_url: str, channel=None) -> str:
+    ch = str(channel or "").strip()
+    return f"/ai-workflow:pr-grind {pr_url}" + (f" --channel {ch}" if ch.replace("_", "").isalnum() else "")
+
+
+def qa_prompt(epic: str, branch) -> str:
+    return (
+        f"Final QA for epic {epic}"
+        + (f" on branch {branch}" if branch else "")
+        + ": run /ai-workflow:verifier-locally "
+        "against every child issue's acceptance criteria, then test the whole feature end to end in the running app "
+        "with the browser tool. File each bug you find with /ai-workflow:create-tasks as a child issue of the epic."
+    )
 
 
 def conflict_prompt(pr: int, base) -> str:
@@ -79,7 +91,7 @@ def stage_prompt(lane: dict, settings: dict, pr_url=None):
     base = settings.get("feature_branch") or lane.get("base")
     return {
         "implementing": lambda: implement_prompt(lane["n"], base),
-        "grinding": lambda: grind_prompt(pr_url or ""),
+        "grinding": lambda: grind_prompt(pr_url or "", lane.get("channel")),
         "conflict_fix": lambda: conflict_prompt(lane.get("pr"), base),
         "followups": lambda: followups_prompt(lane["n"], lane.get("pr"), base),
     }.get(lane["stage"], lambda: None)()
@@ -154,7 +166,7 @@ def step(lane: dict, facts: dict, settings: dict, now: float) -> tuple:
             patch["pr"] = pr["n"]
             if _grind_on(settings, facts):
                 to("grinding")
-                acts.append(("send", grind_prompt(pr["url"])))
+                acts.append(("send", grind_prompt(pr["url"], facts.get("channel"))))
             else:
                 to("merge_gate")
             return patch, acts
@@ -179,7 +191,7 @@ def step(lane: dict, facts: dict, settings: dict, now: float) -> tuple:
                 patch["held"] = None
             if g.get("due") and g["due"] != lane.get("nudged") and agent in ("idle", None):
                 patch["nudged"] = g["due"]
-                acts.append(("send", grind_prompt(pr.get("url") or "")))
+                acts.append(("send", grind_prompt(pr.get("url") or "", facts.get("channel"))))
             elif agent == "blocked" and not lane.get("needs_you"):
                 patch["needs_you"] = "the grind waits on you"
                 acts.append(("notify", "needs_you", patch["needs_you"]))
@@ -366,14 +378,27 @@ def check_settings(s: dict) -> dict:
     return s
 
 
+@contextlib.contextmanager
+def locked(did: str):
+    """Cross-process lock on one dispatch: the server's tick and the CLI both write its file. Not re-entrant."""
+    with open(_path(did)[:-5] + ".lock", "w") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+
+
 def save(d: dict) -> None:
-    with _lock:
-        atomic_write_text(_path(d["id"]), json.dumps(d, indent=1))
+    atomic_write_text(_path(d["id"]), json.dumps(d, indent=1))
 
 
 def load(did: str) -> dict:
-    with open(_path(did), encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(_path(did), encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        raise ValueError(f"no dispatch {did}") from None
 
 
 def list_all() -> list:
@@ -395,7 +420,7 @@ def event(d: dict, lane_key, kind: str, text: str) -> dict:
 
 def set_settings(did: str, **kv) -> dict:
     """Live edit; takes effect at the next tick."""
-    with _lock:
+    with locked(did):
         d = load(did)
         d["settings"] = check_settings({**d["settings"], **kv})
         event(d, None, "settings", ", ".join(f"{k}={v}" for k, v in kv.items()))
@@ -406,7 +431,7 @@ def set_settings(did: str, **kv) -> dict:
 def set_state(did: str, state: str) -> dict:
     if state not in ("running", "paused", "cancelled"):
         raise ValueError("state must be running, paused or cancelled")
-    with _lock:
+    with locked(did):
         d = load(did)
         d["state"] = state
         if state == "cancelled":
@@ -416,28 +441,29 @@ def set_state(did: str, state: str) -> dict:
         return d
 
 
-LANE_ACTIONS = ("pause", "resume", "retry", "skip", "merge", "hold", "unhold")
+LANE_ACTIONS = ("pause", "resume", "retry", "skip", "merge", "hold", "unhold", "send")
 
 
-def lane_action(did: str, k: str, action: str, runner=None) -> dict:
-    with _lock:
+def lane_action(did: str, k: str, action: str, text=None) -> dict:
+    """The user's action on a lane. Session effects (close, send) go through the lane's outbox: the tick runs them."""
+    with locked(did):
         d = load(did)
         x = d["lanes"].get(k)
         if x is None:
-            raise KeyError(f"no lane {k}")
+            raise ValueError(f"no lane {k}")
         if action == "pause":
             x["paused"] = True
         elif action == "resume":
             x["paused"] = False
         elif action == "skip":
-            if x["stage"] in ACTIVE and runner and x.get("handle"):
-                runner.close(x["handle"])
+            if x["stage"] in ACTIVE and x.get("handle"):
+                x.setdefault("outbox", []).append(["close", None])
             x.update(stage="skipped", skip_reason="skipped by you")
         elif action == "retry":  # clear held/needs; a fresh session for the lane's stage at the next tick
             x.update(held=None, needs_you=None, paused=False)
             if x["stage"] == "skipped" or (x["stage"] == "implementing" and not x.get("pr")):
-                if runner and x.get("handle"):
-                    runner.close(x["handle"])
+                if x.get("handle"):
+                    x.setdefault("outbox", []).append(["close", None])
                 x.update(stage="queued", skip_reason=None, handle=None)
             elif x["stage"] in ACTIVE:
                 x["restart"] = True
@@ -445,11 +471,83 @@ def lane_action(did: str, k: str, action: str, runner=None) -> dict:
             x["force_merge"] = True
         elif action in ("hold", "unhold"):
             x["hold_merge"] = action == "hold"
+        elif action == "send":
+            if not isinstance(text, str) or not text.strip() or len(text) > 2000:
+                raise ValueError("send needs a message of 1 to 2000 characters")
+            if not x.get("handle"):
+                raise ValueError(f"lane {k} has no session to send to")
+            x.setdefault("outbox", []).append(["send", text.strip()])
         else:
             raise ValueError(f"action must be one of {LANE_ACTIONS}")
         event(d, k, "lane", action)
         save(d)
         return d
+
+
+def request_end(did: str, action: str) -> dict:
+    """An end-of-dispatch action, run by the next tick: open-pr (feature branch -> default branch, per repo),
+    qa (a final QA session), grind-pr (grind the PRs open-pr opened). Never automatic."""
+    if action not in END_ACTIONS:
+        raise ValueError(f"end action must be one of {END_ACTIONS}")
+    with locked(did):
+        d = load(did)
+        if action == "open-pr" and not d["settings"].get("feature_branch"):
+            raise ValueError("open-pr needs a feature branch")
+        if action == "grind-pr" and not d.get("final_prs"):
+            raise ValueError("grind-pr needs the PR from open-pr first")
+        d.setdefault("end_requests", []).append(action)
+        event(d, None, "end", f"requested {action}")
+        save(d)
+        return d
+
+
+def _repos(d: dict) -> list:
+    return sorted({x["repo"] for x in d["lanes"].values()})
+
+
+def run_end(d: dict, action: str, runner, gh) -> str:
+    """One end action; returns what happened. gh(argv) -> CompletedProcess."""
+    epic_repo, _, epic_n = d["epic"].partition("#")
+    fb = d["settings"].get("feature_branch")
+    if action == "open-pr":
+        out = []
+        for repo in _repos(d):
+            base = gh(
+                ["repo", "view", repo, "--json", "defaultBranchRef", "-q", ".defaultBranchRef.name"]
+            ).stdout.strip()
+            p = gh(
+                [
+                    "pr",
+                    "create",
+                    "-R",
+                    repo,
+                    "--base",
+                    base or "master",
+                    "--head",
+                    fb,
+                    "--title",
+                    f"Epic #{epic_n}: merge {fb}",
+                    "--body",
+                    f"Every child of {d['epic']} is merged into `{fb}`.",
+                ]
+            )
+            if p.returncode != 0:
+                raise RuntimeError(f"gh pr create on {repo} failed: {(p.stderr or p.stdout).strip()[:200]}")
+            url = p.stdout.strip().splitlines()[-1]
+            d.setdefault("final_prs", {})[repo] = url
+            out.append(url)
+        return "opened " + ", ".join(out)
+    if action == "qa":
+        lane = {"repo": epic_repo, "n": int(epic_n), "label": f"qa-{epic_n}"}
+        d["qa"] = runner.start(lane, qa_prompt(d["epic"], fb), d)
+        return "QA session started"
+    for repo, url in (d.get("final_prs") or {}).items():
+        d.setdefault("final_grinds", {})[repo] = runner.start(
+            {"repo": repo, "n": int(url.rstrip("/").split("/")[-1]), "label": f"grind-{repo.split('/')[-1]}"},
+            grind_prompt(url),
+            d,
+        )
+    return "grind started on " + ", ".join((d.get("final_prs") or {}).values())
 
 
 # --------------------------------------------------------------------------- tick
@@ -461,8 +559,13 @@ def gh_merge(repo: str, pr: int):
     return p.returncode == 0, (p.stderr or p.stdout or "").strip()[:300]
 
 
-def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None) -> list:
-    """Step every lane, run its actions, launch the startable ones. Returns the new events."""
+def _gh(argv):
+    return run(["gh", *argv], timeout=120)
+
+
+def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None, gh=_gh) -> list:
+    """Step every lane, run its actions, launch the startable ones, run end requests. Returns the new events.
+    The caller holds `locked(d["id"])` around load + tick."""
     now = now or time.time()
     new: list = []
 
@@ -471,9 +574,18 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None) ->
         if notify and kind in ("needs_you", "held", "awaiting_merge", "finished"):
             notify(d, k, kind, text)
 
-    if d["state"] in ("cancelled", "done"):
-        return new
     for k, x in d["lanes"].items():
+        for kind, text in x.pop("outbox", None) or []:
+            try:
+                if kind == "send":
+                    runner.send(x["handle"], text)
+                elif x.get("handle"):
+                    runner.close(x["handle"])
+                    x["handle"] = None
+            except Exception as e:  # noqa: BLE001
+                ev(k, "needs_you", f"{kind} failed: {e}")
+        if d["state"] in ("cancelled", "done"):
+            continue
         f = facts.get(k) or {}
         if x.pop("restart", None):
             try:
@@ -513,6 +625,11 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None) ->
             except Exception as e:  # noqa: BLE001 - one lane's failure never stops the others
                 x["needs_you"] = f"{a[0]} failed: {e}"
                 ev(k, "needs_you", x["needs_you"])
+    for action in d.pop("end_requests", None) or []:
+        try:
+            ev(None, "end", run_end(d, action, runner, gh))
+        except Exception as e:  # noqa: BLE001
+            ev(None, "needs_you", f"{action} failed: {e}")
     for k in startable(d, facts):
         x = d["lanes"][k]
         base = d["settings"].get("feature_branch") or x.get("base")
