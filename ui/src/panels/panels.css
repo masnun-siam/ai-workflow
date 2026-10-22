@@ -15,4 +15,5 @@
 .p-diff .ln-hunk{background:var(--sunk);color:var(--muted)}
 .p-commit{display:grid;grid-template-columns:64px minmax(0,1fr);gap:2px 10px;padding:6px 0;border-bottom:1px solid var(--line)}
 .p-foot textarea{flex:1 1 100%}
-.panel .tabs-list{margin:0 -4px}
+.panel .tabs-list{margin:0 -4px;gap:0}
+.panel .tabs-list [role=tab]{padding:9px 8px}

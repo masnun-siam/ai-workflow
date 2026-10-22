@@ -106,6 +106,7 @@ def shape(pr: dict, files: list, commits: list, comments: list, reviews: list, r
         "created_at": pr.get("created_at"),
         "head": (pr.get("head") or {}).get("ref"),
         "base": (pr.get("base") or {}).get("ref"),
+        "conflict": pr.get("mergeable_state") == "dirty",  # conflicts with the base (GitHub's merge check)
         "labels": [
             {"name": x.get("name"), "color": x.get("color")} for x in pr.get("labels") or [] if isinstance(x, dict)
         ],

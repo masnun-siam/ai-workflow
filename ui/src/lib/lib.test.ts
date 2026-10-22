@@ -39,6 +39,16 @@ describe('nextStep (FR-12)', () => {
   it('approved -> create tasks', () => {
     expect(nextStep(feat(prd())).primary.action).toEqual({ kind: 'createTasks' });
   });
+  it('no open epic: open children come from whichever lane holds them', () => {
+    const p = prd({ epic: null, issues: 1, column: 'refined', children: [{ n: 7, title: 't', refined: true }] });
+    const loose: DeliveryLane = { epic: null, title: '', autopilot: false, cap: 2, running: 0, cards: [card({ n: 7 }), card({ n: 8 })] };
+    const f = joinFeatures([p], [loose])[0];
+    expect(f.issues.map((i) => i.n)).toEqual([7]);
+    expect(nextStep(f).primary).toEqual({ label: 'Start 1 now', action: { kind: 'startReady', issues: [7] } });
+  });
+  it('done column is shipped even with no merged cards in the lane', () => {
+    expect(feat(prd({ column: 'done' }), []).stage).toBe('shipped');
+  });
   it('tasks: refine N, secondary start ready', () => {
     const f = feat(prd({ issues: 2, unrefined: [2], column: 'tasks_filed' }), [card({ n: 2, column: 'unrefined' }), card({ n: 3 })]);
     expect(f.stage).toBe('tasks');
@@ -49,7 +59,7 @@ describe('nextStep (FR-12)', () => {
   it('building: merge, auto-build, or open board', () => {
     const p = prd({ issues: 2 });
     const pr = { n: 9, draft: false, ci: 'success', url: '', review: 'approved' as const };
-    const m = nextStep(feat(p, [card({ n: 1, column: 'in_review', pr }), card({ n: 2 })]));
+    const m = nextStep(feat(p, [card({ n: 1, column: 'in_review', pr, mergeable: true }), card({ n: 2 })]));
     expect(m.primary).toEqual({ label: 'Review and merge', action: { kind: 'merge', pr: 9 } });
     const a = nextStep(feat(p, [card({ n: 1, column: 'in_progress' }), card({ n: 2 })]));
     expect(a.primary.label).toBe('Turn on auto-build');
@@ -63,10 +73,10 @@ describe('nextStep (FR-12)', () => {
     expect(f.stage).toBe('shipped');
     expect(nextStep(f).primary.action).toEqual({ kind: 'closeEpic' });
   });
-  it('a draft pr is not mergeable', () => {
-    const pr = { n: 9, draft: true, ci: 'success', url: '', review: 'approved' as const };
-    const s = nextStep(feat(prd({ issues: 1 }), [card({ column: 'draft_pr', pr })]));
-    expect(s.primary.label).not.toBe('Review and merge');
+  it('merge follows the server rule (card.mergeable), not the PR fields', () => {
+    const pr = { n: 9, draft: false, ci: 'success', url: '', review: 'approved' as const };
+    expect(nextStep(feat(prd({ issues: 1 }), [card({ column: 'in_review', pr, mergeable: false })])).primary.label).not.toBe('Review and merge');
+    expect(nextStep(feat(prd({ issues: 1 }), [card({ column: 'in_review', pr: { ...pr, review: 'none' }, mergeable: true })])).primary.action).toEqual({ kind: 'merge', pr: 9 });
   });
 });
 

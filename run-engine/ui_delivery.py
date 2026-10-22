@@ -7,12 +7,13 @@ Inputs (plain data, no I/O):
   settings       {auto_grind, autopilot_cap, slack_channel, autopilot}; `autopilot` is a list of epic
                  numbers or a {epic: bool} map (the repo's autopilot epics); cap defaults to 2
   cleanup_flags  {issue_n: {uncommitted, unpushed}} for merged issues that need cleanup (ui_mergeclean)
+  solo           the user owns the repo (ui_gh.solo)
 
 Result: {repo, stale, fetched_at, cap, running, auto_grind, lanes: [{epic, title, autopilot, cap, running, cards}]},
 one lane per open epic plus a final "No epic" lane (epic None). Card:
-{n, title, column, priority, blocked_by: [n], pr: {n, draft, ci, url, review} | None,
- session: {id, status} | None, grind: {state, round, reason} | None,
- needs_cleanup: None | {uncommitted, unpushed}}.
+{n, title, column, priority, blocked_by: [n], pr: {n, draft, ci, url, review, conflict} | None,
+ session: {id, status} | None, grind: {state, round, reason, thread} | None, grind_on: bool,
+ mergeable: bool (ui_inbox.merge_ready), needs_cleanup: None | {uncommitted, unpushed}}.
 `review` is approved | changes_requested | review_required | none. `grind` is the PR's loop (state running |
 idle | paused; reason only when paused), None when it has none or is done.
 `column` is ready | in_progress | draft_pr | in_review | grinding | merged. Placement of an open
@@ -65,7 +66,7 @@ def _epics(settings) -> set:
     return {int(k) for k, v in a.items() if v} if isinstance(a, dict) else {int(x) for x in a}
 
 
-def build(repo, snapshot, sessions, grind_index, settings, cleanup_flags) -> dict:
+def build(repo, snapshot, sessions, grind_index, settings, cleanup_flags, solo=False) -> dict:
     data = snapshot.get("data") or {}
     settings = settings or {}
     cap = settings.get("autopilot_cap") or DEFAULT_CAP
@@ -112,11 +113,14 @@ def build(repo, snapshot, sessions, grind_index, settings, cleanup_flags) -> dic
             column = "unrefined"  # an epic's child still to refine
         else:
             continue  # a loose non-refined issue: not on the board
+        on = ui_inbox.grind_on(settings, i["n"])
         lanes[epic_of(i)].append(
             {
                 "n": i["n"],
                 "title": i["title"],
                 "column": column,
+                "grind_on": on,
+                "mergeable": ui_inbox.merge_ready(pr, grind, on, solo),
                 "priority": i["priority"],
                 "blocked_by": [b["n"] for b in i["blocked_by"] if b["state"] == "OPEN"],
                 "pr": {
@@ -125,6 +129,7 @@ def build(repo, snapshot, sessions, grind_index, settings, cleanup_flags) -> dic
                     "ci": pr["ci"],
                     "url": pr["url"],
                     "review": pr.get("review", "none"),
+                    "conflict": pr.get("conflict", False),
                 }
                 if pr
                 else None,
@@ -133,6 +138,7 @@ def build(repo, snapshot, sessions, grind_index, settings, cleanup_flags) -> dic
                     "state": grind["state"],
                     "round": grind["round"],
                     "reason": ui_inbox.split_reason(grind.get("reason"))[1],
+                    "thread": grind.get("thread"),
                 }
                 if grind and grind.get("state") != "done"
                 else None,
@@ -147,6 +153,8 @@ def build(repo, snapshot, sessions, grind_index, settings, cleanup_flags) -> dic
                 "n": n,
                 "title": m["title"],
                 "column": "merged",
+                "grind_on": False,
+                "mergeable": False,
                 "priority": None,
                 "blocked_by": [],
                 "pr": {"n": m["n"], "draft": False, "ci": "success", "url": m["url"], "review": "none"},

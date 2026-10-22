@@ -18,13 +18,32 @@
 - Developers: the UI source is in `ui/` (React, TypeScript, Vite). Rebuild with `npm run build` and
   commit `run-engine/ui_dist/`; a new `ui` CI job checks the build is current. `run-engine/ui_static/`
   and its source-reading tests are removed, and `run_tests.sh` now uses a throwaway plugin data dir.
+- `aiw ui` spends far less of the GitHub rate limit. Each board poll is a 1-point probe, and the full
+  6-point query runs only when the probe sees a change. A repo nobody is viewing (no UI request for 2
+  minutes, no live session) polls every 10 minutes instead of every minute. Under 1000 GraphQL points
+  left, every repo slows to 10 minutes, so the poller leaves the budget to the agents. A rate limit now
+  waits for GitHub's reported reset instead of a fixed 10 minutes.
 
 ### Added
 
+- UI: a **Grinding** switch per issue (default: the repo's auto-grind). Merge appears once CI is green
+  and the PR is approved on GitHub (no approval needed on a repo you own), and with grinding on only
+  once the grind is done too. With it on, the grind starts by itself when the PR turns ready (or at
+  once, if it already is). Turning it off stops a running grind. The
+  Inbox, Features list (**Merge #n** per PR), Issues tab and Board all follow this rule.
+- UI: a PR that conflicts with its base can't be merged from the UI and shows **Resolve conflicts** (PR
+  panel, Inbox, Board/Issues row). It starts a session that merges the base branch in, resolves the
+  conflicts, verifies and pushes; the PR shows up as ready to merge in the Inbox once the merge rule
+  holds again.
+- **Grinding mode** in Settings → Repositories: Deep (default, as before) or Simple, where a grind
+  stops at the round the PR is approved instead of fixing the remaining findings. It applies to every
+  grind, running ones included, from their next round. `aiw grind-mode` prints it.
+- UI: an issue and its PR now open in one panel: an Issue tab, then the PR's tabs beside it once there
+  is a PR. **Open Slack thread** shows while a grind runs.
 - UI: **Start now** on a queued session starts it at once past the batch cap
   (`POST /api/sessions/<id>/start-now`). A session waiting on an account limit still starts at the reset.
 - UI: `day` and `skill-feedback` are in the Start dialog.
-- `GET /api/inbox`, `POST /api/sessions/<id>/rerun`, `POST /api/grind/skip-ci|stop` and
+- `GET /api/inbox`, `POST /api/sessions/<id>/rerun`, `POST /api/grind/skip-ci|stop|issue` and
   `POST /api/review/<panel>/rounds`; `GET /api/prd` returns a `sha` and a save is refused when the file
   changed on disk.
 

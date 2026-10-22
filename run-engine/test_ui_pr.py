@@ -43,6 +43,8 @@ d = ui_pr.shape(
     ],
     {"statusCheckRollup": [{"name": "ci", "detailsUrl": "l", "status": "COMPLETED", "conclusion": "FAILURE"}]},
 )
+assert d["conflict"] is False
+assert ui_pr.shape({"mergeable_state": "dirty"}, [], [], [], [], {})["conflict"] is True
 assert (
     d["state"] == "merged"
     and d["head"] == "feat"

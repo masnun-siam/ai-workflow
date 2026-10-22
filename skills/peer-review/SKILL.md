@@ -59,6 +59,10 @@ the rounds, and relays to you. Lenses never message each other or you; the UI is
    in the scratchpad or a temp dir: `## Ask` (the user's request, verbatim), `## Answer`
    (your final answer and anything you did not do), `## Diff` (`git diff` of the change; confirm
    the start point with the user, never guess it, and leave out secret files and lockfiles).
+   When the argument is a task that ends in a change, first write the plan as a doc artifact and
+   run the panel on it before implementing; then run the panel on the change. When the Answer
+   cites a test run, run the suite with `CLAUDE_PLUGIN_DATA=$(mktemp -d)` so the user's data dir
+   cannot fail it.
 2. **Lenses.** `--lenses` if given, otherwise `critical`. The pool is critical, ceo, cto,
    security, qa, ux, performance. For a doc a PRD offers all seven; pick the ones that fit. The
    lens descriptions are `peer_review.lenses` in `run-engine/config.json`; paste each lens's
@@ -66,12 +70,15 @@ the rounds, and relays to you. Lenses never message each other or you; the UI is
 3. **Round.** In one message, spawn one `ai-workflow:peer-reviewer` subagent per lens, in
    parallel, each with `model: "opus"`. Each prompt names: the artifact path, the lens and its
    description, the round number, and from round 2 on that the artifact was revised. Tell it to
-   end with `Verdict: approve` or `Verdict: changes`.
+   end with `Verdict: approve` or `Verdict: changes`. From round 2, resume each lens's subagent
+   (SendMessage) with the revision note instead of spawning a new one, so it re-checks its own
+   findings.
 4. **Read.** Take each subagent's final message; its last line is the verdict. A message with no
    `Verdict:` line is not a verdict: re-spawn that lens once, and if it is still missing, stop and
    say which lens.
 5. **Revise.** If any lens says `changes`, revise the artifact in place as in the root procedure
-   above, answer every finding, and go to 3 with the next round number.
+   above, answer every finding, and go to 3 with the next round number. Before revising, ask the
+   user every finding only they can settle in one AskUserQuestion, then revise with the answers.
 6. **Stop** when every lens approves in the same round, or after round 5. At the cap, list the
    open findings for the user and do not approve anything. A finding only the user can settle
    goes to the user, never into the artifact as a guess.

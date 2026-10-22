@@ -11,6 +11,7 @@ Usage:
   aiw ci status <pr-ref> [--watch]
   aiw threads list|resolve <pr-ref|node-id...>
   aiw autopilot <owner/repo> <epic> on|off
+  aiw grind-mode       # print deep or simple (Settings -> Repositories), read by /pr-grind each round
 """
 
 from __future__ import annotations
@@ -57,6 +58,10 @@ def cmd_autopilot(args) -> None:
     print(json.dumps({"repo": args.repo, "autopilot": epics}))
 
 
+def cmd_grind_mode(args) -> None:
+    print(ui_settings.grind_mode())
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(
         prog="aiw", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -77,6 +82,8 @@ def main(argv=None) -> None:
     p_ap.add_argument("epic", help="epic issue number")
     p_ap.add_argument("state", choices=("on", "off"))
     p_ap.set_defaults(func=cmd_autopilot)
+
+    sub.add_parser("grind-mode", help="print the grind mode: deep or simple").set_defaults(func=cmd_grind_mode)
 
     # Each module owns its own argparse wiring.
     for module in (threads, ci, ui_server, ask):

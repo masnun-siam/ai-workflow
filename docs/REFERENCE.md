@@ -30,6 +30,7 @@ aiw ask                                 a headless session asks the user a quest
 aiw ci status                           check state plus the failing job's log
 aiw threads list|resolve                PR review threads
 aiw autopilot <owner/repo> <epic> on|off  switch autopilot for an epic (works without the UI)
+aiw grind-mode                          print the grind mode, deep or simple (read by /pr-grind each round)
 ```
 
 ## aiw ui
@@ -59,8 +60,8 @@ turns Away mode on or off.
 **Inbox.** Everything that needs you, across repos, grouped Blocking everything, Answer Claude, Decide,
 Fix, Set up and Waiting (nothing to do); the rail badge and tab title count all but Waiting. Items: GitHub CLI
 signed out; a session asking a question (answered inline); a peer review at its round cap or with every
-lens approving (Approve PRD anyway, Run 2 more rounds); a PR that is approved with green checks (Review
-and merge); a paused grind (Skip CI and continue, Stop grind); a failed session (Retry, Continue in
+lens approving (Approve PRD anyway, Run 2 more rounds); a PR ready to merge (Review and merge, see
+**Merge rule**); a PR with merge conflicts (Resolve conflicts); a paused grind (Skip CI and continue, Stop grind); a failed session (Retry, Continue in
 terminal); a merged issue whose worktree has unsaved work (Review and clean up); a `local/` repo with no
 GitHub remote (Publish to GitHub); a usage-limited session (Resume on another account); a queued session
 (Start now, Cancel). An item disappears within a poll after its condition clears.
@@ -69,7 +70,8 @@ repo registry and the board polls; a repo whose board data is stale is listed in
 session items only.
 
 **Features.** One row per PRD in the current repo with its stage (PRD draft, PRD review, Approved,
-Tasks, Building, Shipped), progress and one next-step button. A feature page shows a stage stepper, a
+Tasks, Building, Shipped), progress, a **Merge #n** button for each of its PRs ready to merge, and one
+next-step button. A feature page shows a stage stepper, a
 **Next step** box and tabs **Issues**, **PRD**, **Peer review** and **Sessions**. Issues: a table by
 status with signals (priority, PR, CI, review, grind, live session, failed last run, cleanup), one
 action per row (Refine, Start, Retry, Answer, Merge, Grind, Skip CI, Clean up), the **Auto-build**
@@ -89,20 +91,42 @@ answer `{session: null, via: "herdr", tab}` because herdr tabs are not tracked),
 
 **Board data.** A PR belongs to an issue when GitHub links it, when its body says Closes, Fixes or
 Resolves #n, or when its branch starts `issue-<n>-` (GitHub links closing keywords only for PRs into
-the default branch, so a staging-based repo needs the last two). One GitHub GraphQL call per watched
-repo per poll, every 60 s (15 s while a PR's CI is pending), kept in memory. A repo is watched while it
-has a live session or was opened in the last 7 days. A rate limit pauses fetching for 10 minutes and
-the boards show the last data as stale with the reason and a **Refresh** (`?refresh=1` on the board GET
-fetches now). After each fresh poll the server runs Auto-build (refined, unblocked issues of
+the default branch, so a staging-based repo needs the last two). Each poll of a watched repo is a
+1-point GraphQL probe (newest issue and PR update, open PRs' CI, conflict and review state); the full
+query (about 6 points) runs only when the probe's answer changed, on **Refresh** or after a write, and
+at least every 10 minutes. Results are kept in memory. A repo is watched while it has a live session or
+was opened in the last 7 days. It polls every 60 s (15 s while a PR's CI is pending) while it has a live
+session or the UI asked about it in the last 2 minutes (the global Inbox counts for every watched
+repo), else every 10 minutes. Every response reports the token's GraphQL budget, which the agents share:
+under 1000 points left, every repo polls every 10 minutes until the reset. A rate limit pauses fetching
+until that reset (10 minutes when the budget was not low) and the boards show the last data as stale
+with the reason and a **Refresh** (`?refresh=1` on the board GET fetches now). After each fresh poll the server runs Auto-build (refined, unblocked issues of
 switched-on epics, by `priority:` label then number, up to the repo's cap), merge cleanup, and grind
-autostart (a PR that turned ready on a repo with auto-grind on). Nothing runs on stale data, and
-nothing merges a PR without a click.
+autostart (a PR that turned ready whose issue has grinding on; a PR with no issue follows the repo's
+auto-grind). Nothing runs on stale data, and nothing merges a PR without a click.
 
-**Panels.** An issue or PR opens in a side panel (full screen on a phone). Issues show the body,
-comments (with a comment box), blockers and sessions, and close (completed or not planned) or reopen.
-A PR has Overview, Checks, Conversation, Files and Commits tabs, grind state with **Skip CI** and
-**Stop**, and **Merge** (a merge commit, never squash; the confirm lists failing or running checks,
-requested changes and a missing approval but does not block).
+**Merge rule.** Each issue has a **Grinding** switch (in its panel); an untouched issue follows the
+repo's auto-grind. A PR shows Merge (Inbox, Features list, feature Issues tab, Board) when it is not a
+draft, does not conflict with its base (GitHub's `mergeable` is not `CONFLICTING`), CI is green and GitHub's review decision is approved (skipped when the repo's owner is your `gh`
+login), and with grinding on its grind is also done (stopped from the UI counts). Turning grinding
+on starts a grind at once when the PR is already ready and has none; turning it off stops a running or
+paused grind (the PR stays open). Delivery cards carry `grind_on` and `mergeable`. The switches are in
+`issue_grind.json`. `POST /api/grind/issue` (`{repo, issue, on}`).
+
+**Panels.** An issue and its PR share one side panel (full screen on a phone): an **Issue** tab, and
+once the issue has a PR, **PR overview**, Checks, Conversation, Files and Commits beside it. Opened on
+an issue it starts on Issue; opened from a PR action (Merge, Open PR) on PR overview; a PR with no
+issue on the board has only the PR tabs. The header holds the **Grinding** switch and, while a grind
+runs or is paused, **Open Slack thread**. The Issue tab shows the body, comments (with a comment box),
+blockers and sessions, and close (completed or not planned) or reopen. PR overview has grind state with
+**Skip CI** and **Stop**; the footer has **Merge** on every tab
+(a merge commit, never squash; the confirm lists failing or running checks, requested changes and a
+missing approval but does not block; disabled while the PR conflicts with its base, next to **Resolve
+conflicts**). Resolve conflicts, also
+the row action and an Inbox Fix item for a conflicting PR, starts one session that merges the base into
+the PR branch in its worktree (never a rebase or force-push), resolves, runs `/verifier-locally` and
+pushes; while it runs the button is a **Resolving…** link to it. Once the merge rule holds the usual
+ready-to-merge Inbox item appears.
 `POST /api/issues/<o>/<r>/<n>/comment|state`, `POST /api/pulls/<o>/<r>/<n>/comment|merge`,
 `POST /api/grind/skip-ci|stop` (`{repo, pr}`; 409 when there is nothing to skip or stop),
 `GET /api/prd?repo=&path=` (returns `sha`), `POST /api/prd` (takes `base_sha`; 409 when it changed).
@@ -136,7 +160,11 @@ once per PR per window), and retries failed sessions on a 2m/10m/30m/1h backoff.
 one push sums it up and the Inbox shows a "While you were away" log until dismissed. State is
 `afk.json`. `POST /api/afk` (start), `POST /api/afk/stop|dismiss`.
 
-**Settings** (`#/settings/repos|accounts|notifications|review|vault`). **Repositories**: one table of
+**Settings** (`#/settings/repos|accounts|notifications|review|vault`). **Repositories**: the global
+**Grinding** mode, Deep (default: a grind runs until the reviewer has no blocker or should-fix left) or
+Simple (a grind stops, fixing nothing more, at the round where the PR is approved: the reviewer's
+review is an approval or GitHub's reviewDecision is approved). `/pr-grind` reads it every round, so a
+change reaches running grinds too (`grind_mode` in `ui_settings.json`). Then one table of
 the registered checkouts (`checkouts.json`) with GitHub status or **Publish**, auto-grind (default off),
 Auto-build cap (1–5, default 2), the Slack review channel grind posts to (`repos[owner/repo]` in
 `ui_settings.json`; `autopilot` maps a repo to its epics) and **Remove** (its clone is untouched), plus
@@ -205,6 +233,7 @@ Nothing stateful lives in this repo. `aiw paths` resolves it under `$CLAUDE_PLUG
 | `ui_settings.json` | the named `claude` commands, the vault path |
 | `checkouts.json` | the registered repo checkouts |
 | `pr-grind/` | one markdown state file per PR under grind |
+| `issue_grind.json` | each issue's Grinding switch, by repo (unset issues follow the repo's auto-grind) |
 | `peer-review/` | one directory per panel: `panel.json` and `round-<n>/<lens>.md` verdicts |
 | `afk.json` | the Away mode window and its log |
 | `ui.json` | push notifications and `public_url` (mode 0600) |

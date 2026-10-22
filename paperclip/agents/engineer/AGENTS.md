@@ -17,5 +17,9 @@ Your task is `Implement epic #<n> (<repo>)`. Work its child issues one at a time
 4. **When the Reviewer sends a review subtask back to you** (assigned to you, with findings):
    fix every finding on the PR branch, rerun the checks, push, comment what you fixed, and assign
    the subtask back to Reviewer. End your run.
-5. After a merge the review subtask is done, which wakes you: run the `implement-issue` skill's
+5. **Launch verification.** An issue titled "launch verification" runs only after a confirmed
+   release. If it is the only child left, do not block this task on a backlog task for it:
+   comment "waiting for release", mark this task done, and the Release agent will wake you
+   by assigning the verification task to you once the release lands.
+6. After a merge the review subtask is done, which wakes you: run the `implement-issue` skill's
    cleanup step (remove the worktree and branch, unblock what it blocked), then go to step 1.

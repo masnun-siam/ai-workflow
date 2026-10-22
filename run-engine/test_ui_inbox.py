@@ -148,7 +148,36 @@ r = one(res, "pr_ready")
 assert (r["group"], r["key"], r["repo"], r["pr"], r["issue"]) == ("decide", "pr_ready:o/r#1", "o/r", 1, 9)
 assert (r["title"], r["reviewer"], r["checks"], r["url"]) == ("t1", "bob", 3, "u1")
 assert "pr_ready" not in types(build(snapshots={"o/r": snap(prs[1:], issues)}))
-print("  ok  pr_ready")
+
+
+# the user owns the repo: no approval needed
+def ready_prs(res):
+    return [i["pr"] for i in res["items"] if i["type"] == "pr_ready"]
+
+
+assert ready_prs(build(snapshots={"o/r": snap(prs, issues)}, solo={"O/R": True})) == [1, 4, 6]
+# grinding on (repo default, or the issue's switch): also the grind is done (stopped counts); approval still needed
+on = {"o/r": {"auto_grind": True}}
+done = {"pr": {("o", "r", 1): {"state": "done", "round": 2}, ("o", "r", 6): {"state": "done", "round": 1}}}
+assert "pr_ready" not in types(build(snapshots={"o/r": snap(prs, issues)}, settings=on))
+assert ready_prs(build(snapshots={"o/r": snap(prs, issues)}, settings=on, grind_index=done)) == [1]
+assert ready_prs(build(snapshots={"o/r": snap(prs, issues)}, settings=on, grind_index=done, solo={"o/r": True})) == [
+    1,
+    6,
+]
+off9 = {"o/r": {"auto_grind": True, "issue_grind": {9: False}}}
+assert ready_prs(build(snapshots={"o/r": snap(prs, issues)}, settings=off9)) == [1], "#9 is off"
+on9 = {"o/r": {"auto_grind": False, "issue_grind": {9: True}}}
+assert "pr_ready" not in types(build(snapshots={"o/r": snap(prs[:1], issues)}, settings=on9))
+assert not ui_inbox.merge_ready({"draft": False, "ci": "pending"}, {"state": "done"}, True, True)
+assert ui_inbox.grind_on({"auto_grind": True}, None) and not ui_inbox.grind_on({}, 3)
+# a conflicting PR is a Fix item, never ready to merge
+conflicting = dict(pr(1), conflict=True)
+res = build(snapshots={"o/r": snap([conflicting], issues)})
+assert "pr_ready" not in types(res)
+c = one(res, "pr_conflict")
+assert (c["group"], c["key"], c["pr"], c["issue"], c["url"]) == ("fix", "pr_conflict:o/r#1", 1, 9, "u1")
+print("  ok  pr_ready (grind on/off, solo), pr_conflict")
 
 # grind_paused: only paused loops; gone when the PR is no longer open (fresh snapshot)
 idx = {

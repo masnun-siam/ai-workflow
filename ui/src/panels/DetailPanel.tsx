@@ -1,7 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Button, Icon } from '../components';
-import { IssuePanel } from './IssuePanel';
-import { PrPanel } from './PrPanel';
+import { WorkPanel } from './WorkPanel';
 import { usePanel } from './PanelContext';
 
 /** Header + scrolling body + optional sticky footer. Panels use it so they all look and close the same way. */
@@ -39,7 +38,7 @@ export function DetailPanel() {
     <>
       <div className="panel-scrim" onClick={close} aria-hidden="true" />
       <aside className="panel" aria-label={target.kind === 'issue' ? 'Issue details' : 'Pull request details'} tabIndex={-1} ref={ref}>
-        {target.kind === 'issue' ? <IssuePanel key={key} repo={target.repo} n={target.n} /> : <PrPanel key={key} repo={target.repo} n={target.n} />}
+        <WorkPanel key={key} kind={target.kind} repo={target.repo} n={target.n} />
       </aside>
     </>
   );

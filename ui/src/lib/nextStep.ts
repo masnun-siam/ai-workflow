@@ -1,5 +1,5 @@
 // FR-12: the Next step box on a feature page. Pure: Feature in, one primary action (and at most one secondary) out.
-import { countBy, mergeable, type Feature } from './features';
+import { countBy, type Feature } from './features';
 
 export type FeatureTab = 'issues' | 'prd' | 'review' | 'sessions';
 export type StepAction =
@@ -79,14 +79,22 @@ export function nextStep(f: Feature): Step {
       };
     }
     case 'building': {
-      const m = f.issues.find((i) => mergeable(i.pr));
+      const m = f.issues.find((i) => i.mergeable);
       const ready = f.issues.filter((i) => i.status === 'ready').map((i) => i.n);
       if (m && m.pr) {
         return {
           title: 'A PR is ready to merge',
-          hint: `#${m.n} ${m.title}: approved, checks green.`,
+          hint: `#${m.n} ${m.title}: checks green and reviewed.`,
           primary: { label: 'Review and merge', action: { kind: 'merge', pr: m.pr.n } },
-          secondary: f.autobuild ? undefined : { label: 'Turn on auto-build', action: { kind: 'toggleAuto' } },
+          secondary: f.autobuild || !f.epic ? undefined : { label: 'Turn on auto-build', action: { kind: 'toggleAuto' } },
+        };
+      }
+      if (!f.epic && ready.length) {
+        // auto-build runs per epic lane; without an open epic, starting by hand is the only way
+        return {
+          title: `${plural(ready.length, 'issue')} ready to build`,
+          hint: 'Start them yourself.',
+          primary: { label: `Start ${ready.length} now`, action: { kind: 'startReady', issues: ready } },
         };
       }
       if (!f.autobuild && ready.length) {

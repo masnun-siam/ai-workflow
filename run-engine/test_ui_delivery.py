@@ -92,6 +92,7 @@ assert c[1]["column"] == "draft_pr" and c[1]["pr"] == {
     "ci": "success",
     "url": "u31",
     "review": "none",
+    "conflict": False,
 }
 assert c[2]["column"] == "in_review" and c[3]["column"] == "grinding" and c[3]["grind"]["round"] == 2
 assert c[4]["column"] == "ready" and c[4]["pr"] is None
@@ -109,13 +110,32 @@ g = {
     }
 }
 c = cards(build(s, grind=g))
-assert c[1]["grind"] == {"state": "idle", "round": 1, "reason": None}
-assert c[2]["grind"] == {"state": "paused", "round": 3, "reason": "CI red"}
+assert c[1]["grind"] == {"state": "idle", "round": 1, "reason": None, "thread": None}
+assert c[2]["grind"] == {"state": "paused", "round": 3, "reason": "CI red", "thread": None}
+g2 = {"pr": {("o", "r", 31): {"state": "running", "round": 1, "thread": "https://x.slack.com/archives/C1/p1"}}}
+assert cards(build(s, grind=g2))[1]["grind"]["thread"] == "https://x.slack.com/archives/C1/p1"
 assert c[3]["grind"] is None and c[4]["grind"] is None
 # card.pr.review comes from the snapshot's PR
 s2 = snap([issue(1, prs=[pr(31, review="approved")]), issue(2, prs=[pr(32, review="changes_requested")])])
 c = cards(build(s2))
 assert c[1]["pr"]["review"] == "approved" and c[2]["pr"]["review"] == "changes_requested"
+
+# grind_on (the issue's switch, else auto_grind) and mergeable (ui_inbox.merge_ready)
+s3 = snap([issue(1, prs=[pr(41, review="approved")]), issue(2, prs=[pr(42)])])
+c = cards(build(s3))
+assert not c[1]["grind_on"] and c[1]["mergeable"] and not c[2]["mergeable"], "off: approval needed"
+assert cards(ui_delivery.build("o/r", s3, [], {"pr": {}}, {}, {}, solo=True))[2]["mergeable"], "owner: no approval"
+c = cards(build(s3, settings={"auto_grind": True, "issue_grind": {2: False}}))
+assert c[1]["grind_on"] and not c[1]["mergeable"] and not c[2]["grind_on"]
+c = cards(build(s3, grind={"pr": {("o", "r", 41): {"state": "done", "round": 1}}}, settings={"issue_grind": {1: True}}))
+assert c[1]["grind_on"] and c[1]["mergeable"]
+g42 = {"pr": {("o", "r", 42): {"state": "done", "round": 1}}}
+assert not cards(build(s3, grind=g42, settings={"auto_grind": True}))[2]["mergeable"], "grind done but not approved"
+
+# a PR that conflicts with its base is never mergeable
+s4 = snap([issue(1, prs=[dict(pr(43, review="approved"), conflict=True)])])
+c = cards(build(s4))
+assert c[1]["pr"]["conflict"] is True and not c[1]["mergeable"]
 
 # merged cards with cleanup flags, placed in their epic lane
 m = [{"n": 40, "title": "t", "url": "u40", "merged_at": "x", "head": "h", "closes": [7], "epic": 10}]

@@ -9,7 +9,7 @@ import { ATTENTION_ORDER, ISSUE } from '../lib/vocab';
 import { usePanel } from '../panels/PanelContext';
 import { taskArg } from './useStepRunner';
 
-export function IssuesTab({ f, repo, autoGrind }: { f: Feature; repo: string; autoGrind: boolean }) {
+export function IssuesTab({ f, repo }: { f: Feature; repo: string }) {
   const panel = usePanel();
   const starter = useStarter();
   const auto = useAutoBuild();
@@ -82,7 +82,7 @@ export function IssuesTab({ f, repo, autoGrind }: { f: Feature; repo: string; au
                       </td>
                       <td><IssueChip s={i.status} /></td>
                       <td className="hide-sm"><IssueSignals card={i} /></td>
-                      <td style={{ textAlign: 'right' }}><IssueAction card={i} repo={repo} autoGrind={autoGrind} /></td>
+                      <td style={{ textAlign: 'right' }}><IssueAction card={i} repo={repo} /></td>
                     </tr>
                   ))}
                 </Fragment>

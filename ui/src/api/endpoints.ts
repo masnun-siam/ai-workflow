@@ -51,6 +51,7 @@ export const api = {
   cleanupIssue: (repo: string, issue: number) => post('/api/cleanup', { repo, issue, confirm: true }),
   skipCi: (repo: string, pr: number) => post('/api/grind/skip-ci', { repo, pr }),
   stopGrind: (repo: string, pr: number) => post('/api/grind/stop', { repo, pr }),
+  grindIssue: (repo: string, issue: number, on: boolean) => post('/api/grind/issue', { repo, issue, on }),
   merge: (repo: string, n: number) => post(`/api/pulls/${splitRepo(repo).join('/')}/${n}/merge`),
   comment: (kind: 'issues' | 'pulls', repo: string, n: number, text: string) =>
     post(`/api/${kind}/${splitRepo(repo).join('/')}/${n}/comment`, { text }),

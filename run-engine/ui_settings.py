@@ -22,6 +22,7 @@ DEFAULT_VAULT = os.path.join("~", "Documents", "notes")  # the `notes` vault /du
 MAX_COMMANDS = 20
 DEFAULT_CAP = 2
 SLUG_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+GRIND_MODES = ("deep", "simple")  # simple: /pr-grind stops once the PR is approved
 
 
 def _path() -> str:
@@ -35,6 +36,12 @@ def _stored() -> dict:
     except (OSError, ValueError):
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def grind_mode() -> str:
+    """deep (the default) or simple, for every /pr-grind loop; the skill reads it each round (`aiw grind-mode`)."""
+    m = _stored().get("grind_mode")
+    return m if m in GRIND_MODES else "deep"
 
 
 def vault_dir() -> str:
@@ -75,7 +82,44 @@ def _migrate(data: dict) -> dict:
 def repo_settings(slug: str) -> dict:
     """Per-repo settings with defaults, plus its autopilot epic list."""
     d = _migrate(_stored())
-    return {**_repo((d.get("repos") or {}).get(slug)), "autopilot": _epics((d.get("autopilot") or {}).get(slug))}
+    return {
+        **_repo((d.get("repos") or {}).get(slug)),
+        "autopilot": _epics((d.get("autopilot") or {}).get(slug)),
+        "issue_grind": _issue_grind().get(str(slug).lower(), {}),
+    }
+
+
+def _issue_grind_path() -> str:
+    # its own file: save() rewrites ui_settings.json from the Settings form, which never sends these
+    return os.path.join(shared.data_dir(), "issue_grind.json")
+
+
+def _issue_grind() -> dict:
+    """{owner/repo lowercased: {issue: bool}}: issues whose grinding was switched in the UI."""
+    try:
+        with open(_issue_grind_path(), encoding="utf-8") as f:
+            raw = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        k: {int(n): v for n, v in m.items() if str(n).isdigit() and isinstance(v, bool)}
+        for k, m in raw.items()
+        if isinstance(m, dict)
+    }
+
+
+def set_issue_grind(slug: str, issue: int, on: bool) -> dict:
+    """Switch one issue's grinding; the other issues keep following the repo's auto_grind."""
+    if not isinstance(slug, str) or not SLUG_RE.match(slug):
+        raise ValueError("repo must be owner/repo")
+    if type(issue) is not int or issue < 1 or type(on) is not bool:
+        raise ValueError("issue must be a number and on must be true or false")
+    all_ = _issue_grind()
+    all_.setdefault(slug.lower(), {})[issue] = on
+    shared.atomic_write_text(_issue_grind_path(), json.dumps(all_, indent=2))
+    return all_[slug.lower()]
 
 
 def set_autopilot(slug: str, epic: int, on: bool) -> list:
@@ -117,6 +161,7 @@ def load() -> dict:
         "repos": {k: _repo(stored_repos.get(k)) for k in slugs},
         "autopilot": {k: _epics(v) for k, v in ap.items()},
         "vault_dir": vault_dir(),
+        "grind_mode": grind_mode(),
     }
 
 
@@ -180,6 +225,9 @@ def validate(body) -> dict:
         vault = vault.strip() or None
         if vault and not os.path.isabs(os.path.expanduser(vault)):
             raise ValueError("vault_dir must be an absolute path (or start with ~)")
+    mode = body.get("grind_mode", grind_mode())  # a save that omits it keeps the stored one
+    if mode not in GRIND_MODES:
+        raise ValueError("grind_mode must be deep or simple")
     stored = _migrate(_stored())
     sent = body.get("repos", {})
     if not isinstance(sent, dict):
@@ -213,6 +261,7 @@ def validate(body) -> dict:
         "repos": clean_repos,
         "autopilot": {k: _epics(v) for k, v in autopilot.items()},
         "vault_dir": vault,
+        "grind_mode": mode,
     }
 
 

@@ -9,7 +9,7 @@ allowed-tools: Bash(aiw:*), Bash(gh:*), Bash(git:*), Bash(bash:*), Bash(slackcli
 > Substitute the printed value; never guess a path.
 
 Drive a PR through review→fix→re-trigger rounds with no human per round, until the
-reviewer approves (zero blocker/should-fix) or a rail stops it. Everything runs in this
+reviewer approves (zero blocker/should-fix; in simple mode, any approval) or a rail stops it. Everything runs in this
 session: **spawn no subagent**. Merging stays manual.
 
 ## State file
@@ -75,6 +75,12 @@ Header keys (lines above the first `## Round <n>`; names are pinned for the aiw 
   newest. Record the others as superseded.
 
 ## Step 2 — Exit check
+
+**Mode, every round.** Run `aiw grind-mode` now, never from memory: the owner can switch it while
+the loop runs. `deep` (the default) → the rule below. `simple` → also done the moment the PR is
+approved: this round's review from the reviewer has state `APPROVED`, or
+`gh pr view <pr> --json reviewDecision` says `APPROVED`. Then stop right away: fix, rebut and reply to
+nothing, post the closing summary below, and write `done: <ISO8601> — approved (simple)`.
 
 Zero blocker and zero should-fix → done, whatever `reviewDecision` says. First handle nits:
 a genuine improvement goes on the fix-list (Step 5 round procedure); noise or out of scope

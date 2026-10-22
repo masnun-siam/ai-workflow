@@ -14,6 +14,8 @@ Inputs (plain data, no I/O):
   slug            session record -> owner/repo (ui_delivery._slug)
   watched         the repos the poller watches (default: those in `snapshots`); `stale` is drawn from them
   repo            only this repo's items (and the repo-less ones: gh_auth)
+  settings        {repo: ui_settings.repo_settings}: auto_grind and issue_grind decide pr_ready (merge_ready)
+  solo            {repo: bool}: the user owns the repo, so its PRs need no approval
 
 Result: {items, stale}. A repo whose snapshot is missing or stale is in `stale` and contributes no
 poller-derived items (pr_ready, a PR's issue number); sessions, panels, grinds, cleanups and the registry
@@ -23,7 +25,7 @@ polls, `at` an ISO time or None. group is block | answer | decide | fix | setup 
   answer  question {session_id, command, link, round_id, questions, process_alive}
   decide  review_cap {prd_path, panel, round, max_rounds, note}, review_approved {prd_path, panel},
           pr_ready {pr, issue, title, url, reviewer, checks}
-  fix     grind_paused {pr, issue, round, reason}, session_failed {session_id, command, link, error},
+  fix     grind_paused {pr, issue, round, reason}, pr_conflict {pr, issue, title, url}, session_failed {session_id, command, link, error},
           needs_cleanup {issue, uncommitted, unpushed}
   setup   repo_unpublished {slug, path}
   wait    limited {session_id, command, account, resets_at, auto_resume}, queued {session_id, command, reason}
@@ -35,6 +37,22 @@ import re
 from datetime import datetime, timezone
 
 GROUPS = ("block", "answer", "decide", "fix", "setup", "wait")
+
+
+def grind_on(settings, issue) -> bool:
+    """An issue's grinding switch, else the repo's Auto-grind (also the rule for a PR with no issue)."""
+    s = settings or {}
+    return (s.get("issue_grind") or {}).get(issue, s.get("auto_grind") is True)
+
+
+def merge_ready(pr, grind, on: bool, solo: bool) -> bool:
+    """Does an open PR get Merge? Not a draft, no conflicts with its base, CI green, GitHub approved it unless the user owns the repo
+    (`solo`), and with grinding on its grind is done (stopped from the UI counts)."""
+    if not pr or pr.get("draft") or pr.get("ci") != "success" or pr.get("conflict"):
+        return False
+    if on and (grind or {}).get("state") != "done":
+        return False
+    return pr.get("review") == "approved" or solo
 
 
 def _prd_path(artifact: str):
@@ -79,6 +97,8 @@ def build(
     slug=lambda rec: str(rec.get("repo") or ""),
     watched=None,
     repo=None,
+    settings=None,
+    solo=None,
 ) -> dict:
     items = []
 
@@ -226,8 +246,25 @@ def build(
         where = names.get(k, k)
         data = snaps[k].get("data") or {}
         by_pr = {p["n"]: i["n"] for i in data.get("issues") or [] for p in i["prs"]}
+        owner, _, name = k.partition("/")
+        st = next((v for r, v in (settings or {}).items() if r.lower() == k), None)
+        alone = next((v for r, v in (solo or {}).items() if r.lower() == k), False)
         for p in data.get("open_prs") or []:
-            if not p.get("draft") and p.get("ci") == "success" and p.get("review") == "approved":
+            if p.get("conflict"):
+                add(
+                    f"pr_conflict:{where}#{p['n']}",
+                    "fix",
+                    "pr_conflict",
+                    None,
+                    where,
+                    pr=p["n"],
+                    issue=by_pr.get(p["n"]),
+                    title=p.get("title"),
+                    url=p.get("url"),
+                )
+                continue
+            g = ((grind_index or {}).get("pr") or {}).get((owner, name, p["n"]))
+            if merge_ready(p, g, grind_on(st, by_pr.get(p["n"])), alone):
                 add(
                     f"pr_ready:{where}#{p['n']}",
                     "decide",
