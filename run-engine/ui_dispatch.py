@@ -332,7 +332,10 @@ def public(d: dict, full: bool = False) -> dict:
             }
         )
     tot = {f: sum(lane["usage"][f] for lane in lanes) for f in ("cost", "tokens")}
-    out = {f: d.get(f) for f in ("id", "epic", "runner", "state", "settings", "created_at", "ended_at", "final_prs")}
+    out = {
+        f: d.get(f)
+        for f in ("id", "epic", "title", "runner", "state", "settings", "created_at", "ended_at", "final_prs")
+    }
     out.update(lanes=lanes, totals={**tot, "seconds": int((d.get("ended_at") or time.time()) - d["created_at"])})
     if full:
         out["events"] = d.get("events") or []

@@ -1,7 +1,7 @@
 // Every endpoint the UI calls, as plain typed functions. Hooks in hooks.ts wrap these with caching and invalidation.
 import { enc, get, post, put, qs, splitRepo } from './client';
 import type {
-  AnswerBody, AfkState, BoardStartBody, BoardStartResponse, CleanupItem, DeliveryResponse, InboxResponse,
+  AnswerBody, AfkState, Dispatch, DispatchPlan, DispatchSettings, DispatchState, EndAction, LaneAction, BoardStartBody, BoardStartResponse, CleanupItem, DeliveryResponse, InboxResponse,
   IssueDetail, NotifySettings, OpenItem, PeerReviewOffers, PlanningResponse, PrDetail, PrdFile, ReposResponse,
   ReviewSettings, Session, SessionStartBody, SessionsResponse, Settings, StreamResponse, VaultFolders, VaultPrd,
 } from './types';
@@ -64,6 +64,18 @@ export const api = {
     post<{ panel: string }>('/api/review', { repo, artifact, lenses, root_session }),
   reviewLens: (panel: string, lens: string, action: 'retry' | 'drop' | string) => post(`/api/review/${enc(panel)}/lens`, { lens, action }),
   reviewRounds: (panel: string, add: number) => post(`/api/review/${enc(panel)}/rounds`, { add }),
+
+  // ---- dispatches
+  dispatches: () => get<{ dispatches: Dispatch[] }>('/api/dispatches'),
+  dispatch: (id: string) => get<Dispatch>(`/api/dispatches/${enc(id)}`),
+  dispatchLane: (id: string, key: string) => get<{ text?: string; session?: string }>(`/api/dispatches/${enc(id)}/lane${qs({ key })}`),
+  planDispatch: (epic: string, settings: Partial<DispatchSettings>) => post<DispatchPlan>('/api/dispatches/plan', { epic, settings }),
+  startDispatch: (epic: string, settings: Partial<DispatchSettings>) => post<Dispatch>('/api/dispatches', { epic, settings }),
+  dispatchSettings: (id: string, s: Partial<DispatchSettings>) => post<Dispatch>(`/api/dispatches/${enc(id)}/settings`, s),
+  dispatchState: (id: string, state: Exclude<DispatchState, 'done'>) => post<Dispatch>(`/api/dispatches/${enc(id)}/state`, { state }),
+  laneAction: (id: string, lane: string, action: LaneAction, text?: string) => post<Dispatch>(`/api/dispatches/${enc(id)}/lane`, { lane, action, text }),
+  endAction: (id: string, action: EndAction) => post<Dispatch>(`/api/dispatches/${enc(id)}/end`, { action }),
+  dispatchSeen: (id: string) => post<Dispatch>(`/api/dispatches/${enc(id)}/seen`),
 
   // ---- repos and settings
   registerRepo: (slug: string, path: string) => post<{ path: string; repos: ReposResponse['repos'] }>('/api/repos/register', { slug, path }),

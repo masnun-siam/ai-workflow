@@ -354,13 +354,14 @@ def _path(did: str) -> str:
     return os.path.join(_dir(), did + ".json")
 
 
-def create(epic: str, runner: str, settings: dict, children: list, workspace=None) -> dict:
+def create(epic: str, runner: str, settings: dict, children: list, workspace=None, title: str = "") -> dict:
     if runner not in ("herdr", "headless"):
         raise ValueError("runner must be herdr or headless")
     s = check_settings({**DEFAULTS, **(settings or {})})
     d = {
         "id": uuid.uuid4().hex[:12],
         "epic": epic,
+        "title": title,
         "runner": runner,
         "workspace": workspace,
         "settings": s,

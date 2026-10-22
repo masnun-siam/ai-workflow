@@ -4,10 +4,10 @@ import { useMutation, useQuery, useQueryClient, type QueryClient, type QueryKey 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from './client';
 import { api } from './endpoints';
-import type { InboxItem, StreamEvent } from './types';
+import type { DispatchSettings, EndAction, InboxItem, LaneAction, StreamEvent } from './types';
 import { mergeStream } from '../lib/md';
 
-export const POLL = { sessions: 3000, inbox: 5000, boards: 15000, stream: 1000 } as const;
+export const POLL = { sessions: 3000, inbox: 5000, boards: 15000, stream: 1000, dispatch: 5000 } as const;
 
 const notificationsOn = () => typeof Notification !== 'undefined' && Notification.permission === 'granted';
 /** refetch options for a poll: keep going in the background only when notifications are granted. */
@@ -32,6 +32,9 @@ export const keys = {
   issue: (repo: string, n: number) => ['issue', repo, n] as const,
   pull: (repo: string, n: number) => ['pull', repo, n] as const,
   open: (repo: string, kind: string) => ['open', repo, kind] as const,
+  dispatches: ['dispatches'] as const,
+  dispatch: (id: string) => ['dispatch', id] as const,
+  dispatchLane: (id: string, key: string) => ['dispatch', id, 'lane', key] as const,
 };
 
 // ---- reads --------------------------------------------------------------------------------------
@@ -61,6 +64,12 @@ export const usePull = (repo: string, n: number) =>
 /** The repo's open issues or PRs (palette, Start pickers). */
 export const useOpenItems = (repo: string, kind: 'issue' | 'pr', enabled = true) =>
   useQuery({ queryKey: keys.open(repo, kind), queryFn: () => api.open(repo, kind), enabled: enabled && !!repo && repo.includes('/'), staleTime: 30_000 });
+
+export const useDispatches = () => useQuery({ queryKey: keys.dispatches, queryFn: api.dispatches, ...poll(POLL.dispatch) });
+export const useDispatch = (id: string) => useQuery({ queryKey: keys.dispatch(id), queryFn: () => api.dispatch(id), enabled: !!id, ...poll(POLL.dispatch), retry: false });
+/** A herdr lane's pane text (or a headless lane's session id), polled while the lane panel is open. */
+export const useDispatchLane = (id: string, key: string, enabled: boolean) =>
+  useQuery({ queryKey: keys.dispatchLane(id, key), queryFn: () => api.dispatchLane(id, key), enabled: enabled && !!id && !!key, ...poll(3000), retry: false });
 
 /**
  * A session's transcript. Appends events from /stream every second while live (the server answers with
@@ -198,3 +207,17 @@ export const usePublishRepo = () => useApiMutation((v: { slug: string; owner: st
 export const useSaveSettings = () => useApiMutation(api.saveSettings, [keys.settings, keys.repos]);
 export const useSaveNotify = () => useApiMutation(api.saveNotify, [keys.notify]);
 export const useSaveReview = () => useApiMutation(api.saveReview, [keys.review, keys.offers]);
+
+const DISPATCH_WRITES: QueryKey[] = [['dispatches'], ['dispatch'], ['inbox']];
+export const usePlanDispatch = () =>
+  useApiMutation((v: { epic: string; settings: Partial<DispatchSettings> }) => api.planDispatch(v.epic, v.settings), [], { quiet: true });
+export const useStartDispatch = () =>
+  useApiMutation((v: { epic: string; settings: Partial<DispatchSettings> }) => api.startDispatch(v.epic, v.settings), [...DISPATCH_WRITES, ['sessions']]);
+export const useDispatchSettings = () =>
+  useApiMutation((v: { id: string; s: Partial<DispatchSettings> }) => api.dispatchSettings(v.id, v.s), DISPATCH_WRITES);
+export const useDispatchState = () =>
+  useApiMutation((v: { id: string; state: 'running' | 'paused' | 'cancelled' }) => api.dispatchState(v.id, v.state), DISPATCH_WRITES);
+export const useLaneAction = () =>
+  useApiMutation((v: { id: string; lane: string; action: LaneAction; text?: string }) => api.laneAction(v.id, v.lane, v.action, v.text), DISPATCH_WRITES);
+export const useEndAction = () => useApiMutation((v: { id: string; action: EndAction }) => api.endAction(v.id, v.action), DISPATCH_WRITES);
+export const useDispatchSeen = () => useApiMutation((id: string) => api.dispatchSeen(id), DISPATCH_WRITES, { quiet: true });

@@ -5,6 +5,8 @@ import { ConfirmProvider } from './components';
 import { legacyRedirect } from './lib/routes';
 import { ActivityPage } from './pages/ActivityPage';
 import { BoardPage } from './pages/BoardPage';
+import { DispatchPage } from './pages/DispatchPage';
+import { DispatchesPage } from './pages/DispatchesPage';
 import { FeaturePage } from './pages/FeaturePage';
 import { FeaturesPage } from './pages/FeaturesPage';
 import { InboxPage } from './pages/InboxPage';
@@ -48,6 +50,8 @@ export function AppRoutes() {
           <Route path="/features/:slug/:tab" element={<FeaturePage />} />
           <Route path="/board" element={<BoardPage />} />
           <Route path="/activity" element={<ActivityPage />} />
+          <Route path="/dispatches" element={<DispatchesPage />} />
+          <Route path="/dispatches/:id" element={<DispatchPage />} />
           <Route path="/sessions/:id" element={<SessionPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/settings/:section" element={<SettingsPage />} />

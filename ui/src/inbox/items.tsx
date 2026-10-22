@@ -1,7 +1,7 @@
 // One Inbox row per item type (FR-7, FR-8): icon, title, meta, detail and its inline actions.
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { useCleanupIssue, useResume, useReviewRounds, useSettings, useSkipCi, useStartNow, useStartSession, useStop, useStopGrind } from '../api/hooks';
+import { useCleanupIssue, useDispatchSeen, useLaneAction, useResume, useReviewRounds, useSettings, useSkipCi, useStartNow, useStartSession, useStop, useStopGrind } from '../api/hooks';
 import type { InboxItem, Question } from '../api/types';
 import { Button, LinkButton, Menu, useConfirm, useToast, type IconName } from '../components';
 import { agoIso, clockText, shortRepo } from '../lib/format';
@@ -39,11 +39,19 @@ export function useInboxActions() {
   const startNowM = useStartNow();
   const startErr = useStartError();
   const cleanup = useCleanupIssue();
+  const lane = useLaneAction();
+  const seen = useDispatchSeen();
   const goSession = (id?: string) => id && nav(routes.session(id));
   return {
     terminal,
     panel,
     recheck: () => qc.invalidateQueries({ queryKey: ['inbox'] }),
+    laneMerge: async (id: string, key: string, pr: number | null) => {
+      if (await confirm({ title: `Merge PR #${pr}?`, body: 'The dispatch merges it with a merge commit at its next tick, then the lane does its followups.', okLabel: 'Merge' }))
+        lane.mutate({ id, lane: key, action: 'merge' }, { onSuccess: () => toast('Merge requested') });
+    },
+    laneRetry: (id: string, key: string) => lane.mutate({ id, lane: key, action: 'retry' }, { onSuccess: () => toast('Retrying the lane') }),
+    dispatchSeen: (id: string) => seen.mutate(id),
     copy: copyCommand,
     approve: async (repo: string, path: string) => {
       const ok = await confirm({
@@ -195,6 +203,25 @@ export function ItemRow({ item, a, open, toggle, publish }: Props) {
       </>);
       break;
     }
+    case 'dispatch_lane': {
+      const at = `${routes.dispatch(item.dispatch)}?lane=${encodeURIComponent(item.lane)}`;
+      icon = item.group === 'decide' ? 'merge' : item.group === 'wait' ? 'clock' : item.group === 'fix' ? 'alert' : 'msg';
+      tone = item.group === 'fix' ? 'bad' : item.group === 'wait' ? 'away' : 'you';
+      title = item.group === 'decide' ? `PR #${item.pr} of #${item.issue} is ready to merge` : `#${item.issue} ${item.title}`;
+      meta = [where, 'dispatch', item.group === 'decide' ? item.title : item.reason];
+      detail = item.group === 'decide' ? 'CI is green, a review approves and the grind is done. Auto-merge is off for this dispatch.' : undefined;
+      acts = (<>
+        {item.group === 'decide' ? <Button sm variant="primary" onClick={() => void a.laneMerge(item.dispatch, item.lane, item.pr)}>Merge</Button> : null}
+        {item.group === 'fix' ? <Button sm onClick={() => a.laneRetry(item.dispatch, item.lane)}>Retry</Button> : null}
+        <LinkButton sm variant={item.group === 'answer' ? 'you' : 'default'} to={at}>Open lane</LinkButton>
+      </>);
+      break;
+    }
+    case 'dispatch_done':
+      icon = 'check'; tone = 'ship'; title = `Every lane of ${item.epic} is done`; meta = [where, 'dispatch'];
+      detail = item.feature_branch ? `Open the PR from ${item.feature_branch}, run QA, or grind the final PR.` : 'Run QA on the whole feature, or call it done.';
+      acts = (<><LinkButton sm variant="primary" to={routes.dispatch(item.dispatch)}>What next</LinkButton><Button sm variant="ghost" onClick={() => a.dispatchSeen(item.dispatch)}>Dismiss</Button></>);
+      break;
     case 'queued':
       icon = 'clock'; title = `${cmdName(item.command)} is queued`; meta = [where, item.reason];
       acts = (<><Button sm onClick={() => a.startNow(item.session_id)}>Start now</Button><Button sm variant="ghost" onClick={() => void a.cancel(item.session_id)}>Cancel</Button></>);

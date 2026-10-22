@@ -230,7 +230,19 @@ export type InboxItem =
   | (InboxBase & { type: 'needs_cleanup'; issue: number; uncommitted: string[]; unpushed: string[] })
   | (InboxBase & { type: 'repo_unpublished'; slug: string; path: string })
   | (InboxBase & { type: 'limited'; session_id: string; command?: string; account: string; resets_at: number; auto_resume: boolean | null })
-  | (InboxBase & { type: 'queued'; session_id: string; command?: string; reason: string });
+  | (InboxBase & { type: 'queued'; session_id: string; command?: string; reason: string })
+  | (InboxBase & {
+      type: 'dispatch_lane';
+      dispatch: string;
+      lane: string;
+      issue: number;
+      title: string;
+      stage: LaneStage;
+      pr: number | null;
+      reason: string;
+      resets_at?: number;
+    })
+  | (InboxBase & { type: 'dispatch_done'; dispatch: string; epic: string; feature_branch: string | null; final_prs: Record<string, string> });
 export interface InboxResponse {
   items: InboxItem[];
   afk: AfkState;
@@ -438,3 +450,67 @@ export interface ScanResult {
   duplicates: { slug: string; path: string }[];
   repos: Repo[];
 }
+
+// ---- dispatches: an epic's child issues as parallel lanes (aiw dispatch) ---------------------------
+export type LaneStage =
+  | 'queued' | 'implementing' | 'grinding' | 'merge_gate' | 'conflict_fix' | 'awaiting_merge' | 'followups' | 'closed' | 'skipped';
+export type GrindMode = 'off' | 'simple' | 'full';
+export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export interface DispatchSettings {
+  max: number;
+  grind: GrindMode;
+  auto_merge: boolean;
+  feature_branch: string | null;
+  model: string | null;
+  effort: Effort | null;
+}
+export interface LaneUsage { cost: number; tokens: number; seconds: number }
+export interface Lane {
+  key: string; // owner/repo#n
+  repo: RepoSlug;
+  n: number;
+  title: string;
+  deps: string[];
+  stage: LaneStage;
+  pr: number | null;
+  needs_you: string | null;
+  held: string | null;
+  gate: string | null;
+  skip_reason: string | null;
+  paused: boolean | null;
+  hold_merge: boolean | null;
+  limited_until: number | null;
+  started_at: number | null;
+  ended_at: number | null;
+  session: string | null; // headless lane: the UI session id
+  tab: string | null; // herdr lane: the tab id
+  usage: LaneUsage;
+}
+export interface DispatchEvent { at: number; lane: string | null; kind: string; text: string }
+export type DispatchState = 'running' | 'paused' | 'done' | 'cancelled';
+export interface Dispatch {
+  id: string;
+  epic: string; // owner/repo#n
+  title: string | null; // the epic's title (older records have none)
+  runner: 'herdr' | 'headless';
+  state: DispatchState;
+  settings: DispatchSettings;
+  created_at: number;
+  ended_at: number | null;
+  final_prs: Record<string, string> | null;
+  lanes: Lane[];
+  totals: LaneUsage;
+  events?: DispatchEvent[];
+}
+export interface PlanLane { repo: RepoSlug; n: number; title: string; refined: boolean; deps: string[] }
+export interface DispatchPlan {
+  epic: string;
+  title: string;
+  settings: DispatchSettings;
+  runner: 'herdr' | 'headless';
+  lanes: PlanLane[];
+  waves: string[][];
+  warnings: string[];
+}
+export type LaneAction = 'pause' | 'resume' | 'retry' | 'skip' | 'merge' | 'hold' | 'unhold' | 'send';
+export type EndAction = 'open-pr' | 'qa' | 'grind-pr';

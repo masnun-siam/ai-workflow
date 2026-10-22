@@ -6,6 +6,8 @@ export const routes = {
   feature: (slug: string, tab?: string) => `/features/${encodeURIComponent(slug)}${tab ? `/${tab}` : ''}`,
   board: '/board',
   activity: '/activity',
+  dispatches: '/dispatches',
+  dispatch: (id: string) => `/dispatches/${encodeURIComponent(id)}`,
   session: (id: string) => `/sessions/${encodeURIComponent(id)}`,
   settings: (section?: string) => `/settings${section ? `/${section}` : ''}`,
   onboarding: '/onboarding',

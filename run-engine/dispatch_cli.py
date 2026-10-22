@@ -192,7 +192,7 @@ def start(epic: str, runner: str, s: dict, workspace=None, gh=_gh) -> dict:
         raise ValueError(f"{r['epic']} has no open child issues")
     for repo in sorted({c["repo"] for c in r["children"]}) if s["feature_branch"] else []:
         ensure_feature_branch(repo, s["feature_branch"], gh)
-    return dr.create(r["epic"], runner, s, r["children"], workspace=workspace)
+    return dr.create(r["epic"], runner, s, r["children"], workspace=workspace, title=r["title"])
 
 
 def cmd_start(a) -> None:
