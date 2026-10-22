@@ -15,11 +15,13 @@ data = tempfile.mkdtemp()
 os.environ["CLAUDE_PLUGIN_DATA"] = data
 import dispatch_run as dr  # noqa: E402
 import ui_dispatch  # noqa: E402
+import ui_gh  # noqa: E402
 import ui_notify  # noqa: E402
 import ui_sessions  # noqa: E402
 
 pushed = []
 ui_notify.notify = lambda event, rec: pushed.append((event, rec))
+ui_gh.status = lambda *a, **k: {"ok": True, "login": "someone-else", "error": None}
 macs = []
 ui_dispatch.mac_notify = lambda title, text: macs.append((title, text))
 R = "o/r"

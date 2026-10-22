@@ -13,6 +13,7 @@ the caller from the board snapshot, the grind index and the runner:
                    "conflict": bool, "approved": bool},
      "grind": None | {"state": idle|running|paused|done, "reason": str, "due": str | None},  # due: a token
      "slack": bool,                                  # the repo has a grind channel; False skips grinding
+     "solo": bool,                                   # the repo is the gh user's own: no approval needed
      "agent": working|idle|blocked|gone|None, "limited_until": float | None}
 
 Actions: ("send", text), ("merge", pr_n), ("close",), ("continue",), ("notify", kind, text).
@@ -121,7 +122,7 @@ def _gate(lane: dict, facts: dict, settings: dict):
     pr, g = facts.get("pr") or {}, facts.get("grind") or {}
     if pr.get("ci") != "success":
         return "CI is not green"
-    if not pr.get("approved"):
+    if not pr.get("approved") and not facts.get("solo"):  # nobody can approve a PR on your own repo
         return "no approving review"
     if _grind_on(settings, facts) and not (g.get("state") == "done" and "approved" in (g.get("reason") or "")):
         return "grind is not done"

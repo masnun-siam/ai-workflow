@@ -140,6 +140,7 @@ print("  ok  grind nudge, pause, done")
 fg = {**f1, "grind": {"state": "done", "reason": "approved (simple)"}}
 dr.tick(d, {K(1): fg}, run, merge, now=1015)
 assert d["lanes"][K(1)]["gate"] == "no approving review" and 101 not in merges
+assert dr._gate(d["lanes"][K(1)], {**fg, "solo": True}, d["settings"]) is None  # your own repo needs no approval
 dr.tick(d, {K(1): {**fg, "pr": pr(101, approved=True, ci="failure")}}, run, merge, now=1016)
 assert d["lanes"][K(1)]["held"] == "CI is red"
 dr.tick(d, {K(1): {**fg, "pr": pr(101, approved=True, conflict=True)}}, run, merge, now=1017)

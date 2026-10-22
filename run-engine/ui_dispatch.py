@@ -17,6 +17,7 @@ import time
 import dispatch_cli
 import dispatch_run as dr
 import dispatch_runners
+import ui_gh
 import ui_grind
 import ui_notify
 import ui_sessions
@@ -59,7 +60,7 @@ def _grind(repo: str, pr: int, files=None):
     return None
 
 
-def lane_facts(x: dict, snap, status=None, grind_files=None, channel=dispatch_cli.channel):
+def lane_facts(x: dict, snap, status=None, grind_files=None, channel=dispatch_cli.channel, solo=ui_gh.solo):
     """Facts for one lane (schema in dispatch_run), or None when its repo has no fresh snapshot.
     ponytail: the poller reads the first 100 open issues; a lane past that would look closed."""
     if not snap or snap.get("stale") or snap.get("fetched_at") is None:
@@ -76,6 +77,7 @@ def lane_facts(x: dict, snap, status=None, grind_files=None, channel=dispatch_cl
     }
     ch = channel(x["repo"])
     f["slack"], f["channel"] = ch is not None, ch or None
+    f["solo"] = solo(x["repo"])
     p = _pr_of(x, data, issue)
     if p:
         extra = next((o for o in data.get("open_prs") or [] if o["n"] == p["n"]), {})
