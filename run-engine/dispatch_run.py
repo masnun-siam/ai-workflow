@@ -323,7 +323,8 @@ def sync_lanes(d: dict, children: list) -> list:
             if d.get("state") == "done":  # QA filed new children: the dispatch runs again
                 d.update(state="running", ended_at=None)
         else:
-            x["deps"] = list(c.get("deps", x["deps"]))
+            # a re-read lists only blockers still open: keep the ones already known, or the graph loses its shape
+            x["deps"] = sorted(set(x["deps"]) | set(c.get("deps", [])))
             if x["stage"] == "skipped" and x.get("skip_reason") == "needs refine" and c.get("refined"):
                 x.update(stage="queued", skip_reason=None)
     return added
@@ -664,9 +665,16 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None, gh
                 elif a[0] == "merge":
                     ok, err = merge(x["repo"], a[1])
                     x["force_merge"] = False
-                    ev(k, "merged" if ok else "held", f"merged PR #{a[1]}" if ok else f"merge failed: {err}")
-                    if not ok:
+                    if ok:
+                        ev(k, "merged", f"merged PR #{a[1]}")
+                    elif "conflict" in err.lower():  # the board had not seen the conflict yet: fix it in the lane
+                        base = d["settings"].get("feature_branch") or x.get("base")
+                        x.update(stage="conflict_fix", merge_at=None)
+                        runner.send(x["handle"], conflict_prompt(a[1], base))
+                        ev(k, "stage", "merge_gate -> conflict_fix (GitHub refused the merge: conflicts)")
+                    else:
                         x["held"] = f"merge failed: {err}"
+                        ev(k, "held", x["held"])
                 elif a[0] == "notify":
                     ev(k, a[1], a[2])
             except Exception as e:  # noqa: BLE001 - one lane's failure never stops the others

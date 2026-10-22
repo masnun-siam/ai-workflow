@@ -3,18 +3,18 @@ import type { Dispatch, DispatchState, Lane, LaneStage } from '../api/types';
 import type { Tone } from '../lib/vocab';
 
 export const STAGE: Record<LaneStage, { label: string; tone: Tone; step: number }> = {
-  queued: { label: 'Queued', tone: 'muted', step: 0 },
-  implementing: { label: 'Implementing', tone: 'build', step: 1 },
+  queued: { label: 'Waiting', tone: 'muted', step: 0 },
+  implementing: { label: 'Building', tone: 'build', step: 1 },
   grinding: { label: 'Grinding', tone: 'review', step: 2 },
-  merge_gate: { label: 'Merge gate', tone: 'review', step: 3 },
+  merge_gate: { label: 'Merging', tone: 'review', step: 3 },
   conflict_fix: { label: 'Fixing conflicts', tone: 'review', step: 3 },
-  awaiting_merge: { label: 'Ready to merge', tone: 'you', step: 3 },
-  followups: { label: 'Followups', tone: 'ship', step: 4 },
+  awaiting_merge: { label: 'Your merge', tone: 'you', step: 3 },
+  followups: { label: 'Wrapping up', tone: 'ship', step: 4 },
   closed: { label: 'Done', tone: 'ship', step: 5 },
   skipped: { label: 'Skipped', tone: 'muted', step: 0 },
 };
 /** The steps a lane walks, for the stepper and the list's progress bar. */
-export const STEPS = ['Implement', 'Grind', 'Merge', 'Followups', 'Done'];
+export const STEPS = ['Build', 'Grind', 'Merge', 'Wrap up', 'Done'];
 export const ACTIVE: LaneStage[] = ['implementing', 'grinding', 'merge_gate', 'conflict_fix', 'awaiting_merge', 'followups'];
 
 export const DSTATE: Record<DispatchState, { label: string; tone: Tone; live?: boolean }> = {
@@ -78,4 +78,62 @@ export function secs(s: number): string {
   if (m < 60) return `${m}m`;
   const h = Math.floor(m / 60);
   return h < 24 ? `${h}h ${m % 60}m` : `${Math.floor(h / 24)}d ${h % 24}h`;
+}
+
+/** What a lane needs from you, as one action. */
+export type LaneAsk = 'merge' | 'open' | 'retry';
+
+/** One plain sentence for what the lane is doing now, and the action when it needs you. */
+export function nowLine(l: Lane, lanes: Pick<Lane, 'key' | 'stage'>[], nowMs = Date.now()): { text: string; tone: Tone; ask?: LaneAsk } {
+  if (l.needs_you)
+    return l.needs_you === 'waiting on you'
+      ? { text: 'Asked you a question', tone: 'you', ask: l.session || l.tab ? 'open' : 'retry' }
+      : { text: sentence(l.needs_you), tone: 'you', ask: 'retry' };
+  if (l.held) return { text: sentence(l.held), tone: 'bad', ask: 'retry' };
+  if (l.stage === 'awaiting_merge') return l.hold_merge ? { text: 'You held the merge', tone: 'muted' } : { text: `PR #${l.pr} is ready for your merge`, tone: 'you', ask: 'merge' };
+  if (l.limited_until && l.limited_until * 1000 > nowMs) return { text: 'Paused by the Claude usage limit', tone: 'away' };
+  if (l.paused) return { text: 'Paused by you', tone: 'review' };
+  switch (l.stage) {
+    case 'queued': {
+      const open = l.deps.filter((d) => (lanes.find((x) => x.key === d)?.stage ?? 'closed') !== 'closed');
+      return { text: open.length ? `Starts after ${open.map(issueNo).join(' and ')}` : 'Starts when a slot frees up', tone: 'muted' };
+    }
+    case 'implementing':
+      return { text: l.pr ? `Getting PR #${l.pr} ready` : 'Implementing the issue', tone: 'build' };
+    case 'grinding':
+      return { text: `Working through review on PR #${l.pr}`, tone: 'review' };
+    case 'merge_gate':
+      return { text: GATE[l.gate ?? ''] ?? `Merging PR #${l.pr}`, tone: 'review' };
+    case 'conflict_fix':
+      return { text: `Resolving conflicts on PR #${l.pr}`, tone: 'review' };
+    case 'followups':
+      return { text: 'Closing the issue and cleaning up', tone: 'ship' };
+    case 'closed':
+      return { text: l.pr ? `PR #${l.pr} merged` : 'Done', tone: 'ship' };
+    default:
+      return { text: l.skip_reason === 'needs refine' ? 'Skipped: refine it first' : sentence(l.skip_reason ?? 'Skipped'), tone: 'muted' };
+  }
+}
+const GATE: Record<string, string> = {
+  'CI is not green': 'Waiting for CI to pass',
+  'no approving review': 'Waiting for an approving review',
+  'grind is not done': 'Waiting for the grind to finish',
+};
+const sentence = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+
+/** The activity feed in plain words: "queued -> implementing" reads "started building". */
+export function eventText(e: { kind: string; text: string }): string {
+  const m = /^(\w+) -> (\w+)(.*)$/.exec(e.text);
+  if (e.kind === 'stage' && m) {
+    const to = m[2] as LaneStage;
+    const said: Partial<Record<LaneStage, string>> = {
+      implementing: 'started building', grinding: 'went to the grind', merge_gate: 'is ready to merge',
+      conflict_fix: 'is fixing merge conflicts', awaiting_merge: 'is waiting for your merge',
+      followups: 'merged; wrapping up', closed: 'is done', queued: 'is waiting again', skipped: 'was skipped',
+    };
+    return (said[to] ?? `is ${STAGE[to]?.label.toLowerCase() ?? to}`) + (m[3] ?? '');
+  }
+  if (e.kind === 'started') return `Dispatch started: ${e.text}`;
+  if (e.kind === 'lane') return e.text === 'joined the dispatch' ? 'joined the dispatch' : `you chose ${e.text}`;
+  return sentence(e.text);
 }

@@ -2,28 +2,28 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { Lane } from '../api/types';
 import { Chip, Icon } from '../components';
-import { money } from '../lib/format';
-import { STAGE, STEPS, issueNo, laneNote, levels, secs } from './vocab';
+import { shortRepo } from '../lib/format';
+import { ACTIVE, STAGE, STEPS, issueNo, levels, nowLine, secs } from './vocab';
 
-function LaneCard({ l, on, onPick, dim }: { l: Lane; on: boolean; onPick: () => void; dim: boolean }) {
+function LaneCard({ l, lanes, on, onPick, dim, multi }: { l: Lane; lanes: Lane[]; on: boolean; onPick: () => void; dim: boolean; multi: boolean }) {
   const st = STAGE[l.stage];
-  const note = laneNote(l);
+  const now = nowLine(l, lanes);
+  const working = ACTIVE.includes(l.stage) && !now.ask && !l.paused;
   return (
     <button
       type="button"
       data-lane={l.key}
-      className={`dsp-node${on ? ' on' : ''}${note?.tone === 'you' || note?.tone === 'bad' ? ' you' : ''}${dim ? ' dim' : ''}`}
+      className={`dsp-node${on ? ' on' : ''}${now.ask ? ' you' : ''}${dim ? ' dim' : ''}${l.stage === 'closed' ? ' done' : ''}`}
       onClick={onPick}
       aria-pressed={on}
     >
       <div className="row" style={{ gap: 6 }}>
-        <span className="mono faint" style={{ fontSize: 12 }}>{issueNo(l.key)}</span>
-        <span className="grow" />
-        <Chip tone={st.tone} live={l.stage !== 'queued' && l.stage !== 'closed' && l.stage !== 'skipped' && !note}>{st.label}</Chip>
+        <span className="dsp-ref">{issueNo(l.key)}</span>
+        {multi ? <span className="dsp-repo" title={l.repo}>{shortRepo(l.repo)}</span> : <span className="grow" />}
+        <Chip tone={st.tone} live={working}>{st.label}</Chip>
       </div>
       <div className="dsp-node-t">{l.title || issueNo(l.key)}</div>
-      {note ? <div className={`dsp-note t-${note.tone}`}>{note.text}</div> : null}
-      {l.pr ? <div className="faint" style={{ fontSize: 12 }}><Icon n="pr" s={12} /> PR #{l.pr}</div> : null}
+      <div className={`dsp-now t-${now.tone}`}>{now.ask ? <Icon n="alert" s={12} /> : null}{now.text}</div>
     </button>
   );
 }
@@ -31,6 +31,7 @@ function LaneCard({ l, on, onPick, dim }: { l: Lane; on: boolean; onPick: () => 
 /** Columns by dependency depth; SVG edges from each dependency to its dependent, measured after layout. */
 export function LaneGraph({ lanes, picked, onPick }: { lanes: Lane[]; picked: string | null; onPick: (k: string) => void }) {
   const lv = levels(lanes);
+  const multi = new Set(lanes.map((l) => l.repo)).size > 1;
   const cols: Lane[][] = [];
   for (const l of lanes) (cols[lv[l.key]] ??= []).push(l);
   const box = useRef<HTMLDivElement>(null);
@@ -79,8 +80,8 @@ export function LaneGraph({ lanes, picked, onPick }: { lanes: Lane[]; picked: st
       </svg>
       {cols.map((c, i) => (
         <div key={i} className="dsp-col">
-          <div className="dsp-col-h">{i === 0 ? 'No blockers' : `Depth ${i}`}</div>
-          {c.map((l) => <LaneCard key={l.key} l={l} on={picked === l.key} onPick={() => onPick(l.key)} dim={!!related && !related.has(l.key)} />)}
+          <div className="dsp-col-h">{i === 0 ? 'Starts first' : i === 1 ? 'Then' : 'And then'}</div>
+          {c.map((l) => <LaneCard key={l.key} l={l} lanes={lanes} multi={multi} on={picked === l.key} onPick={() => onPick(l.key)} dim={!!related && !related.has(l.key)} />)}
         </div>
       ))}
     </div>
@@ -97,29 +98,29 @@ function Progress({ l }: { l: Lane }) {
 }
 
 export function LaneTable({ lanes, picked, onPick }: { lanes: Lane[]; picked: string | null; onPick: (k: string) => void }) {
+  const multi = new Set(lanes.map((l) => l.repo)).size > 1;
   return (
     <div className="tbl-wrap">
       <table className="tbl">
         <thead>
-          <tr><th>Issue</th><th>Stage</th><th>Progress</th><th>Needs</th><th>PR</th><th>Time</th><th>Cost</th></tr>
+          <tr><th>Issue</th><th>Stage</th><th>Progress</th><th>Now</th><th>PR</th><th>Time</th></tr>
         </thead>
         <tbody>
           {lanes.map((l) => {
-            const note = laneNote(l);
+            const now = nowLine(l, lanes);
             return (
               <tr key={l.key} className={picked === l.key ? 'on' : ''} style={{ cursor: 'pointer' }} onClick={() => onPick(l.key)}>
                 <td className="title">
                   <button type="button" className="linkish" onClick={(e) => { e.stopPropagation(); onPick(l.key); }}>
-                    <span className="mono faint">{issueNo(l.key)}</span> {l.title}
+                    <span className="dsp-ref">{issueNo(l.key)}</span> {l.title}
                   </button>
-                  {l.deps.length ? <div className="faint" style={{ fontSize: 12 }}>after {l.deps.map(issueNo).join(', ')}</div> : null}
+                  {multi ? <div className="faint" style={{ fontSize: 12 }}>{shortRepo(l.repo)}</div> : null}
                 </td>
                 <td><Chip tone={STAGE[l.stage].tone}>{STAGE[l.stage].label}</Chip></td>
                 <td><Progress l={l} /></td>
-                <td>{note ? <span className={`dsp-c t-${note.tone}`}>{note.text}</span> : <span className="faint">—</span>}</td>
+                <td><span className={`dsp-c t-${now.tone}`}>{now.text}</span></td>
                 <td>{l.pr ? `#${l.pr}` : <span className="faint">—</span>}</td>
                 <td className="mono">{l.usage.seconds ? secs(l.usage.seconds) : '—'}</td>
-                <td className="mono">{l.usage.cost ? money(l.usage.cost) : '—'}</td>
               </tr>
             );
           })}

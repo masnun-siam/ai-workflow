@@ -1,15 +1,15 @@
 // One dispatch: live settings, totals, lanes as a graph or a table, the picked lane, the activity feed, end actions.
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { useDispatch, useDispatchSeen, useDispatchSettings, useDispatchState, useEndAction, useSessions } from '../api/hooks';
-import type { Dispatch, DispatchEvent, EndAction } from '../api/types';
+import { useDispatch, useDispatchSeen, useDispatchSettings, useDispatchState, useEndAction, useLaneAction, useSessions } from '../api/hooks';
+import type { Dispatch, DispatchEvent, EndAction, Lane } from '../api/types';
 import { Banner, Button, Chip, EmptyState, Icon, useConfirm, useToast } from '../components';
-import { clockText, fmtTokens, money, shortRepo } from '../lib/format';
+import { clockText, money, shortRepo } from '../lib/format';
 import { routes } from '../lib/routes';
 import { LanePanel } from '../dispatch/LanePanel';
 import { LaneGraph, LaneTable } from '../dispatch/LaneViews';
 import { SettingsFields } from '../dispatch/SettingsFields';
-import { DSTATE, counts, epicNo, issueNo, secs } from '../dispatch/vocab';
+import { DSTATE, counts, epicNo, eventText, issueNo, nowLine, secs, type LaneAsk } from '../dispatch/vocab';
 import '../dispatch/dispatch.css';
 
 const VIEW_KEY = 'aiw.dispatch.view';
@@ -21,7 +21,49 @@ const readView = () => {
   }
 };
 
-const KIND_ICON: Record<string, string> = { needs_you: '!', held: '■', awaiting_merge: '↗', merged: '✓', finished: '★', stage: '→', end: '◆' };
+const KIND_ICON: Record<string, string> = { needs_you: '!', held: '!', awaiting_merge: '↗', merged: '✓', finished: '✓', stage: '·', end: '·' };
+
+/** Lanes that need you, each with its one action. Silent when nothing does. */
+function NeedsYou({ d, onPick }: { d: Dispatch; onPick: (k: string) => void }) {
+  const act = useLaneAction();
+  const confirm = useConfirm();
+  const toast = useToast();
+  const asks = d.lanes.map((l) => ({ l, now: nowLine(l, d.lanes) })).filter((x) => x.now.ask);
+  if (!asks.length) return null;
+  const go = async (l: Lane, ask: LaneAsk) => {
+    if (ask === 'open') return onPick(l.key);
+    if (ask === 'merge' && !(await confirm({ title: `Merge PR #${l.pr}?`, body: 'A merge commit, at the next check (within 30 s). Then the lane closes its issue and cleans up.', okLabel: 'Merge' }))) return;
+    act.mutate({ id: d.id, lane: l.key, action: ask }, { onSuccess: () => toast(ask === 'merge' ? 'Merge requested' : 'Retrying') });
+  };
+  const LABEL: Record<LaneAsk, string> = { merge: 'Merge', open: 'Answer', retry: 'Retry' };
+  return (
+    <section className="dsp-asks" aria-label="Needs you">
+      <h2>{asks.length === 1 ? 'One issue needs you' : `${asks.length} issues need you`}</h2>
+      <ul>
+        {asks.map(({ l, now }) => (
+          <li key={l.key}>
+            <button type="button" className="linkish dsp-ask-t" onClick={() => onPick(l.key)}>
+              <span className="dsp-ref">{issueNo(l.key)}</span> {l.title}
+            </button>
+            <span className={`dsp-c t-${now.tone}`}>{now.text}</span>
+            <Button sm variant={now.ask === 'retry' ? 'default' : 'you'} onClick={() => void go(l, now.ask!)}>{LABEL[now.ask!]}</Button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** Where the dispatch stands, in one sentence. */
+function summary(c: ReturnType<typeof counts>): string {
+  const rest = [
+    c.active ? `${c.active} in progress` : '',
+    c.queued ? `${c.queued} waiting their turn` : '',
+    c.skipped ? `${c.skipped} skipped` : '',
+  ].filter(Boolean);
+  const head = `${c.closed} of ${c.total} issue${c.total === 1 ? '' : 's'} done`;
+  return rest.length ? `${head}. ${rest.join(', ').replace(/, ([^,]*)$/, ' and $1')}.` : `${head}.`;
+}
 
 function Feed({ events, onPick }: { events: DispatchEvent[]; onPick: (k: string) => void }) {
   const [all, setAll] = useState(false);
@@ -37,8 +79,10 @@ function Feed({ events, onPick }: { events: DispatchEvent[]; onPick: (k: string)
             <li key={`${e.at}-${i}`} className={`k-${e.kind}`}>
               <span className="dsp-ev-ic" aria-hidden="true">{KIND_ICON[e.kind] ?? '·'}</span>
               <span className="faint mono">{clockText(e.at)}</span>
-              {e.lane ? <button type="button" className="linkish mono" onClick={() => onPick(e.lane!)}>{issueNo(e.lane)}</button> : null}
-              <span>{e.text}</span>
+              <span>
+                {e.lane ? <><button type="button" className="linkish dsp-ref" onClick={() => onPick(e.lane!)}>{issueNo(e.lane)}</button> </> : null}
+                {eventText(e)}
+              </span>
             </li>
           ))}
         </ol>
@@ -55,8 +99,8 @@ function EndPanel({ d }: { d: Dispatch }) {
   const go = (action: EndAction, msg: string) => end.mutate({ id: d.id, action }, { onSuccess: () => toast(msg) });
   return (
     <section className="dsp-end" aria-label="What next">
-      <div className="row"><Icon n="check" /><h2 className="grow" style={{ fontSize: 15 }}>Every lane is done. What next?</h2></div>
-      <p className="muted">Nothing below runs by itself. QA files any bug it finds as a new issue of the epic, and new issues join this dispatch as lanes.</p>
+      <div className="row"><Icon n="check" /><h2 className="grow" style={{ fontSize: 15 }}>Every issue is done. What next?</h2></div>
+      <p className="muted">Nothing here runs by itself. QA files each bug it finds as a new issue of the epic, and new issues join this dispatch.</p>
       <div className="row wrap" style={{ gap: 8 }}>
         {fb && !prs.length ? <Button variant="primary" onClick={() => go('open-pr', 'Opening the PR')}><Icon n="pr" />Open PR from {fb}</Button> : null}
         <Button onClick={() => go('qa', 'QA session starting')}><Icon n="eye" />Run QA{fb ? ` on ${fb}` : ''}</Button>
@@ -69,10 +113,6 @@ function EndPanel({ d }: { d: Dispatch }) {
       ) : null}
     </section>
   );
-}
-
-function Stat({ k, v, tone }: { k: string; v: string | number; tone?: string }) {
-  return <div className="dsp-stat"><span className="faint">{k}</span><b className={tone ? `dsp-c t-${tone}` : ''}>{v}</b></div>;
 }
 
 export function DispatchPage() {
@@ -122,37 +162,34 @@ export function DispatchPage() {
       </nav>
       <div className="page-head">
         <div className="grow" style={{ minWidth: 0 }}>
-          <h1 className="ellipsis">{d.title || `Epic #${epicNo(d.epic)}`}</h1>
+          <h1>{d.title?.replace(/^Epic:\s*/i, '') || `Epic #${epicNo(d.epic)}`}</h1>
           <p className="sub row wrap" style={{ gap: 10 }}>
             <Chip tone={st.tone} live={st.live}>{st.label}</Chip>
-            <a href={`https://github.com/${d.epic.replace('#', '/issues/')}`} target="_blank" rel="noopener noreferrer" className="mono">{d.epic}</a>
-            <span>{d.runner === 'herdr' ? 'herdr tabs' : 'headless sessions'}</span>
-            <span>started {clockText(d.created_at)}</span>
+            <a href={`https://github.com/${d.epic.replace('#', '/issues/')}`} target="_blank" rel="noopener noreferrer">{shortRepo(d.epic.split('#')[0])} epic #{epicNo(d.epic)}</a>
+            <span>{d.runner === 'herdr' ? 'in herdr tabs' : 'in background sessions'}</span>
           </p>
         </div>
         <div className="row wrap" style={{ gap: 6 }}>
           <Button aria-expanded={showSettings} onClick={() => setShowSettings(!showSettings)}><Icon n="sliders" />Settings</Button>
-          {d.state === 'running' ? <Button onClick={() => state.mutate({ id: d.id, state: 'paused' }, { onSuccess: () => toast('Paused: no new lanes start') })}><Icon n="pause" />Pause</Button> : null}
+          {d.state === 'running' ? <Button onClick={() => state.mutate({ id: d.id, state: 'paused' }, { onSuccess: () => toast('Paused: no new issue starts') })}><Icon n="pause" />Pause</Button> : null}
           {d.state === 'paused' ? <Button variant="primary" onClick={() => state.mutate({ id: d.id, state: 'running' })}><Icon n="play" />Resume</Button> : null}
           {live ? <Button variant="ghost" onClick={() => void cancel()}>Cancel</Button> : null}
         </div>
       </div>
 
-      <div className="dsp-stats" aria-label="Totals">
-        <div className="dsp-stat grow">
-          <span className="faint">{c.closed} of {c.total} done</span>
-          <div className="meter" role="img" aria-label={`${c.closed} of ${c.total} lanes done`}><span style={{ width: `${c.total ? (c.closed / c.total) * 100 : 0}%`, background: 'var(--ship)' }} /></div>
-        </div>
-        <Stat k="Running" v={`${c.active} / ${d.settings.max}`} />
-        <Stat k="Queued" v={c.queued} />
-        <Stat k="Need you" v={c.you} tone={c.you ? 'you' : undefined} />
-        <Stat k="Elapsed" v={secs(d.totals.seconds)} />
-        <Stat k="Cost" v={d.runner === 'herdr' ? '—' : money(d.totals.cost)} />
-        <Stat k="Tokens" v={d.runner === 'herdr' ? '—' : fmtTokens(d.totals.tokens)} />
-      </div>
+      <section className="dsp-summary" aria-label="Progress">
+        <p className="dsp-sentence">{summary(c)}</p>
+        <div className="meter" role="img" aria-label={`${c.closed} of ${c.total} done`}><span style={{ width: `${c.total ? (c.closed / c.total) * 100 : 0}%`, background: 'var(--ship)' }} /></div>
+        <p className="faint">
+          {d.state === 'done' || d.state === 'cancelled' ? `Took ${secs(d.totals.seconds)}` : `Running for ${secs(d.totals.seconds)}`}
+          {d.runner === 'headless' && d.totals.cost > 0 ? `. Spent ${money(d.totals.cost)} so far` : ''}
+          {`. Up to ${d.settings.max} at a time, grind ${d.settings.grind}, ${d.settings.auto_merge ? 'merges by itself' : 'you merge'}.`}
+        </p>
+      </section>
+      <NeedsYou d={d} onPick={pick} />
 
-      {d.state === 'paused' ? <Banner tone="review" icon="pause">Paused: running lanes carry on, no new lane starts.</Banner> : null}
-      {limited && live ? <Banner tone="away" icon="clock">A Claude account is at its usage limit: new lanes wait and limited ones resume after the reset.</Banner> : null}
+      {d.state === 'paused' ? <Banner tone="review" icon="pause">Paused. Issues already running carry on; no new one starts until you resume.</Banner> : null}
+      {limited && live ? <Banner tone="away" icon="clock">A Claude account hit its usage limit. New issues wait, and paused ones resume after the reset.</Banner> : null}
       {showSettings ? (
         <section className="box" aria-label="Dispatch settings">
           <SettingsFields live value={d.settings} onChange={(p) => save.mutate({ id: d.id, s: p }, { onSuccess: () => toast('Saved: applies at each lane’s next step') })} />
@@ -161,8 +198,8 @@ export function DispatchPage() {
       {d.state === 'done' ? <EndPanel d={d} /> : null}
 
       <div className="row">
-        <h2 className="grow" style={{ fontSize: 15 }}>Lanes</h2>
-        <div className="seg" role="radiogroup" aria-label="Lane view">
+        <h2 className="grow" style={{ fontSize: 15 }}>Issues</h2>
+        <div className="seg" role="radiogroup" aria-label="Issue view">
           <button type="button" role="radio" aria-checked={view === 'graph'} className={view === 'graph' ? 'on' : ''} onClick={() => setView('graph')}>Graph</button>
           <button type="button" role="radio" aria-checked={view === 'list'} className={view === 'list' ? 'on' : ''} onClick={() => setView('list')}>List</button>
         </div>
@@ -171,7 +208,7 @@ export function DispatchPage() {
         <div style={{ minWidth: 0 }}>
           {d.lanes.length ? (
             view === 'graph' ? <LaneGraph lanes={d.lanes} picked={picked} onPick={pick} /> : <LaneTable lanes={d.lanes} picked={picked} onPick={pick} />
-          ) : <EmptyState icon="layers" title="No lanes">This epic had no open child issues.</EmptyState>}
+          ) : <EmptyState icon="layers" title="No issues to run">This epic had no open child issues when it started.</EmptyState>}
         </div>
         {lane ? <LanePanel key={lane.key} d={d} l={lane} onClose={() => pick(null)} /> : <Feed events={d.events ?? []} onPick={pick} />}
       </div>

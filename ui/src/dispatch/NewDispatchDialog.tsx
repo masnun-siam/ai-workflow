@@ -45,15 +45,15 @@ export function NewDispatchDialog({ open, onOpenChange, epic: initial }: { open:
       open={open}
       onOpenChange={onOpenChange}
       wide
-      title="Dispatch an epic"
-      description="Each child issue runs as a lane: implement, grind, merge, followups, then the next unblocked one starts."
+      title="Run an epic"
+      description="Each issue is built, grinded, merged and wrapped up in its own session. The next one starts as soon as what it waits for is done."
       showDescription
       footer={
         <>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
           {plan ? (
             <Button variant="primary" disabled={!runnable || start.isPending} onClick={doStart}>
-              {start.isPending ? 'Starting…' : `Start ${runnable} lane${runnable === 1 ? '' : 's'}`}
+              {start.isPending ? 'Starting…' : `Start ${runnable} issue${runnable === 1 ? '' : 's'}`}
             </Button>
           ) : (
             <Button variant="primary" disabled={!valid || preview.isPending} onClick={doPreview}>{preview.isPending ? 'Reading the epic…' : 'Preview'}</Button>
@@ -77,7 +77,7 @@ export function NewDispatchDialog({ open, onOpenChange, epic: initial }: { open:
           {epic && !valid ? <span className="hint" style={{ color: 'var(--bad)' }}>Use owner/repo#123, or a number in {repo || 'the current repo'}.</span> : null}
         </div>
         <SettingsFields value={s} onChange={change} />
-        <p className="faint" style={{ fontSize: 12.5 }}>Lanes run as headless sessions here. To run them in herdr tabs, use the herdr-dispatch skill; both show up on the Dispatches page.</p>
+        <p className="faint" style={{ fontSize: 12.5 }}>Started here, the issues run in background sessions. To run them in herdr tabs instead, use the herdr-dispatch skill; both show up on this page.</p>
         {preview.isError ? <Banner tone="bad" icon="alert">{preview.error.message}</Banner> : null}
         {plan ? <PlanView plan={plan} /> : null}
       </div>
@@ -99,7 +99,7 @@ function PlanView({ plan }: { plan: DispatchPlan }) {
         <ol className="dsp-waves">
           {plan.waves.map((w, i) => (
             <li key={i}>
-              <span className="faint" style={{ fontSize: 12 }}>{i === 0 ? 'Starts first' : `After wave ${i}`}</span>
+              <span className="faint" style={{ fontSize: 12 }}>{i === 0 ? 'Starts first' : 'Then'}</span>
               <div className="row wrap" style={{ gap: 6 }}>
                 {w.map((k) => <Chip key={k} tone={i === 0 ? 'build' : 'muted'} title={title.get(k)}>{issueNo(k)} {title.get(k)}</Chip>)}
               </div>
@@ -107,7 +107,7 @@ function PlanView({ plan }: { plan: DispatchPlan }) {
           ))}
         </ol>
       ) : (
-        <p className="muted">Nothing to run: no refined open issues under this epic.</p>
+        <p className="muted">Nothing to run: this epic has no refined open issues. Refine them first.</p>
       )}
     </section>
   );

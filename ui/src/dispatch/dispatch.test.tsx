@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
 import type { Dispatch, Lane } from '../api/types';
-import { counts, laneNote, levels } from './vocab';
+import { counts, eventText, laneNote, levels, nowLine } from './vocab';
 
 const json = (b: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } }));
 const AFK = { active: false, until: null, started: null, decisions: 0, held: 0, summary: null };
@@ -66,6 +66,15 @@ describe('dispatch vocab', () => {
     expect(laneNote(lane(1, { stage: 'awaiting_merge', hold_merge: true }))?.text).toBe('Merge held');
     expect(laneNote(lane(1, { stage: 'implementing' }))).toBeNull();
   });
+  it('says what a lane does now, and what it needs from you', () => {
+    const lanes = [lane(2, { stage: 'implementing' }), lane(4, { deps: ['o/r#2'] })];
+    expect(nowLine(lanes[1], lanes).text).toBe('Starts after #2');
+    expect(nowLine(lane(5), lanes).text).toBe('Starts when a slot frees up');
+    expect(nowLine(lane(3, { stage: 'awaiting_merge', pr: 30 }), lanes)).toMatchObject({ ask: 'merge', text: 'PR #30 is ready for your merge' });
+    expect(nowLine(lane(3, { needs_you: 'waiting on you', session: 's' }), lanes)).toMatchObject({ ask: 'open', text: 'Asked you a question' });
+    expect(nowLine(lane(3, { stage: 'merge_gate', gate: 'CI is not green', pr: 9 }), lanes).text).toBe('Waiting for CI to pass');
+    expect(eventText({ kind: 'stage', text: 'queued -> implementing' })).toBe('started building');
+  });
 });
 
 describe('Dispatches page', () => {
@@ -74,7 +83,7 @@ describe('Dispatches page', () => {
     render(<App />);
     const running = within(await screen.findByRole('region', { name: 'Running' }));
     expect(await running.findByText('Payments')).toBeTruthy();
-    expect(running.getByText('2 need you')).toBeTruthy();
+    expect(running.getByText('PR #30 is ready for your merge')).toBeTruthy();
     expect(within(screen.getByRole('region', { name: 'History' })).getByText('Old epic')).toBeTruthy();
     expect(screen.getAllByRole('link', { name: /^Dispatches/ }).length).toBeGreaterThan(0); // in the rail (and the mobile nav)
   });
@@ -82,13 +91,13 @@ describe('Dispatches page', () => {
   it('previews an epic, warns, then starts it', async () => {
     window.location.hash = '#/dispatches?repo=o/r';
     render(<App />);
-    await userEvent.click(await screen.findByRole('button', { name: 'New dispatch' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Run an epic' }));
     await userEvent.type(screen.getByLabelText('Epic'), '1');
     await userEvent.click(screen.getByRole('radio', { name: 'Simple' }));
     await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
     expect(await screen.findByText('o/r#5: needs refine')).toBeTruthy();
     expect(posts.at(-1)).toEqual(['/api/dispatches/plan', { epic: 'o/r#1', settings: { ...S, grind: 'simple' } }]);
-    await userEvent.click(screen.getByRole('button', { name: 'Start 1 lane' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Start 1 issue' }));
     await waitFor(() => expect(posts.at(-1)?.[0]).toBe('/api/dispatches'));
     expect(await screen.findByRole('heading', { name: 'Payments' })).toBeTruthy();
   });
@@ -100,18 +109,22 @@ describe('Dispatch page', () => {
     render(<App />);
     expect(await screen.findByRole('heading', { name: 'Payments' })).toBeTruthy();
     const graph = screen.getByRole('group', { name: 'Lanes by dependency' });
-    expect(within(graph).getByText('No blockers')).toBeTruthy();
-    expect(within(graph).getByText('Depth 1')).toBeTruthy();
-    expect(screen.getByText('waiting on you', { selector: '.dsp-note' })).toBeTruthy();
+    expect(within(graph).getByText('Starts first')).toBeTruthy();
+    expect(within(graph).getByText('Then')).toBeTruthy();
+    expect(screen.getByText('0 of 3 issues done. 2 in progress and 1 waiting their turn.')).toBeTruthy();
+    const asks = within(screen.getByRole('region', { name: 'Needs you' }));
+    expect(asks.getByText('2 issues need you')).toBeTruthy();
+    expect(asks.getByRole('button', { name: 'Merge' })).toBeTruthy();
     await userEvent.click(screen.getByRole('radio', { name: 'List' }));
     expect(screen.getByRole('table')).toBeTruthy();
     expect(localStorage.getItem('aiw.dispatch.view')).toBe('list');
-    await userEvent.click(screen.getByRole('button', { name: /#3 Issue 3/ }));
+    await userEvent.click(within(screen.getByRole('table')).getByRole('button', { name: /#3 Issue 3/ }));
     const panel = within(await screen.findByRole('complementary', { name: 'Lane #3' }));
-    await userEvent.click(panel.getByRole('button', { name: 'Hold merge' }));
+    await userEvent.click(panel.getByRole('button', { name: 'Issue actions' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Hold the merge' }));
     await waitFor(() => expect(posts.at(-1)).toEqual(['/api/dispatches/abc123abc123/lane', { lane: 'o/r#3', action: 'hold' }]));
-    await userEvent.click(panel.getByRole('button', { name: /Merge now/ }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Merge now' }));
+    await userEvent.click(panel.getByRole('button', { name: /Merge PR #30/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Merge' }));
     await waitFor(() => expect(posts.at(-1)).toEqual(['/api/dispatches/abc123abc123/lane', { lane: 'o/r#3', action: 'merge' }]));
   });
 

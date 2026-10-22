@@ -161,6 +161,19 @@ dr.tick(d, {K(1): {**fg, "pr": pr(101, approved=True)}}, run, merge, now=1019)
 assert d["lanes"][K(1)]["stage"] == "merge_gate"
 dr.tick(d, {K(1): {**fg, "pr": pr(101, approved=True)}}, run, merge, now=1020)
 assert merges[-1] == 101
+# GitHub refuses the merge for a conflict the board has not seen yet: straight to the lane's conflict fix
+dc = dr.create("o/r#90", "headless", {"grind": "off", "auto_merge": True}, [child(91)])
+rc = FakeRunner()
+dc["lanes"][K(91)].update(stage="merge_gate", handle={"n": 91}, pr=191)
+dr.tick(
+    dc,
+    {K(91): {"issue_open": True, "agent": "idle", "solo": True, "pr": pr(191)}},
+    rc,
+    lambda r, n: (False, "GraphQL: Pull Request has merge conflicts (mergePullRequest)"),
+    now=1,
+)
+assert dc["lanes"][K(91)]["stage"] == "conflict_fix" and not dc["lanes"][K(91)].get("held")
+assert "conflicts" in rc.sent[-1][1]
 print("  ok  merge gate, red CI, conflict")
 
 # --- merged -> followups -> closed, tab closed, dependent #2 starts
@@ -199,7 +212,10 @@ print("  ok  awaiting merge, merge now, done")
 # --- QA adds a child: done dispatch runs again
 dr.sync_lanes(d2, [child(7), child(8)])
 assert d2["state"] == "running" and d2["lanes"][K(8)]["stage"] == "queued"
-print("  ok  new children reopen")
+dr.sync_lanes(d2, [child(8, [7]), child(7)])
+dr.sync_lanes(d2, [child(8), child(7)])  # #7 closed: the epic no longer lists it as a blocker
+assert d2["lanes"][K(8)]["deps"] == [K(7)]
+print("  ok  new children reopen, deps kept")
 
 # --- usage limit: hold launches, continue after reset
 d3 = dr.create("o/r#7", "herdr", {"max": 3}, [child(20), child(21, [20]), child(22)])

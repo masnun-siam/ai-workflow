@@ -7,7 +7,7 @@ import { Banner, Button, Chip, EmptyState, Icon } from '../components';
 import { clockText, money } from '../lib/format';
 import { routes } from '../lib/routes';
 import { NewDispatchDialog } from '../dispatch/NewDispatchDialog';
-import { DSTATE, counts, epicNo, secs } from '../dispatch/vocab';
+import { DSTATE, counts, epicNo, issueNo, nowLine, secs } from '../dispatch/vocab';
 import '../dispatch/dispatch.css';
 
 const live = (d: Dispatch) => d.state === 'running' || d.state === 'paused';
@@ -15,16 +15,21 @@ const live = (d: Dispatch) => d.state === 'running' || d.state === 'paused';
 function Card({ d }: { d: Dispatch }) {
   const c = counts(d);
   const st = DSTATE[d.state];
-  const s = d.settings;
+  const asks = d.lanes.map((l) => ({ l, now: nowLine(l, d.lanes) })).filter((x) => x.now.ask);
   return (
-    <Link to={routes.dispatch(d.id)} className={`live-card${c.you ? ' you' : ''}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-      <div className="row"><Chip tone={st.tone} live={st.live}>{st.label}</Chip>{c.you ? <Chip tone="you">{c.you} need you</Chip> : null}<span className="grow" /><span className="faint" style={{ fontSize: 12 }}>{secs(d.totals.seconds)}</span></div>
-      <b className="ellipsis">{d.title || `Epic #${epicNo(d.epic)}`}</b>
-      <span className="faint mono" style={{ fontSize: 12 }}>{d.epic}</span>
-      <div className="meter" role="img" aria-label={`${c.closed} of ${c.total} lanes done`}><span style={{ width: `${c.total ? (c.closed / c.total) * 100 : 0}%`, background: 'var(--ship)' }} /></div>
-      <span className="muted" style={{ fontSize: 12.5 }}>
-        {c.closed}/{c.total} done · {c.active} running · grind {s.grind} · {s.auto_merge ? 'auto-merge' : 'you merge'} · {d.runner === 'herdr' ? 'herdr' : 'headless'}
+    <Link to={routes.dispatch(d.id)} className={`live-card dsp-card${asks.length ? ' you' : ''}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+      <div className="row"><Chip tone={st.tone} live={st.live}>{st.label}</Chip><span className="grow" /><span className="faint" style={{ fontSize: 12 }}>{secs(d.totals.seconds)}</span></div>
+      <b>{d.title?.replace(/^Epic:\s*/i, '') || `Epic #${epicNo(d.epic)}`}</b>
+      <div className="meter" role="img" aria-label={`${c.closed} of ${c.total} done`}><span style={{ width: `${c.total ? (c.closed / c.total) * 100 : 0}%`, background: 'var(--ship)' }} /></div>
+      <span className="muted" style={{ fontSize: 13 }}>
+        {c.closed} of {c.total} done{c.active ? `, ${c.active} in progress` : ''}{c.queued ? `, ${c.queued} waiting` : ''}
       </span>
+      {asks.length ? (
+        <ul className="dsp-card-asks">
+          {asks.slice(0, 3).map(({ l, now }) => <li key={l.key}><span className="dsp-ref">{issueNo(l.key)}</span> {now.text}</li>)}
+          {asks.length > 3 ? <li className="faint">and {asks.length - 3} more</li> : null}
+        </ul>
+      ) : null}
     </Link>
   );
 }
@@ -50,9 +55,9 @@ export function DispatchesPage() {
       <div className="page-head">
         <div className="grow">
           <h1>Dispatches</h1>
-          <p className="sub">An epic’s issues as parallel lanes: implement, grind, merge, followups, next. Started here or by the herdr-dispatch skill.</p>
+          <p className="sub">Run an epic’s issues side by side. Each one is built, grinded, merged and wrapped up, and the next starts as soon as what it waits for is done.</p>
         </div>
-        <Button variant="primary" onClick={() => setOpen(true)}><Icon n="plus" />New dispatch</Button>
+        <Button variant="primary" onClick={() => setOpen(true)}><Icon n="plus" />Run an epic</Button>
       </div>
       {q.isError ? <Banner tone="bad" icon="alert" action={<Button sm onClick={() => void q.refetch()}>Retry</Button>}>Could not load dispatches. {q.error.message}</Banner> : null}
       <section aria-label="Running">
@@ -60,8 +65,8 @@ export function DispatchesPage() {
         {running.length ? (
           <div className="live-grid">{running.map((d) => <Card key={d.id} d={d} />)}</div>
         ) : q.isPending ? <div className="skel" style={{ height: 90 }} /> : (
-          <EmptyState icon="bolt" title="No dispatch running" actions={<Button variant="primary" onClick={() => setOpen(true)}>Dispatch an epic</Button>}>
-            Pick an epic with refined issues. Its unblocked issues start in parallel and the rest follow as their blockers merge.
+          <EmptyState icon="bolt" title="Nothing is running" actions={<Button variant="primary" onClick={() => setOpen(true)}>Run an epic</Button>}>
+            Pick an epic whose issues are refined. The ones with nothing to wait for start right away; the rest follow as their blockers merge.
           </EmptyState>
         )}
       </section>
@@ -70,7 +75,7 @@ export function DispatchesPage() {
           <h2>History</h2>
           <div className="tbl-wrap">
             <table className="tbl">
-              <thead><tr><th>Epic</th><th>Result</th><th>Lanes</th><th>Started</th><th>Took</th><th>Cost</th></tr></thead>
+              <thead><tr><th>Epic</th><th>Result</th><th>Issues</th><th>Started</th><th>Took</th><th>Spent</th></tr></thead>
               <tbody>
                 {past.map((d) => {
                   const c = counts(d);

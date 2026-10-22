@@ -137,7 +137,7 @@ describe('Next step box wired to actions', () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(within(await step()).getByRole('button', { name: 'Run epic' }));
-    expect(await screen.findByRole('dialog', { name: 'Dispatch an epic' })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'Run an epic' })).toBeTruthy();
     expect((screen.getByLabelText('Epic') as HTMLInputElement).value).toBe('o/r#7');
   });
 
