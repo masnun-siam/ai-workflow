@@ -20,7 +20,7 @@ import { useRepo } from '../shell/useRepo';
 
 const TABS = ['issues', 'prd', 'review', 'sessions'];
 
-function Body({ f, repo, tab, autoGrind, meta }: { f: Feature; repo: string; tab?: string; autoGrind: boolean; meta?: BoardMeta }) {
+function Body({ f, repo, tab, meta }: { f: Feature; repo: string; tab?: string; meta?: BoardMeta }) {
   const navigate = useNavigate();
   const { link } = useRepo();
   const sessions = useSessions().data?.sessions ?? [];
@@ -81,7 +81,7 @@ function Body({ f, repo, tab, autoGrind, meta }: { f: Feature; repo: string; tab
           { value: 'sessions', label: 'Sessions', count: mine.length },
         ]}
       >
-        <TabPanel value="issues"><IssuesTab f={f} repo={repo} autoGrind={autoGrind} /></TabPanel>
+        <TabPanel value="issues"><IssuesTab f={f} repo={repo} /></TabPanel>
         <TabPanel value="prd">{cur === 'prd' ? <PrdTab f={f} repo={repo} /> : null}</TabPanel>
         <TabPanel value="review"><ReviewTab f={f} repo={repo} /></TabPanel>
         <TabPanel value="sessions"><SessionTable rows={mine} /></TabPanel>
@@ -116,6 +116,6 @@ export function FeaturePage() {
       </div>
     );
   return (
-    <Body f={f} repo={repo} tab={tab} autoGrind={del.data?.auto_grind ?? false} meta={plan.data} />
+    <Body f={f} repo={repo} tab={tab} meta={plan.data} />
   );
 }

@@ -8,7 +8,8 @@ the epic (or listed in its sub_issues), plus any issue labelled `prd-<slug>`.
 Card: {slug, title, status, path, abs_path, column, pr, epic, issues, refined, unrefined, children, panel}.
 `children` is [{n, title, refined}] of its open child issues.
 `unrefined` lists the child issue numbers not yet labelled `refined`. `column` is one of
-draft | in_review | approved | tasks_filed | refined. `pr` is {n, url} for an In review PRD (an open PR
+draft | in_review | approved | tasks_filed | refined | done. `done` is an Approved PRD with no open child
+whose epic is closed, or open with sub-issues that are all closed. `pr` is {n, url} for an In review PRD (an open PR
 whose branch or title mentions the slug; heuristic), else None. `panels` maps slug -> a panel id or an
 already-built panel_status dict.
 """
@@ -61,6 +62,7 @@ def build(repo: str, checkout_path: str, snapshot: dict, panels: dict | None) ->
     data = snapshot.get("data") or {}
     issues = data.get("issues") or []
     prs = data.get("open_prs") or []
+    closed_epics = data.get("closed_epics") or []
     out = []
     for path in sorted(glob.glob(os.path.join(checkout_path or "", "docs", "prds", "*.md"))):
         meta = _parse(path)
@@ -88,6 +90,8 @@ def build(repo: str, checkout_path: str, snapshot: dict, panels: dict | None) ->
             column = "in_review"
         elif kids:
             column = "refined" if refined == len(kids) else "tasks_filed"
+        elif (epic and epic["sub_issues"]) or (not epic and any(label in e["labels"] for e in closed_epics)):
+            column = "done"
         else:
             column = "approved"
         out.append(

@@ -3,7 +3,8 @@ pauses or finishes. Stdlib only.
 
 State lives where pr-grind already keeps it: <pr_grind_dir>/<owner>-<repo>-<pr>.md (headers
 `paused:` / `done:`, one `## Round n` heading per round). Re-entering an existing loop is
-ui_runner.prgrind_tick's; `autostart` begins a loop when a PR turns ready (FR-10).
+ui_runner.prgrind_tick's; `autostart` begins a loop when a PR turns ready (FR-10) and its issue's
+grinding is on; `set_issue` is the per-issue switch.
 """
 
 from __future__ import annotations
@@ -17,9 +18,11 @@ import time
 from datetime import datetime, timezone
 
 import shared
+import ui_inbox
 import ui_notify
 import ui_runner
 import ui_sessions
+import ui_settings
 from shared import warn
 
 _lock = threading.Lock()
@@ -55,10 +58,20 @@ def _state_files():
 
 
 def index() -> dict:
-    """One scan: {"pr": {(owner, repo, pr): {state, round}}}. state is running | idle | paused | done."""
+    """One scan: {"pr": {(owner, repo, pr): {state, round, thread, reason?}}}. state is running | idle | paused |
+    done; thread is the loop's Slack thread URL (None when it is not one); reason only when paused."""
     sessions = ui_sessions.list_sessions()
     live = {r.get("command") for r in sessions if ui_runner._live(r)}
     by_pr = {}
+    # a /pr-grind <pr url> just started has no state file until its first round writes one: running
+    for cmd in live:
+        m = _PR_URL.search(str(cmd)) if str(cmd).startswith("/pr-grind ") else None
+        if m:
+            by_pr[(m["owner"].lower(), m["repo"].lower(), int(m["n"]))] = {
+                "state": "running",
+                "round": 0,
+                "thread": None,
+            }
     for path, h in _state_files():
         if "done" in h:
             st = "done"
@@ -69,10 +82,17 @@ def index() -> dict:
         else:
             st = "idle"
         rounds = sum(1 for ln in ui_runner._read_lines(path) if ln.startswith("## Round "))
-        by_pr[(h["owner"].lower(), h["repo"].lower(), int(h["number"]))] = (
-            {"state": st, "round": rounds, "reason": h["paused"]} if st == "paused" else {"state": st, "round": rounds}
+        key = (h["owner"].lower(), h["repo"].lower(), int(h["number"]))
+        if st in ("done", "idle") and key in by_pr:
+            st = "running"  # a new /pr-grind <pr url> on a PR with an old loop
+        thread = h["thread"] if str(h.get("thread", "")).startswith("https://") else None  # the Slack thread
+        by_pr[key] = {"state": st, "round": rounds, "thread": thread} | (
+            {"reason": h["paused"]} if st == "paused" else {}
         )
     return {"pr": by_pr}
+
+
+_PR_URL = re.compile(r"github\.com/(?P<owner>[\w.-]+)/(?P<repo>[\w.-]+)/pull/(?P<n>\d+)\b")
 
 
 class Conflict(Exception):
@@ -151,27 +171,59 @@ def turned_ready(snapshot, prev) -> list:
 
 def autostart(repo: str, snapshot: dict, prev_snapshot: dict, settings: dict, start=None) -> list:
     """Start `/pr-grind <pr url>` (plus the repo's Slack channel) for each PR that turned ready since the
-    previous poll, when the repo has auto_grind on. Returns the PR numbers started. Nothing on stale data,
-    nothing for a PR with a grind state file (any state) or a live grind (start_session answers 409)."""
-    if not (settings or {}).get("auto_grind") or (snapshot or {}).get("stale", True):
+    previous poll, when its issue's grinding is on (ui_inbox.grind_on). Returns the PR numbers started. Nothing
+    on stale data, nothing for a PR with a grind state file (any state) or a live grind (start_session answers 409)."""
+    if (snapshot or {}).get("stale", True):
         return []
+    owner, _, name = repo.lower().partition("/")
+    have = {(h["owner"].lower(), h["repo"].lower(), int(h["number"])) for _, h in _state_files()}
+    issue_of = {p["n"]: i["n"] for i in _data(snapshot).get("issues") or [] for p in i.get("prs") or []}
+    started = []
+    for p in turned_ready(snapshot, prev_snapshot):
+        if (owner, name, p["n"]) in have or not ui_inbox.grind_on(settings, issue_of.get(p["n"])):
+            continue
+        if _start(repo, p, settings, start) == 201:
+            started.append(p["n"])
+    return started
+
+
+def _start(repo: str, pr: dict, settings: dict, start=None) -> int:
+    """Start one `/pr-grind` for `pr`; the HTTP status (201 started, 409 one is live), anything else warned."""
     if start is None:
         import ui_repos
 
         start = ui_repos.start_session
-    owner, _, name = repo.lower().partition("/")
-    have = {(h["owner"].lower(), h["repo"].lower(), int(h["number"])) for _, h in _state_files()}
-    started = []
-    for p in turned_ready(snapshot, prev_snapshot):
-        if (owner, name, p["n"]) in have:
-            continue
-        text = grind_text(p["url"], (settings or {}).get("slack_channel"))
-        status, body = start({"repo": repo, "text": text})
-        if status == 201:
-            started.append(p["n"])
-        elif status != 409:
-            warn(f"grind autostart {repo}#{p['n']}: {status} {body.get('error') if isinstance(body, dict) else body}")
-    return started
+    status, body = start({"repo": repo, "text": grind_text(pr["url"], (settings or {}).get("slack_channel"))})
+    if status not in (201, 409):
+        warn(f"grind start {repo}#{pr['n']}: {status} {body.get('error') if isinstance(body, dict) else body}")
+    return status
+
+
+def set_issue(repo: str, issue: int, on: bool, snapshot: dict, settings: dict, start=None) -> dict:
+    """The issue's grinding switch. On starts a grind for its ready PR when it has none yet; off stops a loop
+    that is not done (the PR stays open)."""
+    ui_settings.set_issue_grind(repo, issue, on)
+    pr = next(
+        (
+            p
+            for i in _data(snapshot).get("issues") or []
+            if i["n"] == issue
+            for p in i.get("prs") or []
+            if p.get("state", "OPEN") == "OPEN"
+        ),
+        None,
+    )
+    if pr:
+        try:
+            _, h = _loop(repo, pr["n"])
+        except Conflict:
+            h = None
+        if on and h is None and not pr.get("draft"):
+            if _start(repo, pr, settings, start) not in (201, 409):
+                raise RuntimeError(f"could not start the grind on PR #{pr['n']}")
+        elif not on and h is not None and "done" not in h:
+            stop(repo, pr["n"])
+    return {"repo": repo, "issue": issue, "on": on}
 
 
 def grind_text(pr_url: str, channel) -> str:

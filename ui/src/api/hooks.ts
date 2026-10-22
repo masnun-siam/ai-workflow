@@ -164,6 +164,8 @@ export const useCloseEpic = () => useApiMutation((v: { repo: string; epic: numbe
 export const useCleanupIssue = () => useApiMutation((v: { repo: string; issue: number }) => api.cleanupIssue(v.repo, v.issue), BOARD_WRITES);
 export const useSkipCi = () => useApiMutation((v: { repo: string; pr: number }) => api.skipCi(v.repo, v.pr), [...BOARD_WRITES, ['pull']]);
 export const useStopGrind = () => useApiMutation((v: { repo: string; pr: number }) => api.stopGrind(v.repo, v.pr), [...BOARD_WRITES, ['pull']]);
+export const useGrindIssue = () =>
+  useApiMutation((v: { repo: string; issue: number; on: boolean }) => api.grindIssue(v.repo, v.issue, v.on), [...BOARD_WRITES, ['pull']]);
 export const useMerge = () =>
   useApiMutation((v: { repo: string; n: number }) => api.merge(v.repo, v.n), (v) => [...BOARD_WRITES, ['pull', v.repo, v.n], ['issue', v.repo]], { quiet: true });
 export const useComment = () =>

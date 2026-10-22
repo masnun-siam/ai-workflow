@@ -1,10 +1,16 @@
-"""Board poller: one `gh api graphql` call per repo per poll, last result kept in memory (FR-17).
+"""Board poller: a 1-point GraphQL probe per repo per poll, the full query only when it saw a change (FR-17).
 
 `snapshot(repo)` never touches GitHub: it returns `{data, stale, fetched_at, error, retry_at}` from memory.
 `error` says why the last poll failed ("rate limited" or gh's message), None after a good one;
 `retry_at` is the end of a rate-limit pause, else None.
-`poll(repo)` does the single GraphQL call. Cadence is 60 s, or 15 s while any PR's CI is pending.
-A rate-limit response keeps the last data, marks it stale and pauses fetching for 600 s.
+`poll(repo)` runs PROBE (newest issue/PR update, open PRs' CI, mergeable and review state). The full QUERY
+(about 6 points) follows only when the probe's answer changed, on `poll(repo, full=True)`, and at least every
+FULL_EVERY s (what the probe cannot see: the 7-day merged window, edits that leave updatedAt alone).
+Cadence is 60 s, or 15 s while any PR's CI is pending; COLD_POLL_SECONDS for a repo nobody is viewing
+(`start`'s `hot`), and for every repo while the token's GraphQL budget, shared with the agents, is under
+LOW_BUDGET points (read from each response's `rateLimit`, free) until it resets.
+A rate-limit response keeps the last data, marks it stale and pauses fetching until the budget's reset
+(when it was low), else for 600 s (a secondary limit).
 Any other failure keeps the last data and marks it stale (retry on the normal cadence).
 Never written back to GitHub; read-only.
 
@@ -19,7 +25,8 @@ with `stale: True, fetched_at: None`):
          "sub_issues": [int],
          "blocked_by": [{"n": int, "state": "OPEN" | "CLOSED"}],   # all blockers; filter on state
          "prs": [{"n": int, "url": str, "draft": bool, "state": "OPEN"|"CLOSED"|"MERGED",
-                  "merged_at": str | None, "head": str, "ci": "success"|"failure"|"pending"|"none"}]}
+                  "merged_at": str | None, "head": str, "ci": "success"|"failure"|"pending"|"none",
+                  "conflict": bool}]}         # GitHub says the PR conflicts with its base
       ],
       "merged": [   # PRs merged in the last 7 days, newest first
         {"n": int, "title": str, "url": str, "merged_at": str, "head": str,
@@ -30,6 +37,9 @@ with `stale: True, fetched_at: None`):
         {"n": int, "title": str, "url": str, "draft": bool, "head": str, "ci": ..., "review": ...,
          "reviewer": str | None,          # login of the newest approving review
          "checks": int}                   # status checks that ran
+      ],
+      "closed_epics": [  # the 50 most recently updated CLOSED issues labelled `epic` (a PRD's Done column)
+        {"n": int, "labels": [str]}
       ]
     }
 
@@ -51,9 +61,12 @@ from shared import run
 POLL_SECONDS = 60
 FAST_POLL_SECONDS = 15  # any PR's CI still pending
 RATE_LIMIT_PAUSE = 600
+COLD_POLL_SECONDS = 600  # nobody viewing the repo, or the budget is low
+FULL_EVERY = 600  # full fetch at least this often, even when the probe saw no change
+LOW_BUDGET = 1000  # GraphQL points left of the hourly 5000
 MERGED_DAYS = 7
 
-_PR = "number url isDraft state mergedAt headRefName reviewDecision statusCheckRollup { state }"
+_PR = "number url isDraft state mergedAt headRefName reviewDecision mergeable statusCheckRollup { state }"
 # open PRs also carry who approved and how many checks ran (the Inbox's "ready to merge" line)
 _PR_OPEN = (
     _PR
@@ -73,6 +86,9 @@ query($owner: String!, $name: String!) {{
         closedByPullRequestsReferences(first: 5, includeClosedPrs: true) {{ nodes {{ {_PR} }} }}
       }}
     }}
+    closedEpics: issues(states: CLOSED, labels: ["epic"], first: 50, orderBy: {{field: UPDATED_AT, direction: DESC}}) {{
+      nodes {{ number labels(first: 20) {{ nodes {{ name }} }} }}
+    }}
     mergedPrs: pullRequests(states: MERGED, first: 50, orderBy: {{field: UPDATED_AT, direction: DESC}}) {{
       nodes {{
         number title url mergedAt headRefName body
@@ -83,7 +99,21 @@ query($owner: String!, $name: String!) {{
       nodes {{ title body {_PR_OPEN} closingIssuesReferences(first: 10) {{ nodes {{ number }} }} }}
     }}
   }}
+  rateLimit {{ cost remaining resetAt }}
 }}
+"""
+# what changes when the board would: any issue or PR touched, an open PR's CI, conflict or review state
+PROBE = """
+query($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    issues(first: 1, orderBy: {field: UPDATED_AT, direction: DESC}) { totalCount nodes { updatedAt } }
+    pullRequests(first: 1, orderBy: {field: UPDATED_AT, direction: DESC}) { totalCount nodes { updatedAt } }
+    openPrs: pullRequests(states: OPEN, first: 50) {
+      nodes { number mergeable reviewDecision statusCheckRollup { state } }
+    }
+  }
+  rateLimit { cost remaining resetAt }
+}
 """
 
 _REVIEW = {"APPROVED": "approved", "CHANGES_REQUESTED": "changes_requested", "REVIEW_REQUIRED": "review_required"}
@@ -91,7 +121,7 @@ _CI = {"SUCCESS": "success", "FAILURE": "failure", "ERROR": "failure", "PENDING"
 
 
 def empty() -> dict:
-    return {"issues": [], "merged": [], "open_prs": []}
+    return {"issues": [], "merged": [], "open_prs": [], "closed_epics": []}
 
 
 def _nodes(x) -> list:
@@ -109,6 +139,7 @@ def _pr(n: dict) -> dict:
         "head": n.get("headRefName"),
         "ci": ci,
         "review": _REVIEW.get(n.get("reviewDecision") or "", "none"),  # no review rule on the repo: none
+        "conflict": n.get("mergeable") == "CONFLICTING",  # UNKNOWN while GitHub computes it: not a conflict
     }
 
 
@@ -215,7 +246,11 @@ def normalize(response: dict, now: datetime | None = None) -> dict:
                         "review": "none",
                     }
                 )
-    return {"issues": issues, "merged": merged, "open_prs": open_prs}
+    closed_epics = [
+        {"n": e["number"], "labels": [x["name"] for x in _nodes(e.get("labels")) if x.get("name")]}
+        for e in _nodes(repo.get("closedEpics"))
+    ]
+    return {"issues": issues, "merged": merged, "open_prs": open_prs, "closed_epics": closed_epics}
 
 
 def _rate_limited(proc) -> bool:
@@ -237,13 +272,28 @@ class Poller:
     def __init__(self, runner=_gh, clock=time.time, on_fresh=None):
         self.runner, self.clock, self.on_fresh = runner, clock, on_fresh
         self._lock = threading.Lock()
-        self._state: dict = {}  # repo -> {data, stale, fetched_at, error, next_due, paused_until}
+        self._state: dict = {}  # repo -> {data, stale, fetched_at, error, next_due, paused_until, last, full_at, probe}
+        self._budget = {"remaining": None, "reset_at": 0.0}  # the token's GraphQL points, from the last response
 
     def _entry(self, repo: str) -> dict:
         return self._state.setdefault(
             repo,
-            {"data": empty(), "stale": True, "fetched_at": None, "error": None, "next_due": 0.0, "paused_until": 0.0},
+            {
+                "data": empty(),
+                "stale": True,
+                "fetched_at": None,
+                "error": None,
+                "next_due": 0.0,
+                "paused_until": 0.0,
+                "last": 0.0,  # last poll attempt
+                "full_at": 0.0,  # last full fetch
+                "probe": None,  # the probe's answer at the last full fetch
+            },
         )
+
+    def _low(self) -> bool:
+        b = self._budget
+        return b["remaining"] is not None and b["remaining"] < LOW_BUDGET and self.clock() < b["reset_at"]
 
     def snapshot(self, repo: str) -> dict:
         """From memory; never waits on GitHub."""
@@ -258,62 +308,105 @@ class Poller:
                 "retry_at": paused,
             }
 
-    def due(self, repo: str) -> bool:
+    def due(self, repo: str, hot: bool = True) -> bool:
+        """`hot`: someone is viewing the repo or a session runs on it; a cold one polls every COLD_POLL_SECONDS."""
         with self._lock:
             e = self._entry(repo)
-            return self.clock() >= max(e["next_due"], e["paused_until"])
+            cold = 0.0 if hot else e["last"] + COLD_POLL_SECONDS
+            return self.clock() >= max(e["next_due"], e["paused_until"], cold)
 
-    def poll(self, repo: str) -> dict:
-        """One gh call (none while rate-limit paused). Returns the snapshot afterwards."""
-        with self._lock:
-            e = self._entry(repo)
-            paused = self.clock() < e["paused_until"]
-            prev = e["data"]
-        if paused:
-            return self.snapshot(repo)
+    def _call(self, repo: str, query: str):
+        """One `gh api graphql`. The response, or None after recording why (a rate limit pauses the repo)."""
         owner, _, name = repo.partition("/")
         proc = self.runner(
-            ["gh", "api", "graphql", "-f", f"query={QUERY}", "-F", f"owner={owner}", "-F", f"name={name}"]
+            ["gh", "api", "graphql", "-f", f"query={query}", "-F", f"owner={owner}", "-F", f"name={name}"]
         )
-        data = None
+        e = self._entry(repo)
         if _rate_limited(proc):
             with self._lock:
-                e["stale"], e["error"], e["paused_until"] = True, "rate limited", self.clock() + RATE_LIMIT_PAUSE
-            print(f"ui_poller: rate limit on {repo}, pausing {RATE_LIMIT_PAUSE}s", file=sys.stderr)
-        else:
-            try:
-                resp = json.loads(proc.stdout or "")
-                if proc.returncode != 0 or resp.get("errors"):
-                    raise ValueError(str(resp.get("errors") or proc.stderr)[:200])
-                data = normalize(resp)
-            except (ValueError, KeyError, TypeError, AttributeError) as exc:
-                print(f"ui_poller: {repo}: {exc}", file=sys.stderr)
-                with self._lock:
-                    e["stale"], e["error"] = True, str(exc)[:200] or type(exc).__name__
+                now = self.clock()
+                reset = self._budget["reset_at"]
+                e["stale"], e["error"] = True, "rate limited"
+                e["paused_until"] = reset if self._low() and reset > now else now + RATE_LIMIT_PAUSE
+            print(f"ui_poller: rate limit on {repo}, paused until {e['paused_until']:.0f}", file=sys.stderr)
+            return None
+        try:
+            resp = json.loads(proc.stdout or "")
+            if proc.returncode != 0 or resp.get("errors"):
+                raise ValueError(str(resp.get("errors") or proc.stderr)[:200])
+        except (ValueError, AttributeError) as exc:
+            print(f"ui_poller: {repo}: {exc}", file=sys.stderr)
+            with self._lock:
+                e["stale"], e["error"] = True, str(exc)[:200] or type(exc).__name__
+            return None
+        rl = (resp.get("data") or {}).get("rateLimit") or {}
+        at = _parse_ts(rl.get("resetAt"))
+        if isinstance(rl.get("remaining"), int) and at:
+            with self._lock:
+                self._budget = {"remaining": rl["remaining"], "reset_at": at.timestamp()}
+        return resp
+
+    def poll(self, repo: str, full: bool = False) -> dict:
+        """The probe, then the full query when needed (none while rate-limit paused). Returns the snapshot.
+        `full`: fetch everything even when the probe saw no change (the board's Refresh, after a write)."""
+        with self._lock:
+            e = self._entry(repo)
+            now = self.clock()
+            paused = now < e["paused_until"]
+            prev = e["data"]
+            if not paused:
+                e["last"] = now
+        if paused:
+            return self.snapshot(repo)
+        data, fresh = None, False
+        probe = self._call(repo, PROBE)
+        if probe is not None:
+            answer = json.dumps((probe.get("data") or {}).get("repository"), sort_keys=True)
+            with self._lock:
+                full = full or answer != e["probe"] or self.clock() - e["full_at"] >= FULL_EVERY
+            if not full:
+                fresh = True  # nothing changed: the data in memory is current
+            else:
+                resp = self._call(repo, QUERY)
+                if resp is not None:
+                    try:
+                        data = normalize(resp)
+                    except (ValueError, KeyError, TypeError, AttributeError) as exc:
+                        print(f"ui_poller: {repo}: {exc}", file=sys.stderr)
+                        with self._lock:
+                            e["stale"], e["error"] = True, str(exc)[:200] or type(exc).__name__
+                    else:
+                        fresh = True
+                        with self._lock:
+                            e.update(data=data, full_at=self.clock(), probe=answer)
         with self._lock:
             now = self.clock()
-            if data is not None:
-                pending = any(p["ci"] == "pending" for i in data["issues"] for p in i["prs"] if p["state"] == "OPEN")
-                pending = pending or any(p["ci"] == "pending" for p in data["open_prs"])
-                e.update(data=data, stale=False, fetched_at=now, error=None)
-                e["next_due"] = now + (FAST_POLL_SECONDS if pending else POLL_SECONDS)
+            if fresh:
+                d = e["data"]
+                pending = any(p["ci"] == "pending" for i in d["issues"] for p in i["prs"] if p["state"] == "OPEN")
+                pending = pending or any(p["ci"] == "pending" for p in d["open_prs"])
+                e.update(stale=False, fetched_at=now, error=None)
+                wait = FAST_POLL_SECONDS if pending else POLL_SECONDS
+                e["next_due"] = now + (max(wait, COLD_POLL_SECONDS) if self._low() else wait)
             elif now >= e["paused_until"]:
                 e["next_due"] = now + POLL_SECONDS
         snap = self.snapshot(repo)
-        if data is not None and self.on_fresh:
+        if fresh and self.on_fresh:
             try:
                 self.on_fresh(repo, snap, prev)
             except Exception as exc:  # noqa: BLE001 - a hook must not stop polling
                 print(f"ui_poller: on_fresh {repo}: {type(exc).__name__}: {exc}", file=sys.stderr)
         return snap
 
-    def start(self, repos, tick: float = 5.0) -> threading.Thread:
-        """Daemon thread: every `tick` s poll each repo of `repos()` (callable -> slugs) that is due."""
+    def start(self, repos, tick: float = 5.0, hot=None) -> threading.Thread:
+        """Daemon thread: every `tick` s poll each repo of `repos()` (callable -> slugs) that is due.
+        `hot()` (callable -> slugs) names the repos on the normal cadence; the rest are cold. None: all hot."""
 
         def loop():
             while True:
+                warm = hot() if hot else None
                 for repo in list(repos()):
-                    if self.due(repo):
+                    if self.due(repo, warm is None or repo in warm):
                         self.poll(repo)
                 time.sleep(tick)
 

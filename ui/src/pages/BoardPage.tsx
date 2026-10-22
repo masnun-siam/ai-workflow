@@ -33,7 +33,7 @@ interface LaneData {
   cards: FeatureIssue[];
 }
 
-function Card({ c, repo, autoGrind }: { c: FeatureIssue; repo: string; autoGrind: boolean }) {
+function Card({ c, repo }: { c: FeatureIssue; repo: string }) {
   const panel = usePanel();
   const open = () => panel.open({ kind: 'issue', repo, n: c.n });
   return (
@@ -48,12 +48,12 @@ function Card({ c, repo, autoGrind }: { c: FeatureIssue; repo: string; autoGrind
       <div className="row"><span className="ref">#{c.n}</span><span className="grow" />{needsYou(c) ? <Chip tone="you">Needs you</Chip> : null}</div>
       <div className="t">{c.title}</div>
       <IssueSignals card={c} />
-      <div><IssueAction card={c} repo={repo} autoGrind={autoGrind} /></div>
+      <div><IssueAction card={c} repo={repo} /></div>
     </div>
   );
 }
 
-function Lane({ lane, repo, autoGrind, flat }: { lane: LaneData; repo: string; autoGrind: boolean; flat: boolean }) {
+function Lane({ lane, repo, flat }: { lane: LaneData; repo: string; flat: boolean }) {
   const { link } = useRepo();
   const auto = useAutoBuild();
   const cols = placeCards(lane.cards);
@@ -81,7 +81,7 @@ function Lane({ lane, repo, autoGrind, flat }: { lane: LaneData; repo: string; a
             <div key={col.id}>
               <div className="bcol-h" style={{ ['--c' as string]: col.color }}><i /><h3 style={{ font: 'inherit' }}>{col.label}</h3><span className="faint">{cols[col.id].length}</span></div>
               <div className="bcol" data-lane={lane.key} data-col={col.id} role="list" aria-label={col.label}>
-                {cols[col.id].map((c) => <div key={c.n} role="listitem" style={{ display: 'contents' }}><Card c={c} repo={repo} autoGrind={autoGrind} /></div>)}
+                {cols[col.id].map((c) => <div key={c.n} role="listitem" style={{ display: 'contents' }}><Card c={c} repo={repo} /></div>)}
               </div>
             </div>
           ))}
@@ -164,7 +164,6 @@ export function BoardPage() {
       setRefreshing(false);
     }
   };
-  const autoGrind = del.data?.auto_grind ?? false;
 
   return (
     <div className="content-inner" style={{ maxWidth: 'none' }}>
@@ -188,9 +187,9 @@ export function BoardPage() {
           Issues land here once a PRD is approved and split into tasks.
         </EmptyState>
       ) : flat ? (
-        <Lane lane={{ key: 'all', title: 'All issues', epic: null, autobuild: false, running: 0, cap: 0, cards: lanes.flatMap((l) => l.cards) }} repo={repo} autoGrind={autoGrind} flat />
+        <Lane lane={{ key: 'all', title: 'All issues', epic: null, autobuild: false, running: 0, cap: 0, cards: lanes.flatMap((l) => l.cards) }} repo={repo} flat />
       ) : (
-        lanes.map((l) => <Lane key={l.key} lane={l} repo={repo} autoGrind={autoGrind} flat={false} />)
+        lanes.map((l) => <Lane key={l.key} lane={l} repo={repo} flat={false} />)
       )}
     </div>
   );

@@ -11,6 +11,7 @@ import { agoIso } from '../lib/format';
 import { nextStep } from '../lib/nextStep';
 import { routes } from '../lib/routes';
 import { STAGES, stageIdx } from '../lib/vocab';
+import { usePanel } from '../panels/PanelContext';
 import { useRepo } from '../shell/useRepo';
 import { useStart } from '../start/StartContext';
 
@@ -25,7 +26,9 @@ function Row({ f, repo }: { f: Feature; repo: string }) {
   const navigate = useNavigate();
   const { link } = useRepo();
   const { run, busy } = useStepRunner(f, repo);
+  const panel = usePanel();
   const ns = nextStep(f);
+  const ready = f.issues.filter((i) => i.mergeable && i.pr);
   const st = STAGES[stageIdx(f.stage)];
   const href = link(routes.feature(f.slug));
   return (
@@ -40,7 +43,8 @@ function Row({ f, repo }: { f: Feature; repo: string }) {
       <div><Chip tone={st.tone}>{st.label}</Chip></div>
       <Track feature={f} />
       <div className="fnext" onClick={(e) => e.stopPropagation()}>
-        <Button sm variant={ns.quiet ? 'default' : 'primary'} disabled={busy} onClick={() => run(ns.primary.action)}>{ns.primary.label}</Button>
+        {ready.map((i) => <Button key={i.n} sm variant="primary" onClick={() => panel.open({ kind: 'pr', repo, n: i.pr!.n })}>Merge #{i.pr!.n}</Button>)}
+        {ns.primary.action.kind === 'merge' ? null : <Button sm variant={ns.quiet ? 'default' : 'primary'} disabled={busy} onClick={() => run(ns.primary.action)}>{ns.primary.label}</Button>}
       </div>
     </div>
   );

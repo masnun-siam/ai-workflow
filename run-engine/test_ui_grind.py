@@ -39,12 +39,23 @@ state_file(10)
 state_file(11, paused="2026-10-08T00:00:00Z — rail")
 state_file(12, done="2026-10-08T00:00:00Z — approved")
 idx = ui_grind.index()["pr"]
-assert idx[("o", "r", 10)] == {"state": "idle", "round": 2}
+assert idx[("o", "r", 10)] == {"state": "idle", "round": 2, "thread": "https://x.slack.com/archives/C1/p10"}
 assert idx[("o", "r", 11)]["state"] == "paused" and "rail" in idx[("o", "r", 11)]["reason"]
 assert idx[("o", "r", 12)]["state"] == "done"
 rec = ui_sessions.create("/pr-grind https://x.slack.com/archives/C1/p10", d)
 ui_sessions.update(rec["id"], status="running", pid=os.getpgrp())
 assert ui_grind.index()["pr"][("o", "r", 10)]["state"] == "running"
+# a /pr-grind <pr url> just started (no state file yet, or an old done loop) is running
+fresh = ui_sessions.create("/pr-grind https://github.com/O/R/pull/90 --channel C1", d)
+ui_sessions.update(fresh["id"], status="running", pid=os.getpgrp())
+again = ui_sessions.create("/pr-grind https://github.com/o/r/pull/12", d)
+ui_sessions.update(again["id"], status="running", pid=os.getpgrp())
+idx = ui_grind.index()["pr"]
+assert idx[("o", "r", 90)] == {"state": "running", "round": 0, "thread": None}
+assert idx[("o", "r", 12)]["state"] == "running"
+for r_ in (fresh, again):
+    ui_sessions.update(r_["id"], status="done")
+assert ("o", "r", 90) not in ui_grind.index()["pr"] and ui_grind.index()["pr"][("o", "r", 12)]["state"] == "done"
 print("  ok  index states and rounds")
 
 # the queue and autostart are gone
@@ -101,6 +112,19 @@ state_file(60, done="x")
 assert ui_grind.autostart("o/r", now, prev, on, start=fake_start) == [] and not calls
 os.unlink(os.path.join(d, "pr-grind", "o-r-60.md"))
 assert ui_grind.autostart("o/r", now, prev, on, start=lambda b: (409, {"error": "live"})) == []  # live grind: 409
+# per issue: the issue's switch overrides the repo's auto_grind (#1 owns both PRs here)
+assert ui_grind.autostart("o/r", now, prev, {"auto_grind": True, "issue_grind": {1: False}}, start=fake_start) == []
+assert ui_grind.autostart("o/r", now, prev, {"auto_grind": False, "issue_grind": {1: True}}, start=fake_start) == [60]
+calls.clear()
+bare = snap([])
+bare["data"]["open_prs"] = [pr(62, False)]
+bare_prev = snap([])
+bare_prev["data"]["open_prs"] = [pr(62, True)]
+assert ui_grind.autostart(
+    "o/r", bare, bare_prev, {"auto_grind": True, "issue_grind": {1: False}}, start=fake_start
+) == [62]
+assert ui_grind.autostart("o/r", bare, bare_prev, {"issue_grind": {1: True}}, start=fake_start) == [], "no issue: repo"
+calls.clear()
 assert ui_grind.grind_text("u", "") == "/pr-grind u" and ui_grind.grind_text("u", "a b;c") == "/pr-grind u"
 print("  ok  autostart")
 
@@ -157,4 +181,40 @@ assert ui_runner.prgrind_tick(os.path.join(d, "pr-grind", "o-r-71.md")) == "done
 assert ui_grind.stop("o/r", 71) == {"ok": True, "state": "done"}  # twice is fine
 assert ui_grind.stop("o/r", 72)["state"] == "done" and ui_grind.index()["pr"][("o", "r", 72)]["state"] == "done"
 print("  ok  stop")
+
+# set_issue: stores the switch; on starts a grind for a ready PR with none, off stops a live loop
+import ui_settings  # noqa: E402
+
+calls.clear()
+ready = snap([pr(80, False)])
+ready["data"]["issues"][0]["n"] = 8
+assert ui_grind.set_issue("o/r", 8, True, ready, {"slack_channel": ""}, start=fake_start) == {
+    "repo": "o/r",
+    "issue": 8,
+    "on": True,
+}
+assert ui_settings.repo_settings("o/r")["issue_grind"][8] is True
+assert calls == [{"repo": "o/r", "text": "/pr-grind https://github.com/o/r/pull/80"}], calls
+calls.clear()
+state_file(80)
+ui_grind.set_issue("o/r", 8, True, ready, {}, start=fake_start)
+assert not calls, "a loop already exists: not started twice"
+ui_grind.set_issue("o/r", 8, False, ready, {}, start=fake_start)
+assert (
+    ui_grind.index()["pr"][("o", "r", 80)]["state"] == "done"
+    and ui_settings.repo_settings("o/r")["issue_grind"][8] is False
+)
+draft = snap([pr(81, True)])
+draft["data"]["issues"][0]["n"] = 9
+ui_grind.set_issue("o/r", 9, True, draft, {}, start=fake_start)
+assert not calls, "a draft PR is not ready: the grind starts when it turns ready"
+ui_grind.set_issue("o/r", 10, True, snap([]), {}, start=lambda b: (502, {"error": "x"}))  # no PR: only the switch
+assert ui_settings.repo_settings("o/r")["issue_grind"][10] is True
+os.unlink(os.path.join(d, "pr-grind", "o-r-80.md"))
+try:
+    ui_grind.set_issue("o/r", 8, True, ready, {}, start=lambda b: (502, {"error": "x"}))
+    raise AssertionError("expected RuntimeError")
+except RuntimeError:
+    pass
+print("  ok  set_issue")
 print("ui_grind: all checks passed")

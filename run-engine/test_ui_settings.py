@@ -39,6 +39,7 @@ assert {k: v for k, v in ui_settings.load().items() if k != "vault_dir"} == {
     "default": "claude",
     "repos": {},
     "autopilot": {},
+    "grind_mode": "deep",
 }
 assert ui_settings.load()["vault_dir"] == os.path.expanduser("~/Documents/notes")
 assert ui_settings.default_cmd() == "claude"
@@ -90,8 +91,25 @@ assert ui_settings.repo_settings("o/a") == {
     "autopilot_cap": 2,
     "slack_channel": "",
     "autopilot": [],
+    "issue_grind": {},
 }
 assert ui_settings.repo_settings("o/none")["auto_grind"] is False
+assert ui_settings.set_issue_grind("O/a", 5, False) == {5: False} and ui_settings.set_issue_grind("o/a", 6, True) == {
+    5: False,
+    6: True,
+}
+assert ui_settings.repo_settings("o/a")["issue_grind"] == {5: False, 6: True}
+ui_settings.save(ui_settings.load())
+assert ui_settings.repo_settings("o/a")["issue_grind"] == {5: False, 6: True}, "a Settings save keeps the switches"
+assert raises(ui_settings.set_issue_grind, "o/a", 0, True) and raises(ui_settings.set_issue_grind, "o/a", 5, "on")
+# grind_mode: deep by default, a partial save sets it, other saves keep it, anything else is refused
+assert ui_settings.grind_mode() == "deep" and ui_settings.load()["grind_mode"] == "deep"
+ui_settings.save({"grind_mode": "simple"})
+assert ui_settings.grind_mode() == "simple" and ui_settings.load()["grind_mode"] == "simple"
+ui_settings.save({"repos": {"o/a": {"autopilot_cap": 3}}})
+assert ui_settings.grind_mode() == "simple", "a save without grind_mode keeps it"
+assert raises(ui_settings.validate, {"grind_mode": "fast"})
+ui_settings.save({"grind_mode": "deep"})
 assert ui_settings.set_autopilot("o/a", 12, True) == [12] and ui_settings.set_autopilot("o/a", 12, False) == []
 ui_settings.set_autopilot("o/a", 7, True)
 assert ui_settings.load()["autopilot"] == {"o/a": [7]} and ui_settings.repo_settings("o/a")["autopilot"] == [7]

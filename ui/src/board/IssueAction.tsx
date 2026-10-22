@@ -3,17 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { useCleanupIssue, useSettings, useSkipCi } from '../api/hooks';
 import type { DeliveryCard } from '../api/types';
 import { Button, Chip, Icon, Menu, toast, useConfirm } from '../components';
-import { mergeable } from '../lib/features';
 import { issueStatus } from '../lib/vocab';
 import { routes } from '../lib/routes';
 import { usePanel } from '../panels/PanelContext';
 import { useRepo } from '../shell/useRepo';
 import { useStarter } from './actions';
+import { ResolveConflicts } from './ResolveConflicts';
 
-export type IssueActionKind = 'refine' | 'blocked' | 'queued' | 'start' | 'answer' | 'watch' | 'merge' | 'grind' | 'openPr' | 'skipCi' | 'round' | 'cleanup' | 'none';
+export type IssueActionKind = 'refine' | 'blocked' | 'queued' | 'start' | 'answer' | 'watch' | 'merge' | 'grind' | 'openPr' | 'skipCi' | 'round' | 'resolve' | 'cleanup' | 'none';
 
 /** Which action a card gets. Pure so the board and tests agree. */
-export function actionKind(card: DeliveryCard, autoGrind: boolean): IssueActionKind {
+export function actionKind(card: DeliveryCard): IssueActionKind {
   const st = issueStatus(card);
   const s = card.session;
   if (st === 'unrefined') return 'refine';
@@ -24,13 +24,14 @@ export function actionKind(card: DeliveryCard, autoGrind: boolean): IssueActionK
     if (s) return 'watch';
     return card.pr ? 'openPr' : 'none';
   }
-  if (st === 'in_review') return mergeable(card.pr) ? 'merge' : !autoGrind && card.pr ? 'grind' : 'openPr';
+  if (card.pr?.conflict && st !== 'merged') return 'resolve';
+  if (st === 'in_review') return card.mergeable ? 'merge' : card.grind_on && !card.grind && card.pr && !card.pr.draft ? 'grind' : 'openPr';
   if (st === 'grinding') return card.grind?.state === 'paused' ? 'skipCi' : 'round';
   if (st === 'merged' && card.needs_cleanup) return 'cleanup';
   return 'none';
 }
 
-export function IssueAction({ card, repo, autoGrind = false }: { card: DeliveryCard; repo: string; autoGrind?: boolean }) {
+export function IssueAction({ card, repo }: { card: DeliveryCard; repo: string }) {
   const starter = useStarter();
   const panel = usePanel();
   const navigate = useNavigate();
@@ -39,7 +40,7 @@ export function IssueAction({ card, repo, autoGrind = false }: { card: DeliveryC
   const skip = useSkipCi();
   const clean = useCleanupIssue();
   const accounts = useSettings().data;
-  const kind = actionKind(card, autoGrind);
+  const kind = actionKind(card);
   const n = card.n;
   const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
 
@@ -93,6 +94,9 @@ export function IssueAction({ card, repo, autoGrind = false }: { card: DeliveryC
       break;
     case 'skipCi':
       el = <Button sm disabled={skip.isPending} onClick={() => card.pr && skip.mutate({ repo, pr: card.pr.n }, { onSuccess: () => toast('Skipping CI and continuing the grind') })}>Skip CI</Button>;
+      break;
+    case 'resolve':
+      el = card.pr ? <ResolveConflicts repo={repo} url={card.pr.url} n={card.pr.n} primary /> : null;
       break;
     case 'round':
       el = <span className="muted" style={{ fontSize: 13 }}>round {card.grind?.round ?? 1}</span>;

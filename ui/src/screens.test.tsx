@@ -30,7 +30,7 @@ function mock(o: { fetchedAt?: number | null; delFetchedAt?: number | null; stal
   };
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     const path = String(url).split('?')[0];
-    if (init?.method === 'POST') posts.push({ url: path, body: JSON.parse(String(init.body ?? '{}')) });
+    if (init?.method === 'POST' || init?.method === 'PUT') posts.push({ url: path, body: JSON.parse(String(init.body ?? '{}')) });
     if (o.extra?.[path]) return o.extra[path](init);
     if (init?.method === 'POST') return json({ id: 'sess1' }, 201);
     return path in routes ? json(routes[path]) : json({ items: [] });
@@ -125,7 +125,7 @@ describe('Next step box wired to actions', () => {
     await user.click(within(await step()).getByRole('button', { name: 'Refine 2' }));
     await waitFor(() => expect(posts.find((p) => p.url === '/api/start')?.body).toMatchObject({ skill: 'refine-issues', arg: '11 12' }));
     cleanup();
-    mock({ prds: [prd({ issues: 1, column: 'refined' })], lanes: [lane([card(11, 'in_review', { pr: { n: 40, draft: false, ci: 'success', url: 'u', review: 'approved' } })])] });
+    mock({ prds: [prd({ issues: 1, column: 'refined' })], lanes: [lane([card(11, 'in_review', { pr: { n: 40, draft: false, ci: 'success', url: 'u', review: 'approved' }, mergeable: true })])] });
     window.location.hash = '#/features/f1?repo=o/r';
     render(<App />);
     expect(await within(await step()).findByRole('button', { name: 'Review and merge' })).toBeTruthy();
@@ -204,7 +204,7 @@ describe('Board', () => {
   });
 
   it('renders lanes, cards with their action, and moves focus with j/l', async () => {
-    mock({ prds: [prd({ issues: 2 })], lanes: [lane([card(11, 'ready'), card(12, 'in_review', { pr: { n: 40, draft: false, ci: 'success', url: 'u', review: 'approved' } })])] });
+    mock({ prds: [prd({ issues: 2 })], lanes: [lane([card(11, 'ready'), card(12, 'in_review', { pr: { n: 40, draft: false, ci: 'success', url: 'u', review: 'approved' }, mergeable: true })])] });
     window.location.hash = '#/board?repo=o/r';
     const user = userEvent.setup();
     render(<App />);
@@ -235,6 +235,83 @@ describe('Board', () => {
   });
 });
 
+describe('work panel: issue + PR tabs, grinding switch', () => {
+  const issue = { number: 12, title: 'Task 12', state: 'open', url: 'https://github.com/o/r/issues/12', author: 'me', created_at: '2026-01-01T00:00:00Z', labels: [], assignees: [], body_html: '', comments: [], comment_count: 0, is_pr: false };
+  const pull = { number: 40, title: 'PR T', url: 'https://github.com/o/r/pull/40', state: 'open', author: 'me', created_at: '2026-01-01T00:00:00Z', head: 'f', base: 'main', body_html: '', additions: 1, deletions: 0, file_count: 0, files: [], commit_count: 0, commits: [], conversation: [], checks: [] };
+  const grinding = card(12, 'grinding', { pr: { n: 40, draft: false, ci: 'success', url: 'u' }, grind_on: true, grind: { state: 'running', round: 2, thread: 'https://x.slack.com/archives/C1/p1' } });
+  it('an issue with a PR has Issue and PR tabs; turning grinding off confirms and posts /api/grind/issue', async () => {
+    mock({ prds: [prd({ issues: 1, column: 'refined' })], lanes: [lane([grinding])], extra: { '/api/issues/o/r/12': () => json(issue), '/api/pulls/o/r/40': () => json(pull) } });
+    window.location.hash = '#/features/f1/issues?repo=o/r';
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: 'Task 12' }));
+    const panel = await screen.findByRole('complementary', { name: 'Issue details' });
+    expect(within(panel).getByRole('tab', { name: 'Issue' }).getAttribute('aria-selected')).toBe('true');
+    expect(within(panel).getByRole('tab', { name: 'PR overview' })).toBeTruthy();
+    expect(within(panel).getByRole('link', { name: /Open Slack thread/ }).getAttribute('href')).toBe('https://x.slack.com/archives/C1/p1');
+    await user.click(within(panel).getByRole('switch', { name: 'Grinding for #12' }));
+    await user.click(await screen.findByRole('button', { name: 'Stop grind' }));
+    await waitFor(() => expect(posts.find((p) => p.url === '/api/grind/issue')?.body).toEqual({ repo: 'o/r', issue: 12, on: false }));
+  });
+  it('the Features list shows Merge #n for each mergeable PR, opening the panel on the PR', async () => {
+    const ready = (n: number, pr: number) => card(n, 'in_review', { pr: { n: pr, draft: false, ci: 'success', url: 'u' }, mergeable: true });
+    mock({ prds: [prd({ issues: 2, column: 'refined' })], lanes: [lane([ready(12, 40), ready(13, 41)])], extra: { '/api/issues/o/r/12': () => json(issue), '/api/pulls/o/r/40': () => json(pull) } });
+    window.location.hash = '#/features?repo=o/r';
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByRole('button', { name: 'Merge #41' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Review and merge' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Merge #40' }));
+    const panel = await screen.findByRole('complementary', { name: 'Pull request details' });
+    expect(within(panel).getByRole('tab', { name: 'PR overview' }).getAttribute('aria-selected')).toBe('true');
+    expect(within(panel).getByRole('tab', { name: 'Issue' })).toBeTruthy();
+    expect(await within(panel).findByRole('button', { name: 'Merge…' })).toBeTruthy();
+  });
+});
+
+describe('merge conflicts', () => {
+  const pull = { number: 40, title: 'PR T', url: 'https://github.com/o/r/pull/40', state: 'open', author: 'me', created_at: '2026-01-01T00:00:00Z', head: 'f', base: 'main', body_html: '', additions: 1, deletions: 0, file_count: 0, files: [], commit_count: 0, commits: [], conversation: [], checks: [], conflict: true };
+  it('the PR panel disables Merge and Resolve conflicts starts a session', async () => {
+    mock({ extra: { '/api/pulls/o/r/40': () => json(pull) } });
+    const { WorkPanel } = await import('./panels/WorkPanel');
+    const { QueryProvider } = await import('./QueryProvider');
+    const { ConfirmProvider } = await import('./components');
+    const { HashRouter } = await import('react-router-dom');
+    const { PanelProvider } = await import('./panels/PanelContext');
+    const user = userEvent.setup();
+    render(<QueryProvider><ConfirmProvider><HashRouter><PanelProvider><WorkPanel kind="pr" repo="o/r" n={40} /></PanelProvider></HashRouter></ConfirmProvider></QueryProvider>);
+    expect((await screen.findByRole('button', { name: 'Merge…' })).hasAttribute('disabled')).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'Resolve conflicts' }));
+    await waitFor(() => expect(String(posts.find((p) => p.url === '/api/sessions')?.body.text)).toMatch(/^Resolve the merge conflicts on https:\/\/github.com\/o\/r\/pull\/40 /));
+  });
+  it('a running resolve session turns the button into a Resolving… link', async () => {
+    const { resolveText } = await import('./board/ResolveConflicts');
+    mock({ extra: { '/api/pulls/o/r/40': () => json(pull), '/api/sessions': () => json({ sessions: [{ id: 's9', command: resolveText(pull.url), outcome: 'running', link: null, repo: '/x' }], limits: {}, usage: {}, afk: {}, gh: { ok: true } }) } });
+    const { WorkPanel } = await import('./panels/WorkPanel');
+    const { QueryProvider } = await import('./QueryProvider');
+    const { ConfirmProvider } = await import('./components');
+    const { HashRouter } = await import('react-router-dom');
+    const { PanelProvider } = await import('./panels/PanelContext');
+    render(<QueryProvider><ConfirmProvider><HashRouter><PanelProvider><WorkPanel kind="pr" repo="o/r" n={40} /></PanelProvider></HashRouter></ConfirmProvider></QueryProvider>);
+    expect(await screen.findByRole('link', { name: 'Resolving…' })).toBeTruthy();
+  });
+});
+
+describe('settings: grinding mode', () => {
+  it('Simple saves grind_mode for every grind', async () => {
+    mock();
+    const { ReposSection } = await import('./settings/ReposSection');
+    const { QueryProvider } = await import('./QueryProvider');
+    const { ConfirmProvider } = await import('./components');
+    const user = userEvent.setup();
+    render(<QueryProvider><ConfirmProvider><ReposSection /></ConfirmProvider></QueryProvider>);
+    const deep = await screen.findByRole('radio', { name: 'Deep' });
+    expect((deep as HTMLInputElement).checked).toBe(true);
+    await user.click(screen.getByRole('radio', { name: 'Simple' }));
+    await waitFor(() => expect(posts.find((p) => p.url === '/api/settings')?.body).toEqual({ grind_mode: 'simple' }));
+  });
+});
+
 describe('PR panel merge', () => {
   const pull = (over: Record<string, unknown>) => ({
     number: 40, title: 'T', url: 'https://github.com/o/r/pull/40', state: 'open', author: 'me', created_at: '2026-01-01T00:00:00Z', head: 'f', base: 'main',
@@ -252,13 +329,13 @@ describe('PR panel merge', () => {
   it('warnings change the confirm button to Merge anyway', async () => {
     mock({ extra: { '/api/pulls/o/r/40': () => json(pull({ checks: [{ name: 'ci', link: null, bucket: 'red' }] })) } });
     window.location.hash = '#/inbox?repo=o/r';
-    const { PrPanel } = await import('./panels/PrPanel');
+    const { WorkPanel } = await import('./panels/WorkPanel');
     const { QueryProvider } = await import('./QueryProvider');
     const { ConfirmProvider } = await import('./components');
     const { HashRouter } = await import('react-router-dom');
     const { PanelProvider } = await import('./panels/PanelContext');
     const user = userEvent.setup();
-    render(<QueryProvider><ConfirmProvider><HashRouter><PanelProvider><PrPanel repo="o/r" n={40} /></PanelProvider></HashRouter></ConfirmProvider></QueryProvider>);
+    render(<QueryProvider><ConfirmProvider><HashRouter><PanelProvider><WorkPanel kind="pr" repo="o/r" n={40} /></PanelProvider></HashRouter></ConfirmProvider></QueryProvider>);
     await user.click(await screen.findByRole('button', { name: 'Merge…' }));
     expect(screen.getByText(/1 check failing/)).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Merge anyway' }));

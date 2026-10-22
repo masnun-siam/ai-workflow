@@ -1,4 +1,4 @@
-.fnext{display:flex;justify-content:flex-end}
+.fnext{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
 .frow:focus-within{background:color-mix(in srgb,var(--sunk) 55%,transparent)}
 .frow .ftitle a{text-decoration:none}
 .frow .ftitle a:hover{text-decoration:underline}

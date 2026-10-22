@@ -566,6 +566,26 @@ try:
     assert "stopped from the UI" in open(state).read() and ui_grind.index()["pr"][("o", "r", 9)]["state"] == "done"
     ok("grind: skip-ci and stop validate, 409 without a loop / when not paused, stop marks it done")
 
+    # a merge re-polls before answering, so the board the UI refetches already shows it merged
+    import ui_actions
+
+    _gql([_issue(5, ["refined"], prs=[_pr(55)])])
+    ui_server.POLLER.poll("o/r")
+    real_merge = ui_actions.merge
+
+    def fake_merge(*a):
+        _gql([_issue(5, ["refined"], prs=[_pr(55, state="MERGED", merged="2026-10-21T00:00:00Z")])])
+        return {"ok": True}
+
+    ui_actions.merge = fake_merge
+    try:
+        assert call("POST", "/api/pulls/o/r/55/merge", {}) == (200, {"ok": True})
+    finally:
+        ui_actions.merge = real_merge
+    pr55 = ui_server.POLLER.snapshot("o/r")["data"]["issues"][0]["prs"][0]
+    assert pr55["state"] == "MERGED", pr55
+    ok("merge: re-polls the repo before answering")
+
     # watch set: opened in the last 7 days (any ?repo= request) or live session; GitHub remotes only
     other = tempfile.mkdtemp()
     local = tempfile.mkdtemp()
@@ -596,6 +616,18 @@ try:
     assert "o/q" not in ui_server._watched_copy(), "opened 8 days ago: out"
     ok("watch set: opened in 7 days or live, GitHub repos only, persisted in the data dir")
 
+    # hot: viewed in the last VIEW_SECONDS (every watched repo while the global Inbox is open) or live
+    ui_server._seen.clear()
+    assert ui_server._hot() == set(), "nobody looking: every repo is cold"
+    call("GET", "/api/delivery?repo=o/r")
+    assert ui_server._hot() == {"o/r"}
+    ui_server._seen["o/r"] = time.time() - ui_server.VIEW_SECONDS
+    assert ui_server._hot() == set()
+    ui_server._seen["*"] = time.time()
+    assert ui_server._hot() == set(ui_server._watched_copy()) and "o/r" in ui_server._hot()
+    ui_server._seen.clear()
+    ok("hot: viewed repos and live sessions poll on the normal cadence")
+
     # /api/inbox and gh on /api/sessions
     ui_gh.status = lambda *a, **k: {"ok": True, "login": "me", "error": None}
     ready = dict(_pr(60), statusCheckRollup={"state": "SUCCESS"}, reviewDecision="APPROVED")
@@ -603,6 +635,9 @@ try:
     ui_server.POLLER.poll("o/r")
     st, body = call("GET", "/api/inbox?repo=o/r")
     assert st == 200 and set(body) == {"items", "afk", "gh", "stale"} and body["gh"]["login"] == "me", body
+    assert not [i for i in body["items"] if i["type"] == "pr_ready"], "o/r grinds: no Merge before the grind is done"
+    ui_settings.save({"repos": {"o/r": {"auto_grind": False, "slack_channel": "C9"}}})
+    st, body = call("GET", "/api/inbox?repo=o/r")
     assert [i["key"] for i in body["items"] if i["type"] == "pr_ready"] == ["pr_ready:o/r#60"] and body["stale"] == []
     assert body["afk"]["active"] is False
     ui_server.POLLER._state.pop("o/q", None)  # the first look at o/q polled it (the fake gh answers o/r's data)

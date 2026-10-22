@@ -45,4 +45,11 @@ for _ in range(100):
     time.sleep(0.02)
 assert len(calls) == 2 and ui_gh.status(runner)["login"] == "me", "refreshed behind the request"
 print("  ok  status: cached for a minute, stale-while-refresh")
+
+# solo: the signed-in login owns the repo (case-insensitive); signed out is never solo
+ui_gh._cache.update(at=time.time(), value={"ok": True, "login": "Me", "error": None}, busy=False)
+assert ui_gh.solo("me/r", runner) and ui_gh.solo("ME/r", runner) and not ui_gh.solo("org/r", runner)
+ui_gh._cache.update(at=time.time(), value={"ok": False, "login": None, "error": "x"}, busy=False)
+assert not ui_gh.solo("me/r", runner)
+print("  ok  solo: repo owner is the signed-in user")
 print("ui_gh: all checks passed")

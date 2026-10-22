@@ -44,8 +44,11 @@ snap = {
         "issues": [issue(100, ["epic", "prd-appr"], subs=range(1, 9))]
         + [issue(n, ["refined"] if n <= 3 else [], parent=100) for n in range(1, 9)]
         + [issue(200, ["epic", "prd-done"], subs=[20])]
-        + [issue(20, ["refined", "prd-done"], parent=200)],
+        + [issue(20, ["refined", "prd-done"], parent=200)]
+        + [issue(300, ["epic", "prd-shipped"], subs=[30, 31])]  # open epic, every sub-issue closed
+        + [issue(400, ["epic", "prd-bare"])],  # open epic, no tasks filed yet
         "merged": [],
+        "closed_epics": [{"n": 500, "labels": ["epic", "prd-closed"]}, {"n": 501, "labels": ["epic", "prd-other"]}],
         "open_prs": [{"n": 7, "title": "PRD: rev", "url": "u7", "draft": False, "head": "prd-rev", "ci": "none"}],
     },
 }
@@ -57,6 +60,9 @@ prd("rev", "In review")
 prd("appr", "Approved")
 prd("done", "Approved")
 prd("fresh", "Approved")
+prd("shipped", "Approved")
+prd("bare", "Approved")
+prd("closed", "Approved")
 panel = peer_review.new_panel("o/r", os.path.join(co, "docs", "prds", "drft.md"), ["critical", "cto", "qa"], None)
 r = ui_planning.build("o/r", co, snap, {"drft": panel})
 by = {p["slug"]: p for p in r["prds"]}
@@ -79,6 +85,9 @@ assert len(by["appr"]["unrefined"]) == 5
 assert len(by["appr"]["children"]) == 8 and sum(c["refined"] for c in by["appr"]["children"]) == 3
 assert set(by["appr"]["children"][0]) == {"n", "title", "refined"}
 assert by["fresh"]["column"] == "approved" and by["fresh"]["epic"] is None and by["fresh"]["panel"] is None
+assert by["shipped"]["column"] == "done" and by["shipped"]["epic"] == 300 and by["shipped"]["issues"] == 0
+assert by["bare"]["column"] == "approved" and by["bare"]["epic"] == 400
+assert by["closed"]["column"] == "done" and by["closed"]["epic"] is None
 
 os.remove(os.path.join(co, "docs", "prds", "drft.md"))  # deleted draft: card gone next build
 assert "drft" not in {p["slug"] for p in ui_planning.build("o/r", co, snap, {})["prds"]}

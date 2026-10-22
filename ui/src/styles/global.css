@@ -382,7 +382,8 @@ html,body{overflow-x:hidden}
 .dlg-pos.wide{width:min(920px,calc(100vw - 32px))}
 .dlg-pos.pal{width:min(620px,calc(100vw - 32px))}
 @media (max-width:760px){.dlg-pos{top:16px}}
-.tabs-list{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tabs-list{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.tabs-list::-webkit-scrollbar{display:none}
 .tabs-list [role=tab]{border:0;background:none;padding:9px 12px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
 .tabs-list [role=tab]:hover{color:var(--ink)}
 .tabs-list [role=tab][data-state=active]{color:var(--ink);border-bottom-color:var(--ink)}

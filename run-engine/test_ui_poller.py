@@ -88,10 +88,28 @@ class Clock:
         return self.t
 
 
-def runner_for(responses, calls):
+def probe_answer(stamp, remaining=4000, reset="2099-01-01T00:00:00Z"):
+    return {
+        "data": {
+            "repository": {"issues": {"totalCount": 1, "nodes": [{"updatedAt": stamp}]}},
+            "rateLimit": {"cost": 1, "remaining": remaining, "resetAt": reset},
+        }
+    }
+
+
+def runner_for(responses, calls, probes=None, probe_calls=None):
+    """`responses` answer the full query (recorded in `calls`), `probes` the probe (in `probe_calls`).
+    No `probes`: every probe answers differently, so every poll does the full fetch."""
+    probe_calls = [] if probe_calls is None else probe_calls
+
     def runner(argv):
-        calls.append(argv)
-        r = responses[min(len(calls), len(responses)) - 1]
+        if f"query={ui_poller.PROBE}" in argv:
+            probe_calls.append(argv)
+            seq = probes or [probe_answer(str(len(probe_calls)))]
+            r = seq[min(len(probe_calls), len(seq)) - 1]
+        else:
+            calls.append(argv)
+            r = responses[min(len(calls), len(responses)) - 1]
         out, err, code = r if isinstance(r, tuple) else (json.dumps(r), "", 0)
         return subprocess.CompletedProcess(argv, code, out, err)
 
@@ -138,8 +156,14 @@ d2 = ui_poller.normalize(f, NOW)
 op = d2["open_prs"][0]
 assert (op["review"], op["reviewer"], op["checks"]) == ("approved", "bob", 4)
 assert [p["review"] for p in d2["issues"][2]["prs"]] == ["changes_requested", "review_required"]
+# conflict: only GitHub's CONFLICTING (UNKNOWN while it computes, MERGEABLE) is a conflict
+assert "mergeable" in ui_poller.QUERY and op["conflict"] is False
+f["data"]["repository"]["openPrs"]["nodes"][0]["mergeable"] = "CONFLICTING"
+f["data"]["repository"]["issues"]["nodes"][2]["closedByPullRequestsReferences"]["nodes"][0]["mergeable"] = "UNKNOWN"
+d3 = ui_poller.normalize(f, NOW)
+assert d3["open_prs"][0]["conflict"] is True and d3["issues"][2]["prs"][0]["conflict"] is False
 
-# one call per poll, cadence 60s, before first fetch is stale+empty
+# one full call per poll (the probe changed), cadence 60s, before first fetch is stale+empty
 clock, calls = Clock(), []
 fresh = []
 p = ui_poller.Poller(runner_for([fixture("SUCCESS", "SUCCESS")], calls), clock, on_fresh=lambda *a: fresh.append(a))
@@ -242,4 +266,56 @@ m62 = next(m for m in d["merged"] if m["n"] == 62)
 assert m62["closes"] == [8] and m62["epic"] == 1, m62
 assert [p["n"] for p in d["open_prs"]] == [60, 61] and "state" not in d["open_prs"][0]
 print("ok  PRs into staging link to their issue by body keyword and issue-<n> branch")
+
+# probe: an unchanged answer skips the full query (data stays fresh), a changed one, full=True or FULL_EVERY fetch
+clock6, calls6, probes6 = Clock(), [], []
+same = probe_answer("t1")
+p6 = ui_poller.Poller(
+    runner_for([fixture("SUCCESS", "SUCCESS")], calls6, [same, same, same, probe_answer("t2"), same], probes6), clock6
+)
+p6.poll("o/r")
+assert (len(probes6), len(calls6)) == (1, 1)  # first poll: probe + full
+clock6.t += 60
+s = p6.poll("o/r")
+assert (len(probes6), len(calls6)) == (2, 1) and not s["stale"] and s["fetched_at"] == clock6.t
+assert len(s["data"]["issues"]) == 20
+s = p6.poll("o/r", full=True)
+assert (len(probes6), len(calls6)) == (3, 2)  # Refresh / after a write
+p6.poll("o/r")
+assert (len(probes6), len(calls6)) == (4, 3)  # probe answer changed
+clock6.t += ui_poller.FULL_EVERY
+p6.poll("o/r")
+assert (len(probes6), len(calls6)) == (5, 4)  # same answer, but the full fetch is due
+assert "rateLimit" in ui_poller.QUERY and "rateLimit" in ui_poller.PROBE
+print("ok  probe skips the full query when nothing changed")
+
+# cold repo (nobody viewing, no live session): due every COLD_POLL_SECONDS, not every 60 s
+clock7 = Clock()
+p7 = ui_poller.Poller(runner_for([fixture("SUCCESS", "SUCCESS")], []), clock7)
+p7.poll("o/r")
+clock7.t += 60
+assert p7.due("o/r") and not p7.due("o/r", hot=False)
+clock7.t += ui_poller.COLD_POLL_SECONDS - 60
+assert p7.due("o/r", hot=False)
+print("ok  cold repos poll every COLD_POLL_SECONDS")
+
+# low budget: slow every repo to COLD_POLL_SECONDS; a rate limit then pauses until the reported reset
+clock8, calls8 = Clock(), []
+reset = datetime.fromtimestamp(clock8.t + 1800, timezone.utc).isoformat()
+low = probe_answer("t1", remaining=ui_poller.LOW_BUDGET - 1, reset=reset)
+p8 = ui_poller.Poller(runner_for([fixture(), ("", "GraphQL: API rate limit exceeded", 1)], calls8, [low]), clock8)
+p8.poll("o/r")  # fixture has pending CI: would be 15 s
+clock8.t += 15
+assert not p8.due("o/r")
+clock8.t += ui_poller.COLD_POLL_SECONDS - 15
+assert p8.due("o/r")
+s = p8.poll("o/r", full=True)
+assert s["error"] == "rate limited" and s["retry_at"] == clock8.t - ui_poller.COLD_POLL_SECONDS + 1800
+# budget fine (secondary limit): the fixed RATE_LIMIT_PAUSE
+clock9 = Clock()
+p9 = ui_poller.Poller(runner_for([fixture(), ("", "GraphQL: API rate limit exceeded", 1)], []), clock9)
+p9.poll("o/r")
+clock9.t += 60
+assert p9.poll("o/r")["retry_at"] == clock9.t + ui_poller.RATE_LIMIT_PAUSE
+print("ok  low budget slows polling, a rate limit waits for the reset")
 print("ok")

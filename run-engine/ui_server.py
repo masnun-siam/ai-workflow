@@ -19,6 +19,7 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 from urllib.parse import parse_qs, unquote, urlsplit
 
 import peer_review
@@ -50,7 +51,7 @@ import ui_usage
 import ui_vault
 import ui_watch
 import shared
-from shared import die
+from shared import die, warn
 
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
@@ -161,6 +162,8 @@ _REMOVED = [["api", p] for p in ("runs", "pipelines", "flows", "notes", "dispatc
 POLLER = ui_poller._default
 _watched: set = set()  # repos opened since start: only the first look (a poll now) hangs off this; see _watched_copy
 _watch_lock = threading.Lock()
+VIEW_SECONDS = 120  # a repo the UI asked about this recently is polled on the normal cadence (see _hot)
+_seen: dict = {}  # repo -> last request naming it; "*" -> last global Inbox request (it shows every watched repo)
 _flags: dict = {}  # repo -> {issue: {uncommitted, unpushed}}: merged issues whose cleanup was held back
 
 
@@ -175,19 +178,45 @@ def _registered(repo) -> str:
 def _watch(repo: str) -> None:
     ui_watch.touch(repo)
     with _watch_lock:
+        _seen[repo] = time.time()
         new = repo not in _watched
         _watched.add(repo)
     if new:  # first look at this repo: fetch now, off the request thread (reads never wait on GitHub)
         threading.Thread(target=POLLER.poll, args=(repo,), daemon=True).start()
 
 
+def _repoll(slug: str, out):
+    """After a GitHub write: poll that repo now, on this thread, so the UI's refetch sees the change instead of
+    data up to a minute old. Returns `out`. A repo that is not registered or a failed poll changes nothing."""
+    try:
+        POLLER.poll(_registered(slug), full=True)
+    except (ValueError, OSError) as e:
+        warn(f"repoll {slug}: {e}")
+    return out
+
+
+def _live_repos() -> set:
+    return {ui_delivery._slug(r) for r in ui_sessions.list_sessions() if r.get("status") in ui_sessions._LIVE}
+
+
 def _watched_copy() -> list:
     """Repos the poller keeps fresh: registered, with a GitHub remote, and opened in the last 7 days or live."""
     checkouts = dispatch.read_checkouts()
     names = {k.lower(): k for k in checkouts if not k.startswith("local/")}
-    want = set(ui_watch.recent())
-    want |= {ui_delivery._slug(r) for r in ui_sessions.list_sessions() if r.get("status") in ui_sessions._LIVE}
+    want = set(ui_watch.recent()) | _live_repos()
     return sorted({names[w.lower()] for w in want if w.lower() in names})
+
+
+def _hot() -> set:
+    """Repos on the normal poll cadence: viewed in the last VIEW_SECONDS (every watched one while the global
+    Inbox is open) or with a live session (its hooks need fresh data). The rest poll every few minutes."""
+    now = time.time()
+    with _watch_lock:
+        seen = {r for r, t in _seen.items() if now - t < VIEW_SECONDS}
+    if "*" in seen:
+        return set(_watched_copy())
+    live = {r.lower() for r in _live_repos()}
+    return {r for r in _watched_copy() if r in seen or r.lower() in live}
 
 
 def _link(repo: str, n: int) -> dict:
@@ -260,7 +289,7 @@ def _board(path: str, query: str):
         return 400, {"error": str(e)}
     _watch(repo)
     if (parse_qs(query).get("refresh") or [""])[0] == "1":  # the board's Refresh: fetch now, off this thread
-        threading.Thread(target=POLLER.poll, args=(repo,), daemon=True).start()
+        threading.Thread(target=POLLER.poll, args=(repo,), kwargs={"full": True}, daemon=True).start()
     snap = POLLER.snapshot(repo)
     if path == "/api/planning":
         body = ui_planning.build(repo, dispatch.read_checkouts()[repo], snap, _panels(dispatch.read_checkouts()[repo]))
@@ -272,6 +301,7 @@ def _board(path: str, query: str):
             ui_grind.index(),
             ui_settings.repo_settings(repo),
             _flags.get(repo, {}),
+            solo=ui_gh.solo(repo),
         )
     return 200, {**body, "error": snap.get("error"), "retry_at": snap.get("retry_at")}
 
@@ -311,6 +341,9 @@ def _inbox(query: str):
         except ValueError as e:
             return 400, {"error": str(e)}
         _watch(repo)
+    else:
+        with _watch_lock:
+            _seen["*"] = time.time()
     watched = [repo] if repo else _watched_copy()
     recs = ui_sessions.list_sessions()
     labels = {c["cmd"]: c["label"] for c in ui_settings.load()["commands"]}
@@ -327,6 +360,8 @@ def _inbox(query: str):
         slug=ui_delivery._slug,
         watched=watched,
         repo=repo or None,
+        settings={r: ui_settings.repo_settings(r) for r in watched},
+        solo={r: ui_gh.solo(r) for r in watched},
     )
     return 200, {**body, "afk": ui_afk.public(recs), "gh": ui_gh.status()}
 
@@ -508,6 +543,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._review_rounds(parts[3])
         elif parts == ["", "api", "start"]:
             self._dispatch(self._board_start)
+        elif parts == ["", "api", "grind", "issue"]:
+            self._dispatch(self._grind_issue)
         elif parts in (["", "api", "grind", "skip-ci"], ["", "api", "grind", "stop"]):
             self._dispatch(lambda b: self._grind(parts[3], b))
         elif parts == ["", "api", "autopilot"]:
@@ -568,9 +605,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif len(parts) == 7 and parts[1:3] in (["api", "issues"], ["api", "pulls"]) and parts[6] == "comment":
             self._dispatch(lambda b: ui_actions.comment(*parts[3:6], b.get("text")))
         elif len(parts) == 7 and parts[1:3] == ["api", "issues"] and parts[6] == "state":
-            self._dispatch(lambda b: ui_actions.set_state(*parts[3:6], b.get("state"), b.get("reason")))
+            self._dispatch(
+                lambda b: _repoll(
+                    f"{parts[3]}/{parts[4]}", ui_actions.set_state(*parts[3:6], b.get("state"), b.get("reason"))
+                )
+            )
         elif len(parts) == 7 and parts[1:3] == ["api", "pulls"] and parts[6] == "merge":
-            self._dispatch(lambda b: ui_actions.merge(*parts[3:6]))
+            self._dispatch(lambda b: _repoll(f"{parts[3]}/{parts[4]}", ui_actions.merge(*parts[3:6])))
         elif parts == ["", "api", "epics", "close"]:
             self._dispatch(self._close_epic)
         elif parts == ["", "api", "prd"]:
@@ -594,9 +635,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if not isinstance(epic, int) or isinstance(epic, bool) or epic < 1:
             raise ValueError("epic must be an issue number")
         owner, _, name = repo.partition("/")
-        out = ui_actions.close_epic(owner, name, epic, ui_actions.open_children(POLLER.snapshot(repo), epic))
-        threading.Thread(target=POLLER.poll, args=(repo,), daemon=True).start()  # the boards catch up now
-        return out
+        return _repoll(
+            repo, ui_actions.close_epic(owner, name, epic, ui_actions.open_children(POLLER.snapshot(repo), epic))
+        )
 
     @staticmethod
     def _grind(action: str, body: dict) -> dict:
@@ -604,6 +645,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if type(pr) is not int or pr < 1:
             raise ValueError("pr must be a PR number")
         return (ui_grind.skip_ci if action == "skip-ci" else ui_grind.stop)(repo, pr)
+
+    @staticmethod
+    def _grind_issue(body: dict) -> dict:
+        repo, issue, on = _registered(body.get("repo")), body.get("issue"), body.get("on")
+        if type(issue) is not int or issue < 1 or type(on) is not bool:
+            raise ValueError("issue must be an issue number and on must be true or false")
+        return ui_grind.set_issue(repo, issue, on, POLLER.snapshot(repo), ui_settings.repo_settings(repo))
 
     def _review_rounds(self, panel: str) -> None:
         body = self._read_body()
@@ -982,7 +1030,7 @@ def cmd_serve(args) -> None:
     ui_grind.start_timer()  # ntfy on grind pause/finish
     ui_runner.start_prgrind_timer()  # re-enter pr-grind loops whose session ended (reviews, CI, heartbeat)
     ui_runner.start_limit_timer()  # auto-resume limited runs, incl. catch-up of resets missed while down
-    POLLER.start(_watched_copy)  # boards: poll every repo a board was opened for, run the hooks
+    POLLER.start(_watched_copy, hot=_hot)  # boards: poll every repo a board was opened for, run the hooks
     ui_panel.start_timer()  # lens verdicts -> root, rounds, cap
     ui_usage.start_timer()  # 5h/7d usage per account, only while the UI is open
     ui_afk.start_timer()  # AFK mode: auto-answer, skip CI on paused grinds, retry failures; ends the window

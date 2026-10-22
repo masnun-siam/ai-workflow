@@ -12,6 +12,7 @@ import { copyCommand, useTerminal } from '../session/terminal';
 import { useStartError } from '../session/useSessionActions';
 import { QuestionForm } from '../questions/QuestionForm';
 import { Icon } from '../components';
+import { ResolveConflicts } from '../board/ResolveConflicts';
 
 export const approveArgs = (path: string) =>
   `${path} approve: the team has reviewed this PRD. Fold in the review's changes, set the status to Approved and file the epic.`;
@@ -148,6 +149,15 @@ export function ItemRow({ item, a, open, toggle, publish }: Props) {
       acts = <Button sm variant="primary" onClick={() => a.panel.open({ kind: 'pr', repo, n: item.pr })}>Review and merge</Button>;
       break;
     }
+    case 'pr_conflict':
+      icon = 'alert'; tone = 'bad'; title = `PR #${item.pr} has merge conflicts`;
+      meta = [where, item.issue ? `#${item.issue} ${item.title}` : item.title];
+      detail = 'It cannot merge until its base branch is merged in and the conflicts are resolved.';
+      acts = (<>
+        <Button sm onClick={() => a.panel.open({ kind: 'pr', repo, n: item.pr })}>Open PR</Button>
+        <ResolveConflicts repo={repo} url={item.url} n={item.pr} primary />
+      </>);
+      break;
     case 'grind_paused':
       icon = 'pause'; tone = 'review'; title = `Grind paused on PR #${item.pr}`;
       meta = [where, item.issue ? `#${item.issue}` : undefined, item.round ? `round ${item.round}` : undefined]; detail = item.reason;

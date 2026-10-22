@@ -49,6 +49,19 @@ export function ReposSection() {
   const list = repos.data?.repos ?? [];
   const rowOf = (slug: string): RepoSettings => ({ ...DEFAULTS, ...settings.data?.repos?.[slug], ...over[slug] });
   const scanRoots = roots ?? (repos.data?.scan_roots ?? []).join('\n');
+  const [modeOver, setModeOver] = useState<'deep' | 'simple' | null>(null);
+  const mode = modeOver ?? settings.data?.grind_mode ?? 'deep';
+  const changeMode = async (m: 'deep' | 'simple') => {
+    setModeOver(m);
+    try {
+      await save.mutateAsync({ grind_mode: m });
+      toast(m === 'simple' ? 'Grinding is simple: loops stop once the PR is approved' : 'Grinding is deep');
+    } catch {
+      /* the error toast comes from the mutation cache */
+    } finally {
+      setModeOver(null);
+    }
+  };
 
   // Each row saves on its own and sends only that repo's entry; a rejected save puts the old value back.
   const change = async (slug: string, patch: Partial<RepoSettings>) => {
@@ -114,6 +127,15 @@ export function ReposSection() {
         <Button onClick={checkRemotes} disabled={check.isPending || !list.length}>{check.isPending ? 'Checking…' : 'Check remotes'}</Button>
       </div>
       {msg ? <p className="set-note" role="status">{msg}</p> : null}
+      <fieldset className="row wrap" style={{ gap: 14, border: 0, padding: 0, margin: 0 }}>
+        <legend className="sr">Grinding for every repo</legend>
+        <b>Grinding</b>
+        <label className="row" style={{ gap: 6 }}><input type="radio" name="grind-mode" checked={mode === 'deep'} disabled={save.isPending} onChange={() => void changeMode('deep')} />Deep</label>
+        <label className="row" style={{ gap: 6 }}><input type="radio" name="grind-mode" checked={mode === 'simple'} disabled={save.isPending} onChange={() => void changeMode('simple')} />Simple</label>
+        <span className="muted" style={{ fontSize: 13 }}>
+          {mode === 'deep' ? 'Every grind keeps going until the reviewer has no blocker or should-fix left.' : 'Every grind, running ones included, stops at the round where the PR is approved.'}
+        </span>
+      </fieldset>
       {list.length > REPO_FILTER_AFTER ? (
         <input type="search" className="f" aria-label="Filter repos" placeholder={`Filter ${list.length} repos`} value={q} onChange={(e) => setQ(e.target.value)} />
       ) : null}

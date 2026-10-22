@@ -116,7 +116,7 @@ export interface StreamResponse {
 
 // ---- boards ---------------------------------------------------------------------------------------
 export type PrdStatus = 'Draft' | 'In review' | 'Approved';
-export type PlanningColumn = 'draft' | 'in_review' | 'approved' | 'tasks_filed' | 'refined';
+export type PlanningColumn = 'draft' | 'in_review' | 'approved' | 'tasks_filed' | 'refined' | 'done';
 export interface PanelRef extends PanelStatus {
   id: string;
   root_session?: string | null;
@@ -155,6 +155,7 @@ export interface Grind {
   round?: number;
   max_rounds?: number;
   reason?: string | null;
+  thread?: string | null; // the loop's Slack thread URL
 }
 export interface DeliveryCard {
   n: number;
@@ -162,9 +163,13 @@ export interface DeliveryCard {
   column: DeliveryColumn;
   priority: string | null;
   blocked_by: number[];
-  pr: { n: number; draft: boolean; ci: string | null; url: string; review?: ReviewDecision } | null;
+  pr: { n: number; draft: boolean; ci: string | null; url: string; review?: ReviewDecision; conflict?: boolean } | null;
   session: { id: string; status: SessionStatus } | null;
   grind?: Grind | null;
+  /** The issue's grinding switch (else the repo's Auto-grind). */
+  grind_on?: boolean;
+  /** The server's merge rule: CI green, approved (not needed on your own repo), and the grind done when grinding is on. */
+  mergeable?: boolean;
   needs_cleanup: null | { uncommitted: string[]; unpushed: string[] };
   last_failed?: boolean;
 }
@@ -219,6 +224,7 @@ export type InboxItem =
       reviewer?: string | null;
       checks?: number | { total: number; passed: number } | null;
     })
+  | (InboxBase & { type: 'pr_conflict'; pr: number; issue: number | null; title: string; url: string })
   | (InboxBase & { type: 'grind_paused'; pr: number; issue: number | null; round: number; reason: string })
   | (InboxBase & { type: 'session_failed'; session_id: string; command: string; link: SessionLink | string | null; error: string })
   | (InboxBase & { type: 'needs_cleanup'; issue: number; uncommitted: string[]; unpushed: string[] })
@@ -261,6 +267,8 @@ export interface Settings {
   autopilot?: Record<RepoSlug, number[]> | Record<RepoSlug, Record<string, boolean>>;
   vault_dir?: string;
   claude_label?: string;
+  /** Every /pr-grind loop: deep (until zero findings) or simple (stops once the PR is approved). */
+  grind_mode?: 'deep' | 'simple';
   [k: string]: unknown;
 }
 export interface NotifySettings {
@@ -350,6 +358,7 @@ export interface PrDetail {
   created_at: string;
   head: string;
   base: string;
+  conflict?: boolean; // conflicts with its base
   labels: { name: string; color: string }[];
   assignees: (GhUser | null)[];
   milestone: string | null;

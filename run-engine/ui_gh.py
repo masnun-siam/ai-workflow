@@ -1,4 +1,6 @@
-"""Is `gh` signed in? One `gh api user` call, cached for a minute (the header and the Inbox poll for it).
+"""Is `gh` signed in? (And `solo`: does the signed-in user own a repo.)
+
+`gh` sign-in: one `gh api user` call, cached for a minute (the header and the Inbox poll for it).
 
 `status()` returns {ok, login, error}. A cold cache waits for the call (5 s at most); a stale one is served
 as it is while a background thread refreshes it, so a request never waits on gh twice.
@@ -47,3 +49,9 @@ def status(runner=run, now=None) -> dict:
     # ponytail: cold concurrent callers each run the check; it is one cheap call, a lock would only queue them
     _refresh(runner)
     return _cache["value"]
+
+
+def solo(repo: str, runner=run) -> bool:
+    """Is the repo owned by the signed-in user (owner == gh login)? Then a PR needs no approval to merge."""
+    login = status(runner).get("login")
+    return bool(login) and repo.partition("/")[0].lower() == str(login).lower()

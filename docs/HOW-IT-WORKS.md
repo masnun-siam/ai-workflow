@@ -88,8 +88,8 @@ repos, the questions to answer, PRs ready to merge, paused grinds, failed sessio
 cap. A **Feature** page follows one PRD from draft to shipped with one next step, and the **Board**
 shows its issues from Needs refinement to Merged. **Auto-build** starts refined, unblocked issues of an
 epic up to the repo's cap as merges unblock them, grind starts when a PR turns ready (per-repo
-setting), and a merged issue's clean worktree is removed. GitHub is read with one GraphQL call per
-watched repo per poll; nothing is written back.
+setting), and a merged issue's clean worktree is removed. GitHub is read with a cheap GraphQL probe per
+watched repo per poll, and the full query only when something changed; nothing is written back.
 
 It starts these as sessions and keeps them going: it takes your answers to `aiw ask` questions in the
 Inbox or the session page, resumes after a rate limit, and notifies you. **Away mode** answers
