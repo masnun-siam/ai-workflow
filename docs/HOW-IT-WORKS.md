@@ -2,7 +2,9 @@
 
 One process takes a feature from idea to merged PR. Each stage is a skill with a clear input
 and output; GitHub and the repo's `docs/prds/` hold the state. The `aiw ui` web app starts a
-stage as a headless session, and `herdr-dispatch` starts it in a terminal tab.
+stage as a headless session. A **dispatch** runs a whole epic: each child issue as a lane, in parallel
+and in dependency order, from implementation through grind, merge and followups, in herdr tabs
+(`herdr-dispatch`) or as headless sessions (the UI).
 
 ```mermaid
 flowchart LR
@@ -14,12 +16,13 @@ flowchart LR
     E -->|/implement-issue| F[Draft PR]
     F -->|CI green, /pr-review, fixes| G[Ready PR]
     G -->|/pr-grind| H[Approved]
-    H -->|human merges| I[Merged]
+    H -->|you merge, or a dispatch with auto-merge| I[Merged]
     I -->|unblocks| E
 ```
 
 A human decides at three points: approving the PRD, deciding what to do at a peer-review cap, and merging.
-Nothing in this plugin merges a PR on its own: the UI's **Merge** button is a human's click, behind a confirm.
+The only thing that merges a PR without a click is a dispatch you started with auto-merge on, and only
+once CI is green, a review approves and the grind is done. Otherwise **Merge** is your click, behind a confirm.
 
 ## Stages
 
@@ -52,9 +55,37 @@ One session, start to Ready:
 7. Log learnings on the issue.
 8. After the merge: close the issue, set it to Done, clean up, and move the issues it unblocked to Ready.
 
-Independent refined issues run in parallel, each in its own worktree. `herdr-dispatch` fans a
-batch out into herdr tabs, one `/implement-issue <n>` per tab, in dependency order under a
-concurrency cap; a tab is done when its issue has a non-draft PR.
+Independent refined issues run in parallel, each in its own worktree, as the lanes of a dispatch.
+
+## Dispatch
+
+A dispatch takes one epic and runs its open, refined child issues as **lanes** (an unrefined one is
+skipped as "needs refine" until it is refined). Up to `max` lanes (default 2) run at once; a lane
+starts only when every issue blocking it is merged and its followups are done. Each lane, in one
+session (a herdr tab or a headless session):
+
+1. `/implement-issue <n>` until the PR is Ready (CI green, `/pr-review` handled).
+2. `/pr-grind <pr>` in the same session, unless grinding is off or the repo has no Slack channel.
+   Simple ends on any approval, full on zero blocker and should-fix. Between rounds the engine types
+   the next round into the lane when a review lands or the heartbeat is due.
+3. The merge gate: CI green on the head, an approving review, the grind done. A conflict with the
+   base sends the lane to merge the base in, resolve, re-run the checks and push; then the gate again.
+4. Merge (a merge commit) when auto-merge is on; otherwise the lane waits for you and goes on once
+   it sees your merge.
+5. Followups: implement-issue's after-merge steps (close the issue, clean up, unblock). Then the tab
+   closes and the next unblocked lane starts.
+
+A lane that needs you (a question, red CI, a paused grind, a failed merge) is held and tells you in
+the Inbox, by a macOS notification and in the `herdr-dispatch` session; its dependents wait, the other
+lanes go on. At a Claude usage limit no new lane starts until the reset. Settings (grind mode,
+auto-merge, max, model, effort) change while it runs. With a feature branch, every PR targets it
+(cut from the default branch). When every lane is done you choose what follows: open the feature
+branch's PR, run QA (`/verifier-locally` plus a browser end-to-end test; each bug becomes a new epic
+child, which joins the dispatch as a lane), or grind the final PR.
+
+The `aiw ui` server runs the engine: every 30 s it reads each lane's facts from the board poll (no
+extra GitHub calls), the grind state files and the lane's session, and acts. A dispatch survives a
+server restart.
 
 ## Grind
 
@@ -86,9 +117,9 @@ starts a panel from its **Peer review** box.
 `aiw ui` shows the process around one question: what needs you. The **Inbox** collects, across
 repos, the questions to answer, PRs ready to merge, paused grinds, failed sessions and reviews at their
 cap. A **Feature** page follows one PRD from draft to shipped with one next step, and the **Board**
-shows its issues from Needs refinement to Merged. **Auto-build** starts refined, unblocked issues of an
-epic up to the repo's cap as merges unblock them, grind starts when a PR turns ready (per-repo
-setting), and a merged issue's clean worktree is removed. GitHub is read with a cheap GraphQL probe per
+shows its issues from Needs refinement to Merged. **Dispatches** shows each dispatch as a dependency
+graph or a list of lanes, with its activity, totals and live settings. Grind starts when a PR turns
+ready (per-repo setting) unless a dispatch lane owns it, and a merged issue's clean worktree is removed. GitHub is read with a cheap GraphQL probe per
 watched repo per poll, and the full query only when something changed; nothing is written back.
 
 It starts these as sessions and keeps them going: it takes your answers to `aiw ask` questions in the
@@ -102,4 +133,4 @@ recommended options and retries failures while you are away. Details are in [REF
 | GitHub | issues, labels, blocked-by links, PRs, review threads, CI |
 | `docs/prds/`, `docs/tasks/` in the repo | the PRD and the task list |
 | the Obsidian vault | `/dump` captures and the PRD mirror |
-| plugin data dir | UI sessions, settings, grind and peer-review state: nothing here is a source of truth for the work |
+| plugin data dir | UI sessions, settings, grind, peer-review and dispatch state: nothing here is a source of truth for the work |

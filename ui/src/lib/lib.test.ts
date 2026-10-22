@@ -14,11 +14,11 @@ const prd = (o: Partial<PlanningPrd> = {}): PlanningPrd => ({
   slug: 'f', title: 'F', status: 'Approved', path: 'docs/prds/f.md', abs_path: '/x/f.md', column: 'approved',
   pr: null, epic: 10, issues: 0, refined: 0, unrefined: [], children: [], panel: null, ...o,
 });
-const lane = (cards: DeliveryCard[], autopilot = false): DeliveryLane => ({ epic: 10, title: 'F', autopilot, cap: 2, running: 0, cards });
+const lane = (cards: DeliveryCard[]): DeliveryLane => ({ epic: 10, title: 'F', running: 0, cards });
 const panel = (o: Partial<PanelRef>): PanelRef => ({
   id: 'p', approved: 1, total: 3, round: 2, max_rounds: 5, state: 'running', lenses: {}, ...o,
 });
-const feat = (p: PlanningPrd, cards: DeliveryCard[] = [], auto = false) => joinFeatures([p], [lane(cards, auto)])[0];
+const feat = (p: PlanningPrd, cards: DeliveryCard[] = []) => joinFeatures([p], [lane(cards)])[0];
 
 describe('nextStep (FR-12)', () => {
   it('draft', () => {
@@ -41,7 +41,7 @@ describe('nextStep (FR-12)', () => {
   });
   it('no open epic: open children come from whichever lane holds them', () => {
     const p = prd({ epic: null, issues: 1, column: 'refined', children: [{ n: 7, title: 't', refined: true }] });
-    const loose: DeliveryLane = { epic: null, title: '', autopilot: false, cap: 2, running: 0, cards: [card({ n: 7 }), card({ n: 8 })] };
+    const loose: DeliveryLane = { epic: null, title: '', running: 0, cards: [card({ n: 7 }), card({ n: 8 })] };
     const f = joinFeatures([p], [loose])[0];
     expect(f.issues.map((i) => i.n)).toEqual([7]);
     expect(nextStep(f).primary).toEqual({ label: 'Start 1 now', action: { kind: 'startReady', issues: [7] } });
@@ -56,15 +56,15 @@ describe('nextStep (FR-12)', () => {
     expect(s.primary).toEqual({ label: 'Refine 1', action: { kind: 'refine', issues: [2] } });
     expect(s.secondary?.action).toEqual({ kind: 'startReady', issues: [3] });
   });
-  it('building: merge, auto-build, or open board', () => {
+  it('building: merge, run the epic, or open board', () => {
     const p = prd({ issues: 2 });
     const pr = { n: 9, draft: false, ci: 'success', url: '', review: 'approved' as const };
     const m = nextStep(feat(p, [card({ n: 1, column: 'in_review', pr, mergeable: true }), card({ n: 2 })]));
     expect(m.primary).toEqual({ label: 'Review and merge', action: { kind: 'merge', pr: 9 } });
     const a = nextStep(feat(p, [card({ n: 1, column: 'in_progress' }), card({ n: 2 })]));
-    expect(a.primary.label).toBe('Turn on auto-build');
+    expect(a.primary).toEqual({ label: 'Run epic', action: { kind: 'dispatch' } });
     expect(a.secondary?.label).toBe('Start 1 now');
-    const quiet = nextStep(feat(p, [card({ n: 1, column: 'in_progress' })], true));
+    const quiet = nextStep(feat(p, [card({ n: 1, column: 'in_progress' })]));
     expect(quiet.primary.action).toEqual({ kind: 'board' });
     expect(quiet.quiet).toBe(true);
   });

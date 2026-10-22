@@ -44,7 +44,7 @@ export function IssueAction({ card, repo }: { card: DeliveryCard; repo: string }
   const n = card.n;
   const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
 
-  const start = (via: 'headless' | 'herdr') => starter.startBoard({ repo, skill: 'implement-issue', arg: String(n), via });
+  const start = () => starter.startBoard({ repo, skill: 'implement-issue', arg: String(n), via: 'headless' });
   const onAccount = (label: string) => starter.startSession({ repo, command: 'implement-issue', args: String(n), issue: n, claude_cmd: label });
   const openPr = () => card.pr && panel.open({ kind: 'pr', repo, n: card.pr.n });
 
@@ -63,12 +63,11 @@ export function IssueAction({ card, repo }: { card: DeliveryCard; repo: string }
       const others = (accounts?.commands ?? []).filter((c) => c.label !== accounts?.default);
       el = (
         <span className="split">
-          <Button sm variant="primary" disabled={starter.pending} onClick={() => start('headless')}>{card.last_failed ? 'Retry' : 'Start'}</Button>
+          <Button sm variant="primary" disabled={starter.pending} onClick={() => start()}>{card.last_failed ? 'Retry' : 'Start'}</Button>
           <Menu
             trigger={<Button sm variant="primary" aria-label="More ways to start"><Icon n="down" s={13} /></Button>}
             items={[
-              { label: 'Start here (tracked)', icon: 'play', onSelect: () => void start('headless') },
-              { label: 'Start in a herdr tab', icon: 'terminal', onSelect: () => void start('herdr') },
+              { label: 'Start here (tracked)', icon: 'play', onSelect: () => void start() },
               ...others.map((c) => ({ label: `Start on ${c.label}`, icon: 'user' as const, onSelect: () => void onAccount(c.label) })),
               ...(others.length === 0 ? [{ label: 'Start on another account', icon: 'user' as const, disabled: true, onSelect: () => {} }] : []),
             ]}

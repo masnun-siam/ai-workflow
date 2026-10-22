@@ -10,7 +10,7 @@ export type StepAction =
   | { kind: 'refine'; issues: number[] }
   | { kind: 'startReady'; issues: number[] }
   | { kind: 'merge'; pr: number }
-  | { kind: 'toggleAuto' }
+  | { kind: 'dispatch' }
   | { kind: 'board' }
   | { kind: 'closeEpic' };
 
@@ -86,28 +86,27 @@ export function nextStep(f: Feature): Step {
           title: 'A PR is ready to merge',
           hint: `#${m.n} ${m.title}: checks green and reviewed.`,
           primary: { label: 'Review and merge', action: { kind: 'merge', pr: m.pr.n } },
-          secondary: f.autobuild || !f.epic ? undefined : { label: 'Turn on auto-build', action: { kind: 'toggleAuto' } },
         };
       }
       if (!f.epic && ready.length) {
-        // auto-build runs per epic lane; without an open epic, starting by hand is the only way
+        // a dispatch runs an epic's issues; without an open epic, starting by hand is the only way
         return {
           title: `${plural(ready.length, 'issue')} ready to build`,
           hint: 'Start them yourself.',
           primary: { label: `Start ${ready.length} now`, action: { kind: 'startReady', issues: ready } },
         };
       }
-      if (!f.autobuild && ready.length) {
+      if (ready.length) {
         return {
           title: `${plural(ready.length, 'issue')} ready to build`,
-          hint: 'Start them yourself, or turn on auto-build to start them as slots free up.',
-          primary: { label: 'Turn on auto-build', action: { kind: 'toggleAuto' } },
+          hint: 'Run the epic: its issues build in parallel lanes, grind, merge and do their followups as blockers clear.',
+          primary: { label: 'Run epic', action: { kind: 'dispatch' } },
           secondary: { label: `Start ${ready.length} now`, action: { kind: 'startReady', issues: ready } },
         };
       }
       return {
         title: 'Building',
-        hint: `${c.merged ?? 0} of ${f.issues.length} merged. Auto-build is ${f.autobuild ? 'on' : 'off'}.`,
+        hint: `${c.merged ?? 0} of ${f.issues.length} merged.`,
         primary: { label: 'Open board', action: { kind: 'board' } },
         quiet: true,
       };

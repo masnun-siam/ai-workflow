@@ -27,7 +27,6 @@ import dispatch
 import dispatch_run
 import ui_actions
 import ui_afk
-import ui_autopilot
 import ui_cleanup
 import ui_config
 import ui_delivery
@@ -47,6 +46,7 @@ import ui_pr
 import ui_repos
 import ui_runner
 import ui_sessions
+import ui_start
 import ui_settings
 import ui_tailscale
 import ui_usage
@@ -156,7 +156,7 @@ def _public(rec: dict) -> dict:
 
 
 # engine-era API prefixes that no longer exist (POST answers 404, not 405)
-_REMOVED = [["api", p] for p in ("runs", "pipelines", "flows", "notes", "dispatch", "maintree", "grind")]
+_REMOVED = [["api", p] for p in ("runs", "pipelines", "flows", "notes", "dispatch", "maintree", "grind", "autopilot")]
 
 
 # ---- boards: poller snapshots in memory, hooks after each fresh poll ----------------------------------
@@ -227,7 +227,7 @@ def _link(repo: str, n: int) -> dict:
 
 
 def _on_fresh(repo: str, snap: dict, prev: dict) -> None:
-    """After a fresh, non-stale poll: notify, clean merged worktrees, autopilot tick, grind autostart."""
+    """After a fresh, non-stale poll: notify, clean merged worktrees, grind autostart."""
     if snap.get("stale") or snap.get("fetched_at") is None:
         return
     settings = ui_settings.repo_settings(repo)
@@ -258,7 +258,6 @@ def _on_fresh(repo: str, snap: dict, prev: dict) -> None:
                     },
                 )
             _flags[repo][n] = f
-    ui_autopilot.tick(repo, snap, ui_sessions.list_sessions(), settings)
     if not first:
         ui_grind.autostart(repo, snap, {"data": prev}, settings)
 
@@ -600,8 +599,6 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._dispatch(self._grind_issue)
         elif parts in (["", "api", "grind", "skip-ci"], ["", "api", "grind", "stop"]):
             self._dispatch(lambda b: self._grind(parts[3], b))
-        elif parts == ["", "api", "autopilot"]:
-            self._dispatch(self._autopilot)
         elif parts == ["", "api", "cleanup"]:
             self._dispatch(self._merge_cleanup)
         elif parts == ["", "api", "afk"]:
@@ -732,25 +729,16 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     @staticmethod
     def _board_start(body: dict) -> dict:
         repo = _registered(body.get("repo"))
-        return ui_autopilot.start(
+        if body.get("via") not in (None, "headless"):
+            raise ValueError("cards start headless sessions; run an epic's issues in parallel with a dispatch")
+        return ui_start.start(
             repo,
             body.get("skill"),
             body.get("arg"),
-            body.get("via") or "headless",
             lenses=body.get("lenses"),
             snapshot=POLLER.snapshot(repo),
             channel=ui_settings.repo_settings(repo)["slack_channel"],
         )
-
-    @staticmethod
-    def _autopilot(body: dict) -> dict:
-        repo, epic, on = _registered(body.get("repo")), body.get("epic"), body.get("on")
-        if type(epic) is not int or epic < 1 or type(on) is not bool:
-            raise ValueError("epic must be an issue number and on must be true or false")
-        if on and not any(epic == i["n"] and "epic" in i["labels"] for i in POLLER.snapshot(repo)["data"]["issues"]):
-            raise ValueError(f"#{epic} is not an open epic")
-        ui_settings.set_autopilot(repo, epic, on)
-        return {"repo": repo, "epic": epic, "on": on}
 
     @staticmethod
     def _merge_cleanup(body: dict) -> dict:
@@ -758,7 +746,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if type(issue) is not int or issue < 1 or body.get("confirm") is not True:
             raise ValueError("issue must be a number and confirm must be true")
         if not any(issue in m["closes"] or issue == m["n"] for m in POLLER.snapshot(repo)["data"]["merged"]):
-            raise ui_autopilot.Conflict(f"#{issue}'s PR is not merged")
+            raise ui_start.Conflict(f"#{issue}'s PR is not merged")
         checkout = dispatch.read_checkouts()[repo]
         res = ui_mergeclean.clean(checkout, issue, confirm=True)
         _flags.get(repo, {}).pop(issue, None)
@@ -804,7 +792,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json(ok, fn(body))
         except (ValueError, TypeError) as e:
             self._json(400, {"error": str(e)})
-        except (ui_autopilot.Conflict, ui_grind.Conflict, ui_actions.Conflict) as e:
+        except (ui_start.Conflict, ui_grind.Conflict, ui_actions.Conflict) as e:
             self._json(409, {"error": str(e)})
         except (RuntimeError, OSError, ui_runner.RunnerError) as e:  # RunnerError, a failed herdr call
             self._json(502, {"error": str(e)})

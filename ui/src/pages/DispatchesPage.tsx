@@ -1,6 +1,6 @@
 // Every dispatch: the live ones as cards, the rest as history; New dispatch opens the dialog.
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useDispatches } from '../api/hooks';
 import type { Dispatch } from '../api/types';
 import { Banner, Button, Chip, EmptyState, Icon } from '../components';
@@ -31,7 +31,17 @@ function Card({ d }: { d: Dispatch }) {
 
 export function DispatchesPage() {
   const q = useDispatches();
-  const [open, setOpen] = useState(false);
+  const [sp, setSp] = useSearchParams();
+  const asked = sp.get('new'); // ?new=owner/repo#n: a Run epic button sent us here
+  const [open, setOpen] = useState(!!asked);
+  const onOpenChange = (o: boolean) => {
+    setOpen(o);
+    if (!o && asked) {
+      const n = new URLSearchParams(sp);
+      n.delete('new');
+      setSp(n, { replace: true });
+    }
+  };
   const all = q.data?.dispatches ?? [];
   const running = all.filter(live);
   const past = all.filter((d) => !live(d));
@@ -80,7 +90,7 @@ export function DispatchesPage() {
           </div>
         </section>
       ) : null}
-      <NewDispatchDialog open={open} onOpenChange={setOpen} />
+      <NewDispatchDialog open={open} onOpenChange={onOpenChange} epic={asked ?? undefined} />
     </div>
   );
 }

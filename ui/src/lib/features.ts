@@ -14,8 +14,6 @@ export interface Feature {
   stage: StageId;
   issues: FeatureIssue[];
   panel: PanelRef | null;
-  autobuild: boolean;
-  cap: number;
 }
 
 /** Both board snapshots have been fetched; before that the stage and next step would be guesses. */
@@ -62,8 +60,6 @@ export function joinFeatures(prds: PlanningPrd[], lanes: DeliveryLane[]): Featur
       stage: stageOf(prd, lane),
       issues: cards.map((c) => ({ ...c, status: issueStatus(c) })),
       panel: prd.panel,
-      autobuild: lane?.autopilot ?? false,
-      cap: lane?.cap ?? 2,
     };
   });
 }

@@ -176,8 +176,6 @@ export interface DeliveryCard {
 export interface DeliveryLane {
   epic: number | null;
   title: string;
-  autopilot: boolean; // "auto-build" in the UI
-  cap: number;
   running: number;
   cards: DeliveryCard[];
 }
@@ -269,14 +267,12 @@ export interface ClaudeCommand {
 }
 export interface RepoSettings {
   auto_grind: boolean;
-  autopilot_cap: number;
   slack_channel: string;
 }
 export interface Settings {
   commands: ClaudeCommand[];
   default: string;
   repos?: Record<RepoSlug, RepoSettings>;
-  autopilot?: Record<RepoSlug, number[]> | Record<RepoSlug, Record<string, boolean>>;
   vault_dir?: string;
   claude_label?: string;
   /** Every /pr-grind loop: deep (until zero findings) or simple (stops once the PR is approved). */
@@ -401,7 +397,7 @@ export interface PrdFile {
 }
 
 // ---- request bodies / small responses -------------------------------------------------------------
-export type StartVia = 'headless' | 'herdr';
+export type StartVia = 'headless';
 /** POST /api/sessions: start a session. `command` is the slash command text, or `text` for a free prompt. */
 export interface SessionStartBody {
   repo?: string; // registered slug, or a checkout path
@@ -424,8 +420,8 @@ export interface BoardStartBody {
   via?: StartVia;
   lenses?: string[];
 }
-/** POST /api/start: a public session, or for herdr `{session: null, via: 'herdr', tab}` (NEW). */
-export type BoardStartResponse = Partial<Session> & { session?: string | null; via?: StartVia; tab?: string };
+/** POST /api/start: a public session. */
+export type BoardStartResponse = Partial<Session> & { session?: string | null };
 /** 409 body from a duplicate start (and rerun): the session already running. */
 export interface DuplicateError {
   error: string;

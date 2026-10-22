@@ -1,6 +1,6 @@
 // Runs a Next-step action (lib/nextStep.ts StepAction) for a feature: the same wiring on the list rows and the feature page.
 import { useNavigate } from 'react-router-dom';
-import { useAutoBuild, useCloseEpic } from '../api/hooks';
+import { useCloseEpic } from '../api/hooks';
 import { toast, useConfirm } from '../components';
 import { useStarter } from '../board/actions';
 import type { Feature } from '../lib/features';
@@ -21,7 +21,6 @@ export function useStepRunner(f: Feature, repo: string) {
   const confirm = useConfirm();
   const starter = useStarter();
   const panel = usePanel();
-  const auto = useAutoBuild();
   const close = useCloseEpic();
   const go = (tab?: string) => navigate(link(routes.feature(f.slug, tab)));
 
@@ -57,8 +56,8 @@ export function useStepRunner(f: Feature, repo: string) {
       case 'merge':
         panel.open({ kind: 'pr', repo, n: a.pr });
         return;
-      case 'toggleAuto':
-        if (f.epic) auto.mutate({ repo, epic: f.epic, on: !f.autobuild });
+      case 'dispatch':
+        if (f.epic) navigate(link(routes.newDispatch(`${repo}#${f.epic}`)));
         return;
       case 'closeEpic': {
         if (!f.epic) return;
@@ -73,5 +72,5 @@ export function useStepRunner(f: Feature, repo: string) {
       }
     }
   };
-  return { run, busy: starter.pending || auto.isPending || close.isPending };
+  return { run, busy: starter.pending || close.isPending };
 }

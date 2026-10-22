@@ -46,7 +46,6 @@ export const api = {
   afkDismiss: () => post<AfkState>('/api/afk/dismiss'),
 
   // ---- delivery
-  autoBuild: (repo: string, epic: number, on: boolean) => post('/api/autopilot', { repo, epic, on }),
   closeEpic: (repo: string, epic: number) => post('/api/epics/close', { repo, epic }),
   cleanupIssue: (repo: string, issue: number) => post('/api/cleanup', { repo, issue, confirm: true }),
   skipCi: (repo: string, pr: number) => post('/api/grind/skip-ci', { repo, pr }),

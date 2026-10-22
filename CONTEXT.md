@@ -59,14 +59,14 @@ _Avoid_: Notifications, queue
 A timed run by the UI server that answers recommended `aiw ask` options, skips CI on paused grinds and retries failed sessions while the user is away. Formerly "AFK".
 _Avoid_: AFK, autopilot
 
-**Auto-build**:
-A per-epic switch that starts the epic's refined, unblocked issues as `/implement-issue` sessions, up to the repo's cap, as merges unblock them. Formerly "epic autopilot".
-_Avoid_: Autopilot
-
 **Project**:
 The human-friendly name for a GitHub `owner/repo`, looked up from `skills/worklog/projects.json`. Falls back to the raw `owner/repo` slug when unmapped.
 _Avoid_: Repo (when referring to the display name; "repo" is fine for the raw slug)
 
 **Dispatch**:
-Opening several refined issues in separate herdr tabs, one `/implement-issue <n>` each, in dependency order with a concurrency cap, via `herdr-dispatch`.
-_Avoid_: Batch run, fan-out
+One run of an epic's child issues as parallel Lanes, in dependency order under a cap, recorded under `<data_dir>/dispatches/` and ticked by the `aiw ui` server. Started by the `herdr-dispatch` skill (lanes are herdr tabs) or from the UI (lanes are headless Sessions); both see and steer every dispatch. Replaces Auto-build and epic autopilot.
+_Avoid_: Batch run, fan-out, autopilot, auto-build
+
+**Lane**:
+One issue of a Dispatch, walked by the engine: implement (`/implement-issue`), grind (`/pr-grind`, off/simple/full), the merge gate (CI green, an approving review, the grind done), merge (automatic only with auto-merge on), followups (implement-issue's after-merge steps), closed; then the next unblocked lane starts. A lane that needs the user is held, and its dependents wait.
+_Avoid_: Job, tab (a herdr tab is only where a lane may run)

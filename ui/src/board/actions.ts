@@ -31,14 +31,10 @@ export function useStarter() {
 
   return {
     pending: board.isPending || sess.isPending,
-    /** POST /api/start. Resolves to the new session id (null for herdr or on failure). */
+    /** POST /api/start. Resolves to the new session id (null on failure). */
     async startBoard(body: BoardStartBody, o: { nav?: boolean } = {}): Promise<string | null> {
       try {
         const r = await board.mutateAsync(body);
-        if (body.via === 'herdr' || r.via === 'herdr') {
-          toast('Started in a herdr tab. herdr tabs are not tracked here.');
-          return null;
-        }
         return opened(r.id as string | undefined, o.nav !== false);
       } catch (e) {
         fail(e);

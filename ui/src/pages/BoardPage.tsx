@@ -2,13 +2,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/endpoints';
-import { keys, useAutoBuild, useDelivery, usePlanning } from '../api/hooks';
+import { keys, useDelivery, usePlanning } from '../api/hooks';
 import { BoardStatus, isRateLimited } from '../board/BoardStatus';
 import { IssueAction } from '../board/IssueAction';
 import { IssueSignals } from '../board/IssueSignals';
 import { needsYou, placeCards } from '../board/columns';
 import '../board/board.css';
-import { Button, Chip, EmptyState, Icon, Switch } from '../components';
+import { Button, Chip, EmptyState, Icon, LinkButton } from '../components';
 import { joinFeatures, type FeatureIssue } from '../lib/features';
 import { routes } from '../lib/routes';
 import { BOARD_COLUMNS, issueStatus } from '../lib/vocab';
@@ -27,9 +27,7 @@ interface LaneData {
   title: string;
   epic: number | null;
   slug?: string;
-  autobuild: boolean;
   running: number;
-  cap: number;
   cards: FeatureIssue[];
 }
 
@@ -55,7 +53,6 @@ function Card({ c, repo }: { c: FeatureIssue; repo: string }) {
 
 function Lane({ lane, repo, flat }: { lane: LaneData; repo: string; flat: boolean }) {
   const { link } = useRepo();
-  const auto = useAutoBuild();
   const cols = placeCards(lane.cards);
   const merged = lane.cards.filter((c) => issueStatus(c) === 'merged').length;
   return (
@@ -66,11 +63,8 @@ function Lane({ lane, repo, flat }: { lane: LaneData; repo: string; flat: boolea
           <span className="muted" style={{ fontSize: 13 }}>{merged} of {lane.cards.length} merged</span>
           {lane.epic ? (
             <>
-              <label className="row" style={{ gap: 8, fontSize: 13, fontWeight: 600 }}>
-                <Switch checked={lane.autobuild} label={`Auto-build ${lane.title}`} disabled={auto.isPending} onChange={(on) => auto.mutate({ repo, epic: lane.epic!, on })} />
-                Auto-build
-              </label>
-              <span className="cap">{lane.running}/{lane.cap} running</span>
+              <LinkButton sm to={link(routes.newDispatch(`${repo}#${lane.epic}`))} title="Run the epic's issues as parallel lanes"><Icon n="bolt" />Run epic</LinkButton>
+              {lane.running ? <span className="cap">{lane.running} running</span> : null}
             </>
           ) : null}
         </div>
@@ -145,9 +139,7 @@ export function BoardPage() {
           title: l.title,
           epic: l.epic,
           slug: f?.slug,
-          autobuild: l.autopilot,
           running: l.running,
-          cap: l.cap,
           cards: l.cards.map((c) => ({ ...c, status: issueStatus(c) })),
         };
       })
@@ -187,7 +179,7 @@ export function BoardPage() {
           Issues land here once a PRD is approved and split into tasks.
         </EmptyState>
       ) : flat ? (
-        <Lane lane={{ key: 'all', title: 'All issues', epic: null, autobuild: false, running: 0, cap: 0, cards: lanes.flatMap((l) => l.cards) }} repo={repo} flat />
+        <Lane lane={{ key: 'all', title: 'All issues', epic: null, running: 0, cards: lanes.flatMap((l) => l.cards) }} repo={repo} flat />
       ) : (
         lanes.map((l) => <Lane key={l.key} lane={l} repo={repo} flat={false} />)
       )}

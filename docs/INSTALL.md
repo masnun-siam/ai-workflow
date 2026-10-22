@@ -134,7 +134,7 @@ installation.**
 |---|---|---|
 | `node --version` + `npx gitnexus --help` | code-graph lookups in `implement-issue` and `pr-review` | grep and glob, slower but correct |
 | `command -v slackcli` | the Slack reviewer-bot loop (`/pr-grind`, `/release-pr`) | no grind loop |
-| `command -v herdr` | `herdr-dispatch`: issues in separate terminal tabs | start issues from the UI or one session at a time |
+| `command -v herdr` | `herdr-dispatch`: an epic's lanes in separate terminal tabs | dispatch from the UI (headless lanes) |
 | `command -v tailscale` | reaching `aiw ui` from your phone | the UI stays on loopback |
 
 Present it as findings, not as a shopping list. "slackcli is missing, so PRs land without the review loop" is more useful than "please install slackcli".

@@ -168,7 +168,6 @@ export const useAfkStart = () => useApiMutation(api.afkStart, [['sessions'], ['i
 export const useAfkStop = () => useApiMutation(api.afkStop, [['sessions'], ['inbox']]);
 export const useAfkDismiss = () => useApiMutation(api.afkDismiss, [['sessions'], ['inbox']]);
 
-export const useAutoBuild = () => useApiMutation((v: { repo: string; epic: number; on: boolean }) => api.autoBuild(v.repo, v.epic, v.on), BOARD_WRITES);
 export const useCloseEpic = () => useApiMutation((v: { repo: string; epic: number }) => api.closeEpic(v.repo, v.epic), BOARD_WRITES);
 export const useCleanupIssue = () => useApiMutation((v: { repo: string; issue: number }) => api.cleanupIssue(v.repo, v.issue), BOARD_WRITES);
 export const useSkipCi = () => useApiMutation((v: { repo: string; pr: number }) => api.skipCi(v.repo, v.pr), [...BOARD_WRITES, ['pull']]);

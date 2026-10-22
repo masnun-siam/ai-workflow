@@ -1,6 +1,6 @@
 ---
 name: flow
-description: "Guide one feature from raw input to autopilot: /dump (optional) → /create-prd → approval → /create-tasks → /refine-issues → aiw autopilot, stopping for the user's go-ahead at every stage boundary. Picks the entry stage from the input, so half-done work (a PRD, existing issues) resumes where it is. Use whenever the user says /flow, 'take this idea to PRs', 'guided flow', or wants an idea carried through capture, PRD, tasks, refined issues and autopilot in one go."
+description: "Guide one feature from raw input to a running dispatch: /dump (optional) → /create-prd → approval → /create-tasks → /refine-issues → dispatch, stopping for the user's go-ahead at every stage boundary. Picks the entry stage from the input, so half-done work (a PRD, existing issues) resumes where it is. Use whenever the user says /flow, 'take this idea to PRs', 'guided flow', or wants an idea carried through capture, PRD, tasks, refined issues and implementation in one go."
 allowed-tools:
   - Skill
   - AskUserQuestion
@@ -8,7 +8,7 @@ allowed-tools:
   - Read
 ---
 
-# /flow — Idea → PRD → tasks → refined issues → autopilot
+# /flow — Idea → PRD → tasks → refined issues → dispatch
 
 `/flow` holds the user's place in the Guided Flow. It owns no stage logic: each stage is the existing skill, invoked through the Skill tool in this same session. Its job is to pick the entry stage, carry each stage's output into the next, and ask before every boundary.
 
@@ -25,7 +25,7 @@ The artifacts are the state (the PRD file, its `Epics` section, the epic's child
 | A PRD path (vault `…/PRD.md` or repo `docs/prds/<slug>.md`), not yet `Approved` | approval, then create-tasks |
 | An `Approved` PRD path | create-tasks |
 | An epic number whose child issues are not all refined (`gh issue view`; a refined issue carries WHAT, WHY and HOW) | refine-issues |
-| An epic number whose child issues are all refined | autopilot |
+| An epic number whose child issues are all refined | dispatch |
 
 When an input fits no row cleanly, ask which stage to start at (AskUserQuestion) rather than guessing. Resolve `<owner/repo>` once with `gh repo view --json nameWithOwner -q .nameWithOwner`.
 
@@ -36,7 +36,7 @@ When an input fits no row cleanly, ask which stage to start at (AskUserQuestion)
 3. **approval.** Only on the user's say that the PRD is reviewed: invoke `ai-workflow:create-prd` with `approve <prd-path>`. It files the epic and writes its number into the PRD's `Epics` section.
 4. **create-tasks.** Invoke `ai-workflow:create-tasks` with the PRD path. It files the child issues under the epic.
 5. **refine-issues.** Invoke `ai-workflow:refine-issues` with the epic number (from the PRD's `Epics` section).
-6. **autopilot.** Run `aiw autopilot <owner/repo> <epic> on`. Autopilot then starts eligible refined issues up to the repo's cap; `aiw autopilot <owner/repo> <epic> off` stops it.
+6. **dispatch.** Run the epic's issues as parallel lanes (implement, grind, merge, followups, next). In herdr (`command -v herdr` and `herdr pane current` succeed), invoke `ai-workflow:herdr-dispatch` with `<owner/repo>#<epic>`: it previews, asks for the settings and starts. Otherwise run `aiw dispatch plan <owner/repo>#<epic>`, show the waves and warnings, ask for grind mode and auto-merge, then `aiw dispatch start <owner/repo>#<epic> --runner headless <flags>` and give the user the UI link it prints.
 
 ## Checkpoints
 
@@ -46,7 +46,7 @@ Before each stage after the entry stage, ask one AskUserQuestion: "Continue to <
 
 - No stage logic copied here: PRD writing, task splitting and refining belong to their own skills.
 - No state file. One feature per run.
-- Never create GitHub issues, or switch autopilot on, without the user's "Continue" into that stage.
+- Never create GitHub issues, or start a dispatch, without the user's "Continue" into that stage.
 
 ## Self-improve
 

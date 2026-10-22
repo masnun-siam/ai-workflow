@@ -15,7 +15,7 @@ const prd = (over: Record<string, unknown> = {}) => ({
   slug: 'f1', title: 'Feature one', status: 'Approved', path: 'docs/prds/f1.md', abs_path: '/x/docs/prds/f1.md', column: 'approved',
   pr: null, epic: 7, issues: 0, refined: 0, unrefined: [], children: [], panel: null, ...over,
 });
-const lane = (cards: any[], over: Record<string, unknown> = {}) => ({ epic: 7, title: 'F1', autopilot: false, cap: 2, running: 0, cards, ...over });
+const lane = (cards: any[], over: Record<string, unknown> = {}) => ({ epic: 7, title: 'F1', running: 0, cards, ...over });
 
 function mock(o: { fetchedAt?: number | null; delFetchedAt?: number | null; stale?: boolean; prds?: any[]; lanes?: any[]; extra?: Record<string, (init?: RequestInit) => Promise<Response>> } = {}) {
   posts.length = 0;
@@ -55,7 +55,7 @@ describe('before the board snapshot is fetched', () => {
 });
 
 describe('real not-fetched server state (both snapshots null, stale)', () => {
-  const noEpic = [{ epic: null, title: 'No epic', autopilot: false, cap: 2, running: 0, cards: [] }];
+  const noEpic = [{ epic: null, title: 'No epic', running: 0, cards: [] }];
   for (const [name, o] of [['both null', { fetchedAt: null, delFetchedAt: null }], ['delivery null only', { delFetchedAt: null }]] as const) {
     it(`${name}: no stage, no banner action, no Create tasks`, async () => {
       mock({ ...o, stale: true, prds: [prd({ epic: null })], lanes: noEpic });
@@ -131,13 +131,14 @@ describe('Next step box wired to actions', () => {
     expect(await within(await step()).findByRole('button', { name: 'Review and merge' })).toBeTruthy();
   });
 
-  it('Building with ready issues and auto-build off: Turn on auto-build posts /api/autopilot', async () => {
+  it('Building with ready issues: Run epic opens the New dispatch dialog on the epic', async () => {
     mock({ prds: [prd({ issues: 1, column: 'refined' })], lanes: [lane([card(11, 'ready')])] });
     window.location.hash = '#/features/f1?repo=o/r';
     const user = userEvent.setup();
     render(<App />);
-    await user.click(within(await step()).getByRole('button', { name: 'Turn on auto-build' }));
-    await waitFor(() => expect(posts.find((p) => p.url === '/api/autopilot')?.body).toEqual({ repo: 'o/r', epic: 7, on: true }));
+    await user.click(within(await step()).getByRole('button', { name: 'Run epic' }));
+    expect(await screen.findByRole('dialog', { name: 'Dispatch an epic' })).toBeTruthy();
+    expect((screen.getByLabelText('Epic') as HTMLInputElement).value).toBe('o/r#7');
   });
 
   it('Shipped: Close epic confirms, then posts /api/epics/close', async () => {
@@ -211,25 +212,25 @@ describe('Board', () => {
     expect(await screen.findByText('Task 11')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Start' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Merge' })).toBeTruthy();
-    expect(screen.getByText('0/2 running')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Run epic/ }).getAttribute('href')).toContain('/dispatches?new=o%2Fr%237');
     await user.keyboard('j'); // nothing focused: first card
     expect(document.activeElement?.getAttribute('aria-label')).toContain('Issue 11');
     await user.keyboard('l');
     expect(document.activeElement?.getAttribute('aria-label')).toContain('Issue 12');
   });
 
-  it('herdr start toasts that tabs are not tracked; a 409 toasts with the existing session', async () => {
+  it('a card starts headless only; a 409 toasts with the existing session', async () => {
     mock({
       prds: [prd({ issues: 1 })],
       lanes: [lane([card(11, 'ready')])],
-      extra: { '/api/start': (init) => json(JSON.parse(String(init?.body)).via === 'herdr' ? { session: null, via: 'herdr', tab: 'issue-11' } : { error: 'already running', id: 'abc', href: '#/session/abc' }, JSON.parse(String(init?.body)).via === 'herdr' ? 200 : 409) },
+      extra: { '/api/start': () => json({ error: 'already running', id: 'abc', href: '#/session/abc' }, 409) },
     });
     window.location.hash = '#/board?repo=o/r';
     const user = userEvent.setup();
     render(<App />);
     await user.click(await screen.findByRole('button', { name: 'More ways to start' }));
-    await user.click(await screen.findByRole('menuitem', { name: /herdr tab/ }));
-    expect(await screen.findByText(/herdr tabs are not tracked here/)).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: /herdr tab/ })).toBeNull();
+    await user.keyboard('{Escape}');
     await user.click(screen.getByRole('button', { name: 'Start' }));
     expect(await screen.findByRole('button', { name: 'Open session' })).toBeTruthy();
   });

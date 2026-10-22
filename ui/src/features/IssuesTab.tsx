@@ -1,10 +1,10 @@
 import { Fragment, useState } from 'react';
-import { useAutoBuild } from '../api/hooks';
 import { IssueAction } from '../board/IssueAction';
 import { IssueSignals } from '../board/IssueSignals';
 import { useStarter } from '../board/actions';
-import { Button, IssueChip, Switch } from '../components';
+import { Button, Icon, IssueChip, LinkButton } from '../components';
 import type { Feature } from '../lib/features';
+import { routes } from '../lib/routes';
 import { ATTENTION_ORDER, ISSUE } from '../lib/vocab';
 import { usePanel } from '../panels/PanelContext';
 import { taskArg } from './useStepRunner';
@@ -12,7 +12,6 @@ import { taskArg } from './useStepRunner';
 export function IssuesTab({ f, repo }: { f: Feature; repo: string }) {
   const panel = usePanel();
   const starter = useStarter();
-  const auto = useAutoBuild();
   const [text, setText] = useState('');
   const [picked, setPicked] = useState<number[]>([]);
   const groups = ATTENTION_ORDER.map((s) => [s, f.issues.filter((i) => i.status === s)] as const).filter(([, l]) => l.length);
@@ -23,11 +22,8 @@ export function IssuesTab({ f, repo }: { f: Feature; repo: string }) {
     <div className="stack">
       {f.epic ? (
         <div className="row wrap" style={{ gap: 14 }}>
-          <label className="row" style={{ gap: 10, fontWeight: 600 }}>
-            <Switch checked={f.autobuild} label="Auto-build" disabled={auto.isPending} onChange={(on) => auto.mutate({ repo, epic: f.epic!, on })} />
-            Auto-build
-          </label>
-          <span className="muted" style={{ fontSize: 13 }}>Starts ready, unblocked issues by priority, {f.cap} at a time. Never merges.</span>
+          <LinkButton sm variant="primary" to={routes.newDispatch(`${repo}#${f.epic}`) + `&repo=${repo}`}><Icon n="bolt" />Run epic</LinkButton>
+          <span className="muted" style={{ fontSize: 13 }}>Runs the ready issues as parallel lanes: implement, grind, merge, followups, next.</span>
           <span className="grow" />
           <form
             className="row"

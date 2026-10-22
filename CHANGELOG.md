@@ -4,6 +4,10 @@
 
 ### Changed
 
+- **Auto-build is gone**, with its per-repo cap, the `aiw autopilot` verb and `POST /api/autopilot`:
+  dispatches run an epic's issues instead. A card or Start no longer opens a herdr tab (`POST
+  /api/start` is headless only), and `herdr-dispatch` is no longer a Start command; it is the skill
+  you run in herdr. Stored Auto-build settings are ignored. `/flow` ends by starting a dispatch.
 - **UI rewrite.** `aiw ui` has a new interface, and it is organised around "what needs me". The
   **Inbox** collects everything that needs you across repos: questions from Claude, PRs ready to
   merge, paused grinds, failed sessions, reviews at their round cap, worklogs to clean up. You act on
@@ -11,8 +15,7 @@
   step; Planning and Delivery are gone (the **Board** keeps the issues, in five columns), and the
   Answer page is part of the session page. **Start** (the New button, `N`, or ⌘K) replaces New run.
   Issues and PRs open in a side panel with their comments, checks, files and merge.
-  "AFK" is now **Away mode** and epic autopilot is **Auto-build**, so the two no longer share a
-  name. Light and dark themes, a phone layout, and keyboard shortcuts (`?` lists them) are built in.
+  "AFK" is now **Away mode**, and epic autopilot is replaced by dispatches (below). Light and dark themes, a phone layout, and keyboard shortcuts (`?` lists them) are built in.
   Old bookmarks and push-notification links still open the right page; push links now point at the
   new routes. Plugin users do not need Node: the built app ships in `run-engine/ui_dist/`.
 - Developers: the UI source is in `ui/` (React, TypeScript, Vite). Rebuild with `npm run build` and
@@ -25,6 +28,18 @@
   waits for GitHub's reported reset instead of a fixed 10 minutes.
 
 ### Added
+
+- **Dispatches.** Give an epic and its refined child issues run as parallel lanes in dependency
+  order: `/implement-issue`, then a grind (off, simple or full), then the merge (automatic only with
+  auto-merge on, a merge commit once CI is green, a review approves and the grind is done), then
+  implement-issue's followups, then the next unblocked issue. Start one from the UI (**Dispatches**,
+  or **Run epic** on a feature or board lane; lanes are headless sessions) or with the rewritten
+  `herdr-dispatch` skill (lanes are herdr tabs, closed when their followups are done); both see and
+  steer the same dispatches. A lane that needs you is held and shows in the Inbox and as a macOS
+  notification while the rest go on; settings change mid-run; usage limits pause new lanes; a
+  conflict at merge time is fixed in the lane. With a feature branch, the end offers its PR, a QA
+  pass whose bugs join as new lanes, and a grind of the final PR. `aiw dispatch` drives it all from a
+  terminal, and `aiw grind-mode --pr <url>` lets a dispatch set its PRs' grind mode.
 
 - UI: a **Grinding** switch per issue (default: the repo's auto-grind). Merge appears once CI is green
   and the PR is approved on GitHub (no approval needed on a repo you own), and with grinding on only

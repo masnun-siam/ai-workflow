@@ -54,18 +54,17 @@ def build(s, sessions=(), grind=None, settings=None, flags=None):
 # no epics: only the No epic lane; non-refined without PR/session absent
 r = build(snap([issue(1), issue(2, labels=[])]))
 assert [lane["epic"] for lane in r["lanes"]] == [None] and set(cards(r)) == {1}
-assert r["cap"] == 2 and r["running"] == 0 and r["lanes"][0]["title"] == "No epic"
+assert "cap" not in r and r["running"] == 0 and r["lanes"][0]["title"] == "No epic"
 assert r["auto_grind"] is False and build(snap([]), settings={"auto_grind": True})["auto_grind"] is True
 
 # blocked by open issue -> Ready with blocked_by; closed blocker dropped
 epic = issue(10, labels=["epic"])
 epic["title"] = "Epic: Boards"
 s = snap([epic, issue(11, parent=10, blockers=[(12, "OPEN"), (9, "CLOSED")], prio="high"), issue(12, parent=10)])
-c = cards(build(s, settings={"autopilot": [10], "autopilot_cap": 3}), 10)
+c = cards(build(s), 10)
 assert c[11]["column"] == "ready" and c[11]["blocked_by"] == [12] and c[11]["priority"] == "high"
-r = build(s, settings={"autopilot": {"10": True}, "autopilot_cap": 3})
-lane = next(x for x in r["lanes"] if x["epic"] == 10)
-assert lane["autopilot"] and lane["title"] == "Boards" and r["cap"] == 3
+lane = next(x for x in build(s)["lanes"] if x["epic"] == 10)
+assert lane["title"] == "Boards" and "autopilot" not in lane
 s = snap([epic, issue(11, parent=10, blockers=[(12, "CLOSED")]), issue(12, parent=10)])
 assert cards(build(s), 10)[11]["blocked_by"] == []
 

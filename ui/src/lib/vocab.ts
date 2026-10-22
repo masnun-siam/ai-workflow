@@ -107,7 +107,6 @@ export const COMMANDS: CommandGroup[] = [
   ] },
   { g: 'Build', items: [
     { id: 'implement-issue', name: 'Implement an issue', desc: 'Takes one refined issue to a ready PR in its own worktree.', arg: 'issue' },
-    { id: 'herdr-dispatch', name: 'Dispatch to herdr tabs', desc: 'Opens several issues in herdr, one tab each, in dependency order.', arg: 'issues' },
     { id: 'verifier-locally', name: 'Verify changes locally', desc: 'Runs the checks that match the changed files.', arg: 'none' },
   ] },
   { g: 'Review', items: [

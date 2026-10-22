@@ -7,6 +7,8 @@ export const routes = {
   board: '/board',
   activity: '/activity',
   dispatches: '/dispatches',
+  /** Dispatches with the New dispatch dialog open on this epic (owner/repo#n). */
+  newDispatch: (epic: string) => `/dispatches?new=${encodeURIComponent(epic)}`,
   dispatch: (id: string) => `/dispatches/${encodeURIComponent(id)}`,
   session: (id: string) => `/sessions/${encodeURIComponent(id)}`,
   settings: (section?: string) => `/settings${section ? `/${section}` : ''}`,

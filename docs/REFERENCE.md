@@ -18,8 +18,8 @@
 | `/ai-workflow:dump <text>` | file free-form input into the Obsidian vault's Project → Feature structure, after one confirmation |
 | `/ai-workflow:release-pr [--dry-run] [head=staging] [base=master]` | open or refresh the `staging` → `master` release PR with a deploy checklist, post the Slack trigger, hand off to `/pr-grind`. Never merges |
 | `/ai-workflow:worklog [date]` | today's worklog from GitHub activity and the daily note, written to the Obsidian daily note (runs as the `worklog-runner` agent) |
-| `/ai-workflow:flow <idea \| folder \| PRD \| task list \| epic>` | the guided flow: dump → create-prd → create-tasks → refine-issues → herdr-dispatch of implement-issue; starts at the stage the input implies and stops for your go at each boundary |
-| `herdr-dispatch` (skill) | open issues in herdr tabs, one `/ai-workflow:implement-issue <n>` each, in dependency order under a concurrency cap |
+| `/ai-workflow:flow <idea \| folder \| PRD \| task list \| epic>` | the guided flow: dump → create-prd → create-tasks → refine-issues → a dispatch of the epic; starts at the stage the input implies and stops for your go at each boundary |
+| `/ai-workflow:herdr-dispatch <epic> [--max N] [--grind off\|simple\|full] [--auto-merge] [--feature-branch <name>] [--model M] [--effort E]` | run an epic's issues as a dispatch in herdr tabs: preview, confirm, start, then relay what needs you (see **Dispatches**) |
 
 ## The `aiw` CLI
 
@@ -29,8 +29,16 @@ aiw paths                               resolve every path, create the state dir
 aiw ask                                 a headless session asks the user a question and pauses
 aiw ci status                           check state plus the failing job's log
 aiw threads list|resolve                PR review threads
-aiw autopilot <owner/repo> <epic> on|off  switch autopilot for an epic (works without the UI)
-aiw grind-mode                          print the grind mode, deep or simple (read by /pr-grind each round)
+aiw grind-mode [--pr <url>]             print the grind mode, deep or simple: the PR's dispatch decides, else
+                                        Settings (read by /pr-grind each round)
+aiw dispatch plan|start <epic> [flags]  preview or start a dispatch (flags as herdr-dispatch, plus
+                                        --runner herdr|headless and --workspace <herdr workspace id>)
+aiw dispatch ls|show <id>               list dispatches, or one as JSON
+aiw dispatch set <id> key=value...      change max, grind, auto_merge, model, effort while it runs
+aiw dispatch pause|resume|cancel <id>   the whole dispatch (pause stops new lanes only)
+aiw dispatch lane <id> <n> <action>     pause, resume, retry, skip, merge, hold, unhold, or send "<text>"
+aiw dispatch watch <id> [--since T]     block until an event needs you; prints it and the next --since
+aiw dispatch end <id> open-pr|qa|grind-pr  an end-of-dispatch action, run by the server
 ```
 
 ## aiw ui
@@ -49,7 +57,8 @@ after an upgrade it deletes the old run data from the plugin data dir once and l
   app for one more release.
 
 **Routes** (hash routes, each with an optional `?repo=owner/name` that a shared link keeps):
-`#/inbox` (default), `#/features`, `#/features/<slug>[/<tab>]`, `#/board`, `#/activity`,
+`#/inbox` (default), `#/features`, `#/features/<slug>[/<tab>]`, `#/board`, `#/dispatches[?new=<owner/repo#n>]`
+(`new` opens New dispatch on that epic), `#/dispatches/<id>[?lane=<owner/repo#n>]`, `#/activity`,
 `#/sessions/<id>`, `#/settings[/<section>]`. Old routes still open the matching page, so old
 bookmarks and push-notification links work: `#/planning`, `#/delivery`, `#/answer/<id>`,
 `#/session/<id>`, `#/dispatch/<id>`, `#/sessions` and `#/new` (opens Start). **Shortcuts:** `N` Start,
@@ -64,7 +73,8 @@ lens approving (Approve PRD anyway, Run 2 more rounds); a PR ready to merge (Rev
 **Merge rule**); a PR with merge conflicts (Resolve conflicts); a paused grind (Skip CI and continue, Stop grind); a failed session (Retry, Continue in
 terminal); a merged issue whose worktree has unsaved work (Review and clean up); a `local/` repo with no
 GitHub remote (Publish to GitHub); a usage-limited session (Resume on another account); a queued session
-(Start now, Cancel). An item disappears within a poll after its condition clears.
+(Start now, Cancel); a dispatch lane that needs you, is held or hit a usage limit (Open lane, Retry), a
+lane's PR waiting for your merge (Merge), and a finished dispatch (What next, Dismiss). An item disappears within a poll after its condition clears.
 `GET /api/inbox[?repo=]` builds it on the server from sessions, panels, grind state, cleanup flags, the
 repo registry and the board polls; a repo whose board data is stale is listed in `stale` and contributes
 session items only.
@@ -74,8 +84,8 @@ Tasks, Building, Shipped), progress, a **Merge #n** button for each of its PRs r
 next-step button. A feature page shows a stage stepper, a
 **Next step** box and tabs **Issues**, **PRD**, **Peer review** and **Sessions**. Issues: a table by
 status with signals (priority, PR, CI, review, grind, live session, failed last run, cleanup), one
-action per row (Refine, Start, Retry, Answer, Merge, Grind, Skip CI, Clean up), the **Auto-build**
-switch with the repo's cap, **Add task** (`/create-tasks` with the text as a finding) and refine-picked.
+action per row (Refine, Start, Retry, Answer, Merge, Grind, Skip CI, Clean up), **Run epic** (opens
+New dispatch on the feature's epic; also in the page head and the Next step box), **Add task** (`/create-tasks` with the text as a finding) and refine-picked.
 PRD: rendered, **Edit** (**Save and commit** commits only that file on the checkout's current branch, not
 pushed; refused if the file changed on disk since it opened) or **Ask Claude** (`/create-prd <path>
 --update <request>`). The More menu has **Close epic** (closes the epic and every open child as
@@ -83,11 +93,10 @@ completed, `POST /api/epics/close`). `GET /api/planning?repo=`.
 
 **Board.** Five columns: Needs refinement, Ready (blocked issues last, with a lock), Building (draft
 PRs included), In review (grinding included), Merged (7 days). Grouped by feature (each lane shows
-progress and its Auto-build switch) or All issues. Cards show their signals and one action; j/k and
+progress, its running sessions and **Run epic**) or All issues. Cards show their signals and one action; j/k and
 h/l move between cards and columns. A ready issue with open blockers cannot start. `GET
-/api/delivery`, `POST /api/start` (409 for a live session, open PR or blocked issue; herdr starts
-answer `{session: null, via: "herdr", tab}` because herdr tabs are not tracked), `POST
-/api/autopilot` (the Auto-build switch), `POST /api/cleanup`.
+/api/delivery`, `POST /api/start` (headless only; 409 for a live session, an open PR, a blocked issue or
+an issue a running dispatch owns), `POST /api/cleanup`.
 
 **Board data.** A PR belongs to an issue when GitHub links it, when its body says Closes, Fixes or
 Resolves #n, or when its branch starts `issue-<n>-` (GitHub links closing keywords only for PRs into
@@ -100,10 +109,10 @@ session or the UI asked about it in the last 2 minutes (the global Inbox counts 
 repo), else every 10 minutes. Every response reports the token's GraphQL budget, which the agents share:
 under 1000 points left, every repo polls every 10 minutes until the reset. A rate limit pauses fetching
 until that reset (10 minutes when the budget was not low) and the boards show the last data as stale
-with the reason and a **Refresh** (`?refresh=1` on the board GET fetches now). After each fresh poll the server runs Auto-build (refined, unblocked issues of
-switched-on epics, by `priority:` label then number, up to the repo's cap), merge cleanup, and grind
-autostart (a PR that turned ready whose issue has grinding on; a PR with no issue follows the repo's
-auto-grind). Nothing runs on stale data, and nothing merges a PR without a click.
+with the reason and a **Refresh** (`?refresh=1` on the board GET fetches now). After each fresh poll the server runs merge cleanup and grind autostart (a PR that
+turned ready whose issue has grinding on, unless a dispatch lane owns it; a PR with no issue follows the
+repo's auto-grind). Nothing runs on stale data, and outside a dispatch with auto-merge on nothing merges
+a PR without a click.
 
 **Merge rule.** Each issue has a **Grinding** switch (in its panel); an untouched issue follows the
 repo's auto-grind. A PR shows Merge (Inbox, Features list, feature Issues tab, Board) when it is not a
@@ -130,6 +139,25 @@ ready-to-merge Inbox item appears.
 `POST /api/issues/<o>/<r>/<n>/comment|state`, `POST /api/pulls/<o>/<r>/<n>/comment|merge`,
 `POST /api/grind/skip-ci|stop` (`{repo, pr}`; 409 when there is nothing to skip or stop),
 `GET /api/prd?repo=&path=` (returns `sha`), `POST /api/prd` (takes `base_sha`; 409 when it changed).
+
+**Dispatches.** `#/dispatches` lists running dispatches as cards (progress, lanes that need you,
+settings) and the rest as history; **New dispatch** takes an epic (typed, or picked from the repo's
+epics), grind mode (Off, Simple, Full), auto-merge, lanes at once (1–10), a feature branch, model and
+effort, then **Preview** shows the waves and warnings (unrefined issues, cycles, missing checkouts,
+repos without a Slack channel, open blockers outside the epic) before **Start**. Lanes started here run
+as headless sessions; `herdr-dispatch` starts herdr ones, and both show here. A dispatch page has the
+live settings, **Pause**/**Resume**/**Cancel**, totals (done, running, queued, need you, elapsed, cost and
+tokens for headless lanes), the lanes as a **Graph** (columns by dependency depth, edges to dependents)
+or a **List** (stage, progress, what it needs, PR, time, cost), a lane panel (step bar, gate, PR,
+**Pause**, **Retry**, **Merge now**, **Hold merge**, **Skip**, a message box into the lane, and its
+transcript or herdr pane text) and the activity feed. When every lane is done it offers **Open PR from
+<branch>**, **Run QA** and **Grind the final PR**; none runs by itself.
+The server ticks every running dispatch every 30 s from the board poll, the grind state files and each
+lane's session; grind rounds a lane owns are typed into the lane (`dispatch-due:` in the grind state)
+instead of starting a separate session, and the epic is re-read every 5 minutes so new children join.
+`GET /api/dispatches`, `GET /api/dispatches/<id>` (with events), `GET /api/dispatches/<id>/lane?key=`,
+`POST /api/dispatches` (`{epic, settings}`), `POST /api/dispatches/plan`, `POST
+/api/dispatches/<id>/settings|state|lane|end|seen`.
 
 **Start** (the New button, `N` or ⌘K). Commands grouped Plan, Build, Review, Ship, Capture and
 Maintain, each with a one-line description; the last one is remembered. Pick **Where** (a registered repo,
@@ -166,8 +194,8 @@ Simple (a grind stops, fixing nothing more, at the round where the PR is approve
 review is an approval or GitHub's reviewDecision is approved). `/pr-grind` reads it every round, so a
 change reaches running grinds too (`grind_mode` in `ui_settings.json`). Then one table of
 the registered checkouts (`checkouts.json`) with GitHub status or **Publish**, auto-grind (default off),
-Auto-build cap (1–5, default 2), the Slack review channel grind posts to (`repos[owner/repo]` in
-`ui_settings.json`; `autopilot` maps a repo to its epics) and **Remove** (its clone is untouched), plus
+the Slack review channel grind posts to (`repos[owner/repo]` in `ui_settings.json`; a repo without one
+skips grinding in a dispatch) and **Remove** (its clone is untouched), plus
 scan folders, **Find repos** and **Check remotes** (`gh repo view` on every repo, failures first).
 **Claude accounts**: the named `claude` commands a session can launch with, one per account; their plan
 usage (5h / 7d) shows in the rail. **Notifications** edits `ui.json` (written mode 0600; a token or
@@ -236,6 +264,7 @@ Nothing stateful lives in this repo. `aiw paths` resolves it under `$CLAUDE_PLUG
 | `issue_grind.json` | each issue's Grinding switch, by repo (unset issues follow the repo's auto-grind) |
 | `peer-review/` | one directory per panel: `panel.json` and `round-<n>/<lens>.md` verdicts |
 | `afk.json` | the Away mode window and its log |
+| `dispatches/` | one `<id>.json` per dispatch (settings, lanes, events) and its `.lock` |
 | `ui.json` | push notifications and `public_url` (mode 0600) |
 | `config.json` | peer-review overrides from Settings, laid over `run-engine/config.json` |
 | `channels.json` | Slack ids and trigger templates for grind and release-pr |
@@ -253,6 +282,7 @@ guides/       engineering-workflow, code-review, skills
 templates/    prd, epic, issue
 commands/     code-review (a slash command)
 run-engine/   route.py (the aiw CLI) · ui_*.py (the web UI server) · peer_review, threads, ci, ask
+              dispatch_run (the lane engine), dispatch_runners (herdr, headless), dispatch_cli
               ui_dist/ (the built UI, committed) · config.json · test_*.py
 ui/           the web UI source: React + TypeScript + Vite
 bin/aiw       PATH shim. NOT named `route`; see INSTALL.md Step 3.
