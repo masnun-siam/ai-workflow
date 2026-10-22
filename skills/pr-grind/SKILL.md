@@ -32,7 +32,7 @@ Header keys (lines above the first `## Round <n>`; names are pinned for the aiw 
   when a human re-invokes `/pr-grind`.
 - `next-poll: <ISO8601>` — next headless re-entry (round end + 1500s).
 - `done: <ISO8601> — <reason>` — terminal; never restarted.
-- `poll-since:` and `ci-seen: <sha> <state>` — owned by the aiw ui tick; preserve, never edit.
+- `poll-since:`, `ci-seen: <sha> <state>` and `dispatch-due:` — owned by the aiw ui tick; preserve, never edit.
 
 ## Step 0 — Resolve
 

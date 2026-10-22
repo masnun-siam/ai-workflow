@@ -33,8 +33,9 @@ _LOOK = {
     "pr-ready": ("eyes", "aiw: #{n} PR is ready", "aiw: PR is ready", "Open board"),
     "needs-cleanup": ("broom", "aiw: #{n} needs cleanup", "aiw: needs cleanup", "Open board"),
     "panel-cap": ("no_entry", "aiw: review panel hit its cap", "aiw: review panel hit its cap", "Open board"),
+    "dispatch": ("rocket", "aiw: #{n} dispatch lane", "aiw: dispatch", "Open board"),
 }
-_BOARD = ("afk", "pr-ready", "needs-cleanup", "panel-cap")  # no run page: the click lands on the board
+_BOARD = ("afk", "pr-ready", "needs-cleanup", "panel-cap", "dispatch")  # no run page: the click lands on the board
 # While AFK mode runs, autopilot handles or holds these; the one "afk" push at the end sums them up.
 _AFK_MUTED = ("waiting", "failed", "grind-paused")
 _TAG_SAFE = re.compile(r"[^A-Za-z0-9._#/-]+")

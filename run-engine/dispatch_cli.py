@@ -183,16 +183,20 @@ def cmd_plan(a) -> None:
     print(json.dumps(preview(resolve(a.epic), _settings(a), a.runner), indent=1))
 
 
-def cmd_start(a) -> None:
-    s = _settings(a)
-    if a.runner == "herdr" and not a.workspace:
-        raise ValueError("--runner herdr needs --workspace (herdr pane current)")
-    r = resolve(a.epic)
+def start(epic: str, runner: str, s: dict, workspace=None, gh=_gh) -> dict:
+    """Resolve the epic, cut the feature branch if asked, record the dispatch. The UI server ticks it."""
+    if runner == "herdr" and not workspace:
+        raise ValueError("the herdr runner needs a workspace id (herdr pane current)")
+    r = resolve(epic, gh)
     if not r["children"]:
         raise ValueError(f"{r['epic']} has no open child issues")
     for repo in sorted({c["repo"] for c in r["children"]}) if s["feature_branch"] else []:
-        ensure_feature_branch(repo, s["feature_branch"])
-    d = dr.create(r["epic"], a.runner, s, r["children"], workspace=a.workspace)
+        ensure_feature_branch(repo, s["feature_branch"], gh)
+    return dr.create(r["epic"], runner, s, r["children"], workspace=workspace)
+
+
+def cmd_start(a) -> None:
+    d = start(a.epic, a.runner, _settings(a), a.workspace)
     if not ui_running():
         start_ui()
     print(

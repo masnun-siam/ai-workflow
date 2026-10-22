@@ -59,9 +59,17 @@ def implement_prompt(n: int, base) -> str:
     )
 
 
-def grind_prompt(pr_url: str, channel=None) -> str:
+LANE_GRIND = " -- dispatch lane: re-arm the headless way (write next-poll, end the turn; no Monitor, no ScheduleWakeup)"
+
+
+def grind_prompt(pr_url: str, channel=None, lane=True) -> str:
+    """A lane's grind ends each round like a headless one: the engine types the next round into the lane."""
     ch = str(channel or "").strip()
-    return f"/ai-workflow:pr-grind {pr_url}" + (f" --channel {ch}" if ch.replace("_", "").isalnum() else "")
+    return (
+        f"/ai-workflow:pr-grind {pr_url}"
+        + (f" --channel {ch}" if ch.replace("_", "").isalnum() else "")
+        + (LANE_GRIND if lane else "")
+    )
 
 
 def qa_prompt(epic: str, branch) -> str:
@@ -272,7 +280,9 @@ def startable(d: dict, facts: dict) -> list:
             continue
         if any(lanes.get(b, {}).get("stage", "closed") != "closed" for b in x.get("deps", [])):
             continue
-        if any(b not in lanes for b in (facts.get(k) or {}).get("blockers_open", [])):
+        if k not in facts:  # never launch on a guess: wait for the repo's first fresh poll
+            continue
+        if any(b not in lanes for b in facts[k].get("blockers_open", [])):
             continue  # a blocker outside this dispatch is still open
         out.append(k)
         free -= 1
@@ -372,6 +382,13 @@ def check_settings(s: dict) -> dict:
     if not isinstance(s.get("max"), int) or isinstance(s["max"], bool) or not 1 <= s["max"] <= 10:
         raise ValueError("max must be an integer from 1 to 10")
     s["auto_merge"] = bool(s.get("auto_merge"))
+    unknown = set(s) - set(DEFAULTS)
+    if unknown:
+        raise ValueError(f"unknown settings: {sorted(unknown)}")
+    if s.get("model") is not None and not re.fullmatch(r"[A-Za-z0-9][\w.\[\]-]{0,60}", str(s["model"])):
+        raise ValueError("model is not a model name")
+    if s.get("effort") not in (None, "low", "medium", "high", "xhigh", "max"):
+        raise ValueError("effort must be low, medium, high, xhigh or max")
     fb = s.get("feature_branch")
     if fb is not None and not re.fullmatch(r"[A-Za-z0-9._/-]{1,100}", fb):
         raise ValueError("feature_branch is not a valid branch name")
@@ -399,6 +416,22 @@ def load(did: str) -> dict:
             return json.load(f)
     except FileNotFoundError:
         raise ValueError(f"no dispatch {did}") from None
+
+
+def active_lane(repo: str, n=None, pr=None):
+    """(dispatch id, lane) of a running or paused dispatch's live lane for issue `n` or PR `pr`, else None.
+    The grind autostart and the pr-grind re-entry leave such PRs to the dispatch."""
+    for d in list_all():
+        if d["state"] not in ("running", "paused"):
+            continue
+        for x in d["lanes"].values():
+            if (
+                x["repo"].lower() == repo.lower()
+                and x["stage"] in ACTIVE
+                and ((n is not None and x["n"] == n) or (pr is not None and x.get("pr") == pr))
+            ):
+                return d["id"], x
+    return None
 
 
 def list_all() -> list:
@@ -544,7 +577,7 @@ def run_end(d: dict, action: str, runner, gh) -> str:
     for repo, url in (d.get("final_prs") or {}).items():
         d.setdefault("final_grinds", {})[repo] = runner.start(
             {"repo": repo, "n": int(url.rstrip("/").split("/")[-1]), "label": f"grind-{repo.split('/')[-1]}"},
-            grind_prompt(url),
+            grind_prompt(url, lane=False),
             d,
         )
     return "grind started on " + ", ".join((d.get("final_prs") or {}).values())
@@ -593,6 +626,8 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None, gh
                     runner.close(x["handle"])
                 text = stage_prompt(x, d["settings"], (f.get("pr") or {}).get("url"))
                 x["handle"] = runner.start(x, text, d) if text else None
+                if x["handle"]:
+                    x.setdefault("handles", []).append(x["handle"])
                 ev(k, "lane", f"restarted in {x['stage']}")
             except Exception as e:  # noqa: BLE001
                 x["needs_you"] = f"restart failed: {e}"
@@ -635,6 +670,7 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None, gh
         base = d["settings"].get("feature_branch") or x.get("base")
         try:
             x["handle"] = runner.start(x, implement_prompt(x["n"], base), d)
+            x.setdefault("handles", []).append(x["handle"])
             x.update(stage="implementing", started_at=now, needs_you=None)
             ev(k, "stage", "queued -> implementing")
         except Exception as e:  # noqa: BLE001

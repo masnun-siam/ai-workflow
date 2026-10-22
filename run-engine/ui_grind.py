@@ -18,6 +18,7 @@ import time
 from datetime import datetime, timezone
 
 import shared
+import dispatch_run
 import ui_inbox
 import ui_notify
 import ui_runner
@@ -182,6 +183,8 @@ def autostart(repo: str, snapshot: dict, prev_snapshot: dict, settings: dict, st
     for p in turned_ready(snapshot, prev_snapshot):
         if (owner, name, p["n"]) in have or not ui_inbox.grind_on(settings, issue_of.get(p["n"])):
             continue
+        if dispatch_run.active_lane(repo, n=issue_of.get(p["n"])) or dispatch_run.active_lane(repo, pr=p["n"]):
+            continue  # a dispatch lane grinds its own PR in its own session
         if _start(repo, p, settings, start) == 201:
             started.append(p["n"])
     return started

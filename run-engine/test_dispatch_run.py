@@ -35,6 +35,11 @@ class FakeRunner:
         self.closed.append(h["n"])
 
 
+def fq(*ns):
+    """Fresh facts for queued lanes: a lane only launches once its repo was polled."""
+    return {K(n): {"blockers_open": []} for n in ns}
+
+
 def child(n, deps=(), refined=True, base=None):
     return {"repo": R, "n": n, "title": f"i{n}", "refined": refined, "deps": [K(d) for d in deps], "base": base}
 
@@ -85,10 +90,10 @@ d = dr.create(
     [child(3), child(1), child(2, [1]), child(4, refined=False)],
 )
 assert d["lanes"][K(4)]["stage"] == "skipped" and d["lanes"][K(4)]["skip_reason"] == "needs refine"
-dr.tick(d, {}, run, merge, now=1000)
+dr.tick(d, fq(1, 2, 3), run, merge, now=1000)
 assert [s[0] for s in run.started] == [1, 3], run.started
 assert run.started[0][1] == "/ai-workflow:implement-issue 1"
-dr.tick(d, {}, run, merge, now=1001)
+dr.tick(d, fq(1, 2, 3), run, merge, now=1001)
 assert len(run.started) == 2  # cap holds, #2 waits on #1
 print("  ok  launch order, cap, deps")
 
@@ -106,7 +111,7 @@ f1 = {"issue_open": True, "slack": True, "agent": "idle", "pr": pr(101)}
 dr.tick(d, {K(1): f1}, run, merge, now=1005)
 assert d["lanes"][K(1)]["stage"] == "grinding" and run.sent[-1] == (
     1,
-    "/ai-workflow:pr-grind https://github.com/o/r/pull/101",
+    "/ai-workflow:pr-grind https://github.com/o/r/pull/101" + dr.LANE_GRIND,
 )
 f3 = {"issue_open": True, "slack": False, "agent": "idle", "pr": pr(103, approved=True)}
 dr.tick(d, {K(3): f3}, run, merge, now=1006)
@@ -153,7 +158,9 @@ dr.tick(d, {K(1): fm}, run, merge, now=1021)
 assert d["lanes"][K(1)]["stage"] == "followups" and "is merged" in run.sent[-1][1]
 dr.tick(d, {K(1): {**fm, "agent": "working"}}, run, merge, now=1022)
 assert d["lanes"][K(1)]["stage"] == "followups"
-dr.tick(d, {K(1): {**fm, "issue_open": False}, K(3): {**f3, "pr": pr(103, state="MERGED")}}, run, merge, now=1023)
+dr.tick(
+    d, {K(1): {**fm, "issue_open": False}, K(3): {**f3, "pr": pr(103, state="MERGED")}, **fq(2)}, run, merge, now=1023
+)
 assert d["lanes"][K(1)]["stage"] == "closed" and 1 in run.closed
 assert run.started[-1][0] == 2  # unblocked, slot free
 print("  ok  followups, close, next lane")
@@ -161,7 +168,7 @@ print("  ok  followups, close, next lane")
 # --- auto-merge off -> awaiting_merge; human merge picked up; hold/force
 d2 = dr.create("o/r#8", "headless", {"grind": "off"}, [child(7, base="feature/x")])
 run2 = FakeRunner()
-dr.tick(d2, {}, run2, merge, now=1)
+dr.tick(d2, fq(7), run2, merge, now=1)
 assert run2.started[0][1].startswith("/ai-workflow:implement-issue 7 (base branch feature/x")
 f7 = {"issue_open": True, "slack": True, "agent": "idle", "pr": pr(107, approved=True)}
 dr.tick(d2, {K(7): f7}, run2, merge, now=2)
@@ -187,7 +194,7 @@ print("  ok  new children reopen")
 d3 = dr.create("o/r#7", "herdr", {"max": 3}, [child(20), child(21, [20]), child(22)])
 run3 = FakeRunner()
 d3["settings"]["max"] = 1
-dr.tick(d3, {}, run3, merge, now=10)
+dr.tick(d3, fq(20, 22), run3, merge, now=10)
 dr.tick(d3, {K(20): {"agent": "idle", "limited_until": 9e9}}, run3, merge, now=11)
 assert d3["lanes"][K(20)]["limited_until"] == 9e9
 d3["settings"]["max"] = 3
@@ -206,7 +213,7 @@ dr.save(d3)
 dr.lane_action(d3["id"], K(20), "retry")
 d3 = dr.load(d3["id"])
 dr.tick(d3, {K(20): {"agent": "working", "slack": True, "pr": pr(120)}}, run3, merge, now=301)
-assert run3.started[-1] == (20, "/ai-workflow:pr-grind https://github.com/o/r/pull/120")
+assert run3.started[-1] == (20, "/ai-workflow:pr-grind https://github.com/o/r/pull/120" + dr.LANE_GRIND)
 dr.lane_action(d3["id"], K(20), "pause")
 d3 = dr.load(d3["id"])
 assert dr.step(d3["lanes"][K(20)], {"pr": pr(120, state="MERGED")}, d3["settings"], 400) == ({}, [])
@@ -225,8 +232,10 @@ except ValueError:
 d3 = dr.load(d3["id"])
 dr.tick(d3, {}, run3, merge, now=500)
 assert run3.sent[-1] == (20, "please rebase") and "outbox" not in d3["lanes"][K(20)]
-assert dr.grind_prompt("u", "C1") == "/ai-workflow:pr-grind u --channel C1"
-assert dr.grind_prompt("u", "") == "/ai-workflow:pr-grind u" == dr.grind_prompt("u", "a b")
+assert dr.grind_prompt("u", "C1", lane=False) == "/ai-workflow:pr-grind u --channel C1"
+assert dr.grind_prompt("u", "", lane=False) == "/ai-workflow:pr-grind u" == dr.grind_prompt("u", "a b", lane=False)
+assert len(dr.grind_prompt("https://github.com/owner-name/repo-name/pull/12345", "C0123456789")) < 480
+assert len(dr.grind_prompt("https://github.com/owner-name/repo-name/pull/12345", "C0123456789")) < 480
 print("  ok  outbox, channel")
 
 # --- end actions: open-pr needs a feature branch; qa and grind-pr start sessions
