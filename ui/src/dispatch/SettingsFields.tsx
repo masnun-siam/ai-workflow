@@ -66,7 +66,7 @@ export function SettingsFields({ value, onChange, live }: { value: DispatchSetti
         <span className="dsp-k" id="am-l">Auto-merge</span>
         <Switch label="Auto-merge" checked={value.auto_merge} onChange={(auto_merge) => onChange({ auto_merge })} />
         <span className="faint dsp-hint">
-          {value.auto_merge ? 'Merge commit once CI is green, a review approves and the grind is done.' : 'Each PR waits for you to merge it; the lane then does its followups.'}
+          {value.auto_merge ? 'Merge commit once CI is green, a review approves (not needed on your own repo) and the grind is done.' : 'Each PR waits for you to merge it; the lane then does its followups.'}
         </span>
       </div>
       <div className="dsp-field">

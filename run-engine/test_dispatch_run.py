@@ -104,6 +104,16 @@ assert d["lanes"][K(1)]["needs_you"] == "waiting on you" and any(e["kind"] == "n
 assert not [e for e in dr.tick(d, {K(1): f1}, run, merge, now=1003) if e["kind"] == "needs_you"]  # said once
 dr.tick(d, {K(1): {**f1, "agent": "working"}}, run, merge, now=1004)
 assert d["lanes"][K(1)]["needs_you"] is None
+# an idle session is flagged only after the grace: the board may not have seen its PR yet
+x = {"n": 1, "stage": "implementing"}
+p1, _ = dr.step(x, {"agent": "idle"}, {}, 5000)
+assert p1 == {"idle_since": 5000} and "needs_you" not in p1
+x.update(p1)
+p2, a2 = dr.step(x, {"agent": "idle"}, {}, 5000 + dr.IDLE_GRACE_SECONDS)
+assert p2["needs_you"] == "stopped without a ready PR" and a2[0][0] == "notify"
+x.update(p2)
+p3, _ = dr.step(x, {"agent": "working"}, {}, 5300)
+assert p3 == {"idle_since": None, "needs_you": None}
 print("  ok  needs you")
 
 # --- PR ready -> grinding (slack) ; no slack -> merge_gate

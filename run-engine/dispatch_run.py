@@ -44,6 +44,7 @@ DEFAULTS = {
 }
 GRIND_MODES = ("off", "simple", "full")
 MERGE_RETRY_SECONDS = 300  # the board lags a merge; don't call gh pr merge twice in this window
+IDLE_GRACE_SECONDS = 180  # a session that just ended may have a PR the board has not seen yet
 LIMIT_BUFFER_SECONDS = 60
 MAX_EVENTS = 500
 CONTINUE = "Continue from where you were stopped."
@@ -140,7 +141,7 @@ def step(lane: dict, facts: dict, settings: dict, now: float) -> tuple:
     acts: list = []
 
     def to(s, why=None):
-        patch.update(stage=s, needs_you=None, held=None)
+        patch.update(stage=s, needs_you=None, held=None, idle_since=None)
         if why:
             acts.append(("notify", s, why))
 
@@ -179,7 +180,7 @@ def step(lane: dict, facts: dict, settings: dict, now: float) -> tuple:
             else:
                 to("merge_gate")
             return patch, acts
-        return _waits(lane, agent, patch, acts, "stopped without a ready PR")
+        return _waits(lane, agent, patch, acts, "stopped without a ready PR", now)
 
     if stage == "grinding":
         g = facts.get("grind") or {}
@@ -240,7 +241,7 @@ def step(lane: dict, facts: dict, settings: dict, now: float) -> tuple:
             to("merge_gate")
             return patch, acts
         if pr.get("conflict"):
-            return _waits(lane, agent, patch, acts, "stopped with the conflict unresolved")
+            return _waits(lane, agent, patch, acts, "stopped with the conflict unresolved", now)
         return patch, acts
 
     # followups
@@ -249,11 +250,20 @@ def step(lane: dict, facts: dict, settings: dict, now: float) -> tuple:
         patch["ended_at"] = now
         acts.append(("close",))
         return patch, acts
-    return _waits(lane, agent, patch, acts, "followups stopped with the issue still open")
+    return _waits(lane, agent, patch, acts, "followups stopped with the issue still open", now)
 
 
-def _waits(lane, agent, patch, acts, idle_why):
-    why = "waiting on you" if agent == "blocked" else idle_why if agent == "idle" else None
+def _waits(lane, agent, patch, acts, idle_why, now):
+    """A blocked session needs the user at once; an idle one only after IDLE_GRACE_SECONDS, so the board
+    can catch up with what it just did (a PR marked ready, an issue closed)."""
+    if agent == "idle":
+        since = lane.get("idle_since") or now
+        if lane.get("idle_since") is None:
+            patch["idle_since"] = now
+    elif lane.get("idle_since") is not None:
+        patch["idle_since"] = None
+    idle_long = agent == "idle" and now - since >= IDLE_GRACE_SECONDS
+    why = "waiting on you" if agent == "blocked" else idle_why if idle_long else None
     if why != lane.get("needs_you"):
         patch["needs_you"] = why
         if why:
