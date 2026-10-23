@@ -82,7 +82,9 @@ session items only.
 Tasks, Building, Shipped), progress, its running dispatch (or that it needs you), a **Merge #n** button
 for each of its PRs ready to merge, and one next-step button. A last **Other issues** row opens `#/issues`:
 open issues of the repo that belong to no feature (no epic, or an epic with no PRD here), in the same
-table. A feature page shows a stage stepper, a
+table. The **Small changes** tab has a pick bar: tick unrefined, ready or blocked rows a dispatch does not
+own, then **Refine N** (one `/refine-issues` session on the picked unrefined ones), **Run N** (Run small
+changes on the picked refined ones) or **Clear**. A feature page shows a stage stepper, a
 **Next step** box and tabs **Issues**, **PRD**, **Peer review** and **Sessions**. Issues: a table by
 status with signals (priority, PR, CI, review, grind, live session, failed last run, cleanup), one
 action per row (Refine, Start, Retry, Answer, Merge, Grind, Skip CI, Clean up; an issue a dispatch owns

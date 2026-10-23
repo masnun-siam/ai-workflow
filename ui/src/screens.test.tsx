@@ -308,6 +308,103 @@ describe('Small changes tab', () => {
     expect(((await screen.findByRole('button', { name: 'Refine' })) as HTMLButtonElement).disabled).toBe(false);
   });
 
+  describe('pick bar', () => {
+    const lanes = [lane([card(30, 'ready'), card(31, 'unrefined'), card(32, 'ready', { blocked_by: [30] }), card(33, 'in_progress'), card(34, 'merged')], { epic: null, title: 'No epic' })];
+    const box = (n: number) => screen.queryByRole('checkbox', { name: `Pick #${n}` }) as HTMLInputElement | null;
+    const btn = (name: string) => screen.queryByRole('button', { name }) as HTMLButtonElement | null;
+    const lane30 = { key: 'o/r#30', repo: 'o/r', n: 30, title: 'Task 30', deps: [], stage: 'implementing', pr: null, needs_you: null, held: null, gate: null, skip_reason: null, paused: null, hold_merge: null, limited_until: null, started_at: 1, ended_at: null, session: 's', tab: null, usage: { cost: 0, tokens: 0, seconds: 0 } };
+    const owning = { '/api/dispatches': () => json({ dispatches: [{ id: 'd1', epic: null, issues: ['o/r#30'], title: 'Small', runner: 'headless', state: 'running', settings: {}, created_at: 1, ended_at: null, final_prs: null, totals: { cost: 0, tokens: 0, seconds: 0 }, lanes: [lane30] }] }) };
+
+    it('unrefined, ready and blocked rows get a checkbox; the bar counts Refine and Run and Clear empties it', async () => {
+      mock({ lanes });
+      const user = await open('#/features?tab=changes&repo=o/r');
+      await screen.findByText('Task 30');
+      for (const n of [30, 31, 32]) expect(box(n)).toBeTruthy();
+      for (const n of [33, 34]) expect(box(n)).toBeNull();
+      expect(btn('Clear')).toBeNull();
+      await user.click(box(31)!);
+      expect(btn('Refine 1')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /^Run \d/ })).toBeNull();
+      await user.click(box(30)!);
+      await user.click(box(32)!);
+      expect(btn('Refine 1')).toBeTruthy();
+      expect(btn('Run 2')).toBeTruthy();
+      await user.click(box(31)!);
+      expect(btn('Refine 1')).toBeNull();
+      expect(btn('Run 2')).toBeTruthy();
+      await user.click(box(30)!);
+      await user.click(box(32)!);
+      expect(btn('Clear')).toBeNull();
+      await user.click(box(30)!);
+      await user.click(box(31)!);
+      await user.click(btn('Clear')!);
+      expect(btn('Clear')).toBeNull();
+      expect(box(30)!.checked || box(31)!.checked).toBe(false);
+    });
+
+    it('Refine 1 starts one headless refine-issues on the picked unrefined issue', async () => {
+      mock({ lanes });
+      const user = await open('#/features?tab=changes&repo=o/r');
+      await screen.findByText('Task 31');
+      await user.click(box(31)!);
+      await user.click(box(30)!);
+      await user.click(btn('Refine 1')!);
+      await waitFor(() => expect(posts.find((p) => p.url === '/api/start')?.body).toEqual({ repo: 'o/r', skill: 'refine-issues', arg: '31', via: 'headless', model: 'opus', effort: 'medium' }));
+    });
+
+    it('Run 2 opens the small-changes dialog on the picked refined issues and Preview posts them', async () => {
+      const plan = { epic: null, issues: ['o/r#30', 'o/r#32'], title: 'Small changes', settings: {}, runner: 'headless', lanes: [], waves: [], warnings: [] };
+      mock({ lanes, extra: { '/api/dispatches/plan': () => json(plan) } });
+      const user = await open('#/features?tab=changes&repo=o/r');
+      await screen.findByText('Task 30');
+      await user.click(box(30)!);
+      await user.click(box(31)!);
+      await user.click(box(32)!);
+      await user.click(btn('Run 2')!);
+      const dialog = await screen.findByRole('dialog');
+      expect(within(dialog).getByText('Run small changes')).toBeTruthy();
+      expect(within(dialog).getByText('#30 Task 30')).toBeTruthy();
+      expect(within(dialog).getByText('#32 Task 32')).toBeTruthy();
+      expect(within(dialog).queryByText('#31 Task 31')).toBeNull();
+      expect(within(dialog).queryByLabelText('Epic')).toBeNull();
+      await user.click(within(dialog).getByRole('button', { name: 'Preview' }));
+      await waitFor(() => expect(posts.find((p) => p.url === '/api/dispatches/plan')?.body).toMatchObject({ issues: ['o/r#30', 'o/r#32'], settings: expect.any(Object) }));
+    });
+
+    it('a row a dispatch owns shows In dispatch, has no checkbox and leaves the Run count', async () => {
+      mock({ lanes, extra: owning });
+      const user = await open('#/features?tab=changes&repo=o/r');
+      expect(await screen.findByRole('link', { name: 'In dispatch' })).toBeTruthy();
+      expect(box(30)).toBeNull();
+      await user.click(box(32)!);
+      expect(btn('Run 1')).toBeTruthy();
+    });
+
+    it('a live small-change session disables Refine N with the hint; Run N stays enabled', async () => {
+      mock({ lanes, extra: withSessions([sess('a', marked('x'), 'running')]) });
+      const user = await open('#/features?tab=changes&repo=o/r');
+      await screen.findByText('Task 31');
+      await user.click(box(31)!);
+      await user.click(box(30)!);
+      expect(btn('Refine 1')!.disabled).toBe(true);
+      expect(btn('Refine 1')!.title).toBe(SMALL_CHANGE_LOCK);
+      expect(btn('Run 1')!.disabled).toBe(false);
+    });
+
+    it('switching repo clears the picks', async () => {
+      mock({ lanes, extra: { '/api/repos': () => json({ repos: [{ slug: 'o/r', name: 'R', path: '/x' }, { slug: 'o/s', name: 'S', path: '/y' }], can_browse: false, scan_roots: [] }) } });
+      const user = await open('#/features?tab=changes&repo=o/r');
+      await screen.findByText('Task 30');
+      await user.click(box(30)!);
+      expect(btn('Run 1')).toBeTruthy();
+      window.location.hash = '#/features?tab=changes&repo=o/s';
+      await waitFor(() => expect(btn('Run 1')).toBeNull());
+      await screen.findByText('Task 30');
+      expect(box(30)!.checked).toBe(false);
+      expect(btn('Clear')).toBeNull();
+    });
+  });
+
   it('the empty message hides while a pending row exists and shows when both are empty', async () => {
     mock({ extra: withSessions([sess('a', marked('x'), 'running')]) });
     await open('#/features?tab=changes&repo=o/r');
