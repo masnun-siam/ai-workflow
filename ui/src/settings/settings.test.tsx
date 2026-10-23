@@ -17,6 +17,15 @@ let handlers: Record<string, (body: Record<string, unknown> | null) => [number, 
 const json = (b: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } }));
 const sent = (method: string, url: string) => calls.filter((c) => c.method === method && c.url === url).map((c) => c.body);
 
+const EVENTS = [
+  ['waiting', 'A session is waiting on you', 'Needs you'], ['failed', 'A session failed', 'Needs you'],
+  ['dispatch', 'A dispatch needs you', 'Needs you'], ['panel-cap', 'Review panel hit its cap', 'Needs you'],
+  ['pr-ready', 'PR is ready for review', 'Pull requests'], ['needs-cleanup', 'Merged issue needs cleanup', 'Pull requests'],
+  ['grind-paused', 'Grind paused', 'Pull requests'], ['grind-done', 'Grind finished', 'Pull requests'],
+  ['done', 'A session is done', 'Finished'], ['pipeline', 'Pipeline finished', 'Finished'], ['afk', 'Away mode ended', 'Finished'],
+].map(([key, label, group]) => ({ key, label, group }));
+const matrix = () => Object.fromEntries(EVENTS.map((e) => [e.key, { browser: e.group !== 'Finished', ntfy: true, mac: e.group !== 'Finished' }]));
+
 const GET: Record<string, unknown> = {
   '/api/repos': {
     repos: [{ slug: 'o/r', name: 'R', path: '/x/r' }, { slug: 'local/idea', name: 'local/idea', path: '/x/idea' }],
@@ -30,7 +39,12 @@ const GET: Record<string, unknown> = {
     vault_dir: '/vault',
   },
   '/api/sessions': { sessions: [], limits: {}, usage: {}, afk: {}, gh: { ok: false, error: 'not logged in' } },
-  '/api/settings/notify': { server: 'https://ntfy.sh', topic: 't', user: '', public_url: '', token_set: true, password_set: false, env: ['topic'] },
+  '/api/settings/notify': { server: 'https://ntfy.sh', topic: 't', user: '', public_url: '', token_set: true, password_set: false, env: ['topic'],
+    ntfy_ready: true,
+    mac: { available: true, notifier: true, clickable: false },
+    events: EVENTS,
+    matrix: matrix(),
+  },
   '/api/settings/review': {
     max_rounds: 5,
     default_lenses: ['critical'],
@@ -195,6 +209,48 @@ describe('Settings: notifications', () => {
     await user.type(await screen.findByLabelText(/Access token/), 'tk_new');
     await user.click(screen.getByRole('button', { name: 'Save notifications' }));
     await waitFor(() => expect(sent('POST', '/api/settings/notify')[0]).toMatchObject({ token: 'tk_new' }));
+  });
+
+  it('shows the matrix: 33 named switches in three groups, states from the server', async () => {
+    page(<SettingsPage />, '/settings/notifications');
+    expect(await screen.findAllByRole('switch')).toHaveLength(33);
+    expect([...document.querySelectorAll('th[scope=rowgroup]')].map((r) => r.textContent)).toEqual(['Needs you', 'Pull requests', 'Finished']);
+    expect(screen.getAllByRole('switch')[12].getAttribute('aria-label')).toBe('PR is ready for review: Browser');
+    expect(screen.getByRole('switch', { name: 'A session is done: ntfy' }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('switch', { name: 'A session is done: Browser' }).getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('a flip saves just that cell and shows the server value', async () => {
+    handlers['POST /api/settings/notify/channel'] = () => {
+      const m = matrix();
+      m.failed.ntfy = false;
+      GET['/api/settings/notify'] = { ...(GET['/api/settings/notify'] as object), matrix: m };
+      return [200, GET['/api/settings/notify']];
+    };
+    const user = userEvent.setup();
+    page(<SettingsPage />, '/settings/notifications');
+    await user.click(await screen.findByRole('switch', { name: 'A session failed: ntfy' }));
+    await waitFor(() => expect(sent('POST', '/api/settings/notify/channel')).toEqual([{ event: 'failed', channel: 'ntfy', on: false }]));
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'A session failed: ntfy' }).getAttribute('aria-checked')).toBe('false'));
+    GET['/api/settings/notify'] = { ...(GET['/api/settings/notify'] as object), matrix: matrix() };
+  });
+
+  it('a failed flip goes back and shows the error', async () => {
+    handlers['POST /api/settings/notify/channel'] = () => [400, { error: 'unknown event' }];
+    const user = userEvent.setup();
+    page(<SettingsPage />, '/settings/notifications');
+    await user.click(await screen.findByRole('switch', { name: 'A session failed: ntfy' }));
+    expect(await screen.findByText('unknown event')).toBeTruthy();
+    expect(screen.getByRole('switch', { name: 'A session failed: ntfy' }).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('saving the ntfy form sends no channel cell', async () => {
+    handlers['POST /api/settings/notify'] = () => [200, GET['/api/settings/notify']];
+    const user = userEvent.setup();
+    page(<SettingsPage />, '/settings/notifications');
+    await user.click(await screen.findByRole('button', { name: 'Save notifications' }));
+    await waitFor(() => expect(sent('POST', '/api/settings/notify')).toHaveLength(1));
+    expect(sent('POST', '/api/settings/notify/channel')).toEqual([]);
   });
 
   it('explains how to unblock browser notifications', async () => {

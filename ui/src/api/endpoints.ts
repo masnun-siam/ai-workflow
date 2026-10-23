@@ -2,7 +2,7 @@
 import { enc, get, post, put, qs, splitRepo } from './client';
 import type {
   AnswerBody, AfkState, Dispatch, DispatchPlan, DispatchSettings, DispatchState, EndAction, LaneAction, BoardStartBody, BoardStartResponse, CleanupItem, DeliveryResponse, InboxResponse,
-  IssueDetail, NotifySettings, OpenItem, PeerReviewOffers, PlanningResponse, PrDetail, PrdFile, ReposResponse,
+  IssueDetail, NotifyChannel, NotifySettings, OpenItem, PeerReviewOffers, PlanningResponse, PrDetail, PrdFile, ReposResponse,
   ReviewSettings, Session, SessionStartBody, SessionsResponse, Settings, StreamResponse, VaultFolders, VaultPrd,
 } from './types';
 
@@ -86,6 +86,7 @@ export const api = {
   publishRepo: (slug: string, owner: string, name: string, priv: boolean) => post('/api/repos/publish', { slug, owner, name, private: priv }),
   suggestFolder: (text: string) => post<Record<string, unknown>>('/api/vault/suggest', { text }),
   saveSettings: (s: Partial<Settings>) => put<Settings>('/api/settings', s),
+  notifyChannel: (event: string, channel: NotifyChannel, on: boolean) => post<NotifySettings>('/api/settings/notify/channel', { event, channel, on }),
   saveNotify: (b: Record<string, unknown>) => post<NotifySettings>('/api/settings/notify', b),
   saveReview: (b: Record<string, unknown>) => post<ReviewSettings>('/api/settings/review', b),
   testAccount: (cmd: string) => post<{ ok: boolean; message: string }>('/api/settings/test', { cmd }),

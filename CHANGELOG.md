@@ -4,6 +4,7 @@
 
 ### Added
 
+- Settings → Notifications shows the notification matrix: 11 events in three groups by Browser, ntfy and This Mac, one instant-save switch per cell. The ntfy form moves below it under "Phone push (ntfy)".
 - The notification matrix store: `ui.json` keeps per-event, per-channel (`browser`, `ntfy`, `mac`) overrides under `channels`. `GET /api/settings/notify` now returns `matrix`, `events`, `ntfy_ready` and `mac`, and `POST /api/settings/notify/channel` saves one cell. Matrix and ntfy form saves share one lock.
 - `ui_notify.send_mac` sends the macOS banner through `terminal-notifier` when it is on the server's PATH (clickable when given a link) and falls back to AppleScript; it replaces `ui_dispatch.mac_notify`. Run `brew install terminal-notifier` and restart `aiw ui` for clickable banners.
 - A session started from the UI can carry a `model` (`opus`, `sonnet`, `haiku`) and an `effort` (`low` to `max`): optional fields on `POST /api/sessions` and `POST /api/start`, applied on every spawn and replayed by Rerun. `GET|PUT /api/settings` stores the last-used pair as `run_model` / `run_effort` The Start dialog now shows Model and Effort dropdowns for every command, preselected from the saved pair and saved on change.

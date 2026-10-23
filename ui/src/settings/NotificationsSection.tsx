@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
-import { useNotifySettings, useSaveNotify } from '../api/hooks';
-import type { NotifySettings } from '../api/types';
-import { Banner, Button, Chip, toast } from '../components';
+import { useNotifySettings, useSaveNotify, useSaveNotifyChannel } from '../api/hooks';
+import type { NotifyChannel, NotifySettings } from '../api/types';
+import { Banner, Button, Chip, Switch, toast } from '../components';
 import './settings.css';
 
 type Perm = NotificationPermission | 'unsupported';
 const permission = (): Perm => (typeof Notification === 'undefined' ? 'unsupported' : Notification.permission);
+
+const CHANNELS: NotifyChannel[] = ['browser', 'ntfy', 'mac'];
+const CHANNEL_NAME: Record<NotifyChannel, string> = { browser: 'Browser', ntfy: 'ntfy', mac: 'This Mac' };
 
 interface Form {
   server: string;
@@ -39,6 +42,8 @@ export function notifyBody(f: Form, env: string[] = []): Record<string, unknown>
 export function NotificationsSection() {
   const q = useNotifySettings();
   const save = useSaveNotify();
+  const saveCell = useSaveNotifyChannel();
+  const [pending, setPending] = useState<Record<string, boolean>>({});
   const [perm, setPerm] = useState<Perm>(permission);
   const [form, setForm] = useState<Form | null>(null);
   const data = q.data;
@@ -58,6 +63,20 @@ export function NotificationsSection() {
       /* toasted */
     }
   };
+
+  // Each cell saves on its own; a rejected save puts the old value back (the mutation cache toasts).
+  const flip = async (event: string, channel: NotifyChannel, on: boolean) => {
+    const key = `${event}:${channel}`;
+    setPending((p) => ({ ...p, [key]: on }));
+    try {
+      await saveCell.mutateAsync({ event, channel, on });
+    } catch {
+      /* toasted */
+    } finally {
+      setPending(({ [key]: _gone, ...rest }) => rest);
+    }
+  };
+  const groups = [...new Set((data?.events ?? []).map((e) => e.group))];
 
   const env = data?.env ?? [];
   const field = (k: 'server' | 'topic' | 'user' | 'public_url', label: string, hint?: string, type = 'text', ph = '') => (
@@ -109,10 +128,37 @@ export function NotificationsSection() {
           </div>
         )}
       </div>
+      {q.isError ? <p className="err-text" role="alert">{q.error.message}</p> : null}
+      {!data && !q.isError ? <p className="muted" role="status">Loading…</p> : null}
+      {data ? (
+        <div className="tbl-wrap">
+          <table className="tbl matrix">
+            <thead>
+              <tr><th scope="col">Event</th>{CHANNELS.map((c) => <th key={c} scope="col">{CHANNEL_NAME[c]}</th>)}</tr>
+            </thead>
+            {groups.map((g) => (
+              <tbody key={g}>
+                <tr><th scope="rowgroup" colSpan={4}>{g}</th></tr>
+                {data.events.filter((e) => e.group === g).map((e) => (
+                  <tr key={e.key}>
+                    <th scope="row">{e.label}</th>
+                    {CHANNELS.map((c) => {
+                      const key = `${e.key}:${c}`;
+                      return (
+                        <td key={c}>
+                          <Switch checked={pending[key] ?? data.matrix[e.key]?.[c] ?? false} disabled={key in pending} label={`${e.label}: ${CHANNEL_NAME[c]}`} onChange={(v) => void flip(e.key, c, v)} />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            ))}
+          </table>
+        </div>
+      ) : null}
       <h3>Phone push (ntfy)</h3>
       <p className="set-note">Pushes a notification through <a href="https://ntfy.sh" target="_blank" rel="noopener noreferrer">ntfy</a> when a session waits on you, finishes or fails. A saved token or password never comes back to the browser.</p>
-      {q.isError ? <p className="err-text" role="alert">{q.error.message}</p> : null}
-      {!form && !q.isError ? <p className="muted" role="status">Loading…</p> : null}
       {form ? (
         <form className="set-form" onSubmit={(e) => { e.preventDefault(); void onSave(); }} noValidate>
           {field('server', 'Server', undefined, 'url', 'https://ntfy.sh')}

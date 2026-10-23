@@ -206,7 +206,7 @@ the Slack review channel grind posts to (`repos[owner/repo]` in `ui_settings.jso
 skips grinding in a dispatch) and **Remove** (its clone is untouched), plus
 scan folders, **Find repos** and **Check remotes** (`gh repo view` on every repo, failures first).
 **Claude accounts**: the named `claude` commands a session can launch with, one per account; their plan
-usage (5h / 7d) shows in the rail. **Notifications** edits `ui.json` (written mode 0600; a token or
+usage (5h / 7d) shows in the rail. **Notifications** shows the matrix of 11 events by Browser, ntfy and This Mac: one switch per cell, saved at once (`POST /api/settings/notify/channel`; a failed save reverts the switch and toasts). Below it, "Phone push (ntfy)" edits `ui.json` (written mode 0600; a token or
 password is never sent back to the browser, and an empty box keeps the saved one). **Peer review**
 sets the rounds cap, the lenses ticked by default and each lens prompt; changes are saved to
 `<data_dir>/config.json` and laid over the shipped `run-engine/config.json`, so **Reset to defaults**
