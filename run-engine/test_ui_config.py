@@ -89,3 +89,91 @@ try:
 except ValueError:
     pass
 print("ok  repos: remote check per repo, remove unregisters (twice is an error)")
+
+
+# --- notification matrix ---
+import threading  # noqa: E402
+
+ui_path = os.path.join(tmp, "ui.json")
+os.remove(ui_path)
+pub = ui_config.notify_public()
+assert len(pub["events"]) == 11 and pub["events"][0] == {
+    "key": "waiting",
+    "label": "A session is waiting on you",
+    "group": "Needs you",
+}
+assert pub["events"][-1]["key"] == "afk" and set(pub["matrix"]) == {e["key"] for e in pub["events"]}
+OFF = {"grind-done", "done", "pipeline", "afk"}
+for ev, row in pub["matrix"].items():
+    assert row["ntfy"] is True, ev
+    assert row["browser"] is row["mac"] is (ev not in OFF), ev
+assert pub["mac"]["available"] == (sys.platform == "darwin") and not pub["ntfy_ready"]
+assert "server" in pub and "token_set" in pub, "existing fields stay"
+
+with open(ui_path, "w") as f:
+    json.dump(
+        {
+            "public_url": "https://u.example",
+            "channels": {"done": {"ntfy": False, "bogus": True, "mac": "yes"}, "nope": {"ntfy": False}},
+        },
+        f,
+    )
+os.chmod(ui_path, 0o600)
+m = ui_config.notify_public()["matrix"]
+assert m["done"] == {"browser": False, "ntfy": False, "mac": False} and m["waiting"]["ntfy"] is True
+with open(ui_path, "w") as f:
+    json.dump({"channels": []}, f)
+assert ui_config.notify_public()["matrix"]["done"]["ntfy"] is True, "a non-object channels falls back"
+
+before = ui_config.notify_public()["matrix"]
+out = ui_config.save_channel({"event": "done", "channel": "ntfy", "on": False})
+assert out["matrix"]["done"]["ntfy"] is False
+assert all(out["matrix"][e][c] == before[e][c] for e in before for c in before[e] if (e, c) != ("done", "ntfy"))
+assert os.stat(ui_path).st_mode & 0o777 == 0o600
+for bad in (
+    {"event": "x", "channel": "ntfy", "on": True},
+    {"event": "done", "channel": "x", "on": True},
+    {"event": "done", "channel": "ntfy", "on": 1},
+    {"event": "done", "channel": "ntfy", "on": "true"},
+    {"event": "done", "channel": "ntfy"},
+):
+    try:
+        ui_config.save_channel(bad)
+        raise AssertionError(bad)
+    except ValueError:
+        pass
+
+with open(ui_path, "w") as f:
+    json.dump({"channels": {"done": {"ntfy": False, "mac": "yes"}, "nope": {"ntfy": True}}}, f)
+ui_config.save_channel({"event": "pipeline", "channel": "browser", "on": True})
+assert json.load(open(ui_path))["channels"] == {"done": {"ntfy": False}, "pipeline": {"browser": True}}, (
+    "junk dropped on save"
+)
+
+ui_config.save_notify({"topic": "t9", "public_url": "https://mac.ts.net"})
+assert json.load(open(ui_path))["channels"]["pipeline"] == {"browser": True}, "save_notify keeps channels"
+ui_config.save_channel({"event": "afk", "channel": "mac", "on": True})
+j = json.load(open(ui_path))
+assert j["ntfy"]["topic"] == "t9" and j["public_url"] == "https://mac.ts.net", "save_channel keeps ntfy and public_url"
+
+os.remove(ui_path)
+ts = [
+    threading.Thread(target=ui_config.save_channel, args=({"event": e, "channel": "ntfy", "on": False},))
+    for e in ("done", "pipeline", "afk", "waiting")
+]
+[t.start() for t in ts]
+[t.join() for t in ts]
+assert {e for e, r in json.load(open(ui_path))["channels"].items() if r["ntfy"] is False} == {
+    "done",
+    "pipeline",
+    "afk",
+    "waiting",
+}, "concurrent saves all land"
+
+os.remove(ui_path)
+os.environ["AIW_NTFY_SERVER"], os.environ["AIW_NTFY_TOPIC"] = "https://ntfy.sh", "envtopic"
+pub = ui_config.notify_public()
+assert pub["ntfy_ready"] and "envtopic" not in json.dumps(pub), "an env topic is never echoed"
+for k in ("SERVER", "TOPIC"):
+    os.environ.pop(f"AIW_NTFY_{k}")
+print("ok  matrix: defaults, overrides, junk ignored, one-cell save, shared lock, ntfy_ready, mac")
