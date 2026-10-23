@@ -187,6 +187,9 @@ x = {"handles": [{"session": rec["id"]}, {"tab": "t"}], "started_at": 10, "ended
 assert ui_dispatch._usage(x) == {"cost": 1.25, "tokens": 120, "seconds": 60}
 p = ui_dispatch.public(dr.load(d["id"]), full=True)
 assert p["lanes"][0]["key"] == "o/r#5" and "events" in p and "handle" not in p["lanes"][0]
+assert p["issues"] is None
+il = dr.create(None, "headless", {"grind": "off"}, [{"repo": "o/r", "n": 5, "refined": True}], issues=["o/r#5"])
+assert ui_dispatch.public(il)["issues"] == ["o/r#5"]
 print("  ok  usage, public")
 
 # --- the Inbox shows a dispatch's issue once: as its lane

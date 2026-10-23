@@ -395,10 +395,26 @@ def _path(did: str) -> str:
     return os.path.join(_dir(), did + ".json")
 
 
-def create(epic: str, runner: str, settings: dict, children: list, workspace=None, title: str = "") -> dict:
+def issues_title(keys: list) -> str:
+    nums = sorted(int(k.rsplit("#", 1)[1]) for k in keys)
+    t = "Small changes: " + ", ".join(f"#{n}" for n in nums[:3])
+    return t + f" +{len(nums) - 3} more" if len(nums) > 3 else t
+
+
+def _no_feature_branch(s: dict) -> None:
+    if s.get("feature_branch") is not None:
+        raise ValueError("an issue-list dispatch has no feature branch")
+
+
+def create(epic, runner: str, settings: dict, children: list, workspace=None, title: str = "", issues=None) -> dict:
     if runner not in ("herdr", "headless"):
         raise ValueError("runner must be herdr or headless")
     s = check_settings({**DEFAULTS, **(settings or {})})
+    if issues:
+        _no_feature_branch(s)
+        epic = None
+        issues = sorted(issues, key=lambda k: int(k.rsplit("#", 1)[1]))
+        title = title or issues_title(issues)
     d = {
         "id": uuid.uuid4().hex[:12],
         "epic": epic,
@@ -412,6 +428,8 @@ def create(epic: str, runner: str, settings: dict, children: list, workspace=Non
         "created_at": time.time(),
         "ended_at": None,
     }
+    if issues:
+        d["issues"] = issues
     sync_lanes(d, children)
     event(d, None, "started", f"{len(d['lanes'])} lanes")
     save(d)
@@ -502,6 +520,8 @@ def set_settings(did: str, **kv) -> dict:
     with locked(did):
         d = load(did)
         d["settings"] = check_settings({**d["settings"], **kv})
+        if d.get("issues"):
+            _no_feature_branch(d["settings"])
         event(d, None, "settings", ", ".join(f"{k}={v}" for k, v in kv.items()))
         save(d)
         return d
