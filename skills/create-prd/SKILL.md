@@ -51,6 +51,7 @@ Paths below starting `../../` are relative to this skill's folder, at the plugin
    - Draft one epic issue per entry under "Epics" from `../../templates/epic.md`, and find the GitHub project by the rule in the guide.
    - Show the user each epic's title, labels and project, and ask with `AskUserQuestion` whether to create them. Create nothing without an explicit yes.
    - Create them with `gh issue create`, then write each number into the PRD's "Epics" section.
+   - Commit the approved PRD on its own branch from the base branch, as `docs: <title> PRD (#<epic>)`, push it and open a pull request into the base branch that links the epic, so the PRD is in the base branch before any issue's worktree is made. If it was already committed for review, commit the approval to that branch instead. Report the pull request link.
 
 8. **Hand off.** State the next stage: `/create-tasks` splits the PRD into parallel tasks and creates them as sub-issues of the epic with their dependencies, then `/refine-issues` fills each one. Do not start it unless asked.
 

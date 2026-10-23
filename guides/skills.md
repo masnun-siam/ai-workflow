@@ -4,7 +4,7 @@ A skill is a short procedure an AI agent loads for one kind of task. The skills 
 
 | Skill | Use it to |
 |---|---|
-| `/create-prd` | Turn a feature idea into a PRD with its technical design and no open questions, and create its epic on approval |
+| `/create-prd` | Turn a feature idea into a PRD with its technical design and no open questions, and on approval create its epic and open a PR with the PRD |
 | `/create-tasks` | Split an approved PRD into small parallel tasks and create them as child issues of the epic, with blocked-by links |
 | `/refine-issues` | Write WHAT, WHY and HOW into each issue so it can be implemented without asking anything |
 | `/implement-issue` | Implement a refined issue (or the next Ready one of an epic) in its own worktree through to a ready PR into the base branch, then close it and clean up after the merge |
