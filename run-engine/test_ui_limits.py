@@ -34,6 +34,9 @@ cat {STREAMS}/$(cat {root}/mode)
     os.chmod(p, os.stat(p).st_mode | stat.S_IXUSR)
 os.environ["PATH"] = bindir + os.pathsep + os.environ["PATH"]
 
+import ui_notify  # noqa: E402
+
+ui_notify.send_mac = lambda *a, **k: None  # the fan-out would show a real banner
 import ui_runner  # noqa: E402
 import ui_sessions  # noqa: E402
 
