@@ -143,3 +143,12 @@ describe('md', () => {
 describe('PLAN_RUN', () => {
   it('is the opus alias at medium effort', () => expect(PLAN_RUN).toEqual({ model: 'opus', effort: 'medium' }));
 });
+
+describe('mdToHtml tables', () => {
+  it('renders a pipe table', () => {
+    const h = mdToHtml('| a | b |\n|---|---|\n| **x** | `y` |\n\nafter');
+    expect(h).toContain('<th>a</th><th>b</th>');
+    expect(h).toContain('<td><strong>x</strong></td><td><code>y</code></td>');
+    expect(h).toContain('<p>after</p>');
+  });
+});

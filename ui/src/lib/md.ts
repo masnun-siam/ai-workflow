@@ -23,6 +23,7 @@ function inline(s: string): string {
     .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, t: string, u: string) =>
       /^https?:\/\//.test(u) ? `\u0001${links.push([u, t]) - 1}\u0001` : t)
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[\s(])\*([^*\s][^*]*)\*(?=[\s).,;:!?]|$)/g, '$1<em>$2</em>')
     .replace(URL_RE, (u) => {
       const href = u.replace(/[.,;:!?)\]}]+$/, '');
       return `<a href="${href}" target="_blank" rel="noopener noreferrer">${href}</a>${u.slice(href.length)}`;
@@ -48,7 +49,10 @@ export function mdToHtml(md: unknown): string {
     if (list) out.push(`</${list}>`);
     list = null;
   };
-  for (const line of esc(String(md)).split('\n')) {
+  const lines = esc(String(md)).split('\n');
+  const cells = (l: string) => l.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+  for (let n = 0; n < lines.length; n++) {
+    const line = lines[n];
     if (fence) {
       if (/^\s*```/.test(line)) {
         out.push(lang === 'mermaid' ? `<pre class="mermaid">${fence.join('\n')}</pre>` : `<pre><code>${fence.join('\n')}</code></pre>`);
@@ -57,7 +61,14 @@ export function mdToHtml(md: unknown): string {
       continue;
     }
     let m: RegExpExecArray | null;
-    if ((m = /^\s*```\s*(\w*)/.exec(line))) {
+    if (/^\s*\|.*\|\s*$/.test(line) && /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/.test(lines[n + 1] ?? '')) {
+      flush();
+      const row = (l: string, t: string) => `<tr>${cells(l).map((c) => `<${t}>${inline(c)}</${t}>`).join('')}</tr>`;
+      const body: string[] = [];
+      for (n += 2; n < lines.length && /^\s*\|/.test(lines[n]); n++) body.push(row(lines[n], 'td'));
+      n--;
+      out.push(`<table><thead>${row(line, 'th')}</thead><tbody>${body.join('')}</tbody></table>`);
+    } else if ((m = /^\s*```\s*(\w*)/.exec(line))) {
       flush();
       lang = m[1];
       fence = [];

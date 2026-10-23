@@ -1,8 +1,8 @@
 # PRD — aiw ui rewrite
 
-**Status:** Draft · **Date:** 2026-10-21 · **Slug:** `ui-rewrite` · **Owner:** Masnun Siam · **Priority:** high · **Repo:** masnun-siam/ai-workflow
+**Status:** Done · **Date:** 2026-10-21 · **Slug:** `ui-rewrite` · **Owner:** Masnun Siam · **Priority:** high · **Repo:** masnun-siam/ai-workflow
 
-Status is `Draft`, `In review` or `Approved`. This document is the source of truth for the feature: every issue is derived from it, and a decision that is not written here has not been made.
+Status is `Draft`, `In review`, `Approved` or `Done`. This document is the source of truth for the feature: every issue is derived from it, and a decision that is not written here has not been made.
 
 ## Overview
 
@@ -246,6 +246,8 @@ None formally defined. Informal check: a full day of real use without going to t
 ## Open questions
 
 ## Change log
+
+- 2026-10-23: status set to Done — the rewrite is implemented. No requirement changed; no issues affected.
 
 ## Related
 

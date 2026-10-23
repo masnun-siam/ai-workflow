@@ -2,7 +2,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { StreamEvent } from '../api/types';
 import { Icon } from '../components';
-import { fmtTokens, linkParts, money, toolSummary } from '../lib/format';
+import { mdToHtml } from '../lib/md';
+import { fmtTokens, money, toolSummary } from '../lib/format';
 
 /** Searchable text of one event. */
 export function eventText(e: StreamEvent): string {
@@ -14,10 +15,6 @@ export function filterEvents(events: StreamEvent[], query: string) {
   const t = query.trim().toLowerCase();
   const all = events.map((e, i) => ({ e, i }));
   return t ? all.filter(({ e }) => eventText(e).toLowerCase().includes(t)) : all;
-}
-
-function Linked({ text }: { text: string }) {
-  return <>{linkParts(text).map((p, i) => (typeof p === 'string' ? p : <a key={i} href={p.href} target="_blank" rel="noopener noreferrer">{p.href}</a>))}</>;
 }
 
 export function Transcript({ events, live, working }: { events: StreamEvent[]; live: boolean; working: boolean }) {
@@ -58,13 +55,13 @@ export function Transcript({ events, live, working }: { events: StreamEvent[]; l
                 <b>{e.is_error ? 'Failed' : 'Result'}</b>
                 {typeof e.cost === 'number' ? ` · ${money(e.cost)}` : ''}
                 {e.tokens && typeof (e.tokens as { output?: number }).output === 'number' ? ` · ${fmtTokens(((e.tokens as { input?: number }).input ?? 0) + (e.tokens as { output: number }).output)} tok` : ''}
-                {e.text ? <div><Linked text={String(e.text)} /></div> : null}
+                {e.text ? <div className="prose" dangerouslySetInnerHTML={{ __html: mdToHtml(e.text) }} /> : null}
               </div>
             </div>
           ) : (
             <div key={i} className="ev text">
               <span className="ic"><Icon n="msg" s={14} /></span>
-              <div className="body"><Linked text={String(e.text ?? '')} /></div>
+              <div className="body prose" dangerouslySetInnerHTML={{ __html: mdToHtml(e.text) }} />
             </div>
           ),
         )}
