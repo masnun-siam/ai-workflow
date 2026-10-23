@@ -19,7 +19,7 @@
 | `/ai-workflow:release-pr [--dry-run] [head=staging] [base=master]` | open or refresh the `staging` → `master` release PR with a deploy checklist, post the Slack trigger, hand off to `/pr-grind`. Never merges |
 | `/ai-workflow:worklog [date]` | today's worklog from GitHub activity and the daily note, written to the Obsidian daily note (runs as the `worklog-runner` agent) |
 | `/ai-workflow:flow <idea \| folder \| PRD \| task list \| epic>` | the guided flow: dump → create-prd → create-tasks → refine-issues → a dispatch of the epic; starts at the stage the input implies and stops for your go at each boundary |
-| `/ai-workflow:herdr-dispatch <epic> [--max N] [--grind off\|simple\|full] [--auto-merge] [--feature-branch <name>] [--model M] [--effort E]` | run an epic's issues as a dispatch in herdr tabs: preview, confirm, start, then relay what needs you (see **Dispatches**) |
+| `/ai-workflow:herdr-dispatch <epic> [--max N] [--grind off\|simple\|full] [--ci wait\|defer\|ignore] [--auto-merge] [--feature-branch <name>] [--model M] [--effort E]` | run an epic's issues as a dispatch in herdr tabs: preview, confirm, start, then relay what needs you (see **Dispatches**) |
 
 ## The `aiw` CLI
 
@@ -34,7 +34,7 @@ aiw grind-mode [--pr <url>]             print the grind mode, deep or simple: th
 aiw dispatch plan|start <epic> [flags]  preview or start a dispatch (flags as herdr-dispatch, plus
                                         --runner herdr|headless and --workspace <herdr workspace id>)
 aiw dispatch ls|show <id>               list dispatches, or one as JSON
-aiw dispatch set <id> key=value...      change max, grind, auto_merge, model, effort while it runs
+aiw dispatch set <id> key=value...      change max, grind, ci, auto_merge, model, effort while it runs
 aiw dispatch pause|resume|cancel <id>   the whole dispatch (pause stops new lanes only)
 aiw dispatch lane <id> <n> <action>     pause, resume, retry, skip, merge, hold, unhold, or send "<text>"
 aiw dispatch watch <id> [--since T]     block until an event needs you; prints it and the next --since

@@ -157,6 +157,7 @@ def _settings(a) -> dict:
     s = {
         "max": a.max,
         "grind": a.grind,
+        "ci": a.ci,
         "auto_merge": a.auto_merge,
         "feature_branch": a.feature_branch,
         "model": a.model,
@@ -289,6 +290,7 @@ def register(sub, add) -> None:
         q.add_argument("--workspace", help="herdr workspace id (herdr pane current)")
         q.add_argument("--max", type=int, default=dr.DEFAULTS["max"])
         q.add_argument("--grind", choices=dr.GRIND_MODES, default=dr.DEFAULTS["grind"])
+        q.add_argument("--ci", choices=dr.CI_MODES, default=dr.DEFAULTS["ci"])
         q.add_argument("--auto-merge", action="store_true")
         q.add_argument("--feature-branch", default=None, help="every lane's base, cut from the default branch")
         q.add_argument("--model", default=None)
@@ -304,7 +306,7 @@ def register(sub, add) -> None:
     q = ops.add_parser("show", help="print a dispatch as JSON")
     q.add_argument("id")
     q.set_defaults(func=cmd_show)
-    q = ops.add_parser("set", help="edit settings live: max=3 grind=simple auto_merge=on model=opus")
+    q = ops.add_parser("set", help="edit settings live: max=3 grind=simple ci=defer auto_merge=on model=opus")
     q.add_argument("id")
     q.add_argument("pairs", nargs="+")
     q.set_defaults(func=cmd_set)

@@ -1,7 +1,7 @@
 ---
 name: herdr-dispatch
 description: Run an epic's child issues as parallel herdr tabs, end to end — each tab runs `/ai-workflow:implement-issue <n>`, then grinds the PR (off/simple/full), is merged (optional auto-merge), does implement-issue's after-merge followups, closes, and the next unblocked issue opens. Dependency order and a concurrency cap; this session previews, starts and relays. Use whenever the user wants to run, dispatch or fan out an epic's issues in herdr tabs, "implement this epic in parallel", "dispatch epic 123", or work several issues at once in herdr, even if they don't name this skill.
-argument-hint: <epic: owner/repo#N or N> [--max N] [--grind off|simple|full] [--auto-merge] [--feature-branch <name>] [--model M] [--effort E]
+argument-hint: <epic: owner/repo#N or N> [--max N] [--grind off|simple|full] [--ci wait|defer|ignore] [--auto-merge] [--feature-branch <name>] [--model M] [--effort E]
 ---
 
 # herdr-dispatch
@@ -22,6 +22,7 @@ user turned auto-merge on.
 |---|---|---|
 | `--max N` | tabs running at once | 2 |
 | `--grind off\|simple\|full` | grind each ready PR: `simple` ends on any approval, `full` on zero blocker/should-fix | full |
+| `--ci wait\|defer\|ignore` | `wait`: CI gates each lane as today; `defer`: CI blocks only the merge; `ignore`: CI never blocks, red CI can merge | wait |
 | `--auto-merge` | merge (merge commit) once CI is green, an approving review is in and the grind is done | off: the tab waits for the user's merge |
 | `--feature-branch <name>` | every PR targets this branch, cut from the default branch if missing | each issue's own base |
 | `--model`, `--effort` | for every tab | Claude's defaults |
