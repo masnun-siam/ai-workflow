@@ -183,7 +183,7 @@ export function DispatchPage() {
         <p className="faint">
           {d.state === 'done' || d.state === 'cancelled' ? `Took ${secs(d.totals.seconds)}` : `Running for ${secs(d.totals.seconds)}`}
           {d.runner === 'headless' && d.totals.cost > 0 ? `. Spent ${money(d.totals.cost)} so far` : ''}
-          {`. Up to ${d.settings.max} at a time, grind ${d.settings.grind}, ${d.settings.auto_merge ? 'merges by itself' : 'you merge'}.`}
+          {`. Up to ${d.settings.max} at a time, grind ${d.settings.grind}, CI: ${d.settings.ci ?? 'wait'}, ${d.settings.auto_merge ? 'merges by itself' : 'you merge'}.`}
         </p>
       </section>
       <NeedsYou d={d} onPick={pick} />

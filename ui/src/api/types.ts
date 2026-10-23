@@ -467,10 +467,13 @@ export interface ScanResult {
 export type LaneStage =
   | 'queued' | 'implementing' | 'grinding' | 'merge_gate' | 'conflict_fix' | 'awaiting_merge' | 'followups' | 'closed' | 'skipped';
 export type GrindMode = 'off' | 'simple' | 'full';
+export type CiMode = 'wait' | 'defer' | 'ignore';
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export interface DispatchSettings {
   max: number;
   grind: GrindMode;
+  /** Absent on older dispatches: read as 'wait'. */
+  ci?: CiMode;
   auto_merge: boolean;
   feature_branch: string | null;
   model: string | null;

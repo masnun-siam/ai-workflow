@@ -1,7 +1,7 @@
 // The dispatch settings as form fields: the New dispatch dialog and the live editor on a dispatch share them.
 import { useEffect, useState } from 'react';
 import { useSaveSettings } from '../api/hooks';
-import type { DispatchSettings, GrindMode } from '../api/types';
+import type { CiMode, DispatchSettings, GrindMode } from '../api/types';
 import { Button, ModelEffortPicker, Switch } from '../components';
 
 const GRIND: { v: GrindMode; label: string; hint: string }[] = [
@@ -9,6 +9,24 @@ const GRIND: { v: GrindMode; label: string; hint: string }[] = [
   { v: 'simple', label: 'Simple', hint: 'Grind until the reviewer bot approves.' },
   { v: 'full', label: 'Full', hint: 'Grind until zero blocker and should-fix findings.' },
 ];
+
+const CI: { v: CiMode; label: string; hint: string }[] = [
+  { v: 'wait', label: 'Wait', hint: 'Each PR waits for green CI before it grinds and merges.' },
+  { v: 'defer', label: 'Defer', hint: 'Lanes move on without CI; CI must be green to merge.' },
+  { v: 'ignore', label: 'Ignore', hint: 'CI never blocks: red CI can merge.' },
+];
+
+export function CiSeg({ value, onChange }: { value: CiMode; onChange: (v: CiMode) => void }) {
+  return (
+    <div className="seg" role="radiogroup" aria-label="CI mode">
+      {CI.map((c) => (
+        <button key={c.v} type="button" role="radio" aria-checked={value === c.v} className={value === c.v ? 'on' : ''} title={c.hint} onClick={() => onChange(c.v)}>
+          {c.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function GrindSeg({ value, onChange }: { value: GrindMode; onChange: (v: GrindMode) => void }) {
   return (
@@ -60,6 +78,7 @@ export function SettingsFields({ value, onChange, live }: { value: DispatchSetti
     onChange(p as Partial<DispatchSettings>);
     saveDefaults.mutate({ ...(p.model !== undefined ? { run_model: p.model } : {}), ...(p.effort !== undefined ? { run_effort: p.effort } : {}) });
   };
+  const ci = value.ci ?? 'wait';
   const grindHint = GRIND.find((g) => g.v === value.grind)?.hint;
   return (
     <div className="dsp-settings">
@@ -67,6 +86,11 @@ export function SettingsFields({ value, onChange, live }: { value: DispatchSetti
         <span className="dsp-k">Grind</span>
         <GrindSeg value={value.grind} onChange={(grind) => onChange({ grind })} />
         <span className="faint dsp-hint">{grindHint} Repos with no Slack channel skip it.</span>
+      </div>
+      <div className="dsp-field">
+        <span className="dsp-k">CI</span>
+        <CiSeg value={ci} onChange={(ci) => onChange({ ci })} />
+        <span className="faint dsp-hint">{CI.find((c) => c.v === ci)?.hint}</span>
       </div>
       <div className="dsp-field">
         <span className="dsp-k" id="am-l">Auto-merge</span>

@@ -7,7 +7,7 @@ import { counts, eventText, laneNote, levels, nowLine } from './vocab';
 
 const json = (b: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } }));
 const AFK = { active: false, until: null, started: null, decisions: 0, held: 0, summary: null };
-const S = { max: 2, grind: 'full', auto_merge: false, feature_branch: null, model: null, effort: null } as const;
+const S = { max: 2, grind: 'full', ci: 'wait', auto_merge: false, feature_branch: null, model: null, effort: null } as const;
 const lane = (n: number, o: Partial<Lane> = {}): Lane => ({
   key: `o/r#${n}`, repo: 'o/r', n, title: `Issue ${n}`, deps: [], stage: 'queued', pr: null, needs_you: null, held: null, gate: null,
   skip_reason: null, paused: null, hold_merge: null, limited_until: null, started_at: null, ended_at: null, session: null, tab: null,
@@ -73,6 +73,8 @@ describe('dispatch vocab', () => {
     expect(nowLine(lane(3, { stage: 'awaiting_merge', pr: 30 }), lanes)).toMatchObject({ ask: 'merge', text: 'PR #30 is ready for your merge' });
     expect(nowLine(lane(3, { needs_you: 'waiting on you', session: 's' }), lanes)).toMatchObject({ ask: 'open', text: 'Asked you a question' });
     expect(nowLine(lane(3, { stage: 'merge_gate', gate: 'CI is not green', pr: 9 }), lanes).text).toBe('Waiting for CI to pass');
+    expect(nowLine(lane(3, { stage: 'merge_gate', gate: 'waiting for green CI (defer)', pr: 9 }), lanes).text).toBe('Waiting for green CI (defer)');
+    expect(laneNote(lane(3, { stage: 'merge_gate', gate: 'waiting for green CI (defer)' }))?.text).toBe('waiting for green CI (defer)');
     expect(eventText({ kind: 'stage', text: 'queued -> implementing' })).toBe('started building');
   });
 });
@@ -100,6 +102,37 @@ describe('Dispatches page', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Start 1 issue' }));
     await waitFor(() => expect(posts.at(-1)?.[0]).toBe('/api/dispatches'));
     expect(await screen.findByRole('heading', { name: 'Payments' })).toBeTruthy();
+  });
+});
+
+describe('Dispatch CI mode', () => {
+  it('sends the picked CI mode to the plan, defaulting to wait', async () => {
+    window.location.hash = '#/dispatches?repo=o/r';
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Run an epic' }));
+    expect(screen.getByRole('radio', { name: 'Wait' }).getAttribute('aria-checked')).toBe('true');
+    await userEvent.click(screen.getByRole('radio', { name: 'Ignore' }));
+    expect(screen.getByText('CI never blocks: red CI can merge.')).toBeTruthy();
+    await userEvent.click(screen.getByRole('radio', { name: 'Defer' }));
+    await userEvent.type(screen.getByLabelText('Epic'), '1');
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    await screen.findByText('o/r#5: needs refine');
+    expect(posts.find(([p]) => p === '/api/dispatches/plan')?.[1]).toEqual({ epic: 'o/r#1', settings: { ...S, ci: 'defer' } });
+  });
+
+  it('shows the mode on the dispatch, wait when absent, and saves a live pick', async () => {
+    routes['/api/dispatches/abc123abc123'] = disp({ settings: { ...S, ci: 'defer' } });
+    window.location.hash = '#/dispatches/abc123abc123?repo=o/r';
+    const a = render(<App />);
+    expect(await screen.findByText(/CI: defer/)).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: /Settings/ }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Ignore' }));
+    await waitFor(() => expect(posts.at(-1)).toEqual(['/api/dispatches/abc123abc123/settings', { ci: 'ignore' }]));
+    a.unmount();
+    const { ci: _ci, ...noCi } = S;
+    routes['/api/dispatches/abc123abc123'] = disp({ settings: noCi });
+    render(<App />);
+    expect(await screen.findByText(/CI: wait/)).toBeTruthy();
   });
 });
 
