@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { mergeWarnings } from './panels/prWarnings';
+import { SMALL_CHANGE_MARKER, SMALL_CHANGE_NOTE, smallChangeArg } from './features/smallChange';
 
 const json = (b: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } }));
 const posts: { url: string; body: any }[] = [];
@@ -214,6 +215,43 @@ describe('Small changes tab', () => {
     const body = posts.find((p) => p.url === '/api/start')?.body;
     expect(body).toMatchObject({ skill: 'implement-issue' });
     expect(body).not.toHaveProperty('model'); // only the planning starts carry PLAN_RUN
+  });
+
+  it('Create task is disabled while blank, starts one headless create-tasks with the collapsed text, and clears', async () => {
+    mock({ lanes: [lane([card(30, 'ready')], { epic: null })] });
+    const user = await open('#/features?tab=changes&repo=o/r');
+    const btn = await screen.findByRole('button', { name: 'Create task' });
+    const box = screen.getByLabelText('Describe a bug or small change') as HTMLTextAreaElement;
+    expect((btn as HTMLButtonElement).disabled).toBe(true);
+    await user.type(box, '   ');
+    expect((btn as HTMLButtonElement).disabled).toBe(true);
+    await user.clear(box);
+    await user.type(box, 'a   b{Enter}c');
+    expect((btn as HTMLButtonElement).disabled).toBe(false);
+    await user.click(btn);
+    await waitFor(() => expect(box.value).toBe(''));
+    const posted = posts.filter((p) => p.url === '/api/start');
+    expect(posted).toHaveLength(1);
+    expect(posted[0].body).toMatchObject({ repo: 'o/r', skill: 'create-tasks', via: 'headless', model: 'opus', effort: 'medium' });
+    expect((posted[0].body as { arg: string }).arg).toBe(smallChangeArg('a b c'));
+    expect(window.location.hash).toContain('tab=changes');
+  });
+
+  it('a failing start keeps the text and toasts the error', async () => {
+    mock({ lanes: [lane([card(30, 'ready')], { epic: null })], extra: { '/api/start': () => json({ error: 'boom' }, 502) } });
+    const user = await open('#/features?tab=changes&repo=o/r');
+    const box = (await screen.findByLabelText('Describe a bug or small change')) as HTMLTextAreaElement;
+    await user.type(box, 'broken thing');
+    await user.click(screen.getByRole('button', { name: 'Create task' }));
+    expect(await screen.findByText('boom')).toBeTruthy();
+    expect(box.value).toBe('broken thing');
+  });
+
+  it('smallChangeArg puts the marker first, collapses whitespace and ends with the note', () => {
+    const arg = smallChangeArg('  a \n b  ');
+    expect(arg.startsWith(`${SMALL_CHANGE_MARKER} a b`)).toBe(true);
+    expect(arg.endsWith(SMALL_CHANGE_NOTE)).toBe(true);
+    expect(arg).not.toMatch(/[\n\0]/);
   });
 
   it('with 0 PRDs the tabs show, the tab counts 3 and the idea box stays in In progress', async () => {
