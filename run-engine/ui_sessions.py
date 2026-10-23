@@ -162,7 +162,10 @@ def set_pending(sid: str, round) -> dict:
             if label in seen:
                 raise ValueError(f"duplicate option label: {label!r}")
             seen.add(label)
-            options.append({"label": label, "description": o.get("description")})
+            opt = {"label": label, "description": o.get("description")}
+            if isinstance(o.get("preview"), str):
+                opt["preview"] = o["preview"]
+            options.append(opt)
         questions.append(
             {
                 "header": q.get("header"),

@@ -302,5 +302,32 @@ assert [x for x in ui_sessions.list_sessions() if x["id"] == live["id"]][0]["tok
 assert ui_sessions.ui_events.tokens_of(None) is None and ui_sessions.ui_events.tokens_of({"input_tokens": 0}) is None
 ok("tokens: backfilled once from the last result (input counts cache reads and writes)")
 
+# 21. set_pending keeps a string option preview; a non-string one is dropped, no error
+d = fresh()
+sp = ui_sessions.create("worklog", "/r")
+got = ui_sessions.set_pending(
+    sp["id"],
+    {
+        "id": "q-1",
+        "status": "pending",
+        "questions": [
+            {
+                "header": "H",
+                "question": "Q?",
+                "multiSelect": False,
+                "options": [
+                    {"label": "a", "description": "A", "preview": "+--+\n|  |\n+--+"},
+                    {"label": "b", "description": "B", "preview": {"x": 1}},
+                    {"label": "c", "description": "C"},
+                ],
+            }
+        ],
+    },
+)["pending_question"]["questions"][0]["options"]
+assert got[0] == {"label": "a", "description": "A", "preview": "+--+\n|  |\n+--+"}, got[0]
+assert got[1] == {"label": "b", "description": "B"}, got[1]
+assert got[2] == {"label": "c", "description": "C"}, got[2]
+ok("set_pending keeps string previews, drops non-strings")
+
 print(f"\n{passed} checks passed")
 sys.exit(0)
