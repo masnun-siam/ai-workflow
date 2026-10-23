@@ -288,3 +288,20 @@ def send_mac(title: str, body: str, link: str | None = None, run=subprocess.run)
         warn(f"macOS notification failed: {type(e).__name__}")
         return type(e).__name__
     return f"exit {r.returncode}" if r.returncode else None
+
+
+def send_test(channel) -> dict:
+    """One sample push on `channel` alone, ignoring the matrix and Away mode. The error is a status,
+    a fixed phrase or an exception class name, never the URL (it holds the topic)."""
+    if channel not in ("ntfy", "mac"):
+        raise ValueError("channel must be ntfy or mac")
+    cfg = load_config()
+    title, body = "aiw: test notification", "This is a test from aiw ui."
+    public_url = cfg.get("public_url")
+    link = f"{str(public_url).rstrip('/')}/#/settings/notifications" if public_url else None
+    if channel == "mac":
+        err = send_mac(title, body, link)
+    else:
+        headers = {"Title": title, "Priority": "default", "Tags": "bell", **({"Click": link} if link else {})}
+        err = send_ntfy(cfg, headers, body, "test", {})
+    return {"ok": err is None, **({"error": err} if err else {})}

@@ -212,7 +212,7 @@ sets the rounds cap, the lenses ticked by default and each lens prompt; changes 
 `<data_dir>/config.json` and laid over the shipped `run-engine/config.json`, so **Reset to defaults**
 just removes that file. **Notes vault** sets the vault path. With no repos registered the app opens
 an onboarding page that checks `gh` and a Claude account, then scans folders.
-`GET|POST /api/settings/notify`, `POST /api/settings/notify/channel` (one event × channel switch,
+`GET|POST /api/settings/notify`, `POST /api/settings/notify/test` (`{channel: "ntfy"|"mac"}`: one sample push on that channel alone, ignoring the matrix and Away mode; 200 `{ok}` or `{ok: false, error}` with an HTTP status, error type or "ntfy is not set up" / "Only on macOS", never a credential; `browser` or an unknown channel is 400), `POST /api/settings/notify/channel` (one event × channel switch,
 `{event, channel, on}`; `GET` also returns `matrix`, `events`, `ntfy_ready` and `mac`), `GET|POST /api/settings/review`, `POST /api/repos/remove`,
 `POST /api/repos/check`.
 `GET /api/notifications?after=<id>` is the in-memory browser feed (`ui_feed.py`, newest 200, empty after
