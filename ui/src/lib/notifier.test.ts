@@ -1,6 +1,6 @@
-import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FeedEvent } from '../api/types';
+import swSource from '../../public/sw.js?raw';
 import { showNotification, step } from './notifier';
 
 const ev = (id: number): FeedEvent => ({ id, event: 'e', title: `t${id}`, body: 'b', path: '#/inbox', tag: `g${id}`, ts: '' });
@@ -44,7 +44,7 @@ describe('sw.js notificationclick', () => {
       clients: { matchAll: async () => wins, openWindow },
       registration: { scope: 'http://x/' },
     };
-    new Function('self', readFileSync('public/sw.js', 'utf8'))(self);
+    new Function('self', swSource)(self);
     let p: Promise<unknown> = Promise.resolve();
     const close = vi.fn();
     handlers.notificationclick({ notification: { close, data: { path } }, waitUntil: (x: Promise<unknown>) => { p = x; } });
