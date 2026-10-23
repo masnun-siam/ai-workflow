@@ -55,10 +55,10 @@ END_ACTIONS = ("open-pr", "qa", "grind-pr")
 # --------------------------------------------------------------------------- prompts
 
 
-def implement_prompt(n: int, base) -> str:
-    return f"/ai-workflow:implement-issue {n}" + (
-        f" (base branch {base}: branch from it, open the PR into it)" if base else ""
-    )
+def implement_prompt(n: int, base, pr=None) -> str:
+    notes = [f"PR #{pr} is already open for it: continue that PR on its branch, don't start over"] if pr else []
+    notes += [f"base branch {base}: branch from it, open the PR into it"] if base else []
+    return f"/ai-workflow:implement-issue {n}" + (f" ({'; '.join(notes)})" if notes else "")
 
 
 LANE_GRIND = " -- dispatch lane: re-arm the headless way (write next-poll, end the turn; no Monitor, no ScheduleWakeup)"
@@ -104,7 +104,7 @@ def stage_prompt(lane: dict, settings: dict, pr_url=None):
     """What a fresh session for the lane's current stage is told; None when the stage needs no session."""
     base = settings.get("feature_branch") or lane.get("base")
     return {
-        "implementing": lambda: implement_prompt(lane["n"], base),
+        "implementing": lambda: implement_prompt(lane["n"], base, lane.get("pr")),
         "grinding": lambda: grind_prompt(pr_url or "", lane.get("channel")),
         "conflict_fix": lambda: conflict_prompt(lane.get("pr"), base),
         "followups": lambda: followups_prompt(lane["n"], lane.get("pr"), base),
@@ -176,8 +176,17 @@ def step(lane: dict, facts: dict, settings: dict, now: float) -> tuple:
         return patch, acts
 
     if stage == "implementing":
-        if pr.get("state") == "OPEN" and not pr.get("draft") and pr.get("ci") == "success":
-            patch["pr"] = pr["n"]
+        ready = pr.get("state") == "OPEN" and not pr.get("draft")
+        if pr.get("state") == "OPEN" and pr.get("n") != lane.get("pr"):
+            patch["pr"] = pr["n"]  # tracked as soon as it exists: a retry continues it instead of starting over
+        if ready and pr.get("ci") == "failure" and agent in ("idle", None):
+            if lane.get("held") != "CI is red":
+                patch.update(held="CI is red", needs_you=None, idle_since=None)
+                acts.append(("notify", "held", f"CI is red on PR #{pr['n']}"))
+            return patch, acts
+        if lane.get("held"):  # CI re-ran, or the session is back on it
+            patch["held"] = None
+        if ready and pr.get("ci") == "success":
             if _grind_on(settings, facts):
                 to("grinding")
                 acts.append(("send", grind_prompt(pr["url"], facts.get("channel"))))
@@ -633,7 +642,8 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None, gh
             notify(d, k, kind, text)
 
     for k, x in d["lanes"].items():
-        for kind, text in x.pop("outbox", None) or []:
+        outbox = x.pop("outbox", None) or []
+        for kind, text in outbox:
             try:
                 if kind == "send":
                     runner.send(x["handle"], text)
@@ -659,6 +669,8 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None, gh
                 ev(k, "needs_you", x["needs_you"])
             continue
         if k not in facts:  # no fresh facts for this lane (repo not polled yet): never move on a guess
+            continue
+        if any(kind == "send" for kind, _ in outbox):  # the facts predate that prompt: an idle agent is stale
             continue
         patch, acts = step(x, f, d["settings"], now)
         old = x["stage"]
