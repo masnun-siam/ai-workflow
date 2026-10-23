@@ -8,6 +8,7 @@ import type { StepAction } from '../lib/nextStep';
 import { routes } from '../lib/routes';
 import { usePanel } from '../panels/PanelContext';
 import { useRepo } from '../shell/useRepo';
+import { PLAN_RUN } from '../lib/vocab';
 
 // The exact texts the old Planning board sent.
 export const approveArgs = (path: string) =>
@@ -38,14 +39,14 @@ export function useStepRunner(f: Feature, repo: string) {
           okLabel: 'Approve PRD',
           body: <p>Runs <code>/create-prd</code> to fold in the review, set the PRD to Approved and file its epic. Claude may ask you questions.</p>,
         });
-        if (ok) await starter.startSession({ repo, command: 'create-prd', args: approveArgs(f.prd.path) });
+        if (ok) await starter.startSession({ repo, command: 'create-prd', args: approveArgs(f.prd.path), ...PLAN_RUN });
         return;
       }
       case 'createTasks':
-        await starter.startBoard({ repo, skill: 'create-tasks', arg: f.prd.path, via: 'headless' });
+        await starter.startBoard({ repo, skill: 'create-tasks', arg: f.prd.path, via: 'headless', ...PLAN_RUN });
         return;
       case 'refine':
-        await starter.startBoard({ repo, skill: 'refine-issues', arg: a.issues.join(' '), via: 'headless' });
+        await starter.startBoard({ repo, skill: 'refine-issues', arg: a.issues.join(' '), via: 'headless', ...PLAN_RUN });
         return;
       case 'merge':
         panel.open({ kind: 'pr', repo, n: a.pr });

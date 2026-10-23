@@ -8,6 +8,7 @@
 
 ### Changed
 
+- A feature's own starts of `/create-prd`, `/create-tasks` and `/refine-issues` (Write the PRD, Approve PRD, Create tasks, Refine, Start update, Inbox approve, Add task) run on `opus` at `medium` effort (`PLAN_RUN` in `ui/src/lib/vocab.ts`), whatever the Start dialog saved.
 - `/implement-issue` reviews the local branch with `/pr-review` before the first push, then merges the base branch, pushes and opens the draft PR (steps 12 to 14); `/pr-review`, `/skill-feedback`, the guides and `/verifier-locally` follow (synced from Wasensi 637579d4).
 - **The Board is gone.** A feature's Issues tab holds its issues, and a new **Other issues** page
   (the last row of Features, `#/issues`) holds open issues that belong to no feature. `G` then `D` now

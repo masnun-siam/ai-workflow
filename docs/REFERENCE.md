@@ -200,7 +200,7 @@ review is an approval or GitHub's reviewDecision is approved). `/pr-grind` reads
 change reaches running grinds too (`grind_mode` in `ui_settings.json`). The last-used run model
 (`opus`, `sonnet`, `haiku`) and effort (`low` to `max`) are `run_model` / `run_effort` there (null: Claude's
 default); `POST /api/sessions` and `POST /api/start` take optional `model` / `effort`, added as `--model` /
-`--effort` on every spawn of that session and replayed by Rerun; only a settings save changes the saved pair. Then one table of
+`--effort` on every spawn of that session and replayed by Rerun; only a settings save changes the saved pair. The feature flow's PRD, tasks and refine starts always send `opus` / `medium` (`PLAN_RUN`) and never touch the saved pair. Then one table of
 the registered checkouts (`checkouts.json`) with GitHub status or **Publish**, auto-grind (default off),
 the Slack review channel grind posts to (`repos[owner/repo]` in `ui_settings.json`; a repo without one
 skips grinding in a dispatch) and **Remove** (its clone is untouched), plus

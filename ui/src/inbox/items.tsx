@@ -6,7 +6,7 @@ import type { InboxItem, Question } from '../api/types';
 import { Button, LinkButton, Menu, useConfirm, useToast, type IconName } from '../components';
 import { agoIso, clockText, shortRepo } from '../lib/format';
 import { routes } from '../lib/routes';
-import { type Tone } from '../lib/vocab';
+import { PLAN_RUN, type Tone } from '../lib/vocab';
 import { usePanel } from '../panels/PanelContext';
 import { copyCommand, useTerminal } from '../session/terminal';
 import { useStartError } from '../session/useSessionActions';
@@ -59,7 +59,7 @@ export function useInboxActions() {
         body: 'This runs /create-prd to fold in the review, set the PRD to Approved and file its epic on GitHub.',
         okLabel: 'Approve PRD',
       });
-      if (ok) start.mutate({ repo, command: 'create-prd', args: approveArgs(path) }, { onSuccess: (s) => goSession(s.id) });
+      if (ok) start.mutate({ repo, command: 'create-prd', args: approveArgs(path), ...PLAN_RUN }, { onSuccess: (s) => goSession(s.id) });
     },
     moreRounds: (panelId: string) => rounds.mutate({ panel: panelId, add: 2 }, { onSuccess: () => toast('Two more review rounds started') }),
     skipCi: async (repo: string, pr: number) => {

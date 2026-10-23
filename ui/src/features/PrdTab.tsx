@@ -7,6 +7,7 @@ import { useStarter } from '../board/actions';
 import { Banner, Button, EmptyState, useConfirm } from '../components';
 import type { Feature } from '../lib/features';
 import { mdToHtml } from '../lib/md';
+import { PLAN_RUN } from '../lib/vocab';
 
 export const CHANGED_MSG = 'This file changed on disk since you opened it, so nothing was saved. Reload it, then redo your edit.';
 export const askArgs = (path: string, text: string) => `${path} --update ${text.trim()}`;
@@ -113,7 +114,7 @@ export function PrdTab({ f, repo }: { f: Feature; repo: string }) {
         <p className="muted" style={{ fontSize: 13 }}>Runs <code>/create-prd --update</code>, which records the decision in the PRD.</p>
         <label className="sr" htmlFor="prd-ask">What should change?</label>
         <textarea id="prd-ask" className="f" rows={4} placeholder="Example: Guests should be able to see reports but not export them." value={ask} onChange={(e) => setAsk(e.target.value)} />
-        <Button disabled={!ask.trim() || starter.pending} onClick={async () => { const id = await starter.startSession({ repo, command: 'create-prd', args: askArgs(path, ask) }); if (id) setAsk(''); }}>Start update</Button>
+        <Button disabled={!ask.trim() || starter.pending} onClick={async () => { const id = await starter.startSession({ repo, command: 'create-prd', args: askArgs(path, ask), ...PLAN_RUN }); if (id) setAsk(''); }}>Start update</Button>
       </div>
     </div>
   );

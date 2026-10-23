@@ -98,6 +98,9 @@ export interface CommandGroup {
   g: string;
   items: Command[];
 }
+/** Model and effort for the feature flow's planning starts (PRD, tasks, refine); not the Start dialog's saved choice. */
+export const PLAN_RUN = { model: 'opus', effort: 'medium' } as const;
+
 export const COMMANDS: CommandGroup[] = [
   { g: 'Plan', items: [
     { id: 'create-prd', name: 'Write a PRD', desc: 'Claude interviews you about an idea and writes the PRD.', arg: 'text', placeholder: 'Describe the feature: who it is for, what problem it solves…', lenses: true, noRepo: true },

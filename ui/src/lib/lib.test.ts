@@ -4,7 +4,7 @@ import { joinFeatures, stageOf } from './features';
 import { mdToHtml } from './md';
 import { nextStep } from './nextStep';
 import { migrateRepoKey, pickRepo, withRepoParam } from './repo';
-import { boardColumn, issueStatus, BOARD_COLUMNS } from './vocab';
+import { boardColumn, issueStatus, BOARD_COLUMNS, PLAN_RUN } from './vocab';
 
 const card = (o: Partial<DeliveryCard>): DeliveryCard => ({
   n: 1, title: 't', column: 'ready', priority: null, blocked_by: [], pr: null, session: null, needs_cleanup: null, ...o,
@@ -138,4 +138,8 @@ describe('md', () => {
     expect(mdToHtml('[Docs](https://a.b/c) and [Logs](../x.md)')).toBe('<p><a href="https://a.b/c" target="_blank" rel="noopener noreferrer">Docs</a> and Logs</p>');
     expect(mdToHtml('[x](javascript:alert(1))')).toBe('<p>x)</p>');
   });
+});
+
+describe('PLAN_RUN', () => {
+  it('is the opus alias at medium effort', () => expect(PLAN_RUN).toEqual({ model: 'opus', effort: 'medium' }));
 });
