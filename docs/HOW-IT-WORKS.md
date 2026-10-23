@@ -61,8 +61,8 @@ Independent refined issues run in parallel, each in its own worktree, as the lan
 
 A dispatch takes one epic, or a list of picked issues (from the UI only), and runs its open, refined
 issues as **lanes** (an unrefined one is skipped as "needs refine" until it is refined). Up to `max`
-lanes (default 2) run at once; a lane starts only when every issue blocking it is merged and its followups are done. Each lane, in one
-session (a herdr tab or a headless session):
+lanes (default 2) run at once; a lane starts only when every issue blocking it is merged and its
+followups are done. Each lane, in one session (a herdr tab or a headless session):
 
 1. `/implement-issue <n>` until the PR is Ready (CI green, `/pr-review` handled).
 2. `/pr-grind <pr>` in the same session, unless grinding is off or the repo has no Slack channel.
