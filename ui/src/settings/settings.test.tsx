@@ -261,6 +261,99 @@ describe('Settings: notifications', () => {
   });
 });
 
+describe('Settings: notification channel headers', () => {
+  const notify = (over: Record<string, unknown>) => { GET['/api/settings/notify'] = { ...(GET['/api/settings/notify'] as object), ...over }; };
+  const base = { ...(GET['/api/settings/notify'] as object) };
+  afterEach(() => { GET['/api/settings/notify'] = base; });
+  const head = async (name: string) => (await screen.findByRole('columnheader', { name: new RegExp(`^${name}`) }));
+
+  it('Browser shows On, Off with Enable, Blocked and Not supported', async () => {
+    vi.stubGlobal('Notification', { permission: 'granted', requestPermission: vi.fn() });
+    page(<SettingsPage />, '/settings/notifications');
+    expect(within(await head('Browser')).getByText('On')).toBeTruthy();
+    cleanup();
+    const ask = vi.fn(async () => 'granted');
+    vi.stubGlobal('Notification', { permission: 'default', requestPermission: ask });
+    const user = userEvent.setup();
+    page(<SettingsPage />, '/settings/notifications');
+    expect(within(await head('Browser')).getByText('Off')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Enable' }));
+    expect(ask).toHaveBeenCalled();
+    expect(within(await head('Browser')).getByText('On')).toBeTruthy();
+    cleanup();
+    vi.stubGlobal('Notification', { permission: 'denied', requestPermission: vi.fn() });
+    page(<SettingsPage />, '/settings/notifications');
+    expect(within(await head('Browser')).getByText('Blocked')).toBeTruthy();
+    cleanup();
+    vi.stubGlobal('Notification', undefined);
+    page(<SettingsPage />, '/settings/notifications');
+    expect(within(await head('Browser')).getByText('Not supported')).toBeTruthy();
+  });
+
+  it('ntfy shows Set up or Not set up and its switches stay saveable', async () => {
+    page(<SettingsPage />, '/settings/notifications');
+    expect(within(await head('ntfy')).getByText('Set up')).toBeTruthy();
+    cleanup();
+    notify({ ntfy_ready: false });
+    handlers['POST /api/settings/notify/channel'] = () => [200, GET['/api/settings/notify']];
+    const user = userEvent.setup();
+    page(<SettingsPage />, '/settings/notifications');
+    expect(within(await head('ntfy')).getByText('Not set up')).toBeTruthy();
+    const sw = screen.getByRole('switch', { name: 'A session failed: ntfy' }) as HTMLButtonElement;
+    expect(sw.disabled).toBe(false);
+    await user.click(sw);
+    await waitFor(() => expect(sent('POST', '/api/settings/notify/channel')).toEqual([{ event: 'failed', channel: 'ntfy', on: false }]));
+  });
+
+  it('This Mac shows Clickable, No links, the install text and Only on macOS (all disabled)', async () => {
+    notify({ mac: { available: true, notifier: true, clickable: true } });
+    page(<SettingsPage />, '/settings/notifications');
+    expect(within(await head('This Mac')).getByText('Clickable')).toBeTruthy();
+    cleanup();
+    notify({ mac: { available: true, notifier: true, clickable: false } });
+    page(<SettingsPage />, '/settings/notifications');
+    expect(within(await head('This Mac')).getByText('No links')).toBeTruthy();
+    cleanup();
+    notify({ mac: { available: true, notifier: false, clickable: false } });
+    page(<SettingsPage />, '/settings/notifications');
+    expect(within(await head('This Mac')).getByText('Install terminal-notifier to make banners clickable (brew install terminal-notifier)')).toBeTruthy();
+    cleanup();
+    notify({ mac: { available: false, notifier: false, clickable: false } });
+    page(<SettingsPage />, '/settings/notifications');
+    expect(within(await head('This Mac')).getByText('Only on macOS')).toBeTruthy();
+    const macSwitches = screen.getAllByRole('switch').filter((s) => /: This Mac$/.test(s.getAttribute('aria-label') ?? ''));
+    expect(macSwitches).toHaveLength(11);
+    expect(macSwitches.every((s) => (s as HTMLButtonElement).disabled)).toBe(true);
+    expect((screen.getByRole('button', { name: 'Send test: This Mac' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('the Browser Send test is disabled unless granted, and shows the notification without a server call', async () => {
+    vi.stubGlobal('Notification', { permission: 'default', requestPermission: vi.fn() });
+    page(<SettingsPage />, '/settings/notifications');
+    expect(((await screen.findByRole('button', { name: 'Send test: Browser' })) as HTMLButtonElement).disabled).toBe(true);
+    cleanup();
+    const showNotification = vi.fn(async () => undefined);
+    vi.stubGlobal('Notification', { permission: 'granted', requestPermission: vi.fn() });
+    vi.stubGlobal('navigator', { ...navigator, serviceWorker: { ready: Promise.resolve({ showNotification }) } });
+    const user = userEvent.setup();
+    page(<SettingsPage />, '/settings/notifications');
+    await user.click(await screen.findByRole('button', { name: 'Send test: Browser' }));
+    await waitFor(() => expect(showNotification).toHaveBeenCalledWith('aiw: test notification', expect.objectContaining({ tag: 'aiw-test' })));
+    expect(calls.filter((c) => c.url.includes('/notify/test'))).toEqual([]);
+  });
+
+  it('ntfy and This Mac Send test post the channel and toast the result', async () => {
+    handlers['POST /api/settings/notify/test'] = (b) => [200, b?.channel === 'ntfy' ? { ok: false, error: 'HTTP 401' } : { ok: true }];
+    const user = userEvent.setup();
+    page(<SettingsPage />, '/settings/notifications');
+    await user.click(await screen.findByRole('button', { name: 'Send test: ntfy' }));
+    expect(await screen.findByText('ntfy test failed: HTTP 401')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Send test: This Mac' }));
+    expect(await screen.findByText('This Mac test sent')).toBeTruthy();
+    expect(sent('POST', '/api/settings/notify/test')).toEqual([{ channel: 'ntfy' }, { channel: 'mac' }]);
+  });
+});
+
 describe('Settings: peer review', () => {
   it('marks an edited prompt and resets only after a confirm', async () => {
     handlers['POST /api/settings/review'] = () => [200, GET['/api/settings/review']];

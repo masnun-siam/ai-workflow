@@ -20,4 +20,7 @@
 .matrix th[scope=row]{font-weight:400;text-align:left;white-space:normal}
 .matrix th[scope=rowgroup]{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
 .matrix th:not(:first-child),.matrix td{width:64px;text-align:center}
+.matrix thead th:not(:first-child){width:150px;vertical-align:top;white-space:normal}
+.matrix thead th .chip{display:inline-block;margin:4px 0;white-space:normal;text-align:center}
+.matrix thead th .btn{display:block;margin:0 auto 4px}
 @media (max-width:600px){.matrix th:not(:first-child),.matrix td{width:48px;padding-left:4px;padding-right:4px}}

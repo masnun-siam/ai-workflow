@@ -5,6 +5,7 @@
 ### Added
 
 - Browser notifications work again: while permission is granted, every aiw tab polls `/api/notifications` (also in the background) and shows each new event as a system notification through the service worker. The same tag shows once across tabs, a tab shows only events after it opened, and a click focuses or opens an aiw window on the event's page.
+- Settings → Notifications: each column header shows its channel's state (Browser On / Off with Enable / Blocked / Not supported, ntfy Set up / Not set up, This Mac Clickable / No links / install hint / Only on macOS) and a Send test button. Browser tests itself through the service worker; ntfy and This Mac post to `/api/settings/notify/test` and toast the result. The separate "This browser" block is gone.
 - Settings → Notifications shows the notification matrix: 11 events in three groups by Browser, ntfy and This Mac, one instant-save switch per cell. The ntfy form moves below it under "Phone push (ntfy)".
 - The notification matrix store: `ui.json` keeps per-event, per-channel (`browser`, `ntfy`, `mac`) overrides under `channels`. `GET /api/settings/notify` now returns `matrix`, `events`, `ntfy_ready` and `mac`, and `POST /api/settings/notify/channel` saves one cell. Matrix and ntfy form saves share one lock.
 - `ui_notify.send_mac` sends the macOS banner through `terminal-notifier` when it is on the server's PATH (clickable when given a link) and falls back to AppleScript; it replaces `ui_dispatch.mac_notify`. Run `brew install terminal-notifier` and restart `aiw ui` for clickable banners.
