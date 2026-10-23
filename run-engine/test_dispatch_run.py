@@ -83,6 +83,22 @@ for bad in ({"ci": "x"}, {"grind": "deep"}, {"max": 0}, {"max": True}, {"feature
 assert dr.create("o/r#1", "headless", {}, [])["settings"]["ci"] == "wait"
 print("  ok  settings")
 
+# --- issue-list dispatch
+il = dr.create(None, "headless", {"grind": "off"}, [child(7), child(2)], issues=["o/r#7", "o/r#2"])
+assert il["epic"] is None and il["issues"] == ["o/r#2", "o/r#7"] and il["title"] == "Small changes: #2, #7"
+assert "issues" not in dr.create("o/r#1", "headless", {}, [])
+assert dr.issues_title([f"o/r#{n}" for n in (9, 5, 1, 3, 4)]) == "Small changes: #1, #3, #4 +2 more"
+for fn in (
+    lambda: dr.create(None, "headless", {"feature_branch": "f/x"}, [], issues=["o/r#1"]),
+    lambda: dr.set_settings(il["id"], feature_branch="f/x"),
+):
+    try:
+        fn()
+        raise AssertionError("feature_branch accepted")
+    except ValueError:
+        pass
+print("  ok  issue list")
+
 # --- launch order, cap, deps, needs refine
 run = FakeRunner()
 d = dr.create(
