@@ -6,3 +6,4 @@
 .prd-edit{font-family:var(--mono);font-size:12.5px;min-height:320px}
 .tbl td.title{font-weight:600;min-width:160px}
 @media (max-width:760px){.frow .fnext{justify-content:flex-start}}
+.pending-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

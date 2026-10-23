@@ -62,7 +62,7 @@ export function IssuesTab({ f, repo }: { f: Feature; repo: string }) {
  * Issues grouped by status, one row each with its signals and one action. An issue a running dispatch owns
  * shows its dispatch stage and links there instead of offering a Start. Shared by a feature and the Small changes tab.
  */
-export function IssueTable({ issues, repo, picked = [], onPick }: { issues: FeatureIssue[]; repo: string; picked?: number[]; onPick?: (n: number) => void }) {
+export function IssueTable({ issues, repo, picked = [], onPick, lockRefine }: { issues: FeatureIssue[]; repo: string; picked?: number[]; onPick?: (n: number) => void; lockRefine?: string }) {
   const panel = usePanel();
   const owned = useOwnedIssues(repo);
   const refining = useRefining(repo);
@@ -100,7 +100,7 @@ export function IssueTable({ issues, repo, picked = [], onPick }: { issues: Feat
                     <td>{own ? <Chip tone={STAGE[own.l.stage].tone} live={own.l.stage !== 'queued'}>{STAGE[own.l.stage].label}</Chip> : <IssueChip s={i.status} />}</td>
                     <td className="hide-sm"><IssueSignals card={i} /></td>
                     <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
-                      {own ? <LinkButton sm to={`${routes.dispatch(own.d.id)}?lane=${encodeURIComponent(own.l.key)}`}>In dispatch</LinkButton> : <IssueAction card={i} repo={repo} />}
+                      {own ? <LinkButton sm to={`${routes.dispatch(own.d.id)}?lane=${encodeURIComponent(own.l.key)}`}>In dispatch</LinkButton> : <IssueAction card={i} repo={repo} refineLock={lockRefine} />}
                     </td>
                   </tr>
                 );
