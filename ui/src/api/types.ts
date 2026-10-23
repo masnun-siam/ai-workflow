@@ -277,6 +277,9 @@ export interface Settings {
   claude_label?: string;
   /** Every /pr-grind loop: deep (until zero findings) or simple (stops once the PR is approved). */
   grind_mode?: 'deep' | 'simple';
+  /** Last-used model / effort for a run (null: Claude's default). */
+  run_model?: string | null;
+  run_effort?: string | null;
   [k: string]: unknown;
 }
 export interface NotifySettings {
@@ -410,6 +413,8 @@ export interface SessionStartBody {
   vault_folder?: string; // 05-Work/<Project>[/<Feature>]
   batch?: string; // groups a worklog range
   peer_review?: string[]; // lens names
+  model?: string | null; // opus | sonnet | haiku; absent: Claude's default
+  effort?: string | null; // low | medium | high | xhigh | max
   [k: string]: unknown;
 }
 /** POST /api/start: the board's one-click starts (refine, create-tasks, implement-issue, pr-grind, ...). */
@@ -419,6 +424,8 @@ export interface BoardStartBody {
   arg: string | number | (string | number)[];
   via?: StartVia;
   lenses?: string[];
+  model?: string | null;
+  effort?: string | null;
 }
 /** POST /api/start: a public session. */
 export type BoardStartResponse = Partial<Session> & { session?: string | null };

@@ -146,6 +146,14 @@ def _spawn(
     return rec
 
 
+def _run_flags(rec: dict) -> list:
+    """`--model` / `--effort` for the ones the session was started with (old records have neither)."""
+    return [
+        *(["--model", rec["run_model"]] if rec.get("run_model") else []),
+        *(["--effort", rec["run_effort"]] if rec.get("run_effort") else []),
+    ]
+
+
 def start(
     command_text,
     cwd,
@@ -159,8 +167,11 @@ def start(
     batch=None,
     agent=None,
     model=None,
+    run_model=None,
+    effort=None,
 ) -> dict:
     """agent/model: `--agent` / `--model` for the session (peer-review lens sessions).
+    run_model/effort: the user's pick; kept on the record so every spawn of the session adds the flags.
     batch: (id, max) runs at most `max` sessions of that batch at once; the rest wait as "queued"
     and start, oldest first, as earlier ones end (see release_batch)."""
     if not isinstance(command_text, str) or not command_text.strip():
@@ -174,6 +185,9 @@ def start(
     extra_args = [*extra_args, *(["--agent", agent] if agent else []), *(["--model", model] if model else [])]
     claude_cmd = claude_cmd or ui_settings.default_cmd()
     sid = ui_sessions.create(command_text, cwd, link, claude_cmd=claude_cmd)["id"]
+    if run_model or effort:
+        ui_sessions.update(sid, run_model=run_model, run_effort=effort)
+    run_flags = _run_flags({"run_model": run_model, "run_effort": effort})
     if batch:
         with _batch_lock:
             busy = _batch_live(batch[0]) >= batch[1]
@@ -200,7 +214,7 @@ def start(
     gate = ["--append-system-prompt", HEADLESS_PROMPT] if gate_questions else []
     return _spawn(
         sid,
-        [*exe, *CLAUDE_ARGS, *gate, *extra_args, command_text],
+        [*exe, *CLAUDE_ARGS, *gate, *extra_args, *run_flags, command_text],
         path,
         cwd_path=path,
         env_extra=env_extra,
@@ -245,7 +259,7 @@ def _start_claimed(rec: dict, batch=None) -> None:
         exe = _preflight(sid)
         _spawn(
             sid,
-            [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, rec["command"]],
+            [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, *_run_flags(rec), rec["command"]],
             rec["cwd_path"],
             cwd_path=rec["cwd_path"],
         )
@@ -292,7 +306,16 @@ def resume(sid: str, answer_text) -> dict:
     exe = _preflight(sid)
     return _spawn(
         sid,
-        [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, "--resume", rec["session_id"], answer_text],
+        [
+            *exe,
+            *CLAUDE_ARGS,
+            "--append-system-prompt",
+            HEADLESS_PROMPT,
+            *_run_flags(rec),
+            "--resume",
+            rec["session_id"],
+            answer_text,
+        ],
         path,
         answer=answer_text,
         ended_at=None,
@@ -739,7 +762,7 @@ def resume_stopped(sid: str, claude_cmd=None) -> dict:
             exe = _preflight(sid)
             return _spawn(
                 sid,
-                [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, rec["command"]],
+                [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, *_run_flags(rec), rec["command"]],
                 path,
                 cwd_path=path,
                 ended_at=None,
@@ -749,7 +772,16 @@ def resume_stopped(sid: str, claude_cmd=None) -> dict:
     exe = _preflight(sid)
     return _spawn(
         sid,
-        [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, "--resume", rec["session_id"], prompt],
+        [
+            *exe,
+            *CLAUDE_ARGS,
+            "--append-system-prompt",
+            HEADLESS_PROMPT,
+            *_run_flags(rec),
+            "--resume",
+            rec["session_id"],
+            prompt,
+        ],
         path,
         resuming=True,
         cwd_path=path,

@@ -323,7 +323,19 @@ def _vault_hint(folder) -> str:
     )
 
 
-_REQUEST_KEYS = ("repo", "no_repo", "vault_folder", "command", "args", "text", "issue", "claude_cmd", "batch")
+_REQUEST_KEYS = (
+    "repo",
+    "no_repo",
+    "vault_folder",
+    "command",
+    "args",
+    "text",
+    "issue",
+    "claude_cmd",
+    "batch",
+    "model",
+    "effort",
+)
 
 
 def _request(body: dict) -> dict:
@@ -411,6 +423,11 @@ def start_session(body: dict):
     batch = body.get("batch")
     if batch is not None and not (isinstance(batch, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", batch)):
         return 400, {"error": "batch must be a short id (letters, digits, - and _)"}
+    model, effort = body.get("model"), body.get("effort")
+    try:
+        ui_settings.check_run(model, effort)
+    except ValueError as exc:
+        return 400, {"error": str(exc)}
     peer_review = body.get("peer_review")
     if peer_review is not None and not (
         isinstance(peer_review, list) and peer_review and all(isinstance(x, str) for x in peer_review)
@@ -459,6 +476,8 @@ def start_session(body: dict):
                 link,
                 claude_cmd=claude_cmd,
                 gate_questions=True,
+                **({"run_model": model} if model else {}),
+                **({"effort": effort} if effort else {}),
                 **({"batch": (batch, BATCH_MAX)} if batch else {}),
             )
             if artifact:

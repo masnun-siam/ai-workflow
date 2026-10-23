@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- A session started from the UI can carry a `model` (`opus`, `sonnet`, `haiku`) and an `effort` (`low` to `max`): optional fields on `POST /api/sessions` and `POST /api/start`, applied on every spawn and replayed by Rerun. `GET|PUT /api/settings` stores the last-used pair as `run_model` / `run_effort` (API only; the dropdowns come next).
+
 ### Changed
 
 - `/implement-issue` reviews the local branch with `/pr-review` before the first push, then merges the base branch, pushes and opens the draft PR (steps 12 to 14); `/pr-review`, `/skill-feedback`, the guides and `/verifier-locally` follow (synced from Wasensi 637579d4).

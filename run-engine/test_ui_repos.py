@@ -707,6 +707,28 @@ try:
     assert s == 201 and ui_sessions.load(p3["id"])["no_repo"] is True and "05-Work/P/F" in calls[-1][0], (s, p3)
     ok("session records keep the start request; rerun replays it (lenses, no-repo vault folder)")
 
+    # --- model / effort: validated (400), passed to the runner, replayed by rerun
+    seen = {}
+    real_fake = fake_start
+
+    def spy_start(command_text, cwd, link=None, **kw):
+        seen.clear()
+        seen.update({k: kw[k] for k in ("run_model", "effort") if k in kw})
+        return real_fake(command_text, cwd, link, **{k: v for k, v in kw.items() if k not in ("run_model", "effort")})
+
+    fake_start = spy_start  # noqa: F811 - post()/rerun() look it up at call time
+    s, p = post({"repo": "o/r", "text": "hi", "model": "opus", "effort": "xhigh"})
+    assert s == 201 and seen == {"run_model": "opus", "effort": "xhigh"}, (s, seen)
+    s, p2 = rerun(p["id"])
+    assert s == 201 and seen == {"run_model": "opus", "effort": "xhigh"}, "rerun replays them"
+    s, p = post({"repo": "o/r", "text": "hi", "model": None})
+    assert s == 201 and seen == {}, seen
+    for bad in ({"model": "default"}, {"model": "gpt"}, {"effort": "huge"}, {"model": 5}, {"effort": ["low"]}):
+        s, p = post({"repo": "o/r", "text": "hi", **bad})
+        assert s == 400 and err(p), (bad, s, p)
+    fake_start = real_fake  # noqa: F811
+    ok("model/effort: validated, passed to the runner, replayed by rerun")
+
     # a live duplicate refuses the rerun: 409 with the running session, nothing started
     reset_sessions()
     s, p = post({"repo": "o/r", "command": "implement-issue", "args": "7"})
