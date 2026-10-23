@@ -1,14 +1,14 @@
 // The dispatch settings as form fields: the New dispatch dialog and the live editor on a dispatch share them.
 import { useEffect, useState } from 'react';
-import type { DispatchSettings, Effort, GrindMode } from '../api/types';
-import { Button, Switch } from '../components';
+import { useSaveSettings } from '../api/hooks';
+import type { DispatchSettings, GrindMode } from '../api/types';
+import { Button, ModelEffortPicker, Switch } from '../components';
 
 const GRIND: { v: GrindMode; label: string; hint: string }[] = [
   { v: 'off', label: 'Off', hint: 'No grind: a ready PR goes straight to the merge gate.' },
   { v: 'simple', label: 'Simple', hint: 'Grind until the reviewer bot approves.' },
   { v: 'full', label: 'Full', hint: 'Grind until zero blocker and should-fix findings.' },
 ];
-const EFFORTS: Effort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 
 export function GrindSeg({ value, onChange }: { value: GrindMode; onChange: (v: GrindMode) => void }) {
   return (
@@ -54,6 +54,12 @@ function LazyText({ id, value, onCommit, placeholder }: { id: string; value: str
  * already target it) and edits apply at each lane's next step.
  */
 export function SettingsFields({ value, onChange, live }: { value: DispatchSettings; onChange: (p: Partial<DispatchSettings>) => void; live?: boolean }) {
+  const saveDefaults = useSaveSettings();
+  // The saved defaults follow the latest pick, so every picker starts from it.
+  const pickRun = (p: { model?: string | null; effort?: string | null }) => {
+    onChange(p as Partial<DispatchSettings>);
+    saveDefaults.mutate({ ...(p.model !== undefined ? { run_model: p.model } : {}), ...(p.effort !== undefined ? { run_effort: p.effort } : {}) });
+  };
   const grindHint = GRIND.find((g) => g.v === value.grind)?.hint;
   return (
     <div className="dsp-settings">
@@ -84,12 +90,8 @@ export function SettingsFields({ value, onChange, live }: { value: DispatchSetti
         {!live ? <span className="faint dsp-hint">Cut from the default branch if missing; every PR targets it.</span> : null}
       </div>
       <div className="dsp-field">
-        <label className="dsp-k" htmlFor="ds-model">Model</label>
-        <LazyText id="ds-model" value={value.model ?? ''} placeholder="Claude’s default" onCommit={(v) => onChange({ model: v.trim() || null })} />
-        <select className="f" aria-label="Effort" style={{ maxWidth: 130 }} value={value.effort ?? ''} onChange={(e) => onChange({ effort: (e.target.value || null) as Effort | null })}>
-          <option value="">Default effort</option>
-          {EFFORTS.map((e) => <option key={e} value={e}>{e}</option>)}
-        </select>
+        <span className="dsp-k">Model</span>
+        <ModelEffortPicker model={value.model} effort={value.effort} onChange={pickRun} />
       </div>
     </div>
   );
