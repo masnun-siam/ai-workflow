@@ -11,6 +11,7 @@ repos:
       - id: check-json
       - id: check-merge-conflict
       - id: check-added-large-files
+        exclude: ^site/public/media/ # the showcase's compressed clips (each under 2 MB) are committed on purpose
       - id: check-symlinks
       - id: trailing-whitespace
       - id: end-of-file-fixer
