@@ -173,7 +173,7 @@ assert {e for e, r in json.load(open(ui_path))["channels"].items() if r["ntfy"] 
 os.remove(ui_path)
 os.environ["AIW_NTFY_SERVER"], os.environ["AIW_NTFY_TOPIC"] = "https://ntfy.sh", "envtopic"
 pub = ui_config.notify_public()
-assert pub["ntfy_ready"] and "envtopic" not in json.dumps(pub["matrix"])
+assert pub["ntfy_ready"] and "envtopic" not in json.dumps(pub), "an env topic is never echoed"
 for k in ("SERVER", "TOPIC"):
     os.environ.pop(f"AIW_NTFY_{k}")
 print("ok  matrix: defaults, overrides, junk ignored, one-cell save, shared lock, ntfy_ready, mac")
