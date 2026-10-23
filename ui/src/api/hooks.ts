@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient, type QueryKey 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from './client';
 import { api } from './endpoints';
-import type { DispatchSettings, EndAction, InboxItem, LaneAction, StreamEvent } from './types';
+import type { DispatchSettings, EndAction, InboxItem, LaneAction, NotifyChannel, StreamEvent } from './types';
 import { mergeStream } from '../lib/md';
 
 export const POLL = { sessions: 3000, inbox: 5000, boards: 15000, stream: 1000, dispatch: 5000 } as const;
@@ -204,6 +204,7 @@ export const useScanRepos = () => useApiMutation((roots?: string[]) => api.scanR
 export const useCreateRepo = () => useApiMutation((v: { parent: string; name: string; prd_folder?: string }) => api.createRepo(v.parent, v.name, v.prd_folder), [keys.repos, ['sessions']]);
 export const usePublishRepo = () => useApiMutation((v: { slug: string; owner: string; name: string; priv: boolean }) => api.publishRepo(v.slug, v.owner, v.name, v.priv), [keys.repos, ['inbox']]);
 export const useSaveSettings = () => useApiMutation(api.saveSettings, [keys.settings, keys.repos]);
+export const useSaveNotifyChannel = () => useApiMutation((v: { event: string; channel: NotifyChannel; on: boolean }) => api.notifyChannel(v.event, v.channel, v.on), [keys.notify]);
 export const useSaveNotify = () => useApiMutation(api.saveNotify, [keys.notify]);
 export const useSaveReview = () => useApiMutation(api.saveReview, [keys.review, keys.offers]);
 
