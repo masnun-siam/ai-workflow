@@ -12,6 +12,7 @@ import { useRepo } from '../shell/useRepo';
 import { usePanel } from './PanelContext';
 import { useFollowups } from './useFollowups';
 import './panels.css';
+import { PLAN_RUN } from '../lib/vocab';
 
 export const who = (a: unknown): string => (typeof a === 'string' ? a : a && typeof a === 'object' && 'login' in a ? String((a as { login: unknown }).login) : 'ghost');
 
@@ -54,7 +55,7 @@ export function IssueTab({ repo, n, card }: { repo: string; n: number; card?: De
       <div className="row wrap">
         {open ? (
           <>
-            {!d.is_pr ? <Button sm disabled={starter.pending} onClick={() => starter.startBoard({ repo, skill: 'refine-issues', arg: String(n), via: 'headless' })}>{d.labels.some((l) => l.name === 'refined') ? 'Refine again' : 'Refine'}</Button> : null}
+            {!d.is_pr ? <Button sm disabled={starter.pending} onClick={() => starter.startBoard({ repo, skill: 'refine-issues', arg: String(n), via: 'headless', ...PLAN_RUN })}>{d.labels.some((l) => l.name === 'refined') ? 'Refine again' : 'Refine'}</Button> : null}
             {!d.is_pr ? <Button sm disabled={setState.isPending} onClick={() => setState.mutate({ repo, n, state: 'closed', reason: 'completed' }, { onSuccess: () => void followups.offer(n, `issue #${n} is closed`) })}>Close as completed</Button> : null}
             {!d.is_pr ? <Button sm disabled={setState.isPending} onClick={() => setState.mutate({ repo, n, state: 'closed', reason: 'not_planned' })}>Close as not planned</Button> : null}
           </>
