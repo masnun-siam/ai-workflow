@@ -227,6 +227,7 @@ export const useCreateRepo = () => useApiMutation((v: { parent: string; name: st
 export const usePublishRepo = () => useApiMutation((v: { slug: string; owner: string; name: string; priv: boolean }) => api.publishRepo(v.slug, v.owner, v.name, v.priv), [keys.repos, ['inbox']]);
 export const useSaveSettings = () => useApiMutation(api.saveSettings, [keys.settings, keys.repos]);
 export const useSaveNotifyChannel = () => useApiMutation((v: { event: string; channel: NotifyChannel; on: boolean }) => api.notifyChannel(v.event, v.channel, v.on), [keys.notify]);
+export const useNotifyTest = () => useApiMutation(api.notifyTest, []);
 export const useSaveNotify = () => useApiMutation(api.saveNotify, [keys.notify]);
 export const useSaveReview = () => useApiMutation(api.saveReview, [keys.review, keys.offers]);
 
