@@ -2,7 +2,7 @@
 import { enc, get, post, put, qs, splitRepo } from './client';
 import type {
   AnswerBody, AfkState, Dispatch, DispatchPlan, DispatchSettings, DispatchState, EndAction, LaneAction, BoardStartBody, BoardStartResponse, CleanupItem, DeliveryResponse, InboxResponse,
-  IssueDetail, NotifyChannel, NotifySettings, OpenItem, PeerReviewOffers, PlanningResponse, PrDetail, PrdFile, ReposResponse,
+  IssueDetail, NotificationFeed, NotifyChannel, NotifySettings, OpenItem, PeerReviewOffers, PlanningResponse, PrDetail, PrdFile, ReposResponse,
   ReviewSettings, Session, SessionStartBody, SessionsResponse, Settings, StreamResponse, VaultFolders, VaultPrd,
 } from './types';
 
@@ -12,6 +12,7 @@ export const api = {
   session: (id: string) => get<Session>(`/api/sessions/${enc(id)}`),
   stream: (id: string, offset: number) => get<StreamResponse>(`/api/sessions/${enc(id)}/stream${qs({ offset })}`),
   inbox: (repo?: string) => get<InboxResponse>(`/api/inbox${qs({ repo })}`),
+  notifications: (after: number | null) => get<NotificationFeed>(`/api/notifications${qs({ after })}`),
   planning: (repo: string, refresh = false) => get<PlanningResponse>(`/api/planning${qs({ repo, refresh: refresh ? 1 : undefined })}`),
   delivery: (repo: string, refresh = false) => get<DeliveryResponse>(`/api/delivery${qs({ repo, refresh: refresh ? 1 : undefined })}`),
   repos: () => get<ReposResponse>('/api/repos'),
