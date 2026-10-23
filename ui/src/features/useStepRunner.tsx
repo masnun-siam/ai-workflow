@@ -9,10 +9,8 @@ import { routes } from '../lib/routes';
 import { usePanel } from '../panels/PanelContext';
 import { useRepo } from '../shell/useRepo';
 import { PLAN_RUN } from '../lib/vocab';
+import { approveArgs } from '../inbox/items';
 
-// The exact texts the old Planning board sent.
-export const approveArgs = (path: string) =>
-  `${path} approve: the team has reviewed this PRD. Fold in the review's changes, set the status to Approved and file the epic.`;
 export const taskArg = (epic: number, path: string, text: string) =>
   `A finding for epic #${epic} (PRD ${path}): ${text.trim().replace(/\s+/g, ' ')}`;
 
@@ -38,7 +36,7 @@ export function useStepRunner(f: Feature, repo: string) {
         const ok = await confirm({
           title: 'Approve this PRD?',
           okLabel: 'Approve PRD',
-          body: <p>Runs <code>/create-prd</code> to fold in the review, set the PRD to Approved and file its epic. Claude may ask you questions.</p>,
+          body: <p>Runs <code>/create-prd</code> to fold in the review, set the PRD to Approved and file its epic. It then commits the PRD and opens a PR (merged right away on repos you own). Claude may ask you questions.</p>,
         });
         if (ok) await starter.startSession({ repo, command: 'create-prd', args: approveArgs(f.prd.path), ...PLAN_RUN });
         return;
