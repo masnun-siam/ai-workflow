@@ -107,6 +107,10 @@ code,.mono{font-family:var(--mono);font-size:12.5px}
 .split .btn:not(.primary):last-child{border-left-color:var(--line-strong)}
 input.f,select.f,textarea.f{width:100%;border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 10px;min-height:34px}
 textarea.f{resize:vertical;line-height:1.5}
+select.f{appearance:none;-webkit-appearance:none;cursor:pointer;padding-right:30px;text-overflow:ellipsis;
+  background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+  background-position:calc(100% - 15px) 52%,calc(100% - 10px) 52%;background-size:5px 5px;background-repeat:no-repeat}
+select.f:hover,input.f:hover,textarea.f:hover{border-color:var(--faint)}
 input.f:focus,select.f:focus,textarea.f:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
 label.lbl{display:flex;flex-direction:column;gap:6px;font-weight:600;font-size:13px}
 label.lbl .hint{font-weight:400;color:var(--muted)}
@@ -207,7 +211,9 @@ label.lbl .hint{font-weight:400;color:var(--muted)}
 .tab .n{color:var(--faint);margin-left:4px;font-weight:500}
 
 /* tables */
-.tbl-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.clamp2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;max-width:52ch}
+/* Edge shadows appear only while there is more table to scroll to (the local layers cover them at each end). */
+.tbl-wrap{overflow-x:auto;background:linear-gradient(to right,var(--surface) 30%,transparent) 0 0/40px 100% no-repeat local,linear-gradient(to left,var(--surface) 30%,transparent) 100% 0/40px 100% no-repeat local,linear-gradient(to right,rgba(0,0,0,.14),transparent) 0 0/14px 100% no-repeat scroll,linear-gradient(to left,rgba(0,0,0,.14),transparent) 100% 0/14px 100% no-repeat scroll,var(--surface);border:1px solid var(--line);border-radius:12px}
 table.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
 .tbl th{text-align:left;font-weight:600;color:var(--muted);font-size:12.5px;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surface)}
 .tbl td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
@@ -420,3 +426,16 @@ html,body{overflow-x:hidden}
 .prose,.p-html{overflow-wrap:anywhere}
 /* long unbroken strings (paths, errors) wrap instead of being clipped */
 .item-title,.item-meta,.item-body,.banner,.err-text,.empty,.ev,.toast,.fmeta,.ftitle,.page-head .sub{overflow-wrap:anywhere}
+.prose pre{margin:0 0 10px;padding:10px 12px;background:var(--sunk);border-radius:6px;font:12px/1.5 var(--mono);overflow-x:auto}
+.prose pre.mermaid{background:none;padding:0;overflow-x:auto;cursor:zoom-in}
+.prose pre.mermaid.full{cursor:zoom-out}
+.pop-c{z-index:60;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
+.repo-pop{width:min(340px,calc(100vw - 16px))}
+.repo-pop [cmdk-input]{border:0;border-bottom:1px solid var(--line);padding:11px 14px;background:none;width:100%}
+.repo-pop [cmdk-input]:focus{outline:none}
+.repo-pop [cmdk-list]{overflow:auto;padding:4px;max-height:min(380px,calc(var(--radix-popover-content-available-height) - 100px))}
+.repo-pop [cmdk-group-heading]{font-size:11.5px;font-weight:700;color:var(--faint);padding:8px 10px 3px}
+.repo-pop [cmdk-item]{display:flex;gap:10px;align-items:center;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:13.5px}
+.repo-pop [cmdk-item][data-selected=true]{background:var(--sunk)}
+.repo-pop [cmdk-empty]{padding:14px;color:var(--muted)}
+@media (min-width:900px){.sess-grid>.box:last-child{position:sticky;top:0}}

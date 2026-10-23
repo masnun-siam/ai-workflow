@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ApiError } from '../api/client';
 import { api } from '../api/endpoints';
 import { keys, usePrd, useSavePrd } from '../api/hooks';
@@ -10,6 +10,26 @@ import { mdToHtml } from '../lib/md';
 
 export const CHANGED_MSG = 'This file changed on disk since you opened it, so nothing was saved. Reload it, then redo your edit.';
 export const askArgs = (path: string, text: string) => `${path} --update ${text.trim()}`;
+
+// mermaid is ~1MB, so it is only fetched when a PRD actually has a diagram.
+async function renderDiagrams(root: HTMLElement | null) {
+  const nodes = root ? Array.from(root.querySelectorAll<HTMLElement>('pre.mermaid')) : [];
+  if (!nodes.length) return;
+  const { default: mermaid } = await import('mermaid');
+  const dark = getComputedStyle(document.documentElement).colorScheme === 'dark';
+  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: dark ? 'dark' : 'default' });
+  await mermaid.run({ nodes, suppressErrors: true });
+}
+
+// A wide diagram fits the column with tiny labels; a click toggles it to natural size, scrolled sideways.
+function toggleDiagram(e: React.MouseEvent) {
+  const svg = (e.target as Element).closest('pre.mermaid')?.querySelector('svg');
+  if (!svg) return;
+  const full = !svg.style.width;
+  svg.style.width = full ? `${svg.viewBox.baseVal.width}px` : '';
+  svg.style.maxWidth = full ? 'none' : `${svg.viewBox.baseVal.width}px`;
+  svg.parentElement!.classList.toggle('full', full);
+}
 
 export function PrdTab({ f, repo }: { f: Feature; repo: string }) {
   const path = f.prd.path;
@@ -24,6 +44,8 @@ export function PrdTab({ f, repo }: { f: Feature; repo: string }) {
   const [note, setNote] = useState('');
   const [ask, setAsk] = useState('');
   const data = q.data;
+  const prose = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (mode === 'read') void renderDiagrams(prose.current); }, [mode, data?.text]);
   const branch = typeof data?.branch === 'string' ? data.branch : 'the current branch';
   const dirty = mode === 'edit' && !!data && draft !== data.text;
 
@@ -70,7 +92,7 @@ export function PrdTab({ f, repo }: { f: Feature; repo: string }) {
         </div>
         {note ? <p role="status" className="muted">{note}</p> : null}
         {mode === 'read' ? (
-          <div className="prose box" style={{ padding: '18px 22px' }} dangerouslySetInnerHTML={{ __html: mdToHtml(data.text) }} />
+          <div ref={prose} onClick={toggleDiagram} className="prose box" style={{ padding: '18px 22px' }} dangerouslySetInnerHTML={{ __html: mdToHtml(data.text) }} />
         ) : (
           <div className="stack">
             <label className="sr" htmlFor="prd-text">PRD markdown</label>

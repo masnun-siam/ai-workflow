@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, Link, useLocation } from 'react-router-dom';
 import { needsYouCount, useAfkStart, useAfkStop, useDispatches, useInbox, useSessions, useSettings } from '../api/hooks';
 import type { Session } from '../api/types';
-import { Button, Icon, Menu, type IconName, type MenuEntry } from '../components';
-import { clockText, sessionLabel, skillOf, shortRepo } from '../lib/format';
+import { Button, Icon, type IconName } from '../components';
+import { clockText, sessionLabel, skillOf } from '../lib/format';
 import { applyTheme, getTheme, type Theme } from '../lib/theme';
 import { RUNNING_NOW, SESS } from '../lib/vocab';
 import { routes } from '../lib/routes';
 import { useShell } from './ShellContext';
+import { RepoSwitcher } from './RepoSwitcher';
 import { useRepo } from './useRepo';
 
 export const NAV: { to: string; label: string; icon: IconName; badge?: 'inbox' | 'running' | 'dispatch' }[] = [
@@ -20,33 +21,6 @@ export const NAV: { to: string; label: string; icon: IconName; badge?: 'inbox' |
 /** The number on the Inbox nav item: everything except Waiting (FR-7). */
 export function useInboxCount() {
   return needsYouCount(useInbox().data?.items);
-}
-
-function RepoSwitcher() {
-  const { repo, repos, current, setRepo } = useRepo();
-  const navigate = useNavigate();
-  const items: MenuEntry[] = [
-    ...repos.map((r) => ({ label: r.name === r.slug ? r.slug : `${r.name} · ${r.slug}`, icon: 'folder' as const, checked: r.slug === repo, onSelect: () => setRepo(r.slug) })),
-    ...(repos.length ? ['sep' as const] : []),
-    { label: 'Add a repository', icon: 'plus' as const, onSelect: () => navigate(routes.settings('repositories')) },
-  ];
-  const name = current?.name ?? (repo ? shortRepo(repo) : 'No repo');
-  return (
-    <Menu
-      align="start"
-      items={items}
-      trigger={
-        <button type="button" className="repo-btn" aria-label={`Repository: ${name}. Switch repository`}>
-          <span className="repo-mark" aria-hidden="true">{name[0]?.toUpperCase() ?? '?'}</span>
-          <span className="grow">
-            <b className="ellipsis" style={{ display: 'block' }}>{name}</b>
-            <span className="faint mono ellipsis" style={{ fontSize: 11.5, display: 'block' }}>{repo}</span>
-          </span>
-          <Icon n="down" s={14} />
-        </button>
-      }
-    />
-  );
 }
 
 function sessionTitle(s: Session) {

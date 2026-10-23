@@ -132,5 +132,10 @@ describe('md', () => {
   it('lists, headings, fences', () => {
     expect(mdToHtml('# T\n- a\n- b')).toBe('<h1>T</h1>\n<ul>\n<li>a</li>\n<li>b</li>\n</ul>');
     expect(mdToHtml('```\n<x>\n```')).toBe('<pre><code>&lt;x&gt;</code></pre>');
+    expect(mdToHtml('```mermaid\na->>b\n```')).toBe('<pre class="mermaid">a-&gt;&gt;b</pre>');
+  });
+  it('markdown links: http(s) linked, relative paths left as text', () => {
+    expect(mdToHtml('[Docs](https://a.b/c) and [Logs](../x.md)')).toBe('<p><a href="https://a.b/c" target="_blank" rel="noopener noreferrer">Docs</a> and Logs</p>');
+    expect(mdToHtml('[x](javascript:alert(1))')).toBe('<p>x)</p>');
   });
 });

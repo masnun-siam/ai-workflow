@@ -5,7 +5,7 @@ import type { Session } from '../api/types';
 import { Banner, Button, EmptyState, Icon, SessionChip } from '../components';
 import { CleanupDialog } from '../activity/CleanupDialog';
 import { forText, issueOf, SessionTable } from '../activity/SessionTable';
-import { clockText, duration, money, sessionLabel, sessionSlug, shortRepo, untilText } from '../lib/format';
+import { clockText, duration, money, repoLabel, sessionLabel, sessionSlug, untilText } from '../lib/format';
 import { routes } from '../lib/routes';
 import { isLive } from '../lib/vocab';
 
@@ -81,7 +81,7 @@ export function ActivityPage() {
           </select>
           <select className="f" style={{ width: 160 }} aria-label="Repo" value={repo} onChange={(e) => { setRepo(e.target.value); setShown(PAGE); }}>
             <option value="">All repos</option>
-            {repos.map((r) => <option key={r.slug} value={r.slug}>{shortRepo(r.slug)}</option>)}
+            {repos.map((r) => <option key={r.slug} value={r.slug}>{repoLabel(r.slug, repos.map((x) => x.slug))}</option>)}
           </select>
           <label className="row" style={{ gap: 6 }}><input type="checkbox" checked={group} onChange={(e) => setGroup(e.target.checked)} />Group by issue</label>
         </div>

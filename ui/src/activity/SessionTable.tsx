@@ -52,9 +52,9 @@ export function SessionTable({ rows, groupByIssue }: { rows: Session[]; groupByI
               {g ? <tr className="sub"><td colSpan={6}>{g}</td></tr> : null}
               {list.map((s) => (
                 <tr key={s.id} className="click" onClick={() => nav(routes.session(s.id))}>
-                  <td className="mono"><a href={`#${routes.session(s.id)}`} onClick={(e) => e.stopPropagation()} style={{ textDecoration: 'none' }}>{sessionLabel(s.command)}</a></td>
-                  <td className="hide-sm muted">{forText(s)}</td>
-                  <td className="muted">{formatWhen(s.started_at)}</td>
+                  <td className="mono"><a href={`#${routes.session(s.id)}`} onClick={(e) => e.stopPropagation()} className="clamp2" title={sessionLabel(s.command)} style={{ textDecoration: 'none' }}>{sessionLabel(s.command)}</a></td>
+                  <td className="hide-sm muted" style={{ whiteSpace: 'nowrap' }}>{forText(s)}</td>
+                  <td className="muted" style={{ whiteSpace: 'nowrap' }}>{formatWhen(s.started_at)}</td>
                   <td><SessionChip s={s.outcome} /></td>
                   <td className="num hide-sm">{money(s.cost)}</td>
                   <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}><SessionActions s={s} /></td>

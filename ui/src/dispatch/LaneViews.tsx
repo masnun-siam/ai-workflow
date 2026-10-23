@@ -118,9 +118,9 @@ export function LaneTable({ lanes, picked, onPick }: { lanes: Lane[]; picked: st
                 </td>
                 <td><Chip tone={STAGE[l.stage].tone}>{STAGE[l.stage].label}</Chip></td>
                 <td><Progress l={l} /></td>
-                <td><span className={`dsp-c t-${now.tone}`}>{now.text}</span></td>
+                <td style={{ minWidth: 180 }}><span className={`dsp-c t-${now.tone}`}>{now.text}</span></td>
                 <td>{l.pr ? `#${l.pr}` : <span className="faint">—</span>}</td>
-                <td className="mono">{l.usage.seconds ? secs(l.usage.seconds) : '—'}</td>
+                <td className="mono" style={{ whiteSpace: 'nowrap' }}>{l.usage.seconds ? secs(l.usage.seconds) : '—'}</td>
               </tr>
             );
           })}

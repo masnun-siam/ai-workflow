@@ -5,7 +5,7 @@ import { useAfkDismiss, useInbox, useRepos, useSessions, needsYouCount } from '.
 import type { AfkState } from '../api/types';
 import { Banner, Button, Chip, EmptyState } from '../components';
 import { ItemRow, useInboxActions } from '../inbox/items';
-import { clockText, shortRepo } from '../lib/format';
+import { clockText, repoLabel, shortRepo } from '../lib/format';
 import { routes } from '../lib/routes';
 import { INBOX_GROUPS } from '../lib/vocab';
 import { PublishDialog } from '../repos/PublishDialog';
@@ -66,7 +66,7 @@ export function InboxPage() {
         {afk?.active ? <Chip tone="away">Away mode: answers held for review below</Chip> : null}
         <select className="f" style={{ width: 180 }} aria-label="Repo filter" value={filter} onChange={(e) => setFilter(e.target.value)}>
           <option value="">All repos</option>
-          {repos.map((r) => (<option key={r.slug} value={r.slug}>{shortRepo(r.slug)}</option>))}
+          {repos.map((r) => (<option key={r.slug} value={r.slug}>{repoLabel(r.slug, repos.map((x) => x.slug))}</option>))}
         </select>
       </div>
       {afk?.summary ? <AwaySummary s={afk.summary} /> : null}
