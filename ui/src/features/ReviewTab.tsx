@@ -41,7 +41,7 @@ export function ReviewTab({ f, repo }: { f: Feature; repo: string }) {
         </div>
         <div>
           <Button variant="primary" disabled={!picked.length || !draft || start.isPending} onClick={() => start.mutate({ repo, artifact: f.prd.abs_path, lenses: picked }, { onSuccess: () => toast('Peer review started') })}>
-            Start review with {picked.length} lenses
+            Start review with {picked.length} {picked.length === 1 ? "lens" : "lenses"}
           </Button>
         </div>
         {!draft ? <p className="faint" style={{ fontSize: 13 }}>Peer review runs on draft PRDs. This one is {STAGES[stageIdx(f.stage)].label.toLowerCase()}.</p> : null}

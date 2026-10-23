@@ -20,6 +20,8 @@ export function formatWhen(iso: string | number | null | undefined, now = new Da
 
 /** Last path segment of a repo path or owner/repo slug. */
 export const shortRepo = (repo: string | null | undefined) => String(repo || '').replace(/\/+$/, '').split('/').pop() || '—';
+/** shortRepo, or the full owner/repo when another slug in `all` has the same short name. */
+export const repoLabel = (slug: string, all: string[]) => (all.filter((s) => shortRepo(s) === shortRepo(slug)).length > 1 ? slug : shortRepo(slug));
 
 /** "in 1h 12m", "in 5m", "now" for an epoch-seconds reset time. */
 export function untilText(epochSec: number, nowMs = Date.now()): string {

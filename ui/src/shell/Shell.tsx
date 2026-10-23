@@ -10,6 +10,7 @@ import { AwayBanner, OfflineBanner } from './Banners';
 import { NAV, Rail, useInboxCount } from './Rail';
 import { ShellCtx } from './ShellContext';
 import { ShortcutsDialog, useGlobalShortcuts } from './shortcuts';
+import { RepoSwitcher } from './RepoSwitcher';
 import { useRepo } from './useRepo';
 import { useAwayDocument } from './useAwayDocument';
 
@@ -20,14 +21,10 @@ const TITLES: [string, string][] = [
 function Topbar({ openPalette }: { openPalette: () => void }) {
   const start = useStart();
   const { pathname } = useLocation();
-  const { current, repo } = useRepo();
   const title = TITLES.find(([p]) => pathname.startsWith(p))?.[1] ?? 'aiw';
-  const name = current?.name ?? repo;
   return (
     <div className="topbar">
-      <button type="button" className="repo-mark mob-only" style={{ width: 26, height: 26, fontSize: 12, border: 0, cursor: 'pointer' }} aria-label={`Repository ${name || 'none'}. Open search to switch`} onClick={openPalette}>
-        {name?.[0]?.toUpperCase() ?? '?'}
-      </button>
+      <span className="mob-only"><RepoSwitcher compact /></span>
       <h2 className="mob-only" style={{ fontSize: 16 }}>{title}</h2>
       <button type="button" className="btn grow" style={{ justifyContent: 'flex-start', color: 'var(--muted)', fontWeight: 500, maxWidth: 520 }} onClick={openPalette} aria-label="Search or jump to" aria-keyshortcuts="Meta+K Control+K">
         <Icon n="search" />
@@ -77,6 +74,9 @@ export function Shell() {
     document.title = inbox ? `(${inbox}) aiw` : 'aiw';
   }, [inbox]);
   useAwayDocument();
+  // The page scrolls inside .content, which the router keeps mounted: start each new page at the top.
+  const { pathname } = useLocation();
+  useEffect(() => { const c = document.getElementById('main-content'); if (c) c.scrollTop = 0; }, [pathname]);
   return (
     <ShellCtx.Provider value={ctx}>
       <GlobalKeys />

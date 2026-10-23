@@ -16,13 +16,18 @@ const URL_RE = /https?:\/\/(?:(?!&(?:quot|#39|gt|lt);)[^\s<])+/g;
 function inline(s: string): string {
   // Code spans are lifted out first so bold can wrap them and nothing inside them is touched.
   const codes: string[] = [];
+  const links: [string, string][] = [];
   const lifted = s.replace(/`([^`]+)`/g, (_, c: string) => `\u0000${codes.push(c) - 1}\u0000`);
+  // [text](url) is lifted too, so URL_RE never re-links it; non-http(s) targets (repo-relative paths) keep just the text.
   return lifted
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, t: string, u: string) =>
+      /^https?:\/\//.test(u) ? `\u0001${links.push([u, t]) - 1}\u0001` : t)
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(URL_RE, (u) => {
       const href = u.replace(/[.,;:!?)\]}]+$/, '');
       return `<a href="${href}" target="_blank" rel="noopener noreferrer">${href}</a>${u.slice(href.length)}`;
     })
+    .replace(/\u0001(\d+)\u0001/g, (_, i: string) => `<a href="${links[Number(i)][0]}" target="_blank" rel="noopener noreferrer">${links[Number(i)][1]}</a>`)
     .replace(/\u0000(\d+)\u0000/g, (_, i: string) => `<code>${codes[Number(i)]}</code>`);
 }
 
@@ -35,6 +40,7 @@ export function mdToHtml(md: unknown): string {
   let base = 0; // indent of the outermost list
   const nest: { kind: 'ul' | 'ol'; indent: number }[] = [];
   let fence: string[] | null = null;
+  let lang = '';
   const flush = () => {
     if (para.length) out.push(`<p>${inline(para.join(' '))}</p>`);
     para = [];
@@ -45,14 +51,15 @@ export function mdToHtml(md: unknown): string {
   for (const line of esc(String(md)).split('\n')) {
     if (fence) {
       if (/^\s*```/.test(line)) {
-        out.push(`<pre><code>${fence.join('\n')}</code></pre>`);
+        out.push(lang === 'mermaid' ? `<pre class="mermaid">${fence.join('\n')}</pre>` : `<pre><code>${fence.join('\n')}</code></pre>`);
         fence = null;
       } else fence.push(line);
       continue;
     }
     let m: RegExpExecArray | null;
-    if (/^\s*```/.test(line)) {
+    if ((m = /^\s*```\s*(\w*)/.exec(line))) {
       flush();
+      lang = m[1];
       fence = [];
     } else if ((m = /^(#{1,6})\s+(.*)$/.exec(line))) {
       flush();
