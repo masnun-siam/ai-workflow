@@ -272,6 +272,7 @@ assert st == 200 and body["settings"]["ci"] == "ignore"
 st, body = call(f"/api/dispatches/{d2['id']}/settings", {"ci": "nope"})
 assert st == 400 and body["error"] == "ci must be one of ('wait', 'defer', 'ignore')"
 seen = []
+real_start = ui_dispatch.dispatch_cli.start
 ui_dispatch.dispatch_cli.start = lambda epic, runner, s, ws=None: seen.append(s) or d2  # no gh in a self-check
 ui_dispatch.start({"epic": "o/r#1", "settings": {"ci": "defer"}})
 assert seen[0]["ci"] == "defer"
@@ -291,6 +292,62 @@ dr.save(d2)
 st, body = call("/api/inbox")
 row = next(i for i in body["items"] if i["type"] == "dispatch_lane")
 assert st == 200 and row["group"] == "fix" and row["reason"] == "CI is red"
+# issue-list dispatches: plan, start, 400s and the 409 ownership check
+ui_dispatch.dispatch_cli.start = real_start
+
+
+def fake_resolve(refs, gh=None):
+    repo, nums = ui_dispatch.dispatch_cli.parse_issues(refs)
+    kids = [
+        {"repo": repo, "n": n, "title": f"t{n}", "refined": True, "deps": [f"{repo}#412"] if n == 415 else []}
+        for n in nums
+    ]
+    keys = [f"{repo}#{n}" for n in nums]
+    return {"epic": None, "issues": keys, "title": dr.issues_title(keys), "children": kids, "outside": {}, "closed": []}
+
+
+ui_dispatch.dispatch_cli.resolve_issues = fake_resolve
+st, body = call("/api/dispatches/plan", {"issues": ["o/r#415", "o/r#412"]})
+assert st == 200 and body["epic"] is None and body["issues"] == ["o/r#415", "o/r#412"] and body["title"]
+assert body["waves"] == [["o/r#412"], ["o/r#415"]], body["waves"]
+st, body = call("/api/dispatches", {"issues": ["o/r#105", "o/r#105"]})
+assert st == 201 and body["epic"] is None and body["issues"] == ["o/r#105"], body
+owner = body["id"]
+for bad in (
+    {"epic": "o/r#1", "issues": ["o/r#106"]},
+    {},
+    {"issues": ["nope"]},
+    {"issues": ["a/b#1", "c/d#2"]},
+    {"issues": []},
+    {"issues": [f"o/r#{i}" for i in range(1, 32)]},
+    {"issues": "o/r#106"},
+    {"issues": [6]},
+    {"issues": ["o/r#106"], "settings": {"feature_branch": "feat"}},
+):
+    for path in ("/api/dispatches/plan", "/api/dispatches"):
+        assert call(path, bad)[0] == 400, (path, bad)
+real_resolve = ui_dispatch.dispatch_cli.resolve_issues
+ui_dispatch.dispatch_cli.resolve_issues = lambda refs, gh=None: {**fake_resolve(refs), "children": []}
+st, body = call("/api/dispatches", {"issues": ["o/r#107"]})
+assert st == 400 and body["error"] == "none of the picked issues is open"
+ui_dispatch.dispatch_cli.resolve_issues = real_resolve
+st, body = call("/api/dispatches", {"issues": ["o/r#105", "o/r#106"]})
+assert st == 409 and body["id"] == owner and "o/r#105" in body["error"] and owner in body["error"], body
+od = dr.load(owner)
+od["state"] = "paused"
+dr.save(od)
+assert call("/api/dispatches", {"issues": ["o/r#105"]})[0] == 409  # paused still owns its lanes
+od["state"] = "cancelled"
+dr.save(od)
+assert call("/api/dispatches", {"issues": ["o/r#105"]})[0] == 201
+results = []
+ts = [
+    threading.Thread(target=lambda: results.append(call("/api/dispatches", {"issues": ["o/r#108"]})[0]))
+    for _ in range(2)
+]
+[t.start() for t in ts]
+[t.join() for t in ts]
+assert sorted(results) == [201, 409], results
 srv.shutdown()
 print("  ok  api")
 print("ui_dispatch: all green")
