@@ -5,6 +5,7 @@ import { useAnswer, useSession } from '../api/hooks';
 import { ApiError } from '../api/client';
 import type { AnswerBody, PendingQuestion, Question } from '../api/types';
 import { Button, Icon, useToast } from '../components';
+import { mdToHtml } from '../lib/md';
 
 const REC = ' (Recommended)';
 const MAX_OTHER = 4000;
@@ -94,7 +95,7 @@ function Form({ sessionId, pending, alive, onSent, reload }: { sessionId: string
           <fieldset key={k} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} disabled={answer.isPending}>
             <legend className="sr">{q.question}</legend>
             <div className="q-h">{n > 1 ? `${k + 1} of ${n}  ·  ` : ''}{q.header || 'Question'}</div>
-            <div className="q-text">{q.question}</div>
+            {q.question ? <div className="q-text prose" dangerouslySetInnerHTML={{ __html: mdToHtml(q.question) }} /> : null}
             <div className="opts">
               {q.options.map((o) => {
                 const on = !ans[k].useOther && ans[k].labels.includes(o.label);
@@ -114,7 +115,8 @@ function Form({ sessionId, pending, alive, onSent, reload }: { sessionId: string
                     <span>
                       <span style={{ fontWeight: 600 }}>{displayLabel(o.label)}</span>
                       {o.label === rec ? <span className="rec">Recommended</span> : null}
-                      {o.description ? <div className="d">{o.description}</div> : null}
+                      {o.description ? <div className="d prose" dangerouslySetInnerHTML={{ __html: mdToHtml(o.description) }} /> : null}
+                      {o.preview ? <pre className="q-preview">{o.preview}</pre> : null}
                     </span>
                   </label>
                 );

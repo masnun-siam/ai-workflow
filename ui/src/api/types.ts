@@ -9,6 +9,7 @@ export type SessionStatus = 'queued' | 'starting' | 'running' | 'waiting' | 'lim
 export interface QuestionOption {
   label: string;
   description?: string;
+  preview?: string; // a mockup shown verbatim under the option
 }
 export interface Question {
   question: string;

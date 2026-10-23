@@ -86,4 +86,60 @@ describe('QuestionForm', () => {
     expect(await screen.findByText(/Already answered/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Reload' })).toBeTruthy();
   });
+
+  describe('markdown and previews', () => {
+    const BOX = '+---+\n| A |\n+---+';
+    const MD: Question = {
+      question: 'Pick `code` and **bold**:\n\n- one\n- two\n\nSee https://example.com/x <script>window.__x=1</script>',
+      multiSelect: false,
+      allowFreeText: false,
+      options: [
+        { label: 'Use **X**', description: 'has `tick` <script>1</script>', preview: BOX },
+        { label: 'Plain' },
+      ],
+    };
+    const mount = async () => {
+      const f = setup(sess({}, [MD]));
+      await screen.findByText('Plain');
+      return f;
+    };
+
+    it('renders question text and descriptions as markdown, escaped', async () => {
+      await mount();
+      const t = document.querySelector('.q-text')!;
+      expect(t.querySelector('code')!.textContent).toBe('code');
+      expect(t.querySelector('strong')!.textContent).toBe('bold');
+      expect(t.querySelectorAll('li').length).toBe(2);
+      const a = t.querySelector('a[href^="https"]')!;
+      expect(a.getAttribute('target')).toBe('_blank');
+      expect(t.querySelector('script')).toBeNull();
+      expect(t.textContent).toContain('<script>');
+      expect(document.querySelector('.opt .d code')!.textContent).toBe('tick');
+      expect(document.querySelector('.opt script')).toBeNull();
+    });
+
+    it('shows a preview verbatim and no block without one', async () => {
+      await mount();
+      const pres = document.querySelectorAll('pre.q-preview');
+      expect(pres.length).toBe(1);
+      expect(pres[0].textContent).toBe(BOX);
+    });
+
+    it('renders nothing for empty question text or description', async () => {
+      setup(sess({}, [{ ...Q2, question: '', options: [{ label: 'A', description: '' }] }]));
+      await screen.findByText('A');
+      expect(document.querySelector('.q-text')).toBeNull();
+      expect(document.querySelector('.opt .d')).toBeNull();
+    });
+
+    it('keeps labels plain and sends the exact label', async () => {
+      const f = await mount();
+      expect(screen.getByText('Use **X**')).toBeTruthy();
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('radio', { name: /Use \*\*X\*\*/ }));
+      await user.click(screen.getByRole('button', { name: 'Send answer and resume' }));
+      await waitFor(() => expect(f.mock.calls.some(([, i]) => i?.method === 'POST')).toBe(true));
+      expect(JSON.parse(f.mock.calls.find(([, i]) => i?.method === 'POST')![1]!.body as string).answers).toEqual({ 0: { labels: ['Use **X**'] } });
+    });
+  });
 });
