@@ -117,6 +117,7 @@ export function nowLine(l: Lane, lanes: Pick<Lane, 'key' | 'stage'>[], nowMs = D
 const GATE: Record<string, string> = {
   'CI is not green': 'Waiting for CI to pass',
   'no approving review': 'Waiting for an approving review',
+  'waiting for green CI (defer)': 'Waiting for green CI (defer)',
   'grind is not done': 'Waiting for the grind to finish',
 };
 const sentence = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
