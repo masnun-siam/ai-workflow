@@ -1,7 +1,7 @@
 import { Fragment, useState } from 'react';
 import { IssueAction } from '../board/IssueAction';
 import { IssueSignals } from '../board/IssueSignals';
-import { useStarter } from '../board/actions';
+import { useRefining, useStarter } from '../board/actions';
 import { Button, Chip, Icon, IssueChip, LinkButton } from '../components';
 import { useOwnedIssues } from '../dispatch/useOwner';
 import { STAGE, nowLine } from '../dispatch/vocab';
@@ -14,6 +14,7 @@ import { taskArg } from './useStepRunner';
 
 export function IssuesTab({ f, repo }: { f: Feature; repo: string }) {
   const starter = useStarter();
+  const refining = useRefining(repo);
   const [text, setText] = useState('');
   const [picked, setPicked] = useState<number[]>([]);
   const toggle = (n: number) => setPicked((p) => (p.includes(n) ? p.filter((x) => x !== n) : [...p, n]));
@@ -40,7 +41,7 @@ export function IssuesTab({ f, repo }: { f: Feature; repo: string }) {
           </form>
         </div>
       ) : null}
-      {picked.length > 0 ? (
+      {picked.length > 0 && picked.every((n) => !refining.has(n)) ? (
         <div className="row">
           <Button variant="primary" sm disabled={starter.pending} onClick={async () => { const id = await starter.startBoard({ repo, skill: 'refine-issues', arg: picked.join(' '), via: 'headless', ...PLAN_RUN }); if (id !== null) setPicked([]); }}>
             Refine {picked.length} picked
@@ -64,6 +65,7 @@ export function IssuesTab({ f, repo }: { f: Feature; repo: string }) {
 export function IssueTable({ issues, repo, picked = [], onPick }: { issues: FeatureIssue[]; repo: string; picked?: number[]; onPick?: (n: number) => void }) {
   const panel = usePanel();
   const owned = useOwnedIssues(repo);
+  const refining = useRefining(repo);
   const groups = ATTENTION_ORDER.map((s) => [s, issues.filter((i) => i.status === s)] as const).filter(([, l]) => l.length);
   const unrefined = issues.filter((i) => i.column === 'unrefined').map((i) => i.n);
   return (
@@ -88,7 +90,7 @@ export function IssueTable({ issues, repo, picked = [], onPick }: { issues: Feat
                 return (
                   <tr key={i.n} className="click" onClick={() => panel.open({ kind: 'issue', repo, n: i.n })}>
                     <td onClick={(e) => e.stopPropagation()}>
-                      {onPick && unrefined.includes(i.n) ? <input type="checkbox" className="issue-pick" aria-label={`Pick #${i.n} to refine`} checked={picked.includes(i.n)} onChange={() => onPick(i.n)} /> : null}
+                      {onPick && unrefined.includes(i.n) && !refining.has(i.n) ? <input type="checkbox" className="issue-pick" aria-label={`Pick #${i.n} to refine`} checked={picked.includes(i.n)} onChange={() => onPick(i.n)} /> : null}
                     </td>
                     <td className="ref">#{i.n}</td>
                     <td className="title">

@@ -2,7 +2,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useCloseEpic } from '../api/hooks';
 import { toast, useConfirm } from '../components';
-import { useStarter } from '../board/actions';
+import { useRefining, useStarter } from '../board/actions';
 import type { Feature } from '../lib/features';
 import type { StepAction } from '../lib/nextStep';
 import { routes } from '../lib/routes';
@@ -21,6 +21,7 @@ export function useStepRunner(f: Feature, repo: string) {
   const { link } = useRepo();
   const confirm = useConfirm();
   const starter = useStarter();
+  const refining = useRefining(repo);
   const panel = usePanel();
   const close = useCloseEpic();
   const go = (tab?: string) => navigate(link(routes.feature(f.slug, tab)));
@@ -45,9 +46,12 @@ export function useStepRunner(f: Feature, repo: string) {
       case 'createTasks':
         await starter.startBoard({ repo, skill: 'create-tasks', arg: f.prd.path, via: 'headless', ...PLAN_RUN });
         return;
-      case 'refine':
-        await starter.startBoard({ repo, skill: 'refine-issues', arg: a.issues.join(' '), via: 'headless', ...PLAN_RUN });
+      case 'refine': {
+        const live = a.issues.map((n) => refining.get(n)).find(Boolean);
+        if (live && a.issues.every((n) => refining.has(n))) return navigate(link(routes.session(live)));
+        await starter.startBoard({ repo, skill: 'refine-issues', arg: a.issues.filter((n) => !refining.has(n)).join(' '), via: 'headless', ...PLAN_RUN });
         return;
+      }
       case 'merge':
         panel.open({ kind: 'pr', repo, n: a.pr });
         return;

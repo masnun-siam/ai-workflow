@@ -95,6 +95,13 @@ refuses("refine-issues", "7 and 9", ValueError)
 assert ui_start.start("o/r", "refine-issues", "7", launch=L, model="opus", effort="medium")["session"] == "S5"
 assert L.bodies[4]["model"] == "opus" and L.bodies[4]["effort"] == "medium"
 assert "model" not in L.bodies[3] and "effort" not in L.bodies[3], "unset: not sent"
+live_refine = {"id": "R1", "status": "running", "command": "/refine-issues 7 8", "repo": "o/r"}
+try:
+    ui_start.start("o/r", "refine-issues", "8 12", launch=L, sessions=[live_refine])
+    raise AssertionError("overlapping live refine")
+except ui_start.Conflict as e:
+    assert e.id == "R1"
+assert ui_start.start("o/r", "refine-issues", "99", launch=L, sessions=[live_refine])["session"] == "S6"
 refuses("refine-issues", "7", ValueError, model="gpt")
 refuses("refine-issues", "7", ValueError, effort="default")
 print("  ok  start guards and launch")

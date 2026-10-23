@@ -53,6 +53,8 @@ snap = {
     },
 }
 
+next(i for i in snap["data"]["issues"] if i["n"] == 300)["closed_subs"] = [{"n": 30, "title": "t30"}]
+snap["data"]["closed_epics"][0]["closed_subs"] = [{"n": 50, "title": "t50"}]
 assert ui_planning.build("o/r", co, snap, {})["prds"] == []  # no PRDs
 
 prd("drft", "Draft", "A draft")
@@ -72,6 +74,9 @@ assert (
 )
 assert by["drft"]["panel"]["id"] == panel and by["drft"]["panel"]["root_session"] is None
 assert os.path.isabs(by["drft"]["abs_path"]) and by["drft"]["abs_path"].endswith("docs/prds/drft.md")
+assert by["shipped"]["closed_children"] == [{"n": 30, "title": "t30"}], "open epic: its closed subs"
+assert by["closed"]["closed_children"] == [{"n": 50, "title": "t50"}], "closed epic found by its prd label"
+assert by["appr"]["closed_children"] == []
 assert by["drft"]["panel"]["approved"] == 0 and by["drft"]["panel"]["total"] == 3
 assert (by["drft"]["panel"]["round"], by["drft"]["panel"]["state"]) == (1, "running")
 assert by["rev"]["column"] == "in_review" and by["rev"]["pr"] == {"n": 7, "url": "u7"}

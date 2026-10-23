@@ -134,6 +134,7 @@ export interface PlanningPrd {
   refined: number;
   unrefined: number[];
   children: { n: number; title: string; refined: boolean }[];
+  closed_children?: { n: number; title: string }[];
   panel: PanelRef | null;
   mtime?: number; // last update, when the server sends it
 }

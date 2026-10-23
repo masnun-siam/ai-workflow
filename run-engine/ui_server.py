@@ -804,7 +804,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         except (ValueError, TypeError) as e:
             self._json(400, {"error": str(e)})
         except (ui_start.Conflict, ui_grind.Conflict, ui_actions.Conflict) as e:
-            self._json(409, {"error": str(e)})
+            self._json(409, {"error": str(e), **({"id": e.id} if getattr(e, "id", None) else {})})
         except (RuntimeError, OSError, ui_runner.RunnerError) as e:  # RunnerError, a failed herdr call
             self._json(502, {"error": str(e)})
 
