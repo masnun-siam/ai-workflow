@@ -191,30 +191,97 @@ describe('PRD tab', () => {
   });
 });
 
-describe('Other issues and dispatch-owned issues', () => {
+describe('Small changes tab', () => {
+  const tabBtn = (name: RegExp) => screen.findByRole('tab', { name });
+  const open = async (hash: string) => { window.location.hash = hash; const user = userEvent.setup(); render(<App />); return user; };
+
   it('lists open issues outside every feature; a card starts headless only and a 409 toasts the running session', async () => {
     mock({
       prds: [prd({ issues: 1 })],
       lanes: [lane([card(11, 'ready')]), lane([card(30, 'ready'), card(31, 'unrefined')], { epic: null, title: 'No epic' })],
       extra: { '/api/start': () => json({ error: 'already running', id: 'abc', href: '#/session/abc' }, 409) },
     });
-    window.location.hash = '#/features?repo=o/r';
-    const user = userEvent.setup();
-    render(<App />);
-    await user.click(await screen.findByRole('link', { name: /Other issues/ }));
-    expect(await screen.findByRole('heading', { level: 1, name: 'Other issues' })).toBeTruthy();
-    expect(screen.getByText('Task 30')).toBeTruthy();
+    const user = await open('#/features?tab=changes&repo=o/r');
+    expect(await screen.findByText('Task 30')).toBeTruthy();
+    expect(screen.getByText('Task 31')).toBeTruthy();
     expect(screen.queryByText('Task 11')).toBeNull(); // part of the feature
+    expect((await tabBtn(/Small changes/)).textContent).toContain('2');
     await user.click(await screen.findByRole('button', { name: 'More ways to start' }));
     expect(screen.queryByRole('menuitem', { name: /herdr tab/ })).toBeNull();
     await user.keyboard('{Escape}');
-    await user.click(screen.getByRole('button', { name: 'Start' }));
+    await user.click(screen.getAllByRole('button', { name: 'Start' })[0]);
     expect(await screen.findByRole('button', { name: 'Open session' })).toBeTruthy();
     const body = posts.find((p) => p.url === '/api/start')?.body;
     expect(body).toMatchObject({ skill: 'implement-issue' });
     expect(body).not.toHaveProperty('model'); // only the planning starts carry PLAN_RUN
   });
 
+  it('with 0 PRDs the tabs show, the tab counts 3 and the idea box stays in In progress', async () => {
+    mock({ lanes: [lane([card(1, 'ready'), card(2, 'ready'), card(3, 'ready')], { epic: null })] });
+    await open('#/features?tab=changes&repo=o/r');
+    const t = await tabBtn(/Small changes/);
+    expect(t.getAttribute('aria-selected')).toBe('true');
+    expect(t.textContent).toContain('3');
+    expect(screen.getAllByText(/^Task \d$/)).toHaveLength(3);
+    expect(screen.queryByLabelText('Describe the feature')).toBeNull();
+  });
+
+  it('clicking tabs updates the URL and keeps repo; Shipped is empty', async () => {
+    mock();
+    const user = await open('#/features?repo=o/r');
+    expect(await screen.findByLabelText('Describe the feature')).toBeTruthy();
+    await user.click(await tabBtn(/Shipped/));
+    expect(window.location.hash).toContain('tab=shipped');
+    expect(await screen.findByText('Nothing here yet.')).toBeTruthy();
+    await user.click(await tabBtn(/Small changes/));
+    expect(window.location.hash).toContain('tab=changes');
+    expect(decodeURIComponent(window.location.hash)).toContain('repo=o/r');
+    await user.click(await tabBtn(/In progress/));
+    expect(window.location.hash).not.toContain('tab=');
+    expect(decodeURIComponent(window.location.hash)).toContain('repo=o/r');
+  });
+
+  it('a bad tab value selects In progress', async () => {
+    mock();
+    await open('#/features?tab=bogus&repo=o/r');
+    expect((await tabBtn(/In progress/)).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('an issue under an epic with no PRD is listed', async () => {
+    mock({ prds: [prd({ issues: 1 })], lanes: [lane([card(11, 'ready')]), lane([card(40, 'ready')], { epic: 99 })] });
+    await open('#/features?tab=changes&repo=o/r');
+    expect(await screen.findByText('Task 40')).toBeTruthy();
+    expect(screen.queryByText('Task 11')).toBeNull();
+  });
+
+  it('#/issues redirects to the tab and there is no Other issues link', async () => {
+    mock({ lanes: [lane([card(30, 'ready')], { epic: null })] });
+    await open('#/issues?repo=o/r');
+    expect(await screen.findByText('Task 30')).toBeTruthy();
+    expect((await tabBtn(/Small changes/)).getAttribute('aria-selected')).toBe('true');
+    expect(window.location.hash).toBe('#/features?repo=o%2Fr&tab=changes');
+    expect(screen.queryByRole('link', { name: /Other issues/ })).toBeNull();
+  });
+
+  it('an empty tab shows the message', async () => {
+    mock();
+    await open('#/features?tab=changes&repo=o/r');
+    expect(await screen.findByText('Nothing outside a feature. Describe a bug or small change to start one.')).toBeTruthy();
+  });
+
+  it('a failed delivery read shows Retry', async () => {
+    let calls = 0;
+    mock({ extra: { '/api/delivery': () => { calls++; return json({ error: 'boom' }, 500); } } });
+    const user = await open('#/features?tab=changes&repo=o/r');
+    const retry = await screen.findByRole('button', { name: 'Retry' }, { timeout: 5000 }); // the query client retries once first
+    expect(screen.getByText('Issues unavailable')).toBeTruthy();
+    const before = calls;
+    await user.click(retry);
+    await waitFor(() => expect(calls).toBeGreaterThan(before));
+  }, 15000);
+});
+
+describe('dispatch-owned issues', () => {
   it('an issue a dispatch owns links there instead of Start, and the feature header shows the dispatch', async () => {
     const lane11 = { key: 'o/r#11', repo: 'o/r', n: 11, title: 'Task 11', deps: [], stage: 'implementing', pr: null, needs_you: null, held: null, gate: null, skip_reason: null, paused: null, hold_merge: null, limited_until: null, started_at: 1, ended_at: null, session: 's', tab: null, usage: { cost: 0, tokens: 0, seconds: 0 } };
     mock({

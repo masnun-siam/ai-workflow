@@ -14,7 +14,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { PanelProvider } from './panels/PanelContext';
 import { QueryProvider } from './QueryProvider';
 import { Shell } from './shell/Shell';
-import { OtherIssuesPage } from './pages/OtherIssuesPage';
+import { routes } from './lib/routes';
 import { StartProvider } from './start/StartContext';
 
 /** No registered repos: everything but Settings sends the user to onboarding (FR-29). */
@@ -24,6 +24,14 @@ function Gate() {
   const empty = repos.isSuccess && repos.data.repos.length === 0;
   if (empty && !pathname.startsWith('/settings') && pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
   return <Outlet />;
+}
+
+/** The old Other issues page is the Small changes tab. */
+function IssuesRedirect() {
+  const { search } = useLocation();
+  const p = new URLSearchParams(search);
+  p.set('tab', 'changes');
+  return <Navigate to={{ pathname: routes.features, search: `?${p}` }} replace />;
 }
 
 export function AppRoutes() {
@@ -36,7 +44,7 @@ export function AppRoutes() {
           <Route path="/features/:slug" element={<FeaturePage />} />
           <Route path="/features/:slug/:tab" element={<FeaturePage />} />
           <Route path="/" element={<Navigate to="/inbox" replace />} />
-          <Route path="/issues" element={<OtherIssuesPage />} />
+          <Route path="/issues" element={<IssuesRedirect />} />
           <Route path="/activity" element={<ActivityPage />} />
           <Route path="/dispatches" element={<DispatchesPage />} />
           <Route path="/dispatches/:id" element={<DispatchPage />} />
