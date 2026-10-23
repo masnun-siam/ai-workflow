@@ -255,6 +255,19 @@ assert call("/api/dispatches/000000000000")[0] == 404
 st, body = call(f"/api/dispatches/{d2['id']}/settings", {"max": 4, "auto_merge": True})
 assert st == 200 and body["settings"]["max"] == 4 and body["settings"]["auto_merge"] is True
 assert call(f"/api/dispatches/{d2['id']}/settings", {"bogus": 1})[0] == 400
+st, body = call(f"/api/dispatches/{d2['id']}/settings", {"ci": "ignore"})
+assert st == 200 and body["settings"]["ci"] == "ignore"
+st, body = call(f"/api/dispatches/{d2['id']}/settings", {"ci": "nope"})
+assert st == 400 and body["error"] == "ci must be one of ('wait', 'defer', 'ignore')"
+seen = []
+ui_dispatch.dispatch_cli.start = lambda epic, runner, s, ws=None: seen.append(s) or d2  # no gh in a self-check
+ui_dispatch.start({"epic": "o/r#1", "settings": {"ci": "defer"}})
+assert seen[0]["ci"] == "defer"
+try:
+    ui_dispatch.start({"epic": "o/r#1", "settings": {"ci": "x"}})
+    raise AssertionError("accepted ci=x")
+except ValueError:
+    pass
 assert call(f"/api/dispatches/{d2['id']}/lane", {"lane": "o/r#9", "action": "hold"})[1]["lanes"][0]["hold_merge"]
 assert call(f"/api/dispatches/{d2['id']}/lane", {"lane": "o/r#9", "action": "explode"})[0] == 400
 assert call(f"/api/dispatches/{d2['id']}/state", {"state": "paused"})[1]["state"] == "paused"

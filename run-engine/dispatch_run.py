@@ -37,12 +37,14 @@ ACTIVE = ("implementing", "grinding", "merge_gate", "conflict_fix", "awaiting_me
 DEFAULTS = {
     "max": 2,
     "grind": "full",  # off | simple | full (pr-grind's deep)
+    "ci": "wait",  # wait | defer (CI blocks only the merge) | ignore (CI never blocks)
     "auto_merge": False,
     "feature_branch": None,  # every lane's base when set; else the issue's own
     "model": None,
     "effort": None,
 }
 GRIND_MODES = ("off", "simple", "full")
+CI_MODES = ("wait", "defer", "ignore")
 MERGE_RETRY_SECONDS = 300  # the board lags a merge; don't call gh pr merge twice in this window
 IDLE_GRACE_SECONDS = 180  # a session that just ended may have a PR the board has not seen yet
 LIMIT_BUFFER_SECONDS = 60
@@ -405,6 +407,8 @@ def create(epic: str, runner: str, settings: dict, children: list, workspace=Non
 def check_settings(s: dict) -> dict:
     if s.get("grind") not in GRIND_MODES:
         raise ValueError(f"grind must be one of {GRIND_MODES}")
+    if s.get("ci") not in CI_MODES:
+        raise ValueError(f"ci must be one of {CI_MODES}")
     if not isinstance(s.get("max"), int) or isinstance(s["max"], bool) or not 1 <= s["max"] <= 10:
         raise ValueError("max must be an integer from 1 to 10")
     s["auto_merge"] = bool(s.get("auto_merge"))
@@ -439,9 +443,11 @@ def save(d: dict) -> None:
 def load(did: str) -> dict:
     try:
         with open(_path(did), encoding="utf-8") as f:
-            return json.load(f)
+            d = json.load(f)
     except FileNotFoundError:
         raise ValueError(f"no dispatch {did}") from None
+    d["settings"] = {**DEFAULTS, **d.get("settings", {})}  # records saved before a key existed read its default
+    return d
 
 
 def active_lane(repo: str, n=None, pr=None):
