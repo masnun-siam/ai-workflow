@@ -80,7 +80,7 @@ def lane_facts(x: dict, snap, status=None, grind_files=None, channel=dispatch_cl
     if p:
         extra = next((o for o in data.get("open_prs") or [] if o["n"] == p["n"]), {})
         f["pr"] = {
-            **{k: p.get(k) for k in ("n", "url", "draft", "state", "ci", "conflict")},
+            **{k: p.get(k) for k in ("n", "url", "draft", "state", "ci", "conflict", "sha")},
             "approved": p.get("review") == "approved" or bool(extra.get("reviewer")),
         }
         f["grind"] = _grind(x["repo"], p["n"], grind_files)

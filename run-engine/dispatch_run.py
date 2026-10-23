@@ -10,7 +10,7 @@ the caller from the board snapshot, the grind index and the runner:
 
     {"issue_open": bool, "refined": bool, "blockers_open": [key],   # blockers still open on GitHub
      "pr": None | {"n", "url", "draft", "state": OPEN|MERGED|CLOSED, "ci": success|failure|pending|none,
-                   "conflict": bool, "approved": bool},
+                   "conflict": bool, "approved": bool, "sha": head commit | None},
      "grind": None | {"state": idle|running|paused|done, "reason": str, "due": str | None},  # due: a token
      "slack": bool,                                  # the repo has a grind channel; False skips grinding
      "solo": bool,                                   # the repo is the gh user's own: no approval needed
@@ -133,8 +133,11 @@ def _grind_on(settings: dict, facts: dict) -> bool:
 def _gate(lane: dict, facts: dict, settings: dict):
     """None when the PR may merge, else why not."""
     pr, g = facts.get("pr") or {}, facts.get("grind") or {}
-    if pr.get("ci") != "success":
+    mode = settings.get("ci", "wait")
+    if mode == "wait" and pr.get("ci") != "success":
         return "CI is not green"
+    if mode == "defer" and pr.get("ci") not in ("success", "none"):
+        return "waiting for green CI (defer)"
     if not pr.get("approved") and not facts.get("solo"):  # nobody can approve a PR on your own repo
         return "no approving review"
     if _grind_on(settings, facts) and not (g.get("state") == "done" and "approved" in (g.get("reason") or "")):
@@ -237,13 +240,16 @@ def step(lane: dict, facts: dict, settings: dict, now: float) -> tuple:
             to("conflict_fix")
             acts.append(("send", conflict_prompt(pr.get("n"), base)))
             return patch, acts
-        if pr.get("ci") == "failure":
+        if pr.get("ci") == "failure" and ci == "wait":
             if lane.get("held") != "CI is red":
                 patch["held"] = "CI is red"
                 acts.append(("notify", "held", f"CI is red on PR #{pr.get('n')}"))
             return patch, acts
         if lane.get("held"):
             patch["held"] = None
+        if pr.get("ci") == "failure" and ci == "defer" and lane.get("ci_fixed") != pr.get("sha"):
+            patch["ci_fixed"] = pr.get("sha")  # once per red head commit, like `nudged` for a grind round
+            acts.append(("send", ci_fix_prompt(pr.get("n"))))
         why = None if lane.get("force_merge") else _gate(lane, facts, settings)
         if why:
             if stage == "awaiting_merge":
@@ -652,7 +658,7 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None, gh
 
     def ev(k, kind, text):
         new.append(event(d, k, kind, text))
-        if notify and kind in ("needs_you", "held", "awaiting_merge", "finished"):
+        if notify and kind in ("needs_you", "held", "awaiting_merge", "finished", "warning"):
             notify(d, k, kind, text)
 
     for k, x in d["lanes"].items():
@@ -705,6 +711,9 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None, gh
                     x["force_merge"] = False
                     if ok:
                         ev(k, "merged", f"merged PR #{a[1]}")
+                        ci_now = (f.get("pr") or {}).get("ci")
+                        if d["settings"].get("ci") == "ignore" and ci_now in ("failure", "pending"):
+                            ev(k, "warning", "merged with red CI" if ci_now == "failure" else "merged with CI pending")
                     elif "conflict" in err.lower():  # the board had not seen the conflict yet: fix it in the lane
                         base = d["settings"].get("feature_branch") or x.get("base")
                         x.update(stage="conflict_fix", merge_at=None)
