@@ -212,7 +212,8 @@ sets the rounds cap, the lenses ticked by default and each lens prompt; changes 
 `<data_dir>/config.json` and laid over the shipped `run-engine/config.json`, so **Reset to defaults**
 just removes that file. **Notes vault** sets the vault path. With no repos registered the app opens
 an onboarding page that checks `gh` and a Claude account, then scans folders.
-`GET|POST /api/settings/notify`, `GET|POST /api/settings/review`, `POST /api/repos/remove`,
+`GET|POST /api/settings/notify`, `POST /api/settings/notify/channel` (one event × channel switch,
+`{event, channel, on}`; `GET` also returns `matrix`, `events`, `ntfy_ready` and `mac`), `GET|POST /api/settings/review`, `POST /api/repos/remove`,
 `POST /api/repos/check`.
 
 **Notes vault.** With **No repo yet** and a new idea, Start shows a **Vault folder**
@@ -246,8 +247,12 @@ Optional push notifications and links live in `<data_dir>/ui.json` (the data dir
 
 ```json
 {"ntfy": {"server": "<ntfy-server-url>", "topic": "<topic>", "token": "<token>"},
- "public_url": "<https://your-ui-url>"}
+ "public_url": "<https://your-ui-url>",
+ "channels": {"done": {"ntfy": false}}}
 ```
+
+`channels` holds only the matrix cells (event → `browser`/`ntfy`/`mac` → bool) changed from their
+defaults; unknown keys and non-boolean values are ignored and dropped on the next save.
 
 The file must be mode 0600 (`chmod 600 <data_dir>/ui.json`) because it can hold a token;
 a looser mode is ignored with a warning. `AIW_NTFY_SERVER`, `AIW_NTFY_TOPIC` and

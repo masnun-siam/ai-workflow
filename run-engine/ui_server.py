@@ -609,6 +609,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             )
         elif parts == ["", "api", "settings", "notify"]:
             self._dispatch(ui_config.save_notify)
+        elif parts == ["", "api", "settings", "notify", "channel"]:
+            self._dispatch(ui_config.save_channel)
         elif parts == ["", "api", "settings", "review"]:
             self._dispatch(ui_config.save_review)
         elif parts == ["", "api", "repos", "remove"]:

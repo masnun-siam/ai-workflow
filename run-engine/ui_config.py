@@ -11,13 +11,18 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor
 
 import dispatch
+import ui_notify
 from shared import data_dir, gh_json, load_config, read_json, GLOBAL_CONFIG
 
 _SECRETS = ("token", "password")
 MAX_PROMPT = 8000
+_ui_lock = threading.Lock()  # one read-modify-write of ui.json at a time (readers take no lock)
 
 
 def _ui_path() -> str:
@@ -36,7 +41,14 @@ def _read_ui() -> dict:
 def notify_public() -> dict:
     cfg = _read_ui()
     ntfy = cfg.get("ntfy") if isinstance(cfg.get("ntfy"), dict) else {}
+    n = ui_notify.load_config()["ntfy"]  # environment overrides count
+    available = sys.platform == "darwin"
+    notifier = available and shutil.which("terminal-notifier") is not None
     return {
+        "matrix": ui_notify.matrix(cfg),
+        "events": [{"key": k, "label": label, "group": g} for k, label, g in ui_notify.EVENTS],
+        "ntfy_ready": bool(n.get("server") and n.get("topic")),
+        "mac": {"available": available, "notifier": notifier, "clickable": notifier and bool(cfg.get("public_url"))},
         "server": ntfy.get("server") or "",
         "topic": ntfy.get("topic") or "",
         "user": ntfy.get("user") or "",
@@ -47,7 +59,40 @@ def notify_public() -> dict:
     }
 
 
+def _write_ui(cfg: dict) -> None:
+    path = _ui_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd = os.open(path + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2)
+    os.chmod(path + ".tmp", 0o600)
+    os.replace(path + ".tmp", path)
+
+
 def save_notify(body: dict) -> dict:
+    with _ui_lock:
+        _save_notify(body)
+    return notify_public()
+
+
+def save_channel(body: dict) -> dict:
+    """{event, channel, on} -> that one matrix cell; unknown or non-boolean stored cells are dropped."""
+    event, channel, on = body.get("event"), body.get("channel"), body.get("on")
+    if event not in {k for k, _, _ in ui_notify.EVENTS}:
+        raise ValueError("unknown event")
+    if channel not in ui_notify.CHANNELS:
+        raise ValueError("unknown channel")
+    if type(on) is not bool:
+        raise ValueError("on must be true or false")
+    with _ui_lock:
+        cfg = _read_ui()
+        cfg["channels"] = ui_notify.stored_cells(cfg)
+        cfg["channels"].setdefault(event, {})[channel] = on
+        _write_ui(cfg)
+    return notify_public()
+
+
+def _save_notify(body: dict) -> None:
     cfg = _read_ui()
     ntfy = dict(cfg.get("ntfy") or {})
     for key in ("server", "topic", "user", *_SECRETS):
@@ -72,14 +117,7 @@ def save_notify(body: dict) -> dict:
         else:
             cfg.pop("public_url", None)
     cfg["ntfy"] = ntfy
-    path = _ui_path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    fd = os.open(path + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, indent=2)
-    os.chmod(path + ".tmp", 0o600)
-    os.replace(path + ".tmp", path)
-    return notify_public()
+    _write_ui(cfg)
 
 
 def _override_path() -> str:

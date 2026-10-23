@@ -399,6 +399,12 @@ try:
         assert call(m, p, b)[0] == 400, p
     ok("boards: unknown repo is 400")
 
+    st, _ = call("POST", "/api/settings/notify/channel", {"event": "done", "channel": "sms", "on": True})
+    assert st == 400
+    st, body = call("POST", "/api/settings/notify/channel", {"event": "done", "channel": "ntfy", "on": False})
+    assert st == 200 and body["matrix"]["done"]["ntfy"] is False
+    ok("settings: notify channel route")
+
     # before the first poll: stale, empty. Planning shows the PRD file.
     st, body = call("GET", "/api/planning?repo=o/r")
     assert st == 200 and body["stale"] and [c["slug"] for c in body["prds"]] == ["x"]

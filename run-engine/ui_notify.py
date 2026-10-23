@@ -35,6 +35,47 @@ _LOOK = {
     "panel-cap": ("no_entry", "aiw: review panel hit its cap", "aiw: review panel hit its cap", "Open Inbox"),
     "dispatch": ("rocket", "aiw: #{n} in a dispatch needs you", "aiw: a dispatch needs you", "Open Inbox"),
 }
+# The matrix rows in display order: (event, label, group).
+EVENTS = (
+    ("waiting", "A session is waiting on you", "Needs you"),
+    ("failed", "A session failed", "Needs you"),
+    ("dispatch", "A dispatch needs you", "Needs you"),
+    ("panel-cap", "Review panel hit its cap", "Needs you"),
+    ("pr-ready", "PR is ready for review", "Pull requests"),
+    ("needs-cleanup", "Merged issue needs cleanup", "Pull requests"),
+    ("grind-paused", "Grind paused", "Pull requests"),
+    ("grind-done", "Grind finished", "Pull requests"),
+    ("done", "A session is done", "Finished"),
+    ("pipeline", "Pipeline finished", "Finished"),
+    ("afk", "Away mode ended", "Finished"),
+)
+CHANNELS = ("browser", "ntfy", "mac")
+
+
+def default_cell(event: str, channel: str) -> bool:
+    if channel == "ntfy":
+        return True
+    return next(g for k, _, g in EVENTS if k == event) != "Finished" and event != "grind-done"
+
+
+def stored_cells(cfg: dict) -> dict:
+    """The known event/channel cells of cfg["channels"] that hold a boolean; anything else is ignored."""
+    raw = cfg.get("channels") if isinstance(cfg.get("channels"), dict) else {}
+    out = {}
+    for event, _, _ in EVENTS:
+        row = raw.get(event) if isinstance(raw.get(event), dict) else {}
+        cells = {ch: row[ch] for ch in CHANNELS if isinstance(row.get(ch), bool)}
+        if cells:
+            out[event] = cells
+    return out
+
+
+def matrix(cfg: dict) -> dict:
+    """{event: {channel: bool}} for every event: the defaults, overlaid with the stored cells."""
+    stored = stored_cells(cfg)
+    return {e: {ch: stored.get(e, {}).get(ch, default_cell(e, ch)) for ch in CHANNELS} for e, _, _ in EVENTS}
+
+
 _BOARD = ("afk", "pr-ready", "needs-cleanup", "panel-cap", "dispatch")  # no session page: the click lands on the Inbox
 # While away mode runs, it handles or holds these; the one "afk" push at the end sums them up.
 _AFK_MUTED = ("waiting", "failed", "grind-paused")
