@@ -7,3 +7,5 @@
 .tbl td.title{font-weight:600;min-width:160px}
 @media (max-width:760px){.frow .fnext{justify-content:flex-start}}
 .pending-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.frow.pending{cursor:default}
+.frow.pending:hover{background:none}

@@ -16,9 +16,10 @@ export function PendingRows({ pending }: { pending: PendingChange[] }) {
         const st = p.status === 'queued' || p.status === 'waiting' ? STATE[p.status] : { label: 'Creating…', tone: 'build' as const };
         const open = () => navigate(link(routes.session(p.id)));
         return (
-          <div key={p.id} className="frow">
+          <div key={p.id} className="frow pending">
             <div style={{ minWidth: 0 }}><div className="ftitle pending-text" title={p.text}>{p.text}</div></div>
             <div><Chip tone={st.tone} live={st.label === 'Creating…'}>{st.label}</Chip></div>
+            <div />
             <div className="fnext">
               {p.status === 'waiting' ? <Button sm variant="you" onClick={open}>Answer</Button> : <Button sm onClick={open}>Watch</Button>}
             </div>
