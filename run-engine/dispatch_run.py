@@ -57,22 +57,27 @@ END_ACTIONS = ("open-pr", "qa", "grind-pr")
 # --------------------------------------------------------------------------- prompts
 
 
-def implement_prompt(n: int, base, pr=None) -> str:
+def implement_prompt(n: int, base, pr=None, ci="wait") -> str:
     notes = [f"PR #{pr} is already open for it: continue that PR on its branch, don't start over"] if pr else []
     notes += [f"base branch {base}: branch from it, open the PR into it"] if base else []
+    if ci != "wait":
+        notes.append(f"CI mode {ci}: mark the PR ready after local checks and review pass; do not wait for CI")
     return f"/ai-workflow:implement-issue {n}" + (f" ({'; '.join(notes)})" if notes else "")
 
 
 LANE_GRIND = " -- dispatch lane: re-arm the headless way (write next-poll, end the turn; no Monitor, no ScheduleWakeup)"
 
 
-def grind_prompt(pr_url: str, channel=None, lane=True) -> str:
+SKIP_CI_REPLY = "Skip CI for now, complete the grind, then come back and fix the CI"
+
+
+def grind_prompt(pr_url: str, channel=None, lane=True, ci="wait") -> str:
     """A lane's grind ends each round like a headless one: the engine types the next round into the lane."""
     ch = str(channel or "").strip()
     return (
         f"/ai-workflow:pr-grind {pr_url}"
         + (f" --channel {ch}" if ch.replace("_", "").isalnum() else "")
-        + (LANE_GRIND if lane else "")
+        + (LANE_GRIND + (" " + SKIP_CI_REPLY if ci != "wait" else "") if lane else "")
     )
 
 
@@ -105,9 +110,10 @@ def followups_prompt(n: int, pr: int, base) -> str:
 def stage_prompt(lane: dict, settings: dict, pr_url=None):
     """What a fresh session for the lane's current stage is told; None when the stage needs no session."""
     base = settings.get("feature_branch") or lane.get("base")
+    ci = settings.get("ci", "wait")
     return {
-        "implementing": lambda: implement_prompt(lane["n"], base, lane.get("pr")),
-        "grinding": lambda: grind_prompt(pr_url or "", lane.get("channel")),
+        "implementing": lambda: implement_prompt(lane["n"], base, lane.get("pr"), ci),
+        "grinding": lambda: grind_prompt(pr_url or "", lane.get("channel"), ci=ci),
         "conflict_fix": lambda: conflict_prompt(lane.get("pr"), base),
         "followups": lambda: followups_prompt(lane["n"], lane.get("pr"), base),
     }.get(lane["stage"], lambda: None)()
@@ -143,6 +149,8 @@ def step(lane: dict, facts: dict, settings: dict, now: float) -> tuple:
     pr = facts.get("pr") or {}
     agent = facts.get("agent")
     base = settings.get("feature_branch") or lane.get("base")
+    ci = settings.get("ci", "wait")
+    free = ci != "wait"  # defer / ignore: a lane does not wait for CI before the gate
     patch: dict = {}
     acts: list = []
 
@@ -181,17 +189,17 @@ def step(lane: dict, facts: dict, settings: dict, now: float) -> tuple:
         ready = pr.get("state") == "OPEN" and not pr.get("draft")
         if pr.get("state") == "OPEN" and pr.get("n") != lane.get("pr"):
             patch["pr"] = pr["n"]  # tracked as soon as it exists: a retry continues it instead of starting over
-        if ready and pr.get("ci") == "failure" and agent in ("idle", None):
+        if not free and ready and pr.get("ci") == "failure" and agent in ("idle", None):
             if lane.get("held") != "CI is red":
                 patch.update(held="CI is red", needs_you=None, idle_since=None)
                 acts.append(("notify", "held", f"CI is red on PR #{pr['n']}"))
             return patch, acts
         if lane.get("held"):  # CI re-ran, or the session is back on it
             patch["held"] = None
-        if ready and pr.get("ci") == "success":
+        if ready and (free or pr.get("ci") == "success"):
             if _grind_on(settings, facts):
                 to("grinding")
-                acts.append(("send", grind_prompt(pr["url"], facts.get("channel"))))
+                acts.append(("send", grind_prompt(pr["url"], facts.get("channel"), ci=ci)))
             else:
                 to("merge_gate")
             return patch, acts
@@ -216,7 +224,7 @@ def step(lane: dict, facts: dict, settings: dict, now: float) -> tuple:
                 patch["held"] = None
             if g.get("due") and g["due"] != lane.get("nudged") and agent in ("idle", None):
                 patch["nudged"] = g["due"]
-                acts.append(("send", grind_prompt(pr.get("url") or "", facts.get("channel"))))
+                acts.append(("send", grind_prompt(pr.get("url") or "", facts.get("channel"), ci=ci)))
             elif agent == "blocked" and not lane.get("needs_you"):
                 patch["needs_you"] = "the grind waits on you"
                 acts.append(("notify", "needs_you", patch["needs_you"]))
@@ -252,7 +260,7 @@ def step(lane: dict, facts: dict, settings: dict, now: float) -> tuple:
         return patch, acts
 
     if stage == "conflict_fix":
-        if not pr.get("conflict") and pr.get("ci") == "success" and agent in ("idle", None):
+        if not pr.get("conflict") and (free or pr.get("ci") == "success") and agent in ("idle", None):
             to("merge_gate")
             return patch, acts
         if pr.get("conflict"):
@@ -719,7 +727,7 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None, gh
         x = d["lanes"][k]
         base = d["settings"].get("feature_branch") or x.get("base")
         try:
-            x["handle"] = runner.start(x, implement_prompt(x["n"], base), d)
+            x["handle"] = runner.start(x, implement_prompt(x["n"], base, ci=d["settings"].get("ci", "wait")), d)
             x.setdefault("handles", []).append(x["handle"])
             x.update(stage="implementing", started_at=now, needs_you=None)
             ev(k, "stage", "queued -> implementing")

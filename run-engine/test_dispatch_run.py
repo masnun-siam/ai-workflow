@@ -129,6 +129,38 @@ p6, _ = dr.step(x, {"agent": "working", "pr": pr(140, ci="failure")}, {}, 6002)
 assert p6 == {"held": None}  # back on it
 print("  ok  needs you, red CI while implementing")
 
+# --- ci defer / ignore: no waiting for CI before the gate
+for mode in ("defer", "ignore"):
+    for ci_state in ("failure", "pending", "success", "none"):
+        ln = {"n": 9, "stage": "implementing"}
+        pa, aa = dr.step(ln, {"agent": "idle", "slack": True, "pr": pr(9, ci=ci_state)}, {"ci": mode}, 7000)
+        assert pa["stage"] == "grinding" and pa.get("held") is None, (mode, ci_state, pa)
+        assert [a[0] for a in aa] == ["send"] and aa[0][1].endswith(dr.SKIP_CI_REPLY), aa
+        pa, aa = dr.step(ln, {"agent": "idle", "pr": pr(9, ci=ci_state)}, {"ci": mode, "grind": "off"}, 7000)
+        assert pa["stage"] == "merge_gate" and pa["held"] is None and not aa, (mode, ci_state, pa, aa)
+pw, _ = dr.step({"n": 9, "stage": "implementing"}, {"agent": "idle", "pr": pr(9, ci="failure")}, {"ci": "wait"}, 7000)
+assert pw["held"] == "CI is red"
+rel, _ = dr.step(
+    {"n": 9, "stage": "implementing", "held": "CI is red"},
+    {"agent": "idle", "slack": True, "pr": pr(9, ci="failure")},
+    {"ci": "defer"},
+    7001,
+)
+assert rel["held"] is None and rel["stage"] == "grinding"
+cf = {"n": 9, "stage": "conflict_fix"}
+cfacts = {"agent": "idle", "pr": pr(9, ci="pending", conflict=False)}
+assert dr.step(cf, cfacts, {"ci": "defer"}, 7002)[0]["stage"] == "merge_gate"
+assert dr.step(cf, cfacts, {"ci": "wait"}, 7002)[0] == {}
+assert "CI mode defer: mark the PR ready after local checks and review pass; do not wait for CI" in dr.implement_prompt(
+    5, "master", ci="defer"
+)
+assert dr.implement_prompt(5, "master", ci="wait") == dr.implement_prompt(5, "master")
+assert "CI mode" not in dr.stage_prompt({"n": 5, "stage": "implementing"}, {})
+assert dr.grind_prompt("u", ci="wait") == "/ai-workflow:pr-grind u" + dr.LANE_GRIND
+assert dr.grind_prompt("u", lane=False, ci="defer") == "/ai-workflow:pr-grind u"
+assert dr.stage_prompt({"n": 5, "stage": "grinding"}, {"ci": "ignore"}, "u").endswith(dr.SKIP_CI_REPLY)
+print("  ok  ci defer / ignore skip CI before the gate")
+
 # --- PR ready -> grinding (slack) ; no slack -> merge_gate
 f1 = {"issue_open": True, "slack": True, "agent": "idle", "pr": pr(101)}
 dr.tick(d, {K(1): f1}, run, merge, now=1005)
