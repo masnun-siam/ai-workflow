@@ -16,6 +16,9 @@ import { copyCommand, resumeCommand } from '../session/terminal';
 import { Transcript } from '../session/Transcript';
 import { useSessionActions } from '../session/useSessionActions';
 
+// Stable ref callback: runs once when the question appears, not on every poll.
+const reveal = (el: HTMLElement | null) => el?.scrollIntoView({ block: 'nearest' });
+
 const PEER_TONE: Record<string, 'ship' | 'bad' | 'review'> = { approved: 'ship', 'cap reached': 'bad', failed: 'bad' };
 
 export function PeerChip({ p }: { p: NonNullable<Session['peer_review']> }) {
@@ -90,12 +93,6 @@ export function SessionPage() {
         </div>
       </div>
 
-      {s.outcome === 'waiting' ? (
-        <section className="stack" style={{ gap: 8 }}>
-          <h2 style={{ color: 'var(--you)' }}>Claude is waiting on you</h2>
-          <QuestionForm sessionId={s.id} />
-        </section>
-      ) : null}
       {s.outcome === 'limited' ? (
         <Banner
           tone="review"
@@ -124,6 +121,12 @@ export function SessionPage() {
       <div className="sess-grid">
         <div className="stack">
           <Transcript events={tr.events} live={live} working={['running', 'starting'].includes(s.outcome)} />
+          {s.outcome === 'waiting' ? (
+            <section className="stack" style={{ gap: 8 }} ref={reveal}>
+              <h2 style={{ color: 'var(--you)' }}>Claude is waiting on you</h2>
+              <QuestionForm sessionId={s.id} />
+            </section>
+          ) : null}
           <Composer s={s} />
         </div>
         <aside className="box" aria-label="Facts">

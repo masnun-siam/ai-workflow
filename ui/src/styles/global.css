@@ -34,7 +34,7 @@
 
 *{box-sizing:border-box}
 html,body{height:100%}
-body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--font);-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 var(--font);-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
 #root{height:100%}
 button,input,select,textarea{font:inherit;color:inherit}
 a{color:inherit}
@@ -60,15 +60,15 @@ code,.mono{font-family:var(--mono);font-size:12.5px}
 .t-muted{--c:var(--muted);--cs:var(--sunk)} .t-away{--c:var(--away);--cs:var(--away-soft)}
 .t-accent{--c:var(--accent);--cs:var(--accent-soft)}
 
-/* app frame */
+/* app frame. Scroll panes are positioned so absolute .sr text never escapes them and grows the document. */
 .app{display:grid;grid-template-columns:240px minmax(0,1fr);height:100%}
 .app.has-panel{grid-template-columns:240px minmax(0,1fr) min(480px,40vw)}
-.rail{background:var(--sunk);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:6px;padding:12px 10px;min-height:0;overflow:auto}
+.rail{position:relative;background:var(--sunk);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:6px;padding:12px 10px;min-height:0;overflow:auto}
 .main{min-width:0;min-height:0;display:flex;flex-direction:column}
 .topbar{display:flex;align-items:center;gap:10px;padding-block:10px;padding-left:max(24px, env(safe-area-inset-left,0px));padding-right:max(24px, env(safe-area-inset-right,0px));border-bottom:1px solid var(--line);background:var(--bg);min-height:56px}
-.content{flex:1;min-height:0;overflow:auto;padding-block:24px 96px;padding-left:max(28px, env(safe-area-inset-left,0px));padding-right:max(28px, env(safe-area-inset-right,0px))}
+.content{flex:1;min-height:0;overflow:auto;position:relative;padding-block:24px 96px;padding-left:max(28px, env(safe-area-inset-left,0px));padding-right:max(28px, env(safe-area-inset-right,0px))}
 .content-inner{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
-.panel{background:var(--surface);border-left:1px solid var(--line);min-height:0;display:flex;flex-direction:column}
+.panel{position:relative;background:var(--surface);border-left:1px solid var(--line);min-height:0;display:flex;flex-direction:column}
 
 /* rail */
 .repo-btn{display:flex;align-items:center;gap:10px;width:100%;padding:8px;border:1px solid transparent;border-radius:10px;background:none;cursor:pointer;text-align:left}

@@ -112,6 +112,11 @@ Plugin-only lines inside ported files (keep them; they are not upstream drift):
 - Project status: a new issue or epic goes to Backlog; **Ready** (open, `refined`, every `blockedBy` closed) is defined once in the guide's "Project fields", and `/refine-issues` and `/implement-issue` point at it. Upstream adopted this in #761/#829, replacing the plugin's "copy the other unstarted issues' status".
 - "Each push, and each edit to a PR's title or body, starts a full CI run" is ported hedged: "and so may each edit", since PR-edit triggers depend on the repo's workflows.
 
+- **Review before push** (`/implement-issue` steps 12 to 14, from Wasensi 637579d4): the `pr-body.yml` checks and the `PR base - CI ran against this base` check are dropped; "a body edit runs light checks, a base change needs a push" is kept hedged with "may".
+- **Parallel local tests**: `PEST_PARALLEL=1` in the verifier's commands and the push-hook "Feature runs in parallel" note are dropped; the idea "a test failing in only one of local-parallel and CI-serial is a real bug" is kept hedged ("if the repo runs tests in parallel locally").
+- **Node 24 / jsdom `localStorage`**: becomes "run the frontend checks on the runtime version CI uses", with the newer-Node `localStorage` example.
+- **Symlinked `node_modules`**: "run tools through `./node_modules/.bin/`, not `npx`" is kept as "directly from their bin folder, not through a package runner".
+
 ## Leak scan
 
 Run from the plugin root after applying changes. Expected hits only: the base-branch lookup line (`staging`, `stage`, `dev`), "for example `master` or `main`", and the `/sync-from-wasensi` rows in `README.md` and `guides/skills.md`.

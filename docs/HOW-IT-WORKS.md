@@ -51,7 +51,7 @@ One session, start to Ready:
 3. Work in a new worktree under `.worktrees/`, branched from the latest base.
 4. Implement, write the tests, update the docs in the same PR.
 5. `/verifier-locally`: run the checks CI runs, then exercise the behaviour against the acceptance criteria.
-6. Open a draft PR. Mark it Ready only when CI is green and every review comment is handled.
+6. Review the local branch with `/pr-review`, fix Critical and Major findings, merge the base branch in, then push and open a draft PR. Mark it Ready only when CI is green and every review comment is handled.
 7. Log learnings on the issue.
 8. After the merge: close the issue, set it to Done, clean up, and move the issues it unblocked to Ready.
 

@@ -54,7 +54,7 @@ function open(preset: { cmd?: string; arg?: string; repo?: string } = {}) {
 }
 const startButton = () => screen.getByRole('button', { name: /^(Start|Queue|Retry|Starting)/ });
 const ready = async () => {
-  await waitFor(() => expect((screen.getByLabelText('Where') as HTMLSelectElement).value).toBe('o/r'));
+  await waitFor(() => expect(screen.getByRole('button', { name: /^Where: / }).textContent).toBe('r'));
   await screen.findByRole('radiogroup', { name: 'Run on' });
 };
 
@@ -100,7 +100,7 @@ describe('Start dialog', () => {
     open({ cmd: 'implement-issue' });
     await ready();
     await user.type(screen.getByLabelText('Issue'), 'https://github.com/o/other/issues/3');
-    await waitFor(() => expect((screen.getByLabelText('Where') as HTMLSelectElement).value).toBe('o/other'));
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Where: / }).textContent).toBe('other'));
     await user.click(startButton());
     await waitFor(() => expect(posts()[0]).toMatchObject({ repo: 'o/other', args: 'https://github.com/o/other/issues/3' }));
   });
@@ -121,7 +121,8 @@ describe('Start dialog', () => {
     const user = userEvent.setup();
     open({ cmd: 'dump' });
     await ready();
-    await user.selectOptions(screen.getByLabelText('Where'), '__vault');
+    await user.click(screen.getByRole('button', { name: /^Where: / }));
+    await user.click(await screen.findByText('No repo yet: notes vault'));
     await user.type(screen.getByLabelText('What to capture'), 'a gym app bug');
     await waitFor(() => expect((screen.getByLabelText('Project') as HTMLInputElement).value).toBe('Gym App')); // keyword match
     await user.click(startButton());

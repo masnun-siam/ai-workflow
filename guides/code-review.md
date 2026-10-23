@@ -56,7 +56,7 @@ Applies when the project is multi-tenant or holds per-user data.
 ### 8. Gates
 - No lint, type or static-analysis suppressions added.
 - No change to hooks, CI or test configuration that makes a check weaker.
-- CI is green on the head commit, and its log shows the new and changed tests as passed, not skipped. A PR whose CI is failing or still running is `Blocked`, not reviewed.
+- CI is green on the head commit, and its log shows the new and changed tests as passed, not skipped. A PR whose CI is failing or still running is `Blocked`, not reviewed. A local branch reviewed before its push has no CI yet; its `/verifier-locally` results stand in.
 
 ### 9. Conventions
 - The change follows the repo's docs for its area and the sibling files next to it, including the documented data flow between layers.
