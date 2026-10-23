@@ -16,10 +16,12 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import urllib.error
 import urllib.request
 from urllib.parse import quote, urlparse
 
+import ui_feed
 from shared import data_dir, warn
 
 TIMEOUT_SECONDS = 5
@@ -163,19 +165,18 @@ def load_config() -> dict:
     return cfg
 
 
+def click_path(event: str, rec: dict) -> str:
+    if (
+        event == "pipeline" or event not in _BOARD and rec.get("id")
+    ):  # a session: pipeline, waiting, done, failed, grind
+        return f"#/sessions/{quote(str(rec['id']), safe='')}"
+    return "#/inbox" if event in _BOARD else "#/activity"
+
+
 def click_url(event: str, rec: dict, public_url) -> str | None:
     if not public_url:
         return None
-    base = str(public_url).rstrip("/")
-    if event == "pipeline":
-        return f"{base}/#/sessions/{quote(str(rec['id']), safe='')}"
-    if event in _BOARD:
-        return f"{base}/#/inbox"
-    if event == "waiting":
-        return f"{base}/#/sessions/{quote(str(rec['id']), safe='')}"
-    if rec.get("id"):  # a session: done, failed, grind events
-        return f"{base}/#/sessions/{quote(str(rec['id']), safe='')}"
-    return f"{base}/#/activity"
+    return f"{str(public_url).rstrip('/')}/{click_path(event, rec)}"
 
 
 def dedupe_key(event, rec: dict):
@@ -189,7 +190,48 @@ def dedupe_key(event, rec: dict):
 _QUIET_DONE = ("/pr-grind ", "Start the review grind for PR ")  # keep in step with ui_runner.GRIND_PREFIX
 
 
+def send_ntfy(cfg: dict, headers: dict, text: str, event: str, rec: dict) -> str | None:
+    """POST one push to ntfy. None on success, else a short error."""
+    ntfy = cfg["ntfy"]
+    server, topic, token = ntfy.get("server"), ntfy.get("topic"), ntfy.get("token")
+    if not server or not topic:
+        return "ntfy is not set up"
+    if urlparse(str(server)).scheme not in ("http", "https"):
+        warn("ntfy server must be an http(s) URL; push skipped")
+        return "ntfy server must be an http(s) URL"
+    # Cloudflare's Browser Integrity Check rejects urllib's default User-Agent (error 1010).
+    headers = {**headers, "User-Agent": "aiw-ui (ntfy publisher)"}
+    user, password = ntfy.get("user"), ntfy.get("password")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    elif user and password:
+        headers["Authorization"] = "Basic " + base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
+    req = urllib.request.Request(
+        str(server).rstrip("/") + "/" + quote(str(topic), safe=""),
+        data=text.encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS).close()
+    except urllib.error.HTTPError as e:
+        warn(f"ntfy push failed ({event} {rec.get('id')}): HTTP {e.code}")
+        return f"HTTP {e.code}"
+    except Exception as e:  # never let a push failure break the session
+        warn(f"ntfy push failed ({event} {rec.get('id')}): {type(e).__name__}")
+        return type(e).__name__
+    return None
+
+
+def _never_raise(label: str, fn, *args) -> None:
+    try:
+        fn(*args)
+    except Exception as e:
+        warn(f"{label} notification failed: {type(e).__name__}")
+
+
 def notify(event: str, rec: dict) -> None:
+    """Route one event to every channel its matrix cell turns on; each channel is independent."""
     if event == "done" and str(rec.get("command", "")).startswith(_QUIET_DONE):
         return
     if event in _AFK_MUTED:
@@ -199,30 +241,22 @@ def notify(event: str, rec: dict) -> None:
             return
     try:
         cfg = load_config()
-        ntfy = cfg["ntfy"]
-        server, topic, token = ntfy.get("server"), ntfy.get("topic"), ntfy.get("token")
-        if not server or not topic:
-            return
-        if urlparse(str(server)).scheme not in ("http", "https"):
-            warn("ntfy server must be an http(s) URL; push skipped")
-            return
+        cells = matrix(cfg).get(event, {"browser": False, "ntfy": True, "mac": False})  # unknown event: ntfy only
         headers, text = compose(event, rec, cfg.get("public_url"))
-        # Cloudflare's Browser Integrity Check rejects urllib's default User-Agent (error 1010).
-        headers["User-Agent"] = "aiw-ui (ntfy publisher)"
-        user, password = ntfy.get("user"), ntfy.get("password")
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
-        elif user and password:
-            headers["Authorization"] = "Basic " + base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
-        body = text.encode("utf-8")
-        req = urllib.request.Request(
-            str(server).rstrip("/") + "/" + quote(str(topic), safe=""), data=body, headers=headers, method="POST"
-        )
-        urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS).close()
-    except urllib.error.HTTPError as e:
-        warn(f"ntfy push failed ({event} {rec.get('id')}): HTTP {e.code}")
-    except Exception as e:  # never let a push failure break the session
-        warn(f"ntfy push failed ({event} {rec.get('id')}): {type(e).__name__}")
+        if cells["browser"]:
+            _never_raise("browser", ui_feed.add, event, headers["Title"], text, click_path(event, rec))
+        sends = []
+        if cells["ntfy"]:
+            sends.append(("ntfy", send_ntfy, cfg, headers, text, event, rec))
+        if cells["mac"]:
+            sends.append(("mac", send_mac, headers["Title"], text, headers.get("Click")))
+        threads = [threading.Thread(target=_never_raise, args=a, daemon=True) for a in sends]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+    except Exception as e:  # never let a notification failure break the session
+        warn(f"notification failed ({event} {rec.get('id')}): {type(e).__name__}")
 
 
 @functools.cache

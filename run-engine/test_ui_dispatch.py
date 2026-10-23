@@ -158,7 +158,9 @@ for t in (1002, 1003):
     ui_dispatch.tick_one(d["id"], lambda r: snaps.get(r), runner_for=lambda d: runner, now=t, grind_files=[])
 d = dr.load(d["id"])
 assert d["lanes"]["o/r#5"]["stage"] == "awaiting_merge"
-assert macs and "ready to merge" in macs[-1][1] and pushed[-1][0] == "dispatch"
+assert (
+    pushed[-1][0] == "dispatch" and "ready to merge" in pushed[-1][1]["note"] and not macs
+)  # the fan-out owns the banner
 items = ui_dispatch.inbox_items([d])
 row = next(i for i in items if i["lane"] == "o/r#5")
 assert row["group"] == "decide" and row["type"] == "dispatch_lane" and row["pr"] == 50
