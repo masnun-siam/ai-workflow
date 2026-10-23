@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useCleanupIssue, useSettings, useSkipCi } from '../api/hooks';
 import type { DeliveryCard } from '../api/types';
 import { Button, Chip, Icon, Menu, toast, useConfirm } from '../components';
-import { issueStatus } from '../lib/vocab';
+import { issueStatus, PLAN_RUN } from '../lib/vocab';
 import { routes } from '../lib/routes';
 import { usePanel } from '../panels/PanelContext';
 import { useRepo } from '../shell/useRepo';
@@ -44,14 +44,14 @@ export function IssueAction({ card, repo }: { card: DeliveryCard; repo: string }
   const n = card.n;
   const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
 
-  const start = () => starter.startBoard({ repo, skill: 'implement-issue', arg: String(n), via: 'headless' });
+  const start = () => starter.startBoard({ repo, skill: 'implement-issue', arg: String(n), via: 'headless', ...PLAN_RUN });
   const onAccount = (label: string) => starter.startSession({ repo, command: 'implement-issue', args: String(n), issue: n, claude_cmd: label });
   const openPr = () => card.pr && panel.open({ kind: 'pr', repo, n: card.pr.n });
 
   let el: React.ReactNode = null;
   switch (kind) {
     case 'refine':
-      el = <Button sm disabled={starter.pending} onClick={() => starter.startBoard({ repo, skill: 'refine-issues', arg: String(n), via: 'headless' })}>Refine</Button>;
+      el = <Button sm disabled={starter.pending} onClick={() => starter.startBoard({ repo, skill: 'refine-issues', arg: String(n), via: 'headless', ...PLAN_RUN })}>Refine</Button>;
       break;
     case 'blocked':
       el = <span className="muted" style={{ fontSize: 13 }}><Icon n="lock" s={13} /> after {card.blocked_by.map((b) => `#${b}`).join(', ')}</span>;
