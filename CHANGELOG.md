@@ -127,6 +127,13 @@
 - UI: a Planning card in Tasks filed whose issues have no epic now offers **Refine** with the
   unrefined issue numbers. Boards no longer render before the first GitHub fetch, where every
   PRD looked unstarted and offered Create tasks.
+- UI: a PRD's ` ```mermaid ` diagrams render (click one for full size), and `[text](url)` links
+  and code blocks render instead of showing as raw text.
+- UI: the repo switcher is searchable, groups repos by owner, pins the current one and names each
+  by its repo, so repos sharing a project name are told apart; it works on mobile too. Dropdowns
+  match the app's style, and repo filters show `owner/repo` when two repos share a name.
+- UI: a page opened from a scrolled one starts at the top. Wide tables show a shadow where they
+  scroll, long session prompts are cut to two lines, and the PRD's "Ask Claude" panel stays in view.
 
 ### Changed
 
