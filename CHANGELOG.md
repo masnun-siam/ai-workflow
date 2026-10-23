@@ -5,6 +5,8 @@
 ### Added
 
 - New GitHub Pages showcase in `site/` replaces the old Field Guide: a landing page, a scroll-driven pipeline, a UI tour and a case study. All of it uses real captures from one todoman run (idea to ready PR in 11.5 min). `.github/workflows/pages.yml` builds and deploys it on pushes to master that touch `site/`.
+- Features gains a third tab, **Small changes**, after **In progress** and **Shipped**, and the selected tab is now in the URL (`#/features?tab=shipped|changes`). Small changes holds the open issues that belong to no feature, grouped by status, under a **Describe a bug or small change** box whose **Create task** starts one headless `/create-tasks` session that files the issue with no PRD and refines it in the same session.
+- `POST /api/dispatches` and `POST /api/dispatches/plan` take `issues: ["owner/repo#n", ...]` in place of `epic` (never both; 1 to 30 open issues in one repo; no `feature_branch`): 400 for a bad request, 409 when a picked issue is a lane of a dispatch that is not done or cancelled. `GET /api/dispatches[/<id>]` returns `issues` (the list, or null) and `title`. Such a dispatch re-reads only its listed issues, so no lane joins it later. `aiw dispatch plan|start` and `herdr-dispatch` still take an epic only.
 - Small changes tab: unrefined, ready and blocked rows that no dispatch owns get a checkbox, and a pick bar shows **Refine N** (one headless `/refine-issues` on the picked unrefined issues, locked while a small change is being filed), **Run N** (the Run small changes dialog on the picked refined issues) and **Clear**. The counts follow the board; switching repo clears the picks. On a feature's Issues tab an unrefined issue a dispatch owns no longer has a checkbox.
 - The run dialog has an issue-list mode, "Run small changes": it shows the picked issues as chips, has no epic or feature branch field, and previews and starts with `issues` instead of `epic`. The live settings of an issue-list dispatch have no Feature branch either. Run N on the Small changes tab opens it.
 - Small changes tab: each live small-change `/create-tasks` session of the repo shows as a row above the issues (Queued, Creating… or Needs you, with Watch or Answer) until it ends, counts in the tab, and disables Refine on unrefined rows meanwhile.
@@ -21,6 +23,7 @@
 
 ### Changed
 
+- The **Other issues** row of Features and its `#/issues` page are gone: those issues are the Small changes tab, and `#/issues` redirects to `#/features?tab=changes`.
 - `ui_notify.notify` routes each event by the notification matrix: the browser feed, ntfy and This Mac each get it when their cell is on, independently, with one shared title, body and link. A dispatch no longer shows its own macOS banner; it reaches the Mac through the `dispatch` cell.
 - The session transcript renders assistant and result text as markdown (headings, lists, code, links, bold, italics), and the markdown renderer now handles pipe tables.
 - `make restart` rebuilds the UI and restarts the supervisord-managed server. The `ui-rewrite` PRD is marked Done.

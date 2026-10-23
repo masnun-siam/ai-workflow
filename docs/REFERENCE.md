@@ -32,8 +32,10 @@ aiw threads list|resolve                PR review threads
 aiw grind-mode [--pr <url>]             print the grind mode, deep or simple: the PR's dispatch decides, else
                                         Settings (read by /pr-grind each round)
 aiw dispatch plan|start <epic> [flags]  preview or start a dispatch (flags as herdr-dispatch, plus
-                                        --runner herdr|headless and --workspace <herdr workspace id>)
-aiw dispatch ls|show <id>               list dispatches, or one as JSON
+                                        --runner herdr|headless and --workspace <herdr workspace id>);
+                                        an epic only: picked issues dispatch from the UI
+aiw dispatch ls|show <id>               list dispatches, or one as JSON (also those of picked issues
+                                        started from the UI, listed by title)
 aiw dispatch set <id> key=value...      change max, grind, ci, auto_merge, model, effort while it runs
 aiw dispatch pause|resume|cancel <id>   the whole dispatch (pause stops new lanes only)
 aiw dispatch lane <id> <n> <action>     pause, resume, retry, skip, merge, hold, unhold, or send "<text>"
@@ -56,7 +58,8 @@ after an upgrade it deletes the old run data from the plugin data dir once and l
   `/sw.js`, `/manifest.webmanifest` and `/icons/*` are served from the root.
 
 **Routes** (hash routes, each with an optional `?repo=owner/name` that a shared link keeps):
-`#/inbox` (default, and `#/`), `#/features`, `#/features/<slug>[/<tab>]`, `#/issues` (Other issues),
+`#/inbox` (default, and `#/`), `#/features[?tab=active|shipped|changes]` (`active` when absent),
+`#/features/<slug>[/<tab>]`, `#/issues` (redirects to `#/features?tab=changes`),
 `#/dispatches[?new=<owner/repo#n>]` (`new` opens Run an epic on that epic),
 `#/dispatches/<id>[?lane=<owner/repo#n>]`, `#/activity`, `#/sessions/<id>`, `#/settings[/<section>]`.
 Anything else is a not-found page. **Shortcuts:** `N` Start, `G` then `I/F/D/A/S` to go to a page, `?` lists them, `Esc` closes the top panel. The palette
@@ -80,11 +83,16 @@ session items only.
 
 **Features.** One row per PRD in the current repo with its stage (PRD draft, PRD review, Approved,
 Tasks, Building, Shipped), progress, its running dispatch (or that it needs you), a **Merge #n** button
-for each of its PRs ready to merge, and one next-step button. A last **Other issues** row opens `#/issues`:
-open issues of the repo that belong to no feature (no epic, or an epic with no PRD here), in the same
-table. The **Small changes** tab has a pick bar: tick unrefined, ready or blocked rows a dispatch does not
-own, then **Refine N** (one `/refine-issues` session on the picked unrefined ones), **Run N** (Run small
-changes on the picked refined ones) or **Clear**. A feature page shows a stage stepper, a
+for each of its PRs ready to merge, and one next-step button, under three tabs: **In progress**,
+**Shipped** and **Small changes** (the tab is `?tab=` in the URL). **Small changes** holds the open
+issues of the repo that belong to no feature (no epic, or an epic with no PRD here), grouped by status
+in the same table as a feature's Issues tab. Above them, **Describe a bug or small change** and
+**Create task** start one headless `/create-tasks` session (on `opus` at `medium`) that files the issue
+with no PRD and refines it in the same session; while it lives it shows as a pending row (Queued,
+Creating… or Needs you, with Watch or Answer) and Refine is locked on unrefined rows. A pick bar: tick
+unrefined, ready or blocked rows a dispatch does not own, then **Refine N** (one `/refine-issues`
+session on the picked unrefined ones), **Run N** (Run small changes on the picked refined ones) or
+**Clear**. A feature page shows a stage stepper, a
 **Next step** box and tabs **Issues**, **PRD**, **Peer review** and **Sessions**. Issues: a table by
 status with signals (priority, PR, CI, review, grind, live session, failed last run, cleanup), one
 action per row (Refine, Start, Retry, Answer, Merge, Grind, Skip CI, Clean up; an issue a dispatch owns
@@ -97,7 +105,7 @@ pushed; refused if the file changed on disk since it opened) or **Ask Claude** (
 completed, `POST /api/epics/close`). `GET /api/planning?repo=`.
 
 Issues start one at a time from their row (**Start**); a whole epic runs as a dispatch. `GET
-/api/delivery` (the issue data behind Features and Other issues), `POST /api/start` (headless only; 409
+/api/delivery` (the issue data behind Features and Small changes), `POST /api/start` (headless only; 409
 for a live session, an open PR, a blocked issue or an issue a running dispatch owns), `POST
 /api/cleanup`.
 
@@ -118,7 +126,7 @@ repo's auto-grind). Nothing runs on stale data, and outside a dispatch with auto
 a PR without a click.
 
 **Merge rule.** Each issue has a **Grinding** switch (in its panel); an untouched issue follows the
-repo's auto-grind. A PR shows Merge (Inbox, Features list, feature Issues tab, Other issues) when it is not a
+repo's auto-grind. A PR shows Merge (Inbox, Features list, feature Issues tab, Small changes tab) when it is not a
 draft, does not conflict with its base (GitHub's `mergeable` is not `CONFLICTING`), CI is green and GitHub's review decision is approved (skipped when the repo's owner is your `gh`
 login), and with grinding on its grind is also done (stopped from the UI counts). Turning grinding
 on starts a grind at once when the PR is already ready and has none; turning it off stops a running or
@@ -149,7 +157,7 @@ and the rest as history; **Run an epic** takes an epic (typed, or picked from th
 epics), grind mode (Off, Simple, Full), auto-merge, lanes at once (1–10), a feature branch, model and
 effort, then **Preview** shows the waves and warnings (unrefined issues, cycles, missing checkouts,
 repos without a Slack channel, open blockers outside the epic) before **Start**. Lanes started here run
-as headless sessions (the same dialog, given picked issues, becomes **Run small changes**: chips instead of the epic field, no feature branch, `issues` in the request); `herdr-dispatch` starts herdr ones, and both show here. A dispatch page has the
+as headless sessions (the same dialog, given picked issues, becomes **Run small changes**: chips instead of the epic field, no feature branch, `issues` in the request; lists show it by its title, "Small changes: #412, #415", and `owner/repo`); `herdr-dispatch` starts herdr ones, and both show here. `aiw dispatch plan|start` and `herdr-dispatch` take an epic only. A dispatch page has the
 live settings, **Pause**/**Resume**/**Cancel**, a one-sentence summary with time and spend, a **Needs
 you** strip (each issue waiting on you with its one action: Merge, Answer, Retry), the issues as a
 **Graph** (Starts first, Then: columns by what they wait for, edges to dependents, the repo on cards when
@@ -157,12 +165,12 @@ the epic spans repos) or a **List**, each with a plain line on what it is doing 
 is happening and its main action, a step bar, the question form when its session asks one, a message box,
 its transcript or herdr pane text, and Pause, Merge now, Hold the merge, Retry, Skip in a menu) and the
 activity feed in plain sentences. **Retry** on red CI asks the issue's session to fix CI. When every lane is done it offers **Open PR from
-<branch>**, **Run QA** and **Grind the final PR**; none runs by itself.
+<branch>**, **Run QA** and **Grind the final PR**; none runs by itself, and a dispatch of picked issues offers none of them.
 The server ticks every running dispatch every 30 s from the board poll, the grind state files and each
 lane's session; grind rounds a lane owns are typed into the lane (`dispatch-due:` in the grind state)
-instead of starting a separate session, and the epic is re-read every 5 minutes so new children join.
-`GET /api/dispatches`, `GET /api/dispatches/<id>` (with events), `GET /api/dispatches/<id>/lane?key=`,
-`POST /api/dispatches` (`{epic, settings}` or `{issues: ["owner/repo#n", ...], settings}`, never both; 1 to 30 issues in one repo, no `feature_branch`; 409 when a picked issue is a lane of a dispatch not done or cancelled), `POST /api/dispatches/plan`, `POST
+instead of starting a separate session, and the epic is re-read every 5 minutes so new children join (a dispatch of picked issues re-reads only its listed issues; none joins).
+`GET /api/dispatches`, `GET /api/dispatches/<id>` (with events; `issues` is the list or null), `GET /api/dispatches/<id>/lane?key=`,
+`POST /api/dispatches` (`{epic, settings}` or `{issues: ["owner/repo#n", ...], settings}`, never both; 1 to 30 issues in one repo, no `feature_branch`; 400 for both or neither, a bad ref, more than 30, two repos, a feature branch or no open issue; 409 when a picked issue is a lane of a dispatch not done or cancelled), `POST /api/dispatches/plan` (the same body), `POST
 /api/dispatches/<id>/settings|state|lane|end|seen`.
 
 **Start** (the New button, `N` or ⌘K). Commands grouped Plan, Build, Review, Ship, Capture and

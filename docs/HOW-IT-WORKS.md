@@ -59,10 +59,10 @@ Independent refined issues run in parallel, each in its own worktree, as the lan
 
 ## Dispatch
 
-A dispatch takes one epic and runs its open, refined child issues as **lanes** (an unrefined one is
-skipped as "needs refine" until it is refined). Up to `max` lanes (default 2) run at once; a lane
-starts only when every issue blocking it is merged and its followups are done. Each lane, in one
-session (a herdr tab or a headless session):
+A dispatch takes one epic, or a list of picked issues (from the UI only), and runs its open, refined
+issues as **lanes** (an unrefined one is skipped as "needs refine" until it is refined). Up to `max`
+lanes (default 2) run at once; a lane starts only when every issue blocking it is merged and its
+followups are done. Each lane, in one session (a herdr tab or a headless session):
 
 1. `/implement-issue <n>` until the PR is Ready (CI green, `/pr-review` handled).
 2. `/pr-grind <pr>` in the same session, unless grinding is off or the repo has no Slack channel.
@@ -86,6 +86,15 @@ child, which joins the dispatch as a lane), or grind the final PR.
 The `aiw ui` server runs the engine: every 30 s it reads each lane's facts from the board poll (no
 extra GitHub calls), the grind state files and the lane's session, and acts. A dispatch survives a
 server restart.
+
+A dispatch of picked issues (**Run small changes**) differs from an epic's: 1 to 30 issues in one
+repo, no feature branch, no Open PR, Run QA or Grind the final PR at the end, and its lane set is fixed:
+the engine re-reads only the listed issues, so nothing joins later. An issue already a lane of a live
+dispatch cannot be picked.
+
+**Small changes.** A bug or change that needs no PRD starts on the Features page's **Small changes**
+tab: describe it, and one `/create-tasks` session files it and runs `/refine-issues` on it. Then tick
+the refined issues and **Run N** dispatches them.
 
 ## Grind
 
@@ -117,7 +126,7 @@ starts a panel from its **Peer review** box.
 `aiw ui` shows the process around one question: what needs you. The **Inbox** collects, across
 repos, the questions to answer, PRs ready to merge, paused grinds, failed sessions and reviews at their
 cap. A **Feature** page follows one PRD from draft to shipped with one next step and its issues, and
-shows its running dispatch; **Other issues** holds the open issues outside any feature. **Dispatches**
+shows its running dispatch; **Small changes** holds the open issues outside any feature. **Dispatches**
 shows each dispatch: what needs you first, then its issues as a graph or a list, its activity and live
 settings. Grind starts when a PR turns
 ready (per-repo setting) unless a dispatch lane owns it, and a merged issue's clean worktree is removed. GitHub is read with a cheap GraphQL probe per
