@@ -3,9 +3,9 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import { api } from '../api/endpoints';
-import { keys, useApiMutation, useOpenItems, usePeerReviewOffers, useRepos, useSessions, useSettings } from '../api/hooks';
+import { keys, useApiMutation, useOpenItems, usePeerReviewOffers, useRepos, useSaveSettings, useSessions, useSettings } from '../api/hooks';
 import type { Session } from '../api/types';
-import { Banner, Button, Dialog, toast } from '../components';
+import { Banner, Button, Dialog, ModelEffortPicker, toast } from '../components';
 import { clockText } from '../lib/format';
 import { routes } from '../lib/routes';
 import { COMMAND, COMMANDS, lensName } from '../lib/vocab';
@@ -49,6 +49,7 @@ function StartBody({ preset, onClose }: { preset: StartPreset; onClose: () => vo
   const repos = useRepos();
   const settings = useSettings();
   const sessions = useSessions();
+  const saveSettings = useSaveSettings();
   const offers = usePeerReviewOffers();
   const start = useApiMutation<Parameters<typeof api.startSession>[0], Session>(api.startSession, [['sessions'], ['inbox'], ['session']], { quiet: true });
 
@@ -57,6 +58,7 @@ function StartBody({ preset, onClose }: { preset: StartPreset; onClose: () => vo
   const [sel, setSel] = useState<WhereSel | null>(preset.repo ? { kind: 'repo', slug: preset.repo } : null);
   const [vf, setVf] = useState<FolderPick>({ project: '', feature: '', touched: false });
   const [acctSel, setAcctSel] = useState<string | null>(null);
+  const [runSel, setRunSel] = useState<{ model?: string | null; effort?: string | null }>({});
   const [picked, setPicked] = useState<string[]>([]);
   const [wl, setWl] = useState<WorklogPick>({ mode: 'today', day: '', from: '', to: '' });
   const [failedDays, setFailedDays] = useState<string[] | null>(null);
@@ -84,6 +86,12 @@ function StartBody({ preset, onClose }: { preset: StartPreset; onClose: () => vo
 
   const cmds = settings.data?.commands ?? [];
   const acct = acctSel ?? settings.data?.default ?? '';
+  const model = runSel.model !== undefined ? runSel.model : settings.data?.run_model ?? null;
+  const effort = runSel.effort !== undefined ? runSel.effort : settings.data?.run_effort ?? null;
+  const pickRun = (patch: { model?: string | null; effort?: string | null }) => {
+    setRunSel((r) => ({ ...r, ...patch }));
+    saveSettings.mutate({ ...(patch.model !== undefined ? { run_model: patch.model } : {}), ...(patch.effort !== undefined ? { run_effort: patch.effort } : {}) });
+  };
   const until = limitedUntil(cmds, acct, sessions.data?.limits);
 
   const offer = offers.data?.kinds?.[cmd] ?? [];
@@ -126,7 +134,7 @@ function StartBody({ preset, onClose }: { preset: StartPreset; onClose: () => vo
     }
   };
   const body = (args: string, batch?: string) =>
-    startBody({ where, folder: folderOf(vf), command: cmd, args, lenses, account: acct || undefined, batch });
+    startBody({ where, folder: folderOf(vf), command: cmd, args, lenses, account: acct || undefined, batch, model, effort });
 
   // Worklog: one run, or one per day of a range. A range shares a batch id, so the server runs 3 at a time.
   const runWorklog = async () => {
@@ -244,6 +252,8 @@ function StartBody({ preset, onClose }: { preset: StartPreset; onClose: () => vo
                 <p>Custom prompts run with permission checks skipped (--dangerously-skip-permissions): the prompt is not gated.</p>
               </Banner>
             ) : null}
+
+            <ModelEffortPicker model={model} effort={effort} onChange={pickRun} disabled={settings.isPending} />
 
             {cmds.length > 1 ? (
               <div className="lbl">

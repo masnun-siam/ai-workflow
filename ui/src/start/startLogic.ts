@@ -153,6 +153,8 @@ export function startBody(o: {
   lenses: string[];
   account?: string;
   batch?: string;
+  model?: string | null;
+  effort?: string | null;
 }): SessionStartBody {
   const body: SessionStartBody = o.command === 'custom' ? { text: o.args.trim() } : { command: o.command, args: o.args.trim() };
   if (o.lenses.length) body.peer_review = o.lenses; // the server appends --review <lenses>, or asks a custom prompt to run it
@@ -161,6 +163,8 @@ export function startBody(o: {
     if (pr) body.issue = pr;
   }
   if (o.batch) body.batch = o.batch;
+  if (o.model) body.model = o.model;
+  if (o.effort) body.effort = o.effort;
   const out = { ...whereBody(o.where, o.folder), ...body };
   return o.account ? { ...out, claude_cmd: o.account } : out;
 }
