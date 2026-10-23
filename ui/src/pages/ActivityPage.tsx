@@ -5,7 +5,8 @@ import type { Session } from '../api/types';
 import { Banner, Button, EmptyState, Icon, SessionChip } from '../components';
 import { CleanupDialog } from '../activity/CleanupDialog';
 import { forText, issueOf, SessionTable } from '../activity/SessionTable';
-import { clockText, duration, money, repoLabel, sessionLabel, sessionSlug, untilText } from '../lib/format';
+import { clockText, duration, money, sessionLabel, sessionSlug, untilText } from '../lib/format';
+import { RepoSelect } from '../shell/RepoSelect';
 import { routes } from '../lib/routes';
 import { isLive } from '../lib/vocab';
 
@@ -79,10 +80,7 @@ export function ActivityPage() {
           <select className="f" style={{ width: 140 }} aria-label="Result" value={result} onChange={(e) => { setResult(e.target.value); setShown(PAGE); }}>
             <option value="all">All results</option><option value="done">Done</option><option value="failed">Failed</option><option value="stopped">Stopped</option>
           </select>
-          <select className="f" style={{ width: 160 }} aria-label="Repo" value={repo} onChange={(e) => { setRepo(e.target.value); setShown(PAGE); }}>
-            <option value="">All repos</option>
-            {repos.map((r) => <option key={r.slug} value={r.slug}>{repoLabel(r.slug, repos.map((x) => x.slug))}</option>)}
-          </select>
+          <RepoSelect repos={repos} value={repo} onChange={(v) => { setRepo(v); setShown(PAGE); }} label="Repo" width={160} extrasBefore={[{ value: '', label: 'All repos' }]} />
           <label className="row" style={{ gap: 6 }}><input type="checkbox" checked={group} onChange={(e) => setGroup(e.target.checked)} />Group by issue</label>
         </div>
         <SessionTable rows={hist.slice(0, shown)} groupByIssue={group} />

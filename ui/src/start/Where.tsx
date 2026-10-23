@@ -3,6 +3,7 @@ import { api } from '../api/endpoints';
 import { useApiMutation } from '../api/hooks';
 import type { Repo } from '../api/types';
 import { Button } from '../components';
+import { RepoSelect } from '../shell/RepoSelect';
 import { folderOf } from './startLogic';
 import type { WhereSel } from './startLogic';
 
@@ -43,21 +44,14 @@ export function Where({ repos, value, onChange, canVault, canBrowse, vaultFolder
   return (
     <div className="lbl">
       <label htmlFor="start-where">Where</label>
-      <select
+      <RepoSelect
         id="start-where"
-        className="f"
+        label="Where"
+        repos={repos}
         value={selected}
-        onChange={(e) => {
-          const v = e.target.value;
-          onChange(v === VAULT ? { kind: 'vault' } : v === PATH ? { kind: 'path', path: value.kind === 'path' ? value.path : '' } : { kind: 'repo', slug: v });
-        }}
-      >
-        {repos.map((r) => (
-          <option key={r.slug} value={r.slug}>{r.name && r.name !== r.slug ? `${r.name} (${r.slug})` : r.slug}</option>
-        ))}
-        {canVault ? <option value={VAULT}>No repo yet: notes vault</option> : null}
-        <option value={PATH}>Another folder…</option>
-      </select>
+        extrasAfter={[...(canVault ? [{ value: VAULT, label: 'No repo yet: notes vault' }] : []), { value: PATH, label: 'Another folder…' }]}
+        onChange={(v) => onChange(v === VAULT ? { kind: 'vault' } : v === PATH ? { kind: 'path', path: value.kind === 'path' ? value.path : '' } : { kind: 'repo', slug: v })}
+      />
       {value.kind === 'path' ? (
         <span className="row">
           <input
