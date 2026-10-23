@@ -76,7 +76,7 @@ session (a herdr tab or a headless session):
    closes and the next unblocked lane starts.
 
 A lane that needs you (a question, red CI, a paused grind, a failed merge) is held and tells you in
-the Inbox, by a macOS notification and in the `herdr-dispatch` session; its dependents wait, the other
+the Inbox, by a notification on the channels picked in Settings → Notifications and in the `herdr-dispatch` session; its dependents wait, the other
 lanes go on. At a Claude usage limit no new lane starts until the reset. Settings (grind mode,
 auto-merge, max, model, effort) change while it runs. With a feature branch, every PR targets it
 (cut from the default branch). When every lane is done you choose what follows: open the feature

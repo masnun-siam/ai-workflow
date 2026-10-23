@@ -12,6 +12,7 @@
 
 ### Changed
 
+- `ui_notify.notify` routes each event by the notification matrix: the browser feed, ntfy and This Mac each get it when their cell is on, independently, with one shared title, body and link. A dispatch no longer shows its own macOS banner; it reaches the Mac through the `dispatch` cell.
 - The session transcript renders assistant and result text as markdown (headings, lists, code, links, bold, italics), and the markdown renderer now handles pipe tables.
 - `make restart` rebuilds the UI and restarts the supervisord-managed server. The `ui-rewrite` PRD is marked Done.
 - The New dispatch dialog and a dispatch's live settings use the shared Model and Effort dropdowns instead of the free-text model box; the dialog starts from the saved pair and a pick updates the saved defaults.

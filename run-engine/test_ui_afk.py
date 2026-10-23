@@ -17,6 +17,8 @@ for k in [k for k in os.environ if k.startswith("AIW_NTFY_")]:
 
 import ui_afk  # noqa: E402
 import ui_notify  # noqa: E402
+
+ui_notify.send_mac = lambda *a, **k: None  # the fan-out would show a real banner
 import ui_runner  # noqa: E402
 import ui_sessions  # noqa: E402
 
