@@ -176,14 +176,21 @@ try:
     assert ui_repos.build_command("implement-issue", "116") == "/implement-issue 116"
     assert ui_repos.build_command("pr-grind", "") == "/pr-grind"
     assert ui_repos.build_command("pr-review", "5960") == "/pr-review 5960"
-    for gone in ("run-" + "issue", "gh-issue", "fix-blockers", "pr-fix-comments", "issue-to-pr", "intake"):
+    for gone in (
+        "run-" + "issue",
+        "gh-issue",
+        "fix-blockers",
+        "pr-fix-comments",
+        "issue-to-pr",
+        "intake",
+        "herdr-dispatch",
+    ):
         assert gone not in ui_repos.NAMED, gone
     for kept in (
         "implement-issue",
         "verifier-locally",
         "docs-updater",
         "flow",
-        "herdr-dispatch",
         "peer-review",
         "release-pr",
         "sync-from-wasensi",

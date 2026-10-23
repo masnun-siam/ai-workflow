@@ -1,0 +1,89 @@
+/* Dispatches: settings, stats, lane graph, lane table progress, lane panel, activity feed, end panel. */
+.dsp-c{color:var(--c)}
+.dsp-settings{display:flex;flex-direction:column;gap:12px}
+.dsp-field{display:grid;grid-template-columns:120px auto minmax(0,1fr);align-items:center;gap:6px 12px}
+.dsp-k{font-weight:600;font-size:13px}
+.dsp-hint{font-size:12.5px}
+.dsp-field input.f{max-width:260px}
+.dsp-waves{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:10px}
+.dsp-waves li{display:flex;flex-direction:column;gap:4px}
+
+.dsp-ref{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.dsp-repo{flex:1 1 0;min-width:0;font-size:12px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.dsp-summary{display:flex;flex-direction:column;gap:8px}
+.dsp-sentence{font-size:17px;font-weight:600;letter-spacing:-.005em}
+.dsp-summary .meter{height:6px;border-radius:3px;max-width:560px}
+.dsp-summary .faint{font-size:13px}
+
+.dsp-asks{border:1px solid var(--you);background:var(--you-soft);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.dsp-asks h2{font-size:15px}
+.dsp-asks ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.dsp-asks li{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) auto;gap:12px;align-items:center;background:var(--surface);border-radius:9px;padding:8px 10px}
+.dsp-ask-t{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.dsp-card-asks{list-style:none;margin:0;padding:8px 0 0;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--you)}
+
+.dsp-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,360px);gap:16px;align-items:start}
+.dsp-split.has-lane{grid-template-columns:minmax(0,1fr) minmax(320px,440px)}
+
+.dsp-graph{position:relative;display:flex;gap:40px;overflow-x:auto;padding:4px 12px 12px;background:
+  radial-gradient(circle at 1px 1px,var(--line) 1px,transparent 0) 0 0/16px 16px;border:1px solid var(--line);border-radius:12px;min-height:160px}
+.dsp-edges{position:absolute;inset:0;pointer-events:none;overflow:visible}
+.dsp-edges path{fill:none;stroke:var(--line-strong);stroke-width:1.5}
+.dsp-edges path.done{stroke:var(--ship);opacity:.55}
+.dsp-edges path.hot{stroke:var(--accent);stroke-width:2.2;opacity:1}
+.dsp-col{display:flex;flex-direction:column;gap:12px;flex:1 1 0;min-width:190px;max-width:300px;padding-top:8px;position:relative;z-index:1}
+.dsp-col-h{font-size:12.5px;font-weight:600;color:var(--muted);padding:0 2px}
+.dsp-node{display:flex;flex-direction:column;gap:6px;text-align:left;font:inherit;color:inherit;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 10px;cursor:pointer;transition:border-color .12s,box-shadow .12s,opacity .12s}
+.dsp-node:hover{border-color:var(--line-strong)}
+.dsp-node.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.dsp-node.you{border-color:var(--you);box-shadow:0 0 0 1px var(--you)}
+.dsp-node.done{background:color-mix(in srgb,var(--ship-soft) 45%,var(--surface))}
+.dsp-node.done .dsp-node-t{color:var(--muted)}
+.dsp-node.dim{opacity:.45}
+.dsp-node-t{font-weight:600;font-size:13.5px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.dsp-now{display:flex;gap:5px;align-items:center;font-size:12.5px;color:var(--c);overflow-wrap:anywhere}
+.dsp-now.t-muted{color:var(--muted)}
+
+.dsp-prog{display:flex;gap:3px;min-width:90px}
+.dsp-prog i{flex:1;height:5px;border-radius:2px;background:var(--line)}
+.dsp-prog i.done{background:var(--ship)}
+.dsp-prog i.now{background:var(--build)}
+.tbl tr.on td{background:var(--accent-soft)}
+
+.dsp-lane-now{display:flex;flex-direction:column;gap:10px;padding:10px 12px;border-radius:10px;background:var(--cs);border:1px solid color-mix(in srgb,var(--c) 25%,transparent)}
+.dsp-lane-now b{font-weight:600;color:var(--ink)}
+.dsp-lane{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:12px;position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
+.dsp-steps{list-style:none;margin:0;padding:0;display:flex;gap:4px;flex-wrap:wrap}
+.dsp-steps li{display:flex;align-items:center;gap:4px;font-size:12px;padding:3px 8px;border-radius:999px;background:var(--sunk);color:var(--muted)}
+.dsp-steps li.done{background:var(--ship-soft);color:var(--ship)}
+.dsp-steps li.now{background:var(--build-soft);color:var(--build);font-weight:600}
+.dsp-question{display:flex;flex-direction:column;gap:8px;border:1px solid var(--you);border-radius:10px;padding:10px 12px;background:var(--you-soft)}
+.dsp-transcript{max-height:420px;overflow:auto;border-radius:12px}
+.dsp-pane{margin:0;padding:10px;background:var(--bg);border:1px solid var(--line);border-radius:8px;font-family:var(--mono);font-size:11.5px;white-space:pre-wrap;max-height:360px;overflow:auto}
+
+.dsp-feed{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;max-height:560px;overflow:auto}
+.dsp-feed ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px;font-size:12.5px}
+.dsp-feed li{display:grid;grid-template-columns:14px auto auto minmax(0,1fr);gap:6px;align-items:baseline}
+.dsp-feed li > span:last-child{overflow-wrap:anywhere}
+.dsp-ev-ic{color:var(--faint);text-align:center}
+.dsp-feed li.k-needs_you .dsp-ev-ic,.dsp-feed li.k-awaiting_merge .dsp-ev-ic{color:var(--you)}
+.dsp-feed li.k-held .dsp-ev-ic{color:var(--bad)}
+.dsp-feed li.k-merged .dsp-ev-ic,.dsp-feed li.k-finished .dsp-ev-ic{color:var(--ship)}
+
+.dsp-end{border:1px solid var(--ship);background:var(--ship-soft);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.dsp-end > .row svg{color:var(--ship)}
+
+@media (max-width:1100px){
+  .dsp-split,.dsp-split.has-lane{grid-template-columns:minmax(0,1fr)}
+  .dsp-lane{position:static;max-height:none}
+}
+@media (max-width:640px){
+  .dsp-field{grid-template-columns:minmax(0,1fr)}
+  .dsp-asks li{grid-template-columns:minmax(0,1fr) auto}
+  .dsp-asks li > span{grid-column:1}
+  .dsp-col{min-width:200px}
+}
+.dsp-page .page-head{flex-wrap:wrap;row-gap:12px}
+.dsp-page .page-head > .grow{flex:1 1 320px}

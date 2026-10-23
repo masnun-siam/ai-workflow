@@ -26,7 +26,7 @@ const GET: Record<string, unknown> = {
   '/api/settings': {
     commands: [{ label: 'claude', cmd: 'claude', builtin: true }, { label: 'Masum', cmd: 'cc masum' }],
     default: 'claude',
-    repos: { 'o/r': { auto_grind: false, autopilot_cap: 2, slack_channel: '#rev' } },
+    repos: { 'o/r': { auto_grind: false, slack_channel: '#rev' } },
     vault_dir: '/vault',
   },
   '/api/sessions': { sessions: [], limits: {}, usage: {}, afk: {}, gh: { ok: false, error: 'not logged in' } },
@@ -83,23 +83,23 @@ afterEach(() => {
 
 describe('Settings: repositories', () => {
   it('autosaves a row with only that repo and reverts when the server refuses', async () => {
-    handlers['PUT /api/settings'] = () => [400, { error: 'autopilot_cap must be an integer from 1 to 5' }];
+    handlers['PUT /api/settings'] = () => [400, { error: 'slack_channel must be a string of at most 100 characters' }];
     const user = userEvent.setup();
     page(<SettingsPage />);
     const sw = await screen.findByRole('switch', { name: 'Auto-grind o/r' });
     expect(sw.getAttribute('aria-checked')).toBe('false');
     await user.click(sw);
-    await waitFor(() => expect(sent('PUT', '/api/settings')).toEqual([{ repos: { 'o/r': { auto_grind: true, autopilot_cap: 2, slack_channel: '#rev' } } }]));
+    await waitFor(() => expect(sent('PUT', '/api/settings')).toEqual([{ repos: { 'o/r': { auto_grind: true, slack_channel: '#rev' } } }]));
     await waitFor(() => expect(screen.getByRole('switch', { name: 'Auto-grind o/r' }).getAttribute('aria-checked')).toBe('false'));
-    expect(await screen.findByText(/autopilot_cap must be an integer/)).toBeTruthy();
+    expect(await screen.findByText(/slack_channel must be a string/)).toBeTruthy();
   });
 
-  it('saves a changed cap and a Slack channel on blur, and confirms with a toast', async () => {
+  it('saves a changed Auto-grind and a Slack channel on blur, and confirms with a toast', async () => {
     handlers['PUT /api/settings'] = (b) => [200, { ...(GET['/api/settings'] as object), repos: b?.repos }];
     const user = userEvent.setup();
     page(<SettingsPage />);
-    await user.selectOptions(await screen.findByLabelText('Auto-build cap for o/r'), '4');
-    await waitFor(() => expect(sent('PUT', '/api/settings')[0]).toEqual({ repos: { 'o/r': { auto_grind: false, autopilot_cap: 4, slack_channel: '#rev' } } }));
+    await user.click(await screen.findByRole('switch', { name: 'Auto-grind o/r' }));
+    await waitFor(() => expect(sent('PUT', '/api/settings')[0]).toEqual({ repos: { 'o/r': { auto_grind: true, slack_channel: '#rev' } } }));
     expect(await screen.findByText('Saved o/r')).toBeTruthy();
     const slack = screen.getByLabelText('Slack channel for o/r');
     await user.clear(slack);

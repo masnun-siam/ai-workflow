@@ -20,7 +20,6 @@ import shared
 DEFAULT_CMD = "claude"
 DEFAULT_VAULT = os.path.join("~", "Documents", "notes")  # the `notes` vault /dump and /create-prd write to
 MAX_COMMANDS = 20
-DEFAULT_CAP = 2
 SLUG_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 GRIND_MODES = ("deep", "simple")  # simple: /pr-grind stops once the PR is approved
 
@@ -51,17 +50,11 @@ def vault_dir() -> str:
 
 def _repo(d) -> dict:
     d = d if isinstance(d, dict) else {}
-    cap = d.get("autopilot_cap")
     ch = d.get("slack_channel")
     return {
         "auto_grind": d.get("auto_grind") is True,
-        "autopilot_cap": cap if type(cap) is int and 1 <= cap <= 5 else DEFAULT_CAP,
         "slack_channel": ch if isinstance(ch, str) else "",
     }
-
-
-def _epics(v) -> list:
-    return sorted({e for e in v if type(e) is int and e > 0}) if isinstance(v, list) else []
 
 
 def _migrate(data: dict) -> dict:
@@ -80,11 +73,10 @@ def _migrate(data: dict) -> dict:
 
 
 def repo_settings(slug: str) -> dict:
-    """Per-repo settings with defaults, plus its autopilot epic list."""
+    """Per-repo settings with defaults, plus its issues' grinding switches."""
     d = _migrate(_stored())
     return {
         **_repo((d.get("repos") or {}).get(slug)),
-        "autopilot": _epics((d.get("autopilot") or {}).get(slug)),
         "issue_grind": _issue_grind().get(str(slug).lower(), {}),
     }
 
@@ -122,27 +114,11 @@ def set_issue_grind(slug: str, issue: int, on: bool) -> dict:
     return all_[slug.lower()]
 
 
-def set_autopilot(slug: str, epic: int, on: bool) -> list:
-    """Add or remove an epic from a repo's autopilot list; returns the new list."""
-    if not isinstance(slug, str) or not SLUG_RE.match(slug):
-        raise ValueError("repo must be owner/repo")
-    if type(epic) is not int or epic < 1:
-        raise ValueError("epic must be a number")
-    d = _migrate(_stored())
-    ap = d["autopilot"] = dict(d.get("autopilot") or {})
-    epics = set(_epics(ap.get(slug)))
-    epics.add(epic) if on else epics.discard(epic)
-    ap[slug] = sorted(epics)
-    shared.atomic_write_text(_path(), json.dumps(d, indent=2))
-    return ap[slug]
-
-
 def load() -> dict:
     data = _migrate(_stored())
     stored_repos = data.get("repos") if isinstance(data.get("repos"), dict) else {}
     registered = dispatch.read_checkouts()
     slugs = [*registered, *(k for k in stored_repos if k not in registered)]
-    ap = data.get("autopilot") if isinstance(data.get("autopilot"), dict) else {}
     alias = data.get("claude_label")
     alias = alias if isinstance(alias, str) and alias.strip() else DEFAULT_CMD
     cmds = [{"label": alias, "cmd": DEFAULT_CMD, "builtin": True}]
@@ -159,7 +135,6 @@ def load() -> dict:
         "commands": cmds,
         "default": default if any(c["label"] == default for c in cmds) else alias,
         "repos": {k: _repo(stored_repos.get(k)) for k in slugs},
-        "autopilot": {k: _epics(v) for k, v in ap.items()},
         "vault_dir": vault_dir(),
         "grind_mode": grind_mode(),
     }
@@ -237,29 +212,18 @@ def validate(body) -> dict:
     for slug, r in repos.items():
         if not SLUG_RE.match(str(slug)) or not isinstance(r, dict):
             raise ValueError("repos must map owner/repo to an object")
-        cap = r.get("autopilot_cap", DEFAULT_CAP)
-        if type(cap) is not int or not 1 <= cap <= 5:
-            raise ValueError("autopilot_cap must be an integer from 1 to 5")
         ch = r.get("slack_channel", "")
         if not isinstance(ch, str) or len(ch) > 100:
             raise ValueError("slack_channel must be a string of at most 100 characters")
         clean_repos[slug] = {
             "auto_grind": r.get("auto_grind") is True,
-            "autopilot_cap": cap,
             "slack_channel": ch.strip(),
         }
-    autopilot = body.get("autopilot", stored.get("autopilot") or {})
-    if not isinstance(autopilot, dict) or not all(
-        SLUG_RE.match(str(k)) and isinstance(v, list) and all(type(e) is int and e > 0 for e in v)
-        for k, v in autopilot.items()
-    ):
-        raise ValueError("autopilot must map owner/repo to a list of epic numbers")
     return {
         "claude_label": alias,
         "commands": cmds,
         "default": None if default == alias else default,
         "repos": clean_repos,
-        "autopilot": {k: _epics(v) for k, v in autopilot.items()},
         "vault_dir": vault,
         "grind_mode": mode,
     }

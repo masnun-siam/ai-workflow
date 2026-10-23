@@ -14,7 +14,7 @@ import { useRepo } from './useRepo';
 import { useAwayDocument } from './useAwayDocument';
 
 const TITLES: [string, string][] = [
-  ['/inbox', 'Inbox'], ['/features', 'Features'], ['/board', 'Board'], ['/activity', 'Activity'], ['/sessions', 'Session'], ['/settings', 'Settings'], ['/onboarding', 'Welcome'],
+  ['/inbox', 'Inbox'], ['/features', 'Features'], ['/issues', 'Other issues'], ['/dispatches', 'Dispatches'], ['/activity', 'Activity'], ['/sessions', 'Session'], ['/settings', 'Settings'], ['/onboarding', 'Welcome'],
 ];
 
 function Topbar({ openPalette }: { openPalette: () => void }) {

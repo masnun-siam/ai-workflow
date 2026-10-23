@@ -4,12 +4,11 @@ Inputs (plain data, no I/O):
   snapshot       ui_poller snapshot
   sessions       ui_sessions records; live `/implement-issue <n>` ones (ui_runner._issue_key) count
   grind_index    ui_grind.index() -> {"pr": {(owner, repo, pr): {state, round}}}
-  settings       {auto_grind, autopilot_cap, slack_channel, autopilot}; `autopilot` is a list of epic
-                 numbers or a {epic: bool} map (the repo's autopilot epics); cap defaults to 2
+  settings       ui_settings.repo_settings: auto_grind, issue_grind, slack_channel
   cleanup_flags  {issue_n: {uncommitted, unpushed}} for merged issues that need cleanup (ui_mergeclean)
   solo           the user owns the repo (ui_gh.solo)
 
-Result: {repo, stale, fetched_at, cap, running, auto_grind, lanes: [{epic, title, autopilot, cap, running, cards}]},
+Result: {repo, stale, fetched_at, running, auto_grind, lanes: [{epic, title, running, cards}]},
 one lane per open epic plus a final "No epic" lane (epic None). Card:
 {n, title, column, priority, blocked_by: [n], pr: {n, draft, ci, url, review, conflict} | None,
  session: {id, status} | None, grind: {state, round, reason, thread} | None, grind_on: bool,
@@ -31,7 +30,6 @@ import ui_inbox
 import ui_runner
 import ui_sessions
 
-DEFAULT_CAP = 2
 COLUMNS = ("ready", "in_progress", "draft_pr", "in_review", "grinding", "merged")
 
 
@@ -61,19 +59,12 @@ def _live_sessions(repo: str, sessions) -> dict:
     return out
 
 
-def _epics(settings) -> set:
-    a = (settings or {}).get("autopilot") or []
-    return {int(k) for k, v in a.items() if v} if isinstance(a, dict) else {int(x) for x in a}
-
-
 def build(repo, snapshot, sessions, grind_index, settings, cleanup_flags, solo=False) -> dict:
     data = snapshot.get("data") or {}
     settings = settings or {}
-    cap = settings.get("autopilot_cap") or DEFAULT_CAP
     live = _live_sessions(repo, sessions)
     owner, _, name = repo.partition("/")
     grinds = (grind_index or {}).get("pr") or {}
-    auto = _epics(settings)
 
     epics = {i["n"]: i for i in data.get("issues") or [] if "epic" in i["labels"]}
     lanes = {n: [] for n in epics}
@@ -168,13 +159,12 @@ def build(repo, snapshot, sessions, grind_index, settings, cleanup_flags, solo=F
     out = []
     for n, cards in lanes.items():
         title = "No epic" if n is None else epics[n]["title"].removeprefix("Epic:").strip()
-        out.append({"epic": n, "title": title, "autopilot": n in auto, "cap": cap, "running": running, "cards": cards})
+        out.append({"epic": n, "title": title, "running": running, "cards": cards})
     out.sort(key=lambda lane: (lane["epic"] is None, lane["epic"] or 0))
     return {
         "repo": repo,
         "stale": snapshot.get("stale", True),
         "fetched_at": snapshot.get("fetched_at"),
-        "cap": cap,
         "running": running,
         "auto_grind": settings.get("auto_grind") is True,
         "lanes": out,

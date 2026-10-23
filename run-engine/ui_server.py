@@ -24,12 +24,13 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 import peer_review
 import dispatch
+import dispatch_run
 import ui_actions
 import ui_afk
-import ui_autopilot
 import ui_cleanup
 import ui_config
 import ui_delivery
+import ui_dispatch
 import ui_events
 import ui_gh
 import ui_grind
@@ -45,6 +46,7 @@ import ui_pr
 import ui_repos
 import ui_runner
 import ui_sessions
+import ui_start
 import ui_settings
 import ui_tailscale
 import ui_usage
@@ -154,7 +156,7 @@ def _public(rec: dict) -> dict:
 
 
 # engine-era API prefixes that no longer exist (POST answers 404, not 405)
-_REMOVED = [["api", p] for p in ("runs", "pipelines", "flows", "notes", "dispatch", "maintree", "grind")]
+_REMOVED = [["api", p] for p in ("runs", "pipelines", "flows", "notes", "dispatch", "maintree", "grind", "autopilot")]
 
 
 # ---- boards: poller snapshots in memory, hooks after each fresh poll ----------------------------------
@@ -203,7 +205,7 @@ def _watched_copy() -> list:
     """Repos the poller keeps fresh: registered, with a GitHub remote, and opened in the last 7 days or live."""
     checkouts = dispatch.read_checkouts()
     names = {k.lower(): k for k in checkouts if not k.startswith("local/")}
-    want = set(ui_watch.recent()) | _live_repos()
+    want = set(ui_watch.recent()) | _live_repos() | ui_dispatch.repos()
     return sorted({names[w.lower()] for w in want if w.lower() in names})
 
 
@@ -215,7 +217,7 @@ def _hot() -> set:
         seen = {r for r, t in _seen.items() if now - t < VIEW_SECONDS}
     if "*" in seen:
         return set(_watched_copy())
-    live = {r.lower() for r in _live_repos()}
+    live = {r.lower() for r in _live_repos() | ui_dispatch.repos()}  # dispatch lanes need fresh facts
     return {r for r in _watched_copy() if r in seen or r.lower() in live}
 
 
@@ -225,7 +227,7 @@ def _link(repo: str, n: int) -> dict:
 
 
 def _on_fresh(repo: str, snap: dict, prev: dict) -> None:
-    """After a fresh, non-stale poll: notify, clean merged worktrees, autopilot tick, grind autostart."""
+    """After a fresh, non-stale poll: notify, clean merged worktrees, grind autostart."""
     if snap.get("stale") or snap.get("fetched_at") is None:
         return
     settings = ui_settings.repo_settings(repo)
@@ -256,7 +258,6 @@ def _on_fresh(repo: str, snap: dict, prev: dict) -> None:
                     },
                 )
             _flags[repo][n] = f
-    ui_autopilot.tick(repo, snap, ui_sessions.list_sessions(), settings)
     if not first:
         ui_grind.autostart(repo, snap, {"data": prev}, settings)
 
@@ -363,6 +364,11 @@ def _inbox(query: str):
         settings={r: ui_settings.repo_settings(r) for r in watched},
         solo={r: ui_gh.solo(r) for r in watched},
     )
+    dispatches = dispatch_run.list_all()
+    lanes = [i for i in ui_dispatch.inbox_items(dispatches) if not repo or i["repo"].lower() == repo.lower()]
+    order = {g: n for n, g in enumerate(ui_inbox.GROUPS)}
+    mine = ui_dispatch.drop_owned(body["items"], dispatches)  # a dispatch's issue shows once: as its lane
+    body["items"] = sorted(mine + lanes, key=lambda i: order[i["group"]])  # stable: keeps build's order
     return 200, {**body, "afk": ui_afk.public(recs), "gh": ui_gh.status()}
 
 
@@ -385,8 +391,6 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/":
             _serve_static(self, "index.html")
-        elif path in ("/next/", "/next") or path.startswith("/next/"):  # alias for one release
-            _serve_static(self, path[len("/next/") :] or "index.html")
         elif path in ("/sw.js", "/manifest.webmanifest") or path.startswith(("/assets/", "/icons/")):
             _serve_static(self, path)  # sw.js at the root so its scope covers the whole app
         elif path == "/api/health":
@@ -429,6 +433,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 self._json(400, {"error": str(e)})
         elif path == "/api/peer-review":
             self._json(200, peer_review.offers())
+        elif path == "/api/dispatches":
+            self._json(200, {"dispatches": [ui_dispatch.public(d) for d in dispatch_run.list_all()]})
+        elif path.startswith("/api/dispatches/"):
+            self._dispatch_get(path.split("/")[3:])
         elif path == "/api/sessions/cleanup":
             self._json(200, {"items": ui_cleanup.find_targets()})
         elif path == "/api/sessions":
@@ -503,6 +511,46 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             body = {"events": events, "offset": new_offset}
         self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
 
+    def _dispatch_get(self, rest: list) -> None:
+        """GET /api/dispatches/<id> (with events) and /api/dispatches/<id>/lane?key=<owner/repo#n>."""
+        try:
+            if len(rest) == 1:
+                self._json(200, ui_dispatch.public(dispatch_run.load(rest[0]), full=True))
+            elif len(rest) == 2 and rest[1] == "lane":
+                key = (parse_qs(urlsplit(self.path).query).get("key") or [""])[0]
+                self._json(200, ui_dispatch.read_lane(rest[0], key))
+            else:
+                self._send(404, "text/plain; charset=utf-8", b"not found")
+        except ValueError as e:
+            self._json(404 if "no dispatch" in str(e) else 400, {"error": str(e)})
+        except (RuntimeError, OSError) as e:
+            self._json(502, {"error": str(e)})
+
+    def _dispatch_post(self, rest: list) -> None:
+        """POST /api/dispatches, /plan, /<id>/settings|state|lane|end|seen."""
+        did = rest[0] if rest else ""
+        op = rest[1] if len(rest) == 2 else None
+        if not rest:
+            self._dispatch(ui_dispatch.start, ok=201)
+        elif rest == ["plan"]:
+            self._dispatch(ui_dispatch.plan)
+        elif op == "settings":
+            self._dispatch(lambda b: ui_dispatch.public(dispatch_run.set_settings(did, **b)))
+        elif op == "state":
+            self._dispatch(lambda b: ui_dispatch.public(dispatch_run.set_state(did, b.get("state"))))
+        elif op == "lane":
+            self._dispatch(
+                lambda b: ui_dispatch.public(
+                    dispatch_run.lane_action(did, b.get("lane"), b.get("action"), b.get("text"))
+                )
+            )
+        elif op == "end":
+            self._dispatch(lambda b: ui_dispatch.public(dispatch_run.request_end(did, b.get("action"))))
+        elif op == "seen":
+            self._dispatch(lambda b: ui_dispatch.seen(did))
+        else:
+            self._send(404, "text/plain; charset=utf-8", b"not found")
+
     def _json(self, status: int, body: dict) -> None:
         self._send(status, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
 
@@ -541,14 +589,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._review_lens(parts[3])
         elif len(parts) == 5 and parts[:3] == ["", "api", "review"] and parts[4] == "rounds":
             self._review_rounds(parts[3])
+        elif parts[:3] == ["", "api", "dispatches"]:
+            self._dispatch_post(parts[3:])
         elif parts == ["", "api", "start"]:
             self._dispatch(self._board_start)
         elif parts == ["", "api", "grind", "issue"]:
             self._dispatch(self._grind_issue)
         elif parts in (["", "api", "grind", "skip-ci"], ["", "api", "grind", "stop"]):
             self._dispatch(lambda b: self._grind(parts[3], b))
-        elif parts == ["", "api", "autopilot"]:
-            self._dispatch(self._autopilot)
         elif parts == ["", "api", "cleanup"]:
             self._dispatch(self._merge_cleanup)
         elif parts == ["", "api", "afk"]:
@@ -679,25 +727,16 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     @staticmethod
     def _board_start(body: dict) -> dict:
         repo = _registered(body.get("repo"))
-        return ui_autopilot.start(
+        if body.get("via") not in (None, "headless"):
+            raise ValueError("cards start headless sessions; run an epic's issues in parallel with a dispatch")
+        return ui_start.start(
             repo,
             body.get("skill"),
             body.get("arg"),
-            body.get("via") or "headless",
             lenses=body.get("lenses"),
             snapshot=POLLER.snapshot(repo),
             channel=ui_settings.repo_settings(repo)["slack_channel"],
         )
-
-    @staticmethod
-    def _autopilot(body: dict) -> dict:
-        repo, epic, on = _registered(body.get("repo")), body.get("epic"), body.get("on")
-        if type(epic) is not int or epic < 1 or type(on) is not bool:
-            raise ValueError("epic must be an issue number and on must be true or false")
-        if on and not any(epic == i["n"] and "epic" in i["labels"] for i in POLLER.snapshot(repo)["data"]["issues"]):
-            raise ValueError(f"#{epic} is not an open epic")
-        ui_settings.set_autopilot(repo, epic, on)
-        return {"repo": repo, "epic": epic, "on": on}
 
     @staticmethod
     def _merge_cleanup(body: dict) -> dict:
@@ -705,7 +744,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if type(issue) is not int or issue < 1 or body.get("confirm") is not True:
             raise ValueError("issue must be a number and confirm must be true")
         if not any(issue in m["closes"] or issue == m["n"] for m in POLLER.snapshot(repo)["data"]["merged"]):
-            raise ui_autopilot.Conflict(f"#{issue}'s PR is not merged")
+            raise ui_start.Conflict(f"#{issue}'s PR is not merged")
         checkout = dispatch.read_checkouts()[repo]
         res = ui_mergeclean.clean(checkout, issue, confirm=True)
         _flags.get(repo, {}).pop(issue, None)
@@ -751,7 +790,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json(ok, fn(body))
         except (ValueError, TypeError) as e:
             self._json(400, {"error": str(e)})
-        except (ui_autopilot.Conflict, ui_grind.Conflict, ui_actions.Conflict) as e:
+        except (ui_start.Conflict, ui_grind.Conflict, ui_actions.Conflict) as e:
             self._json(409, {"error": str(e)})
         except (RuntimeError, OSError, ui_runner.RunnerError) as e:  # RunnerError, a failed herdr call
             self._json(502, {"error": str(e)})
@@ -1033,6 +1072,7 @@ def cmd_serve(args) -> None:
     POLLER.start(_watched_copy, hot=_hot)  # boards: poll every repo a board was opened for, run the hooks
     ui_panel.start_timer()  # lens verdicts -> root, rounds, cap
     ui_usage.start_timer()  # 5h/7d usage per account, only while the UI is open
+    ui_dispatch.start_timer(POLLER.snapshot)  # dispatch lanes: facts from the boards, tick, launch, merge
     ui_afk.start_timer()  # AFK mode: auto-answer, skip CI on paused grinds, retry failures; ends the window
     print(f"serving http://127.0.0.1:{server.server_address[1]}/ — Ctrl+C to stop")
     if ts:

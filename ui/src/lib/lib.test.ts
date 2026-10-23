@@ -4,7 +4,6 @@ import { joinFeatures, stageOf } from './features';
 import { mdToHtml } from './md';
 import { nextStep } from './nextStep';
 import { migrateRepoKey, pickRepo, withRepoParam } from './repo';
-import { legacyRedirect } from './routes';
 import { boardColumn, issueStatus, BOARD_COLUMNS } from './vocab';
 
 const card = (o: Partial<DeliveryCard>): DeliveryCard => ({
@@ -14,11 +13,11 @@ const prd = (o: Partial<PlanningPrd> = {}): PlanningPrd => ({
   slug: 'f', title: 'F', status: 'Approved', path: 'docs/prds/f.md', abs_path: '/x/f.md', column: 'approved',
   pr: null, epic: 10, issues: 0, refined: 0, unrefined: [], children: [], panel: null, ...o,
 });
-const lane = (cards: DeliveryCard[], autopilot = false): DeliveryLane => ({ epic: 10, title: 'F', autopilot, cap: 2, running: 0, cards });
+const lane = (cards: DeliveryCard[]): DeliveryLane => ({ epic: 10, title: 'F', running: 0, cards });
 const panel = (o: Partial<PanelRef>): PanelRef => ({
   id: 'p', approved: 1, total: 3, round: 2, max_rounds: 5, state: 'running', lenses: {}, ...o,
 });
-const feat = (p: PlanningPrd, cards: DeliveryCard[] = [], auto = false) => joinFeatures([p], [lane(cards, auto)])[0];
+const feat = (p: PlanningPrd, cards: DeliveryCard[] = []) => joinFeatures([p], [lane(cards)])[0];
 
 describe('nextStep (FR-12)', () => {
   it('draft', () => {
@@ -41,31 +40,33 @@ describe('nextStep (FR-12)', () => {
   });
   it('no open epic: open children come from whichever lane holds them', () => {
     const p = prd({ epic: null, issues: 1, column: 'refined', children: [{ n: 7, title: 't', refined: true }] });
-    const loose: DeliveryLane = { epic: null, title: '', autopilot: false, cap: 2, running: 0, cards: [card({ n: 7 }), card({ n: 8 })] };
+    const loose: DeliveryLane = { epic: null, title: '', running: 0, cards: [card({ n: 7 }), card({ n: 8 })] };
     const f = joinFeatures([p], [loose])[0];
     expect(f.issues.map((i) => i.n)).toEqual([7]);
-    expect(nextStep(f).primary).toEqual({ label: 'Start 1 now', action: { kind: 'startReady', issues: [7] } });
+    expect(nextStep(f).primary).toEqual({ label: 'See the issues', action: { kind: 'tab', tab: 'issues' } }); // no epic to run
   });
   it('done column is shipped even with no merged cards in the lane', () => {
     expect(feat(prd({ column: 'done' }), []).stage).toBe('shipped');
   });
-  it('tasks: refine N, secondary start ready', () => {
+  it('tasks: refine N, no batch start', () => {
     const f = feat(prd({ issues: 2, unrefined: [2], column: 'tasks_filed' }), [card({ n: 2, column: 'unrefined' }), card({ n: 3 })]);
     expect(f.stage).toBe('tasks');
     const s = nextStep(f);
     expect(s.primary).toEqual({ label: 'Refine 1', action: { kind: 'refine', issues: [2] } });
-    expect(s.secondary?.action).toEqual({ kind: 'startReady', issues: [3] });
+    expect(s.secondary).toBeUndefined();
   });
-  it('building: merge, auto-build, or open board', () => {
+  it('building: merge, run the epic, follow its dispatch, or see the issues', () => {
     const p = prd({ issues: 2 });
     const pr = { n: 9, draft: false, ci: 'success', url: '', review: 'approved' as const };
     const m = nextStep(feat(p, [card({ n: 1, column: 'in_review', pr, mergeable: true }), card({ n: 2 })]));
     expect(m.primary).toEqual({ label: 'Review and merge', action: { kind: 'merge', pr: 9 } });
     const a = nextStep(feat(p, [card({ n: 1, column: 'in_progress' }), card({ n: 2 })]));
-    expect(a.primary.label).toBe('Turn on auto-build');
-    expect(a.secondary?.label).toBe('Start 1 now');
-    const quiet = nextStep(feat(p, [card({ n: 1, column: 'in_progress' })], true));
-    expect(quiet.primary.action).toEqual({ kind: 'board' });
+    expect(a.primary).toEqual({ label: 'Run epic', action: { kind: 'dispatch' } });
+    expect(a.secondary).toBeUndefined();
+    const running = nextStep(feat(p, [card({ n: 1, column: 'in_progress' })]), { id: 'd1', closed: 1, total: 3, you: 1 });
+    expect(running).toMatchObject({ title: 'The dispatch needs you on 1 issue', primary: { action: { kind: 'openDispatch', id: 'd1' } }, quiet: false });
+    const quiet = nextStep(feat(p, [card({ n: 1, column: 'in_progress' })]));
+    expect(quiet.primary.action).toEqual({ kind: 'tab', tab: 'issues' });
     expect(quiet.quiet).toBe(true);
   });
   it('shipped -> close epic', () => {
@@ -94,23 +95,6 @@ describe('board columns (FR-18)', () => {
   });
   it('stageOf: Approved with open children and all ready is Building', () => {
     expect(stageOf(prd({ issues: 2 }), lane([card({}), card({ n: 2 })]))).toBe('building');
-  });
-});
-
-describe('legacy redirects (FR-2)', () => {
-  it.each([
-    ['/planning', '', '/features'],
-    ['/delivery', '?repo=a/b', '/board?repo=a/b'],
-    ['/session/abc', '', '/sessions/abc'],
-    ['/answer/abc', '', '/sessions/abc'],
-    ['/dispatch/abc', '', '/sessions/abc'],
-    ['/sessions', '', '/activity'],
-    ['/', '', '/inbox'],
-    ['/run/o/r/12', '', '/board?repo=o/r'],
-  ])('%s%s', (p, s, to) => expect(legacyRedirect(p, s)?.to).toBe(to));
-  it('#/new opens Start', () => expect(legacyRedirect('/new')).toEqual({ to: '/inbox', start: true }));
-  it('new routes are not legacy', () => {
-    for (const p of ['/inbox', '/features', '/features/x/prd', '/board', '/activity', '/sessions/abc', '/settings']) expect(legacyRedirect(p)).toBeNull();
   });
 });
 

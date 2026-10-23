@@ -38,7 +38,6 @@ assert {k: v for k, v in ui_settings.load().items() if k != "vault_dir"} == {
     "commands": [BUILTIN],
     "default": "claude",
     "repos": {},
-    "autopilot": {},
     "grind_mode": "deep",
 }
 assert ui_settings.load()["vault_dir"] == os.path.expanduser("~/Documents/notes")
@@ -74,7 +73,7 @@ saved = ui_settings.load()
 assert ui_settings.check_login("claude")["ok"] and not ui_settings.check_login("cc x")["ok"]
 assert not ui_settings.check_login("nope-xyz")["ok"]
 
-# --- per-repo settings, autopilot map, legacy auto_grind migration
+# --- per-repo settings, legacy auto_grind migration
 import json  # noqa: E402
 
 import dispatch  # noqa: E402
@@ -88,9 +87,7 @@ assert s3["repos"]["o/a"]["auto_grind"] and s3["repos"]["o/b"]["auto_grind"] and
 assert "auto_grind" not in json.load(open(ui_settings._path()))
 assert ui_settings.repo_settings("o/a") == {
     "auto_grind": True,
-    "autopilot_cap": 2,
     "slack_channel": "",
-    "autopilot": [],
     "issue_grind": {},
 }
 assert ui_settings.repo_settings("o/none")["auto_grind"] is False
@@ -106,23 +103,15 @@ assert raises(ui_settings.set_issue_grind, "o/a", 0, True) and raises(ui_setting
 assert ui_settings.grind_mode() == "deep" and ui_settings.load()["grind_mode"] == "deep"
 ui_settings.save({"grind_mode": "simple"})
 assert ui_settings.grind_mode() == "simple" and ui_settings.load()["grind_mode"] == "simple"
-ui_settings.save({"repos": {"o/a": {"autopilot_cap": 3}}})
+ui_settings.save({"repos": {"o/a": {"slack_channel": "C1"}}})
 assert ui_settings.grind_mode() == "simple", "a save without grind_mode keeps it"
 assert raises(ui_settings.validate, {"grind_mode": "fast"})
 ui_settings.save({"grind_mode": "deep"})
-assert ui_settings.set_autopilot("o/a", 12, True) == [12] and ui_settings.set_autopilot("o/a", 12, False) == []
-ui_settings.set_autopilot("o/a", 7, True)
-assert ui_settings.load()["autopilot"] == {"o/a": [7]} and ui_settings.repo_settings("o/a")["autopilot"] == [7]
-assert raises(ui_settings.set_autopilot, "bad", 1, True) and raises(ui_settings.set_autopilot, "o/a", "x", True)
 cur = ui_settings.load()
-body = {"commands": [], "repos": {**cur["repos"], "o/a": {"autopilot_cap": 1}}}
-r = ui_settings.save(body)
-assert r["repos"]["o/a"]["autopilot_cap"] == 1 and r["repos"]["o/b"]["autopilot_cap"] == 2
-assert r["autopilot"] == {"o/a": [7]}  # a save that omits autopilot keeps it
-for bad in (6, 0, "3", True):
-    assert raises(ui_settings.save, {"commands": [], "repos": {"o/a": {"autopilot_cap": bad}}})
-r = ui_settings.save(
-    {"repos": {"o/a": {"autopilot_cap": 4, "slack_channel": "#x"}}}
-)  # partial PUT from the Settings page
-assert r["repos"]["o/a"]["autopilot_cap"] == 4 and r["repos"]["o/b"]["autopilot_cap"] == 2 and r["commands"]
+r = ui_settings.save({"commands": [], "repos": {**cur["repos"], "o/a": {"auto_grind": True, "slack_channel": "C2"}}})
+assert r["repos"]["o/a"] == {"auto_grind": True, "slack_channel": "C2"} and r["repos"]["o/b"]["slack_channel"] == ""
+assert raises(ui_settings.save, {"commands": [], "repos": {"o/a": {"slack_channel": 5}}})
+# a stored Auto-build cap or epic list from before dispatches is ignored, never shown
+r = ui_settings.save({"repos": {"o/a": {"autopilot_cap": 4, "slack_channel": "#x"}}, "autopilot": {"o/a": [7]}})
+assert r["repos"]["o/a"] == {"auto_grind": False, "slack_channel": "#x"} and "autopilot" not in r and r["commands"]
 print("ui_settings: 32 checks passed")

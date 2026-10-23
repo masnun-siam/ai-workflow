@@ -8,10 +8,9 @@ export type StepAction =
   | { kind: 'tab'; tab: FeatureTab }
   | { kind: 'createTasks' }
   | { kind: 'refine'; issues: number[] }
-  | { kind: 'startReady'; issues: number[] }
   | { kind: 'merge'; pr: number }
-  | { kind: 'toggleAuto' }
-  | { kind: 'board' }
+  | { kind: 'dispatch' }
+  | { kind: 'openDispatch'; id: string }
   | { kind: 'closeEpic' };
 
 export interface Step {
@@ -24,7 +23,8 @@ export interface Step {
 
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
-export function nextStep(f: Feature): Step {
+/** `running`: the epic's live dispatch, when there is one; it replaces the build-stage advice. */
+export function nextStep(f: Feature, running?: { id: string; closed: number; total: number; you: number } | null): Step {
   const c = countBy(f.issues);
   switch (f.stage) {
     case 'draft':
@@ -70,45 +70,47 @@ export function nextStep(f: Feature): Step {
     case 'tasks': {
       const un = f.issues.filter((i) => i.status === 'unrefined' || (i.column === 'unrefined')).map((i) => i.n);
       const ids = un.length ? un : f.prd.unrefined;
-      const ready = f.issues.filter((i) => i.status === 'ready').map((i) => i.n);
       return {
         title: `${plural(ids.length, 'issue')} need${ids.length === 1 ? 's' : ''} refinement`,
         hint: 'Refining writes WHAT, WHY and HOW so each issue can be built without guessing.',
         primary: { label: `Refine ${ids.length}`, action: { kind: 'refine', issues: ids } },
-        secondary: ready.length ? { label: `Start ${ready.length} ready`, action: { kind: 'startReady', issues: ready } } : undefined,
       };
     }
     case 'building': {
       const m = f.issues.find((i) => i.mergeable);
       const ready = f.issues.filter((i) => i.status === 'ready').map((i) => i.n);
+      if (running) {
+        return {
+          title: running.you ? `The dispatch needs you on ${plural(running.you, 'issue')}` : 'The dispatch is building this',
+          hint: `${running.closed} of ${running.total} issues done.`,
+          primary: { label: 'Open dispatch', action: { kind: 'openDispatch', id: running.id } },
+          quiet: !running.you,
+        };
+      }
       if (m && m.pr) {
         return {
           title: 'A PR is ready to merge',
           hint: `#${m.n} ${m.title}: checks green and reviewed.`,
           primary: { label: 'Review and merge', action: { kind: 'merge', pr: m.pr.n } },
-          secondary: f.autobuild || !f.epic ? undefined : { label: 'Turn on auto-build', action: { kind: 'toggleAuto' } },
         };
       }
-      if (!f.epic && ready.length) {
-        // auto-build runs per epic lane; without an open epic, starting by hand is the only way
-        return {
-          title: `${plural(ready.length, 'issue')} ready to build`,
-          hint: 'Start them yourself.',
-          primary: { label: `Start ${ready.length} now`, action: { kind: 'startReady', issues: ready } },
-        };
-      }
-      if (!f.autobuild && ready.length) {
-        return {
-          title: `${plural(ready.length, 'issue')} ready to build`,
-          hint: 'Start them yourself, or turn on auto-build to start them as slots free up.',
-          primary: { label: 'Turn on auto-build', action: { kind: 'toggleAuto' } },
-          secondary: { label: `Start ${ready.length} now`, action: { kind: 'startReady', issues: ready } },
-        };
+      if (ready.length) {
+        return f.epic
+          ? {
+              title: `${plural(ready.length, 'issue')} ready to build`,
+              hint: 'Run the epic: its issues build side by side, then grind, merge and wrap up as what they wait for is done.',
+              primary: { label: 'Run epic', action: { kind: 'dispatch' } },
+            }
+          : {
+              title: `${plural(ready.length, 'issue')} ready to build`,
+              hint: 'With no open epic to run, start them one at a time from the Issues tab.',
+              primary: { label: 'See the issues', action: { kind: 'tab', tab: 'issues' } },
+            };
       }
       return {
         title: 'Building',
-        hint: `${c.merged ?? 0} of ${f.issues.length} merged. Auto-build is ${f.autobuild ? 'on' : 'off'}.`,
-        primary: { label: 'Open board', action: { kind: 'board' } },
+        hint: `${c.merged ?? 0} of ${f.issues.length} merged.`,
+        primary: { label: 'See the issues', action: { kind: 'tab', tab: 'issues' } },
         quiet: true,
       };
     }

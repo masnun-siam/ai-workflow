@@ -31,11 +31,12 @@ afterEach(() => {
 });
 
 describe('app shell', () => {
-  it('redirects an old bookmark and counts non-waiting inbox items in the title', async () => {
+  it('opens the Inbox at the root, 404s an old route, and counts non-waiting inbox items in the title', async () => {
     window.location.hash = '#/planning?repo=o/r';
     render(<App />);
-    expect(await screen.findByRole('heading', { level: 1, name: 'Features' })).toBeTruthy();
-    expect(window.location.hash).toBe('#/features?repo=o/r');
+    expect(await screen.findByText(/not found/i)).toBeTruthy(); // old routes are gone
+    window.location.hash = '#/?repo=o/r';
+    expect(await screen.findByRole('heading', { level: 1, name: 'Inbox' })).toBeTruthy();
     await waitFor(() => expect(document.title).toBe('(1) aiw'));
   });
 

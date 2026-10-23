@@ -12,13 +12,13 @@ export interface ShortcutRow {
 const BASE: ShortcutRow[] = [
   { keys: '⌘K', label: 'Search or jump anywhere' },
   { keys: 'N', label: 'Start something new' },
-  { keys: 'G then I / F / B / A / S', label: 'Inbox, Features, Board, Activity, Settings' },
+  { keys: 'G then I / F / D / A / S', label: 'Inbox, Features, Dispatches, Activity, Settings' },
   { keys: '?', label: 'Show this list' },
   { keys: 'Esc', label: 'Close the panel or dialog' },
   { keys: '⌘ Enter', label: 'Submit a form' },
 ];
 
-// Screens register extra rows while mounted (the Board adds j/k/h/l), so the sheet lists exactly what works.
+// Screens register extra rows while mounted, so the sheet lists exactly what works.
 let extra: { id: number; rows: ShortcutRow[] }[] = [];
 let seq = 0;
 let snapshot: ShortcutRow[] = BASE;
@@ -72,7 +72,7 @@ export function useGlobalShortcuts() {
       if (typing(e.target) || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
       if (overlayOpen()) return;
       if (Date.now() - g.current < 900) {
-        const dest = ({ i: routes.inbox, f: routes.features, b: routes.board, a: routes.activity, s: routes.settings() } as Record<string, string>)[e.key.toLowerCase()];
+        const dest = ({ i: routes.inbox, f: routes.features, d: routes.dispatches, a: routes.activity, s: routes.settings() } as Record<string, string>)[e.key.toLowerCase()];
         g.current = 0;
         if (dest) {
           e.preventDefault();

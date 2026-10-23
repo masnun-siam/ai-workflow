@@ -16,7 +16,6 @@ export const ARG_LABEL: Record<string, string> = {
   'peer-review': 'What to review (optional)',
   custom: 'Prompt',
   'refine-issues': 'Epic number or issue numbers',
-  'herdr-dispatch': 'Epic number, issue numbers, a label or an issue-search URL',
   'create-tasks': 'PRD',
   'verifier-locally': 'What to verify (optional)',
   'docs-updater': 'Focus (optional)',
@@ -28,7 +27,6 @@ export const ARG_HINT: Record<string, string> = {
   'pr-grind': 'A PR URL, or the Slack link of the review thread',
   'pr-review': '5960, or a PR URL',
   'refine-issues': '#812, or #813 #814',
-  'herdr-dispatch': '#812 #813, a label, or an issue-search URL',
   'release-pr': '--dry-run, or what to hold back',
 };
 

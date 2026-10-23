@@ -1,11 +1,13 @@
 import { Button } from '../components';
 import type { Feature } from '../lib/features';
 import { nextStep } from '../lib/nextStep';
+import { useEpicDispatch } from '../dispatch/useOwner';
 import { useStepRunner } from './useStepRunner';
 
 /** The Next step box: one primary action, at most one secondary (FR-12). */
 export function NextStepBox({ f, repo }: { f: Feature; repo: string }) {
-  const ns = nextStep(f);
+  const live = useEpicDispatch(repo, f.epic);
+  const ns = nextStep(f, live && { id: live.d.id, closed: live.c.closed, total: live.c.total, you: live.c.you });
   const { run, busy } = useStepRunner(f, repo);
   return (
     <section className="next" aria-label="Next step">

@@ -20,6 +20,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 import ci
+import dispatch_run
 import shared
 import ui_sessions
 import ui_settings
@@ -928,6 +929,11 @@ def prgrind_tick(path: str, now=None) -> str:
             warn(f"pr-grind tick: ci check failed: {e}")
         if not trigger:
             return "idle"
+        if dispatch_run.active_lane(f"{h['owner']}/{h['repo']}", pr=int(h["number"])):
+            # a dispatch lane runs this grind in its own session: tell the dispatch, start nothing here
+            _set_header(path, "dispatch-due", _iso(now))
+            _set_header(path, "next-poll", _iso(now + timedelta(seconds=PRGRIND_HEARTBEAT)))
+            return "dispatch"
 
         # a grind begun elsewhere has no /pr-grind session: take the checkout from any session on this repo
         same = recs or [

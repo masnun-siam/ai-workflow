@@ -1,43 +1,74 @@
 ---
 name: herdr-dispatch
-description: Dispatch a batch of GitHub issues into separate herdr tabs (one `/ai-workflow:implement-issue <n>` per tab) and supervise them from this controller session — dependency order, concurrency cap, PR-ready detection, "tab is waiting on you" notices. Use whenever the user wants to run several issues in herdr tabs, fan out implement-issue, work through a label or GitHub issue-search URL, an epic's sub-issues or a list of issue numbers, or says "dispatch these issues", "run all these issues sequentially or in parallel in herdr", even if they don't name this skill.
+description: Run an epic's child issues as parallel herdr tabs, end to end — each tab runs `/ai-workflow:implement-issue <n>`, then grinds the PR (off/simple/full), is merged (optional auto-merge), does implement-issue's after-merge followups, closes, and the next unblocked issue opens. Dependency order and a concurrency cap; this session previews, starts and relays. Use whenever the user wants to run, dispatch or fan out an epic's issues in herdr tabs, "implement this epic in parallel", "dispatch epic 123", or work several issues at once in herdr, even if they don't name this skill.
+argument-hint: <epic: owner/repo#N or N> [--max N] [--grind off|simple|full] [--auto-merge] [--feature-branch <name>] [--model M] [--effort E]
 ---
 
 # herdr-dispatch
 
-> **Paths.** `<...>` placeholders below are keys from `aiw paths` (run it; `aiw` is
-> on `PATH` via the plugin's `bin/`). Substitute the printed value; never guess a path.
+You are the **controller**. The `aiw dispatch` engine, ticked by the `aiw ui` server, does the work:
+it opens one herdr tab per issue, sends each tab its next command, merges, and closes tabs. You preview,
+start, watch and pass on what needs the user. The UI shows and steers the same dispatch.
 
-You are the **controller**. Each issue runs in its own herdr tab as an independent Claude session; you launch them in a safe order, watch them, and tell the user when something needs them. You do not do the issue work, answer a tab's gates, merge, or post to GitHub.
+You never answer a tab's question, merge, or post to GitHub yourself. The engine merges only when the
+user turned auto-merge on.
 
 ## Inputs
-`<input>` is a GitHub issues search URL, a label name, issue numbers, or one epic parent number. Flags: `--sequential` (one at a time), `--max N` (concurrency, default 2), `--cmd "<template with {n}>"` (default `/ai-workflow:implement-issue {n}`), `--dry-run`, `--close-done` (close each tab once its issue is ready and its agent is idle, instead of keeping it open; the user may also ask for this mid-run). A `--cmd` template may name its placeholder differently (`{issue-id}`); substitute the issue number for it.
+
+`<epic>` is `owner/repo#N`, or `N` for the repo of the current checkout. Flags, all passed straight to
+`aiw dispatch`:
+
+| Flag | Meaning | Default |
+|---|---|---|
+| `--max N` | tabs running at once | 2 |
+| `--grind off\|simple\|full` | grind each ready PR: `simple` ends on any approval, `full` on zero blocker/should-fix | full |
+| `--auto-merge` | merge (merge commit) once CI is green, an approving review is in and the grind is done | off: the tab waits for the user's merge |
+| `--feature-branch <name>` | every PR targets this branch, cut from the default branch if missing | each issue's own base |
+| `--model`, `--effort` | for every tab | Claude's defaults |
 
 ## Flow
 
-1. **Context.** `herdr pane current` → `workspace_id` (tabs open here). `gh repo view --json nameWithOwner -q .nameWithOwner` → `<repo>`.
-2. **Resolve.** `bash <plugin_root>/skills/herdr-dispatch/scripts/resolve.sh <repo> <input>` prints `repo<TAB>n<TAB>title<TAB>deps` (deps = "Depends on #N" refs inside the set). An epic's sub-issues can live in other repos (backend here, frontend elsewhere): each row names its own repo, so open that issue's tab with `--cwd` at that repo's checkout (find it next to this one, or ask), and pass it to poll.sh as `<repo>#<n>`. Also check the native blockers (`gh api repos/<repo>/issues/<n>/dependencies/blocked_by`); refined issues often carry only those. Print the order once: independent issues can run together; an issue starts only after all its deps are **ready** (open non-draft PR). `--sequential` chains everything oldest-first. No confirmation prompt.
-3. **Skip what is already running or done** (stateless resume): `herdr tab list` has a label ending `issue-<n>`; an issue whose PR is already ready is done. State lives in GitHub and herdr, not in a file of yours.
-4. **`--dry-run` stops here** after printing the order, the launch commands and the poll plan.
-5. **Launch** each startable issue while running < `--max`:
-   - If the issues name a base branch (`feature/...`) that does not exist on origin yet, push it once before the first tab: `git push origin origin/master:refs/heads/<base>` (cut from the branch the issue names). Parallel tabs told "create it if missing" race each other.
-   - `herdr tab create --workspace <ws> --cwd <repo dir> --label issue-<n>` → pane id.
-   - `herdr agent start issue-<n> --kind claude --pane <pane>`, then `herdr agent prompt issue-<n> "<cmd with n>" --wait`. This confirms the command actually started; a stall is an error you can see, not a silent loss.
-   - If the prompt stalls, read the pane (`herdr pane read <pane>`). A fresh session can open on a "new MCP servers found in this project" dialog: ask the user once how to answer it (Enter keeps the selection, Escape rejects all), apply that to every tab, and dismiss it before typing. `agent start` can also time out before Claude is up, which drops the typed command. Poll `herdr pane read` until the input prompt shows, then send the command with `herdr pane send-text <pane> "<cmd>"` followed by `herdr pane send-keys <pane> Enter`, and check that the tab reports `working`. Keep each typed message under ~500 characters: a longer `send-text` can arrive with its head cut off (the tab saw only `…tisan …php81…`). Put extra instructions (base branch, merge policy, toolchain) in a second message, and `herdr pane read` to confirm the line starting with the slash command is there. Run `--wait` only in the foreground with a short timeout: once the command is running it blocks until the whole run ends. If the slash command sits unsent in the input after `send-keys Enter` (slash autocomplete can swallow the Enter), press Escape and resend it with `herdr agent prompt issue-<n> "<cmd>"` without `--wait`, then check the tab reports `working`.
-6. **Watch.** Run `bash <plugin_root>/skills/herdr-dispatch/scripts/poll.sh <repo> <running issues...>` with `run_in_background`, env `PREV="n=state,..."` carrying the last reported states. It exits printing `<n> <state>` on the first change:
-   - `blocked` — the tab sits at a human gate (a permission prompt or a question). Tell the user which tab. Say it once; stay quiet until the state changes. Never answer it for them.
-   - `ready` — the issue has an open, non-draft linked PR with green checks (implement-issue marks its draft PR ready only after CI is green and review is handled). Rename the tab `✓ issue-<n>` with `herdr tab rename` and **leave it open**. Free the slot, launch newly unblocked dependents.
-   - `idle` — the tab stopped with no ready PR. A tab waiting on its own background monitors counts as `working`, so `idle` means it ended its turn. Read the pane and tell the user what it is asking for. It keeps its slot.
-   - `red` — the PR's checks fail. Mark every transitive dependent as blocked and skip them; don't build on a broken base. Free the slot.
-   With `--close-done`, on `ready` run `herdr tab close <tab>` once its `agent_status` is `idle` or `done`, instead of renaming it. A tab still `working` after `ready` is finishing its report: close it at a later event.
-   implement-issue refuses to start while a blocker is open, so a dependent can't start until the dependency's PR is **merged**, not just ready. Hold the dependent and tell the user. When the user authorises the tabs to merge (put it in the prompt; it overrides implement-issue's "never merge"), set env `BASE=<base branch>` and wait for `merged` (PR merged, the tab still closing the issue) then `done` (issue closed): `done` frees the slot and starts dependents. A PR into a non-default base never fires `Closes #n`, so the prompt must tell the tab to `gh issue close` it.
-   Restart the poll for the remaining issues after each event.
-7. **Finish** when nothing is running or startable. Report per issue: PR URL and verdict, skipped dependents and why, and the merge order (dependencies first; the PRs are stacked).
+1. **Workspace.** `herdr pane current` → its `workspace_id`.
+2. **Preview.** `aiw dispatch plan <epic> <flags>`. Show the user the waves (issues that run together),
+   the settings, and every warning: unrefined issues are skipped ("needs refine": suggest
+   `/ai-workflow:refine-issues`), a repo with no registered checkout cannot open a tab, a repo with no
+   Slack channel skips grinding, an open blocker outside the epic holds its issue. Then ask with
+   `AskUserQuestion`: start, change settings, or stop. On a change, preview again.
+3. **Start.** `aiw dispatch start <epic> <flags> --runner herdr --workspace <workspace_id>` prints
+   `{"id", "since", "ui"}`. It starts the `aiw ui` server when it is not running. Tell the user the id and
+   the UI link.
+4. **Watch.** Run `aiw dispatch watch <id> --since <since>` with `run_in_background`. It exits when an
+   event needs the user (or after ~50 minutes), printing the new events and a last line
+   `state=<state> since=<ts>`. Tell the user, in a line per lane, what happened and what each needs:
+   - `needs_you` — the tab waits on a question or permission, or stopped. Name the tab (`issue-<n>`);
+     the user answers in the tab or the UI.
+   - `held` — CI is red, the grind paused or ended, or a merge failed. Its dependents wait.
+   - `awaiting_merge` — the PR passed the gate and auto-merge is off: the user merges it; the engine
+     sees the merge and sends the tab its followups.
+   - `finished` — every lane is closed or skipped: go to step 6.
+   Then start the watch again with the new `since`. Stay quiet about plain progress unless asked.
+5. **Steer** on the user's word only:
+   - `aiw dispatch set <id> max=3 grind=simple auto_merge=on model=<m>` (applies at the next step)
+   - `aiw dispatch pause|resume|cancel <id>` (pause stops new tabs; running ones go on)
+   - `aiw dispatch lane <id> <n> pause|resume|retry|skip|merge|hold|unhold`, or
+     `aiw dispatch lane <id> <n> send "<text>"` to type into that tab
+   - `aiw dispatch show <id>` for every lane's stage
+6. **End.** When `finished`, report each issue: its PR, merged or not, skipped and why. Offer, with
+   `AskUserQuestion` (multi-select), the end actions; none runs by itself:
+   - **Open PR to the default branch** (`aiw dispatch end <id> open-pr`; only with a feature branch)
+   - **Run QA** (`aiw dispatch end <id> qa`): a tab that runs `/ai-workflow:verifier-locally` and tests
+     the whole feature end to end in the browser, filing each bug as a new child of the epic. New
+     children join this dispatch as lanes by themselves, so keep watching.
+   - **Grind the final PR** (`aiw dispatch end <id> grind-pr`; only after open-pr)
 
 ## Rules
-- Never answer a gate, merge, or comment on GitHub from here.
-- Cap concurrency (`--max`, default 2): each run builds and tests in its own worktree and uncapped runs peg the machine.
-- Readiness is read from the PR, not inferred from the pane. A new push re-runs CI, so `poll.sh` reports `working` again until checks settle; that is expected.
+
+- Never answer a tab's gate, merge, or comment on GitHub from here. Never type into a tab except through
+  `aiw dispatch lane … send` on the user's word.
+- The dispatch record and GitHub are the state. After a compaction or a new session, `aiw dispatch ls`
+  and `show` say where things stand; resume at step 4.
+- A tab that stalls at start (an MCP-servers dialog, a dropped prompt) shows as `needs_you`. The user
+  fixes the tab, then `aiw dispatch lane <id> <n> retry`.
 
 ## Self-improve
 

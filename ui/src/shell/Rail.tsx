@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom';
-import { needsYouCount, useAfkStart, useAfkStop, useInbox, useSessions, useSettings } from '../api/hooks';
+import { needsYouCount, useAfkStart, useAfkStop, useDispatches, useInbox, useSessions, useSettings } from '../api/hooks';
 import type { Session } from '../api/types';
 import { Button, Icon, Menu, type IconName, type MenuEntry } from '../components';
 import { clockText, sessionLabel, skillOf, shortRepo } from '../lib/format';
@@ -10,10 +10,10 @@ import { routes } from '../lib/routes';
 import { useShell } from './ShellContext';
 import { useRepo } from './useRepo';
 
-export const NAV: { to: string; label: string; icon: IconName; badge?: 'inbox' | 'running' }[] = [
+export const NAV: { to: string; label: string; icon: IconName; badge?: 'inbox' | 'running' | 'dispatch' }[] = [
   { to: routes.inbox, label: 'Inbox', icon: 'inbox', badge: 'inbox' },
   { to: routes.features, label: 'Features', icon: 'layers' },
-  { to: routes.board, label: 'Board', icon: 'board' },
+  { to: routes.dispatches, label: 'Dispatches', icon: 'bolt', badge: 'dispatch' },
   { to: routes.activity, label: 'Activity', icon: 'activity', badge: 'running' },
 ];
 
@@ -186,6 +186,7 @@ export function ThemeButton() {
 export function Rail() {
   const inbox = useInboxCount();
   const running = (useSessions().data?.sessions ?? []).filter((s) => RUNNING_NOW.includes(s.outcome)).length;
+  const dispatching = (useDispatches().data?.dispatches ?? []).filter((d) => d.state === 'running').length;
   const { link } = useRepo();
   const { openShortcuts } = useShell();
   const { pathname } = useLocation();
@@ -194,13 +195,13 @@ export function Rail() {
       <RepoSwitcher />
       <nav className="nav" aria-label="Main">
         {NAV.map((n) => {
-          const count = n.badge === 'inbox' ? inbox : n.badge === 'running' ? running : 0;
-          const on = pathname === n.to || (n.to === routes.features && pathname.startsWith('/features')) || (n.to === routes.activity && pathname.startsWith('/sessions'));
+          const count = n.badge === 'inbox' ? inbox : n.badge === 'running' ? running : n.badge === 'dispatch' ? dispatching : 0;
+          const on = pathname === n.to || (n.to === routes.features && pathname.startsWith('/features')) || (n.to === routes.activity && pathname.startsWith('/sessions')) || (n.to === routes.dispatches && pathname.startsWith('/dispatches'));
           return (
             <NavLink key={n.to} to={link(n.to)} className={`nav-a${on ? ' on' : ''}`} aria-current={on ? 'page' : undefined}>
               <Icon n={n.icon} />
               {n.label}
-              {count ? <span className={`count${n.badge === 'running' ? ' quiet' : ''}`} aria-label={`${count} ${n.badge === 'inbox' ? 'need you' : 'running'}`}>{count}</span> : null}
+              {count ? <span className={`count${n.badge !== 'inbox' ? ' quiet' : ''}`} aria-label={`${count} ${n.badge === 'inbox' ? 'need you' : 'running'}`}>{count}</span> : null}
             </NavLink>
           );
         })}

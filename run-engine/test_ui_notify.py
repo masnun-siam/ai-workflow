@@ -139,7 +139,7 @@ fresh(conf(f))
 for ev in ("done", "failed", "waiting"):
     ui_notify.notify(ev, rec())
 done, failed, waiting = f.reqs
-assert done["headers"]["click"] == failed["headers"]["click"] == "https://box.ts.net/#/board?repo=o/r"
+assert done["headers"]["click"] == failed["headers"]["click"] == f"https://box.ts.net/#/sessions/{rec()['id']}"
 assert waiting["headers"]["priority"] == failed["headers"]["priority"] != done["headers"]["priority"]
 assert waiting["headers"]["priority"] in ("high", "urgent", "4", "5")
 f.close()
@@ -271,9 +271,11 @@ ok("public_url missing / trailing slash")
 # 9 link fallback
 f = Fake()
 fresh(conf(f))
-for link in (None, {"owner": "o"}):
+for link in (None, {"owner": "o"}):  # a session links to itself, with or without an issue
     ui_notify.notify("done", rec(link=link))
-    assert f.reqs[-1]["headers"]["click"] == "https://box.ts.net/#/activity", link
+    assert f.reqs[-1]["headers"]["click"] == "https://box.ts.net/#/sessions/sid1", link
+ui_notify.notify("done", rec(id=None))  # nothing to point at: Activity
+assert f.reqs[-1]["headers"]["click"] == "https://box.ts.net/#/activity"
 f.close()
 ok("link fallback")
 
@@ -303,9 +305,9 @@ ok("non-ASCII command")
 # 12 quoting
 f = Fake()
 fresh(conf(f))
-ui_notify.notify("done", rec(link={"owner": "a b", "repo": "c/d", "issue": 5}))
+ui_notify.notify("done", rec(id="a b/c"))
 c = f.reqs[-1]["headers"]["click"]
-assert "a%20b" in c and "c%2Fd" in c, c
+assert c.endswith("#/sessions/a%20b%2Fc"), c
 ui_notify.notify("waiting", rec(id="x y/z"))
 c = f.reqs[-1]["headers"]["click"]
 assert "x%20y" in c and "x y" not in c, c

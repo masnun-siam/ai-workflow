@@ -29,13 +29,14 @@ _LOOK = {
     "grind-paused": ("pause_button", "aiw: #{n} grind paused", "aiw: grind paused", "Open run"),
     "grind-done": ("mag", "aiw: #{n} grind finished", "aiw: grind finished", "Open run"),
     "pipeline": ("checkered_flag", "aiw: pipeline finished", "aiw: pipeline finished", "Open pipeline"),
-    "afk": ("robot", "aiw: autopilot ended", "aiw: autopilot ended", "Open board"),
-    "pr-ready": ("eyes", "aiw: #{n} PR is ready", "aiw: PR is ready", "Open board"),
-    "needs-cleanup": ("broom", "aiw: #{n} needs cleanup", "aiw: needs cleanup", "Open board"),
-    "panel-cap": ("no_entry", "aiw: review panel hit its cap", "aiw: review panel hit its cap", "Open board"),
+    "afk": ("robot", "aiw: away mode ended", "aiw: away mode ended", "Open Inbox"),
+    "pr-ready": ("eyes", "aiw: #{n} PR is ready", "aiw: PR is ready", "Open Inbox"),
+    "needs-cleanup": ("broom", "aiw: #{n} needs cleanup", "aiw: needs cleanup", "Open Inbox"),
+    "panel-cap": ("no_entry", "aiw: review panel hit its cap", "aiw: review panel hit its cap", "Open Inbox"),
+    "dispatch": ("rocket", "aiw: #{n} in a dispatch needs you", "aiw: a dispatch needs you", "Open Inbox"),
 }
-_BOARD = ("afk", "pr-ready", "needs-cleanup", "panel-cap")  # no run page: the click lands on the board
-# While AFK mode runs, autopilot handles or holds these; the one "afk" push at the end sums them up.
+_BOARD = ("afk", "pr-ready", "needs-cleanup", "panel-cap", "dispatch")  # no session page: the click lands on the Inbox
+# While away mode runs, it handles or holds these; the one "afk" push at the end sums them up.
 _AFK_MUTED = ("waiting", "failed", "grind-paused")
 _TAG_SAFE = re.compile(r"[^A-Za-z0-9._#/-]+")
 
@@ -127,9 +128,8 @@ def click_url(event: str, rec: dict, public_url) -> str | None:
         return f"{base}/#/inbox"
     if event == "waiting":
         return f"{base}/#/sessions/{quote(str(rec['id']), safe='')}"
-    link = rec.get("link")
-    if isinstance(link, dict) and all(link.get(k) for k in ("owner", "repo", "issue")):
-        return f"{base}/#/board?repo={quote(str(link['owner']), safe='')}/{quote(str(link['repo']), safe='')}"
+    if rec.get("id"):  # a session: done, failed, grind events
+        return f"{base}/#/sessions/{quote(str(rec['id']), safe='')}"
     return f"{base}/#/activity"
 
 

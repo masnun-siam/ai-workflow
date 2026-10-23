@@ -24,11 +24,11 @@ from contextlib import redirect_stderr
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-import ui_autopilot  # noqa: E402
 import ui_gh  # noqa: E402
 import ui_grind  # noqa: E402
 import ui_server  # noqa: E402
 import ui_sessions  # noqa: E402
+import ui_start  # noqa: E402
 import ui_watch  # noqa: E402
 
 passed = 0
@@ -97,6 +97,7 @@ try:
         assert req(port, p, host=me)[0] == 404, p
     for p in (
         "/api/dispatch/preview",
+        "/api/autopilot",
         "/api/grind/start",
         "/api/maintree/release",
         "/api/runs/o/r/1/options",
@@ -258,46 +259,45 @@ sv.shutdown()
 assert not failures, failures[:2]
 ok("burst of 60 simultaneous connections all served (listen backlog)")
 
-# ---- /next/: the built app from ui_dist/ (not built yet -> 404 with a short text body)
+# ---- /: the built app from ui_dist/ (not built yet -> 404 with a short text body); /next/ is gone
 ns, port = start()
 me = f"127.0.0.1:{port}"
 real_dist = ui_server.DIST_DIR
 dist = tempfile.mkdtemp()
 ui_server.DIST_DIR = os.path.join(dist, "missing")
-s_, r_, body, h_ = req(port, "/next/", host=me)
+s_, r_, body, h_ = req(port, "/", host=me)
 assert s_ == 404 and r_.getheader("Content-Type").startswith("text/plain") and 0 < len(body) < 100, (s_, body)
 ui_server.DIST_DIR = os.path.join(dist, "ui_dist")
 os.makedirs(os.path.join(dist, "ui_dist", "assets"))
-for rel, text in (("index.html", "<html>new</html>"), ("assets/app-1a2b.js", "x()"), ("icon.txt", "i")):
+for rel, text in (("index.html", "<html>new</html>"), ("assets/app-1a2b.js", "x()"), ("sw.js", "i")):
     with open(os.path.join(dist, "ui_dist", rel), "w") as f:
         f.write(text)
 with open(os.path.join(dist, "secret.txt"), "w") as f:
     f.write("secret")
-for p in ("/next/", "/next"):
-    s_, r_, body, h_ = req(port, p, host=me)
-    assert s_ == 200 and body == b"<html>new</html>" and r_.getheader("Cache-Control") == "no-cache", (p, s_, h_)
+s_, r_, body, h_ = req(port, "/", host=me)
+assert s_ == 200 and body == b"<html>new</html>" and r_.getheader("Cache-Control") == "no-cache", (s_, h_)
 assert r_.getheader("Content-Type").startswith("text/html")
-s_, r_, body, h_ = req(port, "/next/assets/app-1a2b.js", host=me)
+s_, r_, body, h_ = req(port, "/assets/app-1a2b.js", host=me)
 assert s_ == 200 and r_.getheader("Content-Type").startswith("text/javascript") and body == b"x()"
 assert "immutable" in r_.getheader("Cache-Control"), "hashed assets may be cached"
-assert req(port, "/next/icon.txt", host=me)[1].getheader("Cache-Control") == "no-cache"
+assert req(port, "/sw.js", host=me)[1].getheader("Cache-Control") == "no-cache"
 for p in (
-    "/next/nope.js",
-    "/next/assets",
-    "/next/%2e%2e/secret.txt",
-    "/next/..%2fsecret.txt",
-    "/next/%252e%252e/secret.txt",
+    "/next/",
+    "/next",
+    "/assets/nope.js",
+    "/assets",
+    "/assets/%2e%2e/secret.txt",
+    "/assets/..%2fsecret.txt",
+    "/assets/%252e%252e/secret.txt",
 ):
     s_, r_, body, h_ = req(port, p, host=me)
     assert s_ == 404 and b"secret" not in body, (p, s_)
-assert req(port, "/next/", host="evil.example")[0] == 403, "same Host guard"
-s_, r_, body, h_ = req(port, "/", host=me)
-assert s_ == 200 and body == b"<html>new</html>", "/ serves the same app as /next/"
+assert req(port, "/", host="evil.example")[0] == 403, "same Host guard"
 ui_server.DIST_DIR = real_dist
 ns.shutdown()
-ok("/next/ serves ui_dist: index no-cache, hashed assets cached, 404 when unbuilt, no escapes; / the same app")
+ok("/ serves ui_dist: index no-cache, hashed assets cached, 404 when unbuilt, no escapes; /next/ is gone")
 
-# ---- boards: /api/planning, /api/delivery, /api/start, /api/autopilot, /api/cleanup and the post-poll hooks
+# ---- boards: /api/planning, /api/delivery, /api/start, /api/cleanup and the post-poll hooks
 import subprocess as sp  # noqa: E402
 
 import dispatch  # noqa: E402
@@ -326,7 +326,6 @@ os.makedirs(os.path.join(repo_dir, "docs", "prds"))
 with open(os.path.join(repo_dir, "docs", "prds", "x.md"), "w") as f:
     f.write("# PRD x\n\n**Status:** Draft · **Slug:** `x`\n")
 dispatch.register_checkout("o/r", repo_dir)
-ui_settings.set_autopilot("o/r", 1, True)
 
 _notes, _started = [], []
 ui_notify.notify = lambda event, rec: _notes.append((event, rec))
@@ -395,7 +394,6 @@ try:
         ("GET", "/api/planning?repo=x/y", None),
         ("GET", "/api/delivery", None),
         ("POST", "/api/start", {"repo": "x/y", "skill": "implement-issue", "arg": "2"}),
-        ("POST", "/api/autopilot", {"repo": "x/y", "epic": 1, "on": True}),
         ("POST", "/api/cleanup", {"repo": "x/y", "issue": 3, "confirm": True}),
     ):
         assert call(m, p, b)[0] == 400, p
@@ -413,7 +411,7 @@ try:
     ui_server.POLLER.runner = _gh
     ok("boards: reads from memory, stale poll runs no hook")
 
-    # poll 1: epic 1 on autopilot; 2 refined but blocked by 3; 3 has a draft PR 30
+    # poll 1: epic 1; 2 refined but blocked by 3; 3 has a draft PR 30. Nothing starts by itself any more.
     _gql(
         [
             _issue(1, ["epic"]),
@@ -424,10 +422,10 @@ try:
         open_prs=[_pr(30, draft=True)],
     )
     ui_server.POLLER.poll("o/r")
-    assert [b["text"] for b in _started] == ["/implement-issue 4"], _started  # 3 has a PR, 2 is blocked
+    assert _started == [], _started
     st, body = call("GET", "/api/delivery?repo=o/r")
-    assert not body["stale"] and any(lane["epic"] == 1 and lane["autopilot"] for lane in body["lanes"])
-    ok("boards: autopilot tick after a fresh poll")
+    assert not body["stale"] and any(lane["epic"] == 1 for lane in body["lanes"])
+    ok("boards: a fresh poll starts no issue (dispatches do that)")
 
     # poll 2: PR 30 ready and merged-by-poll-3 later; first ready -> pr-ready notification + grind autostart
     ui_settings.save({"repos": {"o/r": {"auto_grind": True, "slack_channel": "C9"}}})
@@ -446,7 +444,7 @@ try:
     assert [b["text"] for b in _started] == ["/pr-grind https://github.com/o/r/pull/30 --channel C9"], _started
     ok("boards: PR turned ready notifies once and autostarts grind")
 
-    # poll 3: PR 30 merged -> 3 closed, 2 unblocked: autopilot starts 2; 3's dirty worktree is flagged + notified
+    # poll 3: PR 30 merged -> 3 closed; 3's dirty worktree is flagged + notified
     _notes.clear()
     _started.clear()
     _gql(
@@ -467,14 +465,14 @@ try:
         ],
     )
     ui_server.POLLER.poll("o/r")
-    assert [b["text"] for b in _started] == ["/implement-issue 2"], _started
+    assert _started == [], _started
     assert [e for e, _ in _notes] == ["needs-cleanup"], _notes
     ui_server.POLLER.poll("o/r")  # same merge again: not new, no second notification
     assert [e for e, _ in _notes] == ["needs-cleanup"]
     st, body = call("GET", "/api/delivery?repo=o/r")
     flagged = [c for lane in body["lanes"] for c in lane["cards"] if c["needs_cleanup"]]
     assert [c["n"] for c in flagged] == [3] and flagged[0]["needs_cleanup"]["uncommitted"] == ["dirty.txt"]
-    ok("boards: merge unblocks and starts; needs-cleanup flag + one notification")
+    ok("boards: merge flags needs-cleanup with one notification")
 
     # cleanup: 409 for an unmerged issue, 400 without confirm, removes the flagged worktree
     assert call("POST", "/api/cleanup", {"repo": "o/r", "issue": 4, "confirm": True})[0] == 409
@@ -485,19 +483,8 @@ try:
     assert not [c for lane in body["lanes"] for c in lane["cards"] if c["needs_cleanup"]]
     ok("boards: cleanup 409/400/200 and the flag clears")
 
-    # /api/autopilot
-    assert call("POST", "/api/autopilot", {"repo": "o/r", "epic": 4, "on": True})[0] == 400  # not an epic
-    assert call("POST", "/api/autopilot", {"repo": "o/r", "epic": 1, "on": "yes"})[0] == 400
-    assert call("POST", "/api/autopilot", {"repo": "o/r", "epic": 1, "on": False}) == (
-        200,
-        {"repo": "o/r", "epic": 1, "on": False},
-    )
-    assert ui_settings.repo_settings("o/r")["autopilot"] == []
-    assert call("POST", "/api/autopilot", {"repo": "o/r", "epic": 1, "on": True})[0] == 200
-    ok("boards: autopilot toggle")
-
     # /api/start: headless, conflicts (open PR, blocked, live session), peer-review needs lenses
-    ui_autopilot._recent.clear()
+    ui_start._recent.clear()
     _started.clear()
     st, body = call(
         "POST", "/api/start", {"repo": "o/r", "skill": "create-tasks", "arg": "docs/prds/x.md", "via": "headless"}
@@ -518,12 +505,11 @@ try:
     assert call("POST", "/api/start", {"repo": "o/r", "skill": "refine-issues", "arg": "1"})[0] == 409
     ok("boards: /api/start shapes and 409s")
 
-    # herdr start: no session to link to, so {session: None, via, tab}
-    ui_autopilot._recent.clear()
-    ui_autopilot._herdr = lambda argv: sp.CompletedProcess(argv, 0, "pane-1\n", "")
+    # herdr starts from a card are gone: a dispatch runs issues in herdr tabs
+    ui_start._recent.clear()
     st, body = call("POST", "/api/start", {"repo": "o/r", "skill": "refine-issues", "arg": "1", "via": "herdr"})
-    assert st == 200 and body == {"session": None, "via": "herdr", "tab": "refine-issues-1"}, body
-    ok("boards: herdr start answers {session: null, via: herdr, tab}")
+    assert st == 400 and "dispatch" in body["error"], body
+    ok("boards: a herdr start is refused")
 
     # /api/prd: sha of the file as read; base_sha guards the save
     st, body = call("GET", "/api/prd?repo=o/r&path=docs/prds/x.md")

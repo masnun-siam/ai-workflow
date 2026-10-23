@@ -36,7 +36,6 @@ NAMED = (
     "skill-feedback",
     "dump",
     "flow",
-    "herdr-dispatch",
     "peer-review",
     "pr-grind",
     "release-pr",

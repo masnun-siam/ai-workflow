@@ -3,11 +3,12 @@
 While it runs, each tick:
 - answers every `aiw ask` round whose questions all carry a "(Recommended)" option, through the
   same claim + resume path as the answer page (rounds with any other question are held);
-- retries sessions that failed during the window on a 2m/10m/30m/1h backoff, then holds them.
+- retries sessions that failed during the window on a 2m/10m/30m/1h backoff, then holds them;
+- retries dispatch lanes that are held or stopped (not ones asking a question) on the same backoff.
 When the window ends (expiry or "I'm back") one ntfy push sums it up and the UI shows the log.
 
 State: <data_dir>/afk.json {started, until, log, ended, held_at_end, dismissed}.
-Retry bookkeeping lives on the session record: afk_retries, afk_retry_at, afk_retry_for.
+Retry bookkeeping lives on the session record or the dispatch lane: afk_retries, afk_retry_at, afk_retry_for.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ import threading
 import time
 from datetime import datetime
 
+import dispatch_run
 import shared
 import ui_notify
 import ui_repos
@@ -207,6 +209,51 @@ def _retry(rec: dict, now: float, started) -> dict | None:
     return _entry("retry", rec, now, rec.get("error"), f"retry {n + 1} of {len(RETRY_DELAYS)}")
 
 
+def _retry_lanes(now: float) -> list:
+    """Held or stopped dispatch lanes: retry on RETRY_DELAYS, keyed by the reason, so a new reason starts over."""
+    out = []
+    for d in dispatch_run.list_all():
+        if d["state"] not in ("running", "paused"):
+            continue
+        with dispatch_run.locked(d["id"]):
+            d = dispatch_run.load(d["id"])
+            changed = False
+            for k, x in d["lanes"].items():
+                why = x.get("held") or (x.get("needs_you") if x.get("needs_you") != "waiting on you" else None)
+                if not why:
+                    if x.get("afk_retries"):  # it got through: start the count over
+                        x.update(afk_retries=None, afk_retry_at=None, afk_retry_for=None)
+                        changed = True
+                    continue
+                n = x.get("afk_retries") or 0
+                if x.get("afk_retry_for") != why:
+                    if n < len(RETRY_DELAYS):
+                        x.update(afk_retry_at=now + RETRY_DELAYS[n], afk_retry_for=why)
+                        changed = True
+                    continue
+                if now < (x.get("afk_retry_at") or 0) or n >= len(RETRY_DELAYS):
+                    continue
+                x.update(afk_retries=n + 1, afk_retry_for=None)
+                dispatch_run.apply_lane_action(d, k, "retry")
+                changed = True
+                owner, _, name = x["repo"].partition("/")
+                out.append(
+                    {
+                        "at": now,
+                        "kind": "retry",
+                        "sid": None,
+                        "repo": x["repo"],
+                        "link": {"owner": owner, "repo": name, "issue": x["n"]},
+                        "command": f"dispatch lane #{x['n']}",
+                        "question": why[:500],
+                        "picked": f"retry {n + 1} of {len(RETRY_DELAYS)}",
+                    }
+                )
+            if changed:
+                dispatch_run.save(d)
+    return out
+
+
 def _finish(now: float) -> None:
     with _lock:
         st = load()
@@ -239,6 +286,10 @@ def tick(now=None) -> None:
                 continue
             if e:
                 entries.append(e)
+    try:
+        entries += _retry_lanes(now)
+    except Exception as exc:  # noqa: BLE001 - dispatch trouble must not stop away mode
+        warn(f"afk: dispatch lanes: {type(exc).__name__}: {exc}")
     if not entries:
         return
     with _lock:  # re-read: the owner may have extended or ended the window meanwhile

@@ -1,6 +1,0 @@
-.board-scroll{overflow-x:auto;padding-bottom:6px;max-width:100%}
-.card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.skel{border-radius:9px;background:linear-gradient(90deg,var(--sunk),var(--line),var(--sunk));background-size:200% 100%;animation:skel 1.4s linear infinite;height:70px}
-@keyframes skel{to{background-position:-200% 0}}
-.board-skel{display:grid;grid-template-columns:repeat(5,minmax(210px,1fr));gap:10px;min-width:1090px}
-.lane-h .cap{font-size:13px;color:var(--muted)}

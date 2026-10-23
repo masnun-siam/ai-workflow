@@ -7,7 +7,7 @@ import { PublishDialog } from '../repos/PublishDialog';
 import './settings.css';
 
 export const REPO_FILTER_AFTER = 8;
-const DEFAULTS: RepoSettings = { auto_grind: false, autopilot_cap: 2, slack_channel: '' };
+const DEFAULTS: RepoSettings = { auto_grind: false, slack_channel: '' };
 
 /** Slack channel: edited locally, saved when the field loses focus with a changed value. */
 function SlackCell({ slug, value, onSave }: { slug: string; value: string; onSave: (v: string) => void }) {
@@ -145,7 +145,7 @@ export function ReposSection() {
         <div className="tbl-wrap">
           <table className="tbl">
             <thead>
-              <tr><th>Repo</th><th>GitHub</th><th>Auto-grind</th><th>Auto-build cap</th><th>Slack channel</th><th><span className="sr">Remove</span></th></tr>
+              <tr><th>Repo</th><th>GitHub</th><th>Auto-grind</th><th>Slack channel</th><th><span className="sr">Remove</span></th></tr>
             </thead>
             <tbody>
               {shown.map((r) => {
@@ -167,17 +167,12 @@ export function ReposSection() {
                       )}
                     </td>
                     <td><Switch checked={row.auto_grind} label={`Auto-grind ${r.slug}`} onChange={(v) => void change(r.slug, { auto_grind: v })} /></td>
-                    <td>
-                      <select className="f" aria-label={`Auto-build cap for ${r.slug}`} value={row.autopilot_cap} onChange={(e) => void change(r.slug, { autopilot_cap: Number(e.target.value) })}>
-                        {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
-                      </select>
-                    </td>
                     <td><SlackCell slug={r.slug} value={row.slack_channel} onSave={(v) => void change(r.slug, { slack_channel: v })} /></td>
                     <td><Button variant="danger" sm onClick={() => void onRemove(r)} aria-label={`Remove ${r.slug}`}>Remove</Button></td>
                   </tr>
                 );
               })}
-              {shown.length === 0 ? <tr><td colSpan={6} className="muted">No repo matches.</td></tr> : null}
+              {shown.length === 0 ? <tr><td colSpan={5} className="muted">No repo matches.</td></tr> : null}
             </tbody>
           </table>
         </div>
