@@ -100,9 +100,6 @@ class Conflict(Exception):
     """The loop is not in a state that allows the action (HTTP 409)."""
 
 
-SKIP_CI_REPLY = "Skip CI for now, complete the grind, then come back and fix the CI"
-
-
 def _loop(repo: str, pr) -> tuple:
     """(state file, header) of the loop for `repo`'s PR; Conflict when there is none."""
     owner, _, name = str(repo).lower().partition("/")
@@ -133,7 +130,9 @@ def skip_ci(repo: str, pr: int) -> dict:
     if not target:
         raise Conflict("no finished grind session to reply to")
     try:
-        ui_runner.send_prompt(target["id"], f"Human decision on the paused grind (PR #{pr}): {SKIP_CI_REPLY}")
+        ui_runner.send_prompt(
+            target["id"], f"Human decision on the paused grind (PR #{pr}): {dispatch_run.SKIP_CI_REPLY}"
+        )
     except (ui_runner.Conflict, ui_runner.RunnerError, OSError) as e:
         raise Conflict(str(e))
     ui_runner._set_header(path, "paused", None)
