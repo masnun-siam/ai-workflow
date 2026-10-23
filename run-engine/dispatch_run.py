@@ -633,6 +633,8 @@ def request_end(did: str, action: str) -> dict:
         raise ValueError(f"end action must be one of {END_ACTIONS}")
     with locked(did):
         d = load(did)
+        if d.get("issues"):
+            raise ValueError(f"{action} needs an epic: not available for a list of issues")
         if action == "open-pr" and not d["settings"].get("feature_branch"):
             raise ValueError("open-pr needs a feature branch")
         if action == "grind-pr" and not d.get("final_prs"):
@@ -641,6 +643,11 @@ def request_end(did: str, action: str) -> dict:
         event(d, None, "end", f"requested {action}")
         save(d)
         return d
+
+
+def dispatch_repo(d: dict) -> str:
+    """The dispatch's repo: the epic's, else the repo of its listed issues (all in one repo)."""
+    return (d["epic"] or d["issues"][0]).partition("#")[0]
 
 
 def _repos(d: dict) -> list:

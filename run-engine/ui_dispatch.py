@@ -120,6 +120,7 @@ def tick_one(
     snapshot,
     runner_for=dispatch_runners.for_dispatch,
     resolve=dispatch_cli.resolve,
+    resolve_issues=dispatch_cli.resolve_issues,
     now=None,
     grind_files=None,
 ) -> list:
@@ -132,10 +133,12 @@ def tick_one(
         if now - (d.get("synced_at") or 0) >= SYNC_SECONDS:
             d["synced_at"] = now
             try:
-                for k in dr.sync_lanes(d, resolve(d["epic"])["children"]):
+                listed = d.get("issues")
+                kids = resolve_issues(listed)["children"] if listed else resolve(d["epic"])["children"]
+                for k in dr.sync_lanes(d, kids):
                     dr.event(d, k, "lane", "joined the dispatch")
             except Exception as e:  # noqa: BLE001
-                warn(f"dispatch {did}: cannot re-read the epic: {e}")
+                warn(f"dispatch {did}: cannot re-read the {'issues' if d.get('issues') else 'epic'}: {e}")
         files = list(ui_grind._state_files()) if grind_files is None else grind_files
         facts = {}
         for k, x in d["lanes"].items():
@@ -171,8 +174,8 @@ def start_timer(snapshot, interval=TICK_SECONDS) -> threading.Thread:
 
 def notify(d: dict, k, kind: str, text: str) -> None:
     x = d["lanes"].get(k) if k else None
-    title = f"aiw: {k or d['epic']}"
-    owner, _, name = (x["repo"] if x else d["epic"].partition("#")[0]).partition("/")
+    title = f"aiw: {k or d['epic'] or d['title']}"
+    owner, _, name = (x["repo"] if x else dr.dispatch_repo(d)).partition("/")
     ui_notify.notify(
         "dispatch",
         {
@@ -250,10 +253,11 @@ def inbox_items(dispatches: list) -> list:
                     "key": f"dispatch:{d['id']}:done",
                     "group": "decide",
                     "type": "dispatch_done",
-                    "repo": d["epic"].partition("#")[0],
+                    "repo": dr.dispatch_repo(d),
                     "at": None,
                     "dispatch": d["id"],
                     "epic": d["epic"],
+                    "title": d["title"],
                     "feature_branch": d["settings"].get("feature_branch"),
                     "final_prs": d.get("final_prs") or {},
                 }

@@ -97,6 +97,39 @@ for fn in (
         raise AssertionError("feature_branch accepted")
     except ValueError:
         pass
+# end actions are refused for an issue list, and nothing is recorded
+for act in dr.END_ACTIONS:
+    try:
+        dr.request_end(il["id"], act)
+        raise AssertionError(f"{act} accepted")
+    except ValueError:
+        pass
+assert not dr.load(il["id"]).get("end_requests")
+assert dr.dispatch_repo(il) == "o/r" and dr.dispatch_repo({"epic": "a/b#1", "issues": None}) == "a/b"
+# a two-lane list dispatch walks to done under the cap, merging both
+dl = dr.create(
+    None,
+    "headless",
+    {"max": 1, "grind": "off", "auto_merge": True},
+    [child(21), child(22)],
+    issues=["o/r#21", "o/r#22"],
+)
+rl, lm = FakeRunner(), []
+merge_l = lambda repo, n: (lm.append(n), (True, ""))[1]  # noqa: E731
+for t, n in ((1, 21), (2, 22)):
+    dr.tick(dl, fq(21, 22), rl, merge_l, now=t)
+    assert (
+        len(rl.started) == (1 if n == 21 else 2)
+        and sum(x["stage"] == "implementing" for x in dl["lanes"].values()) == 1
+    )
+    dl["lanes"][K(n)].update(stage="merge_gate", pr=n * 10)
+    dr.tick(dl, {K(n): {"issue_open": True, "agent": "idle", "solo": True, "pr": pr(n * 10)}}, rl, merge_l, now=t + 0.5)
+    gone = {"issue_open": False, "agent": "idle", "pr": pr(n * 10, state="MERGED")}
+    for dt in (0.7, 0.8):
+        dr.tick(dl, {K(n): gone}, rl, merge_l, now=t + dt)
+assert lm == [210, 220], lm
+dr.tick(dl, {}, rl, merge_l, now=10)
+assert dl["state"] == "done", {k: x["stage"] for k, x in dl["lanes"].items()}
 print("  ok  issue list")
 
 # --- launch order, cap, deps, needs refine

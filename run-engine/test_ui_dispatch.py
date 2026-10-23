@@ -175,6 +175,48 @@ row = next(i for i in items if i["lane"] == "o/r#5")
 assert row["group"] == "decide" and row["type"] == "dispatch_lane" and row["pr"] == 50
 print("  ok  tick_one")
 
+# --- issue-list dispatch: re-read of the listed issues only, no epic anywhere
+dl = dr.create(None, "headless", {"grind": "off"}, [{"repo": R, "n": 31, "refined": False}], issues=["o/r#31"])
+rl = FakeRunner()
+kids = [{"repo": R, "n": 31, "refined": True}, {"repo": R, "n": 99, "refined": True}]
+ui_dispatch.tick_one(
+    dl["id"],
+    lambda r: snap(stale=True),
+    runner_for=lambda d: rl,
+    resolve=lambda e: 1 / 0,
+    resolve_issues=lambda refs: {"children": kids[:1]},
+    now=5000,
+    grind_files=[],
+)
+x = dr.load(dl["id"])
+assert list(x["lanes"]) == ["o/r#31"] and x["lanes"]["o/r#31"]["stage"] == "queued"
+warns = []
+ui_dispatch.warn = warns.append
+ui_dispatch.tick_one(
+    dl["id"],
+    lambda r: snap(stale=True),
+    runner_for=lambda d: rl,
+    resolve=lambda e: 1 / 0,
+    resolve_issues=lambda refs: 1 / 0,
+    now=9000,
+    grind_files=[],
+)
+assert warns and "epic" not in warns[0] and dr.load(dl["id"])["synced_at"] == 9000
+n0 = len(pushed)
+ui_dispatch.notify(dl, "o/r#31", "lane", "joined")
+ui_dispatch.notify(dl, None, "x", "paused")
+assert [p[1]["note"] for p in pushed[n0:]] == ["aiw: o/r#31 joined", f"aiw: {dl['title']} paused"]
+assert pushed[-1][1]["repo"] == R and pushed[-1][1]["link"]["issue"] is None
+dl["lanes"]["o/r#31"]["needs_you"] = "waiting on you"
+assert ui_dispatch.inbox_items([dl])[0]["repo"] == R
+dl["state"] = "done"
+row = ui_dispatch.inbox_items([dl])[-1]
+assert (row["repo"], row["epic"], row["title"], row["feature_branch"]) == (R, None, dl["title"], None)
+dl["state"] = "running"
+dl["lanes"]["o/r#31"]["stage"] = "queued"
+assert R in ui_dispatch.repos()
+print("  ok  issue-list dispatch")
+
 # --- not busy: cancelled dispatches are left alone
 dr.set_state(d["id"], "cancelled")
 assert ui_dispatch.tick_one(d["id"], lambda r: snaps.get(r), runner_for=lambda d: 1 / 0) == []
