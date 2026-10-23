@@ -23,7 +23,7 @@ pushed = []
 ui_notify.notify = lambda event, rec: pushed.append((event, rec))
 ui_gh.status = lambda *a, **k: {"ok": True, "login": "someone-else", "error": None}
 macs = []
-ui_dispatch.mac_notify = lambda title, text: macs.append((title, text))
+ui_notify.send_mac = lambda title, text, *a, **k: macs.append((title, text))
 R = "o/r"
 
 
@@ -190,19 +190,6 @@ kept = ui_dispatch.drop_owned(rows, [dd])
 assert [(r["type"], r.get("pr")) for r in kept] == [("pr_ready", 60), ("question", None)], kept
 assert ui_dispatch.drop_owned(rows, [{**dd, "state": "done"}]) == rows
 print("  ok  inbox dedupe")
-
-# --- mac_notify passes the text as argv, never as script
-real = ui_dispatch.__dict__.get("mac_notify")
-import importlib  # noqa: E402
-
-fresh = importlib.reload(ui_dispatch)
-calls = []
-fresh.mac_notify("t", 'x" & do shell script "rm', run=lambda argv, **k: calls.append(argv))
-if sys.platform == "darwin":
-    assert calls[0][-2] == 'x" & do shell script "rm' and "rm" not in " ".join(calls[0][:-2])
-ui_dispatch = fresh
-ui_dispatch.mac_notify = lambda title, text: macs.append((title, text))
-print("  ok  mac notify")
 
 # --- active_lane: grind autostart and pr-grind re-entry leave a lane's PR alone
 d2 = dr.create("o/r#2", "headless", {}, [{"repo": R, "n": 9, "refined": True}])

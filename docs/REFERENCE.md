@@ -258,6 +258,8 @@ The file must be mode 0600 (`chmod 600 <data_dir>/ui.json`) because it can hold 
 a looser mode is ignored with a warning. `AIW_NTFY_SERVER`, `AIW_NTFY_TOPIC` and
 `AIW_NTFY_TOKEN` override the file. `public_url` is the base for push click-through links.
 
+For clickable macOS banners run `brew install terminal-notifier` on the host and restart `aiw ui`; without it banners still show (through AppleScript) but cannot open a link.
+
 **Security:** there is no app-level auth. Access relies on tailnet ACLs, so anyone who can
 reach the URL can start sessions. Sessions run `claude --dangerously-skip-permissions` by
 default, with no opt-out flag. Never use `tailscale funnel` (public exposure plus skip-permissions
