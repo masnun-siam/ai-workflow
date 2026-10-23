@@ -13,6 +13,9 @@
   of the Grinding switch. The Inbox shows an issue in a dispatch once, as its dispatch row.
 - A dispatch issue's question is answered in its issue panel. Away mode also retries held or stopped
   dispatch issues. **Retry** on red CI asks the issue's session to fix CI.
+- A dispatch issue tracks its PR as soon as it opens. A ready PR whose CI is red shows **CI is red**, not
+  "stopped without a ready PR", and **Retry** on an issue that has a PR continues that PR instead of
+  starting implement-issue over.
 - Push links that went to the Board open the session instead; their buttons say **Open Inbox**.
 - **Removed:** the `/next/` alias and the redirects from the old hash routes (`#/planning`,
   `#/delivery`, `#/board`, `#/answer/<id>`, `#/session/<id>`, `#/dispatch/<id>`, `#/new`); those

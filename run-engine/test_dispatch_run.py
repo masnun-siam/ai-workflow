@@ -114,7 +114,18 @@ assert p2["needs_you"] == "stopped without a ready PR" and a2[0][0] == "notify"
 x.update(p2)
 p3, _ = dr.step(x, {"agent": "working"}, {}, 5300)
 assert p3 == {"idle_since": None, "needs_you": None}
-print("  ok  needs you")
+# a PR is tracked once open; ready with red CI and a stopped session is "CI is red", not "no ready PR"
+x = {"n": 1, "stage": "implementing", "needs_you": "stopped without a ready PR"}
+p4, _ = dr.step(x, {"agent": "working", "pr": pr(140, draft=True, ci="pending")}, {}, 6000)
+assert p4["pr"] == 140 and "held" not in p4
+p5, a5 = dr.step(x, {"agent": "idle", "pr": pr(140, ci="failure")}, {}, 6000)
+assert p5 == {"pr": 140, "held": "CI is red", "needs_you": None, "idle_since": None}, p5
+assert a5 == [("notify", "held", "CI is red on PR #140")]
+x.update(p5)
+assert dr.step(x, {"agent": "idle", "pr": pr(140, ci="failure")}, {}, 6001) == ({}, [])  # said once
+p6, _ = dr.step(x, {"agent": "working", "pr": pr(140, ci="failure")}, {}, 6002)
+assert p6 == {"held": None}  # back on it
+print("  ok  needs you, red CI while implementing")
 
 # --- PR ready -> grinding (slack) ; no slack -> merge_gate
 f1 = {"issue_open": True, "slack": True, "agent": "idle", "pr": pr(101)}
@@ -241,6 +252,25 @@ dr.lane_action(d3["id"], K(20), "retry")
 d3 = dr.load(d3["id"])
 dr.tick(d3, {K(20): {"agent": "working", "slack": True, "pr": pr(120)}}, run3, merge, now=301)
 assert run3.started[-1] == (20, "/ai-workflow:pr-grind https://github.com/o/r/pull/120" + dr.LANE_GRIND)
+# a retry while implementing with a PR open continues that PR instead of re-running implement-issue
+d3["lanes"][K(20)].update(stage="implementing", needs_you="stopped without a ready PR")
+dr.save(d3)
+dr.lane_action(d3["id"], K(20), "retry")
+d3 = dr.load(d3["id"])
+assert d3["lanes"][K(20)]["stage"] == "implementing"
+dr.tick(d3, {K(20): {"agent": "idle", "pr": pr(120, draft=True)}}, run3, merge, now=302)
+assert run3.started[-1] == (
+    20,
+    "/ai-workflow:implement-issue 20 (PR #120 is already open for it: continue that PR on its branch, don't start over)",
+)
+# a retry of red CI sends the fix to the lane's session, and the stale idle facts don't re-flag it that tick
+d3["lanes"][K(20)].update(held="CI is red")
+dr.save(d3)
+dr.lane_action(d3["id"], K(20), "retry")
+d3 = dr.load(d3["id"])
+dr.tick(d3, {K(20): {"agent": "idle", "pr": pr(120, ci="failure")}}, run3, merge, now=303)
+assert run3.sent[-1][1] == dr.ci_fix_prompt(120) and d3["lanes"][K(20)]["held"] is None
+d3["lanes"][K(20)].update(stage="grinding")
 dr.lane_action(d3["id"], K(20), "pause")
 d3 = dr.load(d3["id"])
 assert dr.step(d3["lanes"][K(20)], {"pr": pr(120, state="MERGED")}, d3["settings"], 400) == ({}, [])
