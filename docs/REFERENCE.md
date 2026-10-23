@@ -215,6 +215,9 @@ an onboarding page that checks `gh` and a Claude account, then scans folders.
 `GET|POST /api/settings/notify`, `POST /api/settings/notify/channel` (one event × channel switch,
 `{event, channel, on}`; `GET` also returns `matrix`, `events`, `ntfy_ready` and `mac`), `GET|POST /api/settings/review`, `POST /api/repos/remove`,
 `POST /api/repos/check`.
+`GET /api/notifications?after=<id>` is the in-memory browser feed (`ui_feed.py`, newest 200, empty after
+a restart): `{latest, events}` with the entries newer than `after`, at most the 5 newest, oldest first;
+no `after`, or one above `latest`, gives `events: []`; a non-integer `after` is 400.
 
 **Notes vault.** With **No repo yet** and a new idea, Start shows a **Vault folder**
 (`05-Work/<Project>/<Feature>`) that follows the best match of your text as you type; **Suggest with
