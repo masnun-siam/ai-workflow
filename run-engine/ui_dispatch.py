@@ -367,19 +367,42 @@ def seen(did: str) -> dict:
         return public(d)
 
 
-def start(body: dict) -> dict:
-    """POST /api/dispatches: start a dispatch from the UI (headless lanes unless herdr is asked for)."""
-    runner = body.get("runner") or "headless"
+def _target(body: dict) -> tuple:
+    """('epic', text) or ('issues', refs): exactly one of the two, issues a list of strings."""
+    epic, issues = body.get("epic"), body.get("issues")
+    if (epic is None) == (issues is None):
+        raise ValueError("give either epic or issues")
+    if epic is not None:
+        return "epic", str(epic or "")
+    if not isinstance(issues, list) or not all(isinstance(r, str) for r in issues):
+        raise ValueError("issues must be a list of owner/repo#N strings")
+    dispatch_cli.parse_issues(issues)  # the count and one-repo rules, before any GitHub call
+    return "issues", list(dict.fromkeys(issues))
+
+
+def _settings(body: dict, kind: str) -> dict:
     s = dr.check_settings(
         {**dr.DEFAULTS, **{k: v for k, v in (body.get("settings") or {}).items() if k in dr.DEFAULTS}}
     )
-    d = dispatch_cli.start(str(body.get("epic") or ""), runner, s, body.get("workspace"))
-    return public(d)
+    if kind == "issues":
+        dr._no_feature_branch(s)
+    return s
+
+
+def start(body: dict) -> dict:
+    """POST /api/dispatches: start a dispatch from the UI (headless lanes unless herdr is asked for)."""
+    runner = body.get("runner") or "headless"
+    kind, target = _target(body)
+    s = _settings(body, kind)
+    if kind == "issues":
+        return public(dispatch_cli.start(None, runner, s, body.get("workspace"), issues=target))
+    return public(dispatch_cli.start(target, runner, s, body.get("workspace")))
 
 
 def plan(body: dict) -> dict:
     runner = body.get("runner") or "headless"
-    s = dr.check_settings(
-        {**dr.DEFAULTS, **{k: v for k, v in (body.get("settings") or {}).items() if k in dr.DEFAULTS}}
-    )
-    return dispatch_cli.preview(dispatch_cli.resolve(str(body.get("epic") or "")), s, runner)
+    kind, target = _target(body)
+    s = _settings(body, kind)
+    if kind == "issues":
+        return dispatch_cli.preview(dispatch_cli.resolve_issues(target), s, runner)
+    return dispatch_cli.preview(dispatch_cli.resolve(target), s, runner)
