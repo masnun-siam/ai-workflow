@@ -107,6 +107,12 @@ export function linkParts(text: unknown): (string | { href: string })[] {
   return out;
 }
 
+/** True when a session belongs to `repo` (owner/name): by slug when it has one, else by the checkout path `repo` of the current repo. */
+export function sessionInRepo(s: Pick<Session, 'link' | 'repo' | 'slug'>, repo: string, path?: string): boolean {
+  const slug = sessionSlug(s);
+  return slug ? slug.toLowerCase() === repo.toLowerCase() : !!path && s.repo === path;
+}
+
 /** owner/name of a session, from its link or a bare slug in `repo`; '' when unknown (checkout path only). */
 export function sessionSlug(s: Pick<Session, 'link' | 'repo' | 'slug'>): string {
   if (s.slug) return s.slug;

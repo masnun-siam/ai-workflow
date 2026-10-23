@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DeliveryCard, DeliveryLane, PanelRef, PlanningPrd } from '../api/types';
+import { sessionInRepo } from './format';
 import { joinFeatures, stageOf } from './features';
 import { mdToHtml } from './md';
 import { nextStep } from './nextStep';
@@ -150,5 +151,16 @@ describe('mdToHtml tables', () => {
     expect(h).toContain('<th>a</th><th>b</th>');
     expect(h).toContain('<td><strong>x</strong></td><td><code>y</code></td>');
     expect(h).toContain('<p>after</p>');
+  });
+});
+
+describe('sessionInRepo', () => {
+  const s = (o: Record<string, unknown>) => ({ link: null, repo: null, ...o }) as Parameters<typeof sessionInRepo>[0];
+  it('matches by slug when there is one, else by checkout path', () => {
+    expect(sessionInRepo(s({ slug: 'O/R' }), 'o/r', '/x')).toBe(true);
+    expect(sessionInRepo(s({ slug: 'o/other', repo: '/x' }), 'o/r', '/x')).toBe(false);
+    expect(sessionInRepo(s({ repo: '/x' }), 'o/r', '/x')).toBe(true);
+    expect(sessionInRepo(s({ repo: '/other' }), 'o/r', '/x')).toBe(false);
+    expect(sessionInRepo(s({ repo: '/x' }), 'o/r', undefined)).toBe(false);
   });
 });

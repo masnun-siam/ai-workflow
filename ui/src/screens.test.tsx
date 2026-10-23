@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { mergeWarnings } from './panels/prWarnings';
-import { SMALL_CHANGE_MARKER, SMALL_CHANGE_NOTE, smallChangeArg } from './features/smallChange';
+import { SMALL_CHANGE_LOCK, SMALL_CHANGE_MARKER, SMALL_CHANGE_NOTE, smallChangeArg, smallChangeText } from './features/smallChange';
 
 const json = (b: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } }));
 const posts: { url: string; body: any }[] = [];
@@ -252,6 +252,71 @@ describe('Small changes tab', () => {
     expect(arg.startsWith(`${SMALL_CHANGE_MARKER} a b`)).toBe(true);
     expect(arg.endsWith(SMALL_CHANGE_NOTE)).toBe(true);
     expect(arg).not.toMatch(/[\n\0]/);
+  });
+
+  const sess = (id: string, command: string, outcome: string, over: Record<string, unknown> = {}) => ({ id, command, outcome, repo: '/x', link: null, started_at: `2026-01-01T00:00:0${id.length}Z`, ...over });
+  const withSessions = (sessions: unknown[]) => ({ '/api/sessions': () => json({ sessions, limits: {}, usage: {}, afk: { active: false, until: null, started: null, decisions: 0, held: 0, summary: null }, gh: { ok: true } }) });
+  const marked = (text: string) => `/create-tasks ${smallChangeArg(text)}`;
+
+  it('smallChangeText returns the typed text for both command forms and null otherwise', () => {
+    expect(smallChangeText(marked('fix it'))).toBe('fix it');
+    expect(smallChangeText(`/ai-workflow:create-tasks ${SMALL_CHANGE_MARKER} fix it`)).toBe('fix it');
+    expect(smallChangeText('/create-tasks A finding for epic #7 here')).toBeNull();
+    expect(smallChangeText('/implement-issue 3')).toBeNull();
+  });
+
+  it('a live marked session shows a row with its state and button; ended, other repo, other skill do not', async () => {
+    mock({
+      lanes: [lane([card(30, 'ready'), card(31, 'unrefined')], { epic: null })],
+      extra: withSessions([
+        sess('a', marked('typed text'), 'running'),
+        sess('bb', marked('queued one'), 'queued'),
+        sess('ccc', marked('needs one'), 'waiting'),
+        sess('dddd', marked('done one'), 'done'),
+        sess('eeeee', marked('failed one'), 'failed'),
+        sess('ffffff', marked('other repo'), 'running', { repo: '/other' }),
+        sess('g', '/implement-issue 5', 'running'),
+        sess('h', '/create-tasks A finding for epic #7 here', 'running'),
+      ]),
+    });
+    const user = await open('#/features?tab=changes&repo=o/r');
+    expect(await screen.findByText('typed text')).toBeTruthy();
+    expect(screen.getByText('queued one')).toBeTruthy();
+    expect(screen.getByText('needs one')).toBeTruthy();
+    for (const t of ['done one', 'failed one', 'other repo']) expect(screen.queryByText(t)).toBeNull();
+    expect(screen.getByText('typed text').closest('.frow')?.textContent).not.toContain('Instructions');
+    expect(screen.getByText('Creating…')).toBeTruthy();
+    expect(screen.getByText('Queued')).toBeTruthy();
+    expect(screen.getByText('Needs you')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Watch' })).toHaveLength(2);
+    expect((await tabBtn(/Small changes/)).textContent).toContain('5'); // 2 issues + 3 pending
+    await user.click(screen.getByRole('button', { name: 'Answer' }));
+    expect(window.location.hash).toContain('/sessions/ccc');
+  });
+
+  it('a pending row locks Refine on unrefined rows only; with the session done Refine is enabled', async () => {
+    const lanes = [lane([card(30, 'ready'), card(31, 'unrefined')], { epic: null })];
+    mock({ lanes, extra: withSessions([sess('a', marked('x'), 'running')]) });
+    await open('#/features?tab=changes&repo=o/r');
+    const refine = (await screen.findByRole('button', { name: 'Refine' })) as HTMLButtonElement;
+    expect(refine.disabled).toBe(true);
+    expect(refine.title).toBe(SMALL_CHANGE_LOCK);
+    expect((screen.getByRole('button', { name: 'Start' }) as HTMLButtonElement).disabled).toBe(false);
+    cleanup();
+    mock({ lanes, extra: withSessions([sess('a', marked('x'), 'done')]) });
+    await open('#/features?tab=changes&repo=o/r');
+    expect(((await screen.findByRole('button', { name: 'Refine' })) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('the empty message hides while a pending row exists and shows when both are empty', async () => {
+    mock({ extra: withSessions([sess('a', marked('x'), 'running')]) });
+    await open('#/features?tab=changes&repo=o/r');
+    expect(await screen.findByText('x')).toBeTruthy();
+    expect(screen.queryByText(/Nothing outside a feature/)).toBeNull();
+    cleanup();
+    mock();
+    await open('#/features?tab=changes&repo=o/r');
+    expect(await screen.findByText(/Nothing outside a feature/)).toBeTruthy();
   });
 
   it('with 0 PRDs the tabs show, the tab counts 3 and the idea box stays in In progress', async () => {
