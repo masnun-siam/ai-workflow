@@ -254,7 +254,14 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
 .ev.tool{cursor:pointer}
 .ev.tool:hover{background:var(--bg)}
 .ev .ic{color:var(--faint);margin-top:2px}
-.ev.text .body{white-space:pre-wrap}
+.ev.text .body{max-width:none}
+.ev .prose{max-width:none}
+.ev .prose>:last-child{margin-bottom:0}
+.prose table{border-collapse:collapse;margin:0 0 10px;font-size:13px;display:block;overflow-x:auto}
+.prose th,.prose td{border:1px solid var(--line);padding:4px 8px;text-align:left;vertical-align:top}
+.prose th{background:var(--sunk)}
+.prose ol{margin:0 0 10px;padding-left:22px}
+.prose h1,.prose h4{margin:14px 0 4px}
 .ev.tool .body{font-family:var(--mono);font-size:12.5px;color:var(--muted)}
 .ev.tool .body b{color:var(--ink);font-weight:500}
 .ev pre{margin:6px 0 0;padding:10px;background:var(--bg);border-radius:6px;font-family:var(--mono);font-size:12px;white-space:pre-wrap;color:var(--ink);max-height:240px;overflow:auto}

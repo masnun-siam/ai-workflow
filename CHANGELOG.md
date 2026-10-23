@@ -8,6 +8,8 @@
 
 ### Changed
 
+- The session transcript renders assistant and result text as markdown (headings, lists, code, links, bold, italics), and the markdown renderer now handles pipe tables.
+- `make restart` rebuilds the UI and restarts the supervisord-managed server. The `ui-rewrite` PRD is marked Done.
 - The New dispatch dialog and a dispatch's live settings use the shared Model and Effort dropdowns instead of the free-text model box; the dialog starts from the saved pair and a pick updates the saved defaults.
 - A feature's own starts of `/create-prd`, `/create-tasks` and `/refine-issues` (Write the PRD, Approve PRD, Create tasks, Refine, Start update, Inbox approve, Add task) run on `opus` at `medium` effort (`PLAN_RUN` in `ui/src/lib/vocab.ts`), whatever the Start dialog saved.
 - `/implement-issue` reviews the local branch with `/pr-review` before the first push, then merges the base branch, pushes and opens the draft PR (steps 12 to 14); `/pr-review`, `/skill-feedback`, the guides and `/verifier-locally` follow (synced from Wasensi 637579d4).
