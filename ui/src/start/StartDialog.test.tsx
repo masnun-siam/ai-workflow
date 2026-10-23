@@ -84,6 +84,30 @@ describe('Start dialog', () => {
     expect(localStorage.getItem('aiw.lastCommand')).toBe('implement-issue');
   });
 
+  it('model and effort: preselected from settings, saved on change, sent with the start; Default omits them', async () => {
+    mockApi({ '/api/settings': { commands: [{ label: 'claude', cmd: 'claude', builtin: true }], default: 'claude', run_model: 'sonnet' } });
+    const user = userEvent.setup();
+    open({ cmd: 'pr-review', arg: '5' });
+    await ready().catch(() => undefined);
+    const model = (await screen.findByLabelText('Model')) as HTMLSelectElement;
+    await waitFor(() => expect(model.value).toBe('sonnet'));
+    await user.selectOptions(model, 'opus');
+    await user.selectOptions(screen.getByLabelText('Effort'), 'medium');
+    await waitFor(() => expect(calls.filter((c) => c.method === 'PUT' && c.url === '/api/settings').map((c) => c.body)).toEqual([{ run_model: 'opus' }, { run_effort: 'medium' }]));
+    await user.click(startButton());
+    await waitFor(() => expect(posts()[0]).toMatchObject({ model: 'opus', effort: 'medium' }));
+  });
+
+  it('Default model and effort are left out of the start body', async () => {
+    const user = userEvent.setup();
+    open({ cmd: 'pr-review', arg: '5' });
+    await ready();
+    await user.click(startButton());
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(posts()[0]).not.toHaveProperty('model');
+    expect(posts()[0]).not.toHaveProperty('effort');
+  });
+
   it('a list that cannot load still takes a typed number', async () => {
     mockApi({ '/api/repos/o/r/open': undefined });
     const user = userEvent.setup();

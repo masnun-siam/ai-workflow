@@ -9,6 +9,8 @@ describe('start request bodies', () => {
     expect(startBody({ ...base, command: 'implement-issue', args: ' 12 ' })).toEqual({ repo: 'o/r', command: 'implement-issue', args: '12' });
   });
   it('custom prompt sends text; lenses go as peer_review; the account as claude_cmd', () => {
+    expect(startBody({ ...base, command: 'implement-issue', args: '1', model: 'opus', effort: 'max' })).toMatchObject({ model: 'opus', effort: 'max' });
+    expect(Object.keys(startBody({ ...base, command: 'implement-issue', args: '1', model: null, effort: null }))).not.toContain('model');
     expect(startBody({ ...base, command: 'custom', args: 'do it', lenses: ['critical'], account: 'Masum' })).toEqual({ repo: 'o/r', text: 'do it', peer_review: ['critical'], claude_cmd: 'Masum' });
   });
   it('no repo yet: no_repo + vault_folder and an empty repo', () => {

@@ -10,3 +10,4 @@ export { Toaster, toast, useToast, type ToastOpts } from './Toast';
 export { Banner } from './Banner';
 export { EmptyState } from './EmptyState';
 export { Track } from './Track';
+export { ModelEffortPicker, MODELS, EFFORTS, type ModelEffortPickerProps } from './ModelEffortPicker';

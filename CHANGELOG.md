@@ -4,7 +4,7 @@
 
 ### Added
 
-- A session started from the UI can carry a `model` (`opus`, `sonnet`, `haiku`) and an `effort` (`low` to `max`): optional fields on `POST /api/sessions` and `POST /api/start`, applied on every spawn and replayed by Rerun. `GET|PUT /api/settings` stores the last-used pair as `run_model` / `run_effort` (API only; the dropdowns come next).
+- A session started from the UI can carry a `model` (`opus`, `sonnet`, `haiku`) and an `effort` (`low` to `max`): optional fields on `POST /api/sessions` and `POST /api/start`, applied on every spawn and replayed by Rerun. `GET|PUT /api/settings` stores the last-used pair as `run_model` / `run_effort` The Start dialog now shows Model and Effort dropdowns for every command, preselected from the saved pair and saved on change.
 
 ### Changed
 

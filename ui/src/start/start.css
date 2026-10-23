@@ -24,3 +24,4 @@
   .start-fields{overflow:visible}
   .vf-row,.wl-range{grid-template-columns:1fr}
 }
+.mep{display:flex;gap:12px;flex-wrap:wrap}.mep .lbl{flex:1 1 140px;min-width:0}
