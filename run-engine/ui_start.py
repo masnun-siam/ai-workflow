@@ -23,6 +23,7 @@ import ui_panel
 import ui_poller
 import ui_repos
 import ui_sessions
+import ui_settings
 
 SKILLS = ("create-tasks", "refine-issues", "implement-issue", "pr-grind", "peer-review")
 RECENT_SECONDS = 30
@@ -79,6 +80,8 @@ def start(
     sessions=None,
     launch=None,
     channel=None,
+    model=None,
+    effort=None,
 ) -> dict:
     """{session} (the session id), or {panel} for peer-review.
     ValueError -> 400, Conflict -> 409, RuntimeError -> 502."""
@@ -97,6 +100,7 @@ def start(
         arg = " ".join(n.lstrip("#") for n in re.split(r"[\s,]+", arg))
     elif skill == "pr-grind" and not re.fullmatch(r"#?\d+|https://\S+", arg):
         raise ValueError("pr-grind takes a PR number or URL")
+    ui_settings.check_run(model, effort)
     with _lock(repo):
         snapshot = snapshot if snapshot is not None else ui_poller.snapshot(repo)
         if skill == "implement-issue":
@@ -113,7 +117,9 @@ def start(
             text = f"/{skill} {arg}"
             if skill == "pr-grind":
                 text = ui_grind.grind_text(arg, channel)
-            status, body = (launch or ui_repos.start_session)({"repo": repo, "text": text})
+            status, body = (launch or ui_repos.start_session)(
+                {"repo": repo, "text": text, **{k: v for k, v in (("model", model), ("effort", effort)) if v}}
+            )
             if status == 409:
                 raise Conflict(body.get("error", "already running"))
             if status != 201:

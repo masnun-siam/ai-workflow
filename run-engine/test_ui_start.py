@@ -92,6 +92,11 @@ assert L.bodies[2]["text"] == "/pr-grind 13 --channel C1"
 assert ui_start.start("o/r", "refine-issues", "#7, 9  11", launch=L)["session"] == "S4"
 assert L.bodies[3]["text"] == "/refine-issues 7 9 11", "several issue numbers, normalised"
 refuses("refine-issues", "7 and 9", ValueError)
+assert ui_start.start("o/r", "refine-issues", "7", launch=L, model="opus", effort="medium")["session"] == "S5"
+assert L.bodies[4]["model"] == "opus" and L.bodies[4]["effort"] == "medium"
+assert "model" not in L.bodies[3] and "effort" not in L.bodies[3], "unset: not sent"
+refuses("refine-issues", "7", ValueError, model="gpt")
+refuses("refine-issues", "7", ValueError, effort="default")
 print("  ok  start guards and launch")
 
 # a lane of a running dispatch owns its issue

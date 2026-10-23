@@ -39,6 +39,8 @@ assert {k: v for k, v in ui_settings.load().items() if k != "vault_dir"} == {
     "default": "claude",
     "repos": {},
     "grind_mode": "deep",
+    "run_model": None,
+    "run_effort": None,
 }
 assert ui_settings.load()["vault_dir"] == os.path.expanduser("~/Documents/notes")
 assert ui_settings.default_cmd() == "claude"
@@ -114,4 +116,13 @@ assert raises(ui_settings.save, {"commands": [], "repos": {"o/a": {"slack_channe
 # a stored Auto-build cap or epic list from before dispatches is ignored, never shown
 r = ui_settings.save({"repos": {"o/a": {"autopilot_cap": 4, "slack_channel": "#x"}}, "autopilot": {"o/a": [7]}})
 assert r["repos"]["o/a"] == {"auto_grind": False, "slack_channel": "#x"} and "autopilot" not in r and r["commands"]
+# run_model / run_effort: null by default, a partial save sets them, other saves keep them, bad values 400
+assert ui_settings.load()["run_model"] is None and ui_settings.load()["run_effort"] is None
+ui_settings.save({"run_model": "opus", "run_effort": "xhigh"})
+assert ui_settings.load()["run_model"] == "opus" and ui_settings.load()["run_effort"] == "xhigh"
+ui_settings.save({"grind_mode": "simple"})
+assert ui_settings.run_model() == "opus" and ui_settings.run_effort() == "xhigh", "other saves keep them"
+ui_settings.save({"run_model": None})
+assert ui_settings.run_model() is None and ui_settings.run_effort() == "xhigh"
+assert raises(ui_settings.validate, {"run_model": "default"}) and raises(ui_settings.validate, {"run_effort": "huge"})
 print("ui_settings: 32 checks passed")

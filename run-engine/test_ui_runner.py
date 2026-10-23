@@ -224,6 +224,10 @@ def real(p):
     return os.path.realpath(p.strip())
 
 
+def spawned_argv(fake_dir):
+    return os.path.exists(os.path.join(fake_dir, "argv"))
+
+
 def lines(fake_dir, name):
     with open(os.path.join(fake_dir, name)) as f:
         return f.read()
@@ -2299,6 +2303,58 @@ try:
     except ui_runner.NotQueued as e:
         assert "limit resets" in str(e)
     ok("start_now: starts a queued session past the batch cap; limited/running/unknown refuse")
+finally:
+    reap(*recs)
+
+# ---- run model / effort: --model / --effort on every spawn of the session ----------------------
+d, fk, work = setup("normal")
+recs = []
+try:
+    a = ui_runner.start("/worklog 1", work, run_model="opus", effort="max")
+    recs.append(a)
+    wait_for(lambda: spawned_argv(fk))
+    av = lines(fk, "argv").split("\n")
+    assert av[av.index("--model") + 1] == "opus" and av[av.index("--effort") + 1] == "max", av
+    wait_finished(a["id"])
+    assert (ui_sessions.load(a["id"]) or {}).get("run_model") == "opus"
+    os.remove(os.path.join(fk, "argv"))
+    ui_sessions.update(
+        a["id"], session_id="sess-m", status="stopped"
+    )  # a resume after an answer / continue keeps the flags
+    ui_runner.resume_stopped(a["id"])
+    wait_for(lambda: spawned_argv(fk))
+    av = lines(fk, "argv").split("\n")
+    assert "--resume" in av and "--model" in av and "--effort" in av, av
+    wait_finished(a["id"])
+    os.remove(os.path.join(fk, "argv"))
+    b = ui_runner.start("/worklog 2", work)  # none picked: no flags
+    recs.append(b)
+    wait_for(lambda: spawned_argv(fk))
+    av = lines(fk, "argv").split("\n")
+    assert "--model" not in av and "--effort" not in av, av
+    wait_finished(b["id"])
+    os.remove(os.path.join(fk, "argv"))
+    # a rate-limited account still queues a session with flags; the restart at reset adds them
+    c = ui_sessions.create("/worklog 3", work, None)
+    recs.append(c)
+    ui_sessions.update(
+        c["id"],
+        status="limited",
+        limit_resets_at=time.time() + 3600,
+        run_model="haiku",
+        run_effort="low",
+        cwd_path=work,
+    )
+    q = ui_runner.start("/worklog 4", work, run_model="sonnet")
+    recs.append(q)
+    assert q["status"] == "limited" and q["run_model"] == "sonnet" and not spawned_argv(fk), q
+    ui_runner.resume_stopped(c["id"])  # limited before claude reported a session: restarts from the command
+    wait_for(lambda: spawned_argv(fk))
+    av = lines(fk, "argv").split("\n")
+    assert av[av.index("--model") + 1] == "haiku" and av[av.index("--effort") + 1] == "low", av
+    ok(
+        "run model/effort: flags on start, resume and the limited restart; none when unset; a limited account still queues"
+    )
 finally:
     reap(*recs)
 

@@ -22,6 +22,8 @@ DEFAULT_VAULT = os.path.join("~", "Documents", "notes")  # the `notes` vault /du
 MAX_COMMANDS = 20
 SLUG_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 GRIND_MODES = ("deep", "simple")  # simple: /pr-grind stops once the PR is approved
+RUN_MODELS = ("opus", "sonnet", "haiku")  # aliases: they resolve to the latest model
+RUN_EFFORTS = ("low", "medium", "high", "xhigh", "max")  # as dispatch_run
 
 
 def _path() -> str:
@@ -41,6 +43,26 @@ def grind_mode() -> str:
     """deep (the default) or simple, for every /pr-grind loop; the skill reads it each round (`aiw grind-mode`)."""
     m = _stored().get("grind_mode")
     return m if m in GRIND_MODES else "deep"
+
+
+def check_run(model, effort) -> None:
+    """ValueError unless model / effort are None or one of the allowed values."""
+    if model is not None and model not in RUN_MODELS:
+        raise ValueError(f"model must be one of {', '.join(RUN_MODELS)}")
+    if effort is not None and effort not in RUN_EFFORTS:
+        raise ValueError(f"effort must be one of {', '.join(RUN_EFFORTS)}")
+
+
+def run_model():
+    """The last-used model for a run (None: Claude's default)."""
+    m = _stored().get("run_model")
+    return m if m in RUN_MODELS else None
+
+
+def run_effort():
+    """The last-used effort for a run (None: Claude's default)."""
+    e = _stored().get("run_effort")
+    return e if e in RUN_EFFORTS else None
 
 
 def vault_dir() -> str:
@@ -137,6 +159,8 @@ def load() -> dict:
         "repos": {k: _repo(stored_repos.get(k)) for k in slugs},
         "vault_dir": vault_dir(),
         "grind_mode": grind_mode(),
+        "run_model": run_model(),
+        "run_effort": run_effort(),
     }
 
 
@@ -203,6 +227,8 @@ def validate(body) -> dict:
     mode = body.get("grind_mode", grind_mode())  # a save that omits it keeps the stored one
     if mode not in GRIND_MODES:
         raise ValueError("grind_mode must be deep or simple")
+    run_m, run_e = body.get("run_model", run_model()), body.get("run_effort", run_effort())
+    check_run(run_m, run_e)
     stored = _migrate(_stored())
     sent = body.get("repos", {})
     if not isinstance(sent, dict):
@@ -226,6 +252,8 @@ def validate(body) -> dict:
         "repos": clean_repos,
         "vault_dir": vault,
         "grind_mode": mode,
+        "run_model": run_m,
+        "run_effort": run_e,
     }
 
 
