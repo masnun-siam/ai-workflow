@@ -10,7 +10,7 @@ const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 /** The running (or paused) dispatch of `repo#epic`, with its progress; null when there is none. */
 export function useEpicDispatch(repo: string, epic: number | null) {
   const all = useDispatches().data?.dispatches ?? [];
-  const d = epic ? all.find((x) => live(x) && same(x.epic, `${repo}#${epic}`)) : undefined;
+  const d = epic ? all.find((x) => live(x) && x.epic != null && same(x.epic, `${repo}#${epic}`)) : undefined;
   return d ? { d, c: counts(d) } : null;
 }
 

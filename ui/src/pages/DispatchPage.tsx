@@ -9,7 +9,7 @@ import { routes } from '../lib/routes';
 import { LanePanel } from '../dispatch/LanePanel';
 import { LaneGraph, LaneTable } from '../dispatch/LaneViews';
 import { SettingsFields } from '../dispatch/SettingsFields';
-import { DSTATE, counts, epicNo, eventText, issueNo, nowLine, secs, type LaneAsk } from '../dispatch/vocab';
+import { DSTATE, counts, dispatchHeading, dispatchRepo, epicNo, eventText, issueNo, nowLine, secs, type LaneAsk } from '../dispatch/vocab';
 import '../dispatch/dispatch.css';
 
 const VIEW_KEY = 'aiw.dispatch.view';
@@ -99,7 +99,8 @@ function EndPanel({ d }: { d: Dispatch }) {
   const go = (action: EndAction, msg: string) => end.mutate({ id: d.id, action }, { onSuccess: () => toast(msg) });
   return (
     <section className="dsp-end" aria-label="What next">
-      <div className="row"><Icon n="check" /><h2 className="grow" style={{ fontSize: 15 }}>Every issue is done. What next?</h2></div>
+      <div className="row"><Icon n="check" /><h2 className="grow" style={{ fontSize: 15 }}>{d.epic ? 'Every issue is done. What next?' : 'Every issue is done.'}</h2></div>
+      {d.epic ? <>
       <p className="muted">Nothing here runs by itself. QA files each bug it finds as a new issue of the epic, and new issues join this dispatch.</p>
       <div className="row wrap" style={{ gap: 8 }}>
         {fb && !prs.length ? <Button variant="primary" onClick={() => go('open-pr', 'Opening the PR')}><Icon n="pr" />Open PR from {fb}</Button> : null}
@@ -111,6 +112,7 @@ function EndPanel({ d }: { d: Dispatch }) {
           {prs.map(([repo, url]) => <li key={repo}><a href={url} target="_blank" rel="noopener noreferrer">{shortRepo(repo)}: {url.replace(/^.*\/pull\//, 'PR #')}</a></li>)}
         </ul>
       ) : null}
+      </> : null}
     </section>
   );
 }
@@ -158,14 +160,18 @@ export function DispatchPage() {
   return (
     <div className="content-inner dsp-page">
       <nav className="crumbs" aria-label="Breadcrumb">
-        <Link to={routes.dispatches} style={{ textDecoration: 'none' }}>Dispatches</Link><Icon n="right" s={13} /><span>Epic #{epicNo(d.epic)}</span>
+        <Link to={routes.dispatches} style={{ textDecoration: 'none' }}>Dispatches</Link><Icon n="right" s={13} /><span>{d.epic ? `Epic #${epicNo(d.epic)}` : 'Small changes'}</span>
       </nav>
       <div className="page-head">
         <div className="grow" style={{ minWidth: 0 }}>
-          <h1>{d.title?.replace(/^Epic:\s*/i, '') || `Epic #${epicNo(d.epic)}`}</h1>
+          <h1>{dispatchHeading(d)}</h1>
           <p className="sub row wrap" style={{ gap: 10 }}>
             <Chip tone={st.tone} live={st.live}>{st.label}</Chip>
-            <a href={`https://github.com/${d.epic.replace('#', '/issues/')}`} target="_blank" rel="noopener noreferrer">{shortRepo(d.epic.split('#')[0])} epic #{epicNo(d.epic)}</a>
+            {d.epic ? (
+              <a href={`https://github.com/${d.epic.replace('#', '/issues/')}`} target="_blank" rel="noopener noreferrer">{shortRepo(d.epic.split('#')[0])} epic #{epicNo(d.epic)}</a>
+            ) : (
+              <a href={`https://github.com/${dispatchRepo(d)}`} target="_blank" rel="noopener noreferrer">{dispatchRepo(d)}</a>
+            )}
             <span>{d.runner === 'herdr' ? 'in herdr tabs' : 'in background sessions'}</span>
           </p>
         </div>
