@@ -9,8 +9,6 @@ issues QA files join as lanes. On server start the timer simply carries on from 
 
 from __future__ import annotations
 
-import subprocess
-import sys
 import threading
 import time
 
@@ -171,27 +169,10 @@ def start_timer(snapshot, interval=TICK_SECONDS) -> threading.Thread:
 # --------------------------------------------------------------------------- notices
 
 
-def mac_notify(title: str, text: str, run=subprocess.run) -> None:
-    if sys.platform != "darwin":
-        return
-    script = [
-        "-e",
-        "on run argv",
-        "-e",
-        "display notification (item 1 of argv) with title (item 2 of argv)",
-        "-e",
-        "end run",
-    ]
-    try:  # argv, never the script text: nothing in `text` can run as AppleScript
-        run(["osascript", *script, text[:200], title[:80]], capture_output=True, timeout=10)
-    except (OSError, subprocess.SubprocessError) as e:
-        warn(f"macOS notification failed: {e}")
-
-
 def notify(d: dict, k, kind: str, text: str) -> None:
     x = d["lanes"].get(k) if k else None
     title = f"aiw: {k or d['epic']}"
-    mac_notify(title, f"{kind.replace('_', ' ')}: {text}")
+    ui_notify.send_mac(title, f"{kind.replace('_', ' ')}: {text}")
     owner, _, name = (x["repo"] if x else d["epic"].partition("#")[0]).partition("/")
     ui_notify.notify(
         "dispatch",
