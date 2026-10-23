@@ -158,6 +158,10 @@ def aiw(*a):
 assert aiw("set", d["id"], "max=3", "auto_merge=on", "grind=simple").returncode == 0
 s = dr.load(d["id"])["settings"]
 assert (s["max"], s["auto_merge"], s["grind"]) == (3, True, "simple")
+assert aiw("set", d["id"], "ci=defer").returncode == 0
+assert json.loads(aiw("show", d["id"]).stdout)["settings"]["ci"] == "defer"
+assert aiw("set", d["id"], "ci=bogus").returncode == 5
+assert aiw("plan", "1", "--ci", "bogus").returncode == 2  # argparse rejects it
 assert aiw("set", d["id"], "bogus=1").returncode == 5
 assert aiw("set", d["id"], "max=99").returncode == 5
 assert aiw("lane", d["id"], "5", "hold").returncode == 0 and dr.load(d["id"])["lanes"]["o/r#5"]["hold_merge"]

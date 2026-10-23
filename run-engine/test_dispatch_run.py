@@ -73,12 +73,14 @@ assert "cycle" in dr.plan([child(1, [2]), child(2, [1])])["warnings"][0]
 print("  ok  plan")
 
 # --- settings validation
-for bad in ({"grind": "deep"}, {"max": 0}, {"max": True}, {"feature_branch": "a b"}):
+for bad in ({"ci": "x"}, {"grind": "deep"}, {"max": 0}, {"max": True}, {"feature_branch": "a b"}):
     try:
         dr.create("o/r#1", "headless", bad, [])
         raise AssertionError(f"accepted {bad}")
-    except ValueError:
-        pass
+    except ValueError as e:
+        if "ci" in bad:
+            assert str(e) == "ci must be one of ('wait', 'defer', 'ignore')", e
+assert dr.create("o/r#1", "headless", {}, [])["settings"]["ci"] == "wait"
 print("  ok  settings")
 
 # --- launch order, cap, deps, needs refine
@@ -338,6 +340,14 @@ print("  ok  end actions")
 # --- live settings edit, dispatch pause stops launches
 dr.set_settings(d3["id"], grind="simple", auto_merge=True)
 assert dr.load(d3["id"])["settings"]["grind"] == "simple"
+dr.set_settings(d3["id"], ci="defer")
+assert dr.load(d3["id"])["settings"]["ci"] == "defer"
+old = dr.load(d3["id"])
+del old["settings"]["ci"]
+with open(dr._path(d3["id"]), "w") as f:  # a record saved before ci existed
+    json.dump(old, f)
+assert dr.load(d3["id"])["settings"]["ci"] == "wait"
+dr.set_settings(d3["id"], max=3)
 dp = dr.set_state(d3["id"], "paused")
 assert dr.startable(dp, {}) == []
 assert dr.list_all()[0]["id"] == d5["id"] and d3["id"] in [x["id"] for x in dr.list_all()]
