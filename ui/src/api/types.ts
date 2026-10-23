@@ -479,6 +479,8 @@ export interface DispatchSettings {
   model: string | null;
   effort: Effort | null;
 }
+/** What a dispatch runs: an epic's children, or a picked list of issues ("owner/repo#n"). */
+export type DispatchTarget = { epic: string } | { issues: string[] };
 export interface LaneUsage { cost: number; tokens: number; seconds: number }
 export interface Lane {
   key: string; // owner/repo#n

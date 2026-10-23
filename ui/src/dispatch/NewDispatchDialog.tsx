@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePlanDispatch, usePlanning, useSettings, useStartDispatch } from '../api/hooks';
-import type { DispatchPlan, DispatchSettings } from '../api/types';
+import type { DispatchPlan, DispatchSettings, DispatchTarget } from '../api/types';
 import { Banner, Button, Chip, Dialog } from '../components';
 import { routes } from '../lib/routes';
 import { useRepo } from '../shell/useRepo';
@@ -12,9 +12,11 @@ import { issueNo } from './vocab';
 const DEFAULTS: DispatchSettings = { max: 2, grind: 'full', ci: 'wait', auto_merge: false, feature_branch: null, model: null, effort: null };
 const EPIC_RE = /^(?:[\w.-]+\/[\w.-]+#)?\d+$/;
 
-/** `epic` prefills the picker ("owner/repo#n"), e.g. from a feature's Run epic button. */
-export function NewDispatchDialog({ open, onOpenChange, epic: initial }: { open: boolean; onOpenChange: (o: boolean) => void; epic?: string }) {
+/** `epic` prefills the picker ("owner/repo#n"), e.g. from a feature's Run epic button. `issues` switches to small changes: the picked issues of the current repo, no epic and no feature branch. */
+export function NewDispatchDialog({ open, onOpenChange, epic: initial, issues }: { open: boolean; onOpenChange: (o: boolean) => void; epic?: string; issues?: { n: number; title: string }[] }) {
   const { repo } = useRepo();
+  const picked = !!issues;
+  const pickKey = issues?.map((i) => i.n).join() ?? '';
   const epics = (usePlanning(repo).data?.prds ?? []).filter((p) => p.epic != null);
   const [epic, setEpic] = useState(initial ?? '');
   const [s, setS] = useState<DispatchSettings>(DEFAULTS);
@@ -34,17 +36,19 @@ export function NewDispatchDialog({ open, onOpenChange, epic: initial }: { open:
       setPlan(null);
       preview.reset();
     }
-  }, [open, initial]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, initial, pickKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const full = epic.includes('#') || !repo ? epic.trim() : `${repo}#${epic.trim().replace(/^#/, '')}`;
-  const valid = EPIC_RE.test(full);
+  const valid = picked ? issues.length > 0 : EPIC_RE.test(full);
+  const target = (): DispatchTarget => (picked ? { issues: issues.map((i) => `${repo}#${i.n}`) } : { epic: full });
+  const sent = (): DispatchSettings => (picked ? { ...s, feature_branch: null } : s);
   const change = (p: Partial<DispatchSettings>) => {
     setTouched(true);
     setS({ ...s, ...p });
     setPlan(null); // settings change the warnings: preview again
   };
-  const doPreview = () => preview.mutate({ epic: full, settings: s }, { onSuccess: setPlan });
-  const doStart = () => start.mutate({ epic: full, settings: s }, { onSuccess: (d) => { onOpenChange(false); nav(routes.dispatch(d.id)); } });
+  const doPreview = () => preview.mutate({ target: target(), settings: sent() }, { onSuccess: setPlan });
+  const doStart = () => start.mutate({ target: target(), settings: sent() }, { onSuccess: (d) => { onOpenChange(false); nav(routes.dispatch(d.id)); } });
   const runnable = plan ? plan.waves.flat().length : 0;
 
   return (
@@ -52,7 +56,7 @@ export function NewDispatchDialog({ open, onOpenChange, epic: initial }: { open:
       open={open}
       onOpenChange={onOpenChange}
       wide
-      title="Run an epic"
+      title={picked ? 'Run small changes' : 'Run an epic'}
       description="Each issue is built, grinded, merged and wrapped up in its own session. The next one starts as soon as what it waits for is done."
       showDescription
       footer={
@@ -63,36 +67,42 @@ export function NewDispatchDialog({ open, onOpenChange, epic: initial }: { open:
               {start.isPending ? 'Starting…' : `Start ${runnable} issue${runnable === 1 ? '' : 's'}`}
             </Button>
           ) : (
-            <Button variant="primary" disabled={!valid || preview.isPending} onClick={doPreview}>{preview.isPending ? 'Reading the epic…' : 'Preview'}</Button>
+            <Button variant="primary" disabled={!valid || preview.isPending} onClick={doPreview}>{preview.isPending ? `Reading the ${picked ? 'issues' : 'epic'}…` : 'Preview'}</Button>
           )}
         </>
       }
     >
       <div className="stack" style={{ gap: 16 }}>
-        <div className="lbl">
-          <label htmlFor="nd-epic">Epic</label>
-          <div className="row wrap" style={{ gap: 8 }}>
-            <input id="nd-epic" className="f" style={{ maxWidth: 260 }} placeholder={repo ? `${repo}#123, or 123` : 'owner/repo#123'} value={epic}
-              onChange={(e) => { setEpic(e.target.value); setPlan(null); }} onKeyDown={(e) => e.key === 'Enter' && valid && doPreview()} autoFocus />
-            {epics.length ? (
-              <select className="f" style={{ maxWidth: 320 }} aria-label="Pick an epic of this repo" value="" onChange={(e) => { if (e.target.value) { setEpic(`${repo}#${e.target.value}`); setPlan(null); } }}>
-                <option value="">Pick an epic…</option>
-                {epics.map((p) => <option key={p.slug} value={p.epic!}>#{p.epic} {p.title}</option>)}
-              </select>
-            ) : null}
+        {picked ? (
+          <div className="row wrap" style={{ gap: 6 }} aria-label="Picked issues">
+            {issues.map((i) => <Chip key={i.n} tone="build" title={i.title}>#{i.n} {i.title}</Chip>)}
           </div>
-          {epic && !valid ? <span className="hint" style={{ color: 'var(--bad)' }}>Use owner/repo#123, or a number in {repo || 'the current repo'}.</span> : null}
-        </div>
-        <SettingsFields value={s} onChange={change} />
+        ) : (
+          <div className="lbl">
+            <label htmlFor="nd-epic">Epic</label>
+            <div className="row wrap" style={{ gap: 8 }}>
+              <input id="nd-epic" className="f" style={{ maxWidth: 260 }} placeholder={repo ? `${repo}#123, or 123` : 'owner/repo#123'} value={epic}
+                onChange={(e) => { setEpic(e.target.value); setPlan(null); }} onKeyDown={(e) => e.key === 'Enter' && valid && doPreview()} autoFocus />
+              {epics.length ? (
+                <select className="f" style={{ maxWidth: 320 }} aria-label="Pick an epic of this repo" value="" onChange={(e) => { if (e.target.value) { setEpic(`${repo}#${e.target.value}`); setPlan(null); } }}>
+                  <option value="">Pick an epic…</option>
+                  {epics.map((p) => <option key={p.slug} value={p.epic!}>#{p.epic} {p.title}</option>)}
+                </select>
+              ) : null}
+            </div>
+            {epic && !valid ? <span className="hint" style={{ color: 'var(--bad)' }}>Use owner/repo#123, or a number in {repo || 'the current repo'}.</span> : null}
+          </div>
+        )}
+        <SettingsFields value={s} onChange={change} noBranch={picked} />
         <p className="faint" style={{ fontSize: 12.5 }}>Started here, the issues run in background sessions. To run them in herdr tabs instead, use the herdr-dispatch skill; both show up on this page.</p>
         {preview.isError ? <Banner tone="bad" icon="alert">{preview.error.message}</Banner> : null}
-        {plan ? <PlanView plan={plan} /> : null}
+        {plan ? <PlanView plan={plan} picked={picked} /> : null}
       </div>
     </Dialog>
   );
 }
 
-function PlanView({ plan }: { plan: DispatchPlan }) {
+function PlanView({ plan, picked }: { plan: DispatchPlan; picked: boolean }) {
   const title = new Map(plan.lanes.map((l) => [`${l.repo}#${l.n}`, l.title]));
   return (
     <section className="stack" style={{ gap: 10 }} aria-label="Preview">
@@ -114,7 +124,7 @@ function PlanView({ plan }: { plan: DispatchPlan }) {
           ))}
         </ol>
       ) : (
-        <p className="muted">Nothing to run: this epic has no refined open issues. Refine them first.</p>
+        <p className="muted">{picked ? 'Nothing to run: none of the picked issues is open.' : 'Nothing to run: this epic has no refined open issues. Refine them first.'}</p>
       )}
     </section>
   );
