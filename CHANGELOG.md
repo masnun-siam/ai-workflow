@@ -4,6 +4,7 @@
 
 ### Added
 
+- `ui_notify.send_mac` sends the macOS banner through `terminal-notifier` when it is on the server's PATH (clickable when given a link) and falls back to AppleScript; it replaces `ui_dispatch.mac_notify`. Run `brew install terminal-notifier` and restart `aiw ui` for clickable banners.
 - A session started from the UI can carry a `model` (`opus`, `sonnet`, `haiku`) and an `effort` (`low` to `max`): optional fields on `POST /api/sessions` and `POST /api/start`, applied on every spawn and replayed by Rerun. `GET|PUT /api/settings` stores the last-used pair as `run_model` / `run_effort` The Start dialog now shows Model and Effort dropdowns for every command, preselected from the saved pair and saved on change.
 
 ### Changed

@@ -9,9 +9,13 @@ user+password (Basic). notify() never raises and never logs a credential.
 from __future__ import annotations
 
 import base64
+import functools
 import json
 import os
 import re
+import shutil
+import subprocess
+import sys
 import urllib.error
 import urllib.request
 from urllib.parse import quote, urlparse
@@ -178,3 +182,34 @@ def notify(event: str, rec: dict) -> None:
         warn(f"ntfy push failed ({event} {rec.get('id')}): HTTP {e.code}")
     except Exception as e:  # never let a push failure break the session
         warn(f"ntfy push failed ({event} {rec.get('id')}): {type(e).__name__}")
+
+
+@functools.cache
+def _notifier() -> str | None:
+    return shutil.which("terminal-notifier")  # the server's PATH only, cached for the process
+
+
+def send_mac(title: str, body: str, link: str | None = None, run=subprocess.run) -> str | None:
+    """macOS banner: terminal-notifier (clickable when `link`) else AppleScript. None on success, else a short error."""
+    if sys.platform != "darwin":
+        return "Only on macOS"
+    title, body = title[:80], (body or title)[:200]
+    tn = _notifier()
+    if tn:
+        argv = [tn, "-title", title, "-message", body, *(["-open", link] if link else [])]
+    else:  # argv, never the script text: nothing in `body` can run as AppleScript
+        script = [
+            "-e",
+            "on run argv",
+            "-e",
+            "display notification (item 1 of argv) with title (item 2 of argv)",
+            "-e",
+            "end run",
+        ]
+        argv = ["osascript", *script, body, title]
+    try:
+        r = run(argv, stdin=subprocess.DEVNULL, capture_output=True, timeout=10)
+    except (OSError, subprocess.SubprocessError) as e:
+        warn(f"macOS notification failed: {type(e).__name__}")
+        return type(e).__name__
+    return f"exit {r.returncode}" if r.returncode else None
