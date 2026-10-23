@@ -4,12 +4,16 @@
 
 ### Added
 
+- Browser notifications work again: while permission is granted, every aiw tab polls `/api/notifications` (also in the background) and shows each new event as a system notification through the service worker. The same tag shows once across tabs, a tab shows only events after it opened, and a click focuses or opens an aiw window on the event's page.
+- Settings → Notifications: each column header shows its channel's state (Browser On / Off with Enable / Blocked / Not supported, ntfy Set up / Not set up, This Mac Clickable / No links / install hint / Only on macOS) and a Send test button. Browser tests itself through the service worker; ntfy and This Mac post to `/api/settings/notify/test` and toast the result. The separate "This browser" block is gone.
+- Settings → Notifications shows the notification matrix: 11 events in three groups by Browser, ntfy and This Mac, one instant-save switch per cell. The ntfy form moves below it under "Phone push (ntfy)".
 - The notification matrix store: `ui.json` keeps per-event, per-channel (`browser`, `ntfy`, `mac`) overrides under `channels`. `GET /api/settings/notify` now returns `matrix`, `events`, `ntfy_ready` and `mac`, and `POST /api/settings/notify/channel` saves one cell. Matrix and ntfy form saves share one lock.
 - `ui_notify.send_mac` sends the macOS banner through `terminal-notifier` when it is on the server's PATH (clickable when given a link) and falls back to AppleScript; it replaces `ui_dispatch.mac_notify`. Run `brew install terminal-notifier` and restart `aiw ui` for clickable banners.
 - A session started from the UI can carry a `model` (`opus`, `sonnet`, `haiku`) and an `effort` (`low` to `max`): optional fields on `POST /api/sessions` and `POST /api/start`, applied on every spawn and replayed by Rerun. `GET|PUT /api/settings` stores the last-used pair as `run_model` / `run_effort` The Start dialog now shows Model and Effort dropdowns for every command, preselected from the saved pair and saved on change.
 
 ### Changed
 
+- `ui_notify.notify` routes each event by the notification matrix: the browser feed, ntfy and This Mac each get it when their cell is on, independently, with one shared title, body and link. A dispatch no longer shows its own macOS banner; it reaches the Mac through the `dispatch` cell.
 - The session transcript renders assistant and result text as markdown (headings, lists, code, links, bold, italics), and the markdown renderer now handles pipe tables.
 - `make restart` rebuilds the UI and restarts the supervisord-managed server. The `ui-rewrite` PRD is marked Done.
 - The New dispatch dialog and a dispatch's live settings use the shared Model and Effort dropdowns instead of the free-text model box; the dialog starts from the saved pair and a pick updates the saved defaults.

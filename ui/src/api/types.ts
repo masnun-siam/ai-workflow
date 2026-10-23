@@ -242,6 +242,8 @@ export type InboxItem =
       resets_at?: number;
     })
   | (InboxBase & { type: 'dispatch_done'; dispatch: string; epic: string; feature_branch: string | null; final_prs: Record<string, string> });
+export interface FeedEvent { id: number; event: string; title: string; body: string; path: string; tag: string; ts: string }
+export interface NotificationFeed { latest: number; events: FeedEvent[] }
 export interface InboxResponse {
   items: InboxItem[];
   afk: AfkState;
@@ -283,6 +285,7 @@ export interface Settings {
   run_effort?: string | null;
   [k: string]: unknown;
 }
+export type NotifyChannel = 'browser' | 'ntfy' | 'mac';
 export interface NotifySettings {
   server: string;
   topic: string;
@@ -291,6 +294,10 @@ export interface NotifySettings {
   token_set: boolean;
   password_set: boolean;
   env: string[];
+  matrix: Record<string, Record<NotifyChannel, boolean>>;
+  events: { key: string; label: string; group: string }[];
+  ntfy_ready: boolean;
+  mac: { available: boolean; notifier: boolean; clickable: boolean };
 }
 export interface ReviewSettings {
   max_rounds: number;

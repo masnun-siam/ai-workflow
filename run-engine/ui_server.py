@@ -32,6 +32,7 @@ import ui_config
 import ui_delivery
 import ui_dispatch
 import ui_events
+import ui_feed
 import ui_gh
 import ui_grind
 import ui_inbox
@@ -406,6 +407,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             )
         elif path == "/api/inbox":
             self._json(*_inbox(urlsplit(self.path).query))
+        elif path == "/api/notifications":
+            v = (parse_qs(urlsplit(self.path).query, keep_blank_values=True).get("after") or [None])[0]
+            if v is not None and not (v.isascii() and v.isdigit()):
+                self._json(400, {"error": "after must be a whole number"})
+            else:
+                self._json(200, ui_feed.after(int(v) if v is not None else None))
         elif path in ("/api/planning", "/api/delivery"):
             self._json(*_board(path, urlsplit(self.path).query))
         elif path == "/api/settings":
@@ -611,6 +618,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._dispatch(ui_config.save_notify)
         elif parts == ["", "api", "settings", "notify", "channel"]:
             self._dispatch(ui_config.save_channel)
+        elif parts == ["", "api", "settings", "notify", "test"]:
+            self._dispatch(lambda b: ui_notify.send_test(b.get("channel")))
         elif parts == ["", "api", "settings", "review"]:
             self._dispatch(ui_config.save_review)
         elif parts == ["", "api", "repos", "remove"]:

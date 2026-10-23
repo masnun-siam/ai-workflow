@@ -23,6 +23,8 @@ def ok(label):
     print("  ok ", label)
 
 
+pdata = tempfile.mkdtemp()  # before any config read: the user's own data dir must not leak in
+os.environ["CLAUDE_PLUGIN_DATA"] = pdata
 offers = pr.offers()
 assert (
     offers["max_rounds"] == 5
@@ -39,8 +41,6 @@ for kind, picked in (("dump", ["cto"]), ("implement-issue", ["critical"]), ("cre
 ok("offers / check_lenses: what the UI draws and the server enforces")
 
 # --- lens-session panels (task 32) ---
-pdata = tempfile.mkdtemp()
-os.environ["CLAUDE_PLUGIN_DATA"] = pdata
 art = os.path.join(pdata, "prd.md")
 write(art, "# PRD")
 P = pr.new_panel("o/r", art, ["critical", "cto", "qa"], "root-sid")

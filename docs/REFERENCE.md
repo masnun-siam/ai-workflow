@@ -206,15 +206,20 @@ the Slack review channel grind posts to (`repos[owner/repo]` in `ui_settings.jso
 skips grinding in a dispatch) and **Remove** (its clone is untouched), plus
 scan folders, **Find repos** and **Check remotes** (`gh repo view` on every repo, failures first).
 **Claude accounts**: the named `claude` commands a session can launch with, one per account; their plan
-usage (5h / 7d) shows in the rail. **Notifications** edits `ui.json` (written mode 0600; a token or
+usage (5h / 7d) shows in the rail. **Notifications** shows the matrix of 11 events by Browser, ntfy and This Mac: one switch per cell, saved at once. Each column header shows the channel's state and a Send test button (Browser tests itself; ntfy and This Mac call `POST /api/settings/notify/test` and toast the result; This Mac is disabled off a Mac) (`POST /api/settings/notify/channel`; a failed save reverts the switch and toasts). Below it, "Phone push (ntfy)" edits `ui.json` (written mode 0600; a token or
 password is never sent back to the browser, and an empty box keeps the saved one). **Peer review**
 sets the rounds cap, the lenses ticked by default and each lens prompt; changes are saved to
 `<data_dir>/config.json` and laid over the shipped `run-engine/config.json`, so **Reset to defaults**
 just removes that file. **Notes vault** sets the vault path. With no repos registered the app opens
 an onboarding page that checks `gh` and a Claude account, then scans folders.
-`GET|POST /api/settings/notify`, `POST /api/settings/notify/channel` (one event × channel switch,
+`GET|POST /api/settings/notify`, `POST /api/settings/notify/test` (`{channel: "ntfy"|"mac"}`: one sample push on that channel alone, ignoring the matrix and Away mode; 200 `{ok}` or `{ok: false, error}` with an HTTP status, error type or "ntfy is not set up" / "Only on macOS", never a credential; `browser` or an unknown channel is 400), `POST /api/settings/notify/channel` (one event × channel switch,
 `{event, channel, on}`; `GET` also returns `matrix`, `events`, `ntfy_ready` and `mac`), `GET|POST /api/settings/review`, `POST /api/repos/remove`,
 `POST /api/repos/check`.
+`GET /api/notifications?after=<id>` is the in-memory browser feed (`ui_feed.py`, newest 200, empty after
+a restart): `{latest, events}` with the entries newer than `after`, at most the 5 newest, oldest first;
+no `after`, or one above `latest`, gives `events: []`; a non-integer `after` is 400. Browser notifications
+need an open aiw tab or the installed PWA with permission granted: `useBrowserNotifier` (mounted in `Shell`) polls
+this feed, shows each new event via the service worker (`ui/src/lib/notifier.ts`), and `sw.js` handles the click.
 
 **Notes vault.** With **No repo yet** and a new idea, Start shows a **Vault folder**
 (`05-Work/<Project>/<Feature>`) that follows the best match of your text as you type; **Suggest with

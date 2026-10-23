@@ -12,3 +12,14 @@ self.addEventListener('fetch', (e) => {
   if (e.request.mode !== 'navigate') return;
   e.respondWith(fetch(e.request).catch(() => new Response(OFFLINE, { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } })));
 });
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const path = String(e.notification.data?.path || '');
+  const hash = path.startsWith('#/') ? path : '#/inbox';
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+    const win = wins.find((w) => w.focused) || wins[0];
+    if (!win) return self.clients.openWindow(self.registration.scope + hash);
+    win.postMessage({ type: 'aiw-open', path: hash });
+    return win.focus();
+  }));
+});

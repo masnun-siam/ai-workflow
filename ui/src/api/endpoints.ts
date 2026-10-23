@@ -2,7 +2,7 @@
 import { enc, get, post, put, qs, splitRepo } from './client';
 import type {
   AnswerBody, AfkState, Dispatch, DispatchPlan, DispatchSettings, DispatchState, EndAction, LaneAction, BoardStartBody, BoardStartResponse, CleanupItem, DeliveryResponse, InboxResponse,
-  IssueDetail, NotifySettings, OpenItem, PeerReviewOffers, PlanningResponse, PrDetail, PrdFile, ReposResponse,
+  IssueDetail, NotificationFeed, NotifyChannel, NotifySettings, OpenItem, PeerReviewOffers, PlanningResponse, PrDetail, PrdFile, ReposResponse,
   ReviewSettings, Session, SessionStartBody, SessionsResponse, Settings, StreamResponse, VaultFolders, VaultPrd,
 } from './types';
 
@@ -12,6 +12,7 @@ export const api = {
   session: (id: string) => get<Session>(`/api/sessions/${enc(id)}`),
   stream: (id: string, offset: number) => get<StreamResponse>(`/api/sessions/${enc(id)}/stream${qs({ offset })}`),
   inbox: (repo?: string) => get<InboxResponse>(`/api/inbox${qs({ repo })}`),
+  notifications: (after: number | null) => get<NotificationFeed>(`/api/notifications${qs({ after })}`),
   planning: (repo: string, refresh = false) => get<PlanningResponse>(`/api/planning${qs({ repo, refresh: refresh ? 1 : undefined })}`),
   delivery: (repo: string, refresh = false) => get<DeliveryResponse>(`/api/delivery${qs({ repo, refresh: refresh ? 1 : undefined })}`),
   repos: () => get<ReposResponse>('/api/repos'),
@@ -86,6 +87,8 @@ export const api = {
   publishRepo: (slug: string, owner: string, name: string, priv: boolean) => post('/api/repos/publish', { slug, owner, name, private: priv }),
   suggestFolder: (text: string) => post<Record<string, unknown>>('/api/vault/suggest', { text }),
   saveSettings: (s: Partial<Settings>) => put<Settings>('/api/settings', s),
+  notifyChannel: (event: string, channel: NotifyChannel, on: boolean) => post<NotifySettings>('/api/settings/notify/channel', { event, channel, on }),
+  notifyTest: (channel: 'ntfy' | 'mac') => post<{ ok: boolean; error?: string }>('/api/settings/notify/test', { channel }),
   saveNotify: (b: Record<string, unknown>) => post<NotifySettings>('/api/settings/notify', b),
   saveReview: (b: Record<string, unknown>) => post<ReviewSettings>('/api/settings/review', b),
   testAccount: (cmd: string) => post<{ ok: boolean; message: string }>('/api/settings/test', { cmd }),

@@ -22,9 +22,16 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
+import ui_feed  # noqa: E402
 import ui_notify  # noqa: E402
 import ui_runner  # noqa: E402
 import ui_sessions  # noqa: E402
+
+# Stub the Mac and feed channels so no test shows a real banner; later sections read these recorders.
+REAL_SEND_MAC, REAL_FEED_ADD = ui_notify.send_mac, ui_feed.add
+macs, feed = [], []
+ui_notify.send_mac = lambda title, body, link=None, **k: macs.append((title, body, link))
+ui_feed.add = lambda *a: feed.append(a)
 
 passed = 0
 SECRET = "tk_SECRET"
@@ -399,7 +406,104 @@ for ev, word in (("pr-ready", "ready"), ("needs-cleanup", "cleanup"), ("panel-ca
     assert word in h["Title"] and "the note" in body and h["Click"] == "https://x.ts.net/#/inbox", (ev, h)
 ok("pr-ready, needs-cleanup and panel-cap compose")
 
+# --- fan-out
+import itertools  # noqa: E402
+from unittest import mock  # noqa: E402
+
+ui_notify.send_mac = lambda title, body, link=None, **k: macs.append((title, body, link))
+
+
+def fan(cfg, event="failed", record=None, fake_cfg=True):
+    """Run notify against a fake ntfy; return (ntfy requests, mac calls, feed entries)."""
+    macs.clear(), feed.clear()
+    f = Fake()
+    try:
+        fresh(conf(f, **cfg) if fake_cfg else cfg)
+        captured(lambda: ui_notify.notify(event, record or rec(error="boom")))
+        return list(f.reqs), list(macs), list(feed)
+    finally:
+        f.close()
+
+
+for b, n, m in itertools.product((False, True), repeat=3):
+    reqs, ms, fd = fan({"channels": {"failed": {"browser": b, "ntfy": n, "mac": m}}})
+    assert (len(fd), len(reqs), len(ms)) == (b, n, m), (b, n, m)
+ok("8 cell combinations route to exactly the enabled channels")
+
+reqs, ms, fd = fan({"channels": {"failed": {"browser": False, "mac": False}}})
+assert len(reqs) == 1 and not ms and not fd
+ok("failed with browser and mac off: ntfy only")
+
+reqs, ms, fd = fan({"channels": {"failed": {"browser": True, "ntfy": False, "mac": True}}})
+assert len(fd) == 1 and len(ms) == 1 and not reqs
+assert fd[0][1] == ms[0][0] == "aiw: #5 failed" and fd[0][2] == ms[0][1] == "boom\no/r · /implement-issue 5"
+assert fd[0][3] == "#/sessions/sid1" and ms[0][2] == "https://box.ts.net/#/sessions/sid1"
+reqs, ms, fd = fan({"public_url": None, "channels": {"failed": {"browser": True, "ntfy": False, "mac": True}}})
+assert fd[0][3] == "#/sessions/sid1" and ms[0][2] is None
+ok("feed and Mac get the ntfy title/body; path always, link only with a public URL")
+
+reqs, ms, fd = fan({"channels": {"failed": {"browser": True, "mac": True}}})
+assert reqs[0]["headers"]["title"] == fd[0][1] and reqs[0]["body"].decode() == fd[0][2]
+ok("ntfy request carries the same title and body")
+
+# quiet rules apply to every channel
+reqs, ms, fd = fan({}, "done", rec(command="/pr-grind 5"))
+assert not (reqs or ms or fd)
+import ui_afk  # noqa: E402
+
+with mock.patch.object(ui_afk, "active", return_value=True):
+    reqs, ms, fd = fan({}, "waiting")
+    assert not (reqs or ms or fd)
+ok("grind-round done and away-mode holds reach no channel")
+
+# a channel failing never stops the others or reaches the caller
+macs.clear(), feed.clear()
+for status in (500, 200):
+    f = Fake(status=status, delay=0 if status == 500 else 0.2)
+    ui_notify.TIMEOUT_SECONDS = 0.05 if status == 200 else 5
+    try:
+        fresh(conf(f, channels={"failed": {"browser": True, "ntfy": True, "mac": True}}))
+        captured(lambda: ui_notify.notify("failed", rec(error="x")))
+    finally:
+        f.close()
+        ui_notify.TIMEOUT_SECONDS = 5
+    assert len(macs) == 1 and len(feed) == 1, status
+    macs.clear(), feed.clear()
+
+
+def boom(*a, **k):
+    raise RuntimeError("nope")
+
+
+f = Fake()
+fresh(conf(f, channels={"failed": {"browser": True, "ntfy": True, "mac": True}}))
+with mock.patch.object(ui_notify, "send_mac", boom):
+    captured(lambda: ui_notify.notify("failed", rec(error="x")))
+    assert len(f.reqs) == 1 and len(feed) == 1
+feed.clear()
+with mock.patch.object(ui_feed, "add", boom):
+    captured(lambda: ui_notify.notify("failed", rec(error="x")))
+    assert len(f.reqs) == 2 and len(macs) == 1
+f.close()
+ok("ntfy HTTP error or timeout, a raising Mac sender or feed never stop the rest")
+
+# ntfy not set up: other channels still route
+macs.clear(), feed.clear()
+fresh({"channels": {"failed": {"browser": True, "ntfy": True, "mac": True}}})
+captured(lambda: ui_notify.notify("failed", rec(error="x")))
+assert len(macs) == 1 and len(feed) == 1
+assert ui_notify.send_ntfy({"ntfy": {}}, {}, "t", "failed", {}) == "ntfy is not set up"
+ok("ntfy cells on but not set up still routes the others")
+
+# click_url output is unchanged
+assert ui_notify.click_url("failed", rec(), "https://h/") == "https://h/#/sessions/sid1"
+assert ui_notify.click_url("pr-ready", {}, "https://h") == "https://h/#/inbox"
+assert ui_notify.click_url("done", {}, "https://h") == "https://h/#/activity"
+assert ui_notify.click_url("done", rec(), None) is None
+ok("click_url unchanged")
+
 # --- send_mac
+ui_notify.send_mac = REAL_SEND_MAC
 import types  # noqa: E402
 from unittest import mock  # noqa: E402
 
@@ -435,5 +539,44 @@ with mock.patch.object(sys, "platform", "darwin"):
         assert ui_notify.send_mac("t", "b", run=lambda a, **k: types.SimpleNamespace(returncode=1)) == "exit 1"
 ui_notify._notifier.cache_clear()
 ok("send_mac: terminal-notifier, osascript argv, non-Mac, errors")
+
+# send_test: one sample on one channel, ignoring the matrix and Away mode
+import ui_afk  # noqa: E402
+
+f = Fake()
+fresh(conf(f, channels={e: {"browser": False, "ntfy": False, "mac": False} for e in ui_notify.matrix({"ntfy": {}})}))
+with mock.patch.object(ui_afk, "active", return_value=True):
+    res = ui_notify.send_test("ntfy")
+assert res == {"ok": True}, res
+assert len(f.reqs) == 1 and f.reqs[0]["headers"]["title"] == "aiw: test notification"
+assert f.reqs[0]["headers"]["authorization"] == f"Bearer {SECRET}"
+assert f.reqs[0]["headers"]["click"] == "https://box.ts.net/#/settings/notifications"
+f.close()
+f = Fake(status=401)
+fresh(conf(f))
+res, err = captured(lambda: ui_notify.send_test("ntfy"))
+assert res == {"ok": False, "error": "HTTP 401"} and SECRET not in json.dumps(res) + err and "aiw-test" not in err
+f.close()
+fresh(conf(Fake(), ntfy={"server": closed_port(), "topic": "aiw-test"}))
+res, err = captured(lambda: ui_notify.send_test("ntfy"))
+assert res["ok"] is False and "aiw-test" not in json.dumps(res) + err, res
+f = Fake()
+fresh({})
+assert ui_notify.send_test("ntfy") == {"ok": False, "error": "ntfy is not set up"} and not f.reqs
+f.close()
+for bad in ("browser", "x", None):
+    try:
+        ui_notify.send_test(bad)
+        raise AssertionError(bad)
+    except ValueError:
+        pass
+sent = []
+fresh({})
+with mock.patch.object(ui_notify, "send_mac", lambda *a: sent.append(a)):
+    assert ui_notify.send_test("mac") == {"ok": True}
+assert sent == [("aiw: test notification", "This is a test from aiw ui.", None)], sent
+with mock.patch.object(ui_notify, "send_mac", lambda *a: "Only on macOS"):
+    assert ui_notify.send_test("mac") == {"ok": False, "error": "Only on macOS"}
+ok("send_test: ntfy ok/401/unreachable/not set up, mac, bad channel, ignores matrix and Away")
 
 print(f"\n{passed} passed")

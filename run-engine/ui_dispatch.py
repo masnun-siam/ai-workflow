@@ -172,7 +172,6 @@ def start_timer(snapshot, interval=TICK_SECONDS) -> threading.Thread:
 def notify(d: dict, k, kind: str, text: str) -> None:
     x = d["lanes"].get(k) if k else None
     title = f"aiw: {k or d['epic']}"
-    ui_notify.send_mac(title, f"{kind.replace('_', ' ')}: {text}")
     owner, _, name = (x["repo"] if x else d["epic"].partition("#")[0]).partition("/")
     ui_notify.notify(
         "dispatch",
