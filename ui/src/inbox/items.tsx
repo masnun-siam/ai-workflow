@@ -230,8 +230,8 @@ export function ItemRow({ item, a, open, toggle, publish }: Props) {
       break;
     }
     case 'dispatch_done':
-      icon = 'check'; tone = 'ship'; title = `Every lane of ${item.epic} is done`; meta = [where, 'dispatch'];
-      detail = item.feature_branch ? `Open the PR from ${item.feature_branch}, run QA, or grind the final PR.` : 'Run QA on the whole feature, or call it done.';
+      icon = 'check'; tone = 'ship'; title = `Every lane of ${item.epic ?? item.title} is done`; meta = [where, 'dispatch'];
+      detail = !item.epic ? 'Every issue is done.' : item.feature_branch ? `Open the PR from ${item.feature_branch}, run QA, or grind the final PR.` : 'Run QA on the whole feature, or call it done.';
       acts = (<><LinkButton sm variant="primary" to={routes.dispatch(item.dispatch)}>What next</LinkButton><Button sm variant="ghost" onClick={() => a.dispatchSeen(item.dispatch)}>Dismiss</Button></>);
       break;
     case 'queued':

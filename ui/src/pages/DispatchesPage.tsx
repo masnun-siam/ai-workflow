@@ -7,7 +7,7 @@ import { Banner, Button, Chip, EmptyState, Icon } from '../components';
 import { clockText, money } from '../lib/format';
 import { routes } from '../lib/routes';
 import { NewDispatchDialog } from '../dispatch/NewDispatchDialog';
-import { DSTATE, counts, epicNo, issueNo, nowLine, secs } from '../dispatch/vocab';
+import { DSTATE, counts, dispatchHeading, dispatchRepo, issueNo, nowLine, secs } from '../dispatch/vocab';
 import '../dispatch/dispatch.css';
 
 const live = (d: Dispatch) => d.state === 'running' || d.state === 'paused';
@@ -19,7 +19,7 @@ function Card({ d }: { d: Dispatch }) {
   return (
     <Link to={routes.dispatch(d.id)} className={`live-card dsp-card${asks.length ? ' you' : ''}`} style={{ textDecoration: 'none', color: 'inherit' }}>
       <div className="row"><Chip tone={st.tone} live={st.live}>{st.label}</Chip><span className="grow" /><span className="faint" style={{ fontSize: 12 }}>{secs(d.totals.seconds)}</span></div>
-      <b>{d.title?.replace(/^Epic:\s*/i, '') || `Epic #${epicNo(d.epic)}`}</b>
+      <b>{dispatchHeading(d)}</b>
       <div className="meter" role="img" aria-label={`${c.closed} of ${c.total} done`}><span style={{ width: `${c.total ? (c.closed / c.total) * 100 : 0}%`, background: 'var(--ship)' }} /></div>
       <span className="muted" style={{ fontSize: 13 }}>
         {c.closed} of {c.total} done{c.active ? `, ${c.active} in progress` : ''}{c.queued ? `, ${c.queued} waiting` : ''}
@@ -81,7 +81,7 @@ export function DispatchesPage() {
                   const c = counts(d);
                   return (
                     <tr key={d.id}>
-                      <td className="title"><Link to={routes.dispatch(d.id)}>{d.title || d.epic}</Link><div className="faint mono" style={{ fontSize: 12 }}>{d.epic}</div></td>
+                      <td className="title"><Link to={routes.dispatch(d.id)}>{d.title || d.epic}</Link><div className="faint mono" style={{ fontSize: 12 }}>{d.epic ?? dispatchRepo(d)}</div></td>
                       <td><Chip tone={DSTATE[d.state].tone}>{DSTATE[d.state].label}</Chip></td>
                       <td>{c.closed}/{c.total} done{c.skipped ? `, ${c.skipped} skipped` : ''}</td>
                       <td>{new Date(d.created_at * 1000).toLocaleDateString()} {clockText(d.created_at)}</td>

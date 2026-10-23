@@ -14,7 +14,7 @@ const lane = (n: number, o: Partial<Lane> = {}): Lane => ({
   usage: { cost: 0, tokens: 0, seconds: 0 }, ...o,
 });
 const disp = (o: Partial<Dispatch> = {}): Dispatch => ({
-  id: 'abc123abc123', epic: 'o/r#1', title: 'Payments', runner: 'headless', state: 'running', settings: { ...S }, created_at: 1_700_000_000,
+  id: 'abc123abc123', epic: 'o/r#1', issues: null, title: 'Payments', runner: 'headless', state: 'running', settings: { ...S }, created_at: 1_700_000_000,
   ended_at: null, final_prs: null, totals: { cost: 1.5, tokens: 1200, seconds: 600 }, events: [{ at: 1_700_000_100, lane: 'o/r#2', kind: 'needs_you', text: 'waiting on you' }],
   lanes: [
     lane(2, { stage: 'implementing', needs_you: 'waiting on you', started_at: 1_700_000_000 }),
@@ -212,7 +212,56 @@ describe('Dispatch page', () => {
   });
 });
 
+const SMALL = { epic: null, issues: ['o/r#412', 'o/r#415'], title: 'Small changes: #412, #415' };
+
+describe('Issue-list dispatches', () => {
+  it('shows the title on its card and the repo under it in History', async () => {
+    routes['/api/dispatches'] = { dispatches: [disp(), disp({ id: 'sm1', ...SMALL }), disp({ id: 'sm2', state: 'done', ...SMALL })] };
+    window.location.hash = '#/dispatches?repo=o/r';
+    render(<App />);
+    expect((await screen.findAllByText('Small changes: #412, #415')).length).toBe(2);
+    expect(within(screen.getByRole('table')).getByText('o/r')).toBeTruthy();
+    expect(screen.getByText('Payments')).toBeTruthy();
+  });
+
+  it('titles its page, links the repo and offers no end actions once done', async () => {
+    routes['/api/dispatches/abc123abc123'] = disp({ state: 'done', ...SMALL, settings: { ...S, feature_branch: 'feature/pay' }, lanes: [lane(412, { stage: 'closed' })] });
+    window.location.hash = '#/dispatches/abc123abc123?repo=o/r';
+    render(<App />);
+    expect((await screen.findByRole('heading', { level: 1 })).textContent).toBe('Small changes: #412, #415');
+    expect(screen.getByRole('link', { name: 'o/r' }).getAttribute('href')).toBe('https://github.com/o/r');
+    expect(screen.getByText('Small changes', { selector: 'nav span' })).toBeTruthy();
+    expect(screen.queryByText(/Epic #/)).toBeNull();
+    expect(screen.getByText('Every issue is done.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Run QA|Open PR|Grind/ })).toBeNull();
+    await waitFor(() => expect(posts.some(([p]) => p === '/api/dispatches/abc123abc123/seen')).toBe(true));
+  });
+
+  it('does not break the Features page while running', async () => {
+    routes['/api/dispatches'] = { dispatches: [disp({ id: 'sm1', ...SMALL })] };
+    window.location.hash = '#/features?repo=o/r';
+    render(<App />);
+    await waitFor(() => expect(document.body.textContent).not.toContain('Something went wrong'));
+  });
+});
+
 describe('Inbox dispatch rows', () => {
+  it('words a finished issue-list dispatch without QA, and an epic one as before', async () => {
+    routes['/api/inbox'] = {
+      afk: AFK, gh: { ok: true },
+      items: [
+        { key: 'x', group: 'decide', type: 'dispatch_done', repo: 'o/r', at: null, dispatch: 'sm1', epic: null, title: 'Small changes: #412, #415', feature_branch: null, final_prs: {} },
+        { key: 'y', group: 'decide', type: 'dispatch_done', repo: 'o/r', at: null, dispatch: 'abc123abc123', epic: 'o/r#1', feature_branch: null, final_prs: {} },
+      ],
+    };
+    window.location.hash = '#/inbox?repo=o/r';
+    render(<App />);
+    expect(await screen.findByText('Every lane of Small changes: #412, #415 is done')).toBeTruthy();
+    expect(screen.getByText('Every issue is done.')).toBeTruthy();
+    expect(screen.getByText('Every lane of o/r#1 is done')).toBeTruthy();
+    expect(screen.getAllByText(/Run QA on the whole feature/).length).toBe(1);
+  });
+
   it('renders a lane that needs you and a merge decision', async () => {
     routes['/api/inbox'] = {
       afk: AFK, gh: { ok: true },

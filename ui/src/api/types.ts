@@ -242,7 +242,7 @@ export type InboxItem =
       reason: string;
       resets_at?: number;
     })
-  | (InboxBase & { type: 'dispatch_done'; dispatch: string; epic: string; feature_branch: string | null; final_prs: Record<string, string> });
+  | (InboxBase & { type: 'dispatch_done'; dispatch: string; epic: string | null; title?: string | null; feature_branch: string | null; final_prs: Record<string, string> });
 export interface FeedEvent { id: number; event: string; title: string; body: string; path: string; tag: string; ts: string }
 export interface NotificationFeed { latest: number; events: FeedEvent[] }
 export interface InboxResponse {
@@ -505,8 +505,9 @@ export interface DispatchEvent { at: number; lane: string | null; kind: string; 
 export type DispatchState = 'running' | 'paused' | 'done' | 'cancelled';
 export interface Dispatch {
   id: string;
-  epic: string; // owner/repo#n
-  title: string | null; // the epic's title (older records have none)
+  epic: string | null; // owner/repo#n; null for an issue-list dispatch
+  issues: string[] | null; // owner/repo#n each; set only for an issue-list dispatch
+  title: string | null; // the epic's title, or "Small changes: #a, #b" (older records have none)
   runner: 'herdr' | 'headless';
   state: DispatchState;
   settings: DispatchSettings;
@@ -519,7 +520,8 @@ export interface Dispatch {
 }
 export interface PlanLane { repo: RepoSlug; n: number; title: string; refined: boolean; deps: string[] }
 export interface DispatchPlan {
-  epic: string;
+  epic: string | null;
+  issues: string[] | null;
   title: string;
   settings: DispatchSettings;
   runner: 'herdr' | 'headless';
