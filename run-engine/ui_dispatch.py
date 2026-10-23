@@ -257,7 +257,7 @@ def inbox_items(dispatches: list) -> list:
                     "at": None,
                     "dispatch": d["id"],
                     "epic": d["epic"],
-                    "title": d["title"],
+                    "title": d.get("title", ""),
                     "feature_branch": d["settings"].get("feature_branch"),
                     "final_prs": d.get("final_prs") or {},
                 }
