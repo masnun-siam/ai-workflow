@@ -2334,6 +2334,26 @@ try:
     assert "--model" not in av and "--effort" not in av, av
     wait_finished(b["id"])
     os.remove(os.path.join(fk, "argv"))
+    ui_sessions.update(a["id"], status="done")  # resume() after an answer keeps them too
+    os.remove(os.path.join(fk, "argv")) if spawned_argv(fk) else None
+    ui_runner.resume(a["id"], "go on")
+    wait_for(lambda: spawned_argv(fk))
+    av = lines(fk, "argv").split("\n")
+    assert "--resume" in av and av[av.index("--model") + 1] == "opus", av
+    wait_finished(a["id"])
+    os.remove(os.path.join(fk, "argv"))
+    # a queued batch session starts with its flags once a slot frees
+    g1 = ui_runner.start("/worklog 5", work, batch=("wl-flags", 1))
+    g2 = ui_runner.start("/worklog 6", work, batch=("wl-flags", 1), run_model="haiku", effort="high")
+    recs += [g1, g2]
+    wait_finished(g1["id"])
+    ui_runner.release_batch("wl-flags")
+    wait_for(lambda: (ui_sessions.load(g2["id"]) or {}).get("status") in ("running", "done"))
+    wait_for(lambda: spawned_argv(fk))
+    av = lines(fk, "argv").split("\n")
+    assert av[av.index("--model") + 1] == "haiku" and av[av.index("--effort") + 1] == "high", av
+    wait_finished(g2["id"])
+    os.remove(os.path.join(fk, "argv"))
     # a rate-limited account still queues a session with flags; the restart at reset adds them
     c = ui_sessions.create("/worklog 3", work, None)
     recs.append(c)
