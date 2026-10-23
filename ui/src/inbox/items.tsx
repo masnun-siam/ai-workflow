@@ -14,8 +14,9 @@ import { QuestionForm } from '../questions/QuestionForm';
 import { Icon } from '../components';
 import { ResolveConflicts } from '../board/ResolveConflicts';
 
+const slugOfPrd = (p: string) => p.replace(/^.*\//, '').replace(/\.md$/, '');
 export const approveArgs = (path: string) => {
-  const slug = path.replace(/^.*\//, '').replace(/\.md$/, '');
+  const slug = slugOfPrd(path);
   return (
     `${path} approve: the team has reviewed this PRD. Fold in the review's changes, set the status to Approved and file the epic. ` +
     `After the epics are filed and their numbers written into the PRD, commit the PRD and open a PR:\n` +
@@ -28,7 +29,6 @@ export const approveArgs = (path: string) => {
     `- If the commit, push, PR or merge fails (or there is no remote or \`gh\` is not signed in), say which step failed and why in your final message. The PRD stays Approved and the epics stay filed.`
   );
 };
-const slugOfPrd = (p: string) => p.replace(/^.*\//, '').replace(/\.md$/, '');
 const cmdName = (c?: string) => (c ?? '').replace(/^\/(?:[\w-]+:)?/, '').trim() || 'session';
 const featureLink = (it: { repo: string | null; prd_path: string }, tab: string) =>
   `${routes.feature(slugOfPrd(it.prd_path), tab)}${it.repo ? `?repo=${it.repo}` : ''}`;

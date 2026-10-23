@@ -11,7 +11,6 @@ import { useRepo } from '../shell/useRepo';
 import { PLAN_RUN } from '../lib/vocab';
 import { approveArgs } from '../inbox/items';
 
-// The exact text the old Planning board sent.
 export const taskArg = (epic: number, path: string, text: string) =>
   `A finding for epic #${epic} (PRD ${path}): ${text.trim().replace(/\s+/g, ' ')}`;
 
