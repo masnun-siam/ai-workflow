@@ -7,6 +7,7 @@ import { useStepRunner } from '../features/useStepRunner';
 import { useEpicDispatch } from '../dispatch/useOwner';
 import { IdeaBox } from '../features/IdeaBox';
 import { SmallChangesTab } from '../features/SmallChangesTab';
+import { useSmallChangeSessions } from '../features/smallChange';
 import '../features/features.css';
 import '../dispatch/dispatch.css';
 import { joinFeatures, outsideFeatures, snapshotsReady, type Feature } from '../lib/features';
@@ -73,6 +74,7 @@ export function FeaturesPage() {
   const active = features.filter((f) => f.stage !== 'shipped').sort((a, b) => ORDER.indexOf(a.stage) - ORDER.indexOf(b.stage));
   const shipped = features.filter((f) => f.stage === 'shipped');
   const list = tab === 'active' ? active : shipped;
+  const pending = useSmallChangeSessions(repo);
   const outside = useMemo(() => outsideFeatures(features, del.data?.lanes ?? []), [features, del.data]);
   const loaded = plan.isSuccess && !del.isPending && snapshotsReady(plan.data, del.data);
 
@@ -99,12 +101,12 @@ export function FeaturesPage() {
           tabs={[
             { value: 'active', label: 'In progress', count: active.length },
             { value: 'shipped', label: 'Shipped', count: shipped.length },
-            { value: 'changes', label: 'Small changes', count: outside.filter((i) => i.status !== 'merged').length },
+            { value: 'changes', label: 'Small changes', count: outside.filter((i) => i.status !== 'merged').length + pending.length },
           ]}
         >
           <TabPanel value={tab}>
             {tab === 'changes' ? (
-              <SmallChangesTab key={repo} repo={repo} issues={outside} />
+              <SmallChangesTab key={repo} repo={repo} issues={outside} pending={pending} />
             ) : tab === 'active' && features.length === 0 ? (
               <IdeaBox repo={repo} name={current?.name ?? repo} />
             ) : (

@@ -120,6 +120,7 @@ def tick_one(
     snapshot,
     runner_for=dispatch_runners.for_dispatch,
     resolve=dispatch_cli.resolve,
+    resolve_issues=dispatch_cli.resolve_issues,
     now=None,
     grind_files=None,
 ) -> list:
@@ -132,10 +133,12 @@ def tick_one(
         if now - (d.get("synced_at") or 0) >= SYNC_SECONDS:
             d["synced_at"] = now
             try:
-                for k in dr.sync_lanes(d, resolve(d["epic"])["children"]):
+                listed = d.get("issues")
+                kids = resolve_issues(listed)["children"] if listed else resolve(d["epic"])["children"]
+                for k in dr.sync_lanes(d, kids):
                     dr.event(d, k, "lane", "joined the dispatch")
             except Exception as e:  # noqa: BLE001
-                warn(f"dispatch {did}: cannot re-read the epic: {e}")
+                warn(f"dispatch {did}: cannot re-read the {'issues' if d.get('issues') else 'epic'}: {e}")
         files = list(ui_grind._state_files()) if grind_files is None else grind_files
         facts = {}
         for k, x in d["lanes"].items():
@@ -171,8 +174,8 @@ def start_timer(snapshot, interval=TICK_SECONDS) -> threading.Thread:
 
 def notify(d: dict, k, kind: str, text: str) -> None:
     x = d["lanes"].get(k) if k else None
-    title = f"aiw: {k or d['epic']}"
-    owner, _, name = (x["repo"] if x else d["epic"].partition("#")[0]).partition("/")
+    title = f"aiw: {k or d['epic'] or d['title']}"
+    owner, _, name = (x["repo"] if x else dr.dispatch_repo(d)).partition("/")
     ui_notify.notify(
         "dispatch",
         {
@@ -250,10 +253,11 @@ def inbox_items(dispatches: list) -> list:
                     "key": f"dispatch:{d['id']}:done",
                     "group": "decide",
                     "type": "dispatch_done",
-                    "repo": d["epic"].partition("#")[0],
+                    "repo": dr.dispatch_repo(d),
                     "at": None,
                     "dispatch": d["id"],
                     "epic": d["epic"],
+                    "title": d.get("title", ""),
                     "feature_branch": d["settings"].get("feature_branch"),
                     "final_prs": d.get("final_prs") or {},
                 }
@@ -367,19 +371,42 @@ def seen(did: str) -> dict:
         return public(d)
 
 
-def start(body: dict) -> dict:
-    """POST /api/dispatches: start a dispatch from the UI (headless lanes unless herdr is asked for)."""
-    runner = body.get("runner") or "headless"
+def _target(body: dict) -> tuple:
+    """('epic', text) or ('issues', refs): exactly one of the two, issues a list of strings."""
+    epic, issues = body.get("epic"), body.get("issues")
+    if (epic is None) == (issues is None):
+        raise ValueError("give either epic or issues")
+    if epic is not None:
+        return "epic", str(epic or "")
+    if not isinstance(issues, list) or not all(isinstance(r, str) for r in issues):
+        raise ValueError("issues must be a list of owner/repo#N strings")
+    dispatch_cli.parse_issues(issues)  # the count and one-repo rules, before any GitHub call
+    return "issues", list(dict.fromkeys(issues))
+
+
+def _settings(body: dict, kind: str) -> dict:
     s = dr.check_settings(
         {**dr.DEFAULTS, **{k: v for k, v in (body.get("settings") or {}).items() if k in dr.DEFAULTS}}
     )
-    d = dispatch_cli.start(str(body.get("epic") or ""), runner, s, body.get("workspace"))
-    return public(d)
+    if kind == "issues":
+        dr._no_feature_branch(s)
+    return s
+
+
+def start(body: dict) -> dict:
+    """POST /api/dispatches: start a dispatch from the UI (headless lanes unless herdr is asked for)."""
+    runner = body.get("runner") or "headless"
+    kind, target = _target(body)
+    s = _settings(body, kind)
+    if kind == "issues":
+        return public(dispatch_cli.start(None, runner, s, body.get("workspace"), issues=target))
+    return public(dispatch_cli.start(target, runner, s, body.get("workspace")))
 
 
 def plan(body: dict) -> dict:
     runner = body.get("runner") or "headless"
-    s = dr.check_settings(
-        {**dr.DEFAULTS, **{k: v for k, v in (body.get("settings") or {}).items() if k in dr.DEFAULTS}}
-    )
-    return dispatch_cli.preview(dispatch_cli.resolve(str(body.get("epic") or "")), s, runner)
+    kind, target = _target(body)
+    s = _settings(body, kind)
+    if kind == "issues":
+        return dispatch_cli.preview(dispatch_cli.resolve_issues(target), s, runner)
+    return dispatch_cli.preview(dispatch_cli.resolve(target), s, runner)

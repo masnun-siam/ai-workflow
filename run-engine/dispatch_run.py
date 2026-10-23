@@ -406,6 +406,33 @@ def _no_feature_branch(s: dict) -> None:
         raise ValueError("an issue-list dispatch has no feature branch")
 
 
+class Conflict(Exception):
+    """A picked issue is already a lane of a live dispatch (HTTP 409). `id`: that dispatch."""
+
+    def __init__(self, message, id=None):
+        super().__init__(message)
+        self.id = id
+
+
+@contextlib.contextmanager
+def store_locked():
+    """Store-wide lock: the ownership check and the save of an issue-list dispatch are one step."""
+    with open(os.path.join(_dir(), ".store.lock"), "w") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+
+
+def owner_of(k: str):
+    """Id of the dispatch not done or cancelled that has a lane `k`, else None."""
+    for d in list_all():
+        if d["state"] not in ("done", "cancelled") and k in d["lanes"]:
+            return d["id"]
+    return None
+
+
 def create(epic, runner: str, settings: dict, children: list, workspace=None, title: str = "", issues=None) -> dict:
     if runner not in ("herdr", "headless"):
         raise ValueError("runner must be herdr or headless")
@@ -432,7 +459,15 @@ def create(epic, runner: str, settings: dict, children: list, workspace=None, ti
         d["issues"] = issues
     sync_lanes(d, children)
     event(d, None, "started", f"{len(d['lanes'])} lanes")
-    save(d)
+    if not issues:
+        save(d)
+        return d
+    with store_locked():
+        for k in d["lanes"]:
+            owner = owner_of(k)
+            if owner:
+                raise Conflict(f"{k} is already a lane of dispatch {owner}", id=owner)
+        save(d)
     return d
 
 
@@ -598,6 +633,8 @@ def request_end(did: str, action: str) -> dict:
         raise ValueError(f"end action must be one of {END_ACTIONS}")
     with locked(did):
         d = load(did)
+        if d.get("issues"):
+            raise ValueError(f"{action} needs an epic: not available for a list of issues")
         if action == "open-pr" and not d["settings"].get("feature_branch"):
             raise ValueError("open-pr needs a feature branch")
         if action == "grind-pr" and not d.get("final_prs"):
@@ -606,6 +643,11 @@ def request_end(did: str, action: str) -> dict:
         event(d, None, "end", f"requested {action}")
         save(d)
         return d
+
+
+def dispatch_repo(d: dict) -> str:
+    """The dispatch's repo: the epic's, else the repo of its listed issues (all in one repo)."""
+    return (d["epic"] or d["issues"][0]).partition("#")[0]
 
 
 def _repos(d: dict) -> list:

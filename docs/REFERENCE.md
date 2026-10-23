@@ -160,7 +160,7 @@ The server ticks every running dispatch every 30 s from the board poll, the grin
 lane's session; grind rounds a lane owns are typed into the lane (`dispatch-due:` in the grind state)
 instead of starting a separate session, and the epic is re-read every 5 minutes so new children join.
 `GET /api/dispatches`, `GET /api/dispatches/<id>` (with events), `GET /api/dispatches/<id>/lane?key=`,
-`POST /api/dispatches` (`{epic, settings}`), `POST /api/dispatches/plan`, `POST
+`POST /api/dispatches` (`{epic, settings}` or `{issues: ["owner/repo#n", ...], settings}`, never both; 1 to 30 issues in one repo, no `feature_branch`; 409 when a picked issue is a lane of a dispatch not done or cancelled), `POST /api/dispatches/plan`, `POST
 /api/dispatches/<id>/settings|state|lane|end|seen`.
 
 **Start** (the New button, `N` or ⌘K). Commands grouped Plan, Build, Review, Ship, Capture and
