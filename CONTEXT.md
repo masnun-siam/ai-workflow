@@ -64,8 +64,12 @@ The human-friendly name for a GitHub `owner/repo`, looked up from `skills/worklo
 _Avoid_: Repo (when referring to the display name; "repo" is fine for the raw slug)
 
 **Dispatch**:
-One run of an epic's child issues as parallel Lanes, in dependency order under a cap, recorded under `<data_dir>/dispatches/` and ticked by the `aiw ui` server. Started by the `herdr-dispatch` skill (lanes are herdr tabs) or from the UI (lanes are headless Sessions); both see and steer every dispatch. Replaces Auto-build and epic autopilot.
+One run of an epic's child issues, or of a list of picked issues (from the UI only), as parallel Lanes, in dependency order under a cap, recorded under `<data_dir>/dispatches/` and ticked by the `aiw ui` server. Started by the `herdr-dispatch` skill (lanes are herdr tabs) or from the UI (lanes are headless Sessions); both see and steer every dispatch. Replaces Auto-build and epic autopilot.
 _Avoid_: Batch run, fan-out, autopilot, auto-build
+
+**Small change**:
+A bug or change that needs no PRD: filed and refined by one `/create-tasks` then `/refine-issues` session started from the Features page's Small changes tab, and built with a Dispatch of picked issues.
+_Avoid_: Ticket, quick fix
 
 **Lane**:
 One issue of a Dispatch, walked by the engine: implement (`/implement-issue`), grind (`/pr-grind`, off/simple/full), the merge gate (CI green, an approving review, the grind done), merge (automatic only with auto-merge on), followups (implement-issue's after-merge steps), closed; then the next unblocked lane starts. A lane that needs the user is held, and its dependents wait.
