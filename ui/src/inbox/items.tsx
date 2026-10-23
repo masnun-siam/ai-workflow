@@ -14,8 +14,20 @@ import { QuestionForm } from '../questions/QuestionForm';
 import { Icon } from '../components';
 import { ResolveConflicts } from '../board/ResolveConflicts';
 
-export const approveArgs = (path: string) =>
-  `${path} approve: the team has reviewed this PRD. Fold in the review's changes, set the status to Approved and file the epic.`;
+export const approveArgs = (path: string) => {
+  const slug = path.replace(/^.*\//, '').replace(/\.md$/, '');
+  return (
+    `${path} approve: the team has reviewed this PRD. Fold in the review's changes, set the status to Approved and file the epic. ` +
+    `After the epics are filed and their numbers written into the PRD, commit the PRD and open a PR:\n` +
+    `- Commit only the PRD file. Never commit, stash or discard other changes in the checkout.\n` +
+    `- If an open PR already carries this PRD (check \`gh pr list --state open --search ${slug}\`), push onto that PR's branch. ` +
+    `Otherwise branch \`prd/${slug}\` from the latest base branch (reuse it if it exists, merging the latest base in) and open a ready, not draft, PR into the base.\n` +
+    `- Never force-push. On a non-fast-forward rejection, pull, re-apply and push again; on a conflict, give up and report it.\n` +
+    `- If the base branch is checked out with local changes, commit from a temporary worktree or branch so the working tree stays untouched.\n` +
+    `- Right after the PR opens, merge it with \`gh pr merge --merge\` only if the repo owner is the signed-in \`gh\` user. Do not wait for CI. Otherwise leave the PR open.\n` +
+    `- If the commit, push, PR or merge fails (or there is no remote or \`gh\` is not signed in), say which step failed and why in your final message. The PRD stays Approved and the epics stay filed.`
+  );
+};
 const slugOfPrd = (p: string) => p.replace(/^.*\//, '').replace(/\.md$/, '');
 const cmdName = (c?: string) => (c ?? '').replace(/^\/(?:[\w-]+:)?/, '').trim() || 'session';
 const featureLink = (it: { repo: string | null; prd_path: string }, tab: string) =>
@@ -56,7 +68,7 @@ export function useInboxActions() {
     approve: async (repo: string, path: string) => {
       const ok = await confirm({
         title: 'Approve this PRD?',
-        body: 'This runs /create-prd to fold in the review, set the PRD to Approved and file its epic on GitHub.',
+        body: 'This runs /create-prd to fold in the review, set the PRD to Approved and file its epic on GitHub. It then commits the PRD and opens a PR (merged right away on repos you own).',
         okLabel: 'Approve PRD',
       });
       if (ok) start.mutate({ repo, command: 'create-prd', args: approveArgs(path), ...PLAN_RUN }, { onSuccess: (s) => goSession(s.id) });

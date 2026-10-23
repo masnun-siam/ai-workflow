@@ -103,8 +103,9 @@ describe('Next step box wired to actions', () => {
     render(<App />);
     await user.click(within(await step()).getByRole('button', { name: 'Approve PRD' }));
     expect(posts).toHaveLength(0);
+    expect((await screen.findByRole('alertdialog')).textContent).toContain('opens a PR (merged right away on repos you own)');
     await user.click(await screen.findByRole('button', { name: 'Approve PRD', hidden: false }).then(() => within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Approve PRD' })));
-    await waitFor(() => expect(posts.some((p) => p.url === '/api/sessions' && p.body.command === 'create-prd' && p.body.args.startsWith('docs/prds/f1.md approve:') && p.body.model === 'opus' && p.body.effort === 'medium')).toBe(true));
+    await waitFor(() => expect(posts.some((p) => p.url === '/api/sessions' && p.body.command === 'create-prd' && p.body.args.startsWith('docs/prds/f1.md approve:') && ['prd/f1', 'open PR already', '--merge', 'signed-in `gh` user', 'only the PRD file'].every((t) => p.body.args.includes(t)) && p.body.model === 'opus' && p.body.effort === 'medium')).toBe(true));
   });
 
   it('Approved: Create tasks posts /api/start create-tasks with the PRD path', async () => {
