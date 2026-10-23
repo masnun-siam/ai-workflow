@@ -23,6 +23,7 @@ with `stale: True, fetched_at: None`):
          "priority": str | None,          # x of a `priority:<x>` label
          "parent": int | None,            # epic / parent issue number
          "sub_issues": [int],
+         "closed_subs": [{"n": int, "title": str}],   # its closed sub-issues (an epic's finished children)
          "blocked_by": [{"n": int, "state": "OPEN" | "CLOSED"}],   # all blockers; filter on state
          "prs": [{"n": int, "url": str, "draft": bool, "state": "OPEN"|"CLOSED"|"MERGED",
                   "merged_at": str | None, "head": str, "ci": "success"|"failure"|"pending"|"none",
@@ -39,7 +40,7 @@ with `stale: True, fetched_at: None`):
          "checks": int}                   # status checks that ran
       ],
       "closed_epics": [  # the 50 most recently updated CLOSED issues labelled `epic` (a PRD's Done column)
-        {"n": int, "labels": [str]}
+        {"n": int, "labels": [str], "closed_subs": [{"n": int, "title": str}]}
       ]
     }
 
@@ -81,13 +82,13 @@ query($owner: String!, $name: String!) {{
         number title state
         labels(first: 20) {{ nodes {{ name }} }}
         parent {{ number }}
-        subIssues(first: 50) {{ nodes {{ number }} }}
+        subIssues(first: 50) {{ nodes {{ number title state }} }}
         blockedBy(first: 20) {{ nodes {{ number state }} }}
         closedByPullRequestsReferences(first: 5, includeClosedPrs: true) {{ nodes {{ {_PR} }} }}
       }}
     }}
     closedEpics: issues(states: CLOSED, labels: ["epic"], first: 50, orderBy: {{field: UPDATED_AT, direction: DESC}}) {{
-      nodes {{ number labels(first: 20) {{ nodes {{ name }} }} }}
+      nodes {{ number labels(first: 20) {{ nodes {{ name }} }} subIssues(first: 50) {{ nodes {{ number title state }} }} }}
     }}
     mergedPrs: pullRequests(states: MERGED, first: 50, orderBy: {{field: UPDATED_AT, direction: DESC}}) {{
       nodes {{
@@ -122,6 +123,15 @@ _CI = {"SUCCESS": "success", "FAILURE": "failure", "ERROR": "failure", "PENDING"
 
 def empty() -> dict:
     return {"issues": [], "merged": [], "open_prs": [], "closed_epics": []}
+
+
+def _closed_subs(issue) -> list:
+    """[{n, title}] of an issue's closed sub-issues (an epic's finished children)."""
+    return [
+        {"n": s["number"], "title": s.get("title") or ""}
+        for s in _nodes(issue.get("subIssues"))
+        if s.get("state") == "CLOSED"
+    ]
 
 
 def _nodes(x) -> list:
@@ -192,6 +202,7 @@ def normalize(response: dict, now: datetime | None = None) -> dict:
                 "priority": prio or None,
                 "parent": (i.get("parent") or {}).get("number"),
                 "sub_issues": [s["number"] for s in _nodes(i.get("subIssues"))],
+                "closed_subs": _closed_subs(i),
                 "blocked_by": [{"n": b["number"], "state": b.get("state")} for b in _nodes(i.get("blockedBy"))],
                 "prs": [_pr(p) for p in _nodes(i.get("closedByPullRequestsReferences"))],
             }
@@ -247,7 +258,11 @@ def normalize(response: dict, now: datetime | None = None) -> dict:
                     }
                 )
     closed_epics = [
-        {"n": e["number"], "labels": [x["name"] for x in _nodes(e.get("labels")) if x.get("name")]}
+        {
+            "n": e["number"],
+            "labels": [x["name"] for x in _nodes(e.get("labels")) if x.get("name")],
+            "closed_subs": _closed_subs(e),
+        }
         for e in _nodes(repo.get("closedEpics"))
     ]
     return {"issues": issues, "merged": merged, "open_prs": open_prs, "closed_epics": closed_epics}

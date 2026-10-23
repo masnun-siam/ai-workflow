@@ -115,6 +115,13 @@ export function nextStep(f: Feature, running?: { id: string; closed: number; tot
       };
     }
     case 'shipped':
+      if (!f.epic)
+        return {
+          title: 'Shipped',
+          hint: 'Everything merged and the epic is closed.',
+          primary: { label: 'See the issues', action: { kind: 'tab', tab: 'issues' } },
+          quiet: true,
+        };
       return {
         title: 'Everything merged',
         hint: 'Close the epic to tidy GitHub. Its issues are already closed.',

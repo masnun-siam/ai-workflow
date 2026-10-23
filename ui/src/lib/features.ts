@@ -40,7 +40,7 @@ export function stageOf(prd: PlanningPrd, lane: DeliveryLane | null): StageId {
   if (prd.column === 'done') return 'shipped';
   const cards = lane?.cards ?? [];
   const started = cards.some((c) => c.column !== 'unrefined' && c.column !== 'ready');
-  if (prd.issues === 0) return cards.length > 0 && cards.every((c) => c.column === 'merged') ? 'shipped' : 'approved';
+  if (prd.issues === 0) return (cards.length > 0 || prd.closed_children?.length) && cards.every((c) => c.column === 'merged') ? 'shipped' : 'approved';
   if (prd.unrefined.length > 0 && !started) return 'tasks';
   return 'building';
 }
@@ -50,7 +50,13 @@ export function joinFeatures(prds: PlanningPrd[], lanes: DeliveryLane[]): Featur
     const lane = prd.epic != null ? (lanes.find((l) => l.epic === prd.epic) ?? null) : null;
     // no open epic (closed, or never filed): the PRD's open children sit in other lanes, e.g. the no-epic one
     const kids = new Set(prd.children.map((c) => c.n));
-    const cards = lane?.cards ?? lanes.flatMap((l) => l.cards.filter((c) => kids.has(c.n)));
+    const open = lane?.cards ?? lanes.flatMap((l) => l.cards.filter((c) => kids.has(c.n)));
+    // finished children: closed on GitHub, no merged card of their own (older than the board's 7 days, or closed by hand)
+    const shown = new Set(open.map((c) => c.n));
+    const done = (prd.closed_children ?? []).filter((c) => !shown.has(c.n)).map((c): DeliveryCard => ({
+      n: c.n, title: c.title, column: 'merged', priority: null, blocked_by: [], pr: null, session: null, needs_cleanup: null,
+    }));
+    const cards = [...open, ...done];
     return {
       slug: prd.slug,
       title: prd.title,

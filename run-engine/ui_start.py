@@ -33,7 +33,11 @@ _recent: dict = {}  # (repo, skill, arg) -> monotonic time of the last start
 
 
 class Conflict(Exception):
-    """The start is refused (HTTP 409)."""
+    """The start is refused (HTTP 409). `id`: the live session that already does the work, when there is one."""
+
+    def __init__(self, message, id=None):
+        super().__init__(message)
+        self.id = id
 
 
 def _lock(repo: str) -> threading.RLock:
@@ -68,6 +72,20 @@ def _guard_implement(repo, n, snapshot, sessions) -> None:
     blockers = [b["n"] for b in i["blocked_by"] if b["state"] == "OPEN"]
     if blockers:
         raise Conflict(f"#{n} is blocked by " + ", ".join(f"#{b}" for b in blockers))
+
+
+def _guard_refine(repo, arg, sessions) -> None:
+    """A live /refine-issues session that already covers any of these issues refuses the start."""
+    want = set(arg.split())
+    for rec in sessions:
+        m = re.match(r"/(?:[\w-]+:)?refine-issues\s+(.*)", rec.get("command") or "")
+        if (
+            m
+            and rec.get("status") in ui_sessions._LIVE
+            and str(ui_delivery._slug(rec)).lower() == repo.lower()
+            and want & set(re.findall(r"\d+", m.group(1)))
+        ):
+            raise Conflict(f"/refine-issues is already running for {arg}", rec.get("id"))
 
 
 def start(
@@ -107,6 +125,8 @@ def start(
             _guard_implement(
                 repo, int(arg), snapshot, sessions if sessions is not None else ui_sessions.list_sessions()
             )
+        if skill == "refine-issues":
+            _guard_refine(repo, arg, sessions if sessions is not None else ui_sessions.list_sessions())
         key, now = (repo.lower(), skill, arg), time.monotonic()
         if now - _recent.get(key, -1e9) < RECENT_SECONDS:
             raise Conflict(f"{skill} {arg} was just started")

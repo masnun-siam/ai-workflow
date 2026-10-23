@@ -3,10 +3,12 @@
 import { useNavigate } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import { api } from '../api/endpoints';
-import { useApiMutation } from '../api/hooks';
+import { useApiMutation, useSessions } from '../api/hooks';
 import type { BoardStartBody, SessionStartBody } from '../api/types';
 import { toast } from '../components';
+import { sessionSlug } from '../lib/format';
 import { routes } from '../lib/routes';
+import { isLive } from '../lib/vocab';
 import { useRepo } from '../shell/useRepo';
 
 const SESSION_WRITES = [['sessions'], ['inbox'], ['session']];
@@ -52,4 +54,16 @@ export function useStarter() {
       }
     },
   };
+}
+
+/** {issue number: session id} of the live /refine-issues sessions for a repo, so Refine can show it is running instead of starting another. */
+export function useRefining(repo: string): Map<number, string> {
+  const sessions = useSessions().data?.sessions ?? [];
+  const out = new Map<number, string>();
+  for (const s of sessions) {
+    const m = /^\/(?:[\w-]+:)?refine-issues\s+(.*)/.exec(s.command);
+    if (!m || !isLive(s.outcome) || sessionSlug(s).toLowerCase() !== repo.toLowerCase()) continue;
+    for (const n of m[1].match(/\d+/g) ?? []) out.set(Number(n), s.id);
+  }
+  return out;
 }

@@ -6,7 +6,7 @@ Each `docs/prds/*.md` in the checkout is a card. Status comes from the header li
 the epic (or listed in its sub_issues), plus any issue labelled `prd-<slug>`.
 
 Card: {slug, title, status, path, abs_path, column, pr, epic, issues, refined, unrefined, children, panel}.
-`children` is [{n, title, refined}] of its open child issues.
+`children` is [{n, title, refined}] of its open child issues; `closed_children` is [{n, title}] of its closed ones.
 `unrefined` lists the child issue numbers not yet labelled `refined`. `column` is one of
 draft | in_review | approved | tasks_filed | refined | done. `done` is an Approved PRD with no open child
 whose epic is closed, or open with sub-issues that are all closed. `pr` is {n, url} for an In review PRD (an open PR
@@ -80,6 +80,8 @@ def build(repo: str, checkout_path: str, snapshot: dict, panels: dict | None) ->
             )
         ]
         refined = sum("refined" in i["labels"] for i in kids)
+        done_epic = epic or next((e for e in closed_epics if label in e["labels"]), None)
+        closed = (done_epic or {}).get("closed_subs") or []
         pr = None
         if meta["status"] == "In review":
             hit = next((p for p in prs if slug in (p.get("head") or "") or slug in (p.get("title") or "")), None)
@@ -105,6 +107,7 @@ def build(repo: str, checkout_path: str, snapshot: dict, panels: dict | None) ->
                 "issues": len(kids),
                 "refined": refined,
                 "unrefined": sorted(i["n"] for i in kids if "refined" not in i["labels"]),
+                "closed_children": sorted(closed, key=lambda c: c["n"]),
                 "children": sorted(
                     ({"n": i["n"], "title": i["title"], "refined": "refined" in i["labels"]} for i in kids),
                     key=lambda c: c["n"],
