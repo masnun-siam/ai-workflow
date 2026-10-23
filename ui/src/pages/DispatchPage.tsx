@@ -198,7 +198,7 @@ export function DispatchPage() {
       {limited && live ? <Banner tone="away" icon="clock">A Claude account hit its usage limit. New issues wait, and paused ones resume after the reset.</Banner> : null}
       {showSettings ? (
         <section className="box" aria-label="Dispatch settings">
-          <SettingsFields live value={d.settings} onChange={(p) => save.mutate({ id: d.id, s: p }, { onSuccess: () => toast('Saved: applies from each issue’s next step') })} />
+          <SettingsFields live noBranch={!d.epic} value={d.settings} onChange={(p) => save.mutate({ id: d.id, s: p }, { onSuccess: () => toast('Saved: applies from each issue’s next step') })} />
         </section>
       ) : null}
       {d.state === 'done' ? <EndPanel d={d} /> : null}

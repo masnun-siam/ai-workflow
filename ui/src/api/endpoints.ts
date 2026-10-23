@@ -1,7 +1,7 @@
 // Every endpoint the UI calls, as plain typed functions. Hooks in hooks.ts wrap these with caching and invalidation.
 import { enc, get, post, put, qs, splitRepo } from './client';
 import type {
-  AnswerBody, AfkState, Dispatch, DispatchPlan, DispatchSettings, DispatchState, EndAction, LaneAction, BoardStartBody, BoardStartResponse, CleanupItem, DeliveryResponse, InboxResponse,
+  AnswerBody, AfkState, Dispatch, DispatchPlan, DispatchSettings, DispatchTarget, DispatchState, EndAction, LaneAction, BoardStartBody, BoardStartResponse, CleanupItem, DeliveryResponse, InboxResponse,
   IssueDetail, NotificationFeed, NotifyChannel, NotifySettings, OpenItem, PeerReviewOffers, PlanningResponse, PrDetail, PrdFile, ReposResponse,
   ReviewSettings, Session, SessionStartBody, SessionsResponse, Settings, StreamResponse, VaultFolders, VaultPrd,
 } from './types';
@@ -69,8 +69,8 @@ export const api = {
   dispatches: () => get<{ dispatches: Dispatch[] }>('/api/dispatches'),
   dispatch: (id: string) => get<Dispatch>(`/api/dispatches/${enc(id)}`),
   dispatchLane: (id: string, key: string) => get<{ text?: string; session?: string }>(`/api/dispatches/${enc(id)}/lane${qs({ key })}`),
-  planDispatch: (epic: string, settings: Partial<DispatchSettings>) => post<DispatchPlan>('/api/dispatches/plan', { epic, settings }),
-  startDispatch: (epic: string, settings: Partial<DispatchSettings>) => post<Dispatch>('/api/dispatches', { epic, settings }),
+  planDispatch: (target: DispatchTarget, settings: Partial<DispatchSettings>) => post<DispatchPlan>('/api/dispatches/plan', { ...target, settings }),
+  startDispatch: (target: DispatchTarget, settings: Partial<DispatchSettings>) => post<Dispatch>('/api/dispatches', { ...target, settings }),
   dispatchSettings: (id: string, s: Partial<DispatchSettings>) => post<Dispatch>(`/api/dispatches/${enc(id)}/settings`, s),
   dispatchState: (id: string, state: Exclude<DispatchState, 'done'>) => post<Dispatch>(`/api/dispatches/${enc(id)}/state`, { state }),
   laneAction: (id: string, lane: string, action: LaneAction, text?: string) => post<Dispatch>(`/api/dispatches/${enc(id)}/lane`, { lane, action, text }),

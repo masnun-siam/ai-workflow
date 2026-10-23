@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient, type QueryKey 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from './client';
 import { api } from './endpoints';
-import type { DispatchSettings, EndAction, InboxItem, LaneAction, NotifyChannel, StreamEvent } from './types';
+import type { DispatchSettings, DispatchTarget, EndAction, InboxItem, LaneAction, NotifyChannel, StreamEvent } from './types';
 import { mergeStream } from '../lib/md';
 import { showNotification, step } from '../lib/notifier';
 
@@ -233,9 +233,9 @@ export const useSaveReview = () => useApiMutation(api.saveReview, [keys.review, 
 
 const DISPATCH_WRITES: QueryKey[] = [['dispatches'], ['dispatch'], ['inbox']];
 export const usePlanDispatch = () =>
-  useApiMutation((v: { epic: string; settings: Partial<DispatchSettings> }) => api.planDispatch(v.epic, v.settings), [], { quiet: true });
+  useApiMutation((v: { target: DispatchTarget; settings: Partial<DispatchSettings> }) => api.planDispatch(v.target, v.settings), [], { quiet: true });
 export const useStartDispatch = () =>
-  useApiMutation((v: { epic: string; settings: Partial<DispatchSettings> }) => api.startDispatch(v.epic, v.settings), [...DISPATCH_WRITES, ['sessions']]);
+  useApiMutation((v: { target: DispatchTarget; settings: Partial<DispatchSettings> }) => api.startDispatch(v.target, v.settings), [...DISPATCH_WRITES, ['sessions']]);
 export const useDispatchSettings = () =>
   useApiMutation((v: { id: string; s: Partial<DispatchSettings> }) => api.dispatchSettings(v.id, v.s), DISPATCH_WRITES);
 export const useDispatchState = () =>

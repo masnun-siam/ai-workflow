@@ -71,7 +71,7 @@ function LazyText({ id, value, onCommit, placeholder }: { id: string; value: str
  * Every setting. `live` marks the editor on a running dispatch: the feature branch is fixed there (lanes
  * already target it) and edits apply at each lane's next step.
  */
-export function SettingsFields({ value, onChange, live }: { value: DispatchSettings; onChange: (p: Partial<DispatchSettings>) => void; live?: boolean }) {
+export function SettingsFields({ value, onChange, live, noBranch }: { value: DispatchSettings; onChange: (p: Partial<DispatchSettings>) => void; live?: boolean; noBranch?: boolean }) {
   const saveDefaults = useSaveSettings();
   // The saved defaults follow the latest pick, so every picker starts from it.
   const pickRun = (p: { model?: string | null; effort?: string | null }) => {
@@ -104,15 +104,17 @@ export function SettingsFields({ value, onChange, live }: { value: DispatchSetti
         <MaxStepper value={value.max} onChange={(max) => onChange({ max })} />
         <span className="faint dsp-hint">Issues built at the same time. Each builds and tests in its own worktree.</span>
       </div>
-      <div className="dsp-field">
-        <label className="dsp-k" htmlFor="ds-fb">Feature branch</label>
-        {live ? (
-          <span className="mono">{value.feature_branch ?? 'each issue’s own base'}</span>
-        ) : (
-          <LazyText id="ds-fb" value={value.feature_branch ?? ''} placeholder="none (issue’s own base)" onCommit={(v) => onChange({ feature_branch: v.trim() || null })} />
-        )}
-        {!live ? <span className="faint dsp-hint">Cut from the default branch if missing; every PR targets it.</span> : null}
-      </div>
+      {noBranch ? null : (
+        <div className="dsp-field">
+          <label className="dsp-k" htmlFor="ds-fb">Feature branch</label>
+          {live ? (
+            <span className="mono">{value.feature_branch ?? 'each issue’s own base'}</span>
+          ) : (
+            <LazyText id="ds-fb" value={value.feature_branch ?? ''} placeholder="none (issue’s own base)" onCommit={(v) => onChange({ feature_branch: v.trim() || null })} />
+          )}
+          {!live ? <span className="faint dsp-hint">Cut from the default branch if missing; every PR targets it.</span> : null}
+        </div>
+      )}
       <div className="dsp-field">
         <span className="dsp-k">Model</span>
         <ModelEffortPicker model={value.model} effort={value.effort} onChange={pickRun} />
