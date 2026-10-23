@@ -45,6 +45,12 @@ export function stageOf(prd: PlanningPrd, lane: DeliveryLane | null): StageId {
   return 'building';
 }
 
+/** Open issues that belong to no feature of this repo: no epic, or an epic with no PRD here. */
+export function outsideFeatures(features: Feature[], lanes: DeliveryLane[]): FeatureIssue[] {
+  const mine = new Set(features.flatMap((f) => f.issues.map((i) => i.n)));
+  return lanes.flatMap((l) => l.cards).filter((c) => !mine.has(c.n)).map((c) => ({ ...c, status: issueStatus(c) }));
+}
+
 export function joinFeatures(prds: PlanningPrd[], lanes: DeliveryLane[]): Feature[] {
   return prds.map((prd) => {
     const lane = prd.epic != null ? (lanes.find((l) => l.epic === prd.epic) ?? null) : null;

@@ -60,7 +60,7 @@ export function IssuesTab({ f, repo }: { f: Feature; repo: string }) {
 
 /**
  * Issues grouped by status, one row each with its signals and one action. An issue a running dispatch owns
- * shows its dispatch stage and links there instead of offering a Start. Shared by a feature and Other issues.
+ * shows its dispatch stage and links there instead of offering a Start. Shared by a feature and the Small changes tab.
  */
 export function IssueTable({ issues, repo, picked = [], onPick }: { issues: FeatureIssue[]; repo: string; picked?: number[]; onPick?: (n: number) => void }) {
   const panel = usePanel();

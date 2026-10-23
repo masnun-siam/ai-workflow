@@ -1,15 +1,15 @@
-import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useMemo } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDelivery, usePlanning } from '../api/hooks';
 import { BoardStatus } from '../board/BoardStatus';
 import { Button, Chip, EmptyState, Icon, TabPanel, Tabs, Track } from '../components';
 import { useStepRunner } from '../features/useStepRunner';
 import { useEpicDispatch } from '../dispatch/useOwner';
 import { IdeaBox } from '../features/IdeaBox';
+import { SmallChangesTab } from '../features/SmallChangesTab';
 import '../features/features.css';
-import type { DeliveryLane } from '../api/types';
 import '../dispatch/dispatch.css';
-import { joinFeatures, snapshotsReady, type Feature } from '../lib/features';
+import { joinFeatures, outsideFeatures, snapshotsReady, type Feature } from '../lib/features';
 import { agoIso } from '../lib/format';
 import { nextStep } from '../lib/nextStep';
 import { routes } from '../lib/routes';
@@ -55,30 +55,25 @@ function Row({ f, repo }: { f: Feature; repo: string }) {
   );
 }
 
-/** The last row: open issues that belong to no feature, when there are any. */
-function OtherRow({ features, lanes }: { features: Feature[]; lanes: DeliveryLane[] }) {
-  const { link } = useRepo();
-  const mine = new Set(features.flatMap((f) => f.issues.map((i) => i.n)));
-  const n = lanes.flatMap((l) => l.cards).filter((c) => !mine.has(c.n)).length;
-  if (!n) return null;
-  return (
-    <Link to={link(routes.otherIssues)} className="frow other" style={{ textDecoration: 'none', color: 'inherit' }}>
-      <div><div className="ftitle">Other issues</div><div className="fmeta"><span>Open issues that are not part of a feature</span></div></div>
-      <div><Chip>{n} open</Chip></div>
-    </Link>
-  );
-}
-
 export function FeaturesPage() {
   const { repo, current } = useRepo();
   const start = useStart();
   const plan = usePlanning(repo);
   const del = useDelivery(repo);
-  const [tab, setTab] = useState('active');
+  const [sp, setSp] = useSearchParams();
+  const t = sp.get('tab');
+  const tab = t === 'shipped' || t === 'changes' ? t : 'active';
+  const setTab = (v: string) => {
+    const next = new URLSearchParams(sp);
+    if (v === 'active') next.delete('tab');
+    else next.set('tab', v);
+    setSp(next, { replace: true });
+  };
   const features = useMemo(() => joinFeatures(plan.data?.prds ?? [], del.data?.lanes ?? []), [plan.data, del.data]);
   const active = features.filter((f) => f.stage !== 'shipped').sort((a, b) => ORDER.indexOf(a.stage) - ORDER.indexOf(b.stage));
   const shipped = features.filter((f) => f.stage === 'shipped');
   const list = tab === 'active' ? active : shipped;
+  const outside = useMemo(() => outsideFeatures(features, del.data?.lanes ?? []), [features, del.data]);
   const loaded = plan.isSuccess && !del.isPending && snapshotsReady(plan.data, del.data);
 
   return (
@@ -92,24 +87,32 @@ export function FeaturesPage() {
         <EmptyState icon="alert" title="Features unavailable" actions={<Button onClick={() => plan.refetch()}>Retry</Button>}>
           {plan.error.message}. It will keep retrying.
         </EmptyState>
+      ) : del.isError && !del.data ? (
+        <EmptyState icon="alert" title="Issues unavailable" actions={<Button onClick={() => del.refetch()}>Retry</Button>}>{del.error.message}</EmptyState>
       ) : !loaded ? (
         <div className="stack" aria-busy="true"><p className="muted" role="status">Loading features…</p>{[0, 1, 2].map((j) => <div key={j} className="skel" style={{ height: 56 }} />)}</div>
-      ) : features.length === 0 ? (
-        <>
-          <IdeaBox repo={repo} name={current?.name ?? repo} />
-          <div className="list"><OtherRow features={features} lanes={del.data?.lanes ?? []} /></div>
-        </>
       ) : (
         <Tabs
           value={tab}
           onValueChange={setTab}
           label="Features"
-          tabs={[{ value: 'active', label: 'In progress', count: active.length }, { value: 'shipped', label: 'Shipped', count: shipped.length }]}
+          tabs={[
+            { value: 'active', label: 'In progress', count: active.length },
+            { value: 'shipped', label: 'Shipped', count: shipped.length },
+            { value: 'changes', label: 'Small changes', count: outside.filter((i) => i.status !== 'merged').length },
+          ]}
         >
           <TabPanel value={tab}>
-            <div className="list">{list.map((f) => <Row key={f.slug} f={f} repo={repo} />)}</div>
-            {!list.length ? <p className="muted">Nothing here yet.</p> : null}
-            {tab === 'active' ? <OtherRow features={features} lanes={del.data?.lanes ?? []} /> : null}
+            {tab === 'changes' ? (
+              <SmallChangesTab key={repo} repo={repo} issues={outside} />
+            ) : tab === 'active' && features.length === 0 ? (
+              <IdeaBox repo={repo} name={current?.name ?? repo} />
+            ) : (
+              <>
+                <div className="list">{list.map((f) => <Row key={f.slug} f={f} repo={repo} />)}</div>
+                {!list.length ? <p className="muted">Nothing here yet.</p> : null}
+              </>
+            )}
           </TabPanel>
         </Tabs>
       )}

@@ -4,8 +4,6 @@ export const routes = {
   inbox: '/inbox',
   features: '/features',
   feature: (slug: string, tab?: string) => `/features/${encodeURIComponent(slug)}${tab ? `/${tab}` : ''}`,
-  /** Open issues that belong to no feature's epic. */
-  otherIssues: '/issues',
   activity: '/activity',
   dispatches: '/dispatches',
   /** Dispatches with the New dispatch dialog open on this epic (owner/repo#n). */
