@@ -44,7 +44,7 @@ export function IssueAction({ card, repo }: { card: DeliveryCard; repo: string }
   const n = card.n;
   const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
 
-  const start = () => starter.startBoard({ repo, skill: 'implement-issue', arg: String(n), via: 'headless', ...PLAN_RUN });
+  const start = () => starter.startBoard({ repo, skill: 'implement-issue', arg: String(n), via: 'headless' });
   const onAccount = (label: string) => starter.startSession({ repo, command: 'implement-issue', args: String(n), issue: n, claude_cmd: label });
   const openPr = () => card.pr && panel.open({ kind: 'pr', repo, n: card.pr.n });
 

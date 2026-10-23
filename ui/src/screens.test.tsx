@@ -209,6 +209,9 @@ describe('Other issues and dispatch-owned issues', () => {
     await user.keyboard('{Escape}');
     await user.click(screen.getByRole('button', { name: 'Start' }));
     expect(await screen.findByRole('button', { name: 'Open session' })).toBeTruthy();
+    const body = posts.find((p) => p.url === '/api/start')?.body;
+    expect(body).toMatchObject({ skill: 'implement-issue' });
+    expect(body).not.toHaveProperty('model'); // only the planning starts carry PLAN_RUN
   });
 
   it('an issue a dispatch owns links there instead of Start, and the feature header shows the dispatch', async () => {
