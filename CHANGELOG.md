@@ -8,6 +8,7 @@
 
 ### Changed
 
+- `/create-prd` commits the approved PRD on its own branch and opens a PR into the base branch right after it creates the epic, so the PRD reaches the base branch before any issue's worktree is made.
 - The session transcript renders assistant and result text as markdown (headings, lists, code, links, bold, italics), and the markdown renderer now handles pipe tables.
 - `make restart` rebuilds the UI and restarts the supervisord-managed server. The `ui-rewrite` PRD is marked Done.
 - The New dispatch dialog and a dispatch's live settings use the shared Model and Effort dropdowns instead of the free-text model box; the dialog starts from the saved pair and a pick updates the saved defaults.
