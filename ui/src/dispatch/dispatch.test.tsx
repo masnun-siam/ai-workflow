@@ -103,6 +103,35 @@ describe('Dispatches page', () => {
   });
 });
 
+describe('Dispatch model and effort', () => {
+  it('preselects the saved pair and sends a new pick to the plan', async () => {
+    routes['/api/settings'] = { commands: [], default: 'work', run_model: 'sonnet', run_effort: 'low' };
+    window.location.hash = '#/dispatches?repo=o/r';
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Run an epic' }));
+    const model = screen.getByLabelText('Model') as HTMLSelectElement;
+    await waitFor(() => expect(model.value).toBe('sonnet'));
+    expect((screen.getByLabelText('Effort') as HTMLSelectElement).value).toBe('low');
+    await userEvent.selectOptions(model, 'opus');
+    await userEvent.selectOptions(screen.getByLabelText('Effort'), 'high');
+    await userEvent.type(screen.getByLabelText('Epic'), '1');
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    await screen.findByText('o/r#5: needs refine');
+    expect(posts.find(([p]) => p === '/api/dispatches/plan')?.[1]).toEqual({ epic: 'o/r#1', settings: { ...S, model: 'opus', effort: 'high' } });
+  });
+
+  it('saves a live pick and keeps a model outside the list', async () => {
+    routes['/api/dispatches/abc123abc123'] = disp({ settings: { ...S, model: 'claude-opus-4-1' } });
+    window.location.hash = '#/dispatches/abc123abc123?repo=o/r';
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: /Settings/ }));
+    const model = screen.getByLabelText('Model') as HTMLSelectElement;
+    expect(model.value).toBe('claude-opus-4-1');
+    await userEvent.selectOptions(screen.getByLabelText('Effort'), 'max');
+    await waitFor(() => expect(posts).toContainEqual(['/api/dispatches/abc123abc123/settings', { effort: 'max' }]));
+  });
+});
+
 describe('Dispatch page', () => {
   it('shows lanes as a graph, switches to a list, opens a lane and acts on it', async () => {
     window.location.hash = '#/dispatches/abc123abc123?repo=o/r';

@@ -1,7 +1,7 @@
 // New dispatch: pick an epic, set the dispatch up, preview its waves and warnings, then start it.
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { usePlanDispatch, usePlanning, useStartDispatch } from '../api/hooks';
+import { usePlanDispatch, usePlanning, useSettings, useStartDispatch } from '../api/hooks';
 import type { DispatchPlan, DispatchSettings } from '../api/types';
 import { Banner, Button, Chip, Dialog } from '../components';
 import { routes } from '../lib/routes';
@@ -18,10 +18,16 @@ export function NewDispatchDialog({ open, onOpenChange, epic: initial }: { open:
   const epics = (usePlanning(repo).data?.prds ?? []).filter((p) => p.epic != null);
   const [epic, setEpic] = useState(initial ?? '');
   const [s, setS] = useState<DispatchSettings>(DEFAULTS);
+  const saved = useSettings().data;
+  const [touched, setTouched] = useState(false);
   const [plan, setPlan] = useState<DispatchPlan | null>(null);
   const preview = usePlanDispatch();
   const start = useStartDispatch();
   const nav = useNavigate();
+  // Seed the saved model/effort once settings load, unless the user already picked.
+  useEffect(() => {
+    if (!touched && saved) setS((x) => ({ ...x, model: saved.run_model ?? null, effort: (saved.run_effort ?? null) as DispatchSettings['effort'] }));
+  }, [saved, touched]);
   useEffect(() => {
     if (open) {
       setEpic(initial ?? '');
@@ -33,6 +39,7 @@ export function NewDispatchDialog({ open, onOpenChange, epic: initial }: { open:
   const full = epic.includes('#') || !repo ? epic.trim() : `${repo}#${epic.trim().replace(/^#/, '')}`;
   const valid = EPIC_RE.test(full);
   const change = (p: Partial<DispatchSettings>) => {
+    setTouched(true);
     setS({ ...s, ...p });
     setPlan(null); // settings change the warnings: preview again
   };
