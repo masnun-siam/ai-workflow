@@ -399,6 +399,13 @@ try:
         assert call(m, p, b)[0] == 400, p
     ok("boards: unknown repo is 400")
 
+    assert call("GET", "/api/notifications") == (200, {"latest": 0, "events": []})
+    assert call("GET", "/api/notifications?after=0") == (200, {"latest": 0, "events": []})
+    for bad in ("abc", "1.5", "", "-1"):
+        st, body = call("GET", "/api/notifications?after=" + bad)
+        assert st == 400 and "error" in body, bad
+    ok("notifications: empty feed 200, bad after 400")
+
     # before the first poll: stale, empty. Planning shows the PRD file.
     st, body = call("GET", "/api/planning?repo=o/r")
     assert st == 200 and body["stale"] and [c["slug"] for c in body["prds"]] == ["x"]
