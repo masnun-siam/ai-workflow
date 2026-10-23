@@ -31,7 +31,7 @@ export function actionKind(card: DeliveryCard): IssueActionKind {
   return 'none';
 }
 
-export function IssueAction({ card, repo }: { card: DeliveryCard; repo: string }) {
+export function IssueAction({ card, repo, refineLock }: { card: DeliveryCard; repo: string; refineLock?: string }) {
   const starter = useStarter();
   const refining = useRefining(repo).get(card.n);
   const panel = usePanel();
@@ -54,6 +54,8 @@ export function IssueAction({ card, repo }: { card: DeliveryCard; repo: string }
     case 'refine':
       el = refining ? (
         <Button sm onClick={() => navigate(link(routes.session(refining)))}>Refining…</Button>
+      ) : refineLock ? (
+        <Button sm disabled title={refineLock}>Refine</Button>
       ) : (
         <Button sm disabled={starter.pending} onClick={() => starter.startBoard({ repo, skill: 'refine-issues', arg: String(n), via: 'headless', ...PLAN_RUN })}>Refine</Button>
       );
