@@ -170,6 +170,9 @@ label.lbl .hint{font-weight:400;color:var(--muted)}
 .opt.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .opt input{margin:3px 0 0;accent-color:var(--accent)}
 .opt .d{color:var(--muted);font-size:13px}
+.q-text.prose,.opt .d.prose{font-size:inherit}
+.q-text.prose>:last-child,.opt .d.prose>:last-child{margin-bottom:0}
+.q-preview{margin:6px 0 0;padding:8px 10px;background:var(--sunk);border-radius:6px;font:12px/1.5 var(--mono);white-space:pre;overflow-x:auto;max-width:100%}
 .rec{font-size:11.5px;font-weight:700;color:var(--ship);margin-left:6px}
 
 /* features */
