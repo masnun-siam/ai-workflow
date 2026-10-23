@@ -5,6 +5,7 @@ import { Palette } from '../palette/Palette';
 import { DetailPanel } from '../panels/DetailPanel';
 import { usePanel } from '../panels/PanelContext';
 import { routes } from '../lib/routes';
+import { useBrowserNotifier } from '../api/hooks';
 import { useStart } from '../start/StartContext';
 import { AwayBanner, OfflineBanner } from './Banners';
 import { NAV, Rail, useInboxCount } from './Rail';
@@ -74,6 +75,7 @@ export function Shell() {
     document.title = inbox ? `(${inbox}) aiw` : 'aiw';
   }, [inbox]);
   useAwayDocument();
+  useBrowserNotifier();
   // The page scrolls inside .content, which the router keeps mounted: start each new page at the top.
   const { pathname } = useLocation();
   useEffect(() => { const c = document.getElementById('main-content'); if (c) c.scrollTop = 0; }, [pathname]);
