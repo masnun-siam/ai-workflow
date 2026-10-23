@@ -69,6 +69,11 @@ export function levels(lanes: Pick<Lane, 'key' | 'deps'>[]): Record<string, numb
 
 export const issueNo = (key: string) => key.replace(/^.*#/, '#');
 export const epicNo = (epic: string) => epic.replace(/^.*#/, '');
+/** owner/repo of a dispatch: its epic's, or its first issue's; blank when a record has neither. */
+export const dispatchRepo = (d: Pick<Dispatch, 'epic' | 'issues'>) => (d.epic ?? d.issues?.[0] ?? '').split('#')[0];
+/** The dispatch's name: the epic's title (or its number), or the "Small changes: #a, #b" title of an issue-list one. */
+export const dispatchHeading = (d: Pick<Dispatch, 'epic' | 'title'>) =>
+  d.epic ? d.title?.replace(/^Epic:\s*/i, '') || `Epic #${epicNo(d.epic)}` : d.title ?? '';
 export const ghIssue = (repo: string, n: number) => `https://github.com/${repo}/issues/${n}`;
 export const ghPr = (repo: string, n: number) => `https://github.com/${repo}/pull/${n}`;
 
