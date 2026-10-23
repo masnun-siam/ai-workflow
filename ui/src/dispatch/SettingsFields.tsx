@@ -66,13 +66,13 @@ export function SettingsFields({ value, onChange, live }: { value: DispatchSetti
         <span className="dsp-k" id="am-l">Auto-merge</span>
         <Switch label="Auto-merge" checked={value.auto_merge} onChange={(auto_merge) => onChange({ auto_merge })} />
         <span className="faint dsp-hint">
-          {value.auto_merge ? 'Merge commit once CI is green, a review approves (not needed on your own repo) and the grind is done.' : 'Each PR waits for you to merge it; the lane then does its followups.'}
+          {value.auto_merge ? 'Merge commit once CI is green, a review approves (not needed on your own repo) and the grind is done.' : 'Each PR waits for you to merge it; then the issue is closed and cleaned up.'}
         </span>
       </div>
       <div className="dsp-field">
         <span className="dsp-k">At once</span>
         <MaxStepper value={value.max} onChange={(max) => onChange({ max })} />
-        <span className="faint dsp-hint">Lanes running in parallel. Each builds and tests in its own worktree.</span>
+        <span className="faint dsp-hint">Issues built at the same time. Each builds and tests in its own worktree.</span>
       </div>
       <div className="dsp-field">
         <label className="dsp-k" htmlFor="ds-fb">Feature branch</label>

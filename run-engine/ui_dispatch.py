@@ -281,6 +281,30 @@ def inbox_items(dispatches: list) -> list:
     return out
 
 
+DUPLICATED = ("pr_ready", "pr_conflict", "grind_paused", "session_failed")
+
+
+def drop_owned(items: list, dispatches: list) -> list:
+    """Inbox rows minus the generic ones (PR ready or conflicting, grind paused, session failed) for an issue
+    or PR a live dispatch lane owns: the lane's own row carries that, with the dispatch's action."""
+    owned = set()
+    for d in dispatches:
+        if d["state"] in LIVE:
+            for x in d["lanes"].values():
+                if x["stage"] in dr.ACTIVE:
+                    owned.add((x["repo"].lower(), "issue", x["n"]))
+                    if x.get("pr"):
+                        owned.add((x["repo"].lower(), "pr", x["pr"]))
+
+    def mine(i):
+        repo = (i.get("repo") or "").lower()
+        link = i.get("link") if isinstance(i.get("link"), dict) else {}
+        n = i.get("issue") or link.get("issue")
+        return (repo, "issue", n) in owned or (repo, "pr", i.get("pr")) in owned
+
+    return [i for i in items if not (i.get("type") in DUPLICATED and mine(i))]
+
+
 def _usage(x: dict) -> dict:
     """Cost and tokens of a lane's headless sessions (herdr tabs report none), and its elapsed seconds.
     ponytail: a session's cost is its last result event's; resumed turns may undercount."""

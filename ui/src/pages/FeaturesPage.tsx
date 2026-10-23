@@ -4,8 +4,11 @@ import { useDelivery, usePlanning } from '../api/hooks';
 import { BoardStatus } from '../board/BoardStatus';
 import { Button, Chip, EmptyState, Icon, TabPanel, Tabs, Track } from '../components';
 import { useStepRunner } from '../features/useStepRunner';
+import { useEpicDispatch } from '../dispatch/useOwner';
 import { IdeaBox } from '../features/IdeaBox';
 import '../features/features.css';
+import type { DeliveryLane } from '../api/types';
+import '../dispatch/dispatch.css';
 import { joinFeatures, snapshotsReady, type Feature } from '../lib/features';
 import { agoIso } from '../lib/format';
 import { nextStep } from '../lib/nextStep';
@@ -27,7 +30,8 @@ function Row({ f, repo }: { f: Feature; repo: string }) {
   const { link } = useRepo();
   const { run, busy } = useStepRunner(f, repo);
   const panel = usePanel();
-  const ns = nextStep(f);
+  const live = useEpicDispatch(repo, f.epic);
+  const ns = nextStep(f, live && { id: live.d.id, closed: live.c.closed, total: live.c.total, you: live.c.you });
   const ready = f.issues.filter((i) => i.mergeable && i.pr);
   const st = STAGES[stageIdx(f.stage)];
   const href = link(routes.feature(f.slug));
@@ -37,6 +41,7 @@ function Row({ f, repo }: { f: Feature; repo: string }) {
         <div className="ftitle"><Link to={href} onClick={(e) => e.stopPropagation()}>{f.title}</Link></div>
         <div className="fmeta">
           <span>{f.epic ? `Epic #${f.epic}` : 'No epic yet'}</span>
+          {live ? <span className={live.c.you ? 'dsp-c t-you' : ''}>{live.c.you ? `Dispatch needs you on ${live.c.you}` : `Dispatch running, ${live.c.closed} of ${live.c.total} done`}</span> : null}
           {f.prd.mtime ? <span>Updated {updated(f.prd.mtime)}</span> : null}
         </div>
       </div>
@@ -47,6 +52,20 @@ function Row({ f, repo }: { f: Feature; repo: string }) {
         {ns.primary.action.kind === 'merge' ? null : <Button sm variant={ns.quiet ? 'default' : 'primary'} disabled={busy} onClick={() => run(ns.primary.action)}>{ns.primary.label}</Button>}
       </div>
     </div>
+  );
+}
+
+/** The last row: open issues that belong to no feature, when there are any. */
+function OtherRow({ features, lanes }: { features: Feature[]; lanes: DeliveryLane[] }) {
+  const { link } = useRepo();
+  const mine = new Set(features.flatMap((f) => f.issues.map((i) => i.n)));
+  const n = lanes.flatMap((l) => l.cards).filter((c) => !mine.has(c.n)).length;
+  if (!n) return null;
+  return (
+    <Link to={link(routes.otherIssues)} className="frow other" style={{ textDecoration: 'none', color: 'inherit' }}>
+      <div><div className="ftitle">Other issues</div><div className="fmeta"><span>Open issues that are not part of a feature</span></div></div>
+      <div><Chip>{n} open</Chip></div>
+    </Link>
   );
 }
 
@@ -76,7 +95,10 @@ export function FeaturesPage() {
       ) : !loaded ? (
         <div className="stack" aria-busy="true"><p className="muted" role="status">Loading features…</p>{[0, 1, 2].map((j) => <div key={j} className="skel" style={{ height: 56 }} />)}</div>
       ) : features.length === 0 ? (
-        <IdeaBox repo={repo} name={current?.name ?? repo} />
+        <>
+          <IdeaBox repo={repo} name={current?.name ?? repo} />
+          <div className="list"><OtherRow features={features} lanes={del.data?.lanes ?? []} /></div>
+        </>
       ) : (
         <Tabs
           value={tab}
@@ -87,6 +109,7 @@ export function FeaturesPage() {
           <TabPanel value={tab}>
             <div className="list">{list.map((f) => <Row key={f.slug} f={f} repo={repo} />)}</div>
             {!list.length ? <p className="muted">Nothing here yet.</p> : null}
+            {tab === 'active' ? <OtherRow features={features} lanes={del.data?.lanes ?? []} /> : null}
           </TabPanel>
         </Tabs>
       )}

@@ -178,6 +178,19 @@ p = ui_dispatch.public(dr.load(d["id"]), full=True)
 assert p["lanes"][0]["key"] == "o/r#5" and "events" in p and "handle" not in p["lanes"][0]
 print("  ok  usage, public")
 
+# --- the Inbox shows a dispatch's issue once: as its lane
+dd = {"state": "running", "lanes": {"o/r#5": {"repo": "O/R", "n": 5, "stage": "merge_gate", "pr": 50}}}
+rows = [
+    {"type": "pr_ready", "repo": "o/r", "pr": 50, "issue": 5},
+    {"type": "session_failed", "repo": "o/r", "link": {"owner": "o", "repo": "r", "issue": 5}},
+    {"type": "pr_ready", "repo": "o/r", "pr": 60, "issue": 6},
+    {"type": "question", "repo": "o/r", "link": {"issue": 5}},
+]
+kept = ui_dispatch.drop_owned(rows, [dd])
+assert [(r["type"], r.get("pr")) for r in kept] == [("pr_ready", 60), ("question", None)], kept
+assert ui_dispatch.drop_owned(rows, [{**dd, "state": "done"}]) == rows
+print("  ok  inbox dedupe")
+
 # --- mac_notify passes the text as argv, never as script
 real = ui_dispatch.__dict__.get("mac_notify")
 import importlib  # noqa: E402

@@ -116,15 +116,17 @@ starts a panel from its **Peer review** box.
 
 `aiw ui` shows the process around one question: what needs you. The **Inbox** collects, across
 repos, the questions to answer, PRs ready to merge, paused grinds, failed sessions and reviews at their
-cap. A **Feature** page follows one PRD from draft to shipped with one next step, and the **Board**
-shows its issues from Needs refinement to Merged. **Dispatches** shows each dispatch as a dependency
-graph or a list of lanes, with its activity, totals and live settings. Grind starts when a PR turns
+cap. A **Feature** page follows one PRD from draft to shipped with one next step and its issues, and
+shows its running dispatch; **Other issues** holds the open issues outside any feature. **Dispatches**
+shows each dispatch: what needs you first, then its issues as a graph or a list, its activity and live
+settings. Grind starts when a PR turns
 ready (per-repo setting) unless a dispatch lane owns it, and a merged issue's clean worktree is removed. GitHub is read with a cheap GraphQL probe per
 watched repo per poll, and the full query only when something changed; nothing is written back.
 
 It starts these as sessions and keeps them going: it takes your answers to `aiw ask` questions in the
-Inbox or the session page, resumes after a rate limit, and notifies you. **Away mode** answers
-recommended options and retries failures while you are away. Details are in [REFERENCE.md](REFERENCE.md).
+Inbox, the session page or a dispatch's issue panel, resumes after a rate limit, and notifies you.
+**Away mode** answers recommended options and retries failures, dispatch issues included, while you
+are away. Details are in [REFERENCE.md](REFERENCE.md).
 
 ## State
 

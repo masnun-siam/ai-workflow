@@ -59,6 +59,7 @@
 .dsp-steps li{display:flex;align-items:center;gap:4px;font-size:12px;padding:3px 8px;border-radius:999px;background:var(--sunk);color:var(--muted)}
 .dsp-steps li.done{background:var(--ship-soft);color:var(--ship)}
 .dsp-steps li.now{background:var(--build-soft);color:var(--build);font-weight:600}
+.dsp-question{display:flex;flex-direction:column;gap:8px;border:1px solid var(--you);border-radius:10px;padding:10px 12px;background:var(--you-soft)}
 .dsp-transcript{max-height:420px;overflow:auto;border-radius:12px}
 .dsp-pane{margin:0;padding:10px;background:var(--bg);border:1px solid var(--line);border-radius:8px;font-family:var(--mono);font-size:11.5px;white-space:pre-wrap;max-height:360px;overflow:auto}
 

@@ -259,44 +259,43 @@ sv.shutdown()
 assert not failures, failures[:2]
 ok("burst of 60 simultaneous connections all served (listen backlog)")
 
-# ---- /next/: the built app from ui_dist/ (not built yet -> 404 with a short text body)
+# ---- /: the built app from ui_dist/ (not built yet -> 404 with a short text body); /next/ is gone
 ns, port = start()
 me = f"127.0.0.1:{port}"
 real_dist = ui_server.DIST_DIR
 dist = tempfile.mkdtemp()
 ui_server.DIST_DIR = os.path.join(dist, "missing")
-s_, r_, body, h_ = req(port, "/next/", host=me)
+s_, r_, body, h_ = req(port, "/", host=me)
 assert s_ == 404 and r_.getheader("Content-Type").startswith("text/plain") and 0 < len(body) < 100, (s_, body)
 ui_server.DIST_DIR = os.path.join(dist, "ui_dist")
 os.makedirs(os.path.join(dist, "ui_dist", "assets"))
-for rel, text in (("index.html", "<html>new</html>"), ("assets/app-1a2b.js", "x()"), ("icon.txt", "i")):
+for rel, text in (("index.html", "<html>new</html>"), ("assets/app-1a2b.js", "x()"), ("sw.js", "i")):
     with open(os.path.join(dist, "ui_dist", rel), "w") as f:
         f.write(text)
 with open(os.path.join(dist, "secret.txt"), "w") as f:
     f.write("secret")
-for p in ("/next/", "/next"):
-    s_, r_, body, h_ = req(port, p, host=me)
-    assert s_ == 200 and body == b"<html>new</html>" and r_.getheader("Cache-Control") == "no-cache", (p, s_, h_)
+s_, r_, body, h_ = req(port, "/", host=me)
+assert s_ == 200 and body == b"<html>new</html>" and r_.getheader("Cache-Control") == "no-cache", (s_, h_)
 assert r_.getheader("Content-Type").startswith("text/html")
-s_, r_, body, h_ = req(port, "/next/assets/app-1a2b.js", host=me)
+s_, r_, body, h_ = req(port, "/assets/app-1a2b.js", host=me)
 assert s_ == 200 and r_.getheader("Content-Type").startswith("text/javascript") and body == b"x()"
 assert "immutable" in r_.getheader("Cache-Control"), "hashed assets may be cached"
-assert req(port, "/next/icon.txt", host=me)[1].getheader("Cache-Control") == "no-cache"
+assert req(port, "/sw.js", host=me)[1].getheader("Cache-Control") == "no-cache"
 for p in (
-    "/next/nope.js",
-    "/next/assets",
-    "/next/%2e%2e/secret.txt",
-    "/next/..%2fsecret.txt",
-    "/next/%252e%252e/secret.txt",
+    "/next/",
+    "/next",
+    "/assets/nope.js",
+    "/assets",
+    "/assets/%2e%2e/secret.txt",
+    "/assets/..%2fsecret.txt",
+    "/assets/%252e%252e/secret.txt",
 ):
     s_, r_, body, h_ = req(port, p, host=me)
     assert s_ == 404 and b"secret" not in body, (p, s_)
-assert req(port, "/next/", host="evil.example")[0] == 403, "same Host guard"
-s_, r_, body, h_ = req(port, "/", host=me)
-assert s_ == 200 and body == b"<html>new</html>", "/ serves the same app as /next/"
+assert req(port, "/", host="evil.example")[0] == 403, "same Host guard"
 ui_server.DIST_DIR = real_dist
 ns.shutdown()
-ok("/next/ serves ui_dist: index no-cache, hashed assets cached, 404 when unbuilt, no escapes; / the same app")
+ok("/ serves ui_dist: index no-cache, hashed assets cached, 404 when unbuilt, no escapes; /next/ is gone")
 
 # ---- boards: /api/planning, /api/delivery, /api/start, /api/cleanup and the post-poll hooks
 import subprocess as sp  # noqa: E402

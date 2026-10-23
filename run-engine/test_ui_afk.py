@@ -156,7 +156,7 @@ pushed.clear()
 n_log = len(ui_afk.load()["log"])
 pub = ui_afk.stop(t)
 assert not pub["active"] and pub["summary"]["log"] and len(pub["summary"]["log"]) == n_log
-assert [p[0] for p in pushed] == ["aiw: autopilot ended"], pushed
+assert [p[0] for p in pushed] == ["aiw: away mode ended"], pushed
 assert f"{n_log} decisions made" in pushed[0][1]
 ui_afk.tick(t + 5)
 assert len(pushed) == 1
@@ -188,5 +188,22 @@ ui_afk.tick(t + 1)
 assert all(ui_sessions.load(h)["status"] == "waiting" for h in held), [ui_sessions.load(h)["status"] for h in held]
 assert sorted(sid for sid, _ in resumed) == sorted([c, gi]), resumed  # c: the /implement-issue left waiting above
 assert sorted(e["sid"] for e in ui_afk.load()["log"] if e["kind"] == "answer") == sorted([c, gi])
+
+# dispatch lanes: a held lane is retried on the backoff; one asking a question is left to the answer path
+import dispatch_run  # noqa: E402
+
+dl = dispatch_run.create("o/r#1", "headless", {}, [{"repo": "o/r", "n": n, "refined": True} for n in (41, 42, 43)])
+dl["lanes"]["o/r#41"].update(stage="merge_gate", held="CI is red", pr=410, handle={"session": "x"})
+dl["lanes"]["o/r#42"].update(stage="implementing", needs_you="waiting on you", handle={"session": "y"})
+dispatch_run.save(dl)
+ui_afk.start(t + 3600, now=t)
+ui_afk.tick(t + 2)  # schedules the first retry
+assert dispatch_run.load(dl["id"])["lanes"]["o/r#41"]["held"] == "CI is red"
+ui_afk.tick(t + 2 + ui_afk.RETRY_DELAYS[0])
+x41 = dispatch_run.load(dl["id"])["lanes"]["o/r#41"]
+assert x41["held"] is None and x41["afk_retries"] == 1
+assert x41["outbox"] == [["send", dispatch_run.ci_fix_prompt(410)]], x41  # red CI: fix it in the PR's session
+assert dispatch_run.load(dl["id"])["lanes"]["o/r#42"]["needs_you"] == "waiting on you"
+assert any(e["command"] == "dispatch lane #41" for e in ui_afk.load()["log"])
 
 print("test_ui_afk: ok")

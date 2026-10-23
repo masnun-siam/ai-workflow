@@ -30,8 +30,8 @@ export function useStepRunner(f: Feature, repo: string) {
         return go('review');
       case 'tab':
         return go(a.tab);
-      case 'board':
-        return navigate(link(routes.board));
+      case 'openDispatch':
+        return navigate(link(routes.dispatch(a.id)));
       case 'approve': {
         const ok = await confirm({
           title: 'Approve this PRD?',
@@ -47,12 +47,6 @@ export function useStepRunner(f: Feature, repo: string) {
       case 'refine':
         await starter.startBoard({ repo, skill: 'refine-issues', arg: a.issues.join(' '), via: 'headless' });
         return;
-      case 'startReady': {
-        // one implement-issue session per issue; the first one opens, the rest just start
-        for (const [i, n] of a.issues.entries()) await starter.startBoard({ repo, skill: 'implement-issue', arg: String(n), via: 'headless' }, { nav: i === 0 && a.issues.length === 1 });
-        if (a.issues.length > 1) toast(`Started ${a.issues.length} issues`);
-        return;
-      }
       case 'merge':
         panel.open({ kind: 'pr', repo, n: a.pr });
         return;

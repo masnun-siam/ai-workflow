@@ -108,7 +108,7 @@ describe('Dispatch page', () => {
     window.location.hash = '#/dispatches/abc123abc123?repo=o/r';
     render(<App />);
     expect(await screen.findByRole('heading', { name: 'Payments' })).toBeTruthy();
-    const graph = screen.getByRole('group', { name: 'Lanes by dependency' });
+    const graph = screen.getByRole('group', { name: 'Issues by what they wait for' });
     expect(within(graph).getByText('Starts first')).toBeTruthy();
     expect(within(graph).getByText('Then')).toBeTruthy();
     expect(screen.getByText('0 of 3 issues done. 2 in progress and 1 waiting their turn.')).toBeTruthy();

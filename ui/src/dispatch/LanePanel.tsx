@@ -5,6 +5,7 @@ import type { Dispatch, Lane, LaneAction } from '../api/types';
 import { Button, Chip, Icon, LinkButton, MoreMenu, useConfirm, useToast, type MenuEntry } from '../components';
 import { clockText, fmtTokens, money } from '../lib/format';
 import { routes } from '../lib/routes';
+import { QuestionForm } from '../questions/QuestionForm';
 import { Transcript } from '../session/Transcript';
 import { isLive } from '../lib/vocab';
 import { STAGE, STEPS, ghIssue, ghPr, issueNo, nowLine, secs } from './vocab';
@@ -12,7 +13,7 @@ import { STAGE, STEPS, ghIssue, ghPr, issueNo, nowLine, secs } from './vocab';
 function Stepper({ l }: { l: Lane }) {
   const step = STAGE[l.stage].step;
   return (
-    <ol className="dsp-steps" aria-label="Lane progress">
+    <ol className="dsp-steps" aria-label="Progress">
       {STEPS.map((s, i) => {
         const state = l.stage === 'closed' || i + 1 < step ? 'done' : i + 1 === step ? 'now' : '';
         return <li key={s} className={state} aria-current={state === 'now' ? 'step' : undefined}>{state === 'done' ? <Icon n="check" s={12} /> : null}{s}</li>;
@@ -32,6 +33,12 @@ function HeadlessSession({ id }: { id: string }) {
   }, [events.length]);
   return (
     <div className="stack" style={{ gap: 8 }}>
+      {s?.outcome === 'waiting' ? (
+        <section className="dsp-question" aria-label="The session asks you">
+          <b>The session asks you</b>
+          <QuestionForm sessionId={id} />
+        </section>
+      ) : null}
       <div className="row"><b className="grow">What the session is doing</b><LinkButton sm variant="ghost" to={routes.session(id)}>Open session</LinkButton></div>
       <div className="dsp-transcript" ref={box}>
         <Transcript events={events.slice(-80)} live={false} working={s?.outcome === 'running'} />
@@ -68,7 +75,7 @@ export function LanePanel({ d, l, onClose }: { d: Dispatch; l: Lane; onClose: ()
   };
   const send = () => {
     if (!msg.trim()) return;
-    run('send', 'Sent to the lane', msg.trim());
+    run('send', 'Sent', msg.trim());
     setMsg('');
   };
   const sendable = !!(l.session || l.tab) && l.stage !== 'closed';
@@ -100,7 +107,7 @@ export function LanePanel({ d, l, onClose }: { d: Dispatch; l: Lane; onClose: ()
           <h2 style={{ fontSize: 16 }}>{l.title || issueNo(l.key)}</h2>
         </div>
         <MoreMenu items={more} label="Issue actions" />
-        <Button variant="ghost" icon sm aria-label="Close lane" onClick={onClose}><Icon n="x" /></Button>
+        <Button variant="ghost" icon sm aria-label="Close" onClick={onClose}><Icon n="x" /></Button>
       </div>
       <div className={`dsp-lane-now t-${now.tone}`}>
         <div className="row" style={{ gap: 8 }}>

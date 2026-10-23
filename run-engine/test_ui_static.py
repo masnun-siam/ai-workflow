@@ -62,10 +62,9 @@ try:
     assert s == 200 and r.getheader("Content-Type", "").startswith("text/html") and body == index
     assert int(r.getheader("Content-Length")) == len(body) and r.getheader("Cache-Control") == "no-cache"
     ok("GET / serves ui_dist/index.html, no-cache")
-    for p in ("/next/", "/next"):
-        s, _, body = req(port, p)
-        assert s == 200 and body == index, p
-    ok("/next/ still serves the same app")
+    for p in ("/next/", "/next", "/next/index.html"):
+        assert req(port, p)[0] == 404, p
+    ok("the /next/ alias is gone")
 
     assets = sorted(os.listdir(os.path.join(DIST, "assets")))
     js = next(a for a in assets if a.endswith(".js"))
@@ -76,9 +75,9 @@ try:
     assert r.getheader("Cache-Control") == "public, max-age=31536000, immutable"
     s, r, _ = req(port, f"/assets/{css}")
     assert s == 200 and r.getheader("Content-Type", "").startswith("text/css")
-    assert req(port, f"/next/assets/{js}")[0] == 200
+    assert req(port, f"/next/assets/{js}")[0] == 404
     assert req(port, f"/assets/{js}?v=1")[0] == 200
-    ok("hashed assets: content types, immutable cache, query string ignored, /next/ alias")
+    ok("hashed assets: content types, immutable cache, query string ignored")
 
     # root-level files: not hashed, so they revalidate
     for p, t in (
@@ -154,7 +153,7 @@ try:
         for n, t in (("assets/a.js", "text/javascript"), ("assets/a.css", "text/css")):
             s, r, _ = req(port, f"/{n}")
             assert s == 200 and r.getheader("Content-Type", "").startswith(t), (n, s)
-        s, r, _ = req(port, "/next/a.html")
+        s, r, _ = req(port, "/")
         assert (
             s == 200
             and r.getheader("Content-Type", "").startswith("text/html")

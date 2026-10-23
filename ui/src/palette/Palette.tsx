@@ -40,7 +40,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
   const all = useMemo<Entry[]>(() => {
     const e: Entry[] = [];
     const go = (path: string) => () => navigate(link(path));
-    for (const [path, label] of [[routes.inbox, 'Inbox'], [routes.features, 'Features'], [routes.board, 'Board'], [routes.activity, 'Activity'], [routes.settings(), 'Settings']] as const) {
+    for (const [path, label] of [[routes.inbox, 'Inbox'], [routes.features, 'Features'], [routes.dispatches, 'Dispatches'], [routes.activity, 'Activity'], [routes.settings(), 'Settings']] as const) {
       e.push({ id: `go:${path}`, group: 'Go to', label, run: go(path) });
     }
     for (const c of COMMAND_LIST) e.push({ id: `cmd:${c.id}`, group: 'Start', label: c.name, right: `/${c.id}`, run: () => start.open({ cmd: c.id, repo }) });

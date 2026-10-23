@@ -6,7 +6,10 @@ import { useComment, useDelivery, useGrindIssue, useIssue, useMerge, usePull, us
 import type { PrCheck, PrCommitRow, PrConvItem, PrFileRow } from '../api/types';
 import { actionKind, IssueAction } from '../board/IssueAction';
 import { ResolveConflicts } from '../board/ResolveConflicts';
-import { Banner, Button, Chip, EmptyState, ExtButton, IssueChip, Switch, TabPanel, Tabs, toast, useConfirm } from '../components';
+import { Banner, Button, Chip, EmptyState, ExtButton, IssueChip, LinkButton, Switch, TabPanel, Tabs, toast, useConfirm } from '../components';
+import { useOwnedIssues } from '../dispatch/useOwner';
+import { routes } from '../lib/routes';
+import { STAGE, nowLine } from '../dispatch/vocab';
 import { formatWhen, grindLabel } from '../lib/format';
 import { issueStatus } from '../lib/vocab';
 import { PanelFrame } from './DetailPanel';
@@ -54,6 +57,7 @@ export function WorkPanel({ kind, repo, n }: { kind: 'issue' | 'pr'; repo: strin
   const skip = useSkipCi();
   const stop = useStopGrind();
   const setGrind = useGrindIssue();
+  const owner = useOwnedIssues(repo).get(issueN ?? -1);
   const comment = useComment();
   const followups = useFollowups(repo);
   const confirm = useConfirm();
@@ -112,7 +116,13 @@ export function WorkPanel({ kind, repo, n }: { kind: 'issue' | 'pr'; repo: strin
         {d ? <><Chip tone={stTone}>{stLabel}</Chip><b className="p-add">+{d.additions}</b><b className="p-del">−{d.deletions}</b></> : null}
         {act}
       </div>
-      {card && card.column !== 'merged' ? (
+      {owner ? (
+        <div className="row wrap">
+          <Chip tone={STAGE[owner.l.stage].tone}>{STAGE[owner.l.stage].label}</Chip>
+          <span className="muted grow" style={{ fontSize: 13 }}>A dispatch runs this issue: {nowLine(owner.l, owner.d.lanes).text.toLowerCase()}. It grinds and merges by its own settings.</span>
+          <LinkButton sm to={`${routes.dispatch(owner.d.id)}?lane=${encodeURIComponent(owner.l.key)}`}>Open dispatch</LinkButton>
+        </div>
+      ) : card && card.column !== 'merged' ? (
         <div className="row wrap">
           <label className="row" style={{ gap: 8, fontWeight: 600 }}>
             <Switch checked={!!card.grind_on} label={`Grinding for #${card.n}`} disabled={setGrind.isPending} onChange={(on) => void toggleGrind(on)} />

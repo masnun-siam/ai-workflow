@@ -2,7 +2,6 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
-import { placeCards } from './board/columns';
 import { mergeWarnings } from './panels/prWarnings';
 
 const json = (b: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } }));
@@ -191,48 +190,40 @@ describe('PRD tab', () => {
   });
 });
 
-describe('Board', () => {
-  it('placeCards puts each issue in one column, blocked last in Ready', () => {
-    const cols: any = placeCards([
-      { n: 1, column: 'ready', blocked_by: [9] }, { n: 2, column: 'ready', blocked_by: [] }, { n: 3, column: 'draft_pr', blocked_by: [] },
-      { n: 4, column: 'grinding', blocked_by: [] }, { n: 5, column: 'unrefined', blocked_by: [] }, { n: 6, column: 'merged', blocked_by: [] },
-    ] as any);
-    expect(cols.ready.map((c: any) => c.n)).toEqual([2, 1]);
-    expect(cols.building.map((c: any) => c.n)).toEqual([3]);
-    expect(cols.review.map((c: any) => c.n)).toEqual([4]);
-    expect(cols.refine.map((c: any) => c.n)).toEqual([5]);
-    expect(cols.merged.map((c: any) => c.n)).toEqual([6]);
-  });
-
-  it('renders lanes, cards with their action, and moves focus with j/l', async () => {
-    mock({ prds: [prd({ issues: 2 })], lanes: [lane([card(11, 'ready'), card(12, 'in_review', { pr: { n: 40, draft: false, ci: 'success', url: 'u', review: 'approved' }, mergeable: true })])] });
-    window.location.hash = '#/board?repo=o/r';
-    const user = userEvent.setup();
-    render(<App />);
-    expect(await screen.findByText('Task 11')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Start' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Merge' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Run epic/ }).getAttribute('href')).toContain('/dispatches?new=o%2Fr%237');
-    await user.keyboard('j'); // nothing focused: first card
-    expect(document.activeElement?.getAttribute('aria-label')).toContain('Issue 11');
-    await user.keyboard('l');
-    expect(document.activeElement?.getAttribute('aria-label')).toContain('Issue 12');
-  });
-
-  it('a card starts headless only; a 409 toasts with the existing session', async () => {
+describe('Other issues and dispatch-owned issues', () => {
+  it('lists open issues outside every feature; a card starts headless only and a 409 toasts the running session', async () => {
     mock({
       prds: [prd({ issues: 1 })],
-      lanes: [lane([card(11, 'ready')])],
+      lanes: [lane([card(11, 'ready')]), lane([card(30, 'ready'), card(31, 'unrefined')], { epic: null, title: 'No epic' })],
       extra: { '/api/start': () => json({ error: 'already running', id: 'abc', href: '#/session/abc' }, 409) },
     });
-    window.location.hash = '#/board?repo=o/r';
+    window.location.hash = '#/features?repo=o/r';
     const user = userEvent.setup();
     render(<App />);
+    await user.click(await screen.findByRole('link', { name: /Other issues/ }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Other issues' })).toBeTruthy();
+    expect(screen.getByText('Task 30')).toBeTruthy();
+    expect(screen.queryByText('Task 11')).toBeNull(); // part of the feature
     await user.click(await screen.findByRole('button', { name: 'More ways to start' }));
     expect(screen.queryByRole('menuitem', { name: /herdr tab/ })).toBeNull();
     await user.keyboard('{Escape}');
     await user.click(screen.getByRole('button', { name: 'Start' }));
     expect(await screen.findByRole('button', { name: 'Open session' })).toBeTruthy();
+  });
+
+  it('an issue a dispatch owns links there instead of Start, and the feature header shows the dispatch', async () => {
+    const lane11 = { key: 'o/r#11', repo: 'o/r', n: 11, title: 'Task 11', deps: [], stage: 'implementing', pr: null, needs_you: null, held: null, gate: null, skip_reason: null, paused: null, hold_merge: null, limited_until: null, started_at: 1, ended_at: null, session: 's', tab: null, usage: { cost: 0, tokens: 0, seconds: 0 } };
+    mock({
+      prds: [prd({ issues: 2 })],
+      lanes: [lane([card(11, 'in_progress'), card(12, 'ready')])],
+      extra: { '/api/dispatches': () => json({ dispatches: [{ id: 'd1', epic: 'o/r#7', title: 'F', runner: 'headless', state: 'running', settings: {}, created_at: 1, ended_at: null, final_prs: null, totals: { cost: 0, tokens: 0, seconds: 0 }, lanes: [lane11] }] }) },
+    });
+    window.location.hash = '#/features/f1/issues?repo=o/r';
+    render(<App />);
+    expect(await screen.findByRole('link', { name: /Dispatch: 0 of 1 done/ })).toBeTruthy();
+    expect(await screen.findByRole('link', { name: 'In dispatch' })).toBeTruthy();
+    expect(screen.getByText('Implementing the issue')).toBeTruthy();
+    expect(within(await step()).getByRole('button', { name: 'Open dispatch' })).toBeTruthy();
   });
 });
 

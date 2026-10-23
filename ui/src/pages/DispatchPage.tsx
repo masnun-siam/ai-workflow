@@ -32,7 +32,7 @@ function NeedsYou({ d, onPick }: { d: Dispatch; onPick: (k: string) => void }) {
   if (!asks.length) return null;
   const go = async (l: Lane, ask: LaneAsk) => {
     if (ask === 'open') return onPick(l.key);
-    if (ask === 'merge' && !(await confirm({ title: `Merge PR #${l.pr}?`, body: 'A merge commit, at the next check (within 30 s). Then the lane closes its issue and cleans up.', okLabel: 'Merge' }))) return;
+    if (ask === 'merge' && !(await confirm({ title: `Merge PR #${l.pr}?`, body: 'A merge commit within 30 s. Then the issue is closed and cleaned up.', okLabel: 'Merge' }))) return;
     act.mutate({ id: d.id, lane: l.key, action: ask }, { onSuccess: () => toast(ask === 'merge' ? 'Merge requested' : 'Retrying') });
   };
   const LABEL: Record<LaneAsk, string> = { merge: 'Merge', open: 'Answer', retry: 'Retry' };
@@ -151,7 +151,7 @@ export function DispatchPage() {
   const live = d.state === 'running' || d.state === 'paused';
   const limited = Object.values(limits).some((x) => x.limited_until && x.limited_until * 1000 > Date.now());
   const cancel = async () => {
-    if (await confirm({ title: 'Cancel this dispatch?', body: 'No new lanes start and nothing is merged. Lanes already running keep their sessions and PRs; close them yourself.', okLabel: 'Cancel dispatch', cancelLabel: 'Keep it', danger: true }))
+    if (await confirm({ title: 'Cancel this dispatch?', body: 'No new issue starts and nothing more is merged. Issues already running keep their sessions and PRs; close them yourself.', okLabel: 'Cancel dispatch', cancelLabel: 'Keep it', danger: true }))
       state.mutate({ id: d.id, state: 'cancelled' }, { onSuccess: () => toast('Dispatch cancelled') });
   };
 
@@ -192,7 +192,7 @@ export function DispatchPage() {
       {limited && live ? <Banner tone="away" icon="clock">A Claude account hit its usage limit. New issues wait, and paused ones resume after the reset.</Banner> : null}
       {showSettings ? (
         <section className="box" aria-label="Dispatch settings">
-          <SettingsFields live value={d.settings} onChange={(p) => save.mutate({ id: d.id, s: p }, { onSuccess: () => toast('Saved: applies at each lane’s next step') })} />
+          <SettingsFields live value={d.settings} onChange={(p) => save.mutate({ id: d.id, s: p }, { onSuccess: () => toast('Saved: applies from each issue’s next step') })} />
         </section>
       ) : null}
       {d.state === 'done' ? <EndPanel d={d} /> : null}

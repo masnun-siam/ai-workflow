@@ -47,10 +47,10 @@ export function useInboxActions() {
     panel,
     recheck: () => qc.invalidateQueries({ queryKey: ['inbox'] }),
     laneMerge: async (id: string, key: string, pr: number | null) => {
-      if (await confirm({ title: `Merge PR #${pr}?`, body: 'The dispatch merges it with a merge commit at its next tick, then the lane does its followups.', okLabel: 'Merge' }))
+      if (await confirm({ title: `Merge PR #${pr}?`, body: 'The dispatch merges it with a merge commit within 30 s, then closes the issue and cleans up.', okLabel: 'Merge' }))
         lane.mutate({ id, lane: key, action: 'merge' }, { onSuccess: () => toast('Merge requested') });
     },
-    laneRetry: (id: string, key: string) => lane.mutate({ id, lane: key, action: 'retry' }, { onSuccess: () => toast('Retrying the lane') }),
+    laneRetry: (id: string, key: string) => lane.mutate({ id, lane: key, action: 'retry' }, { onSuccess: () => toast('Retrying') }),
     dispatchSeen: (id: string) => seen.mutate(id),
     copy: copyCommand,
     approve: async (repo: string, path: string) => {
@@ -213,7 +213,7 @@ export function ItemRow({ item, a, open, toggle, publish }: Props) {
       acts = (<>
         {item.group === 'decide' ? <Button sm variant="primary" onClick={() => void a.laneMerge(item.dispatch, item.lane, item.pr)}>Merge</Button> : null}
         {item.group === 'fix' ? <Button sm onClick={() => a.laneRetry(item.dispatch, item.lane)}>Retry</Button> : null}
-        <LinkButton sm variant={item.group === 'answer' ? 'you' : 'default'} to={at}>Open lane</LinkButton>
+        <LinkButton sm variant={item.group === 'answer' ? 'you' : 'default'} to={at}>Open</LinkButton>
       </>);
       break;
     }

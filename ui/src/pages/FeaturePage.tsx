@@ -4,7 +4,7 @@ import type { BoardMeta } from '../api/types';
 import { useDelivery, usePlanning, useSessions } from '../api/hooks';
 import { SessionTable } from '../activity/SessionTable';
 import { BoardStatus } from '../board/BoardStatus';
-import { Button, EmptyState, Icon, MoreMenu, TabPanel, Tabs } from '../components';
+import { Button, EmptyState, Icon, LinkButton, MoreMenu, TabPanel, Tabs } from '../components';
 import { IssuesTab } from '../features/IssuesTab';
 import { NextStepBox } from '../features/NextStepBox';
 import { PrdTab } from '../features/PrdTab';
@@ -12,6 +12,7 @@ import { ReviewTab } from '../features/ReviewTab';
 import { Stepper } from '../features/Stepper';
 import { useStepRunner } from '../features/useStepRunner';
 import { NewDispatchDialog } from '../dispatch/NewDispatchDialog';
+import { useEpicDispatch } from '../dispatch/useOwner';
 import '../features/features.css';
 import { joinFeatures, snapshotsReady, type Feature } from '../lib/features';
 import { sessionSlug } from '../lib/format';
@@ -42,6 +43,7 @@ function Body({ f, repo, tab, meta }: { f: Feature; repo: string; tab?: string; 
   const cur = TABS.includes(tab ?? '') ? tab! : f.stage === 'review' ? 'review' : i >= 3 ? 'issues' : 'prd';
   const go = (t: string) => navigate(link(routes.feature(f.slug, t)), { replace: true });
   const [dispatching, setDispatching] = useState(false);
+  const live = useEpicDispatch(repo, f.epic);
 
   return (
     <div className="content-inner">
@@ -59,8 +61,12 @@ function Body({ f, repo, tab, meta }: { f: Feature; repo: string; tab?: string; 
             <span>{f.issues.length} issues</span>
           </p>
         </div>
-        {f.epic && f.issues.length ? (
-          <Button variant="primary" onClick={() => setDispatching(true)} title="Run the epic's issues as parallel lanes">
+        {live ? (
+          <LinkButton variant={live.c.you ? 'you' : 'default'} to={link(routes.dispatch(live.d.id))}>
+            <Icon n="bolt" />{live.c.you ? `Dispatch needs you (${live.c.you})` : `Dispatch: ${live.c.closed} of ${live.c.total} done`}
+          </LinkButton>
+        ) : f.epic && f.issues.length ? (
+          <Button variant="primary" onClick={() => setDispatching(true)} title="Build the epic's issues side by side">
             <Icon n="bolt" />Run epic
           </Button>
         ) : null}

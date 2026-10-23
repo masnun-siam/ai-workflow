@@ -69,7 +69,7 @@ export function LaneGraph({ lanes, picked, onPick }: { lanes: Lane[]; picked: st
 
   const related = picked ? new Set([picked, ...(lanes.find((l) => l.key === picked)?.deps ?? []), ...lanes.filter((l) => l.deps.includes(picked)).map((l) => l.key)]) : null;
   return (
-    <div className="dsp-graph" ref={box} role="group" aria-label="Lanes by dependency">
+    <div className="dsp-graph" ref={box} role="group" aria-label="Issues by what they wait for">
       <svg className="dsp-edges" width={size.w} height={size.h} aria-hidden="true">
         <defs>
           <marker id="dsp-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">

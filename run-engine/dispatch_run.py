@@ -91,6 +91,10 @@ def conflict_prompt(pr: int, base) -> str:
     )
 
 
+def ci_fix_prompt(pr) -> str:
+    return f"CI is red on PR #{pr}. Read the failing job's log, fix it locally, re-run the checks, push and wait for green."
+
+
 def followups_prompt(n: int, pr: int, base) -> str:
     tail = f" Its base {base} is not the default branch, so close #{n} with `gh issue close`." if base else ""
     return f"PR #{pr} for issue #{n} is merged. Run implement-issue's 'After the pull request is merged' steps for #{n}.{tail}"
@@ -494,40 +498,48 @@ def lane_action(did: str, k: str, action: str, text=None) -> dict:
     """The user's action on a lane. Session effects (close, send) go through the lane's outbox: the tick runs them."""
     with locked(did):
         d = load(did)
-        x = d["lanes"].get(k)
-        if x is None:
-            raise ValueError(f"no lane {k}")
-        if action == "pause":
-            x["paused"] = True
-        elif action == "resume":
-            x["paused"] = False
-        elif action == "skip":
-            if x["stage"] in ACTIVE and x.get("handle"):
-                x.setdefault("outbox", []).append(["close", None])
-            x.update(stage="skipped", skip_reason="skipped by you")
-        elif action == "retry":  # clear held/needs; a fresh session for the lane's stage at the next tick
-            x.update(held=None, needs_you=None, paused=False)
-            if x["stage"] == "skipped" or (x["stage"] == "implementing" and not x.get("pr")):
-                if x.get("handle"):
-                    x.setdefault("outbox", []).append(["close", None])
-                x.update(stage="queued", skip_reason=None, handle=None)
-            elif x["stage"] in ACTIVE:
-                x["restart"] = True
-        elif action == "merge":
-            x["force_merge"] = True
-        elif action in ("hold", "unhold"):
-            x["hold_merge"] = action == "hold"
-        elif action == "send":
-            if not isinstance(text, str) or not text.strip() or len(text) > 2000:
-                raise ValueError("send needs a message of 1 to 2000 characters")
-            if not x.get("handle"):
-                raise ValueError(f"lane {k} has no session to send to")
-            x.setdefault("outbox", []).append(["send", text.strip()])
-        else:
-            raise ValueError(f"action must be one of {LANE_ACTIONS}")
-        event(d, k, "lane", action)
+        apply_lane_action(d, k, action, text)
         save(d)
         return d
+
+
+def apply_lane_action(d: dict, k: str, action: str, text=None) -> None:
+    """lane_action on a loaded record; the caller holds `locked(d["id"])` and saves."""
+    x = d["lanes"].get(k)
+    if x is None:
+        raise ValueError(f"no lane {k}")
+    if action == "pause":
+        x["paused"] = True
+    elif action == "resume":
+        x["paused"] = False
+    elif action == "skip":
+        if x["stage"] in ACTIVE and x.get("handle"):
+            x.setdefault("outbox", []).append(["close", None])
+        x.update(stage="skipped", skip_reason="skipped by you")
+    elif action == "retry":  # clear held/needs; a fresh session for the lane's stage at the next tick
+        red = x.get("held") == "CI is red"
+        x.update(held=None, needs_you=None, paused=False)
+        if x["stage"] == "skipped" or (x["stage"] == "implementing" and not x.get("pr")):
+            if x.get("handle"):
+                x.setdefault("outbox", []).append(["close", None])
+            x.update(stage="queued", skip_reason=None, handle=None)
+        elif red and x.get("handle"):  # a retry of red CI means: fix it, in the session that wrote the PR
+            x.setdefault("outbox", []).append(["send", ci_fix_prompt(x.get("pr"))])
+        elif x["stage"] in ACTIVE:
+            x["restart"] = True
+    elif action == "merge":
+        x["force_merge"] = True
+    elif action in ("hold", "unhold"):
+        x["hold_merge"] = action == "hold"
+    elif action == "send":
+        if not isinstance(text, str) or not text.strip() or len(text) > 2000:
+            raise ValueError("send needs a message of 1 to 2000 characters")
+        if not x.get("handle"):
+            raise ValueError(f"lane {k} has no session to send to")
+        x.setdefault("outbox", []).append(["send", text.strip()])
+    else:
+        raise ValueError(f"action must be one of {LANE_ACTIONS}")
+    event(d, k, "lane", action)
 
 
 def request_end(did: str, action: str) -> dict:

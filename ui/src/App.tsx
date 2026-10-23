@@ -1,10 +1,7 @@
-import { useEffect } from 'react';
 import { HashRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { useRepos } from './api/hooks';
 import { ConfirmProvider } from './components';
-import { legacyRedirect } from './lib/routes';
 import { ActivityPage } from './pages/ActivityPage';
-import { BoardPage } from './pages/BoardPage';
 import { DispatchPage } from './pages/DispatchPage';
 import { DispatchesPage } from './pages/DispatchesPage';
 import { FeaturePage } from './pages/FeaturePage';
@@ -17,18 +14,8 @@ import { SettingsPage } from './pages/SettingsPage';
 import { PanelProvider } from './panels/PanelContext';
 import { QueryProvider } from './QueryProvider';
 import { Shell } from './shell/Shell';
-import { StartProvider, useStart } from './start/StartContext';
-
-/** Old hash routes (FR-2) redirect; anything else is a 404 inside the shell. */
-function LegacyOrNotFound() {
-  const { pathname, search } = useLocation();
-  const start = useStart();
-  const r = legacyRedirect(pathname, search);
-  useEffect(() => {
-    if (r?.start) start.open();
-  }, [r?.start]); // eslint-disable-line react-hooks/exhaustive-deps
-  return r ? <Navigate to={r.to} replace /> : <NotFoundPage />;
-}
+import { OtherIssuesPage } from './pages/OtherIssuesPage';
+import { StartProvider } from './start/StartContext';
 
 /** No registered repos: everything but Settings sends the user to onboarding (FR-29). */
 function Gate() {
@@ -48,7 +35,8 @@ export function AppRoutes() {
           <Route path="/features" element={<FeaturesPage />} />
           <Route path="/features/:slug" element={<FeaturePage />} />
           <Route path="/features/:slug/:tab" element={<FeaturePage />} />
-          <Route path="/board" element={<BoardPage />} />
+          <Route path="/" element={<Navigate to="/inbox" replace />} />
+          <Route path="/issues" element={<OtherIssuesPage />} />
           <Route path="/activity" element={<ActivityPage />} />
           <Route path="/dispatches" element={<DispatchesPage />} />
           <Route path="/dispatches/:id" element={<DispatchPage />} />
@@ -56,7 +44,7 @@ export function AppRoutes() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/settings/:section" element={<SettingsPage />} />
           <Route path="/onboarding" element={<OnboardingPage />} />
-          <Route path="*" element={<LegacyOrNotFound />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Route>
     </Routes>

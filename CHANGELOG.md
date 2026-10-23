@@ -4,6 +4,20 @@
 
 ### Changed
 
+- **The Board is gone.** A feature's Issues tab holds its issues, and a new **Other issues** page
+  (the last row of Features, `#/issues`) holds open issues that belong to no feature. `G` then `D` now
+  opens Dispatches. "Start N now" is gone too: start one issue from its row, or run the epic.
+- **The rest of the app follows dispatches.** A feature shows its running dispatch in the header, the
+  Next step box and the Issues tab, where each issue a dispatch owns shows its dispatch stage and what
+  it is doing, and links there instead of offering Start. The issue panel shows the dispatch in place
+  of the Grinding switch. The Inbox shows an issue in a dispatch once, as its dispatch row.
+- A dispatch issue's question is answered in its issue panel. Away mode also retries held or stopped
+  dispatch issues. **Retry** on red CI asks the issue's session to fix CI.
+- Push links that went to the Board open the session instead; their buttons say **Open Inbox**.
+- **Removed:** the `/next/` alias and the redirects from the old hash routes (`#/planning`,
+  `#/delivery`, `#/board`, `#/answer/<id>`, `#/session/<id>`, `#/dispatch/<id>`, `#/new`); those
+  addresses now show the not-found page.
+
 - **Auto-build is gone**, with its per-repo cap, the `aiw autopilot` verb and `POST /api/autopilot`:
   dispatches run an epic's issues instead. A card or Start no longer opens a herdr tab (`POST
   /api/start` is headless only), and `herdr-dispatch` is no longer a Start command; it is the skill

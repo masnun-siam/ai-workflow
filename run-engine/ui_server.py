@@ -364,11 +364,11 @@ def _inbox(query: str):
         settings={r: ui_settings.repo_settings(r) for r in watched},
         solo={r: ui_gh.solo(r) for r in watched},
     )
-    lanes = [
-        i for i in ui_dispatch.inbox_items(dispatch_run.list_all()) if not repo or i["repo"].lower() == repo.lower()
-    ]
+    dispatches = dispatch_run.list_all()
+    lanes = [i for i in ui_dispatch.inbox_items(dispatches) if not repo or i["repo"].lower() == repo.lower()]
     order = {g: n for n, g in enumerate(ui_inbox.GROUPS)}
-    body["items"] = sorted(body["items"] + lanes, key=lambda i: order[i["group"]])  # stable: keeps build's order
+    mine = ui_dispatch.drop_owned(body["items"], dispatches)  # a dispatch's issue shows once: as its lane
+    body["items"] = sorted(mine + lanes, key=lambda i: order[i["group"]])  # stable: keeps build's order
     return 200, {**body, "afk": ui_afk.public(recs), "gh": ui_gh.status()}
 
 
@@ -391,8 +391,6 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/":
             _serve_static(self, "index.html")
-        elif path in ("/next/", "/next") or path.startswith("/next/"):  # alias for one release
-            _serve_static(self, path[len("/next/") :] or "index.html")
         elif path in ("/sw.js", "/manifest.webmanifest") or path.startswith(("/assets/", "/icons/")):
             _serve_static(self, path)  # sw.js at the root so its scope covers the whole app
         elif path == "/api/health":
