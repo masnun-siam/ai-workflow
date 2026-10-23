@@ -6,6 +6,7 @@ import { ApiError } from './client';
 import { api } from './endpoints';
 import type { DispatchSettings, EndAction, InboxItem, LaneAction, NotifyChannel, StreamEvent } from './types';
 import { mergeStream } from '../lib/md';
+import { showNotification, step } from '../lib/notifier';
 
 export const POLL = { sessions: 3000, inbox: 5000, boards: 15000, stream: 1000, dispatch: 5000 } as const;
 
@@ -36,6 +37,27 @@ export const keys = {
   dispatch: (id: string) => ['dispatch', id] as const,
   dispatchLane: (id: string, key: string) => ['dispatch', id, 'lane', key] as const,
 };
+
+/** App-wide browser notifier (FR-6): polls the feed while permission is granted and shows each new event. */
+export function useBrowserNotifier() {
+  const last = useRef<number | null>(null);
+  const { data } = useQuery({ queryKey: ['notifications'], queryFn: () => api.notifications(last.current), enabled: notificationsOn(), retry: false, ...poll(POLL.inbox) });
+  useEffect(() => {
+    if (!data) return;
+    const next = step(last.current, data);
+    last.current = next.last;
+    if (notificationsOn()) next.show.forEach((e) => showNotification(e.title, { body: e.body, tag: e.tag, path: e.path }));
+  }, [data]);
+  // a click handled by the service worker asks this window to navigate
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'aiw-open' && String(e.data.path).startsWith('#/')) window.location.hash = e.data.path;
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, []);
+}
 
 // ---- reads --------------------------------------------------------------------------------------
 /** Sessions, limits, usage, afk, gh: polled every 3 s. Its failure is the app's "offline" signal. */

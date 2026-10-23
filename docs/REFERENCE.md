@@ -217,7 +217,9 @@ an onboarding page that checks `gh` and a Claude account, then scans folders.
 `POST /api/repos/check`.
 `GET /api/notifications?after=<id>` is the in-memory browser feed (`ui_feed.py`, newest 200, empty after
 a restart): `{latest, events}` with the entries newer than `after`, at most the 5 newest, oldest first;
-no `after`, or one above `latest`, gives `events: []`; a non-integer `after` is 400.
+no `after`, or one above `latest`, gives `events: []`; a non-integer `after` is 400. Browser notifications
+need an open aiw tab or the installed PWA with permission granted: `useBrowserNotifier` (mounted in `Shell`) polls
+this feed, shows each new event via the service worker (`ui/src/lib/notifier.ts`), and `sw.js` handles the click.
 
 **Notes vault.** With **No repo yet** and a new idea, Start shows a **Vault folder**
 (`05-Work/<Project>/<Feature>`) that follows the best match of your text as you type; **Suggest with

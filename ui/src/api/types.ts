@@ -241,6 +241,8 @@ export type InboxItem =
       resets_at?: number;
     })
   | (InboxBase & { type: 'dispatch_done'; dispatch: string; epic: string; feature_branch: string | null; final_prs: Record<string, string> });
+export interface FeedEvent { id: number; event: string; title: string; body: string; path: string; tag: string; ts: string }
+export interface NotificationFeed { latest: number; events: FeedEvent[] }
 export interface InboxResponse {
   items: InboxItem[];
   afk: AfkState;
