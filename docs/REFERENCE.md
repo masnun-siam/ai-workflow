@@ -307,6 +307,8 @@ run-engine/   route.py (the aiw CLI) · ui_*.py (the web UI server) · peer_revi
               dispatch_run (the lane engine), dispatch_runners (herdr, headless), dispatch_cli
               ui_dist/ (the built UI, committed) · config.json · test_*.py
 ui/           the web UI source: React + TypeScript + Vite
+site/         the GitHub Pages showcase (Vite + React), deployed by .github/workflows/pages.yml;
+              scripts/ re-capture its media from a running `aiw ui` (raw captures stay in site/raw/, ignored)
 bin/aiw       PATH shim. NOT named `route`; see INSTALL.md Step 3.
 docs/         HOW-IT-WORKS, INSTALL, REFERENCE, prds/, tasks/
 ```
