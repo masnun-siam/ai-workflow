@@ -540,4 +540,43 @@ with mock.patch.object(sys, "platform", "darwin"):
 ui_notify._notifier.cache_clear()
 ok("send_mac: terminal-notifier, osascript argv, non-Mac, errors")
 
+# send_test: one sample on one channel, ignoring the matrix and Away mode
+import ui_afk  # noqa: E402
+
+f = Fake()
+fresh(conf(f, channels={e: {"browser": False, "ntfy": False, "mac": False} for e in ui_notify.matrix({"ntfy": {}})}))
+with mock.patch.object(ui_afk, "active", return_value=True):
+    res = ui_notify.send_test("ntfy")
+assert res == {"ok": True}, res
+assert len(f.reqs) == 1 and f.reqs[0]["headers"]["title"] == "aiw: test notification"
+assert f.reqs[0]["headers"]["authorization"] == f"Bearer {SECRET}"
+assert f.reqs[0]["headers"]["click"] == "https://box.ts.net/#/settings/notifications"
+f.close()
+f = Fake(status=401)
+fresh(conf(f))
+res, err = captured(lambda: ui_notify.send_test("ntfy"))
+assert res == {"ok": False, "error": "HTTP 401"} and SECRET not in json.dumps(res) + err and "aiw-test" not in err
+f.close()
+fresh(conf(Fake(), ntfy={"server": closed_port(), "topic": "aiw-test"}))
+res, err = captured(lambda: ui_notify.send_test("ntfy"))
+assert res["ok"] is False and "aiw-test" not in json.dumps(res) + err, res
+f = Fake()
+fresh({})
+assert ui_notify.send_test("ntfy") == {"ok": False, "error": "ntfy is not set up"} and not f.reqs
+f.close()
+for bad in ("browser", "x", None):
+    try:
+        ui_notify.send_test(bad)
+        raise AssertionError(bad)
+    except ValueError:
+        pass
+sent = []
+fresh({})
+with mock.patch.object(ui_notify, "send_mac", lambda *a: sent.append(a)):
+    assert ui_notify.send_test("mac") == {"ok": True}
+assert sent == [("aiw: test notification", "This is a test from aiw ui.", None)], sent
+with mock.patch.object(ui_notify, "send_mac", lambda *a: "Only on macOS"):
+    assert ui_notify.send_test("mac") == {"ok": False, "error": "Only on macOS"}
+ok("send_test: ntfy ok/401/unreachable/not set up, mac, bad channel, ignores matrix and Away")
+
 print(f"\n{passed} passed")

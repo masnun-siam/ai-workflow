@@ -410,6 +410,10 @@ try:
     st, body = call("POST", "/api/settings/notify/channel", {"event": "done", "channel": "ntfy", "on": False})
     assert st == 200 and body["matrix"]["done"]["ntfy"] is False
     ok("settings: notify channel route")
+    for bad in ({"channel": "browser"}, {"channel": "x"}, {}):
+        st, body = call("POST", "/api/settings/notify/test", bad)
+        assert st == 400 and "error" in body, bad
+    ok("settings: notify test route rejects browser, unknown, missing")
 
     # before the first poll: stale, empty. Planning shows the PRD file.
     st, body = call("GET", "/api/planning?repo=o/r")
