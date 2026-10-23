@@ -21,6 +21,9 @@ data_dir = tempfile.mkdtemp()
 old_data = os.environ.get("CLAUDE_PLUGIN_DATA")
 os.environ["CLAUDE_PLUGIN_DATA"] = data_dir
 
+import ui_notify  # noqa: E402
+
+ui_notify.send_mac = lambda *a, **k: None  # the fan-out would show a real banner
 import ui_events  # noqa: E402
 import ui_server  # noqa: E402
 import ui_sessions  # noqa: E402

@@ -21,6 +21,9 @@ from unittest import mock
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
+import ui_notify  # noqa: E402
+
+ui_notify.send_mac = lambda *a, **k: None  # the fan-out would show a real banner
 import ui_sessions  # noqa: E402
 
 passed = 0

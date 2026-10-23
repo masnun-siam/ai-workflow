@@ -24,6 +24,9 @@ ROOT = os.path.dirname(HERE)
 AIW = os.path.join(ROOT, "bin", "aiw")
 sys.path.insert(0, HERE)
 
+import ui_notify  # noqa: E402
+
+ui_notify.send_mac = lambda *a, **k: None  # the fan-out would show a real banner
 import route  # noqa: E402
 import ui_runner  # noqa: E402
 import ui_server  # noqa: E402
@@ -31,7 +34,13 @@ import ui_sessions  # noqa: E402
 
 passed = 0
 failed = 0
-ORIG_PATH = os.environ.get("PATH", "")
+# `aiw ask` is a subprocess: a no-op terminal-notifier first on PATH keeps its fan-out from showing real banners
+_NOOP = tempfile.mkdtemp()
+with open(os.path.join(_NOOP, "terminal-notifier"), "w") as f:
+    f.write("#!/bin/sh\n")
+os.chmod(os.path.join(_NOOP, "terminal-notifier"), 0o755)
+ORIG_PATH = _NOOP + os.pathsep + os.environ.get("PATH", "")
+os.environ["PATH"] = ORIG_PATH
 INIT = '{"type":"system","subtype":"init","session_id":"sess-abc"}'
 APPROVE = "Approve and start (Recommended)"
 
