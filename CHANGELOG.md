@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- A finished dispatch that gains new epic children (typically bugs filed by Run QA) now goes to `paused` with an event, instead of running again and ending `done` with a queued lane nothing starts. Refine the new issues, then press **Resume** to start their lanes.
+
 ### Added
 
 - New GitHub Pages showcase in `site/` replaces the old Field Guide: a landing page, a scroll-driven pipeline, a UI tour and a case study. All of it uses real captures from one todoman run (idea to ready PR in 11.5 min). `.github/workflows/pages.yml` builds and deploys it on pushes to master that touch `site/`.

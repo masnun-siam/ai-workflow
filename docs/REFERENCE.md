@@ -168,7 +168,7 @@ activity feed in plain sentences. **Retry** on red CI asks the issue's session t
 <branch>**, **Run QA** and **Grind the final PR**; none runs by itself, and a dispatch of picked issues offers none of them.
 The server ticks every running dispatch every 30 s from the board poll, the grind state files and each
 lane's session; grind rounds a lane owns are typed into the lane (`dispatch-due:` in the grind state)
-instead of starting a separate session, and the epic is re-read every 5 minutes so new children join (a dispatch of picked issues re-reads only its listed issues; none joins).
+instead of starting a separate session, and the epic is re-read every 5 minutes so new children join; a finished (`done`) dispatch that gains one goes to `paused` until the new issues are refined and the user presses **Resume** (a dispatch of picked issues re-reads only its listed issues; none joins).
 `GET /api/dispatches`, `GET /api/dispatches/<id>` (with events; `issues` is the list or null), `GET /api/dispatches/<id>/lane?key=`,
 `POST /api/dispatches` (`{epic, settings}` or `{issues: ["owner/repo#n", ...], settings}`, never both; 1 to 30 issues in one repo, no `feature_branch`; 400 for both or neither, a bad ref, more than 30, two repos, a feature branch or no open issue; 409 when a picked issue is a lane of a dispatch not done or cancelled), `POST /api/dispatches/plan` (the same body), `POST
 /api/dispatches/<id>/settings|state|lane|end|seen`.
