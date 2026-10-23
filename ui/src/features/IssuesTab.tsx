@@ -62,18 +62,17 @@ export function IssuesTab({ f, repo }: { f: Feature; repo: string }) {
  * Issues grouped by status, one row each with its signals and one action. An issue a running dispatch owns
  * shows its dispatch stage and links there instead of offering a Start. Shared by a feature and the Small changes tab.
  */
-export function IssueTable({ issues, repo, picked = [], onPick, lockRefine }: { issues: FeatureIssue[]; repo: string; picked?: number[]; onPick?: (n: number) => void; lockRefine?: string }) {
+export function IssueTable({ issues, repo, picked = [], onPick, canPick = (i) => i.column === 'unrefined', lockRefine }: { issues: FeatureIssue[]; repo: string; picked?: number[]; onPick?: (n: number) => void; canPick?: (i: FeatureIssue) => boolean; lockRefine?: string }) {
   const panel = usePanel();
   const owned = useOwnedIssues(repo);
   const refining = useRefining(repo);
   const groups = ATTENTION_ORDER.map((s) => [s, issues.filter((i) => i.status === s)] as const).filter(([, l]) => l.length);
-  const unrefined = issues.filter((i) => i.column === 'unrefined').map((i) => i.n);
   return (
     <div className="tbl-wrap">
       <table className="tbl">
         <thead>
           <tr>
-            <th style={{ width: 28 }}><span className="sr">Pick to refine</span></th>
+            <th style={{ width: 28 }}><span className="sr">Pick issues</span></th>
             <th style={{ width: 70 }}>Issue</th>
             <th>Title</th>
             <th>Status</th>
@@ -90,7 +89,7 @@ export function IssueTable({ issues, repo, picked = [], onPick, lockRefine }: { 
                 return (
                   <tr key={i.n} className="click" onClick={() => panel.open({ kind: 'issue', repo, n: i.n })}>
                     <td onClick={(e) => e.stopPropagation()}>
-                      {onPick && unrefined.includes(i.n) && !refining.has(i.n) ? <input type="checkbox" className="issue-pick" aria-label={`Pick #${i.n} to refine`} checked={picked.includes(i.n)} onChange={() => onPick(i.n)} /> : null}
+                      {onPick && canPick(i) && !refining.has(i.n) && !own ? <input type="checkbox" className="issue-pick" aria-label={`Pick #${i.n}`} checked={picked.includes(i.n)} onChange={() => onPick(i.n)} /> : null}
                     </td>
                     <td className="ref">#{i.n}</td>
                     <td className="title">
