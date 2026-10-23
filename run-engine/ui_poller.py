@@ -27,7 +27,7 @@ with `stale: True, fetched_at: None`):
          "blocked_by": [{"n": int, "state": "OPEN" | "CLOSED"}],   # all blockers; filter on state
          "prs": [{"n": int, "url": str, "draft": bool, "state": "OPEN"|"CLOSED"|"MERGED",
                   "merged_at": str | None, "head": str, "ci": "success"|"failure"|"pending"|"none",
-                  "conflict": bool}]}         # GitHub says the PR conflicts with its base
+                  "conflict": bool, "sha": str | None}]}  # GitHub says the PR conflicts with its base
       ],
       "merged": [   # PRs merged in the last 7 days, newest first
         {"n": int, "title": str, "url": str, "merged_at": str, "head": str,
@@ -67,7 +67,7 @@ FULL_EVERY = 600  # full fetch at least this often, even when the probe saw no c
 LOW_BUDGET = 1000  # GraphQL points left of the hourly 5000
 MERGED_DAYS = 7
 
-_PR = "number url isDraft state mergedAt headRefName reviewDecision mergeable statusCheckRollup { state }"
+_PR = "number url isDraft state mergedAt headRefName headRefOid reviewDecision mergeable statusCheckRollup { state }"
 # open PRs also carry who approved and how many checks ran (the Inbox's "ready to merge" line)
 _PR_OPEN = (
     _PR
@@ -147,6 +147,7 @@ def _pr(n: dict) -> dict:
         "state": n.get("state"),
         "merged_at": n.get("mergedAt"),
         "head": n.get("headRefName"),
+        "sha": n.get("headRefOid"),
         "ci": ci,
         "review": _REVIEW.get(n.get("reviewDecision") or "", "none"),  # no review rule on the repo: none
         "conflict": n.get("mergeable") == "CONFLICTING",  # UNKNOWN while GitHub computes it: not a conflict

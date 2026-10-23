@@ -22,7 +22,7 @@ user turned auto-merge on.
 |---|---|---|
 | `--max N` | tabs running at once | 2 |
 | `--grind off\|simple\|full` | grind each ready PR: `simple` ends on any approval, `full` on zero blocker/should-fix | full |
-| `--ci wait\|defer\|ignore` | `wait`: CI gates each lane as today; `defer`: CI blocks only the merge; `ignore`: CI never blocks, red CI can merge | wait |
+| `--ci wait\|defer\|ignore` | `wait`: CI gates each lane as today; `defer`: CI blocks only the merge (red CI at the gate sends the CI-fix prompt once per push); `ignore`: CI never blocks, red or pending CI can merge with a warning event | wait |
 | `--auto-merge` | merge (merge commit) once CI is green, an approving review is in and the grind is done | off: the tab waits for the user's merge |
 | `--feature-branch <name>` | every PR targets this branch, cut from the default branch if missing | each issue's own base |
 | `--model`, `--effort` | for every tab | Claude's defaults |

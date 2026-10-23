@@ -221,6 +221,53 @@ assert dc["lanes"][K(91)]["stage"] == "conflict_fix" and not dc["lanes"][K(91)].
 assert "conflicts" in rc.sent[-1][1]
 print("  ok  merge gate, red CI, conflict")
 
+
+# --- merge gate follows the ci mode
+def gate_facts(ci, sha="a"):
+    return {"agent": "idle", "solo": True, "pr": pr(9, ci=ci, sha=sha)}
+
+
+for mode, ci_state, want in [
+    ("wait", "failure", "CI is not green"), ("wait", "pending", "CI is not green"), ("wait", "none", "CI is not green"),
+    ("wait", "success", None), ("defer", "failure", "waiting for green CI (defer)"),
+    ("defer", "pending", "waiting for green CI (defer)"), ("defer", "none", None), ("defer", "success", None),
+    ("ignore", "failure", None), ("ignore", "pending", None), ("ignore", "success", None),
+]:  # fmt: skip
+    assert dr._gate({}, gate_facts(ci_state), {"ci": mode, "grind": "off"}) == want, (mode, ci_state)
+assert dr._gate({}, gate_facts("failure"), {"grind": "off"}) == "CI is not green"  # no ci setting: wait
+dset = {"ci": "defer", "grind": "off", "auto_merge": True}
+lane = {"n": 9, "stage": "merge_gate"}
+p1, a1 = dr.step(lane, gate_facts("failure"), dset, 8000)
+assert p1["gate"] == "waiting for green CI (defer)" and not p1.get("held")
+assert a1 == [("send", dr.ci_fix_prompt(9))] and p1["ci_fixed"] == "a"
+lane.update(p1)
+p2, a2 = dr.step(lane, gate_facts("failure"), dset, 8001)
+assert not a2 and not any(x[0] == "merge" for x in a2)  # same head commit: no second prompt
+p3, a3 = dr.step(lane, gate_facts("failure", sha="b"), dset, 8002)
+assert a3 == [("send", dr.ci_fix_prompt(9))]  # a new red push prompts again
+p4, a4 = dr.step({**lane, "stage": "awaiting_merge"}, gate_facts("pending"), dset, 8003)
+assert p4["stage"] == "merge_gate" and not a4
+for ci_state in ("success", "none"):
+    pm, am = dr.step(lane, gate_facts(ci_state), dset, 8004)
+    assert am == [("merge", 9)] and pm["gate"] is None, ci_state
+    pm, am = dr.step(lane, gate_facts(ci_state), {**dset, "auto_merge": False}, 8004)
+    assert pm["stage"] == "awaiting_merge" and ("merge", 9) not in am, ci_state
+pw, aw = dr.step({**lane, "ci_fixed": "a"}, gate_facts("failure"), {**dset, "ci": "wait"}, 8005)
+assert pw["held"] == "CI is red"  # defer -> wait at the gate: held as today
+for ci_state in ("failure", "pending"):
+    pi, ai = dr.step(lane, gate_facts(ci_state), {**dset, "ci": "ignore"}, 8006)
+    assert ai == [("merge", 9)] and not pi.get("held"), ci_state
+    pi, ai = dr.step(lane, gate_facts(ci_state), {"ci": "ignore", "grind": "off"}, 8006)
+    assert pi["stage"] == "awaiting_merge" and ("merge", 9) not in ai, ci_state
+# ignore merging with CI not green leaves a warning event; green leaves none
+for ci_state, warn in [("failure", "merged with red CI"), ("pending", "merged with CI pending"), ("success", None)]:
+    di = dr.create("o/r#95", "headless", {"grind": "off", "auto_merge": True, "ci": "ignore"}, [child(96)])
+    di["lanes"][K(96)].update(stage="merge_gate", handle={"n": 96}, pr=196)
+    evs = dr.tick(di, {K(96): {"issue_open": True, "agent": "idle", "solo": True, "pr": pr(196, ci=ci_state)}},
+                  FakeRunner(), merge, now=1)  # fmt: skip
+    assert [e["text"] for e in evs if e["kind"] == "warning"] == ([warn] if warn else []), (ci_state, evs)
+print("  ok  merge gate follows the ci mode")
+
 # --- merged -> followups -> closed, tab closed, dependent #2 starts
 fm = {**fg, "pr": pr(101, state="MERGED", approved=True)}
 dr.tick(d, {K(1): fm}, run, merge, now=1021)

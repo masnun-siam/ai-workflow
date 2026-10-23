@@ -27,6 +27,7 @@ def pr(n, state="OPEN", draft=False, ci="SUCCESS", merged=None):
         "state": state,
         "mergedAt": merged,
         "headRefName": f"issue-{n}",
+        "headRefOid": f"sha{n}",
         "statusCheckRollup": {"state": ci} if ci else None,
     }
 
@@ -261,6 +262,7 @@ d = ui_poller.normalize(f, now=NOW)
 by = {i["n"]: i for i in d["issues"]}
 assert [p["n"] for p in by[6]["prs"]] == [60] and by[6]["prs"][0]["state"] == "OPEN", by[6]["prs"]
 assert [(p["n"], p["draft"]) for p in by[7]["prs"]] == [(61, True)], "branch issue-7-… links the draft PR"
+assert by[7]["prs"][0]["sha"] == "sha61", "the head commit rides along for the dispatch gate"
 assert [(p["n"], p["state"]) for p in by[8]["prs"]] == [(62, "MERGED")]
 m62 = next(m for m in d["merged"] if m["n"] == 62)
 assert m62["closes"] == [8] and m62["epic"] == 1, m62

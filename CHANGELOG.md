@@ -4,6 +4,7 @@
 
 ### Added
 
+- Dispatch merge gate follows the CI mode: `defer` merges only on green or no CI, holds as "waiting for green CI (defer)" and sends the CI-fix prompt once per red head commit (`pr.sha` in lane facts); `ignore` skips the CI check and a merge with red or pending CI adds a "merged with red CI" / "merged with CI pending" warning event and notification. `wait` is unchanged.
 - Approve PRD (Inbox and feature page, one shared `approveArgs`) now also tells the session to commit only the PRD file, push onto the PRD's open PR or a `prd/<slug>` branch, open a ready PR, merge it with `--merge` right away when the repo owner is the signed-in `gh` user, and report any failed step. Both confirm dialogs say so.
 - The question form (Inbox, session page, dispatch lane panel) renders question text and option descriptions as markdown, like the transcript (escaped, http(s) links in a new tab). An option's `preview` shows as a monospace, whitespace-preserving block that scrolls sideways. Labels stay plain text.
 - Browser notifications work again: while permission is granted, every aiw tab polls `/api/notifications` (also in the background) and shows each new event as a system notification through the service worker. The same tag shows once across tabs, a tab shows only events after it opened, and a click focuses or opens an aiw window on the event's page.
