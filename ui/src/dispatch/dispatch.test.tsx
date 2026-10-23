@@ -1,7 +1,10 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { App } from '../App';
+import { QueryProvider } from '../QueryProvider';
+import { NewDispatchDialog } from './NewDispatchDialog';
 import type { Dispatch, Lane } from '../api/types';
 import { counts, eventText, laneNote, levels, nowLine } from './vocab';
 
@@ -26,9 +29,13 @@ const disp = (o: Partial<Dispatch> = {}): Dispatch => ({
 
 let routes: Record<string, unknown>;
 let posts: [string, unknown][];
+let planSmall: unknown;
+let startError: { error: string } | null;
 beforeEach(() => {
   localStorage.clear();
   posts = [];
+  startError = null;
+  planSmall = { epic: null, issues: ['o/r#412', 'o/r#415'], title: 'Small changes: #412, #415', settings: S, runner: 'headless', lanes: [{ repo: 'o/r', n: 412, title: 'First', refined: true, deps: [] }, { repo: 'o/r', n: 415, title: 'Second', refined: true, deps: ['o/r#412'] }], waves: [['o/r#412'], ['o/r#415']], warnings: ['o/r#415: waits for o/r#9'] };
   routes = {
     '/api/repos': { repos: [{ slug: 'o/r', name: 'R', path: '/x' }], can_browse: false, scan_roots: [] },
     '/api/sessions': { sessions: [], limits: {}, usage: {}, afk: AFK },
@@ -44,6 +51,8 @@ beforeEach(() => {
     if (init?.method === 'POST') {
       const body = init.body ? JSON.parse(init.body as string) : null;
       posts.push([path, body]);
+      if (path === '/api/dispatches/plan' && body.issues) return json(planSmall);
+      if (path === '/api/dispatches' && startError) return json(startError, 409);
       if (path === '/api/dispatches/plan')
         return json({ epic: 'o/r#1', title: 'Payments', settings: S, runner: 'headless', lanes: [{ repo: 'o/r', n: 2, title: 'A', refined: true, deps: [] }, { repo: 'o/r', n: 5, title: 'B', refined: false, deps: [] }], waves: [['o/r#2']], warnings: ['o/r#5: needs refine'] });
       return json(disp());
@@ -276,5 +285,75 @@ describe('Inbox dispatch rows', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Merge' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Merge', hidden: false }));
     await waitFor(() => expect(posts.at(-1)).toEqual(['/api/dispatches/abc123abc123/lane', { lane: 'o/r#3', action: 'merge' }]));
+  });
+});
+
+describe('Run small changes dialog', () => {
+  const PICKED = [{ n: 412, title: 'First' }, { n: 415, title: 'Second' }];
+  const open = (onOpenChange = vi.fn()) => {
+    render(
+      <QueryProvider>
+        <MemoryRouter initialEntries={['/x?repo=o/r']}>
+          <Routes>
+            <Route path="/dispatches/:id" element={<p>dispatch page</p>} />
+            <Route path="*" element={<NewDispatchDialog open onOpenChange={onOpenChange} issues={PICKED} />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryProvider>,
+    );
+    return onOpenChange;
+  };
+
+  it('shows the picked issues as chips, with no epic or feature branch field', async () => {
+    open();
+    expect(await screen.findByText('Run small changes')).toBeTruthy();
+    expect(screen.getByText('#412 First')).toBeTruthy();
+    expect(screen.getByText('#415 Second')).toBeTruthy();
+    expect(screen.queryByLabelText('Epic')).toBeNull();
+    expect(screen.queryByText('Feature branch')).toBeNull();
+  });
+
+  it('previews waves and warnings, then starts and opens the dispatch page', async () => {
+    const onOpenChange = open();
+    await userEvent.click(await screen.findByRole('button', { name: 'Preview' }));
+    expect(await screen.findByText('o/r#415: waits for o/r#9')).toBeTruthy();
+    expect(screen.getByText('Starts first')).toBeTruthy();
+    const body = { issues: ['o/r#412', 'o/r#415'], settings: { ...S } };
+    expect(posts.at(-1)).toEqual(['/api/dispatches/plan', body]);
+    await userEvent.click(screen.getByRole('button', { name: 'Start 2 issues' }));
+    expect(await screen.findByText('dispatch page')).toBeTruthy();
+    expect(posts.at(-1)).toEqual(['/api/dispatches', body]);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('says so when none of the picked issues is open, and cannot start', async () => {
+    planSmall = { ...(planSmall as object), lanes: [], waves: [], warnings: [] };
+    open();
+    await userEvent.click(await screen.findByRole('button', { name: 'Preview' }));
+    expect(await screen.findByText(/none of the picked issues is open/)).toBeTruthy();
+    expect((screen.getByRole('button', { name: /^Start/ }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('keeps the dialog open when start answers 409', async () => {
+    startError = { error: 'o/r#412 runs in dispatch abc' };
+    const onOpenChange = open();
+    await userEvent.click(await screen.findByRole('button', { name: 'Preview' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Start 2 issues' }));
+    await waitFor(() => expect(posts.at(-1)?.[0]).toBe('/api/dispatches'));
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(screen.getByText('Run small changes')).toBeTruthy();
+  });
+
+  it('hides Feature branch in the live settings of an issue-list dispatch only', async () => {
+    routes['/api/dispatches/abc123abc123'] = disp({ ...SMALL });
+    window.location.hash = '#/dispatches/abc123abc123?repo=o/r';
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: /Settings/ }));
+    expect(screen.queryByText('Feature branch')).toBeNull();
+    cleanup();
+    routes['/api/dispatches/abc123abc123'] = disp();
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: /Settings/ }));
+    expect(screen.getByText('Feature branch')).toBeTruthy();
   });
 });

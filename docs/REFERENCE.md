@@ -147,7 +147,7 @@ and the rest as history; **Run an epic** takes an epic (typed, or picked from th
 epics), grind mode (Off, Simple, Full), auto-merge, lanes at once (1–10), a feature branch, model and
 effort, then **Preview** shows the waves and warnings (unrefined issues, cycles, missing checkouts,
 repos without a Slack channel, open blockers outside the epic) before **Start**. Lanes started here run
-as headless sessions; `herdr-dispatch` starts herdr ones, and both show here. A dispatch page has the
+as headless sessions (the same dialog, given picked issues, becomes **Run small changes**: chips instead of the epic field, no feature branch, `issues` in the request); `herdr-dispatch` starts herdr ones, and both show here. A dispatch page has the
 live settings, **Pause**/**Resume**/**Cancel**, a one-sentence summary with time and spend, a **Needs
 you** strip (each issue waiting on you with its one action: Merge, Answer, Retry), the issues as a
 **Graph** (Starts first, Then: columns by what they wait for, edges to dependents, the repo on cards when
