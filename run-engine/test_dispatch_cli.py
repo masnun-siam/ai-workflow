@@ -85,6 +85,69 @@ except ValueError:
     pass
 print("  ok  children_from")
 
+d0 = dr.create("o/r#50", "headless", {"grind": "off"}, [])
+# --- parse_issues, issues_from, resolve_issues, preview and start for an issue list
+assert dc.parse_issues(["O/R#3", "o/r#1"]) == ("O/R", [3, 1])
+for bad in ([], ["o/r#1"] * 31, ["12"], ["o/r"], ["o/r#1", "x/y#2"], ["o/r#1; rm"]):
+    try:
+        dc.parse_issues(bad)
+        raise AssertionError(f"accepted {bad!r}")
+    except ValueError:
+        pass
+iresp = {
+    "data": {
+        "repository": {
+            "i0": node(
+                3, blockers=[("o/r", 2, "OPEN"), ("o/r", 1, "CLOSED"), ("x/y", 9, "OPEN"), ("x/y", 8, "CLOSED")]
+            ),
+            "i1": node(2, labels=()),
+            "i2": node(1, state="CLOSED"),
+        }
+    }
+}
+refs = ["o/r#3", "o/r#2", "o/r#1"]
+ikids, ioutside, iclosed = dc.issues_from(iresp, refs)
+assert [(c["n"], c["refined"], c["deps"]) for c in ikids] == [(2, False, []), (3, True, ["o/r#2"])], ikids
+assert ioutside == {"o/r#3": ["x/y#9"]} and iclosed == ["o/r#1"]
+try:
+    dc.issues_from({"data": {"repository": {"i0": None}}}, ["o/r#7"])
+    raise AssertionError("not-found accepted")
+except ValueError as e:
+    assert "o/r#7" in str(e)
+gh_calls = []
+
+
+def gh_issues(argv):
+    gh_calls.append(argv)
+    return cp(json.dumps(iresp))
+
+
+ri = dc.resolve_issues(refs, gh_issues)
+assert len(gh_calls) == 1 and "i2: issue(number: 1)" in gh_calls[0][3]
+assert ri["epic"] is None and ri["issues"] == ["o/r#2", "o/r#3"] and ri["closed"] == ["o/r#1"]
+assert ri["title"] == "Small changes: #2, #3"
+w = dc.preview(ri, {"grind": "off"}, "headless")
+assert w["epic"] is None and w["issues"] == ri["issues"] and w["title"] == ri["title"]
+assert "o/r#2: needs refine" in w["warnings"]
+assert "o/r#3: blocked by open x/y#9 outside the pick" in w["warnings"]
+assert "o/r#1: closed, left out" in w["warnings"]
+di = dc.start(None, "headless", dr.check_settings({**dr.DEFAULTS, "grind": "off"}), gh=gh_issues, issues=refs)
+assert di["epic"] is None and di["issues"] == ["o/r#2", "o/r#3"]
+assert not any("git/refs" in " ".join(c) for c in gh_calls)
+try:
+    dc.start(
+        None,
+        "headless",
+        dr.check_settings(dict(dr.DEFAULTS)),
+        gh=lambda a: cp(json.dumps({"data": {"repository": {"i0": node(1, state="CLOSED")}}})),
+        issues=["o/r#1"],
+    )
+    raise AssertionError("all-closed accepted")
+except ValueError as e:
+    assert str(e) == "none of the picked issues is open"
+assert dc.summary(di)["issues"] == ["o/r#2", "o/r#3"] and dc.summary(dr.load(d0["id"]))["issues"] is None
+print("  ok  issue list")
+
 # --- preview warnings: checkout, slack channel, outside blockers, unrefined
 r = {"epic": "o/r#1", "title": "Epic", "children": kids, "outside": outside}
 w = dc.preview(r, {"grind": "full"}, "herdr")["warnings"]

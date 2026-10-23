@@ -22,6 +22,8 @@ from shared import data_dir, run
 UI_PORT = 8420
 WATCH_KINDS = ("needs_you", "held", "awaiting_merge", "finished", "end")
 _EPIC = re.compile(r"^(?:([\w.-]+/[\w.-]+)#)?(\d+)$")
+_ISSUE = re.compile(r"^([\w.-]+/[\w.-]+)#(\d+)$")
+MAX_ISSUES = 30
 
 CHILDREN = """
 query($owner: String!, $name: String!, $n: Int!) {
@@ -59,35 +61,87 @@ def parse_epic(text: str, gh=_gh) -> tuple:
     return repo, int(m.group(2))
 
 
+def _child(x: dict, keys: set) -> tuple:
+    """One GraphQL issue node -> (child for dispatch_run, open blockers outside `keys`)."""
+    deps, ext = [], []
+    for b in (x.get("blockedBy") or {}).get("nodes") or []:
+        bk = dr.key(b["repository"]["nameWithOwner"], b["number"])
+        if bk in keys:
+            deps.append(bk)
+        elif b.get("state") == "OPEN":
+            ext.append(bk)
+    child = {
+        "repo": x["repository"]["nameWithOwner"],
+        "n": x["number"],
+        "title": x.get("title") or "",
+        "refined": any(lb.get("name") == "refined" for lb in (x.get("labels") or {}).get("nodes") or []),
+        "deps": sorted(deps),
+    }
+    return child, ext
+
+
+def _children(nodes: list) -> tuple:
+    keys = {dr.key(x["repository"]["nameWithOwner"], x["number"]) for x in nodes}
+    out, outside = [], {}
+    for x in nodes:
+        child, ext = _child(x, keys)
+        if ext:
+            outside[dr.key(child["repo"], child["n"])] = ext
+        out.append(child)
+    return sorted(out, key=lambda c: (c["n"], c["repo"])), outside
+
+
 def children_from(response: dict) -> tuple:
     """GraphQL CHILDREN response -> (epic title, children for dispatch_run, open blockers outside the set)."""
     issue = (((response or {}).get("data") or {}).get("repository") or {}).get("issue")
     if not isinstance(issue, dict):
         raise ValueError("epic not found")
     nodes = [x for x in (issue.get("subIssues") or {}).get("nodes") or [] if x.get("state") == "OPEN"]
-    keys = {dr.key(x["repository"]["nameWithOwner"], x["number"]) for x in nodes}
-    out, outside = [], {}
-    for x in nodes:
-        k = dr.key(x["repository"]["nameWithOwner"], x["number"])
-        deps, ext = [], []
-        for b in (x.get("blockedBy") or {}).get("nodes") or []:
-            bk = dr.key(b["repository"]["nameWithOwner"], b["number"])
-            if bk in keys:
-                deps.append(bk)
-            elif b.get("state") == "OPEN":
-                ext.append(bk)
-        if ext:
-            outside[k] = ext
-        out.append(
-            {
-                "repo": x["repository"]["nameWithOwner"],
-                "n": x["number"],
-                "title": x.get("title") or "",
-                "refined": any(lb.get("name") == "refined" for lb in (x.get("labels") or {}).get("nodes") or []),
-                "deps": sorted(deps),
-            }
-        )
-    return issue.get("title") or "", sorted(out, key=lambda c: (c["n"], c["repo"])), outside
+    kids, outside = _children(nodes)
+    return issue.get("title") or "", kids, outside
+
+
+def parse_issues(refs) -> tuple:
+    """1 to 30 'owner/repo#n' strings in one repo -> (repo, [n, ...])."""
+    refs = list(refs or [])
+    if not 1 <= len(refs) <= MAX_ISSUES:
+        raise ValueError(f"pick 1 to {MAX_ISSUES} issues, got {len(refs)}")
+    repo, nums = None, []
+    for ref in refs:
+        m = _ISSUE.match(str(ref).strip())
+        if not m:
+            raise ValueError(f"issue must be owner/repo#N, got {ref!r}")
+        if repo is not None and m.group(1).lower() != repo.lower():
+            raise ValueError(f"all issues must be in one repo, got {repo} and {m.group(1)}")
+        repo = repo or m.group(1)
+        nums.append(int(m.group(2)))
+    return repo, nums
+
+
+def issues_from(response: dict, refs) -> tuple:
+    """GraphQL ISSUES response -> (children, open blockers outside the list, keys of listed issues that are closed)."""
+    repo, nums = parse_issues(refs)
+    repository = ((response or {}).get("data") or {}).get("repository") or {}
+    found, closed = [], []
+    for i, n in enumerate(nums):
+        x = repository.get(f"i{i}")
+        if not isinstance(x, dict):
+            raise ValueError(f"issue {repo}#{n} not found")
+        if x.get("state") == "OPEN":
+            found.append(x)
+        else:
+            closed.append(dr.key(x["repository"]["nameWithOwner"], x["number"]))
+    kids, outside = _children(found)
+    return kids, outside, sorted(closed)
+
+
+def issues_query(nums) -> str:
+    fields = (
+        "number title state repository { nameWithOwner } labels(first: 20) { nodes { name } } "
+        "blockedBy(first: 20) { nodes { number state repository { nameWithOwner } } }"
+    )
+    aliases = " ".join(f"i{i}: issue(number: {int(n)}) {{ {fields} }}" for i, n in enumerate(nums))
+    return f"query($owner: String!, $name: String!) {{ repository(owner: $owner, name: $name) {{ {aliases} }} }}"
 
 
 def resolve(epic: str, gh=_gh) -> dict:
@@ -98,6 +152,24 @@ def resolve(epic: str, gh=_gh) -> dict:
         raise ValueError(f"cannot read epic {repo}#{n}: {(p.stderr or p.stdout).strip()[:200]}")
     title, kids, outside = children_from(json.loads(p.stdout))
     return {"epic": f"{repo}#{n}", "title": title, "children": kids, "outside": outside}
+
+
+def resolve_issues(refs, gh=_gh) -> dict:
+    repo, nums = parse_issues(refs)
+    owner, name = repo.split("/")
+    p = gh(["api", "graphql", "-f", f"query={issues_query(nums)}", "-f", f"owner={owner}", "-f", f"name={name}"])
+    if p.returncode != 0:
+        raise ValueError(f"cannot read issues in {repo}: {(p.stderr or p.stdout).strip()[:200]}")
+    kids, outside, closed = issues_from(json.loads(p.stdout), refs)
+    keys = [dr.key(c["repo"], c["n"]) for c in kids]
+    return {
+        "epic": None,
+        "issues": keys,
+        "title": dr.issues_title(keys),
+        "children": kids,
+        "outside": outside,
+        "closed": closed,
+    }
 
 
 def channel(repo: str):
@@ -117,14 +189,20 @@ def preview(r: dict, settings: dict, runner: str) -> dict:
     p = dr.plan(r["children"])
     repos = sorted({c["repo"] for c in r["children"]})
     checkouts = {k.lower() for k in dispatch.read_checkouts()}
+    where = "the epic" if r["epic"] else "the pick"
     for k, ext in r["outside"].items():
-        p["warnings"].append(f"{k}: blocked by open {', '.join(ext)} outside the epic")
+        p["warnings"].append(f"{k}: blocked by open {', '.join(ext)} outside {where}")
+    for k in r.get("closed") or []:
+        p["warnings"].append(f"{k}: closed, left out")
     for repo in repos:
         if runner == "herdr" and repo.lower() not in checkouts:
             p["warnings"].append(f"{repo}: no local checkout registered (aiw ui -> Repositories)")
         if settings.get("grind", "full") != "off" and channel(repo) is None:
             p["warnings"].append(f"{repo}: no Slack channel, its lanes skip grinding")
-    return {"epic": r["epic"], "title": r["title"], "settings": settings, "runner": runner, "lanes": r["children"], **p}
+    out = {"epic": r["epic"], "title": r["title"], "settings": settings, "runner": runner, "lanes": r["children"], **p}
+    if not r["epic"]:
+        out["issues"] = r.get("issues")
+    return out
 
 
 def ensure_feature_branch(repo: str, branch: str, gh=_gh) -> bool:
@@ -174,7 +252,9 @@ def summary(d: dict) -> dict:
         }
         for x in sorted(d["lanes"].values(), key=lambda x: (x["n"], x["repo"]))
     ]
-    return {k: d.get(k) for k in ("id", "epic", "runner", "state", "settings", "final_prs")} | {"lanes": lanes}
+    return {k: d.get(k) for k in ("id", "epic", "issues", "runner", "state", "settings", "final_prs")} | {
+        "lanes": lanes
+    }
 
 
 # --------------------------------------------------------------------------- verbs
@@ -184,10 +264,15 @@ def cmd_plan(a) -> None:
     print(json.dumps(preview(resolve(a.epic), _settings(a), a.runner), indent=1))
 
 
-def start(epic: str, runner: str, s: dict, workspace=None, gh=_gh) -> dict:
-    """Resolve the epic, cut the feature branch if asked, record the dispatch. The UI server ticks it."""
+def start(epic, runner: str, s: dict, workspace=None, gh=_gh, issues=None) -> dict:
+    """Resolve the epic (or the picked issues), cut the feature branch if asked, record the dispatch. The UI server ticks it."""
     if runner == "herdr" and not workspace:
         raise ValueError("the herdr runner needs a workspace id (herdr pane current)")
+    if issues:
+        r = resolve_issues(issues, gh)
+        if not r["children"]:
+            raise ValueError("none of the picked issues is open")
+        return dr.create(None, runner, s, r["children"], workspace=workspace, title=r["title"], issues=r["issues"])
     r = resolve(epic, gh)
     if not r["children"]:
         raise ValueError(f"{r['epic']} has no open child issues")
@@ -211,7 +296,7 @@ def cmd_ls(a) -> None:
     for d in dr.list_all():
         n = len(d["lanes"])
         closed = sum(1 for x in d["lanes"].values() if x["stage"] == "closed")
-        print(f"{d['id']}  {d['state']:<9}  {d['epic']:<24}  {closed}/{n} closed  {d['runner']}")
+        print(f"{d['id']}  {d['state']:<9}  {d['epic'] or d['title']:<24}  {closed}/{n} closed  {d['runner']}")
 
 
 def cmd_show(a) -> None:
