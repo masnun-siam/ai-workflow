@@ -15,6 +15,7 @@ import fcntl
 import io
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -27,6 +28,7 @@ from unittest import mock
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
+import repo_skills  # noqa: E402
 import ui_notify  # noqa: E402
 import ui_runner  # noqa: E402
 import ui_server  # noqa: E402
@@ -1286,7 +1288,8 @@ def prgrind_cases() -> int:
         assert act == "started", act
         ss = all_sessions()
         assert len(ss) == 2, ss
-        cmds = [r for r in ss if r["command"] == f"/pr-grind {THREAD}"]
+        # the tick's session runs the resolved spelling (no repo copy in work, #439)
+        cmds = [r for r in ss if repo_skills.is_skill(r["command"], "pr-grind", THREAD)]
         assert len(cmds) == 2 and {r["repo"] for r in cmds} == {work}, ss
         assert any(r["link"] == PR_URL for r in cmds), ss
         wait_for(lambda: os.path.exists(os.path.join(fk, "headless")))
@@ -1296,14 +1299,14 @@ def prgrind_cases() -> int:
         a = lines(fk, "argv")
         parts = a.split("\n")
         assert parts[:5] == ui_runner.CLAUDE_ARGS and parts[5] == "--append-system-prompt", parts
-        assert ui_runner.REENTRY_PROMPT in a and parts[-2] == f"/pr-grind {THREAD}", parts
+        assert ui_runner.REENTRY_PROMPT in a and parts[-2] == f"/ai-workflow:pr-grind {THREAD}", parts
 
     def interactive_unchanged():
         d, fk, work = pset()
         os.environ.pop("AIW_HEADLESS", None)
         rec = ui_runner.start("/implement-issue 1", work)
         wait_status(rec["id"], {"done", "failed"})
-        assert lines(fk, "argv").split("\n")[:-1] == ui_runner.CLAUDE_ARGS + ["/implement-issue 1"]
+        assert lines(fk, "argv").split("\n")[:-1] == ui_runner.CLAUDE_ARGS + ["/ai-workflow:implement-issue 1"]
         assert lines(fk, "headless") == "UNSET"
         assert ui_runner.PRGRIND_HEARTBEAT == 1500
 
@@ -1413,7 +1416,7 @@ def prgrind_cases() -> int:
         ui_sessions.update(r["id"], status="done")
         act, _ = tick(path)
         assert act == "started", act
-        assert any(x["command"] == f"/pr-grind {THREAD}" for x in all_sessions())
+        assert any(x["command"] == f"/ai-workflow:pr-grind {THREAD}" for x in all_sessions())
 
     def empty_and_invalid():
         d, fk, work = pset()
@@ -2014,7 +2017,7 @@ try:
         "stream-json",
         "--verbose",
         "--dangerously-skip-permissions",
-        "/implement-issue 42",
+        "/ai-workflow:implement-issue 42",  # no repo copy in work (#439),
     ], lines(fk, "argv")
     assert ui_runner.CLAUDE_ARGS == [
         "--print",
@@ -2272,7 +2275,7 @@ cmd = "/implement-issue 1; touch PWNED"
 rec = ui_runner.start(cmd, work)
 try:
     wait_status(rec["id"], {"done", "failed"})
-    assert lines(fk, "argv").split("\n")[-2] == cmd
+    assert lines(fk, "argv").split("\n")[-2] == "/ai-workflow:" + cmd[1:]  # resolved (#439)
     assert not os.path.exists(os.path.join(work, "PWNED"))
     assert not os.path.exists(os.path.join(fk, "PWNED"))
     ok("metacharacters are one argv element, no shell")
@@ -2416,8 +2419,131 @@ try:
 finally:
     reap(*recs)
 
+
+# ---- repo skills win: every spawn and send is resolved (issue #439) ---------
+def repo_skill_cases():
+    _, fk, work = setup("normal")
+    plain = tempfile.mkdtemp()
+    recs = []
+
+    def copy(co, name="implement-issue"):
+        os.makedirs(os.path.join(co, ".claude", "skills", name), exist_ok=True)
+        open(os.path.join(co, ".claude", "skills", name, "SKILL.md"), "w").close()
+
+    def last_arg():
+        wait_for(lambda: spawned_argv(fk))
+        av = lines(fk, "argv").rstrip("\n").split("\n")
+        os.remove(os.path.join(fk, "argv"))
+        return av
+
+    def hold(cmd, co, batch):
+        """A batch session that keeps running until release() (FAKE mode is read at spawn)."""
+        os.environ["FAKE_CLAUDE_MODE"] = "sleep"
+        r = ui_runner.start(cmd, co, batch=batch)
+        last_arg()
+        os.environ["FAKE_CLAUDE_MODE"] = "normal"
+        return r
+
+    def release(r):
+        open(os.path.join(fk, "finish"), "w").close()
+        wait_finished(r["id"])
+        os.remove(os.path.join(fk, "finish"))
+
+    try:
+        copy(work)
+        for co, want in ((work, "/implement-issue 12"), (plain, "/ai-workflow:implement-issue 12")):
+            for given in ("/implement-issue 12", "/ai-workflow:implement-issue 12"):
+                r = ui_runner.start(given, co)
+                recs.append(r)
+                assert r["command"] == want and last_arg()[-1] == want, (given, co, r["command"])
+                wait_finished(r["id"])
+        ok("start: stores and sends the spelling the cwd resolves to, from either spelling")
+
+        # batch-queued: raw text until release_batch, then resolved against cwd_path at that moment
+        g1 = hold("/worklog 1", plain, ("rs", 1))
+        g2 = ui_runner.start("/ai-workflow:implement-issue 12", plain, batch=("rs", 1))
+        recs += [g1, g2]
+        assert g2["status"] == "queued" and g2["command"] == "/ai-workflow:implement-issue 12", g2
+        copy(plain)
+        release(g1)  # its end releases the batch
+        assert last_arg()[-1] == "/implement-issue 12"
+        assert ui_sessions.load(g2["id"])["command"] == "/implement-issue 12"
+        wait_finished(g2["id"])
+        shutil.rmtree(os.path.join(plain, ".claude"))
+        ok("batch queue: raw until it starts, then resolved and written back")
+
+        # rate-limited start whose copy is added before the reset
+        lim = ui_sessions.create("/worklog 9", plain, None)
+        recs.append(lim)
+        ui_sessions.update(lim["id"], status="limited", limit_resets_at=time.time() + 3600, cwd_path=plain)
+        q = ui_runner.start("/ai-workflow:implement-issue 7", plain)
+        recs.append(q)
+        assert q["status"] == "limited" and q["command"] == "/ai-workflow:implement-issue 7", q
+        copy(plain)
+        ui_runner.resume_stopped(q["id"])
+        assert last_arg()[-1] == "/implement-issue 7"
+        assert ui_sessions.load(q["id"])["command"] == "/implement-issue 7"
+        wait_finished(q["id"])
+        ui_sessions.update(lim["id"], status="done")
+        ok("limited start: resolved against the cwd when it starts, copy added meanwhile")
+
+        # resume / resume_stopped send resolved text and leave command alone
+        a = ui_runner.start("/ai-workflow:worklog 1", work)
+        recs.append(a)
+        last_arg()
+        wait_status(a["id"], ("done",))
+        wait_finished(a["id"])
+        ui_runner.resume(a["id"], "run /ai-workflow:implement-issue 3")
+        av = last_arg()
+        assert "--resume" in av and av[-1] == "run /implement-issue 3", av
+        wait_finished(a["id"])
+        rec = ui_sessions.load(a["id"])
+        assert rec["command"] == "/ai-workflow:worklog 1", rec["command"]
+        ui_sessions.update(a["id"], status="limited", pending_answer="use /implement-issue 4")
+        ui_runner.resume_stopped(a["id"])
+        assert last_arg()[-1] == "use /implement-issue 4"
+        wait_finished(a["id"])
+        ui_sessions.update(a["id"], status="stopped")
+        ui_runner.resume_stopped(a["id"])
+        assert last_arg()[-1] == ui_runner.CONTINUE_PROMPT
+        wait_finished(a["id"])
+        assert ui_sessions.load(a["id"])["command"] == "/ai-workflow:worklog 1"
+        ok("resume and resume_stopped: resolved prompt sent, stored command unchanged")
+
+        # a prompt queued while the session runs is resolved at delivery, not when queued
+        os.environ["FAKE_CLAUDE_MODE"] = "sleep"
+        b = ui_runner.start("/worklog 2", plain)
+        recs.append(b)
+        last_arg()
+        wait_status(b["id"], ("running",))
+        assert ui_runner.send_prompt(b["id"], "/ai-workflow:implement-issue 8") == "queued"
+        assert ui_sessions.load(b["id"])["queued_prompt"] == "/ai-workflow:implement-issue 8"
+        shutil.rmtree(os.path.join(plain, ".claude"))
+        os.environ["FAKE_CLAUDE_MODE"] = "normal"
+        open(os.path.join(fk, "finish"), "w").close()
+        assert last_arg()[-1] == "/ai-workflow:implement-issue 8"
+        os.remove(os.path.join(fk, "finish"))
+        wait_finished(b["id"])
+        ok("queued prompt: raw while queued, resolved when delivered")
+
+        # a cwd that cannot be read fails the start for the usual reason, not in the resolver
+        gone = tempfile.mkdtemp()
+        h1 = hold("/worklog 3", work, ("rs-gone", 1))
+        h2 = ui_runner.start("/implement-issue 5", gone, batch=("rs-gone", 1))
+        recs += [h1, h2]
+        os.rmdir(gone)
+        release(h1)
+        r = wait_status(h2["id"], ("failed",))
+        assert "failed to spawn claude" in r["error"], r["error"]
+        assert repo_skills.resolve("/implement-issue 5", gone) == "/ai-workflow:implement-issue 5"
+        ok("unreadable cwd: plugin spelling, the start fails only at the spawn")
+    finally:
+        reap(*recs)
+
+
 answer_checks()
 stop_checks()
+repo_skill_cases()
 if prgrind_cases():
     sys.exit(1)
 restart_cases()

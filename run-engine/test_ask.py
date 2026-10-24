@@ -285,7 +285,9 @@ def t_spawn_env_argv():
     wait_status(sid, {"done", "failed"})
     wait_finished(sid)
     env_has(fk, sid, prompt=False)
-    assert lines(fk, "argv").split("\n")[:-1] == ui_runner.CLAUDE_ARGS + ["/implement-issue 1"]
+    assert lines(fk, "argv").split("\n")[:-1] == ui_runner.CLAUDE_ARGS + [
+        "/ai-workflow:implement-issue 1"
+    ]  # resolved (#439)
     sid = ui_runner.start("/implement-issue 1", work, gate_questions=True)["id"]
     wait_status(sid, {"done", "failed"})
     wait_finished(sid)

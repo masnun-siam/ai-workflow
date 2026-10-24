@@ -213,10 +213,12 @@ def start(
         )
     exe = _preflight(sid)
     gate = ["--append-system-prompt", HEADLESS_PROMPT] if gate_questions else []
+    text = repo_skills.resolve(command_text, path)  # queued/limited above keep the raw text until they start
     return _spawn(
         sid,
-        [*exe, *CLAUDE_ARGS, *gate, *extra_args, *run_flags, command_text],
+        [*exe, *CLAUDE_ARGS, *gate, *extra_args, *run_flags, text],
         path,
+        command=text,
         cwd_path=path,
         env_extra=env_extra,
         pass_fds=pass_fds,
@@ -258,10 +260,12 @@ def _start_claimed(rec: dict, batch=None) -> None:
     sid = rec["id"]
     try:
         exe = _preflight(sid)
+        text = repo_skills.resolve(rec["command"], rec["cwd_path"])
         _spawn(
             sid,
-            [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, *_run_flags(rec), rec["command"]],
+            [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, *_run_flags(rec), text],
             rec["cwd_path"],
+            command=text,
             cwd_path=rec["cwd_path"],
         )
     except Exception as e:  # noqa: BLE001 - one bad session must not strand the rest of the batch
@@ -304,6 +308,7 @@ def resume(sid: str, answer_text) -> dict:
     path = read_checkouts().get(repo, repo)
     if not isinstance(path, str) or not os.path.isdir(path):
         _fail(sid, f"cannot resume: cwd is not a directory: {repo!r}")
+    answer_text = repo_skills.resolve(answer_text, path)  # sent resolved; the stored command stays
     exe = _preflight(sid)
     return _spawn(
         sid,
@@ -763,15 +768,18 @@ def resume_stopped(sid: str, claude_cmd=None) -> dict:
     if not rec.get("session_id"):
         if rec.get("status") == "limited":  # limited before claude ever reported a session: start over
             exe = _preflight(sid)
+            text = repo_skills.resolve(rec["command"], path)
             return _spawn(
                 sid,
-                [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, *_run_flags(rec), rec["command"]],
+                [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, *_run_flags(rec), text],
                 path,
+                command=text,
                 cwd_path=path,
                 ended_at=None,
                 error=None,
             )
         _fail(sid, "cannot resume: session has no claude session_id")
+    prompt = repo_skills.resolve(prompt, path)
     exe = _preflight(sid)
     return _spawn(
         sid,
