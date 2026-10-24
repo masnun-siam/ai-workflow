@@ -453,7 +453,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/api/sessions":
             recs = ui_sessions.list_sessions()
             body = {
-                "sessions": [_public(r) for r in recs],
+                "sessions": [_public(r) for r in recs if not ui_sessions.is_answerer(r)],
                 "limits": ui_runner.limits(),
                 "usage": ui_usage.snapshot(),
                 "afk": ui_afk.public(recs),

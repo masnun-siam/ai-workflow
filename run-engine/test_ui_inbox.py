@@ -218,6 +218,15 @@ assert "session_failed" in types(
     build(sessions=[f, rec("N2", "done", command="/other", at="2026-10-20T11:00:00+00:00")])
 )
 assert "session_failed" not in types(build(sessions=[{**f, "panel_role": "lens"}]))
+for st_, kw in (
+    ("waiting", {"pending_question": pq()}),
+    ("failed", {"error": "boom"}),
+    ("limited", {"auto_resume": True}),
+    ("queued", {"batch": "b1"}),
+):
+    plain = rec("A1", st_, **kw)
+    assert types(build(sessions=[plain])) != types(build()), st_
+    assert types(build(sessions=[{**plain, "role": "away-answerer"}])) == types(build()), st_
 print("  ok  session_failed")
 
 # needs_cleanup: from the flags, until cleaned
