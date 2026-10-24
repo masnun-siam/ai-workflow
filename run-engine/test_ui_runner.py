@@ -38,7 +38,7 @@ ui_notify.send_mac = lambda *a, **k: None  # the fan-out would show a real banne
 
 passed = 0
 ORIG_PATH = os.environ.get("PATH", "")
-INIT = '{"type":"system","subtype":"init","session_id":"sess-abc"}'
+INIT = '{"type":"system","subtype":"init","session_id":"sess-abc","model":"claude-test"}'
 ASSIST = '{"type":"assistant","message":"hi"}'
 RESULT = '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.0421}'
 RESULT_ERR = '{"type":"result","subtype":"error","is_error":true,"total_cost_usd":0.5}'
@@ -58,7 +58,7 @@ RESUMING=0
 for a in "$@"; do [ "$a" = "--resume" ] && RESUMING=1; done
 printf '%s' "${AIW_HEADLESS-UNSET}" > "$FAKE_DIR/headless"
 echo "$FAKE_CLAUDE_INIT_ENV" > /dev/null
-INIT='{"type":"system","subtype":"init","session_id":"'"${FAKE_SID:-sess-abc}"'"}'
+INIT='{"type":"system","subtype":"init","session_id":"'"${FAKE_SID:-sess-abc}"'","model":"claude-test"}'
 RESULT='{"type":"result","subtype":"success","is_error":false,"total_cost_usd":'"${FAKE_COST:-0.0421}"'}'
 BADRES='{"type":"result","subtype":"error_during_execution","is_error":true,"errors":["No conversation found with session ID: sess-abc"]}'
 case "$FAKE_CLAUDE_MODE" in
@@ -354,6 +354,7 @@ def answer_checks():
         ui_sessions.set_pending(rec["id"], rnd())
         r = ui_sessions.load(rec["id"])
         assert r["status"] == "waiting" and not alive(r["pid"]) and r["session_id"] == "sess-abc", r
+        assert r["model"] == "claude-test", r
         ok("waiting session has no live process")
 
         # -- ask mode: set_pending mid-run survives clean exit

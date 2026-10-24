@@ -189,7 +189,7 @@ open the running session.
 and cost today; **Clean up** lists finished sessions by repo before removing them. A session page
 has banners for waiting (inline answer), limited (reset time, **Resume on another account**, **Don't
 auto-resume**), failed (**Retry**, **Continue in terminal**) and queued (**Start now**), the transcript, a
-composer (a prompt queues while a turn runs), and a facts box with cost and tokens (`$0.44 · 703k tok`).
+composer (a prompt queues while a turn runs), and a facts box with cost, tokens (`$0.44 · 703k tok`), model and effort.
 Sessions auto-resume after a rate limit, and the limit timer releases queued ones after a restart.
 Actions: **Stop** (`POST /api/sessions/<id>/stop`, after a confirm), **Resume**, **Rerun** (replays the
 recorded start request, same repo and account; `POST /api/sessions/<id>/rerun`), and **Start now**

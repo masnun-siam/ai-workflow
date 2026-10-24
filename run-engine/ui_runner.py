@@ -416,6 +416,8 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
             saw_init = True
             asked = False  # a new claude process: an earlier `aiw ask` was answered (or this is a replay after a UI restart)
             ui_sessions.update(sid, session_id=ev.get("session_id"))
+            if isinstance(ev.get("model"), str) and ev["model"]:
+                ui_sessions.update(sid, model=ev["model"])
         elif ev.get("type") == "assistant":
             asked = asked or any(
                 e["kind"] == "tool"
