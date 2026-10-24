@@ -50,6 +50,7 @@ what needs you across every watched repo. It is a React + TypeScript app (source
 from the committed build in `run-engine/ui_dist/`, so using it never needs Node. On first start
 after an upgrade it deletes the old run data from the plugin data dir once and logs what it removed.
 
+- Every text it hands to Claude (a start, a queued or rate-limited start when it begins, an answer, a typed prompt, a resume) is rewritten by `repo_skills.resolve` against the session's working directory: a plugin skill command becomes `/<name>` when the repo has `.claude/skills/<name>/SKILL.md`, else `/ai-workflow:<name>`. A session's stored `command` is what its latest own start ran; answers and resumes leave it alone. A queued or limited session shows the raw text until it starts.
 - It binds to loopback only. `--port` sets the port (default 8420).
 - `--allow-host HOST` is repeatable and matches exactly: use `name:port`, or the bare name for the default 443 serve.
 - To reach it over a tailnet: `tailscale serve --bg 8420`, then

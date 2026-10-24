@@ -132,7 +132,9 @@ mode("ok")
 ui_sessions.update(q["id"], limit_resets_at=past)
 ui_runner.limit_tick(stagger=0)
 wait(q["id"], "done")
-assert any(c.endswith("/implement-issue 6") for c in calls()), calls()  # no session_id -> fresh start
+assert any(c.endswith("/ai-workflow:implement-issue 6") for c in calls()), (
+    calls()
+)  # no session_id -> fresh start, resolved (#439)
 
 # resume on another account: transcript copied into that profile, run rebound
 slug = re.sub(r"[^A-Za-z0-9]", "-", os.path.realpath(work))
