@@ -136,6 +136,7 @@ It starts these as sessions and keeps them going: it takes your answers to `aiw 
 Inbox, the session page or a dispatch's issue panel, resumes after a rate limit, and notifies you.
 **Away mode** answers recommended options and retries failures, dispatch issues included, while you
 are away. Details are in [REFERENCE.md](REFERENCE.md).
+A repo's own copy of a skill (`.claude/skills/<name>/`) is used in place of the plugin's when it has one; see [Repo copies of skills](REFERENCE.md#repo-copies-of-skills).
 
 ## State
 

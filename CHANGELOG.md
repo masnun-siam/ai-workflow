@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- A copy of a plugin skill in a repo's `.claude/skills/<name>/` now takes over everywhere: UI sessions, dispatch lanes and herdr tabs, peer-review panels, pr-grind re-entries and skill-to-skill hand-offs. Stored commands now read `/<name>` (repo copy) or `/ai-workflow:<name>` (plugin). If you keep a stale copy there, delete or update it. `docs/REFERENCE.md` "Repo copies of skills" lists what a copy must keep so the UI can still drive it (#440).
+
 ### Fixed
 
 - `GET /api/sessions` rows now carry the session's `slug`, resolved by real path, so a session started from a symlinked checkout (macOS `/tmp`) still shows its pending row on Small changes and locks Refine (#421).
