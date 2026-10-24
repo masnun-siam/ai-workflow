@@ -426,6 +426,15 @@ describe('Small changes tab', () => {
     expect(await screen.findByText(/Nothing outside a feature/)).toBeTruthy();
   });
 
+  it('wraps the sections in one .stack and renders no empty .list when nothing is pending', async () => {
+    mock();
+    await open('#/features?tab=changes&repo=o/r');
+    const text = await screen.findByText(/Nothing outside a feature/);
+    const stack = text.closest('.stack');
+    expect(stack).toBeTruthy();
+    expect(stack!.querySelector('.list')).toBeNull();
+  });
+
   it('with 0 PRDs the tabs show, the tab counts 3 and the idea box stays in In progress', async () => {
     mock({ lanes: [lane([card(1, 'ready'), card(2, 'ready'), card(3, 'ready')], { epic: null })] });
     await open('#/features?tab=changes&repo=o/r');
