@@ -95,6 +95,39 @@ describe('Inbox', () => {
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Dismiss' }));
     await waitFor(() => expect(posts).toContainEqual(['/api/afk/dismiss', {}]));
   });
+
+  it('away summary rows show picker, reasons, cost and checkboxes', async () => {
+    const q = (question: string, picked: string[], why: string | null) => ({ question, multiSelect: false, allowFreeText: false, options: [{ label: 'A (Recommended)' }, { label: 'B' }], picked, why });
+    const log = [
+      { at: 1700000100, kind: 'answer', sid: 's1', command: 'implement-issue #455', question: 'Which store?', picked: 'A', id: 's1:r1', by: 'opus', answerer: 'ans1', cost: 0.31, changed: false, questions: [q('Which store?', ['A (Recommended)'], 'matches the state file')] },
+      { at: 1700000200, kind: 'answer', sid: 's2', command: 'create-prd', question: 'How many epics?', picked: 'B', id: 's2:r1', by: 'recommended', answerer: null, cost: null, changed: false, questions: [q('How many epics?', ['B'], null)] },
+      { at: 1700000300, kind: 'held', sid: 's3', command: 'create-tasks #470', question: 'Delete branch?', picked: '', id: 's3:r1', answerer: 'ans3', cost: 0.12, reason: 'destroys unmerged work', questions: [q('Delete branch?', [], null)] },
+      { at: 1700000400, kind: 'answer', sid: 's4', command: 'legacy-cmd', question: 'Old?', picked: 'Yes' },
+      { at: 1700000500, kind: 'answer', sid: 's5', command: 'done-cmd', question: 'Changed?', picked: 'A', id: 's5:r1', by: 'recommended', changed: true, questions: [q('Changed?', ['A (Recommended)'], null)] },
+      { at: 1700000600, kind: 'retry', sid: 's6', command: 'grind PR', question: '', picked: 'retry 1 of 4' },
+    ];
+    routes['/api/inbox'] = { items: [], gh: { ok: true }, afk: { ...AFK, summary: { started: 1700000000, ended: 1700003600, held: 1, log } } };
+    window.location.hash = '#/inbox';
+    render(<App />);
+    expect(await screen.findByText(/: 5 handled, 1 held/)).toBeTruthy();
+    expect(screen.getByText('Opus')).toBeTruthy();
+    expect(document.querySelectorAll('.chip.t-ship')).toHaveLength(2); // the two Recommended rows
+    expect(screen.getByText('$0.31')).toBeTruthy();
+    expect(screen.getByText(/matches the state file/)).toBeTruthy();
+    expect(screen.getByText('Held')).toBeTruthy();
+    expect(screen.getByText(/destroys unmerged work/)).toBeTruthy();
+    expect(screen.getByText('Changed')).toBeTruthy();
+    const links = screen.getAllByRole('link', { name: 'answerer transcript' });
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(['#/sessions/ans1', '#/sessions/ans3']);
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2);
+    expect(screen.queryByRole('checkbox', { name: /Delete branch/ })).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: /Changed\?/ })).toBeNull();
+    const box = screen.getByRole('checkbox', { name: 'Change answer: Which store?' }) as HTMLInputElement;
+    await userEvent.setup().click(box);
+    expect(box.checked).toBe(true);
+    expect(screen.getByText(/legacy-cmd/)).toBeTruthy();
+    expect(screen.getByText(/retry 1 of 4/)).toBeTruthy();
+  });
 });
 
 describe('Session page', () => {

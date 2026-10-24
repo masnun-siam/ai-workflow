@@ -1,11 +1,13 @@
 // FR-7, FR-8, FR-10 and the Away summary (FR-26): everything that needs the user, across repos.
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useAfkDismiss, useInbox, useRepos, useSessions, needsYouCount } from '../api/hooks';
-import type { AfkState } from '../api/types';
+import type { AfkLogEntry, AfkState } from '../api/types';
 import { Banner, Button, Chip, EmptyState } from '../components';
 import { ItemRow, useInboxActions } from '../inbox/items';
-import { clockText, shortRepo } from '../lib/format';
+import { clockText, money, shortRepo } from '../lib/format';
+import { mdToHtml } from '../lib/md';
+import { displayLabel } from '../questions/QuestionForm';
 import { RepoSelect } from '../shell/RepoSelect';
 import { routes } from '../lib/routes';
 import { INBOX_GROUPS } from '../lib/vocab';
@@ -13,24 +15,70 @@ import { PublishDialog } from '../repos/PublishDialog';
 
 const KIND: Record<string, string> = { answer: 'Answered', 'skip-ci': 'Skipped CI', retry: 'Retried' };
 
-function AwaySummary({ s }: { s: NonNullable<AfkState['summary']> }) {
-  const dismiss = useAfkDismiss();
-  const log = (s.log ?? []) as { at?: number; kind?: string; sid?: string; command?: string; question?: string; picked?: string }[];
+type RichEntry = AfkLogEntry & { id: string };
+const isRich = (l: AfkLogEntry): l is RichEntry => !!l.id && (l.kind === 'answer' || l.kind === 'held');
+const hhmm = (t: number) => clockText(t);
+
+function RoundRow({ l, checked, onToggle }: { l: RichEntry; checked: boolean; onToggle: () => void }) {
+  const held = l.kind === 'held';
+  const opus = held || l.by === 'opus';
+  const qs = l.questions ?? [];
   return (
-    <Banner tone="away" icon="moon" action={<Button sm onClick={() => dismiss.mutate()}>Dismiss</Button>}>
+    <li style={{ listStyle: 'none' }}>
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        {!held && !l.changed ? (
+          <input type="checkbox" checked={checked} onChange={onToggle} aria-label={`Change answer: ${qs[0]?.question ?? l.command}`} />
+        ) : null}
+        <span className="faint">{hhmm(l.at)}</span>
+        <Link to={routes.session(l.sid)}>{l.command}</Link>
+        <Chip tone={held ? 'you' : opus ? 'review' : 'ship'}>{held ? 'Held' : opus ? 'Opus' : 'Recommended'}</Chip>
+        {l.changed ? <Chip tone="muted">Changed</Chip> : null}
+        {opus ? <span className="muted">{money(l.cost)}</span> : null}
+        {opus && l.answerer ? <Link to={routes.session(l.answerer)}>answerer transcript</Link> : null}
+      </div>
+      <div className="stack" style={{ gap: 4, paddingLeft: 24 }}>
+        {qs.map((q, k) => (
+          <div key={k}>
+            <div className="prose" dangerouslySetInnerHTML={{ __html: mdToHtml(q.question) }} />
+            {!held && q.picked ? <div>→ {q.picked.map(displayLabel).join(', ')}{opus && q.why ? <span className="muted"> “{q.why}”</span> : null}</div> : null}
+          </div>
+        ))}
+        {held && l.reason ? <div className="muted">“{l.reason}”</div> : null}
+      </div>
+    </li>
+  );
+}
+
+/** `actions` renders beside Dismiss with the ticked round ids (the Change button of #466 plugs in here). */
+function AwaySummary({ s, actions }: { s: NonNullable<AfkState['summary']>; actions?: (ticked: string[]) => ReactNode }) {
+  const dismiss = useAfkDismiss();
+  const log = s.log ?? [];
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // ticks for ids that vanished or got changed on a refetch are ignored
+  const changeable = new Set(log.filter((l) => isRich(l) && l.kind === 'answer' && !l.changed).map((l) => l.id));
+  const ticked = [...selected].filter((id) => changeable.has(id));
+  const toggle = (id: string) => setSelected((p) => { const n = new Set(p); if (!n.delete(id)) n.add(id); return n; });
+  const held = log.filter((l) => l.kind === 'held').length || s.held;
+  const handled = log.filter((l) => l.kind !== 'held').length;
+  return (
+    <Banner tone="away" icon="moon" action={<>{actions?.(ticked)}<Button sm onClick={() => dismiss.mutate()}>Dismiss</Button></>}>
       <div className="stack" style={{ gap: 8 }}>
         <p>
-          <b>While you were away ({clockText(s.started)}{s.ended ? `–${clockText(s.ended)}` : ''})</b>: {log.length} thing{log.length === 1 ? '' : 's'} handled, {s.held} held for you.
+          <b>While you were away ({clockText(s.started)}{s.ended ? `–${clockText(s.ended)}` : ''}): {handled} handled, {held} held</b>
         </p>
         {log.length ? (
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {log.map((l, k) => (
-              <li key={k}>
-                {l.at ? <span className="faint">{clockText(l.at)} </span> : null}
-                {KIND[l.kind ?? ''] ?? l.kind} {l.sid ? <Link to={routes.session(l.sid)}>{l.command ?? 'session'}</Link> : l.command}
-                {l.picked ? <span className="muted"> · {l.picked}</span> : null}
-              </li>
-            ))}
+          <ul style={{ margin: 0, paddingLeft: 0 }}>
+            {log.map((l, k) =>
+              isRich(l) ? (
+                <RoundRow key={l.id} l={l} checked={selected.has(l.id)} onToggle={() => toggle(l.id)} />
+              ) : (
+                <li key={k} style={{ marginLeft: 18 }}>
+                  {l.at ? <span className="faint">{clockText(l.at)} </span> : null}
+                  {KIND[l.kind ?? ''] ?? l.kind} {l.sid ? <Link to={routes.session(l.sid)}>{l.command ?? 'session'}</Link> : l.command}
+                  {l.picked ? <span className="muted"> · {l.picked}</span> : null}
+                </li>
+              ),
+            )}
           </ul>
         ) : null}
       </div>
