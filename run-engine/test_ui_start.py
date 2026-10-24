@@ -102,6 +102,13 @@ try:
 except ui_start.Conflict as e:
     assert e.id == "R1"
 assert ui_start.start("o/r", "refine-issues", "99", launch=L, sessions=[live_refine])["session"] == "S6"
+for cmd in ("/ai-workflow:refine-issues 5 6", "/refine-issues 5 6"):  # #437: both spellings guard
+    live = {"id": "R2", "status": "running", "command": cmd, "repo": "o/r"}
+    try:
+        ui_start.start("o/r", "refine-issues", "6", launch=L, sessions=[live])
+        raise AssertionError(f"live {cmd} must refuse")
+    except ui_start.Conflict as e:
+        assert e.id == "R2", cmd
 refuses("refine-issues", "7", ValueError, model="gpt")
 refuses("refine-issues", "7", ValueError, effort="default")
 print("  ok  start guards and launch")

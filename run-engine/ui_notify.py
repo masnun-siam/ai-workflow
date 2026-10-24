@@ -105,7 +105,7 @@ def compose(event: str, rec: dict, public_url=None) -> tuple[dict, str]:
     icon, with_n, without_n, action = _LOOK.get(event, ("bell", "aiw: update", "aiw: update", "Open"))
     link = rec.get("link") if isinstance(rec.get("link"), dict) else {}
     issue = link.get("issue") if isinstance(link.get("issue"), int) else None
-    family = (str(rec.get("command") or "").lstrip("/").split(None, 1) or [""])[0].split(":")[-1]
+    family = (repo_skills.parse(rec.get("command")) or ("",))[0]
     tags = [icon] + [
         t
         for t in (_tag(family), _tag(str(rec.get("repo") or "").rsplit("/", 1)[-1]), f"#{issue}" if issue else "")

@@ -305,6 +305,25 @@ try:
         assert s == 409 and calls == [], (text, s, p)
     ok("custom text spelling a implement-issue command -> 409")
 
+    for cmd, text in (
+        ("/ai-workflow:implement-issue 7", "/implement-issue 7"),
+        ("/implement-issue 7", "/ai-workflow:implement-issue 7"),
+    ):
+        live(cmd)
+        s, p = post({"repo": "o/r", "text": text})
+        assert s == 409 and calls == [], (cmd, text, s, p)
+    ok("live record in either spelling blocks the other -> 409")
+
+    fam = ui_repos.family
+    assert (
+        fam("/implement-issue 3")
+        == fam("/ai-workflow:implement-issue 3")
+        == fam("/implement-issue")
+        == "implement-issue"
+    )
+    assert fam("/day") == "day" and fam("fix the bug") is None and fam("") is None
+    ok("family: both spellings, bare skill, free text")
+
     for text in ("/implement-issue\n7", "/implement-issue\t7"):
         live("/implement-issue 7")
         s, p = post({"repo": "o/r", "text": text})
