@@ -1025,6 +1025,17 @@ def stop_checks():
             {"repo": "r", "command": "/pr-grind 7"}
         )
         assert ui_runner._issue_key({"repo": "r", "command": "/run-" + "issue 7"}) is None
+        for c, key in (
+            ("/implement-issue 7", "implement-issue:7"),
+            ("/ai-workflow:implement-issue 7", "implement-issue:7"),
+            ("/ai-workflow:implement-issue #7 more", "implement-issue:7"),
+            ("/pr-grind https://github.com/o/r/pull/9", "pr-grind:9"),
+            ("/ai-workflow:pr-grind https://github.com/o/r/pull/9 --channel C", "pr-grind:9"),
+            ("/implement-issue see\n#7", None),
+            ("/ai-workflow:implement-issue", None),
+            ("Start the review grind for PR 9", None),
+        ):
+            assert ui_runner._issue_key({"repo": "r", "command": c}) == (("r", key) if key else None), c
         ok("double /implement-issue 7 and double /pr-grind on one PR raise Conflict; the old command is not keyed")
         assert not any(w in ui_runner.HEADLESS_PROMPT for w in ("run-" + "issue", "/flow", "herdr"))
         ok("headless prompt carries no old-command, flow or herdr-dispatch text")
@@ -1522,6 +1533,29 @@ def prgrind_cases() -> int:
         ui_sessions.update(r["id"], status="running", pid=dead.pid)
         assert tick(path)[0] == "started"
 
+    def plugin_spelling():
+        # a round stored as /ai-workflow:pr-grind <thread> (#439) is the same loop as /pr-grind <thread>
+        d, fk, work = pset()
+        r = ui_sessions.create(f"/ai-workflow:pr-grind {THREAD}", work, claude_cmd="claude-alt")
+        live = subprocess.Popen(["sleep", "300"], start_new_session=True)
+        extra_procs.append(live)
+        ui_sessions.update(r["id"], status="running", pid=live.pid)
+        other = ui_sessions.create(f"/pr-grind {THREAD} --channel C", work)  # another arg: not this loop
+        ui_sessions.update(other["id"], status="running", pid=live.pid)
+        free = ui_sessions.create(f"{ui_runner.GRIND_PREFIX}#7", work)
+        ui_sessions.update(free["id"], status="running", pid=live.pid)
+        assert ui_runner.grind_live() == 3, ui_runner.grind_live()
+        path = mkpr(d)
+        assert tick(path)[0] == "busy"
+        ui_sessions.update(r["id"], status="done")
+        for s in (other, free):
+            ui_sessions.update(s["id"], status="done")
+        assert ui_runner.grind_live() == 0
+        with mock.patch.object(ui_runner, "start") as st:
+            assert tick(path)[0] == "started"
+        (cmd, cwd), kw = st.call_args
+        assert (cmd, cwd, kw["claude_cmd"]) == (f"/pr-grind {THREAD}", work, "claude-alt"), st.call_args
+
     def merged_closed():
         for st, word in (("MERGED", "merged"), ("CLOSED", "closed")):
             d, fk, work = pset()
@@ -1646,6 +1680,7 @@ def prgrind_cases() -> int:
         lock_handoff,
         restart_survival,
         busy_and_stale,
+        plugin_spelling,
         merged_closed,
         gh_errors,
         runner_error,

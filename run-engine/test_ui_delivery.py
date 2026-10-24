@@ -84,6 +84,15 @@ sess = [
     {"id": "S2", "status": "done", "command": "/implement-issue 4", "repo": "o/r"},
     {"id": "S3", "status": "running", "command": "/implement-issue 9", "repo": "x/y"},
 ]
+assert set(
+    ui_delivery._live_sessions(
+        "o/r",
+        sess
+        + [
+            {"id": "S4", "status": "running", "command": "/ai-workflow:implement-issue 6", "repo": "o/r"},
+        ],
+    )
+) == {5, 6}, "either spelling is a live implement-issue session"
 r = build(s, sess, {"pr": {("o", "r", 33): {"state": "running", "round": 2}}})
 c = cards(r)
 assert c[1]["column"] == "draft_pr" and c[1]["pr"] == {

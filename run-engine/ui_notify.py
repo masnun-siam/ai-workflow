@@ -21,6 +21,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import quote, urlparse
 
+import repo_skills
 import ui_feed
 from shared import data_dir, warn
 
@@ -187,7 +188,7 @@ def dedupe_key(event, rec: dict):
 
 
 # A grind round ends its session every time; the loop's own grind-done/grind-paused push is the signal.
-_QUIET_DONE = ("/pr-grind ", "Start the review grind for PR ")  # keep in step with ui_runner.GRIND_PREFIX
+_QUIET_DONE_PREFIX = "Start the review grind for PR "  # keep in step with ui_runner.GRIND_PREFIX
 
 
 def send_ntfy(cfg: dict, headers: dict, text: str, event: str, rec: dict) -> str | None:
@@ -232,7 +233,8 @@ def _never_raise(label: str, fn, *args) -> None:
 
 def notify(event: str, rec: dict) -> None:
     """Route one event to every channel its matrix cell turns on; each channel is independent."""
-    if event == "done" and str(rec.get("command", "")).startswith(_QUIET_DONE):
+    cmd = rec.get("command")
+    if event == "done" and (repo_skills.is_skill(cmd, "pr-grind") or str(cmd or "").startswith(_QUIET_DONE_PREFIX)):
         return
     if event in _AFK_MUTED:
         import ui_afk  # lazy: ui_afk imports the session store, which imports this module

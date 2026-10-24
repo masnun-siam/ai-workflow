@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 
 import shared
 import dispatch_run
+import repo_skills
 import ui_inbox
 import ui_notify
 import ui_runner
@@ -66,7 +67,7 @@ def index() -> dict:
     by_pr = {}
     # a /pr-grind <pr url> just started has no state file until its first round writes one: running
     for cmd in live:
-        m = _PR_URL.search(str(cmd)) if str(cmd).startswith("/pr-grind ") else None
+        m = _PR_URL.search(str(cmd)) if repo_skills.is_skill(cmd, "pr-grind") else None
         if m:
             by_pr[(m["owner"].lower(), m["repo"].lower(), int(m["n"]))] = {
                 "state": "running",
@@ -78,7 +79,7 @@ def index() -> dict:
             st = "done"
         elif "paused" in h:
             st = "paused"
-        elif f"/pr-grind {h['thread']}" in live:
+        elif any(repo_skills.is_skill(c, "pr-grind", h["thread"]) for c in live):
             st = "running"
         else:
             st = "idle"
@@ -120,8 +121,8 @@ def skip_ci(repo: str, pr: int) -> dict:
         (
             r
             for r in ui_sessions.list_sessions()
-            if str(r.get("command", "")).startswith("/pr-grind ")
-            and (r["command"] == f"/pr-grind {h['thread']}" or pat.search(r["command"]))
+            if repo_skills.is_skill(r.get("command"), "pr-grind")
+            and (repo_skills.is_skill(r["command"], "pr-grind", h["thread"]) or pat.search(r["command"]))
             and r.get("session_id")
             and r.get("status") in ("done", "failed", "stopped")
         ),
