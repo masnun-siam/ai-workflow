@@ -134,8 +134,8 @@ watched repo per poll, and the full query only when something changed; nothing i
 
 It starts these as sessions and keeps them going: it takes your answers to `aiw ask` questions in the
 Inbox, the session page or a dispatch's issue panel, resumes after a rate limit, and notifies you.
-**Away mode** answers recommended options and retries failures, dispatch issues included, while you
-are away. Details are in [REFERENCE.md](REFERENCE.md).
+**Away mode** answers every question while you are away (recommended options at once, Opus for the rest,
+risky or unanswerable rounds held) and retries failures, dispatch issues included. Details are in [REFERENCE.md](REFERENCE.md).
 A repo's own copy of a skill (`.claude/skills/<name>/`) is used in place of the plugin's when it has one; see [Repo copies of skills](REFERENCE.md#repo-copies-of-skills).
 
 ## State

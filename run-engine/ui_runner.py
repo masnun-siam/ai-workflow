@@ -155,6 +155,11 @@ def _run_flags(rec: dict) -> list:
     ]
 
 
+def _restricted_args(allowed_tools) -> list:
+    safe = [a for a in CLAUDE_ARGS if a != "--dangerously-skip-permissions"]
+    return [*safe, "--allowedTools", ",".join(allowed_tools)]
+
+
 def start(
     command_text,
     cwd,
@@ -170,8 +175,11 @@ def start(
     model=None,
     run_model=None,
     effort=None,
+    allowed_tools=None,
 ) -> dict:
-    """agent/model: `--agent` / `--model` for the session (peer-review lens sessions).
+    """allowed_tools: runs without the permission bypass; Claude Code refuses every tool outside the list
+    (Away mode answerers). One comma-joined value, since `--allowedTools` is variadic and would eat the prompt.
+    agent/model: `--agent` / `--model` for the session (peer-review lens sessions).
     run_model/effort: the user's pick; kept on the record so every spawn of the session adds the flags.
     batch: (id, max) runs at most `max` sessions of that batch at once; the rest wait as "queued"
     and start, oldest first, as earlier ones end (see release_batch)."""
@@ -214,9 +222,10 @@ def start(
     exe = _preflight(sid)
     gate = ["--append-system-prompt", HEADLESS_PROMPT] if gate_questions else []
     text = repo_skills.resolve(command_text, path)  # queued/limited above keep the raw text until they start
+    base = _restricted_args(allowed_tools) if allowed_tools else CLAUDE_ARGS
     return _spawn(
         sid,
-        [*exe, *CLAUDE_ARGS, *gate, *extra_args, *run_flags, text],
+        [*exe, *base, *gate, *extra_args, *run_flags, text],
         path,
         command=text,
         cwd_path=path,

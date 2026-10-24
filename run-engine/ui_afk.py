@@ -2,8 +2,11 @@
 
 While it runs, each tick:
 - answers every `aiw ask` round whose questions all carry a "(Recommended)" option, planning
-  interviews included, through the same claim + resume path as the answer page (rounds with any
-  other question are held);
+  interviews included, through the same claim + resume path as the answer page;
+- gives every other round to a read-only Opus answerer session (agents/away-answerer.md, started with
+  only its tools allowed): a valid reply is answered the same way and logged `by: opus`; a hold, or two
+  failed answerers (failed, limited, stopped, invalid reply, over 10 minutes), is logged `held` and the
+  round waits for the owner. A human answer or the window ending stops the answerer with no log row;
 - retries sessions that failed during the window on a 2m/10m/30m/1h backoff, then holds them;
 - retries dispatch lanes that are held or stopped (not ones asking a question) on the same backoff.
 When the window ends (expiry or "I'm back") one ntfy push sums it up and the UI shows the log.
@@ -20,9 +23,11 @@ import threading
 import time
 from datetime import datetime
 
+import away_answerer
 import dispatch_run
 import shared
 import ui_notify
+import ui_panel
 import ui_runner
 import ui_sessions
 from shared import warn
@@ -31,6 +36,8 @@ MAX_SECONDS = 24 * 3600  # "until HH:MM" may roll into tomorrow; never longer th
 RETRY_DELAYS = (120, 600, 1800, 3600)
 MAX_LOG = 500
 TICK_SECONDS = 5
+ANSWER_SECONDS = 600  # an answerer running longer than this counts as failed
+MAX_ATTEMPTS = 2  # answerers per round
 _lock = threading.Lock()
 
 
@@ -67,6 +74,7 @@ def _epoch(iso) -> float | None:
 
 def _held(sessions: list, started) -> int:
     """What the owner will have to look at: waiting rounds, failures autopilot gave up on."""
+    sessions = [r for r in sessions if not ui_sessions.is_answerer(r)]
     n = sum(1 for r in sessions if r.get("status") == "waiting")
     for r in sessions:
         ended = _epoch(r.get("ended_at"))
@@ -183,15 +191,25 @@ def _round_entry(rec, now, pending, picks, by, why=None, answerer=None, cost=Non
     }
 
 
-def _answer(rec: dict, now: float) -> dict | None:
+def _round(rec: dict):
+    """The pending round of a session waiting on the owner and ready to be resumed, else None."""
     pq = rec.get("pending_question")
     if rec.get("status") != "waiting" or not isinstance(pq, dict) or pq.get("status") != "pending":
         return None
     if rec["id"] in ui_runner._procs or not rec.get("session_id"):
         return None  # claude is still exiting after `aiw ask`; the next tick gets it
-    qs = pq.get("questions") or []
-    if not qs or not all(q.get("recommended") for q in qs):
-        return None  # held: a question without a recommendation is the owner's call
+    return pq if pq.get("questions") else None
+
+
+def _recommended(pq: dict) -> bool:
+    return all(q.get("recommended") for q in pq["questions"])
+
+
+def _answer(rec: dict, now: float) -> dict | None:
+    pq = _round(rec)
+    if pq is None or not _recommended(pq):
+        return None  # the rest go to an answerer (_opus)
+    qs = pq["questions"]
     text = ui_sessions.answer_text(pq, {str(i): {"labels": [q["recommended"]]} for i, q in enumerate(qs)})
     if ui_sessions.claim_answer(rec["id"], pq["id"]) is None:
         return None
@@ -199,8 +217,119 @@ def _answer(rec: dict, now: float) -> dict | None:
     return _round_entry(rec, now, pq, [[q["recommended"]] for q in qs], "recommended")
 
 
+def _held_entry(rec, now, pending, reason, answerer, cost) -> dict:
+    qs = pending.get("questions") or []
+    entry = _entry(
+        "held",
+        rec,
+        now,
+        " / ".join(str(q.get("question") or q.get("header") or "") for q in qs),
+        f"Held: {reason}",
+    )
+    return {
+        **entry,
+        "id": f"{rec['id']}:{pending['id']}",
+        "questions": [{k: v for k, v in q.items() if k != "recommended"} for q in qs],
+        "answerer": answerer,
+        "cost": cost,
+        "reason": reason[:300],
+    }
+
+
+def _start_answerer(rec: dict, pq: dict) -> None:
+    sid = rec["id"]
+    transcript = os.path.join(ui_sessions.session_dir(sid), "stream.jsonl")
+    checkout = rec.get("cwd_path") or ui_runner.read_checkouts().get(rec["repo"], rec["repo"])
+    a = ui_runner.start(
+        away_answerer.prompt(rec, pq, transcript, checkout),
+        rec["repo"],
+        agent="ai-workflow:away-answerer",
+        model="opus",
+        effort="medium",
+        claude_cmd=rec.get("claude_cmd"),
+        allowed_tools=away_answerer.allowed_tools(),
+    )
+    ui_sessions.update(a["id"], role=ui_sessions.ANSWERER_ROLE, answers_for=sid, answers_round=pq["id"])
+    n = pq.get("answerer_attempts") or 0
+    if not ui_sessions.update_pending(sid, pq["id"], answerer=a["id"], answerer_attempts=n + 1):
+        ui_runner.stop(a["id"])  # the owner answered while it started
+
+
+def _answerer_failed(rec, now, pq, aid, reason) -> dict | None:
+    """Clear the dead answerer; start the next one, or hold the round after the second failure."""
+    sid = rec["id"]
+    cost = (ui_sessions.load(aid) or {}).get("cost")
+    if not ui_sessions.update_pending(sid, pq["id"], answerer=None):
+        return None  # the round is gone
+    if (pq.get("answerer_attempts") or 0) < MAX_ATTEMPTS:
+        _start_answerer(rec, pq)
+        return None
+    reason = f"answerer failed ({reason})"
+    ui_sessions.update_pending(sid, pq["id"], held=True)
+    return _held_entry(rec, now, pq, reason, aid, cost)
+
+
+def _opus(rec: dict, now: float) -> dict | None:
+    pq = _round(rec)
+    if pq is None or _recommended(pq) or pq.get("held"):
+        return None
+    sid, aid = rec["id"], pq.get("answerer")
+    if not aid:
+        if (pq.get("answerer_attempts") or 0) < MAX_ATTEMPTS:
+            _start_answerer(rec, pq)
+        return None
+    a = ui_sessions.load(aid) or {}
+    status = a.get("status")
+    if status in ("starting", "running"):
+        started = _epoch(a.get("started_at"))
+        if started and now - started <= ANSWER_SECONDS:
+            return None
+        ui_runner.stop(aid)
+        return _answerer_failed(rec, now, pq, aid, "timed out after 10 minutes")
+    if status != "done":
+        if status == "limited":
+            ui_runner.stop(aid)  # no auto-resume: a limited answerer is not queued for the reset
+        return _answerer_failed(rec, now, pq, aid, status or "missing")
+    try:
+        reply = away_answerer.parse_reply(ui_panel.final_text(aid), pq)
+    except ValueError as e:
+        return _answerer_failed(rec, now, pq, aid, f"invalid reply: {e}")
+    if "hold" in reply:
+        if not ui_sessions.update_pending(sid, pq["id"], held=True, answerer=None):
+            return None
+        return _held_entry(rec, now, pq, reply["hold"], aid, a.get("cost"))
+    answers = reply["answers"]
+    text = ui_sessions.answer_text(pq, {i: {"labels": v["labels"]} for i, v in answers.items()})
+    if ui_sessions.claim_answer(sid, pq["id"]) is None:
+        return None  # the owner answered first
+    ui_runner.resume(sid, text)
+    n = len(pq["questions"])
+    picks = [answers[str(i)]["labels"] for i in range(n)]
+    why = {i: v["why"] for i, v in answers.items()}
+    return _round_entry(rec, now, pq, picks, "opus", why, aid, a.get("cost"))
+
+
+def _busy_answerers() -> list:
+    return [
+        r
+        for r in ui_sessions.list_sessions()
+        if ui_sessions.is_answerer(r) and r.get("status") in ("starting", "running")
+    ]
+
+
+def _sweep_answerers() -> None:
+    """Stop an answerer whose round is gone: the owner answered it, or its session was stopped or deleted."""
+    for a in _busy_answerers():
+        parent = ui_sessions.load(a.get("answers_for") or "") or {}
+        pq = parent.get("pending_question")
+        if parent.get("status") != "waiting" or not isinstance(pq, dict) or pq.get("id") != a.get("answers_round"):
+            ui_runner.stop(a["id"])
+
+
 def _retry(rec: dict, now: float, started) -> dict | None:
     sid, status = rec["id"], rec.get("status")
+    if ui_sessions.is_answerer(rec):
+        return None  # a failed answerer is handled per round (_opus), never resumed
     if rec.get("afk_retries") and status in ("done", "waiting"):  # a retry got through: start the count over
         ui_sessions.update(sid, afk_retries=None, afk_retry_at=None, afk_retry_for=None)
         return None
@@ -269,7 +398,18 @@ def _retry_lanes(now: float) -> list:
     return out
 
 
+def _stop_answerers() -> None:
+    """The window is over: stop every busy answerer and free its round. No log row; the round stays waiting."""
+    for a in _busy_answerers():
+        ui_runner.stop(a["id"])
+        ui_sessions.update_pending(a.get("answers_for") or "", a.get("answers_round"), answerer=None)
+
+
 def _finish(now: float) -> None:
+    st = load()
+    if st.get("ended") or not st.get("started"):
+        return
+    _stop_answerers()
     with _lock:
         st = load()
         if st.get("ended") or not st.get("started"):
@@ -292,8 +432,14 @@ def tick(now=None) -> None:
         _finish(now)
         return
     entries = []
+    try:
+        _sweep_answerers()
+    except Exception as exc:  # noqa: BLE001 - one bad answerer must not stop the rest
+        warn(f"afk: answerer sweep: {type(exc).__name__}: {exc}")
     for rec in ui_sessions.list_sessions():
-        for step in (_answer, lambda r, t: _retry(r, t, st["started"])):
+        if ui_sessions.is_answerer(rec):
+            continue
+        for step in (_answer, _opus, lambda r, t: _retry(r, t, st["started"])):
             try:
                 e = step(rec, now)
             except Exception as exc:  # noqa: BLE001 - one bad session must not stop the rest
