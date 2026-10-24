@@ -37,7 +37,7 @@ export function useStarter() {
     async startBoard(body: BoardStartBody, o: { nav?: boolean } = {}): Promise<string | null> {
       try {
         const r = await board.mutateAsync(body);
-        return opened(r.id as string | undefined, o.nav !== false);
+        return opened(r.session, o.nav !== false);
       } catch (e) {
         fail(e);
         return null;

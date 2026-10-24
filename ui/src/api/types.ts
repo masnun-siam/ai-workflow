@@ -437,7 +437,7 @@ export interface BoardStartBody {
   effort?: string | null;
 }
 /** POST /api/start: a public session. */
-export type BoardStartResponse = Partial<Session> & { session?: string | null };
+export interface BoardStartResponse { session?: string; panel?: unknown }
 /** 409 body from a duplicate start (and rerun): the session already running. */
 export interface DuplicateError {
   error: string;

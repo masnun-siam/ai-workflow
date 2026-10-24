@@ -32,7 +32,7 @@ function mock(o: { fetchedAt?: number | null; delFetchedAt?: number | null; stal
     const path = String(url).split('?')[0];
     if (init?.method === 'POST' || init?.method === 'PUT') posts.push({ url: path, body: JSON.parse(String(init.body ?? '{}')) });
     if (o.extra?.[path]) return o.extra[path](init);
-    if (init?.method === 'POST') return json({ id: 'sess1' }, 201);
+    if (init?.method === 'POST') return json(path === '/api/start' ? { session: 'sess1' } : { id: 'sess1' }, 201);
     return path in routes ? json(routes[path]) : json({ items: [] });
   }));
 }
@@ -350,6 +350,7 @@ describe('Small changes tab', () => {
       await user.click(box(30)!);
       await user.click(btn('Refine 1')!);
       await waitFor(() => expect(posts.find((p) => p.url === '/api/start')?.body).toEqual({ repo: 'o/r', skill: 'refine-issues', arg: '31', via: 'headless', model: 'opus', effort: 'medium' }));
+      await waitFor(() => expect(window.location.hash).toBe('#/sessions/sess1?repo=o/r'));
     });
 
     it('Run 2 opens the small-changes dialog on the picked refined issues and Preview posts them', async () => {
