@@ -145,7 +145,7 @@ export interface StreamResponse {
 }
 
 // ---- boards ---------------------------------------------------------------------------------------
-export type PrdStatus = 'Draft' | 'In review' | 'Approved';
+export type PrdStatus = 'Draft' | 'In review' | 'Approved' | 'Done';
 export type PlanningColumn = 'draft' | 'in_review' | 'approved' | 'tasks_filed' | 'refined' | 'done';
 export interface PanelRef extends PanelStatus {
   id: string;

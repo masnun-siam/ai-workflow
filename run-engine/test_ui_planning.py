@@ -65,6 +65,8 @@ prd("fresh", "Approved")
 prd("shipped", "Approved")
 prd("bare", "Approved")
 prd("closed", "Approved")
+prd("finished", "Done")
+prd("odd", "Weird")
 panel = peer_review.new_panel("o/r", os.path.join(co, "docs", "prds", "drft.md"), ["critical", "cto", "qa"], None)
 r = ui_planning.build("o/r", co, snap, {"drft": panel})
 by = {p["slug"]: p for p in r["prds"]}
@@ -93,6 +95,8 @@ assert by["fresh"]["column"] == "approved" and by["fresh"]["epic"] is None and b
 assert by["shipped"]["column"] == "done" and by["shipped"]["epic"] == 300 and by["shipped"]["issues"] == 0
 assert by["bare"]["column"] == "approved" and by["bare"]["epic"] == 400
 assert by["closed"]["column"] == "done" and by["closed"]["epic"] is None
+assert (by["finished"]["status"], by["finished"]["column"], by["finished"]["epic"]) == ("Done", "done", None)
+assert (by["odd"]["status"], by["odd"]["column"]) == ("Draft", "draft")
 
 os.remove(os.path.join(co, "docs", "prds", "drft.md"))  # deleted draft: card gone next build
 assert "drft" not in {p["slug"] for p in ui_planning.build("o/r", co, snap, {})["prds"]}
