@@ -1,8 +1,9 @@
 """AFK mode (issue #178): a timed autopilot run by the server, so it works with no browser open.
 
 While it runs, each tick:
-- answers every `aiw ask` round whose questions all carry a "(Recommended)" option, through the
-  same claim + resume path as the answer page (rounds with any other question are held);
+- answers every `aiw ask` round whose questions all carry a "(Recommended)" option, planning
+  interviews included, through the same claim + resume path as the answer page (rounds with any
+  other question are held);
 - retries sessions that failed during the window on a 2m/10m/30m/1h backoff, then holds them;
 - retries dispatch lanes that are held or stopped (not ones asking a question) on the same backoff.
 When the window ends (expiry or "I'm back") one ntfy push sums it up and the UI shows the log.
@@ -22,7 +23,6 @@ from datetime import datetime
 import dispatch_run
 import shared
 import ui_notify
-import ui_repos
 import ui_runner
 import ui_sessions
 from shared import warn
@@ -154,15 +154,36 @@ def _entry(kind: str, rec: dict, now: float, question, picked) -> dict:
     }
 
 
-# #188: these interviews are the user's product decisions, so they always wait for a human.
-# create-tasks asks about scope; refine-issues confirms writes to GitHub.
-# "prd" stays so a session started before the rename stays held.
-NEVER_AUTO = ("create-prd", "prd", "dump", "create-tasks", "refine-issues")
+def _round_entry(rec, now, pending, picks, by, why=None, answerer=None, cost=None) -> dict:
+    """The log entry for one answered round: the summary strings older readers use, plus the full questions."""
+    qs = pending.get("questions") or []
+    summary = _entry(
+        "answer",
+        rec,
+        now,
+        " / ".join(str(q.get("question") or q.get("header") or "") for q in qs),
+        " / ".join(", ".join(p).removesuffix("(Recommended)").strip() for p in picks),
+    )
+    questions = [
+        {
+            **{k: v for k, v in q.items() if k != "recommended"},
+            "picked": picks[i],
+            "why": (why or {}).get(str(i)),
+        }
+        for i, q in enumerate(qs)
+    ]
+    return {
+        **summary,
+        "id": f"{rec['id']}:{pending['id']}",
+        "by": by,
+        "questions": questions,
+        "answerer": answerer,
+        "cost": cost,
+        "changed": False,
+    }
 
 
 def _answer(rec: dict, now: float) -> dict | None:
-    if ui_repos.family(rec.get("command", "")) in NEVER_AUTO:
-        return None
     pq = rec.get("pending_question")
     if rec.get("status") != "waiting" or not isinstance(pq, dict) or pq.get("status") != "pending":
         return None
@@ -175,13 +196,7 @@ def _answer(rec: dict, now: float) -> dict | None:
     if ui_sessions.claim_answer(rec["id"], pq["id"]) is None:
         return None
     ui_runner.resume(rec["id"], text)
-    return _entry(
-        "answer",
-        rec,
-        now,
-        " / ".join(str(q.get("question") or q.get("header") or "") for q in qs),
-        " / ".join(q["recommended"].removesuffix("(Recommended)").strip() for q in qs),
-    )
+    return _round_entry(rec, now, pq, [[q["recommended"]] for q in qs], "recommended")
 
 
 def _retry(rec: dict, now: float, started) -> dict | None:

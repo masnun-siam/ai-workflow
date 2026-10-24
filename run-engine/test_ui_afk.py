@@ -93,6 +93,12 @@ assert resumed == [(a, 'Answer to q-1: {"0":{"labels":["Approve and start (Recom
 assert ui_sessions.load(b)["status"] == "waiting"
 log = ui_afk.load()["log"]
 assert len(log) == 1 and log[0]["kind"] == "answer" and log[0]["picked"] == "Approve and start", log
+e = log[0]
+assert e["id"] == f"{a}:q-1" and e["by"] == "recommended" and e["answerer"] is None and e["cost"] is None
+assert e["changed"] is False
+q0 = e["questions"][0]
+assert q0["picked"] == ["Approve and start (Recommended)"] and q0["why"] is None and "recommended" not in q0
+assert [o["label"] for o in q0["options"]] == ["Approve and start (Recommended)", "Abort"]
 assert ui_afk.public(now=now)["held"] == 1  # b
 
 # extend keeps the window and its log
@@ -172,13 +178,14 @@ assert ui_afk.dismiss()["summary"] is None
 ui_afk.start(t + 3600, t)
 assert ui_afk.load()["log"] == []
 
-# #188: create-prd (and old prd) and dump interviews are never auto-answered (also plugin-prefixed); other families still are
+# #188 no longer holds in a window: planning interviews are answered too, logged as Recommended
 resumed.clear()
-held = [
+planning = [
     waiting(command=c)
     for c in (
         "/prd x",
         "/create-prd x",
+        "/ai-workflow:create-prd x",
         "/dump x",
         "/ai-workflow:prd x",
         "/create-tasks p",
@@ -188,9 +195,11 @@ held = [
 ]
 gi = waiting(command="/implement-issue 9")
 ui_afk.tick(t + 1)
-assert all(ui_sessions.load(h)["status"] == "waiting" for h in held), [ui_sessions.load(h)["status"] for h in held]
-assert sorted(sid for sid, _ in resumed) == sorted([c, gi]), resumed  # c: the /implement-issue left waiting above
-assert sorted(e["sid"] for e in ui_afk.load()["log"] if e["kind"] == "answer") == sorted([c, gi])
+assert all(ui_sessions.load(h)["status"] != "waiting" for h in planning)
+assert sorted(sid for sid, _ in resumed) == sorted([c, gi, *planning]), resumed
+answers = [e for e in ui_afk.load()["log"] if e["kind"] == "answer"]
+assert sorted(e["sid"] for e in answers) == sorted([c, gi, *planning])
+assert all(e["by"] == "recommended" for e in answers)
 
 # dispatch lanes: a held lane is retried on the backoff; one asking a question is left to the answer path
 import dispatch_run  # noqa: E402

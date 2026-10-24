@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Away mode now answers `/create-prd`, `/create-tasks`, `/refine-issues` and `/dump` rounds when every question has a recommended option (the #188 exclusion applies only outside a window). Answer entries in `afk.json` gain `id`, `by`, `questions`, `answerer`, `cost` and `changed` (#460).
 - A copy of a plugin skill in a repo's `.claude/skills/<name>/` now takes over everywhere: UI sessions, dispatch lanes and herdr tabs, peer-review panels, pr-grind re-entries and skill-to-skill hand-offs. Stored commands now read `/<name>` (repo copy) or `/ai-workflow:<name>` (plugin). If you keep a stale copy there, delete or update it. `docs/REFERENCE.md` "Repo copies of skills" lists what a copy must keep so the UI can still drive it (#440).
 
 ### Fixed
