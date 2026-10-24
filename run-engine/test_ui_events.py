@@ -170,6 +170,8 @@ ALLOWED = {
     "slug",
     "session_id",
     "outcome",
+    "model",
+    "effort",
     "no_repo",
     "vault_folder",
     "cost",

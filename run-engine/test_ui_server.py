@@ -685,6 +685,12 @@ try:
     dispatch.register_checkout("o/r", _link)
     assert ui_server._public({"repo": os.path.realpath(_real), "link": None})["slug"] == "o/r"
     assert ui_server._public({"repo": "/nowhere"})["slug"] is None
+    r = ui_server._public({"model": "claude-opus-5-5", "run_model": "opus", "run_effort": "high"})
+    assert r["model"] == "claude-opus-5-5" and r["effort"] == "high", r
+    r = ui_server._public({"run_model": "opus"})
+    assert r["model"] == "opus" and r["effort"] is None, r
+    r = ui_server._public({})
+    assert r["model"] is None and r["effort"] is None, r
     assert ui_server._public({"repo": "/x", "link": {"owner": "a", "repo": "b"}})["slug"] == "a/b"
 finally:
     if _old is None:

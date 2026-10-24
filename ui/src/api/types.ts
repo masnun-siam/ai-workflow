@@ -51,6 +51,8 @@ export interface Session {
   outcome: SessionStatus; // the session's status
   cost: number | null;
   tokens: { input?: number; cached?: number; output?: number } | null;
+  model?: string | null;
+  effort?: string | null;
   started_at: string;
   ended_at: string | null;
   waiting: boolean;

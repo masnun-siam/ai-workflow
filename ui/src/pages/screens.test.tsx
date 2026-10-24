@@ -152,6 +152,16 @@ describe('Session page', () => {
     await user.type(screen.getByLabelText('Search the transcript'), 'zzz');
     expect(await screen.findByText('No events match.')).toBeTruthy();
   });
+  it('Facts shows model and effort, or the defaults', async () => {
+    open(base({ model: 'claude-opus-5-5', effort: 'high' }));
+    expect(await screen.findByText('claude-opus-5-5')).toBeTruthy();
+    expect(screen.getByText('high')).toBeTruthy();
+  });
+  it('Facts falls back to — and Default without model or effort', async () => {
+    open(base());
+    expect(await screen.findByText('Default')).toBeTruthy();
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+  });
   it('failed shows the error with Retry and Continue in terminal', async () => {
     open(base({ outcome: 'failed', error: 'it broke' }));
     expect(await screen.findByText(/it broke/)).toBeTruthy();
