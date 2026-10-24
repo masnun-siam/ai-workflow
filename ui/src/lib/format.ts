@@ -88,10 +88,22 @@ export function toolSummary(input: unknown, max = 110): string {
 
 /** Short name for a session in lists: grind sessions carry long instruction text as their command. */
 export const sessionLabel = (command: string) =>
-  /^\/(?:[\w-]+:)?pr-grind\b/.test(command) ? 'pr-grind round' : String(command).startsWith('Start the review grind') ? 'pr-grind start' : String(command);
+  parseSkill(command)?.skill === 'pr-grind' ? 'pr-grind round' : String(command).startsWith('Start the review grind') ? 'pr-grind start' : String(command);
+
+/** A session's skill and argument from its command, in either spelling ("/implement-issue 801" or "/ai-workflow:implement-issue 801"); null for free text. */
+export function parseSkill(command: string): { skill: string; rest: string } | null {
+  const m = /^\/(?:[\w-]+:)?([\w-]+)(?:\s+([\s\S]*))?$/.exec(String(command ?? ''));
+  return m ? { skill: m[1], rest: (m[2] ?? '').trim() } : null;
+}
 
 /** The skill name of a session's command: "/ai-workflow:implement-issue 801" -> "implement-issue". */
-export const skillOf = (command: string) => /^\/(?:[\w-]+:)?([\w-]+)/.exec(command)?.[1] ?? '';
+export const skillOf = (command: string) => parseSkill(command)?.skill ?? '';
+
+/** A command without its plugin prefix and slash: "/ai-workflow:implement-issue 801" -> "implement-issue 801"; free text as is. */
+export const commandText = (command: string) => {
+  const p = parseSkill(command);
+  return p ? `${p.skill}${p.rest ? ` ${p.rest}` : ''}` : String(command ?? '').trim();
+};
 
 /** Splits text into strings and {href} parts for http(s) URLs; trailing punctuation stays outside the link. */
 export function linkParts(text: unknown): (string | { href: string })[] {

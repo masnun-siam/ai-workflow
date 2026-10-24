@@ -308,6 +308,13 @@ describe('Small changes tab', () => {
     expect(((await screen.findByRole('button', { name: 'Refine' })) as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it.each(['/refine-issues 30 31', '/ai-workflow:refine-issues 30 31'])('a live %s session shows Refining… on both issues', async (command) => {
+    mock({ lanes: [lane([card(30, 'unrefined'), card(31, 'unrefined')], { epic: null })], extra: withSessions([sess('a', command, 'running', { slug: 'o/r' })]) });
+    await open('#/features?tab=changes&repo=o/r');
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Refining…' })).toHaveLength(2));
+    expect(screen.queryByRole('button', { name: 'Refine' })).toBeNull();
+  });
+
   describe('pick bar', () => {
     const lanes = [lane([card(30, 'ready'), card(31, 'unrefined'), card(32, 'ready', { blocked_by: [30] }), card(33, 'in_progress'), card(34, 'merged')], { epic: null, title: 'No epic' })];
     const box = (n: number) => screen.queryByRole('checkbox', { name: `Pick #${n}` }) as HTMLInputElement | null;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DeliveryCard, DeliveryLane, PanelRef, PlanningPrd } from '../api/types';
-import { sessionInRepo } from './format';
+import { commandText, parseSkill, sessionInRepo, sessionLabel, skillOf } from './format';
 import { joinFeatures, stageOf } from './features';
 import { mdToHtml } from './md';
 import { nextStep } from './nextStep';
@@ -19,6 +19,33 @@ const panel = (o: Partial<PanelRef>): PanelRef => ({
   id: 'p', approved: 1, total: 3, round: 2, max_rounds: 5, state: 'running', lenses: {}, ...o,
 });
 const feat = (p: PlanningPrd, cards: DeliveryCard[] = []) => joinFeatures([p], [lane(cards)])[0];
+
+describe('parseSkill (FR-4: both spellings)', () => {
+  it('reads the skill and its argument with or without the plugin prefix', () => {
+    expect(parseSkill('/implement-issue 801')).toEqual({ skill: 'implement-issue', rest: '801' });
+    expect(parseSkill('/ai-workflow:implement-issue 801')).toEqual({ skill: 'implement-issue', rest: '801' });
+    expect(parseSkill('/refine-issues')).toEqual({ skill: 'refine-issues', rest: '' });
+    expect(parseSkill('/create-tasks a\n  b ')).toEqual({ skill: 'create-tasks', rest: 'a\n  b' });
+    expect(parseSkill('/pr-grind-x 5')?.skill).toBe('pr-grind-x');
+    expect(parseSkill('Resolve the merge conflicts on #5')).toBeNull();
+    expect(parseSkill('')).toBeNull();
+  });
+
+  it('skillOf, sessionLabel and commandText go through it', () => {
+    expect(skillOf('/implement-issue 801')).toBe('implement-issue');
+    expect(skillOf('/ai-workflow:implement-issue 801')).toBe('implement-issue');
+    expect(skillOf('/refine-issues')).toBe('refine-issues');
+    expect(skillOf('Resolve the merge conflicts on #5')).toBe('');
+    expect(skillOf('/pr-grind-x')).toBe('pr-grind-x');
+    expect(sessionLabel('/pr-grind 5 long text')).toBe('pr-grind round');
+    expect(sessionLabel('/ai-workflow:pr-grind 5 long text')).toBe('pr-grind round');
+    expect(sessionLabel('/pr-grind-x 5')).toBe('/pr-grind-x 5');
+    expect(sessionLabel('Start the review grind on #5')).toBe('pr-grind start');
+    expect(commandText('/ai-workflow:implement-issue 801')).toBe('implement-issue 801');
+    expect(commandText('/refine-issues')).toBe('refine-issues');
+    expect(commandText(' free text ')).toBe('free text');
+  });
+});
 
 describe('nextStep (FR-12)', () => {
   it('draft', () => {
