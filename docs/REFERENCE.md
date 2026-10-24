@@ -85,7 +85,7 @@ session items only.
 **Features.** One row per PRD in the current repo with its stage (PRD draft, PRD review, Approved,
 Tasks, Building, Shipped), progress, its running dispatch (or that it needs you), a **Merge #n** button
 for each of its PRs ready to merge, and one next-step button, under three tabs: **In progress**,
-**Shipped** and **Small changes** (the tab is `?tab=` in the URL). **Small changes** holds the open
+**Shipped** and **Small changes** (the tab is `?tab=` in the URL). A PRD whose header says `**Status:** Done` counts as Shipped. **Small changes** holds the open
 issues of the repo that belong to no feature (no epic, or an epic with no PRD here), grouped by status
 in the same table as a feature's Issues tab. Above them, **Describe a bug or small change** and
 **Create task** start one headless `/create-tasks` session (on `opus` at `medium`) that files the issue

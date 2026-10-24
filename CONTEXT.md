@@ -5,7 +5,7 @@ A Claude Code plugin that carries the team's dev process (PRD → tasks → refi
 ## Language
 
 **PRD**:
-The product requirements for one feature (the what and why, with a technical design of contracts but never code), written by `/create-prd` after an interview. The canonical copy is the repo's `docs/prds/<slug>.md`. Its status is Draft, In review or Approved; only an Approved PRD can be split into tasks. `/create-prd --update` records later decisions.
+The product requirements for one feature (the what and why, with a technical design of contracts but never code), written by `/create-prd` after an interview. The canonical copy is the repo's `docs/prds/<slug>.md`. Its status is Draft, In review or Approved; only an Approved PRD can be split into tasks. An author can set `Done` by hand in the header for a feature built without an epic; the UI then shows it as Shipped. `/create-prd --update` records later decisions.
 _Avoid_: Spec, design doc
 
 **Epic**:

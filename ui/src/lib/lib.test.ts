@@ -76,6 +76,9 @@ describe('nextStep (FR-12)', () => {
   it('done column is shipped even with no merged cards in the lane', () => {
     expect(feat(prd({ column: 'done' }), []).stage).toBe('shipped');
   });
+  it('stageOf: a Done PRD is shipped', () => {
+    expect(feat(prd({ status: 'Done', column: 'done' }), []).stage).toBe('shipped');
+  });
   it('tasks: refine N, no batch start', () => {
     const f = feat(prd({ issues: 2, unrefined: [2], column: 'tasks_filed' }), [card({ n: 2, column: 'unrefined' }), card({ n: 3 })]);
     expect(f.stage).toBe('tasks');

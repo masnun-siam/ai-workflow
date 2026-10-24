@@ -8,7 +8,7 @@ the epic (or listed in its sub_issues), plus any issue labelled `prd-<slug>`.
 Card: {slug, title, status, path, abs_path, column, pr, epic, issues, refined, unrefined, children, panel}.
 `children` is [{n, title, refined}] of its open child issues; `closed_children` is [{n, title}] of its closed ones.
 `unrefined` lists the child issue numbers not yet labelled `refined`. `column` is one of
-draft | in_review | approved | tasks_filed | refined | done. `done` is an Approved PRD with no open child
+draft | in_review | approved | tasks_filed | refined | done. `done` is a PRD whose status is Done, or an Approved PRD with no open child
 whose epic is closed, or open with sub-issues that are all closed. `pr` is {n, url} for an In review PRD (an open PR
 whose branch or title mentions the slug; heuristic), else None. `panels` maps slug -> a panel id or an
 already-built panel_status dict.
@@ -25,7 +25,7 @@ import peer_review
 _STATUS = re.compile(r"\*\*Status:\*\*\s*([A-Za-z ]+?)\s*(?:·|\||$)", re.M)
 _SLUG = re.compile(r"\*\*Slug:\*\*\s*`?([A-Za-z0-9._-]+)`?")
 _TITLE = re.compile(r"^#\s+(?:PRD\s*[—–:-]\s*)?(.+?)\s*$", re.M)
-_STATUSES = {"draft": "Draft", "in review": "In review", "approved": "Approved"}
+_STATUSES = {"draft": "Draft", "in review": "In review", "approved": "Approved", "done": "Done"}
 
 
 def _parse(path: str):
@@ -90,6 +90,8 @@ def build(repo: str, checkout_path: str, snapshot: dict, panels: dict | None) ->
             column = "draft"
         elif meta["status"] == "In review":
             column = "in_review"
+        elif meta["status"] == "Done":
+            column = "done"
         elif kids:
             column = "refined" if refined == len(kids) else "tasks_filed"
         elif (epic and epic["sub_issues"]) or (not epic and any(label in e["labels"] for e in closed_epics)):
