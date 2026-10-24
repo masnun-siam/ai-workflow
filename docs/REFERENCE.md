@@ -281,6 +281,61 @@ reach the URL can start sessions. Sessions run `claude --dangerously-skip-permis
 default, with no opt-out flag. Never use `tailscale funnel` (public exposure plus skip-permissions
 is remote code execution), and on a shared machine any local user can reach the loopback port.
 
+## Repo copies of skills
+
+A repo can replace any plugin skill with its own copy. The same name wins, even when the repo's
+skill does something else. To undo it, delete the copy.
+
+**The rule** (`run-engine/repo_skills.py`):
+
+- A copy is `<cwd>/.claude/skills/<name>/SKILL.md`, a readable file (symlinks followed), where
+  `<cwd>` is the session's or herdr tab's working directory.
+- It is checked at every spawn and every send, never cached: new sessions, queued and rate-limited
+  starts when they begin, answers, typed prompts (Start dialog, Send box), auto-resumes, pr-grind
+  re-entries, peer-review panels and herdr tabs alike.
+- Every plugin skill command in the text, at the start or inline, in either spelling, becomes
+  `/<name>` when the copy exists, else `/ai-workflow:<name>`. Only names under the plugin's
+  `skills/` (folders with a `SKILL.md`) are rewritten.
+- The stored command shows which copy ran (`/implement-issue 12` or `/ai-workflow:implement-issue 12`).
+- The one exception is the vault's name suggestion (`claude -p` with no skill and no session record).
+
+**Hand-offs between skills** follow the guide's "Repo skills win" rule
+(`guides/engineering-workflow.md`, Repository settings): the skill checks
+`<worktree root>/.claude/skills/<name>/SKILL.md` with Read or Glob and runs `/<name>` if it exists,
+else `/ai-workflow:<name>`.
+
+**Guides and templates:** the repo's `docs/guides/<name>.md` and `docs/templates/<name>.md` win
+over the plugin's `guides/` and `templates/`. Every workflow skill now reads "Repository settings"
+first (all but `skill-feedback`, `sync-from-wasensi` and `worklog`, which work on the plugin or
+your notes).
+
+**Agents are never overridden:** `ai-workflow:peer-reviewer` and `worklog-runner` are always the plugin's.
+
+**Caveats:**
+
+- Commit repo copies to the base branch. The engine checks the checkout, and a skill's hand-off
+  checks its worktree, which is made from the base branch; a copy left uncommitted or on another
+  branch is missed by one of them.
+- Do not keep a personal skill (`~/.claude/skills/<name>`) named like a plugin skill. Claude Code
+  ranks it above the repo's, so it runs while the stored command still reads like the repo copy.
+- Trust: a repo copy runs with the session's permissions (`--dangerously-skip-permissions`). Only
+  run the workflow on repos whose `.claude/` you trust.
+
+**What a copy must keep so the UI can still drive it:**
+
+| Skill | Keep | Read by |
+|---|---|---|
+| pr-grind | State file `<pr_grind_dir>/<owner>-<repo>-<pr>.md` with the header keys `owner`, `repo`, `number`, `thread`, `author`, `reviewer`, `paused`, `done`, `next-poll`, `poll-since`, `ci-seen`, `dispatch-due` | `ui_runner._valid`, `_new_review`, `prgrind_tick`; `ui_dispatch` (`dispatch-due`); `ui_grind.index`. pr-grind's own list: `## State file` |
+| pr-grind | One `## Round ` heading per round | `ui_grind.index` counts them |
+| pr-grind | `## Re-entry` (the "On-wake branch"), `## Step 8 — Paused stop`, and the headless re-arm: write `next-poll`, end the turn | `REENTRY_PROMPT` (`ui_runner.py`), `LANE_GRIND` (`dispatch_run.py`) |
+| peer-review | The `--root <panel id>` round protocol | `ui_panel.py` starts `/ai-workflow:peer-review --root <panel id> <artifact>` |
+| any | `aiw ask` for gate questions in a headless run | `HEADLESS_PROMPT` (`ui_runner.py`) |
+
+- The tick always runs the plugin's own `skills/pr-grind/scripts/poll-reviews.sh` (`_POLL_SH`),
+  whichever copy of pr-grind runs.
+- Relative `../../guides/` and `../../templates/` paths in a copied skill no longer reach the
+  plugin: point them at the repo's own copies or an absolute source.
+
 ## Where state lives
 
 Nothing stateful lives in this repo. `aiw paths` resolves it under `$CLAUDE_PLUGIN_DATA`
