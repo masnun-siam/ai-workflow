@@ -64,7 +64,7 @@ export function InboxPage() {
             {working === 1 ? '1 session is working on its own.' : `${working} sessions are working on their own.`}
           </p>
         </div>
-        {afk?.active ? <Chip tone="away">Away mode: answers held for review below</Chip> : null}
+        {afk?.active ? <Chip tone="away">Away mode: Claude answers every question</Chip> : null}
         <RepoSelect repos={repos} value={filter} onChange={setFilter} label="Repo filter" width={180} extrasBefore={[{ value: '', label: 'All repos' }]} />
       </div>
       {afk?.summary ? <AwaySummary s={afk.summary} /> : null}

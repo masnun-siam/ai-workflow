@@ -67,9 +67,40 @@ agents = r"run-(planner|researcher|sdet|dev|verifier|reviewer|ci|grinder|lessons
 bad = hits(prose, agents + rf"|\baiw ({REMOVED_VERBS})\b|/dev-workflow:|Shahria-skills")
 ok("kept files name no deleted agent, removed aiw verb, /dev-workflow: or Shahria-skills", not bad, bad[:10])
 ok(
-    "agents/ holds only peer-reviewer and worklog-runner",
-    sorted(os.listdir(os.path.join(ROOT, "agents"))) == ["peer-reviewer.md", "worklog-runner.md"],
+    "agents/ holds only away-answerer, peer-reviewer and worklog-runner",
+    sorted(os.listdir(os.path.join(ROOT, "agents"))) == ["away-answerer.md", "peer-reviewer.md", "worklog-runner.md"],
 )
+ANSWERER_TOOLS = {
+    "Read",
+    "Grep",
+    "Glob",
+    "Bash(gh issue view:*)",
+    "Bash(gh issue list:*)",
+    "Bash(gh pr view:*)",
+    "Bash(gh pr diff:*)",
+    "Bash(gh pr list:*)",
+    "Bash(gh pr checks:*)",
+    "Bash(git status:*)",
+    "Bash(git blame:*)",
+}
+with open(os.path.join(ROOT, "agents", "away-answerer.md"), encoding="utf-8") as f:
+    answerer = f.read()
+tools_line = [ln for ln in answerer.splitlines() if ln.startswith("tools:")]
+tools = tools_line[0][len("tools:") :].strip().split(", ") if tools_line else []
+ok(
+    "away-answerer tools line is exactly the read-only allow-list",
+    len(tools) == len(ANSWERER_TOOLS) and set(tools) == ANSWERER_TOOLS,
+    tools,
+)
+ok(
+    "away-answerer has no write, bare-shell, gh api or git log/show/diff tool",
+    not any(
+        t in ("Write", "Edit", "NotebookEdit", "Bash", "Bash(gh:*)", "Bash(git:*)")
+        or re.search(r"gh api|git (log|show|diff)", t)
+        for t in tools
+    ),
+)
+ok("away-answerer runs on opus", "\nmodel: opus\n" in answerer)
 ok("commands/ is gone", not os.path.exists(os.path.join(ROOT, "commands")))
 
 # 4. Imported scripts keep their executable bit (skills call them directly). The byte-compare against

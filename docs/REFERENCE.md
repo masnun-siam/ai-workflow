@@ -309,7 +309,7 @@ over the plugin's `guides/` and `templates/`. Every workflow skill now reads "Re
 first (all but `skill-feedback`, `sync-from-wasensi` and `worklog`, which work on the plugin or
 your notes).
 
-**Agents are never overridden:** `ai-workflow:peer-reviewer` and `worklog-runner` are always the plugin's.
+**Agents are never overridden:** `ai-workflow:peer-reviewer`, `away-answerer` and `worklog-runner` are always the plugin's.
 
 **Caveats:**
 
@@ -364,7 +364,7 @@ The work's own state is on GitHub and in the repo's `docs/prds/` and `docs/tasks
 skills/       create-prd, create-tasks, refine-issues, implement-issue, verifier-locally,
               pr-review, docs-updater, skill-feedback, sync-from-wasensi, pr-grind,
               peer-review, dump, release-pr, worklog, flow, herdr-dispatch
-agents/       peer-reviewer, worklog-runner
+agents/       away-answerer, peer-reviewer, worklog-runner
 guides/       engineering-workflow, code-review, skills
 templates/    prd, epic, issue
 commands/     code-review (a slash command)

@@ -77,6 +77,17 @@ describe('Inbox', () => {
     expect(screen.getByRole('link', { name: 'See what is running' })).toBeTruthy();
   });
 
+  it('away banner says Claude answers every question', async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const afk = { ...AFK, active: true, until: now + 3600, started: now };
+    routes['/api/sessions'] = { sessions: [], limits: {}, usage: {}, afk };
+    routes['/api/inbox'] = { items: [], gh: { ok: true }, afk };
+    window.location.hash = '#/inbox';
+    render(<App />);
+    expect(await screen.findByText(/Opus decides/)).toBeTruthy();
+    expect(screen.queryByText(/rest waits in your Inbox/)).toBeNull();
+  });
+
   it('shows and dismisses the away summary', async () => {
     routes['/api/inbox'] = { items: [], gh: { ok: true }, afk: { ...AFK, summary: { started: 1700000000, ended: 1700003600, held: 2, log: [{ at: 1700000100, kind: 'answer', sid: 's1', command: 'x', picked: 'A' }] } } };
     window.location.hash = '#/inbox';
