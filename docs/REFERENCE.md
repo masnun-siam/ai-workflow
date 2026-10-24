@@ -203,7 +203,7 @@ dispatch issue asking a question gets the recommended answer like any session). 
 one push sums it up and the Inbox shows a "While you were away" log until dismissed. State is
 `afk.json`. `POST /api/afk` (start), `POST /api/afk/stop|dismiss`.
 
-**Settings** (`#/settings/repos|accounts|notifications|review|vault`). **Repositories**: the global
+**Settings** (`#/settings/repos|accounts|notifications|review|vault|server`). **Repositories**: the global
 **Grinding** mode, Deep (default: a grind runs until the reviewer has no blocker or should-fix left) or
 Simple (a grind stops, fixing nothing more, at the round where the PR is approved: the reviewer's
 review is an approval or GitHub's reviewDecision is approved). `/pr-grind` reads it every round, so a
@@ -293,6 +293,7 @@ Nothing stateful lives in this repo. `aiw paths` resolves it under `$CLAUDE_PLUG
 | `pr-grind/` | one markdown state file per PR under grind |
 | `issue_grind.json` | each issue's Grinding switch, by repo (unset issues follow the repo's auto-grind) |
 | `peer-review/` | one directory per panel: `panel.json` and `round-<n>/<lens>.md` verdicts |
+| `restart.log`, `restart.exit` | output and exit code of the last Settings → Server **Rebuild and restart** (`make restart`, a detached child; `GET/POST /api/restart`) |
 | `afk.json` | the Away mode window and its log |
 | `dispatches/` | one `<id>.json` per dispatch (settings, lanes, events) and its `.lock` |
 | `ui.json` | push notifications and `public_url` (mode 0600) |

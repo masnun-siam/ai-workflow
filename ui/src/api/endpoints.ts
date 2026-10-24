@@ -2,7 +2,7 @@
 import { enc, get, post, put, qs, splitRepo } from './client';
 import type {
   AnswerBody, AfkState, Dispatch, DispatchPlan, DispatchSettings, DispatchTarget, DispatchState, EndAction, LaneAction, BoardStartBody, BoardStartResponse, CleanupItem, DeliveryResponse, InboxResponse,
-  IssueDetail, NotificationFeed, NotifyChannel, NotifySettings, OpenItem, PeerReviewOffers, PlanningResponse, PrDetail, PrdFile, ReposResponse,
+  IssueDetail, NotificationFeed, NotifyChannel, NotifySettings, OpenItem, PeerReviewOffers, PlanningResponse, PrDetail, PrdFile, ReposResponse, RestartStatus,
   ReviewSettings, Session, SessionStartBody, SessionsResponse, Settings, StreamResponse, VaultFolders, VaultPrd,
 } from './types';
 
@@ -17,6 +17,8 @@ export const api = {
   delivery: (repo: string, refresh = false) => get<DeliveryResponse>(`/api/delivery${qs({ repo, refresh: refresh ? 1 : undefined })}`),
   repos: () => get<ReposResponse>('/api/repos'),
   settings: () => get<Settings>('/api/settings'),
+  restartStatus: () => get<RestartStatus>('/api/restart'),
+  restart: () => post<{ ok: true }>('/api/restart'),
   notify: () => get<NotifySettings>('/api/settings/notify'),
   review: () => get<ReviewSettings>('/api/settings/review'),
   peerReviewOffers: () => get<PeerReviewOffers>('/api/peer-review'),

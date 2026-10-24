@@ -45,6 +45,7 @@ import ui_planning
 import ui_poller
 import ui_pr
 import ui_repos
+import ui_restart
 import ui_runner
 import ui_sessions
 import ui_start
@@ -397,6 +398,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             _serve_static(self, path)  # sw.js at the root so its scope covers the whole app
         elif path == "/api/health":
             self._send(200, "application/json; charset=utf-8", b'{"ok": true}')
+        elif path == "/api/restart":
+            self._json(200, ui_restart.status())
         elif path == "/api/repos":
             self._json(
                 200,
@@ -568,6 +571,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         parts = urlsplit(self.path).path.split("/")
         if parts == ["", "api", "sessions"]:
             self._start()
+        elif parts == ["", "api", "restart"]:
+            self._dispatch(lambda b: ui_restart.start(), ok=202)
         elif parts == ["", "api", "repos", "browse"]:
             body = self._read_body()
             if body is None:
@@ -804,7 +809,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json(ok, fn(body))
         except (ValueError, TypeError) as e:
             self._json(400, {"error": str(e)})
-        except (ui_start.Conflict, ui_grind.Conflict, ui_actions.Conflict, dispatch_run.Conflict) as e:
+        except (
+            ui_start.Conflict,
+            ui_grind.Conflict,
+            ui_actions.Conflict,
+            dispatch_run.Conflict,
+            ui_restart.Conflict,
+        ) as e:
             self._json(409, {"error": str(e), **({"id": e.id} if getattr(e, "id", None) else {})})
         except (RuntimeError, OSError, ui_runner.RunnerError) as e:  # RunnerError, a failed herdr call
             self._json(502, {"error": str(e)})
