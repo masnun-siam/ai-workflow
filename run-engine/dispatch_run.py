@@ -333,6 +333,8 @@ def sync_lanes(d: dict, children: list) -> list:
     """Add new epic children as lanes; a 'needs refine' lane is queued once refined. Returns added keys.
     children: [{"repo", "n", "title", "refined", "deps": [key], "base"}]."""
     added = []
+    was_done = d.get("state") == "done"
+    added_work = False
     for c in children:
         k = key(c["repo"], c["n"])
         x = d["lanes"].get(k)
@@ -349,13 +351,15 @@ def sync_lanes(d: dict, children: list) -> list:
                 "pr": None,
             }
             added.append(k)
-            if d.get("state") == "done":  # QA filed new children: the dispatch runs again
-                d.update(state="running", ended_at=None)
         else:
             # a re-read lists only blockers still open: keep the ones already known, or the graph loses its shape
             x["deps"] = sorted(set(x["deps"]) | set(c.get("deps", [])))
             if x["stage"] == "skipped" and x.get("skip_reason") == "needs refine" and c.get("refined"):
                 x.update(stage="queued", skip_reason=None)
+                added_work = True
+    if was_done and (added or added_work):  # QA filed new children: pause until the user refines them and resumes
+        d.update(state="paused", ended_at=None)
+        event(d, None, "paused", "new issues joined: refine them, then resume")
     return added
 
 

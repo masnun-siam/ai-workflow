@@ -59,7 +59,7 @@ user turned auto-merge on.
    - **Open PR to the default branch** (`aiw dispatch end <id> open-pr`; only with a feature branch)
    - **Run QA** (`aiw dispatch end <id> qa`): a tab that runs `/ai-workflow:verifier-locally` and tests
      the whole feature end to end in the browser, filing each bug as a new child of the epic. New
-     children join this dispatch as lanes by themselves, so keep watching.
+     children join this dispatch as lanes by themselves, so keep watching. A finished dispatch that gains children pauses; resume it after they are refined.
    - **Grind the final PR** (`aiw dispatch end <id> grind-pr`; only after open-pr)
 
 ## Rules

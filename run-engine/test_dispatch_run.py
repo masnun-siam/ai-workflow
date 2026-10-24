@@ -350,13 +350,39 @@ dr.tick(d2, {K(7): {**f7, "issue_open": False}}, run2, merge, now=6)
 assert d2["state"] == "done"
 print("  ok  awaiting merge, merge now, done")
 
-# --- QA adds a child: done dispatch runs again
+# --- QA adds a child: done dispatch pauses
 dr.sync_lanes(d2, [child(7), child(8)])
-assert d2["state"] == "running" and d2["lanes"][K(8)]["stage"] == "queued"
+assert d2["state"] == "paused" and d2["lanes"][K(8)]["stage"] == "queued"
+assert [e["kind"] for e in d2["events"]].count("paused") == 1
 dr.sync_lanes(d2, [child(8, [7]), child(7)])
 dr.sync_lanes(d2, [child(8), child(7)])  # #7 closed: the epic no longer lists it as a blocker
 assert d2["lanes"][K(8)]["deps"] == [K(7)]
-print("  ok  new children reopen, deps kept")
+print("  ok  new children pause, deps kept")
+
+# --- unrefined child joins a done dispatch: paused, tick keeps it; refine, resume, lane starts
+d4 = dr.create("o/r#30", "headless", {"grind": "off"}, [child(30)])
+d4.update(state="done", ended_at=1)
+d4["lanes"][K(30)]["stage"] = "closed"
+dr.sync_lanes(d4, [child(30), {**child(31), "refined": False}])
+assert d4["state"] == "paused" and d4["ended_at"] is None and d4["lanes"][K(31)]["stage"] == "skipped"
+run4 = FakeRunner()
+dr.tick(d4, {}, run4, merge, now=1)
+assert d4["state"] == "paused" and not run4.started
+dr.sync_lanes(d4, [child(30), child(31)])
+assert d4["lanes"][K(31)]["stage"] == "queued" and d4["state"] == "paused"
+d4["state"] = "running"
+dr.tick(d4, fq(31), run4, merge, now=2)
+assert d4["lanes"][K(31)]["stage"] == "implementing" and run4.started[-1][0] == 31
+# a done dispatch stuck with a refined-later lane pauses; a cancelled one stays cancelled
+d5 = dr.create("o/r#40", "headless", {}, [{**child(40), "refined": False}])
+d5["state"] = "done"
+dr.sync_lanes(d5, [child(40)])
+assert d5["state"] == "paused" and d5["lanes"][K(40)]["stage"] == "queued"
+d6 = dr.create("o/r#50", "headless", {}, [child(50)])
+d6["state"] = "cancelled"
+dr.sync_lanes(d6, [child(50), child(51)])
+assert d6["state"] == "cancelled"
+print("  ok  paused on new issues, resume starts lane")
 
 # --- usage limit: hold launches, continue after reset
 d3 = dr.create("o/r#7", "herdr", {"max": 3}, [child(20), child(21, [20]), child(22)])
