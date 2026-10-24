@@ -233,6 +233,8 @@ def _never_raise(label: str, fn, *args) -> None:
 
 def notify(event: str, rec: dict) -> None:
     """Route one event to every channel its matrix cell turns on; each channel is independent."""
+    if rec.get("role") == "away-answerer":  # literal: ui_sessions imports this module
+        return
     cmd = rec.get("command")
     if event == "done" and (repo_skills.is_skill(cmd, "pr-grind") or str(cmd or "").startswith(_QUIET_DONE_PREFIX)):
         return
