@@ -136,6 +136,8 @@ def _public(rec: dict) -> dict:
         "outcome": rec.get("status"),
         "cost": rec.get("cost"),
         "tokens": rec.get("tokens"),
+        "model": rec.get("model") or rec.get("run_model"),
+        "effort": rec.get("run_effort"),
         "started_at": rec.get("started_at"),
         "ended_at": rec.get("ended_at"),
         "waiting": rec.get("pending_question") is not None,
