@@ -62,7 +62,7 @@ function AwayCard() {
     return (
       <div className="away-card">
         <div className="row"><Icon n="moon" /><b className="grow">Away until {clockText(afk.until)}</b></div>
-        <p className="muted" style={{ fontSize: 12.5 }}>Answering recommended options, retrying failures. {afk.held} held for you.</p>
+        <p className="muted" style={{ fontSize: 12.5 }}>Answering every question (Opus when there is no recommendation), retrying failures. {afk.held} held for you.</p>
         <div className="row">
           <Button sm onClick={() => start.mutate(Math.min(afk.until! + 1800, Math.floor(Date.now() / 1000) + 86000))}>+30 min</Button>
           <Button sm variant="primary" onClick={() => stop.mutate()}>I'm back</Button>
