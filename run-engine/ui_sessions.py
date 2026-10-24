@@ -71,6 +71,13 @@ def _read_meta(path: str):
     return data
 
 
+ANSWERER_ROLE = "away-answerer"
+
+
+def is_answerer(rec: dict) -> bool:
+    return rec.get("role") == ANSWERER_ROLE
+
+
 def create(command: str, repo: str, link=None, claude_cmd=None) -> dict:
     os.makedirs(sessions_dir(), exist_ok=True)
     while True:

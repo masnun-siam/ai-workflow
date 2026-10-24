@@ -118,6 +118,8 @@ def build(
         k = (slug(r), r.get("command"))
         newest[k] = max(newest.get(k, ""), r.get("started_at") or "")
     for r in sessions or []:
+        if r.get("role") == "away-answerer":  # helpers, not work (literal: see ui_sessions.ANSWERER_ROLE)
+            continue
         sid, status, where = r.get("id"), r.get("status"), slug(r)
         base = {"session_id": sid, "command": r.get("command")}
         pq = r.get("pending_question")

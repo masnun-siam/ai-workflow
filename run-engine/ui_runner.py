@@ -596,6 +596,8 @@ def limit_tick(now=None, stagger=2) -> list:
         out += release_batch(batch)
     for rec in ui_sessions.list_sessions():
         until = rec.get("limit_resets_at")
+        if ui_sessions.is_answerer(rec):
+            continue
         if rec.get("status") == "limited" and rec.get("auto_resume") and until and until + LIMIT_BUFFER_SECONDS <= now:
             try:
                 resume_stopped(rec["id"])
