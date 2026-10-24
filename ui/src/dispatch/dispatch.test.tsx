@@ -103,6 +103,7 @@ describe('Dispatches page', () => {
     window.location.hash = '#/dispatches?repo=o/r';
     render(<App />);
     await userEvent.click(await screen.findByRole('button', { name: 'Run an epic' }));
+    expect(screen.getByText(/use the herdr-dispatch skill/)).toBeTruthy();
     await userEvent.type(screen.getByLabelText('Epic'), '1');
     await userEvent.click(screen.getByRole('radio', { name: 'Simple' }));
     await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
@@ -311,6 +312,7 @@ describe('Run small changes dialog', () => {
     expect(screen.getByText('#415 Second')).toBeTruthy();
     expect(screen.queryByLabelText('Epic')).toBeNull();
     expect(screen.queryByText('Feature branch')).toBeNull();
+    expect(screen.queryByText(/herdr/)).toBeNull();
   });
 
   it('previews waves and warnings, then starts and opens the dispatch page', async () => {
