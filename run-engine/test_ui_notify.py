@@ -237,6 +237,10 @@ assert (
 )
 h, _ = ui_notify.compose("done", rec(link=None, command="/create-prd x"), None)
 assert h["Title"] == "aiw: run done" and h["Tags"] == "white_check_mark,create-prd,r", h
+h, _ = ui_notify.compose("done", rec(link=None, command="/ai-workflow:create-prd x"), None)
+assert h["Tags"] == "white_check_mark,create-prd,r", h  # #437: plugin spelling, same tag
+h, _ = ui_notify.compose("done", rec(link=None, command="fix the bug"), None)
+assert h["Tags"] == "white_check_mark,r", h  # free text: no family tag
 h, _ = ui_notify.compose("pipeline", {"id": "p-1", "repo": "o/r", "command": "pipeline x"}, "https://box.ts.net")
 assert (
     h["Tags"].startswith("checkered_flag") and h["Actions"] == "view, Open pipeline, https://box.ts.net/#/sessions/p-1"
@@ -447,8 +451,11 @@ assert reqs[0]["headers"]["title"] == fd[0][1] and reqs[0]["body"].decode() == f
 ok("ntfy request carries the same title and body")
 
 # quiet rules apply to every channel
-reqs, ms, fd = fan({}, "done", rec(command="/pr-grind 5"))
-assert not (reqs or ms or fd)
+for c in ("/pr-grind 5", "/ai-workflow:pr-grind https://x.slack.com/archives/C1/p5", "Start the review grind for PR 5"):
+    reqs, ms, fd = fan({}, "done", rec(command=c))
+    assert not (reqs or ms or fd), c
+reqs, ms, fd = fan({}, "done", rec(command="/ai-workflow:implement-issue 5"))
+assert reqs or ms or fd, "only grind rounds are quiet"
 import ui_afk  # noqa: E402
 
 with mock.patch.object(ui_afk, "active", return_value=True):

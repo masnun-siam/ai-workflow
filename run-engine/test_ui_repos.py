@@ -284,8 +284,8 @@ try:
             ui_sessions.update(rec["id"], status=status)
         return rec
 
-    for status in ("starting", "running"):
-        rec = live("/implement-issue 7", status)
+    for status, cmd in (("starting", "/implement-issue 7"), ("running", "/ai-workflow:implement-issue 7")):
+        rec = live(cmd, status)
         s, p = post({"repo": "o/r", "command": "implement-issue", "args": "7"})
         assert s == 409 and calls == [], (status, s, p, calls)
         assert "o/r#7" in err(p), p
@@ -304,6 +304,25 @@ try:
         s, p = post({"repo": "o/r", "text": text})
         assert s == 409 and calls == [], (text, s, p)
     ok("custom text spelling a implement-issue command -> 409")
+
+    for cmd, text in (
+        ("/ai-workflow:implement-issue 7", "/implement-issue 7"),
+        ("/implement-issue 7", "/ai-workflow:implement-issue 7"),
+    ):
+        live(cmd)
+        s, p = post({"repo": "o/r", "text": text})
+        assert s == 409 and calls == [], (cmd, text, s, p)
+    ok("live record in either spelling blocks the other -> 409")
+
+    fam = ui_repos.family
+    assert (
+        fam("/implement-issue 3")
+        == fam("/ai-workflow:implement-issue 3")
+        == fam("/implement-issue")
+        == "implement-issue"
+    )
+    assert fam("/day") == "day" and fam("fix the bug") is None and fam("") is None
+    ok("family: both spellings, bare skill, free text")
 
     for text in ("/implement-issue\n7", "/implement-issue\t7"):
         live("/implement-issue 7")

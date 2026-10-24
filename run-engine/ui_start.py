@@ -17,6 +17,7 @@ import time
 
 import dispatch
 import dispatch_run
+import repo_skills
 import ui_delivery
 import ui_grind
 import ui_panel
@@ -78,12 +79,13 @@ def _guard_refine(repo, arg, sessions) -> None:
     """A live /refine-issues session that already covers any of these issues refuses the start."""
     want = set(arg.split())
     for rec in sessions:
-        m = re.match(r"/(?:[\w-]+:)?refine-issues\s+(.*)", rec.get("command") or "")
+        p = repo_skills.parse(rec.get("command"))
         if (
-            m
+            p
+            and p[0] == "refine-issues"
             and rec.get("status") in ui_sessions._LIVE
             and str(ui_delivery._slug(rec)).lower() == repo.lower()
-            and want & set(re.findall(r"\d+", m.group(1)))
+            and want & set(re.findall(r"\d+", p[1]))
         ):
             raise Conflict(f"/refine-issues is already running for {arg}", rec.get("id"))
 

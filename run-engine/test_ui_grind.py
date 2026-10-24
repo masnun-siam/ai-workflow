@@ -56,6 +56,21 @@ assert idx[("o", "r", 12)]["state"] == "running"
 for r_ in (fresh, again):
     ui_sessions.update(r_["id"], status="done")
 assert ("o", "r", 90) not in ui_grind.index()["pr"] and ui_grind.index()["pr"][("o", "r", 12)]["state"] == "done"
+ui_sessions.update(rec["id"], status="done")
+assert ui_grind.index()["pr"][("o", "r", 10)]["state"] == "idle"
+# the plugin spelling (#439 stores resolved commands) is the same loop
+plug = ui_sessions.create("/ai-workflow:pr-grind https://x.slack.com/archives/C1/p10", d)
+ui_sessions.update(plug["id"], status="running", pid=os.getpgrp())
+fresh = ui_sessions.create("/ai-workflow:pr-grind https://github.com/o/r/pull/91", d)
+ui_sessions.update(fresh["id"], status="running", pid=os.getpgrp())
+other = ui_sessions.create("/pr-grind https://x.slack.com/archives/C1/p10 --channel C", d)  # not the same arg
+idx = ui_grind.index()["pr"]
+assert idx[("o", "r", 10)]["state"] == "running" and idx[("o", "r", 91)]["state"] == "running"
+for r_ in (plug, fresh):
+    ui_sessions.update(r_["id"], status="done")
+ui_sessions.update(other["id"], status="running", pid=os.getpgrp())
+assert ui_grind.index()["pr"][("o", "r", 10)]["state"] == "idle"
+ui_sessions.update(other["id"], status="done")
 print("  ok  index states and rounds")
 
 # the queue and autostart are gone

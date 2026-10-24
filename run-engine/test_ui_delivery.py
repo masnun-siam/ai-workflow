@@ -84,6 +84,15 @@ sess = [
     {"id": "S2", "status": "done", "command": "/implement-issue 4", "repo": "o/r"},
     {"id": "S3", "status": "running", "command": "/implement-issue 9", "repo": "x/y"},
 ]
+assert set(
+    ui_delivery._live_sessions(
+        "o/r",
+        sess
+        + [
+            {"id": "S4", "status": "running", "command": "/ai-workflow:implement-issue 6", "repo": "o/r"},
+        ],
+    )
+) == {5, 6}, "either spelling is a live implement-issue session"
 r = build(s, sess, {"pr": {("o", "r", 33): {"state": "running", "round": 2}}})
 c = cards(r)
 assert c[1]["column"] == "draft_pr" and c[1]["pr"] == {
@@ -98,6 +107,9 @@ assert c[2]["column"] == "in_review" and c[3]["column"] == "grinding" and c[3]["
 assert c[4]["column"] == "ready" and c[4]["pr"] is None
 assert c[5]["column"] == "in_progress" and c[5]["session"] == {"id": "S1", "status": "running"}
 assert r["running"] == 1 and r["lanes"][0]["running"] == 1
+sess[0]["command"] = "/ai-workflow:implement-issue 5"  # #437: plugin spelling counts the same
+r = build(s, sess, {"pr": {("o", "r", 33): {"state": "running", "round": 2}}})
+assert cards(r)[5]["session"] == {"id": "S1", "status": "running"} and r["running"] == 1
 r = build(s, grind={"pr": {("o", "r", 33): {"state": "done", "round": 2}}})
 assert cards(r)[3]["column"] == "in_review"
 
