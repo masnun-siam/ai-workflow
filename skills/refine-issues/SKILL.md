@@ -10,7 +10,7 @@ Input: an epic number, or one or more issue numbers. Output: every issue's body 
 
 The PRD is the source of truth. A refined issue explains and applies the PRD; it never decides something the PRD does not.
 
-Paths below starting `../../` are relative to this skill's folder, at the plugin root. Read first: `../../guides/engineering-workflow.md` ("Repository settings" and "Refined issues") and the template `../../templates/issue.md`.
+Paths below starting `../../` are relative to this skill's folder, at the plugin root. Read first: `../../guides/engineering-workflow.md` ("Repository settings" for the base branch and which guides, templates and skills win, and "Refined issues") and the template `../../templates/issue.md`.
 
 ## Steps
 
@@ -38,4 +38,4 @@ Paths below starting `../../` are relative to this skill's folder, at the plugin
 
 7. **Update the issues** with `gh issue edit <n> --body-file <file>`. Keep the parent, blocked-by links and labels as they are, and add the `refined` label. If refining showed a blocked-by link is missing or wrong, fix it and say so. Then set the board status (`../implement-issue/set-status.sh <n> "<status>"`): each refined issue still in Backlog (the default) that meets the Ready condition in `../../guides/engineering-workflow.md` (Project fields) moves to Ready, one with an open blocker stays in Backlog (`/implement-issue` moves it later), and an epic being refined moves to In progress. Never move an issue back from a later status (`gh issue view <n> --json projectItems` shows it). If the script fails, carry on and say so in the report.
 
-8. **Report and hand off.** List the refined issues, which can start now, any change made to the PRD or links, and any board status that could not be set. The next step is `/implement-issue <issue number>`, or `/implement-issue <epic number>` to pick the next Ready one. Do not start it unless asked.
+8. **Report and hand off.** List the refined issues, which can start now, any change made to the PRD or links, and any board status that could not be set. The next step is `/implement-issue <issue number>`, or `/implement-issue <epic number>` to pick the next Ready one (see "Repo skills win"). Do not start it unless asked.

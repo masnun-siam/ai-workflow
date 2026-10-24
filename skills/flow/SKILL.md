@@ -14,6 +14,8 @@ allowed-tools:
 
 The artifacts are the state (the PRD file, its `Epics` section, the epic's child issues), so take each next argument from them, never from memory. A stage that fails or is declined ends the flow.
 
+Paths below starting `../../` are relative to this skill's folder, at the plugin root. Read first: `../../guides/engineering-workflow.md` ("Repository settings": the base branch and which guides, templates and skills win).
+
 ## Arguments
 
 `/flow <raw idea | feature folder | Dump.md path | PRD path | epic number | issue URL>`
@@ -31,12 +33,12 @@ When an input fits no row cleanly, ask which stage to start at (AskUserQuestion)
 
 ## Stages
 
-1. **dump** (optional; skip it when the user already has a PRD, a folder or a clear idea they want spec'd). Invoke `ai-workflow:dump` with the raw text. Its own routing confirmation still applies. A bug report or standalone task ends the flow after filing.
-2. **create-prd.** Invoke `ai-workflow:create-prd` with the feature folder or idea. It interviews the user and saves a `Draft` PRD. Then offer the peer-review panel: from the web UI, the PRD card's lens picker; by hand, `/ai-workflow:peer-review <prd-path>`. The panel is optional; do not run it without a yes.
-3. **approval.** Only on the user's say that the PRD is reviewed: invoke `ai-workflow:create-prd` with `approve <prd-path>`. It files the epic and writes its number into the PRD's `Epics` section.
-4. **create-tasks.** Invoke `ai-workflow:create-tasks` with the PRD path. It files the child issues under the epic.
-5. **refine-issues.** Invoke `ai-workflow:refine-issues` with the epic number (from the PRD's `Epics` section).
-6. **dispatch.** Run the epic's issues as parallel lanes (implement, grind, merge, followups, next). In herdr (`command -v herdr` and `herdr pane current` succeed), invoke `ai-workflow:herdr-dispatch` with `<owner/repo>#<epic>`: it previews, asks for the settings and starts. Otherwise run `aiw dispatch plan <owner/repo>#<epic>`, show the waves and warnings, ask for grind mode and auto-merge, then `aiw dispatch start <owner/repo>#<epic> --runner headless <flags>` and give the user the UI link it prints.
+1. **dump** (optional; skip it when the user already has a PRD, a folder or a clear idea they want spec'd). Invoke `ai-workflow:dump` (see "Repo skills win") with the raw text. Its own routing confirmation still applies. A bug report or standalone task ends the flow after filing.
+2. **create-prd.** Invoke `ai-workflow:create-prd` (see "Repo skills win") with the feature folder or idea. It interviews the user and saves a `Draft` PRD. Then offer the peer-review panel: from the web UI, the PRD card's lens picker; by hand, `/ai-workflow:peer-review <prd-path>` (see "Repo skills win"). The panel is optional; do not run it without a yes.
+3. **approval.** Only on the user's say that the PRD is reviewed: invoke `ai-workflow:create-prd` (see "Repo skills win") with `approve <prd-path>`. It files the epic and writes its number into the PRD's `Epics` section.
+4. **create-tasks.** Invoke `ai-workflow:create-tasks` (see "Repo skills win") with the PRD path. It files the child issues under the epic.
+5. **refine-issues.** Invoke `ai-workflow:refine-issues` (see "Repo skills win") with the epic number (from the PRD's `Epics` section).
+6. **dispatch.** Run the epic's issues as parallel lanes (implement, grind, merge, followups, next). In herdr (`command -v herdr` and `herdr pane current` succeed), invoke `ai-workflow:herdr-dispatch` (see "Repo skills win") with `<owner/repo>#<epic>`: it previews, asks for the settings and starts. Otherwise run `aiw dispatch plan <owner/repo>#<epic>`, show the waves and warnings, ask for grind mode and auto-merge, then `aiw dispatch start <owner/repo>#<epic> --runner headless <flags>` and give the user the UI link it prints.
 
 ## Checkpoints
 

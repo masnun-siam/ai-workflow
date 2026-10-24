@@ -1,6 +1,6 @@
 ---
 name: herdr-dispatch
-description: Run an epic's child issues as parallel herdr tabs, end to end — each tab runs `/ai-workflow:implement-issue <n>`, then grinds the PR (off/simple/full), is merged (optional auto-merge), does implement-issue's after-merge followups, closes, and the next unblocked issue opens. Dependency order and a concurrency cap; this session previews, starts and relays. Use whenever the user wants to run, dispatch or fan out an epic's issues in herdr tabs, "implement this epic in parallel", "dispatch epic 123", or work several issues at once in herdr, even if they don't name this skill.
+description: Run an epic's child issues as parallel herdr tabs, end to end — each tab runs implement-issue, then grinds the PR (off/simple/full), is merged (optional auto-merge), does implement-issue's after-merge followups, closes, and the next unblocked issue opens. Dependency order and a concurrency cap; this session previews, starts and relays. Use whenever the user wants to run, dispatch or fan out an epic's issues in herdr tabs, "implement this epic in parallel", "dispatch epic 123", or work several issues at once in herdr, even if they don't name this skill.
 argument-hint: <epic: owner/repo#N or N> [--max N] [--grind off|simple|full] [--ci wait|defer|ignore] [--auto-merge] [--feature-branch <name>] [--model M] [--effort E]
 ---
 
@@ -12,6 +12,8 @@ start, watch and pass on what needs the user. The UI shows and steers the same d
 
 You never answer a tab's question, merge, or post to GitHub yourself. The engine merges only when the
 user turned auto-merge on.
+
+Paths below starting `../../` are relative to this skill's folder, at the plugin root. Read first: `../../guides/engineering-workflow.md` ("Repository settings": the base branch and which guides, templates and skills win).
 
 ## Inputs
 
@@ -32,7 +34,7 @@ user turned auto-merge on.
 1. **Workspace.** `herdr pane current` → its `workspace_id`.
 2. **Preview.** `aiw dispatch plan <epic> <flags>`. Show the user the waves (issues that run together),
    the settings, and every warning: unrefined issues are skipped ("needs refine": suggest
-   `/ai-workflow:refine-issues`), a repo with no registered checkout cannot open a tab, a repo with no
+   `/ai-workflow:refine-issues` (see "Repo skills win")), a repo with no registered checkout cannot open a tab, a repo with no
    Slack channel skips grinding, an open blocker outside the epic holds its issue. Then ask with
    `AskUserQuestion`: start, change settings, or stop. On a change, preview again.
 3. **Start.** `aiw dispatch start <epic> <flags> --runner herdr --workspace <workspace_id>` prints
@@ -57,7 +59,7 @@ user turned auto-merge on.
 6. **End.** When `finished`, report each issue: its PR, merged or not, skipped and why. Offer, with
    `AskUserQuestion` (multi-select), the end actions; none runs by itself:
    - **Open PR to the default branch** (`aiw dispatch end <id> open-pr`; only with a feature branch)
-   - **Run QA** (`aiw dispatch end <id> qa`): a tab that runs `/ai-workflow:verifier-locally` and tests
+   - **Run QA** (`aiw dispatch end <id> qa`): a tab that runs `/ai-workflow:verifier-locally` (see "Repo skills win") and tests
      the whole feature end to end in the browser, filing each bug as a new child of the epic. New
      children join this dispatch as lanes by themselves, so keep watching. A finished dispatch that gains children pauses; resume it after they are refined.
    - **Grind the final PR** (`aiw dispatch end <id> grind-pr`; only after open-pr)

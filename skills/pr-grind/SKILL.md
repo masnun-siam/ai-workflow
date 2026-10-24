@@ -8,6 +8,8 @@ allowed-tools: Bash(aiw:*), Bash(gh:*), Bash(git:*), Bash(bash:*), Bash(slackcli
 > **Paths.** `<...>` placeholders are keys from `aiw paths` (run it; `aiw` is on `PATH`).
 > Substitute the printed value; never guess a path.
 
+Paths below starting `../../` are relative to this skill's folder, at the plugin root. Read first: `../../guides/engineering-workflow.md` ("Repository settings": the base branch and which guides, templates and skills win).
+
 Drive a PR through review→fix→re-trigger rounds with no human per round, until the
 reviewer approves (zero blocker/should-fix; in simple mode, any approval) or a rail stops it. Everything runs in this
 session: **spawn no subagent**. Merging stays manual.
@@ -108,7 +110,7 @@ First that fires wins; firing means stop, fix nothing this round (rail 2 may con
      registry error, 429/503 from a mirror) → `gh run rerun <run-id> --failed` once; if the
      rerun is refused, push an empty `chore: retrigger CI (rerun denied, confirmed unrelated flake)`
      commit instead (skip if that marker is already HEAD). Real failure (assertion, lint,
-     types, build) → fix the cause in existing files, `/ai-workflow:verifier-locally`,
+     types, build) → fix the cause in existing files, `/ai-workflow:verifier-locally` (see "Repo skills win"),
      commit, push. If unsure which, it is real: never rerun hoping it passes. Never weaken
      a check (`continue-on-error`, skipped test, `|| true`, loosened rule), never edit a test
      to match broken behaviour, never `--no-verify`; edit `.github/workflows/*` only when
@@ -148,7 +150,7 @@ the branch rather than checking it out elsewhere. Edit **only files in the PR's 
 
 1. **Fix** each finding in the fix-list. A fix needing a new file is fine if inside the
    change's scope; otherwise it is a decision stop.
-2. **Verify** — run `/ai-workflow:verifier-locally`. Fix any failure locally and re-run
+2. **Verify** — run `/ai-workflow:verifier-locally` (see "Repo skills win"). Fix any failure locally and re-run
    before going on; unresolved after a real attempt → post to Slack, Step 8. Never push
    unverified.
 3. **Commit** — stage by explicit path, never `git add -A`/`.`/`-u` or `commit -a`; never

@@ -8,7 +8,7 @@ argument-hint: "[full] [issue number to reference]"
 
 Keeps `docs/` true to the code on the base branch. The reader is an AI agent about to start work: it must learn quickly where things are, how they flow, which conventions the code follows and how to run and check its work. The code is the only source; never copy from old docs, issues or memory without checking it in the code.
 
-Paths below starting `../../` are relative to this skill's folder, at the plugin root. Read first: `../../guides/engineering-workflow.md` ("Repository settings" to resolve the base branch, and "Branches, commits and pull requests").
+Paths below starting `../../` are relative to this skill's folder, at the plugin root. Read first: `../../guides/engineering-workflow.md` ("Repository settings" to resolve the base branch and which skills win, and "Branches, commits and pull requests").
 
 `docs/prds/` belongs to `/create-prd`; never touch it. Leave `docs/guides/` and `docs/templates/` alone too: they are written by people.
 

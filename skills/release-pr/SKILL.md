@@ -15,6 +15,8 @@ them means **build everything, write nothing to GitHub or Slack** (see Dry run b
 This skill writes a PR and one Slack message. It never merges, never edits code, and
 never pushes.
 
+Paths below starting `../../` are relative to this skill's folder, at the plugin root. Read first: `../../guides/engineering-workflow.md` ("Repository settings": the base branch and which guides, templates and skills win).
+
 ## Why this needs care
 
 A release PR's commit list can't be trusted. When earlier releases were squash-merged, their
@@ -201,7 +203,7 @@ URL and say the grind needs a channel mapping.
 
 ## Step 6: Hand off to the grind
 
-Invoke `ai-workflow:pr-grind` with the thread URL from Step 5. From here it owns the
+Invoke `ai-workflow:pr-grind` (see "Repo skills win") with the thread URL from Step 5. From here it owns the
 loop, the state file and the terminal message. Don't create its state file or arm its
 monitor yourself.
 

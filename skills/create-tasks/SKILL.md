@@ -10,7 +10,7 @@ Input: the path to a PRD file, or a finding from other work (then follow "A find
 
 The PRD is the source of truth. This skill decides how the work is split, never what is built.
 
-Paths below starting `../../` are relative to this skill's folder, at the plugin root. Read first: `../../guides/engineering-workflow.md` ("Repository settings", "Tasks" for the size and split rules, and "GitHub: project, epics and dependencies" for titles and labels).
+Paths below starting `../../` are relative to this skill's folder, at the plugin root. Read first: `../../guides/engineering-workflow.md` ("Repository settings" for the base branch and which guides, templates and skills win, "Tasks" for the size and split rules, and "GitHub: project, epics and dependencies" for titles and labels).
 
 ## Steps
 
@@ -39,15 +39,15 @@ Paths below starting `../../` are relative to this skill's folder, at the plugin
 
 10. **Verify on GitHub** that every task is a child of the epic (`gh issue view <epic> --json subIssues`) and every blocked-by link matches the breakdown (`--json blockedBy`). Fix anything missing.
 
-11. **Report and hand off.** Give the epic link and the issues, showing which can start now. The next step is `/refine-issues <epic number>`. Do not start it unless asked.
+11. **Report and hand off.** Give the epic link and the issues, showing which can start now. The next step is `/refine-issues <epic number>` (see "Repo skills win"). Do not start it unless asked.
 
 ## A finding from other work
 
-Input: what was found, where (file and line, command output), and the issue or pull request being worked on. Output: one issue, created here and then filled by `/refine-issues <n>`. Steps 1–11 do not apply.
+Input: what was found, where (file and line, command output), and the issue or pull request being worked on. Output: one issue, created here and then filled by `/refine-issues <n>` (see "Repo skills win"). Steps 1–11 do not apply.
 
 1. **Reproduce it first.** For a bug or a failing check, reproduce it where it fails (locally or in CI) and file only what reproduces, with the evidence (commands, output, the environment where it happens and where it does not). A refactoring opportunity or a gap carries its evidence instead.
-2. **Do not duplicate.** Search open issues (`gh issue list --search`). If one already covers the finding, comment the new evidence there and hand that number to `/refine-issues` instead.
+2. **Do not duplicate.** Search open issues (`gh issue list --search`). If one already covers the finding, comment the new evidence there and hand that number to `/refine-issues` (see "Repo skills win") instead.
 3. **Find its PRD**: the PRD of the epic or issue it came from, or one that covers the area. If none is found or linked, ask the user with `AskUserQuestion`, recommended option first: link an existing PRD, file a separate issue to create that PRD (through this section), or go on without one.
 4. **Show the user** the title, the outcome in one sentence, the evidence, where it was found and its PRD, and ask with `AskUserQuestion` whether to create it; recommended option first. Create nothing without a yes.
 5. **Create the issue** with `gh issue create`: a body with the finding, the evidence, a link to where it was found and the PRD path when there is one; the labels the guide lists for an issue (area, type, priority, and `prd-<slug>` when there is a PRD); `--parent <epic>` when it belongs to that epic; and the project found as in step 6 of the PRD flow. Comment its number on the issue it came from.
-6. **Hand off.** The next step is `/refine-issues <new issue number>`, which writes the WHAT/WHY/HOW and adds the `refined` label.
+6. **Hand off.** The next step is `/refine-issues <new issue number>` (see "Repo skills win"), which writes the WHAT/WHY/HOW and adds the `refined` label.
