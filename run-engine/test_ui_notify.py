@@ -237,6 +237,10 @@ assert (
 )
 h, _ = ui_notify.compose("done", rec(link=None, command="/create-prd x"), None)
 assert h["Title"] == "aiw: run done" and h["Tags"] == "white_check_mark,create-prd,r", h
+h, _ = ui_notify.compose("done", rec(link=None, command="/ai-workflow:create-prd x"), None)
+assert h["Tags"] == "white_check_mark,create-prd,r", h  # #437: plugin spelling, same tag
+h, _ = ui_notify.compose("done", rec(link=None, command="fix the bug"), None)
+assert h["Tags"] == "white_check_mark,r", h  # free text: no family tag
 h, _ = ui_notify.compose("pipeline", {"id": "p-1", "repo": "o/r", "command": "pipeline x"}, "https://box.ts.net")
 assert (
     h["Tags"].startswith("checkered_flag") and h["Actions"] == "view, Open pipeline, https://box.ts.net/#/sessions/p-1"

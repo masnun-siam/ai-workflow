@@ -182,6 +182,7 @@ held = [
         "/dump x",
         "/ai-workflow:prd x",
         "/create-tasks p",
+        "/ai-workflow:create-tasks p",
         "/refine-issues docs/tasks/x.md",
     )
 ]
