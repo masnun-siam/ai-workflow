@@ -25,11 +25,13 @@ ALLOWED = (
     "and `/dump` should place content",
     "because `/flow` parses it to start the next stage",
     "/dump (optional) → /create-prd → approval → /create-tasks → /refine-issues → dispatch",
+    "Use whenever the user says /flow,",
     "# /flow — Idea",
     "`/flow` holds the user's place",
     "`/flow <raw idea",
     "say `/flow <that argument>` resumes",
     "Also runnable by hand: /peer-review reviews",
+    "Use whenever the user says /peer-review,",
     "# /peer-review: a reviewer panel",
     "`/peer-review [--lenses <lens,lens>] [<artifact>]`, or from the UI: `/ai-workflow:peer-review --root",
     "or invokes /pr-grind.",
@@ -45,29 +47,29 @@ ALLOWED = (
     "`chore: update /verifier-locally skill",
     # Who owns or wrote something: no skill is run.
     "are worked out by `/refine-issues` against the current code",
-    "Input: the path to a PRD file, or a finding from other work",
+    "`/refine-issues` later writes",
     "Find the epic `/create-prd` created on approval",
     "`docs/prds/` belongs to `/create-prd`",
     "is filed as a problem statement, not as raw text. `/create-prd`",
     "tells `/create-prd` this `PRD.md` is only a seed",
-    "Input: a GitHub issue number, or an epic number",
-    "10. **Verify it works in the app.**",
-    "13. **Merge, push and open a draft pull request.**",
-    "14. **Get it green, then mark it ready.**",
-    "15. **Log learnings on the issue.**",
+    "(WHAT/WHY/HOW, written by `/refine-issues`)",
+    "as the `/verifier-locally` trap says",
+    "the `/pr-review` verdict and what was done with each finding, and a **Learnings**",
+    "every comment and `/pr-review` finding is handled",
+    "(`/skill-feedback reconcile` finds it by that heading)",
     "16. **Report** the pull request link, the `/pr-review` verdict",
-    "Input: an epic number, or one or more issue numbers.",
-    "7. **Update the issues** with `gh issue edit",
+    "for what was already known. `/create-tasks`",
+    "(`/implement-issue` moves it later)",
     "hand off to /pr-grind.",  # release-pr description; the hand-off itself is in Step 6
     "If a `/pr-grind` loop is running on it",
     "fixing belongs to `/implement-issue`",
-    "- Hooks that autofix",
+    "leave the fix to `/implement-issue`.",
     "install them first (`/implement-issue` step 3)",
     # pr-review points at /implement-issue steps to read, not a skill to run.
-    "1. **Gather.** The diff and commit list",
+    "(`/implement-issue` step 12) has no CI yet: the `/verifier-locally` results stand in for it",
     "Follow `/implement-issue`",
-    "2. **Work on the PR's branch.**",
-    "3. **Validate each concern before changing code.**",
+    "prepare it as `/implement-issue` step 3 says",
+    "follow-up issue (`/implement-issue` step 8)",
     "5. **Review again, push, get CI green.** `/implement-issue` steps 12 to 14",
     "as `/implement-issue` step 14 says",
     "as `/implement-issue` steps 15 and 16 say",
@@ -75,17 +77,20 @@ ALLOWED = (
     "| 1. Product requirements |",
     "| 2. Tasks |",
     "| 3. Refined issues |",
-    "| 4. Implementation |",
+    "draft first, reviewed with `/pr-review`, ready when CI is green",
+    "`/implement-issue <epic>` picks the lowest-numbered Ready issue",
+    "| `/implement-issue` |",
     "| 5. Local verification |",
     "| 6. Review |",
     "- `/create-tasks` splits an approved PRD",
-    "`/create-tasks` creates the issue; `/refine-issues` fills it",
-    "| Epic | An issue titled",
-    "**Project fields.**",
+    "`/refine-issues` fills it and adds the `refined` label",
+    "Created by `/create-prd` when the PRD is approved; `/create-tasks` creates it only if it is missing.",
+    "`/refine-issues` moves a refin",
+    "`/implement-issue` moves the rest from Backlog",
     "The issue body is corrected later by `/refine-issues`.",
-    "One line is exempt and keeps its exact text: dump's",
+    "dump's `→ next: /create-prd <folder>`, which flow reads byte for byte",
     "Used by people and by the `/pr-review` skill.",
-    "A local branch reviewed before its push has no CI yet",
+    "its `/verifier-locally` results stand in.",
     # guides/skills.md: the table of skills.
     "| `/create-prd` |",
     "| `/create-tasks` |",
@@ -128,11 +133,19 @@ skill_files = sorted(
 )
 files = skill_files + sorted(os.path.relpath(f, ROOT) for f in glob.glob(os.path.join(ROOT, "guides", "*.md")))
 
+
 # 1. Every hand-off names the skill and points to the rule; plain mentions are allow-listed.
+def bare(ln):
+    """The line with every allow-listed plain mention cut out."""
+    for a in ALLOWED:
+        ln = ln.replace(a, "")
+    return ln
+
+
 bad = [
     f"{f}:{i}"
     for f, i, ln in hits(files, mention)
-    if POINTER not in ln and DUMP_EXEMPT not in ln and not any(a in ln for a in ALLOWED)
+    if POINTER not in ln and DUMP_EXEMPT not in ln and mention.search(bare(ln))
 ]
 ok('every hand-off line points to "Repo skills win" or is an allow-listed plain mention', not bad, bad)
 ok("dump keeps its exempt hand-off line", f"| `{DUMP_EXEMPT}`" in text("skills/dump/SKILL.md"))
