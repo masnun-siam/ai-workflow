@@ -2061,6 +2061,27 @@ try:
 finally:
     reap(rec)
 
+# ---- allowed_tools: no permission bypass, one comma-joined --allowedTools before the prompt -----
+d, fk, work = setup("normal")
+rec = ui_runner.start("answer it", work, allowed_tools=["Read", "Bash(git status:*)"])
+try:
+    wait_status(rec["id"], {"done", "failed"})
+    argv = lines(fk, "argv").split("\n")[:-1]
+    assert "--dangerously-skip-permissions" not in argv, argv
+    assert argv[-3:-1] == ["--allowedTools", "Read,Bash(git status:*)"] and argv[-1] == "answer it", argv
+    ok("allowed_tools: no bypass, --allowedTools before the prompt")
+finally:
+    reap(rec)
+d, fk, work = setup("normal")
+rec = ui_runner.start("plain", work)
+try:
+    wait_status(rec["id"], {"done", "failed"})
+    argv = lines(fk, "argv").split("\n")[:-1]
+    assert "--dangerously-skip-permissions" in argv and "--allowedTools" not in argv, argv
+    ok("plain start keeps the bypass")
+finally:
+    reap(rec)
+
 # ---- slug via checkouts.json -----------------------------------------------
 d, fk, work = setup("normal")
 with open(os.path.join(d, "checkouts.json"), "w") as f:

@@ -9,11 +9,22 @@ injected instruction can at most steer a pick among the offered options. Anythin
 from __future__ import annotations
 
 import json
+import os
 
 import ui_sessions
 
 PREFIX = "AWAY-ANSWER:"
 MAX_WHY = 300
+AGENT_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "agents", "away-answerer.md")
+
+
+def allowed_tools() -> list:
+    """The agent file's `tools:` list: the one source for what the answerer session may call."""
+    with open(AGENT_FILE, encoding="utf-8") as f:
+        for line in f:
+            if line.startswith("tools:"):
+                return line[len("tools:") :].strip().split(", ")
+    raise ValueError(f"no tools: line in {AGENT_FILE}")
 
 
 def prompt(rec: dict, pending: dict, transcript: str, checkout: str) -> str:

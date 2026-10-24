@@ -56,8 +56,12 @@ The UI's list of everything that needs the user across repos (questions, PRs rea
 _Avoid_: Notifications, queue
 
 **Away mode**:
-A timed run by the UI server that answers recommended `aiw ask` options, skips CI on paused grinds and retries failed sessions while the user is away. Formerly "AFK".
+A timed run by the UI server that answers every `aiw ask` question (recommended options at once, an Opus answerer for the rest, risky or unanswerable rounds held), skips CI on paused grinds and retries failed sessions while the user is away. Formerly "AFK".
 _Avoid_: AFK, autopilot
+
+**Answerer**:
+A read-only Opus session (`agents/away-answerer.md`) that Away mode starts for one question round without a recommended option. It picks labels with a reason, or holds the round; it never appears in session lists.
+_Avoid_: Bot, auto-answerer
 
 **Project**:
 The human-friendly name for a GitHub `owner/repo`, looked up from `skills/worklog/projects.json`. Falls back to the raw `owner/repo` slug when unmapped.

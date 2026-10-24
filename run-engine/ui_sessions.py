@@ -252,6 +252,26 @@ def claim_answer(sid: str, round_id: str):
     return record
 
 
+def update_pending(sid: str, round_id: str, **fields) -> bool:
+    """Set fields on the pending round only while it is still that waiting round (a human claim wins)."""
+    path = os.path.join(session_dir(sid), "meta.json")
+    try:
+        lock = open(os.path.join(session_dir(sid), ".lock"), "a")
+    except FileNotFoundError:  # the session was deleted
+        return False
+    with lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        record = _read_meta(path)
+        pq = record.get("pending_question") if record else None
+        if record is None or record.get("status") != "waiting" or not isinstance(pq, dict):
+            return False
+        if pq.get("status") != "pending" or pq.get("id") != round_id:
+            return False
+        pq.update(fields)
+        _atomic_write_json(path, record)
+    return True
+
+
 def list_sessions() -> list:
     try:
         names = os.listdir(sessions_dir())
