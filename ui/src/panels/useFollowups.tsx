@@ -4,6 +4,7 @@
 import { useSyncExternalStore } from 'react';
 import { usePrompt, useSessions, useStartSession } from '../api/hooks';
 import { toast, useConfirm } from '../components';
+import { parseSkill } from '../lib/format';
 
 const KEY = 'aiw.followups';
 const read = (): string[] => {
@@ -33,9 +34,13 @@ export function useFollowups(repo: string) {
     markSent(`${repo}#${issueN}`);
     const text = `${why}, do the follow-ups.`;
     const fresh = () => startSession.mutate({ repo, command: 'implement-issue', args: `${issueN} ${text}`, issue: issueN }, { onSuccess: () => toast(`Started follow-ups for #${issueN}`) });
-    const re = new RegExp(`^/(?:[\\w-]+:)?implement-issue\\s+#?${issueN}(?:\\s|$)`);
+    const re = new RegExp(`^#?${issueN}(?:\\s|$)`);
+    const ofIssue = (command: string) => {
+      const p = parseSkill(command);
+      return p?.skill === 'implement-issue' && re.test(p.rest);
+    };
     const prev = sessions
-      .filter((s) => s.session_id && (!s.slug || s.slug === repo) && re.test(s.command))
+      .filter((s) => s.session_id && (!s.slug || s.slug === repo) && ofIssue(s.command))
       .sort((a, b) => b.started_at.localeCompare(a.started_at))[0];
     if (!prev) return fresh();
     prompt.mutate({ id: prev.id, text }, { onSuccess: () => toast(`Follow-ups sent to #${issueN}'s session`), onError: fresh });
