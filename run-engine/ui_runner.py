@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 
 import ci
 import dispatch_run
+import repo_skills
 import shared
 import ui_sessions
 import ui_settings
@@ -375,9 +376,11 @@ def _deliver_queued(sid: str) -> None:
 
 def _issue_key(rec: dict):
     """(repo, "<command>:<number>") of an /implement-issue or /pr-grind session, else None."""
-    m = re.match(r"/(?:[\w-]+:)?(implement-issue|pr-grind)\s+(.*)", rec.get("command") or "")
-    n = re.search(r"(?:^|\s|/issues/|/pull/)#?(\d+)(?=\s|$)", m.group(2)) if m else None
-    return (rec.get("repo"), f"{m.group(1)}:{n.group(1)}") if n else None
+    p = repo_skills.parse(rec.get("command"))
+    if not p or p[0] not in ("implement-issue", "pr-grind"):
+        return None
+    n = re.search(r"(?:^|\s|/issues/|/pull/)#?(\d+)(?=\s|$)", p[1].split("\n", 1)[0])
+    return (rec.get("repo"), f"{p[0]}:{n.group(1)}") if n else None
 
 
 def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None, resuming=False) -> None:
@@ -908,7 +911,7 @@ def prgrind_tick(path: str, now=None) -> str:
     if "done" in h:
         return "done"
     thread, cmd = h["thread"], f"/pr-grind {h['thread']}"
-    recs = [r for r in ui_sessions.list_sessions() if r.get("command") == cmd]
+    recs = [r for r in ui_sessions.list_sessions() if repo_skills.is_skill(r.get("command"), "pr-grind", thread)]
     if any(_live(r) for r in recs):
         return "busy"
     lock = open(path[:-3] + ".lock", "a")
@@ -1005,7 +1008,8 @@ def grind_live() -> int:
     return sum(
         1
         for r in ui_sessions.list_sessions()
-        if str(r.get("command", "")).startswith(("/pr-grind ", GRIND_PREFIX)) and _live(r)
+        if (repo_skills.is_skill(r.get("command"), "pr-grind") or str(r.get("command", "")).startswith(GRIND_PREFIX))
+        and _live(r)
     )
 
 

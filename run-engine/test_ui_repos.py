@@ -284,8 +284,8 @@ try:
             ui_sessions.update(rec["id"], status=status)
         return rec
 
-    for status in ("starting", "running"):
-        rec = live("/implement-issue 7", status)
+    for status, cmd in (("starting", "/implement-issue 7"), ("running", "/ai-workflow:implement-issue 7")):
+        rec = live(cmd, status)
         s, p = post({"repo": "o/r", "command": "implement-issue", "args": "7"})
         assert s == 409 and calls == [], (status, s, p, calls)
         assert "o/r#7" in err(p), p
