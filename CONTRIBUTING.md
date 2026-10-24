@@ -15,7 +15,7 @@
   pre-commit hook is a reminder, not a gate.
 - **`AGENTS.md`:** a symlink to `CLAUDE.md`, so edit `CLAUDE.md`. On Windows with
   `core.symlinks=false`, AGENTS.md checks out as a plain file containing the text `CLAUDE.md`.
-- **`README.md`:** a link hub only. New content goes in the docs it links.
+- **`README.md`:** the intro and a link hub. Detail goes in the docs it links.
 - **Skills, guides, templates:** the dev-workflow ones are imported as they are. Change
   them through the skill's own "Improve this skill" loop or `/sync-from-wasensi`, not by hand-fixing
   one repo's quirk. `guides/skills.md` explains the layout.
