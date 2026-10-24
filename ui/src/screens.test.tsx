@@ -260,6 +260,8 @@ describe('Small changes tab', () => {
 
   it('smallChangeText returns the typed text for both command forms and null otherwise', () => {
     expect(smallChangeText(marked('fix it'))).toBe('fix it');
+    expect(smallChangeText(marked('fix it').replace('/ai-workflow:refine-issues', '/refine-issues'))).toBe('fix it');
+    expect(smallChangeText(marked('Instructions: keep this'))).toBe('Instructions: keep this');
     expect(smallChangeText(`/ai-workflow:create-tasks ${SMALL_CHANGE_MARKER} fix it`)).toBe('fix it');
     expect(smallChangeText('/create-tasks A finding for epic #7 here')).toBeNull();
     expect(smallChangeText('/implement-issue 3')).toBeNull();
