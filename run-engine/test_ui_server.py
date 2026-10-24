@@ -158,6 +158,12 @@ try:
     assert req(port, "/api/health", method="POST", host="evil.example")[0] == 403
     ok("POST bad host -> 403")
 
+    # restart: GET returns the four keys, a foreign-origin POST is refused before anything runs
+    s, _, body, _ = req(port, "/api/restart", host=good)
+    assert s == 200 and set(json.loads(body)) == {"available", "running", "exit_code", "log_tail"}
+    assert req(port, "/api/restart", method="POST", host=good, origin="http://evil.example")[0] == 403
+    ok("restart: GET shape, cross-site POST 403")
+
     # concurrency
     with ThreadPoolExecutor(2) as ex:
         res = list(ex.map(lambda _: req(port, host=good)[0], range(2)))

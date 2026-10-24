@@ -273,6 +273,12 @@ export interface RepoSettings {
   auto_grind: boolean;
   slack_channel: string;
 }
+export interface RestartStatus {
+  available: boolean;
+  running: boolean;
+  exit_code: number | null;
+  log_tail: string;
+}
 export interface Settings {
   commands: ClaudeCommand[];
   default: string;

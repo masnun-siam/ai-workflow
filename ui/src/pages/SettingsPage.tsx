@@ -6,6 +6,7 @@ import { NotificationsSection } from '../settings/NotificationsSection';
 import { ReposSection } from '../settings/ReposSection';
 import { ReviewSection } from '../settings/ReviewSection';
 import { VaultSection } from '../settings/VaultSection';
+import { ServerSection } from '../settings/ServerSection';
 
 export const SECTIONS = [
   { id: 'repos', label: 'Repositories', Body: ReposSection },
@@ -13,6 +14,7 @@ export const SECTIONS = [
   { id: 'notifications', label: 'Notifications', Body: NotificationsSection },
   { id: 'review', label: 'Peer review', Body: ReviewSection },
   { id: 'vault', label: 'Notes vault', Body: VaultSection },
+  { id: 'server', label: 'Server', Body: ServerSection },
 ] as const;
 const ALIAS: Record<string, string> = { commands: 'accounts', notify: 'notifications' }; // old settings links
 
