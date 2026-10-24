@@ -27,6 +27,22 @@ ui_runner.resume = lambda sid, text: resumed.append((sid, text)) or ui_sessions.
 ui_runner.resume_stopped = lambda sid, cmd=None: (
     retried.append(sid) or ui_sessions.update(sid, status="running", ended_at=None)
 )
+started, stopped = [], []
+
+
+def fake_start(prompt, cwd, link=None, **kw):
+    """A real session record, so ui_sessions.update works on it; no claude process."""
+    rec = ui_sessions.create(prompt, cwd, link, claude_cmd=kw.get("claude_cmd"))
+    started.append({"id": rec["id"], "prompt": prompt, **kw})
+    return ui_sessions.update(rec["id"], status="running")
+
+
+def fake_stop(sid):
+    stopped.append(sid)
+    return ui_sessions.update(sid, status="stopped", auto_resume=False)
+
+
+ui_runner.start, ui_runner.stop = fake_start, fake_stop
 ui_notify.load_config = lambda: {"ntfy": {"server": "https://ntfy.example", "topic": "t"}}
 
 
@@ -217,5 +233,140 @@ assert x41["held"] is None and x41["afk_retries"] == 1
 assert x41["outbox"] == [["send", dispatch_run.ci_fix_prompt(410)]], x41  # red CI: fix it in the PR's session
 assert dispatch_run.load(dl["id"])["lanes"]["o/r#42"]["needs_you"] == "waiting on you"
 assert any(e["command"] == "dispatch lane #41" for e in ui_afk.load()["log"])
+
+# ---- Opus answerer (#463) ----
+import ui_panel  # noqa: E402
+import away_answerer  # noqa: E402
+
+for r in ui_sessions.list_sessions():  # leave nothing from the cases above waiting
+    if r["status"] in ("waiting", "running", "starting"):
+        ui_sessions.update(r["id"], status="stopped", pending_question=None)
+W = time.time()
+ui_afk.start(W + 7200, W)
+started.clear()
+stopped.clear()
+resumed.clear()
+retried.clear()
+replies = {}
+ui_panel.final_text = lambda sid: replies[sid]
+OK = 'AWAY-ANSWER: {"answers": {"0": {"labels": ["Approve"], "why": "safe"}}}'
+BAD = 'AWAY-ANSWER: {"answers": {"0": {"labels": ["Nope"], "why": "x"}}}'
+
+
+def log_of(sid):
+    return [e for e in ui_afk.load()["log"] if e["sid"] == sid]
+
+
+def pq(sid):
+    return ui_sessions.load(sid)["pending_question"]
+
+
+def finish(aid, reply, status="done", cost=0.3):
+    replies[aid] = reply
+    ui_sessions.update(aid, status=status, cost=cost)
+
+
+# valid reply: start kwargs, then resume with labels only and an Opus row
+v = waiting(rec=False)
+ui_afk.tick(W)
+assert len(started) == 1, started
+k = started[0]
+assert (k["agent"], k["model"], k["effort"], k["claude_cmd"]) == ("ai-workflow:away-answerer", "opus", "medium", None)
+assert k["allowed_tools"] == away_answerer.allowed_tools() and "Read" in k["allowed_tools"]
+a = ui_sessions.load(k["id"])
+assert (a["role"], a["answers_for"], a["answers_round"]) == ("away-answerer", v, "q-1"), a
+assert pq(v)["answerer"] == k["id"] and pq(v)["answerer_attempts"] == 1
+ui_afk.tick(W)
+assert len(started) == 1 and not log_of(v)  # still running: nothing starts, nothing logs
+finish(k["id"], OK)
+ui_afk.tick(W)
+assert resumed == [(v, 'Answer to q-1: {"0":{"labels":["Approve"]}}')], resumed
+e = log_of(v)[0]
+assert (e["by"], e["answerer"], e["cost"], e["kind"]) == ("opus", k["id"], 0.3, "answer"), e
+assert e["questions"][0]["picked"] == ["Approve"] and e["questions"][0]["why"] == "safe"
+
+# hold: one held row, round stays waiting, no more answerers
+n0 = len(started)
+h = waiting(rec=False)
+ui_afk.tick(W)
+finish(started[n0]["id"], 'AWAY-ANSWER: {"hold": "destructive"}')
+ui_afk.tick(W)
+e = log_of(h)[0]
+assert e["kind"] == "held" and e["reason"] == "destructive" and e["picked"] == "Held: destructive", e
+assert e["answerer"] == started[n0]["id"] and e["cost"] == 0.3 and e["id"] == f"{h}:q-1"
+assert e["questions"] and all("picked" not in q for q in e["questions"])
+assert ui_sessions.load(h)["status"] == "waiting" and pq(h)["held"] is True
+ui_afk.tick(W)
+ui_afk.tick(W)
+assert len(started) == n0 + 1 and len(log_of(h)) == 1
+
+# invalid labels twice: exactly two answerers, then held
+n0 = len(started)
+i = waiting(rec=False)
+ui_afk.tick(W)
+finish(started[n0]["id"], BAD)
+ui_afk.tick(W)  # first failure starts the second answerer in the same tick
+assert len(started) == n0 + 2 and not log_of(i) and pq(i)["answerer"] == started[n0 + 1]["id"]
+finish(started[n0 + 1]["id"], BAD)
+ui_afk.tick(W)
+ui_afk.tick(W)
+assert len(started) == n0 + 2, "no third answerer"
+e = log_of(i)[0]
+assert e["kind"] == "held" and e["reason"].startswith("answerer failed (invalid reply"), e
+assert ui_sessions.load(i)["status"] == "waiting" and pq(i)["answerer_attempts"] == 2
+
+# timeout: stopped by the tick, counted as a failure; limited counts as one too
+n0 = len(started)
+m = waiting(rec=False)
+ui_afk.tick(W)
+first = started[n0]["id"]
+ui_afk.tick(W + ui_afk.ANSWER_SECONDS + 60)
+assert first in stopped and len(started) == n0 + 2, (stopped, started)
+second = started[n0 + 1]["id"]
+ui_sessions.update(second, status="limited")
+ui_afk.tick(W)
+assert second in stopped and len(started) == n0 + 2
+e = log_of(m)[0]
+assert e["kind"] == "held" and e["reason"] == "answerer failed (limited)", e
+
+# a failed answerer is not retried and not counted as held
+before = ui_afk.public(now=W)["held"]
+ui_sessions.update(
+    first,
+    status="failed",
+    session_id="zz",
+    ended_at=ui_runner._iso(__import__("datetime").datetime.now(__import__("datetime").timezone.utc)),
+)
+ui_afk.tick(W + 1)
+ui_afk.tick(W + 1 + ui_afk.RETRY_DELAYS[0] + 1)
+assert not retried and ui_afk.public(now=W)["held"] == before
+
+# the owner answers while the answerer runs: it is stopped, its reply discarded, no row
+n0 = len(started)
+r = waiting(rec=False)
+ui_afk.tick(W)
+ra = started[n0]["id"]
+assert ui_sessions.claim_answer(r, "q-1") is not None
+replies[ra] = OK
+ui_afk.tick(W)
+assert ra in stopped and not log_of(r) and all(sid != r for sid, _ in resumed)
+
+# the window ends while an answerer runs: stopped, round freed and still waiting, no row
+n0 = len(started)
+w = waiting(rec=False)
+ui_afk.tick(W)
+wa = started[n0]["id"]
+assert pq(w)["answerer"] == wa
+ui_afk.stop(W + 1)
+assert wa in stopped and pq(w)["answerer"] is None and pq(w)["answerer_attempts"] == 1
+assert ui_sessions.load(w)["status"] == "waiting" and not log_of(w)
+
+# a fully recommended round never starts an answerer
+ui_sessions.update(w, status="stopped", pending_question=None)
+ui_afk.start(W + 7200, W + 2)
+n0 = len(started)
+fr = waiting()
+ui_afk.tick(W + 2)
+assert len(started) == n0 and log_of(fr)[0]["by"] == "recommended"
 
 print("test_ui_afk: ok")

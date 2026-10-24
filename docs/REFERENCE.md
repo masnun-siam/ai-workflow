@@ -197,11 +197,16 @@ recorded start request, same repo and account; `POST /api/sessions/<id>/rerun`),
 the session is not queued or is waiting on an account limit, which starts by itself at the reset).
 
 **Away mode.** A timed run by the server, so it works with no browser open (30 min to 4 h or an end
-time; **+30 min** and **I'm back** end or extend it). Each tick it answers every `aiw ask` round whose
-questions all carry a "(Recommended)" option (planning interviews included), sends "Skip CI for now" to a grind paused on CI (at most
+time; **+30 min** and **I'm back** end or extend it). Each tick it answers every `aiw ask` round: at once
+when all its questions carry a "(Recommended)" option (planning interviews included), otherwise through a
+read-only **answerer** (`agents/away-answerer.md`, Opus, medium effort, started without the permission bypass
+and with `--allowedTools` set to the agent's `tools:` list). A valid reply resumes the session and is logged
+`by: opus`; a hold, or a second failed answerer (failed, rate limited, invalid reply, over 10 min), is logged
+`kind: held` and the round waits for you. Your own answer, or the window ending, stops the answerer with no
+log row. It also sends "Skip CI for now" to a grind paused on CI (at most
 once per PR per window), and retries failed sessions, and held or stopped dispatch issues, on a 2m/10m/30m/1h backoff (a
 dispatch issue asking a question gets the recommended answer like any session). When the window ends
-one push sums it up and the Inbox shows a "While you were away" summary until dismissed: one row per answered or held round (time, session, picker chip Recommended/Opus/Held, each question and pick, Opus's reasons, cost and answerer transcript link, a checkbox on answers not yet changed). **Change N selected** beside Dismiss opens a dialog with the question form for each ticked round, prefilled with the logged picks; Submit posts `POST /api/afk/change` and one toast reports each session as sent, queued or the refusal; sent and queued rows then show **Changed**; retry and older entries stay one-liners. Each answer entry carries `id` (`<session id>:<round id>`), `by` (`recommended`), `questions` (the round as the session holds it, plus `picked` and `why`), `answerer`, `cost` and `changed`, besides the `question`/`picked` summary strings. State is
+one push sums it up and the Inbox shows a "While you were away" summary until dismissed: one row per answered or held round (time, session, picker chip Recommended/Opus/Held, each question and pick, Opus's reasons, cost and answerer transcript link, a checkbox on answers not yet changed). **Change N selected** beside Dismiss opens a dialog with the question form for each ticked round, prefilled with the logged picks; Submit posts `POST /api/afk/change` and one toast reports each session as sent, queued or the refusal; sent and queued rows then show **Changed**; retry and older entries stay one-liners. Each answer entry carries `id` (`<session id>:<round id>`), `by` (`recommended` or `opus`), `questions` (the round as the session holds it, plus `picked` and `why`), `answerer`, `cost` and `changed`, besides the `question`/`picked` summary strings. State is
 `afk.json`. `POST /api/afk` (start), `POST /api/afk/stop|dismiss`.
 
 **Settings** (`#/settings/repos|accounts|notifications|review|vault|server`). **Repositories**: the global
