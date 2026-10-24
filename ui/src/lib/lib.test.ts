@@ -77,7 +77,7 @@ describe('nextStep (FR-12)', () => {
     expect(feat(prd({ column: 'done' }), []).stage).toBe('shipped');
   });
   it('stageOf: a Done PRD is shipped', () => {
-    expect(stageOf(prd({ status: 'Done', column: 'done' }), [])).toBe('shipped');
+    expect(feat(prd({ status: 'Done', column: 'done' }), []).stage).toBe('shipped');
   });
   it('tasks: refine N, no batch start', () => {
     const f = feat(prd({ issues: 2, unrefined: [2], column: 'tasks_filed' }), [card({ n: 2, column: 'unrefined' }), card({ n: 3 })]);
