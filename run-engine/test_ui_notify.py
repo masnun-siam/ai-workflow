@@ -153,6 +153,15 @@ assert waiting["headers"]["priority"] in ("high", "urgent", "4", "5")
 f.close()
 ok("done/failed click + priority")
 
+# answerer sessions never notify
+f = Fake()
+fresh(conf(f))
+for ev in ("done", "failed", "waiting"):
+    ui_notify.notify(ev, rec(role="away-answerer"))
+assert not f.reqs, f.reqs
+f.close()
+ok("answerer: no notification")
+
 # 3 store e2e
 f = Fake()
 d = fresh(conf(f))

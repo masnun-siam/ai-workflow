@@ -658,6 +658,11 @@ try:
     assert call("GET", "/api/inbox")[1]["items"][0]["type"] == "gh_auth"
     assert call("GET", "/api/sessions")[1]["gh"] == {"ok": False, "login": None, "error": "not logged in"}
     ok("inbox: items, afk, gh, stale; ?repo= filter and 400; gh on /api/sessions")
+    ans = ui_sessions.create("/x", other)
+    ui_sessions.update(ans["id"], role="away-answerer")
+    assert ans["id"] not in [s["id"] for s in call("GET", "/api/sessions")[1]["sessions"]]
+    assert call("GET", f"/api/sessions/{ans['id']}")[0] == 200
+    ok("answerer: hidden from the list, reachable by id")
     assert call("POST", "/api/sessions/nope/start-now")[0] == 404
     st, body = call("POST", f"/api/sessions/{live_q['id']}/start-now")
     assert st == 409 and body == {"error": "session is not queued"}, (st, body)

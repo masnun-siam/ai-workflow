@@ -105,6 +105,15 @@ ui_runner.cancel_auto(b["id"])
 assert ui_runner.limit_tick(stagger=0) == []
 assert ui_runner.stop(b["id"])["status"] == "stopped"
 
+# a limited answerer is never auto-resumed
+mode("limit")
+d_ = ui_runner.start("/implement-issue 4", work)
+wait(d_["id"], "limited")
+ui_sessions.update(d_["id"], limit_resets_at=past, role=ui_sessions.ANSWERER_ROLE)
+r_ = ui_runner.limit_tick(stagger=0)
+assert r_ == [], (r_, d_["id"], a["id"])
+assert ui_runner.stop(d_["id"])["status"] == "stopped"
+
 # limit text without a reset time -> limited, no auto-resume
 stream("nolimit_time", INIT, ERR)
 mode("nolimit_time")
