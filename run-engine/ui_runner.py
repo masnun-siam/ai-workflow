@@ -724,9 +724,11 @@ def stop(sid: str) -> dict:
         end = time.time() + 2
         while not _group_gone(pgid, proc) and time.time() < end:
             time.sleep(0.05)
-    if proc is None:
-        _stopping.discard(sid)  # no follower in this process to clear it (e.g. after a UI restart)
-    return ui_sessions.update(sid, status="stopped", ended_at=_now(), pending_question=None)
+    rec = ui_sessions.update(sid, status="stopped", ended_at=_now(), pending_question=None)
+    if sid not in _procs:
+        _stopping.discard(sid)  # no follower in this process to clear it (e.g. a record never re-attached)
+    # a re-attached follower (_procs[sid] is None) clears _stopping in its finally, after "stopped" is written
+    return rec
 
 
 def resume_stopped(sid: str, claude_cmd=None) -> dict:

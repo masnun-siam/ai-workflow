@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- Stopping a session that was re-attached after a UI restart now always leaves it `stopped`; before, the follower could race the stop and record it as `failed`, which also made `test_ui_runner.py` flaky (#415).
 - `GET /api/sessions` rows now carry the session's `slug`, resolved by real path, so a session started from a symlinked checkout (macOS `/tmp`) still shows its pending row on Small changes and locks Refine (#421).
 - A finished dispatch that gains new epic children (typically bugs filed by Run QA) now goes to `paused` with an event, instead of running again and ending `done` with a queued lane nothing starts. Refine the new issues, then press **Resume** to start their lanes.
 
