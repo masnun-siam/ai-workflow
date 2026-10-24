@@ -24,6 +24,7 @@ from contextlib import redirect_stderr
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
+import ui_afk  # noqa: E402
 import ui_gh  # noqa: E402
 import ui_grind  # noqa: E402
 import ui_server  # noqa: E402
@@ -658,6 +659,15 @@ try:
     assert call("GET", "/api/inbox")[1]["items"][0]["type"] == "gh_auth"
     assert call("GET", "/api/sessions")[1]["gh"] == {"ok": False, "login": None, "error": "not logged in"}
     ok("inbox: items, afk, gh, stale; ?repo= filter and 400; gh on /api/sessions")
+    assert call("POST", "/api/afk/change", {"changes": []})[0] in (400, 409)
+    assert call("POST", "/api/afk/change", {"changes": [{"id": "s:1", "answers": {}}]})[0] == 409  # no summary yet
+    ui_afk.start(time.time() + 60)
+    ui_afk.stop()
+    assert call("POST", "/api/afk/change", {"changes": []})[0] == 400
+    assert call("POST", "/api/afk/change", {"changes": [{"id": "s:1", "answers": {}}]})[0] == 400
+    ui_afk.dismiss()
+    assert call("POST", "/api/afk/change", {"changes": [{"id": "s:1", "answers": {}}]})[0] == 409
+    ok("afk change: 400 malformed, 409 without a summary")
     ans = ui_sessions.create("/x", other)
     ui_sessions.update(ans["id"], role="away-answerer")
     assert ans["id"] not in [s["id"] for s in call("GET", "/api/sessions")[1]["sessions"]]
