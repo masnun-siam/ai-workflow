@@ -1930,11 +1930,18 @@ def restart_cases():
     y = mk("running", os.getpid(), S + "\n")
     seen = []
     it = iter([E] * 100)
+    t = _th.Thread(target=ui_runner._follow, args=(y, None, os.getpid(), "STARTED"), daemon=True)
+
+    def own_calls_only(pid):
+        # stray watcher threads from earlier cases also call _proc_start; count only ours
+        if _th.current_thread() is t:
+            seen.append(1)
+        return next(it)
+
     with (
         mock.patch.object(ui_runner, "POLL_SECONDS", 0.001),
-        mock.patch.object(ui_runner, "_proc_start", lambda pid: seen.append(1) or next(it)),
+        mock.patch.object(ui_runner, "_proc_start", own_calls_only),
     ):
-        t = _th.Thread(target=ui_runner._follow, args=(y, None, os.getpid(), "STARTED"), daemon=True)
         t.start()
         t.join(15)
     assert not t.is_alive() and len(seen) == 26, len(seen)
