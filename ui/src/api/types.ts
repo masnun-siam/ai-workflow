@@ -88,13 +88,34 @@ export interface AccountUsage {
   at?: number;
   error?: string | null;
 }
+export interface AfkQuestion extends Question {
+  picked?: string[];
+  why?: string | null; // the answerer's reason; null for a Recommended pick
+}
+export interface AfkLogEntry {
+  at: number;
+  kind: 'answer' | 'held' | 'retry' | 'skip-ci' | (string & {});
+  sid: string;
+  link: string;
+  repo: string;
+  command: string;
+  question: string;
+  picked: string;
+  id?: string; // `<session id>:<round id>`; absent on entries from before the answerer
+  by?: 'recommended' | 'opus';
+  questions?: AfkQuestion[];
+  answerer?: string | null;
+  cost?: number | null;
+  changed?: boolean;
+  reason?: string;
+}
 export interface AfkState {
   active: boolean;
   until: number | null; // epoch seconds
   started: number | null;
   decisions: number;
   held: number;
-  summary: null | { started: number; ended: number | null; log: unknown[]; held: number };
+  summary: null | { started: number; ended: number | null; log: AfkLogEntry[]; held: number };
 }
 export interface GhStatus {
   ok: boolean;

@@ -201,7 +201,7 @@ time; **+30 min** and **I'm back** end or extend it). Each tick it answers every
 questions all carry a "(Recommended)" option, sends "Skip CI for now" to a grind paused on CI (at most
 once per PR per window), and retries failed sessions, and held or stopped dispatch issues, on a 2m/10m/30m/1h backoff (a
 dispatch issue asking a question gets the recommended answer like any session). When the window ends
-one push sums it up and the Inbox shows a "While you were away" log until dismissed. State is
+one push sums it up and the Inbox shows a "While you were away" summary until dismissed: one row per answered or held round (time, session, picker chip Recommended/Opus/Held, each question and pick, Opus's reasons, cost and answerer transcript link, a checkbox on answers not yet changed); retry and older entries stay one-liners. State is
 `afk.json`. `POST /api/afk` (start), `POST /api/afk/stop|dismiss`.
 
 **Settings** (`#/settings/repos|accounts|notifications|review|vault|server`). **Repositories**: the global
