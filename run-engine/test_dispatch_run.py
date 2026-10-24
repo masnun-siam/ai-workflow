@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -547,10 +548,24 @@ hd = dispatch_runners.Herdr("w1", cli)
 h = hd.start(
     {"repo": R, "n": 5}, "/ai-workflow:implement-issue 5", {"id": "abc", "settings": {"model": "opus", "effort": None}}
 )
-assert h == {"tab": "t1", "pane": "p1", "agent": "aiw-abc-issue-5"}
+assert h == {"tab": "t1", "pane": "p1", "agent": "aiw-abc-issue-5", "cwd": co}
 assert calls[0] == ["tab", "create", "--workspace", "w1", "--cwd", co, "--label", "issue-5", "--no-focus"]
 assert calls[1][-4:] == ["--", "--dangerously-skip-permissions", "--model", "opus"]
 assert calls[2] == ["agent", "prompt", "aiw-abc-issue-5", "/ai-workflow:implement-issue 5"]
+# repo skills win: every send is resolved against the lane's checkout
+os.makedirs(os.path.join(co, ".claude", "skills", "verifier-locally"))
+open(os.path.join(co, ".claude", "skills", "verifier-locally", "SKILL.md"), "w").close()
+hd.send(h, dr.qa_prompt("o/r#1", None))
+assert "run /verifier-locally " in calls[-1][3] and "/ai-workflow:create-tasks" in calls[-1][3]
+hd.send(h, "/ai-workflow:implement-issue 5")
+assert calls[-1][3] == "/ai-workflow:implement-issue 5"  # no copy of that one
+hd.send({**h, "cwd": None}, dr.qa_prompt("o/r#1", None))  # a handle from before `cwd` was kept
+assert "run /ai-workflow:verifier-locally " in calls[-1][3]
+shutil.rmtree(os.path.join(co, ".claude"))
+hd.send(h, dr.qa_prompt("o/r#1", None))
+assert "run /ai-workflow:verifier-locally " in calls[-1][3]
+hd.send(h, "x" * 470 + " /verifier-locally")  # resolved before the 480-character cut
+assert calls[-1][3] == ("x" * 470 + " /ai-workflow:verifier-locally")[:480]
 assert hd.status(h) == ("working", None)  # idle but waiting on its own monitors
 assert hd.status({"tab": "gone"}) == ("gone", None)
 hd.close(h)

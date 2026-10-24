@@ -14,6 +14,7 @@ import re
 from datetime import datetime, timedelta
 
 import dispatch
+import repo_skills
 from shared import run
 
 # Claude's usage-limit line, e.g. "5-hour limit reached ∙ resets 3pm" or "Your limit will reset at 3:30pm"
@@ -86,13 +87,14 @@ class Herdr:
 
     def start(self, lane, prompt, d):
         label = lane.get("label") or f"issue-{lane['n']}"
+        cwd = checkout(lane["repo"])
         made = self._ok(
             [
                 "tab",
                 "create",
                 *(["--workspace", self.workspace] if self.workspace else []),
                 "--cwd",
-                checkout(lane["repo"]),
+                cwd,
                 "--label",
                 label,
                 "--no-focus",
@@ -107,11 +109,14 @@ class Herdr:
             ["agent", "start", name, "--kind", "claude", "--pane", pane, "--timeout", "120000", "--", *claude_args(d)],
             timeout=150,
         )
-        h = {"tab": tab, "pane": pane, "agent": name}
+        h = {"tab": tab, "pane": pane, "agent": name, "cwd": cwd}
         self.send(h, prompt)
         return h
 
     def send(self, h, text):
+        # resolve first: the repo/plugin spelling changes the length. A handle from before `cwd` was kept
+        # resolves against None, which gives the plugin spelling.
+        text = repo_skills.resolve(text, h.get("cwd"))
         # herdr cuts a long send-text; prompts here stay well under its ~500-character limit
         self._ok(["agent", "prompt", h["agent"], text[:480]])
 
