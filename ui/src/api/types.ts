@@ -111,6 +111,12 @@ export interface AfkLogEntry {
   changed?: boolean;
   reason?: string;
 }
+export interface AfkChangeBody {
+  changes: { id: string; answers: AnswerBody['answers'] }[];
+}
+export interface AfkChangeResponse {
+  results: ({ sid: string; ids: string[]; state: 'sent' | 'queued' } | { sid: string; ids: string[]; error: string })[];
+}
 export interface AfkState {
   active: boolean;
   until: number | null; // epoch seconds

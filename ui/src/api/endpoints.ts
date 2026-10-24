@@ -1,7 +1,7 @@
 // Every endpoint the UI calls, as plain typed functions. Hooks in hooks.ts wrap these with caching and invalidation.
 import { enc, get, post, put, qs, splitRepo } from './client';
 import type {
-  AnswerBody, AfkState, Dispatch, DispatchPlan, DispatchSettings, DispatchTarget, DispatchState, EndAction, LaneAction, BoardStartBody, BoardStartResponse, CleanupItem, DeliveryResponse, InboxResponse,
+  AnswerBody, AfkState, AfkChangeBody, AfkChangeResponse, Dispatch, DispatchPlan, DispatchSettings, DispatchTarget, DispatchState, EndAction, LaneAction, BoardStartBody, BoardStartResponse, CleanupItem, DeliveryResponse, InboxResponse,
   IssueDetail, NotificationFeed, NotifyChannel, NotifySettings, OpenItem, PeerReviewOffers, PlanningResponse, PrDetail, PrdFile, ReposResponse, RestartStatus,
   ReviewSettings, Session, SessionStartBody, SessionsResponse, Settings, StreamResponse, VaultFolders, VaultPrd,
 } from './types';
@@ -46,6 +46,7 @@ export const api = {
   // ---- away mode
   afkStart: (until: number) => post<AfkState>('/api/afk', { until }),
   afkStop: () => post<AfkState>('/api/afk/stop'),
+  afkChange: (changes: AfkChangeBody['changes']) => post<AfkChangeResponse>('/api/afk/change', { changes }),
   afkDismiss: () => post<AfkState>('/api/afk/dismiss'),
 
   // ---- delivery
