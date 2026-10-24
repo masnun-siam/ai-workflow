@@ -10,6 +10,7 @@ const STATE = { queued: { label: 'Queued', tone: 'muted' }, waiting: { label: 'N
 export function PendingRows({ pending }: { pending: PendingChange[] }) {
   const navigate = useNavigate();
   const { link } = useRepo();
+  if (!pending.length) return null;
   return (
     <div className="list">
       {pending.map((p) => {

@@ -30,7 +30,7 @@ export function SmallChangesTab({ repo, issues, pending }: { repo: string; issue
   const toRun = useMemo(() => JSON.parse(runKey) as { n: number; title: string }[], [runKey]);
 
   return (
-    <>
+    <div className="stack">
       <SmallChangeBox repo={repo} />
       <PendingRows pending={pending} />
       {toRefine.length || toRun.length ? (
@@ -50,6 +50,6 @@ export function SmallChangesTab({ repo, issues, pending }: { repo: string; issue
         <p className="muted">Nothing outside a feature. Describe a bug or small change to start one.</p>
       )}
       <NewDispatchDialog open={dispatching} onOpenChange={setDispatching} issues={toRun} />
-    </>
+    </div>
   );
 }
