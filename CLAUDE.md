@@ -12,7 +12,7 @@ PRD → tasks → refined issues → `/implement-issue` → `/pr-review`. Skills
 
 - **Skills:** `skills/`. Each stage is one skill: `create-prd`, `create-tasks`, `refine-issues`, `implement-issue`, `verifier-locally`, `pr-review`, `docs-updater`, `sync-from-wasensi`. The tools around them: `dump`, `release-pr`, `worklog`, `peer-review`, `flow`, `herdr-dispatch`, `pr-grind`.
 - **Guides and templates:** `guides/` is the engineering process and review standard the skills read. `templates/` holds the PRD, epic and issue shapes.
-- **Agents:** `agents/`. Only `peer-reviewer` (one read-only review lens) and `worklog-runner`.
+- **Agents:** `agents/`. Only `peer-reviewer` (one read-only review lens), `away-answerer` (the read-only Away mode answerer) and `worklog-runner`.
 - **CLI/UI:** `bin/aiw` → `run-engine/route.py`, verbs `ui`, `paths`, `ask`, `ci`, `threads`, `peer-review`. `aiw ui` is a stdlib `http.server` serving the built React app from `run-engine/ui_dist/` (source in `ui/`).
 - **State:** GitHub (issues, PRs, labels) and the repo's `docs/prds/` are the truth. The plugin data dir holds only UI and grind state, never in this repo.
 
