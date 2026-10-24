@@ -167,6 +167,7 @@ ALLOWED = {
     "command",
     "repo",
     "link",
+    "slug",
     "session_id",
     "outcome",
     "no_repo",

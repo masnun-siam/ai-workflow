@@ -162,5 +162,6 @@ describe('sessionInRepo', () => {
     expect(sessionInRepo(s({ repo: '/x' }), 'o/r', '/x')).toBe(true);
     expect(sessionInRepo(s({ repo: '/other' }), 'o/r', '/x')).toBe(false);
     expect(sessionInRepo(s({ repo: '/x' }), 'o/r', undefined)).toBe(false);
+    expect(sessionInRepo(s({ slug: 'o/r', repo: '/private/x' }), 'o/r', '/x')).toBe(true);
   });
 });
