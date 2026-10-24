@@ -17,6 +17,7 @@ import time
 
 import dispatch
 import peer_review as peer_review_mod
+import repo_skills
 import ui_board
 import ui_panel
 import ui_runner
@@ -227,8 +228,8 @@ def build_command(cmd, args: str) -> str:
 
 
 def family(text: str):
-    first = text.lstrip().split(None, 1)[0] if text.strip() else ""
-    return first[1:].split(":")[-1] if first.startswith("/") else None
+    p = repo_skills.parse(text)
+    return p[0] if p else None
 
 
 def issue_from_args(rest: str):
