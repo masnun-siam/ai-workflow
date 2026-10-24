@@ -18,6 +18,8 @@ Reads/writes the vault via the `obsidian` CLI (`obsidian <command> key=value ...
 
 This skill targets a specific vault (`Documents/notes`) regardless of which project directory Claude is running in — every `obsidian` invocation below passes `vault=notes` explicitly so it resolves correctly even when the current working directory isn't the vault itself.
 
+Paths below starting `../../` are relative to this skill's folder, at the plugin root. Read first: `../../guides/engineering-workflow.md` ("Repository settings": the base branch and which guides, templates and skills win).
+
 ## Step 1: Classify
 
 Read the user's dumped text and classify it as exactly one of:

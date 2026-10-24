@@ -20,6 +20,8 @@ You are the artifact's author (the root). The lenses are read-only: they report 
 their final message, which ends with exactly one line, `Verdict: approve` or `Verdict: changes`,
 with findings above it. You never write a verdict for a lens and never approve on a lens's behalf.
 
+Paths below starting `../../` are relative to this skill's folder, at the plugin root. Read first: `../../guides/engineering-workflow.md` ("Repository settings": the base branch and which guides, templates and skills win).
+
 ## Arguments
 
 `/peer-review [--lenses <lens,lens>] [<artifact>]`, or from the UI: `/ai-workflow:peer-review --root <panel_id> <artifact>`.

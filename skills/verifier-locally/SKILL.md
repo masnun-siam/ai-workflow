@@ -7,7 +7,7 @@ description: Prove a change works before it is pushed - discover the repo's chec
 
 Answers one question with evidence: would this change pass CI and does it do what the issue asks? The verifier runs checks and reports. It is not meant to change code or what is staged; fixing belongs to `/implement-issue`. Some hooks can still touch files, see the traps below.
 
-Paths below starting `../../` are relative to this skill's folder, at the plugin root. Read first: `../../guides/engineering-workflow.md` ("Repository settings" to resolve the base branch, and "Gates"), the commands in the repo's `CLAUDE.md` or `AGENTS.md`, and the repo's `tasks/lessons.md` if it has one.
+Paths below starting `../../` are relative to this skill's folder, at the plugin root. Read first: `../../guides/engineering-workflow.md` ("Repository settings" to resolve the base branch and which skills win, and "Gates"), the commands in the repo's `CLAUDE.md` or `AGENTS.md`, and the repo's `tasks/lessons.md` if it has one.
 
 ## Steps
 
