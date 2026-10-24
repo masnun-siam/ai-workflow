@@ -7,7 +7,7 @@ description: Turn a feature idea into a product requirements document, with its 
 
 Produces the source of truth for a feature: what it does, why, and how it is built. Every issue is derived from it, so a question left open here comes back in the middle of implementation and can change issues that are already in progress. The aim is a PRD that leaves nothing to ask.
 
-Paths below starting `../../` are relative to this skill's folder, at the plugin root. Read first: `../../guides/engineering-workflow.md` ("Repository settings" for the base branch and which guides and templates win, the PRDs section, and "GitHub: project, epics and dependencies"), the template `../../templates/prd.md`, and the repo's docs for the areas the feature touches.
+Paths below starting `../../` are relative to this skill's folder, at the plugin root. Read first: `../../guides/engineering-workflow.md` ("Repository settings" for the base branch and which guides, templates and skills win, the PRDs section, and "GitHub: project, epics and dependencies"), the template `../../templates/prd.md`, and the repo's docs for the areas the feature touches.
 
 ## Steps
 
@@ -52,7 +52,7 @@ Paths below starting `../../` are relative to this skill's folder, at the plugin
    - Show the user each epic's title, labels and project, and ask with `AskUserQuestion` whether to create them. Create nothing without an explicit yes.
    - Create them with `gh issue create`, then write each number into the PRD's "Epics" section.
 
-8. **Hand off.** State the next stage: `/create-tasks` splits the PRD into parallel tasks and creates them as sub-issues of the epic with their dependencies, then `/refine-issues` fills each one. Do not start it unless asked.
+8. **Hand off.** State the next stage: `/create-tasks` splits the PRD into parallel tasks and creates them as sub-issues of the epic with their dependencies, then `/refine-issues` fills each one (see "Repo skills win"). Do not start it unless asked.
 
 ## Changing an approved PRD
 
