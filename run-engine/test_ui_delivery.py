@@ -51,9 +51,10 @@ def build(s, sessions=(), grind=None, settings=None, flags=None):
     return ui_delivery.build("o/r", s, list(sessions), grind or {"pr": {}}, settings or {}, flags or {})
 
 
-# no epics: only the No epic lane; non-refined without PR/session absent
+# no epics: only the No epic lane; a non-refined issue without PR/session is unrefined
 r = build(snap([issue(1), issue(2, labels=[])]))
-assert [lane["epic"] for lane in r["lanes"]] == [None] and set(cards(r)) == {1}
+assert [lane["epic"] for lane in r["lanes"]] == [None] and set(cards(r)) == {1, 2}
+assert cards(r)[2]["column"] == "unrefined"
 assert "cap" not in r and r["running"] == 0 and r["lanes"][0]["title"] == "No epic"
 assert r["auto_grind"] is False and build(snap([]), settings={"auto_grind": True})["auto_grind"] is True
 
@@ -146,13 +147,16 @@ mp = {"n": 41, "url": "u41", "draft": False, "state": "MERGED", "merged_at": "x"
 m = [{"n": 41, "title": "t", "url": "u41", "merged_at": "x", "head": "h", "closes": [8], "epic": 10}]
 r = build(snap([epic, issue(8, parent=10, prs=[mp])], m))
 assert [c["column"] for c in cards(r, 10).values() if c["n"] == 8] == ["merged"], cards(r, 10)
-# an epic's unrefined child is in Needs refinement; a loose unrefined issue is not on the board
+# an epic's unrefined child is in Needs refinement; a loose unrefined issue is in the No epic lane
 r = build(snap([epic, issue(12, labels=(), parent=10), issue(13, labels=())]))
-assert cards(r, 10)[12]["column"] == "unrefined" and 13 not in cards(r, None)
+assert cards(r, 10)[12]["column"] == "unrefined" and cards(r, None)[13]["column"] == "unrefined"
+# a loose unrefined issue with an open blocker stays unrefined and lists the blocker
+r = build(snap([issue(17, labels=(), blockers=[(18, "OPEN")])]))
+assert cards(r, None)[17]["column"] == "unrefined" and cards(r, None)[17]["blocked_by"] == [18]
 # lane membership matches ui_planning's children: sub_issues and the prd-<slug> label count too
 ep = {**issue(10, labels=("epic", "prd-x")), "sub_issues": [14]}
 r = build(snap([ep, issue(14, labels=()), issue(15, labels=("prd-x",)), issue(16, labels=("prd-y",))]))
-assert set(cards(r, 10)) == {14, 15} and 16 not in cards(r, None), r
+assert set(cards(r, 10)) == {14, 15} and cards(r, None)[16]["column"] == "unrefined", r
 # a grind reason's leading "<ISO> — " stamp is not part of the reason
 g = {
     "pr": {("o", "r", 31): {"state": "paused", "round": 3, "reason": "2026-10-06T15:54:44Z — owner decision needed: x"}}

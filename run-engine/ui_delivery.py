@@ -15,9 +15,9 @@ one lane per open epic plus a final "No epic" lane (epic None). Card:
  mergeable: bool (ui_inbox.merge_ready), needs_cleanup: None | {uncommitted, unpushed}}.
 `review` is approved | changes_requested | review_required | none. `grind` is the PR's loop (state running |
 idle | paused; reason only when paused), None when it has none or is done.
-`column` is ready | in_progress | draft_pr | in_review | grinding | merged. Placement of an open
+`column` is unrefined | ready | in_progress | draft_pr | in_review | grinding | merged. Placement of an open
 issue: an OPEN PR decides (grinding if its grind state is not done, else draft_pr / in_review); else a
-live session -> in_progress; else `refined` -> ready; else it is left out. A closed-unmerged PR is
+live session -> in_progress; else `refined` -> ready; else unrefined. A closed-unmerged PR is
 ignored, so its issue falls back to Ready. `blocked_by` lists open blockers only.
 """
 
@@ -30,7 +30,7 @@ import ui_inbox
 import ui_runner
 import ui_sessions
 
-COLUMNS = ("ready", "in_progress", "draft_pr", "in_review", "grinding", "merged")
+COLUMNS = ("unrefined", "ready", "in_progress", "draft_pr", "in_review", "grinding", "merged")
 
 
 def _slug(rec) -> str:
@@ -100,10 +100,8 @@ def build(repo, snapshot, sessions, grind_index, settings, cleanup_flags, solo=F
             column = "in_progress"
         elif "refined" in i["labels"]:
             column = "ready"
-        elif epic_of(i):
-            column = "unrefined"  # an epic's child still to refine
         else:
-            continue  # a loose non-refined issue: not on the board
+            column = "unrefined"  # still to refine, in its epic's lane or the No epic lane
         on = ui_inbox.grind_on(settings, i["n"])
         lanes[epic_of(i)].append(
             {

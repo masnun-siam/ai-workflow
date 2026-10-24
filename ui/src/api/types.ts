@@ -71,7 +71,7 @@ export interface Session {
   repo_path: string | null;
   resume_command: string | null;
   /** NEW: GET /api/sessions rows may carry the slug and what the session is for. */
-  slug?: string;
+  slug?: string | null;
   [k: string]: unknown;
 }
 export interface Limit {
