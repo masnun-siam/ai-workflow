@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useCleanupIssue, useDispatchSeen, useLaneAction, useResume, useReviewRounds, useSettings, useSkipCi, useStartNow, useStartSession, useStop, useStopGrind } from '../api/hooks';
 import type { InboxItem, Question } from '../api/types';
 import { Button, LinkButton, Menu, useConfirm, useToast, type IconName } from '../components';
-import { agoIso, clockText, shortRepo } from '../lib/format';
+import { agoIso, clockText, commandText, shortRepo } from '../lib/format';
 import { routes } from '../lib/routes';
 import { PLAN_RUN, type Tone } from '../lib/vocab';
 import { usePanel } from '../panels/PanelContext';
@@ -29,7 +29,7 @@ export const approveArgs = (path: string) => {
     `- If the commit, push, PR or merge fails (or there is no remote or \`gh\` is not signed in), say which step failed and why in your final message. The PRD stays Approved and the epics stay filed.`
   );
 };
-const cmdName = (c?: string) => (c ?? '').replace(/^\/(?:[\w-]+:)?/, '').trim() || 'session';
+const cmdName = (c?: string) => commandText(c ?? '') || 'session';
 const featureLink = (it: { repo: string | null; prd_path: string }, tab: string) =>
   `${routes.feature(slugOfPrd(it.prd_path), tab)}${it.repo ? `?repo=${it.repo}` : ''}`;
 const questionsOf = (qs: unknown): Question[] => (Array.isArray(qs) ? qs : ((qs as { questions?: Question[] } | null)?.questions ?? []));

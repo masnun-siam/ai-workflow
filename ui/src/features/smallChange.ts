@@ -1,6 +1,6 @@
 import { useSessions } from '../api/hooks';
 import type { SessionStatus } from '../api/types';
-import { sessionInRepo } from '../lib/format';
+import { parseSkill, sessionInRepo } from '../lib/format';
 import { isLive } from '../lib/vocab';
 import { useRepo } from '../shell/useRepo';
 
@@ -16,9 +16,10 @@ export const SMALL_CHANGE_LOCK = 'A small change is being filed and refined. Wai
 
 /** The text typed in the describe box, from a small-change /create-tasks command; null for any other command. */
 export function smallChangeText(command: string): string | null {
-  const m = new RegExp(`^/(?:[\\w-]+:)?create-tasks\\s+${SMALL_CHANGE_MARKER.replace(/[()]/g, '\\$&')}\\s*(.*)$`, 's').exec(command);
-  if (!m) return null;
-  return (m[1].endsWith(SMALL_CHANGE_NOTE) ? m[1].slice(0, -SMALL_CHANGE_NOTE.length) : m[1]).trim();
+  const p = parseSkill(command);
+  if (p?.skill !== 'create-tasks' || !p.rest.startsWith(SMALL_CHANGE_MARKER)) return null;
+  const text = p.rest.slice(SMALL_CHANGE_MARKER.length);
+  return (text.endsWith(SMALL_CHANGE_NOTE) ? text.slice(0, -SMALL_CHANGE_NOTE.length) : text).trim();
 }
 
 export type PendingChange = { id: string; text: string; status: SessionStatus };

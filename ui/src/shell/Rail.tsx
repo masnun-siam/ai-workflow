@@ -3,7 +3,7 @@ import { NavLink, Link, useLocation } from 'react-router-dom';
 import { needsYouCount, useAfkStart, useAfkStop, useDispatches, useInbox, useSessions, useSettings } from '../api/hooks';
 import type { Session } from '../api/types';
 import { Button, Icon, type IconName } from '../components';
-import { clockText, sessionLabel, skillOf } from '../lib/format';
+import { clockText, commandText, sessionLabel } from '../lib/format';
 import { applyTheme, getTheme, type Theme } from '../lib/theme';
 import { RUNNING_NOW, SESS } from '../lib/vocab';
 import { routes } from '../lib/routes';
@@ -24,9 +24,7 @@ export function useInboxCount() {
 }
 
 function sessionTitle(s: Session) {
-  const c = sessionLabel(s.command);
-  const skill = skillOf(c);
-  return skill ? `${skill}${c.replace(/^\/(?:[\w-]+:)?[\w-]+/, '').trim() ? ' ' + c.replace(/^\/(?:[\w-]+:)?[\w-]+/, '').trim() : ''}` : c;
+  return commandText(sessionLabel(s.command));
 }
 
 function RunningNow() {
