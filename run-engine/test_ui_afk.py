@@ -369,4 +369,137 @@ fr = waiting()
 ui_afk.tick(W + 2)
 assert len(started) == n0 and log_of(fr)[0]["by"] == "recommended"
 
+# ---- change answers (#464) ----
+sent = []
+_send = ui_runner.send_prompt
+
+
+def fake_send(sid, text, limit=4000):
+    sent.append((sid, text, limit))
+    return "sent"
+
+
+ui_runner.send_prompt = fake_send
+for r in ui_sessions.list_sessions():
+    if r["status"] in ("waiting", "running", "starting"):
+        ui_sessions.update(r["id"], status="stopped", pending_question=None)
+C = time.time()
+ui_afk.stop(C)
+ui_afk.dismiss()
+ui_afk.start(C + 1, C)  # a fresh window: the old state is dismissed
+
+
+def two_q():
+    q = Q(rec=False)
+    q["questions"].append({**q["questions"][0], "question": "Second?"})
+    return q
+
+
+def answered(sid, rid):
+    """A logged answer entry, built like a window would."""
+    s = ui_sessions.load(sid)
+    pend = {**two_q(), "id": rid}
+    e = ui_afk._round_entry(s, C, pend, [["Approve"], ["Approve"]], "opus")
+    st = ui_afk.load()
+    st["log"].append(e)
+    ui_afk._save(st)
+    return e["id"]
+
+
+sa = ui_sessions.create("/implement-issue 8", d, {"owner": "o", "repo": "r", "issue": 8})["id"]
+sb = ui_sessions.create("/implement-issue 9", d, {"owner": "o", "repo": "r", "issue": 9})["id"]
+ids = [answered(sa, "r1"), answered(sa, "r2"), answered(sb, "r1")]
+ABORT = {"0": {"labels": ["Abort"]}, "1": {"labels": ["Approve"]}}
+
+
+def chg(*pairs):
+    return {"changes": [{"id": i, "answers": a} for i, a in pairs]}
+
+
+def rejects(body, exc=ValueError):
+    try:
+        ui_afk.change(body)
+        raise AssertionError(f"accepted {body!r}")
+    except exc:
+        pass
+    assert not sent and not any(
+        e.get("changed") for e in ui_afk.load()["log"] if e["kind"] == "answer" and e["id"] in ids
+    )
+
+
+try:
+    ui_afk.change(chg((ids[0], ABORT)))
+    raise AssertionError("window active")
+except ui_afk.Conflict:
+    pass
+ui_afk.stop(C + 0.5)
+for bad in (None, {}, {"changes": []}, {"changes": [{"id": 1}]}, {"changes": [{"id": "nope:1", "answers": ABORT}]}):
+    rejects(bad)
+rejects({"changes": [{"id": ids[0], "answers": ABORT}] * 2})  # duplicate id
+rejects({"changes": [{"id": f"x{i}", "answers": ABORT} for i in range(51)]})
+rejects(chg((ids[0], {"0": {"labels": ["Approve"]}, "1": {"labels": ["Approve"]}})))  # nothing changed
+rejects(chg((ids[0], {"0": {"labels": ["Nope"]}, "1": {"labels": ["Approve"]}})))  # not an option
+rejects(chg((ids[0], {"0": {"other": "x" * 4001}, "1": {"labels": ["Approve"]}})))
+
+# a held entry is not changeable
+st = ui_afk.load()
+st["log"].append({"kind": "held", "id": f"{sa}:r9", "sid": sa, "questions": two_q()["questions"]})
+ui_afk._save(st)
+rejects(chg((f"{sa}:r9", ABORT)))
+
+# two in A, one in B: one prompt per session, only changed questions listed, entries marked
+out = ui_afk.change(
+    chg((ids[0], ABORT), (ids[1], {"0": {"other": "do it"}, "1": {"labels": ["Approve"]}}), (ids[2], ABORT))
+)
+assert out == {
+    "results": [{"sid": sa, "ids": ids[:2], "state": "sent"}, {"sid": sb, "ids": [ids[2]], "state": "sent"}]
+}, out
+assert [(s, lim) for s, _, lim in sent] == [(sa, 60000), (sb, 60000)]
+ta = sent[0][1]
+assert ta.startswith("While I was away, Away mode answered these for me. I am changing them:")
+assert ta.count("Question: Approve the plan?") == 2 and "Second?" not in ta
+assert "Old answer: Approve\nNew answer: Abort" in ta and 'New answer: "do it"' in ta
+assert ta.endswith("Redo whatever depended on the old answers; keep everything else.")
+assert all(e["changed"] for e in ui_afk.load()["log"] if e.get("id") in ids)
+sent.clear()
+try:
+    ui_afk.change(chg((ids[0], ABORT)))  # double submit sends once
+    raise AssertionError("double submit accepted")
+except ValueError:
+    assert not sent
+
+# refusals: others still sent, refused entries stay changeable
+ids2 = [answered(sa, "r3"), answered(sb, "r3")]
+ui_sessions.update(sa, queued_prompt="x")
+out = ui_afk.change(chg((ids2[0], ABORT), (ids2[1], ABORT)))
+assert out["results"][0] == {"sid": sa, "ids": [ids2[0]], "error": "It already has a queued prompt"}, out
+assert out["results"][1]["state"] == "sent" and len(sent) == 1
+chd = {e["id"]: e["changed"] for e in ui_afk.load()["log"] if e.get("id") in ids2}
+assert chd == {ids2[0]: False, ids2[1]: True}, chd
+ui_sessions.update(sa, queued_prompt=None)
+
+
+def refuse(sid, exc):
+    def f(*a, **k):
+        raise exc
+
+    ui_runner.send_prompt = f
+    return ui_afk.change(chg((ids2[0], ABORT)))["results"][0]["error"]
+
+
+assert refuse(sa, ui_runner.Conflict("answer the pending question first")) == "Answer its pending question first"
+assert refuse(sa, FileNotFoundError("x")) == "Session not found"
+assert refuse(sa, ui_runner.Conflict("session s is already live for this issue")).startswith("session s is already")
+ui_runner.send_prompt = fake_send
+
+# after Dismiss the endpoint answers Conflict
+ui_afk.dismiss()
+sent.clear()
+try:
+    ui_afk.change(chg((ids2[0], ABORT)))
+    raise AssertionError("dismissed summary accepted")
+except ui_afk.Conflict:
+    assert not sent
+ui_runner.send_prompt = _send
+
 print("test_ui_afk: ok")

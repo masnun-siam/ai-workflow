@@ -345,14 +345,14 @@ def resume(sid: str, answer_text) -> dict:
 MAX_CUSTOM_PROMPT = 4000
 
 
-def send_prompt(sid: str, text) -> str:
+def send_prompt(sid: str, text, limit: int = MAX_CUSTOM_PROMPT) -> str:
     """A free-text prompt into a session: "sent" (resumed with it now) or "queued" (it goes out when the
     session ends, so a running station is never interrupted). Conflict when it cannot be taken."""
     if not isinstance(text, str) or not text.strip():
         raise ValueError("prompt must be a non-empty string")
     text = text.strip()
-    if len(text) > MAX_CUSTOM_PROMPT or "\x00" in text or text.startswith("-"):
-        raise ValueError(f"prompt must be at most {MAX_CUSTOM_PROMPT} characters, no NUL bytes, not starting with '-'")
+    if len(text) > limit or "\x00" in text or text.startswith("-"):
+        raise ValueError(f"prompt must be at most {limit} characters, no NUL bytes, not starting with '-'")
     with _resume_lock:
         rec = ui_sessions.load(sid)
         if rec is None:

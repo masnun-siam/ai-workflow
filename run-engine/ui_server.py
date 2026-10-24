@@ -616,6 +616,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._dispatch(self._merge_cleanup)
         elif parts == ["", "api", "afk"]:
             self._dispatch(lambda b: ui_afk.start(b.get("until")))
+        elif parts == ["", "api", "afk", "change"]:
+            self._dispatch(ui_afk.change)
         elif parts in (["", "api", "afk", "stop"], ["", "api", "afk", "dismiss"]):
             self._dispatch(lambda b: ui_afk.stop() if parts[3] == "stop" else ui_afk.dismiss())
         elif parts == ["", "api", "repos", "register"]:
@@ -817,6 +819,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             ui_actions.Conflict,
             dispatch_run.Conflict,
             ui_restart.Conflict,
+            ui_afk.Conflict,
         ) as e:
             self._json(409, {"error": str(e), **({"id": e.id} if getattr(e, "id", None) else {})})
         except (RuntimeError, OSError, ui_runner.RunnerError) as e:  # RunnerError, a failed herdr call

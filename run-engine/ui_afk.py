@@ -149,6 +149,117 @@ def dismiss() -> dict:
     return public()
 
 
+class Conflict(Exception):
+    """There is no undismissed Away summary to change answers in."""
+
+
+MAX_CHANGES = 50
+CHANGE_PROMPT_LIMIT = 60000
+
+
+def _label(pick) -> str:
+    return ", ".join(p.removesuffix("(Recommended)").strip() for p in pick)
+
+
+def _new_pick(a) -> list:
+    return a["labels"] if "labels" in a else [a["other"]]
+
+
+def _change_text(group: list) -> str:
+    """The one turn a session gets: each changed question with its old and new answer."""
+    lines = ["While I was away, Away mode answered these for me. I am changing them:"]
+    for entry, answers in group:
+        for i, q in enumerate(entry["questions"]):
+            new = _new_pick(answers[str(i)])
+            if new == q["picked"]:
+                continue
+            shown = f'"{new[0]}"' if "other" in answers[str(i)] else _label(new)
+            lines += [
+                "",
+                f"Question: {q.get('question')}",
+                f"Old answer: {_label(q['picked'])}",
+                f"New answer: {shown}",
+            ]
+    lines += ["", "Redo whatever depended on the old answers; keep everything else."]
+    return "\n".join(lines)
+
+
+def _validate_change(st: dict, body) -> list:
+    """[(entry, answers)] for a valid change body; ValueError (400) or Conflict (409) otherwise."""
+    changes = body.get("changes") if isinstance(body, dict) else None
+    if not isinstance(changes, list) or not 1 <= len(changes) <= MAX_CHANGES:
+        raise ValueError(f"changes must be a list of 1 to {MAX_CHANGES} items")
+    if not (st.get("ended") and not st.get("dismissed") and st.get("started")):
+        raise Conflict("there is no Away summary to change answers in")
+    entries = {e["id"]: e for e in st.get("log") or [] if e.get("kind") == "answer" and e.get("id")}
+    out, seen = [], set()
+    for c in changes:
+        cid = c.get("id") if isinstance(c, dict) else None
+        if not isinstance(cid, str) or cid in seen or cid not in entries:
+            raise ValueError("each change needs a unique id of an answered round in the summary")
+        seen.add(cid)
+        entry = entries[cid]
+        if entry.get("changed"):
+            raise ValueError(f"{cid} was already changed")
+        ui_sessions.answer_text({"id": cid, "questions": entry["questions"]}, c.get("answers"))
+        if all(_new_pick(c["answers"][str(i)]) == q["picked"] for i, q in enumerate(entry["questions"])):
+            raise ValueError(f"{cid}: nothing changed")
+        out.append((entry, c["answers"]))
+    return out
+
+
+def _send_change(sid: str, group: list) -> str:
+    """Send one session its change turn: "sent" or "queued"; any refusal raises ValueError (its text)."""
+    rec = ui_sessions.load(sid)
+    if rec is None:
+        raise ValueError("Session not found")
+    if rec.get("queued_prompt"):
+        raise ValueError("It already has a queued prompt")
+    try:
+        return ui_runner.send_prompt(sid, _change_text(group), limit=CHANGE_PROMPT_LIMIT)
+    except FileNotFoundError:
+        raise ValueError("Session not found") from None
+    except ui_runner.Conflict as e:
+        raise ValueError("Answer its pending question first" if "pending question" in str(e) else str(e)) from None
+    except (ValueError, ui_runner.RunnerError, OSError) as e:
+        raise ValueError(str(e)) from None
+
+
+def _set_changed(started, ids: list, value: bool) -> None:
+    with _lock:
+        st = load()
+        if st.get("started") != started:
+            return
+        for e in st.get("log") or []:
+            if e.get("id") in ids:
+                e["changed"] = value
+        _save(st)
+
+
+def change(body) -> dict:
+    """Send changed answers of logged rounds back to the sessions that asked (FR-8, FR-9, FR-10)."""
+    with _lock:
+        st = load()
+        valid = _validate_change(st, body)
+        groups: dict = {}
+        for entry, answers in valid:
+            groups.setdefault(entry["sid"], []).append((entry, answers))
+        ids = [e["id"] for e, _ in valid]
+        for e in st["log"]:
+            if e.get("id") in ids:
+                e["changed"] = True  # claimed under the lock: a double submit is refused above
+        _save(st)
+    results = []
+    for sid, group in groups.items():
+        gids = [e["id"] for e, _ in group]
+        try:
+            results.append({"sid": sid, "ids": gids, "state": _send_change(sid, group)})
+        except ValueError as e:
+            _set_changed(st.get("started"), gids, False)
+            results.append({"sid": sid, "ids": gids, "error": str(e)})
+    return {"results": results}
+
+
 def _entry(kind: str, rec: dict, now: float, question, picked) -> dict:
     return {
         "at": now,
