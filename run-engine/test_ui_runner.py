@@ -1791,6 +1791,26 @@ def restart_cases():
     finally:
         reap({"pid": pid})
 
+    # stop() on re-attached session: "stopped" is written before _stopping clears (deterministic)
+    ui_runner._procs.clear()
+    ui_runner._stopping.clear()
+    pid = dead_pid()
+    sid = mk("running", pid, S, pid_started=OLD)
+    ui_runner._procs[sid] = None  # stands in for the registered follower
+    ui_runner.stop(sid)
+    assert ui_sessions.load(sid)["status"] == "stopped" and sid in ui_runner._stopping
+    ui_runner._follow(sid, None, pid, OLD)
+    assert ui_sessions.load(sid)["status"] == "stopped"
+    assert sid not in ui_runner._stopping and sid not in ui_runner._procs
+    ok("stop on re-attached session: stopped written before the follower clears _stopping")
+
+    # stop() with no follower in this process clears _stopping itself
+    ui_runner._procs.clear()
+    sid = mk("running", pid, S, pid_started=OLD)
+    ui_runner.stop(sid)
+    assert ui_sessions.load(sid)["status"] == "stopped" and sid not in ui_runner._stopping
+    ok("stop without a follower: stopped, _stopping cleared")
+
     # dead pid cases
     d, fk, work = setup()
     ui_runner._procs.clear()
