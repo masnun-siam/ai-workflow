@@ -130,6 +130,7 @@ def _public(rec: dict) -> dict:
         "command": rec.get("command"),
         "repo": rec.get("repo"),
         "link": rec.get("link"),
+        "slug": ui_delivery._slug(rec) or None,
         "session_id": rec.get("session_id"),
         "outcome": rec.get("status"),
         "cost": rec.get("cost"),

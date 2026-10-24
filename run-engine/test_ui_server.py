@@ -660,4 +660,27 @@ finally:
     bs.shutdown()
     os.environ["CLAUDE_PLUGIN_DATA"] = data_dir
 
+# _public carries the slug, resolved by real path so a symlinked checkout still matches (#421)
+import dispatch  # noqa: E402
+
+_sd = tempfile.mkdtemp()
+_real = os.path.join(_sd, "real")
+os.mkdir(_real)
+_link = os.path.join(_sd, "link")
+os.symlink(_real, _link)
+_old = os.environ.get("CLAUDE_PLUGIN_DATA")
+os.environ["CLAUDE_PLUGIN_DATA"] = os.path.join(_sd, "data")
+try:
+    dispatch.register_checkout("o/r", _link)
+    assert ui_server._public({"repo": os.path.realpath(_real), "link": None})["slug"] == "o/r"
+    assert ui_server._public({"repo": "/nowhere"})["slug"] is None
+    assert ui_server._public({"repo": "/x", "link": {"owner": "a", "repo": "b"}})["slug"] == "a/b"
+finally:
+    if _old is None:
+        os.environ.pop("CLAUDE_PLUGIN_DATA", None)
+    else:
+        os.environ["CLAUDE_PLUGIN_DATA"] = _old
+    shutil.rmtree(_sd, ignore_errors=True)
+passed += 1
+
 print(f"{passed} checks passed")
