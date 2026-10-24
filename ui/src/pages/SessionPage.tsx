@@ -137,6 +137,8 @@ export function SessionPage() {
             <dt>Duration</dt><dd>{duration(s.started_at, s.ended_at)}</dd>
             <dt>Cost</dt><dd>{money(s.cost)}</dd>
             <dt>Tokens</dt><dd>{tokensText(s.tokens) || '—'}</dd>
+            <dt>Model</dt><dd>{s.model || '—'}</dd>
+            <dt>Effort</dt><dd>{s.effort || 'Default'}</dd>
             {issue ? <><dt>Issue</dt><dd>#{issue}</dd></> : null}
           </dl>
         </aside>
