@@ -13,7 +13,7 @@ export const displayLabel = (l: string) => (l.endsWith(REC) ? l.slice(0, -REC.le
 /** The recommended option's label: the question's `recommended`, else an option tagged "(Recommended)". */
 export const recommendedOf = (q: Question) => q.recommended || q.options.find((o) => o.label.endsWith(REC))?.label || null;
 
-interface Ans {
+export interface Ans {
   labels: string[];
   other: string;
   useOther: boolean;
@@ -23,7 +23,7 @@ export const initialAnswers = (qs: Question[]): Ans[] =>
     const r = recommendedOf(q);
     return { labels: r ? [r] : [], other: '', useOther: false };
   });
-const answered = (q: Question, a: Ans) => (a.useOther && q.allowFreeText ? a.other.trim().length > 0 : a.labels.length > 0);
+export const answered = (q: Question, a: Ans) => (a.useOther && q.allowFreeText ? a.other.trim().length > 0 : a.labels.length > 0);
 
 /** The POST /answer body, or an error message. */
 export function buildAnswer(roundId: string, qs: Question[], ans: Ans[]): AnswerBody | { error: string } {
@@ -40,6 +40,63 @@ export function buildAnswer(roundId: string, qs: Question[], ans: Ans[]): Answer
     } else answers[String(i)] = { labels: [...a.labels] };
   }
   return { round_id: roundId, answers };
+}
+
+/** The fieldsets of a question round: shared by the Inbox form and the Away Change dialog. `name` keeps radio groups apart. */
+export function QuestionFields({ qs, ans, onChange: set, disabled, name: prefix = '' }: { qs: Question[]; ans: Ans[]; onChange: (k: number, v: Partial<Ans>) => void; disabled?: boolean; name?: string }) {
+  const n = qs.length;
+  return (
+    <>
+    {qs.map((q, k) => {
+      const rec = recommendedOf(q);
+      const name = `${prefix}q${k}`;
+      return (
+        <fieldset key={k} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} disabled={disabled}>
+          <legend className="sr">{q.question}</legend>
+          <div className="q-h">{n > 1 ? `${k + 1} of ${n}  ·  ` : ''}{q.header || 'Question'}</div>
+          {q.question ? <div className="q-text prose" dangerouslySetInnerHTML={{ __html: mdToHtml(q.question) }} /> : null}
+          <div className="opts">
+            {q.options.map((o) => {
+              const on = !ans[k].useOther && ans[k].labels.includes(o.label);
+              return (
+                <label key={o.label} className={`opt${on ? ' on' : ''}`}>
+                  <input
+                    type={q.multiSelect ? 'checkbox' : 'radio'}
+                    name={name}
+                    checked={on}
+                    onChange={() =>
+                      set(k, {
+                        useOther: false,
+                        labels: q.multiSelect ? (on ? ans[k].labels.filter((x) => x !== o.label) : [...(ans[k].useOther ? [] : ans[k].labels), o.label]) : [o.label],
+                      })
+                    }
+                  />
+                  <span>
+                    <span style={{ fontWeight: 600 }}>{displayLabel(o.label)}</span>
+                    {o.label === rec ? <span className="rec">Recommended</span> : null}
+                    {o.description ? <div className="d prose" dangerouslySetInnerHTML={{ __html: mdToHtml(o.description) }} /> : null}
+                    {o.preview ? <pre className="q-preview">{o.preview}</pre> : null}
+                  </span>
+                </label>
+              );
+            })}
+            {q.allowFreeText ? (
+              <label className={`opt${ans[k].useOther ? ' on' : ''}`}>
+                <input type={q.multiSelect ? 'checkbox' : 'radio'} name={name} checked={ans[k].useOther} onChange={() => set(k, { useOther: !ans[k].useOther || !q.multiSelect, labels: [] })} />
+                <span className="stack" style={{ gap: 6 }}>
+                  <span style={{ fontWeight: 600 }}>Something else</span>
+                  {ans[k].useOther ? (
+                    <textarea className="f" rows={2} maxLength={MAX_OTHER} autoFocus placeholder="Write your own answer" aria-label={`Your own answer to: ${q.question}`} value={ans[k].other} onChange={(e) => set(k, { other: e.target.value })} />
+                  ) : null}
+                </span>
+              </label>
+            ) : null}
+          </div>
+        </fieldset>
+      );
+    })}
+    </>
+  );
 }
 
 export function QuestionForm({ sessionId, onSent }: { sessionId: string; onSent?: () => void }) {
@@ -88,54 +145,7 @@ function Form({ sessionId, pending, alive, onSent, reload }: { sessionId: string
 
   return (
     <form className="qform" onSubmit={submit}>
-      {qs.map((q, k) => {
-        const rec = recommendedOf(q);
-        const name = `q${k}`;
-        return (
-          <fieldset key={k} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} disabled={answer.isPending}>
-            <legend className="sr">{q.question}</legend>
-            <div className="q-h">{n > 1 ? `${k + 1} of ${n}  ·  ` : ''}{q.header || 'Question'}</div>
-            {q.question ? <div className="q-text prose" dangerouslySetInnerHTML={{ __html: mdToHtml(q.question) }} /> : null}
-            <div className="opts">
-              {q.options.map((o) => {
-                const on = !ans[k].useOther && ans[k].labels.includes(o.label);
-                return (
-                  <label key={o.label} className={`opt${on ? ' on' : ''}`}>
-                    <input
-                      type={q.multiSelect ? 'checkbox' : 'radio'}
-                      name={name}
-                      checked={on}
-                      onChange={() =>
-                        set(k, {
-                          useOther: false,
-                          labels: q.multiSelect ? (on ? ans[k].labels.filter((x) => x !== o.label) : [...(ans[k].useOther ? [] : ans[k].labels), o.label]) : [o.label],
-                        })
-                      }
-                    />
-                    <span>
-                      <span style={{ fontWeight: 600 }}>{displayLabel(o.label)}</span>
-                      {o.label === rec ? <span className="rec">Recommended</span> : null}
-                      {o.description ? <div className="d prose" dangerouslySetInnerHTML={{ __html: mdToHtml(o.description) }} /> : null}
-                      {o.preview ? <pre className="q-preview">{o.preview}</pre> : null}
-                    </span>
-                  </label>
-                );
-              })}
-              {q.allowFreeText ? (
-                <label className={`opt${ans[k].useOther ? ' on' : ''}`}>
-                  <input type={q.multiSelect ? 'checkbox' : 'radio'} name={name} checked={ans[k].useOther} onChange={() => set(k, { useOther: !ans[k].useOther || !q.multiSelect, labels: [] })} />
-                  <span className="stack" style={{ gap: 6 }}>
-                    <span style={{ fontWeight: 600 }}>Something else</span>
-                    {ans[k].useOther ? (
-                      <textarea className="f" rows={2} maxLength={MAX_OTHER} autoFocus placeholder="Write your own answer" aria-label={`Your own answer to: ${q.question}`} value={ans[k].other} onChange={(e) => set(k, { other: e.target.value })} />
-                    ) : null}
-                  </span>
-                </label>
-              ) : null}
-            </div>
-          </fieldset>
-        );
-      })}
+      <QuestionFields qs={qs} ans={ans} onChange={set} disabled={answer.isPending} />
       <div className="row wrap">
         <Button variant="you" type="submit" disabled={!ok || alive || answer.isPending}>
           <Icon n="send" />

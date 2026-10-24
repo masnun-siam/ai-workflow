@@ -1,9 +1,10 @@
 // FR-7, FR-8, FR-10 and the Away summary (FR-26): everything that needs the user, across repos.
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAfkDismiss, useInbox, useRepos, useSessions, needsYouCount } from '../api/hooks';
 import type { AfkLogEntry, AfkState } from '../api/types';
 import { Banner, Button, Chip, EmptyState } from '../components';
+import { ChangeDialog, type RoundEntry } from '../inbox/ChangeDialog';
 import { ItemRow, useInboxActions } from '../inbox/items';
 import { clockText, money, shortRepo } from '../lib/format';
 import { mdToHtml } from '../lib/md';
@@ -49,19 +50,20 @@ function RoundRow({ l, checked, onToggle }: { l: RichEntry; checked: boolean; on
   );
 }
 
-/** `actions` renders beside Dismiss with the ticked round ids (the Change button of #466 plugs in here). */
-function AwaySummary({ s, actions }: { s: NonNullable<AfkState['summary']>; actions?: (ticked: string[]) => ReactNode }) {
+function AwaySummary({ s }: { s: NonNullable<AfkState['summary']> }) {
   const dismiss = useAfkDismiss();
   const log = s.log ?? [];
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // ticks for ids that vanished or got changed on a refetch are ignored
   const changeable = new Set(log.filter((l) => isRich(l) && l.kind === 'answer' && !l.changed).map((l) => l.id));
   const ticked = [...selected].filter((id) => changeable.has(id));
+  const [changing, setChanging] = useState(false);
+  const rounds = log.filter((l): l is RoundEntry => isRich(l) && !!l.questions && ticked.includes(l.id));
   const toggle = (id: string) => setSelected((p) => { const n = new Set(p); if (!n.delete(id)) n.add(id); return n; });
   const held = log.filter((l) => l.kind === 'held').length || s.held;
   const handled = log.filter((l) => l.kind !== 'held').length;
   return (
-    <Banner tone="away" icon="moon" action={<>{actions?.(ticked)}<Button sm onClick={() => dismiss.mutate()}>Dismiss</Button></>}>
+    <Banner tone="away" icon="moon" action={<>{ticked.length ? <Button sm onClick={() => setChanging(true)}>Change {ticked.length} selected</Button> : null}<Button sm onClick={() => dismiss.mutate()}>Dismiss</Button></>}>
       <div className="stack" style={{ gap: 8 }}>
         <p>
           <b>While you were away ({clockText(s.started)}{s.ended ? `–${clockText(s.ended)}` : ''}): {handled} handled, {held} held</b>
@@ -82,6 +84,7 @@ function AwaySummary({ s, actions }: { s: NonNullable<AfkState['summary']>; acti
           </ul>
         ) : null}
       </div>
+      {changing && rounds.length ? <ChangeDialog rounds={rounds} onClose={() => setChanging(false)} /> : null}
     </Banner>
   );
 }

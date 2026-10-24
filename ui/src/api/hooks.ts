@@ -188,6 +188,8 @@ export const useCleanupSessions = () => useApiMutation(api.cleanupSessions, [['s
 
 export const useAfkStart = () => useApiMutation(api.afkStart, [['sessions'], ['inbox']]);
 export const useAfkStop = () => useApiMutation(api.afkStop, [['sessions'], ['inbox']]);
+// quiet: the Change dialog shows its own toast and errors, like useAnswer
+export const useAfkChange = () => useApiMutation(api.afkChange, [['sessions'], ['inbox']], { quiet: true });
 export const useAfkDismiss = () => useApiMutation(api.afkDismiss, [['sessions'], ['inbox']]);
 
 export const useCloseEpic = () => useApiMutation((v: { repo: string; epic: number }) => api.closeEpic(v.repo, v.epic), BOARD_WRITES);

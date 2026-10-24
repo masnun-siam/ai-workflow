@@ -10,9 +10,11 @@ const item = (type: string, group: string, o: Record<string, unknown> = {}) => (
 
 let routes: Record<string, unknown>;
 let posts: [string, unknown][];
+let changeReply: { status: number; body: unknown };
 beforeEach(() => {
   localStorage.clear();
   posts = [];
+  changeReply = { status: 200, body: { results: [] } };
   routes = {
     '/api/repos': { repos: [{ slug: 'o/r', name: 'R', path: '/x' }], can_browse: false, scan_roots: [] },
     '/api/sessions': { sessions: [], limits: {}, usage: {}, afk: AFK },
@@ -21,7 +23,7 @@ beforeEach(() => {
   };
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     const path = String(url).split('?')[0];
-    if (init?.method === 'POST') { posts.push([path, init.body ? JSON.parse(init.body as string) : null]); return json({ id: 'new1', removed: 1 }); }
+    if (init?.method === 'POST') { posts.push([path, init.body ? JSON.parse(init.body as string) : null]); if (path === '/api/afk/change') return json(changeReply.body, changeReply.status); return json({ id: 'new1', removed: 1 }); }
     return path in routes ? json(routes[path]) : json({ error: 'nf' }, 404);
   }));
 });
@@ -127,6 +129,50 @@ describe('Inbox', () => {
     expect(box.checked).toBe(true);
     expect(screen.getByText(/legacy-cmd/)).toBeTruthy();
     expect(screen.getByText(/retry 1 of 4/)).toBeTruthy();
+  });
+
+  describe('Change dialog', () => {
+    const q = (question: string, picked: string[]) => ({ question, multiSelect: false, allowFreeText: false, options: [{ label: 'A (Recommended)' }, { label: 'B' }], picked });
+    const row = (n: number, sid: string, command: string) => ({ at: 1700000000 + n, kind: 'answer', sid, command, question: '', picked: 'A', id: `${sid}:r1`, by: 'recommended', changed: false, questions: [q(`First ${command}?`, ['A (Recommended)']), q(`Second ${command}?`, ['A (Recommended)'])] });
+    const open = async () => {
+      routes['/api/inbox'] = { items: [], gh: { ok: true }, afk: { ...AFK, summary: { started: 1700000000, ended: 1700003600, held: 0, log: [row(1, 's1', 'cmd-one'), row(2, 's2', 'cmd-two')] } } };
+      window.location.hash = '#/inbox';
+      render(<App />);
+      const user = userEvent.setup();
+      expect(screen.queryByRole('button', { name: /Change \d+ selected/ })).toBeNull();
+      await user.click(await screen.findByRole('checkbox', { name: 'Change answer: First cmd-one?' }));
+      await user.click(screen.getByRole('button', { name: 'Change 1 selected' }));
+      return { user, dlg: within(await screen.findByRole('dialog')) };
+    };
+    it('opens prefilled, enables Submit once a pick changes, and posts every question of the round', async () => {
+      const { user, dlg } = await open();
+      const submit = dlg.getByRole('button', { name: 'Submit' }) as HTMLButtonElement;
+      expect((dlg.getAllByRole('radio', { name: /A/ })[0] as HTMLInputElement).checked).toBe(true);
+      expect(submit.disabled).toBe(true);
+      await user.click(dlg.getAllByRole('radio', { name: 'B' })[1]);
+      expect(submit.disabled).toBe(false);
+      changeReply.body = { results: [{ sid: 's1', ids: ['s1:r1'], state: 'queued' }] };
+      await user.click(submit);
+      await waitFor(() => expect(posts).toContainEqual(['/api/afk/change', { changes: [{ id: 's1:r1', answers: { '0': { labels: ['A (Recommended)'] }, '1': { labels: ['B'] } } }] }]));
+      expect(await screen.findByText('cmd-one: queued')).toBeTruthy();
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    });
+    it('a refused session shows its reason in the toast', async () => {
+      const { user, dlg } = await open();
+      await user.click(dlg.getAllByRole('radio', { name: 'B' })[0]);
+      changeReply.body = { results: [{ sid: 's1', ids: ['s1:r1'], error: 'Answer its pending question first' }] };
+      await user.click(dlg.getByRole('button', { name: 'Submit' }));
+      expect(await screen.findByText('cmd-one: Answer its pending question first')).toBeTruthy();
+      expect((screen.getByRole('checkbox', { name: 'Change answer: First cmd-one?' }) as HTMLInputElement).checked).toBe(true);
+    });
+    it('a 409 keeps the dialog open with the message', async () => {
+      const { user, dlg } = await open();
+      await user.click(dlg.getAllByRole('radio', { name: 'B' })[0]);
+      changeReply = { status: 409, body: { error: 'No away summary to change' } };
+      await user.click(dlg.getByRole('button', { name: 'Submit' }));
+      expect((await dlg.findByRole('alert')).textContent).toContain('No away summary to change');
+      expect(screen.getByRole('dialog')).toBeTruthy();
+    });
   });
 });
 
