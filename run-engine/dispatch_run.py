@@ -104,14 +104,19 @@ def ci_fix_prompt(pr) -> str:
     return f"CI is red on PR #{pr}. Read the failing job's log, fix it locally, re-run the checks, push and wait for green."
 
 
+def lane_base(lane: dict, settings: dict):
+    """The base a lane branches from and opens its PR into: the feature branch, else the base branch, else the issue's own."""
+    return settings.get("feature_branch") or settings.get("base_branch") or lane.get("base")
+
+
 def followups_prompt(n: int, pr: int, base) -> str:
-    tail = f" Its base {base} is not the default branch, so close #{n} with `gh issue close`." if base else ""
+    tail = f" Close #{n} if it is still open." if base else ""
     return f"PR #{pr} for issue #{n} is merged. Run implement-issue's 'After the pull request is merged' steps for #{n}.{tail}"
 
 
 def stage_prompt(lane: dict, settings: dict, pr_url=None):
     """What a fresh session for the lane's current stage is told; None when the stage needs no session."""
-    base = settings.get("feature_branch") or lane.get("base")
+    base = lane_base(lane, settings)
     ci = settings.get("ci", "wait")
     return {
         "implementing": lambda: implement_prompt(lane["n"], base, lane.get("pr"), ci),
@@ -153,7 +158,7 @@ def step(lane: dict, facts: dict, settings: dict, now: float) -> tuple:
         return {}, []
     pr = facts.get("pr") or {}
     agent = facts.get("agent")
-    base = settings.get("feature_branch") or lane.get("base")
+    base = lane_base(lane, settings)
     ci = settings.get("ci", "wait")
     free = ci != "wait"  # defer / ignore: a lane does not wait for CI before the gate
     patch: dict = {}
@@ -640,7 +645,7 @@ def apply_lane_action(d: dict, k: str, action: str, text=None) -> None:
 
 
 def request_end(did: str, action: str) -> dict:
-    """An end-of-dispatch action, run by the next tick: open-pr (feature branch -> default branch, per repo),
+    """An end-of-dispatch action, run by the next tick: open-pr (feature branch -> base branch, else the default branch, per repo),
     qa (a final QA session), grind-pr (grind the PRs open-pr opened). Never automatic."""
     if action not in END_ACTIONS:
         raise ValueError(f"end action must be one of {END_ACTIONS}")
@@ -674,9 +679,12 @@ def run_end(d: dict, action: str, runner, gh) -> str:
     if action == "open-pr":
         out = []
         for repo in _repos(d):
-            base = gh(
-                ["repo", "view", repo, "--json", "defaultBranchRef", "-q", ".defaultBranchRef.name"]
-            ).stdout.strip()
+            base = (
+                d["settings"].get("base_branch")
+                or gh(
+                    ["repo", "view", repo, "--json", "defaultBranchRef", "-q", ".defaultBranchRef.name"]
+                ).stdout.strip()
+            )
             p = gh(
                 [
                     "pr",
@@ -790,7 +798,7 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None, gh
                         if d["settings"].get("ci") == "ignore" and ci_now in ("failure", "pending"):
                             ev(k, "warning", "merged with red CI" if ci_now == "failure" else "merged with CI pending")
                     elif "conflict" in err.lower():  # the board had not seen the conflict yet: fix it in the lane
-                        base = d["settings"].get("feature_branch") or x.get("base")
+                        base = lane_base(x, d["settings"])
                         x.update(stage="conflict_fix", merge_at=None)
                         runner.send(x["handle"], conflict_prompt(a[1], base))
                         ev(k, "stage", "merge_gate -> conflict_fix (GitHub refused the merge: conflicts)")
@@ -809,7 +817,7 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None, gh
             ev(None, "needs_you", f"{action} failed: {e}")
     for k in startable(d, facts):
         x = d["lanes"][k]
-        base = d["settings"].get("feature_branch") or x.get("base")
+        base = lane_base(x, d["settings"])
         try:
             x["handle"] = runner.start(x, implement_prompt(x["n"], base, ci=d["settings"].get("ci", "wait")), d)
             x.setdefault("handles", []).append(x["handle"])

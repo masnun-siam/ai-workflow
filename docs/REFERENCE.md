@@ -166,7 +166,7 @@ the epic spans repos) or a **List**, each with a plain line on what it is doing 
 is happening and its main action, a step bar, the question form when its session asks one, a message box,
 its transcript or herdr pane text, and Pause, Merge now, Hold the merge, Retry, Skip in a menu) and the
 activity feed in plain sentences. **Retry** on red CI asks the issue's session to fix CI. When every lane is done it offers **Open PR from
-<branch>**, **Run QA** and **Grind the final PR**; none runs by itself, and a dispatch of picked issues offers none of them.
+<branch>** (into `base_branch` when set, else the default branch), **Run QA** and **Grind the final PR**; none runs by itself, and a dispatch of picked issues offers none of them.
 The server ticks every running dispatch every 30 s from the board poll, the grind state files and each
 lane's session; grind rounds a lane owns are typed into the lane (`dispatch-due:` in the grind state)
 instead of starting a separate session, and the epic is re-read every 5 minutes so new children join; a finished (`done`) dispatch that gains one goes to `paused` until the new issues are refined and the user presses **Resume** (a dispatch of picked issues re-reads only its listed issues; none joins).

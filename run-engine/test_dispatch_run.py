@@ -372,7 +372,7 @@ d2 = dr.load(d2["id"])
 dr.tick(d2, {K(7): f7}, run2, merge, now=4)
 assert merges[-1] == 107 and not d2["lanes"][K(7)]["force_merge"]
 dr.tick(d2, {K(7): {**f7, "pr": pr(107, state="MERGED")}}, run2, merge, now=5)
-assert "close #7 with `gh issue close`" in run2.sent[-1][1]  # non-default base: issue closes by hand
+assert run2.sent[-1][1].endswith("Close #7 if it is still open.")
 dr.tick(d2, {K(7): {**f7, "issue_open": False}}, run2, merge, now=6)
 assert d2["state"] == "done"
 print("  ok  awaiting merge, merge now, done")
@@ -609,4 +609,36 @@ hl = dispatch_runners.Headless(runner=object(), sessions=FakeSessions())
 assert hl.status({"session": "s1"}) == ("blocked", None) and hl.status({"session": "s2"})[0] == "gone"
 assert hl.status({"session": "nope"})[0] == "gone"
 print("  ok  runners")
+
+# base_branch: lane_base order, lane prompts, followups tail, Open PR target
+assert dr.lane_base({"base": "L"}, {"feature_branch": "F", "base_branch": "B"}) == "F"
+assert dr.lane_base({"base": "L"}, {"base_branch": "B"}) == "B"
+assert dr.lane_base({"base": "L"}, {}) == "L" and dr.lane_base({}, {}) is None
+db = dr.create("o/r#60", "headless", {"grind": "off", "base_branch": "release/1.4"}, [child(61)])
+runb = FakeRunner()
+dr.tick(db, fq(61), runb, merge, now=1)
+assert "base branch release/1.4: branch from it, open the PR into it" in runb.started[0][1]
+assert "Merge origin/release/1.4" in dr.stage_prompt({"n": 61, "stage": "conflict_fix", "pr": 5}, db["settings"])
+assert dr.stage_prompt({"n": 61, "stage": "followups", "pr": 5}, db["settings"]).endswith(
+    "Close #61 if it is still open."
+)
+db2 = dr.create(
+    "o/r#62", "headless", {"grind": "off", "feature_branch": "feat/x", "base_branch": "staging"}, [child(63)]
+)
+runb2 = FakeRunner()
+dr.tick(db2, fq(63), runb2, merge, now=1)
+assert "feat/x" in runb2.started[0][1] and "staging" not in runb2.started[0][1]
+dn = dr.create("o/r#64", "headless", {"grind": "off"}, [child(65)])
+runn = FakeRunner()
+dr.tick(dn, fq(65), runn, merge, now=1)
+assert "base branch" not in runn.started[0][1]
+assert dr.followups_prompt(65, 5, None).endswith("for #65.")
+d6 = dr.create("o/r#70", "headless", {"feature_branch": "feature/x", "base_branch": "staging"}, [child(71)])
+dr.request_end(d6["id"], "open-pr")
+d6 = dr.load(d6["id"])
+del gh_calls[:]
+dr.tick(d6, {}, FakeRunner(), merge, now=1, gh=fake_gh)
+assert gh_calls[0][:8] == ["pr", "create", "-R", "o/r", "--base", "staging", "--head", "feature/x"]
+assert not any(c[:2] == ["repo", "view"] for c in gh_calls)
+print("  ok  base_branch lanes and open-pr")
 print("dispatch_run: all green")
