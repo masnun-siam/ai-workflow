@@ -511,6 +511,8 @@ export interface DispatchSettings {
   ci?: CiMode;
   auto_merge: boolean;
   feature_branch: string | null;
+  /** Absent on older dispatches: read as null (the repo's base). */
+  base_branch?: string | null;
   model: string | null;
   effort: Effort | null;
 }
