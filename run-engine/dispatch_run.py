@@ -40,9 +40,11 @@ DEFAULTS = {
     "ci": "wait",  # wait | defer (CI blocks only the merge) | ignore (CI never blocks)
     "auto_merge": False,
     "feature_branch": None,  # every lane's base when set; else the issue's own
+    "base_branch": None,  # where the dispatch's work lands; empty = today's behaviour. Fixed at start
     "model": None,
     "effort": None,
 }
+_BRANCH = r"[A-Za-z0-9._/-]{1,100}"
 GRIND_MODES = ("off", "simple", "full")
 CI_MODES = ("wait", "defer", "ignore")
 MERGE_RETRY_SECONDS = 300  # the board lags a merge; don't call gh pr merge twice in this window
@@ -491,8 +493,13 @@ def check_settings(s: dict) -> dict:
     if s.get("effort") not in (None, "low", "medium", "high", "xhigh", "max"):
         raise ValueError("effort must be low, medium, high, xhigh or max")
     fb = s.get("feature_branch")
-    if fb is not None and not re.fullmatch(r"[A-Za-z0-9._/-]{1,100}", fb):
+    if fb is not None and not re.fullmatch(_BRANCH, fb):
         raise ValueError("feature_branch is not a valid branch name")
+    bb = s.get("base_branch")
+    if bb is not None and not (isinstance(bb, str) and re.fullmatch(_BRANCH, bb)):
+        raise ValueError("base_branch is not a valid branch name")
+    if bb is not None and bb == fb:
+        raise ValueError("base_branch must differ from feature_branch")
     return s
 
 
@@ -556,6 +563,8 @@ def event(d: dict, lane_key, kind: str, text: str) -> dict:
 
 def set_settings(did: str, **kv) -> dict:
     """Live edit; takes effect at the next tick."""
+    if "base_branch" in kv:
+        raise ValueError("base_branch is fixed at start")
     with locked(did):
         d = load(did)
         d["settings"] = check_settings({**d["settings"], **kv})

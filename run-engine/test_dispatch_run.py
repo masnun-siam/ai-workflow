@@ -82,6 +82,28 @@ for bad in ({"ci": "x"}, {"grind": "deep"}, {"max": 0}, {"max": True}, {"feature
         if "ci" in bad:
             assert str(e) == "ci must be one of ('wait', 'defer', 'ignore')", e
 assert dr.create("o/r#1", "headless", {}, [])["settings"]["ci"] == "wait"
+assert dr.create("o/r#1", "headless", {}, [])["settings"]["base_branch"] is None
+for ok in ("staging", "release/1.4"):
+    assert dr.create("o/r#1", "headless", {"base_branch": ok}, [])["settings"]["base_branch"] == ok
+for bad in ("bad name", "", "x;rm", "a" * 101, 5, {"base_branch": "feat/x", "feature_branch": "feat/x"}):
+    try:
+        dr.create("o/r#1", "headless", bad if isinstance(bad, dict) else {"base_branch": bad}, [])
+        raise AssertionError(f"accepted base_branch {bad!r}")
+    except ValueError:
+        pass
+# fixed at start: refused live, even with the stored value
+bb = dr.create("o/r#1", "headless", {"base_branch": "staging"}, [])
+for v in ("other", "staging"):
+    try:
+        dr.set_settings(bb["id"], base_branch=v)
+        raise AssertionError("live base_branch accepted")
+    except ValueError as e:
+        assert str(e) == "base_branch is fixed at start", e
+# a record saved before the setting loads as empty
+old = dr.load(bb["id"])
+del old["settings"]["base_branch"]
+dr.save(old)
+assert dr.load(bb["id"])["settings"]["base_branch"] is None
 print("  ok  settings")
 
 # --- issue-list dispatch
@@ -98,6 +120,10 @@ for fn in (
         raise AssertionError("feature_branch accepted")
     except ValueError:
         pass
+assert (
+    dr.create(None, "headless", {"base_branch": "hotfix"}, [child(8)], issues=["o/r#8"])["settings"]["base_branch"]
+    == "hotfix"
+)
 # end actions are refused for an issue list, and nothing is recorded
 for act in dr.END_ACTIONS:
     try:
