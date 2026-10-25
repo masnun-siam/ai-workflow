@@ -210,7 +210,7 @@ export function ItemRow({ item, a, open, toggle, publish }: Props) {
       meta = [where, `${item.account} account`, item.auto_resume ? `resumes ${clockText(item.resets_at)}` : 'auto-resume off'];
       const others = (settings.data?.commands ?? []).filter((c) => c.label !== item.account);
       acts = (<>
-        <Menu items={others.map((c) => ({ label: c.label, onSelect: () => a.resumeOn(item.session_id, c.label) }))} trigger={<Button sm disabled={!others.length}>Resume on another account</Button>} />
+        <Menu paletteLabel="Resume on" items={others.map((c) => ({ label: c.label, onSelect: () => a.resumeOn(item.session_id, c.label) }))} trigger={<Button sm disabled={!others.length}>Resume on another account</Button>} />
         {sess(item.session_id)}
       </>);
       break;

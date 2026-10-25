@@ -54,7 +54,7 @@ export interface KeyAction {
   primary?: boolean;
 }
 type Level = 'page' | 'row' | 'panel';
-const LEVEL_RANK: Record<Level, number> = { page: 1, row: 2, panel: 3 };
+export const LEVEL_RANK: Record<Level, number> = { page: 1, row: 2, panel: 3 };
 interface Scope {
   level: Level;
   active: boolean;

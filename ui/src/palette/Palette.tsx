@@ -10,6 +10,7 @@ import { useDelivery } from '../api/hooks';
 import { usePanel } from '../panels/PanelContext';
 import { useRepo } from '../shell/useRepo';
 import { useStart } from '../start/StartContext';
+import { LEVEL_RANK, useActions } from '../shell/shortcuts';
 
 interface Entry {
   id: string;
@@ -19,7 +20,7 @@ interface Entry {
   run: () => void;
 }
 
-const GROUP_ORDER = ['Open', 'Go to', 'Start', 'Features', 'Issues', 'Pull requests', 'Sessions', 'Switch repo', 'Away'];
+const GROUP_ORDER = ['Actions here', 'Open', 'Go to', 'Start', 'Features', 'Issues', 'Pull requests', 'Sessions', 'Switch repo', 'Away'];
 
 /** ⌘K (FR-4). Rendered by the shell only while open, so its queries run only then. */
 export function Palette({ onClose }: { onClose: () => void }) {
@@ -36,9 +37,14 @@ export function Palette({ onClose }: { onClose: () => void }) {
   const afkStart = useAfkStart();
   const afkStop = useAfkStop();
   const afk = sessions?.afk;
+  const actions = useActions();
 
   const all = useMemo<Entry[]>(() => {
     const e: Entry[] = [];
+    const ranked = actions.filter((a) => !a.disabled).sort((a, b) => LEVEL_RANK[b.level] - LEVEL_RANK[a.level] || a.seq - b.seq);
+    for (const a of ranked) {
+      e.push({ id: `act:${a.seq}`, group: 'Actions here', label: `${a.name ? `${a.name}: ` : ''}${a.label}${a.key ? ` (${a.key.toUpperCase()})` : ''}`, run: a.run });
+    }
     const go = (path: string) => () => navigate(link(path));
     for (const [path, label] of [[routes.inbox, 'Inbox'], [routes.features, 'Features'], [routes.dispatches, 'Dispatches'], [routes.activity, 'Activity'], [routes.settings(), 'Settings']] as const) {
       e.push({ id: `go:${path}`, group: 'Go to', label, run: go(path) });
@@ -62,7 +68,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
         : { id: 'away:on', group: 'Away', label: 'Go away for 2 hours', run: () => afkStart.mutate(Math.floor(Date.now() / 1000) + 7200) },
     );
     return e;
-  }, [planning, delivery, issues, prs, sessions, repos, repo, afk?.active]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [planning, delivery, issues, prs, sessions, repos, repo, afk?.active, actions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const results = useMemo(() => {
     const t = q.trim().toLowerCase();
