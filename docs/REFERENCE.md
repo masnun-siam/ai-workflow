@@ -63,7 +63,7 @@ after an upgrade it deletes the old run data from the plugin data dir once and l
 `#/features/<slug>[/<tab>]`, `#/issues` (redirects to `#/features?tab=changes`),
 `#/dispatches[?new=<owner/repo#n>]` (`new` opens Run an epic on that epic),
 `#/dispatches/<id>[?lane=<owner/repo#n>]`, `#/activity`, `#/sessions/<id>`, `#/settings[/<section>]`.
-Anything else is a not-found page. **Shortcuts:** `N` Start, `G` then `I/F/D/A/S` to go to a page, `?` lists them, `Esc` closes the top panel. The palette
+Anything else is a not-found page. **Shortcuts:** `N` Start, `G` then `I/F/D/A/S` to go to a page, `?` lists them, `Esc` closes the top panel. In a question round: `1`–`9` pick an option (toggle in multi-select), `0`/`O` picks Something else, `Tab` goes to the next question, ⌘↵ sends a complete round. The palette
 (⌘K / Ctrl+K) finds pages, every Start command, features, issues, PRs, sessions, switches repo and
 turns Away mode on or off. Its first group, **Actions here**, lists every enabled action registered on the page, the open panel and the selected row (and the items of mounted menus, via `Menu`'s `paletteLabel`), labelled as the button is, with its key; choosing one does what a click does.
 

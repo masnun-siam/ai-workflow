@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Button, Icon } from '../components';
 import { WorkPanel } from './WorkPanel';
+import { KeyScope } from '../shell/shortcuts';
 import { usePanel } from './PanelContext';
 
 /** Header + scrolling body + optional sticky footer. Panels use it so they all look and close the same way. */
@@ -27,10 +28,10 @@ export function PanelFrame({ title, subtitle, head, footer, children }: { title:
  * a fixed overlay below 1180 px and full screen below 760 px (CSS). Focus moves in on open.
  */
 export function DetailPanel() {
-  const { target, close } = usePanel();
+  const { target, follow, close } = usePanel();
   const ref = useRef<HTMLElement>(null);
   useEffect(() => {
-    if (target) ref.current?.focus({ preventScroll: true });
+    if (target && !follow) ref.current?.focus({ preventScroll: true });
   }, [target?.kind, target?.repo, target?.n]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!target) return null;
   const key = `${target.kind}:${target.repo}#${target.n}`;
@@ -38,7 +39,9 @@ export function DetailPanel() {
     <>
       <div className="panel-scrim" onClick={close} aria-hidden="true" />
       <aside className="panel" aria-label={target.kind === 'issue' ? 'Issue details' : 'Pull request details'} tabIndex={-1} ref={ref}>
-        <WorkPanel key={key} kind={target.kind} repo={target.repo} n={target.n} />
+        <KeyScope level="panel" active>
+          <WorkPanel key={key} kind={target.kind} repo={target.repo} n={target.n} />
+        </KeyScope>
       </aside>
     </>
   );
