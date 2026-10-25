@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- `[` and `]` switch to the previous and next tab on Features and the Feature page, stopping at the first and last tab, under the same guards as the other single-key shortcuts (#491).
+
 ### Changed
 
 - Away mode now answers `/create-prd`, `/create-tasks`, `/refine-issues` and `/dump` rounds when every question has a recommended option (the #188 exclusion applies only outside a window). Answer entries in `afk.json` gain `id`, `by`, `questions`, `answerer`, `cost` and `changed` (#460).
