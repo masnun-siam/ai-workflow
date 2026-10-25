@@ -349,6 +349,8 @@ def fake_resolve(refs, gh=None):
 
 
 ui_dispatch.dispatch_cli.resolve_issues = fake_resolve
+real_branch_sha = ui_dispatch.dispatch_cli.branch_sha
+ui_dispatch.dispatch_cli.branch_sha = lambda repo, branch, gh=None: "sha"  # every base exists; no gh in a self-check
 st, body = call("/api/dispatches/plan", {"issues": ["o/r#415", "o/r#412"]})
 assert st == 200 and body["epic"] is None and body["issues"] == ["o/r#415", "o/r#412"] and body["title"]
 assert body["waves"] == [["o/r#412"], ["o/r#415"]], body["waves"]
@@ -360,6 +362,13 @@ st, b2 = call("/api/dispatches", {"issues": ["o/r#106"], "settings": {"base_bran
 assert st == 201 and b2["settings"]["base_branch"] == "hotfix", b2
 st, body = call(f"/api/dispatches/{b2['id']}/settings", {"base_branch": "x"})
 assert st == 400 and body["error"] == "base_branch is fixed at start", body
+ui_dispatch.dispatch_cli.branch_sha = lambda repo, branch, gh=None: None
+nb = {"issues": ["o/r#109"], "settings": {"base_branch": "staging"}}
+st, body = call("/api/dispatches/plan", nb)
+assert st == 200 and "o/r: base branch staging does not exist" in body["warnings"], body
+st, body = call("/api/dispatches", nb)
+assert st == 400 and body["error"] == "o/r: base branch staging does not exist", body
+ui_dispatch.dispatch_cli.branch_sha = real_branch_sha
 for bad in (
     {"epic": "o/r#1", "issues": ["o/r#106"]},
     {},
