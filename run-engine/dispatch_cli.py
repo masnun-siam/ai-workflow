@@ -185,7 +185,22 @@ def channel(repo: str):
     return "" if mapped else None
 
 
-def preview(r: dict, settings: dict, runner: str) -> dict:
+def branch_sha(repo: str, branch: str, gh=_gh) -> "str | None":
+    """Head SHA of `branch` on `repo`, or None when it does not exist (or gh failed: fail safe)."""
+    p = gh(["api", f"repos/{repo}/git/ref/heads/{branch}", "-q", ".object.sha"])
+    return (p.stdout or "").strip() or None if p.returncode == 0 else None
+
+
+def missing_base(repos, base, gh=_gh) -> list:
+    """One message per repo where `base` does not exist; [] when no base is set."""
+    if not base:
+        return []
+    return [
+        f"{repo}: base branch {base} does not exist" for repo in sorted(repos) if branch_sha(repo, base, gh) is None
+    ]
+
+
+def preview(r: dict, settings: dict, runner: str, gh=_gh) -> dict:
     p = dr.plan(r["children"])
     repos = sorted({c["repo"] for c in r["children"]})
     checkouts = {k.lower() for k in dispatch.read_checkouts()}
@@ -199,18 +214,24 @@ def preview(r: dict, settings: dict, runner: str) -> dict:
             p["warnings"].append(f"{repo}: no local checkout registered (aiw ui -> Repositories)")
         if settings.get("grind", "full") != "off" and channel(repo) is None:
             p["warnings"].append(f"{repo}: no Slack channel, its lanes skip grinding")
+    p["warnings"].extend(missing_base(repos, settings.get("base_branch"), gh))
     out = {"epic": r["epic"], "title": r["title"], "settings": settings, "runner": runner, "lanes": r["children"], **p}
     if not r["epic"]:
         out["issues"] = r.get("issues")
     return out
 
 
-def ensure_feature_branch(repo: str, branch: str, gh=_gh) -> bool:
-    """Cut `branch` from the default branch on GitHub when missing. True when it was created."""
+def ensure_feature_branch(repo: str, branch: str, gh=_gh, base=None) -> bool:
+    """Cut `branch` from `base`, else the default branch, on GitHub when missing. True when it was created."""
     if gh(["api", f"repos/{repo}/git/ref/heads/{branch}"]).returncode == 0:
         return False
-    base = gh(["repo", "view", repo, "--json", "defaultBranchRef", "-q", ".defaultBranchRef.name"]).stdout.strip()
-    sha = gh(["api", f"repos/{repo}/commits/{base}", "-q", ".sha"]).stdout.strip()
+    if base:
+        sha = branch_sha(repo, base, gh)
+    else:
+        default = gh(
+            ["repo", "view", repo, "--json", "defaultBranchRef", "-q", ".defaultBranchRef.name"]
+        ).stdout.strip()
+        sha = gh(["api", f"repos/{repo}/commits/{default}", "-q", ".sha"]).stdout.strip()
     p = gh(["api", f"repos/{repo}/git/refs", "-f", f"ref=refs/heads/{branch}", "-f", f"sha={sha}"])
     if p.returncode != 0 or not sha:
         raise ValueError(f"cannot create {branch} on {repo}: {(p.stderr or p.stdout).strip()[:200]}")
@@ -264,6 +285,12 @@ def cmd_plan(a) -> None:
     print(json.dumps(preview(resolve(a.epic), _settings(a), a.runner), indent=1))
 
 
+def refuse_missing_base(children, s: dict, gh) -> None:
+    miss = missing_base({c["repo"] for c in children}, s.get("base_branch"), gh)
+    if miss:
+        raise ValueError("; ".join(miss))
+
+
 def start(epic, runner: str, s: dict, workspace=None, gh=_gh, issues=None) -> dict:
     """Resolve the epic (or the picked issues), cut the feature branch if asked, record the dispatch. The UI server ticks it."""
     if runner == "herdr" and not workspace:
@@ -272,12 +299,14 @@ def start(epic, runner: str, s: dict, workspace=None, gh=_gh, issues=None) -> di
         r = resolve_issues(issues, gh)
         if not r["children"]:
             raise ValueError("none of the picked issues is open")
+        refuse_missing_base(r["children"], s, gh)
         return dr.create(None, runner, s, r["children"], workspace=workspace, title=r["title"], issues=r["issues"])
     r = resolve(epic, gh)
     if not r["children"]:
         raise ValueError(f"{r['epic']} has no open child issues")
+    refuse_missing_base(r["children"], s, gh)
     for repo in sorted({c["repo"] for c in r["children"]}) if s["feature_branch"] else []:
-        ensure_feature_branch(repo, s["feature_branch"], gh)
+        ensure_feature_branch(repo, s["feature_branch"], gh, s.get("base_branch"))
     return dr.create(r["epic"], runner, s, r["children"], workspace=workspace, title=r["title"])
 
 
