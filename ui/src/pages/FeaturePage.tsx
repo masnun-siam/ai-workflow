@@ -87,6 +87,7 @@ function Body({ f, repo, tab, meta }: { f: Feature; repo: string; tab?: string; 
         value={cur}
         onValueChange={go}
         label="Feature"
+        pageKeys
         tabs={[
           { value: 'issues', label: 'Issues', count: f.issues.length },
           { value: 'prd', label: 'PRD' },
