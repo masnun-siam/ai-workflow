@@ -92,16 +92,20 @@ let flushQueued = false;
 // Many buttons register in one render: tell subscribers once per burst.
 const flush = () => {
   flushQueued = false;
-  actionsSnapshot = entries.map((e) => ({
-    label: typeof e.ref.current!.label === 'function' ? e.ref.current!.label() : e.ref.current!.label,
+  actionsSnapshot = entries.flatMap((e) => {
+    const a = e.ref.current;
+    if (!a) return [];
+    return [{
+    label: typeof a.label === 'function' ? a.label() : a.label,
     key: e.key,
     level: e.level,
     name: e.name,
     seq: e.seq,
     primary: e.primary,
-    disabled: !!e.ref.current!.disabled,
+    disabled: !!a.disabled,
     run: () => e.ref.current?.run(),
-  }));
+    }];
+  });
   subs.forEach((f) => f());
 };
 const scheduleFlush = () => {
