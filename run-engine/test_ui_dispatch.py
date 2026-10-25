@@ -355,6 +355,11 @@ assert body["waves"] == [["o/r#412"], ["o/r#415"]], body["waves"]
 st, body = call("/api/dispatches", {"issues": ["o/r#105", "o/r#105"]})
 assert st == 201 and body["epic"] is None and body["issues"] == ["o/r#105"], body
 owner = body["id"]
+assert call("/api/dispatches/plan", {"issues": ["o/r#106"], "settings": {"base_branch": "hotfix"}})[0] == 200
+st, b2 = call("/api/dispatches", {"issues": ["o/r#106"], "settings": {"base_branch": "hotfix"}})
+assert st == 201 and b2["settings"]["base_branch"] == "hotfix", b2
+st, body = call(f"/api/dispatches/{b2['id']}/settings", {"base_branch": "x"})
+assert st == 400 and body["error"] == "base_branch is fixed at start", body
 for bad in (
     {"epic": "o/r#1", "issues": ["o/r#106"]},
     {},
