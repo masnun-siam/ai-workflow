@@ -1,5 +1,6 @@
 import * as DM from '@radix-ui/react-dropdown-menu';
 import type { ReactNode } from 'react';
+import { useAction } from '../shell/shortcuts';
 import { Button } from './Button';
 import { Icon, type IconName } from './Icon';
 
@@ -7,10 +8,17 @@ export type MenuEntry =
   | { label: string; icon?: IconName; onSelect: () => void; danger?: boolean; disabled?: boolean; checked?: boolean }
   | 'sep';
 
-/** Dropdown menu (Radix): arrow keys, type-ahead, Esc and focus return come for free. `trigger` must be a single focusable element. */
-export function Menu({ trigger, items, align = 'end' }: { trigger: ReactNode; items: MenuEntry[]; align?: 'start' | 'end' | 'center' }) {
+/** Lists one menu item in the palette's "Actions here" while the menu is mounted (a hook per item, so one component per item). */
+function MenuAction({ label, item }: { label: string; item: Exclude<MenuEntry, 'sep'> }) {
+  useAction(item.disabled ? null : { label: label ? `${label} ${item.label}` : item.label, run: item.onSelect });
+  return null;
+}
+
+/** Dropdown menu (Radix): arrow keys, type-ahead, Esc and focus return come for free. `trigger` must be a single focusable element. `paletteLabel` prefixes each item in the palette ("Resume on" → "Resume on personal"). */
+export function Menu({ trigger, items, align = 'end', paletteLabel = '' }: { trigger: ReactNode; items: MenuEntry[]; align?: 'start' | 'end' | 'center'; paletteLabel?: string }) {
   return (
     <DM.Root>
+      {items.map((it, i) => (it === 'sep' ? null : <MenuAction key={i} label={paletteLabel} item={it} />))}
       <DM.Trigger asChild>{trigger}</DM.Trigger>
       <DM.Portal>
         <DM.Content className="menu-c" align={align} sideOffset={6} collisionPadding={8}>

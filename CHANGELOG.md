@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- `[` and `]` switch to the previous and next tab on Features and the Feature page, stopping at the first and last tab, under the same guards as the other single-key shortcuts (#491).
+
 ### Changed
 
 - Away mode now answers `/create-prd`, `/create-tasks`, `/refine-issues` and `/dump` rounds when every question has a recommended option (the #188 exclusion applies only outside a window). Answer entries in `afk.json` gain `id`, `by`, `questions`, `answerer`, `cost` and `changed` (#460).
@@ -16,6 +20,7 @@
 
 ### Added
 
+- ⌘K shows an **Actions here** group first: the enabled actions on the current page, open panel and selected row, labelled like the button with its key (`Resume (R)`), plus the items of mounted menus (`Resume on personal`). Running one does what a click does (#490).
 - The "While you were away" summary gets **Change N selected**: a dialog with the question form for each ticked answered round, prefilled with the logged picks, that posts `/api/afk/change` and toasts sent, queued or the refusal per session (#466).
 - Every headless session spawn and send resolves plugin skill commands against the session's working directory (`repo_skills.resolve`): a repo with `.claude/skills/implement-issue/SKILL.md` runs and shows `/implement-issue 12`, elsewhere `/ai-workflow:implement-issue 12`, whichever spelling was typed. Queued and rate-limited starts resolve when they begin and write the resolved command back; answers, typed prompts and resumes are sent resolved and leave the stored command unchanged (#439).
 - "Repository settings" in `guides/engineering-workflow.md` gains **Repo skills win**: before one plugin skill runs another, it checks for the repo's own `.claude/skills/<name>/SKILL.md` and runs `/<name>` if it exists, else `/ai-workflow:<name>`. Every hand-off line points to the rule, flow, herdr-dispatch, pr-grind, release-pr, peer-review and dump now read "Repository settings" first, and `run-engine/test_repo_skills_text.py` keeps it that way (#435).

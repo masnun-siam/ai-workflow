@@ -65,7 +65,7 @@ after an upgrade it deletes the old run data from the plugin data dir once and l
 `#/dispatches/<id>[?lane=<owner/repo#n>]`, `#/activity`, `#/sessions/<id>`, `#/settings[/<section>]`.
 Anything else is a not-found page. **Shortcuts:** `N` Start, `G` then `I/F/D/A/S` to go to a page, `?` lists them, `Esc` closes the top panel. In a question round: `1`–`9` pick an option (toggle in multi-select), `0`/`O` picks Something else, `Tab` goes to the next question, ⌘↵ sends a complete round. The palette
 (⌘K / Ctrl+K) finds pages, every Start command, features, issues, PRs, sessions, switches repo and
-turns Away mode on or off.
+turns Away mode on or off. Its first group, **Actions here**, lists every enabled action registered on the page, the open panel and the selected row (and the items of mounted menus, via `Menu`'s `paletteLabel`), labelled as the button is, with its key; choosing one does what a click does.
 
 **Inbox.** Everything that needs you, across repos, grouped Blocking everything, Answer Claude, Decide,
 Fix, Set up and Waiting (nothing to do); the rail badge and tab title count all but Waiting. Items: GitHub CLI
@@ -171,8 +171,8 @@ The server ticks every running dispatch every 30 s from the board poll, the grin
 lane's session; grind rounds a lane owns are typed into the lane (`dispatch-due:` in the grind state)
 instead of starting a separate session, and the epic is re-read every 5 minutes so new children join; a finished (`done`) dispatch that gains one goes to `paused` until the new issues are refined and the user presses **Resume** (a dispatch of picked issues re-reads only its listed issues; none joins).
 `GET /api/dispatches`, `GET /api/dispatches/<id>` (with events; `issues` is the list or null), `GET /api/dispatches/<id>/lane?key=`,
-`POST /api/dispatches` (`{epic, settings}` or `{issues: ["owner/repo#n", ...], settings}`, never both; 1 to 30 issues in one repo, no `feature_branch`; 400 for both or neither, a bad ref, more than 30, two repos, a feature branch or no open issue; 409 when a picked issue is a lane of a dispatch not done or cancelled), `POST /api/dispatches/plan` (the same body), `POST
-/api/dispatches/<id>/settings|state|lane|end|seen`.
+`POST /api/dispatches` (`{epic, settings}` or `{issues: ["owner/repo#n", ...], settings}`, never both; 1 to 30 issues in one repo, no `feature_branch` (`settings.base_branch` is allowed); 400 for both or neither, a bad ref, more than 30, two repos, a feature branch or no open issue; 409 when a picked issue is a lane of a dispatch not done or cancelled), `POST /api/dispatches/plan` (the same body), `POST
+/api/dispatches/<id>/settings|state|lane|end|seen`. `settings.base_branch` (a branch name or null, same name rule as `feature_branch`, must differ from it) is fixed at start: a settings edit that contains it is 400 `base_branch is fixed at start`.
 
 **Start** (the New button, `N` or ⌘K). Commands grouped Plan, Build, Review, Ship, Capture and
 Maintain, each with a one-line description; the last one is remembered. Pick **Where** (a registered repo,
