@@ -59,7 +59,7 @@ export function useListSelection({ keys, onOpen, reset }: { keys: string[]; onOp
     if (index >= 0) setSel({ key, index });
   }, []);
 
-  useAction(sel ? { key: 'Enter', label: 'Open', run: () => latest.current.onOpen(sel.key) } : null);
+  useAction(sel ? { key: 'Enter', label: 'Open the selected row', run: () => latest.current.onOpen(sel.key) } : null);
 
   const selected = sel?.key ?? null;
   const rowProps = (key: string) => ({
