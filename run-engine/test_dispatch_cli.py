@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import subprocess
@@ -287,6 +288,22 @@ assert json.loads(aiw("show", d["id"]).stdout)["settings"]["ci"] == "defer"
 assert aiw("set", d["id"], "ci=bogus").returncode == 5
 assert aiw("plan", "1", "--ci", "bogus").returncode == 2  # argparse rejects it
 assert aiw("set", d["id"], "bogus=1").returncode == 5
+assert aiw("set", d["id"], "base_branch=x").returncode == 5  # #504 refusal, through the CLI
+_p = argparse.ArgumentParser()
+dc.register(_p.add_subparsers(dest="cmd"), None)
+
+
+def _parse(*x):
+    return _p.parse_args(["dispatch", "plan", "o/r#1", *x])
+
+
+assert dc._settings(_parse("--base-branch", "staging"))["base_branch"] == "staging"
+assert dc._settings(_parse())["base_branch"] is None
+try:
+    dc._settings(_parse("--base-branch", "a b"))
+    raise AssertionError("invalid base name accepted")
+except ValueError:
+    pass
 assert aiw("set", d["id"], "max=99").returncode == 5
 assert aiw("lane", d["id"], "5", "hold").returncode == 0 and dr.load(d["id"])["lanes"]["o/r#5"]["hold_merge"]
 assert aiw("lane", d["id"], "6", "hold").returncode == 5

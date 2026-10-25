@@ -259,6 +259,7 @@ def _settings(a) -> dict:
         "ci": a.ci,
         "auto_merge": a.auto_merge,
         "feature_branch": a.feature_branch,
+        "base_branch": a.base_branch,
         "model": a.model,
         "effort": a.effort,
     }
@@ -406,7 +407,14 @@ def register(sub, add) -> None:
         q.add_argument("--grind", choices=dr.GRIND_MODES, default=dr.DEFAULTS["grind"])
         q.add_argument("--ci", choices=dr.CI_MODES, default=dr.DEFAULTS["ci"])
         q.add_argument("--auto-merge", action="store_true")
-        q.add_argument("--feature-branch", default=None, help="every lane's base, cut from the default branch")
+        q.add_argument(
+            "--feature-branch", default=None, help="every lane's base, cut from the base branch (or the default branch)"
+        )
+        q.add_argument(
+            "--base-branch",
+            default=None,
+            help="where PRs land: every lane's base without a feature branch; the feature branch is cut from it and its final PR goes into it",
+        )
         q.add_argument("--model", default=None)
         q.add_argument("--effort", choices=("low", "medium", "high", "xhigh", "max"), default=None)
 
