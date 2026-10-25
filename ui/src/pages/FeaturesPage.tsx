@@ -98,6 +98,7 @@ export function FeaturesPage() {
           value={tab}
           onValueChange={setTab}
           label="Features"
+          pageKeys
           tabs={[
             { value: 'active', label: 'In progress', count: active.length },
             { value: 'shipped', label: 'Shipped', count: shipped.length },

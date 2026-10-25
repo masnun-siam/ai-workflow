@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- `[` and `]` switch to the previous and next tab on Features and the Feature page, stopping at the first and last tab, under the same guards as the other single-key shortcuts (#491).
+
 ### Changed
 
 - A dispatch with `base_branch` set now sends lanes to it: with no feature branch, each lane branches from it and opens its PR into it (conflict-fix and followups prompts name it). **Open PR** opens the feature branch into `base_branch` instead of the default branch. The followups prompt now ends "Close #n if it is still open." whenever a base is given (#507).
