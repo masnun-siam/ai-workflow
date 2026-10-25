@@ -99,7 +99,7 @@ export function SessionPage() {
           icon="clock"
           action={
             <div className="row wrap">
-              <Menu items={others.map((c) => ({ label: c.label, onSelect: () => a.resume(s.id, c.label) }))} trigger={<Button sm disabled={!others.length}>Resume on another account</Button>} />
+              <Menu paletteLabel="Resume on" items={others.map((c) => ({ label: c.label, onSelect: () => a.resume(s.id, c.label) }))} trigger={<Button sm disabled={!others.length}>Resume on another account</Button>} />
               {s.auto_resume ? <Button sm variant="ghost" onClick={() => cancelAuto.mutate(s.id)}>Don't auto-resume</Button> : null}
             </div>
           }
