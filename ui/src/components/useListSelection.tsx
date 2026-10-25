@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePanel, type PanelTarget } from '../panels/PanelContext';
 import { ignoreKey, useAction, useRegisterShortcuts, type ShortcutRow } from '../shell/shortcuts';
 import './selection.css';
 
@@ -24,13 +25,15 @@ const ROWS: ShortcutRow[] = [
 /**
  * Keyboard selection for one list per page (FR-1..3). `keys` are the rows' stable keys in screen order; spread `rowProps(key)` on each row.
  * Wrap a row's buttons in `<KeyScope level="row" active={selected === key}>` so their keys work for the selected row only.
+ * Pass `panelTarget` to make an open issue/PR panel follow the selection (FR-5): a row without a target closes it.
  * Pass `reset` (the repo, a filter) to clear the selection when it changes.
  */
-export function useListSelection({ keys, onOpen, reset }: { keys: string[]; onOpen: (key: string) => void; reset?: unknown }) {
+export function useListSelection({ keys, onOpen, reset, panelTarget }: { keys: string[]; onOpen: (key: string) => void; reset?: unknown; panelTarget?: (key: string) => PanelTarget | null }) {
+  const panel = usePanel();
   const [sel, setSel] = useState<Sel | null>(null);
   const els = useRef(new Map<string, HTMLElement>());
-  const latest = useRef({ keys, sel, onOpen });
-  latest.current = { keys, sel, onOpen };
+  const latest = useRef({ keys, sel, onOpen, panel, panelTarget });
+  latest.current = { keys, sel, onOpen, panel, panelTarget };
   const joined = keys.join('\n');
 
   useEffect(() => setSel((p) => nextSelection(p, latest.current.keys)), [joined]);
@@ -39,7 +42,7 @@ export function useListSelection({ keys, onOpen, reset }: { keys: string[]; onOp
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      const { keys: ks, sel: cur } = latest.current;
+      const { keys: ks, sel: cur, panel, panelTarget } = latest.current;
       const dir = e.key === 'j' || e.key === 'ArrowDown' ? 1 : e.key === 'k' || e.key === 'ArrowUp' ? -1 : 0;
       if (!dir || !ks.length || ignoreKey(e)) return;
       e.preventDefault();
@@ -47,6 +50,11 @@ export function useListSelection({ keys, onOpen, reset }: { keys: string[]; onOp
       if (cur && index === cur.index) return;
       setSel({ key: ks[index], index });
       const el = els.current.get(ks[index]);
+      if (panel.target && panelTarget) {
+        const t = panelTarget(ks[index]);
+        if (t && el) panel.open(t, el);
+        else if (!t) panel.close();
+      }
       el?.focus({ preventScroll: true });
       el?.scrollIntoView?.({ block: 'nearest' });
     };
