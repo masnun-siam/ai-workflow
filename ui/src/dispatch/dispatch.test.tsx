@@ -10,7 +10,7 @@ import { counts, eventText, laneNote, levels, nowLine } from './vocab';
 
 const json = (b: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } }));
 const AFK = { active: false, until: null, started: null, decisions: 0, held: 0, summary: null };
-const S = { max: 2, grind: 'full', ci: 'wait', auto_merge: false, feature_branch: null, model: null, effort: null } as const;
+const S = { max: 2, grind: 'full', ci: 'wait', auto_merge: false, feature_branch: null, base_branch: null, model: null, effort: null } as const;
 const lane = (n: number, o: Partial<Lane> = {}): Lane => ({
   key: `o/r#${n}`, repo: 'o/r', n, title: `Issue ${n}`, deps: [], stage: 'queued', pr: null, needs_you: null, held: null, gate: null,
   skip_reason: null, paused: null, hold_merge: null, limited_until: null, started_at: null, ended_at: null, session: null, tab: null,
@@ -31,10 +31,12 @@ let routes: Record<string, unknown>;
 let posts: [string, unknown][];
 let planSmall: unknown;
 let startError: { error: string } | null;
+let branchesError: string | null;
 beforeEach(() => {
   localStorage.clear();
   posts = [];
   startError = null;
+  branchesError = null;
   planSmall = { epic: null, issues: ['o/r#412', 'o/r#415'], title: 'Small changes: #412, #415', settings: S, runner: 'headless', lanes: [{ repo: 'o/r', n: 412, title: 'First', refined: true, deps: [] }, { repo: 'o/r', n: 415, title: 'Second', refined: true, deps: ['o/r#412'] }], waves: [['o/r#412'], ['o/r#415']], warnings: ['o/r#415: waits for o/r#9'] };
   routes = {
     '/api/repos': { repos: [{ slug: 'o/r', name: 'R', path: '/x' }], can_browse: false, scan_roots: [] },
@@ -44,8 +46,10 @@ beforeEach(() => {
     '/api/planning': { prds: [], fetched_at: 1, stale: false },
     '/api/dispatches': { dispatches: [disp(), disp({ id: 'old000000000', state: 'done', title: 'Old epic', lanes: [lane(9, { stage: 'closed' })] })] },
     '/api/dispatches/abc123abc123': disp(),
+    '/api/github/branches': { branches: ['master', 'stage-hotfix', 'staging', 'dev'], default: 'master' },
   };
-  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  Element.prototype.scrollIntoView = () => {};
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     const path = String(url).split('?')[0];
     if (init?.method === 'POST') {
@@ -57,6 +61,7 @@ beforeEach(() => {
         return json({ epic: 'o/r#1', title: 'Payments', settings: S, runner: 'headless', lanes: [{ repo: 'o/r', n: 2, title: 'A', refined: true, deps: [] }, { repo: 'o/r', n: 5, title: 'B', refined: false, deps: [] }], waves: [['o/r#2']], warnings: ['o/r#5: needs refine'] });
       return json(disp());
     }
+    if (path === '/api/github/branches' && branchesError) return json({ error: branchesError }, 502);
     return path in routes ? json(routes[path]) : json({ error: 'nf' }, 404);
   }));
 });
@@ -357,5 +362,102 @@ describe('Run small changes dialog', () => {
     render(<App />);
     await userEvent.click(await screen.findByRole('button', { name: /Settings/ }));
     expect(screen.getByText('Feature branch')).toBeTruthy();
+  });
+});
+
+describe('Base branch picker', () => {
+  const open = (props: { epic?: string; issues?: { n: number; title: string }[] } = {}) =>
+    render(
+      <QueryProvider>
+        <MemoryRouter initialEntries={['/x?repo=o/r']}>
+          <NewDispatchDialog open onOpenChange={vi.fn()} {...props} />
+        </MemoryRouter>
+      </QueryProvider>,
+    );
+  const field = () => screen.getByRole('button', { name: /^Base branch/ }) as HTMLButtonElement;
+  const sentBase = async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    await waitFor(() => expect(posts.some(([p]) => p === '/api/dispatches/plan')).toBe(true));
+    return (posts.at(-1)![1] as { settings: { base_branch: string | null } }).settings.base_branch;
+  };
+
+  it('is disabled with a hint until an epic is entered', async () => {
+    open();
+    expect(field().disabled).toBe(true);
+    expect(screen.getByText('Pick an epic first')).toBeTruthy();
+    await userEvent.type(screen.getByLabelText('Epic'), '7');
+    await waitFor(() => expect(field().disabled).toBe(false));
+  });
+
+  it('filters on typing, lists the default first, and sends the pick', async () => {
+    open({ epic: 'o/r#1' });
+    await userEvent.click(field());
+    expect(await screen.findByText('staging')).toBeTruthy();
+    expect(screen.getByText('default')).toBeTruthy();
+    await userEvent.type(screen.getByPlaceholderText('Find a branch…'), 'STA');
+    expect(screen.getByText('stage-hotfix')).toBeTruthy();
+    expect(screen.queryByText('master')).toBeNull();
+    expect(screen.queryByText('dev')).toBeNull();
+    await userEvent.click(screen.getByText('staging'));
+    expect(await sentBase()).toBe('staging');
+  });
+
+  it('sends null untouched, and after picking the repo base again', async () => {
+    open({ epic: 'o/r#1' });
+    expect(await sentBase()).toBeNull();
+    cleanup();
+    posts = [];
+    open({ epic: 'o/r#1' });
+    await userEvent.click(field());
+    await userEvent.click(await screen.findByText('staging'));
+    await userEvent.click(field());
+    await userEvent.click(await screen.findByText('Repo’s base (default)'));
+    expect(await sentBase()).toBeNull();
+  });
+
+  it('has no free-text value: a name outside the list picks nothing', async () => {
+    open({ epic: 'o/r#1' });
+    await userEvent.click(field());
+    await userEvent.type(await screen.findByPlaceholderText('Find a branch…'), 'nope{Enter}');
+    expect(screen.getByText('No branch matches.')).toBeTruthy();
+    await userEvent.keyboard('{Escape}');
+    expect(await sentBase()).toBeNull();
+  });
+
+  it('shows the load error and keeps the repo base', async () => {
+    branchesError = 'boom';
+    open({ epic: 'o/r#1' });
+    expect(await screen.findByText('boom', {}, { timeout: 4000 })).toBeTruthy(); // the query retries once
+    expect(await sentBase()).toBeNull();
+  });
+
+  it('shows a loading state while the list loads', async () => {
+    const f = vi.mocked(fetch);
+    const base = f.getMockImplementation()!;
+    f.mockImplementation(((url: string, init?: RequestInit) => (String(url).startsWith('/api/github/branches') ? new Promise(() => {}) : base(url, init))) as typeof fetch);
+    open({ epic: 'o/r#1' });
+    expect(await screen.findByRole('button', { name: 'Base branch: Loading branches…' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Preview' })).toBeTruthy();
+  });
+
+  it('is shown for small changes and sends the pick', async () => {
+    open({ issues: [{ n: 412, title: 'First' }] });
+    await userEvent.click(field());
+    await userEvent.click(await screen.findByText('staging'));
+    expect(await sentBase()).toBe('staging');
+  });
+
+  it('shows the base read-only on the dispatch page, "Repo’s base" when absent', async () => {
+    routes['/api/dispatches/abc123abc123'] = disp({ settings: { ...S, base_branch: 'staging' } });
+    window.location.hash = '#/dispatches/abc123abc123?repo=o/r';
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: /Settings/ }));
+    expect(screen.getByText('staging')).toBeTruthy();
+    cleanup();
+    const { base_branch: _b, ...old } = S as Record<string, unknown>;
+    routes['/api/dispatches/abc123abc123'] = disp({ settings: old as never });
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: /Settings/ }));
+    expect(screen.getByText('Repo’s base')).toBeTruthy();
   });
 });

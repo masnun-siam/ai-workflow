@@ -22,6 +22,7 @@ export const api = {
   notify: () => get<NotifySettings>('/api/settings/notify'),
   review: () => get<ReviewSettings>('/api/settings/review'),
   peerReviewOffers: () => get<PeerReviewOffers>('/api/peer-review'),
+  branches: (repo: string) => get<{ branches: string[]; default: string }>(`/api/github/branches${qs({ repo })}`),
   owners: () => get<{ owners: string[] }>('/api/github/owners'),
   vaultFolders: () => get<VaultFolders>('/api/vault/folders'),
   vaultPrd: (folder: string) => get<VaultPrd>(`/api/vault/prd${qs({ folder })}`),

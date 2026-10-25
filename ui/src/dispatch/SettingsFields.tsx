@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useSaveSettings } from '../api/hooks';
 import type { CiMode, DispatchSettings, GrindMode } from '../api/types';
+import { BranchSelect } from './BranchSelect';
 import { Button, ModelEffortPicker, Switch } from '../components';
 
 const GRIND: { v: GrindMode; label: string; hint: string }[] = [
@@ -71,7 +72,7 @@ function LazyText({ id, value, onCommit, placeholder }: { id: string; value: str
  * Every setting. `live` marks the editor on a running dispatch: the feature branch is fixed there (lanes
  * already target it) and edits apply at each lane's next step.
  */
-export function SettingsFields({ value, onChange, live, noBranch }: { value: DispatchSettings; onChange: (p: Partial<DispatchSettings>) => void; live?: boolean; noBranch?: boolean }) {
+export function SettingsFields({ value, onChange, live, noBranch, repo }: { value: DispatchSettings; onChange: (p: Partial<DispatchSettings>) => void; live?: boolean; noBranch?: boolean; repo?: string | null }) {
   const saveDefaults = useSaveSettings();
   // The saved defaults follow the latest pick, so every picker starts from it.
   const pickRun = (p: { model?: string | null; effort?: string | null }) => {
@@ -104,6 +105,15 @@ export function SettingsFields({ value, onChange, live, noBranch }: { value: Dis
         <MaxStepper value={value.max} onChange={(max) => onChange({ max })} />
         <span className="faint dsp-hint">Issues built at the same time. Each builds and tests in its own worktree.</span>
       </div>
+      <div className="dsp-field">
+        <label className="dsp-k" htmlFor="ds-bb">Base branch</label>
+        {live ? (
+          <span className="mono">{value.base_branch ?? 'Repo’s base'}</span>
+        ) : (
+          <BranchSelect id="ds-bb" repo={repo ?? null} value={value.base_branch ?? null} onChange={(base_branch) => onChange({ base_branch })} />
+        )}
+        {!live ? <span className="faint dsp-hint">{repo ? 'Where PRs land. With a feature branch: it is cut from here and its final PR goes here.' : 'Pick an epic first'}</span> : null}
+      </div>
       {noBranch ? null : (
         <div className="dsp-field">
           <label className="dsp-k" htmlFor="ds-fb">Feature branch</label>
@@ -112,7 +122,7 @@ export function SettingsFields({ value, onChange, live, noBranch }: { value: Dis
           ) : (
             <LazyText id="ds-fb" value={value.feature_branch ?? ''} placeholder="none (issue’s own base)" onCommit={(v) => onChange({ feature_branch: v.trim() || null })} />
           )}
-          {!live ? <span className="faint dsp-hint">Cut from the default branch if missing; every PR targets it.</span> : null}
+          {!live ? <span className="faint dsp-hint">Cut from the base branch (or the default branch) if missing; every PR targets it.</span> : null}
         </div>
       )}
       <div className="dsp-field">

@@ -155,7 +155,7 @@ ready-to-merge Inbox item appears.
 
 **Dispatches.** `#/dispatches` lists running dispatches as cards (progress, the issues that need you)
 and the rest as history; **Run an epic** takes an epic (typed, or picked from the repo's
-epics), grind mode (Off, Simple, Full), auto-merge, lanes at once (1–10), a feature branch, model and
+epics), grind mode (Off, Simple, Full), auto-merge, lanes at once (1–10), a base branch (a searchable list of the repo's branches, also in Run small changes), a feature branch, model and
 effort, then **Preview** shows the waves and warnings (unrefined issues, cycles, missing checkouts,
 repos without a Slack channel, open blockers outside the epic) before **Start**. Lanes started here run
 as headless sessions (the same dialog, given picked issues, becomes **Run small changes**: chips instead of the epic field, no feature branch, `issues` in the request; lists show it by its title, "Small changes: #412, #415", and `owner/repo`); `herdr-dispatch` starts herdr ones, and both show here. `aiw dispatch plan|start` and `herdr-dispatch` take an epic only. A dispatch page has the
