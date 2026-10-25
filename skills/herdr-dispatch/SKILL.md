@@ -1,7 +1,7 @@
 ---
 name: herdr-dispatch
 description: Run an epic's child issues as parallel herdr tabs, end to end — each tab runs implement-issue, then grinds the PR (off/simple/full), is merged (optional auto-merge), does implement-issue's after-merge followups, closes, and the next unblocked issue opens. Dependency order and a concurrency cap; this session previews, starts and relays. Use whenever the user wants to run, dispatch or fan out an epic's issues in herdr tabs, "implement this epic in parallel", "dispatch epic 123", or work several issues at once in herdr, even if they don't name this skill.
-argument-hint: <epic: owner/repo#N or N> [--max N] [--grind off|simple|full] [--ci wait|defer|ignore] [--auto-merge] [--feature-branch <name>] [--model M] [--effort E]
+argument-hint: <epic: owner/repo#N or N> [--max N] [--grind off|simple|full] [--ci wait|defer|ignore] [--auto-merge] [--feature-branch <name>] [--base-branch <name>] [--model M] [--effort E]
 ---
 
 # herdr-dispatch
@@ -26,16 +26,17 @@ Paths below starting `../../` are relative to this skill's folder, at the plugin
 | `--grind off\|simple\|full` | grind each ready PR: `simple` ends on any approval, `full` on zero blocker/should-fix | full |
 | `--ci wait\|defer\|ignore` | `wait`: CI gates each lane as today; `defer`: CI blocks only the merge (red CI at the gate sends the CI-fix prompt once per push); `ignore`: CI never blocks, red or pending CI can merge with a warning event | wait |
 | `--auto-merge` | merge (merge commit) once CI is green, an approving review is in and the grind is done | off: the tab waits for the user's merge |
-| `--feature-branch <name>` | every PR targets this branch, cut from the default branch if missing | each issue's own base |
+| `--feature-branch <name>` | every PR targets this branch, cut from the base branch (or the default branch) if missing | each issue's own base |
+| `--base-branch <name>` | where PRs land: lanes target it when there is no feature branch; with one, the feature branch is cut from it and Open PR goes into it. It must exist in every lane repo | the repo's base (each issue's own) |
 | `--model`, `--effort` | for every tab | Claude's defaults |
 
 ## Flow
 
 1. **Workspace.** `herdr pane current` → its `workspace_id`.
 2. **Preview.** `aiw dispatch plan <epic> <flags>`. Show the user the waves (issues that run together),
-   the settings, and every warning: unrefined issues are skipped ("needs refine": suggest
+   the settings (the base branch among them), and every warning: unrefined issues are skipped ("needs refine": suggest
    `/ai-workflow:refine-issues` (see "Repo skills win")), a repo with no registered checkout cannot open a tab, a repo with no
-   Slack channel skips grinding, an open blocker outside the epic holds its issue. Then ask with
+   Slack channel skips grinding, an open blocker outside the epic holds its issue, a missing base branch fails Start (pick another or drop the flag). Then ask with
    `AskUserQuestion`: start, change settings, or stop. On a change, preview again.
 3. **Start.** `aiw dispatch start <epic> <flags> --runner herdr --workspace <workspace_id>` prints
    `{"id", "since", "ui"}`. It starts the `aiw ui` server when it is not running. Tell the user the id and
@@ -58,7 +59,7 @@ Paths below starting `../../` are relative to this skill's folder, at the plugin
    - `aiw dispatch show <id>` for every lane's stage
 6. **End.** When `finished`, report each issue: its PR, merged or not, skipped and why. Offer, with
    `AskUserQuestion` (multi-select), the end actions; none runs by itself:
-   - **Open PR to the default branch** (`aiw dispatch end <id> open-pr`; only with a feature branch)
+   - **Open PR into the base branch** (the default branch when none was given; `aiw dispatch end <id> open-pr`; only with a feature branch)
    - **Run QA** (`aiw dispatch end <id> qa`): a tab that runs `/ai-workflow:verifier-locally` (see "Repo skills win") and tests
      the whole feature end to end in the browser, filing each bug as a new child of the epic. New
      children join this dispatch as lanes by themselves, so keep watching. A finished dispatch that gains children pauses; resume it after they are refined.
