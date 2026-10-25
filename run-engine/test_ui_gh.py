@@ -52,4 +52,47 @@ assert ui_gh.solo("me/r", runner) and ui_gh.solo("ME/r", runner) and not ui_gh.s
 ui_gh._cache.update(at=time.time(), value={"ok": False, "login": None, "error": "x"}, busy=False)
 assert not ui_gh.solo("me/r", runner)
 print("  ok  solo: repo owner is the signed-in user")
+
+
+# branches(): default first, rest sorted; paginated; bad repo -> 400 with no gh call; gh failure -> 502; uncached
+def br_runner(argv, **kw):
+    calls.append(argv)
+    if argv[:3] == ["gh", "repo", "view"]:
+        return subprocess.CompletedProcess(argv, 0, "master\n", "")
+    return subprocess.CompletedProcess(argv, 0, "staging\nmaster\ndev\n", "")
+
+
+calls.clear()
+assert ui_gh.branches("o/r", br_runner) == (200, {"branches": ["master", "dev", "staging"], "default": "master"})
+assert any("--paginate" in c for c in calls)
+ui_gh.branches("o/r", br_runner)
+assert len(calls) == 4, "nothing is cached"
+calls.clear()
+for bad in ("", "o", "o/r/x", "o/r;ls", "../x", "./x", "o/..", None):
+    assert ui_gh.branches(bad, br_runner) == (400, {"error": "repo must be owner/name"}), bad
+assert not calls, "a bad repo never reaches gh"
+
+
+def only(argv, **kw):
+    return subprocess.CompletedProcess(argv, 0, "master\n", "")
+
+
+assert ui_gh.branches("o/r", only) == (200, {"branches": ["master"], "default": "master"})
+
+
+def fail(argv, **kw):
+    return subprocess.CompletedProcess(argv, 1, "", "boom\nHTTP 404: Not Found\n\n")
+
+
+assert ui_gh.branches("o/r", fail) == (502, {"error": "HTTP 404: Not Found"})
+
+
+def fail_pages(argv, **kw):
+    if argv[:3] == ["gh", "repo", "view"]:
+        return subprocess.CompletedProcess(argv, 0, "master\n", "")
+    return subprocess.CompletedProcess(argv, 1, "", "rate limited\n")
+
+
+assert ui_gh.branches("o/r", fail_pages) == (502, {"error": "rate limited"})
+print("  ok  branches")
 print("ui_gh: all checks passed")

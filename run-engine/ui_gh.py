@@ -8,6 +8,7 @@ as it is while a background thread refreshes it, so a request never waits on gh 
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 
@@ -55,3 +56,27 @@ def solo(repo: str, runner=run) -> bool:
     """Is the repo owned by the signed-in user (owner == gh login)? Then a PR needs no approval to merge."""
     login = status(runner).get("login")
     return bool(login) and repo.partition("/")[0].lower() == str(login).lower()
+
+
+_REPO_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+BRANCHES_TIMEOUT = 60  # thousands of branches take several pages
+
+
+def _gh_error(p) -> str:
+    lines = (p.stderr or "").strip().splitlines() or (p.stdout or "").strip().splitlines()
+    return (lines[-1] if lines else "gh did not answer")[:200]
+
+
+def branches(repo, runner=run) -> tuple:
+    """(status, body): every branch of owner/name, the default first and the rest sorted. Never cached."""
+    if not isinstance(repo, str) or not _REPO_RE.fullmatch(repo) or {".", ".."} & set(repo.split("/")):
+        return 400, {"error": "repo must be owner/name"}
+    d = runner(["gh", "repo", "view", repo, "--json", "defaultBranchRef", "-q", ".defaultBranchRef.name"], timeout=30)
+    default = (d.stdout or "").strip()
+    if d.returncode != 0 or not default:
+        return 502, {"error": _gh_error(d)}
+    b = runner(["gh", "api", f"repos/{repo}/branches", "--paginate", "--jq", ".[].name"], timeout=BRANCHES_TIMEOUT)
+    if b.returncode != 0:
+        return 502, {"error": _gh_error(b)}
+    names = set((b.stdout or "").split()) - {default}
+    return 200, {"branches": [default] + sorted(names), "default": default}

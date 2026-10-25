@@ -429,6 +429,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json(200, ui_config.review_public())
         elif path == "/api/github/owners":
             self._json(*ui_vault.github_owners())
+        elif path == "/api/github/branches":
+            self._json(*ui_gh.branches((parse_qs(urlsplit(self.path).query).get("repo") or [""])[0]))
         elif path == "/api/vault/folders":
             self._json(200, {"vault": ui_vault.vault(), "folders": ui_vault.folders()})
         elif path == "/api/vault/prd":
