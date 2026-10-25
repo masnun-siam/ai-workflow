@@ -169,6 +169,7 @@ label.lbl .hint{font-weight:400;color:var(--muted)}
 .opt:hover{border-color:var(--line-strong)}
 .opt.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .opt input{margin:3px 0 0;accent-color:var(--accent)}
+.opt-n{font-family:var(--mono);font-size:11px;color:var(--muted);margin-right:6px}
 .opt .d{color:var(--muted);font-size:13px}
 .q-text.prose,.opt .d.prose{font-size:inherit}
 .q-text.prose>:last-child,.opt .d.prose>:last-child{margin-bottom:0}
