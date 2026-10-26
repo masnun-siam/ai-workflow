@@ -104,6 +104,38 @@ describe('Dispatches page', () => {
     expect(screen.getAllByRole('link', { name: /^Dispatches/ }).length).toBeGreaterThan(0); // in the rail (and the mobile nav)
   });
 
+  it('J/K select the running card then the history rows; Enter opens the dispatch', async () => {
+    const old = (id: string) => disp({ id, state: 'done', title: id, lanes: [lane(9, { stage: 'closed' })] });
+    routes['/api/dispatches'] = { dispatches: [disp(), old('old000000001'), old('old000000002')] };
+    window.location.hash = '#/dispatches';
+    render(<App />);
+    await screen.findByRole('region', { name: 'Running' });
+    await screen.findByText('old000000001');
+    const card = screen.getByRole('link', { name: /Payments/ });
+    const rows = screen.getAllByRole('row').slice(1);
+    expect(document.querySelector('[data-selected]')).toBeNull();
+    await userEvent.keyboard('j');
+    expect(card.hasAttribute('data-selected')).toBe(true);
+    await userEvent.keyboard('j');
+    expect(rows[0].hasAttribute('data-selected')).toBe(true);
+    await userEvent.keyboard('k');
+    expect(card.hasAttribute('data-selected')).toBe(true);
+    await userEvent.keyboard('jj');
+    expect(rows[1].hasAttribute('data-selected')).toBe(true);
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(window.location.hash).toBe('#/dispatches/old000000002'));
+  });
+
+  it('J/K/Enter do nothing with no dispatches', async () => {
+    routes['/api/dispatches'] = { dispatches: [] };
+    window.location.hash = '#/dispatches';
+    render(<App />);
+    await screen.findByText('Nothing is running');
+    await userEvent.keyboard('jk{Enter}');
+    expect(document.querySelector('[data-selected]')).toBeNull();
+    expect(window.location.hash).toBe('#/dispatches');
+  });
+
   it('previews an epic, warns, then starts it', async () => {
     window.location.hash = '#/dispatches?repo=o/r';
     render(<App />);
