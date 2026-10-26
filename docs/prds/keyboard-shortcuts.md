@@ -186,12 +186,19 @@ None formally defined. The working check: a full Inbox triage (answer, merge, re
 - Priority is medium: quality of life, and nothing is blocked without it.
 - One registry drives the keys, the palette and the hints, so a button and its key cannot drift apart. This is a technical call made while writing.
 - The Start dialog, multi-select by keyboard and remapping are out of scope for this version.
+- Inside an expanded question round, only the round's own keys work (digits, `0`/`O`, `Tab`, ⌘↵). `J`/`K`, `Enter` and action letters do nothing while focus is on an option, and `Esc` collapses the round and returns focus to its row. A half-answered round cannot be collapsed by accident, and the existing guard (any input counts as a field) stays as it is. (2026-10-26, refining #492, #495)
+- Focus moves into a round only when you expand it (`Enter` or the Answer button on an Inbox row). The round the Inbox opens by default on load, and the round shown on the session page, do not take focus; you Tab into them. Focus is never stolen, and `J`/`K` and the session keys work straight away. (2026-10-26, refining #492, #495, #497)
+- On Activity (Live cards and the History table) and Dispatches (Running cards and the History table), the selection moves through both in screen order: the cards first, then the table rows. `Enter` opens the session or dispatch either way. (2026-10-26, refining #500, #502)
+- On the Dispatch page the open lane panel follows the selection like the issue/PR panel (FR-5): `J`/`K` switch it to the newly selected lane, and `Esc` closes it with the lane still selected. (2026-10-26, refining #501)
+- A button that only opens a menu ("Resume on another account", the Start ▾ split, ⋯ menus) gets no key. Each enabled item of such a menu is listed under "Actions here" in the palette (for example "Resume on personal"), so it can still be run from ⌘K. (2026-10-26, refining #489, #490)
 
 ## Open questions
 
 None.
 
 ## Change log
+
+- 2026-10-26: five decisions added while refining the epic's issues: keys inside a question round, when a round takes focus, card-and-table lists, the lane panel following the selection, and menu buttons.
 
 ## Related
 
