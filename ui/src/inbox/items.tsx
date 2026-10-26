@@ -1,9 +1,10 @@
 // One Inbox row per item type (FR-7, FR-8): icon, title, meta, detail and its inline actions.
 import { useQueryClient } from '@tanstack/react-query';
+import { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCleanupIssue, useDispatchSeen, useLaneAction, useResume, useReviewRounds, useSettings, useSkipCi, useStartNow, useStartSession, useStop, useStopGrind } from '../api/hooks';
 import type { InboxItem, Question } from '../api/types';
-import { Button, LinkButton, Menu, useConfirm, useToast, type IconName } from '../components';
+import { Button, LinkButton, Menu, useConfirm, useToast, type IconName, type useListSelection } from '../components';
 import { agoIso, clockText, commandText, shortRepo } from '../lib/format';
 import { routes } from '../lib/routes';
 import { PLAN_RUN, type Tone } from '../lib/vocab';
@@ -13,6 +14,7 @@ import { useStartError } from '../session/useSessionActions';
 import { QuestionForm } from '../questions/QuestionForm';
 import { Icon } from '../components';
 import { ResolveConflicts } from '../board/ResolveConflicts';
+import { KeyScope, useAction } from '../shell/shortcuts';
 
 const slugOfPrd = (p: string) => p.replace(/^.*\//, '').replace(/\.md$/, '');
 export const approveArgs = (path: string) => {
@@ -113,9 +115,20 @@ interface Props {
   open: boolean;
   toggle: () => void;
   publish: (slug: string) => void;
+  selected: boolean;
+  rowProps: ReturnType<ReturnType<typeof useListSelection>['rowProps']>;
+  /** The user expanded this question (not the default open): its form takes focus. */
+  autoFocus?: boolean;
 }
 
-export function ItemRow({ item, a, open, toggle, publish }: Props) {
+/** Enter on the selected row: the question's Answer/Hide, else a click on the row's primary or "you" button. Renders nothing. */
+function RowEnter({ run }: { run: (() => void) | null }) {
+  useAction(run ? { key: 'Enter', label: 'Open the selected row', run } : null);
+  return null;
+}
+
+export function ItemRow({ item, a, open, toggle, publish, selected, rowProps, autoFocus }: Props) {
+  const rowEl = useRef<HTMLDivElement | null>(null);
   const settings = useSettings();
   const repo = item.repo ?? '';
   const where = item.repo ? shortRepo(item.repo) : 'All repos';
@@ -143,15 +156,15 @@ export function ItemRow({ item, a, open, toggle, publish }: Props) {
       icon = 'msg'; tone = 'you';
       title = qs.length > 1 ? `${qs.length} questions from ${cmdName(item.command)}` : (qs[0]?.question ?? `A question from ${cmdName(item.command)}`);
       meta = [where, item.command ? cmdName(item.command) : undefined, at && `asked ${at} ago`];
-      acts = (<>{sess(item.session_id)}<Button sm variant={open ? 'default' : 'you'} aria-expanded={open} onClick={toggle}>{open ? 'Hide' : 'Answer'}</Button></>);
-      body = open ? <QuestionForm sessionId={item.session_id} /> : null;
+      acts = (<>{sess(item.session_id)}<Button sm shortcut="a" variant={open ? 'default' : 'you'} aria-expanded={open} onClick={toggle}>{open ? 'Hide' : 'Answer'}</Button></>);
+      body = open ? <QuestionForm sessionId={item.session_id} autoFocus={autoFocus} onEscape={() => { toggle(); rowEl.current?.focus(); }} /> : null;
       break;
     }
     case 'review_cap':
       icon = 'eye'; tone = 'plan'; title = `Peer review hit the round limit on “${prdTitle(item.prd_path)}”`;
       meta = [where, `round ${item.round} of ${item.max_rounds}`]; detail = item.note ?? undefined;
       acts = (<>
-        <Button sm onClick={() => void a.approve(repo, item.prd_path)}>Approve PRD anyway</Button>
+        <Button sm shortcut="p" onClick={() => void a.approve(repo, item.prd_path)}>Approve PRD anyway</Button>
         <Button sm onClick={() => a.moreRounds(item.panel)}>Run 2 more rounds</Button>
         <LinkButton sm variant="primary" to={featureLink(item, 'review')}>Open review</LinkButton>
       </>);
@@ -159,14 +172,14 @@ export function ItemRow({ item, a, open, toggle, publish }: Props) {
     case 'review_approved':
       icon = 'check'; tone = 'plan'; title = `Every lens approves “${prdTitle(item.prd_path)}”`;
       detail = 'Approving sets the PRD to Approved and files its epic on GitHub.';
-      acts = (<><Button sm variant="primary" onClick={() => void a.approve(repo, item.prd_path)}>Approve PRD</Button><LinkButton sm to={featureLink(item, 'prd')}>Read PRD</LinkButton></>);
+      acts = (<><Button sm shortcut="p" variant="primary" onClick={() => void a.approve(repo, item.prd_path)}>Approve PRD</Button><LinkButton sm shortcut="o" to={featureLink(item, 'prd')}>Read PRD</LinkButton></>);
       break;
     case 'pr_ready': {
       icon = 'merge'; tone = 'ship'; title = `PR #${item.pr} is ready to merge`;
       meta = [where, item.issue ? `#${item.issue} ${item.title}` : item.title];
       const n = typeof item.checks === 'number' ? item.checks : item.checks?.total;
       detail = `${item.reviewer ? `Approved by ${item.reviewer}. ` : 'Approved. '}${n ? `All ${n} checks pass.` : 'Checks pass.'}`;
-      acts = <Button sm variant="primary" onClick={() => a.panel.open({ kind: 'pr', repo, n: item.pr })}>Review and merge</Button>;
+      acts = <Button sm shortcut="m" variant="primary" onClick={() => a.panel.open({ kind: 'pr', repo, n: item.pr })}>Review and merge</Button>;
       break;
     }
     case 'pr_conflict':
@@ -174,7 +187,7 @@ export function ItemRow({ item, a, open, toggle, publish }: Props) {
       meta = [where, item.issue ? `#${item.issue} ${item.title}` : item.title];
       detail = 'It cannot merge until its base branch is merged in and the conflicts are resolved.';
       acts = (<>
-        <Button sm onClick={() => a.panel.open({ kind: 'pr', repo, n: item.pr })}>Open PR</Button>
+        <Button sm shortcut="o" onClick={() => a.panel.open({ kind: 'pr', repo, n: item.pr })}>Open PR</Button>
         <ResolveConflicts repo={repo} url={item.url} n={item.pr} primary />
       </>);
       break;
@@ -182,17 +195,17 @@ export function ItemRow({ item, a, open, toggle, publish }: Props) {
       icon = 'pause'; tone = 'review'; title = `Grind paused on PR #${item.pr}`;
       meta = [where, item.issue ? `#${item.issue}` : undefined, item.round ? `round ${item.round}` : undefined]; detail = item.reason;
       acts = (<>
-        <Button sm onClick={() => void a.skipCi(repo, item.pr)}>Skip CI and continue</Button>
-        <Button sm onClick={() => void a.stopGrind(repo, item.pr)}>Stop grind</Button>
-        <Button sm variant="primary" onClick={() => a.panel.open({ kind: 'pr', repo, n: item.pr })}>Open PR</Button>
+        <Button sm shortcut="s" onClick={() => void a.skipCi(repo, item.pr)}>Skip CI and continue</Button>
+        <Button sm shortcut="x" onClick={() => void a.stopGrind(repo, item.pr)}>Stop grind</Button>
+        <Button sm shortcut="o" variant="primary" onClick={() => a.panel.open({ kind: 'pr', repo, n: item.pr })}>Open PR</Button>
       </>);
       break;
     case 'session_failed':
       icon = 'alert'; tone = 'bad'; title = `${cmdName(item.command)} failed`; meta = [where, at && `${at} ago`]; detail = item.error;
       acts = (<>
-        <Button sm onClick={() => void a.terminal(item.session_id)}>Continue in terminal</Button>
+        <Button sm shortcut="t" onClick={() => void a.terminal(item.session_id)}>Continue in terminal</Button>
         {sess(item.session_id)}
-        <Button sm variant="primary" onClick={() => a.retry(item.session_id)}>Retry</Button>
+        <Button sm shortcut="r" variant="primary" onClick={() => a.retry(item.session_id)}>Retry</Button>
       </>);
       break;
     case 'needs_cleanup':
@@ -223,8 +236,8 @@ export function ItemRow({ item, a, open, toggle, publish }: Props) {
       meta = [where, 'dispatch', item.group === 'decide' ? item.title : item.reason];
       detail = item.group === 'decide' ? 'CI is green, a review approves and the grind is done. Auto-merge is off for this dispatch.' : undefined;
       acts = (<>
-        {item.group === 'decide' ? <Button sm variant="primary" onClick={() => void a.laneMerge(item.dispatch, item.lane, item.pr)}>Merge</Button> : null}
-        {item.group === 'fix' ? <Button sm onClick={() => a.laneRetry(item.dispatch, item.lane)}>Retry</Button> : null}
+        {item.group === 'decide' ? <Button sm shortcut="m" variant="primary" onClick={() => void a.laneMerge(item.dispatch, item.lane, item.pr)}>Merge</Button> : null}
+        {item.group === 'fix' ? <Button sm shortcut="r" onClick={() => a.laneRetry(item.dispatch, item.lane)}>Retry</Button> : null}
         <LinkButton sm variant={item.group === 'answer' ? 'you' : 'default'} to={at}>Open</LinkButton>
       </>);
       break;
@@ -232,15 +245,15 @@ export function ItemRow({ item, a, open, toggle, publish }: Props) {
     case 'dispatch_done':
       icon = 'check'; tone = 'ship'; title = `Every lane of ${item.epic ?? item.title} is done`; meta = [where, 'dispatch'];
       detail = !item.epic ? 'Every issue is done.' : item.feature_branch ? `Open the PR from ${item.feature_branch}, run QA, or grind the final PR.` : 'Run QA on the whole feature, or call it done.';
-      acts = (<><LinkButton sm variant="primary" to={routes.dispatch(item.dispatch)}>What next</LinkButton><Button sm variant="ghost" onClick={() => a.dispatchSeen(item.dispatch)}>Dismiss</Button></>);
+      acts = (<><LinkButton sm variant="primary" to={routes.dispatch(item.dispatch)}>What next</LinkButton><Button sm shortcut="x" variant="ghost" onClick={() => a.dispatchSeen(item.dispatch)}>Dismiss</Button></>);
       break;
     case 'queued':
       icon = 'clock'; title = `${cmdName(item.command)} is queued`; meta = [where, item.reason];
-      acts = (<><Button sm onClick={() => a.startNow(item.session_id)}>Start now</Button><Button sm variant="ghost" onClick={() => void a.cancel(item.session_id)}>Cancel</Button></>);
+      acts = (<><Button sm onClick={() => a.startNow(item.session_id)}>Start now</Button><Button sm shortcut="x" variant="ghost" onClick={() => void a.cancel(item.session_id)}>Cancel</Button></>);
       break;
   }
   return (
-    <div className="item">
+    <div className="item" {...rowProps} ref={(el) => { rowEl.current = el; rowProps.ref(el); }}>
       <div className={`item-ico t-${tone}`}><Icon n={icon} /></div>
       <div style={{ minWidth: 0 }}>
         <div className="item-title">{title}</div>
@@ -249,7 +262,10 @@ export function ItemRow({ item, a, open, toggle, publish }: Props) {
         </div>
         {detail ? <p style={{ marginTop: 6 }}>{detail}</p> : null}
       </div>
-      <div className="item-actions">{acts}</div>
+      <KeyScope level="row" active={selected} name={title}>
+        <RowEnter run={item.type === 'question' ? toggle : () => rowEl.current?.querySelector<HTMLElement>('.item-actions .btn.primary, .item-actions .btn.you')?.click()} />
+        <div className="item-actions">{acts}</div>
+      </KeyScope>
       {body ? <div className="item-body">{body}</div> : null}
     </div>
   );
