@@ -33,7 +33,7 @@ function Topbar({ openPalette }: { openPalette: () => void }) {
         <span className="kbd hide-sm">⌘K</span>
       </button>
       <span className="grow hide-sm" />
-      <Button variant="primary" onClick={() => start.open()} aria-keyshortcuts="N">
+      <Button variant="primary" noAction onClick={() => start.open()} aria-keyshortcuts="N">
         <Icon n="plus" />
         <span className="hide-sm">New</span>
         <span className="sr mob-only">New</span>

@@ -12,7 +12,7 @@ export function PanelFrame({ title, subtitle, head, footer, children }: { title:
       <div className="p-head">
         <div className="row">
           <h2 className="grow ellipsis">{title}</h2>
-          <Button variant="ghost" icon sm aria-label="Close panel" onClick={close}><Icon n="x" /></Button>
+          <Button variant="ghost" icon sm noAction aria-label="Close panel" onClick={close}><Icon n="x" /></Button>
         </div>
         {subtitle ? <div className="muted ellipsis" style={{ fontSize: 12.5 }}>{subtitle}</div> : null}
         {head}
