@@ -4,6 +4,7 @@
 
 ### Added
 
+- A **Base branch** setting for a dispatch (#486): a searchable picker of the repo's branches in the New dispatch dialog (also for Run small changes), `--base-branch` on `aiw dispatch plan|start` and `herdr-dispatch`, and `GET /api/github/branches?repo=<owner/name>`. PRs land in it, a missing feature branch is cut from it, and Open PR goes into it. It is fixed at start, must exist in every lane repo, and empty keeps today's behaviour (#511).
 - `[` and `]` switch to the previous and next tab on Features and the Feature page, stopping at the first and last tab, under the same guards as the other single-key shortcuts (#491).
 
 ### Changed
