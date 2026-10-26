@@ -57,7 +57,7 @@ export function IssueAction({ card, repo, refineLock }: { card: DeliveryCard; re
       ) : refineLock ? (
         <Button sm disabled title={refineLock}>Refine</Button>
       ) : (
-        <Button sm disabled={starter.pending} onClick={() => starter.startBoard({ repo, skill: 'refine-issues', arg: String(n), via: 'headless', ...PLAN_RUN })}>Refine</Button>
+        <Button sm shortcut="e" disabled={starter.pending} onClick={() => starter.startBoard({ repo, skill: 'refine-issues', arg: String(n), via: 'headless', ...PLAN_RUN })}>Refine</Button>
       );
       break;
     case 'blocked':
@@ -70,9 +70,9 @@ export function IssueAction({ card, repo, refineLock }: { card: DeliveryCard; re
       const others = (accounts?.commands ?? []).filter((c) => c.label !== accounts?.default);
       el = (
         <span className="split">
-          <Button sm variant="primary" disabled={starter.pending} onClick={() => start()}>{card.last_failed ? 'Retry' : 'Start'}</Button>
+          <Button sm variant="primary" shortcut={card.last_failed ? 'r' : undefined} disabled={starter.pending} onClick={() => start()}>{card.last_failed ? 'Retry' : 'Start'}</Button>
           <Menu
-            trigger={<Button sm variant="primary" aria-label="More ways to start"><Icon n="down" s={13} /></Button>}
+            trigger={<Button sm variant="primary" noAction aria-label="More ways to start"><Icon n="down" s={13} /></Button>}
             items={[
               { label: 'Start here (tracked)', icon: 'play', onSelect: () => void start() },
               ...others.map((c) => ({ label: `Start on ${c.label}`, icon: 'user' as const, onSelect: () => void onAccount(c.label) })),
@@ -84,22 +84,22 @@ export function IssueAction({ card, repo, refineLock }: { card: DeliveryCard; re
       break;
     }
     case 'answer':
-      el = <Button sm variant="you" onClick={() => card.session && navigate(link(routes.session(card.session.id)))}>Answer</Button>;
+      el = <Button sm variant="you" shortcut="a" onClick={() => card.session && navigate(link(routes.session(card.session.id)))}>Answer</Button>;
       break;
     case 'watch':
       el = <Button sm onClick={() => card.session && navigate(link(routes.session(card.session.id)))}>Watch</Button>;
       break;
     case 'merge':
-      el = <Button sm variant="primary" onClick={openPr}>Merge</Button>;
+      el = <Button sm variant="primary" shortcut="m" onClick={openPr}>Merge</Button>;
       break;
     case 'grind':
       el = <Button sm disabled={starter.pending} onClick={() => card.pr && starter.startBoard({ repo, skill: 'pr-grind', arg: card.pr.url, via: 'headless' })}>Grind</Button>;
       break;
     case 'openPr':
-      el = <Button sm onClick={openPr}>Open PR</Button>;
+      el = <Button sm shortcut="o" onClick={openPr}>Open PR</Button>;
       break;
     case 'skipCi':
-      el = <Button sm disabled={skip.isPending} onClick={() => card.pr && skip.mutate({ repo, pr: card.pr.n }, { onSuccess: () => toast('Skipping CI and continuing the grind') })}>Skip CI</Button>;
+      el = <Button sm shortcut="s" disabled={skip.isPending} onClick={() => card.pr && skip.mutate({ repo, pr: card.pr.n }, { onSuccess: () => toast('Skipping CI and continuing the grind') })}>Skip CI</Button>;
       break;
     case 'resolve':
       el = card.pr ? <ResolveConflicts repo={repo} url={card.pr.url} n={card.pr.n} primary /> : null;
