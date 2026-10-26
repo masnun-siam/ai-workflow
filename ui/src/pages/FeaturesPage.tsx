@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDelivery, usePlanning } from '../api/hooks';
 import { BoardStatus } from '../board/BoardStatus';
-import { Button, Chip, EmptyState, Icon, TabPanel, Tabs, Track } from '../components';
+import { Button, Chip, EmptyState, Icon, TabPanel, Tabs, Track, useListSelection } from '../components';
 import { useStepRunner } from '../features/useStepRunner';
 import { useEpicDispatch } from '../dispatch/useOwner';
 import { IdeaBox } from '../features/IdeaBox';
@@ -12,11 +12,12 @@ import '../features/features.css';
 import '../dispatch/dispatch.css';
 import { joinFeatures, outsideFeatures, snapshotsReady, type Feature } from '../lib/features';
 import { agoIso } from '../lib/format';
-import { nextStep } from '../lib/nextStep';
+import { nextStep, stepKey } from '../lib/nextStep';
 import { routes } from '../lib/routes';
 import { STAGES, stageIdx } from '../lib/vocab';
 import { usePanel } from '../panels/PanelContext';
 import { useRepo } from '../shell/useRepo';
+import { KeyScope } from '../shell/shortcuts';
 import { useStart } from '../start/StartContext';
 
 const ORDER = ['review', 'draft', 'approved', 'tasks', 'building'];
@@ -26,7 +27,9 @@ const updated = (m: number) => {
   return a === 'now' ? 'just now' : `${a} ago`;
 };
 
-function Row({ f, repo }: { f: Feature; repo: string }) {
+type RowSel = Pick<ReturnType<typeof useListSelection>, 'rowProps'> & { selected: string | null };
+
+function Row({ f, repo, sel }: { f: Feature; repo: string; sel: RowSel }) {
   const navigate = useNavigate();
   const { link } = useRepo();
   const { run, busy } = useStepRunner(f, repo);
@@ -37,7 +40,7 @@ function Row({ f, repo }: { f: Feature; repo: string }) {
   const st = STAGES[stageIdx(f.stage)];
   const href = link(routes.feature(f.slug));
   return (
-    <div className="frow" onClick={() => navigate(href)}>
+    <div className="frow" {...sel.rowProps(f.slug)} onClick={() => { sel.rowProps(f.slug).onClick(); navigate(href); }}>
       <div style={{ minWidth: 0 }}>
         <div className="ftitle"><Link to={href} onClick={(e) => e.stopPropagation()}>{f.title}</Link></div>
         <div className="fmeta">
@@ -48,16 +51,19 @@ function Row({ f, repo }: { f: Feature; repo: string }) {
       </div>
       <div><Chip tone={st.tone}>{st.label}</Chip></div>
       <Track feature={f} />
+      <KeyScope level="row" active={sel.selected === f.slug} name={f.title}>
       <div className="fnext" onClick={(e) => e.stopPropagation()}>
-        {ready.map((i) => <Button key={i.n} sm variant="primary" onClick={() => panel.open({ kind: 'pr', repo, n: i.pr!.n })}>Merge #{i.pr!.n}</Button>)}
-        {ns.primary.action.kind === 'merge' ? null : <Button sm variant={ns.quiet ? 'default' : 'primary'} disabled={busy} onClick={() => run(ns.primary.action)}>{ns.primary.label}</Button>}
+        {ready.map((i, at) => <Button key={i.n} sm variant="primary" shortcut={at === 0 ? 'm' : undefined} onClick={() => panel.open({ kind: 'pr', repo, n: i.pr!.n })}>Merge #{i.pr!.n}</Button>)}
+        {ns.primary.action.kind === 'merge' ? null : <Button sm variant={ns.quiet ? 'default' : 'primary'} shortcut={stepKey(ns.primary.action)} disabled={busy} onClick={() => run(ns.primary.action)}>{ns.primary.label}</Button>}
       </div>
+      </KeyScope>
     </div>
   );
 }
 
 export function FeaturesPage() {
-  const { repo, current } = useRepo();
+  const { repo, current, link } = useRepo();
+  const navigate = useNavigate();
   const start = useStart();
   const plan = usePlanning(repo);
   const del = useDelivery(repo);
@@ -76,6 +82,7 @@ export function FeaturesPage() {
   const list = tab === 'active' ? active : shipped;
   const pending = useSmallChangeSessions(repo);
   const outside = useMemo(() => outsideFeatures(features, del.data?.lanes ?? []), [features, del.data]);
+  const sel = useListSelection({ keys: tab === 'changes' ? [] : list.map((f) => f.slug), onOpen: (slug) => navigate(link(routes.feature(slug))), reset: `${repo}:${tab}` });
   const loaded = plan.isSuccess && !del.isPending && snapshotsReady(plan.data, del.data);
 
   return (
@@ -112,7 +119,7 @@ export function FeaturesPage() {
               <IdeaBox repo={repo} name={current?.name ?? repo} />
             ) : (
               <>
-                <div className="list">{list.map((f) => <Row key={f.slug} f={f} repo={repo} />)}</div>
+                <div className="list">{list.map((f) => <Row key={f.slug} f={f} repo={repo} sel={sel} />)}</div>
                 {!list.length ? <p className="muted">Nothing here yet.</p> : null}
               </>
             )}
