@@ -8,6 +8,7 @@ import { routes } from '../lib/routes';
 import { QuestionForm } from '../questions/QuestionForm';
 import { Transcript } from '../session/Transcript';
 import { isLive } from '../lib/vocab';
+import { useAction } from '../shell/shortcuts';
 import { STAGE, STEPS, ghIssue, ghPr, issueNo, nowLine, secs } from './vocab';
 
 function Stepper({ l }: { l: Lane }) {
@@ -62,6 +63,7 @@ export function LanePanel({ d, l, onClose }: { d: Dispatch; l: Lane; onClose: ()
   const confirm = useConfirm();
   const toast = useToast();
   const [msg, setMsg] = useState('');
+  const msgBox = useRef<HTMLInputElement>(null);
   const live = l.stage !== 'queued' && l.stage !== 'closed' && l.stage !== 'skipped';
   const run = (action: LaneAction, done: string, text?: string) =>
     act.mutate({ id: d.id, lane: l.key, action, text }, { onSuccess: () => toast(done) });
@@ -79,13 +81,14 @@ export function LanePanel({ d, l, onClose }: { d: Dispatch; l: Lane; onClose: ()
     setMsg('');
   };
   const sendable = !!(l.session || l.tab) && l.stage !== 'closed';
+  useAction(sendable ? { label: 'Message the session', key: 'c', run: () => msgBox.current?.focus() } : null);
 
   const now = nowLine(l, d.lanes);
   const canMerge = !!l.pr && ['merge_gate', 'awaiting_merge'].includes(l.stage);
   const primary =
-    now.ask === 'merge' ? <Button variant="you" onClick={() => void mergeNow()}><Icon n="merge" />Merge PR #{l.pr}</Button>
-    : now.ask === 'retry' ? <Button variant="primary" onClick={() => run('retry', 'Retrying')}><Icon n="refresh" />Retry</Button>
-    : l.paused ? <Button variant="primary" onClick={() => run('resume', 'Resumed')}><Icon n="play" />Resume</Button>
+    now.ask === 'merge' ? <Button variant="you" shortcut="m" onClick={() => void mergeNow()}><Icon n="merge" />Merge PR #{l.pr}</Button>
+    : now.ask === 'retry' ? <Button variant="primary" shortcut="r" onClick={() => run('retry', 'Retrying')}><Icon n="refresh" />Retry</Button>
+    : l.paused ? <Button variant="primary" shortcut="r" onClick={() => run('resume', 'Resumed')}><Icon n="play" />Resume</Button>
     : null;
   const more: MenuEntry[] = [
     ...(live && !l.paused ? [{ label: 'Pause this issue', icon: 'pause' as const, onSelect: () => run('pause', 'Paused') }] : []),
@@ -126,7 +129,7 @@ export function LanePanel({ d, l, onClose }: { d: Dispatch; l: Lane; onClose: ()
       </dl>
       {sendable ? (
         <form className="row" onSubmit={(e) => { e.preventDefault(); send(); }}>
-          <input className="f" placeholder={`Message the session working on ${issueNo(l.key)}`} aria-label="Message to the session" value={msg} maxLength={2000} onChange={(e) => setMsg(e.target.value)} />
+          <input ref={msgBox} className="f" placeholder={`Message the session working on ${issueNo(l.key)}`} aria-label="Message to the session" value={msg} maxLength={2000} onChange={(e) => setMsg(e.target.value)} />
           <Button sm type="submit" variant="primary" disabled={!msg.trim()} aria-label="Send"><Icon n="send" /></Button>
         </form>
       ) : null}

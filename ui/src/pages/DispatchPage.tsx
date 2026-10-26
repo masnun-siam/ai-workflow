@@ -3,11 +3,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useDispatch, useDispatchSeen, useDispatchSettings, useDispatchState, useEndAction, useLaneAction, useSessions } from '../api/hooks';
 import type { Dispatch, DispatchEvent, EndAction, Lane } from '../api/types';
-import { Banner, Button, Chip, EmptyState, Icon, useConfirm, useToast } from '../components';
+import { Banner, Button, Chip, EmptyState, Icon, useConfirm, useListSelection, useToast } from '../components';
+import { KeyScope } from '../shell/shortcuts';
 import { clockText, money, shortRepo } from '../lib/format';
 import { routes } from '../lib/routes';
 import { LanePanel } from '../dispatch/LanePanel';
-import { LaneGraph, LaneTable } from '../dispatch/LaneViews';
+import { LaneGraph, LaneTable, columns } from '../dispatch/LaneViews';
 import { SettingsFields } from '../dispatch/SettingsFields';
 import { DSTATE, counts, dispatchHeading, dispatchRepo, epicNo, eventText, issueNo, nowLine, secs, type LaneAsk } from '../dispatch/vocab';
 import '../dispatch/dispatch.css';
@@ -24,7 +25,7 @@ const readView = () => {
 const KIND_ICON: Record<string, string> = { needs_you: '!', held: '!', awaiting_merge: '↗', merged: '✓', finished: '✓', stage: '·', end: '·' };
 
 /** Lanes that need you, each with its one action. Silent when nothing does. */
-function NeedsYou({ d, onPick }: { d: Dispatch; onPick: (k: string) => void }) {
+function NeedsYou({ d, onPick, selected }: { d: Dispatch; onPick: (k: string) => void; selected: string | null }) {
   const act = useLaneAction();
   const confirm = useConfirm();
   const toast = useToast();
@@ -36,6 +37,7 @@ function NeedsYou({ d, onPick }: { d: Dispatch; onPick: (k: string) => void }) {
     act.mutate({ id: d.id, lane: l.key, action: ask }, { onSuccess: () => toast(ask === 'merge' ? 'Merge requested' : 'Retrying') });
   };
   const LABEL: Record<LaneAsk, string> = { merge: 'Merge', open: 'Answer', retry: 'Retry' };
+  const KEY = { merge: 'm', open: 'a', retry: 'r' } as const;
   return (
     <section className="dsp-asks" aria-label="Needs you">
       <h2>{asks.length === 1 ? 'One issue needs you' : `${asks.length} issues need you`}</h2>
@@ -46,7 +48,9 @@ function NeedsYou({ d, onPick }: { d: Dispatch; onPick: (k: string) => void }) {
               <span className="dsp-ref">{issueNo(l.key)}</span> {l.title}
             </button>
             <span className={`dsp-c t-${now.tone}`}>{now.text}</span>
-            <Button sm variant={now.ask === 'retry' ? 'default' : 'you'} onClick={() => void go(l, now.ask!)}>{LABEL[now.ask!]}</Button>
+            <KeyScope level="row" active={selected === l.key} name={issueNo(l.key)}>
+              <Button sm variant={now.ask === 'retry' ? 'default' : 'you'} shortcut={KEY[now.ask!]} onClick={() => void go(l, now.ask!)}>{LABEL[now.ask!]}</Button>
+            </KeyScope>
           </li>
         ))}
       </ul>
@@ -104,7 +108,7 @@ function EndPanel({ d }: { d: Dispatch }) {
       {d.epic ? <>
       <p className="muted">Nothing here runs by itself. QA files each bug it finds as a new issue of the epic, and new issues join this dispatch.</p>
       <div className="row wrap" style={{ gap: 8 }}>
-        {fb && !prs.length ? <Button variant="primary" onClick={() => go('open-pr', 'Opening the PR')}><Icon n="pr" />Open PR from {fb} into {base ?? 'the default branch'}</Button> : null}
+        {fb && !prs.length ? <Button variant="primary" shortcut="o" onClick={() => go('open-pr', 'Opening the PR')}><Icon n="pr" />Open PR from {fb} into {base ?? 'the default branch'}</Button> : null}
         <Button onClick={() => go('qa', 'QA session starting')}><Icon n="eye" />Run QA{fb ? ` on ${fb}` : ''}</Button>
         {prs.length ? <Button onClick={() => go('grind-pr', 'Grind starting')}><Icon n="refresh" />Grind the final PR</Button> : null}
       </div>
@@ -138,6 +142,24 @@ export function DispatchPage() {
     setSp(n, { replace: true });
   };
   const d = q.data;
+  const lanes = d?.lanes ?? [];
+  const selection = useListSelection({
+    keys: (view === 'graph' ? columns(lanes).flat() : lanes).map((l) => l.key),
+    onOpen: (k) => k !== picked && pick(k),
+    onMove: (k) => picked && pick(k),
+    reset: id,
+  });
+  useEffect(() => {
+    // Esc closes the lane panel and leaves its lane selected and focused, unless a dialog or menu is on top.
+    if (!picked) return;
+    const h = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || document.querySelector('[role=dialog],[role=alertdialog],[role=menu]')) return;
+      pick(null);
+      document.querySelector<HTMLElement>(`[data-lane="${CSS.escape(picked)}"]`)?.focus();
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [picked, sp]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     try { localStorage.setItem(VIEW_KEY, view); } catch { /* private window */ }
   }, [view]);
@@ -179,8 +201,8 @@ export function DispatchPage() {
         <div className="row wrap" style={{ gap: 6 }}>
           <Button aria-expanded={showSettings} onClick={() => setShowSettings(!showSettings)}><Icon n="sliders" />Settings</Button>
           {d.state === 'running' ? <Button onClick={() => state.mutate({ id: d.id, state: 'paused' }, { onSuccess: () => toast('Paused: no new issue starts') })}><Icon n="pause" />Pause</Button> : null}
-          {d.state === 'paused' ? <Button variant="primary" onClick={() => state.mutate({ id: d.id, state: 'running' })}><Icon n="play" />Resume</Button> : null}
-          {live ? <Button variant="ghost" onClick={() => void cancel()}>Cancel</Button> : null}
+          {d.state === 'paused' ? <Button variant="primary" shortcut="r" onClick={() => state.mutate({ id: d.id, state: 'running' })}><Icon n="play" />Resume</Button> : null}
+          {live ? <Button variant="ghost" shortcut="x" onClick={() => void cancel()}>Cancel</Button> : null}
         </div>
       </div>
 
@@ -193,7 +215,7 @@ export function DispatchPage() {
           {`. Up to ${d.settings.max} at a time, grind ${d.settings.grind}, CI: ${d.settings.ci ?? 'wait'}, ${d.settings.auto_merge ? 'merges by itself' : 'you merge'}.`}
         </p>
       </section>
-      <NeedsYou d={d} onPick={pick} />
+      <NeedsYou d={d} onPick={pick} selected={selection.selected} />
 
       {d.state === 'paused' ? <Banner tone="review" icon="pause">Paused. Issues already running carry on; no new one starts until you resume.</Banner> : null}
       {limited && live ? <Banner tone="away" icon="clock">A Claude account hit its usage limit. New issues wait, and paused ones resume after the reset.</Banner> : null}
@@ -214,10 +236,10 @@ export function DispatchPage() {
       <div className={`dsp-split${lane ? ' has-lane' : ''}`}>
         <div style={{ minWidth: 0 }}>
           {d.lanes.length ? (
-            view === 'graph' ? <LaneGraph lanes={d.lanes} picked={picked} onPick={pick} /> : <LaneTable lanes={d.lanes} picked={picked} onPick={pick} />
+            view === 'graph' ? <LaneGraph lanes={d.lanes} picked={picked} onPick={pick} rowProps={selection.rowProps} /> : <LaneTable lanes={d.lanes} picked={picked} onPick={pick} rowProps={selection.rowProps} />
           ) : <EmptyState icon="layers" title="No issues to run">This epic had no open child issues when it started.</EmptyState>}
         </div>
-        {lane ? <LanePanel key={lane.key} d={d} l={lane} onClose={() => pick(null)} /> : <Feed events={d.events ?? []} onPick={pick} />}
+        {lane ? <KeyScope level="panel" active><LanePanel key={lane.key} d={d} l={lane} onClose={() => pick(null)} /></KeyScope> : <Feed events={d.events ?? []} onPick={pick} />}
       </div>
       {lane ? <Feed events={d.events ?? []} onPick={pick} /> : null}
       <p className="faint" style={{ fontSize: 12 }}>Steer from a terminal too: <span className="mono">aiw dispatch show {d.id}</span></p>
