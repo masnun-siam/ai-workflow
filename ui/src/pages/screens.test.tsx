@@ -431,6 +431,20 @@ describe('Activity keys', () => {
     await u.keyboard('{Enter}');
     await waitFor(() => expect(window.location.hash).toBe('#/sessions/b'));
   });
+  it('J follows the grouped order when Group by issue is on', async () => {
+    routes['/api/sessions'] = { limits: {}, usage: {}, afk: AFK, sessions: [
+      base({ id: 'x1', link: { owner: 'o', repo: 'r', issue: 1 }, started_at: '2026-01-03T00:00:00Z' }),
+      base({ id: 'y2', link: { owner: 'o', repo: 'r', issue: 2 }, started_at: '2026-01-02T00:00:00Z' }),
+      base({ id: 'x3', link: { owner: 'o', repo: 'r', issue: 1 }, started_at: '2026-01-01T00:00:00Z' }),
+    ] };
+    window.location.hash = '#/activity';
+    render(<App />);
+    const u = userEvent.setup();
+    await u.click(await screen.findByLabelText('Group by issue'));
+    await u.click(document.body);
+    await u.keyboard('jjj{Enter}');
+    await waitFor(() => expect(window.location.hash).toBe('#/sessions/x3'));
+  });
   it('R retries the selected failed row', async () => {
     const u = await open();
     await u.keyboard('jjj');

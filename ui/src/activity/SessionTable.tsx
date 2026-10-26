@@ -35,13 +35,18 @@ export function SessionActions({ s, sm = true }: { s: Session; sm?: boolean }) {
   );
 }
 
+/** The rows in screen order: one group per issue, or a single unnamed group. */
+export function groupRows(rows: Session[], groupByIssue?: boolean): [string, Session[]][] {
+  return groupByIssue
+    ? [...rows.reduce((m, s) => { const k = issueOf(s) ? `Issue #${issueOf(s)}` : 'No issue'; return m.set(k, [...(m.get(k) ?? []), s]); }, new Map<string, Session[]>())]
+    : [['', rows]];
+}
+
 /** With `rowProps` and `selected` (from `useListSelection`) the rows take part in key selection; the Feature page passes neither. */
 export function SessionTable({ rows, groupByIssue, rowProps, selected }: { rows: Session[]; groupByIssue?: boolean; rowProps?: (id: string) => object; selected?: string | null }) {
   const nav = useNavigate();
   if (!rows.length) return <p className="muted">No sessions match.</p>;
-  const groups: [string, Session[]][] = groupByIssue
-    ? [...rows.reduce((m, s) => { const k = issueOf(s) ? `Issue #${issueOf(s)}` : 'No issue'; return m.set(k, [...(m.get(k) ?? []), s]); }, new Map<string, Session[]>())]
-    : [['', rows]];
+  const groups = groupRows(rows, groupByIssue);
   return (
     <div className="tbl-wrap">
       <table className="tbl">

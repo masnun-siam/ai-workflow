@@ -5,7 +5,7 @@ import { useRepos, useSessions, useSettings } from '../api/hooks';
 import type { Session } from '../api/types';
 import { Banner, Button, EmptyState, Icon, SessionChip, useListSelection } from '../components';
 import { CleanupDialog } from '../activity/CleanupDialog';
-import { forText, issueOf, SessionTable } from '../activity/SessionTable';
+import { forText, groupRows, issueOf, SessionTable } from '../activity/SessionTable';
 import { clockText, duration, money, sessionLabel, sessionSlug, untilText } from '../lib/format';
 import { RepoSelect } from '../shell/RepoSelect';
 import { routes } from '../lib/routes';
@@ -41,7 +41,7 @@ export function ActivityPage() {
 
   const nav = useNavigate();
   const shownHist = hist.slice(0, shown);
-  const { selected, rowProps } = useListSelection({ keys: [...live, ...shownHist].map((s) => s.id), onOpen: (id) => nav(routes.session(id)) });
+  const { selected, rowProps } = useListSelection({ keys: [...live, ...groupRows(shownHist, group).flatMap(([, l]) => l)].map((s) => s.id), onOpen: (id) => nav(routes.session(id)) });
 
   const now = new Date();
   const cost = (f: (s: Session) => boolean) => all.filter(f).reduce((a, s) => a + (s.cost ?? 0), 0);
