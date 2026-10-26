@@ -2,8 +2,9 @@
 
 `gh` sign-in: one `gh api user` call, cached for a minute (the header and the Inbox poll for it).
 
-`status()` returns {ok, login, error}. A cold cache waits for the call (5 s at most); a stale one is served
-as it is while a background thread refreshes it, so a request never waits on gh twice.
+`status()` returns {ok, login, error}. A cold cache waits for the call (60 s at most); a stale one is served
+as it is while a background thread refreshes it, so a request never waits on gh twice. A slow GitHub is not
+a sign-out: a refresh that times out keeps the last answer.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ import time
 from shared import run
 
 TTL = 60.0
-TIMEOUT = 5
+TIMEOUT = 60  # gh api can take well over 5 s on a slow network; a timeout is not a sign-out
 _lock = threading.Lock()
 _cache: dict = {"at": None, "value": None, "busy": False}
 
@@ -32,6 +33,8 @@ def check(runner=run) -> dict:
 def _refresh(runner) -> None:
     value = check(runner)
     with _lock:
+        if _cache["value"] is not None and (value["error"] or "").startswith("timed out"):
+            value = _cache["value"]  # shared.run's timeout message; gh did not say we are signed out
         _cache.update(at=time.time(), value=value, busy=False)
 
 

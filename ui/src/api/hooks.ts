@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient, type QueryKey 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from './client';
 import { api } from './endpoints';
-import type { DispatchSettings, DispatchTarget, EndAction, InboxItem, LaneAction, NotifyChannel, StreamEvent } from './types';
+import type { AfkState, DispatchSettings, DispatchTarget, EndAction, InboxItem, LaneAction, NotifyChannel, SessionsResponse, StreamEvent } from './types';
 import { mergeStream } from '../lib/md';
 import { showNotification, step } from '../lib/notifier';
 
@@ -190,11 +190,20 @@ export const useAnswer = () => useApiMutation((v: { id: string; body: Parameters
 export const usePrompt = () => useApiMutation((v: { id: string; text: string }) => api.prompt(v.id, v.text), SESSION_WRITES);
 export const useCleanupSessions = () => useApiMutation(api.cleanupSessions, [['sessions'], ['cleanup']]);
 
-export const useAfkStart = () => useApiMutation(api.afkStart, [['sessions'], ['inbox']]);
-export const useAfkStop = () => useApiMutation(api.afkStop, [['sessions'], ['inbox']]);
+/** An Away write returns the new state: show it now, since a /api/sessions refetch can take seconds under load. */
+function useAfkWrite<V>(fn: (v: V) => Promise<AfkState>) {
+  const qc = useQueryClient();
+  return useApiMutation(async (v: V) => {
+    const afk = await fn(v);
+    qc.setQueryData<SessionsResponse>(keys.sessions, (d) => d && { ...d, afk });
+    return afk;
+  }, [['sessions'], ['inbox']]);
+}
+export const useAfkStart = () => useAfkWrite(api.afkStart);
+export const useAfkStop = () => useAfkWrite(api.afkStop);
 // quiet: the Change dialog shows its own toast and errors, like useAnswer
 export const useAfkChange = () => useApiMutation(api.afkChange, [['sessions'], ['inbox']], { quiet: true });
-export const useAfkDismiss = () => useApiMutation(api.afkDismiss, [['sessions'], ['inbox']]);
+export const useAfkDismiss = () => useAfkWrite(api.afkDismiss);
 
 export const useCloseEpic = () => useApiMutation((v: { repo: string; epic: number }) => api.closeEpic(v.repo, v.epic), BOARD_WRITES);
 export const useCleanupIssue = () => useApiMutation((v: { repo: string; issue: number }) => api.cleanupIssue(v.repo, v.issue), BOARD_WRITES);

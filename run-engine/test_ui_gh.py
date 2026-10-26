@@ -46,6 +46,15 @@ for _ in range(100):
 assert len(calls) == 2 and ui_gh.status(runner)["login"] == "me", "refreshed behind the request"
 print("  ok  status: cached for a minute, stale-while-refresh")
 
+# a refresh that times out keeps the last answer; a real sign-out still replaces it
+answer[:] = [124, "", "timed out after 60s"]
+ui_gh._refresh(runner)
+assert ui_gh._cache["value"]["login"] == "me", "a timeout is not a sign-out"
+answer[:] = [1, "", "You are not logged into any GitHub hosts."]
+ui_gh._refresh(runner)
+assert ui_gh._cache["value"]["ok"] is False
+print("  ok  status: timeout keeps the last answer")
+
 # solo: the signed-in login owns the repo (case-insensitive); signed out is never solo
 ui_gh._cache.update(at=time.time(), value={"ok": True, "login": "Me", "error": None}, busy=False)
 assert ui_gh.solo("me/r", runner) and ui_gh.solo("ME/r", runner) and not ui_gh.solo("org/r", runner)
