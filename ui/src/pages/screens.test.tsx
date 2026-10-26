@@ -442,7 +442,7 @@ describe('Activity keys', () => {
     const u = userEvent.setup();
     await u.click(await screen.findByLabelText('Group by issue'));
     await u.click(document.body);
-    await u.keyboard('jjj{Enter}');
+    await u.keyboard('jj{Enter}');
     await waitFor(() => expect(window.location.hash).toBe('#/sessions/x3'));
   });
   it('R retries the selected failed row', async () => {
