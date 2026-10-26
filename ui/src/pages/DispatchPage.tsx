@@ -95,6 +95,7 @@ function EndPanel({ d }: { d: Dispatch }) {
   const end = useEndAction();
   const toast = useToast();
   const fb = d.settings.feature_branch;
+  const base = d.settings.base_branch;
   const prs = Object.entries(d.final_prs ?? {});
   const go = (action: EndAction, msg: string) => end.mutate({ id: d.id, action }, { onSuccess: () => toast(msg) });
   return (
@@ -103,7 +104,7 @@ function EndPanel({ d }: { d: Dispatch }) {
       {d.epic ? <>
       <p className="muted">Nothing here runs by itself. QA files each bug it finds as a new issue of the epic, and new issues join this dispatch.</p>
       <div className="row wrap" style={{ gap: 8 }}>
-        {fb && !prs.length ? <Button variant="primary" onClick={() => go('open-pr', 'Opening the PR')}><Icon n="pr" />Open PR from {fb}</Button> : null}
+        {fb && !prs.length ? <Button variant="primary" onClick={() => go('open-pr', 'Opening the PR')}><Icon n="pr" />Open PR from {fb} into {base ?? 'the default branch'}</Button> : null}
         <Button onClick={() => go('qa', 'QA session starting')}><Icon n="eye" />Run QA{fb ? ` on ${fb}` : ''}</Button>
         {prs.length ? <Button onClick={() => go('grind-pr', 'Grind starting')}><Icon n="refresh" />Grind the final PR</Button> : null}
       </div>
