@@ -339,6 +339,60 @@ describe('Session page', () => {
   });
 });
 
+describe('Session page keys', () => {
+  const open = async (s: Record<string, unknown>) => {
+    routes['/api/sessions/s1'] = s;
+    routes['/api/sessions/s1/stream'] = { events: [], offset: 0 };
+    window.location.hash = '#/sessions/s1';
+    render(<App />);
+    await screen.findAllByRole('button', { name: /Continue in terminal/ });
+    const user = userEvent.setup();
+    await user.click(document.body);
+    return user;
+  };
+  const posted = (path: string) => posts.some(([p]) => p === path);
+  it('X stops a running session after the confirm', async () => {
+    const u = await open(base({ outcome: 'running', ended_at: null }));
+    await u.keyboard('x');
+    await u.click(await screen.findByRole('button', { name: 'Stop session' }));
+    await waitFor(() => expect(posted('/api/sessions/s1/stop')).toBe(true));
+  });
+  it('R reruns a done session', async () => {
+    const u = await open(base());
+    await u.keyboard('r');
+    await waitFor(() => expect(posted('/api/sessions/s1/rerun')).toBe(true));
+  });
+  it('R resumes a stopped session, not a rerun', async () => {
+    const u = await open(base({ outcome: 'stopped' }));
+    await u.keyboard('r');
+    await waitFor(() => expect(posted('/api/sessions/s1/resume')).toBe(true));
+    expect(posted('/api/sessions/s1/rerun')).toBe(false);
+  });
+  it('R presses Retry on a failed session', async () => {
+    const u = await open(base({ outcome: 'failed', error: 'it broke' }));
+    await u.keyboard('r');
+    await waitFor(() => expect(posted('/api/sessions/s1/resume')).toBe(true));
+    expect(posted('/api/sessions/s1/rerun')).toBe(false);
+  });
+  it('C focuses the message box', async () => {
+    const u = await open(base());
+    await u.keyboard('c');
+    expect(document.activeElement).toBe(screen.getByLabelText('Message to this session'));
+  });
+  it('C does nothing while a question is pending', async () => {
+    const q = { question: 'Which DB?', multiSelect: false, allowFreeText: false, options: [{ label: 'A' }] };
+    const u = await open(base({ outcome: 'waiting', waiting: true, ended_at: 'x', pending_question: { id: 'r', questions: [q] } }));
+    await u.keyboard('c');
+    expect(document.activeElement).toBe(document.body);
+  });
+  it.each([['stopped', ['R', 'T', 'C']], ['running', ['T', 'X', 'C']]])('? on a %s session lists its keys', async (outcome, keys) => {
+    const u = await open(base({ outcome, ended_at: outcome === 'running' ? null : 'x' }));
+    await u.keyboard('?');
+    const dlg = within(await screen.findByRole('dialog'));
+    for (const k of keys) expect(dlg.queryAllByText(k), k).not.toHaveLength(0);
+  });
+});
+
 describe('Activity', () => {
   it('lists live cards and filtered history', async () => {
     routes['/api/sessions'] = { limits: {}, usage: {}, afk: AFK, sessions: [base({ id: 'a', outcome: 'running', ended_at: null }), base({ id: 'b', outcome: 'done' }), base({ id: 'c', outcome: 'failed', command: '/x:dump' })] };
