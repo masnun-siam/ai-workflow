@@ -205,6 +205,45 @@ describe('Dispatch page', () => {
     await waitFor(() => expect(posts.at(-1)).toEqual(['/api/dispatches/abc123abc123/lane', { lane: 'o/r#3', action: 'merge' }]));
   });
 
+  it('moves through lanes by key, opens and follows the lane panel, and Esc closes it', async () => {
+    window.location.hash = '#/dispatches/abc123abc123?repo=o/r';
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Payments' });
+    await userEvent.keyboard('j');
+    await userEvent.keyboard('{Enter}');
+    expect(await screen.findByRole('complementary', { name: 'Lane #2' })).toBeTruthy();
+    expect(window.location.hash).toContain('lane=o%2Fr%232');
+    await userEvent.keyboard('j');
+    expect(await screen.findByRole('complementary', { name: 'Lane #3' })).toBeTruthy();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: /^Lane/ })).toBeNull());
+    expect(document.activeElement?.getAttribute('data-lane')).toBe('o/r#3');
+  });
+
+  it('follows the table order in the list view', async () => {
+    localStorage.setItem('aiw.dispatch.view', 'list');
+    routes['/api/dispatches/abc123abc123'] = disp({ lanes: [lane(4, { deps: ['o/r#2'] }), lane(2, { stage: 'implementing' })] });
+    window.location.hash = '#/dispatches/abc123abc123?repo=o/r';
+    render(<App />);
+    await screen.findByRole('table');
+    await userEvent.keyboard('j');
+    await userEvent.keyboard('{Enter}');
+    expect(await screen.findByRole('complementary', { name: 'Lane #4' })).toBeTruthy();
+  });
+
+  it('merges the selected lane with M and cancels the dispatch with X', async () => {
+    window.location.hash = '#/dispatches/abc123abc123?repo=o/r';
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Payments' });
+    await userEvent.keyboard('jj'); // lane #3 at awaiting_merge
+    await userEvent.keyboard('m');
+    expect((await screen.findByRole('alertdialog')).textContent).toContain('Merge PR #30?');
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    await userEvent.keyboard('x');
+    expect((await screen.findByRole('alertdialog')).textContent).toContain('Cancel this dispatch?');
+  });
+
   it('edits settings live and pauses the dispatch', async () => {
     window.location.hash = '#/dispatches/abc123abc123?repo=o/r';
     render(<App />);

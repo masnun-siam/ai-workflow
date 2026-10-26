@@ -1,17 +1,29 @@
 // The lanes of a dispatch as a dependency graph (columns by depth, edges drawn over) or as a table.
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState, type HTMLAttributes } from 'react';
 import type { Lane } from '../api/types';
 import { Chip, Icon } from '../components';
 import { shortRepo } from '../lib/format';
 import { ACTIVE, STAGE, STEPS, issueNo, levels, nowLine, secs } from './vocab';
 
-function LaneCard({ l, lanes, on, onPick, dim, multi }: { l: Lane; lanes: Lane[]; on: boolean; onPick: () => void; dim: boolean; multi: boolean }) {
+/** What `useListSelection` hands each row. */
+export type RowProps = (key: string) => HTMLAttributes<HTMLElement> & { ref: (el: HTMLElement | null) => void };
+
+/** The lanes in columns by dependency depth, the order the graph shows them in. */
+export function columns(lanes: Lane[]): Lane[][] {
+  const lv = levels(lanes);
+  const cols: Lane[][] = [];
+  for (const l of lanes) (cols[lv[l.key]] ??= []).push(l);
+  return cols;
+}
+
+function LaneCard({ l, lanes, on, onPick, dim, multi, rowProps }: { l: Lane; lanes: Lane[]; on: boolean; onPick: () => void; dim: boolean; multi: boolean; rowProps: RowProps }) {
   const st = STAGE[l.stage];
   const now = nowLine(l, lanes);
   const working = ACTIVE.includes(l.stage) && !now.ask && !l.paused;
   return (
     <button
       type="button"
+      {...(rowProps(l.key) as HTMLAttributes<HTMLButtonElement>)}
       data-lane={l.key}
       className={`dsp-node${on ? ' on' : ''}${now.ask ? ' you' : ''}${dim ? ' dim' : ''}${l.stage === 'closed' ? ' done' : ''}`}
       onClick={onPick}
@@ -29,11 +41,9 @@ function LaneCard({ l, lanes, on, onPick, dim, multi }: { l: Lane; lanes: Lane[]
 }
 
 /** Columns by dependency depth; SVG edges from each dependency to its dependent, measured after layout. */
-export function LaneGraph({ lanes, picked, onPick }: { lanes: Lane[]; picked: string | null; onPick: (k: string) => void }) {
-  const lv = levels(lanes);
+export function LaneGraph({ lanes, picked, onPick, rowProps }: { lanes: Lane[]; picked: string | null; onPick: (k: string) => void; rowProps: RowProps }) {
   const multi = new Set(lanes.map((l) => l.repo)).size > 1;
-  const cols: Lane[][] = [];
-  for (const l of lanes) (cols[lv[l.key]] ??= []).push(l);
+  const cols = columns(lanes);
   const box = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState<{ d: string; hot: boolean; done: boolean }[]>([]);
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -81,7 +91,7 @@ export function LaneGraph({ lanes, picked, onPick }: { lanes: Lane[]; picked: st
       {cols.map((c, i) => (
         <div key={i} className="dsp-col">
           <div className="dsp-col-h">{i === 0 ? 'Starts first' : i === 1 ? 'Then' : 'And then'}</div>
-          {c.map((l) => <LaneCard key={l.key} l={l} lanes={lanes} multi={multi} on={picked === l.key} onPick={() => onPick(l.key)} dim={!!related && !related.has(l.key)} />)}
+          {c.map((l) => <LaneCard key={l.key} l={l} lanes={lanes} multi={multi} on={picked === l.key} onPick={() => onPick(l.key)} rowProps={rowProps} dim={!!related && !related.has(l.key)} />)}
         </div>
       ))}
     </div>
@@ -97,7 +107,7 @@ function Progress({ l }: { l: Lane }) {
   );
 }
 
-export function LaneTable({ lanes, picked, onPick }: { lanes: Lane[]; picked: string | null; onPick: (k: string) => void }) {
+export function LaneTable({ lanes, picked, onPick, rowProps }: { lanes: Lane[]; picked: string | null; onPick: (k: string) => void; rowProps: RowProps }) {
   const multi = new Set(lanes.map((l) => l.repo)).size > 1;
   return (
     <div className="tbl-wrap">
@@ -109,7 +119,7 @@ export function LaneTable({ lanes, picked, onPick }: { lanes: Lane[]; picked: st
           {lanes.map((l) => {
             const now = nowLine(l, lanes);
             return (
-              <tr key={l.key} className={picked === l.key ? 'on' : ''} style={{ cursor: 'pointer' }} onClick={() => onPick(l.key)}>
+              <tr key={l.key} {...rowProps(l.key)} data-lane={l.key} className={picked === l.key ? 'on' : ''} style={{ cursor: 'pointer' }} onClick={() => onPick(l.key)}>
                 <td className="title">
                   <button type="button" className="linkish" onClick={(e) => { e.stopPropagation(); onPick(l.key); }}>
                     <span className="dsp-ref">{issueNo(l.key)}</span> {l.title}
