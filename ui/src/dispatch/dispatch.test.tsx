@@ -221,9 +221,17 @@ describe('Dispatch page', () => {
     routes['/api/dispatches/abc123abc123'] = disp({ state: 'done', settings: { ...S, feature_branch: 'feature/pay' }, lanes: [lane(2, { stage: 'closed' })] });
     window.location.hash = '#/dispatches/abc123abc123?repo=o/r';
     render(<App />);
-    await userEvent.click(await screen.findByRole('button', { name: /Open PR from feature\/pay/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /Open PR from feature\/pay into the default branch/ }));
     await waitFor(() => expect(posts.some(([p, b]) => p === '/api/dispatches/abc123abc123/end' && (b as { action: string }).action === 'open-pr')).toBe(true));
     expect(posts.some(([p]) => p === '/api/dispatches/abc123abc123/seen')).toBe(true);
+  });
+
+  it('names the base branch on the Open PR button', async () => {
+    routes['/api/dispatches/abc123abc123'] = disp({ state: 'done', settings: { ...S, feature_branch: 'feature/pay', base_branch: 'staging' }, lanes: [lane(2, { stage: 'closed' })] });
+    window.location.hash = '#/dispatches/abc123abc123?repo=o/r';
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: /Open PR from feature\/pay into staging/ }));
+    await waitFor(() => expect(posts.some(([p, b]) => p === '/api/dispatches/abc123abc123/end' && (b as { action: string }).action === 'open-pr')).toBe(true));
   });
 });
 
