@@ -1,9 +1,9 @@
 // Every dispatch: the live ones as cards, the rest as history; New dispatch opens the dialog.
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatches } from '../api/hooks';
 import type { Dispatch } from '../api/types';
-import { Banner, Button, Chip, EmptyState, Icon } from '../components';
+import { Banner, Button, Chip, EmptyState, Icon, useListSelection } from '../components';
 import { clockText, money } from '../lib/format';
 import { routes } from '../lib/routes';
 import { NewDispatchDialog } from '../dispatch/NewDispatchDialog';
@@ -12,12 +12,12 @@ import '../dispatch/dispatch.css';
 
 const live = (d: Dispatch) => d.state === 'running' || d.state === 'paused';
 
-function Card({ d }: { d: Dispatch }) {
+function Card({ d, rowProps }: { d: Dispatch; rowProps: ReturnType<ReturnType<typeof useListSelection>['rowProps']> }) {
   const c = counts(d);
   const st = DSTATE[d.state];
   const asks = d.lanes.map((l) => ({ l, now: nowLine(l, d.lanes) })).filter((x) => x.now.ask);
   return (
-    <Link to={routes.dispatch(d.id)} className={`live-card dsp-card${asks.length ? ' you' : ''}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+    <Link {...rowProps} to={routes.dispatch(d.id)} className={`live-card dsp-card${asks.length ? ' you' : ''}`} style={{ textDecoration: 'none', color: 'inherit' }}>
       <div className="row"><Chip tone={st.tone} live={st.live}>{st.label}</Chip><span className="grow" /><span className="faint" style={{ fontSize: 12 }}>{secs(d.totals.seconds)}</span></div>
       <b>{dispatchHeading(d)}</b>
       <div className="meter" role="img" aria-label={`${c.closed} of ${c.total} done`}><span style={{ width: `${c.total ? (c.closed / c.total) * 100 : 0}%`, background: 'var(--ship)' }} /></div>
@@ -50,6 +50,8 @@ export function DispatchesPage() {
   const all = q.data?.dispatches ?? [];
   const running = all.filter(live);
   const past = all.filter((d) => !live(d));
+  const nav = useNavigate();
+  const { rowProps } = useListSelection({ keys: [...running, ...past].map((d) => d.id), onOpen: (id) => nav(routes.dispatch(id)) });
   return (
     <div className="content-inner">
       <div className="page-head">
@@ -63,7 +65,7 @@ export function DispatchesPage() {
       <section aria-label="Running">
         <div className="group-h"><h2>Running</h2><span className="n">{running.length}</span></div>
         {running.length ? (
-          <div className="live-grid">{running.map((d) => <Card key={d.id} d={d} />)}</div>
+          <div className="live-grid">{running.map((d) => <Card key={d.id} d={d} rowProps={rowProps(d.id)} />)}</div>
         ) : q.isPending ? <div className="skel" style={{ height: 90 }} /> : (
           <EmptyState icon="bolt" title="Nothing is running" actions={<Button variant="primary" onClick={() => setOpen(true)}>Run an epic</Button>}>
             Pick an epic whose issues are refined. The ones with nothing to wait for start right away; the rest follow as their blockers merge.
@@ -79,9 +81,10 @@ export function DispatchesPage() {
               <tbody>
                 {past.map((d) => {
                   const c = counts(d);
+                  const rp = rowProps(d.id);
                   return (
-                    <tr key={d.id}>
-                      <td className="title"><Link to={routes.dispatch(d.id)}>{d.title || d.epic}</Link><div className="faint mono" style={{ fontSize: 12 }}>{d.epic ?? dispatchRepo(d)}</div></td>
+                    <tr key={d.id} {...rp} className="click" onClick={() => { rp.onClick(); nav(routes.dispatch(d.id)); }}>
+                      <td className="title"><Link onClick={(e) => e.stopPropagation()} to={routes.dispatch(d.id)}>{d.title || d.epic}</Link><div className="faint mono" style={{ fontSize: 12 }}>{d.epic ?? dispatchRepo(d)}</div></td>
                       <td><Chip tone={DSTATE[d.state].tone}>{DSTATE[d.state].label}</Chip></td>
                       <td>{c.closed}/{c.total} done{c.skipped ? `, ${c.skipped} skipped` : ''}</td>
                       <td>{new Date(d.created_at * 1000).toLocaleDateString()} {clockText(d.created_at)}</td>
