@@ -1,6 +1,6 @@
 // FR-9: the question form, used in the Inbox and on the session page. Re-checks the session every 3 s
 // (useSession) so the submit button unlocks when the Claude process exits.
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAnswer, useSession } from '../api/hooks';
 import { ApiError } from '../api/client';
 import type { AnswerBody, PendingQuestion, Question } from '../api/types';
@@ -42,21 +42,48 @@ export function buildAnswer(roundId: string, qs: Question[], ans: Ans[]): Answer
   return { round_id: roundId, answers };
 }
 
+const focusFirst = (fs: ParentNode) => (fs.querySelector<HTMLInputElement>('input:checked') ?? fs.querySelector<HTMLInputElement>('input'))?.focus();
+
 /** The fieldsets of a question round: shared by the Inbox form and the Away Change dialog. `name` keeps radio groups apart. */
 export function QuestionFields({ qs, ans, onChange: set, disabled, name: prefix = '' }: { qs: Question[]; ans: Ans[]; onChange: (k: number, v: Partial<Ans>) => void; disabled?: boolean; name?: string }) {
   const n = qs.length;
+  const pick = (k: number, label: string) => {
+    const q = qs[k];
+    const on = !ans[k].useOther && ans[k].labels.includes(label);
+    set(k, { useOther: false, labels: q.multiSelect ? (on ? ans[k].labels.filter((x) => x !== label) : [...(ans[k].useOther ? [] : ans[k].labels), label]) : [label] });
+  };
+  const pickOther = (k: number) => set(k, { useOther: !ans[k].useOther || !qs[k].multiSelect, labels: [] });
+  // Number keys pick, 0/O picks "Something else", Tab moves to the next question. Scoped to the focused fieldset.
+  const onKey = (k: number, e: React.KeyboardEvent<HTMLFieldSetElement>) => {
+    const q = qs[k];
+    if ((e.target as HTMLElement).tagName === 'TEXTAREA' || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (/^[1-9]$/.test(e.key) && q.options[+e.key - 1]) {
+      e.preventDefault();
+      pick(k, q.options[+e.key - 1].label);
+    } else if (/^[0oO]$/.test(e.key) && q.allowFreeText) {
+      e.preventDefault();
+      pickOther(k);
+      e.currentTarget.querySelector('textarea')?.focus();
+    } else if (e.key === 'Tab' && !e.shiftKey) {
+      const next = e.currentTarget.nextElementSibling;
+      if (next instanceof HTMLFieldSetElement) {
+        e.preventDefault();
+        focusFirst(next);
+      }
+    }
+  };
   return (
     <>
     {qs.map((q, k) => {
       const rec = recommendedOf(q);
       const name = `${prefix}q${k}`;
       return (
-        <fieldset key={k} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} disabled={disabled}>
+        <fieldset key={k} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} disabled={disabled} onKeyDown={(e) => onKey(k, e)}>
           <legend className="sr">{q.question}</legend>
           <div className="q-h">{n > 1 ? `${k + 1} of ${n}  ·  ` : ''}{q.header || 'Question'}</div>
           {q.question ? <div className="q-text prose" dangerouslySetInnerHTML={{ __html: mdToHtml(q.question) }} /> : null}
           <div className="opts">
-            {q.options.map((o) => {
+            {q.options.map((o, i) => {
               const on = !ans[k].useOther && ans[k].labels.includes(o.label);
               return (
                 <label key={o.label} className={`opt${on ? ' on' : ''}`}>
@@ -64,14 +91,10 @@ export function QuestionFields({ qs, ans, onChange: set, disabled, name: prefix 
                     type={q.multiSelect ? 'checkbox' : 'radio'}
                     name={name}
                     checked={on}
-                    onChange={() =>
-                      set(k, {
-                        useOther: false,
-                        labels: q.multiSelect ? (on ? ans[k].labels.filter((x) => x !== o.label) : [...(ans[k].useOther ? [] : ans[k].labels), o.label]) : [o.label],
-                      })
-                    }
+                    onChange={() => pick(k, o.label)}
                   />
                   <span>
+                    {i < 9 ? <span className="opt-n" aria-hidden="true">{i + 1}</span> : null}
                     <span style={{ fontWeight: 600 }}>{displayLabel(o.label)}</span>
                     {o.label === rec ? <span className="rec">Recommended</span> : null}
                     {o.description ? <div className="d prose" dangerouslySetInnerHTML={{ __html: mdToHtml(o.description) }} /> : null}
@@ -82,7 +105,7 @@ export function QuestionFields({ qs, ans, onChange: set, disabled, name: prefix 
             })}
             {q.allowFreeText ? (
               <label className={`opt${ans[k].useOther ? ' on' : ''}`}>
-                <input type={q.multiSelect ? 'checkbox' : 'radio'} name={name} checked={ans[k].useOther} onChange={() => set(k, { useOther: !ans[k].useOther || !q.multiSelect, labels: [] })} />
+                <input type={q.multiSelect ? 'checkbox' : 'radio'} name={name} checked={ans[k].useOther} onChange={() => pickOther(k)} />
                 <span className="stack" style={{ gap: 6 }}>
                   <span style={{ fontWeight: 600 }}>Something else</span>
                   {ans[k].useOther ? (
@@ -99,7 +122,7 @@ export function QuestionFields({ qs, ans, onChange: set, disabled, name: prefix 
   );
 }
 
-export function QuestionForm({ sessionId, onSent }: { sessionId: string; onSent?: () => void }) {
+export function QuestionForm({ sessionId, onSent, autoFocus, onEscape }: { sessionId: string; onSent?: () => void; autoFocus?: boolean; onEscape?: () => void }) {
   const q = useSession(sessionId);
   const s = q.data;
   const pending: PendingQuestion | null = s && s.waiting && s.pending_question ? s.pending_question : null;
@@ -107,10 +130,10 @@ export function QuestionForm({ sessionId, onSent }: { sessionId: string; onSent?
     return <p className="muted" role="status">{q.isLoading ? 'Loading the question…' : 'Nothing to answer here.'}</p>;
   }
   // keyed by round: a new round resets the picks, a poll of the same round keeps them
-  return <Form key={pending.id} sessionId={sessionId} pending={pending} alive={s!.outcome === 'waiting' && !s!.ended_at} onSent={onSent} reload={() => void q.refetch()} />;
+  return <Form key={pending.id} sessionId={sessionId} pending={pending} alive={s!.outcome === 'waiting' && !s!.ended_at} onSent={onSent} autoFocus={autoFocus} onEscape={onEscape} reload={() => void q.refetch()} />;
 }
 
-function Form({ sessionId, pending, alive, onSent, reload }: { sessionId: string; pending: PendingQuestion; alive: boolean; onSent?: () => void; reload: () => void }) {
+function Form({ sessionId, pending, alive, onSent, reload, autoFocus, onEscape }: { sessionId: string; pending: PendingQuestion; alive: boolean; onSent?: () => void; reload: () => void; autoFocus?: boolean; onEscape?: () => void }) {
   const qs = pending.questions;
   const n = qs.length;
   const toast = useToast();
@@ -120,10 +143,14 @@ function Form({ sessionId, pending, alive, onSent, reload }: { sessionId: string
   const [stale, setStale] = useState(false);
   const set = (k: number, v: Partial<Ans>) => setAns((a) => a.map((x, j) => (j === k ? { ...x, ...v } : x)));
   const ok = qs.every((q, i) => answered(q, ans[i]));
+  const formRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (autoFocus && formRef.current) focusFirst(formRef.current.querySelector('fieldset') ?? formRef.current);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- only when the form mounts
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (alive || answer.isPending) return;
+    if (!ok || alive || answer.isPending) return;
     const body = buildAnswer(pending.id, qs, ans);
     if ('error' in body) return setErr(body.error);
     setErr('');
@@ -144,7 +171,18 @@ function Form({ sessionId, pending, alive, onSent, reload }: { sessionId: string
   };
 
   return (
-    <form className="qform" onSubmit={submit}>
+    <form
+      ref={formRef}
+      className="qform"
+      onSubmit={submit}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && onEscape) {
+          e.preventDefault();
+          e.stopPropagation();
+          onEscape();
+        }
+      }}
+    >
       <QuestionFields qs={qs} ans={ans} onChange={set} disabled={answer.isPending} />
       <div className="row wrap">
         <Button variant="you" type="submit" disabled={!ok || alive || answer.isPending}>

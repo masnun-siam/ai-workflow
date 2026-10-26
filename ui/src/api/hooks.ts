@@ -26,6 +26,7 @@ export const keys = {
   review: ['settings', 'review'] as const,
   offers: ['peer-review'] as const,
   owners: ['owners'] as const,
+  branches: (repo: string) => ['branches', repo] as const,
   vaultFolders: ['vault', 'folders'] as const,
   vaultPrd: (folder: string) => ['vault', 'prd', folder] as const,
   cleanup: ['cleanup'] as const,
@@ -74,6 +75,9 @@ export const useNotifySettings = () => useQuery({ queryKey: keys.notify, queryFn
 export const useReviewSettings = () => useQuery({ queryKey: keys.review, queryFn: api.review });
 export const usePeerReviewOffers = () => useQuery({ queryKey: keys.offers, queryFn: api.peerReviewOffers, staleTime: 60_000 });
 export const useOwners = (enabled = true) => useQuery({ queryKey: keys.owners, queryFn: api.owners, enabled });
+/** The repo's branches, default first; refetched on every dialog opening so a new branch shows. */
+export const useBranches = (repo: string | null) =>
+  useQuery({ queryKey: keys.branches(repo ?? ''), queryFn: () => api.branches(repo!), enabled: !!repo, gcTime: 0 });
 export const useVaultFolders = (enabled = true) => useQuery({ queryKey: keys.vaultFolders, queryFn: api.vaultFolders, enabled });
 export const useVaultPrd = (folder: string) => useQuery({ queryKey: keys.vaultPrd(folder), queryFn: () => api.vaultPrd(folder), enabled: !!folder });
 export const useCleanupTargets = (enabled = true) => useQuery({ queryKey: keys.cleanup, queryFn: api.cleanupTargets, enabled, gcTime: 0 });

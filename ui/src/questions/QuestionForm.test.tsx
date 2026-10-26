@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -11,11 +11,11 @@ const Q1: Question = { question: 'Which DB?', header: 'DB', multiSelect: false, 
 const Q2: Question = { question: 'Extras?', multiSelect: true, allowFreeText: false, options: [{ label: 'A' }, { label: 'B' }] };
 
 const json = (b: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } }));
-function setup(session: Record<string, unknown>, answer: () => Promise<Response> = () => json({})) {
+function setup(session: Record<string, unknown>, answer: () => Promise<Response> = () => json({}), props: { autoFocus?: boolean; onEscape?: () => void } = {}) {
   const fetchMock = vi.fn((_url: string, init?: RequestInit) => (init?.method === 'POST' ? answer() : json(session)));
   vi.stubGlobal('fetch', fetchMock);
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={qc}><MemoryRouter><QuestionForm sessionId="s1" /></MemoryRouter></QueryClientProvider>);
+  render(<QueryClientProvider client={qc}><MemoryRouter><QuestionForm sessionId="s1" {...props} /></MemoryRouter></QueryClientProvider>);
   return fetchMock;
 }
 const sess = (over: Record<string, unknown> = {}, qs = [Q1]) => ({ id: 's1', outcome: 'waiting', waiting: true, ended_at: '2026-01-01T00:00:00Z', pending_question: { id: 'r1', questions: qs }, ...over });
@@ -85,6 +85,93 @@ describe('QuestionForm', () => {
     await user.click(await screen.findByRole('button', { name: 'Send answer and resume' }));
     expect(await screen.findByText(/Already answered/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Reload' })).toBeTruthy();
+  });
+
+  describe('keyboard', () => {
+    const posts = (f: ReturnType<typeof setup>) => f.mock.calls.filter(([, i]) => i?.method === 'POST');
+    const QA: Question = { question: 'First?', multiSelect: false, allowFreeText: false, options: [{ label: 'A1' }, { label: 'A2' }] };
+    const QB: Question = { question: 'Second?', multiSelect: false, allowFreeText: false, options: [{ label: 'B1' }, { label: 'B2' }] };
+
+    it('answers a two-question round with 2, Tab, 1, then submit', async () => {
+      const f = setup(sess({}, [QA, QB]));
+      const user = userEvent.setup();
+      (await screen.findByRole('radio', { name: 'A1' })).focus();
+      await user.keyboard('2{Tab}1');
+      expect(document.activeElement).toBe(screen.getByRole('radio', { name: 'B1' }));
+      fireEvent.submit(document.querySelector('form')!);
+      await waitFor(() => expect(posts(f).length).toBe(1));
+      expect(JSON.parse(posts(f)[0][1]!.body as string).answers).toEqual({ 0: { labels: ['A2'] }, 1: { labels: ['B1'] } });
+    });
+
+    it('toggles a multi-select option with its number key', async () => {
+      setup(sess({}, [Q2]));
+      const user = userEvent.setup();
+      const a = (await screen.findByRole('checkbox', { name: 'A' })) as HTMLInputElement;
+      a.focus();
+      await user.keyboard('1');
+      expect(a.checked).toBe(true);
+      await user.keyboard('1');
+      expect(a.checked).toBe(false);
+    });
+
+    it('0 and O pick Something else and focus its box; digits typed there stay text', async () => {
+      setup(sess());
+      const user = userEvent.setup();
+      (await screen.findByRole('radio', { name: /Postgres/ })).focus();
+      await user.keyboard('0');
+      const box = screen.getByRole('textbox') as HTMLTextAreaElement;
+      expect(document.activeElement).toBe(box);
+      await user.keyboard('12o');
+      expect(box.value).toBe('12o');
+      expect((screen.getByRole('radio', { name: /Something else/ }) as HTMLInputElement).checked).toBe(true);
+    });
+
+    it('0 does nothing without free text', async () => {
+      setup(sess({}, [QA]));
+      const user = userEvent.setup();
+      (await screen.findByRole('radio', { name: 'A1' })).focus();
+      await user.keyboard('0O');
+      expect(screen.queryByRole('textbox')).toBeNull();
+    });
+
+    it('shows numbers for options 1-9 only and ignores a tenth key', async () => {
+      const many: Question = { question: 'Many?', multiSelect: false, allowFreeText: false, options: Array.from({ length: 10 }, (_, i) => ({ label: `L${i + 1}` })) };
+      setup(sess({}, [many]));
+      await screen.findByText('L10');
+      expect([...document.querySelectorAll('.opt-n')].map((n) => n.textContent)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9']);
+      expect(document.querySelector('.opt-n')!.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    it('an incomplete round sends nothing and Send stays disabled', async () => {
+      const f = setup(sess({}, [QA]));
+      const btn = (await screen.findByRole('button', { name: 'Send answer and resume' })) as HTMLButtonElement;
+      expect(btn.disabled).toBe(true);
+      fireEvent.submit(document.querySelector('form')!);
+      expect(posts(f).length).toBe(0);
+    });
+
+    it('autoFocus focuses the checked option; without it focus stays put', async () => {
+      setup(sess(), undefined, { autoFocus: true });
+      const r = await screen.findByRole('radio', { name: /Postgres/ });
+      await waitFor(() => expect(document.activeElement).toBe(r));
+      cleanup();
+      setup(sess());
+      await screen.findByRole('radio', { name: /Postgres/ });
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('Esc calls onEscape and stops the event', async () => {
+      const onEscape = vi.fn();
+      const outer = vi.fn();
+      setup(sess(), undefined, { onEscape });
+      document.body.addEventListener('keydown', outer);
+      const user = userEvent.setup();
+      (await screen.findByRole('radio', { name: /Postgres/ })).focus();
+      await user.keyboard('{Escape}');
+      document.body.removeEventListener('keydown', outer);
+      expect(onEscape).toHaveBeenCalledTimes(1);
+      expect(outer).not.toHaveBeenCalled();
+    });
   });
 
   describe('markdown and previews', () => {

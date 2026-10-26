@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import subprocess
@@ -185,6 +186,67 @@ assert dc.ensure_feature_branch("o/r", "feature/x", gh_fb(True)) is True
 assert calls[-1] == ["api", "repos/o/r/git/refs", "-f", "ref=refs/heads/feature/x", "-f", "sha=abc123"]
 print("  ok  feature branch")
 
+# --- base branch: branch_sha, Preview warning, Start refusal, cut point
+refs_ = {"repos/o/a/git/ref/heads/staging": "sha-staging", "repos/o/b/git/ref/heads/main": "sha-main"}
+calls = []
+
+
+def gh_base(argv):
+    calls.append(argv)
+    if argv[0] == "api" and argv[1] in refs_:
+        return cp(refs_[argv[1]] + "\n")
+    return cp("{}") if argv[1].endswith("/git/refs") else cp("", 1)
+
+
+assert dc.branch_sha("o/a", "staging", gh_base) == "sha-staging"
+assert dc.branch_sha("o/b", "staging", gh_base) is None
+assert dc.missing_base(["o/b", "o/a"], "", gh_base) == []
+two = {
+    "epic": "o/a#1",
+    "title": "E",
+    "children": [{"repo": "o/a", "n": 2, "refined": True}, {"repo": "o/b", "n": 3, "refined": True}],
+    "outside": {},
+    "closed": [],
+}
+calls.clear()
+assert (
+    "o/b: base branch staging does not exist"
+    in dc.preview(two, {"grind": "off", "base_branch": "staging"}, "headless", gh_base)["warnings"]
+)
+assert not [
+    x
+    for x in dc.preview(two, {"grind": "off", "base_branch": "staging"}, "headless", gh_base)["warnings"]
+    if "o/a:" in x
+]
+calls.clear()
+assert not [x for x in dc.preview(two, {"grind": "off"}, "headless", gh_base)["warnings"] if "base branch" in x]
+assert calls == []
+st = dr.check_settings({**dr.DEFAULTS, "grind": "off", "base_branch": "staging", "feature_branch": "feat/x"})
+real_resolve = dc.resolve
+dc.resolve = lambda epic, gh=None: two
+before = len(dr.list_all())
+calls.clear()
+try:
+    dc.start("o/a#1", "headless", st, gh=gh_base)
+    raise AssertionError("started with a missing base")
+except ValueError as e:
+    assert str(e) == "o/b: base branch staging does not exist", e
+assert not [c for c in calls if "git/refs" in c[1]] and len(dr.list_all()) == before
+refs_["repos/o/b/git/ref/heads/staging"] = "sha-b"
+refs_["repos/o/a/git/ref/heads/staging"] = "sha-staging"
+calls.clear()
+dc.start("o/a#1", "headless", st, gh=gh_base)
+made = [c for c in calls if c[1].endswith("/git/refs")]
+assert [c[-1] for c in made] == ["sha=sha-staging", "sha=sha-b"], made
+assert not [c for c in calls if c[0] == "repo" or "/commits/" in c[1]]
+refs_["repos/o/a/git/ref/heads/feat/x"] = "x"
+refs_["repos/o/b/git/ref/heads/feat/x"] = "x"
+calls.clear()
+dc.start("o/a#1", "headless", st, gh=gh_base)
+assert not [c for c in calls if c[1].endswith("/git/refs")]
+dc.resolve = real_resolve
+print("  ok  base branch")
+
 # --- grind_mode: the owning dispatch decides, else Settings
 d = dr.create("o/r#1", "headless", {"grind": "simple"}, [{"repo": "o/r", "n": 5, "refined": True}])
 d["lanes"]["o/r#5"]["pr"] = 77
@@ -226,6 +288,22 @@ assert json.loads(aiw("show", d["id"]).stdout)["settings"]["ci"] == "defer"
 assert aiw("set", d["id"], "ci=bogus").returncode == 5
 assert aiw("plan", "1", "--ci", "bogus").returncode == 2  # argparse rejects it
 assert aiw("set", d["id"], "bogus=1").returncode == 5
+assert aiw("set", d["id"], "base_branch=x").returncode == 5  # #504 refusal, through the CLI
+_p = argparse.ArgumentParser()
+dc.register(_p.add_subparsers(dest="cmd"), None)
+
+
+def _parse(*x):
+    return _p.parse_args(["dispatch", "plan", "o/r#1", *x])
+
+
+assert dc._settings(_parse("--base-branch", "staging"))["base_branch"] == "staging"
+assert dc._settings(_parse())["base_branch"] is None
+try:
+    dc._settings(_parse("--base-branch", "a b"))
+    raise AssertionError("invalid base name accepted")
+except ValueError:
+    pass
 assert aiw("set", d["id"], "max=99").returncode == 5
 assert aiw("lane", d["id"], "5", "hold").returncode == 0 and dr.load(d["id"])["lanes"]["o/r#5"]["hold_merge"]
 assert aiw("lane", d["id"], "6", "hold").returncode == 5

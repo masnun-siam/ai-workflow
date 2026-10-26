@@ -9,7 +9,7 @@ import { useRepo } from '../shell/useRepo';
 import { SettingsFields } from './SettingsFields';
 import { issueNo } from './vocab';
 
-const DEFAULTS: DispatchSettings = { max: 2, grind: 'full', ci: 'wait', auto_merge: false, feature_branch: null, model: null, effort: null };
+const DEFAULTS: DispatchSettings = { max: 2, grind: 'full', ci: 'wait', auto_merge: false, feature_branch: null, base_branch: null, model: null, effort: null };
 const EPIC_RE = /^(?:[\w.-]+\/[\w.-]+#)?\d+$/;
 
 /** `epic` prefills the picker ("owner/repo#n"), e.g. from a feature's Run epic button. `issues` switches to small changes: the picked issues of the current repo, no epic and no feature branch. */
@@ -41,6 +41,11 @@ export function NewDispatchDialog({ open, onOpenChange, epic: initial, issues }:
   const full = epic.includes('#') || !repo ? epic.trim() : `${repo}#${epic.trim().replace(/^#/, '')}`;
   const valid = picked ? issues.length > 0 : EPIC_RE.test(full);
   const target = (): DispatchTarget => (picked ? { issues: issues.map((i) => `${repo}#${i.n}`) } : { epic: full });
+  const dialogRepo = picked ? repo || null : valid && full.includes('#') ? full.split('#')[0] : null;
+  // Another repo has other branches: the pick starts over.
+  useEffect(() => {
+    setS((x) => (x.base_branch ? { ...x, base_branch: null } : x));
+  }, [dialogRepo]);
   const sent = (): DispatchSettings => (picked ? { ...s, feature_branch: null } : s);
   const change = (p: Partial<DispatchSettings>) => {
     setTouched(true);
@@ -93,7 +98,7 @@ export function NewDispatchDialog({ open, onOpenChange, epic: initial, issues }:
             {epic && !valid ? <span className="hint" style={{ color: 'var(--bad)' }}>Use owner/repo#123, or a number in {repo || 'the current repo'}.</span> : null}
           </div>
         )}
-        <SettingsFields value={s} onChange={change} noBranch={picked} />
+        <SettingsFields value={s} onChange={change} noBranch={picked} repo={dialogRepo} />
         {!picked ? <p className="faint" style={{ fontSize: 12.5 }}>Started here, the issues run in background sessions. To run them in herdr tabs instead, use the herdr-dispatch skill; both show up on this page.</p> : null}
         {preview.isError ? <Banner tone="bad" icon="alert">{preview.error.message}</Banner> : null}
         {plan ? <PlanView plan={plan} picked={picked} /> : null}
