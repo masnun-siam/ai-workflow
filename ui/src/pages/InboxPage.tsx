@@ -3,7 +3,9 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAfkDismiss, useInbox, useRepos, useSessions, needsYouCount } from '../api/hooks';
 import type { AfkLogEntry, AfkState } from '../api/types';
-import { Banner, Button, Chip, EmptyState } from '../components';
+import { Banner, Button, Chip, EmptyState, useListSelection } from '../components';
+import type { InboxItem } from '../api/types';
+import type { PanelTarget } from '../panels/PanelContext';
 import { ChangeDialog, type RoundEntry } from '../inbox/ChangeDialog';
 import { ItemRow, useInboxActions } from '../inbox/items';
 import { clockText, money, shortRepo } from '../lib/format';
@@ -63,7 +65,7 @@ function AwaySummary({ s }: { s: NonNullable<AfkState['summary']> }) {
   const held = log.filter((l) => l.kind === 'held').length || s.held;
   const handled = log.filter((l) => l.kind !== 'held').length;
   return (
-    <Banner tone="away" icon="moon" action={<>{ticked.length ? <Button sm onClick={() => setChanging(true)}>Change {ticked.length} selected</Button> : null}<Button sm onClick={() => dismiss.mutate()}>Dismiss</Button></>}>
+    <Banner tone="away" icon="moon" action={<>{ticked.length ? <Button sm onClick={() => setChanging(true)}>Change {ticked.length} selected</Button> : null}<Button sm shortcut="x" onClick={() => dismiss.mutate()}>Dismiss</Button></>}>
       <div className="stack" style={{ gap: 8 }}>
         <p>
           <b>While you were away ({clockText(s.started)}{s.ended ? `–${clockText(s.ended)}` : ''}): {handled} handled, {held} held</b>
@@ -89,6 +91,14 @@ function AwaySummary({ s }: { s: NonNullable<AfkState['summary']> }) {
   );
 }
 
+/** The PR or issue the panel shows for a row; none for rows that have neither (FR-5). */
+function panelTargetOf(it: InboxItem | undefined): PanelTarget | null {
+  if (!it?.repo) return null;
+  if ('pr' in it && typeof it.pr === 'number') return { kind: 'pr', repo: it.repo, n: it.pr };
+  if ('issue' in it && typeof it.issue === 'number') return { kind: 'issue', repo: it.repo, n: it.issue };
+  return null;
+}
+
 export function InboxPage() {
   const [filter, setFilter] = useState('');
   const q = useInbox(filter || undefined);
@@ -104,6 +114,9 @@ export function InboxPage() {
   const firstAnswer = items.find((i) => i.type === 'question')?.key ?? null;
   const open = openKey === undefined ? firstAnswer : openKey;
   const afk = q.data?.afk;
+  const ordered = INBOX_GROUPS.flatMap(({ id }) => items.filter((i) => i.group === id));
+  // Enter is registered per row (ItemRow), so the list's own handler has nothing to do.
+  const { selected, rowProps } = useListSelection({ keys: ordered.map((i) => i.key), onOpen: () => {}, reset: filter, panelTarget: (k) => panelTargetOf(ordered.find((i) => i.key === k)) });
 
   return (
     <div className="content-inner">
@@ -146,7 +159,7 @@ export function InboxPage() {
             <div className="group-h"><h2>{label}</h2><span className="n">{g.length}</span></div>
             <div className="list">
               {g.map((it) => (
-                <ItemRow key={it.key} item={it} a={a} open={open === it.key} toggle={() => setOpen(open === it.key ? null : it.key)} publish={setPublishing} />
+                <ItemRow key={it.key} item={it} a={a} open={open === it.key} toggle={() => setOpen(open === it.key ? null : it.key)} publish={setPublishing} selected={selected === it.key} rowProps={rowProps(it.key)} autoFocus={openKey !== undefined} />
               ))}
             </div>
           </section>

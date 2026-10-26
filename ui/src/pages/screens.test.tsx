@@ -72,6 +72,108 @@ describe('Inbox', () => {
     await waitFor(() => expect(posts).toContainEqual(['/api/review/p1/rounds', { add: 2 }]));
   });
 
+  describe('keyboard', () => {
+    const pr = (n: number) => ({ number: n, title: `PR ${n}`, url: `https://github.com/o/r/pull/${n}`, state: 'open', author: 'me', created_at: '2026-01-01T00:00:00Z', head: 'f', base: 'main', body_html: '', additions: 1, deletions: 0, file_count: 0, files: [], commit_count: 0, commits: [], conversation: [], checks: [] });
+    const rd = (n: number) => item('pr_ready', 'decide', { key: `pr${n}`, pr: n, issue: null, title: `T${n}`, reviewer: 'bot', checks: 1 });
+    const q = { question: 'Which DB?', multiSelect: false, allowFreeText: false, options: [{ label: 'A' }, { label: 'B' }] };
+    const qItem = item('question', 'answer', { key: 'q', session_id: 's1', command: '/x:implement-issue 1', questions: [q], process_alive: false });
+    const sessionRoute = () => { routes['/api/sessions/s1'] = base({ id: 's1', outcome: 'waiting', waiting: true, ended_at: 'x', pending_question: { id: 'r', questions: [q] } }); };
+    const panelOf = (n: number) => screen.findByRole('heading', { name: new RegExp(`PR #${n}\\s*PR ${n}`) });
+    const rows = () => [...document.querySelectorAll<HTMLElement>('.item')];
+    const load = async (items: unknown[]) => {
+      routes['/api/inbox'] = { afk: AFK, gh: { ok: true }, items };
+      routes['/api/pulls/o/r/7'] = pr(7);
+      routes['/api/pulls/o/r/8'] = pr(8);
+      window.location.hash = '#/inbox';
+      render(<App />);
+      await screen.findByText('PR #7 is ready to merge');
+    };
+
+    it('J J J K outlines the second item across groups; nothing is outlined before a key', async () => {
+      await load([rd(7), rd(8), item('grind_paused', 'fix', { key: 'g', pr: 9, issue: null, round: 1, reason: 'CI' })]);
+      expect(document.querySelector('[data-selected]')).toBeNull();
+      const u = userEvent.setup();
+      await u.keyboard('jjjk'); // the first J selects the first row
+      expect(rows()[1].hasAttribute('data-selected')).toBe(true);
+      expect(document.activeElement).toBe(rows()[1]);
+      expect(document.querySelectorAll('[data-selected]')).toHaveLength(1);
+    });
+
+    it('Enter expands a question and focuses its first answer; Esc collapses and refocuses the row', async () => {
+      sessionRoute();
+      await load([qItem, rd(7)]);
+      const u = userEvent.setup();
+      await screen.findByRole('button', { name: /Send answer and resume/ });
+      expect(document.activeElement?.tagName).not.toBe('INPUT'); // the default open does not take focus
+      await u.keyboard('j{Enter}'); // collapses the default-open round
+      await waitFor(() => expect(screen.queryByRole('button', { name: /Send answer and resume/ })).toBeNull());
+      await u.keyboard('{Enter}');
+      await screen.findByRole('button', { name: /Send answer and resume/ });
+      await waitFor(() => expect(document.activeElement?.getAttribute('type')).toBe('radio'));
+      await u.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('button', { name: /Send answer and resume/ })).toBeNull());
+      expect(document.activeElement).toBe(rows()[0]);
+    });
+
+    it('S on a paused grind confirms and sends skip CI', async () => {
+      await load([rd(7), item('grind_paused', 'fix', { key: 'g', pr: 9, issue: null, round: 1, reason: 'CI' })]);
+      const u = userEvent.setup();
+      await u.keyboard('jj');
+      await u.keyboard('s');
+      await u.click(await screen.findByRole('button', { name: 'Skip CI and continue' }));
+      await waitFor(() => expect(posts).toContainEqual(['/api/grind/skip-ci', { repo: 'o/r', pr: 9 }]));
+      expect(await screen.findByText('Grind continues')).toBeTruthy();
+    });
+
+    it('M opens the PR panel, J follows to the next PR and Esc closes it with the row still selected', async () => {
+      await load([rd(7), rd(8)]);
+      const u = userEvent.setup();
+      expect(screen.getAllByRole('button', { name: /Review and merge/ })[0].getAttribute('aria-keyshortcuts')).toBe('M');
+      await u.keyboard('jm');
+      expect(await panelOf(7)).toBeTruthy();
+      await u.keyboard('j');
+      expect(await panelOf(8)).toBeTruthy();
+      await u.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('heading', { name: /PR 8/ })).toBeNull());
+      expect(rows()[1].hasAttribute('data-selected')).toBe(true);
+    });
+
+    it('Enter presses the primary button of a non-question item', async () => {
+      await load([rd(7)]);
+      await userEvent.setup().keyboard('j{Enter}');
+      expect(await panelOf(7)).toBeTruthy();
+    });
+
+    it('selects the former third item after the second is removed by a poll', async () => {
+      await load([rd(7), rd(8), item('grind_paused', 'fix', { key: 'g', pr: 9, issue: null, round: 1, reason: 'CI' })]);
+      await userEvent.setup().keyboard('jj');
+      expect(rows()[1].hasAttribute('data-selected')).toBe(true);
+      routes['/api/inbox'] = { afk: AFK, gh: { ok: true }, items: [rd(7), item('grind_paused', 'fix', { key: 'g', pr: 9, issue: null, round: 1, reason: 'CI' })] };
+      await new Promise((r) => setTimeout(r, 2100)); // past the query staleTime, so a focus refetches
+      window.dispatchEvent(new Event('visibilitychange'));
+      await waitFor(() => expect(rows()).toHaveLength(2));
+      expect(rows()[1].hasAttribute('data-selected')).toBe(true);
+      expect(rows()[1].textContent).toContain('PR #9');
+    });
+
+    it('? lists J / K and the selected row\'s action keys', async () => {
+      await load([rd(7)]);
+      const u = userEvent.setup();
+      await u.keyboard('j');
+      await u.keyboard('?');
+      const dlg = await screen.findByRole('dialog');
+      expect(within(dlg).getByText('J / K')).toBeTruthy();
+      expect(within(dlg).getByText('M')).toBeTruthy();
+      await u.keyboard('{Escape}');
+    });
+
+    it('X with nothing selected does nothing', async () => {
+      await load([item('dispatch_done', 'wait', { key: 'dd', dispatch: 'd1', epic: 'E', feature_branch: null, final_prs: {} }), rd(7)]);
+      await userEvent.setup().keyboard('x');
+      expect(posts).toEqual([]);
+    });
+  });
+
   it('empty inbox says all clear', async () => {
     window.location.hash = '#/inbox';
     render(<App />);
