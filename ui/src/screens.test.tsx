@@ -631,3 +631,55 @@ describe('PR panel merge', () => {
     expect(mergeWarnings([], [{ kind: 'review', verdict: 'CHANGES_REQUESTED', author: 'x', at: null, body_html: '' }])).toEqual(['changes requested']);
   });
 });
+
+describe('work panel action keys', () => {
+  const pull = (over: Record<string, unknown> = {}) => ({ number: 40, title: 'PR T', url: 'https://github.com/o/r/pull/40', state: 'open', author: 'me', created_at: '2026-01-01T00:00:00Z', head: 'f', base: 'main', body_html: '', additions: 1, deletions: 0, file_count: 0, files: [], commit_count: 0, commits: [], conversation: [], checks: [], ...over });
+  const ready = (over: Record<string, unknown> = {}) => card(12, 'in_review', { pr: { n: 40, draft: false, ci: 'success', url: 'u' }, mergeable: true, ...over });
+  async function openPanel(p: Record<string, unknown> = {}, c = ready()) {
+    mock({ prds: [prd({ issues: 1, column: 'refined' })], lanes: [lane([c])], extra: { '/api/pulls/o/r/40': () => json(pull(p)), '/api/issues/o/r/12': () => json({ number: 12, title: 'Task 12', state: 'open', url: 'u', author: 'me', created_at: '2026-01-01T00:00:00Z', labels: [], assignees: [], body_html: '', comments: [], comment_count: 0, is_pr: false }) } });
+    window.location.hash = '#/features/f1/issues?repo=o/r';
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: 'Task 12' }));
+    const panel = await screen.findByRole('complementary', { name: 'Issue details' });
+    await user.click(await within(panel).findByRole('tab', { name: 'PR overview' }));
+    await within(panel).findByText('PR open');
+    (document.activeElement as HTMLElement | null)?.blur();
+    return { user, panel };
+  }
+  it('M asks, Esc cancels back to Merge…, M then Enter merges', async () => {
+    const { user, panel } = await openPanel();
+    await user.keyboard('m');
+    expect(await screen.findByText(/Merge PR #40 into main/)).toBeTruthy();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(posts.some((p) => p.url.endsWith('/merge'))).toBe(false);
+    expect(screen.getByRole('complementary', { name: 'Issue details' })).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(within(panel).getByRole('button', { name: /^Merge…/ })));
+    await user.keyboard('m');
+    await screen.findByRole('alertdialog');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(posts.some((p) => p.url === '/api/pulls/o/r/40/merge')).toBe(true));
+  });
+  it('M does nothing on a conflicting PR', async () => {
+    await openPanel({ conflict: true });
+    await userEvent.keyboard('m');
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+  it('S presses Skip CI on a paused grind', async () => {
+    const { user } = await openPanel({}, ready({ mergeable: false, grind: { state: 'paused', round: 1 } }));
+    await user.keyboard('s');
+    await waitFor(() => expect(posts.some((p) => p.url === '/api/grind/skip-ci')).toBe(true));
+  });
+  it('C focuses the Conversation comment box and typing m merges nothing', async () => {
+    const { user, panel } = await openPanel();
+    await user.click(within(panel).getByRole('tab', { name: 'Conversation' }));
+    await user.keyboard('c');
+    const box = await within(panel).findByLabelText('Comment on the PR');
+    await waitFor(() => expect(document.activeElement).toBe(box));
+    await user.keyboard('m');
+    expect((box as HTMLTextAreaElement).value).toBe('m');
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(posts.length).toBe(0);
+  });
+});
