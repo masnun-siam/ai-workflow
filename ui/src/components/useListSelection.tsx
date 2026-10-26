@@ -26,14 +26,15 @@ const ROWS: ShortcutRow[] = [
  * Keyboard selection for one list per page (FR-1..3). `keys` are the rows' stable keys in screen order; spread `rowProps(key)` on each row.
  * Wrap a row's buttons in `<KeyScope level="row" active={selected === key}>` so their keys work for the selected row only.
  * Pass `panelTarget` to make an open issue/PR panel follow the selection (FR-5): a row without a target closes it.
+ * Pass `onMove` to follow a selection moved by J/K with something other than that panel (it is not called for clicks).
  * Pass `reset` (the repo, a filter) to clear the selection when it changes.
  */
-export function useListSelection({ keys, onOpen, reset, panelTarget }: { keys: string[]; onOpen: (key: string) => void; reset?: unknown; panelTarget?: (key: string) => PanelTarget | null }) {
+export function useListSelection({ keys, onOpen, onMove, reset, panelTarget }: { keys: string[]; onOpen: (key: string) => void; onMove?: (key: string) => void; reset?: unknown; panelTarget?: (key: string) => PanelTarget | null }) {
   const panel = usePanel();
   const [sel, setSel] = useState<Sel | null>(null);
   const els = useRef(new Map<string, HTMLElement>());
-  const latest = useRef({ keys, sel, onOpen, panel, panelTarget });
-  latest.current = { keys, sel, onOpen, panel, panelTarget };
+  const latest = useRef({ keys, sel, onOpen, onMove, panel, panelTarget });
+  latest.current = { keys, sel, onOpen, onMove, panel, panelTarget };
   const joined = keys.join('\n');
 
   useEffect(() => setSel((p) => nextSelection(p, latest.current.keys)), [joined]);
@@ -42,13 +43,14 @@ export function useListSelection({ keys, onOpen, reset, panelTarget }: { keys: s
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      const { keys: ks, sel: cur, panel, panelTarget } = latest.current;
+      const { keys: ks, sel: cur, panel, panelTarget, onMove } = latest.current;
       const dir = e.key === 'j' || e.key === 'ArrowDown' ? 1 : e.key === 'k' || e.key === 'ArrowUp' ? -1 : 0;
       if (!dir || !ks.length || ignoreKey(e)) return;
       e.preventDefault();
       const index = cur ? Math.min(Math.max(cur.index + dir, 0), ks.length - 1) : 0;
       if (cur && index === cur.index) return;
       setSel({ key: ks[index], index });
+      onMove?.(ks[index]);
       const el = els.current.get(ks[index]);
       if (panel.target && panelTarget) {
         const t = panelTarget(ks[index]);
