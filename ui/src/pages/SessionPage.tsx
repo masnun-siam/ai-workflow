@@ -86,10 +86,10 @@ export function SessionPage() {
           </p>
         </div>
         <div className="row wrap">
-          {s.outcome === 'stopped' ? <Button disabled={a.busy} onClick={() => a.resume(s.id)}>Resume</Button> : null}
-          {finished ? <Button disabled={a.busy} onClick={() => a.rerun(s.id)}><Icon n="refresh" />Rerun</Button> : null}
-          {s.session_id ? <Button onClick={term}><Icon n="terminal" />Continue in terminal</Button> : null}
-          {!finished ? <Button variant="danger" onClick={() => void a.stop(s.id)}><Icon n="stop" />Stop</Button> : null}
+          {s.outcome === 'stopped' ? <Button shortcut="r" primary disabled={a.busy} onClick={() => a.resume(s.id)}>Resume</Button> : null}
+          {finished ? <Button shortcut="r" disabled={a.busy} onClick={() => a.rerun(s.id)}><Icon n="refresh" />Rerun</Button> : null}
+          {s.session_id ? <Button shortcut="t" onClick={term}><Icon n="terminal" />Continue in terminal</Button> : null}
+          {!finished ? <Button shortcut="x" variant="danger" onClick={() => void a.stop(s.id)}><Icon n="stop" />Stop</Button> : null}
         </div>
       </div>
 
@@ -108,7 +108,7 @@ export function SessionPage() {
         </Banner>
       ) : null}
       {s.outcome === 'failed' ? (
-        <Banner tone="bad" icon="alert" action={<div className="row wrap">{s.session_id ? <Button sm onClick={term}>Continue in terminal</Button> : null}<Button sm variant="primary" disabled={a.busy} onClick={() => a.resume(s.id)}>Retry</Button></div>}>
+        <Banner tone="bad" icon="alert" action={<div className="row wrap">{s.session_id ? <Button sm shortcut="t" onClick={term}>Continue in terminal</Button> : null}<Button sm shortcut="r" variant="primary" disabled={a.busy} onClick={() => a.resume(s.id)}>Retry</Button></div>}>
           <p><b>Failed.</b> {s.error ?? 'No error was recorded.'}</p>
           <p className="muted">Retry starts it again. Continue in terminal picks up this exact conversation.</p>
         </Banner>

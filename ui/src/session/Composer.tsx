@@ -1,14 +1,17 @@
 // Send a prompt to the session (FR-20): queued while a turn is running, disabled while a question is pending.
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { usePrompt } from '../api/hooks';
 import type { Session } from '../api/types';
 import { Button, Icon } from '../components';
+import { useAction } from '../shell/shortcuts';
 
 export function Composer({ s }: { s: Session }) {
   const [text, setText] = useState('');
   const [note, setNote] = useState('');
   const send = usePrompt();
+  const box = useRef<HTMLTextAreaElement>(null);
   const waiting = s.outcome === 'waiting';
+  useAction({ label: 'Message this session', key: 'c', run: () => box.current?.focus(), disabled: waiting });
   const running = ['starting', 'running', 'limited'].includes(s.outcome);
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,6 +23,7 @@ export function Composer({ s }: { s: Session }) {
     <>
     <form className="composer" onSubmit={submit}>
       <textarea
+        ref={box}
         rows={1}
         maxLength={4000}
         aria-label="Message to this session"
