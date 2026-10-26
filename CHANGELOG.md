@@ -7,6 +7,7 @@
 - A **Base branch** setting for a dispatch (#486): a searchable picker of the repo's branches in the New dispatch dialog (also for Run small changes), `--base-branch` on `aiw dispatch plan|start` and `herdr-dispatch`, and `GET /api/github/branches?repo=<owner/name>`. PRs land in it, a missing feature branch is cut from it, and Open PR goes into it. It is fixed at start, must exist in every lane repo, and empty keeps today's behaviour (#511).
 - Issue/PR panel buttons take their keys: `M` opens the merge confirm (`Enter` merges, `Esc` cancels back to Merge…), `S` Skip CI, `X` Stop, `E` Refine, `C` focuses the comment box, and the card action in the panel head takes `A`, `R`, `E`, `S`. The panel's keys win over the row's (#496).
 - `[` and `]` switch to the previous and next tab on Features and the Feature page, stopping at the first and last tab, under the same guards as the other single-key shortcuts (#491).
+- The session page works from the keyboard (#497): `R` presses Resume, Retry or Rerun, `T` Continue in terminal, `X` Stop, and `C` focuses the message box.
 - The Feature page's buttons take keys (#499): `P` Approve PRD / Approve without review / Approve anyway, `E` Refine N and Refine N picked, `M` Review and merge. A key does what its click does.
 - The Inbox works from the keyboard (#495): `J`/`K` select an item across the groups, `Enter` expands a question or presses the item's primary button, each item's buttons take a key with a badge, and `Esc` leaves an expanded question round.
 
