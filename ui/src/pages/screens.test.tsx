@@ -407,6 +407,43 @@ describe('Activity', () => {
   });
 });
 
+describe('Activity keys', () => {
+  const open = async () => {
+    routes['/api/sessions'] = { limits: {}, usage: {}, afk: AFK, sessions: [
+      base({ id: 'a', outcome: 'running', ended_at: null, started_at: '2026-01-03T00:00:00Z' }),
+      base({ id: 'b', outcome: 'done', started_at: '2026-01-02T00:00:00Z' }),
+      base({ id: 'c', outcome: 'failed', started_at: '2026-01-01T00:00:00Z' }),
+    ] };
+    window.location.hash = '#/activity';
+    render(<App />);
+    await screen.findByText('Live');
+    const u = userEvent.setup();
+    await u.click(document.body);
+    return u;
+  };
+  it('J walks the live card then the history rows; Enter opens the selected session', async () => {
+    const u = await open();
+    expect(document.querySelector('[data-selected]')).toBeNull();
+    await u.keyboard('j');
+    expect(document.querySelector('.live-card')?.hasAttribute('data-selected')).toBe(true);
+    await u.keyboard('j');
+    expect(document.querySelector('tr[data-selected]')).toBeTruthy();
+    await u.keyboard('{Enter}');
+    await waitFor(() => expect(window.location.hash).toBe('#/sessions/b'));
+  });
+  it('R retries the selected failed row', async () => {
+    const u = await open();
+    await u.keyboard('jjj');
+    await u.keyboard('r');
+    await waitFor(() => expect(posts.some(([p]) => p === '/api/sessions/c/resume')).toBe(true));
+  });
+  it('typing in the search box moves nothing', async () => {
+    const u = await open();
+    await u.type(screen.getByLabelText('Search history'), 'j');
+    expect(document.querySelector('[data-selected]')).toBeNull();
+  });
+});
+
 describe('Feature page keys (FR-4)', () => {
   const prd = (o: Record<string, unknown> = {}) => ({ slug: 'f', title: 'F', status: 'Draft', path: 'docs/prds/f.md', abs_path: '/x/f.md', column: 'draft', pr: null, epic: null, issues: 0, refined: 0, unrefined: [], children: [], panel: null, ...o });
   const card = (n: number, o: Record<string, unknown> = {}) => ({ n, title: `Issue ${n}`, column: 'unrefined', priority: null, blocked_by: [], pr: null, session: null, needs_cleanup: null, ...o });

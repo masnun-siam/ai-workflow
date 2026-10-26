@@ -8,6 +8,7 @@
 - Issue/PR panel buttons take their keys: `M` opens the merge confirm (`Enter` merges, `Esc` cancels back to Merge…), `S` Skip CI, `X` Stop, `E` Refine, `C` focuses the comment box, and the card action in the panel head takes `A`, `R`, `E`, `S`. The panel's keys win over the row's (#496).
 - `[` and `]` switch to the previous and next tab on Features and the Feature page, stopping at the first and last tab, under the same guards as the other single-key shortcuts (#491).
 - The dispatch page works from the keyboard (#501): `J`/`K` select a lane in graph or list order, `Enter` opens the lane panel, which follows the selection, `Esc` closes it, and the lane, panel and page buttons take their keys (`M`, `A`, `R`, `C`, `X`, `O`).
+- The Activity page works from the keyboard (#502): `J`/`K` select a session through the Live cards then the History rows, `Enter` opens it, and the selected History row's main button takes its key (`A` Answer, `R` Retry or Resume).
 - The session page works from the keyboard (#497): `R` presses Resume, Retry or Rerun, `T` Continue in terminal, `X` Stop, and `C` focuses the message box.
 - The Feature page's buttons take keys (#499): `P` Approve PRD / Approve without review / Approve anyway, `E` Refine N and Refine N picked, `M` Review and merge. A key does what its click does.
 - The Inbox works from the keyboard (#495): `J`/`K` select an item across the groups, `Enter` expands a question or presses the item's primary button, each item's buttons take a key with a badge, and `Esc` leaves an expanded question round.

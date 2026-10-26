@@ -1,8 +1,9 @@
 // FR-19: live sessions as cards, history as a table with search and filters, cost strip, clean up.
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useRepos, useSessions, useSettings } from '../api/hooks';
 import type { Session } from '../api/types';
-import { Banner, Button, EmptyState, Icon, SessionChip } from '../components';
+import { Banner, Button, EmptyState, Icon, SessionChip, useListSelection } from '../components';
 import { CleanupDialog } from '../activity/CleanupDialog';
 import { forText, issueOf, SessionTable } from '../activity/SessionTable';
 import { clockText, duration, money, sessionLabel, sessionSlug, untilText } from '../lib/format';
@@ -38,6 +39,10 @@ export function ActivityPage() {
     );
   }, [sorted, search, result, repo]);
 
+  const nav = useNavigate();
+  const shownHist = hist.slice(0, shown);
+  const { selected, rowProps } = useListSelection({ keys: [...live, ...shownHist].map((s) => s.id), onOpen: (id) => nav(routes.session(id)) });
+
   const now = new Date();
   const cost = (f: (s: Session) => boolean) => all.filter(f).reduce((a, s) => a + (s.cost ?? 0), 0);
   const today = cost((s) => sameDay(s.started_at, now));
@@ -59,7 +64,7 @@ export function ActivityPage() {
         {live.length ? (
           <div className="live-grid">
             {live.map((s) => (
-              <div key={s.id} className={`live-card${s.outcome === 'waiting' ? ' you' : ''}`}>
+              <div key={s.id} {...rowProps(s.id)} className={`live-card${s.outcome === 'waiting' ? ' you' : ''}`}>
                 <div className="row"><SessionChip s={s.outcome} /><span className="grow" /><span className="faint" style={{ fontSize: 12 }}>{duration(s.started_at)}</span></div>
                 <a className="cmd" href={`#${routes.session(s.id)}`} style={{ textDecoration: 'none' }}>{sessionLabel(s.command)}</a>
                 <div className="muted" style={{ fontSize: 13 }}>{forText(s)}</div>
@@ -83,7 +88,7 @@ export function ActivityPage() {
           <RepoSelect repos={repos} value={repo} onChange={(v) => { setRepo(v); setShown(PAGE); }} label="Repo" width={160} extrasBefore={[{ value: '', label: 'All repos' }]} />
           <label className="row" style={{ gap: 6 }}><input type="checkbox" checked={group} onChange={(e) => setGroup(e.target.checked)} />Group by issue</label>
         </div>
-        <SessionTable rows={hist.slice(0, shown)} groupByIssue={group} />
+        <SessionTable rows={shownHist} groupByIssue={group} rowProps={rowProps} selected={selected} />
         {hist.length > shown ? <div><Button onClick={() => setShown(shown + PAGE)}>Show more ({hist.length - shown} left)</Button></div> : null}
       </section>
       <CleanupDialog open={cleaning} onClose={() => setCleaning(false)} />

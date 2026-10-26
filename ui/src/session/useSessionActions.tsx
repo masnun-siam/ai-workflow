@@ -43,9 +43,9 @@ export type SessionActionsApi = ReturnType<typeof useSessionActions>;
 export function sessionButtons(s: Session, a: SessionActionsApi, go: (path: string) => void, sm = true) {
   const live = isLive(s.outcome);
   let main: React.ReactNode = null;
-  if (s.outcome === 'waiting') main = <Button sm={sm} variant="you" onClick={() => go(routes.session(s.id))}>Answer</Button>;
-  else if (s.outcome === 'failed') main = <Button sm={sm} disabled={a.busy} onClick={() => a.resume(s.id)}>Retry</Button>;
-  else if (s.outcome === 'stopped') main = <Button sm={sm} disabled={a.busy} onClick={() => a.resume(s.id)}>Resume</Button>;
+  if (s.outcome === 'waiting') main = <Button sm={sm} variant="you" shortcut="a" onClick={() => go(routes.session(s.id))}>Answer</Button>;
+  else if (s.outcome === 'failed') main = <Button sm={sm} shortcut="r" disabled={a.busy} onClick={() => a.resume(s.id)}>Retry</Button>;
+  else if (s.outcome === 'stopped') main = <Button sm={sm} shortcut="r" disabled={a.busy} onClick={() => a.resume(s.id)}>Resume</Button>;
   const entries: MenuEntry[] = [
     live ? { label: 'Stop session', icon: 'stop', danger: true, onSelect: () => void a.stop(s.id) } : { label: 'Run again with the same input', icon: 'refresh', onSelect: () => a.rerun(s.id) },
     { label: 'Copy terminal resume command', icon: 'terminal', onSelect: () => void a.terminal(s.id) },

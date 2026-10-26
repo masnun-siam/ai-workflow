@@ -5,6 +5,7 @@ import type { Session, SessionLink } from '../api/types';
 import { MoreMenu, SessionChip } from '../components';
 import { formatWhen, money, sessionLabel, sessionSlug, shortRepo } from '../lib/format';
 import { routes } from '../lib/routes';
+import { KeyScope } from '../shell/shortcuts';
 import { sessionButtons, useSessionActions } from '../session/useSessionActions';
 
 /** The issue number a session works on, from its link. */
@@ -34,7 +35,8 @@ export function SessionActions({ s, sm = true }: { s: Session; sm?: boolean }) {
   );
 }
 
-export function SessionTable({ rows, groupByIssue }: { rows: Session[]; groupByIssue?: boolean }) {
+/** With `rowProps` and `selected` (from `useListSelection`) the rows take part in key selection; the Feature page passes neither. */
+export function SessionTable({ rows, groupByIssue, rowProps, selected }: { rows: Session[]; groupByIssue?: boolean; rowProps?: (id: string) => object; selected?: string | null }) {
   const nav = useNavigate();
   if (!rows.length) return <p className="muted">No sessions match.</p>;
   const groups: [string, Session[]][] = groupByIssue
@@ -51,13 +53,13 @@ export function SessionTable({ rows, groupByIssue }: { rows: Session[]; groupByI
             <Fragment key={g}>
               {g ? <tr className="sub"><td colSpan={6}>{g}</td></tr> : null}
               {list.map((s) => (
-                <tr key={s.id} className="click" onClick={() => nav(routes.session(s.id))}>
+                <tr key={s.id} {...rowProps?.(s.id)} className="click" onClick={() => nav(routes.session(s.id))}>
                   <td className="mono"><a href={`#${routes.session(s.id)}`} onClick={(e) => e.stopPropagation()} className="clamp2" title={sessionLabel(s.command)} style={{ textDecoration: 'none' }}>{sessionLabel(s.command)}</a></td>
                   <td className="hide-sm muted" style={{ whiteSpace: 'nowrap' }}>{forText(s)}</td>
                   <td className="muted" style={{ whiteSpace: 'nowrap' }}>{formatWhen(s.started_at)}</td>
                   <td><SessionChip s={s.outcome} /></td>
                   <td className="num hide-sm">{money(s.cost)}</td>
-                  <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}><SessionActions s={s} /></td>
+                  <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}><KeyScope level="row" active={selected === s.id} name={sessionLabel(s.command)}><SessionActions s={s} /></KeyScope></td>
                 </tr>
               ))}
             </Fragment>
