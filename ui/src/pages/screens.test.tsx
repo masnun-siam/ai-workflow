@@ -352,3 +352,36 @@ describe('Activity', () => {
     expect(hist.getAllByRole('row').length).toBe(2);
   });
 });
+
+describe('Feature page keys (FR-4)', () => {
+  const prd = (o: Record<string, unknown> = {}) => ({ slug: 'f', title: 'F', status: 'Draft', path: 'docs/prds/f.md', abs_path: '/x/f.md', column: 'draft', pr: null, epic: null, issues: 0, refined: 0, unrefined: [], children: [], panel: null, ...o });
+  const card = (n: number, o: Record<string, unknown> = {}) => ({ n, title: `Issue ${n}`, column: 'unrefined', priority: null, blocked_by: [], pr: null, session: null, needs_cleanup: null, ...o });
+  const open = async (p: Record<string, unknown>, cards: unknown[] = []) => {
+    routes['/api/planning'] = { repo: 'o/r', stale: false, fetched_at: 1, prds: [p] };
+    routes['/api/delivery'] = { repo: 'o/r', stale: false, fetched_at: 1, cap: 2, running: 0, auto_grind: false, lanes: p.epic ? [{ epic: p.epic, title: 'F', running: 0, cards }] : [] };
+    window.location.hash = '#/features/f?repo=o/r';
+    render(<App />);
+    await screen.findByLabelText('Next step');
+  };
+
+  it('P on a draft opens the approve confirm, like the click on "Approve without review"', async () => {
+    await open(prd());
+    const u = userEvent.setup();
+    expect(screen.getByRole('button', { name: /Approve without review/ }).getAttribute('aria-keyshortcuts')).toBe('P');
+    await u.keyboard('p');
+    expect(await screen.findByRole('button', { name: 'Approve PRD' })).toBeTruthy();
+  });
+
+  it('E on a tasks feature starts refine-issues with the unrefined issues', async () => {
+    await open(prd({ status: 'Approved', column: 'approved', epic: 10, issues: 2, unrefined: [1, 2] }), [card(1), card(2)]);
+    await userEvent.setup().keyboard('e');
+    await waitFor(() => expect(posts.some(([p, b]) => p === '/api/start' && (b as { skill?: string; arg?: string }).skill === 'refine-issues' && (b as { arg?: string }).arg === '1 2')).toBe(true));
+  });
+
+  it('? lists P on a review-stage feature', async () => {
+    await open(prd({ status: 'In review', column: 'review' }));
+    await userEvent.setup().keyboard('?');
+    const d = await screen.findByRole('dialog', { name: 'Keyboard shortcuts' });
+    expect(within(d).getByText(/Approve PRD/)).toBeTruthy();
+  });
+});

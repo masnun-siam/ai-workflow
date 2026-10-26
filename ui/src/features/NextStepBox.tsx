@@ -1,6 +1,6 @@
 import { Button } from '../components';
 import type { Feature } from '../lib/features';
-import { nextStep } from '../lib/nextStep';
+import { nextStep, stepKey } from '../lib/nextStep';
 import { useEpicDispatch } from '../dispatch/useOwner';
 import { useStepRunner } from './useStepRunner';
 
@@ -17,8 +17,8 @@ export function NextStepBox({ f, repo }: { f: Feature; repo: string }) {
         <div className="h">{ns.hint}</div>
       </div>
       <div className="row wrap">
-        {ns.secondary ? <Button disabled={busy} onClick={() => run(ns.secondary!.action)}>{ns.secondary.label}</Button> : null}
-        <Button variant={ns.quiet ? 'default' : 'primary'} disabled={busy} onClick={() => run(ns.primary.action)}>{ns.primary.label}</Button>
+        {ns.secondary ? <Button shortcut={stepKey(ns.secondary.action)} disabled={busy} onClick={() => run(ns.secondary!.action)}>{ns.secondary.label}</Button> : null}
+        <Button variant={ns.quiet ? 'default' : 'primary'} shortcut={stepKey(ns.primary.action)} disabled={busy} onClick={() => run(ns.primary.action)}>{ns.primary.label}</Button>
       </div>
     </section>
   );

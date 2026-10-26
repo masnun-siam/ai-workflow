@@ -70,7 +70,7 @@ export function ReviewTab({ f, repo }: { f: Feature; repo: string }) {
           action={
             <div className="row wrap">
               <Button sm disabled={rounds.isPending} onClick={() => rounds.mutate({ panel: p.id, add: 2 }, { onSuccess: () => toast('Running 2 more rounds') })}>Run 2 more rounds</Button>
-              <Button sm onClick={() => run({ kind: 'approve' })}>Approve anyway</Button>
+              <Button sm shortcut="p" onClick={() => run({ kind: 'approve' })}>Approve anyway</Button>
             </div>
           }
         >
