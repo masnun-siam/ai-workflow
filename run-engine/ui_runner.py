@@ -738,6 +738,8 @@ def stop(sid: str) -> dict:
         while not _group_gone(pgid, proc) and time.time() < end:
             time.sleep(0.05)
     rec = ui_sessions.update(sid, status="stopped", ended_at=_now(), pending_question=None)
+    # the follower's release ran while this record still said "running"; now the slot is really free
+    release_batch(rec.get("batch"))
     if sid not in _procs:
         _stopping.discard(sid)  # no follower in this process to clear it (e.g. a record never re-attached)
     # a re-attached follower (_procs[sid] is None) clears _stopping in its finally, after "stopped" is written

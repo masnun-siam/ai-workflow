@@ -2516,7 +2516,7 @@ def repo_skill_cases():
         copy(plain)
         release(g1)  # its end releases the batch
         assert last_arg()[-1] == "/implement-issue 12"
-        assert ui_sessions.load(g2["id"])["command"] == "/implement-issue 12"
+        wait_for(lambda: ui_sessions.load(g2["id"])["command"] == "/implement-issue 12")  # written after the spawn
         wait_finished(g2["id"])
         shutil.rmtree(os.path.join(plain, ".claude"))
         ok("batch queue: raw until it starts, then resolved and written back")
