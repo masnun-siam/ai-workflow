@@ -1,10 +1,15 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useRefining, useStarter } from '../board/actions';
+import { useListSelection } from '../components';
 import { NewDispatchDialog } from '../dispatch/NewDispatchDialog';
 import { useOwnedIssues } from '../dispatch/useOwner';
 import type { FeatureIssue } from '../lib/features';
+import { routes } from '../lib/routes';
 import { PLAN_RUN } from '../lib/vocab';
-import { IssueTable } from './IssuesTab';
+import { usePanel } from '../panels/PanelContext';
+import { useRepo } from '../shell/useRepo';
+import { IssueTable, orderedIssues } from './IssuesTab';
 import { PendingRows } from './PendingRows';
 import { PickBar } from './PickBar';
 import { SmallChangeBox } from './SmallChangeBox';
@@ -20,6 +25,16 @@ export function SmallChangesTab({ repo, issues, pending }: { repo: string; issue
   const [picked, setPicked] = useState<number[]>([]);
   const [dispatching, setDispatching] = useState(false);
   const toggle = (n: number) => setPicked((p) => (p.includes(n) ? p.filter((x) => x !== n) : [...p, n]));
+  const navigate = useNavigate();
+  const { link } = useRepo();
+  const panel = usePanel();
+  const pendingKey = (p: PendingChange) => `p:${p.id}`;
+  const selection = useListSelection({
+    keys: [...pending.map(pendingKey), ...orderedIssues(issues).map((i) => String(i.n))],
+    onOpen: (k) => (k.startsWith('p:') ? navigate(link(routes.session(k.slice(2)))) : panel.open({ kind: 'issue', repo, n: Number(k) })),
+    panelTarget: (k) => (k.startsWith('p:') ? null : { kind: 'issue', repo, n: Number(k) }),
+    reset: repo,
+  });
   const lock = pending.length ? SMALL_CHANGE_LOCK : undefined;
 
   // Derived from the board on every render, so a picked issue that closes, refines or joins a dispatch moves or drops out.
@@ -32,7 +47,7 @@ export function SmallChangesTab({ repo, issues, pending }: { repo: string; issue
   return (
     <div className="stack">
       <SmallChangeBox repo={repo} />
-      <PendingRows pending={pending} />
+      <PendingRows pending={pending} selection={selection} />
       {toRefine.length || toRun.length ? (
         <PickBar
           refine={toRefine.length}
@@ -45,7 +60,7 @@ export function SmallChangesTab({ repo, issues, pending }: { repo: string; issue
         />
       ) : null}
       {issues.length ? (
-        <IssueTable issues={issues} repo={repo} picked={picked} onPick={toggle} canPick={pickable} lockRefine={lock} />
+        <IssueTable issues={issues} repo={repo} picked={picked} onPick={toggle} canPick={pickable} lockRefine={lock} selection={selection} />
       ) : pending.length ? null : (
         <p className="muted">Nothing outside a feature. Describe a bug or small change to start one.</p>
       )}
