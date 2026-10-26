@@ -31,12 +31,14 @@ aiw ci status                           check state plus the failing job's log
 aiw threads list|resolve                PR review threads
 aiw grind-mode [--pr <url>]             print the grind mode, deep or simple: the PR's dispatch decides, else
                                         Settings (read by /pr-grind each round)
-aiw dispatch plan|start <epic> [flags]  preview or start a dispatch (flags as herdr-dispatch, plus
+aiw dispatch plan|start <epic> [flags]  preview or start a dispatch (flags as herdr-dispatch, including
+                                        --feature-branch and --base-branch, plus
                                         --runner herdr|headless and --workspace <herdr workspace id>);
                                         an epic only: picked issues dispatch from the UI
 aiw dispatch ls|show <id>               list dispatches, or one as JSON (also those of picked issues
                                         started from the UI, listed by title)
 aiw dispatch set <id> key=value...      change max, grind, ci, auto_merge, model, effort while it runs
+                                        (feature_branch and base_branch are fixed at start)
 aiw dispatch pause|resume|cancel <id>   the whole dispatch (pause stops new lanes only)
 aiw dispatch lane <id> <n> <action>     pause, resume, retry, skip, merge, hold, unhold, or send "<text>"
 aiw dispatch watch <id> [--since T]     block until an event needs you; prints it and the next --since
@@ -173,6 +175,7 @@ instead of starting a separate session, and the epic is re-read every 5 minutes 
 `GET /api/dispatches`, `GET /api/dispatches/<id>` (with events; `issues` is the list or null), `GET /api/dispatches/<id>/lane?key=`,
 `POST /api/dispatches` (`{epic, settings}` or `{issues: ["owner/repo#n", ...], settings}`, never both; 1 to 30 issues in one repo, no `feature_branch` (`settings.base_branch` is allowed); 400 for both or neither, a bad ref, more than 30, two repos, a feature branch or no open issue; 409 when a picked issue is a lane of a dispatch not done or cancelled), `POST /api/dispatches/plan` (the same body), `POST
 /api/dispatches/<id>/settings|state|lane|end|seen`. `settings.base_branch` (a branch name or null, same name rule as `feature_branch`, must differ from it) is fixed at start: a settings edit that contains it is 400 `base_branch is fixed at start`. Preview warns `<repo>: base branch <b> does not exist` per lane repo, Start refuses with that message (400, CLI exit non-zero) before creating anything, and a missing `feature_branch` is cut from the head of `base_branch` when set.
+`GET /api/github/branches?repo=<owner/name>` lists the repo's branches for the Base branch picker: 200 `{branches, default}` (the default first, the rest sorted), 400 `repo must be owner/name`, 502 with `gh`'s error.
 
 **Start** (the New button, `N` or ⌘K). Commands grouped Plan, Build, Review, Ship, Capture and
 Maintain, each with a one-line description; the last one is remembered. Pick **Where** (a registered repo,

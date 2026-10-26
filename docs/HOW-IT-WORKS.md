@@ -78,8 +78,10 @@ followups are done. Each lane, in one session (a herdr tab or a headless session
 A lane that needs you (a question, red CI, a paused grind, a failed merge) is held and tells you in
 the Inbox, by a notification on the channels picked in Settings → Notifications and in the `herdr-dispatch` session; its dependents wait, the other
 lanes go on. At a Claude usage limit no new lane starts until the reset. Settings (grind mode,
-auto-merge, max, model, effort) change while it runs. With a feature branch, every PR targets it
-(cut from the default branch). When every lane is done you choose what follows: open the feature
+auto-merge, max, model, effort) change while it runs. The base branch is where PRs land (pick it when you start; fixed
+after). With a feature branch, every PR targets it, cut from the base branch (the default branch when
+none is set), and Open PR goes into the base branch. Without one, lanes branch from the base branch
+and target it. Empty means the repo's base, as before. When every lane is done you choose what follows: open the feature
 branch's PR, run QA (`/verifier-locally` plus a browser end-to-end test; each bug becomes a new epic
 child, which joins the dispatch as a lane), or grind the final PR.
 
@@ -88,7 +90,7 @@ extra GitHub calls), the grind state files and the lane's session, and acts. A d
 server restart.
 
 A dispatch of picked issues (**Run small changes**) differs from an epic's: 1 to 30 issues in one
-repo, no feature branch, no Open PR, Run QA or Grind the final PR at the end, and its lane set is fixed:
+repo, no feature branch (a base branch is accepted), no Open PR, Run QA or Grind the final PR at the end, and its lane set is fixed:
 the engine re-reads only the listed issues, so nothing joins later. An issue already a lane of a live
 dispatch cannot be picked.
 
