@@ -3,7 +3,7 @@ import type { DeliveryCard, DeliveryLane, PanelRef, PlanningPrd } from '../api/t
 import { commandText, parseSkill, sessionInRepo, sessionLabel, skillOf } from './format';
 import { joinFeatures, stageOf } from './features';
 import { mdToHtml } from './md';
-import { nextStep } from './nextStep';
+import { nextStep, stepKey } from './nextStep';
 import { migrateRepoKey, pickRepo, withRepoParam } from './repo';
 import { boardColumn, issueStatus, BOARD_COLUMNS, PLAN_RUN } from './vocab';
 
@@ -193,5 +193,16 @@ describe('sessionInRepo', () => {
     expect(sessionInRepo(s({ repo: '/other' }), 'o/r', '/x')).toBe(false);
     expect(sessionInRepo(s({ repo: '/x' }), 'o/r', undefined)).toBe(false);
     expect(sessionInRepo(s({ slug: 'o/r', repo: '/private/x' }), 'o/r', '/x')).toBe(true);
+  });
+});
+
+describe('stepKey (FR-4)', () => {
+  it('maps approve, refine and merge; every other action has no key', () => {
+    expect(stepKey({ kind: 'approve' })).toBe('p');
+    expect(stepKey({ kind: 'refine', issues: [1] })).toBe('e');
+    expect(stepKey({ kind: 'merge', pr: 9 })).toBe('m');
+    for (const kind of ['startReview', 'createTasks', 'dispatch', 'closeEpic'] as const) expect(stepKey({ kind })).toBeUndefined();
+    expect(stepKey({ kind: 'tab', tab: 'issues' })).toBeUndefined();
+    expect(stepKey({ kind: 'openDispatch', id: 'd' })).toBeUndefined();
   });
 });
