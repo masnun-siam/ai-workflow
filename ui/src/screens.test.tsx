@@ -397,7 +397,7 @@ describe('Small changes tab', () => {
       await user.click(box(31)!);
       await user.click(box(30)!);
       expect(btn('Refine 1')!.disabled).toBe(true);
-      expect(btn('Refine 1')!.title).toBe(SMALL_CHANGE_LOCK);
+      expect(btn('Refine 1')!.title).toBe(`${SMALL_CHANGE_LOCK} (E)`);
       expect(btn('Run 1')!.disabled).toBe(false);
     });
 

@@ -1,4 +1,5 @@
 // FR-12: the Next step box on a feature page. Pure: Feature in, one primary action (and at most one secondary) out.
+import type { ActionKey } from '../shell/shortcuts';
 import { countBy, type Feature } from './features';
 
 export type FeatureTab = 'issues' | 'prd' | 'review' | 'sessions';
@@ -12,6 +13,9 @@ export type StepAction =
   | { kind: 'dispatch' }
   | { kind: 'openDispatch'; id: string }
   | { kind: 'closeEpic' };
+
+/** FR-4: the key of a next-step action; the Features list shares it. */
+export const stepKey = (a: StepAction): ActionKey | undefined => (a.kind === 'approve' ? 'p' : a.kind === 'refine' ? 'e' : a.kind === 'merge' ? 'm' : undefined);
 
 export interface Step {
   title: string;
