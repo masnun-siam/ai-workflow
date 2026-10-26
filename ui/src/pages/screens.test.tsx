@@ -439,3 +439,31 @@ describe('Feature page keys (FR-4)', () => {
     expect(within(d).getByText(/Approve PRD/)).toBeTruthy();
   });
 });
+
+describe('Features list keys', () => {
+  const prd = (o: Record<string, unknown> = {}) => ({ slug: 'f', title: 'F', status: 'Approved', path: 'docs/prds/f.md', abs_path: '/x/f.md', column: 'approved', pr: null, epic: 10, issues: 2, refined: 2, unrefined: [], children: [], panel: null, ...o });
+  const card = (n: number, o: Record<string, unknown> = {}) => ({ n, title: `Issue ${n}`, column: 'unrefined', priority: null, blocked_by: [], pr: null, session: null, needs_cleanup: null, ...o });
+  const load = (hash: string, cards: unknown[] = [card(1), card(2)]) => {
+    routes['/api/planning'] = { repo: 'o/r', stale: false, fetched_at: 1, prds: [prd()] };
+    routes['/api/delivery'] = { repo: 'o/r', stale: false, fetched_at: 1, cap: 2, running: 0, auto_grind: false, lanes: [{ epic: 10, title: 'F', running: 0, cards }] };
+    window.location.hash = hash;
+    render(<App />);
+  };
+
+  it('J then Enter on a feature row lands on its page', async () => {
+    load('#/features?repo=o/r');
+    await screen.findByText('Epic #10');
+    await userEvent.setup().keyboard('j{Enter}');
+    await waitFor(() => expect(window.location.hash).toContain('#/features/f'));
+  });
+
+  it('on the Issues tab J, Enter opens the issue panel and J switches it', async () => {
+    load('#/features/f/issues?repo=o/r');
+    await screen.findByText('Issue 1');
+    const u = userEvent.setup();
+    await u.keyboard('j{Enter}');
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/issues/o/r/1'), expect.anything()));
+    await u.keyboard('j');
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/issues/o/r/2'), expect.anything()));
+  });
+});
