@@ -22,6 +22,7 @@
 
 ### Fixed
 
+- Rows in the ⌘K palette and the repo and branch pickers no longer all show the blue keyboard-selection ring; only the active row is highlighted. `J`/`K` selection keeps its ring (#538).
 - The Features → Small changes tab sections (describe box, pending rows, pick bar, issue table) are now spaced 12px apart instead of touching, and no empty bordered list shows when nothing is pending (#476).
 - Stopping a session that was re-attached after a UI restart now always leaves it `stopped`; before, the follower could race the stop and record it as `failed`, which also made `test_ui_runner.py` flaky (#415).
 - `GET /api/sessions` rows now carry the session's `slug`, resolved by real path, so a session started from a symlinked checkout (macOS `/tmp`) still shows its pending row on Small changes and locks Refine (#421).
