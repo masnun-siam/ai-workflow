@@ -1,5 +1,6 @@
 import * as RD from '@radix-ui/react-dialog';
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
+import { KeyScope } from '../shell/shortcuts';
 import { Button } from './Button';
 
 interface DialogProps {
@@ -24,16 +25,18 @@ export function Dialog({ open, onOpenChange, title, description, showDescription
       <RD.Portal>
         <RD.Overlay className="scrim-r" />
         <RD.Content className={`dialog dlg-pos${wide ? ' wide' : ''}`} role={alert ? 'alertdialog' : 'dialog'}>
-          <div className="d-h">
-            <RD.Title asChild><h2 style={{ fontSize: 17 }}>{title}</h2></RD.Title>
-            {description ? (
-              <RD.Description className={showDescription ? 'muted' : 'sr'}>{description}</RD.Description>
-            ) : (
-              <RD.Description className="sr">{title}</RD.Description>
-            )}
-          </div>
-          {bare ? children : <div className="d-b">{children}</div>}
-          {footer ? <div className="d-f">{footer}</div> : null}
+          <KeyScope level="page" active={false}>
+            <div className="d-h">
+              <RD.Title asChild><h2 style={{ fontSize: 17 }}>{title}</h2></RD.Title>
+              {description ? (
+                <RD.Description className={showDescription ? 'muted' : 'sr'}>{description}</RD.Description>
+              ) : (
+                <RD.Description className="sr">{title}</RD.Description>
+              )}
+            </div>
+            {bare ? children : <div className="d-b">{children}</div>}
+            {footer ? <div className="d-f">{footer}</div> : null}
+          </KeyScope>
         </RD.Content>
       </RD.Portal>
     </RD.Root>

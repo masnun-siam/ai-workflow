@@ -1,6 +1,6 @@
 import * as DM from '@radix-ui/react-dropdown-menu';
 import type { ReactNode } from 'react';
-import { useAction } from '../shell/shortcuts';
+import { KeyScope, useAction } from '../shell/shortcuts';
 import { Button } from './Button';
 import { Icon, type IconName } from './Icon';
 
@@ -19,7 +19,7 @@ export function Menu({ trigger, items, align = 'end', paletteLabel = '' }: { tri
   return (
     <DM.Root>
       {items.map((it, i) => (it === 'sep' ? null : <MenuAction key={i} label={paletteLabel} item={it} />))}
-      <DM.Trigger asChild>{trigger}</DM.Trigger>
+      <KeyScope level="page" active={false}><DM.Trigger asChild>{trigger}</DM.Trigger></KeyScope>
       <DM.Portal>
         <DM.Content className="menu-c" align={align} sideOffset={6} collisionPadding={8}>
           {items.map((it, i) =>
