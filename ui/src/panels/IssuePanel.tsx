@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useAction } from '../shell/shortcuts';
 import { Link } from 'react-router-dom';
 import { useComment, useDelivery, useIssue, usePlanning, useSessions, useSetIssueState } from '../api/hooks';
 import type { DeliveryCard, IssueDetail } from '../api/types';
@@ -17,6 +18,12 @@ import { PLAN_RUN } from '../lib/vocab';
 export const who = (a: unknown): string => (typeof a === 'string' ? a : a && typeof a === 'object' && 'login' in a ? String((a as { login: unknown }).login) : 'ghost');
 
 export const issueStateText = (d: IssueDetail) => (d.is_pr ? (d.state === 'open' ? 'PR open' : 'PR closed') : d.state === 'open' ? 'Open' : d.state_reason === 'not_planned' ? 'Closed as not planned' : 'Closed');
+
+/** `C`: puts focus in the comment box with this id. Render it inside the tab that holds the box, so the key exists only while the box is on screen. */
+export function FocusComment({ id }: { id: string }) {
+  useAction({ label: 'Comment', key: 'c', run: () => document.getElementById(id)?.focus() });
+  return null;
+}
 
 /** The Issue tab of the work panel: the issue, its sessions, comments and the comment box. */
 export function IssueTab({ repo, n, card }: { repo: string; n: number; card?: DeliveryCard }) {
@@ -46,6 +53,7 @@ export function IssueTab({ repo, n, card }: { repo: string; n: number; card?: De
 
   return (
     <div className="stack">
+      <FocusComment id="issue-comment" />
       <p className="muted" style={{ fontSize: 13 }}>{who(d.author)} opened {formatWhen(d.created_at)}{d.assignees.length ? ` · assigned to ${d.assignees.map(who).join(', ')}` : ''}</p>
       {card ? <IssueSignals card={card} /> : null}
       {feature ? <p>Part of <Link to={link(routes.feature(feature.slug))} onClick={panel.close}>{feature.title}</Link></p> : null}
@@ -55,7 +63,7 @@ export function IssueTab({ repo, n, card }: { repo: string; n: number; card?: De
       <div className="row wrap">
         {open ? (
           <>
-            {!d.is_pr ? <Button sm disabled={starter.pending} onClick={() => starter.startBoard({ repo, skill: 'refine-issues', arg: String(n), via: 'headless', ...PLAN_RUN })}>{d.labels.some((l) => l.name === 'refined') ? 'Refine again' : 'Refine'}</Button> : null}
+            {!d.is_pr ? <Button sm shortcut="e" disabled={starter.pending} onClick={() => starter.startBoard({ repo, skill: 'refine-issues', arg: String(n), via: 'headless', ...PLAN_RUN })}>{d.labels.some((l) => l.name === 'refined') ? 'Refine again' : 'Refine'}</Button> : null}
             {!d.is_pr ? <Button sm disabled={setState.isPending} onClick={() => setState.mutate({ repo, n, state: 'closed', reason: 'completed' }, { onSuccess: () => void followups.offer(n, `issue #${n} is closed`) })}>Close as completed</Button> : null}
             {!d.is_pr ? <Button sm disabled={setState.isPending} onClick={() => setState.mutate({ repo, n, state: 'closed', reason: 'not_planned' })}>Close as not planned</Button> : null}
           </>

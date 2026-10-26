@@ -1,7 +1,7 @@
 // One panel per piece of work: the issue (Issue tab) and, once it has a PR, the PR's tabs beside it.
 // Opened on an issue it starts on the Issue tab; opened on a PR (Merge, Open PR) on the PR's Overview.
 // A PR with no issue on the board gets only the PR tabs.
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useComment, useDelivery, useGrindIssue, useIssue, useMerge, usePull, useSkipCi, useStopGrind } from '../api/hooks';
 import type { PrCheck, PrCommitRow, PrConvItem, PrFileRow } from '../api/types';
 import { actionKind, IssueAction } from '../board/IssueAction';
@@ -13,7 +13,7 @@ import { STAGE, nowLine } from '../dispatch/vocab';
 import { formatWhen, grindLabel } from '../lib/format';
 import { issueStatus } from '../lib/vocab';
 import { PanelFrame } from './DetailPanel';
-import { IssueTab, issueStateText, who } from './IssuePanel';
+import { FocusComment, IssueTab, issueStateText, who } from './IssuePanel';
 import { mergeWarnings } from './prWarnings';
 import { useFollowups } from './useFollowups';
 import './panels.css';
@@ -64,6 +64,12 @@ export function WorkPanel({ kind, repo, n }: { kind: 'issue' | 'pr'; repo: strin
   const [tab, setTab] = useState(kind === 'pr' ? 'overview' : 'issue');
   const [asking, setAsking] = useState(false);
   const [mergeErr, setMergeErr] = useState('');
+  const mergeBtn = useRef<HTMLButtonElement>(null);
+  const wasAsking = useRef(false);
+  useEffect(() => {
+    if (wasAsking.current && !asking) mergeBtn.current?.focus();
+    wasAsking.current = asking;
+  }, [asking]);
   const [text, setText] = useState('');
 
   const d = prN ? q.data : undefined;
@@ -137,7 +143,7 @@ export function WorkPanel({ kind, repo, n }: { kind: 'issue' | 'pr'; repo: strin
   );
   const footer = d ? (
     asking ? (
-      <div className="stack" style={{ width: '100%' }} role="alertdialog" aria-label="Confirm merge">
+      <div className="stack" style={{ width: '100%' }} role="alertdialog" aria-label="Confirm merge" onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setAsking(false); } }}>
         <p><b>Merge PR #{prN} into {d.base} with a merge commit?</b></p>
         {warnings.length ? <Banner tone="review" icon="alert"><p>Warning: {warnings.join(', ')}.</p></Banner> : null}
         {mergeErr ? <Banner tone="bad" icon="alert"><p>{mergeErr}</p></Banner> : null}
@@ -148,7 +154,7 @@ export function WorkPanel({ kind, repo, n }: { kind: 'issue' | 'pr'; repo: strin
       </div>
     ) : (
       <>
-        {d.state === 'open' ? <Button variant={warnings.length || conflict ? 'default' : 'primary'} disabled={conflict} onClick={() => setAsking(true)}>Merge…</Button> : null}
+        {d.state === 'open' ? <Button ref={mergeBtn} shortcut="m" variant={warnings.length || conflict ? 'default' : 'primary'} disabled={conflict} onClick={() => setAsking(true)}>Merge…</Button> : null}
         {d.state === 'open' && conflict ? <><span className="muted">Conflicts with {d.base}.</span><ResolveConflicts repo={repo} url={d.url} n={prN!} primary /></> : null}
         {d.state === 'draft' ? <span className="muted">Draft PRs cannot be merged. Mark it ready on GitHub first.</span> : null}
         <span className="grow" />
@@ -186,8 +192,8 @@ export function WorkPanel({ kind, repo, n }: { kind: 'issue' | 'pr'; repo: strin
                     <Chip tone={grind.state === 'paused' ? 'bad' : 'review'}>{grindLabel({ state: grind.state, round: grind.round })}</Chip>
                     {grind.reason ? <span className="muted">{grind.reason}</span> : null}
                     <span className="grow" />
-                    {grind.state === 'paused' ? <Button sm disabled={skip.isPending} onClick={() => skip.mutate({ repo, pr: prN! }, { onSuccess: () => toast('Skipping CI and continuing') })}>Skip CI</Button> : null}
-                    <Button sm variant="danger" disabled={stop.isPending} onClick={doStop}>Stop</Button>
+                    {grind.state === 'paused' ? <Button sm shortcut="s" disabled={skip.isPending} onClick={() => skip.mutate({ repo, pr: prN! }, { onSuccess: () => toast('Skipping CI and continuing') })}>Skip CI</Button> : null}
+                    <Button sm variant="danger" shortcut="x" disabled={stop.isPending} onClick={doStop}>Stop</Button>
                   </div>
                 </div>
               ) : null}
@@ -217,6 +223,7 @@ export function WorkPanel({ kind, repo, n }: { kind: 'issue' | 'pr'; repo: strin
         <TabPanel value="conversation">
           {prPending(() => (
             <div className="stack">
+              <FocusComment id="pr-comment" />
               {conv.length ? conv.map((c, i) => (
                 <article key={i} className="p-comment">
                   <div className="who"><b>{c.author}</b>{c.kind === 'review' ? ` ${VERDICT[c.verdict ?? ''] ?? c.verdict}` : ''} · {formatWhen(c.at)}</div>
