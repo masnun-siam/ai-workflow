@@ -100,6 +100,7 @@ ALLOWED = (
     "| `/pr-review` |",
     "| `/skill-feedback` |",
     "| `/docs-updater` |",
+    "| `/faq-updater` |",
     "| `/sync-from-wasensi` |",
 )
 fails = []
