@@ -193,6 +193,7 @@ try:
         "implement-issue",
         "verifier-locally",
         "docs-updater",
+        "faq-updater",
         "flow",
         "peer-review",
         "release-pr",
@@ -200,6 +201,9 @@ try:
         "skill-feedback",
     ):
         assert ui_repos.build_command(kept, "x") == f"/{kept} x", kept
+    assert ui_repos.build_command("faq-updater", "") == "/faq-updater"
+    multi = "--lang en,bn\nHow do I add a tag?"
+    assert ui_repos.build_command("faq-updater", multi) == f"/faq-updater {multi}"
     assert (
         ui_repos.build_command("day", "") == "/day" and ui_repos.build_command("day", "call Abir") == "/day call Abir"
     )
