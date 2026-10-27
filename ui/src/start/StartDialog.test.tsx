@@ -233,6 +233,17 @@ describe('Start dialog', () => {
     await waitFor(() => expect(posts()).toEqual([{ repo: 'o/r', command: 'faq-updater', args: '', claude_cmd: 'claude' }]));
   });
 
+  it('repo-bootstrap: optional input, listed after faq-updater, starts empty', async () => {
+    const user = userEvent.setup();
+    open({ cmd: 'repo-bootstrap' });
+    await ready();
+    expect(screen.getByLabelText('Phase and issue (optional)')).toBeTruthy();
+    const ids = COMMANDS.find((g) => g.g === 'Maintain')?.items.map((c) => c.id) ?? [];
+    expect(ids.indexOf('repo-bootstrap')).toBe(ids.indexOf('faq-updater') + 1);
+    await user.click(startButton());
+    await waitFor(() => expect(posts()).toEqual([{ repo: 'o/r', command: 'repo-bootstrap', args: '', claude_cmd: 'claude' }]));
+  });
+
   it('switching to a same-kind command carries the argument over', async () => {
     const user = userEvent.setup();
     open({ cmd: 'dump', arg: 'an idea' });

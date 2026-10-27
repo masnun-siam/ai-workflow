@@ -128,6 +128,7 @@ export const COMMANDS: CommandGroup[] = [
   { g: 'Maintain', items: [
     { id: 'docs-updater', name: 'Update docs', desc: 'Brings docs in line with recent changes.', arg: 'none' },
     { id: 'faq-updater', name: 'Update FAQ', desc: 'Writes and updates the user guide and FAQ from the code', arg: 'text', placeholder: 'One question per line. Options: full, --lang en,bn, --videos <playlist URL>' },
+    { id: 'repo-bootstrap', name: 'Bootstrap repo', desc: 'Makes a repo ready for agents and this workflow, one PR per phase.', arg: 'text', placeholder: 'Optional: a phase (audit, decide, constitution, guides, gates, docs) and the bootstrap issue number' },
     { id: 'sync-from-wasensi', name: 'Sync from Wasensi', desc: 'Ports upstream skill and guide changes.', arg: 'none' },
     { id: 'skill-feedback', name: 'Skill feedback', desc: 'Turns feedback into skill and guide edits, or mines closed PRs for learnings.', arg: 'text', placeholder: 'Feedback on a skill or guide, or reconcile to mine the learning logs of closed PRs' },
     { id: 'custom', name: 'Custom prompt', desc: 'Anything else. Runs with permissions skipped.', arg: 'text', placeholder: 'Prompt for Claude', lenses: true },

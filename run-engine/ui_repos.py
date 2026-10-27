@@ -34,6 +34,7 @@ NAMED = (
     "pr-review",
     "docs-updater",
     "faq-updater",
+    "repo-bootstrap",
     "sync-from-wasensi",
     "skill-feedback",
     "dump",
