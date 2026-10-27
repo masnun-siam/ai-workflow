@@ -33,6 +33,7 @@ NAMED = (
     "verifier-locally",
     "pr-review",
     "docs-updater",
+    "faq-updater",
     "sync-from-wasensi",
     "skill-feedback",
     "dump",
