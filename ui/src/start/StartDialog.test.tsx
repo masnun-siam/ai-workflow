@@ -4,6 +4,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryProvider } from '../QueryProvider';
 import { ConfirmProvider, Toaster } from '../components';
+import { COMMANDS } from '../lib/vocab';
 import { StartDialog } from './StartDialog';
 
 type Call = { method: string; url: string; body: Record<string, unknown> | null };
@@ -217,6 +218,19 @@ describe('Start dialog', () => {
     await user.click(startButton());
     await waitFor(() => expect(posts()).toEqual([{ repo: 'o/r', command: 'worklog', args: 'today', claude_cmd: 'claude' }]));
     await waitFor(() => expect(screen.getByTestId('loc').textContent).toBe('/sessions/s1'));
+  });
+
+  it('faq-updater: optional 8-row input, listed after docs-updater, starts empty', async () => {
+    const user = userEvent.setup();
+    open({ cmd: 'faq-updater' });
+    await ready();
+    const box = screen.getByLabelText('New questions or options (optional)') as HTMLTextAreaElement;
+    expect(box.rows).toBe(8);
+    expect(box.placeholder).toBe('One question per line. Options: full, --lang en,bn, --videos <playlist URL>');
+    const ids = COMMANDS.find((g) => g.g === 'Maintain')?.items.map((c) => c.id) ?? [];
+    expect(ids.indexOf('faq-updater')).toBe(ids.indexOf('docs-updater') + 1);
+    await user.click(startButton());
+    await waitFor(() => expect(posts()).toEqual([{ repo: 'o/r', command: 'faq-updater', args: '', claude_cmd: 'claude' }]));
   });
 
   it('switching to a same-kind command carries the argument over', async () => {

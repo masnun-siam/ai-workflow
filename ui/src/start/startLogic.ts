@@ -6,7 +6,7 @@ import type { ArgKind } from '../lib/vocab';
 /** Commands the server lets run with no repo (ui_repos.start_session): create-prd, dump, a custom prompt. */
 export const NO_REPO = new Set(['create-prd', 'dump', 'day', 'custom']);
 /** Commands whose argument may stay empty. */
-export const OPTIONAL = new Set(['peer-review', 'day']);
+export const OPTIONAL = new Set(['peer-review', 'day', 'faq-updater']);
 export const CMD_KEY = 'aiw.lastCommand';
 
 // ---- worklog days ---------------------------------------------------------------------------------
