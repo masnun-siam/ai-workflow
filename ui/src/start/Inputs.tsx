@@ -11,6 +11,7 @@ export const ARG_LABEL: Record<string, string> = {
   'create-prd': 'The idea',
   dump: 'What to capture',
   day: 'What to capture (optional)',
+  'faq-updater': 'New questions or options (optional)',
   'skill-feedback': 'The feedback',
   flow: 'An idea, a PRD path or an epic number',
   'peer-review': 'What to review (optional)',
