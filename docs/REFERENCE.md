@@ -375,7 +375,7 @@ skills/       create-prd, create-tasks, refine-issues, implement-issue, verifier
               peer-review, dump, release-pr, worklog, flow, herdr-dispatch
 agents/       away-answerer, peer-reviewer, worklog-runner
 guides/       engineering-workflow, code-review, skills
-templates/    prd, epic, issue
+templates/    prd, epic, issue, faq
 commands/     code-review (a slash command)
 run-engine/   route.py (the aiw CLI) · ui_*.py (the web UI server) · peer_review, threads, ci, ask
               dispatch_run (the lane engine), dispatch_runners (herdr, headless), dispatch_cli
