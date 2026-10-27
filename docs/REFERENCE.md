@@ -180,7 +180,7 @@ instead of starting a separate session, and the epic is re-read every 5 minutes 
 `GET /api/github/branches?repo=<owner/name>` lists the repo's branches for the Base branch picker: 200 `{branches, default}` (the default first, the rest sorted), 400 `repo must be owner/name`, 502 with `gh`'s error.
 
 **Start** (the New button, `N` or ⌘K). Commands grouped Plan, Build, Review, Ship, Capture and
-Maintain, each with a one-line description; the last one is remembered. Maintain has **Update FAQ**, whose optional input takes new questions, one per line, and the options `full`, `--lang <codes>` and `--videos <url>`. Pick **Where** (a registered repo,
+Maintain, each with a one-line description; the last one is remembered. Maintain has **Update FAQ**, whose optional input takes new questions, one per line, and the options `full`, `--lang <codes>` and `--videos <url>`, and **Bootstrap repo**, whose optional input takes a phase and the bootstrap issue number. Pick **Where** (a registered repo,
 or **No repo yet** for `create-prd`, `dump`, `day` and the custom prompt, which run in the notes vault
 with a **Vault folder**), the input, and **Run on** an account (a limited account says the run will
 queue). `implement-issue`, `pr-review` and `pr-grind` list the repo's open issues or PRs under the

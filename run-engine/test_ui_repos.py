@@ -194,6 +194,7 @@ try:
         "verifier-locally",
         "docs-updater",
         "faq-updater",
+        "repo-bootstrap",
         "flow",
         "peer-review",
         "release-pr",
@@ -202,6 +203,7 @@ try:
     ):
         assert ui_repos.build_command(kept, "x") == f"/{kept} x", kept
     assert ui_repos.build_command("faq-updater", "") == "/faq-updater"
+    assert ui_repos.build_command("repo-bootstrap", "") == "/repo-bootstrap"
     multi = "--lang en,bn\nHow do I add a tag?"
     assert ui_repos.build_command("faq-updater", multi) == f"/faq-updater {multi}"
     assert (
