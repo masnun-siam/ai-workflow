@@ -12,6 +12,7 @@
 | `/ai-workflow:pr-review <pr or branch> [--fix]` | review against the issue, the repo's rules and `guides/code-review.md`; report findings and a verdict. `--fix` fixes the review feedback on a PR through to green CI, replies and ready |
 | `/ai-workflow:skill-feedback <feedback \| reconcile>` | turn feedback, or the learning logs of closed PRs, into approved edits to the skills and guides |
 | `/ai-workflow:docs-updater` | bring `docs/` in line with the code |
+| `/ai-workflow:faq-updater [full] [--lang <codes>] [--videos <url>] [questions…]` | write and update the product's user guide and FAQ (`docs/faq.md`) from the code, through a PR |
 | `/ai-workflow:sync-from-wasensi` | port Wasensi's skill, guide and template changes into this plugin |
 | `/ai-workflow:pr-grind <pr>` | the Slack reviewer-bot loop on a PR; fixes inline, verifies before each push |
 | `/ai-workflow:peer-review [--lenses <lens,lens>] [--since <sha\|@{u}>] [--herdr]` | a panel of read-only `peer-reviewer` lenses on the session's change (default critical) until every lens approves |
@@ -178,7 +179,7 @@ instead of starting a separate session, and the epic is re-read every 5 minutes 
 `GET /api/github/branches?repo=<owner/name>` lists the repo's branches for the Base branch picker: 200 `{branches, default}` (the default first, the rest sorted), 400 `repo must be owner/name`, 502 with `gh`'s error.
 
 **Start** (the New button, `N` or ⌘K). Commands grouped Plan, Build, Review, Ship, Capture and
-Maintain, each with a one-line description; the last one is remembered. Pick **Where** (a registered repo,
+Maintain, each with a one-line description; the last one is remembered. Maintain has **Update FAQ**, whose optional input takes new questions, one per line, and the options `full`, `--lang <codes>` and `--videos <url>`. Pick **Where** (a registered repo,
 or **No repo yet** for `create-prd`, `dump`, `day` and the custom prompt, which run in the notes vault
 with a **Vault folder**), the input, and **Run on** an account (a limited account says the run will
 queue). `implement-issue`, `pr-review` and `pr-grind` list the repo's open issues or PRs under the
@@ -371,7 +372,7 @@ The work's own state is on GitHub and in the repo's `docs/prds/` and `docs/tasks
 
 ```
 skills/       create-prd, create-tasks, refine-issues, implement-issue, verifier-locally,
-              pr-review, docs-updater, skill-feedback, sync-from-wasensi, pr-grind,
+              pr-review, docs-updater, faq-updater, skill-feedback, sync-from-wasensi, pr-grind,
               peer-review, dump, release-pr, worklog, flow, herdr-dispatch
 agents/       away-answerer, peer-reviewer, worklog-runner
 guides/       engineering-workflow, code-review, skills

@@ -36,6 +36,7 @@ once CI is green, a review approves and the grind is done. Otherwise **Merge** i
 | Review | `/pr-review` | a PR or branch → findings with evidence and a verdict; `--fix` fixes the review feedback on a PR |
 | Grind | `/pr-grind` | a Ready PR → the Slack reviewer-bot loop until approved |
 | Docs | `/docs-updater` | the code's changes → `docs/` brought in line |
+| FAQ | `/faq-updater` | the code's changes and the team's questions → `docs/faq.md`, the user guide and FAQ, through a PR |
 | Feedback | `/skill-feedback` | feedback, or `reconcile` over closed PRs' learning logs → approved edits to the skills and guides |
 
 The planning skills read `templates/` (PRD, epic, issue) and follow `guides/engineering-workflow.md`;

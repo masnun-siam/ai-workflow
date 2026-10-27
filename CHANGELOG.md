@@ -4,6 +4,7 @@
 
 ### Added
 
+- **FAQ updater** (epic #540): `/faq-updater` writes and updates the product's plain-language user guide and FAQ in `docs/faq.md` from the code, answers the team's questions and opens a PR (#543). It uses `templates/faq.md` (#542) and has an **Update FAQ** entry in the Start launcher's Maintain group (#548). Listed in `guides/skills.md`, `docs/REFERENCE.md` and `docs/HOW-IT-WORKS.md` (#549).
 - **Keyboard-first UI** (epic #484): every page works without the mouse. `J`/`K` and arrows select rows, `Enter` opens them, action keys with badges press the buttons, `[`/`]` switch tabs, question rounds take digits, `Tab` and ⌘↵, and ⌘K lists **Actions here**. `docs/REFERENCE.md` lists all the keys (#503).
 - A **Base branch** setting for a dispatch (#486): a searchable picker of the repo's branches in the New dispatch dialog (also for Run small changes), `--base-branch` on `aiw dispatch plan|start` and `herdr-dispatch`, and `GET /api/github/branches?repo=<owner/name>`. PRs land in it, a missing feature branch is cut from it, and Open PR goes into it. It is fixed at start, must exist in every lane repo, and empty keeps today's behaviour (#511).
 - Issue/PR panel buttons take their keys: `M` opens the merge confirm (`Enter` merges, `Esc` cancels back to Merge…), `S` Skip CI, `X` Stop, `E` Refine, `C` focuses the comment box, and the card action in the panel head takes `A`, `R`, `E`, `S`. The panel's keys win over the row's (#496).
