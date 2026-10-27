@@ -35,6 +35,7 @@ once CI is green, a review approves and the grind is done. Otherwise **Merge** i
 | Implement | `/implement-issue <n \| epic>` | one refined issue (or an epic's next Ready one) → a Ready PR (below) |
 | Review | `/pr-review` | a PR or branch → findings with evidence and a verdict; `--fix` fixes the review feedback on a PR |
 | Grind | `/pr-grind` | a Ready PR → the Slack reviewer-bot loop until approved |
+| Bootstrap | `/repo-bootstrap` | a repo new to the workflow → an audit issue, then one PR per phase: protected `CLAUDE.md`, guides, gate issues, docs |
 | Docs | `/docs-updater` | the code's changes → `docs/` brought in line |
 | FAQ | `/faq-updater` | the code's changes and the team's questions → `docs/faq.md`, the user guide and FAQ, through a PR |
 | Feedback | `/skill-feedback` | feedback, or `reconcile` over closed PRs' learning logs → approved edits to the skills and guides |

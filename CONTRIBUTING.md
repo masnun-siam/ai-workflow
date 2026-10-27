@@ -55,5 +55,5 @@ the pre-push hook existed must run `pre-commit install` again to get it.
 ## Process
 
 - `guides/engineering-workflow.md`: the process the skills follow; `guides/code-review.md`: the review standard
-- `templates/`: the PRD, epic, issue and FAQ shapes
+- `templates/`: the PRD, epic, issue and FAQ shapes, and the `CLAUDE.md` and repo-audit shapes `/repo-bootstrap` writes
 - `CHANGELOG.md`: release notes; new entries go under `## Unreleased`

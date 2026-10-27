@@ -12,6 +12,7 @@
 | `/ai-workflow:pr-review <pr or branch> [--fix]` | review against the issue, the repo's rules and `guides/code-review.md`; report findings and a verdict. `--fix` fixes the review feedback on a PR through to green CI, replies and ready |
 | `/ai-workflow:skill-feedback <feedback \| reconcile>` | turn feedback, or the learning logs of closed PRs, into approved edits to the skills and guides |
 | `/ai-workflow:docs-updater` | bring `docs/` in line with the code |
+| `/ai-workflow:repo-bootstrap [audit\|decide\|constitution\|guides\|gates\|docs] [issue]` | make a repo ready for agents in phases, one PR each: a read-only audit issue, the decisions, a short protected `CLAUDE.md` (`templates/claude-md.md`) with its guards, guides and a tested README, the gate gaps filed as issues, then `/docs-updater full` |
 | `/ai-workflow:faq-updater [full] [--lang <codes>] [--videos <url>] [questions…]` | write and update the product's user guide and FAQ (`docs/faq.md`) from the code, through a PR |
 | `/ai-workflow:sync-from-wasensi` | port Wasensi's skill, guide and template changes into this plugin |
 | `/ai-workflow:pr-grind <pr>` | the Slack reviewer-bot loop on a PR; fixes inline, verifies before each push |
@@ -373,10 +374,10 @@ The work's own state is on GitHub and in the repo's `docs/prds/` and `docs/tasks
 ```
 skills/       create-prd, create-tasks, refine-issues, implement-issue, verifier-locally,
               pr-review, docs-updater, faq-updater, skill-feedback, sync-from-wasensi, pr-grind,
-              peer-review, dump, release-pr, worklog, flow, herdr-dispatch
+              peer-review, dump, release-pr, worklog, flow, herdr-dispatch, repo-bootstrap
 agents/       away-answerer, peer-reviewer, worklog-runner
 guides/       engineering-workflow, code-review, skills
-templates/    prd, epic, issue, faq
+templates/    prd, epic, issue, faq, claude-md, repo-audit
 commands/     code-review (a slash command)
 run-engine/   route.py (the aiw CLI) · ui_*.py (the web UI server) · peer_review, threads, ci, ask
               dispatch_run (the lane engine), dispatch_runners (herdr, headless), dispatch_cli
