@@ -46,6 +46,6 @@ This run asks the user nothing. Never use a question tool.
 
 10. **Set the marker** in the header to the step 1 sha and today's date. It changes only here, inside the PR.
 
-11. **Commit and open a pull request** into the base branch with `docs/faq.md` and `docs/faq-images/`. Let every hook run; never use `--no-verify`. The body lists: the mode and commit range; sections and questions added, changed and removed, by ID; questions needing the team; `team` text flagged as contradicted; cold-read gaps by ID; confirmed-video links of deleted sections; screenshots added, retaken, dropped and skipped (with the reason); anything else skipped and why. A failure before the PR leaves the worktree for inspection and moves no marker.
+11. **Commit and open a pull request** into the base branch with `docs/faq.md` and `docs/faq-images/` (when it exists). Let every hook run; never use `--no-verify`. The body lists: the mode and commit range; sections and questions added, changed and removed, by ID; questions needing the team; `team` text flagged as contradicted; cold-read gaps by ID; confirmed-video links of deleted sections; screenshots added, retaken, dropped and skipped (with the reason); anything else skipped and why. A failure before the PR leaves the worktree for inspection and moves no marker.
 
 12. **Report** the PR link, the mode, the range, what was added, changed and removed, the questions for the team, and anything skipped. After merge, remove the worktree and branch.
