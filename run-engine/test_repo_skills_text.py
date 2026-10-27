@@ -45,6 +45,7 @@ ALLOWED = (
     "`chore: update /create-prd skill",
     "`chore: update /pr-review skill",
     "`chore: update /verifier-locally skill",
+    "`chore: update /repo-bootstrap skill",
     # Who owns or wrote something: no skill is run.
     "are worked out by `/refine-issues` against the current code",
     "`/refine-issues` later writes",
@@ -100,6 +101,7 @@ ALLOWED = (
     "| `/pr-review` |",
     "| `/skill-feedback` |",
     "| `/docs-updater` |",
+    "| `/repo-bootstrap` |",
     "| `/faq-updater` |",
     "| `/sync-from-wasensi` |",
 )

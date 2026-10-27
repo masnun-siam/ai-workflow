@@ -12,6 +12,7 @@ A skill is a short procedure an AI agent loads for one kind of task. The skills 
 | `/pr-review` | Review a pull request or a local branch against its issue and the project rules; with `--fix`, fix the review feedback on a pull request through to green CI, replies and ready |
 | `/skill-feedback` | Turn feedback on a skill, guide or the process into approved edits; `reconcile` mines the learning logs of closed PRs and their issues for improvements |
 | `/docs-updater` | Bring the repo's `docs/` in line with the code |
+| `/repo-bootstrap` | Make a repo ready for agents and this workflow: audit, decisions, a short protected `CLAUDE.md`, guides, gates and docs, one PR per phase |
 | `/faq-updater` | Write and update the product's user guide and FAQ from the code |
 | `/sync-from-wasensi` | Maintain this plugin: port Wasensi's latest skill, guide and template changes in repo-agnostic form |
 
