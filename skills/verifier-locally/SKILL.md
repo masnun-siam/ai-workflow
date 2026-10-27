@@ -11,7 +11,7 @@ Paths below starting `../../` are relative to this skill's folder, at the plugin
 
 ## Steps
 
-1. **Establish the scope.** Fetch `origin/<base>`, then list what changed against it: committed changes on the branch plus anything staged or unstaged. Note which areas are touched: each component or package of the repo, and tooling (CI workflows, scripts, build files, hook config, Docker files). Uncommitted changes are fine for early feedback, but the final run is on committed work.
+1. **Establish the scope.** Fetch `origin/<base>`, then list what changed against it: committed changes on the branch plus anything staged or unstaged. Note which areas are touched: each component or package of the repo, and tooling (CI workflows, scripts, build files, hook config, Docker files). Uncommitted changes are fine for early feedback, but the final run is on committed work. If every changed path is in the repo's doc-only set (its CI change-detection filter), only the commit hooks and the CI checks that still run on docs apply; report the code checks as not run, doc-only.
 
 2. **Discover the checks.** CI is the reference: read the workflow files (`.github/workflows/` or the repo's CI config) and note, for each job, what runs, on which paths, and the exact command. Then read the hook config (`.pre-commit-config.yaml`, `.husky/`, `lefthook.yml`), the `Makefile` or task runner, and the package manifests (`package.json` scripts, `composer.json`, `pyproject.toml`, `go.mod` and the like) for checks CI runs indirectly or does not run at all. Prefer the exact command CI runs over a convenience target that looks equivalent.
 

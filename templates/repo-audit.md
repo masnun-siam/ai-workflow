@@ -47,6 +47,8 @@ Layout (`<name>/SKILL.md` with front matter or not), share of code samples, gene
 | Static analysis | | |
 | Tests | | |
 | Dependency audit | | |
+| Doc-only skip | | |
+| PR edit/rename triggers | | |
 
 | Other finding | Detail |
 |---|---|
@@ -54,7 +56,7 @@ Layout (`<name>/SKILL.md` with front matter or not), share of code samples, gene
 Already good:
 
 ## 5. Running the project
-Is there one start command and a quickstart someone can follow without asking?
+Is there one start command and a quickstart someone can follow without asking? Is there one `make up` that boots everything in Docker, isolated per worktree, and a `make down` that removes it?
 
 ## 6. Stale docs
 
@@ -68,12 +70,13 @@ Is there one start command and a quickstart someone can follow without asking?
 - [ ] Where PRDs live: `docs/prds/` or elsewhere.
 - [ ] Who owns `CLAUDE.md` (CODEOWNERS)?
 - [ ] Issue tracker, project board and its statuses.
+- [ ] Which paths count as doc-only (default: any `*.md` plus `docs/`)?
 - [ ] Is a code-graph tool really used? If yes, configure it; if not, drop the rule.
 
 ## Proposed order
 1. Constitution: short `CLAUDE.md`, `AGENTS.md` symlink, guards
 2. Guides, conventions and a tested README quickstart; remove generic files
-3. Gates: file the gaps as issues
+3. Gates and local stack: Makefile, isolated Docker stack, pre-commit and CI
 4. Docs generated for agents
 5. First feature through the full workflow
 
@@ -83,5 +86,6 @@ Is there one start command and a quickstart someone can follow without asking?
 - [ ] `docs/` tracked; conventions guide per component with a real file per rule
 - [ ] README quickstart run end to end on a clean worktree
 - [ ] No generic skill files, duplicates or broken symlinks
-- [ ] Every gate gap filed as its own issue
+- [ ] `make up` and `make down` boot and remove an isolated per-worktree Docker stack
+- [ ] Pre-commit and CI gate every component, skip code checks on doc-only changes, and a PR rename runs only the PR-meta check
 - [ ] `docs/` generated, with `Covers:` lines and a sync marker
