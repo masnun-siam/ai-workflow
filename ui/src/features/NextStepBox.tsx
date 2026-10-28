@@ -20,7 +20,7 @@ export function NextStepBox({ f, repo }: { f: Feature; repo: string }) {
         {you.length ? <p>{why || ns.hint}</p> : <div className="h">{ns.hint}</div>}
       </div>
       <div className="row wrap">
-        {ns.secondary ? <Button shortcut={stepKey(ns.secondary.action)} disabled={busy} onClick={() => run(ns.secondary!.action)}>{ns.secondary.label}</Button> : null}
+        {ns.secondary ? <Button variant="ghost" shortcut={stepKey(ns.secondary.action)} disabled={busy} onClick={() => run(ns.secondary!.action)}>{ns.secondary.label}</Button> : null}
         <Button variant={ns.quiet ? 'default' : 'primary'} shortcut={stepKey(ns.primary.action)} disabled={busy} onClick={() => run(ns.primary.action)}>{ns.primary.label}</Button>
       </div>
     </section>

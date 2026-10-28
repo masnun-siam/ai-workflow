@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { useDispatch, usePrd } from '../api/hooks';
+import { useDispatch } from '../api/hooks';
 import type { Dispatch } from '../api/types';
 import { Icon } from '../components';
 import { levels, needsYou, secs } from '../dispatch/vocab';
@@ -120,24 +120,6 @@ export function DispatchPanel({ id }: { id: string }) {
           ))}
         </ol>
       ) : null}
-    </section>
-  );
-}
-
-/** The PRD's section headings as chips; each opens the PRD tab. */
-export function PrdOutline({ f, repo, onOpen }: { f: Feature; repo: string; onOpen: () => void }) {
-  const prd = usePrd(repo, f.prd.path);
-  const heads = (prd.data?.text ?? '').split('\n').filter((l) => l.startsWith('## ')).map((l) => l.slice(3).trim());
-  const words = (prd.data?.text ?? '').split(/\s+/).filter(Boolean).length;
-  return (
-    <section className="pane fpanel" aria-labelledby="prd-h">
-      <div className="row" style={{ gap: 10, alignItems: 'baseline' }}>
-        <h2 id="prd-h">PRD</h2>
-        <span className="muted" style={{ fontSize: 12.5 }}>{f.prd.status}{words ? ` · ${words.toLocaleString()} words` : ''}</span>
-      </div>
-      {prd.isPending ? <div className="skel" style={{ height: 64 }} /> : heads.length ? (
-        <div className="chips">{heads.map((h) => <button key={h} type="button" onClick={onOpen}>{h}</button>)}</div>
-      ) : <p className="muted" style={{ margin: 0 }}>No sections found. <button type="button" className="linkish" style={{ textDecoration: 'underline' }} onClick={onOpen}>Open the PRD</button></p>}
     </section>
   );
 }
