@@ -7,7 +7,7 @@
 .start-form > .d-f{flex:none}
 .start-fields .lbl{display:flex;flex-direction:column;gap:6px;font-weight:600;font-size:13px}
 .start-fields .lbl .hint{font-weight:400;color:var(--muted)}
-.start-fields fieldset{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0;display:flex;flex-direction:column;gap:10px;min-width:0}
+.start-fields fieldset{border:1px solid var(--line);border-radius:var(--r-card);padding:10px 12px;margin:0;display:flex;flex-direction:column;gap:10px;min-width:0}
 .start-fields legend{font-weight:600;font-size:13px;padding:0 4px}
 .vf-row,.wl-range{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .vf-note{margin:0;font-size:13px}

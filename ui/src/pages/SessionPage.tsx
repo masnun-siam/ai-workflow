@@ -77,7 +77,7 @@ export function SessionPage() {
       <div className="page-head">
         <div className="grow">
           <div className="row wrap" style={{ gap: 10 }}>
-            <h1 className="mono clamp2" title={sessionLabel(s.command)} style={{ fontSize: 21, fontWeight: 500, overflowWrap: 'anywhere', maxWidth: 'none' }}>{sessionLabel(s.command)}</h1>
+            <h1 className="mono clamp2" title={sessionLabel(s.command)} style={{ fontSize: 17, fontWeight: 500, lineHeight: 1.4, overflowWrap: 'anywhere', maxWidth: 'none' }}>{sessionLabel(s.command)}</h1>
             <SessionChip s={s.outcome} />
             {s.peer_review ? <PeerChip p={s.peer_review} /> : null}
           </div>

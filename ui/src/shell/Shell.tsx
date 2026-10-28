@@ -27,7 +27,8 @@ function Topbar({ openPalette }: { openPalette: () => void }) {
     <div className="topbar">
       <span className="mob-only"><RepoSwitcher compact /></span>
       <h2 className="mob-only" style={{ fontSize: 16 }}>{title}</h2>
-      <button type="button" className="btn grow" style={{ justifyContent: 'flex-start', color: 'var(--muted)', fontWeight: 500, maxWidth: 520 }} onClick={openPalette} aria-label="Search or jump to" aria-keyshortcuts="Meta+K Control+K">
+      <span className="grow hide-sm" />
+      <button type="button" className="btn grow search-btn" onClick={openPalette} aria-label="Search or jump to" aria-keyshortcuts="Meta+K Control+K">
         <Icon n="search" />
         <span className="grow ellipsis" style={{ textAlign: 'left' }}>Search or jump to…</span>
         <span className="kbd hide-sm">⌘K</span>
@@ -37,7 +38,7 @@ function Topbar({ openPalette }: { openPalette: () => void }) {
         <Icon n="plus" />
         <span className="hide-sm">New</span>
         <span className="sr mob-only">New</span>
-        <span className="kbd hide-sm" style={{ background: 'transparent', color: 'inherit', borderColor: 'currentColor', opacity: 0.6 }}>N</span>
+        <span className="kbd hide-sm on-primary">N</span>
       </Button>
     </div>
   );
