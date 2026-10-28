@@ -6,6 +6,7 @@ command, and on a default macOS PATH /sbin shadows the plugin bin.
 
 Usage:
   aiw ui ...           # workflow control UI server
+  aiw service install|restart|uninstall|status  # run aiw ui as a macOS LaunchAgent
   aiw paths            # print resolved plugin/data paths as JSON
   aiw ask ...          # record a gate question for a headless run
   aiw ci status <pr-ref> [--watch]
@@ -29,6 +30,7 @@ import dispatch  # noqa: E402
 import dispatch_cli  # noqa: E402
 import threads  # noqa: E402
 import ui_server  # noqa: E402
+import ui_service  # noqa: E402
 from shared import data_dir, die  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -73,7 +75,7 @@ def main(argv=None) -> None:
     p_gm.set_defaults(func=cmd_grind_mode)
 
     # Each module owns its own argparse wiring.
-    for module in (threads, ci, ui_server, ask, dispatch_cli):
+    for module in (threads, ci, ui_server, ui_service, ask, dispatch_cli):
         module.register(sub, add)
 
     args = parser.parse_args(argv)
