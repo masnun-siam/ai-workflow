@@ -27,6 +27,7 @@
 
 ```
 aiw ui [--port N] [--allow-host HOST]   local web UI to start and track sessions
+aiw service install|restart|uninstall|status   run aiw ui as a macOS LaunchAgent that keeps Full Disk Access
 aiw paths                               resolve every path, create the state dirs
 aiw ask                                 a headless session asks the user a question and pauses
 aiw ci status                           check state plus the failing job's log
@@ -260,14 +261,19 @@ a capped panel's limit. Nothing auto-approves and nothing validates a verdict be
 line (a missing line counts as `changes`). `POST /api/review/<panel>/lens` drops or retries a lens.
 Verdicts live under `peer-review/<panel>/round-<n>/<lens>.md`.
 
-**Running it as a service.** `aiw ui` under supervisord or launchd (e.g. `brew services`) runs as
-that daemon's process, not your terminal. On macOS, if the plugin or your repos live under
-`~/Documents`, `~/Desktop` or `~/Downloads`, the daemon needs **Full Disk Access** or every start
-fails with `Operation not permitted` (supervisord shows exit status 126). Grant it to the binary
-that runs the daemon (for Homebrew supervisord, the `Python.app` of its Python, shown by
-`ps -o command -p $(cat /opt/homebrew/var/run/supervisord.pid)`) in System Settings → Privacy &
-Security → Full Disk Access, then `supervisorctl restart aiw-ui`. Keep `stderr_logfile` set in the
-program's ini, or such a failure leaves no trace.
+**Running it as a service.** On macOS run `aiw service install`. It writes a LaunchAgent
+(`~/Library/LaunchAgents/dev.aiw.ui.plist`, log `<data_dir>/ui.err.log`) whose program is a tiny
+launcher compiled once into `<data_dir>/bin/aiw-ui-launcher`, then opens System Settings → Privacy &
+Security → Full Disk Access. Add the launcher there once (⌘⇧G in the file picker, paste the path)
+and run `aiw service restart`. The launcher spawns the server and stays its parent, so macOS checks
+the launcher's grant for the server and every session it starts. It is never rebuilt, so the grant
+survives Homebrew, Python and Claude upgrades. Without the grant, repos under `~/Documents`,
+`~/Desktop` or `~/Downloads` fail inside sessions with `Operation not permitted` (git's
+`unable to access '.git/config'`), because a daemon cannot show the permission prompt. Don't grant
+Homebrew's `Python.app` instead: it is ad-hoc signed, so each upgrade gives it a new identity and
+silently drops the grant. `aiw service status` shows the state; `aiw service uninstall` removes the
+agent and keeps the launcher (and its grant). `aiw service restart` and `make restart` restart the
+agent, or the older supervisord `aiw-ui` program when no agent is installed. Run only one of the two.
 
 Optional push notifications and links live in `<data_dir>/ui.json` (the data dir is
 `$CLAUDE_PLUGIN_DATA`, default `~/.claude/plugins/data/ai-workflow`):
