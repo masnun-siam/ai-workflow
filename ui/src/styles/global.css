@@ -33,6 +33,8 @@
   --shadow:0 12px 32px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.3); color-scheme:dark }
 
 *{box-sizing:border-box}
+html{accent-color:var(--accent);scrollbar-color:var(--line-strong) transparent;-webkit-tap-highlight-color:transparent}
+::selection{background:var(--accent-soft);color:var(--ink)}
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 var(--font);-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
 #root{height:100%}
@@ -66,7 +68,7 @@ code,.mono{font-family:var(--mono);font-size:12.5px}
 .rail{position:relative;background:var(--sunk);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:6px;padding:12px 10px;min-height:0;overflow:auto}
 .main{min-width:0;min-height:0;display:flex;flex-direction:column}
 .topbar{display:flex;align-items:center;gap:10px;padding-block:10px;padding-left:max(24px, env(safe-area-inset-left,0px));padding-right:max(24px, env(safe-area-inset-right,0px));border-bottom:1px solid var(--line);background:var(--bg);min-height:56px}
-.content{flex:1;min-height:0;overflow:auto;position:relative;padding-block:24px 96px;padding-left:max(28px, env(safe-area-inset-left,0px));padding-right:max(28px, env(safe-area-inset-right,0px))}
+.content{flex:1;min-height:0;overflow:auto;position:relative;--pb:96px;--nav-h:0px;padding-block:24px var(--pb);padding-left:max(28px, env(safe-area-inset-left,0px));padding-right:max(28px, env(safe-area-inset-right,0px))}
 .content-inner{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
 .panel{position:relative;background:var(--surface);border-left:1px solid var(--line);min-height:0;display:flex;flex-direction:column}
 
@@ -138,7 +140,10 @@ label.lbl .hint{font-weight:400;color:var(--muted)}
 
 /* page head */
 .page-head{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap}
-.page-head .sub{color:var(--muted);margin-top:4px}
+.page-head .sub{color:var(--muted);margin-top:4px;max-width:72ch}
+/* title block takes a full row once it would drop under 320px, so actions wrap below instead of squeezing it */
+.page-head > .grow{flex:1 1 320px}
+.set-sec > .row.wrap > .grow{flex:1 1 260px}
 .crumbs{display:flex;gap:6px;align-items:center;color:var(--muted);font-size:13px}
 .crumbs button{border:0;background:none;padding:0;cursor:pointer;color:var(--muted)}
 .crumbs button:hover{color:var(--ink);text-decoration:underline}
@@ -270,8 +275,8 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
 .ev.tool .body b{color:var(--ink);font-weight:500}
 .ev pre{margin:6px 0 0;padding:10px;background:var(--bg);border-radius:6px;font-family:var(--mono);font-size:12px;white-space:pre-wrap;color:var(--ink);max-height:240px;overflow:auto}
 .ev.result{background:var(--cs);color:var(--ink)}
-.composer{position:sticky;bottom:0;display:flex;gap:8px;align-items:flex-end;padding:10px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
-.composer textarea{border:0;background:none;resize:none;flex:1;min-height:36px;max-height:160px;padding:8px}
+.composer{position:sticky;bottom:calc(var(--nav-h) + 16px - var(--pb));display:flex;gap:8px;align-items:flex-end;padding:10px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
+.composer textarea{border:0;background:none;resize:none;flex:1;min-height:36px;max-height:160px;padding:8px;field-sizing:content}
 .composer textarea:focus{outline:none}
 
 /* panel */
@@ -361,7 +366,7 @@ html[data-away] .away-card{border-color:var(--away);box-shadow:0 0 0 1px var(--a
   .rail{display:none}
   .mob-only{display:flex}
   .topbar{padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px))}
-  .content{padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px));padding-bottom:120px}
+  .content{padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px));--pb:120px;--nav-h:calc(59px + env(safe-area-inset-bottom,0px))}
   .top-banner{padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px))}
   .mob-nav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--surface);border-top:1px solid var(--line);padding:6px max(8px, env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(8px, env(safe-area-inset-left,0px));justify-content:space-around}
   .mob-nav button,.mob-nav a{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:600;color:var(--muted);padding:4px 8px;position:relative;cursor:pointer}
@@ -376,9 +381,29 @@ html[data-away] .away-card{border-color:var(--away);box-shadow:0 0 0 1px var(--a
   .start{grid-template-columns:minmax(0,1fr)}
   .start-list{border-right:0;border-bottom:1px solid var(--line);max-height:200px}
   .set-grid{grid-template-columns:minmax(0,1fr)}
-  .set-nav{flex-direction:row;overflow-x:auto;position:static}
+  .set-nav{flex-direction:row;overflow-x:auto;position:static;scrollbar-width:none;border-bottom:1px solid var(--line);gap:2px;margin-inline:-16px;padding:0 16px}
+  .set-nav::-webkit-scrollbar{display:none}
+  .set-nav .nav-a{width:auto;white-space:nowrap;flex:none;border-radius:0;padding:9px 12px;border-bottom:2px solid transparent;margin-bottom:-1px;font-weight:600}
+  .set-nav .nav-a.on{background:none;box-shadow:none;border-bottom-color:var(--ink)}
+  .set-nav .nav-a:hover{background:none}
+  .set-grid{gap:18px}
+  .set-sec{padding:16px}
   .hide-sm{display:none}
   .scrim{padding:16px}
+  /* 16px stops iOS zooming the page when a field takes focus */
+  input.f,select.f,textarea.f,.composer textarea,.pal-c [cmdk-input],.repo-pop [cmdk-input]{font-size:16px}
+  h1{font-size:22px}
+  .page-head{gap:12px}
+  .content-inner{gap:18px}
+}
+/* finger-sized targets on touch screens; mouse layouts keep their density */
+@media (pointer:coarse){
+  .btn{min-height:38px}
+  .btn.icon{min-width:38px}
+  .btn.sm{min-height:32px}
+  .btn.sm.icon{min-width:32px}
+  .nav-a,.menu-i,.pal-c [cmdk-item],.repo-pop [cmdk-item]{min-height:40px}
+  .tabs-list [role=tab]{padding-block:11px}
 }
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
 
