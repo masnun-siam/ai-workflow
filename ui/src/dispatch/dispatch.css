@@ -85,5 +85,4 @@
   .dsp-asks li > span{grid-column:1}
   .dsp-col{min-width:200px}
 }
-.dsp-page .page-head{flex-wrap:wrap;row-gap:12px}
-.dsp-page .page-head > .grow{flex:1 1 320px}
+.dsp-page .page-head{row-gap:12px}
