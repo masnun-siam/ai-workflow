@@ -77,7 +77,7 @@ export function DispatchesPage() {
           <h2>History</h2>
           <div className="tbl-wrap">
             <table className="tbl">
-              <thead><tr><th>Epic</th><th>Result</th><th>Issues</th><th>Started</th><th>Took</th><th>Spent</th></tr></thead>
+              <thead><tr><th>Epic</th><th>Result</th><th>Issues</th><th>Started</th><th className="num">Took</th><th className="num">Spent</th></tr></thead>
               <tbody>
                 {past.map((d) => {
                   const c = counts(d);
@@ -88,8 +88,8 @@ export function DispatchesPage() {
                       <td><Chip tone={DSTATE[d.state].tone}>{DSTATE[d.state].label}</Chip></td>
                       <td>{c.closed}/{c.total} done{c.skipped ? `, ${c.skipped} skipped` : ''}</td>
                       <td>{new Date(d.created_at * 1000).toLocaleDateString()} {clockText(d.created_at)}</td>
-                      <td className="mono">{secs(d.totals.seconds)}</td>
-                      <td className="mono">{d.runner === 'herdr' ? '—' : money(d.totals.cost)}</td>
+                      <td className="num">{secs(d.totals.seconds)}</td>
+                      <td className="num">{d.runner === 'herdr' ? '—' : money(d.totals.cost)}</td>
                     </tr>
                   );
                 })}
