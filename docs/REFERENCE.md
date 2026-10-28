@@ -269,6 +269,10 @@ that runs the daemon (for Homebrew supervisord, the `Python.app` of its Python, 
 Security → Full Disk Access, then `supervisorctl restart aiw-ui`. Keep `stderr_logfile` set in the
 program's ini, or such a failure leaves no trace.
 
+`make restart` (and Settings → Server **Rebuild and restart**) rebuilds the UI, then restarts the
+launchd agent `dev.aiw.ui` (`launchctl kickstart -k`) when it is loaded, else the supervisord
+program `aiw-ui`.
+
 Optional push notifications and links live in `<data_dir>/ui.json` (the data dir is
 `$CLAUDE_PLUGIN_DATA`, default `~/.claude/plugins/data/ai-workflow`):
 

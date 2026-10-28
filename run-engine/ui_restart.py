@@ -1,6 +1,6 @@
 """Run the repo's `make restart` from the UI (Settings -> Server). Stdlib only.
 
-The child is detached (own session), so it outlives the supervisord restart of this server.
+The child is detached (own session), so it outlives the restart of this server (launchd or supervisord).
 Its output goes to `<data_dir>/restart.log` and its exit code to `<data_dir>/restart.exit`.
 """
 
