@@ -513,6 +513,8 @@ try:
         "POST", "/api/start", {"repo": "o/r", "skill": "create-tasks", "arg": "docs/prds/x.md", "via": "headless"}
     )
     assert st == 200 and body == {"session": "S1"} and _started[0]["text"] == "/create-tasks docs/prds/x.md"
+    st, _ = call("POST", "/api/start", {"repo": "o/r", "skill": "create-tasks", "arg": "docs/prds/y.md", "issue": 12})
+    assert st == 200 and _started[-1]["issue"] == 12, _started  # issue reaches the session launch
     r4 = call("POST", "/api/start", {"repo": "o/r", "skill": "implement-issue", "arg": "4"})
     assert r4[0] == 409, r4  # open PR 40
     _gql([_issue(1, ["epic"]), _issue(5, ["refined"], 1, [(6, "OPEN")])])

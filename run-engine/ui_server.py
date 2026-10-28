@@ -762,6 +762,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             lenses=body.get("lenses"),
             model=body.get("model"),
             effort=body.get("effort"),
+            issue=body.get("issue"),
             snapshot=POLLER.snapshot(repo),
             channel=ui_settings.repo_settings(repo)["slack_channel"],
         )

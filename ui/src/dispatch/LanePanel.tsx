@@ -8,8 +8,9 @@ import { routes } from '../lib/routes';
 import { QuestionForm } from '../questions/QuestionForm';
 import { Transcript } from '../session/Transcript';
 import { isLive } from '../lib/vocab';
+import { usePanel } from '../panels/PanelContext';
 import { useAction } from '../shell/shortcuts';
-import { STAGE, STEPS, ghIssue, ghPr, issueNo, nowLine, secs } from './vocab';
+import { STAGE, STEPS, ghPr, issueNo, nowLine, secs } from './vocab';
 
 function Stepper({ l }: { l: Lane }) {
   const step = STAGE[l.stage].step;
@@ -60,6 +61,7 @@ function HerdrPane({ d, l }: { d: Dispatch; l: Lane }) {
 
 export function LanePanel({ d, l, onClose }: { d: Dispatch; l: Lane; onClose: () => void }) {
   const act = useLaneAction();
+  const panel = usePanel();
   const confirm = useConfirm();
   const toast = useToast();
   const [msg, setMsg] = useState('');
@@ -97,8 +99,8 @@ export function LanePanel({ d, l, onClose }: { d: Dispatch; l: Lane; onClose: ()
       ? [{ label: l.hold_merge ? 'Let it merge' : 'Hold the merge', icon: 'lock' as const, onSelect: () => run(l.hold_merge ? 'unhold' : 'hold', l.hold_merge ? 'It will merge when ready' : 'Merge held') }]
       : []),
     ...(now.ask !== 'retry' && l.stage !== 'closed' && l.stage !== 'queued' ? [{ label: 'Retry in a new session', icon: 'refresh' as const, onSelect: () => run('retry', 'Retrying') }] : []),
-    { label: 'Open the issue on GitHub', icon: 'github' as const, onSelect: () => window.open(ghIssue(l.repo, l.n), '_blank', 'noopener') },
-    ...(l.pr ? [{ label: `Open PR #${l.pr} on GitHub`, icon: 'pr' as const, onSelect: () => window.open(ghPr(l.repo, l.pr!), '_blank', 'noopener') }] : []),
+    { label: 'Open the issue', icon: 'github' as const, onSelect: () => panel.open({ kind: 'issue', repo: l.repo, n: l.n }) },
+    ...(l.pr ? [{ label: `Open PR #${l.pr}`, icon: 'pr' as const, onSelect: () => panel.open({ kind: 'pr', repo: l.repo, n: l.pr! }) }] : []),
     ...(l.stage !== 'closed' && l.stage !== 'skipped' ? ['sep' as const, { label: 'Skip this issue', icon: 'x' as const, danger: true, onSelect: () => void skip() }] : []),
   ];
 

@@ -95,13 +95,17 @@ refuses("refine-issues", "7 and 9", ValueError)
 assert ui_start.start("o/r", "refine-issues", "7", launch=L, model="opus", effort="medium")["session"] == "S5"
 assert L.bodies[4]["model"] == "opus" and L.bodies[4]["effort"] == "medium"
 assert "model" not in L.bodies[3] and "effort" not in L.bodies[3], "unset: not sent"
+assert "issue" not in L.bodies[3], "several issues: unlinked"
+assert L.bodies[4]["issue"] == 7, "one refined issue links its session"
+assert ui_start.start("o/r", "create-tasks", "docs/prds/b.md", launch=L, issue=3)["session"] == "S6"
+assert L.bodies[5]["issue"] == 3, "an explicit issue is forwarded"
 live_refine = {"id": "R1", "status": "running", "command": "/refine-issues 7 8", "repo": "o/r"}
 try:
     ui_start.start("o/r", "refine-issues", "8 12", launch=L, sessions=[live_refine])
     raise AssertionError("overlapping live refine")
 except ui_start.Conflict as e:
     assert e.id == "R1"
-assert ui_start.start("o/r", "refine-issues", "99", launch=L, sessions=[live_refine])["session"] == "S6"
+assert ui_start.start("o/r", "refine-issues", "99", launch=L, sessions=[live_refine])["session"] == "S7"
 for cmd in ("/ai-workflow:refine-issues 5 6", "/refine-issues 5 6"):  # #437: both spellings guard
     live = {"id": "R2", "status": "running", "command": cmd, "repo": "o/r"}
     try:

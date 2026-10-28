@@ -35,7 +35,7 @@ export function IssuesTab({ f, repo }: { f: Feature; repo: string }) {
             onSubmit={async (e) => {
               e.preventDefault();
               if (!text.trim()) return;
-              const id = await starter.startBoard({ repo, skill: 'create-tasks', arg: taskArg(f.epic!, f.prd.path, text), via: 'headless', ...PLAN_RUN });
+              const id = await starter.startBoard({ repo, skill: 'create-tasks', arg: taskArg(f.epic!, f.prd.path, text), via: 'headless', issue: f.epic!, ...PLAN_RUN });
               if (id !== null) setText('');
             }}
           >
@@ -46,7 +46,7 @@ export function IssuesTab({ f, repo }: { f: Feature; repo: string }) {
       ) : null}
       {picked.length > 0 && picked.every((n) => !refining.has(n)) ? (
         <div className="row">
-          <Button variant="primary" sm shortcut="e" disabled={starter.pending} onClick={async () => { const id = await starter.startBoard({ repo, skill: 'refine-issues', arg: picked.join(' '), via: 'headless', ...PLAN_RUN }); if (id !== null) setPicked([]); }}>
+          <Button variant="primary" sm shortcut="e" disabled={starter.pending} onClick={async () => { const id = await starter.startBoard({ repo, skill: 'refine-issues', arg: picked.join(' '), via: 'headless', ...(f.epic ? { issue: f.epic } : {}), ...PLAN_RUN }); if (id !== null) setPicked([]); }}>
             Refine {picked.length} picked
           </Button>
           <Button variant="ghost" sm onClick={() => setPicked([])}>Clear</Button>
