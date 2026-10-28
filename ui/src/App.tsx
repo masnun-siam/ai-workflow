@@ -7,10 +7,12 @@ import { DispatchesPage } from './pages/DispatchesPage';
 import { FeaturePage } from './pages/FeaturePage';
 import { FeaturesPage } from './pages/FeaturesPage';
 import { InboxPage } from './pages/InboxPage';
+import { NewPage } from './pages/NewPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { SessionPage } from './pages/SessionPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { SmallChangesPage } from './pages/SmallChangesPage';
 import { PanelProvider } from './panels/PanelContext';
 import { QueryProvider } from './QueryProvider';
 import { Shell } from './shell/Shell';
@@ -26,12 +28,19 @@ function Gate() {
   return <Outlet />;
 }
 
-/** The old Other issues page is the Small changes tab. */
-function IssuesRedirect() {
+/** The old Other issues page and the old Features → Small changes tab are the Small changes page. */
+function ChangesRedirect() {
   const { search } = useLocation();
   const p = new URLSearchParams(search);
-  p.set('tab', 'changes');
-  return <Navigate to={{ pathname: routes.features, search: `?${p}` }} replace />;
+  p.delete('tab');
+  const q = p.toString();
+  return <Navigate to={{ pathname: routes.changes, search: q ? `?${q}` : '' }} replace />;
+}
+
+/** Features, unless an old link asks for its Small changes tab. */
+function FeaturesRoute() {
+  const { search } = useLocation();
+  return new URLSearchParams(search).get('tab') === 'changes' ? <ChangesRedirect /> : <FeaturesPage />;
 }
 
 export function AppRoutes() {
@@ -40,11 +49,13 @@ export function AppRoutes() {
       <Route element={<Shell />}>
         <Route element={<Gate />}>
           <Route path="/inbox" element={<InboxPage />} />
-          <Route path="/features" element={<FeaturesPage />} />
+          <Route path="/features" element={<FeaturesRoute />} />
+          <Route path="/changes" element={<SmallChangesPage />} />
+          <Route path="/new" element={<NewPage />} />
           <Route path="/features/:slug" element={<FeaturePage />} />
           <Route path="/features/:slug/:tab" element={<FeaturePage />} />
           <Route path="/" element={<Navigate to="/inbox" replace />} />
-          <Route path="/issues" element={<IssuesRedirect />} />
+          <Route path="/issues" element={<ChangesRedirect />} />
           <Route path="/activity" element={<ActivityPage />} />
           <Route path="/dispatches" element={<DispatchesPage />} />
           <Route path="/dispatches/:id" element={<DispatchPage />} />

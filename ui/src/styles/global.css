@@ -1,42 +1,48 @@
-/* Framed sheet: the chrome (rail + top bar) is one teal-grey frame; the work sits on a white sheet.
-   Colour is two signals only: --you (needs you) and --bad (failed). Stages are a grey ramp that darkens
-   as work moves toward merged; --accent (teal) marks selection and the current stage, nothing else. */
+/* Teal pipeline: a dark rail beside a light page whose work sits in white panels. Stages run from pale to
+   deep teal (--st0..--st5) as work moves toward shipped; orange (--you) is only for what needs you and red
+   (--bad) only for failure. */
 :root{
-  --frame:#F1F5F6; --bg:#F6F8F9; --surface:#FFFFFF; --sunk:#EEF2F3; --line:#E3E7E9; --line-strong:#CDD3D6;
-  --ink:#131416; --muted:#5A6064; --faint:#646B6F;
-  --accent:#1B6C80; --accent-ink:#FFFFFF; --accent-soft:#E3EFF2;
-  --primary:#131416; --primary-ink:#FFFFFF;
-  --plan:#9AA2A6; --plan-soft:#EEF1F2;
-  --build:#5A6064; --build-soft:#EEF1F2;
-  --review:#363B3E; --review-soft:#EEF1F2;
-  --ship:#131416; --ship-soft:#EEF1F2;
-  --you:#C2410C; --you-soft:#FBEDE5;
+  --frame:#F3F4F3; --bg:#F3F4F3; --surface:#FFFFFF; --sunk:#ECEEED; --line:#E2E4E3; --line-strong:#CDD1CF;
+  --ink:#0B0D0E; --muted:#565B5E; --faint:#62676A;
+  --accent:#0F6E64; --accent-ink:#FFFFFF; --accent-soft:#DDEEEB;
+  --primary:#0B0D0E; --primary-ink:#FFFFFF;
+  --plan:#B8C9C6; --plan-soft:#ECEEED;
+  --build:#8DB5AF; --build-soft:#ECEEED;
+  --review:#5E9E96; --review-soft:#ECEEED;
+  --ship:#0F6E64; --ship-soft:#DDEEEB;
+  --st0:#B8C9C6; --st1:#8DB5AF; --st2:#5E9E96; --st3:#287A70; --st4:#0F6E64; --st5:#0B0D0E; --st4-ink:#FFFFFF;
+  --you:#C2410C; --you-soft:#FBE3D6; --you-ink:#8A2D06;
   --bad:#C4242A; --bad-soft:#FDECEC;
-  --away:#5A6064; --away-soft:#EEF1F2; --away-frame:#ECE9E2;
-  --shadow:0 12px 32px rgba(19,20,22,.14), 0 2px 6px rgba(19,20,22,.06);
-  --r-sheet:16px; --r-card:8px; --r-ctl:6px;
-  --font:'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --mono:'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --away:#565B5E; --away-soft:#ECEEED; --away-rail:#3A2416;
+  --rail:#0B0D0E; --rail-ink:#C9CDCF; --rail-muted:#9AA1A4; --rail-on:#23282A;
+  --shadow:0 12px 32px rgba(11,13,14,.14), 0 2px 6px rgba(11,13,14,.06);
+  --r-sheet:16px; --r-card:14px; --r-ctl:9px;
+  --font:'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono:'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --frame:#0C1011; --bg:#181D1F; --surface:#131719; --sunk:#1C2224; --line:#252C2F; --line-strong:#384246;
-  --ink:#E8ECED; --muted:#9BA4A8; --faint:#8A9397;
-  --accent:#5BB3C8; --accent-ink:#0C1011; --accent-soft:#16303A;
-  --primary:#E8ECED; --primary-ink:#0C1011;
-  --plan:#5E676B; --plan-soft:#1F2628; --build:#8A9397; --build-soft:#1F2628;
-  --review:#BFC6C9; --review-soft:#1F2628; --ship:#E8ECED; --ship-soft:#1F2628;
-  --you:#F0844F; --you-soft:#3A2116; --bad:#F2707A; --bad-soft:#3A1B1E;
-  --away:#9BA4A8; --away-soft:#1F2628; --away-frame:#16130F;
+  --frame:#0E1112; --bg:#191D1F; --surface:#141819; --sunk:#1E2325; --line:#262C2E; --line-strong:#3A4346;
+  --ink:#ECEFEF; --muted:#A0A8AB; --faint:#8C9497;
+  --accent:#4FB3A6; --accent-ink:#0E1112; --accent-soft:#143330;
+  --primary:#ECEFEF; --primary-ink:#0E1112;
+  --plan:#3F5A57; --plan-soft:#1E2325; --build:#5B8C85; --build-soft:#1E2325;
+  --review:#7DBDB3; --review-soft:#1E2325; --ship:#4FB3A6; --ship-soft:#143330;
+  --st0:#2E4442; --st1:#3F5A57; --st2:#4F7A74; --st3:#3E9A8E; --st4:#4FB3A6; --st5:#ECEFEF; --st4-ink:#0E1112;
+  --you:#F0844F; --you-soft:#3A2116; --you-ink:#FFD9C4; --bad:#F2707A; --bad-soft:#3A1B1E;
+  --away:#A0A8AB; --away-soft:#1E2325; --away-rail:#2A1A10;
+  --rail:#070909; --rail-ink:#C9CDCF; --rail-muted:#8E9699; --rail-on:#1B2022;
   --shadow:0 12px 32px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.3); color-scheme:dark }}
 :root[data-theme="dark"]{
-  --frame:#0C1011; --bg:#181D1F; --surface:#131719; --sunk:#1C2224; --line:#252C2F; --line-strong:#384246;
-  --ink:#E8ECED; --muted:#9BA4A8; --faint:#8A9397;
-  --accent:#5BB3C8; --accent-ink:#0C1011; --accent-soft:#16303A;
-  --primary:#E8ECED; --primary-ink:#0C1011;
-  --plan:#5E676B; --plan-soft:#1F2628; --build:#8A9397; --build-soft:#1F2628;
-  --review:#BFC6C9; --review-soft:#1F2628; --ship:#E8ECED; --ship-soft:#1F2628;
-  --you:#F0844F; --you-soft:#3A2116; --bad:#F2707A; --bad-soft:#3A1B1E;
-  --away:#9BA4A8; --away-soft:#1F2628; --away-frame:#16130F;
+  --frame:#0E1112; --bg:#191D1F; --surface:#141819; --sunk:#1E2325; --line:#262C2E; --line-strong:#3A4346;
+  --ink:#ECEFEF; --muted:#A0A8AB; --faint:#8C9497;
+  --accent:#4FB3A6; --accent-ink:#0E1112; --accent-soft:#143330;
+  --primary:#ECEFEF; --primary-ink:#0E1112;
+  --plan:#3F5A57; --plan-soft:#1E2325; --build:#5B8C85; --build-soft:#1E2325;
+  --review:#7DBDB3; --review-soft:#1E2325; --ship:#4FB3A6; --ship-soft:#143330;
+  --st0:#2E4442; --st1:#3F5A57; --st2:#4F7A74; --st3:#3E9A8E; --st4:#4FB3A6; --st5:#ECEFEF; --st4-ink:#0E1112;
+  --you:#F0844F; --you-soft:#3A2116; --you-ink:#FFD9C4; --bad:#F2707A; --bad-soft:#3A1B1E;
+  --away:#A0A8AB; --away-soft:#1E2325; --away-rail:#2A1A10;
+  --rail:#070909; --rail-ink:#C9CDCF; --rail-muted:#8E9699; --rail-on:#1B2022;
   --shadow:0 12px 32px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.3); color-scheme:dark }
 
 *{box-sizing:border-box}
@@ -49,7 +55,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 a{color:inherit}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--r-ctl)}
 h1,h2,h3{margin:0;text-wrap:balance}
-h1{font-size:22px;font-weight:600;letter-spacing:-.01em}
+h1{font-size:32px;font-weight:700;letter-spacing:-.03em;line-height:1.1}
 h2{font-size:15px;font-weight:600}
 h3{font-size:14px;font-weight:600}
 p{margin:0}
@@ -70,26 +76,27 @@ code,.mono{font-family:var(--mono);font-size:12.5px}
 .t-accent{--c:var(--accent);--cs:var(--accent-soft)}
 
 /* app frame. Scroll panes are positioned so absolute .sr text never escapes them and grows the document. */
-/* The frame is an L: rail on the left, the 48px top bar above the sheet, one ground and no rule between them.
-   The sheet is inset 8px from the window's right and bottom edges. */
-.app{display:grid;grid-template-columns:228px minmax(0,1fr);height:100%;background:var(--frame);transition:background .2s}
-.app.has-panel{grid-template-columns:228px minmax(0,1fr) min(480px,40vw)}
-.rail{position:relative;display:flex;flex-direction:column;gap:4px;padding:10px 10px 12px;min-height:0;overflow:auto}
+/* A dark rail beside the light page. The rail redefines the surface tokens for everything inside it
+   (nav, Away card, usage, buttons), so its controls need no rules of their own. */
+.app{display:grid;grid-template-columns:232px minmax(0,1fr);height:100%;background:var(--frame)}
+.app.has-panel{grid-template-columns:232px minmax(0,1fr) min(480px,40vw)}
+.rail{position:relative;display:flex;flex-direction:column;gap:4px;padding:14px 12px;min-height:0;overflow:auto;background:var(--rail);color:var(--rail-ink);transition:background .2s;
+  --ink:#FFFFFF;--muted:var(--rail-ink);--faint:var(--rail-muted);--surface:#15191A;--sunk:var(--rail-on);--bg:#15191A;--line:#2A3032;--line-strong:#3A4246;--primary:#FFFFFF;--primary-ink:#0B0D0E}
 .main{min-width:0;min-height:0;display:flex;flex-direction:column}
-.topbar{display:flex;align-items:center;gap:10px;height:48px;flex:none;padding-left:4px;padding-right:max(8px, env(safe-area-inset-right,0px))}
-.content{flex:1;min-height:0;overflow:auto;position:relative;--pb:96px;--nav-h:0px;padding:24px 24px var(--pb);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-sheet);margin:0 8px 8px 0}
-.content-inner{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
-.panel{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-sheet);margin:48px 8px 8px 0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.topbar{display:flex;align-items:center;gap:10px;height:56px;flex:none;padding:0 max(40px, env(safe-area-inset-right,0px)) 0 40px}
+.content{flex:1;min-height:0;overflow:auto;position:relative;--pb:96px;--nav-h:0px;padding:8px 40px var(--pb)}
+.content-inner{max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+.panel{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-sheet);margin:8px 8px 8px 0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 
 /* rail */
 .repo-btn{display:flex;align-items:center;gap:10px;width:100%;padding:6px 8px;border:0;border-radius:var(--r-card);background:none;cursor:pointer;text-align:left}
 .repo-btn:hover{background:var(--sunk)}
-.repo-mark{width:24px;height:24px;border-radius:var(--r-ctl);display:grid;place-items:center;background:var(--accent);color:var(--accent-ink);font:500 12px var(--mono);flex:none}
+.repo-mark{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:var(--st3);color:#FFFFFF;font:600 12px var(--mono);flex:none}
 .nav{display:flex;flex-direction:column;gap:1px;margin-top:8px}
-.nav-a{display:flex;align-items:center;gap:10px;height:32px;padding:0 10px;border-radius:var(--r-card);color:var(--muted);text-decoration:none;font-weight:400;cursor:pointer;border:0;background:none;width:100%;text-align:left}
+.nav-a{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:8px;color:var(--muted);text-decoration:none;font-weight:400;cursor:pointer;border:0;background:none;width:100%;text-align:left}
 .nav-a:hover{background:var(--sunk);color:var(--ink)}
-.nav-a.on{background:color-mix(in srgb, var(--ink) 7%, transparent);color:var(--ink);font-weight:500}
-.nav-a .count{margin-left:auto;font:500 12px var(--mono);min-width:20px;height:18px;padding:0 6px;border-radius:9px;display:grid;place-items:center;background:var(--you);color:#fff}
+.nav-a.on{background:var(--sunk);color:var(--ink);font-weight:500}
+.nav-a .count{margin-left:auto;font:600 11.5px var(--mono);min-width:20px;height:20px;padding:0 6px;border-radius:10px;display:grid;place-items:center;background:var(--you);color:#fff}
 .nav-a .count.quiet{background:none;color:var(--muted)}
 .rail-sep{height:0;margin:6px 0}
 .rail-label{font-size:12px;color:var(--muted);padding:10px 10px 4px;font-weight:500}
@@ -98,18 +105,20 @@ code,.mono{font-family:var(--mono);font-size:12.5px}
 .rail-foot{margin-top:auto;display:flex;flex-direction:column;gap:10px;padding-top:12px}
 
 /* controls */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 12px;border-radius:var(--r-ctl);border:1px solid var(--line-strong);background:var(--surface);cursor:pointer;font-weight:500;font-size:13px;white-space:nowrap;text-decoration:none;color:var(--ink);transition:background .12s,border-color .12s,transform .08s}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:34px;padding:0 14px;border-radius:var(--r-ctl);border:1px solid var(--line-strong);background:var(--surface);cursor:pointer;font-weight:600;font-size:13px;white-space:nowrap;text-decoration:none;color:var(--ink);transition:background .12s,border-color .12s,transform .08s}
 .btn:hover{border-color:var(--faint)}
 .btn:active:not(:disabled){transform:translateY(1px)}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .btn.primary{background:var(--primary);color:var(--primary-ink);border-color:var(--primary)}
 .btn.primary:hover{background:color-mix(in srgb, var(--primary) 86%, var(--surface))}
+.btn.accent{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.accent:hover{background:color-mix(in srgb, var(--accent) 88%, var(--ink))}
 .btn.you{background:var(--you);color:#fff;border-color:var(--you)}
 .btn.danger{color:var(--bad);border-color:color-mix(in srgb, var(--bad) 45%, var(--line))}
 .btn.danger.solid{background:var(--bad);color:#fff;border-color:var(--bad)}
 .btn.ghost{border-color:transparent;background:none;color:var(--muted)}
 .btn.ghost:hover{background:var(--sunk);color:var(--ink)}
-.btn.sm{height:26px;padding:0 9px;font-size:12.5px}
+.btn.sm{height:28px;padding:0 10px;font-size:12.5px;border-radius:8px}
 .btn.icon{width:32px;padding:0}
 .btn.sm.icon{width:26px}
 .split{display:inline-flex}
@@ -152,7 +161,7 @@ label.lbl .hint{font-weight:400;color:var(--muted)}
 
 /* page head */
 .page-head{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap}
-.page-head .sub{color:var(--muted);margin-top:4px;max-width:72ch}
+.page-head .sub{color:var(--muted);margin-top:8px;max-width:72ch;font-size:15px}
 /* title block takes a full row once it would drop under 320px, so actions wrap below instead of squeezing it */
 .page-head > .grow{flex:1 1 320px}
 .set-sec > .row.wrap > .grow{flex:1 1 260px}
@@ -358,14 +367,14 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
 .set-sec + .set-sec{margin-top:16px}
 
 /* away */
-html[data-away] .app,html[data-away] body{background:var(--away-frame)}
+html[data-away] .rail{background:var(--away-rail)}
 .away-card{border-radius:var(--r-card);padding:10px 12px;background:var(--surface);border:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
 html[data-away] .away-card{border-color:var(--ink)}
 .meter{height:3px;border-radius:2px;background:var(--line);overflow:hidden}
 .meter > span{display:block;height:100%;background:var(--muted)}
 .meter.hot > span{background:var(--you)} .meter.full > span{background:var(--bad)}
 
-.empty{display:flex;flex-direction:column;gap:8px;align-items:flex-start;padding:24px;background:var(--bg);border-radius:var(--r-card)}
+.empty{display:flex;flex-direction:column;gap:8px;align-items:flex-start;padding:24px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card)}
 
 
 .mob-nav{display:none}
@@ -381,8 +390,8 @@ html[data-away] .away-card{border-color:var(--ink)}
   .rail{display:none}
   .mob-only{display:flex}
   /* On a phone the frame disappears and the sheet is the screen. */
-  .topbar{padding-left:max(12px, env(safe-area-inset-left,0px));padding-right:max(12px, env(safe-area-inset-right,0px))}
-  .content{margin:0;border-width:1px 0 0;border-radius:0;padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px));--pb:120px;--nav-h:calc(59px + env(safe-area-inset-bottom,0px))}
+  .topbar{height:52px;padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px))}
+  .content{padding-top:4px;padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px));--pb:120px;--nav-h:calc(59px + env(safe-area-inset-bottom,0px))}
   .top-banner{margin:0;border-radius:0;border-width:0 0 1px}
   .mob-nav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--surface);border-top:1px solid var(--line);padding:6px max(8px, env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(8px, env(safe-area-inset-left,0px));justify-content:space-around}
   .mob-nav button,.mob-nav a{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:500;color:var(--muted);padding:4px 8px;position:relative;cursor:pointer}
@@ -492,6 +501,6 @@ html,body{overflow-x:hidden}
 @media (min-width:900px){.sess-grid>.box:last-child{position:sticky;top:0}}
 
 /* framed-sheet top bar */
-.search-btn{justify-content:flex-start;color:var(--muted);font-weight:400;max-width:460px;border-color:var(--line)}
+.search-btn{justify-content:flex-start;color:var(--muted);font-weight:400;max-width:420px;height:38px;border-color:var(--line);border-radius:10px}
 .search-btn:hover{border-color:var(--line-strong)}
 .kbd.on-primary{background:transparent;color:inherit;border-color:currentColor;opacity:.6}

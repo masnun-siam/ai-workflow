@@ -14,6 +14,7 @@ import { useRepo } from './useRepo';
 export const NAV: { to: string; label: string; icon: IconName; badge?: 'inbox' | 'running' | 'dispatch' }[] = [
   { to: routes.inbox, label: 'Inbox', icon: 'inbox', badge: 'inbox' },
   { to: routes.features, label: 'Features', icon: 'layers' },
+  { to: routes.changes, label: 'Small changes', icon: 'tool' },
   { to: routes.dispatches, label: 'Dispatches', icon: 'bolt', badge: 'dispatch' },
   { to: routes.activity, label: 'Activity', icon: 'activity', badge: 'running' },
 ];

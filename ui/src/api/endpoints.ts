@@ -19,6 +19,8 @@ export const api = {
   settings: () => get<Settings>('/api/settings'),
   restartStatus: () => get<RestartStatus>('/api/restart'),
   restart: () => post<{ ok: true }>('/api/restart'),
+  /** Auto in the capture box: jev picks feature or small change; null when it cannot tell or is not installed. */
+  route: (text: string) => post<{ route: 'feature' | 'small_change' | null; confidence: number; why: string }>('/api/route', { text }),
   notify: () => get<NotifySettings>('/api/settings/notify'),
   review: () => get<ReviewSettings>('/api/settings/review'),
   peerReviewOffers: () => get<PeerReviewOffers>('/api/peer-review'),

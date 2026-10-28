@@ -503,14 +503,14 @@ describe('Features list keys', () => {
 
   it('J then Enter on a feature row lands on its page', async () => {
     load('#/features?repo=o/r');
-    await screen.findByText('Epic #10');
+    await screen.findByText('epic #10');
     await userEvent.setup().keyboard('j{Enter}');
     await waitFor(() => expect(window.location.hash).toContain('#/features/f'));
   });
 
   it('on the Issues tab J, Enter opens the issue panel and J switches it', async () => {
     load('#/features/f/issues?repo=o/r');
-    await screen.findByText('Issue 1');
+    await screen.findAllByText('Issue 1');
     const u = userEvent.setup();
     await u.keyboard('j{Enter}');
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/issues/o/r/1'), expect.anything()));

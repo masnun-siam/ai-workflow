@@ -2,9 +2,9 @@ import { forwardRef, useCallback, useRef, type AnchorHTMLAttributes, type Button
 import { Link, type LinkProps } from 'react-router-dom';
 import { useAction, type ActionKey } from '../shell/shortcuts';
 
-export type Variant = 'default' | 'primary' | 'you' | 'danger' | 'solid-danger' | 'ghost';
+export type Variant = 'default' | 'primary' | 'accent' | 'you' | 'danger' | 'solid-danger' | 'ghost';
 const cls = (v: Variant, sm?: boolean, icon?: boolean, extra?: string) =>
-  ['btn', v === 'primary' && 'primary', v === 'you' && 'you', v === 'danger' && 'danger', v === 'solid-danger' && 'danger solid', v === 'ghost' && 'ghost', sm && 'sm', icon && 'icon', extra]
+  ['btn', v === 'primary' && 'primary', v === 'accent' && 'primary accent', v === 'you' && 'you', v === 'danger' && 'danger', v === 'solid-danger' && 'danger solid', v === 'ghost' && 'ghost', sm && 'sm', icon && 'icon', extra]
     .filter(Boolean)
     .join(' ');
 
@@ -47,7 +47,7 @@ function useButtonAction<T extends HTMLElement>(
   useAction(noAction ? null : {
     label: () => labelOf(el.current),
     key: shortcut,
-    primary: primary ?? (variant === 'primary' || variant === 'you'),
+    primary: primary ?? (variant === 'primary' || variant === 'accent' || variant === 'you'),
     disabled,
     run: () => el.current?.click(),
   });
