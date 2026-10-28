@@ -26,7 +26,7 @@ export function IssuesTab({ f, repo }: { f: Feature; repo: string }) {
     <div className="stack">
       {f.epic ? (
         <div className="row wrap" style={{ gap: 14 }}>
-          <LinkButton sm variant="primary" to={routes.newDispatch(`${repo}#${f.epic}`) + `&repo=${repo}`}><Icon n="bolt" />Run epic</LinkButton>
+          <LinkButton sm to={routes.newDispatch(`${repo}#${f.epic}`) + `&repo=${repo}`}><Icon n="bolt" />Run epic</LinkButton>
           <span className="muted" style={{ fontSize: 13 }}>Builds the ready issues side by side, then grinds, merges and wraps up each one.</span>
           <span className="grow" />
           <form

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useDispatch, useDispatchSeen, useDispatchSettings, useDispatchState, useEndAction, useLaneAction, useSessions } from '../api/hooks';
 import type { Dispatch, DispatchEvent, EndAction, Lane } from '../api/types';
-import { Banner, Button, Chip, EmptyState, Icon, useConfirm, useListSelection, useToast } from '../components';
+import { Banner, Button, Chip, EmptyState, Icon, type IconName, useConfirm, useListSelection, useToast } from '../components';
 import { KeyScope } from '../shell/shortcuts';
 import { clockText, money, shortRepo } from '../lib/format';
 import { routes } from '../lib/routes';
@@ -22,7 +22,7 @@ const readView = () => {
   }
 };
 
-const KIND_ICON: Record<string, string> = { needs_you: '!', held: '!', awaiting_merge: '↗', merged: '✓', finished: '✓', stage: '·', end: '·' };
+const KIND_ICON: Record<string, IconName> = { needs_you: 'alert', held: 'alert', awaiting_merge: 'merge', merged: 'check', finished: 'check' };
 
 /** Lanes that need you, each with its one action. Silent when nothing does. */
 function NeedsYou({ d, onPick, selected }: { d: Dispatch; onPick: (k: string) => void; selected: string | null }) {
@@ -81,7 +81,7 @@ function Feed({ events, onPick }: { events: DispatchEvent[]; onPick: (k: string)
         <ol>
           {shown.slice(0, 150).map((e, i) => (
             <li key={`${e.at}-${i}`} className={`k-${e.kind}`}>
-              <span className="dsp-ev-ic" aria-hidden="true">{KIND_ICON[e.kind] ?? '·'}</span>
+              <span className="dsp-ev-ic" aria-hidden="true">{KIND_ICON[e.kind] ? <Icon n={KIND_ICON[e.kind]} s={12} /> : null}</span>
               <span className="faint mono">{clockText(e.at)}</span>
               <span>
                 {e.lane ? <><button type="button" className="linkish dsp-ref" onClick={() => onPick(e.lane!)}>{issueNo(e.lane)}</button> </> : null}

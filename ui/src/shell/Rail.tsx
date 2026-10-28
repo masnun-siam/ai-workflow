@@ -36,7 +36,7 @@ function RunningNow() {
       <div className="rail-label" id="running-now">Running now</div>
       <div className="live-mini" role="list" aria-labelledby="running-now">
         {live.slice(0, 8).map((s) => (
-          <Link key={s.id} to={routes.session(s.id)} role="listitem" className="nav-a" style={{ fontSize: 13, padding: '5px 10px' }}>
+          <Link key={s.id} to={routes.session(s.id)} role="listitem" className="nav-a">
             <span className={`chip ${s.outcome === 'waiting' ? 't-you' : 't-build live'}`} style={{ padding: 0, background: 'none' }} title={SESS[s.outcome].label}>
               <span className="dot" />
               <span className="sr">{SESS[s.outcome].label}</span>
@@ -114,7 +114,7 @@ function Usage() {
   const names = [...new Set([...Object.keys(usage), ...Object.keys(limits)])];
   if (!names.length) return null;
   return (
-    <div className="stack" style={{ gap: 8, padding: '0 4px' }}>
+    <div className="stack" style={{ gap: 8, padding: '0 10px' }}>
       {names.map((cmd) => {
         const label = cmds.find((c) => c.cmd === cmd || c.label === cmd)?.label ?? cmd;
         const u = usage[cmd];
