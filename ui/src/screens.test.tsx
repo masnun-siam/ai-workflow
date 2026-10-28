@@ -77,7 +77,7 @@ describe('Issues tab order', () => {
     window.location.hash = '#/features/f1/issues?repo=o/r';
     render(<App />);
     await screen.findByRole('region', { name: 'Next step' });
-    const text = document.body.textContent ?? '';
+    const text = (await screen.findByRole('tabpanel')).textContent ?? '';
     const at = (t: string) => text.indexOf(t);
     expect(at('Task 4')).toBeLessThan(at('Task 3'));
     expect(at('Task 3')).toBeLessThan(at('Task 2'));
@@ -161,14 +161,43 @@ describe('Next step box wired to actions', () => {
 });
 
 describe('Features list', () => {
-  it('empty repo shows the idea box and starts create-prd', async () => {
+  it('the capture box with Feature picked starts create-prd', async () => {
     mock();
     window.location.hash = '#/features?repo=o/r';
     const user = userEvent.setup();
     render(<App />);
-    await user.type(await screen.findByLabelText('Describe the feature'), 'CSV import');
-    await user.click(screen.getByRole('button', { name: 'Write the PRD' }));
+    await user.type(await screen.findByLabelText('Describe a feature or a fix'), 'CSV import');
+    await user.click(screen.getByRole('radio', { name: 'Feature' }));
+    await user.click(screen.getByRole('button', { name: 'Create' }));
     await waitFor(() => expect(posts.find((p) => p.url === '/api/sessions')?.body).toMatchObject({ repo: 'o/r', command: 'create-prd', args: 'CSV import', model: 'opus', effort: 'medium' }));
+  });
+
+  it('Auto opens the New page, where the jev route is preselected and Start files a small change', async () => {
+    mock({ extra: { '/api/route': () => json({ route: 'small_change', confidence: 0.9, why: 'it reads as a fix or one contained change' }) } });
+    window.location.hash = '#/features?repo=o/r';
+    const user = userEvent.setup();
+    render(<App />);
+    await user.type(await screen.findByLabelText('Describe a feature or a fix'), 'login 404s');
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => expect(window.location.hash).toContain('#/new'));
+    expect(await screen.findByText(/Auto picked/)).toBeTruthy();
+    expect(screen.getByRole('radio', { name: /Small change/ }).getAttribute('aria-checked')).toBe('true');
+    expect(posts.find((p) => p.url === '/api/route')?.body).toEqual({ text: 'login 404s' });
+    await user.click(screen.getByRole('button', { name: 'File the issue' }));
+    await waitFor(() => expect(posts.find((p) => p.url === '/api/start')?.body).toMatchObject({ skill: 'create-tasks', arg: smallChangeArg('login 404s') }));
+    await waitFor(() => expect(window.location.hash).toContain('#/changes'));
+  });
+
+  it('when jev cannot tell, the New page asks for a route and Start stays disabled', async () => {
+    mock({ extra: { '/api/route': () => json({ route: null, confidence: 0, why: 'jev is not installed' }) } });
+    window.location.hash = '#/new?text=stuff&repo=o/r';
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByText(/Auto could not tell \(jev is not installed\)/)).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Start the PRD interview' }) as HTMLButtonElement).disabled).toBe(true);
+    await user.click(screen.getByRole('radio', { name: /Feature/ }));
+    await user.click(screen.getByRole('button', { name: 'Start the PRD interview' }));
+    await waitFor(() => expect(posts.find((p) => p.url === '/api/sessions')?.body).toMatchObject({ command: 'create-prd', args: 'stuff' }));
   });
 });
 
@@ -192,8 +221,7 @@ describe('PRD tab', () => {
   });
 });
 
-describe('Small changes tab', () => {
-  const tabBtn = (name: RegExp) => screen.findByRole('tab', { name });
+describe('Small changes page', () => {
   const open = async (hash: string) => { window.location.hash = hash; const user = userEvent.setup(); render(<App />); return user; };
 
   it('lists open issues outside every feature; a card starts headless only and a 409 toasts the running session', async () => {
@@ -202,11 +230,11 @@ describe('Small changes tab', () => {
       lanes: [lane([card(11, 'ready')]), lane([card(30, 'ready'), card(31, 'unrefined')], { epic: null, title: 'No epic' })],
       extra: { '/api/start': () => json({ error: 'already running', id: 'abc', href: '#/session/abc' }, 409) },
     });
-    const user = await open('#/features?tab=changes&repo=o/r');
-    expect(await screen.findByText('Task 30')).toBeTruthy();
-    expect(screen.getByText('Task 31')).toBeTruthy();
+    const user = await open('#/changes?repo=o/r');
+    expect((await screen.findAllByText('Task 30')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Task 31').length).toBeGreaterThan(0);
     expect(screen.queryByText('Task 11')).toBeNull(); // part of the feature
-    expect((await tabBtn(/Small changes/)).textContent).toContain('2');
+    expect(screen.getByText('2 open issues outside any feature. 1 is ready to run now.')).toBeTruthy();
     await user.click(await screen.findByRole('button', { name: 'More ways to start' }));
     expect(screen.queryByRole('menuitem', { name: /herdr tab/ })).toBeNull();
     await user.keyboard('{Escape}');
@@ -217,16 +245,16 @@ describe('Small changes tab', () => {
     expect(body).not.toHaveProperty('model'); // only the planning starts carry PLAN_RUN
   });
 
-  it('Create task is disabled while blank, starts one headless create-tasks with the collapsed text, and clears', async () => {
+  it('File issue is disabled while blank, starts one headless create-tasks with the collapsed text, and clears', async () => {
     mock({ lanes: [lane([card(30, 'ready')], { epic: null })] });
-    const user = await open('#/features?tab=changes&repo=o/r');
-    const btn = await screen.findByRole('button', { name: 'Create task' });
-    const box = screen.getByLabelText('Describe a bug or small change') as HTMLTextAreaElement;
+    const user = await open('#/changes?repo=o/r');
+    const btn = await screen.findByRole('button', { name: 'File issue' });
+    const box = screen.getByLabelText('Describe a feature or a fix') as HTMLInputElement;
     expect((btn as HTMLButtonElement).disabled).toBe(true);
     await user.type(box, '   ');
     expect((btn as HTMLButtonElement).disabled).toBe(true);
     await user.clear(box);
-    await user.type(box, 'a   b{Enter}c');
+    await user.type(box, 'a   b  c');
     expect((btn as HTMLButtonElement).disabled).toBe(false);
     await user.click(btn);
     await waitFor(() => expect(box.value).toBe(''));
@@ -234,15 +262,15 @@ describe('Small changes tab', () => {
     expect(posted).toHaveLength(1);
     expect(posted[0].body).toMatchObject({ repo: 'o/r', skill: 'create-tasks', via: 'headless', model: 'opus', effort: 'medium' });
     expect((posted[0].body as { arg: string }).arg).toBe(smallChangeArg('a b c'));
-    expect(window.location.hash).toContain('tab=changes');
+    expect(window.location.hash).toContain('#/changes');
   });
 
   it('a failing start keeps the text and toasts the error', async () => {
     mock({ lanes: [lane([card(30, 'ready')], { epic: null })], extra: { '/api/start': () => json({ error: 'boom' }, 502) } });
-    const user = await open('#/features?tab=changes&repo=o/r');
-    const box = (await screen.findByLabelText('Describe a bug or small change')) as HTMLTextAreaElement;
+    const user = await open('#/changes?repo=o/r');
+    const box = (await screen.findByLabelText('Describe a feature or a fix')) as HTMLInputElement;
     await user.type(box, 'broken thing');
-    await user.click(screen.getByRole('button', { name: 'Create task' }));
+    await user.click(screen.getByRole('button', { name: 'File issue' }));
     expect(await screen.findByText('boom')).toBeTruthy();
     expect(box.value).toBe('broken thing');
   });
@@ -281,7 +309,7 @@ describe('Small changes tab', () => {
         sess('h', '/create-tasks A finding for epic #7 here', 'running'),
       ]),
     });
-    const user = await open('#/features?tab=changes&repo=o/r');
+    const user = await open('#/changes?repo=o/r');
     expect(await screen.findByText('typed text')).toBeTruthy();
     expect(screen.getByText('queued one')).toBeTruthy();
     expect(screen.getByText('needs one')).toBeTruthy();
@@ -291,7 +319,6 @@ describe('Small changes tab', () => {
     expect(screen.getByText('Queued')).toBeTruthy();
     expect(screen.getByText('Needs you')).toBeTruthy();
     expect(screen.getAllByRole('button', { name: 'Watch' })).toHaveLength(2);
-    expect((await tabBtn(/Small changes/)).textContent).toContain('5'); // 2 issues + 3 pending
     await user.click(screen.getByRole('button', { name: 'Answer' }));
     expect(window.location.hash).toContain('/sessions/ccc');
   });
@@ -299,20 +326,21 @@ describe('Small changes tab', () => {
   it('a pending row locks Refine on unrefined rows only; with the session done Refine is enabled', async () => {
     const lanes = [lane([card(30, 'ready'), card(31, 'unrefined')], { epic: null })];
     mock({ lanes, extra: withSessions([sess('a', marked('x'), 'running')]) });
-    await open('#/features?tab=changes&repo=o/r');
+    await open('#/changes?repo=o/r');
     const refine = (await screen.findByRole('button', { name: 'Refine' })) as HTMLButtonElement;
     expect(refine.disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Refine #31' }) as HTMLButtonElement).disabled).toBe(true);
     expect(refine.title).toBe(SMALL_CHANGE_LOCK);
     expect((screen.getByRole('button', { name: 'Start' }) as HTMLButtonElement).disabled).toBe(false);
     cleanup();
     mock({ lanes, extra: withSessions([sess('a', marked('x'), 'done')]) });
-    await open('#/features?tab=changes&repo=o/r');
+    await open('#/changes?repo=o/r');
     expect(((await screen.findByRole('button', { name: 'Refine' })) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it.each(['/refine-issues 30 31', '/ai-workflow:refine-issues 30 31'])('a live %s session shows Refining… on both issues', async (command) => {
     mock({ lanes: [lane([card(30, 'unrefined'), card(31, 'unrefined')], { epic: null })], extra: withSessions([sess('a', command, 'running', { slug: 'o/r' })]) });
-    await open('#/features?tab=changes&repo=o/r');
+    await open('#/changes?repo=o/r');
     await waitFor(() => expect(screen.getAllByRole('button', { name: 'Refining…' })).toHaveLength(2));
     expect(screen.queryByRole('button', { name: 'Refine' })).toBeNull();
   });
@@ -326,8 +354,8 @@ describe('Small changes tab', () => {
 
     it('unrefined, ready and blocked rows get a checkbox; the bar counts Refine and Run and Clear empties it', async () => {
       mock({ lanes });
-      const user = await open('#/features?tab=changes&repo=o/r');
-      await screen.findByText('Task 30');
+      const user = await open('#/changes?repo=o/r');
+      await screen.findAllByText('Task 30');
       for (const n of [30, 31, 32]) expect(box(n)).toBeTruthy();
       for (const n of [33, 34]) expect(box(n)).toBeNull();
       expect(btn('Clear')).toBeNull();
@@ -353,8 +381,8 @@ describe('Small changes tab', () => {
 
     it('Refine 1 starts one headless refine-issues on the picked unrefined issue', async () => {
       mock({ lanes });
-      const user = await open('#/features?tab=changes&repo=o/r');
-      await screen.findByText('Task 31');
+      const user = await open('#/changes?repo=o/r');
+      await screen.findAllByText('Task 31');
       await user.click(box(31)!);
       await user.click(box(30)!);
       await user.click(btn('Refine 1')!);
@@ -365,8 +393,8 @@ describe('Small changes tab', () => {
     it('Run 2 opens the small-changes dialog on the picked refined issues and Preview posts them', async () => {
       const plan = { epic: null, issues: ['o/r#30', 'o/r#32'], title: 'Small changes', settings: {}, runner: 'headless', lanes: [], waves: [], warnings: [] };
       mock({ lanes, extra: { '/api/dispatches/plan': () => json(plan) } });
-      const user = await open('#/features?tab=changes&repo=o/r');
-      await screen.findByText('Task 30');
+      const user = await open('#/changes?repo=o/r');
+      await screen.findAllByText('Task 30');
       await user.click(box(30)!);
       await user.click(box(31)!);
       await user.click(box(32)!);
@@ -383,7 +411,7 @@ describe('Small changes tab', () => {
 
     it('a row a dispatch owns shows In dispatch, has no checkbox and leaves the Run count', async () => {
       mock({ lanes, extra: owning });
-      const user = await open('#/features?tab=changes&repo=o/r');
+      const user = await open('#/changes?repo=o/r');
       expect(await screen.findByRole('link', { name: 'In dispatch' })).toBeTruthy();
       expect(box(30)).toBeNull();
       await user.click(box(32)!);
@@ -392,8 +420,8 @@ describe('Small changes tab', () => {
 
     it('a live small-change session disables Refine N with the hint; Run N stays enabled', async () => {
       mock({ lanes, extra: withSessions([sess('a', marked('x'), 'running')]) });
-      const user = await open('#/features?tab=changes&repo=o/r');
-      await screen.findByText('Task 31');
+      const user = await open('#/changes?repo=o/r');
+      await screen.findAllByText('Task 31');
       await user.click(box(31)!);
       await user.click(box(30)!);
       expect(btn('Refine 1')!.disabled).toBe(true);
@@ -403,13 +431,13 @@ describe('Small changes tab', () => {
 
     it('switching repo clears the picks', async () => {
       mock({ lanes, extra: { '/api/repos': () => json({ repos: [{ slug: 'o/r', name: 'R', path: '/x' }, { slug: 'o/s', name: 'S', path: '/y' }], can_browse: false, scan_roots: [] }) } });
-      const user = await open('#/features?tab=changes&repo=o/r');
-      await screen.findByText('Task 30');
+      const user = await open('#/changes?repo=o/r');
+      await screen.findAllByText('Task 30');
       await user.click(box(30)!);
       expect(btn('Run 1')).toBeTruthy();
-      window.location.hash = '#/features?tab=changes&repo=o/s';
+      window.location.hash = '#/changes?repo=o/s';
       await waitFor(() => expect(btn('Run 1')).toBeNull());
-      await screen.findByText('Task 30');
+      await screen.findAllByText('Task 30');
       expect(box(30)!.checked).toBe(false);
       expect(btn('Clear')).toBeNull();
     });
@@ -417,81 +445,75 @@ describe('Small changes tab', () => {
 
   it('the empty message hides while a pending row exists and shows when both are empty', async () => {
     mock({ extra: withSessions([sess('a', marked('x'), 'running')]) });
-    await open('#/features?tab=changes&repo=o/r');
+    await open('#/changes?repo=o/r');
     expect(await screen.findByText('x')).toBeTruthy();
-    expect(screen.queryByText(/Nothing outside a feature/)).toBeNull();
+    expect(screen.queryByText(/Nothing here\. Describe a bug/)).toBeNull();
     cleanup();
     mock();
-    await open('#/features?tab=changes&repo=o/r');
-    expect(await screen.findByText(/Nothing outside a feature/)).toBeTruthy();
+    await open('#/changes?repo=o/r');
+    expect(await screen.findByText(/Nothing here\. Describe a bug/)).toBeTruthy();
   });
 
   it('wraps the sections in one .stack and renders no empty .list when nothing is pending', async () => {
     mock();
-    await open('#/features?tab=changes&repo=o/r');
-    const text = await screen.findByText(/Nothing outside a feature/);
+    await open('#/changes?repo=o/r');
+    const text = await screen.findByText(/Nothing here\. Describe a bug/);
     const stack = text.closest('.stack');
     expect(stack).toBeTruthy();
     expect(stack!.querySelector('.list')).toBeNull();
   });
 
-  it('with 0 PRDs the tabs show, the tab counts 3 and the idea box stays in In progress', async () => {
+  it('ready issues fill the Ready panel; picking two runs them as a dispatch', async () => {
     mock({ lanes: [lane([card(1, 'ready'), card(2, 'ready'), card(3, 'ready')], { epic: null })] });
+    const user = await open('#/changes?repo=o/r');
+    expect(await screen.findByText('3 open issues outside any feature. 3 are ready to run now.')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Pick issues to run' }) as HTMLButtonElement).disabled).toBe(true);
+    await user.click(screen.getByRole('checkbox', { name: 'Run #1' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Run #2' }));
+    await user.click(screen.getByRole('button', { name: 'Run 2 as a dispatch' }));
+    expect(within(await screen.findByRole('dialog')).getByText('#1 Task 1')).toBeTruthy();
+  });
+
+  it('a priority cell filters the list, and Show all clears it', async () => {
+    mock({ lanes: [lane([card(1, 'unrefined', { priority: 'high' }), card(2, 'ready', { priority: 'low' })], { epic: null })] });
+    const user = await open('#/changes?repo=o/r');
+    await user.click(await screen.findByRole('button', { name: 'High, needs refining: 1' }));
+    expect(screen.getByRole('heading', { name: /Filtered issues/ }).textContent).toContain('1');
+    await user.click(screen.getByRole('button', { name: 'Show all' }));
+    expect(screen.getByRole('heading', { name: /All issues/ }).textContent).toContain('2');
+  });
+
+  it('old links to the Features tab land here with the repo kept', async () => {
+    mock({ lanes: [lane([card(30, 'ready')], { epic: null })] });
     await open('#/features?tab=changes&repo=o/r');
-    const t = await tabBtn(/Small changes/);
-    expect(t.getAttribute('aria-selected')).toBe('true');
-    expect(t.textContent).toContain('3');
-    expect(screen.getAllByText(/^Task \d$/)).toHaveLength(3);
-    expect(screen.queryByLabelText('Describe the feature')).toBeNull();
-  });
-
-  it('clicking tabs updates the URL and keeps repo; Shipped is empty', async () => {
-    mock();
-    const user = await open('#/features?repo=o/r');
-    expect(await screen.findByLabelText('Describe the feature')).toBeTruthy();
-    await user.click(await tabBtn(/Shipped/));
-    expect(window.location.hash).toContain('tab=shipped');
-    expect(await screen.findByText('Nothing here yet.')).toBeTruthy();
-    await user.click(await tabBtn(/Small changes/));
-    expect(window.location.hash).toContain('tab=changes');
-    expect(decodeURIComponent(window.location.hash)).toContain('repo=o/r');
-    await user.click(await tabBtn(/In progress/));
-    expect(window.location.hash).not.toContain('tab=');
-    expect(decodeURIComponent(window.location.hash)).toContain('repo=o/r');
-  });
-
-  it('a bad tab value selects In progress', async () => {
-    mock();
-    await open('#/features?tab=bogus&repo=o/r');
-    expect((await tabBtn(/In progress/)).getAttribute('aria-selected')).toBe('true');
+    await waitFor(() => expect(window.location.hash).toBe('#/changes?repo=o%2Fr'));
   });
 
   it('an issue under an epic with no PRD is listed', async () => {
     mock({ prds: [prd({ issues: 1 })], lanes: [lane([card(11, 'ready')]), lane([card(40, 'ready')], { epic: 99 })] });
-    await open('#/features?tab=changes&repo=o/r');
-    expect(await screen.findByText('Task 40')).toBeTruthy();
+    await open('#/changes?repo=o/r');
+    expect((await screen.findAllByText('Task 40')).length).toBeGreaterThan(0);
     expect(screen.queryByText('Task 11')).toBeNull();
   });
 
-  it('#/issues redirects to the tab and there is no Other issues link', async () => {
+  it('#/issues redirects here and there is no Other issues link', async () => {
     mock({ lanes: [lane([card(30, 'ready')], { epic: null })] });
     await open('#/issues?repo=o/r');
-    expect(await screen.findByText('Task 30')).toBeTruthy();
-    expect((await tabBtn(/Small changes/)).getAttribute('aria-selected')).toBe('true');
-    expect(window.location.hash).toBe('#/features?repo=o%2Fr&tab=changes');
+    expect((await screen.findAllByText('Task 30')).length).toBeGreaterThan(0);
+    expect(window.location.hash).toBe('#/changes?repo=o%2Fr');
     expect(screen.queryByRole('link', { name: /Other issues/ })).toBeNull();
   });
 
   it('an empty tab shows the message', async () => {
     mock();
-    await open('#/features?tab=changes&repo=o/r');
-    expect(await screen.findByText('Nothing outside a feature. Describe a bug or small change to start one.')).toBeTruthy();
+    await open('#/changes?repo=o/r');
+    expect(await screen.findByText('Nothing here. Describe a bug or small change above to start one.')).toBeTruthy();
   });
 
   it('a failed delivery read shows Retry', async () => {
     let calls = 0;
     mock({ extra: { '/api/delivery': () => { calls++; return json({ error: 'boom' }, 500); } } });
-    const user = await open('#/features?tab=changes&repo=o/r');
+    const user = await open('#/changes?repo=o/r');
     const retry = await screen.findByRole('button', { name: 'Retry' }, { timeout: 5000 }); // the query client retries once first
     expect(screen.getByText('Issues unavailable')).toBeTruthy();
     const before = calls;

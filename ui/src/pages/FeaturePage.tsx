@@ -9,7 +9,7 @@ import { IssuesTab } from '../features/IssuesTab';
 import { NextStepBox } from '../features/NextStepBox';
 import { PrdTab } from '../features/PrdTab';
 import { ReviewTab } from '../features/ReviewTab';
-import { Stepper } from '../features/Stepper';
+import { BuildMap, DispatchPanel, PrdOutline, StageStrip } from '../features/BuildMap';
 import { useStepRunner } from '../features/useStepRunner';
 import { NewDispatchDialog } from '../dispatch/NewDispatchDialog';
 import { useEpicDispatch } from '../dispatch/useOwner';
@@ -17,7 +17,8 @@ import '../features/features.css';
 import { joinFeatures, snapshotsReady, type Feature } from '../lib/features';
 import { sessionSlug } from '../lib/format';
 import { routes } from '../lib/routes';
-import { stageIdx } from '../lib/vocab';
+import { STAGES, stageIdx } from '../lib/vocab';
+import type { CSSProperties } from 'react';
 import { useRepo } from '../shell/useRepo';
 
 const TABS = ['issues', 'prd', 'review', 'sessions'];
@@ -44,6 +45,7 @@ function Body({ f, repo, tab, meta }: { f: Feature; repo: string; tab?: string; 
   const go = (t: string) => navigate(link(routes.feature(f.slug, t)), { replace: true });
   const [dispatching, setDispatching] = useState(false);
   const live = useEpicDispatch(repo, f.epic);
+  const liveFull = live?.d;
 
   return (
     <div className="content-inner">
@@ -52,17 +54,14 @@ function Body({ f, repo, tab, meta }: { f: Feature; repo: string; tab?: string; 
         <Icon n="right" s={13} />
         <span>{f.title}</span>
       </nav>
-      <div className="page-head">
-        <div className="grow">
-          <h1>{f.title}</h1>
-          <p className="sub row wrap" style={{ gap: 12 }}>
-            <span className="mono">{f.prd.path}</span>
-            {f.epic ? <span>Epic #{f.epic}</span> : null}
-            <span>{f.issues.length} issues</span>
-          </p>
-        </div>
+      <header className="fhead">
+        <h1>{f.title}</h1>
+        <div className="row wrap" style={{ gap: 10 }}>
+          <span className="stage-pill" style={{ '--st': `var(--st${i})`, '--st-ink': i >= 3 ? 'var(--st4-ink)' : 'var(--ink)' } as CSSProperties}>{STAGES[i].label}</span>
+          <span className="mono muted" style={{ fontSize: 12.5 }}>{f.epic ? `epic #${f.epic} · ` : ''}{f.prd.path}</span>
+          <span className="grow" />
         {live ? (
-          <LinkButton variant={live.c.you ? 'you' : 'default'} to={link(routes.dispatch(live.d.id))}>
+          <LinkButton to={link(routes.dispatch(live.d.id))}>
             <Icon n="bolt" />{live.c.you ? `Dispatch needs you (${live.c.you})` : `Dispatch: ${live.c.closed} of ${live.c.total} done`}
           </LinkButton>
         ) : f.epic && f.issues.length ? (
@@ -79,10 +78,16 @@ function Body({ f, repo, tab, meta }: { f: Feature; repo: string; tab?: string; 
             ...(f.epic ? [{ label: 'Close epic and its issues', icon: 'x' as const, danger: true, onSelect: () => void run({ kind: 'closeEpic' }) }] : []),
           ]}
         />
-      </div>
+        </div>
+      </header>
       <BoardStatus meta={meta} />
-      <Stepper f={f} />
+      <StageStrip f={f} />
       <NextStepBox f={f} repo={repo} />
+      <BuildMap f={f} repo={repo} dispatch={liveFull} />
+      <div className="fpanels">
+        {live ? <DispatchPanel id={live.d.id} /> : null}
+        <PrdOutline f={f} repo={repo} onOpen={() => go('prd')} />
+      </div>
       <Tabs
         value={cur}
         onValueChange={go}

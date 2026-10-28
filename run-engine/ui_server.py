@@ -46,6 +46,7 @@ import ui_poller
 import ui_pr
 import ui_repos
 import ui_restart
+import ui_route
 import ui_runner
 import ui_sessions
 import ui_start
@@ -577,6 +578,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._start()
         elif parts == ["", "api", "restart"]:
             self._dispatch(lambda b: ui_restart.start(), ok=202)
+        elif parts == ["", "api", "route"]:
+            self._dispatch(lambda b: ui_route.route(b.get("text")))
         elif parts == ["", "api", "repos", "browse"]:
             body = self._read_body()
             if body is None:

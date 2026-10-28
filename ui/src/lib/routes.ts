@@ -4,6 +4,9 @@ export const routes = {
   inbox: '/inbox',
   features: '/features',
   feature: (slug: string, tab?: string) => `/features/${encodeURIComponent(slug)}${tab ? `/${tab}` : ''}`,
+  changes: '/changes',
+  /** The New page: one capture, two routes. `text` prefills it. */
+  newWork: (text?: string, route?: string) => `/new${text || route ? `?${new URLSearchParams({ ...(text ? { text } : {}), ...(route ? { route } : {}) })}` : ''}`,
   activity: '/activity',
   dispatches: '/dispatches',
   /** Dispatches with the New dispatch dialog open on this epic (owner/repo#n). */

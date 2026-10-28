@@ -12,7 +12,6 @@ import { useRepo } from '../shell/useRepo';
 import { IssueTable, orderedIssues } from './IssuesTab';
 import { PendingRows } from './PendingRows';
 import { PickBar } from './PickBar';
-import { SmallChangeBox } from './SmallChangeBox';
 import { SMALL_CHANGE_LOCK, type PendingChange } from './smallChange';
 
 const pickable = (i: FeatureIssue) => i.column === 'unrefined' || i.column === 'ready';
@@ -46,7 +45,6 @@ export function SmallChangesTab({ repo, issues, pending }: { repo: string; issue
 
   return (
     <div className="stack">
-      <SmallChangeBox repo={repo} />
       <PendingRows pending={pending} selection={selection} />
       {toRefine.length || toRun.length ? (
         <PickBar
@@ -62,7 +60,7 @@ export function SmallChangesTab({ repo, issues, pending }: { repo: string; issue
       {issues.length ? (
         <IssueTable issues={issues} repo={repo} picked={picked} onPick={toggle} canPick={pickable} lockRefine={lock} selection={selection} />
       ) : pending.length ? null : (
-        <p className="muted">Nothing outside a feature. Describe a bug or small change to start one.</p>
+        <p className="muted">Nothing here. Describe a bug or small change above to start one.</p>
       )}
       <NewDispatchDialog open={dispatching} onOpenChange={setDispatching} issues={toRun} />
     </div>

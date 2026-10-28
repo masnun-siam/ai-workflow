@@ -1,58 +1,52 @@
-# Design system: framed sheet
+# Design system: teal pipeline
 
-The source of truth is `ui/src/styles/global.css` (tokens in `:root` and the two dark blocks).
-This file states the rules those tokens serve. Mode: Operate — scanability and consistency over
-expression.
+The source of truth is `ui/src/styles/global.css` (tokens in `:root` and the two dark blocks) and
+`ui/src/features/features.css` (the Features screens). This file states the rules those tokens
+serve. Mode: Operate, with a bold first read: a page should say what needs you before it is read.
 
-## The move
+## The shell
 
-The rail and the 48px top bar share one teal-grey frame (`--frame`) with no rule between them.
-The page lives on a white sheet (`.content`, `--surface`) with a 1px `--line` edge, 16px corners
-(`--r-sheet`) and no shadow, inset 8px from the window's right and bottom. The detail panel is a
-second sheet beside it. On a phone the frame disappears and the sheet is the screen.
+A dark rail (`--rail`) beside a light page (`--frame`); work sits in white panels (`.pane`, 16px
+corners, a 1px `--line` edge, no shadow). The rail redefines the surface tokens for everything inside
+it, so its nav, Away card, usage meters and buttons need no rules of their own. Away mode warms the
+rail (`--away-rail`). On a phone the rail folds into the bottom bar.
 
-## Colour: two signals
+## Colour
 
 | Token | Use |
 | --- | --- |
-| `--you` (#C2410C) | Needs you: the Inbox count, questions, a lane waiting on the user |
-| `--bad` (#C4242A) | Failed, errors, destructive actions |
-| `--accent` (teal #1B6C80) | Selection only: active tab underline, chosen option, focus ring, current stage, live dot, logo mark |
-| `--primary` | The one primary button per screen: near-black in light, near-white in dark |
-
-Stages carry no hue. `--plan`, `--build`, `--review` and `--ship` are a grey ramp that darkens as
-work moves toward merged, and every stage chip renders neutral. Keep it that way: a new status gets
-a label, not a colour.
+| `--st0`…`--st5` | The six stages, pale to deep teal, Shipped in ink. Stage tiles, the stage blocks, card tops |
+| `--ship`, `--review`, `--build`, `--plan` | Issue states on the same ramp: merged, in review, building, ready |
+| `--you` (#C2410C) | Needs you, and only that: counts, alerts, cards and squares that wait on the user |
+| `--bad` | Failed, errors, destructive actions |
+| `--accent` (#0F6E64) | Create actions (`variant="accent"`), focus, selection, the current stage |
+| `--primary` | Next-step buttons: near-black in light, near-white in dark |
 
 ## Type
 
-- IBM Plex Sans 400/500/600 (self-hosted via `@fontsource`). 600 for titles, 500 for emphasis;
-  no 700.
-- IBM Plex Mono for IDs, commands, keys and figures (costs, durations, counts in tables, tab
-  counts). Not for prose labels.
-- Sizes: page title 22px (20 on phone), section 15px, body 14px, small 12–12.5px.
-- Tabular figures everywhere; numeric table columns are `.num` (right-aligned, mono).
+- Geist 400–700 and Geist Mono (self-hosted via `@fontsource`).
+- Page titles `.display` 44px/700 (32px on a phone), feature titles 40px, section heads 20px/600,
+  body 14px. Large figures (stage counts, merged/total) are 34–40px/600.
+- Mono for IDs, commands, issue numbers, metadata lines and money. Not for prose.
+- Tabular figures everywhere.
 
 ## Shape and density
 
-- Radii: `--r-sheet` 16, `--r-card` 8, `--r-ctl` 6, pills fully round. Nothing else.
-- Dense: 32px controls and nav rows, ~40px table rows, 10–12px list padding, 20px page gap.
-- Surfaces separate by one tone step (`--bg` wells on the white sheet) or a 1px line. Shadows only
-  on what floats: menus, dialogs, toasts, the sticky composer, the overlay panel.
-- Selected or attention cards use a 1px inset outline, not a glow or ring shadow.
+- Radii: `--r-sheet` 16 (panels, cards), `--r-card` 14, `--r-ctl` 9 (controls), 8 for small chips,
+  pills fully round.
+- Buttons 34px (28px small), capture controls 44px. Section gap 28px.
+- Shadows only on what floats: menus, dialogs, toasts, the composer, the overlay panel.
 
-## The track
+## Signature elements
 
-The feature track is the signature element: done planning stages fill in ink, the current one in
-the accent, the rest stay pale; the build segment shows issues as the grey ramp toward merged.
-
-## Away mode
-
-Away mode changes the whole frame to `--away-frame` (warm stone light, warm near-black dark); the
-sheet stays as it is.
+- **The pipeline:** six stage tiles; empty stages are dashed outlines with a faint zero.
+- **Issue squares:** one square per issue, coloured by state; needs-refining is a dashed outline,
+  needs-you is orange.
+- **The build map:** issues in dependency waves, left to right, with arrows between columns.
+- **The capture box:** one input for a feature or a fix, routed by Auto (jev), Feature or Small change.
 
 ## Bans
 
-Gradients (except the functional table scroll-edge shadows), glass, icons in tinted squares,
-unicode glyphs as icons, eyebrow labels, uppercase tracked labels, decorative dot grids, a second
-filled primary on one screen.
+Gradients (except the functional table scroll-edge shadows), glass, icons in tinted squares, unicode
+glyphs as icons, eyebrow labels, uppercase tracked labels, orange on anything that does not need the
+user, a second solid-orange element competing with the needs-you alert.
