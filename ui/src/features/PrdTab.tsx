@@ -49,6 +49,11 @@ export function PrdTab({ f, repo }: { f: Feature; repo: string }) {
   useEffect(() => { if (mode === 'read') void renderDiagrams(prose.current); }, [mode, data?.text]);
   const branch = typeof data?.branch === 'string' ? data.branch : 'the current branch';
   const dirty = mode === 'edit' && !!data && draft !== data.text;
+  // The page heading already names the feature, so the PRD's own title is dropped when reading.
+  const body = (data?.text ?? '').replace(/^\s*# [^\n]*\n/, '');
+  const heads = body.split('\n').filter((l) => l.startsWith('## ')).map((l) => l.slice(3).trim());
+  const words = body.split(/\s+/).filter(Boolean).length;
+  const jump = (k: number) => prose.current?.querySelectorAll('h2')[k]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   const discard = async () => {
     if (dirty && !(await confirm({ title: 'Discard your edits?', okLabel: 'Discard', danger: true, body: <p>Your unsaved changes to this PRD will be lost.</p> }))) return false;
@@ -89,11 +94,11 @@ export function PrdTab({ f, repo }: { f: Feature; repo: string }) {
             <button type="button" className={mode === 'edit' ? 'on' : ''} aria-pressed={mode === 'edit'} onClick={() => { if (mode !== 'edit') { setDraft(data.text); setNote(''); setMode('edit'); } }}>Edit</button>
           </div>
           <span className="grow" />
-          <span className="muted mono" style={{ fontSize: 12 }}>{path}</span>
+          <span className="muted" style={{ fontSize: 12.5 }}>{f.prd.status} · {words.toLocaleString()} words</span>
         </div>
         {note ? <p role="status" className="muted">{note}</p> : null}
         {mode === 'read' ? (
-          <div ref={prose} onClick={toggleDiagram} className="prose box" style={{ padding: '18px 22px' }} dangerouslySetInnerHTML={{ __html: mdToHtml(data.text) }} />
+          <div ref={prose} onClick={toggleDiagram} className="prose box" style={{ padding: '18px 22px' }} dangerouslySetInnerHTML={{ __html: mdToHtml(body) }} />
         ) : (
           <div className="stack">
             <label className="sr" htmlFor="prd-text">PRD markdown</label>
@@ -109,12 +114,19 @@ export function PrdTab({ f, repo }: { f: Feature; repo: string }) {
           </div>
         )}
       </div>
-      <div className="box">
-        <h3>Ask Claude to change it</h3>
-        <p className="muted" style={{ fontSize: 13 }}>Runs <code>/create-prd --update</code>, which records the decision in the PRD.</p>
-        <label className="sr" htmlFor="prd-ask">What should change?</label>
-        <textarea id="prd-ask" className="f" rows={4} placeholder="Example: Guests should be able to see reports but not export them." value={ask} onChange={(e) => setAsk(e.target.value)} />
-        <Button disabled={!ask.trim() || starter.pending} onClick={async () => { const id = await starter.startSession({ repo, command: 'create-prd', args: askArgs(path, ask), ...PLAN_RUN }); if (id) setAsk(''); }}>Start update</Button>
+      <div className="toc">
+        {mode === 'read' && heads.length ? (
+          <nav aria-label="PRD sections">
+            <ol>{heads.map((h, k) => <li key={k}><button type="button" onClick={() => jump(k)}>{h}</button></li>)}</ol>
+          </nav>
+        ) : null}
+        <div className="box">
+          <h3>Ask Claude to change it</h3>
+          <p className="muted" style={{ fontSize: 13 }}>Runs <code>/create-prd --update</code>, which records the decision in the PRD.</p>
+          <label className="sr" htmlFor="prd-ask">What should change?</label>
+          <textarea id="prd-ask" className="f" rows={4} placeholder="Example: Guests should be able to see reports but not export them." value={ask} onChange={(e) => setAsk(e.target.value)} />
+          <Button disabled={!ask.trim() || starter.pending} onClick={async () => { const id = await starter.startSession({ repo, command: 'create-prd', args: askArgs(path, ask), ...PLAN_RUN }); if (id) setAsk(''); }}>Start update</Button>
+        </div>
       </div>
     </div>
   );

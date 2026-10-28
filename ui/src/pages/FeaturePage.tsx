@@ -9,7 +9,7 @@ import { IssuesTab } from '../features/IssuesTab';
 import { NextStepBox } from '../features/NextStepBox';
 import { PrdTab } from '../features/PrdTab';
 import { ReviewTab } from '../features/ReviewTab';
-import { BuildMap, DispatchPanel, PrdOutline, StageStrip } from '../features/BuildMap';
+import { BuildMap, DispatchPanel, StageStrip } from '../features/BuildMap';
 import { useStepRunner } from '../features/useStepRunner';
 import { NewDispatchDialog } from '../dispatch/NewDispatchDialog';
 import { useEpicDispatch } from '../dispatch/useOwner';
@@ -17,8 +17,7 @@ import '../features/features.css';
 import { joinFeatures, snapshotsReady, type Feature } from '../lib/features';
 import { sessionSlug } from '../lib/format';
 import { routes } from '../lib/routes';
-import { STAGES, stageIdx } from '../lib/vocab';
-import type { CSSProperties } from 'react';
+import { stageIdx } from '../lib/vocab';
 import { useRepo } from '../shell/useRepo';
 
 const TABS = ['issues', 'prd', 'review', 'sessions'];
@@ -57,7 +56,6 @@ function Body({ f, repo, tab, meta }: { f: Feature; repo: string; tab?: string; 
       <header className="fhead">
         <h1>{f.title}</h1>
         <div className="row wrap" style={{ gap: 10 }}>
-          <span className="stage-pill" style={{ '--st': `var(--st${i})`, '--st-ink': i >= 3 ? 'var(--st4-ink)' : 'var(--ink)' } as CSSProperties}>{STAGES[i].label}</span>
           <span className="mono muted" style={{ fontSize: 12.5 }}>{f.epic ? `epic #${f.epic} · ` : ''}{f.prd.path}</span>
           <span className="grow" />
         {live ? (
@@ -84,10 +82,7 @@ function Body({ f, repo, tab, meta }: { f: Feature; repo: string; tab?: string; 
       <StageStrip f={f} />
       <NextStepBox f={f} repo={repo} />
       <BuildMap f={f} repo={repo} dispatch={liveFull} />
-      <div className="fpanels">
-        {live ? <DispatchPanel id={live.d.id} /> : null}
-        <PrdOutline f={f} repo={repo} onOpen={() => go('prd')} />
-      </div>
+      {live ? <div className="fpanels"><DispatchPanel id={live.d.id} /></div> : null}
       <Tabs
         value={cur}
         onValueChange={go}
