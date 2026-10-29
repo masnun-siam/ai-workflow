@@ -243,7 +243,7 @@ label.lbl .hint{font-weight:400;color:var(--muted)}
 .tab .n{color:var(--muted);margin-left:5px;font:400 12px var(--mono)}
 
 /* tables */
-.clamp2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;max-width:52ch}
+.clamp2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;max-width:52ch}
 /* Edge shadows appear only while there is more table to scroll to (the local layers cover them at each end). */
 .tbl-wrap{overflow-x:auto;background:linear-gradient(to right,var(--surface) 30%,transparent) 0 0/40px 100% no-repeat local,linear-gradient(to left,var(--surface) 30%,transparent) 100% 0/40px 100% no-repeat local,linear-gradient(to right,rgba(0,0,0,.14),transparent) 0 0/14px 100% no-repeat scroll,linear-gradient(to left,rgba(0,0,0,.14),transparent) 100% 0/14px 100% no-repeat scroll,var(--surface);border:1px solid var(--line);border-radius:var(--r-card)}
 table.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
