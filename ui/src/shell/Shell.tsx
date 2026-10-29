@@ -12,6 +12,7 @@ import { AwayBanner, OfflineBanner } from './Banners';
 import { NAV, Rail, useInboxCount } from './Rail';
 import { ShellCtx } from './ShellContext';
 import { ShortcutsDialog, useGlobalShortcuts } from './shortcuts';
+import { PublicBadge } from './PublicBadge';
 import { RepoSwitcher } from './RepoSwitcher';
 import { useRepo } from './useRepo';
 import { useAwayDocument } from './useAwayDocument';
@@ -35,6 +36,7 @@ function Topbar({ openPalette }: { openPalette: () => void }) {
         <span className="kbd hide-sm">⌘K</span>
       </button>
       <span className="grow hide-sm" />
+      <PublicBadge />
       <Button variant="primary" noAction onClick={() => start.open()} aria-keyshortcuts="N">
         <Icon n="plus" />
         <span className="hide-sm">New</span>
