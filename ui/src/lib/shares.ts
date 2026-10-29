@@ -9,3 +9,8 @@ export const clearsClause = (n: number) => (n > 0 ? `clears the ${approvalsLabel
 export const stopBody = (n: number) => `Reviewers lose access. Sharing again makes a new link${n > 0 ? ` and ${clearsClause(n)}` : ''}.`;
 export const shareBody = (n: number) => `${SHARE_WARNING}.${n > 0 ? ` Sharing again ${clearsClause(n)}.` : ''}`;
 export const removeBody = (name: string) => `Remove ${name}'s approval? This cannot be undone.`;
+export const threadsLabel = (n: number) => (n === 1 ? '1 thread' : `${n} threads`);
+export const deleteCommentBody = 'Delete this comment? Reviewers will no longer see it. This cannot be undone.';
+export const deleteThreadBody = (n: number) => `Delete this thread and its ${commentsLabel(n)}? This cannot be undone.`;
+export const deleteRecordBody = (n: number) => `Delete this share with its ${threadsLabel(n)} and approvals? This cannot be undone.`;
+export const MAX_REPLY = 2000;
