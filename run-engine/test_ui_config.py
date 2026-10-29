@@ -97,7 +97,7 @@ import threading  # noqa: E402
 ui_path = os.path.join(tmp, "ui.json")
 os.remove(ui_path)
 pub = ui_config.notify_public()
-assert len(pub["events"]) == 11 and pub["events"][0] == {
+assert len(pub["events"]) == 12 and pub["events"][0] == {
     "key": "waiting",
     "label": "A session is waiting on you",
     "group": "Needs you",
@@ -105,6 +105,9 @@ assert len(pub["events"]) == 11 and pub["events"][0] == {
 assert pub["events"][-1]["key"] == "afk" and set(pub["matrix"]) == {e["key"] for e in pub["events"]}
 OFF = {"grind-done", "done", "pipeline", "afk"}
 for ev, row in pub["matrix"].items():
+    if ev == "prd-comment":  # per-event exception: browser only
+        assert row == {"browser": True, "ntfy": False, "mac": False}
+        continue
     assert row["ntfy"] is True, ev
     assert row["browser"] is row["mac"] is (ev not in OFF), ev
 assert pub["mac"]["available"] == (sys.platform == "darwin") and not pub["ntfy_ready"]

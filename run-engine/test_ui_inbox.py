@@ -322,4 +322,100 @@ assert ui_inbox.urgency_text({"type": "pr_ready"}) is None
 assert ui_inbox.urgency_text({"type": "session_failed", "error": "  "}) is None
 assert ui_inbox.urgency_text({"type": "question", "questions": []}) is None
 print("  ok  urgency_text")
+
+# prd_comment: one item per share with unseen reviewer activity
+SH = {
+    "id": "sh1",
+    "repo": "O/R",
+    "path": "docs/prds/x.md",
+    "title": "My PRD",
+    "comments": 1,
+    "approvals": 0,
+    "at": "2026-10-29T10:00:00+00:00",
+}
+S = ui_inbox.share_summary
+assert S(1, 0, "T") == "1 new comment on T" and S(3, 0, "T") == "3 new comments on T"
+assert S(1, 1, "T") == "1 new comment, 1 approval on T" and S(3, 2, "T") == "3 new comments, 2 approvals on T"
+assert S(0, 1, "T") == "1 approval on T" and S(0, 4, "T") == "4 approvals on T"
+res = build(shares=[SH])
+it = one(res, "prd_comment")
+assert (it["key"], it["group"], it["repo"], it["summary"]) == (
+    "prd_comment:sh1",
+    "decide",
+    "o/r",
+    "1 new comment on My PRD",
+)
+assert (it["share"], it["prd_path"], it["prd_title"], it["comments"], it["approvals"]) == (
+    "sh1",
+    "docs/prds/x.md",
+    "My PRD",
+    1,
+    0,
+)
+assert it["at"] == SH["at"]
+it2 = one(build(shares=[{**SH, "comments": 3, "approvals": 2}]), "prd_comment")
+assert it2["key"] == it["key"] and it2["summary"] == "3 new comments, 2 approvals on My PRD"
+assert one(build(shares=[{**SH, "comments": 0, "approvals": 2}]), "prd_comment")["summary"] == "2 approvals on My PRD"
+assert "prd_comment" not in types(build(shares=[])) and "prd_comment" not in types(build())
+assert "prd_comment" in types(build(repo="o/r", shares=[SH])) and "prd_comment" not in types(
+    build(repo="o/s", shares=[SH])
+)
+assert [i["type"] for i in ui_inbox.rank([it], lambda i: 5)] == ["prd_comment"] and ui_inbox.urgency_text(it) is None
+print("  ok  prd_comment items")
+
+# ui_server._share_rows over the store
+import dispatch  # noqa: E402
+import ui_server  # noqa: E402
+import ui_shares  # noqa: E402
+
+co = tempfile.mkdtemp()
+os.makedirs(os.path.join(co, "docs", "prds"))
+with open(os.path.join(co, "docs", "prds", "x.md"), "w") as f:
+    f.write("# Pretty title\n\nStatus: Draft\n")
+dispatch.read_checkouts = lambda: {"o/r": co}
+clock = [1000.0]
+ui_shares.clock = lambda: clock[0]
+rec, _ = ui_shares.create("o/r", "docs/prds/x.md", co)
+assert ui_server._share_rows() == []
+clock[0] += 5
+t = ui_shares.add_thread(rec["id"], "Ana", "hello", {"exact": "x"})
+ui_shares.add_approval(rec["id"], "Bo")
+(row,) = ui_server._share_rows()
+assert (row["id"], row["repo"], row["title"], row["comments"], row["approvals"]) == (
+    rec["id"],
+    "o/r",
+    "Pretty title",
+    1,
+    1,
+)
+assert "Ana" not in str(row) and "hello" not in str(row)
+ui_shares.add_owner_comment(rec["id"], t["id"], "me", "reply")  # an author reply never counts
+assert ui_server._share_rows()[0]["comments"] == 1
+clock[0] += 5
+ui_shares.mark_seen(rec["id"])
+assert ui_server._share_rows() == []
+clock[0] += 5
+ui_shares.add_comment(rec["id"], t["id"], "Ana", "again")
+ui_shares.end(rec["id"], "stopped")  # an ended share keeps its unseen activity
+(row,) = ui_server._share_rows()
+assert row["comments"] == 1
+os.remove(os.path.join(co, "docs", "prds", "x.md"))
+assert ui_server._share_rows()[0]["title"] == "x"  # the file is gone: the stem
+print("  ok  _share_rows")
+
+# the registered listener raises one throttled prd-comment with only count and title
+import ui_notify  # noqa: E402
+
+raised = []
+ui_notify.notify = lambda ev, r: raised.append((ev, r))
+ui_notify._prd_last.clear()
+with open(os.path.join(co, "docs", "prds", "y.md"), "w") as f:
+    f.write("# Why title\n\nStatus: Draft\n")
+ui_shares.listeners.append(ui_server._on_share_activity)
+r3, _ = ui_shares.create("o/r", "docs/prds/y.md", co)
+clock[0] += 5
+ui_shares.add_thread(r3["id"], "Ana", "secret words", {"exact": "x"})
+ui_shares.add_approval(r3["id"], "Bo")  # within the minute: throttled
+assert raised == [("prd-comment", {"note": "1 new comment on Why title"})], raised
+print("  ok  listener")
 print("ui_inbox: all checks passed")

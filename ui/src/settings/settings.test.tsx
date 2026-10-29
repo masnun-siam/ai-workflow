@@ -20,6 +20,7 @@ const sent = (method: string, url: string) => calls.filter((c) => c.method === m
 const EVENTS = [
   ['waiting', 'A session is waiting on you', 'Needs you'], ['failed', 'A session failed', 'Needs you'],
   ['dispatch', 'A dispatch needs you', 'Needs you'], ['panel-cap', 'Review panel hit its cap', 'Needs you'],
+  ['prd-comment', 'Reviewers commented on a PRD', 'Needs you'],
   ['pr-ready', 'PR is ready for review', 'Pull requests'], ['needs-cleanup', 'Merged issue needs cleanup', 'Pull requests'],
   ['grind-paused', 'Grind paused', 'Pull requests'], ['grind-done', 'Grind finished', 'Pull requests'],
   ['done', 'A session is done', 'Finished'], ['pipeline', 'Pipeline finished', 'Finished'], ['afk', 'Away mode ended', 'Finished'],
@@ -213,11 +214,11 @@ describe('Settings: notifications', () => {
     await waitFor(() => expect(sent('POST', '/api/settings/notify')[0]).toMatchObject({ token: 'tk_new' }));
   });
 
-  it('shows the matrix: 33 named switches in three groups, states from the server', async () => {
+  it('shows the matrix: 36 named switches in three groups, states from the server', async () => {
     page(<SettingsPage />, '/settings/notifications');
-    expect(await screen.findAllByRole('switch')).toHaveLength(33);
+    expect(await screen.findAllByRole('switch')).toHaveLength(36);
     expect([...document.querySelectorAll('th[scope=rowgroup]')].map((r) => r.textContent)).toEqual(['Needs you', 'Pull requests', 'Finished']);
-    expect(screen.getAllByRole('switch')[12].getAttribute('aria-label')).toBe('PR is ready for review: Browser');
+    expect(screen.getAllByRole('switch')[15].getAttribute('aria-label')).toBe('PR is ready for review: Browser');
     expect(screen.getByRole('switch', { name: 'A session is done: ntfy' }).getAttribute('aria-checked')).toBe('true');
     expect(screen.getByRole('switch', { name: 'A session is done: Browser' }).getAttribute('aria-checked')).toBe('false');
   });
@@ -324,7 +325,7 @@ describe('Settings: notification channel headers', () => {
     page(<SettingsPage />, '/settings/notifications');
     expect(within(await head('This Mac')).getByText('Only on macOS')).toBeTruthy();
     const macSwitches = screen.getAllByRole('switch').filter((s) => /: This Mac$/.test(s.getAttribute('aria-label') ?? ''));
-    expect(macSwitches).toHaveLength(11);
+    expect(macSwitches).toHaveLength(12);
     expect(macSwitches.every((s) => (s as HTMLButtonElement).disabled)).toBe(true);
     expect((screen.getByRole('button', { name: 'Send test: This Mac' }) as HTMLButtonElement).disabled).toBe(true);
   });
