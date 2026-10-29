@@ -66,10 +66,10 @@ export function ActivityPage() {
             {live.map((s) => (
               <div key={s.id} {...rowProps(s.id)} className={`live-card${s.outcome === 'waiting' ? ' you' : ''}`}>
                 <div className="row"><SessionChip s={s.outcome} /><span className="grow" /><span className="faint" style={{ fontSize: 12 }}>{duration(s.started_at)}</span></div>
-                <a className="cmd" href={`#${routes.session(s.id)}`} style={{ textDecoration: 'none' }}>{sessionLabel(s.command)}</a>
+                <a className="cmd clamp2" title={sessionLabel(s.command)} href={`#${routes.session(s.id)}`} style={{ textDecoration: 'none' }}>{sessionLabel(s.command)}</a>
                 <div className="muted" style={{ fontSize: 13 }}>{forText(s)}</div>
                 <div className="muted" style={{ fontSize: 12.5 }}>
-                  {s.outcome === 'limited' ? `${label(s.claude_cmd) || 'Account'} limited${s.limit_resets_at ? `, resumes at ${clockText(s.limit_resets_at)} (${untilText(s.limit_resets_at)})` : ''}` : s.outcome === 'queued' ? (s.note ?? 'Queued') : `${label(s.claude_cmd) ? `${label(s.claude_cmd)} account · ` : ''}${money(s.cost)}`}
+                  {s.outcome === 'limited' ? `${label(s.claude_cmd) || 'Account'} limited${s.limit_resets_at ? `, resumes at ${clockText(s.limit_resets_at)} (${untilText(s.limit_resets_at)})` : ''}` : s.outcome === 'queued' ? (s.note ?? 'Queued') : [label(s.claude_cmd) && `${label(s.claude_cmd)} account`, s.cost != null && money(s.cost)].filter(Boolean).join(' · ')}
                 </div>
               </div>
             ))}
