@@ -7,10 +7,10 @@ const json = (b: unknown, status = 200) => Promise.resolve(new Response(JSON.str
 const URL_ = 'https://x.ts.net/s/tok';
 const calls: { method: string; path: string; body: any }[] = [];
 const summary = (o: Record<string, unknown> = {}) => ({ id: 's1', repo: 'o/r', path: 'docs/prds/f1.md', title: 'F', state: 'live', url: URL_, comments: 3, unread: 0, reachable: true, end_reason: null, ...o });
-const detail = (approvals: { id: string; name: string; at: string }[], o: Record<string, unknown> = {}) => ({ ...summary(o), created_at: '', ended_at: null, last_seen_at: null, prd_updated_at: null, unsent: 0, threads: [], approvals });
+const detail = (approvals: { id: string; name: string; at: string }[], o: Record<string, unknown> = {}) => ({ ...summary(o), created_at: '', ended_at: null, last_seen_at: null, prd_updated_at: null, unsent: 0, threads: [], approvals, ...o });
 const ap = (k: number) => ({ id: `a${k}`, name: `Rev${k}`, at: '' });
 
-function mock(o: { status?: string; shares?: unknown[]; detail?: unknown; post?: () => Promise<Response> } = {}) {
+function mock(o: { status?: string; shares?: unknown[]; detail?: unknown; post?: () => Promise<Response>; prd?: string } = {}) {
   calls.length = 0;
   const routes: Record<string, unknown> = {
     '/api/repos': { repos: [{ slug: 'o/r', name: 'R', path: '/x' }], can_browse: false, scan_roots: [] },
@@ -18,7 +18,7 @@ function mock(o: { status?: string; shares?: unknown[]; detail?: unknown; post?:
     '/api/inbox': { items: [], afk: {}, gh: { ok: true } },
     '/api/planning': { repo: 'o/r', stale: false, fetched_at: 1, prds: [{ slug: 'f1', title: 'Feature one', status: o.status ?? 'In review', path: 'docs/prds/f1.md', abs_path: '/x/docs/prds/f1.md', column: 'review', pr: null, epic: null, issues: 0, refined: 0, unrefined: [], children: [], panel: null }] },
     '/api/delivery': { repo: 'o/r', stale: false, fetched_at: 1, cap: 2, running: 0, auto_grind: false, lanes: [] },
-    '/api/prd': { text: '# F\n\n## A\nbody', sha: 'x', branch: 'main' },
+    '/api/prd': { text: o.prd ?? '# F\n\n## A\nbody', sha: 'x', branch: 'main' },
   };
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     const [path] = String(url).split('?');
@@ -31,7 +31,7 @@ function mock(o: { status?: string; shares?: unknown[]; detail?: unknown; post?:
     return path in routes ? json(routes[path]) : json({ items: [] });
   }));
 }
-const posts = () => calls.filter((c) => c.method === 'POST');
+const posts = () => calls.filter((c) => c.method === 'POST' && !c.path.endsWith('/seen')); // the open tab marks the share seen on its own
 async function open(o: Parameters<typeof mock>[0] = {}) {
   mock(o);
   window.location.hash = '#/features/f1/prd?repo=o/r';
@@ -149,5 +149,127 @@ describe('Stop, Remove and re-share', () => {
     expect(dlg.textContent).toContain("Remove Rev1's approval? This cannot be undone.");
     await u.click(within(dlg).getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(calls.filter((c) => c.method === 'DELETE').map((c) => c.path)).toEqual(['/api/shares/s1/approvals/a1']));
+  });
+});
+
+const PRD = '# F\n\n## A\nThe first sentence is here. The second sentence is there. Third one stays.';
+const anc = (exact: string) => ({ exact, prefix: '', suffix: '' });
+const cm = (id: string, o: Record<string, unknown> = {}) => ({ id, author: 'Rae', by_owner: false, body: `body ${id}`, at: '2026-01-02T00:00:00Z', ...o });
+const th = (id: string, exact: string, o: Record<string, unknown> = {}) => ({ id, anchor: anc(exact), created_at: `2026-01-01T00:00:0${id.slice(1)}Z`, resolved: false, sent_at: null, comments: [cm(`c${id}`)], ...o });
+const rail = (threads: unknown[], o: Record<string, unknown> = {}) => ({ prd: PRD, shares: [summary(o)], detail: detail([], { threads, ...o }) });
+const method = (m: string) => calls.filter((c) => c.method === m);
+async function openRail(o: Parameters<typeof mock>[0]) {
+  await open(o);
+  return screen.findByRole('region', { name: 'Comments' });
+}
+
+describe('Thread rail', () => {
+  it('lists open threads in text order, resolved collapsed, Outdated with its quote; highlights the text', async () => {
+    const u = userEvent.setup();
+    const r = await openRail(rail([
+      th('t1', 'Third one stays'), th('t2', 'The first sentence is here'),
+      th('t3', 'The second sentence is there', { resolved: true }), th('t4', 'gone words'),
+    ]));
+    const cards = Array.from(r.querySelectorAll('li.thread')).map((l) => l.id);
+    expect(cards).toEqual(['thread-t2', 'thread-t1', 'thread-t3', 'thread-t4']);
+    expect(within(r).getByText('Outdated')).toBeTruthy();
+    expect(r.querySelector('#thread-t4')!.textContent).toContain('gone words');
+    const marks = Array.from(document.querySelectorAll('mark.anchor-hl')).map((m) => (m as HTMLElement).dataset.thread);
+    expect(marks).toEqual(['t2', 't3', 't1']);
+    expect(document.querySelector('.prose')!.textContent).toContain('The first sentence is here. The second sentence is there. Third one stays.');
+    const head = within(r).getByRole('button', { name: /^Resolved/ });
+    expect(head.getAttribute('aria-expanded')).toBe('false');
+    expect(within(r.querySelector('#thread-t3') as HTMLElement).queryByLabelText('Reply')).toBeNull();
+    head.focus();
+    await u.keyboard('{Enter}');
+    expect(head.getAttribute('aria-expanded')).toBe('true');
+    expect(within(r.querySelector('#thread-t3') as HTMLElement).getByLabelText('Reply')).toBeTruthy();
+  });
+
+  it('labels the author from by_owner, shows hostile text literally, marks New from the opening baseline', async () => {
+    const hostile = '<img src=x onerror=alert(1)>';
+    const r = await openRail(rail([
+      th('t1', 'Third one stays', { comments: [cm('a', { author: 'Rae', body: hostile }), cm('b', { author: 'Sam', by_owner: true, at: '2026-01-05T00:00:00Z' })] }),
+      th('t2', 'The first sentence is here', { comments: [cm('c', { by_owner: true, at: '2026-01-05T00:00:00Z' })] }),
+      th('t3', 'The second sentence is there', { comments: [cm('d', { at: '2026-01-01T00:00:00Z' })] }),
+    ], { last_seen_at: '2026-01-01T12:00:00Z' }));
+    expect(within(r).getByText(hostile)).toBeTruthy();
+    expect(r.querySelector('img')).toBeNull();
+    expect(within(r).getAllByText('Author')).toHaveLength(2);
+    expect(within(r.querySelector('#thread-t1') as HTMLElement).getByText('Sam')).toBeTruthy();
+    const isNew = (id: string) => !!within(r.querySelector(`#thread-${id}`) as HTMLElement).queryByText('New');
+    expect([isNew('t1'), isNew('t2'), isNew('t3')]).toEqual([true, false, false]);
+    await waitFor(() => expect(calls.map((c) => c.path)).toContain('/api/shares/s1/seen'));
+  });
+
+  it('replies, resolves and reopens', async () => {
+    const u = userEvent.setup();
+    const r = await openRail(rail([th('t1', 'Third one stays'), th('t2', 'The first sentence is here', { resolved: true })]));
+    const card = r.querySelector('#thread-t1') as HTMLElement;
+    const send = within(card).getByRole('button', { name: 'Reply' });
+    expect((send as HTMLButtonElement).disabled).toBe(true);
+    await u.type(within(card).getByLabelText('Reply'), '  thanks  ');
+    await u.click(send);
+    await u.click(within(card).getByRole('button', { name: 'Resolve' }));
+    await u.click(within(r).getByRole('button', { name: /^Resolved/ }));
+    await u.click(within(r.querySelector('#thread-t2') as HTMLElement).getByRole('button', { name: 'Reopen' }));
+    await waitFor(() => expect(calls.filter((c) => c.path !== '/api/shares/s1/seen').map((c) => [c.method, c.path, c.body])).toEqual([
+      ['POST', '/api/shares/s1/threads/t1/comments', { body: 'thanks' }],
+      ['PATCH', '/api/shares/s1/threads/t1', { resolved: true }],
+      ['PATCH', '/api/shares/s1/threads/t2', { resolved: false }],
+    ]));
+  });
+
+  it('confirms comment and thread deletes with the exact text; cancel sends nothing', async () => {
+    const u = userEvent.setup();
+    const r = await openRail(rail([
+      th('t1', 'Third one stays', { comments: [cm('a'), cm('b', { author: 'Sam' })] }),
+      th('t2', 'The first sentence is here'),
+    ]));
+    const del = async (name: string, text: string, ok: boolean) => {
+      await u.click(within(r).getByRole('button', { name }));
+      const dlg = await screen.findByRole('alertdialog');
+      expect(dlg.textContent).toContain(text);
+      await u.click(within(dlg).getByRole('button', { name: ok ? 'Delete' : 'Cancel' }));
+    };
+    await del('Delete comment by Sam', 'Delete this comment? Reviewers will no longer see it. This cannot be undone.', false);
+    expect(method('DELETE')).toHaveLength(0);
+    await del('Delete comment by Sam', 'Delete this comment?', true);
+    const t1 = r.querySelector('#thread-t1') as HTMLElement;
+    await u.click(within(t1).getByRole('button', { name: 'Delete thread' }));
+    const dlg = await screen.findByRole('alertdialog');
+    expect(dlg.textContent).toContain('Delete this thread and its 2 comments? This cannot be undone.');
+    await u.click(within(dlg).getByRole('button', { name: 'Delete' }));
+    // single-comment thread: the comment's delete uses the thread text and route
+    await u.click(within(r.querySelector('#thread-t2') as HTMLElement).getByRole('button', { name: 'Delete comment by Rae' }));
+    const one = await screen.findByRole('alertdialog');
+    expect(one.textContent).toContain('Delete this thread and its 1 comment?');
+    await u.click(within(one).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(method('DELETE').map((c) => c.path)).toEqual([
+      '/api/shares/s1/threads/t1/comments/b', '/api/shares/s1/threads/t1', '/api/shares/s1/threads/t2',
+    ]));
+  });
+
+  it('ended share: Delete share record with the thread count; live share and empty ended share do not', async () => {
+    const u = userEvent.setup();
+    const ended = { state: 'ended', url: null, end_reason: 'stopped' };
+    const r = await openRail(rail([th('t1', 'Third one stays'), th('t2', 'The first sentence is here')], ended));
+    await u.click(within(r).getByRole('button', { name: 'Delete share record' }));
+    const dlg = await screen.findByRole('alertdialog');
+    expect(dlg.textContent).toContain('Delete this share with its 2 threads and approvals? This cannot be undone.');
+    await u.click(within(dlg).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(method('DELETE').map((c) => c.path)).toEqual(['/api/shares/s1/record']));
+  });
+
+  it('live share has no Delete share record and shows No comments yet; empty ended share shows no rail', async () => {
+    const r = await openRail(rail([]));
+    expect(within(r).getByText('No comments yet')).toBeTruthy();
+    expect(within(r).queryByRole('button', { name: 'Delete share record' })).toBeNull();
+    cleanup();
+    const ended = { state: 'ended', url: null, end_reason: 'stopped' };
+    await open(rail([], ended));
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some((c) => String(c[0]).startsWith('/api/shares/s1'))).toBe(true));
+    await new Promise((res) => setTimeout(res, 50));
+    expect(screen.queryByRole('region', { name: 'Comments' })).toBeNull();
   });
 });

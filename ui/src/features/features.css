@@ -189,3 +189,15 @@
 .toc ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
 .toc ol button{width:100%;text-align:left;padding:4px 8px;border:0;border-radius:var(--r-ctl);background:none;font:inherit;font-size:13px;color:var(--muted);cursor:pointer}
 .toc ol button:hover{background:var(--bg);color:var(--ink)}
+.thread-rail{display:flex;flex-direction:column;gap:10px}
+.thread-rail h3,.thread-rail h4{margin:0}
+.thread-list,.thread-comments{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.thread{padding:10px;border:1px solid var(--line);border-radius:var(--r-ctl);font-size:13px}
+.thread:focus{outline:2px solid var(--accent)}
+.thread.resolved{background:var(--sunk)}
+.thread-head{width:100%;text-align:left;border:0;background:none;font:inherit;color:var(--muted);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.thread-quote{margin:0;padding:0 0 0 8px;border:0;border-left:3px solid var(--accent);background:none;font:inherit;font-style:italic;color:var(--muted);text-align:left;overflow-wrap:anywhere}
+button.thread-quote{cursor:pointer}
+.thread-body{margin:2px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.chip-new{align-self:flex-start;padding:0 6px;border-radius:99px;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:600}
+.thread-rail{max-height:70vh;overflow:auto}
