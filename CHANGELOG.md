@@ -5,6 +5,7 @@
 ### Added
 
 - **Share links: PRD tab thread rail** (#600): the PRD tab highlights each commented sentence and lists the share's threads beside the text (open in text order, resolved collapsed, Outdated with their quote). The author can reply, resolve, reopen and delete comments and threads, and delete the record of an ended share. While the tab is open it marks the share seen.
+- **Share links: Send open comments button** (#601): the thread rail gets "Send open comments (n)". It shows the exact prompt in a confirm dialog (with warnings for a running panel or update session and for older comments that will be dropped), then starts the PRD update session and links to it, reporting threads still unsent.
 - **Share links: Send open comments** (#592): `POST /api/shares/<id>/send` builds one `/create-prd <path> --update` prompt from a share's unsent open threads (reviewer text in one delimited untrusted block, capped at 32,000 characters), previews it without `confirm: true`, otherwise starts the update session and marks only the threads it sent; `GET /api/shares/<id>` gains `unsent`.
 - **Share page read view** (#595): `ui/share.html` is a second Vite entry, built to `run-engine/ui_dist/share.html` with a build manifest (`.vite/manifest.json`) listing the files the page may load. It shows one shared PRD read-only from `/s/<token>/api/prd` with the PRD tab's Markdown and Mermaid rendering, polling every 30 s; fonts are no longer inlined as `data:` URLs.
 
