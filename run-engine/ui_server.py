@@ -47,6 +47,7 @@ import ui_poller
 import ui_pr
 import ui_repos
 import ui_restart
+import ui_duplicate
 import ui_route
 import ui_runner
 import ui_sessions
@@ -288,6 +289,13 @@ def _panels(checkout: str) -> dict:
         if meta and panel:
             out[meta["slug"]] = panel
     return out
+
+
+def _duplicate(b: dict) -> dict:
+    """POST /api/duplicate: does the typed capture match an open issue or a PRD?"""
+    repo = _registered(b.get("repo"))
+    _watch(repo)  # a repo seen for the first time is polled, off this thread
+    return ui_duplicate.check(repo, b.get("text"), POLLER.snapshot(repo), dispatch.read_checkouts()[repo])
 
 
 def _board(path: str, query: str):
@@ -587,6 +595,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._dispatch(lambda b: ui_restart.start(), ok=202)
         elif parts == ["", "api", "route"]:
             self._dispatch(lambda b: ui_route.route(b.get("text")))
+        elif parts == ["", "api", "duplicate"]:
+            self._dispatch(_duplicate)
         elif parts == ["", "api", "repos", "browse"]:
             body = self._read_body()
             if body is None:

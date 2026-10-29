@@ -10,6 +10,7 @@
 
 ### Added
 
+- **Duplicate check endpoint** (#578): `POST /api/duplicate {repo, text}` asks `jev` whether the capture text matches one of the repo's newest 100 open issues or its PRDs (needs 20+ characters and a 0.6+ pick), and returns the match with a server-built link, or a null match with a `why`. The New page warning follows in #579.
 - **Risk line in the Away summary** (#574): a round the risk check sent to Opus shows "Risk check: sent to Opus (p=…)" on its row in "While you were away" (p rounded to two decimals); other rows are unchanged.
 - **jev answer cache and call ceiling** (#571): the Inbox urgency, readiness and duplicate points reuse earlier answers (kept in memory, flushed to `jev_cache.json` in the plugin data dir every minute; 2000 entries, 7 days) and stop at 500 jev calls an hour (`capped`). Risk checks, the capture route and hints are never cached or counted.
 - **Shared jev helper** (#570): `run-engine/jev.py` is the one place that runs `jev` (pinned model, 8 s timeout, 4000-character input, token-shaped strings redacted first); any failure gives a null answer. The capture router now uses it, and with the switch off `POST /api/route` answers `jev is off`. jev will also see Inbox question, pause and error text, refined issue bodies in a dispatch preview, the capture text plus the repo's open issue and PRD titles, failing CI log tails, review findings, and Away mode round text; **Settings → Use jev** turns all of it off.
