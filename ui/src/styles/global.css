@@ -312,6 +312,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
 .prose h2{font-size:16px;margin:18px 0 6px}
 .prose h3{margin:14px 0 4px}
 .prose p{margin:0 0 10px}
+.anchor-hl{background:var(--accent-soft);color:inherit;text-decoration:underline;text-decoration-color:var(--accent);text-underline-offset:2px}
 .prose ul{margin:0 0 10px;padding-left:20px}
 .checks{display:flex;flex-direction:column;gap:4px}
 .check{display:flex;gap:8px;align-items:center;font-size:13px}
