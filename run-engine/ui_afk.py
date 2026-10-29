@@ -2,7 +2,9 @@
 
 While it runs, each tick:
 - answers every `aiw ask` round whose questions all carry a "(Recommended)" option, planning
-  interviews included, through the same claim + resume path as the answer page;
+  interviews included, through the same claim + resume path as the answer page, once a jev risk check
+  (a worker off the tick, two at a time, stored as `risk: {p}` on the round) says p < 0.5 or has no answer;
+  at p >= 0.5 the round goes to the Opus answerer below and its log entry carries `risk`;
 - gives every other round to a read-only Opus answerer session (agents/away-answerer.md, started with
   only its tools allowed): a valid reply is answered the same way and logged `by: opus`; a hold, or two
   failed answerers (failed, limited, stopped, invalid reply, over 10 minutes), is logged `held` and the
@@ -21,10 +23,12 @@ import json
 import os
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 import away_answerer
 import dispatch_run
+import jev
 import shared
 import ui_notify
 import ui_panel
@@ -293,6 +297,7 @@ def _round_entry(rec, now, pending, picks, by, why=None, answerer=None, cost=Non
     ]
     return {
         **summary,
+        **_risk_key(pending),
         "id": f"{rec['id']}:{pending['id']}",
         "by": by,
         "questions": questions,
@@ -316,10 +321,68 @@ def _recommended(pq: dict) -> bool:
     return all(q.get("recommended") for q in pq["questions"])
 
 
+RISK_P = 0.5
+RISK_QUESTION = (
+    "Is any recommended option irreversible or outward-facing: pushing, merging, publishing, deleting, "
+    "posting, or spending money?"
+)
+_risk_pool = ThreadPoolExecutor(max_workers=2)
+_risk_queued: set = set()  # (sid, round id) queued or in flight
+_risk_lock = threading.Lock()  # not _lock: that one guards afk.json
+
+
+def _risk_text(pq: dict) -> str:
+    """The only data sent to jev: each question, then each option's label and description."""
+    lines = []
+    for q in pq["questions"]:
+        lines.append(str(q.get("question") or q.get("header") or ""))
+        for o in q.get("options") or []:
+            lines += [str(o.get("label") or ""), str(o.get("description") or "")]
+    return "\n".join(x for x in lines if x)
+
+
+def _check_risk(sid: str, rid: str, text: str) -> None:
+    try:
+        r = jev.ask("risk", "noul", RISK_QUESTION, text)
+        ui_sessions.update_pending(sid, rid, risk={"p": r["p"] if r["status"] == "ok" else None})
+    except Exception as exc:  # noqa: BLE001 - a worker never raises
+        warn(f"afk: risk check: {type(exc).__name__}")
+    finally:
+        with _risk_lock:
+            _risk_queued.discard((sid, rid))
+
+
+def _queue_risk(rec: dict, pq: dict) -> None:
+    key = (rec["id"], pq["id"])
+    with _risk_lock:
+        if key in _risk_queued:
+            return
+        _risk_queued.add(key)
+    _risk_pool.submit(_check_risk, *key, _risk_text(pq))
+
+
+def _risky(pq: dict) -> bool:
+    risk = pq.get("risk")
+    p = risk.get("p") if isinstance(risk, dict) else None
+    return isinstance(p, (int, float)) and p >= RISK_P
+
+
+def _risk_key(pending: dict) -> dict:
+    return {"risk": pending["risk"]["p"]} if _risky(pending) else {}
+
+
 def _answer(rec: dict, now: float) -> dict | None:
     pq = _round(rec)
     if pq is None or not _recommended(pq):
         return None  # the rest go to an answerer (_opus)
+    if "risk" not in pq:
+        if jev.status() != "ok":
+            ui_sessions.update_pending(rec["id"], pq["id"], risk={"p": None})
+        else:
+            _queue_risk(rec, pq)
+            return None
+    elif _risky(pq):
+        return None  # _opus takes it
     qs = pq["questions"]
     text = ui_sessions.answer_text(pq, {str(i): {"labels": [q["recommended"]]} for i, q in enumerate(qs)})
     if ui_sessions.claim_answer(rec["id"], pq["id"]) is None:
@@ -339,6 +402,7 @@ def _held_entry(rec, now, pending, reason, answerer, cost) -> dict:
     )
     return {
         **entry,
+        **_risk_key(pending),
         "id": f"{rec['id']}:{pending['id']}",
         "questions": [{k: v for k, v in q.items() if k != "recommended"} for q in qs],
         "answerer": answerer,
@@ -382,7 +446,7 @@ def _answerer_failed(rec, now, pq, aid, reason) -> dict | None:
 
 def _opus(rec: dict, now: float) -> dict | None:
     pq = _round(rec)
-    if pq is None or _recommended(pq) or pq.get("held"):
+    if pq is None or pq.get("held") or (_recommended(pq) and not _risky(pq)):
         return None
     sid, aid = rec["id"], pq.get("answerer")
     if not aid:

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- **Away mode risk check** (#573): before auto-picking a round whose questions all carry a recommended option, a jev worker (off the tick, two at a time) asks whether any recommended option is irreversible or outward-facing and stores `risk` on the round. At 0.5 or more the round goes to the Opus answerer and its log entry carries `risk`; with jev off, missing or failing it is auto-picked as before.
+
 ### Added
 
 - **Risk line in the Away summary** (#574): a round the risk check sent to Opus shows "Risk check: sent to Opus (p=…)" on its row in "While you were away" (p rounded to two decimals); other rows are unchanged.
