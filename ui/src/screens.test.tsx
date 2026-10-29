@@ -24,6 +24,7 @@ function mock(o: { fetchedAt?: number | null; delFetchedAt?: number | null; stal
     '/api/repos': { repos: [{ slug: 'o/r', name: 'R', path: '/x' }], can_browse: false, scan_roots: [] },
     '/api/sessions': { sessions: [], limits: {}, usage: {}, afk: { active: false, until: null, started: null, decisions: 0, held: 0, summary: null }, gh: { ok: true } },
     '/api/inbox': { items: [], afk: {}, gh: { ok: true } },
+    '/api/shares': [],
     '/api/planning': { repo: 'o/r', stale: o.stale ?? false, fetched_at: o.fetchedAt === undefined ? 1 : o.fetchedAt, prds: o.prds ?? [] },
     '/api/delivery': { repo: 'o/r', stale: o.stale ?? false, fetched_at: o.delFetchedAt === undefined ? 1 : o.delFetchedAt, cap: 2, running: 0, auto_grind: false, lanes: o.lanes ?? [] },
     '/api/settings': { commands: [{ label: 'main', cmd: 'claude' }, { label: 'work', cmd: 'claude2' }], default: 'main' },
