@@ -50,6 +50,7 @@ import ui_restart
 import ui_duplicate
 import ui_route
 import ui_runner
+import ui_share_runtime
 import ui_sessions
 import ui_start
 import ui_settings
@@ -1150,6 +1151,7 @@ def cmd_serve(args) -> None:
             server.allowed_hosts |= ts["hosts"]
             server.tailnet_hosts, server.tailnet_login = frozenset(ts["hosts"]), ts["login"]
     ui_shares.listeners.append(_on_share_activity)  # reviewer comments and approvals -> prd-comment
+    ui_share_runtime.configure(args.tailscale_port, tailscale_enabled=not args.no_tailscale)
     ui_runner.reconcile()  # re-attach sessions that outlived the last UI, close the ones that died
     ui_grind.start_timer()  # ntfy on grind pause/finish
     ui_runner.start_prgrind_timer()  # re-enter pr-grind loops whose session ended (reviews, CI, heartbeat)
@@ -1162,9 +1164,13 @@ def cmd_serve(args) -> None:
     # the scorer builds its own item list: _inbox would mark every watched repo as viewed (_hot)
     ui_urgency.start_timer(lambda: _inbox_items(None, _watched_copy(), ui_sessions.list_sessions())["items"])
     ui_afk.start_timer()  # AFK mode: auto-answer, skip CI on paused grinds, retry failures; ends the window
+    ui_share_runtime.start()  # serve live shares again on the same link; nothing runs when there are none
+    ui_share_runtime.start_timer()  # re-check every live share once a minute
     print(f"serving http://127.0.0.1:{server.server_address[1]}/ — Ctrl+C to stop")
     if ts:
         print(f"also on your tailnet: {ts['url']}/ (only {ts['login']}; removed when this exits)")
+    if ui_share_runtime.summary():
+        print(ui_share_runtime.summary())
     if extras:
         print("also allowing hosts: " + ", ".join(extras))
     for sig in (signal.SIGTERM, signal.SIGHUP):  # SIGHUP: closed terminal; let `finally` remove the tailscale handler
@@ -1175,6 +1181,7 @@ def cmd_serve(args) -> None:
         print("\nstopped")
     finally:
         server.server_close()
+        ui_share_runtime.stop()  # its own funnel handler, separate from the tailnet serve below
         if ts:
             ui_tailscale.down(ts["https_port"])
 
