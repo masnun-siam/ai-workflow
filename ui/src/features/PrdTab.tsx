@@ -7,30 +7,11 @@ import { useStarter } from '../board/actions';
 import { Banner, Button, EmptyState, useConfirm } from '../components';
 import type { Feature } from '../lib/features';
 import { mdToHtml } from '../lib/md';
+import { prdBody, renderDiagrams, toggleDiagram } from '../lib/prdRender';
 import { PLAN_RUN } from '../lib/vocab';
 
 export const CHANGED_MSG = 'This file changed on disk since you opened it, so nothing was saved. Reload it, then redo your edit.';
 export const askArgs = (path: string, text: string) => `${path} --update ${text.trim()}`;
-
-// mermaid is ~1MB, so it is only fetched when a PRD actually has a diagram.
-async function renderDiagrams(root: HTMLElement | null) {
-  const nodes = root ? Array.from(root.querySelectorAll<HTMLElement>('pre.mermaid')) : [];
-  if (!nodes.length) return;
-  const { default: mermaid } = await import('mermaid');
-  const dark = getComputedStyle(document.documentElement).colorScheme === 'dark';
-  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: dark ? 'dark' : 'default' });
-  await mermaid.run({ nodes, suppressErrors: true });
-}
-
-// A wide diagram fits the column with tiny labels; a click toggles it to natural size, scrolled sideways.
-function toggleDiagram(e: React.MouseEvent) {
-  const svg = (e.target as Element).closest('pre.mermaid')?.querySelector('svg');
-  if (!svg) return;
-  const full = !svg.style.width;
-  svg.style.width = full ? `${svg.viewBox.baseVal.width}px` : '';
-  svg.style.maxWidth = full ? 'none' : `${svg.viewBox.baseVal.width}px`;
-  svg.parentElement!.classList.toggle('full', full);
-}
 
 export function PrdTab({ f, repo }: { f: Feature; repo: string }) {
   const path = f.prd.path;
@@ -50,7 +31,7 @@ export function PrdTab({ f, repo }: { f: Feature; repo: string }) {
   const branch = typeof data?.branch === 'string' ? data.branch : 'the current branch';
   const dirty = mode === 'edit' && !!data && draft !== data.text;
   // The page heading already names the feature, so the PRD's own title is dropped when reading.
-  const body = (data?.text ?? '').replace(/^\s*# [^\n]*\n/, '');
+  const body = prdBody(data?.text ?? '');
   const heads = body.split('\n').filter((l) => l.startsWith('## ')).map((l) => l.slice(3).trim());
   const words = body.split(/\s+/).filter(Boolean).length;
   const jump = (k: number) => prose.current?.querySelectorAll('h2')[k]?.scrollIntoView({ behavior: 'smooth', block: 'start' });

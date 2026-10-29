@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- **Share page read view** (#595): `ui/share.html` is a second Vite entry, built to `run-engine/ui_dist/share.html` with a build manifest (`.vite/manifest.json`) listing the files the page may load. It shows one shared PRD read-only from `/s/<token>/api/prd` with the PRD tab's Markdown and Mermaid rendering, polling every 30 s; fonts are no longer inlined as `data:` URLs.
+
 ### Removed
 
 - **`/flow` skill** (#621): the deprecated guided flow and the Start dialog's "Plan a flow" are gone; run `/create-prd`, `/create-tasks`, `/refine-issues` and `/herdr-dispatch` directly.

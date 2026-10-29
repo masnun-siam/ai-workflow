@@ -4,6 +4,7 @@ import { commandText, parseSkill, sessionInRepo, sessionLabel, skillOf } from '.
 import { joinFeatures, stageOf } from './features';
 import { ghTarget } from './ghLink';
 import { mdToHtml } from './md';
+import { prdBody } from './prdRender';
 import { nextStep, stepKey } from './nextStep';
 import { migrateRepoKey, pickRepo, withRepoParam } from './repo';
 import { boardColumn, issueStatus, BOARD_COLUMNS, PLAN_RUN } from './vocab';
@@ -216,5 +217,12 @@ describe('ghTarget', () => {
   });
   it('leaves everything else external', () => {
     for (const u of ['https://github.com/o/r/pull/3/files', 'https://github.com/o/r', 'http://github.com/o/r/issues/5', 'https://example.com/o/r/issues/5']) expect(ghTarget(u)).toBeNull();
+  });
+});
+
+describe('prdBody', () => {
+  it('strips a leading title line only', () => {
+    expect(prdBody('# T\nbody\n# Later\nx')).toBe('body\n# Later\nx');
+    expect(prdBody('body\n# Later\n')).toBe('body\n# Later\n');
   });
 });
