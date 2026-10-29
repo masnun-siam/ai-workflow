@@ -33,8 +33,10 @@ def _registered(repo) -> str:
 
 
 def _author(checkout) -> str:
+    if not checkout:  # unregistered repo: do not read the server's own git config
+        return "Author"
     proc = shared.run(["git", "config", "user.name"], cwd=checkout)
-    return (proc.stdout or "").strip() if proc.returncode == 0 and (proc.stdout or "").strip() else "Author"
+    return (proc.stdout or "").strip() or "Author" if proc.returncode == 0 else "Author"
 
 
 def _summary(share: dict) -> dict:
