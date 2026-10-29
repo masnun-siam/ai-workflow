@@ -40,6 +40,14 @@ if a[:2] == ["status", "--json"]:
     print(os.environ["FAKE_TS_STATUS"])
 elif a[:3] == ["serve", "status", "--json"]:
     print(os.environ.get("FAKE_TS_SERVE", "{}"))
+elif a[:3] == ["funnel", "status", "--json"]:
+    print(os.environ.get("FAKE_TS_FUNNEL", "{}"))
+elif a[0] == "funnel" and os.environ.get("FAKE_TS_FUNNEL_ERR"):
+    sys.stderr.write(os.environ["FAKE_TS_FUNNEL_ERR"])
+    sys.exit(1)
+elif a[0] == "funnel" and os.environ.get("FAKE_TS_FUNNEL_HANG"):
+    import time
+    time.sleep(30)
 else:
     sys.exit(int(os.environ.get("FAKE_TS_RC", "0")))
 """)
@@ -55,8 +63,9 @@ RUNNING = json.dumps(
 OLD = os.environ["PATH"]
 
 
-def env(status=RUNNING, serve="{}", rc="0", path=True):
+def env(status=RUNNING, serve="{}", rc="0", path=True, funnel="{}", funnel_err="", hang=""):
     os.environ.update(FAKE_TS_LOG=LOG, FAKE_TS_STATUS=status, FAKE_TS_SERVE=serve, FAKE_TS_RC=rc)
+    os.environ.update(FAKE_TS_FUNNEL=funnel, FAKE_TS_FUNNEL_ERR=funnel_err, FAKE_TS_FUNNEL_HANG=hang)
     os.environ["PATH"] = (tmp + os.pathsep + OLD) if path else "/nonexistent"
     open(LOG, "w").close()
 
@@ -127,6 +136,95 @@ env()
 ts.down(443)
 assert "serve --https=443 off" in calls()
 ok("down removes only our handler")
+assert not any("funnel" in c for c in calls())
+ok("serve up and down make no funnel call")
+
+
+# --- funnel
+def web(port, proxy):
+    return {"Web": {f"mac.tail.ts.net:{port}": {"Handlers": {"/": {"Proxy": proxy}}}}}
+
+
+def fails(kind, *a):
+    try:
+        ts.funnel_up(*a)
+    except ts.FunnelError as e:
+        assert e.kind == kind, (e.kind, str(e))
+        return str(e)
+    raise AssertionError("no FunnelError")
+
+
+assert [ts.funnel_port(p) for p in (443, 8443, 10000, None)] == [8443, 10000, 8443, 8443]
+ok("funnel port is never the UI's port")
+env()
+r = ts.funnel_up(8650, 8443)
+assert r == {"host": "mac.tail.ts.net:8443", "base": "https://mac.tail.ts.net:8443", "https_port": 8443}, r
+assert "funnel --bg --yes --https=8443 http://127.0.0.1:8650" in calls()
+ok("funnel up runs the command and returns host, base and port")
+on = json.dumps({**web(8443, "http://127.0.0.1:8650"), "AllowFunnel": {"mac.tail.ts.net:8443": True}})
+env(serve=on, funnel=on)
+assert ts.funnel_up(8650, 8443)["https_port"] == 8443 and not any("funnel --bg" in c for c in calls())
+ok("a funnel already pointing at ours is adopted without a command")
+env(serve=json.dumps(web(8443, "http://127.0.0.1:8650")))
+ts.funnel_up(8650, 8443)
+assert any("funnel --bg" in c for c in calls())
+ok("our handler without AllowFunnel runs the (idempotent) command")
+env(serve=json.dumps(web(8443, "http://127.0.0.1:8787")))
+assert "already serves http://127.0.0.1:8787; not overwriting" in fails("port_taken", 8650, 8443)
+assert not any(c.startswith("funnel") and "status" not in c for c in calls())
+ok("a foreign handler is refused and nothing runs")
+env(serve=json.dumps(web(8443, "http://127.0.0.1:8600")))
+ts.funnel_up(8650, 8443, (8600,))
+c = calls()
+assert c.index("funnel --https=8443 off") < next(i for i, x in enumerate(c) if "funnel --bg" in x), c
+ok("a leftover of ours on an old port is removed and replaced")
+env(path=False)
+assert "not installed" in fails("unavailable", 8650, 8443)
+env(status=json.dumps({"BackendState": "Stopped"}))
+assert "stopped or logged out" in fails("unavailable", 8650, 8443) and not any("funnel" in c for c in calls())
+ok("tailscale missing or stopped is unavailable, no funnel call")
+env(funnel_err='Funnel not available; "funnel" node attribute not set')
+m = fails("refused", 8650, 8443)
+assert m.startswith("Funnel is not available") and m.endswith("node attribute not set"), m
+ok("funnel not permitted is refused with tailscale's text")
+orig = ts._run
+ts._run = lambda a, timeout=15: orig(a, timeout=1)
+env(hang="1")
+assert "in time" in fails("refused", 8650, 8443)
+ts._run = orig
+ok("a hanging funnel command is refused, not hung")
+try:
+    ts.funnel_up(8650, 8080)
+    raise AssertionError
+except ValueError:
+    ok("a port tailscale cannot terminate TLS on is a ValueError")
+
+env(serve=json.dumps(web(443, "http://127.0.0.1:8420")))
+ts.funnel_down(8443)
+assert "funnel --https=8443 off" in calls() and "serve --https=443 off" not in calls()
+env(path=False)
+quiet(ts.funnel_down, 8443)
+ok("funnel down uses its own off and never raises")
+
+st = lambda ok_, proxy="http://127.0.0.1:8650": json.dumps(  # noqa: E731
+    {**web(8443, proxy), "AllowFunnel": {"mac.tail.ts.net:8443": ok_}}
+)
+env(funnel=st(True))
+assert ts.funnel_reachable(8650, 8443)
+env(funnel=json.dumps(web(8443, "http://127.0.0.1:8650")))
+assert not ts.funnel_reachable(8650, 8443)
+env(funnel=st(True, "http://127.0.0.1:1"))
+assert not ts.funnel_reachable(8650, 8443)
+env(funnel="not json")
+assert not ts.funnel_reachable(8650, 8443)
+env(path=False)
+assert not ts.funnel_reachable(8650, 8443)
+ok("funnel reachable only when on and pointing at ours; false on errors")
+env(serve=json.dumps(web(8443, "http://127.0.0.1:8650")))
+assert ts.funnel_handler(8443) == "http://127.0.0.1:8650" and ts.funnel_handler(10000) is None
+env(path=False)
+assert ts.funnel_handler(8443) is None
+ok("funnel handler returns the proxy or None")
 
 # --- owner-only guard on a real server
 srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, ())
