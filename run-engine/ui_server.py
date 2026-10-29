@@ -25,6 +25,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 import peer_review
 import dispatch
 import dispatch_run
+import jev
 import ui_actions
 import ui_afk
 import ui_cleanup
@@ -1109,6 +1110,7 @@ def cmd_serve(args) -> None:
     ui_panel.start_timer()  # lens verdicts -> root, rounds, cap
     ui_usage.start_timer()  # 5h/7d usage per account, only while the UI is open
     ui_dispatch.start_timer(POLLER.snapshot)  # dispatch lanes: facts from the boards, tick, launch, merge
+    jev.start_timer()  # flush the jev answer cache to disk; writes nothing until a cached point ran
     ui_afk.start_timer()  # AFK mode: auto-answer, skip CI on paused grinds, retry failures; ends the window
     print(f"serving http://127.0.0.1:{server.server_address[1]}/ — Ctrl+C to stop")
     if ts:

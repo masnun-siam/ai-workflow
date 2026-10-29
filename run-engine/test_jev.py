@@ -118,4 +118,90 @@ assert "GH_TOKEN=[redacted]" in sent and "Authorization: [redacted]" in sent
 ask("route", "noul", "q?", "x " * 2500)
 assert len(read(stdin_log)) == 4000
 
+# cache and ceiling
+cpath = os.path.join(d, "jev_cache.json")
+t0 = 1_000_000.0
+
+
+def fresh():
+    jev._cache, jev._dirty, jev._window_calls, jev._window_start, jev._now = None, False, 0, 0.0, lambda: t0
+    if os.path.exists(cpath):
+        os.remove(cpath)
+
+
+def calls():
+    return len(read(argv_log).splitlines())
+
+
+stub("""echo '{"noul":0.7}'""")
+fresh()
+a = ("urgency", "noul", "q?", "text")
+assert ask(*a)[0] == {"status": "ok", "p": 0.7} and ask(*a)[0] == {"status": "ok", "p": 0.7} and calls() == 1
+ask("urgency", "noul", "q2?", "text")
+ask("urgency", "noul", "q?", "text2")
+ask("urgency", "noul", "q?", "text", options={"a": "A"})
+ask("urgency", "noul", "q?", "text", levels=["x"])
+assert calls() == 5
+assert jev.spent() == 5 and not os.path.exists(cpath)
+
+# expiry: exactly 7 days is expired, and the entry is replaced
+jev._now = lambda: t0 + jev.MAX_AGE_S
+ask(*a)
+assert calls() == 6 and list(jev._cache.values())[0]["at"] in (t0, t0 + jev.MAX_AGE_S)
+ask(*a)
+assert calls() == 6
+
+# eviction by oldest `at`
+fresh()
+jev._cache = {f"k{i}": {"answer": {}, "probability": 0, "at": t0 + i} for i in range(jev.MAX_ENTRIES)}
+ask(*a)
+assert len(jev._cache) == jev.MAX_ENTRIES and "k0" not in jev._cache and "k1" in jev._cache
+
+# flush and reload; a corrupt file is empty
+fresh()
+ask(*a)
+jev.flush()
+assert os.path.exists(cpath) and not jev._dirty
+jev._cache = None
+n = calls()
+assert ask(*a)[0] == {"status": "ok", "p": 0.7} and calls() == n
+open(cpath, "w").write("{not json")
+jev._cache = None
+ask(*a)
+assert calls() == n + 1
+os.remove(cpath)
+
+# off beats a cached hit
+fresh()
+ask(*a)
+n = calls()
+ui_settings.save({"use_jev": False})
+assert ask(*a)[0] == {"status": "off"} and calls() == n
+ui_settings.save({"use_jev": True})
+
+# ceiling: 501st counted call is capped, risk is not, hour turns, hits are free, failures count
+fresh()
+jev._window_start, jev._window_calls = t0, jev.CEILING
+n = calls()
+assert ask("duplicate", "noul", "q?", "t")[0] == {"status": "capped"} and calls() == n
+assert ask("risk", "noul", "q?", "t")[0]["status"] == "ok" and calls() == n + 1
+assert jev.spent() == jev.CEILING
+jev._now = lambda: t0 + jev.WINDOW_S
+assert ask("duplicate", "noul", "q?", "t")[0]["status"] == "ok" and jev.spent() == 1
+ask("duplicate", "noul", "q?", "t")
+assert jev.spent() == 1
+stub("exit 3")
+assert ask("urgency", "noul", "q?", "fails")[0]["status"] == "failed" and jev.spent() == 2
+assert not jev._dirty or len(jev._cache) == 1
+
+# uncached points never read, write or count
+stub("""echo '{"noul":0.7}'""")
+fresh()
+for point in ("route", "risk", "ci-hint", "finding-hint"):
+    ask(point, "noul", "q?", "t")
+    ask(point, "noul", "q?", "t")
+assert calls() == 8 and jev.spent() == 0 and jev._cache is None and not os.path.exists(cpath)
+jev.flush()
+assert not os.path.exists(cpath)
+
 print("ok")
