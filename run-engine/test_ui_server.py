@@ -150,6 +150,8 @@ try:
         if m == "HEAD":
             assert body == b"" and r.getheader("Content-Length") == "0"
     ok("all non-GET verbs -> 405 Allow: GET (HEAD empty body)")
+    assert req(port, "/api/nope", method="DELETE", host=f"127.0.0.1:{port}")[0] == 405
+    ok("DELETE outside /api/shares -> 405")
     for m in ("OPTIONS", "TRACE"):
         s, _, _, h = req(port, "/api/health", method=m, host="evil.example")
         assert s == 403 and no_cors(h), m

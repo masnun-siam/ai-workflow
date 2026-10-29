@@ -50,6 +50,7 @@ import ui_restart
 import ui_duplicate
 import ui_route
 import ui_runner
+import ui_share_api
 import ui_share_runtime
 import ui_sessions
 import ui_start
@@ -463,6 +464,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 self._json(200, ui_actions.read_prd(dispatch.read_checkouts()[repo], (q.get("path") or [""])[0]))
             except ValueError as e:
                 self._json(400, {"error": str(e)})
+        elif path == "/api/shares" or path.startswith("/api/shares/"):
+            self._shares(path)
         elif path == "/api/peer-review":
             self._json(200, peer_review.offers())
         elif path == "/api/dispatches":
@@ -583,7 +586,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         else:
             self._send(404, "text/plain; charset=utf-8", b"not found")
 
-    def _json(self, status: int, body: dict) -> None:
+    def _json(self, status: int, body) -> None:
         self._send(status, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
 
     def do_POST(self):
@@ -715,8 +718,40 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                     b.get("base_sha"),
                 )
             )
+        elif parts[:3] == ["", "api", "shares"]:
+            self._shares(self.path)
         elif parts[1:3] in _REMOVED:
             self._send(404, "text/plain; charset=utf-8", b"not found")
+        else:
+            self._method_not_allowed(guarded=True)
+
+    def _shares(self, path: str) -> None:
+        """Owner share routes; a body is read only for the routes that take one."""
+        parts = urlsplit(path).path.split("/")
+        body = None
+        if self.command in ("POST", "PATCH") and parts[-1] != "seen":
+            body = self._read_body()
+            if body is None:
+                return
+        status, out = ui_share_api.handle(self.command, parts, body, urlsplit(path).query)
+        if status == 204:
+            self._send(204, "application/json; charset=utf-8", b"")
+        else:
+            self._json(status, out)
+
+    def do_DELETE(self):
+        if not _guard(self):
+            return
+        if urlsplit(self.path).path.startswith("/api/shares/"):
+            self._shares(self.path)
+        else:
+            self._method_not_allowed(guarded=True)
+
+    def do_PATCH(self):
+        if not _guard(self):
+            return
+        if urlsplit(self.path).path.startswith("/api/shares/"):
+            self._shares(self.path)
         else:
             self._method_not_allowed(guarded=True)
 
@@ -1055,7 +1090,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(405, "text/plain; charset=utf-8", b"method not allowed", {"Allow": "GET"})
 
     # every verb needs a do_* or stdlib answers 501 before _guard runs
-    do_DELETE = do_PATCH = do_HEAD = do_OPTIONS = do_TRACE = do_CONNECT = _method_not_allowed
+    do_HEAD = do_OPTIONS = do_TRACE = do_CONNECT = _method_not_allowed
 
 
 class _Server(http.server.ThreadingHTTPServer):
