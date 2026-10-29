@@ -42,12 +42,12 @@ export function useStepRunner(f: Feature, repo: string) {
         return;
       }
       case 'createTasks':
-        await starter.startBoard({ repo, skill: 'create-tasks', arg: f.prd.path, via: 'headless', ...PLAN_RUN });
+        await starter.startBoard({ repo, skill: 'create-tasks', arg: f.prd.path, via: 'headless', ...(f.epic ? { issue: f.epic } : {}), ...PLAN_RUN });
         return;
       case 'refine': {
         const live = a.issues.map((n) => refining.get(n)).find(Boolean);
         if (live && a.issues.every((n) => refining.has(n))) return navigate(link(routes.session(live)));
-        await starter.startBoard({ repo, skill: 'refine-issues', arg: a.issues.filter((n) => !refining.has(n)).join(' '), via: 'headless', ...PLAN_RUN });
+        await starter.startBoard({ repo, skill: 'refine-issues', arg: a.issues.filter((n) => !refining.has(n)).join(' '), via: 'headless', ...(f.epic ? { issue: f.epic } : {}), ...PLAN_RUN });
         return;
       }
       case 'merge':

@@ -4,6 +4,7 @@ import { Button, Icon, Toaster } from '../components';
 import { Palette } from '../palette/Palette';
 import { DetailPanel } from '../panels/DetailPanel';
 import { usePanel } from '../panels/PanelContext';
+import { ghTarget } from '../lib/ghLink';
 import { routes } from '../lib/routes';
 import { useBrowserNotifier } from '../api/hooks';
 import { useStart } from '../start/StartContext';
@@ -77,6 +78,20 @@ export function Shell() {
   }, [inbox]);
   useAwayDocument();
   useBrowserNotifier();
+  // Issue and PR links anywhere open the side panel; modified clicks and `data-ext` buttons still go to GitHub.
+  const { open } = panel;
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const a = (e.target as Element).closest<HTMLAnchorElement>('a[href]:not([data-ext])');
+      const target = a && ghTarget(a.href);
+      if (!target) return;
+      e.preventDefault();
+      open(target);
+    };
+    document.addEventListener('click', onClick);
+    return () => document.removeEventListener('click', onClick);
+  }, [open]);
   // The page scrolls inside .content, which the router keeps mounted: start each new page at the top.
   const { pathname } = useLocation();
   useEffect(() => { const c = document.getElementById('main-content'); if (c) c.scrollTop = 0; }, [pathname]);

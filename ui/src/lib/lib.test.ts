@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { DeliveryCard, DeliveryLane, PanelRef, PlanningPrd } from '../api/types';
 import { commandText, parseSkill, sessionInRepo, sessionLabel, skillOf } from './format';
 import { joinFeatures, stageOf } from './features';
+import { ghTarget } from './ghLink';
 import { mdToHtml } from './md';
 import { nextStep, stepKey } from './nextStep';
 import { migrateRepoKey, pickRepo, withRepoParam } from './repo';
@@ -204,5 +205,16 @@ describe('stepKey (FR-4)', () => {
     for (const kind of ['startReview', 'createTasks', 'dispatch', 'closeEpic'] as const) expect(stepKey({ kind })).toBeUndefined();
     expect(stepKey({ kind: 'tab', tab: 'issues' })).toBeUndefined();
     expect(stepKey({ kind: 'openDispatch', id: 'd' })).toBeUndefined();
+  });
+});
+
+describe('ghTarget', () => {
+  it('maps issue and PR URLs to panel targets', () => {
+    expect(ghTarget('https://github.com/o/r/issues/5')).toEqual({ kind: 'issue', repo: 'o/r', n: 5 });
+    expect(ghTarget('https://github.com/o/r/pull/6')).toEqual({ kind: 'pr', repo: 'o/r', n: 6 });
+    expect(ghTarget('https://github.com/o/r/issues/5#issuecomment-1')).toEqual({ kind: 'issue', repo: 'o/r', n: 5 });
+  });
+  it('leaves everything else external', () => {
+    for (const u of ['https://github.com/o/r/pull/3/files', 'https://github.com/o/r', 'http://github.com/o/r/issues/5', 'https://example.com/o/r/issues/5']) expect(ghTarget(u)).toBeNull();
   });
 });

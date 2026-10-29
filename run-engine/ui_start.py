@@ -102,6 +102,7 @@ def start(
     channel=None,
     model=None,
     effort=None,
+    issue=None,
 ) -> dict:
     """{session} (the session id), or {panel} for peer-review.
     ValueError -> 400, Conflict -> 409, RuntimeError -> 502."""
@@ -120,6 +121,8 @@ def start(
         arg = " ".join(n.lstrip("#") for n in re.split(r"[\s,]+", arg))
     elif skill == "pr-grind" and not re.fullmatch(r"#?\d+|https://\S+", arg):
         raise ValueError("pr-grind takes a PR number or URL")
+    if issue is None and skill == "refine-issues" and arg.isdigit():  # one issue: link the session to it
+        issue = int(arg)
     ui_settings.check_run(model, effort)
     with _lock(repo):
         snapshot = snapshot if snapshot is not None else ui_poller.snapshot(repo)
@@ -140,7 +143,12 @@ def start(
             if skill == "pr-grind":
                 text = ui_grind.grind_text(arg, channel)
             status, body = (launch or ui_repos.start_session)(
-                {"repo": repo, "text": text, **{k: v for k, v in (("model", model), ("effort", effort)) if v}}
+                {
+                    "repo": repo,
+                    "text": text,
+                    **{k: v for k, v in (("model", model), ("effort", effort)) if v},
+                    **({"issue": issue} if issue is not None else {}),
+                }
             )
             if status == 409:
                 raise Conflict(body.get("error", "already running"))

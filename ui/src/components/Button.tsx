@@ -86,5 +86,5 @@ export function LinkButton({ variant = 'default', sm, icon, className, shortcut,
 
 /** External link (GitHub etc.) styled as a button; opens in a new tab. */
 export function ExtButton({ variant = 'default', sm, icon, className, ...rest }: AnchorHTMLAttributes<HTMLAnchorElement> & Common) {
-  return <a className={cls(variant, sm, icon, className)} target="_blank" rel="noopener noreferrer" {...rest} />;
+  return <a data-ext className={cls(variant, sm, icon, className)} target="_blank" rel="noopener noreferrer" {...rest} />;
 }

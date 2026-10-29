@@ -467,6 +467,7 @@ export interface BoardStartBody {
   skill: string;
   arg: string | number | (string | number)[];
   via?: StartVia;
+  issue?: number; // links the session to this issue (the feature's epic, say)
   lenses?: string[];
   model?: string | null;
   effort?: string | null;

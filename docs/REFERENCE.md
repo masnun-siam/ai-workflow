@@ -155,6 +155,8 @@ on starts a grind at once when the PR is already ready and has none; turning it 
 paused grind (the PR stays open). Delivery cards carry `grind_on` and `mergeable`. The switches are in
 `issue_grind.json`. `POST /api/grind/issue` (`{repo, issue, on}`).
 
+**Links.** A plain click on any GitHub issue or PR link in the app (transcripts, PRD, bodies, comments, dispatch) opens that item's side panel; Cmd/Ctrl/Shift/Alt or middle click, the panels' "on GitHub" buttons (`data-ext`) and other links still open GitHub. `POST /api/start` takes an optional `issue` that links the session to it; a single-issue `refine-issues` links itself, and a feature's create-tasks and refine steps pass the epic.
+
 **Panels.** An issue and its PR share one side panel (full screen on a phone): an **Issue** tab, and
 once the issue has a PR, **PR overview**, Checks, Conversation, Files and Commits beside it. Opened on
 an issue it starts on Issue; opened from a PR action (Merge, Open PR) on PR overview; a PR with no

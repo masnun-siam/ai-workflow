@@ -2,6 +2,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
+import { ExtButton } from './components';
 import { mergeWarnings } from './panels/prWarnings';
 import { SMALL_CHANGE_LOCK, SMALL_CHANGE_MARKER, SMALL_CHANGE_NOTE, smallChangeArg, smallChangeText } from './features/smallChange';
 
@@ -218,6 +219,36 @@ describe('PRD tab', () => {
     await user.click(screen.getByRole('button', { name: 'Save and commit' }));
     expect(await screen.findByText(/changed on disk since you opened it/)).toBeTruthy();
     expect(posts.find((p) => p.url === '/api/prd')?.body.base_sha).toBe('abc');
+  });
+});
+
+describe('GitHub links open the side panel', () => {
+  const open = async () => {
+    mock({
+      prds: [prd({ status: 'Draft', column: 'draft' })],
+      extra: { '/api/prd': () => json({ text: 'See [one](https://github.com/o/r/issues/5) and [two](https://github.com/o/r/pull/3/files).', sha: 'abc', branch: 'main' }) },
+    });
+    window.location.hash = '#/features/f1/prd?repo=o/r';
+    render(<App />);
+    return userEvent.setup();
+  };
+
+  it('a plain click on an issue link opens the panel; a meta-click and a non-issue link do not', async () => {
+    const user = await open();
+    const issue = await screen.findByRole('link', { name: 'one' });
+    await user.keyboard('{Meta>}');
+    await user.click(issue);
+    await user.keyboard('{/Meta}');
+    expect(screen.queryByRole('complementary', { name: 'Issue details' })).toBeNull();
+    await user.click(screen.getByRole('link', { name: 'two' }));
+    expect(screen.queryByLabelText('Pull request details')).toBeNull();
+    await user.click(issue);
+    expect(await screen.findByLabelText('Issue details')).toBeTruthy();
+  });
+
+  it('an ExtButton is not intercepted', () => {
+    render(<ExtButton href="https://github.com/o/r/issues/5">Issue on GitHub</ExtButton>);
+    expect(screen.getByRole('link').hasAttribute('data-ext')).toBe(true);
   });
 });
 
