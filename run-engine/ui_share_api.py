@@ -13,6 +13,7 @@ import dispatch
 import shared
 import ui_actions
 import ui_share_runtime as runtime
+import ui_share_send
 import ui_shares
 import ui_tailscale
 
@@ -65,6 +66,7 @@ def _view(share: dict, detail: bool = False) -> dict:
         out.update(
             threads=[{**ui_shares.public_thread(t), "id": t["id"]} for t in share["threads"]],
             approvals=[{"id": a["id"], "name": a["name"], "at": a["at"]} for a in share["approvals"]],
+            unsent=len(ui_share_send.unsent_threads(share)),
             last_seen_at=share.get("last_seen_at"),
             prd_updated_at=updated,
         )
@@ -164,6 +166,8 @@ def _route(method, p, body, query):
     if method == "POST" and n == 2 and p[1] == "seen":
         ui_shares.mark_seen(p[0])
         return 204, None
+    if method == "POST" and n == 2 and p[1] == "send":
+        return ui_share_send.send(p[0], body)
     if method == "DELETE" and n == 2 and p[1] == "record":
         return _record(p[0])
     if method == "DELETE" and n == 3 and p[1] == "threads":

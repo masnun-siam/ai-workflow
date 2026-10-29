@@ -325,32 +325,6 @@ def _board(path: str, query: str):
     return 200, {**body, "error": snap.get("error"), "retry_at": snap.get("retry_at")}
 
 
-def _panel_rows() -> list:
-    """One row per peer-review panel for the Inbox (ui_inbox's `panels`)."""
-    base = os.path.join(peer_review.data_dir(), "peer-review")
-    rows = []
-    for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
-        try:
-            p, st = peer_review.load_panel(name), peer_review.panel_status(name)
-        except (OSError, ValueError, KeyError):
-            continue
-        meta = ui_planning._parse(p["artifact"]) if "/docs/prds/" in p["artifact"] else None
-        rows.append(
-            {
-                "id": name,
-                "repo": p["repo"],
-                "artifact": p["artifact"],
-                "state": p["state"],
-                "round": st["round"],
-                "max_rounds": st["max_rounds"],
-                "approved": st["approved"],
-                "total": st["total"],
-                "prd_status": meta["status"] if meta else None,
-            }
-        )
-    return rows
-
-
 def _inbox(query: str):
     """(status, body) for GET /api/inbox."""
     repo = (parse_qs(query).get("repo") or [""])[0]
@@ -374,7 +348,7 @@ def _inbox_items(repo, watched, recs) -> dict:
     labels = {c["cmd"]: c["label"] for c in ui_settings.load()["commands"]}
     body = ui_inbox.build(
         sessions=recs,
-        panels=_panel_rows(),
+        panels=ui_panel.rows(),
         grind_index=ui_grind.index(),
         flags=_flags,
         repos=ui_repos.list_repos(),
