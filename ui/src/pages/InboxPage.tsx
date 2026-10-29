@@ -1,11 +1,11 @@
 // FR-7, FR-8, FR-10 and the Away summary (FR-26): everything that needs the user, across repos.
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAfkDismiss, useInbox, useRepos, useSessions, needsYouCount } from '../api/hooks';
 import type { AfkLogEntry, AfkState } from '../api/types';
 import { Banner, Button, Chip, EmptyState, useListSelection } from '../components';
 import type { InboxItem } from '../api/types';
-import type { PanelTarget } from '../panels/PanelContext';
+import { usePanel, type PanelTarget } from '../panels/PanelContext';
 import { ChangeDialog, type RoundEntry } from '../inbox/ChangeDialog';
 import { ItemRow, useInboxActions } from '../inbox/items';
 import { clockText, money, shortRepo } from '../lib/format';
@@ -21,6 +21,12 @@ const KIND: Record<string, string> = { answer: 'Answered', 'skip-ci': 'Skipped C
 type RichEntry = AfkLogEntry & { id: string };
 const isRich = (l: AfkLogEntry): l is RichEntry => !!l.id && (l.kind === 'answer' || l.kind === 'held');
 const hhmm = (t: number) => clockText(t);
+const byGroup = (list: InboxItem[]) => INBOX_GROUPS.flatMap(({ id }) => list.filter((i) => i.group === id));
+/** `items` in the order of `keys` (the order last shown); items not in it keep the server order after the known ones of their group. */
+function heldOrder(items: InboxItem[], keys: string[]): InboxItem[] {
+  const at = new Map(keys.map((k, n) => [k, n]));
+  return byGroup([...items].sort((x, y) => (at.get(x.key) ?? keys.length) - (at.get(y.key) ?? keys.length)));
+}
 
 function RoundRow({ l, checked, onToggle }: { l: RichEntry; checked: boolean; onToggle: () => void }) {
   const held = l.kind === 'held';
@@ -108,14 +114,19 @@ export function InboxPage() {
   const a = useInboxActions();
   const [openKey, setOpen] = useState<string | null | undefined>(undefined);
   const [publishing, setPublishing] = useState('');
+  const panel = usePanel();
+  const shown = useRef<string[]>([]);
 
   const items = q.data?.items ?? [];
   const count = needsYouCount(items);
   const working = sessions.filter((s) => s.outcome === 'starting' || s.outcome === 'running').length;
-  const firstAnswer = items.find((i) => i.type === 'question')?.key ?? null;
+  // FR-4: while a row or the side panel is open, rows keep the order last shown; a new order applies once nothing is open
+  const opened = openKey === undefined ? items.some((i) => i.type === 'question') : items.some((i) => i.key === openKey);
+  const ordered = opened || panel.target ? heldOrder(items, shown.current) : byGroup(items);
+  shown.current = ordered.map((i) => i.key);
+  const firstAnswer = ordered.find((i) => i.type === 'question')?.key ?? null;
   const open = openKey === undefined ? firstAnswer : openKey;
   const afk = q.data?.afk;
-  const ordered = INBOX_GROUPS.flatMap(({ id }) => items.filter((i) => i.group === id));
   // Enter is registered per row (ItemRow), so the list's own handler has nothing to do.
   const { selected, rowProps } = useListSelection({ keys: ordered.map((i) => i.key), onOpen: () => {}, reset: filter, panelTarget: (k) => panelTargetOf(ordered.find((i) => i.key === k)) });
 
@@ -153,7 +164,7 @@ export function InboxPage() {
         </EmptyState>
       ) : null}
       {INBOX_GROUPS.map(({ id, label }) => {
-        const g = items.filter((i) => i.group === id);
+        const g = ordered.filter((i) => i.group === id);
         if (!g.length) return null;
         return (
           <section key={id} aria-label={label}>
