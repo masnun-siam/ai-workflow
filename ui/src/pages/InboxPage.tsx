@@ -38,6 +38,7 @@ function RoundRow({ l, checked, onToggle }: { l: RichEntry; checked: boolean; on
         {l.changed ? <Chip tone="muted">Changed</Chip> : null}
         {opus ? <span className="muted">{money(l.cost)}</span> : null}
         {opus && l.answerer ? <Link to={routes.session(l.answerer)}>answerer transcript</Link> : null}
+        {typeof l.risk === 'number' ? <span className="muted">Risk check: sent to Opus (p={+l.risk.toFixed(2)})</span> : null}
       </div>
       <div className="stack" style={{ gap: 4, paddingLeft: 24 }}>
         {qs.map((q, k) => (
