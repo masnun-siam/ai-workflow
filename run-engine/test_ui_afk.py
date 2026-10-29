@@ -14,6 +14,8 @@ d = tempfile.mkdtemp()
 os.environ["CLAUDE_PLUGIN_DATA"] = d
 for k in [k for k in os.environ if k.startswith("AIW_NTFY_")]:
     del os.environ[k]
+BIN = tempfile.mkdtemp()  # no real jev can run: an empty bin first on PATH
+os.environ["PATH"] = BIN + ":/usr/bin:/bin"
 
 import ui_afk  # noqa: E402
 import ui_notify  # noqa: E402
@@ -285,6 +287,126 @@ e = log_of(v)[0]
 assert (e["by"], e["answerer"], e["cost"], e["kind"]) == ("opus", k["id"], 0.3, "answer"), e
 assert e["questions"][0]["picked"] == ["Approve"] and e["questions"][0]["why"] == "safe"
 
+# ---- risk check (FR-3) ----
+import ui_settings  # noqa: E402
+
+CALLS, PFILE = os.path.join(BIN, "calls"), os.path.join(BIN, "p")
+STUB = os.path.join(BIN, "jev")
+
+
+def stub(p="0.9", fail=False):
+    open(PFILE, "w").write(p)
+    open(STUB, "w").write(
+        f"#!/bin/sh\necho x >> {CALLS}\n" + ("exit 3\n" if fail else f'echo "{{\\"noul\\": $(cat {PFILE})}}"\n')
+    )
+    os.chmod(STUB, 0o755)
+
+
+class FakePool:
+    def __init__(self):
+        self.jobs = []
+
+    def submit(self, fn, *a):
+        self.jobs.append((fn, a))
+
+    def run(self):
+        jobs, self.jobs = self.jobs, []
+        for fn, a in jobs:
+            fn(*a)
+
+
+pool = ui_afk._risk_pool = FakePool()
+
+
+def calls():
+    return open(CALLS).read().count("x") if os.path.exists(CALLS) else 0
+
+
+OKR = 'AWAY-ANSWER: {"answers": {"0": {"labels": ["Abort"], "why": "risky"}}}'
+
+# p 0.9 -> Opus answerer, logged with risk
+stub("0.9")
+resumed.clear()
+r9 = waiting()
+n0 = len(started)
+ui_afk.tick(W)
+ui_afk.tick(W)
+assert len(pool.jobs) == 1 and len(started) == n0 and not resumed, pool.jobs  # queued once, no pick
+pool.run()
+assert pq(r9)["risk"] == {"p": 0.9} and not ui_afk._risk_queued
+ui_afk.tick(W)
+assert len(started) == n0 + 1 and not resumed
+finish(started[n0]["id"], OKR)
+ui_afk.tick(W)
+e = log_of(r9)[0]
+assert e["by"] == "opus" and e["risk"] == 0.9, e
+
+# p 0.5 -> Opus; a hold carries risk
+stub("0.5")
+r5 = waiting()
+ui_afk.tick(W)
+pool.run()
+n1 = len(started)
+ui_afk.tick(W)
+assert len(started) == n1 + 1
+finish(started[n1]["id"], 'AWAY-ANSWER: {"hold": "merge"}')
+ui_afk.tick(W)
+e = log_of(r5)[0]
+assert e["kind"] == "held" and e["risk"] == 0.5, e
+
+# p 0.49 -> auto-picked, no risk key
+stub("0.49")
+resumed.clear()
+r49 = waiting()
+ui_afk.tick(W)
+pool.run()
+ui_afk.tick(W)
+assert [x[0] for x in resumed] == [r49]
+e = log_of(r49)[0]
+assert e["by"] == "recommended" and "risk" not in e, e
+
+# failing stub -> {p: None}, auto-picked
+stub(fail=True)
+resumed.clear()
+rf = waiting()
+ui_afk.tick(W)
+pool.run()
+assert pq(rf)["risk"] == {"p": None}
+ui_afk.tick(W)
+assert [x[0] for x in resumed] == [rf] and "risk" not in log_of(rf)[0]
+
+# switch off: auto-picked in the first tick, jev never run
+stub("0.9")
+ui_settings.save({"use_jev": False})
+resumed.clear()
+c0 = calls()
+ro = waiting()
+ui_afk.tick(W)
+assert [x[0] for x in resumed] == [ro] and not pool.jobs and calls() == c0
+assert "risk" not in log_of(ro)[0]
+ui_settings.save({"use_jev": True})
+
+# owner wins while the check runs
+resumed.clear()
+rw = waiting()
+ui_afk.tick(W)
+assert len(pool.jobs) == 1
+ui_sessions.claim_answer(rw, "q-1")
+n_log = len(ui_afk.load()["log"])
+pool.run()
+assert "risk" not in (ui_sessions.load(rw).get("pending_question") or {}) and not resumed
+assert len(ui_afk.load()["log"]) == n_log and not ui_afk._risk_queued
+
+# non-recommended round: no check, no risk
+rn = waiting(rec=False)
+ui_afk.tick(W)
+assert not pool.jobs and "risk" not in pq(rn)
+
+for sid in (r9, r5, r49, rf, ro, rw, rn):  # leave nothing waiting for the cases below
+    ui_sessions.update(sid, status="stopped", pending_question=None)
+started.clear()
+resumed.clear()
+
 # hold: one held row, round stays waiting, no more answerers
 n0 = len(started)
 h = waiting(rec=False)
@@ -366,6 +488,9 @@ ui_sessions.update(w, status="stopped", pending_question=None)
 ui_afk.start(W + 7200, W + 2)
 n0 = len(started)
 fr = waiting()
+stub("0.1")
+ui_afk.tick(W + 2)
+pool.run()
 ui_afk.tick(W + 2)
 assert len(started) == n0 and log_of(fr)[0]["by"] == "recommended"
 

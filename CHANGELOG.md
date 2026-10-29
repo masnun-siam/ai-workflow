@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- **Away mode risk check** (#573): before auto-picking a round whose questions all carry a recommended option, a jev worker (off the tick, two at a time) asks whether any recommended option is irreversible or outward-facing and stores `risk` on the round. At 0.5 or more the round goes to the Opus answerer and its log entry carries `risk`; with jev off, missing or failing it is auto-picked as before.
+
 ### Added
 
 - **jev answer cache and call ceiling** (#571): the Inbox urgency, readiness and duplicate points reuse earlier answers (kept in memory, flushed to `jev_cache.json` in the plugin data dir every minute; 2000 entries, 7 days) and stop at 500 jev calls an hour (`capped`). Risk checks, the capture route and hints are never cached or counted.
