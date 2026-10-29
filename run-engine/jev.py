@@ -5,6 +5,8 @@ Statuses: ok, off (Settings -> Use jev is off), missing (not on PATH), no_answer
 failed (non-zero exit, with "exit"), unreadable (bad JSON or field). A failure never raises, and the
 `jev` binary never runs while the switch is off. Text is redacted, then cut to MAX_CHARS, before it is sent.
 
+peek(...) reads the cache only (None on a miss or when jev is off or missing).
+
 The CACHED points (urgency, readiness, duplicate) are answered from a cache of ok answers (memory, flushed to
 jev_cache.json by the server's timer; 2000 entries, 7 days) and capped at CEILING calls an hour: past it they
 return {"status": "capped"}. Every other point (risk, route, hints) is never cached, counted or refused.
@@ -128,6 +130,25 @@ def start_timer(interval: float = FLUSH_S) -> threading.Thread:
     return t
 
 
+def _sent_key(point, kind, question, text, options, levels) -> tuple[str, str]:
+    """The redacted, cut text that is sent, and its cache key. Shared by ask and peek so they never disagree."""
+    sent = redact(text)[:MAX_CHARS]
+    digest = hashlib.sha256(json.dumps([kind, question, options, levels, sent], sort_keys=True).encode())
+    return sent, f"{point}:{digest.hexdigest()}"
+
+
+def peek(
+    point: str, kind: str, question: str, text: str, *, options: dict | None = None, levels: list | None = None
+) -> dict | None:
+    """The cached ok answer for a call, or None. Never runs jev, never counts against the ceiling, never writes."""
+    if status() != "ok":
+        return None
+    key = _sent_key(point, kind, question, text, options, levels)[1]
+    with _lock:
+        hit = _load().get(key)
+        return {"status": "ok", **hit["answer"]} if hit and _fresh(hit) else None
+
+
 def ask(
     point: str, kind: str, question: str, text: str, *, options: dict | None = None, levels: list | None = None
 ) -> dict:
@@ -135,11 +156,9 @@ def ask(
     s = status()
     if s != "ok":
         return {"status": s}
-    sent = redact(text)[:MAX_CHARS]
+    sent, key = _sent_key(point, kind, question, text, options, levels)
     if point not in CACHED:
         return _run(point, kind, question, sent, options, levels)
-    digest = hashlib.sha256(json.dumps([kind, question, options, levels, sent], sort_keys=True).encode())
-    key = f"{point}:{digest.hexdigest()}"
     with _lock:
         hit = _load().get(key)
         if hit and _fresh(hit):
