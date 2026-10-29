@@ -45,9 +45,15 @@ the rounds, and relays to you. Lenses never message each other or you; the UI is
      change the code, then update the artifact's Answer and Diff to match.
   2. Answer each finding in a short list in your reply: `fixed`, or `dismissed` with a one-line
      reason. A finding only the user can settle (evidence, priority, a product choice) is not
-     yours to decide: leave the artifact as is and list it for the user.
+     yours to decide: leave the artifact as is and **ask the user in that same turn**. In a
+     headless run, send all such findings in one `aiw ask --json '<AskUserQuestion input>'`
+     (one question per finding, concrete options) and end your turn; the answer arrives as
+     your next message, then apply it. Never only list them in your reply text: the user may
+     not read it, and the panel repeats the same finding every round.
   3. Address minor findings when cheap; the same list answers them.
-  4. End your turn. The UI then asks the same lenses to re-review the revised artifact. You do
+  4. After editing, run `wc -l` and `md5` on the artifact and put both in your reply, so a
+     lens that reads a stale copy (same checksum as before) is caught at once.
+  5. End your turn. The UI then asks the same lenses to re-review the revised artifact. You do
      not ask them, and you do not start another round yourself.
 - **Every lens says `Verdict: approve`:** say the panel approved, list any minor findings and what you
   did with them, and end. If you changed the artifact after that, say the change was not reviewed.

@@ -232,12 +232,21 @@ No metric, because usage is small and the share store can be inspected by hand.
 - **The share page is a second Vite entry in the committed `ui_dist`.** It reuses the PRD renderer and Mermaid and needs no new dependency.
 - **Priority is medium.** It is useful, but nothing is blocked without it.
 - **The author's replies show the git `user.name` of the checkout.** It is the identity teammates already know, and the tailscale login is not exposed.
+- **Settled while refining the issues (2026-10-29).**
+  - Send (FR-9): only a reviewer comment newer than `sent_at` makes a thread unsent; author replies after `sent_at` go along as context. Anchoring runs only in the browser, so the PRD tab passes the ids it placed as Outdated: `POST /api/shares/<id>/send` takes `{confirm?, outdated: [thread id]}`. The preview is `{prompt, threads, remaining, dropped, trimmed: [{thread, dropped}], busy: {sessions, panel}}`, and a thread that does not fit the remaining budget stops the fill (the rest is `remaining`). The share detail adds `unsent`, `approvals` (`{id, name, at}`), `last_seen_at` and `prd_updated_at`.
+  - Inbox (FR-8): the item sits in the Decide group, uses singular forms ("1 new comment", "1 approval") and reads "M approvals on <title>" when there are only approvals. The matrix label is "Reviewers commented on a PRD". The event is raised from a store hook on each saved reviewer comment or approval.
+  - PRD tab (FR-7): an ended share with no threads shows nothing (no "Delete share record"). Delete confirms use the singular for one ("its 1 comment", "its 1 thread"). The "new" marker counts reviewer comments only.
+  - Store and listener: `updated_at` is the PRD file's mtime. A re-share resets `created_at` and keeps `last_seen_at`. Public writes are checked 400, then 409, then 429, and only an accepted write uses a rate slot. A whitespace-only `exact` is 400. The page is served at `/s/<token>` with `<base href="/s/<token>/">` injected, and its assets are allow-listed from Vite's `.vite/manifest.json`, walked from the `share.html` entry. When tailscale waits for funnel consent, the call times out to 503 with a generic message. A recorded funnel port equal to the UI's tailnet port this run is never funnelled, and the share is `reachable: false`.
+  - Owner API: the list's `comments` counts reviewer comments; an ended share is `reachable: false`; Share on a missing PRD file is 400. A comment is deleted at `DELETE /api/shares/<id>/threads/<tid>/comments/<cid>`.
+  - Anchors (FR-5): the fuzzy step is an approximate-substring edit-distance search; a quote whose exact text with context occurs more than once is not guessed (Outdated).
 
 ## Open questions
 
 None.
 
 ## Change log
+
+- 2026-10-29: Refining the epic's issues settled the Send, Inbox, PRD tab, store and listener details listed under Decisions ("Settled while refining the issues").
 
 - 2026-10-29: Approved after the team's review. Folded in the panel's last minor notes: one Stop confirm text (FR-10) that FR-13 refers to, worded for 0 and 1 approvals; the re-share confirm warns when approvals will be cleared; tests cover both confirms.
 
