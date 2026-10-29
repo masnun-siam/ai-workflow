@@ -40,6 +40,13 @@ function LaneCard({ l, lanes, on, onPick, dim, multi, rowProps }: { l: Lane; lan
   );
 }
 
+/** A wave's state as a pill: done when every lane closed, running while any works, else waiting. */
+function WaveState({ c }: { c: Lane[] }) {
+  if (c.every((l) => l.stage === 'closed')) return <span className="wave-st done">done</span>;
+  const run = c.filter((l) => ACTIVE.includes(l.stage)).length;
+  return run ? <span className="wave-st run">{run} running</span> : <span className="wave-st">waiting</span>;
+}
+
 /** Columns by dependency depth; SVG edges from each dependency to its dependent, measured after layout. */
 export function LaneGraph({ lanes, picked, onPick, rowProps }: { lanes: Lane[]; picked: string | null; onPick: (k: string) => void; rowProps: RowProps }) {
   const multi = new Set(lanes.map((l) => l.repo)).size > 1;
@@ -90,7 +97,7 @@ export function LaneGraph({ lanes, picked, onPick, rowProps }: { lanes: Lane[]; 
       </svg>
       {cols.map((c, i) => (
         <div key={i} className="dsp-col">
-          <div className="dsp-col-h">{i === 0 ? 'Starts first' : i === 1 ? 'Then' : 'And then'}</div>
+          <div className="dsp-col-h"><b>Wave {i + 1}</b><WaveState c={c} /></div>
           {c.map((l) => <LaneCard key={l.key} l={l} lanes={lanes} multi={multi} on={picked === l.key} onPick={() => onPick(l.key)} rowProps={rowProps} dim={!!related && !related.has(l.key)} />)}
         </div>
       ))}

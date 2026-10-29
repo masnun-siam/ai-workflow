@@ -74,7 +74,7 @@ Anything else is a not-found page. **Shortcuts:** `N` Start, `G` then `I/F/D/A/S
 turns Away mode on or off. Its first group, **Actions here**, lists every enabled action registered on the page, the open panel and the selected row (and the items of mounted menus, via `Menu`'s `paletteLabel`), labelled as the button is, with its key; choosing one does what a click does.
 
 **Inbox.** Everything that needs you, across repos, grouped Blocking everything, Answer Claude, Decide,
-Fix, Set up and Waiting (nothing to do); the rail badge and tab title count all but Waiting. Items: GitHub CLI
+Fix, Set up and Waiting (nothing to do), each item its own card; the top bar's Inbox count, its orange "n need you" button and the tab title count all but Waiting. Items: GitHub CLI
 signed out; a session asking a question (answered inline); a peer review at its round cap or with every
 lens approving (Approve PRD anyway, Run 2 more rounds); reviewers' comments or approvals on a shared PRD (Open PRD; one item per share, cleared when the share is marked seen); a PR ready to merge (Review and merge, see
 **Merge rule**); a PR with merge conflicts (Resolve conflicts); a paused grind (Skip CI and continue, Stop grind); a failed session (Retry, Continue in
@@ -107,14 +107,16 @@ options, oldest PRDs dropped first). Text under 20 characters runs no check. A p
 otherwise `match` is null and `why` says why (jev off or missing, issues not loaded yet, no likely duplicate, hourly limit).
 The New page calls it 800 ms after typing stops (repo chosen, 20+ characters) and shows "Looks like #n <title>" below the route line, linked in a new tab; it hides on any edit, never blocks either start button, and shows nothing for a null match or a failed check.
 
-**Features.** A pipeline of six stage tiles (PRD draft, PRD review, Approved, Tasks, Building,
-Shipped) with counts and the features in each, then one card per feature in progress: its issues as
+**Features.** A map with the six stages (PRD draft, PRD review, Approved, Tasks, Building, Shipped)
+across the top and one coloured line per feature in progress (then the three latest shipped): solid up to
+its stage, dotted after, its current stop orange when it needs you. Then one card per feature in progress,
+in its line's colour: its issues as
 squares (merged, in review, building, ready, needs refining, needs you), merged of total, its running
 dispatch with time and cost, a **Merge #n** button for each PR ready to merge and one next-step button.
 A feature whose dispatch needs you turns orange. Shipped features follow as chips. A PRD whose header
 says `**Status:** Done` counts as Shipped.
 
-**Small changes** (`#/changes`, its own sidebar item) holds the open issues of the repo that belong to
+**Small changes** (`#/changes`, its own top-bar link) holds the open issues of the repo that belong to
 no feature (no epic, or an epic with no PRD here): **Where they stand**, a priority by state grid
 (Needs refining, Ready, In flight) whose cells filter the list; **Ready to run**, the refined,
 unblocked issues no dispatch owns, to pick and **Run N as a dispatch**; **Needs refining first**, cards
@@ -124,9 +126,9 @@ Refine is locked on unrefined issues. The table's pick bar: tick unrefined, read
 dispatch does not own, then **Refine N** (one `/refine-issues` session on the picked unrefined ones),
 **Run N** (Run small changes on the picked refined ones) or **Clear**.
 
-A feature page shows its stages as blocks, the **Next step** box (solid orange, naming each lane that
+A feature page shows its own line through the stages, the **Next step** box (solid orange, naming each lane that
 waits, when its dispatch needs you), a **Build map** (the issues in build order, a column per wave of
-dependencies, each a button that opens the issue), the running dispatch (time, cost, tokens, recent
+dependencies drawn as a track with each issue a stop on it, each a button that opens the issue), the running dispatch (time, cost, tokens, recent
 events), the PRD's sections, and tabs **Issues**, **PRD**, **Peer review** and **Sessions**. Issues: a table by
 status with signals (priority, PR, CI, review, grind, live session, failed last run, cleanup), one
 action per row (Refine, Start, Retry, Answer, Merge, Grind, Skip CI, Clean up; an issue a dispatch owns
@@ -242,7 +244,7 @@ non-GET without `Content-Type: application/json` and an `Origin` equal to the sh
 Responses carry `Referrer-Policy: no-referrer`, `X-Robots-Tag: noindex`, a strict
 `Content-Security-Policy` and `Cache-Control: no-store`.
 
-**Dispatches.** `#/dispatches` lists running dispatches as cards (progress, the issues that need you)
+**Dispatches.** `#/dispatches` lists running dispatches as cards (a track with one stop per wave, done, running or waiting, and the issues that need you)
 and the rest as history; **Run an epic** takes an epic (typed, or picked from the repo's
 epics), grind mode (Off, Simple, Full), auto-merge, lanes at once (1–10), a base branch (a searchable list of the repo's branches, also in Run small changes), a feature branch, model and
 effort, then **Preview** shows the waves and warnings (unrefined issues, cycles, missing checkouts,
@@ -250,7 +252,7 @@ repos without a Slack channel, open blockers outside the epic, issues jev reads 
 as headless sessions (the same dialog, given picked issues, becomes **Run small changes**: chips instead of the epic field, no feature branch, `issues` in the request; lists show it by its title, "Small changes: #412, #415", and `owner/repo`); `herdr-dispatch` starts herdr ones, and both show here. `aiw dispatch plan|start` and `herdr-dispatch` take an epic only. A dispatch page has the
 live settings, **Pause**/**Resume**/**Cancel**, a one-sentence summary with time and spend, a **Needs
 you** strip (each issue waiting on you with its one action: Merge, Answer, Retry), the issues as a
-**Graph** (Starts first, Then: columns by what they wait for, edges to dependents, the repo on cards when
+**Graph** (a timetable under one header card with the title, state, actions and progress: Wave 1, Wave 2… columns by what they wait for, each marked done, n running or waiting, tracks to dependents, the activity feed below, the repo on cards when
 the epic spans repos) or a **List**, each with a plain line on what it is doing now, an issue panel (what
 is happening and its main action, a step bar, the question form when its session asks one, a message box,
 its transcript or herdr pane text, and Pause, Merge now, Hold the merge, Retry, Skip in a menu) and the
@@ -264,8 +266,8 @@ instead of starting a separate session, and the epic is re-read every 5 minutes 
 /api/dispatches/<id>/settings|state|lane|end|seen`. `settings.base_branch` (a branch name or null, same name rule as `feature_branch`, must differ from it) is fixed at start: a settings edit that contains it is 400 `base_branch is fixed at start`. Preview warns `<repo>: base branch <b> does not exist` per lane repo, Start refuses with that message (400, CLI exit non-zero) before creating anything, and a missing `feature_branch` is cut from the head of `base_branch` when set.
 `GET /api/github/branches?repo=<owner/name>` lists the repo's branches for the Base branch picker: 200 `{branches, default}` (the default first, the rest sorted), 400 `repo must be owner/name`, 502 with `gh`'s error.
 
-**Start** (the New button, `N` or ⌘K). Commands grouped Plan, Build, Review, Ship, Capture and
-Maintain, each with a one-line description; the last one is remembered. Maintain has **Update FAQ**, whose optional input takes new questions, one per line, and the options `full`, `--lang <codes>` and `--videos <url>`, and **Bootstrap repo**, whose optional input takes a phase and the bootstrap issue number. Pick **Where** (a registered repo,
+**Start** (the New button, `N` or ⌘K), titled "What should we start?". Commands grouped Plan, Build, Review, Ship, Capture and
+Maintain as six cards across the top, each command a pill (its description shows above the options below); the last one is remembered. Maintain has **Update FAQ**, whose optional input takes new questions, one per line, and the options `full`, `--lang <codes>` and `--videos <url>`, and **Bootstrap repo**, whose optional input takes a phase and the bootstrap issue number. Pick **Where** (a registered repo,
 or **No repo yet** for `create-prd`, `dump`, `day` and the custom prompt, which run in the notes vault
 with a **Vault folder**), the input, and **Run on** an account (a limited account says the run will
 queue). `implement-issue`, `pr-review` and `pr-grind` list the repo's open issues or PRs under the
@@ -275,7 +277,7 @@ days, one session per day, 3 running at once, the rest `queued`). **Custom** tak
 with permissions skipped. Starting anything opens its session page; a duplicate start (409) offers to
 open the running session.
 
-**Activity and sessions.** Live sessions as cards, history as a table with search, a result filter
+**Activity and sessions.** Live sessions as a departures board (one dark row each), history as a table with search, a result filter
 and cost today; **Clean up** lists finished sessions by repo before removing them. A session page
 has banners for waiting (inline answer), limited (reset time, **Resume on another account**, **Don't
 auto-resume**), failed (**Retry**, **Continue in terminal**) and queued (**Start now**), the transcript, a
@@ -313,7 +315,7 @@ the Slack review channel grind posts to (`repos[owner/repo]` in `ui_settings.jso
 skips grinding in a dispatch) and **Remove** (its clone is untouched), plus
 scan folders, **Find repos** and **Check remotes** (`gh repo view` on every repo, failures first).
 **jev**: a **Use jev** switch (`PUT /api/settings {use_jev}`, reverts on a failed save) and a read-only "jev found / not found" line. **Claude accounts**: the named `claude` commands a session can launch with, one per account; their plan
-usage (5h / 7d) shows in the rail. **Notifications** shows the matrix of 12 events by Browser, ntfy and This Mac: one switch per cell, saved at once. Each column header shows the channel's state and a Send test button (Browser tests itself; ntfy and This Mac call `POST /api/settings/notify/test` and toast the result; This Mac is disabled off a Mac) (`POST /api/settings/notify/channel`; a failed save reverts the switch and toasts). Below it, "Phone push (ntfy)" edits `ui.json` (written mode 0600; a token or
+usage (5h / 7d) shows in the top bar's Away menu. **Notifications** shows the matrix of 12 events by Browser, ntfy and This Mac: one switch per cell, saved at once. Each column header shows the channel's state and a Send test button (Browser tests itself; ntfy and This Mac call `POST /api/settings/notify/test` and toast the result; This Mac is disabled off a Mac) (`POST /api/settings/notify/channel`; a failed save reverts the switch and toasts). Below it, "Phone push (ntfy)" edits `ui.json` (written mode 0600; a token or
 password is never sent back to the browser, and an empty box keeps the saved one). **Peer review**
 sets the rounds cap, the lenses ticked by default and each lens prompt; changes are saved to
 `<data_dir>/config.json` and laid over the shipped `run-engine/config.json`, so **Reset to defaults**

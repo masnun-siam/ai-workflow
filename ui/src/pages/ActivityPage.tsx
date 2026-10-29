@@ -62,7 +62,7 @@ export function ActivityPage() {
       <section aria-label="Live">
         <div className="group-h"><h2>Live</h2><span className="n">{live.length}</span></div>
         {live.length ? (
-          <div className="live-grid">
+          <div className="live-grid departures">
             {live.map((s) => (
               <div key={s.id} {...rowProps(s.id)} className={`live-card${s.outcome === 'waiting' ? ' you' : ''}`}>
                 <div className="row"><SessionChip s={s.outcome} /><span className="grow" /><span className="faint" style={{ fontSize: 12 }}>{duration(s.started_at)}</span></div>

@@ -5,6 +5,7 @@ import type { Dispatch } from '../api/types';
 import { BoardStatus } from '../board/BoardStatus';
 import { Button, EmptyState, useListSelection } from '../components';
 import { CaptureBar } from '../features/CaptureBar';
+import { lineColor, SubwayMap } from '../features/SubwayMap';
 import { useStepRunner } from '../features/useStepRunner';
 import { useEpicDispatch } from '../dispatch/useOwner';
 import { counts, needsYou, secs } from '../dispatch/vocab';
@@ -21,7 +22,6 @@ import { useRepo } from '../shell/useRepo';
 import { KeyScope } from '../shell/shortcuts';
 
 const ORDER = ['review', 'draft', 'approved', 'tasks', 'building'];
-const st = (i: number) => ({ '--st': `var(--st${i})` }) as CSSProperties;
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 /** Live dispatch of each epic, so the pipeline and the cards share one read of /api/dispatches. */
@@ -34,7 +34,8 @@ function useLiveByEpic(repo: string) {
 type RowSel = Pick<ReturnType<typeof useListSelection>, 'rowProps'> & { selected: string | null };
 
 /** One feature in flight: its issues as squares, the merged count, and the next step with its button. */
-function Card({ f, repo, sel }: { f: Feature; repo: string; sel: RowSel }) {
+/** `color` is the feature's line on the map above, so a card and its line match. */
+function Card({ f, repo, sel, color }: { f: Feature; repo: string; sel: RowSel; color: string }) {
   const navigate = useNavigate();
   const { link } = useRepo();
   const { run, busy } = useStepRunner(f, repo);
@@ -51,7 +52,7 @@ function Card({ f, repo, sel }: { f: Feature; repo: string; sel: RowSel }) {
   return (
     <article
       className={`fcard${you ? ' you' : ''}`}
-      style={st(i)}
+      style={{ '--st': color } as CSSProperties}
       aria-label={f.title}
       {...sel.rowProps(f.slug)}
       onClick={() => { sel.rowProps(f.slug).onClick(); navigate(href); }}
@@ -124,29 +125,14 @@ export function FeaturesPage() {
         <div className="stack" aria-busy="true"><p className="muted" role="status">Loading features…</p><div className="skel" style={{ height: 188 }} /><div className="skel" style={{ height: 260 }} /></div>
       ) : (
         <>
-          <section className="pipe" aria-label="Pipeline">
-            {STAGES.map((s, i) => {
-              const here = features.filter((f) => f.stage === s.id);
-              const shown = s.id === 'shipped' ? here.slice(0, 2) : here;
-              return (
-                <div key={s.id} className={`pipe-t${here.length ? '' : ' empty-t'}`} style={st(i)}>
-                  <div className="pipe-h"><b>{s.label}</b><span>{here.length}</span></div>
-                  <div className="stack" style={{ gap: 6 }}>
-                    {shown.map((f) => (
-                      <Link key={f.slug} to={link(routes.feature(f.slug))} className={`pipe-i${stuck.includes(f) ? ' you' : ''}`}><i /><span>{f.title}</span></Link>
-                    ))}
-                    {here.length > shown.length ? <span className="muted" style={{ fontSize: 12.5, padding: '0 10px' }}>+{here.length - shown.length} more</span> : null}
-                  </div>
-                </div>
-              );
-            })}
-          </section>
+          {/* active lines first (their colours match the cards below), then the last few to ship */}
+          {active.length || shipped.length ? <SubwayMap features={[...active, ...shipped.slice(0, 3)]} stuck={stuck} /> : null}
 
           <section className="stack" style={{ gap: 14 }} aria-labelledby="flight-h">
             <h2 id="flight-h" className="sec-h">In progress <span className="n">{active.length}</span></h2>
             {active.length ? (
               <>
-                <div className="fgrid">{active.map((f) => <Card key={f.slug} f={f} repo={repo} sel={sel} />)}</div>
+                <div className="fgrid">{active.map((f, k) => <Card key={f.slug} f={f} repo={repo} sel={sel} color={lineColor(k)} />)}</div>
                 <div className="legend" aria-hidden="true">
                   <span><i style={{ background: 'var(--ship)' }} />Merged</span>
                   <span><i style={{ background: 'var(--review)' }} />In review</span>
