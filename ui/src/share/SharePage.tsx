@@ -5,11 +5,12 @@ import { bodyText, highlight } from '../lib/anchorDom';
 import { formatWhen } from '../lib/format';
 import { mdToHtml } from '../lib/md';
 import { prdBody, renderDiagrams, toggleDiagram } from '../lib/prdRender';
-import { getPrd, getThreads, postComment, postError, postThread, ShareError } from './api';
+import { getApprovals, getPrd, getThreads, postComment, postError, postThread, ShareError } from './api';
+import { Approve } from './Approve';
 import { CommentButton, ComposeForm, OutdatedList, ThreadCard, useIdentity } from './Comments';
 import { useBodySelection } from './selection';
 import { placeSlots, type Slot } from './slots';
-import type { PublicPrd, PublicThread } from './types';
+import type { PublicApproval, PublicPrd, PublicThread } from './types';
 
 const POLL_MS = 30_000;
 const FULL_AT = 500;
@@ -18,6 +19,7 @@ const NEW = 'new';
 export function SharePage() {
   const [prd, setPrd] = useState<PublicPrd | null>(null);
   const [threads, setThreads] = useState<PublicThread[]>([]);
+  const [approvals, setApprovals] = useState<PublicApproval[] | null>(null);
   const [gone, setGone] = useState(false);
   const [offline, setOffline] = useState(false);
   const [bodyTxt, setBodyTxt] = useState<string>();
@@ -40,12 +42,14 @@ export function SharePage() {
     const tick = async () => {
       let again = true;
       try {
-        const [next, list] = await Promise.all([getPrd(ctl.signal), getThreads(ctl.signal)]);
+        const [next, list, appr] = await Promise.all([getPrd(ctl.signal), getThreads(ctl.signal), getApprovals(ctl.signal)]);
         if (ctl.signal.aborted) return;
         // Keep the old objects when nothing changed so React leaves the rendered body alone.
         setPrd((cur) => (cur && cur.text === next.text && cur.title === next.title && cur.status === next.status && cur.updated_at === next.updated_at ? cur : next));
         const fresh = Array.isArray(list) ? list : [];
         setThreads((cur) => (JSON.stringify(cur) === JSON.stringify(fresh) ? cur : fresh));
+        const freshAppr = Array.isArray(appr) ? appr : [];
+        setApprovals((cur) => (JSON.stringify(cur) === JSON.stringify(freshAppr) ? cur : freshAppr));
         setOffline(false);
       } catch (e) {
         if (ctl.signal.aborted) return;
@@ -130,6 +134,7 @@ export function SharePage() {
     } />
   );
 
+  const reloadApprovals = () => getApprovals().then(setApprovals).catch((e) => { if (e instanceof ShareError && e.status === 404) setGone(true); });
   const when = prd?.updated_at ? formatWhen(prd.updated_at) : '';
 
   if (gone) {
@@ -149,6 +154,7 @@ export function SharePage() {
         <>
           <h1>{prd.title}</h1>
           <p>{prd.status && <span>{prd.status}</span>}{prd.status && when !== '' && ' · '}{when !== '' && when !== '—' && `Last updated ${when}`}</p>
+          {approvals && <Approve approvals={approvals} updatedAt={prd.updated_at} who={who} onList={(f) => setApprovals((cur) => f(cur ?? []))} reload={reloadApprovals} onGone={() => setGone(true)} />}
           <div ref={prose} onClick={toggleDiagram} className="prose box share-prose" style={{ padding: '18px 22px' }} dangerouslySetInnerHTML={{ __html: html }} />
           <CommentButton sel={sel} full={full} onClick={startThread} />
           {slots.map((s, i) => createPortal(s.ids.map((id) => threads.find((t) => t.id === id)).map((t) => t && card(t)), s.el, `${i}`))}
