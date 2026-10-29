@@ -465,6 +465,22 @@ describe('Activity', () => {
     await user.selectOptions(hist.getByLabelText('Result'), 'failed');
     expect(hist.getAllByRole('row').length).toBe(2);
   });
+  it('clamps a live card command and drops the dangling cost dash', async () => {
+    const command = '/x:dump ' + 'long/path/'.repeat(30);
+    routes['/api/sessions'] = { limits: {}, usage: {}, afk: AFK, sessions: [
+      base({ id: 'a', outcome: 'running', ended_at: null, command, cost: null }),
+      base({ id: 'b', outcome: 'running', ended_at: null, cost: 1.5 }),
+    ] };
+    window.location.hash = '#/activity';
+    render(<App />);
+    await waitFor(() => expect(document.querySelectorAll('.live-card').length).toBe(2));
+    const cards = document.querySelectorAll('.live-card');
+    const link = cards[0].querySelector('a.cmd');
+    expect(link?.classList.contains('clamp2')).toBe(true);
+    expect(link?.getAttribute('title')).toBe(link?.textContent);
+    expect(cards[0].textContent).not.toContain('—');
+    expect(cards[1].textContent).toContain('$1.50');
+  });
 });
 
 describe('Activity keys', () => {
