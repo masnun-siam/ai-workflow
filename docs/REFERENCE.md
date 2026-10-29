@@ -84,7 +84,7 @@ owns shows once, as its dispatch row: the generic PR-ready, conflict, paused-gri
 are dropped for it. An item disappears within a poll after its condition clears.
 `GET /api/inbox[?repo=]` builds it on the server from sessions, panels, grind state, cleanup flags, the
 repo registry and the board polls; a repo whose board data is stale is listed in `stale` and contributes
-session items only.
+session items only. While an item is open (a question expanded or the side panel showing), polls do not reorder rows; the new order applies once nothing is open or on the next visit.
 
 **Capture box.** At the top of Features and Small changes: describe a feature or a fix and pick a route.
 **Feature** starts `/create-prd` (on `opus` at `medium`) and opens the session. **Small change** (with an
