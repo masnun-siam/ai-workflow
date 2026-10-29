@@ -37,6 +37,8 @@ export const keys = {
   dispatches: ['dispatches'] as const,
   dispatch: (id: string) => ['dispatch', id] as const,
   dispatchLane: (id: string, key: string) => ['dispatch', id, 'lane', key] as const,
+  shares: ['shares'] as const,
+  share: (id: string) => ['share', id] as const,
 };
 
 /** App-wide browser notifier (FR-6): polls the feed while permission is granted and shows each new event. */
@@ -92,6 +94,10 @@ export const useOpenItems = (repo: string, kind: 'issue' | 'pr', enabled = true)
   useQuery({ queryKey: keys.open(repo, kind), queryFn: () => api.open(repo, kind), enabled: enabled && !!repo && repo.includes('/'), staleTime: 30_000 });
 
 export const useDispatches = () => useQuery({ queryKey: keys.dispatches, queryFn: api.dispatches, ...poll(POLL.dispatch) });
+export const useShares = () => useQuery({ queryKey: keys.shares, queryFn: api.shares, ...poll(POLL.inbox), retry: false });
+export const useShare = (id: string | undefined) =>
+  useQuery({ queryKey: keys.share(id ?? ''), queryFn: () => api.share(id!), enabled: !!id, ...poll(POLL.inbox), retry: false });
+
 export const useDispatch = (id: string) => useQuery({ queryKey: keys.dispatch(id), queryFn: () => api.dispatch(id), enabled: !!id, ...poll(POLL.dispatch), retry: false });
 /** A herdr lane's pane text (or a headless lane's session id), polled while the lane panel is open. */
 export const useDispatchLane = (id: string, key: string, enabled: boolean) =>
@@ -259,3 +265,17 @@ export const useLaneAction = () =>
   useApiMutation((v: { id: string; lane: string; action: LaneAction; text?: string }) => api.laneAction(v.id, v.lane, v.action, v.text), DISPATCH_WRITES);
 export const useEndAction = () => useApiMutation((v: { id: string; action: EndAction }) => api.endAction(v.id, v.action), DISPATCH_WRITES);
 export const useDispatchSeen = () => useApiMutation((id: string) => api.dispatchSeen(id), DISPATCH_WRITES, { quiet: true });
+
+const SHARE_WRITES: QueryKey[] = [['shares'], ['share'], ['inbox']];
+// quiet: the Share popover and the Send dialog show their own errors
+export const useCreateShare = () => useApiMutation((v: { repo: string; path: string }) => api.createShare(v.repo, v.path), SHARE_WRITES, { quiet: true });
+export const useStopShare = () => useApiMutation((id: string) => api.stopShare(id), SHARE_WRITES);
+export const useDeleteThread = () => useApiMutation((v: { id: string; tid: string }) => api.deleteThread(v.id, v.tid), SHARE_WRITES);
+export const useDeleteComment = () => useApiMutation((v: { id: string; tid: string; cid: string }) => api.deleteComment(v.id, v.tid, v.cid), SHARE_WRITES);
+export const useDeleteApproval = () => useApiMutation((v: { id: string; aid: string }) => api.deleteApproval(v.id, v.aid), SHARE_WRITES);
+export const useDeleteShareRecord = () => useApiMutation((id: string) => api.deleteShareRecord(id), SHARE_WRITES);
+export const useReplyThread = () => useApiMutation((v: { id: string; tid: string; body: string }) => api.replyThread(v.id, v.tid, v.body), SHARE_WRITES);
+export const useResolveThread = () => useApiMutation((v: { id: string; tid: string; resolved: boolean }) => api.resolveThread(v.id, v.tid, v.resolved), SHARE_WRITES);
+export const useMarkSeen = () => useApiMutation((id: string) => api.markSeen(id), [['shares'], ['inbox']], { quiet: true });
+export const useSendPreview = () => useApiMutation((v: { id: string; outdated: string[] }) => api.sendPreview(v.id, v.outdated), [], { quiet: true });
+export const useSendShare = () => useApiMutation((v: { id: string; outdated: string[] }) => api.sendShare(v.id, v.outdated), [...SHARE_WRITES, ['sessions']], { quiet: true });

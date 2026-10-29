@@ -580,3 +580,50 @@ export interface DispatchPlan {
 }
 export type LaneAction = 'pause' | 'resume' | 'retry' | 'skip' | 'merge' | 'hold' | 'unhold' | 'send';
 export type EndAction = 'open-pr' | 'qa' | 'grind-pr';
+
+// ---- shares (owner side of the share-link feature; never a token or key_hash) ----
+export type ShareState = 'live' | 'ended';
+export type ShareEndReason = 'stopped' | 'approved' | 'status' | 'missing' | null;
+export interface ShareAnchor { exact: string; prefix: string; suffix: string }
+export interface ShareComment { id: string; author: string; by_owner: boolean; body: string; at: string }
+export interface ShareThread {
+  id: string;
+  anchor: ShareAnchor;
+  created_at: string;
+  resolved: boolean;
+  sent_at: string | null;
+  comments: ShareComment[];
+}
+export interface ShareApproval { id: string; name: string; at: string }
+/** The list item of GET /api/shares. */
+export interface ShareSummary {
+  id: string;
+  repo: string;
+  path: string;
+  title: string;
+  state: ShareState;
+  url: string | null;
+  comments: number;
+  unread: number;
+  reachable: boolean;
+  end_reason: ShareEndReason;
+}
+export interface Share extends ShareSummary {
+  created_at: string;
+  ended_at: string | null;
+  last_seen_at: string | null;
+  prd_updated_at: string | null;
+  /** threads not yet sent to the PRD update session ("Send open comments (n)") */
+  unsent: number;
+  threads: ShareThread[];
+  approvals: ShareApproval[];
+}
+export interface SendPreview {
+  prompt: string;
+  threads: number;
+  remaining: number;
+  dropped: number;
+  trimmed: { thread: string; dropped: number }[];
+  busy: { sessions: string[]; panel: string | null };
+}
+export interface SendResult { session_id: string; threads: number; remaining: number; dropped: number }
