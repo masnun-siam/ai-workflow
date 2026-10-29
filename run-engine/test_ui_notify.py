@@ -419,6 +419,34 @@ for ev, word in (("pr-ready", "ready"), ("needs-cleanup", "cleanup"), ("panel-ca
     assert word in h["Title"] and "the note" in body and h["Click"] == "https://x.ts.net/#/inbox", (ev, h)
 ok("pr-ready, needs-cleanup and panel-cap compose")
 
+# --- prd-comment
+assert [e[0] for e in ui_notify.EVENTS][3:5] == ["panel-cap", "prd-comment"] and len(ui_notify.EVENTS) == 12
+assert ui_notify.matrix({})["prd-comment"] == {"browser": True, "ntfy": False, "mac": False}
+assert len(ui_notify.matrix({})) * len(ui_notify.CHANNELS) == 36
+assert all(
+    ui_notify.default_cell(e, c) == (True if c == "ntfy" else g != "Finished" and e != "grind-done")
+    for e, _, g in ui_notify.EVENTS
+    if e != "prd-comment"
+    for c in ui_notify.CHANNELS
+), "other defaults unchanged"
+assert ui_notify.matrix({"channels": {"prd-comment": {"ntfy": True}}})["prd-comment"]["ntfy"] is True
+h, body = ui_notify.compose("prd-comment", {"note": "2 new comments on My PRD"}, "https://x.ts.net")
+assert body == "2 new comments on My PRD" and h["Click"] == "https://x.ts.net/#/inbox", (h, body)
+assert ui_notify.click_path("prd-comment", {"note": "n"}) == "#/inbox"
+ok("prd-comment: matrix defaults and compose")
+
+from unittest import mock  # noqa: E402
+
+feed.clear(), macs.clear()
+with mock.patch.object(ui_notify, "send_ntfy", side_effect=AssertionError("ntfy is off")):
+    assert ui_notify.prd_comment("a", "1 new comment on T", now=100.0) is True
+    assert ui_notify.prd_comment("a", "2 new comments on T", now=130.0) is False
+    assert ui_notify.prd_comment("b", "1 new comment on T", now=130.0) is True
+    assert ui_notify.prd_comment("a", "2 new comments on T", now=161.0) is True
+assert not macs and len(feed) == 3
+assert feed[0][2] == "1 new comment on T" and feed[0][-1] == "#/inbox", feed[0]
+ok("prd_comment: once per share per minute, browser only")
+
 # --- fan-out
 import itertools  # noqa: E402
 from unittest import mock  # noqa: E402

@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 import urllib.error
 import urllib.request
 from urllib.parse import quote, urlparse
@@ -40,6 +41,7 @@ _LOOK = {
     "pr-ready": ("eyes", "aiw: #{n} PR is ready", "aiw: PR is ready", "Open Inbox"),
     "needs-cleanup": ("broom", "aiw: #{n} needs cleanup", "aiw: needs cleanup", "Open Inbox"),
     "panel-cap": ("no_entry", "aiw: review panel hit its cap", "aiw: review panel hit its cap", "Open Inbox"),
+    "prd-comment": ("speech_balloon", "aiw: new PRD comments", "aiw: new PRD comments", "Open Inbox"),
     "dispatch": ("rocket", "aiw: #{n} in a dispatch needs you", "aiw: a dispatch needs you", "Open Inbox"),
 }
 # The matrix rows in display order: (event, label, group).
@@ -48,6 +50,7 @@ EVENTS = (
     ("failed", "A session failed", "Needs you"),
     ("dispatch", "A dispatch needs you", "Needs you"),
     ("panel-cap", "Review panel hit its cap", "Needs you"),
+    ("prd-comment", "Reviewers commented on a PRD", "Needs you"),
     ("pr-ready", "PR is ready for review", "Pull requests"),
     ("needs-cleanup", "Merged issue needs cleanup", "Pull requests"),
     ("grind-paused", "Grind paused", "Pull requests"),
@@ -60,6 +63,8 @@ CHANNELS = ("browser", "ntfy", "mac")
 
 
 def default_cell(event: str, channel: str) -> bool:
+    if event == "prd-comment":  # per-event exception: the browser only, the push is throttled and terse
+        return channel == "browser"
     if channel == "ntfy":
         return True
     return next(g for k, _, g in EVENTS if k == event) != "Finished" and event != "grind-done"
@@ -83,7 +88,14 @@ def matrix(cfg: dict) -> dict:
     return {e: {ch: stored.get(e, {}).get(ch, default_cell(e, ch)) for ch in CHANNELS} for e, _, _ in EVENTS}
 
 
-_BOARD = ("afk", "pr-ready", "needs-cleanup", "panel-cap", "dispatch")  # no session page: the click lands on the Inbox
+_BOARD = (
+    "afk",
+    "pr-ready",
+    "needs-cleanup",
+    "panel-cap",
+    "dispatch",
+    "prd-comment",
+)  # no session page: the click lands on the Inbox
 # While away mode runs, it handles or holds these; the one "afk" push at the end sums them up.
 _AFK_MUTED = ("waiting", "failed", "grind-paused")
 _TAG_SAFE = re.compile(r"[^A-Za-z0-9._#/-]+")
@@ -229,6 +241,22 @@ def _never_raise(label: str, fn, *args) -> None:
         fn(*args)
     except Exception as e:
         warn(f"{label} notification failed: {type(e).__name__}")
+
+
+_PRD_COMMENT_GAP = 60.0
+_prd_last: dict = {}  # ponytail: one float per share id for the life of the process; it never needs pruning at this size
+_prd_lock = threading.Lock()
+
+
+def prd_comment(share_id: str, summary: str, now=None) -> bool:
+    """Raise `prd-comment` at most once per share per minute; the push body is exactly `summary`."""
+    t = time.monotonic() if now is None else now
+    with _prd_lock:
+        if share_id in _prd_last and t - _prd_last[share_id] < _PRD_COMMENT_GAP:
+            return False
+        _prd_last[share_id] = t
+    notify("prd-comment", {"note": summary})
+    return True
 
 
 def notify(event: str, rec: dict) -> None:

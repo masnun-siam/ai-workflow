@@ -6,6 +6,7 @@ Inputs (plain data, no I/O):
                   peer-review panel (prd_status: the artifact's PRD status, None when it is not a PRD)
   grind_index     ui_grind.index() -> {"pr": {(owner, repo, pr): {state, round, reason?}}}
   flags           {repo: {issue: {uncommitted, unpushed}}}: merged issues whose cleanup was held back
+  shares          [{id, repo, path, title, comments, approvals, at}]: shares with unseen reviewer activity (the server builds it from the store)
   repos           [{slug, path}]: the registry
   snapshots       {repo: poller snapshot} for the watched repos
   gh              ui_gh.status()
@@ -24,6 +25,7 @@ polls, `at` an ISO time or None; `rank` adds `urgency` (1-5, or None when unscor
   block   gh_auth {error}
   answer  question {session_id, command, link, round_id, questions, process_alive}
   decide  review_cap {prd_path, panel, round, max_rounds, note}, review_approved {prd_path, panel},
+          prd_comment {share, prd_path, prd_title, summary, comments, approvals},
           pr_ready {pr, issue, title, url, reviewer, checks}
   fix     grind_paused {pr, issue, round, reason}, pr_conflict {pr, issue, title, url}, session_failed {session_id, command, link, error},
           needs_cleanup {issue, uncommitted, unpushed}
@@ -111,6 +113,16 @@ def rank(items, urgency) -> list:
     return sorted(items, key=lambda i: (order[i["group"]], -(i["urgency"] or 0), -_ts(i["at"])))
 
 
+def share_summary(comments: int, approvals: int, title: str) -> str:
+    """The one text for a share's Inbox item and its push: counts and the PRD title only."""
+    parts = []
+    if comments:
+        parts.append(f"{comments} new comment{'s' if comments != 1 else ''}")
+    if approvals:
+        parts.append(f"{approvals} approval{'s' if approvals != 1 else ''}")
+    return f"{', '.join(parts)} on {title}"
+
+
 def build(
     *,
     sessions,
@@ -127,6 +139,7 @@ def build(
     repo=None,
     settings=None,
     solo=None,
+    shares=None,
 ) -> dict:
     items = []
 
@@ -223,6 +236,21 @@ def build(
                 prd_path=prd,
                 panel=p["id"],
             )
+
+    for s in shares or []:
+        add(
+            f"prd_comment:{s['id']}",
+            "decide",
+            "prd_comment",
+            s["at"],
+            names.get(str(s["repo"]).lower(), s["repo"]),
+            share=s["id"],
+            prd_path=s["path"],
+            prd_title=s["title"],
+            summary=share_summary(s["comments"], s["approvals"], s["title"]),
+            comments=s["comments"],
+            approvals=s["approvals"],
+        )
 
     for (owner, name, pr), g in sorted(((grind_index or {}).get("pr") or {}).items()):
         where = names.get(f"{owner}/{name}", f"{owner}/{name}")
