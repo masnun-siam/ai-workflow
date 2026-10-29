@@ -338,7 +338,11 @@ assert st == 200 and row["group"] == "fix" and row["reason"] == "CI is red"
 ui_dispatch.dispatch_cli.start = real_start
 
 
-def fake_resolve(refs, gh=None):
+seen_bodies = []
+
+
+def fake_resolve(refs, gh=None, bodies=False):
+    seen_bodies.append(bodies)
     repo, nums = ui_dispatch.dispatch_cli.parse_issues(refs)
     kids = [
         {"repo": repo, "n": n, "title": f"t{n}", "refined": True, "deps": [f"{repo}#412"] if n == 415 else []}
@@ -354,6 +358,7 @@ ui_dispatch.dispatch_cli.branch_sha = lambda repo, branch, gh=None: "sha"  # eve
 st, body = call("/api/dispatches/plan", {"issues": ["o/r#415", "o/r#412"]})
 assert st == 200 and body["epic"] is None and body["issues"] == ["o/r#415", "o/r#412"] and body["title"]
 assert body["waves"] == [["o/r#412"], ["o/r#415"]], body["waves"]
+assert seen_bodies[-1] is True and all("readiness" in ln and ln["readiness"] is None for ln in body["lanes"])
 st, body = call("/api/dispatches", {"issues": ["o/r#105", "o/r#105"]})
 assert st == 201 and body["epic"] is None and body["issues"] == ["o/r#105"], body
 owner = body["id"]
@@ -383,7 +388,7 @@ for bad in (
     for path in ("/api/dispatches/plan", "/api/dispatches"):
         assert call(path, bad)[0] == 400, (path, bad)
 real_resolve = ui_dispatch.dispatch_cli.resolve_issues
-ui_dispatch.dispatch_cli.resolve_issues = lambda refs, gh=None: {**fake_resolve(refs), "children": []}
+ui_dispatch.dispatch_cli.resolve_issues = lambda refs, gh=None, bodies=False: {**fake_resolve(refs), "children": []}
 st, body = call("/api/dispatches", {"issues": ["o/r#107"]})
 assert st == 400 and body["error"] == "none of the picked issues is open"
 ui_dispatch.dispatch_cli.resolve_issues = real_resolve

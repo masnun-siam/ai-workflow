@@ -408,5 +408,5 @@ def plan(body: dict) -> dict:
     kind, target = _target(body)
     s = _settings(body, kind)
     if kind == "issues":
-        return dispatch_cli.preview(dispatch_cli.resolve_issues(target), s, runner)
-    return dispatch_cli.preview(dispatch_cli.resolve(target), s, runner)
+        return dispatch_cli.preview(dispatch_cli.resolve_issues(target, bodies=True), s, runner)
+    return dispatch_cli.preview(dispatch_cli.resolve(target, bodies=True), s, runner)

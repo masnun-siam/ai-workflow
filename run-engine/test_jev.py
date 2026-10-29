@@ -118,7 +118,8 @@ assert "GH_TOKEN=[redacted]" in sent and "Authorization: [redacted]" in sent
 ask("route", "noul", "q?", "x " * 2500)
 assert len(read(stdin_log)) == 4000
 
-# cache and ceiling
+# cache and ceiling (the server sets _server via start_timer)
+jev._server = True
 cpath = os.path.join(d, "jev_cache.json")
 t0 = 1_000_000.0
 
@@ -203,5 +204,19 @@ for point in ("route", "risk", "ci-hint", "finding-hint"):
 assert calls() == 8 and jev.spent() == 0 and jev._cache is None and not os.path.exists(cpath)
 jev.flush()
 assert not os.path.exists(cpath)
+
+# the cache is server-only: without start_timer() a cached point still runs and counts, but never caches
+stub('echo \'{"score": 1.0, "confidence": 0.5}\'')
+fresh()
+jev._server = False
+ask("readiness", "score", "q?", "same", levels=["a", "b"])
+ask("readiness", "score", "q?", "same", levels=["a", "b"])
+assert calls() == 2 and jev.spent() == 2 and jev._cache is None and not os.path.exists(cpath)
+jev._server = True
+fresh()
+stub('echo \'{"score": 1.0, "confidence": 0.5}\'')
+ask("readiness", "score", "q?", "same", levels=["a", "b"])
+ask("readiness", "score", "q?", "same", levels=["a", "b"])
+assert calls() == 1 and len(jev._cache) == 1
 
 print("ok")
