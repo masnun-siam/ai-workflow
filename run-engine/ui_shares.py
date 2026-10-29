@@ -16,6 +16,7 @@ import re
 import secrets
 import threading
 import time
+from collections import deque
 from datetime import datetime, timezone
 
 import shared
@@ -27,6 +28,11 @@ _ID = re.compile(r"[0-9a-f]{16}")
 _REASONS = ("stopped", "approved", "status", "missing")
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
+NAME_MAX, COMMENT_MAX, EXACT_MAX, CONTEXT_MAX = 60, 2000, 1000, 32
+MAX_COMMENTS, MAX_APPROVALS, RATE_MAX, RATE_WINDOW = 500, 100, 20, 60  # RATE_WINDOW in seconds
+listeners: list = []  # fn(share, kind): kind "comment" or "approval"; called after a reviewer write, outside the lock
+_rates: dict[str, deque] = {}  # accepted reviewer write times per share, in memory only
+_rate_lock = threading.Lock()  # always taken inside the record lock
 
 
 class ShareError(Exception):
@@ -238,3 +244,249 @@ def delete_record(sid) -> None:
         if rec["state"] == "live":
             raise ShareError("conflict", "stop the share before deleting it")
         os.remove(_path(sid))
+    with _rate_lock:
+        _rates.pop(sid, None)
+
+
+# --- threads, comments, approvals (FR-4 to FR-7, FR-13) ---
+
+
+def _text(value, field: str, lo: int, hi: int, strip: bool = True) -> str:
+    """A str that encodes as UTF-8, trimmed unless `strip` is off, of lo..hi code points. Never echoes the input."""
+    bad = ShareError(
+        "invalid", f"{field} must be {lo} to {hi} characters" if lo else f"{field} must be at most {hi} characters"
+    )
+    if not isinstance(value, str):
+        raise bad
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        raise bad from None
+    value = value.strip() if strip else value
+    if not lo <= len(value) <= hi or (lo and not value.strip()):
+        raise bad
+    return value
+
+
+def _anchor(anchor) -> dict:
+    if not isinstance(anchor, dict):
+        raise ShareError("invalid", "anchor must be an object")
+    return {
+        "exact": _text(anchor.get("exact"), "anchor text", 1, EXACT_MAX, strip=False),
+        "prefix": _text(anchor.get("prefix", ""), "anchor prefix", 0, CONTEXT_MAX, strip=False),
+        "suffix": _text(anchor.get("suffix", ""), "anchor suffix", 0, CONTEXT_MAX, strip=False),
+    }
+
+
+def _thread(rec: dict, tid) -> dict:
+    for t in rec["threads"]:
+        if t["id"] == tid:
+            return t
+    raise ShareError("not_found", "thread not found")
+
+
+def _live(rec: dict) -> None:
+    if rec["state"] != "live":
+        raise ShareError("not_found", "share not found")
+
+
+def _take_slot(sid: str) -> None:
+    now = clock()
+    with _rate_lock:
+        q = _rates.setdefault(sid, deque())
+        while q and q[0] <= now - RATE_WINDOW:
+            q.popleft()
+        if len(q) >= RATE_MAX:
+            raise ShareError("rate", "too many comments; try again in a minute")
+        q.append(now)
+
+
+def reviewer_comment_count(share: dict) -> int:
+    return sum(not c["by_owner"] for t in share["threads"] for c in t["comments"])
+
+
+def _comment(author: str, body: str, by_owner: bool) -> dict:
+    return {"id": secrets.token_hex(6), "author": author, "by_owner": by_owner, "body": body, "at": now_iso()}
+
+
+def _reviewer_write(sid: str, thread_id, name, body, anchor=None):
+    """Validate, check the caps in order, then append. Returns (thread, comment); listeners run after the lock."""
+    out = {}
+
+    def fn(rec):
+        _live(rec)
+        thread = _thread(rec, thread_id) if anchor is None else None
+        author, text = _text(name, "name", 1, NAME_MAX), _text(body, "comment", 1, COMMENT_MAX)
+        point = _anchor(anchor) if anchor is not None else None
+        if reviewer_comment_count(rec) >= MAX_COMMENTS:
+            raise ShareError("full", f"this share holds at most {MAX_COMMENTS} comments")
+        _take_slot(sid)
+        c = _comment(author, text, False)
+        if thread is None:
+            thread = {
+                "id": secrets.token_hex(6),
+                "anchor": point,
+                "created_at": c["at"],
+                "resolved": False,
+                "sent_at": None,
+                "comments": [],
+            }
+            rec["threads"].append(thread)
+        thread["comments"].append(c)
+        thread["resolved"] = False
+        out.update(thread=thread, comment=c)
+
+    _notify(update(sid, fn), "comment")
+    return out["thread"], out["comment"]
+
+
+def _notify(share: dict, kind: str) -> None:
+    for fn in list(listeners):
+        try:
+            fn(share, kind)
+        except Exception as e:
+            shared.warn(f"shares: listener failed ({type(e).__name__})")
+
+
+def add_thread(sid, name, body, anchor) -> dict:
+    return _reviewer_write(sid, None, name, body, anchor if anchor is not None else {})[0]
+
+
+def add_comment(sid, thread_id, name, body) -> dict:
+    return _reviewer_write(sid, thread_id, name, body)[1]
+
+
+def add_owner_comment(sid, thread_id, author, body) -> dict:
+    out = {}
+
+    def fn(rec):
+        thread = _thread(rec, thread_id)
+        who = _text(author, "author", 0, 10**6, strip=False)[:NAME_MAX]
+        out["c"] = _comment(who, _text(body, "comment", 1, COMMENT_MAX), True)
+        thread["comments"].append(out["c"])
+
+    update(sid, fn)
+    return out["c"]
+
+
+def set_resolved(sid, thread_id, resolved: bool) -> dict:
+    out = {}
+
+    def fn(rec):
+        out["t"] = _thread(rec, thread_id)
+        out["t"]["resolved"] = bool(resolved)
+
+    update(sid, fn)
+    return out["t"]
+
+
+def delete_comment(sid, thread_id, comment_id) -> None:
+    def fn(rec):
+        thread = _thread(rec, thread_id)
+        rest = [c for c in thread["comments"] if c["id"] != comment_id]
+        if len(rest) == len(thread["comments"]):
+            raise ShareError("not_found", "comment not found")
+        if rest:
+            thread["comments"] = rest
+        else:
+            rec["threads"].remove(thread)
+
+    update(sid, fn)
+
+
+def delete_thread(sid, thread_id) -> None:
+    update(sid, lambda rec: rec["threads"].remove(_thread(rec, thread_id)))
+
+
+def _key_hash(key: str) -> str:
+    return hashlib.sha256(key.encode()).hexdigest()
+
+
+def add_approval(sid, name):
+    """Returns ({name, at, key?}, created); the key is shown once, only when created."""
+    out = {}
+
+    def fn(rec):
+        _live(rec)
+        who = _text(name, "name", 1, NAME_MAX)
+        for a in rec["approvals"]:
+            if a["name"].casefold() == who.casefold():
+                out["view"], out["created"] = {"name": a["name"], "at": a["at"]}, False
+                return
+        if len(rec["approvals"]) >= MAX_APPROVALS:
+            raise ShareError("full", f"this share holds at most {MAX_APPROVALS} approvals")
+        _take_slot(sid)
+        key = secrets.token_urlsafe(24)
+        a = {"id": secrets.token_hex(6), "name": who, "at": now_iso(), "key_hash": _key_hash(key)}
+        rec["approvals"].append(a)
+        out["view"], out["created"] = {"name": who, "at": a["at"], "key": key}, True
+
+    rec = update(sid, fn)
+    if out["created"]:
+        _notify(rec, "approval")
+    return out["view"], out["created"]
+
+
+def withdraw_approval(sid, name, key) -> None:
+    def fn(rec):
+        _live(rec)
+        miss = ShareError("not_found", "approval not found")
+        if not isinstance(name, str) or not isinstance(key, str):
+            raise miss
+        want = _key_hash(key) if key.isascii() else ""
+        for a in rec["approvals"]:
+            if a["name"].casefold() == name.strip().casefold() and hmac.compare_digest(a["key_hash"], want):
+                rec["approvals"].remove(a)
+                return
+        raise miss
+
+    update(sid, fn)
+
+
+def delete_approval(sid, approval_id) -> None:
+    def fn(rec):
+        rest = [a for a in rec["approvals"] if a["id"] != approval_id]
+        if len(rest) == len(rec["approvals"]):
+            raise ShareError("not_found", "approval not found")
+        rec["approvals"] = rest
+
+    update(sid, fn)
+
+
+def unread(share: dict) -> dict:
+    """Reviewer comments and approvals after last_seen_at (all when null), with the newest `at` (null if none)."""
+    seen = share.get("last_seen_at") or ""
+    comments = [c["at"] for t in share["threads"] for c in t["comments"] if not c["by_owner"] and c["at"] > seen]
+    approvals = [a["at"] for a in share["approvals"] if a["at"] > seen]
+    return {"comments": len(comments), "approvals": len(approvals), "at": max(comments + approvals, default=None)}
+
+
+def mark_sent(sid, sent: dict) -> None:
+    def fn(rec):
+        for t in rec["threads"]:
+            at = sent.get(t["id"])
+            if isinstance(at, str) and (t["sent_at"] is None or at > t["sent_at"]):
+                t["sent_at"] = at
+
+    update(sid, fn)
+
+
+def public_comment(c: dict) -> dict:
+    return {k: c[k] for k in ("id", "author", "by_owner", "body", "at")}
+
+
+def public_thread(t: dict) -> dict:
+    return {
+        "id": t["id"],
+        "anchor": t["anchor"],
+        "resolved": t["resolved"],
+        "comments": [public_comment(c) for c in t["comments"]],
+    }
+
+
+def public_threads(share: dict) -> list:
+    return [public_thread(t) for t in share["threads"]]
+
+
+def public_approvals(share: dict) -> list:
+    return [{"name": a["name"], "at": a["at"]} for a in share["approvals"]]
