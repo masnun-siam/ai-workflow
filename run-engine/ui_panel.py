@@ -17,6 +17,7 @@ import time
 import peer_review
 import ui_events
 import ui_notify
+import ui_planning
 import ui_runner
 import ui_sessions
 from shared import warn
@@ -276,3 +277,29 @@ def start_timer(interval: float = TICK_SECONDS) -> threading.Thread:
     t = threading.Thread(target=loop, daemon=True)
     t.start()
     return t
+
+
+def rows() -> list:
+    """One row per peer-review panel for the Inbox (ui_inbox's `panels`)."""
+    base = os.path.join(peer_review.data_dir(), "peer-review")
+    rows = []
+    for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+        try:
+            p, st = peer_review.load_panel(name), peer_review.panel_status(name)
+        except (OSError, ValueError, KeyError):
+            continue
+        meta = ui_planning._parse(p["artifact"]) if "/docs/prds/" in p["artifact"] else None
+        rows.append(
+            {
+                "id": name,
+                "repo": p["repo"],
+                "artifact": p["artifact"],
+                "state": p["state"],
+                "round": st["round"],
+                "max_rounds": st["max_rounds"],
+                "approved": st["approved"],
+                "total": st["total"],
+                "prd_status": meta["status"] if meta else None,
+            }
+        )
+    return rows
