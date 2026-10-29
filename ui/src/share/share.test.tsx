@@ -15,15 +15,17 @@ let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   vi.useFakeTimers();
   window.history.pushState({}, '', '/s/tok/');
-  fetchMock = vi.fn();
-  vi.stubGlobal('fetch', fetchMock);
+  const prdMock = vi.fn();
+  fetchMock = prdMock;
+  // The PRD mock sees only PRD calls; thread calls get an empty list.
+  vi.stubGlobal('fetch', (u: string, init?: RequestInit) => (String(u).endsWith('/api/threads') ? ok([]) : prdMock(u, init)));
   renderDiagrams.mockClear();
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe('SharePage', () => {
   it('shows loading, then title, status, updated line and rendered text', async () => {
-    fetchMock.mockReturnValue(ok(prd()));
+    fetchMock.mockImplementation(() => ok(prd()));
     render(<SharePage />);
     expect(screen.getByText('Loading the PRD…')).toBeTruthy();
     await flush();
@@ -48,14 +50,14 @@ describe('SharePage', () => {
   });
 
   it('404 on first load shows the inactive message', async () => {
-    fetchMock.mockReturnValue(status(404));
+    fetchMock.mockImplementation(() => status(404));
     render(<SharePage />);
     await flush();
     expect(screen.getByText('This link is no longer active')).toBeTruthy();
   });
 
   it('404 on a later poll switches to the inactive message and stops polling', async () => {
-    fetchMock.mockReturnValueOnce(ok(prd())).mockReturnValue(status(404));
+    fetchMock.mockReturnValueOnce(ok(prd())).mockImplementation(() => status(404));
     render(<SharePage />);
     await flush();
     await poll();
@@ -65,7 +67,7 @@ describe('SharePage', () => {
   });
 
   it('a network failure or 5xx keeps the text, shows the retry line, and clears on success', async () => {
-    fetchMock.mockReturnValueOnce(ok(prd())).mockImplementationOnce(() => Promise.reject(new TypeError('x'))).mockReturnValueOnce(status(500)).mockReturnValue(ok(prd()));
+    fetchMock.mockReturnValueOnce(ok(prd())).mockImplementationOnce(() => Promise.reject(new TypeError('x'))).mockReturnValueOnce(status(500)).mockImplementation(() => ok(prd()));
     render(<SharePage />);
     await flush();
     await poll();
@@ -78,7 +80,7 @@ describe('SharePage', () => {
   });
 
   it('a failed first load shows the retry line and no text', async () => {
-    fetchMock.mockReturnValue(status(502));
+    fetchMock.mockImplementation(() => status(502));
     render(<SharePage />);
     await flush();
     expect(screen.getByText("Can't reach the PRD right now, retrying")).toBeTruthy();
