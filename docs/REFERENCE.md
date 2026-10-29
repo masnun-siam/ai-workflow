@@ -98,6 +98,11 @@ the server runs `jev choice` through `run-engine/jev.py` (pinned to `jev-1.14.0`
 confidence, why}`. A null route (jev missing, switched off in Settings with `why: "jev is off"`, failing, unsure, or under 0.4) leaves the choice to you.
 `#/new` shows both routes as cards, the PRD review lenses on the Feature one and a priority on the
 Small change one; **Start the PRD interview** or **File the issue** starts it. `jev` is optional.
+`POST /api/duplicate {repo, text}` (400 for an unregistered repo or blank text) asks `jev` which of the repo's newest 100
+open issues (from the board poll, no GitHub call) or its PRDs the text already covers, with "none of these" as an option (at most 254
+options, oldest PRDs dropped first). Text under 20 characters runs no check. A pick at 0.6 or more answers
+`{match: {kind: issue|prd, title, url, n|path}, confidence, why}` with a server-built url (a GitHub issue, or the Feature page `#/features/<slug>?repo=`);
+otherwise `match` is null and `why` says why (jev off or missing, issues not loaded yet, no likely duplicate, hourly limit).
 
 **Features.** A pipeline of six stage tiles (PRD draft, PRD review, Approved, Tasks, Building,
 Shipped) with counts and the features in each, then one card per feature in progress: its issues as

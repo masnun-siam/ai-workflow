@@ -402,9 +402,13 @@ try:
         ("GET", "/api/delivery", None),
         ("POST", "/api/start", {"repo": "x/y", "skill": "implement-issue", "arg": "2"}),
         ("POST", "/api/cleanup", {"repo": "x/y", "issue": 3, "confirm": True}),
+        ("POST", "/api/duplicate", {"repo": "x/y", "text": "x" * 30}),
     ):
         assert call(m, p, b)[0] == 400, p
     ok("boards: unknown repo is 400")
+
+    assert call("POST", "/api/duplicate", {"repo": "o/r", "text": ""})[0] == 400
+    ok("duplicate: blank text is 400")
 
     assert call("GET", "/api/notifications") == (200, {"latest": 0, "events": []})
     assert call("GET", "/api/notifications?after=0") == (200, {"latest": 0, "events": []})
