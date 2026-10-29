@@ -351,12 +351,12 @@ Tell the user explicitly that this landed in `00-Quick` unsorted and why nothing
 
 After writing, give a one-line summary: what type it was classified as, and the exact final path(s) touched. Never end silently.
 
-Then end with the `→ next:` line for the type. It is the last line of your output, byte-for-byte in this form, because `/flow` parses it to start the next stage:
+Then end with the `→ next:` line for the type. It is the last line of your output, byte-for-byte in this form:
 
 | Type | Final line |
 |---|---|
 | New feature request, change request | `→ next: /create-prd <feature-folder>` (the `05-Work/<Project>/<Feature>` folder) |
-| Bug report, feature-scoped task, standalone task, weekly meeting notes, unclassifiable | no `→ next:` line — the flow stops here |
+| Bug report, feature-scoped task, standalone task, weekly meeting notes, unclassifiable | no `→ next:` line |
 
 ## Notes
 
