@@ -4,6 +4,7 @@
 
 ### Changed
 
+- **Grind logs jev hints** (#581): `/pr-grind` logs jev's CI and finding hints (FR-7, FR-8) in its state file as `jev-ci-hint:` and `jev-finding-hint:` lines; advisory only, nothing is written with jev off or missing.
 - **Inbox sorts by urgency** (#575): inside each group, question, paused-grind, failed-session and PR-conflict items sort by a jev urgency score (1–5, highest first), then newest first; `GET /api/inbox` items gain `urgency` (null when unscored or Use jev is off). A 30 s background scorer fills the cache; the Inbox never waits on jev.
 - **Inbox order holds while an item is open** (#576): with a question expanded (including the default-open one) or the issue/PR side panel showing, a poll that brings a new order does not move rows, the selection or focus. New items join the end of their group; the server's order applies once nothing is open or on the next visit.
 - **Away mode risk check** (#573): before auto-picking a round whose questions all carry a recommended option, a jev worker (off the tick, two at a time) asks whether any recommended option is irreversible or outward-facing and stores `risk` on the round. At 0.5 or more the round goes to the Opus answerer and its log entry carries `risk`; with jev off, missing or failing it is auto-picked as before.
