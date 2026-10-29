@@ -5,7 +5,7 @@ function textNodes(root: Element): Text[] {
   const out: Text[] = [];
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-    if (!n.parentElement?.closest('pre.mermaid')) out.push(n as Text);
+    if (!n.parentElement?.closest('pre.mermaid,[data-no-anchor]')) out.push(n as Text);
   }
   return out;
 }

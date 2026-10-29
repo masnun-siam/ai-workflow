@@ -505,3 +505,29 @@ html,body{overflow-x:hidden}
 .search-btn{justify-content:flex-start;color:var(--muted);font-weight:400;max-width:420px;height:38px;border-color:var(--line);border-radius:10px}
 .search-btn:hover{border-color:var(--line-strong)}
 .kbd.on-primary{background:transparent;color:inherit;border-color:currentColor;opacity:.6}
+
+/* share page commenting */
+.share-prose{position:relative}
+.thread-slot{display:block;margin:6px 0}
+.thread{border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:10px 12px;font-size:13px;text-align:left}
+.thread:focus-visible{outline:2px solid var(--accent)}
+.thread-c+.thread-c{margin-top:8px}
+.thread-sum{all:unset;cursor:pointer;display:block;width:100%}
+.thread-sum:focus-visible{outline:2px solid var(--accent)}
+.plain{white-space:pre-wrap;overflow-wrap:anywhere}
+.quote{margin:0 0 8px;padding-left:10px;border-left:3px solid var(--line-strong);color:var(--muted)}
+.compose{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.compose .btn{align-self:flex-start}
+.comment-form{position:sticky;bottom:0;padding:12px;margin-top:12px}
+.outdated{padding:12px 16px;margin-top:16px}
+.err{color:var(--bad);margin:0}
+.comment-btn{position:absolute;top:var(--top);left:var(--left);z-index:20;box-shadow:var(--shadow)}
+@media (min-width:1180px){
+  .share-main{max-width:1180px!important}
+  .share-prose{margin-right:300px}
+  .thread-slot{float:right;clear:right;width:260px;margin:0 -302px 6px 0}
+}
+@media (pointer:coarse){
+  .comment-btn{position:fixed;top:auto;left:0;right:0;bottom:0;border-radius:0;height:auto;min-height:48px;padding-bottom:env(safe-area-inset-bottom,0px)}
+  .comment-form{bottom:56px}
+}
