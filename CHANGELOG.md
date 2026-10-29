@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Risk line in the Away summary** (#574): a round the risk check sent to Opus shows "Risk check: sent to Opus (p=…)" on its row in "While you were away" (p rounded to two decimals); other rows are unchanged.
 - **jev switch in Settings** (#572): Settings → jev has a **Use jev** switch (saved at once, reverts on a failed save) and a read-only "jev found / not found" line; the UI's API types gain the fields later jev issues use.
 - **Use jev setting** (#569): `GET /api/settings` returns `use_jev` (default on) and a read-only `jev_installed`; `PUT /api/settings` accepts `use_jev` (boolean, else 400) and keeps it when omitted.
 - **Issue and PR links open the side panel** (#582): a plain click on any GitHub issue or PR link in `aiw ui` opens its panel instead of a GitHub tab (modified clicks and the "on GitHub" buttons still go to GitHub). Sessions started by refine, or by a feature's create-tasks and refine steps, link to their issue or epic; `POST /api/start` takes an optional `issue`.
