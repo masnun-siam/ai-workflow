@@ -315,6 +315,7 @@ class FakePool:
             fn(*a)
 
 
+assert ui_afk._risk_pool._max_workers == 2  # at most two checks at a time
 pool = ui_afk._risk_pool = FakePool()
 
 
@@ -336,6 +337,7 @@ pool.run()
 assert pq(r9)["risk"] == {"p": 0.9} and not ui_afk._risk_queued
 ui_afk.tick(W)
 assert len(started) == n0 + 1 and not resumed
+assert "risk" not in started[n0]["prompt"].lower()  # the answerer is not told it was flagged
 finish(started[n0]["id"], OKR)
 ui_afk.tick(W)
 e = log_of(r9)[0]
