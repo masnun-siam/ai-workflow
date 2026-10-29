@@ -4,14 +4,22 @@ ask(point, kind, question, text, ...) -> {"status": "ok", ...answer} or {"status
 Statuses: ok, off (Settings -> Use jev is off), missing (not on PATH), no_answer (timeout or exec error),
 failed (non-zero exit, with "exit"), unreadable (bad JSON or field). A failure never raises, and the
 `jev` binary never runs while the switch is off. Text is redacted, then cut to MAX_CHARS, before it is sent.
+
+The CACHED points (urgency, readiness, duplicate) are answered from a cache of ok answers (memory, flushed to
+jev_cache.json by the server's timer; 2000 entries, 7 days) and capped at CEILING calls an hour: past it they
+return {"status": "capped"}. Every other point (risk, route, hints) is never cached, counted or refused.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
+import threading
+import time
 
 import shared
 import ui_settings
@@ -19,6 +27,19 @@ import ui_settings
 MODEL = "jev-1.14.0"  # pinned: an alias such as jev-latest moves without notice
 TIMEOUT_S = 8
 MAX_CHARS = 4000
+CACHED = ("urgency", "readiness", "duplicate")
+MAX_ENTRIES = 2000
+MAX_AGE_S = 7 * 86400
+CEILING = 500
+WINDOW_S = 3600
+FLUSH_S = 60
+
+_now = time.time  # tests set this to drive the clock
+_lock = threading.Lock()  # guards the cache, the dirty flag and the window; never held while jev runs
+_cache: dict | None = None
+_dirty = False
+_window_start = 0.0
+_window_calls = 0
 
 _REDACTED = "[redacted]"
 _PREFIX = re.compile(r"\b(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|glpat-|sk-|xox[abprs]-|AIza|npm_)[A-Za-z0-9_-]{16,}")
@@ -50,13 +71,98 @@ def _fail(point: str, status_: str, **extra) -> dict:
     return {"status": status_, **extra}
 
 
+def _path() -> str:
+    return os.path.join(shared.data_dir(), "jev_cache.json")
+
+
+def _load() -> dict:
+    """The cache, loaded on first use. Call with _lock held. A missing or corrupt file is an empty cache."""
+    global _cache
+    if _cache is None:
+        try:
+            with open(_path()) as f:
+                data = json.load(f)
+            _cache = data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            _cache = {}
+    return _cache
+
+
+def _fresh(entry: dict) -> bool:
+    return _now() - entry["at"] < MAX_AGE_S
+
+
+def spent() -> int:
+    """Counted calls in the current hour."""
+    with _lock:
+        return _window_calls if _now() - _window_start < WINDOW_S else 0
+
+
+def flush() -> None:
+    """Write the cache if it changed, dropping expired entries. A failed write stays dirty."""
+    global _dirty
+    with _lock:
+        if not _dirty or _cache is None:
+            return
+        for k in [k for k, e in _cache.items() if not _fresh(e)]:
+            del _cache[k]
+        try:
+            shared.atomic_write_text(_path(), json.dumps(_cache))
+        except OSError:
+            shared.warn("jev cache: flush failed")
+            return
+        _dirty = False
+
+
+def start_timer(interval: float = FLUSH_S) -> threading.Thread:
+    def loop():
+        while True:
+            time.sleep(interval)
+            try:
+                flush()
+            except Exception as e:  # noqa: BLE001 - keep the timer alive
+                shared.warn(f"jev cache flush: {type(e).__name__}: {e}")
+
+    t = threading.Thread(target=loop, daemon=True)
+    t.start()
+    return t
+
+
 def ask(
     point: str, kind: str, question: str, text: str, *, options: dict | None = None, levels: list | None = None
 ) -> dict:
+    global _window_start, _window_calls, _dirty
     s = status()
     if s != "ok":
         return {"status": s}
     sent = redact(text)[:MAX_CHARS]
+    if point not in CACHED:
+        return _run(point, kind, question, sent, options, levels)
+    digest = hashlib.sha256(json.dumps([kind, question, options, levels, sent], sort_keys=True).encode())
+    key = f"{point}:{digest.hexdigest()}"
+    with _lock:
+        hit = _load().get(key)
+        if hit and _fresh(hit):
+            return {"status": "ok", **hit["answer"]}
+        now = _now()
+        if now - _window_start >= WINDOW_S:
+            _window_start, _window_calls = now, 0
+        if _window_calls >= CEILING:
+            return {"status": "capped"}
+        _window_calls += 1  # a failed call spent an invocation too
+    r = _run(point, kind, question, sent, options, levels)
+    if r["status"] == "ok":
+        answer = {k: v for k, v in r.items() if k != "status"}
+        with _lock:
+            cache = _load()
+            cache[key] = {"answer": answer, "probability": r.get("p", r.get("confidence")), "at": _now()}
+            while len(cache) > MAX_ENTRIES:
+                del cache[min(cache, key=lambda k: cache[k]["at"])]
+            _dirty = True
+    return r
+
+
+def _run(point: str, kind: str, question: str, sent: str, options: dict | None, levels: list | None) -> dict:
     cmd = [shutil.which("jev"), kind, question, "--model", MODEL, "--state-file", "-", "-o", "json"]
     for k, v in (options or {}).items():
         cmd += ["--option", f"{k}={v}"]
