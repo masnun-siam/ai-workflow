@@ -7,7 +7,8 @@ import { Banner, Button, Chip, EmptyState, Icon, useListSelection } from '../com
 import { clockText, money } from '../lib/format';
 import { routes } from '../lib/routes';
 import { NewDispatchDialog } from '../dispatch/NewDispatchDialog';
-import { DSTATE, counts, dispatchHeading, dispatchRepo, issueNo, nowLine, secs } from '../dispatch/vocab';
+import { ACTIVE, DSTATE, counts, dispatchHeading, dispatchRepo, issueNo, nowLine, secs } from '../dispatch/vocab';
+import { columns } from '../dispatch/LaneViews';
 import '../dispatch/dispatch.css';
 
 const live = (d: Dispatch) => d.state === 'running' || d.state === 'paused';
@@ -20,7 +21,12 @@ function Card({ d, rowProps }: { d: Dispatch; rowProps: ReturnType<ReturnType<ty
     <Link {...rowProps} to={routes.dispatch(d.id)} className={`live-card dsp-card${asks.length ? ' you' : ''}`} style={{ textDecoration: 'none', color: 'inherit' }}>
       <div className="row"><Chip tone={st.tone} live={st.live}>{st.label}</Chip><span className="grow" /><span className="faint" style={{ fontSize: 12 }}>{secs(d.totals.seconds)}</span></div>
       <b>{dispatchHeading(d)}</b>
-      <div className="meter" role="img" aria-label={`${c.closed} of ${c.total} done`}><span style={{ width: `${c.total ? (c.closed / c.total) * 100 : 0}%`, background: 'var(--ship)' }} /></div>
+      <ol className="dsp-train" role="img" aria-label={`${c.closed} of ${c.total} done`}>
+        {columns(d.lanes).map((w, k) => {
+          const cls = w.every((l) => l.stage === 'closed') ? 'done' : w.some((l) => ACTIVE.includes(l.stage)) ? 'now' : '';
+          return <li key={k} className={cls}><i /><span>Wave {k + 1}</span></li>;
+        })}
+      </ol>
       <span className="muted" style={{ fontSize: 13 }}>
         {c.closed} of {c.total} done{c.active ? `, ${c.active} in progress` : ''}{c.queued ? `, ${c.queued} waiting` : ''}
       </span>
@@ -65,7 +71,7 @@ export function DispatchesPage() {
       <section aria-label="Running">
         <div className="group-h"><h2>Running</h2><span className="n">{running.length}</span></div>
         {running.length ? (
-          <div className="live-grid">{running.map((d) => <Card key={d.id} d={d} rowProps={rowProps(d.id)} />)}</div>
+          <div className="dsp-trains">{running.map((d) => <Card key={d.id} d={d} rowProps={rowProps(d.id)} />)}</div>
         ) : q.isPending ? <div className="skel" style={{ height: 90 }} /> : (
           <EmptyState icon="bolt" title="Nothing is running" actions={<Button variant="primary" onClick={() => setOpen(true)}>Run an epic</Button>}>
             Pick an epic whose issues are refined. The ones with nothing to wait for start right away; the rest follow as their blockers merge.

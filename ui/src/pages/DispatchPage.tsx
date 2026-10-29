@@ -185,6 +185,7 @@ export function DispatchPage() {
       <nav className="crumbs" aria-label="Breadcrumb">
         <Link to={routes.dispatches} style={{ textDecoration: 'none' }}>Dispatches</Link><Icon n="right" s={13} /><span>{d.epic ? `Epic #${epicNo(d.epic)}` : 'Small changes'}</span>
       </nav>
+      <section className="dsp-hero" aria-label="Dispatch">
       <div className="page-head">
         <div className="grow" style={{ minWidth: 0 }}>
           <h1>{dispatchHeading(d)}</h1>
@@ -215,6 +216,7 @@ export function DispatchPage() {
           {`. Up to ${d.settings.max} at a time, grind ${d.settings.grind}, CI: ${d.settings.ci ?? 'wait'}, ${d.settings.auto_merge ? 'merges by itself' : 'you merge'}.`}
         </p>
       </section>
+      </section>
       <NeedsYou d={d} onPick={pick} selected={selection.selected} />
 
       {d.state === 'paused' ? <Banner tone="review" icon="pause">Paused. Issues already running carry on; no new one starts until you resume.</Banner> : null}
@@ -239,9 +241,9 @@ export function DispatchPage() {
             view === 'graph' ? <LaneGraph lanes={d.lanes} picked={picked} onPick={pick} rowProps={selection.rowProps} /> : <LaneTable lanes={d.lanes} picked={picked} onPick={pick} rowProps={selection.rowProps} />
           ) : <EmptyState icon="layers" title="No issues to run">This epic had no open child issues when it started.</EmptyState>}
         </div>
-        {lane ? <KeyScope level="panel" active><LanePanel key={lane.key} d={d} l={lane} onClose={() => pick(null)} /></KeyScope> : <Feed events={d.events ?? []} onPick={pick} />}
+        {lane ? <KeyScope level="panel" active><LanePanel key={lane.key} d={d} l={lane} onClose={() => pick(null)} /></KeyScope> : null}
       </div>
-      {lane ? <Feed events={d.events ?? []} onPick={pick} /> : null}
+      <Feed events={d.events ?? []} onPick={pick} />
       <p className="faint" style={{ fontSize: 12 }}>Steer from a terminal too: <span className="mono">aiw dispatch show {d.id}</span></p>
     </div>
   );

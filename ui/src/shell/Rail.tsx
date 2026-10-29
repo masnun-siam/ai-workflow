@@ -1,14 +1,13 @@
+import * as PO from '@radix-ui/react-popover';
 import { useState } from 'react';
-import { NavLink, Link, useLocation } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { needsYouCount, useAfkStart, useAfkStop, useDispatches, useInbox, useSessions, useSettings } from '../api/hooks';
-import type { Session } from '../api/types';
 import { Button, Icon, type IconName } from '../components';
-import { clockText, commandText, sessionLabel } from '../lib/format';
+import { clockText } from '../lib/format';
 import { applyTheme, getTheme, type Theme } from '../lib/theme';
-import { RUNNING_NOW, SESS } from '../lib/vocab';
+import { RUNNING_NOW } from '../lib/vocab';
 import { routes } from '../lib/routes';
 import { useShell } from './ShellContext';
-import { RepoSwitcher } from './RepoSwitcher';
 import { useRepo } from './useRepo';
 
 export const NAV: { to: string; label: string; icon: IconName; badge?: 'inbox' | 'running' | 'dispatch' }[] = [
@@ -22,32 +21,6 @@ export const NAV: { to: string; label: string; icon: IconName; badge?: 'inbox' |
 /** The number on the Inbox nav item: everything except Waiting (FR-7). */
 export function useInboxCount() {
   return needsYouCount(useInbox().data?.items);
-}
-
-function sessionTitle(s: Session) {
-  return commandText(sessionLabel(s.command));
-}
-
-function RunningNow() {
-  const live = (useSessions().data?.sessions ?? []).filter((s) => RUNNING_NOW.includes(s.outcome));
-  if (!live.length) return null;
-  return (
-    <>
-      <div className="rail-sep" />
-      <div className="rail-label" id="running-now">Running now</div>
-      <div className="live-mini" role="list" aria-labelledby="running-now">
-        {live.slice(0, 8).map((s) => (
-          <Link key={s.id} to={routes.session(s.id)} role="listitem" className="nav-a">
-            <span className={`chip ${s.outcome === 'waiting' ? 't-you' : 't-build live'}`} style={{ padding: 0, background: 'none' }} title={SESS[s.outcome].label}>
-              <span className="dot" />
-              <span className="sr">{SESS[s.outcome].label}</span>
-            </span>
-            <span className="ellipsis">{sessionTitle(s)}</span>
-          </Link>
-        ))}
-      </div>
-    </>
-  );
 }
 
 const PRESETS: [number, string][] = [[30, '30 min'], [60, '1 h'], [120, '2 h'], [240, '4 h']];
@@ -156,41 +129,52 @@ export function ThemeButton() {
   );
 }
 
-export function Rail() {
+/** The top bar's page links. A page with a count shows it: needs-you in orange, running and dispatching quiet. */
+export function NavPills() {
   const inbox = useInboxCount();
   const running = (useSessions().data?.sessions ?? []).filter((s) => RUNNING_NOW.includes(s.outcome)).length;
   const dispatching = (useDispatches().data?.dispatches ?? []).filter((d) => d.state === 'running').length;
   const { link } = useRepo();
-  const { openShortcuts } = useShell();
   const { pathname } = useLocation();
   return (
-    <aside className="rail" aria-label="Sidebar">
-      <RepoSwitcher />
-      <nav className="nav" aria-label="Main">
-        {NAV.map((n) => {
-          const count = n.badge === 'inbox' ? inbox : n.badge === 'running' ? running : n.badge === 'dispatch' ? dispatching : 0;
-          const on = pathname === n.to || (n.to === routes.features && pathname.startsWith('/features')) || (n.to === routes.activity && pathname.startsWith('/sessions')) || (n.to === routes.dispatches && pathname.startsWith('/dispatches'));
-          return (
-            <NavLink key={n.to} to={link(n.to)} className={`nav-a${on ? ' on' : ''}`} aria-current={on ? 'page' : undefined}>
-              <Icon n={n.icon} />
-              {n.label}
-              {count ? <span className={`count${n.badge !== 'inbox' ? ' quiet' : ''}`} aria-label={`${count} ${n.badge === 'inbox' ? 'need you' : 'running'}`}>{count}</span> : null}
-            </NavLink>
-          );
-        })}
-      </nav>
-      <RunningNow />
-      <div className="rail-foot">
-        <AwayCard />
-        <Usage />
-        <div className="row" style={{ gap: 2 }}>
-          <NavLink to={link(routes.settings())} className={`nav-a${pathname.startsWith('/settings') ? ' on' : ''}`} style={{ width: 'auto', flex: 1 }}>
-            <Icon n="sliders" />Settings
+    <nav className="nav-pills hide-sm" aria-label="Main">
+      {[...NAV, { to: routes.settings(), label: 'Settings', icon: 'sliders' as IconName, badge: undefined }].map((n) => {
+        const count = n.badge === 'inbox' ? inbox : n.badge === 'running' ? running : n.badge === 'dispatch' ? dispatching : 0;
+        const on = pathname === n.to || (n.to === routes.features && pathname.startsWith('/features')) || (n.to === routes.activity && pathname.startsWith('/sessions')) || (n.to === routes.dispatches && pathname.startsWith('/dispatches')) || (n.label === 'Settings' && pathname.startsWith('/settings'));
+        return (
+          <NavLink key={n.to} to={link(n.to)} className={`pill-a${on ? ' on' : ''}`} aria-current={on ? 'page' : undefined}>
+            {n.label}
+            {count ? <span className={`count${n.badge !== 'inbox' ? ' quiet' : ''}`} aria-label={`${count} ${n.badge === 'inbox' ? 'need you' : 'running'}`}>{count}</span> : null}
           </NavLink>
-          <ThemeButton />
-          <Button variant="ghost" icon aria-label="Keyboard shortcuts" onClick={openShortcuts}><Icon n="help" /></Button>
-        </div>
-      </div>
-    </aside>
+        );
+      })}
+    </nav>
+  );
+}
+
+/** Away mode, usage, theme and the shortcut sheet, behind one top-bar button. */
+export function StatusMenu() {
+  const afk = useSessions().data?.afk;
+  const { openShortcuts } = useShell();
+  const away = !!(afk?.active && afk.until);
+  return (
+    <PO.Root>
+      <PO.Trigger asChild>
+        <button type="button" className={`btn${away ? ' you' : ' ghost'}`} aria-label={away ? `Away until ${clockText(afk!.until!)}. Away mode and usage` : 'Away mode and usage'}>
+          <Icon n="moon" /><span className="hide-sm">{away ? `Away until ${clockText(afk!.until!)}` : 'Away'}</span>
+        </button>
+      </PO.Trigger>
+      <PO.Portal>
+        <PO.Content className="pop-c status-pop" align="end" sideOffset={8} collisionPadding={8}>
+          <AwayCard />
+          <Usage />
+          <div className="row" style={{ gap: 2, borderTop: '1px solid var(--line)', paddingTop: 8 }}>
+            <span className="grow muted" style={{ fontSize: 12.5, paddingLeft: 6 }}>Theme and keys</span>
+            <ThemeButton />
+            <Button variant="ghost" icon aria-label="Keyboard shortcuts" onClick={openShortcuts}><Icon n="help" /></Button>
+          </div>
+        </PO.Content>
+      </PO.Portal>
+    </PO.Root>
   );
 }

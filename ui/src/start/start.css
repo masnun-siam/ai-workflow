@@ -1,10 +1,19 @@
 /* Start dialog (FR-22). Base .start / .start-list / .pick-list / .lens live in global.css. */
-.start{min-height:0;overflow:hidden;flex:1}
-.start-list{min-height:0}
-.start-list button{font:inherit;color:inherit}
-.start-form{padding:0;overflow:hidden;min-height:0;gap:0}
-.start-fields{padding:18px;overflow:auto;display:flex;flex-direction:column;gap:14px;flex:1;min-height:0}
-.start-form > .d-f{flex:none}
+/* every group of commands is a card across the top; the picked command's options fill the space below */
+.start{display:flex;flex-direction:column;min-height:0;overflow:auto;flex:1;max-height:78vh}
+.start-kinds{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:4px 18px 14px;border-bottom:1px solid var(--line)}
+.kind{border:2px solid var(--sunk);border-radius:var(--r-card);padding:10px 12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.kind.on{border-color:var(--ink)}
+.kind-h{display:flex;align-items:baseline;gap:8px}
+.kind-h b{font-size:15px;font-weight:700;letter-spacing:-.01em}
+.kind-h span{font-size:12px;color:var(--muted)}
+.kind-cmds{display:flex;flex-wrap:wrap;gap:4px}
+.kind-cmds button{font:inherit;font-size:12.5px;font-weight:500;color:var(--ink);background:var(--bg);border:0;border-radius:999px;padding:4px 10px;cursor:pointer}
+.kind-cmds button:hover{background:var(--sunk)}
+.kind-cmds button.on{background:var(--ink);color:var(--surface)}
+.start-form{padding:0;overflow:visible;min-height:auto;gap:0}
+.start-fields{padding:18px;display:flex;flex-direction:column;gap:14px}
+.start-form > .d-f{flex:none;position:sticky;bottom:0;background:var(--surface)}
 .start-fields .lbl{display:flex;flex-direction:column;gap:6px;font-weight:600;font-size:13px}
 .start-fields .lbl .hint{font-weight:400;color:var(--muted)}
 .start-fields fieldset{border:1px solid var(--line);border-radius:var(--r-card);padding:10px 12px;margin:0;display:flex;flex-direction:column;gap:10px;min-width:0}
@@ -19,9 +28,7 @@
 .pick-list button .ref{flex:none}
 .seg{flex-wrap:wrap}
 @media (max-width:760px){
-  .start{overflow:auto;display:block}
-  .start-list{max-height:170px}
-  .start-fields{overflow:visible}
+  .start-kinds{grid-template-columns:minmax(0,1fr) minmax(0,1fr);padding:4px 12px 12px}
   .vf-row,.wl-range{grid-template-columns:1fr}
 }
 .mep{display:flex;gap:12px;flex-wrap:wrap}.mep .lbl{flex:1 1 140px;min-width:0}

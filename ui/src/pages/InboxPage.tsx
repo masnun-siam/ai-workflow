@@ -169,7 +169,7 @@ export function InboxPage() {
         return (
           <section key={id} aria-label={label}>
             <div className="group-h"><h2>{label}</h2><span className="n">{g.length}</span></div>
-            <div className="list">
+            <div className="alerts">
               {g.map((it) => (
                 <ItemRow key={it.key} item={it} a={a} open={open === it.key} toggle={() => setOpen(open === it.key ? null : it.key)} publish={setPublishing} selected={selected === it.key} rowProps={rowProps(it.key)} autoFocus={openKey !== undefined} />
               ))}

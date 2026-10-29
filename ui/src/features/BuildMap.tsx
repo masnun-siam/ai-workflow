@@ -1,29 +1,16 @@
-import type { CSSProperties } from 'react';
 import { useDispatch } from '../api/hooks';
 import type { Dispatch } from '../api/types';
 import { Icon } from '../components';
 import { levels, needsYou, secs } from '../dispatch/vocab';
 import { countBy, type Feature, type FeatureIssue } from '../lib/features';
 import { money } from '../lib/format';
-import { ISSUE, STAGES, stageIdx } from '../lib/vocab';
+import { ISSUE } from '../lib/vocab';
+import { MetroLine } from './SubwayMap';
 import { usePanel } from '../panels/PanelContext';
 
-/** The six stages as filled blocks: done ones in their stage tint, the current one deep, the rest dashed. */
+/** The feature's own line through the six stages, station names under it. */
 export function StageStrip({ f }: { f: Feature }) {
-  const at = stageIdx(f.stage);
-  const c = countBy(f.issues);
-  const fact = (id: string, k: number) =>
-    k > at ? '' : id === 'tasks' ? `${f.issues.length} issues` : id === 'building' ? `${c.merged ?? 0} of ${f.issues.length} merged` : k < at ? 'done' : 'now';
-  return (
-    <ol className="stages" aria-label="Stages">
-      {STAGES.map((s, k) => (
-        <li key={s.id} className={k < at ? 'done' : k === at ? 'now' : 'todo'} style={{ '--st': `var(--st${k})`, color: k <= at && k >= 3 ? 'var(--st4-ink)' : undefined } as CSSProperties} aria-current={k === at ? 'step' : undefined}>
-          <b>{s.label}</b>
-          <span>{fact(s.id, k)}</span>
-        </li>
-      ))}
-    </ol>
-  );
+  return <div className="pane metro-solo"><MetroLine f={f} color="var(--accent)" big link={false} /></div>;
 }
 
 /** Build waves: an issue sits one column after the latest issue it waits on. A dispatch's lanes carry the

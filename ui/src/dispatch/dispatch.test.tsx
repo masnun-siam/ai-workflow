@@ -218,8 +218,8 @@ describe('Dispatch page', () => {
     render(<App />);
     expect(await screen.findByRole('heading', { name: 'Payments' })).toBeTruthy();
     const graph = screen.getByRole('group', { name: 'Issues by what they wait for' });
-    expect(within(graph).getByText('Starts first')).toBeTruthy();
-    expect(within(graph).getByText('Then')).toBeTruthy();
+    expect(within(graph).getByText('Wave 1')).toBeTruthy();
+    expect(within(graph).getByText('Wave 2')).toBeTruthy();
     expect(screen.getByText('0 of 3 issues done. 2 in progress and 1 waiting their turn.')).toBeTruthy();
     const asks = within(screen.getByRole('region', { name: 'Needs you' }));
     expect(asks.getByText('2 issues need you')).toBeTruthy();

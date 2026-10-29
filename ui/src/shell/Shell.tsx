@@ -9,7 +9,7 @@ import { routes } from '../lib/routes';
 import { useBrowserNotifier } from '../api/hooks';
 import { useStart } from '../start/StartContext';
 import { AwayBanner, OfflineBanner } from './Banners';
-import { NAV, Rail, useInboxCount } from './Rail';
+import { NAV, NavPills, StatusMenu, useInboxCount } from './Rail';
 import { ShellCtx } from './ShellContext';
 import { ShortcutsDialog, useGlobalShortcuts } from './shortcuts';
 import { PublicBadge } from './PublicBadge';
@@ -21,22 +21,29 @@ const TITLES: [string, string][] = [
   ['/inbox', 'Inbox'], ['/features', 'Features'], ['/changes', 'Small changes'], ['/new', 'New'], ['/dispatches', 'Dispatches'], ['/activity', 'Activity'], ['/sessions', 'Session'], ['/settings', 'Settings'], ['/onboarding', 'Welcome'],
 ];
 
+/** The one bar across the top: repo, page links, search, what needs you, Away and New. */
 function Topbar({ openPalette }: { openPalette: () => void }) {
   const start = useStart();
+  const inbox = useInboxCount();
+  const { link } = useRepo();
   const { pathname } = useLocation();
   const title = TITLES.find(([p]) => pathname.startsWith(p))?.[1] ?? 'aiw';
   return (
     <div className="topbar">
+      <Link to={link(routes.features)} className="brand hide-sm" aria-label="aiw home">aiw</Link>
+      <span className="hide-sm"><RepoSwitcher /></span>
       <span className="mob-only"><RepoSwitcher compact /></span>
       <h2 className="mob-only" style={{ fontSize: 16 }}>{title}</h2>
-      <span className="grow hide-sm" />
-      <button type="button" className="btn grow search-btn" onClick={openPalette} aria-label="Search or jump to" aria-keyshortcuts="Meta+K Control+K">
+      <NavPills />
+      <span className="grow" />
+      <button type="button" className="btn search-btn" onClick={openPalette} aria-label="Search or jump to" aria-keyshortcuts="Meta+K Control+K">
         <Icon n="search" />
-        <span className="grow ellipsis" style={{ textAlign: 'left' }}>Search or jump to…</span>
+        <span className="hide-sm">Search</span>
         <span className="kbd hide-sm">⌘K</span>
       </button>
-      <span className="grow hide-sm" />
       <PublicBadge />
+      {inbox ? <Link to={link(routes.inbox)} className="you-pill hide-sm"><i />{inbox} need you</Link> : null}
+      <StatusMenu />
       <Button variant="primary" noAction onClick={() => start.open()} aria-keyshortcuts="N">
         <Icon n="plus" />
         <span className="hide-sm">New</span>
@@ -68,7 +75,7 @@ function MobileNav() {
   );
 }
 
-/** The frame: rail | (banners, top bar, page) | detail panel, plus the palette, shortcut sheet and toasts. */
+/** The frame: (banners, top bar, page) | detail panel, plus the palette, shortcut sheet and toasts. */
 export function Shell() {
   const [palette, setPalette] = useState(false);
   const [keys, setKeys] = useState(false);
@@ -102,7 +109,6 @@ export function Shell() {
       <GlobalKeys />
       <a className="skip" href="#main-content" onClick={(e) => { e.preventDefault(); document.getElementById('main-content')?.focus(); }}>Skip to content</a>
       <div className={`app${panel.target ? ' has-panel' : ''}`}>
-        <Rail />
         <main className="main" id="main">
           <OfflineBanner />
           <AwayBanner />

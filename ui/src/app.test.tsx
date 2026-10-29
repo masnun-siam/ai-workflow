@@ -58,7 +58,7 @@ describe('app shell', () => {
     render(<App />);
     await screen.findByRole('heading', { level: 1, name: 'Inbox' });
     await user.keyboard('n');
-    expect(await screen.findByRole('dialog', { name: 'Start something' })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'What should we start?' })).toBeTruthy();
   });
 
   it('shows the offline banner when /api/sessions fails', async () => {

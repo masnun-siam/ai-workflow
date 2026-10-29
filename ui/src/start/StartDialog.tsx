@@ -32,12 +32,15 @@ const write = (k: string, v: string) => {
     /* storage blocked: the dialog still works */
   }
 };
+// One line under each group's name in the picker: where that group takes the work.
+const KIND_HINT: Record<string, string> = { Plan: 'Idea to tasks', Build: 'Issue to PR', Review: 'PR to approval', Ship: 'Release', Capture: 'Notes and logs', Maintain: 'Docs and repo' };
+
 const initialCommand = (preset: StartPreset) => [preset.cmd, read(CMD_KEY)].find((c) => c && COMMAND[c]) ?? 'create-prd';
 
 /** The Start dialog (FR-22): pick a command, say where it runs and what on, then start it as a session. */
 export function StartDialog({ open, preset, onClose }: { open: boolean; preset: StartPreset; onClose: () => void }) {
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()} title="Start something" description="Pick a command and what it runs on." wide bare>
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()} title="What should we start?" description="Pick where the work goes, then what it runs on." wide bare>
       <StartBody preset={preset} onClose={onClose} />
     </Dialog>
   );
@@ -186,16 +189,17 @@ function StartBody({ preset, onClose }: { preset: StartPreset; onClose: () => vo
   return (
     <>
       <div className="start">
-        <nav className="start-list" aria-label="Commands">
+        <nav className="start-kinds" aria-label="Commands">
           {COMMANDS.map((g) => (
-            <div key={g.g} role="group" aria-label={g.g}>
-              <div className="g" aria-hidden="true">{g.g}</div>
-              {g.items.map((x) => (
-                <button key={x.id} type="button" className={cmd === x.id ? 'on' : ''} aria-pressed={cmd === x.id} onClick={() => changeCmd(x.id)}>
-                  <div style={{ fontWeight: 600 }}>{x.name}</div>
-                  <div className="s">{x.id === 'custom' ? 'any prompt' : `/${x.id}`}</div>
-                </button>
-              ))}
+            <div key={g.g} role="group" aria-label={g.g} className={`kind${g.items.some((x) => x.id === cmd) ? ' on' : ''}`}>
+              <div className="kind-h" aria-hidden="true"><b>{g.g}</b><span>{KIND_HINT[g.g]}</span></div>
+              <div className="kind-cmds">
+                {g.items.map((x) => (
+                  <button key={x.id} type="button" className={cmd === x.id ? 'on' : ''} aria-pressed={cmd === x.id} title={x.id === 'custom' ? 'any prompt' : `/${x.id}`} onClick={() => changeCmd(x.id)}>
+                    {x.name}
+                  </button>
+                ))}
+              </div>
             </div>
           ))}
         </nav>
