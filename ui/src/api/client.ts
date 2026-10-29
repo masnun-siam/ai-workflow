@@ -20,7 +20,7 @@ export class ApiError extends Error {
   }
 }
 
-type Method = 'GET' | 'POST' | 'PUT';
+type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export async function request<T>(method: Method, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const init: RequestInit = { method, signal, headers: { Accept: 'application/json' } };
@@ -52,6 +52,8 @@ export async function request<T>(method: Method, path: string, body?: unknown, s
 export const get = <T>(path: string, signal?: AbortSignal) => request<T>('GET', path, undefined, signal);
 export const post = <T = Record<string, never>>(path: string, body?: unknown) => request<T>('POST', path, body);
 export const put = <T = Record<string, never>>(path: string, body?: unknown) => request<T>('PUT', path, body);
+export const patch = <T = Record<string, never>>(path: string, body?: unknown) => request<T>('PATCH', path, body);
+export const del = <T = null>(path: string, body?: unknown) => request<T>('DELETE', path, body);
 
 /** Query string from defined values only. */
 export function qs(params: Record<string, string | number | boolean | undefined | null>): string {

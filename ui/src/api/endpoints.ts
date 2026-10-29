@@ -1,9 +1,9 @@
 // Every endpoint the UI calls, as plain typed functions. Hooks in hooks.ts wrap these with caching and invalidation.
-import { enc, get, post, put, qs, request, splitRepo } from './client';
+import { del, enc, get, patch, post, put, qs, request, splitRepo } from './client';
 import type {
   AnswerBody, AfkState, DuplicateResponse, AfkChangeBody, AfkChangeResponse, Dispatch, DispatchPlan, DispatchSettings, DispatchTarget, DispatchState, EndAction, LaneAction, BoardStartBody, BoardStartResponse, CleanupItem, DeliveryResponse, InboxResponse,
   IssueDetail, NotificationFeed, NotifyChannel, NotifySettings, OpenItem, PeerReviewOffers, PlanningResponse, PrDetail, PrdFile, ReposResponse, RestartStatus,
-  ReviewSettings, Session, SessionStartBody, SessionsResponse, Settings, StreamResponse, VaultFolders, VaultPrd,
+  ReviewSettings, SendPreview, SendResult, Session, SessionStartBody, Share, ShareComment, ShareSummary, ShareThread, SessionsResponse, Settings, StreamResponse, VaultFolders, VaultPrd,
 } from './types';
 
 export const api = {
@@ -84,6 +84,22 @@ export const api = {
   laneAction: (id: string, lane: string, action: LaneAction, text?: string) => post<Dispatch>(`/api/dispatches/${enc(id)}/lane`, { lane, action, text }),
   endAction: (id: string, action: EndAction) => post<Dispatch>(`/api/dispatches/${enc(id)}/end`, { action }),
   dispatchSeen: (id: string) => post<Dispatch>(`/api/dispatches/${enc(id)}/seen`),
+
+  // ---- shares (owner side)
+  shares: () => get<ShareSummary[]>('/api/shares'),
+  share: (id: string) => get<Share>(`/api/shares/${enc(id)}`),
+  createShare: (repo: string, path: string) => post<ShareSummary>('/api/shares', { repo, path, confirm: true }),
+  stopShare: (id: string) => del<ShareSummary>(`/api/shares/${enc(id)}`),
+  deleteThread: (id: string, tid: string) => del(`/api/shares/${enc(id)}/threads/${enc(tid)}`),
+  deleteComment: (id: string, tid: string, cid: string) => del(`/api/shares/${enc(id)}/threads/${enc(tid)}/comments/${enc(cid)}`),
+  deleteApproval: (id: string, aid: string) => del(`/api/shares/${enc(id)}/approvals/${enc(aid)}`),
+  deleteShareRecord: (id: string) => del(`/api/shares/${enc(id)}/record`),
+  replyThread: (id: string, tid: string, body: string) => post<ShareComment>(`/api/shares/${enc(id)}/threads/${enc(tid)}/comments`, { body }),
+  resolveThread: (id: string, tid: string, resolved: boolean) => patch<ShareThread>(`/api/shares/${enc(id)}/threads/${enc(tid)}`, { resolved }),
+  /** `outdated`: thread ids the PRD tab placed as Outdated; the server marks them in the prompt. */
+  sendPreview: (id: string, outdated: string[]) => post<SendPreview>(`/api/shares/${enc(id)}/send`, { outdated }),
+  sendShare: (id: string, outdated: string[]) => post<SendResult>(`/api/shares/${enc(id)}/send`, { confirm: true, outdated }),
+  markSeen: (id: string) => post<null>(`/api/shares/${enc(id)}/seen`),
 
   // ---- repos and settings
   registerRepo: (slug: string, path: string) => post<{ path: string; repos: ReposResponse['repos'] }>('/api/repos/register', { slug, path }),
