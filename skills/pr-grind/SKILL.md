@@ -20,7 +20,7 @@ session: **spawn no subagent**. Merging stays manual.
 what survives compaction and headless re-entry: **read it first if it exists.** Per round
 record: round number, review id + `submitted_at`, verdict counts, each finding's
 fingerprint (`path:line` + first ~80 normalized chars of the body), fixed vs rebutted,
-commit SHAs, CI result.
+commit SHAs, CI result, and one `jev-finding-hint: <comment id or #n> <fix|rebut|none> (<p>) — session: <fix|rebut>` line per triaged finding (Step 5).
 
 Header keys (lines above the first `## Round <n>`; names are pinned for the aiw ui tick):
 `owner: repo: number: thread: reviewer: author: base:` plus
@@ -28,6 +28,9 @@ Header keys (lines above the first `## Round <n>`; names are pinned for the aiw 
 - `ci-attempt: <sha> — <outcome>` — one line per head SHA given its one inline CI fix
   attempt. Write it *before* acting, so a crash can't buy a second attempt. A fix's own
   push is recorded `ci-attempt: <sha> — fixed → <new-sha>`.
+- `jev-ci-hint: <check name> <flaky|real|none> (<p>) — session: <fixed|flake-rerun|rerun-denied|cannot-fix>` —
+  jev's advisory view of one failing check, one line per check, right below that head's
+  `ci-attempt:` line (rail 2). Never acted on.
 - `queued-push: <sha>[ <sha>...] — round <n> — then <retrigger|close>` — fix commits
   held locally because CI is not green. Not a pause; removed once pushed.
 - `paused: <ISO8601> — <reason>` — stopped for a human; nothing polls it. Resumes only
@@ -118,6 +121,16 @@ First that fires wins; firing means stop, fix nothing this round (rail 2 may con
      (`fixed → <new-sha>`, `flake-rerun`, `rerun-denied → <new-sha>`, `cannot-fix`). Fixed or
      rerun → continue the round with the push gate closed. Cannot fix or unsure → post the
      root cause to Slack, Step 8.
+
+     Then, for each failing check, log jev's view (advisory: your outcome above stands, and the
+     hint never buys a rerun). One Bash call, with `<job>` the number after `/job/` in the check's
+     `link` (no `/job/` → `<run_id>` in place of `--job <job>`):
+     `t=$(mktemp -d) && { gh run view --job <job> --repo <owner>/<repo> --log-failed > "$t/log"; aiw jev ci-hint --file "$t/log"; rm -rf "$t"; }`
+     It prints `{"hint", "probability", "status"}`. `status` `off` or `missing` → write nothing.
+     Otherwise write `jev-ci-hint: <check name> <hint> (<probability>) — session: <outcome word>`
+     below the `ci-attempt:` line (`failed` gives `none (0)`). The outcome word is the bare word
+     from the `ci-attempt` outcome. For `cannot-fix`, write the line before Step 8. Never paste
+     the log into a command.
    - **Attempt already recorded** (still red at this head, or the red head is our own push)
      → the attempt failed: post the failing check to Slack, Step 8.
 3. **Third-party human comment** since the last round, from an account that is neither the
@@ -143,6 +156,14 @@ Triage each finding left after Step 4:
 - **Rebut** — only with concrete evidence the finding is wrong (handled elsewhere in the
   diff, would break a passing test, false premise). No code change; reply and resolve.
 - **PR-body edit** — remedy is "update the description": `gh pr edit --body-file`, reply, resolve.
+
+Once triaged, log jev's view of the round's findings (advisory: your triage stands). One Bash
+call, with `<review_id>` the round's review:
+`t=$(mktemp -d) && { gh api "repos/<owner>/<repo>/pulls/<n>/reviews/<review_id>/comments?per_page=100" --jq '[.[] | {id, text: (.path + "\n" + .body)}]' > "$t/f.json"; aiw jev finding-hint --file "$t/f.json"; rm -rf "$t"; }`
+It prints a list of `{"id", "hint", "probability", "status"}`, for at most 20 findings. Status
+`off` or `missing` → write nothing. Otherwise, for each finding you triaged that has an entry,
+add `jev-finding-hint: <id> <hint> (<probability>) — session: <fix|rebut>` to this round's
+record (Step 6); a PR-body edit counts as `fix`. Never paste a comment into a command.
 
 Work in the PR's checkout: check `git worktree list` first and use the worktree holding
 the branch rather than checking it out elsewhere. Edit **only files in the PR's diff**

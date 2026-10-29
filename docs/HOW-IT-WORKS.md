@@ -107,7 +107,7 @@ the refined issues and **Run N** dispatches them.
 1. Post the trigger in the repo's review channel (`channels.json`); the thread is the loop's anchor.
 2. Wait for the bot's round, then split findings into fix and rebut.
 3. Fix inline, in the grind session itself: commit, reply on and resolve the thread.
-4. Run `/verifier-locally` before every push. A failing CI check gets one fix attempt per head commit.
+4. Run `/verifier-locally` before every push. A failing CI check gets one fix attempt per head commit. With Use jev on, grind also logs jev's advisory flake and fix/rebut hints in its state file and never acts on them.
 5. Push, re-trigger, repeat until approved or a rail stops it (round cap, stall, rate limit).
 6. Post the closing summary and mention the owner.
 
