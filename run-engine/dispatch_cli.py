@@ -13,9 +13,11 @@ import socket
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, wait
 
 import dispatch
 import dispatch_run as dr
+import jev
 import ui_settings
 from shared import data_dir, run
 
@@ -24,6 +26,18 @@ WATCH_KINDS = ("needs_you", "held", "awaiting_merge", "finished", "end")
 _EPIC = re.compile(r"^(?:([\w.-]+/[\w.-]+)#)?(\d+)$")
 _ISSUE = re.compile(r"^([\w.-]+/[\w.-]+)#(\d+)$")
 MAX_ISSUES = 30
+READINESS_QUESTION = "How clearly does this issue state what to build?"
+READINESS_LEVELS = [
+    "no clear outcome",
+    "an outcome, but no acceptance criteria and no approach",
+    "an outcome and some acceptance criteria, approach unclear",
+    "outcome and acceptance criteria clear, approach partly clear",
+    "outcome, acceptance criteria and approach all clear",
+]
+READINESS_LOW = 2
+READINESS_MAX = 30
+READINESS_WORKERS = 5
+READINESS_WAIT_S = 8
 
 CHILDREN = """
 query($owner: String!, $name: String!, $n: Int!) {
@@ -135,8 +149,17 @@ def issues_from(response: dict, refs) -> tuple:
     return kids, outside, sorted(closed)
 
 
-def issues_query(nums) -> str:
-    fields = (
+def _bodies(nodes) -> dict:
+    """{lane key: body or None} for the open nodes; kept out of the children so no body reaches a lane or a record."""
+    return {
+        dr.key(x["repository"]["nameWithOwner"], x["number"]): x["body"] if isinstance(x.get("body"), str) else None
+        for x in nodes
+        if x.get("state") == "OPEN"
+    }
+
+
+def issues_query(nums, bodies=False) -> str:
+    fields = ("body " if bodies else "") + (
         "number title state repository { nameWithOwner } labels(first: 20) { nodes { name } } "
         "blockedBy(first: 20) { nodes { number state repository { nameWithOwner } } }"
     )
@@ -144,25 +167,33 @@ def issues_query(nums) -> str:
     return f"query($owner: String!, $name: String!) {{ repository(owner: $owner, name: $name) {{ {aliases} }} }}"
 
 
-def resolve(epic: str, gh=_gh) -> dict:
+def resolve(epic: str, gh=_gh, bodies=False) -> dict:
     repo, n = parse_epic(epic, gh)
     owner, name = repo.split("/")
-    p = gh(["api", "graphql", "-f", f"query={CHILDREN}", "-f", f"owner={owner}", "-f", f"name={name}", "-F", f"n={n}"])
+    query = CHILDREN.replace("number title state", "number title body state") if bodies else CHILDREN
+    p = gh(["api", "graphql", "-f", f"query={query}", "-f", f"owner={owner}", "-f", f"name={name}", "-F", f"n={n}"])
     if p.returncode != 0:
         raise ValueError(f"cannot read epic {repo}#{n}: {(p.stderr or p.stdout).strip()[:200]}")
-    title, kids, outside = children_from(json.loads(p.stdout))
-    return {"epic": f"{repo}#{n}", "title": title, "children": kids, "outside": outside}
+    resp = json.loads(p.stdout)
+    title, kids, outside = children_from(resp)
+    r = {"epic": f"{repo}#{n}", "title": title, "children": kids, "outside": outside}
+    if bodies:
+        r["bodies"] = _bodies(resp["data"]["repository"]["issue"]["subIssues"]["nodes"])
+    return r
 
 
-def resolve_issues(refs, gh=_gh) -> dict:
+def resolve_issues(refs, gh=_gh, bodies=False) -> dict:
     repo, nums = parse_issues(refs)
     owner, name = repo.split("/")
-    p = gh(["api", "graphql", "-f", f"query={issues_query(nums)}", "-f", f"owner={owner}", "-f", f"name={name}"])
+    p = gh(
+        ["api", "graphql", "-f", f"query={issues_query(nums, bodies)}", "-f", f"owner={owner}", "-f", f"name={name}"]
+    )
     if p.returncode != 0:
         raise ValueError(f"cannot read issues in {repo}: {(p.stderr or p.stdout).strip()[:200]}")
-    kids, outside, closed = issues_from(json.loads(p.stdout), refs)
+    resp = json.loads(p.stdout)
+    kids, outside, closed = issues_from(resp, refs)
     keys = [dr.key(c["repo"], c["n"]) for c in kids]
-    return {
+    r = {
         "epic": None,
         "issues": keys,
         "title": dr.issues_title(keys),
@@ -170,6 +201,9 @@ def resolve_issues(refs, gh=_gh) -> dict:
         "outside": outside,
         "closed": closed,
     }
+    if bodies:
+        r["bodies"] = _bodies(resp["data"]["repository"].values())
+    return r
 
 
 def channel(repo: str):
@@ -200,6 +234,33 @@ def missing_base(repos, base, gh=_gh) -> list:
     ]
 
 
+def readiness(children, bodies) -> tuple:
+    """({lane key: 1-5}, warning lines): jev scores each refined lane's body; slow or failed ones are named once."""
+    if jev.status() != "ok":
+        return {}, []
+    refined = [dr.key(c["repo"], c["n"]) for c in children if c["refined"]]
+    scored = [k for k in refined if isinstance(bodies.get(k), str)][:READINESS_MAX]
+    unavailable = set(refined) - set(scored)
+    pool = ThreadPoolExecutor(READINESS_WORKERS)  # not `with`: its exit would wait for every call
+    futs = {
+        pool.submit(jev.ask, "readiness", "score", READINESS_QUESTION, bodies[k], levels=READINESS_LEVELS): k
+        for k in scored
+    }
+    done, _ = wait(futs, timeout=READINESS_WAIT_S)
+    pool.shutdown(wait=False, cancel_futures=True)
+    scores = {}
+    for f, k in futs.items():
+        r = f.result() if f in done and not f.exception() else {}
+        if r.get("status") == "ok":
+            scores[k] = min(5, max(1, int(r["score"] + 0.5) + 1))
+        else:
+            unavailable.add(k)
+    lines = [f"{k}: may be underspecified (jev {scores[k]}/5)" for k in refined if scores.get(k, 5) <= READINESS_LOW]
+    if unavailable:
+        lines.append("Readiness unavailable for " + ", ".join(sorted(unavailable)))
+    return scores, lines
+
+
 def preview(r: dict, settings: dict, runner: str, gh=_gh) -> dict:
     p = dr.plan(r["children"])
     repos = sorted({c["repo"] for c in r["children"]})
@@ -215,7 +276,12 @@ def preview(r: dict, settings: dict, runner: str, gh=_gh) -> dict:
         if settings.get("grind", "full") != "off" and channel(repo) is None:
             p["warnings"].append(f"{repo}: no Slack channel, its lanes skip grinding")
     p["warnings"].extend(missing_base(repos, settings.get("base_branch"), gh))
-    out = {"epic": r["epic"], "title": r["title"], "settings": settings, "runner": runner, "lanes": r["children"], **p}
+    scores = {}
+    if "bodies" in r:
+        scores, lines = readiness(r["children"], r["bodies"])
+        p["warnings"].extend(lines)
+    lanes = [{**c, "readiness": scores.get(dr.key(c["repo"], c["n"]))} for c in r["children"]]
+    out = {"epic": r["epic"], "title": r["title"], "settings": settings, "runner": runner, "lanes": lanes, **p}
     if not r["epic"]:
         out["issues"] = r.get("issues")
     return out
@@ -283,7 +349,7 @@ def summary(d: dict) -> dict:
 
 
 def cmd_plan(a) -> None:
-    print(json.dumps(preview(resolve(a.epic), _settings(a), a.runner), indent=1))
+    print(json.dumps(preview(resolve(a.epic, bodies=True), _settings(a), a.runner), indent=1))
 
 
 def refuse_missing_base(children, s: dict, gh) -> None:

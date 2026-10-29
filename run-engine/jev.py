@@ -7,7 +7,7 @@ failed (non-zero exit, with "exit"), unreadable (bad JSON or field). A failure n
 
 peek(...) reads the cache only (None on a miss or when jev is off or missing).
 
-The CACHED points (urgency, readiness, duplicate) are answered from a cache of ok answers (memory, flushed to
+The CACHED points (urgency, readiness, duplicate) are answered, in the server only (start_timer), from a cache of ok answers (memory, flushed to
 jev_cache.json by the server's timer; 2000 entries, 7 days) and capped at CEILING calls an hour: past it they
 return {"status": "capped"}. Every other point (risk, route, hints) is never cached, counted or refused.
 """
@@ -40,6 +40,7 @@ _now = time.time  # tests set this to drive the clock
 _lock = threading.Lock()  # guards the cache, the dirty flag and the window; never held while jev runs
 _cache: dict | None = None
 _dirty = False
+_server = False  # set by start_timer(): only the server reads or writes the cache
 _window_start = 0.0
 _window_calls = 0
 
@@ -117,6 +118,9 @@ def flush() -> None:
 
 
 def start_timer(interval: float = FLUSH_S) -> threading.Thread:
+    global _server
+    _server = True
+
     def loop():
         while True:
             time.sleep(interval)
@@ -160,7 +164,7 @@ def ask(
     if point not in CACHED:
         return _run(point, kind, question, sent, options, levels)
     with _lock:
-        hit = _load().get(key)
+        hit = _load().get(key) if _server else None
         if hit and _fresh(hit):
             return {"status": "ok", **hit["answer"]}
         now = _now()
@@ -170,7 +174,7 @@ def ask(
             return {"status": "capped"}
         _window_calls += 1  # a failed call spent an invocation too
     r = _run(point, kind, question, sent, options, levels)
-    if r["status"] == "ok":
+    if r["status"] == "ok" and _server:
         answer = {k: v for k, v in r.items() if k != "status"}
         with _lock:
             cache = _load()

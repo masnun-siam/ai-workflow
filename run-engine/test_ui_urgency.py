@@ -27,6 +27,8 @@ import ui_inbox  # noqa: E402
 import ui_settings  # noqa: E402
 import ui_urgency  # noqa: E402
 
+jev._server = True  # the server's timer sets this; only the server uses the cache
+
 
 class FakePool:
     def __init__(self):
