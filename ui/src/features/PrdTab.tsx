@@ -9,6 +9,7 @@ import type { Feature } from '../lib/features';
 import { mdToHtml } from '../lib/md';
 import { prdBody, renderDiagrams, toggleDiagram } from '../lib/prdRender';
 import { PLAN_RUN } from '../lib/vocab';
+import { SharePopover } from './SharePopover';
 
 export const CHANGED_MSG = 'This file changed on disk since you opened it, so nothing was saved. Reload it, then redo your edit.';
 export const askArgs = (path: string, text: string) => `${path} --update ${text.trim()}`;
@@ -75,6 +76,7 @@ export function PrdTab({ f, repo }: { f: Feature; repo: string }) {
             <button type="button" className={mode === 'edit' ? 'on' : ''} aria-pressed={mode === 'edit'} onClick={() => { if (mode !== 'edit') { setDraft(data.text); setNote(''); setMode('edit'); } }}>Edit</button>
           </div>
           <span className="grow" />
+          <SharePopover status={f.prd.status} repo={repo} path={path} />
           <span className="muted" style={{ fontSize: 12.5 }}>{f.prd.status} · {words.toLocaleString()} words</span>
         </div>
         {note ? <p role="status" className="muted">{note}</p> : null}
