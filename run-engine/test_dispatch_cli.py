@@ -313,4 +313,107 @@ assert d["id"] in aiw("ls").stdout
 assert aiw("show", "000000000000").returncode == 5
 assert aiw("end", d["id"], "open-pr").returncode == 5  # no feature branch
 print("  ok  cli")
+# --- readiness (FR-5)
+import time  # noqa: E402
+
+import ui_settings  # noqa: E402
+
+rbin = tempfile.mkdtemp()
+rlog = os.path.join(rbin, "calls.log")
+rsleep = os.path.join(rbin, "sleep")
+with open(os.path.join(rbin, "jev"), "w") as f:
+    f.write(
+        f"#!/bin/sh\nb=$(cat)\necho x >> {rlog}\n[ -f {rsleep} ] && sleep 3\n"
+        'case "$b" in *thin*) echo \'{"score": 1.0, "confidence": 0.9}\';; *) echo \'{"score": 2.0, "confidence": 0.9}\';; esac\n'
+    )
+os.chmod(os.path.join(rbin, "jev"), 0o755)
+real_path = os.environ["PATH"]
+os.environ["PATH"] = rbin + ":/usr/bin:/bin"
+
+
+def kid(n, refined=True):
+    return {"repo": "o/r", "n": n, "title": f"t{n}", "refined": refined, "deps": []}
+
+
+def logged():
+    return len(open(rlog).read().splitlines()) if os.path.exists(rlog) else 0
+
+
+def rprev(kids, bodies):
+    return dc.preview(
+        {"epic": "o/r#1", "title": "E", "children": kids, "outside": {}, "bodies": bodies},
+        {"grind": "off"},
+        "headless",
+        lambda a: cp("sha"),
+    )
+
+
+r2 = rprev([kid(2), kid(3), kid(4, False)], {"o/r#2": "thin issue", "o/r#3": "a full issue", "o/r#4": "x"})
+assert "o/r#2: may be underspecified (jev 2/5)" in r2["warnings"], r2["warnings"]
+assert [x["readiness"] for x in r2["lanes"]] == [2, 3, None]
+assert "o/r#2" in [k for w in r2["waves"] for k in w] and "thin issue" not in json.dumps(r2)
+assert not [w for w in r2["warnings"] if "unavailable" in w] and logged() == 2
+r3 = rprev([kid(3)], {"o/r#3": None})
+assert "Readiness unavailable for o/r#3" in r3["warnings"] and r3["lanes"][0]["readiness"] is None
+dc.READINESS_WAIT_S = 1
+open(rsleep, "w").close()
+t = time.time()
+r4 = rprev([kid(2), kid(3)], {"o/r#2": "a", "o/r#3": "b"})
+assert time.time() - t < 3 and [w for w in r4["warnings"] if "eadiness" in w] == [
+    "Readiness unavailable for o/r#2, o/r#3"
+]
+assert [x["readiness"] for x in r4["lanes"]] == [None, None]
+os.remove(rsleep)
+dc.READINESS_WAIT_S = 8
+os.remove(rlog)
+many = [kid(n) for n in range(1, 32)]
+r5 = rprev(many, {f"o/r#{n}": f"body {n}" for n in range(1, 32)})
+assert logged() == 30 and [w for w in r5["warnings"] if "unavailable" in w] == ["Readiness unavailable for o/r#31"]
+os.remove(rlog)
+ui_settings.save({"use_jev": False})
+r6 = rprev([kid(2)], {"o/r#2": "thin"})
+assert not [w for w in r6["warnings"] if "eadiness" in w] and r6["lanes"][0]["readiness"] is None and logged() == 0
+ui_settings.save({"use_jev": True})
+os.environ["PATH"] = tempfile.mkdtemp() + ":/usr/bin:/bin"  # jev missing
+assert not [w for w in rprev([kid(2)], {"o/r#2": "thin"})["warnings"] if "eadiness" in w]
+os.environ["PATH"] = real_path
+
+# bodies are requested only on demand and stay out of the children
+qs = []
+
+
+def gh_body(a):
+    q = next(x for x in a if x.startswith("query="))
+    qs.append(q)
+    node = {
+        "number": 2,
+        "title": "t",
+        "body": "SECRET",
+        "state": "OPEN",
+        "repository": {"nameWithOwner": "o/r"},
+        "labels": {"nodes": []},
+        "blockedBy": {"nodes": []},
+    }
+    if "subIssues" in q:
+        return cp(json.dumps({"data": {"repository": {"issue": {"title": "E", "subIssues": {"nodes": [node]}}}}}))
+    return cp(json.dumps({"data": {"repository": {"i0": node}}}))
+
+
+for fn, arg in ((dc.resolve, "o/r#1"), (dc.resolve_issues, ["o/r#2"])):
+    with_b, without = fn(arg, gh_body, bodies=True), fn(arg, gh_body)
+    assert "body" in qs[-2] and "body" not in qs[-1] and "bodies" not in without
+    assert with_b["bodies"] == {"o/r#2": "SECRET"} and not any("body" in c for c in with_b["children"])
+seen = {}
+real_resolve_ = dc.resolve
+dc.resolve = lambda epic, gh=None, bodies=False: (
+    seen.update(bodies=bodies) or {"epic": epic, "title": "", "children": [], "outside": {}}
+)
+import contextlib  # noqa: E402
+import io  # noqa: E402
+
+with contextlib.redirect_stdout(io.StringIO()):
+    dc.cmd_plan(_parse())
+assert seen == {"bodies": True}
+dc.resolve = real_resolve_
+print("  ok  readiness")
 print("dispatch_cli: all green")

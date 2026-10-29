@@ -36,7 +36,7 @@ Paths below starting `../../` are relative to this skill's folder, at the plugin
 2. **Preview.** `aiw dispatch plan <epic> <flags>`. Show the user the waves (issues that run together),
    the settings (the base branch among them), and every warning: unrefined issues are skipped ("needs refine": suggest
    `/ai-workflow:refine-issues` (see "Repo skills win")), a repo with no registered checkout cannot open a tab, a repo with no
-   Slack channel skips grinding, an open blocker outside the epic holds its issue, a missing base branch fails Start (pick another or drop the flag). Then ask with
+   Slack channel skips grinding, an open blocker outside the epic holds its issue, a missing base branch fails Start (pick another or drop the flag), an issue jev reads as underspecified (`may be underspecified (jev n/5)`) still runs, so suggest refining it first, and "Readiness unavailable" only means jev could not score it in time. Then ask with
    `AskUserQuestion`: start, change settings, or stop. On a change, preview again.
 3. **Start.** `aiw dispatch start <epic> <flags> --runner herdr --workspace <workspace_id>` prints
    `{"id", "since", "ui"}`. It starts the `aiw ui` server when it is not running. Tell the user the id and

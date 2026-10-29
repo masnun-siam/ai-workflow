@@ -180,7 +180,7 @@ ready-to-merge Inbox item appears.
 and the rest as history; **Run an epic** takes an epic (typed, or picked from the repo's
 epics), grind mode (Off, Simple, Full), auto-merge, lanes at once (1–10), a base branch (a searchable list of the repo's branches, also in Run small changes), a feature branch, model and
 effort, then **Preview** shows the waves and warnings (unrefined issues, cycles, missing checkouts,
-repos without a Slack channel, open blockers outside the epic) before **Start**. Lanes started here run
+repos without a Slack channel, open blockers outside the epic, issues jev reads as underspecified, readiness unavailable) before **Start**. With Use jev on, Preview (and `aiw dispatch plan`) scores each refined lane's body 1–5 for up to 8 s: plan lanes carry `readiness` (int or null), a score of 2 or less warns and the lane still runs, and bodies are fetched only for this read and never returned. Lanes started here run
 as headless sessions (the same dialog, given picked issues, becomes **Run small changes**: chips instead of the epic field, no feature branch, `issues` in the request; lists show it by its title, "Small changes: #412, #415", and `owner/repo`); `herdr-dispatch` starts herdr ones, and both show here. `aiw dispatch plan|start` and `herdr-dispatch` take an epic only. A dispatch page has the
 live settings, **Pause**/**Resume**/**Cancel**, a one-sentence summary with time and spend, a **Needs
 you** strip (each issue waiting on you with its one action: Merge, Answer, Retry), the issues as a
