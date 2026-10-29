@@ -9,7 +9,7 @@ Status is `Draft`, `In review` or `Approved`. This document is the source of tru
 Settings → Notifications gets a grid: one row per kind of event (a session waiting on you, a PR ready, a grind paused, …) and one column per channel (Browser, ntfy, This Mac). Each cell is a switch, so the user picks exactly which events reach which channel. aiw has one user, who runs `aiw ui` on their Mac and opens it on the laptop and the phone.
 
 Today:
-- **ntfy** pushes all 11 events (listed under FR-1) to the configured server and topic. The only way to turn one off is to clear the server or topic, which turns them all off.
+- **ntfy** pushes all 12 events (listed under FR-1; `prd-comment` is off by default) to the configured server and topic. The only way to turn one off is to clear the server or topic, which turns them all off.
 - **Browser** has an "Enable browser notifications" button and a permission chip, but nothing shows a notification any more. The pre-React UI showed one for "waiting" (#124). The React rewrite kept the permission handling, and keeps polling in the background when permission is granted, but dropped the code that shows the notification. The ui-rewrite PRD's "Send test push" button was never built.
 - **macOS banner**: a dispatch event also shows a macOS banner on the host through AppleScript. It cannot carry a link, so clicking it opens Script Editor.
 - Two rules already decide whether a notification goes out at all. Away mode holds "waiting", "failed" and "grind paused" and sends one summary at the end. A grind round's own "done" is never sent.
@@ -42,16 +42,17 @@ The single aiw user, in Settings → Notifications in `aiw ui`, from any device 
 
 ## Requirements
 
-- **FR-1 Event list.** The matrix has these 11 rows, in three groups, labelled as shown:
-  - *Needs you*: A session is waiting on you (`waiting`), A session failed (`failed`), A dispatch needs you (`dispatch`), Review panel hit its cap (`panel-cap`).
+- **FR-1 Event list.** The matrix has these 12 rows, in three groups, labelled as shown:
+  - *Needs you*: A session is waiting on you (`waiting`), A session failed (`failed`), A dispatch needs you (`dispatch`), Review panel hit its cap (`panel-cap`), Reviewers commented on a PRD (`prd-comment`).
   - *Pull requests*: PR is ready for review (`pr-ready`), Merged issue needs cleanup (`needs-cleanup`), Grind paused (`grind-paused`), Grind finished (`grind-done`).
   - *Finished*: A session is done (`done`), Pipeline finished (`pipeline`), Away mode ended (`afk`).
-  - Acceptance: Settings → Notifications shows exactly these 11 rows under these three group headings, in this order.
+  - Acceptance: Settings → Notifications shows exactly these 12 rows under these three group headings, in this order.
 - **FR-2 Channels.** Three columns: Browser (`browser`), ntfy (`ntfy`), This Mac (`mac`). Every cell is a switch with an accessible name such as "A session failed: ntfy".
-  - Acceptance: 33 switches are shown. A screen reader announces each switch with its event and channel.
+  - Acceptance: 36 switches are shown. A screen reader announces each switch with its event and channel.
 - **FR-3 Defaults.** A cell the user has never changed takes its default:
-  - ntfy: on for all 11 events.
+  - ntfy: on for all events except `prd-comment`.
   - Browser and This Mac: on for the *Needs you* and *Pull requests* groups, except Grind finished. Off for Grind finished and the *Finished* group.
+  - Per-event exception: `prd-comment` is Browser on, ntfy off, This Mac off (a PRD share's comments are throttled to one push per share per minute; the Inbox item is the durable signal).
   - Acceptance: on an install whose `ui.json` holds no matrix, the grid shows these values. The same events reach ntfy as before the upgrade.
 - **FR-4 Instant save.** Flipping a switch saves that one cell straight away, with no Save button, and toasts on failure. While the save is in flight the switch is disabled. If the save fails, the switch goes back to its old value.
   - Acceptance: flip a switch, reload the page, and the new value is shown. Make the save fail and the switch goes back with an error toast.
@@ -103,7 +104,7 @@ In `<data_dir>/ui.json` (mode 0600, as today) a new optional key `channels` hold
  "channels": {"done": {"ntfy": false}, "pipeline": {"browser": true}}}
 ```
 
-- Shape: event key → channel key (`browser`, `ntfy`, `mac`) → boolean. Event keys are the 11 in FR-1.
+- Shape: event key → channel key (`browser`, `ntfy`, `mac`) → boolean. Event keys are the 12 in FR-1.
 - A missing cell takes the default from FR-3. Storing only the changed cells means a future event gets its default with no migration.
 - Unknown keys are ignored on read and dropped on write. A value that is not a boolean is treated as missing.
 - No other store changes.
@@ -115,7 +116,7 @@ The browser feed is in memory only. Each entry has an increasing integer `id` (s
 All endpoints follow the existing settings ones: there is no auth beyond tailnet reach, bodies and responses are JSON, a bad body gets 400 `{"error": "..."}`.
 
 - **`GET /api/settings/notify`** — extended. Adds:
-  - `matrix`: `{ "<event>": {"browser": bool, "ntfy": bool, "mac": bool} }` for all 11 events, with defaults applied.
+  - `matrix`: `{ "<event>": {"browser": bool, "ntfy": bool, "mac": bool} }` for all 12 events, with defaults applied.
   - `events`: `[{"key", "label", "group"}]` in display order (FR-1), so labels live in one place.
   - `mac`: `{"available": bool, "clickable": bool, "notifier": bool}`. `available` means the host is macOS. `notifier` means `terminal-notifier` was found. `clickable` means `notifier` is true and a public URL is set.
   - `ntfy_ready`: bool, true when a server and topic are configured from the file or the environment.
@@ -184,6 +185,7 @@ Needs you
   A session failed               [x]          [x]            [x]
   A dispatch needs you           [x]          [x]            [x]
   Review panel hit its cap       [x]          [x]            [x]
+  Reviewers commented on a PRD   [x]          [ ]            [ ]
 Pull requests
   PR is ready for review         [x]          [x]            [x]
   Merged issue needs cleanup     [x]          [x]            [x]
@@ -227,7 +229,7 @@ No new realtime channel: the browser feed is polled. No other service reads or w
   - Feed: ids, the 200 cap, the 5-newest cap, `after` higher than `latest`, and a bad `after` (FR-6).
   - Endpoints: the channel save (validation, one-cell change, concurrent saves keep both changes), the test endpoint's results, and the `GET` additions (FR-4, FR-9, FR-10, FR-11).
 - **Component tests** (the existing settings test suite):
-  - The grid renders 33 switches in groups with accessible names (FR-1, FR-2).
+  - The grid renders 36 switches in groups with accessible names (FR-1, FR-2).
   - A toggle posts one cell, and a failed save puts the value back (FR-4).
   - Each header state shows its text (FR-9).
   - The ntfy form still behaves as before (FR-11).
@@ -258,7 +260,7 @@ None formally defined.
 - **One matrix on the server**, in `ui.json`. aiw has one user, so the laptop and phone sharing settings is simpler than storing choices per device.
 - **Defaults keep today's behaviour.** ntfy stays all on, so nobody loses a push on upgrade. Browser and Mac are on only for events that need the user, to avoid a pop-up for every finished turn.
 - **Grouped rows, with each channel's state and Send test in its column header.** This was chosen from the mockups because 11 flat rows read as a wall.
-- **Browser events come from a server feed**, not from each tab comparing what it polls. All 11 events work the same way, the wording matches ntfy, and the routing rules live in one place.
+- **Browser events come from a server feed**, not from each tab comparing what it polls. All 12 events work the same way, the wording matches ntfy, and the routing rules live in one place.
 - **Away mode and grind-round quiet rules apply to every channel.** There is one rule set, which also matches the ui-rewrite PRD's note that browser notifications are held while away.
 - **The macOS banner becomes a "This Mac" column**, and the dispatch's own banner goes through the matrix. The user asked for it, and asked that clicking it must open the right page.
 - **Clickable Mac banners use `terminal-notifier` when it is installed, and fall back to AppleScript.** An AppleScript banner belongs to Script Editor and cannot carry a link. `terminal-notifier` is an optional host tool, not a pip dependency. A bundled signed helper app is too heavy.
@@ -275,6 +277,8 @@ None formally defined.
 None.
 
 ## Change log
+
+- Added the `prd-comment` event (Needs you; Browser on, ntfy and This Mac off): 12 rows, 36 switches. Issue #593, `docs/prds/prd-share-links.md`.
 
 ## Related
 

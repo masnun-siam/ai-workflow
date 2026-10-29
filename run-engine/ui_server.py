@@ -55,6 +55,7 @@ import ui_share_runtime
 import ui_sessions
 import ui_start
 import ui_settings
+import ui_shares
 import ui_tailscale
 import ui_urgency
 import ui_usage
@@ -351,6 +352,35 @@ def _panel_rows() -> list:
     return rows
 
 
+def _share_rows() -> list:
+    """One row per share with unseen reviewer activity, live or ended (ui_inbox's `shares`)."""
+    checkouts, rows = dispatch.read_checkouts(), []
+    for s in ui_shares.list_shares():
+        u = ui_shares.unread(s)
+        if not (u["comments"] or u["approvals"]):
+            continue
+        title = ui_shares.prd_state(checkouts.get(s["repo"]), s["path"])["title"]
+        rows.append(
+            {
+                "id": s["id"],
+                "repo": s["repo"],
+                "path": s["path"],
+                "title": title or os.path.splitext(os.path.basename(s["path"]))[0],
+                "comments": u["comments"],
+                "approvals": u["approvals"],
+                "at": u["at"],
+            }
+        )
+    return rows
+
+
+def _on_share_activity(share: dict, kind: str) -> None:
+    """ui_shares listener: the throttled `prd-comment` push, carrying only the count and the title."""
+    row = next((r for r in _share_rows() if r["id"] == share["id"]), None)
+    if row:
+        ui_notify.prd_comment(row["id"], ui_inbox.share_summary(row["comments"], row["approvals"], row["title"]))
+
+
 def _inbox(query: str):
     """(status, body) for GET /api/inbox."""
     repo = (parse_qs(query).get("repo") or [""])[0]
@@ -375,6 +405,7 @@ def _inbox_items(repo, watched, recs) -> dict:
     body = ui_inbox.build(
         sessions=recs,
         panels=_panel_rows(),
+        shares=_share_rows(),
         grind_index=ui_grind.index(),
         flags=_flags,
         repos=ui_repos.list_repos(),
@@ -1154,6 +1185,7 @@ def cmd_serve(args) -> None:
         if ts:
             server.allowed_hosts |= ts["hosts"]
             server.tailnet_hosts, server.tailnet_login = frozenset(ts["hosts"]), ts["login"]
+    ui_shares.listeners.append(_on_share_activity)  # reviewer comments and approvals -> prd-comment
     ui_share_runtime.configure(args.tailscale_port, tailscale_enabled=not args.no_tailscale)
     ui_runner.reconcile()  # re-attach sessions that outlived the last UI, close the ones that died
     ui_grind.start_timer()  # ntfy on grind pause/finish

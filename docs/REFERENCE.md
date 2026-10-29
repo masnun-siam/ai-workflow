@@ -76,7 +76,7 @@ turns Away mode on or off. Its first group, **Actions here**, lists every enable
 **Inbox.** Everything that needs you, across repos, grouped Blocking everything, Answer Claude, Decide,
 Fix, Set up and Waiting (nothing to do); the rail badge and tab title count all but Waiting. Items: GitHub CLI
 signed out; a session asking a question (answered inline); a peer review at its round cap or with every
-lens approving (Approve PRD anyway, Run 2 more rounds); a PR ready to merge (Review and merge, see
+lens approving (Approve PRD anyway, Run 2 more rounds); reviewers' comments or approvals on a shared PRD (Open PRD; one item per share, cleared when the share is marked seen); a PR ready to merge (Review and merge, see
 **Merge rule**); a PR with merge conflicts (Resolve conflicts); a paused grind (Skip CI and continue, Stop grind); a failed session (Retry, Continue in
 terminal); a merged issue whose worktree has unsaved work (Review and clean up); a `local/` repo with no
 GitHub remote (Publish to GitHub); a usage-limited session (Resume on another account); a queued session
@@ -259,7 +259,7 @@ the Slack review channel grind posts to (`repos[owner/repo]` in `ui_settings.jso
 skips grinding in a dispatch) and **Remove** (its clone is untouched), plus
 scan folders, **Find repos** and **Check remotes** (`gh repo view` on every repo, failures first).
 **jev**: a **Use jev** switch (`PUT /api/settings {use_jev}`, reverts on a failed save) and a read-only "jev found / not found" line. **Claude accounts**: the named `claude` commands a session can launch with, one per account; their plan
-usage (5h / 7d) shows in the rail. **Notifications** shows the matrix of 11 events by Browser, ntfy and This Mac: one switch per cell, saved at once. Each column header shows the channel's state and a Send test button (Browser tests itself; ntfy and This Mac call `POST /api/settings/notify/test` and toast the result; This Mac is disabled off a Mac) (`POST /api/settings/notify/channel`; a failed save reverts the switch and toasts). Below it, "Phone push (ntfy)" edits `ui.json` (written mode 0600; a token or
+usage (5h / 7d) shows in the rail. **Notifications** shows the matrix of 12 events by Browser, ntfy and This Mac: one switch per cell, saved at once. Each column header shows the channel's state and a Send test button (Browser tests itself; ntfy and This Mac call `POST /api/settings/notify/test` and toast the result; This Mac is disabled off a Mac) (`POST /api/settings/notify/channel`; a failed save reverts the switch and toasts). Below it, "Phone push (ntfy)" edits `ui.json` (written mode 0600; a token or
 password is never sent back to the browser, and an empty box keeps the saved one). **Peer review**
 sets the rounds cap, the lenses ticked by default and each lens prompt; changes are saved to
 `<data_dir>/config.json` and laid over the shipped `run-engine/config.json`, so **Reset to defaults**

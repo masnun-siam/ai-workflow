@@ -174,6 +174,10 @@ export function ItemRow({ item, a, open, toggle, publish, selected, rowProps, au
       detail = 'Approving sets the PRD to Approved and files its epic on GitHub.';
       acts = (<><Button sm shortcut="p" variant="primary" onClick={() => void a.approve(repo, item.prd_path)}>Approve PRD</Button><LinkButton sm shortcut="o" to={featureLink(item, 'prd')}>Read PRD</LinkButton></>);
       break;
+    case 'prd_comment':
+      icon = 'msg'; tone = 'you'; title = item.summary;
+      acts = <LinkButton sm shortcut="o" variant="primary" to={featureLink(item, 'prd')}>Open PRD</LinkButton>;
+      break;
     case 'pr_ready': {
       icon = 'merge'; tone = 'ship'; title = `PR #${item.pr} is ready to merge`;
       meta = [where, item.issue ? `#${item.issue} ${item.title}` : item.title];
