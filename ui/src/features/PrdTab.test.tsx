@@ -10,7 +10,7 @@ const summary = (o: Record<string, unknown> = {}) => ({ id: 's1', repo: 'o/r', p
 const detail = (approvals: { id: string; name: string; at: string }[], o: Record<string, unknown> = {}) => ({ ...summary(o), created_at: '', ended_at: null, last_seen_at: null, prd_updated_at: null, unsent: 0, threads: [], approvals, ...o });
 const ap = (k: number) => ({ id: `a${k}`, name: `Rev${k}`, at: '' });
 
-function mock(o: { status?: string; shares?: unknown[]; detail?: unknown; post?: () => Promise<Response>; prd?: string } = {}) {
+function mock(o: { status?: string; shares?: unknown[]; detail?: unknown; post?: () => Promise<Response>; prd?: string; send?: (body: any) => Promise<Response> } = {}) {
   calls.length = 0;
   const routes: Record<string, unknown> = {
     '/api/repos': { repos: [{ slug: 'o/r', name: 'R', path: '/x' }], can_browse: false, scan_roots: [] },
@@ -25,6 +25,7 @@ function mock(o: { status?: string; shares?: unknown[]; detail?: unknown; post?:
     const method = init?.method ?? 'GET';
     if (method !== 'GET') calls.push({ method, path, body: init?.body ? JSON.parse(String(init.body)) : undefined });
     if (path === '/api/shares' && method === 'POST') return o.post ? o.post() : json(summary(), 201);
+    if (path === '/api/shares/s1/send' && o.send) return o.send(calls[calls.length - 1].body);
     if (path === '/api/shares') return json(o.shares ?? []);
     if (path === '/api/shares/s1') return method === 'GET' ? json(o.detail ?? detail([])) : json(summary({ state: 'ended', url: null }));
     if (method !== 'GET') return json({});
@@ -271,5 +272,75 @@ describe('Thread rail', () => {
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some((c) => String(c[0]).startsWith('/api/shares/s1'))).toBe(true));
     await new Promise((res) => setTimeout(res, 50));
     expect(screen.queryByRole('region', { name: 'Comments' })).toBeNull();
+  });
+});
+
+describe('Send open comments', () => {
+  const prev = (o: Record<string, unknown> = {}) => ({ prompt: 'PROMPT <b>x</b>', threads: 2, remaining: 0, dropped: 0, trimmed: [], busy: { sessions: [], panel: null }, ...o });
+  const sent = (o: Record<string, unknown> = {}) => ({ session_id: 'sess1', threads: 2, remaining: 0, dropped: 0, ...o });
+  const go = async (send: (b: any) => Promise<Response>, unsent = 2, o: Record<string, unknown> = {}) => {
+    const r = await openRail({ ...rail([th('t1', 'Third one stays'), th('t4', 'gone words')], { unsent, ...o }), send });
+    return { r, btn: within(r).getByRole('button', { name: /^Send open comments/ }) as HTMLButtonElement };
+  };
+
+  it('shows unsent, is disabled at 0', async () => {
+    const { btn } = await go(() => json(prev()), 0);
+    expect(btn.textContent).toBe('Send open comments (0)');
+    expect(btn.disabled).toBe(true);
+  });
+
+  it('previews with outdated ids and dropped notice; Cancel sends nothing more; confirm links the session', async () => {
+    const u = userEvent.setup();
+    let n = 0;
+    const { r, btn } = await go((b) => (b.confirm ? json(sent({ remaining: 2, dropped: 3 }), 201) : (n++, json(prev({ dropped: 3 })))));
+    expect(btn.textContent).toBe('Send open comments (2)');
+    await u.click(btn);
+    const dlg = await screen.findByRole('alertdialog');
+    expect(dlg.textContent).toContain("3 older comments on this thread won't be sent");
+    expect(within(dlg).getByText('PROMPT <b>x</b>')).toBeTruthy();
+    await u.click(within(dlg).getByRole('button', { name: 'Cancel' }));
+    expect(posts()).toEqual([{ method: 'POST', path: '/api/shares/s1/send', body: { outdated: ['t4'] } }]);
+    await u.click(btn);
+    await u.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Send' }));
+    const st = await within(r).findByRole('status');
+    expect(posts().at(-1)!.body).toEqual({ confirm: true, outdated: ['t4'] });
+    expect(st.textContent).toContain('Sent 2 threads');
+    expect(st.textContent).toContain('2 threads are still unsent');
+    expect(st.textContent).toContain('3 older comments were left out for good');
+    expect(st.querySelector('a')!.getAttribute('href')).toContain('/sessions/sess1');
+    expect(btn.disabled).toBe(false);
+  });
+
+  it('shows 502 inline and 409 message', async () => {
+    const u = userEvent.setup();
+    for (const [status, msg] of [[502, 'Session failed to start'], [409, 'Nothing unsent']] as const) {
+      const { r, btn } = await go((b) => (b.confirm ? json({ error: msg }, status) : json(prev())));
+      await u.click(btn);
+      await u.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Send' }));
+      expect((await within(r).findByRole('alert')).textContent).toContain(msg);
+      expect(btn.textContent).toBe('Send open comments (2)');
+      cleanup();
+    }
+  });
+
+  it('warns for a running panel and update session; Send still works; ended share works', async () => {
+    const u = userEvent.setup();
+    const { r, btn } = await go((b) => (b.confirm ? json(sent(), 201) : json(prev({ busy: { sessions: ['s9'], panel: 'p1' } }))), 2, { state: 'ended' });
+    await u.click(btn);
+    const dlg = await screen.findByRole('alertdialog');
+    expect(dlg.textContent).toContain('A peer review panel is running on this PRD');
+    expect(dlg.textContent).toContain('A PRD update session is running on this PRD');
+    await u.click(within(dlg).getByRole('button', { name: 'Send' }));
+    expect(await within(r).findByRole('status')).toBeTruthy();
+  });
+
+  it('is disabled while the request runs', async () => {
+    const u = userEvent.setup();
+    let release!: (r: Response) => void;
+    const { btn } = await go(() => new Promise<Response>((res) => { release = res; }));
+    await u.click(btn);
+    await waitFor(() => expect(btn.disabled).toBe(true));
+    release(new Response(JSON.stringify(prev()), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    await screen.findByRole('alertdialog');
   });
 });

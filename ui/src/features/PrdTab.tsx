@@ -13,6 +13,7 @@ import { mdToHtml } from '../lib/md';
 import { prdBody, renderDiagrams, toggleDiagram } from '../lib/prdRender';
 import { PLAN_RUN } from '../lib/vocab';
 import { SharePopover } from './SharePopover';
+import { SendComments } from './SendComments';
 import { ThreadRail } from './ThreadRail';
 import { useOwnShare } from './useOwnShare';
 
@@ -141,7 +142,7 @@ export function PrdTab({ f, repo }: { f: Feature; repo: string }) {
             <ol>{heads.map((h, k) => <li key={k}><button type="button" onClick={() => jump(k)}>{h}</button></li>)}</ol>
           </nav>
         ) : null}
-        {share ? <ThreadRail share={share} placements={placements} baseline={baseline.current?.at ?? null} onJump={jumpToThread} /> : null}
+        {share ? <ThreadRail share={share} placements={placements} baseline={baseline.current?.at ?? null} onJump={jumpToThread} extra={(outdatedIds) => <SendComments share={share} outdatedIds={outdatedIds} refetch={() => void shareQ.refetch()} />} /> : null}
         <div className="box">
           <h3>Ask Claude to change it</h3>
           <p className="muted" style={{ fontSize: 13 }}>Runs <code>/create-prd --update</code>, which records the decision in the PRD.</p>

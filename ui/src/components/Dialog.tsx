@@ -50,6 +50,7 @@ export interface ConfirmOpts {
   okLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
+  wide?: boolean;
 }
 type Confirm = (o: ConfirmOpts) => Promise<boolean>;
 const ConfirmCtx = createContext<Confirm>(() => Promise.resolve(false));
@@ -80,6 +81,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
         onOpenChange={(o) => !o && close(false)}
         title={state?.title ?? ''}
         alert
+        wide={state?.wide}
         footer={
           <>
             <Button variant="ghost" onClick={() => close(false)}>{state?.cancelLabel ?? 'Cancel'}</Button>
