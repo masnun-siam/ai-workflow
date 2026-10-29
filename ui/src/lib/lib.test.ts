@@ -5,6 +5,7 @@ import { joinFeatures, stageOf } from './features';
 import { ghTarget } from './ghLink';
 import { mdToHtml } from './md';
 import { prdBody } from './prdRender';
+import { approvalsLabel, clearsClause, commentsLabel, isShareable, shareBody, stopBody } from './shares';
 import { nextStep, stepKey } from './nextStep';
 import { migrateRepoKey, pickRepo, withRepoParam } from './repo';
 import { boardColumn, issueStatus, BOARD_COLUMNS, PLAN_RUN } from './vocab';
@@ -224,5 +225,20 @@ describe('prdBody', () => {
   it('strips a leading title line only', () => {
     expect(prdBody('# T\nbody\n# Later\nx')).toBe('body\n# Later\nx');
     expect(prdBody('body\n# Later\n')).toBe('body\n# Later\n');
+  });
+});
+
+describe('share strings', () => {
+  it('approvals wording and confirm bodies', () => {
+    expect(approvalsLabel(1)).toBe('1 approval');
+    expect(approvalsLabel(2)).toBe('2 approvals');
+    expect(clearsClause(0)).toBe('');
+    expect(clearsClause(1)).toBe('clears the 1 approval');
+    expect(stopBody(0)).toBe('Reviewers lose access. Sharing again makes a new link.');
+    expect(stopBody(2)).toBe('Reviewers lose access. Sharing again makes a new link and clears the 2 approvals.');
+    expect(shareBody(0)).toBe('The PRD text is public as written, including its header and any paths.');
+    expect(shareBody(1)).toBe('The PRD text is public as written, including its header and any paths. Sharing again clears the 1 approval.');
+    expect(commentsLabel(1)).toBe('1 comment');
+    expect(isShareable('In review') && isShareable('Draft') && !isShareable('Approved')).toBe(true);
   });
 });
