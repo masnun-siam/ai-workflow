@@ -5,6 +5,7 @@
 ### Changed
 
 - **Inbox sorts by urgency** (#575): inside each group, question, paused-grind, failed-session and PR-conflict items sort by a jev urgency score (1–5, highest first), then newest first; `GET /api/inbox` items gain `urgency` (null when unscored or Use jev is off). A 30 s background scorer fills the cache; the Inbox never waits on jev.
+- **Away mode risk check** (#573): before auto-picking a round whose questions all carry a recommended option, a jev worker (off the tick, two at a time) asks whether any recommended option is irreversible or outward-facing and stores `risk` on the round. At 0.5 or more the round goes to the Opus answerer and its log entry carries `risk`; with jev off, missing or failing it is auto-picked as before.
 
 ### Added
 

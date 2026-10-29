@@ -36,6 +36,8 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 
+import ui_afk
+
 GROUPS = ("block", "answer", "decide", "fix", "setup", "wait")
 SCORED = ("question", "grind_paused", "session_failed", "pr_conflict")  # the types jev scores for urgency
 
@@ -60,12 +62,7 @@ def urgency_text(item) -> str | None:
     """The text jev scores for an item, or None when its type is not scored or it has none."""
     t = item.get("type")
     if t == "question":
-        lines = []
-        for q in item.get("questions") or []:
-            lines.append(q.get("question") or q.get("header") or "")
-            for o in q.get("options") or []:
-                lines += [o.get("label") or "", o.get("description") or ""]
-        text = "\n".join(x for x in lines if x)
+        text = ui_afk._risk_text({"questions": item.get("questions") or []})  # the one copy of the question text
     elif t == "grind_paused":
         text = item.get("reason")
     elif t == "session_failed":
