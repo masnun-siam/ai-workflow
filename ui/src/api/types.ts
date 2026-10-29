@@ -248,6 +248,7 @@ export type InboxItem =
       note?: string | null;
     })
   | (InboxBase & { type: 'review_approved'; prd_path: string; panel: string })
+  | (InboxBase & { type: 'prd_comment'; share: string; prd_path: string; prd_title: string; summary: string; comments: number; approvals: number })
   | (InboxBase & {
       type: 'pr_ready';
       pr: number;

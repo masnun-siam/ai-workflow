@@ -37,6 +37,7 @@ describe('Inbox', () => {
         item('gh_auth', 'block', { repo: null, error: 'not logged in' }),
         item('question', 'answer', { key: 'q', session_id: 's1', command: '/x:implement-issue 1', questions: [{ question: 'Which DB?', multiSelect: false, allowFreeText: false, options: [{ label: 'A' }] }], process_alive: false }),
         item('review_cap', 'decide', { key: 'rc', prd_path: 'docs/prds/my-feat.md', panel: 'p1', round: 3, max_rounds: 3, note: 'cap' }),
+        item('prd_comment', 'decide', { key: 'pc', share: 'sh1', prd_path: 'docs/prds/my-feat.md', prd_title: 'My feat', summary: '2 new comments on My feat', comments: 2, approvals: 0 }),
         item('pr_ready', 'decide', { key: 'pr', pr: 7, issue: 5, title: 'T', reviewer: 'bot', checks: 4 }),
         item('grind_paused', 'fix', { key: 'g', pr: 8, issue: 5, round: 2, reason: 'CI failing' }),
         item('session_failed', 'fix', { key: 'f', session_id: 's2', command: '/x:pr-grind 8', error: 'boom' }),
@@ -52,6 +53,8 @@ describe('Inbox', () => {
     const group = async (name: string) => within(await screen.findByRole('region', { name }));
     expect((await group('Blocking everything')).getByText('GitHub CLI is not signed in')).toBeTruthy();
     expect((await group('Decide')).getByText('PR #7 is ready to merge')).toBeTruthy();
+    expect((await group('Decide')).getByText('2 new comments on My feat')).toBeTruthy();
+    expect((await group('Decide')).getByRole('link', { name: /Open PRD/ }).getAttribute('href')).toMatch(/\/features\/my-feat\/prd\?repo=o\/r$/);
     expect((await group('Decide')).getByText(/round limit on “my feat”/)).toBeTruthy();
     const fix = await group('Fix');
     expect(fix.getByText('Grind paused on PR #8')).toBeTruthy();
@@ -60,8 +63,8 @@ describe('Inbox', () => {
     expect((await group('Waiting (nothing to do)')).getByText('refine-issues 2 paused by usage limit')).toBeTruthy();
     // the first question is expanded by default
     expect(await screen.findByRole('button', { name: 'Send answer and resume' })).toBeTruthy();
-    // 8 items need you (everything but the 2 waiting)
-    await waitFor(() => expect(document.title).toBe('(8) aiw'));
+    // 9 items need you (everything but the 2 waiting)
+    await waitFor(() => expect(document.title).toBe('(9) aiw'));
   });
 
   it('run 2 more rounds posts to the panel', async () => {
