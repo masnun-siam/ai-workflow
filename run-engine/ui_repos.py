@@ -38,7 +38,6 @@ NAMED = (
     "sync-from-wasensi",
     "skill-feedback",
     "dump",
-    "flow",
     "peer-review",
     "pr-grind",
     "release-pr",

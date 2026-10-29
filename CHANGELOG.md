@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Removed
+
+- **`/flow` skill** (#621): the deprecated guided flow and the Start dialog's "Plan a flow" are gone; run `/create-prd`, `/create-tasks`, `/refine-issues` and `/herdr-dispatch` directly.
+
 ### Changed
 
 - **Grind logs jev hints** (#581): `/pr-grind` logs jev's CI and finding hints (FR-7, FR-8) in its state file as `jev-ci-hint:` and `jev-finding-hint:` lines; advisory only, nothing is written with jev off or missing.

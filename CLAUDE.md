@@ -10,7 +10,7 @@ PRD → tasks → refined issues → `/implement-issue` → `/pr-review`. Skills
 
 `PRD → tasks → refined issue → implement-issue → pr-review → grind → merge`
 
-- **Skills:** `skills/`. Each stage is one skill: `create-prd`, `create-tasks`, `refine-issues`, `implement-issue`, `verifier-locally`, `pr-review`, `docs-updater`, `sync-from-wasensi`. The tools around them: `dump`, `release-pr`, `worklog`, `peer-review`, `flow`, `herdr-dispatch`, `pr-grind`.
+- **Skills:** `skills/`. Each stage is one skill: `create-prd`, `create-tasks`, `refine-issues`, `implement-issue`, `verifier-locally`, `pr-review`, `docs-updater`, `sync-from-wasensi`. The tools around them: `dump`, `release-pr`, `worklog`, `peer-review`, `herdr-dispatch`, `pr-grind`.
 - **Guides and templates:** `guides/` is the engineering process and review standard the skills read. `templates/` holds the PRD, epic and issue shapes.
 - **Agents:** `agents/`. Only `peer-reviewer` (one read-only review lens), `away-answerer` (the read-only Away mode answerer) and `worklog-runner`.
 - **CLI/UI:** `bin/aiw` → `run-engine/route.py`, verbs `ui`, `paths`, `ask`, `ci`, `threads`, `peer-review`. `aiw ui` is a stdlib `http.server` serving the built React app from `run-engine/ui_dist/` (source in `ui/`).

@@ -187,6 +187,7 @@ try:
         "issue-to-pr",
         "intake",
         "herdr-dispatch",
+        "flow",
     ):
         assert gone not in ui_repos.NAMED, gone
     for kept in (
@@ -195,7 +196,6 @@ try:
         "docs-updater",
         "faq-updater",
         "repo-bootstrap",
-        "flow",
         "peer-review",
         "release-pr",
         "sync-from-wasensi",

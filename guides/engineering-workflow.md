@@ -26,7 +26,7 @@ The same goes for conventions: anything the repo's `CLAUDE.md` or `AGENTS.md` st
 
 Before you run another of this plugin's skills, look for the repo's own copy at `<repo root>/.claude/skills/<name>/SKILL.md`, where `<repo root>` is the top of the git worktree you are working in. Check it with Read or Glob. If the file exists, run `/<name>`; otherwise run `/ai-workflow:<name>`. Every hand-off in these skills and guides means this check, whichever spelling it is written in (`/<name>`, `/ai-workflow:<name>` or `ai-workflow:<name>`).
 
-Agents (`peer-reviewer`, `worklog-runner`) are always the plugin's. One line is exempt and keeps its exact text: dump's `→ next: /create-prd <folder>`, which flow reads byte for byte; flow's own hand-off then follows this rule.
+Agents (`peer-reviewer`, `worklog-runner`) are always the plugin's. One line is exempt and keeps its exact text: dump's `→ next: /create-prd <folder>`.
 
 ### Area docs
 
