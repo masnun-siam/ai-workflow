@@ -233,6 +233,21 @@ describe('Inbox', () => {
     expect(screen.getByText(/retry 1 of 4/)).toBeTruthy();
   });
 
+  it('away summary shows the risk line only on risk-routed rounds', async () => {
+    const q = { question: 'Q?', multiSelect: false, allowFreeText: false, options: [{ label: 'A (Recommended)' }], picked: ['A (Recommended)'] };
+    const e = (n: number, extra: object) => ({ at: 1700000000 + n, kind: 'answer', sid: `s${n}`, command: `cmd-${n}`, question: '', picked: 'A', id: `s${n}:r1`, changed: false, questions: [q], ...extra });
+    const run = async (log: object[]) => {
+      routes['/api/inbox'] = { items: [], gh: { ok: true }, afk: { ...AFK, summary: { started: 1700000000, ended: 1700003600, held: 0, log } } };
+      window.location.hash = '#/inbox';
+      render(<App />);
+    };
+    await run([e(1, { by: 'opus', risk: 0.9 }), e(2, { by: 'recommended' }), e(3, { kind: 'held', by: 'opus', risk: 0.5 }), e(4, { by: 'opus', risk: 0.873 })]);
+    expect(await screen.findByText('Risk check: sent to Opus (p=0.9)')).toBeTruthy();
+    expect(screen.getByText('Risk check: sent to Opus (p=0.5)')).toBeTruthy();
+    expect(screen.getByText('Risk check: sent to Opus (p=0.87)')).toBeTruthy();
+    expect(screen.getAllByText(/Risk check/)).toHaveLength(3);
+  });
+
   describe('Change dialog', () => {
     const q = (question: string, picked: string[]) => ({ question, multiSelect: false, allowFreeText: false, options: [{ label: 'A (Recommended)' }, { label: 'B' }], picked });
     const row = (n: number, sid: string, command: string) => ({ at: 1700000000 + n, kind: 'answer', sid, command, question: '', picked: 'A', id: `${sid}:r1`, by: 'recommended', changed: false, questions: [q(`First ${command}?`, ['A (Recommended)']), q(`Second ${command}?`, ['A (Recommended)'])] });
