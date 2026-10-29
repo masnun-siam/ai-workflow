@@ -34,11 +34,12 @@ def raises(fn, *a):
 
 
 BUILTIN = {"label": "claude", "cmd": "claude", "builtin": True}
-assert {k: v for k, v in ui_settings.load().items() if k != "vault_dir"} == {
+assert {k: v for k, v in ui_settings.load().items() if k not in ("vault_dir", "jev_installed")} == {
     "commands": [BUILTIN],
     "default": "claude",
     "repos": {},
     "grind_mode": "deep",
+    "use_jev": True,
     "run_model": None,
     "run_effort": None,
 }
@@ -125,4 +126,26 @@ assert ui_settings.run_model() == "opus" and ui_settings.run_effort() == "xhigh"
 ui_settings.save({"run_model": None})
 assert ui_settings.run_model() is None and ui_settings.run_effort() == "xhigh"
 assert raises(ui_settings.validate, {"run_model": "default"}) and raises(ui_settings.validate, {"run_effort": "huge"})
-print("ui_settings: 32 checks passed")
+# use_jev: on by default, a partial save sets it, other saves keep it, non-booleans are refused
+assert ui_settings.use_jev() is True and ui_settings.load()["use_jev"] is True
+ui_settings.save({"use_jev": False})
+assert ui_settings.use_jev() is False and ui_settings.load()["use_jev"] is False
+ui_settings.save({"grind_mode": "simple"})
+ui_settings.save({"repos": {"o/a": {"slack_channel": "C1"}}})
+assert ui_settings.use_jev() is False, "saves without use_jev keep it"
+before = open(ui_settings._path()).read()
+for bad in ("no", 0, None):
+    assert raises(ui_settings.save, {"use_jev": bad}) and open(ui_settings._path()).read() == before
+ui_settings.save({**ui_settings.load(), "use_jev": True})
+assert ui_settings.use_jev() is True and "jev_installed" not in json.loads(open(ui_settings._path()).read())
+# jev_installed follows PATH (the real PATH is dropped so a developer's jev cannot change the result)
+real_path = os.environ["PATH"]
+os.environ["PATH"] = bindir
+assert ui_settings.load()["jev_installed"] is False
+p = os.path.join(bindir, "jev")
+with open(p, "w") as f:
+    f.write("#!/bin/sh\n")
+os.chmod(p, os.stat(p).st_mode | stat.S_IXUSR)
+assert ui_settings.load()["jev_installed"] is True
+os.environ["PATH"] = real_path
+print("ui_settings: 44 checks passed")
