@@ -20,7 +20,7 @@ Inputs (plain data, no I/O):
 Result: {items, stale}. A repo whose snapshot is missing or stale is in `stale` and contributes no
 poller-derived items (pr_ready, a PR's issue number); sessions, panels, grinds, cleanups and the registry
 are local state and always count. Item: {key, group, type, repo, at, ...fields}; `key` is stable across
-polls, `at` an ISO time or None. group is block | answer | decide | fix | setup | wait; types:
+polls, `at` an ISO time or None; `rank` adds `urgency` (1-5, or None when unscored). group is block | answer | decide | fix | setup | wait; types:
   block   gh_auth {error}
   answer  question {session_id, command, link, round_id, questions, process_alive}
   decide  review_cap {prd_path, panel, round, max_rounds, note}, review_approved {prd_path, panel},
@@ -37,6 +37,7 @@ import re
 from datetime import datetime, timezone
 
 GROUPS = ("block", "answer", "decide", "fix", "setup", "wait")
+SCORED = ("question", "grind_paused", "session_failed", "pr_conflict")  # the types jev scores for urgency
 
 
 def grind_on(settings, issue) -> bool:
@@ -53,6 +54,27 @@ def merge_ready(pr, grind, on: bool, solo: bool) -> bool:
     if on and (grind or {}).get("state") != "done":
         return False
     return pr.get("review") == "approved" or solo
+
+
+def urgency_text(item) -> str | None:
+    """The text jev scores for an item, or None when its type is not scored or it has none."""
+    t = item.get("type")
+    if t == "question":
+        lines = []
+        for q in item.get("questions") or []:
+            lines.append(q.get("question") or q.get("header") or "")
+            for o in q.get("options") or []:
+                lines += [o.get("label") or "", o.get("description") or ""]
+        text = "\n".join(x for x in lines if x)
+    elif t == "grind_paused":
+        text = item.get("reason")
+    elif t == "session_failed":
+        text = item.get("error")
+    elif t == "pr_conflict":
+        text = "A pull request has a merge conflict with its base branch."
+    else:
+        return None
+    return text.strip() or None if isinstance(text, str) else None
 
 
 def _prd_path(artifact: str):
@@ -81,6 +103,15 @@ def _ts(at) -> float:
         return datetime.fromisoformat(str(at).replace("Z", "+00:00")).timestamp() if at else 0.0
     except ValueError:
         return 0.0
+
+
+def rank(items, urgency) -> list:
+    """Set `urgency` on every item (urgency(item) -> 1-5 or None), then sort by group, urgency (high first), newest first.
+    Unscored items and rows with no `at` (dispatch lanes) count as 0, so with no scores the order is plain time order."""
+    order = {g: n for n, g in enumerate(GROUPS)}
+    for i in items:
+        i["urgency"] = urgency(i)
+    return sorted(items, key=lambda i: (order[i["group"]], -(i["urgency"] or 0), -_ts(i["at"])))
 
 
 def build(
@@ -283,7 +314,6 @@ def build(
 
     if repo:
         items = [i for i in items if i["repo"] is None or str(i["repo"]).lower() == repo.lower()]
-    order = {g: n for n, g in enumerate(GROUPS)}
-    items.sort(key=lambda i: (order[i["group"]], -_ts(i["at"])))
+    items = rank(items, lambda i: None)  # time order; the server ranks again with scores
     seen = [repo] if repo else list(snapshots) if watched is None else list(watched)
     return {"items": items, "stale": sorted(k for k in seen if k.lower() not in fresh)}

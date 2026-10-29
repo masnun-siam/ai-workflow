@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- **Inbox sorts by urgency** (#575): inside each group, question, paused-grind, failed-session and PR-conflict items sort by a jev urgency score (1–5, highest first), then newest first; `GET /api/inbox` items gain `urgency` (null when unscored or Use jev is off). A 30 s background scorer fills the cache; the Inbox never waits on jev.
+
 ### Added
 
 - **Risk line in the Away summary** (#574): a round the risk check sent to Opus shows "Risk check: sent to Opus (p=…)" on its row in "While you were away" (p rounded to two decimals); other rows are unchanged.

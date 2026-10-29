@@ -53,6 +53,7 @@ import ui_sessions
 import ui_start
 import ui_settings
 import ui_tailscale
+import ui_urgency
 import ui_usage
 import ui_vault
 import ui_watch
@@ -354,6 +355,12 @@ def _inbox(query: str):
             _seen["*"] = time.time()
     watched = [repo] if repo else _watched_copy()
     recs = ui_sessions.list_sessions()
+    body = _inbox_items(repo, watched, recs)
+    return 200, {**body, "afk": ui_afk.public(recs), "gh": ui_gh.status()}
+
+
+def _inbox_items(repo, watched, recs) -> dict:
+    """The Inbox body {items, stale}: built, merged with the dispatch lanes, ranked by cached urgency."""
     labels = {c["cmd"]: c["label"] for c in ui_settings.load()["commands"]}
     body = ui_inbox.build(
         sessions=recs,
@@ -373,10 +380,9 @@ def _inbox(query: str):
     )
     dispatches = dispatch_run.list_all()
     lanes = [i for i in ui_dispatch.inbox_items(dispatches) if not repo or i["repo"].lower() == repo.lower()]
-    order = {g: n for n, g in enumerate(ui_inbox.GROUPS)}
     mine = ui_dispatch.drop_owned(body["items"], dispatches)  # a dispatch's issue shows once: as its lane
-    body["items"] = sorted(mine + lanes, key=lambda i: order[i["group"]])  # stable: keeps build's order
-    return 200, {**body, "afk": ui_afk.public(recs), "gh": ui_gh.status()}
+    body["items"] = ui_inbox.rank(mine + lanes, ui_urgency.urgency)
+    return body
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
@@ -1111,6 +1117,8 @@ def cmd_serve(args) -> None:
     ui_usage.start_timer()  # 5h/7d usage per account, only while the UI is open
     ui_dispatch.start_timer(POLLER.snapshot)  # dispatch lanes: facts from the boards, tick, launch, merge
     jev.start_timer()  # flush the jev answer cache to disk; writes nothing until a cached point ran
+    # the scorer builds its own item list: _inbox would mark every watched repo as viewed (_hot)
+    ui_urgency.start_timer(lambda: _inbox_items(None, _watched_copy(), ui_sessions.list_sessions())["items"])
     ui_afk.start_timer()  # AFK mode: auto-answer, skip CI on paused grinds, retry failures; ends the window
     print(f"serving http://127.0.0.1:{server.server_address[1]}/ — Ctrl+C to stop")
     if ts:
