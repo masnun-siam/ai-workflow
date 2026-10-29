@@ -6,7 +6,7 @@ import type { Sel } from './selection';
 
 export const NAME_MAX = 60;
 export const BODY_MAX = 2000;
-const fits = (s: string, max: number) => { const n = countPoints(s.trim()); return n >= 1 && n <= max; };
+export const fits = (s: string, max: number) => { const n = countPoints(s.trim()); return n >= 1 && n <= max; };
 
 /** The reviewer's name: asked once, then "Posting as <name>, change". */
 export function useIdentity() {
@@ -23,12 +23,12 @@ export function useIdentity() {
 }
 export type Identity = ReturnType<typeof useIdentity>;
 
-export function NameField({ who }: { who: Identity }) {
+export function NameField({ who, label = 'Your name' }: { who: Identity; label?: string }) {
   const id = useId();
   if (!who.asking) return <p className="muted plain">Posting as {who.stored}, <button type="button" className="btn ghost sm" onClick={who.change}>change</button></p>;
   return (
     <>
-      <label className="sr" htmlFor={id}>Your name</label>
+      <label className="sr" htmlFor={id}>{label}</label>
       <input id={id} className="f" placeholder="Your name" value={who.input} onChange={(e) => who.setInput(e.target.value)} />
     </>
   );
