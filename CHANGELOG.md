@@ -4,6 +4,7 @@
 
 ### Changed
 
+- **Inbox order holds while an item is open** (#576): with a question expanded (including the default-open one) or the issue/PR side panel showing, a poll that brings a new order does not move rows, the selection or focus. New items join the end of their group; the server's order applies once nothing is open or on the next visit.
 - **Away mode risk check** (#573): before auto-picking a round whose questions all carry a recommended option, a jev worker (off the tick, two at a time) asks whether any recommended option is irreversible or outward-facing and stores `risk` on the round. At 0.5 or more the round goes to the Opus answerer and its log entry carries `risk`; with jev off, missing or failing it is auto-picked as before.
 
 ### Added

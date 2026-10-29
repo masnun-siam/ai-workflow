@@ -156,6 +156,51 @@ describe('Inbox', () => {
       expect(rows()[1].textContent).toContain('PR #9');
     });
 
+    const poll = async (items: unknown[]) => {
+      routes['/api/inbox'] = { afk: AFK, gh: { ok: true }, items };
+      await new Promise((r) => setTimeout(r, 2100)); // past the query staleTime, so a focus refetches
+      window.dispatchEvent(new Event('visibilitychange'));
+    };
+    const q2Item = () => item('question', 'answer', { key: 'q2', session_id: 's2', command: '/x:implement-issue 2', questions: [{ ...q, question: 'Which cache?' }], process_alive: false });
+
+    it('holds the order while a question is open, and applies it on Hide', async () => {
+      sessionRoute();
+      await load([qItem, q2Item(), rd(7)]);
+      const u = userEvent.setup();
+      expect(rows()[0].textContent).toContain('Which DB?'); // default-open, before any click
+      await poll([q2Item(), qItem, rd(7)]);
+      await new Promise((r) => setTimeout(r, 100));
+      expect(rows()[0].textContent).toContain('Which DB?');
+      const radio = within(rows()[0]).getAllByRole('radio')[0];
+      await u.click(radio);
+      expect(rows()[0].hasAttribute('data-selected')).toBe(true);
+      await poll([q2Item(), qItem, rd(7)]);
+      expect(rows()[0].textContent).toContain('Which DB?');
+      expect(document.activeElement).toBe(radio);
+      await u.click(within(rows()[0]).getByRole('button', { name: /Hide/ }));
+      await waitFor(() => expect(rows()[0].textContent).toContain('Which cache?'));
+    }, 15000);
+
+    it('puts a new item last in its group while held', async () => {
+      sessionRoute();
+      await load([qItem, rd(7)]);
+      await poll([qItem, item('question', 'answer', { key: 'q3', session_id: 's3', command: '/x:implement-issue 3', questions: [{ ...q, question: 'Which queue?' }], process_alive: false }), rd(7)]);
+      await waitFor(() => expect(rows()).toHaveLength(3));
+      expect(rows().map((r) => r.textContent?.includes('Which queue?'))).toEqual([false, true, false]);
+    });
+
+    it('holds the order while the side panel is open, and applies it on Esc', async () => {
+      await load([rd(7), rd(8)]);
+      const u = userEvent.setup();
+      await u.keyboard('jm');
+      expect(await panelOf(7)).toBeTruthy();
+      await poll([rd(8), rd(7)]);
+      await new Promise((r) => setTimeout(r, 100));
+      expect(rows()[0].textContent).toContain('PR #7');
+      await u.keyboard('{Escape}');
+      await waitFor(() => expect(rows()[0].textContent).toContain('PR #8'));
+    });
+
     it('? lists J / K and the selected row\'s action keys', async () => {
       await load([rd(7)]);
       const u = userEvent.setup();
