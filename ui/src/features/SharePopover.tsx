@@ -14,13 +14,17 @@ export function SharePopover({ status, repo, path }: { status: string; repo: str
   const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const link = useRef<HTMLInputElement>(null);
+  const asking = useRef(false); // a second click while the confirm is open must not open another
   const approvals = share.data?.approvals ?? [];
   const n = approvals.length;
   const ok = isShareable(status);
 
   const doShare = async () => {
-    if (create.isPending) return;
-    if (!(await confirm({ title: 'Share this PRD publicly?', okLabel: 'Share', body: <p>{shareBody(summary?.state === 'ended' ? n : 0)}</p> }))) return;
+    if (create.isPending || asking.current) return;
+    asking.current = true;
+    const yes = await confirm({ title: 'Share this PRD publicly?', okLabel: 'Share', body: <p>{shareBody(summary?.state === 'ended' ? n : 0)}</p> });
+    asking.current = false;
+    if (!yes) return;
     create.reset();
     create.mutate({ repo, path }, { onSettled: () => setOpen(true) });
   };
