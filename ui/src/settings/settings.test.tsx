@@ -37,6 +37,8 @@ const GET: Record<string, unknown> = {
     default: 'claude',
     repos: { 'o/r': { auto_grind: false, slack_channel: '#rev' } },
     vault_dir: '/vault',
+    use_jev: true,
+    jev_installed: true,
   },
   '/api/sessions': { sessions: [], limits: {}, usage: {}, afk: {}, gh: { ok: false, error: 'not logged in' } },
   '/api/settings/notify': { server: 'https://ntfy.sh', topic: 't', user: '', public_url: '', token_set: true, password_set: false, env: ['topic'],
@@ -351,6 +353,47 @@ describe('Settings: notification channel headers', () => {
     await user.click(screen.getByRole('button', { name: 'Send test: This Mac' }));
     expect(await screen.findByText('This Mac test sent')).toBeTruthy();
     expect(sent('POST', '/api/settings/notify/test')).toEqual([{ channel: 'ntfy' }, { channel: 'mac' }]);
+  });
+});
+
+describe('Settings: jev', () => {
+  const settings = GET['/api/settings'] as Record<string, unknown>;
+  const orig = { ...settings };
+  afterEach(() => { for (const k of Object.keys(settings)) delete settings[k]; Object.assign(settings, orig); });
+
+  it('flipping the switch sends use_jev and keeps it off', async () => {
+    handlers['PUT /api/settings'] = (b) => { Object.assign(settings, b); return [200, settings]; };
+    const user = userEvent.setup();
+    page(<SettingsPage />, '/settings/jev');
+    await user.click(await screen.findByRole('switch', { name: 'Use jev' }));
+    await waitFor(() => expect(sent('PUT', '/api/settings')).toEqual([{ use_jev: false }]));
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Use jev' }).getAttribute('aria-checked')).toBe('false'));
+  });
+
+  it('a failed save goes back and shows the error', async () => {
+    handlers['PUT /api/settings'] = () => [400, { error: 'use_jev must be true or false' }];
+    const user = userEvent.setup();
+    page(<SettingsPage />, '/settings/jev');
+    await user.click(await screen.findByRole('switch', { name: 'Use jev' }));
+    expect(await screen.findByText('use_jev must be true or false')).toBeTruthy();
+    expect(screen.getByRole('switch', { name: 'Use jev' }).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('says whether jev is installed', async () => {
+    page(<SettingsPage />, '/settings/jev');
+    expect(await screen.findByText('jev found')).toBeTruthy();
+    cleanup();
+    settings.jev_installed = false;
+    page(<SettingsPage />, '/settings/jev');
+    expect(await screen.findByText('jev not found — see docs/INSTALL.md')).toBeTruthy();
+  });
+
+  it('is on, and says nothing about installation, when the server sends neither field', async () => {
+    delete settings.use_jev;
+    delete settings.jev_installed;
+    page(<SettingsPage />, '/settings/jev');
+    expect((await screen.findByRole('switch', { name: 'Use jev' })).getAttribute('aria-checked')).toBe('true');
+    expect(screen.queryByText(/jev found|jev not found/)).toBeNull();
   });
 });
 
