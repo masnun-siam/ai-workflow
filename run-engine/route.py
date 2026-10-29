@@ -12,6 +12,7 @@ Usage:
   aiw threads list|resolve <pr-ref|node-id...>
   aiw grind-mode [--pr <url>]  # deep or simple: the PR's dispatch decides, else Settings; read by /pr-grind each round
   aiw dispatch ...     # run an epic's child issues as parallel lanes
+  aiw jev ci-hint|finding-hint --file <path>  # advisory jev hint for /pr-grind, JSON, always exit 0
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ import ask  # noqa: E402
 import ci  # noqa: E402
 import dispatch  # noqa: E402
 import dispatch_cli  # noqa: E402
+import jev_cli  # noqa: E402
 import threads  # noqa: E402
 import ui_server  # noqa: E402
 from shared import data_dir, die  # noqa: E402
@@ -73,7 +75,7 @@ def main(argv=None) -> None:
     p_gm.set_defaults(func=cmd_grind_mode)
 
     # Each module owns its own argparse wiring.
-    for module in (threads, ci, ui_server, ask, dispatch_cli):
+    for module in (threads, ci, ui_server, ask, dispatch_cli, jev_cli):
         module.register(sub, add)
 
     args = parser.parse_args(argv)

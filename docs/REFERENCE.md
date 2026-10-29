@@ -37,6 +37,9 @@ aiw dispatch plan|start <epic> [flags]  preview or start a dispatch (flags as he
                                         --feature-branch and --base-branch, plus
                                         --runner herdr|headless and --workspace <herdr workspace id>);
                                         an epic only: picked issues dispatch from the UI
+aiw jev ci-hint|finding-hint --file <path>
+                                        advisory jev hint for /pr-grind as JSON; reads the text from a file;
+                                        always exits 0
 aiw dispatch ls|show <id>               list dispatches, or one as JSON (also those of picked issues
                                         started from the UI, listed by title)
 aiw dispatch set <id> key=value...      change max, grind, ci, auto_merge, model, effort while it runs
