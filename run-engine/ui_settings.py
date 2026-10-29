@@ -45,6 +45,12 @@ def grind_mode() -> str:
     return m if m in GRIND_MODES else "deep"
 
 
+def use_jev() -> bool:
+    """The one global Use jev switch (default on); read from the file on every call."""
+    v = _stored().get("use_jev")
+    return v if isinstance(v, bool) else True
+
+
 def check_run(model, effort) -> None:
     """ValueError unless model / effort are None or one of the allowed values."""
     if model is not None and model not in RUN_MODELS:
@@ -159,6 +165,8 @@ def load() -> dict:
         "repos": {k: _repo(stored_repos.get(k)) for k in slugs},
         "vault_dir": vault_dir(),
         "grind_mode": grind_mode(),
+        "use_jev": use_jev(),
+        "jev_installed": shutil.which("jev") is not None,  # read-only: validate() never stores it
         "run_model": run_model(),
         "run_effort": run_effort(),
     }
@@ -227,6 +235,9 @@ def validate(body) -> dict:
     mode = body.get("grind_mode", grind_mode())  # a save that omits it keeps the stored one
     if mode not in GRIND_MODES:
         raise ValueError("grind_mode must be deep or simple")
+    jev = body.get("use_jev", use_jev())  # a save that omits it keeps the stored one
+    if type(jev) is not bool:
+        raise ValueError("use_jev must be true or false")
     run_m, run_e = body.get("run_model", run_model()), body.get("run_effort", run_effort())
     check_run(run_m, run_e)
     stored = _migrate(_stored())
@@ -252,6 +263,7 @@ def validate(body) -> dict:
         "repos": clean_repos,
         "vault_dir": vault,
         "grind_mode": mode,
+        "use_jev": jev,
         "run_model": run_m,
         "run_effort": run_e,
     }
