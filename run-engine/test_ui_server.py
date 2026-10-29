@@ -651,6 +651,7 @@ try:
     st, body = call("GET", "/api/inbox?repo=o/r")
     assert [i["key"] for i in body["items"] if i["type"] == "pr_ready"] == ["pr_ready:o/r#60"] and body["stale"] == []
     assert body["afk"]["active"] is False
+    assert body["items"] and all("urgency" in i for i in body["items"])
     ui_server.POLLER._state.pop("o/q", None)  # the first look at o/q polled it (the fake gh answers o/r's data)
     live_q = ui_sessions.create("/implement-issue 3", other, {"owner": "o", "repo": "q", "issue": 3})
     ui_sessions.update(live_q["id"], status="running")  # o/q is watched through its session, not yet polled

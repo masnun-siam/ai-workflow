@@ -285,4 +285,41 @@ assert [i["key"] for i in res["items"]][:3] == ["gh_auth", "question:B", "questi
 assert [i["key"] for i in build(sessions=sess)["items"]] == [i["key"] for i in build(sessions=sess)["items"]]
 assert set(ui_inbox.GROUPS) == {"block", "answer", "decide", "fix", "setup", "wait"}
 print("  ok  order and stable keys")
+
+
+# rank: urgency inside a group, then newest first
+def qi(k, at, group="answer", typ="question"):
+    return {"key": k, "group": group, "type": typ, "repo": "o/r", "at": at}
+
+
+old, new = qi("old", "2026-10-20T10:00:00+00:00"), qi("new", "2026-10-21T10:00:00+00:00")
+r = ui_inbox.rank([new, old], lambda i: {"old": 5, "new": 1}[i["key"]])
+assert [(i["key"], i["urgency"]) for i in r] == [("old", 5), ("new", 1)]
+r = ui_inbox.rank([new, old], lambda i: 3 if i["key"] == "old" else None)  # scored old before unscored new
+assert [i["key"] for i in r] == ["old", "new"] and r[1]["urgency"] is None
+r = ui_inbox.rank([old, new], lambda i: 2)  # equal: newest first
+assert [i["key"] for i in r] == ["new", "old"]
+r = ui_inbox.rank([old, new], lambda i: None)  # no scores: time order
+assert [i["key"] for i in r] == ["new", "old"] and all("urgency" in i for i in r)
+lane = qi("lane", None, typ="dispatch_lane")
+r = ui_inbox.rank([lane, old], lambda i: 1 if i["key"] == "old" else None)
+assert [i["key"] for i in r] == ["old", "lane"]
+fix = qi("fix", "2026-10-22T10:00:00+00:00", group="fix", typ="session_failed")
+r = ui_inbox.rank([fix, old], lambda i: 5 if i["key"] == "fix" else 1)  # a high score never leaves its group
+assert [i["key"] for i in r] == ["old", "fix"]
+print("  ok  rank")
+
+# urgency_text per type
+q = {
+    "type": "question",
+    "questions": [{"question": "Merge?", "options": [{"label": "Yes", "description": "force"}, {"label": "No"}]}],
+}
+assert ui_inbox.urgency_text(q) == "Merge?\nYes\nforce\nNo"
+assert ui_inbox.urgency_text({"type": "grind_paused", "reason": "CI red"}) == "CI red"
+assert ui_inbox.urgency_text({"type": "session_failed", "error": "boom"}) == "boom"
+assert "merge conflict" in ui_inbox.urgency_text({"type": "pr_conflict"})
+assert ui_inbox.urgency_text({"type": "pr_ready"}) is None
+assert ui_inbox.urgency_text({"type": "session_failed", "error": "  "}) is None
+assert ui_inbox.urgency_text({"type": "question", "questions": []}) is None
+print("  ok  urgency_text")
 print("ui_inbox: all checks passed")

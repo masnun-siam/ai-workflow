@@ -81,7 +81,11 @@ GitHub remote (Publish to GitHub); a usage-limited session (Resume on another ac
 (Start now, Cancel); an issue in a dispatch that needs you, is held or hit a usage limit (Open, Retry), its
 PR waiting for your merge (Merge), and a finished dispatch (What next, Dismiss). An issue a running dispatch
 owns shows once, as its dispatch row: the generic PR-ready, conflict, paused-grind and failed-session rows
-are dropped for it. An item disappears within a poll after its condition clears.
+are dropped for it. An item disappears within a poll after its condition clears. Inside each group items sort
+by `urgency` (1–5, highest first), then newest first: a background scorer asks `jev` every 30 s about question,
+paused-grind, failed-session and PR-conflict items (at most 3 calls a pass, none once 400 of the hour's 500 are
+spent) and the Inbox only reads the cached answers. An unscored item, a dispatch row, or any item with Use jev
+off has `urgency: null` and keeps time order.
 `GET /api/inbox[?repo=]` builds it on the server from sessions, panels, grind state, cleanup flags, the
 repo registry and the board polls; a repo whose board data is stale is listed in `stale` and contributes
 session items only. While an item is open (a question expanded or the side panel showing), polls do not reorder rows; the new order applies once nothing is open or on the next visit.
