@@ -105,6 +105,7 @@ export interface AfkLogEntry {
   picked: string;
   id?: string; // `<session id>:<round id>`; absent on entries from before the answerer
   by?: 'recommended' | 'opus';
+  risk?: number; // only on a risk-routed round
   questions?: AfkQuestion[];
   answerer?: string | null;
   cost?: number | null;
@@ -224,6 +225,8 @@ interface InboxBase {
   group: InboxGroup;
   repo: RepoSlug | null;
   at: number | string | null;
+  /** 1–5; null when unscored. */
+  urgency?: number | null;
 }
 export type InboxItem =
   | (InboxBase & { type: 'gh_auth'; error?: string })
@@ -308,6 +311,8 @@ export interface RestartStatus {
   exit_code: number | null;
   log_tail: string;
 }
+export interface DuplicateMatch { kind: 'issue' | 'prd'; n?: number; path?: string; title: string; url: string }
+export interface DuplicateResponse { match: DuplicateMatch | null; confidence: number; why: string }
 export interface Settings {
   commands: ClaudeCommand[];
   default: string;
@@ -319,6 +324,9 @@ export interface Settings {
   /** Last-used model / effort for a run (null: Claude's default). */
   run_model?: string | null;
   run_effort?: string | null;
+  use_jev?: boolean;
+  /** Read-only: whether the `jev` CLI is on the server's PATH. */
+  jev_installed?: boolean;
   [k: string]: unknown;
 }
 export type NotifyChannel = 'browser' | 'ntfy' | 'mac';
@@ -558,7 +566,7 @@ export interface Dispatch {
   totals: LaneUsage;
   events?: DispatchEvent[];
 }
-export interface PlanLane { repo: RepoSlug; n: number; title: string; refined: boolean; deps: string[] }
+export interface PlanLane { repo: RepoSlug; n: number; title: string; refined: boolean; deps: string[]; /** 1–5 */ readiness?: number | null }
 export interface DispatchPlan {
   epic: string | null;
   issues: string[] | null;
