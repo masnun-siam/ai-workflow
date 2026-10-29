@@ -148,6 +148,8 @@ for bad in ("0" * 16, "../x"):
 ok("delete_record")
 
 open(os.path.join(S.shares_dir(), "junk.json"), "w").write("{nope")
+open(os.path.join(S.shares_dir(), "0" * 16 + ".json"), "w").write('{"id": "%s"}' % ("0" * 16))
+assert S.get("0" * 16) is None and S.end("0" * 16, "stopped") is None
 assert all(r["id"] != "junk" for r in S.list_shares())
 assert not [x for x in os.listdir(S.shares_dir()) if x.endswith(".tmp")]
 ok("corrupt skipped")

@@ -74,7 +74,8 @@ def _read(sid: str):
             rec = json.load(f)
     except (OSError, ValueError):
         return None
-    return rec if isinstance(rec, dict) and rec.get("id") == sid else None
+    ok = isinstance(rec, dict) and rec.get("id") == sid and rec.get("state") in ("live", "ended")
+    return rec if ok else None
 
 
 def _write(rec: dict) -> None:
@@ -102,7 +103,7 @@ def list_shares() -> list:
     for name in names:
         stem, ext = os.path.splitext(name)
         rec = _read(stem) if ext == ".json" and _ID.fullmatch(stem) else None
-        if rec is None or rec.get("state") not in ("live", "ended"):
+        if rec is None:
             if ext != ".tmp":
                 shared.warn(f"shares: skipping unreadable or foreign file {name}")
             continue
