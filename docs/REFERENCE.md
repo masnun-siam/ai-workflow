@@ -106,6 +106,7 @@ open issues (from the board poll, no GitHub call) or its PRDs the text already c
 options, oldest PRDs dropped first). Text under 20 characters runs no check. A pick at 0.6 or more answers
 `{match: {kind: issue|prd, title, url, n|path}, confidence, why}` with a server-built url (a GitHub issue, or the Feature page `#/features/<slug>?repo=`);
 otherwise `match` is null and `why` says why (jev off or missing, issues not loaded yet, no likely duplicate, hourly limit).
+The New page calls it 800 ms after typing stops (repo chosen, 20+ characters) and shows "Looks like #n <title>" below the route line, linked in a new tab; it hides on any edit, never blocks either start button, and shows nothing for a null match or a failed check.
 
 **Features.** A pipeline of six stage tiles (PRD draft, PRD review, Approved, Tasks, Building,
 Shipped) with counts and the features in each, then one card per feature in progress: its issues as

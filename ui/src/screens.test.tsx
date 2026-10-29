@@ -200,6 +200,82 @@ describe('Features list', () => {
     await user.click(screen.getByRole('button', { name: 'Start the PRD interview' }));
     await waitFor(() => expect(posts.find((p) => p.url === '/api/sessions')?.body).toMatchObject({ command: 'create-prd', args: 'stuff' }));
   });
+
+  describe('duplicate warning', () => {
+    const issue = { kind: 'issue', n: 12, title: 'Dark mode support', url: 'https://github.com/o/r/issues/12' };
+    const dupMock = (h: (init?: RequestInit) => Promise<Response>) => mock({ extra: { '/api/route': () => json({ route: null, confidence: 0, why: 'x' }), '/api/duplicate': h } });
+    const text20 = 'Add dark mode to the settings page';
+    const dups = () => posts.filter((p) => p.url === '/api/duplicate');
+
+    it('shows a linked issue match and both buttons still start', async () => {
+      dupMock(() => json({ match: issue, confidence: 0.7, why: 'same' }));
+      window.location.hash = `#/new?text=${encodeURIComponent(text20)}&repo=o/r`;
+      const user = userEvent.setup();
+      render(<App />);
+      await screen.findByText(/Looks like/, undefined, { timeout: 2000 });
+      const a = screen.getByRole('link', { name: '#12 Dark mode support' });
+      expect(a.getAttribute('href')).toBe(issue.url);
+      expect(a.getAttribute('target')).toBe('_blank');
+      expect(a.getAttribute('rel')).toBe('noopener noreferrer');
+      expect(dups()[0].body).toEqual({ repo: 'o/r', text: text20 });
+      await user.click(screen.getByRole('radio', { name: /Feature/ }));
+      await user.click(screen.getByRole('button', { name: 'Start the PRD interview' }));
+      await waitFor(() => expect(posts.find((p) => p.url === '/api/sessions')?.body).toMatchObject({ command: 'create-prd' }));
+    });
+
+    it('shows a PRD match by its title', async () => {
+      dupMock(() => json({ match: { kind: 'prd', path: 'f1', title: 'Feature one', url: '#/features/f1?repo=o/r' }, confidence: 0.7, why: 'same' }));
+      window.location.hash = `#/new?text=${encodeURIComponent(text20)}&repo=o/r`;
+      render(<App />);
+      expect((await screen.findByRole('link', { name: 'Feature one' }, { timeout: 2000 })).getAttribute('href')).toBe('#/features/f1?repo=o/r');
+    });
+
+    it('checks at 20 characters, not 19', async () => {
+      dupMock(() => json({ match: null, confidence: 0, why: 'x' }));
+      window.location.hash = '#/new?text=0123456789012345678&repo=o/r';
+      const user = userEvent.setup();
+      render(<App />);
+      await screen.findByLabelText('Describe a feature or a fix');
+      await new Promise((r) => setTimeout(r, 1000));
+      expect(dups()).toHaveLength(0);
+      await user.type(screen.getByLabelText('Describe a feature or a fix'), '9');
+      await waitFor(() => expect(dups()).toHaveLength(1), { timeout: 2000 });
+    });
+
+    it('hides on edit', async () => {
+      dupMock(() => json({ match: issue, confidence: 0.7, why: 'same' }));
+      window.location.hash = `#/new?text=${encodeURIComponent(text20)}&repo=o/r`;
+      const user = userEvent.setup();
+      render(<App />);
+      await screen.findByText(/Looks like/, undefined, { timeout: 2000 });
+      await user.type(screen.getByLabelText('Describe a feature or a fix'), '!');
+      expect(screen.queryByText(/Looks like/)).toBeNull();
+    });
+
+    it('ignores a stale response', async () => {
+      let release: (r: Response) => void = () => {};
+      let n = 0;
+      dupMock(() => (++n === 1 ? new Promise<Response>((r) => { release = r; }) : json({ match: null, confidence: 0, why: 'x' })));
+      window.location.hash = `#/new?text=${encodeURIComponent(text20)}&repo=o/r`;
+      const user = userEvent.setup();
+      render(<App />);
+      await waitFor(() => expect(dups()).toHaveLength(1), { timeout: 2000 });
+      await user.type(screen.getByLabelText('Describe a feature or a fix'), '!');
+      await waitFor(() => expect(dups()).toHaveLength(2), { timeout: 2000 });
+      release(await json({ match: issue, confidence: 0.7, why: 'same' }));
+      await new Promise((r) => setTimeout(r, 100));
+      expect(screen.queryByText(/Looks like/)).toBeNull();
+    });
+
+    it('shows nothing for a failed check', async () => {
+      dupMock(() => json({ error: 'boom' }, 500));
+      window.location.hash = `#/new?text=${encodeURIComponent(text20)}&repo=o/r`;
+      render(<App />);
+      await waitFor(() => expect(dups()).toHaveLength(1), { timeout: 2000 });
+      await new Promise((r) => setTimeout(r, 100));
+      expect(screen.queryByText(/Looks like|boom|error/i)).toBeNull();
+    });
+  });
 });
 
 describe('PRD tab', () => {

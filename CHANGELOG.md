@@ -10,6 +10,7 @@
 
 ### Added
 
+- **Duplicate warning on the New page** (#579): once a repo is chosen and the text is 20+ characters, the page asks `POST /api/duplicate` 800 ms after typing stops and shows "Looks like #n <title>" as a link that opens in a new tab. It only advises: both start buttons work as before.
 - **`aiw jev` verb** (#580): `aiw jev ci-hint --file <log>` (flaky or real) and `aiw jev finding-hint --file <json>` (fix or rebut, at most 20 findings, four at a time) print jev's advisory hint as JSON and always exit 0; `status` is `ok`, `off`, `missing` or `failed`. Text goes to jev on stdin, is never cached or counted.
 - **Duplicate check endpoint** (#578): `POST /api/duplicate {repo, text}` asks `jev` whether the capture text matches one of the repo's newest 100 open issues or its PRDs (needs 20+ characters and a 0.6+ pick), and returns the match with a server-built link, or a null match with a `why`. The New page warning follows in #579.
 - **Readiness warnings in the dispatch preview** (#577): jev scores each refined lane's issue body 1–5 (at most 30 lanes, five at a time, 8 s in all); a score of 2 or less adds "may be underspecified (jev n/5)" and the lane still runs; lanes it could not score share one "Readiness unavailable for …" line. Plan lanes gain `readiness`; bodies are read only for the preview and never returned. The jev answer cache is now server-only.
