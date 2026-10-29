@@ -388,6 +388,7 @@ Nothing stateful lives in this repo. `aiw paths` resolves it under `$CLAUDE_PLUG
 | `dispatches/` | one `<id>.json` per dispatch (settings, lanes, events) and its `.lock` |
 | `ui.json` | push notifications and `public_url` (mode 0600) |
 | `config.json` | peer-review overrides from Settings, laid over `run-engine/config.json` |
+| `jev_cache.json` | cached jev answers for Inbox urgency, readiness and duplicates: at most 2000 entries, ignored after 7 days, written by the server only (never by `aiw jev`); safe to delete |
 | `channels.json` | Slack ids and trigger templates for grind and release-pr |
 
 The work's own state is on GitHub and in the repo's `docs/prds/` and `docs/tasks/`.

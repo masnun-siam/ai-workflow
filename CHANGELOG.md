@@ -4,6 +4,7 @@
 
 ### Added
 
+- **jev answer cache and call ceiling** (#571): the Inbox urgency, readiness and duplicate points reuse earlier answers (kept in memory, flushed to `jev_cache.json` in the plugin data dir every minute; 2000 entries, 7 days) and stop at 500 jev calls an hour (`capped`). Risk checks, the capture route and hints are never cached or counted.
 - **Shared jev helper** (#570): `run-engine/jev.py` is the one place that runs `jev` (pinned model, 8 s timeout, 4000-character input, token-shaped strings redacted first); any failure gives a null answer. The capture router now uses it, and with the switch off `POST /api/route` answers `jev is off`. jev will also see Inbox question, pause and error text, refined issue bodies in a dispatch preview, the capture text plus the repo's open issue and PRD titles, failing CI log tails, review findings, and Away mode round text; **Settings → Use jev** turns all of it off.
 - **jev switch in Settings** (#572): Settings → jev has a **Use jev** switch (saved at once, reverts on a failed save) and a read-only "jev found / not found" line; the UI's API types gain the fields later jev issues use.
 - **Use jev setting** (#569): `GET /api/settings` returns `use_jev` (default on) and a read-only `jev_installed`; `PUT /api/settings` accepts `use_jev` (boolean, else 400) and keeps it when omitted.
