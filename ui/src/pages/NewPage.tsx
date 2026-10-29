@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api/endpoints';
+import type { DuplicateMatch } from '../api/types';
 import { usePeerReviewOffers } from '../api/hooks';
 import { Button } from '../components';
 import { PRIORITIES, priorityName, useCreateWork } from '../features/CaptureBar';
@@ -22,6 +23,7 @@ export function NewPage() {
   const [text, setText] = useState(sp.get('text') ?? '');
   const [pick, setPick] = useState<Pick>(sp.get('route') === 'small' ? 'small' : sp.get('route') === 'feature' ? 'feature' : null);
   const [auto, setAuto] = useState<Auto>(null);
+  const [dup, setDup] = useState<DuplicateMatch | null>(null);
   const [lenses, setLenses] = useState<string[]>([]);
   const [priority, setPriority] = useState('');
 
@@ -39,6 +41,18 @@ export function NewPage() {
   };
   // Route the text it was opened with once; after edits, routing again is the user's click.
   useEffect(() => { if (!pick) void ask(text); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Check for a duplicate 800 ms after typing stops; the cleanup drops a late answer for older text or repo.
+  useEffect(() => {
+    setDup(null);
+    const t = text.trim();
+    if (!repo || t.length < 20) return;
+    const ctl = new AbortController();
+    const timer = setTimeout(() => {
+      api.duplicate(repo, t, ctl.signal).then((r) => { if (!ctl.signal.aborted) setDup(r.match ?? null); }, () => {});
+    }, 800);
+    return () => { clearTimeout(timer); ctl.abort(); };
+  }, [repo, text]);
 
   const offer = offers.data?.kinds?.['create-prd'] ?? [];
   const toggle = (l: string) => setLenses((x) => (x.includes(l) ? x.filter((y) => y !== l) : [...x, l]));
@@ -61,6 +75,9 @@ export function NewPage() {
             : done ? <>Auto could not tell ({done.why}). Pick a route.</>
             : 'Pick a route.'}
           {auto !== 'asking' && text.trim() ? <> <button type="button" className="linkish" style={{ textDecoration: 'underline' }} onClick={() => void ask(text)}>Route again</button></> : null}
+        </p>
+        <p role="status" style={{ margin: 0, fontSize: 13 }}>
+          {dup ? <>Looks like <a href={dup.url} target="_blank" rel="noopener noreferrer">{dup.kind === 'issue' ? `#${dup.n} ${dup.title}` : dup.title}</a></> : null}
         </p>
       </div>
 

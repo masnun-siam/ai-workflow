@@ -1,7 +1,7 @@
 // Every endpoint the UI calls, as plain typed functions. Hooks in hooks.ts wrap these with caching and invalidation.
-import { enc, get, post, put, qs, splitRepo } from './client';
+import { enc, get, post, put, qs, request, splitRepo } from './client';
 import type {
-  AnswerBody, AfkState, AfkChangeBody, AfkChangeResponse, Dispatch, DispatchPlan, DispatchSettings, DispatchTarget, DispatchState, EndAction, LaneAction, BoardStartBody, BoardStartResponse, CleanupItem, DeliveryResponse, InboxResponse,
+  AnswerBody, AfkState, DuplicateResponse, AfkChangeBody, AfkChangeResponse, Dispatch, DispatchPlan, DispatchSettings, DispatchTarget, DispatchState, EndAction, LaneAction, BoardStartBody, BoardStartResponse, CleanupItem, DeliveryResponse, InboxResponse,
   IssueDetail, NotificationFeed, NotifyChannel, NotifySettings, OpenItem, PeerReviewOffers, PlanningResponse, PrDetail, PrdFile, ReposResponse, RestartStatus,
   ReviewSettings, Session, SessionStartBody, SessionsResponse, Settings, StreamResponse, VaultFolders, VaultPrd,
 } from './types';
@@ -20,6 +20,8 @@ export const api = {
   restartStatus: () => get<RestartStatus>('/api/restart'),
   restart: () => post<{ ok: true }>('/api/restart'),
   /** Auto in the capture box: jev picks feature or small change; null when it cannot tell or is not installed. */
+  /** New page duplicate check (FR-6): a null match when jev is off, unsure, or the issues are not loaded yet. */
+  duplicate: (repo: string, text: string, signal?: AbortSignal) => request<DuplicateResponse>('POST', '/api/duplicate', { repo, text }, signal),
   route: (text: string) => post<{ route: 'feature' | 'small_change' | null; confidence: number; why: string }>('/api/route', { text }),
   notify: () => get<NotifySettings>('/api/settings/notify'),
   review: () => get<ReviewSettings>('/api/settings/review'),
