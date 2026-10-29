@@ -136,7 +136,15 @@ installation.**
 | `command -v slackcli` | the Slack reviewer-bot loop (`/pr-grind`, `/release-pr`) | no grind loop |
 | `command -v herdr` | `herdr-dispatch`: an epic's lanes in separate terminal tabs | dispatch from the UI (headless lanes) |
 | `command -v jev` | quick judgment calls in `aiw ui` (capture Auto route, Away mode risk check, Inbox order, readiness and duplicate warnings) and grind hints; needs a TypeSafe AI key | you pick routes yourself; everything else works as before |
-| `command -v tailscale` | reaching `aiw ui` from your phone | the UI stays on loopback |
+| `command -v tailscale` | reaching `aiw ui` from your phone, and sharing a PRD for review | the UI stays on loopback; Share is unavailable |
+
+Sharing a PRD publishes it through a tailscale funnel, so the tailnet policy must give the node the `funnel` attribute (and HTTPS certificates must be enabled for the tailnet; funnel runs only on ports 443, 8443 and 10000):
+
+```json
+"nodeAttrs": [{"target": ["autogroup:member"], "attr": ["funnel"]}]
+```
+
+Without it Share is refused with tailscale's own message and everything else works.
 
 Present it as findings, not as a shopping list. "slackcli is missing, so PRs land without the review loop" is more useful than "please install slackcli".
 

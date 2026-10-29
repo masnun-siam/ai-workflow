@@ -188,6 +188,60 @@ ready-to-merge Inbox item appears.
 `POST /api/grind/skip-ci|stop` (`{repo, pr}`; 409 when there is nothing to skip or stop),
 `GET /api/prd?repo=&path=` (returns `sha`), `POST /api/prd` (takes `base_sha`; 409 when it changed).
 
+**Share a PRD.** The PRD tab's **Share** button publishes one PRD for human review at
+`https://<node>.<tailnet>.ts.net:<share port>/s/<token>` (the token has at least 128 random bits).
+Only the owner can start it, only for a Draft or In review PRD, and a PRD has one live share. The
+share ends when the PRD becomes Approved or any other status, when the author presses **Stop**, or
+when the file is gone or no longer a regular file under `docs/prds/`; it is checked on every share
+request and once a minute, and there is no timer. An ended share's link returns 404 at once, its
+threads stay in the UI, and sharing again issues a new token, keeps the threads and clears the
+approvals. The PRD text is public as written, header and paths included, so Share asks to confirm
+that on every press. A reviewer is anyone holding the link, with a typed display name and no account;
+names and comments are visible to everyone who holds the same link. A reviewer's **Approve** is a
+signal shown to the author and never sets the PRD to Approved. Reviewer text reaches a session only
+through the author's **Send open comments**. While any share is live the top bar shows a **Public (n)**
+badge listing them. The share runs on a separate read-only listener that `aiw ui` starts while a share
+is live, behind a tailscale funnel (port 8443, or 10000 when the UI's serve uses 8443, never the UI's
+port). Shares persist; after a clean exit the listener and funnel go down and come back on the same
+link at the next start. After an unclean exit a leftover handler of ours on the recorded port is
+reclaimed; a foreign handler there shows the share as "not reachable" and no new port is chosen.
+
+Limits per share: names 1 to 60 characters and comments 1 to 2,000 (Unicode code points, trimmed),
+500 reviewer comments, 100 approvals, 20 reviewer writes a minute, request bodies of 16 KB.
+
+Owner routes (UI port; errors as `{error}`):
+
+| Route | Does | Status |
+|---|---|---|
+| `GET /api/shares` | `[{id, repo, path, title, state, url, comments, unread, reachable, end_reason}]` | 200 |
+| `POST /api/shares` | `{repo, path, confirm: true}` starts a share; an existing live share comes back without confirm | 201; 200 existing; 400 no `confirm`, bad path or repo; 409 PRD not Draft or In review, or funnel port taken; 503 tailscale missing or stopped, or funnel not permitted (tailscale's message) |
+| `GET /api/shares/<id>` | the share with `threads` and `approvals` | 200; 404 |
+| `DELETE /api/shares/<id>` | Stop (`end_reason: stopped`) | 200; 404 |
+| `DELETE /api/shares/<id>/threads/<tid>`, `.../comments/<cid>`, `.../approvals/<aid>` | delete one | 204; 404 |
+| `DELETE /api/shares/<id>/record` | remove an ended share with its threads and approvals | 204; 404; 409 still live |
+| `POST /api/shares/<id>/threads/<tid>/comments` | `{body}` author reply | 201; 400; 404 |
+| `PATCH /api/shares/<id>/threads/<tid>` | `{resolved: bool}` | 200; 400; 404 |
+| `POST /api/shares/<id>/send` | `{confirm: true}`; without it, the prompt preview | 201 `{session_id, threads, remaining, dropped}`; 409 nothing unsent; 502 session failed to start |
+| `POST /api/shares/<id>/seen` | marks the share seen (Inbox) | 204 |
+
+Public routes (share listener only; any other path, unknown or ended token, foreign `Host`, or a
+non-GET without `Content-Type: application/json` and an `Origin` equal to the share host gets the same
+404):
+
+| Route | Does | Status |
+|---|---|---|
+| `GET /s/<token>`, `/s/<token>/assets/<file>` | share page and its bundle files | 200; 404 |
+| `GET /s/<token>/api/prd` | `{title, status, text, updated_at}` | 200; 404 |
+| `GET /s/<token>/api/threads` | threads with their comments | 200; 404 |
+| `POST /s/<token>/api/threads` | `{name, body, anchor:{exact, prefix, suffix}}` | 201; 400; 409 share full; 413; 429 |
+| `POST /s/<token>/api/threads/<tid>/comments` | `{name, body}` | 201; 400; 404; 409; 413; 429 |
+| `GET /s/<token>/api/approvals` | `[{name, at}]` | 200; 404 |
+| `POST /s/<token>/api/approvals` | `{name}`; the withdraw `key` is returned only on the first approval of a name | 201; 200 name already recorded; 400; 409 100 approvals; 413; 429 |
+| `DELETE /s/<token>/api/approvals` | `{name, key}` withdraws | 204; 400; 404 unknown name or wrong key |
+
+Responses carry `Referrer-Policy: no-referrer`, `X-Robots-Tag: noindex`, a strict
+`Content-Security-Policy` and `Cache-Control: no-store`.
+
 **Dispatches.** `#/dispatches` lists running dispatches as cards (progress, the issues that need you)
 and the rest as history; **Run an epic** takes an epic (typed, or picked from the repo's
 epics), grind mode (Off, Simple, Full), auto-merge, lanes at once (1–10), a base branch (a searchable list of the repo's branches, also in Run small changes), a feature branch, model and
@@ -324,8 +378,11 @@ For clickable macOS banners run `brew install terminal-notifier` on the host and
 
 **Security:** there is no app-level auth. Access relies on tailnet ACLs, so anyone who can
 reach the URL can start sessions. Sessions run `claude --dangerously-skip-permissions` by
-default, with no opt-out flag. Never use `tailscale funnel` (public exposure plus skip-permissions
-is remote code execution), and on a shared machine any local user can reach the loopback port.
+default, with no opt-out flag. Never use `tailscale funnel` for the UI (public exposure plus skip-permissions
+is remote code execution), and on a shared machine any local user can reach the loopback port. The one
+exception is the share listener (see Share a PRD): a separate, read-only listener that serves only
+`/s/<token>` for one PRD, cannot start sessions and answers anything else with the same 404. The UI's
+own port is never funnelled.
 
 ## Repo copies of skills
 
@@ -402,6 +459,8 @@ Nothing stateful lives in this repo. `aiw paths` resolves it under `$CLAUDE_PLUG
 | `config.json` | peer-review overrides from Settings, laid over `run-engine/config.json` |
 | `jev_cache.json` | cached jev answers for Inbox urgency, readiness and duplicates: at most 2000 entries, ignored after 7 days, written by the server only (never by `aiw jev`); safe to delete |
 | `channels.json` | Slack ids and trigger templates for grind and release-pr |
+| `shares/` | one JSON record per shared PRD with its threads and approvals (mode 0600), kept until the author deletes the share record |
+| `share-runtime.json` | the share listener's loopback port and the funnel port, so a restart serves the same link |
 
 The work's own state is on GitHub and in the repo's `docs/prds/` and `docs/tasks/`.
 

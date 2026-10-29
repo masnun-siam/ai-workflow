@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Share a PRD for review** (epic #584, #603): the PRD tab's Share button and the "Public (n)" badge publish a Draft or In review PRD at a token link on a separate read-only listener behind a tailscale funnel; reviewers read it, comment on selected text and Approve (a signal, never the PRD's status) without an account; the author replies, resolves and sends open comments to a `/create-prd --update` session, and an Inbox item and `prd-comment` event announce new comments. Needs the `funnel` node attribute in the tailnet policy (`docs/INSTALL.md`); the UI itself is still never funnelled.
 - **Share links: Send open comments** (#592): `POST /api/shares/<id>/send` builds one `/create-prd <path> --update` prompt from a share's unsent open threads (reviewer text in one delimited untrusted block, capped at 32,000 characters), previews it without `confirm: true`, otherwise starts the update session and marks only the threads it sent; `GET /api/shares/<id>` gains `unsent`.
 - **Share page read view** (#595): `ui/share.html` is a second Vite entry, built to `run-engine/ui_dist/share.html` with a build manifest (`.vite/manifest.json`) listing the files the page may load. It shows one shared PRD read-only from `/s/<token>/api/prd` with the PRD tab's Markdown and Mermaid rendering, polling every 30 s; fonts are no longer inlined as `data:` URLs.
 

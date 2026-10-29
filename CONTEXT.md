@@ -47,6 +47,18 @@ _Avoid_: Note
 **Problem statement**:
 What `/dump` writes for a feature, change request or bug: Problem, Who, Evidence, Expected and Open questions, taken only from the input, followed by the raw input verbatim. `/create-prd` builds a PRD from it.
 
+**Share**:
+A public, token-link view of one PRD in Draft or In review with its comment threads, served by a separate read-only listener behind a tailscale funnel. It ends when the PRD leaves those statuses, on Stop, or when the file is gone.
+_Avoid_: Review link, public PRD
+
+**Reviewer**:
+Anyone holding a Share link: a typed display name, no account and no verified identity. Their Approve is a signal, never the PRD's Approved status.
+_Avoid_: Guest, user
+
+**Thread**:
+One anchored quote in a shared PRD with its comments, from reviewers and the author. Open threads go to a session only through the author's Send.
+_Avoid_: Discussion
+
 **Session**:
 A headless Claude invocation started and tracked by the UI (`aiw ui`), recorded under `<data_dir>/sessions/<id>/`. It exits after each turn and comes back via `--resume` with an answer or after a rate limit.
 _Avoid_: Run, job
