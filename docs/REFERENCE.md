@@ -90,8 +90,8 @@ session items only.
 **Feature** starts `/create-prd` (on `opus` at `medium`) and opens the session. **Small change** (with an
 optional priority) starts one headless `/create-tasks` session that files the issue with no PRD and
 refines it in the same session. **Auto** opens `#/new`, which asks `POST /api/route {text}` for a route:
-the server runs `jev choice` (pinned to `jev-1.14.0`) and answers `{route: feature|small_change|null,
-confidence, why}`. A null route (jev missing, failing, unsure, or under 0.4) leaves the choice to you.
+the server runs `jev choice` through `run-engine/jev.py` (pinned to `jev-1.14.0`) and answers `{route: feature|small_change|null,
+confidence, why}`. A null route (jev missing, switched off in Settings with `why: "jev is off"`, failing, unsure, or under 0.4) leaves the choice to you.
 `#/new` shows both routes as cards, the PRD review lenses on the Feature one and a priority on the
 Small change one; **Start the PRD interview** or **File the issue** starts it. `jev` is optional.
 

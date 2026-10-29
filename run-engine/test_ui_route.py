@@ -11,7 +11,10 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
+os.environ["CLAUDE_PLUGIN_DATA"] = tempfile.mkdtemp()
+
 import ui_route  # noqa: E402
+import ui_settings  # noqa: E402
 
 bin_dir = tempfile.mkdtemp()
 fake = os.path.join(bin_dir, "jev")
@@ -30,7 +33,7 @@ os.environ["PATH"] = tempfile.mkdtemp()
 r = ui_route.route("fix the login 404")
 assert r["route"] is None and "not installed" in r["why"], r
 
-os.environ["PATH"] = bin_dir + os.pathsep + old_path
+os.environ["PATH"] = bin_dir + ":/usr/bin:/bin"  # never the real PATH: a real jev must not run
 
 fake_jev(
     """echo '{"choice":"small_change","confidence":0.8,"probabilities":{"feature":0.1,"small_change":0.88,"unclear":0.02}}'"""
@@ -55,6 +58,16 @@ r = ui_route.route("x")
 assert r["route"] is None and "exit 3" in r["why"], r
 fake_jev("echo not-json")
 assert ui_route.route("x")["route"] is None
+
+# switch off: no route, and jev is never run
+calls = os.path.join(bin_dir, "calls")
+fake_jev(f"echo x >> {calls}\n" + """echo '{"choice":"feature","probabilities":{"feature":0.9}}'""")
+ui_settings.save({"use_jev": False})
+r = ui_route.route("x")
+assert r == {"route": None, "confidence": 0, "why": "jev is off"}, r
+assert not os.path.exists(calls)
+ui_settings.save({"use_jev": True})
+assert ui_route.route("x")["route"] == "feature"
 
 # empty text is a caller error
 for bad in ("", "   ", None, 5):
