@@ -13,7 +13,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GUIDE = "guides/engineering-workflow.md"
 POINTER = "Repo skills win"
-# The one hand-off that keeps its exact text: /flow parses dump's last line byte for byte.
+# The one hand-off that keeps its exact text: dump's last line.
 DUMP_EXEMPT = "→ next: /create-prd <feature-folder>"
 EXEMPT_SKILLS = ("sync-from-wasensi", "skill-feedback")  # PRD non-goal: their text is not touched.
 # Plain mentions, not hand-offs: matched as exact substrings of the line, never by line number.
@@ -23,13 +23,6 @@ ALLOWED = (
     "# /dump — Structured Capture",
     "a human-invoked `/dump`",
     "and `/dump` should place content",
-    "because `/flow` parses it to start the next stage",
-    "/dump (optional) → /create-prd → approval → /create-tasks → /refine-issues → dispatch",
-    "Use whenever the user says /flow,",
-    "# /flow — Idea",
-    "`/flow` holds the user's place",
-    "`/flow <raw idea",
-    "say `/flow <that argument>` resumes",
     "Also runnable by hand: /peer-review reviews",
     "Use whenever the user says /peer-review,",
     "# /peer-review: a reviewer panel",
@@ -89,7 +82,7 @@ ALLOWED = (
     "`/refine-issues` moves a refin",
     "`/implement-issue` moves the rest from Backlog",
     "The issue body is corrected later by `/refine-issues`.",
-    "dump's `→ next: /create-prd <folder>`, which flow reads byte for byte",
+    "dump's `→ next: /create-prd <folder>`",
     "Used by people and by the `/pr-review` skill.",
     "its `/verifier-locally` results stand in.",
     # guides/skills.md: the table of skills.

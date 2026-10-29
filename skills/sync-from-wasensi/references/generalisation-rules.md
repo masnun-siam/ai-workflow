@@ -22,7 +22,7 @@ Ported with a new file:
 
 Plugin-only files (no upstream source):
 - `.claude-plugin/plugin.json` and `skills/sync-from-wasensi/`: never changed by a sync, except the rules file in step 11.
-- The plugin's own tools: `skills/dump`, `flow`, `herdr-dispatch`, `peer-review`, `pr-grind`, `release-pr`, `worklog`, and `agents/`, `run-engine/`, `bin/`, `self-improve.md`. A sync never changes them, and the leak scan skips them (they name Wasensi, Blubird, `staging` and `master` on purpose).
+- The plugin's own tools: `skills/dump`, `herdr-dispatch`, `peer-review`, `pr-grind`, `release-pr`, `worklog`, and `agents/`, `run-engine/`, `bin/`, `self-improve.md`. A sync never changes them, and the leak scan skips them (they name Wasensi, Blubird, `staging` and `master` on purpose).
 - `README.md` is a link hub with no stage table. `docs/HOW-IT-WORKS.md` (stage table, implement-issue steps), `docs/REFERENCE.md` (commands table, layout) and `CHANGELOG.md` (`## Unreleased`) are kept in step with the skills (step 5). `CLAUDE.md` lists the skills too, but changes only on an explicit request: tell the user when a new skill leaves it behind.
 
 Plugin-only lines inside ported files (keep them; they are not upstream drift):
@@ -123,5 +123,5 @@ Plugin-only lines inside ported files (keep them; they are not upstream drift):
 Run from the plugin root after applying changes. Expected hits only: the base-branch lookup line (`staging`, `stage`, `dev`), "for example `master` or `main`", and the `/sync-from-wasensi` rows in `README.md` and `guides/skills.md`.
 
 ```
-grep -rniE --exclude-dir={sync-from-wasensi,dump,flow,herdr-dispatch,peer-review,pr-grind,release-pr,worklog} 'wasensi|blubird|gupshup|\bstaging\b|\bmaster\b|webhook-receiver|\b(pest|pint|phpstan|rector|scribe|biome|mongodb|postgresql|laravel)\b|AGENT=|make (up|down|dev)|gate [0-9]|#[67][0-9]{2}\b|8010|5173' skills guides templates README.md
+grep -rniE --exclude-dir={sync-from-wasensi,dump,herdr-dispatch,peer-review,pr-grind,release-pr,worklog} 'wasensi|blubird|gupshup|\bstaging\b|\bmaster\b|webhook-receiver|\b(pest|pint|phpstan|rector|scribe|biome|mongodb|postgresql|laravel)\b|AGENT=|make (up|down|dev)|gate [0-9]|#[67][0-9]{2}\b|8010|5173' skills guides templates README.md
 ```

@@ -14,7 +14,6 @@ export const ARG_LABEL: Record<string, string> = {
   'faq-updater': 'New questions or options (optional)',
   'repo-bootstrap': 'Phase and issue (optional)',
   'skill-feedback': 'The feedback',
-  flow: 'An idea, a PRD path or an epic number',
   'peer-review': 'What to review (optional)',
   custom: 'Prompt',
   'refine-issues': 'Epic number or issue numbers',

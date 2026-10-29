@@ -106,7 +106,6 @@ export const COMMANDS: CommandGroup[] = [
     { id: 'create-prd', name: 'Write a PRD', desc: 'Claude interviews you about an idea and writes the PRD.', arg: 'text', placeholder: 'Describe the feature: who it is for, what problem it solves…', lenses: true, noRepo: true },
     { id: 'create-tasks', name: 'Break a PRD into tasks', desc: 'Splits an approved PRD into one-PR issues under its epic.', arg: 'prd' },
     { id: 'refine-issues', name: 'Refine issues', desc: 'Writes WHAT, WHY and HOW into each issue so it is ready to build.', arg: 'issues' },
-    { id: 'flow', name: 'Plan a flow', desc: 'Talk through a multi-step change before writing anything.', arg: 'text', placeholder: 'What do you want to plan?' },
   ] },
   { g: 'Build', items: [
     { id: 'implement-issue', name: 'Implement an issue', desc: 'Takes one refined issue to a ready PR in its own worktree.', arg: 'issue' },
