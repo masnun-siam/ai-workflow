@@ -762,6 +762,87 @@ describe('PR panel merge', () => {
   });
 });
 
+describe('PR panel close and reopen', () => {
+  const pull = (over: Record<string, unknown>) => ({
+    number: 40, title: 'T', url: 'https://github.com/o/r/pull/40', state: 'open', author: 'me', created_at: '2026-01-01T00:00:00Z', head: 'f', base: 'main',
+    labels: [], assignees: [], milestone: null, body_html: '', additions: 1, deletions: 0, file_count: 0, files: [], commit_count: 0, commits: [], conversation: [], checks: [], ...over,
+  });
+  async function open(state: string, stateRoute?: () => Promise<Response>) {
+    mock({ extra: { '/api/pulls/o/r/40': () => json(pull({ state })), ...(stateRoute ? { '/api/pulls/o/r/40/state': stateRoute } : {}) } });
+    window.location.hash = '#/inbox?repo=o/r';
+    const { WorkPanel } = await import('./panels/WorkPanel');
+    const { QueryProvider } = await import('./QueryProvider');
+    const { ConfirmProvider } = await import('./components');
+    const { HashRouter } = await import('react-router-dom');
+    const { PanelProvider } = await import('./panels/PanelContext');
+    const user = userEvent.setup();
+    render(<QueryProvider><ConfirmProvider><HashRouter><PanelProvider><WorkPanel kind="pr" repo="o/r" n={40} /></PanelProvider></HashRouter></ConfirmProvider></QueryProvider>);
+    await screen.findByText('PR on GitHub');
+    return user;
+  }
+  const btn = (n: string) => screen.queryByRole('button', { name: n });
+  it('open and draft show Close PR… only; merged shows neither; closed shows Reopen PR only', async () => {
+    await open('open');
+    expect(btn('Close PR…')).toBeTruthy();
+    expect(btn('Reopen PR')).toBeNull();
+    cleanup();
+    await open('draft');
+    expect(btn('Close PR…')).toBeTruthy();
+    expect(screen.getByText(/Draft PRs cannot be merged/)).toBeTruthy();
+    cleanup();
+    await open('merged');
+    expect(btn('Close PR…') ?? btn('Reopen PR')).toBeNull();
+    cleanup();
+    await open('closed');
+    expect(btn('Close PR…')).toBeNull();
+    expect(btn('Reopen PR')).toBeTruthy();
+  });
+  it('Close PR… asks, Cancel and Esc return focus, Confirm posts closed', async () => {
+    const user = await open('open');
+    await user.click(btn('Close PR…')!);
+    expect(screen.getByText('Close PR #40 without merging? The branch is kept.')).toBeTruthy();
+    await user.click(btn('Cancel')!);
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(btn('Close PR…')));
+    await user.click(btn('Close PR…')!);
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(posts.some((p) => p.url.endsWith('/state'))).toBe(false);
+    await user.click(btn('Close PR…')!);
+    await user.click(btn('Close PR')!);
+    await waitFor(() => expect(posts).toContainEqual({ url: '/api/pulls/o/r/40/state', body: { state: 'closed' } }));
+  });
+  it('Reopen PR posts open with no confirm', async () => {
+    const user = await open('closed');
+    await user.click(btn('Reopen PR')!);
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    await waitFor(() => expect(posts).toContainEqual({ url: '/api/pulls/o/r/40/state', body: { state: 'open' } }));
+  });
+  it('a refusal shows GitHub\'s message, keeps the state and the confirm usable', async () => {
+    const user = await open('open', () => json({ error: 'head branch was deleted' }, 422));
+    await user.click(btn('Close PR…')!);
+    await user.click(btn('Close PR')!);
+    expect(await screen.findByText('head branch was deleted')).toBeTruthy();
+    expect(screen.getByText('PR open')).toBeTruthy();
+    expect((btn('Close PR') as HTMLButtonElement).disabled).toBe(false);
+  });
+  it('a Reopen refusal shows in the normal footer', async () => {
+    const user = await open('closed', () => json({ error: 'cannot reopen' }, 422));
+    await user.click(btn('Reopen PR')!);
+    expect(await screen.findByText('cannot reopen')).toBeTruthy();
+    expect(screen.getByText('PR closed')).toBeTruthy();
+  });
+  it('buttons are disabled while the request is pending', async () => {
+    let release: (r: Response) => void = () => {};
+    const user = await open('open', () => new Promise<Response>((r) => { release = r; }));
+    await user.click(btn('Close PR…')!);
+    await user.click(btn('Close PR')!);
+    await waitFor(() => expect((btn('Close PR') as HTMLButtonElement).disabled).toBe(true));
+    release(new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+  });
+});
+
 describe('work panel action keys', () => {
   const pull = (over: Record<string, unknown> = {}) => ({ number: 40, title: 'PR T', url: 'https://github.com/o/r/pull/40', state: 'open', author: 'me', created_at: '2026-01-01T00:00:00Z', head: 'f', base: 'main', body_html: '', additions: 1, deletions: 0, file_count: 0, files: [], commit_count: 0, commits: [], conversation: [], checks: [], ...over });
   const ready = (over: Record<string, unknown> = {}) => card(12, 'in_review', { pr: { n: 40, draft: false, ci: 'success', url: 'u' }, mergeable: true, ...over });
