@@ -125,7 +125,7 @@ says `**Status:** Done` counts as Shipped.
 **Small changes** (`#/changes`, its own top-bar link) opens on **All repos**: the grid totals the open
 small changes of every watched repo, and Ready to run, Needs refining first and the issue list are grouped
 by repo (each with its own repo's Refine lock and pick bar; a loading or stale repo shows a note, never as
-empty; Ready to run has no picks here). The repo filter in the page head (`?only=<owner/repo>`, independent of
+empty; Ready to run has pick checkboxes and **Run N as a dispatch**, but picks stay within one repo: the first pick disables the other repos' checkboxes, with a note, until the picks are cleared, and the dispatch dialog opens on the picked repo, not the switcher's). The repo filter in the page head (`?only=<owner/repo>`, independent of
 the switcher) narrows it to the single-repo page described next, which holds the open issues of one repo that belong to
 no feature (no epic, or an epic with no PRD here): **Where they stand**, a priority by state grid
 (Needs refining, Ready, In flight) whose cells filter the list; **Ready to run**, the refined,
