@@ -710,6 +710,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                     f"{parts[3]}/{parts[4]}", ui_actions.set_state(*parts[3:6], b.get("state"), b.get("reason"))
                 )
             )
+        elif len(parts) == 7 and parts[1:3] == ["api", "pulls"] and parts[6] == "state":
+            self._dispatch(
+                lambda b: _repoll(f"{parts[3]}/{parts[4]}", ui_actions.set_pr_state(*parts[3:6], b.get("state")))
+            )
         elif len(parts) == 7 and parts[1:3] == ["api", "pulls"] and parts[6] == "merge":
             self._dispatch(lambda b: _repoll(f"{parts[3]}/{parts[4]}", ui_actions.merge(*parts[3:6])))
         elif parts == ["", "api", "epics", "close"]:
