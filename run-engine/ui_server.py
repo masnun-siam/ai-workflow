@@ -28,6 +28,7 @@ import dispatch_run
 import jev
 import ui_actions
 import ui_afk
+import ui_bootstrap
 import ui_cleanup
 import ui_config
 import ui_delivery
@@ -1209,6 +1210,7 @@ def cmd_serve(args) -> None:
     ui_runner.start_prgrind_timer()  # re-enter pr-grind loops whose session ended (reviews, CI, heartbeat)
     ui_runner.start_limit_timer()  # auto-resume limited runs, incl. catch-up of resets missed while down
     POLLER.start(_watched_copy, hot=_hot)  # boards: poll every repo a board was opened for, run the hooks
+    ui_bootstrap.start_timer()  # bootstrap runs: next phase from the ended phase session
     ui_panel.start_timer()  # lens verdicts -> root, rounds, cap
     ui_usage.start_timer()  # 5h/7d usage per account, only while the UI is open
     ui_dispatch.start_timer(POLLER.snapshot)  # dispatch lanes: facts from the boards, tick, launch, merge
