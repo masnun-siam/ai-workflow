@@ -81,7 +81,8 @@ lens approving (Approve PRD anyway, Run 2 more rounds); reviewers' comments or a
 terminal); a merged issue whose worktree has unsaved work (Review and clean up); a `local/` repo with no
 GitHub remote (Publish to GitHub); a usage-limited session (Resume on another account); a queued session
 (Start now, Cancel); an issue in a dispatch that needs you, is held or hit a usage limit (Open, Retry), its
-PR waiting for your merge (Merge), and a finished dispatch (What next, Dismiss). An issue a running dispatch
+PR waiting for your merge (Merge), and a finished dispatch (What next, Dismiss). A bootstrap run waiting after its audit (**decide**: Continue bootstrap, Stop) or stopped at a phase
+(**fix**: Retry phase, Stop; carries the session's error); the failed phase session of a run makes no failed-session row. An issue a running dispatch
 owns shows once, as its dispatch row: the generic PR-ready, conflict, paused-grind and failed-session rows
 are dropped for it. An item disappears within a poll after its condition clears. Inside each group items sort
 by `urgency` (1–5, highest first), then newest first: a background scorer asks `jev` every 30 s about question,
@@ -274,6 +275,7 @@ activity feed in plain sentences beside the lists (the issue panel takes its pla
 The server ticks every running dispatch every 30 s from the board poll, the grind state files and each
 lane's session; grind rounds a lane owns are typed into the lane (`dispatch-due:` in the grind state)
 instead of starting a separate session, and the epic is re-read every 5 minutes so new children join; a finished (`done`) dispatch that gains one goes to `paused` until the new issues are refined and the user presses **Resume** (a dispatch of picked issues re-reads only its listed issues; none joins).
+`GET /api/bootstraps[?repo=]` (`{runs: [record]}`, newest first; 400 for an unregistered repo), `POST /api/bootstraps/<id>/continue` (only from `waiting`: starts the decide phase), `/retry` (only from `stopped`: a new session for the failed phase, same account, model and effort) and `/stop` (from `waiting`, `stopped` or `running`: the run becomes `ended`, a running run's live session is stopped); each returns the run record; 409 for a wrong state, 404 for an unknown id, and a failed start leaves the run as it was. Every session row in `GET /api/sessions[/<id>]` carries `bootstrap`: the run it belongs to, or null.
 `GET /api/dispatches`, `GET /api/dispatches/<id>` (with events; `issues` is the list or null), `GET /api/dispatches/<id>/lane?key=`,
 `POST /api/dispatches` (`{epic, settings}` or `{issues: ["owner/repo#n", ...], settings}`, never both; 1 to 30 issues in one repo, no `feature_branch` (`settings.base_branch` is allowed); 400 for both or neither, a bad ref, more than 30, two repos, a feature branch or no open issue; 409 when a picked issue is a lane of a dispatch not done or cancelled), `POST /api/dispatches/plan` (the same body), `POST
 /api/dispatches/<id>/settings|state|lane|end|seen`. `settings.base_branch` (a branch name or null, same name rule as `feature_branch`, must differ from it) is fixed at start: a settings edit that contains it is 400 `base_branch is fixed at start`. Preview warns `<repo>: base branch <b> does not exist` per lane repo, Start refuses with that message (400, CLI exit non-zero) before creating anything, and a missing `feature_branch` is cut from the head of `base_branch` when set.

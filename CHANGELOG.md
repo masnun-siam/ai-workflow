@@ -5,6 +5,8 @@
 ### Added
 
 - **Cross-repo boards: picks stay within one repo** (#669): in the Small changes All repos view, Ready rows have pick checkboxes and "Run N as a dispatch". The first pick disables other repos' checkboxes with a note until cleared, picks that stop being ready drop on refresh, and the dispatch dialog opens on the picked repo.
+||||||| 0f45c90
+- **Bootstrap runs: API and Inbox items** (epic #645, #654): `GET /api/bootstraps[?repo=]`, `POST /api/bootstraps/<id>/continue|retry|stop`, Inbox items `bootstrap_waiting` (group decide) and `bootstrap_stopped` (group fix), and a `bootstrap` field on session rows. A failed phase session makes no generic `session_failed` item.
 - **Bootstrap runs: chain** (epic #645, #653): starting `/repo-bootstrap` through `POST /api/sessions` creates a bootstrap run under `<data_dir>/bootstraps/` and its first phase session; when a phase ends with `BOOTSTRAP: <phase> done #<issue>` the server starts the next phase as a new headless session (`waiting` after the audit, `done` after docs), any other ending stops the run at that phase, and a second run for a repo is a 409. A restart re-checks running runs.
 - **Cross-repo boards: capture bar repo picker** (#666): `CaptureBar` takes `pickRepo`, which adds a "Capture repo" picker defaulting to the switcher's repo; Feature, Small change and Auto then start on the picked repo. Wired into the pages by #667 and #668.
 - **PR panel: Close PR… and Reopen PR** (#651): the footer shows "Close PR…" (inline confirm, branch kept) on open and draft PRs and "Reopen PR" on closed ones, calling `POST /api/pulls/<o>/<r>/<n>/state`; GitHub's refusal shows in the footer and the panel refetches. Merged PRs show neither.
