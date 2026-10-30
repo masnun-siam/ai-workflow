@@ -1,8 +1,7 @@
-import { useSessions } from '../api/hooks';
+import { useRepos, useSessions } from '../api/hooks';
 import type { SessionStatus } from '../api/types';
 import { parseSkill, sessionInRepo } from '../lib/format';
 import { isLive } from '../lib/vocab';
-import { useRepo } from '../shell/useRepo';
 
 export const SMALL_CHANGE_MARKER = 'Small change (no PRD):';
 
@@ -31,7 +30,7 @@ export type PendingChange = { id: string; text: string; status: SessionStatus };
 /** Live small-change create sessions of this repo, newest first. */
 export function useSmallChangeSessions(repo: string): PendingChange[] {
   const sessions = useSessions().data?.sessions ?? [];
-  const path = useRepo().current?.path;
+  const path = useRepos().data?.repos.find((r) => r.slug.toLowerCase() === repo.toLowerCase())?.path;
   return sessions
     .flatMap((s) => {
       const text = smallChangeText(s.command);

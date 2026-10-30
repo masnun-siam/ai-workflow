@@ -180,6 +180,10 @@ export interface PlanningResponse extends BoardMeta {
   prds: PlanningPrd[];
 }
 
+/** A meta-only entry is a repo whose body failed to build: treat it as empty and show its `error`. */
+export type BoardEntry<T extends BoardMeta> = T | BoardMeta;
+export interface PlanningAllResponse { repos: BoardEntry<PlanningResponse>[]; stale: RepoSlug[] }
+
 export type DeliveryColumn = 'unrefined' | 'ready' | 'in_progress' | 'draft_pr' | 'in_review' | 'grinding' | 'merged';
 export type ReviewDecision = 'approved' | 'changes_requested' | 'review_required' | 'none';
 export interface Grind {
@@ -217,6 +221,7 @@ export interface DeliveryResponse extends BoardMeta {
   auto_grind: boolean;
   lanes: DeliveryLane[];
 }
+export interface DeliveryAllResponse { repos: BoardEntry<DeliveryResponse>[]; stale: RepoSlug[] }
 
 // ---- inbox (NEW) ----------------------------------------------------------------------------------
 export type InboxGroup = 'block' | 'answer' | 'decide' | 'fix' | 'setup' | 'wait';
