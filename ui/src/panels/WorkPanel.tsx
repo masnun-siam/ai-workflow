@@ -2,7 +2,7 @@
 // Opened on an issue it starts on the Issue tab; opened on a PR (Merge, Open PR) on the PR's Overview.
 // A PR with no issue on the board gets only the PR tabs.
 import { useEffect, useRef, useState } from 'react';
-import { useComment, useDelivery, useGrindIssue, useIssue, useMerge, usePull, useSkipCi, useStopGrind } from '../api/hooks';
+import { useComment, useDelivery, useGrindIssue, useIssue, useMerge, usePull, useSetPrState, useSkipCi, useStopGrind } from '../api/hooks';
 import type { PrCheck, PrCommitRow, PrConvItem, PrFileRow } from '../api/types';
 import { actionKind, IssueAction } from '../board/IssueAction';
 import { ResolveConflicts } from '../board/ResolveConflicts';
@@ -54,6 +54,7 @@ export function WorkPanel({ kind, repo, n }: { kind: 'issue' | 'pr'; repo: strin
   const iq = useIssue(repo, issueN ?? 0);
   const q = usePull(repo, prN ?? 0);
   const merge = useMerge();
+  const setPrState = useSetPrState();
   const skip = useSkipCi();
   const stop = useStopGrind();
   const setGrind = useGrindIssue();
@@ -70,6 +71,14 @@ export function WorkPanel({ kind, repo, n }: { kind: 'issue' | 'pr'; repo: strin
     if (wasAsking.current && !asking) mergeBtn.current?.focus();
     wasAsking.current = asking;
   }, [asking]);
+  const [closing, setClosing] = useState(false);
+  const [stateErr, setStateErr] = useState('');
+  const closeBtn = useRef<HTMLButtonElement>(null);
+  const wasClosing = useRef(false);
+  useEffect(() => {
+    if (wasClosing.current && !closing) closeBtn.current?.focus();
+    wasClosing.current = closing;
+  }, [closing]);
   const [text, setText] = useState('');
 
   const d = prN ? q.data : undefined;
@@ -95,6 +104,14 @@ export function WorkPanel({ kind, repo, n }: { kind: 'issue' | 'pr'; repo: strin
     merge.mutate(
       { repo, n: prN },
       { onSuccess: () => { setAsking(false); toast(`Merged PR #${prN}`); if (issueN) void followups.offer(issueN, `PR #${prN} is merged`); }, onError: (e) => setMergeErr(e.message) },
+    );
+  };
+  const doSetState = (state: 'open' | 'closed') => {
+    if (!prN) return;
+    setStateErr('');
+    setPrState.mutate(
+      { repo, n: prN, state },
+      { onSuccess: () => { setClosing(false); toast(state === 'closed' ? `Closed PR #${prN}` : `Reopened PR #${prN}`); }, onError: (e) => { setStateErr(e.message); void q.refetch(); } },
     );
   };
   const doStop = async () => {
@@ -142,7 +159,16 @@ export function WorkPanel({ kind, repo, n }: { kind: 'issue' | 'pr'; repo: strin
     </>
   );
   const footer = d ? (
-    asking ? (
+    closing ? (
+      <div className="stack" style={{ width: '100%' }} role="alertdialog" aria-label="Confirm close" onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setClosing(false); setStateErr(''); } }}>
+        <p><b>Close PR #{prN} without merging? The branch is kept.</b></p>
+        {stateErr ? <Banner tone="bad" icon="alert"><p>{stateErr}</p></Banner> : null}
+        <div className="row">
+          <Button variant="primary" autoFocus disabled={setPrState.isPending} onClick={() => doSetState('closed')}>Close PR</Button>
+          <Button variant="ghost" onClick={() => { setClosing(false); setStateErr(''); }}>Cancel</Button>
+        </div>
+      </div>
+    ) : asking ? (
       <div className="stack" style={{ width: '100%' }} role="alertdialog" aria-label="Confirm merge" onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setAsking(false); } }}>
         <p><b>Merge PR #{prN} into {d.base} with a merge commit?</b></p>
         {warnings.length ? <Banner tone="review" icon="alert"><p>Warning: {warnings.join(', ')}.</p></Banner> : null}
@@ -157,8 +183,11 @@ export function WorkPanel({ kind, repo, n }: { kind: 'issue' | 'pr'; repo: strin
         {d.state === 'open' ? <Button ref={mergeBtn} shortcut="m" variant={warnings.length || conflict ? 'default' : 'primary'} disabled={conflict} onClick={() => setAsking(true)}>Merge…</Button> : null}
         {d.state === 'open' && conflict ? <><span className="muted">Conflicts with {d.base}.</span><ResolveConflicts repo={repo} url={d.url} n={prN!} primary /></> : null}
         {d.state === 'draft' ? <span className="muted">Draft PRs cannot be merged. Mark it ready on GitHub first.</span> : null}
+        {d.state === 'open' || d.state === 'draft' ? <Button ref={closeBtn} disabled={setPrState.isPending} onClick={() => { setStateErr(''); setClosing(true); }}>Close PR…</Button> : null}
+        {d.state === 'closed' ? <Button disabled={setPrState.isPending} onClick={() => doSetState('open')}>Reopen PR</Button> : null}
         <span className="grow" />
         <ExtButton sm href={d.url}>PR on GitHub</ExtButton>
+        {stateErr ? <div style={{ flexBasis: '100%' }}><Banner tone="bad" icon="alert"><p>{stateErr}</p></Banner></div> : null}
       </>
     )
   ) : undefined;
