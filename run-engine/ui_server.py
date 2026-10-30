@@ -301,8 +301,9 @@ def _duplicate(b: dict) -> dict:
     return ui_duplicate.check(repo, b.get("text"), POLLER.snapshot(repo), dispatch.read_checkouts()[repo])
 
 
-def _board_body(path: str, repo: str) -> dict:
-    """The body of GET /api/planning or /api/delivery for one registered repo, from memory."""
+def _board_body(path: str, repo: str, sessions=None, grinds=None) -> dict:
+    """The body of GET /api/planning or /api/delivery for one registered repo, from memory. The all-repos call
+    scans the sessions and grind state once and passes them in."""
     snap = POLLER.snapshot(repo)
     if path == "/api/planning":
         body = ui_planning.build(repo, dispatch.read_checkouts()[repo], snap, _panels(dispatch.read_checkouts()[repo]))
@@ -310,8 +311,8 @@ def _board_body(path: str, repo: str) -> dict:
         body = ui_delivery.build(
             repo,
             snap,
-            ui_sessions.list_sessions(),
-            ui_grind.index(),
+            ui_sessions.list_sessions() if sessions is None else sessions,
+            ui_grind.index() if grinds is None else grinds,
             ui_settings.repo_settings(repo),
             _flags.get(repo, {}),
             solo=ui_gh.solo(repo),
@@ -327,10 +328,11 @@ def _all_boards(path: str, refresh: bool):
     watched = _watched_copy()
     if refresh:  # one thread for all repos, never the request thread
         threading.Thread(target=lambda: [POLLER.poll(r, full=True) for r in watched], daemon=True).start()
+    sessions, grinds = ui_sessions.list_sessions(), ui_grind.index()
     repos = []
     for r in watched:
         try:
-            repos.append(_board_body(path, r))
+            repos.append(_board_body(path, r, sessions, grinds))
         except Exception as e:
             warn(f"{path} {r}: {e}")
             snap = POLLER.snapshot(r)
