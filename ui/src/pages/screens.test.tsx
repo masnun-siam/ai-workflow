@@ -581,7 +581,7 @@ describe('Features list keys', () => {
   };
 
   it('J then Enter on a feature row lands on its page', async () => {
-    load('#/features?repo=o/r');
+    load('#/features?only=o/r');
     await screen.findByText('epic #10');
     await userEvent.setup().keyboard('j{Enter}');
     await waitFor(() => expect(window.location.hash).toContain('#/features/f'));
