@@ -29,8 +29,8 @@ export function useCreateWork(repo: string) {
 
 const LABEL: Record<Route, string> = { auto: 'Auto', feature: 'Feature', small: 'Small change' };
 
-/** One box for both kinds of work. Auto goes to the New page, where jev picks the route and you confirm it. */
-/** `pickRepo` adds a repo picker that defaults to `repo` (All repos view); without it the bar files into `repo`. */
+/** One box for both kinds of work. Auto goes to the New page, where jev picks the route and you confirm it.
+ *  `pickRepo` adds a repo picker that defaults to `repo` (All repos view); without it the bar files into `repo`. */
 export function CaptureBar({ repo, initial = 'auto', pickRepo = false }: { repo: string; initial?: Route; pickRepo?: boolean }) {
   const [text, setText] = useState('');
   const [route, setRoute] = useState<Route>(initial);
