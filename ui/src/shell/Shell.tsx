@@ -13,6 +13,7 @@ import { NAV, NavPills, StatusMenu, useInboxCount } from './Rail';
 import { ShellCtx } from './ShellContext';
 import { ShortcutsDialog, useGlobalShortcuts } from './shortcuts';
 import { PublicBadge } from './PublicBadge';
+import { ScrollJump } from './ScrollJump';
 import { RepoSwitcher } from './RepoSwitcher';
 import { useRepo } from './useRepo';
 import { useAwayDocument } from './useAwayDocument';
@@ -116,6 +117,7 @@ export function Shell() {
           <div className="content" id="main-content" tabIndex={-1} style={{ outline: 'none' }}>
             <Outlet />
           </div>
+          <ScrollJump />
         </main>
         <DetailPanel />
       </div>

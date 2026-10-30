@@ -82,7 +82,7 @@ code,.mono{font-family:var(--mono);font-size:12.5px}
 .app.has-panel{grid-template-columns:minmax(0,1fr) min(480px,40vw)}
 .rail{position:relative;display:flex;flex-direction:column;gap:4px;padding:14px 12px;min-height:0;overflow:auto;background:var(--rail);color:var(--rail-ink);transition:background .2s;
   --ink:#FFFFFF;--muted:var(--rail-ink);--faint:var(--rail-muted);--surface:#15191A;--sunk:var(--rail-on);--bg:#15191A;--line:#2A3032;--line-strong:#3A4246;--primary:#FFFFFF;--primary-ink:#0B0D0E}
-.main{min-width:0;min-height:0;display:flex;flex-direction:column}
+.main{min-width:0;min-height:0;display:flex;flex-direction:column;position:relative}
 .topbar{display:flex;align-items:center;gap:10px;height:64px;flex:none;padding:0 max(28px, env(safe-area-inset-right,0px)) 0 28px}
 .brand{font-weight:700;font-size:20px;letter-spacing:-.04em;text-decoration:none;margin-right:2px}
 .topbar .repo-btn{padding:4px 10px 4px 4px;border-radius:var(--r-ctl);max-width:220px}
@@ -97,6 +97,8 @@ code,.mono{font-family:var(--mono);font-size:12.5px}
 .you-pill i{width:7px;height:7px;border-radius:50%;background:#fff;animation:pulse 1.6s ease-in-out infinite}
 .status-pop{width:min(320px,calc(100vw - 16px));padding:10px;display:flex;flex-direction:column;gap:12px}
 .content{flex:1;min-height:0;overflow:auto;position:relative;--pb:96px;--nav-h:0px;padding:8px 28px var(--pb)}
+.scroll-jump{position:absolute;right:20px;bottom:96px;z-index:5;display:flex;flex-direction:column;gap:6px}
+.scroll-jump .btn{background:var(--surface);border-color:var(--line-strong);box-shadow:var(--shadow)}
 .content-inner{max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
 .panel{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-sheet);margin:8px 8px 8px 0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 
@@ -424,6 +426,7 @@ html[data-away] .away-card{border-color:var(--ink)}
   .topbar{height:52px;padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px))}
   .content{padding-top:4px;padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px));--pb:120px;--nav-h:calc(59px + env(safe-area-inset-bottom,0px))}
   .top-banner{margin:0;border-radius:0;border-width:0 0 1px}
+  .scroll-jump{bottom:calc(59px + env(safe-area-inset-bottom,0px) + 72px)}
   .mob-nav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--surface);border-top:1px solid var(--line);padding:6px max(8px, env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(8px, env(safe-area-inset-left,0px));justify-content:space-around}
   .mob-nav button,.mob-nav a{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:500;color:var(--muted);padding:4px 8px;position:relative;cursor:pointer}
   .mob-nav button.on,.mob-nav a.on{color:var(--ink)}

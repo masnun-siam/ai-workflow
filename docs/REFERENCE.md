@@ -171,6 +171,8 @@ paused grind (the PR stays open). Delivery cards carry `grind_on` and `mergeable
 
 **Links.** A plain click on any GitHub issue or PR link in the app (transcripts, PRD, bodies, comments, dispatch) opens that item's side panel; Cmd/Ctrl/Shift/Alt or middle click, the panels' "on GitHub" buttons (`data-ext`) and other links still open GitHub. `POST /api/start` takes an optional `issue` that links the session to it; a single-issue `refine-issues` links itself, and a feature's create-tasks and refine steps pass the epic.
 
+**Long pages.** A page that scrolls shows jump-to-top and jump-to-bottom buttons at the bottom-right of the page column (`shell/ScrollJump.tsx`); each shows only when it has somewhere to go, and the jump is instant under reduced motion.
+
 **Panels.** An issue and its PR share one side panel (full screen on a phone): an **Issue** tab, and
 once the issue has a PR, **PR overview**, Checks, Conversation, Files and Commits beside it. Opened on
 an issue it starts on Issue; opened from a PR action (Merge, Open PR) on PR overview; a PR with no

@@ -11,6 +11,7 @@ const P = {
   check: 'M20 6 9 17l-5-5',
   right: 'm9 18 6-6-6-6',
   down: 'm6 9 6 6 6-6',
+  up: 'm18 15-6-6-6 6',
   left: 'm15 18-6-6 6-6',
   play: 'M7 4v16l13-8z',
   stop: 'M6 6h12v12H6z',
