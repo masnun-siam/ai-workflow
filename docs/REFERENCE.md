@@ -464,6 +464,7 @@ Nothing stateful lives in this repo. `aiw paths` resolves it under `$CLAUDE_PLUG
 | `restart.log`, `restart.exit` | output and exit code of the last Settings → Server **Rebuild and restart** (`make restart`, a detached child; `GET/POST /api/restart`) |
 | `afk.json` | the Away mode window and its log |
 | `dispatches/` | one `<id>.json` per dispatch (settings, lanes, events) and its `.lock` |
+| `bootstraps/` | one `<id>.json` per bootstrap run (repo, issue, branch, six phases with their session ids, state, error) and its `.lock` |
 | `ui.json` | push notifications and `public_url` (mode 0600) |
 | `config.json` | peer-review overrides from Settings, laid over `run-engine/config.json` |
 | `jev_cache.json` | cached jev answers for Inbox urgency, readiness and duplicates: at most 2000 entries, ignored after 7 days, written by the server only (never by `aiw jev`); safe to delete |
