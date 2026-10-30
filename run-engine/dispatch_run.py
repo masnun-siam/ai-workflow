@@ -43,6 +43,7 @@ DEFAULTS = {
     "base_branch": None,  # where the dispatch's work lands; empty = today's behaviour. Fixed at start
     "model": None,
     "effort": None,
+    "account": None,  # a saved account label; None = the Settings default. Headless lanes only
 }
 _BRANCH = r"[A-Za-z0-9._/-]{1,100}"
 GRIND_MODES = ("off", "simple", "full")
@@ -497,6 +498,9 @@ def check_settings(s: dict) -> dict:
         raise ValueError("model is not a model name")
     if s.get("effort") not in (None, "low", "medium", "high", "xhigh", "max"):
         raise ValueError("effort must be low, medium, high, xhigh or max")
+    acc = s.get("account")
+    if acc is not None and not (isinstance(acc, str) and 1 <= len(acc) <= 40):
+        raise ValueError("account must be a saved account label")
     fb = s.get("feature_branch")
     if fb is not None and not re.fullmatch(_BRANCH, fb):
         raise ValueError("feature_branch is not a valid branch name")

@@ -18,6 +18,7 @@ import ui_dispatch  # noqa: E402
 import ui_gh  # noqa: E402
 import ui_notify  # noqa: E402
 import ui_sessions  # noqa: E402
+import ui_settings  # noqa: E402
 
 pushed = []
 ui_notify.notify = lambda event, rec: pushed.append((event, rec))
@@ -232,6 +233,22 @@ assert p["lanes"][0]["key"] == "o/r#5" and "events" in p and "handle" not in p["
 assert p["issues"] is None
 il = dr.create(None, "headless", {"grind": "off"}, [{"repo": "o/r", "n": 5, "refined": True}], issues=["o/r#5"])
 assert ui_dispatch.public(il)["issues"] == ["o/r#5"]
+_load = ui_settings.load
+ui_settings.load = lambda: {"commands": [{"label": "work", "cmd": "claude"}]}
+try:
+    assert ui_dispatch._settings({"settings": {"account": "work"}}, "epic")["account"] == "work"
+    for call in (
+        lambda: ui_dispatch._settings({"settings": {"account": "nope"}}, "epic"),
+        lambda: ui_dispatch.set_settings(d["id"], {"account": "nope"}),
+    ):
+        try:
+            call()
+            raise AssertionError("unsaved account accepted")
+        except ValueError as e:
+            assert "saved in Settings" in str(e)
+    assert ui_dispatch.set_settings(d["id"], {"account": "work"})["settings"]["account"] == "work"
+finally:
+    ui_settings.load = _load
 print("  ok  usage, public")
 
 # --- the Inbox shows a dispatch's issue once: as its lane

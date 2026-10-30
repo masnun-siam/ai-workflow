@@ -575,7 +575,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif rest == ["plan"]:
             self._dispatch(ui_dispatch.plan)
         elif op == "settings":
-            self._dispatch(lambda b: ui_dispatch.public(dispatch_run.set_settings(did, **b)))
+            self._dispatch(lambda b: ui_dispatch.set_settings(did, b))
         elif op == "state":
             self._dispatch(lambda b: ui_dispatch.public(dispatch_run.set_state(did, b.get("state"))))
         elif op == "lane":

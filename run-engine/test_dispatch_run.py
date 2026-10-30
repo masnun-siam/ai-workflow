@@ -536,6 +536,16 @@ with open(dr._path(d3["id"]), "w") as f:  # a record saved before ci existed
     json.dump(old, f)
 assert dr.load(d3["id"])["settings"]["ci"] == "wait"
 dr.set_settings(d3["id"], max=3)
+dr.set_settings(d3["id"], account="work")
+assert dr.load(d3["id"])["settings"]["account"] == "work"
+for ok in (None, "work"):
+    assert dr.check_settings({**dr.DEFAULTS, "account": ok})["account"] == ok
+for bad in ("", 5, "x" * 41):
+    try:
+        dr.check_settings({**dr.DEFAULTS, "account": bad})
+        raise AssertionError(f"accepted account {bad!r}")
+    except ValueError:
+        pass
 dp = dr.set_state(d3["id"], "paused")
 assert dr.startable(dp, {}) == []
 assert dr.list_all()[0]["id"] == d5["id"] and d3["id"] in [x["id"] for x in dr.list_all()]
@@ -615,6 +625,26 @@ class FakeSessions:
 hl = dispatch_runners.Headless(runner=object(), sessions=FakeSessions())
 assert hl.status({"session": "s1"}) == ("blocked", None) and hl.status({"session": "s2"})[0] == "gone"
 assert hl.status({"session": "nope"})[0] == "gone"
+
+
+class KwRunner:
+    def start(self, *a, **kw):
+        self.kw = kw
+        return {"id": "s9"}
+
+
+class FakeSettings:
+    @staticmethod
+    def load():
+        return {"commands": [{"label": "work", "cmd": "cc-profile work"}]}
+
+
+for acc, want in (("work", "cc-profile work"), ("gone", None), (None, None)):
+    kr = KwRunner()
+    dispatch_runners.Headless(runner=kr, sessions=FakeSessions(), settings=FakeSettings).start(
+        {"repo": "o/r"}, "p", {"settings": {"account": acc}}
+    )
+    assert kr.kw["claude_cmd"] == want, (acc, kr.kw)
 print("  ok  runners")
 
 # base_branch: lane_base order, lane prompts, followups tail, Open PR target

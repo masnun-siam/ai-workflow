@@ -525,6 +525,8 @@ export interface DispatchSettings {
   base_branch?: string | null;
   model: string | null;
   effort: Effort | null;
+  /** A saved account label; absent/null: the Settings default. Headless lanes only. */
+  account?: string | null;
 }
 /** What a dispatch runs: an epic's children, or a picked list of issues ("owner/repo#n"). */
 export type DispatchTarget = { epic: string } | { issues: string[] };
