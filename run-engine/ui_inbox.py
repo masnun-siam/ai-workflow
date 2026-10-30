@@ -6,6 +6,7 @@ Inputs (plain data, no I/O):
                   peer-review panel (prd_status: the artifact's PRD status, None when it is not a PRD)
   grind_index     ui_grind.index() -> {"pr": {(owner, repo, pr): {state, round, reason?}}}
   flags           {repo: {issue: {uncommitted, unpushed}}}: merged issues whose cleanup was held back
+  bootstraps      [run record]: ui_bootstrap.list_all(); a `waiting` or `stopped` run needs the user
   shares          [{id, repo, path, title, comments, approvals, at}]: shares with unseen reviewer activity (the server builds it from the store)
   repos           [{slug, path}]: the registry
   snapshots       {repo: poller snapshot} for the watched repos
@@ -26,9 +27,9 @@ polls, `at` an ISO time or None; `rank` adds `urgency` (1-5, or None when unscor
   answer  question {session_id, command, link, round_id, questions, process_alive}
   decide  review_cap {prd_path, panel, round, max_rounds, note}, review_approved {prd_path, panel},
           prd_comment {share, prd_path, prd_title, summary, comments, approvals},
-          pr_ready {pr, issue, title, url, reviewer, checks}
+          pr_ready {pr, issue, title, url, reviewer, checks}, bootstrap_waiting {run_id, repo, issue, next_phase}
   fix     grind_paused {pr, issue, round, reason}, pr_conflict {pr, issue, title, url}, session_failed {session_id, command, link, error},
-          needs_cleanup {issue, uncommitted, unpushed}
+          needs_cleanup {issue, uncommitted, unpushed}, bootstrap_stopped {run_id, repo, issue, phase, session_id, error}
   setup   repo_unpublished {slug, path}
   wait    limited {session_id, command, account, resets_at, auto_resume}, queued {session_id, command, reason}
 """
@@ -140,6 +141,7 @@ def build(
     settings=None,
     solo=None,
     shares=None,
+    bootstraps=None,
 ) -> dict:
     items = []
 
@@ -177,7 +179,7 @@ def build(
                 questions=pq.get("questions") or [],
                 process_alive=sid in set(alive),
             )
-        elif status == "failed" and r.get("panel_role") != "lens":
+        elif status == "failed" and r.get("panel_role") != "lens" and not r.get("bootstrap"):  # a run's item carries it
             if (r.get("started_at") or "") >= newest.get((where, r.get("command")), ""):
                 add(
                     f"failed:{sid}",
@@ -286,6 +288,34 @@ def build(
                 issue=n,
                 uncommitted=f.get("uncommitted") or [],
                 unpushed=f.get("unpushed") or [],
+            )
+
+    for run in bootstraps or []:
+        where = names.get(str(run["repo"]).lower(), run["repo"])
+        if run["state"] == "waiting":
+            add(
+                f"bootstrap:{run['id']}:audit:waiting",
+                "decide",
+                "bootstrap_waiting",
+                run["updated_at"],
+                where,
+                run_id=run["id"],
+                issue=run["issue"],
+                next_phase="decide",
+            )
+        elif run["state"] == "stopped":
+            ph = next((p for p in run["phases"] if p["state"] == "failed"), run["phases"][0])
+            add(
+                f"bootstrap:{run['id']}:{ph['name']}:stopped",
+                "fix",
+                "bootstrap_stopped",
+                run["updated_at"],
+                where,
+                run_id=run["id"],
+                issue=run["issue"],
+                phase=ph["name"],
+                session_id=ph["session_id"],
+                error=run["error"],
             )
 
     for r in repos or []:

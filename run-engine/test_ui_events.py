@@ -193,6 +193,7 @@ ALLOWED = {
     "limit_type",
     "auto_resume",
     "peer_review",
+    "bootstrap",
 }
 
 

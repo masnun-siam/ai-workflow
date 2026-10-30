@@ -10,6 +10,7 @@ import json
 import os
 import subprocess
 import sys
+import http.client
 import tempfile
 import threading
 from unittest import mock
@@ -21,6 +22,7 @@ import dispatch  # noqa: E402
 import ui_bootstrap as B  # noqa: E402
 import ui_repos  # noqa: E402
 import ui_runner  # noqa: E402
+import ui_server  # noqa: E402
 import ui_sessions  # noqa: E402
 
 REPO = "acme/shop"
@@ -39,6 +41,26 @@ def fake_start(cmd, cwd, link=None, **kw):
     ui_sessions.update(sid, status="running", run_model=kw.get("run_model"), run_effort=kw.get("effort"))
     starts.append((sid, cmd, link, kw))
     return ui_sessions.load(sid)
+
+
+srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, ())
+threading.Thread(target=srv.serve_forever, daemon=True).start()
+
+
+def call(method, path, body=None):
+    c = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=5)
+    c.request(method, path, json.dumps(body) if body is not None else None, {"Content-Type": "application/json"})
+    r = c.getresponse()
+    out = json.loads(r.read() or b"{}")
+    c.close()
+    return r.status, out
+
+
+def set_state(run, state, **kw):
+    r = B.load(run["id"])
+    r["state"] = state
+    r.update(kw)
+    B.save(r)
 
 
 def finish(sid, text="", status="done", **extra):
@@ -236,5 +258,142 @@ with mock.patch.object(ui_runner, "start", fake_start):
     s, _ = ui_repos.start_session({"repo": REPO, "command": "repo-bootstrap", "args": "decide #5"})
     assert s == 201 and B.list_all()[0]["issue"] == 5
     print("  ok  start endpoint: run created and linked, 409 body, 400s, discard on failure")
+
+    # ---- continue / retry / stop
+    for r in B.list_all():
+        end_run(r)
+    run = new_run()
+    finish(sid_of(run, "audit"), line("audit"))
+    B.tick_one(run["id"])
+    ui_sessions.update(sid_of(run, "audit"), claude_cmd="claude-work", run_model="opus", run_effort="high")
+    n = len(starts)
+    try:
+        B.retry(run["id"])
+        raise AssertionError("retry from waiting")
+    except B.Conflict as e:
+        assert "waiting" in str(e)
+    fail_start.append(1)
+    try:
+        B.continue_run(run["id"])
+        raise AssertionError("failed start")
+    except ui_runner.RunnerError:
+        pass
+    fail_start.clear()
+    r = B.load(run["id"])
+    assert r["state"] == "waiting" and states(run)[1] == "pending" and len(starts) == n, "failed start: unchanged"
+    r = B.continue_run(run["id"])
+    assert r["state"] == "running" and r["phases"][1]["state"] == "running" and r["phases"][1]["session_id"]
+    _, cmd, _, kw = starts[-1]
+    assert cmd == "/repo-bootstrap decide 7" and kw["claude_cmd"] == "claude-work" and kw["effort"] == "high"
+    assert ui_sessions.load(r["phases"][1]["session_id"])["bootstrap"] == run["id"]
+    try:
+        B.continue_run(run["id"])
+        raise AssertionError("continue from running")
+    except B.Conflict as e:
+        assert "running" in str(e)
+    for bad in ("0" * 12, "nope"):
+        for fn in (B.continue_run, B.retry, B.stop):
+            try:
+                fn(bad)
+                raise AssertionError(bad)
+            except ValueError as e:
+                assert "bootstrap" in str(e)
+
+    # retry from stopped: same phase, error cleared; a failing start leaves it stopped
+    finish(sid_of(run, "decide"), "", "failed", error="crashed")
+    B.tick_one(run["id"])
+    r = B.load(run["id"])
+    assert r["state"] == "stopped" and r["error"] == "crashed" and states(run)[1] == "failed"
+    old = sid_of(run, "decide")
+    fail_start.append(1)
+    try:
+        B.retry(run["id"])
+        raise AssertionError("failed start")
+    except ui_runner.RunnerError:
+        pass
+    fail_start.clear()
+    r = B.load(run["id"])
+    assert r["state"] == "stopped" and r["error"] == "crashed" and states(run)[1] == "failed"
+    n = len(starts)
+    r = B.retry(run["id"])
+    assert r["state"] == "running" and r["error"] is None and states(run)[1] == "running" and len(starts) == n + 1
+    assert starts[-1][1] == "/repo-bootstrap decide 7" and sid_of(run, "decide") != old
+    try:
+        B.retry(run["id"])
+        raise AssertionError("retry from running")
+    except B.Conflict:
+        pass
+
+    # stop from running: ended first, live session stopped, tick leaves it ended
+    stopped = []
+    with mock.patch.object(ui_runner, "stop", lambda sid: stopped.append((sid, B.load(run["id"])["state"]))):
+        live = sid_of(run, "decide")
+        assert B.stop(run["id"])["state"] == "ended"
+        assert stopped == [(live, "ended")], "stopped after the run was ended"
+    finish(live, "", "stopped")
+    B.tick_one(run["id"])
+    assert B.load(run["id"])["state"] == "ended"
+    for fn in (B.stop, B.retry, B.continue_run):
+        try:
+            fn(run["id"])
+            raise AssertionError("from ended")
+        except B.Conflict as e:
+            assert "ended" in str(e)
+    # stop from waiting and stopped: nothing started, nothing stopped
+    for state in ("waiting", "stopped"):
+        run = new_run()
+        set_state(run, state)
+        n = len(starts)
+        with mock.patch.object(ui_runner, "stop", lambda sid: stopped.append(sid)):
+            assert B.stop(run["id"])["state"] == "ended" and len(starts) == n
+        assert stopped[-1] != run["phases"][0]["session_id"]
+    run = new_run()
+    set_state(run, "done")
+    try:
+        B.stop(run["id"])
+        raise AssertionError("from done")
+    except B.Conflict as e:
+        assert "done" in str(e)
+    end_run(run)
+    print("  ok  continue / retry / stop")
+
+    # ---- HTTP
+    for r in B.list_all():
+        end_run(r)
+    run = new_run()
+    finish(sid_of(run, "audit"), line("audit"))
+    B.tick_one(run["id"])
+    other = B.create("acme/other", "audit", None)
+    s, b = call("GET", "/api/bootstraps")
+    assert (
+        s == 200 and b["runs"][0]["created_at"] >= b["runs"][-1]["created_at"] and len(b["runs"]) == len(B.list_all())
+    )
+    s, b = call("GET", "/api/bootstraps?repo=ACME/shop")
+    assert s == 200 and {r["repo"] for r in b["runs"]} == {REPO} and any(r["id"] == run["id"] for r in b["runs"])
+    s, b = call("GET", "/api/bootstraps?repo=nobody/nothing")
+    assert s == 400, (s, b)
+    s, b = call("POST", f"/api/bootstraps/{run['id']}/retry", {})
+    assert s == 409 and "waiting" in b["error"] and b["id"] == run["id"], (s, b)
+    s, b = call("POST", "/api/bootstraps/" + "0" * 12 + "/stop", {})
+    assert s == 404, (s, b)
+    s, b = call("POST", "/api/bootstraps/zz/continue", {})
+    assert s == 404, (s, b)
+    fail_start.append(1)
+    s, b = call("POST", f"/api/bootstraps/{run['id']}/continue", {})
+    fail_start.clear()
+    assert s == 502 and B.load(run["id"])["state"] == "waiting", (s, b)
+    s, b = call("POST", f"/api/bootstraps/{run['id']}/continue", {})
+    assert s == 200 and b["state"] == "running" and b["phases"][1]["state"] == "running", (s, b)
+    s, b = call("POST", f"/api/bootstraps/{run['id']}/stop", {})
+    assert s == 200 and b["state"] == "ended"
+    s, b = call("POST", f"/api/bootstraps/{run['id']}/stop", {})
+    assert s == 409 and "ended" in b["error"]
+    # the session API carries the run, or null
+    mine = ui_server._public(ui_sessions.load(sid_of(run, "audit")))
+    assert mine["bootstrap"]["id"] == run["id"]
+    assert ui_server._public({"id": "x"})["bootstrap"] is None
+    assert ui_server._public({"id": "x", "bootstrap": "0" * 12})["bootstrap"] is None, "run file gone"
+    end_run(other)
+    print("  ok  HTTP: list, filter, 400/404/409/502, session bootstrap field")
 
 print("all ok")

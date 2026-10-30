@@ -204,6 +204,62 @@ def start_phase(run: dict, phase: str) -> dict:
     return rec
 
 
+def _open(rid: str, *allowed: str) -> dict:
+    """The run `rid` with its lock held by the caller; ValueError "no bootstrap" for an unknown id, Conflict
+    when its state is not one of `allowed`."""
+    try:
+        run = load(rid)
+    except ValueError:
+        run = None
+    if run is None:
+        raise ValueError(f"no bootstrap {rid}")
+    if run["state"] not in allowed:
+        raise Conflict(f"bootstrap {rid} is {run['state']}, not {' or '.join(allowed)}", rid)
+    return run
+
+
+def _resume(run: dict, phase: dict) -> dict:
+    """Start `phase`'s session and mark the run `running`; on a failed start the run stays as it was."""
+    before = (phase["state"], run["state"], run["error"])
+    phase["state"], run["state"], run["error"] = "running", "running", None
+    try:
+        start_phase(run, phase["name"])
+    except BaseException:
+        phase["state"], run["state"], run["error"] = before
+        raise
+    return load(run["id"])
+
+
+def continue_run(rid: str) -> dict:
+    """`waiting` -> `running`: start the decide phase."""
+    with locked(rid):
+        run = _open(rid, "waiting")
+        return _resume(run, _phase(run, "decide"))
+
+
+def retry(rid: str) -> dict:
+    """`stopped` -> `running`: a new session for the phase that failed."""
+    with locked(rid):
+        run = _open(rid, "stopped")
+        return _resume(run, _phase(run, phase_of(run)))
+
+
+def stop(rid: str) -> dict:
+    """`waiting`, `stopped` or `running` -> `ended`. A running run's live phase session is stopped after the
+    lock is released; the run is already `ended`, so the tick never turns that session into `stopped`."""
+    with locked(rid):
+        run = _open(rid, "running", "waiting", "stopped")
+        live = _phase(run, phase_of(run))["session_id"] if run["state"] == "running" else None
+        run["state"] = "ended"
+        save(run)
+    if live:
+        try:
+            ui_runner.stop(live)
+        except FileNotFoundError:
+            pass
+    return run
+
+
 def parse_line(text: str, expect: str, issue=None):
     """The issue number of a last line `BOOTSTRAP: <expect> done #<n>` (n equal to `issue` when that is set), else None."""
     lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
