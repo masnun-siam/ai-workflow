@@ -122,7 +122,11 @@ dispatch with time and cost, a **Merge #n** button for each PR ready to merge an
 A feature whose dispatch needs you turns orange. Shipped features follow as chips. A PRD whose header
 says `**Status:** Done` counts as Shipped.
 
-**Small changes** (`#/changes`, its own top-bar link) holds the open issues of the repo that belong to
+**Small changes** (`#/changes`, its own top-bar link) opens on **All repos**: the grid totals the open
+small changes of every watched repo, and Ready to run, Needs refining first and the issue list are grouped
+by repo (each with its own repo's Refine lock and pick bar; a loading or stale repo shows a note, never as
+empty; Ready to run has no picks here). The repo filter in the page head (`?only=<owner/repo>`, independent of
+the switcher) narrows it to the single-repo page described next, which holds the open issues of one repo that belong to
 no feature (no epic, or an epic with no PRD here): **Where they stand**, a priority by state grid
 (Needs refining, Ready, In flight) whose cells filter the list; **Ready to run**, the refined,
 unblocked issues no dispatch owns, to pick and **Run N as a dispatch**; **Needs refining first**, cards

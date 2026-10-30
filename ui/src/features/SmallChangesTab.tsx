@@ -62,7 +62,7 @@ export function SmallChangesTab({ repo, issues, pending }: { repo: string; issue
       ) : pending.length ? null : (
         <p className="muted">Nothing here. Describe a bug or small change above to start one.</p>
       )}
-      <NewDispatchDialog open={dispatching} onOpenChange={setDispatching} issues={toRun} />
+      <NewDispatchDialog open={dispatching} onOpenChange={setDispatching} issues={toRun} repo={repo} />
     </div>
   );
 }
