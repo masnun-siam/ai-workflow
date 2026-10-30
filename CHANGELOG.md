@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Bootstrap runs: Inbox cards and phase strip** (epic #645, #655): a Decide card for a waiting run (Continue bootstrap, Stop) and a Fix card for a stopped one (Retry phase, Stop, Open session), each with the shared `PhaseStrip` (six phases, state as text, current step marked, links to each phase's session).
 - **Bootstrap runs: API and Inbox items** (epic #645, #654): `GET /api/bootstraps[?repo=]`, `POST /api/bootstraps/<id>/continue|retry|stop`, Inbox items `bootstrap_waiting` (group decide) and `bootstrap_stopped` (group fix), and a `bootstrap` field on session rows. A failed phase session makes no generic `session_failed` item.
 - **Bootstrap runs: chain** (epic #645, #653): starting `/repo-bootstrap` through `POST /api/sessions` creates a bootstrap run under `<data_dir>/bootstraps/` and its first phase session; when a phase ends with `BOOTSTRAP: <phase> done #<issue>` the server starts the next phase as a new headless session (`waiting` after the audit, `done` after docs), any other ending stops the run at that phase, and a second run for a repo is a 409. A restart re-checks running runs.
 - **Cross-repo boards: capture bar repo picker** (#666): `CaptureBar` takes `pickRepo`, which adds a "Capture repo" picker defaulting to the switcher's repo; Feature, Small change and Auto then start on the picked repo. Wired into the pages by #667 and #668.
