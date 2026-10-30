@@ -17,6 +17,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ["CLAUDE_PLUGIN_DATA"] = tempfile.mkdtemp()
+os.environ["AIW_NO_MAC_BANNER"] = "1"
 
 import dispatch  # noqa: E402
 import ui_bootstrap as B  # noqa: E402

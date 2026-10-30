@@ -389,7 +389,8 @@ defaults; unknown keys and non-boolean values are ignored and dropped on the nex
 
 The file must be mode 0600 (`chmod 600 <data_dir>/ui.json`) because it can hold a token;
 a looser mode is ignored with a warning. `AIW_NTFY_SERVER`, `AIW_NTFY_TOPIC` and
-`AIW_NTFY_TOKEN` override the file. `public_url` is the base for push click-through links.
+`AIW_NTFY_TOKEN` override the file. `AIW_NO_MAC_BANNER` (any non-empty value) turns the Mac
+banner off (`run_tests.sh` sets it; the Settings "Send test" then reports the off-switch). `public_url` is the base for push click-through links.
 
 For clickable macOS banners run `brew install terminal-notifier` on the host and restart `aiw ui`; without it banners still show (through AppleScript) but cannot open a link.
 
