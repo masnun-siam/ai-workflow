@@ -70,6 +70,7 @@ export interface Session {
   no_repo: boolean;
   vault_folder: string | null;
   peer_review: PanelStatus | null;
+  bootstrap?: BootstrapRun | null;
   repo_path: string | null;
   resume_command: string | null;
   /** NEW: GET /api/sessions rows may carry the slug and what the session is for. */
