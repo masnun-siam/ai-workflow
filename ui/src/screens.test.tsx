@@ -640,13 +640,46 @@ describe('Small changes page', () => {
       expect(list.queryByText('Task 3')).toBeNull();
     });
 
-    it('Ready rows have no checkbox or Run; the capture bar picks a repo', async () => {
+    it('Ready rows have checkboxes and Run; the capture bar picks a repo', async () => {
       mock({ all: two, extra: REPOS });
       await open('#/changes?repo=o/r');
       await screen.findByRole('button', { name: 'High, ready: 3' });
-      expect(screen.queryByRole('checkbox', { name: 'Run #1' })).toBeNull();
-      expect(screen.queryByRole('button', { name: /as a dispatch/ })).toBeNull();
+      expect(screen.getByRole('checkbox', { name: 'Run #1' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Pick issues to run' })).toBeTruthy();
       expect(screen.getByRole('button', { name: /^Capture repo/ })).toBeTruthy();
+    });
+
+    it('a pick in o/r disables o/q checkboxes with the note; unchecking frees them', async () => {
+      mock({ all: two, extra: REPOS });
+      const user = await open('#/changes?repo=o/r');
+      await user.click(await screen.findByRole('checkbox', { name: 'Run #1' }));
+      expect((screen.getByRole('checkbox', { name: 'Run #4' }) as HTMLInputElement).disabled).toBe(true);
+      expect((screen.getByRole('checkbox', { name: 'Run #2' }) as HTMLInputElement).disabled).toBe(false);
+      expect(screen.getByText('Picks are from R. Clear them to pick from another repo.')).toBeTruthy();
+      await user.click(screen.getByRole('checkbox', { name: 'Run #1' }));
+      expect((screen.getByRole('checkbox', { name: 'Run #4' }) as HTMLInputElement).disabled).toBe(false);
+      expect(screen.queryByText(/Picks are from/)).toBeNull();
+    });
+
+    it('a picked issue that stops being ready is dropped and frees the other repos', async () => {
+      let gone = false;
+      const cur = () => (gone ? all(board('o/r', [high(2), card(3, 'unrefined')]), board('o/q', [high(4), card(5, 'unrefined')])) : two);
+      mock({ all: two, extra: { ...REPOS, '/api/planning': () => json({ repos: cur().plan, stale: [] }), '/api/delivery': () => json({ repos: cur().del, stale: [] }) } });
+      const user = await open('#/changes?repo=o/r');
+      await user.click(await screen.findByRole('checkbox', { name: 'Run #1' }));
+      expect((screen.getByRole('checkbox', { name: 'Run #4' }) as HTMLInputElement).disabled).toBe(true);
+      gone = true;
+      await waitFor(() => expect((screen.getByRole('checkbox', { name: 'Run #4' }) as HTMLInputElement).disabled).toBe(false), { timeout: 20000 }); // the next 15s board poll
+    }, 30000);
+
+    it('Run plans the picked repo even when the switcher is on another', async () => {
+      const plan = { epic: null, issues: ['o/r#1'], title: 'Small changes', settings: {}, runner: 'headless', lanes: [], waves: [], warnings: [] };
+      mock({ all: two, extra: { ...REPOS, '/api/dispatches/plan': () => json(plan) } });
+      const user = await open('#/changes?repo=o/q');
+      await user.click(await screen.findByRole('checkbox', { name: 'Run #1' }));
+      await user.click(screen.getByRole('button', { name: 'Run 1 as a dispatch' }));
+      await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Preview' }));
+      await waitFor(() => expect(posts.find((p) => p.url === '/api/dispatches/plan')?.body).toMatchObject({ issues: ['o/r#1'] }));
     });
 
     it('a small-change session in o/r locks Refine on o/r cards only; o/q Refine starts on o/q', async () => {
