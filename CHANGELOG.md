@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Cross-repo boards: capture bar repo picker** (#666): `CaptureBar` takes `pickRepo`, which adds a "Capture repo" picker defaulting to the switcher's repo; Feature, Small change and Auto then start on the picked repo. Wired into the pages by #667 and #668.
 - **PR panel: Close PR… and Reopen PR** (#651): the footer shows "Close PR…" (inline confirm, branch kept) on open and draft PRs and "Reopen PR" on closed ones, calling `POST /api/pulls/<o>/<r>/<n>/state`; GitHub's refusal shows in the footer and the panel refetches. Merged PRs show neither.
 - **Question form: "Select all" and "None of these"** (#648): every multi-select question (Inbox, session page, Away Change dialog) shows a "Select all" link and a "None of these" checkbox that sends the `none` answer kind.
 - **Answer endpoint accepts "none"** (#647): `{"none": true}` answers a multi-select question even with free text off (400 on single-select), resumes as `{"other":"None of these"}`, and works in `POST /api/afk/change`.
