@@ -5,6 +5,7 @@
 ### Added
 
 - **Bootstrap runs: chain** (epic #645, #653): starting `/repo-bootstrap` through `POST /api/sessions` creates a bootstrap run under `<data_dir>/bootstraps/` and its first phase session; when a phase ends with `BOOTSTRAP: <phase> done #<issue>` the server starts the next phase as a new headless session (`waiting` after the audit, `done` after docs), any other ending stops the run at that phase, and a second run for a repo is a 409. A restart re-checks running runs.
+- **Cross-repo boards: capture bar repo picker** (#666): `CaptureBar` takes `pickRepo`, which adds a "Capture repo" picker defaulting to the switcher's repo; Feature, Small change and Auto then start on the picked repo. Wired into the pages by #667 and #668.
 - **PR panel: Close PR… and Reopen PR** (#651): the footer shows "Close PR…" (inline confirm, branch kept) on open and draft PRs and "Reopen PR" on closed ones, calling `POST /api/pulls/<o>/<r>/<n>/state`; GitHub's refusal shows in the footer and the panel refetches. Merged PRs show neither.
 - **Question form: "Select all" and "None of these"** (#648): every multi-select question (Inbox, session page, Away Change dialog) shows a "Select all" link and a "None of these" checkbox that sends the `none` answer kind.
 - **Answer endpoint accepts "none"** (#647): `{"none": true}` answers a multi-select question even with free text off (400 on single-select), resumes as `{"other":"None of these"}`, and works in `POST /api/afk/change`.
@@ -23,6 +24,7 @@
 
 ### Changed
 
+- **`/repo-bootstrap` is one PR, one phase per run** (#652): every phase commits to `bootstrap/<issue>`, one draft PR opened by constitution and ready after docs with a per-phase checklist; each run does one phase and ends with the next command and a `BOOTSTRAP: <phase> done #<issue>` last line. The per-phase-PR mode is removed.
 - **Strip board look for `aiw ui`**: the UI is restyled as an air-traffic strip board. Items sit as strips in sunken bays on a grey-green console, a coloured left edge shows the stage, items that need you are amber and pushed out of line, and the header is a dark plate. Archivo (variable width) replaces Geist and Geist Mono for UI text; code stays monospace.
 
 - **Dispatch page: now, next, done**: the wave graph and list views are gone. The page shows one progress tick per issue with totals, then **Building now** (a card per running lane with its four steps), **Up next** (ready first, each with what it waits for) and **Done** (PR, time, cost), with the activity feed or the picked issue's panel beside them. Issue titles drop the epic-name prefix.
@@ -60,6 +62,7 @@
 
 ### Changed
 
+- **`/repo-bootstrap` is one PR, one phase per run** (#652): every phase commits to `bootstrap/<issue>`, one draft PR opened by constitution and ready after docs with a per-phase checklist; each run does one phase and ends with the next command and a `BOOTSTRAP: <phase> done #<issue>` last line. The per-phase-PR mode is removed.
 - A dispatch with `base_branch` set now sends lanes to it: with no feature branch, each lane branches from it and opens its PR into it (conflict-fix and followups prompts name it). **Open PR** opens the feature branch into `base_branch` instead of the default branch. The followups prompt now ends "Close #n if it is still open." whenever a base is given (#507).
 - Away mode now answers `/create-prd`, `/create-tasks`, `/refine-issues` and `/dump` rounds when every question has a recommended option (the #188 exclusion applies only outside a window). Answer entries in `afk.json` gain `id`, `by`, `questions`, `answerer`, `cost` and `changed` (#460).
 - A copy of a plugin skill in a repo's `.claude/skills/<name>/` now takes over everywhere: UI sessions, dispatch lanes and herdr tabs, peer-review panels, pr-grind re-entries and skill-to-skill hand-offs. Stored commands now read `/<name>` (repo copy) or `/ai-workflow:<name>` (plugin). If you keep a stale copy there, delete or update it. `docs/REFERENCE.md` "Repo copies of skills" lists what a copy must keep so the UI can still drive it (#440).
@@ -98,6 +101,7 @@
 
 ### Changed
 
+- **`/repo-bootstrap` is one PR, one phase per run** (#652): every phase commits to `bootstrap/<issue>`, one draft PR opened by constitution and ready after docs with a per-phase checklist; each run does one phase and ends with the next command and a `BOOTSTRAP: <phase> done #<issue>` last line. The per-phase-PR mode is removed.
 - The **Other issues** row of Features and its `#/issues` page are gone: those issues are the Small changes tab, and `#/issues` redirects to `#/features?tab=changes`.
 - `ui_notify.notify` routes each event by the notification matrix: the browser feed, ntfy and This Mac each get it when their cell is on, independently, with one shared title, body and link. A dispatch no longer shows its own macOS banner; it reaches the Mac through the `dispatch` cell.
 - The session transcript renders assistant and result text as markdown (headings, lists, code, links, bold, italics), and the markdown renderer now handles pipe tables.
@@ -238,6 +242,7 @@
 
 ### Changed
 
+- **`/repo-bootstrap` is one PR, one phase per run** (#652): every phase commits to `bootstrap/<issue>`, one draft PR opened by constitution and ready after docs with a per-phase checklist; each run does one phase and ends with the next command and a `BOOTSTRAP: <phase> done #<issue>` last line. The per-phase-PR mode is removed.
 - New issues and epics start in Backlog; `/refine-issues` moves an unblocked refined issue to
   Ready. `/implement-issue` stops on an unrefined issue, merges the latest base before marking
   ready and always logs a run over 50 minutes. Findings are reproduced before they are filed.
@@ -263,6 +268,7 @@
 
 ### Changed
 
+- **`/repo-bootstrap` is one PR, one phase per run** (#652): every phase commits to `bootstrap/<issue>`, one draft PR opened by constitution and ready after docs with a per-phase checklist; each run does one phase and ends with the next command and a `BOOTSTRAP: <phase> done #<issue>` last line. The per-phase-PR mode is removed.
 - Boards read GitHub with one GraphQL call per repo per poll (60 s, 15 s while CI is pending) and
   pause 10 minutes on a rate limit, showing the last data as stale.
 - `/flow` runs dump → create-prd (with the panel) → approval → create-tasks → refine-issues →
@@ -281,6 +287,7 @@
 
 ### Changed
 
+- **`/repo-bootstrap` is one PR, one phase per run** (#652): every phase commits to `bootstrap/<issue>`, one draft PR opened by constitution and ready after docs with a per-phase checklist; each run does one phase and ends with the next command and a `BOOTSTRAP: <phase> done #<issue>` last line. The per-phase-PR mode is removed.
 - Lens verdicts reach the root through the UI (each lens's final message, ending
   `Verdict: approve|changes`, is saved as `round-<n>/<lens>.md`). Built-in messaging between
   `--print` sessions was tested and does not reach a session whose turn has ended.
@@ -313,6 +320,7 @@ the `shahria-skills` local marketplace (`claude plugin marketplace remove shahri
 
 ### Changed
 
+- **`/repo-bootstrap` is one PR, one phase per run** (#652): every phase commits to `bootstrap/<issue>`, one draft PR opened by constitution and ready after docs with a per-phase checklist; each run does one phase and ends with the next command and a `BOOTSTRAP: <phase> done #<issue>` last line. The per-phase-PR mode is removed.
 - **`/pr-grind` fixes inline:** fix → `/verifier-locally` → commit → reply/resolve → push → CI →
   Slack, with no subagents. One CI fix attempt per head SHA, recorded in its state file.
 - **herdr-dispatch** runs `/ai-workflow:implement-issue {n}`; a tab is done when its PR is ready.
@@ -459,6 +467,7 @@ the `shahria-skills` local marketplace (`claude plugin marketplace remove shahri
 
 ### Changed
 
+- **`/repo-bootstrap` is one PR, one phase per run** (#652): every phase commits to `bootstrap/<issue>`, one draft PR opened by constitution and ready after docs with a per-phase checklist; each run does one phase and ends with the next command and a `BOOTSTRAP: <phase> done #<issue>` last line. The per-phase-PR mode is removed.
 - **`/prd` is now `/create-prd`, and planning runs `/create-prd` → `/create-tasks` → `/refine-issues` (ADR 0004).**
   Breaking: a hard rename with no `/prd` alias, and PRDs move from `docs/prd/` to
   `docs/prds/<slug>.md`. A PRD has a technical design (contracts allowed, code not), its epics
@@ -612,6 +621,7 @@ the `shahria-skills` local marketplace (`claude plugin marketplace remove shahri
 
 ### Changed
 
+- **`/repo-bootstrap` is one PR, one phase per run** (#652): every phase commits to `bootstrap/<issue>`, one draft PR opened by constitution and ready after docs with a per-phase checklist; each run does one phase and ends with the next command and a `BOOTSTRAP: <phase> done #<issue>` last line. The per-phase-PR mode is removed.
 - **`/prd` default destination is Obsidian.** `--to` now defaults to `obsidian` instead of `local`, and `/prd` fills the seeded `PRD.md` that `/dump` leaves in a feature folder (`status: seed`, set to `draft` once filled). `local` and `wiki` are written only when named in `--to`.
 - **Run page.** The header groups the title, status chips and actions, the stations list
   is compact and sticky, assistant output renders as markdown in a readable measure, only
@@ -703,6 +713,7 @@ the `shahria-skills` local marketplace (`claude plugin marketplace remove shahri
 
 ### Changed
 
+- **`/repo-bootstrap` is one PR, one phase per run** (#652): every phase commits to `bootstrap/<issue>`, one draft PR opened by constitution and ready after docs with a per-phase checklist; each run does one phase and ends with the next command and a `BOOTSTRAP: <phase> done #<issue>` last line. The per-phase-PR mode is removed.
 - **`aiw kanban serve` and `kanban.py` are gone (#108).** Use `aiw ui`.
 - **The docs describe the Session term and the `aiw ui` server (#130).** Two ADRs
   record the headless question pause (#103) and the pr-grind re-entry (#104).
@@ -718,6 +729,7 @@ the `shahria-skills` local marketplace (`claude plugin marketplace remove shahri
 
 ### Changed
 
+- **`/repo-bootstrap` is one PR, one phase per run** (#652): every phase commits to `bootstrap/<issue>`, one draft PR opened by constitution and ready after docs with a per-phase checklist; each run does one phase and ends with the next command and a `BOOTSTRAP: <phase> done #<issue>` last line. The per-phase-PR mode is removed.
 - **`/gh-issue` and `/jira-to-gh` file flat issues instead of a parent plus children (#78,
   #79, #80, #81, #83, #84).** Decomposition applies a size rubric (one layer-scoped
   deliverable, 3 or fewer production files, 1-4 acceptance criteria, one verify command)
@@ -903,6 +915,7 @@ the `shahria-skills` local marketplace (`claude plugin marketplace remove shahri
 
 ### Changed
 
+- **`/repo-bootstrap` is one PR, one phase per run** (#652): every phase commits to `bootstrap/<issue>`, one draft PR opened by constitution and ready after docs with a per-phase checklist; each run does one phase and ends with the next command and a `BOOTSTRAP: <phase> done #<issue>` last line. The per-phase-PR mode is removed.
 - **Worklog now writes through Obsidian, not ZenNotes.** `worklog-runner` was the only
   agent in this plugin that saved notes through the ZenNotes MCP server
   (`mcp__zennotes__*`) — every other vault-touching agent (`dump`, `run-researcher`,
@@ -963,6 +976,7 @@ the `shahria-skills` local marketplace (`claude plugin marketplace remove shahri
 
 ### Changed
 
+- **`/repo-bootstrap` is one PR, one phase per run** (#652): every phase commits to `bootstrap/<issue>`, one draft PR opened by constitution and ready after docs with a per-phase checklist; each run does one phase and ends with the next command and a `BOOTSTRAP: <phase> done #<issue>` last line. The per-phase-PR mode is removed.
 - **The CLI is now `aiw`, not `route`.** `route` is also the macOS, BSD and net-tools
   *network* command, and `/sbin` precedes plugin bin directories on a default macOS `PATH`
   — so `route paths` ran `/sbin/route`, printed a usage error to stderr, and **exited 0**

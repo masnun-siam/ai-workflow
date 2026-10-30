@@ -39,6 +39,7 @@ ALLOWED = (
     "`chore: update /pr-review skill",
     "`chore: update /verifier-locally skill",
     "`chore: update /repo-bootstrap skill",
+    "Next: /repo-bootstrap <next phase> <issue>",
     # Who owns or wrote something: no skill is run.
     "are worked out by `/refine-issues` against the current code",
     "`/refine-issues` later writes",
@@ -171,6 +172,28 @@ for name in names:
     hands_off = any(POINTER in ln or DUMP_EXEMPT in ln for ln in body.split("\n") if mention.search(ln))
     if reads.search(body) or hands_off:
         ok(f'{name} reads "Repository settings"', '"Repository settings"' in body)
+
+# 4. /repo-bootstrap: one branch, one PR, one phase per run.
+rb = text("skills/repo-bootstrap/SKILL.md")
+ok(
+    "bootstrap: exactly one phase per run",
+    "exactly one phase" in rb and "stop at the end of each phase and ask whether to go on" not in rb,
+)
+ok(
+    "bootstrap: closing line shape",
+    "BOOTSTRAP: <phase> done #<issue>" in rb and "Next: /repo-bootstrap <next phase> <issue>" in rb,
+)
+ok("bootstrap: one branch", "bootstrap/<issue>" in rb)
+for stale in ("each phase its own pull request", "Each phase is one branch", "one PR per phase", "this phase's PR"):
+    ok(f"bootstrap skill has no {stale!r}", stale not in rb)
+for f in ("docs/REFERENCE.md", "docs/HOW-IT-WORKS.md", "guides/skills.md"):
+    ok(f"{f} has no per-phase PR wording", not any(s in text(f) for s in ("one PR each", "one PR per phase")))
+ok(
+    "bootstrap: constitution opens a draft PR, docs marks it ready",
+    "opens it as a draft" in rb and "`gh pr ready`" in rb,
+)
+ok("bootstrap: audit and decide commit nothing", "Audit and decide commit nothing" in rb and "it commits nothing" in rb)
+ok("bootstrap: declined audit prints no BOOTSTRAP line", "On the user's no, end without a `BOOTSTRAP:` line" in rb)
 
 if fails:
     print(f"{len(fails)} check(s) failed")
