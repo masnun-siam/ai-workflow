@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useRepos } from '../api/hooks';
-import { pickRepo, rememberRepo, storedRepo, withRepoParam } from '../lib/repo';
+import { pickRepo, rememberRepo, repoLink, storedRepo, withRepoParam } from '../lib/repo';
 import { routes } from '../lib/routes';
 
 /**
@@ -27,6 +27,6 @@ export function useRepo() {
     },
     [navigate, pathname, search],
   );
-  const link = useCallback((path: string) => (repo ? `${path}${path.includes('?') ? '&' : '?'}repo=${repo}` : path), [repo]);
+  const link = useCallback((path: string) => repoLink(repo, path), [repo]);
   return { repo, repos, loaded: q.isSuccess, setRepo, link, current: repos.find((r) => r.slug === repo) };
 }

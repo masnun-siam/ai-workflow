@@ -60,3 +60,6 @@ export function withRepoParam(search: string, repo: string): string {
   const s = sp.toString().replace(/%2F/gi, '/');
   return s ? `?${s}` : '';
 }
+
+/** An in-app path carrying `repo` as ?repo= (the switcher's link builder, for any repo). */
+export const repoLink = (repo: string, path: string) => (repo ? `${path}${path.includes('?') ? '&' : '?'}repo=${repo}` : path);
