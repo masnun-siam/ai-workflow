@@ -17,13 +17,14 @@ export interface Ans {
   labels: string[];
   other: string;
   useOther: boolean;
+  none: boolean;
 }
 export const initialAnswers = (qs: Question[]): Ans[] =>
   qs.map((q) => {
     const r = recommendedOf(q);
-    return { labels: r ? [r] : [], other: '', useOther: false };
+    return { labels: r ? [r] : [], other: '', useOther: false, none: false };
   });
-export const answered = (q: Question, a: Ans) => (a.useOther && q.allowFreeText ? a.other.trim().length > 0 : a.labels.length > 0);
+export const answered = (q: Question, a: Ans) => (q.multiSelect && a.none) || (a.useOther && q.allowFreeText ? a.other.trim().length > 0 : a.labels.length > 0);
 
 /** The POST /answer body, or an error message. */
 export function buildAnswer(roundId: string, qs: Question[], ans: Ans[]): AnswerBody | { error: string } {
@@ -33,6 +34,10 @@ export function buildAnswer(roundId: string, qs: Question[], ans: Ans[]): Answer
     const a = ans[i];
     const name = q.question || q.header || `Question ${i + 1}`;
     if (!answered(q, a)) return { error: `Please answer "${name}"` };
+    if (q.multiSelect && a.none) {
+      answers[String(i)] = { none: true };
+      continue;
+    }
     if (a.useOther && q.allowFreeText) {
       const other = a.other.trim();
       if (other.length > MAX_OTHER) return { error: `Answer to "${name}" is longer than ${MAX_OTHER} characters` };
@@ -50,9 +55,11 @@ export function QuestionFields({ qs, ans, onChange: set, disabled, name: prefix 
   const pick = (k: number, label: string) => {
     const q = qs[k];
     const on = !ans[k].useOther && ans[k].labels.includes(label);
-    set(k, { useOther: false, labels: q.multiSelect ? (on ? ans[k].labels.filter((x) => x !== label) : [...(ans[k].useOther ? [] : ans[k].labels), label]) : [label] });
+    set(k, { none: false, useOther: false, labels: q.multiSelect ? (on ? ans[k].labels.filter((x) => x !== label) : [...(ans[k].useOther ? [] : ans[k].labels), label]) : [label] });
   };
-  const pickOther = (k: number) => set(k, { useOther: !ans[k].useOther || !qs[k].multiSelect, labels: [] });
+  const pickOther = (k: number) => set(k, { none: false, useOther: !ans[k].useOther || !qs[k].multiSelect, labels: [] });
+  const pickNone = (k: number) => set(k, { none: !ans[k].none, labels: [], useOther: false });
+  const pickAll = (k: number) => set(k, { none: false, useOther: false, labels: qs[k].options.map((o) => o.label) });
   // Number keys pick, 0/O picks "Something else", Tab moves to the next question. Scoped to the focused fieldset.
   const onKey = (k: number, e: React.KeyboardEvent<HTMLFieldSetElement>) => {
     const q = qs[k];
@@ -82,6 +89,7 @@ export function QuestionFields({ qs, ans, onChange: set, disabled, name: prefix 
           <legend className="sr">{q.question}</legend>
           <div className="q-h">{n > 1 ? `${k + 1} of ${n}  ·  ` : ''}{q.header || 'Question'}</div>
           {q.question ? <div className="q-text prose" dangerouslySetInnerHTML={{ __html: mdToHtml(q.question) }} /> : null}
+          {q.multiSelect ? <Button sm noAction type="button" onClick={() => pickAll(k)}>Select all</Button> : null}
           <div className="opts">
             {q.options.map((o, i) => {
               const on = !ans[k].useOther && ans[k].labels.includes(o.label);
@@ -103,6 +111,12 @@ export function QuestionFields({ qs, ans, onChange: set, disabled, name: prefix 
                 </label>
               );
             })}
+            {q.multiSelect ? (
+              <label className={`opt${ans[k].none ? ' on' : ''}`}>
+                <input type="checkbox" name={name} checked={ans[k].none} onChange={() => pickNone(k)} />
+                <span style={{ fontWeight: 600 }}>None of these</span>
+              </label>
+            ) : null}
             {q.allowFreeText ? (
               <label className={`opt${ans[k].useOther ? ' on' : ''}`}>
                 <input type={q.multiSelect ? 'checkbox' : 'radio'} name={name} checked={ans[k].useOther} onChange={() => pickOther(k)} />
