@@ -213,21 +213,24 @@ describe('Dispatch model and effort', () => {
 });
 
 describe('Dispatch page', () => {
-  it('shows lanes as a graph, switches to a list, opens a lane and acts on it', async () => {
+  it('shows lanes as building now, up next and done, opens a lane and acts on it', async () => {
+    routes['/api/dispatches/abc123abc123'] = disp({ lanes: [...disp().lanes, lane(5, { stage: 'closed', pr: 50, started_at: 1_700_000_000, ended_at: 1_700_003_600, usage: { cost: 2.5, tokens: 1, seconds: 3600 } })] });
     window.location.hash = '#/dispatches/abc123abc123?repo=o/r';
     render(<App />);
     expect(await screen.findByRole('heading', { name: 'Payments' })).toBeTruthy();
-    const graph = screen.getByRole('group', { name: 'Issues by what they wait for' });
-    expect(within(graph).getByText('Wave 1')).toBeTruthy();
-    expect(within(graph).getByText('Wave 2')).toBeTruthy();
-    expect(screen.getByText('0 of 3 issues done. 2 in progress and 1 waiting their turn.')).toBeTruthy();
+    expect(screen.getByRole('img', { name: '1 of 4 done, 2 building, 1 waiting' })).toBeTruthy();
+    const building = within(screen.getByRole('region', { name: 'Building now' }));
+    expect(building.getAllByRole('button').map((b) => b.getAttribute('data-lane'))).toEqual(['o/r#2', 'o/r#3']);
+    expect(within(screen.getByRole('region', { name: 'Up next' })).getByText('Starts after #2 and #3')).toBeTruthy();
+    const done = within(screen.getByRole('region', { name: 'Done' }));
+    expect(done.getByText('PR #50')).toBeTruthy();
+    expect(done.getByText('1h 0m')).toBeTruthy();
+    expect(done.getByText('$2.50')).toBeTruthy();
     const asks = within(screen.getByRole('region', { name: 'Needs you' }));
     expect(asks.getByText('2 issues need you')).toBeTruthy();
     expect(asks.getByRole('button', { name: 'Merge' })).toBeTruthy();
-    await userEvent.click(screen.getByRole('radio', { name: 'List' }));
-    expect(screen.getByRole('table')).toBeTruthy();
-    expect(localStorage.getItem('aiw.dispatch.view')).toBe('list');
-    await userEvent.click(within(screen.getByRole('table')).getByRole('button', { name: /#3 Issue 3/ }));
+    expect(screen.queryByText('Nothing needs you')).toBeNull();
+    await userEvent.click(building.getByRole('button', { name: /Issue 3/ }));
     const panel = within(await screen.findByRole('complementary', { name: 'Lane #3' }));
     await userEvent.click(panel.getByRole('button', { name: 'Issue actions' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Hold the merge' }));
@@ -252,15 +255,16 @@ describe('Dispatch page', () => {
     expect(document.activeElement?.getAttribute('data-lane')).toBe('o/r#3');
   });
 
-  it('follows the table order in the list view', async () => {
-    localStorage.setItem('aiw.dispatch.view', 'list');
-    routes['/api/dispatches/abc123abc123'] = disp({ lanes: [lane(4, { deps: ['o/r#2'] }), lane(2, { stage: 'implementing' })] });
+  it('trims the epic name off issue titles and orders up next ready first', async () => {
+    routes['/api/dispatches/abc123abc123'] = disp({ lanes: [lane(4, { title: 'Payments: refunds', deps: ['o/r#2'] }), lane(2, { stage: 'implementing' }), lane(6, { title: 'Payments: receipts' })] });
     window.location.hash = '#/dispatches/abc123abc123?repo=o/r';
     render(<App />);
-    await screen.findByRole('table');
-    await userEvent.keyboard('j');
+    const next = within(await screen.findByRole('region', { name: 'Up next' }));
+    expect(next.getAllByRole('button').map((b) => b.textContent)).toEqual(['#6receiptsStarts when a slot frees up', '#4refundsStarts after #2']);
+    expect(screen.getByText('Nothing needs you')).toBeTruthy();
+    await userEvent.keyboard('jj');
     await userEvent.keyboard('{Enter}');
-    expect(await screen.findByRole('complementary', { name: 'Lane #4' })).toBeTruthy();
+    expect(await screen.findByRole('complementary', { name: 'Lane #6' })).toBeTruthy();
   });
 
   it('merges the selected lane with M and cancels the dispatch with X', async () => {

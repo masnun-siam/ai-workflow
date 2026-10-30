@@ -143,3 +143,11 @@ export function eventText(e: { kind: string; text: string }): string {
   if (e.kind === 'lane') return e.text === 'joined the dispatch' ? 'joined the dispatch' : `you chose ${e.text}`;
   return sentence(e.text);
 }
+
+/** The lanes in columns by dependency depth: the dispatch's waves. */
+export function columns<T extends Pick<Lane, 'key' | 'deps'>>(lanes: T[]): T[][] {
+  const lv = levels(lanes);
+  const cols: T[][] = [];
+  for (const l of lanes) (cols[lv[l.key]] ??= []).push(l);
+  return cols;
+}

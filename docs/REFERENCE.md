@@ -250,13 +250,14 @@ epics), grind mode (Off, Simple, Full), auto-merge, lanes at once (1–10), a ba
 effort, then **Preview** shows the waves and warnings (unrefined issues, cycles, missing checkouts,
 repos without a Slack channel, open blockers outside the epic, issues jev reads as underspecified, readiness unavailable) before **Start**. With Use jev on, Preview (and `aiw dispatch plan`) scores each refined lane's body 1–5 for up to 8 s: plan lanes carry `readiness` (int or null), a score of 2 or less warns and the lane still runs, and bodies are fetched only for this read and never returned. Lanes started here run
 as headless sessions (the same dialog, given picked issues, becomes **Run small changes**: chips instead of the epic field, no feature branch, `issues` in the request; lists show it by its title, "Small changes: #412, #415", and `owner/repo`); `herdr-dispatch` starts herdr ones, and both show here. `aiw dispatch plan|start` and `herdr-dispatch` take an epic only. A dispatch page has the
-live settings, **Pause**/**Resume**/**Cancel**, a one-sentence summary with time and spend, a **Needs
-you** strip (each issue waiting on you with its one action: Merge, Answer, Retry), the issues as a
-**Graph** (a timetable under one header card with the title, state, actions and progress: Wave 1, Wave 2… columns by what they wait for, each marked done, n running or waiting, tracks to dependents, the activity feed below, the repo on cards when
-the epic spans repos) or a **List**, each with a plain line on what it is doing now, an issue panel (what
+live settings, **Pause**/**Resume**/**Cancel**, one progress tick per issue with done, building, waiting, time and spend, a **Needs
+you** strip (each issue waiting on you with its one action: Merge, Answer, Retry), then the issues in three lists (issue
+titles lose the epic-name prefix; `J`/`K` walk them in this order): **Building now** (a card per lane at work with its
+Build, Grind, Merge, Wrap up steps, time and cost), **Up next** (waiting lanes, ready ones first, each with what it waits
+for) and **Done** (latest first, with PR, time and cost), an issue panel (what
 is happening and its main action, a step bar, the question form when its session asks one, a message box,
 its transcript or herdr pane text, and Pause, Merge now, Hold the merge, Retry, Skip in a menu) and the
-activity feed in plain sentences. **Retry** on red CI asks the issue's session to fix CI. When every lane is done it offers **Open PR from
+activity feed in plain sentences beside the lists (the issue panel takes its place while open). **Retry** on red CI asks the issue's session to fix CI. When every lane is done it offers **Open PR from
 <branch>** (into `base_branch` when set, else the default branch), **Run QA** and **Grind the final PR**; none runs by itself, and a dispatch of picked issues offers none of them.
 The server ticks every running dispatch every 30 s from the board poll, the grind state files and each
 lane's session; grind rounds a lane owns are typed into the lane (`dispatch-due:` in the grind state)
