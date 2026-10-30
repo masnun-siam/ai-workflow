@@ -295,7 +295,7 @@ open the running session.
 **Activity and sessions.** Live sessions as a departures board (one dark row each), history as a table with search, a result filter
 and cost today; **Clean up** lists finished sessions by repo before removing them. A session page
 has banners for waiting (inline answer), limited (reset time, **Resume on another account**, **Don't
-auto-resume**), failed (**Retry**, **Continue in terminal**) and queued (**Start now**), the transcript, a
+auto-resume**), failed (**Retry**, **Continue in terminal**) and queued (**Start now**), the run's phase strip when the session is a bootstrap phase (its own entry marked "this session", the others linked), the transcript, a
 composer (a prompt queues while a turn runs), and a facts box with cost, tokens (`$0.44 · 703k tok`), model and effort.
 Sessions auto-resume after a rate limit, and the limit timer releases queued ones after a restart.
 Actions: **Stop** (`POST /api/sessions/<id>/stop`, after a confirm), **Resume**, **Rerun** (replays the

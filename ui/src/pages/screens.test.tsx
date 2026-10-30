@@ -394,6 +394,23 @@ describe('Session page', () => {
     window.location.hash = '#/sessions/s1';
     render(<App />);
   };
+  it('a bootstrap phase session shows the run strip, its own phase as this session', async () => {
+    const names = ['audit', 'decide', 'constitution', 'guides', 'gates', 'docs'];
+    const states = ['done', 'done', 'done', 'done', 'running', 'pending'];
+    const bootstrap = { id: 'r1', repo: 'o/r', issue: 5, branch: 'b', state: 'running', error: null, created_at: '', updated_at: '', phases: names.map((name, i) => ({ name, state: states[i], session_id: i === 5 ? null : i === 4 ? 's1' : `p${i}` })) };
+    open(base({ bootstrap }));
+    const strip = await screen.findByRole('list', { name: 'Bootstrap phases' });
+    const items = within(strip).getAllByRole('listitem');
+    expect(items.map((li) => li.textContent)).toEqual(['auditDone', 'decideDone', 'constitutionDone', 'guidesDone', 'gates (this session)Running', 'docsPending']);
+    expect(within(items[0]).getByRole('link').getAttribute('href')).toBe('#/sessions/p0');
+    expect(within(items[4]).queryByRole('link')).toBeNull();
+    expect(items[4].getAttribute('aria-current')).toBe('step');
+  });
+  it('a session with no bootstrap run shows no strip', async () => {
+    open(base({ bootstrap: null }));
+    await screen.findByLabelText('Search the transcript');
+    expect(screen.queryByRole('list', { name: 'Bootstrap phases' })).toBeNull();
+  });
   it('404 shows Session not found', async () => {
     window.location.hash = '#/sessions/nope';
     render(<App />);
