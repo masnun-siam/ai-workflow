@@ -2,7 +2,7 @@
 .p-comment .who{font-size:13px;color:var(--muted)}
 .p-html{line-height:1.55;overflow-wrap:anywhere}
 .p-html img{max-width:100%}
-.p-html pre{overflow:auto;background:var(--bg);padding:10px;border-radius:6px}
+.p-html pre{overflow:auto;background:var(--sunk);padding:10px;border-radius:6px}
 .p-html table{display:block;overflow:auto}
 .p-add{color:var(--ship);font-weight:600}
 .p-del{color:var(--bad);font-weight:600}

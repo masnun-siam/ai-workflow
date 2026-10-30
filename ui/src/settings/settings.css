@@ -15,7 +15,7 @@
 .lens-prompt summary{cursor:pointer;font-weight:600;display:flex;gap:8px;align-items:center}
 .lens-prompt textarea{margin-top:8px}
 .set-sec .lens{font:inherit;font-weight:600;font-size:12.5px;color:inherit}
-.set-sec .lens.on{color:var(--bg)}
+.set-sec .lens.on{color:var(--sunk)}
 .set-nav .nav-a{font:inherit;font-weight:500}
 .matrix th[scope=row]{font-weight:400;text-align:left;white-space:normal}
 .matrix th[scope=rowgroup]{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
