@@ -9,8 +9,8 @@ import { answered, buildAnswer, QuestionFields, type Ans } from '../questions/Qu
 
 export type RoundEntry = AfkLogEntry & { id: string; questions: AfkQuestion[] };
 
-const prefill = (l: RoundEntry): Ans[] => l.questions.map((q) => ({ labels: q.picked ?? [], other: '', useOther: false }));
-const differs = (q: AfkQuestion, a: Ans) => a.useOther || a.labels.length !== (q.picked ?? []).length || a.labels.some((x) => !(q.picked ?? []).includes(x));
+const prefill = (l: RoundEntry): Ans[] => l.questions.map((q) => ({ labels: q.picked ?? [], other: '', useOther: false, none: false }));
+const differs = (q: AfkQuestion, a: Ans) => a.useOther || a.none || a.labels.length !== (q.picked ?? []).length || a.labels.some((x) => !(q.picked ?? []).includes(x));
 
 export function ChangeDialog({ rounds, onClose }: { rounds: RoundEntry[]; onClose: () => void }) {
   const toast = useToast();
