@@ -1,8 +1,8 @@
 // Every endpoint the UI calls, as plain typed functions. Hooks in hooks.ts wrap these with caching and invalidation.
 import { del, enc, get, patch, post, put, qs, request, splitRepo } from './client';
 import type {
-  AnswerBody, AfkState, DuplicateResponse, AfkChangeBody, AfkChangeResponse, Dispatch, DispatchPlan, DispatchSettings, DispatchTarget, DispatchState, EndAction, LaneAction, BoardStartBody, BoardStartResponse, CleanupItem, DeliveryResponse, InboxResponse,
-  IssueDetail, NotificationFeed, NotifyChannel, NotifySettings, OpenItem, PeerReviewOffers, PlanningResponse, PrDetail, PrdFile, ReposResponse, RestartStatus,
+  AnswerBody, AfkState, DuplicateResponse, AfkChangeBody, AfkChangeResponse, Dispatch, DispatchPlan, DispatchSettings, DispatchTarget, DispatchState, EndAction, LaneAction, BoardStartBody, BoardStartResponse, CleanupItem, DeliveryAllResponse, DeliveryResponse, InboxResponse,
+  IssueDetail, NotificationFeed, NotifyChannel, NotifySettings, OpenItem, PeerReviewOffers, PlanningAllResponse, PlanningResponse, PrDetail, PrdFile, ReposResponse, RestartStatus,
   ReviewSettings, SendPreview, SendResult, Session, SessionStartBody, Share, ShareComment, ShareSummary, ShareThread, SessionsResponse, Settings, StreamResponse, VaultFolders, VaultPrd,
 } from './types';
 
@@ -14,6 +14,8 @@ export const api = {
   inbox: (repo?: string) => get<InboxResponse>(`/api/inbox${qs({ repo })}`),
   notifications: (after: number | null) => get<NotificationFeed>(`/api/notifications${qs({ after })}`),
   planning: (repo: string, refresh = false) => get<PlanningResponse>(`/api/planning${qs({ repo, refresh: refresh ? 1 : undefined })}`),
+  planningAll: () => get<PlanningAllResponse>('/api/planning'),
+  deliveryAll: () => get<DeliveryAllResponse>('/api/delivery'),
   delivery: (repo: string, refresh = false) => get<DeliveryResponse>(`/api/delivery${qs({ repo, refresh: refresh ? 1 : undefined })}`),
   repos: () => get<ReposResponse>('/api/repos'),
   settings: () => get<Settings>('/api/settings'),

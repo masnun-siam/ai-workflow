@@ -20,6 +20,8 @@ export const keys = {
   inbox: (repo?: string) => ['inbox', repo ?? ''] as const,
   planning: (repo: string) => ['planning', repo] as const,
   delivery: (repo: string) => ['delivery', repo] as const,
+  planningAll: ['planning', '*'] as const,
+  deliveryAll: ['delivery', '*'] as const,
   repos: ['repos'] as const,
   settings: ['settings'] as const,
   notify: ['settings', 'notify'] as const,
@@ -71,6 +73,10 @@ export const usePlanning = (repo: string) =>
   useQuery({ queryKey: keys.planning(repo), queryFn: () => api.planning(repo), enabled: !!repo, ...poll(POLL.boards) });
 export const useDelivery = (repo: string) =>
   useQuery({ queryKey: keys.delivery(repo), queryFn: () => api.delivery(repo), enabled: !!repo, ...poll(POLL.boards) });
+export const usePlanningAll = (enabled: boolean) =>
+  useQuery({ queryKey: keys.planningAll, queryFn: api.planningAll, enabled, ...poll(POLL.boards) });
+export const useDeliveryAll = (enabled: boolean) =>
+  useQuery({ queryKey: keys.deliveryAll, queryFn: api.deliveryAll, enabled, ...poll(POLL.boards) });
 export const useRepos = () => useQuery({ queryKey: keys.repos, queryFn: api.repos, staleTime: 30_000 });
 export const useSettings = () => useQuery({ queryKey: keys.settings, queryFn: api.settings, staleTime: 30_000 });
 export const useNotifySettings = () => useQuery({ queryKey: keys.notify, queryFn: api.notify });
