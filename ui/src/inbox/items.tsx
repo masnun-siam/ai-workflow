@@ -2,7 +2,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useCleanupIssue, useDispatchSeen, useLaneAction, useResume, useReviewRounds, useSettings, useSkipCi, useStartNow, useStartSession, useStop, useStopGrind } from '../api/hooks';
+import { useBootstrapAction, useBootstraps, useCleanupIssue, useDispatchSeen, useLaneAction, useResume, useReviewRounds, useSettings, useSkipCi, useStartNow, useStartSession, useStop, useStopGrind } from '../api/hooks';
 import type { InboxItem, Question } from '../api/types';
 import { Button, LinkButton, Menu, useConfirm, useToast, type IconName, type useListSelection } from '../components';
 import { agoIso, clockText, commandText, shortRepo } from '../lib/format';
@@ -13,6 +13,7 @@ import { copyCommand, useTerminal } from '../session/terminal';
 import { useStartError } from '../session/useSessionActions';
 import { QuestionForm } from '../questions/QuestionForm';
 import { Icon } from '../components';
+import { PhaseStrip } from '../bootstrap/PhaseStrip';
 import { ResolveConflicts } from '../board/ResolveConflicts';
 import { KeyScope, useAction } from '../shell/shortcuts';
 
@@ -55,6 +56,7 @@ export function useInboxActions() {
   const cleanup = useCleanupIssue();
   const lane = useLaneAction();
   const seen = useDispatchSeen();
+  const bootstrap = useBootstrapAction();
   const goSession = (id?: string) => id && nav(routes.session(id));
   return {
     terminal,
@@ -66,6 +68,12 @@ export function useInboxActions() {
     },
     laneRetry: (id: string, key: string) => lane.mutate({ id, lane: key, action: 'retry' }, { onSuccess: () => toast('Retrying') }),
     dispatchSeen: (id: string) => seen.mutate(id),
+    bootstrapContinue: (id: string) => bootstrap.mutate({ id, action: 'continue' }, { onError: (e) => toast(e.message) }),
+    bootstrapRetry: (id: string) => bootstrap.mutate({ id, action: 'retry' }, { onError: (e) => toast(e.message) }),
+    bootstrapStop: async (id: string) => {
+      if (await confirm({ title: 'End the bootstrap?', body: 'The run stops here. Nothing already done is undone.', okLabel: 'End bootstrap', danger: true }))
+        bootstrap.mutate({ id, action: 'stop' }, { onError: (e) => toast(e.message) });
+    },
     copy: copyCommand,
     approve: async (repo: string, path: string) => {
       const ok = await confirm({
@@ -119,6 +127,12 @@ interface Props {
   rowProps: ReturnType<ReturnType<typeof useListSelection>['rowProps']>;
   /** The user expanded this question (not the default open): its form takes focus. */
   autoFocus?: boolean;
+}
+
+/** The run's phase strip, or nothing until its record is loaded (the item and the run list are two polls). */
+function BootstrapStrip({ id, repo }: { id: string; repo?: string }) {
+  const run = useBootstraps(repo).data?.runs.find((r) => r.id === id);
+  return run ? <PhaseStrip run={run} /> : null;
 }
 
 /** Enter on the selected row: the question's Answer/Hide, else a click on the row's primary or "you" button. Renders nothing. */
@@ -246,6 +260,23 @@ export function ItemRow({ item, a, open, toggle, publish, selected, rowProps, au
       </>);
       break;
     }
+    case 'bootstrap_waiting':
+      icon = 'pause'; tone = 'you'; title = `Bootstrap of ${shortRepo(item.repo ?? '')} is waiting: audit issue #${item.issue} is ready for the team`;
+      acts = (<>
+        <Button sm shortcut="c" variant="primary" onClick={() => a.bootstrapContinue(item.run_id)}>Continue bootstrap</Button>
+        <Button sm shortcut="x" onClick={() => void a.bootstrapStop(item.run_id)}>Stop</Button>
+      </>);
+      body = <BootstrapStrip id={item.run_id} repo={item.repo ?? undefined} />;
+      break;
+    case 'bootstrap_stopped':
+      icon = 'alert'; tone = 'bad'; title = `Bootstrap of ${shortRepo(item.repo ?? '')} stopped at ${item.phase}`; detail = item.error ?? undefined;
+      acts = (<>
+        {item.session_id ? sess(item.session_id) : null}
+        <Button sm shortcut="x" onClick={() => void a.bootstrapStop(item.run_id)}>Stop</Button>
+        <Button sm shortcut="r" variant="primary" onClick={() => a.bootstrapRetry(item.run_id)}>Retry phase</Button>
+      </>);
+      body = <BootstrapStrip id={item.run_id} repo={item.repo ?? undefined} />;
+      break;
     case 'dispatch_done':
       icon = 'check'; tone = 'ship'; title = `Every lane of ${item.epic ?? item.title} is done`; meta = [where, 'dispatch'];
       detail = !item.epic ? 'Every issue is done.' : item.feature_branch ? `Open the PR from ${item.feature_branch}, run QA, or grind the final PR.` : 'Run QA on the whole feature, or call it done.';

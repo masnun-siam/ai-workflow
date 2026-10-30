@@ -18,6 +18,7 @@ export const keys = {
   sessions: ['sessions'] as const,
   session: (id: string) => ['session', id] as const,
   inbox: (repo?: string) => ['inbox', repo ?? ''] as const,
+  bootstraps: (repo?: string) => ['bootstraps', repo ?? ''] as const,
   planning: (repo: string) => ['planning', repo] as const,
   delivery: (repo: string) => ['delivery', repo] as const,
   planningAll: ['planning', '*'] as const,
@@ -68,6 +69,7 @@ export function useBrowserNotifier() {
 /** Sessions, limits, usage, afk, gh: polled every 3 s. Its failure is the app's "offline" signal. */
 export const useSessions = () => useQuery({ queryKey: keys.sessions, queryFn: api.sessions, ...poll(POLL.sessions), retry: false });
 export const useInbox = (repo?: string) => useQuery({ queryKey: keys.inbox(repo), queryFn: () => api.inbox(repo), ...poll(POLL.inbox), retry: false });
+export const useBootstraps = (repo?: string) => useQuery({ queryKey: keys.bootstraps(repo), queryFn: () => api.bootstraps(repo), ...poll(POLL.inbox), retry: false });
 export const useSession = (id: string) => useQuery({ queryKey: keys.session(id), queryFn: () => api.session(id), ...poll(POLL.sessions), retry: false });
 export const usePlanning = (repo: string) =>
   useQuery({ queryKey: keys.planning(repo), queryFn: () => api.planning(repo), enabled: !!repo, ...poll(POLL.boards) });
@@ -260,6 +262,8 @@ export const useNotifyTest = () => useApiMutation(api.notifyTest, []);
 export const useSaveNotify = () => useApiMutation(api.saveNotify, [keys.notify]);
 export const useSaveReview = () => useApiMutation(api.saveReview, [keys.review, keys.offers]);
 
+export const useBootstrapAction = () =>
+  useApiMutation((v: { id: string; action: 'continue' | 'retry' | 'stop' }) => api.bootstrapAction(v.id, v.action), [['bootstraps'], ['inbox'], ['sessions'], ['session']]);
 const DISPATCH_WRITES: QueryKey[] = [['dispatches'], ['dispatch'], ['inbox']];
 export const usePlanDispatch = () =>
   useApiMutation((v: { target: DispatchTarget; settings: Partial<DispatchSettings> }) => api.planDispatch(v.target, v.settings), [], { quiet: true });

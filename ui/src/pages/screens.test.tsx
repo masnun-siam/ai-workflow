@@ -75,6 +75,52 @@ describe('Inbox', () => {
     await waitFor(() => expect(posts).toContainEqual(['/api/review/p1/rounds', { add: 2 }]));
   });
 
+  describe('bootstrap cards', () => {
+    const phases = (states: string[]) => ['audit', 'decide', 'constitution', 'guides', 'gates', 'docs'].map((name, i) => ({ name, state: states[i], session_id: states[i] === 'pending' ? null : `ps${i}` }));
+    const runRec = (id: string, state: string, states: string[]) => ({ id, repo: 'o/r', issue: 12, branch: 'b', phases: phases(states), state, error: null, created_at: '', updated_at: '' });
+    const load = async (items: unknown[], runs: unknown[]) => {
+      routes['/api/inbox'] = { afk: AFK, gh: { ok: true }, items };
+      routes['/api/bootstraps'] = { runs };
+      window.location.hash = '#/inbox?repo=o/r';
+      render(<App />);
+    };
+    const waiting = item('bootstrap_waiting', 'decide', { key: 'bw', run_id: 'w1', issue: 12, next_phase: 'decide' });
+    const stopped = item('bootstrap_stopped', 'fix', { key: 'bs', run_id: 'x1', issue: 12, phase: 'guides', session_id: 'ps3', error: 'guides blew up' });
+
+    it('a waiting run is a Decide card with Continue and a confirmed Stop, and shows its strip', async () => {
+      await load([waiting], [runRec('w1', 'waiting', ['done', 'pending', 'pending', 'pending', 'pending', 'pending'])]);
+      const decide = within(await screen.findByRole('region', { name: 'Decide' }));
+      expect(decide.getByText('Bootstrap of r is waiting: audit issue #12 is ready for the team')).toBeTruthy();
+      await waitFor(() => expect(decide.getAllByRole('listitem')).toHaveLength(6));
+      expect(decide.getByRole('listitem', { current: 'step' }).textContent).toBe('decidePending');
+      const u = userEvent.setup();
+      await u.click(decide.getByRole('button', { name: /Continue bootstrap/ }));
+      await waitFor(() => expect(posts).toContainEqual(['/api/bootstraps/w1/continue', {}]));
+      await u.click(decide.getByRole('button', { name: /^Stop/ }));
+      expect(posts.some(([p]) => p === '/api/bootstraps/w1/stop')).toBe(false);
+      await u.click(await screen.findByRole('button', { name: 'End bootstrap' }));
+      await waitFor(() => expect(posts).toContainEqual(['/api/bootstraps/w1/stop', {}]));
+    });
+
+    it('a stopped run is a Fix card with the error, Retry phase and the failed session link', async () => {
+      await load([stopped], [runRec('x1', 'stopped', ['done', 'done', 'done', 'failed', 'pending', 'pending'])]);
+      const fix = within(await screen.findByRole('region', { name: 'Fix' }));
+      expect(fix.getByText('Bootstrap of r stopped at guides')).toBeTruthy();
+      expect(fix.getByText('guides blew up')).toBeTruthy();
+      expect(fix.getByRole('link', { name: /Open session/ }).getAttribute('href')).toBe('#/sessions/ps3');
+      await waitFor(() => expect(fix.getByRole('listitem', { current: 'step' }).textContent).toBe('guidesFailed'));
+      await userEvent.setup().click(fix.getByRole('button', { name: /Retry phase/ }));
+      await waitFor(() => expect(posts).toContainEqual(['/api/bootstraps/x1/retry', {}]));
+    });
+
+    it('hides Open session without a session id and shows no strip when the run is not listed', async () => {
+      await load([{ ...stopped, session_id: null, error: null }], []);
+      const fix = within(await screen.findByRole('region', { name: 'Fix' }));
+      expect(fix.queryByRole('link', { name: /Open session/ })).toBeNull();
+      expect(fix.queryByRole('list')).toBeNull();
+    });
+  });
+
   describe('keyboard', () => {
     const pr = (n: number) => ({ number: n, title: `PR ${n}`, url: `https://github.com/o/r/pull/${n}`, state: 'open', author: 'me', created_at: '2026-01-01T00:00:00Z', head: 'f', base: 'main', body_html: '', additions: 1, deletions: 0, file_count: 0, files: [], commit_count: 0, commits: [], conversation: [], checks: [] });
     const rd = (n: number) => item('pr_ready', 'decide', { key: `pr${n}`, pr: n, issue: null, title: `T${n}`, reviewer: 'bot', checks: 1 });
