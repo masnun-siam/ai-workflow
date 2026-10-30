@@ -107,7 +107,13 @@ options, oldest PRDs dropped first). Text under 20 characters runs no check. A p
 otherwise `match` is null and `why` says why (jev off or missing, issues not loaded yet, no likely duplicate, hourly limit).
 The New page calls it 800 ms after typing stops (repo chosen, 20+ characters) and shows "Looks like #n <title>" below the route line, linked in a new tab; it hides on any edit, never blocks either start button, and shows nothing for a null match or a failed check.
 
-**Features.** A map with the six stages (PRD draft, PRD review, Approved, Tasks, Building, Shipped)
+**Features.** Opens on **All repos**: one group per watched repo (project name, slug, in progress, "N shipped"),
+stopped-on-you repos first, then by in-progress count, then by name; a repo with nothing in progress is one line after
+the others, and a repo still loading or stale shows a note, never as empty. Every card acts on its own repo, and there is
+no map or Shipped list. The repo filter in the page head (`?only=<owner/repo>`, independent of the switcher) narrows the page
+to that repo, which is today's page below.
+
+With a filter set: a map with the six stages (PRD draft, PRD review, Approved, Tasks, Building, Shipped)
 across the top and one coloured line per feature in progress (then the three latest shipped): solid up to
 its stage, dotted after, its current stop orange when it needs you. Then one card per feature in progress,
 in its line's colour: its issues as
