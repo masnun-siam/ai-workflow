@@ -15,11 +15,12 @@ export function useEpicDispatch(repo: string, epic: number | null) {
 }
 
 /** issue number -> its lane in a live dispatch, for one repo. A queued lane counts: the dispatch will start it. */
-export function useOwnedIssues(repo: string): Map<number, { d: Dispatch; l: Lane }> {
-  const all = useDispatches().data?.dispatches ?? [];
+export function ownedIssues(dispatches: Dispatch[], repo: string): Map<number, { d: Dispatch; l: Lane }> {
   const m = new Map<number, { d: Dispatch; l: Lane }>();
-  for (const d of all.filter(live))
+  for (const d of dispatches.filter(live))
     for (const l of d.lanes)
       if (same(l.repo, repo) && (ACTIVE.includes(l.stage) || l.stage === 'queued')) m.set(l.n, { d, l });
   return m;
 }
+
+export const useOwnedIssues = (repo: string) => ownedIssues(useDispatches().data?.dispatches ?? [], repo);

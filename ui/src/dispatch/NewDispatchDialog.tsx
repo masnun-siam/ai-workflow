@@ -12,9 +12,11 @@ import { issueNo } from './vocab';
 const DEFAULTS: DispatchSettings = { max: 2, grind: 'full', ci: 'wait', auto_merge: false, feature_branch: null, base_branch: null, model: null, effort: null };
 const EPIC_RE = /^(?:[\w.-]+\/[\w.-]+#)?\d+$/;
 
-/** `epic` prefills the picker ("owner/repo#n"), e.g. from a feature's Run epic button. `issues` switches to small changes: the picked issues of the current repo, no epic and no feature branch. */
-export function NewDispatchDialog({ open, onOpenChange, epic: initial, issues }: { open: boolean; onOpenChange: (o: boolean) => void; epic?: string; issues?: { n: number; title: string }[] }) {
-  const { repo } = useRepo();
+/** `epic` prefills the picker ("owner/repo#n"), e.g. from a feature's Run epic button. `issues` switches to small changes: the picked issues of the current repo, no epic and no feature branch.
+ *  `repo` overrides the switcher's repo for the picked issues and the epic list. */
+export function NewDispatchDialog({ open, onOpenChange, epic: initial, issues, repo: forRepo }: { open: boolean; onOpenChange: (o: boolean) => void; epic?: string; issues?: { n: number; title: string }[]; repo?: string }) {
+  const { repo: switcher } = useRepo();
+  const repo = forRepo ?? switcher;
   const picked = !!issues;
   const pickKey = issues?.map((i) => i.n).join() ?? '';
   const epics = (usePlanning(repo).data?.prds ?? []).filter((p) => p.epic != null);
