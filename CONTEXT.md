@@ -63,6 +63,10 @@ _Avoid_: Discussion
 A headless Claude invocation started and tracked by the UI (`aiw ui`), recorded under `<data_dir>/sessions/<id>/`. It exits after each turn and comes back via `--resume` with an answer or after a rate limit.
 _Avoid_: Run, job
 
+**Bootstrap run**:
+One "Bootstrap repo" started from the UI: a record under `<data_dir>/bootstraps/` that chains one headless Session per phase (audit, decide, constitution, guides, gates, docs) and stops at the first phase that does not report `BOOTSTRAP: <phase> done #<issue>`. A repo has at most one that is running, waiting or stopped. It is not a Session.
+_Avoid_: Bootstrap session
+
 **Inbox**:
 The UI's list of everything that needs the user across repos (questions, PRs ready to merge, paused grinds, failed sessions, reviews at their cap), built on the server by `GET /api/inbox`. Items clear themselves when their condition does.
 _Avoid_: Notifications, queue

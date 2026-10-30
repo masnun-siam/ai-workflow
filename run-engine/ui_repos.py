@@ -19,6 +19,7 @@ import dispatch
 import peer_review as peer_review_mod
 import repo_skills
 import ui_board
+import ui_bootstrap
 import ui_panel
 import ui_runner
 import ui_sessions
@@ -468,6 +469,21 @@ def start_session(body: dict):
                     "link": link,
                     "href": f"/api/sessions/{dup['id']}",
                 }
+        run = None
+        if fam == "repo-bootstrap":
+            try:
+                phase, first = ui_bootstrap.parse_input((text.split(None, 1) + [""])[1])
+                if not slug or "/" not in slug or slug.startswith("local/"):
+                    raise ValueError("a chained bootstrap needs a registered GitHub repo (owner/name)")
+                run = ui_bootstrap.create(slug, phase, first)
+            except ValueError as exc:
+                return 400, {"error": str(exc)}
+            except ui_bootstrap.Conflict as exc:
+                return 409, {
+                    "error": str(exc),
+                    "bootstrap": exc.id,
+                    **({"id": exc.session, "href": f"/api/sessions/{exc.session}"} if exc.session else {}),
+                }
         artifact = None
         if lenses and kind == "custom":
             text, artifact = _custom_review(text, lenses)
@@ -489,6 +505,8 @@ def start_session(body: dict):
                     ui_runner.stop(res["id"])
                     raise
                 res = ui_sessions.load(res["id"])  # now linked to its panel
+            if run:
+                ui_bootstrap.attach(run["id"], res["id"])
             res = ui_sessions.update(
                 res["id"],
                 request=_request(body),
@@ -497,6 +515,8 @@ def start_session(body: dict):
             _remember(slug, cwd)
             return 201, res
         except (ValueError, ui_runner.RunnerError) as exc:
+            if run:
+                ui_bootstrap.discard(run["id"])
             if artifact:
                 if os.path.exists(artifact):
                     os.unlink(artifact)
