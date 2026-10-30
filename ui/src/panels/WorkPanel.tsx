@@ -160,12 +160,12 @@ export function WorkPanel({ kind, repo, n }: { kind: 'issue' | 'pr'; repo: strin
   );
   const footer = d ? (
     closing ? (
-      <div className="stack" style={{ width: '100%' }} role="alertdialog" aria-label="Confirm close" onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setClosing(false); } }}>
+      <div className="stack" style={{ width: '100%' }} role="alertdialog" aria-label="Confirm close" onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setClosing(false); setStateErr(''); } }}>
         <p><b>Close PR #{prN} without merging? The branch is kept.</b></p>
         {stateErr ? <Banner tone="bad" icon="alert"><p>{stateErr}</p></Banner> : null}
         <div className="row">
           <Button variant="primary" autoFocus disabled={setPrState.isPending} onClick={() => doSetState('closed')}>Close PR</Button>
-          <Button variant="ghost" onClick={() => setClosing(false)}>Cancel</Button>
+          <Button variant="ghost" onClick={() => { setClosing(false); setStateErr(''); }}>Cancel</Button>
         </div>
       </div>
     ) : asking ? (
