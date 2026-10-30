@@ -18,6 +18,7 @@ import dispatch_runners
 import ui_gh
 import ui_grind
 import ui_notify
+import ui_settings
 import ui_sessions
 from shared import warn
 
@@ -388,9 +389,20 @@ def _settings(body: dict, kind: str) -> dict:
     s = dr.check_settings(
         {**dr.DEFAULTS, **{k: v for k, v in (body.get("settings") or {}).items() if k in dr.DEFAULTS}}
     )
+    _check_account(s)
     if kind == "issues":
         dr._no_feature_branch(s)
     return s
+
+
+def _check_account(s: dict) -> None:
+    if s.get("account") is not None and s["account"] not in {c["label"] for c in ui_settings.load()["commands"]}:
+        raise ValueError("account must be a label saved in Settings")
+
+
+def set_settings(did: str, body: dict) -> dict:
+    _check_account(body)
+    return public(dr.set_settings(did, **body))
 
 
 def start(body: dict) -> dict:

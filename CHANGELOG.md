@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Dispatch account** (#670): a dispatch gets an **Account** setting (New dispatch dialog, live editor, `aiw dispatch set <id> account=<label>`); lane sessions started after it run on that saved account. Headless lanes only; a label deleted from Settings falls back to the default.
 - **Bootstrap runs: phase strip on the session page** (epic #645, #656): a bootstrap phase session's page shows the run's `PhaseStrip` above the transcript (its own phase marked "this session", the others linked), and the Start dialog describes "Bootstrap repo" as one branch and one PR, each phase its own session.
 - **Bootstrap runs: Inbox cards and phase strip** (epic #645, #655): a Decide card for a waiting run (Continue bootstrap, Stop) and a Fix card for a stopped one (Retry phase, Stop, Open session), each with the shared `PhaseStrip` (six phases, state as text, current step marked, links to each phase's session).
 - **Cross-repo boards: picks stay within one repo** (#669): in the Small changes All repos view, Ready rows have pick checkboxes and "Run N as a dispatch". The first pick disables other repos' checkboxes with a note until cleared, picks that stop being ready drop on refresh, and the dispatch dialog opens on the picked repo.

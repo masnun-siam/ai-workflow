@@ -9,7 +9,7 @@ import { useRepo } from '../shell/useRepo';
 import { SettingsFields } from './SettingsFields';
 import { issueNo } from './vocab';
 
-const DEFAULTS: DispatchSettings = { max: 2, grind: 'full', ci: 'wait', auto_merge: false, feature_branch: null, base_branch: null, model: null, effort: null };
+const DEFAULTS: DispatchSettings = { max: 2, grind: 'full', ci: 'wait', auto_merge: false, feature_branch: null, base_branch: null, model: null, effort: null, account: null };
 const EPIC_RE = /^(?:[\w.-]+\/[\w.-]+#)?\d+$/;
 
 /** `epic` prefills the picker ("owner/repo#n"), e.g. from a feature's Run epic button. `issues` switches to small changes: the picked issues of the current repo, no epic and no feature branch.

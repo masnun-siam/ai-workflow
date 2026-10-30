@@ -41,7 +41,7 @@ aiw jev ci-hint|finding-hint --file <path>
                                         always exits 0
 aiw dispatch ls|show <id>               list dispatches, or one as JSON (also those of picked issues
                                         started from the UI, listed by title)
-aiw dispatch set <id> key=value...      change max, grind, ci, auto_merge, model, effort while it runs
+aiw dispatch set <id> key=value...      change max, grind, ci, auto_merge, model, effort, account while it runs
                                         (feature_branch and base_branch are fixed at start)
 aiw dispatch pause|resume|cancel <id>   the whole dispatch (pause stops new lanes only)
 aiw dispatch lane <id> <n> <action>     pause, resume, retry, skip, merge, hold, unhold, or send "<text>"
@@ -263,7 +263,7 @@ epics), grind mode (Off, Simple, Full), auto-merge, lanes at once (1–10), a ba
 effort, then **Preview** shows the waves and warnings (unrefined issues, cycles, missing checkouts,
 repos without a Slack channel, open blockers outside the epic, issues jev reads as underspecified, readiness unavailable) before **Start**. With Use jev on, Preview (and `aiw dispatch plan`) scores each refined lane's body 1–5 for up to 8 s: plan lanes carry `readiness` (int or null), a score of 2 or less warns and the lane still runs, and bodies are fetched only for this read and never returned. Lanes started here run
 as headless sessions (the same dialog, given picked issues, becomes **Run small changes**: chips instead of the epic field, no feature branch, `issues` in the request; lists show it by its title, "Small changes: #412, #415", and `owner/repo`); `herdr-dispatch` starts herdr ones, and both show here. `aiw dispatch plan|start` and `herdr-dispatch` take an epic only. A dispatch page has the
-live settings, **Pause**/**Resume**/**Cancel**, one progress tick per issue with done, building, waiting, time and spend, a **Needs
+live settings (including the **Account** lane sessions run on, headless lanes only), **Pause**/**Resume**/**Cancel**, one progress tick per issue with done, building, waiting, time and spend, a **Needs
 you** strip (each issue waiting on you with its one action: Merge, Answer, Retry), then the issues in three lists (issue
 titles lose the epic-name prefix; `J`/`K` walk them in this order): **Building now** (a card per lane at work with its
 Build, Grind, Merge, Wrap up steps, time and cost), **Up next** (waiting lanes, ready ones first, each with what it waits

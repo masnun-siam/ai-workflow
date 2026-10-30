@@ -159,17 +159,22 @@ class Headless:
         "failed": "gone",
     }
 
-    def __init__(self, runner=None, sessions=None):
+    def __init__(self, runner=None, sessions=None, settings=None):
         if runner is None:
             import ui_runner as runner  # noqa: PLC0415 - heavy import, only in the server
         if sessions is None:
             import ui_sessions as sessions  # noqa: PLC0415
-        self.runner, self.sessions = runner, sessions
+        if settings is None:
+            import ui_settings as settings  # noqa: PLC0415
+        self.runner, self.sessions, self.settings = runner, sessions, settings
 
     def start(self, lane, prompt, d):
         s = d.get("settings") or {}  # ui_runner already passes --dangerously-skip-permissions
         effort = ["--effort", s["effort"]] if s.get("effort") else []
-        rec = self.runner.start(prompt, lane["repo"], extra_args=effort, model=s.get("model"), gate_questions=True)
+        cmd = next((c["cmd"] for c in self.settings.load()["commands"] if c["label"] == s.get("account")), None)
+        rec = self.runner.start(
+            prompt, lane["repo"], extra_args=effort, model=s.get("model"), claude_cmd=cmd, gate_questions=True
+        )
         return {"session": rec["id"]}
 
     def send(self, h, text):

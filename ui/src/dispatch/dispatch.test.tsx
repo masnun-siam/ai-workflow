@@ -10,7 +10,7 @@ import { counts, eventText, laneNote, levels, nowLine } from './vocab';
 
 const json = (b: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } }));
 const AFK = { active: false, until: null, started: null, decisions: 0, held: 0, summary: null };
-const S = { max: 2, grind: 'full', ci: 'wait', auto_merge: false, feature_branch: null, base_branch: null, model: null, effort: null } as const;
+const S = { max: 2, grind: 'full', ci: 'wait', auto_merge: false, feature_branch: null, base_branch: null, model: null, effort: null, account: null } as const;
 const lane = (n: number, o: Partial<Lane> = {}): Lane => ({
   key: `o/r#${n}`, repo: 'o/r', n, title: `Issue ${n}`, deps: [], stage: 'queued', pr: null, needs_you: null, held: null, gate: null,
   skip_reason: null, paused: null, hold_merge: null, limited_until: null, started_at: null, ended_at: null, session: null, tab: null,
@@ -278,6 +278,33 @@ describe('Dispatch page', () => {
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
     await userEvent.keyboard('x');
     expect((await screen.findByRole('alertdialog')).textContent).toContain('Cancel this dispatch?');
+  });
+
+  it('picks the account in the dialog and the live editor, and hides it with one account', async () => {
+    const two = { commands: [{ label: 'work', cmd: 'claude' }, { label: 'home', cmd: 'cc-profile home' }], default: 'work' };
+    routes['/api/settings'] = two;
+    window.location.hash = '#/dispatches?repo=o/r';
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Run an epic' }));
+    expect((await screen.findByRole('radio', { name: 'work' })).getAttribute('aria-checked')).toBe('true');
+    await userEvent.click(screen.getByRole('radio', { name: 'home' }));
+    await userEvent.type(screen.getByLabelText('Epic'), '1');
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    await screen.findByText('o/r#5: needs refine');
+    expect(posts.find(([p]) => p === '/api/dispatches/plan')?.[1]).toEqual({ epic: 'o/r#1', settings: { ...S, account: 'home' } });
+    cleanup();
+    posts.length = 0;
+    window.location.hash = '#/dispatches/abc123abc123?repo=o/r';
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: /Settings/ }));
+    await userEvent.click(await screen.findByRole('radio', { name: 'home' }));
+    await waitFor(() => expect(posts.at(-1)).toEqual(['/api/dispatches/abc123abc123/settings', { account: 'home' }]));
+    cleanup();
+    routes['/api/settings'] = { commands: [{ label: 'work', cmd: 'claude' }], default: 'work' };
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: /Settings/ }));
+    await screen.findByRole('switch', { name: 'Auto-merge' });
+    expect(screen.queryByRole('radio', { name: 'work' })).toBeNull();
   });
 
   it('edits settings live and pauses the dispatch', async () => {

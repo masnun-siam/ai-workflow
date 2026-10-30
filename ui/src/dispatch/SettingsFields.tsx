@@ -1,8 +1,10 @@
 // The dispatch settings as form fields: the New dispatch dialog and the live editor on a dispatch share them.
 import { useEffect, useState } from 'react';
-import { useSaveSettings } from '../api/hooks';
+import { useSaveSettings, useSessions, useSettings } from '../api/hooks';
 import type { CiMode, DispatchSettings, GrindMode } from '../api/types';
 import { BranchSelect } from './BranchSelect';
+import { clockText } from '../lib/format';
+import { limitedUntil } from '../start/startLogic';
 import { Button, ModelEffortPicker, Switch } from '../components';
 
 const GRIND: { v: GrindMode; label: string; hint: string }[] = [
@@ -72,13 +74,17 @@ function LazyText({ id, value, onCommit, placeholder }: { id: string; value: str
  * Every setting. `live` marks the editor on a running dispatch: the feature branch is fixed there (lanes
  * already target it) and edits apply at each lane's next step.
  */
-export function SettingsFields({ value, onChange, live, noBranch, repo }: { value: DispatchSettings; onChange: (p: Partial<DispatchSettings>) => void; live?: boolean; noBranch?: boolean; repo?: string | null }) {
+export function SettingsFields({ value, onChange, live, noBranch, repo, runner }: { value: DispatchSettings; onChange: (p: Partial<DispatchSettings>) => void; live?: boolean; noBranch?: boolean; repo?: string | null; runner?: string }) {
   const saveDefaults = useSaveSettings();
   // The saved defaults follow the latest pick, so every picker starts from it.
   const pickRun = (p: { model?: string | null; effort?: string | null }) => {
     onChange(p as Partial<DispatchSettings>);
     saveDefaults.mutate({ ...(p.model !== undefined ? { run_model: p.model } : {}), ...(p.effort !== undefined ? { run_effort: p.effort } : {}) });
   };
+  const settings = useSettings().data;
+  const limits = useSessions().data?.limits;
+  const cmds = settings?.commands ?? [];
+  const account = value.account ?? settings?.default;
   const ci = value.ci ?? 'wait';
   const grindHint = GRIND.find((g) => g.v === value.grind)?.hint;
   return (
@@ -129,6 +135,22 @@ export function SettingsFields({ value, onChange, live, noBranch, repo }: { valu
         <span className="dsp-k">Model</span>
         <ModelEffortPicker model={value.model} effort={value.effort} onChange={pickRun} />
       </div>
+      {cmds.length > 1 ? (
+        <div className="dsp-field">
+          <span className="dsp-k" id="acct-l">Account</span>
+          <div className="seg" role="radiogroup" aria-labelledby="acct-l">
+            {cmds.map((a) => {
+              const lim = limitedUntil(cmds, a.label, limits);
+              return (
+                <button key={a.label} type="button" role="radio" aria-checked={account === a.label} className={account === a.label ? 'on' : ''} title={lim ? `Limited until ${clockText(lim)}` : undefined} onClick={() => onChange({ account: a.label })}>
+                  {a.label}{lim ? ' · limited' : ''}
+                </button>
+              );
+            })}
+          </div>
+          <span className="faint dsp-hint">{runner === 'herdr' ? 'Headless lanes only.' : 'New lane sessions run on this account.'}</span>
+        </div>
+      ) : null}
     </div>
   );
 }
