@@ -489,10 +489,10 @@ export interface DuplicateError {
   id?: string;
   href?: string;
 }
-/** POST /api/sessions/<id>/answer: one entry per question index, exactly one of labels | other. */
+/** POST /api/sessions/<id>/answer: one entry per question index, exactly one of labels | other | none. */
 export interface AnswerBody {
   round_id: string;
-  answers: Record<string, { labels: string[] } | { other: string }>;
+  answers: Record<string, { labels: string[] } | { other: string } | { none: true }>;
 }
 
 // ---- PR / issue / PRD shapes as the server really sends them (ui_pr.py, ui_issue.py) ----------------

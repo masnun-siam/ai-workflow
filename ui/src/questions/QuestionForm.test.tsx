@@ -23,7 +23,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('QuestionForm logic', () => {
   it('pre-selects the recommended option and strips the suffix', () => {
-    expect(initialAnswers([Q1, Q2])).toEqual([{ labels: ['Postgres (Recommended)'], other: '', useOther: false }, { labels: [], other: '', useOther: false }]);
+    expect(initialAnswers([Q1, Q2])).toEqual([{ labels: ['Postgres (Recommended)'], other: '', useOther: false, none: false }, { labels: [], other: '', useOther: false, none: false }]);
     expect(displayLabel('Postgres (Recommended)')).toBe('Postgres');
   });
   it('builds one of labels|other per question and validates', () => {
@@ -31,8 +31,78 @@ describe('QuestionForm logic', () => {
     expect(buildAnswer('r', [Q1, Q2], a)).toEqual({ error: 'Please answer "Extras?"' });
     a[1].labels = ['A', 'B'];
     expect(buildAnswer('r', [Q1, Q2], a)).toEqual({ round_id: 'r', answers: { 0: { labels: ['Postgres (Recommended)'] }, 1: { labels: ['A', 'B'] } } });
-    a[0] = { labels: [], other: 'x'.repeat(4001), useOther: true };
+    a[0] = { labels: [], other: 'x'.repeat(4001), useOther: true, none: false };
     expect(buildAnswer('r', [Q1, Q2], a)).toHaveProperty('error');
+  });
+});
+
+describe('none of these / select all', () => {
+  const Q3: Question = { question: 'Pick?', multiSelect: true, allowFreeText: true, recommended: 'A', options: [{ label: 'A' }, { label: 'B' }, { label: 'C' }] };
+  const box = (n: RegExp | string) => screen.findByRole('checkbox', { name: n }) as Promise<HTMLInputElement>;
+  const posts = (f: ReturnType<typeof setup>) => f.mock.calls.filter(([, i]) => i?.method === 'POST');
+
+  it('buildAnswer sends none for multi-select, ignores it on single-select', () => {
+    expect(buildAnswer('r', [Q2], [{ labels: [], other: '', useOther: false, none: true }])).toEqual({ round_id: 'r', answers: { 0: { none: true } } });
+    expect(buildAnswer('r', [Q2], initialAnswers([Q2]))).toEqual({ error: 'Please answer "Extras?"' });
+    expect(buildAnswer('r', [Q1], [{ labels: [], other: '', useOther: false, none: true }])).toEqual({ error: 'Please answer "Which DB?"' });
+  });
+
+  it('None of these clears the recommended pick, enables Send and posts none', async () => {
+    const f = setup(sess({}, [Q3]));
+    const user = userEvent.setup();
+    expect((await box(/^A/)).checked).toBe(true);
+    await user.click(await box('None of these'));
+    expect((await box(/^A/)).checked).toBe(false);
+    expect((await box('None of these')).checked).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'Send answer and resume' }));
+    await waitFor(() => expect(posts(f).length).toBe(1));
+    expect(JSON.parse(posts(f)[0][1]!.body as string).answers).toEqual({ 0: { none: true } });
+  });
+
+  it('ticking an option or Something else unticks None; unticking None leaves Send disabled', async () => {
+    setup(sess({}, [Q3]));
+    const user = userEvent.setup();
+    await user.click(await box('None of these'));
+    await user.click(await box('B'));
+    expect((await box('None of these')).checked).toBe(false);
+    await user.click(await box('None of these'));
+    await user.click(await box(/Something else/));
+    expect((await box('None of these')).checked).toBe(false);
+    await user.click(await box(/Something else/));
+    await user.click(await box('None of these'));
+    await user.click(await box('None of these'));
+    expect((screen.getByRole('button', { name: 'Send answer and resume' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('Select all ticks every option, clears None and Something else, and is not a toggle', async () => {
+    setup(sess({}, [Q3]));
+    const user = userEvent.setup();
+    await user.click(await box(/Something else/));
+    await user.click(screen.getByRole('button', { name: 'Select all' }));
+    for (const l of ['A', 'B', 'C']) expect((await box(new RegExp(`^${l}`))).checked).toBe(true);
+    expect((await box(/Something else/)).checked).toBe(false);
+    await user.click(await box('None of these'));
+    await user.click(screen.getByRole('button', { name: 'Select all' }));
+    await user.click(screen.getByRole('button', { name: 'Select all' }));
+    expect((await box('None of these')).checked).toBe(false);
+    for (const l of ['A', 'B', 'C']) expect((await box(new RegExp(`^${l}`))).checked).toBe(true);
+  });
+
+  it('single-select shows neither control; number keys map to options and 0 to Something else only', async () => {
+    setup(sess());
+    await screen.findByRole('radio', { name: /Postgres/ });
+    expect(screen.queryByText('None of these')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Select all' })).toBeNull();
+    cleanup();
+    setup(sess({}, [Q3]));
+    const user = userEvent.setup();
+    (await box(/^A/)).focus();
+    await user.keyboard('23');
+    expect([(await box(/^A/)).checked, (await box('B')).checked, (await box('C')).checked]).toEqual([true, true, true]);
+    await user.keyboard('4');
+    expect((await box('None of these')).checked).toBe(false);
+    await user.keyboard('0');
+    expect((await box(/Something else/)).checked).toBe(true);
   });
 });
 
