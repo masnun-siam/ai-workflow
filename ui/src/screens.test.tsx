@@ -18,10 +18,10 @@ const prd = (over: Record<string, unknown> = {}) => ({
 });
 const lane = (cards: any[], over: Record<string, unknown> = {}) => ({ epic: 7, title: 'F1', running: 0, cards, ...over });
 
-function mock(o: { fetchedAt?: number | null; delFetchedAt?: number | null; stale?: boolean; prds?: any[]; lanes?: any[]; extra?: Record<string, (init?: RequestInit) => Promise<Response>> } = {}) {
+function mock(o: { fetchedAt?: number | null; delFetchedAt?: number | null; stale?: boolean; prds?: any[]; lanes?: any[]; extra?: Record<string, (init?: RequestInit) => Promise<Response>>; repos?: { slug: string; name: string; path: string }[]; all?: { plan: any[]; del: any[] } } = {}) {
   posts.length = 0;
   const routes: Record<string, unknown> = {
-    '/api/repos': { repos: [{ slug: 'o/r', name: 'R', path: '/x' }], can_browse: false, scan_roots: [] },
+    '/api/repos': { repos: o.repos ?? [{ slug: 'o/r', name: 'R', path: '/x' }], can_browse: false, scan_roots: [] },
     '/api/sessions': { sessions: [], limits: {}, usage: {}, afk: { active: false, until: null, started: null, decisions: 0, held: 0, summary: null }, gh: { ok: true } },
     '/api/inbox': { items: [], afk: {}, gh: { ok: true } },
     '/api/shares': [],
@@ -34,6 +34,10 @@ function mock(o: { fetchedAt?: number | null; delFetchedAt?: number | null; stal
     const path = String(url).split('?')[0];
     if (init?.method === 'POST' || init?.method === 'PUT') posts.push({ url: path, body: JSON.parse(String(init.body ?? '{}')) });
     if (o.extra?.[path]) return o.extra[path](init);
+    if ((path === '/api/planning' || path === '/api/delivery') && !String(url).includes('repo=')) {
+      const rows = o.all ? (path === '/api/planning' ? o.all.plan : o.all.del) : [routes[path]];
+      return json({ repos: rows, stale: [] });
+    }
     if (init?.method === 'POST') return json(path === '/api/start' ? { session: 'sess1' } : { id: 'sess1' }, 201);
     return path in routes ? json(routes[path]) : json({ items: [] });
   }));
@@ -50,7 +54,7 @@ describe('before the board snapshot is fetched', () => {
     render(<App />);
     expect(await screen.findByText('Loading…')).toBeTruthy();
     expect(screen.queryByRole('region', { name: 'Next step' })).toBeNull();
-    window.location.hash = '#/features?repo=o/r';
+    window.location.hash = '#/features?only=o/r';
     expect(await screen.findByText('Loading features…')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Create tasks' })).toBeNull();
   });
@@ -66,7 +70,7 @@ describe('real not-fetched server state (both snapshots null, stale)', () => {
       expect(await screen.findByText('Loading…')).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'Create tasks' })).toBeNull();
       expect(screen.queryByText('Approved')).toBeNull();
-      window.location.hash = '#/features?repo=o/r';
+      window.location.hash = '#/features?only=o/r';
       expect(await screen.findByText('Loading features…')).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'Create tasks' })).toBeNull();
     });
@@ -165,7 +169,7 @@ describe('Next step box wired to actions', () => {
 describe('Features list', () => {
   it('the capture box with Feature picked starts create-prd', async () => {
     mock();
-    window.location.hash = '#/features?repo=o/r';
+    window.location.hash = '#/features?only=o/r';
     const user = userEvent.setup();
     render(<App />);
     await user.type(await screen.findByLabelText('Describe a feature or a fix'), 'CSV import');
@@ -176,7 +180,7 @@ describe('Features list', () => {
 
   it('Auto opens the New page, where the jev route is preselected and Start files a small change', async () => {
     mock({ extra: { '/api/route': () => json({ route: 'small_change', confidence: 0.9, why: 'it reads as a fix or one contained change' }) } });
-    window.location.hash = '#/features?repo=o/r';
+    window.location.hash = '#/features?only=o/r';
     const user = userEvent.setup();
     render(<App />);
     await user.type(await screen.findByLabelText('Describe a feature or a fix'), 'login 404s');
@@ -668,7 +672,7 @@ describe('work panel: issue + PR tabs, grinding switch', () => {
   it('the Features list shows Merge #n for each mergeable PR, opening the panel on the PR', async () => {
     const ready = (n: number, pr: number) => card(n, 'in_review', { pr: { n: pr, draft: false, ci: 'success', url: 'u' }, mergeable: true });
     mock({ prds: [prd({ issues: 2, column: 'refined' })], lanes: [lane([ready(12, 40), ready(13, 41)])], extra: { '/api/issues/o/r/12': () => json(issue), '/api/pulls/o/r/40': () => json(pull) } });
-    window.location.hash = '#/features?repo=o/r';
+    window.location.hash = '#/features?only=o/r';
     const user = userEvent.setup();
     render(<App />);
     expect(await screen.findByRole('button', { name: 'Merge #41' })).toBeTruthy();
@@ -892,5 +896,84 @@ describe('work panel action keys', () => {
     expect((box as HTMLTextAreaElement).value).toBe('m');
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(posts.length).toBe(0);
+  });
+});
+
+describe('Features across repos', () => {
+  const repos = ['o/a', 'o/b', 'o/c'].map((slug) => ({ slug, name: slug.slice(2).toUpperCase(), path: `/x/${slug}` }));
+  const pl = (repo: string, prds: any[], over: Record<string, unknown> = {}) => ({ repo, stale: false, fetched_at: 1, prds, ...over });
+  const dl = (repo: string, lanes: any[], over: Record<string, unknown> = {}) => ({ repo, stale: false, fetched_at: 1, cap: 2, running: 0, auto_grind: false, lanes, ...over });
+  const feat = (slug: string, epic: number) => prd({ slug, title: `Feat ${slug}`, epic, column: 'building', issues: 1, refined: 1 });
+  const run = (repo: string, epic: number) => ({ id: 'd1', state: 'running', epic: `${repo}#${epic}`, totals: { seconds: 1, cost: 0 }, lanes: [{ n: 1, key: 'l1', stage: 'building', needs_you: 'waiting on you' }] });
+  const three = () => mock({
+    repos,
+    all: {
+      plan: [pl('o/a', [feat('a1', 1), feat('a2', 2)]), pl('o/b', [feat('b1', 3), feat('b2', 4), feat('b3', 5)]), pl('o/c', [prd({ slug: 'c1', title: 'Done', epic: 6, column: 'shipped' })])],
+      del: [dl('o/a', [lane([card(1, 'in_review')], { epic: 1 }), lane([card(2, 'ready')], { epic: 2 })]), dl('o/b', [lane([card(3, 'ready')], { epic: 3 }), lane([card(4, 'ready')], { epic: 4 }), lane([card(5, 'ready')], { epic: 5 })]), dl('o/c', [lane([card(6, 'merged')], { epic: 6 })])],
+    },
+    extra: { '/api/dispatches': () => json({ dispatches: [run('o/a', 2)] }) },
+  });
+  const headings = () => [...document.querySelectorAll('.fgroup-h')].map((h) => h.textContent ?? '');
+
+  it('groups by repo, the repo with a feature stopped on you first, the empty repo as one line', async () => {
+    three();
+    window.location.hash = '#/features?repo=o/b';
+    render(<App />);
+    await screen.findByText('Feat a1');
+    const h = headings();
+    expect(h[0]).toContain('A');
+    expect(h[0]).toContain('2 in progress · 0 shipped');
+    expect(h[1]).toContain('3 in progress');
+    expect(screen.getByText(/nothing in progress/).textContent).toContain('1 shipped');
+    expect(screen.queryByText('Shipped')).toBeNull();
+    expect(screen.getByText(/5 in progress across 2 repos; 1 is stopped on you/)).toBeTruthy();
+  });
+
+  it('a card in another repo opens and acts on its own repo, not the switcher\'s', async () => {
+    three();
+    window.location.hash = '#/features?repo=o/a';
+    render(<App />);
+    const link = await screen.findByRole('link', { name: 'Feat b1' });
+    expect(link.getAttribute('href')).toBe('#/features/b1?repo=o/b');
+    const user = userEvent.setup();
+    await user.click(within(screen.getByRole('article', { name: 'Feat b1' })).getByRole('button', { name: 'Run epic' }));
+    expect((await screen.findByLabelText('Epic') as HTMLInputElement).value).toBe('o/b#3');
+  });
+
+  it('the filter sets only, leaves repo, and All repos clears it', async () => {
+    three();
+    window.location.hash = '#/features?repo=o/a';
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText('Feat b1');
+    await user.click(screen.getByRole('button', { name: /Repo filter/ }));
+    await user.click(await screen.findByText('b'));
+    await waitFor(() => expect(window.location.hash).toContain('only=o%2Fb'.replace('%2F', '/')));
+    expect(window.location.hash).toContain('repo=o/a');
+    await user.click(screen.getByRole('button', { name: /Repo filter/ }));
+    await user.click(await screen.findByText('All repos'));
+    await waitFor(() => expect(window.location.hash).not.toContain('only='));
+  });
+
+  it('a loading or stale repo is never shown as empty, and a meta-only entry shows its error', async () => {
+    mock({
+      repos,
+      all: {
+        plan: [pl('o/a', [], { fetched_at: null, stale: true }), pl('o/b', [], { stale: true, error: 'boom' }), { repo: 'o/c', stale: true, fetched_at: null, error: 'gh failed' }],
+        del: [dl('o/a', [], { fetched_at: null, stale: true }), dl('o/b', []), { repo: 'o/c', stale: true, fetched_at: null }],
+      },
+    });
+    window.location.hash = '#/features?repo=o/a';
+    render(<App />);
+    expect((await screen.findAllByText('Still loading…')).length).toBeGreaterThan(0);
+    expect(screen.getByText(/GitHub data is stale: boom/)).toBeTruthy();
+    expect(screen.queryByText(/nothing in progress/)).toBeNull();
+  });
+
+  it('no watched repo shows the empty text', async () => {
+    mock({ all: { plan: [], del: [] } });
+    window.location.hash = '#/features';
+    render(<App />);
+    expect(await screen.findByText('No repo opened recently. Pick one in the filter.')).toBeTruthy();
   });
 });
