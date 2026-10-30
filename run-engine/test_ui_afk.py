@@ -518,7 +518,7 @@ ui_afk.start(C + 1, C)  # a fresh window: the old state is dismissed
 
 def two_q():
     q = Q(rec=False)
-    q["questions"].append({**q["questions"][0], "question": "Second?"})
+    q["questions"].append({**q["questions"][0], "question": "Second?", "multiSelect": True})
     return q
 
 
@@ -568,6 +568,8 @@ rejects(chg((ids[0], {"0": {"labels": ["Approve"]}, "1": {"labels": ["Approve"]}
 rejects(chg((ids[0], {"0": {"labels": ["Nope"]}, "1": {"labels": ["Approve"]}})))  # not an option
 rejects(chg((ids[0], {"0": {"other": "x" * 4001}, "1": {"labels": ["Approve"]}})))
 
+rejects(chg((ids[0], {"0": {"none": True}, "1": {"labels": ["Approve"]}})))  # none on single-select
+
 # a held entry is not changeable
 st = ui_afk.load()
 st["log"].append({"kind": "held", "id": f"{sa}:r9", "sid": sa, "questions": two_q()["questions"]})
@@ -594,6 +596,13 @@ try:
     raise AssertionError("double submit accepted")
 except ValueError:
     assert not sent
+
+# none on the multi-select question is a change and reads "None of these"
+idn = answered(sb, "r7")
+out = ui_afk.change(chg((idn, {"0": {"labels": ["Approve"]}, "1": {"none": True}})))
+assert out["results"][0]["state"] == "sent", out
+assert 'Question: Second?\nOld answer: Approve\nNew answer: "None of these"' in sent[-1][1], sent[-1][1]
+sent.clear()
 
 # refusals: others still sent, refused entries stay changeable
 ids2 = [answered(sa, "r3"), answered(sb, "r3")]

@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Answer endpoint accepts "none"** (#647): `{"none": true}` answers a multi-select question even with free text off (400 on single-select), resumes as `{"other":"None of these"}`, and works in `POST /api/afk/change`.
 - **Share a PRD for review** (epic #584, #603): the PRD tab's Share button and the "Public (n)" badge publish a Draft or In review PRD at a token link on a separate read-only listener behind a tailscale funnel; reviewers read it, comment on selected text and Approve (a signal, never the PRD's status) without an account; the author replies, resolves and sends open comments to a `/create-prd --update` session, and an Inbox item and `prd-comment` event announce new comments. Needs the `funnel` node attribute in the tailnet policy (`docs/INSTALL.md`); the UI itself is still never funnelled.
 - **Share links: PRD tab thread rail** (#600): the PRD tab highlights each commented sentence and lists the share's threads beside the text (open in text order, resolved collapsed, Outdated with their quote). The author can reply, resolve, reopen and delete comments and threads, and delete the record of an ended share. While the tab is open it marks the share seen.
 - **Share links: Send open comments button** (#601): the thread rail gets "Send open comments (n)". It shows the exact prompt in a confirm dialog (with warnings for a running panel or update session and for older comments that will be dropped), then starts the PRD update session and links to it, reporting threads still unsent.

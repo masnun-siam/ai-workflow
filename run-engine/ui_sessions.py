@@ -188,6 +188,7 @@ def set_pending(sid: str, round) -> dict:
 
 
 MAX_FREE_TEXT = 4000
+NONE_LABEL = "None of these"
 
 
 def answer_text(pending: dict, answers) -> str:
@@ -198,8 +199,8 @@ def answer_text(pending: dict, answers) -> str:
     out = {}
     for i, q in enumerate(qs):
         a = answers[str(i)]
-        if not isinstance(a, dict) or len(a) != 1 or next(iter(a)) not in ("labels", "other"):
-            raise ValueError(f"answer {i} must be exactly one of labels or other")
+        if not isinstance(a, dict) or len(a) != 1 or next(iter(a)) not in ("labels", "other", "none"):
+            raise ValueError(f"answer {i} must be exactly one of labels, other or none")
         if "labels" in a:
             labels = a["labels"]
             valid = {o["label"] for o in q["options"]}
@@ -212,6 +213,12 @@ def answer_text(pending: dict, answers) -> str:
             if any(lab not in valid or "\0" in lab for lab in labels):
                 raise ValueError(f"answer {i}: label is not an option of this question")
             out[str(i)] = {"labels": labels}
+        elif "none" in a:
+            if a["none"] is not True:
+                raise ValueError(f"answer {i}: none must be true")
+            if not q["multiSelect"]:
+                raise ValueError(f"answer {i}: none is only for multi-select questions")
+            out[str(i)] = {"other": NONE_LABEL}
         else:
             other = a["other"]
             if not q.get("allowFreeText", True):

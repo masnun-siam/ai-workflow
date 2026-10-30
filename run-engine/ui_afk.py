@@ -166,6 +166,8 @@ def _label(pick) -> str:
 
 
 def _new_pick(a) -> list:
+    if "none" in a:
+        return [ui_sessions.NONE_LABEL]
     return a["labels"] if "labels" in a else [a["other"]]
 
 
@@ -177,7 +179,7 @@ def _change_text(group: list) -> str:
             new = _new_pick(answers[str(i)])
             if new == q["picked"]:
                 continue
-            shown = f'"{new[0]}"' if "other" in answers[str(i)] else _label(new)
+            shown = f'"{new[0]}"' if "other" in answers[str(i)] or "none" in answers[str(i)] else _label(new)
             lines += [
                 "",
                 f"Question: {q.get('question')}",
