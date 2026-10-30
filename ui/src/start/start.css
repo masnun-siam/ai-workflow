@@ -8,7 +8,7 @@
 .kind-h b{font-size:15px;font-weight:700;letter-spacing:-.01em}
 .kind-h span{font-size:12px;color:var(--muted)}
 .kind-cmds{display:flex;flex-wrap:wrap;gap:4px}
-.kind-cmds button{font:inherit;font-size:12.5px;font-weight:500;color:var(--ink);background:var(--bg);border:0;border-radius:999px;padding:4px 10px;cursor:pointer}
+.kind-cmds button{font:inherit;font-size:12.5px;font-weight:500;color:var(--ink);background:var(--sunk);border:0;border-radius:var(--r-ctl);padding:4px 10px;cursor:pointer}
 .kind-cmds button:hover{background:var(--sunk)}
 .kind-cmds button.on{background:var(--ink);color:var(--surface)}
 .start-form{padding:0;overflow:visible;min-height:auto;gap:0}
@@ -22,7 +22,7 @@
 .vf-note{margin:0;font-size:13px}
 .err-text{color:var(--bad);font-size:13px}
 .chips-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-.pill-btn{border:1px solid var(--line-strong);background:var(--surface);border-radius:999px;padding:3px 10px;cursor:pointer;font-size:12.5px;font-weight:600}
+.pill-btn{border:1px solid var(--line-strong);background:var(--surface);border-radius:var(--r-ctl);padding:3px 10px;cursor:pointer;font-size:12.5px;font-weight:600}
 .pill-btn:hover{border-color:var(--muted)}
 .pick .pick-list{margin-top:6px}
 .pick-list button .ref{flex:none}
