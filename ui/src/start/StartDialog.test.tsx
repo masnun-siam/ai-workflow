@@ -240,8 +240,23 @@ describe('Start dialog', () => {
     expect(screen.getByLabelText('Phase and issue (optional)')).toBeTruthy();
     const ids = COMMANDS.find((g) => g.g === 'Maintain')?.items.map((c) => c.id) ?? [];
     expect(ids.indexOf('repo-bootstrap')).toBe(ids.indexOf('faq-updater') + 1);
+    expect(screen.getByText(/one branch and one PR, each phase its own session/)).toBeTruthy();
+    expect((screen.getByLabelText('Phase and issue (optional)') as HTMLInputElement).placeholder).toBe('Optional: leave empty to start at the audit, or give a later phase and the bootstrap issue, e.g. guides 123');
     await user.click(startButton());
     await waitFor(() => expect(posts()).toEqual([{ repo: 'o/r', command: 'repo-bootstrap', args: '', claude_cmd: 'claude' }]));
+  });
+
+  it('repo-bootstrap: a 409 shows the message with Open that run', async () => {
+    postSessions = () => [409, { error: 'A bootstrap run is already open for o/r', id: 'run-s1' }];
+    const user = userEvent.setup();
+    open({ cmd: 'repo-bootstrap' });
+    await ready();
+    await user.click(startButton());
+    await screen.findAllByRole('button', { name: 'Open that run' });
+    const dlg = within(screen.getByRole('dialog'));
+    expect(dlg.getByText('A bootstrap run is already open for o/r')).toBeTruthy();
+    await user.click(dlg.getByRole('button', { name: 'Open that run' }));
+    expect(screen.getByTestId('loc').textContent).toBe('/sessions/run-s1');
   });
 
   it('switching to a same-kind command carries the argument over', async () => {

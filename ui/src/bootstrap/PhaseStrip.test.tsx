@@ -9,7 +9,7 @@ const run = (states: string[], state: BootstrapRun['state']): BootstrapRun => ({
   id: 'r1', repo: 'o/r', issue: 5, branch: 'b', state, error: null, created_at: '', updated_at: '',
   phases: NAMES.map((name, i) => ({ name, state: states[i] as never, session_id: states[i] === 'pending' ? null : `s${i}` })),
 });
-const draw = (r: BootstrapRun) => render(<MemoryRouter><PhaseStrip run={r} /></MemoryRouter>);
+const draw = (r: BootstrapRun, here?: string) => render(<MemoryRouter><PhaseStrip run={r} here={here} /></MemoryRouter>);
 afterEach(cleanup);
 
 describe('PhaseStrip', () => {
@@ -27,6 +27,13 @@ describe('PhaseStrip', () => {
     cleanup();
     draw(run(['done', 'done', 'failed', 'pending', 'pending', 'pending'], 'stopped'));
     expect(document.querySelector('[aria-current="step"]')?.textContent).toBe('constitutionFailed');
+  });
+  it('marks the here session as this session, without a link to itself', () => {
+    draw(run(['done', 'done', 'done', 'done', 'running', 'pending'], 'running'), 's4');
+    const items = screen.getAllByRole('listitem');
+    expect(items[4].textContent).toBe('gates (this session)Running');
+    expect(within(items[4]).queryByRole('link')).toBeNull();
+    expect(within(items[3]).getByRole('link').getAttribute('href')).toBe('/sessions/s3');
   });
   it('marks no step on a finished run', () => {
     draw(run(Array(6).fill('done'), 'done'));

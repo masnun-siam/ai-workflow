@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import { useCancelAuto, useSession, useSettings, useStartNow, useTranscript, useVaultPrd } from '../api/hooks';
 import type { Session } from '../api/types';
+import { PhaseStrip } from '../bootstrap/PhaseStrip';
 import { Banner, Button, Chip, EmptyState, Icon, Menu, SessionChip } from '../components';
 import { QuestionForm } from '../questions/QuestionForm';
 import { CreateRepoDialog } from '../repos/CreateRepoDialog';
@@ -118,6 +119,7 @@ export function SessionPage() {
       ) : null}
       {finished && s.no_repo && skillOf(s.command) === 'create-prd' && s.vault_folder ? <VaultPrd s={s} /> : null}
 
+      {s.bootstrap ? <PhaseStrip run={s.bootstrap} here={s.id} /> : null}
       <div className="sess-grid">
         <div className="stack">
           <Transcript events={tr.events} live={live} working={['running', 'starting'].includes(s.outcome)} />

@@ -16,7 +16,7 @@ const STATE: Record<BootstrapPhase['state'], { label: string; tone: Tone }> = {
 const currentOf = (phases: BootstrapPhase[]) =>
   (phases.find((p) => p.state === 'running') ?? phases.find((p) => p.state === 'failed') ?? phases.find((p) => p.state === 'pending'))?.name;
 
-export function PhaseStrip({ run }: { run: BootstrapRun }) {
+export function PhaseStrip({ run, here }: { run: BootstrapRun; here?: string }) {
   const now = run.state === 'done' || run.state === 'ended' ? undefined : currentOf(run.phases);
   return (
     <ol className="phase-strip" aria-label="Bootstrap phases">
@@ -24,7 +24,7 @@ export function PhaseStrip({ run }: { run: BootstrapRun }) {
         const st = STATE[p.state];
         return (
           <li key={p.name} className={`phase${p.name === now ? ' now' : ''}`} aria-current={p.name === now ? 'step' : undefined}>
-            {p.session_id ? <Link to={routes.session(p.session_id)}>{p.name}</Link> : <span>{p.name}</span>}
+            {p.session_id && p.session_id === here ? <span>{p.name} (this session)</span> : p.session_id ? <Link to={routes.session(p.session_id)}>{p.name}</Link> : <span>{p.name}</span>}
             <Chip tone={st.tone} live={p.state === 'running'}>{st.label}</Chip>
           </li>
         );
