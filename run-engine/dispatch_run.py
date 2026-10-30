@@ -744,17 +744,26 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None, gh
         if notify and kind in ("needs_you", "held", "awaiting_merge", "finished", "warning"):
             notify(d, k, kind, text)
 
+    def send(x, text):
+        """Prompt the lane's session; a lane whose session was closed (before the merge) gets a fresh one."""
+        if x.get("handle"):
+            runner.send(x["handle"], text)
+        else:
+            x["handle"] = runner.start(x, text, d)
+            x.setdefault("handles", []).append(x["handle"])
+
     for k, x in d["lanes"].items():
         outbox = x.pop("outbox", None) or []
         for kind, text in outbox:
             try:
                 if kind == "send":
-                    runner.send(x["handle"], text)
+                    send(x, text)
                 elif x.get("handle"):
                     runner.close(x["handle"])
                     x["handle"] = None
             except Exception as e:  # noqa: BLE001
-                ev(k, "needs_you", f"{kind} failed: {e}")
+                x["needs_you"] = f"{kind} failed: {e}"
+                ev(k, "needs_you", x["needs_you"])
         if d["state"] in ("cancelled", "done"):
             continue
         f = facts.get(k) or {}
@@ -783,7 +792,7 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None, gh
         for a in acts:
             try:
                 if a[0] == "send":
-                    runner.send(x["handle"], a[1])
+                    send(x, a[1])
                 elif a[0] == "continue":
                     runner.send(x["handle"], CONTINUE)
                 elif a[0] == "close":
@@ -800,7 +809,7 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None, gh
                     elif "conflict" in err.lower():  # the board had not seen the conflict yet: fix it in the lane
                         base = lane_base(x, d["settings"])
                         x.update(stage="conflict_fix", merge_at=None)
-                        runner.send(x["handle"], conflict_prompt(a[1], base))
+                        send(x, conflict_prompt(a[1], base))
                         ev(k, "stage", "merge_gate -> conflict_fix (GitHub refused the merge: conflicts)")
                     else:
                         x["held"] = f"merge failed: {err}"

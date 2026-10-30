@@ -295,6 +295,13 @@ dr.tick(
 )
 assert dc["lanes"][K(91)]["stage"] == "conflict_fix" and not dc["lanes"][K(91)].get("held")
 assert "conflicts" in rc.sent[-1][1]
+# merged after the lane's session was closed: followups start a fresh session, not a send to None
+dm = dr.create("o/r#92", "headless", {"grind": "off", "auto_merge": True}, [child(93)])
+rm = FakeRunner()
+dm["lanes"][K(93)].update(stage="merge_gate", handle=None, pr=193)
+dr.tick(dm, {K(93): {"issue_open": True, "agent": None, "solo": True, "pr": pr(193, state="MERGED")}}, rm, merge, now=1)
+assert dm["lanes"][K(93)]["stage"] == "followups" and not dm["lanes"][K(93)].get("needs_you")
+assert rm.started and rm.started[-1][0] == 93 and dm["lanes"][K(93)]["handle"] == {"n": 93}
 print("  ok  merge gate, red CI, conflict")
 
 
