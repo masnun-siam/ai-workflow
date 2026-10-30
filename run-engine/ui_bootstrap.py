@@ -224,7 +224,7 @@ def _resume(run: dict, phase: dict) -> dict:
     phase["state"], run["state"], run["error"] = "running", "running", None
     try:
         start_phase(run, phase["name"])
-    except BaseException:
+    except Exception:
         phase["state"], run["state"], run["error"] = before
         raise
     return load(run["id"])
