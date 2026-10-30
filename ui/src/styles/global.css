@@ -432,7 +432,7 @@ html[data-away] .away-card{border-color:var(--ink)}
   .mob-nav button.on,.mob-nav a.on{color:var(--ink)}
   .mob-nav .count{position:absolute;top:0;right:4px;background:var(--you);color:#fff;border-radius:8px;font:500 11px var(--mono);padding:0 5px}
   .frow{grid-template-columns:minmax(0,1fr);gap:10px}
-  .departures > .live-card{grid-template-columns:minmax(0,1fr) auto;gap:4px 12px}
+  .departures > .live-card{grid-template-columns:minmax(0,1fr);gap:4px 12px}
   .departures > .live-card > .row{order:0}
   .item,.alerts > .item{grid-template-columns:18px minmax(0,1fr)}
   .alerts .item-ico{width:18px;height:18px}
