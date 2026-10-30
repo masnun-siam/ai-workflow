@@ -28,6 +28,28 @@ ui_actions.set_state("o", "r", 7, "open", None, ok_runner)
 assert calls[-1] == ["issue", "reopen", "7", "-R", "o/r"]
 ui_actions.merge("o", "r", "9", ok_runner)
 assert calls[-1] == ["pr", "merge", "9", "-R", "o/r", "--merge"], "a merge commit, never squash"
+assert ui_actions.set_pr_state("o", "r", 9, "closed", ok_runner) == {"ok": True, "state": "closed"}
+assert calls[-1] == ["pr", "close", "9", "-R", "o/r"], "branch kept, no comment"
+assert ui_actions.set_pr_state("o", "r", 9, "open", ok_runner) == {"ok": True, "state": "open"}
+assert calls[-1] == ["pr", "reopen", "9", "-R", "o/r"]
+n_calls = len(calls)
+for bad in (
+    lambda: ui_actions.set_pr_state("o", "r", 9, "merged", ok_runner),
+    lambda: ui_actions.set_pr_state("o", "r", 9, None, ok_runner),
+    lambda: ui_actions.set_pr_state("o", "../x", 9, "closed", ok_runner),
+    lambda: ui_actions.set_pr_state("o", "r", "7; rm", "open", ok_runner),
+):
+    try:
+        bad()
+        raise AssertionError("expected ValueError")
+    except ValueError:
+        pass
+assert len(calls) == n_calls, "a bad state or id runs no gh command"
+try:
+    ui_actions.set_pr_state("o", "r", 9, "open", bad_runner)
+    raise AssertionError("expected RuntimeError")
+except RuntimeError as e:
+    assert "not mergeable" in str(e)
 for bad in (
     lambda: ui_actions.comment("o", "r", "7", "  ", ok_runner),
     lambda: ui_actions.comment("o", "../x", "7", "x", ok_runner),

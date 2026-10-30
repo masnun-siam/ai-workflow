@@ -7,7 +7,7 @@ import { mdToHtml } from './md';
 import { prdBody } from './prdRender';
 import { approvalsLabel, clearsClause, commentsLabel, isShareable, shareBody, stopBody } from './shares';
 import { nextStep, stepKey } from './nextStep';
-import { migrateRepoKey, pickRepo, withRepoParam } from './repo';
+import { migrateRepoKey, pickRepo, repoLink, withParam, withRepoParam } from './repo';
 import { boardColumn, issueStatus, BOARD_COLUMNS, PLAN_RUN } from './vocab';
 
 const card = (o: Partial<DeliveryCard>): DeliveryCard => ({
@@ -155,6 +155,15 @@ describe('repo choice (FR-3)', () => {
   it('withRepoParam keeps other params', () => {
     expect(withRepoParam('?a=1', 'o/r')).toBe('?a=1&repo=o/r');
     expect(withRepoParam('?repo=o/r', '')).toBe('');
+  });
+  it('withParam sets and removes only, keeping repo', () => {
+    expect(withParam('?repo=o/r', 'only', 'a/b')).toBe('?repo=o/r&only=a/b');
+    expect(withParam('?repo=o/r&only=a/b', 'only', '')).toBe('?repo=o/r');
+  });
+  it('repoLink appends repo with ? or &, and nothing for no repo', () => {
+    expect(repoLink('o/r', '/features')).toBe('/features?repo=o/r');
+    expect(repoLink('o/r', '/f?tab=x')).toBe('/f?tab=x&repo=o/r');
+    expect(repoLink('', '/features')).toBe('/features');
   });
 });
 

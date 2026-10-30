@@ -52,11 +52,16 @@ export function pickRepo(search: string, known: string[], remembered: string): s
   return known[0] ?? '';
 }
 
-/** `search` with ?repo= set (dropped for ''), keeping other params and a readable slash. */
-export function withRepoParam(search: string, repo: string): string {
+/** `search` with ?<key>= set (dropped for ''), keeping other params and a readable slash. */
+export function withParam(search: string, key: string, value: string): string {
   const sp = new URLSearchParams(search);
-  if (repo) sp.set('repo', repo);
-  else sp.delete('repo');
+  if (value) sp.set(key, value);
+  else sp.delete(key);
   const s = sp.toString().replace(/%2F/gi, '/');
   return s ? `?${s}` : '';
 }
+
+export const withRepoParam = (search: string, repo: string) => withParam(search, 'repo', repo);
+
+/** An in-app path that carries `repo` (unchanged when `repo` is empty). */
+export const repoLink = (repo: string, path: string) => (repo ? `${path}${path.includes('?') ? '&' : '?'}repo=${repo}` : path);
