@@ -1,4 +1,4 @@
-"""Writes from the UI's card drawer: comment on, close or reopen an issue, merge a PR, read and save a PRD.
+"""Writes from the UI's card drawer: comment on, close or reopen an issue, merge, close or reopen a PR, read and save a PRD.
 
 Every GitHub call is one `gh` invocation with argv (no shell). A failed call raises RuntimeError with
 gh's message, which the server maps to 502. Merge always uses a merge commit (`--merge`), never squash;
@@ -74,6 +74,16 @@ def merge(owner, repo, n, runner=gh_json) -> dict:
     slug, n = _ids(owner, repo, n)
     _gh(["pr", "merge", n, "-R", slug, "--merge"], runner)
     return {"ok": True}
+
+
+def set_pr_state(owner, repo, n, state, runner=gh_json) -> dict:
+    """Close (branch kept, no comment) or reopen a PR; gh refuses a merged PR or a deleted head branch."""
+    slug, n = _ids(owner, repo, n)
+    verb = {"open": "reopen", "closed": "close"}.get(state)
+    if verb is None:
+        raise ValueError("state must be open or closed")
+    _gh(["pr", verb, n, "-R", slug], runner)
+    return {"ok": True, "state": state}
 
 
 def _prd_path(checkout: str, rel) -> str:

@@ -188,7 +188,7 @@ the row action and an Inbox Fix item for a conflicting PR, starts one session th
 the PR branch in its worktree (never a rebase or force-push), resolves, runs `/verifier-locally` and
 pushes; while it runs the button is a **Resolving…** link to it. Once the merge rule holds the usual
 ready-to-merge Inbox item appears.
-`POST /api/issues/<o>/<r>/<n>/comment|state`, `POST /api/pulls/<o>/<r>/<n>/comment|merge`,
+`POST /api/issues/<o>/<r>/<n>/comment|state`, `POST /api/pulls/<o>/<r>/<n>/comment|merge|state` (`state`: `{state: open|closed}` runs `gh pr reopen|close`, branch kept; 502 with GitHub's message when refused),
 `POST /api/grind/skip-ci|stop` (`{repo, pr}`; 409 when there is nothing to skip or stop),
 `GET /api/prd?repo=&path=` (returns `sha`), `POST /api/prd` (takes `base_sha`; 409 when it changed).
 
