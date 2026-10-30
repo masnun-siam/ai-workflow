@@ -19,6 +19,9 @@ def rec(sid, status, command="/implement-issue 4", at="2026-10-20T10:00:00+00:00
     return {"id": sid, "status": status, "command": command, "repo": "o/r", "started_at": at, **kw}
 
 
+session_rec = rec  # `rec` is rebound by the share tests below
+
+
 def pq():
     return {"id": "q-1", "status": "pending", "questions": [{"question": "A or B?", "options": []}]}
 
@@ -418,4 +421,43 @@ ui_shares.add_thread(r3["id"], "Ana", "secret words", {"exact": "x"})
 ui_shares.add_approval(r3["id"], "Bo")  # within the minute: throttled
 assert raised == [("prd-comment", {"note": "1 new comment on Why title"})], raised
 print("  ok  listener")
+
+
+# ---- bootstrap runs
+def brun(state, rid="a1b2c3d4e5f6", repo="o/r", issue=7, failed=None, error=None):
+    phases = [{"name": n, "session_id": f"s-{n}", "state": "done"} for n in ("audit",)]
+    phases += [{"name": n, "session_id": None, "state": "pending"} for n in ("decide", "constitution")]
+    if failed:
+        phases[1].update(state="failed", session_id="s-decide")
+    return {"id": rid, "repo": repo, "issue": issue, "state": state, "phases": phases, "error": error,
+            "updated_at": "2026-10-20T11:00:00+00:00"}  # fmt: skip
+
+
+def btypes(res):
+    return [t for t in types(res) if t != "repo_unpublished"]
+
+
+res = build(bootstraps=[brun("waiting"), brun("running", "b" * 12), brun("done", "c" * 12), brun("ended", "d" * 12)])
+assert btypes(res) == ["bootstrap_waiting"], btypes(res)
+w = one(res, "bootstrap_waiting")
+assert w["group"] == "decide" and w["repo"] == "o/r" and w["run_id"] == "a1b2c3d4e5f6" and w["issue"] == 7
+assert w["next_phase"] == "decide" and w["key"] == "bootstrap:a1b2c3d4e5f6:audit:waiting" and w["urgency"] is None
+res = build(bootstraps=[brun("stopped", failed=True, error="crashed")])
+st = one(res, "bootstrap_stopped")
+assert st["group"] == "fix" and st["phase"] == "decide" and st["session_id"] == "s-decide" and st["error"] == "crashed"
+assert st["key"] == "bootstrap:a1b2c3d4e5f6:decide:stopped" and st["issue"] == 7
+res = build(bootstraps=[brun("stopped", issue=None, error="x")])  # audit failed before an issue
+assert one(res, "bootstrap_stopped")["issue"] is None and one(res, "bootstrap_stopped")["phase"] == "audit"
+runs = [brun("waiting"), brun("stopped", "e" * 12, failed=True)]
+assert [i["key"] for i in build(bootstraps=runs)["items"]] == [i["key"] for i in build(bootstraps=runs)["items"]]
+assert btypes(build(bootstraps=[brun("waiting")])) == btypes(build(bootstraps=[brun("waiting")], repo="o/r"))
+assert btypes(build(bootstraps=[brun("waiting", repo="o/s")], repo="o/r")) == []
+assert btypes(build(bootstraps=[brun("waiting", repo="O/R")], repo="o/r")) == ["bootstrap_waiting"]
+assert one(build(bootstraps=[brun("waiting", repo="O/R")]), "bootstrap_waiting")["repo"] == "o/r", "registered spelling"
+# a failed session of a run makes no session_failed; one without a run still does
+res = build(sessions=[session_rec("s1", "failed", error="boom", bootstrap="a1b2c3d4e5f6")])
+assert btypes(res) == []
+res = build(sessions=[session_rec("s1", "failed", error="boom")])
+assert btypes(res) == ["session_failed"]
+print("  ok  bootstrap items")
 print("ui_inbox: all checks passed")

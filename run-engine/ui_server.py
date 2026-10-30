@@ -132,6 +132,16 @@ def _panel_of(rec: dict):
         return None
 
 
+def _bootstrap_of(rec: dict):
+    """The bootstrap run a session belongs to, or None."""
+    if not rec.get("bootstrap"):
+        return None
+    try:
+        return ui_bootstrap.load(rec["bootstrap"])
+    except ValueError:
+        return None
+
+
 def _public(rec: dict) -> dict:
     p, sid = rec.get("cwd_path"), rec.get("session_id")
     return {
@@ -163,6 +173,7 @@ def _public(rec: dict) -> dict:
         "no_repo": rec.get("no_repo") is True,
         "vault_folder": rec.get("vault_folder"),
         "peer_review": _panel_of(rec),
+        "bootstrap": _bootstrap_of(rec),
         "repo_path": p,
         "resume_command": f"cd {shlex.quote(p)} && claude --resume {shlex.quote(sid)}" if p and sid else None,
     }
@@ -432,12 +443,17 @@ def _inbox_items(repo, watched, recs) -> dict:
         repo=repo or None,
         settings={r: ui_settings.repo_settings(r) for r in watched},
         solo={r: ui_gh.solo(r) for r in watched},
+        bootstraps=ui_bootstrap.list_all(),
     )
     dispatches = dispatch_run.list_all()
     lanes = [i for i in ui_dispatch.inbox_items(dispatches) if not repo or i["repo"].lower() == repo.lower()]
     mine = ui_dispatch.drop_owned(body["items"], dispatches)  # a dispatch's issue shows once: as its lane
     body["items"] = ui_inbox.rank(mine + lanes, ui_urgency.urgency)
     return body
+
+
+class _NotFound(Exception):
+    """An unknown id in a POST route (HTTP 404)."""
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
@@ -515,6 +531,16 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json(200, peer_review.offers())
         elif path == "/api/dispatches":
             self._json(200, {"dispatches": [ui_dispatch.public(d) for d in dispatch_run.list_all()]})
+        elif path == "/api/bootstraps":
+            try:
+                repo = (parse_qs(urlsplit(self.path).query).get("repo") or [""])[0]
+                runs = ui_bootstrap.list_all()
+                if repo:
+                    repo = _registered(repo).lower()
+                    runs = [r for r in runs if r["repo"].lower() == repo]
+                self._json(200, {"runs": runs})
+            except ValueError as e:
+                self._json(400, {"error": str(e)})
         elif path.startswith("/api/dispatches/"):
             self._dispatch_get(path.split("/")[3:])
         elif path == "/api/sessions/cleanup":
@@ -631,6 +657,23 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         else:
             self._send(404, "text/plain; charset=utf-8", b"not found")
 
+    def _bootstrap_post(self, rid: str, op: str) -> None:
+        """POST /api/bootstraps/<id>/continue|retry|stop; an unknown id is 404."""
+        fn = {"continue": ui_bootstrap.continue_run, "retry": ui_bootstrap.retry, "stop": ui_bootstrap.stop}[op]
+
+        def call(_body):
+            try:
+                return fn(rid)
+            except ValueError as e:
+                if str(e).startswith(("no bootstrap", "bad bootstrap id")):
+                    raise _NotFound(str(e)) from e
+                raise
+
+        try:
+            self._dispatch(call)
+        except _NotFound as e:
+            self._json(404, {"error": str(e)})
+
     def _json(self, status: int, body) -> None:
         self._send(status, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
 
@@ -675,6 +718,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._review_lens(parts[3])
         elif len(parts) == 5 and parts[:3] == ["", "api", "review"] and parts[4] == "rounds":
             self._review_rounds(parts[3])
+        elif len(parts) == 5 and parts[:3] == ["", "api", "bootstraps"] and parts[4] in ("continue", "retry", "stop"):
+            self._bootstrap_post(parts[3], parts[4])
         elif parts[:3] == ["", "api", "dispatches"]:
             self._dispatch_post(parts[3:])
         elif parts == ["", "api", "start"]:
@@ -928,6 +973,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             dispatch_run.Conflict,
             ui_restart.Conflict,
             ui_afk.Conflict,
+            ui_bootstrap.Conflict,
         ) as e:
             self._json(409, {"error": str(e), **({"id": e.id} if getattr(e, "id", None) else {})})
         except (RuntimeError, OSError, ui_runner.RunnerError) as e:  # RunnerError, a failed herdr call
