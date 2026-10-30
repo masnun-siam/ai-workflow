@@ -135,6 +135,8 @@ function AllRepos({ repo, picker }: { repo: string; picker: ReactNode }) {
   const names = useRepos().data?.repos ?? [];
   const dispatches = useDispatches().data?.dispatches ?? [];
   const [filter, setFilter] = useState<Filter>(null);
+  const [picked, setPicked] = useState<{ repo: string; n: number }[]>([]);
+  const [dispatching, setDispatching] = useState(false);
 
   const groups: Group[] = useMemo(
     () => (plan.data?.repos ?? []).map((p) => {
@@ -161,6 +163,16 @@ function AllRepos({ repo, picker }: { repo: string; picker: ReactNode }) {
   const refine = groups.filter((g) => g.toRefine.length);
   const failed = (plan.isError && !plan.data) || (del.isError && !del.data);
   const loaded = !!plan.data && !!del.data;
+  const isPicked = (g: Group, n: number) => picked.some((p) => p.n === n && p.repo.toLowerCase() === g.repo.toLowerCase());
+  // Derived from the current Ready lists on every render, so a pick that is no longer ready drops out and can free the other repos.
+  const live = groups.flatMap((g) => g.ready.filter((i) => isPicked(g, i.n)).map((i) => ({ repo: g.repo, n: i.n, title: i.title })));
+  const pickRepo = live[0]?.repo;
+  const pickName = groups.find((g) => g.repo === pickRepo)?.name;
+  const note = pickRepo ? `Picks are from ${pickName}. Clear them to pick from another repo.` : undefined;
+  // The dialog resets when its list changes identity, so keep one identity while the picks stay the same.
+  const runKey = JSON.stringify(live.map(({ n, title }) => ({ n, title })));
+  const run = useMemo(() => JSON.parse(runKey) as { n: number; title: string }[], [runKey]);
+  const togglePick = (g: Group, n: number) => setPicked((p) => (isPicked(g, n) ? p.filter((x) => !(x.n === n && x.repo.toLowerCase() === g.repo.toLowerCase())) : [...p, { repo: g.repo, n }]));
 
   return (
     <div className="content-inner">
@@ -181,11 +193,13 @@ function AllRepos({ repo, picker }: { repo: string; picker: ReactNode }) {
               <div className="ready-h">
                 <h2 id="rd-h">Ready to run</h2>
                 <p>Refined, unblocked, not in a dispatch yet</p>
+                <Button sm disabled={!run.length} onClick={() => setDispatching(true)}>{run.length ? `Run ${run.length} as a dispatch` : 'Pick issues to run'}</Button>
               </div>
+              {note ? <p className="muted" role="status" style={{ margin: 0 }}>{note}</p> : null}
               {ready ? groups.filter((g) => g.ready.length).map((g) => (
                 <div key={g.repo} className="stack" style={{ gap: 6 }}>
                   <GroupHead g={g} />
-                  <ReadyRows items={g.ready} />
+                  <ReadyRows items={g.ready} picked={live.filter((p) => p.repo === g.repo).map((p) => p.n)} onPick={(n) => togglePick(g, n)} lock={pickRepo && pickRepo !== g.repo ? note : undefined} />
                 </div>
               )) : <p style={{ margin: 0, opacity: 0.9 }}>Nothing is ready. Refine an issue below to make it runnable.</p>}
             </section>
@@ -209,6 +223,7 @@ function AllRepos({ repo, picker }: { repo: string; picker: ReactNode }) {
           </section>
         </>
       )}
+      <NewDispatchDialog open={dispatching} onOpenChange={(o) => { setDispatching(o); if (!o) setPicked([]); }} issues={run} repo={pickRepo ?? repo} />
     </div>
   );
 }
@@ -251,7 +266,7 @@ function Matrix({ open, merged, filter, setFilter }: { open: FeatureIssue[]; mer
 }
 
 /** The first 5 ready issues. With `onPick` each row has a checkbox; without it the rows are plain. */
-function ReadyRows({ items, picked, onPick }: { items: FeatureIssue[]; picked?: number[]; onPick?: (n: number) => void }) {
+function ReadyRows({ items, picked, onPick, lock }: { items: FeatureIssue[]; picked?: number[]; onPick?: (n: number) => void; lock?: string }) {
   const [all, setAll] = useState(false);
   if (!items.length) return <p style={{ margin: 0, opacity: 0.9 }}>Nothing is ready. Refine an issue below to make it runnable.</p>;
   return (
@@ -259,7 +274,7 @@ function ReadyRows({ items, picked, onPick }: { items: FeatureIssue[]; picked?: 
       {(all ? items : items.slice(0, 5)).map((i) => {
         const cells = (
           <>
-            {onPick ? <input type="checkbox" checked={!!picked?.includes(i.n)} onChange={() => onPick(i.n)} aria-label={`Run #${i.n}`} /> : null}
+            {onPick ? <input type="checkbox" checked={!!picked?.includes(i.n)} onChange={() => onPick(i.n)} disabled={!!lock} title={lock} aria-label={`Run #${i.n}`} /> : null}
             <span className="n">#{i.n}</span>
             <span className="t" title={i.title}>{i.title}</span>
             <span className="p">{priorityName(prio(i))}</span>
