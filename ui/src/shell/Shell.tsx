@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { Button, Icon, Toaster } from '../components';
 import { Palette } from '../palette/Palette';
@@ -82,7 +82,16 @@ export function Shell() {
   const [keys, setKeys] = useState(false);
   const inbox = useInboxCount();
   const panel = usePanel();
-  const ctx = useMemo(() => ({ openPalette: () => setPalette(true), openShortcuts: () => setKeys(true) }), []);
+  const switchers = useRef(new Set<{ trigger: () => HTMLElement | null; open: () => void }>());
+  const ctx = useMemo(() => ({
+    openPalette: () => setPalette(true),
+    openShortcuts: () => setKeys(true),
+    openRepoSwitcher: () => [...switchers.current].find((s) => (s.trigger()?.getClientRects().length ?? 0) > 0)?.open(),
+    registerRepoSwitcher: (s: { trigger: () => HTMLElement | null; open: () => void }) => {
+      switchers.current.add(s);
+      return () => void switchers.current.delete(s);
+    },
+  }), []);
   useEffect(() => {
     document.title = inbox ? `(${inbox}) aiw` : 'aiw';
   }, [inbox]);

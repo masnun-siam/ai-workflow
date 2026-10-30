@@ -13,6 +13,7 @@ const BASE: ShortcutRow[] = [
   { keys: '⌘K', label: 'Search or jump anywhere' },
   { keys: 'N', label: 'Start something new' },
   { keys: 'G then I / F / D / A / S', label: 'Inbox, Features, Dispatches, Activity, Settings' },
+  { keys: 'G then R', label: 'Switch repository' },
   { keys: '?', label: 'Show this list' },
   { keys: 'Esc', label: 'Close the panel or dialog' },
   { keys: '⌘ Enter', label: 'Submit a form' },
@@ -158,7 +159,7 @@ function winner(key: string) {
 export function useGlobalShortcuts() {
   const navigate = useNavigate();
   const { search } = useLocation();
-  const { openPalette, openShortcuts } = useShell();
+  const { openPalette, openShortcuts, openRepoSwitcher } = useShell();
   const start = useStart();
   const g = useRef(0);
   useEffect(() => {
@@ -180,6 +181,11 @@ export function useGlobalShortcuts() {
       if (Date.now() - g.current < 900) {
         const dest = ({ i: routes.inbox, f: routes.features, d: routes.dispatches, a: routes.activity, s: routes.settings() } as Record<string, string>)[e.key.toLowerCase()];
         g.current = 0;
+        if (e.key.toLowerCase() === 'r') {
+          e.preventDefault();
+          openRepoSwitcher();
+          return;
+        }
         if (dest) {
           e.preventDefault();
           navigate({ pathname: dest, search });
@@ -203,7 +209,7 @@ export function useGlobalShortcuts() {
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [navigate, search, openPalette, openShortcuts, start]);
+  }, [navigate, search, openPalette, openShortcuts, openRepoSwitcher, start]);
 }
 
 export function ShortcutsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
