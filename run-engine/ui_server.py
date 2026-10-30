@@ -177,7 +177,7 @@ POLLER = ui_poller._default
 _watched: set = set()  # repos opened since start: only the first look (a poll now) hangs off this; see _watched_copy
 _watch_lock = threading.Lock()
 VIEW_SECONDS = 120  # a repo the UI asked about this recently is polled on the normal cadence (see _hot)
-_seen: dict = {}  # repo -> last request naming it; "*" -> last global Inbox request (it shows every watched repo)
+_seen: dict = {}  # repo -> last request naming it; "*" -> last all-repos request (global Inbox, or a board without repo)
 _flags: dict = {}  # repo -> {issue: {uncommitted, unpushed}}: merged issues whose cleanup was held back
 
 
@@ -301,15 +301,8 @@ def _duplicate(b: dict) -> dict:
     return ui_duplicate.check(repo, b.get("text"), POLLER.snapshot(repo), dispatch.read_checkouts()[repo])
 
 
-def _board(path: str, query: str):
-    """(status, body) for GET /api/planning and /api/delivery."""
-    try:
-        repo = _registered((parse_qs(query).get("repo") or [""])[0])
-    except ValueError as e:
-        return 400, {"error": str(e)}
-    _watch(repo)
-    if (parse_qs(query).get("refresh") or [""])[0] == "1":  # the board's Refresh: fetch now, off this thread
-        threading.Thread(target=POLLER.poll, args=(repo,), kwargs={"full": True}, daemon=True).start()
+def _board_body(path: str, repo: str) -> dict:
+    """The body of GET /api/planning or /api/delivery for one registered repo, from memory."""
     snap = POLLER.snapshot(repo)
     if path == "/api/planning":
         body = ui_planning.build(repo, dispatch.read_checkouts()[repo], snap, _panels(dispatch.read_checkouts()[repo]))
@@ -323,7 +316,51 @@ def _board(path: str, query: str):
             _flags.get(repo, {}),
             solo=ui_gh.solo(repo),
         )
-    return 200, {**body, "error": snap.get("error"), "retry_at": snap.get("retry_at")}
+    return {**body, "error": snap.get("error"), "retry_at": snap.get("retry_at")}
+
+
+def _all_boards(path: str, refresh: bool):
+    """(200, {repos, stale}) for the board endpoints without `repo`: one body per watched repo, sorted by slug.
+    Counts as viewing every watched repo, like the global Inbox. A repo whose build raises is a meta-only entry."""
+    with _watch_lock:
+        _seen["*"] = time.time()
+    watched = _watched_copy()
+    if refresh:  # one thread for all repos, never the request thread
+        threading.Thread(target=lambda: [POLLER.poll(r, full=True) for r in watched], daemon=True).start()
+    repos = []
+    for r in watched:
+        try:
+            repos.append(_board_body(path, r))
+        except Exception as e:
+            warn(f"{path} {r}: {e}")
+            snap = POLLER.snapshot(r)
+            repos.append(
+                {
+                    "repo": r,
+                    "stale": True,
+                    "fetched_at": snap.get("fetched_at"),
+                    "error": str(e),
+                    "retry_at": snap.get("retry_at"),
+                }
+            )
+    stale = sorted(e["repo"] for e in repos if e.get("stale") or e.get("fetched_at") is None)
+    return 200, {"repos": repos, "stale": stale}
+
+
+def _board(path: str, query: str):
+    """(status, body) for GET /api/planning and /api/delivery."""
+    q = parse_qs(query)
+    refresh = (q.get("refresh") or [""])[0] == "1"
+    if not (q.get("repo") or [""])[0]:
+        return _all_boards(path, refresh)
+    try:
+        repo = _registered(q["repo"][0])
+    except ValueError as e:
+        return 400, {"error": str(e)}
+    _watch(repo)
+    if refresh:  # the board's Refresh: fetch now, off this thread
+        threading.Thread(target=POLLER.poll, args=(repo,), kwargs={"full": True}, daemon=True).start()
+    return 200, _board_body(path, repo)
 
 
 def _share_rows() -> list:

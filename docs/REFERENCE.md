@@ -138,10 +138,10 @@ its progress while one runs), **Add task** (`/create-tasks` with the text as a f
 PRD: rendered, **Edit** (**Save and commit** commits only that file on the checkout's current branch, not
 pushed; refused if the file changed on disk since it opened) or **Ask Claude** (`/create-prd <path>
 --update <request>`). The More menu has **Close epic** (closes the epic and every open child as
-completed, `POST /api/epics/close`). `GET /api/planning?repo=`.
+completed, `POST /api/epics/close`). `GET /api/planning?repo=`. Without `repo` it returns `{repos, stale}`: one `?repo=` body per watched repo, sorted by slug, from memory (a repo whose build fails is a meta-only entry); `stale` lists watched repos with a missing or stale snapshot; `?refresh=1` polls them all off the request thread.
 
 Issues start one at a time from their row (**Start**); a whole epic runs as a dispatch. `GET
-/api/delivery` (the issue data behind Features and Small changes), `POST /api/start` (headless only; 409
+/api/delivery` (same no-`repo` form; the issue data behind Features and Small changes), `POST /api/start` (headless only; 409
 for a live session, an open PR, a blocked issue or an issue a running dispatch owns), `POST
 /api/cleanup`.
 
@@ -152,7 +152,7 @@ the default branch, so a staging-based repo needs the last two). Each poll of a 
 query (about 6 points) runs only when the probe's answer changed, on **Refresh** or after a write, and
 at least every 10 minutes. Results are kept in memory. A repo is watched while it has a live session or
 was opened in the last 7 days. It polls every 60 s (15 s while a PR's CI is pending) while it has a live
-session or the UI asked about it in the last 2 minutes (the global Inbox counts for every watched
+session or the UI asked about it in the last 2 minutes (the global Inbox and the boards without `repo` count for every watched
 repo), else every 10 minutes. Every response reports the token's GraphQL budget, which the agents share:
 under 1000 points left, every repo polls every 10 minutes until the reset. A rate limit pauses fetching
 until that reset (10 minutes when the budget was not low) and the boards show the last data as stale

@@ -401,7 +401,7 @@ try:
     # unknown repo -> 400 everywhere; nothing is fetched for it
     for m, p, b in (
         ("GET", "/api/planning?repo=x/y", None),
-        ("GET", "/api/delivery", None),
+        ("GET", "/api/delivery?repo=x/y", None),
         ("POST", "/api/start", {"repo": "x/y", "skill": "implement-issue", "arg": "2"}),
         ("POST", "/api/cleanup", {"repo": "x/y", "issue": 3, "confirm": True}),
         ("POST", "/api/duplicate", {"repo": "x/y", "text": "x" * 30}),
@@ -663,6 +663,35 @@ try:
     ui_sessions.update(live_q["id"], status="running")  # o/q is watched through its session, not yet polled
     st, body = call("GET", "/api/inbox")
     assert st == 200 and any(i["type"] == "pr_ready" for i in body["items"]) and "o/q" in body["stale"], body
+    # boards without repo: every watched repo (o/r polled, o/q never polled), sorted, each equal to its ?repo= body
+    ui_server._seen.clear()
+    for path, key in (("/api/planning", "prds"), ("/api/delivery", "lanes")):
+        st, body = call("GET", path)
+        assert st == 200 and [e["repo"] for e in body["repos"]] == ["o/q", "o/r"], body
+        for e in body["repos"]:
+            assert e == call("GET", f"{path}?repo={e['repo']}")[1], e
+        assert "o/q" in body["stale"] and "o/r" not in body["stale"], body["stale"]
+        assert ui_server._hot() == set(ui_server._watched_copy()), "no repo: every watched repo is viewed"
+        ui_server._seen.clear()
+        mod = ui_server.ui_planning if key == "prds" else ui_server.ui_delivery
+        real = mod.build
+
+        def boom(repo, *a, **k):
+            if repo == "o/q":
+                raise RuntimeError("bad")
+            return real(repo, *a, **k)
+
+        mod.build = boom
+        try:
+            st, body = call("GET", path)
+        finally:
+            mod.build = real
+        q, r = body["repos"]
+        assert (
+            st == 200 and key not in q and q["error"] == "bad" and q["stale"] and set(q) >= {"fetched_at", "retry_at"}
+        ), q
+        assert key in r and "o/q" in body["stale"]
+    ok("boards: no repo -> {repos, stale}, sorted, same bodies, one failing repo is meta only, marks all viewed")
     assert call("GET", "/api/inbox?repo=x/y")[0] == 400
     ui_gh.status = lambda *a, **k: {"ok": False, "login": None, "error": "not logged in"}
     assert call("GET", "/api/inbox")[1]["items"][0]["type"] == "gh_auth"
