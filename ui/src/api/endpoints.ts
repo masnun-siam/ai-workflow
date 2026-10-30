@@ -61,6 +61,7 @@ export const api = {
   stopGrind: (repo: string, pr: number) => post('/api/grind/stop', { repo, pr }),
   grindIssue: (repo: string, issue: number, on: boolean) => post('/api/grind/issue', { repo, issue, on }),
   merge: (repo: string, n: number) => post(`/api/pulls/${splitRepo(repo).join('/')}/${n}/merge`),
+  setPrState: (repo: string, n: number, state: 'open' | 'closed') => post(`/api/pulls/${splitRepo(repo).join('/')}/${n}/state`, { state }),
   comment: (kind: 'issues' | 'pulls', repo: string, n: number, text: string) =>
     post(`/api/${kind}/${splitRepo(repo).join('/')}/${n}/comment`, { text }),
   setIssueState: (repo: string, n: number, state: 'closed' | 'open', reason?: 'completed' | 'not_planned') =>

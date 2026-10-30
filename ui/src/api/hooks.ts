@@ -219,6 +219,8 @@ export const useGrindIssue = () =>
   useApiMutation((v: { repo: string; issue: number; on: boolean }) => api.grindIssue(v.repo, v.issue, v.on), [...BOARD_WRITES, ['pull']]);
 export const useMerge = () =>
   useApiMutation((v: { repo: string; n: number }) => api.merge(v.repo, v.n), (v) => [...BOARD_WRITES, ['pull', v.repo, v.n], ['issue', v.repo]], { quiet: true });
+export const useSetPrState = () =>
+  useApiMutation((v: { repo: string; n: number; state: 'open' | 'closed' }) => api.setPrState(v.repo, v.n, v.state), (v) => [...BOARD_WRITES, ['pull', v.repo, v.n], ['issue', v.repo]], { quiet: true });
 export const useComment = () =>
   useApiMutation(
     (v: { kind: 'issues' | 'pulls'; repo: string; n: number; text: string }) => api.comment(v.kind, v.repo, v.n, v.text),
