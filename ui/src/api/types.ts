@@ -269,6 +269,8 @@ export type InboxItem =
   | (InboxBase & { type: 'repo_unpublished'; slug: string; path: string })
   | (InboxBase & { type: 'limited'; session_id: string; command?: string; account: string; resets_at: number; auto_resume: boolean | null })
   | (InboxBase & { type: 'queued'; session_id: string; command?: string; reason: string })
+  | (InboxBase & { type: 'bootstrap_waiting'; run_id: string; issue: number | null; next_phase: string })
+  | (InboxBase & { type: 'bootstrap_stopped'; run_id: string; issue: number | null; phase: string; session_id: string | null; error: string | null })
   | (InboxBase & {
       type: 'dispatch_lane';
       dispatch: string;
@@ -634,3 +636,20 @@ export interface SendPreview {
   busy: { sessions: string[]; panel: string | null };
 }
 export interface SendResult { session_id: string; threads: number; remaining: number; dropped: number }
+
+export interface BootstrapPhase {
+  name: string;
+  session_id: string | null;
+  state: 'pending' | 'running' | 'done' | 'failed';
+}
+export interface BootstrapRun {
+  id: string;
+  repo: string;
+  issue: number | null;
+  branch: string | null;
+  phases: BootstrapPhase[];
+  state: 'running' | 'waiting' | 'stopped' | 'done' | 'ended';
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+}

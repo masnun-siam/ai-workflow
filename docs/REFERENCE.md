@@ -78,7 +78,7 @@ Fix, Set up and Waiting (nothing to do), each item its own card; the top bar's I
 signed out; a session asking a question (answered inline); a peer review at its round cap or with every
 lens approving (Approve PRD anyway, Run 2 more rounds); reviewers' comments or approvals on a shared PRD (Open PRD; one item per share, cleared when the share is marked seen); a PR ready to merge (Review and merge, see
 **Merge rule**); a PR with merge conflicts (Resolve conflicts); a paused grind (Skip CI and continue, Stop grind); a failed session (Retry, Continue in
-terminal); a merged issue whose worktree has unsaved work (Review and clean up); a `local/` repo with no
+terminal); a bootstrap run waiting after the audit (Continue bootstrap, Stop) or stopped at a phase (Retry phase, Stop, Open session), each with its phase strip (the six phases, the current one marked, a link to each phase's session); a merged issue whose worktree has unsaved work (Review and clean up); a `local/` repo with no
 GitHub remote (Publish to GitHub); a usage-limited session (Resume on another account); a queued session
 (Start now, Cancel); an issue in a dispatch that needs you, is held or hit a usage limit (Open, Retry), its
 PR waiting for your merge (Merge), and a finished dispatch (What next, Dismiss). A bootstrap run waiting after its audit (**decide**: Continue bootstrap, Stop) or stopped at a phase
