@@ -7,7 +7,7 @@ import type { Feature } from '../lib/features';
 import type { StepAction } from '../lib/nextStep';
 import { routes } from '../lib/routes';
 import { usePanel } from '../panels/PanelContext';
-import { useRepo } from '../shell/useRepo';
+import { repoLink } from '../lib/repo';
 import { PLAN_RUN } from '../lib/vocab';
 import { approveArgs } from '../inbox/items';
 
@@ -16,7 +16,7 @@ export const taskArg = (epic: number, path: string, text: string) =>
 
 export function useStepRunner(f: Feature, repo: string) {
   const navigate = useNavigate();
-  const { link } = useRepo();
+  const link = (path: string) => repoLink(repo, path);
   const confirm = useConfirm();
   const starter = useStarter();
   const refining = useRefining(repo);
