@@ -129,6 +129,7 @@
 .ready-h p{margin:0;font-size:13px;opacity:.85;flex:1}
 .readyp .btn{background:var(--surface);color:var(--ink);border-color:var(--surface)}
 .ready-r{display:grid;grid-template-columns:20px 56px minmax(0,1fr) 70px;gap:12px;align-items:center;min-height:40px;padding:0 12px;border-radius:var(--r-ctl);background:color-mix(in srgb,#fff 10%,transparent);cursor:pointer}
+.ready-r.np{grid-template-columns:56px minmax(0,1fr) 70px;cursor:default}
 .ready-r input{margin:0;accent-color:#fff}
 .ready-r .n,.ready-r .p{font:400 12.5px var(--mono)}
 .ready-r .p{text-align:right;font-family:var(--font);font-size:12px}
@@ -213,3 +214,6 @@ button.thread-quote{cursor:pointer}
   .metro-head{display:none}
   .metro-line.solo li:not(.now) span{display:none}
 }
+.grp-h{margin:0;font-size:14px;font-weight:400;display:flex;align-items:baseline;gap:8px}
+.grp-h b{font-weight:600}
+.readyp .grp-h .muted{color:inherit;opacity:.8}
