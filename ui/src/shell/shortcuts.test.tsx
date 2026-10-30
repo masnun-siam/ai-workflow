@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState, type ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ShellCtx } from './ShellContext';
 import { KeyScope, ShortcutsDialog, useAction, useGlobalShortcuts, type KeyAction } from './shortcuts';
 
 function Host({ children }: { children?: ReactNode }) {
@@ -134,5 +135,56 @@ describe('key registry', () => {
     expect(keys.filter((k) => k === 'M')).toHaveLength(1);
     expect(keys.indexOf('M')).toBeGreaterThan(keys.indexOf('⌘ Enter'));
     expect(screen.getByText('Merge it')).toBeTruthy();
+  });
+
+  describe('G then R', () => {
+    const withShell = (open: () => void, ui: ReactNode) => render(
+      <MemoryRouter>
+        <ShellCtx.Provider value={{ openPalette: () => {}, openShortcuts: () => {}, openRepoSwitcher: open, registerRepoSwitcher: () => () => {} }}>
+          <Host>{ui}</Host>
+        </ShellCtx.Provider>
+      </MemoryRouter>,
+    );
+
+    it('opens the switcher once and does not run the R action', () => {
+      const open = vi.fn();
+      const run = vi.fn();
+      withShell(open, <Act a={{ label: 'Retry', key: 'r', run }} />);
+      press('g');
+      press('r');
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(run).not.toHaveBeenCalled();
+    });
+
+    it('does nothing after the chord window', () => {
+      vi.useFakeTimers();
+      const open = vi.fn();
+      withShell(open, null);
+      press('g');
+      vi.advanceTimersByTime(1000);
+      press('r');
+      vi.useRealTimers();
+      expect(open).not.toHaveBeenCalled();
+    });
+
+    it('does nothing while typing or with a dialog open', () => {
+      const open = vi.fn();
+      withShell(open, <div role="dialog" />);
+      press('g');
+      press('r');
+      cleanup();
+      const input = document.body.appendChild(document.createElement('input'));
+      withShell(open, null);
+      press('g', { bubbles: true }, input);
+      press('r', { bubbles: true }, input);
+      input.remove();
+      expect(open).not.toHaveBeenCalled();
+    });
+
+    it('is listed in the sheet', async () => {
+      mount(<ShortcutsDialog open onClose={() => {}} />);
+      await act(async () => {});
+      expect(screen.getByText('G then R')).toBeTruthy();
+    });
   });
 });
