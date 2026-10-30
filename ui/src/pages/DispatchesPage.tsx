@@ -7,8 +7,7 @@ import { Banner, Button, Chip, EmptyState, Icon, useListSelection } from '../com
 import { clockText, money } from '../lib/format';
 import { routes } from '../lib/routes';
 import { NewDispatchDialog } from '../dispatch/NewDispatchDialog';
-import { ACTIVE, DSTATE, counts, dispatchHeading, dispatchRepo, issueNo, nowLine, secs } from '../dispatch/vocab';
-import { columns } from '../dispatch/LaneViews';
+import { ACTIVE, columns, DSTATE, counts, dispatchHeading, dispatchRepo, issueNo, nowLine, secs } from '../dispatch/vocab';
 import '../dispatch/dispatch.css';
 
 const live = (d: Dispatch) => d.state === 'running' || d.state === 'paused';

@@ -131,7 +131,7 @@ starts a panel from its **Peer review** box.
 repos, the questions to answer, PRs ready to merge, paused grinds, failed sessions and reviews at their
 cap. A **Feature** page follows one PRD from draft to shipped with one next step and its issues, and
 shows its running dispatch; **Small changes** holds the open issues outside any feature. **Dispatches**
-shows each dispatch: what needs you first, then its issues as a graph or a list, its activity and live
+shows each dispatch: what needs you first, then its issues as building now, up next and done, its activity and live
 settings. Grind starts when a PR turns
 ready (per-repo setting) unless a dispatch lane owns it, and a merged issue's clean worktree is removed. GitHub is read with a cheap GraphQL probe per
 watched repo per poll, and the full query only when something changed; nothing is written back.
