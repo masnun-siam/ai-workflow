@@ -499,6 +499,26 @@ def answer_checks():
         intact(sid2, fk2)
         ok("free text on allowFreeText=False question: 400")
 
+        # -- "none": multi-select ok even with free text off; single-select and malformed are 400
+        sid2, fk2, _ = mk(free=False)
+        for bad in (
+            {"0": {"none": True}, "1": {"none": True}},
+            {"0": GOOD["0"], "1": {"none": False}},
+            {"0": GOOD["0"], "1": {"none": "yes"}},
+            {"0": GOOD["0"], "1": {"none": True, "labels": ["master"]}},
+            {"0": GOOD["0"], "1": {"none": True, "other": "x"}},
+        ):
+            assert post(sid2, "q-1", bad)[0] == 400, bad
+            intact(sid2, fk2)
+        assert post(sid2, "q-1", {"0": GOOD["0"], "1": {"none": True}})[0] == 200
+        wait_for(lambda: spawned(fk2) and '"1":{"other":"None of these"}' in lines(fk2, "argv"))
+        assert '"0":{"labels":["Revise"]}' in lines(fk2, "argv")
+        assert post(sid2, "q-1", {"0": GOOD["0"], "1": {"none": True}})[0] == 409
+        open(os.path.join(fk2, "exit"), "w").close()
+        wait_status(sid2, {"done", "failed"})
+        wait_finished(sid2)
+        ok("none: multi-select 200 (free text off), single-select/malformed 400, repeat 409")
+
         # -- lone surrogate in free text: 400, round intact, then valid answer 200
         sid, fk, work = mk()
         body = ('{"round_id":"q-1","answers":{"0":{"labels":["Revise"]},"1":{"other":"x\\ud800y"}}}').encode()
