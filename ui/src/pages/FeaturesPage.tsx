@@ -229,7 +229,7 @@ function AllRepos({ switcherRepo, setOnly }: { switcherRepo: string; setOnly: (s
   const ready = !!plan.data && !!del.data;
   const lede = !ready ? 'Each feature is one PRD and everything built from it.'
     : !groups.length ? 'No repo opened recently.'
-    : !total ? 'Nothing in progress. Describe what to build above.'
+    : !total ? (groups.some((g) => g.loading || g.note) ? 'Each feature is one PRD and everything built from it.' : 'Nothing in progress. Describe what to build above.')
     : `${total} in progress across ${plural(across, 'repo')}${stuck ? `; ${stuck} ${stuck === 1 ? 'is' : 'are'} stopped on you.` : '. Nothing is waiting on you.'}`;
 
   return (
