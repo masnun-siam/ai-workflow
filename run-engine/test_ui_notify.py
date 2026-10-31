@@ -553,36 +553,43 @@ from unittest import mock  # noqa: E402
 
 calls = []
 fake_run = lambda argv, **k: calls.append((argv, k)) or types.SimpleNamespace(returncode=0)  # noqa: E731
-with mock.patch.object(sys, "platform", "linux"):
-    assert ui_notify.send_mac("t", "b", run=fake_run) == "Only on macOS" and not calls
-with mock.patch.object(sys, "platform", "darwin"):
-    with mock.patch("shutil.which", return_value="/x/terminal-notifier"):
-        ui_notify._notifier.cache_clear()
-        assert ui_notify.send_mac("t", "b", "https://h/#/x", run=fake_run) is None
-        assert calls[-1][0] == ["/x/terminal-notifier", "-title", "t", "-message", "b", "-open", "https://h/#/x"]
-        assert calls[-1][1]["timeout"] == 10
-        ui_notify.send_mac("t", "", run=fake_run)
-        assert calls[-1][0] == ["/x/terminal-notifier", "-title", "t", "-message", "t"]
-    with mock.patch("shutil.which", return_value=None):
-        ui_notify._notifier.cache_clear()
-        evil = 'x" & do shell script "rm'
-        ui_notify.send_mac("t", evil, run=fake_run)
-        assert (
-            calls[-1][0][0] == "osascript"
-            and calls[-1][0][-2:] == [evil, "t"]
-            and "rm" not in " ".join(calls[-1][0][:-2])
-        )
+with mock.patch.dict(os.environ):
+    os.environ.pop("AIW_NO_MAC_BANNER", None)
+    with mock.patch.object(sys, "platform", "linux"):
+        assert ui_notify.send_mac("t", "b", run=fake_run) == "Only on macOS" and not calls
+    with mock.patch.object(sys, "platform", "darwin"):
+        with mock.patch("shutil.which", return_value="/x/terminal-notifier"):
+            ui_notify._notifier.cache_clear()
+            assert ui_notify.send_mac("t", "b", "https://h/#/x", run=fake_run) is None
+            assert calls[-1][0] == ["/x/terminal-notifier", "-title", "t", "-message", "b", "-open", "https://h/#/x"]
+            assert calls[-1][1]["timeout"] == 10
+            ui_notify.send_mac("t", "", run=fake_run)
+            assert calls[-1][0] == ["/x/terminal-notifier", "-title", "t", "-message", "t"]
+        with mock.patch("shutil.which", return_value=None):
+            ui_notify._notifier.cache_clear()
+            evil = 'x" & do shell script "rm'
+            ui_notify.send_mac("t", evil, run=fake_run)
+            assert (
+                calls[-1][0][0] == "osascript"
+                and calls[-1][0][-2:] == [evil, "t"]
+                and "rm" not in " ".join(calls[-1][0][:-2])
+            )
 
-        def boom(argv, **k):
-            raise subprocess.TimeoutExpired(argv, 10)
+            def boom(argv, **k):
+                raise subprocess.TimeoutExpired(argv, 10)
 
-        buf = io.StringIO()
-        with contextlib.redirect_stderr(buf):
-            assert ui_notify.send_mac("t", "b", run=boom) == "TimeoutExpired"
-        assert buf.getvalue().count("macOS notification failed") == 1
-        assert ui_notify.send_mac("t", "b", run=lambda a, **k: types.SimpleNamespace(returncode=1)) == "exit 1"
+            buf = io.StringIO()
+            with contextlib.redirect_stderr(buf):
+                assert ui_notify.send_mac("t", "b", run=boom) == "TimeoutExpired"
+            assert buf.getvalue().count("macOS notification failed") == 1
+            assert ui_notify.send_mac("t", "b", run=lambda a, **k: types.SimpleNamespace(returncode=1)) == "exit 1"
+with mock.patch.dict(os.environ, {"AIW_NO_MAC_BANNER": "1"}), mock.patch.object(sys, "platform", "darwin"):
+    calls.clear()
+    assert ui_notify.send_mac("t", "b", run=fake_run) == "Turned off by AIW_NO_MAC_BANNER" and not calls
+with mock.patch.dict(os.environ, {"AIW_NO_MAC_BANNER": "1"}), mock.patch.object(sys, "platform", "linux"):
+    assert ui_notify.send_mac("t", "b", run=fake_run) == "Only on macOS"
 ui_notify._notifier.cache_clear()
-ok("send_mac: terminal-notifier, osascript argv, non-Mac, errors")
+ok("send_mac: terminal-notifier, osascript argv, non-Mac, errors, AIW_NO_MAC_BANNER off-switch")
 
 # send_test: one sample on one channel, ignoring the matrix and Away mode
 import ui_afk  # noqa: E402

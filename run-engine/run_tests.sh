@@ -11,6 +11,8 @@ if [ -z "${CLAUDE_PLUGIN_DATA:-}" ]; then
   export CLAUDE_PLUGIN_DATA
   trap 'rm -rf "$CLAUDE_PLUGIN_DATA"' EXIT
 fi
+# No real macOS banners from the tests (ui_notify.send_mac honours this).
+export AIW_NO_MAC_BANNER=1
 failed=()
 for t in test_*.py; do
   if ! out=$(python3 "$t" 2>&1); then

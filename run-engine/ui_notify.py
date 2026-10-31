@@ -297,9 +297,12 @@ def _notifier() -> str | None:
 
 
 def send_mac(title: str, body: str, link: str | None = None, run=subprocess.run) -> str | None:
-    """macOS banner: terminal-notifier (clickable when `link`) else AppleScript. None on success, else a short error."""
+    """macOS banner: terminal-notifier (clickable when `link`) else AppleScript. None on success, else a short error.
+    Env `AIW_NO_MAC_BANNER` (non-empty) turns it off, read on every call (the test runner sets it)."""
     if sys.platform != "darwin":
         return "Only on macOS"
+    if os.environ.get("AIW_NO_MAC_BANNER"):
+        return "Turned off by AIW_NO_MAC_BANNER"
     title, body = title[:80], (body or title)[:200]
     tn = _notifier()
     if tn:
