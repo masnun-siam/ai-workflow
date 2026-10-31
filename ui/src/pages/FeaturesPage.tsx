@@ -18,6 +18,7 @@ import { repoLink } from '../lib/repo';
 import { routes } from '../lib/routes';
 import { STAGES, stageIdx } from '../lib/vocab';
 import { usePanel } from '../panels/PanelContext';
+import { RepoScope } from '../shell/RepoScope';
 import { useRepo } from '../shell/useRepo';
 import { useRepoFilter } from '../shell/useRepoFilter';
 import { KeyScope } from '../shell/shortcuts';
@@ -115,17 +116,6 @@ function ledeOf(rows: Row[]) {
   return bits ? `${bits[0].toUpperCase()}${bits.slice(1)}.` : 'Nothing in progress.';
 }
 
-/** Filter to the repo in hand or to all of them; a quiet repo in the list below filters to that one. */
-function Scope({ repo, only, setOnly }: { repo: string; only: string; setOnly: (slug: string) => void }) {
-  const here = only || repo;
-  return (
-    <div className="scope" role="group" aria-label="Show features from">
-      {here ? <button type="button" aria-pressed={!!only} onClick={() => setOnly(here)}>{short(here)}</button> : null}
-      <button type="button" aria-pressed={!only} onClick={() => setOnly('')}>All repos</button>
-    </div>
-  );
-}
-
 function PageHead({ lede, repo, only, setOnly }: { lede: string; repo: string; only: string; setOnly: (slug: string) => void }) {
   const items = (useInbox().data?.items ?? []).filter((i) => !only || (i.repo && same(i.repo, only)));
   const inbox = needsYouCount(items);
@@ -137,7 +127,7 @@ function PageHead({ lede, repo, only, setOnly }: { lede: string; repo: string; o
         <p className="lede">{lede}</p>
         {inbox ? <p className="inbox-note"><Link to={link(routes.inbox)}>{inbox} {inbox === 1 ? 'item waits' : 'items wait'} in Inbox</Link></p> : null}
       </header>
-      <Scope repo={repo} only={only} setOnly={setOnly} />
+      <RepoScope repo={repo} only={only} setOnly={setOnly} label="Show features from" />
     </div>
   );
 }

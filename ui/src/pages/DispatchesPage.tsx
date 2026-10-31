@@ -1,41 +1,66 @@
-// Every dispatch: the live ones as cards, the rest as history; New dispatch opens the dialog.
+// Every dispatch in one table, filtered by tab and repo in the browser; Run an epic opens the dialog.
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatches } from '../api/hooks';
 import type { Dispatch } from '../api/types';
 import { Banner, Button, Chip, EmptyState, Icon, useListSelection } from '../components';
-import { clockText, money } from '../lib/format';
+import { money, shortRepo } from '../lib/format';
+import { withParam } from '../lib/repo';
 import { routes } from '../lib/routes';
 import { NewDispatchDialog } from '../dispatch/NewDispatchDialog';
-import { ACTIVE, columns, DSTATE, counts, dispatchHeading, dispatchRepo, issueNo, nowLine, secs } from '../dispatch/vocab';
+import { DSTATE, counts, dispatchHeading, dispatchRepo, issueNo, needsYou, nowLine, secs } from '../dispatch/vocab';
+import { RepoScope } from '../shell/RepoScope';
+import { useRepo } from '../shell/useRepo';
+import { useRepoFilter } from '../shell/useRepoFilter';
+import '../features/features.css';
 import '../dispatch/dispatch.css';
 
 const live = (d: Dispatch) => d.state === 'running' || d.state === 'paused';
+const stoppedOnYou = (d: Dispatch) => live(d) && counts(d).you > 0;
 
-function Card({ d, rowProps }: { d: Dispatch; rowProps: ReturnType<ReturnType<typeof useListSelection>['rowProps']> }) {
+/** `id` is the `?show=` value, '' for All. */
+const TABS: { id: string; label: string; holds: (d: Dispatch) => boolean; none: string }[] = [
+  { id: '', label: 'All', holds: () => true, none: 'No dispatches in this repo.' },
+  { id: 'needs', label: 'Needs you', holds: stoppedOnYou, none: 'Nothing needs you.' },
+  { id: 'live', label: 'Live', holds: live, none: 'Nothing is live.' },
+  { id: 'finished', label: 'Finished', holds: (d) => !live(d), none: 'Nothing has finished yet.' },
+];
+
+const rank = (d: Dispatch) => (stoppedOnYou(d) ? 0 : d.state === 'running' ? 1 : d.state === 'paused' ? 2 : 3);
+
+function Row({ d, rowProps, onOpen }: { d: Dispatch; rowProps: ReturnType<ReturnType<typeof useListSelection>['rowProps']>; onOpen: () => void }) {
   const c = counts(d);
   const st = DSTATE[d.state];
-  const asks = d.lanes.map((l) => ({ l, now: nowLine(l, d.lanes) })).filter((x) => x.now.ask);
+  const repo = dispatchRepo(d);
+  const you = stoppedOnYou(d) ? d.lanes.filter(needsYou) : [];
+  const bar = [['merged', c.closed], ['build', c.active], ['ready', c.queued], ['refine', c.skipped]] as const;
   return (
-    <Link {...rowProps} to={routes.dispatch(d.id)} className={`live-card dsp-card${asks.length ? ' you' : ''}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-      <div className="row"><Chip tone={st.tone} live={st.live}>{st.label}</Chip><span className="grow" /><span className="faint" style={{ fontSize: 12 }}>{secs(d.totals.seconds)}</span></div>
-      <b>{dispatchHeading(d)}</b>
-      <ol className="dsp-train" role="img" aria-label={`${c.closed} of ${c.total} done`}>
-        {columns(d.lanes).map((w, k) => {
-          const cls = w.every((l) => l.stage === 'closed') ? 'done' : w.some((l) => ACTIVE.includes(l.stage)) ? 'now' : '';
-          return <li key={k} className={cls}><i /><span>Wave {k + 1}</span></li>;
-        })}
-      </ol>
-      <span className="muted" style={{ fontSize: 13 }}>
-        {c.closed} of {c.total} done{c.active ? `, ${c.active} in progress` : ''}{c.queued ? `, ${c.queued} waiting` : ''}
-      </span>
-      {asks.length ? (
-        <ul className="dsp-card-asks">
-          {asks.slice(0, 3).map(({ l, now }) => <li key={l.key}><span className="dsp-ref">{issueNo(l.key)}</span> {now.text}</li>)}
-          {asks.length > 3 ? <li className="faint">and {asks.length - 3} more</li> : null}
-        </ul>
-      ) : null}
-    </Link>
+    <tr {...rowProps} className="click" onClick={() => { rowProps.onClick(); onOpen(); }}>
+      <td>{you.length ? <Chip tone="you">Needs you</Chip> : <Chip tone={st.tone} live={st.live}>{st.label}</Chip>}</td>
+      <td className="title">
+        <Link onClick={(e) => e.stopPropagation()} to={routes.dispatch(d.id)}>{dispatchHeading(d)}</Link>
+        {repo ? (
+          <div className="strip-m">
+            <span>{shortRepo(repo)}</span>
+            {live(d) ? null : <span>{new Date(d.created_at * 1000).toLocaleDateString()}</span>}
+            {!live(d) && c.skipped ? <span>{c.skipped} skipped</span> : null}
+          </div>
+        ) : null}
+        {you.length ? (
+          <div className="dsp-row-ask">
+            <span className="dsp-ref">{issueNo(you[0].key)}</span> {nowLine(you[0], d.lanes).text}{you.length > 1 ? ` and ${you.length - 1} more` : ''}
+          </div>
+        ) : null}
+      </td>
+      <td>
+        <b>{c.closed}/{c.total}</b>
+        <span className="ibar" role="img" aria-label={`${c.closed} of ${c.total} done`}>
+          {bar.map(([s, n]) => (n ? <i key={s} className={`s-${s}`} style={{ flexGrow: n }} /> : null))}
+        </span>
+      </td>
+      <td className="num">{secs(d.totals.seconds)}</td>
+      <td className="num">{d.runner === 'herdr' ? '—' : money(d.totals.cost)}</td>
+    </tr>
   );
 }
 
@@ -52,55 +77,45 @@ export function DispatchesPage() {
       setSp(n, { replace: true });
     }
   };
-  const all = q.data?.dispatches ?? [];
-  const running = all.filter(live);
-  const past = all.filter((d) => !live(d));
   const nav = useNavigate();
-  const { rowProps } = useListSelection({ keys: [...running, ...past].map((d) => d.id), onOpen: (id) => nav(routes.dispatch(id)) });
+  const { repo } = useRepo();
+  const { only, setOnly } = useRepoFilter();
+  const tab = TABS.find((t) => t.id === sp.get('show')) ?? TABS[0];
+  const all = q.data?.dispatches ?? [];
+  const inRepo = all.filter((d) => !only || dispatchRepo(d).toLowerCase() === only.toLowerCase());
+  const rows = inRepo.filter(tab.holds).sort((a, b) => rank(a) - rank(b) || b.created_at - a.created_at);
+  const { rowProps } = useListSelection({ keys: rows.map((d) => d.id), onOpen: (id) => nav(routes.dispatch(id)), reset: `${tab.id}|${only}` });
   return (
     <div className="content-inner">
       <div className="page-head">
-        <div className="grow">
-          <h1>Dispatches</h1>
-          <p className="sub">Run an epic’s issues side by side. Each one is built, grinded, merged and wrapped up, and the next starts as soon as what it waits for is done.</p>
-        </div>
+        <div className="grow"><h1>Dispatches</h1></div>
+        <RepoScope repo={repo} only={only} setOnly={setOnly} label="Show dispatches from" />
         <Button variant="primary" onClick={() => setOpen(true)}><Icon n="plus" />Run an epic</Button>
       </div>
       {q.isError ? <Banner tone="bad" icon="alert" action={<Button sm onClick={() => void q.refetch()}>Retry</Button>}>Could not load dispatches. {q.error.message}</Banner> : null}
-      <section aria-label="Running">
-        <div className="group-h"><h2>Running</h2><span className="n">{running.length}</span></div>
-        {running.length ? (
-          <div className="dsp-trains">{running.map((d) => <Card key={d.id} d={d} rowProps={rowProps(d.id)} />)}</div>
-        ) : q.isPending ? <div className="skel" style={{ height: 90 }} /> : (
-          <EmptyState icon="bolt" title="Nothing is running" actions={<Button variant="primary" onClick={() => setOpen(true)}>Run an epic</Button>}>
-            Pick an epic whose issues are refined. The ones with nothing to wait for start right away; the rest follow as their blockers merge.
-          </EmptyState>
-        )}
-      </section>
-      {past.length ? (
-        <section className="stack" style={{ gap: 10 }} aria-label="History">
-          <h2>History</h2>
-          <div className="tbl-wrap">
-            <table className="tbl">
-              <thead><tr><th>Epic</th><th>Result</th><th>Issues</th><th>Started</th><th className="num">Took</th><th className="num">Spent</th></tr></thead>
-              <tbody>
-                {past.map((d) => {
-                  const c = counts(d);
-                  const rp = rowProps(d.id);
-                  return (
-                    <tr key={d.id} {...rp} className="click" onClick={() => { rp.onClick(); nav(routes.dispatch(d.id)); }}>
-                      <td className="title"><Link onClick={(e) => e.stopPropagation()} to={routes.dispatch(d.id)}>{d.title || d.epic}</Link><div className="faint mono" style={{ fontSize: 12 }}>{d.epic ?? dispatchRepo(d)}</div></td>
-                      <td><Chip tone={DSTATE[d.state].tone}>{DSTATE[d.state].label}</Chip></td>
-                      <td>{c.closed}/{c.total} done{c.skipped ? `, ${c.skipped} skipped` : ''}</td>
-                      <td>{new Date(d.created_at * 1000).toLocaleDateString()} {clockText(d.created_at)}</td>
-                      <td className="num">{secs(d.totals.seconds)}</td>
-                      <td className="num">{d.runner === 'herdr' ? '—' : money(d.totals.cost)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      {q.isPending ? <div className="skel" style={{ height: 90 }} /> : null}
+      {q.data && !all.length ? (
+        <EmptyState icon="bolt" title="Nothing is running" actions={<Button variant="primary" onClick={() => setOpen(true)}>Run an epic</Button>}>
+          Pick an epic whose issues are refined. The ones with nothing to wait for start right away; the rest follow as their blockers merge.
+        </EmptyState>
+      ) : null}
+      {all.length ? (
+        <section className="stack" style={{ gap: 10 }} aria-label="All dispatches">
+          <div className="scope dsp-tabs" role="group" aria-label="Show dispatches">
+            {TABS.map((t) => (
+              <button key={t.id} type="button" aria-pressed={t === tab} onClick={() => nav({ search: withParam(sp.toString(), 'show', t.id) })}>
+                {t.label} <span className="n">{inRepo.filter(t.holds).length}</span>
+              </button>
+            ))}
           </div>
+          {rows.length ? (
+            <div className="tbl-wrap">
+              <table className="tbl">
+                <thead><tr><th>State</th><th>Dispatch</th><th>Issues</th><th className="num">Took</th><th className="num">Spent</th></tr></thead>
+                <tbody>{rows.map((d) => <Row key={d.id} d={d} rowProps={rowProps(d.id)} onOpen={() => nav(routes.dispatch(d.id))} />)}</tbody>
+              </table>
+            </div>
+          ) : <p className="muted">{tab.none}</p>}
         </section>
       ) : null}
       <NewDispatchDialog open={open} onOpenChange={onOpenChange} epic={asked ?? undefined} />

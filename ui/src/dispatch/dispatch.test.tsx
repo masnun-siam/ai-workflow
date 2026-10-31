@@ -94,36 +94,240 @@ describe('dispatch vocab', () => {
 });
 
 describe('Dispatches page', () => {
-  it('shows running dispatches as cards and finished ones as history', async () => {
+  const done = (id: string, o: Partial<Dispatch> = {}) => disp({ id, state: 'done', title: id, lanes: [lane(9, { stage: 'closed' })], ...o });
+  const running = (id: string, o: Partial<Dispatch> = {}) => disp({ id, title: id, lanes: [lane(5, { stage: 'implementing' })], ...o });
+  const titles = () => screen.getAllByRole('row').slice(1).map((r) => within(r).getByRole('link').textContent);
+  const tab = (name: RegExp) => screen.getByRole('button', { name });
+  const DAY = 86_400;
+  const NOW = 1_700_000_000;
+  const TWO_REPOS = { repos: [{ slug: 'o/r', name: 'R', path: '/x' }, { slug: 'o/q', name: 'Q', path: '/y' }], can_browse: false, scan_roots: [] };
+
+  it('shows live and finished dispatches in one table with no cards or sections', async () => {
     window.location.hash = '#/dispatches?repo=o/r';
     render(<App />);
-    const running = within(await screen.findByRole('region', { name: 'Running' }));
-    expect(await running.findByText('Payments')).toBeTruthy();
-    expect(running.getByText('PR #30 is ready for your merge')).toBeTruthy();
-    expect(within(screen.getByRole('region', { name: 'History' })).getByText('Old epic')).toBeTruthy();
+    const table = await screen.findByRole('table');
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['State', 'Dispatch', 'Issues', 'Took', 'Spent']);
+    expect(within(table).getByRole('link', { name: 'Payments' }).getAttribute('href')).toBe('#/dispatches/abc123abc123');
+    expect(within(table).getByRole('link', { name: 'Old epic' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Running' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'History' })).toBeNull();
+    expect(document.querySelector('.page-head .sub')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Run an epic' })).toBeTruthy();
     expect(screen.getAllByRole('link', { name: /^Dispatches/ }).length).toBeGreaterThan(0); // in the rail (and the mobile nav)
   });
 
-  it('J/K select the running card then the history rows; Enter opens the dispatch', async () => {
-    const old = (id: string) => disp({ id, state: 'done', title: id, lanes: [lane(9, { stage: 'closed' })] });
-    routes['/api/dispatches'] = { dispatches: [disp(), old('old000000001'), old('old000000002')] };
+  it('shows Needs you on a paused dispatch waiting for its merge, and Cancelled on a held one', async () => {
+    routes['/api/dispatches'] = { dispatches: [
+      disp({ id: 'p1', state: 'paused', title: 'Paused one', lanes: [lane(3, { stage: 'awaiting_merge', pr: 30 })] }),
+      disp({ id: 'c1', state: 'cancelled', title: 'Cancelled one', lanes: [lane(4, { held: 'CI is red' })] }),
+    ] };
     window.location.hash = '#/dispatches';
     render(<App />);
-    await screen.findByRole('region', { name: 'Running' });
-    await screen.findByText('old000000001');
-    const card = screen.getByRole('link', { name: /Payments/ });
-    const rows = screen.getAllByRole('row').slice(1);
+    const paused = (await screen.findByRole('link', { name: 'Paused one' })).closest('tr')!;
+    const cancelled = screen.getByRole('link', { name: 'Cancelled one' }).closest('tr')!;
+    expect(within(paused).getByText('Needs you')).toBeTruthy();
+    expect(paused.textContent).toContain('#3 PR #30 is ready for your merge');
+    expect(within(cancelled).getByText('Cancelled')).toBeTruthy();
+    expect(within(cancelled).queryByText('Needs you')).toBeNull();
+    expect(cancelled.textContent).not.toContain('CI is red');
+  });
+
+  it('shows the first issue that needs you and how many more', async () => {
+    routes['/api/dispatches'] = { dispatches: [disp({ lanes: [lane(2, { stage: 'implementing', needs_you: 'waiting on you' }), lane(3, { stage: 'awaiting_merge', pr: 30 }), lane(4, { held: 'CI is red' })] })] };
+    window.location.hash = '#/dispatches';
+    render(<App />);
+    expect((await screen.findByText(/Asked you a question/)).textContent).toBe('#2 Asked you a question and 2 more');
+  });
+
+  it('shows the issue bar in order, sized by count, with a text label', async () => {
+    routes['/api/dispatches'] = { dispatches: [disp({ lanes: [
+      ...[1, 2, 3].map((n) => lane(n, { stage: 'closed' })), lane(4, { stage: 'implementing' }), lane(5, { stage: 'grinding' }), lane(6), lane(7),
+    ] })] };
+    window.location.hash = '#/dispatches';
+    render(<App />);
+    const bar = await screen.findByRole('img', { name: '3 of 7 done' });
+    expect(bar.closest('td')!.textContent).toContain('3/7');
+    expect([...bar.children].map((i) => [i.className, (i as HTMLElement).style.flexGrow])).toEqual([['s-merged', '3'], ['s-build', '2'], ['s-ready', '2']]);
+  });
+
+  it('shows the totals, a dash under Spent for herdr, and the date and skipped count once finished', async () => {
+    routes['/api/dispatches'] = { dispatches: [
+      running('headless1', { totals: { cost: 1.5, tokens: 1, seconds: 600 } }),
+      done('herdr1', { runner: 'herdr', lanes: [lane(9, { stage: 'closed' }), lane(8, { stage: 'skipped' })] }),
+    ] };
+    window.location.hash = '#/dispatches';
+    render(<App />);
+    const cells = (name: string) => [...screen.getByRole('link', { name }).closest('tr')!.querySelectorAll('td.num')].map((c) => c.textContent);
+    await screen.findByRole('link', { name: 'herdr1' });
+    expect(cells('headless1')).toEqual(['10m', '$1.50']);
+    expect(cells('herdr1')[1]).toBe('—');
+    const line = screen.getByRole('link', { name: 'herdr1' }).closest('td')!.querySelector('.strip-m')!;
+    expect(line.textContent).toContain('r');
+    expect(line.textContent).toContain(new Date(NOW * 1000).toLocaleDateString());
+    expect(line.textContent).toContain('1 skipped');
+    expect(screen.getByRole('link', { name: 'headless1' }).closest('td')!.querySelector('.strip-m')!.textContent).toBe('r');
+  });
+
+  it('leaves the repo line out of a record with neither epic nor issues', async () => {
+    routes['/api/dispatches'] = { dispatches: [done('blank', { epic: null, issues: null })] };
+    window.location.hash = '#/dispatches';
+    render(<App />);
+    expect((await screen.findByRole('link', { name: 'blank' })).closest('td')!.querySelector('.strip-m')).toBeNull();
+  });
+
+  it('orders Needs you, Running, Paused, then finished and cancelled together, newest first', async () => {
+    routes['/api/dispatches'] = { dispatches: [
+      done('finished-old', { created_at: NOW - 7 * DAY }),
+      disp({ id: 'cancelled-new', title: 'cancelled-new', state: 'cancelled', created_at: NOW - DAY, lanes: [lane(9, { stage: 'closed' })] }),
+      disp({ id: 'paused-new', title: 'paused-new', state: 'paused', created_at: NOW, lanes: [lane(5, { stage: 'implementing' })] }),
+      running('running-old', { created_at: NOW - 2 * DAY }),
+      running('running-new', { created_at: NOW }),
+      disp({ id: 'needs-old', title: 'needs-old', created_at: NOW - 7 * DAY }),
+    ] };
+    window.location.hash = '#/dispatches';
+    render(<App />);
+    await screen.findByRole('table');
+    expect(titles()).toEqual(['needs-old', 'running-new', 'running-old', 'paused-new', 'cancelled-new', 'finished-old']);
+  });
+
+  it('keeps the tab in the URL: click, Back, reload; a dispatch needing you counts under Live too', async () => {
+    routes['/api/dispatches'] = { dispatches: [disp(), running('run'), done('fin')] };
+    window.location.hash = '#/dispatches?repo=o/r';
+    const view = render(<App />);
+    await screen.findByRole('table');
+    expect(tab(/^All \d/).textContent).toBe('All 3');
+    expect(tab(/^Needs you/).textContent).toBe('Needs you 1');
+    expect(tab(/^Live/).textContent).toBe('Live 2');
+    expect(tab(/^Finished/).textContent).toBe('Finished 1');
+    expect(tab(/^All \d/).getAttribute('aria-pressed')).toBe('true');
+    await userEvent.click(tab(/^Needs you/));
+    await waitFor(() => expect(window.location.hash).toContain('show=needs'));
+    expect(window.location.hash).toContain('repo=o/r');
+    expect(titles()).toEqual(['Payments']);
+    await userEvent.click(tab(/^Live/));
+    await waitFor(() => expect(titles()).toEqual(['Payments', 'run']));
+    await userEvent.click(tab(/^Needs you/));
+    await waitFor(() => expect(titles()).toEqual(['Payments']));
+    view.unmount();
+    render(<App />); // a reload keeps it
+    await screen.findByRole('table');
+    expect(tab(/^Needs you/).getAttribute('aria-pressed')).toBe('true');
+    expect(titles()).toEqual(['Payments']);
+    await userEvent.click(tab(/^All \d/));
+    await waitFor(() => expect(window.location.hash).not.toContain('show='));
+    expect(titles().length).toBe(3);
+    window.history.back();
+    await waitFor(() => expect(window.location.hash).toContain('show=needs'));
+    await waitFor(() => expect(titles()).toEqual(['Payments']));
+  });
+
+  it('reads an unknown ?show= as All', async () => {
+    window.location.hash = '#/dispatches?show=nonsense';
+    render(<App />);
+    await screen.findByRole('table');
+    expect(tab(/^All \d/).getAttribute('aria-pressed')).toBe('true');
+    expect(titles().length).toBe(2);
+  });
+
+  it('narrows rows and tab counts to ?only=, in any case, and All repos clears it', async () => {
+    routes['/api/repos'] = TWO_REPOS;
+    routes['/api/dispatches'] = { dispatches: [running('r-run'), running('q-run', { epic: 'O/Q#1' }), done('q-fin', { epic: null, issues: ['o/q#2'] }), done('blank', { epic: null, issues: null })] };
+    window.location.hash = '#/dispatches?only=o/Q';
+    render(<App />);
+    await screen.findByRole('link', { name: 'q-run' });
+    await waitFor(() => expect(titles()).toEqual(['q-run', 'q-fin']));
+    expect(tab(/^All \d/).textContent).toBe('All 2');
+    expect(tab(/^Live/).textContent).toBe('Live 1');
+    expect(tab(/^Finished/).textContent).toBe('Finished 1');
+    expect(screen.getByRole('group', { name: 'Show dispatches from' })).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'All repos' }));
+    await waitFor(() => expect(window.location.hash).not.toContain('only='));
+    await waitFor(() => expect(titles().length).toBe(4));
+    expect(tab(/^All \d/).textContent).toBe('All 4');
+  });
+
+  it('J selects the first visible row on a filtered tab, after an earlier selection too; Enter opens it', async () => {
+    routes['/api/dispatches'] = { dispatches: [running('run1', { created_at: NOW }), running('run2', { created_at: NOW - 1 }), done('fin1', { created_at: NOW - 2 }), done('fin2', { created_at: NOW - 3 })] };
+    window.location.hash = '#/dispatches';
+    render(<App />);
+    await screen.findByRole('table');
     expect(document.querySelector('[data-selected]')).toBeNull();
-    await userEvent.keyboard('j');
-    expect(card.hasAttribute('data-selected')).toBe(true);
-    await userEvent.keyboard('j');
-    expect(rows[0].hasAttribute('data-selected')).toBe(true);
+    await userEvent.keyboard('jjj');
+    expect(screen.getByRole('link', { name: 'fin1' }).closest('tr')!.hasAttribute('data-selected')).toBe(true);
     await userEvent.keyboard('k');
-    expect(card.hasAttribute('data-selected')).toBe(true);
-    await userEvent.keyboard('jj');
-    expect(rows[1].hasAttribute('data-selected')).toBe(true);
+    expect(screen.getByRole('link', { name: 'run2' }).closest('tr')!.hasAttribute('data-selected')).toBe(true);
+    await userEvent.click(tab(/^Finished/));
+    await waitFor(() => expect(titles()).toEqual(['fin1', 'fin2']));
+    await waitFor(() => expect(document.querySelector('[data-selected]')).toBeNull());
+    await userEvent.keyboard('j');
+    expect(screen.getByRole('link', { name: 'fin1' }).closest('tr')!.hasAttribute('data-selected')).toBe(true);
     await userEvent.keyboard('{Enter}');
-    await waitFor(() => expect(window.location.hash).toBe('#/dispatches/old000000002'));
+    await waitFor(() => expect(window.location.hash).toBe('#/dispatches/fin1'));
+  });
+
+  it('opens the dispatch from its row and from its name', async () => {
+    routes['/api/dispatches'] = { dispatches: [running('run1')] };
+    routes['/api/dispatches/run1'] = running('run1');
+    window.location.hash = '#/dispatches';
+    render(<App />);
+    await userEvent.click((await screen.findByRole('table')).querySelector('td')!);
+    await waitFor(() => expect(window.location.hash).toBe('#/dispatches/run1'));
+    window.location.hash = '#/dispatches';
+    await userEvent.click(await screen.findByRole('link', { name: 'run1' }));
+    await waitFor(() => expect(window.location.hash).toBe('#/dispatches/run1'));
+  });
+
+  it('shows one line for an empty filter and keeps the tabs clickable', async () => {
+    routes['/api/repos'] = TWO_REPOS;
+    routes['/api/dispatches'] = { dispatches: [running('run')] };
+    window.location.hash = '#/dispatches?show=needs';
+    render(<App />);
+    expect(await screen.findByText('Nothing needs you.')).toBeTruthy();
+    expect(screen.queryByRole('table')).toBeNull();
+    await userEvent.click(tab(/^Finished/));
+    expect(await screen.findByText('Nothing has finished yet.')).toBeTruthy();
+    await userEvent.click(tab(/^Live/));
+    expect(await screen.findByRole('table')).toBeTruthy();
+    cleanup();
+    window.location.hash = '#/dispatches?only=o/q&show=live';
+    render(<App />);
+    expect(await screen.findByText('Nothing is live.')).toBeTruthy();
+    await userEvent.click(tab(/^All \d/));
+    expect(await screen.findByText('No dispatches in this repo.')).toBeTruthy();
+  });
+
+  it('shows a skeleton while loading, and a failed first load shows the banner and no empty state', async () => {
+    let fail = () => {};
+    const gate = new Promise<void>((r) => { fail = r; });
+    const real = fetch;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => (String(url).split('?')[0] === '/api/dispatches' ? gate.then(() => json({ error: 'boom' }, 500)) : real(url, init))));
+    window.location.hash = '#/dispatches';
+    render(<App />);
+    await waitFor(() => expect(document.querySelector('.content-inner .skel')).toBeTruthy());
+    expect(screen.queryByRole('group', { name: 'Show dispatches' })).toBeNull();
+    fail();
+    expect(await screen.findByText(/Could not load dispatches/, undefined, { timeout: 4000 })).toBeTruthy();
+    expect(screen.queryByText('Nothing is running')).toBeNull();
+    expect(document.querySelector('.content-inner .skel')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+  });
+
+  it('with no dispatches shows Nothing is running and hides the tabs', async () => {
+    routes['/api/dispatches'] = { dispatches: [] };
+    window.location.hash = '#/dispatches?show=needs';
+    render(<App />);
+    expect(await screen.findByText('Nothing is running')).toBeTruthy();
+    expect(screen.queryByRole('group', { name: 'Show dispatches' })).toBeNull();
+    expect(screen.queryByText('Nothing needs you.')).toBeNull();
+  });
+
+  it('?new= opens the dialog on that epic, and closing it keeps ?show=', async () => {
+    window.location.hash = '#/dispatches?new=o/r%231&show=live';
+    render(<App />);
+    expect((await screen.findByLabelText('Epic') as HTMLInputElement).value).toBe('o/r#1');
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(window.location.hash).not.toContain('new='));
+    expect(window.location.hash).toContain('show=live');
   });
 
   it('J/K/Enter do nothing with no dispatches', async () => {
@@ -340,13 +544,14 @@ describe('Dispatch page', () => {
 const SMALL = { epic: null, issues: ['o/r#412', 'o/r#415'], title: 'Small changes: #412, #415' };
 
 describe('Issue-list dispatches', () => {
-  it('shows the title on its card and the repo under it in History', async () => {
+  it('shows the title in its row and the repo under it', async () => {
     routes['/api/dispatches'] = { dispatches: [disp(), disp({ id: 'sm1', ...SMALL }), disp({ id: 'sm2', state: 'done', ...SMALL })] };
     window.location.hash = '#/dispatches?repo=o/r';
     render(<App />);
-    expect((await screen.findAllByText('Small changes: #412, #415')).length).toBe(2);
-    expect(within(screen.getByRole('table')).getByText('o/r')).toBeTruthy();
-    expect(screen.getByText('Payments')).toBeTruthy();
+    const links = await screen.findAllByRole('link', { name: 'Small changes: #412, #415' });
+    expect(links.length).toBe(2);
+    expect(links[0].closest('td')!.querySelector('.strip-m')!.textContent).toBe('r');
+    expect(screen.getByRole('link', { name: 'Payments' })).toBeTruthy();
   });
 
   it('titles its page, links the repo and offers no end actions once done', async () => {
