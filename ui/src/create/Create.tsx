@@ -125,9 +125,7 @@ function CreateBody({ preset, draft, onClose }: { preset: Preset; draft: { curre
             <button key={r} type="button" role="radio" aria-checked={route === r} onClick={() => setPick(r)}>{LABEL[r]}</button>
           ))}
         </div>
-        <RepoSelect repos={repos} value={target} onChange={setPicked} label="Repository" width={210} />
-      </div>
-      <p className="cr-say" role="status">
+      <p className={`cr-say${done?.route ? ' auto' : ''}`} role="status">
         {!t ? 'Describe it and Auto picks the route.'
           : auto === 'asking' ? 'Working out the route…'
           : !done ? null
@@ -135,19 +133,26 @@ function CreateBody({ preset, draft, onClose }: { preset: Preset; draft: { curre
           : pick && pick !== done.route ? <>Your pick. Auto would file this as a {LABEL[done.route].toLowerCase()}. <button type="button" className="linkish" onClick={() => setPick(null)}>Use Auto's pick</button></>
           : `Auto picked ${LABEL[done.route]}: ${done.why}.`}
       </p>
+      </div>
       {dup ? <p className="cr-dup" role="status">Looks like <a href={dup.url} target="_blank" rel="noopener noreferrer">{dup.kind === 'issue' ? `#${dup.n} ${dup.title}` : dup.title}</a></p> : null}
+      <div className="cr-fields">
+        <div className="cr-field">
+          <span className="cr-lbl" aria-hidden="true">Repo</span>
+          <RepoSelect repos={repos} value={target} onChange={setPicked} label="Repository" />
+        </div>
       {cmds.length > 1 ? (
-        <div className="cr-acct">
-          <b id="new-run-on">Run on</b>
+        <div className="cr-field cr-acct">
+          <span className="cr-lbl" id="new-run-on">Run on</span>
           <div className="seg" role="radiogroup" aria-labelledby="new-run-on">
             {cmds.map((a) => {
               const lim = limitedUntil(cmds, a.label, limits);
               return <button key={a.label} type="button" role="radio" aria-checked={acct === a.label} className={acct === a.label ? 'on' : ''} title={lim ? `Limited until ${clockText(lim)}` : undefined} onClick={() => setAcctSel(a.label)}>{a.label}{lim ? ' · limited' : ''}</button>;
             })}
           </div>
-          <span className="muted">The next steps run on this account too.</span>
+          <span className="muted cr-note">The next steps run on this account too.</span>
         </div>
       ) : null}
+      </div>
       {until ? <p className="hint" style={{ margin: 0, color: 'var(--review)' }}>This account is limited until {clockText(until)}. The session queues and starts at reset.</p> : null}
       {route ? (
         <div className="cr-plan">
@@ -174,10 +179,12 @@ function CreateBody({ preset, draft, onClose }: { preset: Preset; draft: { curre
         </div>
       ) : null}
       <div className="cr-foot">
-        <button type="button" className="linkish grow" style={{ textAlign: 'left', textDecoration: 'underline' }} onClick={commands}>Run a command instead</button>
+        <Button variant="ghost" noAction onClick={commands}>Run a command instead</Button>
+        <span className="grow" />
         <Button variant="ghost" noAction onClick={onClose}>Cancel</Button>
         <Button variant="accent" noAction aria-keyshortcuts="Meta+Enter Control+Enter" disabled={!route || !t || !target || work.pending} onClick={() => void start()}>
           {route === 'small' ? 'File the issue' : 'Start the PRD interview'}
+          <span className="kbd on-primary hide-sm" aria-hidden="true">⌘↵</span>
         </Button>
       </div>
     </div>
