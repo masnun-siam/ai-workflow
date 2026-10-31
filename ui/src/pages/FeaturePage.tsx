@@ -4,12 +4,12 @@ import type { BoardMeta } from '../api/types';
 import { useDelivery, usePlanning, useSessions } from '../api/hooks';
 import { SessionTable } from '../activity/SessionTable';
 import { BoardStatus } from '../board/BoardStatus';
-import { Button, EmptyState, Icon, LinkButton, MoreMenu, TabPanel, Tabs } from '../components';
+import { Button, EmptyState, Icon, TabPanel, Tabs } from '../components';
+import { FeatureStrip } from '../features/FeatureStrip';
 import { IssuesTab } from '../features/IssuesTab';
-import { NextStepBox } from '../features/NextStepBox';
 import { PrdTab } from '../features/PrdTab';
 import { ReviewTab } from '../features/ReviewTab';
-import { BuildMap, DispatchPanel, StageStrip } from '../features/BuildMap';
+import { BuildMap, DispatchPanel } from '../features/BuildMap';
 import { useStepRunner } from '../features/useStepRunner';
 import { NewDispatchDialog } from '../dispatch/NewDispatchDialog';
 import { useEpicDispatch } from '../dispatch/useOwner';
@@ -53,34 +53,17 @@ function Body({ f, repo, tab, meta }: { f: Feature; repo: string; tab?: string; 
         <Icon n="right" s={13} />
         <span>{f.title}</span>
       </nav>
-      <header className="fhead">
-        <h1>{f.title}</h1>
-        <div className="row wrap" style={{ gap: 10 }}>
-          <span className="mono muted" style={{ fontSize: 12.5 }}>{f.epic ? `epic #${f.epic} · ` : ''}{f.prd.path}</span>
-          <span className="grow" />
-        {live ? (
-          <LinkButton to={link(routes.dispatch(live.d.id))}>
-            <Icon n="bolt" />{live.c.you ? `Dispatch needs you (${live.c.you})` : `Dispatch: ${live.c.closed} of ${live.c.total} done`}
-          </LinkButton>
-        ) : f.epic && f.issues.length ? (
-          <Button variant="primary" onClick={() => setDispatching(true)} title="Build the epic's issues side by side">
-            <Icon n="bolt" />Run epic
-          </Button>
-        ) : null}
-        <MoreMenu
-          label="More"
-          sm={false}
-          items={[
-            { label: 'Open PRD on GitHub', icon: 'ext', onSelect: () => window.open(`https://github.com/${repo}/blob/HEAD/${f.prd.path}`, '_blank', 'noopener') },
-            { label: 'Add a task', icon: 'plus', onSelect: () => { go('issues'); setTimeout(() => document.getElementById('add-task')?.focus(), 50); }, disabled: !f.epic },
-            ...(f.epic ? [{ label: 'Close epic and its issues', icon: 'x' as const, danger: true, onSelect: () => void run({ kind: 'closeEpic' }) }] : []),
-          ]}
-        />
-        </div>
-      </header>
+      <FeatureStrip
+        f={f}
+        repo={repo}
+        onRunEpic={() => setDispatching(true)}
+        more={[
+          { label: 'Open PRD on GitHub', icon: 'ext', onSelect: () => window.open(`https://github.com/${repo}/blob/HEAD/${f.prd.path}`, '_blank', 'noopener') },
+          { label: 'Add a task', icon: 'plus', onSelect: () => { go('issues'); setTimeout(() => document.getElementById('add-task')?.focus(), 50); }, disabled: !f.epic },
+          ...(f.epic ? [{ label: 'Close epic and its issues', icon: 'x' as const, danger: true, onSelect: () => void run({ kind: 'closeEpic' }) }] : []),
+        ]}
+      />
       <BoardStatus meta={meta} />
-      <StageStrip f={f} />
-      <NextStepBox f={f} repo={repo} />
       <BuildMap f={f} repo={repo} dispatch={liveFull} />
       {live ? <div className="fpanels"><DispatchPanel id={live.d.id} /></div> : null}
       <Tabs

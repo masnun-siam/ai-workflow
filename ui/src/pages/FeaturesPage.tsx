@@ -5,12 +5,13 @@ import type { BoardMeta, Dispatch } from '../api/types';
 import { BoardStatus } from '../board/BoardStatus';
 import { Button, EmptyState, useListSelection } from '../components';
 import { CreatePrompt } from '../create/Create';
+import { IssueBar, StageTicks } from '../features/StripParts';
 import { useStepRunner } from '../features/useStepRunner';
 import { useEpicDispatch } from '../dispatch/useOwner';
 import { counts, needsYou, secs } from '../dispatch/vocab';
 import '../features/features.css';
 import '../dispatch/dispatch.css';
-import { countBy, issueBuckets, joinFeatures, snapshotsReady, type Feature } from '../lib/features';
+import { joinFeatures, snapshotsReady, type Feature } from '../lib/features';
 import { money } from '../lib/format';
 import { attention, nextStep, stepKey, type Attention } from '../lib/nextStep';
 import { repoLink } from '../lib/repo';
@@ -51,16 +52,15 @@ function useRows() {
 function Strip({ row, sel, showRepo }: { row: Row; sel: RowSel; showRepo: boolean }) {
   const { repo, f, kind } = row;
   const key = featureKey(repo, f.slug);
-  const { run, busy } = useStepRunner(f, repo);
+  const { run, busy, labelOf } = useStepRunner(f, repo);
   const panel = usePanel();
   const live = useEpicDispatch(repo, f.epic);
   const ns = nextStep(f, live && { id: live.d.id, closed: live.c.closed, total: live.c.total, you: live.c.you });
   const mergeable = f.issues.filter((m) => m.mergeable && m.pr);
-  const merged = countBy(f.issues).merged ?? 0;
   const i = stageIdx(f.stage);
   const target = { kind: 'feature' as const, repo, slug: f.slug };
   const open = panel.target?.kind === 'feature' && panel.target.repo === repo && panel.target.slug === f.slug;
-  const buckets = issueBuckets(f.issues, new Set((live?.d.lanes ?? []).filter(needsYou).map((l) => l.n))).reverse();
+  const you = new Set((live?.d.lanes ?? []).filter(needsYou).map((l) => l.n));
   const title = (e: MouseEvent) => {
     e.stopPropagation();
     if (e.metaKey || e.ctrlKey || e.shiftKey) return;
@@ -85,25 +85,18 @@ function Strip({ row, sel, showRepo }: { row: Row; sel: RowSel; showRepo: boolea
         </div>
       </div>
       <div className="strip-c strip-s">
-        <span className="ticks" aria-hidden="true">{STAGES.map((s, k) => <i key={s.id} className={k < i ? 'past' : k === i ? 'now' : ''} />)}</span>
+        <StageTicks at={i} />
         {STAGES[i].label}
       </div>
       <div className="strip-c strip-p">
-        {f.issues.length ? (
-          <>
-            <b>{merged}/{f.issues.length}</b>
-            <span className="ibar" role="img" aria-label={`${merged} of ${f.issues.length} issues merged`}>
-              {buckets.map((b) => <i key={b.id} className={`s-${b.id}`} style={{ flexGrow: b.items.length }} title={`${b.items.length} ${b.label.toLowerCase()}`} />)}
-            </span>
-          </>
-        ) : <span className="muted">No issues yet</span>}
+        <IssueBar issues={f.issues} you={you} />
       </div>
       <div className="strip-c strip-n" title={ns.hint}>{ns.title}</div>
       <KeyScope level="row" active={sel.selected === key} name={f.title}>
         <div className="strip-c strip-a" onClick={(e) => e.stopPropagation()}>
           {mergeable.map((m, at) => <Button key={m.n} sm variant="primary" shortcut={at === 0 ? 'm' : undefined} onClick={() => panel.open({ kind: 'pr', repo, n: m.pr!.n })}>Merge #{m.pr!.n}</Button>)}
           {ns.primary.action.kind === 'merge' ? null : (
-            <Button sm variant={kind === 'you' ? 'you' : ns.quiet || mergeable.length ? 'default' : 'primary'} shortcut={stepKey(ns.primary.action)} disabled={busy} onClick={() => run(ns.primary.action)}>{ns.primary.label}</Button>
+            <Button sm variant={kind === 'you' ? 'you' : ns.quiet || mergeable.length ? 'default' : 'primary'} shortcut={stepKey(ns.primary.action)} disabled={busy} onClick={() => run(ns.primary.action)}>{labelOf(ns.primary.action, ns.primary.label)}</Button>
           )}
         </div>
       </KeyScope>

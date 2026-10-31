@@ -1,81 +1,39 @@
 import { useDispatch } from '../api/hooks';
 import type { Dispatch } from '../api/types';
-import { Icon } from '../components';
-import { levels, needsYou, secs } from '../dispatch/vocab';
-import { countBy, type Feature, type FeatureIssue } from '../lib/features';
+import { needsYou, secs } from '../dispatch/vocab';
+import { issueBuckets, type Feature } from '../lib/features';
 import { money } from '../lib/format';
-import { ISSUE } from '../lib/vocab';
-import { MetroLine } from './SubwayMap';
 import { usePanel } from '../panels/PanelContext';
 
-/** The feature's own line through the six stages, station names under it. */
-export function StageStrip({ f }: { f: Feature }) {
-  return <div className="pane metro-solo"><MetroLine f={f} color="var(--accent)" big link={false} /></div>;
-}
-
-/** Build waves: an issue sits one column after the latest issue it waits on. A dispatch's lanes carry the
- * full dependency list; without one, the board's open blockers are all there is. */
-function waves(issues: FeatureIssue[], d: Dispatch | undefined): FeatureIssue[][] {
-  let depth: Record<number, number> = {};
-  if (d) {
-    const lv = levels(d.lanes);
-    for (const l of d.lanes) depth[l.n] = lv[l.key] ?? 0;
-  } else {
-    const by = new Map(issues.map((i) => [i.n, i]));
-    const walk = (n: number, seen: Set<number>): number => {
-      if (depth[n] !== undefined) return depth[n];
-      if (seen.has(n)) return 0;
-      seen.add(n);
-      const deps = (by.get(n)?.blocked_by ?? []).filter((b) => by.has(b));
-      return (depth[n] = deps.length ? 1 + Math.max(...deps.map((b) => walk(b, seen))) : 0);
-    };
-    depth = {};
-    for (const i of issues) walk(i.n, new Set());
-  }
-  const out: FeatureIssue[][] = [];
-  for (const i of [...issues].sort((a, b) => a.n - b.n)) (out[depth[i.n] ?? 0] ??= []).push(i);
-  return out.filter(Boolean);
-}
-
-const waveLabel = (k: number, w: FeatureIssue[], issues: FeatureIssue[]) => {
-  if (k === 0) return 'Starts first';
-  const deps = [...new Set(w.flatMap((i) => i.blocked_by))].filter((n) => issues.some((x) => x.n === n));
-  return deps.length && deps.length <= 4 ? `After ${deps.map((n) => `#${n}`).join(', ')}` : 'Then';
-};
-
+/** One tile per issue in number order; the bar and the legend read the same issue buckets. */
 export function BuildMap({ f, repo, dispatch }: { f: Feature; repo: string; dispatch?: Dispatch }) {
   const panel = usePanel();
   if (!f.issues.length) return null;
   const you = new Map((dispatch?.lanes ?? []).filter(needsYou).map((l) => [l.n, l]));
-  const cols = waves(f.issues, dispatch);
-  const merged = countBy(f.issues).merged ?? 0;
+  const buckets = issueBuckets(f.issues, new Set(you.keys()));
+  const bucket = new Map(buckets.flatMap((b) => b.items.map((i) => [i.n, b] as const)));
   return (
     <section className="pane bmap" aria-labelledby="map-h">
       <div className="bmap-h">
         <h2 id="map-h" className="sec-h">Build map</h2>
-        <p>Issues run left to right; each column waits on one before it.</p>
-        <b>{merged}<small>/{f.issues.length} merged</small></b>
+        <ul className="tile-key" aria-label="Issues by state">
+          {buckets.map((b) => <li key={b.id}><i className={`s-${b.id}`} />{b.label} <span>{b.items.length}</span></li>)}
+        </ul>
       </div>
-      <div className="waves">
-        {cols.map((w, k) => (
-          <div key={k} className="row" style={{ gap: 10, alignItems: 'stretch', flex: k === 0 ? '1.3 0 240px' : '1 0 220px', minWidth: 0 }}>
-            {k ? <div className="wave-arrow" aria-hidden="true"><Icon n="right" s={18} /></div> : null}
-            <div className="wave">
-              <span>{waveLabel(k, w, f.issues)}</span>
-              {w.map((i) => {
-                const y = you.get(i.n);
-                const cls = y ? 'you' : i.status === 'merged' ? 'merged' : ['in_progress', 'draft_pr', 'in_review', 'grinding'].includes(i.status) ? 'active' : '';
-                return (
-                  <button key={i.n} type="button" className={`node ${cls}`} onClick={() => panel.open({ kind: 'issue', repo, n: i.n })} title={y?.needs_you ?? y?.held ?? undefined}>
-                    <span className="nt"><span>#{i.n}</span><span>{y ? 'Needs you' : ISSUE[i.status].label}</span></span>
-                    <span className="nn">{i.title}</span>
-                    {i.pr ? <span className="np">PR #{i.pr.n}</span> : i.status === 'merged' ? null : <span className="np">No PR yet</span>}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+      <div className="tiles">
+        {[...f.issues].sort((a, b) => a.n - b.n).map((i) => {
+          const b = bucket.get(i.n)!;
+          const y = you.get(i.n);
+          const label = `#${i.n} ${i.title}, ${b.label}`;
+          const why = y?.needs_you ?? y?.held;
+          return (
+            <button key={i.n} type="button" className={`tile${y ? ' you' : ''}`} aria-label={label} title={why ? `${label}: ${why}` : label} onClick={() => panel.open({ kind: 'issue', repo, n: i.n })}>
+              <span>#{i.n}</span>
+              {y ? <small>Needs you</small> : null}
+              <i className={`s-${b.id}`} />
+            </button>
+          );
+        })}
       </div>
     </section>
   );

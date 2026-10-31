@@ -69,5 +69,7 @@ export function useStepRunner(f: Feature, repo: string) {
       }
     }
   };
-  return { run, busy: starter.pending || close.isPending };
+  /** A refine step whose every issue has a live session says so; clicking it opens that session. */
+  const labelOf = (a: StepAction, label: string) => (a.kind === 'refine' && a.issues.length && a.issues.every((n) => refining.has(n)) ? 'Refining…' : label);
+  return { run, labelOf, busy: starter.pending || close.isPending };
 }
