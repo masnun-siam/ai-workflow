@@ -312,6 +312,18 @@ describe('Dispatches page', () => {
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
   });
 
+  it('keeps loaded rows under the banner when a refresh fails', async () => {
+    routes['/api/dispatches'] = { dispatches: [running('run')] };
+    window.location.hash = '#/dispatches';
+    render(<App />);
+    const table = await screen.findByRole('table');
+    const real = fetch;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => (String(url).split('?')[0] === '/api/dispatches' ? json({ error: 'boom' }, 500) : real(url, init))));
+    const banner = await screen.findByText(/Could not load dispatches/, undefined, { timeout: 12_000 }); // the next poll, then its retry
+    expect(screen.getByRole('link', { name: 'run' })).toBeTruthy();
+    expect(banner.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  }, 15_000);
+
   it('with no dispatches shows Nothing is running and hides the tabs', async () => {
     routes['/api/dispatches'] = { dispatches: [] };
     window.location.hash = '#/dispatches?show=needs';

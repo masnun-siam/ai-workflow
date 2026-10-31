@@ -18,7 +18,6 @@
 .dsp-asks li{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) auto;gap:12px;align-items:center;background:var(--surface);border-radius:var(--r-card);padding:8px 10px}
 .dsp-ask-t{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-
 .tbl tr.on td{background:var(--accent-soft)}
 
 .dsp-lane-now{display:flex;flex-direction:column;gap:10px;padding:10px 12px;border-radius:var(--r-card);background:var(--cs);border:1px solid color-mix(in srgb,var(--c) 25%,transparent)}
