@@ -166,6 +166,7 @@ button.thread-quote{cursor:pointer}
 .cr-say,.cr-dup{margin:0;font-size:13px;color:var(--muted);min-height:19px}
 .cr-say .linkish{text-decoration:underline}
 .cr-dup{color:var(--ink)}
+.cr-acct{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:13px}
 .cr-plan{display:flex;flex-direction:column;gap:12px;padding:12px 14px;border-radius:var(--r-card);background:var(--sunk)}
 .cr-foot{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .cr-prompt{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:0 14px;border-radius:var(--r-card);border:1px dashed var(--line-strong);background:none;color:var(--muted);font-size:15px;text-align:left;cursor:text}

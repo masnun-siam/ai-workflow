@@ -168,6 +168,7 @@ export interface PlanningPrd {
   children: { n: number; title: string; refined: boolean }[];
   closed_children?: { n: number; title: string }[];
   panel: PanelRef | null;
+  account?: string | null; // the label of the account it was created on, when pinned
   mtime?: number; // last update, when the server sends it
 }
 export interface BoardMeta {
@@ -474,6 +475,7 @@ export interface SessionStartBody {
   vault_folder?: string; // 05-Work/<Project>[/<Feature>]
   batch?: string; // groups a worklog range
   peer_review?: string[]; // lens names
+  pin_account?: boolean; // later sessions on what this one makes run on its account
   model?: string | null; // opus | sonnet | haiku; absent: Claude's default
   effort?: string | null; // low | medium | high | xhigh | max
   [k: string]: unknown;
@@ -488,6 +490,8 @@ export interface BoardStartBody {
   lenses?: string[];
   model?: string | null;
   effort?: string | null;
+  claude_cmd?: string; // an account label from Settings
+  pin_account?: boolean;
 }
 /** POST /api/start: a public session. */
 export interface BoardStartResponse { session?: string; panel?: unknown }

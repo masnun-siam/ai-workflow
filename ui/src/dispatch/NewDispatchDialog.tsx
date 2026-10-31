@@ -42,6 +42,11 @@ export function NewDispatchDialog({ open, onOpenChange, epic: initial, issues, r
 
   const full = epic.includes('#') || !repo ? epic.trim() : `${repo}#${epic.trim().replace(/^#/, '')}`;
   const valid = picked ? issues.length > 0 : EPIC_RE.test(full);
+  // An epic created on an account runs on it, unless the user already picked.
+  const pinned = picked ? null : (epics.find((p) => `${repo}#${p.epic}` === full)?.account ?? null);
+  useEffect(() => {
+    if (!touched) setS((x) => (x.account === pinned ? x : { ...x, account: pinned }));
+  }, [pinned, touched]);
   const target = (): DispatchTarget => (picked ? { issues: issues.map((i) => `${repo}#${i.n}`) } : { epic: full });
   const dialogRepo = picked ? repo || null : valid && full.includes('#') ? full.split('#')[0] : null;
   // Another repo has other branches: the pick starts over.

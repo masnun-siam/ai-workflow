@@ -2,21 +2,27 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import type { DuplicateMatch } from '../api/types';
-import { usePeerReviewOffers, useRepos } from '../api/hooks';
+import { usePeerReviewOffers, useRepos, useSessions, useSettings } from '../api/hooks';
 import { useStarter } from '../board/actions';
 import { Button, Dialog, toast } from '../components';
 import { smallChangeArg } from '../features/smallChange';
 import '../features/features.css';
 import { repoLink } from '../lib/repo';
 import { routes } from '../lib/routes';
+import { clockText } from '../lib/format';
 import { lensName, PLAN_RUN } from '../lib/vocab';
 import { RepoSelect } from '../shell/RepoSelect';
 import { useRepo } from '../shell/useRepo';
 import { useStart } from '../start/StartContext';
+import { limitedUntil } from '../start/startLogic';
+import '../start/start.css';
 
 export type Route = 'feature' | 'small';
 export const PRIORITIES = ['', 'critical', 'high', 'medium', 'low'] as const;
 export const priorityName = (p: string) => (p ? p[0].toUpperCase() + p.slice(1) : 'No priority');
+
+/** The account for this work and every step after it (run-engine/ui_origin.py). */
+const pinned = (account?: string) => (account ? { claude_cmd: account, pin_account: true } : {});
 
 /** The two starts behind the create box. */
 function useCreateWork(repo: string) {
@@ -24,11 +30,11 @@ function useCreateWork(repo: string) {
   return {
     pending: starter.pending,
     /** /create-prd: Claude interviews you into a PRD. Opens the session. */
-    feature: (text: string, lenses: string[]) =>
-      starter.startSession({ repo, command: 'create-prd', args: text.trim(), ...(lenses.length ? { peer_review: lenses } : {}), ...PLAN_RUN }),
+    feature: (text: string, lenses: string[], account?: string) =>
+      starter.startSession({ repo, command: 'create-prd', args: text.trim(), ...(lenses.length ? { peer_review: lenses } : {}), ...pinned(account), ...PLAN_RUN }),
     /** One /create-tasks session that files and refines the issue; stays on this page. */
-    small: (text: string, priority: string) =>
-      starter.startBoard({ repo, skill: 'create-tasks', arg: smallChangeArg(priority ? `${text.trim()} Priority: ${priority}.` : text), via: 'headless', ...PLAN_RUN }, { nav: false }),
+    small: (text: string, priority: string, account?: string) =>
+      starter.startBoard({ repo, skill: 'create-tasks', arg: smallChangeArg(priority ? `${text.trim()} Priority: ${priority}.` : text), via: 'headless', ...pinned(account), ...PLAN_RUN }, { nav: false }),
   };
 }
 
@@ -53,6 +59,13 @@ function CreateBody({ preset, draft, onClose }: { preset: Preset; draft: { curre
   const [dup, setDup] = useState<DuplicateMatch | null>(null);
   const [lenses, setLenses] = useState<string[]>([]);
   const [priority, setPriority] = useState('');
+  const [acctSel, setAcctSel] = useState<string | null>(null);
+  const settings = useSettings().data;
+  const limits = useSessions().data?.limits;
+  const cmds = settings?.commands ?? [];
+  const acct = acctSel ?? settings?.default ?? '';
+  const account = cmds.length > 1 ? acct : undefined;
+  const until = limitedUntil(cmds, acct, limits);
   const target = picked || repo;
   const work = useCreateWork(target);
   const t = text.trim();
@@ -91,8 +104,8 @@ function CreateBody({ preset, draft, onClose }: { preset: Preset; draft: { curre
   const start = async () => {
     if (!route || !t || !target || work.pending) return;
     if (route === 'feature') {
-      if ((await work.feature(text, lenses)) !== null) finish();
-    } else if ((await work.small(text, priority)) !== null) {
+      if ((await work.feature(text, lenses, account)) !== null) finish();
+    } else if ((await work.small(text, priority, account)) !== null) {
       finish();
       toast(`Filing the issue in ${short(target)}.`, { action: { label: 'Open Small changes', onClick: () => navigate(repoLink(target, routes.changes)) } });
     }
@@ -123,6 +136,19 @@ function CreateBody({ preset, draft, onClose }: { preset: Preset; draft: { curre
           : `Auto picked ${LABEL[done.route]}: ${done.why}.`}
       </p>
       {dup ? <p className="cr-dup" role="status">Looks like <a href={dup.url} target="_blank" rel="noopener noreferrer">{dup.kind === 'issue' ? `#${dup.n} ${dup.title}` : dup.title}</a></p> : null}
+      {cmds.length > 1 ? (
+        <div className="cr-acct">
+          <b id="new-run-on">Run on</b>
+          <div className="seg" role="radiogroup" aria-labelledby="new-run-on">
+            {cmds.map((a) => {
+              const lim = limitedUntil(cmds, a.label, limits);
+              return <button key={a.label} type="button" role="radio" aria-checked={acct === a.label} className={acct === a.label ? 'on' : ''} title={lim ? `Limited until ${clockText(lim)}` : undefined} onClick={() => setAcctSel(a.label)}>{a.label}{lim ? ' · limited' : ''}</button>;
+            })}
+          </div>
+          <span className="muted">The next steps run on this account too.</span>
+        </div>
+      ) : null}
+      {until ? <p className="hint" style={{ margin: 0, color: 'var(--review)' }}>This account is limited until {clockText(until)}. The session queues and starts at reset.</p> : null}
       {route ? (
         <div className="cr-plan">
           <div className="steps" style={{ gridTemplateColumns: `repeat(${STEPS[route].length},minmax(0,1fr))` }} aria-hidden="true">

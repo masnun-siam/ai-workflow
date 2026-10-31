@@ -137,7 +137,7 @@ function StartBody({ preset, onClose }: { preset: StartPreset; onClose: () => vo
     }
   };
   const body = (args: string, batch?: string) =>
-    startBody({ where, folder: folderOf(vf), command: cmd, args, lenses, account: acct || undefined, batch, model, effort });
+    startBody({ where, folder: folderOf(vf), command: cmd, args, lenses, account: acctSel ?? undefined, batch, model, effort });
 
   // Worklog: one run, or one per day of a range. A range shares a batch id, so the server runs 3 at a time.
   const runWorklog = async () => {

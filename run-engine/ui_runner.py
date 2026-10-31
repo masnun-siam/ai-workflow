@@ -23,6 +23,7 @@ import ci
 import dispatch_run
 import repo_skills
 import shared
+import ui_origin
 import ui_sessions
 import ui_settings
 from dispatch import read_checkouts
@@ -192,7 +193,7 @@ def start(
         raise ValueError(f"cwd is not a directory or known checkout slug: {cwd!r}")
 
     extra_args = [*extra_args, *(["--agent", agent] if agent else []), *(["--model", model] if model else [])]
-    claude_cmd = claude_cmd or ui_settings.default_cmd()
+    claude_cmd = claude_cmd or ui_origin.account_for(cwd, command_text, link) or ui_settings.default_cmd()
     sid = ui_sessions.create(command_text, cwd, link, claude_cmd=claude_cmd)["id"]
     if run_model or effort:
         ui_sessions.update(sid, run_model=run_model, run_effort=effort)

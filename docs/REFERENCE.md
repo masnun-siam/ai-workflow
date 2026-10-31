@@ -96,7 +96,7 @@ session items only. While an item is open (a question expanded or the side panel
 **Create box.** One dialog, "What should change?", for a feature or a small change. The New button, `N`, the palette and the
 prompts on Features and Small changes all open it (Small changes opens it on Small change). Describe the work; 600 ms after typing
 stops it asks `POST /api/route {text}` for a route and says why it picked it, and a click on **Feature** or **Small change** overrides that
-until **Use Auto's pick**. The repo picker defaults to the repo it was opened with. **Feature** starts `/create-prd` (on `opus` at `medium`) with any picked PRD review lenses and opens
+until **Use Auto's pick**. The repo picker defaults to the repo it was opened with. With more than one Claude account, **Run on** picks the account (default: the Settings default) and pins it: later sessions on the PRD that session writes, its epic, its issues or their PRs, or the issue a small change files, run on that account unless one is picked for them, and a dispatch of the epic opens on it. `run-engine/ui_origin.py` reads what the session made from its stream, and an account removed from Settings falls back to the default. **Feature** starts `/create-prd` (on `opus` at `medium`) with any picked PRD review lenses and opens
 the session. **Small change** (with an optional priority) starts one headless `/create-tasks` session that files the issue with no
 PRD and refines it in the same session, and the page stays. ⌘↵ submits, Cancel keeps the text until something is created, and **Run a command instead** opens Start. For the route,
 the server runs `jev choice` through `run-engine/jev.py` (pinned to `jev-1.14.0`) and answers `{route: feature|small_change|null,
