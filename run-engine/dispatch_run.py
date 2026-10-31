@@ -2,7 +2,7 @@
 
 A lane goes queued -> implementing -> grinding -> merge_gate -> (awaiting_merge) -> followups -> closed,
 with conflict_fix as a detour from the gate and skipped as a dead end (needs refine, or the user's skip).
-Flags on a lane: `paused` (user), `held` (CI red, grind paused or ended: needs you), `needs_you` (the lane
+Flags on a lane: `paused` (user, or `paused_by: "dispatch"` for the dispatch's Pause > Now), `held` (CI red, grind paused or ended: needs you), `needs_you` (the lane
 session waits on a human or stopped), `limited_until` (Claude usage limit), `hold_merge` / `force_merge`.
 
 `step(lane, facts, settings, now)` is pure: facts in, (lane patch, actions) out. Facts per lane, built by
@@ -584,7 +584,30 @@ def set_settings(did: str, **kv) -> dict:
         return d
 
 
-def set_state(did: str, state: str) -> dict:
+def _issues(n: int) -> str:
+    return f"{n} issue" + ("" if n == 1 else "s")
+
+
+def _stop_lanes(d: dict) -> int:
+    """Pause > Now: pause every active lane the user has not paused and close its session. Returns how many."""
+    lanes = [x for x in d["lanes"].values() if x["stage"] in ACTIVE and not x.get("paused")]
+    for x in lanes:
+        x.update(paused=True, paused_by="dispatch", needs_you=None, limited_until=None)  # both were about its session
+        if x.get("handle"):
+            x.setdefault("outbox", []).append(["close", None])
+    return len(lanes)
+
+
+def _restart_lanes(d: dict) -> int:
+    """Resume: the lanes Pause > Now stopped get a fresh session in their stage; a lane the user paused stays paused."""
+    lanes = [x for x in d["lanes"].values() if x.get("paused_by") == "dispatch"]
+    for x in lanes:
+        x.update(paused=False, paused_by=None, restart=True)
+    return len(lanes)
+
+
+def set_state(did: str, state: str, now: bool = False) -> dict:
+    """now: on paused, also stop the sessions of the running lanes (the tick runs their outbox)."""
     if state not in ("running", "paused", "cancelled"):
         raise ValueError("state must be running, paused or cancelled")
     with locked(did):
@@ -592,7 +615,12 @@ def set_state(did: str, state: str) -> dict:
         d["state"] = state
         if state == "cancelled":
             d["ended_at"] = time.time()
-        event(d, None, state, f"dispatch {state}")
+        text = f"dispatch {state}"
+        if state == "paused" and now and (n := _stop_lanes(d)):
+            text = f"dispatch paused now: {_issues(n)} stopped"
+        elif state == "running" and (n := _restart_lanes(d)):
+            text = f"dispatch running: {_issues(n)} restarted"
+        event(d, None, state, text)
         save(d)
         return d
 
@@ -618,13 +646,15 @@ def apply_lane_action(d: dict, k: str, action: str, text=None) -> None:
         x["paused"] = True
     elif action == "resume":
         x["paused"] = False
+        if x.pop("paused_by", None):  # Pause > Now closed its session
+            x["restart"] = True
     elif action == "skip":
         if x["stage"] in ACTIVE and x.get("handle"):
             x.setdefault("outbox", []).append(["close", None])
-        x.update(stage="skipped", skip_reason="skipped by you")
+        x.update(stage="skipped", skip_reason="skipped by you", paused_by=None)
     elif action == "retry":  # clear held/needs; a fresh session for the lane's stage at the next tick
         red = x.get("held") == "CI is red"
-        x.update(held=None, needs_you=None, paused=False)
+        x.update(held=None, needs_you=None, paused=False, paused_by=None)
         if x["stage"] == "skipped" or (x["stage"] == "implementing" and not x.get("pr")):
             if x.get("handle"):
                 x.setdefault("outbox", []).append(["close", None])

@@ -202,7 +202,7 @@ def build(
                 **base,
                 account=(account_labels or {}).get(cmd, cmd),
                 resets_at=r.get("limit_resets_at"),
-                auto_resume=r.get("auto_resume") is True,
+                auto_resume=r.get("auto_resume") is True and not r.get("hold"),
             )
         elif status == "queued":
             add(f"queued:{sid}", "wait", "queued", r.get("started_at"), where, **base, reason=r.get("note"))

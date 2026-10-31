@@ -192,6 +192,7 @@ ALLOWED = {
     "limit_resets_at",
     "limit_type",
     "auto_resume",
+    "hold",
     "peer_review",
     "bootstrap",
 }

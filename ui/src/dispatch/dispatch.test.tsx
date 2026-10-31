@@ -532,7 +532,27 @@ describe('Dispatch page', () => {
     await userEvent.click(screen.getByRole('button', { name: 'More at once' }));
     await waitFor(() => expect(posts.at(-1)).toEqual(['/api/dispatches/abc123abc123/settings', { max: 3 }]));
     await userEvent.click(screen.getByRole('button', { name: /Pause/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'After the running issues' }));
     await waitFor(() => expect(posts.at(-1)).toEqual(['/api/dispatches/abc123abc123/state', { state: 'paused' }]));
+  });
+
+  it('Pause asks: Now sends now, Cancel sends nothing', async () => {
+    window.location.hash = '#/dispatches/abc123abc123?repo=o/r';
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: /Pause/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    expect(posts.some(([p]) => p.endsWith('/state'))).toBe(false);
+    await userEvent.click(screen.getByRole('button', { name: /Pause/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Now' }));
+    await waitFor(() => expect(posts.at(-1)).toEqual(['/api/dispatches/abc123abc123/state', { state: 'paused', now: true }]));
+  });
+
+  it('the paused banner says running issues stopped only when Now stopped them', async () => {
+    routes['/api/dispatches/abc123abc123'] = disp({ state: 'paused', lanes: [lane(2, { stage: 'implementing', paused: true, paused_by: 'dispatch' })] });
+    window.location.hash = '#/dispatches/abc123abc123?repo=o/r';
+    render(<App />);
+    expect(await screen.findByText(/Running issues were stopped/)).toBeTruthy();
+    expect(screen.queryByText(/carry on/)).toBeNull();
   });
 
   it('offers the end actions once every lane is done', async () => {

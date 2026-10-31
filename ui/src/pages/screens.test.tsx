@@ -483,6 +483,28 @@ describe('Session page keys', () => {
     await u.click(await screen.findByRole('button', { name: 'Stop session' }));
     await waitFor(() => expect(posted('/api/sessions/s1/stop')).toBe(true));
   });
+  it('Pause asks: After this run holds, Now stops without a second confirm', async () => {
+    const u = await open(base({ outcome: 'running', ended_at: null }));
+    await u.click(screen.getByRole('button', { name: /Pause/ }));
+    await u.click(await screen.findByRole('button', { name: 'After this run' }));
+    await waitFor(() => expect(posted('/api/sessions/s1/hold')).toBe(true));
+    expect(posted('/api/sessions/s1/stop')).toBe(false);
+    await u.click(screen.getByRole('button', { name: /Pause/ }));
+    await u.click(await screen.findByRole('button', { name: 'Now' }));
+    await waitFor(() => expect(posted('/api/sessions/s1/stop')).toBe(true));
+  });
+  it('a finished session has no Pause', async () => {
+    await open(base());
+    expect(screen.queryByRole('button', { name: /Pause/ })).toBeNull();
+  });
+  it('a held session shows the banner and Resume, and no Pause', async () => {
+    const u = await open(base({ outcome: 'limited', ended_at: null, hold: true, auto_resume: true, limit_resets_at: 4102444800 }));
+    expect(screen.getByText(/Held: nothing continues this session until you resume it/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Pause/ })).toBeNull();
+    expect(screen.queryByText(/Resumes on its own/)).toBeNull();
+    await u.click(screen.getByRole('button', { name: 'Resume' }));
+    await waitFor(() => expect(posted('/api/sessions/s1/release')).toBe(true));
+  });
   it('R reruns a done session', async () => {
     const u = await open(base());
     await u.keyboard('r');

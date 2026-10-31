@@ -63,6 +63,9 @@ _Avoid_: Discussion
 A headless Claude invocation started and tracked by the UI (`aiw ui`), recorded under `<data_dir>/sessions/<id>/`. It exits after each turn and comes back via `--resume` with an answer or after a rate limit.
 _Avoid_: Run, job
 
+**Held session**:
+A Session the user paused with "After this run" (`hold` on its record): the current run finishes, and nothing continues the session on its own until the user resumes it. It can still be answered by hand. Not a held lane, which is a dispatch lane stopped for red CI or a grind.
+
 **Bootstrap run**:
 One "Bootstrap repo" started from the UI: a record under `<data_dir>/bootstraps/` that chains one headless Session per phase (audit, decide, constitution, guides, gates, docs) and stops at the first phase that does not report `BOOTSTRAP: <phase> done #<issue>`. A repo has at most one that is running, waiting or stopped. It is not a Session.
 _Avoid_: Bootstrap session

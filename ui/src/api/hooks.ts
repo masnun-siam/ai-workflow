@@ -200,6 +200,8 @@ export const useStartNow = () => useApiMutation(api.startNow, SESSION_WRITES);
 export const useStop = () => useApiMutation(api.stop, SESSION_WRITES);
 export const useResume = () => useApiMutation((v: { id: string; claude_cmd?: string }) => api.resume(v.id, v.claude_cmd), SESSION_WRITES, { quiet: true });
 export const useCancelAuto = () => useApiMutation(api.cancelAuto, SESSION_WRITES);
+export const useHoldSession = () => useApiMutation(api.hold, SESSION_WRITES);
+export const useReleaseSession = () => useApiMutation(api.release, SESSION_WRITES);
 export const useAnswer = () => useApiMutation((v: { id: string; body: Parameters<typeof api.answer>[1] }) => api.answer(v.id, v.body), SESSION_WRITES, { quiet: true });
 export const usePrompt = () => useApiMutation((v: { id: string; text: string }) => api.prompt(v.id, v.text), SESSION_WRITES);
 export const useCleanupSessions = () => useApiMutation(api.cleanupSessions, [['sessions'], ['cleanup']]);
@@ -272,7 +274,7 @@ export const useStartDispatch = () =>
 export const useDispatchSettings = () =>
   useApiMutation((v: { id: string; s: Partial<DispatchSettings> }) => api.dispatchSettings(v.id, v.s), DISPATCH_WRITES);
 export const useDispatchState = () =>
-  useApiMutation((v: { id: string; state: 'running' | 'paused' | 'cancelled' }) => api.dispatchState(v.id, v.state), DISPATCH_WRITES);
+  useApiMutation((v: { id: string; state: 'running' | 'paused' | 'cancelled'; now?: boolean }) => api.dispatchState(v.id, v.state, v.now), DISPATCH_WRITES);
 export const useLaneAction = () =>
   useApiMutation((v: { id: string; lane: string; action: LaneAction; text?: string }) => api.laneAction(v.id, v.lane, v.action, v.text), DISPATCH_WRITES);
 export const useEndAction = () => useApiMutation((v: { id: string; action: EndAction }) => api.endAction(v.id, v.action), DISPATCH_WRITES);

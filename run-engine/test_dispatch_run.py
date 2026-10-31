@@ -556,6 +556,50 @@ except ValueError:
     pass
 print("  ok  live edit, pause, store")
 
+# --- Pause > Now stops the running lanes; Resume gives them a fresh session
+dn = dr.create("o/r#9", "headless", {}, [child(70), child(71), child(72), child(73), child(74)])
+L = dn["lanes"]
+L[K(70)].update(stage="implementing", handle={"n": 70}, needs_you="waiting on you", limited_until=9e9)
+L[K(71)].update(stage="followups", pr=9)  # no session: nothing to close
+L[K(72)].update(stage="grinding", handle={"n": 72}, paused=True)  # the user's own pause
+L[K(74)].update(stage="closed", handle={"n": 74})
+dr.save(dn)
+plain = dr.set_state(dn["id"], "paused")  # the plain pause touches no lane
+assert all(not x.get("paused_by") and not x.get("outbox") for x in plain["lanes"].values())
+assert plain["events"][-1]["text"] == "dispatch paused"
+dr.set_state(dn["id"], "running")
+dn = dr.set_state(dn["id"], "paused", now=True)
+L = dn["lanes"]
+assert dn["state"] == "paused" and dn["events"][-1]["text"] == "dispatch paused now: 2 issues stopped"
+assert L[K(70)]["paused"] and L[K(70)]["paused_by"] == "dispatch" and L[K(70)]["outbox"] == [["close", None]]
+assert not L[K(70)]["needs_you"] and not L[K(70)]["limited_until"]  # those were about the session it just lost
+assert L[K(71)]["paused_by"] == "dispatch" and "outbox" not in L[K(71)]
+for n in (72, 73, 74):
+    assert not L[K(n)].get("paused_by") and "outbox" not in L[K(n)], n
+fr = FakeRunner()
+dr.tick(dn, {K(70): {"pr": None}, K(73): {"blockers_open": []}}, fr, merge, now=1000)
+assert fr.closed == [70] and fr.started == [] and L[K(70)]["handle"] is None  # not driven, nothing starts
+dr.save(dn)
+dn = dr.set_state(dn["id"], "running")
+L = dn["lanes"]
+assert dn["events"][-1]["text"] == "dispatch running: 2 issues restarted"
+assert L[K(70)]["restart"] and not L[K(70)]["paused"] and L[K(70)]["paused_by"] is None
+assert L[K(72)]["paused"] and "restart" not in L[K(72)]  # still the user's
+fr = FakeRunner()
+dr.tick(dn, {}, fr, merge, now=1001)
+assert [n for n, _ in fr.started] == [70, 71] and L[K(70)]["handle"] == {"n": 70}
+
+# a lane action on a stopped lane leaves no stale paused_by for the dispatch's Resume to act on
+for action, restart in (("resume", True), ("skip", None)):
+    dx = dr.create(f"o/r#{10 + bool(restart)}", "headless", {}, [child(80)])
+    dx["lanes"][K(80)].update(stage="implementing", handle={"n": 80})
+    dr.save(dx)
+    dr.set_state(dx["id"], "paused", now=True)
+    x = dr.lane_action(dx["id"], K(80), action)["lanes"][K(80)]
+    assert not x.get("paused_by") and x.get("restart") is restart, (action, x)
+    assert "restart" not in dr.set_state(dx["id"], "running")["lanes"][K(80)] or restart
+print("  ok  pause now, resume restarts")
+
 # --- outside blocker still open holds a lane
 d4 = dr.create("o/r#6", "headless", {}, [child(30)])
 assert dr.startable(d4, {K(30): {"blockers_open": ["x/y#1"]}}) == []
@@ -625,6 +669,21 @@ class FakeSessions:
 hl = dispatch_runners.Headless(runner=object(), sessions=FakeSessions())
 assert hl.status({"session": "s1"}) == ("blocked", None) and hl.status({"session": "s2"})[0] == "gone"
 assert hl.status({"session": "nope"})[0] == "gone"
+
+
+class StopRunner:
+    stopped = []
+
+    def stop(self, sid):
+        self.stopped.append(sid)
+        if sid == "nope":
+            raise FileNotFoundError(sid)
+
+
+hc = dispatch_runners.Headless(runner=StopRunner(), sessions=FakeSessions())
+hc.close({"session": "s1"})
+hc.close({"session": "nope"})  # a record that is gone is not a failed close
+assert StopRunner.stopped == ["s1", "nope"]
 
 
 class KwRunner:

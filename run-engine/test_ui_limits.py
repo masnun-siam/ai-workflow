@@ -164,6 +164,46 @@ assert ui_sessions.load(f_["id"])["claude_cmd"] == "cc work"
 time.sleep(0.5)
 assert any(c.startswith("cc-profile work") and "--resume sess-1" in c for c in calls()), calls()
 
+# hold: a limited session stays put until release; guards; a held queued prompt waits for release
+h_ = ui_sessions.create("/implement-issue 6", work)
+for bad in ("done", "failed", "stopped", "queued"):
+    ui_sessions.update(h_["id"], status=bad)
+    try:
+        ui_runner.hold(h_["id"])
+        raise AssertionError(f"held a {bad} session")
+    except ui_runner.Conflict:
+        pass
+try:
+    ui_runner.release(h_["id"])
+    raise AssertionError("released a session that is not held")
+except ui_runner.Conflict:
+    pass
+for live_ in ("starting", "running", "waiting", "limited"):
+    ui_sessions.update(h_["id"], status=live_)
+    assert ui_runner.hold(h_["id"])["hold"] is True
+ui_sessions.update(h_["id"], limit_resets_at=past, auto_resume=True, session_id="sess-1")
+assert ui_runner.limit_tick(stagger=0) == []
+assert ui_sessions.load(h_["id"])["status"] == "limited"
+ui_runner.release(h_["id"])
+assert ui_sessions.load(h_["id"]).get("hold") is None
+ui_sessions.update(h_["id"], auto_resume=False)
+
+sent_ = []
+real_send, ui_runner.send_prompt = ui_runner.send_prompt, lambda sid, text: sent_.append((sid, text))
+ui_sessions.update(h_["id"], status="running", queued_prompt="next")
+ui_runner.hold(h_["id"])
+ui_sessions.update(h_["id"], status="done")
+ui_runner._deliver_queued(h_["id"])
+assert sent_ == [] and ui_sessions.load(h_["id"])["queued_prompt"] == "next"
+ui_runner.release(h_["id"])
+assert sent_ == [(h_["id"], "next")]
+sent_.clear()
+ui_sessions.update(h_["id"], status="running", queued_prompt="later", hold=True)
+ui_runner.release(h_["id"])  # still running: it goes out when the run ends
+assert sent_ == [] and ui_sessions.load(h_["id"])["queued_prompt"] == "later"
+ui_runner.send_prompt = real_send
+ui_sessions.update(h_["id"], status="stopped", queued_prompt=None)
+
 # warning chip data
 ui_runner._usage["cc work"] = json.loads(WARN % future)["rate_limit_info"]
 assert ui_runner.limits()["cc work"]["warning"]["utilization"] == 0.95

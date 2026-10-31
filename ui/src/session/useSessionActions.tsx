@@ -32,6 +32,7 @@ export function useSessionActions() {
     stop: async (id: string) => {
       if (await confirm({ title: 'Stop this session?', body: 'Claude stops now. You can resume it later.', okLabel: 'Stop session', danger: true })) stop.mutate(id);
     },
+    stopNow: (id: string) => stop.mutate(id), // for a caller whose own dialog already asked
     resume: (id: string, claude_cmd?: string) => resume.mutate({ id, claude_cmd }, { onError: dup }),
     rerun: (id: string) => rerun.mutate(id, { onSuccess: (s) => nav(routes.session(s.id)), onError: dup }),
     busy: stop.isPending || resume.isPending || rerun.isPending,
