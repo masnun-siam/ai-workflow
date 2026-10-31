@@ -9,7 +9,7 @@ import { routes } from '../lib/routes';
 import { useBrowserNotifier } from '../api/hooks';
 import { useCreate } from '../create/Create';
 import { AwayBanner, OfflineBanner } from './Banners';
-import { NAV, NavPills, StatusMenu, useInboxCount } from './Rail';
+import { NAV, SideRail, StatusMenu, useInboxCount } from './Rail';
 import { ShellCtx } from './ShellContext';
 import { ShortcutsDialog, useGlobalShortcuts } from './shortcuts';
 import { PublicBadge } from './PublicBadge';
@@ -31,20 +31,18 @@ function Topbar({ openPalette }: { openPalette: () => void }) {
   const title = TITLES.find(([p]) => pathname.startsWith(p))?.[1] ?? 'aiw';
   return (
     <div className="topbar">
-      <Link to={link(routes.features)} className="brand hide-sm" aria-label="aiw home">aiw</Link>
       <span className="hide-sm"><RepoSwitcher /></span>
       <span className="mob-only"><RepoSwitcher compact /></span>
       <h2 className="mob-only" style={{ fontSize: 16 }}>{title}</h2>
-      <NavPills />
-      <span className="grow" />
       <button type="button" className="btn search-btn" onClick={openPalette} aria-label="Search or jump to" aria-keyshortcuts="Meta+K Control+K">
         <Icon n="search" />
-        <span className="hide-sm">Search</span>
+        <span className="hide-sm">Search, jump or run a command</span>
         <span className="kbd hide-sm">⌘K</span>
       </button>
+      <span className="grow" />
       <PublicBadge />
       {inbox ? <Link to={link(routes.inbox)} className="you-pill hide-sm"><i />{inbox} need you</Link> : null}
-      <StatusMenu />
+      <span className="mob-only"><StatusMenu /></span>
       <Button variant="primary" noAction onClick={() => create.open()} aria-keyshortcuts="N">
         <Icon n="plus" />
         <span className="hide-sm">New</span>
@@ -119,6 +117,7 @@ export function Shell() {
       <GlobalKeys />
       <a className="skip" href="#main-content" onClick={(e) => { e.preventDefault(); document.getElementById('main-content')?.focus(); }}>Skip to content</a>
       <div className={`app${panel.target ? ' has-panel' : ''}`}>
+        <SideRail />
         <main className="main" id="main">
           <OfflineBanner />
           <AwayBanner />

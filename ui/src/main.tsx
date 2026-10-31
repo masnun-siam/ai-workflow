@@ -1,4 +1,5 @@
-import '@fontsource-variable/archivo/wdth.css';
+import '@fontsource-variable/chivo/wght.css';
+import '@fontsource-variable/chivo-mono/wght.css';
 import './styles/global.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';

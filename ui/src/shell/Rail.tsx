@@ -129,26 +129,44 @@ export function ThemeButton() {
   );
 }
 
-/** The top bar's page links. A page with a count shows it: needs-you in orange, running and dispatching quiet. */
-export function NavPills() {
+/** The left rail: page links with their counts (needs-you in amber, running and dispatching quiet), then
+    Away mode, plan usage, theme and keys at the foot. Hidden on phones, where MobileNav and StatusMenu take over. */
+export function SideRail() {
   const inbox = useInboxCount();
   const running = (useSessions().data?.sessions ?? []).filter((s) => RUNNING_NOW.includes(s.outcome)).length;
   const dispatching = (useDispatches().data?.dispatches ?? []).filter((d) => d.state === 'running').length;
+  const { openShortcuts } = useShell();
   const { link } = useRepo();
   const { pathname } = useLocation();
   return (
-    <nav className="nav-pills hide-sm" aria-label="Main">
-      {[...NAV, { to: routes.settings(), label: 'Settings', icon: 'sliders' as IconName, badge: undefined }].map((n) => {
-        const count = n.badge === 'inbox' ? inbox : n.badge === 'running' ? running : n.badge === 'dispatch' ? dispatching : 0;
-        const on = pathname === n.to || (n.to === routes.features && pathname.startsWith('/features')) || (n.to === routes.activity && pathname.startsWith('/sessions')) || (n.to === routes.dispatches && pathname.startsWith('/dispatches')) || (n.label === 'Settings' && pathname.startsWith('/settings'));
-        return (
-          <NavLink key={n.to} to={link(n.to)} className={`pill-a${on ? ' on' : ''}`} aria-current={on ? 'page' : undefined}>
-            {n.label}
-            {count ? <span className={`count${n.badge !== 'inbox' ? ' quiet' : ''}`} aria-label={`${count} ${n.badge === 'inbox' ? 'need you' : 'running'}`}>{count}</span> : null}
-          </NavLink>
-        );
-      })}
-    </nav>
+    <aside className="rail">
+      <NavLink to={link(routes.inbox)} className="brand" aria-label="aiw home">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4" /></svg>
+        aiw
+      </NavLink>
+      <nav className="nav" aria-label="Main">
+        {[...NAV, { to: routes.settings(), label: 'Settings', icon: 'sliders' as IconName, badge: undefined }].map((n) => {
+          const count = n.badge === 'inbox' ? inbox : n.badge === 'running' ? running : n.badge === 'dispatch' ? dispatching : 0;
+          const on = pathname === n.to || (n.to === routes.features && pathname.startsWith('/features')) || (n.to === routes.activity && pathname.startsWith('/sessions')) || (n.to === routes.dispatches && pathname.startsWith('/dispatches')) || (n.label === 'Settings' && pathname.startsWith('/settings'));
+          return (
+            <NavLink key={n.to} to={link(n.to)} className={`nav-a${on ? ' on' : ''}`} aria-current={on ? 'page' : undefined}>
+              <Icon n={n.icon} />
+              {n.label}
+              {count ? <span className={`count${n.badge !== 'inbox' ? ' quiet' : ''}`} aria-label={`${count} ${n.badge === 'inbox' ? 'need you' : 'running'}`}>{count}</span> : null}
+            </NavLink>
+          );
+        })}
+      </nav>
+      <div className="rail-foot">
+        <AwayCard />
+        <Usage />
+        <div className="row" style={{ gap: 2 }}>
+          <span className="grow faint" style={{ fontSize: 12.5, paddingLeft: 10 }}>Theme and keys</span>
+          <ThemeButton />
+          <Button variant="ghost" icon aria-label="Keyboard shortcuts" onClick={openShortcuts}><Icon n="help" /></Button>
+        </div>
+      </div>
+    </aside>
   );
 }
 
