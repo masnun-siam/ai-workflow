@@ -130,14 +130,16 @@ Refine is locked on unrefined issues. The table's pick bar: tick unrefined, read
 dispatch does not own, then **Refine N** (one `/refine-issues` session on the picked unrefined ones),
 **Run N** (Run small changes on the picked refined ones) or **Clear**.
 
-A feature page shows its own line through the stages, the **Next step** box (solid orange, naming each lane that
-waits, when its dispatch needs you), a **Build map** (the issues in build order, a column per wave of
-dependencies drawn as a track with each issue a stop on it, each a button that opens the issue), the running dispatch (time, cost, tokens, recent
+A feature page opens on one strip (the title, epic and PRD path, stage ticks, `merged/total` with the issue bar, and
+the **Next step** buttons with the live dispatch link or **Run epic** and the More menu), with the next step's title and hint
+on one line under it (naming each lane that waits, with the strip marked, when its dispatch needs you). Below it, a **Build map** (one
+tile per issue in number order, a state bar on each and a legend counting each state; a tile opens the issue, and one a
+dispatch stopped on says **Needs you**), the running dispatch (time, cost, tokens, recent
 events), the PRD's sections, and tabs **Issues**, **PRD**, **Peer review** and **Sessions**. Issues: a table by
 status with signals (priority, PR, CI, review, grind, live session, failed last run, cleanup), one
 action per row (Refine, Start, Retry, Answer, Merge, Grind, Skip CI, Clean up; an issue a dispatch owns
 shows its dispatch stage, what it is doing, and **In dispatch** instead), **Run epic** (opens Run an epic
-on the feature's epic; also in the page head and the Next step box, which become **Open dispatch** with
+on the feature's epic; also in the strip and the Next step box, which become **Open dispatch** with
 its progress while one runs), **Add task** (`/create-tasks` with the text as a finding) and refine-picked.
 PRD: rendered, **Edit** (**Save and commit** commits only that file on the checkout's current branch, not
 pushed; refused if the file changed on disk since it opened) or **Ask Claude** (`/create-prd <path>

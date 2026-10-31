@@ -168,6 +168,110 @@ describe('Next step box wired to actions', () => {
   });
 });
 
+describe('Feature page strip and Build map', () => {
+  const sessions = (command: string) => ({ '/api/sessions': () => json({ sessions: [{ id: 'r1', command, outcome: 'running', slug: 'o/r', started_at: 1, link: null }], limits: {}, usage: {}, afk: { active: false, until: null, started: null, decisions: 0, held: 0, summary: null }, gh: { ok: true } }) });
+  const stopped = (n: number, over: Record<string, unknown>) => ({ key: `o/r#${n}`, repo: 'o/r', n, title: `Task ${n}`, deps: [], stage: 'implementing', pr: null, needs_you: null, held: null, gate: null, skip_reason: null, paused: null, hold_merge: null, limited_until: null, started_at: 1, ended_at: null, session: null, tab: null, usage: { cost: 0, tokens: 0, seconds: 0 }, ...over });
+  const dispatch = (lanes: unknown[]) => ({ '/api/dispatches': () => json({ dispatches: [{ id: 'd1', epic: 'o/r#7', issues: [], title: 'F1', runner: 'headless', state: 'running', settings: {}, created_at: 1, ended_at: null, final_prs: null, totals: { cost: 0, tokens: 0, seconds: 0 }, lanes }] }) });
+  const open = (hash: string) => { window.location.hash = hash; render(<App />); return userEvent.setup(); };
+
+  it('renders the h1, stage label and merged/total in one strip, with no metro line', async () => {
+    mock({ prds: [prd({ issues: 2, column: 'refined' })], lanes: [lane([card(11, 'merged'), card(12, 'in_progress')])] });
+    open('#/features/f1?repo=o/r');
+    const h1 = await screen.findByRole('heading', { level: 1, name: 'Feature one' });
+    const strip = h1.closest('.fstrip') as HTMLElement;
+    expect(strip.textContent).toContain('Building');
+    expect(strip.textContent).toContain('1/2');
+    expect(within(strip).getByRole('img', { name: '1 of 2 issues merged' })).toBeTruthy();
+    expect(within(strip).getByRole('button', { name: 'More' })).toBeTruthy();
+    expect(document.querySelector('.metro-line')).toBeNull();
+  });
+
+  it('a draft with no epic says so, and no issues reads No issues yet', async () => {
+    mock({ prds: [prd({ status: 'Draft', column: 'draft', epic: null })] });
+    open('#/features/f1?repo=o/r');
+    const strip = (await screen.findByRole('heading', { level: 1 })).closest('.fstrip') as HTMLElement;
+    expect(strip.textContent).toContain('no epic yet');
+    expect(strip.textContent).toContain('docs/prds/f1.md');
+    expect(strip.textContent).toContain('No issues yet');
+    expect(screen.queryByRole('heading', { name: 'Build map' })).toBeNull();
+  });
+
+  it('shows one tile per issue in number order, with a legend and labels; a tile opens the issue panel', async () => {
+    mock({
+      prds: [prd({ issues: 3, column: 'refined' })],
+      lanes: [lane([card(12, 'merged'), card(3, 'merged'), card(5, 'unrefined')])],
+      extra: { '/api/issues/o/r/5': () => json({ number: 5, title: 'Task 5', state: 'open', url: 'u', author: 'me', created_at: '2026-01-01T00:00:00Z', labels: [], assignees: [], body_html: '', comments: [], comment_count: 0, is_pr: false }) },
+    });
+    const user = open('#/features/f1?repo=o/r');
+    const map = await screen.findByRole('region', { name: 'Build map' });
+    const tiles = within(map).getAllByRole('button');
+    expect(tiles.map((t) => t.getAttribute('aria-label'))).toEqual(['#3 Task 3, Merged', '#5 Task 5, Needs refining', '#12 Task 12, Merged']);
+    expect(tiles[1].title).toBe('#5 Task 5, Needs refining');
+    expect(within(map).getByRole('list', { name: 'Issues by state' }).textContent).toBe('Needs refining 1Merged 2');
+    await user.click(tiles[1]);
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/issues/o/r/5'), expect.anything()));
+  });
+
+  it('a dispatch stopped on an issue: the tile says Needs you, its title carries the text, the line names the lane', async () => {
+    mock({
+      prds: [prd({ issues: 3, column: 'refined' })],
+      lanes: [lane([card(11, 'in_progress'), card(12, 'in_progress'), card(13, 'in_progress')])],
+      extra: dispatch([stopped(11, { needs_you: 'Pick a schema' }), stopped(12, { held: 'Held for merge' }), stopped(13, {})]),
+    });
+    open('#/features/f1?repo=o/r');
+    const map = await screen.findByRole('region', { name: 'Build map' });
+    const tile = await within(map).findByRole('button', { name: '#11 Task 11, Needs you' });
+    expect(tile.textContent).toContain('Needs you');
+    expect(tile.title).toBe('#11 Task 11, Needs you: Pick a schema');
+    expect(within(map).getByRole('button', { name: '#12 Task 12, Needs you' }).title).toContain('Held for merge');
+    expect(within(map).getByRole('button', { name: '#13 Task 13, Building' }).title).toBe('#13 Task 13, Building');
+    expect(document.querySelector('.fstrip')!.className).toContain('you');
+    expect(document.querySelector('.fnext')!.textContent).toContain('#11: Pick a schema #12: Held for merge');
+    expect(within(await step()).getByRole('button', { name: 'Open dispatch' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Dispatch needs you (2)' })).toBeTruthy();
+  });
+
+  it('Run epic appears once when it is already the primary action, and beside another next step', async () => {
+    mock({ prds: [prd({ issues: 1, column: 'refined' })], lanes: [lane([card(11, 'ready')])] });
+    open('#/features/f1?repo=o/r');
+    await step();
+    expect(await screen.findAllByRole('button', { name: 'Run epic' })).toHaveLength(1);
+    cleanup();
+    mock({ prds: [prd({ issues: 1, column: 'refined' })], lanes: [lane([card(11, 'in_progress')])] });
+    open('#/features/f1?repo=o/r');
+    await step();
+    expect(await screen.findAllByRole('button', { name: 'Run epic' })).toHaveLength(1);
+    expect(within(await step()).queryByRole('button', { name: 'Run epic' })).toBeNull();
+  });
+
+  const tasks = { prds: [prd({ issues: 2, unrefined: [11, 12], column: 'tasks_filed' })], lanes: [lane([card(11, 'unrefined'), card(12, 'unrefined')])] };
+
+  it('a live refine session on every picked issue reads Refining… on the page and opens that session', async () => {
+    mock({ ...tasks, extra: sessions('/refine-issues 11 12') });
+    const user = open('#/features/f1?repo=o/r');
+    const btn = await within(await step()).findByRole('button', { name: 'Refining…' });
+    await user.click(btn);
+    await waitFor(() => expect(window.location.hash).toContain('/sessions/r1'));
+    expect(posts.some((p) => p.url === '/api/start')).toBe(false);
+  });
+
+  it('a live refine session on some issues keeps Refine N', async () => {
+    mock({ ...tasks, extra: sessions('/refine-issues 11') });
+    open('#/features/f1?repo=o/r');
+    await screen.findByRole('button', { name: 'Refining…' }); // the row of #11, once the sessions have loaded
+    expect(within(await step()).getByRole('button', { name: 'Refine 2' })).toBeTruthy();
+  });
+
+  it('Refining… also reads on the Features strip and in the detail panel', async () => {
+    mock({ ...tasks, extra: sessions('/refine-issues 11 12') });
+    const user = open('#/features?only=o/r');
+    const strip = await screen.findByRole('article', { name: 'Feature one' });
+    expect(await within(strip).findByRole('button', { name: 'Refining…' })).toBeTruthy();
+    await user.click(within(strip).getByRole('link', { name: 'Feature one' }));
+    expect(await within(await step()).findByRole('button', { name: 'Refining…' })).toBeTruthy();
+  });
+});
+
 describe('Features list', () => {
   const openBox = async (user: ReturnType<typeof userEvent.setup>) => {
     await user.click(await screen.findByRole('button', { name: /Describe a feature or a fix/ }));
