@@ -592,7 +592,7 @@ def _stop_lanes(d: dict) -> int:
     """Pause > Now: pause every active lane the user has not paused and close its session. Returns how many."""
     lanes = [x for x in d["lanes"].values() if x["stage"] in ACTIVE and not x.get("paused")]
     for x in lanes:
-        x.update(paused=True, paused_by="dispatch")
+        x.update(paused=True, paused_by="dispatch", needs_you=None, limited_until=None)  # both were about its session
         if x.get("handle"):
             x.setdefault("outbox", []).append(["close", None])
     return len(lanes)

@@ -559,7 +559,7 @@ print("  ok  live edit, pause, store")
 # --- Pause > Now stops the running lanes; Resume gives them a fresh session
 dn = dr.create("o/r#9", "headless", {}, [child(70), child(71), child(72), child(73), child(74)])
 L = dn["lanes"]
-L[K(70)].update(stage="implementing", handle={"n": 70})
+L[K(70)].update(stage="implementing", handle={"n": 70}, needs_you="waiting on you", limited_until=9e9)
 L[K(71)].update(stage="followups", pr=9)  # no session: nothing to close
 L[K(72)].update(stage="grinding", handle={"n": 72}, paused=True)  # the user's own pause
 L[K(74)].update(stage="closed", handle={"n": 74})
@@ -572,6 +572,7 @@ dn = dr.set_state(dn["id"], "paused", now=True)
 L = dn["lanes"]
 assert dn["state"] == "paused" and dn["events"][-1]["text"] == "dispatch paused now: 2 issues stopped"
 assert L[K(70)]["paused"] and L[K(70)]["paused_by"] == "dispatch" and L[K(70)]["outbox"] == [["close", None]]
+assert not L[K(70)]["needs_you"] and not L[K(70)]["limited_until"]  # those were about the session it just lost
 assert L[K(71)]["paused_by"] == "dispatch" and "outbox" not in L[K(71)]
 for n in (72, 73, 74):
     assert not L[K(n)].get("paused_by") and "outbox" not in L[K(n)], n
