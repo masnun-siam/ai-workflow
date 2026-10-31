@@ -66,11 +66,11 @@ after an upgrade it deletes the old run data from the plugin data dir once and l
 
 **Routes** (hash routes, each with an optional `?repo=owner/name` that a shared link keeps):
 `#/inbox` (default, and `#/`), `#/features`, `#/features/<slug>[/<tab>]`, `#/changes` (Small changes;
-`#/issues` and the old `#/features?tab=changes` redirect here), `#/new[?text=<idea>&route=feature|small]`,
+`#/issues` and the old `#/features?tab=changes` redirect here), `#/new[?text=<idea>&route=feature|small]` (opens the create box over Features),
 `#/dispatches[?new=<owner/repo#n>]` (`new` opens Run an epic on that epic),
 `#/dispatches/<id>[?lane=<owner/repo#n>]`, `#/activity`, `#/sessions/<id>`, `#/settings[/<section>]`.
-Anything else is a not-found page. **Shortcuts:** `N` Start, `G` then `I/F/D/A/S` to go to a page, `G` then `R` to open the repo switcher (the compact one on narrow screens), `[` and `]` switch to the previous and next page tab (the Feature page, stopping at the ends), `?` lists the keys that work on the current page, `Esc` closes the top panel. Single keys are ignored while typing in a field or when ⌘/Ctrl/Alt is held. On every list (Inbox, Features and the Feature Issues tab, Dispatches, a dispatch's lanes, Activity), `J`/`K` or the arrow keys select a row (the open PR, issue or lane panel follows), `Enter` opens it (on the Inbox: expands a question or presses the item's primary button), and `Esc` closes the panel with the row still selected. The action keys, shown as a badge on each button, act on the selected row, the open panel or the page, and press the same button a click does; the panel's keys win over the row's. The map: `M` Review and merge (in the confirm: `Enter` merges, `Esc` cancels), `S` Skip CI and continue, `R` Retry, Resume or Rerun, `A` Answer, `P` Approve PRD, `E` Refine, `X` Stop or Cancel, `O` Open PR, `T` Continue in terminal, `C` focuses the message or comment box. In a question round: `1`–`9` pick an option (toggle in multi-select), `0`/`O` picks Something else, `Tab` goes to the next question (multi-select questions also show a "Select all" link and a "None of these" checkbox, reached by `Tab` and `Space` with no key of their own; "None of these" sends `{"none": true}`), ⌘↵ sends a complete round, and `Esc` collapses it with focus back on the row. On a session page, `R`, `T`, `X` and `C` work as above. Below 760 px the badges are hidden, though the keys still work with a hardware keyboard. The palette
-(⌘K / Ctrl+K) finds pages, every Start command, features, issues, PRs, sessions, switches repo and
+Anything else is a not-found page. **Shortcuts:** `N` the create box, `G` then `I/F/D/A/S` to go to a page, `G` then `R` to open the repo switcher (the compact one on narrow screens), `[` and `]` switch to the previous and next page tab (the Feature page, stopping at the ends), `?` lists the keys that work on the current page, `Esc` closes the top panel. Single keys are ignored while typing in a field or when ⌘/Ctrl/Alt is held. On every list (Inbox, Features and the Feature Issues tab, Dispatches, a dispatch's lanes, Activity), `J`/`K` or the arrow keys select a row (the open PR, issue or lane panel follows), `Enter` opens it (on the Inbox: expands a question or presses the item's primary button), and `Esc` closes the panel with the row still selected. The action keys, shown as a badge on each button, act on the selected row, the open panel or the page, and press the same button a click does; the panel's keys win over the row's. The map: `M` Review and merge (in the confirm: `Enter` merges, `Esc` cancels), `S` Skip CI and continue, `R` Retry, Resume or Rerun, `A` Answer, `P` Approve PRD, `E` Refine, `X` Stop or Cancel, `O` Open PR, `T` Continue in terminal, `C` focuses the message or comment box. In a question round: `1`–`9` pick an option (toggle in multi-select), `0`/`O` picks Something else, `Tab` goes to the next question (multi-select questions also show a "Select all" link and a "None of these" checkbox, reached by `Tab` and `Space` with no key of their own; "None of these" sends `{"none": true}`), ⌘↵ sends a complete round, and `Esc` collapses it with focus back on the row. On a session page, `R`, `T`, `X` and `C` work as above. Below 760 px the badges are hidden, though the keys still work with a hardware keyboard. The palette
+(⌘K / Ctrl+K) finds pages, the create box, every Start command, features, issues, PRs, sessions, switches repo and
 turns Away mode on or off. Its first group, **Actions here**, lists every enabled action registered on the page, the open panel and the selected row (and the items of mounted menus, via `Menu`'s `paletteLabel`), labelled as the button is, with its key; choosing one does what a click does.
 
 **Inbox.** Everything that needs you, across repos, grouped Blocking everything, Answer Claude, Decide,
@@ -93,35 +93,28 @@ off has `urgency: null` and keeps time order.
 repo registry and the board polls; a repo whose board data is stale is listed in `stale` and contributes
 session items only. While an item is open (a question expanded or the side panel showing), polls do not reorder rows; the new order applies once nothing is open or on the next visit.
 
-**Capture box.** At the top of Features and Small changes: describe a feature or a fix and pick a route.
-**Feature** starts `/create-prd` (on `opus` at `medium`) and opens the session. **Small change** (with an
-optional priority) starts one headless `/create-tasks` session that files the issue with no PRD and
-refines it in the same session. **Auto** opens `#/new`, which asks `POST /api/route {text}` for a route:
+**Create box.** One dialog, "What should change?", for a feature or a small change. The New button, `N`, the palette and the
+prompts on Features and Small changes all open it (Small changes opens it on Small change). Describe the work; 600 ms after typing
+stops it asks `POST /api/route {text}` for a route and says why it picked it, and a click on **Feature** or **Small change** overrides that
+until **Use Auto's pick**. The repo picker defaults to the repo it was opened with. **Feature** starts `/create-prd` (on `opus` at `medium`) with any picked PRD review lenses and opens
+the session. **Small change** (with an optional priority) starts one headless `/create-tasks` session that files the issue with no
+PRD and refines it in the same session, and the page stays. ⌘↵ submits, Cancel keeps the text until something is created, and **Run a command instead** opens Start. For the route,
 the server runs `jev choice` through `run-engine/jev.py` (pinned to `jev-1.14.0`) and answers `{route: feature|small_change|null,
-confidence, why}`. A null route (jev missing, switched off in Settings with `why: "jev is off"`, failing, unsure, or under 0.4) leaves the choice to you.
-`#/new` shows both routes as cards, the PRD review lenses on the Feature one and a priority on the
-Small change one; **Start the PRD interview** or **File the issue** starts it. `jev` is optional.
+confidence, why}`. A null route (jev missing, switched off in Settings with `why: "jev is off"`, failing, unsure, or under 0.4) leaves the choice to you. `jev` is optional.
 `POST /api/duplicate {repo, text}` (400 for an unregistered repo or blank text) asks `jev` which of the repo's newest 100
 open issues (from the board poll, no GitHub call) or its PRDs the text already covers, with "none of these" as an option (at most 254
 options, oldest PRDs dropped first). Text under 20 characters runs no check. A pick at 0.6 or more answers
 `{match: {kind: issue|prd, title, url, n|path}, confidence, why}` with a server-built url (a GitHub issue, or the Feature page `#/features/<slug>?repo=`);
 otherwise `match` is null and `why` says why (jev off or missing, issues not loaded yet, no likely duplicate, hourly limit).
-The New page calls it 800 ms after typing stops (repo chosen, 20+ characters) and shows "Looks like #n <title>" below the route line, linked in a new tab; it hides on any edit, never blocks either start button, and shows nothing for a null match or a failed check.
+The create box calls it 800 ms after typing stops (repo chosen, 20+ characters) and shows "Looks like #n <title>" below the route line, linked in a new tab; it hides on any edit, never blocks either start button, and shows nothing for a null match or a failed check.
 
-**Features.** Opens on **All repos**: one group per watched repo (project name, slug, in progress, "N shipped"),
-stopped-on-you repos first, then by in-progress count, then by name; a repo with nothing in progress is one line after
-the others, and a repo still loading or stale shows a note, never as empty. Every card acts on its own repo, and there is
-no map or Shipped list. The repo filter in the page head (`?only=<owner/repo>`, independent of the switcher) narrows the page
-to that repo, which is today's page below.
-
-With a filter set: a map with the six stages (PRD draft, PRD review, Approved, Tasks, Building, Shipped)
-across the top and one coloured line per feature in progress (then the three latest shipped): solid up to
-its stage, dotted after, its current stop orange when it needs you. Then one card per feature in progress,
-in its line's colour: its issues as
-squares (merged, in review, building, ready, needs refining, needs you), merged of total, its running
-dispatch with time and cost, a **Merge #n** button for each PR ready to merge and one next-step button.
-A feature whose dispatch needs you turns orange. Shipped features follow as chips. A PRD whose header
-says `**Status:** Done` counts as Shipped.
+**Features.** One strip per feature in progress, in bays by who has the next move: **Stopped on you** (a dispatch waits on you; the strip
+sits out of line in amber), **Waiting for your go** and **Running on their own**. A strip shows the title, repo, epic, running dispatch with time and cost,
+the stage, merged of total with a bar of the issues by state, the next step, a **Merge #n** button for each PR ready to merge and one next-step button.
+Clicking a strip or `Enter` opens the feature in the detail panel: its stage, Next step box and issues grouped by state (each opens its issue panel); a modified click on the title, or **Open the feature page**, goes to the full page.
+Below the bays: the create prompt, a note for a repo still loading or stale (never shown as empty), a line of quiet repos (a click filters to that repo) and a collapsed list of shipped features.
+The page opens on all repos; the switch in the page head (`?only=<owner/repo>`, independent of the repo switcher) narrows it to one repo. The head also counts what waits in the Inbox.
+A PRD whose header says `**Status:** Done` counts as Shipped.
 
 **Small changes** (`#/changes`, its own top-bar link) opens on **All repos**: the grid totals the open
 small changes of every watched repo, and Ready to run, Needs refining first and the issue list are grouped
@@ -281,7 +274,7 @@ instead of starting a separate session, and the epic is re-read every 5 minutes 
 /api/dispatches/<id>/settings|state|lane|end|seen`. `settings.base_branch` (a branch name or null, same name rule as `feature_branch`, must differ from it) is fixed at start: a settings edit that contains it is 400 `base_branch is fixed at start`. Preview warns `<repo>: base branch <b> does not exist` per lane repo, Start refuses with that message (400, CLI exit non-zero) before creating anything, and a missing `feature_branch` is cut from the head of `base_branch` when set.
 `GET /api/github/branches?repo=<owner/name>` lists the repo's branches for the Base branch picker: 200 `{branches, default}` (the default first, the rest sorted), 400 `repo must be owner/name`, 502 with `gh`'s error.
 
-**Start** (the New button, `N` or ⌘K), titled "What should we start?". Commands grouped Plan, Build, Review, Ship, Capture and
+**Start** (⌘K, or **Run a command instead** in the create box), titled "What should we start?". Commands grouped Plan, Build, Review, Ship, Capture and
 Maintain as six cards across the top, each command a pill (its description shows above the options below); the last one is remembered. Maintain has **Update FAQ**, whose optional input takes new questions, one per line, and the options `full`, `--lang <codes>` and `--videos <url>`, and **Bootstrap repo**, whose optional input takes a phase and the bootstrap issue number. Pick **Where** (a registered repo,
 or **No repo yet** for `create-prd`, `dump`, `day` and the custom prompt, which run in the notes vault
 with a **Vault folder**), the input, and **Run on** an account (a limited account says the run will

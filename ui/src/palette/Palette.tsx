@@ -9,6 +9,7 @@ import { joinFeatures, snapshotsReady } from '../lib/features';
 import { useDelivery } from '../api/hooks';
 import { usePanel } from '../panels/PanelContext';
 import { useRepo } from '../shell/useRepo';
+import { useCreate } from '../create/Create';
 import { useStart } from '../start/StartContext';
 import { LEVEL_RANK, useActions } from '../shell/shortcuts';
 
@@ -27,6 +28,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const { repo, repos, setRepo, link } = useRepo();
   const start = useStart();
+  const create = useCreate();
   const panel = usePanel();
   const [q, setQ] = useState('');
   const planning = usePlanning(repo).data;
@@ -49,6 +51,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
     for (const [path, label] of [[routes.inbox, 'Inbox'], [routes.features, 'Features'], [routes.dispatches, 'Dispatches'], [routes.activity, 'Activity'], [routes.settings(), 'Settings']] as const) {
       e.push({ id: `go:${path}`, group: 'Go to', label, run: go(path) });
     }
+    e.push({ id: 'new', group: 'Start', label: 'New feature or small change', right: 'N', run: () => create.open({ repo }) });
     for (const c of COMMAND_LIST) e.push({ id: `cmd:${c.id}`, group: 'Start', label: c.name, right: `/${c.id}`, run: () => start.open({ cmd: c.id, repo }) });
     if (planning && snapshotsReady(planning, delivery)) {
       for (const f of joinFeatures(planning.prds, delivery?.lanes ?? [])) e.push({ id: `f:${f.slug}`, group: 'Features', label: f.title, right: STAGES.find((s) => s.id === f.stage)?.label, run: () => navigate(link(routes.feature(f.slug))) });

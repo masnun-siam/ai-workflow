@@ -25,6 +25,10 @@ export interface Step {
   quiet?: boolean; // informational: nothing needs the user
 }
 
+/** Who has the next move on a feature: a dispatch stopped on you, a step that waits for your go, or nothing asked of you. */
+export type Attention = 'you' | 'go' | 'auto';
+export const attention = (s: Step, running?: { you: number } | null): Attention => (running?.you ? 'you' : s.quiet ? 'auto' : 'go');
+
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
 /** `running`: the epic's live dispatch, when there is one; it replaces the build-stage advice. */

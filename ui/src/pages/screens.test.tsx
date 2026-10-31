@@ -643,11 +643,11 @@ describe('Features list keys', () => {
     render(<App />);
   };
 
-  it('J then Enter on a feature row lands on its page', async () => {
+  it('J then Enter on a feature row opens its panel', async () => {
     load('#/features?only=o/r');
     await screen.findByText('epic #10');
     await userEvent.setup().keyboard('j{Enter}');
-    await waitFor(() => expect(window.location.hash).toContain('#/features/f'));
+    expect(await screen.findByLabelText('Feature details')).toBeTruthy();
   });
 
   it('on the Issues tab J, Enter opens the issue panel and J switches it', async () => {

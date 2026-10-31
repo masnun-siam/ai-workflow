@@ -7,7 +7,7 @@ import { usePanel } from '../panels/PanelContext';
 import { ghTarget } from '../lib/ghLink';
 import { routes } from '../lib/routes';
 import { useBrowserNotifier } from '../api/hooks';
-import { useStart } from '../start/StartContext';
+import { useCreate } from '../create/Create';
 import { AwayBanner, OfflineBanner } from './Banners';
 import { NAV, NavPills, StatusMenu, useInboxCount } from './Rail';
 import { ShellCtx } from './ShellContext';
@@ -19,12 +19,12 @@ import { useRepo } from './useRepo';
 import { useAwayDocument } from './useAwayDocument';
 
 const TITLES: [string, string][] = [
-  ['/inbox', 'Inbox'], ['/features', 'Features'], ['/changes', 'Small changes'], ['/new', 'New'], ['/dispatches', 'Dispatches'], ['/activity', 'Activity'], ['/sessions', 'Session'], ['/settings', 'Settings'], ['/onboarding', 'Welcome'],
+  ['/inbox', 'Inbox'], ['/features', 'Features'], ['/changes', 'Small changes'], ['/dispatches', 'Dispatches'], ['/activity', 'Activity'], ['/sessions', 'Session'], ['/settings', 'Settings'], ['/onboarding', 'Welcome'],
 ];
 
 /** The one bar across the top: repo, page links, search, what needs you, Away and New. */
 function Topbar({ openPalette }: { openPalette: () => void }) {
-  const start = useStart();
+  const create = useCreate();
   const inbox = useInboxCount();
   const { link } = useRepo();
   const { pathname } = useLocation();
@@ -45,7 +45,7 @@ function Topbar({ openPalette }: { openPalette: () => void }) {
       <PublicBadge />
       {inbox ? <Link to={link(routes.inbox)} className="you-pill hide-sm"><i />{inbox} need you</Link> : null}
       <StatusMenu />
-      <Button variant="primary" noAction onClick={() => start.open()} aria-keyshortcuts="N">
+      <Button variant="primary" noAction onClick={() => create.open()} aria-keyshortcuts="N">
         <Icon n="plus" />
         <span className="hide-sm">New</span>
         <span className="sr mob-only">New</span>

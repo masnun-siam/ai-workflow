@@ -25,6 +25,17 @@ export function countBy(issues: { status: IssueStatus }[]): Partial<Record<Issue
   return m;
 }
 
+const BUCKETS = [['you', 'Needs you'], ['review', 'In review'], ['build', 'Building'], ['ready', 'Ready'], ['blocked', 'Blocked'], ['refine', 'Needs refining'], ['merged', 'Merged']] as const;
+export type BucketId = (typeof BUCKETS)[number][0];
+const bucketOf: Record<IssueStatus, BucketId> = { merged: 'merged', in_review: 'review', grinding: 'review', in_progress: 'build', draft_pr: 'build', ready: 'ready', blocked: 'blocked', unrefined: 'refine' };
+
+/** A feature's issues by state, in attention order and without empty groups; `you` are the issues a dispatch stopped on. */
+export function issueBuckets<T extends { n: number; status: IssueStatus; column?: string }>(issues: T[], you: Set<number> = new Set()) {
+  // unrefined comes first: an issue that waits on another still needs refining, as the next step counts it
+  const of = (i: T) => (you.has(i.n) ? 'you' : i.column === 'unrefined' ? 'refine' : bucketOf[i.status]);
+  return BUCKETS.map(([id, label]) => ({ id, label, items: issues.filter((i) => of(i) === id) })).filter((b) => b.items.length);
+}
+
 /**
  * Stage from server data:
  * - a PRD with a peer-review panel, or whose status is "In review", is in PRD review

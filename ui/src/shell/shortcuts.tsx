@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalS
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button, Dialog } from '../components';
 import { routes } from '../lib/routes';
-import { useStart } from '../start/StartContext';
+import { useCreate } from '../create/Create';
 import { useShell } from './ShellContext';
 
 export interface ShortcutRow {
@@ -160,7 +160,7 @@ export function useGlobalShortcuts() {
   const navigate = useNavigate();
   const { search } = useLocation();
   const { openPalette, openShortcuts, openRepoSwitcher } = useShell();
-  const start = useStart();
+  const create = useCreate();
   const g = useRef(0);
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -195,7 +195,7 @@ export function useGlobalShortcuts() {
       if (e.key === 'g') g.current = Date.now();
       else if (e.key === 'n') {
         e.preventDefault();
-        start.open();
+        create.open();
       } else if (e.key === '?') openShortcuts();
       else {
         const k = e.key === 'Enter' ? 'Enter' : e.key.toLowerCase();
@@ -209,7 +209,7 @@ export function useGlobalShortcuts() {
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [navigate, search, openPalette, openShortcuts, openRepoSwitcher, start]);
+  }, [navigate, search, openPalette, openShortcuts, openRepoSwitcher, create]);
 }
 
 export function ShortcutsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {

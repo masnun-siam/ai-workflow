@@ -169,34 +169,64 @@ describe('Next step box wired to actions', () => {
 });
 
 describe('Features list', () => {
-  it('the capture box with Feature picked starts create-prd', async () => {
+  const openBox = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(await screen.findByRole('button', { name: /Describe a feature or a fix/ }));
+    return screen.findByLabelText('Describe a feature or a fix');
+  };
+
+  it('the create box with Feature picked starts create-prd', async () => {
     mock();
     window.location.hash = '#/features?only=o/r';
     const user = userEvent.setup();
     render(<App />);
-    await user.type(await screen.findByLabelText('Describe a feature or a fix'), 'CSV import');
+    await user.type(await openBox(user), 'CSV import');
     await user.click(screen.getByRole('radio', { name: 'Feature' }));
-    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await user.click(screen.getByRole('button', { name: 'Start the PRD interview' }));
     await waitFor(() => expect(posts.find((p) => p.url === '/api/sessions')?.body).toMatchObject({ repo: 'o/r', command: 'create-prd', args: 'CSV import', model: 'opus', effort: 'medium' }));
   });
 
-  it('Auto opens the New page, where the jev route is preselected and Start files a small change', async () => {
+  it('Auto preselects the jev route, the button files a small change and the page stays', async () => {
     mock({ extra: { '/api/route': () => json({ route: 'small_change', confidence: 0.9, why: 'it reads as a fix or one contained change' }) } });
     window.location.hash = '#/features?only=o/r';
     const user = userEvent.setup();
     render(<App />);
-    await user.type(await screen.findByLabelText('Describe a feature or a fix'), 'login 404s');
-    await user.click(screen.getByRole('button', { name: 'Create' }));
-    await waitFor(() => expect(window.location.hash).toContain('#/new'));
-    expect(await screen.findByText(/Auto picked/)).toBeTruthy();
-    expect(screen.getByRole('radio', { name: /Small change/ }).getAttribute('aria-checked')).toBe('true');
+    await user.type(await openBox(user), 'login 404s');
+    expect(await screen.findByText(/Auto picked/, undefined, { timeout: 2000 })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: 'Small change' }).getAttribute('aria-checked')).toBe('true');
     expect(posts.find((p) => p.url === '/api/route')?.body).toEqual({ text: 'login 404s' });
     await user.click(screen.getByRole('button', { name: 'File the issue' }));
     await waitFor(() => expect(posts.find((p) => p.url === '/api/start')?.body).toMatchObject({ skill: 'create-tasks', arg: smallChangeArg('login 404s') }));
-    await waitFor(() => expect(window.location.hash).toContain('#/changes'));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'What should change?' })).toBeNull());
+    expect(window.location.hash).toContain('#/features');
   });
 
-  it('when jev cannot tell, the New page asks for a route and Start stays disabled', async () => {
+  it('a manual pick wins over Auto, and Use Auto\'s pick goes back', async () => {
+    mock({ extra: { '/api/route': () => json({ route: 'small_change', confidence: 0.9, why: 'a fix' }) } });
+    window.location.hash = '#/features?only=o/r';
+    const user = userEvent.setup();
+    render(<App />);
+    await user.type(await openBox(user), 'login 404s');
+    await user.click(screen.getByRole('radio', { name: 'Feature' }));
+    expect(await screen.findByText(/Your pick/, undefined, { timeout: 2000 })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: 'Feature' }).getAttribute('aria-checked')).toBe('true');
+    await user.click(screen.getByRole('button', { name: "Use Auto's pick" }));
+    expect(screen.getByRole('radio', { name: 'Small change' }).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('Cancel keeps the draft and an old #/new link opens the box on Features', async () => {
+    mock({ extra: { '/api/route': () => json({ route: null, confidence: 0, why: 'x' }) } });
+    window.location.hash = '#/new?text=stuff&repo=o/r';
+    const user = userEvent.setup();
+    render(<App />);
+    const box = await screen.findByLabelText('Describe a feature or a fix') as HTMLTextAreaElement;
+    expect(box.value).toBe('stuff');
+    await waitFor(() => expect(window.location.hash).toMatch(/^#\/features\?repo=o(\/|%2F)r$/));
+    await user.type(box, ' more');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect((await openBox(user) as HTMLTextAreaElement).value).toBe('stuff more');
+  });
+
+  it('when jev cannot tell, the box asks for a route and Start stays disabled', async () => {
     mock({ extra: { '/api/route': () => json({ route: null, confidence: 0, why: 'jev is not installed' }) } });
     window.location.hash = '#/new?text=stuff&repo=o/r';
     const user = userEvent.setup();
@@ -359,19 +389,24 @@ describe('Small changes page', () => {
     expect(body).not.toHaveProperty('model'); // only the planning starts carry PLAN_RUN
   });
 
-  it('File issue is disabled while blank, starts one headless create-tasks with the collapsed text, and clears', async () => {
+  const smallBox = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(await screen.findByRole('button', { name: /Describe a bug or a small change/ }));
+    return (await screen.findByLabelText('Describe a feature or a fix')) as HTMLTextAreaElement;
+  };
+
+  it('the prompt opens the box on Small change: disabled while blank, starts one headless create-tasks with the collapsed text', async () => {
     mock({ lanes: [lane([card(30, 'ready')], { epic: null })] });
     const user = await open('#/changes?only=o/r');
-    const btn = await screen.findByRole('button', { name: 'File issue' });
-    const box = screen.getByLabelText('Describe a feature or a fix') as HTMLInputElement;
-    expect((btn as HTMLButtonElement).disabled).toBe(true);
+    const box = await smallBox(user);
+    const btn = screen.getByRole('button', { name: 'File the issue' }) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
     await user.type(box, '   ');
-    expect((btn as HTMLButtonElement).disabled).toBe(true);
+    expect(btn.disabled).toBe(true);
     await user.clear(box);
     await user.type(box, 'a   b  c');
-    expect((btn as HTMLButtonElement).disabled).toBe(false);
+    expect(btn.disabled).toBe(false);
     await user.click(btn);
-    await waitFor(() => expect(box.value).toBe(''));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'What should change?' })).toBeNull());
     const posted = posts.filter((p) => p.url === '/api/start');
     expect(posted).toHaveLength(1);
     expect(posted[0].body).toMatchObject({ repo: 'o/r', skill: 'create-tasks', via: 'headless', model: 'opus', effort: 'medium' });
@@ -382,9 +417,9 @@ describe('Small changes page', () => {
   it('a failing start keeps the text and toasts the error', async () => {
     mock({ lanes: [lane([card(30, 'ready')], { epic: null })], extra: { '/api/start': () => json({ error: 'boom' }, 502) } });
     const user = await open('#/changes?only=o/r');
-    const box = (await screen.findByLabelText('Describe a feature or a fix')) as HTMLInputElement;
+    const box = await smallBox(user);
     await user.type(box, 'broken thing');
-    await user.click(screen.getByRole('button', { name: 'File issue' }));
+    await user.click(screen.getByRole('button', { name: 'File the issue' }));
     expect(await screen.findByText('boom')).toBeTruthy();
     expect(box.value).toBe('broken thing');
   });
@@ -640,13 +675,14 @@ describe('Small changes page', () => {
       expect(list.queryByText('Task 3')).toBeNull();
     });
 
-    it('Ready rows have checkboxes and Run; the capture bar picks a repo', async () => {
+    it('Ready rows have checkboxes and Run; the create box picks a repo', async () => {
       mock({ all: two, extra: REPOS });
-      await open('#/changes?repo=o/r');
+      const user = await open('#/changes?repo=o/r');
       await screen.findByRole('button', { name: 'High, ready: 3' });
       expect(screen.getByRole('checkbox', { name: 'Run #1' })).toBeTruthy();
       expect(screen.getByRole('button', { name: 'Pick issues to run' })).toBeTruthy();
-      expect(screen.getByRole('button', { name: /^Capture repo/ })).toBeTruthy();
+      await user.click(screen.getByRole('button', { name: /Describe a bug or a small change/ }));
+      expect(await screen.findByRole('button', { name: /^Repository/ })).toBeTruthy();
     });
 
     it('a pick in o/r disables o/q checkboxes with the note; unchecking frees them', async () => {
@@ -1034,46 +1070,47 @@ describe('Features across repos', () => {
     },
     extra: { '/api/dispatches': () => json({ dispatches: [run('o/a', 2)] }) },
   });
-  const headings = () => [...document.querySelectorAll('.fgroup-h')].map((h) => h.textContent ?? '');
+  const bays = () => [...document.querySelectorAll('.bay-h')].map((h) => h.textContent ?? '');
 
-  it('groups by repo, the repo with a feature stopped on you first, the empty repo as one line', async () => {
+  it('groups by who has the next move, stopped on you first, the empty repo in the quiet line', async () => {
     three();
     window.location.hash = '#/features?repo=o/b';
     render(<App />);
     await screen.findByText('Feat a1');
-    const h = headings();
-    expect(h[0]).toContain('A');
-    expect(h[0]).toContain('2 in progress · 0 shipped');
-    expect(h[1]).toContain('3 in progress');
-    expect(screen.getByText(/nothing in progress/).textContent).toContain('1 shipped');
-    expect(screen.queryByText('Shipped')).toBeNull();
-    expect(screen.getByText(/5 in progress across 2 repos; 1 is stopped on you/)).toBeTruthy();
+    expect(bays()).toEqual(['Stopped on you 1', 'Waiting for your go 3', 'Running on their own 1']);
+    expect(screen.getByRole('button', { name: 'c (1 shipped)' })).toBeTruthy();
+    expect(screen.getByText('1 shipped')).toBeTruthy();
+    expect(screen.getByText('1 stopped on you, 3 waiting for your go, 1 running on its own.')).toBeTruthy();
   });
 
-  it('a card in another repo opens and acts on its own repo, not the switcher\'s', async () => {
+  it('a strip opens the feature panel and acts on its own repo, not the switcher\'s', async () => {
     three();
     window.location.hash = '#/features?repo=o/a';
     render(<App />);
     const link = await screen.findByRole('link', { name: 'Feat b1' });
     expect(link.getAttribute('href')).toBe('#/features/b1?repo=o/b');
     const user = userEvent.setup();
+    await user.click(link);
+    const panel = await screen.findByLabelText('Feature details');
+    expect(within(panel).getByRole('heading', { name: 'Feat b1' })).toBeTruthy();
+    expect(within(panel).getByText('#3')).toBeTruthy();
     await user.click(within(screen.getByRole('article', { name: 'Feat b1' })).getByRole('button', { name: 'Run epic' }));
     expect((await screen.findByLabelText('Epic') as HTMLInputElement).value).toBe('o/b#3');
   });
 
-  it('the filter sets only, leaves repo, and All repos clears it', async () => {
+  it('the scope sets only, leaves repo, and All repos clears it', async () => {
     three();
     window.location.hash = '#/features?repo=o/a';
     const user = userEvent.setup();
     render(<App />);
     await screen.findByText('Feat b1');
-    await user.click(screen.getByRole('button', { name: /Repo filter/ }));
-    await user.click(await screen.findByText('b'));
-    await waitFor(() => expect(window.location.hash).toContain('only=o%2Fb'.replace('%2F', '/')));
+    await user.click(screen.getByRole('button', { name: 'c (1 shipped)' }));
+    await waitFor(() => expect(window.location.hash).toContain('only=o/c'));
     expect(window.location.hash).toContain('repo=o/a');
-    await user.click(screen.getByRole('button', { name: /Repo filter/ }));
-    await user.click(await screen.findByText('All repos'));
+    await user.click(screen.getByRole('button', { name: 'All repos' }));
     await waitFor(() => expect(window.location.hash).not.toContain('only='));
+    await user.click(await screen.findByRole('button', { name: 'a' }));
+    await waitFor(() => expect(window.location.hash).toContain('only=o/a'));
   });
 
   it('a loading or stale repo is never shown as empty, and a meta-only entry shows its error', async () => {
@@ -1088,13 +1125,13 @@ describe('Features across repos', () => {
     render(<App />);
     expect((await screen.findAllByText('Still loading…')).length).toBeGreaterThan(0);
     expect(screen.getByText(/GitHub data is stale: boom/)).toBeTruthy();
-    expect(screen.queryByText(/nothing in progress/)).toBeNull();
+    expect(screen.queryByText(/Nothing in progress/)).toBeNull();
   });
 
   it('no watched repo shows the empty text', async () => {
     mock({ all: { plan: [], del: [] } });
     window.location.hash = '#/features';
     render(<App />);
-    expect(await screen.findByText('No repo opened recently. Pick one in the filter.')).toBeTruthy();
+    expect(await screen.findByText('No repo opened recently. Pick one in the top bar.')).toBeTruthy();
   });
 });

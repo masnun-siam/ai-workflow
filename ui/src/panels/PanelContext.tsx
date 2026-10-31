@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-export type PanelTarget = { kind: 'issue'; repo: string; n: number } | { kind: 'pr'; repo: string; n: number };
+export type PanelTarget = { kind: 'issue'; repo: string; n: number } | { kind: 'pr'; repo: string; n: number } | { kind: 'feature'; repo: string; slug: string };
 
 interface PanelApi {
   target: PanelTarget | null;
