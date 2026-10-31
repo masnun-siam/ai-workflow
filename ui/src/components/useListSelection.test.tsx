@@ -115,7 +115,7 @@ describe('panel follows the selection', () => {
   }
   function Probe() {
     const { target } = usePanel();
-    return <output data-testid="t">{target ? target.n : 'none'}</output>;
+    return <output data-testid="t">{target && 'n' in target ? target.n : 'none'}</output>;
   }
   function Open() {
     const panel = usePanel();

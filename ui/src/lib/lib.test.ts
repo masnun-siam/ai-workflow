@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { attention } from './nextStep';
 import type { DeliveryCard, DeliveryLane, PanelRef, PlanningPrd } from '../api/types';
 import { commandText, parseSkill, sessionInRepo, sessionLabel, skillOf } from './format';
-import { joinFeatures, stageOf } from './features';
+import { issueBuckets, joinFeatures, stageOf } from './features';
 import { ghTarget } from './ghLink';
 import { mdToHtml } from './md';
 import { prdBody } from './prdRender';
@@ -249,5 +250,25 @@ describe('share strings', () => {
     expect(shareBody(1)).toBe('The PRD text is public as written, including its header and any paths. Sharing again clears the 1 approval.');
     expect(commentsLabel(1)).toBe('1 comment');
     expect(isShareable('In review') && isShareable('Draft') && !isShareable('Approved')).toBe(true);
+  });
+});
+
+describe('issueBuckets and attention', () => {
+  it('splits blocked from refining, puts stopped issues under Needs you and drops empty groups', () => {
+    const issues = [{ n: 1, status: 'merged' }, { n: 2, status: 'blocked' }, { n: 3, status: 'unrefined' }, { n: 4, status: 'in_review' }, { n: 5, status: 'grinding' }, { n: 6, status: 'draft_pr' }] as const;
+    const b = issueBuckets([...issues], new Set([4]));
+    expect(b.map((x) => [x.id, x.items.map((i) => i.n)])).toEqual([['you', [4]], ['review', [5]], ['build', [6]], ['blocked', [2]], ['refine', [3]], ['merged', [1]]]);
+  });
+
+  it('an unrefined issue that waits on another still needs refining', () => {
+    const b = issueBuckets([{ n: 1, status: 'blocked' as const, column: 'unrefined' }, { n: 2, status: 'blocked' as const, column: 'ready' }]);
+    expect(b.map((x) => [x.id, x.items.map((i) => i.n)])).toEqual([['blocked', [2]], ['refine', [1]]]);
+  });
+
+  it('a dispatch stopped on you outranks everything, a quiet step runs on its own', () => {
+    const step = { title: 't', hint: 'h', primary: { label: 'l', action: { kind: 'closeEpic' as const } } };
+    expect(attention({ ...step, quiet: true }, { you: 1 })).toBe('you');
+    expect(attention({ ...step, quiet: true }, null)).toBe('auto');
+    expect(attention(step, { you: 0 })).toBe('go');
   });
 });

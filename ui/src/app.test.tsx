@@ -52,13 +52,13 @@ describe('app shell', () => {
     expect(screen.getByText(/#801/)).toBeTruthy();
   });
 
-  it('N opens Start', async () => {
+  it('N opens the create box', async () => {
     window.location.hash = '#/inbox?repo=o/r';
     const user = userEvent.setup();
     render(<App />);
     await screen.findByRole('heading', { level: 1, name: 'Inbox' });
     await user.keyboard('n');
-    expect(await screen.findByRole('dialog', { name: 'What should we start?' })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'What should change?' })).toBeTruthy();
   });
 
   it('shows the offline banner when /api/sessions fails', async () => {

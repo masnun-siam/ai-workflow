@@ -6,7 +6,7 @@ import { BoardStatus } from '../board/BoardStatus';
 import { Button, EmptyState } from '../components';
 import { NewDispatchDialog } from '../dispatch/NewDispatchDialog';
 import { ownedIssues, useOwnedIssues } from '../dispatch/useOwner';
-import { CaptureBar, priorityName } from '../features/CaptureBar';
+import { CreatePrompt, priorityName } from '../create/Create';
 import { SmallChangesTab } from '../features/SmallChangesTab';
 import { SMALL_CHANGE_LOCK, useSmallChangeSessions } from '../features/smallChange';
 import '../features/features.css';
@@ -74,7 +74,7 @@ function RepoBoard({ repo, picker }: { repo: string; picker: ReactNode }) {
 
   return (
     <div className="content-inner">
-      <CaptureBar repo={repo} initial="small" />
+      <CreatePrompt repo={repo} route="small" />
       <Head picker={picker} lede={loaded ? lede(open.length, ready.length) : 'Bugs and one-issue changes, outside any feature.'} />
       <BoardStatus meta={del.data} />
       {del.isError && !del.data ? (
@@ -176,7 +176,7 @@ function AllRepos({ repo, picker }: { repo: string; picker: ReactNode }) {
 
   return (
     <div className="content-inner">
-      <CaptureBar repo={repo} initial="small" pickRepo />
+      <CreatePrompt repo={repo} route="small" />
       <Head picker={picker} lede={loaded ? lede(open.length, ready) : 'Bugs and one-issue changes, outside any feature.'} />
       <BoardStatus />
       {failed ? (

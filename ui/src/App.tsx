@@ -1,13 +1,14 @@
+import { useEffect } from 'react';
 import { HashRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { useRepos } from './api/hooks';
 import { ConfirmProvider } from './components';
+import { CreateProvider, useCreate } from './create/Create';
 import { ActivityPage } from './pages/ActivityPage';
 import { DispatchPage } from './pages/DispatchPage';
 import { DispatchesPage } from './pages/DispatchesPage';
 import { FeaturePage } from './pages/FeaturePage';
 import { FeaturesPage } from './pages/FeaturesPage';
 import { InboxPage } from './pages/InboxPage';
-import { NewPage } from './pages/NewPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { SessionPage } from './pages/SessionPage';
@@ -43,6 +44,20 @@ function FeaturesRoute() {
   return new URLSearchParams(search).get('tab') === 'changes' ? <ChangesRedirect /> : <FeaturesPage />;
 }
 
+/** Old `#/new` links open the create box over Features. */
+function NewRedirect() {
+  const { search } = useLocation();
+  const { open } = useCreate();
+  const p = new URLSearchParams(search);
+  const route = p.get('route');
+  const text = p.get('text') ?? undefined;
+  useEffect(() => { open({ text, route: route === 'feature' || route === 'small' ? route : undefined }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  p.delete('text');
+  p.delete('route');
+  const q = p.toString();
+  return <Navigate to={{ pathname: routes.features, search: q ? `?${q}` : '' }} replace />;
+}
+
 export function AppRoutes() {
   return (
     <Routes>
@@ -51,7 +66,7 @@ export function AppRoutes() {
           <Route path="/inbox" element={<InboxPage />} />
           <Route path="/features" element={<FeaturesRoute />} />
           <Route path="/changes" element={<SmallChangesPage />} />
-          <Route path="/new" element={<NewPage />} />
+          <Route path="/new" element={<NewRedirect />} />
           <Route path="/features/:slug" element={<FeaturePage />} />
           <Route path="/features/:slug/:tab" element={<FeaturePage />} />
           <Route path="/" element={<Navigate to="/inbox" replace />} />
@@ -77,7 +92,9 @@ export function App() {
         <HashRouter>
           <PanelProvider>
             <StartProvider>
-              <AppRoutes />
+              <CreateProvider>
+                <AppRoutes />
+              </CreateProvider>
             </StartProvider>
           </PanelProvider>
         </HashRouter>

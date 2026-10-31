@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Button, Icon } from '../components';
+import { FeaturePanel } from '../features/FeaturePanel';
 import { WorkPanel } from './WorkPanel';
 import { KeyScope } from '../shell/shortcuts';
 import { usePanel } from './PanelContext';
@@ -30,17 +31,17 @@ export function PanelFrame({ title, subtitle, head, footer, children }: { title:
 export function DetailPanel() {
   const { target, follow, close } = usePanel();
   const ref = useRef<HTMLElement>(null);
+  const key = !target ? '' : target.kind === 'feature' ? `feature:${target.repo}/${target.slug}` : `${target.kind}:${target.repo}#${target.n}`;
   useEffect(() => {
     if (target && !follow) ref.current?.focus({ preventScroll: true });
-  }, [target?.kind, target?.repo, target?.n]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!target) return null;
-  const key = `${target.kind}:${target.repo}#${target.n}`;
   return (
     <>
       <div className="panel-scrim" onClick={close} aria-hidden="true" />
-      <aside className="panel" aria-label={target.kind === 'issue' ? 'Issue details' : 'Pull request details'} tabIndex={-1} ref={ref}>
+      <aside className="panel" aria-label={target.kind === 'feature' ? 'Feature details' : target.kind === 'issue' ? 'Issue details' : 'Pull request details'} tabIndex={-1} ref={ref}>
         <KeyScope level="panel" active>
-          <WorkPanel key={key} kind={target.kind} repo={target.repo} n={target.n} />
+          {target.kind === 'feature' ? <FeaturePanel key={key} repo={target.repo} slug={target.slug} /> : <WorkPanel key={key} kind={target.kind} repo={target.repo} n={target.n} />}
         </KeyScope>
       </aside>
     </>

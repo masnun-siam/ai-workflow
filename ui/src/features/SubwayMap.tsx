@@ -5,10 +5,6 @@ import { routes } from '../lib/routes';
 import { STAGES, stageIdx } from '../lib/vocab';
 import { useRepo } from '../shell/useRepo';
 
-// Line colours, assigned by the feature's place in the list. Orange stays out: it means "needs you".
-const LINES = ['#2F6BFF', '#0E8A5A', '#9B51E0', '#C9A100', '#0F8C9C', '#D6457A', '#8C5A34'];
-export const lineColor = (k: number) => LINES[k % LINES.length];
-
 function note(f: Feature, you: boolean) {
   if (you) return 'Needs you';
   if (f.stage === 'building' || f.stage === 'tasks') {
@@ -37,15 +33,5 @@ export function MetroLine({ f, color, you = false, big = false, link = true }: {
         ))}
       </ol>
     </div>
-  );
-}
-
-/** Every feature in flight on one map: the stage names across the top, one line per feature. */
-export function SubwayMap({ features, stuck }: { features: Feature[]; stuck: Feature[] }) {
-  return (
-    <section className="metro" aria-label="Feature map">
-      <ol className="metro-head" aria-hidden="true">{STAGES.map((s) => <li key={s.id}>{s.label}</li>)}</ol>
-      {features.map((f, k) => <MetroLine key={f.slug} f={f} color={lineColor(k)} you={stuck.includes(f)} />)}
-    </section>
   );
 }
