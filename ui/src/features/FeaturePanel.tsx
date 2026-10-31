@@ -21,7 +21,7 @@ function Body({ f, repo }: { f: Feature; repo: string }) {
   return (
     <PanelFrame
       title={f.title}
-      subtitle={<>{short(repo)}, {f.epic ? `epic #${f.epic}` : 'no epic yet'}</>}
+      subtitle={<>{short(repo)}, {f.epic ? `epic #${f.epic}` : 'no epic yet'}{f.prd.account ? `, runs on ${f.prd.account}` : ''}</>}
       head={<LinkButton sm to={repoLink(repo, routes.feature(f.slug))}>Open the feature page</LinkButton>}
     >
       <ol className="fp-stages" aria-label={`Stage: ${STAGES[at].label}`}>

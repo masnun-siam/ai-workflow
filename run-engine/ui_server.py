@@ -42,6 +42,7 @@ import ui_issue
 import ui_mergeclean
 import ui_migrate
 import ui_notify
+import ui_origin
 import ui_panel
 import ui_planning
 import ui_poller
@@ -287,6 +288,7 @@ def _on_fresh(repo: str, snap: dict, prev: dict) -> None:
 
 
 POLLER.on_fresh = _on_fresh
+ui_origin.SNAPSHOT = POLLER.snapshot
 
 
 def _panels(checkout: str) -> dict:
@@ -319,6 +321,8 @@ def _board_body(path: str, repo: str, sessions=None, grinds=None) -> dict:
     snap = POLLER.snapshot(repo)
     if path == "/api/planning":
         body = ui_planning.build(repo, dispatch.read_checkouts()[repo], snap, _panels(dispatch.read_checkouts()[repo]))
+        for p in body["prds"]:
+            p["account"] = ui_origin.prd_label(repo, os.path.splitext(os.path.basename(p["path"]))[0])
     else:
         body = ui_delivery.build(
             repo,
@@ -910,6 +914,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             model=body.get("model"),
             effort=body.get("effort"),
             issue=body.get("issue"),
+            claude_cmd=body.get("claude_cmd"),
+            pin_account=body.get("pin_account") is True,
             snapshot=POLLER.snapshot(repo),
             channel=ui_settings.repo_settings(repo)["slack_channel"],
         )

@@ -103,6 +103,8 @@ def start(
     model=None,
     effort=None,
     issue=None,
+    claude_cmd=None,
+    pin_account=False,
 ) -> dict:
     """{session} (the session id), or {panel} for peer-review.
     ValueError -> 400, Conflict -> 409, RuntimeError -> 502."""
@@ -148,6 +150,8 @@ def start(
                     "text": text,
                     **{k: v for k, v in (("model", model), ("effort", effort)) if v},
                     **({"issue": issue} if issue is not None else {}),
+                    **({"claude_cmd": claude_cmd} if claude_cmd else {}),
+                    **({"pin_account": True} if pin_account else {}),
                 }
             )
             if status == 409:

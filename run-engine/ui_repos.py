@@ -335,6 +335,7 @@ _REQUEST_KEYS = (
     "text",
     "issue",
     "claude_cmd",
+    "pin_account",
     "batch",
     "model",
     "effort",
@@ -511,6 +512,7 @@ def start_session(body: dict):
                 res["id"],
                 request=_request(body),
                 **({"no_repo": True, "vault_folder": vault_folder} if no_repo else {}),
+                **({"pin_account": True} if body.get("pin_account") is True else {}),
             )
             _remember(slug, cwd)
             return 201, res

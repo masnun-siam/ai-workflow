@@ -79,7 +79,7 @@ describe('Start dialog', () => {
     await user.click(await screen.findByRole('button', { name: /#12/ }));
     expect((screen.getByLabelText('Issue') as HTMLInputElement).value).toBe('12');
     await user.click(startButton());
-    await waitFor(() => expect(posts()).toEqual([{ repo: 'o/r', command: 'implement-issue', args: '12', claude_cmd: 'claude' }]));
+    await waitFor(() => expect(posts()).toEqual([{ repo: 'o/r', command: 'implement-issue', args: '12' }]));
     await waitFor(() => expect(screen.getByTestId('loc').textContent).toBe('/sessions/s1'));
     expect(onClose).toHaveBeenCalled();
     expect(localStorage.getItem('aiw.lastCommand')).toBe('implement-issue');
@@ -139,7 +139,7 @@ describe('Start dialog', () => {
     await user.click(screen.getByRole('button', { name: 'CTO' }));
     await user.type(box, 'a gym app');
     await user.keyboard('{Control>}{Enter}{/Control}');
-    await waitFor(() => expect(posts()).toEqual([{ repo: 'o/r', command: 'create-prd', args: 'a gym app', peer_review: ['cto'], claude_cmd: 'claude' }]));
+    await waitFor(() => expect(posts()).toEqual([{ repo: 'o/r', command: 'create-prd', args: 'a gym app', peer_review: ['cto'] }]));
   });
 
   it('No repo yet sends no_repo and the vault folder', async () => {
@@ -161,7 +161,7 @@ describe('Start dialog', () => {
     expect(screen.getByText(/permission checks skipped/)).toBeTruthy();
     await user.type(screen.getByLabelText('Prompt'), '/pr-review 42');
     await user.click(startButton());
-    await waitFor(() => expect(posts()[0]).toEqual({ repo: 'o/r', text: '/pr-review 42', claude_cmd: 'claude' }));
+    await waitFor(() => expect(posts()[0]).toEqual({ repo: 'o/r', text: '/pr-review 42' }));
   });
 
   it('a limited account marks itself and the button reads Queue', async () => {
@@ -216,7 +216,7 @@ describe('Start dialog', () => {
     open({ cmd: 'worklog' });
     await ready();
     await user.click(startButton());
-    await waitFor(() => expect(posts()).toEqual([{ repo: 'o/r', command: 'worklog', args: 'today', claude_cmd: 'claude' }]));
+    await waitFor(() => expect(posts()).toEqual([{ repo: 'o/r', command: 'worklog', args: 'today' }]));
     await waitFor(() => expect(screen.getByTestId('loc').textContent).toBe('/sessions/s1'));
   });
 
@@ -230,7 +230,7 @@ describe('Start dialog', () => {
     const ids = COMMANDS.find((g) => g.g === 'Maintain')?.items.map((c) => c.id) ?? [];
     expect(ids.indexOf('faq-updater')).toBe(ids.indexOf('docs-updater') + 1);
     await user.click(startButton());
-    await waitFor(() => expect(posts()).toEqual([{ repo: 'o/r', command: 'faq-updater', args: '', claude_cmd: 'claude' }]));
+    await waitFor(() => expect(posts()).toEqual([{ repo: 'o/r', command: 'faq-updater', args: '' }]));
   });
 
   it('repo-bootstrap: optional input, listed after faq-updater, starts empty', async () => {
@@ -243,7 +243,7 @@ describe('Start dialog', () => {
     expect(screen.getByText(/one branch and one PR, each phase its own session/)).toBeTruthy();
     expect((screen.getByLabelText('Phase and issue (optional)') as HTMLInputElement).placeholder).toBe('Optional: leave empty to start at the audit, or give a later phase and the bootstrap issue, e.g. guides 123');
     await user.click(startButton());
-    await waitFor(() => expect(posts()).toEqual([{ repo: 'o/r', command: 'repo-bootstrap', args: '', claude_cmd: 'claude' }]));
+    await waitFor(() => expect(posts()).toEqual([{ repo: 'o/r', command: 'repo-bootstrap', args: '' }]));
   });
 
   it('repo-bootstrap: a 409 shows the message with Open that run', async () => {
