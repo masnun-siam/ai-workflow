@@ -314,6 +314,8 @@ def _round(rec: dict):
     pq = rec.get("pending_question")
     if rec.get("status") != "waiting" or not isinstance(pq, dict) or pq.get("status") != "pending":
         return None
+    if rec.get("hold"):
+        return None
     if rec["id"] in ui_runner._procs or not rec.get("session_id"):
         return None  # claude is still exiting after `aiw ask`; the next tick gets it
     return pq if pq.get("questions") else None
@@ -507,6 +509,8 @@ def _retry(rec: dict, now: float, started) -> dict | None:
     sid, status = rec["id"], rec.get("status")
     if ui_sessions.is_answerer(rec):
         return None  # a failed answerer is handled per round (_opus), never resumed
+    if rec.get("hold"):
+        return None
     if rec.get("afk_retries") and status in ("done", "waiting"):  # a retry got through: start the count over
         ui_sessions.update(sid, afk_retries=None, afk_retry_at=None, afk_retry_for=None)
         return None
@@ -540,6 +544,8 @@ def _retry_lanes(now: float) -> list:
             d = dispatch_run.load(d["id"])
             changed = False
             for k, x in d["lanes"].items():
+                if x.get("paused"):  # a retry would unpause it
+                    continue
                 why = x.get("held") or (x.get("needs_you") if x.get("needs_you") != "waiting on you" else None)
                 if not why:
                     if x.get("afk_retries"):  # it got through: start the count over

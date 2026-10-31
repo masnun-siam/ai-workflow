@@ -67,6 +67,7 @@ export interface Session {
   limit_resets_at: number | null; // epoch seconds
   limit_type: string | null;
   auto_resume: boolean | null;
+  hold: boolean;
   no_repo: boolean;
   vault_folder: string | null;
   peer_review: PanelStatus | null;
@@ -556,6 +557,7 @@ export interface Lane {
   gate: string | null;
   skip_reason: string | null;
   paused: boolean | null;
+  paused_by?: 'dispatch' | null;
   hold_merge: boolean | null;
   limited_until: number | null;
   started_at: number | null;

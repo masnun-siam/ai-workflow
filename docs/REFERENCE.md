@@ -258,7 +258,7 @@ epics), grind mode (Off, Simple, Full), auto-merge, lanes at once (1–10), a ba
 effort, then **Preview** shows the waves and warnings (unrefined issues, cycles, missing checkouts,
 repos without a Slack channel, open blockers outside the epic, issues jev reads as underspecified, readiness unavailable) before **Start**. With Use jev on, Preview (and `aiw dispatch plan`) scores each refined lane's body 1–5 for up to 8 s: plan lanes carry `readiness` (int or null), a score of 2 or less warns and the lane still runs, and bodies are fetched only for this read and never returned. Lanes started here run
 as headless sessions (the same dialog, given picked issues, becomes **Run small changes**: chips instead of the epic field, no feature branch, `issues` in the request; lists show it by its title, "Small changes: #412, #415", and its repo); `herdr-dispatch` starts herdr ones, and both show here. `aiw dispatch plan|start` and `herdr-dispatch` take an epic only. A dispatch page has the
-live settings (including the **Account** lane sessions run on, headless lanes only), **Pause**/**Resume**/**Cancel**, one progress tick per issue with done, building, waiting, time and spend, a **Needs
+live settings (including the **Account** lane sessions run on, headless lanes only), **Pause**/**Resume**/**Cancel** (Pause asks **After the running issues**: they carry on and no new one starts, or **Now**, `{"state": "paused", "now": true}`: every running lane is paused and its session stopped, and Resume starts each in its stage in a fresh session; a lane you paused yourself stays paused), one progress tick per issue with done, building, waiting, time and spend, a **Needs
 you** strip (each issue waiting on you with its one action: Merge, Answer, Retry), then the issues in three lists (issue
 titles lose the epic-name prefix; `J`/`K` walk them in this order): **Building now** (a card per lane at work with its
 Build, Grind, Merge, Wrap up steps, time and cost), **Up next** (waiting lanes, ready ones first, each with what it waits
@@ -293,7 +293,7 @@ has banners for waiting (inline answer), limited (reset time, **Resume on anothe
 auto-resume**), failed (**Retry**, **Continue in terminal**) and queued (**Start now**), the run's phase strip when the session is a bootstrap phase (its own entry marked "this session", the others linked), the transcript, a
 composer (a prompt queues while a turn runs), and a facts box with cost, tokens (`$0.44 · 703k tok`), model and effort.
 Sessions auto-resume after a rate limit, and the limit timer releases queued ones after a restart.
-Actions: **Stop** (`POST /api/sessions/<id>/stop`, after a confirm), **Resume**, **Rerun** (replays the
+Actions: **Pause** on a starting, running, waiting or limited session asks **After this run** (`POST /api/sessions/<id>/hold`: the run finishes, then nothing continues the session on its own until **Resume** on the held banner, `POST /api/sessions/<id>/release`; a queued prompt stays unsent, Away mode neither answers nor retries it, a limited session does not auto-resume, and you can still answer it by hand) or **Now** (the same as Stop). **Stop** (`POST /api/sessions/<id>/stop`, after a confirm), **Resume**, **Rerun** (replays the
 recorded start request, same repo and account; `POST /api/sessions/<id>/rerun`), and **Start now**
 (`POST /api/sessions/<id>/start-now`: starts a batch-queued session at once, past the batch cap; 409 when
 the session is not queued or is waiting on an account limit, which starts by itself at the reset).

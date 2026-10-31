@@ -6,6 +6,7 @@ export { Switch } from './Switch';
 export { Menu, MoreMenu, type MenuEntry } from './Menu';
 export { Tabs, TabPanel, type TabDef } from './Tabs';
 export { Dialog, ConfirmProvider, useConfirm, type ConfirmOpts } from './Dialog';
+export { PauseDialog } from './PauseDialog';
 export { Toaster, toast, useToast, type ToastOpts } from './Toast';
 export { Banner } from './Banner';
 export { EmptyState } from './EmptyState';

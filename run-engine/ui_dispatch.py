@@ -331,6 +331,7 @@ def public(d: dict, full: bool = False) -> dict:
                         "gate",
                         "skip_reason",
                         "paused",
+                        "paused_by",
                         "hold_merge",
                         "limited_until",
                         "started_at",

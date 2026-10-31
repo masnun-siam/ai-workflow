@@ -696,6 +696,20 @@ try:
     ui_gh.status = lambda *a, **k: {"ok": False, "login": None, "error": "not logged in"}
     assert call("GET", "/api/inbox")[1]["items"][0]["type"] == "gh_auth"
     assert call("GET", "/api/sessions")[1]["gh"] == {"ok": False, "login": None, "error": "not logged in"}
+    hs = ui_sessions.create("/implement-issue 7", other, {"owner": "o", "repo": "q", "issue": 7})
+    ui_sessions.update(hs["id"], status="running")
+    assert call("GET", f"/api/sessions/{hs['id']}")[1]["hold"] is False
+    assert call("POST", f"/api/sessions/{hs['id']}/release", {})[0] == 409
+    st, body = call("POST", f"/api/sessions/{hs['id']}/hold", {})
+    assert st == 200 and body["hold"] is True
+    assert ui_sessions.load(hs["id"])["status"] == "running"
+    st, body = call("POST", f"/api/sessions/{hs['id']}/release", {})
+    assert st == 200 and body["hold"] is False
+    ui_sessions.update(hs["id"], status="done")
+    assert call("POST", f"/api/sessions/{hs['id']}/hold", {})[0] == 409
+    for verb in ("hold", "release"):
+        assert call("POST", f"/api/sessions/{'0' * 12}/{verb}", {})[0] == 404
+    ok("sessions: hold and release answer 200, 404, 409; hold is on the record")
     ok("inbox: items, afk, gh, stale; ?repo= filter and 400; gh on /api/sessions")
     assert call("POST", "/api/afk/change", {"changes": []})[0] in (400, 409)
     assert call("POST", "/api/afk/change", {"changes": [{"id": "s:1", "answers": {}}]})[0] == 409  # no summary yet

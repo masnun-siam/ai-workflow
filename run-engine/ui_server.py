@@ -171,6 +171,7 @@ def _public(rec: dict) -> dict:
         "limit_resets_at": rec.get("limit_resets_at"),
         "limit_type": rec.get("limit_type"),
         "auto_resume": rec.get("auto_resume"),
+        "hold": rec.get("hold") is True,
         "no_repo": rec.get("no_repo") is True,
         "vault_folder": rec.get("vault_folder"),
         "peer_review": _panel_of(rec),
@@ -647,7 +648,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif op == "settings":
             self._dispatch(lambda b: ui_dispatch.set_settings(did, b))
         elif op == "state":
-            self._dispatch(lambda b: ui_dispatch.public(dispatch_run.set_state(did, b.get("state"))))
+            self._dispatch(
+                lambda b: ui_dispatch.public(dispatch_run.set_state(did, b.get("state"), now=b.get("now") is True))
+            )
         elif op == "lane":
             self._dispatch(
                 lambda b: ui_dispatch.public(
@@ -782,13 +785,17 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 "stop",
                 "resume",
                 "cancel-auto",
+                "hold",
+                "release",
                 "start-now",
             )
         ):
             {
                 "stop": self._stop,
                 "resume": self._resume,
-                "cancel-auto": self._cancel_auto,
+                "cancel-auto": lambda sid: self._session_op(ui_runner.cancel_auto, sid),
+                "hold": lambda sid: self._session_op(ui_runner.hold, sid),
+                "release": lambda sid: self._session_op(ui_runner.release, sid),
                 "start-now": self._start_now,
             }[parts[4]](parts[3])
         elif len(parts) == 7 and parts[1:3] in (["api", "issues"], ["api", "pulls"]) and parts[6] == "comment":
@@ -1040,9 +1047,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         self._json(202 if state == "queued" else 200, {"state": state})
 
-    def _cancel_auto(self, sid: str) -> None:
+    def _session_op(self, op, sid: str) -> None:
         try:
-            self._json(200, _public(ui_runner.cancel_auto(sid)))
+            self._json(200, _public(op(sid)))
         except (FileNotFoundError, ValueError):
             self._json(404, {"error": "not found"})
         except ui_runner.Conflict as e:

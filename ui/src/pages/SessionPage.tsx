@@ -2,10 +2,10 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
-import { useCancelAuto, useSession, useSettings, useStartNow, useTranscript, useVaultPrd } from '../api/hooks';
+import { useCancelAuto, useHoldSession, useReleaseSession, useSession, useSettings, useStartNow, useTranscript, useVaultPrd } from '../api/hooks';
 import type { Session } from '../api/types';
 import { PhaseStrip } from '../bootstrap/PhaseStrip';
-import { Banner, Button, Chip, EmptyState, Icon, Menu, SessionChip } from '../components';
+import { Banner, Button, Chip, EmptyState, Icon, Menu, PauseDialog, SessionChip } from '../components';
 import { QuestionForm } from '../questions/QuestionForm';
 import { CreateRepoDialog } from '../repos/CreateRepoDialog';
 import { issueOf } from '../activity/SessionTable';
@@ -53,6 +53,9 @@ export function SessionPage() {
   const a = useSessionActions();
   const startNowM = useStartNow();
   const cancelAuto = useCancelAuto();
+  const hold = useHoldSession();
+  const release = useReleaseSession();
+  const [pausing, setPausing] = useState(false);
 
   if (q.error instanceof ApiError && q.error.status === 404) {
     return <div className="content-inner"><EmptyState icon="search" title="Session not found" actions={<Link className="btn" to={routes.activity}>Back to activity</Link>}>It may have been cleaned up.</EmptyState></div>;
@@ -71,6 +74,7 @@ export function SessionPage() {
   const account = accounts.find((c) => c.cmd === s.claude_cmd)?.label ?? '';
   const term = () => void copyCommand(resumeCommand(s));
   const startNow = () => startNowM.mutate(s.id);
+  const autoResume = s.auto_resume && !s.hold;
 
   return (
     <div className="content-inner">
@@ -90,10 +94,26 @@ export function SessionPage() {
           {s.outcome === 'stopped' ? <Button shortcut="r" primary disabled={a.busy} onClick={() => a.resume(s.id)}>Resume</Button> : null}
           {finished ? <Button shortcut="r" disabled={a.busy} onClick={() => a.rerun(s.id)}><Icon n="refresh" />Rerun</Button> : null}
           {s.session_id ? <Button shortcut="t" onClick={term}><Icon n="terminal" />Continue in terminal</Button> : null}
+          {['starting', 'running', 'waiting', 'limited'].includes(s.outcome) && !s.hold ? <Button onClick={() => setPausing(true)}><Icon n="pause" />Pause</Button> : null}
           {!finished ? <Button shortcut="x" variant="danger" onClick={() => void a.stop(s.id)}><Icon n="stop" />Stop</Button> : null}
         </div>
       </div>
 
+      <PauseDialog
+        open={pausing}
+        onOpenChange={setPausing}
+        title="Pause this session?"
+        body="After this run: Claude finishes what it is doing, then nothing continues the session until you resume it. Now: Claude stops at once, as Stop does."
+        afterLabel="After this run"
+        nowLabel="Now"
+        onAfter={() => hold.mutate(s.id)}
+        onNow={() => a.stopNow(s.id)}
+      />
+      {s.hold ? (
+        <Banner tone="review" icon="pause" action={<Button sm variant="primary" disabled={release.isPending} onClick={() => release.mutate(s.id)}>Resume</Button>}>
+          <p><b>Held: nothing continues this session until you resume it.</b></p>
+        </Banner>
+      ) : null}
       {s.outcome === 'limited' ? (
         <Banner
           tone="review"
@@ -101,11 +121,11 @@ export function SessionPage() {
           action={
             <div className="row wrap">
               <Menu paletteLabel="Resume on" items={others.map((c) => ({ label: c.label, onSelect: () => a.resume(s.id, c.label) }))} trigger={<Button sm disabled={!others.length}>Resume on another account</Button>} />
-              {s.auto_resume ? <Button sm variant="ghost" onClick={() => cancelAuto.mutate(s.id)}>Don't auto-resume</Button> : null}
+              {autoResume ? <Button sm variant="ghost" onClick={() => cancelAuto.mutate(s.id)}>Don't auto-resume</Button> : null}
             </div>
           }
         >
-          <p><b>Paused: {account || 'the'} account hit its usage limit.</b> {s.limit_resets_at ? (s.auto_resume ? `Resumes on its own at ${clockText(s.limit_resets_at)} (${untilText(s.limit_resets_at)}).` : `Resets at ${clockText(s.limit_resets_at)} (${untilText(s.limit_resets_at)}). Auto-resume is off.`) : 'Auto-resume is off.'}</p>
+          <p><b>Paused: {account || 'the'} account hit its usage limit.</b> {s.limit_resets_at ? (autoResume ? `Resumes on its own at ${clockText(s.limit_resets_at)} (${untilText(s.limit_resets_at)}).` : `Resets at ${clockText(s.limit_resets_at)} (${untilText(s.limit_resets_at)}). Auto-resume is off.`) : 'Auto-resume is off.'}</p>
         </Banner>
       ) : null}
       {s.outcome === 'failed' ? (

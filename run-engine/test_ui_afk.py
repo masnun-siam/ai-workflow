@@ -638,4 +638,28 @@ except ui_afk.Conflict:
     assert not sent
 ui_runner.send_prompt = _send
 
+# hold: Away mode neither answers a held session's question nor retries a held failed one
+ha = waiting()
+assert ui_afk._round(ui_sessions.load(ha)) is not None
+ui_sessions.update(ha, hold=True)
+assert ui_afk._round(ui_sessions.load(ha)) is None
+ui_sessions.update(
+    ha,
+    status="failed",
+    session_id="s9",
+    ended_at=ui_runner._iso(__import__("datetime").datetime.now(__import__("datetime").timezone.utc)),
+)
+assert ui_afk._retry(ui_sessions.load(ha), time.time(), now - 10) is None
+assert "afk_retry_at" not in ui_sessions.load(ha)
+ui_sessions.update(ha, status="stopped", hold=None)
+
+# a paused lane is left alone: a retry would unpause it
+dp = ui_afk.dispatch_run.create(
+    "o/r#9", "headless", {}, [{"repo": "o/r", "n": 5, "title": "t", "refined": True, "deps": []}]
+)
+dp["lanes"]["o/r#5"].update(stage="implementing", held="CI is red", paused=True, paused_by="dispatch")
+ui_afk.dispatch_run.save(dp)
+assert ui_afk._retry_lanes(time.time()) == []
+assert "afk_retry_at" not in ui_afk.dispatch_run.load(dp["id"])["lanes"]["o/r#5"]
+
 print("test_ui_afk: ok")

@@ -379,7 +379,7 @@ def _deliver_queued(sid: str) -> None:
     """The session just ended: send the prompt that was queued while it ran."""
     rec = ui_sessions.load(sid) or {}
     text = rec.get("queued_prompt")
-    if not text or rec.get("status") not in ("done", "failed"):
+    if not text or rec.get("hold") or rec.get("status") not in ("done", "failed"):
         return
     ui_sessions.update(sid, queued_prompt=None)
     try:
@@ -597,6 +597,27 @@ def cancel_auto(sid: str) -> dict:
     return ui_sessions.update(sid, auto_resume=False)
 
 
+def hold(sid: str) -> dict:
+    """Let the current run finish, then nothing continues the session on its own until release()."""
+    rec = ui_sessions.load(sid)
+    if rec is None:
+        raise FileNotFoundError(f"no such session: {sid}")
+    if rec.get("status") not in ("starting", "running", "waiting", "limited"):
+        raise Conflict("session is not running")
+    return ui_sessions.update(sid, hold=True)
+
+
+def release(sid: str) -> dict:
+    rec = ui_sessions.load(sid)
+    if rec is None:
+        raise FileNotFoundError(f"no such session: {sid}")
+    if not rec.get("hold"):
+        raise Conflict("session is not held")
+    ui_sessions.update(sid, hold=None)
+    _deliver_queued(sid)
+    return ui_sessions.load(sid)
+
+
 def limit_tick(now=None, stagger=2) -> list:
     """Resume every auto-resume limited session whose limit has reset, and start queued batch
     sessions that have a free slot (after a UI restart nothing else would)."""
@@ -608,7 +629,7 @@ def limit_tick(now=None, stagger=2) -> list:
         out += release_batch(batch)
     for rec in ui_sessions.list_sessions():
         until = rec.get("limit_resets_at")
-        if ui_sessions.is_answerer(rec):
+        if ui_sessions.is_answerer(rec) or rec.get("hold"):
             continue
         if rec.get("status") == "limited" and rec.get("auto_resume") and until and until + LIMIT_BUFFER_SECONDS <= now:
             try:

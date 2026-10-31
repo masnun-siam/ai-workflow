@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, type HTMLAttributes } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useDispatch, useDispatchSeen, useDispatchSettings, useDispatchState, useEndAction, useLaneAction, useSessions } from '../api/hooks';
 import type { Dispatch, DispatchEvent, EndAction, Lane } from '../api/types';
-import { Banner, Button, Chip, EmptyState, Icon, type IconName, useConfirm, useListSelection, useToast } from '../components';
+import { Banner, Button, Chip, EmptyState, Icon, type IconName, PauseDialog, useConfirm, useListSelection, useToast } from '../components';
 import { KeyScope } from '../shell/shortcuts';
 import { clockText, money, shortRepo } from '../lib/format';
 import { routes } from '../lib/routes';
@@ -205,6 +205,7 @@ export function DispatchPage() {
   const toast = useToast();
   const limits = useSessions().data?.limits ?? {};
   const [showSettings, setShowSettings] = useState(false);
+  const [pausing, setPausing] = useState(false);
   const picked = sp.get('lane');
   const pick = (k: string | null) => {
     const n = new URLSearchParams(sp);
@@ -275,7 +276,7 @@ export function DispatchPage() {
         </div>
         <div className="row" style={{ gap: 6, flex: 'none' }}>
           <Button aria-expanded={showSettings} onClick={() => setShowSettings(!showSettings)}><Icon n="sliders" />Settings</Button>
-          {d.state === 'running' ? <Button onClick={() => state.mutate({ id: d.id, state: 'paused' }, { onSuccess: () => toast('Paused: no new issue starts') })}><Icon n="pause" />Pause</Button> : null}
+          {d.state === 'running' ? <Button onClick={() => setPausing(true)}><Icon n="pause" />Pause</Button> : null}
           {d.state === 'paused' ? <Button variant="primary" shortcut="r" onClick={() => state.mutate({ id: d.id, state: 'running' })}><Icon n="play" />Resume</Button> : null}
           {live ? <Button variant="ghost" shortcut="x" onClick={() => void cancel()}>Cancel</Button> : null}
         </div>
@@ -296,7 +297,17 @@ export function DispatchPage() {
       </section>
 
       <NeedsYou d={d} onPick={pick} selected={selection.selected} />
-      {d.state === 'paused' ? <Banner tone="review" icon="pause">Paused. Issues already running carry on; no new one starts until you resume.</Banner> : null}
+      <PauseDialog
+        open={pausing}
+        onOpenChange={setPausing}
+        title="Pause this dispatch?"
+        body="After the running issues: they carry on, and no new one starts. Now: their sessions stop too, and Resume starts each one again in its stage."
+        afterLabel="After the running issues"
+        nowLabel="Now"
+        onAfter={() => state.mutate({ id: d.id, state: 'paused' }, { onSuccess: () => toast('Paused: no new issue starts') })}
+        onNow={() => state.mutate({ id: d.id, state: 'paused', now: true }, { onSuccess: () => toast('Paused: running issues stopped') })}
+      />
+      {d.state === 'paused' ? <Banner tone="review" icon="pause">{d.lanes.some((l) => l.paused_by === 'dispatch') ? 'Paused. Running issues were stopped; Resume starts each one again in its stage.' : 'Paused. Issues already running carry on; no new one starts until you resume.'}</Banner> : null}
       {limited && live ? <Banner tone="away" icon="clock">A Claude account hit its usage limit. New issues wait, and paused ones resume after the reset.</Banner> : null}
       {showSettings ? (
         <section className="box" aria-label="Dispatch settings">

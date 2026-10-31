@@ -343,6 +343,18 @@ except ValueError:
 assert call(f"/api/dispatches/{d2['id']}/lane", {"lane": "o/r#9", "action": "hold"})[1]["lanes"][0]["hold_merge"]
 assert call(f"/api/dispatches/{d2['id']}/lane", {"lane": "o/r#9", "action": "explode"})[0] == 400
 assert call(f"/api/dispatches/{d2['id']}/state", {"state": "paused"})[1]["state"] == "paused"
+stage_ = dr.load(d2["id"])["lanes"]["o/r#9"]["stage"]
+dn_ = dr.load(d2["id"])
+dn_["lanes"]["o/r#9"]["stage"] = "implementing"
+dr.save(dn_)
+assert (
+    call(f"/api/dispatches/{d2['id']}/state", {"state": "paused", "now": True})[1]["lanes"][0]["paused_by"]
+    == "dispatch"
+)
+dn_ = dr.set_state(d2["id"], "running")
+dn_["lanes"]["o/r#9"].update(stage=stage_, restart=None, outbox=None)
+dr.save(dn_)
+assert call(f"/api/dispatches/{d2['id']}/state", {"state": "paused", "now": "yes"})[1]["lanes"][0]["paused_by"] is None
 assert call(f"/api/dispatches/{d2['id']}/end", {"action": "open-pr"})[0] == 400  # no feature branch
 assert call(f"/api/dispatches/{d2['id']}/lane?key=o/r%239")[0] == 400  # no session yet
 d2 = dr.load(d2["id"])
