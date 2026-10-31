@@ -9,6 +9,7 @@ Every lane session runs with --dangerously-skip-permissions and the dispatch's m
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from datetime import datetime, timedelta
@@ -193,7 +194,8 @@ class Headless:
         return self._AGENT.get(rec.get("status"), "working"), None
 
     def close(self, h):
-        return None  # a headless session ends with its turn; nothing stays open
+        with contextlib.suppress(FileNotFoundError):  # its record is gone: nothing left to stop
+            self.runner.stop(h["session"])  # does nothing to a session that already ended
 
 
 def for_dispatch(d: dict):

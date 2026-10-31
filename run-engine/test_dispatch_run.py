@@ -670,6 +670,21 @@ assert hl.status({"session": "s1"}) == ("blocked", None) and hl.status({"session
 assert hl.status({"session": "nope"})[0] == "gone"
 
 
+class StopRunner:
+    stopped = []
+
+    def stop(self, sid):
+        self.stopped.append(sid)
+        if sid == "nope":
+            raise FileNotFoundError(sid)
+
+
+hc = dispatch_runners.Headless(runner=StopRunner(), sessions=FakeSessions())
+hc.close({"session": "s1"})
+hc.close({"session": "nope"})  # a record that is gone is not a failed close
+assert StopRunner.stopped == ["s1", "nope"]
+
+
 class KwRunner:
     def start(self, *a, **kw):
         self.kw = kw
