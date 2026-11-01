@@ -15,7 +15,7 @@ d = ui_pr.shape(
         "state": "closed",
         "merged": True,
         "user": {"login": "a"},
-        "head": {"ref": "feat"},
+        "head": {"ref": "feat", "sha": "f" * 40},
         "base": {"ref": "main"},
         "body_html": "<p>x</p>",
         "additions": 3,
@@ -44,6 +44,7 @@ d = ui_pr.shape(
     {"statusCheckRollup": [{"name": "ci", "detailsUrl": "l", "status": "COMPLETED", "conclusion": "FAILURE"}]},
 )
 assert d["conflict"] is False
+assert d["head_sha"] == "f" * 40
 assert ui_pr.shape({"mergeable_state": "dirty"}, [], [], [], [], {})["conflict"] is True
 assert (
     d["state"] == "merged"

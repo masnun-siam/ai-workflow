@@ -914,7 +914,7 @@ describe('dispatch-owned issues', () => {
 
 describe('work panel: issue + PR tabs, grinding switch', () => {
   const issue = { number: 12, title: 'Task 12', state: 'open', url: 'https://github.com/o/r/issues/12', author: 'me', created_at: '2026-01-01T00:00:00Z', labels: [], assignees: [], body_html: '', comments: [], comment_count: 0, is_pr: false };
-  const pull = { number: 40, title: 'PR T', url: 'https://github.com/o/r/pull/40', state: 'open', author: 'me', created_at: '2026-01-01T00:00:00Z', head: 'f', base: 'main', body_html: '', additions: 1, deletions: 0, file_count: 0, files: [], commit_count: 0, commits: [], conversation: [], checks: [] };
+  const pull = { number: 40, title: 'PR T', url: 'https://github.com/o/r/pull/40', state: 'open', author: 'me', created_at: '2026-01-01T00:00:00Z', head: 'f', head_sha: 'a'.repeat(40), base: 'main', body_html: '', additions: 1, deletions: 0, file_count: 0, files: [], commit_count: 0, commits: [], conversation: [], checks: [] };
   const grinding = card(12, 'grinding', { pr: { n: 40, draft: false, ci: 'success', url: 'u' }, grind_on: true, grind: { state: 'running', round: 2, thread: 'https://x.slack.com/archives/C1/p1' } });
   it('an issue with a PR has Issue and PR tabs; turning grinding off confirms and posts /api/grind/issue', async () => {
     mock({ prds: [prd({ issues: 1, column: 'refined' })], lanes: [lane([grinding])], extra: { '/api/issues/o/r/12': () => json(issue), '/api/pulls/o/r/40': () => json(pull) } });
@@ -947,7 +947,7 @@ describe('work panel: issue + PR tabs, grinding switch', () => {
 });
 
 describe('merge conflicts', () => {
-  const pull = { number: 40, title: 'PR T', url: 'https://github.com/o/r/pull/40', state: 'open', author: 'me', created_at: '2026-01-01T00:00:00Z', head: 'f', base: 'main', body_html: '', additions: 1, deletions: 0, file_count: 0, files: [], commit_count: 0, commits: [], conversation: [], checks: [], conflict: true };
+  const pull = { number: 40, title: 'PR T', url: 'https://github.com/o/r/pull/40', state: 'open', author: 'me', created_at: '2026-01-01T00:00:00Z', head: 'f', head_sha: 'a'.repeat(40), base: 'main', body_html: '', additions: 1, deletions: 0, file_count: 0, files: [], commit_count: 0, commits: [], conversation: [], checks: [], conflict: true };
   it('the PR panel disables Merge and Resolve conflicts starts a session', async () => {
     mock({ extra: { '/api/pulls/o/r/40': () => json(pull) } });
     const { WorkPanel } = await import('./panels/WorkPanel');
@@ -991,7 +991,7 @@ describe('settings: grinding mode', () => {
 
 describe('PR panel merge', () => {
   const pull = (over: Record<string, unknown>) => ({
-    number: 40, title: 'T', url: 'https://github.com/o/r/pull/40', state: 'open', author: 'me', created_at: '2026-01-01T00:00:00Z', head: 'f', base: 'main',
+    number: 40, title: 'T', url: 'https://github.com/o/r/pull/40', state: 'open', author: 'me', created_at: '2026-01-01T00:00:00Z', head: 'f', head_sha: 'a'.repeat(40), base: 'main',
     labels: [], assignees: [], milestone: null, body_html: '', additions: 1, deletions: 0, file_count: 0, files: [], commit_count: 0, commits: [], conversation: [], checks: [], ...over,
   });
   async function open(p: Record<string, unknown>) {
@@ -1016,7 +1016,7 @@ describe('PR panel merge', () => {
     await user.click(await screen.findByRole('button', { name: 'Merge…' }));
     expect(screen.getByText(/1 check failing/)).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Merge anyway' }));
-    await waitFor(() => expect(posts.some((p) => p.url === '/api/pulls/o/r/40/merge')).toBe(true));
+    await waitFor(() => expect(posts.some((p) => p.url === '/api/pulls/o/r/40/merge' && p.body.sha === 'a'.repeat(40))).toBe(true));
     void open;
   });
   it('mergeWarnings: failing, running, review state', () => {
@@ -1029,7 +1029,7 @@ describe('PR panel merge', () => {
 
 describe('PR panel close and reopen', () => {
   const pull = (over: Record<string, unknown>) => ({
-    number: 40, title: 'T', url: 'https://github.com/o/r/pull/40', state: 'open', author: 'me', created_at: '2026-01-01T00:00:00Z', head: 'f', base: 'main',
+    number: 40, title: 'T', url: 'https://github.com/o/r/pull/40', state: 'open', author: 'me', created_at: '2026-01-01T00:00:00Z', head: 'f', head_sha: 'a'.repeat(40), base: 'main',
     labels: [], assignees: [], milestone: null, body_html: '', additions: 1, deletions: 0, file_count: 0, files: [], commit_count: 0, commits: [], conversation: [], checks: [], ...over,
   });
   async function open(state: string, stateRoute?: () => Promise<Response>) {
@@ -1109,7 +1109,7 @@ describe('PR panel close and reopen', () => {
 });
 
 describe('work panel action keys', () => {
-  const pull = (over: Record<string, unknown> = {}) => ({ number: 40, title: 'PR T', url: 'https://github.com/o/r/pull/40', state: 'open', author: 'me', created_at: '2026-01-01T00:00:00Z', head: 'f', base: 'main', body_html: '', additions: 1, deletions: 0, file_count: 0, files: [], commit_count: 0, commits: [], conversation: [], checks: [], ...over });
+  const pull = (over: Record<string, unknown> = {}) => ({ number: 40, title: 'PR T', url: 'https://github.com/o/r/pull/40', state: 'open', author: 'me', created_at: '2026-01-01T00:00:00Z', head: 'f', head_sha: 'a'.repeat(40), base: 'main', body_html: '', additions: 1, deletions: 0, file_count: 0, files: [], commit_count: 0, commits: [], conversation: [], checks: [], ...over });
   const ready = (over: Record<string, unknown> = {}) => card(12, 'in_review', { pr: { n: 40, draft: false, ci: 'success', url: 'u' }, mergeable: true, ...over });
   async function openPanel(p: Record<string, unknown> = {}, c = ready()) {
     mock({ prds: [prd({ issues: 1, column: 'refined' })], lanes: [lane([c])], extra: { '/api/pulls/o/r/40': () => json(pull(p)), '/api/issues/o/r/12': () => json({ number: 12, title: 'Task 12', state: 'open', url: 'u', author: 'me', created_at: '2026-01-01T00:00:00Z', labels: [], assignees: [], body_html: '', comments: [], comment_count: 0, is_pr: false }) } });

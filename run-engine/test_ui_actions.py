@@ -26,8 +26,11 @@ ui_actions.set_state("o", "r", 7, "closed", "not_planned", ok_runner)
 assert calls[-1] == ["issue", "close", "7", "-R", "o/r", "--reason", "not planned"]
 ui_actions.set_state("o", "r", 7, "open", None, ok_runner)
 assert calls[-1] == ["issue", "reopen", "7", "-R", "o/r"]
-ui_actions.merge("o", "r", "9", ok_runner)
-assert calls[-1] == ["pr", "merge", "9", "-R", "o/r", "--merge"], "a merge commit, never squash"
+SHA = "b" * 40
+ui_actions.merge("o", "r", "9", SHA, ok_runner)
+assert calls[-1] == ["pr", "merge", "9", "-R", "o/r", "--merge", "--match-head-commit", SHA], (
+    "a merge commit, never squash"
+)
 assert ui_actions.set_pr_state("o", "r", 9, "closed", ok_runner) == {"ok": True, "state": "closed"}
 assert calls[-1] == ["pr", "close", "9", "-R", "o/r"], "branch kept, no comment"
 assert ui_actions.set_pr_state("o", "r", 9, "open", ok_runner) == {"ok": True, "state": "open"}
@@ -55,7 +58,9 @@ for bad in (
     lambda: ui_actions.comment("o", "../x", "7", "x", ok_runner),
     lambda: ui_actions.set_state("o", "r", "7", "closed", "duplicate", ok_runner),
     lambda: ui_actions.set_state("o", "r", "7", "locked", None, ok_runner),
-    lambda: ui_actions.merge("o", "r", "7; rm", ok_runner),
+    lambda: ui_actions.merge("o", "r", "7; rm", SHA, ok_runner),
+    lambda: ui_actions.merge("o", "r", "7", None, ok_runner),
+    lambda: ui_actions.merge("o", "r", "7", "abc", ok_runner),
 ):
     try:
         bad()
@@ -63,7 +68,7 @@ for bad in (
     except ValueError:
         pass
 try:
-    ui_actions.merge("o", "r", "9", bad_runner)
+    ui_actions.merge("o", "r", "9", SHA, bad_runner)
     raise AssertionError("expected RuntimeError")
 except RuntimeError as e:
     assert "not mergeable" in str(e)

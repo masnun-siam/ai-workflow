@@ -53,6 +53,7 @@ def pr(n, **kv):
         "ci": "success",
         "review": "none",
         "conflict": False,
+        "sha": "c" * 40,
         **kv,
     }
 
@@ -169,7 +170,7 @@ dw = dr.create(
 dw["lanes"]["o/r#96"].update(stage="merge_gate", handle={"n": 96}, pr=196)
 facts = {"o/r#96": ui_dispatch.lane_facts(dw["lanes"]["o/r#96"], snap([issue(96, prs=[pr(196, ci="failure")])]))}
 facts["o/r#96"]["solo"] = True
-dr.tick(dw, facts, runner, merge=lambda repo, n: (True, ""), now=1004, notify=ui_dispatch.notify)
+dr.tick(dw, facts, runner, merge=lambda repo, n, sha: (True, ""), now=1004, notify=ui_dispatch.notify)
 assert pushed[-1][0] == "dispatch" and "merged with red CI" in pushed[-1][1]["note"]
 items = ui_dispatch.inbox_items([d])
 row = next(i for i in items if i["lane"] == "o/r#5")

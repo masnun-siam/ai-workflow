@@ -811,7 +811,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 lambda b: _repoll(f"{parts[3]}/{parts[4]}", ui_actions.set_pr_state(*parts[3:6], b.get("state")))
             )
         elif len(parts) == 7 and parts[1:3] == ["api", "pulls"] and parts[6] == "merge":
-            self._dispatch(lambda b: _repoll(f"{parts[3]}/{parts[4]}", ui_actions.merge(*parts[3:6])))
+            self._dispatch(lambda b: _repoll(f"{parts[3]}/{parts[4]}", ui_actions.merge(*parts[3:6], b.get("sha"))))
         elif parts == ["", "api", "epics", "close"]:
             self._dispatch(self._close_epic)
         elif parts == ["", "api", "prd"]:
