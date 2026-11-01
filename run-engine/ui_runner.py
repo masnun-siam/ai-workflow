@@ -392,12 +392,13 @@ def _deliver_queued(sid: str) -> None:
     text = rec.get("queued_prompt")
     if not text or rec.get("hold") or rec.get("status") not in ("done", "failed"):
         return
-    ui_sessions.update(sid, queued_prompt=None)
     try:
-        send_prompt(sid, text)
+        send_prompt(sid, text)  # clears queued_prompt when it claims the session
     except (ValueError, Conflict, RunnerError, OSError) as e:
         warn(f"queued prompt for {sid} not sent: {e}")
-        ui_sessions.update(sid, note=f"queued prompt not sent: {e}")
+        # an invalid prompt is dropped; any other failure keeps it for the session's next end
+        extra = {"queued_prompt": None} if isinstance(e, ValueError) else {}
+        ui_sessions.update(sid, note=f"queued prompt not sent: {e}", **extra)
 
 
 def _issue_key(rec: dict):
@@ -1055,7 +1056,6 @@ def prgrind_tick(path: str, now=None) -> str:
             return "invalid"
         if grind_live() >= MAX_GRINDS:
             return "queued"  # next-poll is untouched, so the next tick retries
-        _set_header(path, "next-poll", _iso(now + timedelta(seconds=PRGRIND_HEARTBEAT)))
         try:
             start(
                 cmd,
@@ -1069,6 +1069,7 @@ def prgrind_tick(path: str, now=None) -> str:
         except (RunnerError, ValueError) as e:
             warn(f"pr-grind tick: could not start round for {thread}: {e}")
             return "error"
+        _set_header(path, "next-poll", _iso(now + timedelta(seconds=PRGRIND_HEARTBEAT)))
         return "started"
     finally:
         lock.close()
