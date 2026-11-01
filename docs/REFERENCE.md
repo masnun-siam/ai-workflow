@@ -348,7 +348,7 @@ vault only (`--to obsidian`) there; **Create repo** later turns it into a repo.
 **Peer review.** The feature page's **Peer review** tab (and Start's lens picker for `peer-review` and
 Custom) lists the lenses the command offers (`GET /api/peer-review`, from `config.json`), with
 critical ticked. A custom prompt becomes the root session; its Ask file is the artifact. When the
-root ends its turn, the UI starts one `peer-reviewer` session (Opus) per lens (`POST /api/review`, body
+root ends its turn, the UI starts one read-only `peer-reviewer` session (Opus, `--allowedTools` from the agent's `tools:` list, kept on every resume) per lens (`POST /api/review`, body
 `repo`, `artifact`, `lenses`, optional `root_session`), each told to end with `Verdict: approve` or
 `Verdict: changes`. The UI relays the verdicts to the root session, which revises and ends its turn,
 and the same lens sessions re-review. A panel stops when every lens approves, or as **cap reached**

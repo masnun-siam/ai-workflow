@@ -156,6 +156,11 @@ def _run_flags(rec: dict) -> list:
     ]
 
 
+def _base_args(rec: dict) -> list:
+    """The session's claude flags: the permission bypass, unless the record carries an allow-list."""
+    return _restricted_args(rec["allowed_tools"]) if rec.get("allowed_tools") else CLAUDE_ARGS
+
+
 def _restricted_args(allowed_tools) -> list:
     safe = [a for a in CLAUDE_ARGS if a != "--dangerously-skip-permissions"]
     return [*safe, "--allowedTools", ",".join(allowed_tools)]
@@ -201,6 +206,8 @@ def start(
         ui_sessions.update(sid, **fields)
     if run_model or effort:
         ui_sessions.update(sid, run_model=run_model, run_effort=effort)
+    if allowed_tools:
+        ui_sessions.update(sid, allowed_tools=list(allowed_tools))  # every later spawn of the session keeps it
     run_flags = _run_flags({"run_model": run_model, "run_effort": effort})
     if batch:
         with _batch_lock:
@@ -227,7 +234,7 @@ def start(
     exe = _preflight(sid)
     gate = ["--append-system-prompt", HEADLESS_PROMPT] if gate_questions else []
     text = repo_skills.resolve(command_text, path)  # queued/limited above keep the raw text until they start
-    base = _restricted_args(allowed_tools) if allowed_tools else CLAUDE_ARGS
+    base = _base_args({"allowed_tools": allowed_tools})
     return _spawn(
         sid,
         [*exe, *base, *gate, *extra_args, *run_flags, text],
@@ -277,7 +284,7 @@ def _start_claimed(rec: dict, batch=None) -> None:
         text = repo_skills.resolve(rec["command"], rec["cwd_path"])
         _spawn(
             sid,
-            [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, *_run_flags(rec), text],
+            [*exe, *_base_args(rec), "--append-system-prompt", HEADLESS_PROMPT, *_run_flags(rec), text],
             rec["cwd_path"],
             command=text,
             cwd_path=rec["cwd_path"],
@@ -328,7 +335,7 @@ def resume(sid: str, answer_text) -> dict:
         sid,
         [
             *exe,
-            *CLAUDE_ARGS,
+            *_base_args(rec),
             "--append-system-prompt",
             HEADLESS_PROMPT,
             *_run_flags(rec),
@@ -815,7 +822,7 @@ def resume_stopped(sid: str, claude_cmd=None) -> dict:
             text = repo_skills.resolve(rec["command"], path)
             return _spawn(
                 sid,
-                [*exe, *CLAUDE_ARGS, "--append-system-prompt", HEADLESS_PROMPT, *_run_flags(rec), text],
+                [*exe, *_base_args(rec), "--append-system-prompt", HEADLESS_PROMPT, *_run_flags(rec), text],
                 path,
                 command=text,
                 cwd_path=path,
@@ -829,7 +836,7 @@ def resume_stopped(sid: str, claude_cmd=None) -> dict:
         sid,
         [
             *exe,
-            *CLAUDE_ARGS,
+            *_base_args(rec),
             "--append-system-prompt",
             HEADLESS_PROMPT,
             *_run_flags(rec),

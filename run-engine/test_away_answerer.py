@@ -90,4 +90,7 @@ nowhy = pick()
 del nowhy["answers"]["0"]["why"]
 fails(reply(nowhy), "labels and why")
 
+pr = aa.allowed_tools("peer-reviewer")
+assert "Read" in pr and "Bash(gh:*)" not in pr and "Bash(git:*)" not in pr, pr
+
 print("ok")

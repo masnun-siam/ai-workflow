@@ -15,16 +15,17 @@ import ui_sessions
 
 PREFIX = "AWAY-ANSWER:"
 MAX_WHY = 300
-AGENT_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "agents", "away-answerer.md")
+AGENTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "agents")
 
 
-def allowed_tools() -> list:
-    """The agent file's `tools:` list: the one source for what the answerer session may call."""
-    with open(AGENT_FILE, encoding="utf-8") as f:
+def allowed_tools(agent: str = "away-answerer") -> list:
+    """The agent file's `tools:` list: the one source for what that agent's session may call."""
+    agent_file = os.path.join(AGENTS_DIR, f"{agent}.md")
+    with open(agent_file, encoding="utf-8") as f:
         for line in f:
             if line.startswith("tools:"):
                 return line[len("tools:") :].strip().split(", ")
-    raise ValueError(f"no tools: line in {AGENT_FILE}")
+    raise ValueError(f"no tools: line in {agent_file}")
 
 
 def prompt(rec: dict, pending: dict, transcript: str, checkout: str) -> str:

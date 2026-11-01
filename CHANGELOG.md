@@ -81,6 +81,8 @@
 
 ### Fixed
 
+- **Peer-review lens sessions are read-only** (#708): lenses run with `--allowedTools` from `agents/peer-reviewer.md` (read-only `gh`/`git` verbs, no push or merge) instead of the permission bypass, on every round including resumes. The allow-list is stored on the session record; sessions without one keep the bypass. `peer-reviewer`'s `tools:` line is narrowed to match, which also limits `/peer-review` run by hand.
+
 - **Restart reconcile judges only the last claude process** (#706): a session whose latest turn died while the UI was down is now `failed`, not `done`, even when an earlier turn of the same stream ended with a successful result; a `system/init` event clears the replayed result.
 - **`aiw ci status` no longer reads a gh failure as green** (#702): a rate limit, auth or timeout error from `gh pr checks` returns `state: error` with the gh text as the note, `--watch` keeps polling through it, and pr-grind's push gate and rail 2 treat it as not green.
 - **Tests: no real macOS banners** (#683): `ui_notify.send_mac` honours `AIW_NO_MAC_BANNER`; `run_tests.sh` and `test_ui_bootstrap.py` set it, so the suite shows no banners.
