@@ -46,6 +46,44 @@ def node(n, repo="o/r", state="OPEN", labels=("refined",), blockers=()):
     }
 
 
+# --- resolve follows subIssues cursors; a child with 30 labels still reads refined
+def paged_gh(argv):
+    after = next((a.split("=", 1)[1] for a in argv if a.startswith("after=")), None)
+    lo = {None: 0, "c1": 100}[after]
+    nodes = [
+        node(m, labels=[f"l{k}" for k in range(24)] + ["refined"] + ["x"] * 5)
+        for m in range(lo + 1, lo + (101 if lo == 0 else 51))
+    ]
+    sub = {"pageInfo": {"hasNextPage": lo == 0, "endCursor": "c1"}, "nodes": nodes}
+    return cp(json.dumps({"data": {"repository": {"issue": {"title": "E", "subIssues": sub}}}}))
+
+
+big = dc.resolve("o/r#1", paged_gh)
+assert len(big["children"]) == 150 and all(c["refined"] for c in big["children"])
+try:
+    dc.resolve(
+        "o/r#1",
+        lambda a: cp(
+            json.dumps(
+                {
+                    "data": {
+                        "repository": {
+                            "issue": {
+                                "title": "E",
+                                "subIssues": {"pageInfo": {"hasNextPage": True, "endCursor": "c"}, "nodes": []},
+                            }
+                        }
+                    }
+                }
+            )
+        ),
+    )
+    raise AssertionError("endless paging accepted")
+except ValueError as e:
+    assert "too many" in str(e)
+print("  ok  resolve paging")
+
+
 resp = {
     "data": {
         "repository": {

@@ -59,13 +59,22 @@ def _grind(repo: str, pr: int, files=None):
     return None
 
 
+_TRUNCATED_WARNED: set = set()
+
+
 def lane_facts(x: dict, snap, status=None, grind_files=None, channel=dispatch_cli.channel, solo=ui_gh.solo):
-    """Facts for one lane (schema in dispatch_run), or None when its repo has no fresh snapshot.
-    ponytail: the poller reads the first 100 open issues; a lane past that would look closed."""
+    """Facts for one lane (schema in dispatch_run), or None when its repo has no fresh snapshot, or when the
+    snapshot's open-issue list was cut short and lacks the lane's issue (it may be open past the cut)."""
     if not snap or snap.get("stale") or snap.get("fetched_at") is None:
         return None
     data = snap.get("data") or {}
     issue = next((i for i in data.get("issues") or [] if i["n"] == x["n"]), None)
+    if issue is None and data.get("issues_truncated"):
+        k = dr.key(x["repo"], x["n"])
+        if k not in _TRUNCATED_WARNED:
+            _TRUNCATED_WARNED.add(k)
+            warn(f"dispatch: {k} is not in the poller's truncated open-issue list; the lane waits")
+        return None
     f = {
         "issue_open": issue is not None,
         "refined": bool(issue and "refined" in issue.get("labels", [])),
