@@ -120,18 +120,23 @@ export function useTranscript(id: string, live: boolean) {
   const [error, setError] = useState<ApiError | null>(null);
   const ref = useRef(state);
   ref.current = state;
+  const idRef = useRef(id);
+  idRef.current = id;
   useEffect(() => {
     setState({ events: [], offset: 0 });
+    setError(null);
     ref.current = { events: [], offset: 0 };
   }, [id]);
   const tick = useCallback(async () => {
     try {
       const r = await api.stream(id, ref.current.offset);
+      if (idRef.current !== id) return false; // the session switched while this was in flight
       setError(null);
       const next = mergeStream(ref.current, r);
       if (next !== ref.current) setState(next);
       return r.events.length > 0;
     } catch (e) {
+      if (idRef.current !== id) return false;
       setError(e instanceof ApiError ? e : new ApiError(0, String(e)));
       return false;
     }
