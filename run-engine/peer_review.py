@@ -19,7 +19,7 @@ import os
 import re
 from datetime import datetime, timezone
 
-from shared import data_dir, load_config, write_json
+from shared import data_dir, json_lock, load_config, write_json
 
 
 def _policy() -> dict:
@@ -67,9 +67,10 @@ def load_panel(panel: str) -> dict:
 
 
 def update_panel(panel: str, **fields) -> dict:
-    # ponytail: no lock; the UI's one tick thread and the request handlers touch different fields
-    rec = {**load_panel(panel), **fields}
-    write_json(os.path.join(panel_dir(panel), "panel.json"), rec)
+    path = os.path.join(panel_dir(panel), "panel.json")
+    with json_lock(path):
+        rec = {**load_panel(panel), **fields}
+        write_json(path, rec)
     return rec
 
 

@@ -7,6 +7,7 @@ import os
 import stat
 import sys
 import tempfile
+import threading
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -148,4 +149,24 @@ with open(p, "w") as f:
 os.chmod(p, os.stat(p).st_mode | stat.S_IXUSR)
 assert ui_settings.load()["jev_installed"] is True
 os.environ["PATH"] = real_path
+sp = ui_settings._path()
+with open(sp, "w") as f:
+    f.write("{broken")
+ui_settings.save({})
+assert [n for n in os.listdir(d) if n.startswith("ui_settings.json.corrupt-")]
+ok_ = True
+with open(sp, "w") as f:
+    json.dump({"repos": {"bad slug": {}, "o/r": {"auto_grind": True}}}, f)
+ui_settings.save({})
+assert ui_settings.repo_settings("o/r")["auto_grind"] is True
+try:
+    ui_settings.save({"repos": {"bad slug": {}}})
+    raise SystemExit("invalid sent slug must raise")
+except ValueError:
+    pass
+ts = [threading.Thread(target=ui_settings.set_issue_grind, args=("o/r", i, True)) for i in range(1, 21)]
+[t.start() for t in ts]
+[t.join() for t in ts]
+assert len(ui_settings.repo_settings("o/r")["issue_grind"]) == 20
+print("ui_settings: corrupt aside, bad stored slug dropped, concurrent set_issue_grind kept")
 print("ui_settings: 44 checks passed")

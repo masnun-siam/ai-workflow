@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import json
 import os
 import subprocess
 import sys
+import time
 
 USAGE = 2
 
@@ -86,9 +89,33 @@ def read_json(path: str, missing_code: int = 3):
 
 def write_json(path: str, data) -> None:
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=2, ensure_ascii=False)
-        fh.write("\n")
+    atomic_write_text(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+
+
+@contextlib.contextmanager
+def json_lock(path: str):
+    """Exclusive flock on `<path>.lock` around a read-modify-write: serialises threads and processes.
+    Not re-entrant: never nest it on the same path."""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path + ".lock", "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+
+def backup_if_corrupt(path: str) -> None:
+    """Move a present-but-unparsable (or non-object) JSON file to `<path>.corrupt-<ts>` so the next write
+    does not overwrite it. No-op for a missing or good file."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            ok = isinstance(json.load(fh), dict)
+    except FileNotFoundError:
+        return
+    except (OSError, ValueError):
+        ok = False
+    if not ok:
+        dest = f"{path}.corrupt-{int(time.time())}"
+        os.replace(path, dest)
+        warn(f"{path} is corrupt; moved to {dest}")
 
 
 def atomic_write_text(path: str, text: str) -> None:

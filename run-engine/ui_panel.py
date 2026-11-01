@@ -21,7 +21,7 @@ import ui_notify
 import ui_planning
 import ui_runner
 import ui_sessions
-from shared import warn
+from shared import backup_if_corrupt, warn
 
 LENS_AGENT, LENS_MODEL = "ai-workflow:peer-reviewer", "opus"
 TICK_SECONDS = 5
@@ -218,7 +218,9 @@ def tick() -> None:
     with _lock:
         for name in names:
             try:
-                if os.path.isfile(os.path.join(base, name, "panel.json")):
+                pj = os.path.join(base, name, "panel.json")
+                backup_if_corrupt(pj)  # moved aside once, so it warns once and the other panels keep ticking
+                if os.path.isfile(pj):
                     _tick_panel(name)
             except Exception as e:  # noqa: BLE001
                 warn(f"panel {name}: tick failed: {e}")

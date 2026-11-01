@@ -6,6 +6,7 @@ import os
 import shutil
 import sys
 import tempfile
+import threading
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -86,6 +87,23 @@ for bad in ("../x", "p-1"):
     except ValueError:
         pass
 ok("panel: a failed lens shows failed; dropping it lets the round finish on the rest; ids are validated")
+
+p2 = pr.new_panel("o/r", art, ["critical"], None)
+ts = [threading.Thread(target=pr.update_panel, args=(p2,), kwargs={f"k{i}": i}) for i in range(20)]
+[t.start() for t in ts]
+[t.join() for t in ts]
+rec = pr.load_panel(p2)
+assert all(rec[f"k{i}"] == i for i in range(20)), rec
+ok("update_panel: 20 concurrent updates of distinct fields all land")
+
+pj = os.path.join(pr.panel_dir(p2), "panel.json")
+try:
+    pr.write_json(pj, {"bad": object()})
+    raise SystemExit("write_json should have raised")
+except TypeError:
+    pass
+assert pr.load_panel(p2)["k0"] == 0 and not [n for n in os.listdir(os.path.dirname(pj)) if n.endswith(".tmp")]
+ok("write_json: a failed dump keeps the old file and leaves no .tmp")
 
 shutil.rmtree(pdata, ignore_errors=True)
 print("test_peer_review: ok")

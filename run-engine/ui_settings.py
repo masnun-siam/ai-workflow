@@ -93,6 +93,7 @@ def _migrate(data: dict) -> dict:
     repos = data["repos"] = dict(data.get("repos") or {})
     for slug in dispatch.read_checkouts():
         repos.setdefault(slug, {"auto_grind": legacy})
+    # ponytail: unlocked; the legacy migration is idempotent, so a race rewrites the same result
     try:
         shared.atomic_write_text(_path(), json.dumps(data, indent=2))
     except OSError:
@@ -136,9 +137,12 @@ def set_issue_grind(slug: str, issue: int, on: bool) -> dict:
         raise ValueError("repo must be owner/repo")
     if type(issue) is not int or issue < 1 or type(on) is not bool:
         raise ValueError("issue must be a number and on must be true or false")
-    all_ = _issue_grind()
-    all_.setdefault(slug.lower(), {})[issue] = on
-    shared.atomic_write_text(_issue_grind_path(), json.dumps(all_, indent=2))
+    path = _issue_grind_path()
+    with shared.json_lock(path):
+        shared.backup_if_corrupt(path)
+        all_ = _issue_grind()
+        all_.setdefault(slug.lower(), {})[issue] = on
+        shared.atomic_write_text(path, json.dumps(all_, indent=2))
     return all_[slug.lower()]
 
 
@@ -244,7 +248,13 @@ def validate(body) -> dict:
     sent = body.get("repos", {})
     if not isinstance(sent, dict):
         raise ValueError("repos must be an object")
-    repos = {**(stored.get("repos") or {}), **sent}  # an entry replaces that repo's; the others stay
+    kept = {}
+    for slug, r in (stored.get("repos") or {}).items():
+        if SLUG_RE.match(str(slug)):
+            kept[slug] = r
+        else:
+            shared.warn(f"ui_settings: dropped stored repo with invalid slug {slug!r}")
+    repos = {**kept, **sent}  # an entry replaces that repo's; the others stay
     clean_repos = {}
     for slug, r in repos.items():
         if not SLUG_RE.match(str(slug)) or not isinstance(r, dict):
@@ -270,7 +280,9 @@ def validate(body) -> dict:
 
 
 def save(body) -> dict:
-    shared.atomic_write_text(_path(), json.dumps(validate(body), indent=2))
+    with shared.json_lock(_path()):
+        shared.backup_if_corrupt(_path())
+        shared.atomic_write_text(_path(), json.dumps(validate(body), indent=2))
     return load()
 
 

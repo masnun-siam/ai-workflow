@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import dispatch
 import ui_notify
-from shared import data_dir, gh_json, load_config, read_json, GLOBAL_CONFIG
+from shared import data_dir, gh_json, load_config, read_json, write_json, GLOBAL_CONFIG
 
 _SECRETS = ("token", "password")
 MAX_PROMPT = 8000
@@ -165,8 +165,7 @@ def save_review(body: dict) -> dict:
     changed = {k: {"prompt": v} for k, v in lenses.items() if v != known[k]["prompt"]}  # only what differs
     if changed:
         over["lenses"] = changed
-    with open(_override_path(), "w", encoding="utf-8") as f:
-        json.dump({"peer_review": over}, f, indent=2)
+    write_json(_override_path(), {"peer_review": over})
     return review_public()
 
 

@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -127,5 +128,23 @@ with tempfile.TemporaryDirectory() as d:
     assert out["pr_grind_dir"] == os.path.join(dd, "pr-grind")
     assert out["channels"] == os.path.join(dd, "channels.json")
 ok("aiw paths prints a checkouts key and its other existing keys are unchanged")
+
+with tempfile.TemporaryDirectory() as d:
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        ts = [threading.Thread(target=dispatch.register_checkout, args=(f"o/r{i}", f"/p{i}")) for i in range(20)]
+        [t.start() for t in ts]
+        [t.join() for t in ts]
+        assert len(dispatch.read_checkouts()) == 20
+ok("register_checkout: 20 concurrent registrations all land")
+
+with tempfile.TemporaryDirectory() as d:
+    with env_var("CLAUDE_PLUGIN_DATA", os.path.join(d, "data")):
+        os.makedirs(shared.data_dir())
+        with open(dispatch.checkouts_path(), "w") as fh:
+            fh.write("{broken")
+        dispatch.register_checkout("o/r", "/p")
+        assert dispatch.read_checkouts() == {"o/r": "/p"}
+        assert [n for n in os.listdir(shared.data_dir()) if n.startswith("checkouts.json.corrupt-")]
+ok("register_checkout sets a corrupt registry aside instead of wiping it silently")
 
 print(f"\n{passed} checks passed")
