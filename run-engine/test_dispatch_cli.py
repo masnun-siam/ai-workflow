@@ -234,6 +234,9 @@ except ValueError as e:
 assert not [c for c in calls if "git/refs" in c[1]] and len(dr.list_all()) == before
 refs_["repos/o/b/git/ref/heads/staging"] = "sha-b"
 refs_["repos/o/a/git/ref/heads/staging"] = "sha-staging"
+for old in dr.list_all():
+    old["state"] = "done"
+    dr.save(old)
 calls.clear()
 dc.start("o/a#1", "headless", st, gh=gh_base)
 made = [c for c in calls if c[1].endswith("/git/refs")]
@@ -241,6 +244,9 @@ assert [c[-1] for c in made] == ["sha=sha-staging", "sha=sha-b"], made
 assert not [c for c in calls if c[0] == "repo" or "/commits/" in c[1]]
 refs_["repos/o/a/git/ref/heads/feat/x"] = "x"
 refs_["repos/o/b/git/ref/heads/feat/x"] = "x"
+for old in dr.list_all():
+    old["state"] = "done"
+    dr.save(old)
 calls.clear()
 dc.start("o/a#1", "headless", st, gh=gh_base)
 assert not [c for c in calls if c[1].endswith("/git/refs")]
@@ -416,4 +422,20 @@ with contextlib.redirect_stdout(io.StringIO()):
 assert seen == {"bodies": True}
 dc.resolve = real_resolve_
 print("  ok  readiness")
+
+# --- an owned epic exits non-zero with the message, no traceback (#714)
+import route  # noqa: E402
+
+_start = dc.start
+dc.start = lambda *a, **kw: (_ for _ in ()).throw(dr.Conflict("o/r#5 is already a lane of dispatch abc", id="abc"))
+err = io.StringIO()
+try:
+    with contextlib.redirect_stderr(err):
+        route.main(["dispatch", "start", "o/r#1"])
+    raise AssertionError("conflict did not exit")
+except SystemExit as e:
+    assert e.code not in (0, None), e.code
+assert "already a lane of dispatch abc" in err.getvalue() and "Traceback" not in err.getvalue(), err.getvalue()
+dc.start = _start
+print("  ok  conflict exit")
 print("dispatch_cli: all green")
