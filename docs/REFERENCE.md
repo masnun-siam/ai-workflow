@@ -307,7 +307,7 @@ when all its questions carry a "(Recommended)" option (planning interviews inclu
 read-only **answerer** (`agents/away-answerer.md`, Opus, medium effort, started without the permission bypass
 and with `--allowedTools` set to the agent's `tools:` list). A valid reply resumes the session and is logged
 `by: opus`; a hold, or a second failed answerer (failed to start, failed, rate limited, invalid reply, over 10 min), is logged
-`kind: held` and the round waits for you. Your own answer, or the window ending, stops the answerer with no
+`kind: held` and the round waits for you; so is a round whose resume fails after Away claimed it (restored as pending and held, reason `resume failed: …`). Your own answer, or the window ending, stops the answerer with no
 log row. Before a fully recommended round is auto-picked, a small worker (off the tick, two at a time, each round once) asks jev "is any recommended option irreversible or outward-facing?" and stores `risk: {p}` on the round; the tick waits for it. At `p >= 0.5`, or when jev is on but the check fails (stored as `{p: null, unknown: true}`, also when the worker raises), the round goes to the Opus answerer instead (not told it was flagged) and its log entry carries `risk: <p>`; under 0.5, or with Use jev off or jev missing (`{p: null}`, stored at once), it is auto-picked as before. Non-recommended rounds get no check. It also sends "Skip CI for now" to a grind paused on CI (at most
 once per PR per window), and retries failed sessions, and held or stopped dispatch issues, on a 2m/10m/30m/1h backoff (a
 dispatch issue asking a question gets the recommended answer like any session). When the window ends

@@ -385,7 +385,7 @@ def _risk_key(pending: dict) -> dict:
 
 def _answer(rec: dict, now: float) -> dict | None:
     pq = _round(rec)
-    if pq is None or not _recommended(pq):
+    if pq is None or pq.get("held") or not _recommended(pq):
         return None  # the rest go to an answerer (_opus)
     if "risk" not in pq:
         if jev.status() != "ok":
@@ -399,8 +399,19 @@ def _answer(rec: dict, now: float) -> dict | None:
     text = ui_sessions.answer_text(pq, {str(i): {"labels": [q["recommended"]]} for i, q in enumerate(qs)})
     if ui_sessions.claim_answer(rec["id"], pq["id"]) is None:
         return None
-    ui_runner.resume(rec["id"], text)
+    if failed := _resume_failed(rec, now, pq, text, None, None):
+        return failed
     return _round_entry(rec, now, pq, [[q["recommended"]] for q in qs], "recommended")
+
+
+def _resume_failed(rec, now, pq, text, aid, cost) -> dict | None:
+    """Resume a claimed round; on failure put the round back held and return its held entry."""
+    try:
+        ui_runner.resume(rec["id"], text)
+    except (ui_runner.RunnerError, ValueError, OSError) as e:
+        ui_sessions.restore_round(rec["id"], pq)
+        return _held_entry(rec, now, pq, f"resume failed: {e}", aid, cost)
+    return None
 
 
 def _held_entry(rec, now, pending, reason, answerer, cost) -> dict:
@@ -500,7 +511,8 @@ def _opus(rec: dict, now: float) -> dict | None:
     text = ui_sessions.answer_text(pq, {i: {"labels": v["labels"]} for i, v in answers.items()})
     if ui_sessions.claim_answer(sid, pq["id"]) is None:
         return None  # the owner answered first
-    ui_runner.resume(sid, text)
+    if failed := _resume_failed(rec, now, pq, text, aid, a.get("cost")):
+        return failed
     n = len(pq["questions"])
     picks = [answers[str(i)]["labels"] for i in range(n)]
     why = {i: v["why"] for i, v in answers.items()}

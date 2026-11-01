@@ -711,4 +711,34 @@ ui_afk.dispatch_run.save(dp)
 assert ui_afk._retry_lanes(time.time()) == []
 assert "afk_retry_at" not in ui_afk.dispatch_run.load(dp["id"])["lanes"]["o/r#5"]
 
+# #720 a failing resume restores the claimed round as held, logs one held row and no answer
+real_resume = ui_runner.resume
+
+
+def boom(sid, text):
+    raise ui_runner.RunnerError("cannot resume: no session id")
+
+
+ui_runner.resume = boom
+for rec_first in (True, False):
+    r = waiting(rec=rec_first)
+    if rec_first:
+        ui_sessions.update_pending(r, "q-1", risk={"p": None})  # skip the risk check
+    n0, a0 = len(started), len([e for e in ui_afk.load()["log"] if e["kind"] == "answer"])
+    ui_afk.tick(W)
+    if not rec_first:
+        finish(started[n0]["id"], OK)
+        ui_afk.tick(W)
+    assert ui_sessions.load(r)["status"] == "waiting", ui_sessions.load(r)
+    p = pq(r)
+    assert p["status"] == "pending" and p.get("held") is True and not p.get("answerer"), (rec_first, p)
+    rows = log_of(r)
+    assert [e["kind"] for e in rows] == ["held"] and "resume failed" in rows[0]["reason"], rows
+    assert len([e for e in ui_afk.load()["log"] if e["kind"] == "answer"]) == a0
+    ui_afk.tick(W)
+    ui_afk.tick(W)
+    assert len(log_of(r)) == 1 and len(started) == n0 + (not rec_first)  # not retried
+    ui_sessions.update(r, status="stopped", pending_question=None)
+ui_runner.resume = real_resume
+
 print("test_ui_afk: ok")

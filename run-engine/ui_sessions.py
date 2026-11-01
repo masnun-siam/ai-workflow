@@ -259,6 +259,29 @@ def claim_answer(sid: str, round_id: str):
     return record
 
 
+def restore_round(sid: str, pq: dict) -> bool:
+    """Put a claimed round back as a held, pending one, only while the record is still the claimed state."""
+    path = os.path.join(session_dir(sid), "meta.json")
+    try:
+        lock = open(os.path.join(session_dir(sid), ".lock"), "a")
+    except FileNotFoundError:  # the session was deleted
+        return False
+    with lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        record = _read_meta(path)
+        if (
+            record is None
+            or record.get("pending_question") is not None
+            or record.get("status") not in ("starting", "failed")
+        ):
+            return False  # a human answer got in
+        record.update(
+            pending_question={**pq, "status": "pending", "held": True, "answerer": None}, status="waiting", error=None
+        )
+        _atomic_write_json(path, record)
+    return True
+
+
 def update_pending(sid: str, round_id: str, **fields) -> bool:
     """Set fields on the pending round only while it is still that waiting round (a human claim wins)."""
     path = os.path.join(session_dir(sid), "meta.json")
