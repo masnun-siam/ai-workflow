@@ -21,6 +21,7 @@ import ui_notify
 import ui_poller
 import ui_settings
 import ui_sessions
+import shared
 from shared import warn
 
 TICK_SECONDS = 30
@@ -179,14 +180,7 @@ def tick_all(snapshot) -> None:
 
 
 def start_timer(snapshot, interval=TICK_SECONDS) -> threading.Thread:
-    def loop():
-        while True:
-            tick_all(snapshot)
-            time.sleep(interval)
-
-    t = threading.Thread(target=loop, daemon=True)
-    t.start()
-    return t
+    return shared.supervised_loop(lambda: tick_all(snapshot), interval, "dispatch timer")
 
 
 # --------------------------------------------------------------------------- notices

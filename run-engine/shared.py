@@ -6,6 +6,8 @@ import json
 import os
 import subprocess
 import sys
+import threading
+import time
 
 USAGE = 2
 
@@ -30,6 +32,22 @@ def die(code: int, message: str):
 
 def warn(message: str) -> None:
     sys.stderr.write("warning: " + message.rstrip() + "\n")
+
+
+def supervised_loop(tick, interval: float, label: str) -> threading.Thread:
+    """Daemon thread calling `tick()` every `interval` s; an exception is warned about, never fatal."""
+
+    def loop():
+        while True:
+            try:
+                tick()
+            except Exception as e:  # noqa: BLE001 - keep the timer alive
+                warn(f"{label} tick failed: {type(e).__name__}: {e}")
+            time.sleep(interval)
+
+    t = threading.Thread(target=loop, daemon=True)
+    t.start()
+    return t
 
 
 def extract_json_object(raw: str):
