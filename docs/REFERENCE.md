@@ -59,6 +59,9 @@ after an upgrade it deletes the old run data from the plugin data dir once and l
 - Every text it hands to Claude (a start, a queued or rate-limited start when it begins, an answer, a typed prompt, a resume) is rewritten by `repo_skills.resolve` against the session's working directory: a plugin skill command becomes `/<name>` when the repo has `.claude/skills/<name>/SKILL.md`, else `/ai-workflow:<name>`. A session's stored `command` is what its latest own start ran; answers and resumes leave it alone. A queued or limited session shows the raw text until it starts.
 - It binds to loopback only. `--port` sets the port (default 8420).
 - `--allow-host HOST` is repeatable and matches exactly: use `name:port`, or the bare name for the default 443 serve.
+  Every non-loopback host, including these, needs the node owner's `Tailscale-User-Login` header, so it only works
+  behind `tailscale serve` on the owner's node; a reverse proxy that does not add it is refused. `aiw ui` refuses to
+  start with `--allow-host` when the owner login cannot be read from `tailscale status`.
 - To reach it over a tailnet: `tailscale serve --bg 8420`, then
   `aiw ui --allow-host <machine>.<tailnet>.ts.net`. It installs as a PWA.
 - `/` serves the app (`index.html`, never cached); `/assets/*` are hashed and cached for a year;
@@ -389,8 +392,9 @@ banner off (`run_tests.sh` sets it; the Settings "Send test" then reports the of
 
 For clickable macOS banners run `brew install terminal-notifier` on the host and restart `aiw ui`; without it banners still show (through AppleScript) but cannot open a link.
 
-**Security:** there is no app-level auth. Access relies on tailnet ACLs, so anyone who can
-reach the URL can start sessions. Sessions run `claude --dangerously-skip-permissions` by
+**Security:** there is no app-level auth. Every request that does not arrive on loopback must carry the
+node owner's `Tailscale-User-Login` (added by `tailscale serve` for tailnet traffic only), so other tailnet
+users and funnelled traffic are refused; on loopback, anyone who can reach the URL can start sessions. Sessions run `claude --dangerously-skip-permissions` by
 default, with no opt-out flag. Never use `tailscale funnel` for the UI (public exposure plus skip-permissions
 is remote code execution), and on a shared machine any local user can reach the loopback port. The one
 exception is the share listener (see Share a PRD): a separate, read-only listener that serves only

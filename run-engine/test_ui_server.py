@@ -49,13 +49,15 @@ def start(extras=()):
     return srv, srv.server_address[1]
 
 
-def req(port, path="/api/health", method="GET", host="", origin=None, skip_host=False):
+def req(port, path="/api/health", method="GET", host="", origin=None, skip_host=False, headers=None):
     c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
     c.putrequest(method, path, skip_host=True, skip_accept_encoding=True)
     if not skip_host:
         c.putheader("Host", host)
     if origin is not None:
         c.putheader("Origin", origin)
+    for k, v in (headers or {}).items():
+        c.putheader(k, v)
     c.endheaders()
     r = c.getresponse()
     body = r.read()
@@ -73,6 +75,7 @@ old_data = os.environ.get("CLAUDE_PLUGIN_DATA")
 os.environ["CLAUDE_PLUGIN_DATA"] = data_dir
 srv, port = start()
 tail, tport = start(["box.tailnet.ts.net"])
+tail.tailnet_login = "owner@x"
 try:
     # health
     s, r, body, h = req(port, host=f"127.0.0.1:{port}")
@@ -109,14 +112,18 @@ try:
     ok("removed endpoints 404; GET /api/sessions/cleanup lists")
 
     # extra allowed host
-    assert req(tport, host="box.tailnet.ts.net")[0] == 200
-    ok("allow-host accepted")
+    own = {"Tailscale-User-Login": "OWNER@x"}
+    assert req(tport, host="box.tailnet.ts.net")[0] == 403
+    assert req(tport, host="box.tailnet.ts.net", headers={"Tailscale-User-Login": "bob@x"})[0] == 403
+    assert req(tport, host="box.tailnet.ts.net", headers=own)[0] == 200
+    assert req(tport, host=f"127.0.0.1:{tport}")[0] == 200
+    ok("allow-host needs the owner's login; loopback does not")
     assert req(port, host="box.tailnet.ts.net")[0] == 403
     ok("allow-host rejected on server without it")
 
     # origin
     assert req(port, host=f"127.0.0.1:{port}", origin=f"http://127.0.0.1:{port}")[0] == 200
-    assert req(tport, host="box.tailnet.ts.net", origin="https://box.tailnet.ts.net")[0] == 200
+    assert req(tport, host="box.tailnet.ts.net", origin="https://box.tailnet.ts.net", headers=own)[0] == 200
     assert req(port, host=f"127.0.0.1:{port}")[0] == 200
     ok("origin == host / no origin allowed")
 

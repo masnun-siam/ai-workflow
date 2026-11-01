@@ -235,7 +235,7 @@ try:
         assert call("GET", "/api/shares", **kw)[0] == 403, kw
         assert call("DELETE", "/api/shares/0123456789abcdef", **kw)[0] == 403, kw
     assert call("POST", "/api/shares", START, host="box.ts.net:8443")[0] == 403
-    srv.tailnet_hosts, srv.tailnet_login = frozenset(["tail.ts.net"]), "me@x"
+    srv.tailnet_login = "me@x"
     assert call("GET", "/api/shares", host="tail.ts.net")[0] == 403
     assert call("GET", "/api/shares", host="tail.ts.net", headers={"Tailscale-User-Login": "bob@x"})[0] == 403
     assert call("GET", "/api/shares", host="tail.ts.net", headers={"Tailscale-User-Login": "me@x"})[0] == 200

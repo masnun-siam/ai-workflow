@@ -102,7 +102,7 @@ def _guard(handler) -> bool:
     if host not in handler.server.allowed_hosts:
         handler._send(403, "text/plain; charset=utf-8", b"forbidden")
         return False
-    if host in handler.server.tailnet_hosts:
+    if host not in handler.server.loopback_hosts:
         who = (handler.headers.get("Tailscale-User-Login") or "").strip().lower()
         if not who or who != (handler.server.tailnet_login or "").lower():
             handler._send(403, "text/plain; charset=utf-8", b"forbidden: tailnet access is limited to the node owner")
@@ -1207,15 +1207,15 @@ class _Server(http.server.ThreadingHTTPServer):
     allow_reuse_address = True
     # A cold page load fires a dozen module/font requests at once; the default backlog of 5 resets some of them.
     request_queue_size = 128
-    # Set by cmd_serve when `tailscale serve` fronts this server: Host values that arrive over the
-    # tailnet, and the one login allowed to use them (the UI can start agents).
-    tailnet_hosts: frozenset = frozenset()
+    # Set by cmd_serve when `tailscale serve` fronts this server: the one login allowed on any
+    # non-loopback Host (the UI can start agents).
     tailnet_login = None
 
     def __init__(self, address, handler, allowed_hosts):
         super().__init__(address, handler)
         port = self.server_address[1]
-        self.allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"} | {h.strip().lower() for h in allowed_hosts}
+        self.loopback_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
+        self.allowed_hosts = self.loopback_hosts | {h.strip().lower() for h in allowed_hosts}
 
 
 def _port_holder(port: int):
@@ -1261,7 +1261,12 @@ def cmd_serve(args) -> None:
         ts = ui_tailscale.up(server.server_address[1], args.tailscale_port)
         if ts:
             server.allowed_hosts |= ts["hosts"]
-            server.tailnet_hosts, server.tailnet_login = frozenset(ts["hosts"]), ts["login"]
+            server.tailnet_login = ts["login"]
+    if extras and not server.tailnet_login:
+        me = ui_tailscale.node()
+        if not me:
+            die(1, "--allow-host needs the Tailscale owner login (is tailscale running?)")
+        server.tailnet_login = me["login"]
     ui_shares.listeners.append(_on_share_activity)  # reviewer comments and approvals -> prd-comment
     ui_share_runtime.configure(args.tailscale_port, tailscale_enabled=not args.no_tailscale)
     ui_runner.reconcile()  # re-attach sessions that outlived the last UI, close the ones that died
