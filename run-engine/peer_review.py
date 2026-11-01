@@ -51,7 +51,7 @@ def check_lenses(kind: str, picked: list) -> list[str]:
 # --- lens-session panels (PRD FR-13): one folder per panel, free-text verdicts, no JSON validation ---
 
 _PANEL_ID = re.compile(r"p-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{6}")
-_VERDICT = re.compile(r"^[\s*_`>#-]*verdict:\s*[*_`]*(approve|changes)\b", re.I | re.M)
+_VERDICT = re.compile(r"^[\s*_`>#-]*verdict:\s*[*_`]*(approve|changes)(?![\w-])", re.I | re.M)
 
 
 def panel_dir(panel: str) -> str:
