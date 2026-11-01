@@ -427,6 +427,21 @@ try:
         st, body = call("POST", "/api/settings/notify/test", bad)
         assert st == 400 and "error" in body, bad
     ok("settings: notify test route rejects browser, unknown, missing")
+    calls = []
+    real_check = ui_settings.check_login
+    ui_settings.check_login = lambda c: calls.append(c) or {"ok": True, "message": "stub"}
+    try:
+        st, body = call("POST", "/api/settings/test", {"cmd": "claude"})
+        assert st == 200 and body["ok"] and calls == ["claude"], (st, body)
+        st, body = call("POST", "/api/settings/test", {"cmd": "touch /tmp/x"})
+        assert st == 400 and "saved in Settings" in body["error"] and calls == ["claude"], (st, body)
+        for bad in ({}, {"cmd": ""}, {"cmd": 5}):
+            st, body = call("POST", "/api/settings/test", bad)
+            assert st == 200 and body == {"ok": False, "message": "cmd required"}, bad
+        assert calls == ["claude"]
+    finally:
+        ui_settings.check_login = real_check
+    ok("settings: test route runs only a saved cmd")
 
     # before the first poll: stale, empty. Planning shows the PRD file.
     st, body = call("GET", "/api/planning?repo=o/r")
