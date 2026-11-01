@@ -765,12 +765,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             body = self._read_body()
             if body is not None:
                 cmd = body.get("cmd")
-                self._json(
-                    200,
-                    ui_settings.check_login(cmd)
-                    if isinstance(cmd, str) and cmd.strip()
-                    else {"ok": False, "message": "cmd required"},
-                )
+                if not (isinstance(cmd, str) and cmd.strip()):
+                    self._json(200, {"ok": False, "message": "cmd required"})
+                elif cmd not in {c["cmd"] for c in ui_settings.load()["commands"]}:
+                    self._json(400, {"error": "cmd must be a command saved in Settings: save the account first"})
+                else:
+                    self._json(200, ui_settings.check_login(cmd))
         elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] == "answer":
             self._answer(parts[3])
         elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] == "prompt":
