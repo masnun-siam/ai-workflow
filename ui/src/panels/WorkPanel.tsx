@@ -99,10 +99,11 @@ export function WorkPanel({ kind, repo, n }: { kind: 'issue' | 'pr'; repo: strin
   const act = card && !['merge', 'openPr'].includes(actionKind(card)) ? <IssueAction card={card} repo={repo} /> : null;
 
   const doMerge = () => {
-    if (!prN) return;
+    const sha = q.data?.head_sha;
+    if (!prN || !sha) return;
     setMergeErr('');
     merge.mutate(
-      { repo, n: prN },
+      { repo, n: prN, sha },
       { onSuccess: () => { setAsking(false); toast(`Merged PR #${prN}`); if (issueN) void followups.offer(issueN, `PR #${prN} is merged`); }, onError: (e) => setMergeErr(e.message) },
     );
   };

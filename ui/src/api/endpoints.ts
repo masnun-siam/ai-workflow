@@ -64,7 +64,7 @@ export const api = {
   skipCi: (repo: string, pr: number) => post('/api/grind/skip-ci', { repo, pr }),
   stopGrind: (repo: string, pr: number) => post('/api/grind/stop', { repo, pr }),
   grindIssue: (repo: string, issue: number, on: boolean) => post('/api/grind/issue', { repo, issue, on }),
-  merge: (repo: string, n: number) => post(`/api/pulls/${splitRepo(repo).join('/')}/${n}/merge`),
+  merge: (repo: string, n: number, sha: string) => post(`/api/pulls/${splitRepo(repo).join('/')}/${n}/merge`, { sha }),
   setPrState: (repo: string, n: number, state: 'open' | 'closed') => post(`/api/pulls/${splitRepo(repo).join('/')}/${n}/state`, { state }),
   comment: (kind: 'issues' | 'pulls', repo: string, n: number, text: string) =>
     post(`/api/${kind}/${splitRepo(repo).join('/')}/${n}/comment`, { text }),

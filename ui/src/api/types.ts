@@ -431,6 +431,7 @@ export interface PrDetail {
   author: GhUser | null;
   created_at: string;
   head: string;
+  head_sha?: string;
   base: string;
   conflict?: boolean; // conflicts with its base
   labels: { name: string; color: string }[];

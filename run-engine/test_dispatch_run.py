@@ -54,15 +54,18 @@ def pr(n=100, **kv):
         "ci": "success",
         "conflict": False,
         "approved": False,
+        "sha": "a" * 40,
         **kv,
     }
 
 
 merges = []
+merge_shas = []
 
 
-def merge(repo, n):
+def merge(repo, n, sha):
     merges.append(n)
+    merge_shas.append(sha)
     return True, ""
 
 
@@ -142,7 +145,7 @@ dl = dr.create(
     issues=["o/r#21", "o/r#22"],
 )
 rl, lm = FakeRunner(), []
-merge_l = lambda repo, n: (lm.append(n), (True, ""))[1]  # noqa: E731
+merge_l = lambda repo, n, sha: (lm.append(n), (True, ""))[1]  # noqa: E731
 for t, n in ((1, 21), (2, 22)):
     dr.tick(dl, fq(21, 22), rl, merge_l, now=t)
     assert (
@@ -223,6 +226,12 @@ rel, _ = dr.step(
     7001,
 )
 assert rel["held"] is None and rel["stage"] == "grinding"
+# the merge action carries the head sha; an unknown head is never merged unpinned
+mg = {"n": 9, "stage": "merge_gate"}
+pm, am = dr.step(mg, {"agent": "idle", "solo": True, "pr": pr(9)}, {"auto_merge": True}, 7100)
+assert am == [("merge", 9, "a" * 40)], am
+pm, am = dr.step(mg, {"agent": "idle", "solo": True, "pr": pr(9, sha=None)}, {"auto_merge": True}, 7100)
+assert pm["gate"] == "head commit unknown" and not am, (pm, am)
 cf = {"n": 9, "stage": "conflict_fix"}
 cfacts = {"agent": "idle", "pr": pr(9, ci="pending", conflict=False)}
 assert dr.step(cf, cfacts, {"ci": "defer"}, 7002)[0]["stage"] == "merge_gate"
@@ -248,6 +257,7 @@ f3 = {"issue_open": True, "slack": False, "agent": "idle", "pr": pr(103, approve
 dr.tick(d, {K(3): f3}, run, merge, now=1006)
 assert d["lanes"][K(3)]["stage"] == "merge_gate"
 dr.tick(d, {K(3): f3}, run, merge, now=1007)
+assert merge_shas == ["a" * 40]  # pinned to the facts' head
 assert merges == [103]  # no grind for a repo without a channel: straight to the gate and merge
 dr.tick(d, {K(3): f3}, run, merge, now=1008)
 assert merges == [103]  # not merged twice before the board catches up
@@ -290,7 +300,7 @@ dr.tick(
     dc,
     {K(91): {"issue_open": True, "agent": "idle", "solo": True, "pr": pr(191)}},
     rc,
-    lambda r, n: (False, "GraphQL: Pull Request has merge conflicts (mergePullRequest)"),
+    lambda r, n, sha: (False, "GraphQL: Pull Request has merge conflicts (mergePullRequest)"),
     now=1,
 )
 assert dc["lanes"][K(91)]["stage"] == "conflict_fix" and not dc["lanes"][K(91)].get("held")
@@ -332,16 +342,16 @@ p4, a4 = dr.step({**lane, "stage": "awaiting_merge"}, gate_facts("pending"), dse
 assert p4["stage"] == "merge_gate" and not a4
 for ci_state in ("success", "none"):
     pm, am = dr.step(lane, gate_facts(ci_state), dset, 8004)
-    assert am == [("merge", 9)] and pm["gate"] is None, ci_state
+    assert am == [("merge", 9, "a")] and pm["gate"] is None, ci_state
     pm, am = dr.step(lane, gate_facts(ci_state), {**dset, "auto_merge": False}, 8004)
-    assert pm["stage"] == "awaiting_merge" and ("merge", 9) not in am, ci_state
+    assert pm["stage"] == "awaiting_merge" and ("merge", 9, "a") not in am, ci_state
 pw, aw = dr.step({**lane, "ci_fixed": "a"}, gate_facts("failure"), {**dset, "ci": "wait"}, 8005)
 assert pw["held"] == "CI is red"  # defer -> wait at the gate: held as today
 for ci_state in ("failure", "pending"):
     pi, ai = dr.step(lane, gate_facts(ci_state), {**dset, "ci": "ignore"}, 8006)
-    assert ai == [("merge", 9)] and not pi.get("held"), ci_state
+    assert ai == [("merge", 9, "a")] and not pi.get("held"), ci_state
     pi, ai = dr.step(lane, gate_facts(ci_state), {"ci": "ignore", "grind": "off"}, 8006)
-    assert pi["stage"] == "awaiting_merge" and ("merge", 9) not in ai, ci_state
+    assert pi["stage"] == "awaiting_merge" and ("merge", 9, "a") not in ai, ci_state
 # ignore merging with CI not green leaves a warning event; green leaves none
 for ci_state, warn in [("failure", "merged with red CI"), ("pending", "merged with CI pending"), ("success", None)]:
     di = dr.create("o/r#95", "headless", {"grind": "off", "auto_merge": True, "ci": "ignore"}, [child(96)])

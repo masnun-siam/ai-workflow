@@ -16,7 +16,7 @@ the caller from the board snapshot, the grind index and the runner:
      "solo": bool,                                   # the repo is the gh user's own: no approval needed
      "agent": working|idle|blocked|gone|None, "limited_until": float | None}
 
-Actions: ("send", text), ("merge", pr_n), ("close",), ("continue",), ("notify", kind, text).
+Actions: ("send", text), ("merge", pr_n, sha), ("close",), ("continue",), ("notify", kind, text).
 `tick(d, facts, runner, merge, now)` steps every lane, runs the actions, launches what is startable and
 saves. The record lives at <data_dir>/dispatches/<id>.json; GitHub stays the truth for issues and PRs.
 """
@@ -266,9 +266,11 @@ def step(lane: dict, facts: dict, settings: dict, now: float) -> tuple:
             return patch, acts
         patch["gate"] = None
         if lane.get("force_merge") or (settings.get("auto_merge") and not lane.get("hold_merge")):
-            if lane.get("merge_at") is None or now - lane["merge_at"] >= MERGE_RETRY_SECONDS:
+            if not pr.get("sha"):  # never merge unpinned
+                patch["gate"] = "head commit unknown"
+            elif lane.get("merge_at") is None or now - lane["merge_at"] >= MERGE_RETRY_SECONDS:
                 patch["merge_at"] = now
-                acts.append(("merge", pr.get("n")))
+                acts.append(("merge", pr.get("n"), pr.get("sha")))
         elif stage != "awaiting_merge":
             to("awaiting_merge", f"PR #{pr.get('n')} is ready to merge")
         return patch, acts
@@ -757,9 +759,9 @@ def run_end(d: dict, action: str, runner, gh) -> str:
 # --------------------------------------------------------------------------- tick
 
 
-def gh_merge(repo: str, pr: int):
-    """(ok, error). Merge commit, per the dispatch's merge rule."""
-    p = run(["gh", "pr", "merge", str(pr), "-R", repo, "--merge"], timeout=120)
+def gh_merge(repo: str, pr: int, sha: str):
+    """(ok, error). Merge commit, per the dispatch's merge rule; GitHub refuses it if the head moved off `sha`."""
+    p = run(["gh", "pr", "merge", str(pr), "-R", repo, "--merge", "--match-head-commit", sha], timeout=120)
     return p.returncode == 0, (p.stderr or p.stdout or "").strip()[:300]
 
 
@@ -833,7 +835,7 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None, gh
                     if x.get("handle"):
                         runner.close(x["handle"])
                 elif a[0] == "merge":
-                    ok, err = merge(x["repo"], a[1])
+                    ok, err = merge(x["repo"], a[1], a[2])
                     x["force_merge"] = False
                     if ok:
                         ev(k, "merged", f"merged PR #{a[1]}")

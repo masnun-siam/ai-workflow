@@ -70,9 +70,12 @@ def set_state(owner, repo, n, state, reason=None, runner=gh_json) -> dict:
     return {"ok": True, "state": state}
 
 
-def merge(owner, repo, n, runner=gh_json) -> dict:
+def merge(owner, repo, n, sha=None, runner=gh_json) -> dict:
+    """Merge commit pinned to the head `sha` the caller decided on; GitHub refuses it if the head moved."""
     slug, n = _ids(owner, repo, n)
-    _gh(["pr", "merge", n, "-R", slug, "--merge"], runner)
+    if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise ValueError("sha must be the PR head commit (40 hex characters)")
+    _gh(["pr", "merge", n, "-R", slug, "--merge", "--match-head-commit", sha], runner)
     return {"ok": True}
 
 
