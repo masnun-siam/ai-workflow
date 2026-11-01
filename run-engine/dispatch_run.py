@@ -2,7 +2,7 @@
 
 A lane goes queued -> implementing -> grinding -> merge_gate -> (awaiting_merge) -> followups -> closed,
 with conflict_fix as a detour from the gate and skipped as a dead end (needs refine, or the user's skip).
-Flags on a lane: `paused` (user, or `paused_by: "dispatch"` for the dispatch's Pause > Now), `held` (CI red, grind paused or ended: needs you), `needs_you` (the lane
+Flags on a lane: `paused` (user, or `paused_by: "dispatch"` for the dispatch's Pause > Now), `held` (CI red, grind paused or ended, a failed merge: needs you), `merge_error` / `merge_fails` (the last `gh pr merge` error and the count of failures in a row; `held` stays while the error is set), `needs_you` (the lane
 session waits on a human or stopped), `limited_until` (Claude usage limit), `hold_merge` / `force_merge`.
 
 `step(lane, facts, settings, now)` is pure: facts in, (lane patch, actions) out. Facts per lane, built by
@@ -48,6 +48,7 @@ DEFAULTS = {
 _BRANCH = r"[A-Za-z0-9._/-]{1,100}"
 GRIND_MODES = ("off", "simple", "full")
 CI_MODES = ("wait", "defer", "ignore")
+MERGE_FAILS_BEFORE_NEEDS_YOU = 3  # consecutive failed merges before the lane asks for the user
 MERGE_RETRY_SECONDS = 300  # the board lags a merge; don't call gh pr merge twice in this window
 IDLE_GRACE_SECONDS = 180  # a session that just ended may have a PR the board has not seen yet
 LIMIT_BUFFER_SECONDS = 60
@@ -166,7 +167,7 @@ def step(lane: dict, facts: dict, settings: dict, now: float) -> tuple:
     acts: list = []
 
     def to(s, why=None):
-        patch.update(stage=s, needs_you=None, held=None, idle_since=None)
+        patch.update(stage=s, needs_you=None, held=None, idle_since=None, merge_error=None, merge_fails=0)
         if why:
             acts.append(("notify", s, why))
 
@@ -244,22 +245,31 @@ def step(lane: dict, facts: dict, settings: dict, now: float) -> tuple:
         return patch, acts
 
     if stage in ("merge_gate", "awaiting_merge"):
+
+        def drop_merge_error():  # a failed attempt that no longer applies
+            if lane.get("merge_error"):
+                patch.update(merge_error=None, merge_fails=0, held=None)
+                if str(lane.get("needs_you") or "").startswith("merge failed"):
+                    patch["needs_you"] = None
+
         if pr.get("conflict"):
             to("conflict_fix")
             acts.append(("send", conflict_prompt(pr.get("n"), base)))
             return patch, acts
         if pr.get("ci") == "failure" and ci == "wait":
+            drop_merge_error()
             if lane.get("held") != "CI is red":
                 patch["held"] = "CI is red"
                 acts.append(("notify", "held", f"CI is red on PR #{pr.get('n')}"))
             return patch, acts
-        if lane.get("held"):
+        if lane.get("held") and not lane.get("merge_error"):
             patch["held"] = None
         if pr.get("ci") == "failure" and ci == "defer" and lane.get("ci_fixed") != pr.get("sha"):
             patch["ci_fixed"] = pr.get("sha")  # once per red head commit, like `nudged` for a grind round
             acts.append(("send", ci_fix_prompt(pr.get("n"))))
         why = None if lane.get("force_merge") else _gate(lane, facts, settings)
         if why:
+            drop_merge_error()
             if stage == "awaiting_merge":
                 to("merge_gate")
             patch["gate"] = why
@@ -661,7 +671,7 @@ def apply_lane_action(d: dict, k: str, action: str, text=None) -> None:
         x.update(stage="skipped", skip_reason="skipped by you", paused_by=None)
     elif action == "retry":  # clear held/needs; a fresh session for the lane's stage at the next tick
         red = x.get("held") == "CI is red"
-        x.update(held=None, needs_you=None, paused=False, paused_by=None)
+        x.update(held=None, needs_you=None, paused=False, paused_by=None, merge_error=None, merge_fails=0)
         if x["stage"] == "skipped" or (x["stage"] == "implementing" and not x.get("pr")):
             if x.get("handle"):
                 x.setdefault("outbox", []).append(["close", None])
@@ -845,6 +855,9 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None, gh
                     ok, err = merge(x["repo"], a[1], a[2])
                     x["force_merge"] = False
                     if ok:
+                        x.update(merge_error=None, merge_fails=0, held=None)
+                        if str(x.get("needs_you") or "").startswith("merge failed"):
+                            x["needs_you"] = None
                         ev(k, "merged", f"merged PR #{a[1]}")
                         ci_now = (f.get("pr") or {}).get("ci")
                         if d["settings"].get("ci") == "ignore" and ci_now in ("failure", "pending"):
@@ -855,8 +868,14 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None, gh
                         send(x, conflict_prompt(a[1], base))
                         ev(k, "stage", "merge_gate -> conflict_fix (GitHub refused the merge: conflicts)")
                     else:
+                        x["merge_fails"] = x.get("merge_fails", 0) + 1
                         x["held"] = f"merge failed: {err}"
-                        ev(k, "held", x["held"])
+                        if x.get("merge_error") != err:  # the same text again is not news
+                            x["merge_error"] = err
+                            ev(k, "held", x["held"])
+                        if x["merge_fails"] >= MERGE_FAILS_BEFORE_NEEDS_YOU and not x.get("needs_you"):
+                            x["needs_you"] = f"merge failed {x['merge_fails']} times: {err}"
+                            ev(k, "needs_you", x["needs_you"])
                 elif a[0] == "notify":
                     ev(k, a[1], a[2])
             except Exception as e:  # noqa: BLE001 - one lane's failure never stops the others

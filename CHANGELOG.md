@@ -31,6 +31,8 @@
 
 ### Fixed
 
+- **A failed merge stays visible** (#715): when `gh pr merge` fails for a reason other than a conflict, the lane keeps `held: merge failed: <error>` until a merge succeeds or you retry (it was cleared on the next tick while the merge was retried every 5 minutes unseen). The same error raises no new event; after 3 failures in a row the lane needs you. Red CI, a conflict or leaving the merge stages drops the stale error.
+
 - **Epic dispatches respect lane ownership** (#714): starting a dispatch for an epic whose child is already a lane of a running or paused dispatch is refused (409 in the UI with the owner `id`; `aiw dispatch start` prints the message and exits 5), as issue-list dispatches already were. Check and save run under one lock.
 
 - **A lane's session handle is saved when its session starts** (#713): `tick` saves right after a launch, a restart and a fresh session for a `send`, so a crash later in the tick no longer loses the handle and a restart cannot start a second session on the same issue and worktree.

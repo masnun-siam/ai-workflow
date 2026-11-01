@@ -362,6 +362,45 @@ dm["lanes"][K(93)].update(stage="merge_gate", handle=None, pr=193)
 dr.tick(dm, {K(93): {"issue_open": True, "agent": None, "solo": True, "pr": pr(193, state="MERGED")}}, rm, merge, now=1)
 assert dm["lanes"][K(93)]["stage"] == "followups" and not dm["lanes"][K(93)].get("needs_you")
 assert rm.started and rm.started[-1][0] == 93 and dm["lanes"][K(93)]["handle"] == {"n": 93}
+# a failed merge keeps its error, counts, asks for you after 3, and clears on success / retry / red CI
+
+
+def boom(r, n, sha):
+    return (False, "boom")
+
+
+dq = dr.create("o/r#94", "headless", {"grind": "off", "auto_merge": True}, [child(95)])
+rq = FakeRunner()
+dq["lanes"][K(95)].update(stage="merge_gate", handle={"n": 95}, pr=195)
+fq95 = {K(95): {"issue_open": True, "agent": "idle", "solo": True, "pr": pr(195)}}
+
+
+def kinds():
+    return [e["kind"] for e in dq["events"]]
+
+
+dr.tick(dq, fq95, rq, boom, now=1)
+L = dq["lanes"][K(95)]
+assert L["held"] == "merge failed: boom" and L["merge_error"] == "boom" and L["merge_fails"] == 1
+dr.tick(dq, fq95, rq, boom, now=10)  # inside the retry window: the error stays
+assert L["held"] == "merge failed: boom" and L["merge_fails"] == 1
+dr.tick(dq, fq95, rq, boom, now=400)
+assert L["merge_fails"] == 2 and kinds().count("held") == 1 and not L.get("needs_you")
+dr.tick(dq, fq95, rq, boom, now=800)
+assert L["needs_you"] == "merge failed 3 times: boom" and kinds().count("needs_you") == 1
+dr.tick(dq, fq95, rq, lambda r, n, sha: (False, "other"), now=1200)
+assert L["merge_error"] == "other" and kinds().count("held") == 2
+dr.tick(dq, {K(95): {**fq95[K(95)], "pr": pr(195, ci="failure")}}, rq, boom, now=1201)  # red CI: stale error dropped
+assert L["held"] == "CI is red" and not L.get("merge_error") and not L["merge_fails"] and not L.get("needs_you")
+dr.tick(dq, fq95, rq, boom, now=2000)
+assert L["merge_fails"] == 1
+dr.apply_lane_action(dq, K(95), "retry")
+assert not (L.get("merge_error") or L.get("merge_fails") or L.get("held") or L.get("needs_you"))
+for t in range(3000, 5000, 400):  # the first tick restarts the session
+    dr.tick(dq, fq95, rq, boom, now=t)
+assert L.get("needs_you")
+dr.tick(dq, fq95, rq, merge, now=9000)  # a merge that works clears the lot
+assert not (L.get("merge_error") or L.get("merge_fails") or L.get("held") or L.get("needs_you"))
 print("  ok  merge gate, red CI, conflict")
 
 
