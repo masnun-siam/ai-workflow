@@ -1849,6 +1849,15 @@ def restart_cases():
     assert ui_sessions.load(a)["ended_at"] == ended
     ok("dead pid: done / failed from stream, no _procs entry, no thread, ended_at stable")
 
+    # only the last claude process counts: an earlier turn's ok result must not mask a dead latest turn
+    c = mk("running", dead_pid(), S + RESULT + "\n" + S + "\n", pid_started=OLD)
+    e = mk("running", dead_pid(), S + RESULT + "\n" + S + "\n" + RESULT + "\n", pid_started=OLD)
+    ui_runner.reconcile()
+    rc, re_ = ui_sessions.load(c), ui_sessions.load(e)
+    assert rc["status"] == "failed" and "while the UI was down" in rc["error"], rc
+    assert re_["status"] == "done", re_
+    ok("dead pid: init,ok,init -> failed; init,ok,init,ok -> done")
+
     # waiting session whose claude exited while the UI was down: ended_at stamped, round kept
     w = mk(
         "waiting", dead_pid(), S + RESULT + "\n", pid_started=OLD, pending_question={"id": "q-1", "status": "pending"}
