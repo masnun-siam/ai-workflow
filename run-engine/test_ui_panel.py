@@ -242,6 +242,60 @@ try:
 
     ok("POST /api/review: no/unknown lenses, missing artifact, unknown root -> 400")
 
+    # ---- a held root or lens session is not continued; the panel carries on after Resume
+    with mock.patch.object(ui_runner, "start", fake_start), mock.patch.object(ui_runner, "resume", fake_resume):
+        r = root()
+        pid = ui_panel.start(repo, artifact, ["qa", "cto"], r)
+        ls = lens_sids(pid)
+
+        def mine():
+            return [x[0] for x in resumes if x[0] == r or x[0] in ls.values()]
+
+        finish(ls["qa"], "Verdict: changes")
+        finish(ls["cto"], "Verdict: changes")
+        ui_sessions.update(r, hold=True)
+        resumes.clear()
+        ui_panel.tick()
+        p = peer_review.load_panel(pid)
+        assert mine() == [] and p["phase"] == "lenses" and p["round"] == 1 and p["state"] == "running", p
+        ui_sessions.update(r, hold=None)
+        ui_panel.tick()
+        assert mine() == [r] and peer_review.load_panel(pid)["phase"] == "root"
+        ok("held root: no next round, phase unchanged; after Resume the round goes ahead")
+
+        finish(r, "revised")
+        ui_sessions.update(ls["qa"], hold=True)
+        resumes.clear()
+        ui_panel.tick()
+        p = peer_review.load_panel(pid)
+        assert mine() == [] and p["phase"] == "root" and p["failed"] == [], p  # cto waits for qa too
+        ui_sessions.update(ls["qa"], hold=None)
+        ui_panel.tick()
+        assert sorted(mine()) == sorted(ls.values()) and peer_review.load_panel(pid)["phase"] == "lenses"
+        ok("held lens: no lens resumed, none failed; after Resume they all start together")
+
+        finish(ls["qa"], "Verdict: approve")
+        finish(ls["cto"], "Verdict: approve")
+        ui_sessions.update(ls["qa"], hold=True)
+        ui_panel.tick()
+        p = peer_review.load_panel(pid)
+        assert peer_review.read_verdict(pid, "qa") is None and p["failed"] == [] and p["state"] == "running", p
+        ui_sessions.update(ls["qa"], hold=None)
+        ui_panel.tick()
+        assert peer_review.load_panel(pid)["state"] == "approved"
+        ok("held lens in the round: not failed, the round waits for it")
+
+        r = root()
+        pid = ui_panel.start(repo, artifact, ["qa"], r, after_root=True)
+        ui_sessions.update(r, hold=True)
+        ui_panel.tick()
+        p = peer_review.load_panel(pid)
+        assert p["phase"] == "waiting_root" and p["lens_sessions"] == {} and p["state"] == "running", p
+        ui_sessions.update(r, hold=None)
+        ui_panel.tick()
+        assert peer_review.load_panel(pid)["phase"] == "lenses" and list(lens_sids(pid)) == ["qa"]
+        ok("held root before round one: the lenses wait for Resume")
+
     # ---- ui_runner.start passes --agent / --model
     with (
         mock.patch.object(ui_runner, "_preflight", return_value=["claude"]),

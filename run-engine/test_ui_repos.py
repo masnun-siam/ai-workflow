@@ -509,11 +509,15 @@ try:
         assert s == 200 and json.loads(data)["can_browse"] is want, (plat, host, s, data)
     with mock.patch.object(sys, "platform", "darwin"):
         srv.allowed_hosts.add("mac.tailnet:80")
-        s, data, _ = req("/api/repos", host="mac.tailnet:80")
+        srv.tailnet_login = "owner@x"
+        assert req("/api/repos", host="mac.tailnet:80")[0] == 403
+        h = {"Tailscale-User-Login": "owner@x"}
+        s, data, _ = req("/api/repos", host="mac.tailnet:80", headers=h)
         assert json.loads(data)["can_browse"] is False, data
-        s, data, _ = req("/api/repos/browse", "POST", b"{}", host="mac.tailnet:80")
+        s, data, _ = req("/api/repos/browse", "POST", b"{}", host="mac.tailnet:80", headers=h)
         assert s == 403, (s, data)
         srv.allowed_hosts.discard("mac.tailnet:80")
+        srv.tailnet_login = None
     with mock.patch.object(sys, "platform", "linux"):
         s, _, _ = req("/api/repos/browse", "POST", b"{}")
     assert s == 403, s

@@ -147,6 +147,11 @@ class Herdr:
             self._ok(["tab", "close", h["tab"]])
 
 
+def _held(rec: dict) -> bool:
+    """A held session (ui_runner.hold) waits for the user. `stopped` stays final: the lane treats it as ever."""
+    return bool(rec.get("hold")) and rec.get("status") != "stopped"
+
+
 class Headless:
     """Lanes as headless UI sessions (ui_runner): each turn is a process; send resumes or queues."""
 
@@ -179,6 +184,9 @@ class Headless:
         return {"session": rec["id"]}
 
     def send(self, h, text):
+        if _held(self.sessions.load(h["session"]) or {}):  # ui_runner.release delivers it on Resume
+            self.sessions.update(h["session"], queued_prompt=text)
+            return
         self.runner.send_prompt(h["session"], text)
 
     def read(self, h) -> str:
@@ -189,7 +197,7 @@ class Headless:
         rec = self.sessions.load(h["session"]) if h else None
         if not rec:
             return "gone", None
-        if rec.get("status") == "limited":  # ui_runner resumes it at the reset by itself
+        if _held(rec) or rec.get("status") == "limited":  # limited: ui_runner resumes it at the reset by itself
             return "working", None
         return self._AGENT.get(rec.get("status"), "working"), None
 

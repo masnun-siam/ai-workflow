@@ -229,7 +229,7 @@ ok("funnel handler returns the proxy or None")
 # --- owner-only guard on a real server
 srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, ())
 srv.allowed_hosts |= {"mac.tail.ts.net:8443"}
-srv.tailnet_hosts, srv.tailnet_login = frozenset({"mac.tail.ts.net:8443"}), "owner@example.com"
+srv.tailnet_login = "owner@example.com"
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 port = srv.server_address[1]
 
