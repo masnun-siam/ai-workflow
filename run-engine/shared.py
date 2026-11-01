@@ -108,9 +108,9 @@ def backup_if_corrupt(path: str) -> None:
     try:
         with open(path, encoding="utf-8") as fh:
             ok = isinstance(json.load(fh), dict)
-    except FileNotFoundError:
+    except OSError:  # missing or unreadable: nothing to move aside
         return
-    except (OSError, ValueError):
+    except ValueError:
         ok = False
     if not ok:
         dest = f"{path}.corrupt-{int(time.time())}"
