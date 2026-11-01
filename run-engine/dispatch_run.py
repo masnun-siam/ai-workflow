@@ -506,9 +506,6 @@ def create(epic, runner: str, settings: dict, children: list, workspace=None, ti
         d["issues"] = issues
     sync_lanes(d, children)
     event(d, None, "started", f"{len(d['lanes'])} lanes")
-    if not issues:
-        save(d)
-        return d
     with store_locked():
         for k in d["lanes"]:
             owner = owner_of(k)

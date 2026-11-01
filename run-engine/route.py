@@ -28,6 +28,7 @@ import ask  # noqa: E402
 import ci  # noqa: E402
 import dispatch  # noqa: E402
 import dispatch_cli  # noqa: E402
+import dispatch_run  # noqa: E402
 import jev_cli  # noqa: E402
 import threads  # noqa: E402
 import ui_server  # noqa: E402
@@ -81,7 +82,7 @@ def main(argv=None) -> None:
     args = parser.parse_args(argv)
     try:
         args.func(args)
-    except ValueError as exc:
+    except (ValueError, dispatch_run.Conflict) as exc:
         die(5, str(exc))
 
 
