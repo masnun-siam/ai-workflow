@@ -12,12 +12,8 @@ _Avoid_: Spec, design doc
 A parent issue whose sub-issues are the tasks of one `## Epics` entry of a PRD, filed when the PRD is approved and labelled `epic` + `prd-<slug>`.
 _Avoid_: Parent ticket, umbrella issue
 
-**Task list**:
-The saved, ordered decomposition of one PRD into small one-PR tasks, at `docs/tasks/<slug>.md`: outcome, Area, files, acceptance criteria, verify command, `Depends on:` and Parallel per task, plus Waves. Written by `/create-tasks`; tasks are never renumbered, only marked Changed or Dropped.
-_Avoid_: Plan, backlog
-
 **Refined issue**:
-A task filed as a child issue of its epic, with a WHAT, WHY and HOW written from the PRD and the code, native blocked-by links, and the `refined` label. `/refine-issues` writes it. Only a refined issue is ready to implement.
+A task is a child issue of the epic that `/create-tasks` creates; it becomes a refined issue when `/refine-issues` writes its body. A refined task has a WHAT, WHY and HOW written from the PRD and the code, native blocked-by links, and the `refined` label. `/refine-issues` writes it. Only a refined issue is ready to implement.
 _Avoid_: Groomed, ready
 
 **implement-issue**:

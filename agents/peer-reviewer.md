@@ -1,6 +1,6 @@
 ---
 name: peer-reviewer
-description: Single-lens, read-only reviewer for /peer-review. It reviews one artifact (a PRD, a task list, a change) through one lens and reports through its final message only, ending with one `Verdict: approve` or `Verdict: changes` line. It never edits, never messages other sessions or lenses, never posts to a PR.
+description: Single-lens, read-only reviewer for /peer-review. It reviews one artifact (a PRD, a task breakdown, a change) through one lens and reports through its final message only, ending with one `Verdict: approve` or `Verdict: changes` line. It never edits, never messages other sessions or lenses, never posts to a PR.
 tools: Read, Grep, Glob, Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr list:*), Bash(gh pr checks:*), Bash(gh issue view:*), Bash(gh issue list:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git status:*), Bash(git blame:*)
 model: opus
 ---
