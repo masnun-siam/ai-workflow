@@ -787,6 +787,7 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None, gh
         else:
             x["handle"] = runner.start(x, text, d)
             x.setdefault("handles", []).append(x["handle"])
+            save(d)  # a crash later in the tick must not lose the handle
 
     for k, x in d["lanes"].items():
         outbox = x.pop("outbox", None) or []
@@ -811,6 +812,7 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None, gh
                 x["handle"] = runner.start(x, text, d) if text else None
                 if x["handle"]:
                     x.setdefault("handles", []).append(x["handle"])
+                    save(d)
                 ev(k, "lane", f"restarted in {x['stage']}")
             except Exception as e:  # noqa: BLE001
                 x["needs_you"] = f"restart failed: {e}"
@@ -868,6 +870,7 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None, gh
             x.setdefault("handles", []).append(x["handle"])
             x.update(stage="implementing", started_at=now, needs_you=None)
             ev(k, "stage", "queued -> implementing")
+            save(d)
         except Exception as e:  # noqa: BLE001
             x.update(stage="skipped", skip_reason=f"start failed: {e}")
             ev(k, "needs_you", f"start failed: {e}")
