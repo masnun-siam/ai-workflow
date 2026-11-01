@@ -41,7 +41,8 @@ with `stale: True, fetched_at: None`):
       ],
       "closed_epics": [  # the 50 most recently updated CLOSED issues labelled `epic` (a PRD's Done column)
         {"n": int, "labels": [str], "closed_subs": [{"n": int, "title": str}]}
-      ]
+      ],
+      "issues_truncated": bool        # more open issues were left after MAX_ISSUE_PAGES pages
     }
 
 Ceilings (ponytail): open issues page up to 5 times (500; `issues_truncated` is true when more were left),
@@ -398,7 +399,13 @@ class Poller:
             page = self._call(repo, ISSUES_PAGE, info.get("endCursor"))
             if page is None:
                 return None
-            more = page["data"]["repository"]["issues"]
+            try:
+                more = page["data"]["repository"]["issues"]
+            except (KeyError, TypeError):
+                e = self._entry(repo)
+                with self._lock:
+                    e["stale"], e["error"] = True, "malformed issues page"
+                return None
             issues["nodes"] = (issues.get("nodes") or []) + (more.get("nodes") or [])
             issues["pageInfo"] = more.get("pageInfo") or {}
         return resp
