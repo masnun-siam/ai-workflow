@@ -332,5 +332,22 @@ assert got[1] == {"label": "b", "description": "B"}, got[1]
 assert got[2] == {"label": "c", "description": "C"}, got[2]
 ok("set_pending keeps string previews, drops non-strings")
 
+# 22. restore_round puts a claimed round back held, and refuses once a round is set again
+d = fresh()
+rr = ui_sessions.create("worklog", "/r")
+rnd = {
+    "id": "q-1",
+    "questions": [{"header": "H", "question": "Q?", "multiSelect": False, "options": [{"label": "a"}, {"label": "b"}]}],
+}
+pending = ui_sessions.set_pending(rr["id"], rnd)["pending_question"]
+assert ui_sessions.claim_answer(rr["id"], "q-1") is not None
+assert ui_sessions.restore_round(rr["id"], pending) is True
+back = ui_sessions.load(rr["id"])
+assert back["status"] == "waiting" and back["error"] is None, back
+assert back["pending_question"]["status"] == "pending" and back["pending_question"]["held"] is True
+assert back["pending_question"]["answerer"] is None
+assert ui_sessions.restore_round(rr["id"], pending) is False  # a round is already set
+ok("restore_round restores a claimed round, refuses over an existing one")
+
 print(f"\n{passed} checks passed")
 sys.exit(0)

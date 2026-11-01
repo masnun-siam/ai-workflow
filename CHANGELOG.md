@@ -31,6 +31,7 @@
 
 ### Fixed
 
+- **Away mode keeps a round when the resume fails** (#720): if `resume` fails after Away claims an answer, the round goes back to pending, held, with a `held` log row ("resume failed: …") and the session waits for you again, instead of being left `starting`/`failed` with the answer lost. A held recommended round is not auto-picked again.
 - **Merge cleanup keeps ignored local files and cleans squash merges** (#718): a merged issue's worktree holding ignored files (`.env.local`, a local database) is flagged and kept until you confirm, except regenerable dirs (`node_modules`, `.venv`, `dist`, `build`, ...). A squash-merged branch whose tip is the PR head is no longer flagged unpushed once its remote branch is gone (`sha` on `merged` entries). The checkout lookup is case-insensitive.
 
 - **Dispatch and board read past GitHub's first page** (#716): a dispatch resolves every child of an epic with more than 100 sub-issues, keeps `refined` and all blockers on issues with more than 20 labels or blockers, and the board poller follows the open-issues cursor (up to 5 pages, `issues_truncated` when more are left). A lane whose issue is missing from a truncated list now waits instead of reading as closed.
