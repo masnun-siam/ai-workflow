@@ -36,7 +36,7 @@ def fake_start(prompt, cwd, link=None, **kw):
     """A real session record, so ui_sessions.update works on it; no claude process."""
     rec = ui_sessions.create(prompt, cwd, link, claude_cmd=kw.get("claude_cmd"))
     started.append({"id": rec["id"], "prompt": prompt, **kw})
-    return ui_sessions.update(rec["id"], status="running")
+    return ui_sessions.update(rec["id"], status="running", **(kw.get("fields") or {}))
 
 
 def fake_stop(sid):
@@ -286,6 +286,29 @@ assert resumed == [(v, 'Answer to q-1: {"0":{"labels":["Approve"]}}')], resumed
 e = log_of(v)[0]
 assert (e["by"], e["answerer"], e["cost"], e["kind"]) == ("opus", k["id"], 0.3, "answer"), e
 assert e["questions"][0]["picked"] == ["Approve"] and e["questions"][0]["why"] == "safe"
+
+# #705 an answerer that cannot start: two attempts, no third, role tag on the failed records, then held
+good_start, tries = ui_runner.start, []
+
+
+def failing_start(prompt, cwd, link=None, **kw):
+    tries.append(1)
+    rec = ui_sessions.create(prompt, cwd, link, claude_cmd=kw.get("claude_cmd"))
+    ui_sessions.update(rec["id"], **kw["fields"])
+    ui_sessions.update(rec["id"], status="failed")
+    raise ui_runner.RunnerError("not logged in")
+
+
+ui_runner.start = failing_start
+fv = waiting(rec=False)
+for _ in range(3):
+    ui_afk.tick(W)
+ui_runner.start = good_start
+assert len(tries) == 2 and pq(fv)["answerer_attempts"] == 2 and pq(fv)["held"], pq(fv)
+held = [e for e in log_of(fv) if e["kind"] == "held"]
+assert len(held) == 1 and held[0]["reason"] == "answerer could not start: not logged in", log_of(fv)
+failed = [r for r in ui_sessions.list_sessions() if r.get("answers_for") == fv]
+assert len(failed) == 2 and all(ui_sessions.is_answerer(r) for r in failed), failed
 
 # ---- risk check (FR-3) ----
 import ui_settings  # noqa: E402

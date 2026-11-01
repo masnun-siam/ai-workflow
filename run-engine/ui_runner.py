@@ -177,11 +177,13 @@ def start(
     run_model=None,
     effort=None,
     allowed_tools=None,
+    fields=None,
 ) -> dict:
     """allowed_tools: runs without the permission bypass; Claude Code refuses every tool outside the list
     (Away mode answerers). One comma-joined value, since `--allowedTools` is variadic and would eat the prompt.
     agent/model: `--agent` / `--model` for the session (peer-review lens sessions).
     run_model/effort: the user's pick; kept on the record so every spawn of the session adds the flags.
+    fields: extra session-record fields set at creation, so even a start that fails in preflight carries them.
     batch: (id, max) runs at most `max` sessions of that batch at once; the rest wait as "queued"
     and start, oldest first, as earlier ones end (see release_batch)."""
     if not isinstance(command_text, str) or not command_text.strip():
@@ -195,6 +197,8 @@ def start(
     extra_args = [*extra_args, *(["--agent", agent] if agent else []), *(["--model", model] if model else [])]
     claude_cmd = claude_cmd or ui_origin.account_for(cwd, command_text, link) or ui_settings.default_cmd()
     sid = ui_sessions.create(command_text, cwd, link, claude_cmd=claude_cmd)["id"]
+    if fields:
+        ui_sessions.update(sid, **fields)
     if run_model or effort:
         ui_sessions.update(sid, run_model=run_model, run_effort=effort)
     run_flags = _run_flags({"run_model": run_model, "run_effort": effort})

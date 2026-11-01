@@ -2103,6 +2103,17 @@ try:
 finally:
     reap(rec)
 
+# ---- fields: set at creation, so a start that fails in preflight still carries them (#705) -----
+d, fk, work = setup("normal", auth="out")
+try:
+    ui_runner.start("answer it", work, fields={"role": "x"})
+    raise AssertionError("preflight should have failed")
+except ui_runner.RunnerError:
+    pass
+failed = [r for r in ui_sessions.list_sessions() if r["status"] == "failed"]
+assert len(failed) == 1 and failed[0]["role"] == "x", failed
+ok("fields: role set even when preflight fails")
+
 # ---- slug via checkouts.json -----------------------------------------------
 d, fk, work = setup("normal")
 with open(os.path.join(d, "checkouts.json"), "w") as f:
