@@ -1,5 +1,5 @@
 // FR-7, FR-8, FR-10 and the Away summary (FR-26): everything that needs the user, across repos.
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAfkDismiss, useInbox, useRepos, useSessions, needsYouCount } from '../api/hooks';
 import type { AfkLogEntry, AfkState } from '../api/types';
@@ -123,7 +123,7 @@ export function InboxPage() {
   // FR-4: while a row or the side panel is open, rows keep the order last shown; a new order applies once nothing is open
   const opened = openKey === undefined ? items.some((i) => i.type === 'question') : items.some((i) => i.key === openKey);
   const ordered = opened || panel.target ? heldOrder(items, shown.current) : byGroup(items);
-  shown.current = ordered.map((i) => i.key);
+  useEffect(() => { shown.current = ordered.map((i) => i.key); }, [ordered]);
   const firstAnswer = ordered.find((i) => i.type === 'question')?.key ?? null;
   const open = openKey === undefined ? firstAnswer : openKey;
   const afk = q.data?.afk;

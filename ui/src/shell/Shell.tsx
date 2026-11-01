@@ -102,7 +102,7 @@ export function Shell() {
       if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       const a = (e.target as Element).closest<HTMLAnchorElement>('a[href]:not([data-ext])');
       const target = a && ghTarget(a.href);
-      if (!target) return;
+      if (!target || a.closest('[role=dialog],[role=alertdialog]')) return;
       e.preventDefault();
       open(target);
     };

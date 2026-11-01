@@ -31,6 +31,7 @@
 
 ### Fixed
 
+- **Six small UI bugs** (#732): the Composer's "Sent"/"Queued" note clears on typing or after 5 s; a failed repo Remove no longer rejects unhandled or toasts success; removing a repo also refreshes planning and delivery; options with the same label get unique keys; links inside a dialog no longer open the side panel; the Inbox no longer writes a ref during render.
 - **PRD tab shows the PRD as it is on disk** (#730): the PRD refetches on tab open and window focus (no more `staleTime: Infinity`) and when a `create-prd` session ends, so Read is current and Edit saves against the current `base_sha`. An Edit draft is never overwritten by a refetch (a stale save still hits the 409 path), and closing the browser tab with unsaved edits shows the leave prompt.
 
 - **Away mode keeps a round when the resume fails** (#720): if `resume` fails after Away claims an answer, the round goes back to pending, held, with a `held` log row ("resume failed: …") and the session waits for you again, instead of being left `starting`/`failed` with the answer lost. A held recommended round is not auto-picked again.

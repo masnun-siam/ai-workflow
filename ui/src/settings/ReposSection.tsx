@@ -85,8 +85,12 @@ export function ReposSection() {
       danger: true,
     });
     if (!ok) return;
-    await remove.mutateAsync(r.slug);
-    toast(`Removed ${r.slug}`);
+    try {
+      await remove.mutateAsync(r.slug);
+      toast(`Removed ${r.slug}`);
+    } catch {
+      // the mutation cache already toasts the error
+    }
   };
 
   const find = async () => {

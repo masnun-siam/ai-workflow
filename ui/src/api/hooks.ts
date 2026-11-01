@@ -259,7 +259,7 @@ export const useReviewLens = () => useApiMutation((v: { panel: string; lens: str
 export const useReviewRounds = () => useApiMutation((v: { panel: string; add: number }) => api.reviewRounds(v.panel, v.add), BOARD_WRITES);
 
 export const useRegisterRepo = () => useApiMutation((v: { slug: string; path: string }) => api.registerRepo(v.slug, v.path), [keys.repos, ['inbox']]);
-export const useRemoveRepo = () => useApiMutation(api.removeRepo, [keys.repos, keys.settings, ['inbox']]);
+export const useRemoveRepo = () => useApiMutation(api.removeRepo, [keys.repos, keys.settings, ...BOARD_WRITES]);
 export const useScanRepos = () => useApiMutation((roots?: string[]) => api.scanRepos(roots), [keys.repos]);
 export const useCreateRepo = () => useApiMutation((v: { parent: string; name: string; prd_folder?: string }) => api.createRepo(v.parent, v.name, v.prd_folder), [keys.repos, ['sessions']]);
 export const usePublishRepo = () => useApiMutation((v: { slug: string; owner: string; name: string; priv: boolean }) => api.publishRepo(v.slug, v.owner, v.name, v.priv), [keys.repos, ['inbox']]);

@@ -1,5 +1,5 @@
 // Send a prompt to the session (FR-20): queued while a turn is running, disabled while a question is pending.
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePrompt } from '../api/hooks';
 import type { Session } from '../api/types';
 import { Button, Icon } from '../components';
@@ -12,6 +12,13 @@ export function Composer({ s }: { s: Session }) {
   const box = useRef<HTMLTextAreaElement>(null);
   const waiting = s.outcome === 'waiting';
   useAction({ label: 'Message this session', key: 'c', run: () => box.current?.focus(), disabled: waiting });
+  // The note fades after a few seconds, or as soon as the user types again.
+  useEffect(() => { if (text) setNote(''); }, [text]);
+  useEffect(() => {
+    if (!note) return;
+    const t = setTimeout(() => setNote(''), 5000);
+    return () => clearTimeout(t);
+  }, [note]);
   const running = ['starting', 'running', 'limited'].includes(s.outcome);
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
