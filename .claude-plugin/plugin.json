@@ -12,17 +12,5 @@
     "pull-request",
     "review",
     "ci"
-  ],
-  "userConfig": {
-    "slack_owner_uid": {
-      "type": "string",
-      "title": "Slack owner user id",
-      "description": "Slack user id of the PR owner \u2014 the @-mention target on grind's closing message, e.g. U01ABCDEF23. Used for nothing else."
-    },
-    "slack_review_channel": {
-      "type": "string",
-      "title": "Default Slack review channel",
-      "description": "Channel id for PR review threads when a repo has no entry in channels.json. Optional."
-    }
-  }
+  ]
 }

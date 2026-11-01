@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **pr-grind names no workspace** (#733): the skill no longer quotes a Slack user id, workspace host or bot name. The new-thread URL is built from an optional `workspace_url` in `channels.json` (grind stops with one line when it is missing). The unread `userConfig` keys are gone from `plugin.json`, and INSTALL Step 6 documents every `channels.json` key.
+
 ### Added
 
 - **Flight-control look** (UI redesign): a blue-slate dark theme where colour only means state (cyan running, amber waiting on you, coral failed, slate done, violet Away), Chivo and Chivo Mono in place of Archivo, and a left rail that holds the page links with their counts, Away mode, plan usage, theme and keys. The top bar keeps the repo, search, "n need you" and New; on a phone the rail hides and the bottom nav and Away button stay. Groups are bordered panels with hairline rows instead of strips with coloured edges, and the current stage on a track carries a slow sweep (off under reduced motion). Light theme stays available from the theme button; dark is the default.
