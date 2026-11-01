@@ -542,6 +542,13 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
             _deliver_queued(sid)
     except Exception as e:  # keep the daemon thread from dying silently
         warn(f"ui_runner follower for {sid} failed: {e}")
+        try:
+            if (ui_sessions.load(sid) or {}).get("status") in ("starting", "running") and sid not in _stopping:
+                ui_sessions.update(
+                    sid, status="failed", ended_at=_now(), pending_question=None, error=f"follower failed: {e}"
+                )
+        except Exception as e2:  # noqa: BLE001
+            warn(f"ui_runner cannot mark {sid} failed: {e2}")
     finally:
         if _procs.get(sid) is proc:  # a fallback may have replaced it with a newer process
             _procs.pop(sid, None)
@@ -1104,11 +1111,4 @@ def prgrind_tick_all(now=None) -> list:
 
 
 def start_prgrind_timer(interval=PRGRIND_TICK_SECONDS) -> threading.Thread:
-    def loop():
-        while True:
-            prgrind_tick_all()
-            time.sleep(interval)
-
-    t = threading.Thread(target=loop, daemon=True)
-    t.start()
-    return t
+    return shared.supervised_loop(prgrind_tick_all, interval, "pr-grind timer")

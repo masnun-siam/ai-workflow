@@ -481,4 +481,26 @@ ts = [
 assert sorted(results) == [201, 409], results
 srv.shutdown()
 print("  ok  api")
+
+# the dispatch timer survives a raising tick_all
+import time  # noqa: E402
+
+ticks = []
+
+
+def flaky_tick_all(snapshot, *a, **k):
+    ticks.append(1)
+    if len(ticks) == 1:
+        raise RuntimeError("boom")
+    return []
+
+
+real_tick_all, ui_dispatch.tick_all = ui_dispatch.tick_all, flaky_tick_all
+th = ui_dispatch.start_timer(lambda repo: None, 0.01)
+deadline = time.time() + 10
+while len(ticks) < 2 and time.time() < deadline:
+    time.sleep(0.01)
+ui_dispatch.tick_all = real_tick_all
+assert len(ticks) >= 2 and th.is_alive(), ticks
+print("  ok  timer survives a raising tick")
 print("ui_dispatch: all green")
