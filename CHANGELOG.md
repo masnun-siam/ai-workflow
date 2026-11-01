@@ -30,6 +30,7 @@
 
 ### Fixed
 
+- **Cancel closes the lanes' sessions** (#712): cancelling a dispatch queues a close for every active lane's session (headless run or herdr tab), a paused lane included, and the next tick runs them even though a cancelled dispatch is otherwise idle. Nothing keeps running or spending after Cancel.
 - **Settings Test runs only a saved command** (#709): `POST /api/settings/test` answers 400 `cmd must be a command saved in Settings: save the account first` for a `cmd` that is not a saved account, and starts no subprocess. A missing or empty `cmd` keeps `cmd required`.
 - **Away mode: a failed jev risk check is unknown, not safe** (#707): with Use jev on and jev available, a check that fails (or a worker that raises) stores `risk: {p: null, unknown: true}` and the round goes to the Opus answerer instead of being auto-picked; a raising worker no longer requeues every 5 s. Use jev off or missing still auto-picks.
 

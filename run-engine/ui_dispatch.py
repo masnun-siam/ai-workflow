@@ -111,9 +111,10 @@ def _busy(d: dict) -> bool:
     """A finished dispatch still needs ticks for end actions, outboxes and a QA session's new issues."""
     if d["state"] in LIVE:
         return True
+    outbox = any(x.get("outbox") for x in d["lanes"].values())
     if d["state"] == "done":
-        return bool(d.get("end_requests") or d.get("qa") or any(x.get("outbox") for x in d["lanes"].values()))
-    return False
+        return bool(d.get("end_requests") or d.get("qa") or outbox)
+    return d["state"] == "cancelled" and outbox
 
 
 def tick_one(
@@ -131,7 +132,7 @@ def tick_one(
         if not _busy(d):
             return []
         runner = runner_for(d)
-        if now - (d.get("synced_at") or 0) >= SYNC_SECONDS:
+        if d["state"] != "cancelled" and now - (d.get("synced_at") or 0) >= SYNC_SECONDS:
             d["synced_at"] = now
             try:
                 listed = d.get("issues")
