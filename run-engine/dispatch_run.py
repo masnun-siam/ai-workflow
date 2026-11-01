@@ -339,6 +339,39 @@ def startable(d: dict, facts: dict) -> list:
     return out
 
 
+STRAND_SKIPPED = "blocked by skipped #"
+STRAND_CYCLE = "dependency cycle"
+
+
+def stranded(d: dict) -> dict:
+    """{lane key: reason} for queued, unpaused lanes that can never start: a skipped blocker upstream, or a cycle.
+    A dep outside the dispatch, or one that is active, paused or limited, is only waiting."""
+    lanes = d["lanes"]
+
+    def why(k, path):
+        if k in path:
+            return STRAND_CYCLE
+        for b in lanes[k].get("deps", []):
+            y = lanes.get(b)
+            if y is None:
+                continue
+            if y["stage"] == "skipped":
+                return f"{STRAND_SKIPPED}{y['n']}"
+            if y["stage"] == "queued":
+                r = why(b, path | {k})
+                if r:
+                    return r
+        return None
+
+    out = {}
+    for k, x in lanes.items():
+        if x["stage"] == "queued" and not x.get("paused"):
+            r = why(k, frozenset())
+            if r:
+                out[k] = r
+    return out
+
+
 def sync_lanes(d: dict, children: list) -> list:
     """Add new epic children as lanes; a 'needs refine' lane is queued once refined. Returns added keys.
     children: [{"repo", "n", "title", "refined", "deps": [key], "base"}]."""
@@ -882,6 +915,16 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None, gh
         except Exception as e:  # noqa: BLE001
             x.update(stage="skipped", skip_reason=f"start failed: {e}")
             ev(k, "needs_you", f"start failed: {e}")
+    if d["state"] == "running":
+        strands = stranded(d)
+        idle = not any(x["stage"] in ACTIVE for x in d["lanes"].values())
+        for k, x in d["lanes"].items():
+            if k in strands:
+                if idle and x.get("needs_you") != strands[k]:
+                    x["needs_you"] = strands[k]
+                    ev(k, "needs_you", strands[k])
+            elif x["stage"] == "queued" and (x.get("needs_you") or "").startswith((STRAND_SKIPPED, STRAND_CYCLE)):
+                x["needs_you"] = None  # the blocker was retried
     if d["state"] == "running" and d["lanes"] and all(x["stage"] in ("closed", "skipped") for x in d["lanes"].values()):
         d.update(state="done", ended_at=now)
         ev(None, "finished", "every lane is closed or skipped")

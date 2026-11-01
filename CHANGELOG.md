@@ -31,6 +31,7 @@
 
 ### Fixed
 
+- **Stranded lanes need you** (#711): a queued lane behind a skipped blocker (user skip, needs refine, start failed), or in a dependency cycle, gets `needs_you` ("blocked by skipped #n" or "dependency cycle") and one `needs_you` event once nothing is running. The reason clears when the blocker is retried.
 - **A lane's session handle is saved when its session starts** (#713): `tick` saves right after a launch, a restart and a fresh session for a `send`, so a crash later in the tick no longer loses the handle and a restart cannot start a second session on the same issue and worktree.
 ||||||| f685604
 - **Cancel closes the lanes' sessions** (#712): cancelling a dispatch queues a close for every active lane's session (headless run or herdr tab), a paused lane included, and the next tick runs them even though a cancelled dispatch is otherwise idle. Nothing keeps running or spending after Cancel.
