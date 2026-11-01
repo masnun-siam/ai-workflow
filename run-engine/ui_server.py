@@ -271,7 +271,8 @@ def _on_fresh(repo: str, snap: dict, prev: dict) -> None:
             )
         seen = {m["n"] for m in prev.get("merged") or []}
         issues = [n for m in snap["data"]["merged"] if m["n"] not in seen for n in m["closes"]]
-        flagged = ui_mergeclean.on_merged(repo, issues) if issues else {}
+        heads = {n: m["sha"] for m in snap["data"]["merged"] if m.get("sha") for n in m["closes"]}
+        flagged = ui_mergeclean.on_merged(repo, issues, heads=heads) if issues else {}
         for n, f in flagged.items():
             if n not in _flags.setdefault(repo, {}):
                 ui_notify.notify(
@@ -932,10 +933,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         repo, issue = _registered(body.get("repo")), body.get("issue")
         if type(issue) is not int or issue < 1 or body.get("confirm") is not True:
             raise ValueError("issue must be a number and confirm must be true")
-        if not any(issue in m["closes"] or issue == m["n"] for m in POLLER.snapshot(repo)["data"]["merged"]):
+        pr = next((m for m in POLLER.snapshot(repo)["data"]["merged"] if issue in m["closes"] or issue == m["n"]), None)
+        if not pr:
             raise ui_start.Conflict(f"#{issue}'s PR is not merged")
         checkout = dispatch.read_checkouts()[repo]
-        res = ui_mergeclean.clean(checkout, issue, confirm=True)
+        res = ui_mergeclean.clean(checkout, issue, confirm=True, merged_head=pr.get("sha"))
         _flags.get(repo, {}).pop(issue, None)
         return {"removed": res["removed"]}
 

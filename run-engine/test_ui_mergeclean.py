@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -93,4 +94,49 @@ git(main, "branch", "issue-5-y")
 git(main, "checkout", "-q", "issue-5-y")
 assert mc.clean(main, 5, True)["removed"] == [] and exists_branch("issue-5-y")
 assert mc.on_merged("o/r", [1], checkout=os.path.join(tmp, "nope")) == {}
+
+# ignored files: .env.local keeps the worktree, node_modules does not
+git(main, "checkout", "-q", "main")
+open(os.path.join(main, ".gitignore"), "w").write(".env.local\nnode_modules/\n")
+git(main, "add", ".gitignore")
+git(main, "commit", "-qm", "ignore")
+git(main, "push", "-q", "origin", "main")
+git(main, "fetch", "-q")
+p6 = wt(6)
+os.makedirs(os.path.join(p6, "node_modules"))
+open(os.path.join(p6, "node_modules", "m"), "w").write("m")
+os.makedirs(os.path.join(p6, "ui", "node_modules"))  # nested: ignored by "node_modules/" anywhere
+open(os.path.join(p6, "ui", "node_modules", "m"), "w").write("m")
+assert mc.check(main, 6) is None
+open(os.path.join(p6, ".env.local"), "w").write("S=1")
+assert mc.on_merged("o/r", [6], checkout=main) == {6: {"uncommitted": [".env.local"], "unpushed": []}}
+assert os.path.isdir(p6)
+assert mc.clean(main, 6, True)["flagged"] is None and not os.path.exists(p6)
+
+# squash merge: pushed then remote branch deleted; the merged head clears it, a later commit does not
+p7 = wt(7)
+open(os.path.join(p7, "h"), "w").write("h")
+git(p7, "add", "h")
+git(p7, "commit", "-qm", "work")
+head = git(p7, "rev-parse", "HEAD")
+git(p7, "push", "-q", "origin", "issue-7-x")
+git(main, "push", "-q", "origin", ":issue-7-x")
+git(main, "fetch", "-q", "--prune")
+assert mc.check(main, 7) == {"uncommitted": [], "unpushed": [head]}
+assert mc.check(main, 7, merged_head=head) is None
+assert mc.check(main, 7, merged_head="0" * 40) == {"uncommitted": [], "unpushed": [head]}  # unknown commit: as before
+open(os.path.join(p7, "i"), "w").write("i")
+git(p7, "add", "i")
+git(p7, "commit", "-qm", "after")
+late = git(p7, "rev-parse", "HEAD")
+assert mc.check(main, 7, merged_head=head) == {"uncommitted": [], "unpushed": [late]}
+
+# registry key spelled in another case still finds the checkout
+data = os.path.join(tmp, "data")
+os.makedirs(data)
+open(os.path.join(data, "checkouts.json"), "w").write(json.dumps({"o/r": main}))
+os.environ["CLAUDE_PLUGIN_DATA"] = data
+p8 = wt(8)
+assert mc.on_merged("O/R", [8]) == {} and not os.path.exists(p8)
+assert mc.on_merged("x/y", [8]) == {}
 print("ok")
