@@ -58,15 +58,26 @@ def pr(n, **kv):
     }
 
 
-def snap(issues=(), merged=(), open_prs=(), stale=False):
+def snap(issues=(), merged=(), open_prs=(), stale=False, truncated=False):
     return {
         "stale": stale,
         "fetched_at": 1.0,
-        "data": {"issues": list(issues), "merged": list(merged), "open_prs": list(open_prs), "closed_epics": []},
+        "data": {
+            "issues": list(issues),
+            "merged": list(merged),
+            "open_prs": list(open_prs),
+            "closed_epics": [],
+            "issues_truncated": truncated,
+        },
     }
 
 
 no_channel = lambda repo: None  # noqa: E731
+
+# --- a truncated open-issue list lacking the lane's issue: the lane waits; a complete one: the issue is closed
+t_lane = {"repo": R, "n": 777, "handle": {"t": 1}}
+assert ui_dispatch.lane_facts(t_lane, snap(truncated=True), channel=no_channel) is None
+assert ui_dispatch.lane_facts(t_lane, snap(), channel=no_channel)["issue_open"] is False
 
 # --- lane_facts: stale -> None; open issue, blockers, PR approval via reviewer, grind header, agent
 lane = {"repo": R, "n": 5, "handle": {"t": 1}}
