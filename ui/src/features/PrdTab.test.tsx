@@ -10,7 +10,7 @@ const summary = (o: Record<string, unknown> = {}) => ({ id: 's1', repo: 'o/r', p
 const detail = (approvals: { id: string; name: string; at: string }[], o: Record<string, unknown> = {}) => ({ ...summary(o), created_at: '', ended_at: null, last_seen_at: null, prd_updated_at: null, unsent: 0, threads: [], approvals, ...o });
 const ap = (k: number) => ({ id: `a${k}`, name: `Rev${k}`, at: '' });
 
-function mock(o: { status?: string; shares?: unknown[]; detail?: unknown; post?: () => Promise<Response>; prd?: string; send?: (body: any) => Promise<Response> } = {}) {
+function mock(o: { status?: string; shares?: unknown[]; detail?: unknown; post?: () => Promise<Response>; prd?: string; sessions?: () => unknown[]; prdText?: () => string; send?: (body: any) => Promise<Response> } = {}) {
   calls.length = 0;
   const routes: Record<string, unknown> = {
     '/api/repos': { repos: [{ slug: 'o/r', name: 'R', path: '/x' }], can_browse: false, scan_roots: [] },
@@ -20,9 +20,14 @@ function mock(o: { status?: string; shares?: unknown[]; detail?: unknown; post?:
     '/api/delivery': { repo: 'o/r', stale: false, fetched_at: 1, cap: 2, running: 0, auto_grind: false, lanes: [] },
     '/api/prd': { text: o.prd ?? '# F\n\n## A\nbody', sha: 'x', branch: 'main' },
   };
+  const live = () => {
+    if (o.sessions) routes['/api/sessions'] = { ...(routes['/api/sessions'] as object), sessions: o.sessions() };
+    if (o.prdText) routes['/api/prd'] = { text: o.prdText(), sha: 'x', branch: 'main' };
+  };
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     const [path] = String(url).split('?');
     const method = init?.method ?? 'GET';
+    live();
     if (method !== 'GET') calls.push({ method, path, body: init?.body ? JSON.parse(String(init.body)) : undefined });
     if (path === '/api/shares' && method === 'POST') return o.post ? o.post() : json(summary(), 201);
     if (path === '/api/shares/s1/send' && o.send) return o.send(calls[calls.length - 1].body);
@@ -342,5 +347,39 @@ describe('Send open comments', () => {
     await waitFor(() => expect(btn.disabled).toBe(true));
     release(new Response(JSON.stringify(prev()), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     await screen.findByRole('alertdialog');
+  });
+});
+
+describe('PRD freshness', () => {
+  const sess = (outcome: string) => ({ id: 'u1', command: '/create-prd docs/prds/f1.md --update x', outcome });
+
+  it('refetches when a create-prd session ends', async () => {
+    let state = 'running';
+    let text = '# F\n\n## A\nold text';
+    mock({ sessions: () => [sess(state)], prdText: () => text });
+    window.location.hash = '#/features/f1/prd?repo=o/r';
+    render(<App />);
+    expect(await screen.findByText('old text')).toBeTruthy();
+    await new Promise((r) => setTimeout(r, 3200)); // the running session is seen by a poll
+    text = '# F\n\n## A\nnew text';
+    state = 'done';
+    expect(await screen.findByText('new text', {}, { timeout: 5000 })).toBeTruthy();
+  }, 15000);
+
+  it('does not overwrite an edit draft when the PRD changes on disk', async () => {
+    const u = userEvent.setup();
+    let text = '# F\n\n## A\nold text';
+    mock({ prdText: () => text });
+    window.location.hash = '#/features/f1/prd?repo=o/r';
+    render(<App />);
+    await screen.findByText('old text');
+    await u.click(screen.getByRole('button', { name: 'Edit' }));
+    const box = (await screen.findByLabelText('PRD markdown')) as HTMLTextAreaElement;
+    await u.type(box, ' mine');
+    const draft = box.value;
+    text = '# F\n\n## A\nnew text';
+    window.dispatchEvent(new Event('focus'));
+    await new Promise((r) => setTimeout(r, 300));
+    expect(box.value).toBe(draft);
   });
 });
