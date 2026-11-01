@@ -476,7 +476,7 @@ Nothing stateful lives in this repo. `aiw paths` resolves it under `$CLAUDE_PLUG
 | `ui.json` | push notifications and `public_url` (mode 0600) |
 | `config.json` | peer-review overrides from Settings, laid over `run-engine/config.json` |
 | `jev_cache.json` | cached jev answers for Inbox urgency, readiness and duplicates: at most 2000 entries, ignored after 7 days, written by the server only (never by `aiw jev`); safe to delete |
-| `channels.json` | Slack ids and trigger templates for grind and release-pr |
+| `channels.json` | Slack ids and trigger templates for grind and release-pr; schema in INSTALL Step 6 |
 | `shares/` | one JSON record per shared PRD with its threads and approvals (mode 0600), kept until the author deletes the share record |
 | `share-runtime.json` | the share listener's loopback port and the funnel port, so a restart serves the same link |
 

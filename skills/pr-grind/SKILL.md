@@ -46,17 +46,18 @@ Header keys (lines above the first `## Round <n>`; names are pinned for the aiw 
    `isDraft: true` → stop with one line, `PR #<n> is a draft; mark it ready for review before grinding.`
    Write no state file and post nothing.
 1. Read `<channels>` first: `bot_uid`, `owner_uid`, `channels` (exact `owner/repo` →
-   channel id), `dm_fallback`, `known_bots`, and the `trigger`/`retrigger` templates
+   channel id), `dm_fallback`, `known_bots`, optional `workspace_url`, and the `trigger`/`retrigger` templates
    (`{bot_uid}`, `{pr_url}` only). Missing or unparseable → stop. `owner_uid` is the only
-   @-mention target in terminal posts; it is not masum (`U0373SRT22G`), and not the
-   `userEmail` in CLAUDE.md.
+   @-mention target in terminal posts; never take it from anywhere else (an email, a name in
+   a config).
 2. Argument is a Slack thread URL → `slack_read_thread`, take the first GitHub PR URL
    (none → `AskUserQuestion`). Argument is a PR URL with no thread → **open the thread**:
    post `trigger` as a new top-level message in the repo's channel (`--channel <id>` in the
    arguments when given, else exact key match, else `dm_fallback`), with `slack_send_message`, falling back to
    `slackcli messages send --recipient-id <C|D> --message "..."`. The thread URL is
-   `https://blubird-interactive.slack.com/archives/<channel>/p<ts without the dot>`; read
-   it back to confirm it landed. Slack reads/posts use the Slack MCP tools first, `slackcli`
+   `<workspace_url>/archives/<channel>/p<ts without the dot>`; read
+   it back to confirm it landed. No `workspace_url` in `<channels>` → stop with one line
+   telling the owner to add it; never guess a host. (A thread-URL argument needs no host.) Slack reads/posts use the Slack MCP tools first, `slackcli`
    (`slack-cli` skill) only on failure.
 3. `gh auth status`; `gh pr view <ref> --json state,headRefOid,baseRefName,author,reviews`.
    Not `OPEN` → stop. Reviewer = most recent review author who isn't the PR author; if none,
@@ -95,7 +96,7 @@ nit-only round.
 Then post the closing summary yourself: one thread reply @-mentioning `owner_uid` with
 round count, what was fixed across the run, the PR URL, and "ready for human merge —
 merging stays manual". **Never mention the bot** (no `<@bot_uid>`, no `recheck`, no
-"Blubird AI Agent"): it can restart a cycle. Expect a harmless bot reply anyway; keep
+mention of the bot's display name): it can restart a cycle. Expect a harmless bot reply anyway; keep
 terminal posts to one message. Append to the state file, then `ScheduleWakeup({stop: true})`;
 headless: write `done: <ISO8601> — approved` instead. If commits are queued, defer the post
 and `done:` until they are pushed (Step 6).
