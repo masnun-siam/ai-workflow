@@ -31,6 +31,8 @@
 
 ### Fixed
 
+- **A lane's session handle is saved when its session starts** (#713): `tick` saves right after a launch, a restart and a fresh session for a `send`, so a crash later in the tick no longer loses the handle and a restart cannot start a second session on the same issue and worktree.
+||||||| f685604
 - **Cancel closes the lanes' sessions** (#712): cancelling a dispatch queues a close for every active lane's session (headless run or herdr tab), a paused lane included, and the next tick runs them even though a cancelled dispatch is otherwise idle. Nothing keeps running or spending after Cancel.
 - **`--allow-host` hosts need the owner login** (#710): every request that does not arrive on loopback must carry the node owner's `Tailscale-User-Login`, not just the hosts `tailscale serve` set up, so an `--allow-host` name that is also funnelled is refused. `aiw ui --allow-host` refuses to start when the owner login cannot be read from `tailscale status`.
 - **Settings Test runs only a saved command** (#709): `POST /api/settings/test` answers 400 `cmd must be a command saved in Settings: save the account first` for a `cmd` that is not a saved account, and starts no subprocess. A missing or empty `cmd` keeps `cmd required`.

@@ -178,6 +178,42 @@ dr.tick(d, fq(1, 2, 3), run, merge, now=1001)
 assert len(run.started) == 2  # cap holds, #2 waits on #1
 print("  ok  launch order, cap, deps")
 
+
+# --- a handle is on disk as soon as its session starts: a crash later in the tick cannot lose it
+class Boom(BaseException):
+    pass
+
+
+class BoomRunner(FakeRunner):
+    def __init__(self, boom_on):
+        super().__init__()
+        self.boom_on = boom_on
+
+    def start(self, lane, prompt, d):
+        if len(self.started) == self.boom_on:
+            raise Boom()
+        return super().start(lane, prompt, d)
+
+
+hd = dr.create("o/r#13", "herdr", {"max": 2}, [child(1), child(2)])
+try:
+    dr.tick(hd, fq(1, 2), BoomRunner(1), merge, now=1000)
+except Boom:
+    pass
+x = dr.load(hd["id"])["lanes"][K(1)]
+assert x["stage"] == "implementing" and x["handle"] == {"n": 1} and x["handles"] == [{"n": 1}], x
+# restart start: lane 1 restarts (saved), then lane 2's launch crashes
+hd = dr.create("o/r#14", "herdr", {"max": 2}, [child(1), child(2)])
+dr.tick(hd, fq(1), FakeRunner(), merge, now=1000)
+hd["lanes"][K(1)].update(restart=True, handle=None, handles=[])
+try:
+    dr.tick(hd, {**fq(2), K(1): {}}, BoomRunner(1), merge, now=1001)
+except Boom:
+    pass
+x = dr.load(hd["id"])["lanes"][K(1)]
+assert x["handle"] == {"n": 1} and x["handles"] == [{"n": 1}], x
+print("  ok  handle saved at start")
+
 # --- implementing: blocked / idle need you once
 f1 = {"issue_open": True, "slack": True, "agent": "blocked"}
 ev = dr.tick(d, {K(1): f1}, run, merge, now=1002)
