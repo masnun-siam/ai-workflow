@@ -220,9 +220,27 @@ assert R in ui_dispatch.repos()
 print("  ok  issue-list dispatch")
 
 # --- not busy: cancelled dispatches are left alone
+for x in d["lanes"].values():
+    x["handle"] = None  # no session to close
+dr.save(d)
 dr.set_state(d["id"], "cancelled")
 assert ui_dispatch.tick_one(d["id"], lambda r: snaps.get(r), runner_for=lambda d: 1 / 0) == []
 print("  ok  cancelled is idle")
+
+# --- cancelled with queued closes: the tick runs them, then it is idle again
+dc = dr.create("o/r#9", "headless", {}, [{"repo": "o/r", "n": 9, "refined": True}])
+dc["lanes"]["o/r#9"].update(stage="implementing", handle={"session": "s9"})
+dr.save(dc)
+dr.set_state(dc["id"], "cancelled")
+assert ui_dispatch._busy(dr.load(dc["id"]))
+rc = FakeRunner()
+rc.closed = []
+rc.close = rc.closed.append
+ui_dispatch.tick_one(dc["id"], lambda r: snaps.get(r), runner_for=lambda d: rc, resolve=lambda e: 1 / 0, grind_files=[])
+assert rc.closed == [{"session": "s9"}] and rc.started == []
+assert dr.load(dc["id"])["lanes"]["o/r#9"]["handle"] is None
+assert not ui_dispatch._busy(dr.load(dc["id"]))
+print("  ok  cancel closes sessions")
 
 # --- usage and public
 rec = ui_sessions.create("/ai-workflow:implement-issue 5", R)

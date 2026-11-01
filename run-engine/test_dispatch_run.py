@@ -566,6 +566,24 @@ except ValueError:
     pass
 print("  ok  live edit, pause, store")
 
+# --- Cancel closes every active lane's session, paused ones too, and starts nothing
+dx = dr.create("o/r#9", "headless", {}, [child(80), child(81), child(82), child(83)])
+L = dx["lanes"]
+L[K(80)].update(stage="implementing", handle={"n": 80})
+L[K(81)].update(stage="grinding", handle={"n": 81}, paused=True)
+L[K(82)].update(stage="closed", handle={"n": 82})
+dr.save(dx)
+dx = dr.set_state(dx["id"], "cancelled")
+dx = dr.set_state(dx["id"], "cancelled")  # twice: still one close
+L = dx["lanes"]
+assert L[K(80)]["outbox"] == [["close", None]] and L[K(81)]["outbox"] == [["close", None]]
+assert "outbox" not in L[K(82)] and "outbox" not in L[K(83)] and L[K(81)]["stage"] == "grinding"
+assert dx["events"][-1]["text"] == "dispatch cancelled"
+fr = FakeRunner()
+dr.tick(dx, {K(83): {"blockers_open": []}}, fr, merge, now=1000)
+assert sorted(fr.closed) == [80, 81] and fr.started == [] and L[K(80)]["handle"] is None
+print("  ok  cancel closes sessions")
+
 # --- Pause > Now stops the running lanes; Resume gives them a fresh session
 dn = dr.create("o/r#9", "headless", {}, [child(70), child(71), child(72), child(73), child(74)])
 L = dn["lanes"]
