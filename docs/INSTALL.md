@@ -73,8 +73,8 @@ claude plugin marketplace remove shahria-skills
 
 **Expect this to succeed. If it fails with a manifest validation error, stop and report it**
 — it means `.claude-plugin/plugin.json` is malformed, which is a bug in the repo, not in
-their machine. (This exact failure shipped once: `userConfig` entries carried a `title` and
-no `description`, and the plugin was silently uninstallable for weeks.)
+their machine. (This failure shipped once, from a malformed manifest entry, and the plugin was silently
+uninstallable for weeks.)
 
 Confirm it registered:
 
@@ -167,6 +167,9 @@ Create that file with this shape:
   "bot_uid": "U...",
   "owner_uid": "U...",
   "channels": { "owner/repo": "C..." },
+  "dm_fallback": "D...",
+  "known_bots": ["some-review-bot"],
+  "workspace_url": "https://your-team.slack.com",
   "trigger": "<@{bot_uid}> review {pr_url}",
   "retrigger": "<@{bot_uid}> recheck"
 }
@@ -175,7 +178,15 @@ Create that file with this shape:
 - `bot_uid` — the reviewer bot's Slack user id.
 - `owner_uid` — the person @-mentioned when a PR is ready to merge. **Ask the user for
   theirs**; do not derive it from an email address or a name you found in a config file.
-- `channels` — one entry per repo you will run against.
+- `channels` — one entry per repo you will run against (exact `owner/repo` → channel id).
+- `dm_fallback` — optional. Channel or DM id used when a repo has no `channels` entry.
+- `known_bots` — optional. Extra bot logins (case-insensitive) that grind treats as bots, not
+  humans, besides accounts ending in `[bot]` or of type Bot.
+- `workspace_url` — optional, needed only when grind opens a new thread from a PR URL: the
+  base of the Slack thread link, `<workspace_url>/archives/<channel>/p<ts>`. Without it grind
+  stops with one line; it never guesses a host. Giving grind a thread URL needs no host.
+- `trigger`, `retrigger` — the message posted to start a review and to ask for another round.
+  Only `{bot_uid}` and `{pr_url}` are filled in. Both are required by the grind loop.
 
 These are workspace identifiers, not secrets, but ask before writing the file and show them
 its contents.
