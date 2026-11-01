@@ -92,7 +92,7 @@ export const useVaultFolders = (enabled = true) => useQuery({ queryKey: keys.vau
 export const useVaultPrd = (folder: string) => useQuery({ queryKey: keys.vaultPrd(folder), queryFn: () => api.vaultPrd(folder), enabled: !!folder });
 export const useCleanupTargets = (enabled = true) => useQuery({ queryKey: keys.cleanup, queryFn: api.cleanupTargets, enabled, gcTime: 0 });
 export const usePrd = (repo: string, path: string) =>
-  useQuery({ queryKey: keys.prd(repo, path), queryFn: () => api.prd(repo, path), enabled: !!repo && !!path, staleTime: Infinity, gcTime: 0 });
+  useQuery({ queryKey: keys.prd(repo, path), queryFn: () => api.prd(repo, path), enabled: !!repo && !!path, gcTime: 0 });
 export const useIssue = (repo: string, n: number) =>
   useQuery({ queryKey: keys.issue(repo, n), queryFn: () => api.issue(repo, n), enabled: !!repo && n > 0 });
 export const usePull = (repo: string, n: number) =>
