@@ -125,10 +125,13 @@ class Herdr:
         r = self._ok(["pane", "read", h["pane"], "--lines", "200"])
         return r if isinstance(r, str) else (_find(r, "text") or json.dumps(r))
 
-    def status(self, h):
-        tabs = (
+    def _tabs(self):
+        return (
             _find(self._ok(["tab", "list", *(["--workspace", self.workspace] if self.workspace else [])]), "tabs") or []
         )
+
+    def status(self, h):
+        tabs = self._tabs()
         t = next((t for t in tabs if t.get("tab_id") == h.get("tab")), None)
         if t is None:
             return "gone", None
@@ -144,7 +147,11 @@ class Herdr:
 
     def close(self, h):
         if h and h.get("tab"):
-            self._ok(["tab", "close", h["tab"]])
+            try:
+                self._ok(["tab", "close", h["tab"]])
+            except RuntimeError:  # a tab that is already gone is closed
+                if any(t.get("tab_id") == h["tab"] for t in self._tabs()):
+                    raise
 
 
 def _held(rec: dict) -> bool:
