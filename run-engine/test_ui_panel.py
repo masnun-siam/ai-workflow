@@ -7,7 +7,9 @@ the test finishes a session by writing its stream and status, as the runner's fo
 
 from __future__ import annotations
 
+import contextlib
 import http.client
+import io
 import json
 import os
 import shutil
@@ -309,6 +311,19 @@ try:
         and argv[-1] == "go"
     )
     ok("ui_runner.start: --agent and --model reach claude's argv")
+    # ---- a corrupt panel.json is moved aside once; tick keeps going
+    bad = os.path.join(data_dir, "peer-review", "p-bad")
+    os.makedirs(bad)
+    with open(os.path.join(bad, "panel.json"), "w") as fh:
+        fh.write("{nope")
+    ui_panel.tick()
+    assert not os.path.exists(os.path.join(bad, "panel.json"))
+    assert any(n.startswith("panel.json.corrupt-") for n in os.listdir(bad))
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        ui_panel.tick()
+    assert "p-bad" not in err.getvalue(), err.getvalue()
+    ok("tick moves a corrupt panel.json aside once; the second tick is silent")
 finally:
     srv.shutdown()
     srv.server_close()
