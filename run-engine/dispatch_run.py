@@ -14,7 +14,7 @@ the caller from the board snapshot, the grind index and the runner:
      "grind": None | {"state": idle|running|paused|done, "reason": str, "due": str | None},  # due: a token
      "slack": bool,                                  # the repo has a grind channel; False skips grinding
      "solo": bool,                                   # the repo is the gh user's own: no approval needed
-     "agent": working|idle|blocked|gone|None, "limited_until": float | None}
+     "agent": working|idle|blocked|gone|unknown|None, "limited_until": float | None}
 
 Actions: ("send", text), ("merge", pr_n, sha), ("close",), ("continue",), ("notify", kind, text).
 `tick(d, facts, runner, merge, now)` steps every lane, runs the actions, launches what is startable and
@@ -763,6 +763,9 @@ def run_end(d: dict, action: str, runner, gh) -> str:
     if action == "open-pr":
         out = []
         for repo in _repos(d):
+            if repo in d.get("final_prs", {}):  # opened by an earlier try that failed on a later repo
+                out.append(d["final_prs"][repo])
+                continue
             base = (
                 d["settings"].get("base_branch")
                 or gh(

@@ -821,6 +821,23 @@ assert hd.status(h) == ("working", None)  # idle but waiting on its own monitors
 assert hd.status({"tab": "gone"}) == ("gone", None)
 hd.close(h)
 assert calls[-1] == ["tab", "close", "t1"]
+# a tab that is already gone closes quietly; one that fails to close while it exists raises
+tabs_now = []
+
+
+def cli_close(argv, timeout=60):
+    out = json.dumps({"result": {"tabs": [{"tab_id": t} for t in tabs_now]}}) if argv[:2] == ["tab", "list"] else ""
+    return subprocess.CompletedProcess(argv, 1 if argv[:2] == ["tab", "close"] else 0, out, "no such tab")
+
+
+hc = dispatch_runners.Herdr("w1", cli_close)
+hc.close({"tab": "t9"})
+tabs_now.append("t9")
+try:
+    hc.close({"tab": "t9"})
+    raise AssertionError("close of a live tab that failed")
+except RuntimeError:
+    pass
 
 
 class FakeSessions:
@@ -929,6 +946,33 @@ del gh_calls[:]
 dr.tick(d6, {}, FakeRunner(), merge, now=1, gh=fake_gh)
 assert gh_calls[0][:8] == ["pr", "create", "-R", "o/r", "--base", "staging", "--head", "feature/x"]
 assert not any(c[:2] == ["repo", "view"] for c in gh_calls)
+# a retry after a failure on the second repo creates only that PR and reports both
+d7 = dr.create("o/r#80", "headless", {"feature_branch": "feature/x"}, [child(81), child(82)])
+dr.request_end(d7["id"], "open-pr")
+d7 = dr.load(d7["id"])
+d7["lanes"][K(82)]["repo"] = "o/s"
+fail_once = [True]
+
+
+def gh_fail_s(argv):
+    if argv[:2] == ["pr", "create"] and argv[3] == "o/s" and fail_once:
+        fail_once.pop()
+        return subprocess.CompletedProcess(argv, 1, "", "boom")
+    return fake_gh(argv)
+
+
+del gh_calls[:]
+dr.tick(d7, {}, FakeRunner(), merge, now=1, gh=gh_fail_s)
+assert list(d7["final_prs"]) == ["o/r"] and d7["lanes"][K(82)]["repo"] == "o/s"
+d7.setdefault("end_requests", []).append("open-pr")
+del gh_calls[:]
+dr.tick(d7, {}, FakeRunner(), merge, now=2, gh=gh_fail_s)
+creates = [c[3] for c in gh_calls if c[:2] == ["pr", "create"]]
+assert creates == ["o/s"] and sorted(d7["final_prs"]) == ["o/r", "o/s"]
+# an unreachable runner is no news: a followups lane is not closed
+fl = {"n": 9, "repo": "o/r", "stage": "followups", "pr": 5}
+fp, fa = dr.step(fl, {"issue_open": False, "agent": "unknown", "pr": pr(5, state="MERGED")}, {"grind": "off"}, 1)
+assert fp.get("stage", "followups") == "followups" and ("close",) not in fa
 print("  ok  base_branch lanes and open-pr")
 
 # --- epic dispatches honour lane ownership (#714)

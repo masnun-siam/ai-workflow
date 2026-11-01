@@ -18,6 +18,7 @@ import dispatch_runners
 import ui_gh
 import ui_grind
 import ui_notify
+import ui_poller
 import ui_settings
 import ui_sessions
 from shared import warn
@@ -28,6 +29,11 @@ LIVE = ("running", "paused")
 
 
 # --------------------------------------------------------------------------- facts
+
+
+def _merged_before(p: dict, started_at: float) -> bool:
+    at = ui_poller._parse_ts(p.get("merged_at"))
+    return at is not None and at.timestamp() < started_at
 
 
 def _pr_of(x: dict, data: dict, issue):
@@ -42,6 +48,8 @@ def _pr_of(x: dict, data: dict, issue):
         ]
     if x.get("pr"):
         return next((p for p in prs if p["n"] == x["pr"]), None)
+    if x.get("started_at"):  # a merged PR from before this lane started belongs to an earlier run of the issue
+        prs = [p for p in prs if p.get("state") != "MERGED" or not _merged_before(p, x["started_at"])]
     return next((p for p in prs if p.get("state") == "OPEN"), None) or next(
         (p for p in prs if p.get("state") == "MERGED"), None
     )
@@ -99,6 +107,7 @@ def lane_facts(x: dict, snap, status=None, grind_files=None, channel=dispatch_cl
             f["agent"], f["limited_until"] = status(x["handle"])
         except Exception as e:  # noqa: BLE001 - an unreachable runner reads as "no news", not as gone
             warn(f"dispatch: status of {x['repo']}#{x['n']}: {e}")
+            f["agent"], f["limited_until"] = "unknown", None
     return f
 
 

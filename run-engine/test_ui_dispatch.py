@@ -109,7 +109,18 @@ f = ui_dispatch.lane_facts(
 assert f["issue_open"] is False and f["pr"]["state"] == "MERGED"
 # a runner that cannot be reached reads as no news
 f = ui_dispatch.lane_facts(lane, s, status=lambda h: 1 / 0, grind_files=[], channel=no_channel)
-assert "agent" not in f
+assert f["agent"] == "unknown" and f["limited_until"] is None
+# a merged PR from before the lane started is an earlier run of a reissued issue
+old = pr(40, state="MERGED", merged_at="2026-11-01T00:00:00Z")
+started = 1793000000.0  # 2026-10-28 < merged_at
+for started_at, has_pr in ((started + 10**7, False), (started, True), (None, True)):
+    ln = {"repo": R, "n": 5, **({"started_at": started_at} if started_at else {})}
+    f = ui_dispatch.lane_facts(ln, snap([issue(5, prs=[old])]), grind_files=[], channel=no_channel)
+    assert ("pr" in f) is has_pr and (not has_pr or f["pr"]["state"] == "MERGED"), started_at
+# closed issue: the merged list is filtered the same way
+m = {"n": 50, "title": "", "url": "u", "merged_at": "2026-11-01T00:00:00Z", "head": "h", "closes": [5], "epic": 1}
+ln = {"repo": R, "n": 5, "started_at": started + 10**7}
+assert "pr" not in ui_dispatch.lane_facts(ln, snap(merged=[m]), grind_files=[], channel=no_channel)
 print("  ok  lane_facts")
 
 
