@@ -32,6 +32,7 @@
 ### Fixed
 
 - **Dispatch and board read past GitHub's first page** (#716): a dispatch resolves every child of an epic with more than 100 sub-issues, keeps `refined` and all blockers on issues with more than 20 labels or blockers, and the board poller follows the open-issues cursor (up to 5 pages, `issues_truncated` when more are left). A lane whose issue is missing from a truncated list now waits instead of reading as closed.
+- **A failed merge stays visible** (#715): when `gh pr merge` fails for a reason other than a conflict, the lane keeps `held: merge failed: <error>` until a merge succeeds or you retry (it was cleared on the next tick while the merge was retried every 5 minutes unseen). The same error raises no new event; after 3 failures in a row the lane needs you. Red CI, a conflict or leaving the merge stages drops the stale error.
 - **Stranded lanes need you** (#711): a queued lane behind a skipped blocker (user skip, needs refine, start failed), or in a dependency cycle, gets `needs_you` ("blocked by skipped #n" or "dependency cycle") and one `needs_you` event once nothing is running. The reason clears when the blocker is retried.
 - **Epic dispatches respect lane ownership** (#714): starting a dispatch for an epic whose child is already a lane of a running or paused dispatch is refused (409 in the UI with the owner `id`; `aiw dispatch start` prints the message and exits 5), as issue-list dispatches already were. Check and save run under one lock.
 
