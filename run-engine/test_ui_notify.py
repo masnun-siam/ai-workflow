@@ -27,6 +27,17 @@ import ui_notify  # noqa: E402
 import ui_runner  # noqa: E402
 import ui_sessions  # noqa: E402
 
+# notify returns before the push lands: the cases below assert on received requests, so they wait for it.
+_async_notify = ui_notify.notify
+
+
+def _notify_and_drain(event, rec):
+    _async_notify(event, rec)
+    ui_notify.drain()
+
+
+ui_notify.notify = _notify_and_drain
+
 # Stub the Mac and feed channels so no test shows a real banner; later sections read these recorders.
 REAL_SEND_MAC, REAL_FEED_ADD = ui_notify.send_mac, ui_feed.add
 macs, feed = [], []
@@ -631,3 +642,15 @@ with mock.patch.object(ui_notify, "send_mac", lambda *a: "Only on macOS"):
 ok("send_test: ntfy ok/401/unreachable/not set up, mac, bad channel, ignores matrix and Away")
 
 print(f"\n{passed} passed")
+
+
+# notify never blocks on a slow channel, and the push still arrives
+fresh({})
+slow = Fake(200, delay=2.0)
+os.environ.update(AIW_NTFY_SERVER=slow.url, AIW_NTFY_TOPIC="slow")
+t0 = time.time()
+_async_notify("done", rec())
+assert time.time() - t0 < 0.5, "notify blocked on a slow channel"
+ui_notify.drain()
+assert len(slow.reqs) == 1, slow.reqs
+slow.close()

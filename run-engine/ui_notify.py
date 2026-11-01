@@ -259,8 +259,12 @@ def prd_comment(share_id: str, summary: str, now=None) -> bool:
     return True
 
 
+_inflight: list = []
+_inflight_lock = threading.Lock()
+
+
 def notify(event: str, rec: dict) -> None:
-    """Route one event to every channel its matrix cell turns on; each channel is independent."""
+    """Route one event to every channel its matrix cell turns on, each independent, without blocking the caller."""
     if rec.get("role") == "away-answerer":  # literal: ui_sessions imports this module
         return
     cmd = rec.get("command")
@@ -271,6 +275,23 @@ def notify(event: str, rec: dict) -> None:
 
         if ui_afk.active():
             return
+    # Non-daemon: a short-lived process (`aiw ask`) must still deliver its push before the interpreter exits.
+    t = threading.Thread(target=_deliver, args=(event, dict(rec)))
+    with _inflight_lock:
+        _inflight[:] = [x for x in _inflight if x.is_alive()]
+        _inflight.append(t)
+    t.start()
+
+
+def drain(timeout: float = 15.0) -> None:
+    """Wait for the pushes in flight (tests)."""
+    with _inflight_lock:
+        pending = list(_inflight)
+    for t in pending:
+        t.join(timeout)
+
+
+def _deliver(event: str, rec: dict) -> None:
     try:
         cfg = load_config()
         cells = matrix(cfg).get(event, {"browser": False, "ntfy": True, "mac": False})  # unknown event: ntfy only
