@@ -369,4 +369,26 @@ p9.poll("o/r")
 clock9.t += 60
 assert p9.poll("o/r")["retry_at"] == clock9.t + ui_poller.RATE_LIMIT_PAUSE
 print("ok  low budget slows polling, a rate limit waits for the reset")
+
+# the poller thread survives a raising pass (and shared.supervised_loop keeps ticking)
+import threading  # noqa: E402
+import time  # noqa: E402
+
+seen = []
+
+
+def flaky_repos():
+    seen.append(1)
+    if len(seen) == 1:
+        raise RuntimeError("boom")
+    return []
+
+
+t = ui_poller.Poller(runner_for([], [])).start(flaky_repos, tick=0.01)
+assert isinstance(t, threading.Thread) and t.daemon
+deadline = time.time() + 10
+while len(seen) < 2 and time.time() < deadline:
+    time.sleep(0.01)
+assert len(seen) >= 2 and t.is_alive(), seen
+print("ok  poller survives a raising pass")
 print("ok")

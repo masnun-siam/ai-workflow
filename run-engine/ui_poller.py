@@ -59,6 +59,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
+import shared
 from shared import run
 
 POLL_SECONDS = 60
@@ -470,17 +471,13 @@ class Poller:
         """Daemon thread: every `tick` s poll each repo of `repos()` (callable -> slugs) that is due.
         `hot()` (callable -> slugs) names the repos on the normal cadence; the rest are cold. None: all hot."""
 
-        def loop():
-            while True:
-                warm = hot() if hot else None
-                for repo in list(repos()):
-                    if self.due(repo, warm is None or repo in warm):
-                        self.poll(repo)
-                time.sleep(tick)
+        def once():
+            warm = hot() if hot else None
+            for repo in list(repos()):
+                if self.due(repo, warm is None or repo in warm):
+                    self.poll(repo)
 
-        t = threading.Thread(target=loop, daemon=True)
-        t.start()
-        return t
+        return shared.supervised_loop(once, tick, "board poller")
 
 
 _default = Poller()

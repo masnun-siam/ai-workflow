@@ -1430,6 +1430,21 @@ def prgrind_cases() -> int:
         assert isinstance(t, threading.Thread) and t.daemon
         wait_for(lambda: len(all_sessions()) >= 2, 10)
 
+    def prgrind_timer_survives_raise():
+        calls = []
+
+        def flaky():
+            calls.append(1)
+            if len(calls) == 1:
+                raise RuntimeError("boom")
+
+        real, ui_runner.prgrind_tick_all = ui_runner.prgrind_tick_all, flaky
+        try:
+            ui_runner.start_prgrind_timer(0.01)
+            wait_for(lambda: len(calls) >= 2, 10)
+        finally:
+            ui_runner.prgrind_tick_all = real
+
     def run_issue_origin():
         d, fk, work = pset()
         path = mkpr(d)
@@ -1696,6 +1711,7 @@ def prgrind_cases() -> int:
         poll_once,
         tick_all_scan,
         timer_catchup,
+        prgrind_timer_survives_raise,
         run_issue_origin,
         empty_and_invalid,
         boundaries,
@@ -1867,6 +1883,29 @@ def restart_cases():
     ui_runner.stop(sid)
     assert ui_sessions.load(sid)["status"] == "stopped" and sid not in ui_runner._stopping
     ok("stop without a follower: stopped, _stopping cleared")
+
+    # a follower that dies on an unexpected exception marks a running record failed; others are left alone
+    ui_runner._procs.clear()
+    ui_runner._stopping.clear()
+    broken = {}
+    for st in ("running", "done", "stopped"):
+        sid = mk(st, pid, S, pid_started=OLD)
+        os.remove(os.path.join(sdir(sid), "stream.jsonl"))
+        os.makedirs(os.path.join(sdir(sid), "stream.jsonl"))  # drain raises IsADirectoryError
+        broken[st] = sid
+    sid = mk("running", pid, S, pid_started=OLD)
+    os.remove(os.path.join(sdir(sid), "stream.jsonl"))
+    os.makedirs(os.path.join(sdir(sid), "stream.jsonl"))
+    ui_runner._stopping.add(sid)
+    for x in (*broken.values(), sid):
+        ui_runner._follow(x, None, pid, OLD)
+    r = ui_sessions.load(broken["running"])
+    assert r["status"] == "failed" and r["ended_at"] and r["error"].startswith("follower failed:"), r
+    assert ui_sessions.load(broken["done"])["status"] == "done"
+    assert ui_sessions.load(broken["stopped"])["status"] == "stopped"
+    assert ui_sessions.load(sid)["status"] == "running"  # being stopped: not overwritten
+    ui_runner._stopping.clear()
+    ok("follower death: running record failed with error, others untouched")
 
     # dead pid cases
     d, fk, work = setup()
