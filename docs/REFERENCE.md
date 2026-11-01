@@ -28,7 +28,7 @@
 aiw ui [--port N] [--allow-host HOST]   local web UI to start and track sessions
 aiw paths                               resolve every path, create the state dirs
 aiw ask                                 a headless session asks the user a question and pauses
-aiw ci status                           check state plus the failing job's log
+aiw ci status                           check state (green, red, pending, or error when gh could not be read) plus the failing job's log
 aiw threads list|resolve                PR review threads
 aiw grind-mode [--pr <url>]             print the grind mode, deep or simple: the PR's dispatch decides, else
                                         Settings (read by /pr-grind each round)
