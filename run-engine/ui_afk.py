@@ -3,8 +3,8 @@
 While it runs, each tick:
 - answers every `aiw ask` round whose questions all carry a "(Recommended)" option, planning
   interviews included, through the same claim + resume path as the answer page, once a jev risk check
-  (a worker off the tick, two at a time, stored as `risk: {p}` on the round) says p < 0.5 or has no answer;
-  at p >= 0.5 the round goes to the Opus answerer below and its log entry carries `risk`;
+  (a worker off the tick, two at a time, stored as `risk: {p}` on the round) says p < 0.5 (jev off or missing: no check, auto-picked);
+  at p >= 0.5, or when the check fails (`unknown`), the round goes to the Opus answerer below and its log entry carries `risk`;
 - gives every other round to a read-only Opus answerer session (agents/away-answerer.md, started with
   only its tools allowed): a valid reply is answered the same way and logged `by: opus`; a hold, or two
   failed answerers (failed, limited, stopped, invalid reply, over 10 minutes), is logged `held` and the
@@ -330,6 +330,7 @@ RISK_QUESTION = (
     "Is any recommended option irreversible or outward-facing: pushing, merging, publishing, deleting, "
     "posting, or spending money?"
 )
+_RISK_UNKNOWN = {"p": None, "unknown": True}  # jev was on but the check failed: Opus decides
 _risk_pool = ThreadPoolExecutor(max_workers=2)
 _risk_queued: set = set()  # (sid, round id) queued or in flight
 _risk_lock = threading.Lock()  # not _lock: that one guards afk.json
@@ -348,9 +349,13 @@ def _risk_text(pq: dict) -> str:
 def _check_risk(sid: str, rid: str, text: str) -> None:
     try:
         r = jev.ask("risk", "noul", RISK_QUESTION, text)
-        ui_sessions.update_pending(sid, rid, risk={"p": r["p"] if r["status"] == "ok" else None})
+        ui_sessions.update_pending(sid, rid, risk={"p": r["p"]} if r["status"] == "ok" else dict(_RISK_UNKNOWN))
     except Exception as exc:  # noqa: BLE001 - a worker never raises
         warn(f"afk: risk check: {type(exc).__name__}")
+        try:  # mark it unknown so the round is checked once, not requeued every tick
+            ui_sessions.update_pending(sid, rid, risk=dict(_RISK_UNKNOWN))
+        except Exception as exc2:  # noqa: BLE001
+            warn(f"afk: risk check: {type(exc2).__name__}")
     finally:
         with _risk_lock:
             _risk_queued.discard((sid, rid))
@@ -367,12 +372,15 @@ def _queue_risk(rec: dict, pq: dict) -> None:
 
 def _risky(pq: dict) -> bool:
     risk = pq.get("risk")
-    p = risk.get("p") if isinstance(risk, dict) else None
-    return isinstance(p, (int, float)) and p >= RISK_P
+    if not isinstance(risk, dict):
+        return False
+    p = risk.get("p")
+    return bool(risk.get("unknown")) or (isinstance(p, (int, float)) and p >= RISK_P)
 
 
 def _risk_key(pending: dict) -> dict:
-    return {"risk": pending["risk"]["p"]} if _risky(pending) else {}
+    p = (pending.get("risk") or {}).get("p")
+    return {"risk": p} if isinstance(p, (int, float)) and _risky(pending) else {}
 
 
 def _answer(rec: dict, now: float) -> dict | None:
