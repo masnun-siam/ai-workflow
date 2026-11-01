@@ -36,11 +36,20 @@ def snapshot(owner: str, repo: str, number: int) -> dict:
     head, _ = gh_json(["pr", "view", str(number), "--repo", slug, "--json", "headRefOid", "--jq", ".headRefOid"])
     rows, proc = gh_json(["pr", "checks", str(number), "--repo", slug, "--json", "name,state,bucket,link"])
     if rows is None:
-        # `gh pr checks` exits nonzero when checks are red AND when none exist.
-        # "no checks configured" is green for our purposes; anything else is an error.
-        if "no checks" in ((proc.stderr or "") + (proc.stdout or "")).lower():
-            return {"state": "green", "head_sha": head, "failing": [], "note": "no checks configured"}
-        rows = []
+        # `gh pr checks` may exit nonzero for red or pending checks while still writing
+        # the JSON, so read stdout first. "no checks configured" is green; any other
+        # failure (rate limit, auth, timeout) is "error": never read as green.
+        try:
+            parsed = json.loads((proc.stdout or "").strip() or "null")
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, list):
+            rows = parsed
+        else:
+            text = ((proc.stderr or "") + (proc.stdout or "")).strip()
+            if "no checks" in text.lower():
+                return {"state": "green", "head_sha": head, "failing": [], "note": "no checks configured"}
+            return {"state": "error", "head_sha": head, "failing": [], "note": text[:300]}
     failing = [r for r in rows if (r.get("bucket") or "").lower() == "fail"]
     return {"state": state_of(rows), "head_sha": head, "failing": failing}
 
@@ -64,11 +73,11 @@ def cmd_status(args) -> None:
     slug = f"{owner}/{repo}"
     deadline = time.monotonic() + args.timeout
     result = snapshot(owner, repo, number)
-    while args.watch and result["state"] == "pending" and time.monotonic() < deadline:
+    while args.watch and result["state"] in ("pending", "error") and time.monotonic() < deadline:
         time.sleep(POLL_SECONDS)
         result = snapshot(owner, repo, number)
-    if result["state"] == "pending" and args.watch:
-        result["note"] = f"wall-clock cap of {args.timeout}s expired with checks still pending"
+    if result["state"] in ("pending", "error") and args.watch:
+        result["note"] = f"wall-clock cap of {args.timeout}s expired with checks still {result['state']}"
     result["failing"] = failing_detail(slug, result.get("failing") or [])
     print(json.dumps(result, indent=2))
 
@@ -76,8 +85,8 @@ def cmd_status(args) -> None:
 def register(sub, add) -> None:
     p = sub.add_parser("ci", help="report a PR's check status")
     ops = p.add_subparsers(dest="op", required=True)
-    q = ops.add_parser("status", help="green|red|pending plus the failing jobs' logs")
+    q = ops.add_parser("status", help="green|red|pending|error plus the failing jobs' logs")
     q.add_argument("pr", help="PR url, owner/repo#N, or N")
-    q.add_argument("--watch", action="store_true", help="poll until nothing is pending")
+    q.add_argument("--watch", action="store_true", help="poll until nothing is pending or erroring")
     q.add_argument("--timeout", type=int, default=1200, help="wall-clock cap for --watch")
     q.set_defaults(func=cmd_status)
