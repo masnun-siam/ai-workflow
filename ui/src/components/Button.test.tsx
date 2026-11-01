@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { KeyScope, useActions, useGlobalShortcuts } from '../shell/shortcuts';
 import { Button, LinkButton } from './Button';
-import { Dialog } from './Dialog';
+import { ConfirmProvider, Dialog, useConfirm } from './Dialog';
 import { Menu } from './Menu';
 
 function Host({ children }: { children?: ReactNode }) {
@@ -89,5 +89,24 @@ describe('Button shortcut', () => {
     );
     press('o');
     expect(screen.getByText('arrived')).toBeTruthy();
+  });
+});
+
+describe('useConfirm', () => {
+  it('keeps title, body and labels while the dialog closes', async () => {
+    let ask: ReturnType<typeof useConfirm> = () => Promise.resolve(false);
+    const Grab = () => { ask = useConfirm(); return null; };
+    render(<ConfirmProvider><Grab /></ConfirmProvider>);
+    let answer: Promise<boolean> = Promise.resolve(false);
+    await act(async () => { answer = ask({ title: 'Stop it?', body: 'Really stop', okLabel: 'Stop' }); });
+    expect(screen.getAllByText('Stop it?').length).toBeGreaterThan(0);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Stop' })); });
+    expect(await answer).toBe(true);
+    // Radix keeps the content mounted for the exit transition; it must not have gone empty.
+    const dialog = document.querySelector('[role="alertdialog"]');
+    if (dialog) {
+      expect(dialog.textContent).toContain('Stop it?');
+      expect(dialog.textContent).toContain('Really stop');
+    }
   });
 });

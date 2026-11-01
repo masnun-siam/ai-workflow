@@ -61,6 +61,10 @@ export const useConfirm = () => useContext(ConfirmCtx);
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ConfirmOpts | null>(null);
   const resolver = useRef<((v: boolean) => void) | null>(null);
+  // Keep the last shown content so the exit transition does not render an empty dialog.
+  const last = useRef<ConfirmOpts | null>(null);
+  last.current = state ?? last.current;
+  const shown = state ?? last.current;
   const confirm = useCallback<Confirm>((o) => {
     resolver.current?.(false);
     setState(o);
@@ -79,17 +83,17 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
       <Dialog
         open={!!state}
         onOpenChange={(o) => !o && close(false)}
-        title={state?.title ?? ''}
+        title={shown?.title ?? ''}
         alert
-        wide={state?.wide}
+        wide={shown?.wide}
         footer={
           <>
-            <Button variant="ghost" onClick={() => close(false)}>{state?.cancelLabel ?? 'Cancel'}</Button>
-            <Button variant={state?.danger ? 'solid-danger' : 'primary'} autoFocus onClick={() => close(true)}>{state?.okLabel ?? 'Confirm'}</Button>
+            <Button variant="ghost" onClick={() => close(false)}>{shown?.cancelLabel ?? 'Cancel'}</Button>
+            <Button variant={shown?.danger ? 'solid-danger' : 'primary'} autoFocus onClick={() => close(true)}>{shown?.okLabel ?? 'Confirm'}</Button>
           </>
         }
       >
-        {state?.body}
+        {shown?.body}
       </Dialog>
     </ConfirmCtx.Provider>
   );
