@@ -227,3 +227,32 @@ button.thread-quote{cursor:pointer}
 .ticks i{border-radius:1px}
 .ticks i.now{background:var(--accent)}
 .readyp{border:1px solid var(--line);border-left:1px solid var(--line);box-shadow:none}
+
+/* create box: the canvas design. Route as a cyan-marked segment, Auto's reason in cyan, the duplicate
+   warning in amber, repo and account side by side, and a footer on its own rule. */
+.dlg-pos:has(.cr){border-radius:12px;box-shadow:0 30px 60px rgba(0,0,0,.5);border-color:var(--line-strong)}
+.dlg-pos:has(.cr) .d-h{padding:20px 20px 4px}
+.dlg-pos:has(.cr) .d-h h2{font-size:20px;font-weight:800;letter-spacing:-.015em}
+.cr{padding:10px 20px 0;gap:14px}
+.new-in{font-size:15px;background:var(--bg);border-color:var(--line-strong);border-radius:8px}
+.route{padding:0;gap:0;background:none;border:1px solid var(--line-strong);border-radius:var(--r-ctl);overflow:hidden}
+.route button{height:34px;padding:0 14px;border-radius:0;background:var(--sunk);color:var(--muted);font-weight:600}
+.route button+button{border-left:1px solid var(--line-strong)}
+.route button[aria-checked=true]{background:var(--accent-soft);color:var(--ink);box-shadow:inset 0 -2px var(--accent)}
+.cr-row{justify-content:flex-start;gap:10px 12px}
+.cr-say{flex:1 1 240px;min-height:0}
+.cr-say.auto{color:var(--accent)}
+.cr-dup{padding:8px 10px;border-radius:var(--r-ctl);background:var(--you-wash);border:1px solid var(--you-line);color:var(--you-ink)}
+.cr-dup a{color:var(--you)}
+.cr-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.cr-field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.cr-field .repo-btn,.cr-field > button{width:100%}
+.cr-lbl{font-size:12px;color:var(--faint);font-weight:500}
+.cr-acct{flex-direction:column;align-items:stretch;flex-wrap:nowrap;gap:6px}
+.cr-acct .seg{align-self:flex-start}
+.cr-note{font-size:12px}
+.cr-plan{background:var(--bg);border:1px solid var(--line)}
+.cr .lens.on{background:var(--accent-soft);color:var(--ink);border-color:var(--accent)}
+.cr-foot{margin:4px -20px 0;padding:14px 20px;border-top:1px solid var(--line)}
+@media (max-width:760px){.cr-foot{justify-content:flex-end}.cr-foot > .grow{display:none}.cr-foot > :first-child{margin-right:auto}}
+.scrim-r{background:rgba(5,9,12,.6)}
