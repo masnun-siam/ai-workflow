@@ -11,7 +11,7 @@ flowchart LR
     X[/dump, idea/] --> A[PRD draft]
     A -->|peer review, optional| B[In review]
     B -->|approve: files the epic| C[Approved]
-    C -->|/create-tasks| D[Task list]
+    C -->|/create-tasks| D[Task issues]
     D -->|/refine-issues| E[Refined issues]
     E -->|/implement-issue| F[Draft PR]
     F -->|CI green, /pr-review, fixes| G[Ready PR]
@@ -147,6 +147,6 @@ A repo's own copy of a skill (`.claude/skills/<name>/`) is used in place of the 
 | Where | What |
 |---|---|
 | GitHub | issues, labels, blocked-by links, PRs, review threads, CI |
-| `docs/prds/`, `docs/tasks/` in the repo | the PRD and the task list |
+| `docs/prds/` in the repo | the PRD |
 | the Obsidian vault | `/dump` captures and the PRD mirror |
 | plugin data dir | UI sessions, settings, grind, peer-review and dispatch state: nothing here is a source of truth for the work |
