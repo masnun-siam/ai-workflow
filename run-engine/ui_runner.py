@@ -416,6 +416,7 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
         if ev.get("type") == "system" and ev.get("subtype") == "init":
             saw_init = True
             asked = False  # a new claude process: an earlier `aiw ask` was answered (or this is a replay after a UI restart)
+            saw_result = is_error = False  # only the last claude process decides the outcome of a replay
             ui_sessions.update(sid, session_id=ev.get("session_id"))
             if isinstance(ev.get("model"), str) and ev["model"]:
                 ui_sessions.update(sid, model=ev["model"])
