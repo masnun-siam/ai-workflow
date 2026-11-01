@@ -25,7 +25,7 @@ from shared import warn
 
 LENS_AGENT, LENS_MODEL = "ai-workflow:peer-reviewer", "opus"
 TICK_SECONDS = 5
-_BUSY = ("starting", "running", "waiting", "limited", "queued")
+_BUSY = ("starting", "running", "waiting", "limited", "queued", "held")
 _lock = threading.RLock()
 
 
@@ -51,8 +51,11 @@ def final_text(sid: str) -> str:
 
 
 def _status(sid) -> str | None:
+    """The session's status, or "held" once a held session's run has ended (it waits for the user's Resume)."""
     rec = ui_sessions.load(sid) if sid else None
-    return rec.get("status") if rec else None
+    if not rec:
+        return None
+    return "held" if rec.get("hold") and rec.get("status") == "done" else rec.get("status")
 
 
 def _lens(lens: str) -> dict:
@@ -165,6 +168,8 @@ def _tick_panel(panel_id: str) -> None:
                 _start_lens(panel_id, lens)
     elif phase == "root":
         if rs == "done":
+            if any(_status(p["lens_sessions"].get(x)) == "held" for x in p["lenses"] if x not in p["dropped"]):
+                return  # the round starts for all lenses together
             peer_review.update_panel(panel_id, phase="lenses")
             for lens in p["lenses"]:
                 if lens in p["dropped"]:
