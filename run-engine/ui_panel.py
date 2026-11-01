@@ -14,6 +14,7 @@ import os
 import threading
 import time
 
+import away_answerer
 import peer_review
 import ui_events
 import ui_notify
@@ -72,7 +73,13 @@ def _lens_prompt(panel: dict, lens: str, rnd: int) -> str:
 
 def _start_lens(panel_id: str, lens: str) -> None:
     p = peer_review.load_panel(panel_id)
-    rec = ui_runner.start(_lens_prompt(p, lens, p["round"]), p["repo"], agent=LENS_AGENT, model=LENS_MODEL)
+    rec = ui_runner.start(
+        _lens_prompt(p, lens, p["round"]),
+        p["repo"],
+        agent=LENS_AGENT,
+        model=LENS_MODEL,
+        allowed_tools=away_answerer.allowed_tools("peer-reviewer"),
+    )
     ui_sessions.update(rec["id"], panel=panel_id, panel_role="lens", panel_lens=lens)
     peer_review.update_panel(panel_id, lens_sessions={**p.get("lens_sessions", {}), lens: rec["id"]})
 
