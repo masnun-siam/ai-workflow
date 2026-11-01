@@ -724,6 +724,7 @@ def _watch_waiting(sid: str, pid, started) -> None:
         finally:
             if sid in _procs and _procs[sid] is None:
                 _procs.pop(sid, None)
+                _stopping.discard(sid)
 
     _procs[sid] = None
     threading.Thread(target=watch, daemon=True).start()
@@ -748,7 +749,11 @@ def stop(sid: str) -> dict:
         return ui_sessions.update(sid, status="stopped", ended_at=_now(), auto_resume=False)
     if rec["status"] == "queued":  # never started: it just leaves the batch queue
         return ui_sessions.update(sid, status="stopped", ended_at=_now(), note=None)
-    if rec["status"] == "waiting" and (proc is None or proc.poll() is not None):
+    # a re-attached waiting session (proc None) whose claude process is still ours falls through to the kill
+    reattached = (
+        proc is None and rec.get("pid") and rec.get("pid_started") and _proc_start(rec["pid"]) == rec["pid_started"]
+    )
+    if rec["status"] == "waiting" and not reattached and (proc is None or proc.poll() is not None):
         return ui_sessions.update(sid, status="stopped", ended_at=_now(), pending_question=None)
     if rec["status"] not in ("starting", "running", "waiting") or not rec.get("pid"):
         return rec

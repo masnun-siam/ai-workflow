@@ -1812,6 +1812,42 @@ def restart_cases():
     finally:
         reap({"pid": pid})
 
+    # stop() on a re-attached waiting session kills its group and leaves no _stopping entry
+    d, fk, work = setup("sleep")
+    ui_runner._procs.clear()
+    ui_runner._stopping.clear()
+    sid, pid = detached(work)
+    try:
+        ui_sessions.update(sid, status="waiting", pid_started=ui_runner._proc_start(pid))
+        ui_runner.reconcile()
+        assert sid in ui_runner._procs and ui_runner._procs[sid] is None
+        ui_runner.stop(sid)
+        r = ui_sessions.load(sid)
+        assert group_gone(pid) and r["status"] == "stopped" and r["pending_question"] is None, r
+        wait_for(lambda: sid not in ui_runner._procs)
+        assert sid not in ui_runner._stopping
+        ok("stop on re-attached waiting session: group killed, _stopping cleared")
+    finally:
+        reap({"pid": pid})
+
+    # waiting + stale pid_started / dead pid: marked stopped, nothing signalled
+    d, fk, work = setup("sleep")
+    ui_runner._procs.clear()
+    sid, pid = detached(work)
+    try:
+        ui_sessions.update(sid, status="waiting", pid_started=OLD)
+        ui_runner._procs[sid] = None
+        ui_runner.stop(sid)
+        assert ui_sessions.load(sid)["status"] == "stopped" and not group_gone(pid)
+        sid2 = mk("waiting", dead_pid(), S, pid_started=OLD)
+        ui_runner._procs[sid2] = None
+        ui_runner.stop(sid2)
+        assert ui_sessions.load(sid2)["status"] == "stopped"
+        ok("stop on waiting with stale pid_started or dead pid: stopped, no signal")
+    finally:
+        ui_runner._procs.clear()
+        reap({"pid": pid})
+
     # stop() on re-attached session: "stopped" is written before _stopping clears (deterministic)
     ui_runner._procs.clear()
     ui_runner._stopping.clear()
