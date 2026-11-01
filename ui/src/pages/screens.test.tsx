@@ -556,8 +556,8 @@ describe('Activity', () => {
   it('clamps a live card command and drops the dangling cost dash', async () => {
     const command = '/x:dump ' + 'long/path/'.repeat(30);
     routes['/api/sessions'] = { limits: {}, usage: {}, afk: AFK, sessions: [
-      base({ id: 'a', outcome: 'running', ended_at: null, command, cost: null }),
-      base({ id: 'b', outcome: 'running', ended_at: null, cost: 1.5 }),
+      base({ id: 'a', outcome: 'running', ended_at: null, command, cost: null, started_at: '2026-01-02T00:00:00Z' }), // newest first
+      base({ id: 'b', outcome: 'running', ended_at: null, cost: 1.5, started_at: '2026-01-01T00:00:00Z' }),
     ] };
     window.location.hash = '#/activity';
     render(<App />);
