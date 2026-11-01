@@ -86,6 +86,7 @@ now = time.time()
 a = waiting()
 ui_afk.tick(now)
 assert not resumed and not ui_afk.active(now)
+ui_notify.drain()  # pushes are sent on a background thread
 assert any("waiting" in (t or "") for t, _ in pushed), pushed
 
 # start validation
@@ -101,6 +102,7 @@ assert pub["active"] and pub["until"] == now + 3600 and ui_afk.active(now)
 # recommended round: answered with the recommended label via the normal answer text
 pushed.clear()
 b = waiting(rec=False)  # no recommendation -> held, and no push while AFK
+ui_notify.drain()  # pushes are sent on a background thread
 assert not pushed, pushed
 ui_runner._procs[a] = None  # claude still exiting after `aiw ask`: wait
 ui_afk.tick(now)
@@ -182,9 +184,11 @@ pushed.clear()
 n_log = len(ui_afk.load()["log"])
 pub = ui_afk.stop(t)
 assert not pub["active"] and pub["summary"]["log"] and len(pub["summary"]["log"]) == n_log
+ui_notify.drain()  # pushes are sent on a background thread
 assert [p[0] for p in pushed] == ["aiw: away mode ended"], pushed
 assert f"{n_log} decisions made" in pushed[0][1]
 ui_afk.tick(t + 5)
+ui_notify.drain()  # pushes are sent on a background thread
 assert len(pushed) == 1
 c = waiting()
 fail(f, t + 6)
