@@ -31,6 +31,8 @@
 
 ### Fixed
 
+- **PRD tab shows the PRD as it is on disk** (#730): the PRD refetches on tab open and window focus (no more `staleTime: Infinity`) and when a `create-prd` session ends, so Read is current and Edit saves against the current `base_sha`. An Edit draft is never overwritten by a refetch (a stale save still hits the 409 path), and closing the browser tab with unsaved edits shows the leave prompt.
+
 - **Away mode keeps a round when the resume fails** (#720): if `resume` fails after Away claims an answer, the round goes back to pending, held, with a `held` log row ("resume failed: …") and the session waits for you again, instead of being left `starting`/`failed` with the answer lost. A held recommended round is not auto-picked again.
 - **Merge cleanup keeps ignored local files and cleans squash merges** (#718): a merged issue's worktree holding ignored files (`.env.local`, a local database) is flagged and kept until you confirm, except regenerable dirs (`node_modules`, `.venv`, `dist`, `build`, ...). A squash-merged branch whose tip is the PR head is no longer flagged unpushed once its remote branch is gone (`sha` on `merged` entries). The checkout lookup is case-insensitive.
 

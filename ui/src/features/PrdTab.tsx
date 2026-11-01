@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { ApiError } from '../api/client';
 import { api } from '../api/endpoints';
-import { keys, useMarkSeen, usePrd, useSavePrd } from '../api/hooks';
+import { keys, useMarkSeen, usePrd, useSavePrd, useSessions } from '../api/hooks';
 import type { ShareThread } from '../api/types';
 import { useStarter } from '../board/actions';
 import { Banner, Button, EmptyState, useConfirm } from '../components';
@@ -36,6 +36,14 @@ export function PrdTab({ f, repo }: { f: Feature; repo: string }) {
   const [note, setNote] = useState('');
   const [ask, setAsk] = useState('');
   const data = q.data;
+  // A create-prd session that ends has edited the PRD on disk: refetch it.
+  const sessions = useSessions().data?.sessions;
+  const running = useRef(new Set<string>());
+  useEffect(() => {
+    const ended = (sessions ?? []).filter((s) => s.command.includes('create-prd') && ['done', 'failed', 'stopped'].includes(s.outcome)).some((s) => running.current.has(s.id));
+    running.current = new Set((sessions ?? []).filter((s) => s.command.includes('create-prd') && !['done', 'failed', 'stopped'].includes(s.outcome)).map((s) => s.id));
+    if (ended) void qc.invalidateQueries({ queryKey: ['prd'] });
+  }, [sessions, qc]);
   const prose = useRef<HTMLDivElement>(null);
   useEffect(() => { if (mode === 'read') void renderDiagrams(prose.current); }, [mode, data?.text]);
   const { share: shareQ } = useOwnShare(repo, path);
@@ -59,8 +67,14 @@ export function PrdTab({ f, repo }: { f: Feature; repo: string }) {
     const spans = threads.flatMap((t) => { const s = p.spans.get(t.id); return s ? [{ id: t.id, ...s }] : []; });
     return highlight(el, spans);
   }, [data?.text, mode, threads]);
-  const branch = typeof data?.branch === 'string' ? data.branch : 'the current branch';
   const dirty = mode === 'edit' && !!data && draft !== data.text;
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+  const branch = typeof data?.branch === 'string' ? data.branch : 'the current branch';
   // The page heading already names the feature, so the PRD's own title is dropped when reading.
   const body = prdBody(data?.text ?? '');
   const heads = body.split('\n').filter((l) => l.startsWith('## ')).map((l) => l.slice(3).trim());
