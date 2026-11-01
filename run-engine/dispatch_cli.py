@@ -38,17 +38,19 @@ READINESS_LOW = 2
 READINESS_MAX = 30
 READINESS_WORKERS = 5
 READINESS_WAIT_S = 8
+MAX_CHILD_PAGES = 20
 
 CHILDREN = """
-query($owner: String!, $name: String!, $n: Int!) {
+query($owner: String!, $name: String!, $n: Int!, $after: String) {
   repository(owner: $owner, name: $name) {
     issue(number: $n) {
       title
-      subIssues(first: 100) {
+      subIssues(first: 100, after: $after) {
+        pageInfo { hasNextPage endCursor }
         nodes {
           number title state repository { nameWithOwner }
-          labels(first: 20) { nodes { name } }
-          blockedBy(first: 20) { nodes { number state repository { nameWithOwner } } }
+          labels(first: 100) { nodes { name } }
+          blockedBy(first: 100) { nodes { number state repository { nameWithOwner } } }
         }
       }
     }
@@ -160,8 +162,8 @@ def _bodies(nodes) -> dict:
 
 def issues_query(nums, bodies=False) -> str:
     fields = ("body " if bodies else "") + (
-        "number title state repository { nameWithOwner } labels(first: 20) { nodes { name } } "
-        "blockedBy(first: 20) { nodes { number state repository { nameWithOwner } } }"
+        "number title state repository { nameWithOwner } labels(first: 100) { nodes { name } } "
+        "blockedBy(first: 100) { nodes { number state repository { nameWithOwner } } }"
     )
     aliases = " ".join(f"i{i}: issue(number: {int(n)}) {{ {fields} }}" for i, n in enumerate(nums))
     return f"query($owner: String!, $name: String!) {{ repository(owner: $owner, name: $name) {{ {aliases} }} }}"
@@ -171,10 +173,26 @@ def resolve(epic: str, gh=_gh, bodies=False) -> dict:
     repo, n = parse_epic(epic, gh)
     owner, name = repo.split("/")
     query = CHILDREN.replace("number title state", "number title body state") if bodies else CHILDREN
-    p = gh(["api", "graphql", "-f", f"query={query}", "-f", f"owner={owner}", "-f", f"name={name}", "-F", f"n={n}"])
-    if p.returncode != 0:
-        raise ValueError(f"cannot read epic {repo}#{n}: {(p.stderr or p.stdout).strip()[:200]}")
-    resp = json.loads(p.stdout)
+    resp, after = None, []
+    for _ in range(MAX_CHILD_PAGES):
+        p = gh(
+            ["api", "graphql", "-f", f"query={query}", "-f", f"owner={owner}", "-f", f"name={name}", "-F", f"n={n}"]
+            + after
+        )
+        if p.returncode != 0:
+            raise ValueError(f"cannot read epic {repo}#{n}: {(p.stderr or p.stdout).strip()[:200]}")
+        page = json.loads(p.stdout)
+        subs = page["data"]["repository"]["issue"]["subIssues"]
+        if resp is None:
+            resp = page
+        else:
+            resp["data"]["repository"]["issue"]["subIssues"]["nodes"] += subs["nodes"]
+        info = subs.get("pageInfo") or {}
+        if not info.get("hasNextPage"):
+            break
+        after = ["-F", f"after={info['endCursor']}"]
+    else:
+        raise ValueError("epic has too many sub-issues")
     title, kids, outside = children_from(resp)
     r = {"epic": f"{repo}#{n}", "title": title, "children": kids, "outside": outside}
     if bodies:

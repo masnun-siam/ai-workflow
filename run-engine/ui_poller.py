@@ -44,8 +44,8 @@ with `stale: True, fetched_at: None`):
       ]
     }
 
-Ceilings (ponytail): first 100 open issues, 50 sub-issues / 20 blockers / 5 PRs per issue, 50 merged
-and 50 open PRs; add cursor paging if a repo outgrows them (it would break the one-call rule).
+Ceilings (ponytail): open issues page up to 5 times (500; `issues_truncated` is true when more were left),
+then 50 sub-issues / 100 labels and blockers / 5 PRs per issue, 50 merged and 50 open PRs.
 """
 
 from __future__ import annotations
@@ -74,18 +74,33 @@ _PR_OPEN = (
     + " latestOpinionatedReviews(first: 5) { nodes { state author { login } } }"
     + " checks: statusCheckRollup { contexts(first: 1) { totalCount } }"
 )
+_ISSUE_NODE = f"""
+        number title state
+        labels(first: 100) {{ nodes {{ name }} }}
+        parent {{ number }}
+        subIssues(first: 50) {{ nodes {{ number title state }} }}
+        blockedBy(first: 100) {{ nodes {{ number state }} }}
+        closedByPullRequestsReferences(first: 5, includeClosedPrs: true) {{ nodes {{ {_PR} }} }}
+"""
+MAX_ISSUE_PAGES = 5
+# the open issues past the first page (QUERY reads page one)
+ISSUES_PAGE = f"""
+query($owner: String!, $name: String!, $after: String) {{
+  repository(owner: $owner, name: $name) {{
+    issues(states: OPEN, first: 100, after: $after, orderBy: {{field: CREATED_AT, direction: DESC}}) {{
+      pageInfo {{ hasNextPage endCursor }}
+      nodes {{ {_ISSUE_NODE} }}
+    }}
+  }}
+  rateLimit {{ cost remaining resetAt }}
+}}
+"""
 QUERY = f"""
 query($owner: String!, $name: String!) {{
   repository(owner: $owner, name: $name) {{
     issues(states: OPEN, first: 100, orderBy: {{field: CREATED_AT, direction: DESC}}) {{
-      nodes {{
-        number title state
-        labels(first: 20) {{ nodes {{ name }} }}
-        parent {{ number }}
-        subIssues(first: 50) {{ nodes {{ number title state }} }}
-        blockedBy(first: 20) {{ nodes {{ number state }} }}
-        closedByPullRequestsReferences(first: 5, includeClosedPrs: true) {{ nodes {{ {_PR} }} }}
-      }}
+      pageInfo {{ hasNextPage endCursor }}
+      nodes {{ {_ISSUE_NODE} }}
     }}
     closedEpics: issues(states: CLOSED, labels: ["epic"], first: 50, orderBy: {{field: UPDATED_AT, direction: DESC}}) {{
       nodes {{ number labels(first: 20) {{ nodes {{ name }} }} subIssues(first: 50) {{ nodes {{ number title state }} }} }}
@@ -122,7 +137,7 @@ _CI = {"SUCCESS": "success", "FAILURE": "failure", "ERROR": "failure", "PENDING"
 
 
 def empty() -> dict:
-    return {"issues": [], "merged": [], "open_prs": [], "closed_epics": []}
+    return {"issues": [], "merged": [], "open_prs": [], "closed_epics": [], "issues_truncated": False}
 
 
 def _closed_subs(issue) -> list:
@@ -266,7 +281,14 @@ def normalize(response: dict, now: datetime | None = None) -> dict:
         }
         for e in _nodes(repo.get("closedEpics"))
     ]
-    return {"issues": issues, "merged": merged, "open_prs": open_prs, "closed_epics": closed_epics}
+    truncated = bool(((repo.get("issues") or {}).get("pageInfo") or {}).get("hasNextPage"))
+    return {
+        "issues": issues,
+        "merged": merged,
+        "open_prs": open_prs,
+        "closed_epics": closed_epics,
+        "issues_truncated": truncated,
+    }
 
 
 def _rate_limited(proc) -> bool:
@@ -331,11 +353,12 @@ class Poller:
             cold = 0.0 if hot else e["last"] + COLD_POLL_SECONDS
             return self.clock() >= max(e["next_due"], e["paused_until"], cold)
 
-    def _call(self, repo: str, query: str):
+    def _call(self, repo: str, query: str, after=None):
         """One `gh api graphql`. The response, or None after recording why (a rate limit pauses the repo)."""
         owner, _, name = repo.partition("/")
         proc = self.runner(
             ["gh", "api", "graphql", "-f", f"query={query}", "-F", f"owner={owner}", "-F", f"name={name}"]
+            + (["-F", f"after={after}"] if after else [])
         )
         e = self._entry(repo)
         if _rate_limited(proc):
@@ -362,6 +385,24 @@ class Poller:
                 self._budget = {"remaining": rl["remaining"], "reset_at": at.timestamp()}
         return resp
 
+    def _more_issues(self, repo: str, resp: dict):
+        """Follow the open-issues cursor (up to MAX_ISSUE_PAGES pages in all). resp, or None when a page failed."""
+        try:
+            issues = resp["data"]["repository"]["issues"]
+        except (KeyError, TypeError):
+            return resp  # normalize reports it
+        for _ in range(MAX_ISSUE_PAGES - 1):
+            info = issues.get("pageInfo") or {}
+            if not info.get("hasNextPage"):
+                break
+            page = self._call(repo, ISSUES_PAGE, info.get("endCursor"))
+            if page is None:
+                return None
+            more = page["data"]["repository"]["issues"]
+            issues["nodes"] = (issues.get("nodes") or []) + (more.get("nodes") or [])
+            issues["pageInfo"] = more.get("pageInfo") or {}
+        return resp
+
     def poll(self, repo: str, full: bool = False) -> dict:
         """The probe, then the full query when needed (none while rate-limit paused). Returns the snapshot.
         `full`: fetch everything even when the probe saw no change (the board's Refresh, after a write)."""
@@ -384,6 +425,8 @@ class Poller:
                 fresh = True  # nothing changed: the data in memory is current
             else:
                 resp = self._call(repo, QUERY)
+                if resp is not None:
+                    resp = self._more_issues(repo, resp)
                 if resp is not None:
                     try:
                         data = normalize(resp)

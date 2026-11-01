@@ -117,6 +117,45 @@ def runner_for(responses, calls, probes=None, probe_calls=None):
     return runner
 
 
+# issue paging: QUERY page one, then ISSUES_PAGE until the list ends or MAX_ISSUE_PAGES
+def paged(first_next, page_next, fail=False):
+    def runner(argv):
+        page = f"query={ui_poller.ISSUES_PAGE}" in argv
+        if f"query={ui_poller.PROBE}" in argv:
+            r = probe_answer("1")
+        elif page:
+            if fail:
+                return subprocess.CompletedProcess(argv, 1, "", "boom")
+            n = 100 + 10 * len(pages)
+            pages.append(argv)
+            nodes = [issue(m) for m in range(n, n + 2)]
+            r = {
+                "data": {
+                    "repository": {
+                        "issues": {"pageInfo": {"hasNextPage": page_next, "endCursor": f"c{n}"}, "nodes": nodes}
+                    }
+                }
+            }
+        else:
+            r = fixture()
+            r["data"]["repository"]["issues"]["pageInfo"] = {"hasNextPage": first_next, "endCursor": "c0"}
+        return subprocess.CompletedProcess(argv, 0, json.dumps(r), "")
+
+    pages = []
+    return runner, pages
+
+
+runner, pages = paged(True, False)
+sn = ui_poller.Poller(runner, Clock()).poll("o/r")
+assert len(pages) == 1 and "after=c0" in pages[0] and not sn["stale"]
+assert len(sn["data"]["issues"]) == 22 and sn["data"]["issues_truncated"] is False
+runner, pages = paged(True, True)
+sn = ui_poller.Poller(runner, Clock()).poll("o/r")
+assert len(pages) == ui_poller.MAX_ISSUE_PAGES - 1 and sn["data"]["issues_truncated"] is True
+runner, pages = paged(True, False, fail=True)
+sn = ui_poller.Poller(runner, Clock()).poll("o/r")
+assert sn["stale"] and sn["data"]["issues"] == []
+
 # normalize
 d = ui_poller.normalize(fixture(), NOW)
 assert len(d["issues"]) == 20
