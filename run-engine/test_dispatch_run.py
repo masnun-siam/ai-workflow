@@ -17,6 +17,20 @@ import dispatch  # noqa: E402
 import dispatch_run as dr  # noqa: E402
 import dispatch_runners  # noqa: E402
 
+real_create = dr.create
+
+
+def _create_reusing_keys(*a, **kw):
+    """Most checks reuse lane keys: park the earlier dispatches as done so ownership does not refuse them."""
+    for old in dr.list_all():
+        if old["state"] not in ("done", "cancelled"):
+            old["state"] = "done"
+            dr.save(old)
+    return real_create(*a, **kw)
+
+
+dr.create = _create_reusing_keys
+
 R = "o/r"
 K = lambda n: dr.key(R, n)  # noqa: E731
 
@@ -794,4 +808,30 @@ dr.tick(d6, {}, FakeRunner(), merge, now=1, gh=fake_gh)
 assert gh_calls[0][:8] == ["pr", "create", "-R", "o/r", "--base", "staging", "--head", "feature/x"]
 assert not any(c[:2] == ["repo", "view"] for c in gh_calls)
 print("  ok  base_branch lanes and open-pr")
+
+# --- epic dispatches honour lane ownership (#714)
+shutil.rmtree(dr._dir())
+e1 = real_create("o/r#900", "headless", {}, [child(901), child(902)])
+n_before = len(dr.list_all())
+try:
+    real_create("o/r#900", "headless", {}, [child(902), child(903)])
+    raise AssertionError("second epic dispatch over an owned child should conflict")
+except dr.Conflict as exc:
+    assert exc.id == e1["id"] and K(902) in str(exc), exc
+assert len(dr.list_all()) == n_before
+try:
+    real_create(None, "headless", {}, [child(901)], issues=[K(901)])
+    raise AssertionError("issue-list dispatch over an epic lane should conflict")
+except dr.Conflict as exc:
+    assert exc.id == e1["id"]
+e1["state"] = "cancelled"
+dr.save(e1)
+e2 = real_create("o/r#900", "headless", {}, [child(901), child(902)])
+assert e2["id"] != e1["id"]
+try:
+    real_create("o/r#910", "headless", {}, [child(901)])
+    raise AssertionError("epic dispatch over an issue-list/epic lane should conflict")
+except dr.Conflict:
+    pass
+print("  ok  epic ownership")
 print("dispatch_run: all green")
