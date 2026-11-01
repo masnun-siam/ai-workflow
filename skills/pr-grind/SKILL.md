@@ -106,7 +106,8 @@ First that fires wins; firing means stop, fix nothing this round (rail 2 may con
 
 1. **Round cap** — 10 rounds already recorded → post to Slack, then Step 8.
 2. **CI red** — `aiw ci status <pr> --watch` says `state: red` at the current head; it
-   returns the failing jobs' logs. Look for `ci-attempt: <sha>` for this head.
+   returns the failing jobs' logs. `state: error` means CI could not be read: re-run,
+   treat as not green, never as red or green. Look for `ci-attempt: <sha>` for this head.
    - **None** → write `ci-attempt: <sha> — started`, then make one inline attempt. Never
      while `queued-push:` is set. Read the failing log and workflow file; reproduce locally
      if the repo allows. Infra flake (runner died, timeout with no test output, network/
@@ -181,7 +182,7 @@ the branch rather than checking it out elsewhere. Edit **only files in the PR's 
    (what changed and the SHA, or the rebuttal), then
    `aiw threads list <pr> --for-comment <id>` for the node id and `aiw threads resolve <node_id>`.
    If a write is blocked by the harness, note it in the state file and Slack summary and continue.
-5. **Push gate** — `aiw ci status <pr>`. Not green (red *or* pending) at the current head →
+5. **Push gate** — `aiw ci status <pr>`. Not green (red, pending *or* error) at the current head →
    don't push; record `queued-push: <sha>... — round <n> — then retrigger` (or `then close`
    on a nit-only round). Green → `git push`.
 

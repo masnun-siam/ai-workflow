@@ -80,6 +80,7 @@
 
 ### Fixed
 
+- **`aiw ci status` no longer reads a gh failure as green** (#702): a rate limit, auth or timeout error from `gh pr checks` returns `state: error` with the gh text as the note, `--watch` keeps polling through it, and pr-grind's push gate and rail 2 treat it as not green.
 - **Tests: no real macOS banners** (#683): `ui_notify.send_mac` honours `AIW_NO_MAC_BANNER`; `run_tests.sh` and `test_ui_bootstrap.py` set it, so the suite shows no banners.
 - Rows in the ⌘K palette and the repo and branch pickers no longer all show the blue keyboard-selection ring; only the active row is highlighted. `J`/`K` selection keeps its ring (#538).
 - The Features → Small changes tab sections (describe box, pending rows, pick bar, issue table) are now spaced 12px apart instead of touching, and no empty bordered list shows when nothing is pending (#476).
