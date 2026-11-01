@@ -462,6 +462,26 @@ class _NotFound(Exception):
     """An unknown id in a POST route (HTTP 404)."""
 
 
+def _guarded(fn):
+    """Answer 500 JSON for an unexpected handler error instead of dropping the connection."""
+
+    def wrapper(self):
+        self._headers_sent = False
+        try:
+            fn(self)
+        except (BrokenPipeError, ConnectionResetError):
+            raise
+        except Exception as e:
+            warn(f"ui server: {type(e).__name__}: {e}")
+            if not self._headers_sent:
+                try:
+                    self._json(500, {"error": "internal error"})
+                except OSError:
+                    pass
+
+    return wrapper
+
+
 class _Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
@@ -472,9 +492,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         for name, value in (headers or {}).items():
             self.send_header(name, value)
+        self._headers_sent = True
         self.end_headers()
         self.wfile.write(body)
 
+    @_guarded
     def do_GET(self):
         if not _guard(self):
             return
@@ -685,6 +707,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def _json(self, status: int, body) -> None:
         self._send(status, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))
 
+    @_guarded
     def do_POST(self):
         if not _guard(self):
             return
@@ -845,6 +868,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         else:
             self._json(status, out)
 
+    @_guarded
     def do_DELETE(self):
         if not _guard(self):
             return
@@ -853,6 +877,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         else:
             self._method_not_allowed(guarded=True)
 
+    @_guarded
     def do_PATCH(self):
         if not _guard(self):
             return
@@ -1106,6 +1131,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return None
         return body
 
+    @_guarded
     def do_PUT(self):
         if not _guard(self):
             return

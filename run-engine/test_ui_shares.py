@@ -154,6 +154,15 @@ assert all(r["id"] != "junk" for r in S.list_shares())
 assert not [x for x in os.listdir(S.shares_dir()) if x.endswith(".tmp")]
 ok("corrupt skipped")
 
+import json  # noqa: E402
+
+for sid, extra, want in (("1" * 16, {}, [[], []]), ("2" * 16, {"threads": "x"}, None)):
+    with open(os.path.join(S.shares_dir(), sid + ".json"), "w") as fh:
+        json.dump({"id": sid, "state": "live", **extra}, fh)
+    r = S.get(sid)
+    assert (r and [r["threads"], r["approvals"]]) == (want or None), r
+ok("missing threads/approvals default to [], non-list is unreadable")
+
 
 # --- threads, comments, approvals ---
 def raises(kind, fn, *a):

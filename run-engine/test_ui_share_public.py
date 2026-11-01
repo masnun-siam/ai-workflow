@@ -316,4 +316,13 @@ for breakit in (lambda: os.remove(PRD), lambda: (os.remove(PRD), os.symlink(outs
 os.path.lexists(PRD) and os.remove(PRD)
 ok("end check: approved, missing, symlink")
 
+assert P._Handler.timeout > 0
+_old_timeout, P._Handler.timeout = P._Handler.timeout, 0.5
+import socket  # noqa: E402
+
+with socket.create_connection(("127.0.0.1", port), timeout=5) as idle:
+    assert idle.recv(1) == b""  # server closed the silent connection
+P._Handler.timeout = _old_timeout
+ok("idle connection times out")
+
 print(f"{n} groups passed")

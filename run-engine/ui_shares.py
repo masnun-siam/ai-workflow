@@ -81,7 +81,12 @@ def _read(sid: str):
     except (OSError, ValueError):
         return None
     ok = isinstance(rec, dict) and rec.get("id") == sid and rec.get("state") in ("live", "ended")
-    return rec if ok else None
+    if not ok:
+        return None
+    for key in ("threads", "approvals"):
+        if not isinstance(rec.setdefault(key, []), list):
+            return None
+    return rec
 
 
 def _write(rec: dict) -> None:

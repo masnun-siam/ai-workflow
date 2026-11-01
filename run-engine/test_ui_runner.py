@@ -139,6 +139,18 @@ esac
 """
 
 
+def threads() -> int:
+    """active_count once it holds still: threads from earlier cases may still be exiting."""
+    last, since = threading.active_count(), time.time()
+    deadline = since + 3
+    while time.time() - since < 0.3 and time.time() < deadline:
+        time.sleep(0.02)
+        now = threading.active_count()
+        if now != last:
+            last, since = now, time.time()
+    return last
+
+
 def ok(label: str) -> None:
     global passed
     passed += 1
@@ -1782,7 +1794,6 @@ def detached(work):
 
 
 def restart_cases():
-    import threading
 
     OLD = "Thu Jan  1 00:00:00 1970"
     S = INIT + "\n"
@@ -1811,9 +1822,9 @@ def restart_cases():
     sid, pid = detached(work)
     try:
         ui_runner.reconcile()
-        n = threading.active_count()
+        n = threads()
         ui_runner.reconcile()
-        assert threading.active_count() == n and list(ui_runner._procs).count(sid) == 1
+        assert threads() == n and list(ui_runner._procs).count(sid) == 1
         ok("reconcile twice re-attaches a live session once")
         with open(os.path.join(fk, "finish"), "w") as f:
             f.write("err")
@@ -1921,7 +1932,7 @@ def restart_cases():
     # dead pid cases
     d, fk, work = setup()
     ui_runner._procs.clear()
-    base = threading.active_count()
+    base = threads()
     a = mk("running", dead_pid(), S + ASSIST + "\n" + RESULT + "\n", pid_started=OLD)
     b = mk("running", dead_pid(), S + RESULT_ERR + "\n", pid_started=OLD)
     ui_runner.reconcile()
@@ -1929,7 +1940,7 @@ def restart_cases():
     assert ra["status"] == "done" and ra["ended_at"] and ra["cost"] == 0.0421, ra
     assert rb["status"] == "failed" and "stderr.log" in rb["error"] and "exit code None" not in rb["error"], rb
     assert a not in ui_runner._procs and b not in ui_runner._procs
-    assert threading.active_count() == base
+    assert threads() == base
     ended = ra["ended_at"]
     ui_runner.reconcile()
     assert ui_sessions.load(a)["ended_at"] == ended
@@ -2031,10 +2042,10 @@ def restart_cases():
     i = mk("running", dead_pid(), S + RESULT + "\n", pid_started=OLD)
     fake = mock.Mock()
     ui_runner._procs[i] = fake
-    n = threading.active_count()
+    n = threads()
     ui_runner.reconcile()
     assert ui_runner._procs[i] is fake and ui_sessions.load(i)["status"] == "running"
-    assert threading.active_count() == n
+    assert threads() == n
     ui_runner._procs.pop(i)
     ok("session already in _procs is skipped")
 
