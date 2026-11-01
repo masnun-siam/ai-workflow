@@ -139,6 +139,18 @@ describe('Settings: repositories', () => {
     await waitFor(() => expect(sent('POST', '/api/repos/remove')).toEqual([{ slug: 'o/r' }]));
   });
 
+  it('a failed Remove neither toasts success nor rejects unhandled', async () => {
+    handlers['POST /api/repos/remove'] = () => [500, { error: 'boom' }];
+    const user = userEvent.setup();
+    page(<SettingsPage />);
+    await user.click(await screen.findByRole('button', { name: 'Remove local/idea' }));
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(sent('POST', '/api/repos/remove')).toHaveLength(1));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(await screen.findByText('boom')).toBeTruthy(); // the cache toasts the error
+    expect(screen.queryByText('Removed local/idea')).toBeNull(); // toasts are global, so this repo is used by no other test
+  });
+
   it('Find repos posts the folders and reports what it added', async () => {
     handlers['POST /api/repos/scan'] = () => [200, { added: [{ slug: 'a/b', path: '/x/b' }], duplicates: [], repos: [] }];
     const user = userEvent.setup();

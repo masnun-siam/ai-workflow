@@ -463,6 +463,17 @@ describe('GitHub links open the side panel', () => {
     expect(await screen.findByLabelText('Issue details')).toBeTruthy();
   });
 
+  it('a link inside a dialog does not open the panel', async () => {
+    const user = await open();
+    await screen.findByRole('link', { name: 'one' });
+    const dlg = document.body.appendChild(document.createElement('div'));
+    dlg.setAttribute('role', 'dialog');
+    dlg.innerHTML = '<a href="https://github.com/o/r/issues/5">in dialog</a>';
+    await user.click(screen.getByRole('link', { name: 'in dialog' }));
+    expect(screen.queryByLabelText('Issue details')).toBeNull();
+    dlg.remove();
+  });
+
   it('an ExtButton is not intercepted', () => {
     render(<ExtButton href="https://github.com/o/r/issues/5">Issue on GitHub</ExtButton>);
     expect(screen.getByRole('link').hasAttribute('data-ext')).toBe(true);

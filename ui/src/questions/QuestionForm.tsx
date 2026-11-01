@@ -94,7 +94,7 @@ export function QuestionFields({ qs, ans, onChange: set, disabled, name: prefix 
             {q.options.map((o, i) => {
               const on = !ans[k].useOther && ans[k].labels.includes(o.label);
               return (
-                <label key={o.label} className={`opt${on ? ' on' : ''}`}>
+                <label key={`${i}:${o.label}`} className={`opt${on ? ' on' : ''}`}>
                   <input
                     type={q.multiSelect ? 'checkbox' : 'radio'}
                     name={name}

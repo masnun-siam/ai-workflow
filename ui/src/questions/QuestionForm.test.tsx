@@ -300,3 +300,13 @@ describe('QuestionForm', () => {
     });
   });
 });
+
+describe('duplicate option labels', () => {
+  it('renders both options without a key warning', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    setup(sess({}, [{ question: 'Dup?', multiSelect: false, allowFreeText: false, options: [{ label: 'Same' }, { label: 'Same' }] }]));
+    expect(await screen.findAllByRole('radio', { name: /Same/ })).toHaveLength(2);
+    expect(err.mock.calls.filter(([m]) => String(m).includes('same key'))).toEqual([]);
+    err.mockRestore();
+  });
+});
