@@ -4,6 +4,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useDispatch, useDispatchSeen, useDispatchSettings, useDispatchState, useEndAction, useLaneAction, useSessions } from '../api/hooks';
 import type { Dispatch, DispatchEvent, EndAction, Lane } from '../api/types';
 import { Banner, Button, Chip, EmptyState, Icon, type IconName, PauseDialog, useConfirm, useListSelection, useToast } from '../components';
+import { ApiError } from '../api/client';
 import { KeyScope } from '../shell/shortcuts';
 import { clockText, money, shortRepo } from '../lib/format';
 import { routes } from '../lib/routes';
@@ -237,8 +238,12 @@ export function DispatchPage() {
   }, [d?.id, d?.state]); // eslint-disable-line react-hooks/exhaustive-deps
   const c = useMemo(() => (d ? counts(d) : null), [d]);
 
-  if (q.isError) return <div className="content-inner"><EmptyState icon="alert" title="Dispatch not found" actions={<Link className="btn" to={routes.dispatches}>All dispatches</Link>}>{q.error.message}</EmptyState></div>;
-  if (!d || !c) return <div className="content-inner" aria-busy="true"><p className="muted" role="status">Loading…</p><div className="skel" style={{ height: 200 }} /></div>;
+  if (q.error instanceof ApiError && q.error.status === 404) return <div className="content-inner"><EmptyState icon="alert" title="Dispatch not found" actions={<Link className="btn" to={routes.dispatches}>All dispatches</Link>}>{q.error.message}</EmptyState></div>;
+  if (!d || !c) return (
+    <div className="content-inner" aria-busy={!q.isError}>
+      {q.isError ? <Banner tone="bad" icon="alert" action={<Button sm onClick={() => void q.refetch()}>Retry</Button>}>Could not load the dispatch. {q.error.message}</Banner> : <><p className="muted" role="status">Loading…</p><div className="skel" style={{ height: 200 }} /></>}
+    </div>
+  );
 
   const lane = d.lanes.find((l) => l.key === picked) ?? null;
   const st = DSTATE[d.state];
@@ -258,6 +263,7 @@ export function DispatchPage() {
 
   return (
     <div className="content-inner dsp-page">
+      {q.isError && <Banner tone="bad" icon="alert" action={<Button sm onClick={() => void q.refetch()}>Retry</Button>}>Could not refresh this dispatch. {q.error.message}</Banner>}
       <nav className="crumbs" aria-label="Breadcrumb">
         <Link to={routes.dispatches} style={{ textDecoration: 'none' }}>Dispatches</Link><Icon n="right" s={13} /><span>{d.epic ? `Epic #${epicNo(d.epic)}` : 'Small changes'}</span>
       </nav>
