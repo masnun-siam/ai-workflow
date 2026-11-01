@@ -390,15 +390,41 @@ assert [x[0] for x in resumed] == [r49]
 e = log_of(r49)[0]
 assert e["by"] == "recommended" and "risk" not in e, e
 
-# failing stub -> {p: None}, auto-picked
+# failing stub (jev on, check fails) -> unknown risk, Opus answerer, no auto-pick
 stub(fail=True)
 resumed.clear()
 rf = waiting()
 ui_afk.tick(W)
 pool.run()
-assert pq(rf)["risk"] == {"p": None}
+assert pq(rf)["risk"] == {"p": None, "unknown": True}
+nf = len(started)
 ui_afk.tick(W)
-assert [x[0] for x in resumed] == [rf] and "risk" not in log_of(rf)[0]
+assert not resumed and len(started) == nf + 1
+assert ui_afk._risk_key(pq(rf)) == {}
+finish(started[nf]["id"], OKR)
+ui_afk.tick(W)
+assert "risk" not in log_of(rf)[0]
+
+# a check that raises stores the unknown marker once, not requeued every tick
+_ask = ui_afk.jev.ask
+
+
+def _boom(*a, **k):
+    raise RuntimeError("x")
+
+
+ui_afk.jev.ask = _boom
+resumed.clear()
+rr = waiting()
+ui_afk.tick(W)
+pool.run()
+ui_afk.jev.ask = _ask
+assert pq(rr)["risk"] == {"p": None, "unknown": True} and not ui_afk._risk_queued
+nr = len(started)
+ui_afk.tick(W)
+assert not pool.jobs and not resumed and len(started) == nr + 1
+finish(started[nr]["id"], OKR)
+ui_afk.tick(W)
 
 # switch off: auto-picked in the first tick, jev never run
 stub("0.9")

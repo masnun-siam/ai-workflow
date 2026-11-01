@@ -28,6 +28,10 @@
 - **Share page commenting** (#596): a reviewer selects text in the shared PRD, gives a name once (kept in `localStorage`), and posts a thread anchored to the selection; threads sit beside their text (below it on a narrow screen) with the quote underlined, and replies, resolved threads, an Outdated list, the 500-comment "Share is full" state and draft-keeping errors are handled. Reviewer text renders as plain text.
 - **Share page Approve** (#597): a reviewer approves under their display name; the page keeps the withdraw key in `localStorage`, shows "You approved · Withdraw" or "Approved as <name>", lists approvers with a count and marks approvals older than the PRD's last edit. It never changes the PRD status.
 
+### Fixed
+
+- **Away mode: a failed jev risk check is unknown, not safe** (#707): with Use jev on and jev available, a check that fails (or a worker that raises) stores `risk: {p: null, unknown: true}` and the round goes to the Opus answerer instead of being auto-picked; a raising worker no longer requeues every 5 s. Use jev off or missing still auto-picks.
+
 ### Removed
 
 - **`/flow` skill** (#621): the deprecated guided flow and the Start dialog's "Plan a flow" are gone; run `/create-prd`, `/create-tasks`, `/refine-issues` and `/herdr-dispatch` directly.
