@@ -31,7 +31,6 @@
 ### Fixed
 
 - **`--allow-host` hosts need the owner login** (#710): every request that does not arrive on loopback must carry the node owner's `Tailscale-User-Login`, not just the hosts `tailscale serve` set up, so an `--allow-host` name that is also funnelled is refused. `aiw ui --allow-host` refuses to start when the owner login cannot be read from `tailscale status`.
-||||||| 5c76e6b
 - **Settings Test runs only a saved command** (#709): `POST /api/settings/test` answers 400 `cmd must be a command saved in Settings: save the account first` for a `cmd` that is not a saved account, and starts no subprocess. A missing or empty `cmd` keeps `cmd required`.
 - **Away mode: a failed jev risk check is unknown, not safe** (#707): with Use jev on and jev available, a check that fails (or a worker that raises) stores `risk: {p: null, unknown: true}` and the round goes to the Opus answerer instead of being auto-picked; a raising worker no longer requeues every 5 s. Use jev off or missing still auto-picks.
 
