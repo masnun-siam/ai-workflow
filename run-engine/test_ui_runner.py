@@ -1331,6 +1331,16 @@ def prgrind_cases() -> int:
         assert lines(fk, "headless") == "UNSET"
         assert ui_runner.PRGRIND_HEARTBEAT == 1500
 
+    def failed_start_keeps_next_poll():
+        d, fk, work = pset()
+        path = mkpr(d)
+        prior(work)
+        before = open(path).read()
+        with mock.patch.object(ui_runner, "start", side_effect=ui_runner.RunnerError("boom")):
+            act, _ = tick(path)
+        assert act == "error", act
+        assert open(path).read() == before, "a failed start must not push next-poll out"
+
     def heartbeat_rewrite():
         d, fk, work = pset("sleep")
         path = mkpr(d, **{"queued-push": "abc", "ci-attempt": "2 — red"})
@@ -1704,6 +1714,7 @@ def prgrind_cases() -> int:
     for fn in (
         due_start,
         interactive_unchanged,
+        failed_start_keeps_next_poll,
         heartbeat_rewrite,
         review_trigger,
         ci_trigger,
@@ -2689,6 +2700,23 @@ def repo_skill_cases():
         os.remove(os.path.join(fk, "finish"))
         wait_finished(b["id"])
         ok("queued prompt: raw while queued, resolved when delivered")
+
+        # a failed delivery keeps the prompt (except an invalid one) and says it was not sent
+        for exc, kept in (
+            (ui_runner.Conflict("busy"), True),
+            (ui_runner.RunnerError("x"), True),
+            (OSError("x"), True),
+            (ValueError("bad"), False),
+        ):
+            f = ui_sessions.create("/worklog 4", plain, None)
+            recs.append(f)
+            ui_sessions.update(f["id"], status="done", queued_prompt="again")
+            with mock.patch.object(ui_runner, "send_prompt", side_effect=exc):
+                ui_runner._deliver_queued(f["id"])
+            got = ui_sessions.load(f["id"])
+            assert (got["queued_prompt"] == "again") == kept, (exc, got)
+            assert "not sent" in got["note"], got
+        ok("queued prompt: a failed send keeps it, an invalid one drops it, note says not sent")
 
         # a cwd that cannot be read fails the start for the usual reason, not in the resolver
         gone = tempfile.mkdtemp()

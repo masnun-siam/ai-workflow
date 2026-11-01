@@ -105,5 +105,11 @@ except TypeError:
 assert pr.load_panel(p2)["k0"] == 0 and not [n for n in os.listdir(os.path.dirname(pj)) if n.endswith(".tmp")]
 ok("write_json: a failed dump keeps the old file and leaves no .tmp")
 
+for line in ("Verdict: approve-with-conditions", "Verdict: approved", "Verdict: approve-ish"):
+    assert not pr._VERDICT.findall(line), line
+for line in ("Verdict: approve", "**Verdict: approve**", "Verdict: Approve."):
+    assert pr._VERDICT.findall(line), line
+ok("verdict: only a bare approve counts, approve-with-conditions reads as changes")
+
 shutil.rmtree(pdata, ignore_errors=True)
 print("test_peer_review: ok")

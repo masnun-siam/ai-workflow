@@ -59,6 +59,8 @@ def fetch(cmd: str, now: float | None = None) -> dict:
         )
         with urllib.request.urlopen(req, timeout=15) as r:
             data = json.load(r)
+        if not isinstance(data, dict):
+            raise ValueError("body")
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as e:
         warn(f"ui_usage: {cmd}: {type(e).__name__}")  # never the token or the response
         return {"error": "usage unavailable"}
