@@ -193,6 +193,53 @@ assert len(run.started) == 2  # cap holds, #2 waits on #1
 print("  ok  launch order, cap, deps")
 
 
+_d, _run = d, run  # the sections below reuse these names
+
+
+# --- lanes stranded behind a skipped blocker or in a cycle get needs_you once
+def strand_d(*kids):
+    return dr.create("o/r#9", "herdr", {"max": 2, "grind": "full", "auto_merge": True}, list(kids))
+
+
+d = strand_d(child(1, refined=False), child(2, [1]), child(3, [2]))
+run = FakeRunner()
+ev1 = dr.tick(d, fq(2, 3), run, merge, now=1000)
+assert d["lanes"][K(2)]["needs_you"] == "blocked by skipped #1", d["lanes"][K(2)]
+assert d["lanes"][K(3)]["needs_you"] == "blocked by skipped #1"  # the skipped root, not the middle lane
+assert [e["kind"] for e in ev1].count("needs_you") == 2 and not run.started
+assert not [e for e in dr.tick(d, fq(2, 3), run, merge, now=1001) if e["kind"] == "needs_you"]  # once per reason
+dr.apply_lane_action(d, K(1), "retry")  # blocker back to queued: stale reasons clear at the next tick
+dr.tick(d, fq(1, 2, 3), run, merge, now=1002)
+assert d["lanes"][K(2)].get("needs_you") is None and d["lanes"][K(3)].get("needs_you") is None
+assert [s[0] for s in run.started] == [1]
+
+d = strand_d(child(1), child(2, [1]))
+dr.apply_lane_action(d, K(1), "skip")
+dr.tick(d, fq(2), FakeRunner(), merge, now=1000)
+assert d["lanes"][K(2)]["needs_you"] == "blocked by skipped #1"
+dr.apply_lane_action(d, K(2), "skip")
+dr.tick(d, fq(), FakeRunner(), merge, now=1001)
+assert d["state"] == "done"
+
+d = strand_d(child(1, [2]), child(2, [1]))
+dr.tick(d, fq(1, 2), FakeRunner(), merge, now=1000)
+assert d["lanes"][K(1)]["needs_you"] == d["lanes"][K(2)]["needs_you"] == "dependency cycle"
+
+# merely waiting: no needs_you
+d = strand_d(child(1), child(2, [1]))
+dr.tick(d, fq(1, 2), FakeRunner(), merge, now=1000)  # #1 active, #2 waits
+assert d["lanes"][K(2)].get("needs_you") is None
+d = strand_d(child(1, [5]))  # blocker outside the dispatch
+dr.tick(d, {K(1): {"blockers_open": [dr.key(R, 5)]}}, FakeRunner(), merge, now=1000)
+assert d["lanes"][K(1)].get("needs_you") is None
+d = strand_d(child(1, refined=False), child(2, [1]))
+d["lanes"][K(2)]["paused"] = True
+dr.tick(d, fq(2), FakeRunner(), merge, now=1000)
+assert d["lanes"][K(2)].get("needs_you") is None
+d, run = _d, _run
+print("  ok  stranded lanes")
+
+
 # --- a handle is on disk as soon as its session starts: a crash later in the tick cannot lose it
 class Boom(BaseException):
     pass
@@ -234,7 +281,7 @@ ev = dr.tick(d, {K(1): f1}, run, merge, now=1002)
 assert d["lanes"][K(1)]["needs_you"] == "waiting on you" and any(e["kind"] == "needs_you" for e in ev)
 assert not [e for e in dr.tick(d, {K(1): f1}, run, merge, now=1003) if e["kind"] == "needs_you"]  # said once
 dr.tick(d, {K(1): {**f1, "agent": "working"}}, run, merge, now=1004)
-assert d["lanes"][K(1)]["needs_you"] is None
+assert d["lanes"][K(1)].get("needs_you") is None
 # an idle session is flagged only after the grace: the board may not have seen its PR yet
 x = {"n": 1, "stage": "implementing"}
 p1, _ = dr.step(x, {"agent": "idle"}, {}, 5000)
