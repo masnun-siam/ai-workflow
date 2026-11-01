@@ -784,4 +784,18 @@ finally:
     shutil.rmtree(_sd, ignore_errors=True)
 passed += 1
 
+# an unexpected handler exception answers 500 JSON and the server keeps serving
+_srv, _port = start()
+_orig = ui_sessions.list_sessions
+ui_sessions.list_sessions = lambda *a, **k: {}["boom"]
+try:
+    with redirect_stderr(io.StringIO()) as _buf:
+        _st, _r, _body, _h = req(_port, "/api/sessions", host=f"127.0.0.1:{_port}")
+finally:
+    ui_sessions.list_sessions = _orig
+assert _st == 500 and "error" in json.loads(_body) and "KeyError" in _buf.getvalue(), (_st, _body)
+assert req(_port, host=f"127.0.0.1:{_port}")[0] == 200
+_srv.shutdown()
+ok("handler KeyError -> 500 JSON")
+
 print(f"{passed} checks passed")

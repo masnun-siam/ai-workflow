@@ -34,6 +34,7 @@ _SECURITY_HEADERS = {
 }
 _NOT_FOUND = ("text/plain; charset=utf-8", b"not found")
 _JSON = "application/json; charset=utf-8"
+_TIMEOUT = 30  # seconds a connection may sit idle before it is closed
 _ERRORS = {"invalid": 400, "conflict": 409, "full": 409, "rate": 429}
 _manifest_cache: dict = {}  # (dist dir, manifest mtime) -> set of allowed asset paths
 
@@ -90,6 +91,8 @@ def allowed_assets() -> set:
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
+    timeout = _TIMEOUT
+
     def log_message(self, fmt, *args):  # also swallows log_error, so no token reaches a log
         pass
 
