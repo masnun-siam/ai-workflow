@@ -204,6 +204,19 @@ def t_gate_twice_and_idempotent():
     ok("pending ask is idempotent; every new ask after an answer gets a new round id")
 
 
+def t_pending_different_questions_rejected():
+    sid = new_sid()
+    first = rid_of(ask(sid, ["--json", json.dumps(GATE1)]).stdout)
+    before = meta_bytes(sid)
+    gate2 = {"questions": [dict(GATE1["questions"][0], question="Ship it?")]}
+    p = ask(sid, ["--json", json.dumps(gate2)])
+    assert p.returncode == 2 and "RECORDED" not in p.stdout and first in p.stderr, p
+    assert "wait" in p.stderr and meta_bytes(sid) == before
+    assert ui_sessions.claim_answer(sid, first) is not None
+    assert rid_of(ask(sid, ["--json", json.dumps(gate2)]).stdout) != first
+    ok("pending ask with different questions exits 2 naming the round; new round after the answer")
+
+
 def t_not_ui_session():
     sid = new_sid()
     before = meta_bytes(sid)
@@ -575,8 +588,9 @@ def t_iv_concurrent_ask():
     first = rid_of(ask(sid, ["--json", json.dumps(R_PRD)]).stdout)
     before = meta_bytes(sid)
     again = ask(sid, ["--json", json.dumps(R_GHI)])
-    assert rid_of(again.stdout) == first and meta_bytes(sid) == before
-    ok("iv: second ask during a pending 2-question round returns same id, record identical")
+    assert again.returncode == 2 and "RECORDED" not in again.stdout and first in again.stderr
+    assert meta_bytes(sid) == before
+    ok("iv: different ask during a pending 2-question round exits 2, record identical")
 
 
 IV_SITES = {
@@ -651,6 +665,7 @@ BASE = (
     t_ask_json,
     t_ask_stdin,
     t_gate_twice_and_idempotent,
+    t_pending_different_questions_rejected,
     t_not_ui_session,
     t_headless_irrelevant,
     t_bad_session,

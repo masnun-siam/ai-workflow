@@ -16,6 +16,15 @@ import ui_sessions
 from shared import die
 
 
+def _sig(questions) -> list:
+    """Question texts and option labels, in order: what makes two asks the same round."""
+    return [
+        (q.get("question"), [o.get("label") for o in q.get("options") or [] if isinstance(o, dict)])
+        for q in questions or []
+        if isinstance(q, dict)
+    ]
+
+
 def cmd_ask(args) -> None:
     sid = os.environ.get("AIW_UI_SESSION", "")
     try:
@@ -31,6 +40,12 @@ def cmd_ask(args) -> None:
     # ponytail: no lock across this check and set_pending; one model asks serially. Lock if that changes.
     if rec.get("status") == "waiting" and isinstance(pending, dict) and pending.get("status") == "pending":
         rid = pending["id"]
+        if _sig(payload.get("questions")) != _sig(pending.get("questions")):
+            die(
+                2,
+                f"a question round ({rid}) is already waiting for the human; "
+                "end your turn and wait for its answer instead of asking again",
+            )
     else:
         rid = f"q-{secrets.token_hex(4)}"
         ui_sessions.set_pending(sid, {"id": rid, "questions": payload.get("questions")})
