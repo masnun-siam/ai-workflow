@@ -64,6 +64,7 @@ def fixture(ci="SUCCESS", open_ci="PENDING"):
                             "url": "u40",
                             "mergedAt": ts(2),
                             "headRefName": "issue-5-a",
+                            "headRefOid": "abc",
                             "closingIssuesReferences": {"nodes": [{"number": 5, "parent": {"number": 1}}]},
                         },
                         {
@@ -129,7 +130,16 @@ assert (
 )
 assert i3["prs"][1]["ci"] == "none"
 assert d["merged"] == [
-    {"n": 40, "title": "recent", "url": "u40", "merged_at": ts(2), "head": "issue-5-a", "closes": [5], "epic": 1}
+    {
+        "n": 40,
+        "title": "recent",
+        "url": "u40",
+        "merged_at": ts(2),
+        "head": "issue-5-a",
+        "closes": [5],
+        "epic": 1,
+        "sha": "abc",
+    }
 ]  # the 9-day-old merge is dropped
 assert d["open_prs"][0]["ci"] == "pending" and d["open_prs"][0]["title"] == "PRD x"
 

@@ -31,6 +31,8 @@
 
 ### Fixed
 
+- **Merge cleanup keeps ignored local files and cleans squash merges** (#718): a merged issue's worktree holding ignored files (`.env.local`, a local database) is flagged and kept until you confirm, except regenerable dirs (`node_modules`, `.venv`, `dist`, `build`, ...). A squash-merged branch whose tip is the PR head is no longer flagged unpushed once its remote branch is gone (`sha` on `merged` entries). The checkout lookup is case-insensitive.
+
 - **A failed merge stays visible** (#715): when `gh pr merge` fails for a reason other than a conflict, the lane keeps `held: merge failed: <error>` until a merge succeeds or you retry (it was cleared on the next tick while the merge was retried every 5 minutes unseen). The same error raises no new event; after 3 failures in a row the lane needs you. Red CI, a conflict or leaving the merge stages drops the stale error.
 
 - **Stranded lanes need you** (#711): a queued lane behind a skipped blocker (user skip, needs refine, start failed), or in a dependency cycle, gets `needs_you` ("blocked by skipped #n" or "dependency cycle") and one `needs_you` event once nothing is running. The reason clears when the blocker is retried.

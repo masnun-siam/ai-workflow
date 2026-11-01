@@ -32,7 +32,8 @@ with `stale: True, fetched_at: None`):
       "merged": [   # PRs merged in the last 7 days, newest first
         {"n": int, "title": str, "url": str, "merged_at": str, "head": str,
          "closes": [int],                 # issues the PR closed
-         "epic": int | None}              # parent of the first closed issue
+         "epic": int | None,              # parent of the first closed issue
+         "sha": str | None}               # head commit of the PR (merge cleanup compares the branch tip to it)
       ],
       "open_prs": [  # every open PR (to match PRD pull requests that close no issue)
         {"n": int, "title": str, "url": str, "draft": bool, "head": str, "ci": ..., "review": ...,
@@ -92,7 +93,7 @@ query($owner: String!, $name: String!) {{
     }}
     mergedPrs: pullRequests(states: MERGED, first: 50, orderBy: {{field: UPDATED_AT, direction: DESC}}) {{
       nodes {{
-        number title url mergedAt headRefName body
+        number title url mergedAt headRefName headRefOid body
         closingIssuesReferences(first: 10) {{ nodes {{ number parent {{ number }} }} }}
       }}
     }}
@@ -228,6 +229,7 @@ def normalize(response: dict, now: datetime | None = None) -> dict:
                 "head": p.get("headRefName"),
                 "closes": closes,
                 "epic": parent,
+                "sha": p.get("headRefOid"),
             }
         )
     by_n = {i["n"]: i for i in issues}

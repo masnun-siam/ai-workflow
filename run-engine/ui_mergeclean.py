@@ -14,6 +14,9 @@ import re
 
 from shared import run, warn
 
+# regenerable dirs: ignored, but never worth keeping a worktree for
+_REGENERABLE = {"node_modules", ".venv", "venv", "__pycache__", "dist", "build", ".next", "target"}
+
 
 def _git(cwd: str, *args: str):
     return run(["git", "-C", cwd, *args], timeout=60)
@@ -54,22 +57,29 @@ def _plan(checkout: str, issue: int):
     return (wt["path"] if wt else None), branch
 
 
-def check(checkout: str, issue: int):
-    """None when removal loses nothing, else {uncommitted: [paths], unpushed: [shas]}."""
+def check(checkout: str, issue: int, merged_head: str | None = None):
+    """None when removal loses nothing, else {uncommitted: [paths], unpushed: [shas]}.
+
+    Ignored files (`.env.local`, a local db) count as uncommitted, regenerable dirs excepted. With
+    `merged_head` (the merged PR's head commit, known locally) commits up to it count as pushed:
+    a squash merge deletes the remote branch, so `--remotes` alone would flag them forever."""
     wt, branch = _plan(checkout, issue)
     uncommitted, unpushed = [], []
     if wt and os.path.isdir(wt):
-        for ln in (_git(wt, "status", "--porcelain").stdout or "").split("\n"):
-            if ln.strip():
-                uncommitted.append(ln[3:].strip().strip('"'))
+        for ln in (_git(wt, "status", "--porcelain", "--ignored").stdout or "").split("\n"):
+            path = ln[3:].strip().strip('"')
+            if ln.strip() and not (ln.startswith("!! ") and path.split("/")[0] in _REGENERABLE):
+                uncommitted.append(path)
     if branch:
-        unpushed = (_git(checkout, "rev-list", branch, "--not", "--remotes").stdout or "").split()
+        known = merged_head and _git(checkout, "cat-file", "-e", f"{merged_head}^{{commit}}").returncode == 0
+        skip = [merged_head] if known else []
+        unpushed = (_git(checkout, "rev-list", branch, "--not", *skip, "--remotes").stdout or "").split()
     return {"uncommitted": uncommitted, "unpushed": unpushed} if uncommitted or unpushed else None
 
 
-def clean(checkout: str, issue: int, confirm: bool = False) -> dict:
+def clean(checkout: str, issue: int, confirm: bool = False, merged_head: str | None = None) -> dict:
     """{removed: [...], flagged: None | {...}}. Flagged work is only discarded with confirm=True."""
-    flagged = check(checkout, issue)
+    flagged = check(checkout, issue, merged_head)
     if flagged and not confirm:
         return {"removed": [], "flagged": flagged}
     wt, branch = _plan(checkout, issue)
@@ -87,18 +97,23 @@ def clean(checkout: str, issue: int, confirm: bool = False) -> dict:
     return {"removed": removed, "flagged": None}
 
 
-def on_merged(repo: str, merged_issues, checkout: str | None = None) -> dict:
-    """Clean each merged issue that is safe; returns {issue: flags} for those that are not."""
-    if checkout is None:
-        from dispatch import read_checkouts
+def on_merged(repo: str, merged_issues, checkout: str | None = None, heads: dict | None = None) -> dict:
+    """Clean each merged issue that is safe; returns {issue: flags} for those that are not.
 
-        checkout = read_checkouts().get(repo)
+    `heads` is {issue: merged PR head sha}, see `check`."""
+    if checkout is None:
+        from dispatch_runners import checkout as find
+
+        try:
+            checkout = find(repo)
+        except ValueError:
+            return {}
     if not isinstance(checkout, str) or not os.path.isdir(checkout):
         return {}
     flagged = {}
     for n in merged_issues:
         try:
-            res = clean(checkout, int(n), confirm=False)
+            res = clean(checkout, int(n), confirm=False, merged_head=(heads or {}).get(int(n)))
         except Exception as exc:  # noqa: BLE001 - one issue must not stop the rest
             warn(f"mergeclean {repo}#{n}: {type(exc).__name__}: {exc}")
             continue
