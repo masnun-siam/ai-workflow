@@ -312,6 +312,36 @@ describe('Dispatches page', () => {
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
   });
 
+  it('keeps the dispatch under a banner when a later poll fails, and clears it when one succeeds', async () => {
+    window.location.hash = '#/dispatches/abc123abc123';
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Payments' })).toBeTruthy();
+    const real = fetch;
+    let ok = false;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => (!ok && String(url).split('?')[0] === '/api/dispatches/abc123abc123' ? json({ error: 'boom' }, 500) : real(url, init))));
+    expect(await screen.findByText(/Could not refresh this dispatch\. boom/, undefined, { timeout: 12_000 })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Payments' })).toBeTruthy();
+    expect(screen.queryByText('Dispatch not found')).toBeNull();
+    ok = true;
+    await userEvent.click(within(screen.getByText(/Could not refresh this dispatch/).closest('.banner') as HTMLElement).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(screen.queryByText(/Could not refresh this dispatch/)).toBeNull());
+  }, 15_000);
+
+  it('shows Dispatch not found for a 404, and a Retry banner for another error with no data', async () => {
+    const real = fetch;
+    let status = 404;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => (String(url).split('?')[0] === '/api/dispatches/abc123abc123' ? json({ error: status === 404 ? 'no dispatch abc' : 'boom' }, status) : real(url, init))));
+    window.location.hash = '#/dispatches/abc123abc123';
+    render(<App />);
+    expect(await screen.findByText('Dispatch not found')).toBeTruthy();
+    cleanup();
+    status = 500;
+    render(<App />);
+    expect(await screen.findByText(/Could not load the dispatch\. boom/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+    expect(screen.queryByText('Dispatch not found')).toBeNull();
+  });
+
   it('keeps loaded rows under the banner when a refresh fails', async () => {
     routes['/api/dispatches'] = { dispatches: [running('run')] };
     window.location.hash = '#/dispatches';
