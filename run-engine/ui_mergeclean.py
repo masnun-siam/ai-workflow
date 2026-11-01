@@ -16,6 +16,9 @@ from shared import run, warn
 
 # regenerable dirs: ignored, but never worth keeping a worktree for
 _REGENERABLE = {"node_modules", ".venv", "venv", "__pycache__", "dist", "build", ".next", "target"}
+# -uall so a dir holding only ignored files is not collapsed into one entry; the excludes keep git
+# from listing every file of a node_modules
+_EXCLUDE = [f":(exclude,glob)**/{d}/**" for d in sorted(_REGENERABLE)]
 
 
 def _git(cwd: str, *args: str):
@@ -66,10 +69,11 @@ def check(checkout: str, issue: int, merged_head: str | None = None):
     wt, branch = _plan(checkout, issue)
     uncommitted, unpushed = [], []
     if wt and os.path.isdir(wt):
-        for ln in (_git(wt, "status", "--porcelain", "--ignored").stdout or "").split("\n"):
-            path = ln[3:].strip().strip('"')
-            if ln.strip() and not (ln.startswith("!! ") and path.split("/")[0] in _REGENERABLE):
-                uncommitted.append(path)
+        for ln in (_git(wt, "status", "--porcelain", "--ignored", "-uall", "--", ".", *_EXCLUDE).stdout or "").split(
+            "\n"
+        ):
+            if ln.strip():
+                uncommitted.append(ln[3:].strip().strip('"'))
     if branch:
         known = merged_head and _git(checkout, "cat-file", "-e", f"{merged_head}^{{commit}}").returncode == 0
         skip = [merged_head] if known else []

@@ -105,6 +105,8 @@ git(main, "fetch", "-q")
 p6 = wt(6)
 os.makedirs(os.path.join(p6, "node_modules"))
 open(os.path.join(p6, "node_modules", "m"), "w").write("m")
+os.makedirs(os.path.join(p6, "ui", "node_modules"))  # nested: ignored by "node_modules/" anywhere
+open(os.path.join(p6, "ui", "node_modules", "m"), "w").write("m")
 assert mc.check(main, 6) is None
 open(os.path.join(p6, ".env.local"), "w").write("S=1")
 assert mc.on_merged("o/r", [6], checkout=main) == {6: {"uncommitted": [".env.local"], "unpushed": []}}
