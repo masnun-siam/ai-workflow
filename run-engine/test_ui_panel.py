@@ -247,7 +247,10 @@ try:
         r = root()
         pid = ui_panel.start(repo, artifact, ["qa", "cto"], r)
         ls = lens_sids(pid)
-        mine = lambda: [x[0] for x in resumes if x[0] == r or x[0] in ls.values()]  # noqa: E731
+
+        def mine():
+            return [x[0] for x in resumes if x[0] == r or x[0] in ls.values()]
+
         finish(ls["qa"], "Verdict: changes")
         finish(ls["cto"], "Verdict: changes")
         ui_sessions.update(r, hold=True)
@@ -281,6 +284,17 @@ try:
         ui_panel.tick()
         assert peer_review.load_panel(pid)["state"] == "approved"
         ok("held lens in the round: not failed, the round waits for it")
+
+        r = root()
+        pid = ui_panel.start(repo, artifact, ["qa"], r, after_root=True)
+        ui_sessions.update(r, hold=True)
+        ui_panel.tick()
+        p = peer_review.load_panel(pid)
+        assert p["phase"] == "waiting_root" and p["lens_sessions"] == {} and p["state"] == "running", p
+        ui_sessions.update(r, hold=None)
+        ui_panel.tick()
+        assert peer_review.load_panel(pid)["phase"] == "lenses" and list(lens_sids(pid)) == ["qa"]
+        ok("held root before round one: the lenses wait for Resume")
 
     # ---- ui_runner.start passes --agent / --model
     with (
