@@ -419,18 +419,26 @@ def _start_answerer(rec: dict, pq: dict) -> None:
     sid = rec["id"]
     transcript = os.path.join(ui_sessions.session_dir(sid), "stream.jsonl")
     checkout = rec.get("cwd_path") or ui_runner.read_checkouts().get(rec["repo"], rec["repo"])
-    a = ui_runner.start(
-        away_answerer.prompt(rec, pq, transcript, checkout),
-        rec["repo"],
-        agent="ai-workflow:away-answerer",
-        model="opus",
-        effort="medium",
-        claude_cmd=rec.get("claude_cmd"),
-        allowed_tools=away_answerer.allowed_tools(),
-    )
-    ui_sessions.update(a["id"], role=ui_sessions.ANSWERER_ROLE, answers_for=sid, answers_round=pq["id"])
     n = pq.get("answerer_attempts") or 0
-    if not ui_sessions.update_pending(sid, pq["id"], answerer=a["id"], answerer_attempts=n + 1):
+    # count the attempt first: a start that raises must still use one of the two
+    if not ui_sessions.update_pending(sid, pq["id"], answerer_attempts=n + 1):
+        return  # the round is gone
+    try:
+        a = ui_runner.start(
+            away_answerer.prompt(rec, pq, transcript, checkout),
+            rec["repo"],
+            agent="ai-workflow:away-answerer",
+            model="opus",
+            effort="medium",
+            claude_cmd=rec.get("claude_cmd"),
+            allowed_tools=away_answerer.allowed_tools(),
+            fields={"role": ui_sessions.ANSWERER_ROLE, "answers_for": sid, "answers_round": pq["id"]},
+        )
+    except (ui_runner.RunnerError, ValueError, OSError) as e:
+        warn(f"away: answerer for {sid} did not start: {e}")
+        ui_sessions.update_pending(sid, pq["id"], answerer_error=str(e))
+        return
+    if not ui_sessions.update_pending(sid, pq["id"], answerer=a["id"]):
         ui_runner.stop(a["id"])  # the owner answered while it started
 
 
@@ -456,7 +464,10 @@ def _opus(rec: dict, now: float) -> dict | None:
     if not aid:
         if (pq.get("answerer_attempts") or 0) < MAX_ATTEMPTS:
             _start_answerer(rec, pq)
-        return None
+            return None
+        ui_sessions.update_pending(sid, pq["id"], held=True)  # every attempt failed to start
+        reason = f"answerer could not start: {pq.get('answerer_error') or 'unknown error'}"
+        return _held_entry(rec, now, pq, reason, None, None)
     a = ui_sessions.load(aid) or {}
     status = a.get("status")
     if status in ("starting", "running"):
