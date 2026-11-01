@@ -660,15 +660,44 @@ assert calls[-1] == ["tab", "close", "t1"]
 
 
 class FakeSessions:
-    recs = {"s1": {"status": "waiting"}, "s2": {"status": "failed"}}
+    recs = {
+        "s1": {"status": "waiting"},
+        "s2": {"status": "failed"},
+        "s3": {"status": "done", "hold": True},
+        "s4": {"status": "stopped", "hold": True},
+        "s5": {"status": "done"},
+    }
 
     def load(self, sid):
         return self.recs.get(sid)
+
+    def update(self, sid, **kw):
+        self.recs[sid].update(kw)
 
 
 hl = dispatch_runners.Headless(runner=object(), sessions=FakeSessions())
 assert hl.status({"session": "s1"}) == ("blocked", None) and hl.status({"session": "s2"})[0] == "gone"
 assert hl.status({"session": "nope"})[0] == "gone"
+
+
+class SendRunner:
+    sent = []
+
+    def send_prompt(self, sid, text):
+        self.sent.append((sid, text))
+
+
+hs = dispatch_runners.Headless(runner=SendRunner(), sessions=FakeSessions())
+assert hs.status({"session": "s3"}) == ("working", None)  # held: no needs_you, the lane stays
+hs.send({"session": "s3"}, "first")
+hs.send({"session": "s3"}, "newer")
+assert FakeSessions.recs["s3"]["queued_prompt"] == "newer" and SendRunner.sent == []
+assert hs.status({"session": "s4"}) == ("idle", None)  # stopped stays final, held or not
+hs.send({"session": "s4"}, "go")
+assert "queued_prompt" not in FakeSessions.recs["s4"] and SendRunner.sent == [("s4", "go")]
+assert hs.status({"session": "s5"}) == ("idle", None)
+hs.send({"session": "s5"}, "go")
+assert SendRunner.sent[-1] == ("s5", "go")
 
 
 class StopRunner:
