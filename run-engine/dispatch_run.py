@@ -600,6 +600,13 @@ def _stop_lanes(d: dict) -> int:
     return len(lanes)
 
 
+def _close_sessions(d: dict) -> None:
+    """Cancel: close the session of every active lane, the user's paused ones too (the tick runs the outbox)."""
+    for x in d["lanes"].values():
+        if x["stage"] in ACTIVE and x.get("handle") and ["close", None] not in x.get("outbox", []):
+            x.setdefault("outbox", []).append(["close", None])
+
+
 def _restart_lanes(d: dict) -> int:
     """Resume: the lanes Pause > Now stopped get a fresh session in their stage; a lane the user paused stays paused."""
     lanes = [x for x in d["lanes"].values() if x.get("paused_by") == "dispatch"]
@@ -617,6 +624,7 @@ def set_state(did: str, state: str, now: bool = False) -> dict:
         d["state"] = state
         if state == "cancelled":
             d["ended_at"] = time.time()
+            _close_sessions(d)
         text = f"dispatch {state}"
         if state == "paused" and now and (n := _stop_lanes(d)):
             text = f"dispatch paused now: {_issues(n)} stopped"
