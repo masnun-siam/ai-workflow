@@ -410,6 +410,9 @@ except ValueError:
     pass
 assert call(f"/api/dispatches/{d2['id']}/lane", {"lane": "o/r#9", "action": "hold"})[1]["lanes"][0]["hold_merge"]
 assert call(f"/api/dispatches/{d2['id']}/lane", {"lane": "o/r#9", "action": "explode"})[0] == 400
+st, body = call(f"/api/dispatches/{d2['id']}/retry-failed", {})
+assert st == 200 and body["id"] == d2["id"]
+assert call("/api/dispatches/000000000000/retry-failed", {})[0] == 400
 assert call(f"/api/dispatches/{d2['id']}/state", {"state": "paused"})[1]["state"] == "paused"
 stage_ = dr.load(d2["id"])["lanes"]["o/r#9"]["stage"]
 dn_ = dr.load(d2["id"])
