@@ -93,6 +93,10 @@ export function Shell() {
   useEffect(() => {
     document.title = inbox ? `(${inbox}) aiw` : 'aiw';
   }, [inbox]);
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>('link[rel=icon]');
+    if (link) link.href = inbox ? '/icons/icon-alert.svg' : '/icons/icon.svg';
+  }, [inbox]);
   useAwayDocument();
   useBrowserNotifier();
   // Issue and PR links anywhere open the side panel; modified clicks and `data-ext` buttons still go to GitHub.
