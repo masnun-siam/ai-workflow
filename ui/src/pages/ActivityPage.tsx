@@ -25,7 +25,7 @@ export function ActivityPage() {
   const [shown, setShown] = useState(PAGE);
   const [cleaning, setCleaning] = useState(false);
 
-  const all: Session[] = q.data?.sessions ?? [];
+  const all: Session[] = useMemo(() => q.data?.sessions ?? [], [q.data]);
   const sorted = useMemo(() => [...all].sort((a, b) => (b.started_at ?? '').localeCompare(a.started_at ?? '')), [all]);
   const live = sorted.filter((s) => isLive(s.outcome));
   const hist = useMemo(() => {

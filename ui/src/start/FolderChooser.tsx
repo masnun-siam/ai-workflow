@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { api } from '../api/endpoints';
 import { useApiMutation, useVaultFolders } from '../api/hooks';
 import { Button, Chip } from '../components';
@@ -10,7 +10,8 @@ import { folderOf, keywordSuggest, type FolderPick } from './startLogic';
  */
 export function FolderChooser({ text, value, onChange }: { text: string; value: FolderPick; onChange: (v: FolderPick) => void }) {
   const id = useId();
-  const folders = useVaultFolders().data?.folders ?? [];
+  const foldersData = useVaultFolders().data;
+  const folders = useMemo(() => foldersData?.folders ?? [], [foldersData]);
   const [why, setWhy] = useState('');
   const [error, setError] = useState('');
   const suggest = useApiMutation((t: string) => api.suggestFolder(t), [], { quiet: true });

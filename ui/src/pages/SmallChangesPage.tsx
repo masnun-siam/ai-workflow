@@ -132,8 +132,10 @@ function noteOf(p: BoardEntry<PlanningResponse>, d?: BoardEntry<DeliveryResponse
 function AllRepos({ repo, picker }: { repo: string; picker: ReactNode }) {
   const plan = usePlanningAll(true);
   const del = useDeliveryAll(true);
-  const names = useRepos().data?.repos ?? [];
-  const dispatches = useDispatches().data?.dispatches ?? [];
+  const reposData = useRepos().data;
+  const names = useMemo(() => reposData?.repos ?? [], [reposData]);
+  const dispatchesData = useDispatches().data;
+  const dispatches = useMemo(() => dispatchesData?.dispatches ?? [], [dispatchesData]);
   const [filter, setFilter] = useState<Filter>(null);
   const [picked, setPicked] = useState<{ repo: string; n: number }[]>([]);
   const [dispatching, setDispatching] = useState(false);
