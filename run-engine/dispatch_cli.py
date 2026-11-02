@@ -421,6 +421,11 @@ def cmd_ls(a) -> None:
         print(f"{d['id']}  {d['state']:<9}  {d['epic'] or d['title']:<24}  {closed}/{n} closed  {d['runner']}")
 
 
+def cmd_archive(a) -> None:
+    for did in dr.archive_old(days=a.days):
+        print(did)
+
+
 def _snapshots() -> dict:
     """{repo: {stale, error, fetched_at}} from the running server's board endpoint."""
     with urllib.request.urlopen(f"http://127.0.0.1:{UI_PORT}/api/delivery", timeout=10) as r:  # noqa: S310 - loopback
@@ -559,6 +564,9 @@ def register(sub, add) -> None:
     flags(q)
     q.set_defaults(func=cmd_start)
     ops.add_parser("ls", help="list dispatches").set_defaults(func=cmd_ls)
+    q = ops.add_parser("archive", help="move dispatches finished more than --days ago to dispatches/archive/")
+    q.add_argument("--days", type=float, default=dr.ARCHIVE_DAYS)
+    q.set_defaults(func=cmd_archive)
     q = ops.add_parser("doctor", help="say why a live dispatch cannot move; exits 1 when something is wrong")
     q.add_argument("id", nargs="?")
     q.set_defaults(func=cmd_doctor)
