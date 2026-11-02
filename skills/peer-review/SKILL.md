@@ -51,7 +51,7 @@ the rounds, and relays to you. Lenses never message each other or you; the UI is
      your next message, then apply it. Never only list them in your reply text: the user may
      not read it, and the panel repeats the same finding every round.
   3. Address minor findings when cheap; the same list answers them.
-  4. After editing, run `wc -l` and `md5` on the artifact and put both in your reply, so a
+  4. After editing, run `wc -l` and `md5sum 2>/dev/null || md5` on the artifact and put both in your reply, so a
      lens that reads a stale copy (same checksum as before) is caught at once.
   5. End your turn. The UI then asks the same lenses to re-review the revised artifact. You do
      not ask them, and you do not start another round yourself.

@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- **Docs say only what exists** (#736): `CLAUDE.md` and `docs/REFERENCE.md` drop `commands/` and the removed `peer-review` verb, list the real CLI verbs and skill flags, document five more API routes and the Tailscale owner check; `peer-review` step 4 uses `md5sum` when `md5` is missing.
 - **pr-grind names no workspace** (#733): the skill no longer quotes a Slack user id, workspace host or bot name. The new-thread URL is built from an optional `workspace_url` in `channels.json` (grind stops with one line when it is missing). The unread `userConfig` keys are gone from `plugin.json`, and INSTALL Step 6 documents every `channels.json` key.
 
 ### Added
