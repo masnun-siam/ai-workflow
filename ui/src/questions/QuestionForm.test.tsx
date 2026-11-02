@@ -88,6 +88,17 @@ describe('none of these / select all', () => {
     for (const l of ['A', 'B', 'C']) expect((await box(new RegExp(`^${l}`))).checked).toBe(true);
   });
 
+  it('Tab walks the controls of a question and only the last one jumps to the next question', async () => {
+    setup(sess({}, [Q3, Q2]));
+    const user = userEvent.setup();
+    (await screen.findAllByRole('button', { name: 'Select all' }))[0].focus();
+    await user.tab();
+    expect(document.activeElement).toBe((await screen.findAllByRole('checkbox', { name: /^A/ }))[0]);
+    (await screen.findAllByRole('checkbox', { name: /Something else/ }))[0].focus();
+    await user.tab();
+    expect(document.activeElement).toBe((await screen.findAllByRole('checkbox', { name: /^A/ }))[1]);
+  });
+
   it('single-select shows neither control; number keys map to options and 0 to Something else only', async () => {
     setup(sess());
     await screen.findByRole('radio', { name: /Postgres/ });

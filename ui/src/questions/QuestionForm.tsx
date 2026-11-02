@@ -60,7 +60,7 @@ export function QuestionFields({ qs, ans, onChange: set, disabled, name: prefix 
   const pickOther = (k: number) => set(k, { none: false, useOther: !ans[k].useOther || !qs[k].multiSelect, labels: [] });
   const pickNone = (k: number) => set(k, { none: !ans[k].none, labels: [], useOther: false });
   const pickAll = (k: number) => set(k, { none: false, useOther: false, labels: qs[k].options.map((o) => o.label) });
-  // Number keys pick, 0/O picks "Something else", Tab moves to the next question. Scoped to the focused fieldset.
+  // Number keys pick, 0/O picks "Something else", Tab from the last control moves to the next question. Scoped to the focused fieldset.
   const onKey = (k: number, e: React.KeyboardEvent<HTMLFieldSetElement>) => {
     const q = qs[k];
     if ((e.target as HTMLElement).tagName === 'TEXTAREA' || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -73,7 +73,9 @@ export function QuestionFields({ qs, ans, onChange: set, disabled, name: prefix 
       e.currentTarget.querySelector('textarea')?.focus();
     } else if (e.key === 'Tab' && !e.shiftKey) {
       const next = e.currentTarget.nextElementSibling;
-      if (next instanceof HTMLFieldSetElement) {
+      const controls = e.currentTarget.querySelectorAll('input:not(:disabled),button:not(:disabled),textarea:not(:disabled)');
+      // Only the last control hands focus to the next question; earlier ones tab normally.
+      if (next instanceof HTMLFieldSetElement && e.target === controls[controls.length - 1]) {
         e.preventDefault();
         focusFirst(next);
       }

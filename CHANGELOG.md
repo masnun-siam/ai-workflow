@@ -8,6 +8,7 @@
 
 ### Changed
 
+- **Keyboard navigation** (#751): ArrowUp/ArrowDown move the row selection only when focus is on a row, so the arrow keys scroll the page otherwise (`j`/`k` unchanged). In a question, Tab walks every control (Select all, None of these, Something else) and only the last one jumps to the next question.
 - **Tab favicon** (#746): the browser tab icon gets a red dot while the Inbox has something that needs you, next to the title count.
 - **`/pr-grind` without Slack** (#744): a per-repo `reviewer` setting (a GitHub login or `copilot`) makes grinds, auto-grind and dispatch lanes run `/pr-grind <pr> --reviewer <login>` when the repo has no Slack channel: it requests the review with `gh pr edit --add-reviewer`, reads it through `gh api`, fixes and re-requests until approved. A Slack channel still wins.
 
