@@ -398,6 +398,24 @@ describe('Dispatches page', () => {
   });
 });
 
+describe('Retry on failed loads', () => {
+  it('the preview error banner retries the preview', async () => {
+    const ok = fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>;
+    let fail = true;
+    vi.stubGlobal('fetch', vi.fn((u: string, i?: RequestInit) => (fail && String(u) === '/api/dispatches/plan' ? json({ error: 'gh down' }, 502) : ok(u, i))));
+    window.location.hash = '#/dispatches?repo=o/r';
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Run an epic' }));
+    await userEvent.type(screen.getByLabelText('Epic'), '1');
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    const banner = (await screen.findByText('gh down')).closest('.banner') as HTMLElement;
+    fail = false;
+    await userEvent.click(within(banner).getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText('o/r#5: needs refine')).toBeTruthy();
+    expect(posts.filter(([p]) => p === '/api/dispatches/plan')).toHaveLength(1);
+  });
+});
+
 describe('Dispatch CI mode', () => {
   it('sends the picked CI mode to the plan, defaulting to wait', async () => {
     window.location.hash = '#/dispatches?repo=o/r';
