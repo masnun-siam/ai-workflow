@@ -22,7 +22,7 @@
 - **GitNexus:** run `gitnexus analyze --skip-agents-md` so it does not write its block into
   `CLAUDE.md`.
 
-Some tests pin doc text. Run `bash run-engine/run_tests.sh` after editing docs.
+Some tests pin doc text. Run `bash run-engine/run_tests.sh` after editing docs. `run-engine/test_skill_lint.py` fails on broken `../../` or `docs/` references, unknown `aiw` verbs, skill flags missing from `docs/REFERENCE.md` (or the reverse), and hardcoded Slack ids or hosts.
 
 ## Pre-commit hooks
 

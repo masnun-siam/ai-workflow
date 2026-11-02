@@ -4,7 +4,7 @@
 
 | Command | Does |
 |---|---|
-| `/ai-workflow:create-prd <requirement>` | interview a requirement into a PRD with its technical design, saved to `docs/prds/<slug>.md`; `--update` records later decisions; `approve` files one epic per `## Epics` entry (UI prompt conventions; the skill takes them as plain text) |
+| `/ai-workflow:create-prd <requirement>` | interview a requirement into a PRD with its technical design, saved to `docs/prds/<slug>.md`; asking it to update a PRD records later decisions; `approve` files one epic per `## Epics` entry (UI prompt conventions; the skill takes them as plain text) |
 | `/ai-workflow:create-tasks <prd \| finding>` | split an Approved PRD into one-PR tasks, created as child issues of the epic with blocked-by links; or file one issue for a finding |
 | `/ai-workflow:refine-issues <epic or issues>` | write a WHAT, WHY and HOW into each child issue, label it `refined` and move it to Ready on the board once unblocked |
 | `/ai-workflow:implement-issue <n \| epic>` | one refined issue (or an epic's next Ready one) to a Ready PR: worktree, local checks, local review, draft PR, CI, review comments; after the merge, close and clean up |
