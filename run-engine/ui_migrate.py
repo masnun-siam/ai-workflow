@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 import shutil
 
+from shared import warn
+
 MARKER = "migrated-dev-workflow"
 OLD = (
     "runs",
@@ -27,11 +29,15 @@ def clear_old_data(data_dir: str) -> list:
     removed = []
     for name in OLD:
         p = os.path.join(data_dir, name)
-        if os.path.isdir(p) and not os.path.islink(p):
-            shutil.rmtree(p, ignore_errors=True)
-        elif os.path.lexists(p):
-            os.remove(p)
-        else:
+        try:
+            if os.path.isdir(p) and not os.path.islink(p):
+                shutil.rmtree(p, ignore_errors=True)
+            elif os.path.lexists(p):
+                os.remove(p)
+            else:
+                continue
+        except OSError as e:
+            warn(f"could not remove old engine data {p}: {e}")
             continue
         removed.append(p)
         print(f"removed old engine data: {p}", flush=True)

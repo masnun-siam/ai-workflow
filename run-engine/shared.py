@@ -183,20 +183,6 @@ def run(argv, cwd=None, timeout=None, env=None):
         return subprocess.CompletedProcess(argv, 124, "", f"timed out after {timeout}s")
 
 
-def shell(cmd: str, cwd=None, timeout=None):
-    """Run a command STRING through the shell.
-
-    Only for strings the ledger already holds verbatim — `compose_prefix` and
-    `test_cmd`. Those are contracts: every station is told to run test_cmd
-    "unchanged", so splitting or rewriting it here would make this the one place
-    that runs something different from what every station ran.
-    """
-    try:
-        return subprocess.run(cmd, cwd=cwd, shell=True, capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        return subprocess.CompletedProcess(cmd, 124, "", f"timed out after {timeout}s")
-
-
 def gh_json(args, cwd=None, timeout=120):
     """`gh <args>`. Returns (value, proc).
 

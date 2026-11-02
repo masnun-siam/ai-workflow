@@ -164,7 +164,7 @@ def _record(sid):
     return 204, None
 
 
-def _route(method, p, body, query):
+def _route(method, p, body):
     n = len(p)  # p: path parts after "shares"
     if method == "GET" and n == 0:
         return _list()
@@ -197,10 +197,10 @@ def _route(method, p, body, query):
     return 404, {"error": "not found"}
 
 
-def handle(method: str, parts: list, body=None, query: str = ""):
+def handle(method: str, parts: list, body=None):
     """`parts` is the split path (`["", "api", "shares", ...]`). Returns (status, body)."""
     try:
-        return _route(method, parts[3:], body, query)
+        return _route(method, parts[3:], body)
     except ui_shares.ShareError as e:
         return _STATUS.get(e.kind, 400), {"error": str(e)}
     except ValueError as e:
