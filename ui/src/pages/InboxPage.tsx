@@ -78,7 +78,7 @@ function AwaySummary({ s }: { s: NonNullable<AfkState['summary']> }) {
       <div className="stack" style={{ gap: 8 }}>
         <p>
           <b>While you were away ({clockText(s.started)}{s.ended ? `–${clockText(s.ended)}` : ''}): {handled} handled, {held} held</b>
-          {held > 0 ? <label className="row" style={{ gap: 6, fontSize: 13 }}><input type="checkbox" checked={heldOnly} onChange={(e) => setHeldOnly(e.target.checked)} />Held only</label> : null}
+          {log.some((l) => l.kind === 'held') ? <label className="row" style={{ gap: 6, fontSize: 13 }}><input type="checkbox" checked={heldOnly} onChange={(e) => setHeldOnly(e.target.checked)} />Held only</label> : null}
         </p>
         {log.length ? (
           <ul style={{ margin: 0, paddingLeft: 0 }}>
