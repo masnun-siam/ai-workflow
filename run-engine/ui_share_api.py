@@ -70,6 +70,7 @@ def _view(share: dict, detail: bool = False) -> dict:
             approvals=[{"id": a["id"], "name": a["name"], "at": a["at"]} for a in share["approvals"]],
             unsent=len(ui_share_send.unsent_threads(share)),
             last_seen_at=share.get("last_seen_at"),
+            last_opened_at=share.get("last_opened_at"),
             prd_updated_at=updated,
         )
     return out
