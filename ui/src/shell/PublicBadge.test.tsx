@@ -5,7 +5,7 @@ import { App } from '../App';
 
 const json = (b: unknown) => Promise.resolve(new Response(JSON.stringify(b), { status: 200, headers: { 'Content-Type': 'application/json' } }));
 const AFK = { active: false, until: null, started: null, decisions: 0, held: 0, summary: null };
-const share = (o: Record<string, unknown> = {}) => ({ id: 'a', repo: 'o/r', path: 'docs/prds/my-feat.md', title: 'My feat', state: 'live', url: 'https://x', comments: 0, unread: 0, reachable: true, end_reason: null, ...o });
+const share = (o: Record<string, unknown> = {}) => ({ id: 'a', repo: 'o/r', path: 'docs/prds/my-feat.md', title: 'My feat', state: 'live', url: 'https://x', comments: 0, unread: 0, reachable: true, end_reason: null, expires_at: null, ...o });
 
 let shares: unknown[];
 let calls: string[];

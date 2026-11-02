@@ -600,7 +600,7 @@ export type EndAction = 'open-pr' | 'qa' | 'grind-pr';
 
 // ---- shares (owner side of the share-link feature; never a token or key_hash) ----
 export type ShareState = 'live' | 'ended';
-export type ShareEndReason = 'stopped' | 'approved' | 'status' | 'missing' | null;
+export type ShareEndReason = 'stopped' | 'approved' | 'status' | 'missing' | 'expired' | null;
 export interface ShareAnchor { exact: string; prefix: string; suffix: string }
 export interface ShareComment { id: string; author: string; by_owner: boolean; body: string; at: string }
 export interface ShareThread {
@@ -624,6 +624,7 @@ export interface ShareSummary {
   unread: number;
   reachable: boolean;
   end_reason: ShareEndReason;
+  expires_at: string | null;
 }
 export interface Share extends ShareSummary {
   created_at: string;

@@ -131,11 +131,41 @@ try:
     assert ui_shares.find("o/r", "docs/prds/b.md") is None
     ok("runtime 409/503 create nothing")
 
+    # expiry
+    prd("e.md")
+    ep = {"repo": "o/r", "path": "docs/prds/e.md", "confirm": True}
+    for bad in (0, 91, 1.5, "7", True, []):
+        assert call("POST", "/api/shares", {**ep, "expires_in_days": bad})[0] == 400, bad
+    assert ui_shares.find("o/r", "docs/prds/e.md") is None
+    s, e1 = call("POST", "/api/shares", {**ep, "expires_in_days": 7})
+    assert s == 201 and e1["expires_at"] and e1["expires_at"] > ui_shares.now_iso()
+    assert call("GET", f"/api/shares/{e1['id']}")[1]["expires_at"] == e1["expires_at"]
+    assert [x for x in call("GET", "/api/shares")[1] if x["id"] == e1["id"]][0]["expires_at"] == e1["expires_at"]
+    ui_shares.update(e1["id"], lambda r: r.update(expires_at="2000-01-01T00:00:00.000+00:00"))
+    s, got = call("GET", f"/api/shares/{e1['id']}")
+    assert got["state"] == "ended" and got["end_reason"] == "expired" and got["url"] is None
+    s, e2 = call("POST", "/api/shares", {**ep, "expires_in_days": None})
+    assert s == 201 and e2["expires_at"] is None
+    call("DELETE", f"/api/shares/{e2['id']}")
+    ok("expires_in_days validated, stored, ends as expired")
+
     # list and get
     s, lst = call("GET", "/api/shares")
     assert s == 200 and {x["id"] for x in lst} >= {sid}
     row = next(x for x in lst if x["id"] == sid)
-    assert set(row) == {"id", "repo", "path", "title", "state", "url", "comments", "unread", "reachable", "end_reason"}
+    assert set(row) == {
+        "id",
+        "repo",
+        "path",
+        "title",
+        "state",
+        "url",
+        "comments",
+        "unread",
+        "reachable",
+        "end_reason",
+        "expires_at",
+    }
     assert row["title"] == "Title of a.md" and row["reachable"] is True
     s, det = call("GET", f"/api/shares/{sid}")
     assert (

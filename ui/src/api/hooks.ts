@@ -287,7 +287,7 @@ export const useDispatchSeen = () => useApiMutation((id: string) => api.dispatch
 
 const SHARE_WRITES: QueryKey[] = [['shares'], ['share'], ['inbox']];
 // quiet: the Share popover and the Send dialog show their own errors
-export const useCreateShare = () => useApiMutation((v: { repo: string; path: string }) => api.createShare(v.repo, v.path), SHARE_WRITES, { quiet: true });
+export const useCreateShare = () => useApiMutation((v: { repo: string; path: string; expiresInDays?: number }) => api.createShare(v.repo, v.path, v.expiresInDays), SHARE_WRITES, { quiet: true });
 export const useStopShare = () => useApiMutation((id: string) => api.stopShare(id), SHARE_WRITES);
 export const useDeleteThread = () => useApiMutation((v: { id: string; tid: string }) => api.deleteThread(v.id, v.tid), SHARE_WRITES);
 export const useDeleteComment = () => useApiMutation((v: { id: string; tid: string; cid: string }) => api.deleteComment(v.id, v.tid, v.cid), SHARE_WRITES);

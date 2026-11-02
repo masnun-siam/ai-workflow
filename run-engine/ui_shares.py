@@ -25,7 +25,7 @@ import ui_planning
 
 clock = time.time  # tests replace it
 _ID = re.compile(r"[0-9a-f]{16}")
-_REASONS = ("stopped", "approved", "status", "missing")
+_REASONS = ("stopped", "approved", "status", "missing", "expired")
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
 NAME_MAX, COMMENT_MAX, EXACT_MAX, CONTEXT_MAX = 60, 2000, 1000, 32
@@ -163,7 +163,7 @@ def _end_rec(rec: dict, reason: str) -> None:
     rec.update(state="ended", end_reason=reason, ended_at=now_iso(), token=None)
 
 
-def create(repo: str, rel: str, checkout):
+def create(repo: str, rel: str, checkout, expires_at: str | None = None):
     if not isinstance(rel, str) or not ui_actions._PRD.fullmatch(rel):
         raise ShareError("invalid", "path must be docs/prds/<name>.md")
     sid = share_id(repo, rel)
@@ -197,6 +197,7 @@ def create(repo: str, rel: str, checkout):
             created_at=now,
             ended_at=None,
             approvals=[],
+            expires_at=expires_at,
         )
         _write(rec)
         return rec, True
@@ -221,6 +222,8 @@ def refresh(sid, checkout):
     rec = get(sid)
     if rec is None or rec["state"] != "live":
         return rec
+    if rec.get("expires_at") and now_iso() >= rec["expires_at"]:
+        return end(sid, "expired")
     reason = prd_state(checkout, rec["path"])["reason"]
     return end(sid, reason) if reason else rec
 
