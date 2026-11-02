@@ -117,6 +117,7 @@ export const COMMANDS: CommandGroup[] = [
     { id: 'peer-review', name: 'Peer review an artifact', desc: 'Runs the lens panel until every lens approves.', arg: 'text', placeholder: 'Path or description of what to review', lenses: true },
   ] },
   { g: 'Ship', items: [
+    { id: 'close-epic', name: 'Close an epic', desc: 'Checks every PRD requirement shipped, verifies, marks the PRD Done and closes the epic.', arg: 'text', placeholder: 'Epic number, e.g. 701' },
     { id: 'release-pr', name: 'Open a release PR', desc: 'Staging to master with a release summary and checklist.', arg: 'none' },
   ] },
   { g: 'Capture', items: [

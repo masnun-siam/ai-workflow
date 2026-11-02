@@ -18,6 +18,7 @@
 | `/ai-workflow:pr-grind <slack thread url \| PR url> [--channel <id>]` | the Slack reviewer-bot loop on a PR; fixes inline, verifies before each push |
 | `/ai-workflow:peer-review [--lenses <lens,lens>] [--root <panel_id>]` | a panel of read-only `peer-reviewer` lenses on the session's change (default critical) until every lens approves |
 | `/ai-workflow:dump <text>` | file free-form input into the Obsidian vault's Project → Feature structure, after one confirmation |
+| `/ai-workflow:close-epic <epic> [--dry-run]` | verify every child issue and PRD requirement shipped, run `/verifier-locally` on the base branch, set the PRD to `Done` and close the epic; lists the gaps and stops otherwise, never closes children |
 | `/ai-workflow:release-pr [--dry-run] [head=staging] [base=master]` | open or refresh the `staging` → `master` release PR with a deploy checklist, post the Slack trigger, hand off to `/pr-grind`. Never merges |
 | `/ai-workflow:worklog [date]` | today's worklog from GitHub activity and the daily note, written to the Obsidian daily note (runs as the `worklog-runner` agent) |
 | `/ai-workflow:herdr-dispatch <epic> [--max N] [--grind off\|simple\|full] [--ci wait\|defer\|ignore] [--auto-merge] [--feature-branch <name>] [--base-branch <name>] [--model M] [--effort E]` | run an epic's issues as a dispatch in herdr tabs: preview, confirm, start, then relay what needs you (see **Dispatches**) |
@@ -490,7 +491,7 @@ The work's own state is on GitHub and in the repo's `docs/prds/`.
 ```
 skills/       create-prd, create-tasks, refine-issues, implement-issue, verifier-locally,
               pr-review, docs-updater, faq-updater, skill-feedback, sync-from-wasensi, pr-grind,
-              peer-review, dump, release-pr, worklog, herdr-dispatch, repo-bootstrap
+              peer-review, dump, release-pr, close-epic, worklog, herdr-dispatch, repo-bootstrap
 agents/       away-answerer, peer-reviewer, worklog-runner
 guides/       engineering-workflow, code-review, skills
 templates/    prd, epic, issue, faq, claude-md, repo-audit

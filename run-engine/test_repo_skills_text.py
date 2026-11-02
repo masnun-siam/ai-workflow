@@ -226,4 +226,12 @@ ok(
     re.search(r"^description: Slack reviewer-bot loop only", text("skills/pr-grind/SKILL.md"), re.M)
     and "don't commit" not in text("self-improve.md"),
 )
+ce = text("skills/close-epic/SKILL.md")
+ok(
+    "close-epic: has --dry-run, verifies, never closes children by force",
+    "--dry-run" in ce
+    and "never forces" in ce
+    and "force-close" not in ce
+    and "does not close, edit or reopen child" in ce,
+)
 print("all repo-skills text checks passed")
