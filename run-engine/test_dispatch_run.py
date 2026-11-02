@@ -68,6 +68,7 @@ def pr(n=100, **kv):
         "ci": "success",
         "conflict": False,
         "approved": False,
+        "changes_requested": False,
         "sha": "a" * 40,
         **kv,
     }
@@ -399,6 +400,14 @@ fg = {**f1, "grind": {"state": "done", "reason": "approved (simple)"}}
 dr.tick(d, {K(1): fg}, run, merge, now=1015)
 assert d["lanes"][K(1)]["gate"] == "no approving review" and 101 not in merges
 assert dr._gate(d["lanes"][K(1)], {**fg, "solo": True}, d["settings"]) is None  # your own repo needs no approval
+cr = {**fg, "pr": pr(101, approved=True, changes_requested=True)}
+assert dr._gate(d["lanes"][K(1)], cr, d["settings"]) == "changes requested"
+assert dr._gate(d["lanes"][K(1)], {**cr, "solo": True}, d["settings"]) == "changes requested"
+assert dr._gate(d["lanes"][K(1)], {**fg, "pr": pr(101, draft=True, approved=True)}, d["settings"]) == "PR is a draft"
+assert (
+    dr._gate(d["lanes"][K(1)], {**fg, "pr": pr(101, conflict=True, approved=True)}, d["settings"])
+    == "PR has a merge conflict"
+)
 dr.tick(d, {K(1): {**fg, "pr": pr(101, approved=True, ci="failure")}}, run, merge, now=1016)
 assert d["lanes"][K(1)]["held"] == "CI is red"
 dr.tick(d, {K(1): {**fg, "pr": pr(101, approved=True, conflict=True)}}, run, merge, now=1017)

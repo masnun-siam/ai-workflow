@@ -39,6 +39,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 
+import merge_gate
 import ui_afk
 
 GROUPS = ("block", "answer", "decide", "fix", "setup", "wait")
@@ -52,13 +53,13 @@ def grind_on(settings, issue) -> bool:
 
 
 def merge_ready(pr, grind, on: bool, solo: bool) -> bool:
-    """Does an open PR get Merge? Not a draft, no conflicts with its base, CI green, GitHub approved it unless the user owns the repo
-    (`solo`), and with grinding on its grind is done (stopped from the UI counts)."""
-    if not pr or pr.get("draft") or pr.get("ci") != "success" or pr.get("conflict"):
+    """Does an open PR get Merge? CI green, `merge_gate.blockers` finds nothing (the PR needs the poller's open_prs
+    fields), and with grinding on its grind is done (stopped from the UI counts)."""
+    if not pr or pr.get("ci") != "success":
         return False
     if on and (grind or {}).get("state") != "done":
         return False
-    return pr.get("review") == "approved" or solo
+    return merge_gate.blockers(pr, solo) is None
 
 
 def urgency_text(item) -> str | None:

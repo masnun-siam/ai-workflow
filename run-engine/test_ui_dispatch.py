@@ -85,12 +85,17 @@ assert ui_dispatch.lane_facts(lane, snap(stale=True)) is None
 assert ui_dispatch.lane_facts(lane, None) is None
 s = snap(
     [issue(5, blockers=[(4, "OPEN"), (3, "CLOSED")], prs=[pr(50)])],
-    open_prs=[{**pr(50), "reviewer": "bot", "checks": 3}],
+    open_prs=[{**pr(50), "reviewer": "bot", "approved": True, "changes_requested": False, "checks": 3}],
 )
 grind_files = [("x", {"owner": "O", "repo": "R", "number": "50", "dispatch-due": "2026-10-23T00:00:00Z"})]
 f = ui_dispatch.lane_facts(lane, s, status=lambda h: ("blocked", None), grind_files=grind_files, channel=lambda r: "C1")
 assert f["issue_open"] and f["refined"] and f["blockers_open"] == ["o/r#4"]
-assert f["pr"]["n"] == 50 and f["pr"]["approved"] is True and (f["slack"], f["channel"]) == (True, "C1")
+assert (
+    f["pr"]["n"] == 50
+    and f["pr"]["approved"] is True
+    and f["pr"]["changes_requested"] is False
+    and (f["slack"], f["channel"]) == (True, "C1")
+)
 assert f["grind"] == {"state": "idle", "reason": "", "due": "2026-10-23T00:00:00Z"} and f["agent"] == "blocked"
 f = ui_dispatch.lane_facts(
     lane,
@@ -177,7 +182,10 @@ ui_dispatch.tick_one(
 )
 assert dr.load(d["id"])["lanes"]["o/r#5"]["stage"] == "implementing"
 # PR ready, grind off, auto-merge off -> awaiting_merge: Inbox row, macOS notice, ntfy push
-snaps[R] = snap([issue(5, prs=[pr(50, review="approved")]), issue(6, blockers=[(5, "OPEN")])])
+snaps[R] = snap(
+    [issue(5, prs=[pr(50, review="approved")]), issue(6, blockers=[(5, "OPEN")])],
+    open_prs=[{**pr(50, review="approved"), "approved": True, "changes_requested": False}],
+)
 for t in (1002, 1003):
     ui_dispatch.tick_one(d["id"], lambda r: snaps.get(r), runner_for=lambda d: runner, now=t, grind_files=[])
 d = dr.load(d["id"])
