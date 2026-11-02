@@ -7,10 +7,10 @@ import { STAGES, stageIdx } from '../lib/vocab';
 import { NextStepButtons, useNextStep } from './NextStepBox';
 import { IssueBar, StageTicks } from './StripParts';
 
-type Props = { f: Feature; repo: string; onRunEpic: () => void; more: ComponentProps<typeof MoreMenu>['items'] };
+type Props = { f: Feature; repo: string; onRunEpic: () => void; cost: string; more: ComponentProps<typeof MoreMenu>['items'] };
 
 /** The Feature page header: the list's strip with the page title, then the next step on one line. */
-export function FeatureStrip({ f, repo, onRunEpic, more }: Props) {
+export function FeatureStrip({ f, repo, onRunEpic, cost, more }: Props) {
   const { ns, live, you, why } = useNextStep(f, repo);
   const at = stageIdx(f.stage);
   return (
@@ -22,6 +22,7 @@ export function FeatureStrip({ f, repo, onRunEpic, more }: Props) {
           <div className="strip-m">
             <span>{f.epic ? `epic #${f.epic}` : 'no epic yet'}</span>
             <span className="mono">{f.prd.path}</span>
+            <span>Cost {cost}</span>
           </div>
         </div>
         <div className="strip-c fstrip-s"><StageTicks at={at} />{STAGES[at].label}</div>

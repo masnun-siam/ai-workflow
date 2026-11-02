@@ -79,6 +79,21 @@ describe('real not-fetched server state (both snapshots null, stale)', () => {
   }
 });
 
+describe('Feature cost', () => {
+  const run = (cost: unknown) => ({ id: 'a', command: '/implement-issue 1', outcome: 'done', repo: '/x', link: { issue: 1 }, started_at: '2026-01-01T00:00:00Z', cost });
+  const withSessions = (sessions: unknown[]) => ({ '/api/sessions': () => json({ sessions, limits: {}, usage: {}, afk: { active: false, until: null, started: null, decisions: 0, held: 0, summary: null }, gh: { ok: true } }) });
+  for (const [name, sessions, text] of [
+    ['sums the sessions, a missing cost counts as zero', [run(1.25), { ...run(null), id: 'b' }, { ...run(0.5), id: 'c' }], 'Cost $1.75'],
+    ['shows a dash when none has a cost', [run(null)], 'Cost —'],
+  ] as const)
+    it(name, async () => {
+      mock({ prds: [prd({ issues: 1 })], lanes: [lane([card(1, 'ready')])], extra: withSessions([...sessions]) });
+      window.location.hash = '#/features/f1?repo=o/r';
+      render(<App />);
+      expect(await screen.findByText(text)).toBeTruthy();
+    });
+});
+
 describe('Issues tab order', () => {
   it('lists In review before Ready, Blocked and Merged', async () => {
     mock({ prds: [prd({ issues: 4 })], lanes: [lane([card(1, 'merged'), card(2, 'ready', { blocked_by: [9] }), card(3, 'ready'), card(4, 'in_review')])] });
