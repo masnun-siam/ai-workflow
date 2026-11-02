@@ -745,4 +745,67 @@ for rec_first in (True, False):
     ui_sessions.update(r, status="stopped", pending_question=None)
 ui_runner.resume = real_resume
 
+# ---- cost caps and the hold rule (#742) ----
+for r in ui_sessions.list_sessions():  # nothing from the cases above may be waiting
+    if r["status"] in ("waiting", "running", "starting"):
+        ui_sessions.update(r["id"], status="stopped", pending_question=None)
+ui_afk.start(W + 7200, W + 1)  # a fresh window: the answerers above fall outside it
+ui_runner.resume = lambda sid, text: resumed.append((sid, text))
+
+
+def fake_answerer(sid, cost, rid="q-1"):
+    a = ui_sessions.create("answer", d)
+    ui_sessions.update(
+        a["id"], role=ui_sessions.ANSWERER_ROLE, answers_for=sid, answers_round=rid, status="done", cost=cost
+    )
+    return a["id"]
+
+
+# a destructive word holds recommended and non-recommended rounds alike, once, with nothing started or resumed
+for rec_first in (True, False):
+    r = waiting(rec=rec_first)
+    q = Q(rec=rec_first)
+    q["questions"][0]["options"][0]["label"] = "Force push to main (Recommended)" if rec_first else "Force push"
+    ui_sessions.set_pending(r, q)
+    n0, m0 = len(started), len(resumed)
+    for _ in range(3):
+        ui_afk.tick(W + 2)
+    rows = log_of(r)
+    assert [e["kind"] for e in rows] == ["held"] and "'push'" in rows[0]["reason"], rows
+    assert pq(r)["held"] and len(started) == n0 and len(resumed) == m0
+    ui_sessions.update(r, status="stopped", pending_question=None)
+
+# two answerers at 1.5 each hold the round with the round cap named
+rr = waiting(rec=False)
+fake_answerer(rr, 1.5)
+fake_answerer(rr, 1.5)
+n0 = len(started)
+ui_afk.tick(W + 2)
+ui_afk.tick(W + 2)
+rows = log_of(rr)
+assert len(started) == n0 and [e["kind"] for e in rows] == ["held"] and "this round" in rows[0]["reason"], rows
+ui_sessions.update(rr, status="stopped", pending_question=None)
+
+# a spent window starts no new answerer and holds each waiting round once; a pattern-free auto-pick is unaffected
+big = fake_answerer("other", ui_afk.WINDOW_COST_CAP, rid="q-9")
+wr = waiting(rec=False)
+auto = waiting()
+ui_sessions.update_pending(auto, "q-1", risk={"p": None})
+n0, m0 = len(started), len(resumed)
+ui_afk.tick(W + 3)
+ui_afk.tick(W + 3)
+rows = log_of(wr)
+assert len(started) == n0 and [e["kind"] for e in rows] == ["held"] and "window" in rows[0]["reason"], rows
+assert [x[0] for x in resumed[m0:]] == [auto] and log_of(auto)[0]["by"] == "recommended"
+ui_sessions.update(big, cost=0)
+for x in (wr, auto):
+    ui_sessions.update(x, status="stopped", pending_question=None)
+
+# a benign round still gets its answerer
+ok = waiting(rec=False)
+n0 = len(started)
+ui_afk.tick(W + 4)
+assert len(started) == n0 + 1 and not log_of(ok)
+ui_runner.resume = real_resume
+
 print("test_ui_afk: ok")

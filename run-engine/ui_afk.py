@@ -9,6 +9,8 @@ While it runs, each tick:
   only its tools allowed): a valid reply is answered the same way and logged `by: opus`; a hold, or two
   failed answerers (failed, limited, stopped, invalid reply, over 10 minutes), is logged `held` and the
   round waits for the owner. A human answer or the window ending stops the answerer with no log row;
+- holds a round whose options mention a destructive or outward-facing word (HOLD_WORDS) before anything answers it,
+  and starts no answerer once the round's answerers cost ROUND_COST_CAP or the window's cost WINDOW_COST_CAP (USD);
 - retries sessions that failed during the window on a 2m/10m/30m/1h backoff, then holds them;
 - retries dispatch lanes that are held or stopped (not ones asking a question) on the same backoff.
 When the window ends (expiry or "I'm back") one ntfy push sums it up and the UI shows the log.
@@ -42,6 +44,9 @@ MAX_LOG = 500
 TICK_SECONDS = 5
 ANSWER_SECONDS = 600  # an answerer running longer than this counts as failed
 MAX_ATTEMPTS = 2  # answerers per round
+ROUND_COST_CAP = 2.0  # USD the answerers of one round may cost before no further one starts
+WINDOW_COST_CAP = 10.0  # USD all answerers of one Away window may cost before no new one starts
+HOLD_WORDS = ("push", "merge", "delete", "force", "publish", "deploy", "release", "drop", "rm -rf", "post a comment")
 _lock = threading.Lock()
 
 
@@ -383,9 +388,39 @@ def _risk_key(pending: dict) -> dict:
     return {"risk": p} if isinstance(p, (int, float)) and _risky(pending) else {}
 
 
+def _hold(rec: dict, now: float, pq: dict, reason: str) -> dict:
+    ui_sessions.update_pending(rec["id"], pq["id"], held=True, answerer=None)
+    pq["held"] = True  # tick's next step holds the same stale record: it must see this
+    return _held_entry(rec, now, pq, reason, None, None)
+
+
+def _word_reason(pq: dict) -> str | None:
+    text = _risk_text(pq).lower()
+    word = next((w for w in HOLD_WORDS if w in text), None)
+    return f"an option mentions '{word}'" if word else None
+
+
+def _cap_reason(rec: dict, pq: dict, started) -> str | None:
+    """Why no answerer may start for this round: the window's or the round's spend is at its cap."""
+    mine = [r for r in ui_sessions.list_sessions() if ui_sessions.is_answerer(r)]
+    window = sum(r.get("cost") or 0 for r in mine if (_epoch(r.get("started_at")) or 0) >= (started or 0))
+    if window >= WINDOW_COST_CAP:
+        return f"Away window answerer cost ${window:.2f} reached the ${WINDOW_COST_CAP:.2f} cap"
+    spent = sum(
+        r.get("cost") or 0 for r in mine if r.get("answers_round") == pq["id"] and r.get("answers_for") == rec["id"]
+    )
+    if spent >= ROUND_COST_CAP:
+        return f"answerer cost ${spent:.2f} for this round reached the ${ROUND_COST_CAP:.2f} cap"
+    return None
+
+
 def _answer(rec: dict, now: float) -> dict | None:
     pq = _round(rec)
-    if pq is None or pq.get("held") or not _recommended(pq):
+    if pq is None or pq.get("held"):
+        return None
+    if reason := _word_reason(pq):
+        return _hold(rec, now, pq, reason)
+    if not _recommended(pq):
         return None  # the rest go to an answerer (_opus)
     if "risk" not in pq:
         if jev.status() != "ok":
@@ -461,13 +496,15 @@ def _start_answerer(rec: dict, pq: dict) -> None:
         ui_runner.stop(a["id"])  # the owner answered while it started
 
 
-def _answerer_failed(rec, now, pq, aid, reason) -> dict | None:
+def _answerer_failed(rec, now, pq, aid, reason, started) -> dict | None:
     """Clear the dead answerer; start the next one, or hold the round after the second failure."""
     sid = rec["id"]
     cost = (ui_sessions.load(aid) or {}).get("cost")
     if not ui_sessions.update_pending(sid, pq["id"], answerer=None):
         return None  # the round is gone
     if (pq.get("answerer_attempts") or 0) < MAX_ATTEMPTS:
+        if cap := _cap_reason(rec, pq, started):
+            return _hold(rec, now, pq, cap)
         _start_answerer(rec, pq)
         return None
     reason = f"answerer failed ({reason})"
@@ -475,13 +512,19 @@ def _answerer_failed(rec, now, pq, aid, reason) -> dict | None:
     return _held_entry(rec, now, pq, reason, aid, cost)
 
 
-def _opus(rec: dict, now: float) -> dict | None:
+def _opus(rec: dict, now: float, started=None) -> dict | None:
     pq = _round(rec)
-    if pq is None or pq.get("held") or (_recommended(pq) and not _risky(pq)):
+    if pq is None or pq.get("held"):
+        return None
+    if reason := _word_reason(pq):
+        return _hold(rec, now, pq, reason)
+    if _recommended(pq) and not _risky(pq):
         return None
     sid, aid = rec["id"], pq.get("answerer")
     if not aid:
         if (pq.get("answerer_attempts") or 0) < MAX_ATTEMPTS:
+            if cap := _cap_reason(rec, pq, started):
+                return _hold(rec, now, pq, cap)
             _start_answerer(rec, pq)
             return None
         ui_sessions.update_pending(sid, pq["id"], held=True)  # every attempt failed to start
@@ -494,15 +537,15 @@ def _opus(rec: dict, now: float) -> dict | None:
         if started and now - started <= ANSWER_SECONDS:
             return None
         ui_runner.stop(aid)
-        return _answerer_failed(rec, now, pq, aid, "timed out after 10 minutes")
+        return _answerer_failed(rec, now, pq, aid, "timed out after 10 minutes", started)
     if status != "done":
         if status == "limited":
             ui_runner.stop(aid)  # no auto-resume: a limited answerer is not queued for the reset
-        return _answerer_failed(rec, now, pq, aid, status or "missing")
+        return _answerer_failed(rec, now, pq, aid, status or "missing", started)
     try:
         reply = away_answerer.parse_reply(ui_panel.final_text(aid), pq)
     except ValueError as e:
-        return _answerer_failed(rec, now, pq, aid, f"invalid reply: {e}")
+        return _answerer_failed(rec, now, pq, aid, f"invalid reply: {e}", started)
     if "hold" in reply:
         if not ui_sessions.update_pending(sid, pq["id"], held=True, answerer=None):
             return None
@@ -653,7 +696,7 @@ def tick(now=None) -> None:
     for rec in ui_sessions.list_sessions():
         if ui_sessions.is_answerer(rec):
             continue
-        for step in (_answer, _opus, lambda r, t: _retry(r, t, st["started"])):
+        for step in (_answer, lambda r, t: _opus(r, t, st["started"]), lambda r, t: _retry(r, t, st["started"])):
             try:
                 e = step(rec, now)
             except Exception as exc:  # noqa: BLE001 - one bad session must not stop the rest
