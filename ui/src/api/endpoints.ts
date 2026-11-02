@@ -88,7 +88,7 @@ export const api = {
   dispatchState: (id: string, state: Exclude<DispatchState, 'done'>, now?: boolean) => post<Dispatch>(`/api/dispatches/${enc(id)}/state`, now ? { state, now } : { state }),
   laneAction: (id: string, lane: string, action: LaneAction, text?: string) => post<Dispatch>(`/api/dispatches/${enc(id)}/lane`, { lane, action, text }),
   endAction: (id: string, action: EndAction) => post<Dispatch>(`/api/dispatches/${enc(id)}/end`, { action }),
-  dispatchSeen: (id: string) => post<Dispatch>(`/api/dispatches/${enc(id)}/seen`),
+  dispatchSeen: (id: string, undo = false) => post<Dispatch>(`/api/dispatches/${enc(id)}/seen`, undo ? { undo: true } : {}),
 
   // ---- bootstraps
   bootstraps: (repo?: string) => get<{ runs: BootstrapRun[] }>(`/api/bootstraps${qs({ repo })}`),

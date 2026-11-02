@@ -266,6 +266,15 @@ describe('Inbox', () => {
       await userEvent.setup().keyboard('x');
       expect(posts).toEqual([]);
     });
+
+    it('Dismiss on a finished dispatch toasts with an Undo that posts undo', async () => {
+      await load([item('dispatch_done', 'wait', { key: 'dd', dispatch: 'd1', epic: 'E', feature_branch: null, final_prs: {} }), rd(7)]);
+      const u = userEvent.setup();
+      await u.click(await screen.findByRole('button', { name: 'Dismiss' }));
+      await waitFor(() => expect(posts).toContainEqual(['/api/dispatches/d1/seen', {}]));
+      await u.click(await screen.findByRole('button', { name: 'Undo' }));
+      await waitFor(() => expect(posts).toContainEqual(['/api/dispatches/d1/seen', { undo: true }]));
+    });
   });
 
   it('empty inbox says all clear', async () => {
