@@ -38,3 +38,15 @@ assert ui_sessions.load(done["id"]) is None
 assert ui_sessions.load(live["id"]) is not None and ui_sessions.load(stopped["id"]) is not None
 assert os.path.exists(os.path.join(checkout, "keep.txt"))
 print("  ok  removes chosen finished sessions only; checkout untouched")
+
+# a session resumed between find_targets and the loop keeps its directory
+back = ui_sessions.create("/pr-grind 4", checkout)
+ui_sessions.update(back["id"], status="done")
+real_load = ui_sessions.load
+ui_sessions.load = lambda k: {**real_load(k), "status": "running"} if k == back["id"] else real_load(k)
+try:
+    assert ui_cleanup.clean([back["id"]]) == []
+finally:
+    ui_sessions.load = real_load
+assert os.path.isdir(ui_sessions.session_dir(back["id"]))
+print("  ok  skips a session that went live after the listing")

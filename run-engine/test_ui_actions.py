@@ -113,6 +113,25 @@ with tempfile.TemporaryDirectory() as co:
         "docs/prds/x.md",
     ]
     assert "other.txt" in g("diff", "--cached", "--name-only").stdout, "someone else's staged change stays staged"
+    # a stuck `git commit` times out: the error says so, the file stays written, and the timeout was passed
+    real_run, seen = ui_actions.run, []
+
+    def stuck(argv, **kw):
+        seen.append((argv, kw))
+        if argv[:2] == ["git", "commit"]:
+            return subprocess.CompletedProcess(argv, 124, "", "timed out after 30s")
+        return real_run(argv, **kw)
+
+    ui_actions.run = stuck
+    try:
+        ui_actions.save_prd(co, "docs/prds/x.md", "# X\n\nmore\n\nagain\n")
+        raise AssertionError("a timed-out commit must raise")
+    except RuntimeError as e:
+        assert "saved, but git commit failed" in str(e) and "timed out" in str(e), e
+    finally:
+        ui_actions.run = real_run
+    assert open(os.path.join(co, "docs", "prds", "x.md")).read().endswith("again\n")
+    assert seen[0][1]["timeout"] == ui_actions.GIT_TIMEOUT == 30
     for rel in ("../etc/passwd", "docs/prds/../../x.md", "docs/prds/none.md", "README.md"):
         try:
             ui_actions.read_prd(co, rel)
