@@ -1,10 +1,10 @@
 import type { BoardMeta } from '../api/types';
-import { Banner } from '../components';
+import { Banner, Button } from '../components';
 import { clockText, untilText } from '../lib/format';
 import { GhBanner } from '../shell/Banners';
 
 /** Banners shared by Features and Board (FR-30): gh signed out, rate limit with data age, stale data. */
-export function BoardStatus({ meta, failed }: { meta?: BoardMeta; failed?: boolean }) {
+export function BoardStatus({ meta, failed, onRetry }: { meta?: BoardMeta; failed?: boolean; onRetry?: () => void }) {
   const limited = !!meta?.retry_at && meta.retry_at * 1000 > Date.now();
   return (
     <>
@@ -26,7 +26,7 @@ export function BoardStatus({ meta, failed }: { meta?: BoardMeta; failed?: boole
           </p>
         </Banner>
       ) : failed ? (
-        <Banner tone="bad" icon="wifi"><p><b>Could not refresh.</b> Showing the last data. Retrying.</p></Banner>
+        <Banner tone="bad" icon="wifi" action={onRetry ? <Button sm onClick={onRetry}>Retry</Button> : undefined}><p><b>Could not refresh.</b> Showing the last data. Retrying.</p></Banner>
       ) : null}
     </>
   );
