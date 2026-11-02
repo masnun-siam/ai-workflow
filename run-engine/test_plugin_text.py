@@ -16,8 +16,8 @@ REMOVED_VERBS = (
     "init|route|precheck|classify|resolve-review|skip-review|set|stack|worktree|maintree|pr|gitnexus"
     "|epic|refined|project-status|review|peer-review"
 )
-# Allowed to name the old system: the record of what was removed, and the PRD/task list for it.
-EXEMPT = {"CHANGELOG.md", "docs/prds/dev-workflow-replacement.md", "docs/tasks/dev-workflow-replacement.md", SELF}
+# Allowed to name the old system: the record of what was removed.
+EXEMPT = {"CHANGELOG.md", SELF}
 fails = []
 
 

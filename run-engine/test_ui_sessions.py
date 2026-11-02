@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Self-check for run-engine/ui_sessions.py. `python3 test_ui_sessions.py` — exit 0 = green.
 
-Assert-based, no framework, matching test_kanban.py. Every block points
+Assert-based, no framework, matching the other run-engine tests. Every block points
 CLAUDE_PLUGIN_DATA at a fresh tempdir so the real data dir is never touched.
 """
 
