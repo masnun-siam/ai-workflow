@@ -38,6 +38,8 @@ with `stale: True, fetched_at: None`):
       "open_prs": [  # every open PR (to match PRD pull requests that close no issue)
         {"n": int, "title": str, "url": str, "draft": bool, "head": str, "ci": ..., "review": ...,
          "reviewer": str | None,          # login of the newest approving review
+         "approved": bool,                # review "approved", or review "none" and a reviewer; never with changes requested
+         "changes_requested": bool,       # review "changes_requested", or any CHANGES_REQUESTED review
          "checks": int}                   # status checks that ran
       ],
       "closed_epics": [  # the 50 most recently updated CLOSED issues labelled `epic` (a PRD's Done column)
@@ -74,7 +76,7 @@ _PR = "number url isDraft state mergedAt headRefName headRefOid reviewDecision m
 # open PRs also carry who approved and how many checks ran (the Inbox's "ready to merge" line)
 _PR_OPEN = (
     _PR
-    + " latestOpinionatedReviews(first: 5) { nodes { state author { login } } }"
+    + " latestOpinionatedReviews(first: 20) { nodes { state author { login } } }"
     + " checks: statusCheckRollup { contexts(first: 1) { totalCount } }"
 )
 _ISSUE_NODE = f"""
@@ -173,10 +175,15 @@ def _pr(n: dict) -> dict:
 
 
 def _open_extra(n: dict) -> dict:
-    """reviewer (login of the newest approval, else None) and checks (how many ran) of an open PR."""
-    ok = [r for r in _nodes(n.get("latestOpinionatedReviews")) if r.get("state") == "APPROVED"]
+    """reviewer (login of the newest approval, else None), approved, changes_requested and checks (how many ran) of an open PR."""
+    reviews = _nodes(n.get("latestOpinionatedReviews"))
+    ok = [r for r in reviews if r.get("state") == "APPROVED"]
+    reviewer = (ok[-1].get("author") or {}).get("login") if ok else None
+    review = _pr(n)["review"]
+    changes = review == "changes_requested" or any(r.get("state") == "CHANGES_REQUESTED" for r in reviews)
+    approved = not changes and (review == "approved" or (review == "none" and bool(reviewer)))
     ctx = ((n.get("checks") or {}).get("contexts") or {}).get("totalCount")
-    return {"reviewer": ((ok[-1].get("author") or {}).get("login") if ok else None), "checks": ctx or 0}
+    return {"reviewer": reviewer, "approved": approved, "changes_requested": changes, "checks": ctx or 0}
 
 
 # GitHub links "Closes #n" to the issue only when the PR targets the default branch. A repo whose PRs go

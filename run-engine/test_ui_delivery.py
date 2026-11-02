@@ -39,8 +39,22 @@ def issue(n, labels=("refined",), parent=None, blockers=(), prs=(), prio=None):
     }
 
 
+def open_prs(issues):
+    """The poller's open_prs entries for the issues' open PRs: approval fields the issue entries lack."""
+    return [
+        {**p, "approved": p["review"] == "approved", "changes_requested": p["review"] == "changes_requested"}
+        for i in issues
+        for p in i["prs"]
+        if p["state"] == "OPEN"
+    ]
+
+
 def snap(issues, merged=()):
-    return {"stale": False, "fetched_at": 1.0, "data": {"issues": issues, "merged": list(merged), "open_prs": []}}
+    return {
+        "stale": False,
+        "fetched_at": 1.0,
+        "data": {"issues": issues, "merged": list(merged), "open_prs": open_prs(issues)},
+    }
 
 
 def cards(res, epic=None):
@@ -141,6 +155,9 @@ c = cards(build(s3, settings={"auto_grind": True, "issue_grind": {2: False}}))
 assert c[1]["grind_on"] and not c[1]["mergeable"] and not c[2]["grind_on"]
 c = cards(build(s3, grind={"pr": {("o", "r", 41): {"state": "done", "round": 1}}}, settings={"issue_grind": {1: True}}))
 assert c[1]["grind_on"] and c[1]["mergeable"]
+s4 = snap([issue(1, prs=[pr(51, review="approved")])])
+s4["data"]["open_prs"][0]["changes_requested"] = True  # approved by one, changes requested by another
+assert not cards(ui_delivery.build("o/r", s4, [], {"pr": {}}, {}, {}, solo=True))[1]["mergeable"]
 g42 = {"pr": {("o", "r", 42): {"state": "done", "round": 1}}}
 assert not cards(build(s3, grind=g42, settings={"auto_grind": True}))[2]["mergeable"], "grind done but not approved"
 

@@ -10,7 +10,7 @@ the caller from the board snapshot, the grind index and the runner:
 
     {"issue_open": bool, "refined": bool, "blockers_open": [key],   # blockers still open on GitHub
      "pr": None | {"n", "url", "draft", "state": OPEN|MERGED|CLOSED, "ci": success|failure|pending|none,
-                   "conflict": bool, "approved": bool, "sha": head commit | None},
+                   "conflict": bool, "approved": bool, "changes_requested": bool, "sha": head commit | None},
      "grind": None | {"state": idle|running|paused|done, "reason": str, "due": str | None},  # due: a token
      "slack": bool,                                  # the repo has a grind channel; False skips grinding
      "solo": bool,                                   # the repo is the gh user's own: no approval needed
@@ -31,6 +31,7 @@ import re
 import time
 import uuid
 
+import merge_gate
 from shared import atomic_write_text, data_dir, run
 
 ACTIVE = ("implementing", "grinding", "merge_gate", "conflict_fix", "awaiting_merge", "followups")
@@ -147,8 +148,9 @@ def _gate(lane: dict, facts: dict, settings: dict):
         return "CI is not green"
     if mode == "defer" and pr.get("ci") not in ("success", "none"):
         return "waiting for green CI (defer)"
-    if not pr.get("approved") and not facts.get("solo"):  # nobody can approve a PR on your own repo
-        return "no approving review"
+    why = merge_gate.blockers(pr, facts.get("solo"))
+    if why:
+        return why
     if _grind_on(settings, facts) and not (g.get("state") == "done" and "approved" in (g.get("reason") or "")):
         return "grind is not done"
     return None

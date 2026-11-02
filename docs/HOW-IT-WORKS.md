@@ -70,7 +70,7 @@ followups are done. Each lane, in one session (a herdr tab or a headless session
 2. `/pr-grind <pr>` in the same session, unless grinding is off or the repo has no Slack channel.
    Simple ends on any approval, full on zero blocker and should-fix. Between rounds the engine types
    the next round into the lane when a review lands or the heartbeat is due.
-3. The merge gate: CI green on the head, an approving review, the grind done. A conflict with the
+3. The merge gate: CI green on the head, an approving review and no changes requested, the grind done. A conflict with the
    base sends the lane to merge the base in, resolve, re-run the checks and push; then the gate again.
 4. Merge (a merge commit) when auto-merge is on; otherwise the lane waits for you and goes on once
    it sees your merge.
