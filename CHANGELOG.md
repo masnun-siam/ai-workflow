@@ -6,7 +6,6 @@
 
 - **Docs say only what exists** (#736): `CLAUDE.md` and `docs/REFERENCE.md` drop `commands/` and the removed `peer-review` verb, list the real CLI verbs and skill flags, document five more API routes and the Tailscale owner check; `peer-review` step 4 uses `md5sum` when `md5` is missing.
 - **Fresh repos no longer fail on missing labels** (#735): INSTALL Step 6 creates `epic`, `refined` and `priority:*` with `gh label create --force`, and Step 1 checks `gh` supports `--parent`/`--blocked-by`. `/dump` no longer claims `/create-prd` reads the problem statement or the `status: seed` marker, and a no-repo UI session is told `PRD.md` and `Dump.md` are its source material. `skills/create-prd/SKILL.md` (step 7) and `skills/create-tasks/SKILL.md` (step 9) each carry one added line, `gh label create "prd-<slug>" --force`, so the next `/sync-from-wasensi` must keep it.
-
 - **pr-grind names no workspace** (#733): the skill no longer quotes a Slack user id, workspace host or bot name. The new-thread URL is built from an optional `workspace_url` in `channels.json` (grind stops with one line when it is missing). The unread `userConfig` keys are gone from `plugin.json`, and INSTALL Step 6 documents every `channels.json` key.
 
 ### Added
