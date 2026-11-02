@@ -7,6 +7,7 @@ import os
 import shutil
 import sys
 import tempfile
+import threading
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -81,9 +82,32 @@ try:
     assert os.getsid(int(open(pidfile).read())) != os.getsid(0)
     wait_done()
 
+    # two concurrent starts spawn once; the loser gets a Conflict
+    for p in ui_restart._paths():
+        if os.path.exists(p):
+            os.remove(p)
+    spawned, outcomes, barrier = [], [], threading.Barrier(2)
+    real_popen = ui_restart.subprocess.Popen
+    ui_restart.subprocess.Popen = lambda *a, **k: spawned.append(a)
+
+    def racer():
+        barrier.wait()
+        try:
+            ui_restart.start()
+            outcomes.append("ok")
+        except ui_restart.Conflict as e:
+            outcomes.append(str(e))
+
+    ts = [threading.Thread(target=racer) for _ in range(2)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    ui_restart.subprocess.Popen = real_popen
+    assert len(spawned) == 1 and sorted(outcomes) == ["a restart is already running", "ok"], (spawned, outcomes)
+
     # a crashed run (log, no exit file) stops looking running after the age limit
     log, ex = ui_restart._paths()
-    os.remove(ex)
+    if os.path.exists(ex):
+        os.remove(ex)
     old = time.time() - ui_restart.STALE_S - 5
     os.utime(log, (old, old))
     assert ui_restart.status()["running"] is False

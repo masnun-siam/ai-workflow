@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import threading
 import time
 
 from shared import data_dir
@@ -16,6 +17,8 @@ from shared import data_dir
 ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))  # plugin root
 STALE_S = 600
 TAIL_LINES = 40
+# ponytail: a thread lock covers one server process; a lock file if several ever share the data dir
+_start_lock = threading.Lock()
 
 
 class Conflict(Exception):
@@ -60,22 +63,23 @@ def status() -> dict:
 def start() -> dict:
     if not available():
         raise ValueError("no `make restart` target in this install")
-    log, exit_path = _paths()
-    if _running(log, exit_path):
-        raise Conflict("a restart is already running")
-    os.makedirs(os.path.dirname(log), exist_ok=True)
-    for p in (log, exit_path):
-        try:
-            os.remove(p)
-        except FileNotFoundError:
-            pass
-    with open(log, "wb") as out:
-        subprocess.Popen(
-            ["sh", "-c", 'make restart; echo $? > "$1"', "sh", exit_path],
-            cwd=ROOT,
-            stdin=subprocess.DEVNULL,
-            stdout=out,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
-    return {"ok": True}
+    with _start_lock:
+        log, exit_path = _paths()
+        if _running(log, exit_path):
+            raise Conflict("a restart is already running")
+        os.makedirs(os.path.dirname(log), exist_ok=True)
+        for p in (log, exit_path):
+            try:
+                os.remove(p)
+            except FileNotFoundError:
+                pass
+        with open(log, "wb") as out:
+            subprocess.Popen(
+                ["sh", "-c", 'make restart; echo $? > "$1"', "sh", exit_path],
+                cwd=ROOT,
+                stdin=subprocess.DEVNULL,
+                stdout=out,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+        return {"ok": True}

@@ -26,6 +26,15 @@ def clean(keys: list) -> list:
     """Remove the records of the named finished sessions; returns the keys removed. Unknown or live keys are skipped."""
     ok = {t["key"] for t in find_targets()}  # re-derived: the client never names paths
     removed = [k for k in keys if k in ok]
+    done = []
     for k in removed:
+        try:
+            rec = ui_sessions.load(k)
+        except ValueError:
+            continue
+        if rec is None or rec.get("status") in LIVE:  # resumed (or gone) since find_targets
+            continue
+        # ponytail: a window remains between this check and rmtree; the full fix is the ui_sessions.update flock
         shutil.rmtree(ui_sessions.session_dir(k), ignore_errors=True)
-    return removed
+        done.append(k)
+    return done

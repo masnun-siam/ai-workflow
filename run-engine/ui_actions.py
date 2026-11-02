@@ -19,6 +19,7 @@ from ui_issue import valid
 
 MAX_COMMENT = 65536  # GitHub's comment body limit
 MAX_PRD = 512 * 1024
+GIT_TIMEOUT = 30  # seconds; a stuck `git commit` must not hang the server
 _PRD = re.compile(r"docs/prds/[A-Za-z0-9][A-Za-z0-9._-]*\.md")
 
 
@@ -128,10 +129,12 @@ def save_prd(checkout: str, rel, text, base_sha=None) -> dict:
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
     slug = os.path.basename(rel)[:-3]
-    proc = run(["git", "commit", "-m", f"docs(prd): edit {slug} from aiw ui", "--", rel], cwd=checkout)
+    proc = run(
+        ["git", "commit", "-m", f"docs(prd): edit {slug} from aiw ui", "--", rel], cwd=checkout, timeout=GIT_TIMEOUT
+    )
     if proc.returncode != 0:
         raise RuntimeError(f"saved, but git commit failed: {(proc.stderr or proc.stdout).strip()[:300]}")
-    sha = (run(["git", "rev-parse", "--short", "HEAD"], cwd=checkout).stdout or "").strip()
+    sha = (run(["git", "rev-parse", "--short", "HEAD"], cwd=checkout, timeout=GIT_TIMEOUT).stdout or "").strip()
     with open(path, "rb") as f:
         new = _sha(f.read())
     return {"ok": True, "committed": True, "branch": _branch(checkout), "commit": sha, "sha": new}
