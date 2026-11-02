@@ -14,6 +14,7 @@ export function SharePopover({ status, repo, path }: { status: string; repo: str
   const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const link = useRef<HTMLInputElement>(null);
+  const days = useRef(0);
   const asking = useRef(false); // a second click while the confirm is open must not open another
   const approvals = share.data?.approvals ?? [];
   const n = approvals.length;
@@ -22,11 +23,29 @@ export function SharePopover({ status, repo, path }: { status: string; repo: str
   const doShare = async () => {
     if (create.isPending || asking.current) return;
     asking.current = true;
-    const yes = await confirm({ title: 'Share this PRD publicly?', okLabel: 'Share', body: <p>{shareBody(summary?.state === 'ended' ? n : 0)}</p> });
+    days.current = 0;
+    const yes = await confirm({
+      title: 'Share this PRD publicly?',
+      okLabel: 'Share',
+      body: (
+        <>
+          <p>{shareBody(summary?.state === 'ended' ? n : 0)}</p>
+          <label className="row">
+            Expires{' '}
+            <select className="f" defaultValue="0" onChange={(e) => { days.current = Number(e.target.value); }}>
+              <option value="0">Never</option>
+              <option value="1">In 1 day</option>
+              <option value="7">In 7 days</option>
+              <option value="30">In 30 days</option>
+            </select>
+          </label>
+        </>
+      ),
+    });
     asking.current = false;
     if (!yes) return;
     create.reset();
-    create.mutate({ repo, path }, { onSettled: () => setOpen(true) });
+    create.mutate({ repo, path, expiresInDays: days.current || undefined }, { onSettled: () => setOpen(true) });
   };
   const doStop = async () => {
     if (!summary || !(await confirm({ title: 'Stop sharing?', okLabel: 'Stop', danger: true, body: <p>{stopBody(n)}</p> }))) return;
@@ -84,10 +103,11 @@ export function SharePopover({ status, repo, path }: { status: string; repo: str
                   </ul>
                 </div>
                 <p className="muted">Ends when the PRD leaves Draft or In review</p>
+                {summary.expires_at ? <p className="muted">Expires {new Date(summary.expires_at).toLocaleDateString()}</p> : null}
                 <Button variant="danger" disabled={stop.isPending} onClick={doStop}>Stop</Button>
               </>
             ) : !create.error ? (
-              <p className="muted">{summary ? 'This share has ended.' : 'Not shared.'}</p>
+              <p className="muted">{summary ? (summary.end_reason === 'expired' ? 'This share has expired.' : 'This share has ended.') : 'Not shared.'}</p>
             ) : null}
           </div>
         </PO.Content>

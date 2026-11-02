@@ -209,7 +209,7 @@ ready-to-merge Inbox item appears.
 Only the owner can start it, only for a Draft or In review PRD, and a PRD has one live share. The
 share ends when the PRD becomes Approved or any other status, when the author presses **Stop**, or
 when the file is gone or no longer a regular file under `docs/prds/`; it is checked on every share
-request and once a minute, and there is no timer. An ended share's link returns 404 at once, its
+request and once a minute. The author can also pick an expiry (Never, 1, 7 or 30 days) when sharing; at that time the share ends by itself with `end_reason: expired`, like Stop. Sharing again takes a new expiry. An ended share's link returns 404 at once, its
 threads stay in the UI, and sharing again issues a new token, keeps the threads and clears the
 approvals. The PRD text is public as written, header and paths included, so Share asks to confirm
 that on every press. A reviewer is anyone holding the link, with a typed display name and no account;
@@ -229,8 +229,8 @@ Owner routes (UI port; errors as `{error}`):
 
 | Route | Does | Status |
 |---|---|---|
-| `GET /api/shares` | `[{id, repo, path, title, state, url, comments, unread, reachable, end_reason}]` | 200 |
-| `POST /api/shares` | `{repo, path, confirm: true}` starts a share; an existing live share comes back without confirm | 201; 200 existing; 400 no `confirm`, bad path or repo; 409 PRD not Draft or In review, or funnel port taken; 503 tailscale missing or stopped, or funnel not permitted (tailscale's message) |
+| `GET /api/shares` | `[{id, repo, path, title, state, url, comments, unread, reachable, end_reason, expires_at}]` | 200 |
+| `POST /api/shares` | `{repo, path, confirm: true, expires_in_days?}` starts a share (`expires_in_days` an integer 1 to 90, else none); an existing live share comes back without confirm | 201; 200 existing; 400 no `confirm`, bad path or repo or `expires_in_days`; 409 PRD not Draft or In review, or funnel port taken; 503 tailscale missing or stopped, or funnel not permitted (tailscale's message) |
 | `GET /api/shares/<id>` | the share with `threads` and `approvals` | 200; 404 |
 | `DELETE /api/shares/<id>` | Stop (`end_reason: stopped`) | 200; 404 |
 | `DELETE /api/shares/<id>/threads/<tid>`, `.../comments/<cid>`, `.../approvals/<aid>` | delete one | 204; 404 |
