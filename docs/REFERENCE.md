@@ -515,7 +515,7 @@ bash run-engine/run_tests.sh          # every test_*.py; also the pre-commit hoo
 No network, no install step. The UI has its own checks, in `ui/` (Node 20; plugin users never need it):
 
 ```bash
-cd ui && npm ci && npm run typecheck && npm test && npm run build
+cd ui && npm ci && npm run typecheck && npm run lint && npm test && npm run build
 ```
 
 The `ui` CI job runs those and fails if the committed `run-engine/ui_dist/` differs from the build.
