@@ -751,6 +751,13 @@ try:
     st, body = call("POST", f"/api/sessions/{live_q['id']}/start-now")
     assert st == 409 and body == {"error": "session is not queued"}, (st, body)
     ok("start-now: 404 unknown, 409 when the session is not queued")
+    fs = ui_sessions.create("/x", other)
+    ui_sessions.update(fs["id"], status="failed")
+    assert call("POST", "/api/sessions/nope/dismiss")[0] == 404
+    assert call("POST", f"/api/sessions/{live_q['id']}/dismiss")[0] == 409
+    assert call("POST", f"/api/sessions/{fs['id']}/dismiss")[0] == 200
+    assert ui_sessions.load(fs["id"])["dismissed"] is True
+    ok("dismiss: 404 unknown, 409 when not failed, 200 marks the record dismissed")
 finally:
     bs.shutdown()
     os.environ["CLAUDE_PLUGIN_DATA"] = data_dir

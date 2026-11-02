@@ -226,6 +226,7 @@ assert "session_failed" in types(
     build(sessions=[f, rec("N2", "done", command="/other", at="2026-10-20T11:00:00+00:00")])
 )
 assert "session_failed" not in types(build(sessions=[{**f, "panel_role": "lens"}]))
+assert "session_failed" not in types(build(sessions=[{**f, "dismissed": True}]))
 for st_, kw in (
     ("waiting", {"pending_question": pq()}),
     ("failed", {"error": "boom"}),

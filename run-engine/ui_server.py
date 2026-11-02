@@ -482,6 +482,15 @@ def _guarded(fn):
     return wrapper
 
 
+def _dismiss_failed(sid: str) -> dict:
+    rec = ui_sessions.load(sid)
+    if rec is None:
+        raise FileNotFoundError(sid)
+    if rec.get("status") != "failed":
+        raise ui_runner.Conflict("only a failed session can be dismissed")
+    return ui_sessions.update(sid, dismissed=True)
+
+
 class _Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
@@ -803,6 +812,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._prompt(parts[3])
         elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] == "rerun":
             self._rerun(parts[3])
+        elif len(parts) == 5 and parts[:3] == ["", "api", "sessions"] and parts[4] == "dismiss":
+            self._session_op(_dismiss_failed, parts[3])
         elif (
             len(parts) == 5
             and parts[:3] == ["", "api", "sessions"]

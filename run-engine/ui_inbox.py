@@ -180,7 +180,9 @@ def build(
                 questions=pq.get("questions") or [],
                 process_alive=sid in set(alive),
             )
-        elif status == "failed" and r.get("panel_role") != "lens" and not r.get("bootstrap"):  # a run's item carries it
+        elif (
+            status == "failed" and r.get("panel_role") != "lens" and not r.get("bootstrap") and not r.get("dismissed")
+        ):  # a run's item carries it
             if (r.get("started_at") or "") >= newest.get((where, r.get("command")), ""):
                 add(
                     f"failed:{sid}",
