@@ -97,7 +97,8 @@ export const api = {
   // ---- shares (owner side)
   shares: () => get<ShareSummary[]>('/api/shares'),
   share: (id: string) => get<Share>(`/api/shares/${enc(id)}`),
-  createShare: (repo: string, path: string) => post<ShareSummary>('/api/shares', { repo, path, confirm: true }),
+  createShare: (repo: string, path: string, expiresInDays?: number) =>
+    post<ShareSummary>('/api/shares', { repo, path, confirm: true, ...(expiresInDays ? { expires_in_days: expiresInDays } : {}) }),
   stopShare: (id: string) => del<ShareSummary>(`/api/shares/${enc(id)}`),
   deleteThread: (id: string, tid: string) => del(`/api/shares/${enc(id)}/threads/${enc(tid)}`),
   deleteComment: (id: string, tid: string, cid: string) => del(`/api/shares/${enc(id)}/threads/${enc(tid)}/comments/${enc(cid)}`),

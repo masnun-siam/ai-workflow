@@ -153,6 +153,16 @@ assert st == 404
 assert req("POST", f"{BASE}/api/threads", T, HOST, "auto", "application/json; charset=utf-8")[0] == 201
 ok("every guard gives the same 404")
 
+# an expired share is the same 404
+S.update(SID, lambda r: r.update(expires_at="2000-01-01T00:00:00.000+00:00"))
+st, h, body = req("GET", f"{BASE}/api/prd")
+assert st == 404 and body == ref and S.get(SID)["end_reason"] == "expired"
+headers_ok(h)
+S.create(SLUG, "docs/prds/x.md", co)
+TOKEN, SID = S.get(SID)["token"], SID
+BASE = f"/s/{TOKEN}"
+ok("expired share gives the same 404")
+
 # --- page and assets
 st, h, body = req("GET", BASE)
 assert st == 200 and h["Content-Type"].startswith("text/html")

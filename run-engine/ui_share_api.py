@@ -8,6 +8,7 @@ Never puts a token (outside `url`), `key_hash` or a withdraw key in a response.
 from __future__ import annotations
 
 import threading
+from datetime import datetime, timezone
 
 import dispatch
 import shared
@@ -55,6 +56,7 @@ def _summary(share: dict) -> dict:
         "unread": un["comments"] + un["approvals"],
         "reachable": runtime.reachable() if live else False,
         "end_reason": share.get("end_reason"),
+        "expires_at": share.get("expires_at"),
         "_prd_updated_at": st["updated_at"],
     }
 
@@ -95,11 +97,20 @@ def _get(sid):
     return (200, _view(share, detail=True)) if share else _NOT_FOUND
 
 
+def _expires_at(days):
+    if days is None:
+        return None
+    if isinstance(days, bool) or not isinstance(days, int) or not 1 <= days <= 90:
+        raise ValueError("expires_in_days must be an integer from 1 to 90")
+    return datetime.fromtimestamp(ui_shares.clock() + days * 86400, timezone.utc).isoformat(timespec="milliseconds")
+
+
 def _start(body):
     body = body or {}
     repo = _registered(body.get("repo"))
     checkout, rel = _checkouts()[repo], body.get("path")
     ui_actions._prd_path(checkout, rel)  # ValueError: bad path or no such file
+    expires_at = _expires_at(body.get("expires_in_days"))
     with _start_lock:
         sid = ui_shares.share_id(repo, rel)
         share = ui_shares.refresh(sid, checkout)
@@ -116,7 +127,7 @@ def _start(body):
         except ui_tailscale.FunnelError as e:
             return (409 if e.kind == "port_taken" else 503), {"error": str(e)}
         try:
-            share, created = ui_shares.create(repo, rel, checkout)
+            share, created = ui_shares.create(repo, rel, checkout, expires_at)
         except BaseException:
             runtime.sync()  # nothing live: take the funnel down again
             raise

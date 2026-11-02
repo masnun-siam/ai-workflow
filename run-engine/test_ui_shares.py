@@ -121,6 +121,23 @@ assert S.refresh(sh["id"], None)["end_reason"] == "missing"
 ok("refresh + re-share")
 
 prd("x")
+real_clock, t = S.clock, [5000.0]
+S.clock = lambda: t[0]
+S.end(sh["id"], "stopped")
+sx, _ = S.create(R, P, co, S.now_iso())
+assert sx["expires_at"] and S.refresh(sx["id"], co)["end_reason"] == "expired"
+assert S.get(sx["id"])["token"] is None
+sx, _ = S.create(R, P, co, "1970-01-01T01:40:00.000+00:00")  # 6000s
+t[0] = 5999.0
+assert S.refresh(sx["id"], co)["state"] == "live"
+t[0] = 6000.0
+assert S.refresh(sx["id"], co)["end_reason"] == "expired"
+sx, _ = S.create(R, P, co)
+assert sx["expires_at"] is None and S.refresh(sx["id"], co)["state"] == "live"
+S.clock = real_clock
+ok("expiry ends by time; re-share clears expires_at")
+
+prd("x")
 s4, _ = S.create(R, P, co)
 assert S.by_token(s4["token"])["id"] == sh["id"]
 assert S.by_token("") is None and S.by_token("é☃") is None and S.by_token(None) is None

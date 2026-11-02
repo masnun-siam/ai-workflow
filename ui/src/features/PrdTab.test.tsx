@@ -6,7 +6,7 @@ import { App } from '../App';
 const json = (b: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } }));
 const URL_ = 'https://x.ts.net/s/tok';
 const calls: { method: string; path: string; body: any }[] = [];
-const summary = (o: Record<string, unknown> = {}) => ({ id: 's1', repo: 'o/r', path: 'docs/prds/f1.md', title: 'F', state: 'live', url: URL_, comments: 3, unread: 0, reachable: true, end_reason: null, ...o });
+const summary = (o: Record<string, unknown> = {}) => ({ id: 's1', repo: 'o/r', path: 'docs/prds/f1.md', title: 'F', state: 'live', url: URL_, comments: 3, unread: 0, reachable: true, end_reason: null, expires_at: null, ...o });
 const detail = (approvals: { id: string; name: string; at: string }[], o: Record<string, unknown> = {}) => ({ ...summary(o), created_at: '', ended_at: null, last_seen_at: null, prd_updated_at: null, unsent: 0, threads: [], approvals, ...o });
 const ap = (k: number) => ({ id: `a${k}`, name: `Rev${k}`, at: '' });
 
@@ -68,6 +68,23 @@ describe('Share button', () => {
     await u.click(b);
     await u.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Share' }));
     await waitFor(() => expect(posts()).toEqual([{ method: 'POST', path: '/api/shares', body: { repo: 'o/r', path: 'docs/prds/f1.md', confirm: true } }]));
+  });
+
+  it('sends expires_in_days when the dialog picks 7 days and shows Expires', async () => {
+    const u = userEvent.setup();
+    const b = await open({ shares: [] });
+    await u.click(b);
+    const dlg = await screen.findByRole('alertdialog');
+    await u.selectOptions(within(dlg).getByRole('combobox'), '7');
+    await u.click(within(dlg).getByRole('button', { name: 'Share' }));
+    await waitFor(() => expect(posts()).toEqual([{ method: 'POST', path: '/api/shares', body: { repo: 'o/r', path: 'docs/prds/f1.md', confirm: true, expires_in_days: 7 } }]));
+  });
+
+  it('shows the Expires line for a live share with an expiry', async () => {
+    const u = userEvent.setup();
+    const b = await open({ shares: [summary({ expires_at: '2030-05-06T12:00:00.000+00:00' })], detail: detail([], { expires_at: '2030-05-06T12:00:00.000+00:00' }) });
+    await u.click(b);
+    expect(await screen.findByText(/^Expires /)).toBeTruthy();
   });
 
   it('shows the live share: link, comments, end rule, reachability, Copy', async () => {
