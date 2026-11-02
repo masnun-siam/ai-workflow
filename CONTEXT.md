@@ -19,6 +19,9 @@ _Avoid_: Groomed, ready
 **implement-issue**:
 The skill that takes one refined issue to a Ready PR in a single session: stop if blocked, work in its own worktree, run every check locally, verify in the running app, open a draft PR, and mark it ready only when CI is green and every review comment is handled.
 
+**close-epic**:
+The skill that verifies an epic is really finished: every child issue closed, every PRD `FR-n` shipped by a merged PR, `/verifier-locally` green on the base branch. Then it sets the PRD to `Done` and closes the epic. It never force-closes children (the UI's close-epic button does).
+
 **verifier-locally**:
 The skill that proves a change works before it is pushed: it finds the repo's checks from CI, hooks and build files, runs the ones matching the changed paths, and reports each result with evidence. `implement-issue` and grind both call it.
 

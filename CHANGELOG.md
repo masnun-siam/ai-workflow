@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- **`/close-epic`** (#743): verifies that every child issue is closed and every PRD `FR-n` shipped through a merged PR, runs `/verifier-locally` on the base branch, then sets the PRD to `Done` and closes the epic. `--dry-run` changes nothing; it never closes children.
+
 ### Changed
 
 - **One skill per prompt, one improve loop** (#737): `pr-grind`, `faq-updater` and `repo-bootstrap` descriptions say what they are not for (comments already on a PR are `/pr-review --fix`; agent docs are `/docs-updater`). `self-improve.md` now applies edits as `guides/skills.md` step 4 says (commit on their own), and `release-pr` and `faq-updater` carry the `## Self-improve` pointer. `guides/engineering-workflow.md` (Release row names `/release-pr`) and `guides/skills.md` (six skills added to the table) were edited by hand, so the next `/sync-from-wasensi` must keep them.
