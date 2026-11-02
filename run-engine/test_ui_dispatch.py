@@ -299,6 +299,11 @@ print("  ok  cost cap")
 p = ui_dispatch.public(dr.load(d["id"]), full=True)
 assert p["lanes"][0]["key"] == "o/r#5" and "events" in p and "handle" not in p["lanes"][0]
 assert p["issues"] is None
+ui_dispatch.seen(d["id"])
+assert dr.load(d["id"])["seen_done"] is True
+ui_dispatch.seen(d["id"], undo=True)
+assert dr.load(d["id"])["seen_done"] is False
+print("  ok  seen undo")
 il = dr.create(None, "headless", {"grind": "off"}, [{"repo": "o/r", "n": 5, "refined": True}], issues=["o/r#5"])
 assert ui_dispatch.public(il)["issues"] == ["o/r#5"]
 _load = ui_settings.load

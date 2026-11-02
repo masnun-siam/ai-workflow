@@ -409,10 +409,10 @@ def read_lane(did: str, k: str) -> dict:
     return {"text": dispatch_runners.for_dispatch(d).read(x["handle"])}
 
 
-def seen(did: str) -> dict:
+def seen(did: str, undo: bool = False) -> dict:
     with dr.locked(did):
         d = dr.load(did)
-        d["seen_done"] = True
+        d["seen_done"] = not undo
         dr.save(d)
         return public(d)
 

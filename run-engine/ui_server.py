@@ -685,7 +685,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif op == "retry-failed":
             self._dispatch(lambda b: (dispatch_run.retry_failed(did), ui_dispatch.public(dispatch_run.load(did)))[1])
         elif op == "seen":
-            self._dispatch(lambda b: ui_dispatch.seen(did))
+            self._dispatch(lambda b: ui_dispatch.seen(did, b.get("undo") is True))
         else:
             self._send(404, "text/plain; charset=utf-8", b"not found")
 

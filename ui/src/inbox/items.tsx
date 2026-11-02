@@ -67,7 +67,8 @@ export function useInboxActions() {
         lane.mutate({ id, lane: key, action: 'merge' }, { onSuccess: () => toast('Merge requested') });
     },
     laneRetry: (id: string, key: string) => lane.mutate({ id, lane: key, action: 'retry' }, { onSuccess: () => toast('Retrying') }),
-    dispatchSeen: (id: string) => seen.mutate(id),
+    dispatchSeen: (id: string) =>
+      seen.mutate({ id }, { onSuccess: () => toast('Dismissed', { action: { label: 'Undo', onClick: () => seen.mutate({ id, undo: true }) } }) }),
     bootstrapContinue: (id: string) => bootstrap.mutate({ id, action: 'continue' }, { onError: (e) => toast(e.message) }),
     bootstrapRetry: (id: string) => bootstrap.mutate({ id, action: 'retry' }, { onError: (e) => toast(e.message) }),
     bootstrapStop: async (id: string) => {
