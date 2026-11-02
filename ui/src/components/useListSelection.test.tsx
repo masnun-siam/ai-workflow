@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useListSelection, nextSelection } from './useListSelection';
@@ -64,6 +64,16 @@ describe('useListSelection', () => {
     expect(selected()).toBe(screen.getByText('a'));
     await u.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}j');
     expect(selected()).toBe(screen.getByText('c'));
+  });
+  it('arrows scroll the page unless focus is on a row; j still moves from anywhere', async () => {
+    const u = userEvent.setup();
+    render(ui({ keys: abc, onOpen: () => {} }));
+    expect(fireEvent.keyDown(document.body, { key: 'ArrowDown' })).toBe(true);
+    expect(selected()).toBeNull();
+    await u.keyboard('j');
+    expect(selected()).toBe(screen.getByText('a'));
+    expect(fireEvent.keyDown(screen.getByText('a'), { key: 'ArrowDown' })).toBe(false);
+    expect(selected()).toBe(screen.getByText('b'));
   });
   it('ignores key repeat', async () => {
     const u = userEvent.setup();

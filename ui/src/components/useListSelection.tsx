@@ -46,6 +46,11 @@ export function useListSelection({ keys, onOpen, onMove, reset, panelTarget }: {
       const { keys: ks, sel: cur, panel, panelTarget, onMove } = latest.current;
       const dir = e.key === 'j' || e.key === 'ArrowDown' ? 1 : e.key === 'k' || e.key === 'ArrowUp' ? -1 : 0;
       if (!dir || !ks.length || ignoreKey(e)) return;
+      // Arrows move the selection only from a row (or inside one); elsewhere they scroll the page. j/k work from anywhere.
+      if (e.key.startsWith('Arrow')) {
+        const active = document.activeElement;
+        if (![...els.current.values()].some((r) => r.contains(active))) return;
+      }
       e.preventDefault();
       const index = cur ? Math.min(Math.max(cur.index + dir, 0), ks.length - 1) : 0;
       if (cur && index === cur.index) return;
