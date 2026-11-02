@@ -386,6 +386,13 @@ except ValueError:
 assert aiw("set", d["id"], "max=99").returncode == 5
 assert aiw("lane", d["id"], "5", "hold").returncode == 0 and dr.load(d["id"])["lanes"]["o/r#5"]["hold_merge"]
 assert aiw("lane", d["id"], "6", "hold").returncode == 5
+assert aiw("retry-failed", d["id"]).stdout.strip() == "nothing to retry"
+dd = dr.load(d["id"])
+dd["lanes"]["o/r#5"]["needs_you"] = "x"
+dr.save(dd)
+assert (
+    aiw("retry-failed", d["id"]).stdout.strip() == "o/r#5" and dr.load(d["id"])["lanes"]["o/r#5"]["needs_you"] is None
+)
 assert aiw("pause", d["id"]).returncode == 0 and dr.load(d["id"])["state"] == "paused"
 assert json.loads(aiw("show", d["id"]).stdout)["lanes"][0]["n"] == 5
 assert d["id"] in aiw("ls").stdout

@@ -1083,4 +1083,25 @@ assert {recent["id"], running["id"]} <= {d["id"] for d in dr.list_all()}
 assert dr.archive_old(now=now) == [] and before - set(moved) == {d["id"] for d in dr.list_all()}
 assert recent["id"] in dr.archive_old(now=now, days=28)
 print("  ok  archive_old")
+
+# --- retry_failed: start-failed, needs_you and held lanes retry; user-skipped, closed and healthy stay
+d = strand_d(*[child(n) for n in range(1, 8)])
+L = d["lanes"]
+L[K(1)].update(stage="skipped", skip_reason="start failed: boom")
+L[K(2)].update(stage="implementing", needs_you="the lane session is gone", handle="h")
+L[K(3)].update(stage="grinding", pr=3, held="CI is red")
+L[K(4)].update(stage="skipped", skip_reason="skipped by you")
+L[K(5)].update(stage="skipped", skip_reason="needs refine")
+L[K(6)].update(stage="closed")
+dr.save(d)
+n_events = len(d["events"])
+assert sorted(dr.retry_failed(d["id"])) == sorted([K(1), K(2), K(3)])
+d = dr.load(d["id"])
+L = d["lanes"]
+assert L[K(1)]["stage"] == "queued" and L[K(2)]["needs_you"] is None and L[K(3)]["held"] is None
+assert [L[K(n)]["stage"] for n in (4, 5, 6, 7)] == ["skipped", "skipped", "closed", "queued"]
+assert L[K(4)]["skip_reason"] == "skipped by you"
+assert [e["lane"] for e in d["events"][n_events:] if e["kind"] == "lane" and e["text"] == "retry"] == [K(1), K(2), K(3)]
+assert dr.retry_failed(d["id"]) == []
+print("  ok  retry_failed")
 print("dispatch_run: all green")

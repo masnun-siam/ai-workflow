@@ -8,6 +8,8 @@
 
 - **Dispatch archive** (#755): finished dispatches older than 30 days move to `dispatches/archive/`, daily from the server or with `aiw dispatch archive [--days N]`, so lists and ticks stay small. Nothing is deleted.
 
+- **Retry failed lanes** (#756): `aiw dispatch retry-failed <id>` and `POST /api/dispatches/<id>/retry-failed` retry every lane that failed to start, needs you or is held, and leave lanes you skipped, lanes needing a refine, closed and healthy lanes alone.
+
 ### Changed
 
 - **Keyboard navigation** (#751): ArrowUp/ArrowDown move the row selection only when focus is on a row, so the arrow keys scroll the page otherwise (`j`/`k` unchanged). In a question, Tab walks every control (Select all, None of these, Something else) and only the last one jumps to the next question.
