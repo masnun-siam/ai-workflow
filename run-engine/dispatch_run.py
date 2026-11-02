@@ -771,6 +771,24 @@ def lane_action(did: str, k: str, action: str, text=None) -> dict:
         return d
 
 
+def retry_failed(did: str) -> list:
+    """Retry every lane that failed to start or needs you or is held; returns their keys.
+    Lanes skipped by you, needing a refine, closed or healthy are left alone."""
+    with locked(did):
+        d = load(did)
+        failed = [
+            k
+            for k, x in d["lanes"].items()
+            if (x["stage"] == "skipped" and str(x.get("skip_reason") or "").startswith("start failed"))
+            or x.get("needs_you")
+            or x.get("held")
+        ]
+        for k in failed:
+            apply_lane_action(d, k, "retry")
+        save(d)
+        return failed
+
+
 def apply_lane_action(d: dict, k: str, action: str, text=None) -> None:
     """lane_action on a loaded record; the caller holds `locked(d["id"])` and saves."""
     x = d["lanes"].get(k)

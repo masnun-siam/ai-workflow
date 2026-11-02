@@ -661,7 +661,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json(502, {"error": str(e)})
 
     def _dispatch_post(self, rest: list) -> None:
-        """POST /api/dispatches, /plan, /<id>/settings|state|lane|end|seen."""
+        """POST /api/dispatches, /plan, /<id>/settings|state|lane|retry-failed|end|seen."""
         did = rest[0] if rest else ""
         op = rest[1] if len(rest) == 2 else None
         if not rest:
@@ -682,6 +682,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             )
         elif op == "end":
             self._dispatch(lambda b: ui_dispatch.public(dispatch_run.request_end(did, b.get("action"))))
+        elif op == "retry-failed":
+            self._dispatch(lambda b: (dispatch_run.retry_failed(did), ui_dispatch.public(dispatch_run.load(did)))[1])
         elif op == "seen":
             self._dispatch(lambda b: ui_dispatch.seen(did))
         else:

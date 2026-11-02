@@ -488,6 +488,10 @@ def cmd_lane(a) -> None:
     print(f"{k}: {a.action}")
 
 
+def cmd_retry_failed(a) -> None:
+    print("\n".join(dr.retry_failed(a.id)) or "nothing to retry")
+
+
 def cmd_end(a) -> None:
     dr.request_end(a.id, a.action)
     print(f"{a.action}: requested; the UI server runs it at its next tick")
@@ -600,6 +604,9 @@ def register(sub, add) -> None:
     q.add_argument("--since", type=float, default=None, help="from the last watch or start; default now")
     q.add_argument("--timeout", type=float, default=3000.0)
     q.set_defaults(func=cmd_watch)
+    q = ops.add_parser("retry-failed", help="retry every lane that failed to start, needs you or is held")
+    q.add_argument("id")
+    q.set_defaults(func=cmd_retry_failed)
     q = ops.add_parser("end", help="end-of-dispatch action: open-pr | qa | grind-pr")
     q.add_argument("id")
     q.add_argument("action", choices=dr.END_ACTIONS)
