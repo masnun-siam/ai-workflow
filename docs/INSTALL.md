@@ -59,10 +59,10 @@ blocker. Tell the user they can add it later with `gh auth refresh -s project`.
 The process also needs a `gh` that can set parents and blockers. Check the feature, not a version:
 
 ```bash
-gh issue create --help | grep -q -- --blocked-by && echo ok   # also needs --parent
+h=$(gh issue create --help); grep -q -- --parent <<<"$h" && grep -q -- --blocked-by <<<"$h" && echo ok
 ```
 
-If it does not print `ok` (or `--parent` is missing), tell the user to upgrade `gh`.
+If it does not print `ok`, tell the user to upgrade `gh`.
 
 ## Step 2 — Install the plugin
 
