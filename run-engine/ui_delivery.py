@@ -65,6 +65,7 @@ def build(repo, snapshot, sessions, grind_index, settings, cleanup_flags, solo=F
     live = _live_sessions(repo, sessions)
     owner, _, name = repo.partition("/")
     grinds = (grind_index or {}).get("pr") or {}
+    open_prs = {p["n"]: p for p in data.get("open_prs") or []}  # issue["prs"] entries lack the review fields
 
     epics = {i["n"]: i for i in data.get("issues") or [] if "epic" in i["labels"]}
     lanes = {n: [] for n in epics}
@@ -109,7 +110,7 @@ def build(repo, snapshot, sessions, grind_index, settings, cleanup_flags, solo=F
                 "title": i["title"],
                 "column": column,
                 "grind_on": on,
-                "mergeable": ui_inbox.merge_ready(pr, grind, on, solo),
+                "mergeable": ui_inbox.merge_ready({**pr, **open_prs.get(pr["n"], {})} if pr else pr, grind, on, solo),
                 "priority": i["priority"],
                 "blocked_by": [b["n"] for b in i["blocked_by"] if b["state"] == "OPEN"],
                 "pr": {

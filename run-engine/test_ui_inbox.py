@@ -42,6 +42,8 @@ def pr(n, draft=False, ci="success", review="approved"):
         "draft": draft,
         "ci": ci,
         "review": review,
+        "approved": review == "approved",
+        "changes_requested": review == "changes_requested",
         "reviewer": "bob",
         "checks": 3,
     }
@@ -173,6 +175,9 @@ assert ready_prs(build(snapshots={"o/r": snap(prs, issues)}, settings=off9)) == 
 on9 = {"o/r": {"auto_grind": False, "issue_grind": {9: True}}}
 assert "pr_ready" not in types(build(snapshots={"o/r": snap(prs[:1], issues)}, settings=on9))
 assert not ui_inbox.merge_ready({"draft": False, "ci": "pending"}, {"state": "done"}, True, True)
+# changes requested is never ready, solo or not
+assert not ui_inbox.merge_ready(pr(1, review="changes_requested"), None, False, True)
+assert ui_inbox.merge_ready(pr(1), None, False, False) and ui_inbox.merge_ready(pr(1, review="none"), None, False, True)
 assert ui_inbox.grind_on({"auto_grind": True}, None) and not ui_inbox.grind_on({}, 3)
 # a conflicting PR is a Fix item, never ready to merge
 conflicting = dict(pr(1), conflict=True)

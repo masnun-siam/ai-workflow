@@ -205,6 +205,12 @@ f["data"]["repository"]["issues"]["nodes"][2]["closedByPullRequestsReferences"][
 d2 = ui_poller.normalize(f, NOW)
 op = d2["open_prs"][0]
 assert (op["review"], op["reviewer"], op["checks"]) == ("approved", "bob", 4)
+assert (op["approved"], op["changes_requested"]) == (False, True), "one changes-request blocks the approval"
+f["data"]["repository"]["openPrs"]["nodes"][0].update(
+    reviewDecision=None, latestOpinionatedReviews={"nodes": [{"state": "APPROVED", "author": {"login": "bob"}}]}
+)
+op3 = ui_poller.normalize(f, NOW)["open_prs"][0]
+assert (op3["review"], op3["approved"], op3["changes_requested"]) == ("none", True, False)
 assert [p["review"] for p in d2["issues"][2]["prs"]] == ["changes_requested", "review_required"]
 # conflict: only GitHub's CONFLICTING (UNKNOWN while it computes, MERGEABLE) is a conflict
 assert "mergeable" in ui_poller.QUERY and op["conflict"] is False

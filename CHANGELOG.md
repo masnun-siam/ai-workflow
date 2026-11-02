@@ -8,6 +8,8 @@
 
 ### Fixed
 
+- **One merge gate** (#739, folds in #703): `run-engine/merge_gate.py` decides draft, conflict, changes requested and approval for dispatch `_gate`, the Inbox `pr_ready` and the board `mergeable`. A PR with any changes-requested review is never mergeable, `solo` or not; the poller computes `approved` and `changes_requested` once and reads 20 reviews instead of 5.
+
 - **Dead files removed** (#738): `paperclip/` and the finished `dev-workflow-replacement` PRD are deleted (git history keeps them); they carried personal paths or described finished work.
 - **Docs say only what exists** (#736): `CLAUDE.md` and `docs/REFERENCE.md` drop `commands/` and the removed `peer-review` verb, list the real CLI verbs and skill flags, document five more API routes and the Tailscale owner check; `peer-review` step 4 uses `md5sum` when `md5` is missing.
 - **Fresh repos no longer fail on missing labels** (#735): INSTALL Step 6 creates `epic`, `refined` and `priority:*` with `gh label create --force`, and Step 1 checks `gh` supports `--parent`/`--blocked-by`. `/dump` no longer claims `/create-prd` reads the problem statement or the `status: seed` marker, and a no-repo UI session is told `PRD.md` and `Dump.md` are its source material. `skills/create-prd/SKILL.md` (step 7) and `skills/create-tasks/SKILL.md` (step 9) each carry one added line, `gh label create "prd-<slug>" --force`, so the next `/sync-from-wasensi` must keep it.
