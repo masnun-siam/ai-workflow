@@ -10,17 +10,17 @@
 | `/ai-workflow:implement-issue <n \| epic>` | one refined issue (or an epic's next Ready one) to a Ready PR: worktree, local checks, local review, draft PR, CI, review comments; after the merge, close and clean up |
 | `/ai-workflow:verifier-locally` | run the checks CI would run and exercise the change against its acceptance criteria |
 | `/ai-workflow:pr-review <pr or branch> [--fix]` | review against the issue, the repo's rules and `guides/code-review.md`; report findings and a verdict. `--fix` fixes the review feedback on a PR through to green CI, replies and ready |
-| `/ai-workflow:skill-feedback <feedback \| reconcile>` | turn feedback, or the learning logs of closed PRs, into approved edits to the skills and guides |
+| `/ai-workflow:skill-feedback <feedback \| reconcile [owner/name] [--since <date\|PR>] [--prs <n,n>] [--merged-only]>` | turn feedback, or the learning logs of closed PRs, into approved edits to the skills and guides |
 | `/ai-workflow:docs-updater` | bring `docs/` in line with the code |
 | `/ai-workflow:repo-bootstrap [audit\|decide\|constitution\|guides\|gates\|docs] [issue]` | make a repo ready for agents in phases on one branch and one PR, one phase per run (it prints the next command and a `BOOTSTRAP:` last line): a read-only audit issue, the decisions, a short protected `CLAUDE.md` (`templates/claude-md.md`) with its guards, guides and a tested README, the gates, then `/docs-updater full` |
-| `/ai-workflow:faq-updater [full] [--lang <codes>] [--videos <url>] [questions…]` | write and update the product's user guide and FAQ (`docs/faq.md`) from the code, through a PR |
+| `/ai-workflow:faq-updater [full\|--full] [--lang <codes>] [--videos <url>] [questions…]` | write and update the product's user guide and FAQ (`docs/faq.md`) from the code, through a PR |
 | `/ai-workflow:sync-from-wasensi` | port Wasensi's skill, guide and template changes into this plugin |
-| `/ai-workflow:pr-grind <pr>` | the Slack reviewer-bot loop on a PR; fixes inline, verifies before each push |
-| `/ai-workflow:peer-review [--lenses <lens,lens>] [--since <sha\|@{u}>] [--herdr]` | a panel of read-only `peer-reviewer` lenses on the session's change (default critical) until every lens approves |
+| `/ai-workflow:pr-grind <slack thread url \| PR url> [--channel <id>]` | the Slack reviewer-bot loop on a PR; fixes inline, verifies before each push |
+| `/ai-workflow:peer-review [--lenses <lens,lens>] [--root <panel_id>]` | a panel of read-only `peer-reviewer` lenses on the session's change (default critical) until every lens approves |
 | `/ai-workflow:dump <text>` | file free-form input into the Obsidian vault's Project → Feature structure, after one confirmation |
 | `/ai-workflow:release-pr [--dry-run] [head=staging] [base=master]` | open or refresh the `staging` → `master` release PR with a deploy checklist, post the Slack trigger, hand off to `/pr-grind`. Never merges |
 | `/ai-workflow:worklog [date]` | today's worklog from GitHub activity and the daily note, written to the Obsidian daily note (runs as the `worklog-runner` agent) |
-| `/ai-workflow:herdr-dispatch <epic> [--max N] [--grind off\|simple\|full] [--ci wait\|defer\|ignore] [--auto-merge] [--feature-branch <name>] [--model M] [--effort E]` | run an epic's issues as a dispatch in herdr tabs: preview, confirm, start, then relay what needs you (see **Dispatches**) |
+| `/ai-workflow:herdr-dispatch <epic> [--max N] [--grind off\|simple\|full] [--ci wait\|defer\|ignore] [--auto-merge] [--feature-branch <name>] [--base-branch <name>] [--model M] [--effort E]` | run an epic's issues as a dispatch in herdr tabs: preview, confirm, start, then relay what needs you (see **Dispatches**) |
 
 ## The `aiw` CLI
 
@@ -337,6 +337,7 @@ an onboarding page that checks `gh` and a Claude account, then scans folders.
 `GET /api/settings` also returns `use_jev` (bool, default true; a `PUT` that omits it keeps it, a non-boolean is 400) and the read-only `jev_installed` (is `jev` on `PATH`; never stored). `GET|POST /api/settings/notify`, `POST /api/settings/notify/test` (`{channel: "ntfy"|"mac"}`: one sample push on that channel alone, ignoring the matrix and Away mode; 200 `{ok}` or `{ok: false, error}` with an HTTP status, error type or "ntfy is not set up" / "Only on macOS", never a credential; `browser` or an unknown channel is 400), `POST /api/settings/notify/channel` (one event × channel switch,
 `{event, channel, on}`; `GET` also returns `matrix`, `events`, `ntfy_ready` and `mac`), `GET|POST /api/settings/review`, `POST /api/repos/remove`,
 `POST /api/repos/check`.
+`GET /api/health` returns `{ok: true}`. `GET /api/vault/folders` returns `{vault, folders}`, the vault path and every `05-Work/<Project>[/<Feature>]` folder. `GET /api/vault/prd?folder=<05-Work/Project/Feature>` returns `{exists, status, title, folder}` for that folder's `PRD.md` (400 on a bad folder). `GET /api/github/owners` returns `{owners}`, the `gh` login and its orgs that Publish can create a repo under (502 when `gh` is not logged in). `GET /api/sessions/cleanup` lists the finished sessions that can be removed (`{items}`); `POST /api/sessions/cleanup {keys}` removes those sessions and returns `{removed}`.
 `GET /api/notifications?after=<id>` is the in-memory browser feed (`ui_feed.py`, newest 200, empty after
 a restart): `{latest, events}` with the entries newer than `after`, at most the 5 newest, oldest first;
 no `after`, or one above `latest`, gives `events: []`; a non-integer `after` is 400. Browser notifications
@@ -392,9 +393,9 @@ banner off (`run_tests.sh` sets it; the Settings "Send test" then reports the of
 
 For clickable macOS banners run `brew install terminal-notifier` on the host and restart `aiw ui`; without it banners still show (through AppleScript) but cannot open a link.
 
-**Security:** there is no app-level auth. Every request that does not arrive on loopback must carry the
+**Security:** when `aiw ui` is fronted by `tailscale serve`, every request that does not arrive on loopback must carry the
 node owner's `Tailscale-User-Login` (added by `tailscale serve` for tailnet traffic only), so other tailnet
-users and funnelled traffic are refused; on loopback, anyone who can reach the URL can start sessions. Sessions run `claude --dangerously-skip-permissions` by
+users and funnelled traffic are refused; with no tailscale, or on loopback, there is no app-level auth: anyone who can reach the URL can start sessions. Sessions run `claude --dangerously-skip-permissions` by
 default, with no opt-out flag. Never use `tailscale funnel` for the UI (public exposure plus skip-permissions
 is remote code execution), and on a shared machine any local user can reach the loopback port. The one
 exception is the share listener (see Share a PRD): a separate, read-only listener that serves only
@@ -491,7 +492,6 @@ skills/       create-prd, create-tasks, refine-issues, implement-issue, verifier
 agents/       away-answerer, peer-reviewer, worklog-runner
 guides/       engineering-workflow, code-review, skills
 templates/    prd, epic, issue, faq, claude-md, repo-audit
-commands/     code-review (a slash command)
 run-engine/   route.py (the aiw CLI) · ui_*.py (the web UI server) · peer_review, threads, ci, ask
               dispatch_run (the lane engine), dispatch_runners (herdr, headless), dispatch_cli
               ui_dist/ (the built UI, committed) · config.json · test_*.py
