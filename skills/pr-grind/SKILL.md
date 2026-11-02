@@ -45,7 +45,7 @@ Header keys (lines above the first `## Round <n>`; names are pinned for the aiw 
    url → read the thread only to find its PR url), then `gh pr view <pr> --json isDraft`.
    `isDraft: true` → stop with one line, `PR #<n> is a draft; mark it ready for review before grinding.`
    Write no state file and post nothing.
-1. **`--reviewer <login>` given → the GitHub path:** skip `<channels>` and every Slack step. `<login>` is a GitHub
+1. **`--reviewer <login>` given and no `--channel` → the GitHub path:** skip `<channels>` and every Slack step. `<login>` is a GitHub
    login (`[A-Za-z0-9-]{1,39}`) or `copilot`; anything else (a team slug such as `org/team`) → stop with one
    line. The reviewer is the PR author → stop with one line. Slack steps below say "post"; on this path read
    "GitHub" for them (Steps 1 and 7 have a paragraph each). Rails 1, 2 and 4 and Step 8 report in the final message
@@ -55,8 +55,9 @@ Header keys (lines above the first `## Round <n>`; names are pinned for the aiw 
    @-mention target in terminal posts; never take it from anywhere else (an email, a name in
    a config).
 2. **GitHub path:** request the review, `gh pr edit <n> --add-reviewer <login>` (`copilot` is requested as
-   `@copilot`), and record `reviewer: <login>` and `thread: github` in the header. Both a Slack channel
-   and `--reviewer` given: Slack wins, ignore `--reviewer`.
+   `@copilot`), and record `reviewer: <login>` and `thread: github` in the header. `--channel` and
+   `--reviewer` both given: Slack wins, ignore `--reviewer`. Copilot's reviews are authored by
+   `copilot-pull-request-reviewer[bot]`: use that login to read its reviews and for `poll-reviews.sh`.
    Otherwise: argument is a Slack thread URL → `slack_read_thread`, take the first GitHub PR URL
    (none → `AskUserQuestion`). Argument is a PR URL with no thread → **open the thread**:
    post `trigger` as a new top-level message in the repo's channel (`--channel <id>` in the
