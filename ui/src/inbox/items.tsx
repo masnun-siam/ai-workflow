@@ -2,7 +2,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useBootstrapAction, useBootstraps, useCleanupIssue, useDispatchSeen, useLaneAction, useResume, useReviewRounds, useSettings, useSkipCi, useStartNow, useStartSession, useStop, useStopGrind } from '../api/hooks';
+import { useBootstrapAction, useBootstraps, useCleanupIssue, useDismissSession, useDispatchSeen, useLaneAction, useResume, useReviewRounds, useSettings, useSkipCi, useStartNow, useStartSession, useStop, useStopGrind } from '../api/hooks';
 import type { InboxItem, Question } from '../api/types';
 import { Button, LinkButton, Menu, useConfirm, useToast, type IconName, type useListSelection } from '../components';
 import { agoIso, clockText, commandText, shortRepo } from '../lib/format';
@@ -56,6 +56,7 @@ export function useInboxActions() {
   const cleanup = useCleanupIssue();
   const lane = useLaneAction();
   const seen = useDispatchSeen();
+  const dismissM = useDismissSession();
   const bootstrap = useBootstrapAction();
   const goSession = (id?: string) => id && nav(routes.session(id));
   return {
@@ -93,6 +94,7 @@ export function useInboxActions() {
       if (await confirm({ title: `Stop the grind on PR #${pr}?`, body: 'The loop ends. The PR stays open and you can start a grind again later.', okLabel: 'Stop grind', danger: true }))
         stopGrind.mutate({ repo, pr }, { onSuccess: () => toast('Grind stopped') });
     },
+    dismissSession: (id: string) => dismissM.mutate(id, { onError: (e) => toast(e.message) }),
     retry: (id: string) => resume.mutate({ id }, { onSuccess: (s) => goSession(s.id ?? id), onError: startErr }),
     resumeOn: (id: string, claude_cmd: string) => resume.mutate({ id, claude_cmd }, { onSuccess: () => toast('Resuming on the other account'), onError: startErr }),
     startNow: (id: string) => startNowM.mutate(id, { onSuccess: (s) => goSession(s.id) }),
@@ -224,6 +226,7 @@ export function ItemRow({ item, a, open, toggle, publish, selected, rowProps, au
       acts = (<>
         <Button sm shortcut="t" onClick={() => void a.terminal(item.session_id)}>Continue in terminal</Button>
         {sess(item.session_id)}
+        <Button sm shortcut="x" variant="ghost" onClick={() => a.dismissSession(item.session_id)}>Dismiss</Button>
         <Button sm shortcut="r" variant="primary" onClick={() => a.retry(item.session_id)}>Retry</Button>
       </>);
       break;

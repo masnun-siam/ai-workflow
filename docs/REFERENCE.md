@@ -303,7 +303,7 @@ auto-resume**), failed (**Retry**, **Continue in terminal**) and queued (**Start
 composer (a prompt queues while a turn runs), and a facts box with cost, tokens (`$0.44 · 703k tok`), model and effort.
 Sessions auto-resume after a rate limit, and the limit timer releases queued ones after a restart.
 Actions: **Pause** on a starting, running, waiting or limited session asks **After this run** (`POST /api/sessions/<id>/hold`: the run finishes, then nothing continues the session on its own until **Resume** on the held banner, `POST /api/sessions/<id>/release`; a queued prompt stays unsent, Away mode neither answers nor retries it, a limited session does not auto-resume, a dispatch tick stores its prompt as the queued prompt and the lane waits, a peer-review panel waits in its phase, and you can still answer it by hand) or **Now** (the same as Stop). **Stop** (`POST /api/sessions/<id>/stop`, after a confirm), **Resume**, **Rerun** (replays the
-recorded start request, same repo and account; `POST /api/sessions/<id>/rerun`), and **Start now**
+recorded start request, same repo and account; `POST /api/sessions/<id>/rerun`), **Dismiss** on a failed session's Inbox item (`POST /api/sessions/<id>/dismiss`: sets `dismissed`, 409 unless failed; the session stays on Activity), and **Start now**
 (`POST /api/sessions/<id>/start-now`: starts a batch-queued session at once, past the batch cap; 409 when
 the session is not queued or is waiting on an account limit, which starts by itself at the reset).
 

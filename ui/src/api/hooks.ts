@@ -201,6 +201,7 @@ export const useStartSession = () => useApiMutation(api.startSession, SESSION_WR
 // resume and rerun are quiet: callers show the error with useStartError (409 duplicate gets an "Open it" action)
 export const useRerun = () => useApiMutation(api.rerun, SESSION_WRITES, { quiet: true });
 export const useStartNow = () => useApiMutation(api.startNow, SESSION_WRITES);
+export const useDismissSession = () => useApiMutation(api.dismissSession, SESSION_WRITES);
 export const useStop = () => useApiMutation(api.stop, SESSION_WRITES);
 export const useResume = () => useApiMutation((v: { id: string; claude_cmd?: string }) => api.resume(v.id, v.claude_cmd), SESSION_WRITES, { quiet: true });
 export const useCancelAuto = () => useApiMutation(api.cancelAuto, SESSION_WRITES);
