@@ -13,6 +13,7 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor, wait
 
 import dispatch
@@ -413,6 +414,34 @@ def cmd_ls(a) -> None:
         print(f"{d['id']}  {d['state']:<9}  {d['epic'] or d['title']:<24}  {closed}/{n} closed  {d['runner']}")
 
 
+def _snapshots() -> dict:
+    """{repo: {stale, error, fetched_at}} from the running server's board endpoint."""
+    with urllib.request.urlopen(f"http://127.0.0.1:{UI_PORT}/api/delivery", timeout=10) as r:  # noqa: S310 - loopback
+        return {e["repo"]: e for e in json.load(r)["repos"] if "repo" in e}
+
+
+def cmd_doctor(a) -> None:
+    """Print one line per reason a live dispatch cannot move; exit 1 when there is one."""
+    ds = [dr.load(a.id)] if a.id else [d for d in dr.list_all() if d["state"] not in ("done", "cancelled")]
+    up = ui_running()
+    try:
+        snaps = _snapshots() if up and ds else {}
+    except (OSError, ValueError, KeyError):
+        snaps = {}
+    bad = 0
+    for d in ds:
+        probs = dr.diagnose(d, snaps)
+        if not up and d["state"] in ("running", "paused"):
+            probs.insert(0, {"lane": None, "problem": "dead server: nothing ticks this dispatch (run `aiw ui`)"})
+        for p in probs:
+            print(f"{d['id']}  {p['lane'] or '-'}  {p['problem']}")
+        bad += len(probs)
+        if not probs and d["state"] not in ("done", "cancelled"):
+            print(f"{d['id']}  ok")
+    if bad:
+        sys.exit(1)
+
+
 def cmd_show(a) -> None:
     print(json.dumps(summary(dr.load(a.id)), indent=1))
 
@@ -509,6 +538,9 @@ def register(sub, add) -> None:
     flags(q)
     q.set_defaults(func=cmd_start)
     ops.add_parser("ls", help="list dispatches").set_defaults(func=cmd_ls)
+    q = ops.add_parser("doctor", help="say why a live dispatch cannot move; exits 1 when something is wrong")
+    q.add_argument("id", nargs="?")
+    q.set_defaults(func=cmd_doctor)
     q = ops.add_parser("show", help="print a dispatch as JSON")
     q.add_argument("id")
     q.set_defaults(func=cmd_show)
