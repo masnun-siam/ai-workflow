@@ -322,6 +322,11 @@ def _vault_hint(folder) -> str:
     return (
         "\n\nThis is a new idea with no code repo yet; you are running in the notes vault. "
         + where
+        + (
+            " Its `PRD.md` (a seed when its `status` property is `seed`) and `Dump.md` are the source material."
+            if folder
+            else ""
+        )
         + " Confirm the folder with the user before writing anything."
     )
 

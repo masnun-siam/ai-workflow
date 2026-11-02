@@ -56,6 +56,14 @@ gh auth status 2>&1 | grep -i 'token scopes'
 If `project` is absent, features that touch GitHub Projects will warn and skip. That is not a
 blocker. Tell the user they can add it later with `gh auth refresh -s project`.
 
+The process also needs a `gh` that can set parents and blockers. Check the feature, not a version:
+
+```bash
+gh issue create --help | grep -q -- --blocked-by && echo ok   # also needs --parent
+```
+
+If it does not print `ok` (or `--parent` is missing), tell the user to upgrade `gh`.
+
 ## Step 2 — Install the plugin
 
 ```bash
@@ -150,7 +158,17 @@ Present it as findings, not as a shopping list. "slackcli is missing, so PRs lan
 
 ## Step 6 — Configure
 
-One thing is configurable, and it is optional; ask before writing it.
+Ask before running or writing either of these.
+
+### Process labels
+
+`gh issue create --label` fails when a label is missing. Create the labels once per repo the process will run on (`--force` makes it idempotent: it only updates colour and description of an existing label):
+
+```bash
+for l in epic refined priority:critical priority:high priority:medium priority:low; do gh label create "$l" --force -R <owner/repo>; done
+```
+
+The per-PRD `prd-<slug>` label is created by `/create-prd` and `/create-tasks` themselves.
 
 ### Slack review loop
 

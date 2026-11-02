@@ -735,6 +735,10 @@ try:
         json.dump({"vault_dir": tempfile.mkdtemp()}, f)
     s, p = post({"repo": "", "no_repo": True, "vault_folder": "05-Work/P/F", "command": "dump", "args": "idea"})
     assert s == 201 and ui_sessions.load(p["id"])["request"]["vault_folder"] == "05-Work/P/F"
+    assert "`PRD.md` (a seed when" in ui_repos._vault_hint("05-Work/P/F") and "`Dump.md`" in ui_repos._vault_hint(
+        "05-Work/P/F"
+    )
+    assert "source material" not in ui_repos._vault_hint(None)
     s, p3 = rerun(p["id"])
     assert s == 201 and ui_sessions.load(p3["id"])["no_repo"] is True and "05-Work/P/F" in calls[-1][0], (s, p3)
     ok("session records keep the start request; rerun replays it (lenses, no-repo vault folder)")
