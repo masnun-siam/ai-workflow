@@ -107,7 +107,7 @@ export function NewDispatchDialog({ open, onOpenChange, epic: initial, issues, r
         )}
         <SettingsFields value={s} onChange={change} noBranch={picked} repo={dialogRepo} />
         {!picked ? <p className="faint" style={{ fontSize: 12.5 }}>Started here, the issues run in background sessions. To run them in herdr tabs instead, use the herdr-dispatch skill; both show up on this page.</p> : null}
-        {preview.isError ? <Banner tone="bad" icon="alert">{preview.error.message}</Banner> : null}
+        {preview.isError ? <Banner tone="bad" icon="alert" action={<Button sm disabled={!valid || preview.isPending} onClick={doPreview}>Retry</Button>}>{preview.error.message}</Banner> : null}
         {plan ? <PlanView plan={plan} picked={picked} /> : null}
       </div>
     </Dialog>

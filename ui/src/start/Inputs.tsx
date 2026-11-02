@@ -100,7 +100,7 @@ export function OpenPicker({ id, command, kind, value, onChange, q, slug, usable
           </div>
           {hit ? <p role="status" className="muted"><b>#{hit.number}</b> {hit.title}</p> : null}
           {q.isError ? (
-            <p className="muted">Could not list {noun}: {q.error.message.replace(/\.+$/, '')}. Type a number or URL instead.</p>
+            <p className="muted">Could not list {noun}: {q.error.message.replace(/\.+$/, '')}. Type a number or URL instead. <Button variant="ghost" sm onClick={() => void q.refetch()}>Retry</Button></p>
           ) : q.isSuccess && !items.length ? (
             <p className="muted">No open {noun} in {slug}. A number or URL still works.</p>
           ) : items.length && !shown.length ? (

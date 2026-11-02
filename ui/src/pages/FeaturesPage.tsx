@@ -197,7 +197,7 @@ function RepoBoard({ repo, setOnly }: { repo: string; setOnly: (slug: string) =>
   return (
     <div className="content-inner">
       <PageHead lede={loaded ? ledeOf(rows) : 'Each feature is one PRD and everything built from it.'} repo={repo} only={repo} setOnly={setOnly} />
-      <BoardStatus meta={plan.data} failed={plan.isError && !!plan.data} />
+      <BoardStatus meta={plan.data} failed={plan.isError && !!plan.data} onRetry={() => void plan.refetch()} />
       {plan.isError && !plan.data ? (
         <EmptyState icon="alert" title="Features unavailable" actions={<Button onClick={() => plan.refetch()}>Retry</Button>}>
           {plan.error.message}. It will keep retrying.

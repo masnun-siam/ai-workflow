@@ -115,6 +115,10 @@ describe('Start dialog', () => {
     open({ cmd: 'pr-review' });
     await ready();
     expect(await screen.findByText(/Type a number or URL instead/)).toBeTruthy();
+    const listed = () => calls.filter((c) => c.url.startsWith('/api/repos/o/r/open')).length;
+    const before = listed();
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(listed()).toBeGreaterThan(before));
     await user.type(screen.getByLabelText('Pull request'), '5');
     await user.click(startButton());
     await waitFor(() => expect(posts()[0]).toMatchObject({ command: 'pr-review', args: '5' }));
