@@ -862,7 +862,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             body = self._read_body()
             if body is None:
                 return
-        status, out = ui_share_api.handle(self.command, parts, body, urlsplit(path).query)
+        status, out = ui_share_api.handle(self.command, parts, body)
         if status == 204:
             self._send(204, "application/json; charset=utf-8", b"")
         else:

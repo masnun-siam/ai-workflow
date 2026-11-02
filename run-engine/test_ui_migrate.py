@@ -43,3 +43,22 @@ with contextlib.redirect_stdout(io.StringIO()):
     assert ui_migrate.clear_old_data(e) == []
 assert os.path.exists(os.path.join(e, ui_migrate.MARKER))
 print("  ok  fresh data dir just gets the marker")
+
+g = tempfile.mkdtemp()
+open(os.path.join(g, "titles.json"), "w").write("{}")
+real_remove = os.remove
+
+
+def _deny(p):
+    raise PermissionError(13, "denied", p)
+
+
+os.remove = _deny
+try:
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as err:
+        removed = ui_migrate.clear_old_data(g)
+finally:
+    os.remove = real_remove
+assert removed == [] and os.path.exists(os.path.join(g, "titles.json"))
+assert os.path.exists(os.path.join(g, ui_migrate.MARKER))
+print("  ok  an unremovable old path warns, startup carries on, marker still written")
