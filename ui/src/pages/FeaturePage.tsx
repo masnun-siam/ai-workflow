@@ -15,7 +15,7 @@ import { NewDispatchDialog } from '../dispatch/NewDispatchDialog';
 import { useEpicDispatch } from '../dispatch/useOwner';
 import '../features/features.css';
 import { joinFeatures, snapshotsReady, type Feature } from '../lib/features';
-import { sessionSlug } from '../lib/format';
+import { money, sessionSlug } from '../lib/format';
 import { routes } from '../lib/routes';
 import { stageIdx } from '../lib/vocab';
 import { useRepo } from '../shell/useRepo';
@@ -38,6 +38,7 @@ function Body({ f, repo, tab, meta }: { f: Feature; repo: string; tab?: string; 
       }),
     [sessions, f, repo], // eslint-disable-line react-hooks/exhaustive-deps
   );
+  const cost = mine.some((s) => s.cost != null) ? money(mine.reduce((n, s) => n + (s.cost ?? 0), 0)) : '—';
   const { run } = useStepRunner(f, repo);
   const i = stageIdx(f.stage);
   const cur = TABS.includes(tab ?? '') ? tab! : f.stage === 'review' ? 'review' : i >= 3 ? 'issues' : 'prd';
@@ -57,6 +58,7 @@ function Body({ f, repo, tab, meta }: { f: Feature; repo: string; tab?: string; 
         f={f}
         repo={repo}
         onRunEpic={() => setDispatching(true)}
+        cost={cost}
         more={[
           { label: 'Open PRD on GitHub', icon: 'ext', onSelect: () => window.open(`https://github.com/${repo}/blob/HEAD/${f.prd.path}`, '_blank', 'noopener') },
           { label: 'Add a task', icon: 'plus', onSelect: () => { go('issues'); setTimeout(() => document.getElementById('add-task')?.focus(), 50); }, disabled: !f.epic },
