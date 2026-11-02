@@ -317,7 +317,7 @@ describe('Inbox', () => {
     expect(screen.getByText('Changed')).toBeTruthy();
     const links = screen.getAllByRole('link', { name: 'answerer transcript' });
     expect(links.map((a) => a.getAttribute('href'))).toEqual(['#/sessions/ans1', '#/sessions/ans3']);
-    expect(screen.getAllByRole('checkbox')).toHaveLength(2);
+    expect(screen.getAllByRole('checkbox')).toHaveLength(3); // two answers + Held only
     expect(screen.queryByRole('checkbox', { name: /Delete branch/ })).toBeNull();
     expect(screen.queryByRole('checkbox', { name: /Changed\?/ })).toBeNull();
     const box = screen.getByRole('checkbox', { name: 'Change answer: Which store?' }) as HTMLInputElement;
@@ -325,6 +325,24 @@ describe('Inbox', () => {
     expect(box.checked).toBe(true);
     expect(screen.getByText(/legacy-cmd/)).toBeTruthy();
     expect(screen.getByText(/retry 1 of 4/)).toBeTruthy();
+  });
+
+  it('away summary Held only toggle lists just the held rounds', async () => {
+    const log = [
+      { at: 1700000100, kind: 'answer', sid: 's1', command: 'cmd-a', question: 'Q?', picked: 'A' },
+      { at: 1700000200, kind: 'held', sid: 's2', command: 'cmd-h', question: 'Q?', picked: '' },
+    ];
+    routes['/api/inbox'] = { items: [], gh: { ok: true }, afk: { ...AFK, summary: { started: 1700000000, ended: 1700003600, held: 1, log } } };
+    window.location.hash = '#/inbox';
+    render(<App />);
+    const user = userEvent.setup();
+    expect(await screen.findByText(/cmd-a/)).toBeTruthy();
+    await user.click(screen.getByRole('checkbox', { name: 'Held only' }));
+    expect(screen.queryByText(/cmd-a/)).toBeNull();
+    expect(screen.getByText(/cmd-h/)).toBeTruthy();
+    expect(screen.getByText(/: 1 handled, 1 held/)).toBeTruthy();
+    await user.click(screen.getByRole('checkbox', { name: 'Held only' }));
+    expect(screen.getByText(/cmd-a/)).toBeTruthy();
   });
 
   it('away summary shows the risk line only on risk-routed rounds', async () => {
