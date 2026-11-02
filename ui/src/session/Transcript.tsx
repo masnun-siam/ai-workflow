@@ -60,20 +60,33 @@ export function Transcript({ events, live, working }: { events: StreamEvent[]; l
   const [follow, setFollow] = useState(true);
   const [open, setOpen] = useState<Record<number, boolean>>({});
   const [all, setAll] = useState(false);
+  const [collapse, setCollapse] = useState(false);
+  const [atEnd, setAtEnd] = useState(true);
   const end = useRef<HTMLDivElement>(null);
-  const shown = filterEvents(events, q);
+  const shown = filterEvents(events, q).filter(({ e }) => !collapse || e.kind !== 'tool' && e.kind !== 'result');
   const more = !q.trim() && !all && shown.length > LIMIT;
   const visible = more ? shown.slice(-LIMIT) : shown;
   const toggle = useCallback((i: number) => setOpen((o) => ({ ...o, [i]: !o[i] })), []);
   useEffect(() => {
     if (live && follow) end.current?.scrollIntoView({ block: 'nearest' });
   }, [events.length, live, follow]);
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined' || !end.current) return;
+    const io = new IntersectionObserver(([en]) => setAtEnd(en.isIntersecting));
+    io.observe(end.current);
+    return () => io.disconnect();
+  }, []);
+  const jump = () => {
+    setFollow(true);
+    end.current?.scrollIntoView({ block: 'nearest' });
+  };
   return (
     <div className="stack" style={{ gap: 8 }}>
       <div className="row wrap">
         <input className="f" style={{ maxWidth: 260 }} placeholder="Search the transcript" aria-label="Search the transcript" value={q} onChange={(e) => setQ(e.target.value)} />
         {q ? <span className="muted" style={{ fontSize: 13 }}>{shown.length} of {events.length}</span> : null}
         <span className="grow" />
+        <label className="row" style={{ gap: 6, fontSize: 13 }}><input type="checkbox" checked={collapse} onChange={(e) => setCollapse(e.target.checked)} />Collapse tool calls</label>
         {live ? <label className="row" style={{ gap: 6, fontSize: 13 }}><input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} />Auto-scroll</label> : null}
       </div>
       <div className="events" aria-label="Transcript">
@@ -84,6 +97,7 @@ export function Transcript({ events, live, working }: { events: StreamEvent[]; l
         {working ? <div className="ev"><span className="ic"><span className="chip t-build live" style={{ padding: 0, background: 'none' }}><span className="dot" /></span></span><div className="muted">Working…</div></div> : null}
         <div ref={end} />
       </div>
+      {live && !atEnd ? <button type="button" className="btn sm" style={{ position: 'sticky', bottom: 12, alignSelf: 'center' }} onClick={jump}>Jump to latest</button> : null}
     </div>
   );
 }

@@ -59,4 +59,34 @@ describe('Transcript', () => {
     await userEvent.click(screen.getByRole('button', { name: /Show earlier events/ }));
     expect(screen.getByText('ev0')).toBeTruthy();
   });
+
+  it('collapse hides tool and result rows, keeps text, and the search count follows', async () => {
+    const evs = [text('hello'), { kind: 'tool', name: 'Bash', input: {} } as StreamEvent, { kind: 'result', text: 'done' } as StreamEvent];
+    render(<Transcript events={evs} live={false} working={false} />);
+    expect(screen.getByText('Bash')).toBeTruthy();
+    await userEvent.click(screen.getByLabelText('Collapse tool calls'));
+    expect(screen.queryByText('Bash')).toBeNull();
+    expect(screen.queryByText('Result')).toBeNull();
+    expect(screen.getByText('hello')).toBeTruthy();
+    await userEvent.type(screen.getByLabelText('Search the transcript'), 'o');
+    expect(screen.getByText('1 of 3')).toBeTruthy();
+  });
+
+  it('shows Jump to latest only while live and off the end; clicking scrolls and re-enables Auto-scroll', async () => {
+    let cb: (en: { isIntersecting: boolean }[]) => void = () => {};
+    vi.stubGlobal('IntersectionObserver', class { constructor(c: typeof cb) { cb = c; } observe() {} disconnect() {} });
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const { rerender } = render(<Transcript events={[text('a')]} live working={false} />);
+    expect(screen.queryByText('Jump to latest')).toBeNull();
+    await act(async () => cb([{ isIntersecting: false }]));
+    await userEvent.click(screen.getByLabelText('Auto-scroll'));
+    expect((screen.getByLabelText('Auto-scroll') as HTMLInputElement).checked).toBe(false);
+    scroll.mockClear();
+    await userEvent.click(screen.getByText('Jump to latest'));
+    expect(scroll).toHaveBeenCalled();
+    expect((screen.getByLabelText('Auto-scroll') as HTMLInputElement).checked).toBe(true);
+    rerender(<Transcript events={[text('a')]} live={false} working={false} />);
+    expect(screen.queryByText('Jump to latest')).toBeNull();
+  });
 });
