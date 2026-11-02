@@ -234,7 +234,7 @@ export function DispatchPage() {
     return () => window.removeEventListener('keydown', h);
   }, [picked, sp]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (d?.state === 'done') seen.mutate(d.id); // opening a finished dispatch clears its Inbox row
+    if (d?.state === 'done') seen.mutate({ id: d.id }); // opening a finished dispatch clears its Inbox row
   }, [d?.id, d?.state]); // eslint-disable-line react-hooks/exhaustive-deps
   const c = useMemo(() => (d ? counts(d) : null), [d]);
 

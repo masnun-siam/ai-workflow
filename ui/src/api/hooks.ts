@@ -279,7 +279,7 @@ export const useDispatchState = () =>
 export const useLaneAction = () =>
   useApiMutation((v: { id: string; lane: string; action: LaneAction; text?: string }) => api.laneAction(v.id, v.lane, v.action, v.text), DISPATCH_WRITES);
 export const useEndAction = () => useApiMutation((v: { id: string; action: EndAction }) => api.endAction(v.id, v.action), DISPATCH_WRITES);
-export const useDispatchSeen = () => useApiMutation((id: string) => api.dispatchSeen(id), DISPATCH_WRITES, { quiet: true });
+export const useDispatchSeen = () => useApiMutation((v: { id: string; undo?: boolean }) => api.dispatchSeen(v.id, v.undo), DISPATCH_WRITES, { quiet: true });
 
 const SHARE_WRITES: QueryKey[] = [['shares'], ['share'], ['inbox']];
 // quiet: the Share popover and the Send dialog show their own errors
