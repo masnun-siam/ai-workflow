@@ -14,7 +14,7 @@ With `--dry-run`, change nothing: run every check, and for each step that would 
 
 ## Steps
 
-1. **Resolve the epic and its PRD.** `gh issue view <epic> --json number,title,state,labels,body,subIssues`. Stop if it is not labelled `epic` or is already closed. The PRD path is the `Source PRD:` line of the epic body. If there is none, or the file is missing on the base branch, there is no PRD: skip steps 3 and 5's Status edit, and say so.
+1. **Resolve the epic and its PRD.** `gh issue view <epic> --json number,title,state,labels,body,subIssues`. Stop if it is not labelled `epic` or is already closed. The PRD path is the `Source PRD:` line of the epic body. If there is none, or the file is missing on the base branch, there is no PRD: skip step 3 and the Status edit of step 6, and say so.
 
 2. **Check the children.** List `subIssues`. Any still open is a gap; list each with its number and title.
 
@@ -24,6 +24,6 @@ With `--dry-run`, change nothing: run every check, and for each step that would 
 
 5. **Verify.** Fetch, make sure the checkout is `origin/<base>` (use a throwaway worktree if the main checkout is elsewhere) and run `/verifier-locally` (see "Repo skills win") there. If it reports any failure, print the failures and stop.
 
-6. **Mark done and close.** Set the PRD's `**Status:**` to `Done` and commit it to the base branch in the epic's repo as `docs(prd): mark <slug> done`, then `gh issue close <epic> --reason completed --comment "All requirements shipped and verified on <base>."`. This is the one write to the base branch this plugin allows an agent, and only for that line. If the base branch rejects the push (protected), open a one-line PR instead and say the epic stays open until it merges. Move the epic to Done on its board with `../implement-issue/set-status.sh <epic> "Done"`; on failure carry on and say so.
+6. **Mark done and close.** Set the PRD's `**Status:**` to `Done` and commit it to the base branch in the epic's repo as `docs(prd): mark <slug> done`, then `gh issue close <epic> --reason completed --comment "All requirements shipped and verified on <base>."`. This is the one direct commit to the base branch (the guide's "never commit to the base branch" rule has this exception, for that one line only). If the base branch rejects the push (protected), open a one-line PR instead and say the epic stays open until it merges. Move the epic to Done on its board with `../implement-issue/set-status.sh <epic> "Done"`; on failure carry on and say so.
 
 7. **Report** each check and its result, the gaps or failures, and what was written (or, with `--dry-run`, would have been).
