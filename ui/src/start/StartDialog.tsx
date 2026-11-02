@@ -8,7 +8,7 @@ import type { Session } from '../api/types';
 import { Banner, Button, Dialog, ModelEffortPicker, toast } from '../components';
 import { clockText } from '../lib/format';
 import { routes } from '../lib/routes';
-import { COMMAND, COMMANDS, lensName } from '../lib/vocab';
+import { COMMAND, commandGroups, lensName } from '../lib/vocab';
 import { CreateRepoDialog } from '../repos/CreateRepoDialog';
 import { useRepo } from '../shell/useRepo';
 import { FolderChooser } from './FolderChooser';
@@ -190,7 +190,7 @@ function StartBody({ preset, onClose }: { preset: StartPreset; onClose: () => vo
     <>
       <div className="start">
         <nav className="start-kinds" aria-label="Commands">
-          {COMMANDS.map((g) => (
+          {commandGroups(settings.data?.personal_plugin === true).map((g) => (
             <div key={g.g} role="group" aria-label={g.g} className={`kind${g.items.some((x) => x.id === cmd) ? ' on' : ''}`}>
               <div className="kind-h" aria-hidden="true"><b>{g.g}</b><span>{KIND_HINT[g.g]}</span></div>
               <div className="kind-cmds">
