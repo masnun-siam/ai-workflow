@@ -476,4 +476,32 @@ except SystemExit as e:
 assert "already a lane of dispatch abc" in err.getvalue() and "Traceback" not in err.getvalue(), err.getvalue()
 dc.start = _start
 print("  ok  conflict exit")
+# --- doctor (#741)
+_up, _snaps = dc.ui_running, dc._snapshots
+dd = dr.create("o/r#1", "headless", {}, [{"repo": "o/r", "n": 1, "deps": [], "title": "a"}])
+dc.ui_running, dc._snapshots = (lambda *a: False), (lambda: {})
+out = io.StringIO()
+try:
+    with contextlib.redirect_stdout(out):
+        dc.cmd_doctor(argparse.Namespace(id=dd["id"]))
+    raise AssertionError("dead server did not exit non-zero")
+except SystemExit as e:
+    assert e.code == 1
+assert "dead server" in out.getvalue(), out.getvalue()
+dc.ui_running, dc._snapshots = (lambda *a: True), (lambda: {"o/r": {"stale": True, "error": "boom"}})
+out = io.StringIO()
+try:
+    with contextlib.redirect_stdout(out):
+        dc.cmd_doctor(argparse.Namespace(id=None))
+    raise AssertionError("stale snapshot did not exit non-zero")
+except SystemExit as e:
+    assert e.code == 1
+assert "stale poll snapshot for o/r: boom" in out.getvalue(), out.getvalue()
+dc._snapshots = lambda: {"o/r": {"stale": False, "error": None}}
+out = io.StringIO()
+with contextlib.redirect_stdout(out):
+    dc.cmd_doctor(argparse.Namespace(id=dd["id"]))  # healthy: no exit
+assert out.getvalue().strip().endswith("ok"), out.getvalue()
+dc.ui_running, dc._snapshots = _up, _snaps
+print("  ok  doctor")
 print("dispatch_cli: all green")

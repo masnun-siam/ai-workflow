@@ -384,6 +384,27 @@ def stranded(d: dict) -> dict:
     return out
 
 
+def diagnose(d: dict, snapshots: dict) -> list:
+    """Why a live dispatch cannot move: [{lane: key|None, problem: text}]. Pure.
+    `snapshots` is {repo: {stale, error, fetched_at}} as the poller reports it; a repo missing from it is not checked."""
+    if d["state"] in ("done", "cancelled"):
+        return []
+    strand = stranded(d)
+    out = [{"lane": k, "problem": r} for k, r in strand.items()]
+    live = {x["repo"] for x in d["lanes"].values() if x["stage"] not in ("closed", "skipped")}
+    for repo in sorted(live & snapshots.keys()):
+        s = snapshots[repo]
+        if s.get("stale") or s.get("error"):
+            out.append(
+                {"lane": None, "problem": f"stale poll snapshot for {repo}: {s.get('error') or 'not fetched yet'}"}
+            )
+    for k, x in d["lanes"].items():
+        for f in ("needs_you", "held"):
+            if x.get(f) and x[f] != strand.get(k):  # a stranded lane's needs_you is already listed
+                out.append({"lane": k, "problem": f"{f.replace('_', ' ')}: {x[f]}"})
+    return out
+
+
 def sync_lanes(d: dict, children: list) -> list:
     """Add new epic children as lanes; a 'needs refine' lane is queued once refined. Returns added keys.
     children: [{"repo", "n", "title", "refined", "deps": [key], "base"}]."""

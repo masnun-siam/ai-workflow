@@ -240,6 +240,26 @@ assert d["lanes"][K(2)].get("needs_you") is None
 d, run = _d, _run
 print("  ok  stranded lanes")
 
+# --- diagnose (#741)
+d = strand_d(child(1), child(2, [1]))
+assert dr.diagnose(d, {R: {"stale": False, "error": None}}) == []  # healthy
+dr.apply_lane_action(d, K(1), "skip")
+assert dr.diagnose(d, {}) == [{"lane": K(2), "problem": "blocked by skipped #1"}]
+dr.tick(d, fq(2), FakeRunner(), merge, now=1000)  # needs_you now holds the same reason: listed once
+assert dr.diagnose(d, {}) == [{"lane": K(2), "problem": "blocked by skipped #1"}]
+d = strand_d(child(1, [2]), child(2, [1]))
+assert {p["problem"] for p in dr.diagnose(d, {})} == {"dependency cycle"}
+d = strand_d(child(1))
+got = dr.diagnose(d, {R: {"stale": True, "error": "rate limited"}})
+assert got == [{"lane": None, "problem": f"stale poll snapshot for {R}: rate limited"}], got
+assert dr.diagnose(d, {"other/repo": {"stale": True}}) == []  # not this dispatch's repo
+d["lanes"][K(1)].update(stage="grinding", held="CI is red")
+assert dr.diagnose(d, {}) == [{"lane": K(1), "problem": "held: CI is red"}]
+d["state"] = "cancelled"
+assert dr.diagnose(d, {R: {"stale": True}}) == []
+d, run = _d, _run
+print("  ok  diagnose")
+
 
 # --- a handle is on disk as soon as its session starts: a crash later in the tick cannot lose it
 class Boom(BaseException):
