@@ -42,7 +42,7 @@ Skills often say "the repo's docs for each area touched". Find them from the ref
 | 4. Implementation | A worktree, a branch and a PR into the base branch that closes the issue: draft first, reviewed with `/pr-review`, ready when CI is green; after the merge the issue is closed and set to Done. `/implement-issue <epic>` picks the lowest-numbered Ready issue. Independent issues run in parallel, one worktree and dev stack each | `/implement-issue` |
 | 5. Local verification | Evidence that every relevant check passes | `/verifier-locally` |
 | 6. Review | Findings with evidence and a verdict | `/pr-review` |
-| 7. Release | A base-branch to production-branch release PR, opened by a human | none |
+| 7. Release | A base-branch to production-branch release PR, opened by a human | `/release-pr` |
 
 Work on anything that is not trivial starts from a refined issue. If there is no issue, or it has no acceptance criteria, stop and ask for one instead of guessing the requirements.
 

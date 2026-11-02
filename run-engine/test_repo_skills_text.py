@@ -98,6 +98,17 @@ ALLOWED = (
     "| `/repo-bootstrap` |",
     "| `/faq-updater` |",
     "| `/sync-from-wasensi` |",
+    "| `/dump` |",
+    "| `/herdr-dispatch` |",
+    "| `/peer-review` |",
+    "| `/pr-grind` |",
+    "| `/release-pr` |",
+    "| `/worklog` |",
+    "| 7. Release |",
+    # Descriptions that say what a skill is not for.
+    "For review comments already on a PR use /pr-review --fix.",
+    "(that is /docs-updater)",
+    "a standalone docs refresh is /docs-updater.",
 )
 fails = []
 
@@ -209,5 +220,10 @@ ok(
         'gh label create "prd-<slug>" --force' in text(f)
         for f in ("skills/create-prd/SKILL.md", "skills/create-tasks/SKILL.md")
     ),
+)
+ok(
+    "pr-grind description is the Slack-only loop; self-improve.md does not forbid committing",
+    re.search(r"^description: Slack reviewer-bot loop only", text("skills/pr-grind/SKILL.md"), re.M)
+    and "don't commit" not in text("self-improve.md"),
 )
 print("all repo-skills text checks passed")

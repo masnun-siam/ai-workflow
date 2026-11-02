@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- **One skill per prompt, one improve loop** (#737): `pr-grind`, `faq-updater` and `repo-bootstrap` descriptions say what they are not for (comments already on a PR are `/pr-review --fix`; agent docs are `/docs-updater`). `self-improve.md` now applies edits as `guides/skills.md` step 4 says (commit on their own), and `release-pr` and `faq-updater` carry the `## Self-improve` pointer. `guides/engineering-workflow.md` (Release row names `/release-pr`) and `guides/skills.md` (six skills added to the table) were edited by hand, so the next `/sync-from-wasensi` must keep them.
+
 ### Fixed
 
 - **Fresh repos no longer fail on missing labels** (#735): INSTALL Step 6 creates `epic`, `refined` and `priority:*` with `gh label create --force`, and Step 1 checks `gh` supports `--parent`/`--blocked-by`. `/dump` no longer claims `/create-prd` reads the problem statement or the `status: seed` marker, and a no-repo UI session is told `PRD.md` and `Dump.md` are its source material. `skills/create-prd/SKILL.md` (step 7) and `skills/create-tasks/SKILL.md` (step 9) each carry one added line, `gh label create "prd-<slug>" --force`, so the next `/sync-from-wasensi` must keep it.

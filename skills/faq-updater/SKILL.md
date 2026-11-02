@@ -1,6 +1,6 @@
 ---
 name: faq-updater
-description: Write and update a product's plain-language help guide with a FAQ per feature in docs/faq.md, from the code, for the product's users. The first run documents every user-reachable feature; later runs read only what changed since the sync marker, answer the questions the team added, and open a PR. Use when asked to write, update, refresh or sync the FAQ, help guide or user guide, to add questions to it, or on the team's periodic FAQ run.
+description: Write and update a product's plain-language help guide with a FAQ per feature in docs/faq.md, from the code, for the product's users. It writes the user-facing help guide, not the agent docs in docs/ (that is /docs-updater). The first run documents every user-reachable feature; later runs read only what changed since the sync marker, answer the questions the team added, and open a PR. Use when asked to write, update, refresh or sync the FAQ, help guide or user guide, to add questions to it, or on the team's periodic FAQ run.
 argument-hint: "[full|--full] [--lang <codes>] [--videos <url>] [question lines...]"
 ---
 
@@ -51,3 +51,7 @@ The only thing this run asks the user is the video proposals of step 8. Never us
 13. **Commit and open a pull request** into the base branch with `docs/faq.md` and `docs/faq-images/` (when it exists). Let every hook run; never use `--no-verify`. The body lists: the mode and commit range; sections and questions added, changed and removed, by ID; questions needing the team; `team` text flagged as contradicted; `team` text translated, by ID and language; cold-read gaps by ID; videos linked, by section, and confirmed-video links of deleted sections; screenshots added, retaken, dropped and skipped (with the reason); anything else skipped and why. A failure before the PR leaves the worktree for inspection and moves no marker.
 
 14. **Report** the PR link, the mode, the range, what was added, changed and removed, the questions for the team, and anything skipped. After merge, remove the worktree and branch.
+
+## Self-improve
+
+After the task, follow `../../self-improve.md` (relative to this skill's directory).

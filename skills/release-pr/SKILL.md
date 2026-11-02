@@ -225,3 +225,7 @@ With `--dry-run`, run Steps 1 to 3 normally (they only read), then write:
 Print the title, the body and the Slack message, and say which action Steps 4 to 6
 *would* take (create vs update #n, which channel). Then stop: no `gh pr create`/`edit`, no
 Slack post, no grind.
+
+## Self-improve
+
+After the task, follow `../../self-improve.md` (relative to this skill's directory).

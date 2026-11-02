@@ -15,6 +15,12 @@ A skill is a short procedure an AI agent loads for one kind of task. The skills 
 | `/repo-bootstrap` | Make a repo ready for agents and this workflow: audit, decisions, a short protected `CLAUDE.md`, guides, gates and docs, one PR, one phase per run |
 | `/faq-updater` | Write and update the product's user guide and FAQ from the code |
 | `/sync-from-wasensi` | Maintain this plugin: port Wasensi's latest skill, guide and template changes in repo-agnostic form |
+| `/dump` | Capture free-form input (a feature request, change request, bug report or dev-cycle task) and file it into the vault's Project→Feature structure after confirming the routing |
+| `/herdr-dispatch` | Run an epic's child issues as parallel herdr tabs, end to end, in dependency order under a concurrency cap |
+| `/peer-review` | Run a panel of single-lens reviewers on one artifact until every lens approves |
+| `/pr-grind` | Slack reviewer-bot loop only: post the trigger, fix the bot's round, re-trigger until approved |
+| `/release-pr` | Open or refresh a release PR from staging to master with a release summary and deploy checklist, then post the reviewer-bot trigger |
+| `/worklog` | Generate a day's worklog entry from GitHub activity and the daily note's log, and save it to the daily note |
 
 ## What belongs in a skill
 
