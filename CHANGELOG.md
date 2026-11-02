@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Answer the first waiting question** (#764): a palette action, listed from any page while a session waits on you, that opens the oldest such session.
 - **Jump to latest** (#763): a live transcript shows a "Jump to latest" pill when its end is off screen (it also turns Auto-scroll back on), and a "Collapse tool calls" checkbox hides tool and result rows.
 - **`/revert-pr`** (#758): reverts a merged PR with a revert PR into its base branch, files the finding through `/create-tasks` and reopens the issue it closed. Stops if the PR is not merged or already reverted, or if the revert conflicts. `--dry-run` changes nothing; it never merges.
 - **Held only** (#757): the Away summary in the Inbox gets a toggle, shown when a round was held, that lists only the held rounds.

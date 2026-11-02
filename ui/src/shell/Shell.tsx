@@ -8,6 +8,7 @@ import { ghTarget } from '../lib/ghLink';
 import { routes } from '../lib/routes';
 import { useBrowserNotifier } from '../api/hooks';
 import { useCreate } from '../create/Create';
+import { AnswerFirstAction } from './AnswerFirstAction';
 import { AwayBanner, OfflineBanner } from './Banners';
 import { NAV, SideRail, StatusMenu, useInboxCount } from './Rail';
 import { ShellCtx } from './ShellContext';
@@ -119,6 +120,7 @@ export function Shell() {
   return (
     <ShellCtx.Provider value={ctx}>
       <GlobalKeys />
+      <AnswerFirstAction />
       <a className="skip" href="#main-content" onClick={(e) => { e.preventDefault(); document.getElementById('main-content')?.focus(); }}>Skip to content</a>
       <div className={`app${panel.target ? ' has-panel' : ''}`}>
         <SideRail />
