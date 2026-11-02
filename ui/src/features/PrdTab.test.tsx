@@ -7,7 +7,7 @@ const json = (b: unknown, status = 200) => Promise.resolve(new Response(JSON.str
 const URL_ = 'https://x.ts.net/s/tok';
 const calls: { method: string; path: string; body: any }[] = [];
 const summary = (o: Record<string, unknown> = {}) => ({ id: 's1', repo: 'o/r', path: 'docs/prds/f1.md', title: 'F', state: 'live', url: URL_, comments: 3, unread: 0, reachable: true, end_reason: null, expires_at: null, ...o });
-const detail = (approvals: { id: string; name: string; at: string }[], o: Record<string, unknown> = {}) => ({ ...summary(o), created_at: '', ended_at: null, last_seen_at: null, prd_updated_at: null, unsent: 0, threads: [], approvals, ...o });
+const detail = (approvals: { id: string; name: string; at: string }[], o: Record<string, unknown> = {}) => ({ ...summary(o), created_at: '', ended_at: null, last_seen_at: null, last_opened_at: null, prd_updated_at: null, unsent: 0, threads: [], approvals, ...o });
 const ap = (k: number) => ({ id: `a${k}`, name: `Rev${k}`, at: '' });
 
 function mock(o: { status?: string; shares?: unknown[]; detail?: unknown; post?: () => Promise<Response>; prd?: string; sessions?: () => unknown[]; prdText?: () => string; send?: (body: any) => Promise<Response> } = {}) {
@@ -95,6 +95,7 @@ describe('Share button', () => {
     await u.click(b);
     expect(((await screen.findByLabelText('Share link')) as HTMLInputElement).value).toBe(URL_);
     expect(screen.getByText('3 comments')).toBeTruthy();
+    expect(screen.getByText('Not opened yet')).toBeTruthy();
     expect(await screen.findByText('1 approval')).toBeTruthy();
     expect(screen.getByText('Ends when the PRD leaves Draft or In review')).toBeTruthy();
     expect(screen.getByText(/Not reachable right now/)).toBeTruthy();

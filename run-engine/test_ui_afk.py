@@ -750,6 +750,7 @@ ui_runner.resume = real_resume
 for r in ui_sessions.list_sessions():  # nothing from the cases above may be waiting
     if r["status"] in ("waiting", "running", "starting"):
         ui_sessions.update(r["id"], status="stopped", pending_question=None)
+ui_afk.stop(W + 1)  # end the window left running by the cases above, or start() keeps it and its real-time start
 ui_afk.start(W + 7200, W + 1)  # a fresh window: the answerers above fall outside it
 ui_runner.resume = lambda sid, text: resumed.append((sid, text))
 

@@ -179,6 +179,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 html = f.read()
         except OSError:
             return self._not_found()
+        try:
+            ui_shares.mark_opened(share["id"])
+        except Exception as e:  # a failed stamp must not break the page; never log the token
+            shared.warn(f"share listener: mark_opened {type(e).__name__}")
         base = f'<head><base href="/s/{share["token"]}/">'
         self._send(200, "text/html; charset=utf-8", _HEAD.sub(lambda _: base, html, count=1).encode("utf-8"))
 

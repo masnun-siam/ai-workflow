@@ -243,6 +243,21 @@ def mark_seen(sid) -> dict:
     return update(sid, lambda rec: rec.update(last_seen_at=now_iso()))
 
 
+OPENED_THROTTLE_S = 60
+
+
+def mark_opened(sid) -> dict:
+    """Stamp last_opened_at on a reviewer page load, at most once a minute (the listener is public)."""
+
+    def stamp(rec):
+        prev = rec.get("last_opened_at")
+        if prev and (datetime.fromisoformat(prev).timestamp() > clock() - OPENED_THROTTLE_S):
+            return
+        rec["last_opened_at"] = now_iso()
+
+    return update(sid, stamp)
+
+
 def delete_record(sid) -> None:
     _check_id(sid)
     with _lock(sid):

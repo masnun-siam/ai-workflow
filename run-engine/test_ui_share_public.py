@@ -163,6 +163,23 @@ TOKEN, SID = S.get(SID)["token"], SID
 BASE = f"/s/{TOKEN}"
 ok("expired share gives the same 404")
 
+# --- last_opened_at
+assert "last_opened_at" not in S.get(SID)
+req("GET", f"{BASE}/assets/share-abc.js")
+req("GET", f"{BASE}/api/prd")
+req("GET", WRONG)
+assert "last_opened_at" not in S.get(SID)
+assert req("GET", BASE)[0] == 200
+first = S.get(SID)["last_opened_at"]
+assert first
+S.clock = lambda t=S.clock: t() + 30  # inside the minute: unchanged
+req("GET", BASE)
+assert S.get(SID)["last_opened_at"] == first
+S.clock = lambda t=S.clock: t() + 120  # past the minute: restamped
+req("GET", BASE)
+assert S.get(SID)["last_opened_at"] > first
+ok("page GET stamps last_opened_at, throttled; assets, api and 404 do not")
+
 # --- page and assets
 st, h, body = req("GET", BASE)
 assert st == 200 and h["Content-Type"].startswith("text/html")
