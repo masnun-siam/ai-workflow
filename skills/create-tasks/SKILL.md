@@ -35,7 +35,7 @@ Paths below starting `../../` are relative to this skill's folder, at the plugin
 
 8. **Create the epic only if it is missing**, from `../../templates/epic.md`, with the `epic` label, a body that says what the feature is and why, and the PRD path. Add it to the project and write its number into the PRD's "Epics" section.
 
-9. **Create one child issue per task**, blockers first, with `gh issue create --parent <epic> --blocked-by <numbers>` and `--project <title>` when there is a project, titled and labelled as the guide says. Body: the outcome, how to verify, and the PRD path.
+9. **Create one child issue per task**, blockers first (run `gh label create "prd-<slug>" --force` once before the first), with `gh issue create --parent <epic> --blocked-by <numbers>` and `--project <title>` when there is a project, titled and labelled as the guide says. Body: the outcome, how to verify, and the PRD path.
 
 10. **Verify on GitHub** that every task is a child of the epic (`gh issue view <epic> --json subIssues`) and every blocked-by link matches the breakdown (`--json blockedBy`). Fix anything missing.
 

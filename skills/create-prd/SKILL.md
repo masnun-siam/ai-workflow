@@ -50,7 +50,7 @@ Paths below starting `../../` are relative to this skill's folder, at the plugin
    - Fold in the review's changes, then set the status to `Approved`.
    - Draft one epic issue per entry under "Epics" from `../../templates/epic.md`, and find the GitHub project by the rule in the guide.
    - Show the user each epic's title, labels and project, and ask with `AskUserQuestion` whether to create them. Create nothing without an explicit yes.
-   - Create them with `gh issue create`, then write each number into the PRD's "Epics" section.
+   - Run `gh label create "prd-<slug>" --force` once, then create them with `gh issue create`, then write each number into the PRD's "Epics" section.
 
 8. **Hand off.** State the next stage: `/create-tasks` splits the PRD into parallel tasks and creates them as sub-issues of the epic with their dependencies, then `/refine-issues` fills each one (see "Repo skills win"). Do not start it unless asked.
 

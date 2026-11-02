@@ -160,8 +160,8 @@ wikilinks, never as backticked filenames.
 
 ## Problem statement
 
-A new feature, change request or bug is filed as a problem statement, not as raw text. `/create-prd`
-reads it for a feature or change request. Write it from the
+A new feature, change request or bug is filed as a problem statement, not as raw text. The next step
+starts from it. Write it from the
 input only: never invent a user, a number or a cause the input doesn't give. Anything missing
 goes under **Open questions** for the next step to ask.
 
@@ -218,7 +218,7 @@ obsidian vault=notes property:set path="05-Work/<Project>/<Feature>/PRD.md" name
 obsidian vault=notes append path="05-Work/<Project>/<Feature>/PRD.md" content="\n## Related\n- [[05-Work/<Project>/<Feature>/Dump|Dump]] — problem statement\n- [[05-Work/<Project>/Index|<Project> Project Index]]"
 obsidian vault=notes append path="05-Work/<Project>/<Feature>/Dump.md" content="\n## Related\n- [[05-Work/<Project>/<Feature>/PRD|PRD]] — requirements\n- [[05-Work/<Project>/Index|<Project> Project Index]]"
 ```
-The `status: seed` marker tells `/create-prd` this `PRD.md` is only a seed it may fill in, not a finished PRD.
+`status: seed` marks `PRD.md` as a seed, not a finished PRD.
 
 **Change request** — target feature already has `PRD.md`/`SRS.md`:
 ```
