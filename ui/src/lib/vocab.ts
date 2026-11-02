@@ -135,6 +135,11 @@ export const COMMANDS: CommandGroup[] = [
     { id: 'custom', name: 'Custom prompt', desc: 'Anything else. Runs with permissions skipped.', arg: 'text', placeholder: 'Prompt for Claude', lenses: true },
   ] },
 ];
+/** Commands that run from the `ai-workflow-personal` plugin; listed only when the server reports it installed. */
+export const PERSONAL_COMMANDS = new Set(['dump', 'worklog', 'sync-from-wasensi']);
+/** COMMANDS without the personal ones unless `personal` is true. */
+export const commandGroups = (personal: boolean): CommandGroup[] =>
+  personal ? COMMANDS : COMMANDS.map((g) => ({ ...g, items: g.items.filter((x) => !PERSONAL_COMMANDS.has(x.id)) })).filter((g) => g.items.length);
 export const COMMAND_LIST: Command[] = COMMANDS.flatMap((g) => g.items);
 export const COMMAND: Record<string, Command> = Object.fromEntries(COMMAND_LIST.map((c) => [c.id, c]));
 

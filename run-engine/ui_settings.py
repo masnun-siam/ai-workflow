@@ -15,6 +15,7 @@ import shutil
 import subprocess
 
 import dispatch
+import repo_skills
 import shared
 
 DEFAULT_CMD = "claude"
@@ -173,6 +174,7 @@ def load() -> dict:
         "grind_mode": grind_mode(),
         "use_jev": use_jev(),
         "jev_installed": shutil.which("jev") is not None,  # read-only: validate() never stores it
+        "personal_plugin": repo_skills.personal_plugin_installed(),  # read-only, like jev_installed
         "run_model": run_model(),
         "run_effort": run_effort(),
     }

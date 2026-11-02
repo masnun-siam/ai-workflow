@@ -35,7 +35,7 @@ def raises(fn, *a):
 
 
 BUILTIN = {"label": "claude", "cmd": "claude", "builtin": True}
-assert {k: v for k, v in ui_settings.load().items() if k not in ("vault_dir", "jev_installed")} == {
+assert {k: v for k, v in ui_settings.load().items() if k not in ("vault_dir", "jev_installed", "personal_plugin")} == {
     "commands": [BUILTIN],
     "default": "claude",
     "repos": {},
@@ -166,6 +166,16 @@ with open(p, "w") as f:
 os.chmod(p, os.stat(p).st_mode | stat.S_IXUSR)
 assert ui_settings.load()["jev_installed"] is True
 os.environ["PATH"] = real_path
+# personal_plugin follows installed_plugins.json under CLAUDE_CONFIG_DIR; missing or unreadable means false
+cfgdir = tempfile.mkdtemp()
+os.environ["CLAUDE_CONFIG_DIR"] = cfgdir
+assert ui_settings.load()["personal_plugin"] is False
+os.makedirs(os.path.join(cfgdir, "plugins"))
+with open(os.path.join(cfgdir, "plugins", "installed_plugins.json"), "w") as f:
+    json.dump({"version": 2, "plugins": {"ai-workflow-personal@mine": [{}]}}, f)
+assert ui_settings.load()["personal_plugin"] is True
+assert "personal_plugin" not in json.loads(open(ui_settings._path()).read())
+del os.environ["CLAUDE_CONFIG_DIR"]
 sp = ui_settings._path()
 with open(sp, "w") as f:
     f.write("{broken")

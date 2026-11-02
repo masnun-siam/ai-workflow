@@ -124,4 +124,33 @@ assert not rs.is_skill("plain text", "pr-grind")
 assert rs.is_skill("/refine-issues", "refine-issues", "")
 ok("is_skill matches name and, when given, the exact argument")
 
+# ----------------------------------------------------------------------- personal plugin
+with tempfile.TemporaryDirectory() as cfg:
+    old = os.environ.get("CLAUDE_CONFIG_DIR")
+    os.environ["CLAUDE_CONFIG_DIR"] = cfg
+    try:
+        assert not rs.personal_plugin_installed(), "no file"
+        assert (
+            rs.resolve("/dump x", None) == "/dump x"
+            and rs.resolve("/ai-workflow:worklog", None) == "/ai-workflow:worklog"
+        )
+        os.makedirs(os.path.join(cfg, "plugins"))
+        f = os.path.join(cfg, "plugins", "installed_plugins.json")
+        for bad in ("not json", "[]", '{"plugins": []}', '{"plugins": {"ai-workflow@m": []}}'):
+            open(f, "w").write(bad)
+            assert not rs.personal_plugin_installed(), bad
+        ok("missing, unreadable or foreign plugin file means not installed; commands left unchanged")
+        open(f, "w").write('{"version": 2, "plugins": {"ai-workflow-personal@m": [{}]}}')
+        assert rs.personal_plugin_installed()
+        for src in ("/dump x", "/ai-workflow:dump x", "/ai-workflow-personal:dump x"):
+            assert rs.resolve(src, None) == "/ai-workflow-personal:dump x", src
+        assert (
+            rs.resolve("/sync-from-wasensi and /worklog today", None)
+            == "/ai-workflow-personal:sync-from-wasensi and /ai-workflow-personal:worklog today"
+        )
+        assert rs.resolve("/pr-review 1", None) == "/ai-workflow:pr-review 1"
+        ok("installed: dump, worklog and sync-from-wasensi run as /ai-workflow-personal:<name>")
+    finally:
+        os.environ.pop("CLAUDE_CONFIG_DIR", None) if old is None else os.environ.__setitem__("CLAUDE_CONFIG_DIR", old)
+
 print(f"{passed} passed")
