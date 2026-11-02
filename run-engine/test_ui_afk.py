@@ -7,6 +7,7 @@ import os
 import sys
 import tempfile
 import time
+from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -756,7 +757,13 @@ ui_runner.resume = lambda sid, text: resumed.append((sid, text))
 def fake_answerer(sid, cost, rid="q-1"):
     a = ui_sessions.create("answer", d)
     ui_sessions.update(
-        a["id"], role=ui_sessions.ANSWERER_ROLE, answers_for=sid, answers_round=rid, status="done", cost=cost
+        a["id"],
+        role=ui_sessions.ANSWERER_ROLE,
+        answers_for=sid,
+        answers_round=rid,
+        status="done",
+        cost=cost,
+        started_at=datetime.fromtimestamp(W + 2, timezone.utc).isoformat(),  # inside the fake window, not real time
     )
     return a["id"]
 
