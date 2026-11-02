@@ -312,13 +312,43 @@ dd = dr.load(d["id"])
 dd["events"] = [{"at": 150, "lane": "o/r#5", "kind": "stage", "text": "queued -> implementing"}]
 dr.save(dd)
 new, state = dc.watch(
-    d["id"], 120, timeout=30, sleep=lambda s: clock.__setitem__(0, clock[0] + s), clock=lambda: clock[0]
+    d["id"],
+    120,
+    timeout=30,
+    sleep=lambda s: clock.__setitem__(0, clock[0] + s),
+    clock=lambda: clock[0],
+    ui_up=lambda: True,
 )
 assert [e["kind"] for e in new] == ["stage"] and clock[0] >= 130  # timed out with progress only
 dd["events"].append({"at": 160, "lane": "o/r#5", "kind": "needs_you", "text": "waiting on you"})
 dr.save(dd)
-new, _ = dc.watch(d["id"], 150, timeout=999, sleep=lambda s: None, clock=lambda: 0)
+new, _ = dc.watch(d["id"], 150, timeout=999, sleep=lambda s: None, clock=lambda: 0, ui_up=lambda: True)
 assert [e["kind"] for e in new] == ["needs_you"]
+# a dead UI port restarts the server, at most once per 60 s
+starts = []
+clock = [0]
+dc.watch(
+    d["id"],
+    400,
+    timeout=130,
+    sleep=lambda s: clock.__setitem__(0, clock[0] + s),
+    clock=lambda: clock[0],
+    ui_up=lambda: False,
+    start=lambda: starts.append(clock[0]),
+)
+assert len(starts) == 3 and starts[1] - starts[0] >= 60, starts
+starts.clear()
+clock[0] = 0
+dc.watch(
+    d["id"],
+    400,
+    timeout=130,
+    sleep=lambda s: clock.__setitem__(0, clock[0] + s),
+    clock=lambda: clock[0],
+    ui_up=lambda: True,
+    start=lambda: starts.append(1),
+)
+assert not starts
 print("  ok  watch")
 
 # --- the CLI end to end on a record: set, lane by number, pause, show, ls, errors exit 5
