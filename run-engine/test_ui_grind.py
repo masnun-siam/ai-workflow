@@ -141,6 +141,10 @@ assert ui_grind.autostart(
 assert ui_grind.autostart("o/r", bare, bare_prev, {"issue_grind": {1: True}}, start=fake_start) == [], "no issue: repo"
 calls.clear()
 assert ui_grind.grind_text("u", "") == "/pr-grind u" and ui_grind.grind_text("u", "a b;c") == "/pr-grind u"
+assert ui_grind.grind_text("u", None, "bob") == "/pr-grind u --reviewer bob"
+assert ui_grind.grind_text("u", None, "copilot") == "/pr-grind u --reviewer copilot"
+assert ui_grind.grind_text("u", "C1", "bob") == "/pr-grind u --channel C1", "Slack wins"
+assert ui_grind.grind_text("u", None, "a b;c") == "/pr-grind u" == ui_grind.grind_text("u", None, "org/team")
 print("  ok  autostart")
 
 

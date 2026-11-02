@@ -8,6 +8,8 @@
 
 ### Changed
 
+- **`/pr-grind` without Slack** (#744): a per-repo `reviewer` setting (a GitHub login or `copilot`) makes grinds, auto-grind and dispatch lanes run `/pr-grind <pr> --reviewer <login>` when the repo has no Slack channel: it requests the review with `gh pr edit --add-reviewer`, reads it through `gh api`, fixes and re-requests until approved. A Slack channel still wins.
+
 - **One skill per prompt, one improve loop** (#737): `pr-grind`, `faq-updater` and `repo-bootstrap` descriptions say what they are not for (comments already on a PR are `/pr-review --fix`; agent docs are `/docs-updater`). `self-improve.md` now applies edits as `guides/skills.md` step 4 says (commit on their own), and `release-pr` and `faq-updater` carry the `## Self-improve` pointer. `guides/engineering-workflow.md` (Release row names `/release-pr`) and `guides/skills.md` (six skills added to the table) were edited by hand, so the next `/sync-from-wasensi` must keep them.
 
 ### Fixed

@@ -21,6 +21,7 @@ DEFAULT_CMD = "claude"
 DEFAULT_VAULT = os.path.join("~", "Documents", "notes")  # the `notes` vault /dump and /create-prd write to
 MAX_COMMANDS = 20
 SLUG_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+REVIEWER_RE = re.compile(r"^[A-Za-z0-9-]{1,39}$")  # a GitHub login, or copilot
 GRIND_MODES = ("deep", "simple")  # simple: /pr-grind stops once the PR is approved
 RUN_MODELS = ("opus", "sonnet", "haiku")  # aliases: they resolve to the latest model
 RUN_EFFORTS = ("low", "medium", "high", "xhigh", "max")  # as dispatch_run
@@ -82,6 +83,7 @@ def _repo(d) -> dict:
     return {
         "auto_grind": d.get("auto_grind") is True,
         "slack_channel": ch if isinstance(ch, str) else "",
+        "reviewer": d["reviewer"] if isinstance(d.get("reviewer"), str) else "",
     }
 
 
@@ -262,9 +264,13 @@ def validate(body) -> dict:
         ch = r.get("slack_channel", "")
         if not isinstance(ch, str) or len(ch) > 100:
             raise ValueError("slack_channel must be a string of at most 100 characters")
+        rv = r.get("reviewer", (kept.get(slug) or {}).get("reviewer", ""))  # the UI form omits it: keep the stored one
+        if not isinstance(rv, str) or (rv.strip() and not REVIEWER_RE.match(rv.strip())):
+            raise ValueError("reviewer must be a GitHub login or copilot")
         clean_repos[slug] = {
             "auto_grind": r.get("auto_grind") is True,
             "slack_channel": ch.strip(),
+            "reviewer": rv.strip(),
         }
     return {
         "claude_label": alias,

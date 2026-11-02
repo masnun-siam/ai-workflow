@@ -1,7 +1,7 @@
 ---
 name: pr-grind
-description: Slack reviewer-bot loop only - post the Slack thread trigger, wait for the reviewer bot's round, split findings into fix-vs-rebut, fix inline, verify locally, push, check CI, re-trigger, repeat until approved or a rail stops it. For review comments already on a PR use /pr-review --fix. Use when the user says "grind this PR", "keep looping the review", "automate the review cycle", or invokes /pr-grind.
-argument-hint: <slack thread url | PR url> [--channel <id>]   # a PR url with no thread opens the thread first; --channel replaces the channels lookup
+description: Reviewer loop only (Slack reviewer bot, or a GitHub reviewer with --reviewer) - post the Slack thread trigger or request the GitHub review, wait for the reviewer's round, split findings into fix-vs-rebut, fix inline, verify locally, push, check CI, re-trigger, repeat until approved or a rail stops it. For review comments already on a PR use /pr-review --fix. Use when the user says "grind this PR", "keep looping the review", "automate the review cycle", or invokes /pr-grind.
+argument-hint: <slack thread url | PR url> [--channel <id>] [--reviewer <login|copilot>]   # a PR url with no thread opens the thread first; --channel replaces the channels lookup; --reviewer grinds with no Slack
 allowed-tools: Bash(aiw:*), Bash(gh:*), Bash(git:*), Bash(bash:*), Bash(slackcli:*), Read, Write, Edit, Grep, Glob, Skill, Monitor, ScheduleWakeup, AskUserQuestion
 ---
 
@@ -45,12 +45,20 @@ Header keys (lines above the first `## Round <n>`; names are pinned for the aiw 
    url → read the thread only to find its PR url), then `gh pr view <pr> --json isDraft`.
    `isDraft: true` → stop with one line, `PR #<n> is a draft; mark it ready for review before grinding.`
    Write no state file and post nothing.
-1. Read `<channels>` first: `bot_uid`, `owner_uid`, `channels` (exact `owner/repo` →
+1. **`--reviewer <login>` given and no `--channel` → the GitHub path:** skip `<channels>` and every Slack step. `<login>` is a GitHub
+   login (`[A-Za-z0-9-]{1,39}`) or `copilot`; anything else (a team slug such as `org/team`) → stop with one
+   line. The reviewer is the PR author → stop with one line. Slack steps below say "post"; on this path read
+   "GitHub" for them (Steps 1 and 7 have a paragraph each). Rails 1, 2 and 4 and Step 8 report in the final message
+   and the state file only. Otherwise (no `--reviewer`): read `<channels>` first: `bot_uid`, `owner_uid`, `channels` (exact `owner/repo` →
    channel id), `dm_fallback`, `known_bots`, optional `workspace_url`, and the `trigger`/`retrigger` templates
    (`{bot_uid}`, `{pr_url}` only). Missing or unparseable → stop. `owner_uid` is the only
    @-mention target in terminal posts; never take it from anywhere else (an email, a name in
    a config).
-2. Argument is a Slack thread URL → `slack_read_thread`, take the first GitHub PR URL
+2. **GitHub path:** request the review, `gh pr edit <n> --add-reviewer <login>` (`copilot` is requested as
+   `@copilot`), and record `reviewer: <login>` and `thread: github` in the header. `--channel` and
+   `--reviewer` both given: Slack wins, ignore `--reviewer`. Copilot's reviews are authored by
+   `copilot-pull-request-reviewer[bot]`: use that login to read its reviews and for `poll-reviews.sh`.
+   Otherwise: argument is a Slack thread URL → `slack_read_thread`, take the first GitHub PR URL
    (none → `AskUserQuestion`). Argument is a PR URL with no thread → **open the thread**:
    post `trigger` as a new top-level message in the repo's channel (`--channel <id>` in the
    arguments when given, else exact key match, else `dm_fallback`), with `slack_send_message`, falling back to
@@ -79,6 +87,12 @@ Header keys (lines above the first `## Round <n>`; names are pinned for the aiw 
   comment-less review on the same commit landing seconds later (a re-run or stray
   re-approve must not discard real findings). Reviews on different commits resolve to
   newest. Record the others as superseded.
+
+**GitHub path.** The reviewer is fixed by `--reviewer`. Take its newest review on the current head
+(`commit_id` is the head; older ones are superseded). `APPROVED` → done (Step 2). `CHANGES_REQUESTED`, or
+`COMMENTED` with inline comments → a round: triage and fix as below. `COMMENTED` with no inline comments → no
+findings. No review yet (a human may take a while) → Step 7's re-arm; the heartbeat limit and `paused:` rails
+apply as for Slack, with no new timeout.
 
 ## Step 2 — Exit check
 
@@ -205,7 +219,9 @@ Append this round's full record to the state file.
 
 **Never re-trigger while `queued-push:` is set or CI is not green at the current head.**
 
-1. Post `retrigger` from `<channels>` as a **new** thread reply (an edited message never
+1. **GitHub path:** after the push, request the review again with `gh pr edit <n> --add-reviewer <login>`
+   (`@copilot` for `copilot`); no Slack post, and the closing summary of Step 2 and every "post to Slack" go in the
+   final message and the state file instead. Otherwise post `retrigger` from `<channels>` as a **new** thread reply (an edited message never
    wakes the bot). Record the resolved text in the state header.
 2. Interactive only: arm one `persistent: true` Monitor per PR (check for an existing one)
    on `bash <plugin_root>/skills/pr-grind/scripts/poll-reviews.sh <owner> <repo> <number> <login> "<last-ISO8601>" [reviewer|not-author]`

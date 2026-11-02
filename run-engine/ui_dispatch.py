@@ -93,7 +93,8 @@ def lane_facts(x: dict, snap, status=None, grind_files=None, channel=dispatch_cl
         ],
     }
     ch = channel(x["repo"])
-    f["slack"], f["channel"] = ch is not None, ch or None
+    f["reviewer"] = dispatch_cli.reviewer(x["repo"]) if channel is dispatch_cli.channel else None
+    f["slack"], f["channel"] = ch is not None or bool(f["reviewer"]), ch or None
     f["solo"] = solo(x["repo"])
     p = _pr_of(x, data, issue)
     if p:
