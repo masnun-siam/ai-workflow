@@ -10,7 +10,8 @@ the caller from the board snapshot, the grind index and the runner:
 
     {"issue_open": bool, "refined": bool, "blockers_open": [key],   # blockers still open on GitHub
      "pr": None | {"n", "url", "draft", "state": OPEN|MERGED|CLOSED, "ci": success|failure|pending|none,
-                   "conflict": bool, "approved": bool, "changes_requested": bool, "sha": head commit | None},
+                   "conflict": bool, "approved": bool, "changes_requested": bool, "threads_open": int,
+                   "sha": head commit | None},
      "grind": None | {"state": idle|running|paused|done, "reason": str, "due": str | None},  # due: a token
      "slack": bool,                                  # the repo has a grind channel; False skips grinding
      "solo": bool,                                   # the repo is the gh user's own: no approval needed
@@ -50,6 +51,8 @@ _BRANCH = r"[A-Za-z0-9._/-]{1,100}"
 GRIND_MODES = ("off", "simple", "full")
 CI_MODES = ("wait", "defer", "ignore")
 MERGE_FAILS_BEFORE_NEEDS_YOU = 3  # consecutive failed merges before the lane asks for the user
+# CI reading `none` this long for a head commit: nothing will register; before it, checks may not be registered yet
+NONE_GRACE_SECONDS = 300
 MERGE_RETRY_SECONDS = 300  # the board lags a merge; don't call gh pr merge twice in this window
 IDLE_GRACE_SECONDS = 180  # a session that just ended may have a PR the board has not seen yet
 LIMIT_BUFFER_SECONDS = 60
@@ -140,13 +143,22 @@ def _grind_on(settings: dict, facts: dict) -> bool:
     return settings.get("grind", "full") != "off" and bool(facts.get("slack"))
 
 
-def _gate(lane: dict, facts: dict, settings: dict):
+def _none_since(lane: dict, pr: dict, now: float) -> float:
+    """When CI first read `none` for this head commit (a new sha restarts the grace)."""
+    return lane["none_since"] if lane.get("none_sha") == pr.get("sha") and lane.get("none_since") else now
+
+
+def _gate(lane: dict, facts: dict, settings: dict, now: float):
     """None when the PR may merge, else why not."""
     pr, g = facts.get("pr") or {}, facts.get("grind") or {}
     mode = settings.get("ci", "wait")
-    if mode == "wait" and pr.get("ci") != "success":
+    if mode in ("wait", "defer") and pr.get("ci") == "none":
+        # checks may not be registered yet; after the grace a repo with no CI merges in either mode
+        if now - _none_since(lane, pr, now) < NONE_GRACE_SECONDS:
+            return "CI not registered yet"
+    elif mode == "wait" and pr.get("ci") != "success":
         return "CI is not green"
-    if mode == "defer" and pr.get("ci") not in ("success", "none"):
+    elif mode == "defer" and pr.get("ci") != "success":
         return "waiting for green CI (defer)"
     why = merge_gate.blockers(pr, facts.get("solo"))
     if why:
@@ -269,7 +281,11 @@ def step(lane: dict, facts: dict, settings: dict, now: float) -> tuple:
         if pr.get("ci") == "failure" and ci == "defer" and lane.get("ci_fixed") != pr.get("sha"):
             patch["ci_fixed"] = pr.get("sha")  # once per red head commit, like `nudged` for a grind round
             acts.append(("send", ci_fix_prompt(pr.get("n"))))
-        why = None if lane.get("force_merge") else _gate(lane, facts, settings)
+        if pr.get("ci") != "none":
+            patch.update(none_since=None, none_sha=None)
+        elif lane.get("none_sha") != pr.get("sha") or not lane.get("none_since"):
+            patch.update(none_since=now, none_sha=pr.get("sha"))
+        why = None if lane.get("force_merge") else _gate(lane, facts, settings, now)
         if why:
             drop_merge_error()
             if stage == "awaiting_merge":

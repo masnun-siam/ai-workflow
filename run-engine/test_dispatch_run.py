@@ -399,13 +399,15 @@ print("  ok  grind nudge, pause, done")
 fg = {**f1, "grind": {"state": "done", "reason": "approved (simple)"}}
 dr.tick(d, {K(1): fg}, run, merge, now=1015)
 assert d["lanes"][K(1)]["gate"] == "no approving review" and 101 not in merges
-assert dr._gate(d["lanes"][K(1)], {**fg, "solo": True}, d["settings"]) is None  # your own repo needs no approval
+assert dr._gate(d["lanes"][K(1)], {**fg, "solo": True}, d["settings"], 1015) is None  # your own repo needs no approval
 cr = {**fg, "pr": pr(101, approved=True, changes_requested=True)}
-assert dr._gate(d["lanes"][K(1)], cr, d["settings"]) == "changes requested"
-assert dr._gate(d["lanes"][K(1)], {**cr, "solo": True}, d["settings"]) == "changes requested"
-assert dr._gate(d["lanes"][K(1)], {**fg, "pr": pr(101, draft=True, approved=True)}, d["settings"]) == "PR is a draft"
+assert dr._gate(d["lanes"][K(1)], cr, d["settings"], 1015) == "changes requested"
+assert dr._gate(d["lanes"][K(1)], {**cr, "solo": True}, d["settings"], 1015) == "changes requested"
 assert (
-    dr._gate(d["lanes"][K(1)], {**fg, "pr": pr(101, conflict=True, approved=True)}, d["settings"])
+    dr._gate(d["lanes"][K(1)], {**fg, "pr": pr(101, draft=True, approved=True)}, d["settings"], 1015) == "PR is a draft"
+)
+assert (
+    dr._gate(d["lanes"][K(1)], {**fg, "pr": pr(101, conflict=True, approved=True)}, d["settings"], 1015)
     == "PR has a merge conflict"
 )
 dr.tick(d, {K(1): {**fg, "pr": pr(101, approved=True, ci="failure")}}, run, merge, now=1016)
@@ -486,13 +488,33 @@ def gate_facts(ci, sha="a"):
 
 
 for mode, ci_state, want in [
-    ("wait", "failure", "CI is not green"), ("wait", "pending", "CI is not green"), ("wait", "none", "CI is not green"),
+    ("wait", "failure", "CI is not green"), ("wait", "pending", "CI is not green"), ("wait", "none", "CI not registered yet"),
     ("wait", "success", None), ("defer", "failure", "waiting for green CI (defer)"),
-    ("defer", "pending", "waiting for green CI (defer)"), ("defer", "none", None), ("defer", "success", None),
+    ("defer", "pending", "waiting for green CI (defer)"), ("defer", "none", "CI not registered yet"), ("defer", "success", None),
     ("ignore", "failure", None), ("ignore", "pending", None), ("ignore", "success", None),
 ]:  # fmt: skip
-    assert dr._gate({}, gate_facts(ci_state), {"ci": mode, "grind": "off"}) == want, (mode, ci_state)
-assert dr._gate({}, gate_facts("failure"), {"grind": "off"}) == "CI is not green"  # no ci setting: wait
+    assert dr._gate({}, gate_facts(ci_state), {"ci": mode, "grind": "off"}, 0) == want, (mode, ci_state)
+assert dr._gate({}, gate_facts("failure"), {"grind": "off"}, 0) == "CI is not green"  # no ci setting: wait
+# unresolved review threads block in every ci mode, solo or not
+for mode in ("wait", "defer", "ignore"):
+    tf = {**gate_facts("success"), "pr": pr(9, ci="success", approved=True, threads_open=2)}
+    assert dr._gate({}, tf, {"ci": mode, "grind": "off"}, 0) == "unresolved review threads", mode
+# CI `none`: blocked for NONE_GRACE_SECONDS from the first sighting of this sha, then it passes (wait and defer)
+for mode in ("wait", "defer"):
+    st = {"ci": mode, "grind": "off"}
+    ln = {"none_since": 100, "none_sha": "a"}
+    g_ = dr.NONE_GRACE_SECONDS
+    assert dr._gate(ln, gate_facts("none"), st, 100 + g_ - 1) == "CI not registered yet", mode
+    assert dr._gate(ln, gate_facts("none"), st, 100 + g_) is None, mode
+    assert dr._gate(ln, gate_facts("none", sha="b"), st, 100 + g_) == "CI not registered yet", "new sha restarts"
+nl = {"n": 9, "stage": "merge_gate"}
+pn, _ = dr.step(nl, gate_facts("none"), {"ci": "wait", "grind": "off"}, 500)
+assert pn["none_since"] == 500 and pn["none_sha"] == "a" and pn["gate"] == "CI not registered yet", pn
+nl.update(pn)
+pn2, _ = dr.step(nl, gate_facts("none"), {"ci": "wait", "grind": "off"}, 500 + dr.NONE_GRACE_SECONDS)
+assert pn2["gate"] is None and "none_since" not in pn2, pn2
+pn3, _ = dr.step(nl, gate_facts("success"), {"ci": "wait", "grind": "off"}, 600)
+assert pn3["none_since"] is None and pn3["none_sha"] is None  # cleared once CI registers
 dset = {"ci": "defer", "grind": "off", "auto_merge": True}
 lane = {"n": 9, "stage": "merge_gate"}
 p1, a1 = dr.step(lane, gate_facts("failure"), dset, 8000)
@@ -506,9 +528,10 @@ assert a3 == [("send", dr.ci_fix_prompt(9))]  # a new red push prompts again
 p4, a4 = dr.step({**lane, "stage": "awaiting_merge"}, gate_facts("pending"), dset, 8003)
 assert p4["stage"] == "merge_gate" and not a4
 for ci_state in ("success", "none"):
-    pm, am = dr.step(lane, gate_facts(ci_state), dset, 8004)
+    lane_ci = {**lane, "none_since": 100, "none_sha": "a"}  # `none` for longer than the grace
+    pm, am = dr.step(lane_ci, gate_facts(ci_state), dset, 8004)
     assert am == [("merge", 9, "a")] and pm["gate"] is None, ci_state
-    pm, am = dr.step(lane, gate_facts(ci_state), {**dset, "auto_merge": False}, 8004)
+    pm, am = dr.step(lane_ci, gate_facts(ci_state), {**dset, "auto_merge": False}, 8004)
     assert pm["stage"] == "awaiting_merge" and ("merge", 9, "a") not in am, ci_state
 pw, aw = dr.step({**lane, "ci_fixed": "a"}, gate_facts("failure"), {**dset, "ci": "wait"}, 8005)
 assert pw["held"] == "CI is red"  # defer -> wait at the gate: held as today

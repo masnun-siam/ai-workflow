@@ -174,7 +174,7 @@ a PR without a click.
 
 **Merge rule.** Each issue has a **Grinding** switch (in its panel); an untouched issue follows the
 repo's auto-grind. A PR shows Merge (Inbox, Features list, feature Issues tab, Small changes tab) when it is not a
-draft, does not conflict with its base (GitHub's `mergeable` is not `CONFLICTING`), CI is green and the PR is approved (GitHub's review decision, or an approving review on a repo with no review rule; never with a changes-requested review; approval is skipped when the repo's owner is your `gh`
+draft, does not conflict with its base (GitHub's `mergeable` is not `CONFLICTING`), CI is green and the PR is approved (GitHub's review decision, or an approving review on a repo with no review rule; never with a changes-requested review; no unresolved, non-outdated review threads; approval is skipped when the repo's owner is your `gh`
 login), and with grinding on its grind is also done (stopped from the UI counts). Turning grinding
 on starts a grind at once when the PR is already ready and has none; turning it off stops a running or
 paused grind (the PR stays open). Delivery cards carry `grind_on` and `mergeable`. The switches are in

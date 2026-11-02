@@ -102,6 +102,7 @@ def lane_facts(x: dict, snap, status=None, grind_files=None, channel=dispatch_cl
             **{k: p.get(k) for k in ("n", "url", "draft", "state", "ci", "conflict", "sha")},
             "approved": bool(extra.get("approved")),
             "changes_requested": bool(extra.get("changes_requested")),
+            "threads_open": extra.get("threads_open") or 0,
         }
         f["grind"] = _grind(x["repo"], p["n"], grind_files)
     if x.get("handle") and status:

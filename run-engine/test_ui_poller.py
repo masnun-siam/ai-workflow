@@ -211,6 +211,16 @@ f["data"]["repository"]["openPrs"]["nodes"][0].update(
 )
 op3 = ui_poller.normalize(f, NOW)["open_prs"][0]
 assert (op3["review"], op3["approved"], op3["changes_requested"]) == ("none", True, False)
+assert op3["threads_open"] == 0 and "reviewThreads" in ui_poller.QUERY
+f["data"]["repository"]["openPrs"]["nodes"][0]["reviewThreads"] = {
+    "nodes": [
+        {"isResolved": True, "isOutdated": False},
+        {"isResolved": False, "isOutdated": True},
+        {"isResolved": False, "isOutdated": False},
+        {"isResolved": False, "isOutdated": False},
+    ]
+}
+assert ui_poller.normalize(f, NOW)["open_prs"][0]["threads_open"] == 2  # resolved and outdated do not count
 assert [p["review"] for p in d2["issues"][2]["prs"]] == ["changes_requested", "review_required"]
 # conflict: only GitHub's CONFLICTING (UNKNOWN while it computes, MERGEABLE) is a conflict
 assert "mergeable" in ui_poller.QUERY and op["conflict"] is False
