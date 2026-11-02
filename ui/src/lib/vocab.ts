@@ -118,6 +118,7 @@ export const COMMANDS: CommandGroup[] = [
   ] },
   { g: 'Ship', items: [
     { id: 'close-epic', name: 'Close an epic', desc: 'Checks every PRD requirement shipped, verifies, marks the PRD Done and closes the epic.', arg: 'text', placeholder: 'Epic number, e.g. 701' },
+    { id: 'revert-pr', name: 'Revert a PR', desc: 'Reverts a bad merge, files the finding and reopens the issue.', arg: 'pr' },
     { id: 'release-pr', name: 'Open a release PR', desc: 'Staging to master with a release summary and checklist.', arg: 'none' },
   ] },
   { g: 'Capture', items: [

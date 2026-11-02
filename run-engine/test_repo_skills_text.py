@@ -237,4 +237,9 @@ ok(
     and "force-close" not in ce
     and "does not close, edit or reopen child" in ce,
 )
+rv = text("skills/revert-pr/SKILL.md")
+ok(
+    "revert-pr: has --dry-run, files the finding through /create-tasks, reopens the issue",
+    "--dry-run" in rv and "/create-tasks" in rv and "gh issue reopen" in rv,
+)
 print("all repo-skills text checks passed")

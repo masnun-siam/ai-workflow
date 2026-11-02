@@ -4,6 +4,7 @@
 
 ### Added
 
+- **`/revert-pr`** (#758): reverts a merged PR with a revert PR into its base branch, files the finding through `/create-tasks` and reopens the issue it closed. Stops if the PR is not merged or already reverted, or if the revert conflicts. `--dry-run` changes nothing; it never merges.
 - **Held only** (#757): the Away summary in the Inbox gets a toggle, shown when a round was held, that lists only the held rounds.
 - **Dispatch cost cap** (#754): the `max_cost` setting (USD; `aiw dispatch set <id> max_cost=20`, or **Cost cap** in the dispatch settings) pauses a running dispatch with a `needs_you` notice once its lanes' headless sessions have cost that much. Resuming with the cap still reached pauses it again at the next tick.
 - **`/close-epic`** (#743): verifies that every child issue is closed and every PRD `FR-n` shipped through a merged PR, runs `/verifier-locally` on the base branch, then sets the PRD to `Done` and closes the epic. `--dry-run` changes nothing; it never closes children.
