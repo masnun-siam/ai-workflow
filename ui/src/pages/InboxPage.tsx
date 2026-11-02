@@ -62,12 +62,14 @@ function RoundRow({ l, checked, onToggle }: { l: RichEntry; checked: boolean; on
 function AwaySummary({ s }: { s: NonNullable<AfkState['summary']> }) {
   const dismiss = useAfkDismiss();
   const log = s.log ?? [];
+  const [heldOnly, setHeldOnly] = useState(false);
+  const shownLog = heldOnly ? log.filter((l) => l.kind === 'held') : log;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // ticks for ids that vanished or got changed on a refetch are ignored
-  const changeable = new Set(log.filter((l) => isRich(l) && l.kind === 'answer' && !l.changed).map((l) => l.id));
+  const changeable = new Set(shownLog.filter((l) => isRich(l) && l.kind === 'answer' && !l.changed).map((l) => l.id));
   const ticked = [...selected].filter((id) => changeable.has(id));
   const [changing, setChanging] = useState(false);
-  const rounds = log.filter((l): l is RoundEntry => isRich(l) && !!l.questions && ticked.includes(l.id));
+  const rounds = shownLog.filter((l): l is RoundEntry => isRich(l) && !!l.questions && ticked.includes(l.id));
   const toggle = (id: string) => setSelected((p) => { const n = new Set(p); if (!n.delete(id)) n.add(id); return n; });
   const held = log.filter((l) => l.kind === 'held').length || s.held;
   const handled = log.filter((l) => l.kind !== 'held').length;
@@ -76,10 +78,11 @@ function AwaySummary({ s }: { s: NonNullable<AfkState['summary']> }) {
       <div className="stack" style={{ gap: 8 }}>
         <p>
           <b>While you were away ({clockText(s.started)}{s.ended ? `–${clockText(s.ended)}` : ''}): {handled} handled, {held} held</b>
+          {log.some((l) => l.kind === 'held') ? <label className="row" style={{ gap: 6, fontSize: 13 }}><input type="checkbox" checked={heldOnly} onChange={(e) => setHeldOnly(e.target.checked)} />Held only</label> : null}
         </p>
         {log.length ? (
           <ul style={{ margin: 0, paddingLeft: 0 }}>
-            {log.map((l, k) =>
+            {shownLog.map((l, k) =>
               isRich(l) ? (
                 <RoundRow key={l.id} l={l} checked={selected.has(l.id)} onToggle={() => toggle(l.id)} />
               ) : (
