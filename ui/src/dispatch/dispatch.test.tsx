@@ -553,6 +553,18 @@ describe('Dispatch page', () => {
     expect(screen.queryByRole('radio', { name: 'work' })).toBeNull();
   });
 
+  it('sets and clears the cost cap live, ignoring a bad value', async () => {
+    window.location.hash = '#/dispatches/abc123abc123?repo=o/r';
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: /Settings/ }));
+    const box = await screen.findByLabelText('Cost cap (USD)');
+    await userEvent.type(box, 'abc{Enter}');
+    await userEvent.clear(box);
+    await userEvent.type(box, '20{Enter}');
+    await waitFor(() => expect(posts.at(-1)).toEqual(['/api/dispatches/abc123abc123/settings', { max_cost: 20 }]));
+    expect(posts.some(([, b]) => (b as { max_cost?: unknown }).max_cost === null || Number.isNaN((b as { max_cost?: number }).max_cost))).toBe(false);
+  });
+
   it('edits settings live and pauses the dispatch', async () => {
     window.location.hash = '#/dispatches/abc123abc123?repo=o/r';
     render(<App />);

@@ -170,7 +170,25 @@ def tick_one(
                 f = lane_facts(x, snapshot(x["repo"]), runner.status, files)
                 if f is not None:
                     facts[k] = f
+        if _cost_capped(d):
+            dr.save(d)
+            return []
         return dr.tick(d, facts, runner, now=now, notify=notify)
+
+
+def _cost_capped(d: dict) -> bool:
+    """Pause a running dispatch whose lanes have cost its max_cost; sessions running now finish their turn."""
+    cap = d["settings"].get("max_cost")
+    if not cap or d["state"] != "running":
+        return False
+    spent = sum(_usage(x)["cost"] for x in d["lanes"].values())
+    if spent < cap:
+        return False
+    d["state"] = "paused"
+    text = f"cost cap reached: ${spent:.2f} of ${cap:.2f}"
+    dr.event(d, None, "paused", text)
+    notify(d, None, "needs_you", text)
+    return True
 
 
 _archived_at = 0.0

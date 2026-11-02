@@ -277,6 +277,25 @@ rec = ui_sessions.create("/ai-workflow:implement-issue 5", R)
 ui_sessions.update(rec["id"], cost=1.25, tokens={"input": 100, "cached": 0, "output": 20})
 x = {"handles": [{"session": rec["id"]}, {"tab": "t"}], "started_at": 10, "ended_at": 70}
 assert ui_dispatch._usage(x) == {"cost": 1.25, "tokens": 120, "seconds": 60}
+# cost cap: over it pauses once with one event and one notice; under it, or no cap, does nothing
+dcap = dr.create("o/r#77", "headless", {"grind": "off", "max_cost": 1.0}, [{"repo": R, "n": 77, "refined": True}])
+dcap["lanes"]["o/r#77"]["handles"] = [{"session": rec["id"]}]  # costs 1.25
+dr.save(dcap)
+rcap = FakeRunner()
+npushed = len(pushed)
+for t in (2000, 2001):
+    ui_dispatch.tick_one(dcap["id"], lambda r: snaps.get(r), runner_for=lambda d: rcap, now=t, grind_files=[])
+dcap = dr.load(dcap["id"])
+caps = [e for e in dcap["events"] if e["kind"] == "paused"]
+assert dcap["state"] == "paused" and len(caps) == 1 and "$1.25 of $1.00" in caps[0]["text"], dcap["events"]
+assert len(pushed) == npushed + 1 and rcap.started == []
+dr.set_settings(dcap["id"], max_cost=2.0)
+dr.set_state(dcap["id"], "running")
+ui_dispatch.tick_one(dcap["id"], lambda r: snaps.get(r), runner_for=lambda d: rcap, now=2002, grind_files=[])
+assert dr.load(dcap["id"])["state"] == "running"
+dr.set_settings(dcap["id"], max_cost=None)
+assert not ui_dispatch._cost_capped(dr.load(dcap["id"]))
+print("  ok  cost cap")
 p = ui_dispatch.public(dr.load(d["id"]), full=True)
 assert p["lanes"][0]["key"] == "o/r#5" and "events" in p and "handle" not in p["lanes"][0]
 assert p["issues"] is None

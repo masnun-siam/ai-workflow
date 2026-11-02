@@ -45,7 +45,7 @@ aiw dispatch ls|show <id>               list dispatches, or one as JSON (also th
 aiw dispatch archive [--days N]      move dispatches finished over N days ago (default 30) to dispatches/archive/; prints the ids (the server does this daily)
 aiw dispatch doctor [<id>]          why a live dispatch cannot move (skipped blocker, cycle, stale snapshot,
                                         dead server, needs you, held); exits 1 on a problem
-aiw dispatch set <id> key=value...      change max, grind, ci, auto_merge, model, effort, account while it runs
+aiw dispatch set <id> key=value...      change max, grind, ci, auto_merge, model, effort, account, max_cost while it runs (`max_cost=20` pauses the dispatch once its headless lanes have cost $20; `max_cost=` clears it)
                                         (feature_branch and base_branch are fixed at start)
 aiw dispatch pause|resume|cancel <id>   the whole dispatch (pause stops new lanes only)
 aiw dispatch lane <id> <n> <action>     pause, resume, retry, skip, merge, hold, unhold, or send "<text>"

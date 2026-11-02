@@ -135,6 +135,15 @@ export function SettingsFields({ value, onChange, live, noBranch, repo, runner }
         <span className="dsp-k">Model</span>
         <ModelEffortPicker model={value.model} effort={value.effort} onChange={pickRun} />
       </div>
+      <div className="dsp-field">
+        <label className="dsp-k" htmlFor="ds-cost">Cost cap (USD)</label>
+        <LazyText id="ds-cost" value={value.max_cost == null ? '' : String(value.max_cost)} placeholder="none" onCommit={(v) => {
+          const n = Number(v);
+          if (!v.trim()) onChange({ max_cost: null });
+          else if (n > 0) onChange({ max_cost: n });
+        }} />
+        <span className="faint dsp-hint">Pauses the dispatch once its headless sessions have cost this much.</span>
+      </div>
       {cmds.length > 1 ? (
         <div className="dsp-field">
           <span className="dsp-k" id="acct-l">Account</span>

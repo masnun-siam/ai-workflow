@@ -465,7 +465,13 @@ def cmd_set(a) -> None:
         if not sep or k not in dr.DEFAULTS:
             raise ValueError(f"expected key=value with key in {sorted(dr.DEFAULTS)}, got {item!r}")
         kv[k] = (
-            int(v) if k == "max" else (v.lower() in ("1", "true", "on", "yes")) if k == "auto_merge" else (v or None)
+            int(v)
+            if k == "max"
+            else (v.lower() in ("1", "true", "on", "yes"))
+            if k == "auto_merge"
+            else (float(v) if v else None)
+            if k == "max_cost"
+            else (v or None)
         )
     print(json.dumps(dr.set_settings(a.id, **kv)["settings"]))
 
@@ -573,7 +579,9 @@ def register(sub, add) -> None:
     q = ops.add_parser("show", help="print a dispatch as JSON")
     q.add_argument("id")
     q.set_defaults(func=cmd_show)
-    q = ops.add_parser("set", help="edit settings live: max=3 grind=simple ci=defer auto_merge=on model=opus")
+    q = ops.add_parser(
+        "set", help="edit settings live: max=3 grind=simple ci=defer auto_merge=on model=opus max_cost=20"
+    )
     q.add_argument("id")
     q.add_argument("pairs", nargs="+")
     q.set_defaults(func=cmd_set)
