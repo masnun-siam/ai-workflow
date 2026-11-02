@@ -26,7 +26,7 @@ If the list is empty, say nothing and stop.
 **Unattended:** the run is headless (your system prompt contains `Headless run: ask via aiw
 ask`), runs inside `/pr-grind`, or was dispatched by herdr. Do not
 ask: this would add a gate, and those flows stop for a human only at their fixed gates.
-Append the candidates to `~/.claude/skills/_shared/pending-improvements.md`, one block per
+Append the candidates to `pending-improvements.md` in the user-level `~/.claude/skills/_shared/` folder (the user's, not repo state), one block per
 run under a heading `## <skill> · <YYYY-MM-DD>`, using the label and description format
 below. Then stop.
 
@@ -45,20 +45,7 @@ If the user picks none, drop the candidates and stop. Don't ask again.
 
 ## 3. Apply the approved changes
 
-1. Resolve the real source file. An edit made anywhere else gets wiped:
-   - an ai-workflow skill: edit it under `~/Documents/Projects/Personal/ai-workflow/skills/`,
-     never under `~/.claude/plugins/cache/`
-   - a `~/.claude/skills/<name>` that is a symlink: edit the `readlink` target
-   - a third-party plugin or skill (gstack, superpowers, mattpocock, ponytail, engram, …):
-     don't edit it. Tell the user the change would be overwritten on the next upgrade.
-2. If the file is not in a git repo, back it up first:
-   `cp <file> ~/.claude/skills/_shared/backups/<name>-$(date +%Y%m%d-%H%M%S).md`
-3. Edit with the Edit tool, following these rules:
-   - add or tighten. Never delete or rewrite an existing instruction unless the user
-     explicitly approved that removal.
-   - put each change in the section it belongs to, not in a changelog at the bottom
-   - keep each change to a few lines, in the skill's own voice and formatting
-   - never touch the frontmatter `name`. Edit `description` only if the user approved it.
-4. Show the diff in one short block (`git diff <file>`, or `diff <backup> <file>`).
-5. For an ai-workflow edit: don't commit. Tell the user the change is uncommitted, and that
-   the installed copy picks it up only after the plugin is updated.
+Apply them as `guides/skills.md` step 4 says: edit the skill in the plugin's source repository
+and commit it on its own as `chore: update /<name> skill - <what changed>`. Never edit the
+installed plugin cache, a symlink's copy, or a third-party plugin or skill (it would be
+overwritten on the next upgrade; tell the user instead).

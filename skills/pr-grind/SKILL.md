@@ -1,6 +1,6 @@
 ---
 name: pr-grind
-description: Automate the review-fix-retrigger loop on a PR that's stuck in CHANGES_REQUESTED — post the Slack thread trigger, wait for the reviewer bot's round, split findings into fix-vs-rebut, fix inline, verify locally, push, check CI, re-trigger, repeat until approved or a rail stops it. Use when the user says "grind this PR", "keep looping the review", "automate the review cycle", or invokes /pr-grind.
+description: Slack reviewer-bot loop only - post the Slack thread trigger, wait for the reviewer bot's round, split findings into fix-vs-rebut, fix inline, verify locally, push, check CI, re-trigger, repeat until approved or a rail stops it. For review comments already on a PR use /pr-review --fix. Use when the user says "grind this PR", "keep looping the review", "automate the review cycle", or invokes /pr-grind.
 argument-hint: <slack thread url | PR url> [--channel <id>]   # a PR url with no thread opens the thread first; --channel replaces the channels lookup
 allowed-tools: Bash(aiw:*), Bash(gh:*), Bash(git:*), Bash(bash:*), Bash(slackcli:*), Read, Write, Edit, Grep, Glob, Skill, Monitor, ScheduleWakeup, AskUserQuestion
 ---

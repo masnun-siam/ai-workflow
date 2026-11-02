@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- **One skill per prompt, one improve loop** (#737): `pr-grind`, `faq-updater` and `repo-bootstrap` descriptions say what they are not for (comments already on a PR are `/pr-review --fix`; agent docs are `/docs-updater`). `self-improve.md` now applies edits as `guides/skills.md` step 4 says (commit on their own), and `release-pr` and `faq-updater` carry the `## Self-improve` pointer. `guides/engineering-workflow.md` (Release row names `/release-pr`) and `guides/skills.md` (six skills added to the table) were edited by hand, so the next `/sync-from-wasensi` must keep them.
+
 ### Fixed
 
 - **Docs say only what exists** (#736): `CLAUDE.md` and `docs/REFERENCE.md` drop `commands/` and the removed `peer-review` verb, list the real CLI verbs and skill flags, document five more API routes and the Tailscale owner check; `peer-review` step 4 uses `md5sum` when `md5` is missing.

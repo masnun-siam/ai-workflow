@@ -1,6 +1,6 @@
 ---
 name: repo-bootstrap
-description: Make an existing repository ready for AI agents and this plugin's workflow, in reviewable phases - a read-only audit for the team to discuss, the decisions it raises, a short protected CLAUDE.md, guides and a tested README quickstart, the gates, and agent-written docs - on one branch and one pull request, one phase per run. Use when asked to bootstrap, onboard or set up a repo for agents or for ai-workflow, to write or rewrite a repo's CLAUDE.md or AGENTS.md from scratch, to audit a repo's agent setup, or to "do what we did for Wasensi" on another project.
+description: Make an existing repository ready for AI agents and this plugin's workflow, in reviewable phases - a read-only audit for the team to discuss, the decisions it raises, a short protected CLAUDE.md, guides and a tested README quickstart, the gates, and agent-written docs - on one branch and one pull request, one phase per run. Its docs phase runs only inside a bootstrap; a standalone docs refresh is /docs-updater. Use when asked to bootstrap, onboard or set up a repo for agents or for ai-workflow, to write or rewrite a repo's CLAUDE.md or AGENTS.md from scratch, to audit a repo's agent setup, or to "do what we did for Wasensi" on another project.
 argument-hint: "[audit | decide | constitution | guides | gates | docs] [issue number]"
 ---
 
