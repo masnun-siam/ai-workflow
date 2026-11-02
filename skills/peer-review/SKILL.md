@@ -14,7 +14,7 @@ allowed-tools:
 
 # /peer-review: a reviewer panel on one artifact
 
-A panel of single-lens reviewers checks one artifact (a PRD, a task list, or a change) in
+A panel of single-lens reviewers checks one artifact (a PRD, a task breakdown, or a change) in
 rounds. **Every lens blocks:** the artifact is done when all lenses approve on the same round.
 You are the artifact's author (the root). The lenses are read-only: they report only through
 their final message, which ends with exactly one line, `Verdict: approve` or `Verdict: changes`,

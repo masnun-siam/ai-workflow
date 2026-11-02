@@ -480,7 +480,7 @@ Nothing stateful lives in this repo. `aiw paths` resolves it under `$CLAUDE_PLUG
 | `shares/` | one JSON record per shared PRD with its threads and approvals (mode 0600), kept until the author deletes the share record |
 | `share-runtime.json` | the share listener's loopback port and the funnel port, so a restart serves the same link |
 
-The work's own state is on GitHub and in the repo's `docs/prds/` and `docs/tasks/`.
+The work's own state is on GitHub and in the repo's `docs/prds/`.
 
 ## Layout
 
