@@ -482,14 +482,28 @@ def cmd_end(a) -> None:
     print(f"{a.action}: requested; the UI server runs it at its next tick")
 
 
-def watch(did: str, since: float, timeout: float, interval: float = 10, sleep=time.sleep, clock=time.time) -> tuple:
-    """New events after `since`, returned once one needs the user (or the dispatch ended, or timeout)."""
+def watch(
+    did: str,
+    since: float,
+    timeout: float,
+    interval: float = 10,
+    sleep=time.sleep,
+    clock=time.time,
+    ui_up=ui_running,
+    start=start_ui,
+) -> tuple:
+    """New events after `since`, returned once one needs the user (or the dispatch ended, or timeout).
+    Restarts the UI server while waiting if its port is closed, at most once per 60 s."""
     end = clock() + timeout
+    last_start = float("-inf")
     while True:
         d = dr.load(did)
         new = [e for e in d.get("events") or [] if e["at"] > since]
         if any(e["kind"] in WATCH_KINDS for e in new) or d["state"] in ("done", "cancelled") or clock() >= end:
             return new, d["state"]
+        if not ui_up() and clock() - last_start >= 60:
+            start()
+            last_start = clock()
         sleep(interval)
 
 

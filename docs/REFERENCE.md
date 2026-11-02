@@ -48,7 +48,7 @@ aiw dispatch set <id> key=value...      change max, grind, ci, auto_merge, model
                                         (feature_branch and base_branch are fixed at start)
 aiw dispatch pause|resume|cancel <id>   the whole dispatch (pause stops new lanes only)
 aiw dispatch lane <id> <n> <action>     pause, resume, retry, skip, merge, hold, unhold, or send "<text>"
-aiw dispatch watch <id> [--since T]     block until an event needs you; prints it and the next --since
+aiw dispatch watch <id> [--since T]     block until an event needs you; prints it and the next --since (restarts the UI server if its port is closed)
 aiw dispatch end <id> open-pr|qa|grind-pr  an end-of-dispatch action, run by the server
 ```
 
