@@ -7,6 +7,8 @@
 - **Dispatch cost cap** (#754): the `max_cost` setting (USD; `aiw dispatch set <id> max_cost=20`, or **Cost cap** in the dispatch settings) pauses a running dispatch with a `needs_you` notice once its lanes' headless sessions have cost that much. Resuming with the cap still reached pauses it again at the next tick.
 - **`/close-epic`** (#743): verifies that every child issue is closed and every PRD `FR-n` shipped through a merged PR, runs `/verifier-locally` on the base branch, then sets the PRD to `Done` and closes the epic. `--dry-run` changes nothing; it never closes children.
 
+- **Dispatch archive** (#755): finished dispatches older than 30 days move to `dispatches/archive/`, daily from the server or with `aiw dispatch archive [--days N]`, so lists and ticks stay small. Nothing is deleted.
+
 ### Changed
 
 - **Keyboard navigation** (#751): ArrowUp/ArrowDown move the row selection only when focus is on a row, so the arrow keys scroll the page otherwise (`j`/`k` unchanged). In a question, Tab walks every control (Select all, None of these, Something else) and only the last one jumps to the next question.

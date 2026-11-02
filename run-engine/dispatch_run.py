@@ -664,6 +664,32 @@ def list_all() -> list:
     return sorted(out, key=lambda d: d["created_at"], reverse=True)
 
 
+ARCHIVE_DAYS = 30
+
+
+def archive_old(now=None, days=ARCHIVE_DAYS) -> list:
+    """Move finished dispatches ended more than `days` ago to dispatches/archive/; return their ids.
+    Running and paused ones stay, and so does any record that cannot be read."""
+    cutoff = (time.time() if now is None else now) - days * 86400
+    moved = []
+    for name in sorted(os.listdir(_dir())):
+        if not name.endswith(".json"):
+            continue
+        did = name[:-5]
+        try:
+            with locked(did):
+                d = load(did)  # re-read under the lock: the state may have changed since the listing
+                if d["state"] not in ("done", "cancelled") or (d.get("ended_at") or d["created_at"]) >= cutoff:
+                    continue
+                dest = os.path.join(_dir(), "archive")
+                os.makedirs(dest, exist_ok=True)
+                os.replace(_path(did), os.path.join(dest, name))
+            moved.append(did)
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    return moved
+
+
 def event(d: dict, lane_key, kind: str, text: str) -> dict:
     e = {"at": time.time(), "lane": lane_key, "kind": kind, "text": text}
     d["events"] = (d.get("events") or [])[-(MAX_EVENTS - 1) :] + [e]

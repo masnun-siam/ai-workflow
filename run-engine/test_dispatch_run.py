@@ -1062,4 +1062,33 @@ try:
 except dr.Conflict:
     pass
 print("  ok  epic ownership")
+# --- archive_old: finished and old moves; recent, running and malformed stay
+import time  # noqa: E402
+
+for old in dr.list_all():  # start clean: park earlier dispatches out of the way
+    old["state"], old["ended_at"] = "done", time.time()
+    dr.save(old)
+now = time.time()
+mk = lambda n, st, ago: dict(  # noqa: E731
+    real_create(None, "headless", {}, [child(n)], issues=[K(n)]), state=st, ended_at=now - ago * 86400
+)
+old_done, recent, running = mk(951, "done", 31), mk(952, "done", 29), mk(953, "running", 40)
+for d in (old_done, recent, running):
+    dr.save(d)
+    open(dr._path(d["id"])[:-5] + ".lock", "w").close()
+bad = os.path.join(dr._dir(), "0" * 12 + ".json")
+with open(bad, "w") as f:
+    f.write("{not json")
+before = {d["id"] for d in dr.list_all()}
+moved = dr.archive_old(now=now)
+assert old_done["id"] in moved and recent["id"] not in moved and running["id"] not in moved and "0" * 12 not in moved, (
+    moved
+)
+assert os.path.exists(os.path.join(dr._dir(), "archive", old_done["id"] + ".json"))
+assert os.path.exists(dr._path(old_done["id"])[:-5] + ".lock") and os.path.exists(bad)
+assert old_done["id"] not in {d["id"] for d in dr.list_all()}
+assert {recent["id"], running["id"]} <= {d["id"] for d in dr.list_all()}
+assert dr.archive_old(now=now) == [] and before - set(moved) == {d["id"] for d in dr.list_all()}
+assert recent["id"] in dr.archive_old(now=now, days=28)
+print("  ok  archive_old")
 print("dispatch_run: all green")

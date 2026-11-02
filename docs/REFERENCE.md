@@ -42,6 +42,7 @@ aiw jev ci-hint|finding-hint --file <path>
                                         always exits 0
 aiw dispatch ls|show <id>               list dispatches, or one as JSON (also those of picked issues
                                         started from the UI, listed by title)
+aiw dispatch archive [--days N]      move dispatches finished over N days ago (default 30) to dispatches/archive/; prints the ids (the server does this daily)
 aiw dispatch doctor [<id>]          why a live dispatch cannot move (skipped blocker, cycle, stale snapshot,
                                         dead server, needs you, held); exits 1 on a problem
 aiw dispatch set <id> key=value...      change max, grind, ci, auto_merge, model, effort, account, max_cost while it runs (`max_cost=20` pauses the dispatch once its headless lanes have cost $20; `max_cost=` clears it)
@@ -475,7 +476,7 @@ Nothing stateful lives in this repo. `aiw paths` resolves it under `$CLAUDE_PLUG
 | `peer-review/` | one directory per panel: `panel.json` and `round-<n>/<lens>.md` verdicts |
 | `restart.log`, `restart.exit` | output and exit code of the last Settings → Server **Rebuild and restart** (`make restart`, a detached child; `GET/POST /api/restart`) |
 | `afk.json` | the Away mode window and its log |
-| `dispatches/` | one `<id>.json` per dispatch (settings, lanes, events) and its `.lock` |
+| `dispatches/` | one `<id>.json` per dispatch (settings, lanes, events) and its `.lock`; finished ones older than 30 days move to `dispatches/archive/` (not listed, restore by hand) |
 | `bootstraps/` | one `<id>.json` per bootstrap run (repo, issue, branch, six phases with their session ids, state, error) and its `.lock` |
 | `ui.json` | push notifications and `public_url` (mode 0600) |
 | `config.json` | peer-review overrides from Settings, laid over `run-engine/config.json` |
