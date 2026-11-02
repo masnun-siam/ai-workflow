@@ -45,8 +45,8 @@ ALLOWED = (
     "`/refine-issues` later writes",
     "Find the epic `/create-prd` created on approval",
     "`docs/prds/` belongs to `/create-prd`",
-    "is filed as a problem statement, not as raw text. `/create-prd`",
-    "tells `/create-prd` this `PRD.md` is only a seed",
+    "is filed as a problem statement, not as raw text. The next step",
+    "`status: seed` marks `PRD.md` as a seed",
     "(WHAT/WHY/HOW, written by `/refine-issues`)",
     "as the `/verifier-locally` trap says",
     "the `/pr-review` verdict and what was done with each finding, and a **Learnings**",
@@ -198,4 +198,16 @@ ok("bootstrap: declined audit prints no BOOTSTRAP line", "On the user's no, end 
 if fails:
     print(f"{len(fails)} check(s) failed")
     sys.exit(1)
+ok(
+    "labels: INSTALL creates the process labels; prd skills create prd-<slug>",
+    "gh label create" in text("docs/INSTALL.md")
+    and all(
+        label in text("docs/INSTALL.md")
+        for label in ("epic", "refined", "priority:critical", "priority:high", "priority:medium", "priority:low")
+    )
+    and all(
+        'gh label create "prd-<slug>" --force' in text(f)
+        for f in ("skills/create-prd/SKILL.md", "skills/create-tasks/SKILL.md")
+    ),
+)
 print("all repo-skills text checks passed")
