@@ -209,6 +209,15 @@ Create that file with this shape:
 These are workspace identifiers, not secrets, but ask before writing the file and show them
 its contents.
 
+## Personal tools
+
+`/dump`, `/worklog` and `/sync-from-wasensi` live in the separate `ai-workflow-personal` plugin once the removal issue lands (they are still in this plugin until then). Install it next to this one:
+
+```
+/plugin marketplace add masnun-siam/ai-workflow-personal
+/plugin install ai-workflow-personal@ai-workflow-personal
+```
+
 ## Step 7 — Report and hand back
 
 Tell the user, in this order:
