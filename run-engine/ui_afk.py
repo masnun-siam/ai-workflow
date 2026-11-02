@@ -512,7 +512,7 @@ def _answerer_failed(rec, now, pq, aid, reason, started) -> dict | None:
     return _held_entry(rec, now, pq, reason, aid, cost)
 
 
-def _opus(rec: dict, now: float, started=None) -> dict | None:
+def _opus(rec: dict, now: float, window=None) -> dict | None:
     pq = _round(rec)
     if pq is None or pq.get("held"):
         return None
@@ -523,7 +523,7 @@ def _opus(rec: dict, now: float, started=None) -> dict | None:
     sid, aid = rec["id"], pq.get("answerer")
     if not aid:
         if (pq.get("answerer_attempts") or 0) < MAX_ATTEMPTS:
-            if cap := _cap_reason(rec, pq, started):
+            if cap := _cap_reason(rec, pq, window):
                 return _hold(rec, now, pq, cap)
             _start_answerer(rec, pq)
             return None
@@ -537,15 +537,15 @@ def _opus(rec: dict, now: float, started=None) -> dict | None:
         if started and now - started <= ANSWER_SECONDS:
             return None
         ui_runner.stop(aid)
-        return _answerer_failed(rec, now, pq, aid, "timed out after 10 minutes", started)
+        return _answerer_failed(rec, now, pq, aid, "timed out after 10 minutes", window)
     if status != "done":
         if status == "limited":
             ui_runner.stop(aid)  # no auto-resume: a limited answerer is not queued for the reset
-        return _answerer_failed(rec, now, pq, aid, status or "missing", started)
+        return _answerer_failed(rec, now, pq, aid, status or "missing", window)
     try:
         reply = away_answerer.parse_reply(ui_panel.final_text(aid), pq)
     except ValueError as e:
-        return _answerer_failed(rec, now, pq, aid, f"invalid reply: {e}", started)
+        return _answerer_failed(rec, now, pq, aid, f"invalid reply: {e}", window)
     if "hold" in reply:
         if not ui_sessions.update_pending(sid, pq["id"], held=True, answerer=None):
             return None

@@ -801,6 +801,19 @@ ui_sessions.update(big, cost=0)
 for x in (wr, auto):
     ui_sessions.update(x, status="stopped", pending_question=None)
 
+# a failed first answerer is not replaced once the window is spent (the restart path)
+fr = waiting(rec=False)
+ui_afk.tick(W + 3)
+first = pq(fr)["answerer"]
+big = fake_answerer("other", ui_afk.WINDOW_COST_CAP, rid="q-9")
+ui_sessions.update(first, status="failed")
+n0 = len(started)
+ui_afk.tick(W + 3)
+rows = log_of(fr)
+assert len(started) == n0 and [e["kind"] for e in rows] == ["held"] and "window" in rows[0]["reason"], rows
+ui_sessions.update(big, cost=0)
+ui_sessions.update(fr, status="stopped", pending_question=None)
+
 # a benign round still gets its answerer
 ok = waiting(rec=False)
 n0 = len(started)
