@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Personal plugin commands** (#766): `dump`, `worklog` and `sync-from-wasensi` are listed in the Start dialog and palette only when `ai-workflow-personal` is installed (`personal_plugin` in `GET /api/settings`), and run as `/ai-workflow-personal:<name>`.
 - **Dismiss a failed session** (#765): a `session_failed` Inbox item has a Dismiss button (`x`) that removes it for good (`POST /api/sessions/<id>/dismiss`: 409 unless the session failed, 404 unknown); the session stays on Activity.
 - **Answer the first waiting question** (#764): a palette action, listed from any page while a session waits on you, that opens the oldest such session.
 - **Jump to latest** (#763): a live transcript shows a "Jump to latest" pill when its end is off screen (it also turns Auto-scroll back on), and a "Collapse tool calls" checkbox hides tool and result rows.

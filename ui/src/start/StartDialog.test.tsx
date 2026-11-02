@@ -71,6 +71,20 @@ afterEach(() => {
 });
 
 describe('Start dialog', () => {
+  it('lists dump, worklog and sync-from-wasensi only when the personal plugin is installed', async () => {
+    const names = ['Dump an idea or bug', 'Write a worklog', 'Sync from Wasensi'];
+    mockApi();
+    open();
+    await ready();
+    for (const n of names) expect(screen.queryByRole('button', { name: n })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Plan my day' })).toBeTruthy();
+    cleanup();
+    mockApi({ '/api/settings': { commands: [{ label: 'claude', cmd: 'claude', builtin: true }, { label: 'Masum', cmd: 'cc masum' }], default: 'claude', personal_plugin: true } });
+    open();
+    await ready();
+    for (const n of names) await screen.findByRole('button', { name: n });
+  });
+
   it('implement-issue: picks from the open list, posts the exact body and opens the session', async () => {
     const user = userEvent.setup();
     const onClose = open({ cmd: 'implement-issue' });

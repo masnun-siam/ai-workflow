@@ -8,7 +8,7 @@ let sessions: unknown[] = [];
 vi.mock('../api/hooks', () => {
   const q = { data: undefined };
   const m = { mutate: () => {} };
-  return { useAfkStart: () => m, useAfkStop: () => m, useOpenItems: () => q, usePlanning: () => q, useDelivery: () => q, useSessions: () => ({ data: { sessions } }) };
+  return { useAfkStart: () => m, useAfkStop: () => m, useOpenItems: () => q, usePlanning: () => q, useDelivery: () => q, useSettings: () => q, useSessions: () => ({ data: { sessions } }) };
 });
 vi.mock('./useRepo', () => ({ useRepo: () => ({ repo: 'o/r', repos: [], setRepo: () => {}, link: (p: string) => p }) }));
 vi.mock('../start/StartContext', () => ({ useStart: () => ({ open: () => {} }) }));

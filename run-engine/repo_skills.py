@@ -8,10 +8,13 @@ command as a skill in either spelling.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 
 PLUGIN = "ai-workflow"
+PERSONAL_PLUGIN = "ai-workflow-personal"
+PERSONAL = ("dump", "worklog", "sync-from-wasensi")  # skills that live in the personal plugin
 _SKILLS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "skills")
 _COMMAND_RE = re.compile(r"^/(?:[\w-]+:)?([\w-]+)(?:\s+(.*))?$", re.DOTALL)
 
@@ -23,6 +26,17 @@ def names() -> set:
     except OSError:
         return set()
     return {e for e in entries if os.path.isfile(os.path.join(_SKILLS_DIR, e, "SKILL.md"))}
+
+
+def personal_plugin_installed() -> bool:
+    """True when installed_plugins.json lists a plugin keyed `ai-workflow-personal@…`; unreadable means no."""
+    cfg = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
+    try:
+        with open(os.path.join(cfg, "plugins", "installed_plugins.json"), encoding="utf-8") as f:
+            plugins = json.load(f).get("plugins")
+        return isinstance(plugins, dict) and any(str(k).startswith(PERSONAL_PLUGIN + "@") for k in plugins)
+    except (OSError, ValueError, AttributeError):
+        return False
 
 
 def has_copy(cwd, name: str) -> bool:
@@ -38,19 +52,20 @@ def resolve(text, cwd):
     """Rewrite each plugin skill command in text to `/<name>` (repo copy) or `/ai-workflow:<name>`."""
     if not isinstance(text, str) or not text:
         return text
-    known = sorted(names(), key=len, reverse=True)
-    if not known:
-        return text
+    known = sorted(names() | set(PERSONAL), key=len, reverse=True)
     # A slash command stands after start/space/opening quote or bracket, and ends at end/space/
     # closing punctuation, or a `.`/`:` not followed by a word character (so not `/x.md`, `/x:y`).
     pattern = re.compile(
-        r"(?<![^\s(\[\"'`])/(?:" + PLUGIN + r":)?(" + "|".join(map(re.escape, known)) + r")"
+        r"(?<![^\s(\[\"'`])/(?:" + PLUGIN + r"(?:-personal)?:)?(" + "|".join(map(re.escape, known)) + r")"
         r"(?=$|[\s,;!?)\]\"'`]|[.:](?!\w))"
     )
     copies: dict = {}
+    personal = personal_plugin_installed()
 
     def spell(m):
         name = m.group(1)
+        if name in PERSONAL:  # never fall back to a team command that does not exist
+            return f"/{PERSONAL_PLUGIN}:{name}" if personal else m.group(0)
         if name not in copies:
             copies[name] = has_copy(cwd, name)
         return f"/{name}" if copies[name] else f"/{PLUGIN}:{name}"

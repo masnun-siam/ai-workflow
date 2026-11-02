@@ -1,10 +1,10 @@
 import { Command } from 'cmdk';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAfkStart, useAfkStop, useOpenItems, usePlanning, useSessions } from '../api/hooks';
+import { useAfkStart, useAfkStop, useOpenItems, usePlanning, useSessions, useSettings } from '../api/hooks';
 import { sessionLabel } from '../lib/format';
 import { routes } from '../lib/routes';
-import { COMMAND_LIST, ISSUE, SESS, STAGES } from '../lib/vocab';
+import { commandGroups, ISSUE, SESS, STAGES } from '../lib/vocab';
 import { joinFeatures, snapshotsReady } from '../lib/features';
 import { useDelivery } from '../api/hooks';
 import { usePanel } from '../panels/PanelContext';
@@ -33,6 +33,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
   const [q, setQ] = useState('');
   const planning = usePlanning(repo).data;
   const delivery = useDelivery(repo).data;
+  const personal = useSettings().data?.personal_plugin === true;
   const issues = useOpenItems(repo, 'issue').data?.items ?? [];
   const prs = useOpenItems(repo, 'pr').data?.items ?? [];
   const sessions = useSessions().data;
@@ -52,7 +53,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
       e.push({ id: `go:${path}`, group: 'Go to', label, run: go(path) });
     }
     e.push({ id: 'new', group: 'Start', label: 'New feature or small change', right: 'N', run: () => create.open({ repo }) });
-    for (const c of COMMAND_LIST) e.push({ id: `cmd:${c.id}`, group: 'Start', label: c.name, right: `/${c.id}`, run: () => start.open({ cmd: c.id, repo }) });
+    for (const c of commandGroups(personal).flatMap((g) => g.items)) e.push({ id: `cmd:${c.id}`, group: 'Start', label: c.name, right: `/${c.id}`, run: () => start.open({ cmd: c.id, repo }) });
     if (planning && snapshotsReady(planning, delivery)) {
       for (const f of joinFeatures(planning.prds, delivery?.lanes ?? [])) e.push({ id: `f:${f.slug}`, group: 'Features', label: f.title, right: STAGES.find((s) => s.id === f.stage)?.label, run: () => navigate(link(routes.feature(f.slug))) });
     } else if (planning) {
@@ -71,7 +72,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
         : { id: 'away:on', group: 'Away', label: 'Go away for 2 hours', run: () => afkStart.mutate(Math.floor(Date.now() / 1000) + 7200) },
     );
     return e;
-  }, [planning, delivery, issues, prs, sessions, repos, repo, afk?.active, actions]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [planning, delivery, issues, prs, sessions, repos, repo, afk?.active, actions, personal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const results = useMemo(() => {
     const t = q.trim().toLowerCase();

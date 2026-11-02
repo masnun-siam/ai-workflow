@@ -338,6 +338,8 @@ export interface Settings {
   use_jev?: boolean;
   /** Read-only: whether the `jev` CLI is on the server's PATH. */
   jev_installed?: boolean;
+  /** Read-only: whether the `ai-workflow-personal` plugin is installed (dump, worklog, sync-from-wasensi). */
+  personal_plugin?: boolean;
   [k: string]: unknown;
 }
 export type NotifyChannel = 'browser' | 'ntfy' | 'mac';

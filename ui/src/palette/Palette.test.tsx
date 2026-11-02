@@ -9,7 +9,7 @@ import { Palette } from './Palette';
 vi.mock('../api/hooks', () => {
   const q = { data: undefined };
   const m = { mutate: () => {} };
-  return { useAfkStart: () => m, useAfkStop: () => m, useOpenItems: () => q, usePlanning: () => q, useSessions: () => q, useDelivery: () => q };
+  return { useAfkStart: () => m, useAfkStop: () => m, useOpenItems: () => q, usePlanning: () => q, useSessions: () => q, useDelivery: () => q, useSettings: () => q };
 });
 vi.mock('../shell/useRepo', () => ({ useRepo: () => ({ repo: 'o/r', repos: [], setRepo: () => {}, link: (p: string) => p }) }));
 vi.mock('../start/StartContext', () => ({ useStart: () => ({ open: () => {} }) }));
