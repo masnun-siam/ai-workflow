@@ -41,6 +41,7 @@ export const api = {
   // ---- sessions
   startSession: (b: SessionStartBody) => post<Session>('/api/sessions', b),
   startBoard: (b: BoardStartBody) => post<BoardStartResponse>('/api/start', b),
+  dismissSession: (id: string) => post<Session>(`/api/sessions/${enc(id)}/dismiss`),
   rerun: (id: string) => post<Session>(`/api/sessions/${enc(id)}/rerun`),
   startNow: (id: string) => post<Session>(`/api/sessions/${enc(id)}/start-now`),
   stop: (id: string) => post<Session>(`/api/sessions/${enc(id)}/stop`),
