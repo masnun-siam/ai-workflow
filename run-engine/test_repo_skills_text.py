@@ -108,6 +108,9 @@ ALLOWED = (
     # Descriptions that say what a skill is not for.
     "For review comments already on a PR use /pr-review --fix.",
     "(that is /docs-updater)",
+    "[--reviewer <login|copilot>]",  # pr-grind's GitHub path; the Slack steps stay
+    "`slack_read_thread`",
+    "post `trigger` as a new top-level message",
     "a standalone docs refresh is /docs-updater.",
 )
 fails = []
@@ -223,7 +226,7 @@ ok(
 )
 ok(
     "pr-grind description is the Slack-only loop; self-improve.md does not forbid committing",
-    re.search(r"^description: Slack reviewer-bot loop only", text("skills/pr-grind/SKILL.md"), re.M)
+    re.search(r"^description: Reviewer loop only", text("skills/pr-grind/SKILL.md"), re.M)
     and "don't commit" not in text("self-improve.md"),
 )
 ce = text("skills/close-epic/SKILL.md")

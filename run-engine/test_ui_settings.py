@@ -92,6 +92,7 @@ assert "auto_grind" not in json.load(open(ui_settings._path()))
 assert ui_settings.repo_settings("o/a") == {
     "auto_grind": True,
     "slack_channel": "",
+    "reviewer": "",
     "issue_grind": {},
 }
 assert ui_settings.repo_settings("o/none")["auto_grind"] is False
@@ -113,11 +114,27 @@ assert raises(ui_settings.validate, {"grind_mode": "fast"})
 ui_settings.save({"grind_mode": "deep"})
 cur = ui_settings.load()
 r = ui_settings.save({"commands": [], "repos": {**cur["repos"], "o/a": {"auto_grind": True, "slack_channel": "C2"}}})
-assert r["repos"]["o/a"] == {"auto_grind": True, "slack_channel": "C2"} and r["repos"]["o/b"]["slack_channel"] == ""
+assert (
+    r["repos"]["o/a"] == {"auto_grind": True, "slack_channel": "C2", "reviewer": ""}
+    and r["repos"]["o/b"]["slack_channel"] == ""
+)
 assert raises(ui_settings.save, {"commands": [], "repos": {"o/a": {"slack_channel": 5}}})
+r = ui_settings.save({"repos": {"o/a": {"reviewer": " bob-1 "}}})
+assert r["repos"]["o/a"]["reviewer"] == "bob-1" and ui_settings.repo_settings("o/a")["reviewer"] == "bob-1"
+assert ui_settings.save({"repos": {"o/a": {"reviewer": "copilot"}}})["repos"]["o/a"]["reviewer"] == "copilot"
+for bad in ("org/team", "a b", "x" * 40, 5):
+    assert raises(ui_settings.save, {"repos": {"o/a": {"reviewer": bad}}}), bad
+assert ui_settings.save({"repos": {"o/a": {"slack_channel": "C3"}}})["repos"]["o/a"]["reviewer"] == "copilot", (
+    "omitted: kept"
+)
+assert ui_settings.save({"repos": {"o/a": {"reviewer": ""}}})["repos"]["o/a"]["reviewer"] == ""
 # a stored Auto-build cap or epic list from before dispatches is ignored, never shown
 r = ui_settings.save({"repos": {"o/a": {"autopilot_cap": 4, "slack_channel": "#x"}}, "autopilot": {"o/a": [7]}})
-assert r["repos"]["o/a"] == {"auto_grind": False, "slack_channel": "#x"} and "autopilot" not in r and r["commands"]
+assert (
+    r["repos"]["o/a"] == {"auto_grind": False, "slack_channel": "#x", "reviewer": ""}
+    and "autopilot" not in r
+    and r["commands"]
+)
 # run_model / run_effort: null by default, a partial save sets them, other saves keep them, bad values 400
 assert ui_settings.load()["run_model"] is None and ui_settings.load()["run_effort"] is None
 ui_settings.save({"run_model": "opus", "run_effort": "xhigh"})

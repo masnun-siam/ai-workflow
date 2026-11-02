@@ -196,7 +196,9 @@ def _start(repo: str, pr: dict, settings: dict, start=None) -> int:
         import ui_repos
 
         start = ui_repos.start_session
-    status, body = start({"repo": repo, "text": grind_text(pr["url"], (settings or {}).get("slack_channel"))})
+    status, body = start(
+        {"repo": repo, "text": grind_text(pr["url"], (settings or {}).get("slack_channel"), reviewer_of(repo))}
+    )
     if status not in (201, 409):
         warn(f"grind start {repo}#{pr['n']}: {status} {body.get('error') if isinstance(body, dict) else body}")
     return status
@@ -229,10 +231,17 @@ def set_issue(repo: str, issue: int, on: bool, snapshot: dict, settings: dict, s
     return {"repo": repo, "issue": issue, "on": on}
 
 
-def grind_text(pr_url: str, channel) -> str:
-    """The /pr-grind prompt; `--channel <id>` names the repo's Slack channel (pr-grind's channels config otherwise)."""
-    ch = str(channel or "").strip()
-    return f"/pr-grind {pr_url}" + (f" --channel {ch}" if ch and ch.replace("_", "").isalnum() else "")
+def reviewer_of(repo: str):
+    """The repo's GitHub reviewer when it has no Slack channel (Settings or channels.json), else None."""
+    import dispatch_cli
+
+    return dispatch_cli.reviewer(repo)
+
+
+def grind_text(pr_url: str, channel, reviewer=None) -> str:
+    """The /pr-grind prompt; `--channel <id>` names the repo's Slack channel (pr-grind's channels config otherwise),
+    `--reviewer <login>` a GitHub reviewer for a repo with no Slack."""
+    return f"/pr-grind {pr_url}" + dispatch_run.grind_args(channel, reviewer)
 
 
 def notify_changes() -> None:

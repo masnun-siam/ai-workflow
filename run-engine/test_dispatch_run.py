@@ -679,6 +679,8 @@ dr.tick(d3, {}, run3, merge, now=500)
 assert run3.sent[-1] == (20, "please rebase") and "outbox" not in d3["lanes"][K(20)]
 assert dr.grind_prompt("u", "C1", lane=False) == "/ai-workflow:pr-grind u --channel C1"
 assert dr.grind_prompt("u", "", lane=False) == "/ai-workflow:pr-grind u" == dr.grind_prompt("u", "a b", lane=False)
+assert dr.grind_prompt("u", None, lane=False, reviewer="bob") == "/ai-workflow:pr-grind u --reviewer bob"
+assert dr.grind_prompt("u", "C1", lane=False, reviewer="bob") == "/ai-workflow:pr-grind u --channel C1"
 assert len(dr.grind_prompt("https://github.com/owner-name/repo-name/pull/12345", "C0123456789")) < 480
 assert len(dr.grind_prompt("https://github.com/owner-name/repo-name/pull/12345", "C0123456789")) < 480
 print("  ok  outbox, channel")

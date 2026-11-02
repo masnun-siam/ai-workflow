@@ -143,7 +143,7 @@ def start(
         else:
             text = f"/{skill} {arg}"
             if skill == "pr-grind":
-                text = ui_grind.grind_text(arg, channel)
+                text = ui_grind.grind_text(arg, channel, ui_grind.reviewer_of(repo))
             status, body = (launch or ui_repos.start_session)(
                 {
                     "repo": repo,

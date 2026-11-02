@@ -13,7 +13,7 @@ the caller from the board snapshot, the grind index and the runner:
                    "conflict": bool, "approved": bool, "changes_requested": bool, "threads_open": int,
                    "sha": head commit | None},
      "grind": None | {"state": idle|running|paused|done, "reason": str, "due": str | None},  # due: a token
-     "slack": bool,                                  # the repo has a grind channel; False skips grinding
+     "slack": bool,                                  # the repo has a grind channel or reviewer; False skips grinding
      "solo": bool,                                   # the repo is the gh user's own: no approval needed
      "agent": working|idle|blocked|gone|unknown|None, "limited_until": float | None}
 
@@ -79,12 +79,19 @@ LANE_GRIND = " -- dispatch lane: re-arm the headless way (write next-poll, end t
 SKIP_CI_REPLY = "Skip CI for now, complete the grind, then come back and fix the CI"
 
 
-def grind_prompt(pr_url: str, channel=None, lane=True, ci="wait") -> str:
+def grind_args(channel=None, reviewer=None) -> str:
+    """` --channel <id>` when the repo has a Slack channel, else ` --reviewer <login>`; "" when neither is valid."""
+    ch, rv = str(channel or "").strip(), str(reviewer or "").strip()
+    if ch and ch.replace("_", "").isalnum():
+        return f" --channel {ch}"
+    return f" --reviewer {rv}" if not ch and re.fullmatch(r"[A-Za-z0-9-]{1,39}", rv) else ""
+
+
+def grind_prompt(pr_url: str, channel=None, lane=True, ci="wait", reviewer=None) -> str:
     """A lane's grind ends each round like a headless one: the engine types the next round into the lane."""
-    ch = str(channel or "").strip()
     return (
         f"/ai-workflow:pr-grind {pr_url}"
-        + (f" --channel {ch}" if ch.replace("_", "").isalnum() else "")
+        + grind_args(channel, reviewer)
         + (LANE_GRIND + (" " + SKIP_CI_REPLY if ci != "wait" else "") if lane else "")
     )
 
@@ -126,7 +133,7 @@ def stage_prompt(lane: dict, settings: dict, pr_url=None):
     ci = settings.get("ci", "wait")
     return {
         "implementing": lambda: implement_prompt(lane["n"], base, lane.get("pr"), ci),
-        "grinding": lambda: grind_prompt(pr_url or "", lane.get("channel"), ci=ci),
+        "grinding": lambda: grind_prompt(pr_url or "", lane.get("channel"), ci=ci, reviewer=lane.get("reviewer")),
         "conflict_fix": lambda: conflict_prompt(lane.get("pr"), base),
         "followups": lambda: followups_prompt(lane["n"], lane.get("pr"), base),
     }.get(lane["stage"], lambda: None)()
@@ -225,7 +232,9 @@ def step(lane: dict, facts: dict, settings: dict, now: float) -> tuple:
         if ready and (free or pr.get("ci") == "success"):
             if _grind_on(settings, facts):
                 to("grinding")
-                acts.append(("send", grind_prompt(pr["url"], facts.get("channel"), ci=ci)))
+                acts.append(
+                    ("send", grind_prompt(pr["url"], facts.get("channel"), ci=ci, reviewer=facts.get("reviewer")))
+                )
             else:
                 to("merge_gate")
             return patch, acts
@@ -250,7 +259,12 @@ def step(lane: dict, facts: dict, settings: dict, now: float) -> tuple:
                 patch["held"] = None
             if g.get("due") and g["due"] != lane.get("nudged") and agent in ("idle", None):
                 patch["nudged"] = g["due"]
-                acts.append(("send", grind_prompt(pr.get("url") or "", facts.get("channel"), ci=ci)))
+                acts.append(
+                    (
+                        "send",
+                        grind_prompt(pr.get("url") or "", facts.get("channel"), ci=ci, reviewer=facts.get("reviewer")),
+                    )
+                )
             elif agent == "blocked" and not lane.get("needs_you"):
                 patch["needs_you"] = "the grind waits on you"
                 acts.append(("notify", "needs_you", patch["needs_you"]))

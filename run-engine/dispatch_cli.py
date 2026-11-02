@@ -238,6 +238,13 @@ def channel(repo: str):
     return "" if mapped else None
 
 
+def reviewer(repo: str):
+    """The repo's GitHub reviewer for grinding, only when it has no Slack channel (Slack wins); else None."""
+    if channel(repo) is not None:
+        return None
+    return ui_settings.repo_settings(repo).get("reviewer") or None
+
+
 def branch_sha(repo: str, branch: str, gh=_gh) -> "str | None":
     """Head SHA of `branch` on `repo`, or None when it does not exist (or gh failed: fail safe)."""
     p = gh(["api", f"repos/{repo}/git/ref/heads/{branch}", "-q", ".object.sha"])
@@ -292,8 +299,8 @@ def preview(r: dict, settings: dict, runner: str, gh=_gh) -> dict:
     for repo in repos:
         if runner == "herdr" and repo.lower() not in checkouts:
             p["warnings"].append(f"{repo}: no local checkout registered (aiw ui -> Repositories)")
-        if settings.get("grind", "full") != "off" and channel(repo) is None:
-            p["warnings"].append(f"{repo}: no Slack channel, its lanes skip grinding")
+        if settings.get("grind", "full") != "off" and channel(repo) is None and not reviewer(repo):
+            p["warnings"].append(f"{repo}: no Slack channel or reviewer, its lanes skip grinding")
     p["warnings"].extend(missing_base(repos, settings.get("base_branch"), gh))
     scores = {}
     if "bodies" in r:

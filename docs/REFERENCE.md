@@ -15,7 +15,7 @@
 | `/ai-workflow:repo-bootstrap [audit\|decide\|constitution\|guides\|gates\|docs] [issue]` | make a repo ready for agents in phases on one branch and one PR, one phase per run (it prints the next command and a `BOOTSTRAP:` last line): a read-only audit issue, the decisions, a short protected `CLAUDE.md` (`templates/claude-md.md`) with its guards, guides and a tested README, the gates, then `/docs-updater full` |
 | `/ai-workflow:faq-updater [full\|--full] [--lang <codes>] [--videos <url>] [questions…]` | write and update the product's user guide and FAQ (`docs/faq.md`) from the code, through a PR |
 | `/ai-workflow:sync-from-wasensi` | port Wasensi's skill, guide and template changes into this plugin |
-| `/ai-workflow:pr-grind <slack thread url \| PR url> [--channel <id>]` | the Slack reviewer-bot loop on a PR; fixes inline, verifies before each push |
+| `/ai-workflow:pr-grind <slack thread url \| PR url> [--channel <id>] [--reviewer <login\|copilot>]` | the reviewer loop on a PR: a Slack reviewer bot, or with `--reviewer` (no Slack) a GitHub reviewer asked with `gh pr edit --add-reviewer`, read through `gh api .../reviews`; fixes inline, verifies before each push |
 | `/ai-workflow:peer-review [--lenses <lens,lens>] [--root <panel_id>]` | a panel of read-only `peer-reviewer` lenses on the session's change (default critical) until every lens approves |
 | `/ai-workflow:dump <text>` | file free-form input into the Obsidian vault's Project → Feature structure, after one confirmation |
 | `/ai-workflow:close-epic <epic> [--dry-run]` | verify every child issue and PRD requirement shipped, run `/verifier-locally` on the base branch, set the PRD to `Done` and close the epic; lists the gaps and stops otherwise, never closes children |
@@ -327,7 +327,7 @@ change reaches running grinds too (`grind_mode` in `ui_settings.json`). The last
 default); `POST /api/sessions` and `POST /api/start` take optional `model` / `effort`, added as `--model` /
 `--effort` on every spawn of that session and replayed by Rerun; only a settings save changes the saved pair. The feature flow's PRD, tasks and refine starts always send `opus` / `medium` (`PLAN_RUN`) and never touch the saved pair. Then one table of
 the registered checkouts (`checkouts.json`) with GitHub status or **Publish**, auto-grind (default off),
-the Slack review channel grind posts to (`repos[owner/repo]` in `ui_settings.json`; a repo without one
+the Slack review channel grind posts to and the GitHub `reviewer` (a login or `copilot`, used only when the repo has no Slack channel, which wins; passed to `/pr-grind` as `--reviewer`) (`repos[owner/repo]` in `ui_settings.json`; a repo with neither
 skips grinding in a dispatch) and **Remove** (its clone is untouched), plus
 scan folders, **Find repos** and **Check remotes** (`gh repo view` on every repo, failures first).
 **jev**: a **Use jev** switch (`PUT /api/settings {use_jev}`, reverts on a failed save) and a read-only "jev found / not found" line. **Claude accounts**: the named `claude` commands a session can launch with, one per account; their plan
