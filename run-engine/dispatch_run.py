@@ -51,9 +51,8 @@ _BRANCH = r"[A-Za-z0-9._/-]{1,100}"
 GRIND_MODES = ("off", "simple", "full")
 CI_MODES = ("wait", "defer", "ignore")
 MERGE_FAILS_BEFORE_NEEDS_YOU = 3  # consecutive failed merges before the lane asks for the user
-NONE_GRACE_SECONDS = (
-    300  # CI reading `none` this long after a head commit: no checks are coming (or none registered yet before)
-)
+# CI reading `none` this long for a head commit: nothing will register; before it, checks may not be registered yet
+NONE_GRACE_SECONDS = 300
 MERGE_RETRY_SECONDS = 300  # the board lags a merge; don't call gh pr merge twice in this window
 IDLE_GRACE_SECONDS = 180  # a session that just ended may have a PR the board has not seen yet
 LIMIT_BUFFER_SECONDS = 60

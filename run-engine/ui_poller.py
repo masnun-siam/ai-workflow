@@ -74,7 +74,7 @@ LOW_BUDGET = 1000  # GraphQL points left of the hourly 5000
 MERGED_DAYS = 7
 
 _PR = "number url isDraft state mergedAt headRefName headRefOid reviewDecision mergeable statusCheckRollup { state }"
-# open PRs also carry who approved how many checks ran and unresolved threads (the Inbox's "ready to merge" line)
+# open PRs also carry who approved, how many checks ran and unresolved threads (the Inbox's "ready to merge" line)
 _PR_OPEN = (
     _PR
     + " latestOpinionatedReviews(first: 20) { nodes { state author { login } } }"
