@@ -539,4 +539,14 @@ with contextlib.redirect_stdout(out):
 assert out.getvalue().strip().endswith("ok"), out.getvalue()
 dc.ui_running, dc._snapshots = _up, _snaps
 print("  ok  doctor")
+# --- archive verb prints the moved ids
+_old = dr.archive_old
+dr.archive_old = lambda days=30: ["a" * 12] if days == 7 else []
+out = io.StringIO()
+with contextlib.redirect_stdout(out):
+    dc.cmd_archive(argparse.Namespace(days=7))
+    dc.cmd_archive(argparse.Namespace(days=30))
+assert out.getvalue() == "a" * 12 + "\n", out.getvalue()
+dr.archive_old = _old
+print("  ok  archive verb")
 print("dispatch_cli: all green")

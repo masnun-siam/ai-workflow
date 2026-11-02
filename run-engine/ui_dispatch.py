@@ -173,7 +173,17 @@ def tick_one(
         return dr.tick(d, facts, runner, now=now, notify=notify)
 
 
+_archived_at = 0.0
+
+
 def tick_all(snapshot) -> None:
+    global _archived_at
+    if time.time() - _archived_at > 86400:  # once a day; one server process
+        _archived_at = time.time()
+        try:
+            dr.archive_old()
+        except Exception as e:  # noqa: BLE001 - archiving must not stop the ticks
+            warn(f"dispatch archive failed: {e}")
     for d in dr.list_all():
         if _busy(d):
             try:
