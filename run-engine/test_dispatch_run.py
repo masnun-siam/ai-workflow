@@ -746,6 +746,14 @@ for bad in ("", 5, "x" * 41):
         raise AssertionError(f"accepted account {bad!r}")
     except ValueError:
         pass
+for ok in (None, 5, 0.5, 10000):
+    assert dr.check_settings({**dr.DEFAULTS, "max_cost": ok})["max_cost"] == ok
+for bad in (0, -1, "5", True, 10001, float("nan")):
+    try:
+        dr.check_settings({**dr.DEFAULTS, "max_cost": bad})
+        raise AssertionError(f"accepted max_cost {bad!r}")
+    except ValueError:
+        pass
 dp = dr.set_state(d3["id"], "paused")
 assert dr.startable(dp, {}) == []
 assert dr.list_all()[0]["id"] == d5["id"] and d3["id"] in [x["id"] for x in dr.list_all()]

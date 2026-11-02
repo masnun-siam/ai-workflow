@@ -365,6 +365,12 @@ assert (s["max"], s["auto_merge"], s["grind"]) == (3, True, "simple")
 assert aiw("set", d["id"], "ci=defer").returncode == 0
 assert json.loads(aiw("show", d["id"]).stdout)["settings"]["ci"] == "defer"
 assert aiw("set", d["id"], "ci=bogus").returncode == 5
+assert aiw("set", d["id"], "max_cost=5").returncode == 0
+assert dr.load(d["id"])["settings"]["max_cost"] == 5
+assert aiw("set", d["id"], "max_cost=").returncode == 0
+assert dr.load(d["id"])["settings"]["max_cost"] is None
+assert aiw("set", d["id"], "max_cost=abc").returncode == 5
+assert aiw("set", d["id"], "max_cost=0").returncode == 5
 assert aiw("plan", "1", "--ci", "bogus").returncode == 2  # argparse rejects it
 assert aiw("set", d["id"], "bogus=1").returncode == 5
 assert aiw("set", d["id"], "base_branch=x").returncode == 5  # #504 refusal, through the CLI

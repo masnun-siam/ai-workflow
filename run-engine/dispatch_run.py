@@ -46,6 +46,7 @@ DEFAULTS = {
     "model": None,
     "effort": None,
     "account": None,  # a saved account label; None = the Settings default. Headless lanes only
+    "max_cost": None,  # USD; the dispatch pauses itself once its headless lanes have cost this much
 }
 _BRANCH = r"[A-Za-z0-9._/-]{1,100}"
 GRIND_MODES = ("off", "simple", "full")
@@ -57,6 +58,7 @@ MERGE_RETRY_SECONDS = 300  # the board lags a merge; don't call gh pr merge twic
 IDLE_GRACE_SECONDS = 180  # a session that just ended may have a PR the board has not seen yet
 LIMIT_BUFFER_SECONDS = 60
 MAX_EVENTS = 500
+MAX_COST_LIMIT = 10000  # USD, a sanity bound for the max_cost setting
 CONTINUE = "Continue from where you were stopped."
 
 END_ACTIONS = ("open-pr", "qa", "grind-pr")
@@ -596,6 +598,9 @@ def check_settings(s: dict) -> dict:
     acc = s.get("account")
     if acc is not None and not (isinstance(acc, str) and 1 <= len(acc) <= 40):
         raise ValueError("account must be a saved account label")
+    mc = s.get("max_cost")
+    if mc is not None and not (isinstance(mc, (int, float)) and not isinstance(mc, bool) and 0 < mc <= MAX_COST_LIMIT):
+        raise ValueError(f"max_cost must be a positive number up to {MAX_COST_LIMIT}")
     fb = s.get("feature_branch")
     if fb is not None and not re.fullmatch(_BRANCH, fb):
         raise ValueError("feature_branch is not a valid branch name")

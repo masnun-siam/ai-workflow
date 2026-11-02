@@ -535,6 +535,8 @@ export interface DispatchSettings {
   effort: Effort | null;
   /** A saved account label; absent/null: the Settings default. Headless lanes only. */
   account?: string | null;
+  /** USD; the dispatch pauses itself once its headless lanes have cost this much. Absent/null: no cap. */
+  max_cost?: number | null;
 }
 /** What a dispatch runs: an epic's children, or a picked list of issues ("owner/repo#n"). */
 export type DispatchTarget = { epic: string } | { issues: string[] };
