@@ -198,7 +198,6 @@ export function useApiMutation<V = void, R = unknown>(fn: (v: V) => Promise<R>, 
 }
 
 export const useStartSession = () => useApiMutation(api.startSession, SESSION_WRITES);
-export const useStartBoard = () => useApiMutation(api.startBoard, [...SESSION_WRITES, ...BOARD_WRITES]);
 // resume and rerun are quiet: callers show the error with useStartError (409 duplicate gets an "Open it" action)
 export const useRerun = () => useApiMutation(api.rerun, SESSION_WRITES, { quiet: true });
 export const useStartNow = () => useApiMutation(api.startNow, SESSION_WRITES);
@@ -258,11 +257,8 @@ export const useStartReview = () =>
 export const useReviewLens = () => useApiMutation((v: { panel: string; lens: string; action: string }) => api.reviewLens(v.panel, v.lens, v.action), BOARD_WRITES);
 export const useReviewRounds = () => useApiMutation((v: { panel: string; add: number }) => api.reviewRounds(v.panel, v.add), BOARD_WRITES);
 
-export const useRegisterRepo = () => useApiMutation((v: { slug: string; path: string }) => api.registerRepo(v.slug, v.path), [keys.repos, ['inbox']]);
 export const useRemoveRepo = () => useApiMutation(api.removeRepo, [keys.repos, keys.settings, ...BOARD_WRITES]);
 export const useScanRepos = () => useApiMutation((roots?: string[]) => api.scanRepos(roots), [keys.repos]);
-export const useCreateRepo = () => useApiMutation((v: { parent: string; name: string; prd_folder?: string }) => api.createRepo(v.parent, v.name, v.prd_folder), [keys.repos, ['sessions']]);
-export const usePublishRepo = () => useApiMutation((v: { slug: string; owner: string; name: string; priv: boolean }) => api.publishRepo(v.slug, v.owner, v.name, v.priv), [keys.repos, ['inbox']]);
 export const useSaveSettings = () => useApiMutation(api.saveSettings, [keys.settings, keys.repos]);
 export const useSaveNotifyChannel = () => useApiMutation((v: { event: string; channel: NotifyChannel; on: boolean }) => api.notifyChannel(v.event, v.channel, v.on), [keys.notify]);
 export const useNotifyTest = () => useApiMutation(api.notifyTest, []);

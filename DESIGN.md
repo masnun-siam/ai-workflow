@@ -24,7 +24,7 @@ rail (`--away-rail`). On a phone the rail folds into the bottom bar.
 
 ## Type
 
-- Geist 400–700 and Geist Mono (self-hosted via `@fontsource`).
+- Chivo 400–700 and Chivo Mono (self-hosted via `@fontsource`).
 - Page titles `.display` 44px/700 (32px on a phone), feature titles 40px, section heads 20px/600,
   body 14px. Large figures (stage counts, merged/total) are 34–40px/600.
 - Mono for IDs, commands, issue numbers, metadata lines and money. Not for prose.

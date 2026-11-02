@@ -20,8 +20,6 @@ export function formatWhen(iso: string | number | null | undefined, now = new Da
 
 /** Last path segment of a repo path or owner/repo slug. */
 export const shortRepo = (repo: string | null | undefined) => String(repo || '').replace(/\/+$/, '').split('/').pop() || '—';
-/** shortRepo, or the full owner/repo when another slug in `all` has the same short name. */
-export const repoLabel = (slug: string, all: string[]) => (all.filter((s) => shortRepo(s) === shortRepo(slug)).length > 1 ? slug : shortRepo(slug));
 
 /** "in 1h 12m", "in 5m", "now" for an epoch-seconds reset time. */
 export function untilText(epochSec: number, nowMs = Date.now()): string {
@@ -104,20 +102,6 @@ export const commandText = (command: string) => {
   const p = parseSkill(command);
   return p ? `${p.skill}${p.rest ? ` ${p.rest}` : ''}` : String(command ?? '').trim();
 };
-
-/** Splits text into strings and {href} parts for http(s) URLs; trailing punctuation stays outside the link. */
-export function linkParts(text: unknown): (string | { href: string })[] {
-  const s = String(text ?? '');
-  const out: (string | { href: string })[] = [];
-  let last = 0;
-  for (const m of s.matchAll(/https?:\/\/[^\s<>"'`]+/g)) {
-    const href = m[0].replace(/[.,;:!?)\]}]+$/, '');
-    out.push(s.slice(last, m.index), { href });
-    last = (m.index ?? 0) + href.length;
-  }
-  out.push(s.slice(last));
-  return out;
-}
 
 /** True when a session belongs to `repo` (owner/name): by slug when it has one, else by the checkout path `repo` of the current repo. */
 export function sessionInRepo(s: Pick<Session, 'link' | 'repo' | 'slug'>, repo: string, path?: string): boolean {

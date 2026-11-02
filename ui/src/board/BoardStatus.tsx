@@ -31,5 +31,3 @@ export function BoardStatus({ meta, failed }: { meta?: BoardMeta; failed?: boole
     </>
   );
 }
-
-export const isRateLimited = (meta?: BoardMeta) => !!meta?.retry_at && meta.retry_at * 1000 > Date.now();

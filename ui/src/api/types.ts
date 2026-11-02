@@ -497,12 +497,6 @@ export interface BoardStartBody {
 }
 /** POST /api/start: a public session. */
 export interface BoardStartResponse { session?: string; panel?: unknown }
-/** 409 body from a duplicate start (and rerun): the session already running. */
-export interface DuplicateError {
-  error: string;
-  id?: string;
-  href?: string;
-}
 /** POST /api/sessions/<id>/answer: one entry per question index, exactly one of labels | other | none. */
 export interface AnswerBody {
   round_id: string;
