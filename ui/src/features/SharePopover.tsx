@@ -2,6 +2,7 @@ import * as PO from '@radix-ui/react-popover';
 import { useRef, useState } from 'react';
 import { useCreateShare, useDeleteApproval, useStopShare } from '../api/hooks';
 import { Button, toast, useConfirm } from '../components';
+import { formatWhen } from '../lib/format';
 import { NOT_SHAREABLE, approvalsLabel, commentsLabel, isShareable, removeBody, shareBody, stopBody } from '../lib/shares';
 import { useOwnShare } from './useOwnShare';
 
@@ -91,6 +92,7 @@ export function SharePopover({ status, repo, path }: { status: string; repo: str
                 </div>
                 {!summary.reachable ? <p className="muted">Not reachable right now. aiw will retry at the next start or share action.</p> : null}
                 <p>{commentsLabel(summary.comments)}</p>
+                <p className="muted">{share.data?.last_opened_at ? `Last opened ${formatWhen(share.data.last_opened_at)}` : 'Not opened yet'}</p>
                 <div>
                   <p>{approvalsLabel(n)}</p>
                   <ul>

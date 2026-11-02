@@ -234,7 +234,7 @@ Owner routes (UI port; errors as `{error}`):
 |---|---|---|
 | `GET /api/shares` | `[{id, repo, path, title, state, url, comments, unread, reachable, end_reason, expires_at}]` | 200 |
 | `POST /api/shares` | `{repo, path, confirm: true, expires_in_days?}` starts a share (`expires_in_days` an integer 1 to 90, else none); an existing live share comes back without confirm | 201; 200 existing; 400 no `confirm`, bad path or repo or `expires_in_days`; 409 PRD not Draft or In review, or funnel port taken; 503 tailscale missing or stopped, or funnel not permitted (tailscale's message) |
-| `GET /api/shares/<id>` | the share with `threads` and `approvals` | 200; 404 |
+| `GET /api/shares/<id>` | the share with `threads`, `approvals` and `last_opened_at` (ISO or null; set by a reviewer page load, at most once a minute) | 200; 404 |
 | `DELETE /api/shares/<id>` | Stop (`end_reason: stopped`) | 200; 404 |
 | `DELETE /api/shares/<id>/threads/<tid>`, `.../comments/<cid>`, `.../approvals/<aid>` | delete one | 204; 404 |
 | `DELETE /api/shares/<id>/record` | remove an ended share with its threads and approvals | 204; 404; 409 still live |

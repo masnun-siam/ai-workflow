@@ -169,7 +169,12 @@ try:
     assert row["title"] == "Title of a.md" and row["reachable"] is True
     s, det = call("GET", f"/api/shares/{sid}")
     assert (
-        s == 200 and det["threads"] == [] and det["approvals"] == [] and "last_seen_at" in det and det["prd_updated_at"]
+        s == 200
+        and det["threads"] == []
+        and det["approvals"] == []
+        and "last_seen_at" in det
+        and det["last_opened_at"] is None
+        and det["prd_updated_at"]
     )
     assert call("GET", "/api/shares/0123456789abcdef")[0] == 404
     assert call("GET", "/api/shares/zz")[0] == 404

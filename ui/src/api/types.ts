@@ -626,6 +626,7 @@ export interface Share extends ShareSummary {
   created_at: string;
   ended_at: string | null;
   last_seen_at: string | null;
+  last_opened_at: string | null;
   prd_updated_at: string | null;
   /** threads not yet sent to the PRD update session ("Send open comments (n)") */
   unsent: number;

@@ -10,7 +10,7 @@ import type { Share, ShareSummary } from './types';
 
 const summary: ShareSummary = { id: 's1', repo: 'o/r', path: 'docs/prds/a.md', title: 'A', state: 'live', url: 'https://x/s/t', comments: 0, unread: 0, reachable: true, end_reason: null, expires_at: null };
 // type-level: compiles only if Share has the shape the PRD tab relies on
-const share: Share = { ...summary, created_at: '', ended_at: null, last_seen_at: null, prd_updated_at: null, unsent: 0, threads: [], approvals: [] };
+const share: Share = { ...summary, created_at: '', ended_at: null, last_seen_at: null, last_opened_at: null, prd_updated_at: null, unsent: 0, threads: [], approvals: [] };
 
 const stub = (status = 200, body: unknown = {}) => {
   const f = vi.fn(async () => new Response(status === 204 ? null : JSON.stringify(body), { status }));

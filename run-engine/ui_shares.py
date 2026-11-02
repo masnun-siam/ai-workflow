@@ -243,6 +243,18 @@ def mark_seen(sid) -> dict:
     return update(sid, lambda rec: rec.update(last_seen_at=now_iso()))
 
 
+OPENED_THROTTLE_S = 60
+
+
+def mark_opened(sid) -> None:
+    """Stamp last_opened_at on a reviewer page load, at most once a minute: no write inside the throttle (the listener is public)."""
+    rec = get(sid)
+    prev = rec and rec.get("last_opened_at")
+    if prev and datetime.fromisoformat(prev).timestamp() > clock() - OPENED_THROTTLE_S:
+        return
+    update(sid, lambda r: r.update(last_opened_at=now_iso()))
+
+
 def delete_record(sid) -> None:
     _check_id(sid)
     with _lock(sid):
