@@ -193,10 +193,15 @@ w = dc.preview(r, {"grind": "full"}, "herdr")["warnings"]
 assert "o/web#4: needs refine" in w
 assert "o/r#3: blocked by open x/y#9 outside the epic" in w
 assert "o/r: no local checkout registered (aiw ui -> Repositories)" in w
-assert "o/r: no Slack channel, its lanes skip grinding" in w
+assert "o/r: no Slack channel or reviewer, its lanes skip grinding" in w
 with open(os.path.join(data, "channels.json"), "w") as f:
     json.dump({"channels": {"o/r": "C1"}}, f)
 assert dc.channel("o/r") == "" and dc.channel("o/web") is None
+assert dc.reviewer("o/web") is None, "no reviewer set"
+dc.ui_settings.save({"repos": {"o/web": {"reviewer": "copilot"}, "o/r": {"reviewer": "bob"}}})
+assert dc.reviewer("o/web") == "copilot", "no Slack channel: the reviewer"
+assert dc.reviewer("o/r") is None, "Slack wins"
+assert not [x for x in dc.preview(r, {"grind": "full"}, "herdr")["warnings"] if x.startswith("o/web: no Slack")]
 w = dc.preview(r, {"grind": "off"}, "headless")["warnings"]
 assert not [x for x in w if "Slack" in x or "checkout" in x]
 print("  ok  preview")
