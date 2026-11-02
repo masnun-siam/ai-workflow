@@ -40,7 +40,8 @@ with `stale: True, fetched_at: None`):
          "reviewer": str | None,          # login of the newest approving review
          "approved": bool,                # review "approved", or review "none" and a reviewer; never with changes requested
          "changes_requested": bool,       # review "changes_requested", or any CHANGES_REQUESTED review
-         "checks": int}                   # status checks that ran
+         "checks": int,                   # status checks that ran
+         "threads_open": int}             # unresolved, non-outdated review threads
       ],
       "closed_epics": [  # the 50 most recently updated CLOSED issues labelled `epic` (a PRD's Done column)
         {"n": int, "labels": [str], "closed_subs": [{"n": int, "title": str}]}
@@ -73,11 +74,13 @@ LOW_BUDGET = 1000  # GraphQL points left of the hourly 5000
 MERGED_DAYS = 7
 
 _PR = "number url isDraft state mergedAt headRefName headRefOid reviewDecision mergeable statusCheckRollup { state }"
-# open PRs also carry who approved and how many checks ran (the Inbox's "ready to merge" line)
+# open PRs also carry who approved how many checks ran and unresolved threads (the Inbox's "ready to merge" line)
 _PR_OPEN = (
     _PR
     + " latestOpinionatedReviews(first: 20) { nodes { state author { login } } }"
     + " checks: statusCheckRollup { contexts(first: 1) { totalCount } }"
+    # ponytail: first 100 threads per open PR; a PR past that undercounts. Drop to 20 if the repo query hits the node limit
+    + " reviewThreads(first: 100) { nodes { isResolved isOutdated } }"
 )
 _ISSUE_NODE = f"""
         number title state
@@ -182,8 +185,15 @@ def _open_extra(n: dict) -> dict:
     review = _pr(n)["review"]
     changes = review == "changes_requested" or any(r.get("state") == "CHANGES_REQUESTED" for r in reviews)
     approved = not changes and (review == "approved" or (review == "none" and bool(reviewer)))
+    threads = sum(1 for t in _nodes(n.get("reviewThreads")) if not t.get("isResolved") and not t.get("isOutdated"))
     ctx = ((n.get("checks") or {}).get("contexts") or {}).get("totalCount")
-    return {"reviewer": reviewer, "approved": approved, "changes_requested": changes, "checks": ctx or 0}
+    return {
+        "reviewer": reviewer,
+        "approved": approved,
+        "changes_requested": changes,
+        "checks": ctx or 0,
+        "threads_open": threads,
+    }
 
 
 # GitHub links "Closes #n" to the issue only when the PR targets the default branch. A repo whose PRs go

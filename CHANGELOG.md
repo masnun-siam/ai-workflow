@@ -8,6 +8,7 @@
 
 ### Fixed
 
+- **Merge gate honours review threads and CI `none`** (#717): `merge_gate.blockers` refuses a PR with unresolved review threads (poller `threads_open`, first 100 per PR). In dispatch, CI `none` blocks for `NONE_GRACE_SECONDS` (300) per head commit as "CI not registered yet", then `wait` and `defer` both merge instead of hanging or merging at once.
 - **One merge gate** (#739, folds in #703): `run-engine/merge_gate.py` decides draft, conflict, changes requested and approval for dispatch `_gate`, the Inbox `pr_ready` and the board `mergeable`. A PR with any changes-requested review is never mergeable, `solo` or not; the poller computes `approved` and `changes_requested` once and reads 20 reviews instead of 5.
 
 - **Dead files removed** (#738): `paperclip/` and the finished `dev-workflow-replacement` PRD are deleted (git history keeps them); they carried personal paths or described finished work.
