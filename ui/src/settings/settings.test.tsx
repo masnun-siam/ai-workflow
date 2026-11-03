@@ -35,8 +35,12 @@ const GET: Record<string, unknown> = {
     scan_roots: ['/x'],
   },
   '/api/settings': {
-    commands: [{ label: 'claude', cmd: 'claude', builtin: true }, { label: 'Masum', cmd: 'cc masum' }],
+    commands: [{ label: 'claude', cmd: 'claude', builtin: true, harness: 'claude' }, { label: 'Masum', cmd: 'cc masum', harness: 'claude' }],
     default: 'claude',
+    harnesses: [
+      { id: 'claude', label: 'Claude Code', models: ['opus', 'sonnet', 'haiku'], efforts: ['low', 'medium', 'high', 'xhigh', 'max'], usage: true },
+      { id: 'codex', label: 'Codex', models: null, efforts: ['low', 'medium', 'high', 'xhigh'], usage: false },
+    ],
     repos: { 'o/r': { auto_grind: false, slack_channel: 'C0B8385GKNK' } },
     slack_channels: [{ id: 'C0B8385GKNK', name: '#reviews' }, { id: 'C0123ABCD', name: '#ops' }],
     reviewers: [
@@ -626,7 +630,7 @@ describe('Settings: accounts, vault', () => {
     await user.click(screen.getByRole('button', { name: 'Save accounts' }));
     await waitFor(() => expect(sent('PUT', '/api/settings')).toHaveLength(1));
     expect(sent('PUT', '/api/settings')[0]).toEqual({
-      commands: [{ label: 'claude', cmd: 'claude', builtin: true }, { label: 'Masum', cmd: 'cc masum' }],
+      commands: [{ label: 'claude', cmd: 'claude', builtin: true, harness: 'claude' }, { label: 'Masum', cmd: 'cc masum', harness: 'claude' }],
       default: 'Masum',
     });
     expect((screen.getAllByLabelText('Command')[0] as HTMLInputElement).readOnly).toBe(true);
@@ -639,6 +643,114 @@ describe('Settings: accounts, vault', () => {
     await user.click((await screen.findAllByRole('button', { name: 'Test' }))[1]);
     expect(await screen.findByText('logged in me@x.com')).toBeTruthy();
     expect(sent('POST', '/api/settings/test')).toEqual([{ cmd: 'cc masum' }]);
+  });
+
+  const harness = (i: number) => screen.getAllByLabelText('Harness')[i] as HTMLSelectElement;
+  // Stores the PUT like the server, since a save refetches settings.
+  const echo = (body: Record<string, unknown> | null): Reply => [200, (GET['/api/settings'] = { ...SETTINGS, ...body })];
+
+  it('each row has a Harness select; the built-in one is fixed to Claude Code, a new row defaults to it', async () => {
+    const user = userEvent.setup();
+    page(<SettingsPage />, '/settings/accounts');
+    await screen.findAllByLabelText('Harness');
+    expect(within(harness(0)).getAllByRole('option').map((o) => o.textContent)).toEqual(['Claude Code', 'Codex']);
+    expect(harness(0).disabled).toBe(true);
+    expect(harness(0).value).toBe('claude');
+    expect(harness(1).disabled).toBe(false);
+    await user.click(screen.getByRole('button', { name: /Add account/ }));
+    expect(harness(2).value).toBe('claude');
+  });
+
+  it('Models shows only on Codex rows and keeps its text across a harness toggle', async () => {
+    const user = userEvent.setup();
+    page(<SettingsPage />, '/settings/accounts');
+    await screen.findAllByLabelText('Harness');
+    expect(screen.queryByLabelText('Models')).toBeNull();
+    await user.selectOptions(harness(1), 'codex');
+    await user.type(screen.getByLabelText('Models'), 'a, b,');
+    await user.selectOptions(harness(1), 'claude');
+    expect(screen.queryByLabelText('Models')).toBeNull();
+    await user.selectOptions(harness(1), 'codex');
+    expect((screen.getByLabelText('Models') as HTMLInputElement).value).toBe('a, b,');
+  });
+
+  it('saves harness and a trimmed models list for Codex rows, reloads from the response, and is clean again', async () => {
+    handlers['PUT /api/settings'] = echo;
+    const user = userEvent.setup();
+    page(<SettingsPage />, '/settings/accounts');
+    await screen.findAllByLabelText('Harness');
+    const saveBtn = screen.getByRole('button', { name: 'Save accounts' }) as HTMLButtonElement;
+    expect(saveBtn.disabled).toBe(true);
+    await user.selectOptions(harness(1), 'codex');
+    expect(saveBtn.disabled).toBe(false);
+    await user.type(screen.getByLabelText('Models'), 'a, b,');
+    await user.click(saveBtn);
+    await waitFor(() => expect(sent('PUT', '/api/settings')).toHaveLength(1));
+    expect(sent('PUT', '/api/settings')[0]).toEqual({
+      commands: [{ label: 'claude', cmd: 'claude', builtin: true, harness: 'claude' }, { label: 'Masum', cmd: 'cc masum', harness: 'codex', models: ['a', 'b'] }],
+      default: 'claude',
+    });
+    await waitFor(() => expect(saveBtn.disabled).toBe(true));
+    expect((screen.getByLabelText('Models') as HTMLInputElement).value).toBe('a, b');
+    expect(harness(1).value).toBe('codex');
+  });
+
+  it('a Claude row sends no models, and changing only the models makes the form dirty', async () => {
+    withSettings({ commands: [{ label: 'claude', cmd: 'claude', builtin: true, harness: 'claude' }, { label: 'Cx', cmd: 'codex', harness: 'codex', models: ['o3'] }] });
+    handlers['PUT /api/settings'] = echo;
+    const user = userEvent.setup();
+    page(<SettingsPage />, '/settings/accounts');
+    const models = (await screen.findByLabelText('Models')) as HTMLInputElement;
+    expect(models.value).toBe('o3');
+    const saveBtn = screen.getByRole('button', { name: 'Save accounts' }) as HTMLButtonElement;
+    await user.type(models, ', gpt-5');
+    expect(saveBtn.disabled).toBe(false);
+    await user.selectOptions(harness(1), 'claude');
+    await user.click(saveBtn);
+    await waitFor(() => expect(sent('PUT', '/api/settings')).toHaveLength(1));
+    expect((sent('PUT', '/api/settings')[0]!.commands as unknown[])[1]).toEqual({ label: 'Cx', cmd: 'codex', harness: 'claude' });
+  });
+
+  it('a login-check result clears when that row\'s harness or command changes', async () => {
+    handlers['POST /api/settings/test'] = () => [200, { ok: true, message: 'logged in me@x.com' }];
+    const user = userEvent.setup();
+    page(<SettingsPage />, '/settings/accounts');
+    const test = async () => {
+      await user.click(screen.getAllByRole('button', { name: 'Test' })[1]);
+      expect(await screen.findByText('logged in me@x.com')).toBeTruthy();
+    };
+    await screen.findAllByLabelText('Harness');
+    await test();
+    await user.selectOptions(harness(1), 'codex');
+    expect(screen.queryByText('logged in me@x.com')).toBeNull();
+    await test();
+    await user.type(screen.getAllByLabelText('Command')[1], 'x');
+    expect(screen.queryByText('logged in me@x.com')).toBeNull();
+  });
+
+  it('a 400 from the save is toasted and the form stays dirty', async () => {
+    handlers['PUT /api/settings'] = () => [400, { error: 'each account needs its own command' }];
+    const user = userEvent.setup();
+    page(<SettingsPage />, '/settings/accounts');
+    await screen.findAllByLabelText('Harness');
+    await user.selectOptions(harness(1), 'codex');
+    const saveBtn = screen.getByRole('button', { name: 'Save accounts' }) as HTMLButtonElement;
+    await user.click(saveBtn);
+    expect(await screen.findByText('each account needs its own command')).toBeTruthy();
+    expect(saveBtn.disabled).toBe(false);
+  });
+
+  it('the section and its navigation link read "Accounts", also when settings fail to load', async () => {
+    page(<SettingsPage />, '/settings/accounts');
+    expect(await screen.findByRole('heading', { name: 'Accounts' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Accounts' })).toBeTruthy();
+    cleanup();
+    delete GET['/api/settings'];
+    page(<SettingsPage />, '/settings/accounts');
+    expect(await screen.findByRole('heading', { name: 'Accounts' })).toBeTruthy();
+    const h = await screen.findByRole('heading', { name: 'Accounts' });
+    await waitFor(() => expect(within(h.closest('section')!).getByRole('status').textContent).not.toBe('Loading…'));
+    expect(screen.getByRole('heading', { name: 'Accounts' })).toBeTruthy();
   });
 
   it('the vault folder saves on its own with only vault_dir', async () => {
