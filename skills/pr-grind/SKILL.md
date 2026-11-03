@@ -209,7 +209,7 @@ reviewers, they are fixed (or rebutted) and pushed through Step 5's push gate, t
 closes without a recheck (`queued-push: ... — then close` if CI is not green, as a nit-only round).
 
 **Comment-only human review.** A human's `COMMENTED` review with no inline findings is neither an
-approval nor a round: record it as seen (advance the round baseline), fix and post nothing, and go to
+approval nor findings. When it is the round's only review, it is not a round: record it as seen (advance the round baseline), fix and post nothing, and go to
 Step 7's re-arm with no re-trigger. It never closes a deep grind.
 
 Then post the closing summary yourself: one thread reply @-mentioning `owner_uid` with
