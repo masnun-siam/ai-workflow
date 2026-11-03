@@ -32,7 +32,7 @@ The skill that reviews a PR or local branch against its issue, the repo's rules 
 The `/pr-review` of the local branch in `implement-issue` step 12, before the push. `aiw local-review` picks the mode: Single reviews once and fixes Critical and Major findings; Loop reviews the whole branch round after round until a round finds nothing new, recording every finding in a findings log in the worktree's git directory.
 
 **Grind**:
-`/pr-grind`: the loop on a ready PR that posts the Slack reviewer-bot trigger, waits for a round, fixes the findings inline in its own session, runs `/verifier-locally`, pushes, re-triggers, and repeats until approved or a rail stops it. Each round re-enters as a fresh headless session that reads the PR's grind state file.
+`/pr-grind`: the loop on a ready PR that mentions (Slack) or requests (GitHub) the current reviewers, read again from Settings before each recheck, waits for a round, fixes the findings inline in its own session, runs `/verifier-locally`, pushes, re-triggers, and repeats until approved or a rail stops it. Each round re-enters as a fresh headless session that reads the PR's grind state file.
 _Avoid_: Review loop
 
 **Lens**:

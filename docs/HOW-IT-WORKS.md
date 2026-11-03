@@ -102,13 +102,13 @@ the refined issues and **Run N** dispatches them.
 
 ## Grind
 
-`/pr-grind` works a Ready PR through the Slack reviewer bot:
+`/pr-grind` works a Ready PR through its reviewers, the ones set in Settings → Reviewers:
 
-1. Post the trigger in the repo's review channel (`channels.json`); the thread is the loop's anchor.
-2. Wait for the bot's round, then split findings into fix and rebut.
+1. Mention the reviewers in a trigger in the repo's review channel (the thread is the loop's anchor), or on the GitHub path request them on the PR.
+2. Wait for a reviewer's round, then split findings into fix and rebut.
 3. Fix inline, in the grind session itself: commit, reply on and resolve the thread.
 4. Run `/verifier-locally` before every push. A failing CI check gets one fix attempt per head commit. With Use jev on, grind also logs jev's advisory flake and fix/rebut hints in its state file and never acts on them.
-5. Push, re-trigger, repeat until approved or a rail stops it (round cap, stall, rate limit).
+5. Push, re-trigger, repeat until approved or a rail stops it (round cap, stall, rate limit). Before each re-trigger the grind reads the reviewers again (`aiw grind-reviewers`) and mentions or requests that set in the same thread or PR, so a swap in Settings reaches a running grind.
 6. Post the closing summary and mention the owner.
 
 Each round re-enters as a fresh headless session that reads the PR's state file under
