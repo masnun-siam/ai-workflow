@@ -327,7 +327,10 @@ one push sums it up and the Inbox shows a "While you were away" summary until di
 **Grinding** mode, Deep (default: a grind runs until the reviewer has no blocker or should-fix left) or
 Simple (a grind stops, fixing nothing more, at the round where the PR is approved: the reviewer's
 review is an approval or GitHub's reviewDecision is approved). `/pr-grind` reads it every round, so a
-change reaches running grinds too (`grind_mode` in `ui_settings.json`). The last-used run model
+change reaches running grinds too (`grind_mode` in `ui_settings.json`). Under it, the global **Local review**
+mode, Single (default: `/implement-issue` step 12 fixes Critical/Major and re-reviews the new commits) or Loop
+(re-review until a round finds nothing new, then check and push once); a run reads it once at the start of
+step 12, so a switch affects later runs only (`review_mode` in `ui_settings.json`). The last-used run model
 (`opus`, `sonnet`, `haiku`) and effort (`low` to `max`) are `run_model` / `run_effort` there (null: Claude's
 default); `POST /api/sessions` and `POST /api/start` take optional `model` / `effort`, added as `--model` /
 `--effort` on every spawn of that session and replayed by Rerun; only a settings save changes the saved pair. The feature flow's PRD, tasks and refine starts always send `opus` / `medium` (`PLAN_RUN`) and never touch the saved pair. Then one table of
