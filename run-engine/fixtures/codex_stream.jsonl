@@ -19,8 +19,8 @@
 {"type":"thread.started","thread_id":"01a1a2fc-5ee5-7443-bac0-d09ae1ff20a4"}
 {"type":"turn.started"}
 {"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I’ll append the line to README.md using the file-editing tool."}}
-{"type":"item.started","item":{"id":"item_1","type":"file_change","changes":[{"path":"/private/tmp/codex-fixture.XrsQ/README.md","kind":"update"}],"status":"in_progress"}}
-{"type":"item.completed","item":{"id":"item_1","type":"file_change","changes":[{"path":"/private/tmp/codex-fixture.XrsQ/README.md","kind":"update"}],"status":"completed"}}
+{"type":"item.started","item":{"id":"item_1","type":"file_change","changes":[{"path":"/private/tmp/scratch/README.md","kind":"update"}],"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"file_change","changes":[{"path":"/private/tmp/scratch/README.md","kind":"update"}],"status":"completed"}}
 {"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"Added “world” to the end of README.md."}}
 {"type":"turn.completed","usage":{"input_tokens":117089,"cached_input_tokens":108032,"cache_write_input_tokens":0,"output_tokens":329,"reasoning_output_tokens":0}}
 {"type":"thread.started","thread_id":"01a1a2fd-0ac7-75b3-826e-dc39fb189f59"}

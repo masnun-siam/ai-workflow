@@ -161,7 +161,7 @@ expected = [
         "input": {
             "id": "item_1",
             "type": "file_change",
-            "changes": [{"path": "/private/tmp/codex-fixture.XrsQ/README.md", "kind": "update"}],
+            "changes": [{"path": "/private/tmp/scratch/README.md", "kind": "update"}],
             "status": "completed",
         },
     },
