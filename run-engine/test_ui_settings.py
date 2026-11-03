@@ -96,7 +96,6 @@ assert "auto_grind" not in json.load(open(ui_settings._path()))
 assert ui_settings.repo_settings("o/a") == {
     "auto_grind": True,
     "slack_channel": "",
-    "reviewer": "",
     "reviewers": None,
     "issue_grind": {},
 }
@@ -137,25 +136,16 @@ r = ui_settings.save(
     }
 )
 assert (
-    r["repos"]["o/a"]
-    == {"auto_grind": True, "slack_channel": "C0123ABCD", "reviewer": "", "reviewers": None, "channel_invalid": False}
+    r["repos"]["o/a"] == {"auto_grind": True, "slack_channel": "C0123ABCD", "reviewers": None, "channel_invalid": False}
     and r["repos"]["o/b"]["slack_channel"] == ""
 )
 assert raises(ui_settings.save, {"commands": [], "repos": {"o/a": {"slack_channel": 5}}})
-r = ui_settings.save({"repos": {"o/a": {"reviewer": " bob-1 "}}})
-assert r["repos"]["o/a"]["reviewer"] == "bob-1" and ui_settings.repo_settings("o/a")["reviewer"] == "bob-1"
-assert ui_settings.save({"repos": {"o/a": {"reviewer": "copilot"}}})["repos"]["o/a"]["reviewer"] == "copilot"
-for bad in ("org/team", "a b", "x" * 40, 5):
-    assert raises(ui_settings.save, {"repos": {"o/a": {"reviewer": bad}}}), bad
-assert ui_settings.save({"repos": {"o/a": {"slack_channel": ""}}})["repos"]["o/a"]["reviewer"] == "copilot", (
-    "omitted: kept"
-)
-assert ui_settings.save({"repos": {"o/a": {"reviewer": ""}}})["repos"]["o/a"]["reviewer"] == ""
+r = ui_settings.save({"repos": {"o/a": {"reviewer": "bob"}}})  # the old per-repo field: accepted, not stored
+assert "reviewer" not in r["repos"]["o/a"] and "reviewer" not in json.load(open(ui_settings._path()))["repos"]["o/a"]
 # a stored Auto-build cap or epic list from before dispatches is ignored, never shown
 r = ui_settings.save({"repos": {"o/a": {"autopilot_cap": 4, "slack_channel": ""}}, "autopilot": {"o/a": [7]}})
 assert (
-    r["repos"]["o/a"]
-    == {"auto_grind": False, "slack_channel": "", "reviewer": "", "reviewers": None, "channel_invalid": False}
+    r["repos"]["o/a"] == {"auto_grind": False, "slack_channel": "", "reviewers": None, "channel_invalid": False}
     and "autopilot" not in r
     and r["commands"]
 )

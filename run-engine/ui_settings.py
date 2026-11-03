@@ -208,7 +208,6 @@ def _repo(d) -> dict:
     return {
         "auto_grind": d.get("auto_grind") is True,
         "slack_channel": ch if isinstance(ch, str) else "",
-        "reviewer": d["reviewer"] if isinstance(d.get("reviewer"), str) else "",
         "reviewers": rv if isinstance(rv := d.get("reviewers"), list) and all(isinstance(i, str) for i in rv) else None,
     }
 
@@ -497,9 +496,6 @@ def validate(body) -> dict:
         ch = r.get("slack_channel", "")
         if not isinstance(ch, str) or len(ch) > 100:
             raise ValueError("slack_channel must be a string of at most 100 characters")
-        rv = r.get("reviewer", (kept.get(slug) or {}).get("reviewer", ""))  # the UI form omits it: keep the stored one
-        if not isinstance(rv, str) or (rv.strip() and not REVIEWER_RE.match(rv.strip())):
-            raise ValueError("reviewer must be a GitHub login or copilot")
         if slug in sent and "reviewers" in r:
             rv_ids = (
                 None
@@ -518,7 +514,6 @@ def validate(body) -> dict:
         clean_repos[slug] = {
             "auto_grind": r.get("auto_grind") is True,
             "slack_channel": ch,
-            "reviewer": rv.strip(),
             "reviewers": rv_ids,
         }
     return {

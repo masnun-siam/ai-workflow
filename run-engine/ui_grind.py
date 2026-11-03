@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 
 import shared
 import dispatch_run
+import grind_reviewers
 import repo_skills
 import ui_inbox
 import ui_notify
@@ -185,28 +186,31 @@ def autostart(repo: str, snapshot: dict, prev_snapshot: dict, settings: dict, st
             continue
         if dispatch_run.active_lane(repo, n=issue_of.get(p["n"])) or dispatch_run.active_lane(repo, pr=p["n"]):
             continue  # a dispatch lane grinds its own PR in its own session
-        if _start(repo, p, settings, start) == 201:
+        if _start(repo, p, start) == 201:
             started.append(p["n"])
     return started
 
 
-def _start(repo: str, pr: dict, settings: dict, start=None) -> int:
-    """Start one `/pr-grind` for `pr`; the HTTP status (201 started, 409 one is live), anything else warned."""
+def _start(repo: str, pr: dict, start=None):
+    """Start one `/pr-grind` for `pr`; the HTTP status (201 started, 409 one is live), anything else warned.
+    None, warned, when the resolver says the repo cannot grind."""
+    why = skip_reason(repo)
+    if why:
+        warn(f"grind start {repo}#{pr['n']}: {why}")
+        return None
     if start is None:
         import ui_repos
 
         start = ui_repos.start_session
-    status, body = start(
-        {"repo": repo, "text": grind_text(pr["url"], (settings or {}).get("slack_channel"), reviewer_of(repo))}
-    )
+    status, body = start({"repo": repo, "text": grind_text(pr["url"], grind_reviewers.resolve(repo)["channel"])})
     if status not in (201, 409):
         warn(f"grind start {repo}#{pr['n']}: {status} {body.get('error') if isinstance(body, dict) else body}")
     return status
 
 
-def set_issue(repo: str, issue: int, on: bool, snapshot: dict, settings: dict, start=None) -> dict:
+def set_issue(repo: str, issue: int, on: bool, snapshot: dict, start=None) -> dict:
     """The issue's grinding switch. On starts a grind for its ready PR when it has none yet; off stops a loop
-    that is not done (the PR stays open)."""
+    that is not done (the PR stays open). ValueError when a grind would start for a repo that cannot grind."""
     ui_settings.set_issue_grind(repo, issue, on)
     pr = next(
         (
@@ -224,24 +228,25 @@ def set_issue(repo: str, issue: int, on: bool, snapshot: dict, settings: dict, s
         except Conflict:
             h = None
         if on and h is None and not pr.get("draft"):
-            if _start(repo, pr, settings, start) not in (201, 409):
+            why = skip_reason(repo)
+            if why:
+                raise ValueError(why)
+            if _start(repo, pr, start) not in (201, 409):
                 raise RuntimeError(f"could not start the grind on PR #{pr['n']}")
         elif not on and h is not None and "done" not in h:
             stop(repo, pr["n"])
     return {"repo": repo, "issue": issue, "on": on}
 
 
-def reviewer_of(repo: str):
-    """The repo's GitHub reviewer when it has no Slack channel (Settings or channels.json), else None."""
-    import dispatch_cli
+def skip_reason(repo: str):
+    """Why the repo cannot grind (grind_reviewers' skip, or NO_REVIEWER for a repo it does not know), else None."""
+    g = grind_reviewers.resolve(repo)
+    return g["skip"] or (grind_reviewers.NO_REVIEWER if g["path"] is None else None)
 
-    return dispatch_cli.reviewer(repo)
 
-
-def grind_text(pr_url: str, channel, reviewer=None) -> str:
-    """The /pr-grind prompt; `--channel <id>` names the repo's Slack channel (pr-grind's channels config otherwise),
-    `--reviewer <login>` a GitHub reviewer for a repo with no Slack."""
-    return f"/pr-grind {pr_url}" + dispatch_run.grind_args(channel, reviewer)
+def grind_text(pr_url: str, channel) -> str:
+    """The /pr-grind prompt; `--channel <id>` names the repo's Slack channel (pr-grind's channels config otherwise)."""
+    return f"/pr-grind {pr_url}" + dispatch_run.grind_args(channel)
 
 
 def notify_changes() -> None:

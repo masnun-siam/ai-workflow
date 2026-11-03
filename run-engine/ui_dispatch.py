@@ -15,6 +15,7 @@ import time
 import dispatch_cli
 import dispatch_run as dr
 import dispatch_runners
+import grind_reviewers
 import ui_gh
 import ui_grind
 import ui_notify
@@ -71,7 +72,7 @@ def _grind(repo: str, pr: int, files=None):
 _TRUNCATED_WARNED: set = set()
 
 
-def lane_facts(x: dict, snap, status=None, grind_files=None, channel=dispatch_cli.channel, solo=ui_gh.solo):
+def lane_facts(x: dict, snap, status=None, grind_files=None, resolve=grind_reviewers.resolve, solo=ui_gh.solo):
     """Facts for one lane (schema in dispatch_run), or None when its repo has no fresh snapshot, or when the
     snapshot's open-issue list was cut short and lacks the lane's issue (it may be open past the cut)."""
     if not snap or snap.get("stale") or snap.get("fetched_at") is None:
@@ -92,9 +93,8 @@ def lane_facts(x: dict, snap, status=None, grind_files=None, channel=dispatch_cl
             dr.key(x["repo"], b["n"]) for b in (issue or {}).get("blocked_by", []) if b["state"] == "OPEN"
         ],
     }
-    ch = channel(x["repo"])
-    f["reviewer"] = dispatch_cli.reviewer(x["repo"]) if channel is dispatch_cli.channel else None
-    f["slack"], f["channel"] = ch is not None or bool(f["reviewer"]), ch or None
+    g = resolve(x["repo"])
+    f["slack"], f["channel"] = g["path"] is not None and not g["skip"], g["channel"]
     f["solo"] = solo(x["repo"])
     p = _pr_of(x, data, issue)
     if p:

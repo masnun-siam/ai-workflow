@@ -18,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor, wait
 
 import dispatch
 import dispatch_run as dr
+import grind_reviewers
 import jev
 import ui_settings
 from shared import data_dir, run
@@ -225,26 +226,6 @@ def resolve_issues(refs, gh=_gh, bodies=False) -> dict:
     return r
 
 
-def channel(repo: str):
-    """The repo's Slack channel for grinding: the id from Settings, "" when channels.json maps it, None for none."""
-    ch = ui_settings.repo_settings(repo).get("slack_channel")
-    if ch:
-        return ch
-    try:
-        with open(os.path.join(data_dir(), "channels.json"), encoding="utf-8") as f:
-            mapped = (json.load(f).get("channels") or {}).get(repo)
-    except (OSError, ValueError, AttributeError):
-        mapped = None
-    return "" if mapped else None
-
-
-def reviewer(repo: str):
-    """The repo's GitHub reviewer for grinding, only when it has no Slack channel (Slack wins); else None."""
-    if channel(repo) is not None:
-        return None
-    return ui_settings.repo_settings(repo).get("reviewer") or None
-
-
 def branch_sha(repo: str, branch: str, gh=_gh) -> "str | None":
     """Head SHA of `branch` on `repo`, or None when it does not exist (or gh failed: fail safe)."""
     p = gh(["api", f"repos/{repo}/git/ref/heads/{branch}", "-q", ".object.sha"])
@@ -299,8 +280,9 @@ def preview(r: dict, settings: dict, runner: str, gh=_gh) -> dict:
     for repo in repos:
         if runner == "herdr" and repo.lower() not in checkouts:
             p["warnings"].append(f"{repo}: no local checkout registered (aiw ui -> Repositories)")
-        if settings.get("grind", "full") != "off" and channel(repo) is None and not reviewer(repo):
-            p["warnings"].append(f"{repo}: no Slack channel or reviewer, its lanes skip grinding")
+        g = grind_reviewers.resolve(repo)
+        if settings.get("grind", "full") != "off" and (g["skip"] or g["path"] is None):
+            p["warnings"].append(f"{repo}: {g['skip'] or grind_reviewers.NO_REVIEWER}")
     p["warnings"].extend(missing_base(repos, settings.get("base_branch"), gh))
     scores = {}
     if "bodies" in r:

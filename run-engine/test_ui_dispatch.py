@@ -72,12 +72,13 @@ def snap(issues=(), merged=(), open_prs=(), stale=False, truncated=False):
     }
 
 
-no_channel = lambda repo: None  # noqa: E731
+GRIND = {"path": None, "channel": None, "mentions": [], "logins": [], "unlogged": [], "skip": None}
+no_grind = lambda repo: GRIND  # noqa: E731
 
 # --- a truncated open-issue list lacking the lane's issue: the lane waits; a complete one: the issue is closed
 t_lane = {"repo": R, "n": 777, "handle": {"t": 1}}
-assert ui_dispatch.lane_facts(t_lane, snap(truncated=True), channel=no_channel) is None
-assert ui_dispatch.lane_facts(t_lane, snap(), channel=no_channel)["issue_open"] is False
+assert ui_dispatch.lane_facts(t_lane, snap(truncated=True), resolve=no_grind) is None
+assert ui_dispatch.lane_facts(t_lane, snap(), resolve=no_grind)["issue_open"] is False
 
 # --- lane_facts: stale -> None; open issue, blockers, PR approval via reviewer, grind header, agent
 lane = {"repo": R, "n": 5, "handle": {"t": 1}}
@@ -88,7 +89,13 @@ s = snap(
     open_prs=[{**pr(50), "reviewer": "bot", "approved": True, "changes_requested": False, "checks": 3}],
 )
 grind_files = [("x", {"owner": "O", "repo": "R", "number": "50", "dispatch-due": "2026-10-23T00:00:00Z"})]
-f = ui_dispatch.lane_facts(lane, s, status=lambda h: ("blocked", None), grind_files=grind_files, channel=lambda r: "C1")
+f = ui_dispatch.lane_facts(
+    lane,
+    s,
+    status=lambda h: ("blocked", None),
+    grind_files=grind_files,
+    resolve=lambda r: {**GRIND, "path": "slack", "channel": "C1"},
+)
 assert f["issue_open"] and f["refined"] and f["blockers_open"] == ["o/r#4"]
 assert (
     f["pr"]["n"] == 50
@@ -101,31 +108,34 @@ f = ui_dispatch.lane_facts(
     lane,
     s,
     grind_files=[("x", {"owner": "o", "repo": "r", "number": "50", "done": "t — approved"})],
-    channel=no_channel,
+    resolve=no_grind,
 )
 assert f["grind"]["state"] == "done" and f["slack"] is False and "agent" not in f
+assert "reviewer" not in f
+skipped = {**GRIND, "skip": "invalid Slack channel general, pick a channel in Settings"}
+assert ui_dispatch.lane_facts(lane, s, grind_files=[], resolve=lambda r: skipped)["slack"] is False
 # closed issue: the merged list names its PR
 f = ui_dispatch.lane_facts(
     lane,
     snap(merged=[{"n": 50, "title": "", "url": "u", "merged_at": "t", "head": "h", "closes": [5], "epic": 1}]),
     grind_files=[],
-    channel=no_channel,
+    resolve=no_grind,
 )
 assert f["issue_open"] is False and f["pr"]["state"] == "MERGED"
 # a runner that cannot be reached reads as no news
-f = ui_dispatch.lane_facts(lane, s, status=lambda h: 1 / 0, grind_files=[], channel=no_channel)
+f = ui_dispatch.lane_facts(lane, s, status=lambda h: 1 / 0, grind_files=[], resolve=no_grind)
 assert f["agent"] == "unknown" and f["limited_until"] is None
 # a merged PR from before the lane started is an earlier run of a reissued issue
 old = pr(40, state="MERGED", merged_at="2026-11-01T00:00:00Z")
 started = 1793000000.0  # 2026-10-28 < merged_at
 for started_at, has_pr in ((started + 10**7, False), (started, True), (None, True)):
     ln = {"repo": R, "n": 5, **({"started_at": started_at} if started_at else {})}
-    f = ui_dispatch.lane_facts(ln, snap([issue(5, prs=[old])]), grind_files=[], channel=no_channel)
+    f = ui_dispatch.lane_facts(ln, snap([issue(5, prs=[old])]), grind_files=[], resolve=no_grind)
     assert ("pr" in f) is has_pr and (not has_pr or f["pr"]["state"] == "MERGED"), started_at
 # closed issue: the merged list is filtered the same way
 m = {"n": 50, "title": "", "url": "u", "merged_at": "2026-11-01T00:00:00Z", "head": "h", "closes": [5], "epic": 1}
 ln = {"repo": R, "n": 5, "started_at": started + 10**7}
-assert "pr" not in ui_dispatch.lane_facts(ln, snap(merged=[m]), grind_files=[], channel=no_channel)
+assert "pr" not in ui_dispatch.lane_facts(ln, snap(merged=[m]), grind_files=[], resolve=no_grind)
 print("  ok  lane_facts")
 
 

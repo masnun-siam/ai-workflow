@@ -13,7 +13,7 @@ the caller from the board snapshot, the grind index and the runner:
                    "conflict": bool, "approved": bool, "changes_requested": bool, "threads_open": int,
                    "sha": head commit | None},
      "grind": None | {"state": idle|running|paused|done, "reason": str, "due": str | None},  # due: a token
-     "slack": bool,                                  # the repo has a grind channel or reviewer; False skips grinding
+     "slack": bool,                                  # the resolver gives a path and no skip; False skips grinding
      "solo": bool,                                   # the repo is the gh user's own: no approval needed
      "agent": working|idle|blocked|gone|unknown|None, "limited_until": float | None}
 
@@ -234,9 +234,7 @@ def step(lane: dict, facts: dict, settings: dict, now: float) -> tuple:
         if ready and (free or pr.get("ci") == "success"):
             if _grind_on(settings, facts):
                 to("grinding")
-                acts.append(
-                    ("send", grind_prompt(pr["url"], facts.get("channel"), ci=ci, reviewer=facts.get("reviewer")))
-                )
+                acts.append(("send", grind_prompt(pr["url"], facts.get("channel"), ci=ci)))
             else:
                 to("merge_gate")
             return patch, acts
@@ -264,7 +262,7 @@ def step(lane: dict, facts: dict, settings: dict, now: float) -> tuple:
                 acts.append(
                     (
                         "send",
-                        grind_prompt(pr.get("url") or "", facts.get("channel"), ci=ci, reviewer=facts.get("reviewer")),
+                        grind_prompt(pr.get("url") or "", facts.get("channel"), ci=ci),
                     )
                 )
             elif agent == "blocked" and not lane.get("needs_you"):

@@ -113,10 +113,31 @@ def fake_start(body):
     return 201, {"id": "S"}
 
 
-on = {"auto_grind": True, "slack_channel": "C0123"}
+import json  # noqa: E402
+
+import ui_settings  # noqa: E402
+
+
+def grind_setup(repos):
+    """Settings with one listed channel and two reviewers: a Slack member and a GitHub login."""
+    revs = [
+        {"id": "r-0000000a", "name": "Sam", "slack_id": "U0000000A", "github_login": ""},
+        {"id": "r-0000000c", "name": "Gita", "slack_id": "", "github_login": "gita"},
+    ]
+    body = {
+        "slack_channels": [{"id": "C0123ABCD", "name": "#rev"}],
+        "reviewers": revs,
+        "active_reviewers": ["r-0000000a"],
+    }
+    with open(ui_settings._path(), "w") as f:
+        json.dump({**body, "repos": repos}, f)
+
+
+grind_setup({"o/r": {"slack_channel": "C0123ABCD"}})
+on = {"auto_grind": True}
 prev, now = snap([pr(60, True), pr(61, True)]), snap([pr(60, False), pr(61, True)])
 assert ui_grind.autostart("o/r", now, prev, on, start=fake_start) == [60]
-assert calls == [{"repo": "o/r", "text": "/pr-grind https://github.com/o/r/pull/60 --channel C0123"}], calls
+assert calls == [{"repo": "o/r", "text": "/pr-grind https://github.com/o/r/pull/60 --channel C0123ABCD"}], calls
 calls.clear()
 assert ui_grind.autostart("o/r", now, prev, {"auto_grind": False}, start=fake_start) == [] and not calls
 assert ui_grind.autostart("o/r", snap([pr(60, False)], stale=True), prev, on, start=fake_start) == [] and not calls
@@ -141,10 +162,15 @@ assert ui_grind.autostart(
 assert ui_grind.autostart("o/r", bare, bare_prev, {"issue_grind": {1: True}}, start=fake_start) == [], "no issue: repo"
 calls.clear()
 assert ui_grind.grind_text("u", "") == "/pr-grind u" and ui_grind.grind_text("u", "a b;c") == "/pr-grind u"
-assert ui_grind.grind_text("u", None, "bob") == "/pr-grind u --reviewer bob"
-assert ui_grind.grind_text("u", None, "copilot") == "/pr-grind u --reviewer copilot"
-assert ui_grind.grind_text("u", "C1", "bob") == "/pr-grind u --channel C1", "Slack wins"
-assert ui_grind.grind_text("u", None, "a b;c") == "/pr-grind u" == ui_grind.grind_text("u", None, "org/team")
+assert ui_grind.grind_text("u", "C1") == "/pr-grind u --channel C1"
+grind_setup({"o/r": {}})  # no channel, no reviewer with a login: nothing starts
+assert ui_grind.autostart("o/r", now, prev, on, start=fake_start) == [] and not calls
+assert ui_grind.skip_reason("o/r") == "no Slack channel or reviewer, its lanes skip grinding"
+assert ui_grind.skip_reason("x/unknown") == "no Slack channel or reviewer, its lanes skip grinding"
+grind_setup({"o/r": {"reviewers": ["r-0000000c"]}})  # a login, no channel: no flags
+assert ui_grind.autostart("o/r", now, prev, on, start=fake_start) == [60]
+assert calls == [{"repo": "o/r", "text": "/pr-grind https://github.com/o/r/pull/60"}], calls
+calls.clear()
 print("  ok  autostart")
 
 
@@ -202,12 +228,10 @@ assert ui_grind.stop("o/r", 72)["state"] == "done" and ui_grind.index()["pr"][("
 print("  ok  stop")
 
 # set_issue: stores the switch; on starts a grind for a ready PR with none, off stops a live loop
-import ui_settings  # noqa: E402
-
 calls.clear()
 ready = snap([pr(80, False)])
 ready["data"]["issues"][0]["n"] = 8
-assert ui_grind.set_issue("o/r", 8, True, ready, {"slack_channel": ""}, start=fake_start) == {
+assert ui_grind.set_issue("o/r", 8, True, ready, start=fake_start) == {
     "repo": "o/r",
     "issue": 8,
     "on": True,
@@ -216,22 +240,30 @@ assert ui_settings.repo_settings("o/r")["issue_grind"][8] is True
 assert calls == [{"repo": "o/r", "text": "/pr-grind https://github.com/o/r/pull/80"}], calls
 calls.clear()
 state_file(80)
-ui_grind.set_issue("o/r", 8, True, ready, {}, start=fake_start)
+ui_grind.set_issue("o/r", 8, True, ready, start=fake_start)
 assert not calls, "a loop already exists: not started twice"
-ui_grind.set_issue("o/r", 8, False, ready, {}, start=fake_start)
+ui_grind.set_issue("o/r", 8, False, ready, start=fake_start)
 assert (
     ui_grind.index()["pr"][("o", "r", 80)]["state"] == "done"
     and ui_settings.repo_settings("o/r")["issue_grind"][8] is False
 )
 draft = snap([pr(81, True)])
 draft["data"]["issues"][0]["n"] = 9
-ui_grind.set_issue("o/r", 9, True, draft, {}, start=fake_start)
+ui_grind.set_issue("o/r", 9, True, draft, start=fake_start)
 assert not calls, "a draft PR is not ready: the grind starts when it turns ready"
-ui_grind.set_issue("o/r", 10, True, snap([]), {}, start=lambda b: (502, {"error": "x"}))  # no PR: only the switch
+ui_grind.set_issue("o/r", 10, True, snap([]), start=lambda b: (502, {"error": "x"}))  # no PR: only the switch
 assert ui_settings.repo_settings("o/r")["issue_grind"][10] is True
 os.unlink(os.path.join(d, "pr-grind", "o-r-80.md"))
+grind_setup({"o/r": {}})
 try:
-    ui_grind.set_issue("o/r", 8, True, ready, {}, start=lambda b: (502, {"error": "x"}))
+    ui_grind.set_issue("o/r", 8, True, ready, start=fake_start)
+    raise AssertionError("expected ValueError")
+except ValueError as e:
+    assert str(e) == "no Slack channel or reviewer, its lanes skip grinding" and not calls
+assert ui_settings.repo_settings("o/r")["issue_grind"][8] is True, "the switch is stored"
+grind_setup({"o/r": {"reviewers": ["r-0000000c"]}})
+try:
+    ui_grind.set_issue("o/r", 8, True, ready, start=lambda b: (502, {"error": "x"}))
     raise AssertionError("expected RuntimeError")
 except RuntimeError:
     pass
