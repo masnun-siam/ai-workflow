@@ -15,7 +15,7 @@ export const SECTIONS = [
   { id: 'repos', label: 'Repositories', Body: ReposSection },
   { id: 'channels', label: 'Slack channels', Body: ChannelsSection },
   { id: 'reviewers', label: 'Reviewers', Body: ReviewersSection },
-  { id: 'accounts', label: 'Claude accounts', Body: AccountsSection },
+  { id: 'accounts', label: 'Accounts', Body: AccountsSection },
   { id: 'notifications', label: 'Notifications', Body: NotificationsSection },
   { id: 'review', label: 'Peer review', Body: ReviewSection },
   { id: 'vault', label: 'Notes vault', Body: VaultSection },

@@ -53,6 +53,9 @@ export interface Session {
   tokens: { input?: number; cached?: number; output?: number } | null;
   model?: string | null;
   effort?: string | null;
+  /** Absent means Claude. */
+  harness?: HarnessId;
+  run_note?: string | null;
   started_at: string;
   ended_at: string | null;
   waiting: boolean;
@@ -307,10 +310,17 @@ export interface ReposResponse {
   can_browse: boolean;
   scan_roots: string[];
 }
+export type HarnessId = 'claude' | 'codex';
+/** A harness the server can run; `models: null` means the account lists its own. */
+export interface Harness { id: HarnessId; label: string; models: string[] | null; efforts: string[]; usage: boolean }
 export interface ClaudeCommand {
   label: string;
   cmd: string;
   builtin?: boolean;
+  /** Absent means Claude. */
+  harness?: HarnessId;
+  /** Codex rows only: the models the account offers. */
+  models?: string[];
 }
 export interface SlackChannel { id: string; name: string }
 /** A saved grind reviewer: a Slack member id, a GitHub login, or both. A new entry is sent without an id. */
@@ -337,6 +347,8 @@ export interface DuplicateResponse { match: DuplicateMatch | null; confidence: n
 export interface Settings {
   commands: ClaudeCommand[];
   default: string;
+  /** Read-only: the harnesses an account can use. */
+  harnesses?: Harness[];
   repos?: Record<RepoSlug, RepoSettings>;
   /** The saved channels a repo picks from; a PUT with it replaces the whole list. */
   slack_channels?: SlackChannel[];
