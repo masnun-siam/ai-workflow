@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Grind reviewer resolver** (#841): `aiw grind-reviewers --pr <url>` prints the PR's grind `path` (`slack` or `github`), `channel`, `mentions`, `logins`, `unlogged` and `skip` as JSON from Settings and `channels.json` (exit 1 with `{"error"}` on an unreadable settings file). `GET /api/settings` adds the read-only `bot_label` and each repo's `path`; `PUT` ignores them.
 - **Local review radio** (#850): Settings → Repositories gets a **Local review: Single / Loop** radio under Grinding, saved as `review_mode` on change, with each mode's hint; a refused save puts the old choice back.
 - **Repo Reviewers column** (#849): Settings → Repositories shows each repo's reviewers, **Default** (the active names) or its override as chips, and a popover of reviewer ticks plus **Use default** sets or clears the override. Entries the repo's path can't use are dimmed with a hint.
 - **Saved reviewers** (#839): a validated `reviewers` list (`[{id, name, slack_id, github_login}]`, at most 50, server-generated `r-<8 hex>` ids that survive renames), a global `active_reviewers` and a per-repo `reviewers` override (`null` follows the active set) in `ui_settings.json` and `GET`/`PUT /api/settings`. Unknown ids are 400, and removing a reviewer drops its id from the active set and every override.
