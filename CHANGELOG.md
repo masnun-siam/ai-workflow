@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Local review mode** (#837): `review_mode` (`single`, the default, or `loop`) in `ui_settings.json` and `GET`/`PUT /api/settings` (any other value is 400), and `aiw local-review`, which prints it and falls back to `single` when it is unset or unreadable.
 - **Personal plugin commands** (#766): `dump`, `worklog` and `sync-from-wasensi` are listed in the Start dialog and palette only when `ai-workflow-personal` is installed (`personal_plugin` in `GET /api/settings`), and run as `/ai-workflow-personal:<name>`.
 - **Dismiss a failed session** (#765): a `session_failed` Inbox item has a Dismiss button (`x`) that removes it for good (`POST /api/sessions/<id>/dismiss`: 409 unless the session failed, 404 unknown); the session stays on Activity.
 - **Answer the first waiting question** (#764): a palette action, listed from any page while a session waits on you, that opens the oldest such session.

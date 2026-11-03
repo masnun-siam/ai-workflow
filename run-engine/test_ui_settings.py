@@ -40,6 +40,7 @@ assert {k: v for k, v in ui_settings.load().items() if k not in ("vault_dir", "j
     "default": "claude",
     "repos": {},
     "grind_mode": "deep",
+    "review_mode": "single",
     "use_jev": True,
     "run_model": None,
     "run_effort": None,
@@ -112,6 +113,17 @@ ui_settings.save({"repos": {"o/a": {"slack_channel": "C1"}}})
 assert ui_settings.grind_mode() == "simple", "a save without grind_mode keeps it"
 assert raises(ui_settings.validate, {"grind_mode": "fast"})
 ui_settings.save({"grind_mode": "deep"})
+# review_mode: single by default, a partial save sets it, other saves keep it, anything else is refused
+assert ui_settings.review_mode() == "single" and ui_settings.load()["review_mode"] == "single"
+ui_settings.save({"review_mode": "loop"})
+assert ui_settings.review_mode() == "loop" and ui_settings.load()["review_mode"] == "loop"
+ui_settings.save({"grind_mode": "simple"})
+ui_settings.save({"repos": {"o/a": {"slack_channel": "C1"}}})
+assert ui_settings.review_mode() == "loop", "saves without review_mode keep it"
+before = open(ui_settings._path()).read()
+for bad in ("fast", None, 1):
+    assert raises(ui_settings.save, {"review_mode": bad}) and open(ui_settings._path()).read() == before, bad
+ui_settings.save({"grind_mode": "deep", "review_mode": "single"})
 cur = ui_settings.load()
 r = ui_settings.save({"commands": [], "repos": {**cur["repos"], "o/a": {"auto_grind": True, "slack_channel": "C2"}}})
 assert (
@@ -196,4 +208,4 @@ ts = [threading.Thread(target=ui_settings.set_issue_grind, args=("o/r", i, True)
 [t.join() for t in ts]
 assert len(ui_settings.repo_settings("o/r")["issue_grind"]) == 20
 print("ui_settings: corrupt aside, bad stored slug dropped, concurrent set_issue_grind kept")
-print("ui_settings: 44 checks passed")
+print("ui_settings: 49 checks passed")
