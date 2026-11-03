@@ -264,4 +264,4 @@ ui_settings.save({"repos": {"o/a": {"slack_channel": "#x"}}})
 assert ui_settings.load()["repos"]["o/a"]["channel_invalid"] is True
 assert raises(ui_settings.save, {"repos": {"o/a": {"slack_channel": "#y"}}})
 assert "channel_invalid" not in open(ui_settings._path()).read()
-print("ui_settings: 72 checks passed")
+print("ui_settings: 71 checks passed")
