@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import shlex
 import subprocess
 
 import repo_skills
+import ui_events
 import ui_settings
 
 ID = "claude"
@@ -117,3 +119,39 @@ def resume_argv(exe, session_id, prompt, *, rec):
 
 def skill_text(text, cwd) -> str:
     return repo_skills.resolve(text, cwd)
+
+
+def parse_line(line) -> list:
+    """One stream-json line -> common events: ui_events' text/tool/result, plus session_id and limit."""
+    events = ui_events.parse_line(line)
+    try:
+        ev = json.loads(line)
+    except ValueError:  # includes UnicodeDecodeError
+        return events
+    if not isinstance(ev, dict):
+        return events
+    if ev.get("type") == "system" and ev.get("subtype") == "init":
+        model = ev.get("model")
+        return [
+            *events,
+            {
+                "kind": "session_id",
+                "id": ev.get("session_id"),
+                "model": model if isinstance(model, str) and model else None,
+            },
+        ]
+    if ev.get("type") == "rate_limit_event" and isinstance(ev.get("rate_limit_info"), dict):
+        info = ev["rate_limit_info"]
+        resets = info.get("resetsAt")
+        resets = int(resets) if isinstance(resets, (int, float)) and not isinstance(resets, bool) else None
+        return [{"kind": "limit", "resets_at": resets, "type": info.get("rateLimitType"), "info": info}]
+    errs = ev.get("errors")
+    if ev.get("type") == "result" and ev.get("is_error") and isinstance(errs, list) and errs:
+        for e in events:
+            e["error"] = str(errs[0])  # the follower prefers it over `result` for its error text
+    return events
+
+
+def resume_command(cmd, path, session_id):
+    """The "resume in terminal" command; cmd is ignored, as before the adapter."""
+    return f"cd {shlex.quote(path)} && claude --resume {shlex.quote(session_id)}" if path and session_id else None

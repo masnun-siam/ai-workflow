@@ -57,7 +57,17 @@ def tokens_of(usage):
     return {"input": total_in, "cached": cached, "output": out} if total_in or out else None
 
 
-def read_from(path: str, offset: int):
+TRANSCRIPT_KINDS = ("text", "tool", "result")
+
+
+def transcript_parser(parse):
+    """parse, keeping only the events the transcript shows (no session_id/limit, no follower-only `error`)."""
+    return lambda line: [
+        {k: v for k, v in e.items() if k != "error"} for e in parse(line) if e["kind"] in TRANSCRIPT_KINDS
+    ]
+
+
+def read_from(path: str, offset: int, parse=parse_line):
     try:
         f = open(path, "rb")
     except FileNotFoundError:
@@ -73,5 +83,5 @@ def read_from(path: str, offset: int):
         return [], offset
     events = []
     for line in chunk[:end].split(b"\n"):
-        events.extend(parse_line(line))
+        events.extend(parse(line))
     return events, offset + end + 1

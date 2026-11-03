@@ -15,6 +15,7 @@ import threading
 import time
 
 import away_answerer
+import harness
 import peer_review
 import ui_events
 import ui_notify
@@ -36,11 +37,12 @@ class Conflict(Exception):
 def final_text(sid: str) -> str:
     """The last turn's final answer: the stream's last result text, else its last assistant text."""
     path = os.path.join(ui_sessions.session_dir(sid), "stream.jsonl")
+    parse = ui_events.transcript_parser(harness.for_record(ui_sessions.load(sid)).parse_line)
     result = text = None
     try:
         with open(path, "rb") as fh:
             for line in fh:
-                for ev in ui_events.parse_line(line):
+                for ev in parse(line):
                     if ev["kind"] == "result" and ev["text"] is not None:
                         result = ev["text"]
                     elif ev["kind"] == "text":

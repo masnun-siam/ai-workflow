@@ -16,7 +16,6 @@ import secrets
 import tempfile
 from datetime import datetime, timezone
 
-import ui_events
 import ui_notify
 from shared import data_dir, warn
 
@@ -324,19 +323,19 @@ _LIVE = ("starting", "running", "waiting", "limited", "queued")
 
 def last_tokens(sid: str):
     """Token use from the stream's last result event, the same one `cost` came from; None if none."""
+    import harness  # noqa: PLC0415 - harness imports modules that import this one
+
+    parse = harness.for_record(load(sid)).parse_line
     last = None
     try:
         with open(os.path.join(session_dir(sid), "stream.jsonl"), "rb") as f:
             for line in f:
-                if b'"type":"result"' in line:
-                    last = line
+                for ev in parse(line):
+                    if ev["kind"] == "result":
+                        last = ev
     except OSError:
         return None
-    try:
-        ev = json.loads(last) if last else None
-    except ValueError:
-        return None
-    return ui_events.tokens_of(ev.get("usage")) if isinstance(ev, dict) else None
+    return last["tokens"] if last else None
 
 
 def _with_tokens(record: dict) -> dict:

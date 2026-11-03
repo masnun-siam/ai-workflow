@@ -164,6 +164,8 @@ port = srv.server_address[1]
 HOST = f"127.0.0.1:{port}"
 ALLOWED = {
     "id",
+    "harness",
+    "run_note",
     "command",
     "repo",
     "link",

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import fcntl
 import glob
-import json
 import os
 import re
 import shutil
@@ -29,7 +28,6 @@ import ui_sessions
 import ui_settings
 from dispatch import read_checkouts
 from shared import data_dir, warn
-import ui_events
 
 from harness_claude import CLAUDE_ARGS, HEADLESS_PROMPT  # noqa: F401 - re-exported: tests import them from here
 
@@ -391,47 +389,45 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
     """Follow a session until it exits. proc is None for a re-attached (non-child) pid."""
     path = os.path.join(ui_sessions.session_dir(sid), "stream.jsonl")
     buf, is_error, saw_init, saw_result, first_err, asked = b"", False, False, False, None, False
-    limit = None  # rate_limit_info of a rejected event
-    cmd = (ui_sessions.load(sid) or {}).get("claude_cmd") or ui_settings.DEFAULT_CMD
+    limit = None  # the `limit` event of a rejected run
+    run_tokens = None  # summed `result` tokens since the run's session_id event
+    rec = ui_sessions.load(sid) or {}
+    cmd = rec.get("claude_cmd") or ui_settings.DEFAULT_CMD
+    adapter = harness.for_record(rec)
 
     def handle(line: bytes) -> None:
-        nonlocal is_error, saw_init, saw_result, first_err, asked, limit
-        try:
-            ev = json.loads(line)
-        except ValueError:
-            return
-        if not isinstance(ev, dict):
-            return
-        if ev.get("type") == "system" and ev.get("subtype") == "init":
+        for ev in adapter.parse_line(line):
+            on_event(ev)
+
+    def on_event(ev: dict) -> None:
+        nonlocal is_error, saw_init, saw_result, first_err, asked, limit, run_tokens
+        if ev["kind"] == "session_id":
             saw_init = True
-            asked = False  # a new claude process: an earlier `aiw ask` was answered (or this is a replay after a UI restart)
-            saw_result = is_error = False  # only the last claude process decides the outcome of a replay
-            ui_sessions.update(sid, session_id=ev.get("session_id"))
-            if isinstance(ev.get("model"), str) and ev["model"]:
+            asked = False  # a new process: an earlier `aiw ask` was answered (or this is a replay after a UI restart)
+            saw_result = is_error = False  # only the last process decides the outcome of a replay
+            run_tokens = None
+            ui_sessions.update(sid, session_id=ev["id"])
+            if ev["model"]:
                 ui_sessions.update(sid, model=ev["model"])
-        elif ev.get("type") == "assistant":
-            asked = asked or any(
-                e["kind"] == "tool"
-                and e["name"] == "Bash"
-                and isinstance(e["input"], dict)
-                and str(e["input"].get("command", "")).lstrip().startswith("aiw ask")
-                for e in ui_events.parse_line(line)
+        elif ev["kind"] == "tool":
+            asked = asked or (
+                ev["name"] == "Bash"
+                and isinstance(ev["input"], dict)
+                and str(ev["input"].get("command", "")).lstrip().startswith("aiw ask")
             )
-        elif ev.get("type") == "rate_limit_event" and isinstance(ev.get("rate_limit_info"), dict):
-            info = ev["rate_limit_info"]
-            _usage[cmd] = info
-            if info.get("status") not in (None, "allowed", "allowed_warning"):
-                limit = info
-        elif ev.get("type") == "result":
-            is_error, saw_result = bool(ev.get("is_error")), True
+        elif ev["kind"] == "limit":
+            info = ev["info"]
+            if isinstance(info, dict):
+                _usage[cmd] = info
+            if not isinstance(info, dict) or info.get("status") not in (None, "allowed", "allowed_warning"):
+                limit = ev
+        elif ev["kind"] == "result":
+            is_error, saw_result = ev["is_error"], True
             if is_error and first_err is None:
-                errs = ev.get("errors")
-                first_err = (
-                    str(errs[0])
-                    if isinstance(errs, list) and errs
-                    else str(ev.get("result") or "claude reported an error")
-                )
-            ui_sessions.update(sid, cost=ev.get("total_cost_usd"), tokens=ui_events.tokens_of(ev.get("usage")))
+                first_err = ev.get("error") or ev["text"] or "claude reported an error"
+            if ev["tokens"]:
+                run_tokens = {k: (run_tokens or {}).get(k, 0) + v for k, v in ev["tokens"].items()}
+            ui_sessions.update(sid, cost=ev["cost"], tokens=run_tokens)
 
     def drain() -> None:
         nonlocal offset, buf
@@ -537,9 +533,9 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
             warn(f"batch release after {sid} failed: {e}")
 
 
-def _mark_limited(sid: str, info, err) -> None:
-    resets = (info or {}).get("resetsAt")
-    resets = int(resets) if isinstance(resets, (int, float)) and not isinstance(resets, bool) else None
+def _mark_limited(sid: str, ev, err) -> None:
+    """ev: the run's `limit` event, or None when only the error text matched the limit rule."""
+    resets = (ev or {}).get("resets_at")
     ui_sessions.update(
         sid,
         status="limited",
@@ -547,7 +543,7 @@ def _mark_limited(sid: str, info, err) -> None:
         error=err,
         ended_at=None,
         limit_resets_at=resets,
-        limit_type=(info or {}).get("rateLimitType"),
+        limit_type=(ev or {}).get("type"),
         auto_resume=resets is not None,
     )
 
