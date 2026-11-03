@@ -148,6 +148,7 @@ ok(
     out,
 )
 ok("replaced: dropped from record", link("b") not in rec())
+ok("replaced: reported once", "1 skipped" in out[-1], out)
 reset()
 plugin("a", "b", "c")
 run()

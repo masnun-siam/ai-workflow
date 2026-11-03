@@ -39,7 +39,7 @@ def _not_symlink(p: str) -> str:
 
 
 def _install(rec: list, save) -> list:
-    out = []
+    out, reported = [], set()
     names = repo_skills.names()
     for p in list(rec):
         name = os.path.basename(p)
@@ -47,6 +47,7 @@ def _install(rec: list, save) -> list:
         if not os.path.islink(p):
             if os.path.lexists(p):
                 out.append(_not_symlink(p))
+                reported.add(p)
             rec.remove(p)  # aiw no longer owns it; a vanished link is recreated below
             save()
         elif name not in names:
@@ -68,7 +69,7 @@ def _install(rec: list, save) -> list:
     link_dir = _link_dir()
     for name in sorted(names):
         p = os.path.join(link_dir, name)
-        if p in rec:
+        if p in rec or p in reported:
             continue
         if os.path.lexists(p):
             out.append(f"skipped {p}: already exists and was not created by aiw install-skills")
