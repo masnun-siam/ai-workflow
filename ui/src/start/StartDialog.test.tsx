@@ -113,6 +113,65 @@ describe('Start dialog', () => {
     await waitFor(() => expect(posts()[0]).toMatchObject({ model: 'opus', effort: 'medium' }));
   });
 
+  describe('harness pickers', () => {
+    const HARNESSES = [
+      { id: 'claude', label: 'Claude Code', models: ['opus', 'sonnet', 'haiku'], efforts: ['low', 'medium', 'high', 'xhigh', 'max'], usage: true },
+      { id: 'codex', label: 'Codex', models: null, efforts: ['low', 'medium', 'high', 'xhigh'], usage: false },
+    ];
+    const withCodex = (over: Record<string, unknown> = {}) =>
+      mockApi({ '/api/settings': { commands: [{ label: 'claude', cmd: 'claude', builtin: true }, { label: 'cx', cmd: 'codex', harness: 'codex', models: ['gpt-5.1', 'o3'] }], default: 'claude', harnesses: HARNESSES, ...over } });
+    const opts = (label: string) => Array.from((screen.getByLabelText(label) as HTMLSelectElement).options).map((o) => o.textContent);
+    const puts = () => calls.filter((c) => c.method === 'PUT' && c.url === '/api/settings');
+
+    it('switching Run on resets what Codex does not offer, keeps the rest, and saves nothing', async () => {
+      withCodex();
+      const user = userEvent.setup();
+      open({ cmd: 'pr-review', arg: '5' });
+      await ready();
+      expect(opts('Model')).toEqual(['Default', 'Opus', 'Sonnet', 'Haiku']);
+      await user.selectOptions(screen.getByLabelText('Model'), 'opus');
+      await user.selectOptions(screen.getByLabelText('Effort'), 'high');
+      await waitFor(() => expect(puts()).toHaveLength(2));
+      await user.click(screen.getByRole('radio', { name: 'cx' }));
+      expect(opts('Model')).toEqual(['Default', 'gpt-5.1', 'o3']);
+      expect(opts('Effort')).toEqual(['Default', 'low', 'medium', 'high', 'xhigh']);
+      expect((screen.getByLabelText('Model') as HTMLSelectElement).value).toBe('');
+      expect((screen.getByLabelText('Effort') as HTMLSelectElement).value).toBe('high');
+      await user.selectOptions(screen.getByLabelText('Model'), 'o3');
+      await user.click(startButton());
+      await waitFor(() => expect(posts()[0]).toMatchObject({ claude_cmd: 'cx', model: 'o3', effort: 'high' }));
+      expect(puts()).toHaveLength(2); // the Codex pick and the reset saved nothing
+    });
+
+    it('max resets on Codex and switching back does not restore it', async () => {
+      withCodex({ run_model: 'opus', run_effort: 'max' });
+      const user = userEvent.setup();
+      open({ cmd: 'pr-review', arg: '5' });
+      await ready();
+      await waitFor(() => expect((screen.getByLabelText('Effort') as HTMLSelectElement).value).toBe('max'));
+      await user.click(screen.getByRole('radio', { name: 'cx' }));
+      expect((screen.getByLabelText('Model') as HTMLSelectElement).value).toBe('');
+      expect((screen.getByLabelText('Effort') as HTMLSelectElement).value).toBe('');
+      await user.click(screen.getByRole('radio', { name: 'claude' }));
+      expect((screen.getByLabelText('Model') as HTMLSelectElement).value).toBe('');
+      expect((screen.getByLabelText('Effort') as HTMLSelectElement).value).toBe('');
+      await user.click(startButton());
+      await waitFor(() => expect(posts()).toHaveLength(1));
+      expect(posts()[0]).not.toHaveProperty('model');
+      expect(posts()[0]).not.toHaveProperty('effort');
+      expect(puts()).toHaveLength(0);
+    });
+
+    it('a Codex default account opens on Default, not the saved Claude pair', async () => {
+      withCodex({ default: 'cx', run_model: 'sonnet', run_effort: 'max' });
+      open({ cmd: 'pr-review', arg: '5' });
+      await ready();
+      expect(opts('Model')).toEqual(['Default', 'gpt-5.1', 'o3']);
+      expect((screen.getByLabelText('Model') as HTMLSelectElement).value).toBe('');
+      expect((screen.getByLabelText('Effort') as HTMLSelectElement).value).toBe('');
+    });
+  });
+
   it('Default model and effort are left out of the start body', async () => {
     const user = userEvent.setup();
     open({ cmd: 'pr-review', arg: '5' });

@@ -4,7 +4,7 @@ import { useSaveSettings, useSessions, useSettings } from '../api/hooks';
 import type { CiMode, DispatchSettings, GrindMode } from '../api/types';
 import { BranchSelect } from './BranchSelect';
 import { clockText } from '../lib/format';
-import { limitedUntil } from '../start/startLogic';
+import { fitRun, limitedUntil, runOptions } from '../start/startLogic';
 import { Button, ModelEffortPicker, Switch } from '../components';
 
 const GRIND: { v: GrindMode; label: string; hint: string }[] = [
@@ -76,15 +76,16 @@ function LazyText({ id, value, onCommit, placeholder }: { id: string; value: str
  */
 export function SettingsFields({ value, onChange, live, noBranch, repo, runner }: { value: DispatchSettings; onChange: (p: Partial<DispatchSettings>) => void; live?: boolean; noBranch?: boolean; repo?: string | null; runner?: string }) {
   const saveDefaults = useSaveSettings();
-  // The saved defaults follow the latest pick, so every picker starts from it.
-  const pickRun = (p: { model?: string | null; effort?: string | null }) => {
-    onChange(p as Partial<DispatchSettings>);
-    saveDefaults.mutate({ ...(p.model !== undefined ? { run_model: p.model } : {}), ...(p.effort !== undefined ? { run_effort: p.effort } : {}) });
-  };
   const settings = useSettings().data;
   const limits = useSessions().data?.limits;
   const cmds = settings?.commands ?? [];
   const account = value.account ?? settings?.default;
+  const opts = runOptions(settings, account);
+  // The saved defaults follow the latest pick on a Claude account, so every picker starts from it (FR-12).
+  const pickRun = (p: { model?: string | null; effort?: string | null }) => {
+    onChange(p as Partial<DispatchSettings>);
+    if (opts.harness === 'claude') saveDefaults.mutate({ ...(p.model !== undefined ? { run_model: p.model } : {}), ...(p.effort !== undefined ? { run_effort: p.effort } : {}) });
+  };
   const ci = value.ci ?? 'wait';
   const grindHint = GRIND.find((g) => g.v === value.grind)?.hint;
   return (
@@ -140,7 +141,7 @@ export function SettingsFields({ value, onChange, live, noBranch, repo, runner }
       )}
       <div className="dsp-field">
         <span className="dsp-k">Model</span>
-        <ModelEffortPicker model={value.model} effort={value.effort} onChange={pickRun} />
+        <ModelEffortPicker model={value.model} effort={value.effort} onChange={pickRun} models={opts.models} efforts={opts.efforts} />
       </div>
       <div className="dsp-field">
         <label className="dsp-k" htmlFor="ds-cost">Cost cap (USD)</label>
@@ -149,7 +150,10 @@ export function SettingsFields({ value, onChange, live, noBranch, repo, runner }
           if (!v.trim()) onChange({ max_cost: null });
           else if (n > 0) onChange({ max_cost: n });
         }} />
-        <span className="faint dsp-hint">Pauses the dispatch once its headless sessions have cost this much.</span>
+        <span className="faint dsp-hint">
+          Pauses the dispatch once its headless sessions have cost this much.
+          {opts.harness === 'codex' ? <span style={{ display: 'block' }}>Cost cap does not apply on Codex accounts</span> : null}
+        </span>
       </div>
       {cmds.length > 1 ? (
         <div className="dsp-field">
@@ -158,13 +162,13 @@ export function SettingsFields({ value, onChange, live, noBranch, repo, runner }
             {cmds.map((a) => {
               const lim = limitedUntil(cmds, a.label, limits);
               return (
-                <button key={a.label} type="button" role="radio" aria-checked={account === a.label} className={account === a.label ? 'on' : ''} title={lim ? `Limited until ${clockText(lim)}` : undefined} onClick={() => onChange({ account: a.label })}>
+                <button key={a.label} type="button" role="radio" aria-checked={account === a.label} className={account === a.label ? 'on' : ''} title={lim ? `Limited until ${clockText(lim)}` : undefined} onClick={() => onChange({ account: a.label, ...fitRun({ model: value.model, effort: value.effort }, runOptions(settings, a.label)) })}>
                   {a.label}{lim ? ' · limited' : ''}
                 </button>
               );
             })}
           </div>
-          <span className="faint dsp-hint">{runner === 'herdr' ? 'Headless lanes only.' : 'New lane sessions run on this account.'}</span>
+          <span className="faint dsp-hint">{runner === 'herdr' ? 'herdr lanes use it only for a Codex account (command `codex`).' : 'New lane sessions run on this account.'}</span>
         </div>
       ) : null}
     </div>

@@ -29,12 +29,14 @@ const disp = (o: Partial<Dispatch> = {}): Dispatch => ({
 
 let routes: Record<string, unknown>;
 let posts: [string, unknown][];
+let puts: [string, unknown][];
 let planSmall: unknown;
 let startError: { error: string } | null;
 let branchesError: string | null;
 beforeEach(() => {
   localStorage.clear();
   posts = [];
+  puts = [];
   startError = null;
   branchesError = null;
   planSmall = { epic: null, issues: ['o/r#412', 'o/r#415'], title: 'Small changes: #412, #415', settings: S, runner: 'headless', lanes: [{ repo: 'o/r', n: 412, title: 'First', refined: true, deps: [] }, { repo: 'o/r', n: 415, title: 'Second', refined: true, deps: ['o/r#412'] }], waves: [['o/r#412'], ['o/r#415']], warnings: ['o/r#415: waits for o/r#9'] };
@@ -61,6 +63,7 @@ beforeEach(() => {
         return json({ epic: 'o/r#1', title: 'Payments', settings: S, runner: 'headless', lanes: [{ repo: 'o/r', n: 2, title: 'A', refined: true, deps: [] }, { repo: 'o/r', n: 5, title: 'B', refined: false, deps: [] }], waves: [['o/r#2']], warnings: ['o/r#5: needs refine'] });
       return json(disp());
     }
+    if (init?.method === 'PUT') puts.push([path, init.body ? JSON.parse(init.body as string) : null]);
     if (path === '/api/github/branches' && branchesError) return json({ error: branchesError }, 502);
     return path in routes ? json(routes[path]) : json({ error: 'nf' }, 404);
   }));
@@ -473,6 +476,66 @@ describe('Dispatch model and effort', () => {
     expect(model.value).toBe('claude-opus-4-1');
     await userEvent.selectOptions(screen.getByLabelText('Effort'), 'max');
     await waitFor(() => expect(posts).toContainEqual(['/api/dispatches/abc123abc123/settings', { effort: 'max' }]));
+  });
+});
+
+describe('Dispatch harness pickers', () => {
+  const codex = {
+    commands: [{ label: 'work', cmd: 'claude' }, { label: 'cx', cmd: 'codex', harness: 'codex', models: ['gpt-5.1', 'o3'] }],
+    default: 'work',
+    run_model: 'opus',
+    run_effort: 'max',
+    harnesses: [
+      { id: 'claude', label: 'Claude Code', models: ['opus', 'sonnet', 'haiku'], efforts: ['low', 'medium', 'high', 'xhigh', 'max'], usage: true },
+      { id: 'codex', label: 'Codex', models: null, efforts: ['low', 'medium', 'high', 'xhigh'], usage: false },
+    ],
+  };
+  const opts = (label: string) => Array.from((screen.getByLabelText(label) as HTMLSelectElement).options).map((o) => o.textContent);
+  const note = 'Cost cap does not apply on Codex accounts';
+
+  it('New dispatch: a Codex account lists its models, resets the pick, shows the cost-cap note and saves nothing', async () => {
+    routes['/api/settings'] = codex;
+    window.location.hash = '#/dispatches?repo=o/r';
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Run an epic' }));
+    await waitFor(() => expect((screen.getByLabelText('Effort') as HTMLSelectElement).value).toBe('max'));
+    expect(screen.queryByText(note)).toBeNull();
+    await userEvent.click(screen.getByRole('radio', { name: 'cx' }));
+    expect(opts('Model')).toEqual(['Default', 'gpt-5.1', 'o3']);
+    expect(opts('Effort')).toEqual(['Default', 'low', 'medium', 'high', 'xhigh']);
+    expect(screen.getByText(note)).toBeTruthy();
+    await userEvent.selectOptions(screen.getByLabelText('Model'), 'o3');
+    await userEvent.type(screen.getByLabelText('Epic'), '1');
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    await screen.findByText('o/r#5: needs refine');
+    expect(posts.find(([p]) => p === '/api/dispatches/plan')?.[1]).toEqual({ epic: 'o/r#1', settings: { ...S, account: 'cx', model: 'o3', effort: null } });
+    expect(puts).toEqual([]);
+  });
+
+  it('live editor: an account change posts only the keys that reset; a Claude pick still saves', async () => {
+    routes['/api/settings'] = codex;
+    routes['/api/dispatches/abc123abc123'] = disp({ runner: 'herdr', settings: { ...S, account: 'work', model: 'opus', effort: 'high' } });
+    window.location.hash = '#/dispatches/abc123abc123?repo=o/r';
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: /Settings/ }));
+    await userEvent.selectOptions(screen.getByLabelText('Effort'), 'max');
+    await waitFor(() => expect(puts).toContainEqual(['/api/settings', { run_effort: 'max' }]));
+    await userEvent.click(screen.getByRole('radio', { name: 'cx' }));
+    await waitFor(() => expect(posts.at(-1)).toEqual(['/api/dispatches/abc123abc123/settings', { account: 'cx', model: null }]));
+    expect(puts).toHaveLength(1);
+    expect(screen.getByText('herdr lanes use it only for a Codex account (command `codex`).')).toBeTruthy();
+  });
+
+  it('an epic pinned to a Codex account opens on Default', async () => {
+    routes['/api/settings'] = codex;
+    routes['/api/planning'] = { prds: [{ path: 'docs/prds/p.md', title: 'P', status: 'Approved', epic: 1, account: 'cx' }], fetched_at: 1, stale: false };
+    window.location.hash = '#/dispatches?repo=o/r';
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Run an epic' }));
+    await userEvent.type(screen.getByLabelText('Epic'), '1');
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'cx' }).getAttribute('aria-checked')).toBe('true'));
+    expect((screen.getByLabelText('Model') as HTMLSelectElement).value).toBe('');
+    expect((screen.getByLabelText('Effort') as HTMLSelectElement).value).toBe('');
   });
 });
 
