@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 
 import ci
 import dispatch_run
+import harness
 import repo_skills
 import shared
 import ui_origin
@@ -30,15 +31,10 @@ from dispatch import read_checkouts
 from shared import data_dir, warn
 import ui_events
 
-HEADLESS_PROMPT = (
-    "Headless run: ask via aiw ask, never AskUserQuestion. Gate questions go through "
-    "`aiw ask --json '<AskUserQuestion input>'`; then end your turn. "
-    "Never call ScheduleWakeup: a pending wakeup keeps this process alive, and the UI cannot take "
-    "an answer until it exits."
-)
+from harness_claude import CLAUDE_ARGS, HEADLESS_PROMPT  # noqa: F401 - re-exported: tests import them from here
+
 MAX_GRINDS = 2  # grind rounds running at once; idle loops cost nothing
 GRIND_PREFIX = "Start the review grind for PR "
-CLAUDE_ARGS = ["--print", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"]
 STOP_GRACE_SECONDS = 10
 POLL_SECONDS = 0.2
 # After a turn ends on a recorded question, claude --print still waits for its background tasks
@@ -76,30 +72,13 @@ def _fail(sid: str, msg: str):
 
 
 def _preflight(sid: str) -> list:
-    """argv prefix of the session's bound claude command, after checking it is logged in."""
-    cmd = (ui_sessions.load(sid) or {}).get("claude_cmd") or ui_settings.DEFAULT_CMD
+    """argv prefix of the session's bound command, after its harness checks it is logged in."""
+    rec = ui_sessions.load(sid) or {}
+    cmd = rec.get("claude_cmd") or ui_settings.DEFAULT_CMD
     try:
-        exe = ui_settings.argv(cmd)
-    except ValueError as e:
-        _fail(
-            sid,
-            f"claude command {cmd!r} unusable: {e}"
-            if cmd != ui_settings.DEFAULT_CMD
-            else "claude CLI not found on PATH",
-        )
-    login_msg = (
-        f"claude CLI is not logged in, run `{cmd} auth login`"
-        if cmd != ui_settings.DEFAULT_CMD
-        else "claude CLI is not logged in, run `claude auth login`"
-    )
-    try:
-        p = subprocess.run([*exe, "auth", "status", "--json"], capture_output=True, text=True, timeout=30)
-        status = json.loads(p.stdout)
-    except (subprocess.TimeoutExpired, OSError, ValueError) as e:
-        _fail(sid, f"{login_msg} (auth status check failed: {e})")
-    if not isinstance(status, dict) or status.get("loggedIn") is not True:
-        _fail(sid, login_msg)
-    return exe
+        return harness.for_record(rec).preflight(cmd)
+    except harness.LoginError as e:
+        _fail(sid, str(e))
 
 
 _PS_ERROR = object()  # ps itself failed: liveness unknown, not 'no such process'
@@ -148,30 +127,13 @@ def _spawn(
     return rec
 
 
-def _run_flags(rec: dict) -> list:
-    """`--model` / `--effort` for the ones the session was started with (old records have neither)."""
-    return [
-        *(["--model", rec["run_model"]] if rec.get("run_model") else []),
-        *(["--effort", rec["run_effort"]] if rec.get("run_effort") else []),
-    ]
-
-
-def _base_args(rec: dict) -> list:
-    """The session's claude flags: the permission bypass, unless the record carries an allow-list."""
-    return _restricted_args(rec["allowed_tools"]) if rec.get("allowed_tools") else CLAUDE_ARGS
-
-
-def _restricted_args(allowed_tools) -> list:
-    safe = [a for a in CLAUDE_ARGS if a != "--dangerously-skip-permissions"]
-    return [*safe, "--allowedTools", ",".join(allowed_tools)]
-
-
 def start(
     command_text,
     cwd,
     link=None,
     *,
-    extra_args=(),
+    instructions=(),
+    direct_effort=None,
     env_extra=None,
     pass_fds=(),
     gate_questions=False,
@@ -187,6 +149,7 @@ def start(
     """allowed_tools: runs without the permission bypass; Claude Code refuses every tool outside the list
     (Away mode answerers). One comma-joined value, since `--allowedTools` is variadic and would eat the prompt.
     agent/model: `--agent` / `--model` for the session (peer-review lens sessions).
+    instructions: extra system instructions (the grind re-entry); direct_effort: the headless dispatch lane's effort.
     run_model/effort: the user's pick; kept on the record so every spawn of the session adds the flags.
     fields: extra session-record fields set at creation, so even a start that fails in preflight carries them.
     batch: (id, max) runs at most `max` sessions of that batch at once; the rest wait as "queued"
@@ -199,16 +162,15 @@ def start(
     if not isinstance(path, str) or not os.path.isdir(path):
         raise ValueError(f"cwd is not a directory or known checkout slug: {cwd!r}")
 
-    extra_args = [*extra_args, *(["--agent", agent] if agent else []), *(["--model", model] if model else [])]
     claude_cmd = claude_cmd or ui_origin.account_for(cwd, command_text, link) or ui_settings.default_cmd()
-    sid = ui_sessions.create(command_text, cwd, link, claude_cmd=claude_cmd)["id"]
+    ad = harness.for_cmd(claude_cmd)
+    sid = ui_sessions.create(command_text, cwd, link, claude_cmd=claude_cmd, harness=ad.ID)["id"]
     if fields:
         ui_sessions.update(sid, **fields)
     if run_model or effort:
         ui_sessions.update(sid, run_model=run_model, run_effort=effort)
     if allowed_tools:
         ui_sessions.update(sid, allowed_tools=list(allowed_tools))  # every later spawn of the session keeps it
-    run_flags = _run_flags({"run_model": run_model, "run_effort": effort})
     if batch:
         with _batch_lock:
             busy = _batch_live(batch[0]) >= batch[1]
@@ -222,7 +184,9 @@ def start(
         if busy:
             return ui_sessions.load(sid)
     until = limits().get(claude_cmd, {}).get("limited_until")
-    if until and not (extra_args or env_extra or pass_fds):  # queue: the limit timer starts it at reset
+    # queue: the limit timer starts it at reset. Starts with their own instructions, env, fds, agent or
+    # direct model/effort skip it; a Start-dialog run_model/effort alone does not.
+    if until and not (instructions or env_extra or pass_fds or agent or model or direct_effort):
         return ui_sessions.update(
             sid,
             status="limited",
@@ -232,14 +196,23 @@ def start(
             note="queued: account is rate limited",
         )
     exe = _preflight(sid)
-    gate = ["--append-system-prompt", HEADLESS_PROMPT] if gate_questions else []
-    text = repo_skills.resolve(command_text, path)  # queued/limited above keep the raw text until they start
-    base = _base_args({"allowed_tools": allowed_tools})
+    gate = [HEADLESS_PROMPT] if gate_questions else []
+    argv, _ = ad.start_argv(
+        exe,
+        ad.skill_text(command_text, path),
+        instructions=[*gate, *instructions],
+        agent=agent,
+        model=model,
+        effort=direct_effort,
+        run_model=run_model,
+        run_effort=effort,
+        allowed_tools=allowed_tools,
+    )
     return _spawn(
         sid,
-        [*exe, *base, *gate, *extra_args, *run_flags, text],
+        argv,
         path,
-        command=text,
+        command=repo_skills.resolve(command_text, path),  # queued/limited above keep the raw text until they start
         cwd_path=path,
         env_extra=env_extra,
         pass_fds=pass_fds,
@@ -284,7 +257,7 @@ def _start_claimed(rec: dict, batch=None) -> None:
         text = repo_skills.resolve(rec["command"], rec["cwd_path"])
         _spawn(
             sid,
-            [*exe, *_base_args(rec), "--append-system-prompt", HEADLESS_PROMPT, *_run_flags(rec), text],
+            _restart_argv(rec, exe, text),
             rec["cwd_path"],
             command=text,
             cwd_path=rec["cwd_path"],
@@ -293,6 +266,19 @@ def _start_claimed(rec: dict, batch=None) -> None:
         warn(f"batch {batch}: starting {sid} failed: {e}")
         if (ui_sessions.load(sid) or {}).get("status") == "starting":
             ui_sessions.update(sid, status="failed", ended_at=_now(), error=f"could not start: {e}")
+
+
+def _restart_argv(rec: dict, exe: list, text: str) -> list:
+    """A recorded session started afresh (batch, start-now, limited before a session): gated, with its run flags."""
+    return harness.for_record(rec).start_argv(
+        exe,
+        text,
+        instructions=[HEADLESS_PROMPT],
+        run_model=rec.get("run_model"),
+        run_effort=rec.get("run_effort"),
+        allowed_tools=rec.get("allowed_tools"),
+        rec=rec,
+    )[0]
 
 
 class NotQueued(Exception):
@@ -333,16 +319,7 @@ def resume(sid: str, answer_text) -> dict:
     exe = _preflight(sid)
     return _spawn(
         sid,
-        [
-            *exe,
-            *_base_args(rec),
-            "--append-system-prompt",
-            HEADLESS_PROMPT,
-            *_run_flags(rec),
-            "--resume",
-            rec["session_id"],
-            answer_text,
-        ],
+        harness.for_record(rec).resume_argv(exe, rec["session_id"], answer_text, rec=rec)[0],
         path,
         answer=answer_text,
         ended_at=None,
@@ -835,7 +812,7 @@ def resume_stopped(sid: str, claude_cmd=None) -> dict:
             text = repo_skills.resolve(rec["command"], path)
             return _spawn(
                 sid,
-                [*exe, *_base_args(rec), "--append-system-prompt", HEADLESS_PROMPT, *_run_flags(rec), text],
+                _restart_argv(rec, exe, text),
                 path,
                 command=text,
                 cwd_path=path,
@@ -847,16 +824,7 @@ def resume_stopped(sid: str, claude_cmd=None) -> dict:
     exe = _preflight(sid)
     return _spawn(
         sid,
-        [
-            *exe,
-            *_base_args(rec),
-            "--append-system-prompt",
-            HEADLESS_PROMPT,
-            *_run_flags(rec),
-            "--resume",
-            rec["session_id"],
-            prompt,
-        ],
+        harness.for_record(rec).resume_argv(exe, rec["session_id"], prompt, rec=rec)[0],
         path,
         resuming=True,
         cwd_path=path,
@@ -1064,7 +1032,7 @@ def prgrind_tick(path: str, now=None) -> str:
                 cmd,
                 cwd,
                 link=pr_url,
-                extra_args=["--append-system-prompt", REENTRY_PROMPT],
+                instructions=[REENTRY_PROMPT],
                 env_extra={"AIW_HEADLESS": "1"},
                 pass_fds=[lock.fileno()],
                 claude_cmd=next((r["claude_cmd"] for r in same if r.get("claude_cmd")), None),

@@ -261,10 +261,14 @@ class Headless:
 
     def start(self, lane, prompt, d):
         s = d.get("settings") or {}  # ui_runner already passes --dangerously-skip-permissions
-        effort = ["--effort", s["effort"]] if s.get("effort") else []
         cmd = next((c["cmd"] for c in self.settings.load()["commands"] if c["label"] == s.get("account")), None)
         rec = self.runner.start(
-            prompt, lane["repo"], extra_args=effort, model=s.get("model"), claude_cmd=cmd, gate_questions=True
+            prompt,
+            lane["repo"],
+            direct_effort=s.get("effort"),
+            model=s.get("model"),
+            claude_cmd=cmd,
+            gate_questions=True,
         )
         return {"session": rec["id"]}
 
