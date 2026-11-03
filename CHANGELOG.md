@@ -5,6 +5,7 @@
 ### Added
 
 - **Saved Slack channels** (#838): a validated `slack_channels` list (`[{id, name}]`, at most 50) in `ui_settings.json` and `GET`/`PUT /api/settings`; a repo's `slack_channel` must be a listed id, `""` or its unchanged stored value, a picked channel can't be dropped, and `GET` marks each repo `channel_invalid`.
+- **Slack channels** (#847): Settings gets a **Slack channels** section (`#/settings/channels`) to add, rename and delete saved channels (name and id, validated inline), and each repo's Slack channel is now a select over that list plus None. A legacy value that is not a channel id shows a red **invalid** chip until another channel is picked.
 - **Review polling watches the `reviewers:` set** (#843): `poll-reviews.sh` takes comma-separated logins and matches any of them ignoring case (`copilot` also matches `copilot-pull-request-reviewer[bot]`); the `aiw ui` tick passes the state file's `reviewers:` line, still one reviews read per poll.
 - **Local review mode** (#837): `review_mode` (`single`, the default, or `loop`) in `ui_settings.json` and `GET`/`PUT /api/settings` (any other value is 400), and `aiw local-review`, which prints it and falls back to `single` when it is unset or unreadable.
 - **Personal plugin commands** (#766): `dump`, `worklog` and `sync-from-wasensi` are listed in the Start dialog and palette only when `ai-workflow-personal` is installed (`personal_plugin` in `GET /api/settings`), and run as `/ai-workflow-personal:<name>`.

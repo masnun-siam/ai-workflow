@@ -2,7 +2,8 @@
 .set-sec h2{font-size:16px}
 .set-sec .tbl-wrap{max-width:100%}
 .set-sec .tbl select.f{width:70px}
-.set-sec .tbl input.f.slack{width:150px}
+.set-sec .tbl select.f.slack{width:170px}
+.set-sec .tbl .chan-hint{font-size:12px;margin-top:4px;display:flex;gap:6px;align-items:center;max-width:260px}
 .set-sec .tbl td{vertical-align:middle}
 .acct-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .acct-row input.f{width:150px;flex:none}
