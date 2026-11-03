@@ -7,6 +7,7 @@ import { Banner, Button, Chip, Dialog } from '../components';
 import { routes } from '../lib/routes';
 import { useRepo } from '../shell/useRepo';
 import { SettingsFields } from './SettingsFields';
+import { fitRun, runOptions } from '../start/startLogic';
 import { issueNo } from './vocab';
 
 const DEFAULTS: DispatchSettings = { max: 2, grind: 'full', ci: 'wait', auto_merge: false, skip_approval: false, feature_branch: null, base_branch: null, model: null, effort: null, account: null };
@@ -30,7 +31,10 @@ export function NewDispatchDialog({ open, onOpenChange, epic: initial, issues, r
   const nav = useNavigate();
   // Seed the saved model/effort once settings load, unless the user already picked.
   useEffect(() => {
-    if (!touched && saved) setS((x) => ({ ...x, model: saved.run_model ?? null, effort: (saved.run_effort ?? null) as DispatchSettings['effort'] }));
+    if (!touched && saved) setS((x) => {
+      const pair = { model: saved.run_model ?? null, effort: (saved.run_effort ?? null) as DispatchSettings['effort'] };
+      return { ...x, ...pair, ...fitRun(pair, runOptions(saved, x.account ?? saved.default)) };
+    });
   }, [saved, touched]);
   useEffect(() => {
     if (open) {
@@ -45,8 +49,8 @@ export function NewDispatchDialog({ open, onOpenChange, epic: initial, issues, r
   // An epic created on an account runs on it, unless the user already picked.
   const pinned = picked ? null : (epics.find((p) => `${repo}#${p.epic}` === full)?.account ?? null);
   useEffect(() => {
-    if (!touched) setS((x) => (x.account === pinned ? x : { ...x, account: pinned }));
-  }, [pinned, touched]);
+    if (!touched) setS((x) => (x.account === pinned ? x : { ...x, account: pinned, ...fitRun(x, runOptions(saved, pinned ?? saved?.default)) }));
+  }, [pinned, touched, saved]);
   const target = (): DispatchTarget => (picked ? { issues: issues.map((i) => `${repo}#${i.n}`) } : { epic: full });
   const dialogRepo = picked ? repo || null : valid && full.includes('#') ? full.split('#')[0] : null;
   // Another repo has other branches: the pick starts over.

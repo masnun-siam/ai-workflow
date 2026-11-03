@@ -1,6 +1,7 @@
 // Pure helpers for the Start dialog (FR-22): request bodies, worklog days, issue/PR argument handling, vault folders.
 // Ported from the old launcher.js / vault.js so the request bodies stay what the server expects.
-import type { Limit, OpenItem, Repo, SessionStartBody } from '../api/types';
+import type { HarnessId, Limit, OpenItem, Repo, SessionStartBody, Settings } from '../api/types';
+import { EFFORTS, MODELS } from '../components/ModelEffortPicker';
 import type { ArgKind } from '../lib/vocab';
 
 /** Commands the server lets run with no repo (ui_repos.start_session): create-prd, dump, a custom prompt. */
@@ -99,6 +100,23 @@ export function limitedUntil(cmds: { label: string; cmd: string }[] | undefined,
   const c = (cmds ?? []).find((x) => x.label === label);
   const until = c && limits?.[c.cmd]?.limited_until;
   return until && until > nowSec ? until : null;
+}
+
+export interface RunOptions { harness: HarnessId; models: { value: string; label: string }[]; efforts: string[] }
+/** The model and effort choices of the account's harness (FR-12). No `harnesses` list (older server) or an unknown label: Claude's. */
+export function runOptions(settings: Pick<Settings, 'commands' | 'harnesses'> | undefined, label: string | undefined): RunOptions {
+  const c = settings?.commands.find((x) => x.label === label);
+  const h = settings?.harnesses?.find((x) => x.id === (c?.harness ?? 'claude'));
+  if (!h) return { harness: 'claude', models: MODELS, efforts: EFFORTS };
+  const models = (h.models ?? c?.models ?? []).map((v) => MODELS.find((m) => m.value === v) ?? { value: v, label: v });
+  return { harness: h.id, models, efforts: h.efforts };
+}
+/** The keys of the pick the harness does not offer, reset to default; `{}` when the pick still fits. */
+export function fitRun(cur: { model: string | null; effort: string | null }, opts: RunOptions): { model?: null; effort?: null } {
+  return {
+    ...(cur.model && !opts.models.some((m) => m.value === cur.model) ? { model: null } : {}),
+    ...(cur.effort && !opts.efforts.includes(cur.effort) ? { effort: null } : {}),
+  };
 }
 
 // ---- notes-vault folder ---------------------------------------------------------------------------

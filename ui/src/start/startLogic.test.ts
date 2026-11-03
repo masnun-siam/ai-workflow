@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { folderOf, grindPr, keywordSuggest, limitedUntil, matchItems, repoFromText, startBody, switchArgs, typedNumber, worklogDates } from './startLogic';
+import { fitRun, folderOf, grindPr, keywordSuggest, limitedUntil, runOptions, matchItems, repoFromText, startBody, switchArgs, typedNumber, worklogDates } from './startLogic';
 
 const where = { kind: 'repo', slug: 'o/r' } as const;
 const base = { where, folder: null, lenses: [] as string[] };
@@ -80,5 +80,42 @@ describe('vault folder and limits', () => {
     expect(limitedUntil(cmds, 'Masum', { 'cc masum': { limited_until: 2000 } }, 1000)).toBe(2000);
     expect(limitedUntil(cmds, 'Masum', { 'cc masum': { limited_until: 500 } }, 1000)).toBeNull();
     expect(limitedUntil(cmds, 'Nope', {}, 1000)).toBeNull();
+  });
+});
+
+describe('harness run options', () => {
+  const harnesses = [
+    { id: 'claude' as const, label: 'Claude Code', models: ['opus', 'sonnet', 'haiku'], efforts: ['low', 'medium', 'high', 'xhigh', 'max'], usage: true },
+    { id: 'codex' as const, label: 'Codex', models: null, efforts: ['low', 'medium', 'high', 'xhigh'], usage: false },
+  ];
+  const settings = {
+    harnesses,
+    commands: [
+      { label: 'work', cmd: 'claude' },
+      { label: 'cx', cmd: 'codex', harness: 'codex' as const, models: ['gpt-5.1', 'o3'] },
+      { label: 'cx2', cmd: 'codex -p b', harness: 'codex' as const, models: ['o3'] },
+      { label: 'bare', cmd: 'codex', harness: 'codex' as const },
+    ],
+  };
+  it('lists the harness choices of the account', () => {
+    expect(runOptions(settings, 'work')).toEqual({ harness: 'claude', models: [{ value: 'opus', label: 'Opus' }, { value: 'sonnet', label: 'Sonnet' }, { value: 'haiku', label: 'Haiku' }], efforts: ['low', 'medium', 'high', 'xhigh', 'max'] });
+    expect(runOptions(settings, 'cx')).toEqual({ harness: 'codex', models: [{ value: 'gpt-5.1', label: 'gpt-5.1' }, { value: 'o3', label: 'o3' }], efforts: ['low', 'medium', 'high', 'xhigh'] });
+    expect(runOptions(settings, 'bare').models).toEqual([]);
+    expect(runOptions(settings, 'gone').harness).toBe('claude');
+  });
+  it('falls back to the Claude constants with no harnesses list', () => {
+    const old = runOptions({ commands: [{ label: 'cx', cmd: 'codex', harness: 'codex' }] }, 'cx');
+    expect(old.models.map((m) => m.value)).toEqual(['opus', 'sonnet', 'haiku']);
+    expect(old.harness).toBe('claude');
+    expect(old.efforts).toContain('max');
+    expect(runOptions(undefined, undefined).harness).toBe('claude');
+  });
+  it('fitRun resets only what the harness does not offer', () => {
+    const cx = runOptions(settings, 'cx');
+    expect(fitRun({ model: 'opus', effort: 'max' }, cx)).toEqual({ model: null, effort: null });
+    expect(fitRun({ model: 'opus', effort: 'high' }, cx)).toEqual({ model: null });
+    expect(fitRun({ model: 'o3', effort: null }, runOptions(settings, 'cx2'))).toEqual({});
+    expect(fitRun({ model: 'gpt-5.1', effort: null }, runOptions(settings, 'cx2'))).toEqual({ model: null });
+    expect(fitRun({ model: null, effort: null }, cx)).toEqual({});
   });
 });

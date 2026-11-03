@@ -13,7 +13,7 @@ import { CreateRepoDialog } from '../repos/CreateRepoDialog';
 import { useRepo } from '../shell/useRepo';
 import { FolderChooser } from './FolderChooser';
 import { ARG_HINT, ARG_LABEL, LineInput, OpenPicker, prdArg, PrdInput, TextInput, WorklogInput } from './Inputs';
-import { CMD_KEY, folderOf, isoDay, limitedUntil, NO_REPO, OPTIONAL, PICK, repoFromText, startBody, switchArgs, worklogDates, type FolderPick, type WhereSel, type WorklogPick } from './startLogic';
+import { CMD_KEY, fitRun, folderOf, isoDay, limitedUntil, NO_REPO, OPTIONAL, PICK, repoFromText, runOptions, startBody, switchArgs, worklogDates, type FolderPick, type WhereSel, type WorklogPick } from './startLogic';
 import type { StartPreset } from './StartContext';
 import { Where } from './Where';
 import './start.css';
@@ -89,13 +89,23 @@ function StartBody({ preset, onClose }: { preset: StartPreset; onClose: () => vo
 
   const cmds = settings.data?.commands ?? [];
   const acct = acctSel ?? settings.data?.default ?? '';
-  const model = runSel.model !== undefined ? runSel.model : settings.data?.run_model ?? null;
-  const effort = runSel.effort !== undefined ? runSel.effort : settings.data?.run_effort ?? null;
+  const opts = runOptions(settings.data, acct);
+  // The saved pair is Claude's: an account whose harness does not offer it opens on Default.
+  const saved = { model: settings.data?.run_model ?? null, effort: settings.data?.run_effort ?? null };
+  const fitSaved = { ...saved, ...fitRun(saved, opts) };
+  const model = runSel.model !== undefined ? runSel.model : fitSaved.model;
+  const effort = runSel.effort !== undefined ? runSel.effort : fitSaved.effort;
+  // Only a pick on a Claude account becomes the saved default (FR-12).
   const pickRun = (patch: { model?: string | null; effort?: string | null }) => {
     setRunSel((r) => ({ ...r, ...patch }));
-    saveSettings.mutate({ ...(patch.model !== undefined ? { run_model: patch.model } : {}), ...(patch.effort !== undefined ? { run_effort: patch.effort } : {}) });
+    if (opts.harness === 'claude') saveSettings.mutate({ ...(patch.model !== undefined ? { run_model: patch.model } : {}), ...(patch.effort !== undefined ? { run_effort: patch.effort } : {}) });
   };
   const until = limitedUntil(cmds, acct, sessions.data?.limits);
+  // A pick the new account's harness does not offer resets to Default, unsaved.
+  const pickAcct = (label: string) => {
+    setAcctSel(label);
+    setRunSel((r) => ({ ...r, ...fitRun({ model, effort }, runOptions(settings.data, label)) }));
+  };
 
   const offer = offers.data?.kinds?.[cmd] ?? [];
   const lenses = offer.filter((l) => picked.includes(l));
@@ -257,7 +267,7 @@ function StartBody({ preset, onClose }: { preset: StartPreset; onClose: () => vo
               </Banner>
             ) : null}
 
-            <ModelEffortPicker model={model} effort={effort} onChange={pickRun} disabled={settings.isPending} />
+            <ModelEffortPicker model={model} effort={effort} onChange={pickRun} disabled={settings.isPending} models={opts.models} efforts={opts.efforts} />
 
             {cmds.length > 1 ? (
               <div className="lbl">
@@ -266,7 +276,7 @@ function StartBody({ preset, onClose }: { preset: StartPreset; onClose: () => vo
                   {cmds.map((a) => {
                     const lim = limitedUntil(cmds, a.label, sessions.data?.limits);
                     return (
-                      <button key={a.label} type="button" role="radio" aria-checked={acct === a.label} className={acct === a.label ? 'on' : ''} title={lim ? `Limited until ${clockText(lim)}` : undefined} onClick={() => setAcctSel(a.label)}>
+                      <button key={a.label} type="button" role="radio" aria-checked={acct === a.label} className={acct === a.label ? 'on' : ''} title={lim ? `Limited until ${clockText(lim)}` : undefined} onClick={() => pickAcct(a.label)}>
                         {a.label}{lim ? ' · limited' : ''}
                       </button>
                     );
