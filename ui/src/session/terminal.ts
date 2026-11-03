@@ -4,12 +4,11 @@ import { api } from '../api/endpoints';
 import type { Session } from '../api/types';
 import { toast } from '../components';
 
-const q = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
-export const resumeCommand = (s: Pick<Session, 'resume_command' | 'repo_path' | 'session_id'>): string | null =>
-  s.resume_command || (s.session_id ? `cd ${q(s.repo_path || '.')} && claude --resume ${q(s.session_id)}` : null);
+/** The server builds the harness's own command; the UI never builds one. */
+export const resumeCommand = (s: Pick<Session, 'resume_command'>): string | null => s.resume_command || null;
 
 export async function copyCommand(cmd: string | null) {
-  if (!cmd) return toast.error('This session has no Claude conversation to resume yet.');
+  if (!cmd) return toast.error('This session has nothing to resume in a terminal yet.');
   try {
     await navigator.clipboard.writeText(cmd);
     toast('Resume command copied. Paste it in a terminal.');
