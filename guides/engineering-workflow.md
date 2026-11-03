@@ -36,10 +36,10 @@ Skills often say "the repo's docs for each area touched". Find them from the ref
 
 | Stage | Output | Skill |
 |---|---|---|
-| 1. Product requirements | A PRD: what, why and the technical design, with no open questions. On approval, one GitHub epic | `/create-prd` |
+| 1. Product requirements | A PRD: what, why and the technical design, with no open questions. On approval, one GitHub epic and a pull request that adds the PRD to the base branch | `/create-prd` |
 | 2. Tasks | One child issue of the epic per task, small and verifiable, split so several engineers can work at once, with native blocked-by links | `/create-tasks` |
 | 3. Refined issues | Each issue body rewritten with WHAT, WHY and HOW, labelled `refined`, moved from Backlog to Ready on the board once no blocker is open (the epic to In progress) | `/refine-issues` |
-| 4. Implementation | A worktree, a branch and a PR into the base branch that closes the issue: draft first, reviewed with `/pr-review`, ready when CI is green; after the merge the issue is closed and set to Done. `/implement-issue <epic>` picks the lowest-numbered Ready issue. Independent issues run in parallel, one worktree and dev stack each | `/implement-issue` |
+| 4. Implementation | A worktree, a branch and a PR into the base branch that closes the issue: draft first, then `/verifier-locally` and `/pr-review` pass locally, then marked ready (after green CI, or before CI in a repo that runs no CI on drafts) and moved to In review once CI is green; after the merge the issue is closed and set to Done. `/implement-issue <epic>` picks the lowest-numbered Ready issue. Independent issues run in parallel, one worktree and dev stack each | `/implement-issue` |
 | 5. Local verification | Evidence that every relevant check passes | `/verifier-locally` |
 | 6. Review | Findings with evidence and a verdict | `/pr-review` |
 | 7. Release | A base-branch to production-branch release PR, opened by a human | `/release-pr` |
@@ -56,7 +56,7 @@ Work on anything that is not trivial starts from a refined issue. If there is no
 - **It has no open questions when it is approved.** Whoever writes it asks every question up front, each with a recommendation and its reason, and records the answers under "Decisions". A question found during implementation can change issues that are already in progress, which is what this rule prevents.
 - Every requirement is numbered (`FR-1`, `FR-2`) and has an acceptance line someone could test.
 - Each PRD gets a slug (for example `conversation-tags`). The same slug names the label `prd-<slug>` that ties its issues together.
-- Status moves `Draft` → `In review` (a pull request into the base branch is open for the team) → `Approved` (a human says the team has reviewed it). Approval creates the epic.
+- Status moves `Draft` → `In review` (a pull request into the base branch is open for the team) → `Approved` (a human says the team has reviewed it). Approval creates the epic and a pull request that adds the approved PRD to the base branch.
 - A PRD has one epic unless the team asks for more. More than one is for a feature that ships in separately releasable parts; each epic lists the `FR-n` it covers.
 - **Changing an approved PRD.** Change the PRD first, add a line to its "Change log" with the reason and the issues affected, then update those issues to match.
 
