@@ -959,9 +959,12 @@ def _live(rec) -> bool:
 
 
 def _new_review(h: dict, now) -> str | None:
-    login, mode = (
-        (h["author"], "not-author") if h.get("reviewer", "UNRESOLVED") == "UNRESOLVED" else (h["reviewer"], "reviewer")
-    )
+    if h.get("reviewer", "UNRESOLVED") == "UNRESOLVED":
+        login, mode = h["author"], "not-author"
+    else:
+        # `reviewers:` is written comma-separated; whitespace also splits so a hand edit works.
+        logins = [t for t in re.split(r"[,\s]+", h.get("reviewers", "")) if t]
+        login, mode = ",".join(logins or [h["reviewer"]]), "reviewer"
     p = shared.run(
         ["bash", _POLL_SH, h["owner"], h["repo"], h["number"], login, h.get("poll-since") or _iso(now), mode, "once"],
         timeout=120,

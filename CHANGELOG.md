@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Review polling watches the `reviewers:` set** (#843): `poll-reviews.sh` takes comma-separated logins and matches any of them ignoring case (`copilot` also matches `copilot-pull-request-reviewer[bot]`); the `aiw ui` tick passes the state file's `reviewers:` line, still one reviews read per poll.
 - **Personal plugin commands** (#766): `dump`, `worklog` and `sync-from-wasensi` are listed in the Start dialog and palette only when `ai-workflow-personal` is installed (`personal_plugin` in `GET /api/settings`), and run as `/ai-workflow-personal:<name>`.
 - **Dismiss a failed session** (#765): a `session_failed` Inbox item has a Dismiss button (`x`) that removes it for good (`POST /api/sessions/<id>/dismiss`: 409 unless the session failed, 404 unknown); the session stays on Activity.
 - **Answer the first waiting question** (#764): a palette action, listed from any page while a session waits on you, that opens the oldest such session.

@@ -1218,7 +1218,13 @@ case "$1 $2" in
       *) printf '{"state":"%s"}\n' "${FAKE_GH_STATE:-OPEN}";;
     esac;;
   "pr checks") printf '%s\n' "${FAKE_GH_CHECKS:-[]}";;
-  api*) printf '%s\n' "$FAKE_GH_REVIEWS" | awk -v l="$LAST" '$1 > l';;
+  api*)
+    if [ -n "$FAKE_GH_REVIEWS_JSON" ]; then
+      while [ $# -gt 0 ] && [ "$1" != --jq ]; do shift; done
+      printf '%s\n' "$FAKE_GH_REVIEWS_JSON" | jq -r "$2"
+    else
+      printf '%s\n' "$FAKE_GH_REVIEWS" | awk -v l="$LAST" '$1 > l'
+    fi;;
 esac
 """
 REPO_ROOT = os.path.dirname(HERE)
@@ -1245,7 +1251,14 @@ def prgrind_cases() -> int:
         with open(gh, "w") as f:
             f.write(FAKE_GH)
         os.chmod(gh, 0o755)
-        for k in ("AIW_HEADLESS", "FAKE_GH_FAIL", "FAKE_GH_REVIEWS", "FAKE_GH_CHECKS", "FAKE_GH_SHA"):
+        for k in (
+            "AIW_HEADLESS",
+            "FAKE_GH_FAIL",
+            "FAKE_GH_REVIEWS",
+            "FAKE_GH_REVIEWS_JSON",
+            "FAKE_GH_CHECKS",
+            "FAKE_GH_SHA",
+        ):
             os.environ.pop(k, None)
         os.environ["FAKE_GH_STATE"] = "OPEN"
         return d, fk, work
@@ -1518,6 +1531,66 @@ def prgrind_cases() -> int:
         assert tick(path)[0] == "idle"
         log = ghlog(fk)
         assert "api" in log and "LOGIN=bob" in log and "!=" in log, log
+        d, fk, work = pset()
+        path = mkpr(d, reviewer="UNRESOLVED", reviewers="alice", **{"next-poll": FUTURE})
+        prior(work)
+        assert tick(path)[0] == "idle"
+        log = ghlog(fk)
+        assert "LOGIN=bob" in log and "!=" in log, log
+
+    def poll_logins():
+        d, fk, work = pset()
+
+        def rv(i, login, at):
+            return {"id": i, "user": {"login": login}, "submitted_at": at, "state": "COMMENTED"}
+
+        os.environ["FAKE_GH_REVIEWS_JSON"] = json.dumps(
+            [
+                rv(1, "Gsm-Masum", "2030-06-01T11:00:00Z"),
+                rv(2, "copilot-pull-request-reviewer[bot]", "2030-06-01T11:10:00Z"),
+                rv(3, "stranger", "2030-06-01T11:20:00Z"),
+                rv(4, "gsm-masum", "2030-06-01T09:00:00Z"),
+                rv(5, "alice", "2030-06-01T11:30:00Z"),
+                {"id": 6, "user": None, "submitted_at": "2030-06-01T11:40:00Z", "state": "COMMENTED"},
+            ]
+        )
+
+        def ids(login, mode):
+            p = subprocess.run(
+                ["bash", POLL, "o", "r", "7", login, SINCE, mode, "once"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            assert p.returncode == 0, (p.returncode, p.stdout, p.stderr)
+            return [ln.split()[1] for ln in p.stdout.splitlines()]
+
+        assert ids("gsm-masum,carol", "reviewer") == ["id=1"]
+        assert ids("bob,Copilot", "reviewer") == ["id=2"]
+        assert ids("alice", "reviewer") == ["id=5"]
+        assert ids("STRANGER", "not-author") == ["id=1", "id=2", "id=5", "id=6"]
+        assert ghlog(fk).count("api repos/o/r/pulls/7/reviews") == 4
+
+    def tick_reviewers_set():
+        d, fk, work = pset()
+        os.environ["FAKE_GH_REVIEWS_JSON"] = json.dumps(
+            [{"id": 9, "user": {"login": "CAROL"}, "submitted_at": REV_NEW.split()[0], "state": "APPROVED"}]
+        )
+        path = mkpr(d, reviewer="alice", reviewers="alice, carol", **{"next-poll": FUTURE})
+        prior(work)
+        assert tick(path)[0] == "started"
+        assert header(path)["poll-since"] == REV_NEW.split()[0], header(path)
+        log = ghlog(fk)
+        assert "LOGIN=alice,carol" in log, log
+        assert log.count("api repos/o/r/pulls/7/reviews") == 1, log
+        reap(*all_sessions())
+        prior(work)
+        assert tick(path)[0] == "idle"
+        d, fk, work = pset()
+        path = mkpr(d, **{"next-poll": FUTURE})
+        prior(work)
+        tick(path)
+        assert "LOGIN=alice\n" in ghlog(fk), ghlog(fk)
 
     def race():
         d, fk, work = pset("sleep")
@@ -1750,6 +1823,8 @@ def prgrind_cases() -> int:
         paused,
         untrusted_headers,
         skill_sites,
+        poll_logins,
+        tick_reviewers_set,
     ):
         case(fn)
     os.environ["PATH"] = ORIG_PATH
