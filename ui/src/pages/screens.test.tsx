@@ -5,7 +5,7 @@ import { App } from '../App';
 
 const json = (b: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } }));
 const AFK = { active: false, until: null, started: null, decisions: 0, held: 0, summary: null };
-const base = (o: Record<string, unknown> = {}) => ({ id: 's1', command: '/ai-workflow:implement-issue 801', repo: '/x', link: { owner: 'o', repo: 'r', issue: 801 }, session_id: 'cl1', outcome: 'done', cost: 0.5, tokens: { input: 100, output: 50 }, started_at: new Date().toISOString(), ended_at: new Date().toISOString(), waiting: false, pending_question: null, error: null, note: null, peer_review: null, no_repo: false, vault_folder: null, repo_path: '/x', resume_command: null, ...o });
+const base = (o: Record<string, unknown> = {}) => ({ id: 's1', command: '/ai-workflow:implement-issue 801', repo: '/x', link: { owner: 'o', repo: 'r', issue: 801 }, session_id: 'cl1', outcome: 'done', cost: 0.5, tokens: { input: 100, output: 50 }, started_at: new Date().toISOString(), ended_at: new Date().toISOString(), waiting: false, pending_question: null, error: null, note: null, peer_review: null, no_repo: false, vault_folder: null, repo_path: '/x', resume_command: "cd '/x' && claude --resume 'cl1'", ...o });
 const item = (type: string, group: string, o: Record<string, unknown> = {}) => ({ key: `${type}:1`, group, type, repo: 'o/r', at: null, ...o });
 
 let routes: Record<string, unknown>;
@@ -477,6 +477,48 @@ describe('Session page', () => {
     await userEvent.setup().click(screen.getAllByRole('button', { name: 'Retry' })[0]);
     await waitFor(() => expect(posts.some(([p]) => p === '/api/sessions/s1/resume')).toBe(true));
     expect(screen.getAllByRole('button', { name: 'Continue in terminal' }).length).toBeGreaterThan(0);
+  });
+  const facts = () => document.querySelector('dl.facts') as HTMLElement;
+  const fact = (dt: string) => [...facts().querySelectorAll('dt')].find((d) => d.textContent === dt)?.nextElementSibling?.textContent;
+  const stubClipboard = () => { const writeText = vi.fn(() => Promise.resolve()); Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true }); return writeText; };
+  it('a Claude session shows Harness Claude Code, no Note, and copies exactly resume_command', async () => {
+    open(base({ harness: 'claude' }));
+    const btn = await screen.findByRole('button', { name: /Continue in terminal/ });
+    expect(fact('Harness')).toBe('Claude Code');
+    expect(fact('Note')).toBeUndefined();
+    const user = userEvent.setup();
+    const writeText = stubClipboard();
+    await user.click(btn);
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("cd '/x' && claude --resume 'cl1'"));
+  });
+  it('a record with no harness reads as Claude Code', async () => {
+    open(base());
+    await screen.findByText('Default');
+    expect(fact('Harness')).toBe('Claude Code');
+  });
+  const codex = { harness: 'codex', session_id: 't1', resume_command: null, cost: null, tokens: { input: 10, cached: 5, output: 3 }, run_note: "gpt-9 is not a Codex model; ran on Codex's default" };
+  it('a Codex session with no resume_command shows Codex, the note, — for cost, tokens, and no terminal button', async () => {
+    open(base({ ...codex, outcome: 'failed', error: 'it broke' }));
+    expect(await screen.findByText(/it broke/)).toBeTruthy();
+    expect(fact('Harness')).toBe('Codex');
+    expect(fact('Note')).toBe(codex.run_note);
+    expect(fact('Cost')).toBe('—');
+    expect(fact('Tokens')).not.toBe('—');
+    expect(screen.queryByRole('button', { name: /Continue in terminal/ })).toBeNull();
+    expect(document.body.textContent).not.toContain('claude --resume');
+  });
+  it('a Codex session with a resume_command shows the button and copies it', async () => {
+    open(base({ ...codex, resume_command: 'cd /x && codex resume t1' }));
+    const btn = await screen.findByRole('button', { name: /Continue in terminal/ });
+    const user = userEvent.setup();
+    const writeText = stubClipboard();
+    await user.click(btn);
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('cd /x && codex resume t1'));
+  });
+  it('the Harness label comes from settings.harnesses when present', async () => {
+    routes['/api/settings'] = { commands: [], default: 'work', harnesses: [{ id: 'codex', label: 'OpenAI Codex', models: null, efforts: [], usage: false }] };
+    open(base({ harness: 'codex' }));
+    await waitFor(() => expect(fact('Harness')).toBe('OpenAI Codex'));
   });
   it('limited shows reset time and resume-on-another-account', async () => {
     open(base({ outcome: 'limited', ended_at: null, claude_cmd: 'c1', limit_resets_at: 4102444800, auto_resume: true }));

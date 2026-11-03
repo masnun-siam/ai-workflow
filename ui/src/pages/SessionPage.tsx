@@ -49,7 +49,8 @@ export function SessionPage() {
   const s = q.data;
   const live = !!s && (['starting', 'running'].includes(s.outcome) || (s.outcome === 'waiting' && !s.ended_at));
   const tr = useTranscript(id, live);
-  const accounts = useSettings().data?.commands ?? [];
+  const settings = useSettings().data;
+  const accounts = settings?.commands ?? [];
   const a = useSessionActions();
   const startNowM = useStartNow();
   const cancelAuto = useCancelAuto();
@@ -72,6 +73,8 @@ export function SessionPage() {
   const finished = ['done', 'failed', 'stopped'].includes(s.outcome);
   const others = accounts.filter((c) => c.cmd !== s.claude_cmd);
   const account = accounts.find((c) => c.cmd === s.claude_cmd)?.label ?? '';
+  const harness = s.harness ?? 'claude';
+  const harnessLabel = settings?.harnesses?.find((h) => h.id === harness)?.label ?? (harness === 'codex' ? 'Codex' : 'Claude Code');
   const term = () => void copyCommand(resumeCommand(s));
   const startNow = () => startNowM.mutate(s.id);
   const autoResume = s.auto_resume && !s.hold;
@@ -93,7 +96,7 @@ export function SessionPage() {
         <div className="row wrap">
           {s.outcome === 'stopped' ? <Button shortcut="r" primary disabled={a.busy} onClick={() => a.resume(s.id)}>Resume</Button> : null}
           {finished ? <Button shortcut="r" disabled={a.busy} onClick={() => a.rerun(s.id)}><Icon n="refresh" />Rerun</Button> : null}
-          {s.session_id ? <Button shortcut="t" onClick={term}><Icon n="terminal" />Continue in terminal</Button> : null}
+          {s.resume_command ? <Button shortcut="t" onClick={term}><Icon n="terminal" />Continue in terminal</Button> : null}
           {['starting', 'running', 'waiting', 'limited'].includes(s.outcome) && !s.hold ? <Button onClick={() => setPausing(true)}><Icon n="pause" />Pause</Button> : null}
           {!finished ? <Button shortcut="x" variant="danger" onClick={() => void a.stop(s.id)}><Icon n="stop" />Stop</Button> : null}
         </div>
@@ -129,9 +132,9 @@ export function SessionPage() {
         </Banner>
       ) : null}
       {s.outcome === 'failed' ? (
-        <Banner tone="bad" icon="alert" action={<div className="row wrap">{s.session_id ? <Button sm shortcut="t" onClick={term}>Continue in terminal</Button> : null}<Button sm shortcut="r" variant="primary" disabled={a.busy} onClick={() => a.resume(s.id)}>Retry</Button></div>}>
+        <Banner tone="bad" icon="alert" action={<div className="row wrap">{s.resume_command ? <Button sm shortcut="t" onClick={term}>Continue in terminal</Button> : null}<Button sm shortcut="r" variant="primary" disabled={a.busy} onClick={() => a.resume(s.id)}>Retry</Button></div>}>
           <p><b>Failed.</b> {s.error ?? 'No error was recorded.'}</p>
-          <p className="muted">Retry starts it again. Continue in terminal picks up this exact conversation.</p>
+          <p className="muted">Retry starts it again.{s.resume_command ? ' Continue in terminal picks up this exact conversation.' : ''}</p>
         </Banner>
       ) : null}
       {s.outcome === 'queued' ? (
@@ -155,12 +158,14 @@ export function SessionPage() {
           <dl className="facts">
             <dt>Repo</dt><dd>{s.no_repo ? 'Notes vault' : shortRepo(slug || s.repo)}</dd>
             {account ? <><dt>Account</dt><dd>{account}</dd></> : null}
+            <dt>Harness</dt><dd>{harnessLabel}</dd>
             <dt>Started</dt><dd>{formatWhen(s.started_at)}</dd>
             <dt>Duration</dt><dd>{duration(s.started_at, s.ended_at)}</dd>
             <dt>Cost</dt><dd>{money(s.cost)}</dd>
             <dt>Tokens</dt><dd>{tokensText(s.tokens) || '—'}</dd>
             <dt>Model</dt><dd>{s.model || '—'}</dd>
             <dt>Effort</dt><dd>{s.effort || 'Default'}</dd>
+            {s.run_note ? <><dt>Note</dt><dd>{s.run_note}</dd></> : null}
             {issue ? <><dt>Issue</dt><dd>#{issue}</dd></> : null}
           </dl>
         </aside>
