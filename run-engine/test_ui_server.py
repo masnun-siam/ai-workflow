@@ -479,7 +479,12 @@ try:
     ok("boards: a fresh poll starts no issue (dispatches do that)")
 
     # poll 2: PR 30 ready and merged-by-poll-3 later; first ready -> pr-ready notification + grind autostart
-    ui_settings.save({"repos": {"o/r": {"auto_grind": True, "slack_channel": "C9"}}})
+    ui_settings.save(
+        {
+            "slack_channels": [{"id": "C0123ABCD", "name": "#rev"}],
+            "repos": {"o/r": {"auto_grind": True, "slack_channel": "C0123ABCD"}},
+        }
+    )
     _gql(
         [
             _issue(1, ["epic"]),
@@ -492,7 +497,7 @@ try:
     _started.clear()
     ui_server.POLLER.poll("o/r")
     assert [e for e, _ in _notes] == ["pr-ready"], _notes
-    assert [b["text"] for b in _started] == ["/pr-grind https://github.com/o/r/pull/30 --channel C9"], _started
+    assert [b["text"] for b in _started] == ["/pr-grind https://github.com/o/r/pull/30 --channel C0123ABCD"], _started
     ok("boards: PR turned ready notifies once and autostarts grind")
 
     # poll 3: PR 30 merged -> 3 closed; 3's dirty worktree is flagged + notified
@@ -675,7 +680,7 @@ try:
     st, body = call("GET", "/api/inbox?repo=o/r")
     assert st == 200 and set(body) == {"items", "afk", "gh", "stale"} and body["gh"]["login"] == "me", body
     assert not [i for i in body["items"] if i["type"] == "pr_ready"], "o/r grinds: no Merge before the grind is done"
-    ui_settings.save({"repos": {"o/r": {"auto_grind": False, "slack_channel": "C9"}}})
+    ui_settings.save({"repos": {"o/r": {"auto_grind": False, "slack_channel": "C0123ABCD"}}})
     st, body = call("GET", "/api/inbox?repo=o/r")
     assert [i["key"] for i in body["items"] if i["type"] == "pr_ready"] == ["pr_ready:o/r#60"] and body["stale"] == []
     assert body["afk"]["active"] is False
