@@ -193,7 +193,7 @@ Create that file with this shape:
 }
 ```
 
-- `bot_uid` — the reviewer bot's Slack user id.
+- `bot_uid` — the reviewer bot's Slack user id. On the first `aiw ui` load after the reviewers upgrade, `bot_uid` and `bot_label` seed the Settings **Reviewers** list (as the only active reviewer) and `channels` seeds **Slack channels**.
 - `owner_uid` — the person @-mentioned when a PR is ready to merge. **Ask the user for
   theirs**; do not derive it from an email address or a name you found in a config file.
 - `channels` — one entry per repo you will run against (exact `owner/repo` → channel id).
