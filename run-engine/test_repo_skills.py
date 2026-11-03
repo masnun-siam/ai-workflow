@@ -153,4 +153,99 @@ with tempfile.TemporaryDirectory() as cfg:
     finally:
         os.environ.pop("CLAUDE_CONFIG_DIR", None) if old is None else os.environ.__setitem__("CLAUDE_CONFIG_DIR", old)
 
+# ----------------------------------------------------------------------- codex_prompt
+BASE = "Base directory for this skill: "
+
+with tempfile.TemporaryDirectory() as tmp:
+    have, none = os.path.join(tmp, "have"), os.path.join(tmp, "none")
+    os.makedirs(none)
+    p = rs.codex_prompt("/implement-issue 12", none)
+    assert p.startswith(BASE + os.path.join(rs._SKILLS_DIR, "implement-issue") + "\n\n# Implement an issue\n"), p[:200]
+    assert p.endswith("\n\nARGUMENTS: 12") and "argument-hint:" not in p and "name: implement-issue" not in p
+    ok("plugin copy: base directory, body without frontmatter, ARGUMENTS last")
+
+    open(copy(have, "implement-issue"), "w").write("---\nname: implement-issue\n---\n\nREPO COPY BODY\n")
+    p = rs.codex_prompt("/implement-issue 12", have)
+    want = BASE + os.path.join(have, ".claude", "skills", "implement-issue") + "\n\nREPO COPY BODY\n\nARGUMENTS: 12"
+    assert p == want, p
+    assert rs.resolve("/implement-issue 12", have) == "/implement-issue 12"
+    ok("repo copy wins; the stored command keeps the repo spelling")
+
+    for cwd in (have, none):
+        a = rs.codex_prompt("/implement-issue 12", cwd)
+        assert (
+            a
+            == rs.codex_prompt("/ai-workflow:implement-issue 12", cwd)
+            == rs.codex_prompt("  \n/implement-issue 12", cwd)
+        )
+    assert rs.codex_prompt("/implement-issue 12\nsecond line", have).endswith("ARGUMENTS: 12\nsecond line")
+    assert (
+        rs.codex_prompt("/implement-issue", have)
+        == BASE + os.path.join(have, ".claude", "skills", "implement-issue") + "\n\nREPO COPY BODY"
+    )
+    assert rs.codex_prompt("/implement-issue 3 then /pr-review", have).endswith(
+        "ARGUMENTS: 3 then /ai-workflow:pr-review"
+    )
+    ok("both spellings and leading space agree; multi-line, empty and resolved arguments")
+
+    for raw, body in (
+        ("no frontmatter\n---\nrule\n", "no frontmatter\n---\nrule"),
+        ("---\nname: x\nunclosed\n", "---\nname: x\nunclosed"),
+        ("---\nname: x\n---\nabove\n\n---\n\nbelow\n", "above\n\n---\n\nbelow"),
+    ):
+        open(copy(have, "create-prd"), "w").write(raw)
+        assert rs.codex_prompt("/create-prd", have).endswith("\n\n" + body), raw
+    ok("frontmatter: none, unclosed and a later --- rule are kept")
+
+    copy(have, "pr-grind")  # folder only: plugin copy runs
+    assert rs.codex_prompt("/pr-grind 1", have).startswith(BASE + os.path.join(rs._SKILLS_DIR, "pr-grind"))
+    for t in ("/frobnicate 1", "plain text", "Final QA for #3: run /ai-workflow:verifier-locally", BASE + "x"):
+        for cwd in (have, none, None, os.path.join(tmp, "gone")):
+            assert rs.codex_prompt(t, cwd) == rs.resolve(t, cwd), (t, cwd)
+    assert rs.codex_prompt(None, have) is None and rs.codex_prompt("", have) == "" and rs.codex_prompt(5, have) == 5
+    assert rs.codex_prompt("/implement-issue 1", None).startswith(
+        BASE + os.path.join(rs._SKILLS_DIR, "implement-issue")
+    )
+    old_dir = rs._SKILLS_DIR
+    rs._SKILLS_DIR = os.path.join(tmp, "plugin")
+    try:
+        os.makedirs(os.path.join(rs._SKILLS_DIR, "pr-review"))
+        open(os.path.join(rs._SKILLS_DIR, "pr-review", "SKILL.md"), "wb").write(b"\xff\xfe bad")  # not UTF-8
+        assert rs.codex_prompt("/pr-review 1", none) == "/ai-workflow:pr-review 1"
+        assert rs.codex_prompt("/frobnicate 1", none) == "/frobnicate 1"
+    finally:
+        rs._SKILLS_DIR = old_dir
+    ok("unknown skill, plain text, inline mention, unreadable SKILL.md, None/empty/non-string: resolve's text")
+
+with tempfile.TemporaryDirectory() as cfg:
+    old = os.environ.get("CLAUDE_CONFIG_DIR")
+    os.environ["CLAUDE_CONFIG_DIR"] = cfg
+    try:
+        repo, home = os.path.join(cfg, "repo"), os.path.join(cfg, "personal")
+        open(copy(repo, "dump"), "w").write("REPO DUMP")
+        for cwd in (None, repo):
+            assert rs.codex_prompt("/dump x", cwd) == "/dump x", "not installed"
+            assert rs.codex_prompt("/ai-workflow:dump x", cwd) == "/ai-workflow:dump x"
+        os.makedirs(os.path.join(cfg, "plugins"))
+        f = os.path.join(cfg, "plugins", "installed_plugins.json")
+        for bad in (
+            "not json",
+            '{"plugins": {"ai-workflow-personal@m": [{}]}}',
+            '{"plugins": {"ai-workflow-personal@m": [{"installPath": 5}]}}',
+            '{"plugins": {"ai-workflow-personal@m": [{"installPath": "%s"}]}}' % home,
+        ):
+            open(f, "w").write(bad)
+            for src in ("/dump x", "/ai-workflow:dump x"):
+                assert rs.codex_prompt(src, repo) == rs.resolve(src, repo), (bad, src)
+                assert not rs.codex_prompt(src, repo).startswith(BASE), (bad, src)
+        os.makedirs(os.path.join(home, "skills", "dump"))
+        open(os.path.join(home, "skills", "dump", "SKILL.md"), "w").write("---\nname: dump\n---\nPERSONAL DUMP\n")
+        for cwd in (None, repo):
+            want = BASE + os.path.join(home, "skills", "dump") + "\n\nPERSONAL DUMP\n\nARGUMENTS: x"
+            assert rs.codex_prompt("/dump x", cwd) == want, rs.codex_prompt("/dump x", cwd)
+        assert rs.codex_prompt("/pr-review 1", None).startswith(BASE + os.path.join(rs._SKILLS_DIR, "pr-review"))
+        ok("personal skills come from the installed personal plugin only, else plain text")
+    finally:
+        os.environ.pop("CLAUDE_CONFIG_DIR", None) if old is None else os.environ.__setitem__("CLAUDE_CONFIG_DIR", old)
+
 print(f"{passed} passed")
