@@ -83,6 +83,15 @@ describe('Inbox', () => {
     await waitFor(() => expect(posts.some(([p]) => p === '/api/sessions/s2/dismiss')).toBe(true));
   });
 
+  it('Continue in terminal on a session with no resume_command toasts a harness-neutral message', async () => {
+    routes['/api/inbox'] = { afk: AFK, gh: { ok: true }, items: [item('session_failed', 'fix', { key: 'f', session_id: 's2', command: '/x:pr-grind 8', error: 'boom' })] };
+    routes['/api/sessions/s2'] = base({ id: 's2', harness: 'codex', session_id: 't1', resume_command: null });
+    window.location.hash = '#/inbox';
+    render(<App />);
+    await userEvent.setup().click(await screen.findByRole('button', { name: /Continue in terminal/ }));
+    expect(await screen.findByText('This session has nothing to resume in a terminal yet.')).toBeTruthy();
+  });
+
   describe('bootstrap cards', () => {
     const phases = (states: string[]) => ['audit', 'decide', 'constitution', 'guides', 'gates', 'docs'].map((name, i) => ({ name, state: states[i], session_id: states[i] === 'pending' ? null : `ps${i}` }));
     const runRec = (id: string, state: string, states: string[]) => ({ id, repo: 'o/r', issue: 12, branch: 'b', phases: phases(states), state, error: null, created_at: '', updated_at: '' });
