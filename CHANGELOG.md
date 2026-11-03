@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Reviewers** (#848): Settings gets a **Reviewers** section (`#/settings/reviewers`) to add, rename and delete saved grind reviewers (name, Slack id, GitHub login, validated inline), with an **Active** tick per entry that swaps who reviews. Delete asks first and names where the entry is used; with no active reviewer the section shows a warning.
 - **Slack channels** (#847): Settings gets a **Slack channels** section (`#/settings/channels`) to add, rename and delete saved channels (name and id, validated inline), and each repo's Slack channel is now a select over that list plus None. A legacy value that is not a channel id shows a red **invalid** chip until another channel is picked.
 - **Review polling watches the `reviewers:` set** (#843): `poll-reviews.sh` takes comma-separated logins and matches any of them ignoring case (`copilot` also matches `copilot-pull-request-reviewer[bot]`); the `aiw ui` tick passes the state file's `reviewers:` line, still one reviews read per poll.
 - **Local review mode** (#837): `review_mode` (`single`, the default, or `loop`) in `ui_settings.json` and `GET`/`PUT /api/settings` (any other value is 400), and `aiw local-review`, which prints it and falls back to `single` when it is unset or unreadable.

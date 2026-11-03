@@ -39,6 +39,13 @@ const GET: Record<string, unknown> = {
     default: 'claude',
     repos: { 'o/r': { auto_grind: false, slack_channel: 'C0B8385GKNK' } },
     slack_channels: [{ id: 'C0B8385GKNK', name: '#reviews' }, { id: 'C0123ABCD', name: '#ops' }],
+    reviewers: [
+      { id: 'r-aaaaaaaa', name: 'Blubird AI Agent', slack_id: 'U0BS34962FK', github_login: 'blubird-ai-agent' },
+      { id: 'r-bbbbbbbb', name: 'Masum', slack_id: 'U0373SRT22G', github_login: 'gsm-masum' },
+      { id: 'r-cccccccc', name: 'Copilot', slack_id: '', github_login: 'copilot' },
+    ],
+    active_reviewers: ['r-bbbbbbbb'],
+    bot_label: 'Review bot',
     vault_dir: '/vault',
     use_jev: true,
     jev_installed: true,
@@ -297,6 +304,162 @@ describe('Settings: Slack channels', () => {
     await user.type(screen.getByRole('textbox', { name: 'New channel id' }), 'C999999999{Enter}');
     expect(await screen.findByText('at most 50')).toBeTruthy();
     expect(sent('PUT', '/api/settings')).toEqual([]);
+  });
+});
+
+describe('Settings: Reviewers', () => {
+  const at = '/settings/reviewers';
+  const REVIEWERS = SETTINGS.reviewers as { id: string; name: string; slack_id: string; github_login: string }[];
+  const box = (name: string) => screen.getByRole('checkbox', { name: `Active: ${name}` }) as HTMLInputElement;
+  const tb = (name: string) => screen.getByRole('textbox', { name }) as HTMLInputElement;
+
+  it('lists the reviewers with their Active ticks', async () => {
+    page(<SettingsPage />, at);
+    expect((await screen.findByRole('checkbox', { name: 'Active: Masum' }) as HTMLInputElement).checked).toBe(true);
+    expect(box('Blubird AI Agent').checked).toBe(false);
+    expect(box('Copilot').checked).toBe(false);
+    expect(tb('Name of Copilot').value).toBe('Copilot');
+    expect(screen.getByText('U0BS34962FK')).toBeTruthy();
+    expect(screen.getByText('—')).toBeTruthy(); // Copilot has no Slack id
+    expect(screen.getByRole('button', { name: 'Delete Masum' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Reviewers' })).toBeTruthy();
+  });
+
+  it('a tick sends only active_reviewers and disables every tick until it resolves', async () => {
+    let finish: (r: Reply) => void = () => {};
+    handlers['PUT /api/settings'] = () => new Promise<Reply>((r) => { finish = r; });
+    const user = userEvent.setup();
+    page(<SettingsPage />, at);
+    await user.click(await screen.findByRole('checkbox', { name: 'Active: Blubird AI Agent' }));
+    await waitFor(() => expect(sent('PUT', '/api/settings')).toEqual([{ active_reviewers: ['r-bbbbbbbb', 'r-aaaaaaaa'] }]));
+    expect(box('Blubird AI Agent').checked).toBe(true);
+    expect(box('Masum').disabled && box('Copilot').disabled && box('Blubird AI Agent').disabled).toBe(true);
+    withSettings({ active_reviewers: ['r-bbbbbbbb', 'r-aaaaaaaa'] });
+    finish([200, GET['/api/settings']]);
+    await waitFor(() => expect(box('Masum').disabled).toBe(false));
+    expect(box('Blubird AI Agent').checked).toBe(true);
+  });
+
+  it('a failed tick puts it back and toasts', async () => {
+    handlers['PUT /api/settings'] = () => [400, { error: 'unknown reviewer r-zzzzzzzz' }];
+    const user = userEvent.setup();
+    page(<SettingsPage />, at);
+    await user.click(await screen.findByRole('checkbox', { name: 'Active: Masum' }));
+    expect(await screen.findByText('unknown reviewer r-zzzzzzzz')).toBeTruthy();
+    await waitFor(() => expect(box('Masum').checked).toBe(true));
+  });
+
+  it('adds one without an id: the row appears, the Add row clears and focus returns', async () => {
+    handlers['PUT /api/settings'] = (b) => {
+      withSettings({ reviewers: (b?.reviewers as object[]).map((r, i) => ({ id: `r-0000000${i}`, ...r })) });
+      return [200, GET['/api/settings']];
+    };
+    const user = userEvent.setup();
+    page(<SettingsPage />, at);
+    const name = await screen.findByRole('textbox', { name: 'New reviewer name' }) as HTMLInputElement;
+    await user.type(name, ' Siam ');
+    await user.type(tb('New reviewer Slack id'), 'W0123456789');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(sent('PUT', '/api/settings')).toEqual([{ reviewers: [...REVIEWERS, { name: 'Siam', slack_id: 'W0123456789', github_login: '' }] }]));
+    expect(await screen.findByRole('checkbox', { name: 'Active: Siam' })).toBeTruthy();
+    await waitFor(() => expect(name.value).toBe(''));
+    expect(tb('New reviewer Slack id').value).toBe('');
+    expect(document.activeElement).toBe(name);
+  });
+
+  it('Enter in a field adds too', async () => {
+    const user = userEvent.setup();
+    page(<SettingsPage />, at);
+    await user.type(await screen.findByRole('textbox', { name: 'New reviewer name' }), 'Octo');
+    await user.type(tb('New reviewer GitHub login'), 'octocat{Enter}');
+    await waitFor(() => expect(sent('PUT', '/api/settings')).toHaveLength(1));
+    expect((sent('PUT', '/api/settings')[0]?.reviewers as object[]).at(-1)).toEqual({ name: 'Octo', slack_id: '', github_login: 'octocat' });
+  });
+
+  it('shows each FR-3 message inline and sends nothing', async () => {
+    const user = userEvent.setup();
+    page(<SettingsPage />, at);
+    const name = await screen.findByRole('textbox', { name: 'New reviewer name' });
+    const slack = tb('New reviewer Slack id');
+    const login = tb('New reviewer GitHub login');
+    await user.type(name, 'X');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    expect(await screen.findByText('add a Slack id or a GitHub login')).toBeTruthy();
+    await user.type(slack, '@bot');
+    expect(await screen.findByText('Slack id must look like U0123ABCD')).toBeTruthy();
+    await user.clear(slack);
+    await user.type(slack, 'U0373SRT22G');
+    expect(await screen.findByText('Slack id U0373SRT22G is already listed')).toBeTruthy();
+    await user.clear(slack);
+    await user.type(login, 'Gsm-Masum');
+    expect(await screen.findByText('login gsm-masum is already listed')).toBeTruthy();
+    await user.clear(login);
+    await user.type(login, 'not_a_login{Enter}');
+    expect(await screen.findByText('not a GitHub login')).toBeTruthy();
+    await user.clear(name);
+    expect(await screen.findByText('reviewer name must be 1 to 60 characters')).toBeTruthy();
+    await user.type(name, 'x'.repeat(61));
+    expect(screen.getByText('reviewer name must be 1 to 60 characters')).toBeTruthy();
+    expect(sent('PUT', '/api/settings')).toEqual([]);
+  });
+
+  it('a 51st entry shows "at most 50" and sends nothing', async () => {
+    withSettings({ reviewers: Array.from({ length: 50 }, (_, i) => ({ id: `r-${String(i).padStart(8, '0')}`, name: `R${i}`, slack_id: '', github_login: `r${i}` })) });
+    const user = userEvent.setup();
+    page(<SettingsPage />, at);
+    await user.type(await screen.findByRole('textbox', { name: 'New reviewer name' }), 'One more');
+    await user.type(tb('New reviewer GitHub login'), 'one-more{Enter}');
+    expect(await screen.findByText('at most 50')).toBeTruthy();
+    expect(sent('PUT', '/api/settings')).toEqual([]);
+  });
+
+  it('a rename saves the whole list on blur', async () => {
+    const user = userEvent.setup();
+    page(<SettingsPage />, at);
+    const cop = await screen.findByRole('textbox', { name: 'Name of Copilot' });
+    await user.clear(cop);
+    await user.type(cop, 'GitHub Copilot');
+    await user.tab();
+    await waitFor(() => expect(sent('PUT', '/api/settings')).toEqual([{ reviewers: [REVIEWERS[0], REVIEWERS[1], { ...REVIEWERS[2], name: 'GitHub Copilot' }] }]));
+  });
+
+  it('delete asks first, naming where the entry is used', async () => {
+    withSettings({ repos: { 'o/r': { auto_grind: false, slack_channel: '', reviewers: ['r-bbbbbbbb'] } } });
+    const user = userEvent.setup();
+    page(<SettingsPage />, at);
+    await user.click(await screen.findByRole('button', { name: 'Delete Masum' }));
+    let dlg = within(await screen.findByRole('alertdialog'));
+    expect(dlg.getByRole('heading', { name: 'Delete Masum?' })).toBeTruthy();
+    expect(dlg.getByText('It is active and overrides o/r.')).toBeTruthy();
+    await user.click(dlg.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(sent('PUT', '/api/settings')).toEqual([]);
+    await user.click(screen.getByRole('button', { name: 'Delete Copilot' }));
+    dlg = within(await screen.findByRole('alertdialog'));
+    expect(dlg.getByRole('heading', { name: 'Delete Copilot?' })).toBeTruthy();
+    expect(dlg.queryByText(/It /)).toBeNull();
+    await user.click(dlg.getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(sent('PUT', '/api/settings')).toEqual([{ reviewers: [REVIEWERS[0], REVIEWERS[1]] }]));
+  });
+
+  it('with no active reviewer it warns, naming the bot', async () => {
+    withSettings({ active_reviewers: [] });
+    page(<SettingsPage />, at);
+    expect(await screen.findByText('No active reviewer: Slack repos mention Review bot, GitHub repos skip grinding.')).toBeTruthy();
+  });
+
+  it('with no bot label the warning names the channels.json bot', async () => {
+    withSettings({ active_reviewers: [], bot_label: null });
+    page(<SettingsPage />, at);
+    expect(await screen.findByText('No active reviewer: Slack repos mention the channels.json bot, GitHub repos skip grinding.')).toBeTruthy();
+  });
+
+  it('an empty list shows the hint and the Add row', async () => {
+    withSettings({ reviewers: [], active_reviewers: [] });
+    page(<SettingsPage />, at);
+    expect(await screen.findByText(/No reviewers yet/)).toBeTruthy();
+    expect(tb('New reviewer name')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add' })).toBeTruthy();
   });
 });
 

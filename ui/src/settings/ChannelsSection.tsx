@@ -14,24 +14,24 @@ function idError(id: string, list: SlackChannel[]) {
   return list.some((c) => c.id === id) ? `channel ${id} is already listed` : '';
 }
 
-/** A channel's name: edited locally, saved on blur or Enter when it changed and is valid. */
-function NameCell({ ch, disabled, onSave }: { ch: SlackChannel; disabled: boolean; onSave: (name: string) => void }) {
-  const [draft, setDraft] = useState(ch.name);
-  const [seen, setSeen] = useState(ch.name);
-  if (ch.name !== seen) { // the saved name changed (a save, or a revert): follow it
-    setSeen(ch.name);
-    setDraft(ch.name);
+/** A row's name: edited locally, saved on blur or Enter when it changed and is valid. */
+export function NameCell({ name, label, error, disabled, onSave }: { name: string; label: string; error: (n: string) => string; disabled: boolean; onSave: (name: string) => void }) {
+  const [draft, setDraft] = useState(name);
+  const [seen, setSeen] = useState(name);
+  if (name !== seen) { // the saved name changed (a save, or a revert): follow it
+    setSeen(name);
+    setDraft(name);
   }
-  const err = nameError(draft.trim());
+  const err = error(draft.trim());
   return (
     <>
       <input
         className="f"
-        aria-label={`Name of ${ch.id}`}
+        aria-label={label}
         value={draft}
         disabled={disabled}
         onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => !err && draft.trim() !== ch.name && onSave(draft.trim())}
+        onBlur={() => !err && draft.trim() !== name && onSave(draft.trim())}
         onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
       />
       {err ? <p className="err-text" role="alert">{err}</p> : null}
@@ -94,7 +94,7 @@ export function ChannelsSection() {
           <tbody>
             {list.map((ch) => (
               <tr key={ch.id}>
-                <td><NameCell ch={ch} disabled={busy} onSave={(n) => void persist(list.map((c) => (c.id === ch.id ? { ...c, name: n } : c)), `Renamed ${ch.id}`)} /></td>
+                <td><NameCell name={ch.name} label={`Name of ${ch.id}`} error={nameError} disabled={busy} onSave={(n) => void persist(list.map((c) => (c.id === ch.id ? { ...c, name: n } : c)), `Renamed ${ch.id}`)} /></td>
                 <td className="mono">{ch.id}</td>
                 <td><Button variant="danger" sm disabled={busy} onClick={() => void persist(list.filter((c) => c.id !== ch.id), `Deleted ${ch.name}`)} aria-label={`Delete ${ch.name}`}>Delete</Button></td>
               </tr>

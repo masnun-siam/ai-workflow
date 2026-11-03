@@ -313,12 +313,18 @@ export interface ClaudeCommand {
   builtin?: boolean;
 }
 export interface SlackChannel { id: string; name: string }
+/** A saved grind reviewer: a Slack member id, a GitHub login, or both. A new entry is sent without an id. */
+export interface Reviewer { id: string; name: string; slack_id: string; github_login: string }
 export interface RepoSettings {
   auto_grind: boolean;
   /** A channel id from `slack_channels`, "" for none, or a legacy value the server flags with `channel_invalid`. */
   slack_channel: string;
   /** Read-only: the stored value is not a channel id (grinds skip until another channel is picked). */
   channel_invalid?: boolean;
+  /** Read-only: how grind reaches this repo's reviewer. */
+  path?: 'slack' | 'github' | null;
+  /** Reviewer ids overriding the active set; null follows it. */
+  reviewers?: string[] | null;
 }
 export interface RestartStatus {
   available: boolean;
@@ -334,6 +340,12 @@ export interface Settings {
   repos?: Record<RepoSlug, RepoSettings>;
   /** The saved channels a repo picks from; a PUT with it replaces the whole list. */
   slack_channels?: SlackChannel[];
+  /** The saved reviewers; a PUT with it replaces the whole list. */
+  reviewers?: Reviewer[];
+  /** Ids of the reviewers every repo without an override uses. */
+  active_reviewers?: string[];
+  /** Read-only: the channels.json bot's label, null when none. */
+  bot_label?: string | null;
   vault_dir?: string;
   claude_label?: string;
   /** Every /pr-grind loop: deep (until zero findings) or simple (stops once the PR is approved). */
