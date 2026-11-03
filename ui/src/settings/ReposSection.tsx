@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api/endpoints';
 import { useApiMutation, useRemoveRepo, useRepos, useSaveSettings, useScanRepos, useSettings } from '../api/hooks';
-import type { Repo, RepoSettings, ScanResult } from '../api/types';
+import type { Repo, RepoSettings, ScanResult, SlackChannel } from '../api/types';
 import { Button, Chip, Icon, Switch, toast, useConfirm } from '../components';
 import { PublishDialog } from '../repos/PublishDialog';
 import './settings.css';
@@ -9,24 +9,21 @@ import './settings.css';
 export const REPO_FILTER_AFTER = 8;
 const DEFAULTS: RepoSettings = { auto_grind: false, slack_channel: '' };
 
-/** Slack channel: edited locally, saved when the field loses focus with a changed value. */
-function SlackCell({ slug, value, onSave }: { slug: string; value: string; onSave: (v: string) => void }) {
-  const [draft, setDraft] = useState(value);
-  const [seen, setSeen] = useState(value);
-  if (value !== seen) { // the saved value changed (a save, or a revert): follow it
-    setSeen(value);
-    setDraft(value);
-  }
+/** Slack channel: a select over the saved channels plus None, saved on change. A legacy value stays as a disabled option. */
+function ChannelCell({ slug, row, channels, disabled, onSave }: { slug: string; row: RepoSettings; channels: SlackChannel[]; disabled: boolean; onSave: (v: string) => void }) {
+  const value = row.slack_channel;
+  const legacy = value !== '' && !channels.some((c) => c.id === value);
   return (
-    <input
-      className="f slack"
-      aria-label={`Slack channel for ${slug}`}
-      placeholder="#channel"
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => draft.trim() !== value && onSave(draft.trim())}
-      onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-    />
+    <>
+      <select className="f slack" aria-label={`Slack channel for ${slug}`} value={value} disabled={disabled} onChange={(e) => onSave(e.target.value)}>
+        <option value="">None</option>
+        {channels.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        {legacy ? <option value={value} disabled>{value}</option> : null}
+      </select>
+      {legacy && row.channel_invalid ? (
+        <div className="chan-hint"><Chip tone="bad">invalid</Chip><span>Not a channel id. Pick a channel; grinds skip until then.</span></div>
+      ) : null}
+    </>
   );
 }
 
@@ -67,8 +64,10 @@ export function ReposSection() {
   const change = async (slug: string, patch: Partial<RepoSettings>) => {
     const next = { ...rowOf(slug), ...patch };
     setOver((o) => ({ ...o, [slug]: next }));
+    // the GET's read-only keys never go back in a PUT
+    const { channel_invalid: _ro, path: _path, ...send } = next as RepoSettings & { path?: string };
     try {
-      await save.mutateAsync({ repos: { [slug]: next } });
+      await save.mutateAsync({ repos: { [slug]: send } });
       toast(`Saved ${slug}`);
     } catch {
       /* the error toast comes from the mutation cache */
@@ -171,7 +170,7 @@ export function ReposSection() {
                       )}
                     </td>
                     <td><Switch checked={row.auto_grind} label={`Auto-grind ${r.slug}`} onChange={(v) => void change(r.slug, { auto_grind: v })} /></td>
-                    <td><SlackCell slug={r.slug} value={row.slack_channel} onSave={(v) => void change(r.slug, { slack_channel: v })} /></td>
+                    <td><ChannelCell slug={r.slug} row={row} channels={settings.data?.slack_channels ?? []} disabled={r.slug in over} onSave={(v) => void change(r.slug, { slack_channel: v })} /></td>
                     <td><Button variant="danger" sm onClick={() => void onRemove(r)} aria-label={`Remove ${r.slug}`}>Remove</Button></td>
                   </tr>
                 );

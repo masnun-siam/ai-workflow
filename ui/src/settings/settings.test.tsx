@@ -12,7 +12,8 @@ import { QueryProvider } from '../QueryProvider';
 
 type Call = { method: string; url: string; body: Record<string, unknown> | null };
 let calls: Call[];
-let handlers: Record<string, (body: Record<string, unknown> | null) => [number, unknown]>;
+type Reply = [number, unknown];
+let handlers: Record<string, (body: Record<string, unknown> | null) => Reply | Promise<Reply>>;
 
 const json = (b: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } }));
 const sent = (method: string, url: string) => calls.filter((c) => c.method === method && c.url === url).map((c) => c.body);
@@ -36,7 +37,8 @@ const GET: Record<string, unknown> = {
   '/api/settings': {
     commands: [{ label: 'claude', cmd: 'claude', builtin: true }, { label: 'Masum', cmd: 'cc masum' }],
     default: 'claude',
-    repos: { 'o/r': { auto_grind: false, slack_channel: '#rev' } },
+    repos: { 'o/r': { auto_grind: false, slack_channel: 'C0B8385GKNK' } },
+    slack_channels: [{ id: 'C0B8385GKNK', name: '#reviews' }, { id: 'C0123ABCD', name: '#ops' }],
     vault_dir: '/vault',
     use_jev: true,
     jev_installed: true,
@@ -59,6 +61,9 @@ const GET: Record<string, unknown> = {
   '/api/vault/prd': { exists: true, status: 'Approved', title: 'Gym' },
 };
 
+const SETTINGS = GET['/api/settings'] as Record<string, unknown>;
+const withSettings = (patch: Record<string, unknown>) => { GET['/api/settings'] = { ...SETTINGS, ...patch }; };
+
 function mockApi() {
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET';
@@ -67,8 +72,7 @@ function mockApi() {
     calls.push({ method, url: path, body });
     if (method === 'GET') return path in GET ? json(GET[path]) : json({ error: 'nope' }, 404);
     const h = handlers[`${method} ${path}`];
-    const [status, res] = h ? h(body) : [200, {}];
-    return json(res, status);
+    return Promise.resolve(h ? h(body) : ([200, {}] as Reply)).then(([status, res]) => json(res, status));
   }));
 }
 
@@ -94,36 +98,79 @@ beforeEach(() => {
   mockApi();
 });
 afterEach(() => {
+  GET['/api/settings'] = SETTINGS;
   cleanup();
   vi.unstubAllGlobals();
 });
 
 describe('Settings: repositories', () => {
   it('autosaves a row with only that repo and reverts when the server refuses', async () => {
-    handlers['PUT /api/settings'] = () => [400, { error: 'slack_channel must be a string of at most 100 characters' }];
+    handlers['PUT /api/settings'] = () => [400, { error: 'auto_grind must be a boolean' }];
     const user = userEvent.setup();
     page(<SettingsPage />);
     const sw = await screen.findByRole('switch', { name: 'Auto-grind o/r' });
     expect(sw.getAttribute('aria-checked')).toBe('false');
     await user.click(sw);
-    await waitFor(() => expect(sent('PUT', '/api/settings')).toEqual([{ repos: { 'o/r': { auto_grind: true, slack_channel: '#rev' } } }]));
+    await waitFor(() => expect(sent('PUT', '/api/settings')).toEqual([{ repos: { 'o/r': { auto_grind: true, slack_channel: 'C0B8385GKNK' } } }]));
     await waitFor(() => expect(screen.getByRole('switch', { name: 'Auto-grind o/r' }).getAttribute('aria-checked')).toBe('false'));
-    expect(await screen.findByText(/slack_channel must be a string/)).toBeTruthy();
+    expect(await screen.findByText(/auto_grind must be a boolean/)).toBeTruthy();
   });
 
-  it('saves a changed Auto-grind and a Slack channel on blur, and confirms with a toast', async () => {
-    handlers['PUT /api/settings'] = (b) => [200, { ...(GET['/api/settings'] as object), repos: b?.repos }];
+  it('the Slack channel select lists None and the channels, and saves a pick on change', async () => {
+    handlers['PUT /api/settings'] = (b) => [200, { ...SETTINGS, repos: b?.repos }];
     const user = userEvent.setup();
     page(<SettingsPage />);
-    await user.click(await screen.findByRole('switch', { name: 'Auto-grind o/r' }));
-    await waitFor(() => expect(sent('PUT', '/api/settings')[0]).toEqual({ repos: { 'o/r': { auto_grind: true, slack_channel: '#rev' } } }));
+    const sel = (await screen.findByRole('combobox', { name: 'Slack channel for o/r' })) as HTMLSelectElement;
+    expect(sel.value).toBe('C0B8385GKNK');
+    expect(within(sel).getAllByRole('option').map((o) => o.textContent)).toEqual(['None', '#reviews', '#ops']);
+    await user.selectOptions(sel, '#ops');
+    await waitFor(() => expect(sent('PUT', '/api/settings')).toEqual([{ repos: { 'o/r': { auto_grind: false, slack_channel: 'C0123ABCD' } } }]));
     expect(await screen.findByText('Saved o/r')).toBeTruthy();
-    const slack = screen.getByLabelText('Slack channel for o/r');
-    await user.clear(slack);
-    await user.type(slack, '#ship');
-    await user.tab();
-    await waitFor(() => expect(sent('PUT', '/api/settings')).toHaveLength(2));
-    expect((sent('PUT', '/api/settings')[1]?.repos as Record<string, { slack_channel: string }>)['o/r'].slack_channel).toBe('#ship');
+  });
+
+  it('the select is disabled while its save is in flight', async () => {
+    let finish: (r: Reply) => void = () => {};
+    handlers['PUT /api/settings'] = () => new Promise<Reply>((r) => { finish = r; });
+    const user = userEvent.setup();
+    page(<SettingsPage />);
+    const sel = (await screen.findByRole('combobox', { name: 'Slack channel for local/idea' })) as HTMLSelectElement;
+    await user.selectOptions(sel, '#ops');
+    await waitFor(() => expect(sel.disabled).toBe(true));
+    expect(sent('PUT', '/api/settings')).toEqual([{ repos: { 'local/idea': { auto_grind: false, slack_channel: 'C0123ABCD' } } }]);
+    finish([200, SETTINGS]);
+    await waitFor(() => expect(sel.disabled).toBe(false));
+  });
+
+  it('a refused pick puts the old channel back and shows the error', async () => {
+    handlers['PUT /api/settings'] = () => [400, { error: 'repo o/r: slack_channel C0123ABCD is not listed' }];
+    const user = userEvent.setup();
+    page(<SettingsPage />);
+    const sel = (await screen.findByRole('combobox', { name: 'Slack channel for o/r' })) as HTMLSelectElement;
+    await user.selectOptions(sel, 'None');
+    await waitFor(() => expect(sent('PUT', '/api/settings')).toHaveLength(1));
+    expect(await screen.findByText(/C0123ABCD is not listed/)).toBeTruthy();
+    await waitFor(() => expect(sel.value).toBe('C0B8385GKNK'));
+    expect(sel.disabled).toBe(false);
+  });
+
+  it('a legacy channel shows the invalid chip, and an Auto-grind save keeps it unchanged', async () => {
+    withSettings({ repos: { 'o/r': { auto_grind: false, slack_channel: '#rev', channel_invalid: true, path: '/x/r' } } });
+    const user = userEvent.setup();
+    page(<SettingsPage />);
+    const sel = (await screen.findByRole('combobox', { name: 'Slack channel for o/r' })) as HTMLSelectElement;
+    expect(sel.value).toBe('#rev');
+    expect((within(sel).getByRole('option', { name: '#rev' }) as HTMLOptionElement).disabled).toBe(true);
+    expect(screen.getByText('invalid')).toBeTruthy();
+    expect(screen.getByText('Not a channel id. Pick a channel; grinds skip until then.')).toBeTruthy();
+    await user.click(screen.getByRole('switch', { name: 'Auto-grind o/r' }));
+    await waitFor(() => expect(sent('PUT', '/api/settings')).toEqual([{ repos: { 'o/r': { auto_grind: true, slack_channel: '#rev' } } }]));
+  });
+
+  it('with no saved channels the select holds only None', async () => {
+    withSettings({ slack_channels: [], repos: {} });
+    page(<SettingsPage />);
+    const sel = await screen.findByRole('combobox', { name: 'Slack channel for o/r' });
+    expect(within(sel).getAllByRole('option').map((o) => o.textContent)).toEqual(['None']);
   });
 
   it('a local repo offers Publish; Remove asks first', async () => {
@@ -158,6 +205,98 @@ describe('Settings: repositories', () => {
     await user.click(await screen.findByRole('button', { name: /Find repos/ }));
     await waitFor(() => expect(sent('POST', '/api/repos/scan')).toEqual([{ roots: ['/x'] }]));
     expect(await screen.findByText('Registered 1 new repo.')).toBeTruthy();
+  });
+});
+
+describe('Settings: Slack channels', () => {
+  const at = '/settings/channels';
+  const nameOf = (id: string) => screen.getByRole('textbox', { name: `Name of ${id}` }) as HTMLInputElement;
+
+  it('lists the channels and adds one: the whole list is sent, the Add row clears and focus returns', async () => {
+    handlers['PUT /api/settings'] = (b) => { withSettings(b ?? {}); return [200, GET['/api/settings']]; };
+    const user = userEvent.setup();
+    page(<SettingsPage />, at);
+    expect((await screen.findByRole('textbox', { name: 'Name of C0B8385GKNK' }) as HTMLInputElement).value).toBe('#reviews');
+    expect(nameOf('C0123ABCD').value).toBe('#ops');
+    expect(screen.getByText('C0123ABCD')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Delete #ops' })).toBeTruthy();
+    const name = screen.getByRole('textbox', { name: 'New channel name' }) as HTMLInputElement;
+    const id = screen.getByRole('textbox', { name: 'New channel id' }) as HTMLInputElement;
+    await user.type(name, ' #ship ');
+    await user.type(id, 'G01234ABCDE');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(sent('PUT', '/api/settings')).toEqual([{ slack_channels: [...(SETTINGS.slack_channels as object[]), { id: 'G01234ABCDE', name: '#ship' }] }]));
+    expect(await screen.findByRole('textbox', { name: 'Name of G01234ABCDE' })).toBeTruthy();
+    await waitFor(() => expect(name.value).toBe(''));
+    expect(id.value).toBe('');
+    expect(document.activeElement).toBe(name);
+  });
+
+  it('Enter in the id field adds too', async () => {
+    const user = userEvent.setup();
+    page(<SettingsPage />, at);
+    await user.type(await screen.findByRole('textbox', { name: 'New channel name' }), '#ship');
+    await user.type(screen.getByRole('textbox', { name: 'New channel id' }), 'D0123456789{Enter}');
+    await waitFor(() => expect(sent('PUT', '/api/settings')).toHaveLength(1));
+    expect((sent('PUT', '/api/settings')[0]?.slack_channels as object[]).at(-1)).toEqual({ id: 'D0123456789', name: '#ship' });
+  });
+
+  it('a bad id, a listed id or an empty name shows its message and sends nothing', async () => {
+    const user = userEvent.setup();
+    page(<SettingsPage />, at);
+    const id = await screen.findByRole('textbox', { name: 'New channel id' });
+    await user.type(screen.getByRole('textbox', { name: 'New channel name' }), '#reviews');
+    await user.type(id, 'reviews');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    expect(await screen.findByText('channel id must look like C0123ABCD')).toBeTruthy();
+    await user.clear(id);
+    await user.type(id, 'C0B8385GKNK{Enter}');
+    expect(await screen.findByText('channel C0B8385GKNK is already listed')).toBeTruthy();
+    await user.clear(screen.getByRole('textbox', { name: 'New channel name' }));
+    expect(await screen.findByText('channel name must be 1 to 60 characters')).toBeTruthy();
+    expect(sent('PUT', '/api/settings')).toEqual([]);
+  });
+
+  it('a rename saves the whole list on blur, and not when unchanged or invalid', async () => {
+    const user = userEvent.setup();
+    page(<SettingsPage />, at);
+    const ops = await screen.findByRole('textbox', { name: 'Name of C0123ABCD' });
+    await user.click(ops);
+    await user.tab();
+    await user.clear(ops);
+    await user.tab();
+    expect(screen.getByText('channel name must be 1 to 60 characters')).toBeTruthy();
+    expect(sent('PUT', '/api/settings')).toEqual([]);
+    await user.type(ops, '#oncall{Enter}');
+    await waitFor(() => expect(sent('PUT', '/api/settings')).toEqual([{ slack_channels: [{ id: 'C0B8385GKNK', name: '#reviews' }, { id: 'C0123ABCD', name: '#oncall' }] }]));
+  });
+
+  it('a refused delete shows the server error and keeps the row', async () => {
+    handlers['PUT /api/settings'] = () => [400, { error: 'channel C0B8385GKNK is used by o/r' }];
+    const user = userEvent.setup();
+    page(<SettingsPage />, at);
+    await user.click(await screen.findByRole('button', { name: 'Delete #reviews' }));
+    await waitFor(() => expect(sent('PUT', '/api/settings')).toEqual([{ slack_channels: [{ id: 'C0123ABCD', name: '#ops' }] }]));
+    expect(await screen.findByText('channel C0B8385GKNK is used by o/r')).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Name of C0B8385GKNK' })).toBeTruthy());
+  });
+
+  it('an empty list shows the hint and the Add row', async () => {
+    withSettings({ slack_channels: [] });
+    page(<SettingsPage />, at);
+    expect(await screen.findByText(/No channels yet/)).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'New channel name' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add' })).toBeTruthy();
+  });
+
+  it('a 51st channel shows "at most 50" and sends nothing', async () => {
+    withSettings({ slack_channels: Array.from({ length: 50 }, (_, i) => ({ id: `C${String(i).padStart(9, '0')}`, name: `#c${i}` })) });
+    const user = userEvent.setup();
+    page(<SettingsPage />, at);
+    await user.type(await screen.findByRole('textbox', { name: 'New channel name' }), '#one-more');
+    await user.type(screen.getByRole('textbox', { name: 'New channel id' }), 'C999999999{Enter}');
+    expect(await screen.findByText('at most 50')).toBeTruthy();
+    expect(sent('PUT', '/api/settings')).toEqual([]);
   });
 });
 

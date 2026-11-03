@@ -312,9 +312,13 @@ export interface ClaudeCommand {
   cmd: string;
   builtin?: boolean;
 }
+export interface SlackChannel { id: string; name: string }
 export interface RepoSettings {
   auto_grind: boolean;
+  /** A channel id from `slack_channels`, "" for none, or a legacy value the server flags with `channel_invalid`. */
   slack_channel: string;
+  /** Read-only: the stored value is not a channel id (grinds skip until another channel is picked). */
+  channel_invalid?: boolean;
 }
 export interface RestartStatus {
   available: boolean;
@@ -328,6 +332,8 @@ export interface Settings {
   commands: ClaudeCommand[];
   default: string;
   repos?: Record<RepoSlug, RepoSettings>;
+  /** The saved channels a repo picks from; a PUT with it replaces the whole list. */
+  slack_channels?: SlackChannel[];
   vault_dir?: string;
   claude_label?: string;
   /** Every /pr-grind loop: deep (until zero findings) or simple (stops once the PR is approved). */
