@@ -16,7 +16,7 @@ d = tempfile.mkdtemp()
 os.environ["CLAUDE_PLUGIN_DATA"] = d
 bindir = os.path.join(d, "bin")
 os.makedirs(bindir)
-for name, out in (("claude", '{"loggedIn": true}'), ("cc-profile", '{"loggedIn": false}')):
+for name, out in (("claude", '{"loggedIn": true}'), ("cc-profile", '{"loggedIn": false}'), ("codex", "{}")):
     p = os.path.join(bindir, name)
     with open(p, "w") as f:
         f.write(f"#!/bin/sh\necho '{out}'\n")
@@ -34,7 +34,17 @@ def raises(fn, *a):
     return False
 
 
-BUILTIN = {"label": "claude", "cmd": "claude", "builtin": True}
+BUILTIN = {"label": "claude", "cmd": "claude", "builtin": True, "harness": "claude"}
+HARNESSES = [
+    {
+        "id": "claude",
+        "label": "Claude Code",
+        "models": ["opus", "sonnet", "haiku"],
+        "efforts": ["low", "medium", "high", "xhigh", "max"],
+        "usage": True,
+    },
+    {"id": "codex", "label": "Codex", "models": None, "efforts": ["low", "medium", "high", "xhigh"], "usage": False},
+]
 assert {k: v for k, v in ui_settings.load().items() if k not in ("vault_dir", "jev_installed", "personal_plugin")} == {
     "commands": [BUILTIN],
     "default": "claude",
@@ -47,6 +57,7 @@ assert {k: v for k, v in ui_settings.load().items() if k not in ("vault_dir", "j
     "use_jev": True,
     "run_model": None,
     "run_effort": None,
+    "harnesses": HARNESSES,
 }
 assert ui_settings.load()["vault_dir"] == os.path.expanduser("~/Documents/notes")
 assert ui_settings.default_cmd() == "claude"
@@ -54,11 +65,14 @@ assert ui_settings.argv("cc masum") == [os.path.join(bindir, "cc-profile"), "mas
 assert ui_settings.argv("claude --model x")[1:] == ["--model", "x"]
 assert raises(ui_settings.argv, "") and raises(ui_settings.argv, "nope-xyz") and raises(ui_settings.argv, "a 'b")
 saved = ui_settings.save(
-    {"commands": [{"label": "Main", "cmd": "claude"}, {"label": "Masum", "cmd": "cc masum"}], "default": "Masum"}
+    {
+        "commands": [{"label": "Main", "cmd": "claude --model x"}, {"label": "Masum", "cmd": "cc masum"}],
+        "default": "Masum",
+    }
 )
 assert ui_settings.load() == saved and ui_settings.default_cmd() == "cc masum"
 assert saved["commands"][0] == BUILTIN and [c["label"] for c in saved["commands"]] == ["claude", "Main", "Masum"]
-assert raises(ui_settings.save, {"commands": [{"label": "A", "cmd": "claude"}, {"label": "A", "cmd": "claude"}]})
+assert raises(ui_settings.save, {"commands": [{"label": "A", "cmd": "claude -c"}, {"label": "A", "cmd": "claude -r"}]})
 assert raises(ui_settings.save, {"commands": [{"label": "A", "cmd": "nope-xyz"}]})
 assert raises(ui_settings.save, {"commands": [], "default": "ghost"})
 assert ui_settings.load() == saved  # failed saves leave the file alone
@@ -69,7 +83,7 @@ s2 = ui_settings.save(
         "default": "Work",
     }
 )
-assert s2["commands"][0] == {"label": "Work", "cmd": "claude", "builtin": True} and s2["default"] == "Work"
+assert s2["commands"][0] == {**BUILTIN, "label": "Work"} and s2["default"] == "Work"
 assert ui_settings.default_cmd() == "claude"
 assert ui_settings.save({"commands": [{"label": "Masum", "cmd": "cc masum"}]})["commands"][0] == BUILTIN
 assert raises(
@@ -466,4 +480,94 @@ assert len(r["slack_channels"]) == 50 and len(r["reviewers"]) == 50
 pre_upgrade({"repos": {f"o/r{i}": {"reviewer": f"u{i}"} for i in range(51)}})
 r = ui_settings.load()
 assert len(r["reviewers"]) == 50 and r["repos"]["o/r50"]["reviewers"] is None and r["repos"]["o/r0"]["reviewers"]
-print("ui_settings: 129 checks passed")
+
+
+# --- account harness and models (#870)
+def error(fn, *a):
+    """The ValueError message fn raises, or None."""
+    try:
+        fn(*a)
+    except ValueError as e:
+        return str(e)
+    return None
+
+
+def stored_accounts():
+    return json.loads(file())["commands"]
+
+
+os.remove(ui_settings._path())
+ui_settings.load()["harnesses"][0]["models"].append("x")
+assert ui_settings.load()["harnesses"] == HARNESSES, "a caller cannot change the constant"
+# an old account (no harness) and an unknown harness both load as claude, nothing else changes
+with open(ui_settings._path(), "w") as f:
+    json.dump(
+        {"commands": [{"label": "Old", "cmd": "cc old"}, {"label": "Odd", "cmd": "cc odd", "harness": "bogus"}]}, f
+    )
+assert ui_settings.load()["commands"][1:] == [
+    {"label": "Old", "cmd": "cc old", "harness": "claude"},
+    {"label": "Odd", "cmd": "cc odd", "harness": "claude"},
+]
+# a Codex account saves and reloads with its harness and models; a Claude row has no models key
+CODEX = {"label": "Codex", "cmd": "codex", "harness": "codex", "models": ["gpt-5-codex"]}
+r = ui_settings.save({"commands": [BUILTIN, CODEX, {"label": "Main", "cmd": "cc main", "models": [1, ""]}]})
+assert r["commands"] == [BUILTIN, CODEX, {"label": "Main", "cmd": "cc main", "harness": "claude"}], r["commands"]
+assert ui_settings.load()["commands"] == r["commands"]
+assert stored_accounts() == [CODEX, {"label": "Main", "cmd": "cc main", "harness": "claude"}], "Claude models dropped"
+r = ui_settings.save({"commands": [{"label": "C2", "cmd": "codex", "harness": "codex"}]})
+assert r["commands"][1] == {"label": "C2", "cmd": "codex", "harness": "codex", "models": []}
+# the read-only harnesses list is accepted in a body and never stored
+r = ui_settings.save({**ui_settings.load(), "harnesses": [{"id": "x"}]})
+assert "harnesses" not in json.loads(file()) and r["harnesses"] == HARNESSES
+# the 400 messages
+H, B, M, U = (
+    "harness must be claude or codex",
+    "the built-in account is always claude",
+    "models must be a list of at most 20 model names",
+    "each account needs its own command",
+)
+assert error(ui_settings.save, {"commands": [{"label": "A", "cmd": "codex", "harness": "gemini"}]}) == H
+assert error(ui_settings.save, {"commands": [{"label": "A", "cmd": "codex", "harness": None}]}) == H
+assert error(ui_settings.save, {"commands": [{**BUILTIN, "harness": "codex"}]}) == B
+assert error(ui_settings.save, {"commands": [{**BUILTIN, "harness": "bogus"}]}) == H
+assert error(ui_settings.save, {"commands": [{**BUILTIN, "harness": "claude"}]}) is None
+assert ui_settings.load()["commands"] == [BUILTIN] and stored_accounts() == []
+
+
+def codex_models(models):
+    return error(
+        ui_settings.validate, {"commands": [{"label": "X", "cmd": "codex", "harness": "codex", "models": models}]}
+    )
+
+
+assert codex_models([f"m{i}" for i in range(20)]) is None and codex_models([f"m{i}" for i in range(21)]) == M
+assert codex_models(["a" * 80]) is None and codex_models(["a" * 81]) == M
+assert codex_models(["openai/gpt-5.1:mini_x-2"]) is None
+for bad in ([""], ["-gpt"], ["gpt 5"], [5], [None], "gpt-5", {"m": 1}, None):
+    assert codex_models(bad) == M, bad
+# duplicate commands: refused on a full save, the built-in claude counted
+dup = [{"label": "A", "cmd": "codex", "harness": "codex"}, {"label": "B", "cmd": "codex "}]
+assert error(ui_settings.save, {"commands": dup}) == U
+assert error(ui_settings.save, {"commands": [{"label": "A", "cmd": "claude"}]}) == U
+# a stored duplicate loads as it is (both claude); a partial save keeps it; an Accounts save refuses it
+with open(ui_settings._path(), "w") as f:
+    json.dump({"commands": [{"label": "A", "cmd": "cc x"}, {"label": "B", "cmd": "cc x"}]}, f)
+assert [c["harness"] for c in ui_settings.load()["commands"]] == ["claude"] * 3
+ui_settings.save({"repos": {"o/a": {"slack_channel": ""}}})
+assert [c["label"] for c in stored_accounts()] == ["A", "B"]
+assert error(ui_settings.save, {"commands": ui_settings.load()["commands"]}) == U
+# hand-edited junk in a stored Codex models list is dropped on load, so a partial save still validates
+with open(ui_settings._path(), "w") as f:
+    junk = ["ok-1", "", 5, "-x", *[f"m{i}" for i in range(25)]]
+    json.dump({"commands": [{"label": "C", "cmd": "codex", "harness": "codex", "models": junk}]}, f)
+assert ui_settings.load()["commands"][1]["models"] == ["ok-1", *[f"m{i}" for i in range(19)]]
+assert error(ui_settings.save, {"repos": {"o/a": {"slack_channel": ""}}}) is None
+# harness_of / models_of
+ui_settings.save({"commands": [CODEX, {"label": "Main", "cmd": "cc main"}]})
+assert ui_settings.harness_of("codex") == "codex" and ui_settings.models_of("codex") == ["gpt-5-codex"]
+assert ui_settings.harness_of("cc main") == "claude" and ui_settings.models_of("cc main") == []
+assert ui_settings.harness_of("claude") == "claude" and ui_settings.models_of("claude") == []
+assert ui_settings.harness_of("nope") == "claude" and ui_settings.models_of("nope") == []
+# run_model / run_effort stay on the Claude lists
+assert raises(ui_settings.validate, {"run_model": "gpt-5"}) and raises(ui_settings.validate, {"run_effort": "minimal"})
+print("ui_settings: 158 checks passed")
