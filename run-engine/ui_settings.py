@@ -59,9 +59,9 @@ def review_mode() -> str:
     return m if m in REVIEW_MODES else "single"
 
 
-def slack_channels() -> list:
+def slack_channels(data=None) -> list:
     """The saved Slack channels list, [{id, name}]; malformed stored entries are skipped."""
-    raw = _stored().get("slack_channels")
+    raw = (_stored() if data is None else data).get("slack_channels")
     return [
         {"id": c["id"], "name": c["name"]}
         for c in (raw if isinstance(raw, list) else [])
@@ -95,9 +95,9 @@ def _clean_channels(chans) -> list:
     return out
 
 
-def reviewers() -> list:
+def reviewers(data=None) -> list:
     """The saved reviewers list, [{id, name, slack_id, github_login}]; malformed stored entries are skipped."""
-    raw = _stored().get("reviewers")
+    raw = (_stored() if data is None else data).get("reviewers")
     keys = ("id", "name", "slack_id", "github_login")
     return [
         {k: r[k] for k in keys}
@@ -111,9 +111,10 @@ def _known(raw, ids: set) -> list:
     return [i for i in raw if isinstance(i, str) and i in ids] if isinstance(raw, list) else []
 
 
-def active_reviewers() -> list:
+def active_reviewers(data=None) -> list:
     """The global active set: ids of saved reviewers every repo without an override follows."""
-    return _known(_stored().get("active_reviewers"), {r["id"] for r in reviewers()})
+    data = _stored() if data is None else data
+    return _known(data.get("active_reviewers"), {r["id"] for r in reviewers(data)})
 
 
 def _clean_reviewers(revs) -> list:
@@ -212,20 +213,103 @@ def _repo(d) -> dict:
     }
 
 
-def _migrate(data: dict) -> dict:
-    """Drop the legacy global auto_grind, seeding it onto every registered repo once."""
+def _migrate_auto_grind(data: dict) -> bool:
+    """Drop the legacy global auto_grind, seeding it onto every registered repo; True if it changed data."""
     if "auto_grind" not in data:
-        return data
+        return False
     legacy = data.pop("auto_grind") is True
     repos = data["repos"] = dict(data.get("repos") or {})
     for slug in dispatch.read_checkouts():
         repos.setdefault(slug, {"auto_grind": legacy})
-    # ponytail: unlocked; the legacy migration is idempotent, so a race rewrites the same result
+    return True
+
+
+def _channels_json() -> dict:
+    """channels.json as a dict ({} when it is missing, corrupt or not an object)."""
+    try:
+        with open(os.path.join(shared.data_dir(), "channels.json"), encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _seed_reviewers(data: dict) -> dict:
+    """Seed slack_channels, reviewers and active_reviewers from the old settings (FR-9) and drop each
+    repo's old `reviewer`. Built from the stored dict and channels.json only, so it needs no lock."""
+    cj = _channels_json()
+    mapped = cj.get("channels") if isinstance(cj.get("channels"), dict) else {}
+    raw = data.get("repos")
+    repos = {k: v for k, v in (raw if isinstance(raw, dict) else {}).items() if isinstance(v, dict)}
+    chans, revs, taken = [], [], set()
+
+    def add_channel(cid):
+        cid = cid.strip() if isinstance(cid, str) else ""
+        if CHANNEL_RE.match(cid) and len(chans) < MAX_LISTED and all(c["id"] != cid for c in chans):
+            chans.append({"id": cid, "name": cid})
+
+    def add_reviewer(name, sid, login) -> str:
+        rid = "r-" + secrets.token_hex(4)
+        while rid in taken:
+            rid = "r-" + secrets.token_hex(4)
+        taken.add(rid)
+        revs.append({"id": rid, "name": name, "slack_id": sid, "github_login": login})
+        return rid
+
+    for r in repos.values():  # repos' picks first, so they always make the list
+        add_channel(r.get("slack_channel"))
+    for cid in mapped.values():
+        add_channel(cid)
+    bot, label = cj.get("bot_uid"), cj.get("bot_label")
+    label = label.strip()[:60] if isinstance(label, str) else ""  # stripped: every save re-validates the name
+    active = [add_reviewer(label or "Review bot", bot, "")] if isinstance(bot, str) and SLACK_ID_RE.match(bot) else []
+    for slug, r in repos.items():
+        login = r.pop("reviewer", None)
+        login = login.strip() if isinstance(login, str) else ""
+        rid = None
+        if REVIEWER_RE.match(login):
+            rid = next((x["id"] for x in revs if x["github_login"].lower() == login.lower()), None)
+            if rid is None and len(revs) < MAX_LISTED:
+                rid = add_reviewer(login, "", login)
+        ch = r.get("slack_channel")
+        has_channel = (isinstance(ch, str) and ch.strip()) or mapped.get(slug)
+        r["reviewers"] = [rid] if rid and not has_channel else None
+    data["slack_channels"], data["reviewers"], data["active_reviewers"] = chans, revs, active
+    return data
+
+
+def _write(data: dict) -> None:
     try:
         shared.atomic_write_text(_path(), json.dumps(data, indent=2))
-    except OSError:
+    except OSError:  # ponytail: read-only data dir; seeded ids may differ between loads until a write works
         pass
-    return data
+
+
+def _migrate(data: dict, persist: bool = True) -> dict:
+    """Run the one-time migrations on the stored settings. persist=False writes nothing and takes no lock
+    (validate() runs inside save()'s lock, which is not re-entrant; save() writes the result)."""
+    changed = _migrate_auto_grind(data)
+    if "reviewers" in data or not persist:
+        if "reviewers" not in data:
+            _seed_reviewers(data)
+        elif changed and persist:
+            _write(data)  # ponytail: unlocked; the legacy migration is idempotent, so a race rewrites the same result
+        return data
+    with shared.json_lock(_path()):  # re-check under the lock, so two racing first loads give one set of ids
+        try:
+            with open(_path(), encoding="utf-8") as f:
+                fresh = json.load(f)
+        except FileNotFoundError:
+            fresh = {}
+        except (OSError, ValueError):
+            return data  # corrupt: never overwrite it here; save() moves it aside
+        if not isinstance(fresh, dict):
+            return data
+        if "reviewers" in fresh:  # another process migrated
+            return fresh
+        _migrate_auto_grind(fresh)
+        _write(_seed_reviewers(fresh))
+    return fresh
 
 
 def repo_settings(slug: str) -> dict:
@@ -273,8 +357,8 @@ def set_issue_grind(slug: str, issue: int, on: bool) -> dict:
     return all_[slug.lower()]
 
 
-def load() -> dict:
-    data = _migrate(_stored())
+def load(persist: bool = True) -> dict:
+    data = _migrate(_stored(), persist)
     stored_repos = data.get("repos") if isinstance(data.get("repos"), dict) else {}
     registered = dispatch.read_checkouts()
     slugs = [*registered, *(k for k in stored_repos if k not in registered)]
@@ -290,9 +374,9 @@ def load() -> dict:
         and c["label"] != alias
     ]
     default = data.get("default")
-    listed = {c["id"] for c in slack_channels()}
+    listed = {c["id"] for c in slack_channels(data)}
     repos = {k: _repo(stored_repos.get(k)) for k in slugs}
-    rids = {r["id"] for r in reviewers()}
+    rids = {r["id"] for r in reviewers(data)}
     for r in repos.values():
         r["channel_invalid"] = bool(r["slack_channel"]) and r["slack_channel"] not in listed  # read-only, never stored
         if r["reviewers"] is not None:
@@ -301,9 +385,9 @@ def load() -> dict:
         "commands": cmds,
         "default": default if any(c["label"] == default for c in cmds) else alias,
         "repos": repos,
-        "slack_channels": slack_channels(),
-        "reviewers": reviewers(),
-        "active_reviewers": active_reviewers(),
+        "slack_channels": slack_channels(data),
+        "reviewers": reviewers(data),
+        "active_reviewers": active_reviewers(data),
         "vault_dir": vault_dir(),
         "grind_mode": grind_mode(),
         "review_mode": review_mode(),
@@ -336,7 +420,7 @@ def argv(cmd: str) -> list:
 def validate(body) -> dict:
     """Return the cleaned settings dict, or raise ValueError."""
     if isinstance(body, dict) and "commands" not in body:  # a partial save (a board's per-repo PUT) keeps the rest
-        cur = load()
+        cur = load(persist=False)
         body = {"commands": cur["commands"], "default": cur["default"], **body}
     if not isinstance(body, dict) or not isinstance(body.get("commands"), list):
         raise ValueError("commands must be a list")
@@ -386,16 +470,16 @@ def validate(body) -> dict:
         raise ValueError("use_jev must be true or false")
     run_m, run_e = body.get("run_model", run_model()), body.get("run_effort", run_effort())
     check_run(run_m, run_e)
-    old_ids = {c["id"] for c in slack_channels()}
-    chans = _clean_channels(body.get("slack_channels", slack_channels()))  # a save that omits it keeps the stored one
+    stored = _migrate(_stored(), persist=False)  # a pre-upgrade file: the seeded lists are the stored ones
+    old_ids = {c["id"] for c in slack_channels(stored)}
+    chans = _clean_channels(body.get("slack_channels", slack_channels(stored)))  # omitted: keep the stored one
     ids = {c["id"] for c in chans}
-    revs = _clean_reviewers(body.get("reviewers", reviewers()))  # a save that omits it keeps the stored one
+    revs = _clean_reviewers(body.get("reviewers", reviewers(stored)))  # a save that omits it keeps the stored one
     rids = {r["id"] for r in revs}
     if "active_reviewers" in body:
         active = _clean_ids(body["active_reviewers"], rids, "active_reviewers must be a list of ids")
     else:  # kept, minus the reviewers this save removes
-        active = _known(_stored().get("active_reviewers"), rids)
-    stored = _migrate(_stored())
+        active = _known(stored.get("active_reviewers"), rids)
     sent = body.get("repos", {})
     if not isinstance(sent, dict):
         raise ValueError("repos must be an object")

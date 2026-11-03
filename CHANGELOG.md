@@ -27,6 +27,7 @@
 
 ### Changed
 
+- **Reviewers carry over** (#840): the first load after the upgrade seeds the saved Slack channels and reviewers once from each repo's channel and old GitHub `reviewer` and from `channels.json`'s `channels`, `bot_uid` and `bot_label` (the bot is the only active reviewer), so grinds behave as before.
 - **Feature cost** (#762): the Feature page header shows the summed cost of the feature's sessions (a dash when none has one).
 - **Retry on load errors** (#760): the New dispatch preview error, the Features "Could not refresh" banner and the Start dialog's "Could not list" line get a Retry button.
 - **Keyboard navigation** (#751): ArrowUp/ArrowDown move the row selection only when focus is on a row, so the arrow keys scroll the page otherwise (`j`/`k` unchanged). In a question, Tab walks every control (Select all, None of these, Something else) and only the last one jumps to the next question.

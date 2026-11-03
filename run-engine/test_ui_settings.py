@@ -346,4 +346,134 @@ assert bot_id not in open(ui_settings._path()).read()
 r = ui_settings.save({"repos": {"o/a": {"reviewers": None}}})
 assert r["repos"]["o/a"]["reviewers"] is None
 assert ui_settings.save({"repos": {"o/a": {"slack_channel": ""}}})["repos"]["o/a"]["reviewers"] is None
-print("ui_settings: 101 checks passed")
+
+# FR-9: the first load seeds the lists from the old settings, once
+import glob  # noqa: E402
+import json  # noqa: E402
+
+CJ = os.path.join(d, "channels.json")
+
+
+def pre_upgrade(stored, cj=None):
+    """Write a pre-upgrade ui_settings.json (no `reviewers`) and channels.json (removed when None)."""
+    with open(ui_settings._path(), "w") as f:
+        json.dump(stored, f)
+    if cj is None:
+        if os.path.exists(CJ):
+            os.remove(CJ)
+    elif isinstance(cj, str):
+        with open(CJ, "w") as f:
+            f.write(cj)
+    else:
+        with open(CJ, "w") as f:
+            json.dump(cj, f)
+
+
+def file():
+    with open(ui_settings._path()) as f:
+        return f.read()
+
+
+A, B2 = "C0B8385GKNK", "C0123ABCD9"
+pre_upgrade(
+    {"repos": {"o/a": {"slack_channel": A}, "o/b": {"slack_channel": f" {A} "}, "o/c": {"slack_channel": "#reviews"}}},
+    {"channels": {"o/a": A, "o/z": B2, "o/n": 5, "o/m": "bad"}},
+)
+r = ui_settings.load()
+assert r["slack_channels"] == [{"id": A, "name": A}, {"id": B2, "name": B2}], r["slack_channels"]
+assert r["repos"]["o/a"]["slack_channel"] == A and r["repos"]["o/b"]["slack_channel"] == f" {A} "
+assert r["repos"]["o/c"]["slack_channel"] == "#reviews" and r["repos"]["o/c"]["channel_invalid"] is True
+assert not r["repos"]["o/a"]["channel_invalid"] and "o/z" not in r["repos"]
+assert r["reviewers"] == [] and r["active_reviewers"] == []
+before = file()
+assert ui_settings.load() == r and file() == before and ui_settings.repo_settings("o/a") and file() == before
+
+# the bot: bot_label cut to 60, or Review bot; an invalid bot_uid seeds nothing
+pre_upgrade({}, {"bot_uid": "U0BS34962FK", "bot_label": "L" * 80})
+r = ui_settings.load()
+assert [{k: v for k, v in x.items() if k != "id"} for x in r["reviewers"]] == [
+    {"name": "L" * 60, "slack_id": "U0BS34962FK", "github_login": ""}
+]
+assert re.match(r"^r-[0-9a-f]{8}$", r["reviewers"][0]["id"]) and r["active_reviewers"] == [r["reviewers"][0]["id"]]
+for label in (None, "", "   ", 5):
+    pre_upgrade({}, {"bot_uid": "U0BS34962FK", **({} if label is None else {"bot_label": label})})
+    assert ui_settings.load()["reviewers"][0]["name"] == "Review bot", label
+pre_upgrade({}, {"bot_uid": "@bot", "bot_label": "Bot"})
+r = ui_settings.load()
+assert r["reviewers"] == [] and r["active_reviewers"] == []
+
+# GitHub reviewers: deduped ignoring case; the override only where no channel is set anywhere
+pre_upgrade(
+    {
+        "repos": {
+            "o/x": {"reviewer": "copilot"},
+            "o/y": {"reviewer": " Copilot ", "slack_channel": A},
+            "o/w": {"reviewer": "copilot"},
+            "o/v": {"reviewer": "bob-1"},
+            "o/t": {"reviewer": "org/team"},
+        }
+    },
+    {"bot_uid": "U0BS34962FK", "bot_label": "Bot", "channels": {"o/w": B2}},
+)
+r = ui_settings.load()
+assert [x["github_login"] for x in r["reviewers"]] == ["", "copilot", "bob-1"], r["reviewers"]
+bot, cop, bob = (x["id"] for x in r["reviewers"])
+assert r["reviewers"][1]["name"] == "copilot" and r["reviewers"][1]["slack_id"] == "" and r["active_reviewers"] == [bot]
+assert r["repos"]["o/x"]["reviewers"] == [cop] and r["repos"]["o/v"]["reviewers"] == [bob]
+assert r["repos"]["o/y"]["reviewers"] is None and r["repos"]["o/w"]["reviewers"] is None
+assert r["repos"]["o/t"]["reviewers"] is None
+assert not any(v.get("reviewer") for v in json.loads(file())["repos"].values()), "the old key is dropped"
+ids = {x["id"] for x in r["reviewers"]}
+ui_settings.load()
+ui_settings.repo_settings("o/x")
+assert {x["id"] for x in ui_settings.load()["reviewers"]} == ids
+
+# two racing first loads: one set of ids, the one in the file
+pre_upgrade({"repos": {"o/x": {"reviewer": "copilot"}}}, {"bot_uid": "U0BS34962FK"})
+got = []
+ts = [threading.Thread(target=lambda: got.append(ui_settings.load()["reviewers"])) for _ in range(4)]
+for t in ts:
+    t.start()
+for t in ts:
+    t.join()
+assert all(g == got[0] for g in got) and json.loads(file())["reviewers"] == got[0] and len(got[0]) == 2
+
+# corrupt: a load leaves it alone; save() moves it aside and does not hang
+pre_upgrade({}, "{broken")
+with open(ui_settings._path(), "w") as f:
+    f.write("{broken")
+r = ui_settings.load()
+assert file() == "{broken" and r["slack_channels"] == [] and r["reviewers"] == []
+for p in glob.glob(ui_settings._path() + ".corrupt-*"):
+    os.remove(p)
+ui_settings.save({})
+assert glob.glob(ui_settings._path() + ".corrupt-*") and json.loads(file())["reviewers"] == []
+with open(ui_settings._path(), "w") as f:
+    f.write("[1]")
+assert ui_settings.load()["reviewers"] == [] and file() == "[1]"
+
+# save() on a pre-upgrade file keeps the seeded lists
+pre_upgrade({"repos": {"o/a": {"slack_channel": A, "reviewer": "copilot"}}}, {"bot_uid": "U0BS34962FK"})
+r = ui_settings.save({"grind_mode": "simple"})
+assert r["grind_mode"] == "simple" and r["slack_channels"] == [{"id": A, "name": A}]
+assert [x["github_login"] for x in r["reviewers"]] == ["", "copilot"] and r["active_reviewers"] == [
+    r["reviewers"][0]["id"]
+]
+assert r["repos"]["o/a"]["slack_channel"] == A and r["repos"]["o/a"]["reviewers"] is None
+assert ui_settings.save({"use_jev": False})["reviewers"] == r["reviewers"], "the seeded list passes validation"
+
+# missing ui_settings.json: created with the marker; missing or corrupt channels.json seeds nothing
+for cj in (None, "{broken", "[1]"):
+    os.remove(ui_settings._path())
+    pre_upgrade({}, cj)
+    os.remove(ui_settings._path())
+    assert ui_settings.load()["slack_channels"] == [] and json.loads(file())["reviewers"] == [], cj
+
+# at most 50 per list
+pre_upgrade({"repos": {f"o/r{i}": {"slack_channel": f"C{i:08d}", "reviewer": f"u{i}"} for i in range(51)}})
+r = ui_settings.load()
+assert len(r["slack_channels"]) == 50 and len(r["reviewers"]) == 50
+pre_upgrade({"repos": {f"o/r{i}": {"reviewer": f"u{i}"} for i in range(51)}})
+r = ui_settings.load()
+assert len(r["reviewers"]) == 50 and r["repos"]["o/r50"]["reviewers"] is None and r["repos"]["o/r0"]["reviewers"]
+print("ui_settings: 129 checks passed")
