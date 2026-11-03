@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom';
 import { routes } from '../lib/routes';
 import { useRepo } from '../shell/useRepo';
 import { AccountsSection } from '../settings/AccountsSection';
+import { ChannelsSection } from '../settings/ChannelsSection';
 import { NotificationsSection } from '../settings/NotificationsSection';
 import { ReposSection } from '../settings/ReposSection';
 import { ReviewSection } from '../settings/ReviewSection';
@@ -11,6 +12,7 @@ import { ServerSection } from '../settings/ServerSection';
 
 export const SECTIONS = [
   { id: 'repos', label: 'Repositories', Body: ReposSection },
+  { id: 'channels', label: 'Slack channels', Body: ChannelsSection },
   { id: 'accounts', label: 'Claude accounts', Body: AccountsSection },
   { id: 'notifications', label: 'Notifications', Body: NotificationsSection },
   { id: 'review', label: 'Peer review', Body: ReviewSection },
