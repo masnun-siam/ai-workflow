@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Local review loop** (#846): with Local review set to Loop, `/implement-issue` step 12 re-runs a full `/pr-review` of the branch until a round finds nothing new, fixing or answering every finding of every severity, then runs the checks once and pushes once. A findings log in the worktree's git directory lets an interrupted run resume; the PR body states `Local review: loop, N rounds`. Single mode is unchanged.
 - **Review polling watches the `reviewers:` set** (#843): `poll-reviews.sh` takes comma-separated logins and matches any of them ignoring case (`copilot` also matches `copilot-pull-request-reviewer[bot]`); the `aiw ui` tick passes the state file's `reviewers:` line, still one reviews read per poll.
 - **Local review mode** (#837): `review_mode` (`single`, the default, or `loop`) in `ui_settings.json` and `GET`/`PUT /api/settings` (any other value is 400), and `aiw local-review`, which prints it and falls back to `single` when it is unset or unreadable.
 - **Personal plugin commands** (#766): `dump`, `worklog` and `sync-from-wasensi` are listed in the Start dialog and palette only when `ai-workflow-personal` is installed (`personal_plugin` in `GET /api/settings`), and run as `/ai-workflow-personal:<name>`.
