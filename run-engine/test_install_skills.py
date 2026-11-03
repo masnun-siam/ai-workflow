@@ -232,6 +232,21 @@ on_disk = sorted(link(n) for n in os.listdir(LINKS) if os.path.islink(link(n)))
 ok("partial repoint: raises", raised)
 ok("partial repoint: record == disk", rec() == on_disk, (rec(), on_disk))
 
+# 10c. ~/.agents/skills is a file: exit 1, the file left as it is, nothing recorded
+reset()
+plugin("a")
+os.makedirs(os.path.dirname(LINKS))
+with open(LINKS, "w") as f:
+    f.write("mine")
+try:
+    ins.cmd_install_skills(type("A", (), {"harness": "codex", "remove": False})())
+    code = 0
+except SystemExit as e:
+    code = e.code
+ok("skills dir is a file: exit 1", code == 1, code)
+ok("skills dir is a file: untouched, nothing recorded", open(LINKS).read() == "mine" and not rec())
+os.remove(LINKS)
+
 # 11. a user-repointed recorded symlink is repointed back
 reset()
 p = plugin("a")
