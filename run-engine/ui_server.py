@@ -12,7 +12,6 @@ import http.server
 import json
 import mimetypes
 import os
-import shlex
 import signal
 import glob
 import socket
@@ -26,6 +25,7 @@ import peer_review
 import dispatch
 import dispatch_run
 import grind_reviewers
+import harness
 import jev
 import ui_actions
 import ui_afk
@@ -178,7 +178,11 @@ def _public(rec: dict) -> dict:
         "peer_review": _panel_of(rec),
         "bootstrap": _bootstrap_of(rec),
         "repo_path": p,
-        "resume_command": f"cd {shlex.quote(p)} && claude --resume {shlex.quote(sid)}" if p and sid else None,
+        "harness": rec.get("harness") or "claude",
+        "run_note": rec.get("run_note"),
+        "resume_command": harness.for_record(rec).resume_command(
+            rec.get("claude_cmd") or ui_settings.DEFAULT_CMD, p, sid
+        ),
     }
 
 
@@ -640,7 +644,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 self._send(400, "text/plain; charset=utf-8", b"bad offset")
                 return
             sp = os.path.join(ui_sessions.session_dir(sid), "stream.jsonl")
-            events, new_offset = ui_events.read_from(sp, offset)
+            parse = ui_events.transcript_parser(harness.for_record(rec).parse_line)
+            events, new_offset = ui_events.read_from(sp, offset, parse)
             if rec.get("status") in ("done", "failed", "stopped"):
                 # terminal session: no more writes, so an unterminated last line is complete
                 try:
@@ -650,7 +655,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 except FileNotFoundError:
                     tail = b""
                 if tail:
-                    events += ui_events.parse_line(tail)
+                    events += parse(tail)
                     new_offset += len(tail)
             body = {"events": events, "offset": new_offset}
         self._send(200, "application/json; charset=utf-8", json.dumps(body).encode("utf-8"))

@@ -25,6 +25,7 @@ import ui_notify  # noqa: E402
 
 ui_notify.send_mac = lambda *a, **k: None  # the fan-out would show a real banner
 import ui_sessions  # noqa: E402
+import ui_events  # noqa: E402
 
 passed = 0
 ID_RE = re.compile(r"[0-9]{8}T[0-9]{12}Z-[0-9a-f]{8}")
@@ -302,7 +303,7 @@ with open(meta) as f:
     assert json.load(f)["tokens"] == got["tokens"], "persisted, so the stream is read once"
 live = ui_sessions.create("worklog", "/r")  # still starting: never backfilled, the runner fills it
 assert [x for x in ui_sessions.list_sessions() if x["id"] == live["id"]][0]["tokens"] is None
-assert ui_sessions.ui_events.tokens_of(None) is None and ui_sessions.ui_events.tokens_of({"input_tokens": 0}) is None
+assert ui_events.tokens_of(None) is None and ui_events.tokens_of({"input_tokens": 0}) is None
 ok("tokens: backfilled once from the last result (input counts cache reads and writes)")
 
 # 21. set_pending keeps a string option preview; a non-string one is dropped, no error
