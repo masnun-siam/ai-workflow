@@ -32,6 +32,19 @@ GRIND_MODES = ("deep", "simple")  # simple: /pr-grind stops once the PR is appro
 REVIEW_MODES = ("single", "loop")  # loop: /implement-issue re-reviews until a round finds nothing new
 RUN_MODELS = ("opus", "sonnet", "haiku")  # aliases: they resolve to the latest model
 RUN_EFFORTS = ("low", "medium", "high", "xhigh", "max")  # as dispatch_run
+HARNESS_IDS = ("claude", "codex")  # the CLI an account runs; a command maps to one harness
+MAX_MODELS = 20  # model names a Codex account lists
+MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$")
+HARNESSES = [  # read-only, sent with the settings; models: None means "from the account"
+    {
+        "id": "claude",
+        "label": "Claude Code",
+        "models": list(RUN_MODELS),
+        "efforts": list(RUN_EFFORTS),
+        "usage": True,
+    },
+    {"id": "codex", "label": "Codex", "models": None, "efforts": ["low", "medium", "high", "xhigh"], "usage": False},
+]
 
 
 def _path() -> str:
@@ -363,9 +376,9 @@ def load(persist: bool = True) -> dict:
     slugs = [*registered, *(k for k in stored_repos if k not in registered)]
     alias = data.get("claude_label")
     alias = alias if isinstance(alias, str) and alias.strip() else DEFAULT_CMD
-    cmds = [{"label": alias, "cmd": DEFAULT_CMD, "builtin": True}]
+    cmds = [{"label": alias, "cmd": DEFAULT_CMD, "builtin": True, "harness": "claude"}]
     cmds += [
-        {"label": c["label"], "cmd": c["cmd"]}
+        _account(c)
         for c in data.get("commands") or []
         if isinstance(c, dict)
         and isinstance(c.get("label"), str)
@@ -395,7 +408,30 @@ def load(persist: bool = True) -> dict:
         "personal_plugin": repo_skills.personal_plugin_installed(),  # read-only, like jev_installed
         "run_model": run_model(),
         "run_effort": run_effort(),
+        "harnesses": HARNESSES,  # read-only: validate() never stores it
     }
+
+
+def _account(c: dict) -> dict:
+    """A stored account as loaded: no or an unknown harness is claude; a Codex one lists its models."""
+    harness = c.get("harness") if c.get("harness") in HARNESS_IDS else "claude"
+    acc = {"label": c["label"], "cmd": c["cmd"], "harness": harness}
+    if harness == "codex":
+        models = c.get("models")
+        ok = [m for m in models if isinstance(m, str) and MODEL_RE.match(m)] if isinstance(models, list) else []
+        acc["models"] = ok[:MAX_MODELS]  # hand-edited junk is dropped, so a partial save still validates
+    return acc
+
+
+def _clean_models(models) -> list:
+    """Validate a Codex account's model names; ValueError when any is bad."""
+    if (
+        not isinstance(models, list)
+        or len(models) > MAX_MODELS
+        or not all(isinstance(m, str) and MODEL_RE.match(m) for m in models)
+    ):
+        raise ValueError(f"models must be a list of at most {MAX_MODELS} model names")
+    return models
 
 
 def argv(cmd: str) -> list:
@@ -418,6 +454,7 @@ def argv(cmd: str) -> list:
 
 def validate(body) -> dict:
     """Return the cleaned settings dict, or raise ValueError."""
+    full = isinstance(body, dict) and "commands" in body  # Settings > Accounts: commands must be unique
     if isinstance(body, dict) and "commands" not in body:  # a partial save (a board's per-repo PUT) keeps the rest
         cur = load(persist=False)
         body = {"commands": cur["commands"], "default": cur["default"], **body}
@@ -432,9 +469,13 @@ def validate(body) -> dict:
     if not isinstance(alias, str) or not alias.strip() or len(alias) > 40:
         raise ValueError("label must be a non-empty string of at most 40 characters")
     alias = alias.strip()
-    cmds, seen = [], {alias}
+    cmds, seen, used = [], {alias}, {DEFAULT_CMD}
     for c in body["commands"]:
         if isinstance(c, dict) and c.get("builtin") is True:
+            if "harness" in c and c["harness"] not in HARNESS_IDS:
+                raise ValueError("harness must be claude or codex")
+            if c.get("harness", "claude") != "claude":
+                raise ValueError("the built-in account is always claude")
             continue  # its command is always `claude`; only the label is editable
         label = c.get("label") if isinstance(c, dict) else None
         cmd = c.get("cmd") if isinstance(c, dict) else None
@@ -447,7 +488,17 @@ def validate(body) -> dict:
         if not isinstance(cmd, str) or len(cmd) > 200:
             raise ValueError("cmd must be a string of at most 200 characters")
         argv(cmd)
-        cmds.append({"label": label, "cmd": cmd.strip()})
+        harness = c.get("harness", "claude")
+        if harness not in HARNESS_IDS:
+            raise ValueError("harness must be claude or codex")
+        cmd = cmd.strip()
+        if full and cmd in used:
+            raise ValueError("each account needs its own command")
+        used.add(cmd)
+        acc = {"label": label, "cmd": cmd, "harness": harness}
+        if harness == "codex":
+            acc["models"] = _clean_models(c.get("models", []))
+        cmds.append(acc)
     default = body.get("default")
     if default is not None and default not in seen:
         raise ValueError("default must be one of the labels")
@@ -543,6 +594,18 @@ def save(body) -> dict:
 def default_cmd() -> str:
     s = load()
     return next((c["cmd"] for c in s["commands"] if c["label"] == s["default"]), DEFAULT_CMD)
+
+
+def harness_of(cmd: str) -> str:
+    """The harness of the account whose command is cmd; claude when no account holds it."""
+    acc = next((c for c in load(persist=False)["commands"] if c["cmd"] == cmd), {})
+    return acc.get("harness", "claude")
+
+
+def models_of(cmd: str) -> list:
+    """A Codex account's model names; [] for a Claude account or an unknown command."""
+    acc = next((c for c in load(persist=False)["commands"] if c["cmd"] == cmd), {})
+    return list(acc.get("models") or []) if acc.get("harness") == "codex" else []
 
 
 def check_login(cmd: str) -> dict:
