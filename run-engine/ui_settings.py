@@ -24,6 +24,7 @@ MAX_COMMANDS = 20
 SLUG_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 REVIEWER_RE = re.compile(r"^[A-Za-z0-9-]{1,39}$")  # a GitHub login, or copilot
 GRIND_MODES = ("deep", "simple")  # simple: /pr-grind stops once the PR is approved
+REVIEW_MODES = ("single", "loop")  # loop: /implement-issue re-reviews until a round finds nothing new
 RUN_MODELS = ("opus", "sonnet", "haiku")  # aliases: they resolve to the latest model
 RUN_EFFORTS = ("low", "medium", "high", "xhigh", "max")  # as dispatch_run
 
@@ -45,6 +46,12 @@ def grind_mode() -> str:
     """deep (the default) or simple, for every /pr-grind loop; the skill reads it each round (`aiw grind-mode`)."""
     m = _stored().get("grind_mode")
     return m if m in GRIND_MODES else "deep"
+
+
+def review_mode() -> str:
+    """single (the default) or loop, for /implement-issue's local review (`aiw local-review`)."""
+    m = _stored().get("review_mode")
+    return m if m in REVIEW_MODES else "single"
 
 
 def use_jev() -> bool:
@@ -172,6 +179,7 @@ def load() -> dict:
         "repos": {k: _repo(stored_repos.get(k)) for k in slugs},
         "vault_dir": vault_dir(),
         "grind_mode": grind_mode(),
+        "review_mode": review_mode(),
         "use_jev": use_jev(),
         "jev_installed": shutil.which("jev") is not None,  # read-only: validate() never stores it
         "personal_plugin": repo_skills.personal_plugin_installed(),  # read-only, like jev_installed
@@ -243,6 +251,9 @@ def validate(body) -> dict:
     mode = body.get("grind_mode", grind_mode())  # a save that omits it keeps the stored one
     if mode not in GRIND_MODES:
         raise ValueError("grind_mode must be deep or simple")
+    rmode = body.get("review_mode", review_mode())  # a save that omits it keeps the stored one
+    if rmode not in REVIEW_MODES:
+        raise ValueError("review_mode must be single or loop")
     jev = body.get("use_jev", use_jev())  # a save that omits it keeps the stored one
     if type(jev) is not bool:
         raise ValueError("use_jev must be true or false")
@@ -281,6 +292,7 @@ def validate(body) -> dict:
         "repos": clean_repos,
         "vault_dir": vault,
         "grind_mode": mode,
+        "review_mode": rmode,
         "use_jev": jev,
         "run_model": run_m,
         "run_effort": run_e,
