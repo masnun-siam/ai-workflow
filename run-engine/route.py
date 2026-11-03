@@ -11,6 +11,7 @@ Usage:
   aiw ci status <pr-ref> [--watch]
   aiw threads list|resolve <pr-ref|node-id...>
   aiw grind-mode [--pr <url>]  # deep or simple: the PR's dispatch decides, else Settings; read by /pr-grind each round
+  aiw local-review     # single or loop, from Settings; read by /implement-issue at step 12
   aiw dispatch ...     # run an epic's child issues as parallel lanes
   aiw jev ci-hint|finding-hint --file <path>  # advisory jev hint for /pr-grind, JSON, always exit 0
 """
@@ -32,6 +33,7 @@ import dispatch_run  # noqa: E402
 import jev_cli  # noqa: E402
 import threads  # noqa: E402
 import ui_server  # noqa: E402
+import ui_settings  # noqa: E402
 from shared import data_dir, die  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -56,6 +58,10 @@ def cmd_grind_mode(args) -> None:
     print(dispatch_cli.grind_mode(args.pr))
 
 
+def cmd_local_review(args) -> None:
+    print(ui_settings.review_mode())
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(
         prog="aiw", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -74,6 +80,9 @@ def main(argv=None) -> None:
     p_gm = sub.add_parser("grind-mode", help="print the grind mode: deep or simple")
     p_gm.add_argument("--pr", default=None, help="PR url: the mode of the dispatch that owns it")
     p_gm.set_defaults(func=cmd_grind_mode)
+
+    p_lr = sub.add_parser("local-review", help="print the local review mode: single or loop")
+    p_lr.set_defaults(func=cmd_local_review)
 
     # Each module owns its own argparse wiring.
     for module in (threads, ci, ui_server, ask, dispatch_cli, jev_cli):
