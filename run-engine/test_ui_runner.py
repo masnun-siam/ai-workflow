@@ -1214,7 +1214,7 @@ echo "$* LOGIN=$LOGIN" >> "$FAKE_DIR/gh.log"
 case "$1 $2" in
   "pr view")
     case "$*" in
-      *headRefOid*) printf '%s\n' "${FAKE_GH_SHA:-abc}";;
+      *headRefOid*) printf '{"headRefOid":"%s","mergeable":"MERGEABLE"}\n' "${FAKE_GH_SHA:-abc}";;
       *) printf '{"state":"%s"}\n' "${FAKE_GH_STATE:-OPEN}";;
     esac;;
   "pr checks") printf '%s\n' "${FAKE_GH_CHECKS:-[]}";;

@@ -33,7 +33,13 @@ def run_id_of(link: str) -> str:
 
 def snapshot(owner: str, repo: str, number: int) -> dict:
     slug = f"{owner}/{repo}"
-    head, _ = gh_json(["pr", "view", str(number), "--repo", slug, "--json", "headRefOid", "--jq", ".headRefOid"])
+    view, _ = gh_json(["pr", "view", str(number), "--repo", slug, "--json", "headRefOid,mergeable"])
+    view = view if isinstance(view, dict) else {}
+    head = view.get("headRefOid")
+    if view.get("mergeable") == "CONFLICTING":
+        # GitHub runs no CI on a conflicting PR, so its "no checks" must not read as green.
+        # UNKNOWN (still computing after a push) falls through to the checks.
+        return {"state": "conflict", "head_sha": head, "failing": [], "note": "merge conflict with the base branch"}
     rows, proc = gh_json(["pr", "checks", str(number), "--repo", slug, "--json", "name,state,bucket,link"])
     if rows is None:
         # `gh pr checks` may exit nonzero for red or pending checks while still writing
@@ -85,7 +91,7 @@ def cmd_status(args) -> None:
 def register(sub, add) -> None:
     p = sub.add_parser("ci", help="report a PR's check status")
     ops = p.add_subparsers(dest="op", required=True)
-    q = ops.add_parser("status", help="green|red|pending|error plus the failing jobs' logs")
+    q = ops.add_parser("status", help="green|red|pending|error|conflict plus the failing jobs' logs")
     q.add_argument("pr", help="PR url, owner/repo#N, or N")
     q.add_argument("--watch", action="store_true", help="poll until nothing is pending or erroring")
     q.add_argument("--timeout", type=int, default=1200, help="wall-clock cap for --watch")
