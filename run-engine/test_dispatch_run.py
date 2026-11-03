@@ -904,6 +904,49 @@ except RuntimeError:
     pass
 
 
+# herdr-app: hc run makes the tab with the first prompt as claude's argument; status/close by terminal
+happ, app_calls, live = [], [], {"t7": {"state": "live", "status": "blocked"}}
+
+
+def hc_cli(argv, timeout=60):
+    happ.append(argv)
+    out, code = "", 0
+    if argv[0] == "run":
+        out = json.dumps({"address": "t7", "state": "live"})
+    elif argv[0] == "get":
+        t = live.get(argv[-1])
+        out, code = (json.dumps(t), 0) if t else ("", 1)
+    elif argv[0] == "read":
+        out = "all done"
+    elif argv[0] == "kill":
+        code = 1 if argv[-1] in live else 0
+    return subprocess.CompletedProcess(argv, code, out, "")
+
+
+ha = dispatch_runners.HerdrApp("sp1", hc_cli, lambda argv, timeout=30: app_calls.append(argv))
+h = ha.start({"repo": R, "n": 5}, "/ai-workflow:implement-issue 5", {"id": "abc", "settings": {"model": "opus"}})
+assert h["terminal"] == "t7" and h["cwd"] == co and h["tab"].startswith("tb")
+assert happ[0][:6] == ["run", "--bg", "--json", "--no-parent", "--keep", "--cwd"]
+assert "herdr.space=sp1" in happ[0] and f"herdr.tab={h['tab']}" in happ[0]
+assert happ[0][-5:] == ["claude", "--dangerously-skip-permissions", "--model", "opus", "/ai-workflow:implement-issue 5"]
+assert app_calls == [["do", "tab.rename", "--id", h["tab"], "--name", "issue-5"]]
+ha.send(h, "go on")
+assert happ[-1] == ["send", "--json", "t7", "go on"]
+assert ha.status(h) == ("blocked", None)
+live["t7"]["status"] = "idle"
+assert ha.status(h) == ("idle", None)
+assert ha.status({"terminal": "t9"}) == ("gone", None)
+try:
+    ha.close(h)  # kill failed while it is still live
+    raise AssertionError("close of a live terminal that failed")
+except RuntimeError:
+    pass
+del live["t7"]
+ha.close(h)  # already gone: quiet
+assert dispatch_runners.for_dispatch({"runner": "herdr-app", "workspace": "sp1"}).space == "sp1"
+print("  ok  herdr-app runner")
+
+
 class FakeSessions:
     recs = {
         "s1": {"status": "waiting"},
