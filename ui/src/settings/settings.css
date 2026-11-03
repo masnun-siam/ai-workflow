@@ -26,3 +26,10 @@
 .matrix thead th .btn{display:block;margin:0 auto 4px}
 @media (max-width:600px){.matrix th:not(:first-child),.matrix td{width:48px;padding-left:4px;padding-right:4px}}
 .set-sec .tbl td .mono{overflow-wrap:anywhere}
+.rv-cell{font:inherit;background:none;border:0;padding:4px;margin:-4px;cursor:pointer;display:flex;flex-wrap:wrap;gap:4px;align-items:center;text-align:left;border-radius:var(--r-ctl);max-width:240px}
+.rv-cell:hover{background:var(--sunk)}
+.rv-pop{padding:12px 14px;width:min(300px,calc(100vw - 16px));display:flex;flex-direction:column;gap:10px}
+.rv-pop ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.rv-pop label{display:flex;gap:8px;align-items:center;font-size:13.5px}
+.rv-pop .rv-hint{display:block;font-size:12px;margin-left:24px}
+.rv-off{opacity:.6}

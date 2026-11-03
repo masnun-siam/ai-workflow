@@ -215,6 +215,109 @@ describe('Settings: repositories', () => {
   });
 });
 
+describe('Settings: repo Reviewers cell', () => {
+  const REPOS = {
+    'o/r': { auto_grind: false, slack_channel: 'C0B8385GKNK', reviewers: null, path: 'slack', channel_invalid: false },
+    'local/idea': { auto_grind: true, slack_channel: '', reviewers: ['r-cccccccc'], path: 'github' },
+  };
+  const cell = (slug: string) => screen.findByRole('button', { name: `Reviewers for ${slug}` });
+  const box = (name: string) => screen.getByRole('checkbox', { name }) as HTMLInputElement;
+  beforeEach(() => withSettings({ repos: REPOS }));
+
+  it('shows Default with the active names, or the override chips', async () => {
+    page(<SettingsPage />);
+    expect((await cell('o/r')).textContent).toBe('Default (Masum)');
+    expect(screen.getByRole('columnheader', { name: 'Reviewers' })).toBeTruthy();
+    expect((await cell('local/idea')).textContent).toBe('Copilotoverride');
+  });
+
+  it('Enter and Space open the popover; Escape closes it and focus returns to the cell', async () => {
+    const user = userEvent.setup();
+    page(<SettingsPage />);
+    const btn = await cell('o/r');
+    btn.focus();
+    await user.keyboard('{Enter}');
+    expect(await screen.findByRole('checkbox', { name: 'Masum' })).toBeTruthy();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('checkbox', { name: 'Masum' })).toBeNull());
+    expect(document.activeElement).toBe(btn);
+    await user.keyboard(' ');
+    expect(await screen.findByRole('checkbox', { name: 'Masum' })).toBeTruthy();
+  });
+
+  it('a first tick makes an override from the default set, disables the controls until it resolves, and never sends read-only keys', async () => {
+    let finish: (r: Reply) => void = () => {};
+    handlers['PUT /api/settings'] = () => new Promise<Reply>((r) => { finish = r; });
+    const user = userEvent.setup();
+    page(<SettingsPage />);
+    await user.click(await cell('o/r'));
+    expect(box('Masum').checked).toBe(true);
+    expect(box('Blubird AI Agent').checked).toBe(false);
+    await user.click(box('Blubird AI Agent'));
+    await waitFor(() => expect(sent('PUT', '/api/settings')).toEqual([{ repos: { 'o/r': { auto_grind: false, slack_channel: 'C0B8385GKNK', reviewers: ['r-bbbbbbbb', 'r-aaaaaaaa'] } } }]));
+    expect(box('Blubird AI Agent').checked && box('Masum').disabled && box('Copilot').disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Use default' }) as HTMLButtonElement).disabled).toBe(true);
+    finish([200, GET['/api/settings']]);
+    await waitFor(() => expect(box('Masum').disabled).toBe(false));
+  });
+
+  it('a refused tick puts the old state back and toasts', async () => {
+    handlers['PUT /api/settings'] = () => [400, { error: 'unknown reviewer r-zzzzzzzz' }];
+    const user = userEvent.setup();
+    page(<SettingsPage />);
+    await user.click(await cell('o/r'));
+    await user.click(box('Copilot'));
+    expect(await screen.findByText(/unknown reviewer r-zzzzzzzz/)).toBeTruthy();
+    await waitFor(() => expect(box('Copilot').checked).toBe(false));
+    expect(box('Copilot').disabled).toBe(false);
+  });
+
+  it('Use default sends reviewers: null', async () => {
+    const user = userEvent.setup();
+    page(<SettingsPage />);
+    await user.click(await cell('local/idea'));
+    await user.click(screen.getByRole('button', { name: 'Use default' }));
+    await waitFor(() => expect(sent('PUT', '/api/settings')).toEqual([{ repos: { 'local/idea': { auto_grind: true, slack_channel: '', reviewers: null } } }]));
+  });
+
+  it('dims entries the path cannot use, with the hint as text outside the dimmed name', async () => {
+    withSettings({
+      repos: REPOS,
+      reviewers: [...(SETTINGS.reviewers as unknown[]), { id: 'r-dddddddd', name: 'Slacker', slack_id: 'U0123ABCDE', github_login: '' }],
+    });
+    const user = userEvent.setup();
+    page(<SettingsPage />);
+    await user.click(await cell('o/r'));
+    const hint = screen.getByText('not used: no Slack id');
+    expect(hint.className).not.toContain('rv-off');
+    expect(hint.closest('.rv-off')).toBeNull();
+    expect(within(screen.getByRole('dialog')).getByText('Copilot').className).toBe('rv-off');
+    expect(within(screen.getByRole('dialog')).getByText('Blubird AI Agent').className).toBe('');
+    expect(screen.getByText('login learned from its first review')).toBeTruthy();
+    await user.keyboard('{Escape}');
+    await user.click(await cell('local/idea'));
+    expect(screen.getByText('not used: no GitHub login')).toBeTruthy();
+    expect(within(screen.getByRole('dialog')).getByText('Slacker').className).toBe('rv-off');
+  });
+
+  it('empty states: no reviewers, no active reviewer per path, and an empty override', async () => {
+    withSettings({ repos: REPOS, reviewers: [] });
+    page(<SettingsPage />);
+    expect((await screen.findAllByText('Add reviewers in')).length).toBe(2);
+    expect(screen.getAllByRole('link', { name: 'Settings → Reviewers' })[0].getAttribute('href')).toBe('#/settings/reviewers');
+    cleanup();
+    withSettings({ repos: { ...REPOS, 'local/idea': { ...REPOS['local/idea'], reviewers: null } }, active_reviewers: [] });
+    page(<SettingsPage />);
+    expect((await cell('o/r')).textContent).toBe('Default (none, mentions Review bot)');
+    expect((await cell('local/idea')).textContent).toBe('Default (none, grinding skips)');
+    cleanup();
+    withSettings({ repos: { ...REPOS, 'local/idea': { ...REPOS['local/idea'], reviewers: ['r-gone'] } }, active_reviewers: [], bot_label: null });
+    page(<SettingsPage />);
+    expect((await cell('o/r')).textContent).toBe('Default (none, mentions the channels.json bot)');
+    expect((await cell('local/idea')).textContent).toBe('override: none');
+  });
+});
+
 describe('Settings: Slack channels', () => {
   const at = '/settings/channels';
   const nameOf = (id: string) => screen.getByRole('textbox', { name: `Name of ${id}` }) as HTMLInputElement;

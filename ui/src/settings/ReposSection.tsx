@@ -4,6 +4,7 @@ import { useApiMutation, useRemoveRepo, useRepos, useSaveSettings, useScanRepos,
 import type { Repo, RepoSettings, ScanResult, SlackChannel } from '../api/types';
 import { Button, Chip, Icon, Switch, toast, useConfirm } from '../components';
 import { PublishDialog } from '../repos/PublishDialog';
+import { ReviewersCell } from './ReviewersCell';
 import './settings.css';
 
 export const REPO_FILTER_AFTER = 8;
@@ -65,7 +66,7 @@ export function ReposSection() {
     const next = { ...rowOf(slug), ...patch };
     setOver((o) => ({ ...o, [slug]: next }));
     // the GET's read-only keys never go back in a PUT
-    const { channel_invalid: _ro, path: _path, ...send } = next as RepoSettings & { path?: string };
+    const { channel_invalid: _ro, path: _path, ...send } = next;
     try {
       await save.mutateAsync({ repos: { [slug]: send } });
       toast(`Saved ${slug}`);
@@ -148,7 +149,7 @@ export function ReposSection() {
         <div className="tbl-wrap">
           <table className="tbl">
             <thead>
-              <tr><th>Repo</th><th>GitHub</th><th>Auto-grind</th><th>Slack channel</th><th><span className="sr">Remove</span></th></tr>
+              <tr><th>Repo</th><th>GitHub</th><th>Auto-grind</th><th>Slack channel</th><th>Reviewers</th><th><span className="sr">Remove</span></th></tr>
             </thead>
             <tbody>
               {shown.map((r) => {
@@ -171,11 +172,14 @@ export function ReposSection() {
                     </td>
                     <td><Switch checked={row.auto_grind} label={`Auto-grind ${r.slug}`} onChange={(v) => void change(r.slug, { auto_grind: v })} /></td>
                     <td><ChannelCell slug={r.slug} row={row} channels={settings.data?.slack_channels ?? []} disabled={r.slug in over} onSave={(v) => void change(r.slug, { slack_channel: v })} /></td>
+                    <td>
+                      <ReviewersCell slug={r.slug} row={row} reviewers={settings.data?.reviewers ?? []} active={settings.data?.active_reviewers ?? []} botLabel={settings.data?.bot_label} disabled={r.slug in over} onSave={(v) => void change(r.slug, { reviewers: v })} />
+                    </td>
                     <td><Button variant="danger" sm onClick={() => void onRemove(r)} aria-label={`Remove ${r.slug}`}>Remove</Button></td>
                   </tr>
                 );
               })}
-              {shown.length === 0 ? <tr><td colSpan={5} className="muted">No repo matches.</td></tr> : null}
+              {shown.length === 0 ? <tr><td colSpan={6} className="muted">No repo matches.</td></tr> : null}
             </tbody>
           </table>
         </div>
