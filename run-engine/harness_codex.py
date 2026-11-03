@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 
 from ui_events import _n
 
@@ -42,13 +43,24 @@ def _item(item) -> list:
         return [{"kind": "text", "text": item["text"]}] if isinstance(item.get("text"), str) else []
     if item["type"] == "command_execution":
         cmd = item.get("command")
-        return [{"kind": "tool", "name": "Bash", "input": {"command": cmd}}] if isinstance(cmd, str) else []
+        return [{"kind": "tool", "name": "Bash", "input": {"command": _unwrap(cmd)}}] if isinstance(cmd, str) else []
     return [{"kind": "tool", "name": item["type"], "input": item}]
+
+
+def _unwrap(cmd: str) -> str:
+    """Codex runs every command as `<shell> -lc "<command>"`; return the inner command, so the
+    `aiw ask` detector sees it as Claude's Bash tool would. Anything else is returned as is."""
+    try:
+        argv = shlex.split(cmd)
+    except ValueError:
+        return cmd
+    return argv[2] if len(argv) == 3 and argv[1] in ("-c", "-lc") else cmd
 
 
 def _tokens(usage):
     """OpenAI usage: `input_tokens` is the whole prompt, `cached_input_tokens` the cached part of it,
-    which is what `ui_events.tokens_of` means by input and cached. PROVISIONAL until the real fixture."""
+    which is what `ui_events.tokens_of` means by input and cached (the recorded fixture has cached < input).
+    `cache_write_input_tokens` and `reasoning_output_tokens` are ignored."""
     if not isinstance(usage, dict):
         return None
     tokens = {

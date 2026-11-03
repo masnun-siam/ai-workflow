@@ -1,0 +1,30 @@
+{"type":"thread.started","thread_id":"01a1a2fc-5ee5-7443-bac0-d09ae1ff20a4"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I’ll run that exact command."}}
+{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc \"aiw ask --json '{\\\"questions\\\":[{\\\"question\\\":\\\"Proceed?\\\",\\\"header\\\":\\\"Gate\\\",\\\"options\\\":[{\\\"label\\\":\\\"Yes\\\",\\\"description\\\":\\\"go on\\\"},{\\\"label\\\":\\\"No\\\",\\\"description\\\":\\\"stop\\\"}],\\\"multiSelect\\\":false}]}'\"","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc \"aiw ask --json '{\\\"questions\\\":[{\\\"question\\\":\\\"Proceed?\\\",\\\"header\\\":\\\"Gate\\\",\\\"options\\\":[{\\\"label\\\":\\\"Yes\\\",\\\"description\\\":\\\"go on\\\"},{\\\"label\\\":\\\"No\\\",\\\"description\\\":\\\"stop\\\"}],\\\"multiSelect\\\":false}]}'\"","aggregated_output":"RECORDED q-89edb174. The question is now with the human. End your turn immediately; the answer arrives as your next message: Answer to q-89edb174: {...}\n","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"The question was recorded and sent to the human for an answer."}}
+{"type":"turn.completed","usage":{"input_tokens":28560,"cached_input_tokens":24960,"cache_write_input_tokens":0,"output_tokens":102,"reasoning_output_tokens":0}}
+{"type":"thread.started","thread_id":"01a1a2fc-5ee5-7443-bac0-d09ae1ff20a4"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I’ll run the two status checks and append the requested line in order."}}
+{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'git status --short'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'git status --short'","aggregated_output":"?? .aiwdata/\n?? prompt-a.txt\n?? prompt-b.txt\n?? run-a.err\n?? run-a.jsonl\n?? run-b.err\n?? run-b.jsonl\n","exit_code":0,"status":"completed"}}
+{"type":"item.started","item":{"id":"item_2","type":"command_execution","command":"/bin/zsh -lc \"printf 'hello\\\\n' >> README.md\"","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_2","type":"command_execution","command":"/bin/zsh -lc \"printf 'hello\\\\n' >> README.md\"","aggregated_output":"","exit_code":0,"status":"completed"}}
+{"type":"item.started","item":{"id":"item_3","type":"command_execution","command":"/bin/zsh -lc 'git status --short'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_3","type":"command_execution","command":"/bin/zsh -lc 'git status --short'","aggregated_output":" M README.md\n?? .aiwdata/\n?? prompt-a.txt\n?? prompt-b.txt\n?? run-a.err\n?? run-a.jsonl\n?? run-b.err\n?? run-b.jsonl\n","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_4","type":"agent_message","text":"I appended “hello” to README.md and confirmed it appears as modified in the final status."}}
+{"type":"turn.completed","usage":{"input_tokens":87256,"cached_input_tokens":82560,"cache_write_input_tokens":0,"output_tokens":239,"reasoning_output_tokens":0}}
+{"type":"thread.started","thread_id":"01a1a2fc-5ee5-7443-bac0-d09ae1ff20a4"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I’ll append the line to README.md using the file-editing tool."}}
+{"type":"item.started","item":{"id":"item_1","type":"file_change","changes":[{"path":"/private/tmp/scratch/README.md","kind":"update"}],"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"file_change","changes":[{"path":"/private/tmp/scratch/README.md","kind":"update"}],"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"Added “world” to the end of README.md."}}
+{"type":"turn.completed","usage":{"input_tokens":117089,"cached_input_tokens":108032,"cache_write_input_tokens":0,"output_tokens":329,"reasoning_output_tokens":0}}
+{"type":"thread.started","thread_id":"01a1a2fd-0ac7-75b3-826e-dc39fb189f59"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Model metadata for `no-such-model-xyz` not found. Defaulting to fallback metadata; this can degrade performance and cause issues."}}
+{"type":"turn.started"}
+{"type":"error","message":"The 'no-such-model-xyz' model is not supported when using Codex with a ChatGPT account."}
+{"type":"turn.failed","error":{"message":"The 'no-such-model-xyz' model is not supported when using Codex with a ChatGPT account."}}
