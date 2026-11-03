@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import secrets
 import shlex
 import shutil
 import subprocess
@@ -24,6 +25,8 @@ MAX_COMMANDS = 20
 SLUG_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 REVIEWER_RE = re.compile(r"^[A-Za-z0-9-]{1,39}$")  # a GitHub login, or copilot
 CHANNEL_RE = re.compile(r"^[CGD][A-Z0-9]{8,12}$")  # a Slack channel id
+SLACK_ID_RE = re.compile(r"^[UW][A-Z0-9]{8,12}$")  # a Slack member id
+REVIEWER_ID_RE = re.compile(r"^r-[0-9a-f]{8}$")  # a saved reviewer, generated here
 MAX_LISTED = 50  # entries in a saved list (Slack channels, reviewers)
 GRIND_MODES = ("deep", "simple")  # simple: /pr-grind stops once the PR is approved
 REVIEW_MODES = ("single", "loop")  # loop: /implement-issue re-reviews until a round finds nothing new
@@ -92,6 +95,81 @@ def _clean_channels(chans) -> list:
     return out
 
 
+def reviewers() -> list:
+    """The saved reviewers list, [{id, name, slack_id, github_login}]; malformed stored entries are skipped."""
+    raw = _stored().get("reviewers")
+    keys = ("id", "name", "slack_id", "github_login")
+    return [
+        {k: r[k] for k in keys}
+        for r in (raw if isinstance(raw, list) else [])
+        if isinstance(r, dict) and all(isinstance(r.get(k), str) for k in keys) and REVIEWER_ID_RE.match(r["id"])
+    ]
+
+
+def _known(raw, ids: set) -> list:
+    """The listed ids of a stored id list, in order ([] when it is not a list)."""
+    return [i for i in raw if isinstance(i, str) and i in ids] if isinstance(raw, list) else []
+
+
+def active_reviewers() -> list:
+    """The global active set: ids of saved reviewers every repo without an override follows."""
+    return _known(_stored().get("active_reviewers"), {r["id"] for r in reviewers()})
+
+
+def _clean_reviewers(revs) -> list:
+    """Validate a sent reviewers list, keeping sent ids and generating the missing ones; ValueError on a bad entry."""
+    if not isinstance(revs, list):
+        raise ValueError("reviewers must be a list")
+    if len(revs) > MAX_LISTED:
+        raise ValueError(f"at most {MAX_LISTED}")
+    out, slack_ids, logins = [], set(), set()
+    for r in revs:
+        if not isinstance(r, dict):
+            raise ValueError("a reviewer must be an object")
+        name, sid, login = (
+            r.get(k).strip() if isinstance(r.get(k), str) else "" for k in ("name", "slack_id", "github_login")
+        )
+        if not 1 <= len(name) <= 60:
+            raise ValueError("reviewer name must be 1 to 60 characters")
+        if not sid and not login:
+            raise ValueError("add a Slack id or a GitHub login")
+        if sid and not SLACK_ID_RE.match(sid):
+            raise ValueError("Slack id must look like U0123ABCD")
+        if login and not REVIEWER_RE.match(login):
+            raise ValueError("not a GitHub login")
+        if sid in slack_ids:
+            raise ValueError(f"Slack id {sid} is already listed")
+        if login.lower() in logins:
+            raise ValueError(f"login {login.lower()} is already listed")
+        slack_ids |= {sid} - {""}
+        logins |= {login.lower()} - {""}
+        rid = r.get("id")
+        if rid is not None and not (isinstance(rid, str) and REVIEWER_ID_RE.match(rid)):
+            raise ValueError("reviewer id must be r-<8 hex>")
+        out.append({"id": rid, "name": name, "slack_id": sid, "github_login": login})
+    sent = [r["id"] for r in out if r["id"]]
+    if len(sent) != len(set(sent)):
+        raise ValueError("duplicate reviewer id")
+    taken = set(sent)
+    for r in out:
+        while not r["id"]:
+            rid = "r-" + secrets.token_hex(4)
+            if rid not in taken:
+                r["id"] = rid
+                taken.add(rid)
+    return out
+
+
+def _clean_ids(raw, ids: set, err: str) -> list:
+    """Validate a sent list of reviewer ids (ValueError(err) when it is not one); deduped, order kept."""
+    if not isinstance(raw, list) or not all(isinstance(i, str) for i in raw):
+        raise ValueError(err)
+    for i in raw:
+        if i not in ids:
+            raise ValueError(f"unknown reviewer id {i}")
+    return list(dict.fromkeys(raw))
+
+
 def use_jev() -> bool:
     """The one global Use jev switch (default on); read from the file on every call."""
     v = _stored().get("use_jev")
@@ -130,6 +208,7 @@ def _repo(d) -> dict:
         "auto_grind": d.get("auto_grind") is True,
         "slack_channel": ch if isinstance(ch, str) else "",
         "reviewer": d["reviewer"] if isinstance(d.get("reviewer"), str) else "",
+        "reviewers": rv if isinstance(rv := d.get("reviewers"), list) and all(isinstance(i, str) for i in rv) else None,
     }
 
 
@@ -213,13 +292,18 @@ def load() -> dict:
     default = data.get("default")
     listed = {c["id"] for c in slack_channels()}
     repos = {k: _repo(stored_repos.get(k)) for k in slugs}
-    for r in repos.values():  # read-only: validate() never stores it
-        r["channel_invalid"] = bool(r["slack_channel"]) and r["slack_channel"] not in listed
+    rids = {r["id"] for r in reviewers()}
+    for r in repos.values():
+        r["channel_invalid"] = bool(r["slack_channel"]) and r["slack_channel"] not in listed  # read-only, never stored
+        if r["reviewers"] is not None:
+            r["reviewers"] = _known(r["reviewers"], rids)
     return {
         "commands": cmds,
         "default": default if any(c["label"] == default for c in cmds) else alias,
         "repos": repos,
         "slack_channels": slack_channels(),
+        "reviewers": reviewers(),
+        "active_reviewers": active_reviewers(),
         "vault_dir": vault_dir(),
         "grind_mode": grind_mode(),
         "review_mode": review_mode(),
@@ -305,6 +389,12 @@ def validate(body) -> dict:
     old_ids = {c["id"] for c in slack_channels()}
     chans = _clean_channels(body.get("slack_channels", slack_channels()))  # a save that omits it keeps the stored one
     ids = {c["id"] for c in chans}
+    revs = _clean_reviewers(body.get("reviewers", reviewers()))  # a save that omits it keeps the stored one
+    rids = {r["id"] for r in revs}
+    if "active_reviewers" in body:
+        active = _clean_ids(body["active_reviewers"], rids, "active_reviewers must be a list of ids")
+    else:  # kept, minus the reviewers this save removes
+        active = _known(_stored().get("active_reviewers"), rids)
     stored = _migrate(_stored())
     sent = body.get("repos", {})
     if not isinstance(sent, dict):
@@ -326,6 +416,15 @@ def validate(body) -> dict:
         rv = r.get("reviewer", (kept.get(slug) or {}).get("reviewer", ""))  # the UI form omits it: keep the stored one
         if not isinstance(rv, str) or (rv.strip() and not REVIEWER_RE.match(rv.strip())):
             raise ValueError("reviewer must be a GitHub login or copilot")
+        if slug in sent and "reviewers" in r:
+            rv_ids = (
+                None
+                if r["reviewers"] is None
+                else _clean_ids(r["reviewers"], rids, "reviewers must be a list of ids or null")
+            )
+        else:  # the Repositories table omits it: keep the stored override, minus removed reviewers
+            rv_ids = _repo(kept.get(slug))["reviewers"]
+            rv_ids = None if rv_ids is None else _known(rv_ids, rids)
         ch = ch.strip()
         if ch and ch not in ids:
             if ch in old_ids:
@@ -336,6 +435,7 @@ def validate(body) -> dict:
             "auto_grind": r.get("auto_grind") is True,
             "slack_channel": ch,
             "reviewer": rv.strip(),
+            "reviewers": rv_ids,
         }
     return {
         "claude_label": alias,
@@ -343,6 +443,8 @@ def validate(body) -> dict:
         "default": None if default == alias else default,
         "repos": clean_repos,
         "slack_channels": chans,
+        "reviewers": revs,
+        "active_reviewers": active,
         "vault_dir": vault,
         "grind_mode": mode,
         "review_mode": rmode,
