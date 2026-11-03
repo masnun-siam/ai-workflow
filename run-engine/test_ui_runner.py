@@ -1569,7 +1569,8 @@ def prgrind_cases() -> int:
         assert ids("bob,Copilot", "reviewer") == ["id=2"]
         assert ids("alice", "reviewer") == ["id=5"]
         assert ids("STRANGER", "not-author") == ["id=1", "id=2", "id=5", "id=6"]
-        assert ghlog(fk).count("api repos/o/r/pulls/7/reviews") == 4
+        assert ids("gsm-MASUM", "not-author") == ["id=2", "id=3", "id=5", "id=6"]
+        assert ghlog(fk).count("api repos/o/r/pulls/7/reviews") == 5
 
     def tick_reviewers_set():
         d, fk, work = pset()
