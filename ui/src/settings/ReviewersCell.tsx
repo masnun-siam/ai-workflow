@@ -33,7 +33,8 @@ export function ReviewersCell({ slug, row, reviewers, active, botLabel, disabled
   const override = Array.isArray(row.reviewers);
   // ids a stale read still lists after a delete are ignored
   const effective = (override ? row.reviewers! : active).filter((id) => known.has(id));
-  const names = effective.map((id) => reviewers.find((r) => r.id === id)!.name);
+  const chosen = effective.map((id) => reviewers.find((r) => r.id === id)!);
+  const names = chosen.map((r) => r.name);
   // the first tick on a repo without an override makes one from the default set plus or minus that id
   const tick = (id: string, on: boolean) => onSave(on ? [...effective, id] : effective.filter((x) => x !== id));
 
@@ -43,7 +44,7 @@ export function ReviewersCell({ slug, row, reviewers, active, botLabel, disabled
         <button type="button" className="rv-cell" aria-label={`Reviewers for ${slug}`}>
           {override ? (
             <>
-              {names.length ? names.map((n) => <Chip key={n}>{n}</Chip>) : <span className="muted">override: none</span>}
+              {names.length ? chosen.map((r) => <Chip key={r.id}>{r.name}</Chip>) : <span className="muted">override: none</span>}
               {names.length ? <span className="muted">override</span> : null}
             </>
           ) : (
