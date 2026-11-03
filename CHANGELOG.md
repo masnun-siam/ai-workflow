@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Grind recognises its reviewers and the first approval** (#845): `/pr-grind` reads reviews by every login in `reviewers:` (ignoring case, Copilot mapped), learns one login per no-login reviewer (`learned: <slack id>=<login>`), exempts the set from rail 3, and closes on the first approval from any of them (a human counts only by approving), fixing the others' findings in that round first. Its Monitor watches the whole set and is re-armed when a login is added.
 - **Grind reads its reviewers each round** (#844): unless `--reviewer` pins it, `/pr-grind` runs `aiw grind-reviewers` at start and before each recheck, mentions every Slack id (`<@id1> <@id2> recheck`) or requests every GitHub login, keeps the previous set when none is usable (`reviewers-kept:`), stops at start on the resolver's `skip`, and a restart rechecks in the existing thread. New state header lines: `reviewers:`, `unlogged:`, `reviewers-last:`, `reviewers-kept:`, `request-failed:`.
 - **Grind reviewer resolver** (#841): `aiw grind-reviewers --pr <url>` prints the PR's grind `path` (`slack` or `github`), `channel`, `mentions`, `logins`, `unlogged` and `skip` as JSON from Settings and `channels.json` (exit 1 with `{"error"}` on an unreadable settings file). `GET /api/settings` adds the read-only `bot_label` and each repo's `path`; `PUT` ignores them.
 - **Local review radio** (#850): Settings → Repositories gets a **Local review: Single / Loop** radio under Grinding, saved as `review_mode` on change, with each mode's hint; a refused save puts the old choice back.

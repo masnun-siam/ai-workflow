@@ -68,7 +68,7 @@ followups are done. Each lane, in one session (a herdr tab or a headless session
 
 1. `/implement-issue <n>` until the PR is Ready (CI green, `/pr-review` handled).
 2. `/pr-grind <pr>` in the same session, unless grinding is off or the repo has no Slack channel or reviewer.
-   Simple ends on any approval, full on zero blocker and should-fix. Between rounds the engine types
+   Simple ends on any reviewer's approval, full on the first approval or clean bot review from any reviewer. Between rounds the engine types
    the next round into the lane when a review lands or the heartbeat is due.
 3. The merge gate: CI green on the head, an approving review, no changes requested, no unresolved review threads, the grind done. CI that reads `none` waits 5 minutes (`NONE_GRACE_SECONDS`, restarted by a new head commit) for checks to register, then a repo with no CI merges. A conflict with the
    base sends the lane to merge the base in, resolve, re-run the checks and push; then the gate again.
@@ -108,7 +108,7 @@ the refined issues and **Run N** dispatches them.
 2. Wait for a reviewer's round, then split findings into fix and rebut.
 3. Fix inline, in the grind session itself: commit, reply on and resolve the thread.
 4. Run `/verifier-locally` before every push. A failing CI check gets one fix attempt per head commit. With Use jev on, grind also logs jev's advisory flake and fix/rebut hints in its state file and never acts on them.
-5. Push, re-trigger, repeat until approved or a rail stops it (round cap, stall, rate limit). Before each re-trigger the grind reads the reviewers again (`aiw grind-reviewers`) and mentions or requests that set in the same thread or PR, so a swap in Settings reaches a running grind.
+5. Push, re-trigger, repeat until approved or a rail stops it (round cap, stall, rate limit). Before each re-trigger the grind reads the reviewers again (`aiw grind-reviewers`) and mentions or requests that set in the same thread or PR, so a swap in Settings reaches a running grind. Every reviewer it has mentioned or requested (a swapped-out bot too) is read as a reviewer, not a third party, and the grind stops at the first approval from any of them, after fixing the others' findings in that round.
 6. Post the closing summary and mention the owner.
 
 Each round re-enters as a fresh headless session that reads the PR's state file under
