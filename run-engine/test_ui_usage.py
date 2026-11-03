@@ -52,6 +52,43 @@ with (
     assert u.fetch("claude", 1.0) == {"error": "usage unavailable"}
 ok("fetch: a non-object body is 'usage unavailable', not an AttributeError")
 
+ACCOUNTS = [
+    {"label": "claude", "cmd": "claude", "builtin": True, "harness": "claude"},
+    {"label": "Codex", "cmd": "codex", "harness": "codex"},
+]
+NA = {"error": "not available for Codex", "at": None}
+with (
+    mock.patch.object(u.ui_settings, "load", return_value={"commands": ACCOUNTS[1:]}),
+    mock.patch.object(u.subprocess, "run", side_effect=AssertionError("keychain read for Codex")),
+    mock.patch.object(u.urllib.request, "urlopen", side_effect=AssertionError("Anthropic call for Codex")),
+):
+    u.refresh(now=500.0)
+    assert u.snapshot()["codex"] == NA and "codex" not in u._next
+ok("a Codex account never reads the keychain or calls Anthropic")
+
+real = u.fetch
+calls = []
+good = {"five_hour": {"pct": 7, "resets_at": "r"}, "seven_day": None}
+u.fetch = lambda cmd, now=None: calls.append(cmd) or dict(good)
+with mock.patch.object(u.ui_settings, "load", return_value={"commands": ACCOUNTS}):
+    u._cache.clear()
+    u._next.clear()
+    u._cache["codex"] = {**good, "at": 1.0, "error": None}  # numbers from before a switch to Codex
+    u._next["codex"] = 1e9  # and its pending poll, which a switch back must not wait for
+    u.refresh(now=1000.0)
+    snap = u.snapshot()
+    assert calls == ["claude"] and snap["codex"] == NA and snap["claude"]["five_hour"]["pct"] == 7
+    assert "codex" not in u._next
+    u.refresh(now=1001.0)  # written on every refresh, still no fetch
+    assert calls == ["claude"] and u.snapshot()["codex"] == NA
+    ACCOUNTS[1]["harness"] = "claude"  # switched back: fetched on the next refresh
+    u.refresh(now=1002.0)
+    assert calls == ["claude", "codex"] and u.snapshot()["codex"]["five_hour"]["pct"] == 7
+ok("refresh skips Codex accounts, drops their old numbers, and fetches one switched back")
+u.fetch = real
+u._cache.clear()
+u._next.clear()
+
 calls = []
 res = {"five_hour": {"pct": 10, "resets_at": "r"}, "seven_day": None}
 u.fetch = lambda cmd, now=None: calls.append(cmd) or dict(res)
