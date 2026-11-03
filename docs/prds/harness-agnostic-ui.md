@@ -124,7 +124,7 @@ The adapter contract:
 | Skill invocation | `/ai-workflow:<name> args` or `/<name> args` (unchanged) | prompt built from the skill file (see Skill delivery) |
 | Agent sessions | `--agent ai-workflow:<agent>` | the agent file's body prepended as instructions |
 | Model / effort | `--model`, `--effort` | `--model=<model>`, `-c model_reasoning_effort=<effort>`; omitted for `default` |
-| Parse | assistant text, tool_use, result (cost, tokens), session id, rate_limit_event | `thread.started` (session id); `item.completed` only (`item.started`/`item.updated` ignored): agent_message → text, command_execution → tool `Bash` with its command, other items → tool by type; `turn.completed` usage → tokens (summed per run); `turn.failed`/`error` → error or limit |
+| Parse | assistant text, tool_use, result (cost, tokens), session id, rate_limit_event | `thread.started` (session id); `item.completed` only (`item.started`/`item.updated` ignored): agent_message → text, command_execution → tool `Bash` with its command (the `<shell> -lc` wrapper removed), other items → tool by type; `turn.completed` usage → tokens (summed per run); `turn.failed`/`error` → error or limit |
 | Limit detection | rate_limit_event, limit text | `turn.failed`/`error` whose message matches the limit rule confirmed by build gate G1; reset time in the format confirmed there |
 | Terminal resume command | `claude --resume <id>` | `<cmd> resume <id>` |
 | Usage | Anthropic OAuth usage | none |
@@ -254,6 +254,7 @@ None.
 
 ## Change log
 
+- 2026-11-04: The real Codex fixture (#871, `codex-cli 0.166.0`) confirmed the event names and fields. Codex wraps each command as `<shell> -lc "<command>"`, so the parser unwraps it before mapping `command_execution` to `Bash` (otherwise the `aiw ask` detector misses it). A failed turn emits a top-level `error` and then a `turn.failed` with the same message. `codex exec resume` takes no `-s`/`-C`: the sandbox is set with `-c sandbox_mode=...` and the working directory is the process cwd. A rate-limit line cannot be produced on demand, so it is recorded with build gate G1 instead of in the parser fixture.
 - 2026-11-04: Refining the epic's issues settled four gaps: a Codex limit with no reset time retries after a doubling wait capped at 60 minutes (the old text said "back off as today", but nothing backs off today); the removed-account resume rule applies to Codex sessions only, Claude stays as today (FR-15); the Codex login message appends the CLI's first output line, so a harness/command mismatch shows the CLI's own error (FR-2); personal-plugin skills are inlined on Codex from the installed personal plugin.
 - 2026-11-03: Approved. The four Codex CLI open questions became build gates G1-G4 in Testing. No issues existed yet.
 
