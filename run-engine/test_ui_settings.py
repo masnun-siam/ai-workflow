@@ -395,7 +395,7 @@ assert [{k: v for k, v in x.items() if k != "id"} for x in r["reviewers"]] == [
     {"name": "L" * 60, "slack_id": "U0BS34962FK", "github_login": ""}
 ]
 assert re.match(r"^r-[0-9a-f]{8}$", r["reviewers"][0]["id"]) and r["active_reviewers"] == [r["reviewers"][0]["id"]]
-for label in (None, "", 5):
+for label in (None, "", "   ", 5):
     pre_upgrade({}, {"bot_uid": "U0BS34962FK", **({} if label is None else {"bot_label": label})})
     assert ui_settings.load()["reviewers"][0]["name"] == "Review bot", label
 pre_upgrade({}, {"bot_uid": "@bot", "bot_label": "Bot"})
@@ -460,6 +460,7 @@ assert [x["github_login"] for x in r["reviewers"]] == ["", "copilot"] and r["act
     r["reviewers"][0]["id"]
 ]
 assert r["repos"]["o/a"]["slack_channel"] == A and r["repos"]["o/a"]["reviewers"] is None
+assert ui_settings.save({"use_jev": False})["reviewers"] == r["reviewers"], "the seeded list passes validation"
 
 # missing ui_settings.json: created with the marker; missing or corrupt channels.json seeds nothing
 for cj in (None, "{broken", "[1]"):
@@ -475,4 +476,4 @@ assert len(r["slack_channels"]) == 50 and len(r["reviewers"]) == 50
 pre_upgrade({"repos": {f"o/r{i}": {"reviewer": f"u{i}"} for i in range(51)}})
 r = ui_settings.load()
 assert len(r["reviewers"]) == 50 and r["repos"]["o/r50"]["reviewers"] is None and r["repos"]["o/r0"]["reviewers"]
-print("ui_settings: 124 checks passed")
+print("ui_settings: 129 checks passed")

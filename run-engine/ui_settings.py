@@ -261,9 +261,8 @@ def _seed_reviewers(data: dict) -> dict:
     for cid in mapped.values():
         add_channel(cid)
     bot, label = cj.get("bot_uid"), cj.get("bot_label")
-    active = []
-    if isinstance(bot, str) and SLACK_ID_RE.match(bot):
-        active = [add_reviewer(label[:60] if isinstance(label, str) and label else "Review bot", bot, "")]
+    label = label.strip()[:60] if isinstance(label, str) else ""  # stripped: every save re-validates the name
+    active = [add_reviewer(label or "Review bot", bot, "")] if isinstance(bot, str) and SLACK_ID_RE.match(bot) else []
     for slug, r in repos.items():
         login = r.pop("reviewer", None)
         login = login.strip() if isinstance(login, str) else ""
