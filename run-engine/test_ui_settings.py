@@ -40,6 +40,8 @@ assert {k: v for k, v in ui_settings.load().items() if k not in ("vault_dir", "j
     "default": "claude",
     "repos": {},
     "slack_channels": [],
+    "reviewers": [],
+    "active_reviewers": [],
     "grind_mode": "deep",
     "review_mode": "single",
     "use_jev": True,
@@ -95,6 +97,7 @@ assert ui_settings.repo_settings("o/a") == {
     "auto_grind": True,
     "slack_channel": "",
     "reviewer": "",
+    "reviewers": None,
     "issue_grind": {},
 }
 assert ui_settings.repo_settings("o/none")["auto_grind"] is False
@@ -134,7 +137,8 @@ r = ui_settings.save(
     }
 )
 assert (
-    r["repos"]["o/a"] == {"auto_grind": True, "slack_channel": "C0123ABCD", "reviewer": "", "channel_invalid": False}
+    r["repos"]["o/a"]
+    == {"auto_grind": True, "slack_channel": "C0123ABCD", "reviewer": "", "reviewers": None, "channel_invalid": False}
     and r["repos"]["o/b"]["slack_channel"] == ""
 )
 assert raises(ui_settings.save, {"commands": [], "repos": {"o/a": {"slack_channel": 5}}})
@@ -150,7 +154,8 @@ assert ui_settings.save({"repos": {"o/a": {"reviewer": ""}}})["repos"]["o/a"]["r
 # a stored Auto-build cap or epic list from before dispatches is ignored, never shown
 r = ui_settings.save({"repos": {"o/a": {"autopilot_cap": 4, "slack_channel": ""}}, "autopilot": {"o/a": [7]}})
 assert (
-    r["repos"]["o/a"] == {"auto_grind": False, "slack_channel": "", "reviewer": "", "channel_invalid": False}
+    r["repos"]["o/a"]
+    == {"auto_grind": False, "slack_channel": "", "reviewer": "", "reviewers": None, "channel_invalid": False}
     and "autopilot" not in r
     and r["commands"]
 )
@@ -264,4 +269,81 @@ ui_settings.save({"repos": {"o/a": {"slack_channel": "#x"}}})
 assert ui_settings.load()["repos"]["o/a"]["channel_invalid"] is True
 assert raises(ui_settings.save, {"repos": {"o/a": {"slack_channel": "#y"}}})
 assert "channel_invalid" not in open(ui_settings._path()).read()
-print("ui_settings: 71 checks passed")
+# reviewers: a validated list with server ids, a global active set, a per-repo override (null = follow it)
+import re  # noqa: E402
+
+ui_settings.save({"repos": {"o/a": {"slack_channel": ""}}})
+BOT = {"name": "Blubird AI Agent", "slack_id": "U0BS34962FK", "github_login": "blubird-ai-agent"}
+MASUM = {"name": "Masum", "slack_id": "U0373SRT22G", "github_login": "gsm-masum"}
+r = ui_settings.save({"reviewers": [BOT, MASUM]})
+assert [{k: v for k, v in x.items() if k != "id"} for x in r["reviewers"]] == [BOT, MASUM]
+assert all(re.match(r"^r-[0-9a-f]{8}$", x["id"]) for x in r["reviewers"]) and ui_settings.load() == r
+bot_id, masum_id = (x["id"] for x in r["reviewers"])
+assert bot_id != masum_id and r["active_reviewers"] == [] and r["repos"]["o/a"]["reviewers"] is None
+r = ui_settings.save(
+    {
+        "reviewers": [
+            {**r["reviewers"][0], "name": "Bot"},
+            r["reviewers"][1],
+            {"github_login": "copilot", "name": "Copilot"},
+        ]
+    }
+)
+assert [x["id"] for x in r["reviewers"][:2]] == [bot_id, masum_id] and r["reviewers"][0]["name"] == "Bot", (
+    "renames keep ids"
+)
+cop_id = r["reviewers"][2]["id"]
+assert cop_id not in (bot_id, masum_id) and r["reviewers"][2]["slack_id"] == ""
+LIST = r["reviewers"]
+before = open(ui_settings._path()).read()
+assert msg({"reviewers": [{"name": "x", "slack_id": "", "github_login": " "}]}) == "add a Slack id or a GitHub login"
+assert msg({"reviewers": [{"name": "x", "slack_id": "@bot"}]}) == "Slack id must look like U0123ABCD"
+for bad in ("a b", "x" * 40, "org/team"):
+    assert msg({"reviewers": [{"name": "x", "github_login": bad}]}) == "not a GitHub login", bad
+assert msg({"reviewers": [BOT, {**MASUM, "slack_id": BOT["slack_id"]}]}) == "Slack id U0BS34962FK is already listed"
+assert msg({"reviewers": [MASUM, {**BOT, "github_login": "Gsm-Masum"}]}) == "login gsm-masum is already listed"
+for bad in ("", "  ", "x" * 61, None):
+    assert msg({"reviewers": [{**BOT, "name": bad}]}) == "reviewer name must be 1 to 60 characters", bad
+many = [{"name": "n", "slack_id": f"U{i:08d}"} for i in range(51)]
+assert msg({"reviewers": many}) == "at most 50" and msg({"reviewers": "x"}) == "reviewers must be a list"
+for bad in ("abc", "r-XYZ12345", "r-1234567", 5):
+    assert msg({"reviewers": [{**BOT, "id": bad}]}) == "reviewer id must be r-<8 hex>", bad
+assert msg({"reviewers": [{**BOT, "id": bot_id}, {**MASUM, "id": bot_id}]}) == "duplicate reviewer id"
+assert msg({"active_reviewers": ["r-00000000"]}) == "unknown reviewer id r-00000000"
+assert msg({"active_reviewers": bot_id}) == "active_reviewers must be a list of ids"
+assert msg({"repos": {"o/a": {"reviewers": ["r-00000000"]}}}) == "unknown reviewer id r-00000000"
+assert msg({"repos": {"o/a": {"reviewers": "x"}}}) == "reviewers must be a list of ids or null"
+assert msg({"reviewers": LIST[1:], "active_reviewers": [bot_id]}) == f"unknown reviewer id {bot_id}", (
+    "removed in the same PUT"
+)
+assert len(ui_settings.save({"reviewers": many[:50]})["reviewers"]) == 50
+r = ui_settings.save({"reviewers": LIST, "active_reviewers": [bot_id, bot_id]})
+assert r["active_reviewers"] == [bot_id] and ui_settings.save({"active_reviewers": []})["active_reviewers"] == []
+r = ui_settings.save(
+    {"active_reviewers": [bot_id], "repos": {"o/a": {"reviewers": [bot_id, masum_id]}, "o/b": {"reviewers": [bot_id]}}}
+)
+assert r["repos"]["o/a"]["reviewers"] == [bot_id, masum_id] and r["repos"]["o/b"]["reviewers"] == [bot_id]
+assert ui_settings.repo_settings("o/b")["reviewers"] == [bot_id]
+# omitted keeps: a partial save, and a Repositories table row (auto_grind + slack_channel only)
+ui_settings.save({"grind_mode": "simple"})
+ui_settings.save({"repos": {"o/a": {"auto_grind": True, "slack_channel": ""}}})
+r = ui_settings.load()
+assert (
+    r["reviewers"] == LIST
+    and r["active_reviewers"] == [bot_id]
+    and r["repos"]["o/a"]["reviewers"] == [bot_id, masum_id]
+)
+ui_settings.save({"repos": {"o/b": {"reviewers": []}}})
+assert (
+    ui_settings.save({"repos": {"o/b": {"auto_grind": True, "slack_channel": ""}}})["repos"]["o/b"]["reviewers"] == []
+)
+ui_settings.save({"repos": {"o/b": {"reviewers": [bot_id]}}})
+# cascade: dropping the bot removes it from the active set and from both overrides (o/b is not in the PUT)
+r = ui_settings.save({"reviewers": LIST[1:], "repos": {"o/a": {"slack_channel": ""}}})
+assert r["active_reviewers"] == [] and r["repos"]["o/a"]["reviewers"] == [masum_id]
+assert r["repos"]["o/b"]["reviewers"] == [], "emptied by the cascade: an explicit empty override, not null"
+assert bot_id not in open(ui_settings._path()).read()
+r = ui_settings.save({"repos": {"o/a": {"reviewers": None}}})
+assert r["repos"]["o/a"]["reviewers"] is None
+assert ui_settings.save({"repos": {"o/a": {"slack_channel": ""}}})["repos"]["o/a"]["reviewers"] is None
+print("ui_settings: 101 checks passed")
