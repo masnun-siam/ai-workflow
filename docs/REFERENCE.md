@@ -40,7 +40,10 @@ aiw local-review                        print the local review mode, single or l
                                         /implement-issue at step 12)
 aiw dispatch plan|start <epic> [flags]  preview or start a dispatch (flags as herdr-dispatch, including
                                         --feature-branch and --base-branch, plus
-                                        --runner herdr|headless and --workspace <herdr workspace id>);
+                                        --runner herdr|herdr-app|headless and --workspace <herdr workspace id>;
+                                        herdr-app opens lanes as tabs of the Herdr desktop app, with
+                                        --workspace its app space id from `herdr-app ls`; the web UI still
+                                        labels herdr-app dispatches as background sessions);
                                         an epic only: picked issues dispatch from the UI
 aiw jev ci-hint|finding-hint --file <path>
                                         advisory jev hint for /pr-grind as JSON; reads the text from a file;
@@ -513,7 +516,7 @@ agents/       away-answerer, peer-reviewer, worklog-runner
 guides/       engineering-workflow, code-review, skills
 templates/    prd, epic, issue, faq, claude-md, repo-audit
 run-engine/   route.py (the aiw CLI) · ui_*.py (the web UI server) · peer_review, threads, ci, ask
-              dispatch_run (the lane engine), dispatch_runners (herdr, headless), dispatch_cli
+              dispatch_run (the lane engine), dispatch_runners (herdr, herdr-app, headless), dispatch_cli
               harness_codex (the Codex adapter; the stream parser so far, provisional fixture in fixtures/)
               ui_dist/ (the built UI, committed) · config.json · test_*.py
 ui/           the web UI source: React + TypeScript + Vite

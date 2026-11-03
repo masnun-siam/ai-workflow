@@ -1,4 +1,4 @@
-"""Lane runners for dispatch_run: herdr tabs or headless UI sessions, one interface. Stdlib only.
+"""Lane runners for dispatch_run: herdr tabs, Herdr app tabs or headless UI sessions, one interface. Stdlib only.
 
     start(lane, prompt, dispatch) -> handle     send(handle, text)     close(handle)
     status(handle) -> (agent, limited_until)    agent: working | idle | blocked | gone
@@ -12,6 +12,7 @@ from __future__ import annotations
 import contextlib
 import json
 import re
+import uuid
 from datetime import datetime, timedelta
 
 import dispatch
@@ -154,6 +155,83 @@ class Herdr:
                     raise
 
 
+class HerdrApp:
+    """Lanes as tabs of the Herdr desktop app (herdr-app over herdr-core `hc`), in one space. `hc run` with
+    herdr.space/herdr.tab labels makes the tab; an unknown tab id becomes a new, unfocused tab. The first
+    prompt goes in as claude's argument, so nothing waits for claude to be ready."""
+
+    def __init__(self, space, cli=None, app=None):
+        self.space = space
+        self.cli = cli or (lambda argv, timeout=60: run(["hc", *argv], timeout=timeout))
+        self.app = app or (lambda argv, timeout=30: run(["herdr-app", *argv], timeout=timeout))
+
+    def _ok(self, argv, timeout=60):
+        p = self.cli(argv, timeout=timeout)
+        if p.returncode != 0:
+            raise RuntimeError(f"hc {argv[0]} failed: {(p.stderr or p.stdout or '').strip()[:200]}")
+        try:
+            return json.loads(p.stdout or "null")
+        except ValueError:
+            return p.stdout or ""
+
+    def start(self, lane, prompt, d):
+        label = lane.get("label") or f"issue-{lane['n']}"
+        cwd = checkout(lane["repo"])
+        tab = f"tb{uuid.uuid4().hex}"
+        made = self._ok(
+            [
+                "run",
+                "--bg",
+                "--json",
+                "--no-parent",
+                "--keep",
+                "--cwd",
+                cwd,
+                "--label",
+                f"herdr.space={self.space}",
+                "--label",
+                f"herdr.tab={tab}",
+                "--",
+                "claude",
+                *claude_args(d),
+                repo_skills.resolve(prompt, cwd),
+            ]
+        )
+        address = made.get("address") if isinstance(made, dict) else None
+        if not address:
+            raise RuntimeError("hc run returned no terminal address")
+        self.app(["do", "tab.rename", "--id", tab, "--name", label])  # ponytail: a name only; the window may be closed
+        return {"terminal": address, "tab": tab, "cwd": cwd}
+
+    def send(self, h, text):
+        self._ok(["send", "--json", h["terminal"], repo_skills.resolve(text, h.get("cwd"))])
+
+    def read(self, h) -> str:
+        r = self._ok(["read", h["terminal"], "--lines", "200"])
+        return r if isinstance(r, str) else (_find(r, "text") or json.dumps(r))
+
+    def status(self, h):
+        p = self.cli(["get", "--json", h["terminal"]]) if h else None
+        t = json.loads(p.stdout or "null") if p and p.returncode == 0 else None
+        if not t or t.get("state") != "live":
+            return "gone", None
+        s = t.get("status") or "unknown"
+        if s in ("idle", "done"):
+            text = self.read(h)
+            until = limit_reset(text)
+            if until:
+                return "idle", until
+            tail = "\n".join(text.splitlines()[-3:])
+            return ("working" if _MONITORS_RE.search(tail) else "idle"), None  # waits on its own monitors
+        return ("blocked" if s == "blocked" else "working"), None
+
+    def close(self, h):
+        if h and h.get("terminal"):  # its pane, and the tab with it, closes when claude ends
+            p = self.cli(["kill", "--json", h["terminal"]])
+            if p.returncode != 0 and self.status(h)[0] != "gone":
+                raise RuntimeError(f"hc kill failed: {(p.stderr or p.stdout or '').strip()[:200]}")
+
+
 def _held(rec: dict) -> bool:
     """A held session (ui_runner.hold) waits for the user. `stopped` stays final: the lane treats it as ever."""
     return bool(rec.get("hold")) and rec.get("status") != "stopped"
@@ -214,4 +292,6 @@ class Headless:
 
 
 def for_dispatch(d: dict):
-    return Herdr(d.get("workspace")) if d["runner"] == "herdr" else Headless()
+    if d["runner"] == "herdr":
+        return Herdr(d.get("workspace"))
+    return HerdrApp(d.get("workspace")) if d["runner"] == "herdr-app" else Headless()
