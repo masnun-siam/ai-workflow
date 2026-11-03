@@ -56,7 +56,7 @@ Never write a key the ui tick reads (`paused:`, `done:`, `next-poll:`) by accide
 
 The one place that says who the grind mentions (Slack) or requests (GitHub).
 
-- **Pinned.** `--reviewer <login>` given and no `--channel` (Step 0.1's GitHub path): the set is that
+- **Pinned.** `--reviewer <login>` given and no `--channel`: the set is that
   login, every round. The resolver is never run. With both flags Slack wins and `--reviewer` is
   ignored (Step 0.2), so the grind is not pinned.
 - **Read.** Otherwise run `aiw grind-reviewers --pr <pr url>` (one Bash call) and parse its JSON line
@@ -70,7 +70,7 @@ The one place that says who the grind mentions (Slack) or requests (GitHub).
   "no Slack channel or reviewer, its lanes skip grinding" skip still stops it. Slack path with empty
   `mentions` → mention `channels.json`'s `bot_uid`. GitHub path with no login left → stop with
   "no Slack channel or reviewer, its lanes skip grinding". Resolver failed or `path: null` → as before
-  this section existed: Slack with `bot_uid` (there is no GitHub path without `--reviewer`).
+  this section existed: the Slack path with `bot_uid` (unless `--reviewer` pins the grind).
 - **Mid-grind** (a recheck in Step 7, or a restart). Not usable, `skip` set, or the resolver failed →
   use `reviewers-last:` and write `reviewers-kept: <reason>` (for example `resolver failed: <first error line>`,
   `no active reviewer`, `all requests failed`). Never fall back to `bot_uid` mid-grind: a swap saved in
@@ -99,9 +99,9 @@ The one place that says who the grind mentions (Slack) or requests (GitHub).
    **0b. Reviewers.** Still before any Slack read or post, unless pinned, run the Reviewers "Read"
    and apply "At start". A `skip` that stops the grind stops it like the draft check: that one line,
    no state file, no post. A state file whose header has a `thread:` is not a start: skip 0b (item 2).
-1. **`--reviewer <login>` given and no `--channel`, or no `--channel` and the resolver's `path` is `github` → the GitHub path:** skip `<channels>` and every Slack step. `<login>` is a GitHub
+1. **`--reviewer <login>` given and no `--channel`, or no `--channel` and the resolver's `path` is `github` → the GitHub path:** skip `<channels>` and every Slack step. `--reviewer`'s `<login>` is a GitHub
    login (`[A-Za-z0-9-]{1,39}`) or `copilot`; anything else (a team slug such as `org/team`) → stop with one
-   line. The reviewer is the PR author → stop with one line. Slack steps below say "post"; on this path read
+   line. It is the PR author → stop with one line. Slack steps below say "post"; on this path read
    "GitHub" for them (Steps 1 and 7 have a paragraph each). Rails 1, 2 and 4 and Step 8 report in the final message
    and the state file only. Otherwise (the Slack path): read `<channels>` first: `bot_uid`, `owner_uid`, `channels` (exact `owner/repo` →
    channel id), `dm_fallback`, `known_bots`, optional `workspace_url`, and the `trigger`/`retrigger` templates
