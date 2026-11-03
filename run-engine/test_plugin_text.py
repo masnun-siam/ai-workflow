@@ -11,7 +11,19 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SELF = os.path.relpath(os.path.abspath(__file__), ROOT)
-KEPT_VERBS = {"ui", "paths", "ask", "ci", "threads", "grind-mode", "grind-reviewers", "local-review", "dispatch", "jev"}
+KEPT_VERBS = {
+    "ui",
+    "paths",
+    "ask",
+    "ci",
+    "threads",
+    "grind-mode",
+    "grind-reviewers",
+    "local-review",
+    "dispatch",
+    "jev",
+    "install-skills",
+}
 REMOVED_VERBS = (
     "init|route|precheck|classify|resolve-review|skip-review|set|stack|worktree|maintree|pr|gitnexus"
     "|epic|refined|project-status|review|peer-review"
