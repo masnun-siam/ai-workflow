@@ -517,6 +517,7 @@ guides/       engineering-workflow, code-review, skills
 templates/    prd, epic, issue, faq, claude-md, repo-audit
 run-engine/   route.py (the aiw CLI) · ui_*.py (the web UI server) · peer_review, threads, ci, ask
               dispatch_run (the lane engine), dispatch_runners (herdr, herdr-app, headless), dispatch_cli
+              harness_codex (the Codex adapter; the stream parser so far, provisional fixture in fixtures/)
               ui_dist/ (the built UI, committed) · config.json · test_*.py
 ui/           the web UI source: React + TypeScript + Vite
 site/         the GitHub Pages showcase (Vite + React), deployed by .github/workflows/pages.yml;
