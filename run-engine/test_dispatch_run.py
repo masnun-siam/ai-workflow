@@ -551,6 +551,33 @@ for ci_state, warn in [("failure", "merged with red CI"), ("pending", "merged wi
     assert [e["text"] for e in evs if e["kind"] == "warning"] == ([warn] if warn else []), (ci_state, evs)
 print("  ok  merge gate follows the ci mode")
 
+# --- skip_approval: no approving review needed on a team repo; every other gate still applies
+sa = {"ci": "wait", "grind": "off", "auto_merge": True, "skip_approval": True}
+team = lambda **kv: {"agent": "idle", "solo": False, "slack": True, "pr": pr(9, **kv)}  # noqa: E731
+assert dr._gate({}, team(), sa, 0) is None
+assert dr._gate({}, team(), {**sa, "skip_approval": False}, 0) == "no approving review"
+assert dr._gate({}, team(), {k: v for k, v in sa.items() if k != "skip_approval"}, 0) == "no approving review"
+assert dr._gate({}, team(changes_requested=True), sa, 0) == "changes requested"
+assert dr._gate({}, team(threads_open=1), sa, 0) == "unresolved review threads"
+assert dr._gate({}, team(draft=True), sa, 0) == "PR is a draft"
+assert dr._gate({}, team(conflict=True), sa, 0) == "PR has a merge conflict"
+assert dr._gate({}, team(ci="pending"), sa, 0) == "CI is not green"
+assert dr._gate({}, team(ci="pending"), {**sa, "ci": "defer"}, 0) == "waiting for green CI (defer)"
+assert dr._gate({}, team(ci="none"), sa, 0) == "CI not registered yet"
+gr = {**team(), "grind": {"state": "running", "reason": ""}}
+assert dr._gate({}, gr, {**sa, "grind": "simple"}, 0) == "grind is not done"
+gd = {**team(), "grind": {"state": "done", "reason": "approved (simple)"}}
+assert dr._gate({}, gd, {**sa, "grind": "simple"}, 0) is None
+ps, as_ = dr.step({"n": 9, "stage": "merge_gate"}, team(), sa, 0)
+assert as_ == [("merge", 9, "a" * 40)] and ps["gate"] is None, (ps, as_)
+ps, as_ = dr.step({"n": 9, "stage": "merge_gate", "hold_merge": True}, team(), sa, 0)
+assert not any(a[0] == "merge" for a in as_), as_
+ps, as_ = dr.step({"n": 9, "stage": "merge_gate"}, team(), {**sa, "auto_merge": False}, 0)
+assert ps["stage"] == "awaiting_merge" and not any(a[0] == "merge" for a in as_), (ps, as_)
+assert dr.check_settings({**dr.DEFAULTS, "skip_approval": 1})["skip_approval"] is True
+assert dr.check_settings({**dr.DEFAULTS})["skip_approval"] is False
+print("  ok  skip_approval drops only the approval")
+
 # --- merged -> followups -> closed, tab closed, dependent #2 starts
 fm = {**fg, "pr": pr(101, state="MERGED", approved=True)}
 dr.tick(d, {K(1): fm}, run, merge, now=1021)
@@ -733,10 +760,14 @@ assert dr.load(d3["id"])["settings"]["grind"] == "simple"
 dr.set_settings(d3["id"], ci="defer")
 assert dr.load(d3["id"])["settings"]["ci"] == "defer"
 old = dr.load(d3["id"])
-del old["settings"]["ci"]
-with open(dr._path(d3["id"]), "w") as f:  # a record saved before ci existed
+del old["settings"]["ci"], old["settings"]["skip_approval"]
+with open(dr._path(d3["id"]), "w") as f:  # a record saved before ci and skip_approval existed
     json.dump(old, f)
 assert dr.load(d3["id"])["settings"]["ci"] == "wait"
+assert dr.load(d3["id"])["settings"]["skip_approval"] is False
+dr.set_settings(d3["id"], skip_approval=True)
+assert dr.load(d3["id"])["settings"]["skip_approval"] is True
+dr.set_settings(d3["id"], skip_approval=False)
 dr.set_settings(d3["id"], max=3)
 dr.set_settings(d3["id"], account="work")
 assert dr.load(d3["id"])["settings"]["account"] == "work"

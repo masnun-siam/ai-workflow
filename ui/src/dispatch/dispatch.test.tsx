@@ -10,7 +10,7 @@ import { counts, eventText, laneNote, levels, nowLine } from './vocab';
 
 const json = (b: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } }));
 const AFK = { active: false, until: null, started: null, decisions: 0, held: 0, summary: null };
-const S = { max: 2, grind: 'full', ci: 'wait', auto_merge: false, feature_branch: null, base_branch: null, model: null, effort: null, account: null } as const;
+const S = { max: 2, grind: 'full', ci: 'wait', auto_merge: false, skip_approval: false, feature_branch: null, base_branch: null, model: null, effort: null, account: null } as const;
 const lane = (n: number, o: Partial<Lane> = {}): Lane => ({
   key: `o/r#${n}`, repo: 'o/r', n, title: `Issue ${n}`, deps: [], stage: 'queued', pr: null, needs_you: null, held: null, gate: null,
   skip_reason: null, paused: null, hold_merge: null, limited_until: null, started_at: null, ended_at: null, session: null, tab: null,
@@ -589,6 +589,8 @@ describe('Dispatch page', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Settings/ }));
     await userEvent.click(screen.getByRole('switch', { name: 'Auto-merge' }));
     await waitFor(() => expect(posts.at(-1)).toEqual(['/api/dispatches/abc123abc123/settings', { auto_merge: true }]));
+    await userEvent.click(screen.getByRole('switch', { name: 'Skip approval' }));
+    await waitFor(() => expect(posts.at(-1)).toEqual(['/api/dispatches/abc123abc123/settings', { skip_approval: true }]));
     await userEvent.click(screen.getByRole('button', { name: 'More at once' }));
     await waitFor(() => expect(posts.at(-1)).toEqual(['/api/dispatches/abc123abc123/settings', { max: 3 }]));
     await userEvent.click(screen.getByRole('button', { name: /Pause/ }));

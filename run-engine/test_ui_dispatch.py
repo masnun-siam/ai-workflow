@@ -408,6 +408,8 @@ assert st == 200 and body["events"]
 assert call("/api/dispatches/000000000000")[0] == 404
 st, body = call(f"/api/dispatches/{d2['id']}/settings", {"max": 4, "auto_merge": True})
 assert st == 200 and body["settings"]["max"] == 4 and body["settings"]["auto_merge"] is True
+st, body = call(f"/api/dispatches/{d2['id']}/settings", {"skip_approval": True})
+assert st == 200 and body["settings"]["skip_approval"] is True
 assert call(f"/api/dispatches/{d2['id']}/settings", {"bogus": 1})[0] == 400
 st, body = call(f"/api/dispatches/{d2['id']}/settings", {"ci": "ignore"})
 assert st == 200 and body["settings"]["ci"] == "ignore"

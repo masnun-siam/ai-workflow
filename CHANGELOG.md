@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Dispatch skip approval** (#889): a `skip_approval` dispatch setting (`aiw dispatch plan|start --skip-approval`, `aiw dispatch set <id> skip_approval=on`, a **Skip approval** switch in the dispatch settings) lets the merge gate pass without an approving review; CI, the grind, draft, conflicts, changes requested and open threads still gate. Off by default and on older dispatches.
 - **Account harness in the settings API** (#870): each account in `ui_settings.json` has a `harness` (`claude` or `codex`; stored accounts without one load as `claude`) and Codex accounts a `models` list; `GET /api/settings` returns them plus a read-only `harnesses` list; an Accounts save rejects two accounts with the same command; `ui_settings.harness_of` / `models_of` map a command to its harness and models.
 - **Herdr app runner**: `aiw dispatch plan|start --runner herdr-app --workspace <space id>` opens lanes as tabs of the Herdr desktop app (via `hc run`) instead of the herdr TUI; the web UI still labels these dispatches as background sessions.
 - **Sync with Wasensi 9d25044a**: `/create-prd` opens a pull request that adds the approved PRD to the base branch (`Refs #<epic>`); `/create-tasks` asks which epic a finding goes under; `/implement-issue` and `/verifier-locally` run only the tests for the change when a push hook runs the full suite, and re-run only failing tests; `/implement-issue` step 14 and `/pr-review` step 7 mark a PR ready before CI in a repo that runs no CI on drafts.

@@ -103,7 +103,14 @@ export function SettingsFields({ value, onChange, live, noBranch, repo, runner }
         <span className="dsp-k" id="am-l">Auto-merge</span>
         <Switch label="Auto-merge" checked={value.auto_merge} onChange={(auto_merge) => onChange({ auto_merge })} />
         <span className="faint dsp-hint">
-          {value.auto_merge ? 'Merge commit once CI is green, a review approves (not needed on your own repo) and the grind is done.' : 'Each PR waits for you to merge it; then the issue is closed and cleaned up.'}
+          {value.auto_merge ? 'Merge commit once CI is green, a review approves (unless Skip approval is on; not needed on your own repo) and the grind is done.' : 'Each PR waits for you to merge it; then the issue is closed and cleaned up.'}
+        </span>
+      </div>
+      <div className="dsp-field">
+        <span className="dsp-k" id="sa-l">Skip approval</span>
+        <Switch label="Skip approval" checked={!!value.skip_approval} onChange={(skip_approval) => onChange({ skip_approval })} />
+        <span className="faint dsp-hint">
+          {value.skip_approval ? 'Merge without an approving review; CI, the grind, conflicts, changes requested and open threads still gate.' : 'A review must approve (not needed on your own repo).'}
         </span>
       </div>
       <div className="dsp-field">

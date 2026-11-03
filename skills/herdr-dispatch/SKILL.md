@@ -1,7 +1,7 @@
 ---
 name: herdr-dispatch
 description: Run an epic's child issues as parallel herdr tabs, end to end — each tab runs implement-issue, then grinds the PR (off/simple/full), is merged (optional auto-merge), does implement-issue's after-merge followups, closes, and the next unblocked issue opens. Dependency order and a concurrency cap; this session previews, starts and relays. Use whenever the user wants to run, dispatch or fan out an epic's issues in herdr tabs, "implement this epic in parallel", "dispatch epic 123", or work several issues at once in herdr, even if they don't name this skill.
-argument-hint: <epic: owner/repo#N or N> [--max N] [--grind off|simple|full] [--ci wait|defer|ignore] [--auto-merge] [--feature-branch <name>] [--base-branch <name>] [--model M] [--effort E]
+argument-hint: <epic: owner/repo#N or N> [--max N] [--grind off|simple|full] [--ci wait|defer|ignore] [--auto-merge] [--skip-approval] [--feature-branch <name>] [--base-branch <name>] [--model M] [--effort E]
 ---
 
 # herdr-dispatch
@@ -25,7 +25,8 @@ Paths below starting `../../` are relative to this skill's folder, at the plugin
 | `--max N` | tabs running at once | 2 |
 | `--grind off\|simple\|full` | grind each ready PR: `simple` ends on any approval, `full` on zero blocker/should-fix | full |
 | `--ci wait\|defer\|ignore` | `wait`: CI gates each lane as today; `defer`: CI blocks only the merge (red CI at the gate sends the CI-fix prompt once per push); `ignore`: CI never blocks, red or pending CI can merge with a warning event | wait |
-| `--auto-merge` | merge (merge commit) once CI is green, an approving review is in and the grind is done | off: the tab waits for the user's merge |
+| `--auto-merge` | merge (merge commit) once CI is green, an approving review is in (unless `--skip-approval`) and the grind is done | off: the tab waits for the user's merge |
+| `--skip-approval` | merge without an approving review; CI, the grind, conflicts, changes requested and open threads still gate | off: a review must approve (not needed on the user's own repo) |
 | `--feature-branch <name>` | every PR targets this branch, cut from the base branch (or the default branch) if missing | each issue's own base |
 | `--base-branch <name>` | where PRs land: lanes target it when there is no feature branch; with one, the feature branch is cut from it and Open PR goes into it. It must exist in every lane repo | the repo's base (each issue's own) |
 | `--model`, `--effort` | for every tab | Claude's defaults |
@@ -52,7 +53,7 @@ Paths below starting `../../` are relative to this skill's folder, at the plugin
    - `finished` — every lane is closed or skipped: go to step 6.
    Then start the watch again with the new `since`. Stay quiet about plain progress unless asked.
 5. **Steer** on the user's word only:
-   - `aiw dispatch set <id> max=3 grind=simple auto_merge=on model=<m>` (applies at the next step)
+   - `aiw dispatch set <id> max=3 grind=simple auto_merge=on skip_approval=on model=<m>` (applies at the next step)
    - `aiw dispatch pause|resume|cancel <id>` (pause stops new tabs; running ones go on)
    - `aiw dispatch lane <id> <n> pause|resume|retry|skip|merge|hold|unhold`, or
      `aiw dispatch lane <id> <n> send "<text>"` to type into that tab
