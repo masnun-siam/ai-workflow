@@ -5,6 +5,7 @@ import { AccountsSection } from '../settings/AccountsSection';
 import { ChannelsSection } from '../settings/ChannelsSection';
 import { NotificationsSection } from '../settings/NotificationsSection';
 import { ReposSection } from '../settings/ReposSection';
+import { ReviewersSection } from '../settings/ReviewersSection';
 import { ReviewSection } from '../settings/ReviewSection';
 import { VaultSection } from '../settings/VaultSection';
 import { JevSection } from '../settings/JevSection';
@@ -13,6 +14,7 @@ import { ServerSection } from '../settings/ServerSection';
 export const SECTIONS = [
   { id: 'repos', label: 'Repositories', Body: ReposSection },
   { id: 'channels', label: 'Slack channels', Body: ChannelsSection },
+  { id: 'reviewers', label: 'Reviewers', Body: ReviewersSection },
   { id: 'accounts', label: 'Claude accounts', Body: AccountsSection },
   { id: 'notifications', label: 'Notifications', Body: NotificationsSection },
   { id: 'review', label: 'Peer review', Body: ReviewSection },
