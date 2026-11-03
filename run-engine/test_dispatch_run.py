@@ -371,6 +371,8 @@ assert d["lanes"][K(1)]["stage"] == "grinding" and run.sent[-1] == (
     1,
     "/ai-workflow:pr-grind https://github.com/o/r/pull/101" + dr.LANE_GRIND,
 )
+_, a = dr.step({"n": 1, "stage": "implementing"}, {**f1, "channel": "C1", "reviewer": "bob"}, {}, 1005)
+assert a == [("send", "/ai-workflow:pr-grind https://github.com/o/r/pull/101 --channel C1" + dr.LANE_GRIND)], a
 f3 = {"issue_open": True, "slack": False, "agent": "idle", "pr": pr(103, approved=True)}
 dr.tick(d, {K(3): f3}, run, merge, now=1006)
 assert d["lanes"][K(3)]["stage"] == "merge_gate"

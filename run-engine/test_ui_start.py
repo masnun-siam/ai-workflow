@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -85,10 +86,21 @@ assert ui_start.start("o/r", "implement-issue", "#4", snapshot=s, launch=L) == {
 refuses("implement-issue", "4", ui_start.Conflict)  # just started
 assert ui_start.start("o/r", "create-tasks", "docs/prds/a.md", launch=L)["session"] == "S2"
 assert L.bodies[1] == {"repo": "o/r", "text": "/create-tasks docs/prds/a.md"}
+refuses("pr-grind", "13", ValueError)  # no channel and no reviewer: the repo cannot grind
+with open(os.path.join(data, "ui_settings.json"), "w") as f:
+    json.dump(
+        {
+            "slack_channels": [{"id": "C0000000A", "name": "#rev"}],
+            "reviewers": [{"id": "r-0000000a", "name": "Sam", "slack_id": "U0000000A", "github_login": ""}],
+            "active_reviewers": ["r-0000000a"],
+            "repos": {"o/r": {"slack_channel": "C0000000A"}},
+        },
+        f,
+    )
 conflict = lambda b: (409, {"error": "pr-grind already running"})  # noqa: E731
 refuses("pr-grind", "12", ui_start.Conflict, launch=conflict)
-assert ui_start.start("o/r", "pr-grind", "13", launch=L, channel="C1")["session"] == "S3"
-assert L.bodies[2]["text"] == "/pr-grind 13 --channel C1"
+assert ui_start.start("o/r", "pr-grind", "13", launch=L)["session"] == "S3"
+assert L.bodies[2]["text"] == "/pr-grind 13 --channel C0000000A"
 assert ui_start.start("o/r", "refine-issues", "#7, 9  11", launch=L)["session"] == "S4"
 assert L.bodies[3]["text"] == "/refine-issues 7 9 11", "several issue numbers, normalised"
 refuses("refine-issues", "7 and 9", ValueError)

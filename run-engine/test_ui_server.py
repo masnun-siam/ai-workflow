@@ -482,6 +482,7 @@ try:
     ui_settings.save(
         {
             "slack_channels": [{"id": "C0123ABCD", "name": "#rev"}],
+            "reviewers": [{"name": "Sam", "slack_id": "U0000000A", "github_login": ""}],
             "repos": {"o/r": {"auto_grind": True, "slack_channel": "C0123ABCD"}},
         }
     )
@@ -494,6 +495,7 @@ try:
         ],
         open_prs=[_pr(30)],
     )
+    ui_settings.save({"active_reviewers": [ui_settings.reviewers()[0]["id"]]})
     _started.clear()
     ui_server.POLLER.poll("o/r")
     assert [e for e, _ in _notes] == ["pr-ready"], _notes

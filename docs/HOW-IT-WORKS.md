@@ -67,7 +67,7 @@ lanes (default 2) run at once; a lane starts only when every issue blocking it i
 followups are done. Each lane, in one session (a herdr tab or a headless session):
 
 1. `/implement-issue <n>` until the PR is Ready (CI green, `/pr-review` handled).
-2. `/pr-grind <pr>` in the same session, unless grinding is off or the repo has no Slack channel.
+2. `/pr-grind <pr>` in the same session, unless grinding is off or the repo has no Slack channel or reviewer.
    Simple ends on any approval, full on zero blocker and should-fix. Between rounds the engine types
    the next round into the lane when a review lands or the heartbeat is due.
 3. The merge gate: CI green on the head, an approving review, no changes requested, no unresolved review threads, the grind done. CI that reads `none` waits 5 minutes (`NONE_GRACE_SECONDS`, restarted by a new head commit) for checks to register, then a repo with no CI merges. A conflict with the

@@ -29,6 +29,7 @@
 
 ### Changed
 
+- **Grind start uses the resolver** (#842): auto-grind, the per-issue switch, the board's pr-grind start, dispatch lanes and the dispatch preview take the channel and the skip decision from `grind_reviewers.resolve`, so they agree with `/pr-grind`. A UI-started grind never passes `--reviewer`; a repo with no channel and no usable reviewer starts nothing (the switch and the board start answer 400 with the reason). The per-repo `reviewer` setting is gone.
 - **Reviewers carry over** (#840): the first load after the upgrade seeds the saved Slack channels and reviewers once from each repo's channel and old GitHub `reviewer` and from `channels.json`'s `channels`, `bot_uid` and `bot_label` (the bot is the only active reviewer), so grinds behave as before.
 - **Feature cost** (#762): the Feature page header shows the summed cost of the feature's sessions (a dash when none has one).
 - **Retry on load errors** (#760): the New dispatch preview error, the Features "Could not refresh" banner and the Start dialog's "Could not list" line get a Retry button.

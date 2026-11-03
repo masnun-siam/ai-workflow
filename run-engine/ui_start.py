@@ -17,6 +17,7 @@ import time
 
 import dispatch
 import dispatch_run
+import grind_reviewers
 import repo_skills
 import ui_delivery
 import ui_grind
@@ -99,7 +100,6 @@ def start(
     snapshot=None,
     sessions=None,
     launch=None,
-    channel=None,
     model=None,
     effort=None,
     issue=None,
@@ -143,7 +143,10 @@ def start(
         else:
             text = f"/{skill} {arg}"
             if skill == "pr-grind":
-                text = ui_grind.grind_text(arg, channel, ui_grind.reviewer_of(repo))
+                why = ui_grind.skip_reason(repo)
+                if why:
+                    raise ValueError(why)
+                text = ui_grind.grind_text(arg, grind_reviewers.resolve(repo)["channel"])
             status, body = (launch or ui_repos.start_session)(
                 {
                     "repo": repo,

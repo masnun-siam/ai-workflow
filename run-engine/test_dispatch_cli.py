@@ -195,13 +195,25 @@ assert "o/r#3: blocked by open x/y#9 outside the epic" in w
 assert "o/r: no local checkout registered (aiw ui -> Repositories)" in w
 assert "o/r: no Slack channel or reviewer, its lanes skip grinding" in w
 with open(os.path.join(data, "channels.json"), "w") as f:
-    json.dump({"channels": {"o/r": "C1"}}, f)
-assert dc.channel("o/r") == "" and dc.channel("o/web") is None
-assert dc.reviewer("o/web") is None, "no reviewer set"
-dc.ui_settings.save({"repos": {"o/web": {"reviewer": "copilot"}, "o/r": {"reviewer": "bob"}}})
-assert dc.reviewer("o/web") == "copilot", "no Slack channel: the reviewer"
-assert dc.reviewer("o/r") is None, "Slack wins"
-assert not [x for x in dc.preview(r, {"grind": "full"}, "herdr")["warnings"] if x.startswith("o/web: no Slack")]
+    json.dump({"channels": {"o/r": "C1"}, "bot_uid": "U0BOT0000"}, f)
+
+
+def grind_warnings():
+    return [x for x in dc.preview(r, {"grind": "full"}, "herdr")["warnings"] if "Slack" in x]
+
+
+gita = {"name": "Gita", "slack_id": "", "github_login": "gita"}
+dc.ui_settings.save({"reviewers": [gita], "active_reviewers": [], "repos": {"o/web": {}}})
+gid = dc.ui_settings.load()["reviewers"][-1]["id"]
+assert grind_warnings() == ["o/web: no Slack channel or reviewer, its lanes skip grinding"], "o/r: mapped, the bot"
+dc.ui_settings.save({"repos": {"o/web": {"reviewers": [gid]}}})
+assert grind_warnings() == [], "o/web: a reviewer with a login"
+with open(os.path.join(data, "ui_settings.json")) as f:
+    raw = json.load(f)
+raw["repos"]["o/web"]["slack_channel"] = "general"  # a stored value no longer in the list
+with open(os.path.join(data, "ui_settings.json"), "w") as f:
+    json.dump(raw, f)
+assert grind_warnings() == ["o/web: invalid Slack channel general, pick a channel in Settings"]
 w = dc.preview(r, {"grind": "off"}, "headless")["warnings"]
 assert not [x for x in w if "Slack" in x or "checkout" in x]
 print("  ok  preview")

@@ -923,7 +923,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         repo, issue, on = _registered(body.get("repo")), body.get("issue"), body.get("on")
         if type(issue) is not int or issue < 1 or type(on) is not bool:
             raise ValueError("issue must be an issue number and on must be true or false")
-        return ui_grind.set_issue(repo, issue, on, POLLER.snapshot(repo), ui_settings.repo_settings(repo))
+        return ui_grind.set_issue(repo, issue, on, POLLER.snapshot(repo))
 
     def _review_rounds(self, panel: str) -> None:
         body = self._read_body()
@@ -964,7 +964,6 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             claude_cmd=body.get("claude_cmd"),
             pin_account=body.get("pin_account") is True,
             snapshot=POLLER.snapshot(repo),
-            channel=ui_settings.repo_settings(repo)["slack_channel"],
         )
 
     @staticmethod
