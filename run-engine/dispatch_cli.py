@@ -278,7 +278,7 @@ def preview(r: dict, settings: dict, runner: str, gh=_gh) -> dict:
     for k in r.get("closed") or []:
         p["warnings"].append(f"{k}: closed, left out")
     for repo in repos:
-        if runner == "herdr" and repo.lower() not in checkouts:
+        if runner != "headless" and repo.lower() not in checkouts:
             p["warnings"].append(f"{repo}: no local checkout registered (aiw ui -> Repositories)")
         g = grind_reviewers.resolve(repo)
         if settings.get("grind", "full") != "off" and (g["skip"] or g["path"] is None):
@@ -369,8 +369,8 @@ def refuse_missing_base(children, s: dict, gh) -> None:
 
 def start(epic, runner: str, s: dict, workspace=None, gh=_gh, issues=None) -> dict:
     """Resolve the epic (or the picked issues), cut the feature branch if asked, record the dispatch. The UI server ticks it."""
-    if runner == "herdr" and not workspace:
-        raise ValueError("the herdr runner needs a workspace id (herdr pane current)")
+    if runner != "headless" and not workspace:
+        raise ValueError(f"the {runner} runner needs a workspace id (herdr pane current, or the Herdr app space id)")
     if issues:
         r = resolve_issues(issues, gh)
         if not r["children"]:
@@ -533,8 +533,8 @@ def register(sub, add) -> None:
 
     def flags(q):
         q.add_argument("epic", help="owner/repo#N, or N in the current checkout")
-        q.add_argument("--runner", choices=("herdr", "headless"), default="herdr")
-        q.add_argument("--workspace", help="herdr workspace id (herdr pane current)")
+        q.add_argument("--runner", choices=dr.RUNNERS, default="herdr")
+        q.add_argument("--workspace", help="herdr workspace id (herdr pane current), or the Herdr app space id")
         q.add_argument("--max", type=int, default=dr.DEFAULTS["max"])
         q.add_argument("--grind", choices=dr.GRIND_MODES, default=dr.DEFAULTS["grind"])
         q.add_argument("--ci", choices=dr.CI_MODES, default=dr.DEFAULTS["ci"])
