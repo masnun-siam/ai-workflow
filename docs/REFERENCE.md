@@ -439,6 +439,9 @@ skill does something else. To undo it, delete the copy.
   `/<name>` when the copy exists, else `/ai-workflow:<name>`. Only names under the plugin's
   `skills/` (folders with a `SKILL.md`) are rewritten.
 - The stored command shows which copy ran (`/implement-issue 12` or `/ai-workflow:implement-issue 12`).
+- For a Codex session, `codex_prompt(text, cwd)` inlines the copy `resolve` picked: `Base directory for this
+  skill: <folder>`, the `SKILL.md` body without frontmatter, then `ARGUMENTS: <args>`. Personal skills come
+  from the installed `ai-workflow-personal` plugin's `installPath`; anything else is `resolve`'s text.
 - The one exception is the vault's name suggestion (`claude -p` with no skill and no session record).
 
 **Hand-offs between skills** follow the guide's "Repo skills win" rule
