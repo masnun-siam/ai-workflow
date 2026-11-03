@@ -48,10 +48,10 @@ import subprocess  # noqa: E402
 import types  # noqa: E402
 
 
-def fake_gh(checks_proc):
+def fake_gh(checks_proc, mergeable="MERGEABLE"):
     def gh(args, **kw):
         if args[1] == "view":
-            return "abc", None
+            return {"headRefOid": "abc", "mergeable": mergeable}, None
         return None, checks_proc
 
     return gh
@@ -65,7 +65,13 @@ ci.gh_json = fake_gh(subprocess.CompletedProcess([], 1, "", "no checks reported 
 assert ci.snapshot("o", "r", 1)["state"] == "green"
 ci.gh_json = fake_gh(subprocess.CompletedProcess([], 8, '[{"name":"a","bucket":"fail","link":""}]', ""))
 assert ci.snapshot("o", "r", 1)["state"] == "red"
-ok("snapshot: gh failure is error, no checks is green, nonzero exit with JSON is read")
+no_checks = subprocess.CompletedProcess([], 1, "", "no checks reported on the branch")
+ci.gh_json = fake_gh(no_checks, mergeable="CONFLICTING")
+snap = ci.snapshot("o", "r", 1)
+assert snap["state"] == "conflict" and snap["head_sha"] == "abc", snap
+ci.gh_json = fake_gh(no_checks, mergeable="UNKNOWN")
+assert ci.snapshot("o", "r", 1)["state"] == "green"
+ok("snapshot: gh failure is error, no checks is green, nonzero exit with JSON is read, conflicting is conflict")
 
 seq = iter([{"state": "error", "failing": []}, {"state": "green", "failing": []}])
 calls = []

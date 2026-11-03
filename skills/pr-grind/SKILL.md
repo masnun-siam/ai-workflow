@@ -212,7 +212,10 @@ closes without a recheck (`queued-push: ... — then close` if CI is not green, 
 approval nor findings. When it is the round's only review, it is not a round: record it as seen (advance the round baseline), fix and post nothing, and go to
 Step 7's re-arm with no re-trigger. It never closes a deep grind.
 
-Then post the closing summary yourself: one thread reply @-mentioning `owner_uid` with
+Then, before the closing summary, run Step 5's push-gate base check at the current head. If it
+merges, push through that gate as a closing-round push (no recheck; `then close` if queued) and
+post the summary only once the push is verified (Step 6).
+Post the closing summary yourself: one thread reply @-mentioning `owner_uid` with
 round count, what was fixed across the run, the PR URL, and "ready for human merge —
 merging stays manual". **Never mention the bot** (no `<@bot_uid>`, no `recheck`, no
 mention of the bot's display name): it can restart a cycle. Expect a harmless bot reply anyway; keep
@@ -304,9 +307,15 @@ the branch rather than checking it out elsewhere. Edit **only files in the PR's 
    (what changed and the SHA, or the rebuttal), then
    `aiw threads list <pr> --for-comment <id>` for the node id and `aiw threads resolve <node_id>`.
    If a write is blocked by the harness, note it in the state file and Slack summary and continue.
-5. **Push gate** — `aiw ci status <pr>`. Not green (red, pending *or* error) at the current head →
-   don't push; record `queued-push: <sha>... — round <n> — then retrigger` (or `then close`
-   on a nit-only round). Green → `git push`.
+5. **Push gate** — first sync with the base: `git fetch origin`; if `git merge-base --is-ancestor
+   origin/<base> HEAD` fails or `gh pr view <pr> --json mergeable` says `CONFLICTING`, run
+   `git merge origin/<base>` in the PR worktree (`<base>` from the header's `base:`). Resolve a
+   conflict only when the resolution is clear from both sides; otherwise `git merge --abort` and go
+   to Step 8 listing the conflicting files. Verify the merge commit as item 2 says. A sync is not a
+   review round and doesn't count against the cap. Then `aiw ci status <pr>`. Not green (red,
+   pending *or* error) at the current head → don't push; record `queued-push: <sha>... — round <n> —
+   then retrigger` (or `then close` on a nit-only round). Green, or `conflict` that the sync just
+   resolved → `git push`.
 
 ## Step 6 — Verify the push
 
@@ -368,7 +377,7 @@ Every round re-enters as a fresh session (headless, or a wake): read the state f
 - `queued-push:` → check rails 3 and 4 (either → Step 8, naming the queued SHAs), else Step 6's
   flush, then continue at the line's `then` (`retrigger` → Step 7, `close` → Step 2's close).
   Meanwhile treat a newly seen review like Step 1's "none".
-- Else `aiw ci status <pr>`; not green → rail 2 directly (this breaks the wake-forever loop
+- Else `aiw ci status <pr>`; `conflict` → Step 5's push gate (sync, verify, push) first; other not green → rail 2 directly (this breaks the wake-forever loop
   when nothing was queued). Otherwise Step 1.
 
 ## Rules
