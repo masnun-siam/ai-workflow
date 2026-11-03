@@ -56,7 +56,12 @@ def _install(rec: list, save) -> list:
             out.append(f"removed {name}")
         elif os.readlink(p) != target:
             os.unlink(p)
-            os.symlink(target, p)
+            try:
+                os.symlink(target, p)
+            except OSError:
+                rec.remove(p)  # the old link is gone: keep the record matching the disk
+                save()
+                raise
             out.append(f"repointed {name}")
         else:
             out.append(f"unchanged {name}")

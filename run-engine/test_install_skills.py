@@ -208,6 +208,29 @@ on_disk = sorted(link(n) for n in os.listdir(LINKS) if os.path.islink(link(n)))
 ok("partial: exit 1", code == 1, code)
 ok("partial: record == disk", rec() == on_disk and len(on_disk) == 2, (rec(), on_disk))
 
+# 10b. a repoint that fails after the unlink drops the path from the record
+reset()
+plugin("a", "b")
+run()
+plugin("a", "b")
+
+
+def broken(src, dst):
+    raise OSError("disk full")
+
+
+os.symlink = broken
+try:
+    run()
+    raised = False
+except OSError:
+    raised = True
+finally:
+    os.symlink = real_symlink
+on_disk = sorted(link(n) for n in os.listdir(LINKS) if os.path.islink(link(n)))
+ok("partial repoint: raises", raised)
+ok("partial repoint: record == disk", rec() == on_disk, (rec(), on_disk))
+
 # 11. a user-repointed recorded symlink is repointed back
 reset()
 p = plugin("a")
