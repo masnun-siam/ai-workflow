@@ -129,6 +129,10 @@ assert argv == [*want, CONTINUE], argv
 sid = record("/implement-issue 5", run_model="opus", run_effort="high", status="limited")
 argv = spawned(ui_runner.resume_stopped, sid)
 assert argv == ["claude", *BASE, *GATE, "--model", "opus", "--effort", "high", "/ai-workflow:implement-issue 5"], argv
+lens_tools = away_answerer.allowed_tools("peer-reviewer")
+sid = record("/implement-issue 10", allowed_tools=lens_tools, status="limited")  # a lens limited before its session
+argv = spawned(ui_runner.resume_stopped, sid)
+assert argv == ["claude", *RESTRICTED, "--allowedTools", LENS_TOOLS, *GATE, "/ai-workflow:implement-issue 10"], argv
 ok("Continue: --resume, and a fresh start when limited before any session")
 
 # ---- 4. batch start (_start_claimed) ----------------------------------------------------------
