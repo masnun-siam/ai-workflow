@@ -96,6 +96,7 @@ function Usage() {
         const limited = !!until && until * 1000 > Date.now();
         const five = limited ? 100 : Math.round(u?.five_hour?.pct ?? 0);
         const seven = Math.round(u?.seven_day?.pct ?? 0);
+        const noNumbers = !!u?.error && !u.five_hour && !limited; // e.g. Codex: no plan usage, so no 0% meter
         return (
           <div key={cmd} className="stack" style={{ gap: 4 }}>
             <div className="row" style={{ fontSize: 12 }}>
@@ -108,9 +109,11 @@ function Usage() {
                 <span className="faint">5h {five}% · 7d {seven}%</span>
               )}
             </div>
-            <div className={`meter ${five >= 100 ? 'full' : five >= 80 ? 'hot' : ''}`} role="img" aria-label={`${label} 5-hour usage ${five}%`}>
-              <span style={{ width: `${Math.min(100, five)}%` }} />
-            </div>
+            {noNumbers ? null : (
+              <div className={`meter ${five >= 100 ? 'full' : five >= 80 ? 'hot' : ''}`} role="img" aria-label={`${label} 5-hour usage ${five}%`}>
+                <span style={{ width: `${Math.min(100, five)}%` }} />
+              </div>
+            )}
           </div>
         );
       })}
