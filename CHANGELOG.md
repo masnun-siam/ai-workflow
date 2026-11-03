@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Repo Reviewers column** (#849): Settings → Repositories shows each repo's reviewers, **Default** (the active names) or its override as chips, and a popover of reviewer ticks plus **Use default** sets or clears the override. Entries the repo's path can't use are dimmed with a hint.
 - **Reviewers** (#848): Settings gets a **Reviewers** section (`#/settings/reviewers`) to add, rename and delete saved grind reviewers (name, Slack id, GitHub login, validated inline), with an **Active** tick per entry that swaps who reviews. Delete asks first and names where the entry is used; with no active reviewer the section shows a warning.
 - **Saved Slack channels** (#838): a validated `slack_channels` list (`[{id, name}]`, at most 50) in `ui_settings.json` and `GET`/`PUT /api/settings`; a repo's `slack_channel` must be a listed id, `""` or its unchanged stored value, a picked channel can't be dropped, and `GET` marks each repo `channel_invalid`.
 - **Local review loop** (#846): with Local review set to Loop, `/implement-issue` step 12 re-runs a full `/pr-review` of the branch until a round finds nothing new, fixing or answering every finding of every severity, then runs the checks once and pushes once. A findings log in the worktree's git directory lets an interrupted run resume; the PR body states `Local review: loop, N rounds`. Single mode is unchanged.
