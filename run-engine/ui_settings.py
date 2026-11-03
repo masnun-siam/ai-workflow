@@ -14,7 +14,6 @@ import re
 import secrets
 import shlex
 import shutil
-import subprocess
 
 import dispatch
 import repo_skills
@@ -610,16 +609,14 @@ def models_of(cmd: str) -> list:
 
 
 def check_login(cmd: str) -> dict:
-    """Run `<cmd> auth status --json`; {"ok": bool, "message": str}. Never raises."""
+    """The account's harness checks its login; {"ok": bool, "message": str}. Never raises."""
+    import harness  # noqa: PLC0415 - harness imports this module
+
     try:
-        p = subprocess.run([*argv(cmd), "auth", "status", "--json"], capture_output=True, text=True, timeout=30)
-        status = json.loads(p.stdout)
-    except (ValueError, subprocess.TimeoutExpired, OSError) as e:
-        return {"ok": False, "message": f"auth status check failed: {e}"}
-    if not isinstance(status, dict) or status.get("loggedIn") is not True:
-        return {"ok": False, "message": "not logged in"}
-    who = status.get("email") or status.get("account") or ""
-    return {"ok": True, "message": f"logged in {who}".strip()}
+        ad = harness.for_cmd(cmd)
+    except ValueError as e:  # a harness with no adapter yet (codex before #878)
+        return {"ok": False, "message": str(e)}
+    return ad.check_login(cmd)
 
 
 def config_dir(cmd: str) -> str:

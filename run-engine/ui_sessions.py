@@ -78,7 +78,7 @@ def is_answerer(rec: dict) -> bool:
     return rec.get("role") == ANSWERER_ROLE
 
 
-def create(command: str, repo: str, link=None, claude_cmd=None) -> dict:
+def create(command: str, repo: str, link=None, claude_cmd=None, harness=None) -> dict:
     os.makedirs(sessions_dir(), exist_ok=True)
     while True:
         now = datetime.now(timezone.utc)
@@ -104,6 +104,8 @@ def create(command: str, repo: str, link=None, claude_cmd=None) -> dict:
         "pending_question": None,
         "claude_cmd": claude_cmd,
     }
+    if harness:  # absent on old records, read as claude (harness.for_record)
+        record["harness"] = harness
     _atomic_write_json(os.path.join(session_dir(sid), "meta.json"), record)
     return record
 

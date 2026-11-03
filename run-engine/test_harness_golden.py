@@ -254,8 +254,8 @@ bypass = {
     "model": {"model": "opus"},
     "env_extra": {"env_extra": {"AIW_HEADLESS": "1"}},
     "pass_fds": {"pass_fds": [0]},
-    "re-entry extra_args": {"extra_args": ["--append-system-prompt", REENTRY]},
-    "dispatch effort extra_args": {"extra_args": ["--effort", "high"]},
+    "re-entry instructions": {"instructions": [REENTRY]},
+    "dispatch direct_effort": {"direct_effort": "high"},
 }
 queued = {"plain": {}, "run_model/effort": {"run_model": "opus", "effort": "high"}}
 with mock.patch.object(ui_runner, "limits", return_value={"cc-x": {"limited_until": 4102444800}}):
@@ -266,7 +266,7 @@ with mock.patch.object(ui_runner, "limits", return_value={"cc-x": {"limited_unti
             assert sp.call_count == 1, label
         else:
             assert sp.call_count == 0 and rec["status"] == "limited", (label, rec)
-ok("limit queue: agent/model/env_extra/pass_fds/extra_args bypass it, run model/effort alone does not")
+ok("limit queue: agent/model/env_extra/pass_fds/instructions/direct_effort bypass it, run model/effort alone does not")
 
 preflight.stop()
 print(f"\n{passed} checks passed")
