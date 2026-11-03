@@ -555,6 +555,12 @@ assert [c["harness"] for c in ui_settings.load()["commands"]] == ["claude"] * 3
 ui_settings.save({"repos": {"o/a": {"slack_channel": ""}}})
 assert [c["label"] for c in stored_accounts()] == ["A", "B"]
 assert error(ui_settings.save, {"commands": ui_settings.load()["commands"]}) == U
+# hand-edited junk in a stored Codex models list is dropped on load, so a partial save still validates
+with open(ui_settings._path(), "w") as f:
+    junk = ["ok-1", "", 5, "-x", *[f"m{i}" for i in range(25)]]
+    json.dump({"commands": [{"label": "C", "cmd": "codex", "harness": "codex", "models": junk}]}, f)
+assert ui_settings.load()["commands"][1]["models"] == ["ok-1", *[f"m{i}" for i in range(19)]]
+assert error(ui_settings.save, {"repos": {"o/a": {"slack_channel": ""}}}) is None
 # harness_of / models_of
 ui_settings.save({"commands": [CODEX, {"label": "Main", "cmd": "cc main"}]})
 assert ui_settings.harness_of("codex") == "codex" and ui_settings.models_of("codex") == ["gpt-5-codex"]
@@ -563,4 +569,4 @@ assert ui_settings.harness_of("claude") == "claude" and ui_settings.models_of("c
 assert ui_settings.harness_of("nope") == "claude" and ui_settings.models_of("nope") == []
 # run_model / run_effort stay on the Claude lists
 assert raises(ui_settings.validate, {"run_model": "gpt-5"}) and raises(ui_settings.validate, {"run_effort": "minimal"})
-print("ui_settings: 156 checks passed")
+print("ui_settings: 158 checks passed")
