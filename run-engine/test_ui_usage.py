@@ -74,6 +74,7 @@ with mock.patch.object(u.ui_settings, "load", return_value={"commands": ACCOUNTS
     u._cache.clear()
     u._next.clear()
     u._cache["codex"] = {**good, "at": 1.0, "error": None}  # numbers from before a switch to Codex
+    u._next["codex"] = 1e9  # and its pending poll, which a switch back must not wait for
     u.refresh(now=1000.0)
     snap = u.snapshot()
     assert calls == ["claude"] and snap["codex"] == NA and snap["claude"]["five_hour"]["pct"] == 7
