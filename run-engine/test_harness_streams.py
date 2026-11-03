@@ -211,7 +211,10 @@ r = ui_sessions.load(sid)
 assert r["status"] == "limited" and r["limit_resets_at"] == 1900000000 and r["limit_type"] == "five_hour", r
 assert r["error"] == "No conversation found with id x" and r["auto_resume"] is True, r
 assert ui_runner._usage[r.get("claude_cmd") or "claude"] == INFO
-ok("_follow (claude): same record as before; errors[0] wins; rate limit -> limited")
+sid = session([j(INIT), j({**RL, "rate_limit_info": warn_info}), j(RES)], harness_id="claude")
+ui_runner._follow(sid, DoneProc(), None, None, 0)
+assert ui_sessions.load(sid)["status"] == "done"
+ok("_follow (claude): same record as before; errors[0] wins; rejected limit -> limited, warning does not")
 
 # ------------------------------------------------------------------ transcript endpoint
 srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, ())
@@ -256,7 +259,10 @@ assert ui_panel.final_text(session([j(ASSIST)], harness_id="claude")) == "hi"
 with claude_guard:
     assert ui_panel.final_text(session(["T first", "R 0.1 1 1", "T later"])) == "stub result"
     assert ui_panel.final_text(session(["T first", "T Verdict: approve"])) == "Verdict: approve"
-ok("final_text: last result text else last text, through the session's adapter")
+orphan = session([j(ASSIST), j(RES)], harness_id="claude")
+os.remove(os.path.join(ui_sessions.session_dir(orphan), "meta.json"))
+assert ui_sessions.load(orphan) is None and ui_panel.final_text(orphan) == "done"
+ok("final_text: last result text else last text, through the session's adapter; no record -> claude")
 
 # ------------------------------------------------------------------ last_tokens / _with_tokens
 two = {**RES, "usage": {"input_tokens": 1, "output_tokens": 1}}
