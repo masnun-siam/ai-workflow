@@ -497,7 +497,8 @@ def stored_accounts():
 
 
 os.remove(ui_settings._path())
-assert ui_settings.load()["harnesses"] == HARNESSES
+ui_settings.load()["harnesses"][0]["models"].append("x")
+assert ui_settings.load()["harnesses"] == HARNESSES, "a caller cannot change the constant"
 # an old account (no harness) and an unknown harness both load as claude, nothing else changes
 with open(ui_settings._path(), "w") as f:
     json.dump(

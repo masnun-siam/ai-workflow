@@ -7,6 +7,7 @@ interactive-shell alias, so a leading `cc` is rewritten to the `cc-profile` scri
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
@@ -408,7 +409,7 @@ def load(persist: bool = True) -> dict:
         "personal_plugin": repo_skills.personal_plugin_installed(),  # read-only, like jev_installed
         "run_model": run_model(),
         "run_effort": run_effort(),
-        "harnesses": HARNESSES,  # read-only: validate() never stores it
+        "harnesses": copy.deepcopy(HARNESSES),  # read-only: validate() never stores it
     }
 
 
