@@ -543,9 +543,12 @@ def owner_of(k: str):
     return None
 
 
+RUNNERS = ("herdr", "herdr-app", "headless")
+
+
 def create(epic, runner: str, settings: dict, children: list, workspace=None, title: str = "", issues=None) -> dict:
-    if runner not in ("herdr", "headless"):
-        raise ValueError("runner must be herdr or headless")
+    if runner not in RUNNERS:
+        raise ValueError("runner must be herdr, herdr-app or headless")
     s = check_settings({**DEFAULTS, **(settings or {})})
     if issues:
         _no_feature_branch(s)
