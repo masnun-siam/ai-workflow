@@ -87,6 +87,8 @@ settings({"o/g": {"reviewers": ["r-0000000c"]}, "o/e": {"reviewers": []}, "o/n":
 assert gr.resolve("o/g")["logins"] == ["gita"]
 assert gr.resolve("o/e") == {**EMPTY, "skip": FR8}
 assert gr.resolve("o/n")["logins"] == ["blubird", "gita"]
+settings({"o/g": {"reviewers": ["r-0000000c", "r-0000000a"]}})
+assert gr.resolve("o/g")["logins"] == ["blubird", "gita"]  # Reviewers-list order, not override order
 print("  ok  repo override")
 
 # --- slack path, login-only reviewer: bot_uid keeps it grinding, none skips
