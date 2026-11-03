@@ -31,6 +31,8 @@ Paths below starting `../../` are relative to this skill's folder, at the plugin
 
    Note what CI does that cannot be reproduced locally (remote caches, separate secret-scan actions, checks on the PR body) and report it under the differences from CI.
 
+   When a push hook runs the full test suite, run only the tests for the changed code here, not the full suite: a manual full run only doubles the wait. When a targeted run or the push hook fails, re-run only the failing tests. If the repo's test script can run its static and generated-artifact checks with the tests turned off, as separate CI jobs often do, run them that way.
+
 4. **Run the checks.** Run every row that applies; do not stop at the first failure.
 
    Traps to know:
@@ -41,7 +43,7 @@ Paths below starting `../../` are relative to this skill's folder, at the plugin
    - A Docker test image can hold stale source after local edits. If a result does not match the code, rebuild the image before trusting it.
    - A shallow clone can break checks that diff against `origin/<base>`; fix with `git fetch --unshallow origin`.
    - Parallel sessions: test runs isolated per worktree (their own containers or compose project) can run at once and only compete for CPU and memory (a suite that runs in parallel uses every CPU, so concurrent runs slow each other down). A dev stack is not shared safely: use one of your own if the repo supports it, never the default stack or another session's.
-   - If the repo runs tests in parallel locally but serially in CI, a test that fails in only one of the two modes is a real bug (shared state or order dependence), not flakiness to retry; re-run in the other mode to tell which.
+   - If the repo runs tests in parallel (locally, in CI or both), a test that fails only in parallel or only serially is a real bug (shared state or order dependence), not flakiness to retry; re-run in the other mode to tell which.
    - Run the frontend checks on the runtime version CI uses. A newer Node, for example, can shadow jsdom's `localStorage` and fail every test that touches a persisted store; put the CI version first on `PATH` for the tests and the commit hooks.
    - Processes you start for a check (a second server, a listener, a fake tree): record their PIDs (`$!`, `pgrep -P`) and stop only those, after checking each one's command. Never kill a computed PID list unchecked, never PID 0, never `pkill` by name; other sessions run on the same machine.
    - A fresh worktree has no installed dependencies: install them first (`/implement-issue` step 3), or hooks and tests fail with missing-file or missing-module errors that have nothing to do with the change.

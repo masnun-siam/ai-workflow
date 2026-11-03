@@ -115,8 +115,12 @@ Plugin-only lines inside ported files (keep them; they are not upstream drift):
 
 - **Review before push** (`/implement-issue` steps 12 to 14, from Wasensi 637579d4): the `pr-body.yml` checks and the `PR base - CI ran against this base` check are dropped; "a body edit runs light checks, a base change needs a push" is kept hedged with "may".
 - **Local review loop** (keep): `/implement-issue` step 12's `aiw local-review` paragraph, and the Loop-mode sentences in steps 13 and 16. Single mode is the imported text, unchanged; the paragraph, the findings log and the marker line are plugin-only. `run-engine/test_local_review_text.py` checks them.
-- **Parallel local tests**: `PEST_PARALLEL=1` in the verifier's commands and the push-hook "Feature runs in parallel" note are dropped; the idea "a test failing in only one of local-parallel and CI-serial is a real bug" is kept hedged ("if the repo runs tests in parallel locally").
+- **Parallel local tests**: `PEST_PARALLEL=1` in the verifier's commands and the push-hook "Feature runs in parallel" note are dropped; the idea "a test failing only in parallel or only serially is a real bug" is kept hedged ("if the repo runs tests in parallel, locally, in CI or both").
 - **Node 24 / jsdom `localStorage`**: becomes "run the frontend checks on the runtime version CI uses", with the newer-Node `localStorage` example.
+- **PRD pull request on approval** (`/create-prd` step 7, from Wasensi b33ce7e4): ported with `origin/<base>`; the branch `issue-<epic>-<slug>-prd` and commit `docs(#<epic>): add <title> PRD` are kept.
+- **Full suite left to the push hook** (Wasensi #1213): `PEST_FEATURE_FILES`, `RUN_PEST=0`, Scribe and the Docker static phase are dropped; the idea is hedged "when a push hook runs the full test suite", and "run static and generated-artifact checks with the tests turned off" is hedged "if the repo's test script can".
+- **Ready before CI** (Wasensi #986, where CI runs only on ready PRs): hedged by repo in `/implement-issue` step 14 and `/pr-review` step 7: before CI when a draft gets no CI checks, else after green CI. The plugin-only freshness check (`merge-base --is-ancestor`, not `CONFLICTING`) stays at the end of step 14.
+- **Wasensi CI layout** in the guide's Gates rows (Gate 2/3 side by side, `ci-deps`, Harbor, `PEST_SHARDS`, coverage gate, junit merge) is dropped; the plugin's Gates section is discovery-based.
 - **Symlinked `node_modules`**: "run tools through `./node_modules/.bin/`, not `npx`" is kept as "directly from their bin folder, not through a package runner".
 
 ## Leak scan

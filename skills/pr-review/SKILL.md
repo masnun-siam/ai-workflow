@@ -42,7 +42,7 @@ For a session that addresses the feedback already on a pull request: every unres
 4. **Fix** what holds, following `/implement-issue` steps 4 to 11: impact analysis, the fix, tests that fail without it, docs, `/verifier-locally` (see "Repo skills win"), the running app where a user can see it, small commits.
 5. **Review again, push, get CI green.** `/implement-issue` steps 12 to 14: a re-review of the new commits on the local branch with this skill (review mode) and fixes for its Critical and Major findings, then the latest `origin/<base>` merged in, one push, and green CI with the new tests seen passing.
 6. **Reply to every comment** only after the fix is pushed and CI is green: what changed and in which commit, or why not with the evidence.
-7. **Mark it ready** if it is a draft (`gh pr ready <pr>`) and move the issue to In review, as `/implement-issue` step 14 says. Never merge it.
+7. **Mark it ready** if it is still a draft (`gh pr ready <pr>`) and move the issue to In review, in the order `/implement-issue` step 14 gives: before CI in a repo whose drafts get no CI, after green CI otherwise. Never merge it.
 8. **Log learnings and report** as `/implement-issue` steps 15 and 16 say, including the 50-minute rule, plus each comment and what was done with it.
 
 ## Stop and ask when

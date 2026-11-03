@@ -1,6 +1,6 @@
 ---
 name: create-prd
-description: Turn a feature idea into a product requirements document, with its technical design, every decision settled by interviewing the user, and on approval one GitHub epic per PRD. Use when asked to write, draft, update or approve a PRD, or to spec a feature before it is broken into tasks and issues.
+description: Turn a feature idea into a product requirements document, with its technical design, every decision settled by interviewing the user, and on approval one GitHub epic per PRD and a pull request that adds the PRD. Use when asked to write, draft, update or approve a PRD, or to spec a feature before it is broken into tasks and issues.
 ---
 
 # Create a PRD
@@ -51,8 +51,9 @@ Paths below starting `../../` are relative to this skill's folder, at the plugin
    - Draft one epic issue per entry under "Epics" from `../../templates/epic.md`, and find the GitHub project by the rule in the guide.
    - Show the user each epic's title, labels and project, and ask with `AskUserQuestion` whether to create them. Create nothing without an explicit yes.
    - Run `gh label create "prd-<slug>" --force` once, then create them with `gh issue create`, then write each number into the PRD's "Epics" section.
+   - Open the PRD's pull request, so the approved PRD reaches the base branch with its epic, not after the feature ships. Ask about it in the same question as the epics. If a review pull request for it is open, push the approved version there; otherwise branch from the latest `origin/<base>` as `issue-<epic>-<slug>-prd`, commit only the PRD as `docs(#<epic>): add <title> PRD`, push, and open a pull request into the base branch with `Refs #<epic>` (not `Closes`: the epic stays open). Never merge it.
 
-8. **Hand off.** State the next stage: `/create-tasks` splits the PRD into parallel tasks and creates them as sub-issues of the epic with their dependencies, then `/refine-issues` fills each one (see "Repo skills win"). Do not start it unless asked.
+8. **Hand off.** State the next stage: `/create-tasks` splits the PRD into parallel tasks and creates them as sub-issues of the epic with their dependencies, then `/refine-issues` fills each one (see "Repo skills win"). Give the PRD pull request link. Do not start it unless asked.
 
 ## Changing an approved PRD
 
