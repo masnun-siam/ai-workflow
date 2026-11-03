@@ -23,6 +23,8 @@ DEFAULT_VAULT = os.path.join("~", "Documents", "notes")  # the `notes` vault /du
 MAX_COMMANDS = 20
 SLUG_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 REVIEWER_RE = re.compile(r"^[A-Za-z0-9-]{1,39}$")  # a GitHub login, or copilot
+CHANNEL_RE = re.compile(r"^[CGD][A-Z0-9]{8,12}$")  # a Slack channel id
+MAX_LISTED = 50  # entries in a saved list (Slack channels, reviewers)
 GRIND_MODES = ("deep", "simple")  # simple: /pr-grind stops once the PR is approved
 REVIEW_MODES = ("single", "loop")  # loop: /implement-issue re-reviews until a round finds nothing new
 RUN_MODELS = ("opus", "sonnet", "haiku")  # aliases: they resolve to the latest model
@@ -52,6 +54,42 @@ def review_mode() -> str:
     """single (the default) or loop, for /implement-issue's local review (`aiw local-review`)."""
     m = _stored().get("review_mode")
     return m if m in REVIEW_MODES else "single"
+
+
+def slack_channels() -> list:
+    """The saved Slack channels list, [{id, name}]; malformed stored entries are skipped."""
+    raw = _stored().get("slack_channels")
+    return [
+        {"id": c["id"], "name": c["name"]}
+        for c in (raw if isinstance(raw, list) else [])
+        if isinstance(c, dict)
+        and isinstance(c.get("id"), str)
+        and CHANNEL_RE.match(c["id"])
+        and isinstance(c.get("name"), str)
+    ]
+
+
+def _clean_channels(chans) -> list:
+    """Validate a sent slack_channels list; ValueError on the first bad entry."""
+    if not isinstance(chans, list):
+        raise ValueError("slack_channels must be a list")
+    if len(chans) > MAX_LISTED:
+        raise ValueError(f"at most {MAX_LISTED}")
+    out, seen = [], set()
+    for c in chans:
+        cid = c.get("id") if isinstance(c, dict) else None
+        cid = cid.strip() if isinstance(cid, str) else ""
+        if not CHANNEL_RE.match(cid):
+            raise ValueError("channel id must look like C0123ABCD")
+        name = c.get("name")
+        name = name.strip() if isinstance(name, str) else ""
+        if not 1 <= len(name) <= 60:
+            raise ValueError("channel name must be 1 to 60 characters")
+        if cid in seen:
+            raise ValueError(f"channel {cid} is already listed")
+        seen.add(cid)
+        out.append({"id": cid, "name": name})
+    return out
 
 
 def use_jev() -> bool:
@@ -173,10 +211,15 @@ def load() -> dict:
         and c["label"] != alias
     ]
     default = data.get("default")
+    listed = {c["id"] for c in slack_channels()}
+    repos = {k: _repo(stored_repos.get(k)) for k in slugs}
+    for r in repos.values():  # read-only: validate() never stores it
+        r["channel_invalid"] = bool(r["slack_channel"]) and r["slack_channel"] not in listed
     return {
         "commands": cmds,
         "default": default if any(c["label"] == default for c in cmds) else alias,
-        "repos": {k: _repo(stored_repos.get(k)) for k in slugs},
+        "repos": repos,
+        "slack_channels": slack_channels(),
         "vault_dir": vault_dir(),
         "grind_mode": grind_mode(),
         "review_mode": review_mode(),
@@ -259,6 +302,9 @@ def validate(body) -> dict:
         raise ValueError("use_jev must be true or false")
     run_m, run_e = body.get("run_model", run_model()), body.get("run_effort", run_effort())
     check_run(run_m, run_e)
+    old_ids = {c["id"] for c in slack_channels()}
+    chans = _clean_channels(body.get("slack_channels", slack_channels()))  # a save that omits it keeps the stored one
+    ids = {c["id"] for c in chans}
     stored = _migrate(_stored())
     sent = body.get("repos", {})
     if not isinstance(sent, dict):
@@ -280,9 +326,15 @@ def validate(body) -> dict:
         rv = r.get("reviewer", (kept.get(slug) or {}).get("reviewer", ""))  # the UI form omits it: keep the stored one
         if not isinstance(rv, str) or (rv.strip() and not REVIEWER_RE.match(rv.strip())):
             raise ValueError("reviewer must be a GitHub login or copilot")
+        ch = ch.strip()
+        if ch and ch not in ids:
+            if ch in old_ids:
+                raise ValueError(f"channel {ch} is used by {slug}")
+            if ch != (kept.get(slug) or {}).get("slack_channel"):  # an unchanged legacy value stays
+                raise ValueError(f"slack_channel {ch} is not a listed channel")
         clean_repos[slug] = {
             "auto_grind": r.get("auto_grind") is True,
-            "slack_channel": ch.strip(),
+            "slack_channel": ch,
             "reviewer": rv.strip(),
         }
     return {
@@ -290,6 +342,7 @@ def validate(body) -> dict:
         "commands": cmds,
         "default": None if default == alias else default,
         "repos": clean_repos,
+        "slack_channels": chans,
         "vault_dir": vault,
         "grind_mode": mode,
         "review_mode": rmode,
