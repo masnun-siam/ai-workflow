@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Saved reviewers** (#839): a validated `reviewers` list (`[{id, name, slack_id, github_login}]`, at most 50, server-generated `r-<8 hex>` ids that survive renames), a global `active_reviewers` and a per-repo `reviewers` override (`null` follows the active set) in `ui_settings.json` and `GET`/`PUT /api/settings`. Unknown ids are 400, and removing a reviewer drops its id from the active set and every override.
 - **Saved Slack channels** (#838): a validated `slack_channels` list (`[{id, name}]`, at most 50) in `ui_settings.json` and `GET`/`PUT /api/settings`; a repo's `slack_channel` must be a listed id, `""` or its unchanged stored value, a picked channel can't be dropped, and `GET` marks each repo `channel_invalid`.
 - **Local review loop** (#846): with Local review set to Loop, `/implement-issue` step 12 re-runs a full `/pr-review` of the branch until a round finds nothing new, fixing or answering every finding of every severity, then runs the checks once and pushes once. A findings log in the worktree's git directory lets an interrupted run resume; the PR body states `Local review: loop, N rounds`. Single mode is unchanged.
 - **Slack channels** (#847): Settings gets a **Slack channels** section (`#/settings/channels`) to add, rename and delete saved channels (name and id, validated inline), and each repo's Slack channel is now a select over that list plus None. A legacy value that is not a channel id shows a red **invalid** chip until another channel is picked.
