@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Slack channels** (#847): Settings gets a **Slack channels** section (`#/settings/channels`) to add, rename and delete saved channels (name and id, validated inline), and each repo's Slack channel is now a select over that list plus None. A legacy value that is not a channel id shows a red **invalid** chip until another channel is picked.
 - **Personal plugin commands** (#766): `dump`, `worklog` and `sync-from-wasensi` are listed in the Start dialog and palette only when `ai-workflow-personal` is installed (`personal_plugin` in `GET /api/settings`), and run as `/ai-workflow-personal:<name>`.
 - **Dismiss a failed session** (#765): a `session_failed` Inbox item has a Dismiss button (`x`) that removes it for good (`POST /api/sessions/<id>/dismiss`: 409 unless the session failed, 404 unknown); the session stays on Activity.
 - **Answer the first waiting question** (#764): a palette action, listed from any page while a session waits on you, that opens the oldest such session.
