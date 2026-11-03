@@ -21,6 +21,7 @@ URL = "https://api.anthropic.com/api/oauth/usage"
 POLL = 300.0  # seconds between refreshes of one account
 RETRY = 900.0  # after a failure
 ACTIVE = 120.0  # only poll while a UI client asked within this window
+NOT_CODEX_USAGE = "not available for Codex"
 
 _cache: dict = {}  # cmd -> {"five_hour", "seven_day", "at", "error"}
 _next: dict = {}  # cmd -> earliest next fetch
@@ -71,6 +72,11 @@ def refresh(now: float | None = None) -> None:
     now = now or time.time()
     for c in ui_settings.load()["commands"]:
         cmd = c["cmd"]
+        if c.get("harness", "claude") == "codex":  # no Claude login to read; replace, so pre-switch numbers go
+            with _lock:
+                _cache[cmd] = {"error": NOT_CODEX_USAGE, "at": None}
+                _next.pop(cmd, None)
+            continue
         if _next.get(cmd, 0) > now:
             continue
         res = fetch(cmd, now)
