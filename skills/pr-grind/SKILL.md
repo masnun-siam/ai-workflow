@@ -38,30 +38,89 @@ Header keys (lines above the first `## Round <n>`; names are pinned for the aiw 
 - `next-poll: <ISO8601>` — next headless re-entry (round end + 1500s).
 - `done: <ISO8601> — <reason>` — terminal; never restarted.
 - `poll-since:`, `ci-seen: <sha> <state>` and `dispatch-due:` — owned by the aiw ui tick; preserve, never edit.
+- `reviewers: <login>,<login>` — logins mentioned or requested in this grind, comma-separated, no spaces,
+  deduped ignoring case.
+- `unlogged: <slack id>,<slack id>` — Slack ids mentioned in this grind that have no login (the resolver's
+  `unlogged`, plus the `bot_uid` fallback when it is mentioned), comma-separated, no spaces, deduped, in
+  mention order. Never shrinks; a later `learned:` line resolves an id.
+- `reviewers-last: <id>,<id>` — what the last trigger or recheck used: Slack ids on the Slack path (the
+  `bot_uid` fallback included), logins on the GitHub path. Overwritten after each post or request; it is
+  the previous round's set.
+- `reviewers-kept: <reason>` — one line each time a round keeps the previous set (one line, under 200 characters).
+- `request-failed: <login> — <error>` — one line per failed GitHub request (the error collapsed to one
+  line, under 200 characters).
+
+Never write a key the ui tick reads (`paused:`, `done:`, `next-poll:`) by accident.
+
+## Reviewers
+
+The one place that says who the grind mentions (Slack) or requests (GitHub).
+
+- **Pinned.** `--reviewer <login>` given and no `--channel` (Step 0.1's GitHub path): the set is that
+  login, every round. The resolver is never run. With both flags Slack wins and `--reviewer` is
+  ignored (Step 0.2), so the grind is not pinned.
+- **Read.** Otherwise run `aiw grind-reviewers --pr <pr url>` (one Bash call) and parse its JSON line
+  `{path, channel, mentions, logins, unlogged, skip}`; a failure prints `{"error": ...}` and exits 1.
+  Drop the PR author (`author` from Step 0.0's `gh pr view`) from `logins`, ignoring case. The PR author's
+  Slack id is not dropped: the output cannot say which id is theirs.
+- **Usable.** Slack path: `mentions` is non-empty. GitHub path: `logins` is non-empty after the drop and
+  at least one request succeeds.
+- **At start.** `skip` set → stop with that line verbatim (Step 0.0b). A run given `--channel` ignores
+  only a skip that starts with "invalid Slack channel" (its channel comes from the argument); the
+  "no Slack channel or reviewer, its lanes skip grinding" skip still stops it. Slack path with empty
+  `mentions` → mention `channels.json`'s `bot_uid`. GitHub path with no login left → stop with
+  "no Slack channel or reviewer, its lanes skip grinding". Resolver failed or `path: null` → as before
+  this section existed: Slack with `bot_uid` (there is no GitHub path without `--reviewer`).
+- **Mid-grind** (a recheck in Step 7, or a restart). Not usable, `skip` set, or the resolver failed →
+  use `reviewers-last:` and write `reviewers-kept: <reason>` (for example `resolver failed: <first error line>`,
+  `no active reviewer`, `all requests failed`). Never fall back to `bot_uid` mid-grind: a swap saved in
+  two steps can leave the set empty for a moment, and the previous set covers it. `reviewers-last:`
+  unusable too → Step 8.
+- **Slack text.** Fill the `trigger` and `retrigger` templates' `{bot_uid}` with the ids joined by
+  `> <@`, so the text has one `<@id>` per id: one id gives `<@id> recheck`, two give
+  `<@id1> <@id2> recheck`.
+- **GitHub requests.** Every current login is requested at start and again at every recheck, even
+  one requested before: one `gh pr edit <n> --add-reviewer <login>` per login (`@copilot` for
+  `copilot`). A failed request writes `request-failed: <login> — <error>` and the other logins are still
+  requested. Every request of the new set failed → request the `reviewers-last:` logins instead and
+  write `reviewers-kept: all requests failed`; those fail too → Step 8.
+- **Header.** After each post or request: add the logins mentioned or requested (`logins` minus the
+  author and failed requests) to `reviewers:`; on the Slack path add the mentioned ids that are in the
+  resolver's `unlogged` (and `bot_uid` when it was mentioned) to `unlogged:`; overwrite
+  `reviewers-last:`. On the GitHub path also write `reviewer: <first login>`. A thread-URL start posts
+  nothing, so seed `reviewers:` and `unlogged:` from the resolver output as if just mentioned.
 
 ## Step 0 — Resolve
 
 0. **Draft check, before any Slack post or fix.** Get the PR ref (a PR url as given; a thread
-   url → read the thread only to find its PR url), then `gh pr view <pr> --json isDraft`.
+   url → read the thread only to find its PR url), then `gh pr view <pr> --json isDraft,author` (the author is the one the Reviewers section drops).
    `isDraft: true` → stop with one line, `PR #<n> is a draft; mark it ready for review before grinding.`
    Write no state file and post nothing.
-1. **`--reviewer <login>` given and no `--channel` → the GitHub path:** skip `<channels>` and every Slack step. `<login>` is a GitHub
+   **0b. Reviewers.** Still before any Slack read or post, unless pinned, run the Reviewers "Read"
+   and apply "At start". A `skip` that stops the grind stops it like the draft check: that one line,
+   no state file, no post. A state file whose header has a `thread:` is not a start: skip 0b (item 2).
+1. **`--reviewer <login>` given and no `--channel`, or no `--channel` and the resolver's `path` is `github` → the GitHub path:** skip `<channels>` and every Slack step. `<login>` is a GitHub
    login (`[A-Za-z0-9-]{1,39}`) or `copilot`; anything else (a team slug such as `org/team`) → stop with one
    line. The reviewer is the PR author → stop with one line. Slack steps below say "post"; on this path read
    "GitHub" for them (Steps 1 and 7 have a paragraph each). Rails 1, 2 and 4 and Step 8 report in the final message
-   and the state file only. Otherwise (no `--reviewer`): read `<channels>` first: `bot_uid`, `owner_uid`, `channels` (exact `owner/repo` →
+   and the state file only. Otherwise (the Slack path): read `<channels>` first: `bot_uid`, `owner_uid`, `channels` (exact `owner/repo` →
    channel id), `dm_fallback`, `known_bots`, optional `workspace_url`, and the `trigger`/`retrigger` templates
    (`{bot_uid}`, `{pr_url}` only). Missing or unparseable → stop. `owner_uid` is the only
    @-mention target in terminal posts; never take it from anywhere else (an email, a name in
    a config).
-2. **GitHub path:** request the review, `gh pr edit <n> --add-reviewer <login>` (`copilot` is requested as
-   `@copilot`), and record `reviewer: <login>` and `thread: github` in the header. `--channel` and
+2. **Existing thread first.** The state file exists and its header has a `thread:` → use that thread
+   (GitHub when it is `github`), never open a new one; a PR-URL argument (the UI's Grind restart)
+   included. Path, channel and thread come from that header, never from the resolver again. A human
+   restart that cleared `paused:` and finds no new review (Step 1 "none") goes to Step 7's re-trigger
+   once, with the current set, in that thread.
+   **GitHub path:** request the review by the Reviewers "GitHub requests" rule, and record `thread: github` in the header. `--channel` and
    `--reviewer` both given: Slack wins, ignore `--reviewer`. Copilot's reviews are authored by
    `copilot-pull-request-reviewer[bot]`: use that login to read its reviews and for `poll-reviews.sh`.
    Otherwise: argument is a Slack thread URL → `slack_read_thread`, take the first GitHub PR URL
    (none → `AskUserQuestion`). Argument is a PR URL with no thread → **open the thread**:
    post `trigger` as a new top-level message in the repo's channel (`--channel <id>` in the
-   arguments when given, else exact key match, else `dm_fallback`), with `slack_send_message`, falling back to
+   arguments when given, else the resolver's `channel`, else exact key match, else `dm_fallback`),
+   its mentions filled by the Reviewers "Slack text" rule, with `slack_send_message`, falling back to
    `slackcli messages send --recipient-id <C|D> --message "..."`. The thread URL is
    `<workspace_url>/archives/<channel>/p<ts without the dot>`; read
    it back to confirm it landed. No `workspace_url` in `<channels>` → stop with one line
@@ -88,7 +147,7 @@ Header keys (lines above the first `## Round <n>`; names are pinned for the aiw 
   re-approve must not discard real findings). Reviews on different commits resolve to
   newest. Record the others as superseded.
 
-**GitHub path.** The reviewer is fixed by `--reviewer`. Take its newest review on the current head
+**GitHub path.** The reviewers are the grind's set (Reviewers section). Take its newest review on the current head
 (`commit_id` is the head; older ones are superseded). `APPROVED` → done (Step 2). `CHANGES_REQUESTED`, or
 `COMMENTED` with inline comments → a round: triage and fix as below. `COMMENTED` with no inline comments → no
 findings. No review yet (a human may take a while) → Step 7's re-arm; the heartbeat limit and `paused:` rails
@@ -219,8 +278,9 @@ Append this round's full record to the state file.
 
 **Never re-trigger while `queued-push:` is set or CI is not green at the current head.**
 
-1. **GitHub path:** after the push, request the review again with `gh pr edit <n> --add-reviewer <login>`
-   (`@copilot` for `copilot`); no Slack post, and the closing summary of Step 2 and every "post to Slack" go in the
+1. **Reviewers first.** Right before each recheck, unless pinned, run the Reviewers "Read" and apply
+   "Mid-grind", then post or request with that set.
+   **GitHub path:** after the push, request the review again by the Reviewers "GitHub requests" rule; no Slack post, and the closing summary of Step 2 and every "post to Slack" go in the
    final message and the state file instead. Otherwise post `retrigger` from `<channels>` as a **new** thread reply (an edited message never
    wakes the bot). Record the resolved text in the state header.
 2. Interactive only: arm one `persistent: true` Monitor per PR (check for an existing one)
