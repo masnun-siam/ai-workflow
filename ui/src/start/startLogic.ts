@@ -106,11 +106,10 @@ export interface RunOptions { harness: HarnessId; models: { value: string; label
 /** The model and effort choices of the account's harness (FR-12). No `harnesses` list (older server) or an unknown label: Claude's. */
 export function runOptions(settings: Pick<Settings, 'commands' | 'harnesses'> | undefined, label: string | undefined): RunOptions {
   const c = settings?.commands.find((x) => x.label === label);
-  const harness = c?.harness ?? 'claude';
-  const h = settings?.harnesses?.find((x) => x.id === harness);
-  if (!h) return { harness, models: MODELS, efforts: EFFORTS };
+  const h = settings?.harnesses?.find((x) => x.id === (c?.harness ?? 'claude'));
+  if (!h) return { harness: 'claude', models: MODELS, efforts: EFFORTS };
   const models = (h.models ?? c?.models ?? []).map((v) => MODELS.find((m) => m.value === v) ?? { value: v, label: v });
-  return { harness, models, efforts: h.efforts };
+  return { harness: h.id, models, efforts: h.efforts };
 }
 /** The keys of the pick the harness does not offer, reset to default; `{}` when the pick still fits. */
 export function fitRun(cur: { model: string | null; effort: string | null }, opts: RunOptions): { model?: null; effort?: null } {

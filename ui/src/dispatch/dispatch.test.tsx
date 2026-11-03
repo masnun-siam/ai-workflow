@@ -523,7 +523,7 @@ describe('Dispatch harness pickers', () => {
     await userEvent.click(screen.getByRole('radio', { name: 'cx' }));
     await waitFor(() => expect(posts.at(-1)).toEqual(['/api/dispatches/abc123abc123/settings', { account: 'cx', model: null }]));
     expect(puts).toHaveLength(1);
-    expect(screen.getByText('herdr lanes use it only for a Codex account (command `codex`).')).toBeTruthy();
+    expect(screen.getByText(/herdr lanes use it only for a Codex account/).textContent).toBe('herdr lanes use it only for a Codex account (command codex).');
   });
 
   it('an epic pinned to a Codex account opens on Default', async () => {

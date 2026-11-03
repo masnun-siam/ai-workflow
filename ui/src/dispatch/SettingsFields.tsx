@@ -168,7 +168,7 @@ export function SettingsFields({ value, onChange, live, noBranch, repo, runner }
               );
             })}
           </div>
-          <span className="faint dsp-hint">{runner === 'herdr' ? 'herdr lanes use it only for a Codex account (command `codex`).' : 'New lane sessions run on this account.'}</span>
+          <span className="faint dsp-hint">{runner === 'herdr' ? <>herdr lanes use it only for a Codex account (command <span className="mono">codex</span>).</> : 'New lane sessions run on this account.'}</span>
         </div>
       ) : null}
     </div>

@@ -106,6 +106,7 @@ describe('harness run options', () => {
   it('falls back to the Claude constants with no harnesses list', () => {
     const old = runOptions({ commands: [{ label: 'cx', cmd: 'codex', harness: 'codex' }] }, 'cx');
     expect(old.models.map((m) => m.value)).toEqual(['opus', 'sonnet', 'haiku']);
+    expect(old.harness).toBe('claude');
     expect(old.efforts).toContain('max');
     expect(runOptions(undefined, undefined).harness).toBe('claude');
   });
