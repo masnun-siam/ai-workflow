@@ -14,6 +14,7 @@ Usage:
   aiw grind-reviewers --pr <url>  # the PR's grind path, channel and reviewers as JSON; read by /pr-grind each round
   aiw local-review     # single or loop, from Settings; read by /implement-issue at step 12
   aiw dispatch ...     # run an epic's child issues as parallel lanes
+  aiw install-skills --harness codex [--remove]  # link the plugin skills into Codex's ~/.agents/skills
   aiw jev ci-hint|finding-hint --file <path>  # advisory jev hint for /pr-grind, JSON, always exit 0
 """
 
@@ -32,6 +33,7 @@ import dispatch  # noqa: E402
 import dispatch_cli  # noqa: E402
 import dispatch_run  # noqa: E402
 import grind_reviewers  # noqa: E402
+import install_skills  # noqa: E402
 import jev_cli  # noqa: E402
 import threads  # noqa: E402
 import ui_server  # noqa: E402
@@ -87,7 +89,7 @@ def main(argv=None) -> None:
     p_lr.set_defaults(func=cmd_local_review)
 
     # Each module owns its own argparse wiring.
-    for module in (threads, ci, ui_server, ask, dispatch_cli, jev_cli, grind_reviewers):
+    for module in (threads, ci, ui_server, ask, dispatch_cli, jev_cli, grind_reviewers, install_skills):
         module.register(sub, add)
 
     args = parser.parse_args(argv)
