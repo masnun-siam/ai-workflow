@@ -6,7 +6,7 @@
 .set-sec .tbl .chan-hint{font-size:12px;margin-top:4px;display:flex;gap:6px;align-items:center;max-width:260px}
 .set-sec .tbl td{vertical-align:middle}
 .acct-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.acct-row input.f{width:150px;flex:none}
+.acct-row input.f,.acct-row select.f{width:150px;flex:none}
 .acct-row input.f.cmd{flex:1;min-width:160px}
 .acct-row input.f.models{flex:1;min-width:160px}
 .acct-row .radio{display:flex;gap:6px;align-items:center;font-size:13px;font-weight:500}
