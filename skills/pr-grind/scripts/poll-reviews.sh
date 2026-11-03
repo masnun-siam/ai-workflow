@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Monitor poll for /pr-grind: emit one line per NEW review by the reviewer account.
+# Monitor poll for /pr-grind: emit one line per NEW review by any reviewer account.
 #
 # Usage: poll-reviews.sh <owner> <repo> <number> <login> <last-iso> [mode] [interval]
 #   interval  seconds between polls (default 60), or "once": poll one time, print, exit with
 #             gh's status (used by the headless aiw ui tick)
-#   login  the reviewer account, or the PR author when the reviewer is UNRESOLVED
-#   mode   "reviewer" (default, login==) or "not-author" (login!=)
+#   login  the reviewer logins, comma-separated, or the PR author when the reviewer is UNRESOLVED
+#   mode   "reviewer" (default: the review's login is any of them, ignoring case; `copilot`
+#          also matches copilot-pull-request-reviewer[bot]) or "not-author" (login != the
+#          author, ignoring case)
 #
 # Emits `<submitted_at> id=<id> state=<STATE>` and nothing else. That restraint is the
 # whole point: piping a review `body` through a second jq pass fails on the control
@@ -20,9 +22,13 @@ LOGIN="${4:?reviewer or author login}"; LAST="${5:?last seen ISO8601}"
 MODE="${6:-reviewer}"; INTERVAL="${7:-60}"
 
 if [ "$MODE" = "not-author" ]; then
-  MATCH="select(.user.login != \$ENV.LOGIN)"
+  MATCH=".[] | select((.user.login // \"\" | ascii_downcase) != (\$ENV.LOGIN | ascii_downcase))"
 else
-  MATCH="select(.user.login == \$ENV.LOGIN)"
+  # Logins reach jq through $ENV, never spliced into the filter. `// ""`: a deleted
+  # account's review has a null .user, which ascii_downcase would fail on.
+  MATCH="(\$ENV.LOGIN | ascii_downcase | split(\",\")) as \$set |
+    (\$set + (if any(\$set[]; . == \"copilot\") then [\"copilot-pull-request-reviewer[bot]\"] else [] end)) as \$want |
+    .[] | select((.user.login // \"\" | ascii_downcase) as \$l | any(\$want[]; . == \$l))"
 fi
 
 export LOGIN LAST
@@ -31,7 +37,7 @@ while true; do
   # `gh api --jq` takes one filter string and no jq flags of its own — `--arg name val`
   # is parsed as unknown gh flags and errors. Values reach the filter via $ENV.
   out=$(gh api "repos/$OWNER/$REPO/pulls/$NUMBER/reviews" --paginate --jq "
-    .[] | $MATCH | select(.submitted_at > \$ENV.LAST) |
+    $MATCH | select(.submitted_at > \$ENV.LAST) |
     \"\(.submitted_at) id=\(.id) state=\(.state)\"
   " 2>&1)
   rc=$?

@@ -454,14 +454,16 @@ your notes).
 
 | Skill | Keep | Read by |
 |---|---|---|
-| pr-grind | State file `<pr_grind_dir>/<owner>-<repo>-<pr>.md` with the header keys `owner`, `repo`, `number`, `thread`, `author`, `reviewer`, `paused`, `done`, `next-poll`, `poll-since`, `ci-seen`, `dispatch-due` | `ui_runner._valid`, `_new_review`, `prgrind_tick`; `ui_dispatch` (`dispatch-due`); `ui_grind.index`. pr-grind's own list: `## State file` |
+| pr-grind | State file `<pr_grind_dir>/<owner>-<repo>-<pr>.md` with the header keys `owner`, `repo`, `number`, `thread`, `author`, `reviewer`, `reviewers`, `paused`, `done`, `next-poll`, `poll-since`, `ci-seen`, `dispatch-due` | `ui_runner._valid`, `_new_review`, `prgrind_tick`; `ui_dispatch` (`dispatch-due`); `ui_grind.index`. pr-grind's own list: `## State file` |
 | pr-grind | One `## Round ` heading per round | `ui_grind.index` counts them |
 | pr-grind | `## Re-entry` (the "On-wake branch"), `## Step 8 — Paused stop`, and the headless re-arm: write `next-poll`, end the turn | `REENTRY_PROMPT` (`ui_runner.py`), `LANE_GRIND` (`dispatch_run.py`) |
 | peer-review | The `--root <panel id>` round protocol | `ui_panel.py` starts `/ai-workflow:peer-review --root <panel id> <artifact>` |
 | any | `aiw ask` for gate questions in a headless run | `HEADLESS_PROMPT` (`ui_runner.py`) |
 
 - The tick always runs the plugin's own `skills/pr-grind/scripts/poll-reviews.sh` (`_POLL_SH`),
-  whichever copy of pr-grind runs.
+  whichever copy of pr-grind runs. It watches every login in `reviewers:` (comma-separated, compared
+  ignoring case), falling back to `reviewer:` when that line is missing, and the PR author with
+  `not-author` while `reviewer:` is `UNRESOLVED`.
 - Relative `../../guides/` and `../../templates/` paths in a copied skill no longer reach the
   plugin: point them at the repo's own copies or an absolute source.
 
