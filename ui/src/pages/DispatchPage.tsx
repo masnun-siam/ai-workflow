@@ -277,7 +277,7 @@ export function DispatchPage() {
             ) : (
               <a href={`https://github.com/${dispatchRepo(d)}`} target="_blank" rel="noopener noreferrer">{dispatchRepo(d)}</a>
             )}
-            <span>{d.runner === 'herdr' ? 'in herdr tabs' : 'in background sessions'}, up to {d.settings.max} at a time, grind {d.settings.grind}, CI: {d.settings.ci ?? 'wait'}, {d.settings.auto_merge ? 'merges by itself' : 'you merge'}</span>
+            <span>{d.runner === 'herdr' ? 'in herdr tabs' : 'in background sessions'}, up to {d.settings.max} at a time, grind {d.settings.grind}, CI: {d.settings.ci ?? 'wait'}, {d.settings.auto_merge ? 'merges by itself' : 'you merge'}{d.settings.skip_approval ? ', no approval needed' : ''}</span>
           </p>
         </div>
         <div className="row" style={{ gap: 6, flex: 'none' }}>

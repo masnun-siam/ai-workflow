@@ -550,6 +550,8 @@ export interface DispatchSettings {
   /** Absent on older dispatches: read as 'wait'. */
   ci?: CiMode;
   auto_merge: boolean;
+  /** Merge without an approving review. Absent on older dispatches: read as false. */
+  skip_approval?: boolean;
   feature_branch: string | null;
   /** Absent on older dispatches: read as null (the repo's base). */
   base_branch?: string | null;

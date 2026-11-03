@@ -332,6 +332,7 @@ def _settings(a) -> dict:
         "grind": a.grind,
         "ci": a.ci,
         "auto_merge": a.auto_merge,
+        "skip_approval": a.skip_approval,
         "feature_branch": a.feature_branch,
         "base_branch": a.base_branch,
         "model": a.model,
@@ -450,7 +451,7 @@ def cmd_set(a) -> None:
             int(v)
             if k == "max"
             else (v.lower() in ("1", "true", "on", "yes"))
-            if k == "auto_merge"
+            if k in ("auto_merge", "skip_approval")
             else (float(v) if v else None)
             if k == "max_cost"
             else (v or None)
@@ -539,6 +540,11 @@ def register(sub, add) -> None:
         q.add_argument("--ci", choices=dr.CI_MODES, default=dr.DEFAULTS["ci"])
         q.add_argument("--auto-merge", action="store_true")
         q.add_argument(
+            "--skip-approval",
+            action="store_true",
+            help="merge without an approving review; CI, grind, conflicts, changes requested and open threads still gate",
+        )
+        q.add_argument(
             "--feature-branch", default=None, help="every lane's base, cut from the base branch (or the default branch)"
         )
         q.add_argument(
@@ -566,7 +572,8 @@ def register(sub, add) -> None:
     q.add_argument("id")
     q.set_defaults(func=cmd_show)
     q = ops.add_parser(
-        "set", help="edit settings live: max=3 grind=simple ci=defer auto_merge=on model=opus max_cost=20"
+        "set",
+        help="edit settings live: max=3 grind=simple ci=defer auto_merge=on skip_approval=on model=opus max_cost=20",
     )
     q.add_argument("id")
     q.add_argument("pairs", nargs="+")

@@ -15,6 +15,7 @@ the caller from the board snapshot, the grind index and the runner:
      "grind": None | {"state": idle|running|paused|done, "reason": str, "due": str | None},  # due: a token
      "slack": bool,                                  # the resolver gives a path and no skip; False skips grinding
      "solo": bool,                                   # the repo is the gh user's own: no approval needed
+                                                     # (the `skip_approval` setting drops the approval the same way)
      "agent": working|idle|blocked|gone|unknown|None, "limited_until": float | None}
 
 Actions: ("send", text), ("merge", pr_n, sha), ("close",), ("continue",), ("notify", kind, text).
@@ -41,6 +42,7 @@ DEFAULTS = {
     "grind": "full",  # off | simple | full (pr-grind's deep)
     "ci": "wait",  # wait | defer (CI blocks only the merge) | ignore (CI never blocks)
     "auto_merge": False,
+    "skip_approval": False,  # merge without an approving review; every other gate still applies
     "feature_branch": None,  # every lane's base when set; else the issue's own
     "base_branch": None,  # where the dispatch's work lands; empty = today's behaviour. Fixed at start
     "model": None,
@@ -169,7 +171,7 @@ def _gate(lane: dict, facts: dict, settings: dict, now: float):
         return "CI is not green"
     elif mode == "defer" and pr.get("ci") != "success":
         return "waiting for green CI (defer)"
-    why = merge_gate.blockers(pr, facts.get("solo"))
+    why = merge_gate.blockers(pr, facts.get("solo") or settings.get("skip_approval"))
     if why:
         return why
     if _grind_on(settings, facts) and not (g.get("state") == "done" and "approved" in (g.get("reason") or "")):
@@ -586,6 +588,7 @@ def check_settings(s: dict) -> dict:
     if not isinstance(s.get("max"), int) or isinstance(s["max"], bool) or not 1 <= s["max"] <= 10:
         raise ValueError("max must be an integer from 1 to 10")
     s["auto_merge"] = bool(s.get("auto_merge"))
+    s["skip_approval"] = bool(s.get("skip_approval"))
     unknown = set(s) - set(DEFAULTS)
     if unknown:
         raise ValueError(f"unknown settings: {sorted(unknown)}")

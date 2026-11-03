@@ -22,7 +22,7 @@
 | `/ai-workflow:revert-pr <pr> [--dry-run]` | revert a merged PR: open a revert PR into its base branch, file the finding through `/create-tasks` and reopen the issue it closed. Never merges |
 | `/ai-workflow:release-pr [--dry-run] [head=staging] [base=master]` | open or refresh the `staging` → `master` release PR with a deploy checklist, post the Slack trigger, hand off to `/pr-grind`. Never merges |
 | `/ai-workflow:worklog [date]` | today's worklog from GitHub activity and the daily note, written to the Obsidian daily note (runs as the `worklog-runner` agent) |
-| `/ai-workflow:herdr-dispatch <epic> [--max N] [--grind off\|simple\|full] [--ci wait\|defer\|ignore] [--auto-merge] [--feature-branch <name>] [--base-branch <name>] [--model M] [--effort E]` | run an epic's issues as a dispatch in herdr tabs: preview, confirm, start, then relay what needs you (see **Dispatches**) |
+| `/ai-workflow:herdr-dispatch <epic> [--max N] [--grind off\|simple\|full] [--ci wait\|defer\|ignore] [--auto-merge] [--skip-approval] [--feature-branch <name>] [--base-branch <name>] [--model M] [--effort E]` | run an epic's issues as a dispatch in herdr tabs: preview, confirm, start, then relay what needs you (see **Dispatches**) |
 
 ## The `aiw` CLI
 
@@ -50,7 +50,7 @@ aiw dispatch ls|show <id>               list dispatches, or one as JSON (also th
 aiw dispatch archive [--days N]      move dispatches finished over N days ago (default 30) to dispatches/archive/; prints the ids (the server does this daily)
 aiw dispatch doctor [<id>]          why a live dispatch cannot move (skipped blocker, cycle, stale snapshot,
                                         dead server, needs you, held); exits 1 on a problem
-aiw dispatch set <id> key=value...      change max, grind, ci, auto_merge, model, effort, account, max_cost while it runs (`max_cost=20` pauses the dispatch once its headless lanes have cost $20; `max_cost=` clears it)
+aiw dispatch set <id> key=value...      change max, grind, ci, auto_merge, skip_approval, model, effort, account, max_cost while it runs (`max_cost=20` pauses the dispatch once its headless lanes have cost $20; `max_cost=` clears it)
                                         (feature_branch and base_branch are fixed at start)
 aiw dispatch pause|resume|cancel <id>   the whole dispatch (pause stops new lanes only)
 aiw dispatch lane <id> <n> <action>     pause, resume, retry, skip, merge, hold, unhold, or send "<text>"
@@ -267,7 +267,7 @@ Responses carry `Referrer-Policy: no-referrer`, `X-Robots-Tag: noindex`, a stric
 
 **Dispatches.** `#/dispatches` is one table of every dispatch, live and past (State, Dispatch, Issues, Took, Spent): Needs you, Running, Paused, then Finished and Cancelled together, newest first in each group. A running or paused dispatch with an issue that needs you shows Needs you and the first such issue. Tabs (All, Needs you, Live, Finished) and the Features repo control narrow the rows, and the repo control narrows the tab counts too; a dispatch needing you counts under both Needs you and Live. A row opens the dispatch page, which holds every action.
 **Run an epic** takes an epic (typed, or picked from the repo's
-epics), grind mode (Off, Simple, Full), auto-merge, lanes at once (1–10), a base branch (a searchable list of the repo's branches, also in Run small changes), a feature branch, model and
+epics), grind mode (Off, Simple, Full), auto-merge, skip approval (merge without an approving review; CI, the grind, conflicts, changes requested and open threads still gate), lanes at once (1–10), a base branch (a searchable list of the repo's branches, also in Run small changes), a feature branch, model and
 effort, then **Preview** shows the waves and warnings (unrefined issues, cycles, missing checkouts,
 repos without a Slack channel, open blockers outside the epic, issues jev reads as underspecified, readiness unavailable) before **Start**. With Use jev on, Preview (and `aiw dispatch plan`) scores each refined lane's body 1–5 for up to 8 s: plan lanes carry `readiness` (int or null), a score of 2 or less warns and the lane still runs, and bodies are fetched only for this read and never returned. Lanes started here run
 as headless sessions (the same dialog, given picked issues, becomes **Run small changes**: chips instead of the epic field, no feature branch, `issues` in the request; lists show it by its title, "Small changes: #412, #415", and its repo); `herdr-dispatch` starts herdr ones, and both show here. `aiw dispatch plan|start` and `herdr-dispatch` take an epic only. A dispatch page has the

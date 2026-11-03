@@ -374,6 +374,10 @@ def aiw(*a):
 assert aiw("set", d["id"], "max=3", "auto_merge=on", "grind=simple").returncode == 0
 s = dr.load(d["id"])["settings"]
 assert (s["max"], s["auto_merge"], s["grind"]) == (3, True, "simple")
+assert aiw("set", d["id"], "skip_approval=on").returncode == 0 and dr.load(d["id"])["settings"]["skip_approval"] is True
+assert (
+    aiw("set", d["id"], "skip_approval=off").returncode == 0 and dr.load(d["id"])["settings"]["skip_approval"] is False
+)
 assert aiw("set", d["id"], "ci=defer").returncode == 0
 assert json.loads(aiw("show", d["id"]).stdout)["settings"]["ci"] == "defer"
 assert aiw("set", d["id"], "ci=bogus").returncode == 5
@@ -396,6 +400,8 @@ def _parse(*x):
 
 assert dc._settings(_parse("--base-branch", "staging"))["base_branch"] == "staging"
 assert dc._settings(_parse())["base_branch"] is None
+assert dc._settings(_parse("--skip-approval"))["skip_approval"] is True
+assert dc._settings(_parse())["skip_approval"] is False
 try:
     dc._settings(_parse("--base-branch", "a b"))
     raise AssertionError("invalid base name accepted")
