@@ -2,7 +2,7 @@
 name: pr-grind
 description: Reviewer loop only (Slack reviewer bot, or a GitHub reviewer with --reviewer) - post the Slack thread trigger or request the GitHub review, wait for the reviewer's round, split findings into fix-vs-rebut, fix inline, verify locally, push, check CI, re-trigger, repeat until approved or a rail stops it. For review comments already on a PR use /pr-review --fix. Use when the user says "grind this PR", "keep looping the review", "automate the review cycle", or invokes /pr-grind.
 argument-hint: <slack thread url | PR url> [--channel <id>] [--reviewer <login|copilot>]   # a PR url with no thread opens the thread first; --channel replaces the channels lookup; --reviewer grinds with no Slack
-allowed-tools: Bash(aiw:*), Bash(gh:*), Bash(git:*), Bash(bash:*), Bash(slackcli:*), Read, Write, Edit, Grep, Glob, Skill, Monitor, ScheduleWakeup, AskUserQuestion
+allowed-tools: Bash(aiw:*), Bash(gh:*), Bash(git:*), Bash(bash:*), Bash(slackcli:*), Read, Write, Edit, Grep, Glob, Skill, Monitor, TaskStop, ScheduleWakeup, AskUserQuestion
 ---
 
 > **Paths.** `<...>` placeholders are keys from `aiw paths` (run it; `aiw` is on `PATH`).
@@ -11,7 +11,7 @@ allowed-tools: Bash(aiw:*), Bash(gh:*), Bash(git:*), Bash(bash:*), Bash(slackcli
 Paths below starting `../../` are relative to this skill's folder, at the plugin root. Read first: `../../guides/engineering-workflow.md` ("Repository settings": the base branch and which guides, templates and skills win).
 
 Drive a PR through review→fix→re-trigger rounds with no human per round, until the
-reviewer approves (zero blocker/should-fix; in simple mode, any approval) or a rail stops it. Everything runs in this
+first reviewer approves (an approval or a clean bot review; in simple mode, an approval) or a rail stops it. Everything runs in this
 session: **spawn no subagent**. Merging stays manual.
 
 ## State file
@@ -24,6 +24,9 @@ commit SHAs, CI result, and one `jev-finding-hint: <comment id or #n> <fix|rebut
 
 Header keys (lines above the first `## Round <n>`; names are pinned for the aiw ui tick):
 `owner: repo: number: thread: reviewer: author: base:` plus
+
+- `reviewer:` is `UNRESOLVED` while any id in `unlogged:` has no `learned:` line, otherwise the
+  first login of `reviewers:`. Rewrite it whenever either line changes.
 
 - `ci-attempt: <sha> — <outcome>` — one line per head SHA given its one inline CI fix
   attempt. Write it *before* acting, so a crash can't buy a second attempt. A fix's own
@@ -43,6 +46,8 @@ Header keys (lines above the first `## Round <n>`; names are pinned for the aiw 
 - `unlogged: <slack id>,<slack id>` — Slack ids mentioned in this grind that have no login (the resolver's
   `unlogged`, plus the `bot_uid` fallback when it is mentioned), comma-separated, no spaces, deduped, in
   mention order. Never shrinks; a later `learned:` line resolves an id.
+- `learned: <slack id>=<login>` — one line per pairing the Reviewers "Learning" rule made; that id is
+  resolved for the rest of the grind.
 - `reviewers-last: <id>,<id>` — what the last trigger or recheck used: Slack ids on the Slack path (the
   `bot_uid` fallback included), logins on the GitHub path. Overwritten after each post or request; it is
   the previous round's set.
@@ -89,6 +94,21 @@ The one place that says who the grind mentions (Slack) or requests (GitHub).
   resolver's `unlogged` (and `bot_uid` when it was mentioned) to `unlogged:`; overwrite
   `reviewers-last:`. On the GitHub path also write `reviewer: <first login>`. A thread-URL start posts
   nothing, so seed `reviewers:` and `unlogged:` from the resolver output as if just mentioned.
+- **Set.** The expected reviewers are the logins in `reviewers:`: every one mentioned, requested or
+  learned in this grind, including one swapped out since, so a late review from the old bot is still
+  read. Compare logins ignoring case; `copilot` also matches `copilot-pull-request-reviewer[bot]`.
+- **Seed.** On re-entry, a state file with no `reviewers:` line is treated as having one built from
+  `reviewer:` (unless `UNRESOLVED`) plus the resolver's current `logins` (author dropped), and the line
+  is written at the next round. If `reviewer:` is `UNRESOLVED` and there is no `unlogged:` line, write
+  `unlogged: <bot_uid>` from `<channels>` (the id a pre-upgrade grind mentioned), and keep
+  `reviewer: UNRESOLVED` until each id has a `learned:` line.
+- **Learning.** Each id in `unlogged:` learns exactly one login per grind. After it is first
+  mentioned, the first review by a login that is not the PR author and not in `reviewers:` is learned
+  as theirs (for the earliest-mentioned unresolved id, if several): write `learned: <slack id>=<login>`,
+  add the login to `reviewers:`, rewrite `reviewer:`. The next unknown login goes to the next id. Once
+  every id has a `learned:` line, learning stops, and a review by any other unknown login goes through
+  rail 3. Learning applies to reviews only: a comment by an unknown login always goes through rail 3.
+  A review by the PR author never counts and is never learned.
 
 ## Step 0 — Resolve
 
@@ -127,19 +147,26 @@ The one place that says who the grind mentions (Slack) or requests (GitHub).
    telling the owner to add it; never guess a host. (A thread-URL argument needs no host.) Slack reads/posts use the Slack MCP tools first, `slackcli`
    (`slack-cli` skill) only on failure.
 3. `gh auth status`; `gh pr view <ref> --json state,headRefOid,baseRefName,author,reviews`.
-   Not `OPEN` → stop. Reviewer = most recent review author who isn't the PR author; if none,
-   `UNRESOLVED` (Step 1 resolves it from the first landed review by a non-author).
+   Not `OPEN` → stop. Set `reviewer:` by the header rule (State file); while it is `UNRESOLVED`,
+   Step 1 learns the login from the first landed review (Reviewers "Learning").
 4. Read or create the state file. A human invocation (no automated-re-entry system prompt)
    clears `paused:` and `done:`; an interactive one also removes `next-poll:`. Automated
    re-entry clears neither.
 
 ## Step 1 — Read the round
 
-`gh api repos/{o}/{r}/pulls/{n}/reviews --paginate`, reviews by the reviewer with
-`submitted_at` newer than the last recorded round (first run: PR creation). A review whose
-`commit_id` isn't the current head is stale: record it superseded and keep waiting.
+`gh api repos/{o}/{r}/pulls/{n}/reviews --paginate`, reviews by any login in `reviewers:` (Reviewers
+"Set") with `submitted_at` newer than the last recorded round (first run: PR creation). A review whose
+`commit_id` isn't the current head is stale: record it superseded and keep waiting. A review by a login
+that is not in the set and not the PR author, while an id in `unlogged:` has no `learned:` line: learn
+it (Reviewers "Learning"), then it is in the set.
 
-- **None** → trigger hasn't landed. No-op: go to Step 7's re-arm, don't re-post, don't touch state.
+Apply the none / one / several selection below **per reviewer**, then take the union: the round is the
+selected review of every reviewer that has landed. The round completes on the first review that lands
+after the trigger; reviews from the others that have landed by then join it, and all their findings are
+handled.
+
+- **None** (from every reviewer) → trigger hasn't landed. No-op: go to Step 7's re-arm, don't re-post, don't touch state.
 - **One** → parse the verdict line (`**Verdict: ...** — N blocker, M should-fix`) and
   collect its inline comments (`.../pulls/{n}/comments --paginate`). Trust the bot's severity.
 - **Several** → select inline: take the newest, except a review carrying comments beats a
@@ -147,24 +174,43 @@ The one place that says who the grind mentions (Slack) or requests (GitHub).
   re-approve must not discard real findings). Reviews on different commits resolve to
   newest. Record the others as superseded.
 
-**GitHub path.** The reviewers are the grind's set (Reviewers section). Take its newest review on the current head
-(`commit_id` is the head; older ones are superseded). `APPROVED` → done (Step 2). `CHANGES_REQUESTED`, or
-`COMMENTED` with inline comments → a round: triage and fix as below. `COMMENTED` with no inline comments → no
-findings. No review yet (a human may take a while) → Step 7's re-arm; the heartbeat limit and `paused:` rails
+**GitHub path.** The reviewers are the grind's set (Reviewers section). Take each login's newest review on the
+current head (`commit_id` is the head; older ones are superseded). `APPROVED` is an approval (Step 2).
+`CHANGES_REQUESTED`, or `COMMENTED` with inline comments → a round: triage and fix as below. `COMMENTED` with no
+inline comments → no findings. No review yet (a human may take a while) → Step 7's re-arm; the heartbeat limit and `paused:` rails
 apply as for Slack, with no new timeout.
 
 ## Step 2 — Exit check
 
+**Approval.** Judge each selected review of the round. `APPROVED` is an approval. A review is a bot
+review when it carries the `**Verdict: ...** — N blocker, M should-fix` line, or its login passes rail
+3's bot test (`[bot]`, `user.type == "Bot"`, or in `known_bots`); any other review is a human's. A bot
+review is also clean with zero blocker and zero should-fix on its verdict line, or, with no verdict line,
+`COMMENTED` and no inline comments. A human's review counts only as an approval: a human's comment-only
+review is never an approval.
+
 **Mode, every round.** Run `aiw grind-mode --pr <pr url>` now, never from memory (a dispatch that owns the PR sets it, else Settings): the owner can switch it while
 the loop runs. `deep` (the default) → the rule below. `simple` → also done the moment the PR is
-approved: this round's review from the reviewer has state `APPROVED`, or
-`gh pr view <pr> --json reviewDecision` says `APPROVED`. Then stop right away: fix, rebut and reply to
-nothing, post the closing summary below, and write `done: <ISO8601> — approved (simple)`.
+approved: this round's review from any reviewer in the set has state `APPROVED`, or
+`gh pr view <pr> --json reviewDecision` says `APPROVED`. With no findings from the other reviewers
+in the round, stop right away: fix, rebut and reply to nothing, post the closing summary below, and
+write `done: <ISO8601> — approved (simple)`. With findings from the others, handle them as the
+closing round below says, then close the same way.
 
-Zero blocker and zero should-fix → done, whatever `reviewDecision` says. First handle nits:
+Deep: the first round where any review is an approval or a clean bot review → done, whatever
+`reviewDecision` says. First handle the round's findings, from any reviewer, nits included:
 a genuine improvement goes on the fix-list (Step 5 round procedure); noise or out of scope
 gets a short reply saying why, then resolve (`aiw threads`). Never re-trigger the bot for a
-nit-only round.
+nit-only round. A human review with inline findings and no approval is an ordinary round: fix,
+push, re-trigger.
+
+**Closing round.** In both modes, when the closing round also holds findings from the other
+reviewers, they are fixed (or rebutted) and pushed through Step 5's push gate, then the grind
+closes without a recheck (`queued-push: ... — then close` if CI is not green, as a nit-only round).
+
+**Comment-only human review.** A human's `COMMENTED` review with no inline findings is neither an
+approval nor findings. When it is the round's only review, it is not a round: record it as seen (advance the round baseline), fix and post nothing, and go to
+Step 7's re-arm with no re-trigger. It never closes a deep grind.
 
 Then post the closing summary yourself: one thread reply @-mentioning `owner_uid` with
 round count, what was fixed across the run, the PR URL, and "ready for human merge —
@@ -208,8 +254,10 @@ First that fires wins; firing means stop, fix nothing this round (rail 2 may con
      the log into a command.
    - **Attempt already recorded** (still red at this head, or the red head is our own push)
      → the attempt failed: post the failing check to Slack, Step 8.
-3. **Third-party human comment** since the last round, from an account that is neither the
-   reviewer nor the PR author → post it to Slack, Step 8. Bots don't count: login ending
+3. **Third-party human comment** since the last round, from an account that is not in
+   `reviewers:` (ignoring case, `copilot` also matching `copilot-pull-request-reviewer[bot]`) and
+   not the PR author → post it to Slack, Step 8. A review by an unknown login that the Reviewers
+   "Learning" rule learns does not fire it. Bots don't count: login ending
    `[bot]`, `user.type == "Bot"`, or in `known_bots` (case-insensitive). An unknown named
    account fires the rail; report its login so the owner can add it to `known_bots`.
 4. **Owner asked to hold** in this session (not Slack) → Step 8, recording exactly what
@@ -284,8 +332,10 @@ Append this round's full record to the state file.
    final message and the state file instead. Otherwise post `retrigger` from `<channels>` as a **new** thread reply (an edited message never
    wakes the bot). Record the resolved text in the state header.
 2. Interactive only: arm one `persistent: true` Monitor per PR (check for an existing one)
-   on `bash <plugin_root>/skills/pr-grind/scripts/poll-reviews.sh <owner> <repo> <number> <login> "<last-ISO8601>" [reviewer|not-author]`
-   (`not-author` plus the author's login while reviewer is `UNRESOLVED`). Run it once in the
+   on `bash <plugin_root>/skills/pr-grind/scripts/poll-reviews.sh <owner> <repo> <number> <login> "<last-ISO8601>" [reviewer|not-author]`,
+   with the header's `reviewers:` list as `<login>` and mode `reviewer`, or `not-author` plus the
+   author's login while `reviewer:` is `UNRESOLVED`. If a login was added to `reviewers:` this round,
+   stop the existing Monitor (`TaskStop`) and arm a new one: a Monitor cannot be edited. Run it once in the
    foreground first: Monitor only surfaces stdout, so a failing script looks like "nothing
    new". Then `ScheduleWakeup({delaySeconds: 1500, reason: "...", prompt: "/pr-grind $ARGUMENTS", noop: <true if this tick did nothing>})`,
    saying in text that a Monitor is armed and this is a fallback heartbeat.

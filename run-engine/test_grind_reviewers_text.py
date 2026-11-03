@@ -65,15 +65,68 @@ for k in (
     ok(f"header key {k}", k in keys)
 ok("unlogged comma-separated, no spaces", "comma-separated, no spaces, deduped, in" in keys)
 
+for k in ("`learned: <slack id>=<login>`",):
+    ok(f"header key {k}", k in keys)
+ok(
+    "UNRESOLVED rule",
+    "`UNRESOLVED` while any id in `unlogged:` has no `learned:` line" in keys and "first login of `reviewers:`" in keys,
+)
+ok(
+    "learning: one login per id, earliest first, then rail 3",
+    "learns exactly one login per grind" in rev
+    and "earliest-mentioned unresolved id" in rev
+    and "learning stops" in rev
+    and "goes through\n  rail 3" in rev,
+)
+ok(
+    "set ignores case, copilot mapping",
+    "ignoring case" in rev and "`copilot-pull-request-reviewer[bot]`" in rev,
+)
+ok(
+    "seed rule",
+    "no `reviewers:` line" in rev
+    and "`reviewer:` (unless `UNRESOLVED`)" in rev
+    and "resolver's current `logins`" in rev,
+)
+rail3 = skill[skill.index("3. **Third-party human comment**") : skill.index("4. **Owner asked to hold**")]
+ok(
+    "rail 3 uses reviewers: set",
+    "`reviewers:`" in rail3
+    and "ignoring case" in rail3
+    and "copilot-pull-request-reviewer[bot]" in rail3
+    and "the\n   reviewer nor" not in rail3,
+)
+ok(
+    "Step 7 Monitor watches reviewers: and re-arms",
+    "header's `reviewers:` list as `<login>`" in step7
+    and "`not-author`" in step7
+    and "`UNRESOLVED`" in step7
+    and "TaskStop" in step7,
+)
+front = skill[: skill.index("\n---\n", 4)]
+ok("TaskStop allowed", "TaskStop" in front.split("allowed-tools:")[1].splitlines()[0])
+step1 = section("\n## Step 1")
+ok("Step 1 reads every reviewer", "any login in `reviewers:`" in step1 and "**per reviewer**" in step1)
+step2 = section("\n## Step 2")
+ok(
+    "Step 2 first approval, human only approval",
+    "from any reviewer in the set" in step2
+    and "A human's review counts only as an approval" in step2
+    and "never closes a deep grind" in step2
+    and "closes without a recheck" in step2
+    and "fixed (or rebutted) and pushed" in step2,
+)
+
 d = tempfile.mkdtemp()
 path = os.path.join(d, "o-r-1.md")
 open(path, "w").write(
-    "owner: o\nrepo: r\nnumber: 1\nreviewers: a,b\nreviewers-last: U1,U2\nunlogged: U1,U3\n"
+    "owner: o\nrepo: r\nnumber: 1\nreviewer: UNRESOLVED\nreviewers: a,b\nlearned: U1=gsm-masum\nreviewers-last: U1,U2\nunlogged: U1,U3\n"
     "reviewers-kept: no active reviewer\nrequest-failed: bob — not a collaborator\n\n## Round 1\n"
 )
 h = ui_runner._header(path)
 ok("no paused/done", "paused" not in h and "done" not in h, str(h))
 ui_runner._set_header(path, "reviewers", "a,b,c")
+ui_runner._set_header(path, "reviewer", "gsm-masum")
 t = open(path).read()
 ok(
     "set_header keeps the other lines",
@@ -81,6 +134,8 @@ ok(
         x in t
         for x in (
             "reviewers: a,b,c\n",
+            "reviewer: gsm-masum\n",
+            "learned: U1=gsm-masum",
             "reviewers-last: U1,U2",
             "unlogged: U1,U3",
             "reviewers-kept: no active reviewer",
