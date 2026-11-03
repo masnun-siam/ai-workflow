@@ -25,6 +25,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 import peer_review
 import dispatch
 import dispatch_run
+import grind_reviewers
 import jev
 import ui_actions
 import ui_afk
@@ -538,7 +539,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif path in ("/api/planning", "/api/delivery"):
             self._json(*_board(path, urlsplit(self.path).query))
         elif path == "/api/settings":
-            self._json(200, ui_settings.load())
+            self._json(200, grind_reviewers.settings_view(ui_settings.load()))
         elif path == "/api/settings/notify":
             self._json(200, ui_config.notify_public())
         elif path == "/api/settings/review":

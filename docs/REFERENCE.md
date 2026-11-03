@@ -34,6 +34,8 @@ aiw ci status                           check state (green, red, pending, or err
 aiw threads list|resolve                PR review threads
 aiw grind-mode [--pr <url>]             print the grind mode, deep or simple: the PR's dispatch decides, else
                                         Settings (read by /pr-grind each round)
+aiw grind-reviewers --pr <url>          print the PR's resolved path, channel, mentions, logins, unlogged and
+                                        skip as JSON (Settings and channels.json; read by /pr-grind each round)
 aiw local-review                        print the local review mode, single or loop (Settings; read by
                                         /implement-issue at step 12)
 aiw dispatch plan|start <epic> [flags]  preview or start a dispatch (flags as herdr-dispatch, including
