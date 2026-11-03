@@ -213,7 +213,8 @@ approval nor findings. When it is the round's only review, it is not a round: re
 Step 7's re-arm with no re-trigger. It never closes a deep grind.
 
 Then, before the closing summary, run Step 5's push-gate base check at the current head. If it
-merges, push through that gate and post the summary only once the push is verified (Step 6).
+merges, push through that gate as a closing-round push (no recheck; `then close` if queued) and
+post the summary only once the push is verified (Step 6).
 Post the closing summary yourself: one thread reply @-mentioning `owner_uid` with
 round count, what was fixed across the run, the PR URL, and "ready for human merge —
 merging stays manual". **Never mention the bot** (no `<@bot_uid>`, no `recheck`, no
