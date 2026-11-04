@@ -15,6 +15,7 @@ import shlex
 import sys
 import tempfile
 import threading
+import time
 import types
 from unittest import mock
 
@@ -191,7 +192,9 @@ ui_runner._usage.clear()
 r = follow(["S th-1", "L 1900000000", "E boom"])
 assert r["status"] == "limited" and r["limit_resets_at"] == 1900000000 and r["auto_resume"] is True, r
 r = follow(["S th-1", "L", "E boom"])
-assert r["status"] == "limited" and r["limit_resets_at"] is None and not r["auto_resume"], r
+# a non-Claude limit with no reset time retries after the back-off wait (#882)
+assert r["status"] == "limited" and r["limit_backoff"] == 1 and r["auto_resume"] is True, r
+assert 0 < r["limit_resets_at"] - time.time() <= 60, r
 r = follow(["S th-1", "E You hit your limit"])
 assert r["status"] == "limited" and r["error"] == "You hit your limit", r
 assert ui_runner._usage == {}, ui_runner._usage

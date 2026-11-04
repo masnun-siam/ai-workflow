@@ -32,6 +32,15 @@ echo "{name} $*" >> {root}/calls
 cat {STREAMS}/$(cat {root}/mode)
 """)
     os.chmod(p, os.stat(p).st_mode | stat.S_IXUSR)
+for name in ("codex", "codex2"):  # `<cmd> login status` -> logged in; else log argv and play $FAKE_STREAM
+    p = os.path.join(bindir, name)
+    with open(p, "w") as f:
+        f.write(f"""#!/bin/sh
+if [ "$1" = "login" ]; then exit 0; fi
+echo "{name} $*" >> {root}/calls
+cat {STREAMS}/$(cat {root}/mode)
+""")
+    os.chmod(p, os.stat(p).st_mode | stat.S_IXUSR)
 os.environ["PATH"] = bindir + os.pathsep + os.environ["PATH"]
 
 import ui_notify  # noqa: E402
@@ -203,6 +212,152 @@ ui_runner.release(h_["id"])  # still running: it goes out when the run ends
 assert sent_ == [] and ui_sessions.load(h_["id"])["queued_prompt"] == "later"
 ui_runner.send_prompt = real_send
 ui_sessions.update(h_["id"], status="stopped", queued_prompt=None)
+
+# ---- Codex: resume and auto-resume stay on the session's harness (#882) ----
+import ui_settings  # noqa: E402
+
+# PROVISIONAL: hand-written Codex lines until the real G1 fixture exists
+CX_INIT = '{"type":"thread.started","thread_id":"th-1"}'
+CX_LIMIT = '{"type":"turn.failed","error":{"message":"You\'ve hit your usage limit."}}'
+CX_OK = '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}'
+stream("cx_limit", CX_INIT, CX_LIMIT)
+stream("cx_ok", CX_INIT, CX_OK)
+CX = {"label": "Codex", "cmd": "codex", "harness": "codex"}
+CX2 = {"label": "Codex2", "cmd": "codex2", "harness": "codex"}
+
+
+def settings(*accounts, default="claude"):
+    ui_settings.save({"commands": list(accounts), "default": default})
+
+
+def settle(sid):
+    end = time.time() + 10
+    while sid in ui_runner._procs and time.time() < end:
+        time.sleep(0.05)
+
+
+def refused(fn, msg):
+    try:
+        fn()
+    except ui_runner.Conflict as e:
+        assert str(e) == msg, (str(e), msg)
+        assert isinstance(e, ui_runner.RunnerError)
+        return
+    raise AssertionError(f"not refused: {msg}")
+
+
+def stopped(cmd, harness, n, sid_="th-1"):
+    return ui_sessions.create(f"/implement-issue {n}", work, claude_cmd=cmd, harness=harness)["id"], sid_
+
+
+settings(CX, CX2)
+
+# no reset time: limited, auto-resume after a doubling wait on its own account
+mode("cx_limit")
+g = ui_runner.start("/implement-issue 20", work, claude_cmd="codex")["id"]
+t0 = time.time()
+rec = wait(g, "limited")
+settle(g)
+assert rec["harness"] == "codex" and rec["session_id"] == "th-1" and rec["claude_cmd"] == "codex", rec
+assert rec["auto_resume"] is True and rec["limit_backoff"] == 1 and abs(rec["limit_resets_at"] - (t0 + 60)) <= 5, rec
+assert ui_runner.limit_tick(now=t0 + 30, stagger=0) == []
+n_calls = len(calls())
+assert ui_runner.limit_tick(now=t0 + 70, stagger=0) == [g]
+t1 = time.time()
+rec = wait(g, "limited")
+settle(g)
+assert any(c.startswith("codex exec resume") and "th-1" in c for c in calls()[n_calls:]), calls()
+assert rec["limit_backoff"] == 2 and abs(rec["limit_resets_at"] - (t1 + 120)) <= 5 and rec["claude_cmd"] == "codex"
+ui_sessions.update(g, limit_backoff=6)
+ui_runner._mark_limited(g, None, "x")
+rec = ui_sessions.load(g)
+assert rec["limit_backoff"] == 7 and abs(rec["limit_resets_at"] - (time.time() + 3600)) <= 5, rec
+soon = future - 1000  # before the Claude sessions' reset above, so the tick resumes only this one
+ui_runner._mark_limited(g, {"resets_at": soon}, "x")  # a reset time clears the count
+assert ui_sessions.load(g)["limit_backoff"] is None and ui_sessions.load(g)["limit_resets_at"] == soon
+ui_sessions.update(g, limit_backoff=3)
+
+# with a reset time: not before it, resumed after it; a run without a limit clears the count
+mode("cx_ok")
+assert ui_runner.limit_tick(now=soon - 10, stagger=0) == []
+assert ui_runner.limit_tick(now=soon + 10, stagger=0) == [g]
+rec = wait(g, "done")
+settle(g)
+assert rec.get("limit_backoff") is None and rec["claude_cmd"] == "codex", rec
+
+# Claude: a no-reset limit never gets a back-off count
+assert ui_sessions.load(c["id"]).get("limit_backoff") is None and ui_sessions.load(c["id"])["auto_resume"] is False
+
+# own account removed, or switched to another harness: stays limited, auto-resume off, note, no retry
+for accounts, label in (((CX,), "codex2"), ((CX, {**CX2, "harness": "claude"}), "Codex2")):
+    settings(CX, CX2)
+    k, _ = stopped("codex2", "codex", 21)
+    ui_sessions.update(k, status="limited", session_id="th-1", auto_resume=True, limit_resets_at=past)
+    settings(*accounts)
+    n_calls = len(calls())
+    assert ui_runner.limit_tick(stagger=0) == []
+    rec = ui_sessions.load(k)
+    want = f"account {label} is no longer a codex account; resume it on a codex account"
+    assert rec["status"] == "limited" and rec["auto_resume"] is False and rec["note"] == want, rec
+    assert ui_runner.limit_tick(stagger=0) == [] and ui_sessions.load(k) == rec and len(calls()) == n_calls
+    ui_sessions.update(k, status="stopped")
+
+# a limited Claude session whose account turned Codex: auto-resume off with the note, not a retry every tick
+settings({"label": "Work", "cmd": "cc work", "harness": "codex"})
+k, _ = stopped("cc work", None, 26)
+ui_sessions.update(k, status="limited", session_id="sess-1", auto_resume=True, limit_resets_at=past)
+n_calls = len(calls())
+assert ui_runner.limit_tick(stagger=0) == [] and len(calls()) == n_calls
+rec = ui_sessions.load(k)
+assert rec["auto_resume"] is False and rec["note"] == (
+    "account Work is no longer a claude account; resume it on a claude account"
+), rec
+ui_sessions.update(k, status="stopped")
+
+# cross-harness resume refused: nothing spawned, nothing copied, record unchanged
+settings(CX, CX2)
+k, _ = stopped("codex", "codex", 22)
+ui_sessions.update(k, status="limited", session_id="th-1", auto_resume=True, limit_resets_at=future, limit_backoff=2)
+before, n_calls = ui_sessions.load(k), len(calls())
+refused(lambda: ui_runner.resume_stopped(k, "cc work"), "this session ran on codex; pick a codex account")
+assert ui_sessions.load(k) == before and len(calls()) == n_calls
+ui_sessions.update(k, status="stopped")
+k, _ = stopped("cc other", None, 23)
+ui_sessions.update(k, status="limited", session_id="sess-1")
+before = ui_sessions.load(k)
+refused(lambda: ui_runner.resume_stopped(k, "codex"), "this session ran on claude; pick a claude account")
+assert ui_sessions.load(k) == before and len(calls()) == n_calls
+ui_sessions.update(k, status="stopped")
+
+# Codex account removed: a Codex default takes over; a Claude default refuses before any claim
+k, _ = stopped("codex2", "codex", 24)
+ui_sessions.update(k, status="stopped", session_id="th-1")
+settings(CX, default="Codex")
+mode("cx_ok")
+ui_runner.resume_stopped(k)
+assert wait(k, "done")["claude_cmd"] == "codex"
+settle(k)
+assert calls()[-1].startswith("codex exec resume") and "th-1" in calls()[-1], calls()[-1]
+ui_sessions.update(k, claude_cmd="codex2", status="stopped")
+settings(CX)
+n_calls = len(calls())
+gone = "account codex2 was removed; pick a codex account"
+refused(lambda: ui_runner.resume_stopped(k), gone)
+refused(lambda: ui_runner.send_prompt(k, "next"), gone)
+refused(lambda: ui_runner.resume(k, "an answer"), gone)
+assert ui_sessions.load(k)["status"] == "stopped" and len(calls()) == n_calls
+
+# Claude account removed: resumed on its recorded command, whatever the default is
+k, _ = stopped("cc gone", None, 25)
+ui_sessions.update(k, status="stopped", session_id="sess-1")
+settings(CX, default="Codex")
+mode("ok")
+ui_runner.resume_stopped(k)
+assert wait(k, "done")["claude_cmd"] == "cc gone"
+settle(k)
+assert calls()[-1].startswith("cc-profile gone") and "--resume sess-1" in calls()[-1], calls()[-1]
+assert not os.path.exists(os.path.join(root, ".claude-profiles", "gone"))
+settings()
 
 # warning chip data
 ui_runner._usage["cc work"] = json.loads(WARN % future)["rate_limit_info"]

@@ -60,6 +60,41 @@ class Conflict(Exception):
     pass
 
 
+class AccountRefused(Conflict, RunnerError):
+    """The session cannot run on that account (another harness, or its account is gone): a 409, and a
+    failed resume to callers that only catch RunnerError."""
+
+
+def _harness(rec: dict) -> str:
+    return rec.get("harness") or "claude"
+
+
+def _account(cmd: str):
+    return next((c for c in ui_settings.load(persist=False)["commands"] if c["cmd"] == cmd), None)
+
+
+def resume_target(rec: dict) -> dict:
+    """Record fields to set before resuming rec on its own account ({} = as it is); AccountRefused when it cannot."""
+    h, cmd = _harness(rec), rec.get("claude_cmd") or ui_settings.DEFAULT_CMD
+    acc = _account(cmd)
+    if acc is None:
+        if h == "claude":  # FR-15: a removed Claude account resumes on its recorded command
+            return {}
+        d = ui_settings.default_cmd()
+        if ui_settings.harness_of(d) == h:
+            return {"claude_cmd": d}
+        raise AccountRefused(f"account {cmd} was removed; pick a {h} account")
+    if acc["harness"] != h:
+        raise AccountRefused(f"account {acc['label']} is no longer a {h} account; resume it on a {h} account")
+    return {}
+
+
+def _check_harness(rec: dict, new_cmd: str) -> None:
+    h = _harness(rec)
+    if ui_settings.harness_of(new_cmd) != h:
+        raise AccountRefused(f"this session ran on {h}; pick a {h} account")
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -314,6 +349,9 @@ def resume(sid: str, answer_text) -> dict:
     path = read_checkouts().get(repo, repo)
     if not isinstance(path, str) or not os.path.isdir(path):
         _fail(sid, f"cannot resume: cwd is not a directory: {repo!r}")
+    fields = resume_target(rec)
+    if fields:
+        rec = ui_sessions.update(sid, **fields)
     ad = harness.for_record(rec)
     sent = ad.skill_text(answer_text, path)  # sent resolved; the stored command stays
     answer_text = repo_skills.resolve(answer_text, path)
@@ -359,7 +397,10 @@ def send_prompt(sid: str, text, limit: int = MAX_CUSTOM_PROMPT) -> str:
         for o in ui_sessions.list_sessions() if key else []:
             if o.get("id") != sid and _issue_key(o) == key and o.get("status") in ("starting", "running", "waiting"):
                 raise Conflict(f"session {o['id']} is already live for this issue")
-        ui_sessions.update(sid, status="starting", pid=None, queued_prompt=None)  # claim: double-submits are safe
+        fields = resume_target(rec)  # before the claim: a refusal must not leave it `starting`
+        ui_sessions.update(
+            sid, status="starting", pid=None, queued_prompt=None, **fields
+        )  # claim: double-submits are safe
     resume(sid, text)
     return "sent"
 
@@ -498,7 +539,7 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
                 )
             elif (rc == 0 or proc is None) and not is_error:
                 if status == "waiting":  # question recorded mid-run: stay waiting for the answer
-                    ui_sessions.update(sid, ended_at=_now(), pending_answer=None)
+                    ui_sessions.update(sid, ended_at=_now(), pending_answer=None, limit_backoff=None)
                 elif asked:  # model ran `aiw ask` but nothing was recorded: don't call it done
                     ui_sessions.update(
                         sid,
@@ -507,7 +548,7 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
                         error="aiw ask ran but recorded no question; see stream.jsonl",
                     )
                 else:
-                    ui_sessions.update(sid, status="done", ended_at=_now(), pending_answer=None)
+                    ui_sessions.update(sid, status="done", ended_at=_now(), pending_answer=None, limit_backoff=None)
             else:
                 ui_sessions.update(
                     sid,
@@ -539,6 +580,13 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
 def _mark_limited(sid: str, ev, err) -> None:
     """ev: the run's `limit` event, or None when only the error text matched the limit rule."""
     resets = (ev or {}).get("resets_at")
+    rec = ui_sessions.load(sid) or {}
+    extra = {}
+    if _harness(rec) != "claude":  # no reset time: retry after a doubling wait, 1 min .. 60 min
+        n = None if resets is not None else (rec.get("limit_backoff") or 0) + 1
+        if n:
+            resets = int(time.time()) + min(60 * 2 ** (n - 1), 3600)
+        extra = {"limit_backoff": n}
     ui_sessions.update(
         sid,
         status="limited",
@@ -548,6 +596,7 @@ def _mark_limited(sid: str, ev, err) -> None:
         limit_resets_at=resets,
         limit_type=(ev or {}).get("type"),
         auto_resume=resets is not None,
+        **extra,
     )
 
 
@@ -628,6 +677,8 @@ def limit_tick(now=None, stagger=2) -> list:
         if ui_sessions.is_answerer(rec) or rec.get("hold"):
             continue
         if rec.get("status") == "limited" and rec.get("auto_resume") and until and until + LIMIT_BUFFER_SECONDS <= now:
+            if not _on_own_account(rec):
+                continue
             try:
                 resume_stopped(rec["id"])
                 out.append(rec["id"])
@@ -635,6 +686,23 @@ def limit_tick(now=None, stagger=2) -> list:
                 warn(f"limit auto-resume of {rec['id']} failed: {e}")
             time.sleep(stagger)
     return out
+
+
+def _on_own_account(rec: dict) -> bool:
+    """A limited session auto-resumes only on its own account (FR-8). When that account changed harness (or a
+    Codex one is gone), auto-resume stops for it with a note, so later ticks leave it alone. A Claude session on a
+    removed account still resumes on its recorded command (resume_target returns {} for it)."""
+    try:
+        if resume_target(rec) == {}:
+            return True
+    except AccountRefused:
+        pass
+    h, cmd = _harness(rec), rec.get("claude_cmd") or ui_settings.DEFAULT_CMD
+    label = (_account(cmd) or {}).get("label", cmd)
+    ui_sessions.update(
+        rec["id"], auto_resume=False, note=f"account {label} is no longer a {h} account; resume it on a {h} account"
+    )
+    return False
 
 
 def start_limit_timer(interval=LIMIT_TICK_SECONDS) -> threading.Thread:
@@ -773,7 +841,8 @@ def resume_stopped(sid: str, claude_cmd=None) -> dict:
     """Continue a stopped, limited or failed session via --resume (fails the session if that cannot continue).
 
     A limited session resumes with its unanswered answer, if any; claude_cmd rebinds it to another
-    account first (its transcript is copied into that account's config dir).
+    account first (a Claude transcript is copied into that account's config dir); an account of another
+    harness than the session's is refused (AccountRefused).
     """
     with _resume_lock:
         rec = ui_sessions.load(sid)
@@ -792,11 +861,21 @@ def resume_stopped(sid: str, claude_cmd=None) -> dict:
                     raise Conflict(f"session {o['id']} is already live for this issue")
         repo = rec.get("repo")
         path = read_checkouts().get(repo, repo)
-        rebind = {}
         if claude_cmd and claude_cmd != rec.get("claude_cmd"):
-            if rec.get("session_id") and isinstance(path, str) and os.path.isdir(path):
-                _copy_transcript(rec, path, claude_cmd)
+            _check_harness(rec, claude_cmd)
             rebind = {"claude_cmd": claude_cmd}
+        else:
+            rebind = resume_target(rec)  # a removed Codex account rebinds to a Codex default
+        new_cmd = rebind.get("claude_cmd")
+        # a Claude transcript moves between profiles; Codex has no copy (a missing thread fails in Codex itself)
+        if (
+            new_cmd
+            and _harness(rec) == "claude"
+            and rec.get("session_id")
+            and isinstance(path, str)
+            and os.path.isdir(path)
+        ):
+            _copy_transcript(rec, path, new_cmd)
         # claim: makes double-submits safe; pid=None so a /stop during preflight can't kill the old group
         ui_sessions.update(
             sid, status="starting", pid=None, limit_resets_at=None, limit_type=None, auto_resume=None, **rebind
