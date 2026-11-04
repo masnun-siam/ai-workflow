@@ -318,7 +318,13 @@ ui_sessions.update(sid3, status="stopped")
 ui_runner.resume_stopped(sid3)
 finished(sid3)
 assert flags_of(argv(), resume=True) == want
-ok("direct model/direct_effort: win over the pick, recorded, re-applied on send, answer and resume")
+q = ui_sessions.create("plain text", work, claude_cmd="codex", harness="codex")
+q = ui_sessions.update(q["id"], status="starting", cwd_path=work, direct_model="gpt-5", run_model="opus")
+q = ui_sessions.update(q["id"], direct_effort="low", run_effort="high")
+ui_runner._start_claimed(q)
+finished(q["id"])
+assert flags_of(argv()) == want, argv()
+ok("direct model/direct_effort: win over the pick, recorded, re-applied on send, answer, resume and queued start")
 
 # Start: a Codex account accepts any value, Claude's 400s are unchanged
 with mock.patch.object(ui_repos, "resolve_repo", return_value=(work, None)):

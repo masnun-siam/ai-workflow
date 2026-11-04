@@ -83,12 +83,13 @@ def model_flags(model, effort, models) -> tuple:
     return flags, notes
 
 
-def _rec_flags(rec, model=None, effort=None) -> tuple:
-    """model_flags for a session: a direct value wins over the user's pick; models of the account it runs on."""
+def _rec_flags(rec, model=None, effort=None, run_model=None, run_effort=None) -> tuple:
+    """model_flags for a session: a direct value (given, else recorded) wins over the user's pick (given, else
+    recorded); models of the account it runs on."""
     rec = rec or {}
     return model_flags(
-        model or rec.get("direct_model") or rec.get("run_model"),
-        effort or rec.get("direct_effort") or rec.get("run_effort"),
+        model or rec.get("direct_model") or run_model or rec.get("run_model"),
+        effort or rec.get("direct_effort") or run_effort or rec.get("run_effort"),
         ui_settings.models_of(rec["claude_cmd"]) if rec.get("claude_cmd") else [],
     )
 
@@ -114,7 +115,7 @@ def start_argv(
     """(argv, sent_prompt) for a fresh start. Codex has no system prompt flag: instructions and the tool-name
     mapping lead the first prompt. agent/allowed_tools are #881's."""
     sent = "\n\n".join([*instructions, TOOL_MAPPING, prompt]) if instructions else prompt
-    flags = _rec_flags(rec, model or run_model, effort or run_effort)[0]
+    flags = _rec_flags(rec, model, effort, run_model, run_effort)[0]
     return [*exe, "exec", "--json", BYPASS_FLAG, "--skip-git-repo-check", *flags, sent], sent
 
 
