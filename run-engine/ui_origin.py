@@ -62,6 +62,9 @@ def _made(rec: dict) -> tuple:
             for line in f:
                 if "docs/prds/" not in line and "tool_result" not in line and "gh issue create" not in line:
                     continue
+                if rec.get("harness") == "codex":
+                    _codex_made(line, prds, issues)
+                    continue
                 for b in _blocks(line):
                     args = b.get("input") if isinstance(b.get("input"), dict) else {}
                     if b.get("type") == "tool_use" and b.get("name") == "Write":
@@ -74,6 +77,22 @@ def _made(rec: dict) -> tuple:
         return set(), set()
     _made_cache[rec["id"]] = (size, prds, issues)
     return prds, issues
+
+
+def _codex_made(line: str, prds: set, issues: set) -> None:
+    """A Codex `item.completed` line: a PRD file it changed, or the issues a `gh issue create` printed."""
+    try:
+        ev = json.loads(line)
+        item = ev.get("item") if ev.get("type") == "item.completed" else None
+    except (ValueError, AttributeError):
+        return
+    if not isinstance(item, dict):
+        return
+    if item.get("type") == "file_change" and isinstance(item.get("changes"), list):
+        for c in item["changes"]:
+            prds.update(_PRD.findall(str(c.get("path", "")) if isinstance(c, dict) else ""))
+    elif item.get("type") == "command_execution" and "gh issue create" in str(item.get("command", "")):
+        issues.update(int(n) for n in _ISSUE_URL.findall(str(item.get("aggregated_output", ""))))
 
 
 def _slug(repo: str) -> str:

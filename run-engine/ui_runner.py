@@ -100,7 +100,7 @@ def _proc_start(pid):
 def _spawn(
     sid: str, argv: list, path: str, answer=None, resuming=False, *, env_extra=None, pass_fds=(), **fields
 ) -> dict:
-    """Spawn claude detached, record pid/running, start the follower. Any failure -> _fail."""
+    """Spawn the harness CLI detached, record pid/running, start the follower. Any failure -> _fail."""
     d = ui_sessions.session_dir(sid)
     stream_path = os.path.join(d, "stream.jsonl")
     try:
@@ -118,7 +118,7 @@ def _spawn(
                 pass_fds=tuple(pass_fds),
             )
     except (OSError, ValueError) as e:
-        _fail(sid, f"failed to spawn claude: {e}")
+        _fail(sid, f"failed to spawn {harness.for_record(ui_sessions.load(sid)).ID}: {e}")
     rec = ui_sessions.update(sid, pid=proc.pid, pid_started=_proc_start(proc.pid), status="running", **fields)
     _procs[sid] = proc
     threading.Thread(target=_follow, args=(sid, proc, None, None, offset, answer, resuming), daemon=True).start()
@@ -255,7 +255,7 @@ def _start_claimed(rec: dict, batch=None) -> None:
         text = repo_skills.resolve(rec["command"], rec["cwd_path"])
         _spawn(
             sid,
-            _restart_argv(rec, exe, text),
+            _restart_argv(rec, exe, rec["cwd_path"]),
             rec["cwd_path"],
             command=text,
             cwd_path=rec["cwd_path"],
@@ -266,11 +266,12 @@ def _start_claimed(rec: dict, batch=None) -> None:
             ui_sessions.update(sid, status="failed", ended_at=_now(), error=f"could not start: {e}")
 
 
-def _restart_argv(rec: dict, exe: list, text: str) -> list:
+def _restart_argv(rec: dict, exe: list, path: str) -> list:
     """A recorded session started afresh (batch, start-now, limited before a session): gated, with its run flags."""
-    return harness.for_record(rec).start_argv(
+    ad = harness.for_record(rec)
+    return ad.start_argv(
         exe,
-        text,
+        ad.skill_text(rec["command"], path),
         instructions=[HEADLESS_PROMPT],
         run_model=rec.get("run_model"),
         run_effort=rec.get("run_effort"),
@@ -313,11 +314,13 @@ def resume(sid: str, answer_text) -> dict:
     path = read_checkouts().get(repo, repo)
     if not isinstance(path, str) or not os.path.isdir(path):
         _fail(sid, f"cannot resume: cwd is not a directory: {repo!r}")
-    answer_text = repo_skills.resolve(answer_text, path)  # sent resolved; the stored command stays
+    ad = harness.for_record(rec)
+    sent = ad.skill_text(answer_text, path)  # sent resolved; the stored command stays
+    answer_text = repo_skills.resolve(answer_text, path)
     exe = _preflight(sid)
     return _spawn(
         sid,
-        harness.for_record(rec).resume_argv(exe, rec["session_id"], answer_text, rec=rec)[0],
+        ad.resume_argv(exe, rec["session_id"], sent, rec=rec)[0],
         path,
         answer=answer_text,
         ended_at=None,
@@ -808,7 +811,7 @@ def resume_stopped(sid: str, claude_cmd=None) -> dict:
             text = repo_skills.resolve(rec["command"], path)
             return _spawn(
                 sid,
-                _restart_argv(rec, exe, text),
+                _restart_argv(rec, exe, path),
                 path,
                 command=text,
                 cwd_path=path,
@@ -816,11 +819,11 @@ def resume_stopped(sid: str, claude_cmd=None) -> dict:
                 error=None,
             )
         _fail(sid, "cannot resume: session has no claude session_id")
-    prompt = repo_skills.resolve(prompt, path)
+    ad = harness.for_record(rec)
     exe = _preflight(sid)
     return _spawn(
         sid,
-        harness.for_record(rec).resume_argv(exe, rec["session_id"], prompt, rec=rec)[0],
+        ad.resume_argv(exe, rec["session_id"], ad.skill_text(prompt, path), rec=rec)[0],
         path,
         resuming=True,
         cwd_path=path,

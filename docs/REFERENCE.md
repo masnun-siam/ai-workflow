@@ -442,6 +442,15 @@ skill does something else. To undo it, delete the copy.
 - For a Codex session, `codex_prompt(text, cwd)` inlines the copy `resolve` picked: `Base directory for this
   skill: <folder>`, the `SKILL.md` body without frontmatter, then `ARGUMENTS: <args>`. Personal skills come
   from the installed `ai-workflow-personal` plugin's `installPath`; anything else is `resolve`'s text.
+  The adapter's `skill_text` sends it at every spawn and send (start, queued start, answer, typed prompt,
+  continue, re-entry); the stored command is still `resolve`'s short form.
+- A Codex session runs `codex exec --json --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check
+  <prompt>` and continues with `codex exec resume <same flags> <thread id> <prompt>`. A fresh start that carries
+  instructions (the headless rules, the grind re-entry) puts them, then `TOOL_MAPPING` (Claude Code tool names to
+  `aiw ask`, `SKILL.md` paths, in-session work, end the turn), before the skill prompt; a resume sends the
+  prompt alone. Login is the exit code of `<cmd> login status` (`` codex CLI is not logged in, run `<cmd> login` ``
+  plus the CLI's first output line in parentheses). Resume in terminal is `cd <path> && <cmd> resume <id>`,
+  every word quoted. Pins (`ui_origin`) read a Codex stream's `file_change` paths and `gh issue create` output.
 - The one exception is the vault's name suggestion (`claude -p` with no skill and no session record).
 
 **Hand-offs between skills** follow the guide's "Repo skills win" rule
@@ -474,7 +483,7 @@ your notes).
 | pr-grind | One `## Round ` heading per round | `ui_grind.index` counts them |
 | pr-grind | `## Re-entry` (the "On-wake branch"), `## Step 8 — Paused stop`, and the headless re-arm: write `next-poll`, end the turn | `REENTRY_PROMPT` (`ui_runner.py`), `LANE_GRIND` (`dispatch_run.py`) |
 | peer-review | The `--root <panel id>` round protocol | `ui_panel.py` starts `/ai-workflow:peer-review --root <panel id> <artifact>` |
-| any | `aiw ask` for gate questions in a headless run | `HEADLESS_PROMPT` (`harness_claude.py`) |
+| any | `aiw ask` for gate questions in a headless run | `HEADLESS_PROMPT` (`harness_claude.py`); on Codex also `TOOL_MAPPING` (`harness_codex.py`) |
 
 - The tick always runs the plugin's own `skills/pr-grind/scripts/poll-reviews.sh` (`_POLL_SH`),
   whichever copy of pr-grind runs. It watches every login in `reviewers:` (comma-separated, compared
@@ -522,7 +531,7 @@ run-engine/   route.py (the aiw CLI) · ui_*.py (the web UI server) · peer_revi
               dispatch_run (the lane engine), dispatch_runners (herdr, herdr-app, headless), dispatch_cli
               harness (the adapter registry: a session's recorded `harness`, `claude` when missing, picks its adapter)
               harness_claude (the Claude adapter: login check, start/resume argv, skill text)
-              harness_codex (the Codex adapter; the stream parser so far, provisional fixture in fixtures/)
+              harness_codex (the Codex adapter: login check, exec/resume argv, tool-name mapping, parser; fixture in fixtures/)
               ui_dist/ (the built UI, committed) · config.json · test_*.py
 ui/           the web UI source: React + TypeScript + Vite
 site/         the GitHub Pages showcase (Vite + React), deployed by .github/workflows/pages.yml;
