@@ -580,4 +580,49 @@ with contextlib.redirect_stdout(out):
 assert out.getvalue() == "a" * 12 + "\n", out.getvalue()
 dr.archive_old = _old
 print("  ok  archive verb")
+# --- herdr on a Codex account: only a `codex` command starts; the refusal makes no dispatch (FR-13)
+import shutil  # noqa: E402
+
+import dispatch_runners  # noqa: E402
+import ui_settings  # noqa: E402
+
+fake_bin = tempfile.mkdtemp()  # Settings only saves an account whose command is on PATH; CI has no codex
+for exe in ("codex", "cc-codex"):
+    with open(os.path.join(fake_bin, exe), "w") as f:
+        f.write("#!/bin/sh\nexit 0\n")
+    os.chmod(os.path.join(fake_bin, exe), 0o755)
+os.environ["PATH"] = fake_bin + os.pathsep + os.environ["PATH"]
+ui_settings.save(
+    {
+        "commands": [
+            {"label": "Cx", "cmd": "codex", "harness": "codex"},
+            {"label": "Ccx", "cmd": "cc-codex x", "harness": "codex"},
+        ],
+        "default": "claude",
+    }
+)
+one = {
+    "epic": "o/a#9",
+    "title": "E",
+    "children": [{"repo": "o/a", "n": 91, "refined": True}],
+    "outside": {},
+    "closed": [],
+}
+dc.resolve = lambda epic, gh=None: one
+sc = dr.check_settings({**dr.DEFAULTS, "grind": "off", "account": "Ccx"})
+before = len(dr.list_all())
+try:
+    dc.start("o/a#9", "herdr", sc, "w1", gh=lambda a: cp("{}"))
+    raise AssertionError("herdr started cc-codex")
+except ValueError as e:
+    assert str(e) == dispatch_runners.HERDR_CODEX_REFUSAL, e
+assert len(dr.list_all()) == before
+dh = dc.start("o/a#9", "headless", sc, gh=lambda a: cp("{}"))
+assert dh["runner"] == "headless"
+dr.set_state(dh["id"], "cancelled")
+assert dc.start("o/a#9", "herdr", {**sc, "account": "Cx"}, "w1", gh=lambda a: cp("{}"))["runner"] == "herdr"
+assert len(dr.list_all()) == before + 2
+dc.resolve = real_resolve
+shutil.rmtree(fake_bin)
+print("  ok  herdr codex refusal")
 print("dispatch_cli: all green")

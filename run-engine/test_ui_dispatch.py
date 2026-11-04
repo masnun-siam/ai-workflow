@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 data = tempfile.mkdtemp()
 os.environ["CLAUDE_PLUGIN_DATA"] = data
 import dispatch_run as dr  # noqa: E402
+import dispatch_runners  # noqa: E402
 import ui_dispatch  # noqa: E402
 import ui_gh  # noqa: E402
 import ui_notify  # noqa: E402
@@ -305,6 +306,17 @@ ui_dispatch.tick_one(dcap["id"], lambda r: snaps.get(r), runner_for=lambda d: rc
 assert dr.load(dcap["id"])["state"] == "running"
 dr.set_settings(dcap["id"], max_cost=None)
 assert not ui_dispatch._cost_capped(dr.load(dcap["id"]))
+# a Codex dispatch runs past the cap: its sessions report tokens and no cost (FR-13)
+cx = ui_sessions.create("/ai-workflow:implement-issue 78", R, claude_cmd="codex", harness="codex")
+ui_sessions.update(cx["id"], cost=None, tokens={"input": 5000, "cached": 0, "output": 900})
+dcx = dr.create("o/r#76", "headless", {"grind": "off", "max_cost": 1.0}, [{"repo": R, "n": 78, "refined": True}])
+dcx["lanes"]["o/r#78"]["handles"] = [{"session": cx["id"]}]
+dr.save(dcx)
+npushed = len(pushed)
+ui_dispatch.tick_one(dcx["id"], lambda r: snaps.get(r), runner_for=lambda d: rcap, now=2003, grind_files=[])
+dcx = dr.load(dcx["id"])
+assert dcx["state"] == "running" and not [e for e in dcx["events"] if e["kind"] == "paused"], dcx["events"]
+assert len(pushed) == npushed
 print("  ok  cost cap")
 p = ui_dispatch.public(dr.load(d["id"]), full=True)
 assert p["lanes"][0]["key"] == "o/r#5" and "events" in p and "handle" not in p["lanes"][0]
@@ -415,6 +427,20 @@ st, body = call(f"/api/dispatches/{d2['id']}/settings", {"ci": "ignore"})
 assert st == 200 and body["settings"]["ci"] == "ignore"
 st, body = call(f"/api/dispatches/{d2['id']}/settings", {"ci": "nope"})
 assert st == 400 and body["error"] == "ci must be one of ('wait', 'defer', 'ignore')"
+fake_bin = tempfile.mkdtemp()  # Settings only saves an account whose command is on PATH; CI has no cc-codex
+with open(os.path.join(fake_bin, "cc-codex"), "w") as f:
+    f.write("#!/bin/sh\nexit 0\n")
+os.chmod(os.path.join(fake_bin, "cc-codex"), 0o755)
+os.environ["PATH"] = fake_bin + os.pathsep + os.environ["PATH"]
+saved = ui_settings.load()
+ui_settings.save({"commands": [{"label": "Ccx", "cmd": "cc-codex x", "harness": "codex"}], "default": "claude"})
+n_before = len(dr.list_all())
+st, body = call(
+    "/api/dispatches", {"epic": "o/r#1", "runner": "herdr", "workspace": "w1", "settings": {"account": "Ccx"}}
+)
+assert (st, body) == (400, {"error": dispatch_runners.HERDR_CODEX_REFUSAL}), (st, body)
+assert len(dr.list_all()) == n_before
+ui_settings.save({"commands": [c for c in saved["commands"] if not c.get("builtin")], "default": saved["default"]})
 seen = []
 real_start = ui_dispatch.dispatch_cli.start
 ui_dispatch.dispatch_cli.start = lambda epic, runner, s, ws=None: seen.append(s) or d2  # no gh in a self-check
