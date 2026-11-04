@@ -779,6 +779,14 @@ for bad in ("", 5, "x" * 41):
         raise AssertionError(f"accepted account {bad!r}")
     except ValueError:
         pass
+for ok in ("gpt-5-codex", "o3:high", "openai/gpt-5.1", "a" * 80, "opus", "opus[1m]", "claude-sonnet-4-5"):
+    assert dr.check_settings({**dr.DEFAULTS, "model": ok})["model"] == ok
+for bad in ("", "a" * 81, "gpt 5", "-x", ";rm"):
+    try:
+        dr.check_settings({**dr.DEFAULTS, "model": bad})
+        raise AssertionError(f"accepted model {bad!r}")
+    except ValueError as e:
+        assert str(e) == "model is not a model name"
 for ok in (None, 5, 0.5, 10000):
     assert dr.check_settings({**dr.DEFAULTS, "max_cost": ok})["max_cost"] == ok
 for bad in (0, -1, "5", True, 10001, float("nan")):
@@ -1052,7 +1060,154 @@ for acc, want in (("work", "cc-profile work"), ("gone", None), (None, None)):
         {"repo": "o/r"}, "p", {"settings": {"account": acc}}
     )
     assert kr.kw["claude_cmd"] == want, (acc, kr.kw)
+# headless on a Codex account: its command, model and effort go to the runner, no Claude flag added
+kr = KwRunner()
+FakeSettings.load = staticmethod(lambda: {"commands": [{"label": "cx", "cmd": "codex"}]})
+dispatch_runners.Headless(runner=kr, sessions=FakeSessions(), settings=FakeSettings).start(
+    {"repo": "o/r"}, "p", {"settings": {"account": "cx", "model": "gpt-5-codex", "effort": "high"}}
+)
+assert kr.kw == {
+    "direct_effort": "high",
+    "model": "gpt-5-codex",
+    "claude_cmd": "codex",
+    "gate_questions": True,
+}, kr.kw
 print("  ok  runners")
+
+# --- herdr on a Codex account (FR-13): --kind codex, the command's words, Codex flags, a short skill pointer
+import ui_settings  # noqa: E402
+
+
+class CodexSettings:
+    HARNESSES = ui_settings.HARNESSES
+    ACC = [
+        {"label": "claude", "cmd": "claude", "harness": "claude"},
+        {"label": "work", "cmd": "cc-profile work", "harness": "claude"},
+        {"label": "cx", "cmd": "codex", "harness": "codex", "models": ["gpt-5-codex"]},
+        {"label": "cxp", "cmd": "codex --profile x", "harness": "codex", "models": []},
+        {"label": "cc", "cmd": "cc-codex x", "harness": "codex", "models": []},
+    ]
+    default = "claude"
+
+    @classmethod
+    def load(cls):
+        return {"commands": cls.ACC, "default": cls.default}
+
+    @classmethod
+    def default_cmd(cls):
+        return next(c["cmd"] for c in cls.ACC if c["label"] == cls.default)
+
+    @classmethod
+    def harness_of(cls, cmd):
+        return next((c["harness"] for c in cls.ACC if c["cmd"] == cmd), "claude")
+
+    @classmethod
+    def models_of(cls, cmd):
+        return next((c.get("models") or [] for c in cls.ACC if c["cmd"] == cmd and c["harness"] == "codex"), [])
+
+
+def herdr_start(account, model=None, effort=None, prompt="/ai-workflow:implement-issue 5"):
+    del calls[:]
+    hx = dispatch_runners.Herdr("w1", cli, settings=CodexSettings)
+    d = {"id": "abc", "settings": {"account": account, "model": model, "effort": effort}}
+    return hx, hx.start({"repo": R, "n": 5}, prompt, d)
+
+
+CODEX_HEAD = ["agent", "start", "aiw-abc-issue-5", "--kind", "codex", "--pane", "p1", "--timeout", "120000", "--"]
+hx, h = herdr_start("cx", "gpt-5-codex", "high")
+assert h == {"tab": "t1", "pane": "p1", "agent": "aiw-abc-issue-5", "cwd": co, "kind": "codex"}
+assert calls[1] == [
+    *CODEX_HEAD,
+    "--dangerously-bypass-approvals-and-sandbox",
+    "--model=gpt-5-codex",
+    "-c",
+    "model_reasoning_effort=high",
+], calls[1]
+first = calls[2][3]
+assert len(calls) == 3 and len(first) <= 480 and first.startswith("Read the skill file "), first
+assert os.path.join("skills", "implement-issue", "SKILL.md") in first and first.endswith("ARGUMENTS: 5")
+hx.send(h, dr.conflict_prompt(7, "master"))
+assert calls[-1][3] == dr.conflict_prompt(7, "master")  # not a skill command: sent as today
+for model, effort in (("opus", "max"), ("default", None), (None, "default"), ("gpt-x", "low")):
+    _, _ = herdr_start("cx", model, effort)
+    want = ["-c", "model_reasoning_effort=low"] if effort == "low" else []
+    assert calls[1] == [*CODEX_HEAD, "--dangerously-bypass-approvals-and-sandbox", *want], (model, effort, calls[1])
+_, h = herdr_start("cxp", "gpt-5-codex", "medium")  # a model saved on another account is left out
+assert calls[1] == [
+    *CODEX_HEAD,
+    "--profile",
+    "x",
+    "--dangerously-bypass-approvals-and-sandbox",
+    "-c",
+    "model_reasoning_effort=medium",
+], calls[1]
+# the repo copy wins in the pointer
+os.makedirs(os.path.join(co, ".claude", "skills", "implement-issue"))
+open(os.path.join(co, ".claude", "skills", "implement-issue", "SKILL.md"), "w").close()
+hx.send(h, "/ai-workflow:implement-issue 5")
+assert calls[-1][3].startswith(f"Read the skill file {co}/.claude/skills/implement-issue/SKILL.md "), calls[-1][3]
+shutil.rmtree(os.path.join(co, ".claude"))
+# the longest lane prompts fit herdr's send with a 120-character plugin path
+real_dir = dispatch_runners.repo_skills._SKILLS_DIR
+root = tempfile.mkdtemp()
+dispatch_runners.repo_skills._SKILLS_DIR = os.path.join(root + "/" + "p" * (119 - len(root)), "skills")
+assert len(os.path.dirname(dispatch_runners.repo_skills._SKILLS_DIR)) == 120
+for nm in ("implement-issue", "pr-grind"):
+    os.makedirs(os.path.join(dispatch_runners.repo_skills._SKILLS_DIR, nm))
+    open(os.path.join(dispatch_runners.repo_skills._SKILLS_DIR, nm, "SKILL.md"), "w").close()
+pr_url = "https://github.com/masnun-siam/ai-workflow/pull/12345"
+for text in (
+    dr.grind_prompt(pr_url, "C0123456789AB", ci="defer"),
+    dr.implement_prompt(12345, "staging", pr=67890, ci="defer"),
+):
+    out = dispatch_runners.repo_skills.codex_pointer(text, None)
+    assert out.startswith("Read the skill file ") and len(out) < 480, (len(out), out)
+dispatch_runners.repo_skills._SKILLS_DIR = real_dir
+# a Codex command herdr cannot start is refused before any herdr call
+for acc in ("cc",):
+    del calls[:]
+    try:
+        herdr_start(acc)
+        raise AssertionError("started cc-codex on herdr")
+    except ValueError as e:
+        assert str(e) == dispatch_runners.HERDR_CODEX_REFUSAL and calls == [], (e, calls)
+for bad in ("cc-codex x", "npx codex", "/usr/bin/codex", "codex 'x", ""):
+    try:
+        dispatch_runners.herdr_codex_words(bad)
+        raise AssertionError(bad)
+    except ValueError as e:
+        assert str(e) == dispatch_runners.HERDR_CODEX_REFUSAL
+assert dispatch_runners.herdr_codex_words("codex --profile 'my work'") == ["--profile", "my work"]
+# Claude accounts, default or not, start today's argv and handle whatever the account
+for acc in (None, "claude", "work", "gone"):
+    _, h = herdr_start(acc, "opus", None)
+    assert h == {"tab": "t1", "pane": "p1", "agent": "aiw-abc-issue-5", "cwd": co}, h
+    assert calls[1][3:5] == ["--kind", "claude"] and calls[1][-4:] == [
+        "--",
+        "--dangerously-skip-permissions",
+        "--model",
+        "opus",
+    ]
+    assert calls[2] == ["agent", "prompt", "aiw-abc-issue-5", "/ai-workflow:implement-issue 5"]
+# a Settings default of Codex makes an unset account a Codex lane
+CodexSettings.default = "cx"
+_, h = herdr_start(None)
+assert h.get("kind") == "codex" and calls[1][3:5] == ["--kind", "codex"]
+CodexSettings.default = "claude"
+# a limited herdr Codex lane shows as stalled, never limited; a Claude lane with the same pane is limited
+lim_text = "x\n5-hour limit reached ∙ resets 3pm"
+
+
+def cli_lim(argv, timeout=60):
+    if argv[:2] == ["pane", "read"]:
+        return subprocess.CompletedProcess(argv, 0, lim_text, "")
+    return cli(argv, timeout)
+
+
+hl = dispatch_runners.Herdr("w1", cli_lim, settings=CodexSettings)
+assert hl.status({"tab": "t1", "pane": "p1", "kind": "codex"}) == ("idle", None)
+assert hl.status({"tab": "t1", "pane": "p1"})[1] is not None
+print("  ok  herdr codex lanes")
 
 # base_branch: lane_base order, lane prompts, followups tail, Open PR target
 assert dr.lane_base({"base": "L"}, {"feature_branch": "F", "base_branch": "B"}) == "F"

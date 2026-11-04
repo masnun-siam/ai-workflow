@@ -595,7 +595,7 @@ def check_settings(s: dict) -> dict:
     unknown = set(s) - set(DEFAULTS)
     if unknown:
         raise ValueError(f"unknown settings: {sorted(unknown)}")
-    if s.get("model") is not None and not re.fullmatch(r"[A-Za-z0-9][\w.\[\]-]{0,60}", str(s["model"])):
+    if s.get("model") is not None and not re.fullmatch(r"[A-Za-z0-9][\w.\[\]:/-]{0,79}", str(s["model"])):
         raise ValueError("model is not a model name")
     if s.get("effort") not in (None, "low", "medium", "high", "xhigh", "max"):
         raise ValueError("effort must be low, medium, high, xhigh or max")

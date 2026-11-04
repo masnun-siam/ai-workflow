@@ -44,7 +44,10 @@ aiw dispatch plan|start <epic> [flags]  preview or start a dispatch (flags as he
                                         herdr-app opens lanes as tabs of the Herdr desktop app, with
                                         --workspace its app space id from `herdr-app ls`; the web UI still
                                         labels herdr-app dispatches as background sessions);
-                                        an epic only: picked issues dispatch from the UI
+                                        a herdr dispatch on a Codex account starts `--kind codex` lanes
+                                        and needs an account whose command is `codex` (else refused:
+                                        "herdr can only start the codex binary; ..."); herdr Claude lanes
+                                        ignore the account; an epic only: picked issues dispatch from the UI
 aiw jev ci-hint|finding-hint --file <path>
                                         advisory jev hint for /pr-grind as JSON; reads the text from a file;
                                         always exits 0
@@ -53,7 +56,7 @@ aiw dispatch ls|show <id>               list dispatches, or one as JSON (also th
 aiw dispatch archive [--days N]      move dispatches finished over N days ago (default 30) to dispatches/archive/; prints the ids (the server does this daily)
 aiw dispatch doctor [<id>]          why a live dispatch cannot move (skipped blocker, cycle, stale snapshot,
                                         dead server, needs you, held); exits 1 on a problem
-aiw dispatch set <id> key=value...      change max, grind, ci, auto_merge, skip_approval, model, effort, account, max_cost while it runs (`max_cost=20` pauses the dispatch once its headless lanes have cost $20; `max_cost=` clears it)
+aiw dispatch set <id> key=value...      change max, grind, ci, auto_merge, skip_approval, model, effort, account, max_cost while it runs (`max_cost=20` pauses the dispatch once its headless lanes have cost $20; never on a Codex account, whose sessions report no cost; `max_cost=` clears it; `model` is 1–80 letters, digits, `.`, `-`, `_`, `:`, `/`, `[`, `]`, starting with a letter or digit)
                                         (feature_branch and base_branch are fixed at start)
 aiw dispatch pause|resume|cancel <id>   the whole dispatch (pause stops new lanes only)
 aiw dispatch lane <id> <n> <action>     pause, resume, retry, skip, merge, hold, unhold, or send "<text>"

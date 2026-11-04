@@ -102,15 +102,13 @@ def _skill_body(path: str) -> str:
     return "\n".join(lines).strip("\r\n")
 
 
-def codex_prompt(text, cwd):
-    """The prompt a Codex session gets for text: the resolved skill's SKILL.md inlined with its base
-    directory and arguments, as Claude Code builds it; any other text is `resolve(text, cwd)`."""
-    r = resolve(text, cwd)
+def _skill_folder(r, cwd):
+    """(folder, args) of the skill a resolved command `r` runs, else None. resolve's spelling says which
+    copy runs: no prefix = repo copy, ai-workflow: = this plugin."""
     m = _SPELLED_RE.match(r.lstrip()) if isinstance(r, str) and r else None
     if not m:
-        return r
+        return None
     prefix, name, args = m.groups()
-    # resolve's spelling says which copy runs: no prefix = repo copy, ai-workflow: = this plugin.
     if not prefix and name in names() and name not in PERSONAL and has_copy(cwd, name):
         folder = os.path.join(cwd, ".claude", "skills", name)
     elif prefix == PLUGIN and name in names() and name not in PERSONAL:
@@ -118,13 +116,36 @@ def codex_prompt(text, cwd):
     elif prefix == PERSONAL_PLUGIN and name in PERSONAL and (home := _personal_plugin_dir()):
         folder = os.path.join(home, "skills", name)
     else:
+        return None
+    return folder, (args or "").strip()
+
+
+def codex_prompt(text, cwd):
+    """The prompt a Codex session gets for text: the resolved skill's SKILL.md inlined with its base
+    directory and arguments, as Claude Code builds it; any other text is `resolve(text, cwd)`."""
+    r = resolve(text, cwd)
+    found = _skill_folder(r, cwd)
+    if not found:
         return r
+    folder, args = found
     try:
         body = _skill_body(os.path.join(folder, "SKILL.md"))
     except (OSError, UnicodeDecodeError):
         return r
-    args = (args or "").strip()
     return f"Base directory for this skill: {folder}\n\n{body}" + (f"\n\nARGUMENTS: {args}" if args else "")
+
+
+def codex_pointer(text, cwd):
+    """codex_prompt's short form for herdr, whose sends are cut at ~480 characters: an instruction to read
+    the skill file, arguments last; any other text, or a skill with no file, is `resolve(text, cwd)`."""
+    r = resolve(text, cwd)
+    found = _skill_folder(r, cwd)
+    if not found or not os.path.isfile(os.path.join(found[0], "SKILL.md")):
+        return r
+    folder, args = found
+    return f"Read the skill file {folder}/SKILL.md and follow it; paths in it are relative to it." + (
+        f" ARGUMENTS: {args}" if args else ""
+    )
 
 
 def parse(command):

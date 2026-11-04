@@ -4,7 +4,8 @@
     status(handle) -> (agent, limited_until)    agent: working | idle | blocked | gone
     read(handle) -> text
 
-Every lane session runs with --dangerously-skip-permissions and the dispatch's model and effort.
+Every lane session runs with permissions skipped and the dispatch's model and effort; a herdr lane on a
+Codex account starts `--kind codex` (FR-13).
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from __future__ import annotations
 import contextlib
 import json
 import re
+import shlex
 import uuid
 from datetime import datetime, timedelta
 
@@ -49,6 +51,50 @@ def claude_args(d: dict) -> list:
     ]
 
 
+def _settings(settings):
+    if settings is None:
+        import ui_settings as settings  # noqa: PLC0415 - reads the plugin data dir
+    return settings
+
+
+def account_cmd(d: dict, settings=None) -> str:
+    """The dispatch account's command: the saved account with that label, else the Settings default."""
+    settings = _settings(settings)
+    label = (d.get("settings") or {}).get("account")
+    cmds = settings.load()["commands"]
+    return next((c["cmd"] for c in cmds if c["label"] == label), None) or settings.default_cmd()
+
+
+HERDR_CODEX_REFUSAL = (
+    "herdr can only start the codex binary; use the headless runner or an account whose command is codex"
+)
+
+
+def herdr_codex_words(cmd: str) -> list:
+    """A Codex account command's words after `codex`, split as ui_settings.argv splits; ValueError when
+    herdr cannot start it (`herdr agent start --kind codex` runs only the codex binary)."""
+    try:
+        words = shlex.split(cmd)
+    except ValueError:
+        words = []
+    if not words or words[0] != "codex":
+        raise ValueError(HERDR_CODEX_REFUSAL)
+    return words[1:]
+
+
+def codex_args(d: dict, cmd: str, settings=None) -> list:
+    """Interactive Codex flags for a lane; a model or effort Codex does not offer is left to Codex's default."""
+    settings = _settings(settings)
+    s = d.get("settings") or {}
+    m, e = s.get("model"), s.get("effort")
+    efforts = next(h["efforts"] for h in settings.HARNESSES if h["id"] == "codex")
+    return [
+        "--dangerously-bypass-approvals-and-sandbox",
+        *([f"--model={m}"] if m and m in settings.models_of(cmd) else []),
+        *(["-c", f"model_reasoning_effort={e}"] if e in efforts else []),
+    ]
+
+
 def checkout(repo: str) -> str:
     path = next((p for k, p in dispatch.read_checkouts().items() if k.lower() == repo.lower()), None)
     if not isinstance(path, str):
@@ -74,9 +120,10 @@ class Herdr:
     """Lanes as herdr tabs in one workspace. ponytail: herdr's JSON shapes are read loosely (`_find`);
     pin them with a fixture once herdr documents its API."""
 
-    def __init__(self, workspace, cli=None):
+    def __init__(self, workspace, cli=None, settings=None):
         self.workspace = workspace
         self.cli = cli or (lambda argv, timeout=60: run(["herdr", *argv], timeout=timeout))
+        self.settings = settings
 
     def _ok(self, argv, timeout=60):
         p = self.cli(argv, timeout=timeout)
@@ -88,6 +135,11 @@ class Herdr:
             return p.stdout or ""
 
     def start(self, lane, prompt, d):
+        # herdr Claude lanes ignore the account; a Codex account is refused before any tab is made
+        settings = _settings(self.settings)
+        cmd = account_cmd(d, settings)
+        codex = settings.harness_of(cmd) == "codex"
+        rest = herdr_codex_words(cmd) if codex else None
         label = lane.get("label") or f"issue-{lane['n']}"
         cwd = checkout(lane["repo"])
         made = self._ok(
@@ -107,18 +159,21 @@ class Herdr:
         if not pane:
             raise RuntimeError("herdr tab create returned no pane id")
         name = f"aiw-{d['id']}-{label}"
+        kind, args = ("codex", [*rest, *codex_args(d, cmd, settings)]) if codex else ("claude", claude_args(d))
         self._ok(
-            ["agent", "start", name, "--kind", "claude", "--pane", pane, "--timeout", "120000", "--", *claude_args(d)],
+            ["agent", "start", name, "--kind", kind, "--pane", pane, "--timeout", "120000", "--", *args],
             timeout=150,
         )
-        h = {"tab": tab, "pane": pane, "agent": name, "cwd": cwd}
+        h = {"tab": tab, "pane": pane, "agent": name, "cwd": cwd} | ({"kind": "codex"} if codex else {})
         self.send(h, prompt)
         return h
 
     def send(self, h, text):
         # resolve first: the repo/plugin spelling changes the length. A handle from before `cwd` was kept
         # resolves against None, which gives the plugin spelling.
-        text = repo_skills.resolve(text, h.get("cwd"))
+        # a Codex lane gets a pointer to the skill file: the inlined body would not fit herdr's send
+        prep = repo_skills.codex_pointer if h.get("kind") == "codex" else repo_skills.resolve
+        text = prep(text, h.get("cwd"))
         # herdr cuts a long send-text; prompts here stay well under its ~500-character limit
         self._ok(["agent", "prompt", h["agent"], text[:480]])
 
@@ -139,7 +194,8 @@ class Herdr:
         s = t.get("agent_status") or "unknown"
         if s in ("idle", "done"):
             text = self.read(h)
-            until = limit_reset(text)
+            # ponytail: no Codex limit text match; a limited herdr Codex lane shows as stalled (PRD FR-13)
+            until = None if h.get("kind") == "codex" else limit_reset(text)
             if until:
                 return "idle", until
             tail = "\n".join(text.splitlines()[-3:])

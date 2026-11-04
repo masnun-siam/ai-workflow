@@ -181,7 +181,7 @@ def _cost_capped(d: dict) -> bool:
     cap = d["settings"].get("max_cost")
     if not cap or d["state"] != "running":
         return False
-    spent = sum(_usage(x)["cost"] for x in d["lanes"].values())
+    spent = sum(_usage(x)["cost"] for x in d["lanes"].values())  # Codex sessions cost None: never capped
     if spent < cap:
         return False
     d["state"] = "paused"
