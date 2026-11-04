@@ -34,13 +34,6 @@ repos:
         args: [--exclude=SC2016]
   - repo: local
     hooks:
-      - id: engine-tests
-        name: run-engine/run_tests.sh
-        language: system
-        # `git commit -a` hands hooks a temp GIT_INDEX_FILE; the tests' own temp repos must not write into it
-        entry: env -u GIT_INDEX_FILE -u GIT_DIR -u GIT_WORK_TREE bash run-engine/run_tests.sh
-        files: ^run-engine/.*\.py$
-        pass_filenames: false
       - id: all-tests
         name: run-engine/test_*.py (all, ~2 min)
         language: system
