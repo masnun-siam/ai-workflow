@@ -338,6 +338,18 @@ with mock.patch.object(ui_repos, "resolve_repo", return_value=(work, None)):
     )
 ok("start_session: Codex 201 for opus/gpt-5/max with the fallback, Claude 400s as before")
 
+# dispatch headless: the dispatch's model and effort arrive as direct values
+import dispatch_runners  # noqa: E402
+
+d = {"settings": {"account": "Codex", "model": "gpt-5", "effort": "max"}}
+h = dispatch_runners.Headless(runner=ui_runner, sessions=ui_sessions, settings=ui_settings).start(
+    {"repo": work}, "plain text", d
+)
+rec = finished(h["session"])
+assert flags_of(argv()) == ["--model=gpt-5"] and rec["direct_model"] == "gpt-5" and rec["direct_effort"] == "max"
+assert rec["run_note"] == "`max` is not a Codex effort; ran on Codex's default", rec["run_note"]
+ok("dispatch headless: model as a flag, max falls back with the note")
+
 # grind re-entry: no model or effort, no flag, no note
 rec = finished(ui_runner.start("/pr-grind 7", work, instructions=[ui_runner.REENTRY_PROMPT], claude_cmd="codex")["id"])
 assert flags_of(argv()) == [] and "run_note" not in rec
