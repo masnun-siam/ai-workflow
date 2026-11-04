@@ -294,6 +294,8 @@ def _start_claimed(rec: dict, batch=None) -> None:
             rec["cwd_path"],
             command=text,
             cwd_path=rec["cwd_path"],
+            tokens_base=None,
+            tokens_total=None,
         )
     except Exception as e:  # noqa: BLE001 - one bad session must not strand the rest of the batch
         warn(f"batch {batch}: starting {sid} failed: {e}")
@@ -367,6 +369,7 @@ def resume(sid: str, answer_text) -> dict:
         resumed_fresh=None,
         note=None,
         terminal_handoff=None,
+        tokens_base=rec.get("tokens_total"),
     )
 
 
@@ -434,10 +437,11 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
     path = os.path.join(ui_sessions.session_dir(sid), "stream.jsonl")
     buf, is_error, saw_init, saw_result, first_err, asked = b"", False, False, False, None, False
     limit = None  # the `limit` event of a rejected run
-    run_tokens = None  # summed `result` tokens since the run's session_id event
+    run_tokens = None  # summed `result` tokens since the run's session_id event (the last one when cumulative)
     rec = ui_sessions.load(sid) or {}
     cmd = rec.get("claude_cmd") or ui_settings.DEFAULT_CMD
     adapter = harness.for_record(rec)
+    base = rec.get("tokens_base") or {}  # the thread's cumulative usage when this run started (set at spawn)
 
     def handle(line: bytes) -> None:
         for ev in adapter.parse_line(line):
@@ -469,6 +473,16 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
             is_error, saw_result = ev["is_error"], True
             if is_error and first_err is None:
                 first_err = ev.get("error") or ev["text"] or "claude reported an error"
+            if adapter.CUMULATIVE_USAGE:
+                if ev["tokens"]:  # usage over the whole thread: this run's own is the rise since it started
+                    run_tokens = ev["tokens"]
+                    ui_sessions.update(
+                        sid,
+                        tokens_total=run_tokens,
+                        tokens={k: max(0, v - base.get(k, 0)) for k, v in run_tokens.items()},
+                    )
+                ui_sessions.update(sid, cost=ev["cost"])
+                return
             if ev["tokens"]:
                 run_tokens = {k: (run_tokens or {}).get(k, 0) + v for k, v in ev["tokens"].items()}
             ui_sessions.update(sid, cost=ev["cost"], tokens=run_tokens)
@@ -896,6 +910,8 @@ def resume_stopped(sid: str, claude_cmd=None) -> dict:
                 cwd_path=path,
                 ended_at=None,
                 error=None,
+                tokens_base=None,  # a new thread: its usage starts at zero
+                tokens_total=None,
             )
         _fail(sid, "cannot resume: session has no claude session_id")
     ad = harness.for_record(rec)
@@ -908,6 +924,7 @@ def resume_stopped(sid: str, claude_cmd=None) -> dict:
         cwd_path=path,
         ended_at=None,
         error=None,
+        tokens_base=rec.get("tokens_total"),
         pending_question=None,
         resumed_fresh=None,
         note=None,

@@ -139,6 +139,7 @@ def stub_parse(line) -> list:
 
 
 stub = types.SimpleNamespace(
+    CUMULATIVE_USAGE=False,
     parse_line=stub_parse,
     resume_command=lambda cmd, path, sid: f"stub-resume {sid}" if sid else None,
 )
