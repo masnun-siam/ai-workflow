@@ -552,7 +552,10 @@ with mock.patch.object(harness_codex, "AGENT_SANDBOX_VERIFIED", True):
     ok("plain Codex start: bypass flag, no sandbox field")
 
 # 6. Claude agent sessions carry no sandbox or agent field
-with mock.patch.object(ui_runner, "_spawn", side_effect=lambda sid, *a, **k: ui_sessions.load(sid)):
+with (
+    mock.patch.object(ui_runner, "_preflight", return_value=["claude"]),  # CI has no claude CLI
+    mock.patch.object(ui_runner, "_spawn", side_effect=lambda sid, *a, **k: ui_sessions.load(sid)),
+):
     crec = ui_runner.start(
         "review it", work, agent="ai-workflow:peer-reviewer", claude_cmd="claude", allowed_tools=["Read"]
     )
