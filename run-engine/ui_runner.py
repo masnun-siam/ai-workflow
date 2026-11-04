@@ -677,7 +677,7 @@ def limit_tick(now=None, stagger=2) -> list:
         if ui_sessions.is_answerer(rec) or rec.get("hold"):
             continue
         if rec.get("status") == "limited" and rec.get("auto_resume") and until and until + LIMIT_BUFFER_SECONDS <= now:
-            if _harness(rec) != "claude" and not _on_own_account(rec):
+            if not _on_own_account(rec):
                 continue
             try:
                 resume_stopped(rec["id"])
@@ -689,8 +689,9 @@ def limit_tick(now=None, stagger=2) -> list:
 
 
 def _on_own_account(rec: dict) -> bool:
-    """A limited non-Claude session auto-resumes only on its own account (FR-8). When that account is gone or
-    changed harness, auto-resume stops for it with a note, so later ticks leave it alone."""
+    """A limited session auto-resumes only on its own account (FR-8). When that account changed harness (or a
+    Codex one is gone), auto-resume stops for it with a note, so later ticks leave it alone. A Claude session on a
+    removed account still resumes on its recorded command (resume_target returns {} for it)."""
     try:
         if resume_target(rec) == {}:
             return True

@@ -302,6 +302,18 @@ for accounts, label in (((CX,), "codex2"), ((CX, {**CX2, "harness": "claude"}), 
     assert ui_runner.limit_tick(stagger=0) == [] and ui_sessions.load(k) == rec and len(calls()) == n_calls
     ui_sessions.update(k, status="stopped")
 
+# a limited Claude session whose account turned Codex: auto-resume off with the note, not a retry every tick
+settings({"label": "Work", "cmd": "cc work", "harness": "codex"})
+k, _ = stopped("cc work", None, 26)
+ui_sessions.update(k, status="limited", session_id="sess-1", auto_resume=True, limit_resets_at=past)
+n_calls = len(calls())
+assert ui_runner.limit_tick(stagger=0) == [] and len(calls()) == n_calls
+rec = ui_sessions.load(k)
+assert rec["auto_resume"] is False and rec["note"] == (
+    "account Work is no longer a claude account; resume it on a claude account"
+), rec
+ui_sessions.update(k, status="stopped")
+
 # cross-harness resume refused: nothing spawned, nothing copied, record unchanged
 settings(CX, CX2)
 k, _ = stopped("codex", "codex", 22)
