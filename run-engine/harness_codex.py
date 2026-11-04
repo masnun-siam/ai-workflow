@@ -14,6 +14,7 @@ import ui_settings
 from ui_events import _n
 
 ID = "codex"
+CUMULATIVE_USAGE = True  # `turn.completed` usage covers the whole thread, not one run
 BYPASS_FLAG = "--dangerously-bypass-approvals-and-sandbox"
 _PLUGIN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Claude Code tool names the skills use, told to Codex on every fresh start that carries instructions.
