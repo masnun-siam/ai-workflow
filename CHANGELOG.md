@@ -49,6 +49,7 @@
 
 ### Changed
 
+- **Session page leads with the outcome**: a finished session shows its last result in an **Outcome** card above the transcript, and the transcript ends with a pointer to it instead of repeating the text. Runs of tool calls fold into one expandable "N steps" row (**Show every step** replaces **Collapse tool calls**), a final message the result repeats is dropped, and tool paths lose their worktree and repo prefixes. The facts box becomes a line under the title, so the transcript gets the full width, and Rerun on a finished session moves into a ⋯ menu, off the `R` key.
 - **Accounts, not Claude accounts** (#874, #885, #886): the Settings section and the docs say "Accounts" and "coding-agent sessions (Claude Code or Codex)" where they said Claude only; the session's **Continue in terminal** command comes from the server only (no UI fallback).
 - **Commits no longer run the test suite**: the `engine-tests` pre-commit hook is removed, so a commit takes seconds instead of minutes. The whole suite still runs on push and in CI.
 - **Grind start uses the resolver** (#842): auto-grind, the per-issue switch, the board's pr-grind start, dispatch lanes and the dispatch preview take the channel and the skip decision from `grind_reviewers.resolve`, so they agree with `/pr-grind`. A UI-started grind never passes `--reviewer`; a repo with no channel and no usable reviewer starts nothing (the switch and the board start answer 400 with the reason). The per-repo `reviewer` setting is gone.

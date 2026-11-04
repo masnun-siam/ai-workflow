@@ -475,6 +475,12 @@ describe('Session page', () => {
     expect(await screen.findByText('claude-opus-5-5')).toBeTruthy();
     expect(screen.getByText('high')).toBeTruthy();
   });
+  it('a done session shows its last result as the outcome above the transcript', async () => {
+    open(base(), [{ kind: 'text', text: 'Merged in #9.' }, { kind: 'result', text: 'Merged in #9.', cost: 0.5 }]);
+    const out = await screen.findByRole('region', { name: 'Outcome' });
+    expect(within(out).getByText('Merged in #9.')).toBeTruthy();
+    expect(screen.getAllByText('Merged in #9.').length).toBe(1);
+  });
   it('Facts falls back to — and Default without model or effort', async () => {
     open(base());
     expect(await screen.findByText('Default')).toBeTruthy();
@@ -591,9 +597,12 @@ describe('Session page keys', () => {
     await u.click(screen.getByRole('button', { name: 'Resume' }));
     await waitFor(() => expect(posted('/api/sessions/s1/release')).toBe(true));
   });
-  it('R reruns a done session', async () => {
+  it('a done session reruns from the ⋯ menu, not from R', async () => {
     const u = await open(base());
     await u.keyboard('r');
+    expect(posted('/api/sessions/s1/rerun')).toBe(false);
+    await u.click(screen.getByRole('button', { name: 'More actions' }));
+    await u.click(await screen.findByRole('menuitem', { name: /Rerun from scratch/ }));
     await waitFor(() => expect(posted('/api/sessions/s1/rerun')).toBe(true));
   });
   it('R resumes a stopped session, not a rerun', async () => {

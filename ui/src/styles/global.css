@@ -309,6 +309,15 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
 .sess-grid{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:20px;align-items:start}
 .facts{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 14px;font-size:13px}
 .facts dt{color:var(--muted)} .facts dd{margin:0;min-width:0}
+.facts.inline{display:flex;flex-wrap:wrap;gap:2px 6px;margin:8px 0 0;font-size:12.5px;color:var(--muted)}
+.facts.inline dt{color:var(--faint)} .facts.inline dd{color:var(--ink);margin-right:10px}
+.outcome{border-left:3px solid var(--c);display:flex;flex-direction:column;gap:8px}
+.outcome h2{display:flex;align-items:center;gap:8px;color:var(--c)}
+.outcome .prose{max-width:80ch}
+.ev-group .ev{width:100%;text-align:left;border:0;background:none;font:inherit}
+.ev-group .ev .body{font-family:var(--mono);font-size:12.5px;color:var(--muted)}
+.ev-group .ev .body b{color:var(--ink);font-weight:500}
+.ev-steps{margin-left:18px;padding-left:8px;border-left:1px solid var(--line)}
 .events{display:flex;flex-direction:column;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);padding:6px}
 .ev{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;padding:6px 8px;border-radius:var(--r-ctl)}
 .ev.tool{cursor:pointer}
@@ -325,7 +334,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
 .ev.tool .body{font-family:var(--mono);font-size:12.5px;color:var(--muted)}
 .ev.tool .body b{color:var(--ink);font-weight:500}
 .ev pre{margin:6px 0 0;padding:10px;background:var(--bg);border-radius:6px;font-family:var(--mono);font-size:12px;white-space:pre-wrap;color:var(--ink);max-height:240px;overflow:auto}
-.ev.result{background:var(--cs);color:var(--ink)}
+.ev.result{box-shadow:inset 3px 0 var(--c);color:var(--ink)}
 .composer{position:sticky;bottom:calc(var(--nav-h) + 16px - var(--pb));display:flex;gap:8px;align-items:flex-end;padding:8px;background:var(--surface);border:1px solid var(--line-strong);border-radius:var(--r-card);box-shadow:var(--shadow)}
 .composer textarea{border:0;background:none;resize:none;flex:1;min-height:36px;max-height:160px;padding:8px;field-sizing:content}
 .composer textarea:focus{outline:none}
