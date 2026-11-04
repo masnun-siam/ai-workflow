@@ -620,8 +620,12 @@ assert len(dr.list_all()) == before
 dh = dc.start("o/a#9", "headless", sc, gh=lambda a: cp("{}"))
 assert dh["runner"] == "headless"
 dr.set_state(dh["id"], "cancelled")
-assert dc.start("o/a#9", "herdr", {**sc, "account": "Cx"}, "w1", gh=lambda a: cp("{}"))["runner"] == "herdr"
+dx = dc.start("o/a#9", "herdr", {**sc, "account": "Cx"}, "w1", gh=lambda a: cp("{}"))
+assert dx["runner"] == "herdr"
 assert len(dr.list_all()) == before + 2
+dr.set_state(dx["id"], "cancelled")
+da = dc.start("o/a#9", "herdr-app", sc, "space1", gh=lambda a: cp("{}"))  # herdr-app runs any Codex command
+assert da["runner"] == "herdr-app" and len(dr.list_all()) == before + 3
 dc.resolve = real_resolve
 shutil.rmtree(fake_bin)
 print("  ok  herdr codex refusal")
