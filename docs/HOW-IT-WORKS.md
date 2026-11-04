@@ -79,8 +79,8 @@ followups are done. Each lane, in one session (a herdr tab or a headless session
 
 A lane that needs you (a question, red CI, a paused grind, a failed merge) is held and tells you in
 the Inbox, by a notification on the channels picked in Settings → Notifications and in the `herdr-dispatch` session; its dependents wait, the other
-lanes go on. At a usage limit a herdr Claude lane stops new lanes from starting until the reset; a headless
-lane's session resumes by itself at the reset, and a limited herdr Codex lane shows as stalled. Settings (grind mode,
+lanes go on. At a usage limit a herdr or herdr-app Claude lane stops new lanes from starting until the reset;
+a headless lane's session resumes by itself at the reset, and a limited herdr Codex lane shows as stalled. Settings (grind mode,
 auto-merge, max, model, effort) change while it runs. The base branch is where PRs land (pick it when you start; fixed
 after). With a feature branch, every PR targets it, cut from the base branch (the default branch when
 none is set), and Open PR goes into the base branch. Without one, lanes branch from the base branch
