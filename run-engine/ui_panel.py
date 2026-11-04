@@ -19,9 +19,11 @@ import harness
 import peer_review
 import ui_events
 import ui_notify
+import ui_origin
 import ui_planning
 import ui_runner
 import ui_sessions
+import ui_settings
 from shared import backup_if_corrupt, warn
 
 LENS_AGENT, LENS_MODEL = "ai-workflow:peer-reviewer", "opus"
@@ -112,6 +114,12 @@ def start(repo: str, artifact: str, lenses: list, root_session: str | None = Non
     lenses = peer_review.check_lenses("custom", lenses)  # ValueError names what is offered
     if root_session is not None and (not isinstance(root_session, str) or ui_sessions.load(root_session) is None):
         raise ValueError(f"root_session {root_session!r} is not a known session")
+    account = (ui_sessions.load(root_session) or {}).get("claude_cmd") if root_session else None
+    account = (
+        account or ui_origin.account_for(repo, f"/ai-workflow:peer-review {artifact}") or ui_settings.default_cmd()
+    )
+    if msg := ui_runner.agent_refusal(account):
+        raise ui_runner.AgentRefused(msg)  # before the panel and its root exist
     with _lock:
         panel_id = peer_review.new_panel(repo, artifact, lenses, root_session)
         try:

@@ -9,6 +9,7 @@ import re
 import shlex
 import subprocess
 
+import away_answerer
 import repo_skills
 import ui_settings
 from ui_events import _n
@@ -16,6 +17,13 @@ from ui_events import _n
 ID = "codex"
 CUMULATIVE_USAGE = True  # `turn.completed` usage covers the whole thread, not one run
 BYPASS_FLAG = "--dangerously-bypass-approvals-and-sandbox"
+# Agent sessions (peer-review lenses, Away answerers) read untrusted text: on Codex they run in its read-only
+# sandbox, or are refused while the sandbox is unproven. Set True only when build gates G2 and G3 pass on a real Codex.
+AGENT_SANDBOX_VERIFIED = False
+AGENT_REFUSAL = "panels and Away answers need a Claude account: Codex's read-only sandbox cannot run gh"
+SANDBOX = "read-only"
+# `exec resume` has no --sandbox (codex-cli 0.166.0, #881): the config override sets it
+RESUME_SANDBOX = ["-c", f'sandbox_mode="{SANDBOX}"']
 _PLUGIN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Claude Code tool names the skills use, told to Codex on every fresh start that carries instructions.
 TOOL_MAPPING = (
@@ -114,16 +122,27 @@ def start_argv(
     rec=None,
 ):
     """(argv, sent_prompt) for a fresh start. Codex has no system prompt flag: instructions and the tool-name
-    mapping lead the first prompt. agent/allowed_tools are #881's."""
-    sent = "\n\n".join([*instructions, TOOL_MAPPING, prompt]) if instructions else prompt
+    mapping lead the first prompt. An agent session (agent or allowed_tools, given or recorded) gets the agent
+    file's text ahead of the prompt and the read-only sandbox instead of the bypass, and no tool mapping: it
+    would hand a lens an `aiw ask` route."""
+    rec = rec or {}
+    agent = agent or rec.get("agent")
+    if agent or allowed_tools or rec.get("sandbox"):
+        sent = "\n\n".join([*instructions, *([away_answerer.agent_body(agent)] if agent else []), prompt])
+        mode = ["--sandbox", SANDBOX]
+    else:
+        sent = "\n\n".join([*instructions, TOOL_MAPPING, prompt]) if instructions else prompt
+        mode = [BYPASS_FLAG]
     flags = _rec_flags(rec, model, effort, run_model, run_effort)[0]
-    return [*exe, "exec", "--json", BYPASS_FLAG, "--skip-git-repo-check", *flags, sent], sent
+    return [*exe, "exec", "--json", *mode, "--skip-git-repo-check", *flags, sent], sent
 
 
 def resume_argv(exe, session_id, prompt, *, rec):
-    """(argv, sent_prompt) continuing thread session_id with prompt alone (the first prompt carried the rest)."""
+    """(argv, sent_prompt) continuing thread session_id with prompt alone (the first prompt carried the rest).
+    A sandboxed session keeps its sandbox and never gets the bypass."""
     flags = _rec_flags(rec)[0]
-    return [*exe, "exec", "resume", "--json", BYPASS_FLAG, "--skip-git-repo-check", *flags, session_id, prompt], prompt
+    mode = RESUME_SANDBOX if rec.get("sandbox") else [BYPASS_FLAG]
+    return [*exe, "exec", "resume", "--json", *mode, "--skip-git-repo-check", *flags, session_id, prompt], prompt
 
 
 def skill_text(text, cwd) -> str:
