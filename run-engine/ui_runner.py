@@ -437,7 +437,7 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
     path = os.path.join(ui_sessions.session_dir(sid), "stream.jsonl")
     buf, is_error, saw_init, saw_result, first_err, asked = b"", False, False, False, None, False
     limit = None  # the `limit` event of a rejected run
-    run_tokens = None  # summed `result` tokens since the run's session_id event (the last one when cumulative)
+    run_tokens = None  # summed `result` tokens since the run's session_id event
     rec = ui_sessions.load(sid) or {}
     cmd = rec.get("claude_cmd") or ui_settings.DEFAULT_CMD
     adapter = harness.for_record(rec)
@@ -473,15 +473,10 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
             is_error, saw_result = ev["is_error"], True
             if is_error and first_err is None:
                 first_err = ev.get("error") or ev["text"] or "claude reported an error"
-            if adapter.CUMULATIVE_USAGE:
-                if ev["tokens"]:  # usage over the whole thread: this run's own is the rise since it started
-                    run_tokens = ev["tokens"]
-                    ui_sessions.update(
-                        sid,
-                        tokens_total=run_tokens,
-                        tokens={k: max(0, v - base.get(k, 0)) for k, v in run_tokens.items()},
-                    )
-                ui_sessions.update(sid, cost=ev["cost"])
+            if adapter.CUMULATIVE_USAGE:  # usage over the whole thread: this run's own is the rise since it started
+                total = ev["tokens"] or {}  # none: a run without usage keeps the stored total
+                rise = {k: max(0, v - base.get(k, 0)) for k, v in total.items()}
+                ui_sessions.update(sid, cost=ev["cost"], **({"tokens_total": total, "tokens": rise} if total else {}))
                 return
             if ev["tokens"]:
                 run_tokens = {k: (run_tokens or {}).get(k, 0) + v for k, v in ev["tokens"].items()}

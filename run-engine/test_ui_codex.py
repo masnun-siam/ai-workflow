@@ -216,7 +216,7 @@ assert finished(sid)["tokens"] == tok(60000, 55000, 600)
 ok("tokens: a drop below the base clamps at 0; a record from before #907 records its first run as reported")
 
 # limited before any thread id: starts over, gated, a new thread with no base
-ui_sessions.update(sid, status="limited", session_id=None)
+ui_sessions.update(sid, status="limited", session_id=None, tokens_base=tok(5, 5, 5), tokens_total=tok(5, 5, 5))
 usage(900, 800, 7)
 ui_runner.resume_stopped(sid)
 rec = finished(sid)
