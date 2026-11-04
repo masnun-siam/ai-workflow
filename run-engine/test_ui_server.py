@@ -739,6 +739,11 @@ try:
     for verb in ("hold", "release"):
         assert call("POST", f"/api/sessions/{'0' * 12}/{verb}", {})[0] == 404
     ok("sessions: hold and release answer 200, 404, 409; hold is on the record")
+    fake_bin = tempfile.mkdtemp()  # Settings only saves an account whose command is on PATH; CI has no codex
+    with open(os.path.join(fake_bin, "codex"), "w") as f:
+        f.write("#!/bin/sh\nexit 0\n")
+    os.chmod(os.path.join(fake_bin, "codex"), 0o755)
+    os.environ["PATH"] = fake_bin + os.pathsep + os.environ["PATH"]
     ui_settings.save({"commands": [{"label": "Cx", "cmd": "codex", "harness": "codex"}], "default": "claude"})
     xs = ui_sessions.create("/implement-issue 8", other, claude_cmd="codex", harness="codex")
     ui_sessions.update(xs["id"], status="stopped", session_id="th-1")
