@@ -74,7 +74,7 @@ The person running `aiw ui`, usually the repo owner. It is single-user, with no 
   - Acceptance: a grind is waiting on Blubird. You switch the active set to {Masum} and restart the grind. The thread's next message is `<@U0373SRT22G> recheck`, and Masum's GitHub review is read as that round. A hand run `/pr-grind <url> --reviewer bob` on a repo whose default is {Blubird} requests `bob` every round.
 - **FR-6 Mentioned reviewers are expected, not third parties.** A review or comment counts as a reviewer's round, and never trips rail 3, when its GitHub login belongs to any reviewer the grind has mentioned or requested so far. That includes one swapped out since, so a late review from the old bot is still read. Each reviewer with no login learns exactly one login per grind, as `UNRESOLVED` is learned today: after it is first mentioned, the first review by a login that is not the author and not already in the set is learned as theirs (for the earliest-mentioned one, if several are unresolved). The pairing is recorded in the state header as `learned: <slack id>=<login>`, and that reviewer is resolved for the rest of the grind. Once every mentioned no-login reviewer is resolved, learning stops, and a review by any other unknown login goes through rail 3 as today. Everyone else is treated as today.
   - Acceptance: after a swap from Blubird to Masum, a review by `gsm-masum` is that round's review, and a late review by `blubird-ai-agent` joins the same round, even after Blubird is deleted from Settings. A review by `copilot-pull-request-reviewer[bot]` is read as the round of a grind that requested `copilot`. A comment by an unlisted human still ends the grind. After the migrated bot's login is learned, a review by an unlisted human ends the grind too.
-- **FR-7 First approval ends the grind.** A round completes on the first review that lands after the trigger from any mentioned reviewer. Reviews from the others that have landed by then join that round, and all their findings are handled, in either mode. An approval is a GitHub review in the `APPROVED` state, or a bot review that pr-grind already parses as clean. A human's comment-only review is never an approval.
+- **FR-7 First approval ends the grind.** A round completes on the first review that lands after the trigger from any mentioned reviewer. Reviews from the others that have landed by then join that round, and all their findings are handled, in either mode. An approval is a GitHub review in the `APPROVED` state, or a bot review that pr-grind already parses as clean. A review is a bot review when it carries the `**Verdict: …**` line pr-grind parses, or its login passes rail 3's bot test (`[bot]`, `user.type == "Bot"`, or in `known_bots`). Any other review is a human's. A human's comment-only review is never an approval.
   - Simple mode ends at the round with an approval from any of them.
   - Deep mode ends at the first round where any one of them has an approval, or a bot review with zero blocker and should-fix findings. A human's review counts only as an approval.
   - In both modes, findings from the others in that same round are fixed and pushed, and the grind closes without a recheck.
@@ -140,6 +140,7 @@ repos.<owner/repo>.reviewers:     null | ["r-…", …]     # null = follow acti
 - A reviewer's `id` is generated when the entry is created, and it stays the same through renames.
 - The migration (FR-9) is keyed on whether `reviewers` exists. Normal reads stay lock-free: only when `reviewers` is absent does a load take the settings lock, re-check under it, migrate, and write. So two racing first loads produce one set of ids. It drops the old per-repo `reviewer` field.
 - The pr-grind state file header gains `reviewers: <logins>`. This is the cumulative set of logins mentioned, requested or learned in this grind, which FR-6 uses.
+- The existing `reviewer:` header key stays. pr-grind writes `reviewer: UNRESOLVED` while any mentioned no-login reviewer has no `learned:` line, otherwise the first login of `reviewers:`. Review polling uses `not-author` on the PR author while it is `UNRESOLVED`, otherwise any login in `reviewers:`.
 
 ```mermaid
 erDiagram
@@ -156,7 +157,7 @@ erDiagram
 
 These extend the existing `GET` and `PUT /api/settings`. A partial `PUT` keeps the fields it leaves out.
 
-- `GET` adds `slack_channels`, `reviewers`, `active_reviewers` and `review_mode`. Each `repos.<slug>` gains `reviewers: string[] | null` and `channel_invalid: bool`.
+- `GET` adds `slack_channels`, `reviewers`, `active_reviewers`, `review_mode` and a read-only `bot_label: string | null` (from `channels.json`). Each `repos.<slug>` gains `reviewers: string[] | null`, `channel_invalid: bool` and a read-only `path: "slack" | "github" | null` from the reviewer resolver. `PUT` ignores the read-only fields.
 - `PUT` with `slack_channels` or `reviewers` replaces that whole list. `active_reviewers` and `repos.<slug>.reviewers` take arrays of known ids, and a repo's `reviewers` can also be `null`. Removing a reviewer removes its id from `active_reviewers` and from every repo override.
 - `PUT` answers `400 {error}` when:
   - an entry fails FR-1 or FR-3 validation;
@@ -169,13 +170,16 @@ These extend the existing `GET` and `PUT /api/settings`. A partial `PUT` keeps t
 - **CLI `aiw grind-reviewers --pr <url>`** (FR-5, FR-6, FR-8) resolves the PR's repo and prints JSON:
 
   ```
-  {path: "slack" | "github", channel: "<id>" | null, mentions: ["U…"], logins: ["…"]}
+  {path: "slack" | "github", channel: "<id>" | null, mentions: ["U…"], logins: ["…"], unlogged: ["U…"], skip: "<warning>" | null}
   ```
+
+  - `unlogged` holds the Slack ids of the current reviewers that have no GitHub login. `/pr-grind` adds them to a cumulative header line `unlogged: <ids>`, and an id is resolved once it has a `learned:` line (FR-6).
+  - `skip` is set when the repo must not grind, and holds the warning to show: "no Slack channel or reviewer, its lanes skip grinding" (FR-8: no channel and no reviewer with a login, or the Slack path with no reviewer Slack id and no `bot_uid`), or "invalid Slack channel <value>, pick a channel in Settings" (FR-9's invalid stored value). Grind start and the dispatch preview skip on it. `/pr-grind` stops at start with that line, except that a run given `--channel` ignores the invalid-channel skip, since its channel comes from the argument. Otherwise it is `null`.
 
   - `mentions` holds the Slack ids of the repo's current reviewers.
   - `logins` holds their GitHub logins, used to recognise reviews on both paths.
   - It reads `ui_settings.json` and `channels.json` only. It does no network call and doesn't filter out the PR author; `/pr-grind` does that.
-  - The output is the same for hand runs. An unregistered repo, or a PR it can't parse, gives `{path: null, mentions: [], logins: []}` with exit 0, and pr-grind then behaves as today. An unreadable settings file gives `{"error": "…"}` with exit 1.
+  - The output is the same for hand runs. An unregistered repo, or a PR it can't parse, gives `{path: null, channel: null, mentions: [], logins: [], unlogged: [], skip: null}` with exit 0, and pr-grind then behaves as today. An unreadable settings file gives `{"error": "…"}` with exit 1.
 - **CLI `aiw local-review`** prints `single` or `loop` (FR-10, FR-12).
 - `/pr-grind` keeps its current arguments (`--channel`, `--reviewer`), with the precedence in FR-5. No new argument is needed.
 
@@ -186,7 +190,7 @@ These extend the existing `GET` and `PUT /api/settings`. A partial `PUT` keeps t
 - **`/pr-grind` skill** (FR-5 to FR-8):
   - At start it fixes the path, channel and thread (FR-5). Each round, before waiting or rechecking, it runs `aiw grind-reviewers --pr <url>` unless `--reviewer` pinned the grind.
   - The trigger and recheck fill the templates' `{bot_uid}` so that the posted text has one valid mention per id: for one id `<@U0373SRT22G> recheck`, for two `<@U0373SRT22G> <@U0BS34962FK> recheck`. The existing templates and `channels.json` stay as they are, and an empty `mentions` uses `bot_uid`.
-  - On the GitHub path, it requests the current logins that haven't been requested yet, skipping the PR author. A login whose request fails (for example, not a collaborator) is skipped with a `request-failed: <login> — <error>` line in the state file, and the other logins are still requested. If every request fails, FR-5's previous-set rule applies.
+  - On the GitHub path, it requests every current login at each recheck, skipping the PR author, as Step 7 re-requests after a push today. A login is requested once per recheck. A login whose request fails (for example, not a collaborator) is skipped with a `request-failed: <login> — <error>` line in the state file, and the other logins are still requested. If every request fails, FR-5's previous-set rule applies.
   - Logins are added to the header's `reviewers:` set, including ones learned from a no-login reviewer's first review. That set counts as expected reviewers for reading rounds and for rail 3, compared ignoring case, with `copilot` matching `copilot-pull-request-reviewer[bot]`.
   - The done rules follow FR-7.
 - **Review polling** (FR-5, FR-6): both the aiw ui tick that wakes headless grinds and the Monitor that interactive grinds arm watch reviews from any login in the header's `reviewers:` set, compared ignoring case, and still use `not-author` while a mentioned no-login reviewer has no `learned:` pairing. Each poll is one reviews read per grind, whatever the size of the set. Today both watch the single `reviewer:` login only, with a case-sensitive match.
@@ -316,6 +320,12 @@ This ships to everyone in a normal plugin release, and the migration runs on fir
   - **A failed review request** skips that login with a warning, so one bad entry doesn't pause a grind that has other reviewers.
   - **Slack or GitHub.** The two paths stay exclusive, and Slack wins, as today. pr-grind keeps one place to post per round.
   - **Fallback.** An empty Slack mention list falls back to `bot_uid`, and the templates keep `{bot_uid}` as the fill point. Hand runs and `channels.json` keep working unchanged.
+  - **Skip in the resolver output.** `aiw grind-reviewers` gains a `skip` field, so `path: null` keeps meaning "behave as today" and an invalid-channel repo never falls back to `channels.json` silently.
+  - **UI reads.** `GET /api/settings` returns each repo's path and `channels.json`'s `bot_label`, read-only, so the UI can dim entries and show the empty-state text.
+  - **No-login reviewers.** The resolver lists them as `unlogged`, and pr-grind keeps a cumulative `unlogged:` header line, so learning knows when to stop across sessions.
+  - **Bot reviews.** A review with the Verdict line, or from a login that passes rail 3's bot test, is a bot review. Review bots that post as ordinary users are covered by the Verdict line.
+  - **Re-request.** Every current login is requested at each recheck on the GitHub path.
+  - **Unlearned signal.** The `reviewer: UNRESOLVED` header value marks an unlearned no-login reviewer. No new header key.
 - **Review loop:**
   - **Where it lives.** It goes in `/implement-issue` step 12 and reads `aiw local-review`, as a recorded deviation from the imported skill, so hand runs follow it as well as UI runs. You approved this exception to the repo rule that imported skills stay as imported.
   - **No round cap**, at your call. The cost is bounded by stopping the session. A failing check after the loop is fixed as step 9 does, also with no cap.
@@ -334,6 +344,8 @@ None.
 - 2026-11-03: peer-review round 2 — Deep-mode approval wording, one learned login per no-login reviewer, findings-log resume rules, polling for interactive grinds, UI test coverage, migration notice, CI baseline note.
 - 2026-11-03: approved by the owner after the team's review; no further changes.
 - 2026-11-03: the local review CLI verb is renamed `aiw local-review` (it was `review-mode`), matching the Settings label, because the plugin-text test that bans naming the removed review verb also matched the old name. Affects epic #835 (no tasks yet).
+- 2026-11-03: refining the issues — the resolver output gains `skip` (how a skipping repo is reported), `reviewer: UNRESOLVED` marks an unlearned no-login reviewer for review polling, and the two new `aiw` verbs are added to `CLAUDE.md`'s verb list (owner's answers). Affects #841, #842, #843, #844, #845, #837.
+- 2026-11-03: refining the issues, second round (owner's answers) — `GET` adds read-only `bot_label` and `repos.<slug>.path`, the resolver output gains `unlogged` with a matching `unlogged:` header line, a bot review is defined, every current login is requested at each recheck, and a run given `--channel` ignores the invalid-channel skip. Affects #841, #844, #845, #848, #849.
 
 ## Related
 
