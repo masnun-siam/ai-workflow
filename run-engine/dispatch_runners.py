@@ -84,15 +84,12 @@ def herdr_codex_words(cmd: str) -> list:
 
 def codex_args(d: dict, cmd: str, settings=None) -> list:
     """Interactive Codex flags for a lane; a model or effort Codex does not offer is left to Codex's default."""
+    import harness_codex  # noqa: PLC0415 - it reads the plugin data dir
+
     settings = _settings(settings)
     s = d.get("settings") or {}
-    m, e = s.get("model"), s.get("effort")
-    efforts = next(h["efforts"] for h in settings.HARNESSES if h["id"] == "codex")
-    return [
-        "--dangerously-bypass-approvals-and-sandbox",
-        *([f"--model={m}"] if m and m in settings.models_of(cmd) else []),
-        *(["-c", f"model_reasoning_effort={e}"] if e in efforts else []),
-    ]
+    flags = harness_codex.model_flags(s.get("model"), s.get("effort"), settings.models_of(cmd))[0]
+    return ["--dangerously-bypass-approvals-and-sandbox", *flags]
 
 
 def checkout(repo: str) -> str:
