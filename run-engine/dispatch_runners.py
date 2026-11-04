@@ -211,12 +211,14 @@ class Herdr:
 class HerdrApp:
     """Lanes as tabs of the Herdr desktop app (herdr-app over herdr-core `hc`), in one space. `hc run` with
     herdr.space/herdr.tab labels makes the tab; an unknown tab id becomes a new, unfocused tab. The first
-    prompt goes in as claude's argument, so nothing waits for claude to be ready."""
+    prompt goes in as the agent's argument, so nothing waits for it to be ready. A Codex account runs its own
+    command with the Codex flags and the inlined skill prompt (FR-13)."""
 
-    def __init__(self, space, cli=None, app=None):
+    def __init__(self, space, cli=None, app=None, settings=None):
         self.space = space
         self.cli = cli or (lambda argv, timeout=60: run(["hc", *argv], timeout=timeout))
         self.app = app or (lambda argv, timeout=30: run(["herdr-app", *argv], timeout=timeout))
+        self.settings = settings
 
     def _ok(self, argv, timeout=60):
         p = self.cli(argv, timeout=timeout)
@@ -228,8 +230,16 @@ class HerdrApp:
             return p.stdout or ""
 
     def start(self, lane, prompt, d):
+        settings = _settings(self.settings)
+        cmd = account_cmd(d, settings)
+        codex = settings.harness_of(cmd) == "codex"
         label = lane.get("label") or f"issue-{lane['n']}"
         cwd = checkout(lane["repo"])
+        # built before hc run, so a Codex command not on PATH fails with nothing made
+        if codex:
+            head, first = [*settings.argv(cmd), *codex_args(d, cmd, settings)], repo_skills.codex_prompt(prompt, cwd)
+        else:
+            head, first = ["claude", *claude_args(d)], repo_skills.resolve(prompt, cwd)
         tab = f"tb{uuid.uuid4().hex}"
         made = self._ok(
             [
@@ -245,19 +255,19 @@ class HerdrApp:
                 "--label",
                 f"herdr.tab={tab}",
                 "--",
-                "claude",
-                *claude_args(d),
-                repo_skills.resolve(prompt, cwd),
+                *head,
+                first,
             ]
         )
         address = made.get("address") if isinstance(made, dict) else None
         if not address:
             raise RuntimeError("hc run returned no terminal address")
         self.app(["do", "tab.rename", "--id", tab, "--name", label])  # ponytail: a name only; the window may be closed
-        return {"terminal": address, "tab": tab, "cwd": cwd}
+        return {"terminal": address, "tab": tab, "cwd": cwd} | ({"kind": "codex"} if codex else {})
 
     def send(self, h, text):
-        self._ok(["send", "--json", h["terminal"], repo_skills.resolve(text, h.get("cwd"))])
+        prep = repo_skills.codex_prompt if h.get("kind") == "codex" else repo_skills.resolve
+        self._ok(["send", "--json", h["terminal"], prep(text, h.get("cwd"))])
 
     def read(self, h) -> str:
         r = self._ok(["read", h["terminal"], "--lines", "200"])
@@ -271,7 +281,8 @@ class HerdrApp:
         s = t.get("status") or "unknown"
         if s in ("idle", "done"):
             text = self.read(h)
-            until = limit_reset(text)
+            # ponytail: no Codex limit text match; a limited herdr-app Codex lane shows as stalled (PRD FR-13)
+            until = None if h.get("kind") == "codex" else limit_reset(text)
             if until:
                 return "idle", until
             tail = "\n".join(text.splitlines()[-3:])
@@ -279,7 +290,7 @@ class HerdrApp:
         return ("blocked" if s == "blocked" else "working"), None
 
     def close(self, h):
-        if h and h.get("terminal"):  # its pane, and the tab with it, closes when claude ends
+        if h and h.get("terminal"):  # its pane, and the tab with it, closes when the agent ends
             p = self.cli(["kill", "--json", h["terminal"]])
             if p.returncode != 0 and self.status(h)[0] != "gone":
                 raise RuntimeError(f"hc kill failed: {(p.stderr or p.stdout or '').strip()[:200]}")
