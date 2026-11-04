@@ -46,8 +46,10 @@ aiw dispatch plan|start <epic> [flags]  preview or start a dispatch (flags as he
                                         labels herdr-app dispatches as background sessions);
                                         a herdr dispatch on a Codex account starts `--kind codex` lanes
                                         and needs an account whose command is `codex` (else refused:
-                                        "herdr can only start the codex binary; ..."); herdr Claude lanes
-                                        ignore the account; an epic only: picked issues dispatch from the UI
+                                        "herdr can only start the codex binary; ..."); a herdr-app dispatch
+                                        on a Codex account runs the account's own command (any, `cc-codex`
+                                        included) with the Codex flags and the inlined skill prompt;
+                                        herdr and herdr-app Claude lanes ignore the account; an epic only: picked issues dispatch from the UI
 aiw jev ci-hint|finding-hint --file <path>
                                         advisory jev hint for /pr-grind as JSON; reads the text from a file;
                                         always exits 0

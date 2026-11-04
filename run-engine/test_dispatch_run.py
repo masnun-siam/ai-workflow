@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -1105,6 +1106,14 @@ class CodexSettings:
     def models_of(cls, cmd):
         return next((c.get("models") or [] for c in cls.ACC if c["cmd"] == cmd and c["harness"] == "codex"), [])
 
+    missing = set()  # commands whose first word is "not on PATH"
+
+    @classmethod
+    def argv(cls, cmd):
+        if cmd in cls.missing:
+            raise ValueError(f"{cmd.split()[0]!r} not found on PATH")
+        return shlex.split(cmd)
+
 
 def herdr_start(account, model=None, effort=None, prompt="/ai-workflow:implement-issue 5"):
     del calls[:]
@@ -1208,6 +1217,70 @@ hl = dispatch_runners.Herdr("w1", cli_lim, settings=CodexSettings)
 assert hl.status({"tab": "t1", "pane": "p1", "kind": "codex"}) == ("idle", None)
 assert hl.status({"tab": "t1", "pane": "p1"})[1] is not None
 print("  ok  herdr codex lanes")
+
+
+# herdr-app on a Codex account: the account's own command, the Codex flags, the inlined skill prompt
+def app_start(account, model=None, effort=None, prompt="/ai-workflow:implement-issue 5"):
+    del happ[:]
+    live["t7"] = {"state": "live", "status": "idle"}
+    ha = dispatch_runners.HerdrApp("sp1", hc_cli, lambda argv, timeout=30: None, settings=CodexSettings)
+    d = {"id": "abc", "settings": {"account": account, "model": model, "effort": effort}}
+    return ha, ha.start({"repo": R, "n": 5}, prompt, d)
+
+
+def after_dashes(argv):
+    return argv[argv.index("--") + 1 :]
+
+
+ha, h = app_start("cx", "gpt-5-codex", "high")
+assert h["kind"] == "codex" and h["terminal"] == "t7" and h["cwd"] == co
+tail = after_dashes(happ[0])
+assert tail[:-1] == [
+    "codex",
+    "--dangerously-bypass-approvals-and-sandbox",
+    "--model=gpt-5-codex",
+    "-c",
+    "model_reasoning_effort=high",
+], tail
+assert tail[-1].startswith("Base directory for this skill: ") and tail[-1].endswith("ARGUMENTS: 5"), tail[-1][:80]
+ha.send(h, "/ai-workflow:implement-issue 5")
+assert happ[-1][:3] == ["send", "--json", "t7"] and happ[-1][3].startswith("Base directory for this skill: ")
+ha.send(h, dr.conflict_prompt(7, "master"))
+assert happ[-1] == ["send", "--json", "t7", dr.conflict_prompt(7, "master")]  # not a skill command: as today
+_, h = app_start("cc", "gpt-5-codex", "max")  # cc-codex starts on herdr-app; unsaved model and max left out
+assert h["kind"] == "codex" and after_dashes(happ[0])[:-1] == [
+    "cc-codex",
+    "x",
+    "--dangerously-bypass-approvals-and-sandbox",
+], happ[0]
+_, h = app_start("cxp", None, "default")
+assert after_dashes(happ[0])[:-1] == ["codex", "--profile", "x", "--dangerously-bypass-approvals-and-sandbox"]
+CodexSettings.missing = {"codex"}
+try:
+    app_start("cx")
+    raise AssertionError("started a codex not on PATH")
+except ValueError as e:
+    assert "not found on PATH" in str(e) and happ == [], (e, happ)
+CodexSettings.missing = set()
+# Claude accounts, default or not: today's argv and handle exactly
+for acc in (None, "claude", "work", "gone"):
+    _, h = app_start(acc, "opus", "high")
+    assert "kind" not in h and set(h) == {"terminal", "tab", "cwd"}, h
+    assert after_dashes(happ[0]) == [
+        "claude",
+        "--dangerously-skip-permissions",
+        "--model",
+        "opus",
+        "--effort",
+        "high",
+        "/ai-workflow:implement-issue 5",
+    ], happ[0]
+# a limited herdr-app Codex lane shows as stalled; a Claude handle with the same text is limited
+_real_read, dispatch_runners.HerdrApp.read = dispatch_runners.HerdrApp.read, lambda self, h: lim_text
+assert ha.status({"terminal": "t7", "kind": "codex"}) == ("idle", None)
+assert ha.status({"terminal": "t7"})[1] is not None
+dispatch_runners.HerdrApp.read = _real_read
+print("  ok  herdr-app codex lanes")
 
 # base_branch: lane_base order, lane prompts, followups tail, Open PR target
 assert dr.lane_base({"base": "L"}, {"feature_branch": "F", "base_branch": "B"}) == "F"
