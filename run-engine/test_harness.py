@@ -56,8 +56,8 @@ with mock.patch.dict(harness._ADAPTERS, {"stub": stub}):
     with mock.patch.object(ui_settings, "harness_of", return_value="stub"):
         assert harness.for_cmd("cc-x") is stub
         assert ui_settings.check_login("cc-x") == {"ok": True, "message": "stub cc-x"}
-with mock.patch.object(ui_settings, "harness_of", return_value="codex"):  # no codex adapter until #878
-    assert ui_settings.check_login("cx") == {"ok": False, "message": "unknown harness 'codex'"}
+with mock.patch.object(ui_settings, "harness_of", return_value="nope"):  # a harness with no adapter
+    assert ui_settings.check_login("cx") == {"ok": False, "message": "unknown harness 'nope'"}
 assert ui_settings.check_login("nope-xyz-876")["ok"] is False
 ok("registry: get, for_record, for_cmd, check_login delegates and never raises")
 

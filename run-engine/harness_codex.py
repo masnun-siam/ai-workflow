@@ -1,15 +1,100 @@
-"""The Codex adapter. #871 ships only the parser: one `codex exec --json` line -> UI events
-(the `ui_events` shapes, plus `session_id` and `limit`). #878 adds the rest of the adapter."""
+"""The Codex adapter: `codex exec --json` behind the harness contract. The parser maps one line to UI events
+(the `ui_events` shapes, plus `session_id` and `limit`)."""
 
 from __future__ import annotations
 
 import json
+import os
 import re
+import shlex
+import subprocess
 
+import repo_skills
+import ui_settings
 from ui_events import _n
+
+ID = "codex"
+BYPASS_FLAG = "--dangerously-bypass-approvals-and-sandbox"
+_PLUGIN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Claude Code tool names the skills use, told to Codex on every fresh start that carries instructions.
+TOOL_MAPPING = (
+    "Claude Code tool names in skills map as follows: AskUserQuestion → `aiw ask`; a slash command for a plugin "
+    "skill → read `<plugin>/skills/<name>/SKILL.md` (or the repo copy at `.claude/skills/<name>/SKILL.md` when it "
+    "exists) and follow it; Agent/subagent or SendMessage → do the work yourself in this session; "
+    "ScheduleWakeup/Monitor → write the state the skill asks for and end the turn."
+).replace("<plugin>", _PLUGIN_DIR)
 
 # Copied from ui_runner._LIMIT_RE so the parser does not import the runner. G1 replaces it.
 LIMIT_RE = re.compile(r"usage limit|limit reached|rate.?limit|hit your limit", re.I)
+
+
+def _login(cmd: str):
+    """(exe, None) when logged in, else (None, the user message). Only the exit code of `login status` is read."""
+    try:
+        exe = ui_settings.argv(cmd)
+    except ValueError as e:
+        return None, ("codex CLI not found on PATH" if cmd == "codex" else f"codex command {cmd!r} unusable: {e}")
+    msg = f"codex CLI is not logged in, run `{cmd} login`"
+    try:
+        p = subprocess.run([*exe, "login", "status"], capture_output=True, text=True, timeout=30)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        return None, f"{msg} (login status check failed: {e})"
+    if p.returncode == 0:
+        return exe, None
+    said = next((ln.strip() for out in (p.stderr, p.stdout) for ln in (out or "").splitlines() if ln.strip()), None)
+    return None, f"{msg} ({said})" if said else msg
+
+
+def preflight(cmd: str) -> list:
+    """argv prefix of cmd, after checking it is logged in; raises harness.LoginError with the user message."""
+    from harness import LoginError  # noqa: PLC0415 - harness imports this module
+
+    exe, msg = _login(cmd)
+    if msg:
+        raise LoginError(msg)
+    return exe
+
+
+def check_login(cmd: str) -> dict:
+    """{"ok": bool, "message": str} for Settings' check; never raises."""
+    _, msg = _login(cmd)
+    return {"ok": False, "message": msg} if msg else {"ok": True, "message": "logged in"}
+
+
+def start_argv(
+    exe,
+    prompt,
+    *,
+    instructions=(),
+    agent=None,
+    model=None,
+    effort=None,
+    run_model=None,
+    run_effort=None,
+    allowed_tools=None,
+    rec=None,
+):
+    """(argv, sent_prompt) for a fresh start. Codex has no system prompt flag: instructions and the tool-name
+    mapping lead the first prompt. agent/model/effort/allowed_tools are #880/#881's."""
+    sent = "\n\n".join([*instructions, TOOL_MAPPING, prompt]) if instructions else prompt
+    return [*exe, "exec", "--json", BYPASS_FLAG, "--skip-git-repo-check", sent], sent
+
+
+def resume_argv(exe, session_id, prompt, *, rec):
+    """(argv, sent_prompt) continuing thread session_id with prompt alone (the first prompt carried the rest)."""
+    return [*exe, "exec", "resume", "--json", BYPASS_FLAG, "--skip-git-repo-check", session_id, prompt], prompt
+
+
+def skill_text(text, cwd) -> str:
+    return repo_skills.codex_prompt(text, cwd)
+
+
+def resume_command(cmd, path, session_id):
+    """The "resume in terminal" command; every word quoted. A leading `cc` stays: the user's shell has the alias."""
+    if not path or not session_id:
+        return None
+    words = " ".join(shlex.quote(w) for w in shlex.split(cmd))
+    return f"cd {shlex.quote(path)} && {words} resume {shlex.quote(session_id)}"
 
 
 def parse_line(line) -> list:

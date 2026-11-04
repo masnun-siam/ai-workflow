@@ -28,6 +28,7 @@ from unittest import mock
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
+import harness_codex  # noqa: E402
 import repo_skills  # noqa: E402
 import ui_notify  # noqa: E402
 import ui_runner  # noqa: E402
@@ -915,6 +916,20 @@ def stop_checks():
             f.write("#!/bin/sh\nexit 0\n")
         os.chmod(os.path.join(stub, "claude"), 0o755)
         elsewhere = tempfile.mkdtemp()
+        subprocess.run(
+            ["sh", "-c", cmd], cwd=elsewhere, check=True, env={**os.environ, "PATH": stub + os.pathsep + ORIG_PATH}
+        )
+        for dd in (bad, elsewhere, work):
+            assert not os.path.exists(os.path.join(dd, "PWNED")), dd
+        ui_sessions.update(sid, harness="codex", claude_cmd='codex -p "my profile"')
+        st, pub = http_("GET", f"/api/sessions/{sid}")
+        cmd = pub["resume_command"]
+        assert cmd == harness_codex.resume_command('codex -p "my profile"', pub["repo_path"], "sess-abc"), cmd
+        assert shlex.split(cmd) == ["cd", pub["repo_path"], "&&", "codex", "-p", "my profile", "resume", "sess-abc"]
+        assert "--resume" not in cmd, cmd
+        with open(os.path.join(stub, "codex"), "w") as f:
+            f.write("#!/bin/sh\nexit 0\n")
+        os.chmod(os.path.join(stub, "codex"), 0o755)
         subprocess.run(
             ["sh", "-c", cmd], cwd=elsewhere, check=True, env={**os.environ, "PATH": stub + os.pathsep + ORIG_PATH}
         )

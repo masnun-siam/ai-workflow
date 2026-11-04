@@ -1,4 +1,4 @@
-"""Harness registry: one adapter module per harness (claude today; #878 registers codex).
+"""Harness registry: one adapter module per harness (claude, codex).
 
 An adapter owns everything harness-specific: the login check, the start/resume argv and the skill text.
 The runner picks it from the session's recorded `harness`; a record without one is Claude.
@@ -7,9 +7,10 @@ The runner picks it from the session's recorded `harness`; a record without one 
 from __future__ import annotations
 
 import harness_claude
+import harness_codex
 import ui_settings
 
-_ADAPTERS = {"claude": harness_claude}
+_ADAPTERS = {"claude": harness_claude, "codex": harness_codex}
 
 
 class LoginError(Exception):

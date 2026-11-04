@@ -123,3 +123,32 @@ ui_settings.load = lambda: {"commands": [{"label": "main", "cmd": "claude"}], "d
 assert ui_origin.account_for("o/app", "/implement-issue 7") is None, "an account gone from Settings falls back"
 assert prd
 print("  ok  everything else")
+
+cx = ui_sessions.create("/create-prd x", "o/app", None, claude_cmd="codex", harness="codex")["id"]
+with open(os.path.join(ui_sessions.session_dir(cx), "stream.jsonl"), "w") as f:
+    for item in [
+        {"id": "i0", "type": "file_change", "changes": [{"path": f"{checkout}/docs/prds/x.md", "kind": "add"}]},
+        {
+            "id": "i1",
+            "type": "command_execution",
+            "command": "gh issue create --title t",
+            "aggregated_output": "https://github.com/o/r/issues/12\n",
+            "exit_code": 0,
+            "status": "completed",
+        },
+        {
+            "id": "i2",
+            "type": "command_execution",
+            "command": "gh issue view 13",
+            "aggregated_output": "https://github.com/o/r/issues/13\n",
+            "exit_code": 0,
+            "status": "completed",
+        },
+    ]:
+        f.write(json.dumps({"type": "item.completed", "item": item}) + "\n")
+    f.write(
+        json.dumps({"type": "item.started", "item": {"type": "file_change", "changes": [{"path": "docs/prds/y.md"}]}})
+        + "\n"
+    )
+assert ui_origin._made(ui_sessions.load(cx)) == ({"x"}, {12}), ui_origin._made(ui_sessions.load(cx))
+print("  ok  a Codex stream: file_change PRDs and gh issue create output")
