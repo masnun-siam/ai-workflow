@@ -144,7 +144,10 @@ installation.**
 | `command -v slackcli` | the Slack reviewer-bot loop (`/pr-grind`, `/release-pr`) | no grind loop |
 | `command -v herdr` | `herdr-dispatch`: an epic's lanes in separate terminal tabs | dispatch from the UI (headless lanes) |
 | `command -v jev` | quick judgment calls in `aiw ui` (create box Auto route, Away mode risk check, Inbox order, readiness and duplicate warnings) and grind hints; needs a TypeSafe AI key | you pick routes yourself; everything else works as before |
+| `command -v codex` | sessions and dispatch lanes on a Codex account in `aiw ui` (Settings > Accounts, harness Codex), and `aiw install-skills --harness codex` for interactive Codex | everything runs on Claude accounts as before |
 | `command -v tailscale` | reaching `aiw ui` from your phone, and sharing a PRD for review | the UI stays on loopback; Share is unavailable |
+
+Codex needs its own login (`codex login`, which the user runs; never run it for them). `aiw ui` needs no restart to use it, only a saved Codex account. Panels and Away answers stay on Claude accounts: Codex's read-only sandbox cannot run `gh`.
 
 Sharing a PRD publishes it through a tailscale funnel, so the tailnet policy must give the node the `funnel` attribute (and HTTPS certificates must be enabled for the tailnet; funnel runs only on ports 443, 8443 and 10000):
 

@@ -62,8 +62,16 @@ One anchored quote in a shared PRD with its comments, from reviewers and the aut
 _Avoid_: Discussion
 
 **Session**:
-A headless Claude invocation started and tracked by the UI (`aiw ui`), recorded under `<data_dir>/sessions/<id>/`. It exits after each turn and comes back via `--resume` with an answer or after a rate limit.
+A headless coding-agent invocation (Claude Code or Codex) started and tracked by the UI (`aiw ui`), recorded under `<data_dir>/sessions/<id>/`. It exits after each turn and resumes the same conversation with an answer or after a rate limit.
 _Avoid_: Run, job
+
+**Harness**:
+The coding-agent CLI a Session runs on: `claude` (Claude Code) or `codex`. Each account in Settings has one, and a Session records the harness it started on.
+_Avoid_: Provider, model
+
+**Adapter**:
+The module that owns everything harness-specific for one Harness (`run-engine/harness_claude.py`, `harness_codex.py`): login check, start and resume arguments, prompt shape, stream parsing into common events and the resume command. The runner and every stream reader talk only to it.
+_Avoid_: Driver, plugin
 
 **Held session**:
 A Session the user paused with "After this run" (`hold` on its record): the current run finishes, and nothing continues the session on its own until the user resumes it. It can still be answered by hand. Not a held lane, which is a dispatch lane stopped for red CI or a grind.
