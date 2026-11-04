@@ -193,6 +193,17 @@ finished(q["id"])
 assert argv()[4].startswith(HEADLESS_PROMPT) and "repo body" in argv()[4]
 ok("starts: no instructions = skill prompt only; re-entry and queued starts carry the preamble")
 
+with (
+    mock.patch.object(ui_runner.subprocess, "Popen", side_effect=OSError("no exec")),
+    mock.patch.object(ui_runner, "_preflight", return_value=[EXE]),
+):
+    try:
+        ui_runner.start("plain text", work, claude_cmd="codex")
+        raise AssertionError("expected RunnerError")
+    except ui_runner.RunnerError as e:
+        assert str(e) == "failed to spawn codex: no exec", e
+ok("a spawn failure names the harness")
+
 # 6. Login
 n = calls()
 os.environ["FAKE_CODEX_LOGIN"] = "1"
