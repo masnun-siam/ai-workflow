@@ -41,6 +41,7 @@ printf '%s\0' "$@" > "$FAKE_DIR/argv"
 printf '%s\n%s\n' "$AIW_UI_SESSION" "$CLAUDE_PLUGIN_DATA" > "$FAKE_DIR/env"
 echo '{"type":"thread.started","thread_id":"th-1"}'
 echo '{"type":"item.completed","item":{"id":"i0","type":"agent_message","text":"hi"}}'
+[ "$FAKE_CODEX_USAGE" = failed ] && echo '{"type":"turn.failed","error":{"message":"boom"}}' && exit 1
 [ "$FAKE_CODEX_USAGE" = none ] || printf '{"type":"turn.completed","usage":%s}\n' "$FAKE_CODEX_USAGE"
 """
 FAKE_DIR = tempfile.mkdtemp()
@@ -183,6 +184,11 @@ ui_runner.resume_stopped(sid)
 rec = finished(sid)
 assert argv()[6] == ui_runner.CONTINUE_PROMPT and argv()[1] == "resume"
 assert rec["tokens_total"] == tok(42684, 39040, 328), rec
+os.environ["FAKE_CODEX_USAGE"] = "failed"  # nor does a turn.failed
+ui_sessions.update(sid, status="stopped")
+ui_runner.resume_stopped(sid)
+rec = finished(sid)
+assert rec["status"] == "failed" and rec["tokens_total"] == tok(42684, 39040, 328), rec
 ui_sessions.update(sid, status="limited", pending_answer="/ai-workflow:create-tasks docs/prds/x.md")
 usage(50000, 45000, 400)
 ui_runner.resume_stopped(sid)
