@@ -549,7 +549,7 @@ docs/         HOW-IT-WORKS, INSTALL, REFERENCE, prds/, tasks/
 
 ```bash
 python3 run-engine/test_<name>.py     # one file
-bash run-engine/run_tests.sh          # every test_*.py; also the pre-commit hook, the pre-push hook and CI
+bash run-engine/run_tests.sh          # every test_*.py; also the pre-push hook and CI
 ```
 
 No network, no install step. The UI has its own checks, in `ui/` (Node 20; plugin users never need it):

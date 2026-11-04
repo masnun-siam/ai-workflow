@@ -40,12 +40,13 @@ git config blame.ignoreRevsFile .git-blame-ignore-revs   # optional: skip the re
 - `ruff` lint and format, configured by `ruff.toml` (the repo's own config, so a
   machine-level ruff config never changes the result)
 - `shellcheck` (excluding SC2016, which flags the GraphQL `$vars` in imported scripts)
-- `bash run-engine/run_tests.sh` (the whole suite) when a `run-engine/*.py` file is staged
+
+The test suite does not run on commit; it runs on push.
 
 All of these block the commit. The one exception is the `CLAUDE.md` hook, which prints a
 warning and lets the commit through. Run `pre-commit run --all-files` to check the whole
 repo. An agent's commit can be aborted by a fixer hook (whitespace, final newline,
-ruff-format) or a failing test. Re-stage the fixed files and commit again, or fix the failure first.
+ruff-format). Re-stage the fixed files and commit again, or fix the failure first.
 
 On `git push`, `run-engine/run_tests.sh` runs every `run-engine/test_*.py` (about 2 minutes)
 and blocks the push if any file fails. The `Tests` GitHub Actions job runs the same script on
