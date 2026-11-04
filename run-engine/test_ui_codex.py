@@ -41,11 +41,8 @@ printf '%s\0' "$@" > "$FAKE_DIR/argv"
 printf '%s\n%s\n' "$AIW_UI_SESSION" "$CLAUDE_PLUGIN_DATA" > "$FAKE_DIR/env"
 echo '{"type":"thread.started","thread_id":"th-1"}'
 echo '{"type":"item.completed","item":{"id":"i0","type":"agent_message","text":"hi"}}'
-case "$*" in
-  *" resume "*) echo '{"type":"turn.completed","usage":{"input_tokens":5,"cached_input_tokens":0,"output_tokens":7}}';;
-  *) echo '{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":10}}'
-     echo '{"type":"turn.completed","usage":{"input_tokens":200,"cached_input_tokens":60,"output_tokens":20}}';;
-esac
+[ "$FAKE_CODEX_USAGE" = failed ] && echo '{"type":"turn.failed","error":{"message":"boom"}}' && exit 1
+[ "$FAKE_CODEX_USAGE" = none ] || printf '{"type":"turn.completed","usage":%s}\n' "$FAKE_CODEX_USAGE"
 """
 FAKE_DIR = tempfile.mkdtemp()
 BIN = os.path.join(FAKE_DIR, "bin")
@@ -55,6 +52,18 @@ with open(os.path.join(BIN, "codex"), "w") as f:
 os.chmod(os.path.join(BIN, "codex"), 0o755)
 os.environ["PATH"] = BIN + os.pathsep + os.environ.get("PATH", "")
 os.environ["FAKE_DIR"] = FAKE_DIR
+
+
+def usage(i: int, c: int, o: int) -> None:
+    """The cumulative thread usage the fake prints in the next run's one `turn.completed` (codex-cli 0.166.0)."""
+    os.environ["FAKE_CODEX_USAGE"] = json.dumps({"input_tokens": i, "cached_input_tokens": c, "output_tokens": o})
+
+
+def tok(i: int, c: int, o: int) -> dict:
+    return {"input": i, "cached": c, "output": o}
+
+
+usage(1, 0, 1)
 with open(os.path.join(DATA, "ui_settings.json"), "w") as f:
     json.dump(
         {
@@ -100,7 +109,17 @@ def finished(sid: str) -> dict:
 
 
 # 1. Contract
-CONTRACT = ["ID", "preflight", "check_login", "start_argv", "resume_argv", "parse_line", "resume_command", "skill_text"]
+CONTRACT = [
+    "ID",
+    "CUMULATIVE_USAGE",
+    "preflight",
+    "check_login",
+    "start_argv",
+    "resume_argv",
+    "parse_line",
+    "resume_command",
+    "skill_text",
+]
 for ad in (harness.get("claude"), harness.get("codex")):
     assert all(hasattr(ad, n) for n in CONTRACT), [n for n in CONTRACT if not hasattr(ad, n)]
 assert harness_codex.ID == "codex"
@@ -122,8 +141,9 @@ for s in (
 assert "<plugin>" not in harness_codex.TOOL_MAPPING
 ok("mapping paragraph: every mapping, <plugin> replaced with the plugin dir")
 
-# 2. Gated start: argv, prompt, stored command; tokens summed (8)
+# 2. Gated start: argv, prompt, stored command; a fresh thread's tokens as reported (8, #907)
 work = tempfile.mkdtemp()
+usage(14196, 10880, 5)
 sid = ui_runner.start("/ai-workflow:implement-issue 12", work, gate_questions=True, claude_cmd="codex")["id"]
 rec = finished(sid)
 a = argv()
@@ -134,42 +154,81 @@ assert a[4].endswith(skill) and skill.endswith("ARGUMENTS: 12"), a[4][-200:]
 assert f"Base directory for this skill: {plugin}/skills/implement-issue" in a[4]
 assert rec["command"] == "/ai-workflow:implement-issue 12" and rec["harness"] == "codex", rec
 assert rec["session_id"] == "th-1", rec
-assert rec["tokens"] == {"input": 300, "cached": 100, "output": 30} and rec.get("cost") is None, rec
-ok("gated start: exec argv, headless + mapping + skill prompt, short command, summed tokens, no cost")
+assert rec["tokens"] == rec["tokens_total"] == tok(14196, 10880, 5) and rec.get("cost") is None, rec
+ok("gated start: exec argv, headless + mapping + skill prompt, short command, tokens as reported, no cost")
 
 # 7. Environment
 with open(os.path.join(FAKE_DIR, "env")) as f:
     assert f.read().split("\n")[:2] == [sid, DATA]
 ok("environment: AIW_UI_SESSION and CLAUDE_PLUGIN_DATA reach the child")
 
-# 5. Follow-up and answer: resume argv, prompt only, skill-resolved; tokens replaced (8)
+# 5. Follow-up and answer: resume argv, prompt only, skill-resolved; tokens per run (8, #907)
+usage(28416, 24960, 34)
 assert ui_runner.send_prompt(sid, "now run /ai-workflow:create-tasks docs/prds/x.md") == "sent"
 rec = finished(sid)
 a = argv()
 assert a[:6] == ["exec", "resume", *FLAGS, "th-1"] and len(a) == 7, a[:6]
 assert a[6] == repo_skills.codex_prompt("now run /ai-workflow:create-tasks docs/prds/x.md", work)
 assert HEADLESS_PROMPT not in a[6] and harness_codex.TOOL_MAPPING not in a[6]
-assert rec["tokens"] == {"input": 5, "cached": 0, "output": 7}, rec
+assert rec["tokens"] == tok(14220, 14080, 29) and rec["tokens_total"] == tok(28416, 24960, 34), rec
+assert rec.get("cost") is None, rec
 ui_sessions.update(sid, status="waiting", pending_question={"id": "q-1"})
+usage(42684, 39040, 328)
 ui_runner.resume(sid, "Answer to q-1: yes")
 rec = finished(sid)
 assert argv()[6] == "Answer to q-1: yes", argv()[6]
+assert rec["tokens"] == tok(14268, 14080, 294) and rec["tokens_total"] == tok(42684, 39040, 328), rec
+ui_sessions.update(sid, status="stopped")
+os.environ["FAKE_CODEX_USAGE"] = "none"  # a run with no turn.completed keeps the stored total
+ui_runner.resume_stopped(sid)
+rec = finished(sid)
+assert argv()[6] == ui_runner.CONTINUE_PROMPT and argv()[1] == "resume"
+assert rec["tokens_total"] == tok(42684, 39040, 328), rec
+os.environ["FAKE_CODEX_USAGE"] = "failed"  # nor does a turn.failed
 ui_sessions.update(sid, status="stopped")
 ui_runner.resume_stopped(sid)
-finished(sid)
-assert argv()[6] == ui_runner.CONTINUE_PROMPT and argv()[1] == "resume"
+rec = finished(sid)
+assert rec["status"] == "failed" and rec["tokens_total"] == tok(42684, 39040, 328), rec
 ui_sessions.update(sid, status="limited", pending_answer="/ai-workflow:create-tasks docs/prds/x.md")
+usage(50000, 45000, 400)
 ui_runner.resume_stopped(sid)
-finished(sid)
+rec = finished(sid)
 assert argv()[6] == repo_skills.codex_prompt("/ai-workflow:create-tasks docs/prds/x.md", work), argv()[6][:200]
-ok("resume: exec resume argv, no preamble, follow-up skill-resolved, tokens replaced per run")
+assert rec["tokens"] == tok(7316, 5960, 72) and rec["tokens_base"] == tok(42684, 39040, 328), rec
+ok("resume: exec resume argv, no preamble, follow-up skill-resolved, tokens per run, a run without usage skipped")
 
-# limited before any thread id: starts over, gated
-ui_sessions.update(sid, status="limited", session_id=None)
+# replay after a UI restart: re-reading the whole stream ends on the live result
+live = rec["tokens"]
+dead = subprocess.Popen(["true"])
+dead.wait()
+ui_sessions.update(sid, status="running", tokens=None)
+ui_runner._procs[sid] = None
+ui_runner._follow(sid, None, dead.pid, "Thu Jan  1 00:00:00 1970")
+rec = ui_sessions.load(sid)
+assert rec["tokens"] == live and rec["tokens_total"] == tok(50000, 45000, 400), rec
+ok("replay: re-attaching reads every run's usage and ends with the live per-run tokens")
+
+# clamping: a reported value below the base gives 0
+ui_sessions.update(sid, status="stopped")
+usage(10, 50000, 500)
 ui_runner.resume_stopped(sid)
-finished(sid)
+rec = finished(sid)
+assert rec["tokens"] == tok(0, 5000, 100), rec
+# an old record with no stored total: the first resumed run as reported
+ui_sessions.update(sid, status="stopped", tokens_total=None)
+usage(60000, 55000, 600)
+ui_runner.resume_stopped(sid)
+assert finished(sid)["tokens"] == tok(60000, 55000, 600)
+ok("tokens: a drop below the base clamps at 0; a record from before #907 records its first run as reported")
+
+# limited before any thread id: starts over, gated, a new thread with no base
+ui_sessions.update(sid, status="limited", session_id=None, tokens_base=tok(5, 5, 5), tokens_total=tok(5, 5, 5))
+usage(900, 800, 7)
+ui_runner.resume_stopped(sid)
+rec = finished(sid)
 assert argv()[1] == "--json" and argv()[4].startswith(HEADLESS_PROMPT) and argv()[4].endswith(skill)
-ok("resume_stopped with no thread id: a fresh gated start with the skill prompt")
+assert rec.get("tokens_base") is None and rec["tokens"] == rec["tokens_total"] == tok(900, 800, 7), rec
+ok("resume_stopped with no thread id: a fresh gated start with the skill prompt, tokens as reported")
 
 # repo copy: base dir is the repo copy, command is the repo spelling
 os.makedirs(os.path.join(work, ".claude", "skills", "implement-issue"))
@@ -188,8 +247,11 @@ finished(ui_runner.start("/pr-grind 7", work, instructions=[ui_runner.REENTRY_PR
 assert argv()[4].startswith(ui_runner.REENTRY_PROMPT + "\n\n" + harness_codex.TOOL_MAPPING)
 q = ui_sessions.create("/ai-workflow:implement-issue 12", work, claude_cmd="codex", harness="codex")
 q = ui_sessions.update(q["id"], status="starting", cwd_path=work, command="/ai-workflow:implement-issue 12")
+ui_sessions.update(q["id"], tokens_base=tok(1, 1, 1), tokens_total=tok(1, 1, 1))  # a fresh start drops both
+usage(30, 20, 3)
 ui_runner._start_claimed(q)
-finished(q["id"])
+rec = finished(q["id"])
+assert rec.get("tokens_base") is None and rec["tokens"] == rec["tokens_total"] == tok(30, 20, 3), rec
 assert argv()[4].startswith(HEADLESS_PROMPT) and "repo body" in argv()[4]
 ok("starts: no instructions = skill prompt only; re-entry and queued starts carry the preamble")
 

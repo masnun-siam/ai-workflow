@@ -11,6 +11,7 @@ import ui_events
 import ui_settings
 
 ID = "claude"
+CUMULATIVE_USAGE = False  # each `result` carries that process's own usage
 HEADLESS_PROMPT = (
     "Headless run: ask via aiw ask, never AskUserQuestion. Gate questions go through "
     "`aiw ask --json '<AskUserQuestion input>'`; then end your turn. "
