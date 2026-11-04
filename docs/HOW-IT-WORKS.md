@@ -79,7 +79,8 @@ followups are done. Each lane, in one session (a herdr tab or a headless session
 
 A lane that needs you (a question, red CI, a paused grind, a failed merge) is held and tells you in
 the Inbox, by a notification on the channels picked in Settings → Notifications and in the `herdr-dispatch` session; its dependents wait, the other
-lanes go on. At a Claude usage limit no new lane starts until the reset. Settings (grind mode,
+lanes go on. At a usage limit a herdr Claude lane stops new lanes from starting until the reset; a headless
+lane's session resumes by itself at the reset, and a limited herdr Codex lane shows as stalled. Settings (grind mode,
 auto-merge, max, model, effort) change while it runs. The base branch is where PRs land (pick it when you start; fixed
 after). With a feature branch, every PR targets it, cut from the base branch (the default branch when
 none is set), and Open PR goes into the base branch. Without one, lanes branch from the base branch
@@ -140,6 +141,7 @@ It starts these as sessions and keeps them going: it takes your answers to `aiw 
 Inbox, the session page or a dispatch's issue panel, resumes after a rate limit, and notifies you.
 **Away mode** answers every question while you are away (recommended options at once, Opus for the rest,
 risky or unanswerable rounds held) and retries failures, dispatch issues included. Details are in [REFERENCE.md](REFERENCE.md).
+A session runs on the harness (Claude Code or Codex) of the account picked in **Run on**; see [REFERENCE.md](REFERENCE.md#aiw-ui).
 A repo's own copy of a skill (`.claude/skills/<name>/`) is used in place of the plugin's when it has one; see [Repo copies of skills](REFERENCE.md#repo-copies-of-skills).
 
 ## State

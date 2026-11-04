@@ -38,6 +38,9 @@ aiw grind-reviewers --pr <url>          print the PR's resolved path, channel, m
                                         skip as JSON (Settings and channels.json; read by /pr-grind each round)
 aiw local-review                        print the local review mode, single or loop (Settings; read by
                                         /implement-issue at step 12)
+aiw install-skills --harness codex [--remove]
+                                        link the plugin skills into Codex's skills folder (~/.agents/skills)
+                                        for interactive Codex; --remove deletes the links this command made
 aiw dispatch plan|start <epic> [flags]  preview or start a dispatch (flags as herdr-dispatch, including
                                         --feature-branch and --base-branch, plus
                                         --runner herdr|herdr-app|headless and --workspace <herdr workspace id>;
@@ -67,14 +70,22 @@ aiw dispatch retry-failed <id>          retry every lane that failed to start, n
 aiw dispatch end <id> open-pr|qa|grind-pr  an end-of-dispatch action, run by the server
 ```
 
+**`aiw install-skills --harness codex`** (`run-engine/install_skills.py`) links each plugin skill
+folder into `~/.agents/skills/<name>`, creating the folder when missing, so an interactive Codex finds
+them. Every link it makes is recorded in `<data_dir>/install_skills.json` (`{"codex": [<link path>, ...]}`).
+A rerun repoints a recorded link that points elsewhere, deletes a recorded link whose skill left the plugin,
+and leaves `unchanged` the rest; a recorded path that is no longer a symlink, or an existing path it did not
+make, is skipped and reported, never touched. `--remove` deletes only its own recorded links. It prints one
+line per skill, then counts (`linked`, `repointed`, `removed`, `unchanged`, `skipped`).
+
 ## aiw ui
 
-`aiw ui` serves a local web app for starting and tracking headless Claude sessions and for seeing
+`aiw ui` serves a local web app for starting and tracking headless coding-agent sessions (Claude Code or Codex) and for seeing
 what needs you across every watched repo. It is a React + TypeScript app (source in `ui/`) served
 from the committed build in `run-engine/ui_dist/`, so using it never needs Node. On first start
 after an upgrade it deletes the old run data from the plugin data dir once and logs what it removed.
 
-- Every text it hands to Claude (a start, a queued or rate-limited start when it begins, an answer, a typed prompt, a resume) is rewritten by `repo_skills.resolve` against the session's working directory: a plugin skill command becomes `/<name>` when the repo has `.claude/skills/<name>/SKILL.md`, else `/ai-workflow:<name>`. A session's stored `command` is what its latest own start ran; answers and resumes leave it alone. A queued or limited session shows the raw text until it starts.
+- Every text it hands to a session (a start, a queued or rate-limited start when it begins, an answer, a typed prompt, a resume) is rewritten by `repo_skills.resolve` against the session's working directory: a plugin skill command becomes `/<name>` when the repo has `.claude/skills/<name>/SKILL.md`, else `/ai-workflow:<name>`. A session's stored `command` is what its latest own start ran; answers and resumes leave it alone. A queued or limited session shows the raw text until it starts. The stored `command` is this short form on both harnesses; a session on a Codex account is sent the skill's text instead, built by `repo_skills.codex_prompt` at every spawn and send (see **Repo copies of skills**).
 - It binds to loopback only. `--port` sets the port (default 8420).
 - `--allow-host HOST` is repeatable and matches exactly: use `name:port`, or the bare name for the default 443 serve.
   Every non-loopback host, including these, needs the node owner's `Tailscale-User-Login` header, so it only works
@@ -117,7 +128,7 @@ session items only. While an item is open (a question expanded or the side panel
 **Create box.** One dialog, "What should change?", for a feature or a small change. The New button, `N`, the palette and the
 prompts on Features and Small changes all open it (Small changes opens it on Small change). Describe the work; 600 ms after typing
 stops it asks `POST /api/route {text}` for a route and says why it picked it, and a click on **Feature** or **Small change** overrides that
-until **Use Auto's pick**. The repo picker defaults to the repo it was opened with. With more than one Claude account, **Run on** picks the account (default: the Settings default) and pins it: later sessions on the PRD that session writes, its epic, its issues or their PRs, or the issue a small change files, run on that account unless one is picked for them, and a dispatch of the epic opens on it. `run-engine/ui_origin.py` reads what the session made from its stream, and an account removed from Settings falls back to the default. **Feature** starts `/create-prd` (on `opus` at `medium`) with any picked PRD review lenses and opens
+until **Use Auto's pick**. The repo picker defaults to the repo it was opened with. With more than one account, **Run on** picks the account (default: the Settings default) and pins it: later sessions on the PRD that session writes, its epic, its issues or their PRs, or the issue a small change files, run on that account unless one is picked for them, and a dispatch of the epic opens on it. `run-engine/ui_origin.py` reads what the session made from its stream, and an account removed from Settings falls back to the default. **Feature** starts `/create-prd` (on `opus` at `medium`) with any picked PRD review lenses and opens
 the session. **Small change** (with an optional priority) starts one headless `/create-tasks` session that files the issue with no
 PRD and refines it in the same session, and the page stays. ⌘↵ submits, Cancel keeps the text until something is created, and **Run a command instead** opens Start. For the route,
 the server runs `jev choice` through `run-engine/jev.py` (pinned to `jev-1.14.0`) and answers `{route: feature|small_change|null,
@@ -300,8 +311,8 @@ instead of starting a separate session, and the epic is re-read every 5 minutes 
 **Start** (⌘K, or **Run a command instead** in the create box), titled "What should we start?". Commands grouped Plan, Build, Review, Ship, Capture and
 Maintain as six cards across the top, each command a pill (its description shows above the options below); the last one is remembered. Maintain has **Update FAQ**, whose optional input takes new questions, one per line, and the options `full`, `--lang <codes>` and `--videos <url>`, and **Bootstrap repo**, whose optional input takes a phase and the bootstrap issue number. Pick **Where** (a registered repo,
 or **No repo yet** for `create-prd`, `dump`, `day` and the custom prompt, which run in the notes vault
-with a **Vault folder**), the input, and **Run on** an account (a limited account says the run will
-queue). `implement-issue`, `pr-review` and `pr-grind` list the repo's open issues or PRs under the
+with a **Vault folder**), the input, and **Run on** an account of either harness (a limited account says the run will
+queue; switching it keeps a model and effort the new harness offers and resets the rest to Default). `implement-issue`, `pr-review` and `pr-grind` list the repo's open issues or PRs under the
 input (`GET /api/repos/<owner>/<repo>/open?kind=issue|pr`, one `gh` page of 100); a pasted issue or PR URL
 of a registered repo switches the repo. `worklog` offers Today, Yesterday, A day or A range (at most 31
 days, one session per day, 3 running at once, the rest `queued`). **Custom** takes any prompt and runs
@@ -313,7 +324,7 @@ and cost today; **Clean up** lists finished sessions by repo before removing the
 has banners for waiting (inline answer), limited (reset time, **Resume on another account**, **Don't
 auto-resume**), failed (**Retry**, **Continue in terminal**) and queued (**Start now**), the run's phase strip when the session is a bootstrap phase (its own entry marked "this session", the others linked), the transcript, a
 composer (a prompt queues while a turn runs), and a facts box with the account, its harness (Claude Code or Codex; a record with no `harness` reads as Claude Code), cost ("—" when the harness reports none), tokens (`$0.44 · 703k tok`; the latest run's own usage on both harnesses: Codex reports usage over the whole thread, so the record keeps `tokens_total` and each run that continues the thread records the rise over its `tokens_base`), model, effort and the run's `run_note` when set. **Continue in terminal** (header, failed banner, `T`) shows only when the session JSON carries a `resume_command` and copies exactly that string; the UI never builds a resume command itself.
-Sessions auto-resume after a rate limit, and the limit timer releases queued ones after a restart. A session resumes only on an account of its own harness (another is a 409); a Claude session can move to another Claude account (its transcript is copied), a Codex one auto-resumes only on its own account and, with no reset time, after a doubling wait (1 min to 60 min, `limit_backoff`). A Codex session whose account is gone or switched harness stays limited with auto-resume off and a note; a manual resume of one whose account was removed uses the Settings default only when that is a Codex account.
+Sessions auto-resume after a rate limit, and the limit timer releases queued ones after a restart. A session resumes only on an account of its own harness (another is a 409); a Claude session can move to another Claude account (its transcript is copied), a Codex one auto-resumes only on its own account and, with no reset time, after a doubling wait (1 min to 60 min, `limit_backoff`). A Codex run counts as limited when its `turn.failed` or `error` message matches `usage limit|limit reached|rate.?limit|hit your limit`, and it carries no reset time: build gate G1 (Codex's real limit text and reset format) is not recorded yet, so this fallback is what ships. A Codex session whose account is gone or switched harness stays limited with auto-resume off and a note; a manual resume of one whose account was removed uses the Settings default only when that is a Codex account.
 Actions: **Pause** on a starting, running, waiting or limited session asks **After this run** (`POST /api/sessions/<id>/hold`: the run finishes, then nothing continues the session on its own until **Resume** on the held banner, `POST /api/sessions/<id>/release`; a queued prompt stays unsent, Away mode neither answers nor retries it, a limited session does not auto-resume, a dispatch tick stores its prompt as the queued prompt and the lane waits, a peer-review panel waits in its phase, and you can still answer it by hand) or **Now** (the same as Stop). **Stop** (`POST /api/sessions/<id>/stop`, after a confirm), **Resume**, **Rerun** (replays the
 recorded start request, same repo and account; `POST /api/sessions/<id>/rerun`), **Dismiss** on a failed session's Inbox item (`POST /api/sessions/<id>/dismiss`: sets `dismissed`, 409 unless failed; the session stays on Activity), and **Start now**
 (`POST /api/sessions/<id>/start-now`: starts a batch-queued session at once, past the batch cap; 409 when
@@ -353,7 +364,7 @@ warns and its lanes skip grinding) and **Remove** (its clone is untouched), plus
 scan folders, **Find repos** and **Check remotes** (`gh repo view` on every repo, failures first).
 **Slack channels**: a table of the saved channels (name, editable; id, read-only; **Delete**) and an Add row. Ids must match `^[CGD][A-Z0-9]{8,12}$`, names are 1 to 60 characters, ids are unique and the list holds at most 50; this is checked inline before saving. Add, rename (on blur or Enter) and delete each send the whole list (`PUT /api/settings {slack_channels}`); a server `400`, such as deleting a channel a repo picks, is toasted and the list reverts.
 **Reviewers**: a table of the saved grind reviewers (name, editable; Slack id and GitHub login, read-only, "—" when empty; an **Active** checkbox; **Delete**) and an Add row. Each entry needs a Slack id (`^[UW][A-Z0-9]{8,12}$`), a GitHub login (`^[A-Za-z0-9-]{1,39}$`, `copilot` included) or both; names are 1 to 60 characters, Slack ids and logins (ignoring case) are unique, and the list holds at most 50, all checked inline before saving. Add, rename and delete send the whole list (`PUT /api/settings {reviewers}`, a new entry without an `id`); delete asks first and names where the entry is used ("It is active and overrides org/api."). The **Active** ticks are the reviewer swap: each tick sends `{active_reviewers}`, every tick is disabled until it resolves, and a failed save reverts. With no active reviewer the section warns that Slack repos mention the `channels.json` bot (`bot_label`) and GitHub repos skip grinding.
-**jev**: a **Use jev** switch (`PUT /api/settings {use_jev}`, reverts on a failed save) and a read-only "jev found / not found" line. **Claude accounts**: the named `claude` commands a session can launch with, one per account; their plan
+**jev**: a **Use jev** switch (`PUT /api/settings {use_jev}`, reverts on a failed save) and a read-only "jev found / not found" line. **Accounts**: the named commands a session can launch with, one per account and each command unique. Each row has a **Harness** (Claude Code or Codex; the built-in `claude` row is fixed to Claude Code) and a Codex row a comma-separated **Models** field (at most 20 names, each 1–80 letters, digits, `.`, `-`, `_`, `:`, `/`, starting with a letter or digit). The check button runs the account's harness's login check (`POST /api/settings/test`): Codex reports "codex CLI not found on PATH" or "`` codex CLI is not logged in, run `<cmd> login` ``"; a command that is not the harness's CLI fails the check with that CLI's own error. Claude accounts' plan
 usage (5h / 7d) shows at the foot of the rail (the Away menu on a phone); an account whose usage entry has an `error` shows "usage unavailable" with the error as tooltip, and no meter when it also has no numbers (a Codex account: the poller never fetches one and reports `error: "not available for Codex"`). **Notifications** shows the matrix of 12 events by Browser, ntfy and This Mac: one switch per cell, saved at once. Each column header shows the channel's state and a Send test button (Browser tests itself; ntfy and This Mac call `POST /api/settings/notify/test` and toast the result; This Mac is disabled off a Mac) (`POST /api/settings/notify/channel`; a failed save reverts the switch and toasts). Below it, "Phone push (ntfy)" edits `ui.json` (written mode 0600; a token or
 password is never sent back to the browser, and an empty box keeps the saved one). **Peer review**
 sets the rounds cap, the lenses ticked by default and each lens prompt; changes are saved to
@@ -422,7 +433,10 @@ For clickable macOS banners run `brew install terminal-notifier` on the host and
 **Security:** when `aiw ui` is fronted by `tailscale serve`, every request that does not arrive on loopback must carry the
 node owner's `Tailscale-User-Login` (added by `tailscale serve` for tailnet traffic only), so other tailnet
 users and funnelled traffic are refused; with no tailscale, or on loopback, there is no app-level auth: anyone who can reach the URL can start sessions. Sessions run `claude --dangerously-skip-permissions` by
-default, with no opt-out flag. Never use `tailscale funnel` for the UI (public exposure plus skip-permissions
+default, with no opt-out flag; on a Codex account they run `--dangerously-bypass-approvals-and-sandbox` (approvals and
+sandbox bypassed, the same trust level). Agent sessions (peer-review lenses, the Away answerer) are the exception: on
+Claude they get only their allowed tools, and on Codex they are refused (see **Repo copies of skills**). Only run
+sessions on repos whose `.claude/` and `.agents/` you trust. Never use `tailscale funnel` for the UI (public exposure plus skip-permissions
 is remote code execution), and on a shared machine any local user can reach the loopback port. The one
 exception is the share listener (see Share a PRD): a separate, read-only listener that serves only
 `/s/<token>` for one PRD, cannot start sessions and answers anything else with the same 404. The UI's
@@ -457,8 +471,8 @@ skill does something else. To undo it, delete the copy.
   plus the CLI's first output line in parentheses). Resume in terminal is `cd <path> && <cmd> resume <id>`,
   every word quoted. Pins (`ui_origin`) read a Codex stream's `file_change` paths and `gh issue create` output.
 - Agent sessions on Codex (peer-review lenses, the Away answerer; any start with `agent` or `allowed_tools`):
-  while `harness_codex.AGENT_SANDBOX_VERIFIED` is `False` (as committed, until build gates G2/G3 pass on a real
-  Codex) `ui_runner.start` raises `AgentRefused` ("panels and Away answers need a Claude account: Codex's
+  while `harness_codex.AGENT_SANDBOX_VERIFIED` is `False` (as committed: on codex-cli 0.166.0 gate G2 passed,
+  `exec resume` takes `-c sandbox_mode="read-only"`, but G3 failed, the read-only sandbox blocks the network `gh` needs) `ui_runner.start` raises `AgentRefused` ("panels and Away answers need a Claude account: Codex's
   read-only sandbox cannot run gh") before any record or process; `ui_panel.start` refuses the same way before
   the panel or its root exists (a 400), and `ui_afk` holds the round at once with that message as its reason, no
   second attempt. With it `True` the session runs `--sandbox read-only` (never the bypass flag), its first prompt
@@ -470,7 +484,8 @@ skill does something else. To undo it, delete the copy.
 **Hand-offs between skills** follow the guide's "Repo skills win" rule
 (`guides/engineering-workflow.md`, Repository settings): the skill checks
 `<worktree root>/.claude/skills/<name>/SKILL.md` with Read or Glob and runs `/<name>` if it exists,
-else `/ai-workflow:<name>`.
+else `/ai-workflow:<name>`. Inside a Codex session, `TOOL_MAPPING` turns such a hand-off into reading the
+other skill's `SKILL.md` (the repo copy when it exists) and following it.
 
 **Guides and templates:** the repo's `docs/guides/<name>.md` and `docs/templates/<name>.md` win
 over the plugin's `guides/` and `templates/`. Every workflow skill now reads "Repository settings"
@@ -486,8 +501,8 @@ your notes).
   branch is missed by one of them.
 - Do not keep a personal skill (`~/.claude/skills/<name>`) named like a plugin skill. Claude Code
   ranks it above the repo's, so it runs while the stored command still reads like the repo copy.
-- Trust: a repo copy runs with the session's permissions (`--dangerously-skip-permissions`). Only
-  run the workflow on repos whose `.claude/` you trust.
+- Trust: a repo copy runs with the session's permissions (`--dangerously-skip-permissions`, or the Codex
+  bypass flag). Only run the workflow on repos whose `.claude/` you trust.
 
 **What a copy must keep so the UI can still drive it:**
 
