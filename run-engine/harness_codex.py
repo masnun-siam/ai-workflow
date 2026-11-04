@@ -28,6 +28,11 @@ TOOL_MAPPING = (
 # Copied from ui_runner._LIMIT_RE so the parser does not import the runner. G1 replaces it.
 LIMIT_RE = re.compile(r"usage limit|limit reached|rate.?limit|hit your limit", re.I)
 
+CODEX_EFFORTS = ("low", "medium", "high", "xhigh")  # the `codex` entry of ui_settings.HARNESSES
+EFFORT_KEY = "model_reasoning_effort"
+NOTE_MAX = 80  # characters of an unsupported value echoed in the note
+_UNSET = (None, "", "default")
+
 
 def _login(cmd: str):
     """(exe, None) when logged in, else (None, the user message). Only the exit code of `login status` is read."""
@@ -62,6 +67,39 @@ def check_login(cmd: str) -> dict:
     return {"ok": False, "message": msg} if msg else {"ok": True, "message": "logged in"}
 
 
+def model_flags(model, effort, models) -> tuple:
+    """(flags, notes): a model saved on the account and a Codex effort become flags; any other value falls back
+    to Codex's default with a note. Only listed values ever reach argv."""
+    flags, notes = [], []
+    if model not in _UNSET:
+        if model in models:
+            flags.append(f"--model={model}")
+        else:
+            notes.append(f"`{str(model)[:NOTE_MAX]}` is not a Codex model; ran on Codex's default")
+    if effort not in _UNSET:
+        if effort in CODEX_EFFORTS:
+            flags += ["-c", f"{EFFORT_KEY}={effort}"]
+        else:
+            notes.append(f"`{str(effort)[:NOTE_MAX]}` is not a Codex effort; ran on Codex's default")
+    return flags, notes
+
+
+def _rec_flags(rec, model=None, effort=None, run_model=None, run_effort=None) -> tuple:
+    """model_flags for a session: a direct value (given, else recorded) wins over the user's pick (given, else
+    recorded); models of the account it runs on."""
+    rec = rec or {}
+    return model_flags(
+        model or rec.get("direct_model") or run_model or rec.get("run_model"),
+        effort or rec.get("direct_effort") or run_effort or rec.get("run_effort"),
+        ui_settings.models_of(rec["claude_cmd"]) if rec.get("claude_cmd") else [],
+    )
+
+
+def run_note(rec):
+    """The fallback note for the session record, None when nothing fell back."""
+    return "; ".join(_rec_flags(rec)[1]) or None
+
+
 def start_argv(
     exe,
     prompt,
@@ -76,14 +114,16 @@ def start_argv(
     rec=None,
 ):
     """(argv, sent_prompt) for a fresh start. Codex has no system prompt flag: instructions and the tool-name
-    mapping lead the first prompt. agent/model/effort/allowed_tools are #880/#881's."""
+    mapping lead the first prompt. agent/allowed_tools are #881's."""
     sent = "\n\n".join([*instructions, TOOL_MAPPING, prompt]) if instructions else prompt
-    return [*exe, "exec", "--json", BYPASS_FLAG, "--skip-git-repo-check", sent], sent
+    flags = _rec_flags(rec, model, effort, run_model, run_effort)[0]
+    return [*exe, "exec", "--json", BYPASS_FLAG, "--skip-git-repo-check", *flags, sent], sent
 
 
 def resume_argv(exe, session_id, prompt, *, rec):
     """(argv, sent_prompt) continuing thread session_id with prompt alone (the first prompt carried the rest)."""
-    return [*exe, "exec", "resume", "--json", BYPASS_FLAG, "--skip-git-repo-check", session_id, prompt], prompt
+    flags = _rec_flags(rec)[0]
+    return [*exe, "exec", "resume", "--json", BYPASS_FLAG, "--skip-git-repo-check", *flags, session_id, prompt], prompt
 
 
 def skill_text(text, cwd) -> str:

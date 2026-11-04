@@ -434,7 +434,7 @@ def start_session(body: dict):
         return 400, {"error": "batch must be a short id (letters, digits, - and _)"}
     model, effort = body.get("model"), body.get("effort")
     try:
-        ui_settings.check_run(model, effort)
+        ui_settings.check_run(model, effort, claude_cmd or ui_settings.default_cmd())
     except ValueError as exc:
         return 400, {"error": str(exc)}
     peer_review = body.get("peer_review")

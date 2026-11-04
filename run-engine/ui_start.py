@@ -125,7 +125,11 @@ def start(
         raise ValueError("pr-grind takes a PR number or URL")
     if issue is None and skill == "refine-issues" and arg.isdigit():  # one issue: link the session to it
         issue = int(arg)
-    ui_settings.check_run(model, effort)
+    ui_settings.check_run(
+        model,
+        effort,
+        next((c["cmd"] for c in ui_settings.load()["commands"] if c["label"] == claude_cmd), ui_settings.default_cmd()),
+    )
     with _lock(repo):
         snapshot = snapshot if snapshot is not None else ui_poller.snapshot(repo)
         if skill == "implement-issue":

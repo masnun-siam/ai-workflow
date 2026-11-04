@@ -190,8 +190,15 @@ def use_jev() -> bool:
     return v if isinstance(v, bool) else True
 
 
-def check_run(model, effort) -> None:
-    """ValueError unless model / effort are None or one of the allowed values."""
+def check_run(model, effort, cmd=None) -> None:
+    """ValueError unless model / effort are None or one of the allowed values. On a Codex account cmd any
+    non-empty text is accepted: what Codex does not offer falls back with a note (harness_codex). No cmd (the
+    saved run_model/run_effort): Claude's lists."""
+    if cmd and harness_of(cmd) == "codex":
+        for name, v in (("model", model), ("effort", effort)):
+            if v is not None and not (isinstance(v, str) and v and "\x00" not in v):
+                raise ValueError(f"{name} must be a non-empty string")
+        return
     if model is not None and model not in RUN_MODELS:
         raise ValueError(f"model must be one of {', '.join(RUN_MODELS)}")
     if effort is not None and effort not in RUN_EFFORTS:
