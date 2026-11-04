@@ -456,6 +456,15 @@ skill does something else. To undo it, delete the copy.
   prompt alone. Login is the exit code of `<cmd> login status` (`` codex CLI is not logged in, run `<cmd> login` ``
   plus the CLI's first output line in parentheses). Resume in terminal is `cd <path> && <cmd> resume <id>`,
   every word quoted. Pins (`ui_origin`) read a Codex stream's `file_change` paths and `gh issue create` output.
+- Agent sessions on Codex (peer-review lenses, the Away answerer; any start with `agent` or `allowed_tools`):
+  while `harness_codex.AGENT_SANDBOX_VERIFIED` is `False` (as committed, until build gates G2/G3 pass on a real
+  Codex) `ui_runner.start` raises `AgentRefused` ("panels and Away answers need a Claude account: Codex's
+  read-only sandbox cannot run gh") before any record or process; `ui_panel.start` refuses the same way before
+  the panel or its root exists (a 400), and `ui_afk` holds the round at once with that message as its reason, no
+  second attempt. With it `True` the session runs `--sandbox read-only` (never the bypass flag), its first prompt
+  is the agent file's body without frontmatter (`away_answerer.agent_body`) then the prompt, with no
+  `TOOL_MAPPING`; the record gets `sandbox: "read-only"` and `agent`, so every resume adds
+  `-c sandbox_mode="read-only"` (`exec resume` has no `--sandbox`) and a start-over sends the agent text again.
 - The one exception is the vault's name suggestion (`claude -p` with no skill and no session record).
 
 **Hand-offs between skills** follow the guide's "Repo skills win" rule

@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 import ci
 import dispatch_run
 import harness
+import harness_codex
 import repo_skills
 import shared
 import ui_origin
@@ -58,6 +59,17 @@ class RunnerError(Exception):
 
 class Conflict(Exception):
     pass
+
+
+class AgentRefused(RunnerError):
+    """An agent session (lens, Away answerer) refused on a Codex account: deterministic, never retried."""
+
+
+def agent_refusal(cmd) -> str | None:
+    """Why an agent session cannot start on account cmd, None when it can."""
+    if harness.for_cmd(cmd).ID == "codex" and not harness_codex.AGENT_SANDBOX_VERIFIED:
+        return harness_codex.AGENT_REFUSAL
+    return None
 
 
 class AccountRefused(Conflict, RunnerError):
@@ -197,6 +209,8 @@ def start(
 
     claude_cmd = claude_cmd or ui_origin.account_for(cwd, command_text, link) or ui_settings.default_cmd()
     ad = harness.for_cmd(claude_cmd)
+    if (agent or allowed_tools) and (msg := agent_refusal(claude_cmd)):
+        raise AgentRefused(msg)  # before the record: a refusal leaves nothing behind
     sid = ui_sessions.create(command_text, cwd, link, claude_cmd=claude_cmd, harness=ad.ID)["id"]
     if fields:
         ui_sessions.update(sid, **fields)
@@ -206,6 +220,8 @@ def start(
         ui_sessions.update(sid, **{k: v for k, v in (("direct_model", model), ("direct_effort", direct_effort)) if v})
     if allowed_tools:
         ui_sessions.update(sid, allowed_tools=list(allowed_tools))  # every later spawn of the session keeps it
+    if ad.ID == "codex" and (agent or allowed_tools):  # every later spawn keeps the sandbox (and a fresh one the agent)
+        ui_sessions.update(sid, sandbox=harness_codex.SANDBOX, **({"agent": agent} if agent else {}))
     rec = ui_sessions.load(sid)
     if note := ad.run_note(rec):
         rec = ui_sessions.update(sid, run_note=note)

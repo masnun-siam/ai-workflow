@@ -469,7 +469,8 @@ def _held_entry(rec, now, pending, reason, answerer, cost) -> dict:
     }
 
 
-def _start_answerer(rec: dict, pq: dict) -> None:
+def _start_answerer(rec: dict, pq: dict, now: float) -> dict | None:
+    """Start the round's answerer; the held entry when its account refuses agents (held at once, no retry)."""
     sid = rec["id"]
     transcript = os.path.join(ui_sessions.session_dir(sid), "stream.jsonl")
     checkout = rec.get("cwd_path") or ui_runner.read_checkouts().get(rec["repo"], rec["repo"])
@@ -488,12 +489,15 @@ def _start_answerer(rec: dict, pq: dict) -> None:
             allowed_tools=away_answerer.allowed_tools(),
             fields={"role": ui_sessions.ANSWERER_ROLE, "answers_for": sid, "answers_round": pq["id"]},
         )
+    except ui_runner.AgentRefused as e:
+        return _hold(rec, now, pq, str(e))
     except (ui_runner.RunnerError, ValueError, OSError) as e:
         warn(f"away: answerer for {sid} did not start: {e}")
         ui_sessions.update_pending(sid, pq["id"], answerer_error=str(e))
         return
     if not ui_sessions.update_pending(sid, pq["id"], answerer=a["id"]):
         ui_runner.stop(a["id"])  # the owner answered while it started
+    return None
 
 
 def _answerer_failed(rec, now, pq, aid, reason, started) -> dict | None:
@@ -505,8 +509,7 @@ def _answerer_failed(rec, now, pq, aid, reason, started) -> dict | None:
     if (pq.get("answerer_attempts") or 0) < MAX_ATTEMPTS:
         if cap := _cap_reason(rec, pq, started):
             return _hold(rec, now, pq, cap)
-        _start_answerer(rec, pq)
-        return None
+        return _start_answerer(rec, pq, now)
     reason = f"answerer failed ({reason})"
     ui_sessions.update_pending(sid, pq["id"], held=True)
     return _held_entry(rec, now, pq, reason, aid, cost)
@@ -525,8 +528,7 @@ def _opus(rec: dict, now: float, window=None) -> dict | None:
         if (pq.get("answerer_attempts") or 0) < MAX_ATTEMPTS:
             if cap := _cap_reason(rec, pq, window):
                 return _hold(rec, now, pq, cap)
-            _start_answerer(rec, pq)
-            return None
+            return _start_answerer(rec, pq, now)
         ui_sessions.update_pending(sid, pq["id"], held=True)  # every attempt failed to start
         reason = f"answerer could not start: {pq.get('answerer_error') or 'unknown error'}"
         return _held_entry(rec, now, pq, reason, None, None)

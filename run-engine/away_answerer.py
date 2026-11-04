@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 
 import ui_sessions
 
@@ -26,6 +27,19 @@ def allowed_tools(agent: str = "away-answerer") -> list:
             if line.startswith("tools:"):
                 return line[len("tools:") :].strip().split(", ")
     raise ValueError(f"no tools: line in {agent_file}")
+
+
+def agent_body(agent: str) -> str:
+    """The agent file's text without its frontmatter: a Codex agent session's instructions (Codex has no
+    plugin agents). agent is `ai-workflow:<name>` or `<name>`."""
+    name = agent.rsplit(":", 1)[-1] if isinstance(agent, str) else ""
+    agent_file = os.path.join(AGENTS_DIR, f"{name}.md")
+    if not re.fullmatch(r"[\w-]+", name) or not os.path.isfile(agent_file):
+        raise ValueError(f"unknown agent {agent!r}")
+    with open(agent_file, encoding="utf-8") as f:
+        text = f.read()
+    m = re.match(r"---\n.*?\n---\n", text, re.S)
+    return text[m.end() if m else 0 :].strip()
 
 
 def prompt(rec: dict, pending: dict, transcript: str, checkout: str) -> str:

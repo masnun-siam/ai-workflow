@@ -164,7 +164,7 @@ sid = record("/implement-issue 7", status="waiting", session_id="sess-W")
 pq = {"id": "q-1", "status": "pending", "questions": [{"question": "Ship?", "options": [{"label": "Yes"}]}]}
 ui_sessions.set_pending(sid, pq)
 with capture() as sp:
-    ui_afk._start_answerer(ui_sessions.load(sid), pq)
+    ui_afk._start_answerer(ui_sessions.load(sid), pq, 0)
 argv = sp.call_args[0][1]
 want = ["claude", *RESTRICTED, "--allowedTools", AWAY_TOOLS, "--agent", "ai-workflow:away-answerer", "--model", "opus"]
 assert argv[:-1] == [*want, "--effort", "medium"], argv

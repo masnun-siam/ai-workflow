@@ -343,12 +343,10 @@ assert list(harness_codex.CODEX_EFFORTS) == next(h for h in ui_settings.HARNESSE
 assert harness.get("claude").run_note({"run_model": "gpt-5", "run_effort": "nope"}) is None
 ok("model_flags: saved model and Codex effort become flags, the rest fall back with an 80-char note")
 
-SKIP = len(["exec", *FLAGS])
-
 
 def flags_of(a: list, resume=False) -> list:
     """The flags between --skip-git-repo-check and the prompt (and, on resume, the thread id)."""
-    return a[SKIP + (1 if resume else 0) : -2 if resume else -1]
+    return a[a.index("--skip-git-repo-check") + 1 : -2 if resume else -1]
 
 
 rec = finished(ui_runner.start("plain text", work, claude_cmd="codex", run_model="gpt-5", effort="high")["id"])
@@ -425,6 +423,7 @@ ok("grind re-entry: no flags, no note")
 
 # built-in lens (opus) and Away answerer (opus, medium) on a Codex account
 with (
+    mock.patch.object(harness_codex, "AGENT_SANDBOX_VERIFIED", True),
     mock.patch.object(ui_runner.ui_origin, "account_for", return_value="codex"),
     mock.patch.object(ui_panel.peer_review, "load_panel", return_value={"repo": work, "round": 1}),
     mock.patch.object(ui_panel.peer_review, "update_panel"),
@@ -436,10 +435,11 @@ finished(lens["id"])
 assert flags_of(argv()) == [] and lens["run_note"] == "`opus` is not a Codex model; ran on Codex's default"
 host = ui_sessions.create("x", work, claude_cmd="codex", harness="codex")
 with (
+    mock.patch.object(harness_codex, "AGENT_SANDBOX_VERIFIED", True),
     mock.patch.object(ui_afk.ui_sessions, "update_pending", return_value=True),
     mock.patch.object(ui_afk.away_answerer, "prompt", return_value="answer it"),
 ):
-    ui_afk._start_answerer({**host, "repo": work}, {"id": "q-1"})
+    ui_afk._start_answerer({**host, "repo": work}, {"id": "q-1"}, time.time())
 ans = next(r for r in ui_sessions.list_sessions() if r.get("answers_for") == host["id"])
 finished(ans["id"])
 assert flags_of(argv()) == ["-c", "model_reasoning_effort=medium"], argv()
@@ -462,5 +462,151 @@ crec = ui_sessions.update(crec["id"], direct_model="opus", direct_effort="low", 
 ca, _ = harness.get("claude").resume_argv(["claude"], "s1", "go", rec=crec)
 assert "opus" not in ca and "low" not in ca and ca[ca.index("--model") + 1] == "sonnet", ca
 ok("claude resume ignores direct_model/direct_effort")
+
+# ---- #881: agent sessions on Codex ----------------------------------------------------------------
+import away_answerer  # noqa: E402
+import ui_server  # noqa: E402
+
+LENS_BODY = away_answerer.agent_body("ai-workflow:peer-reviewer")
+AWAY_BODY = away_answerer.agent_body("away-answerer")
+for body in (LENS_BODY, AWAY_BODY):
+    assert body and not body.startswith("---") and "tools:" not in body.split("\n")[0], body[:200]
+assert LENS_BODY == away_answerer.agent_body("peer-reviewer")
+for bad in ("nope", "ai-workflow:../x", "../agents/peer-reviewer", "", None):
+    try:
+        away_answerer.agent_body(bad)
+        raise AssertionError(bad)
+    except ValueError:
+        pass
+ok("agent_body: frontmatter stripped; unknown or path-like names raise")
+
+SANDBOX_START = ["--sandbox", "read-only"]
+SANDBOX_RESUME = ["-c", 'sandbox_mode="read-only"']
+
+
+def sandboxed(a: list, resume=False) -> None:
+    assert harness_codex.BYPASS_FLAG not in a, a
+    i = a.index("--skip-git-repo-check")
+    assert a[i - 2 : i] == (SANDBOX_RESUME if resume else SANDBOX_START), a
+
+
+with mock.patch.object(harness_codex, "AGENT_SANDBOX_VERIFIED", True):
+    # 1. lens start through the real runner
+    with (
+        mock.patch.object(ui_runner.ui_origin, "account_for", return_value="codex"),
+        mock.patch.object(ui_panel.peer_review, "load_panel", return_value={"repo": work, "round": 1}),
+        mock.patch.object(ui_panel.peer_review, "update_panel"),
+        mock.patch.object(ui_panel, "_lens_prompt", return_value="review it"),
+    ):
+        ui_panel._start_lens("p2", "cto")
+    lens = finished(next(r for r in ui_sessions.list_sessions() if r.get("panel_lens") == "cto")["id"])
+    a = argv()
+    sandboxed(a)
+    assert a[-1] == LENS_BODY + "\n\nreview it" and harness_codex.TOOL_MAPPING not in a[-1], a[-1][:200]
+    assert lens["sandbox"] == "read-only" and lens["agent"] == ui_panel.LENS_AGENT and lens["allowed_tools"], lens
+    ok("lens on Codex: --sandbox read-only, no bypass, agent body + prompt, no mapping, sandbox recorded")
+
+    # 2. Away answerer start
+    host2 = ui_sessions.create("x", work, claude_cmd="codex", harness="codex")
+    with (
+        mock.patch.object(ui_afk.ui_sessions, "update_pending", return_value=True),
+        mock.patch.object(ui_afk.away_answerer, "prompt", return_value="answer it"),
+    ):
+        assert ui_afk._start_answerer({**host2, "repo": work}, {"id": "q-1"}, time.time()) is None
+    ans = finished(next(r for r in ui_sessions.list_sessions() if r.get("answers_for") == host2["id"])["id"])
+    sandboxed(argv())
+    assert argv()[-1] == AWAY_BODY + "\n\nanswer it" and ans["sandbox"] == "read-only", argv()[-1][:200]
+    ok("Away answerer on Codex: sandboxed start with the away-answerer body")
+
+    # 3. every later spawn keeps the sandbox and never repeats the agent text
+    for sid4 in (lens["id"], ans["id"]):
+        ui_sessions.update(sid4, status="waiting", pending_question={"id": "q-1"})
+        ui_runner.resume(sid4, "round 2")  # a later panel round goes through resume
+        finished(sid4)
+        sandboxed(argv(), resume=True)
+        assert argv()[1] == "resume" and argv()[-1] == "round 2", argv()
+        assert ui_runner.send_prompt(sid4, "more") == "sent"
+        finished(sid4)
+        sandboxed(argv(), resume=True)
+        assert argv()[-1] == "more"
+        ui_sessions.update(sid4, status="stopped")
+        ui_runner.resume_stopped(sid4)
+        finished(sid4)
+        sandboxed(argv(), resume=True)
+        assert argv()[-1] == ui_runner.CONTINUE_PROMPT
+    # limited before a thread id: start over keeps the sandbox and prepends the agent text again
+    ui_sessions.update(lens["id"], status="limited", session_id=None)
+    ui_runner.resume_stopped(lens["id"])
+    finished(lens["id"])
+    sandboxed(argv())
+    assert argv()[-1].startswith(HEADLESS_PROMPT + "\n\n" + LENS_BODY), argv()[-1][:200]
+    q = ui_sessions.update(lens["id"], status="starting", cwd_path=work)
+    ui_runner._start_claimed(q)
+    finished(lens["id"])
+    sandboxed(argv())
+    ok("agent session: resume, send, resume_stopped, start over and queued start keep the sandbox, no bypass")
+
+    # 5. a plain Codex start is unchanged
+    rec = finished(ui_runner.start("plain text", work, claude_cmd="codex")["id"])
+    assert harness_codex.BYPASS_FLAG in argv() and "--sandbox" not in argv() and "sandbox" not in rec
+    ok("plain Codex start: bypass flag, no sandbox field")
+
+# 6. Claude agent sessions carry no sandbox or agent field
+with mock.patch.object(ui_runner, "_spawn", side_effect=lambda sid, *a, **k: ui_sessions.load(sid)):
+    crec = ui_runner.start(
+        "review it", work, agent="ai-workflow:peer-reviewer", claude_cmd="claude", allowed_tools=["Read"]
+    )
+assert "sandbox" not in crec and "agent" not in crec and crec["allowed_tools"] == ["Read"], crec
+ok("Claude agent session: no sandbox or agent field")
+
+# 7-9. the refusal (constant as committed)
+assert harness_codex.AGENT_SANDBOX_VERIFIED is False
+REFUSAL = "panels and Away answers need a Claude account: Codex's read-only sandbox cannot run gh"
+assert harness_codex.AGENT_REFUSAL == REFUSAL
+n_calls, n_recs = calls(), len(ui_sessions.list_sessions())
+for kw in ({"agent": "ai-workflow:peer-reviewer"}, {"allowed_tools": ["Read"]}):
+    try:
+        ui_runner.start("review it", work, claude_cmd="codex", **kw)
+        raise AssertionError(kw)
+    except ui_runner.RunnerError as e:
+        assert isinstance(e, ui_runner.AgentRefused) and str(e) == REFUSAL, e
+assert calls() == n_calls and len(ui_sessions.list_sessions()) == n_recs
+ok("refusal: runner start raises the exact message, spawns nothing, writes no record")
+
+art = os.path.join(work, "prd.md")
+with open(art, "w") as f:
+    f.write("# prd\n")
+root = ui_sessions.create("x", work, claude_cmd="codex", harness="codex")
+with (
+    mock.patch.object(ui_panel.peer_review, "new_panel") as np,
+    mock.patch.object(ui_panel.ui_runner, "start") as st,
+):
+    for rs, default in ((root["id"], "claude"), (None, "codex")):
+        with mock.patch.object(ui_panel.ui_settings, "default_cmd", return_value=default):
+            try:
+                ui_panel.start(work, art, ["qa"], rs)
+                raise AssertionError(rs)
+            except ui_runner.RunnerError as e:
+                assert str(e) == REFUSAL, e
+    with mock.patch.object(ui_panel.ui_settings, "default_cmd", return_value="codex"):
+        try:
+            ui_server._Handler._review({"repo": work, "artifact": art, "lenses": ["qa"]})
+            raise AssertionError("no refusal")
+        except ValueError as e:  # the route turns ValueError into a 400
+            assert str(e) == REFUSAL, e
+    assert not np.called and not st.called
+assert calls() == n_calls
+ok("refusal: panel start (Codex root or Codex default) refuses before any panel or root, 400 via _review")
+
+host3 = ui_sessions.create("x", work, claude_cmd="codex", harness="codex")
+pq3 = {"id": "q-9", "status": "pending", "questions": [{"question": "Ship?", "options": [{"label": "Yes"}]}]}
+ui_sessions.set_pending(host3["id"], pq3)
+ui_sessions.update(host3["id"], status="waiting")
+held = ui_afk._start_answerer(ui_sessions.load(host3["id"]), ui_sessions.load(host3["id"])["pending_question"], 1.0)
+pq3 = ui_sessions.load(host3["id"])["pending_question"]
+assert held and held["reason"] == REFUSAL and pq3["held"] and pq3.get("answerer_attempts") == 1, (held, pq3)
+assert not ui_afk._opus(ui_sessions.load(host3["id"]), 2.0)  # held: no second attempt
+assert calls() == n_calls and not any(r.get("answers_for") == host3["id"] for r in ui_sessions.list_sessions())
+ok("refusal: Away round held at once with the message as its note, nothing spawned, no retry")
 
 print(f"{passed} passed")
