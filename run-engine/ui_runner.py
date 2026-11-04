@@ -100,7 +100,7 @@ def _proc_start(pid):
 def _spawn(
     sid: str, argv: list, path: str, answer=None, resuming=False, *, env_extra=None, pass_fds=(), **fields
 ) -> dict:
-    """Spawn claude detached, record pid/running, start the follower. Any failure -> _fail."""
+    """Spawn the harness CLI detached, record pid/running, start the follower. Any failure -> _fail."""
     d = ui_sessions.session_dir(sid)
     stream_path = os.path.join(d, "stream.jsonl")
     try:

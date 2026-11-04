@@ -36,7 +36,7 @@ def _login(cmd: str):
         return None, ("codex CLI not found on PATH" if cmd == "codex" else f"codex command {cmd!r} unusable: {e}")
     msg = f"codex CLI is not logged in, run `{cmd} login`"
     try:
-        p = subprocess.run([*exe, "login", "status"], capture_output=True, text=True, timeout=30)
+        p = subprocess.run([*exe, "login", "status"], capture_output=True, text=True, errors="replace", timeout=30)
     except (subprocess.TimeoutExpired, OSError) as e:
         return None, f"{msg} (login status check failed: {e})"
     if p.returncode == 0:

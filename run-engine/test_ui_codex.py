@@ -158,6 +158,10 @@ ui_sessions.update(sid, status="stopped")
 ui_runner.resume_stopped(sid)
 finished(sid)
 assert argv()[6] == ui_runner.CONTINUE_PROMPT and argv()[1] == "resume"
+ui_sessions.update(sid, status="limited", pending_answer="/ai-workflow:create-tasks docs/prds/x.md")
+ui_runner.resume_stopped(sid)
+finished(sid)
+assert argv()[6] == repo_skills.codex_prompt("/ai-workflow:create-tasks docs/prds/x.md", work), argv()[6][:200]
 ok("resume: exec resume argv, no preamble, follow-up skill-resolved, tokens replaced per run")
 
 # limited before any thread id: starts over, gated
@@ -212,6 +216,14 @@ assert harness_codex.check_login("nope-codex-878") == {
 }
 with mock.patch.object(ui_settings, "argv", side_effect=ValueError("x")):
     assert harness_codex.check_login("codex")["message"] == "codex CLI not found on PATH"
+os.environ["FAKE_CODEX_LOGIN"] = "1"
+os.environ["FAKE_CODEX_SAY"] = "caf\xe9"
+real_run = subprocess.run
+with mock.patch.object(
+    subprocess, "run", lambda a, **k: real_run(["sh", "-c", "printf 'caf\\351\\n' >&2; exit 1"], **k)
+):
+    assert harness_codex.check_login("codex")["message"] == base + " (caf\ufffd)"
+os.environ["FAKE_CODEX_LOGIN"] = "0"
 with mock.patch.object(subprocess, "run", side_effect=subprocess.TimeoutExpired(["codex"], 30)):
     m = harness_codex.check_login("codex")["message"]
     assert m.startswith(base + " (login status check failed: ") and m.endswith(")"), m
