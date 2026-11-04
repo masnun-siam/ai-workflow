@@ -1,4 +1,4 @@
-// FR-20, FR-21: one page per session. Header, state banners, transcript, composer, facts.
+// FR-20, FR-21: one page per session. Header with facts, state banners, the outcome of a finished session, transcript, composer.
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
@@ -9,6 +9,7 @@ import { Banner, Button, Chip, EmptyState, Icon, Menu, PauseDialog, SessionChip 
 import { QuestionForm } from '../questions/QuestionForm';
 import { CreateRepoDialog } from '../repos/CreateRepoDialog';
 import { issueOf } from '../activity/SessionTable';
+import { mdToHtml } from '../lib/md';
 import { clockText, duration, formatWhen, money, sessionLabel, sessionSlug, shortRepo, skillOf, tokensText, untilText } from '../lib/format';
 import { routes } from '../lib/routes';
 import { usePanel } from '../panels/PanelContext';
@@ -78,6 +79,10 @@ export function SessionPage() {
   const term = () => void copyCommand(resumeCommand(s));
   const startNow = () => startNowM.mutate(s.id);
   const autoResume = s.auto_resume && !s.hold;
+  // A finished session leads with its last result; the transcript then points up to it.
+  let last = finished ? tr.events.length - 1 : -1;
+  while (last >= 0 && !(tr.events[last].kind === 'result' && String(tr.events[last].text ?? '').trim())) last--;
+  const result = last >= 0 ? tr.events[last] : null;
 
   return (
     <div className="content-inner">
@@ -92,11 +97,23 @@ export function SessionPage() {
           <p className="sub">
             {issue && slug ? <button type="button" className="linkish" onClick={() => panel.open({ kind: 'issue', repo: slug, n: issue })}>Issue #{issue}</button> : s.no_repo ? 'Notes vault' : shortRepo(slug || s.repo)}
           </p>
+          <dl className="facts inline" aria-label="Facts">
+            <dt>Repo</dt><dd>{s.no_repo ? 'Notes vault' : shortRepo(slug || s.repo)}</dd>
+            {account ? <><dt>Account</dt><dd>{account}</dd></> : null}
+            <dt>Harness</dt><dd>{harnessLabel}</dd>
+            <dt>Started</dt><dd>{formatWhen(s.started_at)}</dd>
+            <dt>Duration</dt><dd>{duration(s.started_at, s.ended_at)}</dd>
+            <dt>Cost</dt><dd>{money(s.cost)}</dd>
+            <dt>Tokens</dt><dd>{tokensText(s.tokens) || '—'}</dd>
+            <dt>Model</dt><dd>{s.model || '—'}</dd>
+            <dt>Effort</dt><dd>{s.effort || 'Default'}</dd>
+            {s.run_note ? <><dt>Note</dt><dd>{s.run_note}</dd></> : null}
+            </dl>
         </div>
         <div className="row wrap">
           {s.outcome === 'stopped' ? <Button shortcut="r" primary disabled={a.busy} onClick={() => a.resume(s.id)}>Resume</Button> : null}
-          {finished ? <Button shortcut="r" disabled={a.busy} onClick={() => a.rerun(s.id)}><Icon n="refresh" />Rerun</Button> : null}
           {s.resume_command ? <Button shortcut="t" onClick={term}><Icon n="terminal" />Continue in terminal</Button> : null}
+          {finished ? <Menu items={[{ label: 'Rerun from scratch, as a new session', icon: 'refresh', disabled: a.busy, onSelect: () => a.rerun(s.id) }]} trigger={<Button aria-label="More actions"><Icon n="more" /></Button>} /> : null}
           {['starting', 'running', 'waiting', 'limited'].includes(s.outcome) && !s.hold ? <Button onClick={() => setPausing(true)}><Icon n="pause" />Pause</Button> : null}
           {!finished ? <Button shortcut="x" variant="danger" onClick={() => void a.stop(s.id)}><Icon n="stop" />Stop</Button> : null}
         </div>
@@ -143,32 +160,21 @@ export function SessionPage() {
       {finished && s.no_repo && skillOf(s.command) === 'create-prd' && s.vault_folder ? <VaultPrd s={s} /> : null}
 
       {s.bootstrap ? <PhaseStrip run={s.bootstrap} here={s.id} /> : null}
-      <div className="sess-grid">
-        <div className="stack">
-          <Transcript events={tr.events} live={live} working={['running', 'starting'].includes(s.outcome)} />
-          {s.outcome === 'waiting' ? (
-            <section className="stack" style={{ gap: 8 }} ref={reveal}>
-              <h2 style={{ color: 'var(--you)' }}>Claude is waiting on you</h2>
-              <QuestionForm sessionId={s.id} />
-            </section>
-          ) : null}
-          <Composer s={s} />
-        </div>
-        <aside className="box" aria-label="Facts">
-          <dl className="facts">
-            <dt>Repo</dt><dd>{s.no_repo ? 'Notes vault' : shortRepo(slug || s.repo)}</dd>
-            {account ? <><dt>Account</dt><dd>{account}</dd></> : null}
-            <dt>Harness</dt><dd>{harnessLabel}</dd>
-            <dt>Started</dt><dd>{formatWhen(s.started_at)}</dd>
-            <dt>Duration</dt><dd>{duration(s.started_at, s.ended_at)}</dd>
-            <dt>Cost</dt><dd>{money(s.cost)}</dd>
-            <dt>Tokens</dt><dd>{tokensText(s.tokens) || '—'}</dd>
-            <dt>Model</dt><dd>{s.model || '—'}</dd>
-            <dt>Effort</dt><dd>{s.effort || 'Default'}</dd>
-            {s.run_note ? <><dt>Note</dt><dd>{s.run_note}</dd></> : null}
-            {issue ? <><dt>Issue</dt><dd>#{issue}</dd></> : null}
-          </dl>
-        </aside>
+      {result ? (
+        <section className={`box outcome t-${result.is_error ? 'bad' : 'ship'}`} aria-label="Outcome">
+          <h2><Icon n={result.is_error ? 'alert' : 'check'} s={15} />{result.is_error ? 'Failed' : 'Outcome'}</h2>
+          <div className="prose" dangerouslySetInnerHTML={{ __html: mdToHtml(result.text) }} />
+        </section>
+      ) : null}
+      <div className="stack">
+        <Transcript events={tr.events} live={live} working={['running', 'starting'].includes(s.outcome)} root={s.repo_path} summaryAbove={result ? last : undefined} />
+        {s.outcome === 'waiting' ? (
+          <section className="stack" style={{ gap: 8 }} ref={reveal}>
+            <h2 style={{ color: 'var(--you)' }}>Claude is waiting on you</h2>
+            <QuestionForm sessionId={s.id} />
+          </section>
+        ) : null}
+        <Composer s={s} />
       </div>
     </div>
   );

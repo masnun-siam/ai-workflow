@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useTranscript } from '../api/hooks';
 import type { StreamEvent } from '../api/types';
 import * as md from '../lib/md';
-import { Transcript } from './Transcript';
+import { shortPaths, Transcript } from './Transcript';
 
 afterEach(() => {
   cleanup();
@@ -60,16 +60,31 @@ describe('Transcript', () => {
     expect(screen.getByText('ev0')).toBeTruthy();
   });
 
-  it('collapse hides tool and result rows, keeps text, and the search count follows', async () => {
-    const evs = [text('hello'), { kind: 'tool', name: 'Bash', input: {} } as StreamEvent, { kind: 'result', text: 'done' } as StreamEvent];
+  it('folds a run of tool calls into one row that opens, and Show every step lists them flat', async () => {
+    const tool = (c: string) => ({ kind: 'tool', name: 'Bash', input: { command: c } }) as StreamEvent;
+    const evs = [text('hello'), tool('ls'), tool('pwd'), { kind: 'tool', name: 'Read', input: { file_path: 'a' } } as StreamEvent, text('bye')];
     render(<Transcript events={evs} live={false} working={false} />);
-    expect(screen.getByText('Bash')).toBeTruthy();
-    await userEvent.click(screen.getByLabelText('Collapse tool calls'));
-    expect(screen.queryByText('Bash')).toBeNull();
-    expect(screen.queryByText('Result')).toBeNull();
-    expect(screen.getByText('hello')).toBeTruthy();
-    await userEvent.type(screen.getByLabelText('Search the transcript'), 'o');
-    expect(screen.getByText('1 of 3')).toBeTruthy();
+    expect(screen.getByText('3 steps')).toBeTruthy();
+    expect(screen.getByText(/Bash ×2, Read/)).toBeTruthy();
+    expect(screen.queryByText('ls')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: /3 steps/ }));
+    expect(screen.getByText('ls')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: /3 steps/ }));
+    await userEvent.click(screen.getByLabelText('Show every step'));
+    expect(screen.queryByText('3 steps')).toBeNull();
+    expect(screen.getByText('pwd')).toBeTruthy();
+  });
+
+  it('drops a final message the result repeats, and points up when the page shows the summary', () => {
+    const evs = [text('all done'), { kind: 'result', text: 'all done', cost: 1 } as StreamEvent];
+    render(<Transcript events={evs} live={false} working={false} summaryAbove={1} />);
+    expect(screen.queryByText('all done')).toBeNull();
+    expect(screen.getByText(/the summary is at the top/)).toBeTruthy();
+  });
+
+  it('cuts worktree and repo prefixes from tool paths', () => {
+    expect(shortPaths('cd /u/x/.worktrees/12-a && cat /u/x/.worktrees/12-a/src/f.ts')).toBe('cd /u/x/.worktrees/12-a && cat src/f.ts');
+    expect(shortPaths('Read /repo/src/f.ts', '/repo')).toBe('Read src/f.ts');
   });
 
   it('shows Jump to latest only while live and off the end; clicking scrolls and re-enables Auto-scroll', async () => {
