@@ -1222,6 +1222,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         except ValueError as e:
             self._json(400, {"error": str(e)})
             return
+        try:  # before the claim: a refused account must not consume the round
+            ui_runner.resume_target(rec)
+        except ui_runner.AccountRefused as e:
+            self._json(409, {"error": str(e)})
+            return
         if ui_sessions.claim_answer(sid, round_id) is None:
             self._json(409, {"error": "round already answered"})
             return

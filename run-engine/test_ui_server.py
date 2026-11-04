@@ -739,6 +739,27 @@ try:
     for verb in ("hold", "release"):
         assert call("POST", f"/api/sessions/{'0' * 12}/{verb}", {})[0] == 404
     ok("sessions: hold and release answer 200, 404, 409; hold is on the record")
+    ui_settings.save({"commands": [{"label": "Cx", "cmd": "codex", "harness": "codex"}], "default": "claude"})
+    xs = ui_sessions.create("/implement-issue 8", other, claude_cmd="codex", harness="codex")
+    ui_sessions.update(xs["id"], status="stopped", session_id="th-1")
+    before = ui_sessions.load(xs["id"])
+    st, body = call("POST", f"/api/sessions/{xs['id']}/resume", {"claude_cmd": "claude"})
+    assert (st, body) == (409, {"error": "this session ran on codex; pick a codex account"}), (st, body)
+    assert ui_sessions.load(xs["id"]) == before
+    pq = {"id": "r1", "questions": [{"question": "q?", "options": [{"label": "A"}], "multiSelect": False}]}
+    ui_sessions.update(xs["id"], status="waiting", claude_cmd="codex-gone", pending_question=pq)
+    c_ = http.client.HTTPConnection("127.0.0.1", bport, timeout=5)
+    raw = json.dumps({"round_id": "r1", "answers": {"0": {"labels": ["A"]}}})
+    c_.request("POST", f"/api/sessions/{xs['id']}/answer", raw, {"Host": bme, "Content-Type": "application/json"})
+    r_ = c_.getresponse()
+    st, body = r_.status, json.loads(r_.read())
+    c_.close()
+    assert (st, body) == (409, {"error": "account codex-gone was removed; pick a codex account"}), (st, body)
+    rec_ = ui_sessions.load(xs["id"])
+    assert rec_["status"] == "waiting" and rec_["pending_question"] == pq, rec_
+    ui_sessions.update(xs["id"], status="stopped", pending_question=None)
+    ui_settings.save({"commands": [], "default": "claude"})
+    ok("sessions: a cross-harness resume and an answer on a removed Codex account answer 409, nothing claimed")
     ok("inbox: items, afk, gh, stale; ?repo= filter and 400; gh on /api/sessions")
     assert call("POST", "/api/afk/change", {"changes": []})[0] in (400, 409)
     assert call("POST", "/api/afk/change", {"changes": [{"id": "s:1", "answers": {}}]})[0] == 409  # no summary yet
