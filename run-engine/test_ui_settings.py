@@ -570,4 +570,14 @@ assert ui_settings.harness_of("claude") == "claude" and ui_settings.models_of("c
 assert ui_settings.harness_of("nope") == "claude" and ui_settings.models_of("nope") == []
 # run_model / run_effort stay on the Claude lists
 assert raises(ui_settings.validate, {"run_model": "gpt-5"}) and raises(ui_settings.validate, {"run_effort": "minimal"})
+# check_run per harness (#880): Codex accepts any value (it falls back), Claude and no cmd keep the lists
+for m, e in (("opus", None), ("gpt-5", "max"), (None, "anything"), ("default", "xhigh")):
+    assert error(ui_settings.check_run, m, e, "codex") is None, (m, e)
+assert error(ui_settings.check_run, "", None, "codex") == "model must be a non-empty string"
+assert error(ui_settings.check_run, None, "a\x00b", "codex") == "effort must be a non-empty string"
+assert error(ui_settings.check_run, None, 5, "codex") == "effort must be a non-empty string"
+for cmd in ("cc main", None):
+    assert error(ui_settings.check_run, "gpt-5", None, cmd) == "model must be one of opus, sonnet, haiku"
+    assert error(ui_settings.check_run, None, "ultra", cmd) == "effort must be one of low, medium, high, xhigh, max"
+    assert error(ui_settings.check_run, "opus", "max", cmd) is None
 print("ui_settings: 158 checks passed")

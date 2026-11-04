@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Self-check for the Codex adapter end to end (issue #878). `python3 test_ui_codex.py` — exit 0 = green.
+"""Self-check for the Codex adapter end to end (issues #878, #880). `python3 test_ui_codex.py` — exit 0 = green.
 
 A fake `codex` on PATH answers `login status` by $FAKE_CODEX_LOGIN and, for `exec`, records its argv and
 environment and prints Codex JSONL. A temp data dir holds a Codex account in ui_settings.json.
@@ -60,7 +60,7 @@ with open(os.path.join(DATA, "ui_settings.json"), "w") as f:
         {
             "commands": [
                 {"label": "Claude", "cmd": "claude"},
-                {"label": "Codex", "cmd": "codex", "harness": "codex", "models": []},
+                {"label": "Codex", "cmd": "codex", "harness": "codex", "models": ["gpt-5"]},
             ],
             "default": "Claude",
         },
@@ -259,5 +259,128 @@ for cmd, words in [("codex", ["codex"]), ('codex -p "my profile"', ["codex", "-p
 assert harness_codex.resume_command("codex", "", "th-1") is None
 assert harness_codex.resume_command("codex", path, None) is None
 ok("resume_command: every word quoted, survives sh -c, None without path or id")
+
+# ---- #880 model and effort per harness -------------------------------------------------------
+import ui_afk  # noqa: E402
+import ui_bootstrap  # noqa: E402
+import ui_panel  # noqa: E402
+import ui_repos  # noqa: E402
+
+MF = harness_codex.model_flags
+assert MF("gpt-5", "high", ["gpt-5"]) == (["--model=gpt-5", "-c", "model_reasoning_effort=high"], [])
+for unset in (None, "", "default"):
+    assert MF(unset, unset, ["gpt-5"]) == ([], [])
+assert MF("opus", "max", ["gpt-5"]) == (
+    [],
+    ["`opus` is not a Codex model; ran on Codex's default", "`max` is not a Codex effort; ran on Codex's default"],
+)
+assert MF("gpt-5", None, []) == ([], ["`gpt-5` is not a Codex model; ran on Codex's default"])
+assert MF("--oops", "--oops", ["gpt-5"])[0] == []
+assert MF("x" * 100, None, [])[1] == [f"`{'x' * 80}` is not a Codex model; ran on Codex's default"]
+assert list(harness_codex.CODEX_EFFORTS) == next(h for h in ui_settings.HARNESSES if h["id"] == "codex")["efforts"]
+assert harness.get("claude").run_note({"run_model": "gpt-5", "run_effort": "nope"}) is None
+ok("model_flags: saved model and Codex effort become flags, the rest fall back with an 80-char note")
+
+SKIP = len(["exec", *FLAGS])
+
+
+def flags_of(a: list, resume=False) -> list:
+    """The flags between --skip-git-repo-check and the prompt (and, on resume, the thread id)."""
+    return a[SKIP + (1 if resume else 0) : -2 if resume else -1]
+
+
+rec = finished(ui_runner.start("plain text", work, claude_cmd="codex", run_model="gpt-5", effort="high")["id"])
+assert flags_of(argv()) == ["--model=gpt-5", "-c", "model_reasoning_effort=high"] and argv()[-1] == "plain text"
+assert rec.get("run_note") is None and "run_note" not in rec, rec
+rec = finished(ui_runner.start("plain text", work, claude_cmd="codex", run_model="default")["id"])
+assert flags_of(argv()) == [] and "run_note" not in rec
+rec = finished(ui_runner.start("plain text", work, claude_cmd="codex", run_model="opus", effort="max")["id"])
+assert flags_of(argv()) == [], argv()
+assert rec["run_note"] == (
+    "`opus` is not a Codex model; ran on Codex's default; `max` is not a Codex effort; ran on Codex's default"
+), rec["run_note"]
+assert rec["run_model"] == "opus" and rec["run_effort"] == "max"  # the raw pick stays on the record
+ok("start: saved model and effort as flags; opus/max fall back, both notes joined, raw pick kept")
+
+# direct values win and every later spawn re-applies them
+sid3 = ui_runner.start("plain text", work, claude_cmd="codex", model="gpt-5", direct_effort="low", effort="high")["id"]
+rec = finished(sid3)
+want = ["--model=gpt-5", "-c", "model_reasoning_effort=low"]
+assert flags_of(argv()) == want and rec["direct_model"] == "gpt-5" and rec["direct_effort"] == "low", rec
+assert ui_runner.send_prompt(sid3, "more") == "sent"
+finished(sid3)
+assert argv()[1] == "resume" and flags_of(argv(), resume=True) == want and argv()[-2:] == ["th-1", "more"], argv()
+ui_sessions.update(sid3, status="waiting", pending_question={"id": "q-1"})
+ui_runner.resume(sid3, "yes")
+finished(sid3)
+assert flags_of(argv(), resume=True) == want
+ui_sessions.update(sid3, status="stopped")
+ui_runner.resume_stopped(sid3)
+finished(sid3)
+assert flags_of(argv(), resume=True) == want
+ok("direct model/direct_effort: win over the pick, recorded, re-applied on send, answer and resume")
+
+# Start: a Codex account accepts any value, Claude's 400s are unchanged
+with mock.patch.object(ui_repos, "resolve_repo", return_value=(work, None)):
+    for body, flags in (({"model": "opus"}, []), ({"model": "gpt-5"}, ["--model=gpt-5"]), ({"effort": "max"}, [])):
+        status, res = ui_repos.start_session({"repo": "x", "text": "plain text", "claude_cmd": "Codex", **body})
+        assert status == 201, (status, res)
+        rec = finished(res["id"])
+        assert flags_of(argv()) == flags and not any(x in ("-m", "--model") for x in argv()), argv()
+        assert (rec.get("run_note") is None) == bool(flags), rec.get("run_note")
+    assert ui_repos.start_session({"repo": "x", "text": "t", "claude_cmd": "Claude", "model": "gpt-5"}) == (
+        400,
+        {"error": "model must be one of opus, sonnet, haiku"},
+    )
+    assert ui_repos.start_session({"repo": "x", "text": "t", "claude_cmd": "Claude", "effort": "ultra"}) == (
+        400,
+        {"error": "effort must be one of low, medium, high, xhigh, max"},
+    )
+ok("start_session: Codex 201 for opus/gpt-5/max with the fallback, Claude 400s as before")
+
+# grind re-entry: no model or effort, no flag, no note
+rec = finished(ui_runner.start("/pr-grind 7", work, instructions=[ui_runner.REENTRY_PROMPT], claude_cmd="codex")["id"])
+assert flags_of(argv()) == [] and "run_note" not in rec
+ok("grind re-entry: no flags, no note")
+
+# built-in lens (opus) and Away answerer (opus, medium) on a Codex account
+with (
+    mock.patch.object(ui_runner.ui_origin, "account_for", return_value="codex"),
+    mock.patch.object(ui_panel.peer_review, "load_panel", return_value={"repo": work, "round": 1}),
+    mock.patch.object(ui_panel.peer_review, "update_panel"),
+    mock.patch.object(ui_panel, "_lens_prompt", return_value="review it"),
+):
+    ui_panel._start_lens("p1", "qa")
+lens = next(r for r in ui_sessions.list_sessions() if r.get("panel_lens") == "qa")
+finished(lens["id"])
+assert flags_of(argv()) == [] and lens["run_note"] == "`opus` is not a Codex model; ran on Codex's default"
+host = ui_sessions.create("x", work, claude_cmd="codex", harness="codex")
+with (
+    mock.patch.object(ui_afk.ui_sessions, "update_pending", return_value=True),
+    mock.patch.object(ui_afk.away_answerer, "prompt", return_value="answer it"),
+):
+    ui_afk._start_answerer({**host, "repo": work}, {"id": "q-1"})
+ans = next(r for r in ui_sessions.list_sessions() if r.get("answers_for") == host["id"])
+finished(ans["id"])
+assert flags_of(argv()) == ["-c", "model_reasoning_effort=medium"], argv()
+assert ans["run_note"] == "`opus` is not a Codex model; ran on Codex's default"
+ok("lens and Away answerer: opus falls back with the note, Away's medium is a flag")
+
+# bootstrap chain inherits the previous session's pick
+with (
+    mock.patch.object(ui_bootstrap, "_session_of", return_value={"claude_cmd": "codex", "run_model": "opus"}),
+    mock.patch.object(ui_bootstrap, "_attach"),
+):
+    rec = ui_bootstrap.start_phase({"issue": None, "repo": work}, "audit")
+rec = finished(rec["id"])
+assert rec["run_note"] == "`opus` is not a Codex model; ran on Codex's default" and "--model=opus" not in argv()
+ok("bootstrap start_phase: inherited opus falls back with the note")
+
+# Claude sessions: no note, no direct-value flags added on resume
+crec = ui_sessions.create("x", work, claude_cmd="claude", harness="claude")
+crec = ui_sessions.update(crec["id"], direct_model="opus", direct_effort="low", run_model="sonnet")
+ca, _ = harness.get("claude").resume_argv(["claude"], "s1", "go", rec=crec)
+assert "opus" not in ca and "low" not in ca and ca[ca.index("--model") + 1] == "sonnet", ca
+ok("claude resume ignores direct_model/direct_effort")
 
 print(f"{passed} passed")

@@ -117,6 +117,11 @@ def resume_argv(exe, session_id, prompt, *, rec):
     return argv, prompt
 
 
+def run_note(rec):
+    """Claude takes every model and effort it is given: nothing falls back."""
+    return None
+
+
 def skill_text(text, cwd) -> str:
     return repo_skills.resolve(text, cwd)
 

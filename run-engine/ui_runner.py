@@ -167,8 +167,13 @@ def start(
         ui_sessions.update(sid, **fields)
     if run_model or effort:
         ui_sessions.update(sid, run_model=run_model, run_effort=effort)
+    if model or direct_effort:  # every later spawn of the session re-applies them (Codex)
+        ui_sessions.update(sid, **{k: v for k, v in (("direct_model", model), ("direct_effort", direct_effort)) if v})
     if allowed_tools:
         ui_sessions.update(sid, allowed_tools=list(allowed_tools))  # every later spawn of the session keeps it
+    rec = ui_sessions.load(sid)
+    if note := ad.run_note(rec):
+        rec = ui_sessions.update(sid, run_note=note)
     if batch:
         with _batch_lock:
             busy = _batch_live(batch[0]) >= batch[1]
@@ -205,6 +210,7 @@ def start(
         run_model=run_model,
         run_effort=effort,
         allowed_tools=allowed_tools,
+        rec=rec,
     )
     return _spawn(
         sid,
