@@ -44,7 +44,10 @@ aiw dispatch plan|start <epic> [flags]  preview or start a dispatch (flags as he
                                         herdr-app opens lanes as tabs of the Herdr desktop app, with
                                         --workspace its app space id from `herdr-app ls`; the web UI still
                                         labels herdr-app dispatches as background sessions);
-                                        an epic only: picked issues dispatch from the UI
+                                        a herdr dispatch on a Codex account starts `--kind codex` lanes
+                                        and needs an account whose command is `codex` (else refused:
+                                        "herdr can only start the codex binary; ..."); herdr Claude lanes
+                                        ignore the account; an epic only: picked issues dispatch from the UI
 aiw jev ci-hint|finding-hint --file <path>
                                         advisory jev hint for /pr-grind as JSON; reads the text from a file;
                                         always exits 0
@@ -53,7 +56,7 @@ aiw dispatch ls|show <id>               list dispatches, or one as JSON (also th
 aiw dispatch archive [--days N]      move dispatches finished over N days ago (default 30) to dispatches/archive/; prints the ids (the server does this daily)
 aiw dispatch doctor [<id>]          why a live dispatch cannot move (skipped blocker, cycle, stale snapshot,
                                         dead server, needs you, held); exits 1 on a problem
-aiw dispatch set <id> key=value...      change max, grind, ci, auto_merge, skip_approval, model, effort, account, max_cost while it runs (`max_cost=20` pauses the dispatch once its headless lanes have cost $20; `max_cost=` clears it)
+aiw dispatch set <id> key=value...      change max, grind, ci, auto_merge, skip_approval, model, effort, account, max_cost while it runs (`max_cost=20` pauses the dispatch once its headless lanes have cost $20; never on a Codex account, whose sessions report no cost; `max_cost=` clears it; `model` is 1–80 letters, digits, `.`, `-`, `_`, `:`, `/`, `[`, `]`, starting with a letter or digit)
                                         (feature_branch and base_branch are fixed at start)
 aiw dispatch pause|resume|cancel <id>   the whole dispatch (pause stops new lanes only)
 aiw dispatch lane <id> <n> <action>     pause, resume, retry, skip, merge, hold, unhold, or send "<text>"
@@ -308,7 +311,7 @@ and cost today; **Clean up** lists finished sessions by repo before removing the
 has banners for waiting (inline answer), limited (reset time, **Resume on another account**, **Don't
 auto-resume**), failed (**Retry**, **Continue in terminal**) and queued (**Start now**), the run's phase strip when the session is a bootstrap phase (its own entry marked "this session", the others linked), the transcript, a
 composer (a prompt queues while a turn runs), and a facts box with the account, its harness (Claude Code or Codex; a record with no `harness` reads as Claude Code), cost ("—" when the harness reports none), tokens (`$0.44 · 703k tok`), model, effort and the run's `run_note` when set. **Continue in terminal** (header, failed banner, `T`) shows only when the session JSON carries a `resume_command` and copies exactly that string; the UI never builds a resume command itself.
-Sessions auto-resume after a rate limit, and the limit timer releases queued ones after a restart.
+Sessions auto-resume after a rate limit, and the limit timer releases queued ones after a restart. A session resumes only on an account of its own harness (another is a 409); a Claude session can move to another Claude account (its transcript is copied), a Codex one auto-resumes only on its own account and, with no reset time, after a doubling wait (1 min to 60 min, `limit_backoff`). A Codex session whose account is gone or switched harness stays limited with auto-resume off and a note; a manual resume of one whose account was removed uses the Settings default only when that is a Codex account.
 Actions: **Pause** on a starting, running, waiting or limited session asks **After this run** (`POST /api/sessions/<id>/hold`: the run finishes, then nothing continues the session on its own until **Resume** on the held banner, `POST /api/sessions/<id>/release`; a queued prompt stays unsent, Away mode neither answers nor retries it, a limited session does not auto-resume, a dispatch tick stores its prompt as the queued prompt and the lane waits, a peer-review panel waits in its phase, and you can still answer it by hand) or **Now** (the same as Stop). **Stop** (`POST /api/sessions/<id>/stop`, after a confirm), **Resume**, **Rerun** (replays the
 recorded start request, same repo and account; `POST /api/sessions/<id>/rerun`), **Dismiss** on a failed session's Inbox item (`POST /api/sessions/<id>/dismiss`: sets `dismissed`, 409 unless failed; the session stays on Activity), and **Start now**
 (`POST /api/sessions/<id>/start-now`: starts a batch-queued session at once, past the batch cap; 409 when

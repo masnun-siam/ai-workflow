@@ -18,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor, wait
 
 import dispatch
 import dispatch_run as dr
+import dispatch_runners
 import grind_reviewers
 import jev
 import ui_settings
@@ -371,6 +372,10 @@ def start(epic, runner: str, s: dict, workspace=None, gh=_gh, issues=None) -> di
     """Resolve the epic (or the picked issues), cut the feature branch if asked, record the dispatch. The UI server ticks it."""
     if runner != "headless" and not workspace:
         raise ValueError(f"the {runner} runner needs a workspace id (herdr pane current, or the Herdr app space id)")
+    if runner == "herdr":
+        cmd = dispatch_runners.account_cmd({"settings": s})
+        if ui_settings.harness_of(cmd) == "codex":
+            dispatch_runners.herdr_codex_words(cmd)  # refuses a Codex command herdr cannot start
     if issues:
         r = resolve_issues(issues, gh)
         if not r["children"]:

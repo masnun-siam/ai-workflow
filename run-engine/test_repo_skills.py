@@ -248,4 +248,25 @@ with tempfile.TemporaryDirectory() as cfg:
     finally:
         os.environ.pop("CLAUDE_CONFIG_DIR", None) if old is None else os.environ.__setitem__("CLAUDE_CONFIG_DIR", old)
 
+# ----------------------------------------------------------------------- codex_pointer
+READ = "Read the skill file "
+with tempfile.TemporaryDirectory() as tmp:
+    have, none = os.path.join(tmp, "have"), os.path.join(tmp, "none")
+    os.makedirs(none)
+    folder = os.path.join(rs._SKILLS_DIR, "implement-issue")
+    p = rs.codex_pointer("/ai-workflow:implement-issue 12", none)
+    assert p == f"{READ}{folder}/SKILL.md and follow it; paths in it are relative to it. ARGUMENTS: 12", p
+    assert p.count(folder) == 1 and not rs.codex_pointer("/implement-issue", none).count("ARGUMENTS")
+    open(copy(have, "implement-issue"), "w").write("REPO COPY\n")
+    p = rs.codex_pointer("/implement-issue 12", have)
+    assert p.startswith(READ + os.path.join(have, ".claude", "skills", "implement-issue", "SKILL.md")), p
+    assert rs.codex_pointer("/implement-issue 3 then /pr-review", none).endswith(
+        "ARGUMENTS: 3 then /ai-workflow:pr-review"
+    )
+    for text in ("plain text /pr-review", "/no-such-skill 1", "", None):
+        assert rs.codex_pointer(text, have) == rs.resolve(text, have), text
+    copy(have, "pr-grind")  # a repo folder with no SKILL.md: the plugin copy
+    assert rs.codex_pointer("/pr-grind 1", have).startswith(READ + os.path.join(rs._SKILLS_DIR, "pr-grind"))
+    ok("codex_pointer: plugin and repo copy, arguments last or none, other text is resolve's")
+
 print(f"{passed} passed")
