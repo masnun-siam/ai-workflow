@@ -60,7 +60,7 @@ describe('Transcript', () => {
     expect(screen.getByText('ev0')).toBeTruthy();
   });
 
-  it('folds a run of tool calls into one row that opens, and Show every step lists them flat', async () => {
+  it('folds a run of tool calls into one row that opens, and All steps lists them flat', async () => {
     const tool = (c: string) => ({ kind: 'tool', name: 'Bash', input: { command: c } }) as StreamEvent;
     const evs = [text('hello'), tool('ls'), tool('pwd'), { kind: 'tool', name: 'Read', input: { file_path: 'a' } } as StreamEvent, text('bye')];
     render(<Transcript events={evs} live={false} working={false} />);
@@ -70,7 +70,7 @@ describe('Transcript', () => {
     await userEvent.click(screen.getByRole('button', { name: /3 steps/ }));
     expect(screen.getByText('ls')).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: /3 steps/ }));
-    await userEvent.click(screen.getByLabelText('Show every step'));
+    await userEvent.click(screen.getByRole('radio', { name: 'All steps' }));
     expect(screen.queryByText('3 steps')).toBeNull();
     expect(screen.getByText('pwd')).toBeTruthy();
   });

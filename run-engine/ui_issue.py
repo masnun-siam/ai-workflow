@@ -38,6 +38,7 @@ def shape(issue: dict, comments: list) -> dict:
         "state": issue.get("state"),
         "state_reason": issue.get("state_reason"),
         "is_pr": "pull_request" in issue,
+        "merged": bool((issue.get("pull_request") or {}).get("merged_at")),
         "author": _user(issue.get("user")),
         "created_at": issue.get("created_at"),
         "labels": [

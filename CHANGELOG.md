@@ -49,6 +49,7 @@
 
 ### Changed
 
+- **Session page outcome, polished**: an issue session's title is `#n <issue title>` with the command below it; the outcome's first paragraph is its headline, and each `#n` in it is a chip with its kind and state (open, closed, merged) that opens its panel (`GET /api/issue` now carries `merged`). Facts read as one dotted line, effort as "high effort", and the transcript gets a **Story / All steps** switch in place of the "Show every step" box.
 - **Session page leads with the outcome**: a finished session shows its last result in an **Outcome** card above the transcript, and the transcript ends with a pointer to it instead of repeating the text. Runs of tool calls fold into one expandable "N steps" row (**Show every step** replaces **Collapse tool calls**), a final message the result repeats is dropped, and tool paths lose their worktree and repo prefixes. The facts box becomes a line under the title, so the transcript gets the full width, and Rerun on a finished session moves into a ⋯ menu, off the `R` key.
 - **Accounts, not Claude accounts** (#874, #885, #886): the Settings section and the docs say "Accounts" and "coding-agent sessions (Claude Code or Codex)" where they said Claude only; the session's **Continue in terminal** command comes from the server only (no UI fallback).
 - **Commits no longer run the test suite**: the `engine-tests` pre-commit hook is removed, so a commit takes seconds instead of minutes. The whole suite still runs on push and in CI.
