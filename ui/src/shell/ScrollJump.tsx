@@ -4,11 +4,12 @@ import { Icon } from '../components';
 
 const read = (el: HTMLElement | null) => ({
   overflow: !!el && el.scrollHeight > el.clientHeight,
+  past: !!el && el.scrollTop >= el.clientHeight,
   atTop: !el || el.scrollTop <= 0,
   atBottom: !el || el.scrollTop + el.clientHeight >= el.scrollHeight - 1,
 });
 
-/** Floating jump-to-top / jump-to-bottom for the page scroller (#main-content); renders nothing when the page fits. */
+/** Floating jump-to-top / jump-to-bottom for the page scroller (#main-content); renders nothing until the page is scrolled a viewport past the top. */
 export function ScrollJump() {
   const { pathname } = useLocation();
   const [s, setS] = useState(() => read(null));
@@ -28,7 +29,7 @@ export function ScrollJump() {
       ro.disconnect();
     };
   }, [pathname, update]);
-  if (!s.overflow) return null;
+  if (!s.overflow || !s.past) return null;
   const jump = (end: boolean) => {
     const el = document.getElementById('main-content');
     el?.scrollTo({ top: end ? el.scrollHeight : 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });

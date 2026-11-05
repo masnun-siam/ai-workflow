@@ -191,7 +191,8 @@ describe('Settings: repositories', () => {
     expect(await screen.findByRole('dialog', { name: 'Publish to GitHub' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Publish to GitHub' })).toBeNull());
-    await user.click(screen.getByRole('button', { name: 'Remove o/r' }));
+    await user.click(screen.getByRole('button', { name: 'More actions for o/r' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Remove' }));
     expect(sent('POST', '/api/repos/remove')).toEqual([]); // not before the confirm
     await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(sent('POST', '/api/repos/remove')).toEqual([{ slug: 'o/r' }]));
@@ -201,7 +202,8 @@ describe('Settings: repositories', () => {
     handlers['POST /api/repos/remove'] = () => [500, { error: 'boom' }];
     const user = userEvent.setup();
     page(<SettingsPage />);
-    await user.click(await screen.findByRole('button', { name: 'Remove local/idea' }));
+    await user.click(await screen.findByRole('button', { name: 'More actions for local/idea' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Remove' }));
     await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(sent('POST', '/api/repos/remove')).toHaveLength(1));
     await new Promise((r) => setTimeout(r, 20));
@@ -440,6 +442,8 @@ describe('Settings: Slack channels', () => {
     const user = userEvent.setup();
     page(<SettingsPage />, at);
     await user.click(await screen.findByRole('button', { name: 'Delete #reviews' }));
+    expect(sent('PUT', '/api/settings')).toEqual([]); // not before the confirm
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(sent('PUT', '/api/settings')).toEqual([{ slack_channels: [{ id: 'C0123ABCD', name: '#ops' }] }]));
     expect(await screen.findByText('channel C0B8385GKNK is used by o/r')).toBeTruthy();
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Name of C0B8385GKNK' })).toBeTruthy());

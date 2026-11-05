@@ -91,6 +91,15 @@ describe('useListSelection', () => {
     await u.keyboard('{Enter}');
     expect(onOpen).toHaveBeenCalledWith('c');
   });
+  it('opens once on Enter from a focused row and marks it aria-selected', async () => {
+    const onOpen = vi.fn();
+    const u = userEvent.setup();
+    render(ui({ keys: abc, onOpen }));
+    screen.getByText('b').focus();
+    await u.keyboard('{Enter}');
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('b').getAttribute('aria-selected')).toBe('true');
+  });
   it('keeps the index when the selected row disappears', async () => {
     const u = userEvent.setup();
     const { rerender } = render(ui({ keys: abc, onOpen: () => {} }));

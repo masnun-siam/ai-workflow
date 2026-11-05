@@ -1237,9 +1237,11 @@ describe('Features across repos', () => {
     await user.click(screen.getByRole('button', { name: 'c (1 shipped)' }));
     await waitFor(() => expect(window.location.hash).toContain('only=o/c'));
     expect(window.location.hash).toContain('repo=o/a');
-    await user.click(screen.getByRole('button', { name: 'All repos' }));
+    await user.click(screen.getByRole('button', { name: /^Show features from:/ }));
+    await user.click(await screen.findByRole('option', { name: 'All repos' }));
     await waitFor(() => expect(window.location.hash).not.toContain('only='));
-    await user.click(await screen.findByRole('button', { name: 'a' }));
+    await user.click(screen.getByRole('button', { name: /^Show features from:/ }));
+    await user.click(await screen.findByRole('option', { name: /^a/ }));
     await waitFor(() => expect(window.location.hash).toContain('only=o/a'));
   });
 

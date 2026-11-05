@@ -17,7 +17,7 @@ export function AwayBanner() {
   const stop = useAfkStop();
   if (!afk?.active || !afk.until) return null;
   return (
-    <Banner tone="away" icon="moon" top action={<Button sm onClick={() => stop.mutate(undefined, { onSuccess: () => toast('Welcome back. See what happened in your Inbox.') })}>I'm back</Button>}>
+    <Banner tone="away" icon="moon" top action={<Button sm disabled={stop.isPending} onClick={() => stop.mutate(undefined, { onSuccess: () => toast('Welcome back. See what happened in your Inbox.') })}>I'm back</Button>}>
       <p><b>Away until {clockText(afk.until)}.</b> Claude answers every question: the recommended option when there is one, otherwise Opus decides. It holds only risky or unanswerable ones, and retries failures.</p>
     </Banner>
   );

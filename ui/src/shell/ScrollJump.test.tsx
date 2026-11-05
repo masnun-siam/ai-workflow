@@ -30,16 +30,25 @@ describe('ScrollJump', () => {
     expect(bottom()).toBeNull();
   });
 
-  it('at the top shows only Jump to bottom, which scrolls smoothly to the end', () => {
-    const { el } = setup(2000);
+  it('does not show on initial load of a long page', () => {
+    setup(2000);
     expect(top()).toBeNull();
+    expect(bottom()).toBeNull();
+  });
+
+  it('once scrolled a viewport shows Jump to bottom, which scrolls smoothly to the end', () => {
+    const { el, scrollTo } = setup(2000);
+    scrollTo(300);
+    expect(top()).toBeNull();
+    expect(bottom()).toBeNull();
+    scrollTo(600);
     fireEvent.click(bottom()!);
     expect(el.scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: 'smooth' });
   });
 
   it('in the middle shows both; at the end only Jump to top, which scrolls to 0', () => {
     const { el, scrollTo } = setup(2000);
-    scrollTo(300);
+    scrollTo(600);
     expect(top()).not.toBeNull();
     expect(bottom()).not.toBeNull();
     scrollTo(1500);
@@ -50,7 +59,8 @@ describe('ScrollJump', () => {
 
   it('jumps instantly under reduced motion', () => {
     vi.stubGlobal('matchMedia', (q: string) => ({ matches: true, media: q, addEventListener() {}, removeEventListener() {} }));
-    const { el } = setup(2000);
+    const { el, scrollTo } = setup(2000);
+    scrollTo(600);
     fireEvent.click(bottom()!);
     expect(el.scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: 'auto' });
   });

@@ -18,18 +18,19 @@ export function RepoSwitcher({ compact = false }: { compact?: boolean }) {
   const trigger = useRef<HTMLButtonElement>(null);
   const { registerRepoSwitcher } = useShell();
   useEffect(() => registerRepoSwitcher({ trigger: () => trigger.current, open: () => setOpen(true) }), [registerRepoSwitcher]);
-  const name = current?.name ?? (repo ? short(repo) : 'No repo');
+  const name = current?.name ? short(current.name) : repo ? short(repo) : 'No repo'; // a name that is the owner/repo slug shows as the repo
+  const full = repo || name;
   const pick = (go: () => void) => { setOpen(false); go(); };
 
   return (
     <PO.Root open={open} onOpenChange={setOpen}>
       <PO.Trigger asChild>
         {compact ? (
-          <button type="button" ref={trigger} title="Switch repository (G then R)" className="repo-mark" style={{ width: 26, height: 26, fontSize: 12, border: 0, cursor: 'pointer' }} aria-label={`Repository: ${name}. Switch repository`}>
+          <button type="button" ref={trigger} title={`${full}. Switch repository (G then R)`} className="repo-mark" style={{ width: 26, height: 26, fontSize: 12, border: 0, cursor: 'pointer' }} aria-label={`Repository: ${name}. Switch repository`}>
             {name[0]?.toUpperCase() ?? '?'}
           </button>
         ) : (
-          <button type="button" ref={trigger} title="Switch repository (G then R)" className="repo-btn" aria-label={`Repository: ${name}. Switch repository`}>
+          <button type="button" ref={trigger} title={`${full}. Switch repository (G then R)`} className="repo-btn" aria-label={`Repository: ${name}. Switch repository`}>
             <span className="repo-mark" aria-hidden="true">{name[0]?.toUpperCase() ?? '?'}</span>
             <span className="grow" style={{ minWidth: 0 }}>
               <b className="ellipsis" style={{ display: 'block' }}>{name}</b>

@@ -242,8 +242,8 @@ describe('Dispatches page', () => {
     expect(tab(/^All \d/).textContent).toBe('All 2');
     expect(tab(/^Live/).textContent).toBe('Live 1');
     expect(tab(/^Finished/).textContent).toBe('Finished 1');
-    expect(screen.getByRole('group', { name: 'Show dispatches from' })).toBeTruthy();
-    await userEvent.click(screen.getByRole('button', { name: 'All repos' }));
+    await userEvent.click(screen.getByRole('button', { name: /^Show dispatches from: / }));
+    await userEvent.click(await screen.findByRole('option', { name: 'All repos' }));
     await waitFor(() => expect(window.location.hash).not.toContain('only='));
     await waitFor(() => expect(titles().length).toBe(4));
     expect(tab(/^All \d/).textContent).toBe('All 4');

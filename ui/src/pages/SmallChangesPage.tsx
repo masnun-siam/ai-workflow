@@ -3,7 +3,7 @@ import { useDeliveryAll, useDelivery, useDispatches, usePlanning, usePlanningAll
 import type { BoardEntry, DeliveryResponse, PlanningResponse } from '../api/types';
 import { useRefining, useStarter } from '../board/actions';
 import { BoardStatus } from '../board/BoardStatus';
-import { Button, EmptyState } from '../components';
+import { Button, EmptyState, Loading } from '../components';
 import { NewDispatchDialog } from '../dispatch/NewDispatchDialog';
 import { ownedIssues, useOwnedIssues } from '../dispatch/useOwner';
 import { CreatePrompt, priorityName } from '../create/Create';
@@ -42,13 +42,13 @@ export function SmallChangesPage() {
 
 function Head({ picker, lede: text }: { picker: ReactNode; lede: string }) {
   return (
-    <header>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <h1 className="display">Small changes</h1>
-        {picker}
+    <div className="page-head">
+      <div className="grow">
+        <h1>Small changes</h1>
+        <p className="sub">{text}</p>
       </div>
-      <p className="lede">{text}</p>
-    </header>
+      {picker}
+    </div>
   );
 }
 
@@ -74,13 +74,13 @@ function RepoBoard({ repo, picker }: { repo: string; picker: ReactNode }) {
 
   return (
     <div className="content-inner">
-      <CreatePrompt repo={repo} route="small" />
       <Head picker={picker} lede={loaded ? lede(open.length, ready.length) : 'Bugs and one-issue changes, outside any feature.'} />
+      <CreatePrompt repo={repo} route="small" />
       <BoardStatus meta={del.data} />
       {del.isError && !del.data ? (
         <EmptyState icon="alert" title="Issues unavailable" actions={<Button onClick={() => del.refetch()}>Retry</Button>}>{del.error.message}</EmptyState>
       ) : !loaded ? (
-        <Loading />
+        <Loading label="Loading issues…" heights={[300]} />
       ) : (
         <>
           <div className="sc-top">
@@ -112,8 +112,6 @@ function RepoBoard({ repo, picker }: { repo: string; picker: ReactNode }) {
     </div>
   );
 }
-
-const Loading = () => <div className="stack" aria-busy="true"><p className="muted" role="status">Loading issues…</p><div className="skel" style={{ height: 300 }} /></div>;
 
 /** One watched repo's slice of the All repos page. `note` is set while its data is loading or stale. */
 type Group = { repo: string; name: string; note: string | null; outside: FeatureIssue[]; open: FeatureIssue[]; ready: FeatureIssue[]; toRefine: FeatureIssue[] };
@@ -178,13 +176,13 @@ function AllRepos({ repo, picker }: { repo: string; picker: ReactNode }) {
 
   return (
     <div className="content-inner">
-      <CreatePrompt repo={repo} route="small" />
       <Head picker={picker} lede={loaded ? lede(open.length, ready) : 'Bugs and one-issue changes, outside any feature.'} />
+      <CreatePrompt repo={repo} route="small" />
       <BoardStatus />
       {failed ? (
         <EmptyState icon="alert" title="Issues unavailable" actions={<Button onClick={() => { void plan.refetch(); void del.refetch(); }}>Retry</Button>}>{(plan.error ?? del.error)?.message}</EmptyState>
       ) : !loaded ? (
-        <Loading />
+        <Loading label="Loading issues…" heights={[300]} />
       ) : !groups.length ? (
         <EmptyState icon="alert" title="No repo opened recently. Pick one in the filter." />
       ) : (

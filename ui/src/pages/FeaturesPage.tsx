@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useDelivery, useDeliveryAll, useDispatches, useInbox, needsYouCount, usePlanning, usePlanningAll } from '../api/hooks';
 import type { BoardMeta, Dispatch } from '../api/types';
 import { BoardStatus } from '../board/BoardStatus';
-import { Button, EmptyState, useListSelection } from '../components';
+import { Button, EmptyState, Loading, useListSelection } from '../components';
 import { CreatePrompt } from '../create/Create';
 import { IssueBar, StageTicks } from '../features/StripParts';
 import { useStepRunner } from '../features/useStepRunner';
@@ -116,23 +116,21 @@ function ledeOf(rows: Row[]) {
   return bits ? `${bits[0].toUpperCase()}${bits.slice(1)}.` : 'Nothing in progress.';
 }
 
-function PageHead({ lede, repo, only, setOnly }: { lede: string; repo: string; only: string; setOnly: (slug: string) => void }) {
+function PageHead({ lede, only, setOnly }: { lede: string; only: string; setOnly: (slug: string) => void }) {
   const items = (useInbox().data?.items ?? []).filter((i) => !only || (i.repo && same(i.repo, only)));
   const inbox = needsYouCount(items);
   const { link } = useRepo();
   return (
     <div className="page-head">
       <header className="grow">
-        <h1 className="display">Features</h1>
-        <p className="lede">{lede}</p>
+        <h1>Features</h1>
+        <p className="sub">{lede}</p>
         {inbox ? <p className="inbox-note"><Link to={link(routes.inbox)}>{inbox} {inbox === 1 ? 'item waits' : 'items wait'} in Inbox</Link></p> : null}
       </header>
-      <RepoScope repo={repo} only={only} setOnly={setOnly} label="Show features from" />
+      <RepoScope only={only} setOnly={setOnly} label="Show features from" />
     </div>
   );
 }
-
-const Loading = () => <div className="stack" aria-busy="true"><p className="muted" role="status">Loading features…</p><div className="skel" style={{ height: 188 }} /><div className="skel" style={{ height: 260 }} /></div>;
 
 /** The strips by who has the next move, then one way in to create, then everything quiet. */
 function Bays({ rows, shipped, quiet, showRepo, target, setOnly, onOpen }: { rows: Row[]; shipped: Shipped[]; quiet: Quiet[]; showRepo: boolean; target: string; setOnly: (slug: string) => void; onOpen: (key: string) => void }) {
@@ -196,7 +194,7 @@ function RepoBoard({ repo, setOnly }: { repo: string; setOnly: (slug: string) =>
 
   return (
     <div className="content-inner">
-      <PageHead lede={loaded ? ledeOf(rows) : 'Each feature is one PRD and everything built from it.'} repo={repo} only={repo} setOnly={setOnly} />
+      <PageHead lede={loaded ? ledeOf(rows) : 'Each feature is one PRD and everything built from it.'} only={repo} setOnly={setOnly} />
       <BoardStatus meta={plan.data} failed={plan.isError && !!plan.data} onRetry={() => void plan.refetch()} />
       {plan.isError && !plan.data ? (
         <EmptyState icon="alert" title="Features unavailable" actions={<Button onClick={() => plan.refetch()}>Retry</Button>}>
@@ -204,7 +202,7 @@ function RepoBoard({ repo, setOnly }: { repo: string; setOnly: (slug: string) =>
         </EmptyState>
       ) : del.isError && !del.data ? (
         <EmptyState icon="alert" title="Issues unavailable" actions={<Button onClick={() => del.refetch()}>Retry</Button>}>{del.error.message}</EmptyState>
-      ) : !loaded ? <Loading /> : (
+      ) : !loaded ? <Loading label="Loading features…" heights={[188, 260]} /> : (
         <Bays rows={rows} shipped={shipped.map((f) => ({ repo, f }))} quiet={[]} showRepo={false} target={repo} setOnly={setOnly} onOpen={onOpen} />
       )}
     </div>
@@ -241,7 +239,7 @@ function AllRepos({ switcherRepo, setOnly }: { switcherRepo: string; setOnly: (s
 
   return (
     <div className="content-inner">
-      <PageHead lede={lede} repo={switcherRepo} only="" setOnly={setOnly} />
+      <PageHead lede={lede} only="" setOnly={setOnly} />
       <BoardStatus />
       {plan.isError && !plan.data ? (
         <EmptyState icon="alert" title="Features unavailable" actions={<Button onClick={() => plan.refetch()}>Retry</Button>}>
@@ -249,7 +247,7 @@ function AllRepos({ switcherRepo, setOnly }: { switcherRepo: string; setOnly: (s
         </EmptyState>
       ) : del.isError && !del.data ? (
         <EmptyState icon="alert" title="Issues unavailable" actions={<Button onClick={() => del.refetch()}>Retry</Button>}>{del.error.message}</EmptyState>
-      ) : !ready ? <Loading /> : !groups.length ? (
+      ) : !ready ? <Loading label="Loading features…" heights={[188, 260]} /> : !groups.length ? (
         <p className="muted">No repo opened recently. Pick one in the top bar.</p>
       ) : (
         <Bays rows={rows} shipped={shipped} quiet={quiet} showRepo target={switcherRepo} setOnly={setOnly} onOpen={onOpen} />

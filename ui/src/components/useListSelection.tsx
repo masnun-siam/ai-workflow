@@ -26,10 +26,11 @@ const ROWS: ShortcutRow[] = [
  * Keyboard selection for one list per page (FR-1..3). `keys` are the rows' stable keys in screen order; spread `rowProps(key)` on each row.
  * Wrap a row's buttons in `<KeyScope level="row" active={selected === key}>` so their keys work for the selected row only.
  * Pass `panelTarget` to make an open issue/PR panel follow the selection (FR-5): a row without a target closes it.
+ * Omit `onOpen` when rows handle Enter themselves (the Inbox).
  * Pass `onMove` to follow a selection moved by J/K with something other than that panel (it is not called for clicks).
  * Pass `reset` (the repo, a filter) to clear the selection when it changes.
  */
-export function useListSelection({ keys, onOpen, onMove, reset, panelTarget }: { keys: string[]; onOpen: (key: string) => void; onMove?: (key: string) => void; reset?: unknown; panelTarget?: (key: string) => PanelTarget | null }) {
+export function useListSelection({ keys, onOpen, onMove, reset, panelTarget }: { keys: string[]; onOpen?: (key: string) => void; onMove?: (key: string) => void; reset?: unknown; panelTarget?: (key: string) => PanelTarget | null }) {
   const panel = usePanel();
   const [sel, setSel] = useState<Sel | null>(null);
   const els = useRef(new Map<string, HTMLElement>());
@@ -74,7 +75,7 @@ export function useListSelection({ keys, onOpen, onMove, reset, panelTarget }: {
     if (index >= 0) setSel({ key, index });
   }, []);
 
-  useAction(sel ? { key: 'Enter', label: 'Open the selected row', run: () => latest.current.onOpen(sel.key) } : null);
+  useAction(sel && onOpen ? { key: 'Enter', label: 'Open the selected row', run: () => latest.current.onOpen?.(sel.key) } : null);
 
   const selected = sel?.key ?? null;
   const rowProps = (key: string) => ({
@@ -83,6 +84,14 @@ export function useListSelection({ keys, onOpen, onMove, reset, panelTarget }: {
     'data-selected': selected === key || undefined,
     onClick: () => select(key),
     onFocus: () => select(key),
+    'aria-selected': selected === key,
+    // Enter on the row itself opens it; stopPropagation keeps the global Enter shortcut from opening it a second time.
+    onKeyDown: (e: React.KeyboardEvent<HTMLElement>) => {
+      if (!latest.current.onOpen || e.key !== 'Enter' || e.target !== e.currentTarget || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      latest.current.onOpen(key);
+    },
   });
   return { selected, select, rowProps };
 }

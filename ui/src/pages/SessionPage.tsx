@@ -126,15 +126,15 @@ export function SessionPage() {
             {issueTitle ? <span className="mono">{sessionLabel(s.command)}</span> : issue && slug ? <button type="button" className="linkish" onClick={() => panel.open({ kind: 'issue', repo: slug, n: issue })}>Issue #{issue}</button> : s.no_repo ? 'Notes vault' : shortRepo(slug || s.repo)}
           </p>
           <dl className="facts inline" aria-label="Facts">
-            <dt>Repo</dt><dd>{s.no_repo ? 'Notes vault' : shortRepo(slug || s.repo)}</dd>
+            {issue && slug ? <><dt>Repo</dt><dd>{shortRepo(slug)}</dd></> : null}
             {account ? <><dt>Account</dt><dd>{account}</dd></> : null}
             <dt>Harness</dt><dd>{harnessLabel}</dd>
             <dt>Started</dt><dd>{formatWhen(s.started_at)}</dd>
             <dt>Duration</dt><dd>{duration(s.started_at, s.ended_at)}</dd>
-            <dt>Cost</dt><dd>{money(s.cost)}</dd>
-            <dt>Tokens</dt><dd>{tokensText(s.tokens) || '—'}</dd>
-            <dt>Model</dt><dd>{s.model || '—'}</dd>
-            <dt>Effort</dt><dd>{s.effort || 'Default'} effort</dd>
+            {typeof s.cost === 'number' ? <><dt>Cost</dt><dd>{money(s.cost)}</dd></> : null}
+            {tokensText(s.tokens) ? <><dt>Tokens</dt><dd>{tokensText(s.tokens)}</dd></> : null}
+            {s.model ? <><dt>Model</dt><dd>{s.model}</dd></> : null}
+            {s.effort ? <><dt>Effort</dt><dd>{s.effort} effort</dd></> : null}
             {s.run_note ? <><dt>Note</dt><dd>{s.run_note}</dd></> : null}
             </dl>
         </div>

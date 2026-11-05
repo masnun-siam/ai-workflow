@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
-import { Button, Icon, Toaster } from '../components';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Button, Icon, Menu, Toaster } from '../components';
 import { Palette } from '../palette/Palette';
 import { DetailPanel } from '../panels/DetailPanel';
 import { usePanel } from '../panels/PanelContext';
@@ -42,7 +42,7 @@ function Topbar({ openPalette }: { openPalette: () => void }) {
       </button>
       <span className="grow" />
       <PublicBadge />
-      {inbox ? <Link to={link(routes.inbox)} className="you-pill hide-sm"><i />{inbox} need you</Link> : null}
+      {inbox ? <Link to={link(routes.inbox)} className="you-pill hide-sm" title={inbox.endsWith('+') ? 'More may appear: GitHub data is still loading' : undefined}><i />{inbox} need you</Link> : null}
       <span className="mob-only"><StatusMenu /></span>
       <Button variant="primary" noAction onClick={() => create.open()} aria-keyshortcuts="N">
         <Icon n="plus" />
@@ -54,15 +54,19 @@ function Topbar({ openPalette }: { openPalette: () => void }) {
   );
 }
 
+const MOBILE_LABEL: Record<string, string> = { [routes.changes]: 'Changes' }; // "Small changes" wraps to two lines at this width
+
 function MobileNav() {
   const inbox = useInboxCount();
   const { link } = useRepo();
   const { pathname } = useLocation();
-  const items = [...NAV.map((n) => ({ to: n.to, label: n.label, icon: n.icon, count: n.badge === 'inbox' ? inbox : 0 })), { to: routes.settings(), label: 'Settings', icon: 'sliders' as const, count: 0 }];
+  const navigate = useNavigate();
+  const items = NAV.filter((n) => n.to !== routes.activity).map((n) => ({ to: n.to, label: MOBILE_LABEL[n.to] ?? n.label, icon: n.icon, count: n.badge === 'inbox' ? inbox : 0 }));
+  const moreOn = ['/activity', '/sessions', '/settings'].some((p) => pathname.startsWith(p));
   return (
     <nav className="mob-nav" aria-label="Main">
       {items.map((n) => {
-        const on = pathname.startsWith(n.to) || (n.to === routes.activity && pathname.startsWith('/sessions'));
+        const on = pathname.startsWith(n.to);
         return (
           <Link key={n.to} to={link(n.to)} className={on ? 'on' : ''} aria-current={on ? 'page' : undefined} style={{ textDecoration: 'none' }}>
             <Icon n={n.icon} s={20} />
@@ -71,6 +75,14 @@ function MobileNav() {
           </Link>
         );
       })}
+      <Menu
+        align="end"
+        trigger={<button type="button" className={moreOn ? 'on' : ''} aria-current={moreOn ? 'page' : undefined}><Icon n="more" s={20} />More</button>}
+        items={[
+          { label: 'Activity', icon: 'activity', onSelect: () => navigate(link(routes.activity)) },
+          { label: 'Settings', icon: 'sliders', onSelect: () => navigate(link(routes.settings())) },
+        ]}
+      />
     </nav>
   );
 }

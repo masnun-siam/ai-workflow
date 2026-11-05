@@ -10,7 +10,6 @@ import { routes } from '../lib/routes';
 import { NewDispatchDialog } from '../dispatch/NewDispatchDialog';
 import { DSTATE, counts, dispatchHeading, dispatchRepo, issueNo, needsYou, nowLine, secs } from '../dispatch/vocab';
 import { RepoScope } from '../shell/RepoScope';
-import { useRepo } from '../shell/useRepo';
 import { useRepoFilter } from '../shell/useRepoFilter';
 import '../features/features.css';
 import '../dispatch/dispatch.css';
@@ -78,7 +77,6 @@ export function DispatchesPage() {
     }
   };
   const nav = useNavigate();
-  const { repo } = useRepo();
   const { only, setOnly } = useRepoFilter();
   const tab = TABS.find((t) => t.id === sp.get('show')) ?? TABS[0];
   const all = q.data?.dispatches ?? [];
@@ -89,7 +87,7 @@ export function DispatchesPage() {
     <div className="content-inner">
       <div className="page-head">
         <div className="grow"><h1>Dispatches</h1></div>
-        <RepoScope repo={repo} only={only} setOnly={setOnly} label="Show dispatches from" />
+        <RepoScope only={only} setOnly={setOnly} label="Show dispatches from" />
         <Button variant="primary" onClick={() => setOpen(true)}><Icon n="plus" />Run an epic</Button>
       </div>
       {q.isError ? <Banner tone="bad" icon="alert" action={<Button sm onClick={() => void q.refetch()}>Retry</Button>}>Could not load dispatches. {q.error.message}</Banner> : null}
