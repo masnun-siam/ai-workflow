@@ -436,6 +436,23 @@ dr.tick(
 )
 assert dc["lanes"][K(91)]["stage"] == "conflict_fix" and not dc["lanes"][K(91)].get("held")
 assert "conflicts" in rc.sent[-1][1]
+# GitHub refuses the merge because the head is behind its base: the base is merged in, no hold
+BEHIND = "X Pull request o/r#191 is not mergeable: the head branch is not up to date with the base branch."
+for rc_upd, want in ((0, "merge_gate"), (1, "conflict_fix")):
+    db_ = dr.create("o/r#94", "headless", {"grind": "off", "auto_merge": True}, [child(95)])
+    rb, ub = FakeRunner(), []
+    db_["lanes"][K(95)].update(stage="merge_gate", handle={"n": 95}, pr=195)
+    dr.tick(
+        db_,
+        {K(95): {"issue_open": True, "agent": "idle", "solo": True, "pr": pr(195)}},
+        rb,
+        lambda r, n, sha: (False, BEHIND),
+        now=1,
+        gh=lambda argv: (ub.append(argv), subprocess.CompletedProcess(argv, rc_upd, "", ""))[1],
+    )
+    lb = db_["lanes"][K(95)]
+    assert ub == [["pr", "update-branch", "195", "-R", "o/r"]], ub
+    assert lb["stage"] == want and not lb.get("held") and not lb.get("merge_fails"), lb
 # merged after the lane's session was closed: followups start a fresh session, not a send to None
 dm = dr.create("o/r#92", "headless", {"grind": "off", "auto_merge": True}, [child(93)])
 rm = FakeRunner()

@@ -119,10 +119,14 @@ export function Transcript({ events, live, working, root, summaryAbove }: { even
   return (
     <div className="stack" style={{ gap: 8 }}>
       <div className="row wrap">
-        <input className="f" style={{ maxWidth: 260 }} placeholder="Search the transcript" aria-label="Search the transcript" value={q} onChange={(e) => setQ(e.target.value)} />
-        {q ? <span className="muted" style={{ fontSize: 13 }}>{shown.length} of {events.length}</span> : null}
+        <h2>How it got there</h2>
+        <div className="seg" role="radiogroup" aria-label="Transcript view">
+          <button type="button" role="radio" aria-checked={!flat} className={flat ? '' : 'on'} onClick={() => setFlat(false)}>Story</button>
+          <button type="button" role="radio" aria-checked={flat} className={flat ? 'on' : ''} onClick={() => setFlat(true)}>All steps</button>
+        </div>
         <span className="grow" />
-        <label className="row" style={{ gap: 6, fontSize: 13 }}><input type="checkbox" checked={flat} onChange={(e) => setFlat(e.target.checked)} />Show every step</label>
+        <input className="f" style={{ maxWidth: 220 }} placeholder="Search the transcript" aria-label="Search the transcript" value={q} onChange={(e) => setQ(e.target.value)} />
+        {q ? <span className="muted" style={{ fontSize: 13 }}>{shown.length} of {events.length}</span> : null}
         {live ? <label className="row" style={{ gap: 6, fontSize: 13 }}><input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} />Auto-scroll</label> : null}
       </div>
       <div className="events" aria-label="Transcript">

@@ -1,4 +1,5 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { refsIn } from './SessionPage';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
@@ -473,17 +474,18 @@ describe('Session page', () => {
   it('Facts shows model and effort, or the defaults', async () => {
     open(base({ model: 'claude-opus-5-5', effort: 'high' }));
     expect(await screen.findByText('claude-opus-5-5')).toBeTruthy();
-    expect(screen.getByText('high')).toBeTruthy();
+    expect(screen.getByText('high effort')).toBeTruthy();
   });
   it('a done session shows its last result as the outcome above the transcript', async () => {
     open(base(), [{ kind: 'text', text: 'Merged in #9.' }, { kind: 'result', text: 'Merged in #9.', cost: 0.5 }]);
     const out = await screen.findByRole('region', { name: 'Outcome' });
     expect(within(out).getByText('Merged in #9.')).toBeTruthy();
     expect(screen.getAllByText('Merged in #9.').length).toBe(1);
+    expect(refsIn('#1 closed, #2 and #1 again; o/r#3 and a#4 are not refs')).toEqual([1, 2]);
   });
   it('Facts falls back to — and Default without model or effort', async () => {
     open(base());
-    expect(await screen.findByText('Default')).toBeTruthy();
+    expect(await screen.findByText('Default effort')).toBeTruthy();
     expect(screen.getAllByText('—').length).toBeGreaterThan(0);
   });
   it('failed shows the error with Retry and Continue in terminal', async () => {
@@ -508,7 +510,7 @@ describe('Session page', () => {
   });
   it('a record with no harness reads as Claude Code', async () => {
     open(base());
-    await screen.findByText('Default');
+    await screen.findByText('Default effort');
     expect(fact('Harness')).toBe('Claude Code');
   });
   const codex = { harness: 'codex', session_id: 't1', resume_command: null, cost: null, tokens: { input: 10, cached: 5, output: 3 }, run_note: "gpt-9 is not a Codex model; ran on Codex's default" };

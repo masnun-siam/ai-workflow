@@ -32,6 +32,14 @@ from shared import data_dir, warn
 
 from harness_claude import CLAUDE_ARGS, HEADLESS_PROMPT  # noqa: F401 - re-exported: tests import them from here
 
+# Sessions call `aiw ask`; a server started without the plugin bin on PATH must still hand it over.
+PLUGIN_BIN = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin")
+
+
+def _session_path() -> str:
+    return os.pathsep.join([PLUGIN_BIN, os.environ.get("PATH", "")])
+
+
 MAX_GRINDS = 2  # grind rounds running at once; idle loops cost nothing
 GRIND_PREFIX = "Start the review grind for PR "
 STOP_GRACE_SECONDS = 10
@@ -161,7 +169,13 @@ def _spawn(
                 stderr=err_f,
                 start_new_session=True,
                 close_fds=True,
-                env={**os.environ, "AIW_UI_SESSION": sid, "CLAUDE_PLUGIN_DATA": data_dir(), **(env_extra or {})},
+                env={
+                    **os.environ,
+                    "PATH": _session_path(),
+                    "AIW_UI_SESSION": sid,
+                    "CLAUDE_PLUGIN_DATA": data_dir(),
+                    **(env_extra or {}),
+                },
                 pass_fds=tuple(pass_fds),
             )
     except (OSError, ValueError) as e:

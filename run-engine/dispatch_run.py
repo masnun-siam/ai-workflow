@@ -1009,6 +1009,14 @@ def tick(d: dict, facts: dict, runner, merge=gh_merge, now=None, notify=None, gh
                         x.update(stage="conflict_fix", merge_at=None)
                         send(x, conflict_prompt(a[1], base))
                         ev(k, "stage", "merge_gate -> conflict_fix (GitHub refused the merge: conflicts)")
+                    elif "not up to date" in err.lower():  # branch protection wants base merged in: GitHub does it
+                        p = gh(["pr", "update-branch", str(a[1]), "-R", x["repo"]])
+                        if p.returncode == 0:  # new head commit: the gate waits for its CI, then merges again
+                            ev(k, "lane", f"PR #{a[1]} was behind its base: merged the base into it")
+                        else:  # GitHub could not merge the base in (conflicts): fix it in the lane
+                            x.update(stage="conflict_fix", merge_at=None)
+                            send(x, conflict_prompt(a[1], lane_base(x, d["settings"])))
+                            ev(k, "stage", "merge_gate -> conflict_fix (could not update the branch from its base)")
                     else:
                         x["merge_fails"] = x.get("merge_fails", 0) + 1
                         x["held"] = f"merge failed: {err}"

@@ -439,6 +439,7 @@ export interface IssueDetail {
   state: 'open' | 'closed' | string;
   state_reason: string | null;
   is_pr: boolean;
+  merged?: boolean;
   author: GhUser | null;
   created_at: string;
   labels: { name: string; color: string }[];
