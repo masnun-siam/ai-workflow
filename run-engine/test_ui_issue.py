@@ -33,6 +33,8 @@ d = ui_issue.shape(
 assert d["author"] == "ghost" and d["assignees"] == ["a"] and d["milestone"] == "v1" and not d["is_pr"]
 assert 'target="_blank"' in d["body_html"] and d["comment_count"] == 2 and len(d["comments"]) == 1
 assert ui_issue.shape({"pull_request": {}}, [])["is_pr"]
+assert ui_issue.shape({"pull_request": {"merged_at": "2026-11-04T15:00:00Z"}}, [])["merged"]
+assert not ui_issue.shape({"pull_request": {"merged_at": None}}, [])["merged"]
 print("  ok  ui_issue")
 
 rows = [

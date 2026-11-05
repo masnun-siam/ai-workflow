@@ -2835,6 +2835,14 @@ def repo_skill_cases():
         reap(*recs)
 
 
+os.environ["PATH"] = "/x/y"
+try:
+    assert ui_runner._session_path() == os.pathsep.join([ui_runner.PLUGIN_BIN, "/x/y"])
+    assert os.path.isfile(os.path.join(ui_runner.PLUGIN_BIN, "aiw")), ui_runner.PLUGIN_BIN
+finally:
+    os.environ["PATH"] = ORIG_PATH
+ok("session PATH leads with the plugin bin, so `aiw ask` resolves")
+
 answer_checks()
 stop_checks()
 repo_skill_cases()

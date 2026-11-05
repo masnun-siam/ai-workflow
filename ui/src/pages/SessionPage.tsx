@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
-import { useCancelAuto, useHoldSession, useReleaseSession, useSession, useSettings, useStartNow, useTranscript, useVaultPrd } from '../api/hooks';
+import { useCancelAuto, useHoldSession, useIssue, useReleaseSession, useSession, useSettings, useStartNow, useTranscript, useVaultPrd } from '../api/hooks';
 import type { Session } from '../api/types';
 import { PhaseStrip } from '../bootstrap/PhaseStrip';
 import { Banner, Button, Chip, EmptyState, Icon, Menu, PauseDialog, SessionChip } from '../components';
@@ -43,6 +43,22 @@ function VaultPrd({ s }: { s: Session }) {
   );
 }
 
+/** One #n from the outcome text: its kind and state from GitHub, opening its panel. */
+function RefChip({ repo, n }: { repo: string; n: number }) {
+  const panel = usePanel();
+  const d = useIssue(repo, n).data;
+  const state = d ? (d.merged ? 'merged' : d.state) : '';
+  return (
+    <button type="button" className="ref-chip" onClick={() => panel.open({ kind: d?.is_pr ? 'pr' : 'issue', repo, n })} title={d?.title}>
+      <span className={`dot s-${state || 'unknown'}`} />
+      {d ? <span className="muted">{d.is_pr ? 'PR' : 'Issue'}</span> : null}#{n}{state ? ` ${state}` : ''}
+    </button>
+  );
+}
+
+/** The #n references in a text, in order, without repeats. */
+export const refsIn = (text: string) => [...new Set([...text.matchAll(/(?<![\w/])#(\d+)\b/g)].map((m) => Number(m[1])))];
+
 export function SessionPage() {
   const { id = '' } = useParams();
   const panel = usePanel();
@@ -50,6 +66,7 @@ export function SessionPage() {
   const s = q.data;
   const live = !!s && (['starting', 'running'].includes(s.outcome) || (s.outcome === 'waiting' && !s.ended_at));
   const tr = useTranscript(id, live);
+  const issueQ = useIssue(s ? sessionSlug(s) : '', s ? issueOf(s) ?? 0 : 0);
   const settings = useSettings().data;
   const accounts = settings?.commands ?? [];
   const a = useSessionActions();
@@ -71,6 +88,7 @@ export function SessionPage() {
   }
   const issue = issueOf(s);
   const slug = sessionSlug(s);
+  const issueTitle = issueQ.data?.title;
   const finished = ['done', 'failed', 'stopped'].includes(s.outcome);
   const others = accounts.filter((c) => c.cmd !== s.claude_cmd);
   const account = accounts.find((c) => c.cmd === s.claude_cmd)?.label ?? '';
@@ -83,6 +101,12 @@ export function SessionPage() {
   let last = finished ? tr.events.length - 1 : -1;
   while (last >= 0 && !(tr.events[last].kind === 'result' && String(tr.events[last].text ?? '').trim())) last--;
   const result = last >= 0 ? tr.events[last] : null;
+  // The first paragraph is the headline; the rest is the body.
+  const text = String(result?.text ?? '').trim();
+  const cut = text.indexOf('\n\n');
+  const headline = cut < 0 ? text : text.slice(0, cut);
+  const rest = cut < 0 ? '' : text.slice(cut + 2);
+  const refs = refsIn(text).slice(0, 8);
 
   return (
     <div className="content-inner">
@@ -90,12 +114,16 @@ export function SessionPage() {
       <div className="page-head">
         <div className="grow">
           <div className="row wrap" style={{ gap: 10 }}>
-            <h1 className="mono clamp2" title={sessionLabel(s.command)} style={{ fontSize: 17, fontWeight: 500, lineHeight: 1.4, overflowWrap: 'anywhere', maxWidth: 'none' }}>{sessionLabel(s.command)}</h1>
+            {issueTitle ? (
+              <h1 className="clamp2" style={{ fontSize: 24, lineHeight: 1.2, maxWidth: 'none' }}>#{issue} {issueTitle}</h1>
+            ) : (
+              <h1 className="mono clamp2" title={sessionLabel(s.command)} style={{ fontSize: 17, fontWeight: 500, lineHeight: 1.4, overflowWrap: 'anywhere', maxWidth: 'none' }}>{sessionLabel(s.command)}</h1>
+            )}
             <SessionChip s={s.outcome} />
             {s.peer_review ? <PeerChip p={s.peer_review} /> : null}
           </div>
           <p className="sub">
-            {issue && slug ? <button type="button" className="linkish" onClick={() => panel.open({ kind: 'issue', repo: slug, n: issue })}>Issue #{issue}</button> : s.no_repo ? 'Notes vault' : shortRepo(slug || s.repo)}
+            {issueTitle ? <span className="mono">{sessionLabel(s.command)}</span> : issue && slug ? <button type="button" className="linkish" onClick={() => panel.open({ kind: 'issue', repo: slug, n: issue })}>Issue #{issue}</button> : s.no_repo ? 'Notes vault' : shortRepo(slug || s.repo)}
           </p>
           <dl className="facts inline" aria-label="Facts">
             {issue && slug ? <><dt>Repo</dt><dd>{shortRepo(slug)}</dd></> : null}
@@ -106,7 +134,7 @@ export function SessionPage() {
             {typeof s.cost === 'number' ? <><dt>Cost</dt><dd>{money(s.cost)}</dd></> : null}
             {tokensText(s.tokens) ? <><dt>Tokens</dt><dd>{tokensText(s.tokens)}</dd></> : null}
             {s.model ? <><dt>Model</dt><dd>{s.model}</dd></> : null}
-            {s.effort ? <><dt>Effort</dt><dd>{s.effort}</dd></> : null}
+            {s.effort ? <><dt>Effort</dt><dd>{s.effort} effort</dd></> : null}
             {s.run_note ? <><dt>Note</dt><dd>{s.run_note}</dd></> : null}
             </dl>
         </div>
@@ -162,8 +190,12 @@ export function SessionPage() {
       {s.bootstrap ? <PhaseStrip run={s.bootstrap} here={s.id} /> : null}
       {result ? (
         <section className={`box outcome t-${result.is_error ? 'bad' : 'ship'}`} aria-label="Outcome">
-          <h2><Icon n={result.is_error ? 'alert' : 'check'} s={15} />{result.is_error ? 'Failed' : 'Outcome'}</h2>
-          <div className="prose" dangerouslySetInnerHTML={{ __html: mdToHtml(result.text) }} />
+          <div className="row wrap" style={{ gap: 10 }}>
+            <span className="chip">{result.is_error ? 'Failed' : 'Outcome'}</span>
+            <div className="grow prose oc-head" dangerouslySetInnerHTML={{ __html: mdToHtml(headline) }} />
+          </div>
+          {slug && refs.length ? <div className="row wrap" style={{ gap: 6 }}>{refs.map((n) => <RefChip key={n} repo={slug} n={n} />)}</div> : null}
+          {rest ? <div className="prose" dangerouslySetInnerHTML={{ __html: mdToHtml(rest) }} /> : null}
         </section>
       ) : null}
       <div className="stack">

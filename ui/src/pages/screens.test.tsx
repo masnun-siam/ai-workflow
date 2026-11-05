@@ -1,4 +1,5 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { refsIn } from './SessionPage';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
@@ -473,13 +474,14 @@ describe('Session page', () => {
   it('Facts shows model and effort, or the defaults', async () => {
     open(base({ model: 'claude-opus-5-5', effort: 'high' }));
     expect(await screen.findByText('claude-opus-5-5')).toBeTruthy();
-    expect(screen.getByText('high')).toBeTruthy();
+    expect(screen.getByText('high effort')).toBeTruthy();
   });
   it('a done session shows its last result as the outcome above the transcript', async () => {
     open(base(), [{ kind: 'text', text: 'Merged in #9.' }, { kind: 'result', text: 'Merged in #9.', cost: 0.5 }]);
     const out = await screen.findByRole('region', { name: 'Outcome' });
     expect(within(out).getByText('Merged in #9.')).toBeTruthy();
     expect(screen.getAllByText('Merged in #9.').length).toBe(1);
+    expect(refsIn('#1 closed, #2 and #1 again; o/r#3 and a#4 are not refs')).toEqual([1, 2]);
   });
   it('Facts omits Model and Effort when the record has none, with no — or Default placeholder', async () => {
     open(base());

@@ -70,20 +70,41 @@ def _grind(repo: str, pr: int, files=None):
 
 
 _TRUNCATED_WARNED: set = set()
+OPEN_RECHECK_SECONDS = 300
+_STATE: dict = {}  # lane key -> (issue state, checked at); CLOSED is final
 
 
-def lane_facts(x: dict, snap, status=None, grind_files=None, resolve=grind_reviewers.resolve, solo=ui_gh.solo):
+def _issue_closed(repo: str, n: int, runner=shared.run, now=None) -> bool:
+    """Is the issue closed? One `gh issue view` call; a CLOSED answer is kept, an OPEN one for a few minutes."""
+    now = now or time.time()
+    k = dr.key(repo, n)
+    state, at = _STATE.get(k, (None, 0.0))
+    if state != "CLOSED" and (state is None or now - at >= OPEN_RECHECK_SECONDS):
+        p = runner(["gh", "issue", "view", str(n), "-R", repo, "--json", "state", "-q", ".state"], timeout=30)
+        got = (p.stdout or "").strip()
+        if p.returncode == 0 and got in ("OPEN", "CLOSED"):
+            state = got
+            _STATE[k] = (state, now)
+        else:
+            warn(f"dispatch: state of {k}: {(p.stderr or got or 'gh did not answer').strip()[:200]}")
+    return state == "CLOSED"
+
+
+def lane_facts(
+    x: dict, snap, status=None, grind_files=None, resolve=grind_reviewers.resolve, solo=ui_gh.solo, closed=_issue_closed
+):
     """Facts for one lane (schema in dispatch_run), or None when its repo has no fresh snapshot, or when the
-    snapshot's open-issue list was cut short and lacks the lane's issue (it may be open past the cut)."""
+    snapshot's open-issue list was cut short and lacks the lane's issue while GitHub says it is open (past the
+    cut) or does not answer. A closed issue past the cut is looked up on its own, so its lane can finish."""
     if not snap or snap.get("stale") or snap.get("fetched_at") is None:
         return None
     data = snap.get("data") or {}
     issue = next((i for i in data.get("issues") or [] if i["n"] == x["n"]), None)
-    if issue is None and data.get("issues_truncated"):
+    if issue is None and data.get("issues_truncated") and not closed(x["repo"], x["n"]):
         k = dr.key(x["repo"], x["n"])
         if k not in _TRUNCATED_WARNED:
             _TRUNCATED_WARNED.add(k)
-            warn(f"dispatch: {k} is not in the poller's truncated open-issue list; the lane waits")
+            warn(f"dispatch: {k} is not in the poller's truncated open-issue list and is open; the lane waits")
         return None
     f = {
         "issue_open": issue is not None,
