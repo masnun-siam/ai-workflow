@@ -113,7 +113,8 @@ export function InboxPage() {
   const [filter, setFilter] = useState('');
   const q = useInbox(filter || undefined);
   const repos = useRepos().data?.repos ?? [];
-  const sessions = useSessions().data?.sessions ?? [];
+  const sessionsQ = useSessions();
+  const sessions = sessionsQ.data?.sessions ?? [];
   const a = useInboxActions();
   const [openKey, setOpen] = useState<string | null | undefined>(undefined);
   const [publishing, setPublishing] = useState('');
@@ -131,7 +132,7 @@ export function InboxPage() {
   const open = openKey === undefined ? firstAnswer : openKey;
   const afk = q.data?.afk;
   // Enter is registered per row (ItemRow), so the list's own handler has nothing to do.
-  const { selected, rowProps } = useListSelection({ keys: ordered.map((i) => i.key), onOpen: () => {}, reset: filter, panelTarget: (k) => panelTargetOf(ordered.find((i) => i.key === k)) });
+  const { selected, rowProps } = useListSelection({ keys: ordered.map((i) => i.key), reset: filter, panelTarget: (k) => panelTargetOf(ordered.find((i) => i.key === k)) });
 
   return (
     <div className="content-inner">
@@ -139,8 +140,9 @@ export function InboxPage() {
         <div className="grow">
           <h1>Inbox</h1>
           <p className="sub">
-            {count ? `${count} thing${count === 1 ? '' : 's'} need${count === 1 ? 's' : ''} you${filter ? '' : ' across your repos'}. ` : 'Nothing needs you. '}
-            {working === 1 ? '1 session is working on its own.' : `${working} sessions are working on their own.`}
+            {/* no verdict until the inbox has loaded: "Nothing needs you" while loading is a false all-clear */}
+            {!q.data ? 'Loading…' : count ? `${count} thing${count === 1 ? '' : 's'} need${count === 1 ? 's' : ''} you${filter ? '' : ' across your repos'}. ` : 'Nothing needs you. '}
+            {!q.data || !sessionsQ.data ? null : working === 1 ? '1 session is working on its own.' : `${working} sessions are working on their own.`}
           </p>
         </div>
         {afk?.active ? <Chip tone="away">Away mode: Claude answers every question</Chip> : null}

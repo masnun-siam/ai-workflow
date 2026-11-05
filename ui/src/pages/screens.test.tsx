@@ -481,10 +481,13 @@ describe('Session page', () => {
     expect(within(out).getByText('Merged in #9.')).toBeTruthy();
     expect(screen.getAllByText('Merged in #9.').length).toBe(1);
   });
-  it('Facts falls back to — and Default without model or effort', async () => {
+  it('Facts omits Model and Effort when the record has none, with no — or Default placeholder', async () => {
     open(base());
-    expect(await screen.findByText('Default')).toBeTruthy();
-    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+    await screen.findByRole('heading', { level: 1 });
+    expect(fact('Harness')).toBeTruthy();
+    expect(fact('Model')).toBeUndefined();
+    expect(fact('Effort')).toBeUndefined();
+    expect(facts().textContent).not.toMatch(/Default|—/);
   });
   it('failed shows the error with Retry and Continue in terminal', async () => {
     open(base({ outcome: 'failed', error: 'it broke' }));
@@ -508,17 +511,17 @@ describe('Session page', () => {
   });
   it('a record with no harness reads as Claude Code', async () => {
     open(base());
-    await screen.findByText('Default');
+    await screen.findByRole('heading', { level: 1 });
     expect(fact('Harness')).toBe('Claude Code');
   });
   const codex = { harness: 'codex', session_id: 't1', resume_command: null, cost: null, tokens: { input: 10, cached: 5, output: 3 }, run_note: "gpt-9 is not a Codex model; ran on Codex's default" };
-  it('a Codex session with no resume_command shows Codex, the note, — for cost, tokens, and no terminal button', async () => {
+  it('a Codex session with no resume_command shows Codex, the note, no cost row, tokens, and no terminal button', async () => {
     open(base({ ...codex, outcome: 'failed', error: 'it broke' }));
     expect(await screen.findByText(/it broke/)).toBeTruthy();
     expect(fact('Harness')).toBe('Codex');
     expect(fact('Note')).toBe(codex.run_note);
-    expect(fact('Cost')).toBe('—');
-    expect(fact('Tokens')).not.toBe('—');
+    expect(fact('Cost')).toBeUndefined();
+    expect(fact('Tokens')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Continue in terminal/ })).toBeNull();
     expect(document.body.textContent).not.toContain('claude --resume');
   });

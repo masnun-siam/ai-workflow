@@ -26,7 +26,7 @@ const settle = () => screen.findByText('Inbox');
 afterEach(cleanup);
 
 describe('palette: Actions here', () => {
-  it('lists page and row actions first, labelled as the button, and runs the chosen one', async () => {
+  it('lists page and row actions after Go to, labelled as the button, and runs the chosen one', async () => {
     const run = vi.fn();
     const onClose = mount(
       <>
@@ -37,9 +37,9 @@ describe('palette: Actions here', () => {
       </>,
     );
     await settle();
-    expect(headings()[0]).toBe('Actions here');
-    const texts = [...document.querySelectorAll('[cmdk-item]')].map((i) => i.textContent);
-    expect(texts.slice(0, 3)).toEqual(['PR #7: Review and merge (M)', 'Resume (R)', 'Run 2 more rounds']); // row before page
+    expect(headings().slice(0, 2)).toEqual(['Go to', 'Actions here']); // navigation is the default highlight, never an action
+    const texts = [...document.querySelectorAll('[cmdk-item]')].map((i) => i.textContent).filter((t) => /Review and merge|Resume|more rounds/.test(t ?? ''));
+    expect(texts).toEqual(['PR #7: Review and merge (M)', 'Resume (R)', 'Run 2 more rounds']); // row before page
     expect(screen.queryByText(/Stop/)).toBeNull();
     fireEvent.click(screen.getByText('Resume (R)'));
     expect(run).toHaveBeenCalledTimes(1);

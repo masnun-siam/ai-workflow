@@ -193,7 +193,6 @@ function Done({ lanes, picked, onPick, rowProps, short, label, headless }: Rows 
   );
 }
 
-const TICK: Record<string, number> = { closed: 0, skipped: 1, queued: 3 };
 
 export function DispatchPage() {
   const { id = '' } = useParams();
@@ -254,7 +253,7 @@ export function DispatchPage() {
   const multi = new Set(d.lanes.map((l) => l.repo)).size > 1; // a cross-repo epic names the repo on each issue
   const label = (l: Lane) => (multi ? `${shortRepo(l.repo)}${issueNo(l.key)}` : issueNo(l.key));
   const rows = { all: d.lanes, picked, onPick: pick, rowProps: selection.rowProps, short, label };
-  const ticks = [...d.lanes].sort((a, b) => (TICK[a.stage] ?? 2) - (TICK[b.stage] ?? 2));
+  const pct = (n: number) => `${c.total ? (n / c.total) * 100 : 0}%`;
   const asks = d.lanes.some((l) => nowLine(l, d.lanes).ask);
   const cancel = async () => {
     if (await confirm({ title: 'Cancel this dispatch?', body: 'No new issue starts and nothing more is merged. Issues already running keep their sessions and PRs; close them yourself.', okLabel: 'Cancel dispatch', cancelLabel: 'Keep it', danger: true }))
@@ -289,8 +288,9 @@ export function DispatchPage() {
       </div>
 
       <section className="dsp-progress" aria-label="Progress">
-        <div className="dsp-ticks" role="img" aria-label={`${c.closed} of ${c.total} done, ${c.active} building, ${c.queued} waiting`}>
-          {ticks.map((l) => <i key={l.key} title={`${issueNo(l.key)} ${STAGE[l.stage].label}`} className={l.stage === 'closed' ? 'done' : l.stage === 'skipped' ? 'skip' : nowLine(l, d.lanes).ask ? 'you' : ACTIVE.includes(l.stage) ? 'run' : ''} />)}
+        <div className="dsp-bar" role="img" aria-label={`${c.closed} of ${c.total} done, ${c.active} building, ${c.queued} waiting`}>
+          <i className="done" style={{ width: pct(c.closed) }} />
+          <i className="run" style={{ width: pct(c.active) }} />
         </div>
         <dl className="dsp-stats">
           <div><dt>done</dt><dd>{c.closed} of {c.total}</dd></div>

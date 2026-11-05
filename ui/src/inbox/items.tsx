@@ -59,7 +59,17 @@ export function useInboxActions() {
   const dismissM = useDismissSession();
   const bootstrap = useBootstrapAction();
   const goSession = (id?: string) => id && nav(routes.session(id));
+  // per-row pending: only the row whose id is in flight is disabled
+  const busy = {
+    laneRetry: (id: string, key: string) => lane.isPending && lane.variables?.id === id && lane.variables?.lane === key,
+    retry: (id: string) => resume.isPending && resume.variables?.id === id,
+    bootstrap: (id: string) => bootstrap.isPending && bootstrap.variables?.id === id,
+    startNow: (id: string) => startNowM.isPending && startNowM.variables === id,
+    stop: (id: string) => stop.isPending && stop.variables === id,
+    stopGrind: (repo: string, pr: number) => stopGrind.isPending && stopGrind.variables?.repo === repo && stopGrind.variables?.pr === pr,
+  };
   return {
+    busy,
     terminal,
     panel,
     recheck: () => qc.invalidateQueries({ queryKey: ['inbox'] }),
@@ -188,8 +198,7 @@ export function ItemRow({ item, a, open, toggle, publish, selected, rowProps, au
       break;
     case 'review_approved':
       icon = 'check'; tone = 'plan'; title = `Every lens approves “${prdTitle(item.prd_path)}”`;
-      detail = 'Approving sets the PRD to Approved and files its epic on GitHub.';
-      acts = (<><Button sm shortcut="p" variant="primary" onClick={() => void a.approve(repo, item.prd_path)}>Approve PRD</Button><LinkButton sm shortcut="o" to={featureLink(item, 'prd')}>Read PRD</LinkButton></>);
+      acts = (<><Button sm shortcut="p" variant="primary" title="Sets the PRD to Approved and files its epic on GitHub" onClick={() => void a.approve(repo, item.prd_path)}>Approve PRD</Button><LinkButton sm shortcut="o" to={featureLink(item, 'prd')}>Read PRD</LinkButton></>);
       break;
     case 'prd_comment':
       icon = 'msg'; tone = 'you'; title = item.summary;
@@ -217,7 +226,7 @@ export function ItemRow({ item, a, open, toggle, publish, selected, rowProps, au
       meta = [where, item.issue ? `#${item.issue}` : undefined, item.round ? `round ${item.round}` : undefined]; detail = item.reason;
       acts = (<>
         <Button sm shortcut="s" onClick={() => void a.skipCi(repo, item.pr)}>Skip CI and continue</Button>
-        <Button sm shortcut="x" onClick={() => void a.stopGrind(repo, item.pr)}>Stop grind</Button>
+        <Button sm shortcut="x" disabled={a.busy.stopGrind(repo, item.pr)} onClick={() => void a.stopGrind(repo, item.pr)}>Stop grind</Button>
         <Button sm shortcut="o" variant="primary" onClick={() => a.panel.open({ kind: 'pr', repo, n: item.pr })}>Open PR</Button>
       </>);
       break;
@@ -227,7 +236,7 @@ export function ItemRow({ item, a, open, toggle, publish, selected, rowProps, au
         <Button sm shortcut="t" onClick={() => void a.terminal(item.session_id)}>Continue in terminal</Button>
         {sess(item.session_id)}
         <Button sm shortcut="x" variant="ghost" onClick={() => a.dismissSession(item.session_id)}>Dismiss</Button>
-        <Button sm shortcut="r" variant="primary" onClick={() => a.retry(item.session_id)}>Retry</Button>
+        <Button sm shortcut="r" variant="primary" disabled={a.busy.retry(item.session_id)} onClick={() => a.retry(item.session_id)}>Retry</Button>
       </>);
       break;
     case 'needs_cleanup':
@@ -256,10 +265,9 @@ export function ItemRow({ item, a, open, toggle, publish, selected, rowProps, au
       tone = item.group === 'fix' ? 'bad' : item.group === 'wait' ? 'away' : 'you';
       title = item.group === 'decide' ? `PR #${item.pr} of #${item.issue} is ready to merge` : `#${item.issue} ${item.title}`;
       meta = [where, 'dispatch', item.group === 'decide' ? item.title : item.reason];
-      detail = item.group === 'decide' ? 'CI is green, a review approves and the grind is done. Auto-merge is off for this dispatch.' : undefined;
       acts = (<>
-        {item.group === 'decide' ? <Button sm shortcut="m" variant="primary" onClick={() => void a.laneMerge(item.dispatch, item.lane, item.pr)}>Merge</Button> : null}
-        {item.group === 'fix' ? <Button sm shortcut="r" onClick={() => a.laneRetry(item.dispatch, item.lane)}>Retry</Button> : null}
+        {item.group === 'decide' ? <Button sm shortcut="m" variant="primary" title="CI is green, a review approves and the grind is done. Auto-merge is off for this dispatch" onClick={() => void a.laneMerge(item.dispatch, item.lane, item.pr)}>Merge</Button> : null}
+        {item.group === 'fix' ? <Button sm shortcut="r" disabled={a.busy.laneRetry(item.dispatch, item.lane)} onClick={() => a.laneRetry(item.dispatch, item.lane)}>Retry</Button> : null}
         <LinkButton sm variant={item.group === 'answer' ? 'you' : 'default'} to={at}>Open</LinkButton>
       </>);
       break;
@@ -267,8 +275,8 @@ export function ItemRow({ item, a, open, toggle, publish, selected, rowProps, au
     case 'bootstrap_waiting':
       icon = 'pause'; tone = 'you'; title = `Bootstrap of ${shortRepo(item.repo ?? '')} is waiting: audit issue #${item.issue} is ready for the team`;
       acts = (<>
-        <Button sm shortcut="c" variant="primary" onClick={() => a.bootstrapContinue(item.run_id)}>Continue bootstrap</Button>
-        <Button sm shortcut="x" onClick={() => void a.bootstrapStop(item.run_id)}>Stop</Button>
+        <Button sm shortcut="c" variant="primary" disabled={a.busy.bootstrap(item.run_id)} onClick={() => a.bootstrapContinue(item.run_id)}>Continue bootstrap</Button>
+        <Button sm shortcut="x" disabled={a.busy.bootstrap(item.run_id)} onClick={() => void a.bootstrapStop(item.run_id)}>Stop</Button>
       </>);
       body = <BootstrapStrip id={item.run_id} repo={item.repo ?? undefined} />;
       break;
@@ -276,8 +284,8 @@ export function ItemRow({ item, a, open, toggle, publish, selected, rowProps, au
       icon = 'alert'; tone = 'bad'; title = `Bootstrap of ${shortRepo(item.repo ?? '')} stopped at ${item.phase}`; detail = item.error ?? undefined;
       acts = (<>
         {item.session_id ? sess(item.session_id) : null}
-        <Button sm shortcut="x" onClick={() => void a.bootstrapStop(item.run_id)}>Stop</Button>
-        <Button sm shortcut="r" variant="primary" onClick={() => a.bootstrapRetry(item.run_id)}>Retry phase</Button>
+        <Button sm shortcut="x" disabled={a.busy.bootstrap(item.run_id)} onClick={() => void a.bootstrapStop(item.run_id)}>Stop</Button>
+        <Button sm shortcut="r" variant="primary" disabled={a.busy.bootstrap(item.run_id)} onClick={() => a.bootstrapRetry(item.run_id)}>Retry phase</Button>
       </>);
       body = <BootstrapStrip id={item.run_id} repo={item.repo ?? undefined} />;
       break;
@@ -288,7 +296,7 @@ export function ItemRow({ item, a, open, toggle, publish, selected, rowProps, au
       break;
     case 'queued':
       icon = 'clock'; title = `${cmdName(item.command)} is queued`; meta = [where, item.reason];
-      acts = (<><Button sm onClick={() => a.startNow(item.session_id)}>Start now</Button><Button sm shortcut="x" variant="ghost" onClick={() => void a.cancel(item.session_id)}>Cancel</Button></>);
+      acts = (<><Button sm disabled={a.busy.startNow(item.session_id)} onClick={() => a.startNow(item.session_id)}>Start now</Button><Button sm shortcut="x" variant="ghost" disabled={a.busy.stop(item.session_id)} onClick={() => void a.cancel(item.session_id)}>Cancel</Button></>);
       break;
   }
   return (

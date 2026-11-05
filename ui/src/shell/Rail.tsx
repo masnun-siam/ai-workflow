@@ -18,9 +18,11 @@ export const NAV: { to: string; label: string; icon: IconName; badge?: 'inbox' |
   { to: routes.activity, label: 'Activity', icon: 'activity', badge: 'running' },
 ];
 
-/** The number on the Inbox nav item: everything except Waiting (FR-7). */
-export function useInboxCount() {
-  return needsYouCount(useInbox().data?.items);
+/** The number on the Inbox nav item: everything except Waiting (FR-7). `12+` while some repos' GitHub data is still loading, '' when nothing needs you. */
+export function useInboxCount(): string {
+  const d = useInbox().data;
+  const n = needsYouCount(d?.items);
+  return n ? `${n}${d?.stale?.length ? '+' : ''}` : '';
 }
 
 const PRESETS: [number, string][] = [[30, '30 min'], [60, '1 h'], [120, '2 h'], [240, '4 h']];
@@ -38,8 +40,8 @@ function AwayCard() {
         <div className="row"><Icon n="moon" /><b className="grow">Away until {clockText(afk.until)}</b></div>
         <p className="muted" style={{ fontSize: 12.5 }}>Answering every question (Opus when there is no recommendation), retrying failures. {afk.held} held for you.</p>
         <div className="row">
-          <Button sm onClick={() => start.mutate(Math.min(afk.until! + 1800, Math.floor(Date.now() / 1000) + 86000))}>+30 min</Button>
-          <Button sm variant="primary" onClick={() => stop.mutate()}>I'm back</Button>
+          <Button sm disabled={start.isPending} onClick={() => start.mutate(Math.min(afk.until! + 1800, Math.floor(Date.now() / 1000) + 86000))}>+30 min</Button>
+          <Button sm variant="primary" disabled={stop.isPending} onClick={() => stop.mutate()}>I'm back</Button>
         </div>
       </div>
     );

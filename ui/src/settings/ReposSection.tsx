@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { api } from '../api/endpoints';
 import { useApiMutation, useRemoveRepo, useRepos, useSaveSettings, useScanRepos, useSettings } from '../api/hooks';
 import type { Repo, RepoSettings, ScanResult, SlackChannel } from '../api/types';
-import { Button, Chip, Icon, Switch, toast, useConfirm } from '../components';
+import { Button, Chip, Icon, MoreMenu, Switch, toast, useConfirm } from '../components';
 import { PublishDialog } from '../repos/PublishDialog';
 import { ReviewersCell } from './ReviewersCell';
 import './settings.css';
@@ -172,7 +172,7 @@ export function ReposSection() {
         <div className="tbl-wrap">
           <table className="tbl">
             <thead>
-              <tr><th>Repo</th><th>GitHub</th><th>Auto-grind</th><th>Slack channel</th><th>Reviewers</th><th><span className="sr">Remove</span></th></tr>
+              <tr><th>Repo</th><th>GitHub</th><th>Auto-grind</th><th>Slack channel</th><th>Reviewers</th><th><span className="sr">More actions</span></th></tr>
             </thead>
             <tbody>
               {shown.map((r) => {
@@ -198,7 +198,7 @@ export function ReposSection() {
                     <td>
                       <ReviewersCell slug={r.slug} row={row} reviewers={settings.data?.reviewers ?? []} active={settings.data?.active_reviewers ?? []} botLabel={settings.data?.bot_label} disabled={r.slug in over} onSave={(v) => void change(r.slug, { reviewers: v })} />
                     </td>
-                    <td><Button variant="danger" sm onClick={() => void onRemove(r)} aria-label={`Remove ${r.slug}`}>Remove</Button></td>
+                    <td><MoreMenu label={`More actions for ${r.slug}`} items={[{ label: 'Remove', icon: 'trash', danger: true, onSelect: () => void onRemove(r) }]} /></td>
                   </tr>
                 );
               })}

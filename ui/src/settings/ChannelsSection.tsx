@@ -1,7 +1,7 @@
 import { type KeyboardEvent, useRef, useState } from 'react';
 import { useSaveSettings, useSettings } from '../api/hooks';
 import type { SlackChannel } from '../api/types';
-import { Button, toast } from '../components';
+import { Button, toast, useConfirm } from '../components';
 import './settings.css';
 
 const MAX_CHANNELS = 50;
@@ -43,6 +43,7 @@ export function NameCell({ name, label, error, disabled, onSave }: { name: strin
 export function ChannelsSection() {
   const settings = useSettings();
   const save = useSaveSettings();
+  const confirm = useConfirm();
   const [over, setOver] = useState<SlackChannel[] | null>(null); // optimistic list while a save is in flight
   const [name, setName] = useState('');
   const [id, setId] = useState('');
@@ -66,6 +67,10 @@ export function ChannelsSection() {
     }
   };
 
+  const onDelete = async (ch: SlackChannel) => {
+    const ok = await confirm({ title: `Delete ${ch.name}?`, body: <p>Repos that send their grind reviews to {ch.name} will have no channel until you pick another.</p>, okLabel: 'Delete', danger: true });
+    if (ok) await persist(list.filter((c) => c.id !== ch.id), `Deleted ${ch.name}`);
+  };
   const errs = { name: nameError(name.trim()), id: idError(id.trim(), list), full: list.length >= MAX_CHANNELS ? 'at most 50' : '' };
   const add = async () => {
     setTried(true);
@@ -96,7 +101,7 @@ export function ChannelsSection() {
               <tr key={ch.id}>
                 <td><NameCell name={ch.name} label={`Name of ${ch.id}`} error={nameError} disabled={busy} onSave={(n) => void persist(list.map((c) => (c.id === ch.id ? { ...c, name: n } : c)), `Renamed ${ch.id}`)} /></td>
                 <td className="mono">{ch.id}</td>
-                <td><Button variant="danger" sm disabled={busy} onClick={() => void persist(list.filter((c) => c.id !== ch.id), `Deleted ${ch.name}`)} aria-label={`Delete ${ch.name}`}>Delete</Button></td>
+                <td><Button variant="danger" sm disabled={busy} onClick={() => void onDelete(ch)} aria-label={`Delete ${ch.name}`}>Delete</Button></td>
               </tr>
             ))}
             <tr>

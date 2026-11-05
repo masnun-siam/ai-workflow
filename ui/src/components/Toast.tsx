@@ -51,9 +51,7 @@ export function Toaster() {
     (cb) => (subs.add(cb), () => subs.delete(cb)),
     () => items,
   );
-  return (
-    <div className="toasts" role="status" aria-live="polite">
-      {list.map((t) => (
+  const item = (t: ToastItem) => (
         <div
           key={t.id}
           className={`toast${t.tone === 'bad' ? ' bad' : ''}`}
@@ -67,7 +65,11 @@ export function Toaster() {
             <button type="button" onClick={() => { t.action?.onClick(); dismiss(t.id); }}>{t.action.label}</button>
           ) : null}
         </div>
-      ))}
+  );
+  return (
+    <div className="toasts">
+      <div role="status" aria-live="polite">{list.filter((t) => t.tone !== 'bad').map(item)}</div>
+      <div role="alert">{list.filter((t) => t.tone === 'bad').map(item)}</div>
     </div>
   );
 }

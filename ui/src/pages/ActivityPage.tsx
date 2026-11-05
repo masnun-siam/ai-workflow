@@ -61,13 +61,13 @@ export function ActivityPage() {
       {q.isError ? <Banner tone="bad" icon="alert" action={<Button sm onClick={() => void q.refetch()}>Retry</Button>}>Could not load sessions. {q.error.message}</Banner> : null}
       <section aria-label="Live">
         <div className="group-h"><h2>Live</h2><span className="n">{live.length}</span></div>
-        {live.length ? (
+        {q.isPending ? <><p className="muted" role="status">Loading…</p><div className="skel" style={{ height: 90 }} /></> : live.length ? (
           <div className="live-grid departures">
             {live.map((s) => (
               <div key={s.id} {...rowProps(s.id)} className={`live-card${s.outcome === 'waiting' ? ' you' : ''}`}>
                 <div className="row"><SessionChip s={s.outcome} /><span className="grow" /><span className="faint" style={{ fontSize: 12 }}>{duration(s.started_at)}</span></div>
                 <a className="cmd clamp2" title={sessionLabel(s.command)} href={`#${routes.session(s.id)}`} style={{ textDecoration: 'none' }}>{sessionLabel(s.command)}</a>
-                <div className="muted" style={{ fontSize: 13 }}>{forText(s)}</div>
+                <div className="repo-name faint" title={forText(s)} style={{ fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{forText(s)}</div>
                 <div className="muted" style={{ fontSize: 12.5 }}>
                   {s.outcome === 'limited' ? `${label(s.claude_cmd) || 'Account'} limited${s.limit_resets_at ? `, resumes at ${clockText(s.limit_resets_at)} (${untilText(s.limit_resets_at)})` : ''}` : s.outcome === 'queued' ? (s.note ?? 'Queued') : [label(s.claude_cmd) && `${label(s.claude_cmd)} account`, s.cost != null && money(s.cost)].filter(Boolean).join(' · ')}
                 </div>
@@ -88,7 +88,9 @@ export function ActivityPage() {
           <RepoSelect repos={repos} value={repo} onChange={(v) => { setRepo(v); setShown(PAGE); }} label="Repo" width={160} extrasBefore={[{ value: '', label: 'All repos' }]} />
           <label className="row" style={{ gap: 6 }}><input type="checkbox" checked={group} onChange={(e) => setGroup(e.target.checked)} />Group by issue</label>
         </div>
-        <SessionTable rows={shownHist} groupByIssue={group} rowProps={rowProps} selected={selected} />
+        {q.isPending ? <div className="skel" style={{ height: 160 }} /> : shownHist.length === 0 ? (
+          <EmptyState icon="activity" title="No sessions match" actions={search || result !== 'all' || repo ? <Button onClick={() => { setSearch(''); setResult('all'); setRepo(''); setShown(PAGE); }}>Clear filters</Button> : undefined}>{search || result !== 'all' || repo ? 'Try a different search or filter.' : 'Finished sessions show up here.'}</EmptyState>
+        ) : <SessionTable rows={shownHist} groupByIssue={group} rowProps={rowProps} selected={selected} />}
         {hist.length > shown ? <div><Button onClick={() => setShown(shown + PAGE)}>Show more ({hist.length - shown} left)</Button></div> : null}
       </section>
       <CleanupDialog open={cleaning} onClose={() => setCleaning(false)} />

@@ -41,5 +41,5 @@ export function Menu({ trigger, items, align = 'end', paletteLabel = '' }: { tri
 
 /** The ⋯ button with a menu: row actions, the feature page's More. */
 export function MoreMenu({ items, label = 'More actions', sm = true }: { items: MenuEntry[]; label?: string; sm?: boolean }) {
-  return <Menu items={items} trigger={<Button variant="ghost" icon sm={sm} aria-label={label}><Icon n="more" /></Button>} />;
+  return <Menu items={items} trigger={<Button variant="ghost" icon sm={sm} aria-label={label}><Icon n="more" s={20} /></Button>} />;
 }

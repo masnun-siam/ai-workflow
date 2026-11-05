@@ -21,7 +21,7 @@ interface Entry {
   run: () => void;
 }
 
-const GROUP_ORDER = ['Actions here', 'Open', 'Go to', 'Start', 'Features', 'Issues', 'Pull requests', 'Sessions', 'Switch repo', 'Away'];
+const GROUP_ORDER = ['Open', 'Go to', 'Actions here', 'Start', 'Features', 'Issues', 'Pull requests', 'Sessions', 'Switch repo', 'Away'];
 
 /** ⌘K (FR-4). Rendered by the shell only while open, so its queries run only then. */
 export function Palette({ onClose }: { onClose: () => void }) {
