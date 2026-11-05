@@ -9,6 +9,7 @@ import os
 import sys
 import tempfile
 import threading
+import types
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 data = tempfile.mkdtemp()
@@ -76,10 +77,38 @@ def snap(issues=(), merged=(), open_prs=(), stale=False, truncated=False):
 GRIND = {"path": None, "channel": None, "mentions": [], "logins": [], "unlogged": [], "skip": None}
 no_grind = lambda repo: GRIND  # noqa: E731
 
-# --- a truncated open-issue list lacking the lane's issue: the lane waits; a complete one: the issue is closed
+# --- a truncated open-issue list lacking the lane's issue: GitHub is asked; open (or no answer) -> the lane
+# waits, closed -> the issue is closed; a complete list needs no lookup
 t_lane = {"repo": R, "n": 777, "handle": {"t": 1}}
-assert ui_dispatch.lane_facts(t_lane, snap(truncated=True), resolve=no_grind) is None
-assert ui_dispatch.lane_facts(t_lane, snap(), resolve=no_grind)["issue_open"] is False
+assert ui_dispatch.lane_facts(t_lane, snap(truncated=True), resolve=no_grind, closed=lambda r, n: False) is None
+f = ui_dispatch.lane_facts(t_lane, snap(truncated=True), resolve=no_grind, closed=lambda r, n: True)
+assert f["issue_open"] is False
+assert ui_dispatch.lane_facts(t_lane, snap(), resolve=no_grind, closed=lambda r, n: 1 / 0)["issue_open"] is False
+
+# --- _issue_closed: CLOSED is kept for good; OPEN is re-asked after OPEN_RECHECK_SECONDS; a gh failure is not closed
+calls = []
+
+
+def gh_says(*answers):
+    it = iter(answers)
+
+    def runner(cmd, timeout=None):
+        calls.append(cmd)
+        rc, out = next(it)
+        return types.SimpleNamespace(returncode=rc, stdout=out, stderr="boom" if rc else "")
+
+    return runner
+
+
+ui_dispatch._STATE.clear()
+assert ui_dispatch._issue_closed(R, 9, gh_says((1, "")), now=1000) is False
+assert ui_dispatch._issue_closed(R, 9, gh_says((0, "OPEN\n")), now=1000) is False
+assert ui_dispatch._issue_closed(R, 9, gh_says(), now=1100) is False  # cached OPEN, no call
+assert ui_dispatch._issue_closed(R, 9, gh_says((0, "CLOSED\n")), now=1300) is True
+n_calls = len(calls)
+assert ui_dispatch._issue_closed(R, 9, gh_says(), now=99999) is True and len(calls) == n_calls
+assert calls[0][:3] == ["gh", "issue", "view"] and "-R" in calls[0]
+ui_dispatch._STATE.clear()
 
 # --- lane_facts: stale -> None; open issue, blockers, PR approval via reviewer, grind header, agent
 lane = {"repo": R, "n": 5, "handle": {"t": 1}}
