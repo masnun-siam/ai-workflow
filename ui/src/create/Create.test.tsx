@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { QueryProvider } from '../QueryProvider';
 import { CreatePrompt, CreateProvider } from './Create';
+import { REGISTRY } from '../test-registry';
 
 type Call = { method: string; url: string; body: Record<string, unknown> | null };
 let calls: Call[];
@@ -17,6 +18,7 @@ beforeEach(() => {
     const method = init?.method ?? 'GET';
     calls.push({ method, url: String(url), body: init?.body ? JSON.parse(String(init.body)) : null });
     if (url === '/api/repos') return json({ repos: [{ slug: 'o/r', name: 'R', path: '/x' }, { slug: 'o/q', name: 'Q', path: '/y' }], can_browse: false, scan_roots: [] });
+    if (url === '/api/registry') return json(REGISTRY);
     if (url === '/api/route') return json({ route: null, confidence: 0, why: 'x' });
     if (url === '/api/settings') return json({ commands, default: 'main' });
     if (method === 'POST') return json({ id: 's1' }, 201);

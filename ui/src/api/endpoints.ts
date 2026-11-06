@@ -2,7 +2,7 @@
 import { del, enc, get, patch, post, put, qs, request, splitRepo } from './client';
 import type {
   AnswerBody, AfkState, DuplicateResponse, AfkChangeBody, AfkChangeResponse, Dispatch, DispatchPlan, DispatchSettings, DispatchTarget, DispatchState, EndAction, LaneAction, BoardStartBody, BootstrapRun, BoardStartResponse, CleanupItem, DeliveryAllResponse, DeliveryResponse, InboxResponse,
-  IssueDetail, NotificationFeed, NotifyChannel, NotifySettings, OpenItem, PeerReviewOffers, PlanningAllResponse, PlanningResponse, PrDetail, PrdFile, ReposResponse, RestartStatus,
+  IssueDetail, NotificationFeed, NotifyChannel, NotifySettings, OpenItem, PeerReviewOffers, PlanningAllResponse, PlanningResponse, PrDetail, PrdFile, ReposResponse, RegistryResponse, RestartStatus,
   ReviewSettings, SendPreview, SendResult, Session, SessionStartBody, Share, ShareComment, ShareSummary, ShareThread, SessionsResponse, Settings, StreamResponse, VaultFolders, VaultPrd,
 } from './types';
 
@@ -19,6 +19,7 @@ export const api = {
   delivery: (repo: string, refresh = false) => get<DeliveryResponse>(`/api/delivery${qs({ repo, refresh: refresh ? 1 : undefined })}`),
   repos: () => get<ReposResponse>('/api/repos'),
   settings: () => get<Settings>('/api/settings'),
+  registry: () => get<RegistryResponse>('/api/registry'),
   restartStatus: () => get<RestartStatus>('/api/restart'),
   restart: () => post<{ ok: true }>('/api/restart'),
   /** Auto in the capture box: jev picks feature or small change; null when it cannot tell or is not installed. */
