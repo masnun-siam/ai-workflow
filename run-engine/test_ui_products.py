@@ -208,7 +208,7 @@ try:
     write_map(docs, [entry("shared", "o/shared", "../shared"), entry("mono", "o/mono", "../../mono")])
     write_map(mono, [{"name": "mono", "role": "plugin", "repo": "o/mono", "path": "."}, entry("s", "o/shared", "s")])
     ui_products.register(docs)
-    ui_products.register(mono)
+    assert ui_products.register(mono)["docs_repo"] == "o/mono"  # not o/docs, which also lists o/mono
     by = {p["docs_repo"]: {r["repo"]: r.get("conflict") for r in p["repos"]} for p in ui_products.list_products()}
     assert by == {
         "o/docs": {"o/shared": "o/mono", "o/mono": "o/mono"},

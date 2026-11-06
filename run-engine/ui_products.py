@@ -101,7 +101,7 @@ def register(path) -> dict:
     for repo, resolved in todo:
         ui_repos.register(repo, resolved)  # ValueError when the clone's origin is not the map's repo
     _save(slug, top)
-    return product_of(slug)
+    return next(p for p in list_products() if p["docs_repo"].lower() == slug.lower())
 
 
 def list_products() -> list:
