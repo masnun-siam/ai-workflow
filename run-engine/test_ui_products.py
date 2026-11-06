@@ -98,6 +98,10 @@ try:
         del e[k]
         write_map(d, [e])
         raises(lambda: ui_products.read_map(d), f"`{k}`")
+    write_map(d, "{}")
+    with open(os.path.join(d, ".blubird", "repos.json"), "wb") as f:
+        f.write(b"\xff")
+    raises(lambda: ui_products.read_map(d), "not valid UTF-8")
     write_map(d, [entry("a", "o/a", ".")])
     assert ui_products.read_map(d) == [entry("a", "o/a", ".")]
     ok("read_map: valid map and each invalid shape")
@@ -127,7 +131,14 @@ try:
 
     before = snapshot()
     assert ui_products.register(docs) == row and snapshot() == before
-    ok("register twice is idempotent")
+    co = dispatch.read_checkouts()
+    co["O/API"] = co.pop("o/api")
+    with open(CHECKOUTS, "w") as f:
+        json.dump(co, f)
+    ui_products.register(docs)
+    assert [k for k in dispatch.read_checkouts() if k.lower() == "o/api"] == ["O/API"]
+    assert dispatch.rename_checkout("O/API", "o/api")
+    ok("register twice is idempotent, even with a slug stored in another case")
 
     shutil.rmtree(api)
     rows = ui_products.list_products()

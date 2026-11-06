@@ -46,6 +46,8 @@ def read_map(path: str) -> list:
             raw = fh.read()
     except OSError:
         raise ValueError(f"no .blubird/repos.json in {path}") from None
+    except UnicodeDecodeError:
+        raise ValueError("repos.json is not valid UTF-8") from None
     try:
         data = json.loads(raw)
     except ValueError as e:
@@ -100,7 +102,8 @@ def register(path) -> dict:
         old = _registered_at(e["repo"], checkouts)
         if isinstance(old, str) and os.path.realpath(old) != resolved:
             raise ValueError(f"{e['repo']} is already registered at {old}, the map points at {resolved}")
-        todo.append((e["repo"], resolved))
+        if old is None:  # already there at this path: no second key in another case
+            todo.append((e["repo"], resolved))
     ui_repos.register(slug, top)
     for repo, resolved in todo:
         ui_repos.register(repo, resolved)  # ValueError when the clone's origin is not the map's repo
