@@ -1,6 +1,6 @@
 """No-repo work: runs in the notes vault, the vault's 05-Work folders, and making a repo for an idea.
 
-A new product idea has no code repo yet, so its create-prd / dump / intake / custom session runs in
+A new product idea has no code repo yet, so its dump / intake / custom session runs in
 the notes vault (Settings) and files under 05-Work/<Project>/<Feature>. New run suggests that folder
 (keyword match in the UI, or `suggest` here asks Claude), and once the PRD is approved
 `create_repo` makes a local git repo for it, registered as local/<name> until it gets a GitHub
@@ -20,7 +20,7 @@ import ui_settings
 from shared import run
 
 WORK = "05-Work"
-NO_REPO_COMMANDS = ("create-prd", "dump", "intake")  # plus the custom prompt
+NO_REPO_COMMANDS = ("dump", "intake")  # plus the custom prompt
 _NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
 _FOLDER_RE = re.compile(r"05-Work(/[^/\x00]{1,120}){1,2}")
 _STATUS_RE = re.compile(r"\*\*Status:\*\*\s*([A-Za-z ]+?)\s*(?:·|$)", re.M)

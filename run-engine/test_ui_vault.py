@@ -192,11 +192,14 @@ ui_repos.ui_sessions.update = lambda sid, **f: {"id": sid, **f}
 s, res = ui_repos.start_session(
     {"no_repo": True, "command": "create-prd", "args": "gym check-ins", "vault_folder": "05-Work/Gym/Check-ins"}
 )
+assert s == 400 and "create-prd needs a repo" in res["error"] and not started, (s, res)
+s, res = ui_repos.start_session(
+    {"no_repo": True, "command": "dump", "args": "gym check-ins", "vault_folder": "05-Work/Gym/Check-ins"}
+)
 assert s == 201 and started[-1][1] == VAULT and started[-1][2] is None, (s, res)
 text = started[-1][0]
-assert (
-    text.startswith("/create-prd gym check-ins") and "05-Work/Gym/Check-ins" in text and text.endswith("--to obsidian")
-), text
+assert text.startswith("/ai-workflow-personal:dump gym check-ins") and "05-Work/Gym/Check-ins" in text, text
+assert "--to" not in text
 assert res["no_repo"] is True and res["vault_folder"] == "05-Work/Gym/Check-ins"
 s, res = ui_repos.start_session({"no_repo": True, "text": "sketch a pricing page"})
 assert s == 201 and "No vault folder was chosen" in started[-1][0]
@@ -209,6 +212,6 @@ assert s == 400 and "GitHub remote" in res["error"], res
 s, res = ui_repos.start_session({"repo": "local/dup", "command": "implement-issue", "args": "7"})
 assert s == 400 and "already registered to another checkout" in res["error"], res
 assert json.dumps(started)  # nothing odd went to the runner
-ok("no-repo sessions: vault cwd, folder hint, create-prd --to obsidian; other commands and local repos refused")
+ok("no-repo sessions: vault cwd, folder hint for dump; create-prd and other commands and local repos refused")
 
 print(f"\n{passed} checks passed")

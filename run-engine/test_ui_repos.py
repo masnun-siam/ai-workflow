@@ -34,6 +34,7 @@ import ui_runner  # noqa: E402
 import ui_server  # noqa: E402
 import ui_sessions  # noqa: E402
 import ui_settings  # noqa: E402
+import skill_registry  # noqa: E402
 
 passed = 0
 
@@ -176,41 +177,20 @@ try:
     set_registry({"o/r": REPO_A, "z/last": REPO_B}, {"o/r": "Orange Repo"})
 
     # ------------------------------------------------------------ build_command
-    assert ui_repos.build_command("implement-issue", "116") == "/implement-issue 116"
-    assert ui_repos.build_command("pr-grind", "") == "/pr-grind"
-    assert ui_repos.build_command("pr-review", "5960") == "/pr-review 5960"
-    for gone in (
-        "run-" + "issue",
-        "gh-issue",
-        "fix-blockers",
-        "pr-fix-comments",
-        "issue-to-pr",
-        "intake",
-        "herdr-dispatch",
-        "flow",
-    ):
-        assert gone not in ui_repos.NAMED, gone
-    for kept in (
-        "implement-issue",
-        "verifier-locally",
-        "docs-updater",
-        "faq-updater",
-        "repo-bootstrap",
-        "peer-review",
-        "release-pr",
-        "sync-from-wasensi",
-        "skill-feedback",
-    ):
-        assert ui_repos.build_command(kept, "x") == f"/{kept} x", kept
-    assert ui_repos.build_command("faq-updater", "") == "/faq-updater"
-    assert ui_repos.build_command("repo-bootstrap", "") == "/repo-bootstrap"
+    assert ui_repos.build_command("implement-issue", "116") == "/blubird:implement-issue 116"
+    assert ui_repos.build_command("pr-grind", "") == "/ai-workflow:pr-grind"
+    assert ui_repos.build_command("create-tasks", "docs/prds/x.md") == "/blubird:create-tasks docs/prds/x.md"
     multi = "--lang en,bn\nHow do I add a tag?"
-    assert ui_repos.build_command("faq-updater", multi) == f"/faq-updater {multi}"
-    assert (
-        ui_repos.build_command("day", "") == "/day" and ui_repos.build_command("day", "call Abir") == "/day call Abir"
-    )
-    assert ui_repos.build_command("create-tasks", "docs/prds/x.md") == "/create-tasks docs/prds/x.md"
-    assert "refine-issues" in ui_repos.NAMED and "create-prd" in ui_repos.NAMED and "prd" not in ui_repos.NAMED
+    assert ui_repos.build_command("faq-updater", multi) == f"/ai-workflow:faq-updater {multi}"
+    for step in skill_registry.steps():
+        assert ui_repos.build_command(step, "x") == skill_registry.command(step) + " x", step
+    assert not hasattr(ui_repos, "NAMED")
+    for gone in ("repo-bootstrap", "sync-from-wasensi", "day", "intake", "nope", None, 5):
+        try:
+            ui_repos.build_command(gone, "")
+            raise AssertionError(gone)
+        except ValueError as exc:
+            assert "unknown command" in str(exc), exc
     assert ui_repos.MAX_PROMPT_CHARS == 32000
     ok("build_command units, MAX_PROMPT_CHARS")
 
@@ -226,9 +206,9 @@ try:
     print("  ok  batch: passed to the runner with the 3-at-once cap; validated")
     s, p = post({"repo": "o/r", "command": "implement-issue", "args": "7"})
     assert s == 201, (s, p)
-    assert calls == [("/implement-issue 7", REPO_A, {"owner": "o", "repo": "r", "issue": 7})] or (
+    assert calls == [("/blubird:implement-issue 7", REPO_A, {"owner": "o", "repo": "r", "issue": 7})] or (
         len(calls) == 1
-        and calls[0][0] == "/implement-issue 7"
+        and calls[0][0] == "/blubird:implement-issue 7"
         and rp(calls[0][1]) == rp(REPO_A)
         and calls[0][2] == {"owner": "o", "repo": "r", "issue": 7}
     ), calls
@@ -494,7 +474,9 @@ try:
     # pr-grind is keyed by PR (number or URL), separately from implement-issue on the same number
     reset_sessions()
     s, p = post({"repo": "o/r", "command": "pr-grind", "args": "https://github.com/o/r/pull/9"})
-    assert s == 201 and calls[0][0] == "/pr-grind https://github.com/o/r/pull/9" and calls[0][2]["issue"] == 9, (s, p)
+    assert (
+        s == 201 and calls[0][0] == "/ai-workflow:pr-grind https://github.com/o/r/pull/9" and calls[0][2]["issue"] == 9
+    ), (s, p)
     ui_sessions.update(p["id"], status="running")
     s, p2 = post({"repo": "o/r", "command": "pr-grind", "args": "9"})
     assert s == 409 and p2["id"] == p["id"], (s, p2)
@@ -648,29 +630,74 @@ try:
     # --- no legacy options: worktree / review / auto_grind never reach the prompt
     for extra in ({"worktree": False}, {"review": False}, {"auto_grind": True}, {"flow_id": "f-1"}):
         s, p = post({"repo": "o/r", "command": "implement-issue", "args": "42", **extra})
-        assert s == 201 and calls[-1][0] == "/implement-issue 42", (extra, s, p, calls)
+        assert s == 201 and calls[-1][0] == "/blubird:implement-issue 42", (extra, s, p, calls)
         reset_sessions()
-    ok("implement-issue builds /implement-issue <args> only; old engine options are ignored")
-    # --- peer review: a list of lenses; doc commands get --review <list>, a custom prompt a review line
+    ok("implement-issue builds /blubird:implement-issue <args> only; old engine options are ignored")
+
+    # --- docs steps run in the Documentation Repo; issue/any steps in the picked repo
+    DOCS = git_repo()
+    os.makedirs(os.path.join(DOCS, ".blubird"))
+    write(os.path.join(DOCS, ".blubird", "repos.json"), '{"repos": [{"path": "."}]}')
+    parent = os.path.realpath(tempfile.mkdtemp())
+    SIB_DOCS, PRODUCT = os.path.join(parent, "docs"), os.path.join(parent, "app")
+    for d in (SIB_DOCS, PRODUCT):
+        subprocess.run(["git", "init", "-q", d], check=True)
+    os.makedirs(os.path.join(SIB_DOCS, ".blubird"))
+    write(os.path.join(SIB_DOCS, ".blubird", "repos.json"), '{"repos": []}')
+    os.makedirs(os.path.join(PRODUCT, ".blubird"))
+    write(os.path.join(PRODUCT, ".blubird", "docs-repo"), "../docs\n")
+    s, p = post({"repo": DOCS, "command": "create-tasks", "args": "docs/prds/x.md"})
+    assert s == 201 and calls == [("/blubird:create-tasks docs/prds/x.md", DOCS, None)], (s, p, calls)
+    s, p = post({"repo": PRODUCT, "command": "map-prds"})
+    assert s == 201 and calls[-1][:2] == ("/blubird:map-prds", SIB_DOCS), (s, p, calls)
+    s, p = post({"repo": "o/r", "command": "create-prd", "args": "an idea"})
+    assert s == 400 and "agentic-onboard" in err(p) and not calls, (s, p, calls)
+    write(os.path.join(PRODUCT, ".blubird", "docs-repo"), "../../../../../etc\n")
+    s, p = post({"repo": PRODUCT, "command": "security-sweep"})
+    assert s == 400 and not calls, "a pointer out of any git checkout is refused"
+    write(os.path.join(PRODUCT, ".blubird", "docs-repo"), "../app\n")
+    s, p = post({"repo": PRODUCT, "command": "security-sweep"})
+    assert s == 400 and "repos.json" in err(p) and not calls, "the pointer target must be the Documentation Repo"
+    for step in ("refine-issues", "agentic-onboard"):
+        s, p = post({"repo": "o/r", "command": step, "args": "5"})
+        assert s == 201 and rp(calls[-1][1]) == rp(REPO_A), (step, s, p, calls)
+    reset_sessions()
+    ok("docs steps: own repos.json, sibling via docs-repo pointer, 400 unmapped/bad pointer; issue/any steps stay")
+
+    # changing a registry entry changes the started command, with no other edit
+    reg = json.load(open(skill_registry.REGISTRY_PATH))
+    reg["steps"]["refine-issues"]["plugin"] = "ai-workflow"
+    alt = os.path.join(tmp, "registry.json")
+    write(alt, json.dumps(reg))
+    with mock.patch.object(skill_registry, "REGISTRY_PATH", alt):
+        s, p = post({"repo": "o/r", "command": "refine-issues", "args": "8"})
+    assert s == 201 and calls[-1][0] == "/ai-workflow:refine-issues 8", (s, p, calls)
+    s, p = post({"repo": "o/r", "command": "nope", "args": "8"})
+    assert s == 400 and "unknown command: nope" in err(p) and not calls, (s, p)
+    reset_sessions()
+    ok("registry edit changes the command; an unknown step is a 400 naming it")
+    # --- peer review: a list of lenses; every command runs, then a panel reviews its artifact (no --review)
     s, p = post(
-        {"repo": "o/r", "command": "create-prd", "args": "05-Work/P/F", "peer_review": ["critical", "qa", "critical"]}
+        {"repo": DOCS, "command": "create-prd", "args": "an idea", "peer_review": ["critical", "qa", "critical"]}
     )
-    assert s == 201 and calls[-1][0] == "/create-prd 05-Work/P/F --review critical,qa", (s, p, calls)
-    for cmd in ("dump",):
-        s, p = post({"repo": "o/r", "command": cmd, "args": "x", "peer_review": ["critical"]})
-        assert s == 201 and calls[-1][0] == f"/{cmd} x --review critical", (cmd, s, p, calls)
-    s, p = post({"repo": "o/r", "command": "create-prd", "args": "05-Work/P/G"})
-    assert s == 201 and calls[-1][0] == "/create-prd 05-Work/P/G" and p.get("peer_review") is None, (s, p, calls)
+    sent = calls[-1][0]
+    assert s == 201 and sent.startswith("/blubird:create-prd an idea\n\nWhen the work is done"), (s, p, calls)
+    assert "--review" not in sent and "critical, qa review panel" in sent, sent
+    pan = ui_panel.peer_review.load_panel(ui_sessions.load(p["id"])["panel"])
+    assert pan["lenses"] == ["critical", "qa"] and pan["root_session"] == p["id"] and pan["phase"] == "waiting_root"
+    s, p = post({"repo": "o/r", "command": "dump", "args": "x", "peer_review": ["critical"]})
+    assert s == 201 and "--review" not in calls[-1][0] and "critical review panel" in calls[-1][0], (s, calls)
+    assert ui_sessions.load(p["id"])["panel_role"] == "root"
+    s, p = post({"repo": DOCS, "command": "create-prd", "args": "x"})
+    assert s == 201 and calls[-1][0] == "/blubird:create-prd x" and p.get("peer_review") is None, (s, p, calls)
     s, p = post({"repo": "o/r", "command": "dump", "args": "x", "peer_review": ["critical", "cto"]})
     assert s == 400 and "dump offers" in err(p) and not calls, "a lens the command doesn't offer is refused"
     s, p = post({"repo": "o/r", "command": "implement-issue", "args": "49", "peer_review": ["critical"]})
     assert s == 400 and "no peer review" in err(p) and not calls, "implement-issue has its own review"
     for bad in (True, "yes", [], [1]):
-        s, p = post({"repo": "o/r", "command": "create-prd", "args": "x", "peer_review": bad})
+        s, p = post({"repo": DOCS, "command": "create-prd", "args": "x", "peer_review": bad})
         assert s == 400 and "peer_review" in err(p), bad
-    ok(
-        "peer_review: lens list appended as --review <list> to create-prd/dump; not-offered, implement-issue, non-list refused"
-    )
+    ok("peer_review: create-prd/dump run then a panel on their artifact, never --review; bad lenses refused")
 
     asks = os.path.join(data_dir, "peer-review", "asks")
     s, p = post({"repo": "o/r", "text": "tidy the README", "peer_review": ["critical", "cto"]})
@@ -727,7 +754,8 @@ try:
         "repo": "o/r", "command": "dump", "args": "x", "claude_cmd": "claude", "lenses": ["critical"],
     }, ui_sessions.load(p["id"])  # fmt: skip
     s, p2 = rerun(p["id"])
-    assert s == 201 and p2["id"] != p["id"] and calls[-1][0] == "/dump x --review critical", (s, p2, calls)
+    assert s == 201 and p2["id"] != p["id"] and calls[-1][0].startswith("/ai-workflow-personal:dump x\n\n"), calls
+    assert "--review" not in calls[-1][0] and "critical review panel" in calls[-1][0], calls
     assert ui_sessions.load(p2["id"])["request"] == ui_sessions.load(p["id"])["request"]
     s, p = post({"repo": "o/r", "text": "hello", "batch": "wl-1", "issue": 5})
     assert ui_sessions.load(p["id"])["request"] == {"repo": "o/r", "text": "hello", "issue": 5, "batch": "wl-1"}
@@ -775,7 +803,7 @@ try:
     )
     ui_sessions.update(p["id"], status="done")
     s, d = rerun(p["id"])
-    assert s == 201 and calls[-1][0] == "/implement-issue 7", (s, d)
+    assert s == 201 and calls[-1][0] == "/blubird:implement-issue 7", (s, d)
     ok("rerun: 409 {error, id, href} while the original runs, 201 once it is done")
 
     # records from before requests were stored: the command is posted as text; nothing to rerun -> 400

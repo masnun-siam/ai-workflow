@@ -547,7 +547,11 @@ try:
     st, body = call(
         "POST", "/api/start", {"repo": "o/r", "skill": "create-tasks", "arg": "docs/prds/x.md", "via": "headless"}
     )
-    assert st == 200 and body == {"session": "S1"} and _started[0]["text"] == "/create-tasks docs/prds/x.md"
+    assert (
+        st == 200
+        and body == {"session": "S1"}
+        and (_started[0]["command"], _started[0]["args"]) == ("create-tasks", "docs/prds/x.md")
+    )
     st, _ = call("POST", "/api/start", {"repo": "o/r", "skill": "create-tasks", "arg": "docs/prds/y.md", "issue": 12})
     assert st == 200 and _started[-1]["issue"] == 12, _started  # issue reaches the session launch
     r4 = call("POST", "/api/start", {"repo": "o/r", "skill": "implement-issue", "arg": "4"})

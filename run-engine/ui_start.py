@@ -19,6 +19,7 @@ import dispatch
 import dispatch_run
 import grind_reviewers
 import repo_skills
+import skill_registry
 import ui_delivery
 import ui_grind
 import ui_panel
@@ -110,6 +111,7 @@ def start(
     ValueError -> 400, Conflict -> 409, RuntimeError -> 502."""
     if skill not in SKILLS:
         raise ValueError(f"skill must be one of {', '.join(SKILLS)}")
+    skill_registry.entry(skill)  # every start goes through the registry: a step it lacks is a 400
     arg = str(arg if arg is not None else "").strip()
     if not arg or arg.startswith("-") or any(c in arg for c in "\x00\n"):
         raise ValueError("arg is required")
@@ -145,16 +147,17 @@ def start(
             path = arg if os.path.isabs(arg) else os.path.join(_checkout(repo), arg)
             out = {"panel": ui_panel.start(_checkout(repo), path, lenses)}
         else:
-            text = f"/{skill} {arg}"
+            args = arg
             if skill == "pr-grind":
                 why = ui_grind.skip_reason(repo)
                 if why:
                     raise ValueError(why)
-                text = ui_grind.grind_text(arg, grind_reviewers.resolve(repo)["channel"])
+                args = ui_grind.grind_text(arg, grind_reviewers.resolve(repo)["channel"]).split(None, 1)[1]
             status, body = (launch or ui_repos.start_session)(
                 {
                     "repo": repo,
-                    "text": text,
+                    "command": skill,
+                    "args": args,
                     **{k: v for k, v in (("model", model), ("effort", effort)) if v},
                     **({"issue": issue} if issue is not None else {}),
                     **({"claude_cmd": claude_cmd} if claude_cmd else {}),
