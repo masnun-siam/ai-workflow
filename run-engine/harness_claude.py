@@ -13,8 +13,9 @@ import ui_settings
 ID = "claude"
 CUMULATIVE_USAGE = False  # each `result` carries that process's own usage
 HEADLESS_PROMPT = (
-    "Headless run: ask via aiw ask, never AskUserQuestion. Gate questions go through "
-    "`aiw ask --json '<AskUserQuestion input>'`; then end your turn. "
+    "Headless run: ask via aiw ask. AskUserQuestion is not available: wherever a skill says to ask the user "
+    "with AskUserQuestion, run `aiw ask --json '<the AskUserQuestion input>'` instead, then end your turn; "
+    "the answer arrives as your next message. "
     "Never call ScheduleWakeup: a pending wakeup keeps this process alive, and the UI cannot take "
     "an answer until it exits."
 )

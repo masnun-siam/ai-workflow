@@ -515,7 +515,7 @@ your notes).
 | pr-grind | One `## Round ` heading per round | `ui_grind.index` counts them |
 | pr-grind | `## Re-entry` (the "On-wake branch"), `## Step 8 — Paused stop`, and the headless re-arm: write `next-poll`, end the turn | `REENTRY_PROMPT` (`ui_runner.py`), `LANE_GRIND` (`dispatch_run.py`) |
 | peer-review | The `--root <panel id>` round protocol | `ui_panel.py` starts `/ai-workflow:peer-review --root <panel id> <artifact>` |
-| any | `aiw ask` for gate questions in a headless run | `HEADLESS_PROMPT` (`harness_claude.py`); on Codex also `TOOL_MAPPING` (`harness_codex.py`) |
+| any | `aiw ask` for gate questions in a headless run: headless `claude --print` has no AskUserQuestion, so a skill step that says to ask with it runs `aiw ask --json` instead | `HEADLESS_PROMPT` (`harness_claude.py`); on Codex also `TOOL_MAPPING` (`harness_codex.py`) |
 
 - The tick always runs the plugin's own `skills/pr-grind/scripts/poll-reviews.sh` (`_POLL_SH`),
   whichever copy of pr-grind runs. It watches every login in `reviewers:` (comma-separated, compared
