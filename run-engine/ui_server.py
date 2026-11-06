@@ -304,6 +304,8 @@ def _after_merge(repo: str, merged: list) -> None:
     the issue is answered 409 by start_session's duplicate guard; anything else is warned, never raised."""
     for m in merged:
         for n in m["closes"]:
+            if dispatch_run.active_lane(repo, n=n) or dispatch_run.active_lane(repo, pr=m["n"]):
+                continue  # a dispatch lane runs its own followups stage (not always a session find_live sees)
             try:
                 status, body = ui_repos.start_session(
                     {"repo": repo, "text": dispatch_run.followups_prompt(n, m["n"], None), "issue": n}

@@ -196,7 +196,8 @@ with the reason and a **Refresh** (`?refresh=1` on the board GET fetches now). A
 worktree, else a `needs-cleanup` flag; `POST /api/cleanup`) runs only for an unmapped repo; for a blubird product (its
 checkout has `.blubird/repos.json` or `.blubird/docs-repo`) each issue a newly merged PR closes instead gets one
 headless session with the registry's after-merge command (`dispatch_run.followups_prompt`), which closes it, sets it
-Done and removes the worktree; a live session for the issue makes that start a 409, and `POST /api/cleanup` answers 409.
+Done and removes the worktree; a live session for the issue makes that start a 409, an issue a dispatch lane owns is left to the lane, and
+`POST /api/cleanup` answers 409.
 Grind autostart: a PR that
 turned ready whose issue has grinding on, unless a dispatch lane owns it; a PR with no issue follows the
 repo's auto-grind). Nothing runs on stale data, and outside a dispatch with auto-merge on nothing merges

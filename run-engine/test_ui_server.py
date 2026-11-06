@@ -662,6 +662,14 @@ try:
     assert [b["issue"] for b in _started] == [6, 8] and _notes == [], _started
     ui_server.POLLER.poll("o/r")
     assert len(_started) == 2, _started
+    real_lane = dispatch_run.active_lane
+    dispatch_run.active_lane = lambda repo, n=None, pr=None: ("d1", {"n": 9}) if n == 9 else None
+    try:
+        _gql([_issue(1, ["epic"])], merged=[m56, dict(m56, number=59, url="u59", headRefName="issue-9-x")])
+        ui_server.POLLER.poll("o/r")  # a dispatch lane owns #9: its followups stage runs after-merge
+        assert len(_started) == 2, _started
+    finally:
+        dispatch_run.active_lane = real_lane
     os.remove(os.path.join(blu, "docs-repo"))
     os.rmdir(blu)
     ok("merge on a blubird product: one after-merge session per issue, 409 accepted, no cleanup")
