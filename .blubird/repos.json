@@ -1,0 +1,5 @@
+{
+  "repos": [
+    {"name": "ai-workflow", "role": "plugin", "repo": "masnun-siam/ai-workflow", "path": "."}
+  ]
+}
