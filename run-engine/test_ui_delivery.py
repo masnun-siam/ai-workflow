@@ -104,9 +104,17 @@ assert set(
         sess
         + [
             {"id": "S4", "status": "running", "command": "/ai-workflow:implement-issue 6", "repo": "o/r"},
+            {"id": "S5", "status": "running", "command": "/blubird:implement-issue 8", "repo": "o/r"},
+            {
+                "id": "S6",
+                "status": "running",
+                "command": "/blubird:implement-issue 10 (PR #3 for issue #10 is merged: run the 'After the pull request is merged' section, not the implement steps)",
+                "repo": "o/r",
+            },
+            {"id": "S7", "status": "running", "command": "/blubird:pr-grind 11", "repo": "o/r"},
         ],
     )
-) == {5, 6}, "either spelling is a live implement-issue session"
+) == {5, 6, 8, 10}, "any plugin spelling of implement-issue (implement or after-merge) is live; pr-grind is not"
 r = build(s, sess, {"pr": {("o", "r", 33): {"state": "running", "round": 2}}})
 c = cards(r)
 assert c[1]["column"] == "draft_pr" and c[1]["pr"] == {

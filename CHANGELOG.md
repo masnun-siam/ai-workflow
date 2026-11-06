@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Dispatch prompts from the registry** (#933): dispatch lanes build their implement, grind, QA and followup prompts from the skill registry, so lanes now run `/blubird:implement-issue <n>` and, after the merge, `/blubird:implement-issue <n>` told to run its "After the pull request is merged" section (no "Close #n" tail: blubird's step closes it). QA names `/blubird:verifier-locally` and `/blubird:create-tasks`; grind stays `/ai-workflow:pr-grind`. A live `/blubird:implement-issue` session (implement or after-merge) counts as the issue's live session on the board and in the duplicate guard. Codex lanes do not inline a `/blubird:` skill yet (#969).
 - **Idle guard off in UI sessions** (#927): every session the UI starts runs with `BLUBIRD_IDLE_GUARD=off`, so blubird's idle-guard Stop hook no longer blocks a headless turn end; the UI value wins over one the server inherited.
 - **Skill registry** (#926): `run-engine/skill_registry.json` maps each UI step (today's command names) to `{plugin, skill, runs_in}`, `skill_registry.py` loads and validates it on every call, and `GET /api/registry` serves it with each step's `/<plugin>:<skill>` command. Nothing reads it yet.
 - **Products** (#929): `POST /api/products {path}` registers a Documentation Repo checkout; its `.blubird/repos.json` makes it and its code repos one product, and `GET /api/products` lists each product's repos with `cloned` and any `conflict`. Cloned code repos are registered as checkouts, and `ui_products.sync()` registers ones cloned later.

@@ -64,9 +64,10 @@ Independent refined issues run in parallel, each in its own worktree, as the lan
 A dispatch takes one epic, or a list of picked issues (from the UI only), and runs its open, refined
 issues as **lanes** (an unrefined one is skipped as "needs refine" until it is refined). Up to `max`
 lanes (default 2) run at once; a lane starts only when every issue blocking it is merged and its
-followups are done. Each lane, in one session (a herdr tab or a headless session):
+followups are done. Each lane, in one session (a herdr tab or a headless session), runs the commands the
+skill registry (`run-engine/skill_registry.json`) names for its steps:
 
-1. `/implement-issue <n>` until the PR is Ready (CI green, `/pr-review` handled).
+1. `/blubird:implement-issue <n>` until the PR is Ready (CI green, `/pr-review` handled).
 2. `/pr-grind <pr>` in the same session, unless grinding is off or the repo has no Slack channel or reviewer.
    Simple ends on any reviewer's approval, full on the first approval or clean bot review from any reviewer. Between rounds the engine types
    the next round into the lane when a review lands or the heartbeat is due.
@@ -74,7 +75,7 @@ followups are done. Each lane, in one session (a herdr tab or a headless session
    base sends the lane to merge the base in, resolve, re-run the checks and push; then the gate again.
 4. Merge (a merge commit) when auto-merge is on; otherwise the lane waits for you and goes on once
    it sees your merge.
-5. Followups: implement-issue's after-merge steps (close the issue, clean up, unblock). Then the tab
+5. Followups: `/blubird:implement-issue <n>` told the PR is merged, so it runs its "After the pull request is merged" section (close the issue, clean up, unblock). Then the tab
    closes and the next unblocked lane starts.
 
 A lane that needs you (a question, red CI, a paused grind, a failed merge) is held and tells you in
