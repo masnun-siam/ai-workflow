@@ -96,6 +96,14 @@ _Avoid_: Bot, auto-answerer
 The human-friendly name for a GitHub `owner/repo`, looked up from `skills/worklog/projects.json`. Falls back to the raw `owner/repo` slug when unmapped.
 _Avoid_: Repo (when referring to the display name; "repo" is fine for the raw slug)
 
+**Documentation Repo**:
+The repo that holds a product's PRDs and its `.blubird/repos.json` map of code repos (`name`, `role`, `repo`, `path` relative to it). A monorepo is its own documentation repo, with one `"."` entry.
+_Avoid_: Docs folder, spec repo
+
+**Product**:
+A Documentation Repo plus the code repos its map lists, registered in the UI by the docs repo's checkout (`<data_dir>/products.json`). A repo belongs to one product; a second product listing it shows a conflict.
+_Avoid_: Project (that is a repo's display name)
+
 **Dispatch**:
 One run of an epic's child issues, or of a list of picked issues (from the UI only), as parallel Lanes, in dependency order under a cap, recorded under `<data_dir>/dispatches/` and ticked by the `aiw ui` server. Started by the `herdr-dispatch` skill (lanes are herdr tabs) or from the UI (lanes are headless Sessions); both see and steer every dispatch. Replaces Auto-build and epic autopilot.
 _Avoid_: Batch run, fan-out, autopilot, auto-build

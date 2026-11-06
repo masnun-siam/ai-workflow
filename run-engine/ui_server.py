@@ -48,6 +48,7 @@ import ui_panel
 import ui_planning
 import ui_poller
 import ui_pr
+import ui_products
 import ui_repos
 import ui_restart
 import ui_duplicate
@@ -523,6 +524,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(200, "application/json; charset=utf-8", b'{"ok": true}')
         elif path == "/api/restart":
             self._json(200, ui_restart.status())
+        elif path == "/api/products":
+            self._json(200, ui_products.list_products())
         elif path == "/api/repos":
             self._json(
                 200,
@@ -784,6 +787,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._dispatch(ui_afk.change)
         elif parts in (["", "api", "afk", "stop"], ["", "api", "afk", "dismiss"]):
             self._dispatch(lambda b: ui_afk.stop() if parts[3] == "stop" else ui_afk.dismiss())
+        elif parts == ["", "api", "products"]:
+            self._dispatch(lambda b: ui_products.register(b.get("path")))
         elif parts == ["", "api", "repos", "register"]:
             self._dispatch(
                 lambda b: {"path": ui_repos.register(b.get("slug"), b.get("path")), "repos": ui_repos.list_repos()}
