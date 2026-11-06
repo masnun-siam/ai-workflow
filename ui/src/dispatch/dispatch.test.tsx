@@ -798,11 +798,13 @@ describe('Run small changes dialog', () => {
     expect(screen.queryByText(/herdr/)).toBeNull();
   });
 
-  it('never loads the epic list', async () => {
+  it('never loads the epic list, so never shows the truncated hint', async () => {
+    routes['/api/delivery'] = { ...(routes['/api/delivery'] as object), truncated: true };
     open();
     await userEvent.click(await screen.findByRole('button', { name: 'Preview' }));
     await screen.findByText('o/r#415: waits for o/r#9');
     expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).startsWith('/api/delivery'))).toBe(false);
+    expect(screen.queryByText(/Only the newest 500/)).toBeNull();
   });
 
   it('previews waves and warnings, then starts and opens the dispatch page', async () => {
@@ -965,6 +967,20 @@ describe('Run an epic select', () => {
     expect(texts()).toEqual(['Pick an epic…']);
     expect(sel().disabled).toBe(false);
     await typedPreviews();
+  });
+
+  const TRUNC = "Only the newest 500 open issues were read; type an older epic's number.";
+  it('hints that older epics must be typed when the snapshot was truncated', async () => {
+    routes['/api/delivery'] = { ...(routes['/api/delivery'] as object), truncated: true };
+    open();
+    expect(await screen.findByText(TRUNC)).toBeTruthy();
+  });
+
+  it.each([undefined, false])('shows no truncated hint when truncated is %s', async (truncated) => {
+    if (truncated === false) routes['/api/delivery'] = { ...(routes['/api/delivery'] as object), truncated };
+    open();
+    await loaded();
+    expect(screen.queryByText(TRUNC)).toBeNull();
   });
 
   it('reads Pick a repo first with no repo registered', async () => {
