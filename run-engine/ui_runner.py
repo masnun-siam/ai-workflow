@@ -467,10 +467,10 @@ def _deliver_queued(sid: str) -> None:
 def _issue_key(rec: dict):
     """(repo, "<command>:<number>") of an /implement-issue or /pr-grind session, else None."""
     p = repo_skills.parse(rec.get("command"))
-    if not p or p[0] not in (
-        skill_registry.entry("implement-issue")["skill"],
-        skill_registry.entry("pr-grind")["skill"],
-    ):
+    if not p:
+        return None
+    steps = skill_registry.steps()  # one read of the registry file per call
+    if p[0] not in (steps["implement-issue"]["skill"], steps["pr-grind"]["skill"]):
         return None
     n = re.search(r"(?:^|\s|/issues/|/pull/)#?(\d+)(?=\s|$)", p[1].split("\n", 1)[0])
     return (rec.get("repo"), f"{p[0]}:{n.group(1)}") if n else None

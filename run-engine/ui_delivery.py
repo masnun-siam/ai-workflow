@@ -52,16 +52,13 @@ def _slug(rec) -> str:
 def _live_sessions(repo: str, sessions) -> dict:
     """{issue_n: record} of live implement-issue sessions for this repo."""
     out = {}
+    prefix = skill_registry.entry("implement-issue")["skill"] + ":"
     for rec in sessions or []:
         if rec.get("status") not in ui_sessions._LIVE:
             continue
         key = ui_runner._issue_key(rec)
         slug = _slug(rec)
-        if (
-            key
-            and key[1].startswith(skill_registry.entry("implement-issue")["skill"] + ":")
-            and str(slug).lower() == repo.lower()
-        ):
+        if key and key[1].startswith(prefix) and str(slug).lower() == repo.lower():
             out[int(key[1].split(":")[1])] = rec
     return out
 
