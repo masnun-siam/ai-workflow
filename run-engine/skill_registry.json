@@ -1,0 +1,114 @@
+{
+  "steps": {
+    "create-prd": {
+      "plugin": "blubird",
+      "skill": "create-prd",
+      "runs_in": "docs"
+    },
+    "create-tasks": {
+      "plugin": "blubird",
+      "skill": "create-tasks",
+      "runs_in": "docs"
+    },
+    "small-change": {
+      "plugin": "blubird",
+      "skill": "create-tasks",
+      "runs_in": "any"
+    },
+    "refine-issues": {
+      "plugin": "blubird",
+      "skill": "refine-issues",
+      "runs_in": "issue"
+    },
+    "implement-issue": {
+      "plugin": "blubird",
+      "skill": "implement-issue",
+      "runs_in": "issue"
+    },
+    "after-merge": {
+      "plugin": "blubird",
+      "skill": "implement-issue",
+      "runs_in": "issue"
+    },
+    "pr-review": {
+      "plugin": "blubird",
+      "skill": "pr-review",
+      "runs_in": "issue"
+    },
+    "pr-review-unmapped": {
+      "plugin": "ai-workflow",
+      "skill": "pr-review",
+      "runs_in": "issue"
+    },
+    "verifier-locally": {
+      "plugin": "blubird",
+      "skill": "verifier-locally",
+      "runs_in": "issue"
+    },
+    "docs-updater": {
+      "plugin": "blubird",
+      "skill": "docs-updater",
+      "runs_in": "issue"
+    },
+    "reproduce-bug": {
+      "plugin": "blubird",
+      "skill": "reproduce-bug",
+      "runs_in": "issue"
+    },
+    "security-sweep": {
+      "plugin": "blubird",
+      "skill": "security-sweep",
+      "runs_in": "docs"
+    },
+    "map-prds": {
+      "plugin": "blubird",
+      "skill": "map-prds",
+      "runs_in": "docs"
+    },
+    "agentic-onboard": {
+      "plugin": "blubird",
+      "skill": "agentic-onboard",
+      "runs_in": "any"
+    },
+    "ci-optimize": {
+      "plugin": "blubird",
+      "skill": "ci-optimize",
+      "runs_in": "any"
+    },
+    "skill-feedback": {
+      "plugin": "blubird",
+      "skill": "skill-feedback",
+      "runs_in": "any"
+    },
+    "release-pr": {
+      "plugin": "ai-workflow",
+      "skill": "release-pr",
+      "runs_in": "any"
+    },
+    "faq-updater": {
+      "plugin": "ai-workflow",
+      "skill": "faq-updater",
+      "runs_in": "any"
+    },
+    "pr-grind": {
+      "plugin": "ai-workflow",
+      "skill": "pr-grind",
+      "runs_in": "issue"
+    },
+    "peer-review": {
+      "plugin": "ai-workflow",
+      "skill": "peer-review",
+      "runs_in": "any"
+    },
+    "dump": {
+      "plugin": "ai-workflow-personal",
+      "skill": "dump",
+      "runs_in": "any"
+    },
+    "worklog": {
+      "plugin": "ai-workflow-personal",
+      "skill": "worklog",
+      "runs_in": "any"
+    }
+  }
+}
