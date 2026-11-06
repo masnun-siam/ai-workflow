@@ -144,8 +144,9 @@ def update(sid: str, **fields) -> dict:
     return record
 
 
-def set_pending(sid: str, round) -> dict:
-    """Store a question round (ADR 0001 shape) and mark the session waiting."""
+def set_pending(sid: str, round, *, held: bool = False, **fields) -> dict:
+    """Store a question round (ADR 0001 shape) and mark the session waiting. held: never auto-answered
+    (Away/AFK skip it); fields: more record fields, written in the same update."""
     if not isinstance(round, dict):
         raise ValueError("round must be an object")
     rid, qs = round.get("id"), round.get("questions")
@@ -185,7 +186,9 @@ def set_pending(sid: str, round) -> dict:
             }
         )
     rec = {"id": rid, "status": "pending", "allowFreeText": True, "questions": questions}
-    return update(sid, pending_question=rec, status="waiting")
+    if held:
+        rec["held"] = True
+    return update(sid, **fields, pending_question=rec, status="waiting")
 
 
 MAX_FREE_TEXT = 4000

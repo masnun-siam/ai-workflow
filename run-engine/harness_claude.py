@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import subprocess
 
@@ -156,7 +157,30 @@ def parse_line(line) -> list:
     if ev.get("type") == "result" and ev.get("is_error") and isinstance(errs, list) and errs:
         for e in events:
             e["error"] = str(errs[0])  # the follower prefers it over `result` for its error text
+    if ev.get("type") == "result":
+        extra = []
+        edits = [d for d in ev.get("permission_denials") or [] if _guarded_edit(d)]
+        if edits:
+            extra.append({"kind": "guard_ask", "edits": edits})
+        text = ev.get("result")
+        if isinstance(text, str) and text.startswith(PROMPT_BLOCKED):
+            reason = text[len(PROMPT_BLOCKED) :].split("\n\nOriginal prompt:", 1)[0].strip()
+            extra.append({"kind": "prompt_blocked", "reason": reason or "the prompt holds a secret"})
+        return [*extra, *events]
     return events
+
+
+PROMPT_BLOCKED = "UserPromptSubmit operation blocked by hook:"
+GUARD_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
+
+
+def _guarded_edit(denial) -> bool:
+    """A denied edit of a CLAUDE.md/AGENTS.md: blubird's guard hook asked, and headless the ask is denied."""
+    if not isinstance(denial, dict) or denial.get("tool_name") not in GUARD_TOOLS:
+        return False
+    inp = denial.get("tool_input")
+    path = inp.get("file_path") or inp.get("notebook_path") if isinstance(inp, dict) else None
+    return isinstance(path, str) and os.path.basename(path).lower() in ("claude.md", "agents.md")
 
 
 def resume_command(cmd, path, session_id):

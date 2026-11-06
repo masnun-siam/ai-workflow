@@ -122,6 +122,19 @@ assert q0["picked"] == ["Approve and start (Recommended)"] and q0["why"] is None
 assert [o["label"] for o in q0["options"]] == ["Approve and start (Recommended)", "Abort"]
 assert ui_afk.public(now=now)["held"] == 1  # b
 
+# a CLAUDE.md guard round (#941) is held for the human: never answered, no answerer started
+g = ui_sessions.create("/implement-issue 2", d)["id"]
+groot = os.path.realpath(tempfile.mkdtemp())
+open(os.path.join(groot, "CLAUDE.md"), "w").close()
+ui_sessions.update(g, session_id="abc", cwd_path=groot)
+denial = {"tool_name": "Write", "tool_use_id": "t9", "tool_input": {"file_path": f"{groot}/CLAUDE.md", "content": "x"}}
+assert ui_runner._relay_guard(g, denial)
+n_started, n_resumed = len(started), len(resumed)
+ui_afk.tick(now)
+assert ui_sessions.load(g)["pending_question"]["held"] is True and ui_sessions.load(g)["status"] == "waiting"
+assert len(started) == n_started and len(resumed) == n_resumed
+ui_sessions.update(g, status="stopped", pending_question=None)  # out of the counts below
+
 # extend keeps the window and its log
 ui_afk.start(now + 80000, now + 10)
 assert ui_afk.load()["started"] == now and len(ui_afk.load()["log"]) == 1
