@@ -35,6 +35,9 @@ from harness_claude import CLAUDE_ARGS, HEADLESS_PROMPT  # noqa: F401 - re-expor
 # Sessions call `aiw ask`; a server started without the plugin bin on PATH must still hand it over.
 PLUGIN_BIN = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin")
 
+# blubird FR-4: the UI tracks liveness, so blubird's idle-guard Stop hook must not block a headless turn end.
+SESSION_ENV = {"BLUBIRD_IDLE_GUARD": "off"}
+
 
 def _session_path() -> str:
     return os.pathsep.join([PLUGIN_BIN, os.environ.get("PATH", "")])
@@ -174,6 +177,7 @@ def _spawn(
                     "PATH": _session_path(),
                     "AIW_UI_SESSION": sid,
                     "CLAUDE_PLUGIN_DATA": data_dir(),
+                    **SESSION_ENV,
                     **(env_extra or {}),
                 },
                 pass_fds=tuple(pass_fds),
