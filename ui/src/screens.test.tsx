@@ -5,6 +5,7 @@ import { App } from './App';
 import { ExtButton } from './components';
 import { mergeWarnings } from './panels/prWarnings';
 import { SMALL_CHANGE_LOCK, SMALL_CHANGE_MARKER, SMALL_CHANGE_NOTE, smallChangeArg, smallChangeText } from './features/smallChange';
+import { REGISTRY } from './test-registry';
 
 const json = (b: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } }));
 const posts: { url: string; body: any }[] = [];
@@ -22,6 +23,7 @@ function mock(o: { fetchedAt?: number | null; delFetchedAt?: number | null; stal
   posts.length = 0;
   const routes: Record<string, unknown> = {
     '/api/repos': { repos: o.repos ?? [{ slug: 'o/r', name: 'R', path: '/x' }], can_browse: false, scan_roots: [] },
+    '/api/registry': REGISTRY,
     '/api/sessions': { sessions: [], limits: {}, usage: {}, afk: { active: false, until: null, started: null, decisions: 0, held: 0, summary: null }, gh: { ok: true } },
     '/api/inbox': { items: [], afk: {}, gh: { ok: true } },
     '/api/shares': [],

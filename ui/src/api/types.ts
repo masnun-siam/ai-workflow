@@ -1,6 +1,8 @@
 // Hand-written contracts for every endpoint the UI uses. Existing shapes come from run-engine/ui_*.py;
 // the ones marked NEW follow docs/prds/ui-rewrite.md ("API"). Fields the server may omit are optional.
 
+import type { Registry } from '../lib/registry';
+
 export type RepoSlug = string; // owner/name, or local/<name> for a repo with no GitHub remote
 
 // ---- sessions -------------------------------------------------------------------------------------
@@ -362,7 +364,7 @@ export interface Settings {
   bot_label?: string | null;
   vault_dir?: string;
   claude_label?: string;
-  /** Every /pr-grind loop: deep (until zero findings) or simple (stops once the PR is approved). */
+  /** Every review grind loop: deep (until zero findings) or simple (stops once the PR is approved). */
   grind_mode?: 'deep' | 'simple';
   /** Last-used model / effort for a run (null: Claude's default). */
   run_model?: string | null;
@@ -370,7 +372,7 @@ export interface Settings {
   use_jev?: boolean;
   /** Read-only: whether the `jev` CLI is on the server's PATH. */
   jev_installed?: boolean;
-  /** Read-only: whether the `ai-workflow-personal` plugin is installed (dump, worklog, sync-from-wasensi). */
+  /** Read-only: whether the `ai-workflow-personal` plugin is installed (its personal steps). */
   personal_plugin?: boolean;
   [k: string]: unknown;
 }
@@ -503,12 +505,12 @@ export type StartVia = 'headless';
 /** POST /api/sessions: start a session. `command` is the slash command text, or `text` for a free prompt. */
 export interface SessionStartBody {
   repo?: string; // registered slug, or a checkout path
-  command?: string; // e.g. "implement-issue"
+  command?: string; // a step id from the registry
   args?: string; // the command's argument text
   text?: string; // custom prompt (runs with permissions skipped)
   issue?: number;
   claude_cmd?: string; // an account label from Settings
-  no_repo?: boolean; // run in the notes vault (create-prd, dump, custom)
+  no_repo?: boolean; // run in the notes vault (dump, worklog, custom)
   vault_folder?: string; // 05-Work/<Project>[/<Feature>]
   batch?: string; // groups a worklog range
   peer_review?: string[]; // lens names
@@ -517,7 +519,7 @@ export interface SessionStartBody {
   effort?: string | null; // low | medium | high | xhigh | max
   [k: string]: unknown;
 }
-/** POST /api/start: the board's one-click starts (refine, create-tasks, implement-issue, pr-grind, ...). */
+/** POST /api/start: the board's one-click starts; `skill` is a step id from the registry. */
 export interface BoardStartBody {
   repo: string;
   skill: string;
@@ -695,4 +697,9 @@ export interface BootstrapRun {
   error: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** GET /api/registry: step id -> the skill it runs and its command. */
+export interface RegistryResponse {
+  steps: Registry;
 }
