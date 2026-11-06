@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { HashRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
-import { useRepos } from './api/hooks';
+import { useRegistry, useRepos } from './api/hooks';
 import { ConfirmProvider } from './components';
 import { CreateProvider, useCreate } from './create/Create';
 import { ActivityPage } from './pages/ActivityPage';
@@ -24,6 +24,7 @@ import { StartProvider } from './start/StartContext';
 function Gate() {
   const { pathname } = useLocation();
   const repos = useRepos();
+  useRegistry();
   const empty = repos.isSuccess && repos.data.repos.length === 0;
   if (empty && !pathname.startsWith('/settings') && pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
   return <Outlet />;

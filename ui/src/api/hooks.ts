@@ -6,6 +6,7 @@ import { ApiError } from './client';
 import { api } from './endpoints';
 import type { AfkState, DispatchSettings, DispatchTarget, EndAction, InboxItem, LaneAction, NotifyChannel, SessionsResponse, StreamEvent } from './types';
 import { mergeStream } from '../lib/md';
+import { setRegistry } from '../lib/registry';
 import { showNotification, step } from '../lib/notifier';
 
 export const POLL = { sessions: 3000, inbox: 5000, boards: 15000, stream: 1000, dispatch: 5000 } as const;
@@ -25,6 +26,7 @@ export const keys = {
   deliveryAll: ['delivery', '*'] as const,
   repos: ['repos'] as const,
   settings: ['settings'] as const,
+  registry: ['registry'] as const,
   notify: ['settings', 'notify'] as const,
   review: ['settings', 'review'] as const,
   offers: ['peer-review'] as const,
@@ -81,6 +83,17 @@ export const useDeliveryAll = (enabled: boolean) =>
   useQuery({ queryKey: keys.deliveryAll, queryFn: api.deliveryAll, enabled, ...poll(POLL.boards) });
 export const useRepos = () => useQuery({ queryKey: keys.repos, queryFn: api.repos, staleTime: 30_000 });
 export const useSettings = () => useQuery({ queryKey: keys.settings, queryFn: api.settings, staleTime: 30_000 });
+/** The skill registry, fetched once at start; it also fills the module value commandOf and isStep read. */
+export const useRegistry = () =>
+  useQuery({
+    queryKey: keys.registry,
+    queryFn: async () => {
+      const r = (await api.registry()).steps ?? {};
+      setRegistry(r);
+      return r;
+    },
+    staleTime: Infinity,
+  });
 export const useNotifySettings = () => useQuery({ queryKey: keys.notify, queryFn: api.notify });
 export const useReviewSettings = () => useQuery({ queryKey: keys.review, queryFn: api.review });
 export const usePeerReviewOffers = () => useQuery({ queryKey: keys.offers, queryFn: api.peerReviewOffers, staleTime: 60_000 });
