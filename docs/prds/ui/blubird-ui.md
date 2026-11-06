@@ -1,6 +1,6 @@
 # PRD — The UI drives the blubird plugin
 
-**Status:** In review · **Date:** 2026-11-06 · **Slug:** `blubird-ui` · **Owner:** Masnun Siam · **Priority:** high · **Repo:** masnun-siam/ai-workflow
+**Status:** Approved · **Date:** 2026-11-06 · **Slug:** `blubird-ui` · **Owner:** Masnun Siam · **Priority:** high · **Repo:** masnun-siam/ai-workflow
 
 Status is `Draft`, `In review` or `Approved`. This document is the source of truth for the feature: the tasks and every issue are derived from it, and a decision that is not written here has not been made.
 
@@ -199,9 +199,9 @@ The server's JSON endpoints change as follows (same auth: local only):
 
 ## Epics
 
-- **E1 Core: blubird skills in the UI** — covers FR-1 to FR-8, FR-21. Issue: —
-- **E2 Product model and board** — covers FR-9 to FR-16. Issue: —
-- **E3 Parallel runs and new views** — covers FR-17 to FR-20. Issue: —
+- **E1 Core: blubird skills in the UI** — covers FR-1 to FR-8, FR-21. Issue: #923
+- **E2 Product model and board** — covers FR-9 to FR-16. Issue: #924
+- **E3 Parallel runs and new views** — covers FR-17 to FR-20. Issue: #925
 
 ## Decisions
 
