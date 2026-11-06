@@ -116,6 +116,7 @@ export function NewDispatchDialog({ open, onOpenChange, epic: initial, issues, r
               </select>
             </div>
             {loadError ? <span className="hint" style={{ color: 'var(--bad)' }}>Could not load epics: {loadError}</span> : null}
+            {delivery.data?.truncated ? <span className="hint">Only the newest 500 open issues were read; type an older epic's number.</span> : null}
             {epic && !valid ? <span className="hint" style={{ color: 'var(--bad)' }}>Use owner/repo#123, or a number in {repo || 'the current repo'}.</span> : null}
           </div>
         )}
