@@ -13,6 +13,8 @@ data = tempfile.mkdtemp()
 os.environ["CLAUDE_PLUGIN_DATA"] = data
 import dispatch  # noqa: E402
 import dispatch_run  # noqa: E402
+import skill_registry  # noqa: E402
+from unittest import mock  # noqa: E402
 import ui_start  # noqa: E402
 
 checkout = tempfile.mkdtemp()
@@ -82,10 +84,12 @@ refuses("implement-issue", "x", ValueError)
 refuses("bogus", "4", ValueError)
 refuses("peer-review", "docs/prds/a.md", ValueError, lenses=None)  # no lenses (400), never reaches the panel
 assert not L.bodies
+with mock.patch.object(skill_registry, "REGISTRY_PATH", os.devnull):
+    refuses("create-tasks", "docs/prds/a.md", ValueError)  # every start goes through the registry
 assert ui_start.start("o/r", "implement-issue", "#4", snapshot=s, launch=L) == {"session": "S1"}
 refuses("implement-issue", "4", ui_start.Conflict)  # just started
 assert ui_start.start("o/r", "create-tasks", "docs/prds/a.md", launch=L)["session"] == "S2"
-assert L.bodies[1] == {"repo": "o/r", "text": "/create-tasks docs/prds/a.md"}
+assert L.bodies[1] == {"repo": "o/r", "command": "create-tasks", "args": "docs/prds/a.md"}
 refuses("pr-grind", "13", ValueError)  # no channel and no reviewer: the repo cannot grind
 with open(os.path.join(data, "ui_settings.json"), "w") as f:
     json.dump(
@@ -100,9 +104,9 @@ with open(os.path.join(data, "ui_settings.json"), "w") as f:
 conflict = lambda b: (409, {"error": "pr-grind already running"})  # noqa: E731
 refuses("pr-grind", "12", ui_start.Conflict, launch=conflict)
 assert ui_start.start("o/r", "pr-grind", "13", launch=L)["session"] == "S3"
-assert L.bodies[2]["text"] == "/pr-grind 13 --channel C0000000A"
+assert L.bodies[2] == {"repo": "o/r", "command": "pr-grind", "args": "13 --channel C0000000A"}, L.bodies[2]
 assert ui_start.start("o/r", "refine-issues", "#7, 9  11", launch=L)["session"] == "S4"
-assert L.bodies[3]["text"] == "/refine-issues 7 9 11", "several issue numbers, normalised"
+assert L.bodies[3]["args"] == "7 9 11" and L.bodies[3]["command"] == "refine-issues", "normalised"
 refuses("refine-issues", "7 and 9", ValueError)
 assert ui_start.start("o/r", "refine-issues", "7", launch=L, model="opus", effort="medium")["session"] == "S5"
 assert L.bodies[4]["model"] == "opus" and L.bodies[4]["effort"] == "medium"

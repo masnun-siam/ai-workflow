@@ -232,10 +232,10 @@ with mock.patch.object(ui_runner, "start", fake_start):
         end_run(B.list_all()[0])
     print("  ok  one run per repo (case-insensitive), free after ended")
 
-    # ---- through ui_repos.start_session
+    # ---- through ui_repos.start_session (as text: repo-bootstrap is not a registry step; #946 removes the chain)
     for r in B.list_all():
         end_run(r)
-    s, res = ui_repos.start_session({"repo": REPO, "command": "repo-bootstrap", "args": ""})
+    s, res = ui_repos.start_session({"repo": REPO, "text": "/repo-bootstrap"})
     assert s == 201, (s, res)
     runs = [r for r in B.list_all() if r["state"] == "running"]
     assert len(runs) == 1 and runs[0]["phases"][0]["session_id"] == res["id"] and res["command"] == "/repo-bootstrap"
@@ -247,16 +247,16 @@ with mock.patch.object(ui_runner, "start", fake_start):
     assert len(starts) == n and len(B.list_all()) == total, "nothing spawned or written"
     end_run(runs[0])
     for bad in ("12", "audit 123", "docs"):
-        s, res3 = ui_repos.start_session({"repo": REPO, "command": "repo-bootstrap", "args": bad})
+        s, res3 = ui_repos.start_session({"repo": REPO, "text": f"/repo-bootstrap {bad}"})
         assert s == 400 and "accepted" in res3["error"], (bad, s, res3)
-    s, res3 = ui_repos.start_session({"repo": "local/x", "command": "repo-bootstrap", "args": ""})
+    s, res3 = ui_repos.start_session({"repo": "local/x", "text": "/repo-bootstrap"})
     assert s == 400 and "GitHub" in res3["error"], (s, res3)
     total = len(B.list_all())
     fail_start.append(1)
-    s, _ = ui_repos.start_session({"repo": REPO, "command": "repo-bootstrap", "args": "decide #5"})
+    s, _ = ui_repos.start_session({"repo": REPO, "text": "/repo-bootstrap decide #5"})
     fail_start.clear()
     assert s == 502 and len(B.list_all()) == total, "a failed start leaves no run"
-    s, _ = ui_repos.start_session({"repo": REPO, "command": "repo-bootstrap", "args": "decide #5"})
+    s, _ = ui_repos.start_session({"repo": REPO, "text": "/repo-bootstrap decide #5"})
     assert s == 201 and B.list_all()[0]["issue"] == 5
     print("  ok  start endpoint: run created and linked, 409 body, 400s, discard on failure")
 

@@ -18,6 +18,7 @@ import time
 import dispatch
 import peer_review as peer_review_mod
 import repo_skills
+import skill_registry
 import ui_board
 import ui_bootstrap
 import ui_panel
@@ -26,25 +27,6 @@ import ui_sessions
 import ui_settings
 import ui_vault
 
-NAMED = (
-    "create-prd",
-    "create-tasks",
-    "refine-issues",
-    "implement-issue",
-    "verifier-locally",
-    "pr-review",
-    "docs-updater",
-    "faq-updater",
-    "repo-bootstrap",
-    "sync-from-wasensi",
-    "skill-feedback",
-    "dump",
-    "peer-review",
-    "pr-grind",
-    "release-pr",
-    "worklog",
-    "day",
-)
 MAX_PROMPT_CHARS = 32000
 BATCH_MAX = 3  # sessions of one batch (a worklog date range) running at once
 _TERMINAL = ("done", "failed", "stopped")
@@ -223,10 +205,30 @@ def resolve_repo(repo: str):
     return top, (f"{m.group(1)}/{m.group(2)}" if m else None)
 
 
+def docs_repo(cwd: str) -> str:
+    """The Documentation Repo for a checkout: itself when it holds `.blubird/repos.json`, else the folder its
+    `.blubird/docs-repo` pointer names (that folder must hold `.blubird/repos.json`). ValueError otherwise.
+    ponytail: reads the repo's own `.blubird` files; #929 swaps this one function for the product model."""
+    if os.path.isfile(os.path.join(cwd, ".blubird", "repos.json")):
+        return cwd
+    try:
+        with open(os.path.join(cwd, ".blubird", "docs-repo"), encoding="utf-8") as f:
+            line = f.readline().strip()
+    except (OSError, UnicodeDecodeError):
+        line = ""
+    if line:
+        top = validate_repo(os.path.realpath(os.path.join(cwd, line)))  # the pointer holds `..` by design
+        if os.path.isfile(os.path.join(top, ".blubird", "repos.json")):
+            return top
+        raise ValueError(f"{cwd}'s .blubird/docs-repo points at {top}, which has no .blubird/repos.json")
+    raise ValueError(f"{cwd} has no .blubird map or docs-repo pointer: map it, or run /blubird:agentic-onboard")
+
+
 def build_command(cmd, args: str) -> str:
-    if cmd in NAMED:
-        return f"/{cmd} {args}".rstrip()
-    raise ValueError(f"unknown command: {cmd}")
+    """The registry step's command plus its args; ValueError for a step that is not in the registry."""
+    if not isinstance(cmd, str) or cmd not in skill_registry.steps():
+        raise ValueError(f"unknown command: {cmd}")
+    return f"{skill_registry.command(cmd)} {args}".rstrip()
 
 
 def family(text: str):
@@ -386,6 +388,9 @@ def start_session(body: dict):
         if "issue" in body and (not isinstance(issue, int) or isinstance(issue, bool) or issue < 1):
             raise ValueError("issue must be a positive integer")
         text = _prompt(body)
+        step = body.get("command")  # a registry step id; None for a custom prompt
+        entry = skill_registry.entry(step) if step is not None else None
+        fam = entry["skill"] if entry else family(text)
         if "\x00" in text:
             raise ValueError("prompt must not contain NUL bytes")
         if len(text) > MAX_PROMPT_CHARS:
@@ -396,10 +401,10 @@ def start_session(body: dict):
         if url_slug and any(k.lower() == url_slug.lower() for k in dispatch.read_checkouts()):
             repo = url_slug
         if body.get("no_repo") is True:  # a new idea: no code yet, so it runs in the notes vault
-            fam0 = "custom" if body.get("text") is not None else family(text)
+            fam0 = "custom" if entry is None else fam
             if fam0 not in (*ui_vault.NO_REPO_COMMANDS, "custom"):
                 raise ValueError(
-                    f"{fam0} needs a repo; only create-prd, dump, intake and a custom prompt run without one"
+                    f"{fam0} needs a repo; only {', '.join(ui_vault.NO_REPO_COMMANDS)} and a custom prompt run without one"
                 )
             cwd, slug = ui_vault.vault(), None
             if not os.path.isdir(cwd):
@@ -410,12 +415,14 @@ def start_session(body: dict):
             )
         else:
             cwd, slug = resolve_repo(repo)
-            if slug and slug.startswith("local/") and family(text) in _GITHUB_COMMANDS:
+            if entry and entry["runs_in"] == "docs":  # blubird runs these only in the Documentation Repo
+                cwd, slug = resolve_repo(docs_repo(cwd))
+            if slug and slug.startswith("local/") and fam in _GITHUB_COMMANDS:
                 taken = origin_slug(cwd)  # set means promote_local found that name already registered
                 raise ValueError(
-                    f"{slug}'s origin {taken} is already registered to another checkout: remove one, then run {family(text)}"
+                    f"{slug}'s origin {taken} is already registered to another checkout: remove one, then run {fam}"
                     if taken
-                    else f"{slug} has no GitHub remote yet: add one (git remote add origin …), then run {family(text)}"
+                    else f"{slug} has no GitHub remote yet: add one (git remote add origin …), then run {fam}"
                 )
     except ValueError as exc:
         return 400, {"error": str(exc)}
@@ -442,20 +449,15 @@ def start_session(body: dict):
         isinstance(peer_review, list) and peer_review and all(isinstance(x, str) for x in peer_review)
     ):
         return 400, {"error": "peer_review must be a non-empty list of lens names"}
-    fam = family(text)
-    kind = "custom" if body.get("text") is not None else fam
+    kind = "custom" if entry is None else fam
     if no_repo:
         text += _vault_hint(vault_folder)
-        if fam == "create-prd" and "--to" not in text:
-            text += " --to obsidian"  # no repo to write docs/prds/ into; Create repo copies it there later
     lenses = None
     if peer_review is not None:
         try:
             lenses = peer_review_mod.check_lenses(kind, peer_review)
         except ValueError as exc:
             return 400, {"error": str(exc)}
-        if kind != "custom":
-            text += " --review " + ",".join(lenses)
     if issue is None and fam in ("implement-issue", "pr-grind"):
         issue = issue_from_args((text.split(None, 1) + [""])[1])  # the issue number, or the PR for pr-grind
     link = None
@@ -491,7 +493,7 @@ def start_session(body: dict):
                     **({"id": exc.session, "href": f"/api/sessions/{exc.session}"} if exc.session else {}),
                 }
         artifact = None
-        if lenses and kind == "custom":
+        if lenses:  # every kind: the session runs, then the panel reviews its artifact
             text, artifact = _custom_review(text, lenses)
         try:
             res = ui_runner.start(
