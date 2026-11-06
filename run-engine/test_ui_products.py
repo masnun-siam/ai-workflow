@@ -201,7 +201,9 @@ try:
     assert co.get("o/x") == os.path.realpath(xs) and "o/web" not in co, co
     ok("sync: new clone registered, entry with another origin skipped")
 
-    # a product whose map breaks lists an error row and sync skips it
+    # a product whose map breaks lists an error row and sync skips it (a NUL path is a broken map too)
+    write_map(docs, [entry("n", "o/n", "x\0y")])
+    assert "`path`" in ui_products.list_products()[0]["error"]
     with open(os.path.join(docs, ".blubird", "repos.json"), "w") as f:
         f.write("{broken")
     dispatch.remove_checkout("o/x")

@@ -59,7 +59,7 @@ def read_map(path: str) -> list:
         if not isinstance(e, dict):
             raise ValueError(f"repos.json entry {i} is not an object")
         for k in _KEYS:
-            if not isinstance(e.get(k), str) or not e[k]:
+            if not isinstance(e.get(k), str) or not e[k] or "\0" in e[k]:
                 raise ValueError(f"repos.json entry {i} has no string `{k}`")
         if not ui_repos._SLUG_RE.match(e["repo"]):
             raise ValueError(f"repos.json entry {i}: repo {e['repo']!r} is not owner/name")
