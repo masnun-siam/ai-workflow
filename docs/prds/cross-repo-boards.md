@@ -180,6 +180,8 @@ None.
 
 ## Change log
 
+- 2026-11-06: Superseded in part by `docs/prds/ui/blubird-ui.md` FR-10. Features are grouped by product and then by module, not by repo, and the repo filter becomes a product filter. Affects #661 and is delivered in #924.
+
 ## Related
 
 - `docs/prds/small-changes.md` (Small changes page and picked-issue dispatches)

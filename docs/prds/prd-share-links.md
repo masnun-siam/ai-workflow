@@ -246,6 +246,8 @@ None.
 
 ## Change log
 
+- 2026-11-06: Withdrawn by `docs/prds/ui/blubird-ui.md` FR-20. PRD share links are removed. Affects #584 and is delivered in #925.
+
 - 2026-10-29: Refining the epic's issues settled the Send, Inbox, PRD tab, store and listener details listed under Decisions ("Settled while refining the issues").
 
 - 2026-10-29: Approved after the team's review. Folded in the panel's last minor notes: one Stop confirm text (FR-10) that FR-13 refers to, worded for 0 and 1 approvals; the re-share confirm warns when approvals will be cleared; tests cover both confirms.

@@ -259,6 +259,8 @@ None.
 
 ## Change log
 
+- 2026-11-06: The Bootstrap chain is withdrawn by `docs/prds/ui/blubird-ui.md` FR-20, because repo-bootstrap is dropped in favour of `/blubird:agentic-onboard`. Affects #645 and is delivered in #925.
+
 ## Related
 
 - `docs/prds/keyboard-shortcuts.md` (the `G` chord and the key rules)
