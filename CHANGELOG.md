@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Skill registry** (#926): `run-engine/skill_registry.json` maps each UI step (today's command names) to `{plugin, skill, runs_in}`, `skill_registry.py` loads and validates it on every call, and `GET /api/registry` serves it with each step's `/<plugin>:<skill>` command. Nothing reads it yet.
 - **Products** (#929): `POST /api/products {path}` registers a Documentation Repo checkout; its `.blubird/repos.json` makes it and its code repos one product, and `GET /api/products` lists each product's repos with `cloned` and any `conflict`. Cloned code repos are registered as checkouts, and `ui_products.sync()` registers ones cloned later.
 - **Codex accounts** (#867): an account in Settings > Accounts can run on Codex (**Harness** column, **Models** field), and every UI-started session and dispatch lane (headless, herdr and herdr-app) runs on that account's harness, with per-harness model and effort, tokens without cost, limit auto-resume on the same account, and "usage unavailable" for Codex in the rail. Panels and Away answers stay Claude-only: Codex's read-only sandbox cannot run `gh` (gate G3). The entries below are the parts.
 - **aiw install-skills** (#873): `aiw install-skills --harness codex` links each plugin skill into `~/.agents/skills` for interactive Codex and records its links in `<data_dir>/install_skills.json`; a rerun repoints or removes only its own recorded links, skips and reports anything else, and `--remove` deletes only its own links.

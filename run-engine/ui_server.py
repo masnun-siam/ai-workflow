@@ -60,6 +60,7 @@ import ui_sessions
 import ui_start
 import ui_settings
 import ui_shares
+import skill_registry
 import ui_tailscale
 import ui_urgency
 import ui_usage
@@ -547,6 +548,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json(*_board(path, urlsplit(self.path).query))
         elif path == "/api/settings":
             self._json(200, grind_reviewers.settings_view(ui_settings.load()))
+        elif path == "/api/registry":
+            self._json(200, skill_registry.view())
         elif path == "/api/settings/notify":
             self._json(200, ui_config.notify_public())
         elif path == "/api/settings/review":
