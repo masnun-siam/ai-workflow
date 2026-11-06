@@ -88,9 +88,13 @@ def register(path) -> dict:
     if not slug:
         raise ValueError(f"{top} has no GitHub origin")
     entries = read_map(top)
-    todo, checkouts = [], dispatch.read_checkouts()
+    todo, checkouts, seen = [], dispatch.read_checkouts(), {slug.lower(): top}
     for e in entries:
         resolved = _resolve(top, e)
+        if seen.setdefault(e["repo"].lower(), resolved) != resolved:
+            raise ValueError(f"{e['repo']} is mapped to both {seen[e['repo'].lower()]} and {resolved}")
+        if resolved == top and e["repo"].lower() != slug.lower():
+            raise ValueError(f"{e['repo']} points at the docs repo {slug} itself")
         if resolved == top or not _cloned(resolved):
             continue  # the docs repo's own "." entry, or a repo not cloned yet
         old = _registered_at(e["repo"], checkouts)

@@ -139,8 +139,10 @@ try:
     dispatch.remove_checkout("o/api")
     ui_products.sync()
     assert dispatch.read_checkouts()["o/api"] == api
-    with mock.patch.object(ui_repos, "register", side_effect=AssertionError("no git work")):
+    no_git = AssertionError("no git work")
+    with mock.patch.object(ui_repos, "register", side_effect=no_git), mock.patch("subprocess.run", side_effect=no_git):
         ui_products.sync()
+        ui_products.list_products()
     ok("sync: registers a new clone; second call does no git work")
 
     # product_of
@@ -158,12 +160,21 @@ try:
     assert snapshot() == before
     ok("register: code repo registered at another path is refused, nothing written")
 
-    # register refused: clone with another origin; non-string path; non-git path; no origin
+    # register refused: clone with another origin, a repo mapped twice, a "." entry for another repo;
+    # non-string path; non-git path; no origin
     reset()
     write_map(docs, [entry("api", "o/other", "../api")])
     raises(lambda: ui_products.register(docs), "not o/other")
     assert not os.path.exists(PRODUCTS)
     raises(lambda: ui_products.register(None), "string")
+    reset()
+    write_map(docs, [entry("a1", "o/api", "../api"), entry("a2", "o/api", "web")])
+    raises(lambda: ui_products.register(docs), "mapped to both", api, web)
+    write_map(docs, [entry("d", "o/docs", "web")])
+    raises(lambda: ui_products.register(docs), "mapped to both", docs, web)
+    write_map(docs, [entry("z", "o/zzz", ".")])
+    raises(lambda: ui_products.register(docs), "points at the docs repo")
+    assert not os.path.exists(PRODUCTS) and not os.path.exists(CHECKOUTS)
     raises(lambda: ui_products.register(os.path.join(root, "maps")), "not a git repository")
     noorigin = git_repo(os.path.join(root, "noorigin"))
     write_map(noorigin, [entry("a", "o/a", ".")])
