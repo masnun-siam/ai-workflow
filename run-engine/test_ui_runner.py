@@ -58,6 +58,7 @@ echo "$PWD|$*" >> "$FAKE_DIR/calls"
 RESUMING=0
 for a in "$@"; do [ "$a" = "--resume" ] && RESUMING=1; done
 printf '%s' "${AIW_HEADLESS-UNSET}" > "$FAKE_DIR/headless"
+printf '%s' "${BLUBIRD_IDLE_GUARD-UNSET}" > "$FAKE_DIR/idle_guard"
 echo "$FAKE_CLAUDE_INIT_ENV" > /dev/null
 INIT='{"type":"system","subtype":"init","session_id":"'"${FAKE_SID:-sess-abc}"'","model":"claude-test"}'
 RESULT='{"type":"result","subtype":"success","is_error":false,"total_cost_usd":'"${FAKE_COST:-0.0421}"'}'
@@ -461,6 +462,21 @@ def answer_checks():
         wait_finished(sid)
         assert ui_sessions.load(sid)["status"] == "done"
         ok("resume(): exact argv, running then done, ended_at/error cleared")
+        assert lines(fk, "idle_guard") == "off"
+        ok("resume(): the resumed process runs with BLUBIRD_IDLE_GUARD=off")
+
+        # -- a fresh start sets the idle guard off, even when the server inherited another value (FR-4)
+        d, fk, work = setup()
+        os.environ["BLUBIRD_IDLE_GUARD"] = "on"
+        try:
+            rec = ui_runner.start("/worklog 1", work)
+            wait_for(lambda: os.path.exists(os.path.join(fk, "idle_guard")))
+            wait_status(rec["id"], {"done", "failed"})
+            wait_finished(rec["id"])
+        finally:
+            os.environ.pop("BLUBIRD_IDLE_GUARD", None)
+        assert lines(fk, "idle_guard") == "off"
+        ok("start(): BLUBIRD_IDLE_GUARD=off wins over the server's inherited value")
 
         # -- 400s leave the round intact (one session), then boundary 4000 ok
         sid, fk, work = mk()
@@ -1356,6 +1372,7 @@ def prgrind_cases() -> int:
         wait_for(lambda: os.path.exists(os.path.join(fk, "headless")))
         wait_for(lambda: lines(fk, "headless") != "")
         assert lines(fk, "headless") == "1"
+        assert lines(fk, "idle_guard") == "off"
         wait_for(lambda: os.path.exists(os.path.join(fk, "argv")) and lines(fk, "argv").endswith("\n"))
         a = lines(fk, "argv")
         parts = a.split("\n")

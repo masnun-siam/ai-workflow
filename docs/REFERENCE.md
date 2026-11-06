@@ -472,6 +472,11 @@ skill does something else. To undo it, delete the copy.
   prompt alone. Login is the exit code of `<cmd> login status` (`` codex CLI is not logged in, run `<cmd> login` ``
   plus the CLI's first output line in parentheses). Resume in terminal is `cd <path> && <cmd> resume <id>`,
   every word quoted. Pins (`ui_origin`) read a Codex stream's `file_change` paths and `gh issue create` output.
+- Every session process (`ui_runner._spawn`: fresh start, queued start, answer, typed prompt, continue, limit
+  resume, grind round, headless dispatch lane, panel lens, Away answerer) gets `PATH` with the plugin's `bin/`
+  first, `AIW_UI_SESSION=<sid>`, `CLAUDE_PLUGIN_DATA`, and `SESSION_ENV` (`BLUBIRD_IDLE_GUARD=off`, overriding
+  any inherited value): the UI tracks liveness, so blubird's idle-guard Stop hook must not block a headless turn
+  end. Codex runs no blubird hooks, so it is inert there.
 - Agent sessions on Codex (peer-review lenses, the Away answerer; any start with `agent` or `allowed_tools`):
   while `harness_codex.AGENT_SANDBOX_VERIFIED` is `False` (as committed: on codex-cli 0.166.0 gate G2 passed,
   `exec resume` takes `-c sandbox_mode="read-only"`, but G3 failed, the read-only sandbox blocks the network `gh` needs) `ui_runner.start` raises `AgentRefused` ("panels and Away answers need a Claude account: Codex's
