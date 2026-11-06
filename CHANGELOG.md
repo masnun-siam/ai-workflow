@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Launcher starts commands from the registry** (#932): `POST /api/sessions {command: <step id>}` and `POST /api/start` start the registry's `/<plugin>:<skill>` command (`ui_repos.NAMED` is gone; an unknown step is a 400). `docs` steps (create-prd, create-tasks, map-prds, security-sweep) run in the Documentation Repo found from the picked repo's `.blubird/repos.json` or `.blubird/docs-repo`, else a 400 pointing at `/blubird:agentic-onboard`. The vault (no-repo) create-prd flow and the `--to obsidian` and `--review` appends are removed: lenses on any command run a peer-review panel after the session.
 - **Idle guard off in UI sessions** (#927): every session the UI starts runs with `BLUBIRD_IDLE_GUARD=off`, so blubird's idle-guard Stop hook no longer blocks a headless turn end; the UI value wins over one the server inherited.
 - **Skill registry** (#926): `run-engine/skill_registry.json` maps each UI step (today's command names) to `{plugin, skill, runs_in}`, `skill_registry.py` loads and validates it on every call, and `GET /api/registry` serves it with each step's `/<plugin>:<skill>` command. Nothing reads it yet.
 - **Products** (#929): `POST /api/products {path}` registers a Documentation Repo checkout; its `.blubird/repos.json` makes it and its code repos one product, and `GET /api/products` lists each product's repos with `cloned` and any `conflict`. Cloned code repos are registered as checkouts, and `ui_products.sync()` registers ones cloned later.
