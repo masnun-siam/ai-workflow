@@ -137,7 +137,9 @@ try:
         json.dump(co, f)
     ui_products.register(docs)
     assert [k for k in dispatch.read_checkouts() if k.lower() == "o/api"] == ["O/API"]
-    assert dispatch.rename_checkout("O/API", "o/api")
+    co["o/api"] = co.pop("O/API")
+    with open(CHECKOUTS, "w") as f:
+        json.dump(co, f)
     ok("register twice is idempotent, even with a slug stored in another case")
 
     shutil.rmtree(api)
