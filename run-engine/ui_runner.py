@@ -24,6 +24,7 @@ import harness
 import harness_codex
 import repo_skills
 import shared
+import skill_registry
 import ui_origin
 import ui_sessions
 import ui_settings
@@ -466,7 +467,10 @@ def _deliver_queued(sid: str) -> None:
 def _issue_key(rec: dict):
     """(repo, "<command>:<number>") of an /implement-issue or /pr-grind session, else None."""
     p = repo_skills.parse(rec.get("command"))
-    if not p or p[0] not in ("implement-issue", "pr-grind"):
+    if not p:
+        return None
+    steps = skill_registry.steps()  # one read of the registry file per call
+    if p[0] not in (steps["implement-issue"]["skill"], steps["pr-grind"]["skill"]):
         return None
     n = re.search(r"(?:^|\s|/issues/|/pull/)#?(\d+)(?=\s|$)", p[1].split("\n", 1)[0])
     return (rec.get("repo"), f"{p[0]}:{n.group(1)}") if n else None

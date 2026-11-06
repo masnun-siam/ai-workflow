@@ -34,6 +34,7 @@ import time
 import uuid
 
 import merge_gate
+import skill_registry
 from shared import atomic_write_text, data_dir, run
 
 ACTIVE = ("implementing", "grinding", "merge_gate", "conflict_fix", "awaiting_merge", "followups")
@@ -74,7 +75,7 @@ def implement_prompt(n: int, base, pr=None, ci="wait") -> str:
     notes += [f"base branch {base}: branch from it, open the PR into it"] if base else []
     if ci != "wait":
         notes.append(f"CI mode {ci}: mark the PR ready after local checks and review pass; do not wait for CI")
-    return f"/ai-workflow:implement-issue {n}" + (f" ({'; '.join(notes)})" if notes else "")
+    return f"{skill_registry.command('implement-issue')} {n}" + (f" ({'; '.join(notes)})" if notes else "")
 
 
 LANE_GRIND = " -- dispatch lane: re-arm the headless way (write next-poll, end the turn; no Monitor, no ScheduleWakeup)"
@@ -94,7 +95,7 @@ def grind_args(channel=None, reviewer=None) -> str:
 def grind_prompt(pr_url: str, channel=None, lane=True, ci="wait", reviewer=None) -> str:
     """A lane's grind ends each round like a headless one: the engine types the next round into the lane."""
     return (
-        f"/ai-workflow:pr-grind {pr_url}"
+        f"{skill_registry.command('pr-grind')} {pr_url}"
         + grind_args(channel, reviewer)
         + (LANE_GRIND + (" " + SKIP_CI_REPLY if ci != "wait" else "") if lane else "")
     )
@@ -104,9 +105,10 @@ def qa_prompt(epic: str, branch) -> str:
     return (
         f"Final QA for epic {epic}"
         + (f" on branch {branch}" if branch else "")
-        + ": run /ai-workflow:verifier-locally "
+        + f": run {skill_registry.command('verifier-locally')} "
         "against every child issue's acceptance criteria, then test the whole feature end to end in the running app "
-        "with the browser tool. File each bug you find with /ai-workflow:create-tasks as a child issue of the epic."
+        f"with the browser tool. File each bug you find with {skill_registry.command('small-change')} "
+        "as a child issue of the epic."
     )
 
 
@@ -127,8 +129,11 @@ def lane_base(lane: dict, settings: dict):
 
 
 def followups_prompt(n: int, pr: int, base) -> str:
-    tail = f" Close #{n} if it is still open." if base else ""
-    return f"PR #{pr} for issue #{n} is merged. Run implement-issue's 'After the pull request is merged' steps for #{n}.{tail}"
+    """The after-merge step's command: blubird has no flag for it, so the note names the section to run."""
+    return (
+        f"{skill_registry.command('after-merge')} {n} (PR #{pr} for issue #{n} is merged: "
+        "run the 'After the pull request is merged' section, not the implement steps)"
+    )
 
 
 def stage_prompt(lane: dict, settings: dict, pr_url=None):
