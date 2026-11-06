@@ -142,6 +142,20 @@ try:
         json.dump(co, f)
     ok("register twice is idempotent, even with a slug stored in another case")
 
+    # a symlinked entry path resolves to the real clone; a stored case-variant or non-string row is dropped
+    link = os.path.join(prod, "link")
+    os.symlink(api, link)
+    write_map(docs, [entry("api", "o/api", "../link"), entry("web", "o/web", "web")])
+    assert ui_products.list_products()[0]["repos"][0]["path"] == api
+    write_map(docs, [entry("api", "o/api", "../api"), entry("web", "o/web", "web")])
+    os.remove(link)
+    with open(PRODUCTS, "w") as f:
+        json.dump({"O/DOCS": docs, "x/bad": 3}, f)
+    ui_products.register(docs)
+    assert json.load(open(PRODUCTS)) == {"x/bad": 3, "o/docs": docs}
+    assert [p["docs_repo"] for p in ui_products.list_products()] == ["o/docs"]
+    ok("symlinked entry path is resolved; case-variant row replaced; non-string row skipped")
+
     shutil.rmtree(api)
     rows = ui_products.list_products()
     assert [(r["repo"], r["cloned"]) for r in rows[0]["repos"]] == [("o/api", False), ("o/web", True)]
