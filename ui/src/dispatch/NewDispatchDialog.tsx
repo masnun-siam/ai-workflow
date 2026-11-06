@@ -1,7 +1,7 @@
 // New dispatch: pick an epic, set the dispatch up, preview its waves and warnings, then start it.
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { usePlanDispatch, usePlanning, useSettings, useStartDispatch } from '../api/hooks';
+import { useDelivery, usePlanDispatch, usePlanning, useSettings, useStartDispatch } from '../api/hooks';
 import type { DispatchPlan, DispatchSettings, DispatchTarget } from '../api/types';
 import { Banner, Button, Chip, Dialog } from '../components';
 import { routes } from '../lib/routes';
@@ -20,7 +20,9 @@ export function NewDispatchDialog({ open, onOpenChange, epic: initial, issues, r
   const repo = forRepo ?? switcher;
   const picked = !!issues;
   const pickKey = issues?.map((i) => i.n).join() ?? '';
-  const epics = (usePlanning(repo).data?.prds ?? []).filter((p) => p.epic != null);
+  const prds = (usePlanning(repo).data?.prds ?? []).filter((p) => p.epic != null);
+  const delivery = useDelivery(open && !picked ? repo : ''); // no load in small-changes mode, or while closed
+  const epics = (delivery.data?.lanes ?? []).filter((l) => l.epic != null).sort((a, b) => b.epic! - a.epic!);
   const [epic, setEpic] = useState(initial ?? '');
   const [s, setS] = useState<DispatchSettings>(DEFAULTS);
   const saved = useSettings().data;
@@ -44,10 +46,14 @@ export function NewDispatchDialog({ open, onOpenChange, epic: initial, issues, r
     }
   }, [open, initial, pickKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const full = epic.includes('#') || !repo ? epic.trim() : `${repo}#${epic.trim().replace(/^#/, '')}`;
+  const full = /^#?\d+$/.test(epic.trim()) && repo ? `${repo}#${epic.trim().replace(/^#/, '')}` : epic.trim();
   const valid = picked ? issues.length > 0 : EPIC_RE.test(full);
   // An epic created on an account runs on it, unless the user already picked.
-  const pinned = picked ? null : (epics.find((p) => `${repo}#${p.epic}` === full)?.account ?? null);
+  const pinned = picked ? null : (prds.find((p) => `${repo}#${p.epic}` === full)?.account ?? null);
+  const chosen = epics.find((l) => `${repo}#${l.epic}`.toLowerCase() === full.toLowerCase())?.epic ?? '';
+  const loadError = delivery.isError ? delivery.error.message : delivery.data?.error && delivery.data.fetched_at == null ? delivery.data.error : null;
+  // One disabled option while the list cannot be picked from; null = the list itself.
+  const placeholder = !repo ? 'Pick a repo first' : loadError ? null : delivery.isLoading || delivery.data?.fetched_at == null ? 'Loading epics…' : epics.length ? null : `No open epics in ${repo}`;
   useEffect(() => {
     if (!touched) setS((x) => (x.account === pinned ? x : { ...x, account: pinned, ...fitRun(x, runOptions(saved, pinned ?? saved?.default)) }));
   }, [pinned, touched, saved]);
@@ -99,13 +105,17 @@ export function NewDispatchDialog({ open, onOpenChange, epic: initial, issues, r
             <div className="row wrap" style={{ gap: 8 }}>
               <input id="nd-epic" className="f" style={{ maxWidth: 260 }} placeholder={repo ? `${repo}#123, or 123` : 'owner/repo#123'} value={epic}
                 onChange={(e) => { setEpic(e.target.value); setPlan(null); }} onKeyDown={(e) => e.key === 'Enter' && valid && doPreview()} autoFocus />
-              {epics.length ? (
-                <select className="f" style={{ maxWidth: 320 }} aria-label="Pick an epic of this repo" value="" onChange={(e) => { if (e.target.value) { setEpic(`${repo}#${e.target.value}`); setPlan(null); } }}>
-                  <option value="">Pick an epic…</option>
-                  {epics.map((p) => <option key={p.slug} value={p.epic!}>#{p.epic} {p.title}</option>)}
-                </select>
-              ) : null}
+              <select className="f" style={{ maxWidth: 320 }} aria-label="Pick an epic of this repo" disabled={!!placeholder} value={placeholder ? '' : String(chosen)}
+                onChange={(e) => { if (e.target.value) { setEpic(`${repo}#${e.target.value}`); setPlan(null); } }}>
+                {placeholder ? <option value="">{placeholder}</option> : (
+                  <>
+                    <option value="">Pick an epic…</option>
+                    {loadError ? null : epics.map((l) => <option key={l.epic} value={l.epic!}>#{l.epic} {l.title}</option>)}
+                  </>
+                )}
+              </select>
             </div>
+            {loadError ? <span className="hint" style={{ color: 'var(--bad)' }}>Could not load epics: {loadError}</span> : null}
             {epic && !valid ? <span className="hint" style={{ color: 'var(--bad)' }}>Use owner/repo#123, or a number in {repo || 'the current repo'}.</span> : null}
           </div>
         )}
