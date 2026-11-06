@@ -61,20 +61,6 @@ export function ReposSection() {
     }
   };
 
-  const [reviewOver, setReviewOver] = useState<'single' | 'loop' | null>(null);
-  const reviewMode = reviewOver ?? settings.data?.review_mode ?? 'single';
-  const changeReview = async (m: 'single' | 'loop') => {
-    setReviewOver(m);
-    try {
-      await save.mutateAsync({ review_mode: m });
-      toast(`Local review is ${m}`);
-    } catch {
-      /* the error toast comes from the mutation cache */
-    } finally {
-      setReviewOver(null);
-    }
-  };
-
   // Each row saves on its own and sends only that repo's entry; a rejected save puts the old value back.
   const change = async (slug: string, patch: Partial<RepoSettings>) => {
     const next = { ...rowOf(slug), ...patch };
@@ -152,15 +138,6 @@ export function ReposSection() {
         <label className="row" style={{ gap: 6 }}><input type="radio" name="grind-mode" checked={mode === 'simple'} disabled={save.isPending} onChange={() => void changeMode('simple')} />Simple</label>
         <span className="muted" style={{ fontSize: 13 }}>
           {mode === 'deep' ? 'Every grind keeps going until the reviewer has no blocker or should-fix left.' : 'Every grind, running ones included, stops at the round where the PR is approved.'}
-        </span>
-      </fieldset>
-      <fieldset className="row wrap" style={{ gap: 14, border: 0, padding: 0, margin: 0 }}>
-        <legend className="sr">Local review for every implement-issue run</legend>
-        <b>Local review</b>
-        <label className="row" style={{ gap: 6 }}><input type="radio" name="review-mode" checked={reviewMode === 'single'} disabled={save.isPending} onChange={() => void changeReview('single')} />Single</label>
-        <label className="row" style={{ gap: 6 }}><input type="radio" name="review-mode" checked={reviewMode === 'loop'} disabled={save.isPending} onChange={() => void changeReview('loop')} />Loop</label>
-        <span className="muted" style={{ fontSize: 13 }}>
-          {reviewMode === 'single' ? 'Single: fix Critical/Major, re-review new commits' : 'Loop: re-review until nothing new, then check and push once'}
         </span>
       </fieldset>
       {list.length > REPO_FILTER_AFTER ? (

@@ -19,7 +19,6 @@ KEPT_VERBS = {
     "threads",
     "grind-mode",
     "grind-reviewers",
-    "local-review",
     "dispatch",
     "jev",
     "install-skills",

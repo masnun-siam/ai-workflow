@@ -53,7 +53,6 @@ assert {k: v for k, v in ui_settings.load().items() if k not in ("vault_dir", "j
     "reviewers": [],
     "active_reviewers": [],
     "grind_mode": "deep",
-    "review_mode": "single",
     "use_jev": True,
     "run_model": None,
     "run_effort": None,
@@ -130,17 +129,15 @@ ui_settings.save({"repos": {"o/a": {"slack_channel": ""}}})
 assert ui_settings.grind_mode() == "simple", "a save without grind_mode keeps it"
 assert raises(ui_settings.validate, {"grind_mode": "fast"})
 ui_settings.save({"grind_mode": "deep"})
-# review_mode: single by default, a partial save sets it, other saves keep it, anything else is refused
-assert ui_settings.review_mode() == "single" and ui_settings.load()["review_mode"] == "single"
-ui_settings.save({"review_mode": "loop"})
-assert ui_settings.review_mode() == "loop" and ui_settings.load()["review_mode"] == "loop"
-ui_settings.save({"grind_mode": "simple"})
-ui_settings.save({"repos": {"o/a": {"slack_channel": ""}}})
-assert ui_settings.review_mode() == "loop", "saves without review_mode keep it"
-before = open(ui_settings._path()).read()
-for bad in ("fast", None, 1):
-    assert raises(ui_settings.save, {"review_mode": bad}) and open(ui_settings._path()).read() == before, bad
-ui_settings.save({"grind_mode": "deep", "review_mode": "single"})
+# an old stored review_mode (the removed Local review setting) is ignored on load and dropped by the next save
+with open(ui_settings._path()) as f:
+    stored = json.load(f)
+with open(ui_settings._path(), "w") as f:
+    json.dump({**stored, "review_mode": "loop"}, f)
+assert "review_mode" not in ui_settings.load()
+ui_settings.save({})
+assert "review_mode" not in open(ui_settings._path()).read()
+ui_settings.save({"grind_mode": "deep"})
 cur = ui_settings.load()
 r = ui_settings.save(
     {

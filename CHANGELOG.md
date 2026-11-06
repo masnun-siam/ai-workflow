@@ -50,6 +50,10 @@
 
 - **Retry failed lanes** (#756): `aiw dispatch retry-failed <id>` and `POST /api/dispatches/<id>/retry-failed` retry every lane that failed to start, needs you or is held, and leave lanes you skipped, lanes needing a refine, closed and healthy lanes alone.
 
+### Removed
+
+- **Local review setting removed** (FR-8 of blubird-ui, #928): `review_mode`, the Settings Local review radio and `aiw local-review` are gone; blubird's implement-issue reviews the branch itself. An old `review_mode` in `ui_settings.json` is ignored and dropped on the next save.
+
 ### Changed
 
 - **Run an epic select lists every open epic** (#975): the select reads the repo's delivery lanes, so epics without a PRD, of a PRD in a subfolder, and a PRD's second and third epics are listed too, `#<n> <title>`, newest first. It is always shown, follows the text box (`n`, `#n` or `<repo>#n` selects the epic; `#n` is now a valid entry), and shows loading, empty, no-repo and load-error states. The account pin still comes from the epic's PRD. Run small changes never loads it. When the delivery response has `truncated: true` (#976), a hint under the field reads "Only the newest 500 open issues were read; type an older epic's number."

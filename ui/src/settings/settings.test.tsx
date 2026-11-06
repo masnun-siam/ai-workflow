@@ -211,54 +211,12 @@ describe('Settings: repositories', () => {
     expect(screen.queryByText('Removed local/idea')).toBeNull(); // toasts are global, so this repo is used by no other test
   });
 
-  it('Local review defaults to Single with its hint', async () => {
-    page(<SettingsPage />);
-    const single = (await screen.findByRole('radio', { name: 'Single' })) as HTMLInputElement;
-    expect(single.checked).toBe(true);
-    expect((screen.getByRole('radio', { name: 'Loop' }) as HTMLInputElement).checked).toBe(false);
-    expect(screen.getByRole('group', { name: 'Local review for every implement-issue run' })).toBeTruthy();
-    expect(screen.getByText('Single: fix Critical/Major, re-review new commits')).toBeTruthy();
-  });
-
-  it('picking Loop sends only review_mode, toasts and shows the Loop hint', async () => {
-    handlers['PUT /api/settings'] = (b) => { withSettings(b ?? {}); return [200, GET['/api/settings']]; };
-    const user = userEvent.setup();
-    page(<SettingsPage />);
-    await user.click(await screen.findByRole('radio', { name: 'Loop' }));
-    await waitFor(() => expect(sent('PUT', '/api/settings')).toEqual([{ review_mode: 'loop' }]));
-    expect(await screen.findByText('Local review is loop')).toBeTruthy();
-    expect(screen.getByText('Loop: re-review until nothing new, then check and push once')).toBeTruthy();
-    await waitFor(() => expect((screen.getByRole('radio', { name: 'Loop' }) as HTMLInputElement).checked).toBe(true));
-  });
-
-  it('the Local review radios are disabled while the save is in flight', async () => {
-    let finish: (r: Reply) => void = () => {};
-    handlers['PUT /api/settings'] = () => new Promise<Reply>((r) => { finish = r; });
-    const user = userEvent.setup();
-    page(<SettingsPage />);
-    const loop = (await screen.findByRole('radio', { name: 'Loop' })) as HTMLInputElement;
-    const single = screen.getByRole('radio', { name: 'Single' }) as HTMLInputElement;
-    await user.click(loop);
-    await waitFor(() => expect(loop.disabled && single.disabled).toBe(true));
-    finish([200, { ...SETTINGS, review_mode: 'loop' }]);
-    await waitFor(() => expect(loop.disabled || single.disabled).toBe(false));
-  });
-
-  it('a refused Local review save puts Single back and shows the error', async () => {
-    handlers['PUT /api/settings'] = () => [400, { error: 'review_mode must be single or loop' }];
-    const user = userEvent.setup();
-    page(<SettingsPage />);
-    await user.click(await screen.findByRole('radio', { name: 'Loop' }));
-    await waitFor(() => expect(sent('PUT', '/api/settings')).toHaveLength(1));
-    expect(await screen.findByText('review_mode must be single or loop')).toBeTruthy();
-    await waitFor(() => expect((screen.getByRole('radio', { name: 'Single' }) as HTMLInputElement).checked).toBe(true));
-  });
-
   it('the Grinding radios still send only grind_mode', async () => {
     const user = userEvent.setup();
     page(<SettingsPage />);
     await user.click(await screen.findByRole('radio', { name: 'Simple' }));
     await waitFor(() => expect(sent('PUT', '/api/settings')).toEqual([{ grind_mode: 'simple' }]));
+    expect(screen.queryByText('Local review')).toBeNull();
   });
 
   it('Find repos posts the folders and reports what it added', async () => {
