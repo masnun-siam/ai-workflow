@@ -140,7 +140,7 @@ watched repo per poll, and the full query only when something changed; nothing i
 It starts these as sessions and keeps them going: it takes your answers to `aiw ask` questions in the
 Inbox, the session page or a dispatch's issue panel, resumes after a rate limit, and notifies you.
 **Away mode** answers every question while you are away (recommended options at once, Opus for the rest,
-risky or unanswerable rounds held) and retries failures, dispatch issues included. Details are in [REFERENCE.md](REFERENCE.md).
+risky or unanswerable rounds held) and retries failures, dispatch issues included. blubird's guard on the root `CLAUDE.md`/`AGENTS.md` comes to you as an Approve / Deny question that Away never answers, and a prompt that blubird's mask-secrets hook blocks fails the session with the reason. Details are in [REFERENCE.md](REFERENCE.md).
 A session runs on the harness (Claude Code or Codex) of the account picked in **Run on**; see [REFERENCE.md](REFERENCE.md#aiw-ui).
 A repo's own copy of a skill (`.claude/skills/<name>/`) is used in place of the plugin's when it has one; see [Repo copies of skills](REFERENCE.md#repo-copies-of-skills).
 
