@@ -114,7 +114,6 @@ Plugin-only lines inside ported files (keep them; they are not upstream drift):
 - "Each push, and each edit to a PR's title or body, starts a full CI run" is ported hedged: "and so may each edit", since PR-edit triggers depend on the repo's workflows.
 
 - **Review before push** (`/implement-issue` steps 12 to 14, from Wasensi 637579d4): the `pr-body.yml` checks and the `PR base - CI ran against this base` check are dropped; "a body edit runs light checks, a base change needs a push" is kept hedged with "may".
-- **Local review loop** (keep): `/implement-issue` step 12's `aiw local-review` paragraph, and the Loop-mode sentences in steps 13 and 16. Single mode is the imported text, unchanged; the paragraph, the findings log and the marker line are plugin-only. `run-engine/test_local_review_text.py` checks them.
 - **Parallel local tests**: `PEST_PARALLEL=1` in the verifier's commands and the push-hook "Feature runs in parallel" note are dropped; the idea "a test failing only in parallel or only serially is a real bug" is kept hedged ("if the repo runs tests in parallel, locally, in CI or both").
 - **Node 24 / jsdom `localStorage`**: becomes "run the frontend checks on the runtime version CI uses", with the newer-Node `localStorage` example.
 - **PRD pull request on approval** (`/create-prd` step 7, from Wasensi b33ce7e4): ported with `origin/<base>`; the branch `issue-<epic>-<slug>-prd` and commit `docs(#<epic>): add <title> PRD` are kept.

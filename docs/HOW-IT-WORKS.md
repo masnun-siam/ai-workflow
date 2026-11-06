@@ -53,7 +53,7 @@ One session, start to Ready:
 3. Work in a new worktree under `.worktrees/`, branched from the latest base.
 4. Implement, write the tests, update the docs in the same PR.
 5. `/verifier-locally`: run the checks CI runs, then exercise the behaviour against the acceptance criteria.
-6. Review the local branch with `/pr-review`, fix Critical and Major findings, merge the base branch in, then push and open a draft PR. With Local review set to Loop, the review repeats round after round, handling every finding, until a round finds nothing new; then the checks and the push run once. Mark it Ready once CI is green and every review comment is handled, or before CI in a repo that runs no CI on drafts. When a push hook runs the full test suite, only the tests for the change run before the push.
+6. Review the local branch with `/pr-review`, fix Critical and Major findings, merge the base branch in, then push and open a draft PR. Mark it Ready once CI is green and every review comment is handled, or before CI in a repo that runs no CI on drafts. When a push hook runs the full test suite, only the tests for the change run before the push.
 7. Log learnings on the issue.
 8. After the merge: close the issue, set it to Done, clean up, and move the issues it unblocked to Ready.
 

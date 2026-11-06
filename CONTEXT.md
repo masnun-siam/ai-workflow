@@ -28,9 +28,6 @@ The skill that proves a change works before it is pushed: it finds the repo's ch
 **pr-review**:
 The skill that reviews a PR or local branch against its issue, the repo's rules and `guides/code-review.md`, and reports evidence-backed findings with a verdict.
 
-**Local review**:
-The `/pr-review` of the local branch in `implement-issue` step 12, before the push. `aiw local-review` picks the mode: Single reviews once and fixes Critical and Major findings; Loop reviews the whole branch round after round until a round finds nothing new, recording every finding in a findings log in the worktree's git directory.
-
 **Grind**:
 `/pr-grind`: the loop on a ready PR that mentions (Slack) or requests (GitHub) the current reviewers, read again from Settings before each recheck, waits for a round, fixes the findings inline in its own session, runs `/verifier-locally`, pushes, re-triggers, and repeats until the first reviewer approves or a rail stops it. Each round re-enters as a fresh headless session that reads the PR's grind state file.
 _Avoid_: Review loop
