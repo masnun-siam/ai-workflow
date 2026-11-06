@@ -2,7 +2,8 @@
 
 Inputs (plain data, no I/O):
   snapshot       ui_poller snapshot
-  sessions       ui_sessions records; live `/implement-issue <n>` ones (ui_runner._issue_key) count
+  sessions       ui_sessions records; live sessions of the registry's implement-issue skill
+                 (`/blubird:implement-issue <n>`, implement or after-merge; ui_runner._issue_key) count
   grind_index    ui_grind.index() -> {"pr": {(owner, repo, pr): {state, round}}}
   settings       ui_settings.repo_settings: auto_grind, issue_grind, slack_channel
   cleanup_flags  {issue_n: {uncommitted, unpushed}} for merged issues that need cleanup (ui_mergeclean)
@@ -27,6 +28,7 @@ from __future__ import annotations
 import os
 
 import dispatch
+import skill_registry
 import ui_inbox
 import ui_runner
 import ui_sessions
@@ -50,12 +52,13 @@ def _slug(rec) -> str:
 def _live_sessions(repo: str, sessions) -> dict:
     """{issue_n: record} of live implement-issue sessions for this repo."""
     out = {}
+    prefix = skill_registry.entry("implement-issue")["skill"] + ":"
     for rec in sessions or []:
         if rec.get("status") not in ui_sessions._LIVE:
             continue
         key = ui_runner._issue_key(rec)
         slug = _slug(rec)
-        if key and key[1].startswith("implement-issue:") and str(slug).lower() == repo.lower():
+        if key and key[1].startswith(prefix) and str(slug).lower() == repo.lower():
             out[int(key[1].split(":")[1])] = rec
     return out
 
