@@ -902,6 +902,9 @@ describe('Run an epic select', () => {
   it('follows the text box: n, #n and repo#n select it; anything else shows the placeholder', async () => {
     open();
     await loaded();
+    await typed('#925');
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' })); // `#n` is the dialog's repo
+    await waitFor(() => expect(posts).toContainEqual(['/api/dispatches/plan', { epic: 'o/r#925', settings: S }]));
     for (const v of ['925', '#925', 'o/r#925', 'O/R#925']) {
       await typed(v);
       expect(shown()).toBe('#925 Search');
