@@ -273,6 +273,20 @@ assert (
     f"`{ROOT}/CLAUDE.md`" in q["question"] and "```diff\n- # hi\n\n+ # hi\nedited by agent\n\n```" in q["question"]
 ), q
 assert ui_runner._fenced("a ``` b") == "````diff\na ``` b\n````"
+assert ui_runner._code("a`b") == "a`b" and ui_runner._code("p") == "`p`"
+long = {"tool_name": "Write", "tool_input": {"content": "x" * 2000}}
+assert ui_runner._guard_diff(long).endswith("… 513 more characters not shown; Approve applies all of it")
+assert not ui_runner._relay_guard(
+    sid, {"tool_name": "NotebookEdit", "tool_input": {"notebook_path": ROOT + "/CLAUDE.md"}}
+)
+link_root = os.path.realpath(tempfile.mkdtemp())
+os.symlink(ROOT + "/CLAUDE.md", link_root + "/CLAUDE.md")
+lsid = session([], harness_id="claude", cwd_path=link_root)
+w = {"tool_name": "Write", "tool_use_id": "t2", "tool_input": {"file_path": link_root + "/CLAUDE.md", "content": "y"}}
+assert ui_runner._relay_guard(lsid, w)
+assert (
+    f"(the file written: `{ROOT}/CLAUDE.md`)" in ui_sessions.load(lsid)["pending_question"]["questions"][0]["question"]
+)
 assert r["guard_edit"]["tool_input"] == denial["tool_input"], r
 sid = session(GUARD, harness_id="claude", cwd_path=tempfile.mkdtemp())  # not this session's root file
 ui_runner._follow(sid, DoneProc(), None, None, 0)

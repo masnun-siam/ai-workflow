@@ -486,16 +486,18 @@ def _relay_guard(sid: str, denial: dict) -> bool:
     stored on the record. False when it is not the session's root file (nothing to ask)."""
     rec = ui_sessions.load(sid) or {}
     inp = denial.get("tool_input") or {}
-    path = inp.get("file_path") or inp.get("notebook_path")
-    if not _root_guarded(rec.get("cwd_path"), path):
-        return False
+    path = inp.get("file_path")
+    if denial.get("tool_name") not in _APPLIED_TOOLS or not _root_guarded(rec.get("cwd_path"), path):
+        return False  # a NotebookEdit cannot be applied by the UI: nothing to ask
+    real = os.path.realpath(os.path.join(rec["cwd_path"], path))
+    shown = _code(path) + ("" if real == path else f" (the file written: {_code(real)})")
     edit = {k: denial.get(k) for k in ("tool_name", "tool_input", "tool_use_id")}
     round_ = {
         "id": f"{GUARD_PREFIX}{denial.get('tool_use_id') or secrets.token_hex(4)}",
         "questions": [
             {
                 "header": "Protected file",
-                "question": f"{GUARD_REASON}\n\n`{path}`\n\n{_fenced(_guard_diff(edit))}",
+                "question": f"{GUARD_REASON}\n\n{shown}\n\n{_fenced(_guard_diff(edit))}",
                 "multiSelect": False,
                 "allowFreeText": False,
                 "options": [
@@ -519,7 +521,17 @@ def _guard_diff(edit: dict) -> str:
         text = "\n".join(
             f"- {p.get('old_string', '')}\n+ {p.get('new_string', '')}" for p in pairs or [] if isinstance(p, dict)
         )
-    return text if len(text) <= _GUARD_SHOW else text[:_GUARD_SHOW] + "\n…"
+    if len(text) <= _GUARD_SHOW:
+        return text
+    return f"{text[:_GUARD_SHOW]}\n… {len(text) - _GUARD_SHOW} more characters not shown; Approve applies all of it"
+
+
+_APPLIED_TOOLS = ("Edit", "Write", "MultiEdit")
+
+
+def _code(text: str) -> str:
+    """text as inline Markdown code, unless a backtick in it would break the span."""
+    return text if "`" in text else f"`{text}`"
 
 
 def _fenced(text: str) -> str:
