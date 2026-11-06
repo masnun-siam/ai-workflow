@@ -189,7 +189,7 @@ d = dr.create(
 assert d["lanes"][K(4)]["stage"] == "skipped" and d["lanes"][K(4)]["skip_reason"] == "needs refine"
 dr.tick(d, fq(1, 2, 3), run, merge, now=1000)
 assert [s[0] for s in run.started] == [1, 3], run.started
-assert run.started[0][1] == "/ai-workflow:implement-issue 1"
+assert run.started[0][1] == "/blubird:implement-issue 1"
 dr.tick(d, fq(1, 2, 3), run, merge, now=1001)
 assert len(run.started) == 2  # cap holds, #2 waits on #1
 print("  ok  launch order, cap, deps")
@@ -613,7 +613,7 @@ print("  ok  followups, close, next lane")
 d2 = dr.create("o/r#8", "headless", {"grind": "off"}, [child(7, base="feature/x")])
 run2 = FakeRunner()
 dr.tick(d2, fq(7), run2, merge, now=1)
-assert run2.started[0][1].startswith("/ai-workflow:implement-issue 7 (base branch feature/x")
+assert run2.started[0][1].startswith("/blubird:implement-issue 7 (base branch feature/x")
 f7 = {"issue_open": True, "slack": True, "agent": "idle", "pr": pr(107, approved=True)}
 dr.tick(d2, {K(7): f7}, run2, merge, now=2)
 ev = dr.tick(d2, {K(7): f7}, run2, merge, now=3)
@@ -624,7 +624,7 @@ d2 = dr.load(d2["id"])
 dr.tick(d2, {K(7): f7}, run2, merge, now=4)
 assert merges[-1] == 107 and not d2["lanes"][K(7)]["force_merge"]
 dr.tick(d2, {K(7): {**f7, "pr": pr(107, state="MERGED")}}, run2, merge, now=5)
-assert run2.sent[-1][1].endswith("Close #7 if it is still open.")
+assert run2.sent[-1][1] == dr.followups_prompt(7, 107, "feature/x") and "Close #" not in run2.sent[-1][1]
 dr.tick(d2, {K(7): {**f7, "issue_open": False}}, run2, merge, now=6)
 assert d2["state"] == "done"
 print("  ok  awaiting merge, merge now, done")
@@ -696,7 +696,7 @@ assert d3["lanes"][K(20)]["stage"] == "implementing"
 dr.tick(d3, {K(20): {"agent": "idle", "pr": pr(120, draft=True)}}, run3, merge, now=302)
 assert run3.started[-1] == (
     20,
-    "/ai-workflow:implement-issue 20 (PR #120 is already open for it: continue that PR on its branch, don't start over)",
+    "/blubird:implement-issue 20 (PR #120 is already open for it: continue that PR on its branch, don't start over)",
 )
 # a retry of red CI sends the fix to the lane's session, and the stale idle facts don't re-flag it that tick
 d3["lanes"][K(20)].update(held="CI is red")
@@ -927,15 +927,19 @@ assert calls[2] == ["agent", "prompt", "aiw-abc-issue-5", "/ai-workflow:implemen
 # repo skills win: every send is resolved against the lane's checkout
 os.makedirs(os.path.join(co, ".claude", "skills", "verifier-locally"))
 open(os.path.join(co, ".claude", "skills", "verifier-locally", "SKILL.md"), "w").close()
-hd.send(h, dr.qa_prompt("o/r#1", None))
-assert "run /verifier-locally " in calls[-1][3] and "/ai-workflow:create-tasks" in calls[-1][3]
+hd.send(h, dr.qa_prompt("o/r#1", None))  # a /blubird: command is never shadowed by a repo copy
+assert "run /blubird:verifier-locally " in calls[-1][3] and "/blubird:create-tasks" in calls[-1][3]
+os.makedirs(os.path.join(co, ".claude", "skills", "pr-grind"))
+open(os.path.join(co, ".claude", "skills", "pr-grind", "SKILL.md"), "w").close()
+hd.send(h, dr.grind_prompt("u", lane=False))  # an ai-workflow one is
+assert calls[-1][3] == "/pr-grind u"
 hd.send(h, "/ai-workflow:implement-issue 5")
 assert calls[-1][3] == "/ai-workflow:implement-issue 5"  # no copy of that one
-hd.send({**h, "cwd": None}, dr.qa_prompt("o/r#1", None))  # a handle from before `cwd` was kept
-assert "run /ai-workflow:verifier-locally " in calls[-1][3]
+hd.send({**h, "cwd": None}, dr.grind_prompt("u", lane=False))  # a handle from before `cwd` was kept
+assert calls[-1][3] == "/ai-workflow:pr-grind u"
 shutil.rmtree(os.path.join(co, ".claude"))
-hd.send(h, dr.qa_prompt("o/r#1", None))
-assert "run /ai-workflow:verifier-locally " in calls[-1][3]
+hd.send(h, dr.grind_prompt("u", lane=False))
+assert calls[-1][3] == "/ai-workflow:pr-grind u"
 hd.send(h, "x" * 470 + " /verifier-locally")  # resolved before the 480-character cut
 assert calls[-1][3] == ("x" * 470 + " /ai-workflow:verifier-locally")[:480]
 assert hd.status(h) == ("working", None)  # idle but waiting on its own monitors
@@ -1182,12 +1186,11 @@ for nm in ("implement-issue", "pr-grind"):
     os.makedirs(os.path.join(dispatch_runners.repo_skills._SKILLS_DIR, nm))
     open(os.path.join(dispatch_runners.repo_skills._SKILLS_DIR, nm, "SKILL.md"), "w").close()
 pr_url = "https://github.com/masnun-siam/ai-workflow/pull/12345"
-for text in (
-    dr.grind_prompt(pr_url, "C0123456789AB", ci="defer"),
-    dr.implement_prompt(12345, "staging", pr=67890, ci="defer"),
-):
-    out = dispatch_runners.repo_skills.codex_pointer(text, None)
-    assert out.startswith("Read the skill file ") and len(out) < 480, (len(out), out)
+out = dispatch_runners.repo_skills.codex_pointer(dr.grind_prompt(pr_url, "C0123456789AB", ci="defer"), None)
+assert out.startswith("Read the skill file ") and len(out) < 480, (len(out), out)
+# a /blubird: command passes through unchanged (inlining it for Codex is #969), still under the cut
+text = dr.implement_prompt(12345, "staging", pr=67890, ci="defer")
+assert dispatch_runners.repo_skills.codex_pointer(text, None) == text and len(text) < 480, text
 dispatch_runners.repo_skills._SKILLS_DIR = real_dir
 # a Codex command herdr cannot start is refused before any herdr call
 for acc in ("cc",):
@@ -1308,9 +1311,43 @@ runb = FakeRunner()
 dr.tick(db, fq(61), runb, merge, now=1)
 assert "base branch release/1.4: branch from it, open the PR into it" in runb.started[0][1]
 assert "Merge origin/release/1.4" in dr.stage_prompt({"n": 61, "stage": "conflict_fix", "pr": 5}, db["settings"])
-assert dr.stage_prompt({"n": 61, "stage": "followups", "pr": 5}, db["settings"]).endswith(
-    "Close #61 if it is still open."
+assert dr.stage_prompt({"n": 61, "stage": "followups", "pr": 5}, db["settings"]) == dr.followups_prompt(61, 5, "x")
+# followups: the after-merge command plus the pinned section sentence, no Close tail
+assert dr.followups_prompt(5, 9, "staging") == (
+    "/blubird:implement-issue 5 (PR #9 for issue #5 is merged: "
+    "run the 'After the pull request is merged' section, not the implement steps)"
 )
+# the registry drives the prompts: implement-issue and after-merge change independently
+import skill_registry  # noqa: E402
+
+_reg_real = skill_registry.REGISTRY_PATH
+with open(_reg_real) as f:
+    _reg = json.load(f)
+_tmpreg = os.path.join(tempfile.mkdtemp(), "reg.json")
+
+
+def _with_reg(steps):
+    with open(_tmpreg, "w") as f:
+        json.dump({"steps": steps}, f)
+    skill_registry.REGISTRY_PATH = _tmpreg
+
+
+try:
+    _with_reg({**_reg["steps"], "implement-issue": {**_reg["steps"]["implement-issue"], "plugin": "ai-workflow"}})
+    assert dr.implement_prompt(5, None) == "/ai-workflow:implement-issue 5"
+    assert dr.followups_prompt(5, 9, None).startswith("/blubird:implement-issue 5 (")
+    _with_reg({**_reg["steps"], "after-merge": {**_reg["steps"]["after-merge"], "plugin": "ai-workflow"}})
+    assert dr.implement_prompt(5, None) == "/blubird:implement-issue 5"
+    assert dr.followups_prompt(5, 9, None).startswith("/ai-workflow:implement-issue 5 (")
+    _with_reg({k: v for k, v in _reg["steps"].items() if k != "after-merge"})
+    try:
+        dr.followups_prompt(5, 9, None)
+        raise AssertionError("a registry without after-merge must not build a prompt")
+    except ValueError:
+        pass
+finally:
+    skill_registry.REGISTRY_PATH = _reg_real
+assert len(dr.followups_prompt(99999, 99999, "x")) < 480
 db2 = dr.create(
     "o/r#62", "headless", {"grind": "off", "feature_branch": "feat/x", "base_branch": "staging"}, [child(63)]
 )
@@ -1321,7 +1358,7 @@ dn = dr.create("o/r#64", "headless", {"grind": "off"}, [child(65)])
 runn = FakeRunner()
 dr.tick(dn, fq(65), runn, merge, now=1)
 assert "base branch" not in runn.started[0][1]
-assert dr.followups_prompt(65, 5, None).endswith("for #65.")
+assert "Close #" not in dr.followups_prompt(65, 5, None)
 d6 = dr.create("o/r#70", "headless", {"feature_branch": "feature/x", "base_branch": "staging"}, [child(71)])
 dr.request_end(d6["id"], "open-pr")
 d6 = dr.load(d6["id"])
