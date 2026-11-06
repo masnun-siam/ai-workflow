@@ -220,6 +220,76 @@ ui_runner._follow(sid, DoneProc(), None, None, 0)
 assert ui_sessions.load(sid)["status"] == "done"
 ok("_follow (claude): same record as before; errors[0] wins; rejected limit -> limited, warning does not")
 
+
+# ------------------------------------------------------------------ guard ask and secret block (#941)
+def fixture(name, root) -> list:
+    with open(os.path.join(HERE, "fixtures", name)) as f:
+        return [line.rstrip("\n").replace("@ROOT@", root) for line in f]
+
+
+ROOT = os.path.realpath(tempfile.mkdtemp())
+with open(os.path.join(ROOT, "CLAUDE.md"), "w") as f:
+    f.write("# hi\n")
+GUARD = fixture("claude_guard_ask.jsonl", ROOT)
+evs = harness_claude.parse_line(GUARD[-1])
+assert [e["kind"] for e in evs] == ["guard_ask", "result"], evs
+(denial,) = evs[0]["edits"]
+assert denial["tool_use_id"] == "toolu_015RguardFixture" and denial["tool_name"] == "Edit", denial
+assert denial["tool_input"]["new_string"] == "# hi\nedited by agent\n", denial
+res = json.loads(GUARD[-1])
+for other in (
+    {**denial, "tool_input": {**denial["tool_input"], "file_path": ROOT + "/README.md"}},
+    {**denial, "tool_name": "Bash", "tool_input": {"command": "echo x >> CLAUDE.md"}},
+    {**denial, "tool_input": "not a dict"},
+    "garbage",
+):
+    assert [e["kind"] for e in harness_claude.parse_line(j({**res, "permission_denials": [other]}))] == ["result"]
+nb = {"tool_name": "NotebookEdit", "tool_input": {"notebook_path": "/x/Agents.MD"}}
+assert harness_claude.parse_line(j({**res, "permission_denials": [nb]}))[0]["kind"] == "guard_ask"
+assert all(e["kind"] != "guard_ask" for line in GUARD[:-1] for e in harness_claude.parse_line(line))
+ok("parse_line: guard denial of CLAUDE.md/AGENTS.md -> guard_ask before result; other files/tools ignored")
+
+SECRET = fixture("claude_secret_block.jsonl", ROOT)
+evs = harness_claude.parse_line(SECRET[-1])
+assert [e["kind"] for e in evs] == ["prompt_blocked", "result"], evs
+reason = evs[0]["reason"]
+assert reason.startswith("This prompt was not sent because it contains a secret (github_token).") and reason.endswith(
+    "refer to $NAME."
+), reason
+assert "Original prompt" not in reason and "REDACTED" not in reason, reason
+assert [
+    e["kind"] for e in harness_claude.parse_line(j({**res, "permission_denials": [], "result": "blocked by hook"}))
+] == ["result"]
+ok("parse_line: mask-secrets block -> prompt_blocked with the reason, no Original prompt echo")
+
+sid = session(GUARD, harness_id="claude", cwd_path=ROOT)
+ui_runner._follow(sid, DoneProc(), None, None, 0)
+r = ui_sessions.load(sid)
+pq = r["pending_question"]
+assert r["status"] == "waiting" and pq["id"] == "guard-toolu_015RguardFixture" and pq["held"] is True, r
+(q,) = pq["questions"]
+assert [o["label"] for o in q["options"]] == ["Approve", "Deny"] and q["allowFreeText"] is False, q
+assert (
+    f"`{ROOT}/CLAUDE.md`" in q["question"] and "```diff\n- # hi\n\n+ # hi\nedited by agent\n\n```" in q["question"]
+), q
+assert ui_runner._fenced("a ``` b") == "````diff\na ``` b\n````"
+assert r["guard_edit"]["tool_input"] == denial["tool_input"], r
+sid = session(GUARD, harness_id="claude", cwd_path=tempfile.mkdtemp())  # not this session's root file
+ui_runner._follow(sid, DoneProc(), None, None, 0)
+r = ui_sessions.load(sid)
+assert r["status"] == "done" and r.get("pending_question") is None and "guard_edit" not in r, r
+# replay: only the last process counts, an earlier run's denial is not asked again
+sid = session([*GUARD, j(INIT), j(RES)], harness_id="claude", cwd_path=ROOT)
+ui_runner._follow(sid, DoneProc(), None, None, 0)
+assert ui_sessions.load(sid)["status"] == "done"
+ok("_follow (claude): guard denial -> waiting on a held Approve/Deny round; other roots and replays -> done")
+
+sid = session(SECRET, harness_id="claude", cwd_path=ROOT)
+ui_runner._follow(sid, DoneProc(), None, None, 0)
+r = ui_sessions.load(sid)
+assert r["status"] == "failed" and r["error"] == f"blocked by mask-secrets: {reason}", r
+ok("_follow (claude): blocked prompt -> failed with the hook's reason")
+
 # ------------------------------------------------------------------ transcript endpoint
 srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, ())
 threading.Thread(target=srv.serve_forever, daemon=True).start()

@@ -1239,6 +1239,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json(409, {"error": "round already answered"})
             return
         try:
+            text = ui_runner.guard_resume_text(rec, round_id, body.get("answers"), text)
             rec = ui_runner.resume(sid, text)
         except (ui_runner.RunnerError, ValueError, OSError) as e:
             self._json(500, {"error": str(e)})

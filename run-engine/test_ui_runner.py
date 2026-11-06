@@ -95,6 +95,16 @@ case "$FAKE_CLAUDE_MODE" in
     done
     printf '%s\n' "$RESULT"
     exit 0;;
+  guardask)
+    if [ "$RESUMING" = 1 ]; then printf '%s\n' "$INIT" "$RESULT"; exit 0; fi
+    sed "s#@ROOT@#$PWD#g" "$FAKE_FIXTURES/claude_guard_ask.jsonl"
+    exit 0;;
+  secretblock)
+    case "$*" in
+      *ghp_*) sed "s#@ROOT@#$PWD#g" "$FAKE_FIXTURES/claude_secret_block.jsonl";;
+      *) printf '%s\n' "$INIT" "$RESULT";;
+    esac
+    exit 0;;
   normal)
     printf '%s\n' "$INIT" '{"type":"assistant","message":"hi"}' "$RESULT"
     echo "some warning" >&2
@@ -181,6 +191,7 @@ def setup(mode="normal", auth="in"):
     os.environ["FAKE_DIR"] = fake_dir
     os.environ["FAKE_CLAUDE_MODE"] = mode
     os.environ["FAKE_CLAUDE_AUTH"] = auth
+    os.environ["FAKE_FIXTURES"] = os.path.join(HERE, "fixtures")
     for k in ("FAKE_SID", "FAKE_COST"):
         os.environ.pop(k, None)
     return d, fake_dir, tempfile.mkdtemp()
@@ -2860,6 +2871,162 @@ finally:
     os.environ["PATH"] = ORIG_PATH
 ok("session PATH leads with the plugin bin, so `aiw ask` resolves")
 
+
+# ---- CLAUDE.md guard relay and secret blocks (#941) -------------------------
+def guard_unit_checks():
+    def repo(text="# hi\n"):
+        work = os.path.realpath(tempfile.mkdtemp())
+        with open(os.path.join(work, "CLAUDE.md"), "w") as f:
+            f.write(text)
+        return work
+
+    def body(work, name="CLAUDE.md"):
+        with open(os.path.join(work, name)) as f:
+            return f.read()
+
+    def edit(work, old, new, name="CLAUDE.md", **kw):
+        inp = {"file_path": os.path.join(work, name), "old_string": old, "new_string": new, **kw}
+        return {"tool_name": "Edit", "tool_input": inp, "tool_use_id": "toolu_1"}
+
+    work = repo()
+    ui_runner._apply_guard_edit(work, edit(work, "# hi\n", "# hi\nmore\n"))
+    assert body(work) == "# hi\nmore\n"
+    work = repo("a\na\n")
+    ui_runner._apply_guard_edit(work, edit(work, "a", "b", replace_all=True))
+    assert body(work) == "b\nb\n"
+    for bad, why in (
+        (edit(work, "zzz", "y"), "no longer in the file"),
+        (edit(work, "b", "c"), "occurs 2 times"),
+        ({"tool_name": "Bash", "tool_input": {"file_path": os.path.join(work, "CLAUDE.md")}}, "not applied"),
+    ):
+        try:
+            ui_runner._apply_guard_edit(work, bad)
+            raise AssertionError(bad)
+        except ui_runner.GuardEditError as e:
+            assert why in str(e), e
+        assert body(work) == "b\nb\n"
+    outside = repo("x\n")
+    with open(os.path.join(work, "README.md"), "w") as f:
+        f.write("x\n")
+    for target in (os.path.join(outside, "CLAUDE.md"), os.path.join(work, "README.md"), f"{work}/sub/../../CLAUDE.md"):
+        e = {"tool_name": "Write", "tool_input": {"file_path": target, "content": "pwned"}}
+        try:
+            ui_runner._apply_guard_edit(work, e)
+            raise AssertionError(target)
+        except ui_runner.GuardEditError as err:
+            assert "not this repo's root" in str(err), err
+    assert body(outside) == "x\n" and body(work, "README.md") == "x\n"
+    os.symlink("CLAUDE.md", os.path.join(work, "AGENTS.md"))
+    ui_runner._apply_guard_edit(work, edit(work, "b\nb", "c\nc", name="AGENTS.md"))
+    assert body(work) == "c\nc\n" and os.path.islink(os.path.join(work, "AGENTS.md"))
+    multi = {
+        "tool_name": "MultiEdit",
+        "tool_input": {
+            "file_path": os.path.join(work, "CLAUDE.md"),
+            "edits": [{"old_string": "c\nc", "new_string": "d\nc"}, {"old_string": "nope", "new_string": "x"}],
+        },
+    }
+    try:
+        ui_runner._apply_guard_edit(work, multi)
+        raise AssertionError("multi")
+    except ui_runner.GuardEditError:
+        assert body(work) == "c\nc\n"  # all or nothing
+    multi["tool_input"]["edits"][1] = {"old_string": "d", "new_string": "e"}
+    ui_runner._apply_guard_edit(work, multi)
+    assert body(work) == "e\nc\n"
+    fresh_repo = os.path.realpath(tempfile.mkdtemp())
+    ui_runner._apply_guard_edit(
+        fresh_repo, {"tool_name": "Write", "tool_input": {"file_path": f"{fresh_repo}/CLAUDE.md", "content": "new\n"}}
+    )
+    assert body(fresh_repo) == "new\n"
+    ok("_apply_guard_edit: Edit, replace_all, MultiEdit all-or-nothing, Write; no match / outside root refused")
+
+    fresh()
+    work = repo()
+    sid = ui_sessions.create("/x", "o/r")["id"]
+    e = edit(work, "# hi\n", "# hi\nmore\n")
+    approve, deny = {"0": {"labels": ["Approve"]}}, {"0": {"labels": ["Deny"]}}
+    rec = ui_sessions.update(sid, cwd_path=work, guard_edit=e)
+    assert ui_runner.guard_resume_text(rec, "q-1", approve, "T") == "T"  # an ordinary round
+    t = ui_runner.guard_resume_text(rec, "guard-toolu_1", deny, "T")
+    assert t.startswith("T\nThe human denied this edit to ") and body(work) == "# hi\n", t
+    assert ui_sessions.load(sid)["guard_edit"] is None
+    assert ui_runner.guard_resume_text(ui_sessions.load(sid), "guard-toolu_1", approve, "T") == "T"  # no stored edit
+    rec = ui_sessions.update(sid, guard_edit=e)
+    t = ui_runner.guard_resume_text(rec, "guard-toolu_1", approve, "T")
+    assert "approved the edit to" in t and "the UI applied it" in t and body(work) == "# hi\nmore\n", t
+    rec = ui_sessions.update(sid, guard_edit=edit(work, "# gone\n", "x"))  # the file changed since the ask
+    t = ui_runner.guard_resume_text(rec, "guard-toolu_1", approve, "T")
+    assert "could not apply it: edit 1: the text to replace is no longer in the file" in t, t
+    assert body(work) == "# hi\nmore\n"
+    ok("guard_resume_text: ordinary text unchanged; Deny leaves the file; Approve applies; stale -> could not")
+
+
+def guard_flow_checks():
+    srv = ui_server._Server(("127.0.0.1", 0), ui_server._Handler, ())
+    port = srv.server_address[1]
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    SLUG, live = "own/repo", []
+
+    def post(path, payload):
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
+        data = json.dumps(payload).encode()
+        c.request("POST", path, body=data, headers={"Content-Type": "application/json"})
+        r = c.getresponse()
+        raw = r.read()
+        c.close()
+        return r.status, json.loads(raw)
+
+    def run(mode, prompt="/implement-issue 42"):
+        d, fk, work = setup(mode)
+        with open(os.path.join(d, "checkouts.json"), "w") as f:
+            json.dump({SLUG: work}, f)
+        with open(os.path.join(work, "CLAUDE.md"), "w") as f:
+            f.write("# hi\n")
+        rec = ui_runner.start(prompt, SLUG)
+        live.append(rec)
+        return rec["id"], fk, work
+
+    try:
+        for label, want in (("Deny", "# hi\n"), ("Approve", "# hi\nedited by agent\n")):
+            sid, fk, work = run("guardask")
+            r = wait_status(sid, {"waiting", "done", "failed"})
+            wait_finished(sid)
+            r = ui_sessions.load(sid)
+            pq = r["pending_question"]
+            assert r["status"] == "waiting" and pq["id"] == "guard-toolu_015RguardFixture" and pq["held"], r
+            st, b = post(f"/api/sessions/{sid}/answer", {"round_id": pq["id"], "answers": {"0": {"labels": [label]}}})
+            assert st == 200, (st, b)
+            r = wait_status(sid, {"done", "failed"})
+            wait_finished(sid)
+            with open(os.path.join(work, "CLAUDE.md")) as f:
+                assert f.read() == want, label
+            sent = lines(fk, "argv").splitlines()
+            assert "--resume" in sent, sent
+            msg = "denied this edit" if label == "Deny" else "the UI applied it"
+            assert msg in lines(fk, "argv"), sent
+            r = ui_sessions.load(sid)
+            assert r["status"] == "done" and r.get("guard_edit") is None, r
+        ok("guard round end to end: waiting on Approve/Deny; Deny leaves CLAUDE.md, Approve applies it; both resume")
+
+        sid, fk, work = run("secretblock", "say hi with ghp_" + "a" * 36)
+        r = wait_status(sid, {"done", "failed"})
+        wait_finished(sid)
+        r = ui_sessions.load(sid)
+        assert r["status"] == "failed" and "github_token" in r["error"] and "ghp_" not in r["error"], r
+        assert "Original prompt" not in r["error"] and r["error"].startswith("blocked by mask-secrets: "), r
+        assert ui_runner.send_prompt(sid, "say hi") == "sent"
+        r = wait_status(sid, {"done", "failed"})
+        wait_finished(sid)
+        assert ui_sessions.load(sid)["status"] == "done", ui_sessions.load(sid)
+        ok("blocked prompt -> failed with the hook's reason (kind, no value); a clean prompt resumes it")
+    finally:
+        reap(*live)
+        srv.shutdown()
+
+
+guard_unit_checks()
+guard_flow_checks()
 answer_checks()
 stop_checks()
 repo_skill_cases()

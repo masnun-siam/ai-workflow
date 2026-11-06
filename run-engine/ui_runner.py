@@ -11,6 +11,7 @@ import fcntl
 import glob
 import os
 import re
+import secrets
 import shutil
 import signal
 import subprocess
@@ -472,10 +473,143 @@ def _issue_key(rec: dict):
     return (rec.get("repo"), f"{p[0]}:{n.group(1)}") if n else None
 
 
+GUARD_PREFIX = "guard-"
+GUARD_REASON = (
+    "blubird's guard stopped this edit: CLAUDE.md and AGENTS.md are the protected agent instructions. "
+    "Approve only if a human asked for this change."
+)
+_GUARD_SHOW = 1500  # characters of the proposed change shown in the question
+
+
+def _relay_guard(sid: str, denial: dict) -> bool:
+    """Ask the human about a denied protected edit (FR-5): an Approve/Deny round held from Away/AFK, the edit
+    stored on the record. False when it is not the session's root file (nothing to ask)."""
+    rec = ui_sessions.load(sid) or {}
+    inp = denial.get("tool_input") or {}
+    path = inp.get("file_path") or inp.get("notebook_path")
+    if not _root_guarded(rec.get("cwd_path"), path):
+        return False
+    edit = {k: denial.get(k) for k in ("tool_name", "tool_input", "tool_use_id")}
+    round_ = {
+        "id": f"{GUARD_PREFIX}{denial.get('tool_use_id') or secrets.token_hex(4)}",
+        "questions": [
+            {
+                "header": "Protected file",
+                "question": f"{GUARD_REASON}\n\n`{path}`\n\n{_fenced(_guard_diff(edit))}",
+                "multiSelect": False,
+                "allowFreeText": False,
+                "options": [
+                    {"label": "Approve", "description": "Apply this edit"},
+                    {"label": "Deny", "description": "Leave the file unchanged"},
+                ],
+            }
+        ],
+    }
+    ui_sessions.set_pending(sid, round_, held=True, guard_edit=edit)
+    return True
+
+
+def _guard_diff(edit: dict) -> str:
+    """The proposed change, short: `- old` / `+ new` per edit, or the first lines of a written file."""
+    inp = edit.get("tool_input") or {}
+    if edit.get("tool_name") == "Write":
+        text = f"New content:\n{inp.get('content', '')}"
+    else:
+        pairs = inp.get("edits") if edit.get("tool_name") == "MultiEdit" else [inp]
+        text = "\n".join(
+            f"- {p.get('old_string', '')}\n+ {p.get('new_string', '')}" for p in pairs or [] if isinstance(p, dict)
+        )
+    return text if len(text) <= _GUARD_SHOW else text[:_GUARD_SHOW] + "\n…"
+
+
+def _fenced(text: str) -> str:
+    """text as a Markdown code block (the question is rendered as Markdown), fence longer than any backtick run."""
+    run = max((len(m) for m in re.findall(r"`+", text)), default=0)
+    fence = "`" * max(3, run + 1)
+    return f"{fence}diff\n{text}\n{fence}"
+
+
+def _root_guarded(cwd, path) -> bool:
+    """path is the same file as cwd's root CLAUDE.md or AGENTS.md (symlinks followed)."""
+    if not isinstance(cwd, str) or not isinstance(path, str) or not path:
+        return False
+    real = os.path.realpath(os.path.join(cwd, path))
+    for name in ("CLAUDE.md", "AGENTS.md"):
+        root = os.path.join(cwd, name)
+        try:
+            if os.path.samefile(real, root):
+                return True
+        except OSError:  # either side missing
+            if not os.path.exists(real) and real == os.path.realpath(root):
+                return True  # a Write creating the root file
+    return False
+
+
+class GuardEditError(Exception):
+    """The approved edit could not be applied (the message says why); the file is unchanged."""
+
+
+def _apply_guard_edit(cwd: str, edit: dict) -> str:
+    """Apply the stored, human-approved edit to cwd's root CLAUDE.md/AGENTS.md; returns the path.
+    All or nothing: raises GuardEditError and leaves the file as it was."""
+    inp = edit.get("tool_input") if isinstance(edit, dict) else None
+    path = inp.get("file_path") if isinstance(inp, dict) else None
+    if not _root_guarded(cwd, path):
+        raise GuardEditError(f"{path!r} is not this repo's root CLAUDE.md or AGENTS.md")
+    real = os.path.realpath(os.path.join(cwd, path))
+    tool = edit.get("tool_name")
+    if tool == "Write":
+        content = inp.get("content")
+        if not isinstance(content, str):
+            raise GuardEditError("the Write has no content")
+    elif tool in ("Edit", "MultiEdit"):
+        try:
+            with open(real, encoding="utf-8", newline="") as f:
+                content = f.read()
+        except OSError as e:
+            raise GuardEditError(f"cannot read the file: {e}") from None
+        for i, e in enumerate(inp.get("edits") if tool == "MultiEdit" else [inp]):
+            old, new = (e.get("old_string"), e.get("new_string")) if isinstance(e, dict) else (None, None)
+            if not isinstance(old, str) or not old or not isinstance(new, str):
+                raise GuardEditError(f"edit {i + 1} is malformed")
+            n = content.count(old)
+            if n == 0:
+                raise GuardEditError(f"edit {i + 1}: the text to replace is no longer in the file")
+            if n > 1 and not e.get("replace_all"):
+                raise GuardEditError(f"edit {i + 1}: the text to replace occurs {n} times")
+            content = content.replace(old, new) if e.get("replace_all") else content.replace(old, new, 1)
+    else:
+        raise GuardEditError(f"{tool} edits are not applied by the UI")
+    try:
+        with open(real, "w", encoding="utf-8", newline="") as f:
+            f.write(content)
+    except OSError as e:
+        raise GuardEditError(f"cannot write the file: {e}") from None
+    return path
+
+
+def guard_resume_text(rec: dict, round_id: str, answers: dict, text: str) -> str:
+    """The resume text for an answered round. A guard round's Approve applies the stored edit first;
+    both answers tell the agent what happened. Other rounds: text unchanged."""
+    edit = rec.get("guard_edit")
+    if not str(round_id).startswith(GUARD_PREFIX) or not isinstance(edit, dict):
+        return text
+    ui_sessions.update(rec["id"], guard_edit=None)
+    path = (edit.get("tool_input") or {}).get("file_path")
+    if (answers or {}).get("0") != {"labels": ["Approve"]}:
+        return f"{text}\nThe human denied this edit to {path}. Leave it unchanged and continue without it."
+    try:
+        _apply_guard_edit(rec.get("cwd_path"), edit)
+    except GuardEditError as e:
+        return f"{text}\nThe human approved the edit but the UI could not apply it: {e}. Say so and continue."
+    return f"{text}\nThe human approved the edit to {path} and the UI applied it. Continue."
+
+
 def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None, resuming=False) -> None:
     """Follow a session until it exits. proc is None for a re-attached (non-child) pid."""
     path = os.path.join(ui_sessions.session_dir(sid), "stream.jsonl")
     buf, is_error, saw_init, saw_result, first_err, asked = b"", False, False, False, None, False
+    guard, blocked = None, None  # this process's denied protected edit (FR-5) / mask-secrets block reason
     limit = None  # the `limit` event of a rejected run
     run_tokens = None  # summed `result` tokens since the run's session_id event
     rec = ui_sessions.load(sid) or {}
@@ -488,10 +622,11 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
             on_event(ev)
 
     def on_event(ev: dict) -> None:
-        nonlocal is_error, saw_init, saw_result, first_err, asked, limit, run_tokens
+        nonlocal is_error, saw_init, saw_result, first_err, asked, limit, run_tokens, guard, blocked
         if ev["kind"] == "session_id":
             saw_init = True
             asked = False  # a new process: an earlier `aiw ask` was answered (or this is a replay after a UI restart)
+            guard = blocked = None
             saw_result = is_error = False  # only the last process decides the outcome of a replay
             run_tokens = None
             ui_sessions.update(sid, session_id=ev["id"])
@@ -503,6 +638,12 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
                 and isinstance(ev["input"], dict)
                 and str(ev["input"].get("command", "")).lstrip().startswith("aiw ask")
             )
+        elif ev["kind"] == "guard_ask":
+            guard = guard or ev["edits"][0]  # one round at a time
+            if len(ev["edits"]) > 1:
+                warn(f"ui_runner {sid}: {len(ev['edits'])} protected edits denied; only the first is relayed")
+        elif ev["kind"] == "prompt_blocked":
+            blocked = ev["reason"]
         elif ev["kind"] == "limit":
             info = ev["info"]
             if isinstance(info, dict):
@@ -587,7 +728,18 @@ def _follow(sid: str, proc, pid=None, started=None, offset: int = 0, answer=None
                     error="claude exited while the UI was down without a successful result; see stderr.log",
                 )
             elif (rc == 0 or proc is None) and not is_error:
-                if status == "waiting":  # question recorded mid-run: stay waiting for the answer
+                if blocked:  # mask-secrets refused the prompt: nothing ran
+                    ui_sessions.update(
+                        sid,
+                        status="failed",
+                        ended_at=_now(),
+                        pending_question=None,
+                        pending_answer=None,
+                        error=f"blocked by mask-secrets: {blocked}",
+                    )
+                elif status == "waiting":  # question recorded mid-run: stay waiting for the answer
+                    ui_sessions.update(sid, ended_at=_now(), pending_answer=None, limit_backoff=None)
+                elif guard and _relay_guard(sid, guard):  # the guard's ask, denied headless: the human decides
                     ui_sessions.update(sid, ended_at=_now(), pending_answer=None, limit_backoff=None)
                 elif asked:  # model ran `aiw ask` but nothing was recorded: don't call it done
                     ui_sessions.update(
