@@ -191,4 +191,10 @@ g = {
     "pr": {("o", "r", 31): {"state": "paused", "round": 3, "reason": "2026-10-06T15:54:44Z — owner decision needed: x"}}
 }
 assert cards(build(snap([issue(1, prs=[pr(31)])]), grind=g))[1]["grind"]["reason"] == "owner decision needed: x"
+# truncated mirrors the snapshot's issues_truncated; false when it or data is missing
+assert build(snap([issue(1)]))["truncated"] is False
+s = snap([issue(1)])
+s["data"]["issues_truncated"] = True
+assert build(s)["truncated"] is True
+assert build({"stale": True, "fetched_at": None})["truncated"] is False
 print("ok")
