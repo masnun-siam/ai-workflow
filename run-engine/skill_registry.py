@@ -57,12 +57,15 @@ def entry(step: str) -> dict:
     return e
 
 
+def _command(e: dict) -> str:
+    return f"/{e['plugin']}:{e['skill']}"
+
+
 def command(step: str) -> str:
     """The slash command the step runs: `/<plugin>:<skill>`."""
-    e = entry(step)
-    return f"/{e['plugin']}:{e['skill']}"
+    return _command(entry(step))
 
 
 def view() -> dict:
     """The body of GET /api/registry: every entry plus its derived `command`."""
-    return {"steps": {s: {**e, "command": f"/{e['plugin']}:{e['skill']}"} for s, e in steps().items()}}
+    return {"steps": {s: {**e, "command": _command(e)} for s, e in steps().items()}}

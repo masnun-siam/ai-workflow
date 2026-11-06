@@ -9,6 +9,7 @@ from __future__ import annotations
 import http.client
 import json
 import os
+import shutil
 import sys
 import tempfile
 import threading
@@ -17,6 +18,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 os.environ["CLAUDE_PLUGIN_DATA"] = tempfile.mkdtemp()
+TMP = tempfile.mkdtemp()
 
 import repo_skills  # noqa: E402
 import skill_registry  # noqa: E402
@@ -67,7 +69,7 @@ ok("every ai-workflow skill exists under skills/; personal entries use repo_skil
 
 def with_registry(data):
     """Point the loader at a temp file holding `data` (a dict, or raw text)."""
-    fd, p = tempfile.mkstemp(suffix=".json")
+    fd, p = tempfile.mkstemp(suffix=".json", dir=TMP)
     with os.fdopen(fd, "w") as f:
         f.write(data if isinstance(data, str) else json.dumps(data))
     skill_registry.REGISTRY_PATH = p
@@ -153,4 +155,6 @@ skill_registry.REGISTRY_PATH = SHIPPED
 ok("a malformed registry answers 500 JSON")
 
 srv.shutdown()
+shutil.rmtree(TMP, ignore_errors=True)
+shutil.rmtree(os.environ["CLAUDE_PLUGIN_DATA"], ignore_errors=True)
 print(f"{passed} passed")
