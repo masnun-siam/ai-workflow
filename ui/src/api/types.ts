@@ -364,8 +364,6 @@ export interface Settings {
   claude_label?: string;
   /** Every /pr-grind loop: deep (until zero findings) or simple (stops once the PR is approved). */
   grind_mode?: 'deep' | 'simple';
-  /** /implement-issue's local /pr-review: single (fix Critical/Major, re-review new commits) or loop (until nothing new). */
-  review_mode?: 'single' | 'loop';
   /** Last-used model / effort for a run (null: Claude's default). */
   run_model?: string | null;
   run_effort?: string | null;
