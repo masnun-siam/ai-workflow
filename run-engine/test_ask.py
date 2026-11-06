@@ -601,6 +601,22 @@ IV_SITES = {
 IV_FILES = list(IV_SITES) + ["skills/worklog/SKILL.md"]
 
 
+def t_headless_prompt_relays_skill_asks():
+    # #935: headless claude --print has no AskUserQuestion tool, so a skill's "ask with AskUserQuestion" step
+    # reaches the Inbox only through this sentence; the old "never AskUserQuestion" clause alone did not say so
+    p = ui_runner.HEADLESS_PROMPT
+    for want in (
+        PROMPT_MARK,  # dump, worklog and worklog-runner detect a headless run by this phrase
+        "AskUserQuestion is not available",
+        "wherever a skill says to ask the user with AskUserQuestion",
+        "aiw ask --json '<the AskUserQuestion input>'` instead",
+        "end your turn",
+        "Never call ScheduleWakeup",
+    ):
+        assert want in p, (want, p)
+    ok("headless prompt: a skill's AskUserQuestion step goes through aiw ask")
+
+
 def t_iv_doc_sites():
     bad = []
     for path, anchors in IV_SITES.items():
@@ -657,6 +673,7 @@ INTERVIEWS = (
     t_iv_aiwaskfail,
     t_iv_concurrent_ask,
     t_iv_doc_sites,
+    t_headless_prompt_relays_skill_asks,
     t_iv_no_unbranched_ask,
     t_iv_interactive_unchanged,
 )
