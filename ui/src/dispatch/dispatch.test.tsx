@@ -46,6 +46,12 @@ beforeEach(() => {
     '/api/inbox': { items: [], afk: AFK, gh: { ok: true } },
     '/api/settings': { commands: [], default: 'work' },
     '/api/planning': { prds: [], fetched_at: 1, stale: false },
+    '/api/delivery': { repo: 'o/r', stale: false, fetched_at: 1, cap: 2, running: 0, auto_grind: false, lanes: [
+      { epic: 1, title: 'Payments', running: 0, cards: [] },
+      { epic: 925, title: 'Search', running: 0, cards: [] },
+      { epic: null, title: 'No epic', running: 0, cards: [] },
+      { epic: 701, title: 'Exports', running: 0, cards: [] },
+    ] },
     '/api/dispatches': { dispatches: [disp(), disp({ id: 'old000000000', state: 'done', title: 'Old epic', lanes: [lane(9, { stage: 'closed' })] })] },
     '/api/dispatches/abc123abc123': disp(),
     '/api/github/branches': { branches: ['master', 'stage-hotfix', 'staging', 'dev'], default: 'master' },
@@ -792,6 +798,15 @@ describe('Run small changes dialog', () => {
     expect(screen.queryByText(/herdr/)).toBeNull();
   });
 
+  it('never loads the epic list, so never shows the truncated hint', async () => {
+    routes['/api/delivery'] = { ...(routes['/api/delivery'] as object), truncated: true };
+    open();
+    await userEvent.click(await screen.findByRole('button', { name: 'Preview' }));
+    await screen.findByText('o/r#415: waits for o/r#9');
+    expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).startsWith('/api/delivery'))).toBe(false);
+    expect(screen.queryByText(/Only the newest 500/)).toBeNull();
+  });
+
   it('previews waves and warnings, then starts and opens the dispatch page', async () => {
     const onOpenChange = open();
     await userEvent.click(await screen.findByRole('button', { name: 'Preview' }));
@@ -834,6 +849,181 @@ describe('Run small changes dialog', () => {
     render(<App />);
     await userEvent.click(await screen.findByRole('button', { name: /Settings/ }));
     expect(screen.getByText('Feature branch')).toBeTruthy();
+  });
+});
+
+describe('Run an epic select', () => {
+  const open = (props: { epic?: string } = {}) =>
+    render(
+      <QueryProvider>
+        <MemoryRouter initialEntries={['/x?repo=o/r']}>
+          <NewDispatchDialog open onOpenChange={vi.fn()} {...props} />
+        </MemoryRouter>
+      </QueryProvider>,
+    );
+  const sel = () => screen.getByLabelText('Pick an epic of this repo') as HTMLSelectElement;
+  const shown = () => sel().selectedOptions[0]?.textContent;
+  const texts = () => Array.from(sel().options).map((o) => o.textContent);
+  const loaded = () => waitFor(() => expect(texts()).toHaveLength(4));
+  const typed = async (v: string) => {
+    await userEvent.clear(screen.getByLabelText('Epic'));
+    await userEvent.type(screen.getByLabelText('Epic'), v);
+  };
+  /** The text box works whatever the select shows: Preview on a typed number posts the plan request. */
+  const typedPreviews = async () => {
+    await typed('123');
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    await waitFor(() => expect(posts).toContainEqual(['/api/dispatches/plan', { epic: 'o/r#123', settings: S }]));
+  };
+  const deliveryHangs = () => {
+    const f = vi.mocked(fetch);
+    const base = f.getMockImplementation()!;
+    f.mockImplementation(((url: string, init?: RequestInit) => (String(url).startsWith('/api/delivery') ? new Promise(() => {}) : base(url, init))) as typeof fetch);
+  };
+
+  it('lists every open epic of the repo, newest first, without the No epic lane', async () => {
+    open();
+    await loaded();
+    expect(texts()).toEqual(['Pick an epic…', '#925 Search', '#701 Exports', '#1 Payments']);
+    expect(sel().disabled).toBe(false);
+    expect(texts().some((t) => t?.startsWith('Epic:'))).toBe(false);
+  });
+
+  it('a pick fills the text box and clears the preview', async () => {
+    open();
+    await loaded();
+    await typed('1');
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    expect(await screen.findByText('o/r#5: needs refine')).toBeTruthy();
+    await userEvent.selectOptions(sel(), '925');
+    expect((screen.getByLabelText('Epic') as HTMLInputElement).value).toBe('o/r#925');
+    expect(screen.queryByText('o/r#5: needs refine')).toBeNull();
+    expect(shown()).toBe('#925 Search');
+  });
+
+  it('follows the text box: n, #n and repo#n select it; anything else shows the placeholder', async () => {
+    open();
+    await loaded();
+    await typed('#925');
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' })); // `#n` is the dialog's repo
+    await waitFor(() => expect(posts).toContainEqual(['/api/dispatches/plan', { epic: 'o/r#925', settings: S }]));
+    for (const v of ['925', '#925', 'o/r#925', 'O/R#925']) {
+      await typed(v);
+      expect(shown()).toBe('#925 Search');
+    }
+    await typed('9');
+    expect(shown()).toBe('Pick an epic…');
+    await typed('x/y#5');
+    expect(shown()).toBe('Pick an epic…');
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    await waitFor(() => expect(posts).toContainEqual(['/api/dispatches/plan', { epic: 'x/y#5', settings: S }]));
+  });
+
+  it('shows a prefilled epic once the list loads', async () => {
+    open({ epic: 'o/r#701' });
+    await waitFor(() => expect(shown()).toBe('#701 Exports'));
+  });
+
+  it('is disabled and reads Loading epics… while the list loads', async () => {
+    deliveryHangs();
+    open();
+    expect(sel().disabled).toBe(true);
+    expect(texts()).toEqual(['Loading epics…']);
+    await typedPreviews();
+  });
+
+  it('reads Loading epics… until the first poll of the repo finishes', async () => {
+    routes['/api/delivery'] = { repo: 'o/r', stale: true, fetched_at: null, cap: 2, running: 0, auto_grind: false, lanes: [] };
+    open();
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).startsWith('/api/delivery'))).toBe(true));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(texts()).toEqual(['Loading epics…']);
+    expect(sel().disabled).toBe(true);
+    await typedPreviews();
+  });
+
+  it('says so when the repo has no open epic', async () => {
+    routes['/api/delivery'] = { repo: 'o/r', stale: false, fetched_at: 1, cap: 2, running: 0, auto_grind: false, lanes: [{ epic: null, title: 'No epic', running: 0, cards: [] }] };
+    open();
+    await waitFor(() => expect(texts()).toEqual(['No open epics in o/r']));
+    expect(sel().disabled).toBe(true);
+    await typedPreviews();
+  });
+
+  it('shows the load error and stays usable when the request fails', async () => {
+    vi.mocked(fetch).mockImplementation(((base) => (url: string, init?: RequestInit) =>
+      String(url).startsWith('/api/delivery') ? json({ error: 'boom' }, 500) : base(url, init))(vi.mocked(fetch).getMockImplementation()!) as typeof fetch);
+    open();
+    expect(await screen.findByText(/^Could not load epics: /, {}, { timeout: 4000 })).toBeTruthy(); // the query retries once
+    expect(texts()).toEqual(['Pick an epic…']);
+    expect(sel().disabled).toBe(false);
+    await typedPreviews();
+  });
+
+  it('shows the snapshot error while the repo was never fetched', async () => {
+    routes['/api/delivery'] = { repo: 'o/r', stale: true, fetched_at: null, error: 'gh down', cap: 2, running: 0, auto_grind: false, lanes: [] };
+    open();
+    expect(await screen.findByText('Could not load epics: gh down')).toBeTruthy();
+    expect(texts()).toEqual(['Pick an epic…']);
+    expect(sel().disabled).toBe(false);
+    await typedPreviews();
+  });
+
+  const TRUNC = "Only the newest 500 open issues were read; type an older epic's number.";
+  it('hints that older epics must be typed when the snapshot was truncated', async () => {
+    routes['/api/delivery'] = { ...(routes['/api/delivery'] as object), truncated: true };
+    open();
+    expect(await screen.findByText(TRUNC)).toBeTruthy();
+  });
+
+  it.each([undefined, false])('shows no truncated hint when truncated is %s', async (truncated) => {
+    if (truncated === false) routes['/api/delivery'] = { ...(routes['/api/delivery'] as object), truncated };
+    open();
+    await loaded();
+    expect(screen.queryByText(TRUNC)).toBeNull();
+  });
+
+  it('reads Pick a repo first with no repo registered', async () => {
+    routes['/api/repos'] = { repos: [], can_browse: false, scan_roots: [] };
+    render(
+      <QueryProvider>
+        <MemoryRouter initialEntries={['/x']}>
+          <NewDispatchDialog open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryProvider>,
+    );
+    await waitFor(() => expect(texts()).toEqual(['Pick a repo first']));
+    expect(sel().disabled).toBe(true);
+    await typed('o/r#123');
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    await waitFor(() => expect(posts).toContainEqual(['/api/dispatches/plan', { epic: 'o/r#123', settings: S }]));
+  });
+
+  describe('account pin', () => {
+    const accounts = { commands: [{ label: 'work', cmd: 'claude' }, { label: 'cx', cmd: 'codex', harness: 'codex', models: ['o3'] }], default: 'work' };
+    const checked = (name: string) => screen.getByRole('radio', { name }).getAttribute('aria-checked');
+    beforeEach(() => {
+      routes['/api/settings'] = accounts;
+      routes['/api/planning'] = { prds: [{ path: 'docs/prds/p.md', title: 'P', status: 'Approved', epic: 1, account: 'cx' }], fetched_at: 1, stale: false };
+    });
+
+    it('picking an epic whose PRD has an account pre-selects it; one with no PRD keeps the default', async () => {
+      open();
+      await loaded();
+      await userEvent.selectOptions(sel(), '1');
+      await waitFor(() => expect(checked('cx')).toBe('true'));
+      await userEvent.selectOptions(sel(), '701');
+      await waitFor(() => expect(checked('work')).toBe('true'));
+    });
+
+    it('keeps the user’s account when they changed a setting first', async () => {
+      open();
+      await loaded();
+      await userEvent.click(screen.getByRole('radio', { name: 'work' }));
+      await userEvent.selectOptions(sel(), '1');
+      await new Promise((r) => setTimeout(r, 50));
+      expect(checked('work')).toBe('true');
+    });
   });
 });
 

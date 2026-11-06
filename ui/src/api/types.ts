@@ -225,6 +225,8 @@ export interface DeliveryResponse extends BoardMeta {
   cap: number;
   running: number;
   auto_grind: boolean;
+  /** More than 500 open issues: the snapshot read stopped early (the poller's issues_truncated). */
+  truncated?: boolean;
   lanes: DeliveryLane[];
 }
 export interface DeliveryAllResponse { repos: BoardEntry<DeliveryResponse>[]; stale: RepoSlug[] }

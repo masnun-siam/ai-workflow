@@ -8,8 +8,9 @@ Inputs (plain data, no I/O):
   cleanup_flags  {issue_n: {uncommitted, unpushed}} for merged issues that need cleanup (ui_mergeclean)
   solo           the user owns the repo (ui_gh.solo)
 
-Result: {repo, stale, fetched_at, running, auto_grind, lanes: [{epic, title, running, cards}]},
-one lane per open epic plus a final "No epic" lane (epic None). Card:
+Result: {repo, stale, fetched_at, running, auto_grind, truncated, lanes: [{epic, title, running, cards}]},
+one lane per open epic plus a final "No epic" lane (epic None). `truncated` mirrors the snapshot's
+`issues_truncated` (more than 500 open issues, so some epics may be missing). Card:
 {n, title, column, priority, blocked_by: [n], pr: {n, draft, ci, url, review, conflict} | None,
  session: {id, status} | None, grind: {state, round, reason, thread} | None, grind_on: bool,
  mergeable: bool (ui_inbox.merge_ready), needs_cleanup: None | {uncommitted, unpushed}}.
@@ -166,5 +167,6 @@ def build(repo, snapshot, sessions, grind_index, settings, cleanup_flags, solo=F
         "fetched_at": snapshot.get("fetched_at"),
         "running": running,
         "auto_grind": settings.get("auto_grind") is True,
+        "truncated": data.get("issues_truncated") is True,
         "lanes": out,
     }
