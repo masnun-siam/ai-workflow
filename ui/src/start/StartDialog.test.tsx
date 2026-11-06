@@ -6,6 +6,7 @@ import { QueryProvider } from '../QueryProvider';
 import { ConfirmProvider, Toaster } from '../components';
 import { COMMANDS } from '../lib/vocab';
 import { StartDialog } from './StartDialog';
+import { REGISTRY } from '../test-registry';
 
 type Call = { method: string; url: string; body: Record<string, unknown> | null };
 let calls: Call[];
@@ -17,6 +18,7 @@ const posts = () => calls.filter((c) => c.method === 'POST' && c.url === '/api/s
 function mockApi(over: Record<string, unknown> = {}) {
   const routes: Record<string, unknown> = {
     '/api/repos': { repos: [{ slug: 'o/r', name: 'R', path: '/x' }, { slug: 'o/other', name: 'Other', path: '/y' }], can_browse: false, scan_roots: [] },
+    '/api/registry': REGISTRY,
     '/api/settings': { commands: [{ label: 'claude', cmd: 'claude', builtin: true }, { label: 'Masum', cmd: 'cc masum' }], default: 'claude' },
     '/api/sessions': { sessions: [], limits: { 'cc masum': { limited_until: Math.floor(Date.now() / 1000) + 3600 } }, usage: {}, afk: {} },
     '/api/peer-review': { default: ['critical'], max_rounds: 5, kinds: { 'create-prd': ['critical', 'cto'], custom: ['critical'] } },

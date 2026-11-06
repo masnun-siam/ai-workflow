@@ -2,6 +2,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
+import { REGISTRY } from '../test-registry';
 
 const json = (b: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } }));
 const URL_ = 'https://x.ts.net/s/tok';
@@ -14,6 +15,7 @@ function mock(o: { status?: string; shares?: unknown[]; detail?: unknown; post?:
   calls.length = 0;
   const routes: Record<string, unknown> = {
     '/api/repos': { repos: [{ slug: 'o/r', name: 'R', path: '/x' }], can_browse: false, scan_roots: [] },
+    '/api/registry': REGISTRY,
     '/api/sessions': { sessions: [], limits: {}, usage: {}, afk: { active: false, until: null, started: null, decisions: 0, held: 0, summary: null }, gh: { ok: true } },
     '/api/inbox': { items: [], afk: {}, gh: { ok: true } },
     '/api/planning': { repo: 'o/r', stale: false, fetched_at: 1, prds: [{ slug: 'f1', title: 'Feature one', status: o.status ?? 'In review', path: 'docs/prds/f1.md', abs_path: '/x/docs/prds/f1.md', column: 'review', pr: null, epic: null, issues: 0, refined: 0, unrefined: [], children: [], panel: null }] },
