@@ -56,6 +56,15 @@ assert mc.check(main, 1) is None
 assert mc.on_merged("o/r", [1], checkout=main) == {}
 assert not os.path.exists(p1) and not exists_branch("issue-1-x")
 
+# a blubird product: on_merged leaves cleanup to its after-merge session
+p1 = wt(1)
+os.makedirs(os.path.join(main, ".blubird"))
+open(os.path.join(main, ".blubird", "docs-repo"), "w").write("o/docs\n")
+assert mc.on_merged("o/r", [1], checkout=main) == {} and os.path.exists(p1)
+os.remove(os.path.join(main, ".blubird", "docs-repo"))
+os.rmdir(os.path.join(main, ".blubird"))
+assert mc.on_merged("o/r", [1], checkout=main) == {} and not os.path.exists(p1)
+
 # uncommitted file: kept, flagged
 p2 = wt(2)
 open(os.path.join(p2, "f"), "w").write("x")

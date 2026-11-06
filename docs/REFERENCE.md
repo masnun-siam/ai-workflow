@@ -192,7 +192,12 @@ session or the UI asked about it in the last 2 minutes (the global Inbox and the
 repo), else every 10 minutes. Every response reports the token's GraphQL budget, which the agents share:
 under 1000 points left, every repo polls every 10 minutes until the reset. A rate limit pauses fetching
 until that reset (10 minutes when the budget was not low) and the boards show the last data as stale
-with the reason and a **Refresh** (`?refresh=1` on the board GET fetches now). After each fresh poll the server runs merge cleanup and grind autostart (a PR that
+with the reason and a **Refresh** (`?refresh=1` on the board GET fetches now). After each fresh poll the server runs merge cleanup and grind autostart. Merge cleanup (remove the merged issue's
+worktree, else a `needs-cleanup` flag; `POST /api/cleanup`) runs only for an unmapped repo; for a blubird product (its
+checkout has `.blubird/repos.json` or `.blubird/docs-repo`) each issue a newly merged PR closes instead gets one
+headless session with the registry's after-merge command (`dispatch_run.followups_prompt`), which closes it, sets it
+Done and removes the worktree; a live session for the issue makes that start a 409, and `POST /api/cleanup` answers 409.
+Grind autostart: a PR that
 turned ready whose issue has grinding on, unless a dispatch lane owns it; a PR with no issue follows the
 repo's auto-grind). Nothing runs on stale data, and outside a dispatch with auto-merge on nothing merges
 a PR without a click.

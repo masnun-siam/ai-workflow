@@ -114,6 +114,10 @@ def on_merged(repo: str, merged_issues, checkout: str | None = None, heads: dict
             return {}
     if not isinstance(checkout, str) or not os.path.isdir(checkout):
         return {}
+    import ui_products  # lazy: ui_products pulls in ui_repos
+
+    if ui_products.mapped(checkout):
+        return {}  # a blubird product: its after-merge session cleans up
     flagged = {}
     for n in merged_issues:
         try:

@@ -636,6 +636,36 @@ try:
     assert pr55["state"] == "MERGED", pr55
     ok("merge: re-polls the repo before answering")
 
+    import dispatch_run
+
+    # a blubird product: a new merge starts one after-merge session per closed issue, no UI cleanup
+    blu = os.path.join(repo_dir, ".blubird")
+    os.makedirs(blu)
+    with open(os.path.join(blu, "docs-repo"), "w") as f:
+        f.write("o/docs\n")
+    _notes.clear()
+    _started.clear()
+    ui_repos.start_session = lambda body: _started.append(body) or (201, {"id": "S"})
+    m56 = {"number": 56, "title": "m", "url": "u56", "mergedAt": "2999-01-01T00:00:00Z", "headRefName": "issue-6-x"}
+    m57 = dict(m56, number=57, url="u57", headRefName="chore-x", closingIssuesReferences={"nodes": []})
+    m57["body"] = ""
+    _gql([_issue(1, ["epic"])], merged=[m56, m57])
+    ui_server.POLLER.poll("o/r")
+    assert _started == [{"repo": "o/r", "text": dispatch_run.followups_prompt(6, 56, None), "issue": 6}], _started
+    assert _notes == [], _notes
+    ui_server.POLLER.poll("o/r")  # same merge again: nothing more
+    assert len(_started) == 1, _started
+    assert call("POST", "/api/cleanup", {"repo": "o/r", "issue": 6, "confirm": True})[0] == 409
+    _gql([_issue(1, ["epic"])], merged=[m56, dict(m56, number=58, url="u58", headRefName="issue-8-x")])
+    ui_repos.start_session = lambda body: _started.append(body) or (409, {"error": "already running"})
+    ui_server.POLLER.poll("o/r")  # a live session: 409 is accepted, not retried
+    assert [b["issue"] for b in _started] == [6, 8] and _notes == [], _started
+    ui_server.POLLER.poll("o/r")
+    assert len(_started) == 2, _started
+    os.remove(os.path.join(blu, "docs-repo"))
+    os.rmdir(blu)
+    ok("merge on a blubird product: one after-merge session per issue, 409 accepted, no cleanup")
+
     # watch set: opened in the last 7 days (any ?repo= request) or live session; GitHub remotes only
     other = tempfile.mkdtemp()
     local = tempfile.mkdtemp()
