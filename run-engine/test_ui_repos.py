@@ -300,6 +300,14 @@ try:
         assert s == 409 and calls == [], (cmd, text, s, p)
     ok("live record in either spelling blocks the other -> 409")
 
+    import dispatch_run
+
+    for cmd in ("/blubird:implement-issue 7", dispatch_run.followups_prompt(7, 70, None)):
+        live(cmd)  # a live implement or after-merge session blocks the after-merge start
+        s, p = post({"repo": "o/r", "text": dispatch_run.followups_prompt(7, 70, None), "issue": 7})
+        assert s == 409 and calls == [], (cmd, s, p)
+    ok("after-merge start vs live /blubird: implement or after-merge -> 409")
+
     fam = ui_repos.family
     assert (
         fam("/implement-issue 3")

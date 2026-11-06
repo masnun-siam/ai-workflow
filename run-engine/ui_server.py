@@ -278,6 +278,9 @@ def _on_fresh(repo: str, snap: dict, prev: dict) -> None:
             )
         seen = {m["n"] for m in prev.get("merged") or []}
         issues = [n for m in snap["data"]["merged"] if m["n"] not in seen for n in m["closes"]]
+        if ui_products.mapped(dispatch.read_checkouts().get(repo)):  # blubird's after-merge owns the cleanup
+            _after_merge(repo, [m for m in snap["data"]["merged"] if m["n"] not in seen])
+            issues = []
         heads = {n: m["sha"] for m in snap["data"]["merged"] if m.get("sha") for n in m["closes"]}
         flagged = ui_mergeclean.on_merged(repo, issues, heads=heads) if issues else {}
         for n, f in flagged.items():
@@ -294,6 +297,23 @@ def _on_fresh(repo: str, snap: dict, prev: dict) -> None:
             _flags[repo][n] = f
     if not first:
         ui_grind.autostart(repo, snap, {"data": prev}, settings)
+
+
+def _after_merge(repo: str, merged: list) -> None:
+    """Start the registry's after-merge command once per issue each newly merged PR closes. A live session for
+    the issue is answered 409 by start_session's duplicate guard; anything else is warned, never raised."""
+    for m in merged:
+        for n in m["closes"]:
+            if dispatch_run.active_lane(repo, n=n) or dispatch_run.active_lane(repo, pr=m["n"]):
+                continue  # a dispatch lane runs its own followups stage (not always a session find_live sees)
+            try:
+                status, body = ui_repos.start_session(
+                    {"repo": repo, "text": dispatch_run.followups_prompt(n, m["n"], None), "issue": n}
+                )
+            except Exception as e:  # noqa: BLE001 - one issue must not stop the poll or the rest
+                status, body = type(e).__name__, {"error": str(e)}
+            if status not in (201, 409):
+                warn(f"after-merge {repo}#{n}: {status} {body.get('error') if isinstance(body, dict) else body}")
 
 
 POLLER.on_fresh = _on_fresh
@@ -988,6 +1008,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if not pr:
             raise ui_start.Conflict(f"#{issue}'s PR is not merged")
         checkout = dispatch.read_checkouts()[repo]
+        if ui_products.mapped(checkout):
+            raise ui_start.Conflict(f"{repo} is a blubird product: after-merge cleanup belongs to its implement-issue")
         res = ui_mergeclean.clean(checkout, issue, confirm=True, merged_head=pr.get("sha"))
         _flags.get(repo, {}).pop(issue, None)
         return {"removed": res["removed"]}
