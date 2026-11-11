@@ -1,0 +1,8 @@
+- [P0] `errs.Error` gets an optional `Status int` and `errs.WithStatus(status,msg)` (plus `errs.Status/Body/As` helpers) — Decode must return 413/415, which the five kinds cannot express.
+- [P0] `cli.Main` opens the home for every verb except `version`; `cli.Run(ctx, env, cmds, args)` is the testable core — `Main(cmds,args)` in API §2 has no Env parameter.
+- [P0] `server.Server` also exposes `Handler()`, `Ready()`, `Addr()`, `BootID()`, `SetTailnet(hosts, owner)` — needed for tests and wiring; tailscale status/serve runs inside `Listen` when `Config.Tailscale` (best effort, logged, never fatal).
+- [P0] Static serving 404s any path with `..`, `%`, backslash or NUL, and any missing path that has a file extension; extensionless misses get `index.html` — satisfies "traversal → 404" while keeping SPA routes.
+- [P0] Unknown `/api/*` and method mismatches on registered API paths answer JSON 404 (the catch-all), not 405 — keeps D14 (no text/plain errors) simply.
+- [P0] `events.Bus` full-buffer policy: drop the queued events and leave one `hello{resync:true}` marker (Topic `hello`); the SSE handler fills in version/boot_id.
+- [P0] `home.Migrate` writes `.migrated` only after an error-free copy (a failed copy retries, skipping files already present with the same size); a missing old dir still writes the marker; it refuses when the home is inside the old dir.
+- [P0] `serve` skeleton keeps tailscale off until settings exist (`--no-tailscale` is parsed; the wiring task reads `settings.server`).
