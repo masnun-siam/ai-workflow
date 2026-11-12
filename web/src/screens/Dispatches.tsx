@@ -11,6 +11,7 @@ import { nav, route, setParam } from "../state/route";
 import { Header } from "../components/Header";
 import { AccountPick, EFFORTS, MODELS, openItems } from "../components/Start";
 import { Btn, Chips, Empty, Field, Pane, Tag } from "../components/ui";
+import { Select } from "../components/Select";
 
 // ---------- shared ----------
 const STAGE: Record<string, [string, string]> = {
@@ -68,27 +69,27 @@ function NewDispatch({ initial = "", onClose }: { initial?: string; onClose: () 
     <Pane label={small ? "run small changes" : "run an epic"}>
       <form class="form" onSubmit={async (e) => { e.preventDefault(); if (target.trim()) await preview(); }}>
         <div class="fields">
-          {!small && <Field label="Repository"><select value={repo} onChange={(e) => { setRepo((e.target as HTMLSelectElement).value); setTarget(""); }}>{repoList.value.filter((r) => !r.slug.startsWith("local/")).map((r) => <option key={r.slug}>{r.slug}</option>)}</select></Field>}
+          {!small && <Field label="Repository"><Select label="Repository" value={repo} onChange={(v) => { setRepo(v); setTarget(""); }} options={repoList.value.filter((r) => !r.slug.startsWith("local/")).map((r) => ({ value: r.slug, label: r.slug.split("/")[1] ?? r.slug, hint: r.slug.split("/")[0] }))} /></Field>}
           <Field label={small ? "Issues" : "Epic"} hint={small ? "comma-separated, 1–30" : "pick one, or type owner/name#N, #N or a link"}>
             <input list="dispatch-epics" value={target} onInput={(e) => { setTarget((e.target as HTMLInputElement).value); setPlan(null); }} placeholder={`${repo || "owner/name"}#123`} />
             <datalist id="dispatch-epics">{epics.map((e) => <option key={e.number} value={`${repo}#${e.number}`}>{e.title}</option>)}</datalist>
           </Field>
         </div>
         <div class="fields">
-          <Field label="Grind"><select value={st.grind} onChange={(e) => set("grind", (e.target as HTMLSelectElement).value as DispatchSettings["grind"])}><option value="off">Off</option><option value="simple">Simple</option><option value="full">Full</option></select></Field>
-          <Field label="CI"><select value={st.ci} onChange={(e) => set("ci", (e.target as HTMLSelectElement).value as DispatchSettings["ci"])}><option value="wait">Wait</option><option value="defer">Defer</option><option value="ignore">Ignore</option></select></Field>
+          <Field label="Grind"><Select label="Grind" value={st.grind ?? "simple"} onChange={(v) => set("grind", v as DispatchSettings["grind"])} options={[["off", "Off"], ["simple", "Simple"], ["full", "Full"]]} /></Field>
+          <Field label="CI"><Select label="CI" value={st.ci ?? "wait"} onChange={(v) => set("ci", v as DispatchSettings["ci"])} options={[["wait", "Wait"], ["defer", "Defer"], ["ignore", "Ignore"]]} /></Field>
           <Field label="At most at once"><input type="number" min={1} max={10} value={st.max} onInput={(e) => set("max", Number((e.target as HTMLInputElement).value))} /></Field>
           <Field label="Cost cap (USD)"><input type="number" min={0} step={1} placeholder="none" value={st.max_cost ?? ""} onInput={(e) => set("max_cost", (e.target as HTMLInputElement).value ? Number((e.target as HTMLInputElement).value) : null)} /></Field>
         </div>
         <div class="fields">
           <label class="fld check"><span>&nbsp;</span><span><input type="checkbox" checked={!!st.auto_merge} onChange={(e) => set("auto_merge", (e.target as HTMLInputElement).checked)} /> Auto-merge</span></label>
           <label class="fld check"><span>&nbsp;</span><span><input type="checkbox" checked={!!st.skip_approval} onChange={(e) => set("skip_approval", (e.target as HTMLInputElement).checked)} /> Skip approval</span></label>
-          <Field label="Base branch"><select value={st.base_branch ?? ""} onChange={(e) => set("base_branch", (e.target as HTMLSelectElement).value || null)}><option value="">{branches ? `default (${branches.default})` : "default"}</option>{(branches?.branches ?? []).map((b) => <option key={b}>{b}</option>)}</select></Field>
+          <Field label="Base branch"><Select label="Base branch" value={st.base_branch ?? ""} onChange={(v) => set("base_branch", v || null)} options={[["", branches ? `default (${branches.default})` : "default"], ...(branches?.branches ?? []).map((b) => [b, b] as [string, string])]} /></Field>
           {!small && <Field label="Feature branch" hint="optional: lanes merge here, then one PR to base"><input value={st.feature_branch ?? ""} placeholder="none" onInput={(e) => set("feature_branch", (e.target as HTMLInputElement).value || null)} /></Field>}
         </div>
         <div class="fields">
-          <Field label="Model"><select value={st.model ?? ""} onChange={(e) => set("model", (e.target as HTMLSelectElement).value || null)}><option value="">default</option>{MODELS.map((m) => <option key={m}>{m}</option>)}</select></Field>
-          <Field label="Effort"><select value={st.effort ?? ""} onChange={(e) => set("effort", ((e.target as HTMLSelectElement).value || null) as Effort | null)}><option value="">default</option>{EFFORTS.map((m) => <option key={m}>{m}</option>)}</select></Field>
+          <Field label="Model"><Select label="Model" value={st.model ?? ""} onChange={(v) => set("model", v || null)} options={[["", "default"], ...MODELS.map((m) => [m, m] as [string, string])]} /></Field>
+          <Field label="Effort"><Select label="Effort" value={st.effort ?? ""} onChange={(v) => set("effort", (v || null) as Effort | null)} options={[["", "default"], ...EFFORTS.map((m) => [m, m] as [string, string])]} /></Field>
         </div>
         <AccountPick value={st.account ?? ""} onChange={(v) => set("account", v || null)} />
         <div class="acts">
@@ -172,8 +173,8 @@ function Settings({ d }: { d: Dispatch }) {
   return (
     <div class="fields">
       <Field label="At most at once"><input type="number" min={1} max={10} value={s.max} onChange={(e) => void set({ max: Number((e.target as HTMLInputElement).value) })} /></Field>
-      <Field label="Grind"><select value={s.grind} onChange={(e) => void set({ grind: (e.target as HTMLSelectElement).value as DispatchSettings["grind"] })}><option value="off">Off</option><option value="simple">Simple</option><option value="full">Full</option></select></Field>
-      <Field label="CI"><select value={s.ci} onChange={(e) => void set({ ci: (e.target as HTMLSelectElement).value as DispatchSettings["ci"] })}><option value="wait">Wait</option><option value="defer">Defer</option><option value="ignore">Ignore</option></select></Field>
+      <Field label="Grind"><Select label="Grind" value={s.grind} onChange={(v) => void set({ grind: v as DispatchSettings["grind"] })} options={[["off", "Off"], ["simple", "Simple"], ["full", "Full"]]} /></Field>
+      <Field label="CI"><Select label="CI" value={s.ci} onChange={(v) => void set({ ci: v as DispatchSettings["ci"] })} options={[["wait", "Wait"], ["defer", "Defer"], ["ignore", "Ignore"]]} /></Field>
       <Field label="Cost cap (USD)"><input type="number" min={0} value={s.max_cost ?? ""} placeholder="none" onChange={(e) => void set({ max_cost: (e.target as HTMLInputElement).value ? Number((e.target as HTMLInputElement).value) : null })} /></Field>
       <label class="fld check"><span>&nbsp;</span><span><input type="checkbox" checked={s.auto_merge} onChange={(e) => void set({ auto_merge: (e.target as HTMLInputElement).checked })} /> Auto-merge</span></label>
       <label class="fld check"><span>&nbsp;</span><span><input type="checkbox" checked={s.skip_approval} onChange={(e) => void set({ skip_approval: (e.target as HTMLInputElement).checked })} /> Skip approval</span></label>

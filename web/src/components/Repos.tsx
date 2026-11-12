@@ -1,6 +1,7 @@
 /** Old aiw repo dialogs: Create a new repo (optionally seeded with a notes-vault PRD) and Publish a
  *  local/ repo to GitHub. */
 import { signal } from "@preact/signals";
+import { Select } from "./Select";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { http } from "../api/http";
 import type { Repo, VaultPRD } from "../api/types";
@@ -101,7 +102,7 @@ export function PublishDialog() {
       <form class="form" onSubmit={(e) => { e.preventDefault(); if (owner && name && !busy) void submit(); }}>
         <h2 class="dlg-h">Publish {slug} to GitHub</h2>
         <div class="fields">
-          <Field label="Owner">{owners === null ? <span class="dim">Loading…</span> : <select value={owner} onChange={(e) => setOwner((e.target as HTMLSelectElement).value)}>{owners.map((o) => <option key={o}>{o}</option>)}</select>}</Field>
+          <Field label="Owner">{owners === null ? <span class="dim">Loading…</span> : <Select label="Owner" value={owner} onChange={setOwner} options={owners.map((o) => [o, o] as [string, string])} />}</Field>
           <Field label="Name"><input value={name} onInput={(e) => setName((e.target as HTMLInputElement).value)} /></Field>
         </div>
         <label class="opt inline"><input type="checkbox" checked={priv} onChange={(e) => setPriv((e.target as HTMLInputElement).checked)} /><span>Private</span></label>

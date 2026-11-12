@@ -1,4 +1,5 @@
 import { useState } from "preact/hooks";
+import { Select } from "../../components/Select";
 import { http } from "../../api/http";
 import type { Effort, Model, Settings } from "../../api/types";
 import { mutate, settings } from "../../state/data";
@@ -31,8 +32,8 @@ export function AccountsPane() {
         <div class="acts"><Btn onClick={() => setCmds([...list, { label: "", cmd: "" }])}>Add account</Btn>
           {cmds && <><Btn primary disabled={cmds.some((c) => !c.label.trim() || !c.cmd.trim())} title={cmds.some((c) => !c.label.trim() || !c.cmd.trim()) ? "Every account needs a label and a command" : undefined} onClick={async () => { if (await saveSettings({ commands: cmds })) setCmds(null); }}>Save accounts</Btn><Btn onClick={() => setCmds(null)}>Discard</Btn><span class="c-w">Unsaved changes</span></>}</div>
         <div class="fields">
-          <Field label="Default model"><select value={s.run_model ?? ""} onChange={(e) => void saveSettings({ run_model: ((e.target as HTMLSelectElement).value || null) as Model | null })}><option value="">account default</option><option>opus</option><option>sonnet</option><option>haiku</option></select></Field>
-          <Field label="Default effort"><select value={s.run_effort ?? ""} onChange={(e) => void saveSettings({ run_effort: ((e.target as HTMLSelectElement).value || null) as Effort | null })}><option value="">account default</option><option>low</option><option>medium</option><option>high</option><option>xhigh</option><option>max</option></select></Field>
+          <Field label="Default model"><Select label="Default model" value={s.run_model ?? ""} onChange={(v) => void saveSettings({ run_model: (v || null) as Model | null })} options={[["", "account default"], ["opus", "opus"], ["sonnet", "sonnet"], ["haiku", "haiku"]]} /></Field>
+          <Field label="Default effort"><Select label="Default effort" value={s.run_effort ?? ""} onChange={(v) => void saveSettings({ run_effort: (v || null) as Effort | null })} options={[["", "account default"], ["low", "low"], ["medium", "medium"], ["high", "high"], ["xhigh", "xhigh"], ["max", "max"]]} /></Field>
         </div>
       </div>
     </Pane>

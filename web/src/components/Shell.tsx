@@ -11,6 +11,7 @@ import { detailOpen, helpOpen, paletteOpen, repoOpen } from "../state/ui";
 import { clock } from "../state/format";
 import { Btn, Meter } from "./ui";
 import { openCreate } from "../state/ui";
+import { Chevron, DdTrigger } from "./Select";
 
 const owner = (slug: string) => slug.split("/")[0] ?? slug;
 const short = (slug: string) => slug.split("/").pop() ?? slug;
@@ -67,7 +68,7 @@ export function RepoList({ list, first, selected, extrasBefore = [], extrasAfter
 }
 
 /** A popover anchored under its trigger; closes on outside click and Escape. */
-export function Popover({ open, setOpen, trigger, children, wide }: { open: boolean; setOpen: (v: boolean) => void; trigger: preact.ComponentChildren; children: preact.ComponentChildren; wide?: boolean }) {
+export function Popover({ open, setOpen, trigger, children, wide, fit }: { open: boolean; setOpen: (v: boolean) => void; trigger: preact.ComponentChildren; children: preact.ComponentChildren; wide?: boolean; fit?: boolean }) {
   const box = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -78,7 +79,7 @@ export function Popover({ open, setOpen, trigger, children, wide }: { open: bool
     const el = box.current;
     return () => { document.removeEventListener("mousedown", down); el?.removeEventListener("keydown", key); };
   }, [open]);
-  return <span class="popw" ref={box}>{trigger}{open && <div class={`pop${wide ? " wide" : ""}`}>{children}</div>}</span>;
+  return <span class={`popw${fit ? " fit" : ""}`} ref={box}>{trigger}{open && <div class={`pop${wide ? " wide" : ""}${fit ? " fit" : ""}`}>{children}</div>}</span>;
 }
 
 /** The current repo (g r): new runs start here, and it picks the product River, Releases and Ops show. */
@@ -92,7 +93,7 @@ export function RepoSwitcher() {
       <button type="button" class="repo-btn" aria-expanded={open} title={`${repo ?? "No repository"}. Switch repository (g then r)`} aria-label={`Repository: ${name}. Switch repository`} onClick={() => setOpen(!open)}>
         <span class="repo-mark" aria-hidden="true">{name[0]?.toUpperCase() ?? "?"}</span>
         <span class="repo-txt"><b>{name}</b><span class="dim mono">{repo ?? "add one in Settings"}</span></span>
-        <span aria-hidden="true" class="dim">▾</span>
+        <Chevron />
       </button>
     }>
       <RepoList list={repoList.value} first={repo} selected={repo ?? ""} label="Switch repository"
@@ -108,9 +109,7 @@ export function RepoScope({ label = "Repository filter" }: { label?: string }) {
   const v = only.value;
   return (
     <Popover open={open} setOpen={setOpen} trigger={
-      <button type="button" class="btn scope" aria-expanded={open} aria-label={`${label}: ${v ? short(v) : "All repos"}`} onClick={() => setOpen(!open)}>
-        {v ? short(v) : "All repos"} <span aria-hidden="true" class="dim">▾</span>
-      </button>
+      <DdTrigger compact open={open} label={`${label}: ${v ? short(v) : "All repos"}`} onClick={() => setOpen(!open)}>{v ? short(v) : "All repos"}</DdTrigger>
     }>
       <RepoList list={repoList.value} selected={v} label={label} extrasBefore={[{ value: "", label: "All repos" }]}
         onPick={(s) => { setOpen(false); setParam("only", s); }} />
@@ -123,10 +122,9 @@ export function RepoField({ value, onChange, label, extrasBefore, extrasAfter }:
   const [open, setOpen] = useState(false);
   const shown = [...(extrasBefore ?? []), ...(extrasAfter ?? [])].find((e) => e.value === value)?.label ?? (value ? short(value) : "Pick a repository");
   return (
-    <Popover open={open} setOpen={setOpen} wide trigger={
-      <button type="button" class="btn field-btn" aria-expanded={open} aria-label={`${label}: ${shown}`} onClick={() => setOpen(!open)}>
-        <span class="grow">{shown}</span>{value && !value.startsWith(":") && value.includes("/") && !value.startsWith("/") && <span class="dim mono">{owner(value)}</span>}<span aria-hidden="true" class="dim">▾</span>
-      </button>
+    <Popover open={open} setOpen={setOpen} wide fit trigger={
+      <DdTrigger open={open} label={`${label}: ${shown}`} onClick={() => setOpen(!open)}
+        aside={value && !value.startsWith(":") && value.includes("/") && !value.startsWith("/") ? <span class="mono">{owner(value)}</span> : undefined}>{shown}</DdTrigger>
     }>
       <RepoList list={repoList.value} first={currentRepo.value} selected={value} label={label} extrasBefore={extrasBefore} extrasAfter={extrasAfter} onPick={(v) => { setOpen(false); onChange(v); }} />
     </Popover>
