@@ -2,19 +2,26 @@ import { computed, signal } from "@preact/signals";
 import { useEffect, useState } from "preact/hooks";
 import { http } from "../api/http";
 import type { Release, ReleaseStage } from "../api/types";
-import { loadErrors, mutate, releases, settings } from "../state/data";
+import { currentRepo, loadErrors, mutate, releases, settings } from "../state/data";
 import { askConfirm } from "../state/ui";
 import { ago } from "../state/format";
 import { Header } from "../components/Header";
 import { ActionBar } from "../components/ActionBar";
 import { Btn, Chips, Empty, KV, Pane } from "../components/ui";
 
-const relRepo = signal<string | null>(null);
+/** The repository chip picked on this page; it applies only while the current repo is the one it was picked under. */
+const relRepo = signal<{ under: string | null; repo: string } | null>(null);
 const editing = signal(false);
 const DONE = new Set<ReleaseStage>(["done", "skipped", "failed"]);
 
 const repoList = computed(() => releases.value?.repos ?? []);
-const repoSlug = computed(() => relRepo.value && repoList.value.some((r) => r.repo === relRepo.value) ? relRepo.value : (repoList.value[0]?.repo ?? null));
+const has = (slug: string | null | undefined): slug is string => !!slug && repoList.value.some((r) => r.repo === slug);
+const repoSlug = computed(() => {
+  const picked = relRepo.value?.under === currentRepo.value ? relRepo.value?.repo : null;
+  if (has(picked)) return picked;
+  if (has(currentRepo.value)) return currentRepo.value;
+  return repoList.value[0]?.repo ?? null;
+});
 /** The release in flight for the repo, else the newest one. */
 export const currentRelease = computed<Release | null>(() => {
   const all = (releases.value?.releases ?? []).filter((r) => r.repo === repoSlug.value);
@@ -78,7 +85,7 @@ export function Releases() {
         <Btn k="n" onClick={() => releaseOps.note()} disabled={!r || posted} title={!r ? "No release yet" : posted ? "The note is already posted" : "Draft the release note"}>Note</Btn>
       </Header>
       {err && <div class="banner bad" role="alert">{err}</div>}
-      {repoList.value.length > 0 && <Chips label="Repository" value={repoSlug.value ?? ""} options={repoList.value.map((x) => [x.repo, `${x.name}${x.ahead ? ` (${x.ahead})` : ""}`])} onPick={(v) => { relRepo.value = v; editing.value = false; }} />}
+      {repoList.value.length > 0 && <Chips label="Repository" value={repoSlug.value ?? ""} options={repoList.value.map((x) => [x.repo, `${x.name}${x.ahead ? ` (${x.ahead})` : ""}`])} onPick={(v) => { relRepo.value = { under: currentRepo.value, repo: v }; editing.value = false; }} />}
       {repo && <span class="mu">{repo.repo} · {repo.head} → {repo.base}{repo.last_release ? ` · last #${repo.last_release.pr} ${ago(repo.last_release.merged_at)}` : ""}</span>}
       <div class="steps" role="list" aria-label="Release steps">
         {STEPS.map((s, i) => {
