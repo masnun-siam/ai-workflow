@@ -5,3 +5,4 @@
 - sessions: adapters for settings (`AccountCmd/DefaultCmd/LabelFor/CheckRun/RunDefaults/VaultDir`), prompts, products, notify; implement `pin_account` routing.
 - products: Deps.ScanRoots (settings), Deps.Merged (poller).
 - gh/poller: wire `Commands()`, `Routes(Deps)`, `Poller.Start`, injected Repoll/OpenChildren/ProductRepos.
+- away: notify.SetAway(away.Active); pass dispatch adapter implementing away.Lanes{Stuck, Retry}.
