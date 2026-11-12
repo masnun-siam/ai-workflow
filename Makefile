@@ -10,8 +10,20 @@ UID        := $(shell id -u)
 VERSION    ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT     ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 LDFLAGS    := -X main.version=$(VERSION) -X main.commit=$(COMMIT)
+SIGN_ID    ?= $(or $(SETU_SIGN_ID),setu-dev)
 
-.PHONY: build web test install restart uninstall
+# Sign the installed binary with a stable identity so macOS keeps its Full Disk Access grant
+# across rebuilds (an ad-hoc signature changes every build). `make codesign-setup` creates it.
+define sign
+	@if security find-certificate -c "$(SIGN_ID)" >/dev/null 2>&1; then \
+	  codesign -f -s "$(SIGN_ID)" -i $(LABEL) $(BIN); \
+	else \
+	  codesign -f -s - -i $(LABEL) $(BIN); \
+	  echo "warning: no '$(SIGN_ID)' identity, signed ad-hoc; Full Disk Access is lost on every rebuild. Run 'make codesign-setup'."; \
+	fi
+endef
+
+.PHONY: build web test install restart uninstall codesign-setup
 
 # The web app is committed (internal/web/dist), so `go build` alone also works.
 web:
@@ -29,6 +41,7 @@ test:
 install: web
 	mkdir -p $(dir $(BIN)) $(HOME)/.setu/logs $(HOME)/Library/LaunchAgents
 	go build -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/setu
+	$(sign)
 	@tooldirs=""; for t in claude gh slackcli jev tailscale terminal-notifier; do \
 	  p=$$(command -v $$t 2>/dev/null) && tooldirs="$$tooldirs:$$(dirname $$p)"; done; \
 	agentpath="/opt/homebrew/bin:/usr/local/bin:$(HOME)/.local/bin$$tooldirs:/usr/bin:/bin:/usr/sbin:/sbin"; \
@@ -51,7 +64,12 @@ install: web
 # Rebuild the web app and the binary, then restart the agent.
 restart: web
 	go build -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/setu
+	$(sign)
 	launchctl kickstart -k gui/$(UID)/$(LABEL)
+
+# Create the local code-signing identity once per machine, then grant Full Disk Access once.
+codesign-setup:
+	SETU_SIGN_ID="$(SIGN_ID)" ./deploy/codesign-setup.sh
 
 # Stop and remove the agent and the binary. State in ~/.setu is kept.
 uninstall:
