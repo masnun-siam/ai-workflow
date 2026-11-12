@@ -40,7 +40,9 @@ type Deps struct {
 	// Merged is the poller's merged list: the PR merged time when PR n of repo is in it.
 	// Optional; without it (or on a miss) release asks `gh pr view`.
 	Merged func(repo string, n int) (mergedAt string, ok bool)
-	Now    func() time.Time
+	// PRsWaiting counts the PRs merged to head since base (optional; nil leaves prs_waiting null).
+	PRsWaiting func(slug, head, base string) *int
+	Now        func() time.Time
 }
 
 // Service runs the release flow.
@@ -353,6 +355,9 @@ func (s *Service) Repos(product string) []ReleaseRepo {
 			defer wg.Done()
 			n, at := s.ahead(slug, head, base)
 			out[i].Ahead = n
+			if s.d.PRsWaiting != nil {
+				out[i].PRsWaiting = s.d.PRsWaiting(slug, head, base)
+			}
 			if !at.IsZero() {
 				out[i].CheckedAt = sp(ts(at))
 			}

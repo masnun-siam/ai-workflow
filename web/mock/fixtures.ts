@@ -186,10 +186,11 @@ export const settings: Settings = {
 };
 const ev = (key: string, label: string, group: string) => ({ key: key as never, label, group });
 export const notify: NotifySettings = {
-  matrix: Object.fromEntries(["waiting", "failed", "dispatch", "panel-cap", "pr-ready", "needs-cleanup", "grind-paused", "grind-done", "done", "afk", "release"].map((k) => [k, { browser: true, push: k === "waiting", mac: k !== "done" }])) as NotifySettings["matrix"],
+  matrix: Object.fromEntries(["waiting", "failed", "dispatch", "panel-cap", "pr-ready", "needs-cleanup", "grind-paused", "grind-done", "done", "afk", "release"].map((k) => [k, { browser: true, push: k === "waiting", mac: k !== "done", ntfy: true }])) as NotifySettings["matrix"],
   events: [ev("waiting", "Waiting on you", "Sessions"), ev("failed", "Failed", "Sessions"), ev("done", "Done", "Sessions"), ev("dispatch", "Dispatch needs you", "Dispatch"), ev("panel-cap", "Review panel cap", "Review"),
     ev("pr-ready", "PR ready", "PRs"), ev("needs-cleanup", "Needs cleanup", "PRs"), ev("grind-paused", "Grind paused", "Grind"), ev("grind-done", "Grind done", "Grind"), ev("afk", "Away ended", "Away"), ev("release", "Release", "Release")],
   public_url: "https://mac.tail1234.ts.net", mac: { available: true, notifier: "terminal-notifier", clickable: true }, push: { subscriptions: 1 },
+  ntfy_ready: true, server: "https://ntfy.sh", topic: "setu-demo", user: "", token_set: false, password_set: false, env: [],
 };
 export const reviewCfg: ReviewConfig = {
   max_rounds: 3, default_lenses: ["security", "perf"], lenses: { security: "Look for auth and injection problems", perf: "Look for N+1 and slow paths", tests: "Look for missing tests" },

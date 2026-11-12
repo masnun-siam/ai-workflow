@@ -225,9 +225,10 @@ export type Settings = {
   server: { port: number; tailscale: boolean; tailscale_https_port: 443 | 8443 | 10000; allow_hosts: string[] };
   /* GET only: */ jev_installed?: boolean; bot_label?: string | null;
 };
-export type NotifySettings = { matrix: Record<NotifyEvent, { browser: boolean; push: boolean; mac: boolean }>;
+export type NotifySettings = { matrix: Record<NotifyEvent, { browser: boolean; push: boolean; mac: boolean; ntfy: boolean }>;
   events: { key: NotifyEvent; label: string; group: string }[]; public_url: string;
-  mac: { available: boolean; notifier: string; clickable: boolean }; push: { subscriptions: number } };
+  mac: { available: boolean; notifier: string; clickable: boolean }; push: { subscriptions: number };
+  ntfy_ready: boolean; server: string; topic: string; user: string; token_set: boolean; password_set: boolean; env: string[] };
 export type NotifyEvent = "waiting"|"failed"|"dispatch"|"panel-cap"|"pr-ready"|"needs-cleanup"|"grind-paused"|"grind-done"|"done"|"afk"|"release";
 export type PushSubscription = { endpoint: string; keys: { p256dh: string; auth: string } };
 
