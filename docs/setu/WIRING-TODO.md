@@ -9,3 +9,4 @@
 - review: Routes/Start/Commands; sessions.Deps.PanelState = review.Service.State. Check peer-reviewer.md's verdict format matches the parser (`**Verdict:** approve` parses as changes).
 - web: Go registry JSON tags must be id, source, skill, runs_in, stage, args_hint, command, available, reason. NotifySettings needs ntfy fields (server, topic, token_set, ntfy_ready) for the Settings form. Push subscribe in the browser (P4-P).
 - inbox/views: adapt dispatch/release/away/grind/review via inbox.Convert[T]; dispatch public view needs seen_done; provide cleanup Flags(repo); share one Builder.
+- grind: register Service.OnFresh with poller; call Service.Start; pass dispatch as LaneOwner.
