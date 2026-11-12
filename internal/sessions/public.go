@@ -168,7 +168,10 @@ func (m *Manager) titleOf(r Record, slug string) string {
 		}
 	}
 	line := strings.TrimSpace(strings.SplitN(strings.TrimSpace(r.Command), "\n", 2)[0])
-	return clip(line, 120)
+	if c := clip(line, 119); c != line {
+		return strings.TrimRight(c, " ") + "…"
+	}
+	return line
 }
 
 // Stats tallies today's and this month's sessions and cost (UTC).

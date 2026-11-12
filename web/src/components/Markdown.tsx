@@ -9,6 +9,8 @@ const dark = () => document.documentElement.dataset.theme === "dark" || (documen
 export function Markdown({ text }: { text: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const html = useMemo(() => {
+    // Without a DOM (server render, tests) DOMPurify cannot sanitize: show the text escaped instead.
+    if (!DOMPurify.isSupported) return text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
     const raw = marked.parse(text, { gfm: true, async: false });
     return DOMPurify.sanitize(raw);
   }, [text]);
