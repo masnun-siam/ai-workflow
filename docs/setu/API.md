@@ -743,7 +743,7 @@ Guard 1 always applies to `implement-issue` and `pr-grind` (S§5.4), even withou
 | GET | `/api/dispatches/{id}` | — | `Dispatch` (with events) | 200 | dispatch |
 | POST | `/api/dispatches/{id}/settings` | `Partial<DispatchSettings>` | `Dispatch` | 200; 400 | dispatch |
 | POST | `/api/dispatches/{id}/state` | `{state:"running"\|"paused"\|"cancelled", now?: boolean}` | `Dispatch` | 200; 400 | dispatch |
-| POST | `/api/dispatches/{id}/lane` | `{lane: IssueKey, action: "pause"\|"resume"\|"retry"\|"skip"\|"merge"\|"hold"\|"unhold"\|"send", text?}` | `Dispatch` | 200; 400 | dispatch |
+| POST | `/api/dispatches/{id}/lane` | `{lane: IssueKey, action: "pause"\|"resume"\|"retry"\|"skip"\|"merge"\|"hold"\|"unhold"\|"send"\|"unblock", text?}` (`skip` settles the lane: clears needs-you, held and gate, sets `ended_at`; `unblock` drops the lane's skipped blockers so it can start; `retry` on a skipped lane queues it again) | `Dispatch` | 200; 400 | dispatch |
 | POST | `/api/dispatches/{id}/lanes` | `{issues: IssueKey[]}` (River "Add to dispatch") | `Dispatch` | 200; 400; 409 | dispatch |
 | POST | `/api/dispatches/{id}/{retry-failed\|seen}` | `{undo?: boolean}` for seen | `Dispatch` | 200 | dispatch |
 | POST | `/api/dispatches/{id}/end` | `{action:"open-pr"\|"qa"\|"grind-pr"}` | `Dispatch` | 200; 400 | dispatch |

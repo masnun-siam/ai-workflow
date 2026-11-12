@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+
+- A dispatch no longer stalls silently behind a skipped issue. Lanes whose blockers were skipped show **Can't start** at once (the `stranded` and `skipped_deps` lane fields), with **Run #N again** and a new **Unblock** lane action that lets them start without the skipped blocker.
+- A skipped or closed lane no longer keeps its old "needs you", held or gate text, no longer raises an Inbox item, and stops its clock when it ends.
+- The lane panel offers only the actions that apply: no Merge without a PR, no message box on a finished lane, **Run it again** on a skipped one. It lists the sessions for the issue and the PRs the last one opened in other repos, which a dispatch never merges.
+
 ### Changed
 
 - The UI is back on the old aiw navigation: a rail with Inbox, Features, Small changes, Dispatches and Activity (then River, Releases, Ops, Me, Settings) and counts for needs-you, dispatching and running; a top bar with the repo switcher (`g r`), search, the needs-you pill and New; a repo filter on list pages (`?only=`); onboarding while no repo is registered; Away mode presets and plan usage in the rail foot. Runs split into Dispatches and Activity; `#/runs` still opens Activity.

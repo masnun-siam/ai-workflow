@@ -176,8 +176,10 @@ export const dispatches: Dispatch[] = [{
   lanes: [
     { key: "acme/wasensi-backend#942", repo: "acme/wasensi-backend", n: 942, title: "Cache table", deps: [], stage: "implementing", pr: null, needs_you: null, held: null, gate: null, skip_reason: null, paused: false, paused_by: null, hold_merge: false, limited_until: null, started_at: null, ended_at: null, session: SID(2), usage: { cost: 1.1, tokens: null, seconds: 600 } },
     { key: "acme/wasensi-backend#943", repo: "acme/wasensi-backend", n: 943, title: "Cache reader", deps: ["acme/wasensi-backend#942"], stage: "queued", pr: null, needs_you: null, held: null, gate: "blocked by #942", skip_reason: null, paused: false, paused_by: null, hold_merge: false, limited_until: null, started_at: null, ended_at: null, session: null, usage: { cost: 0, tokens: null, seconds: 0 } },
+    { key: "acme/wasensi-backend#944", repo: "acme/wasensi-backend", n: 944, title: "Harbor robots (admin only)", deps: [], stage: "skipped", pr: null, needs_you: null, held: null, gate: null, skip_reason: "skipped by you", paused: false, paused_by: null, hold_merge: false, limited_until: null, started_at: null, ended_at: null, session: null, usage: { cost: 0.5, tokens: null, seconds: 300 } },
+    { key: "acme/wasensi-backend#945", repo: "acme/wasensi-backend", n: 945, title: "Image workflow", deps: ["acme/wasensi-backend#944"], stage: "queued", pr: null, needs_you: null, held: null, gate: null, skip_reason: null, paused: false, paused_by: null, hold_merge: false, limited_until: null, started_at: null, ended_at: null, session: null, usage: { cost: 0, tokens: null, seconds: 0 }, stranded: "blocked by skipped #944", skipped_deps: ["acme/wasensi-backend#944"], unblocked: [] },
   ],
-  totals: { lanes: 2, closed: 0, cost: 1.1 }, created_at: Math.floor(now / 1000) - 900, ended_at: null,
+  totals: { lanes: 4, closed: 0, cost: 1.6 }, created_at: Math.floor(now / 1000) - 900, ended_at: null,
   events: [{ at: Math.floor(now / 1000) - 880, lane: null, kind: "start", text: "dispatch started: 2 issues, 3 at most" }, { at: Math.floor(now / 1000) - 870, lane: "acme/wasensi-backend#942", kind: "start", text: "implement-issue started" }],
 }];
 export const coordinators: Coordinator[] = [{ run: "20261112-coord", repo: "acme/bop-bd", source: "label:payments", destination: "staging", session: SID(4), live: true,

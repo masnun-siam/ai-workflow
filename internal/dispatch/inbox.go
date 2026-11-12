@@ -40,6 +40,9 @@ func InboxRows(ds []store.Dispatch, now float64) []InboxRow {
 			row := InboxRow{Repo: x.Repo, Dispatch: d.ID, Lane: k, Issue: x.N, Title: x.Title, Stage: x.Stage, PR: x.PR,
 				Type: "dispatch_lane"}
 			pre := "dispatch:" + d.ID + ":" + k + ":"
+			if Settled(x) {
+				continue // closed or skipped: nothing waits on you
+			}
 			switch {
 			case x.NeedsYou != "":
 				row.Key, row.Group, row.Reason = pre+"needs", "answer", x.NeedsYou

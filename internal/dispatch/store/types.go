@@ -122,6 +122,7 @@ type Lane struct {
 	N          int      `json:"n"`
 	Title      string   `json:"title"`
 	Deps       []string `json:"deps"`
+	Unblocked  []string `json:"unblocked,omitempty"` // skipped blockers the user dropped (lane action unblock)
 	Base       string   `json:"base"`
 	Stage      string   `json:"stage"`
 	SkipReason string   `json:"skip_reason"`
