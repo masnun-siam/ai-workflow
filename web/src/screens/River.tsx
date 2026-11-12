@@ -1,5 +1,5 @@
 import { http } from "../api/http";
-import { loadErrors, mutate, product, river } from "../state/data";
+import { loadErrors, mutate, product, river, soloRepo } from "../state/data";
 import { stages } from "../state/select";
 import { detailOpen, sel, setSel } from "../state/ui";
 import { prefs } from "../state/prefs";
@@ -10,14 +10,17 @@ export function River() {
   const s = sel.value;
   const st = stages.value;
   const err = loadErrors.value.river;
+  // A repo with no product gets a River of its own; product chips would not change it.
+  const solo = soloRepo.value;
+  const scope = solo ?? product.value;
   return (
     <>
-      <Header title="River" products scope>
-        <Btn small onClick={() => mutate(() => http.send("POST", "/api/refresh", { product: product.value }), "Refreshing from GitHub")}>Refresh</Btn>
+      <Header title="River" products={!solo} scope>
+        <Btn small onClick={() => mutate(() => http.send("POST", "/api/refresh", solo ? { repo: solo } : { product: product.value }), "Refreshing from GitHub")}>Refresh</Btn>
       </Header>
       {err && <div class="banner bad" role="alert">{err}</div>}
       {river.value && river.value.stale.length > 0 && <div class="banner">Stale GitHub data: {river.value.stale.join(", ")}</div>}
-      <Pane label={`river · ${product.value ?? "no product"}`}>
+      <Pane label={`river · ${scope ?? "no product"}`}>
         {!river.value ? <Empty>Loading…</Empty> : (
           <div class="river">
             {st.map((stage, si) => (

@@ -1,4 +1,4 @@
-import { signal, computed } from "@preact/signals";
+import { signal, computed, effect } from "@preact/signals";
 import { http } from "../api/http";
 import type { RegistryStep, SessionList } from "../api/extra";
 import type {
@@ -75,17 +75,22 @@ export function chooseRepo(s: Slug): void {
   lsSet(REPO_KEY, s);
   const p = repoList.peek().find((r) => r.slug === s)?.product;
   if (p) chooseProduct(p);
-  // Releases and Ops follow the repo even when the product stays the same: App reloads them on a repo change.
+  // River, Releases and Ops follow the repo even when the product stays the same: App reloads them on a repo change.
 }
 /** Releases scope: the current repo's product, or every registered repo when the current repo belongs to no product. */
 export const releaseProduct = computed<Slug | null>(() => {
   const r = repoList.value.find((x) => x.slug === currentRepo.value);
   return r && !r.product ? null : product.value;
 });
-/** Ops scope: the current repo's product, or the current repo alone when it belongs to no product. */
-const opsQuery = (): string => {
+/** The current repo when it belongs to no product: River and Ops then show that repo alone. */
+export const soloRepo = computed<Slug | null>(() => {
   const r = repoList.value.find((x) => x.slug === currentRepo.value);
-  return r && !r.product ? `?repo=${encodeURIComponent(r.slug)}` : q(product.value);
+  return r && !r.product ? r.slug : null;
+});
+/** River and Ops scope: the current repo's product, or the current repo alone when it belongs to no product. */
+const scopeQuery = (): string => {
+  const solo = soloRepo.value;
+  return solo ? `?repo=${encodeURIComponent(solo)}` : q(product.value);
 };
 
 /** The page's repo filter (old aiw FR-1): `?only=owner/name`, independent of the current repo. "" = all repos. */
@@ -103,17 +108,31 @@ export function currentView(): View {
   return { screen: r.screen, sessionId: r.screen === "activity" ? r.id : undefined, tab: activityTab.value };
 }
 
+/** Resolves once the repo registry has loaded or failed to load. */
+function reposSettled(): Promise<void> {
+  if (repos.peek() || loadErrors.peek().repos) return Promise.resolve();
+  return new Promise((resolve) => {
+    let off: (() => void) | undefined;
+    off = effect(() => {
+      if (!repos.value && !loadErrors.value.repos) return;
+      resolve();
+      queueMicrotask(() => off?.());
+    });
+  });
+}
+
 const q = (p: Slug | null) => (p ? `?product=${encodeURIComponent(p)}` : "");
 type Loader = () => Promise<unknown>;
 const loaders: Record<LoadKey, Loader> = {
   status: async () => (status.value = await http.get<Status>("/api/status")),
-  river: async () => { river.value = await http.get<River>(`/api/river${q(product.value)}`); dropped.value = new Set(); },
+  // Its scope needs the repo registry (a repo with no product gets its own River), so it waits for the first registry load.
+  river: async () => { await reposSettled(); river.value = await http.get<River>(`/api/river${scopeQuery()}`); dropped.value = new Set(); },
   inbox: async () => { inbox.value = await http.get<InboxList>("/api/inbox"); dropped.value = new Set(); },
   sessions: async () => (sessionList.value = await http.get<SessionList>("/api/sessions?limit=500")),
   session: async () => { const id = route.value.id; if (id) sessionOne.value = await http.get<Session>(`/api/sessions/${id}`); },
   stream: async () => { await loadStream(route.value.id); },
   releases: async () => (releases.value = await http.get(`/api/releases${q(releaseProduct.value)}`)),
-  ops: async () => (ops.value = await http.get<Ops>(`/api/ops${opsQuery()}`)),
+  ops: async () => (ops.value = await http.get<Ops>(`/api/ops${scopeQuery()}`)),
   me: async () => (me.value = await http.get<Me>("/api/me")),
   settings: async () => (settings.value = await http.get<Settings>("/api/settings")),
   notify: async () => (notify.value = await http.get<NotifySettings>("/api/settings/notify")),
