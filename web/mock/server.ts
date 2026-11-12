@@ -149,6 +149,11 @@ const routes: [string, RegExp, H][] = [
   ["POST", /^\/api\/away$/, ({ body }) => { const a: Away = { active: true, until: body.until, started: Math.floor(Date.now() / 1000), decisions: 0, held: 0, summary: null }; db.status.away = a; emit("usage", { kind: "away" }); return a; }],
   ["POST", /^\/api\/away\/(stop|dismiss)$/, () => { db.status.away = { active: false, until: null, started: null, decisions: 0, held: 0, summary: null }; emit("usage", { kind: "away" }); return db.status.away; }],
   ["GET", /^\/api\/vault\/folders$/, () => F.vault],
+  ["GET", /^\/api\/vault\/prd$/, ({ q }) => ({ ...F.vaultPrd, folder: q.get("folder") })],
+  ["POST", /^\/api\/away\/change$/, ({ body }) => ({ sent: body.changes.map((c: { id: string }) => c.id), queued: [], errors: [] })],
+  ["POST", /^\/api\/repos\/create$/, ({ body }) => { const r = { slug: `local/${body.name}`, path: `${body.parent}/${body.name}`, product: null }; db.repos.push(r); return json({ repo: r, repos: db.repos }, 201); }],
+  ["POST", /^\/api\/repos\/publish$/, ({ body }) => { const r = db.repos.find((x) => x.slug === body.slug); if (r) r.slug = `${body.owner}/${body.name}`; return { repo: r, repos: db.repos }; }],
+  ["GET", /^\/api\/github\/owners$/, () => ({ owners: ["masnun", "acme"] })],
   ["GET", /^\/api\/releases$/, () => ({ repos: db.releaseRepos, releases: db.releases })],
   ["POST", /^\/api\/releases$/, ({ body }) => {
     if (db.releases.some((r) => r.repo === body.repo && !["done", "skipped", "failed"].includes(r.stage))) return fail(409, "a release is in flight", { id: "r-x" });

@@ -372,3 +372,22 @@ func Routes(d RouteDeps) []server.Route {
 		})},
 	}
 }
+
+// PRDFile returns the PRD.md of a notes folder, for a new repo's first PRD.
+func (s *Service) PRDFile(folder string) ([]byte, error) {
+	if !ValidFolder(folder) {
+		return nil, errs.Invalid("folder is not a valid notes folder")
+	}
+	v, err := s.Dir()
+	if err != nil {
+		return nil, err
+	}
+	b, err := os.ReadFile(filepath.Join(v, folder, "PRD.md"))
+	if err != nil {
+		return nil, errs.Invalid("%s has no PRD.md", folder)
+	}
+	if len(b) > maxPRD {
+		return nil, errs.Invalid("PRD.md is too large")
+	}
+	return b, nil
+}

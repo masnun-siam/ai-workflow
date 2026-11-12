@@ -1,6 +1,6 @@
 import { computed, signal } from "@preact/signals";
 import type { Action, InboxGroup, InboxItem, Session } from "../api/types";
-import { activityTab, dispatches, dropped, inbox, inScope, only, ops, river, sessionList } from "./data";
+import { activityTab, dispatches, dropped, inbox, inScope, only, ops, river, sessionList, status } from "./data";
 import { clamp, sel } from "./ui";
 import { route } from "./route";
 import type { Target } from "../components/Detail";
@@ -18,7 +18,8 @@ const cardInScope = (name: string) => !only.value || !name || only.value.split("
 
 export const inboxItems = computed<InboxItem[]>(() => {
   const order = GROUPS.map((g) => g[0]);
-  return (inbox.value?.items ?? []).filter((i) => !dropped.value.has(i.key) && inScope(i.repo))
+  const summaryShown = !!status.value?.away.summary; // the Inbox shows it as "While you were away"
+  return (inbox.value?.items ?? []).filter((i) => !dropped.value.has(i.key) && inScope(i.repo) && !(summaryShown && i.type === "away_summary"))
     .map((it, n) => ({ it, n })).sort((a, b) => order.indexOf(a.it.group) - order.indexOf(b.it.group) || a.n - b.n).map((x) => x.it);
 });
 

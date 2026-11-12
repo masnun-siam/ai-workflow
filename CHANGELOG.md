@@ -14,6 +14,8 @@
 - Dispatches is a table again, and each dispatch has its page (`#/dispatches/<id>`): Settings, Pause (after the running issues, or now), Resume, Cancel, a progress bar, lanes in Needs you / Building now / Up next / Done, the activity feed, the end actions, and a lane panel with a message box and the lane actions. New dispatch has every setting again (grind, CI, at most at once, cost cap, auto-merge, skip approval, base branch from GitHub, feature branch, model, effort, account) and a preview with waves and warnings.
 - The issue / PR side panel is back: any GitHub issue or PR link of a registered repo opens it. Issues: refine, close as completed or not planned, reopen, comments. PRs: merge (warns on conflicts, failing or running checks, drafts), close, reopen, checks, files, conversation, the grind card. Both take a comment.
 - Activity has **Clean up old** again: pick finished sessions to remove; ones with unsaved work start unticked.
+- **Create a new repo** is back (Start → Where, Settings → products and repos, and the banner on a notes-vault session): a local git repo with a README and, optionally, the PRD from a notes folder, registered as `local/<name>`. **Publish to GitHub** picks the owner and visibility and pushes it; an unpublished repo in the Inbox opens it directly. Endpoints `POST /api/repos/create`, `POST /api/repos/publish`, `GET /api/github/owners`.
+- The Inbox shows **While you were away** again: every round Away mode answered (with Recommended or Opus, risk and cost), held or retried, a Held only filter, **Change N selected** to send a different answer, and Dismiss.
 
 ## setu 1.0.0
 

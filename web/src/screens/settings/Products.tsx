@@ -1,4 +1,6 @@
-import { useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
+import { route, setParam } from "../../state/route";
+import { createRepo, publishRepo } from "../../components/Repos";
 import { http } from "../../api/http";
 import { loadMany, mutate, products, repos, settings } from "../../state/data";
 import { askConfirm } from "../../state/ui";
@@ -12,6 +14,8 @@ export function ProductsPane() {
   const [rpath, setRpath] = useState("");
   const [problems, setProblems] = useState<Record<string, string | null>>({});
   const keys = ["products", "repos", "river"] as const;
+  const pub = route.value.query.publish;
+  useEffect(() => { if (pub) { publishRepo.value = pub; setParam("publish", "", true); } }, [pub]);
   return (
     <Pane label="products and repos" wide id="set-products">
       <div class="det">
@@ -38,7 +42,7 @@ export function ProductsPane() {
                 <td><input type="checkbox" aria-label={`Auto grind ${r.slug}`} checked={rs.auto_grind} onChange={(e) => set({ auto_grind: (e.target as HTMLInputElement).checked })} /></td>
                 <td><input aria-label={`Slack channel ${r.slug}`} defaultValue={rs.slack_channel} onChange={(e) => set({ slack_channel: (e.target as HTMLInputElement).value.trim() })} style={{ width: "9em" }} /></td>
                 <td style={{ whiteSpace: "nowrap" }}><input aria-label={`Release head ${r.slug}`} defaultValue={rs.release_head ?? ""} placeholder="staging" onChange={(e) => set({ release_head: (e.target as HTMLInputElement).value.trim() })} style={{ width: "7.5em" }} /> → <input aria-label={`Release base ${r.slug}`} defaultValue={rs.release_base ?? ""} placeholder="master" onChange={(e) => set({ release_base: (e.target as HTMLInputElement).value.trim() })} style={{ width: "7.5em" }} /></td>
-                <td><Btn small bad onClick={async () => { if (await askConfirm(`Unregister ${r.slug}? The checkout stays on disk.`)) void mutate(() => http.send("DELETE", `/api/repos/${r.slug}`), "Removed", [...keys]); }}>Remove</Btn></td>
+                <td><div class="acts">{r.slug.startsWith("local/") && <Btn small primary onClick={() => (publishRepo.value = r.slug)}>Publish</Btn>}<Btn small bad onClick={async () => { if (await askConfirm(`Unregister ${r.slug}? The checkout stays on disk.`)) void mutate(() => http.send("DELETE", `/api/repos/${r.slug}`), "Removed", [...keys]); }}>Remove</Btn></div></td>
               </tr>
             );
           })}</tbody></table></div>
@@ -48,6 +52,7 @@ export function ProductsPane() {
           <Btn type="submit" disabled={!slug.trim() || !rpath.trim()}>Add repo</Btn>
         </form>
         <div class="acts">
+          <Btn onClick={() => (createRepo.value = {})}>Create a new repo…</Btn>
           <Btn onClick={() => mutate(() => http.send("POST", "/api/repos/scan", {}), "Scan done", [...keys])}>Scan {repos.value?.scan_roots.join(", ")}</Btn>
           <Btn onClick={async () => { const r = await mutate(() => http.send<{ problems: Record<string, string | null> }>("POST", "/api/repos/check", {}), "Checked"); if (r) setProblems(r.problems); void loadMany([]); }}>Check repos</Btn>
         </div>

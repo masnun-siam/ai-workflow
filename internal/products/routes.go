@@ -23,6 +23,9 @@ type Deps struct {
 	// Merged reports whether issue or PR n of the repo is in its snapshot's merged list and the
 	// merged PR's head sha (poller).
 	Merged func(repo string, n int) (mergedHead string, ok bool)
+	// VaultPRD returns the PRD.md of a notes-vault folder (05-Work/<Project>[/<Feature>]); nil means
+	// no vault.
+	VaultPRD func(folder string) ([]byte, error)
 	// Pick opens the native folder picker; nil uses osascript on macOS.
 	Pick func(ctx context.Context, start string) (string, error)
 }
@@ -130,6 +133,54 @@ func Routes(d Deps) []server.Route {
 			}
 			res, err := reg.Scan(r.Context(), roots)
 			return 0, res, err
+		}),
+		h("POST /api/repos/create", func(r *http.Request) (int, any, error) {
+			var in struct {
+				Name        string `json:"name"`
+				Parent      string `json:"parent"`
+				VaultFolder string `json:"vault_folder"`
+			}
+			if err := server.Decode(r, &in); err != nil {
+				return 0, nil, err
+			}
+			var prd []byte
+			prdName := ""
+			if in.VaultFolder != "" {
+				if d.VaultPRD == nil {
+					return 0, nil, errs.Invalid("no notes vault is set up")
+				}
+				b, err := d.VaultPRD(in.VaultFolder)
+				if err != nil {
+					return 0, nil, err
+				}
+				prd = b
+				prdName = strings.ToLower(filepath.Base(in.VaultFolder))
+			}
+			rp, err := reg.CreateLocal(r.Context(), in.Name, in.Parent, prd, prdName)
+			if err != nil {
+				return 0, nil, err
+			}
+			return 201, map[string]any{"repo": rp, "repos": reg.Repos()}, nil
+		}),
+		h("POST /api/repos/publish", func(r *http.Request) (int, any, error) {
+			var in struct {
+				Slug    string `json:"slug"`
+				Owner   string `json:"owner"`
+				Name    string `json:"name"`
+				Private bool   `json:"private"`
+			}
+			if err := server.Decode(r, &in); err != nil {
+				return 0, nil, err
+			}
+			rp, err := reg.Publish(r.Context(), in.Slug, in.Owner, in.Name, in.Private)
+			if err != nil {
+				return 0, nil, err
+			}
+			return 0, map[string]any{"repo": rp, "repos": reg.Repos()}, nil
+		}),
+		h("GET /api/github/owners", func(r *http.Request) (int, any, error) {
+			o, err := reg.Owners(r.Context())
+			return 0, map[string]any{"owners": o}, err
 		}),
 		h("POST /api/repos/check", func(r *http.Request) (int, any, error) {
 			return 0, map[string]any{"problems": reg.Check(r.Context())}, nil

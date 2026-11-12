@@ -11,9 +11,11 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/masnun-siam/setu/internal/errs"
 	"github.com/masnun-siam/setu/internal/events"
+	"github.com/masnun-siam/setu/internal/execx"
 	"github.com/masnun-siam/setu/internal/home"
 	"github.com/masnun-siam/setu/internal/server"
 	"github.com/masnun-siam/setu/internal/testutil/fakebin"
@@ -909,6 +911,46 @@ func TestSavePRDCommitsOnlyThatFile(t *testing.T) {
 		t.Fatalf("index changed: %q", st)
 	}
 	if _, err := r.SavePRD(ctx, "acme/shop-wiki", "docs/prds/../x.md", "x", got.Sha); errs.KindOf(err) != errs.KInvalid {
+		t.Fatal(err)
+	}
+}
+
+func TestCreateLocalThenPublish(t *testing.T) {
+	r, ws, _ := setup(t)
+	write(t, os.Getenv("GIT_CONFIG_GLOBAL"), "[user]\n\tname = t\n\temail = t@t\n[commit]\n\tgpgsign = false\n")
+	ctx := context.Background()
+	rp, err := r.CreateLocal(ctx, "notes-app", ws, []byte("# Notes\n**Status:** Draft\n"), "payouts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rp.Slug != "local/notes-app" {
+		t.Fatalf("%+v", rp)
+	}
+	if files := run(t, rp.Path, "ls-files"); files != "README.md\ndocs/prds/payouts.md" {
+		t.Fatalf("files %q", files)
+	}
+	for _, bad := range [][2]string{{"../x", ws}, {"ok", "relative"}, {"notes-app", ws}} {
+		if _, err := r.CreateLocal(ctx, bad[0], bad[1], nil, ""); err == nil {
+			t.Errorf("%v accepted", bad)
+		}
+	}
+
+	var got []string
+	orig := ghRun
+	t.Cleanup(func() { ghRun = orig })
+	ghRun = func(_ context.Context, args []string, _ time.Duration) execx.Result {
+		got = args
+		run(t, rp.Path, "remote", "add", "origin", "https://github.com/acme/notes-app.git")
+		return execx.Result{Code: 0}
+	}
+	pub, err := r.Publish(ctx, "local/notes-app", "acme", "notes-app", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pub.Slug != "acme/notes-app" || strings.Join(got, " ") != "repo create acme/notes-app --private --source "+rp.Path+" --remote origin --push" {
+		t.Fatalf("%+v %v", pub, got)
+	}
+	if _, err := r.Publish(ctx, "acme/notes-app", "acme", "x", false); errs.KindOf(err) != errs.KInvalid {
 		t.Fatal(err)
 	}
 }

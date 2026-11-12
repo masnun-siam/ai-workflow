@@ -3,6 +3,7 @@ import { Detail } from "../components/Detail";
 import { ConfirmDialog, Help, Palette, Toast } from "../components/Overlays";
 import { CreateDialog, StartDialog } from "../components/Start";
 import { interceptGitHubLinks, WorkPanel, workTarget } from "../components/WorkPanel";
+import { CreateRepoDialog, createRepo, PublishDialog, publishRepo } from "../components/Repos";
 import { Btn, useFocusTrap } from "../components/ui";
 import type { ComponentChildren } from "preact";
 import { Inbox } from "../screens/Inbox";
@@ -120,7 +121,7 @@ export function App() {
         { key: e.key, meta: e.metaKey, ctrl: e.ctrlKey, alt: e.altKey, typing },
         {
           screen: route.value.screen,
-          overlay: !!confirmReq.value || !!startReq.value || paletteOpen.value || helpOpen.value || repoOpen.value || createOpen.value || !!workTarget.value,
+          overlay: !!confirmReq.value || !!startReq.value || paletteOpen.value || helpOpen.value || repoOpen.value || createOpen.value || !!workTarget.value || !!createRepo.value || !!publishRepo.value,
           actions: [...targetActions(currentTarget.value), ...screenActionList()],
           quickOptions: quickCount.value,
           nav: hasList(route.value.screen),
@@ -159,6 +160,8 @@ export function App() {
       {startReq.value && <StartDialog />}
       {createOpen.value && <CreateDialog />}
       {workTarget.value && <WorkPanel />}
+      {createRepo.value && <CreateRepoDialog />}
+      {publishRepo.value && <PublishDialog />}
       {helpOpen.value && <Help />}
       {confirmReq.value && <ConfirmDialog />}
       <Toast />

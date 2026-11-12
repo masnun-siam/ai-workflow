@@ -10,11 +10,13 @@ import { nav } from "../state/route";
 import { clock, shortRepo } from "../state/format";
 import { createDraft, createOpen, paletteOpen, startReq, toast } from "../state/ui";
 import { RepoField } from "./Shell";
+import { createRepo } from "./Repos";
 import { Btn, Field, useFocusTrap } from "./ui";
 
 export const MODELS: Model[] = ["opus", "sonnet", "haiku"];
 export const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
 const FOLDER = ":folder";
+const CREATE = ":create";
 const VAULT = ":vault";
 
 // ---------- shared data, cached for the page's life ----------
@@ -316,7 +318,7 @@ export function StartDialog() {
     if (ok) startReq.value = null;
   };
   const close = () => (startReq.value = null);
-  const repoExtras = runsIn === "custom" ? [{ value: FOLDER, label: "Another folder…" }, { value: VAULT, label: "No repo yet: notes vault" }] : [{ value: FOLDER, label: "Another folder…" }];
+  const repoExtras = [{ value: FOLDER, label: "Another folder…" }, ...(runsIn === "custom" ? [{ value: VAULT, label: "No repo yet: notes vault" }] : []), { value: CREATE, label: "Create a new repo…" }];
 
   return (
     <Dialog label="What should we start?" onClose={close} wide>
@@ -342,7 +344,7 @@ export function StartDialog() {
 
           {(runsIn === "issue" || runsIn === "repo" || runsIn === "custom") && (
             <Field label="Where">
-              <RepoField label="Where" value={where} onChange={(v) => { setWhere(v); setIssue(null); }} extrasAfter={repoExtras} />
+              <RepoField label="Where" value={where} onChange={(v) => { if (v === CREATE) { createRepo.value = { onDone: (r) => setWhere(r.slug) }; return; } setWhere(v); setIssue(null); }} extrasAfter={repoExtras} />
             </Field>
           )}
           {where === FOLDER && runsIn !== "docs" && runsIn !== "none" && (

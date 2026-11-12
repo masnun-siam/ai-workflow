@@ -539,3 +539,11 @@ button.irow.lane:focus-visible{outline:2px solid var(--acc)}
 .small{font-size:12px}
 a.btn{text-decoration:none;color:var(--tx)}
 @media (max-width:980px){.dpage{grid-template-columns:1fr}.dside{position:static}}
+
+/* ---------- away summary, change dialog ---------- */
+.away-sum{border-color:var(--wait-edge,var(--warn))}
+.away-sum>.dh{align-items:center;margin-bottom:6px}
+.away-sum .lb{margin:0}
+.away-sum .chip{margin-left:6px}
+.chg{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:10px}
+.chg .opt small{display:block;color:var(--mu);font-size:12px}

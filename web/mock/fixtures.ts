@@ -117,7 +117,15 @@ export const inboxItems: InboxItem[] = [
 ];
 
 const usage = (label: string, p5: number, p7: number): AccountUsage => ({ label, cmd: "claude", five_hour: { pct: p5, resets_at: iso(-120) }, seven_day: { pct: p7, resets_at: iso(-3000) }, at: Math.floor(now / 1000), error: null, limit: {} });
-export const away: Away = { active: false, until: null, started: null, decisions: 0, held: 0, summary: null };
+const t0 = Math.floor(now / 1000);
+export const away: Away = { active: false, until: null, started: null, decisions: 2, held: 1, summary: { started: t0 - 7200, ended: t0 - 600, held: 1, log: [
+  { at: t0 - 6000, kind: "answer", sid: SID(1), link: { owner: "acme", repo: "wasensi-backend", issue: 1012 }, repo: "acme/wasensi-backend", command: "/blubird:implement-issue 1012",
+    question: "How do existing rows get a value?", picked: "Nullable + backfill job", id: `${SID(1)}:r1`, risk: 0.2, by: "recommended", answerer: SID(9), cost: 0.04,
+    questions: [{ header: "Migration", question: "How do existing rows get a value?", multiSelect: false, allowFreeText: true, recommended: "Nullable + backfill job",
+      options: [{ label: "Nullable + backfill job", description: "No lock" }, { label: "Default value", description: "One statement" }], picked: ["Nullable + backfill job"], why: "it avoids a long table lock" }] },
+  { at: t0 - 3000, kind: "held", sid: SID(2), link: { owner: "acme", repo: "wasensi-backend", issue: 1013 }, repo: "acme/wasensi-backend", command: "/blubird:implement-issue 1013",
+    question: "Drop the legacy scheduler table?", picked: "", reason: "destructive: held for you" },
+] } };
 export const status: Status = {
   version: "0.1.0", boot_id: "boot1", gh: { ok: true, login: "siam", error: "" }, usage: [usage("work", 62, 41), usage("personal", 8, 3)], away, migrated: true,
   poller: { remaining: 4800, reset_at: null },
@@ -270,3 +278,4 @@ export const prView: PRView = { number: 1060, title: "Rename the settings tab", 
   files: [{ path: "web/src/settings.tsx", additions: 12, deletions: 4, status: "modified", patch: null }], commits: [{ sha: "b".repeat(40), message: "rename", author: "setu-bot" }],
   conversation: [{ kind: "review", author: "copilot", at: "2026-11-12T08:30:00Z", state: "COMMENTED", body_html: "<p>Looks fine.</p>" }],
   checks: [{ name: "test", bucket: "pending", link: "https://github.com/acme/wasensi-backend/actions/runs/1" }, { name: "lint", bucket: "green", link: "https://github.com/acme/wasensi-backend/actions/runs/2" }] };
+export const vaultPrd = { exists: true, status: "Draft", title: "Notes app", folder: "05-Work/wasensi/payouts" };
