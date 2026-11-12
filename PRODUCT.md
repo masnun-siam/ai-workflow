@@ -17,4 +17,4 @@ setu's job is to make "what needs me now" obvious and one keypress to act on.
 
 ## Screens
 
-River (pipeline), Inbox, Runs, Releases, Ops, Me, Settings.
+Inbox, Features, Small changes, Dispatches, Activity, River (pipeline), Releases, Ops, Me, Settings, with a top-bar repo switcher and a per-page repo filter.

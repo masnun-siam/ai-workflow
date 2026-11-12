@@ -30,3 +30,5 @@ export function fmtTokens(t: { input: number; cached: number; output: number } |
   const k = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n));
   return `${k(t.input)} in · ${k(t.cached)} cached · ${k(t.output)} out`;
 }
+/** "14:05" for a unix-seconds time. */
+export const clock = (epoch: number): string => new Date(epoch * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });

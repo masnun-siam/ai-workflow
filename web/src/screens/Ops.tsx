@@ -8,7 +8,7 @@ import { Empty, Pane } from "../components/ui";
 export function Ops() {
   return (
     <>
-      <Header title="ops" products />
+      <Header title="Ops" products />
       {loadErrors.value.ops && <div class="banner bad" role="alert">{loadErrors.value.ops}</div>}
       <Pane label="ops">
         <div class="rows">

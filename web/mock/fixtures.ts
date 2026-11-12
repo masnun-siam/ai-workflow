@@ -1,7 +1,7 @@
 // Mock data for `npm run dev:mock` and the smoke tests. Typed by src/api/types.ts.
 import type {
   Action, Card, Coordinator, Dispatch, InboxItem, Me, NotifySettings, Ops, Panel, Product, Release, ReleaseRepo,
-  Repo, ReviewConfig, River, Round, Session, Settings, Status, TranscriptEvent, GrindStatus, AccountUsage, Away,
+  Repo, ReviewConfig, River, Round, Session, Settings, Status, TranscriptEvent, GrindStatus, AccountUsage, Away, PRD,
 } from "../src/api/types";
 import type { RegistryStep } from "../src/api/extra";
 
@@ -203,3 +203,10 @@ export const registry: RegistryStep[] = [
 ].map(([id, source, runs_in]) => ({ id: id!, source: source as "blubird", skill: id!, runs_in: runs_in as "docs", stage: "x", command: `/${source === "blubird" ? "blubird:" : ""}${id}`, available: true }));
 export const vault = { vault: "/Users/me/vault", folders: [{ project: "wasensi", feature: "payouts", path: "wasensi/payouts" }] };
 export const prdFile = { repo: PRODUCT, path: "docs/prds/payouts/batches.md", text: "# Merchant payouts v2\n\nStatus: In review\n\n## Goal\nGroup payouts into weekly batches.", sha: "abc", branch: "main" };
+
+export const prds: PRD[] = [
+  { product: PRODUCT, module: "payouts", slug: "batches", title: "Merchant payouts v2", status: "In review", path: "docs/prds/payouts/batches.md", label: "payouts/batches", epic: null },
+  { product: PRODUCT, module: "kyc", slug: "recheck", title: "KYC re-check", status: "Draft", path: "docs/prds/kyc/recheck.md", label: "kyc/recheck", epic: null },
+  { product: PRODUCT, module: "cache", slug: "rates", title: "Rate cache", status: "Approved", path: "docs/prds/cache/rates.md", label: "cache/rates", epic: "acme/wasensi-backend#941" },
+  { product: PRODUCT, module: null, slug: "login", title: "Passwordless login", status: "Done", path: "docs/prds/login.md", label: "login", epic: "acme/wasensi-backend#800" },
+];

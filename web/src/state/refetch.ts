@@ -6,23 +6,26 @@ export type LoadKey =
   | "settings" | "notify" | "review" | "blubird" | "products" | "repos" | "dispatches" | "coordinators"
   | "grinds" | "panels" | "registry";
 
-export type View = { screen: string; sessionId?: string; runsTab?: string };
+export type View = { screen: string; sessionId?: string; tab?: string };
 
 /** What the current view shows, i.e. what a `hello` (connect or resync) refetches. Status and the inbox badge are always live. */
 export function visibleKeys(v: View): LoadKey[] {
-  const base: LoadKey[] = ["status", "inbox", "products"];
+  // The rail counts (needs you, dispatching, running) and the repo switcher are always live.
+  const base: LoadKey[] = ["status", "inbox", "products", "repos", "sessions", "dispatches"];
   switch (v.screen) {
     case "river": return [...base, "river"];
     case "inbox": return base;
-    case "runs": {
-      const k: LoadKey[] = [...base, "sessions"];
+    case "features": case "changes": return [...base, "river"];
+    case "dispatches": return base;
+    case "activity": {
+      const k: LoadKey[] = [...base];
       if (v.sessionId) k.push("session", "stream");
-      if (v.runsTab === "dispatch") k.push("dispatches");
-      if (v.runsTab === "coordinators") k.push("coordinators");
-      if (v.runsTab === "grinds") k.push("grinds");
-      if (v.runsTab === "panels") k.push("panels");
+      if (v.tab === "coordinators") k.push("coordinators");
+      if (v.tab === "grinds") k.push("grinds");
+      if (v.tab === "panels") k.push("panels");
       return k;
     }
+    case "onboarding": return [...base, "settings"];
     case "releases": return [...base, "releases"];
     case "ops": return [...base, "ops"];
     case "me": return [...base, "me"];
@@ -75,5 +78,5 @@ export function refetchFor(topic: Topic, payload: unknown, v: View): LoadKey[] {
   return [...out];
 }
 
-/** River and Me refetch debounced 1 s after a session event; everything else immediately. */
-export const DEBOUNCED: ReadonlySet<LoadKey> = new Set<LoadKey>(["river", "me"]);
+/** River, Me and the session list refetch debounced 1 s after a session event; everything else immediately. */
+export const DEBOUNCED: ReadonlySet<LoadKey> = new Set<LoadKey>(["river", "me", "sessions"]);

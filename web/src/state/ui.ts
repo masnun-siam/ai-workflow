@@ -11,6 +11,8 @@ export function toast(msg: string, level: ToastMsg["level"] = "info", path?: str
 }
 
 export const paletteOpen = signal(false);
+/** The top-bar repo switcher popover (g r). */
+export const repoOpen = signal(false);
 export const helpOpen = signal(false);
 export const connected = signal(false);
 export const detailOpen = signal(false);

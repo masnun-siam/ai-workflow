@@ -1,7 +1,6 @@
 import type { ComponentChildren } from "preact";
 import { chooseProduct, product, products } from "../state/data";
-import { paletteOpen } from "../state/ui";
-import { Btn } from "./ui";
+import { RepoScope } from "./Shell";
 
 export function ProductSwitch() {
   const list = products.value ?? [];
@@ -15,14 +14,15 @@ export function ProductSwitch() {
   );
 }
 
-export function Header({ title, products: withProducts, children }: { title: string; products?: boolean; children?: ComponentChildren }) {
+/** A page heading. `scope` adds the page's repo filter (`?only=`), `products` the product chips (2+ products). */
+export function Header({ title, products: withProducts, scope, sub, children }: { title: string; products?: boolean; scope?: boolean; sub?: ComponentChildren; children?: ComponentChildren }) {
   return (
     <div class="hd">
-      <h1>{title}</h1>
+      <div class="hd-t"><h1>{title}</h1>{sub && <span class="mu hd-sub">{sub}</span>}</div>
       {withProducts && <ProductSwitch />}
       <span class="grow" />
       {children}
-      <Btn k=":" onClick={() => (paletteOpen.value = true)}>run skill</Btn>
+      {scope && <RepoScope />}
     </div>
   );
 }

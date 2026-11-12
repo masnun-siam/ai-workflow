@@ -32,7 +32,8 @@ export const grinds = signal<GrindStatus[] | null>(null);
 export const panels = signal<Panel[] | null>(null);
 export const registry = signal<RegistryStep[]>([]);
 export const loadErrors = signal<Record<string, string>>({});
-export const runsTab = signal<"sessions" | "dispatch" | "coordinators" | "grinds" | "panels">("sessions");
+export type ActivityTab = "sessions" | "coordinators" | "grinds" | "panels";
+export const activityTab = signal<ActivityTab>("sessions");
 
 /** Ids optimistically hidden after an action with `clears`; reset when the list reloads. */
 export const dropped = signal<ReadonlySet<string>>(new Set());
@@ -47,14 +48,45 @@ export const product = computed<Slug | null>(() => {
   return list[0]?.docs_repo ?? null;
 });
 export function chooseProduct(s: Slug): void {
+  if (productSel.peek() === s && product.peek() === s) return;
   productSel.value = s;
   lsSet(PRODUCT_KEY, s);
-  void load("river"); void load("inbox"); void load("releases"); void load("ops");
+  void load("river"); void load("releases"); void load("ops");
 }
+
+/** The current repo (old aiw FR-3): `?repo=` in the URL, else the remembered one, else the first registered.
+ *  It is the default "where" for new runs and picks the product River, Releases and Ops show. */
+const REPO_KEY = "setu.repo";
+export const repoSel = signal<Slug | null>(lsGet(REPO_KEY));
+export const repoList = computed(() => repos.value?.repos ?? []);
+export const currentRepo = computed<Slug | null>(() => {
+  const fromUrl = route.value.query.repo;
+  if (fromUrl) return fromUrl;
+  const list = repoList.value;
+  const s = repoSel.value;
+  if (s && (!repos.value || list.some((r) => r.slug === s))) return s;
+  return list[0]?.slug ?? null;
+});
+export function chooseRepo(s: Slug): void {
+  repoSel.value = s;
+  lsSet(REPO_KEY, s);
+  const p = repoList.peek().find((r) => r.slug === s)?.product;
+  if (p) chooseProduct(p);
+}
+
+/** The page's repo filter (old aiw FR-1): `?only=owner/name`, independent of the current repo. "" = all repos. */
+export const only = computed<Slug>(() => {
+  const raw = route.value.query.only ?? "";
+  if (!raw || !repos.value) return raw;
+  return repoList.value.find((r) => r.slug.toLowerCase() === raw.toLowerCase())?.slug ?? "";
+});
+const sameRepo = (a: string | null | undefined, b: string) => !!a && a.toLowerCase() === b.toLowerCase();
+/** True when `repo` passes the page filter. Items without a repo always pass. */
+export const inScope = (repo: string | null | undefined): boolean => !only.value || !repo || sameRepo(repo, only.value);
 
 export function currentView(): View {
   const r = route.value;
-  return { screen: r.screen, sessionId: r.screen === "runs" ? r.id : undefined, runsTab: runsTab.value };
+  return { screen: r.screen, sessionId: r.screen === "activity" ? r.id : undefined, tab: activityTab.value };
 }
 
 const q = (p: Slug | null) => (p ? `?product=${encodeURIComponent(p)}` : "");
@@ -62,8 +94,8 @@ type Loader = () => Promise<unknown>;
 const loaders: Record<LoadKey, Loader> = {
   status: async () => (status.value = await http.get<Status>("/api/status")),
   river: async () => { river.value = await http.get<River>(`/api/river${q(product.value)}`); dropped.value = new Set(); },
-  inbox: async () => { inbox.value = await http.get<InboxList>(`/api/inbox${q(product.value)}`); dropped.value = new Set(); },
-  sessions: async () => (sessionList.value = await http.get<SessionList>("/api/sessions?limit=200")),
+  inbox: async () => { inbox.value = await http.get<InboxList>("/api/inbox"); dropped.value = new Set(); },
+  sessions: async () => (sessionList.value = await http.get<SessionList>("/api/sessions?limit=500")),
   session: async () => { const id = route.value.id; if (id) sessionOne.value = await http.get<Session>(`/api/sessions/${id}`); },
   stream: async () => { await loadStream(route.value.id); },
   releases: async () => (releases.value = await http.get(`/api/releases${q(product.value)}`)),

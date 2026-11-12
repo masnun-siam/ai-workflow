@@ -9,7 +9,7 @@ export function SessionPage() {
   const s = sessionOne.value?.id === id ? sessionOne.value : sessionList.value?.sessions.find((x) => x.id === id);
   return (
     <>
-      <Header title="session"><Btn small onClick={() => goBack(s?.status === "waiting" ? "inbox" : "runs")}>← Back</Btn></Header>
+      <Header title="Session"><Btn small onClick={() => goBack(s?.status === "waiting" ? "inbox" : "activity")}>← Back</Btn></Header>
       {loadErrors.value.session && <div class="banner bad" role="alert">{loadErrors.value.session}</div>}
       <Pane label={s ? `session · ${s.skill ?? "free text"}` : "session"}>{s ? <SessionView s={s} /> : <Empty>Loading…</Empty>}</Pane>
     </>

@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "preact/hooks";
 import { Detail } from "../components/Detail";
-import { Questions } from "../components/Questions";
 import { ConfirmDialog, Help, Palette, StartDialog, Toast } from "../components/Overlays";
 import { Btn, useFocusTrap } from "../components/ui";
 import type { ComponentChildren } from "preact";
@@ -10,28 +9,36 @@ import { Ops } from "../screens/Ops";
 import { Prd } from "../screens/Prd";
 import { Releases } from "../screens/Releases";
 import { River } from "../screens/River";
-import { Runs } from "../screens/Runs";
+import { Activity } from "../screens/Activity";
+import { Changes } from "../screens/Changes";
+import { Dispatches } from "../screens/Dispatches";
+import { Features } from "../screens/Features";
+import { Onboarding, Rail, Topbar } from "../components/Shell";
 import { SessionPage } from "../screens/SessionPage";
 import { Settings } from "../screens/Settings";
-import { currentView, loadMany, runsTab, status, load } from "../state/data";
+import { http } from "../api/http";
+import { activityTab, mutate, chooseProduct, currentRepo, currentView, loadMany, repoList, repos, status, load } from "../state/data";
 import { HINTS, resolveKey } from "../state/keymap";
 import { applyPrefs, prefs } from "../state/prefs";
 import { visibleKeys } from "../state/refetch";
 import { startRealtime } from "../state/realtime";
-import { goScreen, route, SCREENS, startRouter } from "../state/route";
+import { goScreen, nav, route, startRouter } from "../state/route";
 import { currentTarget, hasList, needCount, quickCount } from "../state/select";
-import { confirmReq, connected, detailOpen, helpOpen, paletteOpen, startReq } from "../state/ui";
-import { pct } from "../state/format";
+import { confirmReq, connected, detailOpen, helpOpen, paletteOpen, repoOpen, startReq } from "../state/ui";
 import { targetActions } from "../components/Detail";
 import { closeTopLayer, runCommand, screenActionList } from "./commands";
 
 function Screen() {
   const r = route.value;
-  if (r.screen === "runs" && r.id) return <SessionPage />;
+  if (r.screen === "activity" && r.id) return <SessionPage />;
   switch (r.screen) {
     case "river": return <River />;
     case "inbox": return <Inbox />;
-    case "runs": return <Runs />;
+    case "features": return <Features />;
+    case "changes": return <Changes />;
+    case "dispatches": return <Dispatches />;
+    case "activity": return <Activity />;
+    case "onboarding": return <Onboarding />;
     case "releases": return <Releases />;
     case "ops": return <Ops />;
     case "me": return <Me />;
@@ -40,41 +47,13 @@ function Screen() {
   }
 }
 
-function Nav() {
-  const cur = route.value.screen;
-  return (
-    <>
-      {SCREENS.map(([id, name], i) => (
-        <button key={id} type="button" class={`nv${cur === id ? " on" : ""}`} aria-current={cur === id ? "page" : undefined} onClick={() => { detailOpen.value = false; goScreen(id); }}>
-          <kbd>{i + 1}</kbd>{name}{id === "inbox" && needCount.value > 0 && <span class="n" aria-label={`${needCount.value} need you`}>{needCount.value}</span>}
-        </button>
-      ))}
-    </>
-  );
-}
-
-function Brand() {
-  return <div class="brand"><b>setu</b><span>সেতু</span></div>;
-}
-
-function StatusLine() {
-  const st = status.value;
-  const u = st?.usage[0];
-  return (
-    <>
-      <span><i class={`status-dot${connected.value ? " on" : ""}`} />{connected.value ? "live" : "offline"}</span>
-      <span>blubird {st?.blubird.installed ? st.blubird.version : "missing"}</span>
-      {u && <span>{u.label} · {pct(u.five_hour)}</span>}
-      <span>away {st?.away.active ? "on" : "off"}</span>
-    </>
-  );
-}
-
 function Banners() {
   const st = status.value;
   if (!st) return null;
   return (
     <>
+      {!connected.value && <div class="banner" role="status">Offline: reconnecting to setu… What you see may be out of date.</div>}
+      {st.away.active && <div class="banner" role="status">Away mode is on: Claude answers what it can and holds the rest. <Btn small onClick={() => mutate(() => http.send("POST", "/api/away/stop", {}), "Welcome back", ["status", "inbox"])}>I'm back</Btn></div>}
       {!st.blubird.installed && <div class="banner" role="alert">blubird is not installed, so its skills are disabled. <Btn small onClick={() => goScreen("settings")}>Open settings</Btn></div>}
       {!st.gh.ok && <div class="banner bad" role="alert">GitHub CLI is not signed in{st.gh.error ? `: ${st.gh.error}` : ""}. Run <code>gh auth login</code> in a terminal, then reload.</div>}
     </>
@@ -95,14 +74,31 @@ function Drawer({ children }: { children: ComponentChildren }) {
   );
 }
 
-const SPLIT_SCREENS = new Set(["river", "inbox", "runs", "ops"]);
+const SPLIT_SCREENS = new Set(["river", "inbox", "activity", "ops"]);
+
+/** Old aiw gate: every page but Settings goes to onboarding while no repo is registered. */
+function useOnboardingGate() {
+  const r = route.value;
+  const none = !!repos.value && repoList.value.length === 0;
+  useEffect(() => {
+    if (none && r.screen !== "settings" && r.screen !== "onboarding") nav("#/onboarding", true);
+  }, [none, r.screen]);
+}
 
 export function App() {
   const r = route.value;
   const p = prefs.value;
   const split = p.layout === "split";
-  const showSide = split && SPLIT_SCREENS.has(r.screen) && !r.id && (r.screen !== "runs" || runsTab.value === "sessions");
-  const hints = [...(HINTS[r.screen] ?? []), ["1-7", "screens"], [":", "skill"], [".", "mode"], ["s", "look"], ["?", "keys"]] as [string, string][];
+  const showSide = split && SPLIT_SCREENS.has(r.screen) && !r.id && (r.screen !== "activity" || activityTab.value === "sessions");
+  const hints = [...(HINTS[r.screen] ?? []), ["0-9", "pages"], ["g r", "repo"], ["n", "new"], ["⌘K", "search"], ["?", "keys"]] as [string, string][];
+  useOnboardingGate();
+  // The current repo picks the product River, Releases and Ops show.
+  const repoProduct = repoList.value.find((x) => x.slug === currentRepo.value)?.product;
+  useEffect(() => { if (repoProduct) chooseProduct(repoProduct); }, [repoProduct]);
+  useEffect(() => {
+    const n = needCount.value;
+    document.title = n ? `(${n}) setu` : "setu";
+  }, [needCount.value]);
 
   useEffect(() => {
     applyPrefs(prefs.peek());
@@ -111,7 +107,7 @@ export function App() {
     void load("registry"); void load("settings");
     return () => { stopRoute(); stopSse(); };
   }, []);
-  useEffect(() => { detailOpen.value = false; void loadMany(visibleKeys(currentView())); }, [r.screen, r.id, runsTab.value]);
+  useEffect(() => { detailOpen.value = false; repoOpen.value = false; void loadMany(visibleKeys(currentView())); }, [r.screen, r.id, activityTab.value]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
@@ -120,7 +116,7 @@ export function App() {
         { key: e.key, meta: e.metaKey, ctrl: e.ctrlKey, alt: e.altKey, typing },
         {
           screen: route.value.screen,
-          overlay: !!confirmReq.value || !!startReq.value || paletteOpen.value || helpOpen.value,
+          overlay: !!confirmReq.value || !!startReq.value || paletteOpen.value || helpOpen.value || repoOpen.value,
           actions: [...targetActions(currentTarget.value), ...screenActionList()],
           quickOptions: quickCount.value,
           nav: hasList(route.value.screen),
@@ -142,21 +138,15 @@ export function App() {
   }, []);
 
   const side = <Detail t={currentTarget.value} />;
-  const main = <main class="main" id="main"><Banners />{!split && !(r.screen === "runs" && r.id) && <Questions />}<Screen /></main>;
+  const main = <main class="main" id="main"><Topbar /><Banners /><Screen /></main>;
   return (
     <div class="app">
       <a class="skip" href="#main" onClick={(e) => { e.preventDefault(); document.getElementById("main")?.focus(); }}>Skip to content</a>
-      {split ? (
-        <>
-          <header class="tabs"><Brand /><nav class="nav-wrap" aria-label="Main"><Nav /></nav><span class="st" style={{ display: "flex", gap: "12px" }}><StatusLine /></span></header>
-          <div class="body">{main}{showSide && <aside class="side" aria-label="Detail">{side}</aside>}</div>
-        </>
-      ) : (
-        <div class="body">
-          <nav class="rail" aria-label="Main"><Brand /><Nav /><div class="railfoot"><StatusLine /></div></nav>
-          {main}
-        </div>
-      )}
+      <div class="body">
+        <Rail />
+        {main}
+        {split && showSide && <aside class="side" aria-label="Detail">{side}</aside>}
+      </div>
       <footer class="keys">{hints.map(([k, d]) => <span key={k + d}><kbd>{k}</kbd>{d}</span>)}</footer>
       {!split && detailOpen.value && currentTarget.value && (
         <Drawer>{side}</Drawer>

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- The UI is back on the old aiw navigation: a rail with Inbox, Features, Small changes, Dispatches and Activity (then River, Releases, Ops, Me, Settings) and counts for needs-you, dispatching and running; a top bar with the repo switcher (`g r`), search, the needs-you pill and New; a repo filter on list pages (`?only=`); onboarding while no repo is registered; Away mode presets and plan usage in the rail foot. Runs split into Dispatches and Activity; `#/runs` still opens Activity.
+
 ## setu 1.0.0
 
 setu (সেতু) replaces the `ai-workflow` Claude Code plugin. It is one Go binary (`setu`) with a Preact web app embedded,
