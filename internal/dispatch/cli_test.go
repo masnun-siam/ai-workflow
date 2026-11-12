@@ -126,7 +126,9 @@ func TestCLIShapes(t *testing.T) {
 	if code, _, _ := runCLI(t, h, "lane", "aaaaaaaaaaaa", "10", "dance"); code != ExitInvalid {
 		t.Fatal(code)
 	}
-	for verb, word := range map[string]string{"pause": "paused", "resume": "resumed", "cancel": "cancelled"} {
+	// in order: resume after cancel would revive the dispatch
+	for _, vw := range [][2]string{{"pause", "paused"}, {"resume", "resumed"}, {"cancel", "cancelled"}} {
+		verb, word := vw[0], vw[1]
 		code, out, _ = runCLI(t, h, verb, "aaaaaaaaaaaa")
 		if code != 0 || out != word+"\n" {
 			t.Errorf("%s: %d %q", verb, code, out)

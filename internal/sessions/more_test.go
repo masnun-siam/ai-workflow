@@ -205,14 +205,14 @@ func TestListAllCacheFollowsWrites(t *testing.T) {
 	if got := e.m.List(Filter{}); got[0].Note != "two" {
 		t.Fatal(got[0].Note)
 	}
-	// a write by another process shows after listFresh
+	// a write by another process shows after time.Millisecond
 	write("done", "three")
-	time.Sleep(listFresh + 50*time.Millisecond)
+	time.Sleep(time.Millisecond + 50*time.Millisecond)
 	if got := e.m.List(Filter{}); got[0].Note != "three" {
 		t.Fatal(got[0].Note)
 	}
 	os.RemoveAll(dir)
-	time.Sleep(listFresh + 50*time.Millisecond)
+	time.Sleep(time.Millisecond + 50*time.Millisecond)
 	if got := e.m.List(Filter{}); len(got) != 0 {
 		t.Fatal(got)
 	}

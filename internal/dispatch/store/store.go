@@ -6,13 +6,13 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/masnun-siam/setu/internal/errs"
@@ -67,8 +67,6 @@ func Save(h *home.Home, d *Dispatch) error {
 	if err != nil {
 		return err
 	}
-	saves.Add(1)
-	defer saves.Add(1)
 	return home.AtomicWrite(p, append(b, '\n'), 0o644)
 }
 
@@ -90,51 +88,41 @@ func List(h *home.Home) []Dispatch {
 }
 
 type listEntry struct {
-	mtime int64
-	size  int64
-	d     Dispatch
+	mtime, ctime, size int64
+	ino                uint64
+	d                  Dispatch
 }
+
+// racyWindow: a file whose mtime is this close to the scan may be rewritten within the same
+// filesystem timestamp tick, so its stat key proves nothing and it is parsed again.
+const racyWindow = 2 * time.Second
 
 var listCache struct {
 	sync.Mutex
 	root  string
 	m     map[string]listEntry
-	ver   uint64
-	gen   int64      // mtime of dispatches/ when out and lanes were built (0: none)
-	out   []Dispatch // sorted result for gen
-	lanes map[string]string
+	lanes map[string]string // valid until a scan sees any change
 }
 
-// ListShared is List for read-only callers (liveLanes, Repos, tick scans): a record is re-parsed
-// only when its file changed (mtime, size), so a poll that scans every dispatch costs a stat each,
-// not a parse. The returned values share maps with the cache: callers must not modify them.
+// ListShared is List for read-only callers (liveLanes, Repos, tick scans): every call stats each
+// record (so a write by any process shows at once) and re-parses only a record whose file
+// changed (mtime, ctime, size, inode) or is too young to trust. The returned values share maps
+// with the cache: callers must not modify them.
 func ListShared(h *home.Home) []Dispatch {
 	listCache.Lock()
 	defer listCache.Unlock()
 	return slices.Clone(listLocked(h))
 }
 
-// saves counts the writes of this process; another process's write shows in the mtime of
-// dispatches/ (every save is an atomic rename).
-var saves atomic.Uint64
-
-// listLocked needs listCache locked and returns the shared slice. While neither this process
-// nor the directory mtime saw a write, the previous result stands and a poll costs one stat.
+// listLocked needs listCache locked.
 func listLocked(h *home.Home) []Dispatch {
 	if listCache.root != h.Root || listCache.m == nil {
-		listCache.root, listCache.m, listCache.gen, listCache.out, listCache.lanes = h.Root, map[string]listEntry{}, 0, nil, nil
+		listCache.root, listCache.m, listCache.lanes = h.Root, map[string]listEntry{}, nil
 	}
-	var gen int64
-	if di, err := os.Stat(dir(h)); err == nil && time.Since(di.ModTime()) > 100*time.Millisecond {
-		// (a younger mtime may share a filesystem timestamp tick with a write still to come)
-		gen = di.ModTime().UnixNano()
-		if gen == listCache.gen && listCache.ver == saves.Load() {
-			return listCache.out
-		}
-	}
-	ver := saves.Load()
 	ents, _ := os.ReadDir(dir(h))
+	now := time.Now()
 	seen := make(map[string]bool, len(ents))
+	changed := false
 	var out []Dispatch
 	for _, e := range ents {
 		n := e.Name()
@@ -147,14 +135,21 @@ func listLocked(h *home.Home) []Dispatch {
 			continue
 		}
 		seen[id] = true
+		k := listEntry{mtime: fi.ModTime().UnixNano(), size: fi.Size()}
+		k.ctime, k.ino = statExtra(fi)
 		c, ok := listCache.m[id]
-		if !ok || c.mtime != fi.ModTime().UnixNano() || c.size != fi.Size() {
+		if !ok || c.mtime != k.mtime || c.size != k.size || c.ctime != k.ctime || c.ino != k.ino || now.Sub(fi.ModTime()) < racyWindow {
 			d, err := Load(h, id)
 			if err != nil {
 				delete(listCache.m, id)
+				changed = true
 				continue
 			}
-			c = listEntry{fi.ModTime().UnixNano(), fi.Size(), d}
+			k.d = d
+			if !ok || !reflect.DeepEqual(c.d, d) {
+				changed = true
+			}
+			c = k
 			listCache.m[id] = c
 		}
 		out = append(out, c.d)
@@ -162,10 +157,13 @@ func listLocked(h *home.Home) []Dispatch {
 	for id := range listCache.m {
 		if !seen[id] {
 			delete(listCache.m, id)
+			changed = true
 		}
 	}
+	if changed {
+		listCache.lanes = nil
+	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt > out[j].CreatedAt })
-	listCache.gen, listCache.ver, listCache.out, listCache.lanes = gen, ver, out, nil
 	return out
 }
 
@@ -307,7 +305,6 @@ func ArchiveOld(h *home.Home, now, days float64) []string {
 			if os.MkdirAll(dest, 0o755) != nil {
 				return
 			}
-			saves.Add(1)
 			if os.Rename(filepath.Join(dir(h), n), filepath.Join(dest, n)) == nil {
 				moved = append(moved, id)
 			}

@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"sync/atomic"
 	"time"
 
 	"github.com/masnun-siam/setu/internal/errs"
@@ -107,11 +106,9 @@ func updateRecord(h *home.Home, id string, fn func(*Record, statKey) error, post
 		return prev, next, st, err
 	}
 	next.ID = id
-	recWrites.Add(1)
 	if err := home.WriteJSON(path, next); err != nil {
 		return prev, next, st, err
 	}
-	recWrites.Add(1)
 	st = statOf(path)
 	if post != nil {
 		post(next, st)
@@ -144,11 +141,9 @@ func (m *Manager) create(rec Record) (Record, error) {
 	}
 	f.Close()
 	rec.StartedAt = isoNow(m.d.now())
-	recWrites.Add(1)
 	if err := home.WriteJSON(metaPath(m.d.Home, rec.ID), rec); err != nil {
 		return rec, err
 	}
-	recWrites.Add(1)
 	m.publishRecord(rec, "record")
 	m.trackMeta(rec.ID, rec.Status, statOf(metaPath(m.d.Home, rec.ID)))
 	return rec, nil
@@ -296,31 +291,14 @@ func (m *Manager) trackMeta(id string, status Status, st statKey) {
 	m.metaSeen[id] = st
 }
 
-// recWrites counts the record writes of this process (create, update, remove).
-var recWrites atomic.Uint64
-
-// listFresh is how long a listAll result is reused when this process wrote nothing: a write by
-// another process (`setu ask`, the CLI) shows within it. Without it every inbox rebuild stats and
-// copies all of the (1000+) records.
-const listFresh = time.Second
+// racyWindow: a file whose mtime is this close to the scan may be rewritten within the same
+// filesystem timestamp tick with the same size, so its stat key proves nothing and it is re-read.
+const racyWindow = 2 * time.Second
 
 // listAll returns every record, newest first, as a slice shared with the next callers: range over
-// it, never modify it.
-func (m *Manager) listAll() []Record {
-	ver := recWrites.Load()
-	m.mu.Lock()
-	if m.all != nil && m.allVer == ver && time.Since(m.allAt) < listFresh {
-		out := m.all
-		m.mu.Unlock()
-		return out
-	}
-	m.mu.Unlock()
-	out := m.scanAll()
-	m.mu.Lock()
-	m.all, m.allVer, m.allAt = out, ver, time.Now()
-	m.mu.Unlock()
-	return out
-}
+// it, never modify it. Every call validates each meta.json by stat, so a write by any process
+// (the child's `setu ask`, the CLI) shows on the next read.
+func (m *Manager) listAll() []Record { return m.scanAll() }
 
 // scanAll reads every record, newest first. A record whose meta.json is unchanged (stat key) is
 // taken from the previous result instead of being parsed again; the cache holds only the stat key
@@ -340,6 +318,7 @@ func (m *Manager) scanAll() []Record {
 	m.mu.Lock()
 	prev, old := m.all, m.cache
 	m.mu.Unlock()
+	now := time.Now()
 	out := make([]Record, 0, len(names))
 	next := make(map[string]cached, len(names))
 	for _, id := range names {
@@ -348,7 +327,7 @@ func (m *Manager) scanAll() []Record {
 		if st == (statKey{}) {
 			continue
 		}
-		if c, ok := old[id]; ok && c.st == st && c.idx < len(prev) && prev[c.idx].ID == id {
+		if c, ok := old[id]; ok && c.st == st && now.Sub(time.Unix(0, st.mtime)) > racyWindow && c.idx < len(prev) && prev[c.idx].ID == id {
 			next[id] = cached{st, len(out)}
 			out = append(out, prev[c.idx])
 			continue
@@ -366,7 +345,7 @@ func (m *Manager) scanAll() []Record {
 		out = append(out, r)
 	}
 	m.mu.Lock()
-	m.cache = next
+	m.cache, m.all = next, out
 	m.mu.Unlock()
 	return out
 }

@@ -236,6 +236,15 @@ func newEnv(t *testing.T) *tenv {
 	e.m = New(Deps{Home: h, Bus: e.bus, Settings: e.settings, Claude: e.claude, Prompts: fakePrompts{},
 		Repos: &fakeRepos{slugs: map[string]string{"acme/app": repo, "acme/docs": docs}}, Notify: e.notes, BinDir: fb})
 	e.m.poll = 20 * time.Millisecond
+	// runs before the TempDir removal: no follower or child may still write into the home
+	t.Cleanup(func() {
+		deadline := time.Now().Add(15 * time.Second)
+		for _, r := range e.m.List(Filter{Answerers: true}) {
+			for e.m.Alive(r.ID) && time.Now().Before(deadline) {
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+	})
 	return e
 }
 
