@@ -1,51 +1,61 @@
-# ai-workflow
+# setu (সেতু)
 
-**Type an idea. Get back a reviewed pull request.**
+A local frontend for Claude Code. setu starts headless `claude -p` sessions that run the
+[blubird](https://github.com/blubird-interactiveltd/agentic-workflow) plugin's skills, watches GitHub, and shows
+what needs you: a question to answer, a PR to review, a release to cut. It is one Go binary with the web app embedded.
+It is not a Claude Code plugin.
 
-[![Landing page](https://img.shields.io/badge/landing%20page-masnun--siam.github.io-blue)](https://masnun-siam.github.io/ai-workflow)
-[![Tests](https://github.com/masnun-siam/ai-workflow/actions/workflows/tests.yml/badge.svg)](https://github.com/masnun-siam/ai-workflow/actions/workflows/tests.yml)
-[![Docs](https://img.shields.io/badge/docs-INSTALL%20%C2%B7%20HOW--IT--WORKS-lightgrey)](docs/HOW-IT-WORKS.md)
+The process it drives: `PRD → tasks → refined issue → implement-issue → pr-review → grind → merge → release`.
 
-[![The aiw UI](site/public/media/hero.webp)](https://masnun-siam.github.io/ai-workflow)
+## Install
 
-A Claude Code plugin that carries one team process, from an idea to a merged PR: a PRD that
-reviewers sign off, small issues, code written and checked in its own worktree, and a PR reviewed
-before you see it. One local UI (`aiw ui`) shows where everything stands and asks you only what
-needs a person.
+Requires Go 1.27, Node 24 (only to rebuild the UI), the `claude` and `gh` CLIs, and the blubird plugin.
 
-## The flow
-
-`PRD → tasks → refined issues → /implement-issue → /pr-review`
-
-A person decides at three points: answering the PRD questions and approving the PRD, and merging.
-Everything between runs as a headless Claude session.
-
-## Features
-
-- A skill per stage: `/create-prd`, `/create-tasks`, `/refine-issues`, `/implement-issue`, `/pr-review`.
-- `/peer-review`: independent reviewer lenses (critical, CEO, CTO, security, QA, UX, performance) read the PRD until all approve.
-- `aiw ui`: a local web app that starts each stage as a session and shows the board, blockers and next step.
-- A worktree per issue, with every local check run the way CI runs it, before a draft PR.
-- A review grind: `/pr-grind` loops the review-fix cycle until the PR is approved.
-
-## Quick start
-
-Needs Python 3.10+ and an authenticated `gh`. Easiest: ask Claude Code to follow
-[docs/INSTALL.md](docs/INSTALL.md). By hand:
-
-```bash
-claude plugin marketplace add masnun-siam/ai-workflow
-claude plugin install ai-workflow@ai-workflow
-aiw ui          # open the web app
+```sh
+make install     # builds the web app and the binary, installs ~/.local/bin/setu and the launchd agent
+setu serve       # or run in the foreground (alias: setu ui)
 ```
 
-Then run `/create-prd` in a repo to start a feature.
+Open http://127.0.0.1:8420. `--port N`, `--allow-host H` and `--no-tailscale` override the saved server settings.
+`setu serve` also exposes the app over `tailscale serve` when Tailscale is running (HTTPS port 443, 8443 or 10000).
 
-## Docs
+## First run
 
-- [docs/INSTALL.md](docs/INSTALL.md): the setup protocol, written for an AI agent to follow
-- [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md): the process, stage by stage
-- [docs/REFERENCE.md](docs/REFERENCE.md): commands, the `aiw` CLI, `aiw ui`, state, layout, tests
-- [guides/](guides/): the engineering process and review standards the skills follow
-- [CONTRIBUTING.md](CONTRIBUTING.md): which docs to update, and the pre-commit hooks
-- [CHANGELOG.md](CHANGELOG.md)
+1. Settings > Blubird: setu looks for blubird in `~/.claude/plugins/installed_plugins.json`
+   (`CLAUDE_CONFIG_DIR` is respected). If it is missing, a banner shows and blubird actions stay disabled;
+   Settings can install or update it.
+2. Settings > Products: register a Documentation Repo checkout. Its `.blubird/repos.json` makes it and its
+   code repos one product.
+3. Settings > Accounts: pick the `claude` account(s) sessions run under.
+4. If `~/.claude/plugins/data/ai-workflow/` exists, the first start copies it into `~/.setu/` once. The old dir is never deleted.
+
+## Screens
+
+| Key | Screen | What it shows |
+|---|---|---|
+| 1 | River | the pipeline by stage, with the cards in each |
+| 2 | Inbox | everything waiting on you, ranked by urgency |
+| 3 | Runs | sessions and their transcripts |
+| 4 | Releases | the release flow: cut, grind, merge, notify |
+| 5 | Ops | repo and product upkeep (onboard, docs, security sweep) |
+| 6 | Me | reconcile and weekly review |
+| 7 | Settings | accounts, products, blubird, notifications, away, review, appearance |
+
+## Keyboard
+
+`1`-`7` screens, `j`/`k` move, `h`/`l` stage (River), `Enter` open, `a`/`b`/`c` answer a question, `:` or `Cmd/Ctrl-K` command
+palette, `?` help, `Esc` back. Each screen lists its action keys in the footer. `.` cycles mode, `s` cycles look, `L` cycles layout.
+
+## Appearance
+
+Settings > Appearance, stored per browser: Look (Console or River), Mode (System, Dark or Light), Layout (Rail + drawer or Tabs + split).
+Default: Console, System, drawer.
+
+## Data
+
+Everything lives in `~/.setu` (override with `SETU_HOME`). GitHub and the repo's `docs/prds/` stay the source of truth for work.
+Files and settings: [docs/setu/REFERENCE.md](docs/setu/REFERENCE.md).
+
+## Develop
+
+`make test` runs the Go and web tests. See [CLAUDE.md](CLAUDE.md), [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/setu/](docs/setu/).

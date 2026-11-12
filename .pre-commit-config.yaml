@@ -1,6 +1,5 @@
-# Lint, secret and test hooks block the commit; the CLAUDE.md hook is a reminder only.
+# Format, vet, secret and test hooks block the commit; the CLAUDE.md hook is a reminder only.
 # See CONTRIBUTING.md.
-exclude: ^run-engine/ui_dist/
 default_install_hook_types: [pre-commit, pre-push]  # `pre-commit install` sets up both
 default_stages: [pre-commit]  # only all-tests runs on push
 repos:
@@ -11,33 +10,33 @@ repos:
       - id: check-json
       - id: check-merge-conflict
       - id: check-added-large-files
-        exclude: ^site/public/media/ # the showcase's compressed clips (each under 2 MB) are committed on purpose
+        exclude: ^internal/web/dist/ # the committed UI build
       - id: check-symlinks
       - id: trailing-whitespace
+        exclude: ^internal/web/dist/
       - id: end-of-file-fixer
+        exclude: ^internal/web/dist/
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.0
     hooks:
       - id: gitleaks
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.17.0
-    hooks:
-      - id: ruff-check
-        types_or: [python, pyi]
-      - id: ruff-format
-        types_or: [python, pyi]  # not Markdown: docs keep their code samples as written
-  - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.11.0.1-1
-    hooks:
-      - id: shellcheck
-        # imported dev-workflow scripts stay byte-identical to the source; SC2016 flags GraphQL $vars
-        args: [--exclude=SC2016]
   - repo: local
     hooks:
-      - id: all-tests
-        name: run-engine/test_*.py (all, ~2 min)
+      - id: gofmt
+        name: gofmt
         language: system
-        entry: bash run-engine/run_tests.sh
+        entry: bash -c 'out=$(gofmt -l "$@"); [ -z "$out" ] || { echo "gofmt needed:"; echo "$out"; exit 1; }' --
+        types: [go]
+      - id: go-vet
+        name: go vet
+        language: system
+        entry: go vet ./...
+        types: [go]
+        pass_filenames: false
+      - id: all-tests
+        name: make test
+        language: system
+        entry: make test
         stages: [pre-push]
         always_run: true
         pass_filenames: false

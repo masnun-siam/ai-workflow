@@ -1,9 +1,0 @@
-#!/bin/sh
-# Plugin bin/ is on PATH, so orchestrator markdown never spells an absolute path.
-# ponytail: a shim, not a wrapper — no arg parsing, no logic of its own (just resolves symlinks to find the plugin root).
-p=$0
-while [ -L "$p" ]; do
-  l=$(readlink "$p")
-  case $l in /*) p=$l ;; *) p=$(dirname "$p")/$l ;; esac
-done
-exec python3 "$(dirname "$(cd "$(dirname "$p")" && pwd)")/run-engine/route.py" "$@"

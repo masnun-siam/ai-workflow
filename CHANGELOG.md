@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+## setu 1.0.0
+
+setu (সেতু) replaces the `ai-workflow` Claude Code plugin. It is one Go binary (`setu`) with a Preact web app embedded,
+and it drives the blubird plugin instead of shipping its own skills.
+
+### Removed
+
+- The plugin itself: `skills/`, `agents/`, `guides/`, `templates/`, `.claude-plugin/`, and the personal plugin. Process skills now come from blubird.
+- The Python `aiw` engine (`run-engine/`, `bin/aiw`) and the React app in `ui/`.
+- PRD shares (public share links and their sending).
+- The Codex harness; sessions run `claude` only.
+- herdr runner support; Dispatch lanes are headless.
+- `install-skills` and `repo-bootstrap` (Ops runs `blubird:agentic-onboard` instead).
+- The `site/` showcase and `kanban.html`, plus the old docs (`HOW-IT-WORKS`, `REFERENCE`, `INSTALL`, `docs/superpowers`, `docs/tasks`).
+- Endpoints `/api/route`, `/api/duplicate`, `POST /api/prd`, `/api/restart`, `/api/notifications`, `/api/repos/create|publish`, `/api/github/owners`.
+
+### Added
+
+- `setu` single binary: `serve` (alias `ui`), `ask`, `paths`, `grind`, `dispatch`, `ci`, `threads`, `jev`, `blubird`, `review`, `version`.
+- Preact UI with seven screens (River, Inbox, Runs, Releases, Ops, Me, Settings), two looks (Console, River), three modes, two layouts, and a full keyboard map with a command palette.
+- Releases screen and a deterministic release flow: cut, grind, merge, notify. setu posts the release note itself, exactly once.
+- Built-in prompts embedded in the binary: `release-pr`, `pr-grind`, `release-note`, `peer-review`.
+- blubird detection, install and update from Settings; Server-Sent Events for live updates.
+- Web Push to the installed PWA as an extra notification channel next to browser, ntfy and macOS.
+- `make install` with a launchd agent.
+
+### Kept
+
+Sessions with questions and answers, accounts and usage meters, GitHub poller and board, inbox, Dispatch and the blubird coordinator reader,
+Away mode and the away answerer, grind state, peer review panels, Jev, Vault, merge cleanup, small changes, cost and transcripts.
+The data dir moves to `~/.setu`; the first start copies `~/.claude/plugins/data/ai-workflow/` into it once and never deletes the old one.
+
+---
+
+## ai-workflow plugin (before setu)
+
 ### Added
 
 - **blubird's CLAUDE.md guard and secret blocks in UI sessions** (#941): an edit of the root `CLAUDE.md` or `AGENTS.md` that blubird's guard hook stops (denied headless) puts the session `waiting` on an Approve / Deny round held from Away; Deny resumes saying the edit was denied, Approve has the UI apply the exact proposed edit (only to the session's root file) and resumes saying it was applied or why it could not be. A prompt or answer that blubird's mask-secrets hook blocks ends the session `failed` with the hook's reason (the secret kind, never the value) instead of a silent `done`.
