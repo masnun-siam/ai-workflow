@@ -57,7 +57,7 @@ function NoteEditor({ r }: { r: Release }) {
   return (
     <div class="det">
       <textarea aria-label="Release note" rows={10} value={text} maxLength={8000} onInput={(e) => setText((e.target as HTMLTextAreaElement).value)} />
-      <div class="acts"><Btn primary onClick={() => void save()}>Save</Btn><Btn onClick={() => (editing.value = false)}>Cancel</Btn></div>
+      <div class="acts"><Btn primary onClick={() => save()}>Save</Btn><Btn onClick={() => (editing.value = false)}>Cancel</Btn></div>
     </div>
   );
 }
@@ -68,13 +68,14 @@ export function Releases() {
   const posted = !!r?.note_posted_at;
   const repo = repoList.value.find((x) => x.repo === repoSlug.value);
   const err = loadErrors.value.releases;
+  const cutWhy = !repo ? "No repository with releases" : repo.open ? "A release is already in flight for this repository" : "Open a release PR";
   return (
     <>
       <Header title="releases" products>
-        <Btn k="c" onClick={() => void releaseOps.cut(false)} disabled={!repo || !!repo.open}>Cut release</Btn>
-        <Btn k="y" onClick={() => void releaseOps.cut(true)} disabled={!repo || !!repo.open}>Dry run</Btn>
-        <Btn k="g" onClick={() => void releaseOps.grind()} disabled={!r}>Grind</Btn>
-        <Btn k="n" onClick={() => void releaseOps.note()} disabled={!r || posted}>Note</Btn>
+        <Btn k="c" onClick={() => releaseOps.cut(false)} disabled={!repo || !!repo.open} title={cutWhy}>Cut release</Btn>
+        <Btn k="y" onClick={() => releaseOps.cut(true)} disabled={!repo || !!repo.open} title={cutWhy}>Dry run</Btn>
+        <Btn k="g" onClick={() => releaseOps.grind()} disabled={!r} title={r ? "Grind the release PR" : "No release yet"}>Grind</Btn>
+        <Btn k="n" onClick={() => releaseOps.note()} disabled={!r || posted} title={!r ? "No release yet" : posted ? "The note is already posted" : "Draft the release note"}>Note</Btn>
       </Header>
       {err && <div class="banner bad" role="alert">{err}</div>}
       {repoList.value.length > 0 && <Chips label="Repository" value={repoSlug.value ?? ""} options={repoList.value.map((x) => [x.repo, `${x.name}${x.ahead ? ` (${x.ahead})` : ""}`])} onPick={(v) => { relRepo.value = v; editing.value = false; }} />}
@@ -90,14 +91,14 @@ export function Releases() {
       {r?.error && <div class="banner bad" role="alert">{r.error}</div>}
       <div class="grid2">
         <Pane label="release note preview">
-          {!r ? <Empty>No release yet. Cut one to start.</Empty> : (
+          {!r ? <Empty>No release yet for this repository. Press c to cut one.</Empty> : (
             <div class="det">
               {editing.value ? <NoteEditor r={r} /> : r.note ? <pre class="note">{r.note}</pre> : <span class="dim">No note yet. Draft one with n once the release is merged.</span>}
               {posted ? <span class="c-o">Posted{r.note_permalink ? <> · <a href={r.note_permalink} target="_blank" rel="noopener noreferrer">open</a></> : ""}. Never retried.</span> : (
                 <div class="acts">
-                  <Btn k="p" primary disabled={!r.note} onClick={() => void releaseOps.post()}>Post to #{settings.value?.release_note.channel_name ?? "channel"}</Btn>
-                  <Btn k="e" disabled={!r.note} onClick={releaseOps.edit}>Edit</Btn>
-                  <Btn k="x" bad onClick={() => void releaseOps.skip()}>Skip</Btn>
+                  <Btn k="p" primary disabled={!r.note} title={r.note ? undefined : "Draft a note first"} onClick={() => releaseOps.post()}>Post to #{settings.value?.release_note.channel_name ?? "channel"}</Btn>
+                  <Btn k="e" disabled={!r.note} title={r.note ? undefined : "Draft a note first"} onClick={releaseOps.edit}>Edit</Btn>
+                  <Btn k="x" bad onClick={() => releaseOps.skip()}>Skip</Btn>
                 </div>
               )}
               <ActionBar actions={r.actions} />
@@ -105,8 +106,12 @@ export function Releases() {
           )}
         </Pane>
         <Pane label="repositories">
-          <KV rows={repoList.value.map((x) => [x.name, x.open ? <span class="c-q">release in flight</span> : x.ahead ? `${x.ahead} ahead · ${x.prs_waiting ?? "?"} PRs waiting` : "nothing new"])} />
-          {repoList.value.map((x) => x.actions.length > 0 && <ActionBar key={x.repo} actions={x.actions} />)}
+          <div class="det">{repoList.value.map((x) => (
+            <div key={x.repo} class="repo-row">
+              <span><b>{x.name}</b> <span class="dim">· </span>{x.open ? <span class="c-q">release in flight</span> : x.ahead ? `${x.ahead} ahead · ${x.prs_waiting ?? "?"} PRs waiting` : <span class="dim">nothing new</span>}</span>
+              {x.actions.length > 0 && <ActionBar actions={x.actions} />}
+            </div>))}
+            {repoList.value.length === 0 && <Empty>No repositories with a release branch.</Empty>}</div>
         </Pane>
       </div>
     </>

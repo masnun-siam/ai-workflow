@@ -11,7 +11,7 @@ export function SessionPage() {
     <>
       <Header title="session"><Btn small onClick={() => goBack(s?.status === "waiting" ? "inbox" : "runs")}>← Back</Btn></Header>
       {loadErrors.value.session && <div class="banner bad" role="alert">{loadErrors.value.session}</div>}
-      <Pane label={id}>{s ? <SessionView s={s} /> : <Empty>Loading…</Empty>}</Pane>
+      <Pane label={s ? `session · ${s.skill ?? "free text"}` : "session"}>{s ? <SessionView s={s} /> : <Empty>Loading…</Empty>}</Pane>
     </>
   );
 }

@@ -2,6 +2,7 @@ import { useState } from "preact/hooks";
 import { http } from "../../api/http";
 import type { ReviewConfig } from "../../api/types";
 import { mutate, reviewCfg } from "../../state/data";
+import { askConfirm } from "../../state/ui";
 import { Btn, Field, Pane } from "../../components/ui";
 import { csv } from "./common";
 
@@ -17,15 +18,15 @@ export function ReviewPane() {
     if (r) { reviewCfg.value = r; setD(null); }
   };
   return (
-    <Pane label="peer review">
+    <Pane label="peer review" id="set-review">
       <div class="det">
         <div class="fields">
           <Field label="Max rounds"><input type="number" min={1} max={10} value={v.max} onInput={(e) => setD({ ...v, max: Number((e.target as HTMLInputElement).value) })} /></Field>
           <Field label="Default lenses (comma separated)"><input value={v.defs} onInput={(e) => setD({ ...v, defs: (e.target as HTMLInputElement).value })} /></Field>
         </div>
         <Field label="Lenses, one per line as name: instructions"><textarea rows={5} value={v.lenses} onInput={(e) => setD({ ...v, lenses: (e.target as HTMLTextAreaElement).value })} /></Field>
-        <div class="acts"><Btn primary disabled={!d} onClick={() => void save()}>Save</Btn>
-          <Btn disabled={!c.overridden} onClick={async () => { const r = await mutate(() => http.send<ReviewConfig>("PUT", "/api/settings/review", { reset: true }), "Reset to shipped lenses"); if (r) { reviewCfg.value = r; setD(null); } }}>Reset to shipped</Btn></div>
+        <div class="acts"><Btn primary disabled={!d} onClick={() => save()}>Save</Btn>{d && <Btn onClick={() => setD(null)}>Discard</Btn>}
+          <Btn disabled={!c.overridden} title={c.overridden ? undefined : "Already the shipped lenses"} onClick={async () => { if (!(await askConfirm("Replace your lenses with the shipped ones?"))) return; const r = await mutate(() => http.send<ReviewConfig>("PUT", "/api/settings/review", { reset: true }), "Reset to shipped lenses"); if (r) { reviewCfg.value = r; setD(null); } }}>Reset to shipped</Btn></div>
       </div>
     </Pane>
   );

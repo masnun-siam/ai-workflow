@@ -3,7 +3,7 @@ import { http } from "../api/http";
 import type { Dispatch, DispatchPlan, DispatchSettings, Lane } from "../api/types";
 import { coordinators, dispatches, grinds, mutate, panels, runsTab, sessionList } from "../state/data";
 import { runList } from "../state/select";
-import { detailOpen, sel, setSel } from "../state/ui";
+import { askConfirm, detailOpen, sel, setSel } from "../state/ui";
 import { prefs } from "../state/prefs";
 import { fmtCost, fmtDur, shortRepo } from "../state/format";
 import { Header } from "../components/Header";
@@ -37,10 +37,14 @@ function Sessions() {
   );
 }
 
+const END_ACTIONS: [string, string][] = [["open-pr", "Open PR"], ["qa", "QA"], ["grind-pr", "Grind PR"]];
 const LANE_ACTIONS: [string, string][] = [["pause", "Pause"], ["resume", "Resume"], ["retry", "Retry"], ["skip", "Skip"], ["merge", "Merge"], ["hold", "Hold merge"], ["unhold", "Release merge"]];
 
 function LaneRow({ d, l }: { d: Dispatch; l: Lane }) {
-  const go = (action: string) => mutate(() => http.send("POST", `/api/dispatches/${d.id}/lane`, { lane: l.key, action }), `${action}: ${l.key}`, ["dispatches"]);
+  const go = async (action: string) => {
+    if ((action === "merge" || action === "skip") && !(await askConfirm(action === "merge" ? `Merge the PR for ${l.key} now?` : `Skip ${l.key}? It will not be worked on in this dispatch.`))) return;
+    return mutate(() => http.send("POST", `/api/dispatches/${d.id}/lane`, { lane: l.key, action }), `${action}: ${l.key}`, ["dispatches"]);
+  };
   return (
     <tr>
       <td class="mono">{l.key}<br /><span class="dim">{l.title}</span></td>
@@ -49,7 +53,7 @@ function LaneRow({ d, l }: { d: Dispatch; l: Lane }) {
       <td>{fmtCost(l.usage.cost)}</td>
       <td><div class="acts">
         {l.session && <a href={`#/sessions/${l.session}`}>session</a>}
-        {LANE_ACTIONS.filter(([a]) => (a === "pause" ? !l.paused : a === "resume" ? l.paused : a === "hold" ? !l.hold_merge : a === "unhold" ? l.hold_merge : true)).map(([a, t]) => <Btn small key={a} onClick={() => void go(a)}>{t}</Btn>)}
+        {LANE_ACTIONS.filter(([a]) => (a === "pause" ? !l.paused : a === "resume" ? l.paused : a === "hold" ? !l.hold_merge : a === "unhold" ? l.hold_merge : true)).map(([a, t]) => <Btn small key={a} onClick={() => go(a)}>{t}</Btn>)}
       </div></td>
     </tr>
   );
@@ -63,10 +67,10 @@ function DispatchCard({ d }: { d: Dispatch }) {
       <div class="det">
         <span class="dim">{d.totals.closed}/{d.totals.lanes} closed · {fmtCost(d.totals.cost)}</span>
         <div class="acts">
-          {d.state === "running" ? <Btn small onClick={() => void setState("paused")}>Pause</Btn> : d.state === "paused" ? <Btn small primary onClick={() => void setState("running")}>Resume</Btn> : null}
-          {(d.state === "running" || d.state === "paused") && <Btn small bad onClick={() => void setState("cancelled")}>Cancel</Btn>}
-          <Btn small onClick={() => void mutate(() => http.send("POST", `/api/dispatches/${d.id}/retry-failed`, {}), "Retrying failed lanes", ["dispatches"])}>Retry failed</Btn>
-          {(["open-pr", "qa", "grind-pr"] as const).map((a) => <Btn small key={a} onClick={() => void mutate(() => http.send("POST", `/api/dispatches/${d.id}/end`, { action: a }), a, ["dispatches"])}>{a}</Btn>)}
+          {d.state === "running" ? <Btn small onClick={() => setState("paused")}>Pause</Btn> : d.state === "paused" ? <Btn small primary onClick={() => setState("running")}>Resume</Btn> : null}
+          {(d.state === "running" || d.state === "paused") && <Btn small bad onClick={async () => { if (await askConfirm(`Cancel dispatch ${d.title}? Running lanes stop.`)) await setState("cancelled"); }}>Cancel dispatch</Btn>}
+          <Btn small onClick={() => mutate(() => http.send("POST", `/api/dispatches/${d.id}/retry-failed`, {}), "Retrying failed lanes", ["dispatches"])}>Retry failed</Btn>
+          {END_ACTIONS.map(([a, t]) => <Btn small key={a} onClick={() => mutate(() => http.send("POST", `/api/dispatches/${d.id}/end`, { action: a }), `${t}: started`, ["dispatches"])}>{t}</Btn>)}
         </div>
         <div class="fields">
           <Field label="Parallel lanes"><input type="number" min={1} max={8} value={d.settings.max} onChange={(e) => void setSetting({ max: Number((e.target as HTMLInputElement).value) })} /></Field>
@@ -84,13 +88,14 @@ function DispatchCard({ d }: { d: Dispatch }) {
 function NewDispatch() {
   const [epic, setEpic] = useState("");
   const [plan, setPlan] = useState<DispatchPlan | null>(null);
+  const plan_ = async () => setPlan((await mutate(() => http.send<DispatchPlan>("POST", "/api/dispatches/plan", body()), null)) ?? null);
   const body = () => (/^[\w./-]+#\d+(\s*,\s*[\w./-]+#\d+)+$/.test(epic) ? { issues: epic.split(/\s*,\s*/) } : { epic });
   return (
     <Pane label="new dispatch">
-      <form class="det" onSubmit={(e) => e.preventDefault()}>
+      <form class="det" onSubmit={async (e) => { e.preventDefault(); if (epic.trim()) await plan_(); }}>
         <Field label="Epic (owner/name#N or an epic link) or comma-separated issues"><input value={epic} onInput={(e) => setEpic((e.target as HTMLInputElement).value)} placeholder="acme/wasensi-docs#941" /></Field>
         <div class="acts">
-          <Btn disabled={!epic.trim()} onClick={async () => setPlan((await mutate(() => http.send<DispatchPlan>("POST", "/api/dispatches/plan", body()), null)) ?? null)}>Plan</Btn>
+          <Btn type="submit" disabled={!epic.trim()}>Plan</Btn>
           <Btn primary disabled={!epic.trim()} onClick={async () => { if (await mutate(() => http.send("POST", "/api/dispatches", body()), "Dispatch started", ["dispatches"])) { setPlan(null); setEpic(""); } }}>Start</Btn>
         </div>
         {plan && (
@@ -110,7 +115,7 @@ export function Runs() {
       <Header title="runs" />
       <Chips label="Runs view" value={tab} options={TABS} onPick={(t) => (runsTab.value = t)} />
       {tab === "sessions" && <Sessions />}
-      {tab === "dispatch" && <><NewDispatch />{(dispatches.value ?? []).map((d) => <DispatchCard key={d.id} d={d} />)}{dispatches.value?.length === 0 && <Empty>No dispatches yet.</Empty>}</>}
+      {tab === "dispatch" && <><NewDispatch />{(dispatches.value ?? []).map((d) => <DispatchCard key={d.id} d={d} />)}{dispatches.value?.length === 0 && <Empty>No dispatches yet. Plan one above from an epic or a list of issues.</Empty>}</>}
       {tab === "coordinators" && (
         <Pane label="coordinators">
           {(coordinators.value ?? []).map((c) => (
@@ -118,10 +123,10 @@ export function Runs() {
               <div class="dh"><Tag tone={c.live ? "c-q" : ""}>{c.live ? "live" : "stopped"}</Tag><b>{c.source}</b><span class="dim">{shortRepo(c.repo)} → {c.destination}</span></div>
               <div class="tablewrap"><table class="t"><tbody>{c.queue.map((q) => <tr key={q.issue}><td>#{q.issue}</td><td>{q.title}</td><td>{q.state}</td></tr>)}</tbody></table></div>
               <div class="log">{c.events.map((e, i) => <span key={i}>{e}</span>)}</div>
-              <div class="acts">{c.session && <a href={`#/sessions/${c.session}`}>session</a>}<Btn small bad onClick={() => void mutate(() => http.send("POST", `/api/coordinators/${c.run}/stop`, {}), "Coordinator stopped", ["coordinators"])}>Stop refilling</Btn></div>
+              <div class="acts">{c.session && <a href={`#/sessions/${c.session}`}>session</a>}<Btn small bad onClick={async () => { if (await askConfirm("Stop refilling this coordinator? Running sessions keep going.")) await mutate(() => http.send("POST", `/api/coordinators/${c.run}/stop`, {}), "Coordinator stopped", ["coordinators"]); }}>Stop refilling</Btn></div>
             </div>
           ))}
-          {coordinators.value?.length === 0 && <Empty>No coordinators.</Empty>}
+          {coordinators.value?.length === 0 && <Empty>No coordinators running. Start one with : and blubird:project-coordinator.</Empty>}
         </Pane>
       )}
       {tab === "grinds" && (
@@ -130,10 +135,10 @@ export function Runs() {
             {(grinds.value ?? []).map((g) => (
               <tr key={`${g.repo}#${g.pr}`}><td class="mono">{g.repo}#{g.pr}</td><td><Tag tone={g.state === "running" ? "c-q" : g.state === "paused" ? "c-w" : "c-o"}>{g.state}</Tag></td><td>{g.rounds}{g.mode ? ` · ${g.mode}` : ""}</td><td>{g.reason ?? ""}</td>
                 <td><div class="acts">{g.session && <a href={`#/sessions/${g.session}`}>session</a>}
-                  <Btn small onClick={() => void mutate(() => http.send("POST", `/api/grinds/${g.repo}/${g.pr}/skip-ci`, {}), "CI wait skipped", ["grinds"])}>Skip CI</Btn>
-                  <Btn small bad onClick={() => void mutate(() => http.send("POST", `/api/grinds/${g.repo}/${g.pr}/stop`, {}), "Grind stopped", ["grinds"])}>Stop</Btn></div></td></tr>
+                  <Btn small onClick={() => mutate(() => http.send("POST", `/api/grinds/${g.repo}/${g.pr}/skip-ci`, {}), "CI wait skipped", ["grinds"])}>Skip CI</Btn>
+                  <Btn small bad onClick={async () => { if (await askConfirm(`Stop grinding ${g.repo}#${g.pr}?`)) await mutate(() => http.send("POST", `/api/grinds/${g.repo}/${g.pr}/stop`, {}), "Grind stopped", ["grinds"]); }}>Stop</Btn></div></td></tr>
             ))}</tbody></table></div>
-          {grinds.value?.length === 0 && <Empty>No grinds.</Empty>}
+          {grinds.value?.length === 0 && <Empty>No grinds running.</Empty>}
         </Pane>
       )}
       {tab === "panels" && (
@@ -142,10 +147,10 @@ export function Runs() {
             <div class="det" key={p.id}>
               <div class="dh"><Tag tone={p.state === "approved" ? "c-o" : p.state === "running" ? "c-q" : "c-w"}>{p.state}</Tag><b>{p.artifact}</b><span class="dim">round {p.round}/{p.max_rounds} · {p.status.approved}/{p.status.total} approved</span></div>
               <div class="chips">{Object.entries(p.status.lenses).map(([l, v]) => <span class="chip" key={l}>{l}: {v}</span>)}</div>
-              <div class="acts">{[1, 2].map((n) => <Btn small key={n} onClick={() => void mutate(() => http.send("POST", `/api/review/${p.id}/rounds`, { add: n }), `Added ${n} round(s)`, ["panels"])}>+{n} round{n > 1 ? "s" : ""}</Btn>)}</div>
+              <div class="acts">{[1, 2].map((n) => <Btn small key={n} onClick={() => mutate(() => http.send("POST", `/api/review/${p.id}/rounds`, { add: n }), `Added ${n} round(s)`, ["panels"])}>+{n} round{n > 1 ? "s" : ""}</Btn>)}</div>
             </div>
           ))}
-          {panels.value?.length === 0 && <Empty>No panels.</Empty>}
+          {panels.value?.length === 0 && <Empty>No peer review panels.</Empty>}
         </Pane>
       )}
     </>

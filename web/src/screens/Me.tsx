@@ -17,13 +17,13 @@ export function Me() {
           <Pane label="day end">
             <div class="det">
               <span class="mu">{m.day_end.reconciled ? `${m.day_end.date} is reconciled.` : `${m.day_end.date} is not reconciled.`}{m.day_end.missing_days > 0 && ` ${m.day_end.missing_days} days this month are missing.`}</span>
-              <div class="acts">{m.actions.filter((a) => a.key === "r").map((a) => <Btn key={a.key} k={a.key} primary onClick={() => void exec(a)}>{a.label}</Btn>)}</div>
+              <div class="acts">{m.actions.filter((a) => a.key === "r").map((a) => <Btn key={a.key} k={a.key} primary onClick={() => exec(a)}>{a.label}</Btn>)}</div>
             </div>
           </Pane>
           <Pane label="weekly review">
             <div class="det">
               <span class="mu">Week {m.weekly.week} {m.weekly.drafted ? "is drafted." : "is not drafted."}</span>
-              <div class="acts">{m.actions.filter((a) => a.key === "w").map((a) => <Btn key={a.key} k={a.key} onClick={() => void exec(a)}>{a.label}</Btn>)}</div>
+              <div class="acts">{m.actions.filter((a) => a.key === "w").map((a) => <Btn key={a.key} k={a.key} onClick={() => exec(a)}>{a.label}</Btn>)}</div>
             </div>
           </Pane>
           <Pane label="usage">

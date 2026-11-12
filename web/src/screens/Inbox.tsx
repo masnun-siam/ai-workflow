@@ -1,4 +1,4 @@
-import { inbox, loadErrors, product } from "../state/data";
+import { inbox, loadErrors } from "../state/data";
 import { GROUPS, inboxItems } from "../state/select";
 import { detailOpen, sel, setSel } from "../state/ui";
 import { prefs } from "../state/prefs";
@@ -15,7 +15,7 @@ export function Inbox() {
       <Header title="inbox" products />
       {err && <div class="banner bad" role="alert">{err}</div>}
       {inbox.value && inbox.value.stale.length > 0 && <div class="banner">Stale GitHub data: {inbox.value.stale.join(", ")}</div>}
-      <Pane label={`inbox · ${inbox.value?.count ?? 0} need you${product.value ? "" : ""}`}>
+      <Pane label={`inbox · ${inbox.value?.count ?? 0} need you`}>
         <div class="rows">
           {GROUPS.map(([g, name]) => {
             const rows = items.map((it, i) => ({ it, i })).filter((x) => x.it.group === g);
@@ -34,7 +34,7 @@ export function Inbox() {
               </div>
             );
           })}
-          {inbox.value && items.length === 0 && <Empty>Nothing needs you.</Empty>}
+          {inbox.value && items.length === 0 && <Empty>Nothing needs you right now. New questions, approvals and failures show up here.</Empty>}
           {!inbox.value && <Empty>Loading…</Empty>}
         </div>
       </Pane>

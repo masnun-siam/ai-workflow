@@ -9,7 +9,7 @@ const GROUPS = [
 
 export function Appearance() {
   return (
-    <Pane label="appearance" wide>
+    <Pane label="appearance" wide id="set-appearance">
       <div class="det">
         {GROUPS.map((g) => (
           <div class="seg-row" key={g.key}>

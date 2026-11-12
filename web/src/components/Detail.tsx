@@ -37,7 +37,7 @@ const Links = ({ links }: { links: Card["links"] }) => (
 );
 
 export function Detail({ t }: { t: Target }) {
-  if (!t) return <Empty>Select something.</Empty>;
+  if (!t) return <Empty>Select an item to see its details and actions.</Empty>;
   if (t.kind === "session") {
     return <div><div class="acts"><a href={`#/sessions/${t.session.id}`} onClick={(e) => { e.preventDefault(); nav(`#/sessions/${t.session.id}`); }}>Open full page</a></div><SessionView s={t.session} compact /></div>;
   }

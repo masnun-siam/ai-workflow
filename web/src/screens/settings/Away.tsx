@@ -12,24 +12,24 @@ export function AwayPane() {
   if (!a) return <Pane label="away mode"><span class="dim">Loading…</span></Pane>;
   const call = (path: string, body: object, msg: string) => mutate(() => http.send("POST", path, body), msg, ["status", "inbox"]);
   return (
-    <Pane label="away mode">
+    <Pane label="away mode" id="set-away">
       <div class="det">
         <span class="mu">While away, setu answers questions it is confident about and holds the rest for you.</span>
         {a.active ? (
           <>
             <KV rows={[["until", a.until ? new Date(a.until * 1000).toLocaleString() : "open"], ["answered", a.decisions], ["held", a.held]]} />
-            <div class="acts"><Btn primary onClick={() => void call("/api/away/stop", {}, "Away mode ended")}>I am back</Btn></div>
+            <div class="acts"><Btn primary onClick={() => call("/api/away/stop", {}, "Away mode ended")}>I am back</Btn></div>
           </>
         ) : (
           <div class="acts">
             <Chips label="Away duration" value={h} options={HOURS} onPick={setH} />
-            <Btn onClick={() => void call("/api/away", { until: Math.floor(Date.now() / 1000) + Number(h) * 3600 }, "Away mode on")}>Go away</Btn>
+            <Btn primary onClick={() => call("/api/away", { until: Math.floor(Date.now() / 1000) + Number(h) * 3600 }, `Away mode on for ${h}h`)}>Go away for {h}h</Btn>
           </div>
         )}
         {a.summary && (
           <div><b>Last session</b> · {a.summary.log.length} events, {a.summary.held} held
             <div class="log">{a.summary.log.slice(0, 8).map((l, i) => <span key={i}>{l.kind}: {l.question} → {l.picked}</span>)}</div>
-            <Btn small onClick={() => void call("/api/away/dismiss", {}, "Dismissed")}>Dismiss summary</Btn></div>
+            <Btn small onClick={() => call("/api/away/dismiss", {}, "Dismissed")}>Dismiss summary</Btn></div>
         )}
       </div>
     </Pane>

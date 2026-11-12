@@ -13,7 +13,7 @@ export function ProductsPane() {
   const [problems, setProblems] = useState<Record<string, string | null>>({});
   const keys = ["products", "repos", "river"] as const;
   return (
-    <Pane label="products and repos" wide>
+    <Pane label="products and repos" wide id="set-products">
       <div class="det">
         {(products.value ?? []).map((p) => (
           <div key={p.docs_repo}>
@@ -23,7 +23,7 @@ export function ProductsPane() {
             <KV rows={p.repos.map((r) => [r.name, <span>{r.repo} <span class="dim">{r.role}</span> {r.cloned ? "" : <span class="c-w">not cloned</span>}{r.conflict && <span class="c-b"> conflicts with {r.conflict}</span>}</span>])} />
           </div>
         ))}
-        <form class="acts" onSubmit={(e) => { e.preventDefault(); void mutate(() => http.send("POST", "/api/products", { path }), "Product added", [...keys]).then(() => setPath("")); }}>
+        <form class="acts" onSubmit={async (e) => { e.preventDefault(); if (path.trim() && (await mutate(() => http.send("POST", "/api/products", { path: path.trim() }), "Product added", [...keys]))) setPath(""); }}>
           <input aria-label="Documentation repo path" placeholder="/path/to/docs-repo" value={path} onInput={(e) => setPath((e.target as HTMLInputElement).value)} style={{ flex: 1 }} />
           <Btn type="submit" disabled={!path.trim()}>Add product</Btn>
         </form>
@@ -37,18 +37,18 @@ export function ProductsPane() {
                 <td class="mono">{r.slug}{problems[r.slug] && <div class="c-b">{problems[r.slug]}</div>}</td><td class="mono brk">{r.path}</td>
                 <td><input type="checkbox" aria-label={`Auto grind ${r.slug}`} checked={rs.auto_grind} onChange={(e) => set({ auto_grind: (e.target as HTMLInputElement).checked })} /></td>
                 <td><input aria-label={`Slack channel ${r.slug}`} defaultValue={rs.slack_channel} onChange={(e) => set({ slack_channel: (e.target as HTMLInputElement).value.trim() })} style={{ width: "9em" }} /></td>
-                <td style={{ whiteSpace: "nowrap" }}><input aria-label={`Release head ${r.slug}`} defaultValue={rs.release_head ?? ""} placeholder="staging" onChange={(e) => set({ release_head: (e.target as HTMLInputElement).value.trim() })} style={{ width: "5.5em" }} /> → <input aria-label={`Release base ${r.slug}`} defaultValue={rs.release_base ?? ""} placeholder="master" onChange={(e) => set({ release_base: (e.target as HTMLInputElement).value.trim() })} style={{ width: "5.5em" }} /></td>
-                <td><Btn small bad onClick={async () => { if (await askConfirm(`Unregister ${r.slug}?`)) void mutate(() => http.send("DELETE", `/api/repos/${r.slug}`), "Removed", [...keys]); }}>Remove</Btn></td>
+                <td style={{ whiteSpace: "nowrap" }}><input aria-label={`Release head ${r.slug}`} defaultValue={rs.release_head ?? ""} placeholder="staging" onChange={(e) => set({ release_head: (e.target as HTMLInputElement).value.trim() })} style={{ width: "7.5em" }} /> → <input aria-label={`Release base ${r.slug}`} defaultValue={rs.release_base ?? ""} placeholder="master" onChange={(e) => set({ release_base: (e.target as HTMLInputElement).value.trim() })} style={{ width: "7.5em" }} /></td>
+                <td><Btn small bad onClick={async () => { if (await askConfirm(`Unregister ${r.slug}? The checkout stays on disk.`)) void mutate(() => http.send("DELETE", `/api/repos/${r.slug}`), "Removed", [...keys]); }}>Remove</Btn></td>
               </tr>
             );
           })}</tbody></table></div>
-        <form class="fields" onSubmit={(e) => { e.preventDefault(); void mutate(() => http.send("POST", "/api/repos", { slug, path: rpath }), "Repo added", [...keys]); }}>
-          <Field label="Slug (owner/name)"><input value={slug} onInput={(e) => setSlug((e.target as HTMLInputElement).value)} /></Field>
-          <Field label="Checkout path"><input value={rpath} onInput={(e) => setRpath((e.target as HTMLInputElement).value)} /></Field>
+        <form class="fields add-repo" onSubmit={async (e) => { e.preventDefault(); if (slug.trim() && rpath.trim() && (await mutate(() => http.send("POST", "/api/repos", { slug: slug.trim(), path: rpath.trim() }), "Repo added", [...keys]))) { setSlug(""); setRpath(""); } }}>
+          <Field label="Slug (owner/name)"><input value={slug} placeholder="acme/web" onInput={(e) => setSlug((e.target as HTMLInputElement).value)} /></Field>
+          <Field label="Checkout path"><input value={rpath} placeholder="/path/to/checkout" onInput={(e) => setRpath((e.target as HTMLInputElement).value)} /></Field>
+          <Btn type="submit" disabled={!slug.trim() || !rpath.trim()}>Add repo</Btn>
         </form>
         <div class="acts">
-          <Btn type="button" disabled={!slug || !rpath} onClick={() => void mutate(() => http.send("POST", "/api/repos", { slug, path: rpath }), "Repo added", [...keys])}>Add repo</Btn>
-          <Btn onClick={() => void mutate(() => http.send("POST", "/api/repos/scan", {}), "Scan done", [...keys])}>Scan {repos.value?.scan_roots.join(", ")}</Btn>
+          <Btn onClick={() => mutate(() => http.send("POST", "/api/repos/scan", {}), "Scan done", [...keys])}>Scan {repos.value?.scan_roots.join(", ")}</Btn>
           <Btn onClick={async () => { const r = await mutate(() => http.send<{ problems: Record<string, string | null> }>("POST", "/api/repos/check", {}), "Checked"); if (r) setProblems(r.problems); void loadMany([]); }}>Check repos</Btn>
         </div>
       </div>
