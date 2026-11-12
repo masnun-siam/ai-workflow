@@ -43,7 +43,8 @@ install: web
 	  launchctl bootout gui/$(UID)/$(OLD_LABEL) || true; fi
 	@if [ -f $(OLD_PLIST) ]; then mv $(OLD_PLIST) $(OLD_PLIST).disabled; fi
 	@launchctl bootout gui/$(UID)/$(LABEL) >/dev/null 2>&1 || true
-	launchctl bootstrap gui/$(UID) $(PLIST)
+	@# bootout returns before the old agent is gone; bootstrap then fails with EIO, so retry
+	@for i in 1 2 3 4 5 6 7 8 9 10; do launchctl bootstrap gui/$(UID) $(PLIST) 2>/dev/null && exit 0; sleep 1; done; launchctl bootstrap gui/$(UID) $(PLIST)
 	launchctl kickstart -k gui/$(UID)/$(LABEL)
 	@echo "setu installed: $(BIN), agent $(LABEL), logs in ~/.setu/logs/"
 

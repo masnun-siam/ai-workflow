@@ -214,3 +214,17 @@ table.t td.brk{overflow-wrap:anywhere;min-width:12em}
 .qs{display:flex;flex-direction:column;gap:18px}
 .q-item{display:flex;flex-direction:column;gap:6px}
 .q-item+.q-item{border-top:1px solid var(--line);padding-top:14px}
+.md{line-height:1.6;max-width:900px;overflow-wrap:anywhere}
+.md h1,.md h2,.md h3,.md h4{margin:1.4em 0 .5em;line-height:1.3}
+.md h1{font-size:1.5em}.md h2{font-size:1.25em;border-bottom:1px solid var(--line);padding-bottom:4px}.md h3{font-size:1.1em}
+.md p,.md ul,.md ol,.md blockquote,.md table,.md pre{margin:0 0 1em}
+.md ul,.md ol{padding-left:1.5em}
+.md code{font-family:var(--mono,monospace);font-size:.92em;background:var(--p2,rgba(127,127,127,.12));padding:1px 4px;border-radius:3px}
+.md pre{overflow:auto;padding:10px 12px;background:var(--p2,rgba(127,127,127,.12));border:1px solid var(--line)}
+.md pre code{background:none;padding:0}
+.md blockquote{border-left:3px solid var(--line);padding-left:12px;color:var(--dim)}
+.md table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%}
+.md th,.md td{border:1px solid var(--line);padding:4px 8px;text-align:left;vertical-align:top}
+.md img{max-width:100%}
+.md .mmd{overflow-x:auto;margin:0 0 1em;text-align:center}
+.md .mmd svg{max-width:100%;height:auto}
