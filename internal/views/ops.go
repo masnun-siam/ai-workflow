@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/masnun-siam/setu/internal/inbox"
+	"github.com/masnun-siam/setu/internal/products"
 	"github.com/masnun-siam/setu/internal/prompts"
 	"github.com/masnun-siam/setu/internal/sessions"
 )
@@ -44,20 +46,50 @@ func scopeOf(st prompts.Step) string {
 	return "each repo"
 }
 
+// productOf finds the product a repo is part of (its docs repo or one of its repos).
+func (s *Service) productOf(repo string) (products.Product, bool) {
+	if repo == "" || s.d.Products == nil {
+		return products.Product{}, false
+	}
+	for _, p := range s.d.Products.Products() {
+		for _, r := range inbox.ProductRepos(p) {
+			if strings.EqualFold(r, repo) {
+				return p, true
+			}
+		}
+	}
+	return products.Product{}, false
+}
+
 func dayMonth(t time.Time) string { return t.Format("2 Jan") }
 
-// Ops builds one row per step of the ops stage (API §9.1).
-func (s *Service) Ops(ctx context.Context, product string) Ops {
-	p, ok := s.Product(product)
+// Ops builds one row per step of the ops stage (API §9.1). A non-empty repo that belongs to no product
+// (registered on its own) gets the repo steps run on itself; the docs repo steps need a product and get no action.
+func (s *Service) Ops(ctx context.Context, product, repo string) Ops {
 	out := Ops{Product: product, Rows: []OpsRow{}}
-	if !ok || s.d.Prompts == nil {
+	if s.d.Prompts == nil {
 		return out
 	}
-	out.Product = p.DocsRepo
-	repos := inbox.ProductRepos(p)
-	cloned := map[string]bool{lower(p.DocsRepo): true}
-	for _, r := range p.Repos {
-		cloned[lower(r.Repo)] = r.Cloned
+	var docs string
+	var repos []string
+	cloned := map[string]bool{}
+	if p, ok := s.productOf(repo); repo != "" && !ok {
+		out.Product = ""
+		repos = []string{repo}
+		cloned[lower(repo)] = true
+	} else {
+		if !ok {
+			if p, ok = s.Product(product); !ok {
+				return out
+			}
+		}
+		out.Product = p.DocsRepo
+		docs = p.DocsRepo
+		repos = inbox.ProductRepos(p)
+		cloned[lower(p.DocsRepo)] = true
+		for _, r := range p.Repos {
+			cloned[lower(r.Repo)] = r.Cloned
+		}
 	}
 	for _, st := range s.d.Prompts.Steps() {
 		if !st.InStage("ops") {
@@ -66,8 +98,11 @@ func (s *Service) Ops(ctx context.Context, product string) Ops {
 		scope := scopeOf(st)
 		row := OpsRow{Step: st.ID, Label: st.Label, Scope: scope, Targets: []OpsTarget{}, Actions: []inbox.Action{}}
 		targets := repos
-		if scope != "each repo" {
-			targets = []string{p.DocsRepo}
+		switch {
+		case scope == "docs repo" && docs == "":
+			targets = nil
+		case scope != "each repo" && docs != "":
+			targets = []string{docs}
 		}
 		// the newest run per repo
 		last := map[string]sessions.Session{}
@@ -112,6 +147,8 @@ func (s *Service) Ops(ctx context.Context, product string) Ops {
 			row.Targets = append(row.Targets, t)
 		}
 		switch {
+		case len(targets) == 0:
+			row.Summary = "needs a product"
 		case len(targets) > 1:
 			row.Summary = fmt.Sprintf("%d/%d repos ran", ran, len(targets))
 		case len(row.Targets) == 1 && row.Targets[0].Last != nil:
@@ -121,8 +158,8 @@ func (s *Service) Ops(ctx context.Context, product string) Ops {
 		}
 		body := func(repo string) map[string]any {
 			b := map[string]any{"step": st.ID, "repo": repo}
-			if scope != "each repo" {
-				b["product"] = p.DocsRepo
+			if scope != "each repo" && docs != "" {
+				b["product"] = docs
 			}
 			return b
 		}

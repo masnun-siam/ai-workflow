@@ -75,13 +75,18 @@ export function chooseRepo(s: Slug): void {
   lsSet(REPO_KEY, s);
   const p = repoList.peek().find((r) => r.slug === s)?.product;
   if (p) chooseProduct(p);
-  void load("releases"); // its scope follows the repo even when the product stays the same
+  // Releases and Ops follow the repo even when the product stays the same: App reloads them on a repo change.
 }
 /** Releases scope: the current repo's product, or every registered repo when the current repo belongs to no product. */
 export const releaseProduct = computed<Slug | null>(() => {
   const r = repoList.value.find((x) => x.slug === currentRepo.value);
   return r && !r.product ? null : product.value;
 });
+/** Ops scope: the current repo's product, or the current repo alone when it belongs to no product. */
+const opsQuery = (): string => {
+  const r = repoList.value.find((x) => x.slug === currentRepo.value);
+  return r && !r.product ? `?repo=${encodeURIComponent(r.slug)}` : q(product.value);
+};
 
 /** The page's repo filter (old aiw FR-1): `?only=owner/name`, independent of the current repo. "" = all repos. */
 export const only = computed<Slug>(() => {
@@ -108,7 +113,7 @@ const loaders: Record<LoadKey, Loader> = {
   session: async () => { const id = route.value.id; if (id) sessionOne.value = await http.get<Session>(`/api/sessions/${id}`); },
   stream: async () => { await loadStream(route.value.id); },
   releases: async () => (releases.value = await http.get(`/api/releases${q(releaseProduct.value)}`)),
-  ops: async () => (ops.value = await http.get<Ops>(`/api/ops${q(product.value)}`)),
+  ops: async () => (ops.value = await http.get<Ops>(`/api/ops${opsQuery()}`)),
   me: async () => (me.value = await http.get<Me>("/api/me")),
   settings: async () => (settings.value = await http.get<Settings>("/api/settings")),
   notify: async () => (notify.value = await http.get<NotifySettings>("/api/settings/notify")),
