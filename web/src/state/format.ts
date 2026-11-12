@@ -17,6 +17,7 @@ export function ago(iso: string | null | undefined, now: number = Date.now()): s
   const d = Math.round((now - t) / 1000);
   if (d < 0) return `in ${fmtDur(-d)}`;
   if (d < 45) return "just now";
+  if (d >= 86400) return `${Math.floor(d / 86400)}d ago`;
   return `${fmtDur(d)} ago`;
 }
 export const shortRepo = (slug: string | null | undefined): string => (slug ? (slug.split("/")[1] ?? slug) : "");

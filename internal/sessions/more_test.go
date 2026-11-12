@@ -184,3 +184,36 @@ func TestCorruptMetaIsSkippedAndInvalidIDRejected(t *testing.T) {
 		}
 	}
 }
+
+func TestListAllCacheFollowsWrites(t *testing.T) {
+	e := newEnv(t)
+	id := "20260101T120000123456Z-0a1b2c3d"
+	dir := sessionDir(e.h, id)
+	os.MkdirAll(dir, 0o755)
+	meta := filepath.Join(dir, "meta.json")
+	write := func(status, note string) {
+		os.WriteFile(meta, []byte(`{"id":"`+id+`","command":"x","status":"`+status+`","note":"`+note+`","weird":{"a":[1]}}`), 0o644)
+	}
+	write("done", "one")
+	if got := e.m.List(Filter{}); len(got) != 1 || got[0].Note != "one" || string(got[0].Extra["weird"]) != `{"a":[1]}` {
+		t.Fatalf("%+v", got)
+	}
+	// a write through the manager shows at once
+	if _, err := e.m.Update(id, func(r *Record) error { r.Note = "two"; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.m.List(Filter{}); got[0].Note != "two" {
+		t.Fatal(got[0].Note)
+	}
+	// a write by another process shows after listFresh
+	write("done", "three")
+	time.Sleep(listFresh + 50*time.Millisecond)
+	if got := e.m.List(Filter{}); got[0].Note != "three" {
+		t.Fatal(got[0].Note)
+	}
+	os.RemoveAll(dir)
+	time.Sleep(listFresh + 50*time.Millisecond)
+	if got := e.m.List(Filter{}); len(got) != 0 {
+		t.Fatal(got)
+	}
+}

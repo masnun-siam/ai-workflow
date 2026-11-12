@@ -139,7 +139,8 @@ func (s *Service) publish(id, change string) {
 // ---- the store, as the API names it ----
 
 // List is every dispatch, newest first.
-func (s *Service) List() []store.Dispatch { return store.List(s.d.Home) }
+// List is for readers: the records are shared with the store cache and must not be modified.
+func (s *Service) List() []store.Dispatch { return store.ListShared(s.d.Home) }
 
 // Get is one dispatch.
 func (s *Service) Get(id string) (store.Dispatch, error) { return store.Load(s.d.Home, id) }
@@ -164,7 +165,7 @@ func (s *Service) GrindMode(prURL string) (string, bool) { return store.GrindMod
 func (s *Service) Repos() []string {
 	set := map[string]bool{}
 	var out []string
-	for _, d := range store.List(s.d.Home) {
+	for _, d := range store.ListShared(s.d.Home) {
 		if !store.Live(d.State) {
 			continue
 		}
@@ -492,7 +493,7 @@ func (s *Service) TickAll(ctx context.Context) {
 		s.archivedAt = s.d.Now()
 		s.Archive(store.ArchiveDays)
 	}
-	for _, d := range store.List(s.d.Home) {
+	for _, d := range store.ListShared(s.d.Home) {
 		if ctx.Err() != nil {
 			return
 		}

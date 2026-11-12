@@ -287,3 +287,56 @@ func TestEventsCapAndKeys(t *testing.T) {
 		t.Fatal(e)
 	}
 }
+
+func TestListSharedFollowsWritesAndIsRaceFree(t *testing.T) {
+	h := newHome(t)
+	mk(h, "aaaaaaaaaaaa", Running, 1, &Lane{Repo: "o/r", N: 1, Stage: StQueued, PR: 7})
+	if got := ListShared(h); len(got) != 1 {
+		t.Fatal(got)
+	}
+	if m, ok := GrindMode(h, "https://github.com/o/r/pull/7"); !ok || m != "deep" {
+		t.Fatal(m, ok)
+	}
+	// a write by this process shows at once
+	mk(h, "bbbbbbbbbbbb", Running, 2, &Lane{Repo: "o/r", N: 2, Stage: StQueued, PR: 8})
+	if got := ListShared(h); len(got) != 2 || got[0].ID != "bbbbbbbbbbbb" {
+		t.Fatal(got)
+	}
+	// a write by another process (no Save here) shows through the directory mtime
+	other := `{"id":"cccccccccccc","title":"c","runner":"headless","state":"running","settings":{"grind":"simple"},"lanes":{"o/r#9":{"repo":"o/r","n":9,"stage":"queued","pr":9}},"created_at":3}`
+	if err := os.WriteFile(filepath.Join(h.Root, "dispatches", "cccccccccccc.json"), []byte(other), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := ListShared(h); len(got) != 3 {
+		t.Fatal(got)
+	}
+	if m, ok := GrindMode(h, "https://github.com/o/r/pull/9"); !ok || m != "simple" {
+		t.Fatal(m, ok)
+	}
+	if err := os.Remove(filepath.Join(h.Root, "dispatches", "cccccccccccc.json")); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := GrindMode(h, "https://github.com/o/r/pull/9"); ok || len(ListShared(h)) != 2 {
+		t.Fatal("removed dispatch still listed")
+	}
+	// the returned slice is the caller's own
+	l := ListShared(h)
+	l[0] = Dispatch{}
+	if ListShared(h)[0].ID == "" {
+		t.Fatal("slice shared with the cache")
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				ListShared(h)
+				GrindMode(h, "https://github.com/o/r/pull/7")
+				ActiveLane(h, "o/r", 1, 0)
+			}
+		}()
+	}
+	mk(h, "dddddddddddd", Running, 4)
+	wg.Wait()
+}

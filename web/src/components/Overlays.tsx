@@ -20,6 +20,7 @@ export function Palette() {
   const [i, setI] = useState(0);
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => ref.current?.focus(), []);
+  useEffect(() => { document.querySelector("#pal-list .sel")?.scrollIntoView?.({ block: "nearest" }); }, [i]);
   const list = matchSteps(registry.value, q);
   const total = list.length + (q.trim() ? 1 : 0);
   const pick = (n: number) => {

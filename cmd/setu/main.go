@@ -8,6 +8,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
+	_ "net/http/pprof" // served only when SETU_PPROF is set
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -175,6 +177,9 @@ func runServe(ctx context.Context, env cli.Env, args []string) int {
 		return 1
 	}
 	app.Start(ctx)
+	if addr := os.Getenv("SETU_PPROF"); addr != "" { // profiling harness, off by default
+		go func() { _ = http.ListenAndServe(addr, nil) }()
+	}
 	trimMemory(ctx)
 	if err := <-errc; err != nil {
 		fmt.Fprintln(env.Stderr, "setu serve:", err)
@@ -184,7 +189,8 @@ func runServe(ctx context.Context, env cli.Env, args []string) int {
 }
 
 // trimMemory keeps the idle footprint small (resource budget): a lower GC target, and the heap
-// handed back to the OS every two minutes.
+// handed back to the OS every two minutes. (A soft memory limit and an earlier first trim were
+// measured and changed nothing: the live heap is ~5 MB, the rest is binary and runtime.)
 func trimMemory(ctx context.Context) {
 	debug.SetGCPercent(40)
 	go func() {

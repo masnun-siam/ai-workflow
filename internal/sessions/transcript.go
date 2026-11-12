@@ -142,9 +142,11 @@ func (m *Manager) Cleanup(keys []string) []string {
 		if r, err := m.Get(k); err != nil || r.Status.Live() {
 			continue
 		}
+		recWrites.Add(1)
 		if err := os.RemoveAll(sessionDir(m.d.Home, k)); err != nil {
 			continue
 		}
+		recWrites.Add(1)
 		m.mu.Lock()
 		delete(m.cache, k)
 		m.mu.Unlock()

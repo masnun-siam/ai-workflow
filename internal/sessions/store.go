@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	"github.com/masnun-siam/setu/internal/errs"
@@ -106,9 +107,11 @@ func updateRecord(h *home.Home, id string, fn func(*Record, statKey) error, post
 		return prev, next, st, err
 	}
 	next.ID = id
+	recWrites.Add(1)
 	if err := home.WriteJSON(path, next); err != nil {
 		return prev, next, st, err
 	}
+	recWrites.Add(1)
 	st = statOf(path)
 	if post != nil {
 		post(next, st)
@@ -120,7 +123,7 @@ func updateRecord(h *home.Home, id string, fn func(*Record, statKey) error, post
 
 type cached struct {
 	st  statKey
-	rec Record
+	idx int // position in Manager.all
 }
 
 func (m *Manager) create(rec Record) (Record, error) {
@@ -141,9 +144,11 @@ func (m *Manager) create(rec Record) (Record, error) {
 	}
 	f.Close()
 	rec.StartedAt = isoNow(m.d.now())
+	recWrites.Add(1)
 	if err := home.WriteJSON(metaPath(m.d.Home, rec.ID), rec); err != nil {
 		return rec, err
 	}
+	recWrites.Add(1)
 	m.publishRecord(rec, "record")
 	m.trackMeta(rec.ID, rec.Status, statOf(metaPath(m.d.Home, rec.ID)))
 	return rec, nil
@@ -291,8 +296,36 @@ func (m *Manager) trackMeta(id string, status Status, st statKey) {
 	m.metaSeen[id] = st
 }
 
-// listAll reads every record, newest first. Unchanged files come from a stat-keyed cache.
+// recWrites counts the record writes of this process (create, update, remove).
+var recWrites atomic.Uint64
+
+// listFresh is how long a listAll result is reused when this process wrote nothing: a write by
+// another process (`setu ask`, the CLI) shows within it. Without it every inbox rebuild stats and
+// copies all of the (1000+) records.
+const listFresh = time.Second
+
+// listAll returns every record, newest first, as a slice shared with the next callers: range over
+// it, never modify it.
 func (m *Manager) listAll() []Record {
+	ver := recWrites.Load()
+	m.mu.Lock()
+	if m.all != nil && m.allVer == ver && time.Since(m.allAt) < listFresh {
+		out := m.all
+		m.mu.Unlock()
+		return out
+	}
+	m.mu.Unlock()
+	out := m.scanAll()
+	m.mu.Lock()
+	m.all, m.allVer, m.allAt = out, ver, time.Now()
+	m.mu.Unlock()
+	return out
+}
+
+// scanAll reads every record, newest first. A record whose meta.json is unchanged (stat key) is
+// taken from the previous result instead of being parsed again; the cache holds only the stat key
+// and the index there, so a record is in memory once.
+func (m *Manager) scanAll() []Record {
 	ents, err := os.ReadDir(sessionsDir(m.d.Home))
 	if err != nil {
 		return nil
@@ -304,20 +337,20 @@ func (m *Manager) listAll() []Record {
 		}
 	}
 	sort.Sort(sort.Reverse(sort.StringSlice(names)))
+	m.mu.Lock()
+	prev, old := m.all, m.cache
+	m.mu.Unlock()
 	out := make([]Record, 0, len(names))
-	seen := make(map[string]bool, len(names))
+	next := make(map[string]cached, len(names))
 	for _, id := range names {
 		p := metaPath(m.d.Home, id)
 		st := statOf(p)
 		if st == (statKey{}) {
 			continue
 		}
-		seen[id] = true
-		m.mu.Lock()
-		c, ok := m.cache[id]
-		m.mu.Unlock()
-		if ok && c.st == st {
-			out = append(out, c.rec)
+		if c, ok := old[id]; ok && c.st == st && c.idx < len(prev) && prev[c.idx].ID == id {
+			next[id] = cached{st, len(out)}
+			out = append(out, prev[c.idx])
 			continue
 		}
 		b, err := os.ReadFile(p)
@@ -329,25 +362,23 @@ func (m *Manager) listAll() []Record {
 			continue
 		}
 		r.ID = id
-		m.mu.Lock()
-		m.cache[id] = cached{st, r}
-		m.mu.Unlock()
+		next[id] = cached{st, len(out)}
 		out = append(out, r)
 	}
 	m.mu.Lock()
-	for id := range m.cache {
-		if !seen[id] {
-			delete(m.cache, id)
-		}
-	}
+	m.cache = next
 	m.mu.Unlock()
 	return out
 }
 
 // List returns records newest first, filtered.
 func (m *Manager) List(f Filter) []Record {
+	all := m.listAll()
 	var out []Record
-	for _, r := range m.listAll() {
+	if f.Limit > 0 {
+		out = make([]Record, 0, min(f.Limit, len(all)))
+	}
+	for _, r := range all {
 		if r.Role == "away-answerer" && !f.Answerers {
 			continue
 		}

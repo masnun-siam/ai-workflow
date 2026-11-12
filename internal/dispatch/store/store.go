@@ -7,9 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/masnun-siam/setu/internal/errs"
 	"github.com/masnun-siam/setu/internal/home"
@@ -63,6 +67,8 @@ func Save(h *home.Home, d *Dispatch) error {
 	if err != nil {
 		return err
 	}
+	saves.Add(1)
+	defer saves.Add(1)
 	return home.AtomicWrite(p, append(b, '\n'), 0o644)
 }
 
@@ -83,6 +89,86 @@ func List(h *home.Home) []Dispatch {
 	return out
 }
 
+type listEntry struct {
+	mtime int64
+	size  int64
+	d     Dispatch
+}
+
+var listCache struct {
+	sync.Mutex
+	root  string
+	m     map[string]listEntry
+	ver   uint64
+	gen   int64      // mtime of dispatches/ when out and lanes were built (0: none)
+	out   []Dispatch // sorted result for gen
+	lanes map[string]string
+}
+
+// ListShared is List for read-only callers (liveLanes, Repos, tick scans): a record is re-parsed
+// only when its file changed (mtime, size), so a poll that scans every dispatch costs a stat each,
+// not a parse. The returned values share maps with the cache: callers must not modify them.
+func ListShared(h *home.Home) []Dispatch {
+	listCache.Lock()
+	defer listCache.Unlock()
+	return slices.Clone(listLocked(h))
+}
+
+// saves counts the writes of this process; another process's write shows in the mtime of
+// dispatches/ (every save is an atomic rename).
+var saves atomic.Uint64
+
+// listLocked needs listCache locked and returns the shared slice. While neither this process
+// nor the directory mtime saw a write, the previous result stands and a poll costs one stat.
+func listLocked(h *home.Home) []Dispatch {
+	if listCache.root != h.Root || listCache.m == nil {
+		listCache.root, listCache.m, listCache.gen, listCache.out, listCache.lanes = h.Root, map[string]listEntry{}, 0, nil, nil
+	}
+	var gen int64
+	if di, err := os.Stat(dir(h)); err == nil && time.Since(di.ModTime()) > 100*time.Millisecond {
+		// (a younger mtime may share a filesystem timestamp tick with a write still to come)
+		gen = di.ModTime().UnixNano()
+		if gen == listCache.gen && listCache.ver == saves.Load() {
+			return listCache.out
+		}
+	}
+	ver := saves.Load()
+	ents, _ := os.ReadDir(dir(h))
+	seen := make(map[string]bool, len(ents))
+	var out []Dispatch
+	for _, e := range ents {
+		n := e.Name()
+		id := strings.TrimSuffix(n, ".json")
+		if e.IsDir() || !strings.HasSuffix(n, ".json") || !ValidID(id) {
+			continue
+		}
+		fi, err := os.Stat(filepath.Join(dir(h), n))
+		if err != nil {
+			continue
+		}
+		seen[id] = true
+		c, ok := listCache.m[id]
+		if !ok || c.mtime != fi.ModTime().UnixNano() || c.size != fi.Size() {
+			d, err := Load(h, id)
+			if err != nil {
+				delete(listCache.m, id)
+				continue
+			}
+			c = listEntry{fi.ModTime().UnixNano(), fi.Size(), d}
+			listCache.m[id] = c
+		}
+		out = append(out, c.d)
+	}
+	for id := range listCache.m {
+		if !seen[id] {
+			delete(listCache.m, id)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt > out[j].CreatedAt })
+	listCache.gen, listCache.ver, listCache.out, listCache.lanes = gen, ver, out, nil
+	return out
+}
+
 // Lock takes the cross-process lock of one dispatch (flock on <id>.lock). Not re-entrant.
 func Lock(h *home.Home, id string) (func(), error) {
 	if !ValidID(id) {
@@ -97,7 +183,7 @@ func StoreLock(h *home.Home) (func(), error) { return home.Lock(filepath.Join(di
 
 // OwnerOf is the id of the dispatch, not done or cancelled, that has a lane with this key.
 func OwnerOf(h *home.Home, key string) string {
-	for _, d := range List(h) {
+	for _, d := range ListShared(h) {
 		if d.State != Done && d.State != Cancelled {
 			if _, ok := d.Lanes[key]; ok {
 				return d.ID
@@ -127,7 +213,7 @@ func Create(h *home.Home, d *Dispatch) error {
 // repo compared case-insensitively. grind autostart and the pr-grind re-entry leave such PRs to
 // the dispatch.
 func ActiveLane(h *home.Home, repo string, issue, pr int) (string, Lane, bool) {
-	for _, d := range List(h) {
+	for _, d := range ListShared(h) {
 		if !Live(d.State) {
 			continue
 		}
@@ -152,20 +238,37 @@ func GrindMode(h *home.Home, prURLStr string) (string, bool) {
 		return "", false
 	}
 	n, _ := strconv.Atoi(m[2])
-	for _, d := range List(h) {
+	mode, ok := liveLanes(h)[strings.ToLower(m[1])+"#"+strconv.Itoa(n)]
+	return mode, ok
+}
+
+// liveLanes maps "owner/repo#pr" to the grind mode of the live dispatch that owns it. The grind
+// index asks once per PR, so the map is built once per state of dispatches/.
+func liveLanes(h *home.Home) map[string]string {
+	listCache.Lock()
+	defer listCache.Unlock()
+	list := listLocked(h)
+	if listCache.lanes != nil {
+		return listCache.lanes
+	}
+	out := map[string]string{}
+	for _, d := range list {
 		if !Live(d.State) {
 			continue
 		}
+		mode := "deep"
+		if d.Settings.Grind == "simple" {
+			mode = "simple"
+		}
 		for _, l := range d.Lanes {
-			if strings.EqualFold(l.Repo, m[1]) && l.PR == n {
-				if d.Settings.Grind == "simple" {
-					return "simple", true
-				}
-				return "deep", true
+			k := strings.ToLower(l.Repo) + "#" + strconv.Itoa(l.PR)
+			if _, dup := out[k]; !dup {
+				out[k] = mode
 			}
 		}
 	}
-	return "", false
+	listCache.lanes = out
+	return out
 }
 
 // ArchiveDays is how long a finished dispatch stays in dispatches/.
@@ -204,6 +307,7 @@ func ArchiveOld(h *home.Home, now, days float64) []string {
 			if os.MkdirAll(dest, 0o755) != nil {
 				return
 			}
+			saves.Add(1)
 			if os.Rename(filepath.Join(dir(h), n), filepath.Join(dest, n)) == nil {
 				moved = append(moved, id)
 			}

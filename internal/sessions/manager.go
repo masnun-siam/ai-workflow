@@ -17,6 +17,9 @@ type Manager struct {
 	procs    map[string]*proc // live claude processes of this server (cmd nil: re-attached)
 	stopping map[string]bool
 	cache    map[string]cached
+	all      []Record // last listAll result, valid for allVer and listFresh
+	allVer   uint64
+	allAt    time.Time
 	metaSeen map[string]statKey // stat of meta.json after our last write, for live sessions
 	streamAt map[string]time.Time
 	usage    map[string]map[string]any // account cmd -> last rate_limit_info (warnings, in memory)

@@ -67,6 +67,9 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request, name string, f fs.
 	} else {
 		w.Header().Set("Cache-Control", "no-cache")
 	}
+	if strings.HasSuffix(name, ".webmanifest") { // not in Go's built-in table; browsers want it to install the PWA
+		w.Header().Set("Content-Type", "application/manifest+json")
+	}
 	if rs, ok := f.(io.ReadSeeker); ok {
 		http.ServeContent(w, r, name, time.Time{}, rs)
 		return

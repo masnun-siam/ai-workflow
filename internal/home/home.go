@@ -73,6 +73,7 @@ func Migrate(h *Home, old string) (copied bool, err error) {
 	}
 	var errs []error
 	n := 0
+	buf := make([]byte, 32<<10) // one copy buffer for the whole walk (io.Copy allocates one per file)
 	walkErr := filepath.WalkDir(old, func(p string, d fs.DirEntry, werr error) error {
 		if werr != nil {
 			errs = append(errs, werr)
@@ -112,7 +113,7 @@ func Migrate(h *Home, old string) (copied bool, err error) {
 			if strings.HasSuffix(d.Name(), ".lock") {
 				return nil
 			}
-			did, err := copyFile(p, dst, info)
+			did, err := copyFile(p, dst, info, buf)
 			if err != nil {
 				errs = append(errs, err)
 			} else if did {
@@ -143,7 +144,7 @@ func writeMarker(path, body string) error {
 
 // copyFile streams src to dst through a temp file, preserving the mode. A destination that
 // already has the source's size is left alone (an interrupted migration resumes cheaply).
-func copyFile(src, dst string, info fs.FileInfo) (bool, error) {
+func copyFile(src, dst string, info fs.FileInfo, buf []byte) (bool, error) {
 	if di, err := os.Lstat(dst); err == nil && di.Mode().IsRegular() && di.Size() == info.Size() {
 		return false, nil
 	}
@@ -160,7 +161,7 @@ func copyFile(src, dst string, info fs.FileInfo) (bool, error) {
 		return false, err
 	}
 	defer os.Remove(tmp.Name())
-	if _, err := io.Copy(tmp, in); err != nil {
+	if _, err := io.CopyBuffer(struct{ io.Writer }{tmp}, struct{ io.Reader }{in}, buf); err != nil {
 		tmp.Close()
 		return false, err
 	}

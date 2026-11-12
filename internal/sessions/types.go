@@ -7,8 +7,11 @@
 package sessions
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"encoding/json/jsontext"
+	"fmt"
 	"os"
 	"reflect"
 	"strings"
@@ -190,18 +193,35 @@ func (r *Record) UnmarshalJSON(b []byte) error {
 			return err
 		}
 	}
-	var all map[string]json.RawMessage
-	if err := json.Unmarshal(b, &all); err != nil {
-		return err
-	}
+	// the keys this struct does not model are kept in Extra: walk the top level once and copy only
+	// those values (a whole-object map would copy every value of every record)
 	a.Extra = nil
-	for k, v := range all {
-		if !recordKeys[k] {
-			if a.Extra == nil {
-				a.Extra = map[string]json.RawMessage{}
-			}
-			a.Extra[k] = v
+	dec := jsontext.NewDecoder(bytes.NewReader(b))
+	if t, err := dec.ReadToken(); err != nil {
+		return err
+	} else if t.Kind() != '{' {
+		return fmt.Errorf("session record is not a JSON object")
+	}
+	for dec.PeekKind() != '}' {
+		kt, err := dec.ReadToken()
+		if err != nil {
+			return err
 		}
+		k := kt.String()
+		if recordKeys[k] {
+			if err := dec.SkipValue(); err != nil {
+				return err
+			}
+			continue
+		}
+		v, err := dec.ReadValue()
+		if err != nil {
+			return err
+		}
+		if a.Extra == nil {
+			a.Extra = map[string]json.RawMessage{}
+		}
+		a.Extra[k] = json.RawMessage(bytes.Clone(v))
 	}
 	*r = Record(a)
 	return nil

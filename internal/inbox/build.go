@@ -662,12 +662,8 @@ func (b *Builder) cleanupItems(v *view) []Item {
 				Title: fmt.Sprintf("#%d is merged but its worktree has loose work", n), Repo: sp(repo),
 				Anchors: []string{fmt.Sprintf("issue:%s#%d", lower(repo), n)}}
 			it.Links.Issue = IssueURL(repo, n)
-			for _, s := range f.Uncommitted {
-				it.Detail = append(it.Detail, "uncommitted: "+s)
-			}
-			for _, s := range f.Unpushed {
-				it.Detail = append(it.Detail, "unpushed: "+s)
-			}
+			it.Detail = append(it.Detail, capDetail("uncommitted: ", f.Uncommitted)...)
+			it.Detail = append(it.Detail, capDetail("unpushed: ", f.Unpushed)...)
 			it.Actions = []Action{
 				Post("c", "Clean up", fmt.Sprintf("/api/repos/%s/cleanup", repo), fmt.Sprintf("Cleaned up #%d", n),
 					map[string]any{"issue": n, "confirm": true}).WithPrimary().WithClears().
@@ -816,4 +812,20 @@ func (b *Builder) awayItems(v *view) []Item {
 		At: sp(time.Unix(a.Summary.Ended, 0).UTC().Format(time.RFC3339)), Anchors: []string{"away"}}
 	it.Actions = []Action{Post("d", "Dismiss summary", "/api/away/dismiss", "Dismissed", nil).WithPrimary().WithClears()}
 	return []Item{it}
+}
+
+// maxLooseDetail bounds the per-item detail lines: a worktree with a build cache can hold tens of
+// thousands of files, which made /api/inbox megabytes large.
+const maxLooseDetail = 12
+
+func capDetail(prefix string, lines []string) []string {
+	out := make([]string, 0, maxLooseDetail+1)
+	for i, s := range lines {
+		if i == maxLooseDetail {
+			out = append(out, fmt.Sprintf("%s… and %d more", prefix, len(lines)-maxLooseDetail))
+			break
+		}
+		out = append(out, prefix+s)
+	}
+	return out
 }
