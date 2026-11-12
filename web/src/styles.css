@@ -186,6 +186,7 @@ table.t{border-collapse:collapse;width:100%;font-size:12.5px}
 table.t th{text-align:left;color:var(--dim);font-weight:500;padding:2px 8px;border-bottom:1px solid var(--line)}
 table.t td{padding:4px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 .tablewrap{overflow-x:auto}
+table.t td.brk{overflow-wrap:anywhere;min-width:12em}
 .mx td,.mx th{text-align:center}.mx td:first-child,.mx th:first-child{text-align:left}
 .row.static{cursor:default}
 .toast.error{border-color:var(--bad)}
