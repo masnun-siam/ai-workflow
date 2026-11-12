@@ -43,10 +43,10 @@ export function AskForm({ sessionId, round }: { sessionId: string; round: Round 
               const on = d.labels.includes(o.label);
               if (quick) {
                 return (
-                  <button type="button" disabled={busy} class={`btn${o.label === q.recommended ? " pri" : ""}`} onClick={() => void send([{ labels: [o.label], other: "" }])}>
-                    <kbd>{"abc"[oi] ?? ""}</kbd>{o.label}
-                    {o.label === q.recommended && <span class="rec">&nbsp;recommended</span>}
-                    {o.description && <span class="dim">&nbsp;{o.description}</span>}
+                  <button type="button" disabled={busy} class={`btn qopt${o.label === q.recommended ? " pri" : ""}`} onClick={() => send([{ labels: [o.label], other: "" }])}>
+                    <kbd>{"abc"[oi] ?? ""}</kbd>
+                    <b>{o.label}</b>{o.label === q.recommended && <span class="rec">recommended</span>}
+                    {o.description && <span class="qd">{o.description}</span>}
                   </button>
                 );
               }
@@ -68,7 +68,7 @@ export function AskForm({ sessionId, round }: { sessionId: string; round: Round 
           </fieldset>
         );
       })}
-      {(!quick || round.questions[0]!.allowFreeText) && <Btn type="submit" primary disabled={busy || !canSubmit(drafts)}>Send answer</Btn>}
+      {(!quick || round.questions[0]!.allowFreeText) && <Btn type="submit" primary disabled={busy || !canSubmit(drafts)}>{busy ? "Sending…" : "Send answer"}</Btn>}
     </form>
   );
 }

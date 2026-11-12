@@ -28,7 +28,7 @@ export function NotificationsPane() {
     if (r) setRes(`${channel}: ${r.ok ? "sent" : `failed${r.error ? ` (${r.error})` : ""}`}`);
   };
   return (
-    <Pane label="notifications" wide>
+    <Pane label="notifications" wide id="set-notify">
       <div class="det">
         <div class="tablewrap"><table class="t mx"><thead><tr><th>Event</th>{CH.map((c) => <th key={c}>{c}</th>)}</tr></thead><tbody>
           {n.events.map((ev) => (
@@ -42,8 +42,8 @@ export function NotificationsPane() {
           <input value={url ?? n.public_url} onInput={(e) => setUrl((e.target as HTMLInputElement).value)} onChange={() => url !== null && void put({ public_url: url })} />
         </Field>
         <span class="dim">macOS: {n.mac.available ? `${n.mac.notifier}${n.mac.clickable ? " (clickable)" : ""}` : "not available"} · phone push subscriptions: {n.push.subscriptions} · ntfy: {n.ntfy_ready ? `${n.server} / ${n.topic}${n.token_set ? " (token set)" : ""}` : "not configured (ui.json or SETU_NTFY_* environment variables)"}</span>
-        <div class="acts"><Btn disabled={busy || ps === "unsupported" || ps === "denied"} onClick={() => void togglePush()}>{ps === "on" ? "Turn off push on this device" : "Turn on push on this device"}</Btn>{ps === "unsupported" && <span class="dim">push needs https or localhost</span>}{ps === "denied" && <span class="dim">notifications are blocked in the browser</span>}</div>
-        <div class="acts"><Btn onClick={() => void test("push")}>Test push</Btn><Btn disabled={!n.ntfy_ready} onClick={() => void test("ntfy")}>Test ntfy</Btn><Btn disabled={!n.mac.available} onClick={() => void test("mac")}>Test macOS</Btn>{res && <span role="status">{res}</span>}</div>
+        <div class="acts"><Btn disabled={busy || ps === "unsupported" || ps === "denied"} onClick={() => togglePush()}>{ps === "on" ? "Turn off push on this device" : "Turn on push on this device"}</Btn>{ps === "unsupported" && <span class="dim">push needs https or localhost</span>}{ps === "denied" && <span class="dim">notifications are blocked in the browser</span>}</div>
+        <div class="acts"><Btn onClick={() => test("push")}>Test push</Btn><Btn disabled={!n.ntfy_ready} onClick={() => test("ntfy")}>Test ntfy</Btn><Btn disabled={!n.mac.available} onClick={() => test("mac")}>Test macOS</Btn>{res && <span role="status">{res}</span>}</div>
       </div>
     </Pane>
   );

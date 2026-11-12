@@ -1,8 +1,9 @@
-import { useEffect } from "preact/hooks";
+import { useEffect, useRef } from "preact/hooks";
 import { Detail } from "../components/Detail";
 import { Questions } from "../components/Questions";
 import { ConfirmDialog, Help, Palette, StartDialog, Toast } from "../components/Overlays";
-import { Btn } from "../components/ui";
+import { Btn, useFocusTrap } from "../components/ui";
+import type { ComponentChildren } from "preact";
 import { Inbox } from "../screens/Inbox";
 import { Me } from "../screens/Me";
 import { Ops } from "../screens/Ops";
@@ -75,7 +76,21 @@ function Banners() {
   return (
     <>
       {!st.blubird.installed && <div class="banner" role="alert">blubird is not installed, so its skills are disabled. <Btn small onClick={() => goScreen("settings")}>Open settings</Btn></div>}
-      {!st.gh.ok && <div class="banner bad" role="alert">GitHub CLI is not signed in{st.gh.error ? `: ${st.gh.error}` : ""}.</div>}
+      {!st.gh.ok && <div class="banner bad" role="alert">GitHub CLI is not signed in{st.gh.error ? `: ${st.gh.error}` : ""}. Run <code>gh auth login</code> in a terminal, then reload.</div>}
+    </>
+  );
+}
+
+function Drawer({ children }: { children: ComponentChildren }) {
+  const box = useRef<HTMLDivElement>(null);
+  useFocusTrap(box, true);
+  return (
+    <>
+      <div class="scrim" onClick={() => (detailOpen.value = false)} />
+      <div class="drawer" ref={box} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Detail">
+        <div class="drawer-top"><Btn small onClick={() => (detailOpen.value = false)}>← Back</Btn><kbd class="wide-only">esc</kbd></div>
+        {children}
+      </div>
     </>
   );
 }
@@ -144,7 +159,7 @@ export function App() {
       )}
       <footer class="keys">{hints.map(([k, d]) => <span key={k + d}><kbd>{k}</kbd>{d}</span>)}</footer>
       {!split && detailOpen.value && currentTarget.value && (
-        <aside class="drawer" aria-label="Detail"><div class="drawer-top"><Btn small onClick={() => (detailOpen.value = false)}>← Back</Btn><kbd class="wide-only">esc</kbd></div>{side}</aside>
+        <Drawer>{side}</Drawer>
       )}
       {paletteOpen.value && <Palette />}
       {startReq.value && <StartDialog />}

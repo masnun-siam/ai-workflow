@@ -19,7 +19,7 @@ const SUBS: SubAction[] = [
   { sub: "hold", label: "Hold", when: (s) => !s.hold && s.status === "queued" },
   { sub: "release", label: "Release hold", when: (s) => s.hold },
   { sub: "cancel-auto", label: "Cancel auto-resume", when: (s) => s.status === "limited" && s.auto_resume === true },
-  { sub: "rerun", label: "Rerun", when: (s) => ["done", "failed", "stopped"].includes(s.status) },
+  { sub: "rerun", label: "Rerun", confirm: "Start this run again from the beginning?", when: (s) => ["done", "failed", "stopped"].includes(s.status) },
   { sub: "dismiss", label: "Dismiss", when: (s) => ["done", "failed", "stopped"].includes(s.status) && !s.dismissed },
 ];
 
@@ -46,10 +46,10 @@ export function SessionView({ s, compact }: { s: Session; compact?: boolean }) {
       {s.queued_prompt && <div class="dim">Queued message: {s.queued_prompt}</div>}
       {s.pending_answer && <div class="dim">{s.status === "running" || s.status === "starting" ? "Your answer was sent. The run is continuing with it." : "Your answer is saved. It is sent when the run resumes."}</div>}
       {s.pending_question && <AskForm sessionId={s.id} round={s.pending_question} />}
-      <div class="acts">{SUBS.filter((a) => a.when(s)).map((a) => <Btn key={a.sub} small bad={a.sub === "stop"} onClick={() => void run(a)}>{a.label}</Btn>)}</div>
+      <div class="acts">{SUBS.filter((a) => a.when(s)).map((a) => <Btn key={a.sub} small bad={a.sub === "stop"} onClick={() => run(a)}>{a.label}</Btn>)}</div>
       {!compact && (
         <KV rows={[["account", s.account], ["model", `${s.model ?? "default"}${s.effort ? ` · ${s.effort}` : ""}`], ["cost", fmtCost(s.cost) || "n/a"], ["tokens", fmtTokens(s.tokens) || "n/a"],
-          ["duration", fmtDur(s.duration_s)], ["hooks", String(s.hooks)], ["resume", s.resume_command ? <code>{s.resume_command}</code> : "n/a"]]} />
+          ["duration", fmtDur(s.duration_s)], ["hooks", String(s.hooks)], ["id", <span class="mono">{s.id}</span>], ["resume", s.resume_command ? <code>{s.resume_command}</code> : "n/a"]]} />
       )}
       {s.panel && <span class="dim">Peer review {s.panel.role}{s.panel.lens ? ` · ${s.panel.lens}` : ""} · {s.panel.state}</span>}
       {s.dispatch && <span class="dim">Dispatch {s.dispatch.id} · lane {s.dispatch.lane}</span>}

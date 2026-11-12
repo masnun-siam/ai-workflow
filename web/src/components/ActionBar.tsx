@@ -8,7 +8,7 @@ export function ActionBar({ actions, dropId }: { actions: readonly Action[]; dro
   return (
     <div class="acts">
       {actions.map((a) => (
-        <Btn key={a.key + a.label} k={a.key} primary={a.primary} onClick={() => void exec(a, dropId)}>{a.label}</Btn>
+        <Btn key={a.key + a.label} k={a.key} primary={a.primary} onClick={() => exec(a, dropId)}>{a.label}</Btn>
       ))}
     </div>
   );

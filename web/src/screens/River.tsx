@@ -13,7 +13,7 @@ export function River() {
   return (
     <>
       <Header title="river" products>
-        <Btn small onClick={() => void mutate(() => http.send("POST", "/api/refresh", { product: product.value }), "Refreshing from GitHub")}>Refresh</Btn>
+        <Btn small onClick={() => mutate(() => http.send("POST", "/api/refresh", { product: product.value }), "Refreshing from GitHub")}>Refresh</Btn>
       </Header>
       {err && <div class="banner bad" role="alert">{err}</div>}
       {river.value && river.value.stale.length > 0 && <div class="banner">Stale GitHub data: {river.value.stale.join(", ")}</div>}
