@@ -473,7 +473,7 @@ func TestOps(t *testing.T) {
 		{ID: "20261110T090000000001Z-aaaaaaaa", Step: "agentic-onboard", Repo: "acme/api", Status: sessions.StDone, StartedAt: "2026-11-10T09:00:00Z", Cost: &c},
 		{ID: "20261111T090000000001Z-bbbbbbbb", Step: "map-prds", Repo: "acme/docs", Status: sessions.StDone, StartedAt: "2026-11-11T09:00:00Z"},
 	}
-	o := f.svc.Ops(context.Background(), "acme/docs")
+	o := f.svc.Ops(context.Background(), "acme/docs", "")
 	var got []string
 	rows := map[string]OpsRow{}
 	for _, r := range o.Rows {
@@ -643,5 +643,32 @@ func TestRoutes(t *testing.T) {
 	}
 	if code, m := get("/api/status"); code != 200 || m["usage"] == nil || m["poller"] == nil {
 		t.Errorf("status %d %v", code, m)
+	}
+}
+
+func TestOpsStandaloneRepo(t *testing.T) {
+	f := newFx(t)
+	o := f.svc.Ops(context.Background(), "acme/docs", "solo/app")
+	if o.Product != "" {
+		t.Errorf("product %q", o.Product)
+	}
+	for _, r := range o.Rows {
+		switch r.Scope {
+		case "docs repo":
+			if len(r.Targets) != 0 || len(r.Actions) != 0 || r.Summary != "needs a product" {
+				t.Errorf("%s %+v", r.Step, r)
+			}
+		default:
+			if len(r.Targets) != 1 || r.Targets[0].Repo != "solo/app" || len(r.Actions) != 1 {
+				t.Fatalf("%s %+v", r.Step, r)
+			}
+			if b := r.Actions[0].Body.(map[string]any); b["repo"] != "solo/app" || b["product"] != nil {
+				t.Errorf("%s body %v", r.Step, b)
+			}
+		}
+	}
+	// a repo of a product shows that product
+	if o := f.svc.Ops(context.Background(), "", "acme/api"); o.Product != "acme/docs" {
+		t.Errorf("product of acme/api %q", o.Product)
 	}
 }

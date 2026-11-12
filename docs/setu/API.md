@@ -385,7 +385,7 @@ func (r *release.Service) Skip(id string) (Release, error)
 type Item = InboxItem /* §4 */
 func (b *inbox.Builder) Build(ctx context.Context, product, repo string) InboxList // pure over inputs + rank (G§4.2)
 func (v *views.Service) River(ctx context.Context, product string) River
-func (v *views.Service) Ops(ctx context.Context, product string) Ops
+func (v *views.Service) Ops(ctx context.Context, product, repo string) Ops
 func (v *views.Service) Me(ctx context.Context) Me
 ```
 Each package ships a `<pkg>test` fake only where a consumer must test without the real dependency: `gh/ghtest.Client` (scripted), `poller/pollertest` (fixed snapshots). For sessions, use the real Manager with fakebin `claude`.
@@ -720,7 +720,7 @@ Guard 1 always applies to `implement-issue` and `pr-grind` (S§5.4), even withou
 | GET | `/api/inbox?product=&repo=` | — | `InboxList` (marks viewed `*`) | 200 |
 | GET | `/api/features?product=` | — | `FeatureList`: per PRD the stage (draft, review, approved, tasks, building, shipped), bay (you, go, running, shipped), next-step line and actions, epic, its open issues (state and row actions) and closed ones, counts, newest panel on the PRD file, the dispatch owning the epic, sessions. Sorted by bay | 200; 400 unknown product |
 | GET | `/api/changes?repo=` | — | `{stale, issues: FeatureIssue[], pending: FeatureSession[]}`: open issues that belong to no epic in every registered repo (or one), with feature-issue states and row actions; `pending` = live `small-change` runs | 200 |
-| GET | `/api/ops?product=` | — | `Ops` | 200 |
+| GET | `/api/ops?product=&repo=` (`repo` of no product: its repo steps run on itself, docs repo steps "needs a product" with no action) | — | `Ops` | 200; 400 unknown product or repo |
 | GET | `/api/me` | — | `Me` | 200 |
 
 ### 5.5 Grind, review, dispatch, coordinator, away, vault

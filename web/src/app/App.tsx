@@ -98,6 +98,9 @@ export function App() {
   // The current repo picks the product River, Releases and Ops show.
   const repoProduct = repoList.value.find((x) => x.slug === currentRepo.value)?.product;
   useEffect(() => { if (repoProduct) chooseProduct(repoProduct); }, [repoProduct]);
+  // Releases and Ops scope by the repo itself when it has no product, so a repo change (switcher or ?repo=) reloads them.
+  const repoNow = currentRepo.value, reposReady = !!repos.value;
+  useEffect(() => { if (repoNow && reposReady) { void load("releases"); void load("ops"); } }, [repoNow, reposReady]);
   useEffect(() => {
     const n = needCount.value;
     document.title = n ? `(${n}) setu` : "setu";
