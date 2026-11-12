@@ -6,3 +6,4 @@
 - products: Deps.ScanRoots (settings), Deps.Merged (poller).
 - gh/poller: wire `Commands()`, `Routes(Deps)`, `Poller.Start`, injected Repoll/OpenChildren/ProductRepos.
 - away: notify.SetAway(away.Active); pass dispatch adapter implementing away.Lanes{Stuck, Retry}.
+- review: Routes/Start/Commands; sessions.Deps.PanelState = review.Service.State. Check peer-reviewer.md's verdict format matches the parser (`**Verdict:** approve` parses as changes).
