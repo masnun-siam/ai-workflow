@@ -71,7 +71,7 @@ export function Releases() {
   const cutWhy = !repo ? "No repository with releases" : repo.open ? "A release is already in flight for this repository" : "Open a release PR";
   return (
     <>
-      <Header title="releases" products>
+      <Header title="Releases" products>
         <Btn k="c" onClick={() => releaseOps.cut(false)} disabled={!repo || !!repo.open} title={cutWhy}>Cut release</Btn>
         <Btn k="y" onClick={() => releaseOps.cut(true)} disabled={!repo || !!repo.open} title={cutWhy}>Dry run</Btn>
         <Btn k="g" onClick={() => releaseOps.grind()} disabled={!r} title={r ? "Grind the release PR" : "No release yet"}>Grind</Btn>

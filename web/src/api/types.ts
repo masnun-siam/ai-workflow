@@ -111,7 +111,7 @@ export type IssueView = { number: number; title: string; url: string; state: str
   milestone: string | null; body_html: string; comment_count: number;
   comments: { author: string; created_at: ISO; body_html: string }[] };
 export type PRView = { number: number; title: string; url: string; state: "open"|"closed"|"merged"|"draft"; conflict: boolean;
-  head: string; base: string; head_sha: string; author: string; body_html: string;
+  head: string; base: string; head_sha: string; author: string; created_at: ISO; body_html: string; additions: number; deletions: number;
   files: { path: string; additions: number; deletions: number; status: string; patch: string | null; patch_cut?: boolean }[];
   commits: { sha: string; message: string; author: string }[];
   conversation: { kind: "comment" | "review"; author: string; at: ISO; state?: string; body_html: string }[];
@@ -236,3 +236,24 @@ export type PushSubscription = { endpoint: string; keys: { p256dh: string; auth:
 export type VaultFolder = { project: string; feature: string | null; path: string };
 export type VaultSuggestion = { project: string; feature: string; new_project: boolean; new_feature: boolean; why: string };
 export type VaultPRD = { exists: boolean; status: string | null; title: string | null; folder: string };
+
+// ---------- features (old aiw Features; GET /api/features?product=) ----------
+export type FeatureStage = "draft" | "review" | "approved" | "tasks" | "building" | "shipped";
+export type FeatureIssueState = "unrefined" | "blocked" | "ready" | "in_progress" | "waiting" | "failed" | "in_review" | "mergeable" | "conflict" | "ci_failed" | "dispatch";
+export type FeatureIssue = { key: IssueKey; repo: Slug; n: number; title: string; url: string; state: FeatureIssueState; refined: boolean; bug: boolean;
+  blockers: string[]; priority: string | null; pr: { n: number; url: string; draft: boolean; ci: string; review: string; conflict: boolean; sha: string } | null;
+  session: string | null; actions: Action[] };
+export type Feature = {
+  product: Slug; slug: string; title: string; status: PRD["status"]; path: string; module: string | null; prd_route: string;
+  stage: FeatureStage; bay: "you" | "go" | "running" | "shipped"; next: string;
+  epic: { key: IssueKey; repo: Slug; n: number; title: string; url: string } | null;
+  issues: FeatureIssue[]; done: { key: IssueKey; n: number; title: string; url: string }[];
+  counts: { open: number; unrefined: number; ready: number; review: number; mergeable: number; done: number };
+  panel: { id: string; repo: Slug; artifact: string; state: PanelState; round: number; max_rounds: number; root_session: string | null; status: { approved: number; total: number } } | null;
+  dispatch: { id: string; state: string; lanes: number; closed: number; needs: number } | null;
+  live: number; sessions: { id: string; status: SessionStatus; skill: string; title: string; started_at: ISO; cost: number }[];
+  actions: Action[];
+};
+export type FeatureList = { product: Slug; stale: Slug[]; features: Feature[] };
+export type ChangesList = { stale: Slug[]; issues: FeatureIssue[]; pending: Feature["sessions"] };
+export type CleanupItem = { key: string; label: string; repo: string; flags: string[] };

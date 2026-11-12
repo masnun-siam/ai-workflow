@@ -6,7 +6,7 @@ import { buildAnswers, canSubmit, emptyDraft, quickOptions, toggleLabel } from "
 import { resolveKey, type KeyCtx } from "./keymap";
 import { DEFAULT_PREFS, loadPrefs, next, sanitize, savePrefs } from "./prefs";
 import { refetchFor, visibleKeys } from "./refetch";
-import { parseHash } from "./route";
+import { parseHash, withParam } from "./route";
 
 const act = (p: Partial<Action> = {}): Action => ({ key: "e", label: "Go", method: "POST", path: "/api/x", toast: "Done", ...p });
 const deps = (o: Partial<ActionDeps> = {}) => {
@@ -47,39 +47,51 @@ describe("SSE refetch map (API.md section 6)", () => {
   const river = { screen: "river" };
   it("hello refetches everything visible", () => {
     expect(refetchFor("hello", {}, river)).toEqual(expect.arrayContaining(["status", "inbox", "river"]));
-    expect(refetchFor("hello", {}, { screen: "runs", runsTab: "dispatch" })).toContain("dispatches");
+    expect(refetchFor("hello", {}, { screen: "dispatches" })).toContain("dispatches");
+    expect(refetchFor("hello", {}, river)).toEqual(expect.arrayContaining(["repos", "sessions", "dispatches"]));
   });
   it("sessions: list always, river/me when shown, stream only for the open session", () => {
     expect(refetchFor("sessions", { id: "a", change: "record" }, river)).toEqual(expect.arrayContaining(["river"]));
     expect(refetchFor("sessions", { id: "a", change: "record" }, { screen: "me" })).toContain("me");
-    const v = { screen: "runs", sessionId: "a", runsTab: "sessions" };
+    const v = { screen: "activity", sessionId: "a", tab: "sessions" };
     expect(refetchFor("sessions", { id: "a", change: "stream" }, v)).toEqual(expect.arrayContaining(["sessions", "session", "stream"]));
     expect(refetchFor("sessions", { id: "b", change: "stream" }, v)).not.toContain("stream");
   });
   it("inbox, dispatch, usage, products kinds, toast", () => {
     expect(refetchFor("inbox", { count: 1 }, river)).toEqual(["inbox"]);
-    expect(refetchFor("dispatch", { id: "x" }, { screen: "runs", runsTab: "dispatch" })).toEqual(["dispatches"]);
+    expect(refetchFor("dispatch", { id: "x" }, { screen: "dispatches" })).toEqual(["dispatches"]);
     expect(refetchFor("usage", { kind: "away" }, river)).toEqual(["status"]);
     expect(refetchFor("usage", { kind: "settings" }, { screen: "settings" })).toEqual(expect.arrayContaining(["status", "settings", "notify"]));
     expect(refetchFor("products", { kind: "release" }, { screen: "releases" })).toEqual(["releases"]);
     expect(refetchFor("products", { kind: "blubird" }, { screen: "settings" })).toEqual(expect.arrayContaining(["blubird", "status"]));
-    expect(refetchFor("products", { kind: "coordinator" }, { screen: "runs", runsTab: "coordinators" })).toEqual(["coordinators"]);
+    expect(refetchFor("products", { kind: "coordinator" }, { screen: "activity", tab: "coordinators" })).toEqual(["coordinators"]);
     expect(refetchFor("products", { kind: "coordinator" }, river)).toEqual([]);
     expect(refetchFor("toast", { id: 1 }, river)).toEqual([]);
   });
   it("visible keys per screen", () => {
     expect(visibleKeys({ screen: "ops" })).toContain("ops");
-    expect(visibleKeys({ screen: "runs", sessionId: "s" })).toEqual(expect.arrayContaining(["session", "stream"]));
+    expect(visibleKeys({ screen: "activity", sessionId: "s" })).toEqual(expect.arrayContaining(["session", "stream"]));
   });
 });
 
 describe("keyboard map", () => {
   const ctx = (o: Partial<KeyCtx> = {}): KeyCtx => ({ screen: "river", overlay: false, actions: [act({ key: "e" })], quickOptions: 0, nav: "river", ...o });
   const k = (key: string, o = {}, c = ctx()) => resolveKey({ key, ...o }, c);
-  it("screens 1-7", () => {
-    expect(k("1")).toEqual({ t: "go", screen: "river" });
-    expect(k("7")).toEqual({ t: "go", screen: "settings" });
-    expect(k("3")).toEqual({ t: "go", screen: "runs" });
+  it("pages 1-9 and 0", () => {
+    expect(k("1")).toEqual({ t: "go", screen: "inbox" });
+    expect(k("2")).toEqual({ t: "go", screen: "features" });
+    expect(k("5")).toEqual({ t: "go", screen: "activity" });
+    expect(k("6")).toEqual({ t: "go", screen: "river" });
+    expect(k("0")).toEqual({ t: "go", screen: "settings" });
+  });
+  it("g chord goes to a page or opens the repo switcher; n is New except on Releases", () => {
+    expect(k("g", {}, ctx({ actions: [] }))).toBeNull();
+    expect(k("d", {}, ctx({ actions: [] }))).toEqual({ t: "go", screen: "dispatches" });
+    expect(k("g", {}, ctx({ actions: [] }))).toBeNull();
+    expect(k("r", {}, ctx({ actions: [] }))).toEqual({ t: "repo" });
+    expect(k("n", {}, ctx({ actions: [] }))).toEqual({ t: "new" });
+    expect(k("n", {}, ctx({ actions: [], screen: "releases", nav: null }))).toEqual({ t: "screen", key: "n" });
+    expect(k("g", {}, ctx({ actions: [act({ key: "g" })] }))).toEqual({ t: "action", key: "g" });
   });
   it("palette, help, escape, mode, look, layout", () => {
     expect(k(":")).toEqual({ t: "palette" });
@@ -162,8 +174,13 @@ describe("prefs and routes", () => {
   });
   it("parses hashes", () => {
     expect(parseHash("#/inbox").screen).toBe("inbox");
-    expect(parseHash("#/sessions/abc")).toMatchObject({ screen: "runs", id: "abc" });
+    expect(parseHash("#/sessions/abc")).toMatchObject({ screen: "activity", id: "abc" });
+    expect(parseHash("#/runs").screen).toBe("activity");
+    expect(parseHash("#/features?only=a/b")).toMatchObject({ screen: "features", query: { only: "a/b" } });
+    expect(parseHash("#/onboarding").screen).toBe("onboarding");
     expect(parseHash("#/prd?repo=a/b&path=docs/x.md")).toMatchObject({ screen: "prd", query: { repo: "a/b", path: "docs/x.md" } });
-    expect(parseHash("")).toMatchObject({ screen: "river" });
+    expect(parseHash("")).toMatchObject({ screen: "inbox" });
+    expect(withParam({ only: "a/b", x: "1" }, "only", "")).toBe("?x=1");
+    expect(withParam({}, "only", "a/b")).toBe("?only=a/b");
   });
 });

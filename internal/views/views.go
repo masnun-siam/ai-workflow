@@ -64,6 +64,7 @@ type Deps struct {
 	Grinds    inbox.Grinds
 	Dispatch  DispatchAPI
 	Releases  inbox.Releases
+	Panels    inbox.Panels
 	Accounts  Accounts
 	Usage     UsageAPI
 	Blubird   inbox.BlubirdStatus

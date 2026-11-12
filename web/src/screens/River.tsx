@@ -12,7 +12,7 @@ export function River() {
   const err = loadErrors.value.river;
   return (
     <>
-      <Header title="river" products>
+      <Header title="River" products scope>
         <Btn small onClick={() => mutate(() => http.send("POST", "/api/refresh", { product: product.value }), "Refreshing from GitHub")}>Refresh</Btn>
       </Header>
       {err && <div class="banner bad" role="alert">{err}</div>}

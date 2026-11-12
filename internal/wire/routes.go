@@ -51,6 +51,7 @@ func (a *App) buildRoutes(disp *dispatch.Service) {
 				}
 				return "", false
 			},
+			VaultPRD: a.Vault.PRDFile,
 		}),
 		gh.Routes(gh.Deps{
 			Client: a.GH,

@@ -1,7 +1,7 @@
 // Mock data for `npm run dev:mock` and the smoke tests. Typed by src/api/types.ts.
 import type {
   Action, Card, Coordinator, Dispatch, InboxItem, Me, NotifySettings, Ops, Panel, Product, Release, ReleaseRepo,
-  Repo, ReviewConfig, River, Round, Session, Settings, Status, TranscriptEvent, GrindStatus, AccountUsage, Away,
+  Repo, ReviewConfig, River, Round, Session, Settings, Status, TranscriptEvent, GrindStatus, AccountUsage, Away, PRD, FeatureIssue, FeatureList, ChangesList, IssueView, PRView,
 } from "../src/api/types";
 import type { RegistryStep } from "../src/api/extra";
 
@@ -117,7 +117,15 @@ export const inboxItems: InboxItem[] = [
 ];
 
 const usage = (label: string, p5: number, p7: number): AccountUsage => ({ label, cmd: "claude", five_hour: { pct: p5, resets_at: iso(-120) }, seven_day: { pct: p7, resets_at: iso(-3000) }, at: Math.floor(now / 1000), error: null, limit: {} });
-export const away: Away = { active: false, until: null, started: null, decisions: 0, held: 0, summary: null };
+const t0 = Math.floor(now / 1000);
+export const away: Away = { active: false, until: null, started: null, decisions: 2, held: 1, summary: { started: t0 - 7200, ended: t0 - 600, held: 1, log: [
+  { at: t0 - 6000, kind: "answer", sid: SID(1), link: { owner: "acme", repo: "wasensi-backend", issue: 1012 }, repo: "acme/wasensi-backend", command: "/blubird:implement-issue 1012",
+    question: "How do existing rows get a value?", picked: "Nullable + backfill job", id: `${SID(1)}:r1`, risk: 0.2, by: "recommended", answerer: SID(9), cost: 0.04,
+    questions: [{ header: "Migration", question: "How do existing rows get a value?", multiSelect: false, allowFreeText: true, recommended: "Nullable + backfill job",
+      options: [{ label: "Nullable + backfill job", description: "No lock" }, { label: "Default value", description: "One statement" }], picked: ["Nullable + backfill job"], why: "it avoids a long table lock" }] },
+  { at: t0 - 3000, kind: "held", sid: SID(2), link: { owner: "acme", repo: "wasensi-backend", issue: 1013 }, repo: "acme/wasensi-backend", command: "/blubird:implement-issue 1013",
+    question: "Drop the legacy scheduler table?", picked: "", reason: "destructive: held for you" },
+] } };
 export const status: Status = {
   version: "0.1.0", boot_id: "boot1", gh: { ok: true, login: "siam", error: "" }, usage: [usage("work", 62, 41), usage("personal", 8, 3)], away, migrated: true,
   poller: { remaining: 4800, reset_at: null },
@@ -170,6 +178,7 @@ export const dispatches: Dispatch[] = [{
     { key: "acme/wasensi-backend#943", repo: "acme/wasensi-backend", n: 943, title: "Cache reader", deps: ["acme/wasensi-backend#942"], stage: "queued", pr: null, needs_you: null, held: null, gate: "blocked by #942", skip_reason: null, paused: false, paused_by: null, hold_merge: false, limited_until: null, started_at: null, ended_at: null, session: null, usage: { cost: 0, tokens: null, seconds: 0 } },
   ],
   totals: { lanes: 2, closed: 0, cost: 1.1 }, created_at: Math.floor(now / 1000) - 900, ended_at: null,
+  events: [{ at: Math.floor(now / 1000) - 880, lane: null, kind: "start", text: "dispatch started: 2 issues, 3 at most" }, { at: Math.floor(now / 1000) - 870, lane: "acme/wasensi-backend#942", kind: "start", text: "implement-issue started" }],
 }];
 export const coordinators: Coordinator[] = [{ run: "20261112-coord", repo: "acme/bop-bd", source: "label:payments", destination: "staging", session: SID(4), live: true,
   queue: [{ issue: 455, state: "ok", title: "phpstan" }, { issue: 461, state: "blocked:#455", title: "Rate cache" }], claims: [455], prs: {}, poll: { calls: 12, last: Math.floor(now / 1000), result: "ok", every: 60 }, events: ["#455 verifying", "#458 PR open"] }];
@@ -196,10 +205,77 @@ export const reviewCfg: ReviewConfig = {
   max_rounds: 3, default_lenses: ["security", "perf"], lenses: { security: "Look for auth and injection problems", perf: "Look for N+1 and slow paths", tests: "Look for missing tests" },
   shipped: { max_rounds: 3, default_lenses: ["security"], lenses: {} }, overridden: true,
 };
-export const registry: RegistryStep[] = [
-  ["create-prd", "blubird", "docs"], ["create-tasks", "blubird", "docs"], ["refine-issues", "blubird", "issue"], ["implement-issue", "blubird", "issue"], ["reproduce-bug", "blubird", "issue"],
-  ["pr-review", "blubird", "issue"], ["project-coordinator", "blubird", "docs"], ["docs-updater", "blubird", "repo"], ["security-sweep", "blubird", "docs"], ["day-end-reconcile", "blubird", "none"],
-  ["release-pr", "setu", "repo"], ["pr-grind", "setu", "issue"], ["release-note", "setu", "none"], ["peer-review", "setu", "repo"],
-].map(([id, source, runs_in]) => ({ id: id!, source: source as "blubird", skill: id!, runs_in: runs_in as "docs", stage: "x", command: `/${source === "blubird" ? "blubird:" : ""}${id}`, available: true }));
+export const registry: RegistryStep[] = ([
+  ["create-prd", "blubird", "docs", "prd", "Create PRD", "free text, a PRD path"], ["create-tasks", "blubird", "docs", "tasks", "Create tasks", "<PRD path>"],
+  ["small-change", "blubird", "repo", "refine", "Small change", "<finding>"], ["refine-issues", "blubird", "issue", "refine", "Refine issues", "<epic | issues>"],
+  ["reproduce-bug", "blubird", "issue", "refine", "Reproduce bug", "<issue | symptoms>"], ["implement-issue", "blubird", "issue", "implement", "Implement issue", "<issue | epic>"],
+  ["project-coordinator", "blubird", "docs", "implement", "Project coordinator", "<issues link | n>"], ["pr-review", "blubird", "issue", "review", "PR review", "<PR | branch | range> [--fix]"],
+  ["peer-review", "setu", "repo", "review", "Peer review", "<artifact>"], ["pr-grind", "setu", "issue", "review", "PR grind", "<PR url>"],
+  ["release-pr", "setu", "repo", "release", "Release PR", "[--dry-run]"], ["release-note", "setu", "none", "notify", "Release note", "<pr-url>"],
+  ["docs-updater", "blubird", "repo", "ops", "Docs updater", "[full]"], ["security-sweep", "blubird", "docs", "ops", "Security sweep", "[repo name ...]"],
+  ["day-end-reconcile", "blubird", "none", "me", "Day-end reconcile", ""],
+] as const).map(([id, source, runs_in, stage, label, args_hint]) => ({ id, source, skill: id === "small-change" ? "create-tasks" : id, runs_in, stage, label, args_hint, command: `/${source === "blubird" ? "blubird:" : ""}${id}`, available: true }));
+export const openIssues = [
+  { number: 1044, title: "CSV export drops the VAT column", labels: ["bug"], updated_at: "2026-11-11T10:00:00Z", draft: false, url: "https://github.com/acme/wasensi-backend/issues/1044" },
+  { number: 1013, title: "Batch scheduler", labels: [], updated_at: "2026-11-10T10:00:00Z", draft: false, url: "https://github.com/acme/wasensi-backend/issues/1013" },
+];
+export const openPRs = [{ number: 1040, title: "Release staging to master", labels: [], updated_at: "2026-11-12T08:00:00Z", draft: false, url: "https://github.com/acme/wasensi-backend/pull/1040" }];
 export const vault = { vault: "/Users/me/vault", folders: [{ project: "wasensi", feature: "payouts", path: "wasensi/payouts" }] };
 export const prdFile = { repo: PRODUCT, path: "docs/prds/payouts/batches.md", text: "# Merchant payouts v2\n\nStatus: In review\n\n## Goal\nGroup payouts into weekly batches.", sha: "abc", branch: "main" };
+
+export const prds: PRD[] = [
+  { product: PRODUCT, module: "payouts", slug: "batches", title: "Merchant payouts v2", status: "In review", path: "docs/prds/payouts/batches.md", label: "payouts/batches", epic: null },
+  { product: PRODUCT, module: "kyc", slug: "recheck", title: "KYC re-check", status: "Draft", path: "docs/prds/kyc/recheck.md", label: "kyc/recheck", epic: null },
+  { product: PRODUCT, module: "cache", slug: "rates", title: "Rate cache", status: "Approved", path: "docs/prds/cache/rates.md", label: "cache/rates", epic: "acme/wasensi-backend#941" },
+  { product: PRODUCT, module: null, slug: "login", title: "Passwordless login", status: "Done", path: "docs/prds/login.md", label: "login", epic: "acme/wasensi-backend#800" },
+];
+
+// ---------- features ----------
+const fi = (n: number, title: string, state: FeatureIssue["state"], extra: Partial<FeatureIssue> = {}): FeatureIssue => ({
+  key: `acme/wasensi-backend#${n}`, repo: "acme/wasensi-backend", n, title, url: `https://github.com/acme/wasensi-backend/issues/${n}`, state,
+  refined: state !== "unrefined", bug: false, blockers: [], priority: null, pr: null, session: null, actions: [], ...extra });
+const readPrd = (path: string): Action => ({ key: "r", label: "Read PRD", method: "POST", path: "/api/noop", toast: "", open: `#/prd?repo=${PRODUCT}&path=${path}` });
+const counts = (issues: FeatureIssue[], done: number) => ({
+  open: issues.length, unrefined: issues.filter((i) => i.state === "unrefined").length, ready: issues.filter((i) => i.state === "ready").length,
+  review: issues.filter((i) => ["in_review", "conflict", "ci_failed"].includes(i.state)).length, mergeable: issues.filter((i) => i.state === "mergeable").length, done });
+const rateIssues = [
+  fi(942, "Cache table", "mergeable", { pr: { n: 1050, url: "https://github.com/acme/wasensi-backend/pull/1050", draft: false, ci: "success", review: "approved", conflict: false, sha: "a".repeat(40) },
+    actions: [{ key: "m", label: "Merge #1050", method: "POST", path: "/api/pulls/acme/wasensi-backend/1050/merge", body: { sha: "a".repeat(40) }, toast: "Merged #1050", confirm: "Merge PR #1050 into its base now?" }] }),
+  fi(943, "Cache reader", "in_progress", { session: SID(2), actions: [{ key: "w", label: "Watch", method: "POST", path: "/api/noop", toast: "", open: `#/sessions/${SID(2)}` }] }),
+  fi(944, "Invalidate on rate change", "ready", { actions: [start("i", "Start", "implement-issue", "944", "acme/wasensi-backend", { primary: true })] }),
+  fi(945, "Metrics for hit rate", "blocked", { blockers: ["#943"] }),
+  fi(946, "Admin toggle", "unrefined", { actions: [start("e", "Refine", "refine-issues", "946", "acme/wasensi-backend")] }),
+];
+export const featureList: FeatureList = { product: PRODUCT, stale: [], features: [
+  { product: PRODUCT, slug: "rates", title: "Rate cache", status: "Approved", path: "docs/prds/cache/rates.md", module: "cache", prd_route: `#/prd?repo=${PRODUCT}&path=docs/prds/cache/rates.md`,
+    stage: "building", bay: "you", next: "1 ready to merge.", epic: { key: "acme/wasensi-backend#941", repo: "acme/wasensi-backend", n: 941, title: "Rate cache", url: "https://github.com/acme/wasensi-backend/issues/941" },
+    issues: rateIssues, done: [{ key: "acme/wasensi-backend#940", n: 940, title: "Spike: cache store", url: "https://github.com/acme/wasensi-backend/issues/940" }], counts: counts(rateIssues, 1),
+    panel: null, dispatch: null, live: 1, sessions: [{ id: SID(2), status: "running", skill: "blubird:implement-issue", title: "#943 Cache reader", started_at: "2026-11-12T08:00:00Z", cost: 2.3 }],
+    actions: [rateIssues[0]!.actions[0]!, { key: "d", label: "Run epic", method: "POST", path: "/api/noop", toast: "", open: "#/dispatches?new=acme%2Fwasensi-backend%23941" }, readPrd("docs/prds/cache/rates.md")] },
+  { product: PRODUCT, slug: "batches", title: "Merchant payouts v2", status: "In review", path: "docs/prds/payouts/batches.md", module: "payouts", prd_route: `#/prd?repo=${PRODUCT}&path=docs/prds/payouts/batches.md`,
+    stage: "review", bay: "running", next: "Peer review round 1 of 3: 1 of 2 lenses approve.", epic: null, issues: [], done: [], counts: counts([], 0),
+    panel: { id: "p-20261112T090000Z-abcdef", repo: PRODUCT, artifact: "/code/wasensi-docs/docs/prds/payouts/batches.md", state: "running", round: 1, max_rounds: 3, root_session: SID(1), status: { approved: 1, total: 2 } },
+    dispatch: null, live: 0, sessions: [], actions: [{ key: "v", label: "Watch review", method: "POST", path: "/api/noop", toast: "", open: `#/features/batches?product=${PRODUCT}&tab=review` }, readPrd("docs/prds/payouts/batches.md")] },
+  { product: PRODUCT, slug: "recheck", title: "KYC re-check", status: "Draft", path: "docs/prds/kyc/recheck.md", module: "kyc", prd_route: `#/prd?repo=${PRODUCT}&path=docs/prds/kyc/recheck.md`,
+    stage: "draft", bay: "go", next: "Draft. Run a peer review, or approve it as it is.", epic: null, issues: [], done: [], counts: counts([], 0), panel: null, dispatch: null, live: 0, sessions: [],
+    actions: [{ key: "v", label: "Start peer review", method: "POST", path: "/api/noop", toast: "", primary: true, open: `#/features/recheck?product=${PRODUCT}&tab=review` },
+      { ...start("p", "Approve without review", "create-prd", "docs/prds/kyc/recheck.md — the team has reviewed it; approve it", PRODUCT), confirm: "Approve this PRD and create its epic?" }, readPrd("docs/prds/kyc/recheck.md")] },
+  { product: PRODUCT, slug: "login", title: "Passwordless login", status: "Done", path: "docs/prds/login.md", module: null, prd_route: `#/prd?repo=${PRODUCT}&path=docs/prds/login.md`,
+    stage: "shipped", bay: "shipped", next: "Shipped.", epic: null, issues: [], done: [], counts: counts([], 0), panel: null, dispatch: null, live: 0, sessions: [], actions: [readPrd("docs/prds/login.md")] },
+] };
+
+export const changesList: ChangesList = { stale: [], pending: [], issues: [
+  fi(1044, "CSV export drops the VAT column", "unrefined", { bug: true, priority: "P1", actions: [start("e", "Refine", "refine-issues", "1044", "acme/wasensi-backend")] }),
+  fi(1051, "Typo on the payouts page", "ready", { priority: "P3", actions: [start("i", "Start", "implement-issue", "1051", "acme/wasensi-backend", { primary: true })] }),
+  fi(1052, "Retry webhook on 502", "ready", { priority: "P2", actions: [start("i", "Start", "implement-issue", "1052", "acme/wasensi-backend", { primary: true })] }),
+  fi(1053, "Rename the settings tab", "in_review", { pr: { n: 1060, url: "https://github.com/acme/wasensi-backend/pull/1060", draft: false, ci: "pending", review: "none", conflict: false, sha: "b".repeat(40) } }),
+] };
+export const issueView: IssueView = { number: 1044, title: "CSV export drops the VAT column", url: "https://github.com/acme/wasensi-backend/issues/1044", state: "OPEN", state_reason: null, is_pr: false, merged: false,
+  author: "ashique", created_at: "2026-11-10T10:00:00Z", labels: [{ name: "bug", color: "d73a4a" }], assignees: [], milestone: null, body_html: "<p>Exports since Monday lack the <code>vat</code> column.</p>", comment_count: 1,
+  comments: [{ author: "najmul", created_at: "2026-11-11T10:00:00Z", body_html: "<p>Seen on the XLSX too.</p>" }] };
+export const prView: PRView = { number: 1060, title: "Rename the settings tab", url: "https://github.com/acme/wasensi-backend/pull/1060", state: "open", conflict: false, head: "issue-1053-rename", base: "staging",
+  head_sha: "b".repeat(40), author: "setu-bot", created_at: "2026-11-12T08:00:00Z", body_html: "<p>Closes #1053.</p>", additions: 12, deletions: 4,
+  files: [{ path: "web/src/settings.tsx", additions: 12, deletions: 4, status: "modified", patch: null }], commits: [{ sha: "b".repeat(40), message: "rename", author: "setu-bot" }],
+  conversation: [{ kind: "review", author: "copilot", at: "2026-11-12T08:30:00Z", state: "COMMENTED", body_html: "<p>Looks fine.</p>" }],
+  checks: [{ name: "test", bucket: "pending", link: "https://github.com/acme/wasensi-backend/actions/runs/1" }, { name: "lint", bucket: "green", link: "https://github.com/acme/wasensi-backend/actions/runs/2" }] };
+export const vaultPrd = { exists: true, status: "Draft", title: "Notes app", folder: "05-Work/wasensi/payouts" };

@@ -31,19 +31,33 @@ Open http://127.0.0.1:8420. `--port N`, `--allow-host H` and `--no-tailscale` ov
 
 ## Screens
 
+The rail follows the old aiw UI. A top bar holds the **repo switcher** (the current repo: new runs start there, and its
+product drives River, Releases and Ops), search (`Cmd/Ctrl-K`), the needs-you count and **New** (`n`). List pages have
+a repo filter (`?only=owner/name`, default All repos). With no repo registered, every page but Settings opens onboarding.
+
 | Key | Screen | What it shows |
 |---|---|---|
-| 1 | River | the pipeline by stage, with the cards in each |
-| 2 | Inbox | everything waiting on you, ranked by urgency |
-| 3 | Runs | sessions and their transcripts |
-| 4 | Releases | the release flow: cut, grind, merge, notify |
-| 5 | Ops | repo and product upkeep (onboard, docs, security sweep) |
-| 6 | Me | reconcile and weekly review |
-| 7 | Settings | accounts, products, blubird, notifications, away, review, appearance |
+| 1 | Inbox | everything waiting on you across your repos, ranked by urgency |
+| 2 | Features | every PRD with its stage, issues and next step; a feature page per PRD (issues, PRD edit, peer review, sessions) |
+| 3 | Small changes | issues outside any epic: what stands where, pick ready ones and run them as a dispatch |
+| 4 | Dispatches | dispatches with All / Needs you / Live / Finished, Run an epic, and a page per dispatch with its lanes |
+| 5 | Activity | live sessions, run history with search and result filter, coordinators, grinds, peer review |
+| 6 | River | the pipeline by stage, with the cards in each |
+| 7 | Releases | the release flow: cut, grind, merge, notify |
+| 8 | Ops | repo and product upkeep (onboard, docs, security sweep) |
+| 9 | Me | reconcile and weekly review |
+| 0 | Settings | accounts, products and repos, blubird, notifications, away, review, appearance |
+
+**New** (`n`) opens the Create box: describe a change, then file it as a Feature (PRD interview) or a Small change.
+The command palette (`:`) opens the Start dialog: any command, where it runs (repo, another folder, or the notes vault),
+its input (open issues and PRs are listed), model, effort, lenses and account.
+
+The rail foot has Away mode (30 min to 4 h, or until a time), plan usage per account, the theme and the key sheet.
 
 ## Keyboard
 
-`1`-`7` screens, `j`/`k` move, `h`/`l` stage (River), `Enter` open, `a`/`b`/`c` answer a question, `:` or `Cmd/Ctrl-K` command
+`1`-`9` and `0` pages, `g` then `i`/`f`/`c`/`d`/`a`/`v`/`s` go to a page, `g r` opens the repo switcher, `n` New,
+`j`/`k` move, `h`/`l` stage (River), `Enter` open, `a`/`b`/`c` answer a question, `:` or `Cmd/Ctrl-K` command
 palette, `?` help, `Esc` back. Each screen lists its action keys in the footer. `.` cycles mode, `s` cycles look, `L` cycles layout.
 
 ## Appearance

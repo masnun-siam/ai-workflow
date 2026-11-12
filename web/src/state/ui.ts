@@ -11,6 +11,8 @@ export function toast(msg: string, level: ToastMsg["level"] = "info", path?: str
 }
 
 export const paletteOpen = signal(false);
+/** The top-bar repo switcher popover (g r). */
+export const repoOpen = signal(false);
 export const helpOpen = signal(false);
 export const connected = signal(false);
 export const detailOpen = signal(false);
@@ -26,6 +28,14 @@ export function askConfirm(text: string): Promise<boolean> {
 /** The "start a run" dialog: a registry step (or free text when step is null) with optional presets. */
 export type StartReq = { step: RegistryStep | null; repo?: string; args?: string };
 export const startReq = signal<StartReq | null>(null);
+
+/** The Create box (n, New): "What should change?" -> a feature (create-prd) or a small change. The draft survives Cancel. */
+export const createOpen = signal(false);
+export const createDraft = signal("");
+export function openCreate(text?: string): void {
+  if (text) createDraft.value = text;
+  createOpen.value = true;
+}
 
 /** Selection in the list screens: river (stage, card), others index. */
 export const sel = signal({ stage: 3, card: 0, inbox: 0, runs: 0, ops: 0 });

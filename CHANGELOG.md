@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Changed
+
+- The UI is back on the old aiw navigation: a rail with Inbox, Features, Small changes, Dispatches and Activity (then River, Releases, Ops, Me, Settings) and counts for needs-you, dispatching and running; a top bar with the repo switcher (`g r`), search, the needs-you pill and New; a repo filter on list pages (`?only=`); onboarding while no repo is registered; Away mode presets and plan usage in the rail foot. Runs split into Dispatches and Activity; `#/runs` still opens Activity.
+- **New** (`n`) opens the old Create box again: describe the change, pick Feature (a PRD interview with optional peer-review lenses, run on opus at medium) or Small change (one issue with a priority), the repo and the account. It warns when an open issue looks the same. The text survives Cancel.
+- The Start dialog is back in full: commands grouped Plan, Build, Review, Ship, Capture, Maintain; **Where** is a repo, another folder (with Browse… on macOS) or, for a custom prompt, the notes vault with Project / Feature and Suggest with Claude; issue and PR steps pick from the repo's open items, Create tasks from Approved PRDs; model, effort (optionally saved as the default), peer-review lenses and the account per run; Queue when the account is limited.
+- Features is back: every PRD as a strip with its stage ticks, issue bar and next step, in the bays Stopped on you, Waiting for your go and Running on their own, plus a collapsed shipped list. Next steps run from the strip: start a peer review, approve, create tasks, refine N, merge PRs, run the epic, close the epic. New endpoint `GET /api/features`.
+- The feature page is back (`#/features/<slug>`): a build map of the epic's issues, and tabs (`[` `]`) for Issues (buckets, row actions, pick and refine, add a task), PRD (read, edit with save and commit, ask Claude to change it), Peer review (run a panel with lenses, re-run or drop a lens, more rounds or approve at the cap) and Sessions. `PUT /api/prd` saves an edit and commits only that file; it refuses when the file changed since you opened it.
+- Run epic opens Dispatches with the epic filled in (`?new=`).
+- Small changes is back: open issues outside any epic, a priority by state matrix, Ready to run with pick and **Run N as a dispatch** (1–30, no feature branch), Needs refining, every issue with a filter, and the runs still filing one. New endpoint `GET /api/changes`.
+- Dispatches is a table again, and each dispatch has its page (`#/dispatches/<id>`): Settings, Pause (after the running issues, or now), Resume, Cancel, a progress bar, lanes in Needs you / Building now / Up next / Done, the activity feed, the end actions, and a lane panel with a message box and the lane actions. New dispatch has every setting again (grind, CI, at most at once, cost cap, auto-merge, skip approval, base branch from GitHub, feature branch, model, effort, account) and a preview with waves and warnings.
+- The issue / PR side panel is back: any GitHub issue or PR link of a registered repo opens it. Issues: refine, close as completed or not planned, reopen, comments. PRs: merge (warns on conflicts, failing or running checks, drafts), close, reopen, checks, files, conversation, the grind card. Both take a comment.
+- Activity has **Clean up old** again: pick finished sessions to remove; ones with unsaved work start unticked.
+- **Create a new repo** is back (Start → Where, Settings → products and repos, and the banner on a notes-vault session): a local git repo with a README and, optionally, the PRD from a notes folder, registered as `local/<name>`. **Publish to GitHub** picks the owner and visibility and pushes it; an unpublished repo in the Inbox opens it directly. Endpoints `POST /api/repos/create`, `POST /api/repos/publish`, `GET /api/github/owners`.
+- The Inbox shows **While you were away** again: every round Away mode answered (with Recommended or Opus, risk and cost), held or retried, a Held only filter, **Change N selected** to send a different answer, and Dismiss.
+
 ## setu 1.0.0
 
 setu (সেতু) replaces the `ai-workflow` Claude Code plugin. It is one Go binary (`setu`) with a Preact web app embedded,

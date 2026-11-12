@@ -83,7 +83,13 @@ const routes: [string, RegExp, H][] = [
     if (body.step === "create-prd" && String(body.args).includes("approve")) { db.river.stages[0]!.cards = db.river.stages[0]!.cards.filter((c) => c.id !== "prd:pay"); db.inbox = db.inbox.filter((i) => i.type !== "prd_approval"); emit("inbox", { count: 1 }); }
     return startSession(body);
   }],
-  ["GET", /^\/api\/sessions\/cleanup$/, () => ({ items: [] })],
+  ["GET", /^\/api\/sessions\/cleanup$/, () => ({ items: [{ key: F.sessions[3]!.id, label: "Release PR #1040", repo: "acme/wasensi-backend", flags: [] }, { key: F.sessions[4]!.id, label: "#1044 CSV drops VAT", repo: "acme/wasensi-backend", flags: ["uncommitted"] }] })],
+  ["POST", /^\/api\/sessions\/cleanup$/, ({ body }) => ({ removed: body.keys })],
+  ["GET", /^\/api\/changes$/, () => F.changesList],
+  ["GET", /^\/api\/issues\/([^/]+)\/([^/]+)\/(\d+)$/, () => F.issueView],
+  ["GET", /^\/api\/pulls\/([^/]+)\/([^/]+)\/(\d+)$/, () => F.prView],
+  ["POST", /^\/api\/(issues|pulls)\/([^/]+)\/([^/]+)\/(\d+)\/(comment|state|merge)$/, () => ({ ok: true })],
+  ["GET", /^\/api\/repos\/([^/]+)\/([^/]+)\/branches$/, () => ({ branches: ["main", "staging"], default: "main" })],
   ["GET", /^\/api\/sessions\/([^/]+)$/, ({ m }) => sess(m[1]!) ?? fail(404, "not found")],
   ["GET", /^\/api\/sessions\/([^/]+)\/stream$/, ({ m, q }) => {
     const ev = F.transcripts[m[1]!] ?? [{ kind: "text" as const, text: "Working on it." }];
@@ -107,6 +113,9 @@ const routes: [string, RegExp, H][] = [
   ["POST", /^\/api\/products$/, ({ body }) => { const p = { docs_repo: "acme/new-docs", name: "New", path: body.path, repos: [] }; db.products.push(p); return json(p, 201); }],
   ["DELETE", /^\/api\/products\/([^/]+)\/([^/]+)$/, ({ m }) => { db.products = db.products.filter((p) => p.docs_repo !== `${m[1]}/${m[2]}`); return { products: db.products }; }],
   ["GET", /^\/api\/prd$/, () => F.prdFile],
+  ["PUT", /^\/api\/prd$/, ({ body }) => (body.base_sha !== F.prdFile.sha ? fail(409, "the PRD changed since you opened it: reload it and edit again") : Object.assign(F.prdFile, { text: body.text, sha: "def" + Date.now() }))],
+  ["GET", /^\/api\/features$/, ({ q }) => (q.get("product") === F.PRODUCT ? F.featureList : { product: q.get("product"), stale: [], features: [] })],
+  ["GET", /^\/api\/products\/([^/]+)\/([^/]+)\/prds$/, ({ m }) => ({ prds: F.prds.filter((p) => p.product === `${m[1]}/${m[2]}`) })],
   ["POST", /^\/api\/refresh$/, () => json({ ok: true }, 202)],
   ["GET", /^\/api\/river$/, () => db.river],
   ["GET", /^\/api\/inbox$/, () => ({ items: db.inbox, stale: [], count: db.inbox.filter((i) => i.group !== "wait").length })],
@@ -116,7 +125,10 @@ const routes: [string, RegExp, H][] = [
   ["POST", /^\/api\/grinds\/([^/]+)\/([^/]+)\/(\d+)\/skip-ci$/, () => ({ state: "running" })],
   ["POST", /^\/api\/grinds\/([^/]+)\/([^/]+)\/(\d+)\/stop$/, ({ m }) => { const g = db.grinds.find((x) => x.pr === Number(m[3])); if (g) g.state = "done"; emit("products", { kind: "grind" }); return g; }],
   ["GET", /^\/api\/review$/, () => ({ panels: db.panels })],
-  ["GET", /^\/api\/review\/offers$/, () => ({ default: ["security"], max_rounds: 3, kinds: {} })],
+  ["GET", /^\/api\/review\/offers$/, () => ({ default: ["critical"], max_rounds: 3, kinds: { "create-prd": ["critical", "ceo", "cto", "security", "qa", "ux"], custom: ["critical", "cto", "security"] } })],
+  ["GET", /^\/api\/repos\/([^/]+)\/([^/]+)\/open$/, ({ q }) => ({ items: q.get("kind") === "pr" ? F.openPRs : F.openIssues })],
+  ["POST", /^\/api\/vault\/suggest$/, () => ({ project: "wasensi", feature: "payouts", new_project: false, new_feature: false, why: "matches the payouts notes" })],
+  ["POST", /^\/api\/repos\/browse$/, () => ({ path: "/code/elsewhere" })],
   ["GET", /^\/api\/dispatches$/, () => ({ dispatches: db.dispatches })],
   ["POST", /^\/api\/dispatches$/, ({ body }) => {
     const d: Dispatch = { ...structuredClone(F.dispatches[0]!), id: "ddddeeeeffff", epic: body.epic ?? null, title: body.epic ?? "Issues", lanes: [] };
@@ -137,6 +149,11 @@ const routes: [string, RegExp, H][] = [
   ["POST", /^\/api\/away$/, ({ body }) => { const a: Away = { active: true, until: body.until, started: Math.floor(Date.now() / 1000), decisions: 0, held: 0, summary: null }; db.status.away = a; emit("usage", { kind: "away" }); return a; }],
   ["POST", /^\/api\/away\/(stop|dismiss)$/, () => { db.status.away = { active: false, until: null, started: null, decisions: 0, held: 0, summary: null }; emit("usage", { kind: "away" }); return db.status.away; }],
   ["GET", /^\/api\/vault\/folders$/, () => F.vault],
+  ["GET", /^\/api\/vault\/prd$/, ({ q }) => ({ ...F.vaultPrd, folder: q.get("folder") })],
+  ["POST", /^\/api\/away\/change$/, ({ body }) => ({ sent: body.changes.map((c: { id: string }) => c.id), queued: [], errors: [] })],
+  ["POST", /^\/api\/repos\/create$/, ({ body }) => { const r = { slug: `local/${body.name}`, path: `${body.parent}/${body.name}`, product: null }; db.repos.push(r); return json({ repo: r, repos: db.repos }, 201); }],
+  ["POST", /^\/api\/repos\/publish$/, ({ body }) => { const r = db.repos.find((x) => x.slug === body.slug); if (r) r.slug = `${body.owner}/${body.name}`; return { repo: r, repos: db.repos }; }],
+  ["GET", /^\/api\/github\/owners$/, () => ({ owners: ["masnun", "acme"] })],
   ["GET", /^\/api\/releases$/, () => ({ repos: db.releaseRepos, releases: db.releases })],
   ["POST", /^\/api\/releases$/, ({ body }) => {
     if (db.releases.some((r) => r.repo === body.repo && !["done", "skipped", "failed"].includes(r.stage))) return fail(409, "a release is in flight", { id: "r-x" });

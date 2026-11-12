@@ -4,7 +4,7 @@ import { createClient } from "./api/client";
 import { useMockClient } from "./api/http";
 import { mockFetch } from "../mock/server";
 import { App } from "./app/App";
-import { loadMany, runsTab } from "./state/data";
+import { activityTab, loadMany } from "./state/data";
 import type { LoadKey } from "./state/refetch";
 import { prefs } from "./state/prefs";
 import { nav } from "./state/route";
@@ -16,8 +16,9 @@ beforeAll(async () => {
   await loadMany(ALL);
 });
 
-const SCREENS: [string, string][] = [["#/river", "Merchant payouts v2"], ["#/inbox", "Questions"], ["#/runs", "Payout batch model"], ["#/releases", "release note preview"],
-  ["#/ops", "security-sweep"], ["#/me", "Reconcile today"], ["#/settings", "appearance"], ["#/prd?repo=a/b&path=x.md", "prd"]];
+const SCREENS: [string, string][] = [["#/river", "Merchant payouts v2"], ["#/inbox", "Questions"], ["#/activity", "Payout batch model"], ["#/dispatches", "Dispatches"],
+  ["#/features", "Features"], ["#/changes", "Small changes"], ["#/releases", "release note preview"],
+  ["#/ops", "security-sweep"], ["#/me", "Reconcile today"], ["#/settings", "appearance"], ["#/prd?repo=a/b&path=x.md", "PRD"]];
 
 describe("smoke render from mock fixtures", () => {
   for (const look of ["classic", "console", "river"] as const) {
@@ -41,13 +42,24 @@ describe("smoke render from mock fixtures", () => {
     expect(html).toContain("Migration");
     expect(html).toContain("Nullable + backfill job");
   });
-  it("renders the runs sub-views", () => {
-    nav("#/runs");
-    for (const t of ["dispatch", "coordinators", "grinds", "panels"] as const) {
-      runsTab.value = t;
+  it("renders the activity sub-views", () => {
+    nav("#/activity");
+    for (const t of ["coordinators", "grinds", "panels"] as const) {
+      activityTab.value = t;
       expect(renderToString(<App />).length).toBeGreaterThan(1000);
     }
-    runsTab.value = "sessions";
+    activityTab.value = "sessions";
+  });
+  it("shows the repo switcher and filters a page to one repo with ?only=", () => {
+    prefs.value = { look: "classic", mode: "system", layout: "drawer" };
+    nav("#/activity");
+    const all = renderToString(<App />);
+    expect(all).toContain("Switch repository");
+    expect(all).toContain("All repos");
+    nav("#/activity?only=acme/wasensi-web");
+    const one = renderToString(<App />);
+    expect(one).toContain("wasensi-web");
+    expect(one).not.toContain("Payout batch model");
   });
   it("renders server-provided actions generically on the river detail", () => {
     nav("#/river");

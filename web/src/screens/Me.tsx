@@ -10,7 +10,7 @@ export function Me() {
   const m = me.value;
   return (
     <>
-      <Header title="me" />
+      <Header title="Me" />
       {loadErrors.value.me && <div class="banner bad" role="alert">{loadErrors.value.me}</div>}
       {!m ? <Empty>Loading…</Empty> : (
         <div class="grid2">

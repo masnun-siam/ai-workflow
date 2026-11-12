@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/masnun-siam/setu/internal/errs"
+	"github.com/masnun-siam/setu/internal/home"
 )
 
 type PRD struct {
@@ -127,24 +128,41 @@ func (r *Registry) PRDs(product string) ([]PRD, error) {
 	return out, nil
 }
 
-// ReadPRD returns one PRD file of a registered docs checkout. rel must be docs/prds/**/*.md.
-func (r *Registry) ReadPRD(repo, rel string) (PRDFile, error) {
+// prdFile resolves rel (docs/prds/**/*.md) inside a registered checkout: the checkout key, its
+// real path and the file's real path.
+func (r *Registry) prdFile(repo, rel string) (key, base, abs, clean string, err error) {
 	co := r.checkouts()
 	key, ok := findKey(co, repo)
 	if !ok {
-		return PRDFile{}, errs.NotFound("%s is not a registered repo", repo)
+		return "", "", "", "", errs.NotFound("%s is not a registered repo", repo)
 	}
 	if rel == "" || strings.ContainsRune(rel, 0) || filepath.IsAbs(rel) || hasDotDot(rel) || strings.Contains(rel, `\`) {
-		return PRDFile{}, errs.Invalid("bad PRD path")
+		return "", "", "", "", errs.Invalid("bad PRD path")
 	}
-	clean := filepath.ToSlash(filepath.Clean(rel))
+	clean = filepath.ToSlash(filepath.Clean(rel))
 	if !strings.HasPrefix(clean, "docs/prds/") || !strings.HasSuffix(clean, ".md") {
-		return PRDFile{}, errs.Invalid("path must be docs/prds/...md")
+		return "", "", "", "", errs.Invalid("path must be docs/prds/...md")
 	}
-	base := realpath(co[key])
-	abs := realpath(filepath.Join(base, filepath.FromSlash(clean)))
+	base = realpath(co[key])
+	abs = realpath(filepath.Join(base, filepath.FromSlash(clean)))
 	if !strings.HasPrefix(abs, filepath.Join(base, "docs", "prds")+string(filepath.Separator)) {
-		return PRDFile{}, errs.Invalid("bad PRD path")
+		return "", "", "", "", errs.Invalid("bad PRD path")
+	}
+	return key, base, abs, clean, nil
+}
+
+func blobSHA(b []byte) string {
+	h := sha1.New()
+	fmt.Fprintf(h, "blob %d\x00", len(b))
+	h.Write(b)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// ReadPRD returns one PRD file of a registered docs checkout. rel must be docs/prds/**/*.md.
+func (r *Registry) ReadPRD(repo, rel string) (PRDFile, error) {
+	key, base, abs, clean, err := r.prdFile(repo, rel)
+	if err != nil {
+		return PRDFile{}, err
 	}
 	st, err := os.Stat(abs)
 	if err != nil || !st.Mode().IsRegular() {
@@ -157,9 +175,40 @@ func (r *Registry) ReadPRD(repo, rel string) (PRDFile, error) {
 	if err != nil {
 		return PRDFile{}, errs.NotFound("no such PRD: %s", clean)
 	}
-	h := sha1.New()
-	fmt.Fprintf(h, "blob %d\x00", len(b))
-	h.Write(b)
 	branch, _ := gitOut(context.Background(), base, "symbolic-ref", "--short", "-q", "HEAD")
-	return PRDFile{Repo: key, Path: clean, Text: string(b), Sha: hex.EncodeToString(h.Sum(nil)), Branch: branch}, nil
+	return PRDFile{Repo: key, Path: clean, Text: string(b), Sha: blobSHA(b), Branch: branch}, nil
+}
+
+// SavePRD writes an existing PRD and commits only that file on the checkout's current branch (it
+// never pushes). baseSHA is the blob sha the edit started from: a different file on disk is a
+// conflict, so a concurrent change (a create-prd run, a pull) is never overwritten.
+func (r *Registry) SavePRD(ctx context.Context, repo, rel, text, baseSHA string) (PRDFile, error) {
+	if strings.ContainsRune(text, 0) || len(text) > prdMaxFile {
+		return PRDFile{}, errs.Invalid("text must be under 2 MiB with no NUL")
+	}
+	cur, err := r.ReadPRD(repo, rel)
+	if err != nil {
+		return PRDFile{}, err
+	}
+	if baseSHA == "" || cur.Sha != baseSHA {
+		return PRDFile{}, errs.Conflict("the PRD changed since you opened it: reload it and edit again", map[string]any{"sha": cur.Sha})
+	}
+	if cur.Text == text {
+		return cur, nil
+	}
+	_, base, abs, clean, err := r.prdFile(repo, rel)
+	if err != nil {
+		return PRDFile{}, err
+	}
+	st, _ := os.Stat(abs)
+	if err := home.AtomicWrite(abs, []byte(text), st.Mode().Perm()); err != nil {
+		return PRDFile{}, err
+	}
+	if res := git(ctx, base, "add", "--", clean); res.Code != 0 {
+		return PRDFile{}, errs.Upstream("git add failed: %s", strings.TrimSpace(string(res.Stderr)))
+	}
+	if res := git(ctx, base, "commit", "--only", "-m", "docs(prd): edit "+clean+" in setu", "--", clean); res.Code != 0 {
+		return PRDFile{}, errs.Upstream("saved, but git commit failed: %s", strings.TrimSpace(string(res.Stderr)+string(res.Stdout)))
+	}
+	return r.ReadPRD(repo, rel)
 }

@@ -245,7 +245,9 @@ type Panel struct {
 	State     string `json:"state"` // running | approved | cap reached | failed
 	Round     int    `json:"round"`
 	MaxRounds int    `json:"max_rounds"`
-	Status    struct {
+	// RootSession is the session that owns the artifact (the PRD interview), if any.
+	RootSession *string `json:"root_session"`
+	Status      struct {
 		Approved int `json:"approved"`
 		Total    int `json:"total"`
 	} `json:"status"`

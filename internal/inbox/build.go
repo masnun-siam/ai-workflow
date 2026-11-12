@@ -216,7 +216,7 @@ func (b *Builder) setupItems(v *view) []Item {
 				repo := r.Slug
 				it := Item{Key: "unpublished:" + r.Slug, Group: GSetup, Type: TRepoUnpublished, Kind: "Setup", Title: r.Slug + " is not on GitHub",
 					Repo: &repo, Detail: []string{r.Path}}
-				it.Actions = []Action{Open("o", "Open settings", "#/settings").WithPrimary()}
+				it.Actions = []Action{Open("p", "Publish to GitHub", "#/settings?pane=products&publish="+repo).WithPrimary()}
 				out = append(out, it)
 			}
 		}

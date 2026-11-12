@@ -18,7 +18,7 @@ export function Prd() {
   }, [repo, path]);
   return (
     <>
-      <Header title="prd"><Btn small onClick={() => history.back()}>← Back</Btn></Header>
+      <Header title="PRD"><Btn small onClick={() => history.back()}>← Back</Btn></Header>
       {err && <div class="banner bad" role="alert">{err}</div>}
       <Pane label={`${repo ?? ""} ${path ?? ""}`}>{f ? <><Chips label="PRD view" value={view} onPick={setView} options={[["preview", "Preview"], ["source", "Markdown"]]} />{view === "preview" ? <Markdown text={f.text} /> : <pre class="note">{f.text}</pre>}</> : !err && <Empty>Loading…</Empty>}</Pane>
     </>

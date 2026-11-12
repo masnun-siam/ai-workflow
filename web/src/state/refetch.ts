@@ -4,25 +4,29 @@ import type { Topic } from "../api/sse";
 export type LoadKey =
   | "status" | "river" | "inbox" | "sessions" | "session" | "stream" | "releases" | "ops" | "me"
   | "settings" | "notify" | "review" | "blubird" | "products" | "repos" | "dispatches" | "coordinators"
-  | "grinds" | "panels" | "registry";
+  | "grinds" | "panels" | "registry" | "features" | "changes";
 
-export type View = { screen: string; sessionId?: string; runsTab?: string };
+export type View = { screen: string; sessionId?: string; tab?: string };
 
 /** What the current view shows, i.e. what a `hello` (connect or resync) refetches. Status and the inbox badge are always live. */
 export function visibleKeys(v: View): LoadKey[] {
-  const base: LoadKey[] = ["status", "inbox", "products"];
+  // The rail counts (needs you, dispatching, running) and the repo switcher are always live.
+  const base: LoadKey[] = ["status", "inbox", "products", "repos", "sessions", "dispatches"];
   switch (v.screen) {
     case "river": return [...base, "river"];
     case "inbox": return base;
-    case "runs": {
-      const k: LoadKey[] = [...base, "sessions"];
+    case "features": return [...base, "features", "panels"];
+    case "changes": return [...base, "changes"];
+    case "dispatches": return [...base, "grinds"];
+    case "activity": {
+      const k: LoadKey[] = [...base];
       if (v.sessionId) k.push("session", "stream");
-      if (v.runsTab === "dispatch") k.push("dispatches");
-      if (v.runsTab === "coordinators") k.push("coordinators");
-      if (v.runsTab === "grinds") k.push("grinds");
-      if (v.runsTab === "panels") k.push("panels");
+      if (v.tab === "coordinators") k.push("coordinators");
+      if (v.tab === "grinds") k.push("grinds");
+      if (v.tab === "panels") k.push("panels");
       return k;
     }
+    case "onboarding": return [...base, "settings"];
     case "releases": return [...base, "releases"];
     case "ops": return [...base, "ops"];
     case "me": return [...base, "me"];
@@ -42,7 +46,7 @@ export function refetchFor(topic: Topic, payload: unknown, v: View): LoadKey[] {
   switch (topic) {
     case "hello": visibleKeys(v).forEach((k) => out.add(k)); break;
     case "sessions": {
-      add("sessions", "river", "me");
+      add("sessions", "river", "me", "features", "changes");
       if (v.sessionId && p?.id === v.sessionId) {
         add("session");
         if (p.change === "stream" || p.change === "record") add("stream");
@@ -52,19 +56,19 @@ export function refetchFor(topic: Topic, payload: unknown, v: View): LoadKey[] {
     case "inbox": add("inbox"); break;
     case "products": {
       switch (p?.kind) {
-        case "snapshot": add("river", "ops", "releases", "products"); break;
+        case "snapshot": add("river", "ops", "releases", "products", "features", "changes"); break;
         case "registry": add("products", "repos", "river", "ops", "releases"); break;
         case "release": add("releases", "river"); break;
         case "grind": add("river", "grinds"); break;
-        case "review": add("panels"); break;
+        case "review": add("panels", "features"); break;
         case "blubird": add("blubird", "status"); break;
         case "coordinator": add("coordinators"); break;
-        case "prd": add("river", "products"); break;
+        case "prd": add("river", "products", "features"); break;
         default: add("river", "releases", "ops", "products", "blubird");
       }
       break;
     }
-    case "dispatch": add("dispatches"); break;
+    case "dispatch": add("dispatches", "features", "changes"); break;
     case "usage": {
       add("status");
       if (p?.kind === "settings") add("settings", "notify");
@@ -75,5 +79,5 @@ export function refetchFor(topic: Topic, payload: unknown, v: View): LoadKey[] {
   return [...out];
 }
 
-/** River and Me refetch debounced 1 s after a session event; everything else immediately. */
-export const DEBOUNCED: ReadonlySet<LoadKey> = new Set<LoadKey>(["river", "me"]);
+/** River, Me and the session list refetch debounced 1 s after a session event; everything else immediately. */
+export const DEBOUNCED: ReadonlySet<LoadKey> = new Set<LoadKey>(["river", "me", "sessions", "features", "changes"]);
