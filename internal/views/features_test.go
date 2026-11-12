@@ -2,6 +2,7 @@ package views
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -126,4 +127,27 @@ func (f fProductsPath) Products() []products.Product {
 		ps[i].Path = f.path
 	}
 	return ps
+}
+
+type fProductsRepos struct {
+	fProducts
+	repos []products.Repo
+}
+
+func (f fProductsRepos) Repos() []products.Repo { return f.repos }
+
+func TestChangesAreIssuesWithoutAnEpic(t *testing.T) {
+	f := newFx(t)
+	f.svc.d.Products = fProductsRepos{f.svc.d.Products.(fProducts), []products.Repo{{Slug: "acme/api"}, {Slug: "acme/docs"}, {Slug: "local/x"}}}
+	c := f.svc.Changes(context.Background(), "")
+	var got []string
+	for _, i := range c.Issues {
+		got = append(got, fmt.Sprintf("%d:%s", i.N, i.State))
+	}
+	if strings.Join(got, ",") != "12:unrefined,13:blocked,14:in_review,15:in_progress" {
+		t.Fatalf("%v", got)
+	}
+	if one := f.svc.Changes(context.Background(), "acme/docs"); len(one.Issues) != 0 {
+		t.Fatalf("docs repo has only the epic: %+v", one.Issues)
+	}
 }

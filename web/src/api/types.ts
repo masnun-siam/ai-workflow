@@ -111,7 +111,7 @@ export type IssueView = { number: number; title: string; url: string; state: str
   milestone: string | null; body_html: string; comment_count: number;
   comments: { author: string; created_at: ISO; body_html: string }[] };
 export type PRView = { number: number; title: string; url: string; state: "open"|"closed"|"merged"|"draft"; conflict: boolean;
-  head: string; base: string; head_sha: string; author: string; body_html: string;
+  head: string; base: string; head_sha: string; author: string; created_at: ISO; body_html: string; additions: number; deletions: number;
   files: { path: string; additions: number; deletions: number; status: string; patch: string | null; patch_cut?: boolean }[];
   commits: { sha: string; message: string; author: string }[];
   conversation: { kind: "comment" | "review"; author: string; at: ISO; state?: string; body_html: string }[];
@@ -255,3 +255,5 @@ export type Feature = {
   actions: Action[];
 };
 export type FeatureList = { product: Slug; stale: Slug[]; features: Feature[] };
+export type ChangesList = { stale: Slug[]; issues: FeatureIssue[]; pending: Feature["sessions"] };
+export type CleanupItem = { key: string; label: string; repo: string; flags: string[] };

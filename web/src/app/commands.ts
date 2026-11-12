@@ -1,4 +1,5 @@
 import { submitAnswers } from "../components/AskForm";
+import { workTarget } from "../components/WorkPanel";
 import { targetActions, targetId, targetRound } from "../components/Detail";
 import { emptyDraft } from "../state/answer";
 import { me } from "../state/data";
@@ -18,6 +19,7 @@ export const screenActionList = (): readonly Action[] => (route.value.screen ===
 export function closeTopLayer(): boolean {
   if (confirmReq.value) { confirmReq.value.resolve(false); return true; }
   if (repoOpen.value) { repoOpen.value = false; return true; }
+  if (workTarget.value) { workTarget.value = null; return true; }
   if (startReq.value) { startReq.value = null; return true; }
   if (createOpen.value) { createOpen.value = false; return true; }
   if (paletteOpen.value) { paletteOpen.value = false; return true; }

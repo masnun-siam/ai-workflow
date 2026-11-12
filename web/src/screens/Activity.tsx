@@ -1,4 +1,7 @@
+import { useEffect, useRef, useState } from "preact/hooks";
 import { http } from "../api/http";
+import type { CleanupItem } from "../api/types";
+import { useFocusTrap } from "../components/ui";
 import { activityTab, coordinators, grinds, inScope, mutate, panels, sessionList, type ActivityTab } from "../state/data";
 import { activityQuery, activityResult, RUNNING, runList } from "../state/select";
 import { askConfirm, detailOpen, sel, setSel } from "../state/ui";
@@ -7,6 +10,37 @@ import { ago, fmtCost, fmtDur, shortRepo } from "../state/format";
 import { Header } from "../components/Header";
 import { statusTone } from "../components/SessionView";
 import { Btn, Chips, Empty, Pane, Tag } from "../components/ui";
+
+/** Clean up old (old aiw): finished sessions to remove; ones with unsaved work start unticked. */
+function CleanupDialog({ onClose }: { onClose: () => void }) {
+  const [items, setItems] = useState<CleanupItem[] | null>(null);
+  const [keep, setKeep] = useState<Set<string>>(new Set());
+  const box = useRef<HTMLDivElement>(null);
+  useFocusTrap(box);
+  useEffect(() => { void http.get<{ items: CleanupItem[] }>("/api/sessions/cleanup").then((r) => { setItems(r.items); setKeep(new Set(r.items.filter((i) => i.flags.length).map((i) => i.key))); }, () => setItems([])); }, []);
+  const chosen = (items ?? []).filter((i) => !keep.has(i.key));
+  const toggle = (k: string) => { const s = new Set(keep); if (s.has(k)) s.delete(k); else s.add(k); setKeep(s); };
+  return (
+    <div class="ov" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div class="dlg" ref={box} role="dialog" aria-modal="true" aria-labelledby="clean-h"><div class="form">
+        <h2 id="clean-h" class="dlg-h">Clean up old sessions</h2>
+        <span class="dim">Removes the session records and logs from setu. Checkouts and branches are not touched. Ones with unsaved work start unticked.</span>
+        {!items && <span class="dim">Loading…</span>}
+        {items && !items.length && <span class="dim">Nothing to clean up.</span>}
+        <div class="picker-list tall">{(items ?? []).map((i) => (
+          <label key={i.key} class="opt inline"><input type="checkbox" checked={!keep.has(i.key)} onChange={() => toggle(i.key)} />
+            <span><b>{i.label}</b> <span class="dim">{shortRepo(i.repo)}</span>{i.flags.map((f) => <span key={f} class="tag c-w"> {f}</span>)}</span></label>
+        ))}</div>
+        <div class="acts">
+          <Btn primary bad disabled={!chosen.length} onClick={async () => {
+            if (await mutate(() => http.send("POST", "/api/sessions/cleanup", { keys: chosen.map((i) => i.key) }), `Removed ${chosen.length} sessions`, ["sessions"])) onClose();
+          }}>Remove {chosen.length} sessions</Btn>
+          <Btn onClick={onClose}>Cancel</Btn>
+        </div>
+      </div></div>
+    </div>
+  );
+}
 
 const TABS: [ActivityTab, string][] = [["sessions", "Sessions"], ["coordinators", "Coordinators"], ["grinds", "Grinds"], ["panels", "Peer review"]];
 const RESULTS: ["all" | "done" | "failed" | "stopped", string][] = [["all", "All"], ["done", "Done"], ["failed", "Failed"], ["stopped", "Stopped"]];
@@ -60,10 +94,14 @@ function Sessions() {
 
 export function Activity() {
   const tab = activityTab.value;
+  const [clean, setClean] = useState(false);
   const st = sessionList.value?.stats;
   return (
     <>
-      <Header title="Activity" scope sub={st ? `${fmtCost(st.today_cost)} today · ${fmtCost(st.month_cost)} this month` : undefined} />
+      <Header title="Activity" scope sub={st ? `${fmtCost(st.today_cost)} today · ${fmtCost(st.month_cost)} this month` : undefined}>
+        <Btn onClick={() => setClean(true)}>Clean up old</Btn>
+      </Header>
+      {clean && <CleanupDialog onClose={() => setClean(false)} />}
       <Chips label="Activity view" value={tab} options={TABS} onPick={(t) => (activityTab.value = t)} />
       {tab === "sessions" && <><Live /><Sessions /></>}
       {tab === "coordinators" && (

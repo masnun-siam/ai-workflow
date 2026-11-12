@@ -55,7 +55,7 @@ function limitNote(label: string): string {
   return t && t * 1000 > Date.now() ? `limited until ${clock(t)}` : "";
 }
 
-function AccountPick({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function AccountPick({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const list = settings.value?.commands ?? [];
   if (list.length < 2) return null;
   const def = settings.value?.default ?? list[0]?.label ?? "";

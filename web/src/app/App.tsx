@@ -2,6 +2,7 @@ import { useEffect, useRef } from "preact/hooks";
 import { Detail } from "../components/Detail";
 import { ConfirmDialog, Help, Palette, Toast } from "../components/Overlays";
 import { CreateDialog, StartDialog } from "../components/Start";
+import { interceptGitHubLinks, WorkPanel, workTarget } from "../components/WorkPanel";
 import { Btn, useFocusTrap } from "../components/ui";
 import type { ComponentChildren } from "preact";
 import { Inbox } from "../screens/Inbox";
@@ -105,10 +106,12 @@ export function App() {
     applyPrefs(prefs.peek());
     const stopRoute = startRouter();
     const stopSse = startRealtime();
+    const stopLinks = interceptGitHubLinks();
     void load("registry"); void load("settings");
-    return () => { stopRoute(); stopSse(); };
+    return () => { stopRoute(); stopSse(); stopLinks(); };
   }, []);
-  useEffect(() => { detailOpen.value = false; repoOpen.value = false; void loadMany(visibleKeys(currentView())); }, [r.screen, r.id, activityTab.value]);
+  useEffect(() => { detailOpen.value = false; repoOpen.value = false; workTarget.value = null; void loadMany(visibleKeys(currentView())); }, [r.screen, r.id, activityTab.value]);
+  useEffect(() => { if (r.screen === "changes") void load("changes"); }, [r.query.only]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
@@ -117,7 +120,7 @@ export function App() {
         { key: e.key, meta: e.metaKey, ctrl: e.ctrlKey, alt: e.altKey, typing },
         {
           screen: route.value.screen,
-          overlay: !!confirmReq.value || !!startReq.value || paletteOpen.value || helpOpen.value || repoOpen.value || createOpen.value,
+          overlay: !!confirmReq.value || !!startReq.value || paletteOpen.value || helpOpen.value || repoOpen.value || createOpen.value || !!workTarget.value,
           actions: [...targetActions(currentTarget.value), ...screenActionList()],
           quickOptions: quickCount.value,
           nav: hasList(route.value.screen),
@@ -155,6 +158,7 @@ export function App() {
       {paletteOpen.value && <Palette />}
       {startReq.value && <StartDialog />}
       {createOpen.value && <CreateDialog />}
+      {workTarget.value && <WorkPanel />}
       {helpOpen.value && <Help />}
       {confirmReq.value && <ConfirmDialog />}
       <Toast />

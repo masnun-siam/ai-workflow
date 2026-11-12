@@ -10,6 +10,10 @@
 - Features is back: every PRD as a strip with its stage ticks, issue bar and next step, in the bays Stopped on you, Waiting for your go and Running on their own, plus a collapsed shipped list. Next steps run from the strip: start a peer review, approve, create tasks, refine N, merge PRs, run the epic, close the epic. New endpoint `GET /api/features`.
 - The feature page is back (`#/features/<slug>`): a build map of the epic's issues, and tabs (`[` `]`) for Issues (buckets, row actions, pick and refine, add a task), PRD (read, edit with save and commit, ask Claude to change it), Peer review (run a panel with lenses, re-run or drop a lens, more rounds or approve at the cap) and Sessions. `PUT /api/prd` saves an edit and commits only that file; it refuses when the file changed since you opened it.
 - Run epic opens Dispatches with the epic filled in (`?new=`).
+- Small changes is back: open issues outside any epic, a priority by state matrix, Ready to run with pick and **Run N as a dispatch** (1–30, no feature branch), Needs refining, every issue with a filter, and the runs still filing one. New endpoint `GET /api/changes`.
+- Dispatches is a table again, and each dispatch has its page (`#/dispatches/<id>`): Settings, Pause (after the running issues, or now), Resume, Cancel, a progress bar, lanes in Needs you / Building now / Up next / Done, the activity feed, the end actions, and a lane panel with a message box and the lane actions. New dispatch has every setting again (grind, CI, at most at once, cost cap, auto-merge, skip approval, base branch from GitHub, feature branch, model, effort, account) and a preview with waves and warnings.
+- The issue / PR side panel is back: any GitHub issue or PR link of a registered repo opens it. Issues: refine, close as completed or not planned, reopen, comments. PRs: merge (warns on conflicts, failing or running checks, drafts), close, reopen, checks, files, conversation, the grind card. Both take a comment.
+- Activity has **Clean up old** again: pick finished sessions to remove; ones with unsaved work start unticked.
 
 ## setu 1.0.0
 

@@ -45,6 +45,9 @@ func Routes(s *Service) []server.Route {
 			}
 			return http.StatusOK, s.Features(r.Context(), p), nil
 		})},
+		{Pattern: "GET /api/changes", Handler: server.Handle(func(r *http.Request) (int, any, error) {
+			return http.StatusOK, s.Changes(r.Context(), r.URL.Query().Get("repo")), nil
+		})},
 		{Pattern: "GET /api/me", Handler: server.Handle(func(r *http.Request) (int, any, error) {
 			return http.StatusOK, s.Me(r.Context()), nil
 		})},

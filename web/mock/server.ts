@@ -83,7 +83,13 @@ const routes: [string, RegExp, H][] = [
     if (body.step === "create-prd" && String(body.args).includes("approve")) { db.river.stages[0]!.cards = db.river.stages[0]!.cards.filter((c) => c.id !== "prd:pay"); db.inbox = db.inbox.filter((i) => i.type !== "prd_approval"); emit("inbox", { count: 1 }); }
     return startSession(body);
   }],
-  ["GET", /^\/api\/sessions\/cleanup$/, () => ({ items: [] })],
+  ["GET", /^\/api\/sessions\/cleanup$/, () => ({ items: [{ key: F.sessions[3]!.id, label: "Release PR #1040", repo: "acme/wasensi-backend", flags: [] }, { key: F.sessions[4]!.id, label: "#1044 CSV drops VAT", repo: "acme/wasensi-backend", flags: ["uncommitted"] }] })],
+  ["POST", /^\/api\/sessions\/cleanup$/, ({ body }) => ({ removed: body.keys })],
+  ["GET", /^\/api\/changes$/, () => F.changesList],
+  ["GET", /^\/api\/issues\/([^/]+)\/([^/]+)\/(\d+)$/, () => F.issueView],
+  ["GET", /^\/api\/pulls\/([^/]+)\/([^/]+)\/(\d+)$/, () => F.prView],
+  ["POST", /^\/api\/(issues|pulls)\/([^/]+)\/([^/]+)\/(\d+)\/(comment|state|merge)$/, () => ({ ok: true })],
+  ["GET", /^\/api\/repos\/([^/]+)\/([^/]+)\/branches$/, () => ({ branches: ["main", "staging"], default: "main" })],
   ["GET", /^\/api\/sessions\/([^/]+)$/, ({ m }) => sess(m[1]!) ?? fail(404, "not found")],
   ["GET", /^\/api\/sessions\/([^/]+)\/stream$/, ({ m, q }) => {
     const ev = F.transcripts[m[1]!] ?? [{ kind: "text" as const, text: "Working on it." }];

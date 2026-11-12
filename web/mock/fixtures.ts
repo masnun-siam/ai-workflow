@@ -1,7 +1,7 @@
 // Mock data for `npm run dev:mock` and the smoke tests. Typed by src/api/types.ts.
 import type {
   Action, Card, Coordinator, Dispatch, InboxItem, Me, NotifySettings, Ops, Panel, Product, Release, ReleaseRepo,
-  Repo, ReviewConfig, River, Round, Session, Settings, Status, TranscriptEvent, GrindStatus, AccountUsage, Away, PRD, FeatureIssue, FeatureList,
+  Repo, ReviewConfig, River, Round, Session, Settings, Status, TranscriptEvent, GrindStatus, AccountUsage, Away, PRD, FeatureIssue, FeatureList, ChangesList, IssueView, PRView,
 } from "../src/api/types";
 import type { RegistryStep } from "../src/api/extra";
 
@@ -170,6 +170,7 @@ export const dispatches: Dispatch[] = [{
     { key: "acme/wasensi-backend#943", repo: "acme/wasensi-backend", n: 943, title: "Cache reader", deps: ["acme/wasensi-backend#942"], stage: "queued", pr: null, needs_you: null, held: null, gate: "blocked by #942", skip_reason: null, paused: false, paused_by: null, hold_merge: false, limited_until: null, started_at: null, ended_at: null, session: null, usage: { cost: 0, tokens: null, seconds: 0 } },
   ],
   totals: { lanes: 2, closed: 0, cost: 1.1 }, created_at: Math.floor(now / 1000) - 900, ended_at: null,
+  events: [{ at: Math.floor(now / 1000) - 880, lane: null, kind: "start", text: "dispatch started: 2 issues, 3 at most" }, { at: Math.floor(now / 1000) - 870, lane: "acme/wasensi-backend#942", kind: "start", text: "implement-issue started" }],
 }];
 export const coordinators: Coordinator[] = [{ run: "20261112-coord", repo: "acme/bop-bd", source: "label:payments", destination: "staging", session: SID(4), live: true,
   queue: [{ issue: 455, state: "ok", title: "phpstan" }, { issue: 461, state: "blocked:#455", title: "Rate cache" }], claims: [455], prs: {}, poll: { calls: 12, last: Math.floor(now / 1000), result: "ok", every: 60 }, events: ["#455 verifying", "#458 PR open"] }];
@@ -254,3 +255,18 @@ export const featureList: FeatureList = { product: PRODUCT, stale: [], features:
   { product: PRODUCT, slug: "login", title: "Passwordless login", status: "Done", path: "docs/prds/login.md", module: null, prd_route: `#/prd?repo=${PRODUCT}&path=docs/prds/login.md`,
     stage: "shipped", bay: "shipped", next: "Shipped.", epic: null, issues: [], done: [], counts: counts([], 0), panel: null, dispatch: null, live: 0, sessions: [], actions: [readPrd("docs/prds/login.md")] },
 ] };
+
+export const changesList: ChangesList = { stale: [], pending: [], issues: [
+  fi(1044, "CSV export drops the VAT column", "unrefined", { bug: true, priority: "P1", actions: [start("e", "Refine", "refine-issues", "1044", "acme/wasensi-backend")] }),
+  fi(1051, "Typo on the payouts page", "ready", { priority: "P3", actions: [start("i", "Start", "implement-issue", "1051", "acme/wasensi-backend", { primary: true })] }),
+  fi(1052, "Retry webhook on 502", "ready", { priority: "P2", actions: [start("i", "Start", "implement-issue", "1052", "acme/wasensi-backend", { primary: true })] }),
+  fi(1053, "Rename the settings tab", "in_review", { pr: { n: 1060, url: "https://github.com/acme/wasensi-backend/pull/1060", draft: false, ci: "pending", review: "none", conflict: false, sha: "b".repeat(40) } }),
+] };
+export const issueView: IssueView = { number: 1044, title: "CSV export drops the VAT column", url: "https://github.com/acme/wasensi-backend/issues/1044", state: "OPEN", state_reason: null, is_pr: false, merged: false,
+  author: "ashique", created_at: "2026-11-10T10:00:00Z", labels: [{ name: "bug", color: "d73a4a" }], assignees: [], milestone: null, body_html: "<p>Exports since Monday lack the <code>vat</code> column.</p>", comment_count: 1,
+  comments: [{ author: "najmul", created_at: "2026-11-11T10:00:00Z", body_html: "<p>Seen on the XLSX too.</p>" }] };
+export const prView: PRView = { number: 1060, title: "Rename the settings tab", url: "https://github.com/acme/wasensi-backend/pull/1060", state: "open", conflict: false, head: "issue-1053-rename", base: "staging",
+  head_sha: "b".repeat(40), author: "setu-bot", created_at: "2026-11-12T08:00:00Z", body_html: "<p>Closes #1053.</p>", additions: 12, deletions: 4,
+  files: [{ path: "web/src/settings.tsx", additions: 12, deletions: 4, status: "modified", patch: null }], commits: [{ sha: "b".repeat(40), message: "rename", author: "setu-bot" }],
+  conversation: [{ kind: "review", author: "copilot", at: "2026-11-12T08:30:00Z", state: "COMMENTED", body_html: "<p>Looks fine.</p>" }],
+  checks: [{ name: "test", bucket: "pending", link: "https://github.com/acme/wasensi-backend/actions/runs/1" }, { name: "lint", bucket: "green", link: "https://github.com/acme/wasensi-backend/actions/runs/2" }] };

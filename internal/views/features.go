@@ -374,6 +374,9 @@ func (s *Service) featureIssue(k found, prOf map[string]poller.OpenPR, latest ma
 	case fi.PR != nil && !fi.PR.Draft:
 		fi.State = "in_review"
 		fi.Actions = append(fi.Actions, inbox.Open("p", "Open PR", fi.PR.URL))
+	case fi.PR != nil && fi.PR.Draft:
+		fi.State = "in_progress"
+		fi.Actions = append(fi.Actions, inbox.Open("p", "Open draft PR", fi.PR.URL))
 	case hasRec && rec.Status == sessions.StFailed:
 		fi.State = "failed"
 		fi.Actions = append(fi.Actions, inbox.Post("r", "Retry", "/api/sessions/"+rec.ID+"/rerun", "Retrying", nil).WithPrimary())

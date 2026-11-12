@@ -30,7 +30,7 @@ export function parseHash(hash: string): Route {
   if (seg[0] === "sessions" && seg[1]) return { screen: "activity", id: decodeURIComponent(seg[1]), query };
   if (seg[0] === "prd") return { screen: "prd", query };
   if (seg[0] === "onboarding") return { screen: "onboarding", query };
-  if (seg[0] === "features" && seg[1]) return { screen: "features", id: decodeURIComponent(seg[1]), query };
+  if ((seg[0] === "features" || seg[0] === "dispatches") && seg[1]) return { screen: seg[0], id: decodeURIComponent(seg[1]), query };
   if (seg[0] && IDS.has(seg[0])) return { screen: seg[0] as ScreenId, query };
   if (seg[0] && ALIASES[seg[0]]) return { screen: ALIASES[seg[0]]!, query };
   return { screen: "inbox", query };

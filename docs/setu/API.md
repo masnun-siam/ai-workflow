@@ -716,6 +716,7 @@ Guard 1 always applies to `implement-issue` and `pr-grind` (S§5.4), even withou
 | GET | `/api/river?product=<docs slug>` | — | `River` (marks the product's repos viewed) | 200; 400 unknown product |
 | GET | `/api/inbox?product=&repo=` | — | `InboxList` (marks viewed `*`) | 200 |
 | GET | `/api/features?product=` | — | `FeatureList`: per PRD the stage (draft, review, approved, tasks, building, shipped), bay (you, go, running, shipped), next-step line and actions, epic, its open issues (state and row actions) and closed ones, counts, newest panel on the PRD file, the dispatch owning the epic, sessions. Sorted by bay | 200; 400 unknown product |
+| GET | `/api/changes?repo=` | — | `{stale, issues: FeatureIssue[], pending: FeatureSession[]}`: open issues that belong to no epic in every registered repo (or one), with feature-issue states and row actions; `pending` = live `small-change` runs | 200 |
 | GET | `/api/ops?product=` | — | `Ops` | 200 |
 | GET | `/api/me` | — | `Me` | 200 |
 

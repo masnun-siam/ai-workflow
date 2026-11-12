@@ -39,8 +39,8 @@ a repo filter (`?only=owner/name`, default All repos). With no repo registered, 
 |---|---|---|
 | 1 | Inbox | everything waiting on you across your repos, ranked by urgency |
 | 2 | Features | every PRD with its stage, issues and next step; a feature page per PRD (issues, PRD edit, peer review, sessions) |
-| 3 | Small changes | file a small change (the list returns in a later phase) |
-| 4 | Dispatches | dispatches with All / Needs you / Live / Finished, and Run an epic |
+| 3 | Small changes | issues outside any epic: what stands where, pick ready ones and run them as a dispatch |
+| 4 | Dispatches | dispatches with All / Needs you / Live / Finished, Run an epic, and a page per dispatch with its lanes |
 | 5 | Activity | live sessions, run history with search and result filter, coordinators, grinds, peer review |
 | 6 | River | the pipeline by stage, with the cards in each |
 | 7 | Releases | the release flow: cut, grind, merge, notify |
