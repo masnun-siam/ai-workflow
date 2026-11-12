@@ -107,6 +107,8 @@ const routes: [string, RegExp, H][] = [
   ["POST", /^\/api\/products$/, ({ body }) => { const p = { docs_repo: "acme/new-docs", name: "New", path: body.path, repos: [] }; db.products.push(p); return json(p, 201); }],
   ["DELETE", /^\/api\/products\/([^/]+)\/([^/]+)$/, ({ m }) => { db.products = db.products.filter((p) => p.docs_repo !== `${m[1]}/${m[2]}`); return { products: db.products }; }],
   ["GET", /^\/api\/prd$/, () => F.prdFile],
+  ["PUT", /^\/api\/prd$/, ({ body }) => (body.base_sha !== F.prdFile.sha ? fail(409, "the PRD changed since you opened it: reload it and edit again") : Object.assign(F.prdFile, { text: body.text, sha: "def" + Date.now() }))],
+  ["GET", /^\/api\/features$/, ({ q }) => (q.get("product") === F.PRODUCT ? F.featureList : { product: q.get("product"), stale: [], features: [] })],
   ["GET", /^\/api\/products\/([^/]+)\/([^/]+)\/prds$/, ({ m }) => ({ prds: F.prds.filter((p) => p.product === `${m[1]}/${m[2]}`) })],
   ["POST", /^\/api\/refresh$/, () => json({ ok: true }, 202)],
   ["GET", /^\/api\/river$/, () => db.river],

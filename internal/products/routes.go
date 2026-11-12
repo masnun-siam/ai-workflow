@@ -235,5 +235,21 @@ func Routes(d Deps) []server.Route {
 			f, err := reg.ReadPRD(repo, path)
 			return 0, f, err
 		}),
+		h("PUT /api/prd", func(r *http.Request) (int, any, error) {
+			var in struct {
+				Repo    string `json:"repo"`
+				Path    string `json:"path"`
+				Text    string `json:"text"`
+				BaseSHA string `json:"base_sha"`
+			}
+			if err := server.Decode(r, &in); err != nil {
+				return 0, nil, err
+			}
+			if !slugRe.MatchString(in.Repo) {
+				return 0, nil, errs.Invalid("repo must look like owner/repo")
+			}
+			f, err := reg.SavePRD(r.Context(), in.Repo, in.Path, in.Text, in.BaseSHA)
+			return 0, f, err
+		}),
 	}
 }

@@ -5,7 +5,7 @@ import { me } from "../state/data";
 import { exec } from "../state/exec";
 import type { Cmd } from "../state/keymap";
 import { LAYOUTS, LOOKS, MODES, next, prefs, setPref } from "../state/prefs";
-import { goScreen, nav, route } from "../state/route";
+import { goScreen, nav, route, setParam } from "../state/route";
 import { currentTarget, hasList, listLength, inboxItems, stages } from "../state/select";
 import { clamp, confirmReq, createOpen, detailOpen, helpOpen, openCreate, paletteOpen, repoOpen, sel, setSel, startReq, toast } from "../state/ui";
 import { releaseKey } from "../screens/Releases";
@@ -75,6 +75,12 @@ export function runCommand(c: Cmd): void {
     case "screen": {
       if (screen === "releases") { releaseKey(c.key); return; }
       if (screen === "me") { const a = me.value?.actions.find((x) => x.key === c.key); if (a) void exec(a); return; }
+      if (screen === "features" && route.value.id && (c.key === "[" || c.key === "]")) {
+        const tabs = ["issues", "prd", "review", "sessions"];
+        const cur = Math.max(0, tabs.indexOf(route.value.query.tab ?? ""));
+        setParam("tab", tabs[(cur + (c.key === "]" ? 1 : tabs.length - 1)) % tabs.length]!, true);
+        return;
+      }
       if (screen === "settings") { if (c.key === "u") void runBlubird("update"); else if (c.key === "i") void runBlubird("install"); }
       return;
     }

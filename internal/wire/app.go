@@ -247,7 +247,7 @@ func Build(ctx context.Context, h *home.Home, bus *events.Bus, version, binDir s
 	views_ = views.New(views.Deps{
 		Inbox: a.Inbox, Sessions: a.Sessions, Snapshots: a.Poller, Products: a.Products, Prompts: reg,
 		Grinds: inboxGrinds{grindSv}, Dispatch: viewDispatch{inboxDispatch{disp}, disp},
-		Releases: inboxReleases{a.Release}, Accounts: a.Settings, Usage: a.Usage, Blubird: a.Blubird, GH: a.Auth,
+		Releases: inboxReleases{a.Release}, Panels: inboxPanels{revSvc}, Accounts: a.Settings, Usage: a.Usage, Blubird: a.Blubird, GH: a.Auth,
 		Away: inboxAway{a.Away}, Poller: a.Poller, Home: h, Version: version,
 		BootID:      func() string { return a.bootID() },
 		NoteChannel: func() string { return a.Settings.Get().ReleaseNote.ChannelName },

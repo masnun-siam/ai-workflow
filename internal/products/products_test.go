@@ -875,3 +875,40 @@ func TestBrowseForbiddenWhenNotLocal(t *testing.T) {
 		t.Fatalf("%d %s", w.Code, w.Body)
 	}
 }
+
+func TestSavePRDCommitsOnlyThatFile(t *testing.T) {
+	r, ws, _ := setup(t)
+	write(t, os.Getenv("GIT_CONFIG_GLOBAL"), "[user]\n\tname = t\n\temail = t@t\n[commit]\n\tgpgsign = false\n")
+	docs, _ := product(t, ws)
+	write(t, filepath.Join(docs, "docs/prds/checkout/flow.md"), prdA)
+	run(t, docs, "add", ".")
+	run(t, docs, "commit", "-q", "-m", "prd")
+	write(t, filepath.Join(docs, "other.txt"), "staged but not part of the edit")
+	run(t, docs, "add", "other.txt")
+	r.Register(context.Background(), docs)
+	ctx := context.Background()
+
+	f, err := r.ReadPRD("acme/shop-wiki", "docs/prds/checkout/flow.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.SavePRD(ctx, "acme/shop-wiki", f.Path, "x", "0000000000000000000000000000000000000000"); errs.KindOf(err) != errs.KConflict {
+		t.Fatalf("stale base accepted: %v", err)
+	}
+	got, err := r.SavePRD(ctx, "acme/shop-wiki", f.Path, prdA+"\nMore.\n", f.Sha)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Sha == f.Sha || !strings.HasSuffix(got.Text, "More.\n") {
+		t.Fatalf("%+v", got)
+	}
+	if files := run(t, docs, "show", "--name-only", "--format=", "HEAD"); files != "docs/prds/checkout/flow.md" {
+		t.Fatalf("commit touched %q", files)
+	}
+	if st := run(t, docs, "status", "--porcelain"); st != "A  other.txt" {
+		t.Fatalf("index changed: %q", st)
+	}
+	if _, err := r.SavePRD(ctx, "acme/shop-wiki", "docs/prds/../x.md", "x", got.Sha); errs.KindOf(err) != errs.KInvalid {
+		t.Fatal(err)
+	}
+}

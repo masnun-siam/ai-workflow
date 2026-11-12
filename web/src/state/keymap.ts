@@ -66,7 +66,7 @@ export const HINTS: Record<string, [string, string][]> = {
   inbox: [["j/k", "move"], ["⏎", "open"], ["a/b/c", "answer"]],
   activity: [["j/k", "move"], ["⏎", "open"]],
   dispatches: [],
-  features: [],
+  features: [["[ ]", "tab (feature page)"]],
   changes: [],
   releases: [["c", "cut"], ["y", "dry run"], ["g", "grind"], ["n", "note"], ["p", "post"], ["e", "edit"]],
   ops: [["j/k", "move"], ["⏎", "run"]],

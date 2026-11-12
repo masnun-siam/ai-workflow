@@ -2,7 +2,7 @@ import { signal, computed } from "@preact/signals";
 import { http } from "../api/http";
 import type { RegistryStep, SessionList } from "../api/extra";
 import type {
-  Coordinator, Dispatch, GrindStatus, InboxList, Me, NotifySettings, Ops, Panel, Product, Repo, ReleaseRepo,
+  Coordinator, Dispatch, FeatureList, GrindStatus, InboxList, Me, NotifySettings, Ops, Panel, Product, Repo, ReleaseRepo,
   Release, ReviewConfig, River, Settings, Status, Transcript, TranscriptEvent, Session, Blubird, Slug,
 } from "../api/types";
 import type { LoadKey, View } from "./refetch";
@@ -31,6 +31,8 @@ export const coordinators = signal<Coordinator[] | null>(null);
 export const grinds = signal<GrindStatus[] | null>(null);
 export const panels = signal<Panel[] | null>(null);
 export const registry = signal<RegistryStep[]>([]);
+/** Features of every product (old aiw opened Features on all repos; the page filters by `?only=`). */
+export const features = signal<FeatureList[] | null>(null);
 export const loadErrors = signal<Record<string, string>>({});
 export type ActivityTab = "sessions" | "coordinators" | "grinds" | "panels";
 export const activityTab = signal<ActivityTab>("sessions");
@@ -112,6 +114,10 @@ const loaders: Record<LoadKey, Loader> = {
   grinds: async () => (grinds.value = (await http.get<{ grinds: GrindStatus[] }>("/api/grinds")).grinds),
   panels: async () => (panels.value = (await http.get<{ panels: Panel[] }>("/api/review")).panels),
   registry: async () => (registry.value = (await http.get<{ steps: RegistryStep[] }>("/api/registry")).steps),
+  features: async () => {
+    const ps = products.value ?? (await http.get<{ products: Product[] }>("/api/products")).products;
+    features.value = await Promise.all(ps.map((p) => http.get<FeatureList>(`/api/features?product=${encodeURIComponent(p.docs_repo)}`)));
+  },
 };
 
 const MAX_EVENTS = 1500; // bounded buffer: older transcript lines are dropped from memory

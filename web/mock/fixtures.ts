@@ -1,7 +1,7 @@
 // Mock data for `npm run dev:mock` and the smoke tests. Typed by src/api/types.ts.
 import type {
   Action, Card, Coordinator, Dispatch, InboxItem, Me, NotifySettings, Ops, Panel, Product, Release, ReleaseRepo,
-  Repo, ReviewConfig, River, Round, Session, Settings, Status, TranscriptEvent, GrindStatus, AccountUsage, Away, PRD,
+  Repo, ReviewConfig, River, Round, Session, Settings, Status, TranscriptEvent, GrindStatus, AccountUsage, Away, PRD, FeatureIssue, FeatureList,
 } from "../src/api/types";
 import type { RegistryStep } from "../src/api/extra";
 
@@ -220,3 +220,37 @@ export const prds: PRD[] = [
   { product: PRODUCT, module: "cache", slug: "rates", title: "Rate cache", status: "Approved", path: "docs/prds/cache/rates.md", label: "cache/rates", epic: "acme/wasensi-backend#941" },
   { product: PRODUCT, module: null, slug: "login", title: "Passwordless login", status: "Done", path: "docs/prds/login.md", label: "login", epic: "acme/wasensi-backend#800" },
 ];
+
+// ---------- features ----------
+const fi = (n: number, title: string, state: FeatureIssue["state"], extra: Partial<FeatureIssue> = {}): FeatureIssue => ({
+  key: `acme/wasensi-backend#${n}`, repo: "acme/wasensi-backend", n, title, url: `https://github.com/acme/wasensi-backend/issues/${n}`, state,
+  refined: state !== "unrefined", bug: false, blockers: [], priority: null, pr: null, session: null, actions: [], ...extra });
+const readPrd = (path: string): Action => ({ key: "r", label: "Read PRD", method: "POST", path: "/api/noop", toast: "", open: `#/prd?repo=${PRODUCT}&path=${path}` });
+const counts = (issues: FeatureIssue[], done: number) => ({
+  open: issues.length, unrefined: issues.filter((i) => i.state === "unrefined").length, ready: issues.filter((i) => i.state === "ready").length,
+  review: issues.filter((i) => ["in_review", "conflict", "ci_failed"].includes(i.state)).length, mergeable: issues.filter((i) => i.state === "mergeable").length, done });
+const rateIssues = [
+  fi(942, "Cache table", "mergeable", { pr: { n: 1050, url: "https://github.com/acme/wasensi-backend/pull/1050", draft: false, ci: "success", review: "approved", conflict: false, sha: "a".repeat(40) },
+    actions: [{ key: "m", label: "Merge #1050", method: "POST", path: "/api/pulls/acme/wasensi-backend/1050/merge", body: { sha: "a".repeat(40) }, toast: "Merged #1050", confirm: "Merge PR #1050 into its base now?" }] }),
+  fi(943, "Cache reader", "in_progress", { session: SID(2), actions: [{ key: "w", label: "Watch", method: "POST", path: "/api/noop", toast: "", open: `#/sessions/${SID(2)}` }] }),
+  fi(944, "Invalidate on rate change", "ready", { actions: [start("i", "Start", "implement-issue", "944", "acme/wasensi-backend", { primary: true })] }),
+  fi(945, "Metrics for hit rate", "blocked", { blockers: ["#943"] }),
+  fi(946, "Admin toggle", "unrefined", { actions: [start("e", "Refine", "refine-issues", "946", "acme/wasensi-backend")] }),
+];
+export const featureList: FeatureList = { product: PRODUCT, stale: [], features: [
+  { product: PRODUCT, slug: "rates", title: "Rate cache", status: "Approved", path: "docs/prds/cache/rates.md", module: "cache", prd_route: `#/prd?repo=${PRODUCT}&path=docs/prds/cache/rates.md`,
+    stage: "building", bay: "you", next: "1 ready to merge.", epic: { key: "acme/wasensi-backend#941", repo: "acme/wasensi-backend", n: 941, title: "Rate cache", url: "https://github.com/acme/wasensi-backend/issues/941" },
+    issues: rateIssues, done: [{ key: "acme/wasensi-backend#940", n: 940, title: "Spike: cache store", url: "https://github.com/acme/wasensi-backend/issues/940" }], counts: counts(rateIssues, 1),
+    panel: null, dispatch: null, live: 1, sessions: [{ id: SID(2), status: "running", skill: "blubird:implement-issue", title: "#943 Cache reader", started_at: "2026-11-12T08:00:00Z", cost: 2.3 }],
+    actions: [rateIssues[0]!.actions[0]!, { key: "d", label: "Run epic", method: "POST", path: "/api/noop", toast: "", open: "#/dispatches?new=acme%2Fwasensi-backend%23941" }, readPrd("docs/prds/cache/rates.md")] },
+  { product: PRODUCT, slug: "batches", title: "Merchant payouts v2", status: "In review", path: "docs/prds/payouts/batches.md", module: "payouts", prd_route: `#/prd?repo=${PRODUCT}&path=docs/prds/payouts/batches.md`,
+    stage: "review", bay: "running", next: "Peer review round 1 of 3: 1 of 2 lenses approve.", epic: null, issues: [], done: [], counts: counts([], 0),
+    panel: { id: "p-20261112T090000Z-abcdef", repo: PRODUCT, artifact: "/code/wasensi-docs/docs/prds/payouts/batches.md", state: "running", round: 1, max_rounds: 3, root_session: SID(1), status: { approved: 1, total: 2 } },
+    dispatch: null, live: 0, sessions: [], actions: [{ key: "v", label: "Watch review", method: "POST", path: "/api/noop", toast: "", open: `#/features/batches?product=${PRODUCT}&tab=review` }, readPrd("docs/prds/payouts/batches.md")] },
+  { product: PRODUCT, slug: "recheck", title: "KYC re-check", status: "Draft", path: "docs/prds/kyc/recheck.md", module: "kyc", prd_route: `#/prd?repo=${PRODUCT}&path=docs/prds/kyc/recheck.md`,
+    stage: "draft", bay: "go", next: "Draft. Run a peer review, or approve it as it is.", epic: null, issues: [], done: [], counts: counts([], 0), panel: null, dispatch: null, live: 0, sessions: [],
+    actions: [{ key: "v", label: "Start peer review", method: "POST", path: "/api/noop", toast: "", primary: true, open: `#/features/recheck?product=${PRODUCT}&tab=review` },
+      { ...start("p", "Approve without review", "create-prd", "docs/prds/kyc/recheck.md — the team has reviewed it; approve it", PRODUCT), confirm: "Approve this PRD and create its epic?" }, readPrd("docs/prds/kyc/recheck.md")] },
+  { product: PRODUCT, slug: "login", title: "Passwordless login", status: "Done", path: "docs/prds/login.md", module: null, prd_route: `#/prd?repo=${PRODUCT}&path=docs/prds/login.md`,
+    stage: "shipped", bay: "shipped", next: "Shipped.", epic: null, issues: [], done: [], counts: counts([], 0), panel: null, dispatch: null, live: 0, sessions: [], actions: [readPrd("docs/prds/login.md")] },
+] };

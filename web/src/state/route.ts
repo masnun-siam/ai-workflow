@@ -20,7 +20,7 @@ const IDS = new Set<string>(SCREENS.map((s) => s[0]));
 /** Old hashes that moved: the Runs screen split into Dispatches and Activity. */
 const ALIASES: Record<string, ScreenId> = { runs: "activity", issues: "changes" };
 
-/** `#/inbox?only=o/r`, `#/sessions/<id>` (Activity, full page), `#/prd?repo=..&path=..`, `#/onboarding`. Unknown -> inbox. */
+/** `#/inbox?only=o/r`, `#/sessions/<id>` (Activity, full page), `#/features/<slug>?product=o/r` (feature page), `#/prd?repo=..&path=..`, `#/onboarding`. Unknown -> inbox. */
 export function parseHash(hash: string): Route {
   const h = hash.replace(/^#\/?/, "");
   const [pathPart = "", qs = ""] = h.split("?");
@@ -30,6 +30,7 @@ export function parseHash(hash: string): Route {
   if (seg[0] === "sessions" && seg[1]) return { screen: "activity", id: decodeURIComponent(seg[1]), query };
   if (seg[0] === "prd") return { screen: "prd", query };
   if (seg[0] === "onboarding") return { screen: "onboarding", query };
+  if (seg[0] === "features" && seg[1]) return { screen: "features", id: decodeURIComponent(seg[1]), query };
   if (seg[0] && IDS.has(seg[0])) return { screen: seg[0] as ScreenId, query };
   if (seg[0] && ALIASES[seg[0]]) return { screen: ALIASES[seg[0]]!, query };
   return { screen: "inbox", query };

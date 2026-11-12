@@ -6,6 +6,7 @@ import { dispatchList } from "../state/select";
 import { askConfirm } from "../state/ui";
 import { fmtCost } from "../state/format";
 import { Header } from "../components/Header";
+import { route, setParam } from "../state/route";
 import { Btn, Chips, Empty, Field, Pane, Tag } from "../components/ui";
 
 const END_ACTIONS: [string, string][] = [["open-pr", "Open PR"], ["qa", "QA"], ["grind-pr", "Grind PR"]];
@@ -56,8 +57,8 @@ function DispatchCard({ d }: { d: Dispatch }) {
   );
 }
 
-function NewDispatch() {
-  const [epic, setEpic] = useState("");
+function NewDispatch({ initial = "" }: { initial?: string }) {
+  const [epic, setEpic] = useState(initial);
   const [plan, setPlan] = useState<DispatchPlan | null>(null);
   const plan_ = async () => setPlan((await mutate(() => http.send<DispatchPlan>("POST", "/api/dispatches/plan", body()), null)) ?? null);
   const body = () => {
@@ -89,14 +90,15 @@ const inTab = (d: Dispatch, t: Tab) =>
 
 export function Dispatches() {
   const [tab, setTab] = useState<Tab>("all");
-  const [showNew, setShowNew] = useState(false);
+  const preset = route.value.query.new ?? "";
+  const [showNew, setShowNew] = useState(!!preset);
   const list = dispatchList.value.filter((d) => inTab(d, tab));
   return (
     <>
       <Header title="Dispatches" scope sub={`${dispatchList.value.filter((d) => d.state === "running").length} running`}>
-        <Btn primary onClick={() => setShowNew(!showNew)}>{showNew ? "Close" : "Run an epic"}</Btn>
+        <Btn primary onClick={() => { if (preset) setParam("new", "", true); setShowNew(!(showNew || preset)); }}>{showNew || preset ? "Close" : "Run an epic"}</Btn>
       </Header>
-      {showNew && <NewDispatch />}
+      {(showNew || preset) && <NewDispatch key={preset} initial={preset} />}
       <Chips label="Dispatch filter" value={tab} options={TABS} onPick={setTab} />
       {list.map((d) => <DispatchCard key={d.id} d={d} />)}
       {dispatches.value && list.length === 0 && <Empty>{dispatchList.value.length ? "No dispatch in this view." : "No dispatches yet. Run an epic to start one."}</Empty>}

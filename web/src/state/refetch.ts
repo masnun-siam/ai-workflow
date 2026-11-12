@@ -4,7 +4,7 @@ import type { Topic } from "../api/sse";
 export type LoadKey =
   | "status" | "river" | "inbox" | "sessions" | "session" | "stream" | "releases" | "ops" | "me"
   | "settings" | "notify" | "review" | "blubird" | "products" | "repos" | "dispatches" | "coordinators"
-  | "grinds" | "panels" | "registry";
+  | "grinds" | "panels" | "registry" | "features";
 
 export type View = { screen: string; sessionId?: string; tab?: string };
 
@@ -15,7 +15,8 @@ export function visibleKeys(v: View): LoadKey[] {
   switch (v.screen) {
     case "river": return [...base, "river"];
     case "inbox": return base;
-    case "features": case "changes": return [...base, "river"];
+    case "features": return [...base, "features", "panels"];
+    case "changes": return [...base, "river"];
     case "dispatches": return base;
     case "activity": {
       const k: LoadKey[] = [...base];
@@ -45,7 +46,7 @@ export function refetchFor(topic: Topic, payload: unknown, v: View): LoadKey[] {
   switch (topic) {
     case "hello": visibleKeys(v).forEach((k) => out.add(k)); break;
     case "sessions": {
-      add("sessions", "river", "me");
+      add("sessions", "river", "me", "features");
       if (v.sessionId && p?.id === v.sessionId) {
         add("session");
         if (p.change === "stream" || p.change === "record") add("stream");
@@ -55,19 +56,19 @@ export function refetchFor(topic: Topic, payload: unknown, v: View): LoadKey[] {
     case "inbox": add("inbox"); break;
     case "products": {
       switch (p?.kind) {
-        case "snapshot": add("river", "ops", "releases", "products"); break;
+        case "snapshot": add("river", "ops", "releases", "products", "features"); break;
         case "registry": add("products", "repos", "river", "ops", "releases"); break;
         case "release": add("releases", "river"); break;
         case "grind": add("river", "grinds"); break;
-        case "review": add("panels"); break;
+        case "review": add("panels", "features"); break;
         case "blubird": add("blubird", "status"); break;
         case "coordinator": add("coordinators"); break;
-        case "prd": add("river", "products"); break;
+        case "prd": add("river", "products", "features"); break;
         default: add("river", "releases", "ops", "products", "blubird");
       }
       break;
     }
-    case "dispatch": add("dispatches"); break;
+    case "dispatch": add("dispatches", "features"); break;
     case "usage": {
       add("status");
       if (p?.kind === "settings") add("settings", "notify");
@@ -79,4 +80,4 @@ export function refetchFor(topic: Topic, payload: unknown, v: View): LoadKey[] {
 }
 
 /** River, Me and the session list refetch debounced 1 s after a session event; everything else immediately. */
-export const DEBOUNCED: ReadonlySet<LoadKey> = new Set<LoadKey>(["river", "me", "sessions"]);
+export const DEBOUNCED: ReadonlySet<LoadKey> = new Set<LoadKey>(["river", "me", "sessions", "features"]);
