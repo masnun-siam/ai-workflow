@@ -9,7 +9,7 @@ export function AccountsPane() {
   const s = settings.value;
   const [cmds, setCmds] = useState<Settings["commands"] | null>(null);
   const [msg, setMsg] = useState<Record<string, string>>({});
-  if (!s) return <Pane label="accounts"><span class="dim">Loading…</span></Pane>;
+  if (!s) return <Pane label="accounts" wide><span class="dim">Loading…</span></Pane>;
   const list = cmds ?? s.commands;
   const edit = (i: number, p: Partial<Settings["commands"][number]>) => setCmds(list.map((c, j) => (j === i ? { ...c, ...p } : c)));
   const test = async (label: string) => {
@@ -17,7 +17,7 @@ export function AccountsPane() {
     if (r) setMsg({ ...msg, [label]: `${r.ok ? "ok" : "failed"}: ${r.message}` });
   };
   return (
-    <Pane label="accounts">
+    <Pane label="accounts" wide>
       <div class="det">
         <div class="tablewrap"><table class="t"><thead><tr><th>Label</th><th>Command</th><th>Default</th><th /></tr></thead><tbody>
           {list.map((c, i) => (

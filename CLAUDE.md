@@ -23,6 +23,7 @@ needs the user. It replaced the `ai-workflow` plugin and its Python `aiw` engine
 - Tests: `make test` (Go `go test ./...`, web typecheck and vitest). No network; fake `claude`, `gh`, `slackcli` binaries via `internal/testutil/fakebin`.
 - Errors are JSON `{error}`; use `internal/errs` kinds. Writes to `~/.setu` are atomic, with file locks.
 - Use the vocabulary in `CONTEXT.md`.
+- Base branch is `master`: this repo has no `staging`, so blubird skills branch from and target `master`.
 
 ## Where to look
 

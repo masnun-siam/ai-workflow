@@ -18,13 +18,13 @@ export function Settings() {
       <div class="grid2">
         <Appearance />
         <BlubirdPane />
-        <ProductsPane />
-        <ReleaseNotePane />
-        <AccountsPane />
-        <NotificationsPane />
-        <ReviewPane />
         <AwayPane />
         <JevVaultPane />
+        <ProductsPane />
+        <AccountsPane />
+        <NotificationsPane />
+        <ReleaseNotePane />
+        <ReviewPane />
         <ServerPane />
       </div>
     </>
