@@ -10,3 +10,4 @@
 - web: Go registry JSON tags must be id, source, skill, runs_in, stage, args_hint, command, available, reason. NotifySettings needs ntfy fields (server, topic, token_set, ntfy_ready) for the Settings form. Push subscribe in the browser (P4-P).
 - inbox/views: adapt dispatch/release/away/grind/review via inbox.Convert[T]; dispatch public view needs seen_done; provide cleanup Flags(repo); share one Builder.
 - grind: register Service.OnFresh with poller; call Service.Start; pass dispatch as LaneOwner.
+- dispatch: grind.Resolve -> Deps.Grind; Service.Repos() -> poller watched list; set dispatch.CLIGrind in CLI; inbox gets InboxRows/OwnedBy; Service is grind.LaneOwner and should implement away.Lanes.
