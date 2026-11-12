@@ -15,7 +15,7 @@ export function Inbox() {
       <Header title="inbox" products />
       {err && <div class="banner bad" role="alert">{err}</div>}
       {inbox.value && inbox.value.stale.length > 0 && <div class="banner">Stale GitHub data: {inbox.value.stale.join(", ")}</div>}
-      <Pane label={`inbox · ${inbox.value?.count ?? 0} need you`}>
+      <Pane label={inbox.value ? `inbox · ${inbox.value.count} need you` : "inbox"}>
         <div class="rows">
           {GROUPS.map(([g, name]) => {
             const rows = items.map((it, i) => ({ it, i })).filter((x) => x.it.group === g);
@@ -35,7 +35,7 @@ export function Inbox() {
             );
           })}
           {inbox.value && items.length === 0 && <Empty>Nothing needs you right now. New questions, approvals and failures show up here.</Empty>}
-          {!inbox.value && <Empty>Loading…</Empty>}
+          {!inbox.value && <Empty>Loading from GitHub…</Empty>}
         </div>
       </Pane>
     </>
