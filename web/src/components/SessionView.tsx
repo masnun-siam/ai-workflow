@@ -44,7 +44,7 @@ export function SessionView({ s, compact }: { s: Session; compact?: boolean }) {
       {s.error && <div class="banner bad" role="alert">{s.error}</div>}
       {s.status === "limited" && <div class="banner">Rate limited{s.limit_resets_at ? ` until ${new Date(s.limit_resets_at * 1000).toLocaleTimeString()}` : ""}{s.auto_resume ? ". Resumes by itself." : "."}</div>}
       {s.queued_prompt && <div class="dim">Queued message: {s.queued_prompt}</div>}
-      {s.pending_answer && <div class="dim">Answer waiting to be delivered.</div>}
+      {s.pending_answer && <div class="dim">{s.status === "running" || s.status === "starting" ? "Your answer was sent. The run is continuing with it." : "Your answer is saved. It is sent when the run resumes."}</div>}
       {s.pending_question && <AskForm sessionId={s.id} round={s.pending_question} />}
       <div class="acts">{SUBS.filter((a) => a.when(s)).map((a) => <Btn key={a.sub} small bad={a.sub === "stop"} onClick={() => void run(a)}>{a.label}</Btn>)}</div>
       {!compact && (

@@ -1,5 +1,6 @@
 import { useEffect } from "preact/hooks";
 import { Detail } from "../components/Detail";
+import { Questions } from "../components/Questions";
 import { ConfirmDialog, Help, Palette, StartDialog, Toast } from "../components/Overlays";
 import { Btn } from "../components/ui";
 import { Inbox } from "../screens/Inbox";
@@ -126,7 +127,7 @@ export function App() {
   }, []);
 
   const side = <Detail t={currentTarget.value} />;
-  const main = <main class="main" id="main"><Banners /><Screen /></main>;
+  const main = <main class="main" id="main"><Banners />{!split && !(r.screen === "runs" && r.id) && <Questions />}<Screen /></main>;
   return (
     <div class="app">
       <a class="skip" href="#main" onClick={(e) => { e.preventDefault(); document.getElementById("main")?.focus(); }}>Skip to content</a>
@@ -143,7 +144,7 @@ export function App() {
       )}
       <footer class="keys">{hints.map(([k, d]) => <span key={k + d}><kbd>{k}</kbd>{d}</span>)}</footer>
       {!split && detailOpen.value && currentTarget.value && (
-        <aside class="drawer" aria-label="Detail"><div class="acts" style={{ justifyContent: "flex-end" }}><Btn k="esc" small onClick={() => (detailOpen.value = false)}>close</Btn></div>{side}</aside>
+        <aside class="drawer" aria-label="Detail"><div class="drawer-top"><Btn small onClick={() => (detailOpen.value = false)}>← Back</Btn><kbd class="wide-only">esc</kbd></div>{side}</aside>
       )}
       {paletteOpen.value && <Palette />}
       {startReq.value && <StartDialog />}
