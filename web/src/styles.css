@@ -185,6 +185,7 @@ label.fld{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--
 .gh{font:600 11px var(--hfont);color:var(--dim);text-transform:uppercase;letter-spacing:.5px;padding:8px 8px 2px}
 .tx{display:flex;flex-direction:column;gap:6px;max-height:60vh;overflow:auto;border:1px solid var(--line);border-radius:var(--rc);padding:8px;background:var(--p2);font-size:12px}
 .tx .e{white-space:pre-wrap;word-break:break-word}
+.tx .e.txt{white-space:normal}.tx .e.txt .md{max-width:none;line-height:1.5}.tx .e.txt .md>:last-child{margin-bottom:0}.tx .e.txt .md p,.tx .e.txt .md ul,.tx .e.txt .md ol,.tx .e.txt .md pre{margin:0 0 .6em}
 .tx .tool{color:var(--q)}.tx .tool summary{cursor:pointer}
 .tx .tool pre{margin:2px 0 0;white-space:pre-wrap;color:var(--mu)}
 .tx .hook{color:var(--warn)}.tx .hook.blocked{color:var(--bad)}

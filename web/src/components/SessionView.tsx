@@ -1,3 +1,4 @@
+import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { http } from "../api/http";
 import type { Session } from "../api/types";
@@ -37,6 +38,8 @@ export function SessionView({ s, compact }: { s: Session; compact?: boolean }) {
     if (r) { setText(""); void loadMany(["session"]); }
   };
   const live = ["starting", "running", "waiting"].includes(s.status);
+  const finished = ["done", "failed", "stopped"].includes(s.status) && !!s.session_id;
+  const canSend = live || finished || s.status === "limited" || s.status === "queued";
   return (
     <div class="det">
       <div class="dh"><Tag tone={statusTone(s.status)}>{s.status}</Tag><b>{s.title}</b></div>
@@ -49,16 +52,17 @@ export function SessionView({ s, compact }: { s: Session; compact?: boolean }) {
       <div class="acts">{SUBS.filter((a) => a.when(s)).map((a) => <Btn key={a.sub} small bad={a.sub === "stop"} onClick={() => run(a)}>{a.label}</Btn>)}</div>
       {!compact && (
         <KV rows={[["account", s.account], ["model", `${s.model ?? "default"}${s.effort ? ` · ${s.effort}` : ""}`], ["cost", fmtCost(s.cost) || "n/a"], ["tokens", fmtTokens(s.tokens) || "n/a"],
+          ...(s.command.trim() && s.command.trim() !== s.title ? [["prompt", <span class="pre">{s.command.trim()}</span>] as [string, ComponentChildren]] : []),
           ["duration", fmtDur(s.duration_s)], ["hooks", String(s.hooks)], ["id", <span class="mono">{s.id}</span>], ["resume", s.resume_command ? <code>{s.resume_command}</code> : "n/a"]]} />
       )}
       {s.panel && <span class="dim">Peer review {s.panel.role}{s.panel.lens ? ` · ${s.panel.lens}` : ""} · {s.panel.state}</span>}
       {s.dispatch && <span class="dim">Dispatch {s.dispatch.id} · lane {s.dispatch.lane}</span>}
       <Chips label="Transcript view" value={tab} onPick={setTab} options={[["all", "Transcript"], ["hook", `Hooks (${s.hooks})`]]} />
       <Transcript events={t} hooksOnly={tab === "hook"} />
-      {(live || s.status === "limited" || s.status === "queued") && (
+      {canSend && (
         <form class="acts" onSubmit={(e) => { e.preventDefault(); void sendPrompt(); }}>
-          <input type="text" style={{ flex: 1 }} aria-label="Message to the run" placeholder="Send a message to the run" value={text} onInput={(e) => setText((e.target as HTMLInputElement).value)} />
-          <Btn type="submit" disabled={!text.trim()}>Send</Btn>
+          <input type="text" style={{ flex: 1 }} aria-label="Message to the run" placeholder={finished ? "Reply to continue this run" : "Send a message to the run"} value={text} onInput={(e) => setText((e.target as HTMLInputElement).value)} />
+          <Btn type="submit" disabled={!text.trim()}>{finished ? "Reply" : "Send"}</Btn>
         </form>
       )}
     </div>

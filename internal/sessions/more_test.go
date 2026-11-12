@@ -6,9 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/masnun-siam/setu/internal/events"
 )
@@ -155,6 +157,11 @@ func TestStatsAndTitle(t *testing.T) {
 	r2, _ := e.m.create(Record{Command: "free text\nsecond line", Repo: e.repo, CwdPath: e.repo, Status: StDone, ClaudeCmd: "claude"})
 	if p := e.m.Public(mustGet(t, e, r2.ID)); p.Title != "free text" || p.ResumeCommand != nil {
 		t.Fatalf("%+v", p)
+	}
+	long := strings.Repeat("word ", 30)
+	r3, _ := e.m.create(Record{Command: long, Repo: e.repo, CwdPath: e.repo, Status: StDone, ClaudeCmd: "claude"})
+	if p := e.m.Public(mustGet(t, e, r3.ID)); !strings.HasSuffix(p.Title, "…") || utf8.RuneCountInString(p.Title) > 120 || p.Command != long {
+		t.Fatalf("clipped title %q", p.Title)
 	}
 	e.m.Update(r2.ID, func(r *Record) error { r.SessionID = "it's"; return nil })
 	if p := e.m.Public(mustGet(t, e, r2.ID)); p.ResumeCommand == nil || *p.ResumeCommand != "cd "+shellQuote(e.repo)+" && claude --resume 'it'\"'\"'s'" {
