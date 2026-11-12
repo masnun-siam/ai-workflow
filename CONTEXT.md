@@ -17,7 +17,7 @@ The product requirements for one feature, at `docs/prds/<slug>.md`, written by b
 An epic is the parent GitHub issue of one PRD entry; its child issues become refined issues once `refine-issues` writes their body. Only a refined issue is ready to implement.
 
 **River**:
-The home screen: the pipeline as columns of cards, one per stage. Also one of the two looks (Console, River).
+The home screen: the pipeline as columns of cards, one per stage. Also one of the three looks (Classic, Console, River).
 
 **Stage**:
 A column of the River and the group a step belongs to: `prd`, `tasks`, `refine`, `implement`, `review`, `release`, `notify`, `ops`. Each registry step names its stage.
@@ -68,7 +68,7 @@ A prompt embedded in the binary (`prompts/`): `release-pr`, `pr-grind`, `release
 The Claude Code plugin that carries the team's dev process as skills. setu detects, installs and updates it, and never copies its skills.
 
 **Look / Mode / Layout**:
-The three appearance settings: Look (Console or River), Mode (System, Dark, Light), Layout (Rail + drawer, Tabs + split).
+The three appearance settings: Look (Classic, Console or River), Mode (System, Dark, Light), Layout (Rail + drawer, Tabs + split).
 
 **Data dir**:
 `~/.setu` (override `SETU_HOME`). Holds setu's own state only; GitHub and `docs/prds/` are the truth.

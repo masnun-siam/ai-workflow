@@ -23,7 +23,7 @@ Behaviour there is the contract unless this file overrides it.
 | Product model | blubird's: a Product = one Documentation Repo (`docs/prds/<module>/<feature>.md`, epics, `.blubird/repos.json`) + its code repos (`.blubird/docs-repo` pointer). Monorepo = one repo with a `"."` entry. Board statuses Backlog, Ready, In progress, In review, Done — read from the GitHub Projects v2 Status field when the issue is on a project, else derived. Base branch `staging`. Agents never merge. |
 | Hook state | Show blubird hook events (secret masking, idle guard, CLAUDE.md guard) found in a session's stream in the session view. |
 | Audience | One user (the owner). Release-note defaults are global settings (channel `#dc-supports`/`C06RSFFRUFM`, CC Ashique `UAY0MVDHT`, Najmul `U01012AA4FL`, Abir `U067P3ADDDM`, suffix `vai`). |
-| UI | Screens: River (pipeline home), Inbox, Runs, Releases, Ops, Me, Settings. Settings › Appearance: Look (Console \| River), Mode (System \| Dark \| Light), Layout (Rail + drawer \| Tabs + split). Default Console + drawer + System. Keyboard first, mouse works. Reference prototype: `docs/setu/prototype/` (setu.html, setu.css, setu.js). |
+| UI | Screens: River (pipeline home), Inbox, Runs, Releases, Ops, Me, Settings. Settings › Appearance: Look (Classic \| Console \| River), Mode (System \| Dark \| Light), Layout (Rail + drawer \| Tabs + split). Default Classic + drawer + System. Keyboard first, mouse works. Reference prototype: `docs/setu/prototype/` (setu.html, setu.css, setu.js). |
 
 ## Layout
 

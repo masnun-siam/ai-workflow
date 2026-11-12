@@ -48,7 +48,7 @@ palette, `?` help, `Esc` back. Each screen lists its action keys in the footer. 
 
 ## Appearance
 
-Settings > Appearance, stored per browser: Look (Console or River), Mode (System, Dark or Light), Layout (Rail + drawer or Tabs + split).
+Settings > Appearance, stored per browser: Look (Classic, Console or River), Mode (System, Dark or Light), Layout (Rail + drawer or Tabs + split).
 Default: Console, System, drawer.
 
 ## Data
