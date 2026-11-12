@@ -1,6 +1,7 @@
 /** The old aiw ways to start work: the Create box (n) and the full Start dialog (command, where, input,
  *  model and effort, account). Both post StartRequest (API.md section 4) to POST /api/sessions. */
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { Select } from "./Select";
 import { http } from "../api/http";
 import type { RegistryStep } from "../api/extra";
 import type { Effort, Model, OpenItem, PRD, ReviewOffers, Session, VaultFolder, VaultSuggestion } from "../api/types";
@@ -169,7 +170,7 @@ export function CreateDialog() {
         </div>
         <div class="fields">
           <Field label="Repository">{noRepos ? <span class="c-w">No repositories yet. <a href="#/onboarding">Add one</a>.</span> : <RepoField label="Repository" value={repo} onChange={setRepo} />}</Field>
-          {route === "small" && <Field label="Priority"><select value={prio} onChange={(e) => setPrio((e.target as HTMLSelectElement).value)}>{PRIORITIES.map((p) => <option key={p}>{p}</option>)}</select></Field>}
+          {route === "small" && <Field label="Priority"><Select label="Priority" value={prio} onChange={setPrio} options={PRIORITIES.map((p) => [p, p] as [string, string])} /></Field>}
         </div>
         {route === "feature" && <LensPick kind="create-prd" value={lenses} onChange={setLenses} label="Review the PRD with" />}
         <AccountPick value={account} onChange={setAccount} />
@@ -356,7 +357,7 @@ export function StartDialog() {
           {runsIn === "custom" && where === VAULT && <FolderChooser text={args} value={vault} onChange={setVault} />}
           {runsIn === "docs" && (
             <Field label="Product (docs repo)">
-              {(products.value ?? []).length ? <select value={prod} onChange={(e) => setProd((e.target as HTMLSelectElement).value)}>{products.value!.map((p) => <option key={p.docs_repo} value={p.docs_repo}>{p.name} · {p.docs_repo}</option>)}</select>
+              {(products.value ?? []).length ? <Select label="Product" value={prod} onChange={setProd} options={products.value!.map((p) => ({ value: p.docs_repo, label: p.name, hint: p.docs_repo }))} />
                 : <span class="c-w">No product yet. Add a docs repo in <a href="#/settings?pane=products">Settings → products and repos</a>.</span>}
             </Field>
           )}
@@ -370,8 +371,8 @@ export function StartDialog() {
           {lensKind && <LensPick kind={lensKind} value={lenses} onChange={setLenses} label="Also open a peer review with" />}
 
           <div class="fields">
-            <Field label="Model"><select value={model} onChange={(e) => setModel((e.target as HTMLSelectElement).value)}><option value="">default</option>{MODELS.map((m) => <option key={m}>{m}</option>)}</select></Field>
-            <Field label="Effort"><select value={effort} onChange={(e) => setEffort((e.target as HTMLSelectElement).value)}><option value="">default</option>{EFFORTS.map((m) => <option key={m}>{m}</option>)}</select></Field>
+            <Field label="Model"><Select label="Model" value={model} onChange={setModel} options={[["", "default"], ...MODELS.map((m) => [m, m] as [string, string])]} /></Field>
+            <Field label="Effort"><Select label="Effort" value={effort} onChange={setEffort} options={[["", "default"], ...EFFORTS.map((m) => [m, m] as [string, string])]} /></Field>
             <label class="fld check"><span>&nbsp;</span><span><input type="checkbox" checked={remember} onChange={(e) => setRemember((e.target as HTMLInputElement).checked)} /> Make these the default</span></label>
           </div>
           <AccountPick value={account} onChange={setAccount} />

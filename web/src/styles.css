@@ -547,3 +547,22 @@ a.btn{text-decoration:none;color:var(--tx)}
 .away-sum .chip{margin-left:6px}
 .chg{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:10px}
 .chg .opt small{display:block;color:var(--mu);font-size:12px}
+
+/* ---------- the one dropdown (Select, RepoField, RepoScope): looks like an input ---------- */
+.dd{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:8px;width:100%;min-height:30px;padding:4px 8px 4px 10px;
+  font:inherit;color:var(--tx);background:var(--p2);border:1px solid var(--line);border-radius:var(--r);text-align:left}
+.skin-classic .dd{background:var(--bg);border-color:var(--edge);border-radius:6px;min-height:36px}
+.dd:hover{border-color:var(--mu)}
+.skin-classic .dd:hover{border-color:var(--edge-hi)}
+.dd:focus-visible,.dd.open{outline:none;border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+.dd-v{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dd-aside{color:var(--dim);font-size:11.5px;white-space:nowrap}
+.dd-chev{flex:none;color:var(--mu);transition:transform .12s ease-out}
+.dd.open .dd-chev{transform:rotate(180deg)}
+.dd.compact{width:auto;min-width:150px}
+.popw.fit{display:flex;width:100%}
+.hd .popw.fit,.hd .popw{width:auto}
+.pop.fit{min-width:100%}
+.pop .rp-list .pi{min-height:34px;align-items:center}
+.rp:focus{outline:none}
+.fld .popw{display:flex}

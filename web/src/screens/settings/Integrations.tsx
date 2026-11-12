@@ -1,4 +1,5 @@
 import { useState } from "preact/hooks";
+import { Select } from "../../components/Select";
 import { http } from "../../api/http";
 import type { Settings, VaultFolder } from "../../api/types";
 import { mutate, settings } from "../../state/data";
@@ -48,13 +49,13 @@ export function ServerPane() {
       <div class="det">
         <div class="fields">
           <Field label="Port"><input type="number" min={1024} max={65535} value={v.port} onInput={(e) => setD({ ...v, port: Number((e.target as HTMLInputElement).value) })} /></Field>
-          <Field label="Tailscale HTTPS port"><select value={v.tailscale_https_port} onChange={(e) => setD({ ...v, tailscale_https_port: Number((e.target as HTMLSelectElement).value) as 443 })}><option>443</option><option>8443</option><option>10000</option></select></Field>
+          <Field label="Tailscale HTTPS port"><Select label="Tailscale HTTPS port" value={String(v.tailscale_https_port)} onChange={(x) => setD({ ...v, tailscale_https_port: Number(x) as 443 })} options={[["443", "443"], ["8443", "8443"], ["10000", "10000"]]} /></Field>
           <label class="opt"><input type="checkbox" checked={v.tailscale} onChange={(e) => setD({ ...v, tailscale: (e.target as HTMLInputElement).checked })} /><span><b>Serve on the tailnet</b></span></label>
         </div>
         <Field label="Allowed hosts (comma separated)"><input placeholder="mac.tail1234.ts.net" value={hosts ?? v.allow_hosts.join(", ")} onInput={(e) => setHosts((e.target as HTMLInputElement).value)} /></Field>
         <span class="dim">Port and tailscale changes apply after a restart.</span>
         <div class="fields">
-          <Field label="Grind mode"><select value={s.grind_mode} onChange={(e) => void saveSettings({ grind_mode: (e.target as HTMLSelectElement).value as "deep" })}><option>deep</option><option>simple</option></select></Field>
+          <Field label="Grind mode"><Select label="Grind mode" value={s.grind_mode} onChange={(x) => void saveSettings({ grind_mode: x as "deep" })} options={[["deep", "deep"], ["simple", "simple"]]} /></Field>
           {num("max_rounds")}{num("poll_interval")}{num("max_wait")}{num("max_idle_waits")}{num("stuck_seen")}{num("ci_timeout")}{num("ci_poll")}
         </div>
         <div class="acts"><Btn primary disabled={!dirty} onClick={async () => {
