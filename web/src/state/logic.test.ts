@@ -145,8 +145,8 @@ describe("answers", () => {
 
 describe("prefs and routes", () => {
   it("defaults are Console + drawer + System; bad values fall back", () => {
-    expect(DEFAULT_PREFS).toEqual({ look: "console", mode: "system", layout: "drawer" });
-    expect(sanitize({ look: "x", mode: "dark" })).toEqual({ look: "console", mode: "dark", layout: "drawer" });
+    expect(DEFAULT_PREFS).toEqual({ look: "classic", mode: "system", layout: "drawer" });
+    expect(sanitize({ look: "x", mode: "dark" })).toEqual({ look: "classic", mode: "dark", layout: "drawer" });
   });
   it("storage that throws never breaks", () => {
     const bad = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } };

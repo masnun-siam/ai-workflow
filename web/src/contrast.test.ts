@@ -14,10 +14,11 @@ function tokens(selector: string): Record<string, string> {
   return Object.fromEntries([...m![1]!.matchAll(/--(\w+):(#[0-9A-Fa-f]{6})/g)].map((x) => [x[1]!, x[2]!]));
 }
 const combos: [string, string][] = [
+  ["classic dark", "body.skin-classic"], ["classic light", 'html[data-theme="light"] body.skin-classic'],
   ["console dark", "body.skin-console"], ["river dark", "body.skin-river"],
   ["console light", 'html[data-theme="light"] body.skin-console'], ["river light", 'html[data-theme="light"] body.skin-river'],
 ];
-describe("WCAG AA contrast in all four look x mode combinations", () => {
+describe("WCAG AA contrast in every look x mode combinations", () => {
   for (const [name, sel] of combos) {
     it(name, () => {
       const t = tokens(sel);
