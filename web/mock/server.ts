@@ -141,7 +141,9 @@ const routes: [string, RegExp, H][] = [
     const d = disp(m[1]!); if (!d) return fail(404, "not found");
     if (m[2] === "settings") Object.assign(d.settings, body);
     if (m[2] === "state") d.state = body.state === "cancelled" ? "cancelled" : body.state;
-    if (m[2] === "lane") { const l = d.lanes.find((x) => x.key === body.lane); if (l) { if (body.action === "pause") l.paused = true; if (body.action === "resume") l.paused = false; if (body.action === "skip") l.stage = "skipped"; if (body.action === "hold") l.hold_merge = true; if (body.action === "unhold") l.hold_merge = false; } }
+    if (m[2] === "lane") { const l = d.lanes.find((x) => x.key === body.lane); if (l) { if (body.action === "pause") l.paused = true; if (body.action === "resume") l.paused = false; if (body.action === "skip") l.stage = "skipped"; if (body.action === "hold") l.hold_merge = true; if (body.action === "unhold") l.hold_merge = false;
+      if (body.action === "unblock") { l.unblocked = l.skipped_deps ?? []; l.deps = l.deps.filter((k) => !(l.skipped_deps ?? []).includes(k)); l.skipped_deps = []; l.stranded = null; }
+      if (body.action === "retry" && l.stage === "skipped") { l.stage = "queued"; l.skip_reason = null; for (const y of d.lanes) if (y.skipped_deps?.includes(l.key)) { y.skipped_deps = []; y.stranded = null; } } } }
     emit("dispatch", { id: d.id, change: "record" }); return d;
   }],
   ["GET", /^\/api\/coordinators$/, () => ({ coordinators: db.coordinators })],

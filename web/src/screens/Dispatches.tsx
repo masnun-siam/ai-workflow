@@ -3,7 +3,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { http } from "../api/http";
 import type { Dispatch, DispatchPlan, DispatchSettings, Effort, Lane, OpenItem } from "../api/types";
-import { currentRepo, dispatches, grinds, mutate, repoList } from "../state/data";
+import { currentRepo, dispatches, grinds, mutate, repoList, sessionList } from "../state/data";
 import { dispatchList } from "../state/select";
 import { askConfirm } from "../state/ui";
 import { fmtCost, fmtDur, shortRepo } from "../state/format";
@@ -25,12 +25,14 @@ const laneCall = (d: Dispatch, lane: string, action: string, text?: string) =>
   mutate(() => http.send("POST", `/api/dispatches/${d.id}/lane`, { lane, action, text }), action === "send" ? "Message sent" : `${action}: ${lane}`, ["dispatches"]);
 
 function Progress({ d }: { d: Dispatch }) {
-  const done = d.lanes.filter((l) => l.stage === "closed" || l.stage === "skipped").length;
-  const total = d.lanes.length || 1;
+  const closed = d.lanes.filter((l) => l.stage === "closed").length;
+  const skipped = d.lanes.filter((l) => l.stage === "skipped").length;
+  const working = d.lanes.filter((l) => !["queued", "closed", "skipped"].includes(l.stage)).length;
+  const rest = Math.max(0, d.lanes.length - closed - skipped - working);
   return (
-    <div class="dprog" role="img" aria-label={`${done} of ${d.lanes.length} issues done`}>
-      <div class="ibar"><i class="b-done" style={{ flexGrow: done }} /><i class="b-work" style={{ flexGrow: d.lanes.filter((l) => !["queued", "closed", "skipped"].includes(l.stage)).length }} /><i style={{ flexGrow: Math.max(0, total - done - d.lanes.filter((l) => !["queued", "closed", "skipped"].includes(l.stage)).length) }} /></div>
-      <span class="dim">{done}/{d.lanes.length}</span>
+    <div class="dprog" role="img" aria-label={`${closed} of ${d.lanes.length} issues done${skipped ? `, ${skipped} skipped` : ""}`}>
+      <div class="ibar"><i class="b-done" style={{ flexGrow: closed }} /><i class="b-work" style={{ flexGrow: working }} /><i class="b-skip" style={{ flexGrow: skipped }} /><i style={{ flexGrow: rest }} /></div>
+      <span class="dim">{closed}/{d.lanes.length}{skipped ? ` · ${skipped} skipped` : ""}</span>
     </div>
   );
 }
@@ -182,9 +184,13 @@ function Settings({ d }: { d: Dispatch }) {
   );
 }
 
+const settled = (l: Lane) => l.stage === "closed" || l.stage === "skipped";
+
 function LaneLine({ d, l }: { d: Dispatch; l: Lane }) {
-  const [label, tone] = STAGE[l.stage] ?? [l.stage, ""];
-  const why = l.needs_you ?? l.held ?? l.gate ?? l.skip_reason ?? (l.deps.length && l.stage === "queued" ? `after ${l.deps.map((k) => `#${k.split("#")[1]}`).join(", ")}` : "");
+  const [label0, tone0] = STAGE[l.stage] ?? [l.stage, ""];
+  const [label, tone] = l.stranded ? ["Can't start", "c-b"] : [label0, tone0];
+  const openDeps = l.deps.filter((k) => { const y = d.lanes.find((x) => x.key === k); return !y || !settled(y); });
+  const why = l.stranded ?? l.needs_you ?? l.held ?? l.gate ?? l.skip_reason ?? (openDeps.length && l.stage === "queued" ? `after ${openDeps.map((k) => `#${k.split("#")[1]}`).join(", ")}` : "");
   return (
     <button type="button" class={`irow lane${route.value.query.lane === l.key ? " sel" : ""}`} onClick={() => setParam("lane", l.key, true)}>
       <span />
@@ -195,45 +201,93 @@ function LaneLine({ d, l }: { d: Dispatch; l: Lane }) {
   );
 }
 
+const PR_URL = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+/g;
+
+/** Sessions for the lane's issue, and the PRs the newest one mentions (it may open PRs in other repos). */
+function IssueWork({ l }: { l: Lane }) {
+  const runs = (sessionList.value?.sessions ?? []).filter((s) => s.link && `${s.link.owner}/${s.link.repo}`.toLowerCase() === l.repo.toLowerCase() && s.link.issue === l.n);
+  const last = runs.find((s) => !["running", "starting", "waiting"].includes(s.status));
+  const [prs, setPrs] = useState<string[]>([]);
+  useEffect(() => {
+    setPrs([]);
+    if (!last) return;
+    void http.get<{ events: { kind: string; text?: string | null }[] }>(`/api/sessions/${last.id}/stream?offset=0`).then((t) => {
+      const text = t.events.filter((e) => e.kind === "text" || e.kind === "result").slice(-6).map((e) => e.text ?? "").join("\n");
+      const own = l.pr ? `https://github.com/${l.repo}/pull/${l.pr}` : "";
+      setPrs([...new Set(text.match(PR_URL) ?? [])].filter((u) => u.toLowerCase() !== own.toLowerCase()));
+    }, () => undefined);
+  }, [last?.id]);
+  if (!runs.length) return null;
+  return (
+    <div class="form">
+      {prs.length > 0 && (
+        <div><div class="gh">PRs it opened elsewhere</div>
+          <span class="dim">The dispatch merges only this lane's own PR. Review and merge these yourself.</span>
+          {prs.map((u) => { const m = /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(u)!; return <div key={u}><a href={u}>{m[1]}#{m[2]}</a></div>; })}
+        </div>
+      )}
+      <div><div class="gh">Sessions for #{l.n}</div>
+        {runs.slice(0, 5).map((s) => <a key={s.id} class="row" href={`#/sessions/${s.id}`}><span class="tag">{s.status}</span><span class="t">{s.skill ?? "free text"}</span><span class="w">{fmtDur(s.duration_s)}</span></a>)}
+      </div>
+    </div>
+  );
+}
+
 function LanePanel({ d, l }: { d: Dispatch; l: Lane }) {
   const [msg, setMsg] = useState("");
   const [menu, setMenu] = useState(false);
   const g = (grinds.value ?? []).find((x) => x.pr === l.pr && x.repo.toLowerCase() === l.repo.toLowerCase());
   const act = async (a: string) => {
     setMenu(false);
-    const ask = a === "merge" ? `Merge the PR for ${l.key} now?` : a === "skip" ? `Skip ${l.key}? It will not be worked on in this dispatch.` : "";
+    const ask = a === "merge" ? `Merge the PR for ${l.key} now?` : a === "skip" ? `Skip ${l.key}? It will not be worked on in this dispatch, and issues that depend on it cannot start until you retry it or unblock them.` : "";
     if (ask && !(await askConfirm(ask))) return;
     await laneCall(d, l.key, a);
   };
+  const active = !settled(l) && l.stage !== "queued";
+  const mergeable = !!l.pr && (l.stage === "awaiting_merge" || l.stage === "merge_gate");
+  const dependents = d.lanes.filter((x) => x.skipped_deps?.includes(l.key));
   return (
     <Pane label={`lane · ${shortRepo(l.repo)}#${l.n}`}>
       <div class="form">
         <div class="dh"><b>{l.title}</b><span class="grow" /><Btn small onClick={() => setParam("lane", "", true)}>Close</Btn></div>
-        <div class="dim">{(STAGE[l.stage] ?? [l.stage])[0]}{l.paused ? " · paused" : ""}{l.hold_merge ? " · merge held" : ""}{g ? ` · grind ${g.state}, round ${g.rounds}` : ""}{l.limited_until ? " · rate-limited" : ""}</div>
+        <div class="dim">{l.stranded ? "Can't start" : (STAGE[l.stage] ?? [l.stage])[0]}{l.skip_reason ? ` · ${l.skip_reason}` : ""}{l.paused ? " · paused" : ""}{l.hold_merge ? " · merge held" : ""}{g ? ` · grind ${g.state}, round ${g.rounds}` : ""}{l.gate && !settled(l) ? ` · ${l.gate}` : ""}</div>
         {l.needs_you && <div class="banner">{l.needs_you}</div>}
+        {l.stranded && (
+          <div class="banner">This issue waits on {(l.skipped_deps ?? []).map((k) => `#${k.split("#")[1]}`).join(", ") || "a blocker"}, which {l.skipped_deps?.length === 1 ? "was" : "were"} skipped, so it can never start as things stand.
+            {(l.skipped_deps ?? []).length > 0 && <Btn small primary onClick={() => act("unblock")}>Unblock: start without {l.skipped_deps!.length === 1 ? "it" : "them"}</Btn>}</div>
+        )}
+        {l.stage === "skipped" && (
+          <div class="banner">Skipped{l.skip_reason ? ` (${l.skip_reason})` : ""}. Nothing more happens on it in this dispatch.
+            {dependents.length > 0 && ` ${dependents.length} issue${dependents.length === 1 ? " waits" : "s wait"} on it.`}
+            <Btn small onClick={() => act("retry")}>Run it again</Btn></div>
+        )}
+        {l.unblocked && l.unblocked.length > 0 && <span class="dim">Started without skipped {l.unblocked.map((k) => `#${k.split("#")[1]}`).join(", ")}.</span>}
         <div class="acts">
           {l.session && <a class="btn sm" href={`#/sessions/${l.session}`}>Open session</a>}
           <a class="btn sm" href={`https://github.com/${l.repo}/issues/${l.n}`}>Issue</a>
           {l.pr && <a class="btn sm" href={`https://github.com/${l.repo}/pull/${l.pr}`}>PR #{l.pr}</a>}
-          {(l.stage === "awaiting_merge" || l.stage === "merge_gate") && <Btn small primary onClick={() => act("merge")}>Merge PR</Btn>}
+          {mergeable && <Btn small primary onClick={() => act("merge")}>Merge PR</Btn>}
           {l.needs_you && <Btn small onClick={() => act("retry")}>Retry</Btn>}
-          {l.paused ? <Btn small onClick={() => act("resume")}>Resume</Btn> : null}
-          <span class="popw"><Btn small onClick={() => setMenu(!menu)}>More ▾</Btn>
-            {menu && <div class="pop menu" onMouseLeave={() => setMenu(false)}>
-              {!l.paused && <button type="button" class="pi" onClick={() => act("pause")}>Pause this issue</button>}
-              <button type="button" class="pi" onClick={() => act("merge")}>Merge now</button>
-              <button type="button" class="pi" onClick={() => act(l.hold_merge ? "unhold" : "hold")}>{l.hold_merge ? "Let it merge" : "Hold the merge"}</button>
-              <button type="button" class="pi" onClick={() => act("retry")}>Retry in a new session</button>
-              <button type="button" class="pi c-b" onClick={() => act("skip")}>Skip</button>
-            </div>}
-          </span>
+          {l.paused && !settled(l) && <Btn small onClick={() => act("resume")}>Resume</Btn>}
+          {!settled(l) && (
+            <span class="popw"><Btn small onClick={() => setMenu(!menu)}>More ▾</Btn>
+              {menu && <div class="pop menu" onMouseLeave={() => setMenu(false)}>
+                {!l.paused && <button type="button" class="pi" onClick={() => act("pause")}>Pause this issue</button>}
+                {l.pr && <button type="button" class="pi" onClick={() => act("merge")}>Merge now</button>}
+                {l.pr && <button type="button" class="pi" onClick={() => act(l.hold_merge ? "unhold" : "hold")}>{l.hold_merge ? "Let it merge" : "Hold the merge"}</button>}
+                {active && <button type="button" class="pi" onClick={() => act("retry")}>Retry in a new session</button>}
+                <button type="button" class="pi c-b" onClick={() => act("skip")}>Skip</button>
+              </div>}
+            </span>
+          )}
         </div>
-        {l.session && live(d) && (
+        {l.session && active && live(d) && (
           <form class="acts" onSubmit={async (e) => { e.preventDefault(); if (msg.trim() && (await laneCall(d, l.key, "send", msg.trim())) !== undefined) setMsg(""); }}>
             <input class="grow" placeholder="Message the session (it reads it at its next turn)" aria-label="Message the lane's session" value={msg} onInput={(e) => setMsg((e.target as HTMLInputElement).value)} />
             <Btn small type="submit" disabled={!msg.trim()}>Send</Btn>
           </form>
         )}
+        <IssueWork l={l} />
       </div>
     </Pane>
   );
@@ -248,10 +302,18 @@ function DispatchPage() {
   const d = full ?? fromList;
   if (!d) return <><Header title="Dispatch"><Btn small onClick={() => nav("#/dispatches")}>← Dispatches</Btn></Header><Empty>{dispatches.value ? "No such dispatch." : "Loading…"}</Empty></>;
   const lane = d.lanes.find((l) => l.key === route.value.query.lane);
-  const needs = d.lanes.filter((l) => l.needs_you);
+  const needs = d.lanes.filter((l) => l.needs_you && !settled(l));
+  const stranded = d.lanes.filter((l) => !l.needs_you && l.stranded && l.stage === "queued");
   const building = d.lanes.filter((l) => !l.needs_you && !["queued", "closed", "skipped"].includes(l.stage));
-  const next = d.lanes.filter((l) => !l.needs_you && l.stage === "queued");
-  const done = d.lanes.filter((l) => l.stage === "closed" || l.stage === "skipped");
+  const next = d.lanes.filter((l) => !l.needs_you && !l.stranded && l.stage === "queued");
+  const done = d.lanes.filter((l) => l.stage === "closed");
+  const skipped = d.lanes.filter((l) => l.stage === "skipped");
+  const blockers = [...new Set(stranded.flatMap((l) => l.skipped_deps ?? []))];
+  const unblockAll = async () => {
+    const ls = stranded.filter((l) => (l.skipped_deps ?? []).length);
+    if (!(await askConfirm(`Let ${ls.length} issue${ls.length === 1 ? "" : "s"} start without ${blockers.map((k) => `#${k.split("#")[1]}`).join(", ")}? They lose that dependency in this dispatch.`))) return;
+    for (const l of ls) await laneCall(d, l.key, "unblock");
+  };
   const allDone = d.lanes.length > 0 && done.length === d.lanes.length;
   const setState = (state: string) => mutate(() => http.send("POST", `/api/dispatches/${d.id}/state`, { state }), state === "running" ? "Resumed" : "Cancelled", ["dispatches"]);
   const end = (a: string, t: string) => mutate(() => http.send("POST", `/api/dispatches/${d.id}/end`, { action: a }), `${t}: started`, ["dispatches"]);
@@ -267,6 +329,13 @@ function DispatchPage() {
       </Header>
       {showSettings && <Pane label="settings">{live(d) ? <Settings d={d} /> : <span class="dim">This dispatch has ended.</span>}</Pane>}
       <Progress d={d} />
+      {stranded.length > 0 && live(d) && (
+        <div class="banner bad" role="alert">
+          {stranded.length} issue{stranded.length === 1 ? " can't" : "s can't"} start{blockers.length ? `: ${stranded.length === 1 ? "it waits" : "they wait"} on skipped ${blockers.map((k) => `#${k.split("#")[1]}`).join(", ")}` : " (a dependency cycle)"}. The dispatch will stop there.
+          {blockers.map((k) => <Btn key={k} small onClick={() => laneCall(d, k, "retry")}>Run #{k.split("#")[1]} again</Btn>)}
+          {blockers.length > 0 && <Btn small primary onClick={unblockAll}>Unblock them</Btn>}
+        </div>
+      )}
       {allDone && (
         <Pane label="all issues are done: what next?">
           <div class="acts">
@@ -279,7 +348,7 @@ function DispatchPage() {
       )}
       <div class="dpage">
         <Pane label="issues">
-          {section("Needs you", needs)}{section("Building now", building)}{section("Up next", next)}{section("Done", done)}
+          {section("Needs you", needs)}{section("Can't start", stranded)}{section("Building now", building)}{section("Up next", next)}{section("Done", done)}{section("Skipped", skipped)}
           {!d.lanes.length && <Empty>No issues in this dispatch yet.</Empty>}
         </Pane>
         <div class="dside">

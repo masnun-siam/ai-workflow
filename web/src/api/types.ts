@@ -180,7 +180,8 @@ export type DispatchSettings = { max: number; grind: "off"|"simple"|"full"; ci: 
 export type Lane = { key: IssueKey; repo: Slug; n: number; title: string; deps: IssueKey[]; stage: LaneStage; pr: number | null;
   needs_you: string | null; held: string | null; gate: string | null; skip_reason: string | null; paused: boolean;
   paused_by: "dispatch" | null; hold_merge: boolean; limited_until: Epoch | null; started_at: Epoch | null;
-  ended_at: Epoch | null; session: string | null; usage: { cost: number; tokens: Tokens | null; seconds: number } };
+  ended_at: Epoch | null; session: string | null; usage: { cost: number; tokens: Tokens | null; seconds: number };
+  stranded?: string | null; skipped_deps?: IssueKey[]; unblocked?: IssueKey[] };
 export type Dispatch = { id: string; epic: IssueKey | null; issues?: IssueKey[]; title: string;
   state: "running" | "paused" | "done" | "cancelled"; settings: DispatchSettings; lanes: Lane[];
   totals: { lanes: number; closed: number; cost: number }; created_at: Epoch; ended_at: Epoch | null;

@@ -3,6 +3,7 @@ package dispatch
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/masnun-siam/setu/internal/dispatch/store"
 )
@@ -758,5 +759,61 @@ func TestIssuesTitle(t *testing.T) {
 	}
 	if got := IssuesTitle([]string{"o/r#2"}); got != "Small changes: #2" {
 		t.Fatal(got)
+	}
+}
+
+func TestSkipSettlesAndUnblockDropsSkippedDeps(t *testing.T) {
+	d := dsp(lane(1, store.StImplementing), lane(2, store.StQueued, "o/r#1", "o/r#3"), lane(3, store.StQueued))
+	x := d.Lanes["o/r#1"]
+	x.NeedsYou, x.Gate, x.StartedAt = "stopped without a ready PR", "no approving review", 100
+	if err := ApplyLaneAction(d, "o/r#1", "skip", "", 200); err != nil {
+		t.Fatal(err)
+	}
+	if x.Stage != store.StSkipped || x.NeedsYou != "" || x.Gate != "" || x.EndedAt != 200 {
+		t.Fatalf("skip did not settle the lane: %+v", x)
+	}
+	if got := SkippedDeps(d, d.Lanes["o/r#2"]); len(got) != 1 || got[0] != "o/r#1" {
+		t.Fatal(got)
+	}
+	if err := ApplyLaneAction(d, "o/r#3", "unblock", "", 210); err == nil {
+		t.Fatal("unblock without skipped deps must fail")
+	}
+	if err := ApplyLaneAction(d, "o/r#2", "unblock", "", 210); err != nil {
+		t.Fatal(err)
+	}
+	y := d.Lanes["o/r#2"]
+	if strings.Join(y.Deps, ",") != "o/r#3" || strings.Join(y.Unblocked, ",") != "o/r#1" {
+		t.Fatalf("deps %v unblocked %v", y.Deps, y.Unblocked)
+	}
+	// retrying a skipped lane reopens it
+	if err := ApplyLaneAction(d, "o/r#1", "retry", "", 220); err != nil || x.Stage != store.StQueued || x.EndedAt != 0 {
+		t.Fatalf("retry %+v %v", x, err)
+	}
+}
+
+func TestInboxIgnoresSettledLanes(t *testing.T) {
+	d := dsp(lane(1, store.StSkipped), lane(2, store.StClosed), lane(3, store.StImplementing))
+	d.State = store.Running
+	for _, k := range []string{"o/r#1", "o/r#2", "o/r#3"} {
+		d.Lanes[k].NeedsYou = "stale text"
+	}
+	rows := InboxRows([]store.Dispatch{*d}, 0)
+	if len(rows) != 1 || rows[0].Lane != "o/r#3" {
+		t.Fatalf("%+v", rows)
+	}
+}
+
+func TestPublicSettledAndStranded(t *testing.T) {
+	d := dsp(lane(1, store.StSkipped), lane(2, store.StQueued, "o/r#1"))
+	d.Lanes["o/r#1"].NeedsYou, d.Lanes["o/r#1"].StartedAt = "stopped without a ready PR", 100
+	lk := "o/r#1"
+	d.Events = append(d.Events, store.Event{At: 160, Lane: &lk, Kind: "lane", Text: "skip"})
+	p := New(Deps{Now: func() time.Time { return time.Unix(1000, 0) }}).Public(*d, false)
+	l1, l2 := p.Lanes[0], p.Lanes[1]
+	if l1.NeedsYou != nil || l1.EndedAt == nil || *l1.EndedAt != 160 || l1.Usage.Seconds != 60 {
+		t.Fatalf("settled lane %+v", l1)
+	}
+	if l2.Stranded == nil || *l2.Stranded != "blocked by skipped #1" || strings.Join(l2.SkippedDeps, ",") != "o/r#1" {
+		t.Fatalf("stranded lane %+v", l2)
 	}
 }

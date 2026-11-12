@@ -468,7 +468,7 @@ func Step(lane store.Lane, f Facts, s store.Settings, now float64) (store.Lane, 
 	// followups
 	if !f.IssueOpen && (agent == "idle" || agent == "gone" || agent == "") {
 		to(store.StClosed, "")
-		l.EndedAt = now
+		l.EndedAt, l.Gate = now, ""
 		acts = append(acts, Action{Kind: AClose})
 		return l, acts
 	}
@@ -792,7 +792,22 @@ func MakePlan(children []Child) Plan {
 // ---- user actions (W§2.5) ----
 
 // Lane actions.
-var LaneActions = []string{"pause", "resume", "retry", "skip", "merge", "hold", "unhold", "send"}
+var LaneActions = []string{"pause", "resume", "retry", "skip", "merge", "hold", "unhold", "send", "unblock"}
+
+// Settled reports a lane that will do nothing more: closed, or skipped.
+func Settled(x *store.Lane) bool { return x.Stage == store.StClosed || x.Stage == store.StSkipped }
+
+// SkippedDeps lists the lane's blockers in this dispatch that were skipped: they never close, so the
+// lane waits on them for good until they are retried or the lane is unblocked.
+func SkippedDeps(d *store.Dispatch, x *store.Lane) []string {
+	var out []string
+	for _, b := range x.Deps {
+		if y, ok := d.Lanes[b]; ok && y.Stage == store.StSkipped {
+			out = append(out, b)
+		}
+	}
+	return out
+}
 
 // EndActions are the end-of-dispatch actions.
 var EndActions = []string{"open-pr", "qa", "grind-pr"}
@@ -833,6 +848,11 @@ func ApplyLaneAction(d *store.Dispatch, key, action, text string, now float64) e
 			x.Outbox = append(x.Outbox, store.OutboxItem{Kind: "close"})
 		}
 		x.Stage, x.SkipReason, x.PausedBy = store.StSkipped, "skipped by you", ""
+		// a skipped lane is settled: nothing about it waits on you any more
+		x.NeedsYou, x.Held, x.Gate, x.MergeError, x.MergeFails, x.IdleSince, x.ForceMerge = "", "", "", "", 0, 0, false
+		if x.EndedAt == 0 {
+			x.EndedAt = now
+		}
 	case "retry": // clear held/needs; a fresh session for the lane's stage at the next tick
 		red := x.Held == "CI is red"
 		x.Held, x.NeedsYou, x.Paused, x.PausedBy, x.MergeError, x.MergeFails = "", "", false, "", "", 0
@@ -841,7 +861,7 @@ func ApplyLaneAction(d *store.Dispatch, key, action, text string, now float64) e
 			if x.Handle != nil {
 				x.Outbox = append(x.Outbox, store.OutboxItem{Kind: "close"})
 			}
-			x.Stage, x.SkipReason, x.Handle = store.StQueued, "", nil
+			x.Stage, x.SkipReason, x.Handle, x.EndedAt = store.StQueued, "", nil, 0
 		case red && x.Handle != nil: // a retry of red CI means: fix it, in the session that wrote the PR
 			x.Outbox = append(x.Outbox, store.OutboxItem{Kind: "send", Text: ciFixMsg(x.PR).Plain})
 		case store.Active(x.Stage):
@@ -851,6 +871,23 @@ func ApplyLaneAction(d *store.Dispatch, key, action, text string, now float64) e
 		x.ForceMerge = true
 	case "hold", "unhold":
 		x.HoldMerge = action == "hold"
+	case "unblock": // stop waiting on blockers you skipped; the lane may start without them
+		skipped := SkippedDeps(d, x)
+		if len(skipped) == 0 {
+			return errs.Invalid("lane %s waits on no skipped issue", key)
+		}
+		drop := map[string]bool{}
+		for _, b := range skipped {
+			drop[b] = true
+		}
+		var keep []string
+		for _, b := range x.Deps {
+			if !drop[b] {
+				keep = append(keep, b)
+			}
+		}
+		x.Deps = keep
+		x.Unblocked = append(x.Unblocked, skipped...)
 	case "send":
 		if strings.TrimSpace(text) == "" || len([]rune(text)) > 2000 {
 			return errs.Invalid("send needs a message of 1 to 2000 characters")

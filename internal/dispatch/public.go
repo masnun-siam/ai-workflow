@@ -33,6 +33,11 @@ type PublicLane struct {
 	EndedAt      *float64  `json:"ended_at"`
 	Session      *string   `json:"session"`
 	Usage        LaneUsage `json:"usage"`
+	// Stranded says why a queued lane can never start as things stand ("blocked by skipped #N",
+	// "dependency cycle"); SkippedDeps are its blockers that were skipped (lane action unblock drops them).
+	Stranded    *string  `json:"stranded"`
+	SkippedDeps []string `json:"skipped_deps"`
+	Unblocked   []string `json:"unblocked"`
 }
 
 // Totals of a dispatch.
@@ -71,6 +76,13 @@ func (s *Service) Public(d store.Dispatch, full bool) PublicDispatch {
 	p := PublicDispatch{ID: d.ID, Epic: d.Epic, Issues: d.Issues, Title: d.Title, State: d.State, Settings: d.Settings,
 		Lanes: []PublicLane{}, CreatedAt: d.CreatedAt, EndedAt: fptr(d.EndedAt), FinalPRs: d.FinalPRs, SeenDone: d.SeenDone}
 	now := s.now()
+	strands := Stranded(&d)
+	lastAt := map[string]float64{}
+	for _, e := range d.Events {
+		if e.Lane != nil && e.At > lastAt[*e.Lane] {
+			lastAt[*e.Lane] = e.At
+		}
+	}
 	for _, k := range d.SortedKeys() {
 		x := d.Lanes[k]
 		cost, tok, hasTok := s.laneCost(x)
@@ -80,6 +92,22 @@ func (s *Service) Public(d store.Dispatch, full bool) PublicDispatch {
 			LimitedUntil: fptr(x.LimitedUntil), StartedAt: fptr(x.StartedAt), EndedAt: fptr(x.EndedAt)}
 		if l.Deps == nil {
 			l.Deps = []string{}
+		}
+		l.SkippedDeps, l.Unblocked = SkippedDeps(&d, x), x.Unblocked
+		if l.SkippedDeps == nil {
+			l.SkippedDeps = []string{}
+		}
+		if l.Unblocked == nil {
+			l.Unblocked = []string{}
+		}
+		if why, ok := strands[k]; ok {
+			l.Stranded = &why
+		}
+		if Settled(x) { // nothing about a closed or skipped lane waits on you (older records kept the text)
+			l.NeedsYou, l.Held, l.Gate = nil, nil, nil
+			if x.EndedAt == 0 && lastAt[k] > 0 {
+				l.EndedAt = fptr(lastAt[k])
+			}
 		}
 		if x.PR != 0 {
 			pr := x.PR
@@ -96,6 +124,9 @@ func (s *Service) Public(d store.Dispatch, full bool) PublicDispatch {
 		}
 		if x.StartedAt != 0 {
 			end := x.EndedAt
+			if end == 0 && Settled(x) {
+				end = lastAt[k]
+			}
 			if end == 0 {
 				end = now
 			}

@@ -25,6 +25,16 @@ describe("small changes, dispatch page, issue/PR panel", () => {
     const html = renderToString(<App />);
     for (const s of ["Courier rate cache", "Building now", "Up next", "Pause", "Cancel", "Settings", "lane · wasensi-backend#942", "Message the lane", "activity"]) expect(html).toContain(s);
   });
+  it("a lane stranded behind a skipped one is called out with retry and unblock", () => {
+    nav("#/dispatches/d1a2b3c4d5e6?lane=acme/wasensi-backend%23945");
+    const html = renderToString(<App />);
+    for (const s of ["Can't start", "skipped #944", "0/4 · 1 skipped", "Run #944 again", "Unblock them", "Unblock: start without it", "Skipped · 1"]) expect(html).toContain(s);
+    nav("#/dispatches/d1a2b3c4d5e6?lane=acme/wasensi-backend%23944");
+    const sk = renderToString(<App />);
+    expect(sk).toContain("Run it again");
+    expect(sk).toContain("1 issue waits on it");
+    expect(sk).not.toContain("Message the lane");
+  });
   it("the dispatch list is a table that opens the page", () => {
     nav("#/dispatches");
     const html = renderToString(<App />);
