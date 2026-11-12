@@ -2,8 +2,50 @@
 
 ## Unreleased
 
+## setu 1.0.0
+
+setu (সেতু) replaces the `ai-workflow` Claude Code plugin. It is one Go binary (`setu`) with a Preact web app embedded,
+and it drives the blubird plugin instead of shipping its own skills.
+
+### Removed
+
+- The plugin itself: `skills/`, `agents/`, `guides/`, `templates/`, `.claude-plugin/`, and the personal plugin. Process skills now come from blubird.
+- The Python `aiw` engine (`run-engine/`, `bin/aiw`) and the React app in `ui/`.
+- PRD shares (public share links and their sending).
+- The Codex harness; sessions run `claude` only.
+- herdr runner support; Dispatch lanes are headless.
+- `install-skills` and `repo-bootstrap` (Ops runs `blubird:agentic-onboard` instead).
+- The `site/` showcase and `kanban.html`, plus the old docs (`HOW-IT-WORKS`, `REFERENCE`, `INSTALL`, `docs/superpowers`, `docs/tasks`).
+- Endpoints `/api/route`, `/api/duplicate`, `POST /api/prd`, `/api/restart`, `/api/notifications`, `/api/repos/create|publish`, `/api/github/owners`.
+
 ### Added
 
+- `setu` single binary: `serve` (alias `ui`), `ask`, `paths`, `grind`, `dispatch`, `ci`, `threads`, `jev`, `blubird`, `review`, `version`.
+- Preact UI with seven screens (River, Inbox, Runs, Releases, Ops, Me, Settings), two looks (Console, River), three modes, two layouts, and a full keyboard map with a command palette.
+- Releases screen and a deterministic release flow: cut, grind, merge, notify. setu posts the release note itself, exactly once.
+- Built-in prompts embedded in the binary: `release-pr`, `pr-grind`, `release-note`, `peer-review`.
+- blubird detection, install and update from Settings; Server-Sent Events for live updates.
+- Web Push to the installed PWA as an extra notification channel next to browser, ntfy and macOS.
+- `make install` with a launchd agent.
+
+### Kept
+
+Sessions with questions and answers, accounts and usage meters, GitHub poller and board, inbox, Dispatch and the blubird coordinator reader,
+Away mode and the away answerer, grind state, peer review panels, Jev, Vault, merge cleanup, small changes, cost and transcripts.
+The data dir moves to `~/.setu`; the first start copies `~/.claude/plugins/data/ai-workflow/` into it once and never deletes the old one.
+
+---
+
+## ai-workflow plugin (before setu)
+
+### Added
+
+- **blubird's CLAUDE.md guard and secret blocks in UI sessions** (#941): an edit of the root `CLAUDE.md` or `AGENTS.md` that blubird's guard hook stops (denied headless) puts the session `waiting` on an Approve / Deny round held from Away; Deny resumes saying the edit was denied, Approve has the UI apply the exact proposed edit (only to the session's root file) and resumes saying it was applied or why it could not be. A prompt or answer that blubird's mask-secrets hook blocks ends the session `failed` with the hook's reason (the secret kind, never the value) instead of a silent `done`.
+- **Dispatch prompts from the registry** (#933): dispatch lanes build their implement, grind, QA and followup prompts from the skill registry, so lanes now run `/blubird:implement-issue <n>` and, after the merge, `/blubird:implement-issue <n>` told to run its "After the pull request is merged" section (no "Close #n" tail: blubird's step closes it). QA names `/blubird:verifier-locally` and `/blubird:create-tasks`; grind stays `/ai-workflow:pr-grind`. A live `/blubird:implement-issue` session (implement or after-merge) counts as the issue's live session on the board and in the duplicate guard. Codex lanes do not inline a `/blubird:` skill yet (#969).
+- **Launcher starts commands from the registry** (#932): `POST /api/sessions {command: <step id>}` and `POST /api/start` start the registry's `/<plugin>:<skill>` command (`ui_repos.NAMED` is gone; an unknown step is a 400). `docs` steps (create-prd, create-tasks, map-prds, security-sweep) run in the Documentation Repo found from the picked repo's `.blubird/repos.json` or `.blubird/docs-repo`, else a 400 pointing at `/blubird:agentic-onboard`. The vault (no-repo) create-prd flow and the `--to obsidian` and `--review` appends are removed: lenses on any command run a peer-review panel after the session.
+- **Idle guard off in UI sessions** (#927): every session the UI starts runs with `BLUBIRD_IDLE_GUARD=off`, so blubird's idle-guard Stop hook no longer blocks a headless turn end; the UI value wins over one the server inherited.
+- **Skill registry** (#926): `run-engine/skill_registry.json` maps each UI step (today's command names) to `{plugin, skill, runs_in}`, `skill_registry.py` loads and validates it on every call, and `GET /api/registry` serves it with each step's `/<plugin>:<skill>` command. Nothing reads it yet.
+- **Products** (#929): `POST /api/products {path}` registers a Documentation Repo checkout; its `.blubird/repos.json` makes it and its code repos one product, and `GET /api/products` lists each product's repos with `cloned` and any `conflict`. Cloned code repos are registered as checkouts, and `ui_products.sync()` registers ones cloned later.
 - **Codex accounts** (#867): an account in Settings > Accounts can run on Codex (**Harness** column, **Models** field), and every UI-started session and dispatch lane (headless, herdr and herdr-app) runs on that account's harness, with per-harness model and effort, tokens without cost, limit auto-resume on the same account, and "usage unavailable" for Codex in the rail. Panels and Away answers stay Claude-only: Codex's read-only sandbox cannot run `gh` (gate G3). The entries below are the parts.
 - **aiw install-skills** (#873): `aiw install-skills --harness codex` links each plugin skill into `~/.agents/skills` for interactive Codex and records its links in `<data_dir>/install_skills.json`; a rerun repoints or removes only its own recorded links, skips and reports anything else, and `--remove` deletes only its own links.
 - **Agents on Codex: read-only sandbox or refusal** (#881): starting a peer-review panel or an Away answer on a Codex account is refused with "panels and Away answers need a Claude account: Codex's read-only sandbox cannot run gh" and spawns nothing: a panel start shows it as its error, an Away round is held in the Inbox at once with it as the reason. The sandbox path is built behind `harness_codex.AGENT_SANDBOX_VERIFIED` (off until build gates G2 and G3 pass): lens and answerer sessions run `--sandbox read-only` with their agent file's text as instructions, never the bypass flag, on every start and resume. Claude lenses and answerers are unchanged.
@@ -47,8 +89,13 @@
 
 - **Retry failed lanes** (#756): `aiw dispatch retry-failed <id>` and `POST /api/dispatches/<id>/retry-failed` retry every lane that failed to start, needs you or is held, and leave lanes you skipped, lanes needing a refine, closed and healthy lanes alone.
 
+### Removed
+
+- **Local review setting removed** (FR-8 of blubird-ui, #928): `review_mode`, the Settings Local review radio and `aiw local-review` are gone; blubird's implement-issue reviews the branch itself. An old `review_mode` in `ui_settings.json` is ignored and dropped on the next save.
+
 ### Changed
 
+- **Skill questions relay through aiw ask** (#935): the headless prompt every UI-started Claude session gets now says AskUserQuestion is not available there and that any skill step asking the user with AskUserQuestion runs `aiw ask --json '<the AskUserQuestion input>'` instead, so a blubird skill's question ("Improve this skill" included) reaches the Inbox and answering resumes it. The `Headless run: ask via aiw ask` marker the dump and worklog skills look for stays.
 - **Run an epic select lists every open epic** (#975): the select reads the repo's delivery lanes, so epics without a PRD, of a PRD in a subfolder, and a PRD's second and third epics are listed too, `#<n> <title>`, newest first. It is always shown, follows the text box (`n`, `#n` or `<repo>#n` selects the epic; `#n` is now a valid entry), and shows loading, empty, no-repo and load-error states. The account pin still comes from the epic's PRD. Run small changes never loads it. When the delivery response has `truncated: true` (#976), a hint under the field reads "Only the newest 500 open issues were read; type an older epic's number."
 - **UI audit fixes**: the Inbox shows "Loading…" instead of a false "Nothing needs you", and the need-you count reads `N+` while GitHub data is still loading. Light-theme status colours and control borders meet WCAG contrast, and the font floor is 12px. `Enter` opens a list row; deleting a Slack channel asks first; async buttons disable while pending. The palette no longer pre-selects an action (Go to comes first). Headings share one H1 size, and Small changes puts its input below the heading. Features and Dispatches use the repo dropdown instead of the segmented toggle, and the dispatch progress bar is determinate. The phone nav has 5 items plus a **More** menu (Activity, Settings); the repo switcher shows the short repo name with the full slug on hover. Activity has loading and empty states, and session facts omit empty values. Settings > Repos **Remove** moved into a ··· menu. The scroll-jump buttons appear only after scrolling a screen, and tables show a scroll shade.
 - **Session page outcome, polished**: an issue session's title is `#n <issue title>` with the command below it; the outcome's first paragraph is its headline, and each `#n` in it is a chip with its kind and state (open, closed, merged) that opens its panel (`GET /api/issue` now carries `merged`). Facts read as one dotted line, effort as "high effort", and the transcript gets a **Story / All steps** switch in place of the "Show every step" box.

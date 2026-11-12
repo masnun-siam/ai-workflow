@@ -1,31 +1,20 @@
-# Product
+# setu: product
 
 ## What it is
 
-`aiw ui` is the local control room for the ai-workflow plugin: it starts headless Claude Code
-sessions for each stage of the team process (PRD → tasks → refined issues → implement → review →
-merge) and shows what needs a human across every watched repo.
+A single-user control room for Claude Code work. The human sets direction and answers questions; sessions do the work.
+setu's job is to make "what needs me now" obvious and one keypress to act on.
 
-## Who uses it
+## Principles
 
-- **Primary:** one engineer driving the workflow, with the UI open all day on a second monitor in
-  long sessions. Desktop first; the phone (PWA over the tailnet) is for checking in.
-- **Secondary:** teammates on the same process who open it to answer a question or approve a PRD.
+- **Waiting on me comes first.** The Inbox and River rank by urgency; a question to answer is never more than one key away.
+- **Keyboard first, mouse works.** Every action has a letter shown next to it. Nothing needs a mouse.
+- **The server decides, the UI renders.** Items carry their own actions; the UI has no per-type logic.
+- **GitHub is the truth.** setu derives views from GitHub and `docs/prds/`, and keeps only its own session and loop state.
+- **Calm by default.** Notify only on events the human chose (waiting, failed, PR ready, release); one sender, deduped.
+- **Local and small.** One binary, std lib first, loopback plus optional tailnet, low idle cost.
+- **Away is safe.** In Away mode only a read-only answerer replies, and only when confident.
 
-## Jobs, most frequent first
+## Screens
 
-1. Answer what Claude is asking (questions, approvals, failed sessions) — the Inbox.
-2. See where each feature is in the pipeline and move it on — Features and the Feature page.
-3. Watch and steer epic dispatches — Dispatches.
-4. Find a past session, its transcript and its cost — Activity and Session.
-5. Configure repos, accounts, notifications — Settings.
-
-## Personality
-
-Fast, sharp, technical. Keyboard-first and dense, like Linear; issue and PR conventions familiar
-from GitHub. The interface stays quiet until something needs the user.
-
-## Anti-references
-
-Template dashboards: KPI tiles with icons in coloured circles, rainbow status colours, gradient
-accents, glass, cards inside cards.
+River (pipeline), Inbox, Runs, Releases, Ops, Me, Settings.

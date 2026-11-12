@@ -1,9 +1,18 @@
-__pycache__/
-*.pyc
 .DS_Store
 .superpowers/
 .claude/
-kanban.html
 .gstack/
+.gitnexus/
+.worktrees/
 
-ui/node_modules/
+# Go
+/setu
+/bin/
+*.test
+*.out
+coverage.txt
+
+# Node (internal/web/dist/ is built output and IS committed)
+web/node_modules/
+web/.vite/
+*.tsbuildinfo

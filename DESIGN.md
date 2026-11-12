@@ -1,52 +1,37 @@
-# Design system: teal pipeline
+# setu: design
 
-The source of truth is `ui/src/styles/global.css` (tokens in `:root` and the two dark blocks) and
-`ui/src/features/features.css` (the Features screens). This file states the rules those tokens
-serve. Mode: Operate, with a bold first read: a page should say what needs you before it is read.
+Source of truth: `web/src/styles.css`, `web/src/state/prefs.ts`. The reference prototype is `docs/setu/prototype/`.
 
-## The shell
+## Looks, modes, layouts
 
-A dark rail (`--rail`) beside a light page (`--frame`); work sits in white panels (`.pane`, 16px
-corners, a 1px `--line` edge, no shadow). The rail redefines the surface tokens for everything inside
-it, so its nav, Away card, usage meters and buttons need no rules of their own. Away mode warms the
-rail (`--away-rail`). On a phone the rail folds into the bottom bar.
+| Setting | Values | Default | Applied as |
+|---|---|---|---|
+| Look | Console, River | Console | `body.skin-console` / `body.skin-river` |
+| Mode | System, Dark, Light | System | `html[data-theme]` (absent = follow the OS) |
+| Layout | Rail + drawer (`drawer`), Tabs + split (`split`) | drawer | layout classes |
 
-## Colour
+Stored in `localStorage` key `setu.prefs.v1` (per browser). Storage may be blocked; the page renders without it.
 
-| Token | Use |
-| --- | --- |
-| `--st0`…`--st5` | The six stages, pale to deep teal, Shipped in ink. Stage tiles, the stage blocks, card tops |
-| `--ship`, `--review`, `--build`, `--plan` | Issue states on the same ramp: merged, in review, building, ready |
-| `--you` (#C2410C) | Needs you, and only that: counts, alerts, cards and squares that wait on the user |
-| `--bad` | Failed, errors, destructive actions |
-| `--accent` (#0F6E64) | Create actions (`variant="accent"`), focus, selection, the current stage |
-| `--primary` | Next-step buttons: near-black in light, near-white in dark |
+## Tokens
 
-## Type
+Each look defines the same variables, redefined for light mode: `--bg --p1 --p2 --line --tx --mu --dim --acc --accink --sel --q --bad --ok --warn`
+plus `--font --hfont --r --rc` (radius, card radius).
 
-- Chivo 400–700 and Chivo Mono (self-hosted via `@fontsource`).
-- Page titles `.display` 44px/700 (32px on a phone), feature titles 40px, section heads 20px/600,
-  body 14px. Large figures (stage counts, merged/total) are 34–40px/600.
-- Mono for IDs, commands, issue numbers, metadata lines and money. Not for prose.
-- Tabular figures everywhere.
+| | Console dark | River dark |
+|---|---|---|
+| Fonts | JetBrains Mono everywhere | Inter body, Space Grotesk headings |
+| Radius | 0 | 8px, cards 10px |
+| `--bg` / `--p1` | `#0A0A09` / `#11110F` | `#0B1220` / `#111A2C` |
+| `--tx` / `--mu` | `#ECE7D9` / `#A8A291` | `#E6ECF7` / `#A2AEC6` |
+| `--acc` | `#FFB547` amber | `#5AB0FF` blue |
 
-## Shape and density
+Light variants: Console on warm paper (`--bg #F3EEE2`, `--acc #8F5400`); River on cool white (`--bg #F3F6FB`, `--acc #1D66C9`).
+`--bad`, `--ok`, `--warn` carry status; `--q` marks a live or question state. Contrast is tested (`web/src/contrast.test.ts`); keep every text token at AA on its panel.
 
-- Radii: `--r-sheet` 16 (panels, cards), `--r-card` 14, `--r-ctl` 9 (controls), 8 for small chips,
-  pills fully round.
-- Buttons 34px (28px small), capture controls 44px. Section gap 28px.
-- Shadows only on what floats: menus, dialogs, toasts, the composer, the overlay panel.
+## Principles
 
-## Signature elements
-
-- **The pipeline:** six stage tiles; empty stages are dashed outlines with a faint zero.
-- **Issue squares:** one square per issue, coloured by state; needs-refining is a dashed outline,
-  needs-you is orange.
-- **The build map:** issues in dependency waves, left to right, with arrows between columns.
-- **The capture box:** one input for a feature or a fix, routed by Auto (jev), Feature or Small change.
-
-## Bans
-
-Gradients (except the functional table scroll-edge shadows), glass, icons in tinted squares, unicode
-glyphs as icons, eyebrow labels, uppercase tracked labels, orange on anything that does not need the
-user, a second solid-orange element competing with the needs-you alert.
+- Keyboard first: letter hints sit on buttons; one footer line lists the screen's keys; `?` shows the whole map.
+- Server-built actions render as given. Tone classes `c-w c-q c-o c-b` (warn, query, ok, bad) colour tags.
+- Density over decoration: flat panels and 1px `--line` borders; use shadow or gradient only where it marks layering.
+- Never colour alone: pair status colour with a word or glyph.
+- Respect `prefers-reduced-motion`; no motion is required to understand a state.

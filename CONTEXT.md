@@ -1,109 +1,74 @@
-# ai-workflow
+# setu
 
-A Claude Code plugin that carries the team's dev process (PRD → tasks → refined issues → implement → review) plus the tools around it (dump, worklog, release PR, grind, peer review) and a web UI that runs them.
+Local frontend for Claude Code that drives the blubird plugin. This is the vocabulary used in code, UI and docs.
 
 ## Language
 
+**Product**:
+A Documentation Repo plus the code repos listed in its `.blubird/repos.json`. setu groups boards, inbox and River by product. Registered in `~/.setu/products.json`.
+
+**Documentation Repo**:
+The repo holding `docs/prds/` for a product. `docs`-run steps (`create-prd`, `create-tasks`, `map-prds`, `security-sweep`, `project-coordinator`) run in its checkout.
+
 **PRD**:
-The product requirements for one feature (the what and why, with a technical design of contracts but never code), written by `/create-prd` after an interview. The canonical copy is the repo's `docs/prds/<slug>.md`. Its status is Draft, In review or Approved; only an Approved PRD can be split into tasks. An author can set `Done` by hand in the header for a feature built without an epic; the UI then shows it as Shipped. `/create-prd --update` records later decisions.
-_Avoid_: Spec, design doc
+The product requirements for one feature, at `docs/prds/<slug>.md`, written by blubird `create-prd`. Status Draft, In review or Approved; only Approved is split into tasks.
 
-**Epic**:
-A parent issue whose sub-issues are the tasks of one `## Epics` entry of a PRD, filed when the PRD is approved and labelled `epic` + `prd-<slug>`.
-_Avoid_: Parent ticket, umbrella issue
+**Epic / refined issue**:
+An epic is the parent GitHub issue of one PRD entry; its child issues become refined issues once `refine-issues` writes their body. Only a refined issue is ready to implement.
 
-**Refined issue**:
-A task is a child issue of the epic that `/create-tasks` creates; it becomes a refined issue when `/refine-issues` writes its body. A refined task has a WHAT, WHY and HOW written from the PRD and the code, native blocked-by links, and the `refined` label. `/refine-issues` writes it. Only a refined issue is ready to implement.
-_Avoid_: Groomed, ready
+**River**:
+The home screen: the pipeline as columns of cards, one per stage. Also one of the two looks (Console, River).
 
-**implement-issue**:
-The skill that takes one refined issue to a Ready PR in a single session: stop if blocked, work in its own worktree, run every check locally, verify in the running app, open a draft PR, and mark it ready only when CI is green and every review comment is handled.
+**Stage**:
+A column of the River and the group a step belongs to: `prd`, `tasks`, `refine`, `implement`, `review`, `release`, `notify`, `ops`. Each registry step names its stage.
 
-**close-epic**:
-The skill that verifies an epic is really finished: every child issue closed, every PRD `FR-n` shipped by a merged PR, `/verifier-locally` green on the base branch. Then it sets the PRD to `Done` and closes the epic. It never force-closes children (the UI's close-epic button does).
-
-**verifier-locally**:
-The skill that proves a change works before it is pushed: it finds the repo's checks from CI, hooks and build files, runs the ones matching the changed paths, and reports each result with evidence. `implement-issue` and grind both call it.
-
-**pr-review**:
-The skill that reviews a PR or local branch against its issue, the repo's rules and `guides/code-review.md`, and reports evidence-backed findings with a verdict.
-
-**Local review**:
-The `/pr-review` of the local branch in `implement-issue` step 12, before the push. `aiw local-review` picks the mode: Single reviews once and fixes Critical and Major findings; Loop reviews the whole branch round after round until a round finds nothing new, recording every finding in a findings log in the worktree's git directory.
-
-**Grind**:
-`/pr-grind`: the loop on a ready PR that mentions (Slack) or requests (GitHub) the current reviewers, read again from Settings before each recheck, waits for a round, fixes the findings inline in its own session, runs `/verifier-locally`, pushes, re-triggers, and repeats until the first reviewer approves or a rail stops it. Each round re-enters as a fresh headless session that reads the PR's grind state file.
-_Avoid_: Review loop
-
-**Lens**:
-One review angle (critical, CEO, CTO, security, QA, UX, performance). The `peer-reviewer` agent is a lens: read-only, on Opus, one lens per instance.
-
-**Peer review panel**:
-The lenses picked for one artifact (a draft PRD, or a change: Ask, Answer and Diff), run by `/peer-review` until every picked lens approves or the round cap is reached. The UI starts one lens session per lens, relays verdicts to the root session and caps the loop at 5 rounds; the user decides after that.
-_Avoid_: Review (on its own, that means a PR review)
-
-**Dump**:
-A capture filed into the Obsidian vault by `/dump` (new feature, change request, bug, task or meeting notes). A feature, change request or bug is written as a Problem statement; for a new feature it also seeds a `PRD.md` with `status: seed` next to `Dump.md`.
-_Avoid_: Note
-
-**Problem statement**:
-What `/dump` writes for a feature, change request or bug: Problem, Who, Evidence, Expected and Open questions, taken only from the input, followed by the raw input verbatim. `/create-prd` builds a PRD from it.
-
-**Share**:
-A public, token-link view of one PRD in Draft or In review with its comment threads, served by a separate read-only listener behind a tailscale funnel. It ends when the PRD leaves those statuses, on Stop, or when the file is gone.
-_Avoid_: Review link, public PRD
-
-**Reviewer**:
-Anyone holding a Share link: a typed display name, no account and no verified identity. Their Approve is a signal, never the PRD's Approved status.
-_Avoid_: Guest, user
-
-**Thread**:
-One anchored quote in a shared PRD with its comments, from reviewers and the author. Open threads go to a session only through the author's Send.
-_Avoid_: Discussion
+**Step**:
+One entry of the built-in registry (`create-prd`, `implement-issue`, `pr-grind`, `release-pr` ...). A step is either a blubird skill (`/blubird:<skill>`) or a setu built-in prompt, and declares where it runs (`runs_in`: `docs`, `repo`, `issue` or `none`).
 
 **Session**:
-A headless coding-agent invocation (Claude Code or Codex) started and tracked by the UI (`aiw ui`), recorded under `<data_dir>/sessions/<id>/`. It exits after each turn and resumes the same conversation with an answer or after a rate limit.
-_Avoid_: Run, job
+One headless `claude -p` run started by setu, kept in `~/.setu/sessions/<id>/` with `meta.json`, `stream.jsonl` and `stderr.log`. Status: starting, running, waiting, limited, queued, done, failed, stopped. A `waiting` session has asked the human a question through `setu ask`.
 
-**Harness**:
-The coding-agent CLI a Session runs on: `claude` (Claude Code) or `codex`. Each account in Settings has one, and a Session records the harness it started on.
-_Avoid_: Provider, model
+**Round**:
+One batch of questions a waiting session asks, answered together from the Inbox, the session page or Away mode.
 
-**Adapter**:
-The module that owns everything harness-specific for one Harness (`run-engine/harness_claude.py`, `harness_codex.py`): login check, start and resume arguments, prompt shape, stream parsing into common events and the resume command. The runner and every stream reader talk only to it.
-_Avoid_: Driver, plugin
+**Account**:
+A `claude` command (config dir) sessions run under. Usage meters and limit auto-resume are per account.
 
-**Held session**:
-A Session the user paused with "After this run" (`hold` on its record): the current run finishes, and nothing continues the session on its own until the user resumes it. It can still be answered by hand. Not a held lane, which is a dispatch lane stopped for red CI or a grind.
+**Inbox item**:
+Anything waiting on the human, derived on every read (never stored): a waiting session, a PR ready to review, a stuck lane, a paused grind, a release to approve, a needs-cleanup merge. Each carries server-built actions.
 
-**Bootstrap run**:
-One "Bootstrap repo" started from the UI: a record under `<data_dir>/bootstraps/` that chains one headless Session per phase (audit, decide, constitution, guides, gates, docs) and stops at the first phase that does not report `BOOTSTRAP: <phase> done #<issue>`. A repo has at most one that is running, waiting or stopped. It is not a Session.
-_Avoid_: Bootstrap session
-
-**Inbox**:
-The UI's list of everything that needs the user across repos (questions, PRs ready to merge, paused grinds, failed sessions, reviews at their cap), built on the server by `GET /api/inbox`. Items clear themselves when their condition does.
-_Avoid_: Notifications, queue
-
-**Away mode**:
-A timed run by the UI server that answers every `aiw ask` question (recommended options at once, an Opus answerer for the rest, risky or unanswerable rounds held), skips CI on paused grinds and retries failed sessions while the user is away. Formerly "AFK".
-_Avoid_: AFK, autopilot
-
-**Answerer**:
-A read-only Opus session (`agents/away-answerer.md`) that Away mode starts for one question round without a recommended option. It picks labels with a reason, or holds the round; it never appears in session lists.
-_Avoid_: Bot, auto-answerer
-
-**Project**:
-The human-friendly name for a GitHub `owner/repo`, looked up from `skills/worklog/projects.json`. Falls back to the raw `owner/repo` slug when unmapped.
-_Avoid_: Repo (when referring to the display name; "repo" is fine for the raw slug)
-
-**Dispatch**:
-One run of an epic's child issues, or of a list of picked issues (from the UI only), as parallel Lanes, in dependency order under a cap, recorded under `<data_dir>/dispatches/` and ticked by the `aiw ui` server. Started by the `herdr-dispatch` skill (lanes are herdr tabs) or from the UI (lanes are headless Sessions); both see and steer every dispatch. Replaces Auto-build and epic autopilot.
-_Avoid_: Batch run, fan-out, autopilot, auto-build
-
-**Small change**:
-A bug or change that needs no PRD: filed and refined by one `/create-tasks` then `/refine-issues` session started from the Features page's Small changes tab, and built with a Dispatch of picked issues.
-_Avoid_: Ticket, quick fix
+**Action**:
+A server-built button on an item: key, label, method, path. The UI runs it as given and has no per-type logic.
 
 **Lane**:
-One issue of a Dispatch, walked by the engine: implement (`/implement-issue`), grind (`/pr-grind`, off/simple/full), the merge gate (CI green, an approving review, the grind done), merge (automatic only with auto-merge on), followups (implement-issue's after-merge steps), closed; then the next unblocked lane starts. A lane that needs the user is held, and its dependents wait.
-_Avoid_: Job, tab (a herdr tab is only where a lane may run)
+One issue run by Dispatch: queued, implementing, grinding, merge_gate, conflict_fix, awaiting_merge, followups, closed or skipped. A lane owns its issue; manual starts on it are refused.
+
+**Dispatch**:
+setu's own parallel runner: an epic's child issues become lanes, each a `blubird:implement-issue` session followed by a grind. Stored in `~/.setu/dispatches/<id>.json`.
+
+**Coordinator**:
+blubird's `project-coordinator`, which runs up to 5 interactive sessions as terminal panes. setu starts it and only reads its runs and claims under `~/.claude/project-coordinator/`.
+
+**Grind**:
+The loop that takes a PR from draft to merge-ready: wait for reviewers, fix or rebut each finding, re-run CI, repeat. Modes `deep` or `simple`. State is `~/.setu/pr-grind/<owner>-<repo>-<pr>.md`, mutated only through `setu grind ...`.
+
+**Peer review**:
+A panel of read-only reviewer sessions, one per lens, that review an artifact in rounds. State under `~/.setu/peer-review/`.
+
+**Release flow**:
+`cut` (the `release-pr` prompt opens the head-to-base PR) → `grind` → `merge` → `notify` (setu posts the release note once) → `done`. A dry run stops after the PR draft.
+
+**Away mode**:
+A switch (`afk.json`) for when the human is gone. Waiting rounds go to the read-only away answerer, which answers only what it is confident about and holds the rest; stuck lanes are retried.
+
+**Built-in prompt**:
+A prompt embedded in the binary (`prompts/`): `release-pr`, `pr-grind`, `release-note`, `peer-review`, plus the agent bodies `peer-reviewer` and `away-answerer`. Extracted to `~/.setu/prompts/<version>/`.
+
+**blubird**:
+The Claude Code plugin that carries the team's dev process as skills. setu detects, installs and updates it, and never copies its skills.
+
+**Look / Mode / Layout**:
+The three appearance settings: Look (Console or River), Mode (System, Dark, Light), Layout (Rail + drawer, Tabs + split).
+
+**Data dir**:
+`~/.setu` (override `SETU_HOME`). Holds setu's own state only; GitHub and `docs/prds/` are the truth.
