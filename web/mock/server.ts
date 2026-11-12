@@ -117,7 +117,10 @@ const routes: [string, RegExp, H][] = [
   ["POST", /^\/api\/grinds\/([^/]+)\/([^/]+)\/(\d+)\/skip-ci$/, () => ({ state: "running" })],
   ["POST", /^\/api\/grinds\/([^/]+)\/([^/]+)\/(\d+)\/stop$/, ({ m }) => { const g = db.grinds.find((x) => x.pr === Number(m[3])); if (g) g.state = "done"; emit("products", { kind: "grind" }); return g; }],
   ["GET", /^\/api\/review$/, () => ({ panels: db.panels })],
-  ["GET", /^\/api\/review\/offers$/, () => ({ default: ["security"], max_rounds: 3, kinds: {} })],
+  ["GET", /^\/api\/review\/offers$/, () => ({ default: ["critical"], max_rounds: 3, kinds: { "create-prd": ["critical", "ceo", "cto", "security", "qa", "ux"], custom: ["critical", "cto", "security"] } })],
+  ["GET", /^\/api\/repos\/([^/]+)\/([^/]+)\/open$/, ({ q }) => ({ items: q.get("kind") === "pr" ? F.openPRs : F.openIssues })],
+  ["POST", /^\/api\/vault\/suggest$/, () => ({ project: "wasensi", feature: "payouts", new_project: false, new_feature: false, why: "matches the payouts notes" })],
+  ["POST", /^\/api\/repos\/browse$/, () => ({ path: "/code/elsewhere" })],
   ["GET", /^\/api\/dispatches$/, () => ({ dispatches: db.dispatches })],
   ["POST", /^\/api\/dispatches$/, ({ body }) => {
     const d: Dispatch = { ...structuredClone(F.dispatches[0]!), id: "ddddeeeeffff", epic: body.epic ?? null, title: body.epic ?? "Issues", lanes: [] };

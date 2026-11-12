@@ -5,6 +5,8 @@
 ### Changed
 
 - The UI is back on the old aiw navigation: a rail with Inbox, Features, Small changes, Dispatches and Activity (then River, Releases, Ops, Me, Settings) and counts for needs-you, dispatching and running; a top bar with the repo switcher (`g r`), search, the needs-you pill and New; a repo filter on list pages (`?only=`); onboarding while no repo is registered; Away mode presets and plan usage in the rail foot. Runs split into Dispatches and Activity; `#/runs` still opens Activity.
+- **New** (`n`) opens the old Create box again: describe the change, pick Feature (a PRD interview with optional peer-review lenses, run on opus at medium) or Small change (one issue with a priority), the repo and the account. It warns when an open issue looks the same. The text survives Cancel.
+- The Start dialog is back in full: commands grouped Plan, Build, Review, Ship, Capture, Maintain; **Where** is a repo, another folder (with Browse… on macOS) or, for a custom prompt, the notes vault with Project / Feature and Suggest with Claude; issue and PR steps pick from the repo's open items, Create tasks from Approved PRDs; model, effort (optionally saved as the default), peer-review lenses and the account per run; Queue when the account is limited.
 
 ## setu 1.0.0
 

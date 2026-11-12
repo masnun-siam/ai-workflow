@@ -1,14 +1,11 @@
 import { useEffect, useRef, useState } from "preact/hooks";
-import { http } from "../api/http";
 import type { RegistryStep } from "../api/extra";
-import type { Session } from "../api/types";
-import { describeError } from "../state/actions";
-import { loadMany, products, registry, repos, settings } from "../state/data";
+import { registry } from "../state/data";
 import { nav } from "../state/route";
-import { confirmReq, helpOpen, paletteOpen, startReq, toast, toastMsg } from "../state/ui";
+import { confirmReq, helpOpen, openCreate, paletteOpen, startReq, toast, toastMsg } from "../state/ui";
 import { clamp } from "../state/ui";
 import { HINTS } from "../state/keymap";
-import { Btn, Field, useFocusTrap } from "./ui";
+import { Btn, useFocusTrap } from "./ui";
 
 const RUNS_IN: Record<string, string> = { docs: "in a docs repo", issue: "on an issue", repo: "in a repo", none: "no repo needed" };
 
@@ -51,67 +48,11 @@ export function Palette() {
             </button>
           ))}
           {!list.length && !q.trim() && <div class="empty">No skills loaded yet.</div>}
+          <button type="button" class="pi" onClick={() => { paletteOpen.value = false; openCreate(q.trim() || undefined); }}><span class="c-w">+</span>Describe a feature or a fix{q.trim() ? <>: <b>{q.trim()}</b></> : null}<span class="r"><kbd>n</kbd></span></button>
           {q.trim() && <button id={`pal-${list.length}`} type="button" role="option" aria-selected={i === list.length} class={`pi${i === list.length ? " sel" : ""}`} onClick={() => pick(list.length)}><span class="c-w">›</span>Run as free text: <b>{q.trim()}</b><span class="r">{list.length ? "" : "no skill matches"}</span></button>}
         </div>
         <div class="dlg-foot"><span><kbd>↑↓</kbd>move</span><span><kbd>⏎</kbd>choose</span><span><kbd>esc</kbd>close</span></div>
       </div>
-    </div>
-  );
-}
-
-export function StartDialog() {
-  const req = startReq.value!;
-  const step = req.step;
-  const [args, setArgs] = useState(req.args ?? "");
-  const [repo, setRepo] = useState(req.repo ?? repos.value?.repos[0]?.slug ?? "");
-  const [prod, setProd] = useState(products.value?.[0]?.docs_repo ?? "");
-  const [account, setAccount] = useState("");
-  const [busy, setBusy] = useState(false);
-  const ref = useRef<HTMLInputElement>(null);
-  const box = useRef<HTMLDivElement>(null);
-  useFocusTrap(box);
-  useEffect(() => ref.current?.focus(), []);
-  const repoList = repos.value?.repos ?? [];
-  const needsRepo = !step || step.runs_in === "issue" || step.runs_in === "repo";
-  const submit = async () => {
-    const body: Record<string, unknown> = step ? { step: step.id, args: args || undefined } : { text: args };
-    if (step?.runs_in === "docs") body.product = prod;
-    else if (needsRepo && repo) body.repo = repo;
-    if (account) body.account = account;
-    body.guard = true;
-    setBusy(true);
-    try {
-      const s = await http.send<Session>("POST", "/api/sessions", body);
-      startReq.value = null;
-      toast(`Started ${step?.id ?? "run"}`);
-      void loadMany(["sessions"]);
-      nav(`#/sessions/${s.id}`);
-    } catch (e) {
-      const f = e as { body?: { href?: string } };
-      toast(describeError(e), "error", f.body?.href);
-      setBusy(false);
-    }
-  };
-  return (
-    <div class="ov" onClick={(e) => { if (e.target === e.currentTarget) startReq.value = null; }}>
-      <div class="dlg" ref={box} role="dialog" aria-modal="true" aria-labelledby="start-h"><form class="form" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
-        <h2 id="start-h" class="dlg-h">{step ? `Run ${step.source === "blubird" ? "blubird:" : ""}${step.id}` : "Run a free text prompt"}</h2>
-        {step?.args_hint && <span class="dim">Arguments: {step.args_hint}</span>}
-        {needsRepo && (
-          <Field label="Repository">
-            {repoList.length ? <select value={repo} onChange={(e) => setRepo((e.target as HTMLSelectElement).value)}>{repoList.map((r) => <option key={r.slug}>{r.slug}</option>)}</select>
-              : <span class="c-w">No repositories are registered yet. Add one in Settings → products and repos.</span>}
-          </Field>
-        )}
-        {step?.runs_in === "docs" && (
-          <Field label="Product"><select value={prod} onChange={(e) => setProd((e.target as HTMLSelectElement).value)}>{(products.value ?? []).map((p) => <option key={p.docs_repo} value={p.docs_repo}>{p.name}</option>)}</select></Field>
-        )}
-        <Field label={step ? "Arguments (optional)" : "Prompt"}><input ref={ref} placeholder={step ? (step.args_hint ?? "") : "What should Claude do?"} value={args} onInput={(e) => setArgs((e.target as HTMLInputElement).value)} /></Field>
-        {(settings.value?.commands.length ?? 0) > 1 && (
-          <Field label="Account"><select value={account} onChange={(e) => setAccount((e.target as HTMLSelectElement).value)}><option value="">default</option>{settings.value!.commands.map((c) => <option key={c.label}>{c.label}</option>)}</select></Field>
-        )}
-        <div class="acts"><Btn type="submit" primary disabled={busy || (!step && !args.trim()) || (needsRepo && !!step && !repo)}>{busy ? "Starting…" : "Start"}</Btn><Btn onClick={() => (startReq.value = null)}>Cancel</Btn></div>
-      </form></div>
     </div>
   );
 }
@@ -133,7 +74,7 @@ export function ConfirmDialog() {
   );
 }
 
-const GLOBAL: [string, string][] = [["1-7", "switch screen"], [": or ⌘K", "run a skill"], ["⏎", "open selected"], ["esc", "close"], ["a/b/c", "answer a question"], ["letters on buttons", "run that action"],
+const GLOBAL: [string, string][] = [["1-9, 0", "go to a page"], ["g then i f c d a v s", "go to a page"], ["g r", "switch repository"], ["n", "new: describe a change"], [": or ⌘K", "run a command"], ["⏎", "open selected"], ["esc", "close"], ["a/b/c", "answer a question"], ["letters on buttons", "run that action"],
   [".", "mode: system / dark / light"], ["s", "look: classic / console / river"], ["L", "layout: drawer / split"], ["?", "this help"]];
 export function Help() {
   const box = useRef<HTMLDivElement>(null);

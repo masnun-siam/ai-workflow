@@ -196,11 +196,21 @@ export const reviewCfg: ReviewConfig = {
   max_rounds: 3, default_lenses: ["security", "perf"], lenses: { security: "Look for auth and injection problems", perf: "Look for N+1 and slow paths", tests: "Look for missing tests" },
   shipped: { max_rounds: 3, default_lenses: ["security"], lenses: {} }, overridden: true,
 };
-export const registry: RegistryStep[] = [
-  ["create-prd", "blubird", "docs"], ["create-tasks", "blubird", "docs"], ["refine-issues", "blubird", "issue"], ["implement-issue", "blubird", "issue"], ["reproduce-bug", "blubird", "issue"],
-  ["pr-review", "blubird", "issue"], ["project-coordinator", "blubird", "docs"], ["docs-updater", "blubird", "repo"], ["security-sweep", "blubird", "docs"], ["day-end-reconcile", "blubird", "none"],
-  ["release-pr", "setu", "repo"], ["pr-grind", "setu", "issue"], ["release-note", "setu", "none"], ["peer-review", "setu", "repo"],
-].map(([id, source, runs_in]) => ({ id: id!, source: source as "blubird", skill: id!, runs_in: runs_in as "docs", stage: "x", command: `/${source === "blubird" ? "blubird:" : ""}${id}`, available: true }));
+export const registry: RegistryStep[] = ([
+  ["create-prd", "blubird", "docs", "prd", "Create PRD", "free text, a PRD path"], ["create-tasks", "blubird", "docs", "tasks", "Create tasks", "<PRD path>"],
+  ["small-change", "blubird", "repo", "refine", "Small change", "<finding>"], ["refine-issues", "blubird", "issue", "refine", "Refine issues", "<epic | issues>"],
+  ["reproduce-bug", "blubird", "issue", "refine", "Reproduce bug", "<issue | symptoms>"], ["implement-issue", "blubird", "issue", "implement", "Implement issue", "<issue | epic>"],
+  ["project-coordinator", "blubird", "docs", "implement", "Project coordinator", "<issues link | n>"], ["pr-review", "blubird", "issue", "review", "PR review", "<PR | branch | range> [--fix]"],
+  ["peer-review", "setu", "repo", "review", "Peer review", "<artifact>"], ["pr-grind", "setu", "issue", "review", "PR grind", "<PR url>"],
+  ["release-pr", "setu", "repo", "release", "Release PR", "[--dry-run]"], ["release-note", "setu", "none", "notify", "Release note", "<pr-url>"],
+  ["docs-updater", "blubird", "repo", "ops", "Docs updater", "[full]"], ["security-sweep", "blubird", "docs", "ops", "Security sweep", "[repo name ...]"],
+  ["day-end-reconcile", "blubird", "none", "me", "Day-end reconcile", ""],
+] as const).map(([id, source, runs_in, stage, label, args_hint]) => ({ id, source, skill: id === "small-change" ? "create-tasks" : id, runs_in, stage, label, args_hint, command: `/${source === "blubird" ? "blubird:" : ""}${id}`, available: true }));
+export const openIssues = [
+  { number: 1044, title: "CSV export drops the VAT column", labels: ["bug"], updated_at: "2026-11-11T10:00:00Z", draft: false, url: "https://github.com/acme/wasensi-backend/issues/1044" },
+  { number: 1013, title: "Batch scheduler", labels: [], updated_at: "2026-11-10T10:00:00Z", draft: false, url: "https://github.com/acme/wasensi-backend/issues/1013" },
+];
+export const openPRs = [{ number: 1040, title: "Release staging to master", labels: [], updated_at: "2026-11-12T08:00:00Z", draft: false, url: "https://github.com/acme/wasensi-backend/pull/1040" }];
 export const vault = { vault: "/Users/me/vault", folders: [{ project: "wasensi", feature: "payouts", path: "wasensi/payouts" }] };
 export const prdFile = { repo: PRODUCT, path: "docs/prds/payouts/batches.md", text: "# Merchant payouts v2\n\nStatus: In review\n\n## Goal\nGroup payouts into weekly batches.", sha: "abc", branch: "main" };
 

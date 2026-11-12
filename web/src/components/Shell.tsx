@@ -10,6 +10,7 @@ import { dispatchingCount, needCount, runningCount } from "../state/select";
 import { detailOpen, helpOpen, paletteOpen, repoOpen } from "../state/ui";
 import { clock } from "../state/format";
 import { Btn, Meter } from "./ui";
+import { openCreate } from "../state/ui";
 
 const owner = (slug: string) => slug.split("/")[0] ?? slug;
 const short = (slug: string) => slug.split("/").pop() ?? slug;
@@ -17,7 +18,7 @@ const short = (slug: string) => slug.split("/").pop() ?? slug;
 export type Extra = { value: string; label: string };
 
 /** Searchable repo list grouped by owner (`first` goes under "Current"), with fixed extra rows before and after. */
-function RepoList({ list, first, selected, extrasBefore = [], extrasAfter = [], onPick, label }: {
+export function RepoList({ list, first, selected, extrasBefore = [], extrasAfter = [], onPick, label }: {
   list: Repo[]; first?: string | null; selected: string; extrasBefore?: Extra[]; extrasAfter?: Extra[]; onPick: (v: string) => void; label: string;
 }) {
   const [q, setQ] = useState("");
@@ -66,7 +67,7 @@ function RepoList({ list, first, selected, extrasBefore = [], extrasAfter = [], 
 }
 
 /** A popover anchored under its trigger; closes on outside click and Escape. */
-function Popover({ open, setOpen, trigger, children, wide }: { open: boolean; setOpen: (v: boolean) => void; trigger: preact.ComponentChildren; children: preact.ComponentChildren; wide?: boolean }) {
+export function Popover({ open, setOpen, trigger, children, wide }: { open: boolean; setOpen: (v: boolean) => void; trigger: preact.ComponentChildren; children: preact.ComponentChildren; wide?: boolean }) {
   const box = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -117,6 +118,21 @@ export function RepoScope({ label = "Repository filter" }: { label?: string }) {
   );
 }
 
+/** The searchable repo picker as a form field, with fixed extra rows ("Another folder…", "No repo yet: notes vault"). */
+export function RepoField({ value, onChange, label, extrasBefore, extrasAfter }: { value: string; onChange: (v: string) => void; label: string; extrasBefore?: Extra[]; extrasAfter?: Extra[] }) {
+  const [open, setOpen] = useState(false);
+  const shown = [...(extrasBefore ?? []), ...(extrasAfter ?? [])].find((e) => e.value === value)?.label ?? (value ? short(value) : "Pick a repository");
+  return (
+    <Popover open={open} setOpen={setOpen} wide trigger={
+      <button type="button" class="btn field-btn" aria-expanded={open} aria-label={`${label}: ${shown}`} onClick={() => setOpen(!open)}>
+        <span class="grow">{shown}</span>{value && !value.startsWith(":") && value.includes("/") && !value.startsWith("/") && <span class="dim mono">{owner(value)}</span>}<span aria-hidden="true" class="dim">▾</span>
+      </button>
+    }>
+      <RepoList list={repoList.value} first={currentRepo.value} selected={value} label={label} extrasBefore={extrasBefore} extrasAfter={extrasAfter} onPick={(v) => { setOpen(false); onChange(v); }} />
+    </Popover>
+  );
+}
+
 export function Topbar() {
   const need = needCount.value;
   return (
@@ -127,7 +143,7 @@ export function Topbar() {
       </button>
       <span class="grow" />
       {need > 0 && <a class="you-pill" href="#/inbox"><i />{need} need you</a>}
-      <Btn primary k="n" onClick={() => (paletteOpen.value = true)}>New</Btn>
+      <Btn primary k="n" onClick={() => openCreate()}>New</Btn>
     </div>
   );
 }

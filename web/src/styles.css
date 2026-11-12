@@ -435,3 +435,27 @@ a.row{color:var(--tx);text-decoration:none}
 .onb .form{display:flex;flex-direction:column;gap:8px}
 .onb code{font-family:"JetBrains Mono",monospace;background:var(--p2);padding:0 4px;border-radius:3px}
 @media (max-width:720px){.rail{position:static;height:auto}.repo-btn{min-width:0}.search-btn{flex:1}}
+
+/* ---------- Create box and Start dialog (old aiw) ---------- */
+.dlg.wide{max-width:920px}
+.fset{border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:6px}
+.fset legend{padding:0 0 4px;font-size:12px;color:var(--mu)}
+.opt.inline{align-items:center;padding:6px 12px}
+.field-btn{width:100%;box-sizing:border-box;justify-content:space-between;gap:8px}
+.fields .popw{display:flex}
+.fld.check>span:last-child{display:flex;align-items:center;gap:6px;min-height:36px;color:var(--tx)}
+.start{display:grid;grid-template-columns:220px minmax(0,1fr);min-height:420px}
+.start-cmds{border-right:1px solid var(--line);padding:8px 0;overflow-y:auto;max-height:calc(100vh - 140px)}
+.start-cmds .pi{padding:6px 14px;min-height:0}
+.skin-classic .start-cmds .pi{min-height:32px}
+.start-form{min-width:0}
+.picker{display:flex;flex-direction:column;gap:6px}
+.picker .acts input{flex:1}
+.picker-list{max-height:200px;overflow-y:auto;border:1px solid var(--line);border-radius:var(--r)}
+.picker-list:empty{display:none}
+.picker-list .pi .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
+.seg-o small{font-size:11.5px}
+@media (max-width:720px){.start{grid-template-columns:1fr}.start-cmds{border-right:0;border-bottom:1px solid var(--line);max-height:180px}}
+.form>.seg{flex:none}
+.form>.seg .seg-o{flex:1 1 200px}
+.banner.inline{display:block}

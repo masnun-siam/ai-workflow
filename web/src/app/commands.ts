@@ -7,7 +7,7 @@ import type { Cmd } from "../state/keymap";
 import { LAYOUTS, LOOKS, MODES, next, prefs, setPref } from "../state/prefs";
 import { goScreen, nav, route } from "../state/route";
 import { currentTarget, hasList, listLength, inboxItems, stages } from "../state/select";
-import { clamp, confirmReq, detailOpen, helpOpen, paletteOpen, repoOpen, sel, setSel, startReq, toast } from "../state/ui";
+import { clamp, confirmReq, createOpen, detailOpen, helpOpen, openCreate, paletteOpen, repoOpen, sel, setSel, startReq, toast } from "../state/ui";
 import { releaseKey } from "../screens/Releases";
 import { runBlubird } from "../screens/settings/Blubird";
 import type { Action } from "../api/types";
@@ -19,6 +19,7 @@ export function closeTopLayer(): boolean {
   if (confirmReq.value) { confirmReq.value.resolve(false); return true; }
   if (repoOpen.value) { repoOpen.value = false; return true; }
   if (startReq.value) { startReq.value = null; return true; }
+  if (createOpen.value) { createOpen.value = false; return true; }
   if (paletteOpen.value) { paletteOpen.value = false; return true; }
   if (helpOpen.value) { helpOpen.value = false; return true; }
   if (detailOpen.value) { detailOpen.value = false; return true; }
@@ -32,7 +33,7 @@ export function runCommand(c: Cmd): void {
     case "palette": paletteOpen.value = true; return;
     case "help": helpOpen.value = !helpOpen.value; return;
     case "escape": if (!closeTopLayer() && route.value.id) nav("#/activity"); return;
-    case "new": paletteOpen.value = true; return;
+    case "new": openCreate(); return;
     case "repo": repoOpen.value = true; return;
     case "mode": setPref("mode", next(MODES, prefs.value.mode)); toast(`Mode: ${prefs.value.mode}`); return;
     case "look": setPref("look", next(LOOKS, prefs.value.look)); toast(`Look: ${prefs.value.look}`); return;

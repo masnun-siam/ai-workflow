@@ -48,6 +48,10 @@ a repo filter (`?only=owner/name`, default All repos). With no repo registered, 
 | 9 | Me | reconcile and weekly review |
 | 0 | Settings | accounts, products and repos, blubird, notifications, away, review, appearance |
 
+**New** (`n`) opens the Create box: describe a change, then file it as a Feature (PRD interview) or a Small change.
+The command palette (`:`) opens the Start dialog: any command, where it runs (repo, another folder, or the notes vault),
+its input (open issues and PRs are listed), model, effort, lenses and account.
+
 The rail foot has Away mode (30 min to 4 h, or until a time), plan usage per account, the theme and the key sheet.
 
 ## Keyboard

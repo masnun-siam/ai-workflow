@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "preact/hooks";
 import { Detail } from "../components/Detail";
-import { ConfirmDialog, Help, Palette, StartDialog, Toast } from "../components/Overlays";
+import { ConfirmDialog, Help, Palette, Toast } from "../components/Overlays";
+import { CreateDialog, StartDialog } from "../components/Start";
 import { Btn, useFocusTrap } from "../components/ui";
 import type { ComponentChildren } from "preact";
 import { Inbox } from "../screens/Inbox";
@@ -24,7 +25,7 @@ import { visibleKeys } from "../state/refetch";
 import { startRealtime } from "../state/realtime";
 import { goScreen, nav, route, startRouter } from "../state/route";
 import { currentTarget, hasList, needCount, quickCount } from "../state/select";
-import { confirmReq, connected, detailOpen, helpOpen, paletteOpen, repoOpen, startReq } from "../state/ui";
+import { confirmReq, connected, createOpen, detailOpen, helpOpen, paletteOpen, repoOpen, startReq } from "../state/ui";
 import { targetActions } from "../components/Detail";
 import { closeTopLayer, runCommand, screenActionList } from "./commands";
 
@@ -116,7 +117,7 @@ export function App() {
         { key: e.key, meta: e.metaKey, ctrl: e.ctrlKey, alt: e.altKey, typing },
         {
           screen: route.value.screen,
-          overlay: !!confirmReq.value || !!startReq.value || paletteOpen.value || helpOpen.value || repoOpen.value,
+          overlay: !!confirmReq.value || !!startReq.value || paletteOpen.value || helpOpen.value || repoOpen.value || createOpen.value,
           actions: [...targetActions(currentTarget.value), ...screenActionList()],
           quickOptions: quickCount.value,
           nav: hasList(route.value.screen),
@@ -124,7 +125,7 @@ export function App() {
       );
       if (!cmd) return;
       if (cmd.t === "escape") {
-        if (typing && !paletteOpen.value && !startReq.value) { el!.blur(); return; }
+        if (typing && !paletteOpen.value && !startReq.value && !createOpen.value) { el!.blur(); return; }
       }
       // Enter on a focused button must stay a click; list navigation never steals it
       if (cmd.t === "enter" && el && (el.tagName === "BUTTON" || el.tagName === "A")) return;
@@ -153,6 +154,7 @@ export function App() {
       )}
       {paletteOpen.value && <Palette />}
       {startReq.value && <StartDialog />}
+      {createOpen.value && <CreateDialog />}
       {helpOpen.value && <Help />}
       {confirmReq.value && <ConfirmDialog />}
       <Toast />

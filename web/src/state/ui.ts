@@ -29,6 +29,14 @@ export function askConfirm(text: string): Promise<boolean> {
 export type StartReq = { step: RegistryStep | null; repo?: string; args?: string };
 export const startReq = signal<StartReq | null>(null);
 
+/** The Create box (n, New): "What should change?" -> a feature (create-prd) or a small change. The draft survives Cancel. */
+export const createOpen = signal(false);
+export const createDraft = signal("");
+export function openCreate(text?: string): void {
+  if (text) createDraft.value = text;
+  createOpen.value = true;
+}
+
 /** Selection in the list screens: river (stage, card), others index. */
 export const sel = signal({ stage: 3, card: 0, inbox: 0, runs: 0, ops: 0 });
 export function setSel(patch: Partial<ReturnType<typeof sel.peek>>): void {
