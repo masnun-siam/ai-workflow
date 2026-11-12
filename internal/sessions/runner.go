@@ -338,7 +338,10 @@ func (m *Manager) spawn(ctx context.Context, id string, argv []string, cwd strin
 	}()
 	rec, err := m.Update(id, func(r *Record) error {
 		r.PID, r.PidStarted = p.pid, started
-		r.Status = StRunning
+		// a fast child may already have asked (status waiting, round pending): keep that
+		if !(r.Status == StWaiting && r.PendingQuestion != nil && r.PendingQuestion.Status == "pending") {
+			r.Status = StRunning
+		}
 		r.StreamOffset = offset
 		// accumulation bases: this process's own cost, tokens and hooks add to what came before
 		r.CostBase, r.TokenBase, r.HooksBase = 0, nil, r.Hooks
