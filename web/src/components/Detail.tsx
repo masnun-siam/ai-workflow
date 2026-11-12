@@ -53,7 +53,7 @@ export function Detail({ t }: { t: Target }) {
   const title = t.kind === "card" ? t.card.title : t.item.title;
   const tag = t.kind === "card" ? t.card.tag : t.item.kind;
   const tone = t.kind === "card" ? t.card.tone : "c-w";
-  const log = t.kind === "card" ? t.card.log : (t.item.detail ?? []);
+  const log = (t.kind === "card" ? t.card.log : t.item.detail) ?? [];
   const note = t.kind === "card" ? (t.card.need ? t.card.note : null) : (t.item.note ?? null);
   const links = t.kind === "card" ? t.card.links : t.item.links;
   return (

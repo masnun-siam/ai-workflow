@@ -30,7 +30,11 @@ func Routes(s *Service) []server.Route {
 			if err != nil {
 				return 0, nil, err
 			}
-			return http.StatusOK, s.River(r.Context(), p), nil
+			repo, err := s.registeredRepo(r.URL.Query().Get("repo"))
+			if err != nil {
+				return 0, nil, err
+			}
+			return http.StatusOK, s.River(r.Context(), p, repo), nil
 		})},
 		{Pattern: "GET /api/ops", Handler: server.Handle(func(r *http.Request) (int, any, error) {
 			p, err := product(r)

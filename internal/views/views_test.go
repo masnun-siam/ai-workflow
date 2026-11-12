@@ -244,7 +244,7 @@ func TestRiverStagesFromSnapshots(t *testing.T) {
 		rel:  []inbox.Release{{ID: "r-1", Repo: "acme/api", Head: "staging", Base: "master", Stage: "grind", PR: ptr(52), PRURL: ptr("https://github.com/acme/api/pull/52")}},
 		repo: []inbox.ReleaseRepo{{Repo: "acme/api", Head: "staging", Base: "master", Ahead: ptr(3), Open: ptr("r-1")}, {Repo: "acme/web", Head: "staging", Base: "master", Ahead: ptr(2)}, {Repo: "acme/x", Ahead: ptr(0)}},
 	}
-	r := f.svc.River(context.Background(), "ACME/docs")
+	r := f.svc.River(context.Background(), "ACME/docs", "")
 	if r.Product != "acme/docs" || len(r.Stages) != 7 {
 		t.Fatalf("river %+v", r)
 	}
@@ -332,7 +332,7 @@ func TestRiverNeedMatchesInboxAndAsk(t *testing.T) {
 	f.sess.recs = []sessions.Record{q, live, failed, other}
 	f.svc.d.Inbox = inbox.New(inbox.Deps{Sessions: f.sess, Snapshots: f.snaps, Products: f.svc.d.Products, Now: now})
 
-	r := f.svc.River(context.Background(), "acme/docs")
+	r := f.svc.River(context.Background(), "acme/docs", "")
 	by := map[string]Card{}
 	for _, st := range r.Stages {
 		for _, c := range st.Cards {
@@ -385,7 +385,14 @@ func TestRiverNotifyAndPRDApproval(t *testing.T) {
 	}}
 	f.svc.d.NoteChannel = func() string { return "dc-supports" }
 	f.svc.d.Inbox = inbox.New(inbox.Deps{Snapshots: f.snaps, Products: f.svc.d.Products, Releases: f.svc.d.Releases, Now: now})
-	r := f.svc.River(context.Background(), "")
+	r := f.svc.River(context.Background(), "", "")
+	for _, st := range r.Stages {
+		for _, c := range st.Cards {
+			if c.Log == nil || c.Actions == nil {
+				t.Errorf("card %s: log and actions must be [] not null", c.ID)
+			}
+		}
+	}
 	notify := cardsOf(r, "notify")
 	if len(notify) != 2 || notify[0].ID != "release:r-2" || !notify[0].Need || *notify[0].NeedKind != "Release" || notify[0].Note == nil || *notify[0].Note != note {
 		t.Fatalf("notify cards %+v", notify)
@@ -425,7 +432,7 @@ func TestRiverGrindAndCoordinator(t *testing.T) {
 		{Run: "old", Repo: "acme/api", Live: false},
 		{Run: "elsewhere", Repo: "x/y", Live: true},
 	}}
-	r := f.svc.River(context.Background(), "acme/docs")
+	r := f.svc.River(context.Background(), "acme/docs", "")
 	rv := cardsOf(r, "review")[0]
 	if !rv.Live || rv.Tag != "grind r2" || rv.Skill != "pr-grind" {
 		t.Errorf("grind card %+v", rv)
@@ -670,5 +677,34 @@ func TestOpsStandaloneRepo(t *testing.T) {
 	// a repo of a product shows that product
 	if o := f.svc.Ops(context.Background(), "", "acme/api"); o.Product != "acme/docs" {
 		t.Errorf("product of acme/api %q", o.Product)
+	}
+}
+
+func TestRiverStandaloneRepo(t *testing.T) {
+	f := newFx(t)
+	f.svc.d.Releases = fReleases{rel: []inbox.Release{
+		{ID: "r-solo", Repo: "solo/app", Stage: "cut"},
+		{ID: "r-api", Repo: "acme/api", Stage: "cut"},
+	}}
+	f.svc.d.Dispatch = fDisp{coords: []inbox.Coordinator{
+		{Run: "solo", Repo: "solo/app", Source: "label:x", Live: true},
+		{Run: "api", Repo: "acme/api", Source: "label:y", Live: true},
+	}}
+	r := f.svc.River(context.Background(), "acme/docs", "solo/app")
+	if r.Product != "" {
+		t.Errorf("product %q", r.Product)
+	}
+	if prds := cardsOf(r, "prd"); len(prds) != 0 {
+		t.Errorf("a standalone repo has no PRDs: %+v", prds)
+	}
+	if rel := cardsOf(r, "release"); len(rel) != 1 || rel[0].ID != "release:r-solo" {
+		t.Errorf("release cards %+v", rel)
+	}
+	if im := cardsOf(r, "implement"); len(im) != 1 || im[0].ID != "coord:solo" {
+		t.Errorf("implement cards %+v", im)
+	}
+	// a repo of a product shows that product
+	if r := f.svc.River(context.Background(), "", "acme/api"); r.Product != "acme/docs" {
+		t.Errorf("product of acme/api %q", r.Product)
 	}
 }

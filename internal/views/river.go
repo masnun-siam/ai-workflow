@@ -144,16 +144,26 @@ func start(key, label, toast, step, repo string, extra map[string]any) inbox.Act
 func issueAnchor(repo string, n int) string { return fmt.Sprintf("issue:%s#%d", lower(repo), n) }
 func prAnchor(repo string, n int) string    { return fmt.Sprintf("pr:%s#%d", lower(repo), n) }
 
-// River builds the pipeline for a product. It marks the product's repos viewed.
-func (s *Service) River(ctx context.Context, product string) River {
-	p, ok := s.Product(product)
+// River builds the pipeline for a product. It marks the product's repos viewed. A non-empty repo that
+// belongs to no product (registered on its own) gets a River of that repo alone: its issues, PRs, sessions
+// and open releases; PRDs and the "commits ahead" release cards need a product.
+func (s *Service) River(ctx context.Context, product, repo string) River {
+	p, ok := s.productOf(repo)
+	standalone := repo != "" && !ok
+	if !ok && !standalone {
+		p, ok = s.Product(product)
+	}
 	out := River{Product: product, Stale: []string{}}
 	if ok {
 		out.Product = p.DocsRepo
 	}
 	r := &rv{s: s, ctx: ctx, p: p, set: map[string]bool{}, snaps: map[string]poller.Snapshot{}, items: map[string][]inbox.Item{},
 		byAnchor: map[string]*Card{}, grinds: map[string]inbox.GrindStatus{}, relPR: map[string]bool{}}
-	if ok {
+	switch {
+	case standalone:
+		out.Product = ""
+		r.repos = []string{repo}
+	case ok:
 		r.repos = inbox.ProductRepos(p)
 	}
 	for _, repo := range r.repos {
@@ -186,8 +196,12 @@ func (s *Service) River(ctx context.Context, product string) River {
 			r.grinds[fmt.Sprintf("%s#%d", lower(g.Repo), g.PR)] = g
 		}
 	}
-	if s.d.Inbox != nil && ok {
-		for _, it := range s.d.Inbox.Build(ctx, p.DocsRepo, "").Items {
+	if s.d.Inbox != nil && (ok || standalone) {
+		bp, br := p.DocsRepo, ""
+		if standalone {
+			bp, br = "", repo
+		}
+		for _, it := range s.d.Inbox.Build(ctx, bp, br).Items {
 			if it.Group == inbox.GWait {
 				continue
 			}
@@ -197,9 +211,11 @@ func (s *Service) River(ctx context.Context, product string) River {
 		}
 	}
 
-	if ok {
+	if ok || standalone {
 		r.releases()
-		r.prds()
+		if ok {
+			r.prds()
+		}
 		r.issues()
 		r.coordinators()
 		r.attachSessions()
@@ -570,8 +586,12 @@ func (r *rv) releases() {
 		}
 	}
 	open := map[string]bool{}
+	standalone := r.p.DocsRepo == ""
 	for _, rl := range d.Releases.List(r.p.DocsRepo) {
 		repo := rl.Repo
+		if standalone && !r.set[lower(repo)] {
+			continue
+		}
 		if rl.PR != nil && rl.Stage != "done" && rl.Stage != "skipped" {
 			r.relPR[fmt.Sprintf("%s#%d", lower(repo), *rl.PR)] = true
 		}
@@ -644,6 +664,9 @@ func (r *rv) releases() {
 			r.add(c, anchors...)
 		}
 	}
+	if standalone {
+		return // Repos("") compares every registered repo on GitHub: too costly for one repo's River
+	}
 	for _, rr := range d.Releases.Repos(r.p.DocsRepo) {
 		if rr.Open != nil || open[lower(rr.Repo)] || rr.Ahead == nil || *rr.Ahead <= 0 {
 			continue
@@ -698,7 +721,7 @@ func lastN(s []string, n int) []string {
 	if len(s) > n {
 		s = s[len(s)-n:]
 	}
-	return append([]string(nil), s...)
+	return append([]string{}, s...) // never nil: the UI reads log.length
 }
 
 // ---- sessions ----
