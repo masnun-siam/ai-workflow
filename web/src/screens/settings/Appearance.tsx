@@ -2,7 +2,7 @@ import { prefs, setPref } from "../../state/prefs";
 import { Kbd, Pane } from "../../components/ui";
 
 const GROUPS = [
-  { key: "look", label: "Look", hotkey: "s", opts: [["console", "Console", "mono, amber, boxed panes"], ["river", "River", "navy, rounded cards"]] },
+  { key: "look", label: "Look", hotkey: "s", opts: [["classic", "Classic", "slate and teal, the first aiw look"], ["console", "Console", "mono, amber, boxed panes"], ["river", "River", "navy, rounded cards"]] },
   { key: "mode", label: "Mode", hotkey: ".", opts: [["system", "System", "follow the OS"], ["dark", "Dark", ""], ["light", "Light", ""]] },
   { key: "layout", label: "Layout", hotkey: "L", opts: [["drawer", "Rail + drawer", "details slide in over the page"], ["split", "Tabs + split", "detail pane always visible"]] },
 ] as const;

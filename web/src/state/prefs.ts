@@ -1,12 +1,12 @@
 import { signal } from "@preact/signals";
 
-export type Look = "console" | "river";
+export type Look = "classic" | "console" | "river";
 export type Mode = "system" | "dark" | "light";
 export type Layout = "drawer" | "split";
 export type Prefs = { look: Look; mode: Mode; layout: Layout };
 
-export const DEFAULT_PREFS: Prefs = { look: "console", mode: "system", layout: "drawer" };
-export const LOOKS: Look[] = ["console", "river"];
+export const DEFAULT_PREFS: Prefs = { look: "classic", mode: "system", layout: "drawer" };
+export const LOOKS: Look[] = ["classic", "console", "river"];
 export const MODES: Mode[] = ["system", "dark", "light"];
 export const LAYOUTS: Layout[] = ["drawer", "split"];
 const KEY = "setu.prefs.v1";

@@ -20,7 +20,7 @@ const SCREENS: [string, string][] = [["#/river", "Merchant payouts v2"], ["#/inb
   ["#/ops", "security-sweep"], ["#/me", "Reconcile today"], ["#/settings", "appearance"], ["#/prd?repo=a/b&path=x.md", "prd"]];
 
 describe("smoke render from mock fixtures", () => {
-  for (const look of ["console", "river"] as const) {
+  for (const look of ["classic", "console", "river"] as const) {
     for (const layout of ["drawer", "split"] as const) {
       for (const [hash, needle] of SCREENS) {
         it(`${look} ${layout} ${hash}`, () => {

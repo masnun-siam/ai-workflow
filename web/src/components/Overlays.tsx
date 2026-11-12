@@ -134,7 +134,7 @@ export function ConfirmDialog() {
 }
 
 const GLOBAL: [string, string][] = [["1-7", "switch screen"], [": or ⌘K", "run a skill"], ["⏎", "open selected"], ["esc", "close"], ["a/b/c", "answer a question"], ["letters on buttons", "run that action"],
-  [".", "mode: system / dark / light"], ["s", "look: console / river"], ["L", "layout: drawer / split"], ["?", "this help"]];
+  [".", "mode: system / dark / light"], ["s", "look: classic / console / river"], ["L", "layout: drawer / split"], ["?", "this help"]];
 export function Help() {
   const box = useRef<HTMLDivElement>(null);
   useFocusTrap(box, true);
