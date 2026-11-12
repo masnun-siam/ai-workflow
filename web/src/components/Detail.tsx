@@ -31,7 +31,7 @@ const Links = ({ links }: { links: Card["links"] }) => (
   <div class="acts">
     {links.issue && <a href={links.issue} target="_blank" rel="noopener noreferrer">issue</a>}
     {links.pr && <a href={links.pr} target="_blank" rel="noopener noreferrer">pull request</a>}
-    {links.session && <a href={links.session}>session</a>}
+    {links.session && <a href={links.session}>Open session</a>}
     {links.prd && <a href={links.prd}>PRD</a>}
   </div>
 );
@@ -62,11 +62,11 @@ export function Detail({ t }: { t: Target }) {
       <span class="dim mono">
         {t.kind === "card" ? `${t.card.skill || "—"} · ${t.card.repo}` : `${t.item.type}${t.item.repo ? ` · ${t.item.repo}` : ""}${t.item.at ? ` · ${ago(t.item.at)}` : ""}`}
       </span>
-      {log.length > 0 && <div class="log">{log.map((l, i) => <span key={i}>{l}</span>)}</div>}
+      {log.length > 0 && !ask && <div class="log">{log.map((l, i) => <span key={i}>{l}</span>)}</div>}
       {ask && <AskForm key={ask.round.id} sessionId={ask.sessionId} round={ask.round} />}
       {note && <pre class="note">{note}</pre>}
       <Links links={links} />
-      <ActionBar actions={targetActions(t)} dropId={targetId(t)} />
+      <ActionBar actions={ask ? targetActions(t).filter((a) => !(a.open && a.label === "Answer")) : targetActions(t)} dropId={targetId(t)} />
     </div>
   );
 }

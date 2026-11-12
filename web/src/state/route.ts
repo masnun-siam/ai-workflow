@@ -36,8 +36,16 @@ export function nav(hash: string): void {
   if (globalThis.location) globalThis.location.hash = hash;
   else route.value = parseHash(hash);
 }
+/** True once the user moved inside the app, so history.back() stays in setu. */
+export let movedInApp = false;
+/** Back to the previous in-app screen, or `fallback` when the page was opened directly. */
+export function goBack(fallback: ScreenId): void {
+  if (movedInApp) history.back();
+  else goScreen(fallback);
+}
 export function startRouter(): () => void {
-  const on = () => (route.value = parseHash(location.hash));
+  let first = true;
+  const on = () => { if (!first) movedInApp = true; first = false; route.value = parseHash(location.hash); };
   addEventListener("hashchange", on);
   on();
   return () => removeEventListener("hashchange", on);

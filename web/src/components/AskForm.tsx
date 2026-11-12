@@ -5,7 +5,7 @@ import { buildAnswers, canSubmit, emptyDraft, toggleLabel, type Draft } from "..
 import { currentView, loadMany } from "../state/data";
 import { visibleKeys } from "../state/refetch";
 import { describeError } from "../state/actions";
-import { toast } from "../state/ui";
+import { detailOpen, toast } from "../state/ui";
 import { Btn } from "./ui";
 
 export async function submitAnswers(sessionId: string, round: Round, drafts: Draft[]): Promise<boolean> {
@@ -14,6 +14,7 @@ export async function submitAnswers(sessionId: string, round: Round, drafts: Dra
   try {
     await http.send("POST", `/api/sessions/${sessionId}/answer`, { round_id: round.id, answers });
     toast("Answered. The run continues");
+    detailOpen.value = false;
     void loadMany(visibleKeys(currentView()));
     return true;
   } catch (e) {
