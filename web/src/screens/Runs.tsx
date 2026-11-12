@@ -110,7 +110,7 @@ export function Runs() {
       <Header title="runs" />
       <Chips label="Runs view" value={tab} options={TABS} onPick={(t) => (runsTab.value = t)} />
       {tab === "sessions" && <Sessions />}
-      {tab === "dispatch" && <>{(dispatches.value ?? []).map((d) => <DispatchCard key={d.id} d={d} />)}{dispatches.value?.length === 0 && <Empty>No dispatches.</Empty>}<NewDispatch /></>}
+      {tab === "dispatch" && <><NewDispatch />{(dispatches.value ?? []).map((d) => <DispatchCard key={d.id} d={d} />)}{dispatches.value?.length === 0 && <Empty>No dispatches yet.</Empty>}</>}
       {tab === "coordinators" && (
         <Pane label="coordinators">
           {(coordinators.value ?? []).map((c) => (
