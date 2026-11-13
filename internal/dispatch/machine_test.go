@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/masnun-siam/setu/internal/dispatch/store"
+	"github.com/masnun-siam/setu/internal/errs"
 )
 
 const now = 1_000_000.0
@@ -932,5 +933,35 @@ func TestStalledIdleGuardDeps(t *testing.T) {
 		if got := New(Deps{IdleGuard: c.fn}).idleGuard(); got != c.want {
 			t.Errorf("idleGuard() = %v, want %v", got, c.want)
 		}
+	}
+}
+
+func TestContinueLane(t *testing.T) {
+	d := dsp(lane(1, store.StImplementing), lane(2, store.StImplementing), lane(3, store.StImplementing))
+	x := d.Lanes["o/r#1"]
+	x.Handle, x.Stalled, x.IdleSince, x.NeedsYou = &store.Handle{Session: "s1"}, Stalled, now-500, "old"
+	if err := ApplyLaneAction(d, "o/r#1", "continue", "", now); err != nil {
+		t.Fatal(err)
+	}
+	if x.Stalled != "" || x.NeedsYou != "" || x.IdleSince != 0 || x.Stage != store.StImplementing || x.Handle == nil ||
+		len(x.Outbox) != 1 || x.Outbox[0].Kind != "continue" {
+		t.Fatalf("%+v", x)
+	}
+	// a second press finds the lane no longer stalled: one resume queued at most
+	if err := ApplyLaneAction(d, "o/r#1", "continue", "", now); errs.KindOf(err) != errs.KConflict || len(x.Outbox) != 1 {
+		t.Fatal(err, x.Outbox)
+	}
+
+	// not stalled: 409, nothing queued
+	y := d.Lanes["o/r#2"]
+	y.Handle = &store.Handle{Session: "s2"}
+	if err := ApplyLaneAction(d, "o/r#2", "continue", "", now); errs.KindOf(err) != errs.KConflict || err.Error() != "lane is not stalled" || len(y.Outbox) != 0 {
+		t.Fatal(err, y.Outbox)
+	}
+	// stalled without a session: 409, still stalled
+	z := d.Lanes["o/r#3"]
+	z.Stalled = Stalled
+	if err := ApplyLaneAction(d, "o/r#3", "continue", "", now); errs.KindOf(err) != errs.KConflict || err.Error() != "lane has no session" || z.Stalled != Stalled || len(z.Outbox) != 0 {
+		t.Fatal(err, z)
 	}
 }

@@ -190,6 +190,13 @@ func TestRunsInRouting(t *testing.T) {
 	if got := cwdOf(StartRequest{Step: "implement-issue", Args: "1", Repo: "acme/app"}); got != eval(e.repo) {
 		t.Errorf("issue: %s", got)
 	}
+	// GitHub-only steps still start on a repo with a remote
+	if got := cwdOf(StartRequest{Step: "after-merge", Args: "3", Repo: "acme/app"}); got != eval(e.repo) {
+		t.Errorf("after-merge: %s", got)
+	}
+	if got := cwdOf(StartRequest{Step: "project-coordinator", Args: "3", Repo: "acme/docs"}); got != eval(e.docs) {
+		t.Errorf("project-coordinator: %s", got)
+	}
 	if got := cwdOf(StartRequest{Step: "create-prd", Repo: "acme/docs"}); got != eval(e.docs) {
 		t.Errorf("docs: %s", got)
 	}
@@ -223,6 +230,15 @@ func TestRunsInRouting(t *testing.T) {
 	}
 	if _, err := e.m.StartSession(ctx, StartRequest{Step: "report-bug", Args: "it breaks", Repo: "local/scratch"}); kind(err) != "invalid" || !strings.Contains(err.Error(), "has no GitHub remote yet") {
 		t.Errorf("local report-bug: %v", err)
+	}
+	for _, c := range []struct{ step, args string }{{"small-change", "x"}, {"after-merge", "3"}, {"project-coordinator", "3"}} {
+		before := len(e.m.List(Filter{}))
+		if _, err := e.m.StartSession(ctx, StartRequest{Step: c.step, Args: c.args, Repo: "local/scratch"}); kind(err) != "invalid" || !strings.Contains(err.Error(), "has no GitHub remote yet") {
+			t.Errorf("local %s: %v", c.step, err)
+		}
+		if n := len(e.m.List(Filter{})); n != before {
+			t.Errorf("local %s created a session: %d -> %d", c.step, before, n)
+		}
 	}
 }
 

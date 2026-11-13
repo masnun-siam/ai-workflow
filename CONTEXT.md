@@ -62,7 +62,7 @@ A panel of read-only reviewer sessions, one per lens, that review an artifact in
 `cut` (the `release-pr` prompt opens the head-to-base PR) → `grind` → `merge` → `notify` (setu posts the release note once) → `done`. A dry run stops after the PR draft.
 
 **Away mode**:
-A switch (`afk.json`) for when the human is gone. Waiting rounds go to the read-only away answerer, which answers only what it is confident about and holds the rest; stuck lanes are retried.
+A switch (`afk.json`) for when the human is gone. Waiting rounds go to the read-only away answerer, which answers only what it is confident about and holds the rest; stuck lanes are retried, and stalled lanes continued.
 
 **Built-in prompt**:
 A prompt embedded in the binary (`prompts/`): `release-pr`, `pr-grind`, `release-note`, `peer-review`, plus the agent bodies `peer-reviewer` and `away-answerer`. Extracted to `~/.setu/prompts/<version>/`.

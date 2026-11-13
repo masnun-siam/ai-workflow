@@ -35,6 +35,8 @@ export function AccountsPane() {
           <Field label="Default model"><Select label="Default model" value={s.run_model ?? ""} onChange={(v) => void saveSettings({ run_model: (v || null) as Model | null })} options={[["", "account default"], ["opus", "opus"], ["sonnet", "sonnet"], ["haiku", "haiku"]]} /></Field>
           <Field label="Default effort"><Select label="Default effort" value={s.run_effort ?? ""} onChange={(v) => void saveSettings({ run_effort: (v || null) as Effort | null })} options={[["", "account default"], ["low", "low"], ["medium", "medium"], ["high", "high"], ["xhigh", "xhigh"], ["max", "max"]]} /></Field>
         </div>
+        <label class="opt"><input type="checkbox" name="idle_guard" checked={s.idle_guard} onChange={(e) => void saveSettings({ idle_guard: (e.target as HTMLInputElement).checked })} />
+          <span><b>Idle guard</b><small>Sends headless skill runs and lanes back to work when they stop early. Applies to sessions started or resumed after the change.</small></span></label>
       </div>
     </Pane>
   );

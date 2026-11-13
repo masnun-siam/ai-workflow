@@ -812,7 +812,7 @@ func MakePlan(children []Child) Plan {
 // ---- user actions (W§2.5) ----
 
 // Lane actions.
-var LaneActions = []string{"pause", "resume", "retry", "skip", "merge", "hold", "unhold", "send", "unblock"}
+var LaneActions = []string{"pause", "resume", "retry", "skip", "merge", "hold", "unhold", "send", "unblock", "continue"}
 
 // Settled reports a lane that will do nothing more: closed, or skipped.
 func Settled(x *store.Lane) bool { return x.Stage == store.StClosed || x.Stage == store.StSkipped }
@@ -908,6 +908,15 @@ func ApplyLaneAction(d *store.Dispatch, key, action, text string, now float64) e
 		}
 		x.Deps = keep
 		x.Unblocked = append(x.Unblocked, skipped...)
+	case "continue": // resume the stalled lane's own session where it stopped; retry starts a fresh one
+		if x.Stalled == "" {
+			return errs.Conflict("lane is not stalled", map[string]any{"lane": key})
+		}
+		if x.Handle == nil {
+			return errs.Conflict("lane has no session", map[string]any{"lane": key})
+		}
+		x.Stalled, x.NeedsYou, x.IdleSince = "", "", 0
+		x.Outbox = append(x.Outbox, store.OutboxItem{Kind: "continue"})
 	case "send":
 		if strings.TrimSpace(text) == "" || len([]rune(text)) > 2000 {
 			return errs.Invalid("send needs a message of 1 to 2000 characters")

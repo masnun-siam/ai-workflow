@@ -50,7 +50,7 @@ type Notifier interface {
 	Notify(event string, n notify.Note)
 }
 
-// StuckLane is a dispatch lane that holds or needs the owner for a reason other than a question.
+// StuckLane is a dispatch lane that holds, stalled, or needs the owner for a reason other than a question.
 // The dispatch package lists only lanes of running or paused dispatches, never user-paused ones
 // and never "waiting on you".
 type StuckLane struct {
@@ -59,12 +59,14 @@ type StuckLane struct {
 	Issue    int
 	Repo     string
 	Why      string
+	Stalled  bool // stopped before a ready PR: away mode continues it instead of retrying
 }
 
-// Lanes is the optional dispatch hook for the lane retry ladder.
+// Lanes is the optional dispatch hook for the lane retry ladder (Retry, or Continue for a stalled lane).
 type Lanes interface {
 	Stuck() []StuckLane
 	Retry(dispatch, lane string) error
+	Continue(dispatch, lane string) error
 }
 
 // Deps wires a Service. Lanes, Risk, Notify and Bus may be nil.

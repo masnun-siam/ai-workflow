@@ -30,8 +30,9 @@ func TestMain(m *testing.M) {
 }
 
 type fakeSettings struct {
-	accounts map[string]string // label -> cmd
-	vault    string
+	accounts  map[string]string // label -> cmd
+	vault     string
+	idleGuard bool
 }
 
 func (f *fakeSettings) AccountCmd(label string) (string, bool) {
@@ -61,6 +62,7 @@ func (f *fakeSettings) CheckRun(model, effort string) error {
 }
 func (f *fakeSettings) RunDefaults() (string, string) { return "", "" }
 func (f *fakeSettings) VaultDir() string              { return f.vault }
+func (f *fakeSettings) IdleGuard() bool               { return f.idleGuard }
 
 type fakeClaude struct {
 	mu           sync.Mutex
@@ -108,13 +110,15 @@ func (c *fakeClaude) CopyTranscript(from, to, cwd, sid string) error {
 type fakePrompts struct{}
 
 var fakeSteps = map[string]Step{
-	"implement-issue": {ID: "implement-issue", Source: "blubird", Skill: "implement-issue", RunsIn: "issue"},
-	"refine-issues":   {ID: "refine-issues", Source: "blubird", Skill: "refine-issues", RunsIn: "issue"},
-	"create-prd":      {ID: "create-prd", Source: "blubird", Skill: "create-prd", RunsIn: "docs"},
-	"pr-grind":        {ID: "pr-grind", Source: "setu", Skill: "pr-grind", RunsIn: "issue"},
-	"release-note":    {ID: "release-note", Source: "setu", Skill: "release-note", RunsIn: "none"},
-	"small-change":    {ID: "small-change", Source: "blubird", Skill: "create-tasks", RunsIn: "repo"},
-	"report-bug":      {ID: "report-bug", Source: "blubird", Skill: "reproduce-bug", RunsIn: "repo"},
+	"implement-issue":     {ID: "implement-issue", Source: "blubird", Skill: "implement-issue", RunsIn: "issue"},
+	"refine-issues":       {ID: "refine-issues", Source: "blubird", Skill: "refine-issues", RunsIn: "issue"},
+	"create-prd":          {ID: "create-prd", Source: "blubird", Skill: "create-prd", RunsIn: "docs"},
+	"pr-grind":            {ID: "pr-grind", Source: "setu", Skill: "pr-grind", RunsIn: "issue"},
+	"release-note":        {ID: "release-note", Source: "setu", Skill: "release-note", RunsIn: "none"},
+	"small-change":        {ID: "small-change", Source: "blubird", Skill: "create-tasks", RunsIn: "repo"},
+	"report-bug":          {ID: "report-bug", Source: "blubird", Skill: "reproduce-bug", RunsIn: "repo"},
+	"after-merge":         {ID: "after-merge", Source: "blubird", Skill: "implement-issue", RunsIn: "issue"},
+	"project-coordinator": {ID: "project-coordinator", Source: "blubird", Skill: "project-coordinator", RunsIn: "docs"},
 }
 
 func (fakePrompts) Step(id string) (Step, bool) { s, ok := fakeSteps[id]; return s, ok }

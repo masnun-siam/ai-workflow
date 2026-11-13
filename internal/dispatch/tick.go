@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	"github.com/masnun-siam/setu/internal/dispatch/store"
+	"github.com/masnun-siam/setu/internal/errs"
 	"github.com/masnun-siam/setu/internal/execx"
+	"github.com/masnun-siam/setu/internal/sessions"
 )
 
 // ticker is one tick of one dispatch (W§2.5). The caller holds the dispatch lock around load and run.
@@ -56,6 +58,24 @@ func (t *ticker) send(x *store.Lane, m Msg) error {
 
 func (t *ticker) sendText(x *store.Lane, text string) error { return t.send(x, Msg{Plain: text}) }
 
+// continueLane resumes the lane's own session with the Continue message for its step. The lane's
+// stalled check under the dispatch lock already lets only one continue through, so the session's
+// own stalled flag is not required: a session that ended without the guard stalls the lane too.
+func (t *ticker) continueLane(x *store.Lane) error {
+	if x.Handle == nil {
+		return errs.Conflict("lane has no session", nil)
+	}
+	rec, err := t.s.d.Sessions.Get(x.Handle.Session)
+	if err != nil {
+		return err
+	}
+	step := rec.Step
+	if step == "" {
+		step = implementMsg(x.N, "", 0, "").Step
+	}
+	return t.s.sendSession(t.ctx, x.Handle, sessions.ContinueText(step))
+}
+
 func (t *ticker) run() {
 	d, s := t.d, t.s
 	for _, k := range d.SortedKeys() {
@@ -67,6 +87,8 @@ func (t *ticker) run() {
 			switch {
 			case o.Kind == "send":
 				err = t.sendText(x, o.Text)
+			case o.Kind == "continue":
+				err = t.continueLane(x)
 			case x.Handle != nil:
 				if err = s.closeSession(t.ctx, x.Handle); err == nil {
 					x.Handle = nil
@@ -92,7 +114,7 @@ func (t *ticker) run() {
 		}
 		sentPrompt := false
 		for _, o := range outbox {
-			sentPrompt = sentPrompt || o.Kind == "send"
+			sentPrompt = sentPrompt || o.Kind == "send" || o.Kind == "continue"
 		}
 		if sentPrompt { // the facts predate that prompt: an idle agent is stale
 			continue

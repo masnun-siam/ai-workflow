@@ -219,7 +219,7 @@ export type Settings = {
   repos: Record<Slug, RepoSettings>;
   slack_channels: { id: string; name: string }[];
   reviewers: { id: string; name: string; slack_id: string; github_login: string }[]; active_reviewers: string[];
-  vault_dir: string | null; grind_mode: "deep" | "simple"; use_jev: boolean;
+  vault_dir: string | null; grind_mode: "deep" | "simple"; use_jev: boolean; idle_guard: boolean;
   run_model: Model | null; run_effort: Effort | null;
   grind_limits: { max_rounds: number; poll_interval: number; max_wait: number; max_idle_waits: number;
     stuck_seen: number; ci_timeout: number; ci_poll: number };     // defaults 10, 60, 1500, 4, 2, 1200, 30
@@ -232,7 +232,7 @@ export type NotifySettings = { matrix: Record<NotifyEvent, { browser: boolean; p
   events: { key: NotifyEvent; label: string; group: string }[]; public_url: string;
   mac: { available: boolean; notifier: string; clickable: boolean }; push: { subscriptions: number };
   ntfy_ready: boolean; server: string; topic: string; user: string; token_set: boolean; password_set: boolean; env: string[] };
-export type NotifyEvent = "waiting"|"failed"|"dispatch"|"panel-cap"|"pr-ready"|"needs-cleanup"|"grind-paused"|"grind-done"|"done"|"afk"|"release";
+export type NotifyEvent = "waiting"|"failed"|"dispatch"|"panel-cap"|"stalled"|"pr-ready"|"needs-cleanup"|"grind-paused"|"grind-done"|"done"|"afk"|"release";
 export type PushSubscription = { endpoint: string; keys: { p256dh: string; auth: string } };
 
 // ---------- vault ----------
