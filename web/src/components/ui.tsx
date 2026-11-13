@@ -96,7 +96,8 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, focusSelf = fal
 /** Give focus back to the element that opened a layer; when it was the page itself (a key opened it), to the selected row. */
 export function restoreFocus(prev: HTMLElement | null): void {
   if (prev && prev !== document.body && document.contains(prev)) { prev.focus(); return; }
-  setTimeout(() => document.querySelector<HTMLElement>('[aria-current="true"]')?.focus({ preventScroll: true }), 0);
+  // later, and only if nothing took focus meanwhile: a dialog opened by the one that just closed keeps its own focus
+  setTimeout(() => { if (!document.activeElement || document.activeElement === document.body) document.querySelector<HTMLElement>('[aria-current="true"]')?.focus({ preventScroll: true }); }, 0);
 }
 
 /** Registers this component as an open layer for Escape and the global-key guard while it is mounted (or `active`). */
