@@ -14,6 +14,7 @@
 
 ### Fixed
 
+- Small change, After merge and Project coordinator on a `local/*` repo (no GitHub remote) are refused up front with 400 "has no GitHub remote yet", as API.md §9.1 says, instead of starting a run that fails at its first `gh` call.
 - The Small change route files again: its text and the Priority line may span several lines (setu refused every multi-line argument). Step arguments are capped at 20,000 characters.
 - A dispatch no longer stalls silently behind a skipped issue. Lanes whose blockers were skipped show **Can't start** at once (the `stranded` and `skipped_deps` lane fields), with **Run #N again** and a new **Unblock** lane action that lets them start without the skipped blocker.
 - A skipped or closed lane no longer keeps its old "needs you", held or gate text, no longer raises an Inbox item, and stops its clock when it ends.

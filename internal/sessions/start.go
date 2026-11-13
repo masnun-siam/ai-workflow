@@ -27,7 +27,7 @@ var (
 	issueURLRe  = regexp.MustCompile(`github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/issues/(\d+)`)
 	argIssueRe  = regexp.MustCompile(`^(?:#?(\d+)|https?://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/(?:issues|pull)/(\d+)\S*)$`)
 	vaultDirRe  = regexp.MustCompile(`^05-Work/[^/\x00]+(?:/[^/\x00]+)?$`)
-	needsRemote = map[string]bool{"create-tasks": true, "refine-issues": true, "implement-issue": true, "pr-grind": true, "pr-review": true, "release-pr": true, "report-bug": true}
+	needsRemote = map[string]bool{"create-tasks": true, "small-change": true, "refine-issues": true, "implement-issue": true, "after-merge": true, "pr-grind": true, "pr-review": true, "release-pr": true, "project-coordinator": true, "report-bug": true}
 	// free-text steps always run on the picked repo
 	freeText = map[string]bool{"small-change": true, "report-bug": true}
 )
