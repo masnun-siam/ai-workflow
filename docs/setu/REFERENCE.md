@@ -31,7 +31,7 @@ what the code does. Where the two differ, the code wins.
 | `SETU_HOME` | Data dir override (default `~/.setu`). |
 | `CLAUDE_CONFIG_DIR` | Where blubird and `claude` state live (default `~/.claude`). |
 | `SETU_SESSION`, `SETU_HEADLESS` | Set by setu in child sessions (`AIW_UI_SESSION`, `AIW_HEADLESS` mirror them). `CLAUDE_PLUGIN_DATA` is never set. |
-| `BLUBIRD_IDLE_GUARD=off` | Set in every session so blubird's idle guard does not block headless turn ends. |
+| `BLUBIRD_IDLE_GUARD=off` | Set in every session so blubird's idle guard does not block headless turn ends; setu attaches its own (`setu hook idle`, via `--settings`) to blubird skill runs and lanes while `idle_guard` is on. |
 
 ## Data (`~/.setu`)
 
