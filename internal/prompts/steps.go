@@ -23,6 +23,7 @@ func defaultSteps() []Step {
 		{"small-change", b, "create-tasks", InRepo, "refine", "Small change", "<finding>"},
 		{"refine-issues", b, "refine-issues", InIssue, "refine", "Refine issues", "<epic | issues>"},
 		{"reproduce-bug", b, "reproduce-bug", InIssue, "refine", "Reproduce bug", "<issue | symptoms>"},
+		{"report-bug", b, "reproduce-bug", InRepo, "refine", "Report bug", "<bug report>"},
 		{"implement-issue", b, "implement-issue", InIssue, "implement", "Implement issue", "<issue | epic>"},
 		{"after-merge", b, "implement-issue", InIssue, "implement", "After merge", "<n> (PR #p for issue #n is merged: ...)"},
 		{"verifier-locally", b, "verifier-locally", InIssue, "implement", "Verify locally", "free"},

@@ -191,6 +191,11 @@ func (m *Manager) liveForIssue(r Record) (string, bool) {
 
 // SendPrompt sends text to a session: queued while it runs, resumed when it is finished.
 func (m *Manager) SendPrompt(ctx context.Context, id, text string, limit int) (string, error) {
+	return m.sendPrompt(ctx, id, text, limit, nil)
+}
+
+// sendPrompt is SendPrompt; pre, when set, vets the record under resumeMu, atomic with the claim.
+func (m *Manager) sendPrompt(ctx context.Context, id, text string, limit int, pre func(Record) error) (string, error) {
 	ctx = context.WithoutCancel(ctx)
 	if limit <= 0 {
 		limit = 4000
@@ -200,6 +205,9 @@ func (m *Manager) SendPrompt(ctx context.Context, id, text string, limit int) (s
 	}
 	m.resumeMu.Lock()
 	rec, err := m.Get(id)
+	if err == nil && pre != nil {
+		err = pre(rec)
+	}
 	if err != nil {
 		m.resumeMu.Unlock()
 		return "", err
@@ -232,6 +240,27 @@ func (m *Manager) SendPrompt(ctx context.Context, id, text string, limit int) (s
 		return "", err
 	}
 	return "sent", nil
+}
+
+// Continue resumes a stalled session's own Claude session with the FR-6 message.
+func (m *Manager) Continue(ctx context.Context, id string) (Record, error) {
+	rec, err := m.Get(id)
+	if err != nil {
+		return rec, err
+	}
+	stillStalled := func(r Record) error {
+		if r.Stalled == "" {
+			return errs.Conflict("session is not stalled", map[string]any{"id": id})
+		}
+		if r.Status == StStarting { // another Continue claimed it and has not cleared stalled yet
+			return errs.Conflict("session is already resuming", map[string]any{"id": id})
+		}
+		return nil
+	}
+	if _, err := m.sendPrompt(ctx, id, ContinueText(m.stepOf(rec)), 0, stillStalled); err != nil {
+		return rec, err
+	}
+	return m.Get(id)
 }
 
 // deliverQueued sends a stored prompt once the session is finished and not held.

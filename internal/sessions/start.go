@@ -27,7 +27,9 @@ var (
 	issueURLRe  = regexp.MustCompile(`github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/issues/(\d+)`)
 	argIssueRe  = regexp.MustCompile(`^(?:#?(\d+)|https?://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/(?:issues|pull)/(\d+)\S*)$`)
 	vaultDirRe  = regexp.MustCompile(`^05-Work/[^/\x00]+(?:/[^/\x00]+)?$`)
-	needsRemote = map[string]bool{"create-tasks": true, "refine-issues": true, "implement-issue": true, "pr-grind": true, "pr-review": true, "release-pr": true}
+	needsRemote = map[string]bool{"create-tasks": true, "refine-issues": true, "implement-issue": true, "pr-grind": true, "pr-review": true, "release-pr": true, "report-bug": true}
+	// free-text steps always run on the picked repo
+	freeText = map[string]bool{"small-change": true, "report-bug": true}
 )
 
 func noNUL(s string) bool { return !strings.ContainsRune(s, 0) }
@@ -161,8 +163,9 @@ func (m *Manager) StartSession(ctx context.Context, req StartRequest) (Record, e
 		if m.d.Repos == nil {
 			return Record{}, errs.Invalid("no repository registry")
 		}
-		// an issue URL in the prompt overrides the picked repo when that repo is registered
-		if step.RunsIn != "docs" {
+		// an issue URL in the prompt overrides the picked repo when that repo is registered;
+		// a pasted bug report or finding may quote any issue link, so free-text steps keep the pick
+		if step.RunsIn != "docs" && !freeText[req.Step] {
 			if mm := issueURLRe.FindStringSubmatch(prompt.Display); mm != nil {
 				if p, s, err := m.d.Repos.Resolve(ctx, mm[1]+"/"+mm[2]); err == nil && p != "" {
 					cwd, slug = p, s

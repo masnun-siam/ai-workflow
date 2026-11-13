@@ -115,6 +115,8 @@ var fakeSteps = map[string]Step{
 	"create-prd":      {ID: "create-prd", Source: "blubird", Skill: "create-prd", RunsIn: "docs"},
 	"pr-grind":        {ID: "pr-grind", Source: "setu", Skill: "pr-grind", RunsIn: "issue"},
 	"release-note":    {ID: "release-note", Source: "setu", Skill: "release-note", RunsIn: "none"},
+	"small-change":    {ID: "small-change", Source: "blubird", Skill: "create-tasks", RunsIn: "repo"},
+	"report-bug":      {ID: "report-bug", Source: "blubird", Skill: "reproduce-bug", RunsIn: "repo"},
 }
 
 func (fakePrompts) Step(id string) (Step, bool) { s, ok := fakeSteps[id]; return s, ok }
