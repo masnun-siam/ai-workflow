@@ -119,6 +119,7 @@ func (m *Manager) Public(r Record) Session {
 	s.Effort = strp(r.RunEffort)
 	s.EndedAt = strp(r.EndedAt)
 	s.Error, s.Note = strp(r.Error), strp(r.Note)
+	s.Stalled = strp(r.Stalled)
 	s.PendingAnswer, s.QueuedPrompt = strp(r.PendingAnswer), strp(r.QueuedPrompt)
 	s.Account = r.ClaudeCmd
 	if m.d.Settings != nil {
