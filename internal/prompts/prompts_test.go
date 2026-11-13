@@ -54,7 +54,7 @@ func load(t *testing.T, withBlubird bool) *Registry {
 
 func TestRegistryCoversSpec(t *testing.T) {
 	r := load(t, false)
-	want := strings.Fields("create-prd map-prds create-tasks small-change refine-issues reproduce-bug implement-issue after-merge verifier-locally project-coordinator pr-review peer-review pr-grind release-pr release-note agentic-onboard ci-optimize security-sweep docs-updater skill-feedback day-end-reconcile weekly-review")
+	want := strings.Fields("create-prd map-prds create-tasks small-change refine-issues reproduce-bug report-bug implement-issue after-merge verifier-locally project-coordinator pr-review peer-review pr-grind release-pr release-note agentic-onboard ci-optimize security-sweep docs-updater skill-feedback day-end-reconcile weekly-review")
 	got := r.Steps()
 	if len(got) != len(want) {
 		t.Fatalf("%d steps, want %d", len(got), len(want))
@@ -73,6 +73,10 @@ func TestRegistryCoversSpec(t *testing.T) {
 		}
 	}
 	if s, _ := r.Step("small-change"); s.Skill != "create-tasks" || s.RunsIn != InRepo {
+		t.Fatalf("%+v", s)
+	}
+	if s, _ := r.Step("report-bug"); s.Source != SrcBlubird || s.Skill != "reproduce-bug" || s.RunsIn != InRepo ||
+		s.Stage != "refine" || s.Label != "Report bug" || s.ArgsHint != "<bug report>" {
 		t.Fatalf("%+v", s)
 	}
 	if s, _ := r.Step("map-prds"); !s.InStage("ops") || !s.InStage("prd") || s.InStage("me") {
@@ -187,7 +191,7 @@ func TestArgChecks(t *testing.T) {
 	}
 }
 
-// report-bug is keyed by step id; the step itself is registered elsewhere, so check its args directly.
+// checkArgs keys the multi-line rule by step id.
 func TestArgChecksReportBugMultiLine(t *testing.T) {
 	lines := make([]string, 40)
 	for i := range lines {
@@ -381,11 +385,45 @@ func TestEmbeddedContent(t *testing.T) {
 	}
 }
 
+func TestReportBugPrompt(t *testing.T) {
+	r := load(t, true)
+	p, err := r.Build("report-bug", "Login 500s after upgrade\nPriority: P1\nEnvironment: Staging")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Display != "/blubird:reproduce-bug Login 500s after upgrade\nPriority: P1\nEnvironment: Staging" {
+		t.Fatalf("display %q", p.Display)
+	}
+	if p.Text != p.Display+"\n\n"+ReportBug {
+		t.Fatalf("text %q", p.Text)
+	}
+	rep, ct, ri := strings.Index(p.Text, "reproduce-bug"), strings.Index(p.Text, "/blubird:create-tasks"), strings.Index(p.Text, "/blubird:refine-issues")
+	if rep < 0 || ct <= rep || ri <= ct {
+		t.Fatalf("order reproduce %d, create-tasks %d, refine %d", rep, ct, ri)
+	}
+	for _, opt := range []string{`"File it with the open questions"`, `"Drop it"`} {
+		if !strings.Contains(p.Text, opt) {
+			t.Errorf("missing option %s", opt)
+		}
+	}
+	if _, err := r.Build("report-bug", "-x it breaks"); errs.KindOf(err) != errs.KInvalid {
+		t.Errorf("leading '-': %v", err)
+	}
+}
+
 func TestPromptFixedTexts(t *testing.T) {
 	if !strings.Contains(Headless, "setu ask --json") || strings.Contains(Headless, "aiw") {
 		t.Fatal(Headless)
 	}
 	if !strings.Contains(Reentry, "setu timer") || !strings.Contains(Reentry, "`setu ask`") || strings.Contains(Reentry, "aiw") {
 		t.Fatal(Reentry)
+	}
+	for _, w := range []string{"setu ask", "/blubird:create-tasks", "/blubird:refine-issues"} {
+		if !strings.Contains(ReportBug, w) {
+			t.Errorf("ReportBug lacks %q", w)
+		}
+	}
+	if strings.Contains(ReportBug, "aiw") {
+		t.Error("ReportBug mentions aiw")
 	}
 }

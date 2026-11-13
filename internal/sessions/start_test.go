@@ -141,6 +141,33 @@ func TestStartValidation(t *testing.T) {
 	}
 }
 
+func TestFreeTextStepsRunConcurrently(t *testing.T) {
+	e := newEnv(t)
+	e.slow("5")
+	ctx := context.Background()
+	for _, step := range []string{"report-bug", "small-change"} {
+		first := e.req(step, "login 500s")
+		first.Guard = true
+		a, err := e.m.StartSession(ctx, first)
+		mustNoErr(t, err)
+		e.status(a.ID, StRunning)
+		second := e.req(step, "export hangs")
+		second.Guard = true
+		if _, err := e.m.StartSession(ctx, second); err != nil {
+			t.Fatalf("second %s on one repo: %v", step, err)
+		}
+	}
+	// an issue run keeps its duplicate guard
+	a, err := e.m.StartSession(ctx, e.req("implement-issue", "7"))
+	mustNoErr(t, err)
+	e.status(a.ID, StRunning)
+	g := e.req("implement-issue", "7")
+	g.Guard = true
+	if _, err := e.m.StartSession(ctx, g); kind(err) != "conflict" || !strings.Contains(err.Error(), "already running") {
+		t.Fatalf("implement-issue duplicate: %v", err)
+	}
+}
+
 func TestRunsInRouting(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -183,10 +210,19 @@ func TestRunsInRouting(t *testing.T) {
 	if last.Repo != e.docs || last.CwdPath != e.docs {
 		t.Errorf("%+v", last)
 	}
+	// free-text steps keep the picked repo whatever issue link the pasted text quotes
+	for _, step := range []string{"small-change", "report-bug"} {
+		if got := cwdOf(StartRequest{Step: step, Args: "seen in https://github.com/acme/docs/issues/4", Repo: "acme/app"}); got != eval(e.repo) {
+			t.Errorf("%s ignores the url: %s", step, got)
+		}
+	}
 	// local/ repos cannot run GitHub steps
 	e.m.d.Repos.(*fakeRepos).slugs["local/scratch"] = t.TempDir()
 	if _, err := e.m.StartSession(ctx, StartRequest{Step: "implement-issue", Args: "1", Repo: "local/scratch"}); kind(err) != "invalid" || !strings.Contains(err.Error(), "has no GitHub remote yet") {
 		t.Errorf("local: %v", err)
+	}
+	if _, err := e.m.StartSession(ctx, StartRequest{Step: "report-bug", Args: "it breaks", Repo: "local/scratch"}); kind(err) != "invalid" || !strings.Contains(err.Error(), "has no GitHub remote yet") {
+		t.Errorf("local report-bug: %v", err)
 	}
 }
 

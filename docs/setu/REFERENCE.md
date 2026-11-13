@@ -71,7 +71,8 @@ Appearance (look, mode, layout) is not a server setting; it is kept in the brows
 
 ## Built-in prompts
 
-`release-pr`, `pr-grind`, `release-note`, `peer-review`, plus agent bodies `peer-reviewer` and `away-answerer`, in `prompts/`. Step registry: API.md §9.
+`release-pr`, `pr-grind`, `release-note`, `peer-review`, plus agent bodies `peer-reviewer` and `away-answerer`, in `prompts/`. Step registry: API.md §9. The fixed texts that version with the binary (`Headless`, `Reentry`, and `ReportBug`, the `report-bug` step's
+reproduce-then-file instructions) are Go constants in `internal/prompts/build.go` (API.md §9.4).
 
 ## Build
 
