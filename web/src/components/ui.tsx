@@ -18,10 +18,10 @@ export function Pane({ label, children, wide, id, plain, role, labelledBy }: { l
 
 type BtnProps = {
   children: ComponentChildren; onClick?: () => unknown; k?: string; primary?: boolean; bad?: boolean; small?: boolean;
-  disabled?: boolean; title?: string; type?: "button" | "submit";
+  disabled?: boolean; title?: string; type?: "button" | "submit"; label?: string;
 };
 /** A button. When onClick returns a promise the button is busy (disabled) until it settles, so a slow call cannot be sent twice. */
-export function Btn({ children, onClick, k, primary, bad, small, disabled, title, type = "button" }: BtnProps) {
+export function Btn({ children, onClick, k, primary, bad, small, disabled, title, type = "button", label }: BtnProps) {
   const [busy, setBusy] = useState(false);
   const click = () => {
     const r = onClick?.();
@@ -29,7 +29,7 @@ export function Btn({ children, onClick, k, primary, bad, small, disabled, title
   };
   return (
     <button type={type} class={`btn${primary ? " pri" : ""}${bad ? " bad" : ""}${small ? " sm" : ""}`} onClick={onClick ? click : undefined}
-      disabled={disabled || busy} aria-busy={busy || undefined} title={title}>
+      disabled={disabled || busy} aria-busy={busy || undefined} aria-label={label} title={title}>
       {k && <kbd>{k}</kbd>}
       {children}
     </button>
@@ -68,8 +68,8 @@ export function Chips<T extends string>({ value, options, onPick, label }: { val
   );
 }
 
-export function Field({ label, children, hint }: { label: string; children: ComponentChildren; hint?: string }) {
-  return <label class="fld">{label}{children}{hint && <small class="dim">{hint}</small>}</label>;
+export function Field({ label, children, hint, error }: { label: string; children: ComponentChildren; hint?: string; error?: string | null }) {
+  return <label class="fld">{label}{children}{error ? <small class="c-b" role="alert">{error}</small> : hint && <small class="dim">{hint}</small>}</label>;
 }
 
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
