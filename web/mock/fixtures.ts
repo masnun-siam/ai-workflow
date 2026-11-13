@@ -33,7 +33,7 @@ const base: Session = {
   status: "running", model: "opus", effort: "high", cost: 1.2, tokens: tok, started_at: iso(30), ended_at: null, duration_s: 1800,
   waiting: false, pending_question: null, error: null, note: null, pending_answer: null, queued_prompt: null, account: "work",
   limit_resets_at: null, limit_type: null, auto_resume: null, hold: false, no_repo: false, vault_folder: null, dismissed: false,
-  panel: null, dispatch: null, hooks: 0, resume_command: null,
+  panel: null, dispatch: null, hooks: 0, resume_command: null, stalled: null,
 };
 const S = (p: Partial<Session>): Session => ({ ...base, ...p });
 export const sessions: Session[] = [
