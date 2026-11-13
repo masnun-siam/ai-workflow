@@ -25,6 +25,7 @@ var Events = []Event{
 	{"failed", "A session failed", "Needs you"},
 	{"dispatch", "A dispatch needs you", "Needs you"},
 	{"panel-cap", "Review panel hit its cap", "Needs you"},
+	{"stalled", "A session or lane stalled", "Needs you"},
 	{"pr-ready", "PR is ready for review", "Pull requests"},
 	{"needs-cleanup", "Merged issue needs cleanup", "Pull requests"},
 	{"grind-paused", "Grind paused", "Pull requests"},
@@ -52,9 +53,13 @@ func isChannel(c string) bool {
 	return false
 }
 
-// DefaultCell is the matrix default: ntfy always on, push always off, browser and mac on unless
-// the event is in the Finished group or is grind-done.
+// DefaultCell is the matrix default: stalled off everywhere (it is opt-in, apart from real
+// questions), otherwise ntfy always on, push always off, browser and mac on unless the event is in
+// the Finished group or is grind-done.
 func DefaultCell(event, channel string) bool {
+	if event == "stalled" {
+		return false
+	}
 	switch channel {
 	case "ntfy":
 		return true

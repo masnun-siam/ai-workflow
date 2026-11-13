@@ -517,6 +517,9 @@ func stalls(o, l store.Lane, agent string, acts []Action, now float64) (store.La
 	l.Stalled = ""
 	if agent == "idle" && now-l.IdleSince >= IdleGraceSeconds {
 		l.Stalled = Stalled
+		if o.Stalled == "" {
+			acts = append(acts, Action{Kind: ANotify, NKind: "stalled", NText: Stalled})
+		}
 	}
 	return l, acts
 }

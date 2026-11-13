@@ -116,7 +116,7 @@ func level(event string) string {
 	switch event {
 	case "failed":
 		return "error"
-	case "waiting", "panel-cap", "grind-paused", "dispatch":
+	case "waiting", "panel-cap", "grind-paused", "dispatch", "stalled":
 		return "warn"
 	}
 	return "info"

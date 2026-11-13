@@ -195,11 +195,13 @@ func (m *Manager) update(id string, fn func(*Record) error, external bool) (Reco
 }
 
 // dedupe maintains rec.Notified and returns the event to send ("" = none). Keys: waiting:<round>,
-// done, failed. Moving to starting or running forgets done and failed so a resumed run notifies again.
+// done, failed, stalled. Moving to starting or running forgets done, failed and stalled so a resumed
+// run notifies again. A run the idle guard marked stalled ends as stalled instead of done; a lane's
+// session sends nothing for it, since its lane notifies.
 func dedupe(prev Record, r *Record) string {
 	if r.Status == StStarting || r.Status == StRunning {
 		if prev.Status != r.Status {
-			r.Notified = without(r.Notified, "done", "failed")
+			r.Notified = without(r.Notified, "done", "failed", "stalled")
 		}
 		return ""
 	}
@@ -224,6 +226,12 @@ func dedupe(prev Record, r *Record) string {
 		event, key = string(r.Status), string(r.Status)
 		if prev.Status == r.Status {
 			return ""
+		}
+		if r.Status == StDone && r.Stalled != "" {
+			if r.Kind == "lane" {
+				return ""
+			}
+			event, key = "stalled", "stalled"
 		}
 	default:
 		return ""
@@ -261,6 +269,9 @@ func (m *Manager) sendNotify(event string, r Record) {
 		return
 	}
 	n := Note{ID: r.ID, Repo: m.slugOf(r), Command: r.Command, SessionID: r.SessionID, Error: r.Error, Step: m.stepOf(r), Link: r.Link}
+	if event == "stalled" {
+		n.Text = r.Stalled
+	}
 	if event == "waiting" && r.PendingQuestion != nil && len(r.PendingQuestion.Questions) > 0 {
 		q := r.PendingQuestion.Questions[0]
 		n.Question = q.Question
