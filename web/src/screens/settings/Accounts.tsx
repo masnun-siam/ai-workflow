@@ -25,7 +25,7 @@ export function AccountsPane() {
   const labels = list.map((c) => c.label.trim().toLowerCase());
   const dup = labels.find((l, i) => l && labels.indexOf(l) !== i);
   const blank = list.some((c) => !c.label.trim() || !c.cmd.trim());
-  const problem = blank ? "Every account needs a label and a command" : dup ? `Two accounts are labelled "${dup}"` : null;
+  const problem = blank ? "Every account needs a label and a command" : dup ? `Two accounts are labelled "${dup}"` : !labels.includes(dflt.trim().toLowerCase()) ? "Pick a default account" : null;
   const discard = () => { setCmds(null); setDef(null); };
   const test = async (label: string) => {
     const r = await mutate(() => http.send<{ ok: boolean; message: string }>("POST", "/api/settings/test-account", { label }), null);
