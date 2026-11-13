@@ -626,6 +626,7 @@ type Settings = {
   slack_channels: { id: string; name: string }[];
   reviewers: { id: string; name: string; slack_id: string; github_login: string }[]; active_reviewers: string[];
   vault_dir: string | null; grind_mode: "deep" | "simple"; use_jev: boolean;
+  idle_guard: boolean;                                           // default true; absent reads as true
   run_model: Model | null; run_effort: Effort | null;
   grind_limits: { max_rounds: number; poll_interval: number; max_wait: number; max_idle_waits: number;
     stuck_seen: number; ci_timeout: number; ci_poll: number };     // defaults 10, 60, 1500, 4, 2, 1200, 30
@@ -720,7 +721,7 @@ Guard 1 always applies to `implement-issue` and `pr-grind` (S§5.4), even withou
 | GET | `/api/river?product=<docs slug>&repo=` (`repo` of no product: a River of that repo alone, without PRD and "commits ahead" cards; a repo of a product shows that product) | — | `River` (marks the shown repos viewed; every card's `log` and `actions` are arrays, never null) | 200; 400 unknown product or repo |
 | GET | `/api/inbox?product=&repo=` | — | `InboxList` (marks viewed `*`) | 200 |
 | GET | `/api/features?product=` | — | `FeatureList`: per PRD the stage (draft, review, approved, tasks, building, shipped), bay (you, go, running, shipped), next-step line and actions, epic, its open issues (state and row actions) and closed ones, counts, newest panel on the PRD file, the dispatch owning the epic, sessions. Sorted by bay | 200; 400 unknown product |
-| GET | `/api/changes?repo=` | — | `{stale, issues: FeatureIssue[], pending: FeatureSession[]}`: open issues that belong to no epic in every registered repo (or one), with feature-issue states and row actions; `pending` = live `small-change` runs | 200 |
+| GET | `/api/changes?repo=` | — | `{stale, issues: FeatureIssue[], pending: FeatureSession[]}`: open issues that belong to no epic in every registered repo (or one), with feature-issue states and row actions; `pending` = live `small-change` and `report-bug` runs | 200 |
 | GET | `/api/ops?product=&repo=` (`repo` of no product: its repo steps run on itself, docs repo steps "needs a product" with no action) | — | `Ops` | 200; 400 unknown product or repo |
 | GET | `/api/me` | — | `Me` | 200 |
 

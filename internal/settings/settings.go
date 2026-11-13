@@ -114,6 +114,7 @@ type Settings struct {
 	VaultDir        *string                 `json:"vault_dir"`
 	GrindMode       string                  `json:"grind_mode"`
 	UseJev          bool                    `json:"use_jev"`
+	IdleGuard       bool                    `json:"idle_guard"`
 	RunModel        *string                 `json:"run_model"`
 	RunEffort       *string                 `json:"run_effort"`
 	GrindLimits     GrindLimits             `json:"grind_limits"`
@@ -473,6 +474,10 @@ func normalize(raw map[string]any) *loaded {
 	st.UseJev = true
 	if b, ok := raw["use_jev"].(bool); ok {
 		st.UseJev = b
+	}
+	st.IdleGuard = true
+	if b, ok := raw["idle_guard"].(bool); ok {
+		st.IdleGuard = b
 	}
 	if m, _ := raw["run_model"].(string); contains(RunModels, m) {
 		st.RunModel = &m
