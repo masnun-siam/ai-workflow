@@ -67,8 +67,8 @@ export function Chips<T extends string>({ value, options, onPick, label }: { val
   );
 }
 
-export function Field({ label, children, hint }: { label: string; children: ComponentChildren; hint?: string }) {
-  return <label class="fld">{label}{children}{hint && <small class="dim">{hint}</small>}</label>;
+export function Field({ label, children, hint, error }: { label: string; children: ComponentChildren; hint?: string; error?: string }) {
+  return <label class="fld">{label}{children}{error ? <small class="c-b" role="alert">{error}</small> : hint && <small class="dim">{hint}</small>}</label>;
 }
 
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';

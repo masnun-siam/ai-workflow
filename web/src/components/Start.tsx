@@ -12,6 +12,7 @@ import { clock, shortRepo } from "../state/format";
 import { createDraft, createJevPick, createOpen, createRoute, createRouteTouched, paletteOpen, startReq, toast, type CreateRoute } from "../state/ui";
 import { RepoField } from "./Shell";
 import { createRepo } from "./Repos";
+import { argRequired } from "../state/dispatchView";
 import { Btn, Field, useFocusTrap } from "./ui";
 
 export const MODELS: Model[] = ["opus", "sonnet", "haiku"];
@@ -131,6 +132,8 @@ const ROUTES: [CreateRoute, string, string][] = [
   ["small", "Small change", "one issue, no PRD"],
   ["bug", "Bug", "reproduce it, then file and refine"],
 ];
+/** What each route runs on when you start it: set by the route, not by your saved defaults. */
+const ROUTE_DEFAULTS: Record<CreateRoute, string> = { feature: "Runs on opus · medium effort (set by this route)", small: "Runs on your default model and effort", bug: "Runs on opus · high effort (set by this route)" };
 const SUBMIT: Record<CreateRoute, string> = { feature: "Start the PRD interview", small: "File the issue", bug: "Reproduce the bug" };
 
 /** The argument a route sends: the text, plus the Priority (and for a bug, Environment) lines. */
@@ -232,11 +235,19 @@ export function CreateDialog() {
         <textarea ref={ref} rows={5} aria-label="Describe the change" placeholder="Describe a feature or a fix in a few sentences…" value={text}
           onInput={(e) => (createDraft.value = (e.target as HTMLTextAreaElement).value)} />
         {dup && <div class="banner inline" role="status">Looks like <a href={dup.url ?? `https://github.com/${repo}/issues/${dup.number}`} target="_blank" rel="noreferrer">#{dup.number} {dup.title}</a>. Check it before filing a new one.</div>}
-        <div class="seg" role="radiogroup" aria-label="Route">
+        <div class="seg" role="radiogroup" aria-label="Route" onKeyDown={(e) => {
+          const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+          if (!step) return;
+          e.preventDefault();
+          const next = ROUTES[(ROUTES.findIndex(([v]) => v === route) + step + ROUTES.length) % ROUTES.length]![0];
+          pickRoute(next);
+          requestAnimationFrame(() => (e.currentTarget as HTMLElement).querySelector<HTMLElement>('[aria-checked="true"]')?.focus());
+        }}>
           {ROUTES.map(([v, l, d]) => (
-            <button key={v} type="button" role="radio" aria-checked={route === v} class={`seg-o${route === v ? " on" : ""}`} onClick={() => pickRoute(v)}><b>{l}</b><small class="dim">{d}</small></button>
+            <button key={v} type="button" role="radio" aria-checked={route === v} tabIndex={route === v ? 0 : -1} class={`seg-o${route === v ? " on" : ""}`} onClick={() => pickRoute(v)}><b>{l}</b><small class="dim">{d}</small></button>
           ))}
         </div>
+        <small class="dim">{ROUTE_DEFAULTS[route]}</small>
         {createJevPick.value && !createRouteTouched.value && <small class="dim">{jevLine(createJevPick.value)}</small>}
         <div class="fields">
           <Field label="Repository">{noRepos ? <span class="c-w">No repositories yet. <a href="#/onboarding">Add one</a>.</span> : <RepoField label="Repository" value={repo} onChange={setRepo} />}</Field>
@@ -348,6 +359,7 @@ export function StartDialog() {
   const [lenses, setLenses] = useState<string[]>([]);
   const [account, setAccount] = useState("");
   const [busy, setBusy] = useState(false);
+  const [q, setQ] = useState("");
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => ref.current?.focus(), [stepId]);
   useEffect(() => { if (!settings.value) void load("settings"); }, []);
@@ -357,15 +369,17 @@ export function StartDialog() {
   const repoVal = where === FOLDER ? folder.trim() : where;
   const groups = useMemo(() => {
     const m = new Map<string, RegistryStep[]>();
-    for (const s of steps) m.set(groupOf(s), [...(m.get(groupOf(s)) ?? []), s]);
+    const needle = q.trim().toLowerCase();
+    for (const s of steps) if (!needle || `${s.label ?? ""} ${s.id} ${s.skill}`.toLowerCase().includes(needle)) m.set(groupOf(s), [...(m.get(groupOf(s)) ?? []), s]);
     return GROUP_ORDER.filter((g) => m.has(g)).map((g) => [g, m.get(g)!] as const);
-  }, [steps]);
+  }, [steps, q]);
   const lensKind = !step ? "custom" : step.id === "create-prd" ? "create-prd" : "";
   const acctLabel = account || settings.value?.default || "";
   const limited = !!acctLabel && !!limitNote(acctLabel);
-  const missing = runsIn === "custom" ? !args.trim() || (where === FOLDER && !folder.trim()) || (!where && where !== VAULT)
+  const needsArg = !!step && argRequired(step.args_hint);
+  const missing = (needsArg && !args.trim()) || (runsIn === "custom" ? !args.trim() || (where === FOLDER && !folder.trim()) || (!where && where !== VAULT)
     : runsIn === "issue" || runsIn === "repo" ? !repoVal
-    : runsIn === "docs" ? !prod : false;
+    : runsIn === "docs" ? !prod : false);
 
   const choose = (s: RegistryStep | null) => {
     if (s && !s.available) { toast(s.reason ?? `${s.id} is not available`, "warn"); return; }
@@ -384,10 +398,11 @@ export function StartDialog() {
     if (lenses.length) body.lenses = lenses;
     if (account) { body.account = account; body.pin_account = true; }
     setBusy(true);
-    if (remember && (model !== (settings.value?.run_model ?? "") || effort !== (settings.value?.run_effort ?? ""))) {
+    const ok = await start(body, step?.id ?? "the prompt");
+    // "Make these the default" is saved only once the run has started.
+    if (ok && remember && (model !== (settings.value?.run_model ?? "") || effort !== (settings.value?.run_effort ?? ""))) {
       try { await http.send("PUT", "/api/settings", { run_model: model || null, run_effort: effort || null }); void load("settings"); } catch (e) { toast(describeError(e), "error"); }
     }
-    const ok = await start(body, step?.id ?? "the prompt");
     setBusy(false);
     if (ok) startReq.value = null;
   };
@@ -397,7 +412,16 @@ export function StartDialog() {
   return (
     <Dialog label="What should we start?" onClose={close} wide>
       <div class="start">
-        <nav class="start-cmds" aria-label="Commands">
+        <nav class="start-cmds" aria-label="Commands" onKeyDown={(e) => {
+          if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+          const items = [...e.currentTarget.querySelectorAll<HTMLElement>("input, button.pi:not(.off)")];
+          const at = items.indexOf(document.activeElement as HTMLElement);
+          e.preventDefault();
+          items[Math.max(0, Math.min(items.length - 1, at + (e.key === "ArrowDown" ? 1 : -1)))]?.focus();
+        }}>
+          <input type="search" class="cmd-q" placeholder="Search commands" aria-label="Search commands" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); const first = groups[0]?.[1].find((s) => s.available); if (first) choose(first); } }} />
+          {groups.length === 0 && <div class="dim cmd-none">No command matches.</div>}
           {groups.map(([g, list]) => (
             <div key={g} role="group" aria-label={g}>
               <div class="gh">{g}</div>
@@ -446,7 +470,7 @@ export function StartDialog() {
           <div class="fields">
             <Field label="Model"><Select label="Model" value={model} onChange={setModel} options={[["", "default"], ...MODELS.map((m) => [m, m] as [string, string])]} /></Field>
             <Field label="Effort"><Select label="Effort" value={effort} onChange={setEffort} options={[["", "default"], ...EFFORTS.map((m) => [m, m] as [string, string])]} /></Field>
-            <label class="fld check"><span>&nbsp;</span><span><input type="checkbox" checked={remember} onChange={(e) => setRemember((e.target as HTMLInputElement).checked)} /> Make these the default</span></label>
+            <label class="fld check"><span><input type="checkbox" checked={remember} onChange={(e) => setRemember((e.target as HTMLInputElement).checked)} /> Make these the default</span></label>
           </div>
           <AccountPick value={account} onChange={setAccount} />
           <div class="acts">
