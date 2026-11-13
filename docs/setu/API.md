@@ -673,7 +673,7 @@ type VaultPRD = { exists: boolean; status: string | null; title: string | null; 
 | POST | `/api/sessions/{id}/stop` | — | `Session` | 200; 409 |
 | POST | `/api/sessions/{id}/resume` | `{account?: label}` (optional body) | `Session` | 200; 400; 409 |
 | POST | `/api/sessions/{id}/{cancel-auto\|hold\|release\|start-now\|dismiss}` | — | `Session` | 200; 409 |
-| POST | `/api/sessions/{id}/continue` | — | `Session` | 200; 404; 409 `session is not stalled` (or the `prompt` 409s) |
+| POST | `/api/sessions/{id}/continue` | — | `Session` | 200; 404; 409 `session is not stalled` / `session is already resuming` (or the `prompt` 409s) |
 | POST | `/api/sessions/{id}/rerun` | — | `Session` (new) | 201; 400; 409; 502 |
 | GET | `/api/sessions/cleanup` | — | `{items:{key,label,repo,flags:string[]}[]}` | 200 |
 | POST | `/api/sessions/cleanup` | `{keys: string[]}` | `{removed: string[]}` | 200; 400 |

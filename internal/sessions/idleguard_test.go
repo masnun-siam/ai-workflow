@@ -92,3 +92,18 @@ func TestContinueLiveSessionForIssueConflict(t *testing.T) {
 		t.Fatalf("a refused continue must keep the stall: %+v", got)
 	}
 }
+
+// A second Continue while the first is still spawning (claimed: starting, stalled not yet cleared)
+// must not queue the message: deliverQueued would resume the session a second time.
+func TestContinueWhileResumingConflict(t *testing.T) {
+	e := newEnv(t)
+	rec := e.stoppedRecord(t, StStarting, "s1")
+	markStalled(t, e, rec.ID)
+	code, out := postAction(t, e, rec.ID, "continue")
+	if code != 409 || out["error"] != "session is already resuming" {
+		t.Fatalf("%d %v", code, out)
+	}
+	if got, _ := e.m.Get(rec.ID); got.QueuedPrompt != "" {
+		t.Fatalf("continue was queued: %q", got.QueuedPrompt)
+	}
+}
