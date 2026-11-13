@@ -23,7 +23,9 @@ import { http } from "../api/http";
 import { activityTab, mutate, chooseProduct, currentRepo, currentView, loadMany, repoList, repos, status, load } from "../state/data";
 import { hintsFor, resolveKey } from "../state/keymap";
 import { overlayOpen } from "../state/layers";
-import { applyPrefs, prefs } from "../state/prefs";
+import { applyPrefs, prefs, syncPrefsAcrossTabs } from "../state/prefs";
+import { awayLabel } from "../state/away";
+import { awayChangeOpen } from "../components/AwaySummary";
 import { visibleKeys } from "../state/refetch";
 import { startRealtime } from "../state/realtime";
 import { goScreen, nav, route, startRouter } from "../state/route";
@@ -57,7 +59,7 @@ function Banners() {
   return (
     <>
       {!connected.value && <div class="banner" role="status">Offline: reconnecting to setu… What you see may be out of date.</div>}
-      {st.away.active && <div class="banner" role="status">Away mode is on: Claude answers what it can and holds the rest. <Btn small onClick={() => mutate(() => http.send("POST", "/api/away/stop", {}), "Welcome back", ["status", "inbox"])}>I'm back</Btn></div>}
+      {st.away.active && <div class="banner" role="status">{awayLabel(st.away)}: Claude answers what it can and holds the rest. <Btn small onClick={() => mutate(() => http.send("POST", "/api/away/stop", {}), "Welcome back", ["status", "inbox"])}>I'm back</Btn></div>}
       {!st.blubird.installed && <div class="banner" role="alert">blubird is not installed, so its skills are disabled. <Btn small onClick={() => goScreen("settings")}>Open settings</Btn></div>}
       {!st.gh.ok && <div class="banner bad" role="alert">GitHub CLI is not signed in{st.gh.error ? `: ${st.gh.error}` : ""}. Run <code>gh auth login</code> in a terminal, then reload.</div>}
     </>
@@ -113,8 +115,9 @@ export function App() {
     const stopRoute = startRouter();
     const stopSse = startRealtime();
     const stopLinks = interceptGitHubLinks();
+    const stopPrefs = syncPrefsAcrossTabs();
     void load("registry"); void load("settings");
-    return () => { stopRoute(); stopSse(); stopLinks(); };
+    return () => { stopRoute(); stopSse(); stopLinks(); stopPrefs(); };
   }, []);
   useEffect(() => { detailOpen.value = false; repoOpen.value = false; workTarget.value = null; void loadMany(visibleKeys(currentView())); }, [r.screen, r.id, activityTab.value]);
   useEffect(() => { if (r.screen === "changes") void load("changes"); }, [r.query.only]);
@@ -134,7 +137,7 @@ export function App() {
       );
       if (!cmd) return;
       if (cmd.t === "escape") {
-        if (typing && !paletteOpen.value && !startReq.value && !createOpen.value) { el!.blur(); return; }
+        if (typing && !paletteOpen.value && !startReq.value && !createOpen.value && !awayChangeOpen.value) { el!.blur(); return; }
       }
       // Enter on a focused button must stay a click; list navigation never steals it
       if (cmd.t === "enter" && el && (el.tagName === "BUTTON" || el.tagName === "A")) return;
