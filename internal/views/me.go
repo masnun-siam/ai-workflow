@@ -11,10 +11,12 @@ import (
 
 // DayEnd is the personal end-of-day card.
 type DayEnd struct {
-	Date        string        `json:"date"`
-	Reconciled  bool          `json:"reconciled"`
-	MissingDays int           `json:"missing_days"`
-	Last        *SessionBrief `json:"last"`
+	Date        string `json:"date"`
+	Reconciled  bool   `json:"reconciled"`
+	MissingDays int    `json:"missing_days"`
+	// MissingDates lists those days (YYYY-MM-DD, oldest first), so the UI can show which.
+	MissingDates []string      `json:"missing_dates"`
+	Last         *SessionBrief `json:"last"`
 }
 
 // Weekly is the weekly-review card.
@@ -51,6 +53,7 @@ func (s *Service) Me(ctx context.Context) Me {
 		inbox.Start("w", "Draft weekly review", "Started weekly-review", map[string]any{"step": "weekly-review"}),
 	}}
 	m.DayEnd.Date = now.Format("2006-01-02")
+	m.DayEnd.MissingDates = []string{}
 	_, m.Weekly.Week = now.ISOWeek()
 	if s.d.Sessions == nil {
 		return m
@@ -70,6 +73,7 @@ func (s *Service) Me(ctx context.Context) Me {
 		}
 		if !doneDays[d.Format("2006-01-02")] {
 			m.DayEnd.MissingDays++
+			m.DayEnd.MissingDates = append(m.DayEnd.MissingDates, d.Format("2006-01-02"))
 		}
 	}
 	if r, ok := newest(recs); ok {
