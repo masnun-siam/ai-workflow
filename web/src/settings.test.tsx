@@ -1,10 +1,10 @@
+import { options, type VNode } from "preact";
 import { renderToString } from "preact-render-to-string";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createClient, type FetchLike } from "./api/client";
 import { useMockClient } from "./api/http";
 import { mockFetch, resetMock } from "../mock/server";
 import { App } from "./app/App";
-import { saveIdleGuard } from "./screens/settings/Accounts";
 import { loadMany, settings } from "./state/data";
 import { nav } from "./state/route";
 
@@ -16,6 +16,20 @@ const recorder: FetchLike = async (input, init) => {
 
 /** The <label class="opt"> that wraps the given visible label text. */
 const optLabel = (html: string, text: string) => html.match(new RegExp(`<label class="opt"><input[^>]*>\\s*<span><b>${text}</b>`))?.[0] ?? "";
+
+/** Render the app and return the onChange handler of the Idle guard checkbox, as Preact would attach it. */
+function idleGuardOnChange(): (e: { target: { checked: boolean } }) => unknown {
+  let handler: ((e: { target: { checked: boolean } }) => unknown) | undefined;
+  const prev = options.vnode;
+  options.vnode = (v: VNode) => {
+    const p = v.props as { name?: string; onChange?: typeof handler };
+    if (v.type === "input" && p.name === "idle_guard") handler = p.onChange;
+    prev?.(v);
+  };
+  try { renderToString(<App />); } finally { options.vnode = prev; }
+  if (!handler) throw new Error("Idle guard checkbox not rendered");
+  return handler;
+}
 
 beforeEach(async () => {
   resetMock();
@@ -33,17 +47,20 @@ describe("Settings: idle guard", () => {
   });
 
   it("unchecking sends PUT /api/settings {idle_guard:false} and the box stays unchecked", async () => {
-    expect(await saveIdleGuard(false)).toBe(true);
+    idleGuardOnChange()({ target: { checked: false } });
+    await vi.waitFor(() => expect(settings.value?.idle_guard).toBe(false));
     expect(calls.filter((c) => c.method === "PUT")).toEqual([{ method: "PUT", path: "/api/settings", body: { idle_guard: false } }]);
-    expect(settings.value?.idle_guard).toBe(false);
     const label = optLabel(renderToString(<App />), "Idle guard");
     expect(label).toContain('type="checkbox"');
     expect(label).not.toContain("checked");
   });
 
   it("a failed save leaves the setting as it was", async () => {
-    useMockClient(createClient(async () => new Response(JSON.stringify({ error: "disk full" }), { status: 500, headers: { "content-type": "application/json" } })));
-    expect(await saveIdleGuard(false)).toBe(false);
+    let put = false;
+    useMockClient(createClient(async () => { put = true; return new Response(JSON.stringify({ error: "disk full" }), { status: 500, headers: { "content-type": "application/json" } }); }));
+    idleGuardOnChange()({ target: { checked: false } });
+    await vi.waitFor(() => expect(put).toBe(true));
+    await new Promise((r) => setTimeout(r, 0));
     expect(settings.value?.idle_guard).toBe(true);
   });
 });
