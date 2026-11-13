@@ -8,7 +8,7 @@ import { askConfirm, detailOpen, sel, setSel } from "../state/ui";
 import { prefs } from "../state/prefs";
 import { ago, fmtCost, fmtDur, shortRepo } from "../state/format";
 import { Header } from "../components/Header";
-import { statusTone } from "../components/SessionView";
+import { sessionTag } from "../components/SessionView";
 import { Btn, Chips, Empty, Pane, Tag } from "../components/ui";
 
 /** Clean up old (old aiw): finished sessions to remove; ones with unsaved work start unticked. */
@@ -54,7 +54,7 @@ function Live() {
       <div class="live-grid">
         {live.map((s) => (
           <a key={s.id} class="live-card" href={`#/sessions/${s.id}`}>
-            <span><Tag tone={statusTone(s.status)}>{s.status}</Tag> <span class="dim mono">{s.skill ?? "free text"}</span></span>
+            <span><Tag tone={sessionTag(s)[1]}>{sessionTag(s)[0]}</Tag> <span class="dim mono">{s.skill ?? "free text"}</span></span>
             <b class="t">{s.title}</b>
             <span class="dim">{shortRepo(s.repo)} · {fmtDur(s.duration_s)}{s.cost != null ? ` · ${fmtCost(s.cost)}` : ""}</span>
             {s.status === "limited" && s.limit_resets_at && <span class="c-w">limited, resumes {ago(new Date(s.limit_resets_at * 1000).toISOString())}</span>}
@@ -78,7 +78,7 @@ function Sessions() {
         {list.map((s, i) => (
           <button key={s.id} type="button" class={`row r5${i === sel.value.runs ? " sel" : ""}`} aria-current={i === sel.value.runs}
             onClick={() => { setSel({ runs: i }); if (prefs.value.layout === "drawer") detailOpen.value = true; }}>
-            <span class={`tag ${statusTone(s.status)}`}>{s.status}</span>
+            <span class={`tag ${sessionTag(s)[1]}`}>{sessionTag(s)[0]}</span>
             <span class="t mono">{s.skill ?? "free text"}</span>
             <span class="t">{s.title}</span>
             <span class="w mono">{fmtDur(s.duration_s)}</span>

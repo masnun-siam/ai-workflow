@@ -22,6 +22,7 @@ type PublicLane struct {
 	Stage        string    `json:"stage"`
 	PR           *int      `json:"pr"`
 	NeedsYou     *string   `json:"needs_you"`
+	Stalled      *string   `json:"stalled"` // idle guard: stopped before a ready PR; needs_you is then null
 	Held         *string   `json:"held"`
 	Gate         *string   `json:"gate"`
 	SkipReason   *string   `json:"skip_reason"`
@@ -90,6 +91,9 @@ func (s *Service) Public(d store.Dispatch, full bool) PublicDispatch {
 			NeedsYou: store.Ptr(x.NeedsYou), Held: store.Ptr(x.Held), Gate: store.Ptr(x.Gate),
 			SkipReason: store.Ptr(x.SkipReason), Paused: x.Paused, PausedBy: store.Ptr(x.PausedBy), HoldMerge: x.HoldMerge,
 			LimitedUntil: fptr(x.LimitedUntil), StartedAt: fptr(x.StartedAt), EndedAt: fptr(x.EndedAt)}
+		if l.Stalled = store.Ptr(x.Stalled); l.Stalled != nil {
+			l.NeedsYou = nil
+		}
 		if l.Deps == nil {
 			l.Deps = []string{}
 		}
@@ -104,7 +108,7 @@ func (s *Service) Public(d store.Dispatch, full bool) PublicDispatch {
 			l.Stranded = &why
 		}
 		if Settled(x) { // nothing about a closed or skipped lane waits on you (older records kept the text)
-			l.NeedsYou, l.Held, l.Gate = nil, nil, nil
+			l.NeedsYou, l.Stalled, l.Held, l.Gate = nil, nil, nil, nil
 			if x.EndedAt == 0 && lastAt[k] > 0 {
 				l.EndedAt = fptr(lastAt[k])
 			}

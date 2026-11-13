@@ -23,6 +23,7 @@ const (
 	LimitBufferSeconds       = 60
 	MergeFailsBeforeNeedsYou = 3
 	Continue                 = "Continue from where you were stopped."
+	Stalled                  = "stopped before a PR"
 )
 
 // Msg is a prompt for a lane session. A skill message (Step set) is rendered by the prompt
@@ -65,6 +66,7 @@ type Facts struct {
 	Solo         bool   // the repo is the gh user's own: no approval needed
 	Agent        string // working | idle | blocked | gone | unknown | ""
 	LimitedUntil float64
+	IdleGuard    bool // the idle_guard setting: an idle implementing lane is stalled, not needs-you
 }
 
 // Action kinds returned by Step.
@@ -287,7 +289,7 @@ func Step(lane store.Lane, f Facts, s store.Settings, now float64) (store.Lane, 
 	var acts []Action
 
 	to := func(stage, why string) {
-		l.Stage, l.NeedsYou, l.Held, l.IdleSince, l.MergeError, l.MergeFails = stage, "", "", 0, "", 0
+		l.Stage, l.NeedsYou, l.Stalled, l.Held, l.IdleSince, l.MergeError, l.MergeFails = stage, "", "", "", 0, "", 0
 		if why != "" {
 			acts = append(acts, Action{Kind: ANotify, NKind: stage, NText: why})
 		}
@@ -320,6 +322,7 @@ func Step(lane store.Lane, f Facts, s store.Settings, now float64) (store.Lane, 
 	if agent == "gone" && (o.Stage == store.StImplementing || o.Stage == store.StGrinding ||
 		o.Stage == store.StConflictFix || o.Stage == store.StFollowups) &&
 		!(o.Stage == store.StFollowups && !f.IssueOpen) {
+		l.Stalled = "" // a gone session is a real needs-you
 		if o.NeedsYou != "the lane session is gone" {
 			l.NeedsYou = "the lane session is gone"
 			notify("needs_you", "the lane session is gone: retry it")
@@ -335,7 +338,7 @@ func Step(lane store.Lane, f Facts, s store.Settings, now float64) (store.Lane, 
 		}
 		if !free && ready && pr.CI == "failure" && idleOrNone {
 			if o.Held != "CI is red" {
-				l.Held, l.NeedsYou, l.IdleSince = "CI is red", "", 0
+				l.Held, l.NeedsYou, l.Stalled, l.IdleSince = "CI is red", "", "", 0
 				notify("held", fmt.Sprintf("CI is red on PR #%d", pr.N))
 			}
 			return l, acts
@@ -351,6 +354,9 @@ func Step(lane store.Lane, f Facts, s store.Settings, now float64) (store.Lane, 
 				to(store.StMergeGate, "")
 			}
 			return l, acts
+		}
+		if f.IdleGuard {
+			return stalls(o, l, agent, acts, now)
 		}
 		return waits(o, l, agent, acts, "stopped without a ready PR", now)
 
@@ -500,6 +506,17 @@ func waits(o, l store.Lane, agent string, acts []Action, idleWhy string, now flo
 		if why != "" {
 			acts = append(acts, Action{Kind: ANotify, NKind: "needs_you", NText: why})
 		}
+	}
+	return l, acts
+}
+
+// stalls is waits for an implementing lane under the idle guard: a blocked session still needs
+// the user, but one idle past the grace stopped before a ready PR, which is not a question.
+func stalls(o, l store.Lane, agent string, acts []Action, now float64) (store.Lane, []Action) {
+	l, acts = waits(o, l, agent, acts, "", now) // the grace clock and "waiting on you", nothing for idle
+	l.Stalled = ""
+	if agent == "idle" && now-l.IdleSince >= IdleGraceSeconds {
+		l.Stalled = Stalled
 	}
 	return l, acts
 }
@@ -849,13 +866,13 @@ func ApplyLaneAction(d *store.Dispatch, key, action, text string, now float64) e
 		}
 		x.Stage, x.SkipReason, x.PausedBy = store.StSkipped, "skipped by you", ""
 		// a skipped lane is settled: nothing about it waits on you any more
-		x.NeedsYou, x.Held, x.Gate, x.MergeError, x.MergeFails, x.IdleSince, x.ForceMerge = "", "", "", "", 0, 0, false
+		x.NeedsYou, x.Stalled, x.Held, x.Gate, x.MergeError, x.MergeFails, x.IdleSince, x.ForceMerge = "", "", "", "", "", 0, 0, false
 		if x.EndedAt == 0 {
 			x.EndedAt = now
 		}
 	case "retry": // clear held/needs; a fresh session for the lane's stage at the next tick
 		red := x.Held == "CI is red"
-		x.Held, x.NeedsYou, x.Paused, x.PausedBy, x.MergeError, x.MergeFails = "", "", false, "", "", 0
+		x.Held, x.NeedsYou, x.Stalled, x.Paused, x.PausedBy, x.MergeError, x.MergeFails = "", "", "", false, "", "", 0
 		switch {
 		case x.Stage == store.StSkipped || (x.Stage == store.StImplementing && x.PR == 0):
 			if x.Handle != nil {

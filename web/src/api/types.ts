@@ -145,8 +145,8 @@ export type InboxItem = {
   actions: Action[];
 };
 export type InboxType = "gh_auth" | "blubird_missing" | "question" | "prd_approval" | "session_failed" | "limited" | "queued"
-  | "review_cap" | "review_approved" | "grind_paused" | "needs_cleanup" | "pr_conflict" | "pr_ready" | "release_note"
-  | "dispatch_needs" | "dispatch_held" | "dispatch_merge" | "dispatch_limited" | "dispatch_done" | "away_summary" | "repo_unpublished";
+  | "session_stalled" | "review_cap" | "review_approved" | "grind_paused" | "needs_cleanup" | "pr_conflict" | "pr_ready" | "release_note"
+  | "dispatch_needs" | "dispatch_stalled" | "dispatch_held" | "dispatch_merge" | "dispatch_limited" | "dispatch_done" | "away_summary" | "repo_unpublished";
 export type InboxList = { items: InboxItem[]; stale: Slug[]; count: number /* items not in group "wait" */ };
 
 // ---------- Releases ----------
@@ -182,7 +182,8 @@ export type Lane = { key: IssueKey; repo: Slug; n: number; title: string; deps: 
   needs_you: string | null; held: string | null; gate: string | null; skip_reason: string | null; paused: boolean;
   paused_by: "dispatch" | null; hold_merge: boolean; limited_until: Epoch | null; started_at: Epoch | null;
   ended_at: Epoch | null; session: string | null; usage: { cost: number; tokens: Tokens | null; seconds: number };
-  stranded?: string | null; skipped_deps?: IssueKey[]; unblocked?: IssueKey[] };
+  stranded?: string | null; skipped_deps?: IssueKey[]; unblocked?: IssueKey[];
+  stalled: string | null /* the lane's session stopped without finishing; needs_you is null then */ };
 export type Dispatch = { id: string; epic: IssueKey | null; issues?: IssueKey[]; title: string;
   state: "running" | "paused" | "done" | "cancelled"; settings: DispatchSettings; lanes: Lane[];
   totals: { lanes: number; closed: number; cost: number }; created_at: Epoch; ended_at: Epoch | null;
