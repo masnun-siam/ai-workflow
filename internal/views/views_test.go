@@ -532,6 +532,9 @@ func TestMe(t *testing.T) {
 	if m.DayEnd.MissingDays != 7 {
 		t.Errorf("missing %d", m.DayEnd.MissingDays)
 	}
+	if len(m.DayEnd.MissingDates) != m.DayEnd.MissingDays {
+		t.Errorf("missing dates %v", m.DayEnd.MissingDates)
+	}
 	if m.Weekly.Week != 46 || !m.Weekly.Drafted || m.Weekly.Last.ID != "d" {
 		t.Errorf("weekly %+v", m.Weekly)
 	}

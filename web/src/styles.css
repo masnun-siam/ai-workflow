@@ -599,3 +599,4 @@ a.btn{text-decoration:none;color:var(--tx)}
   .stage{scroll-snap-align:start}
   .start-form .acts:last-of-type{position:sticky;bottom:0;background:var(--p1);margin:0 -16px -16px;padding:10px 16px;border-top:1px solid var(--line);z-index:1}
 }
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
