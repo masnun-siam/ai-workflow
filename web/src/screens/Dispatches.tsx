@@ -3,7 +3,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { http } from "../api/http";
 import type { Dispatch, DispatchPlan, DispatchSettings, Effort, Lane, OpenItem } from "../api/types";
-import { currentRepo, dispatches, grinds, mutate, repoList, sessionList } from "../state/data";
+import { continueStalled, currentRepo, dispatches, grinds, mutate, repoList, sessionList } from "../state/data";
 import { dispatchList } from "../state/select";
 import { askConfirm } from "../state/ui";
 import { fmtCost, fmtDur, shortRepo } from "../state/format";
@@ -12,6 +12,7 @@ import { Header } from "../components/Header";
 import { AccountPick, EFFORTS, MODELS, openItems } from "../components/Start";
 import { Btn, Chips, Empty, Field, Pane, Tag } from "../components/ui";
 import { Select } from "../components/Select";
+import { sessionTag } from "../components/SessionView";
 
 // ---------- shared ----------
 const STAGE: Record<string, [string, string]> = {
@@ -21,6 +22,11 @@ const STAGE: Record<string, [string, string]> = {
 const STATE_TONE: Record<string, string> = { running: "c-q", paused: "c-w", done: "c-o", cancelled: "" };
 const live = (d: Dispatch) => d.state === "running" || d.state === "paused";
 const elapsed = (d: Dispatch) => ((d.ended_at ?? Math.floor(Date.now() / 1000)) - d.created_at);
+/** A lane that waits on the user: a question or failure (`needs_you`), or a session that stopped without finishing. */
+const wants = (l: Lane) => !!(l.needs_you || l.stalled);
+/** Continue a stalled lane; a 409 (no longer stalled) reloads the dispatches. */
+export const continueLane = (d: Pick<Dispatch, "id">, lane: string) =>
+  continueStalled(() => http.send("POST", `/api/dispatches/${d.id}/lane`, { lane, action: "continue" }), ["dispatches"]);
 const laneCall = (d: Dispatch, lane: string, action: string, text?: string) =>
   mutate(() => http.send("POST", `/api/dispatches/${d.id}/lane`, { lane, action, text }), action === "send" ? "Message sent" : `${action}: ${lane}`, ["dispatches"]);
 
@@ -114,7 +120,7 @@ function NewDispatch({ initial = "", onClose }: { initial?: string; onClose: () 
 // ---------- list ----------
 type Tab = "all" | "needs" | "live" | "done";
 const TABS: [Tab, string][] = [["all", "All"], ["needs", "Needs you"], ["live", "Live"], ["done", "Finished"]];
-const inTab = (d: Dispatch, t: Tab) => t === "all" || (t === "needs" ? d.lanes.some((l) => l.needs_you) : t === "live" ? live(d) : !live(d));
+export const inTab = (d: Dispatch, t: Tab) => t === "all" || (t === "needs" ? d.lanes.some(wants) : t === "live" ? live(d) : !live(d));
 
 export function Dispatches() {
   return route.value.id ? <DispatchPage /> : <DispatchList />;
@@ -137,7 +143,7 @@ function DispatchList() {
       {list.length > 0 && (
         <div class="tablewrap"><table class="t dlist"><thead><tr><th>State</th><th>Title</th><th>Issues</th><th>Time</th><th>Spend</th></tr></thead><tbody>
           {list.map((d) => {
-            const needs = d.lanes.filter((l) => l.needs_you).length;
+            const needs = d.lanes.filter(wants).length;
             return (
               <tr key={d.id} class="click" onClick={() => nav(`#/dispatches/${d.id}`)}>
                 <td><Tag tone={needs ? "c-w" : STATE_TONE[d.state]}>{needs ? `${needs} need you` : d.state}</Tag></td>
@@ -190,11 +196,11 @@ function LaneLine({ d, l }: { d: Dispatch; l: Lane }) {
   const [label0, tone0] = STAGE[l.stage] ?? [l.stage, ""];
   const [label, tone] = l.stranded ? ["Can't start", "c-b"] : [label0, tone0];
   const openDeps = l.deps.filter((k) => { const y = d.lanes.find((x) => x.key === k); return !y || !settled(y); });
-  const why = l.stranded ?? l.needs_you ?? l.held ?? l.gate ?? l.skip_reason ?? (openDeps.length && l.stage === "queued" ? `after ${openDeps.map((k) => `#${k.split("#")[1]}`).join(", ")}` : "");
+  const why = l.stranded ?? l.needs_you ?? l.stalled ?? l.held ?? l.gate ?? l.skip_reason ?? (openDeps.length && l.stage === "queued" ? `after ${openDeps.map((k) => `#${k.split("#")[1]}`).join(", ")}` : "");
   return (
     <button type="button" class={`irow lane${route.value.query.lane === l.key ? " sel" : ""}`} onClick={() => setParam("lane", l.key, true)}>
       <span />
-      <Tag tone={l.needs_you ? "c-w" : tone}>{l.needs_you ? "Needs you" : label}{l.paused ? " · paused" : ""}</Tag>
+      <Tag tone={wants(l) ? "c-w" : tone}>{l.needs_you ? "Needs you" : l.stalled ? "Stalled" : label}{l.paused ? " · paused" : ""}</Tag>
       <span class="t"><span class="mono">{shortRepo(l.repo)}#{l.n}</span> {l.title}{why && <span class="dim"> · {why}</span>}{l.pr ? <span class="dim"> · PR #{l.pr}</span> : null}</span>
       <span class="dim mono">{l.usage.seconds ? fmtDur(l.usage.seconds) : ""} {l.usage.cost ? fmtCost(l.usage.cost) : ""}</span>
     </button>
@@ -227,7 +233,7 @@ function IssueWork({ l }: { l: Lane }) {
         </div>
       )}
       <div><div class="gh">Sessions for #{l.n}</div>
-        {runs.slice(0, 5).map((s) => <a key={s.id} class="row" href={`#/sessions/${s.id}`}><span class="tag">{s.status}</span><span class="t">{s.skill ?? "free text"}</span><span class="w">{fmtDur(s.duration_s)}</span></a>)}
+        {runs.slice(0, 5).map((s) => <a key={s.id} class="row" href={`#/sessions/${s.id}`}><span class={`tag ${sessionTag(s)[1]}`}>{sessionTag(s)[0]}</span><span class="t">{s.skill ?? "free text"}</span><span class="w">{fmtDur(s.duration_s)}</span></a>)}
       </div>
     </div>
   );
@@ -252,6 +258,7 @@ function LanePanel({ d, l }: { d: Dispatch; l: Lane }) {
         <div class="dh"><b>{l.title}</b><span class="grow" /><Btn small onClick={() => setParam("lane", "", true)}>Close</Btn></div>
         <div class="dim">{l.stranded ? "Can't start" : (STAGE[l.stage] ?? [l.stage])[0]}{l.skip_reason ? ` · ${l.skip_reason}` : ""}{l.paused ? " · paused" : ""}{l.hold_merge ? " · merge held" : ""}{g ? ` · grind ${g.state}, round ${g.rounds}` : ""}{l.gate && !settled(l) ? ` · ${l.gate}` : ""}</div>
         {l.needs_you && <div class="banner">{l.needs_you}</div>}
+        {l.stalled && <div class="banner">Stalled: {l.stalled}</div>}
         {l.stranded && (
           <div class="banner">This issue waits on {(l.skipped_deps ?? []).map((k) => `#${k.split("#")[1]}`).join(", ") || "a blocker"}, which {l.skipped_deps?.length === 1 ? "was" : "were"} skipped, so it can never start as things stand.
             {(l.skipped_deps ?? []).length > 0 && <Btn small primary onClick={() => act("unblock")}>Unblock: start without {l.skipped_deps!.length === 1 ? "it" : "them"}</Btn>}</div>
@@ -267,7 +274,8 @@ function LanePanel({ d, l }: { d: Dispatch; l: Lane }) {
           <a class="btn sm" href={`https://github.com/${l.repo}/issues/${l.n}`}>Issue</a>
           {l.pr && <a class="btn sm" href={`https://github.com/${l.repo}/pull/${l.pr}`}>PR #{l.pr}</a>}
           {mergeable && <Btn small primary onClick={() => act("merge")}>Merge PR</Btn>}
-          {l.needs_you && <Btn small onClick={() => act("retry")}>Retry</Btn>}
+          {l.stalled && <Btn small primary onClick={() => continueLane(d, l.key)}>Continue</Btn>}
+          {wants(l) && <Btn small onClick={() => act("retry")}>Retry</Btn>}
           {l.paused && !settled(l) && <Btn small onClick={() => act("resume")}>Resume</Btn>}
           {!settled(l) && (
             <span class="popw"><Btn small onClick={() => setMenu(!menu)}>More ▾</Btn>
@@ -302,10 +310,10 @@ function DispatchPage() {
   const d = full ?? fromList;
   if (!d) return <><Header title="Dispatch"><Btn small onClick={() => nav("#/dispatches")}>← Dispatches</Btn></Header><Empty>{dispatches.value ? "No such dispatch." : "Loading…"}</Empty></>;
   const lane = d.lanes.find((l) => l.key === route.value.query.lane);
-  const needs = d.lanes.filter((l) => l.needs_you && !settled(l));
-  const stranded = d.lanes.filter((l) => !l.needs_you && l.stranded && l.stage === "queued");
-  const building = d.lanes.filter((l) => !l.needs_you && !["queued", "closed", "skipped"].includes(l.stage));
-  const next = d.lanes.filter((l) => !l.needs_you && !l.stranded && l.stage === "queued");
+  const needs = d.lanes.filter((l) => wants(l) && !settled(l));
+  const stranded = d.lanes.filter((l) => !wants(l) && l.stranded && l.stage === "queued");
+  const building = d.lanes.filter((l) => !wants(l) && !["queued", "closed", "skipped"].includes(l.stage));
+  const next = d.lanes.filter((l) => !wants(l) && !l.stranded && l.stage === "queued");
   const done = d.lanes.filter((l) => l.stage === "closed");
   const skipped = d.lanes.filter((l) => l.stage === "skipped");
   const blockers = [...new Set(stranded.flatMap((l) => l.skipped_deps ?? []))];

@@ -1,5 +1,6 @@
 import { signal, computed, effect } from "@preact/signals";
 import { http } from "../api/http";
+import { ApiFailure } from "../api/client";
 import type { RegistryStep, SessionList } from "../api/extra";
 import type {
   ChangesList, Coordinator, Dispatch, FeatureList, GrindStatus, InboxList, Me, NotifySettings, Ops, Panel, Product, Repo, ReleaseRepo,
@@ -178,6 +179,18 @@ export async function load(key: LoadKey): Promise<void> {
   }
 }
 export const loadMany = (keys: LoadKey[]) => Promise.all(keys.map(load)).then(() => undefined);
+
+/** Continue a stalled lane or session. A 409 `conflict` means it is no longer stalled, so `keys` reload to show
+ *  what it is now (not only a toast). Returns the promise so the button stays busy until the call ends. */
+export async function continueStalled(fn: () => Promise<unknown>, keys: LoadKey[]): Promise<void> {
+  try {
+    await fn();
+    toast("Continuing");
+  } catch (e) {
+    toast(describeError(e), e instanceof ApiFailure && e.status === 409 ? "warn" : "error");
+  }
+  await loadMany(keys);
+}
 
 /** One-shot mutation helper for forms: runs, toasts the result or the error, then reloads `keys`. */
 export async function mutate<T>(fn: () => Promise<T>, okMsg: string | null, keys: LoadKey[] = []): Promise<T | undefined> {
