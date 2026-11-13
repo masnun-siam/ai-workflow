@@ -56,7 +56,7 @@ function Blockers({ i, f }: { i: FeatureIssue; f: Feature }) {
       const done = f.done.find((x) => x.n === n);
       const title = hit?.title ?? done?.title;
       const href = hit ? `#issue-${n}` : done?.url ?? `https://github.com/${i.repo}/issues/${n}`;
-      return <>{k > 0 && ", "}<a href={href} title={title ? `#${n} ${title}` : undefined} {...(hit ? {} : { target: "_blank", rel: "noreferrer" })}>{b}</a></>;
+      return <>{k > 0 && ", "}<a href={href} title={title ? `#${n} ${title}` : undefined} {...(hit ? { onClick: (e: Event) => { e.preventDefault(); document.getElementById(`issue-${n}`)?.scrollIntoView({ block: "center" }); } } : { target: "_blank", rel: "noreferrer" })}>{b}</a></>;
     })}</span>
   );
 }
@@ -104,7 +104,7 @@ function IssuesTab({ f }: { f: Feature }) {
         return (
           <div key={name} role="group" aria-label={name}>
             <div class="gh">{name} · {rows.length}</div>
-            {rows.map((i) => <IssueRow key={i.key} i={i} f={f} hold={i.state === "ready" && f.status !== "Approved" ? "PRD not approved" : undefined} picked={picked.has(i.n)} onPick={i.state === "unrefined" ? (v) => pick(i.n, v) : undefined} />)}
+            {rows.map((i) => <IssueRow key={i.key} i={i} f={f} hold={i.state === "ready" && (f.status === "Draft" || f.status === "In review") ? "PRD not approved" : undefined} picked={picked.has(i.n)} onPick={i.state === "unrefined" ? (v) => pick(i.n, v) : undefined} />)}
           </div>
         );
       })}
