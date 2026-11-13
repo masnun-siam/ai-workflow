@@ -327,17 +327,25 @@ func (b *Builder) questionItem(v *view, r sessions.Record) Item {
 	return it
 }
 
+// laneOwns reports whether a dispatch owns the session's issue; its lane row speaks for it.
+func (b *Builder) laneOwns(it Item, r sessions.Record) bool {
+	return r.Link != nil && it.Repo != nil && b.owned(*it.Repo, r.Link.Issue, 0)
+}
+
+func endedOrStarted(r sessions.Record) string {
+	if r.EndedAt != "" {
+		return r.EndedAt
+	}
+	return r.StartedAt
+}
+
 func (b *Builder) failedItem(v *view, r sessions.Record) (Item, bool) {
 	it, s := b.sessionBase(v, r)
-	if r.Link != nil && it.Repo != nil && b.owned(*it.Repo, r.Link.Issue, 0) {
+	if b.laneOwns(it, r) {
 		return it, false
 	}
 	it.Key, it.Group, it.Type, it.Kind = "failed:"+r.ID, GFix, TSessionFailed, "Failed"
-	if r.EndedAt != "" {
-		it.At = sp(r.EndedAt)
-	} else {
-		it.At = sp(r.StartedAt)
-	}
+	it.At = sp(endedOrStarted(r))
 	it.text = r.Error
 	if r.Error != "" {
 		it.Detail = []string{r.Error}
@@ -355,15 +363,11 @@ func (b *Builder) failedItem(v *view, r sessions.Record) (Item, bool) {
 
 func (b *Builder) stalledItem(v *view, r sessions.Record) (Item, bool) {
 	it, s := b.sessionBase(v, r)
-	if r.Link != nil && it.Repo != nil && b.owned(*it.Repo, r.Link.Issue, 0) {
+	if b.laneOwns(it, r) {
 		return it, false
 	}
 	it.Key, it.Group, it.Type, it.Kind = "stalled:"+r.ID, GFix, TSessionStalled, "Stalled"
-	if r.EndedAt != "" {
-		it.At = sp(r.EndedAt)
-	} else {
-		it.At = sp(r.StartedAt)
-	}
+	it.At = sp(endedOrStarted(r))
 	it.text = r.Stalled
 	it.Detail = []string{"Stalled: " + r.Stalled}
 	if s.Step != nil {
