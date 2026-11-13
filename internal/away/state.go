@@ -70,9 +70,10 @@ type Entry struct {
 }
 
 type laneRetry struct {
-	Why string  `json:"why"`
-	N   int     `json:"n"`
-	At  float64 `json:"at"`
+	Why     string  `json:"why"`
+	N       int     `json:"n"`
+	At      float64 `json:"at"`
+	Stalled bool    `json:"stalled,omitempty"` // kept while the continued lane runs, so a lane that stalls again climbs the ladder
 }
 
 // state is afk.json.

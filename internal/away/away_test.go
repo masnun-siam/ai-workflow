@@ -1113,6 +1113,37 @@ func TestLaneContinueLadder(t *testing.T) {
 	}
 }
 
+// A continued lane stops being stuck until it stalls again: its rounds still add up to the cap.
+func TestLaneContinueLadderAcrossStalls(t *testing.T) {
+	r := newRig(t)
+	stalled := StuckLane{Dispatch: "abc", Lane: "o/r#7", Issue: 7, Repo: "o/r", Why: "Stalled: stopped before a PR", Stalled: true}
+	fl := &fakeLanes{stuck: []StuckLane{stalled}}
+	r.svc.d.Lanes = fl
+	r.begin()
+	r.tick()
+	for i := 0; i < 10; i++ {
+		r.now = r.now.Add(2 * time.Hour)
+		r.tick() // due: continued (until the cap)
+		fl.stuck = nil
+		r.now = r.now.Add(time.Minute)
+		r.tick() // the resumed session runs: not stuck
+		fl.stuck = []StuckLane{stalled}
+		r.now = r.now.Add(5 * time.Minute)
+		r.tick() // stalled again
+	}
+	if len(fl.continued) != maxRetryRounds {
+		t.Fatalf("continued %d times, want %d", len(fl.continued), maxRetryRounds)
+	}
+	// a held lane that recovers still has its counters cleared
+	fl.stuck = []StuckLane{{Dispatch: "abc", Lane: "o/r#8", Issue: 8, Why: "CI is red"}}
+	r.tick()
+	fl.stuck = nil
+	r.tick()
+	if _, ok := r.svc.load().Lanes["abc|o/r#8"]; ok {
+		t.Fatal("held counter kept")
+	}
+}
+
 // ---- change answers ----
 
 func answeredLog(r *rig) {

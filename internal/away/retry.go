@@ -102,7 +102,7 @@ func (s *Service) retryLanes(ctx context.Context) []Entry {
 			k := l.Dispatch + "|" + l.Lane
 			c, have := st.Lanes[k]
 			if !have || c.Why != l.Why {
-				keep[k] = laneRetry{Why: l.Why, N: 0, At: now + float64(RetryDelays[0])}
+				keep[k] = laneRetry{Why: l.Why, N: 0, At: now + float64(RetryDelays[0]), Stalled: l.Stalled}
 				continue
 			}
 			if c.N >= maxRetryRounds {
@@ -119,6 +119,11 @@ func (s *Service) retryLanes(ctx context.Context) []Entry {
 			}
 			keep[k] = c
 			run = append(run, due{l, c.N})
+		}
+		for k, c := range st.Lanes { // a continued lane leaves Stalled until it stops again; keep its round count
+			if _, ok := keep[k]; !ok && c.Stalled {
+				keep[k] = c
+			}
 		}
 		st.Lanes = keep
 		return nil
