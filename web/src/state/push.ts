@@ -36,9 +36,26 @@ export async function subscribePush(): Promise<void> {
   await registerSW();
   const reg = await navigator.serviceWorker.ready;
   const { public_key } = await http.get<{ public_key: string }>("/api/push/key");
-  const sub = (await reg.pushManager.getSubscription()) ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(public_key) }));
+  const key = b64ToBytes(public_key);
+  let sub = await reg.pushManager.getSubscription();
+  // A subscription made with another VAPID key can never receive our pushes: replace it.
+  if (sub && !sameKey(sub.options?.applicationServerKey, key)) { await sub.unsubscribe(); sub = null; }
+  sub ??= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
   const j = sub.toJSON() as { endpoint?: string; keys?: Sub["keys"] };
-  await http.send("POST", "/api/push/subscription", { endpoint: j.endpoint, keys: j.keys });
+  try {
+    await http.send("POST", "/api/push/subscription", { endpoint: j.endpoint, keys: j.keys });
+  } catch (e) {
+    // The server does not know this browser, so do not leave it subscribed.
+    await sub.unsubscribe().catch(() => undefined);
+    throw e;
+  }
+}
+
+/** True when the subscription's key is the server's key (or the browser does not say, so keep it). */
+export function sameKey(have: ArrayBuffer | null | undefined, want: Uint8Array): boolean {
+  if (!have) return true;
+  const a = new Uint8Array(have);
+  return a.length === want.length && a.every((x, i) => x === want[i]);
 }
 
 export async function unsubscribePush(): Promise<void> {
