@@ -65,7 +65,7 @@ func TestDefaults(t *testing.T) {
 	if st.Default != "claude" || len(st.Commands) != 1 || !st.Commands[0].Builtin {
 		t.Fatalf("%+v", st.Commands)
 	}
-	if st.GrindMode != "deep" || !st.UseJev || st.RunModel != nil {
+	if st.GrindMode != "deep" || !st.UseJev || !st.IdleGuard || st.RunModel != nil {
 		t.Fatalf("%+v", st)
 	}
 	if st.GrindLimits != (GrindLimits{10, 60, 1500, 4, 2, 1200, 30}) {
@@ -112,7 +112,7 @@ func TestOldFileLoadsUnchanged(t *testing.T) {
 	if !r.AutoGrind || r.SlackChannel != "C0123ABCDE" || len(r.Reviewers) != 1 {
 		t.Fatalf("%+v", r)
 	}
-	if len(st.SlackChannels) != 1 || st.GrindMode != "simple" || st.UseJev || *st.RunModel != "opus" || *st.RunEffort != "high" {
+	if len(st.SlackChannels) != 1 || st.GrindMode != "simple" || st.UseJev || !st.IdleGuard || *st.RunModel != "opus" || *st.RunEffort != "high" {
 		t.Fatalf("%+v", st)
 	}
 	if len(st.ActiveReviewers) != 1 {
@@ -213,6 +213,7 @@ func TestSaveValidation(t *testing.T) {
 		{"vault relative", `{"vault_dir":"notes"}`, "absolute"},
 		{"mode", `{"grind_mode":"x"}`, "deep or simple"},
 		{"jev type", `{"use_jev":"yes"}`, "wrong type"},
+		{"idle guard type", `{"idle_guard":"yes"}`, "wrong type"},
 		{"model", `{"run_model":"gpt"}`, "model must be one of opus, sonnet, haiku"},
 		{"effort", `{"run_effort":"ultra"}`, "effort must be one of low, medium, high, xhigh, max"},
 		{"channel id", `{"slack_channels":[{"id":"x","name":"n"}]}`, "channel id must look like"},
@@ -259,7 +260,7 @@ func TestSaveRoundTripAndPartial(t *testing.T) {
 	  "default":"masum",
 	  "slack_channels":[{"id":"C0123ABCDE","name":" dev "}],
 	  "reviewers":[{"name":"Bot","slack_id":"U0123ABCDE"},{"name":"Al","github_login":"al"}],
-	  "vault_dir":"~/vault","grind_mode":"simple","use_jev":false,"run_model":"sonnet","run_effort":"low",
+	  "vault_dir":"~/vault","grind_mode":"simple","use_jev":false,"idle_guard":false,"run_model":"sonnet","run_effort":"low",
 	  "repos":{"o/r":{"auto_grind":true,"slack_channel":"C0123ABCDE","release_head":"dev"}},
 	  "grind_limits":{"max_rounds":5},"release_note":{"suffix":"x"},"server":{"port":9000,"allow_hosts":["Box.ts.net"]}
 	}`)
@@ -293,7 +294,7 @@ func TestSaveRoundTripAndPartial(t *testing.T) {
 	b, _ := os.ReadFile(h.Path("ui_settings.json"))
 	var disk map[string]any
 	_ = json.Unmarshal(b, &disk)
-	if disk["default"] != "masum" || len(disk["commands"].([]any)) != 1 || disk["claude_label"] != "Main" {
+	if disk["default"] != "masum" || len(disk["commands"].([]any)) != 1 || disk["claude_label"] != "Main" || disk["idle_guard"] != false {
 		t.Fatalf("%s", b)
 	}
 
@@ -302,7 +303,7 @@ func TestSaveRoundTripAndPartial(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.Default != "masum" || len(v.Commands) != 2 || v.GrindMode != "simple" || v.UseJev || len(v.Reviewers) != 2 || *v.RunModel != "sonnet" {
+	if v.Default != "masum" || len(v.Commands) != 2 || v.GrindMode != "simple" || v.UseJev || v.IdleGuard || len(v.Reviewers) != 2 || *v.RunModel != "sonnet" {
 		t.Fatalf("%+v", v.Settings)
 	}
 	if v.Repos["o/r"].AutoGrind || !v.Repos["x/y"].AutoGrind || v.Repos["o/r"].ReleaseHead != "dev" {
@@ -471,5 +472,43 @@ func TestRoutes(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 	if rec.Code != 400 || !strings.Contains(rec.Body.String(), "deep or simple") {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestIdleGuardOverHTTP(t *testing.T) {
+	s, h, _ := setup(t)
+	mux := http.NewServeMux()
+	for _, r := range Routes(Deps{Store: s}) {
+		mux.Handle(r.Pattern, r.Handler)
+	}
+	do := func(method, body string) (int, map[string]any) {
+		t.Helper()
+		req := httptest.NewRequest(method, "/api/settings", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		var v map[string]any
+		_ = json.Unmarshal(rec.Body.Bytes(), &v)
+		return rec.Code, v
+	}
+	if code, v := do("GET", ""); code != 200 || v["idle_guard"] != true {
+		t.Fatalf("fresh home: %d %v", code, v["idle_guard"])
+	}
+	if code, v := do("PUT", `{"idle_guard":false}`); code != 200 || v["idle_guard"] != false {
+		t.Fatalf("save off: %d %v", code, v)
+	}
+	if code, v := do("PUT", `{"grind_mode":"simple"}`); code != 200 || v["idle_guard"] != false {
+		t.Fatalf("partial save must keep it: %d %v", code, v["idle_guard"])
+	}
+	before, _ := os.ReadFile(h.Path("ui_settings.json"))
+	code, v := do("PUT", `{"idle_guard":"yes"}`)
+	if code != 400 || !strings.Contains(v["error"].(string), "wrong type") {
+		t.Fatalf("wrong type: %d %v", code, v)
+	}
+	if after, _ := os.ReadFile(h.Path("ui_settings.json")); string(after) != string(before) {
+		t.Fatal("a rejected save wrote the file")
+	}
+	if code, v := do("GET", ""); code != 200 || v["idle_guard"] != false || s.Get().IdleGuard {
+		t.Fatalf("after reject: %d %v", code, v["idle_guard"])
 	}
 }
