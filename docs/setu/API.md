@@ -907,7 +907,7 @@ External (read-only): `${CLAUDE_CONFIG_DIR:-~/.claude}/plugins/installed_plugins
 
 `runs_in`: `docs` = the product's Documentation Repo (G§2.2 `docs_repo`). `issue` = the repo holding the target issue/PR (the UI passes the card's repo; an issue URL in args overrides it, S§5.4). `repo` = any registered repo the user picks. `none` = no repo (vault_dir or `$HOME`, no link). GitHub-only steps (`create-tasks, small-change, refine-issues, implement-issue, after-merge, pr-grind, pr-review, release-pr, project-coordinator`) refuse `local/*` slugs (S§5.4).
 
-### 9.2 Arg checks (400 on failure; all args: no NUL/newline, not starting `-` unless the step's grammar allows)
+### 9.2 Arg checks (400 on failure; all args: no NUL, at most 20,000 characters; one line except `small-change` and `report-bug` (`\r\n` → `\n`); not starting `-` unless the step's grammar allows)
 - `implement-issue`, `after-merge`: first token `#?\d+` → also sets `link.issue`.
 - `refine-issues`: `#?\d+([\s,]+#?\d+)*` → space-joined.
 - `pr-grind`: `#?\d+` (expanded to the PR URL of `repo`) or `https://\S+`, then the optional flags.

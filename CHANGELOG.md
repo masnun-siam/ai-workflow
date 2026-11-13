@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- The Small change route files again: its text and the Priority line may span several lines (setu refused every multi-line argument). Step arguments are capped at 20,000 characters.
 - A dispatch no longer stalls silently behind a skipped issue. Lanes whose blockers were skipped show **Can't start** at once (the `stranded` and `skipped_deps` lane fields), with **Run #N again** and a new **Unblock** lane action that lets them start without the skipped blocker.
 - A skipped or closed lane no longer keeps its old "needs you", held or gate text, no longer raises an Inbox item, and stops its clock when it ends.
 - The lane panel offers only the actions that apply: no Merge without a PR, no message box on a finished lane, **Run it again** on a skipped one. It lists the sessions for the issue and the PRs the last one opened in other repos, which a dispatch never merges.
