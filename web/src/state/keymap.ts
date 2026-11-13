@@ -20,8 +20,8 @@ export type Cmd =
 
 /** `g` then a letter (old aiw): g i/f/c/d/a/s go to a screen, g r opens the repo switcher. */
 const CHORD: Record<string, ScreenId | "repo"> = { i: "inbox", f: "features", c: "changes", d: "dispatches", a: "activity", v: "river", s: "settings", r: "repo" };
-/** Screens whose own keys use g or n (Releases: g grind, n note), so the global chord and New stay off there. */
-const OWN_GN = new Set(["releases"]);
+/** Screens whose own keys use n (Releases: n note), so New stays off there. The `g` chord works everywhere (Releases grinds on G). */
+const OWN_N = new Set(["releases"]);
 let chordAt = 0;
 
 /** The whole keyboard map (prototype HINTS + 1-7, `:`/Cmd-K, `.`, `s`, `L`, `?`). Returns null for keys we ignore. */
@@ -55,8 +55,8 @@ export function resolveKey(e: KeyEvt, c: KeyCtx): Cmd | null {
   if (ai >= 0 && ai < c.quickOptions) return { t: "answer", index: ai };
   if (k.length === 1 && c.actions.some((a) => a.key === k)) return { t: "action", key: k };
   if (k === "Enter" && c.nav) return { t: "enter" };
-  if (!OWN_GN.has(c.screen) && k === "g") { chordAt = Date.now(); return null; }
-  if (!OWN_GN.has(c.screen) && (k === "n" || k === "N")) return { t: "new" };
+  if (k === "g") { chordAt = Date.now(); return null; }
+  if (!OWN_N.has(c.screen) && (k === "n" || k === "N")) return { t: "new" };
   if (k.length === 1) return { t: "screen", key: k };
   return null;
 }
@@ -68,9 +68,9 @@ export const HINTS: Record<string, [string, string][]> = {
   dispatches: [],
   features: [],
   changes: [],
-  releases: [["c", "cut"], ["y", "dry run"], ["g", "grind"], ["n", "note"], ["p", "post"], ["e", "edit"]],
+  releases: [["c", "cut"], ["y", "dry run"], ["G", "grind"], ["n", "note"], ["p", "post"], ["e", "edit"], ["x", "skip"]],
   ops: [["j/k", "move"], ["⏎", "run"]],
-  me: [["r", "reconcile"], ["w", "weekly"]],
+  me: [["d", "day end"], ["w", "weekly"]],
   settings: [["u", "update"], ["i", "reinstall"]],
   prd: [["esc", "back"]],
 };
