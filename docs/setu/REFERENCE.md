@@ -63,7 +63,8 @@ External, read only: `~/.claude/plugins/installed_plugins.json` (blubird), `~/.c
 `vault_dir`; `grind_mode` (`deep`/`simple`) and `grind_limits` (`max_rounds`, `poll_interval`, `max_wait`, `max_idle_waits`, `stuck_seen`, `ci_timeout`, `ci_poll`);
 `use_jev`; `idle_guard` (default on; an absent key reads as on); `run_model`, `run_effort`; `release_note` (channel, cc, suffix); `server` (`port`, `tailscale`, `tailscale_https_port`, `allow_hosts`).
 
-Notification events: waiting, failed, dispatch, panel-cap, pr-ready, needs-cleanup, grind-paused, grind-done, done, afk, release.
+Notification events: waiting, failed, dispatch, panel-cap, stalled, pr-ready, needs-cleanup, grind-paused, grind-done, done, afk, release.
+`stalled` (a session or lane the idle guard let stop unfinished) is off on every channel by default; the others keep their defaults.
 Channels per event: browser, ntfy, mac, push.
 
 Appearance (look, mode, layout) is not a server setting; it is kept in the browser (`setu.prefs.v1`).

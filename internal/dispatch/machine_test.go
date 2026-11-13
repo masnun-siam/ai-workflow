@@ -174,8 +174,18 @@ func TestStepRules(t *testing.T) {
 			}},
 		{"4 implementing, idle guard: idle past grace is stalled, not needs-you", func() store.Lane { l := ln(store.StImplementing); l.IdleSince = now - 181; return l }, Facts{Agent: "idle", IdleGuard: true}, cfg(nil),
 			func(t *testing.T, l store.Lane, a []Action) {
-				if l.Stalled != Stalled || l.NeedsYou != "" || len(a) != 0 {
+				if l.Stalled != Stalled || l.NeedsYou != "" || len(a) != 1 || !hasNotify(a, "stalled") || a[0].NText != Stalled {
 					t.Fatal(l.Stalled, l.NeedsYou, a)
+				}
+			}},
+		{"4 implementing, idle guard: a lane that stays stalled notifies once", func() store.Lane {
+			l := ln(store.StImplementing)
+			l.IdleSince, l.Stalled = now-500, Stalled
+			return l
+		}, Facts{Agent: "idle", IdleGuard: true}, cfg(nil),
+			func(t *testing.T, l store.Lane, a []Action) {
+				if l.Stalled != Stalled || len(a) != 0 {
+					t.Fatal(l.Stalled, a)
 				}
 			}},
 		{"4 implementing, idle guard: idle inside grace only starts the clock", func() store.Lane { return ln(store.StImplementing) }, Facts{Agent: "idle", IdleGuard: true}, cfg(nil),
@@ -197,7 +207,7 @@ func TestStepRules(t *testing.T) {
 			return l
 		}, Facts{Agent: "idle", IdleGuard: true}, cfg(nil),
 			func(t *testing.T, l store.Lane, a []Action) {
-				if l.Stalled != Stalled || l.NeedsYou != "" || len(a) != 0 {
+				if l.Stalled != Stalled || l.NeedsYou != "" || len(a) != 1 || !hasNotify(a, "stalled") {
 					t.Fatal(l.Stalled, l.NeedsYou, a)
 				}
 			}},
