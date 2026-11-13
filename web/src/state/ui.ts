@@ -35,6 +35,11 @@ export const repoOpen = signal(false);
 export const helpOpen = signal(false);
 export const connected = signal(false);
 export const detailOpen = signal(false);
+/** Phone width (the rail becomes a top app bar) and its nav sheet. */
+const phone = typeof matchMedia === "function" ? matchMedia("(max-width:720px)") : null;
+export const narrow = signal(!!phone?.matches);
+phone?.addEventListener?.("change", (e) => { narrow.value = e.matches; if (!e.matches) navOpen.value = false; });
+export const navOpen = signal(false);
 
 export type ConfirmReq = { text: string; danger: boolean; resolve: (yes: boolean) => void };
 export const confirmReq = signal<ConfirmReq | null>(null);
