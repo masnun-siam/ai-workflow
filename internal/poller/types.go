@@ -103,6 +103,7 @@ type OpenPR struct {
 	ChangesRequested bool    `json:"changes_requested"`
 	Checks           int     `json:"checks"`       // status checks that ran
 	ThreadsOpen      int     `json:"threads_open"` // unresolved, non-outdated review threads
+	UpdatedAt        string  `json:"updated_at"`   // when GitHub last touched the PR (RFC 3339)
 }
 
 // ClosedEpic is one of the 50 most recently updated CLOSED issues labelled epic.

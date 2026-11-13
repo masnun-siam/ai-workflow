@@ -587,6 +587,9 @@ func (b *Builder) prItems(v *view) []Item {
 				anchors = append(anchors, fmt.Sprintf("issue:%s#%d", lower(repo), issue))
 			}
 			base := Item{Repo: sp(repo), Title: fmt.Sprintf("PR #%d %s", p.N, p.Title), Anchors: anchors}
+			if p.UpdatedAt != "" {
+				base.At = sp(p.UpdatedAt)
+			}
 			base.Links.PR = p.URL
 			if issue > 0 {
 				base.Links.Issue = IssueURL(repo, issue)

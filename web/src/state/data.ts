@@ -14,7 +14,14 @@ import { toast } from "./ui";
 
 export const status = signal<Status | null>(null);
 export const river = signal<River | null>(null);
-export const inbox = signal<InboxList | null>(null);
+const INBOX_CACHE = "setu.inbox";
+function cachedInbox(): InboxList | null {
+  try { const raw = lsGet(INBOX_CACHE); return raw ? (JSON.parse(raw) as InboxList) : null; } catch { return null; }
+}
+/** The inbox. First paint shows the last copy this browser saw, until the first load replaces it. */
+export const inbox = signal<InboxList | null>(cachedInbox());
+/** True while `inbox` is the saved copy and GitHub has not answered yet. */
+export const inboxCached = signal(inbox.value !== null);
 export const sessionList = signal<SessionList | null>(null);
 export const sessionOne = signal<Session | null>(null);
 export const transcript = signal<{ id: string; events: TranscriptEvent[]; offset: number }>({ id: "", events: [], offset: 0 });
@@ -128,7 +135,11 @@ const loaders: Record<LoadKey, Loader> = {
   status: async () => (status.value = await http.get<Status>("/api/status")),
   // Its scope needs the repo registry (a repo with no product gets its own River), so it waits for the first registry load.
   river: async () => { await reposSettled(); river.value = await http.get<River>(`/api/river${scopeQuery()}`); dropped.value = new Set(); },
-  inbox: async () => { inbox.value = await http.get<InboxList>("/api/inbox"); dropped.value = new Set(); },
+  inbox: async () => {
+    const l = await http.get<InboxList>("/api/inbox");
+    inbox.value = l; inboxCached.value = false; dropped.value = new Set();
+    lsSet(INBOX_CACHE, JSON.stringify(l));
+  },
   sessions: async () => (sessionList.value = await http.get<SessionList>("/api/sessions?limit=500")),
   session: async () => { const id = route.value.id; if (id) sessionOne.value = await http.get<Session>(`/api/sessions/${id}`); },
   stream: async () => { await loadStream(route.value.id); },

@@ -78,6 +78,7 @@ type gqlPR struct {
 	} `json:"statusCheckRollup"`
 	// open PRs
 	Title                    string `json:"title"`
+	UpdatedAt                string `json:"updatedAt"`
 	Body                     string `json:"body"`
 	LatestOpinionatedReviews *nodes[struct {
 		State  string `json:"state"`
@@ -338,7 +339,7 @@ func normalize(repo string, resp *response, projects map[int]string, now time.Ti
 		reviewer, approved, changes, checks, threads := openExtra(node, pr.Review)
 		d.OpenPRs = append(d.OpenPRs, OpenPR{
 			N: pr.N, Title: node.Title, URL: pr.URL, Draft: pr.Draft, Head: pr.Head, SHA: pr.SHA,
-			CI: pr.CI, Review: pr.Review, Conflict: pr.Conflict, Refs: refs,
+			CI: pr.CI, Review: pr.Review, Conflict: pr.Conflict, Refs: refs, UpdatedAt: node.UpdatedAt,
 			Reviewer: reviewer, Approved: approved, ChangesRequested: changes, Checks: checks, ThreadsOpen: threads,
 		})
 	}

@@ -52,7 +52,7 @@ query($owner: String!, $name: String!) {
       }
     }
     openPrs: pullRequests(states: OPEN, first: 50, orderBy: {field: UPDATED_AT, direction: DESC}) {
-      nodes { title body ` + prOpenFields + ` closingIssuesReferences(first: 10) { nodes { number } } }
+      nodes { title body updatedAt ` + prOpenFields + ` closingIssuesReferences(first: 10) { nodes { number } } }
     }
   }
   rateLimit { cost remaining resetAt }
