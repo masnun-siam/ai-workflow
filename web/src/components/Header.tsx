@@ -8,7 +8,7 @@ export function ProductSwitch() {
   return (
     <div class="chips" role="group" aria-label="Product">
       {list.map((p) => (
-        <button type="button" class={`prod${p.docs_repo === product.value ? " on" : ""}`} aria-pressed={p.docs_repo === product.value} onClick={() => chooseProduct(p.docs_repo)}>{p.name}</button>
+        <button key={p.docs_repo} type="button" class={`prod${p.docs_repo === product.value ? " on" : ""}`} aria-pressed={p.docs_repo === product.value} onClick={() => chooseProduct(p.docs_repo)}>{p.name}</button>
       ))}
     </div>
   );

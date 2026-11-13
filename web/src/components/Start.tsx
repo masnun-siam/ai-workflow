@@ -12,7 +12,7 @@ import { clock, shortRepo } from "../state/format";
 import { createDraft, createJevPick, createOpen, createRoute, createRouteTouched, paletteOpen, startReq, toast, type CreateRoute } from "../state/ui";
 import { RepoField } from "./Shell";
 import { createRepo } from "./Repos";
-import { Btn, Field, useFocusTrap } from "./ui";
+import { Btn, Field, useFocusTrap, useLayer } from "./ui";
 
 export const MODELS: Model[] = ["opus", "sonnet", "haiku"];
 export const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
@@ -113,6 +113,7 @@ async function start(body: Record<string, unknown>, label: string): Promise<bool
 function Dialog({ label, onClose, children, wide }: { label: string; onClose: () => void; children: preact.ComponentChildren; wide?: boolean }) {
   const box = useRef<HTMLDivElement>(null);
   useFocusTrap(box);
+  useLayer(onClose);
   return (
     <div class="ov" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div class={`dlg${wide ? " wide" : ""}`} ref={box} role="dialog" aria-modal="true" aria-label={label}>{children}</div>
@@ -402,14 +403,14 @@ export function StartDialog() {
             <div key={g} role="group" aria-label={g}>
               <div class="gh">{g}</div>
               {list.map((s) => (
-                <button key={s.id} type="button" class={`pi${s.id === stepId ? " sel" : ""}${s.available ? "" : " off"}`} aria-current={s.id === stepId} title={s.reason ?? s.args_hint} onClick={() => choose(s)}>
+                <button key={s.id} type="button" class={`pi${s.id === stepId ? " sel" : ""}${s.available ? "" : " off"}`} aria-current={s.id === stepId || undefined} title={s.reason ?? s.args_hint} onClick={() => choose(s)}>
                   {s.label ?? s.id}{s.source === "setu" && <span class="r">setu</span>}
                 </button>
               ))}
             </div>
           ))}
           <div class="gh">Other</div>
-          <button type="button" class={`pi${!stepId ? " sel" : ""}`} aria-current={!stepId} onClick={() => choose(null)}>Custom prompt</button>
+          <button type="button" class={`pi${!stepId ? " sel" : ""}`} aria-current={!stepId || undefined} onClick={() => choose(null)}>Custom prompt</button>
         </nav>
         <form class="form start-form" onSubmit={(e) => { e.preventDefault(); void submit(); }}
           onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void submit(); } }}>

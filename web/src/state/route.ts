@@ -20,8 +20,17 @@ const IDS = new Set<string>(SCREENS.map((s) => s[0]));
 /** Old hashes that moved: the Runs screen split into Dispatches and Activity. */
 const ALIASES: Record<string, ScreenId> = { runs: "activity", issues: "changes" };
 
-/** `#/inbox?only=o/r`, `#/sessions/<id>` (Activity, full page), `#/features/<slug>?product=o/r` (feature page), `#/prd?repo=..&path=..`, `#/onboarding`. Unknown -> inbox. */
+/** `#/inbox?only=o/r`, `#/sessions/<id>` (Activity, full page), `#/features/<slug>?product=o/r` (feature page), `#/prd?repo=..&path=..`, `#/onboarding`. Unknown or malformed -> inbox. */
 export function parseHash(hash: string): Route {
+  return parseKnown(hash) ?? { screen: "inbox", query: {} };
+}
+
+/** The route for a hash, or null when no page matches it or an id will not decode. */
+function parseKnown(hash: string): Route | null {
+  try { return parseSegments(hash); } catch { return null; }
+}
+
+function parseSegments(hash: string): Route | null {
   const h = hash.replace(/^#\/?/, "");
   const [pathPart = "", qs = ""] = h.split("?");
   const query: Record<string, string> = {};
@@ -33,7 +42,7 @@ export function parseHash(hash: string): Route {
   if ((seg[0] === "features" || seg[0] === "dispatches") && seg[1]) return { screen: seg[0], id: decodeURIComponent(seg[1]), query };
   if (seg[0] && IDS.has(seg[0])) return { screen: seg[0] as ScreenId, query };
   if (seg[0] && ALIASES[seg[0]]) return { screen: ALIASES[seg[0]]!, query };
-  return { screen: "inbox", query };
+  return seg[0] ? null : { screen: "inbox", query };
 }
 
 /** A query string with `key` set (dropped for ""), keeping the others and a readable slash. */
@@ -71,7 +80,12 @@ export function goBack(fallback: ScreenId): void {
 }
 export function startRouter(): () => void {
   let first = true;
-  const on = () => { if (!first) movedInApp = true; first = false; route.value = parseHash(location.hash); };
+  const on = () => {
+    if (!first) movedInApp = true;
+    first = false;
+    if (!parseKnown(location.hash)) { nav("#/inbox", true); return; } // an unknown or malformed hash becomes the inbox
+    route.value = parseHash(location.hash);
+  };
   addEventListener("hashchange", on);
   on();
   return () => removeEventListener("hashchange", on);

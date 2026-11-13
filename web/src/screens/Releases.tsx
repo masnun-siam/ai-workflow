@@ -61,11 +61,11 @@ export const releaseOps = {
   },
   grind: () => { const r = currentRelease.value; return !refused(releaseBlock.grind()) && r ? mutate(() => http.send("POST", `/api/releases/${r.id}/grind`, {}), "Grind started", [...KEYS]) : undefined; },
   note: () => { const r = currentRelease.value; return !refused(releaseBlock.note()) && r ? mutate(() => http.send("POST", `/api/releases/${r.id}/note`, {}), "Drafting the note", [...KEYS]) : undefined; },
-  skip: async () => { const r = currentRelease.value; if (!refused(releaseBlock.skip()) && r && (await askConfirm("Skip this release?"))) await mutate(() => http.send("POST", `/api/releases/${r.id}/skip`, {}), "Skipped", [...KEYS, "river"]); },
+  skip: async () => { const r = currentRelease.value; if (!refused(releaseBlock.skip()) && r && (await askConfirm("Skip this release?", true))) await mutate(() => http.send("POST", `/api/releases/${r.id}/skip`, {}), "Skipped", [...KEYS, "river"]); },
   post: async () => {
     const r = currentRelease.value; if (refused(releaseBlock.post()) || !r) return;
     const ch = settings.value?.release_note.channel_name ?? "the channel";
-    if (await askConfirm(`Post the note to #${ch}? It posts once and is never retried.`)) await mutate(() => http.send("POST", `/api/releases/${r.id}/post`, {}), `Posted to #${ch}`, [...KEYS, "river", "inbox"]);
+    if (await askConfirm(`Post the note to #${ch}? It posts once and is never retried.`, true)) await mutate(() => http.send("POST", `/api/releases/${r.id}/post`, {}), `Posted to #${ch}`, [...KEYS, "river", "inbox"]);
   },
   edit: () => { if (!refused(releaseBlock.edit())) editing.value = true; },
 };
