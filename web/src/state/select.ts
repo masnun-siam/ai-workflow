@@ -2,6 +2,7 @@ import { computed, signal } from "@preact/signals";
 import type { Action, InboxGroup, InboxItem, Session } from "../api/types";
 import { activityTab, dispatches, dropped, inbox, inScope, only, ops, river, sessionList, status } from "./data";
 import { clamp, sel } from "./ui";
+import { displayTitle } from "./inboxView";
 import { route } from "./route";
 import type { Target } from "../components/Detail";
 import { targetActions, targetRound } from "../components/Detail";
@@ -16,11 +17,45 @@ export const stages = computed(() =>
 /** River cards carry the repo name only (last slug segment). */
 const cardInScope = (name: string) => !only.value || !name || only.value.split("/").pop()!.toLowerCase() === name.toLowerCase();
 
-export const inboxItems = computed<InboxItem[]>(() => {
+/** Inbox text filter (title, kind, repo). */
+export const inboxQuery = signal("");
+/** Kinds that repeat a lot collapse to this many rows until "show all". */
+export const COLLAPSE_AFTER = 5;
+export const COLLAPSIBLE: ReadonlySet<string> = new Set(["Conflict", "Cleanup"]);
+export const inboxExpanded = signal<ReadonlySet<string>>(new Set());
+export const toggleExpanded = (kind: string) => {
+  const s = new Set(inboxExpanded.value);
+  if (!s.delete(kind)) s.add(kind);
+  inboxExpanded.value = s;
+};
+/** Inside Decide and Fix rows are grouped by kind. */
+export const KIND_GROUPED: ReadonlySet<InboxGroup> = new Set(["decide", "fix"]);
+
+/** Every inbox row in scope that matches the filter, grouped and in display order, nothing collapsed. */
+export const inboxAll = computed<InboxItem[]>(() => {
   const order = GROUPS.map((g) => g[0]);
   const summaryShown = !!status.value?.away.summary; // the Inbox shows it as "While you were away"
-  return (inbox.value?.items ?? []).filter((i) => !dropped.value.has(i.key) && inScope(i.repo) && !(summaryShown && i.type === "away_summary"))
-    .map((it, n) => ({ it, n })).sort((a, b) => order.indexOf(a.it.group) - order.indexOf(b.it.group) || a.n - b.n).map((x) => x.it);
+  const q = inboxQuery.value.trim().toLowerCase();
+  const kinds: string[] = [];
+  const rows = (inbox.value?.items ?? []).filter((i) => !dropped.value.has(i.key) && inScope(i.repo) && !(summaryShown && i.type === "away_summary")
+    && (!q || `${displayTitle(i)} ${i.title} ${i.kind} ${i.repo ?? ""}`.toLowerCase().includes(q)));
+  for (const i of rows) if (!kinds.includes(i.kind)) kinds.push(i.kind);
+  return rows.map((it, n) => ({ it, n }))
+    .sort((a, b) => order.indexOf(a.it.group) - order.indexOf(b.it.group)
+      || (KIND_GROUPED.has(a.it.group) ? kinds.indexOf(a.it.kind) - kinds.indexOf(b.it.kind) : 0) || a.n - b.n).map((x) => x.it);
+});
+
+/** The rows on screen: `inboxAll` without the collapsed tails. Selection and j/k index into this list. */
+export const inboxItems = computed<InboxItem[]>(() => {
+  const seen = new Map<string, number>();
+  const open = inboxExpanded.value;
+  const filtering = inboxQuery.value.trim() !== "";
+  return inboxAll.value.filter((i) => {
+    if (filtering || !COLLAPSIBLE.has(i.kind) || open.has(i.kind)) return true;
+    const n = (seen.get(i.kind) ?? 0) + 1;
+    seen.set(i.kind, n);
+    return n <= COLLAPSE_AFTER;
+  });
 });
 
 export const RUNNING: ReadonlySet<string> = new Set(["starting", "running", "waiting"]);
