@@ -125,12 +125,16 @@ func (s *Service) retryLanes(ctx context.Context) []Entry {
 	})
 	var rows []Entry
 	for _, d := range run {
-		if err := s.d.Lanes.Retry(d.l.Dispatch, d.l.Lane); err != nil {
-			log.Printf("away: lane retry %s %s: %v", d.l.Dispatch, d.l.Lane, err)
+		verb, press := "retry", s.d.Lanes.Retry
+		if d.l.Stalled {
+			verb, press = "continue", s.d.Lanes.Continue
+		}
+		if err := press(d.l.Dispatch, d.l.Lane); err != nil {
+			log.Printf("away: lane %s %s %s: %v", verb, d.l.Dispatch, d.l.Lane, err)
 			continue
 		}
 		e := Entry{At: now, Kind: "retry", Sid: d.l.Dispatch, Command: fmt.Sprintf("dispatch lane #%d", d.l.Issue),
-			Question: cut(d.l.Why, 500), Picked: fmt.Sprintf("retry %d of %d", d.n, maxRetryRounds)}
+			Question: cut(d.l.Why, 500), Picked: fmt.Sprintf("%s %d of %d", verb, d.n, maxRetryRounds)}
 		if d.l.Repo != "" {
 			repo := d.l.Repo
 			e.Repo = &repo

@@ -89,7 +89,7 @@ type Handle struct {
 	Session string `json:"session"`
 }
 
-// OutboxItem is a session effect queued for the next tick: ["send", text] or ["close", null].
+// OutboxItem is a session effect queued for the next tick: ["send", text], ["continue", ""] or ["close", null].
 type OutboxItem struct {
 	Kind string
 	Text string

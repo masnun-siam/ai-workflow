@@ -765,7 +765,8 @@ func (b *Builder) dispatchItems(v *view) []Item {
 				it := base("stalled", GFix, TDispatchStalled)
 				it.Detail = []string{"Stalled: " + *l.Stalled}
 				it.Actions = []Action{
-					Post("r", "Retry", lanePath, "Retrying the lane", lane("retry")).WithPrimary(),
+					Post("c", "Continue", lanePath, "Continuing the lane", lane("continue")).WithPrimary().WithClears(),
+					Post("r", "Retry", lanePath, "Retrying the lane", lane("retry")),
 					Open("o", "Open dispatch", route),
 				}
 				out = append(out, it)
