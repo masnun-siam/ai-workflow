@@ -755,7 +755,7 @@ Guard 1 always applies to `implement-issue` and `pr-grind` (S§5.4), even withou
 | GET | `/api/vault/folders` | — | `{vault: string, folders: VaultFolder[]}` | 200; 400 no vault | vault |
 | GET | `/api/vault/prd?folder=` | — | `VaultPRD` | 200; 400 | vault |
 | POST | `/api/vault/suggest` | `{text}` | `VaultSuggestion` | 200; 400; 502 | vault |
-| POST | `/api/jev/route` | `{text}` ≤20,000 characters | `{route: "feature"\|"small"\|"bug"\|null, p: number\|null, status: "ok"\|"off"\|"missing"\|"no_answer"\|"failed"\|"unreadable"\|"unsure"}` (route set only on `ok`; `unclear` or p < 0.4 → `unsure`; not cached or counted) | 200; 400; 415 | jev |
+| POST | `/api/jev/route` | `{text}` ≤20,000 characters | `{route: "feature"\|"small"\|"bug"\|null, p: number\|null, status: "ok"\|"off"\|"missing"\|"no_answer"\|"failed"\|"unreadable"\|"unsure"}` (route set only on `ok`; `unclear` or p < 0.4 → `unsure`; not cached or counted) | 200; 400; 413 body over 64 KiB (as every route; reachable under 20,000 characters only with 4-byte characters); 415 | jev |
 
 ### 5.6 Releases (release)
 | Method | Path | Request | Response | Codes |
