@@ -200,15 +200,15 @@ export const settings: Settings = {
   claude_label: "work", commands: [{ label: "work", cmd: "claude" }, { label: "personal", cmd: "cc personal" }], default: "work",
   repos: { "acme/wasensi-backend": { auto_grind: true, slack_channel: "dc-supports", reviewers: null, path: "/code/wasensi-backend", grind_path: "github" }, "acme/wasensi-web": { auto_grind: false, slack_channel: "", reviewers: ["copilot"] } },
   slack_channels: [{ id: "C06RSFFRUFM", name: "dc-supports" }], reviewers: [{ id: "copilot", name: "Copilot", slack_id: "", github_login: "copilot" }], active_reviewers: ["copilot"],
-  vault_dir: "/Users/me/vault", grind_mode: "deep", use_jev: true, run_model: null, run_effort: null,
+  vault_dir: "/Users/me/vault", grind_mode: "deep", use_jev: true, idle_guard: true, run_model: null, run_effort: null,
   grind_limits: { max_rounds: 10, poll_interval: 60, max_wait: 1500, max_idle_waits: 4, stuck_seen: 2, ci_timeout: 1200, ci_poll: 30 },
   release_note: { channel_name: "dc-supports", channel_id: "C06RSFFRUFM", cc: [{ name: "Ashique", slack_id: "UAY0MVDHT" }, { name: "Najmul", slack_id: "U01012AA4FL" }, { name: "Abir", slack_id: "U067P3ADDDM" }], suffix: "vai" },
   server: { port: 8420, tailscale: true, tailscale_https_port: 443, allow_hosts: [] }, jev_installed: true, bot_label: null,
 };
 const ev = (key: string, label: string, group: string) => ({ key: key as never, label, group });
 export const notify: NotifySettings = {
-  matrix: Object.fromEntries(["waiting", "failed", "dispatch", "panel-cap", "pr-ready", "needs-cleanup", "grind-paused", "grind-done", "done", "afk", "release"].map((k) => [k, { browser: true, push: k === "waiting", mac: k !== "done", ntfy: true }])) as NotifySettings["matrix"],
-  events: [ev("waiting", "Waiting on you", "Sessions"), ev("failed", "Failed", "Sessions"), ev("done", "Done", "Sessions"), ev("dispatch", "Dispatch needs you", "Dispatch"), ev("panel-cap", "Review panel cap", "Review"),
+  matrix: Object.fromEntries(["waiting", "failed", "dispatch", "panel-cap", "stalled", "pr-ready", "needs-cleanup", "grind-paused", "grind-done", "done", "afk", "release"].map((k) => [k, k === "stalled" ? { browser: false, push: false, mac: false, ntfy: false } : { browser: true, push: k === "waiting", mac: k !== "done", ntfy: true }])) as NotifySettings["matrix"],
+  events: [ev("waiting", "Waiting on you", "Sessions"), ev("failed", "Failed", "Sessions"), ev("done", "Done", "Sessions"), ev("dispatch", "Dispatch needs you", "Dispatch"), ev("panel-cap", "Review panel cap", "Review"), ev("stalled", "A session or lane stalled", "Needs you"),
     ev("pr-ready", "PR ready", "PRs"), ev("needs-cleanup", "Needs cleanup", "PRs"), ev("grind-paused", "Grind paused", "Grind"), ev("grind-done", "Grind done", "Grind"), ev("afk", "Away ended", "Away"), ev("release", "Release", "Release")],
   public_url: "https://mac.tail1234.ts.net", mac: { available: true, notifier: "terminal-notifier", clickable: true }, push: { subscriptions: 1 },
   ntfy_ready: true, server: "https://ntfy.sh", topic: "setu-demo", user: "", token_set: false, password_set: false, env: [],
