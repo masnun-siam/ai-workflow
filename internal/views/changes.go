@@ -16,8 +16,11 @@ import (
 type Changes struct {
 	Stale   []string         `json:"stale"`
 	Issues  []FeatureIssue   `json:"issues"`
-	Pending []FeatureSession `json:"pending"` // small-change runs still filing their issue
+	Pending []FeatureSession `json:"pending"` // small-change and report-bug runs still filing their issue
 }
+
+// filingSteps are the steps whose live runs show as pending rows: each files an issue with no epic.
+var filingSteps = map[string]bool{"small-change": true, "report-bug": true}
 
 // Changes builds the list; repo "" means every registered repo.
 func (s *Service) Changes(ctx context.Context, repo string) Changes {
@@ -71,7 +74,7 @@ func (s *Service) Changes(ctx context.Context, repo string) Changes {
 		}
 	}
 	for _, rec := range recs {
-		if rec.Step != "small-change" || !rec.Status.Live() {
+		if !filingSteps[rec.Step] || !rec.Status.Live() {
 			continue
 		}
 		pub := s.d.Sessions.Public(rec)
