@@ -55,7 +55,7 @@ Contents: 0 decisions made here · 1 module and packages · 2 Go interfaces · 3
 | `internal/products` | `checkouts.json`, `products.json`, `.blubird` maps, docs-repo resolution, PRD discovery, merge cleanup | `Registry` |
 | `internal/poller` | per-repo GraphQL polling, snapshots, merge gate | `Poller`, `Snapshot`, `MergeBlockers` |
 | `internal/notify` | notification compose + channels, `push.json` | `Service` |
-| `internal/jev` | jev CLI wrapper, cache, ceiling | `Client` |
+| `internal/jev` | jev CLI wrapper, cache, ceiling, route classifier | `Client`, `Routes` |
 | `internal/sessions` | `sessions/<id>/`, runner, follower, questions, limits, `setu ask` | `Manager` |
 | `internal/grind` | `pr-grind/*.md`, `grind_notified.json`, `channels.json` (read), re-entry tick, autostart, `setu grind …` | `Service` |
 | `internal/review` | `peer-review/` panels, `config.json` lenses | `Service` |
@@ -74,8 +74,8 @@ Contents: 0 decisions made here · 1 module and packages · 2 Go interfaces · 3
 
 ```
 L0 errs execx home events cli web
-L1 server(errs,events,web) settings(home,events,errs) gh(execx,errs) jev(execx,home) dispatch/store(home)
-L2 products(home,gh,execx,events,errs) claude(execx,settings,home) blubird(execx,home,events) notify(settings,home,events,execx)
+L1 server(errs,events,web) settings(home,events,errs) gh(execx,errs) dispatch/store(home)
+L2 jev(execx,home,server,errs) products(home,gh,execx,events,errs) claude(execx,settings,home) blubird(execx,home,events) notify(settings,home,events,execx)
 L3 prompts(home,blubird) poller(gh,events,errs)
 L4 sessions(home,settings,claude,prompts,notify,events,execx,errs)        // repo lookup via interface (products satisfies it)
 L5 grind(home,gh,sessions,settings,jev,poller,notify,products,dispatch/store) review(home,sessions,notify,prompts) vault(home,settings,claude,execx)
@@ -460,6 +460,7 @@ type Session = {
   dispatch: { id: string; lane: IssueKey } | null;
   hooks: number;                // count of hook events seen (§TranscriptEvent kind "hook")
   resume_command: string | null;
+  stalled: string | null;       // why the idle guard let it end unfinished ("ended without finishing or asking"); cleared on resume
 };
 type SessionStats = { today_count: number; today_cost: number; month_count: number; month_cost: number };
 
@@ -625,6 +626,7 @@ type Settings = {
   slack_channels: { id: string; name: string }[];
   reviewers: { id: string; name: string; slack_id: string; github_login: string }[]; active_reviewers: string[];
   vault_dir: string | null; grind_mode: "deep" | "simple"; use_jev: boolean;
+  idle_guard: boolean;                                           // default true; absent reads as true
   run_model: Model | null; run_effort: Effort | null;
   grind_limits: { max_rounds: number; poll_interval: number; max_wait: number; max_idle_waits: number;
     stuck_seen: number; ci_timeout: number; ci_poll: number };     // defaults 10, 60, 1500, 4, 2, 1200, 30
@@ -723,7 +725,7 @@ Guard 1 always applies to `implement-issue` and `pr-grind` (S§5.4), even withou
 | GET | `/api/ops?product=&repo=` (`repo` of no product: its repo steps run on itself, docs repo steps "needs a product" with no action) | — | `Ops` | 200; 400 unknown product or repo |
 | GET | `/api/me` | — | `Me` | 200 |
 
-### 5.5 Grind, review, dispatch, coordinator, away, vault
+### 5.5 Grind, review, dispatch, coordinator, away, vault, jev
 | Method | Path | Request | Response | Codes | Pkg |
 |---|---|---|---|---|---|
 | GET | `/api/grinds?repo=` | — | `{grinds: GrindStatus[]}` | 200 | grind |
@@ -755,6 +757,7 @@ Guard 1 always applies to `implement-issue` and `pr-grind` (S§5.4), even withou
 | GET | `/api/vault/folders` | — | `{vault: string, folders: VaultFolder[]}` | 200; 400 no vault | vault |
 | GET | `/api/vault/prd?folder=` | — | `VaultPRD` | 200; 400 | vault |
 | POST | `/api/vault/suggest` | `{text}` | `VaultSuggestion` | 200; 400; 502 | vault |
+| POST | `/api/jev/route` | `{text}` ≤20,000 characters | `{route: "feature"\|"small"\|"bug"\|null, p: number\|null, status: "ok"\|"off"\|"missing"\|"no_answer"\|"failed"\|"unreadable"\|"unsure"}` (route set only on `ok`; `unclear` or p < 0.4 → `unsure`; not cached or counted) | 200; 400; 413 body over 64 KiB (as every route; reachable under 20,000 characters only with 4-byte characters); 415 | jev |
 
 ### 5.6 Releases (release)
 | Method | Path | Request | Response | Codes |
@@ -952,7 +955,7 @@ Test harness (`internal/testutil/fakebin`): `Install(t, dir)` writes fake `claud
 | poller | every G§10 "pinned by tests" bullet; cross-repo `Ref` for parent/sub-issues/blockers; Projects v2 `Status` read when present, derived otherwise (G§3 mapping); `OnFresh` gets prev; publishes `products{snapshot}` only on change |
 | products | G§10 products bullets; nested PRD discovery `docs/prds/<module>/<feature>.md` + status/slug/title regexes; docs-repo pointer errors; scan budget/dup; merge cleanup bullets (never outside `.worktrees/`, never HEAD branch, never remote) |
 | notify | ntfy publisher parity (auth Bearer>Basic, UA `setu (ntfy publisher)`, 0600 rule, env overrides `SETU_NTFY_*` then `AIW_NTFY_*`, 5 s timeout, `httptest` server) ; matrix defaults (W§4.1 minus prd-comment/pipeline + `release`); compose titles `setu:` ASCII; suppression (answerer, grind `done`, away); mac argv (never script text); push: VAPID keygen once, 0600, 410 removes the subscription (`httptest` push service); toast published on the browser channel |
-| jev | redaction table; cache key/TTL/2000 cap; ceiling 500/h, `capped`; `off` never execs; ci-hint/finding-hint fallbacks, always exit 0 |
+| jev | redaction table; cache key/TTL/2000 cap; ceiling 500/h, `capped`; `off` never execs; ci-hint/finding-hint fallbacks, always exit 0; `/api/jev/route` statuses, 0.4 cut-off, never cached or counted, 400/415 |
 | sessions | **golden argv** (S§1.4 table, with D4/D5); env contains `SETU_SESSION`, `AIW_UI_SESSION`, `SETU_HOME`, no `CLAUDE_PLUGIN_DATA`; full lifecycle via fake claude: done, failed (rc), limited (event + regex), waiting via `setu ask` exec rule (child writes meta, server publishes + notifies once), answer → resume argv, guard relay Approve/Deny applies the edit, mask-secrets block, asked-but-no-round failure, 30 s reap; stop kills the process group; batch cap 3 + release; limit tick auto-resume + stagger; queued prompt delivery; hold/release; rerun replays `request`; restart reconcile (alive fingerprint, dead, waiting watcher); answer validation matrix (S§1.9 codes); `setu ask` exit codes 0/2/5 and idempotent same-signature round; legacy record (`/ai-workflow:implement-issue 12`) → `step:"implement-issue"`; start guards D1 order; `runs_in` routing for docs/issue/repo/none |
 | grind | state header parse/write (`thread: github` valid, `done:` under a round terminal, `## Round` count); every `wait` exit code from fixture review sequences; `ci` exit codes; `record ci-attempt` 30; `retrigger` 32/33; `done` 31; `status --json` offline; resolver W§6.4 table; `grind-mode` dispatch override; re-entry tick decision order (S§1.14), MAX_GRINDS 2, lock fd inherited; autostart draft→ready only; notify first scan silent; skip-ci/stop |
 | review | verdict regex table; `advance` states; phases incl. held lens; corrupt `panel.json`; lens rerun/drop conflicts; add_rounds restore on failure; lens argv uses the agent body (D4) |

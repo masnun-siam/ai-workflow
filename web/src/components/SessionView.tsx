@@ -2,7 +2,7 @@ import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { http } from "../api/http";
 import type { Session } from "../api/types";
-import { loadMany, mutate, transcript } from "../state/data";
+import { continueStalled, loadMany, mutate, transcript } from "../state/data";
 import { askConfirm } from "../state/ui";
 import { fmtCost, fmtDur, fmtTokens, issueUrl, shortRepo } from "../state/format";
 import { AskForm } from "./AskForm";
@@ -12,8 +12,17 @@ import { Btn, Chips, KV, Tag } from "./ui";
 export const statusTone = (s: Session["status"]): string =>
   ({ running: "c-q", starting: "c-q", waiting: "c-w", limited: "c-w", queued: "", done: "c-o", failed: "c-b", stopped: "" })[s];
 
+/** The status tag of a session: "Stalled" (warning) in place of its status when it stopped without finishing. */
+export const sessionTag = (s: Pick<Session, "status" | "stalled">): [string, string] =>
+  s.stalled ? ["Stalled", "c-w"] : [s.status, statusTone(s.status)];
+
+/** Continue a stalled session; a 409 (no longer stalled) reloads the session, the list and the inbox. */
+export const continueSession = (id: string) =>
+  continueStalled(() => http.send("POST", `/api/sessions/${id}/continue`, {}), ["sessions", "session", "inbox"]);
+
 type SubAction = { sub: string; label: string; when: (s: Session) => boolean; confirm?: string };
 const SUBS: SubAction[] = [
+  { sub: "continue", label: "Continue", when: (s) => !!s.stalled },
   { sub: "stop", label: "Stop", when: (s) => ["starting", "running", "waiting", "limited", "queued"].includes(s.status), confirm: "Stop this run?" },
   { sub: "resume", label: "Resume", when: (s) => ["limited", "stopped", "failed", "done"].includes(s.status) && !!s.session_id },
   { sub: "start-now", label: "Start now", when: (s) => s.status === "queued" },
@@ -30,6 +39,7 @@ export function SessionView({ s, compact }: { s: Session; compact?: boolean }) {
   const t = transcript.value.id === s.id ? transcript.value.events : [];
   const run = async (a: SubAction) => {
     if (a.confirm && !(await askConfirm(a.confirm))) return;
+    if (a.sub === "continue") return continueSession(s.id);
     await mutate(() => http.send("POST", `/api/sessions/${s.id}/${a.sub}`, {}), `${a.label}: ok`, ["sessions", "session", "inbox"]);
   };
   const sendPrompt = async () => {
@@ -40,16 +50,18 @@ export function SessionView({ s, compact }: { s: Session; compact?: boolean }) {
   const live = ["starting", "running", "waiting"].includes(s.status);
   const finished = ["done", "failed", "stopped"].includes(s.status) && !!s.session_id;
   const canSend = live || finished || s.status === "limited" || s.status === "queued";
+  const [tag, tone] = sessionTag(s);
   return (
     <div class="det">
-      <div class="dh"><Tag tone={statusTone(s.status)}>{s.status}</Tag><b>{s.title}</b></div>
+      <div class="dh"><Tag tone={tone}>{tag}</Tag><b>{s.title}</b></div>
       <span class="dim mono">{s.skill ?? "free text"} · {shortRepo(s.repo) || "no repo"}{s.link && <> · <a href={issueUrl(s.link)} target="_blank" rel="noopener noreferrer">#{s.link.issue}</a></>}</span>
+      {s.stalled && <div class="banner">Stalled: {s.stalled}</div>}
       {s.error && <div class="banner bad" role="alert">{s.error}</div>}
       {s.status === "limited" && <div class="banner">Rate limited{s.limit_resets_at ? ` until ${new Date(s.limit_resets_at * 1000).toLocaleTimeString()}` : ""}{s.auto_resume ? ". Resumes by itself." : "."}</div>}
       {s.queued_prompt && <div class="dim">Queued message: {s.queued_prompt}</div>}
       {s.pending_answer && <div class="dim">{s.status === "running" || s.status === "starting" ? "Your answer was sent. The run is continuing with it." : "Your answer is saved. It is sent when the run resumes."}</div>}
       {s.pending_question && <AskForm sessionId={s.id} round={s.pending_question} />}
-      <div class="acts">{SUBS.filter((a) => a.when(s)).map((a) => <Btn key={a.sub} small bad={a.sub === "stop"} onClick={() => run(a)}>{a.label}</Btn>)}</div>
+      <div class="acts">{SUBS.filter((a) => a.when(s)).map((a) => <Btn key={a.sub} small bad={a.sub === "stop"} primary={a.sub === "continue"} onClick={() => run(a)}>{a.label}</Btn>)}</div>
       {!compact && (
         <KV rows={[["account", s.account], ["model", `${s.model ?? "default"}${s.effort ? ` · ${s.effort}` : ""}`], ["cost", fmtCost(s.cost) || "n/a"], ["tokens", fmtTokens(s.tokens) || "n/a"],
           ...(s.command.trim() && s.command.trim() !== s.title ? [["prompt", <span class="pre">{s.command.trim()}</span>] as [string, ComponentChildren]] : []),
