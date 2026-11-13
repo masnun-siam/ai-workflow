@@ -30,8 +30,9 @@ func TestMain(m *testing.M) {
 }
 
 type fakeSettings struct {
-	accounts map[string]string // label -> cmd
-	vault    string
+	accounts  map[string]string // label -> cmd
+	vault     string
+	idleGuard bool
 }
 
 func (f *fakeSettings) AccountCmd(label string) (string, bool) {
@@ -61,6 +62,7 @@ func (f *fakeSettings) CheckRun(model, effort string) error {
 }
 func (f *fakeSettings) RunDefaults() (string, string) { return "", "" }
 func (f *fakeSettings) VaultDir() string              { return f.vault }
+func (f *fakeSettings) IdleGuard() bool               { return f.idleGuard }
 
 type fakeClaude struct {
 	mu           sync.Mutex

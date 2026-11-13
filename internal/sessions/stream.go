@@ -53,6 +53,10 @@ func parseLine(line []byte) []event {
 	switch typ {
 	case "assistant":
 		return parseAssistant(line)
+	case "user":
+		if reason, ok := stopFeedback(line); ok {
+			return []event{{Kind: "hook", Name: "Stop", HookEvent: "Stop", Text: clip(reason, 500), Blocked: true}}
+		}
 	case "rate_limit_event":
 		info, ok := ev["rate_limit_info"].(map[string]any)
 		if !ok {
@@ -234,10 +238,61 @@ func hookEvent(ev map[string]any) (event, bool) {
 	text = strings.TrimSpace(text)
 	code, hasCode := ev["exit_code"].(float64)
 	blocked := hasCode && code == 2
+	if reason, ok := blockReason(text); ok {
+		// a JSON decision on stdout (exit 0), as `setu hook idle` prints it (FR-9)
+		text, blocked = reason, true
+	}
 	if text == "" && !blocked && (!hasCode || code == 0) {
 		return event{}, false
 	}
 	return event{Kind: "hook", Name: name, HookEvent: he, Text: clip(text, 500), Blocked: blocked}, true
+}
+
+// stopFeedbackPrefix starts the user turn claude -p injects when a Stop hook blocks; stream-json
+// has no hook_response line for Stop hooks.
+const stopFeedbackPrefix = "Stop hook feedback:\n"
+
+// stopFeedback reads a Stop hook block from a user line: the reason after stopFeedbackPrefix.
+func stopFeedback(line []byte) (string, bool) {
+	var v struct {
+		Message struct {
+			Content json.RawMessage `json:"content"`
+		} `json:"message"`
+	}
+	if json.Unmarshal(line, &v) != nil {
+		return "", false
+	}
+	var texts []string
+	var s string
+	if json.Unmarshal(v.Message.Content, &s) == nil {
+		texts = []string{s}
+	} else {
+		var blocks []struct{ Type, Text string }
+		_ = json.Unmarshal(v.Message.Content, &blocks)
+		for _, b := range blocks {
+			if b.Type == "text" {
+				texts = append(texts, b.Text)
+			}
+		}
+	}
+	for _, t := range texts {
+		if r, ok := strings.CutPrefix(t, stopFeedbackPrefix); ok {
+			return strings.TrimSpace(r), true
+		}
+	}
+	return "", false
+}
+
+// blockReason reads a hook's {"decision":"block","reason":…} stdout.
+func blockReason(text string) (string, bool) {
+	if !strings.HasPrefix(text, "{") {
+		return "", false
+	}
+	var d struct{ Decision, Reason string }
+	if json.Unmarshal([]byte(text), &d) != nil || d.Decision != "block" {
+		return "", false
+	}
+	return strings.TrimSpace(d.Reason), true
 }
 
 func clip(s string, n int) string {

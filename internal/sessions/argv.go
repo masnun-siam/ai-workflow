@@ -39,6 +39,9 @@ func (m *Manager) startArgv(exe []string, r Record, prompt string) ([]string, er
 		return nil, err
 	}
 	argv := append(append([]string{}, exe...), baseArgs(r.AllowedTools)...)
+	if m.idleGuarded(r) {
+		argv = append(argv, "--settings", m.idleHookSettings())
+	}
 	gate := ""
 	if r.Gate {
 		gate = Headless
@@ -69,6 +72,9 @@ func (m *Manager) resumeArgv(exe []string, r Record, sid, prompt string) ([]stri
 		return nil, err
 	}
 	argv := append(append([]string{}, exe...), baseArgs(r.AllowedTools)...)
+	if m.idleGuarded(r) {
+		argv = append(argv, "--settings", m.idleHookSettings())
+	}
 	argv = append(argv, "--append-system-prompt", joinAppend(body, Headless))
 	if r.RunModel != "" {
 		argv = append(argv, "--model", r.RunModel)

@@ -31,6 +31,7 @@ const (
 	TQuestion        = "question"
 	TPRDApproval     = "prd_approval"
 	TSessionFailed   = "session_failed"
+	TSessionStalled  = "session_stalled"
 	TLimited         = "limited"
 	TQueued          = "queued"
 	TReviewCap       = "review_cap"
