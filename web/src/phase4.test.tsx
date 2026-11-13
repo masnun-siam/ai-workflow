@@ -28,7 +28,7 @@ describe("small changes, dispatch page, issue/PR panel", () => {
   it("a lane stranded behind a skipped one is called out with retry and unblock", () => {
     nav("#/dispatches/d1a2b3c4d5e6?lane=acme/wasensi-backend%23945");
     const html = renderToString(<App />);
-    for (const s of ["Can't start", "skipped #944", "0/4 · 1 skipped", "Run #944 again", "Unblock them", "Unblock: start without it", "Skipped · 1"]) expect(html).toContain(s);
+    for (const s of ["Can't start", "skipped #944", "0/5 · 1 skipped", "Run #944 again", "Unblock them", "Unblock: start without it", "Skipped · 1"]) expect(html).toContain(s);
     nav("#/dispatches/d1a2b3c4d5e6?lane=acme/wasensi-backend%23944");
     const sk = renderToString(<App />);
     expect(sk).toContain("Run it again");
