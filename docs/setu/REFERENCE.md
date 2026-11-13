@@ -13,6 +13,7 @@ what the code does. Where the two differ, the code wins.
 | `version` | Print `setu <version> (<commit>)`. |
 | `paths` | JSON of the data, prompts, checkouts and channels paths, for the built-in prompts. |
 | `ask [--json STR]` | Used by a session to ask the human; records a round in `meta.json` and ends the turn. Needs `SETU_SESSION`. |
+| `hook idle` | The idle guard's Claude Code `Stop` hook: reads the hook input JSON on stdin, prints `{"decision":"block","reason":...}` to block an idle stop (at most 2 in a row, counted in `meta.json` `idle_blocks`), else nothing; the 3rd stop is allowed and sets `stalled`. Always exits 0; no `SETU_SESSION` or any error allows. |
 | `ci status <pr> [--watch] [--timeout S]` | CI snapshot of a PR. |
 | `threads list <pr>` / `threads resolve <node_id>...` | List or resolve review threads. |
 | `grind start\|wait\|ci\|threads\|retrigger\|record\|pause\|done\|status\|mode\|reviewers` | Grind mechanics; exit codes in API.md §8. `grind-mode` and `grind-reviewers` are aliases. |

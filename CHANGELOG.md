@@ -5,6 +5,7 @@
 ### Added
 
 - Settings gain `idle_guard` (on by default; a settings file without it reads as on), returned by `GET /api/settings` and saved by `PUT /api/settings`. Nothing obeys it yet: the headless idle guard that uses it lands next.
+- `setu hook idle`, the headless idle guard's `Stop` hook: it blocks a skill session that tries to end its turn without finishing (a ✅ table), asking (`setu ask`) or waiting on background work, at most twice in a row, then lets it end and marks it stalled. Sessions do not use it yet.
 
 ### Fixed
 
