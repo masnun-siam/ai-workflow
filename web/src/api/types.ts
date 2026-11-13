@@ -52,7 +52,7 @@ export type Session = {
   dispatch: { id: string; lane: IssueKey } | null;
   hooks: number;                // count of hook events seen (§TranscriptEvent kind "hook")
   resume_command: string | null;
-  stalled: string | null;       // why the run stopped without finishing (headless idle guard); null when it did not stall
+  stalled: string | null;       // why the idle guard let it end unfinished; cleared on resume
 };
 export type SessionStats = { today_count: number; today_cost: number; month_count: number; month_cost: number };
 
