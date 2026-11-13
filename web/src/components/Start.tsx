@@ -9,7 +9,7 @@ import { describeError } from "../state/actions";
 import { currentRepo, load, loadMany, product, products, registry, repoList, repos, settings, status } from "../state/data";
 import { nav } from "../state/route";
 import { clock, shortRepo } from "../state/format";
-import { createDraft, createOpen, paletteOpen, startReq, toast } from "../state/ui";
+import { createDraft, createOpen, createRoute, paletteOpen, startReq, toast, type CreateRoute } from "../state/ui";
 import { RepoField } from "./Shell";
 import { createRepo } from "./Repos";
 import { Btn, Field, useFocusTrap } from "./ui";
@@ -121,15 +121,44 @@ function Dialog({ label, onClose, children, wide }: { label: string; onClose: ()
 }
 
 // ---------- Create box ----------
-type Route = "feature" | "small";
 const PRIORITIES = ["P1", "P2", "P3"];
+export const ENVIRONMENTS = ["Unknown", "Local", "Staging", "Production"];
+/** Cap on the whole argument a route sends (the server checks the same, in runes). */
+export const MAX_ARG = 20000;
+const COUNT_FROM = 18000;
+const ROUTES: [CreateRoute, string, string][] = [
+  ["feature", "Feature", "a PRD interview, then tasks and a dispatch"],
+  ["small", "Small change", "one issue, no PRD"],
+  ["bug", "Bug", "reproduce it, then file and refine"],
+];
+const SUBMIT: Record<CreateRoute, string> = { feature: "Start the PRD interview", small: "File the issue", bug: "Reproduce the bug" };
+
+/** The argument a route sends: the text, plus the Priority (and for a bug, Environment) lines. */
+export function createArgs(route: CreateRoute, text: string, prio: string, env: string): string {
+  const t = text.trim();
+  if (route === "small") return `${t}\n\nPriority: ${prio}`;
+  if (route === "bug") return `${t}\n\nPriority: ${prio}\nEnvironment: ${env}`;
+  return t;
+}
+
+/** Length in code points, matching the server's rune count. */
+export const argLength = (s: string): number => [...s].length;
+
+/** The POST /api/sessions body for a route. Model and effort are per request; saved defaults never change. */
+export function createBody(route: CreateRoute, args: string, common: Record<string, unknown>, lenses: string[]): Record<string, unknown> {
+  if (route === "small") return { step: "small-change", args, ...common };
+  // planning and bug runs use opus and never touch the saved defaults (old aiw PLAN_RUN)
+  if (route === "bug") return { step: "report-bug", args, model: "opus", effort: "high", ...common };
+  return { step: "create-prd", args, lenses: lenses.length ? lenses : undefined, model: "opus", effort: "medium", ...common };
+}
 
 export function CreateDialog() {
-  const [route, setRoute] = useState<Route>("feature");
+  const route = createRoute.value;
   const [repo, setRepo] = useState(currentRepo.value ?? repoList.value[0]?.slug ?? "");
   const [account, setAccount] = useState("");
   const [lenses, setLenses] = useState<string[]>([]);
   const [prio, setPrio] = useState("P2");
+  const [env, setEnv] = useState("Unknown");
   const [dup, setDup] = useState<OpenItem | null>(null);
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -142,17 +171,22 @@ export function CreateDialog() {
     const t = setTimeout(() => { void openItems(repo, "issue").then((items) => setDup(likelyDuplicate(text, items))).catch(() => undefined); }, 800);
     return () => clearTimeout(t);
   }, [text, repo]);
+  const args = createArgs(route, text, prio, env);
+  const n = argLength(args);
+  const tooLong = n > MAX_ARG;
   const close = () => (createOpen.value = false);
   const submit = async () => {
-    if (!text.trim() || !repo || busy) return;
+    if (!text.trim() || !repo || busy || tooLong) return;
     setBusy(true);
     const common = { repo, account: account || undefined, pin_account: account ? true : undefined };
-    const ok = route === "feature"
-      // planning runs use opus at medium effort and never touch the saved defaults (old aiw PLAN_RUN)
-      ? await start({ step: "create-prd", args: text.trim(), lenses: lenses.length ? lenses : undefined, model: "opus", effort: "medium", ...common }, "the PRD interview")
-      : await start({ step: "small-change", args: `${text.trim()}\n\nPriority: ${prio}`, ...common }, "filing the small change");
+    const label = route === "feature" ? "the PRD interview" : route === "small" ? "filing the small change" : "reproducing the bug";
+    const ok = await start(createBody(route, args, common, lenses), label);
     setBusy(false);
-    if (ok) { createDraft.value = ""; close(); if (route === "small") toast("Filing it: it shows up on Small changes once refined"); }
+    if (!ok) return;
+    createDraft.value = "";
+    close();
+    if (route === "small") toast("Filing it: it shows up on Small changes once refined");
+    if (route === "bug") toast("Reproducing it: it shows up on Small changes while it runs");
   };
   const noRepos = repos.value && !repoList.value.length;
   return (
@@ -164,19 +198,22 @@ export function CreateDialog() {
           onInput={(e) => (createDraft.value = (e.target as HTMLTextAreaElement).value)} />
         {dup && <div class="banner inline" role="status">Looks like <a href={dup.url ?? `https://github.com/${repo}/issues/${dup.number}`} target="_blank" rel="noreferrer">#{dup.number} {dup.title}</a>. Check it before filing a new one.</div>}
         <div class="seg" role="radiogroup" aria-label="Route">
-          {([["feature", "Feature", "a PRD interview, then tasks and a dispatch"], ["small", "Small change", "one issue, no PRD"]] as [Route, string, string][]).map(([v, l, d]) => (
-            <button key={v} type="button" role="radio" aria-checked={route === v} class={`seg-o${route === v ? " on" : ""}`} onClick={() => setRoute(v)}><b>{l}</b><small class="dim">{d}</small></button>
+          {ROUTES.map(([v, l, d]) => (
+            <button key={v} type="button" role="radio" aria-checked={route === v} class={`seg-o${route === v ? " on" : ""}`} onClick={() => (createRoute.value = v)}><b>{l}</b><small class="dim">{d}</small></button>
           ))}
         </div>
         <div class="fields">
           <Field label="Repository">{noRepos ? <span class="c-w">No repositories yet. <a href="#/onboarding">Add one</a>.</span> : <RepoField label="Repository" value={repo} onChange={setRepo} />}</Field>
-          {route === "small" && <Field label="Priority"><Select label="Priority" value={prio} onChange={setPrio} options={PRIORITIES.map((p) => [p, p] as [string, string])} /></Field>}
+          {route !== "feature" && <Field label="Priority"><Select label="Priority" value={prio} onChange={setPrio} options={PRIORITIES.map((p) => [p, p] as [string, string])} /></Field>}
+          {route === "bug" && <Field label="Environment"><Select label="Environment" value={env} onChange={setEnv} options={ENVIRONMENTS.map((e) => [e, e] as [string, string])} /></Field>}
         </div>
         {route === "feature" && <LensPick kind="create-prd" value={lenses} onChange={setLenses} label="Review the PRD with" />}
         <AccountPick value={account} onChange={setAccount} />
         <div class="acts">
-          <Btn type="submit" primary disabled={busy || !text.trim() || !repo}>{busy ? "Starting…" : route === "feature" ? "Start the PRD interview" : "File the issue"}</Btn>
+          <Btn type="submit" primary disabled={busy || !text.trim() || !repo || tooLong}>{busy ? "Starting…" : SUBMIT[route]}</Btn>
           <Btn onClick={close}>Cancel</Btn>
+          {/* the live region stays mounted so screen readers announce the counter when it appears */}
+          <span class={tooLong ? "c-w" : "dim"} style={{ alignSelf: "center" }} aria-live="polite">{n > COUNT_FROM ? `${n.toLocaleString("en-US")} / ${MAX_ARG.toLocaleString("en-US")}` : ""}</span>
           <span class="grow" />
           <Btn small onClick={() => { close(); paletteOpen.value = true; }}>Run a command instead</Btn>
         </div>

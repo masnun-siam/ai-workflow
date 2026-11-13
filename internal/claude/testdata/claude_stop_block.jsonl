@@ -1,0 +1,6 @@
+{"type":"system","subtype":"init","session_id":"sess-stop","model":"claude-haiku-5-5"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hi"}]},"session_id":"sess-stop"}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Stop hook feedback:\nDo not stop idle. test"}]},"parent_tool_use_id":null,"session_id":"sess-stop"}
+{"type":"system","subtype":"notification","key":"stop-hook-error","text":"Stop hook error occurred · ctrl+o to see","priority":"immediate","session_id":"sess-stop"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"Stop hook feedback:\nnot a hook"}]},"session_id":"sess-stop"}
+{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.01,"result":"ok","usage":{"input_tokens":1,"output_tokens":2}}
