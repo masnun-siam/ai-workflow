@@ -136,6 +136,7 @@ type Lane struct {
 	PausedBy     string       `json:"paused_by,omitempty"`
 	Held         string       `json:"held,omitempty"`
 	NeedsYou     string       `json:"needs_you,omitempty"`
+	Stalled      string       `json:"stalled,omitempty"` // idle guard: the session stopped before a ready PR
 	Gate         string       `json:"gate,omitempty"`
 	MergeError   string       `json:"merge_error,omitempty"`
 	MergeFails   int          `json:"merge_fails,omitempty"`

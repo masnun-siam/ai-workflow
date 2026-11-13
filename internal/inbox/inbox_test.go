@@ -147,9 +147,9 @@ func TestEveryKeptType(t *testing.T) {
 	lane := func(suffix string) Lane {
 		return Lane{Key: "acme/api#" + suffix, Repo: "acme/api", N: 20, Title: "lane"}
 	}
-	lneeds, lheld, lmerge, llim := lane("20"), lane("21"), lane("22"), lane("23")
-	ns, hd := "decide the schema", "CI stuck"
-	lneeds.NeedsYou, lheld.Held = &ns, &hd
+	lneeds, lheld, lmerge, llim, lstall := lane("20"), lane("21"), lane("22"), lane("23"), lane("24")
+	ns, hd, st := "decide the schema", "CI stuck", "stopped before a PR"
+	lneeds.NeedsYou, lheld.Held, lstall.Stalled = &ns, &hd, &st
 	lmerge.Stage = "awaiting_merge"
 	pr := 40
 	lmerge.PR = &pr
@@ -173,7 +173,7 @@ func TestEveryKeptType(t *testing.T) {
 		Settings: fGrindSet{},
 		Grinds:   fGrinds{{Repo: "acme/api", PR: 12, State: "paused", Rounds: 2, Reason: sp("2026-11-12T09:30:00Z — reviewer silent")}},
 		Dispatch: fDispatch{ds: []Dispatch{
-			{ID: "d1", State: "running", Lanes: []Lane{lneeds, lheld, lmerge, llim}},
+			{ID: "d1", State: "running", Lanes: []Lane{lneeds, lheld, lmerge, llim, lstall}},
 			{ID: "d2", State: "done", Title: "Epic", EndedAt: &endAt},
 		}},
 		Away: fAway{Away{Summary: &struct {
@@ -220,12 +220,20 @@ func TestEveryKeptType(t *testing.T) {
 	}
 	for _, ty := range []string{TGHAuth, TBlubirdMissing, TQuestion, TPRDApproval, TSessionFailed, TLimited, TQueued, TReviewCap,
 		TReviewApproved, TGrindPaused, TNeedsCleanup, TPRConflict, TPRReady, TReleaseNote, TDispatchNeeds, TDispatchHeld,
-		TDispatchMerge, TDispatchLimited, TDispatchDone, TAwaySummary, TRepoUnpublished} {
+		TDispatchStalled, TDispatchMerge, TDispatchLimited, TDispatchDone, TAwaySummary, TRepoUnpublished} {
 		if !got[ty] {
 			t.Errorf("missing item type %s", ty)
 		}
 	}
 	m := byType(l)
+	if s := m[TDispatchStalled]; s.Key != "dispatch:d1:acme/api#24:stalled" || s.Group != GFix || s.Detail[0] != "Stalled: stopped before a PR" || s.Actions[0].Key != "r" {
+		t.Errorf("stalled lane: %+v", s)
+	}
+	for _, it := range l.Items {
+		if it.Key == "dispatch:d1:acme/api#24:needs" {
+			t.Errorf("a stalled lane has no needs row")
+		}
+	}
 	if m[TGrindPaused].Detail[0] != "reviewer silent" || *m[TGrindPaused].At != "2026-11-12T09:30:00Z" {
 		t.Errorf("grind item: %+v", m[TGrindPaused])
 	}

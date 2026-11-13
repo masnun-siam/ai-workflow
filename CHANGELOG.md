@@ -4,7 +4,8 @@
 
 ### Added
 
-- Settings gain `idle_guard` (on by default; a settings file without it reads as on), returned by `GET /api/settings` and saved by `PUT /api/settings`. Nothing obeys it yet: the headless idle guard that uses it lands next.
+- Settings gain `idle_guard` (on by default; a settings file without it reads as on), returned by `GET /api/settings` and saved by `PUT /api/settings`. Dispatch lanes obey it (below); the session side of the headless idle guard lands next.
+- With `idle_guard` on, an implementing dispatch lane whose session has been idle for 3 minutes without a ready PR is **stalled** ("stopped before a PR") instead of needs-you "stopped without a ready PR": the lane JSON gains `stalled` (and `needs_you` is null while it is set), and the Inbox shows it under Fix as `dispatch_stalled` with Retry, not under Questions. A session blocked on a real question still needs you. Retry, skip, a resumed session or a stage change clears it.
 
 ### Fixed
 

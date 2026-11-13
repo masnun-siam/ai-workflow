@@ -87,6 +87,7 @@ type Deps struct {
 	Grind     func(repo string) GrindPlan
 	Login     func(ctx context.Context) string  // the signed-in gh login ("" unknown)
 	SkillDir  func(skill string) (string, bool) // blubird.Manager.SkillDir
+	IdleGuard func() bool                       // the idle_guard setting; nil reads as off
 	Merge     func(ctx context.Context, repo string, pr int, sha string) (ok bool, errText string)
 	Now       func() time.Time
 	CoordRoot string // default ~/.claude/project-coordinator (tests)

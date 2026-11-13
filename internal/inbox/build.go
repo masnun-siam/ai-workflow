@@ -761,6 +761,15 @@ func (b *Builder) dispatchItems(v *view) []Item {
 				it.Actions = []Action{Open("o", "Open dispatch", route).WithPrimary()}
 				out = append(out, it)
 			}
+			if l.Stalled != nil && *l.Stalled != "" { // idle guard: stopped before a ready PR, not a question
+				it := base("stalled", GFix, TDispatchStalled)
+				it.Detail = []string{"Stalled: " + *l.Stalled}
+				it.Actions = []Action{
+					Post("r", "Retry", lanePath, "Retrying the lane", lane("retry")).WithPrimary(),
+					Open("o", "Open dispatch", route),
+				}
+				out = append(out, it)
+			}
 			if l.Held != nil && *l.Held != "" {
 				it := base("held", GFix, TDispatchHeld)
 				it.Detail = []string{*l.Held}

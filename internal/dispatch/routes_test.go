@@ -64,7 +64,7 @@ func TestRoutes(t *testing.T) {
 		t.Fatalf("%v", body)
 	}
 	lane0 := body["lanes"].([]any)[0].(map[string]any)
-	for _, k := range []string{"key", "repo", "n", "title", "deps", "stage", "pr", "needs_you", "held", "gate", "skip_reason", "paused", "paused_by", "hold_merge",
+	for _, k := range []string{"key", "repo", "n", "title", "deps", "stage", "pr", "needs_you", "stalled", "held", "gate", "skip_reason", "paused", "paused_by", "hold_merge",
 		"limited_until", "started_at", "ended_at", "session", "usage"} {
 		if _, ok := lane0[k]; !ok {
 			t.Errorf("lane lacks %q", k)

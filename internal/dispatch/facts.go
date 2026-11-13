@@ -167,6 +167,9 @@ func (s *Service) issueClosed(ctx context.Context, repo string, n int) bool {
 	return st.state == "CLOSED"
 }
 
+// idleGuard is the idle_guard setting, off when the wiring gave none.
+func (s *Service) idleGuard() bool { return s.d.IdleGuard != nil && s.d.IdleGuard() }
+
 // laneFacts builds the facts of one lane, or false when its repo has no fresh snapshot, or when
 // the snapshot's open-issue list was cut short and lacks the lane's issue while GitHub says it is
 // open (past the cut) or does not answer. A closed issue past the cut is looked up on its own, so
@@ -198,7 +201,7 @@ func (s *Service) laneFacts(ctx context.Context, x *store.Lane) (Facts, bool) {
 		}
 		return Facts{}, false
 	}
-	f := Facts{IssueOpen: issue != nil}
+	f := Facts{IssueOpen: issue != nil, IdleGuard: s.idleGuard()}
 	if issue != nil {
 		for _, l := range issue.Labels {
 			f.Refined = f.Refined || l == "refined"

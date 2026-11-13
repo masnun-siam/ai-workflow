@@ -553,7 +553,7 @@ type InboxItem = {
 };
 type InboxType = "gh_auth" | "blubird_missing" | "question" | "prd_approval" | "session_failed" | "limited" | "queued"
   | "review_cap" | "review_approved" | "grind_paused" | "needs_cleanup" | "pr_conflict" | "pr_ready" | "release_note"
-  | "dispatch_needs" | "dispatch_held" | "dispatch_merge" | "dispatch_limited" | "dispatch_done" | "away_summary" | "repo_unpublished";
+  | "dispatch_needs" | "dispatch_held" | "dispatch_stalled" | "dispatch_merge" | "dispatch_limited" | "dispatch_done" | "away_summary" | "repo_unpublished";
 type InboxList = { items: InboxItem[]; stale: Slug[]; count: number /* items not in group "wait" */ };
 
 // ---------- Releases ----------
@@ -586,7 +586,8 @@ type DispatchSettings = { max: number; grind: "off"|"simple"|"full"; ci: "wait"|
   skip_approval: boolean; feature_branch: string | null; base_branch: string | null; model: string | null;
   effort: Effort | null; account: string | null; max_cost: number | null };
 type Lane = { key: IssueKey; repo: Slug; n: number; title: string; deps: IssueKey[]; stage: LaneStage; pr: number | null;
-  needs_you: string | null; held: string | null; gate: string | null; skip_reason: string | null; paused: boolean;
+  needs_you: string | null /* null while stalled */; stalled: string | null /* idle guard: "stopped before a PR" */;
+  held: string | null; gate: string | null; skip_reason: string | null; paused: boolean;
   paused_by: "dispatch" | null; hold_merge: boolean; limited_until: Epoch | null; started_at: Epoch | null;
   ended_at: Epoch | null; session: string | null; usage: { cost: number; tokens: Tokens | null; seconds: number } };
 type Dispatch = { id: string; epic: IssueKey | null; issues?: IssueKey[]; title: string;
