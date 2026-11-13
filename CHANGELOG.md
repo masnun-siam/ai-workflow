@@ -5,6 +5,7 @@
 ### Added
 
 - **Stalled** in the UI: a dispatch lane or session that stopped without finishing shows a **Stalled** tag, a "Stalled: <reason>" banner and a **Continue** button (lane action `continue`, `POST /api/sessions/<id>/continue`). Stalled lanes count as **Needs you** on the dispatch list and page. Inbox rows of type `session_stalled` and `dispatch_stalled` sit under **Fix**. When Continue finds it is no longer stalled (409), the dispatch or session reloads.
+- `POST /api/sessions/<id>/continue` resumes a stalled session's own Claude session with "Continue the `<step>` flow from where you stopped…". A session that is not stalled gets 409 `session is not stalled`. The UI Continue button on sessions now works.
 - Settings gain `idle_guard` (on by default; a settings file without it reads as on), returned by `GET /api/settings` and saved by `PUT /api/settings`. Nothing obeys it yet: the headless idle guard that uses it lands next.
 
 ### Fixed

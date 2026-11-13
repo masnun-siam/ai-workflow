@@ -673,6 +673,7 @@ type VaultPRD = { exists: boolean; status: string | null; title: string | null; 
 | POST | `/api/sessions/{id}/stop` | — | `Session` | 200; 409 |
 | POST | `/api/sessions/{id}/resume` | `{account?: label}` (optional body) | `Session` | 200; 400; 409 |
 | POST | `/api/sessions/{id}/{cancel-auto\|hold\|release\|start-now\|dismiss}` | — | `Session` | 200; 409 |
+| POST | `/api/sessions/{id}/continue` | — | `Session` | 200; 404; 409 `session is not stalled` (or the `prompt` 409s) |
 | POST | `/api/sessions/{id}/rerun` | — | `Session` (new) | 201; 400; 409; 502 |
 | GET | `/api/sessions/cleanup` | — | `{items:{key,label,repo,flags:string[]}[]}` | 200 |
 | POST | `/api/sessions/cleanup` | `{keys: string[]}` | `{removed: string[]}` | 200; 400 |
@@ -684,6 +685,8 @@ Start semantics: S§5.2–5.4 with `step` in place of `command`. `runs_in` routi
 4. An identical (step, args, repo) start within 30 s → 409 `just started (session <id>)`.
 
 Guard 1 always applies to `implement-issue` and `pr-grind` (S§5.4), even without `guard`.
+
+Continue (stalled sessions only): resumes the same Claude session id through the `prompt` path with "Continue the `<step>` flow from where you stopped. Do the remaining steps, then end as the idle guard says." (`sessions.ContinueText`). The resume clears `stalled`. A stalled session that is still running gets the message queued, as `prompt` does.
 
 ### 5.3 Repos, products, GitHub (products, gh, poller)
 | Method | Path | Request | Response | Codes | Pkg |

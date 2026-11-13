@@ -234,6 +234,21 @@ func (m *Manager) SendPrompt(ctx context.Context, id, text string, limit int) (s
 	return "sent", nil
 }
 
+// Continue resumes a stalled session's own Claude session with the FR-6 message.
+func (m *Manager) Continue(ctx context.Context, id string) (Record, error) {
+	rec, err := m.Get(id)
+	if err != nil {
+		return rec, err
+	}
+	if rec.Stalled == "" {
+		return rec, errs.Conflict("session is not stalled", map[string]any{"id": id})
+	}
+	if _, err := m.SendPrompt(ctx, id, ContinueText(m.stepOf(rec)), 0); err != nil {
+		return rec, err
+	}
+	return m.Get(id)
+}
+
 // deliverQueued sends a stored prompt once the session is finished and not held.
 func (m *Manager) deliverQueued(id string) {
 	rec, err := m.Get(id)
