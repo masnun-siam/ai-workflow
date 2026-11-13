@@ -42,6 +42,7 @@ const (
 	TReleaseNote     = "release_note"
 	TDispatchNeeds   = "dispatch_needs"
 	TDispatchHeld    = "dispatch_held"
+	TDispatchStalled = "dispatch_stalled"
 	TDispatchMerge   = "dispatch_merge"
 	TDispatchLimited = "dispatch_limited"
 	TDispatchDone    = "dispatch_done"
@@ -186,6 +187,7 @@ type Lane struct {
 	Stage        string  `json:"stage"`
 	PR           *int    `json:"pr"`
 	NeedsYou     *string `json:"needs_you"`
+	Stalled      *string `json:"stalled"`
 	Held         *string `json:"held"`
 	Gate         *string `json:"gate"`
 	Paused       bool    `json:"paused"`

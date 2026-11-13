@@ -1,0 +1,7 @@
+{"type": "user", "message": {"role": "user", "content": "/blubird:implement-issue 135"}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "tu_1", "name": "Bash", "input": {"command": "make test"}}]}}
+{"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "tu_1", "content": "ok"}]}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "tu_ag", "name": "Agent", "input": {"prompt": "review", "run_in_background": true}}]}}
+{"type": "user", "isSidechain": true, "message": {"role": "user", "content": "review"}}
+{"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "tu_ag", "content": [{"type": "text", "text": "Async agent launched successfully.\nagentId: agent_xyz789"}]}]}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Waiting for the reviewer."}]}}
