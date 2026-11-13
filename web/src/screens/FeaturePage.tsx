@@ -152,7 +152,7 @@ function PrdTab({ f }: { f: Feature }) {
       <div class="acts">
         {edit === null
           ? <Btn small disabled={!file} onClick={() => setEdit(file!.text)}>Edit</Btn>
-          : <><Btn small primary onClick={save}>Save and commit</Btn><Btn small onClick={async () => { if (edit === file?.text || (await askConfirm("Discard your edit?"))) setEdit(null); }}>Discard</Btn></>}
+          : <><Btn small primary onClick={save}>Save and commit</Btn><Btn small onClick={async () => { if (edit === file?.text || (await askConfirm("Discard your edit?", true))) setEdit(null); }}>Discard</Btn></>}
         <span class="dim">{file ? `${file.path}${file.branch ? ` on ${file.branch}` : ""}` : "Loading…"}{edit !== null ? " · saving commits only this file, it does not push" : ""}</span>
       </div>
       <Pane label="ask claude to change it">
@@ -215,7 +215,7 @@ function ReviewTab({ f }: { f: Feature }) {
             <td><div class="acts">
               {full?.lens_sessions[l] && <a href={`#/sessions/${full.lens_sessions[l]}`}>session</a>}
               <Btn small onClick={() => mutate(() => http.send("POST", `/api/review/${p.id}/lens`, { lens: l, action: "rerun" }), `Re-running ${l}`, ["panels", "features"])}>Re-run</Btn>
-              <Btn small bad onClick={async () => { if (await askConfirm(`Drop the ${l} lens from this review?`)) await mutate(() => http.send("POST", `/api/review/${p.id}/lens`, { lens: l, action: "drop" }), `Dropped ${l}`, ["panels", "features"]); }}>Drop</Btn>
+              <Btn small bad onClick={async () => { if (await askConfirm(`Drop the ${l} lens from this review?`, true)) await mutate(() => http.send("POST", `/api/review/${p.id}/lens`, { lens: l, action: "drop" }), `Dropped ${l}`, ["panels", "features"]); }}>Drop</Btn>
             </div></td></tr>
         ))}
         {!Object.keys(lensState).length && <tr><td colSpan={3} class="dim">Loading lenses…</td></tr>}
@@ -263,7 +263,7 @@ export function FeaturePage() {
               setMore(false);
               if (closeEpic) { await exec(closeEpic); return; }
               const [o, n] = f.epic!.repo.split("/");
-              if (await askConfirm(`Close epic #${f.epic!.n} and its ${f.counts.open} open issues as completed?`)) await mutate(() => http.send("POST", `/api/epics/${o}/${n}/${f.epic!.n}/close`, {}), "Epic closed", ["features"]);
+              if (await askConfirm(`Close epic #${f.epic!.n} and its ${f.counts.open} open issues as completed?`, true)) await mutate(() => http.send("POST", `/api/epics/${o}/${n}/${f.epic!.n}/close`, {}), "Epic closed", ["features"]);
             }}>Close epic and its issues</button>}
           </div>
         </Popover>

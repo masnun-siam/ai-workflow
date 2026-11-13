@@ -39,7 +39,7 @@ export function Inbox() {
                     <div key={k} role={k ? "group" : undefined} aria-label={k ? `${name}: ${k}` : undefined}>
                       {k && <div class="gh sub">{k} · {total}</div>}
                       {part.map(({ it, i }) => (
-                        <button key={it.key} type="button" class={`row${i === cur ? " sel" : ""}`} aria-current={i === cur}
+                        <button key={it.key} type="button" class={`row${i === cur ? " sel" : ""}`} aria-current={i === cur || undefined}
                           onClick={() => { setSel({ inbox: i }); if (prefs.value.layout === "drawer") detailOpen.value = true; }}>
                           <span class={`tag ${g === "wait" ? "" : "c-w"}`}><span aria-hidden="true">{g === "wait" ? "◷ " : "▲ "}</span><span class="sr">{g === "wait" ? "Waiting: " : "Needs you: "}</span>{it.kind}</span>
                           <span class="t">{displayTitle(it)}</span>
