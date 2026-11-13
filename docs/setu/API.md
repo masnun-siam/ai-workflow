@@ -553,7 +553,7 @@ type InboxItem = {
   actions: Action[];
 };
 type InboxType = "gh_auth" | "blubird_missing" | "question" | "prd_approval" | "session_failed" | "limited" | "queued"
-  | "review_cap" | "review_approved" | "grind_paused" | "needs_cleanup" | "pr_conflict" | "pr_ready" | "release_note"
+  | "session_stalled" | "review_cap" | "review_approved" | "grind_paused" | "needs_cleanup" | "pr_conflict" | "pr_ready" | "release_note"
   | "dispatch_needs" | "dispatch_held" | "dispatch_stalled" | "dispatch_merge" | "dispatch_limited" | "dispatch_done" | "away_summary" | "repo_unpublished";
 type InboxList = { items: InboxItem[]; stale: Slug[]; count: number /* items not in group "wait" */ };
 

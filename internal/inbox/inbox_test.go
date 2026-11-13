@@ -137,6 +137,8 @@ func TestEveryKeptType(t *testing.T) {
 	lim.Command, lim.LimitResetsAt = "/blubird:refine-issues 9", now().Add(time.Hour).Unix()
 	q := rec("20261112T060000000001Z-dddddddd", sessions.StQueued, "2026-11-12T06:00:00Z")
 	q.Command, q.Note = "/blubird:docs-updater", "batch cap"
+	stl := rec("20261112T050000000001Z-eeeeeeee", sessions.StDone, "2026-11-12T05:00:00Z")
+	stl.Command, stl.Stalled = "/blubird:pr-review 3", "ended without finishing or asking"
 
 	conflict := poller.OpenPR{N: 11, Title: "conflicting", URL: "https://github.com/acme/api/pull/11", Conflict: true, Refs: []int{5}}
 	ready := poller.OpenPR{N: 12, Title: "ready", URL: "https://github.com/acme/api/pull/12", SHA: strings.Repeat("a", 40), CI: "success", Approved: true, Refs: []int{6}, Checks: 3}
@@ -161,7 +163,7 @@ func TestEveryKeptType(t *testing.T) {
 	pn := 7
 
 	b := New(Deps{
-		Sessions:  fSessions{[]sessions.Record{w, f, lim, q}},
+		Sessions:  fSessions{[]sessions.Record{w, f, lim, q, stl}},
 		Snapshots: snaps,
 		Products: fProducts{
 			ps:   []products.Product{{DocsRepo: "acme/docs", Repos: []products.ProductRepo{{Repo: "acme/api"}}}},
@@ -218,7 +220,7 @@ func TestEveryKeptType(t *testing.T) {
 	if inboxtest.Count() == 0 {
 		t.Fatal("API.md not found")
 	}
-	for _, ty := range []string{TGHAuth, TBlubirdMissing, TQuestion, TPRDApproval, TSessionFailed, TLimited, TQueued, TReviewCap,
+	for _, ty := range []string{TGHAuth, TBlubirdMissing, TQuestion, TPRDApproval, TSessionFailed, TSessionStalled, TLimited, TQueued, TReviewCap,
 		TReviewApproved, TGrindPaused, TNeedsCleanup, TPRConflict, TPRReady, TReleaseNote, TDispatchNeeds, TDispatchHeld,
 		TDispatchStalled, TDispatchMerge, TDispatchLimited, TDispatchDone, TAwaySummary, TRepoUnpublished} {
 		if !got[ty] {
@@ -373,6 +375,75 @@ func TestDispatchDropsOwnedRowsAndDoneWindow(t *testing.T) {
 	b := New(Deps{Sessions: fSessions{[]sessions.Record{f}}, Now: now,
 		Dispatch: fDispatch{owned: map[string]bool{"acme/api#5": true}, ds: []Dispatch{{ID: "d", State: "done", EndedAt: &old}, {ID: "e", State: "done", SeenDone: true, EndedAt: &old}}}})
 	if l := b.Build(context.Background(), "", ""); len(l.Items) != 0 {
+		t.Fatalf("items %+v", l.Items)
+	}
+}
+
+func stalledRec(id string) sessions.Record {
+	r := rec(id, sessions.StDone, "2026-11-12T08:00:00Z")
+	r.Stalled, r.EndedAt = "ended without finishing or asking", "2026-11-12T08:20:00Z"
+	return r
+}
+
+func TestStalledSessionItem(t *testing.T) {
+	r := stalledRec("20261112T080000000001Z-stall001")
+	l := New(Deps{Sessions: fSessions{[]sessions.Record{r}}, Now: now}).Build(context.Background(), "", "")
+	if len(l.Items) != 1 {
+		t.Fatalf("items %+v", l.Items)
+	}
+	it := l.Items[0]
+	if it.Type != TSessionStalled || it.Group != GFix || it.Key != "stalled:"+r.ID || it.Kind != "Stalled" {
+		t.Fatalf("item %+v", it)
+	}
+	if it.At == nil || *it.At != r.EndedAt {
+		t.Fatalf("at %v", it.At)
+	}
+	if len(it.Detail) == 0 || it.Detail[0] != "Stalled: ended without finishing or asking" {
+		t.Fatalf("detail %v", it.Detail)
+	}
+	var primary []Action
+	for _, a := range it.Actions {
+		if a.Primary {
+			primary = append(primary, a)
+		}
+	}
+	if len(primary) != 1 || primary[0].Label != "Continue" || primary[0].Method != "POST" ||
+		primary[0].Path != "/api/sessions/"+r.ID+"/continue" || !primary[0].Clears {
+		t.Fatalf("primary %+v", primary)
+	}
+}
+
+func TestStalledSessionSkipped(t *testing.T) {
+	resumed := stalledRec("20261112T080000000001Z-stall002")
+	resumed.Status, resumed.Stalled = sessions.StRunning, ""
+	cleared := stalledRec("20261112T080000000001Z-stall003")
+	cleared.Stalled = ""
+	dismissed := stalledRec("20261112T080000000001Z-stall004")
+	dismissed.Dismissed = true
+	lane := stalledRec("20261112T080000000001Z-stall005")
+	lane.Kind, lane.Link = "lane", nil
+	for name, tc := range map[string]struct {
+		r sessions.Record
+		d Dispatches
+	}{
+		"resumed":   {resumed, nil},
+		"cleared":   {cleared, nil},
+		"dismissed": {dismissed, nil},
+		"lane kind": {lane, nil},
+		"owned":     {stalledRec("20261112T080000000001Z-stall006"), fDispatch{owned: map[string]bool{"acme/api#5": true}}},
+	} {
+		l := New(Deps{Sessions: fSessions{[]sessions.Record{tc.r}}, Dispatch: tc.d, Now: now}).Build(context.Background(), "", "")
+		if len(l.Items) != 0 {
+			t.Errorf("%s: items %+v", name, l.Items)
+		}
+	}
+}
+
+func TestQuestionStaysInAnswer(t *testing.T) {
+	w := rec("20261112T090000000001Z-ask00001", sessions.StWaiting, "2026-11-12T09:00:00Z")
+	w.PendingQuestion = pending("r1")
+	l := New(Deps{Sessions: fSessions{[]sessions.Record{w}}, Now: now}).Build(context.Background(), "", "")
+	if len(l.Items) != 1 || l.Items[0].Type != TQuestion || l.Items[0].Group != GAnswer {
 		t.Fatalf("items %+v", l.Items)
 	}
 }
