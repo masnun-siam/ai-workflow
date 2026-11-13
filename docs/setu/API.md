@@ -639,7 +639,8 @@ type Settings = {
 type NotifySettings = { matrix: Record<NotifyEvent, { browser: boolean; push: boolean; mac: boolean }>;
   events: { key: NotifyEvent; label: string; group: string }[]; public_url: string;
   mac: { available: boolean; notifier: string; clickable: boolean }; push: { subscriptions: number } };
-type NotifyEvent = "waiting"|"failed"|"dispatch"|"panel-cap"|"pr-ready"|"needs-cleanup"|"grind-paused"|"grind-done"|"done"|"afk"|"release";
+type NotifyEvent = "waiting"|"failed"|"dispatch"|"panel-cap"|"stalled"|"pr-ready"|"needs-cleanup"|"grind-paused"|"grind-done"|"done"|"afk"|"release";
+  // stalled: off on every channel by default; one per stall (a lane's stall comes from the lane, not its session)
 type PushSubscription = { endpoint: string; keys: { p256dh: string; auth: string } };
 
 // ---------- vault ----------

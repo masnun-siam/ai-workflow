@@ -110,6 +110,10 @@ func TestComposeTable(t *testing.T) {
 		{"grind", "grind-paused", Note{SessionID: "g1", Repo: "o/r", Text: "needs a human", Link: link}, "https://x",
 			map[string]string{"Title": "setu: #5 grind paused", "Click": "https://x/#/sessions/g1"}, nil, "needs a human\no/r"},
 		{"grind-done prio", "grind-done", Note{Repo: "o/r"}, "", map[string]string{"Priority": "default", "Title": "setu: grind finished"}, nil, "o/r"},
+		{"stalled lane", "stalled", Note{Repo: "o/r", Text: "o/r#5 stopped before a PR", Link: link}, "https://x",
+			map[string]string{"Title": "setu: #5 stalled", "Priority": "high", "Tags": "zzz,r,#5", "Click": "https://x/#/inbox"}, nil, "o/r#5 stopped before a PR\no/r"},
+		{"stalled session opens inbox", "stalled", Note{SessionID: "s9", Repo: "o/r", Command: "/blubird:implement-issue 5", Text: "stopped twice"}, "https://x",
+			map[string]string{"Title": "setu: stalled", "Click": "https://x/#/inbox"}, nil, "stopped twice\no/r · /blubird:implement-issue 5"},
 		{"afk", "afk", Note{Text: "3 handled"}, "", map[string]string{"Title": "setu: away mode ended", "Priority": "default"}, nil, "3 handled"},
 		{"unknown", "wat", Note{}, "https://x", map[string]string{"Title": "setu: update", "Tags": "bell", "Click": "https://x/#/activity"}, nil, ""},
 		{"non-ascii url no actions", "done", Note{SessionID: "s"}, "https://x/é", map[string]string{"Click": "https://x/é/#/sessions/s"}, []string{"Actions"}, ""},
@@ -144,6 +148,12 @@ func TestMatrixDefaults(t *testing.T) {
 	m := Config{}.Matrix()
 	for _, e := range Events {
 		c := m[e.Key]
+		if e.Key == "stalled" {
+			if c["browser"] || c["ntfy"] || c["mac"] || c["push"] || e.Group != "Needs you" {
+				t.Errorf("stalled must be off everywhere by default: %v", c)
+			}
+			continue
+		}
 		if !c["ntfy"] || c["push"] {
 			t.Errorf("%s ntfy/push defaults: %v", e.Key, c)
 		}
@@ -152,7 +162,7 @@ func TestMatrixDefaults(t *testing.T) {
 			t.Errorf("%s browser/mac = %v", e.Key, c)
 		}
 	}
-	if len(m) != 11 || m["release"] == nil || m["prd-comment"] != nil || m["pipeline"] != nil {
+	if len(m) != 12 || m["release"] == nil || m["stalled"] == nil || m["prd-comment"] != nil || m["pipeline"] != nil {
 		t.Errorf("events: %v", m)
 	}
 	cfg := Config{Stored: map[string]map[string]bool{"done": {"browser": true, "ntfy": false}}}
@@ -680,8 +690,13 @@ func TestRoutes(t *testing.T) {
 		t.Fatal("secret leaked")
 	}
 	mat := m["matrix"].(map[string]any)
-	if len(mat) != 11 || mat["waiting"].(map[string]any)["push"] != false || mat["waiting"].(map[string]any)["ntfy"] != true {
+	if len(mat) != 12 || mat["waiting"].(map[string]any)["push"] != false || mat["waiting"].(map[string]any)["ntfy"] != true {
 		t.Fatalf("matrix %v", mat)
+	}
+	for ch, on := range mat["stalled"].(map[string]any) {
+		if on != false {
+			t.Fatalf("stalled.%s defaults on", ch)
+		}
 	}
 	if m["mac"].(map[string]any)["available"] != false || m["push"].(map[string]any)["subscriptions"] != float64(0) {
 		t.Fatalf("%v", m)
@@ -777,5 +792,37 @@ func TestMigratedUIJSONKeepsWorking(t *testing.T) {
 	defer mu.Unlock()
 	if len(*reqs) != 1 || (*reqs)[0].hdr.Get("Click") != "https://mac.tail.ts.net/#/sessions/x" {
 		t.Fatalf("%+v", *reqs)
+	}
+}
+
+func TestStalledOffByDefaultOnSendsOne(t *testing.T) {
+	e := newEnv(t)
+	srv, reqs, mu := ntfyServer(t, 200)
+	e.ui(t, 0o600, map[string]any{"ntfy": map[string]any{"server": srv.URL, "topic": "t"}})
+	ch, cancel := e.bus.Subscribe(16)
+	defer cancel()
+	count := func() int { e.s.Wait(5 * time.Second); mu.Lock(); defer mu.Unlock(); return len(*reqs) }
+
+	e.s.Notify("stalled", Note{SessionID: "s1", Repo: "o/r", Text: "stopped twice"})
+	if n := count(); n != 0 || len(ch) != 0 {
+		t.Fatalf("defaults delivered: ntfy %d, toasts %d", n, len(ch))
+	}
+	if err := e.s.SetCell("stalled", "ntfy", true); err != nil {
+		t.Fatal(err)
+	}
+	e.s.Notify("stalled", Note{SessionID: "s1", Repo: "o/r", Text: "stopped twice"})
+	if n := count(); n != 1 || len(ch) != 0 {
+		t.Fatalf("ntfy on: ntfy %d, toasts %d", n, len(ch))
+	}
+	if err := e.s.SetCell("stalled", "browser", true); err != nil {
+		t.Fatal(err)
+	}
+	e.s.Notify("stalled", Note{SessionID: "s1", Repo: "o/r", Text: "stopped twice"})
+	e.s.Wait(5 * time.Second)
+	if len(ch) != 1 {
+		t.Fatalf("toasts %d", len(ch))
+	}
+	if m := (<-ch).Data.(map[string]any); m["level"] != "warn" || m["path"] != "#/inbox" {
+		t.Fatalf("%v", m)
 	}
 }

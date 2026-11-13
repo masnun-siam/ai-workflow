@@ -30,7 +30,7 @@ func (t *ticker) save() {
 func (t *ticker) ev(lane, kind, text string) {
 	t.new = append(t.new, t.d.AddEvent(lane, kind, text, t.now))
 	switch kind {
-	case "needs_you", "held", "awaiting_merge", "finished", "warning":
+	case "needs_you", "held", "awaiting_merge", "finished", "warning", "stalled":
 		t.s.notify(t.d, lane, kind, text)
 	}
 }

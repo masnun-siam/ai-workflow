@@ -647,7 +647,7 @@ func (s *Service) costCapped(d *store.Dispatch, now float64) bool {
 	return true
 }
 
-// notify sends the board event `dispatch` (W§2.7).
+// notify sends the board event `dispatch` (W§2.7), or `stalled` for a lane the idle guard let stop.
 func (s *Service) notify(d *store.Dispatch, lane, kind, text string) {
 	if s.d.Notify == nil {
 		return
@@ -664,7 +664,11 @@ func (s *Service) notify(d *store.Dispatch, lane, kind, text string) {
 		repo, issue = x.Repo, x.N
 	}
 	o, n := splitSlug(repo)
-	s.d.Notify.Notify("dispatch", notify.Note{Repo: repo, Text: who + " " + text,
+	event := "dispatch"
+	if kind == "stalled" {
+		event = "stalled"
+	}
+	s.d.Notify.Notify(event, notify.Note{Repo: repo, Text: who + " " + text,
 		Link: &notify.Link{Owner: o, Repo: n, Issue: issue}})
 }
 
