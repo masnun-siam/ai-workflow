@@ -12,12 +12,16 @@ import (
 	"github.com/masnun-siam/setu/internal/home"
 )
 
-// Commands returns the verbs of this package: `setu ask`.
+// Commands returns the verbs of this package: `setu ask` and `setu hook`.
 func Commands() []cli.Command {
 	return []cli.Command{{
 		Name:    "ask",
 		Summary: "record a gate question for a headless run (AskUserQuestion stand-in)",
 		Run:     runAsk,
+	}, {
+		Name:    "hook",
+		Summary: "Claude Code hooks for setu sessions (idle)",
+		Run:     runHook,
 	}}
 }
 
