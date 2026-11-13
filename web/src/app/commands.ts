@@ -71,7 +71,6 @@ export function runCommand(c: Cmd): void {
     case "enter": {
       const t = currentTarget.value;
       if (!t) return;
-      if (screen === "ops" && t.kind === "ops" && t.row.actions.length === 1) { void exec(t.row.actions[0]!); return; }
       const visible = detailOpen.value || prefs.value.layout === "split";
       if (screen === "activity" && t.kind === "session" && visible) { nav(`#/sessions/${t.session.id}`); return; }
       detailOpen.value = true;

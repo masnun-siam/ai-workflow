@@ -93,7 +93,7 @@ export function App() {
   const p = prefs.value;
   const split = p.layout === "split";
   const showSide = split && SPLIT_SCREENS.has(r.screen) && !r.id && (r.screen !== "activity" || activityTab.value === "sessions");
-  const hints = [...(HINTS[r.screen] ?? []), ["0-9", "pages"], ["g r", "repo"], ["n", "new"], ["⌘K", "search"], ["?", "keys"]] as [string, string][];
+  const hints = [...(HINTS[r.screen] ?? []), ["0-9", "pages"], ["g r", "repo"], ...(r.screen === "releases" ? [] : [["n", "new"]]), ["⌘K", "search"], ["?", "keys"]] as [string, string][];
   useOnboardingGate();
   // The current repo picks the product River, Releases and Ops show.
   const repoProduct = repoList.value.find((x) => x.slug === currentRepo.value)?.product;

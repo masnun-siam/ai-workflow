@@ -159,9 +159,9 @@ export const ops: Ops = { product: PRODUCT, rows: [
   { step: "skill-feedback", label: "blubird:skill-feedback", scope: "any repo", summary: "12 PRs since last reconcile", targets: [], actions: [so("skill-feedback", "")] },
 ] };
 export const me: Me = {
-  day_end: { date: "2026-11-12", reconciled: false, missing_days: 2, last: null }, weekly: { week: 46, drafted: false, last: null }, usage: status.usage,
+  day_end: { date: "2026-11-12", reconciled: false, missing_days: 2, missing_dates: ["2026-11-02", "2026-11-09"], last: null }, weekly: { week: 46, drafted: false, last: null }, usage: status.usage,
   cost: { today_count: 7, today_cost: 17.11, month_count: 148, month_cost: 212 },
-  actions: [{ key: "r", label: "Reconcile today", method: "POST", path: "/api/sessions", body: { step: "day-end-reconcile" }, toast: "Started day-end-reconcile", primary: true },
+  actions: [{ key: "d", label: "Run day-end", method: "POST", path: "/api/sessions", body: { step: "day-end-reconcile" }, toast: "Started day-end-reconcile", primary: true },
     { key: "w", label: "Draft week 46", method: "POST", path: "/api/sessions", body: { step: "weekly-review" }, toast: "Started weekly-review" }],
 };
 

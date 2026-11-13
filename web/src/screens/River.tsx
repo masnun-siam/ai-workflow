@@ -3,8 +3,16 @@ import { loadErrors, mutate, product, river, soloRepo } from "../state/data";
 import { stages } from "../state/select";
 import { detailOpen, sel, setSel } from "../state/ui";
 import { prefs } from "../state/prefs";
+import { useState } from "preact/hooks";
 import { Header } from "../components/Header";
 import { Btn, Empty, Pane } from "../components/ui";
+
+/** Refresh from GitHub; the label says so while the request is out. */
+function RefreshBtn({ body }: { body: Record<string, unknown> }) {
+  const [busy, setBusy] = useState(false);
+  const go = async () => { setBusy(true); try { await mutate(() => http.send("POST", "/api/refresh", body), "Refreshing from GitHub"); } finally { setBusy(false); } };
+  return <Btn small disabled={busy} onClick={go}>{busy ? "Refreshing…" : "Refresh"}</Btn>;
+}
 
 export function River() {
   const s = sel.value;
@@ -15,8 +23,8 @@ export function River() {
   const scope = solo ?? product.value;
   return (
     <>
-      <Header title="River" products={!solo} scope>
-        <Btn small onClick={() => mutate(() => http.send("POST", "/api/refresh", solo ? { repo: solo } : { product: product.value }), "Refreshing from GitHub")}>Refresh</Btn>
+      <Header title="River" products={!solo} scope={!solo}>
+        <RefreshBtn body={solo ? { repo: solo } : { product: product.value }} />
       </Header>
       {err && <div class="banner bad" role="alert">{err}</div>}
       {river.value && river.value.stale.length > 0 && <div class="banner">Stale GitHub data: {river.value.stale.join(", ")}</div>}
@@ -24,7 +32,7 @@ export function River() {
         {!river.value ? <Empty>Loading…</Empty> : (
           <div class="river">
             {st.map((stage, si) => (
-              <div key={stage.id} class={`stage${stage.cards.some((c) => c.need) ? " hot" : ""}${si === s.stage ? " cur" : ""}`}>
+              <div key={stage.id} class={`stage${stage.cards.some((c) => c.need) ? " hot" : ""}${si === s.stage && stage.cards.length > 0 ? " cur" : ""}`}>
                 <div class="sh"><b>{stage.name}</b><span>{stage.skills}</span></div>
                 {stage.cards.map((c, ci) => {
                   const selected = si === s.stage && ci === s.card;
@@ -32,7 +40,7 @@ export function River() {
                     <button key={c.id} type="button" class={`card${c.need ? " need" : ""}${selected ? " sel" : ""}`} aria-current={selected}
                       onClick={() => { setSel({ stage: si, card: ci }); if (prefs.value.layout === "drawer") detailOpen.value = true; }}>
                       <span class="t">{c.title}</span>
-                      <span class="m"><span class={`tag ${c.tone}`}>{c.tag}</span>{c.meta}</span>
+                      <span class="m"><span class={`tag ${c.tone}`}>{c.tag}</span>{c.meta.trim().toLowerCase() === c.tag.trim().toLowerCase() ? "" : c.meta}</span>
                       {c.live && <span class="live" role="img" aria-label="live" />}
                     </button>
                   );

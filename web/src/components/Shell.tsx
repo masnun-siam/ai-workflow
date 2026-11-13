@@ -250,6 +250,7 @@ export function Onboarding() {
   const gh = st?.gh;
   const account = settings.value?.commands?.[0];
   const total = repoList.value.length;
+  const complete = !!gh?.ok && !!account && total > 0;
   const [roots, setRoots] = useState<string | null>(null);
   const [found, setFound] = useState<{ added: Repo[] } | null>(null);
   const rootText = roots ?? (repos.value?.scan_roots ?? []).join("\n");
@@ -271,14 +272,14 @@ export function Onboarding() {
       <div class="onb-item"><span class="onb-ico dim" aria-hidden="true">▣</span>
         <div class="form">
           <b>Add your repositories</b>
-          <span class="dim">Folders to look in, one per line. Every git checkout with a GitHub origin is registered.</span>
-          <textarea class="mono" rows={3} spellcheck={false} aria-label="Folders to scan" value={rootText} onInput={(e) => setRoots((e.target as HTMLTextAreaElement).value)} />
+          <span class="dim" id="onb-roots-help">Folders to look in, one per line. Every git checkout with a GitHub origin is registered.</span>
+          <textarea class="mono" rows={3} spellcheck={false} aria-label="Folders to scan" aria-describedby="onb-roots-help" value={rootText} onInput={(e) => setRoots((e.target as HTMLTextAreaElement).value)} />
           {found && (found.added.length
             ? <div role="status"><b>Added {found.added.length} {found.added.length === 1 ? "repository" : "repositories"}</b>{found.added.map((r) => <div key={r.slug} class="mono">✓ {r.slug} <span class="dim">{r.path}</span></div>)}</div>
             : <p class="mu" role="status">{total ? "No new repos found." : "No repos found in those folders. Check the paths, or clone a repo there first."}</p>)}
           <div class="acts">
-            <Btn primary={!found?.added.length} disabled={!rootText.trim()} onClick={find}>{found ? "Scan again" : "Find repos"}</Btn>
-            {total > 0 && <Btn primary onClick={() => nav("#/inbox")}>Done: open the Inbox</Btn>}
+            <Btn primary={!complete && !found?.added.length} disabled={!rootText.trim()} onClick={find}>{found ? "Scan again" : "Find repos"}</Btn>
+            {total > 0 && <Btn primary onClick={() => nav("#/inbox")}>{complete ? "Open the Inbox" : "Done: open the Inbox"}</Btn>}
           </div>
         </div>
       </div>
