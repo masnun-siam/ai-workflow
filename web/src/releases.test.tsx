@@ -58,7 +58,7 @@ describe("Releases keys share the buttons' guards", () => {
       toastMsg.value = null;
       releaseKey(k);
       await tick();
-      expect(toastMsg.value?.msg, k).toBe("No release yet");
+      expect((toastMsg.value as { msg: string } | null)?.msg, k).toBe("No release yet");
     }
     expect(releaseKey("g")).toBe(false);
     expect(send).not.toHaveBeenCalled();
