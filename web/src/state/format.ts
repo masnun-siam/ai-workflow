@@ -32,3 +32,7 @@ export function fmtTokens(t: { input: number; cached: number; output: number } |
 }
 /** "14:05" for a unix-seconds time. */
 export const clock = (epoch: number): string => new Date(epoch * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+const PRIOS = ["P0", "P1", "P2", "P3"];
+/** "P0".."P3" from an issue's priority label, or "" when it has none. */
+export const prio = (p: string | null | undefined): string => (p && PRIOS.includes(p.toUpperCase()) ? p.toUpperCase() : "");

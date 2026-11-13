@@ -6,10 +6,11 @@ export const Kbd = ({ children }: { children: ComponentChildren }) => <kbd>{chil
 export const Tag = ({ tone, children }: { tone?: Tone | string; children: ComponentChildren }) => <span class={`tag ${tone ?? ""}`}>{children}</span>;
 export const Empty = ({ children }: { children: ComponentChildren }) => <div class="empty">{children}</div>;
 
-export function Pane({ label, children, wide, id }: { label: string; children: ComponentChildren; wide?: boolean; id?: string }) {
+/** `plain` keeps the label as written (monospace, not uppercased): for a repo or path. */
+export function Pane({ label, children, wide, id, plain, role, labelledBy }: { label: string; children: ComponentChildren; wide?: boolean; id?: string; plain?: boolean; role?: "tabpanel"; labelledBy?: string }) {
   return (
-    <section class="pane" id={id} style={wide ? { gridColumn: "1/-1" } : undefined} aria-label={label}>
-      <h2 class="lb">{label}</h2>
+    <section class="pane" id={id} role={role} style={wide ? { gridColumn: "1/-1" } : undefined} aria-label={labelledBy ? undefined : label} aria-labelledby={labelledBy}>
+      <h2 class={plain ? "lb plain" : "lb"}>{label}</h2>
       {children}
     </section>
   );

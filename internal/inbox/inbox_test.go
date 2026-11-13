@@ -140,7 +140,7 @@ func TestEveryKeptType(t *testing.T) {
 	stl := rec("20261112T050000000001Z-eeeeeeee", sessions.StDone, "2026-11-12T05:00:00Z")
 	stl.Command, stl.Stalled = "/blubird:pr-review 3", "ended without finishing or asking"
 
-	conflict := poller.OpenPR{N: 11, Title: "conflicting", URL: "https://github.com/acme/api/pull/11", Conflict: true, Refs: []int{5}}
+	conflict := poller.OpenPR{N: 11, Title: "conflicting", URL: "https://github.com/acme/api/pull/11", Conflict: true, Refs: []int{5}, UpdatedAt: "2026-11-12T08:00:00Z"}
 	ready := poller.OpenPR{N: 12, Title: "ready", URL: "https://github.com/acme/api/pull/12", SHA: strings.Repeat("a", 40), CI: "success", Approved: true, Refs: []int{6}, Checks: 3}
 	snaps := &fSnaps{m: map[string]poller.Snapshot{"acme/api": fresh("acme/api", poller.Data{
 		Issues: []poller.Issue{{N: 5}, {N: 6}}, OpenPRs: []poller.OpenPR{conflict, ready}, Merged: []poller.Merged{}, ClosedEpics: []poller.ClosedEpic{}})},
@@ -249,6 +249,9 @@ func TestEveryKeptType(t *testing.T) {
 	}
 	if m[TPRConflict].Key != "pr_conflict:acme/api#11" || m[TPRReady].Key != "pr_ready:acme/api#12" {
 		t.Errorf("keys: %s %s", m[TPRConflict].Key, m[TPRReady].Key)
+	}
+	if a := m[TPRConflict].At; a == nil || *a != "2026-11-12T08:00:00Z" {
+		t.Errorf("a PR row falls back to the PR's updated time: %v", a)
 	}
 	// count excludes wait
 	wait := 0

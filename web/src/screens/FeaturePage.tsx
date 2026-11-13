@@ -1,16 +1,17 @@
 /** The old aiw feature page: strip, build map, and the Issues, PRD, Peer review and Sessions tabs. */
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { http } from "../api/http";
 import type { Feature, FeatureIssue, FeatureIssueState, PRDFile, ReviewOffers, Session } from "../api/types";
 import { describeError } from "../state/actions";
 import { features, load, loadMany, mutate, panels, products } from "../state/data";
 import { exec } from "../state/exec";
-import { ago, fmtCost } from "../state/format";
+import { ago, fmtCost, prio } from "../state/format";
 import { nav, route, setParam } from "../state/route";
 import { askConfirm, toast } from "../state/ui";
 import { Header } from "../components/Header";
-import { Markdown } from "../components/Markdown";
+import { Markdown, headings } from "../components/Markdown";
 import { statusTone } from "../components/SessionView";
+import { Popover } from "../components/Shell";
 import { Btn, Empty, Pane, Tag } from "../components/ui";
 import { FeatureStrip } from "./Features";
 
@@ -37,25 +38,43 @@ function BuildMap({ f }: { f: Feature }) {
     <div class="bmap" aria-label="Build map">
       {f.done.map((d) => <a key={d.key} class="tile t-done" href={d.url} target="_blank" rel="noreferrer" title={`#${d.n} ${d.title}: done`}>#{d.n}</a>)}
       {f.issues.map((i) => <a key={i.key} class={`tile t-${i.state}`} href={`#issue-${i.n}`} onClick={(e) => { e.preventDefault(); setParam("tab", "issues", true); setTimeout(() => document.getElementById(`issue-${i.n}`)?.scrollIntoView({ block: "center" }), 0); }} title={`#${i.n} ${i.title}: ${STATE[i.state][0]}`}>#{i.n}</a>)}
+      <span class="legend" aria-label="Legend">
+        {f.done.length > 0 && <span><i class="tile t-done sw" aria-hidden="true" /> Done</span>}
+        {[...new Set(f.issues.map((i) => i.state))].map((st) => <span key={st}><i class={`tile t-${st} sw`} aria-hidden="true" /> {STATE[st][0]}</span>)}
+      </span>
       {f.dispatch && <span class="dim">Dispatch {f.dispatch.state}: {f.dispatch.closed}/{f.dispatch.lanes} lanes closed{f.dispatch.needs ? `, ${f.dispatch.needs} need you` : ""}. <a href="#/dispatches">Open dispatch</a></span>}
     </div>
   );
 }
 
-function IssueRow({ i, picked, onPick }: { i: FeatureIssue; picked: boolean; onPick?: (v: boolean) => void }) {
+/** "#944" as a link to that issue: its row here when it is in this feature, else GitHub. The title shows on hover. */
+function Blockers({ i, f }: { i: FeatureIssue; f: Feature }) {
+  return (
+    <span class="dim"> · after {i.blockers.map((b, k) => {
+      const n = Number(/(\d+)/.exec(b)?.[1]);
+      const hit = f.issues.find((x) => x.n === n) ?? null;
+      const done = f.done.find((x) => x.n === n);
+      const title = hit?.title ?? done?.title;
+      const href = hit ? `#issue-${n}` : done?.url ?? `https://github.com/${i.repo}/issues/${n}`;
+      return <>{k > 0 && ", "}<a href={href} title={title ? `#${n} ${title}` : undefined} {...(hit ? {} : { target: "_blank", rel: "noreferrer" })}>{b}</a></>;
+    })}</span>
+  );
+}
+
+function IssueRow({ i, f, picked, onPick, hold }: { i: FeatureIssue; f: Feature; picked: boolean; onPick?: (v: boolean) => void; hold?: string }) {
   const [label, tone] = STATE[i.state];
   return (
     <div class="irow" id={`issue-${i.n}`}>
       {onPick ? <input type="checkbox" aria-label={`Pick #${i.n}`} checked={picked} onChange={(e) => onPick((e.target as HTMLInputElement).checked)} /> : <span />}
       <Tag tone={tone}>{label}</Tag>
       <span class="t"><a href={i.url} target="_blank" rel="noreferrer" class="mono">#{i.n}</a> {i.title}
-        {i.bug && <span class="tag c-b"> bug</span>}{i.priority && <span class="dim"> · {i.priority}</span>}
-        {i.state === "blocked" && <span class="dim"> · after {i.blockers.join(", ")}</span>}
+        {i.bug && <span class="tag c-b"> bug</span>}{prio(i.priority) && <span class="dim"> · {prio(i.priority)}</span>}
+        {i.state === "blocked" && <Blockers i={i} f={f} />}{hold && <span class="tag c-w"> {hold}</span>}
         {i.pr && <> · <a href={i.pr.url} target="_blank" rel="noreferrer">PR #{i.pr.n}</a> <span class="dim">CI {i.pr.ci}{i.pr.review !== "none" ? `, ${i.pr.review.replace("_", " ")}` : ""}</span></>}
       </span>
       <div class="acts">
         {i.session && <a href={`#/sessions/${i.session}`}>session</a>}
-        {i.actions.map((a) => <Btn key={a.label} small primary={a.primary} onClick={() => exec(a)}>{a.label}</Btn>)}
+        {i.actions.map((a) => <Btn key={a.label} small primary={a.primary} disabled={!!hold && /^start/i.test(a.label)} title={hold && /^start/i.test(a.label) ? hold : undefined} onClick={() => exec(a)}>{a.label}</Btn>)}
       </div>
     </div>
   );
@@ -85,7 +104,7 @@ function IssuesTab({ f }: { f: Feature }) {
         return (
           <div key={name} role="group" aria-label={name}>
             <div class="gh">{name} · {rows.length}</div>
-            {rows.map((i) => <IssueRow key={i.key} i={i} picked={picked.has(i.n)} onPick={i.state === "unrefined" ? (v) => pick(i.n, v) : undefined} />)}
+            {rows.map((i) => <IssueRow key={i.key} i={i} f={f} hold={i.state === "ready" && f.status !== "Approved" ? "PRD not approved" : undefined} picked={picked.has(i.n)} onPick={i.state === "unrefined" ? (v) => pick(i.n, v) : undefined} />)}
           </div>
         );
       })}
@@ -112,6 +131,7 @@ function PrdTab({ f }: { f: Feature }) {
   const [edit, setEdit] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
   const [ask, setAsk] = useState("");
+  const toc = useMemo(() => (file ? headings(file.text) : []), [file?.text]);
   const get = () => { setErr(""); setConflict(false); http.get<PRDFile>(`/api/prd?repo=${encodeURIComponent(f.product)}&path=${encodeURIComponent(f.path)}`).then(setFile, (e) => setErr(describeError(e))); };
   useEffect(get, [f.product, f.path]);
   const save = async () => {
@@ -135,8 +155,6 @@ function PrdTab({ f }: { f: Feature }) {
           : <><Btn small primary onClick={save}>Save and commit</Btn><Btn small onClick={async () => { if (edit === file?.text || (await askConfirm("Discard your edit?"))) setEdit(null); }}>Discard</Btn></>}
         <span class="dim">{file ? `${file.path}${file.branch ? ` on ${file.branch}` : ""}` : "Loading…"}{edit !== null ? " · saving commits only this file, it does not push" : ""}</span>
       </div>
-      {file && (edit === null ? <div class="prd-read"><Markdown text={file.text} /></div>
-        : <textarea class="mono prd-edit" aria-label="PRD markdown" value={edit} onInput={(e) => setEdit((e.target as HTMLTextAreaElement).value)} />)}
       <Pane label="ask claude to change it">
         <form class="form" onSubmit={async (e) => {
           e.preventDefault();
@@ -148,6 +166,14 @@ function PrdTab({ f }: { f: Feature }) {
           <div class="acts"><Btn small type="submit" disabled={!ask.trim()}>Start update</Btn></div>
         </form>
       </Pane>
+      {file && edit === null && toc.length > 1 && (
+        <div class="prd-wrap">
+          <nav class="toc" aria-label="Table of contents"><ul>{toc.map((h) => <li key={h.id} class={`l${h.level}`}><a href={`#${h.id}`} onClick={(e) => { e.preventDefault(); document.getElementById(h.id)?.scrollIntoView({ block: "start" }); }}>{h.text}</a></li>)}</ul></nav>
+          <div class="prd-read"><Markdown text={file.text} /></div>
+        </div>
+      )}
+      {file && edit === null && toc.length <= 1 && <div class="prd-read"><Markdown text={file.text} /></div>}
+      {file && edit !== null && <textarea class="mono prd-edit" aria-label="PRD markdown" value={edit} onInput={(e) => setEdit((e.target as HTMLTextAreaElement).value)} />}
     </>
   );
 }
@@ -165,10 +191,11 @@ function ReviewTab({ f }: { f: Feature }) {
       <div class="form">
         {f.panel?.state === "failed" && <div class="banner bad">The last review failed. Start a new one.</div>}
         <span class="mu">A panel of reviewers reads the PRD, each through one lens, and the PRD interview folds their notes in, round after round, until they approve or the round cap.</span>
+        <div class="acts"><Btn small onClick={() => setLenses([...list])}>Select all</Btn><Btn small onClick={() => setLenses([])}>Select none</Btn><span class="dim">{(lenses ?? []).length} of {list.length} lenses</span></div>
         <div class="chips" role="group" aria-label="Lenses">
           {list.map((l) => { const on = (lenses ?? []).includes(l); return <button key={l} type="button" class={`chip${on ? " on" : ""}`} aria-pressed={on} onClick={() => setLenses(on ? lenses!.filter((x) => x !== l) : [...(lenses ?? []), l])}>{l}</button>; })}
         </div>
-        <div class="acts">
+        <div class="acts run-row">
           <Btn primary disabled={!lenses?.length || !docsPath} title={docsPath ? undefined : "the docs repo's checkout is not known"} onClick={() =>
             mutate(() => http.send("POST", "/api/review", { repo: f.product, artifact: `${docsPath}/${f.path}`, lenses }), "Peer review started", ["features", "panels"])}>Run the peer review panel</Btn>
           <span class="dim">{offers ? `up to ${offers.max_rounds} rounds` : ""}</span>
@@ -226,28 +253,35 @@ export function FeaturePage() {
     <>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="#/features">Features</a> › <span>{f.title}</span></nav>
       <Header title={f.title} sub={<><a href={f.prd_route}>{f.path}</a>{f.epic && <> · <a href={f.epic.url} target="_blank" rel="noreferrer">epic {f.epic.key}</a></>}</>}>
-        <span class="popw">
-          <Btn small onClick={() => setMore(!more)}>More ▾</Btn>
-          {more && (
-            <div class="pop menu" onMouseLeave={() => setMore(false)}>
-              <button type="button" class="pi" onClick={() => { setMore(false); nav(f.prd_route); }}>Read the PRD full page</button>
-              {f.epic && <button type="button" class="pi" onClick={() => { setMore(false); setParam("tab", "issues", true); setTimeout(() => document.getElementById("add-task")?.focus(), 0); }}>Add a task</button>}
-              {f.epic && <button type="button" class="pi c-b" onClick={async () => {
-                setMore(false);
-                if (closeEpic) { await exec(closeEpic); return; }
-                const [o, n] = f.epic!.repo.split("/");
-                if (await askConfirm(`Close epic #${f.epic!.n} and its ${f.counts.open} open issues as completed?`)) await mutate(() => http.send("POST", `/api/epics/${o}/${n}/${f.epic!.n}/close`, {}), "Epic closed", ["features"]);
-              }}>Close epic and its issues</button>}
-            </div>
-          )}
-        </span>
+        <Popover inline open={more} setOpen={setMore} trigger={
+          <button type="button" class="btn sm" aria-haspopup="menu" aria-expanded={more} onClick={() => setMore(!more)}>More ▾</button>
+        }>
+          <div class="menu" role="menu" aria-label="More actions">
+            <button type="button" role="menuitem" class="pi" onClick={() => { setMore(false); nav(f.prd_route); }}>Read the PRD full page</button>
+            {f.epic && <button type="button" role="menuitem" class="pi" onClick={() => { setMore(false); setParam("tab", "issues", true); setTimeout(() => document.getElementById("add-task")?.focus(), 0); }}>Add a task</button>}
+            {f.epic && <button type="button" role="menuitem" class="pi c-b" onClick={async () => {
+              setMore(false);
+              if (closeEpic) { await exec(closeEpic); return; }
+              const [o, n] = f.epic!.repo.split("/");
+              if (await askConfirm(`Close epic #${f.epic!.n} and its ${f.counts.open} open issues as completed?`)) await mutate(() => http.send("POST", `/api/epics/${o}/${n}/${f.epic!.n}/close`, {}), "Epic closed", ["features"]);
+            }}>Close epic and its issues</button>}
+          </div>
+        </Popover>
       </Header>
       <FeatureStrip f={f} link={false} />
       <BuildMap f={f} />
-      <div class="chips" role="tablist" aria-label="Feature tabs">
-        {TABS.map(([t, l]) => <button key={t} type="button" role="tab" aria-selected={tab === t} class={`chip${tab === t ? " on" : ""}`} onClick={() => setParam("tab", t, true)}>{l}{t === "issues" && f.counts.open ? ` ${f.counts.open}` : ""}{t === "sessions" && f.sessions.length ? ` ${f.sessions.length}` : ""}</button>)}
+      <div class="chips" role="tablist" aria-label="Feature tabs" onKeyDown={(e) => {
+        const k = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : e.key === "Home" ? -99 : e.key === "End" ? 99 : 0;
+        if (!k) return;
+        e.preventDefault();
+        const at = TABS.findIndex(([t]) => t === tab);
+        const to = TABS[Math.abs(k) === 99 ? (k < 0 ? 0 : TABS.length - 1) : (at + k + TABS.length) % TABS.length]![0];
+        setParam("tab", to, true);
+        setTimeout(() => document.getElementById(`tab-${to}`)?.focus(), 0);
+      }}>
+        {TABS.map(([t, l]) => <button key={t} type="button" role="tab" id={`tab-${t}`} aria-selected={tab === t} aria-controls="feature-panel" tabIndex={tab === t ? 0 : -1} class={`chip${tab === t ? " on" : ""}`} onClick={() => setParam("tab", t, true)}>{l}{t === "issues" && f.counts.open ? ` ${f.counts.open}` : ""}{t === "sessions" && f.sessions.length ? ` ${f.sessions.length}` : ""}</button>)}
       </div>
-      <Pane label={TABS.find(([t]) => t === tab)?.[1] ?? ""}>
+      <Pane label={TABS.find(([t]) => t === tab)?.[1] ?? ""} id="feature-panel" role="tabpanel" labelledBy={`tab-${tab}`}>
         {tab === "issues" && <IssuesTab f={f} />}
         {tab === "prd" && <PrdTab f={f} />}
         {tab === "review" && <ReviewTab f={f} />}

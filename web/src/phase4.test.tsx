@@ -17,7 +17,7 @@ describe("small changes, dispatch page, issue/PR panel", () => {
   it("small changes: matrix, ready to run, needs refining, all issues", () => {
     nav("#/changes");
     const html = renderToString(<App />);
-    for (const s of ["Where they stand", "ready to run · 2", "as a dispatch", "needs refining first · 1", "all issues · 4", "Typo on the payouts page", "P1"]) expect(html.toLowerCase()).toContain(s.toLowerCase());
+    for (const s of ["Where they stand", "ready to run · 2", "as a dispatch", "needs refining first · 1", "other issues · 1", "Typo on the payouts page", "P1"]) expect(html.toLowerCase()).toContain(s.toLowerCase());
   });
   it("routes and renders a dispatch page with lanes and activity", () => {
     expect(parseHash("#/dispatches/d1a2b3c4d5e6?lane=x")).toMatchObject({ screen: "dispatches", id: "d1a2b3c4d5e6", query: { lane: "x" } });

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Changed
+
+- **Inbox:** Decide and Fix rows are grouped by kind with counts; Conflict and Cleanup collapse after 5 rows with a "Show all N" control; a text filter narrows every group. Failed and stalled rows show the skill and issue ("implement-issue #73 failed") instead of the raw prompt, which moves to the drawer; the drawer names raw kinds ("Review approved"). Wait rows carry a ◷ glyph and Fix rows a ▲, not only a colour. PR rows (conflict, ready to merge) now carry `at` from the PR's `updated_at` (`poller.OpenPR.UpdatedAt`). The first paint shows the last inbox this browser saw.
+- **Features:** a filter box and compact one-line rows (the default above 8 features, toggleable); fully done epics show "ready to close"; the redundant "Describe a feature or a fix" button is gone; stage ticks use `aria-current="step"`.
+- **Feature page:** the More menu is a `Popover` (`role=menu`, closes on outside click and Escape, opens inline so it never covers the strip's buttons); tabs follow the ARIA tabs pattern with arrow keys; the build map has a legend; blockers are links with the title on hover; priority shows as P0 to P3; the peer-review tab has select all/none and a clear gap before Run; a Ready issue warns, and its Start is disabled, until the PRD is approved; the PRD tab has a table of contents (sticky on wide screens) and the "ask claude to change it" box above the PRD.
+- **PRD view:** a missing query shows "No PRD selected" with a link to Features; the repo/path label is monospace; Back falls back to Features without in-app history.
+- **Small changes:** each section shows 50 rows with "Show all N"; no issue appears in two sections (the last list is now "other issues"); the "Where they stand" matrix hides with one priority bucket and has `th scope`; "Pick first 30 of N" states the cap; picked keys that vanish on refetch are pruned; issue links open in a new tab.
+
 ### Added
 
 - The Inbox raises a `session_stalled` item (group **Fix**, key `stalled:<id>`) for a session the idle guard let stop unfinished, with **Continue** (`POST /api/sessions/<id>/continue`) as its primary action, plus Open session and Dismiss. It goes away once the session resumes or is dismissed. A dispatch lane's session gets no such item; the lane's `dispatch_stalled` row covers it.

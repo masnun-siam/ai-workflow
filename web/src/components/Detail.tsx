@@ -5,6 +5,7 @@ import { SessionView, statusTone } from "./SessionView";
 import { Empty, Tag } from "./ui";
 import { nav } from "../state/route";
 import { ago } from "../state/format";
+import { displayTitle, typeLabel } from "../state/inboxView";
 
 export type Target =
   | { kind: "card"; card: Card }
@@ -50,7 +51,8 @@ export function Detail({ t }: { t: Target }) {
         <ActionBar actions={t.row.actions} /></div>
     );
   }
-  const title = t.kind === "card" ? t.card.title : t.item.title;
+  const title = t.kind === "card" ? t.card.title : displayTitle(t.item);
+  const fullTitle = t.kind === "inbox" && displayTitle(t.item) !== t.item.title ? t.item.title : "";
   const tag = t.kind === "card" ? t.card.tag : t.item.kind;
   const tone = t.kind === "card" ? t.card.tone : "c-w";
   const log = (t.kind === "card" ? t.card.log : t.item.detail) ?? [];
@@ -60,8 +62,9 @@ export function Detail({ t }: { t: Target }) {
     <div class="det">
       <div class="dh"><Tag tone={tone}>{tag}</Tag><b>{title}</b></div>
       <span class="dim mono">
-        {t.kind === "card" ? `${t.card.skill || "—"} · ${t.card.repo}` : `${t.item.type}${t.item.repo ? ` · ${t.item.repo}` : ""}${t.item.at ? ` · ${ago(t.item.at)}` : ""}`}
+        {t.kind === "card" ? `${t.card.skill || "—"} · ${t.card.repo}` : `${typeLabel(t.item.type)}${t.item.repo ? ` · ${t.item.repo}` : ""}${t.item.at ? ` · ${ago(t.item.at)}` : ""}`}
       </span>
+      {fullTitle && <pre class="note">{fullTitle}</pre>}
       {log.length > 0 && !ask && <div class="log">{log.map((l, i) => <span key={i}>{l}</span>)}</div>}
       {ask && <AskForm key={ask.round.id} sessionId={ask.sessionId} round={ask.round} />}
       {note && <pre class="note">{note}</pre>}

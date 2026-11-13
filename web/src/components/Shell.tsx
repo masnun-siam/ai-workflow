@@ -67,19 +67,26 @@ export function RepoList({ list, first, selected, extrasBefore = [], extrasAfter
   );
 }
 
+/** Escape closes an open popover and stops there, so it does not also leave the page or close a drawer. */
+export function closeOnEscape(e: Pick<KeyboardEvent, "key" | "stopPropagation" | "preventDefault">, setOpen: (v: boolean) => void): boolean {
+  if (e.key !== "Escape") return false;
+  setOpen(false); e.stopPropagation(); e.preventDefault();
+  return true;
+}
+
 /** A popover anchored under its trigger; closes on outside click and Escape. */
-export function Popover({ open, setOpen, trigger, children, wide, fit }: { open: boolean; setOpen: (v: boolean) => void; trigger: preact.ComponentChildren; children: preact.ComponentChildren; wide?: boolean; fit?: boolean }) {
+export function Popover({ open, setOpen, trigger, children, wide, fit, inline }: { open: boolean; setOpen: (v: boolean) => void; trigger: preact.ComponentChildren; children: preact.ComponentChildren; wide?: boolean; fit?: boolean; inline?: boolean }) {
   const box = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     if (!open) return;
     const down = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) setOpen(false); };
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { setOpen(false); e.stopPropagation(); } };
+    const key = (e: KeyboardEvent) => { closeOnEscape(e, setOpen); };
     document.addEventListener("mousedown", down);
     box.current?.addEventListener("keydown", key);
     const el = box.current;
     return () => { document.removeEventListener("mousedown", down); el?.removeEventListener("keydown", key); };
   }, [open]);
-  return <span class={`popw${fit ? " fit" : ""}`} ref={box}>{trigger}{open && <div class={`pop${wide ? " wide" : ""}${fit ? " fit" : ""}`}>{children}</div>}</span>;
+  return <span class={`popw${fit ? " fit" : ""}${inline ? " inline" : ""}`} ref={box}>{trigger}{open && <div class={`pop${wide ? " wide" : ""}${fit ? " fit" : ""}`}>{children}</div>}</span>;
 }
 
 /** The current repo (g r): new runs start here, and it picks the product River, Releases and Ops show. */
