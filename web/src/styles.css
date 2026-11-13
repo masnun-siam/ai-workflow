@@ -569,6 +569,28 @@ a.btn{text-decoration:none;color:var(--tx)}
 .fld .popw{display:flex}
 .b-skip{background:repeating-linear-gradient(45deg,var(--line) 0 3px,transparent 3px 6px)}
 
+/* #1054: dispatches, activity, session page, start */
+.pop:has(>.menu){width:240px;right:0;left:auto}
+.pop>.menu{padding:4px 0}
+.pi.bad{color:var(--bad)}
+.dprog{white-space:nowrap}
+.dprog .dim{flex:none}
+.fields>.fld.check{align-self:end;justify-content:flex-end}
+.log .daysep{margin-top:4px;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+.nowrap{white-space:nowrap}
+.cl-row{display:flex;gap:8px;align-items:baseline;min-width:0}
+.cl-row .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:0 1 auto}
+.cl-row .dim{flex:none}
+.txw{position:relative;display:flex;flex-direction:column}
+.txw.fill .tx{max-height:none;overflow:visible}
+.txw .jump{position:sticky;bottom:12px;align-self:center;margin-top:8px;box-shadow:0 6px 18px rgba(0,0,0,.3)}
+.tx .tool .copy{float:right;margin:2px 0 0 8px}
+details.meta>summary{cursor:pointer;color:var(--mu);font-size:12.5px;padding:2px 0}
+details.meta[open]>summary{margin-bottom:6px}
+.start-cmds .cmd-q{margin:0 10px 6px;width:calc(100% - 20px);box-sizing:border-box}
+.start-cmds .cmd-none{padding:6px 14px}
+.dh .r{text-align:right;font-size:12px}
+
 /* ---------- Audit: scale and menus (#1053) ---------- */
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .gh.sub{padding-top:6px;text-transform:none;letter-spacing:0;color:var(--mu);font-weight:500}

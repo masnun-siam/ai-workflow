@@ -43,15 +43,15 @@ export function AskForm({ sessionId, round }: { sessionId: string; round: Round 
               const on = d.labels.includes(o.label);
               if (quick) {
                 return (
-                  <button type="button" disabled={busy} class={`btn qopt${o.label === q.recommended ? " pri" : ""}`} onClick={() => send([{ labels: [o.label], other: "" }])}>
-                    <kbd>{"abc"[oi] ?? ""}</kbd>
+                  <button key={oi} type="button" disabled={busy} class={`btn qopt${o.label === q.recommended ? " pri" : ""}`} onClick={() => send([{ labels: [o.label], other: "" }])}>
+                    {"abc"[oi] && <kbd>{"abc"[oi]}</kbd>}
                     <b>{o.label}</b>{o.label === q.recommended && <span class="rec">recommended</span>}
                     {o.description && <span class="qd">{o.description}</span>}
                   </button>
                 );
               }
               return (
-                <label class={`opt${on ? " on" : ""}`}>
+                <label key={oi} class={`opt${on ? " on" : ""}`}>
                   <input type={q.multiSelect ? "checkbox" : "radio"} name={`q${i}`} checked={on} onChange={() => patch(i, toggleLabel(d, o.label, q.multiSelect))} />
                   <span><b>{o.label}</b>{o.label === q.recommended && <span class="rec"> recommended</span>}
                     {o.description && <small>{o.description}</small>}{o.preview && <pre>{o.preview}</pre>}</span>
