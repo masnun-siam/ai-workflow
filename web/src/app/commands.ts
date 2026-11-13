@@ -1,36 +1,26 @@
 import { submitAnswers } from "../components/AskForm";
-import { workTarget } from "../components/WorkPanel";
-import { awayChangeOpen } from "../components/AwaySummary";
-import { createRepo, publishRepo } from "../components/Repos";
 import { targetActions, targetId, targetRound } from "../components/Detail";
 import { emptyDraft } from "../state/answer";
 import { me } from "../state/data";
 import { exec } from "../state/exec";
 import type { Cmd } from "../state/keymap";
 import { LAYOUTS, LOOKS, MODES, next, prefs, setPref } from "../state/prefs";
-import { goScreen, nav, route, setParam } from "../state/route";
+import { goBack, goScreen, nav, route, setParam, type ScreenId } from "../state/route";
+import { closeTopLayer } from "../state/layers";
 import { currentTarget, hasList, listLength, inboxItems, stages } from "../state/select";
-import { clamp, confirmReq, createOpen, detailOpen, helpOpen, openCreate, paletteOpen, repoOpen, sel, setSel, startReq, toast } from "../state/ui";
+import { clamp, detailOpen, helpOpen, openCreate, paletteOpen, repoOpen, sel, setSel, toast } from "../state/ui";
 import { releaseKey } from "../screens/Releases";
-import { runBlubird } from "../screens/settings/Blubird";
+import { blubirdAction } from "../screens/settings/Blubird";
 import type { Action } from "../api/types";
 
 /** Actions bound to keys that belong to the screen, not the selected item. */
 export const screenActionList = (): readonly Action[] => (route.value.screen === "me" ? (me.value?.actions ?? []) : []);
 
-export function closeTopLayer(): boolean {
-  if (confirmReq.value) { confirmReq.value.resolve(false); return true; }
-  if (awayChangeOpen.value) { awayChangeOpen.value = false; return true; }
-  if (createRepo.value) { createRepo.value = null; return true; }
-  if (publishRepo.value) { publishRepo.value = null; return true; }
-  if (repoOpen.value) { repoOpen.value = false; return true; }
-  if (workTarget.value) { workTarget.value = null; return true; }
-  if (startReq.value) { startReq.value = null; return true; }
-  if (createOpen.value) { createOpen.value = false; return true; }
-  if (paletteOpen.value) { paletteOpen.value = false; return true; }
-  if (helpOpen.value) { helpOpen.value = false; return true; }
-  if (detailOpen.value) { detailOpen.value = false; return true; }
-  return false;
+/** The screen Escape goes back to from a detail page: a feature page to Features, a dispatch to Dispatches, a session to Activity, the PRD view to Features. */
+export function parentScreen(): ScreenId | null {
+  const r = route.value;
+  if (r.screen === "prd") return "features";
+  return r.id && (r.screen === "features" || r.screen === "dispatches" || r.screen === "activity") ? r.screen : null;
 }
 
 export function runCommand(c: Cmd): void {
@@ -39,7 +29,7 @@ export function runCommand(c: Cmd): void {
     case "go": detailOpen.value = false; goScreen(c.screen); return;
     case "palette": paletteOpen.value = true; return;
     case "help": helpOpen.value = !helpOpen.value; return;
-    case "escape": if (!closeTopLayer() && route.value.id) nav("#/activity"); return;
+    case "escape": if (!closeTopLayer()) { const parent = parentScreen(); if (parent) goBack(parent); } return;
     case "new": openCreate(); return;
     case "repo": repoOpen.value = true; return;
     case "mode": setPref("mode", next(MODES, prefs.value.mode)); toast(`Mode: ${prefs.value.mode}`); return;
@@ -87,9 +77,9 @@ export function runCommand(c: Cmd): void {
         setParam("tab", tabs[(cur + (c.key === "]" ? 1 : tabs.length - 1)) % tabs.length]!, true);
         return;
       }
-      if (screen === "settings") { if (c.key === "u") void runBlubird("update"); else if (c.key === "i") void runBlubird("install"); }
+      if (screen === "settings") { if (c.key === "u") void blubirdAction("update"); else if (c.key === "i") void blubirdAction("install"); }
       return;
     }
   }
 }
-export { hasList };
+export { closeTopLayer, hasList };

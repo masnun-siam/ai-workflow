@@ -28,7 +28,7 @@ export function Inbox() {
               <div key={g} role="group" aria-label={name}>
                 <div class="gh">{name}</div>
                 {rows.map(({ it, i }) => (
-                  <button key={it.key} type="button" class={`row${i === cur ? " sel" : ""}`} aria-current={i === cur}
+                  <button key={it.key} type="button" class={`row${i === cur ? " sel" : ""}`} aria-current={i === cur || undefined}
                     onClick={() => { setSel({ inbox: i }); if (prefs.value.layout === "drawer") detailOpen.value = true; }}>
                     <span class={`tag ${g === "wait" ? "" : "c-w"}`}>{it.kind}</span>
                     <span class="t">{it.title}</span>
