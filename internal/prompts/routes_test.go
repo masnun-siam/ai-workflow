@@ -22,13 +22,17 @@ func TestRegistryRoute(t *testing.T) {
 			Available                   bool
 		}
 	}
-	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &out) != nil || len(out.Steps) != 22 {
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &out) != nil || len(out.Steps) != 23 {
 		t.Fatalf("%d %s", w.Code, w.Body.String())
 	}
 	for _, s := range out.Steps {
 		switch s.ID {
 		case "implement-issue":
 			if s.Available || s.Reason != "blubird is not installed" || s.Command != "/blubird:implement-issue" {
+				t.Fatalf("%+v", s)
+			}
+		case "report-bug":
+			if s.Command != "/blubird:reproduce-bug" || s.Source != "blubird" || s.RunsIn != "repo" {
 				t.Fatalf("%+v", s)
 			}
 		case "release-pr":
