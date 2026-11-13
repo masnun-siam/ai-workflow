@@ -46,8 +46,8 @@ export function Detail({ t }: { t: Target }) {
   if (t.kind === "ops") {
     return (
       <div class="det"><div class="dh"><b>{t.row.label}</b></div><span class="dim">{t.row.scope} · {t.row.summary}</span>
-        <table class="t"><tbody>{t.row.targets.map((x) => (
-          <tr><td class="mono">{x.repo}</td><td>{x.last ? <Tag tone={statusTone(x.last.status)}>{x.last.status}</Tag> : "never"}</td><td>{x.note}</td></tr>))}</tbody></table>
+        <table class="t"><thead><tr><th scope="col">Repo</th><th scope="col">Last run</th><th scope="col">Note</th></tr></thead><tbody>{t.row.targets.map((x) => (
+          <tr key={x.repo}><td class="mono">{x.repo}</td><td>{x.last ? <Tag tone={statusTone(x.last.status)}>{x.last.status}</Tag> : "never"}</td><td>{x.note}</td></tr>))}</tbody></table>
         <ActionBar actions={t.row.actions} /></div>
     );
   }

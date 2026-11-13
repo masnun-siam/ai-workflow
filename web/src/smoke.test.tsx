@@ -18,7 +18,7 @@ beforeAll(async () => {
 
 const SCREENS: [string, string][] = [["#/river", "Merchant payouts v2"], ["#/inbox", "Questions"], ["#/activity", "Payout batch model"], ["#/dispatches", "Dispatches"],
   ["#/features", "Features"], ["#/changes", "Small changes"], ["#/releases", "release note preview"],
-  ["#/ops", "security-sweep"], ["#/me", "Reconcile today"], ["#/settings", "appearance"], ["#/prd?repo=a/b&path=x.md", "PRD"]];
+  ["#/ops", "security-sweep"], ["#/me", "Run day-end"], ["#/settings", "appearance"], ["#/prd?repo=a/b&path=x.md", "PRD"]];
 
 describe("smoke render from mock fixtures", () => {
   for (const look of ["classic", "console", "river"] as const) {
