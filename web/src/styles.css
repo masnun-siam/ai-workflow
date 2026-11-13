@@ -589,4 +589,5 @@ details.meta>summary{cursor:pointer;color:var(--mu);font-size:12.5px;padding:2px
 details.meta[open]>summary{margin-bottom:6px}
 .start-cmds .cmd-q{margin:0 10px 6px;width:calc(100% - 20px);box-sizing:border-box}
 .start-cmds .cmd-none{padding:6px 14px}
-.dh .r{text-align:right;font-size:12px}.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.dh .r{text-align:right;font-size:12px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
