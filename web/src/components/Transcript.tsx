@@ -44,7 +44,8 @@ const lastText = (list: TranscriptEvent[], i: number): string | undefined => {
 /** The page scrolls with the transcript (`fill`), or the box does (the drawer). "Jump to latest" shows once you scroll up. */
 export function Transcript({ events, hooksOnly, fill }: { events: TranscriptEvent[]; hooksOnly?: boolean; fill?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
-  const stick = useRef(true);
+  // The page variant opens at the top (heading, question, actions); it follows new events only once you scroll to the end.
+  const stick = useRef(!fill);
   const [away, setAway] = useState(false);
   const list = hooksOnly ? events.filter((e) => e.kind === "hook") : events;
   const toEnd = () => { const el = ref.current; if (fill) window.scrollTo({ top: document.documentElement.scrollHeight }); else if (el) el.scrollTop = el.scrollHeight; };

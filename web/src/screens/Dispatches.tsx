@@ -201,11 +201,14 @@ function PauseButton({ d }: { d: Dispatch }) {
 function NumSetting({ label, value, placeholder, parse, onSave }: { label: string; value: number | null; placeholder?: string; parse: typeof parseMax; onSave: (v: number | null) => Promise<unknown> }) {
   const [text, setText] = useState(value == null ? "" : String(value));
   const [saved, setSaved] = useState(false);
-  useEffect(() => setText(value == null ? "" : String(value)), [value]);
+  const sent = useRef<number | null | undefined>(undefined);
+  useEffect(() => { setText(value == null ? "" : String(value)); sent.current = undefined; }, [value]);
   const n = parse(text);
   const commit = async () => {
-    if (!n.ok || n.value === value) return;
-    if ((await onSave(n.value)) !== undefined) { setSaved(true); setTimeout(() => setSaved(false), 2000); }
+    if (!n.ok || n.value === value || n.value === sent.current) return;
+    sent.current = n.value;
+    if ((await onSave(n.value)) === undefined) sent.current = undefined;
+    else { setSaved(true); setTimeout(() => setSaved(false), 2000); }
   };
   return (
     <Field label={label} error={n.ok ? "" : n.error} hint={saved ? "Saved" : undefined}>
@@ -221,7 +224,7 @@ function Settings({ d }: { d: Dispatch }) {
   const s = d.settings;
   return (
     <div class="fields">
-      <NumSetting label="At most at once" value={s.max} parse={parseMax} onSave={(v) => set({ max: v ?? undefined })} />
+      <NumSetting label="At most at once" value={s.max} parse={(t) => (t.trim() ? parseMax(t) : { ok: false, error: "Enter a whole number from 1 to 10" })} onSave={(v) => set({ max: v ?? undefined })} />
       <Field label="Grind"><Select label="Grind" value={s.grind} onChange={(v) => void set({ grind: v as DispatchSettings["grind"] })} options={[["off", "Off"], ["simple", "Simple"], ["full", "Full"]]} /></Field>
       <Field label="CI"><Select label="CI" value={s.ci} onChange={(v) => void set({ ci: v as DispatchSettings["ci"] })} options={[["wait", "Wait"], ["defer", "Defer"], ["ignore", "Ignore"]]} /></Field>
       <NumSetting label="Cost cap (USD)" value={s.max_cost} placeholder="none" parse={parseCost} onSave={(v) => set({ max_cost: v })} />
@@ -365,7 +368,14 @@ function DispatchPage() {
   // Refetch the full record when the id changes or the list row changes in a way the page shows, not on every list reload.
   const sig = fromList ? `${fromList.state}|${fromList.ended_at}|${fromList.totals.closed}|${fromList.lanes.map((l) => `${l.stage}${l.pr}${l.needs_you}${l.stalled}${l.paused}${l.hold_merge}${l.stranded}`).join(",")}` : "";
   useEffect(() => { setFull(null); }, [id]);
-  useEffect(() => { void http.get<Dispatch>(`/api/dispatches/${id}`).then(setFull, () => setFull(null)); }, [id, sig]);
+  const running = !!fromList && live(fromList);
+  useEffect(() => {
+    const get = () => void http.get<Dispatch>(`/api/dispatches/${id}`).then(setFull, () => setFull(null));
+    get();
+    // The list row has no events or spend detail, so a live dispatch also refreshes on a slow timer.
+    const t = running ? setInterval(get, 5000) : undefined;
+    return () => clearInterval(t);
+  }, [id, sig, running]);
   const d = (full?.id === id ? full : null) ?? fromList;
   if (!d) return <><Header title="Dispatch"><Btn small onClick={() => nav("#/dispatches")}>← Dispatches</Btn></Header><Empty>{dispatches.value ? "No such dispatch." : "Loading…"}</Empty></>;
   const lane = d.lanes.find((l) => l.key === route.value.query.lane);
