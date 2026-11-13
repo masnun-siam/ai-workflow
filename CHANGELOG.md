@@ -5,11 +5,13 @@
 ### Added
 
 - **Stalled** in the UI: a dispatch lane or session that stopped without finishing shows a **Stalled** tag, a "Stalled: <reason>" banner and a **Continue** button (lane action `continue`, `POST /api/sessions/<id>/continue`). Stalled lanes count as **Needs you** on the dispatch list and page. Inbox rows of type `session_stalled` and `dispatch_stalled` sit under **Fix**. When Continue finds it is no longer stalled (409), the dispatch or session reloads.
-- `POST /api/sessions/<id>/continue` resumes a stalled session's own Claude session with "Continue the `<step>` flow from where you stopped…". A session that is not stalled gets 409 `session is not stalled`. The UI Continue button on sessions now works.
-- Settings gain `idle_guard` (on by default; a settings file without it reads as on), returned by `GET /api/settings` and saved by `PUT /api/settings`. Nothing obeys it yet: the headless idle guard that uses it lands next.
+- `POST /api/sessions/<id>/continue` resumes a stalled session's own Claude session with "Continue the `<step>` flow from where you stopped…". A session that is not stalled gets 409 `session is not stalled`, and a second Continue while the first is still starting gets 409 `session is already resuming`. The UI Continue button on sessions now works.
+- Settings gain `idle_guard` (on by default; a settings file without it reads as on), returned by `GET /api/settings` and saved by `PUT /api/settings`. Dispatch lanes obey it (below).
+- With `idle_guard` on, an implementing dispatch lane whose session has been idle for 3 minutes without a ready PR is **stalled** ("stopped before a PR") instead of needs-you "stopped without a ready PR": the lane JSON gains `stalled` (and `needs_you` is null while it is set), and the Inbox shows it under Fix as `dispatch_stalled` with Retry, not under Questions. A session blocked on a real question still needs you. Retry, skip, a resumed session or a stage change clears it.
 
 ### Fixed
 
+- The Small change route files again: its text and the Priority line may span several lines (setu refused every multi-line argument). Step arguments are capped at 20,000 characters.
 - A dispatch no longer stalls silently behind a skipped issue. Lanes whose blockers were skipped show **Can't start** at once (the `stranded` and `skipped_deps` lane fields), with **Run #N again** and a new **Unblock** lane action that lets them start without the skipped blocker.
 - A skipped or closed lane no longer keeps its old "needs you", held or gate text, no longer raises an Inbox item, and stops its clock when it ends.
 - The lane panel offers only the actions that apply: no Merge without a PR, no message box on a finished lane, **Run it again** on a skipped one. It lists the sessions for the issue and the PRs the last one opened in other repos, which a dispatch never merges.
