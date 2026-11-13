@@ -116,7 +116,7 @@ func (s sessNotifier) Notify(event string, n sessions.Note) {
 // ---- dispatch -> away.Lanes ----
 
 // lanes implements away.Lanes over the dispatch store: stuck = a lane of a running or paused
-// dispatch that is held or needs the owner for a reason other than a question.
+// dispatch that is held, needs the owner for a reason other than a question, or is stalled.
 type lanes struct{ d *dispatch.Service }
 
 func (l lanes) Stuck() []away.StuckLane {
@@ -129,14 +129,17 @@ func (l lanes) Stuck() []away.StuckLane {
 			if !store.Active(x.Stage) || (x.Paused && x.PausedBy == "user") {
 				continue
 			}
-			why := x.Held
+			why, stalled := x.Held, false
 			if why == "" {
 				why = x.NeedsYou
+			}
+			if why == "" && x.Stalled != "" {
+				why, stalled = "Stalled: "+x.Stalled, true
 			}
 			if why == "" || strings.Contains(why, "waiting on you") || strings.Contains(why, "waits on you") {
 				continue
 			}
-			out = append(out, away.StuckLane{Dispatch: d.ID, Lane: k, Issue: x.N, Repo: x.Repo, Why: why})
+			out = append(out, away.StuckLane{Dispatch: d.ID, Lane: k, Issue: x.N, Repo: x.Repo, Why: why, Stalled: stalled})
 		}
 	}
 	return out
@@ -144,5 +147,10 @@ func (l lanes) Stuck() []away.StuckLane {
 
 func (l lanes) Retry(id, lane string) error {
 	_, err := l.d.LaneAction(id, lane, "retry", "")
+	return err
+}
+
+func (l lanes) Continue(id, lane string) error {
+	_, err := l.d.LaneAction(id, lane, "continue", "")
 	return err
 }

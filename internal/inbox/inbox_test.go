@@ -228,8 +228,13 @@ func TestEveryKeptType(t *testing.T) {
 		}
 	}
 	m := byType(l)
-	if s := m[TDispatchStalled]; s.Key != "dispatch:d1:acme/api#24:stalled" || s.Group != GFix || s.Detail[0] != "Stalled: stopped before a PR" || s.Actions[0].Key != "r" {
+	if s := m[TDispatchStalled]; s.Key != "dispatch:d1:acme/api#24:stalled" || s.Group != GFix || s.Detail[0] != "Stalled: stopped before a PR" {
 		t.Errorf("stalled lane: %+v", s)
+	}
+	if a := m[TDispatchStalled].Actions; len(a) != 3 || a[0].Key != "c" || !a[0].Primary || !a[0].Clears || a[0].Method != "POST" ||
+		a[0].Path != "/api/dispatches/d1/lane" || a[0].Body.(map[string]any)["action"] != "continue" || a[0].Body.(map[string]any)["lane"] != "acme/api#24" ||
+		a[1].Key != "r" || a[1].Primary || a[2].Key != "o" {
+		t.Errorf("stalled lane actions: %+v", a)
 	}
 	for _, it := range l.Items {
 		if it.Key == "dispatch:d1:acme/api#24:needs" {

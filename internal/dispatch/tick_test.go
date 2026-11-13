@@ -593,3 +593,24 @@ func TestLaneStallNotifiesOnce(t *testing.T) {
 		}
 	}
 }
+
+func TestContinueOutbox(t *testing.T) {
+	// a session with no step name falls back to the lane's step
+	e := newEnv(t)
+	e.seed(nil, &store.Lane{Repo: "o/r", N: 5, Stage: store.StImplementing, Handle: &store.Handle{Session: "S1"}, Outbox: []store.OutboxItem{{Kind: "continue"}}})
+	e.sess.recs["S1"] = &sessions.Record{ID: "S1", Status: sessions.StDone}
+	e.tick()
+	if len(e.sess.Sent) != 1 || !strings.HasPrefix(e.sess.Sent[0].Text, "Continue the `implement-issue` flow") {
+		t.Fatalf("%+v", e.sess.Sent)
+	}
+
+	// a failing resume needs the user, like a failing send
+	e2 := newEnv(t)
+	e2.seed(nil, &store.Lane{Repo: "o/r", N: 5, Stage: store.StImplementing, Handle: &store.Handle{Session: "S1"}, Outbox: []store.OutboxItem{{Kind: "continue"}}})
+	e2.sess.recs["S1"] = &sessions.Record{ID: "S1", Status: sessions.StDone, Step: "implement-issue"}
+	e2.sess.SendErr = errs.Conflict("issue o/r#5 already has a live session", nil)
+	e2.tick()
+	if e2.lane(5).NeedsYou != "continue failed: issue o/r#5 already has a live session" {
+		t.Fatalf("%q", e2.lane(5).NeedsYou)
+	}
+}

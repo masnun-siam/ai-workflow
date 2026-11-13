@@ -126,6 +126,24 @@ func TestCLIShapes(t *testing.T) {
 	if code, _, _ := runCLI(t, h, "lane", "aaaaaaaaaaaa", "10", "dance"); code != ExitInvalid {
 		t.Fatal(code)
 	}
+	// continue: only a stalled lane with a session; once continued it is not stalled any more
+	stalled := mustLoad(t, h)
+	stalled.Lanes["o/r#10"].Stalled, stalled.Lanes["o/r#10"].Handle = Stalled, &store.Handle{Session: "S1"}
+	if err := store.Save(h, &stalled); err != nil {
+		t.Fatal(err)
+	}
+	code, out, _ = runCLI(t, h, "lane", "aaaaaaaaaaaa", "10", "continue")
+	if l := mustLoad(t, h).Lanes["o/r#10"]; code != 0 || out != "o/r#10: continue\n" || l.Stalled != "" || l.Outbox[len(l.Outbox)-1].Kind != "continue" {
+		t.Fatal(code, out, l)
+	}
+	if code, _, errb := runCLI(t, h, "lane", "aaaaaaaaaaaa", "10", "continue"); code != ExitInvalid || !strings.Contains(errb, "lane is not stalled") {
+		t.Fatal(code, errb)
+	}
+	stalled = mustLoad(t, h)
+	stalled.Lanes["o/r#10"].NeedsYou = "waiting on you" // back to the seed for retry-failed below
+	if err := store.Save(h, &stalled); err != nil {
+		t.Fatal(err)
+	}
 	// in order: resume after cancel would revive the dispatch
 	for _, vw := range [][2]string{{"pause", "paused"}, {"resume", "resumed"}, {"cancel", "cancelled"}} {
 		verb, word := vw[0], vw[1]

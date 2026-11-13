@@ -196,3 +196,47 @@ func TestRoutesAddLanesAndCoordinators(t *testing.T) {
 	}
 	_ = sessions.StDone
 }
+
+// FR-6: continue resumes the stalled lane's own session with the Continue message; retry is untouched.
+func TestContinueLaneRoute(t *testing.T) {
+	e := newEnv(t)
+	m := mux(t, e)
+	e.seed(nil,
+		&store.Lane{Repo: "o/r", N: 5, Stage: store.StImplementing, Stalled: Stalled, IdleSince: 1, Handle: &store.Handle{Session: "S1"}, Handles: []store.Handle{{Session: "S1"}}},
+		&store.Lane{Repo: "o/r", N: 6, Stage: store.StImplementing, Handle: &store.Handle{Session: "S2"}},
+		&store.Lane{Repo: "o/r", N: 7, Stage: store.StImplementing, Stalled: Stalled})
+	e.sess.recs["S1"] = &sessions.Record{ID: "S1", Status: sessions.StDone, Step: "implement-issue"}
+	e.sess.recs["S2"] = &sessions.Record{ID: "S2", Status: sessions.StRunning}
+	path := "/api/dispatches/aaaaaaaaaaaa/lane"
+
+	code, body := call(m, "POST", path, `{"lane":"o/r#5","action":"continue"}`)
+	if code != 200 {
+		t.Fatal(code, body)
+	}
+	for _, l := range body["lanes"].([]any) {
+		if l := l.(map[string]any); l["key"] == "o/r#5" && l["stalled"] != nil {
+			t.Fatalf("still stalled: %v", l)
+		}
+	}
+	if code, body = call(m, "POST", path, `{"lane":"o/r#5","action":"continue"}`); code != 409 || body["error"] != "lane is not stalled" {
+		t.Fatal("second press", code, body)
+	}
+	if code, body = call(m, "POST", path, `{"lane":"o/r#6","action":"continue"}`); code != 409 || body["error"] != "lane is not stalled" {
+		t.Fatal("not stalled", code, body)
+	}
+	if code, body = call(m, "POST", path, `{"lane":"o/r#7","action":"continue"}`); code != 409 || body["error"] != "lane has no session" {
+		t.Fatal("no handle", code, body)
+	}
+	if l := e.lane(6); len(l.Outbox) != 0 {
+		t.Fatalf("queued on a lane that is not stalled: %+v", l.Outbox)
+	}
+
+	e.tick()
+	want := "Continue the `implement-issue` flow from where you stopped. Do the remaining steps, then end as the idle guard says."
+	if len(e.sess.Sent) != 1 || e.sess.Sent[0].ID != "S1" || e.sess.Sent[0].Text != want || len(e.sess.Launched) != 0 || len(e.sess.Stopped) != 0 {
+		t.Fatalf("sent %+v launched %+v stopped %+v", e.sess.Sent, e.sess.Launched, e.sess.Stopped)
+	}
+	if l := e.lane(5); l.Handle == nil || l.Handle.Session != "S1" || l.Stalled != "" || len(l.Outbox) != 0 {
+		t.Fatalf("%+v", l)
+	}
+}

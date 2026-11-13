@@ -1015,8 +1015,14 @@ func TestRetryCountersResetWhenHealthy(t *testing.T) {
 }
 
 type fakeLanes struct {
-	stuck   []StuckLane
-	retried []string
+	stuck     []StuckLane
+	retried   []string
+	continued []string
+}
+
+func (f *fakeLanes) Continue(d, l string) error {
+	f.continued = append(f.continued, d+"/"+l)
+	return nil
 }
 
 func (f *fakeLanes) Stuck() []StuckLane { return f.stuck }
@@ -1066,6 +1072,75 @@ func TestLaneRetryLadder(t *testing.T) {
 	r.tick()
 	if len(r.svc.load().Lanes) != 0 {
 		t.Fatal("counters kept")
+	}
+}
+
+// A stalled lane is continued, not retried, on the same ladder: same delays, same round cap.
+func TestLaneContinueLadder(t *testing.T) {
+	r := newRig(t)
+	fl := &fakeLanes{stuck: []StuckLane{
+		{Dispatch: "abc", Lane: "o/r#7", Issue: 7, Repo: "o/r", Why: "Stalled: stopped before a PR", Stalled: true},
+		{Dispatch: "abc", Lane: "o/r#8", Issue: 8, Repo: "o/r", Why: "CI is red"},
+	}}
+	r.svc.d.Lanes = fl
+	r.begin()
+	r.tick()
+	for i, d := range RetryDelays {
+		r.now = r.now.Add(time.Duration(d-1) * time.Second)
+		r.tick()
+		if len(fl.continued) != i {
+			t.Fatalf("round %d early: %v", i, fl.continued)
+		}
+		r.now = r.now.Add(time.Second)
+		r.tick()
+		if len(fl.continued) != i+1 || len(fl.retried) != i+1 {
+			t.Fatalf("round %d: continued %v retried %v", i, fl.continued, fl.retried)
+		}
+	}
+	r.now = r.now.Add(24 * time.Hour)
+	r.tick()
+	if len(fl.continued) != maxRetryRounds || fl.continued[0] != "abc/o/r#7" || fl.retried[0] != "abc/o/r#8" {
+		t.Fatalf("continued %v retried %v", fl.continued, fl.retried)
+	}
+	var picks []string
+	for _, e := range r.log() {
+		if e.Command == "dispatch lane #7" {
+			picks = append(picks, e.Picked)
+		}
+	}
+	if len(picks) != maxRetryRounds || picks[0] != "continue 1 of 4" || picks[3] != "continue 4 of 4" {
+		t.Fatalf("%v", picks)
+	}
+}
+
+// A continued lane stops being stuck until it stalls again: its rounds still add up to the cap.
+func TestLaneContinueLadderAcrossStalls(t *testing.T) {
+	r := newRig(t)
+	stalled := StuckLane{Dispatch: "abc", Lane: "o/r#7", Issue: 7, Repo: "o/r", Why: "Stalled: stopped before a PR", Stalled: true}
+	fl := &fakeLanes{stuck: []StuckLane{stalled}}
+	r.svc.d.Lanes = fl
+	r.begin()
+	r.tick()
+	for i := 0; i < 10; i++ {
+		r.now = r.now.Add(2 * time.Hour)
+		r.tick() // due: continued (until the cap)
+		fl.stuck = nil
+		r.now = r.now.Add(time.Minute)
+		r.tick() // the resumed session runs: not stuck
+		fl.stuck = []StuckLane{stalled}
+		r.now = r.now.Add(5 * time.Minute)
+		r.tick() // stalled again
+	}
+	if len(fl.continued) != maxRetryRounds {
+		t.Fatalf("continued %d times, want %d", len(fl.continued), maxRetryRounds)
+	}
+	// a held lane that recovers still has its counters cleared
+	fl.stuck = []StuckLane{{Dispatch: "abc", Lane: "o/r#8", Issue: 8, Why: "CI is red"}}
+	r.tick()
+	fl.stuck = nil
+	r.tick()
+	if _, ok := r.svc.load().Lanes["abc|o/r#8"]; ok {
+		t.Fatal("held counter kept")
 	}
 }
 
