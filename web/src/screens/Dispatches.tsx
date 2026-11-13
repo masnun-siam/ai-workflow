@@ -192,13 +192,19 @@ function Settings({ d }: { d: Dispatch }) {
 
 const settled = (l: Lane) => l.stage === "closed" || l.stage === "skipped";
 
+/** Below 980px the lane panel sits under the list: scroll it into view after a lane is picked. */
+function revealLanePanel() {
+  if (typeof matchMedia !== "function" || !matchMedia("(max-width:980px)").matches) return;
+  requestAnimationFrame(() => document.getElementById("lane-side")?.scrollIntoView?.({ behavior: "smooth", block: "start" }));
+}
+
 function LaneLine({ d, l }: { d: Dispatch; l: Lane }) {
   const [label0, tone0] = STAGE[l.stage] ?? [l.stage, ""];
   const [label, tone] = l.stranded ? ["Can't start", "c-b"] : [label0, tone0];
   const openDeps = l.deps.filter((k) => { const y = d.lanes.find((x) => x.key === k); return !y || !settled(y); });
   const why = l.stranded ?? l.needs_you ?? l.stalled ?? l.held ?? l.gate ?? l.skip_reason ?? (openDeps.length && l.stage === "queued" ? `after ${openDeps.map((k) => `#${k.split("#")[1]}`).join(", ")}` : "");
   return (
-    <button type="button" class={`irow lane${route.value.query.lane === l.key ? " sel" : ""}`} onClick={() => setParam("lane", l.key, true)}>
+    <button type="button" class={`irow lane${route.value.query.lane === l.key ? " sel" : ""}`} onClick={() => { setParam("lane", l.key, true); revealLanePanel(); }}>
       <span />
       <Tag tone={wants(l) ? "c-w" : tone}>{l.needs_you ? "Needs you" : l.stalled ? "Stalled" : label}{l.paused ? " · paused" : ""}</Tag>
       <span class="t"><span class="mono">{shortRepo(l.repo)}#{l.n}</span> {l.title}{why && <span class="dim"> · {why}</span>}{l.pr ? <span class="dim"> · PR #{l.pr}</span> : null}</span>
@@ -359,7 +365,7 @@ function DispatchPage() {
           {section("Needs you", needs)}{section("Can't start", stranded)}{section("Building now", building)}{section("Up next", next)}{section("Done", done)}{section("Skipped", skipped)}
           {!d.lanes.length && <Empty>No issues in this dispatch yet.</Empty>}
         </Pane>
-        <div class="dside">
+        <div class="dside" id="lane-side">
           {lane && <LanePanel key={lane.key} d={d} l={lane} />}
           <Pane label="activity">
             <div class="log">{(d.events ?? []).slice(-40).reverse().map((e, i) => <span key={i}><span class="dim mono">{new Date(e.at * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span> {e.lane ? <b>#{e.lane.split("#")[1]} </b> : null}{e.text}</span>)}</div>

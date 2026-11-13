@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "preact/hooks";
 import { http } from "../api/http";
 import { loadErrors, mutate, product, river, soloRepo } from "../state/data";
 import { stages } from "../state/select";
@@ -6,6 +7,24 @@ import { prefs } from "../state/prefs";
 import { Header } from "../components/Header";
 import { Btn, Empty, Pane } from "../components/ui";
 
+/** Marks the wrapper `can-l` / `can-r` while the stages overflow on that side, so the CSS can show an edge fade. */
+function useScrollCue(dep: unknown) {
+  const wrap = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const w = wrap.current, el = w?.firstElementChild as HTMLElement | null;
+    if (!w || !el) return;
+    const upd = () => {
+      w.classList.toggle("can-l", el.scrollLeft > 4);
+      w.classList.toggle("can-r", el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+    };
+    upd();
+    el.addEventListener("scroll", upd, { passive: true });
+    window.addEventListener("resize", upd);
+    return () => { el.removeEventListener("scroll", upd); window.removeEventListener("resize", upd); };
+  }, [dep]);
+  return wrap;
+}
+
 export function River() {
   const s = sel.value;
   const st = stages.value;
@@ -13,6 +32,7 @@ export function River() {
   // A repo with no product gets a River of its own; product chips would not change it.
   const solo = soloRepo.value;
   const scope = solo ?? product.value;
+  const wrap = useScrollCue(river.value ? st : null);
   return (
     <>
       <Header title="River" products={!solo} scope>
@@ -22,7 +42,7 @@ export function River() {
       {river.value && river.value.stale.length > 0 && <div class="banner">Stale GitHub data: {river.value.stale.join(", ")}</div>}
       <Pane label={`river · ${scope ?? "no product"}`}>
         {!river.value ? <Empty>Loading…</Empty> : (
-          <div class="river">
+          <div class="river-wrap" ref={wrap}><div class="river">
             {st.map((stage, si) => (
               <div key={stage.id} class={`stage${stage.cards.some((c) => c.need) ? " hot" : ""}${si === s.stage ? " cur" : ""}`}>
                 <div class="sh"><b>{stage.name}</b><span>{stage.skills}</span></div>
@@ -40,7 +60,7 @@ export function River() {
                 {stage.cards.length === 0 && <span class="dim">Nothing here.</span>}
               </div>
             ))}
-          </div>
+          </div></div>
         )}
       </Pane>
     </>

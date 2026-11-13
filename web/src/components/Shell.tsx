@@ -7,7 +7,7 @@ import { chooseRepo, currentRepo, mutate, only, repoList, repos, settings, statu
 import { MODES, next, prefs, setPref } from "../state/prefs";
 import { goScreen, nav, route, SCREENS, setParam, type ScreenId } from "../state/route";
 import { dispatchingCount, needCount, runningCount } from "../state/select";
-import { detailOpen, helpOpen, paletteOpen, repoOpen } from "../state/ui";
+import { detailOpen, helpOpen, narrow, navOpen, paletteOpen, repoOpen } from "../state/ui";
 import { clock } from "../state/format";
 import { Btn, Meter } from "./ui";
 import { openCreate } from "../state/ui";
@@ -68,7 +68,7 @@ export function RepoList({ list, first, selected, extrasBefore = [], extrasAfter
 }
 
 /** A popover anchored under its trigger; closes on outside click and Escape. */
-export function Popover({ open, setOpen, trigger, children, wide, fit }: { open: boolean; setOpen: (v: boolean) => void; trigger: preact.ComponentChildren; children: preact.ComponentChildren; wide?: boolean; fit?: boolean }) {
+export function Popover({ open, setOpen, trigger, children, wide, fit, sheet }: { open: boolean; setOpen: (v: boolean) => void; trigger: preact.ComponentChildren; children: preact.ComponentChildren; wide?: boolean; fit?: boolean; sheet?: boolean }) {
   const box = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -79,7 +79,7 @@ export function Popover({ open, setOpen, trigger, children, wide, fit }: { open:
     const el = box.current;
     return () => { document.removeEventListener("mousedown", down); el?.removeEventListener("keydown", key); };
   }, [open]);
-  return <span class={`popw${fit ? " fit" : ""}`} ref={box}>{trigger}{open && <div class={`pop${wide ? " wide" : ""}${fit ? " fit" : ""}`}>{children}</div>}</span>;
+  return <span class={`popw${fit ? " fit" : ""}`} ref={box}>{trigger}{open && <div class={`pop${wide ? " wide" : ""}${fit ? " fit" : ""}${sheet ? " sheet" : ""}`}>{children}</div>}</span>;
 }
 
 /** The current repo (g r): new runs start here, and it picks the product River, Releases and Ops show. */
@@ -137,7 +137,7 @@ export function Topbar() {
     <div class="topbar">
       <RepoSwitcher />
       <button type="button" class="btn search-btn" onClick={() => (paletteOpen.value = true)} aria-label="Search, jump or run a command" aria-keyshortcuts="Meta+K Control+K">
-        <span aria-hidden="true">⌕</span><span class="wide-only">Search, jump or run a command</span><kbd class="wide-only">⌘K</kbd>
+        <span aria-hidden="true">⌕</span><span class="narrow-only">Search</span><span class="wide-only">Search, jump or run a command</span><kbd class="wide-only">⌘K</kbd>
       </button>
       <span class="grow" />
       {need > 0 && <a class="you-pill" href="#/inbox"><i />{need} need you</a>}
@@ -214,32 +214,70 @@ function Usage() {
 
 const ICON: Record<string, string> = { system: "◐", light: "☀", dark: "☾" };
 
-export function Rail() {
+function NavItems() {
   const cur = route.value.screen;
   const count = (id: ScreenId) => (id === "inbox" ? needCount.value : id === "activity" ? runningCount.value : id === "dispatches" ? dispatchingCount.value : 0);
-  const mode = prefs.value.mode;
   return (
-    <nav class="rail" aria-label="Main">
-      <a class="brand" href="#/inbox"><b>setu</b><span>সেতু</span></a>
+    <>
       {SCREENS.map(([id, name], i) => {
         const on = cur === id;
         const n = count(id);
         return (
           <button key={id} type="button" class={`nv${on ? " on" : ""}${i === 5 ? " sep" : ""}`} aria-current={on ? "page" : undefined}
-            onClick={() => { detailOpen.value = false; goScreen(id); }}>
+            onClick={() => { detailOpen.value = false; navOpen.value = false; goScreen(id); }}>
             <kbd>{i === 9 ? 0 : i + 1}</kbd>{name}
             {n > 0 && <span class={`n${id === "inbox" ? "" : " quiet"}`} aria-label={`${n} ${id === "inbox" ? "need you" : "running"}`}>{n}</span>}
           </button>
         );
       })}
-      <div class="railfoot">
-        <AwayCard />
-        <Usage />
-        <div class="acts">
-          <Btn small title={`Theme: ${mode}`} onClick={() => setPref("mode", next(MODES, mode))}><span aria-hidden="true">{ICON[mode]}</span> {mode}</Btn>
-          <Btn small k="?" onClick={() => (helpOpen.value = true)}>keys</Btn>
-        </div>
+    </>
+  );
+}
+
+function RailFoot() {
+  const mode = prefs.value.mode;
+  return (
+    <div class="railfoot">
+      <AwayCard />
+      <Usage />
+      <div class="acts">
+        <Btn small title={`Theme: ${mode}`} onClick={() => setPref("mode", next(MODES, mode))}><span aria-hidden="true">{ICON[mode]}</span> {mode}</Btn>
+        <Btn small k="?" onClick={() => { navOpen.value = false; helpOpen.value = true; }}>keys</Btn>
       </div>
+    </div>
+  );
+}
+
+/** Wide: the side rail. Phone width (<720px): a compact top bar with the page title and a menu button
+ *  whose sheet holds the pages and the rail footer. */
+export function Rail() {
+  const cur = route.value.screen;
+  const routeId = route.value.id;
+  useEffect(() => { navOpen.value = false; }, [cur, routeId]);
+  if (narrow.value) {
+    const open = navOpen.value;
+    const title = SCREENS.find(([id]) => id === cur)?.[1] ?? "setu";
+    const need = needCount.value;
+    return (
+      <nav class="rail bar" aria-label="Main">
+        <a class="brand" href="#/inbox" aria-label="setu, go to Inbox"><b>setu</b></a>
+        <b class="bar-title" aria-live="polite">{title}</b>
+        <Popover open={open} setOpen={(v) => (navOpen.value = v)} sheet trigger={
+          <button type="button" class="btn menu-btn" aria-expanded={open} aria-label={`Menu${need ? `, ${need} need you` : ""}`} onClick={() => (navOpen.value = !open)}>
+            <span aria-hidden="true">{open ? "✕" : "☰"}</span>{need > 0 && !open && <span class="n" aria-hidden="true">{need}</span>}
+          </button>
+        }>
+          <NavItems />
+          <RailFoot />
+        </Popover>
+      </nav>
+    );
+  }
+  return (
+    <nav class="rail" aria-label="Main">
+      <a class="brand" href="#/inbox"><b>setu</b><span>সেতু</span></a>
+      <NavItems />
+      <RailFoot />
     </nav>
   );
 }
