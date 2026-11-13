@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { http } from "../api/http";
 import type { CleanupItem } from "../api/types";
-import { useFocusTrap } from "../components/ui";
+import { useFocusTrap, useLayer } from "../components/ui";
 import { activityTab, coordinators, grinds, inScope, mutate, panels, sessionList, type ActivityTab } from "../state/data";
 import { activityQuery, activityResult, RUNNING, runList } from "../state/select";
 import { askConfirm, detailOpen, sel, setSel } from "../state/ui";
@@ -18,16 +18,17 @@ function CleanupDialog({ onClose }: { onClose: () => void }) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const box = useRef<HTMLDivElement>(null);
   useFocusTrap(box);
+  useLayer(onClose);
   useEffect(() => { void http.get<{ items: CleanupItem[] }>("/api/sessions/cleanup").then((r) => setItems(r.items), () => setItems([])); }, []);
   const chosen = (items ?? []).filter((i) => picked.has(i.key));
   const toggle = (k: string) => { const s = new Set(picked); if (s.has(k)) s.delete(k); else s.add(k); setPicked(s); };
   const remove = async () => {
-    if (!(await askConfirm(`Remove ${chosen.length} session${chosen.length === 1 ? "" : "s"}? Their records and logs are deleted from setu.`))) return;
+    if (!(await askConfirm(`Remove ${chosen.length} session${chosen.length === 1 ? "" : "s"}? Their records and logs are deleted from setu.`, true))) return;
     if (await mutate(() => http.send("POST", "/api/sessions/cleanup", { keys: chosen.map((i) => i.key) }), `Removed ${chosen.length} sessions`, ["sessions"])) onClose();
   };
   return (
     <div class="ov" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div class="dlg" ref={box} role="dialog" aria-modal="true" aria-labelledby="clean-h" onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } }}><div class="form">
+      <div class="dlg" ref={box} role="dialog" aria-modal="true" aria-labelledby="clean-h"><div class="form">
         <h2 id="clean-h" class="dlg-h">Clean up old sessions</h2>
         <span class="dim">Removes the session records and logs from setu. Checkouts and branches are not touched. Tick what to remove.</span>
         {!items && <span class="dim">Loading…</span>}
@@ -85,7 +86,7 @@ function Sessions() {
       </div>
       <div class="rows">
         {list.map((s, i) => (
-          <button key={s.id} type="button" class={`row r5${i === sel.value.runs ? " sel" : ""}`} aria-current={i === sel.value.runs}
+          <button key={s.id} type="button" class={`row r5${i === sel.value.runs ? " sel" : ""}`} aria-current={i === sel.value.runs || undefined}
             onClick={() => { setSel({ runs: i }); if (prefs.value.layout === "drawer") detailOpen.value = true; }}>
             <span class={`tag ${sessionTag(s)[1]}`}>{sessionTag(s)[0]}</span>
             <span class="t mono">{s.skill ?? "free text"}</span>
@@ -122,7 +123,7 @@ export function Activity() {
               <div class="dh"><Tag tone={c.live ? "c-q" : ""}>{c.live ? "live" : "stopped"}</Tag><b title={c.source}>{friendlyRef(c.source)}</b><span class="dim" title={c.destination}>{shortRepo(c.repo)} → {friendlyRef(c.destination)}</span></div>
               <div class="tablewrap"><table class="t"><tbody>{c.queue.map((q) => <tr key={q.issue}><td>#{q.issue}</td><td>{q.title}</td><td>{q.state}</td></tr>)}</tbody></table></div>
               <div class="log">{c.events.map((e, i) => <span key={i}>{e}</span>)}</div>
-              <div class="acts">{c.session && <a href={`#/sessions/${c.session}`}>session</a>}{c.live && <Btn small bad onClick={async () => { if (await askConfirm("Stop refilling this coordinator? Running sessions keep going.")) await mutate(() => http.send("POST", `/api/coordinators/${c.run}/stop`, {}), "Coordinator stopped", ["coordinators"]); }}>Stop refilling</Btn>}</div>
+              <div class="acts">{c.session && <a href={`#/sessions/${c.session}`}>session</a>}{c.live && <Btn small bad onClick={async () => { if (await askConfirm("Stop refilling this coordinator? Running sessions keep going.", true)) await mutate(() => http.send("POST", `/api/coordinators/${c.run}/stop`, {}), "Coordinator stopped", ["coordinators"]); }}>Stop refilling</Btn>}</div>
             </div>
           ))}
           {coordinators.value?.length === 0 && <Empty>No coordinators running. Start one with : and blubird:project-coordinator.</Empty>}
@@ -135,7 +136,7 @@ export function Activity() {
               <tr key={`${g.repo}#${g.pr}`}><td class="mono">{g.repo}#{g.pr}</td><td><Tag tone={grindTone(g.state)}>{g.state}</Tag></td><td class="nowrap">{g.rounds}{g.mode ? ` · ${g.mode}` : ""}</td>{showReason && <td>{g.reason ?? ""}</td>}
                 <td><div class="acts">{g.session && <a href={`#/sessions/${g.session}`}>session</a>}
                   {g.state !== "idle" && <Btn small onClick={() => mutate(() => http.send("POST", `/api/grinds/${g.repo}/${g.pr}/skip-ci`, {}), "CI wait skipped", ["grinds"])}>Skip CI</Btn>}
-                  {g.state !== "idle" && <Btn small bad onClick={async () => { if (await askConfirm(`Stop grinding ${g.repo}#${g.pr}?`)) await mutate(() => http.send("POST", `/api/grinds/${g.repo}/${g.pr}/stop`, {}), "Grind stopped", ["grinds"]); }}>Stop</Btn>}</div></td></tr>
+                  {g.state !== "idle" && <Btn small bad onClick={async () => { if (await askConfirm(`Stop grinding ${g.repo}#${g.pr}?`, true)) await mutate(() => http.send("POST", `/api/grinds/${g.repo}/${g.pr}/stop`, {}), "Grind stopped", ["grinds"]); }}>Stop</Btn>}</div></td></tr>
             ))}</tbody></table></div>
           {grinds.value?.length === 0 && <Empty>No grinds running.</Empty>}
         </Pane>

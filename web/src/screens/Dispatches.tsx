@@ -11,7 +11,7 @@ import { nav, route, setParam } from "../state/route";
 import { Header } from "../components/Header";
 import { Popover } from "../components/Shell";
 import { AccountPick, EFFORTS, MODELS, openItems } from "../components/Start";
-import { Btn, Chips, Empty, Field, Pane, Tag } from "../components/ui";
+import { Btn, Chips, Empty, Field, Pane, Tag, useLayer } from "../components/ui";
 import { Select } from "../components/Select";
 import { cleanTitle, dispatchSeconds, inTab, isLive, isSettled, laneSeconds, needsLanes, parseCost, parseMax, recentDispatches, runSummary, targetError, wantsYou, type Tab } from "../state/dispatchView";
 import { sessionTag } from "../components/SessionView";
@@ -184,7 +184,7 @@ function PauseButton({ d }: { d: Dispatch }) {
   const [open, setOpen] = useState(false);
   const pause = async (now: boolean) => {
     setOpen(false);
-    if (now && !(await askConfirm(`Pause ${cleanTitle(d.title)} now? Running sessions stop.`))) return;
+    if (now && !(await askConfirm(`Pause ${cleanTitle(d.title)} now? Running sessions stop.`, true))) return;
     await mutate(() => http.send("POST", `/api/dispatches/${d.id}/state`, { state: "paused", now }), now ? "Paused now" : "Pausing after the running issues", ["dispatches"]);
   };
   return (
@@ -284,6 +284,7 @@ function IssueWork({ l }: { l: Lane }) {
 }
 
 function LanePanel({ d, l }: { d: Dispatch; l: Lane }) {
+  useLayer(() => setParam("lane", "", true), true, false); // Escape closes the lane panel before leaving the dispatch
   const [msg, setMsg] = useState("");
   const [menu, setMenu] = useState(false);
   const open = live(d);
@@ -406,7 +407,7 @@ function DispatchPage() {
         <Btn onClick={() => setShowSettings(!showSettings)}>Settings</Btn>
         {d.state === "running" && <PauseButton d={d} />}
         {d.state === "paused" && <Btn primary onClick={() => setState("running")}>Resume</Btn>}
-        {live(d) && <Btn bad onClick={async () => { if (await askConfirm(`Cancel ${d.title}? Running sessions stop and no new issue starts.`)) await setState("cancelled"); }}>Cancel</Btn>}
+        {live(d) && <Btn bad onClick={async () => { if (await askConfirm(`Cancel ${d.title}? Running sessions stop and no new issue starts.`, true)) await setState("cancelled"); }}>Cancel</Btn>}
       </Header>
       {showSettings && <Pane label="settings">{live(d) ? <Settings d={d} /> : <span class="dim">This dispatch has ended.</span>}</Pane>}
       <Progress d={d} />

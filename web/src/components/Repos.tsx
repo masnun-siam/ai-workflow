@@ -8,7 +8,7 @@ import type { Repo, VaultPRD } from "../api/types";
 import { describeError } from "../state/actions";
 import { chooseRepo, loadMany, repos } from "../state/data";
 import { toast } from "../state/ui";
-import { Btn, Field, useFocusTrap } from "./ui";
+import { Btn, Field, useFocusTrap, useLayer } from "./ui";
 
 /** Open dialogs. `createRepo.vault` seeds the PRD from a notes folder; `onDone` gets the new repo. */
 export const createRepo = signal<{ vault?: string; onDone?: (r: Repo) => void } | null>(null);
@@ -17,6 +17,7 @@ export const publishRepo = signal<string | null>(null);
 function Shell({ label, onClose, children }: { label: string; onClose: () => void; children: preact.ComponentChildren }) {
   const box = useRef<HTMLDivElement>(null);
   useFocusTrap(box);
+  useLayer(onClose);
   return (
     <div class="ov" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       onKeyDown={(e) => { if (e.key === "Escape") { onClose(); e.stopPropagation(); } }}>

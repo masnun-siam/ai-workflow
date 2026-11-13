@@ -10,7 +10,7 @@ import { dispatchingCount, needCount, runningCount } from "../state/select";
 import { detailOpen, helpOpen, paletteOpen, repoOpen } from "../state/ui";
 import { AWAY_PRESETS, awayLabel } from "../state/away";
 import { clock } from "../state/format";
-import { Btn, Meter } from "./ui";
+import { Btn, Meter, useLayer } from "./ui";
 import { openCreate } from "../state/ui";
 import { Chevron, DdTrigger } from "./Select";
 
@@ -71,6 +71,7 @@ export function RepoList({ list, first, selected, extrasBefore = [], extrasAfter
 /** A popover anchored under its trigger; closes on outside click and Escape. */
 export function Popover({ open, setOpen, trigger, children, wide, fit }: { open: boolean; setOpen: (v: boolean) => void; trigger: preact.ComponentChildren; children: preact.ComponentChildren; wide?: boolean; fit?: boolean }) {
   const box = useRef<HTMLSpanElement>(null);
+  useLayer(() => setOpen(false), open);
   useEffect(() => {
     if (!open) return;
     const down = (e: PointerEvent) => { if (box.current && !box.current.contains(e.target as Node)) setOpen(false); };

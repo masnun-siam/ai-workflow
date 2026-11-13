@@ -6,7 +6,7 @@ import { SCREENS } from "./route";
 export type KeyEvt = { key: string; meta?: boolean; ctrl?: boolean; alt?: boolean; typing?: boolean };
 export type KeyCtx = {
   screen: ScreenId | "prd" | "onboarding";
-  overlay: boolean;                 // palette, help, confirm or start dialog is open (they own their keys)
+  overlay: boolean;                 // a popover or dialog is open (they own their keys; esc still closes the top one)
   actions: readonly Action[];       // current item's actions + the screen's actions
   quickOptions: number;             // options answerable with a/b/c (0 = none)
   nav: "river" | "list" | null;     // does the screen have a selectable list
@@ -27,7 +27,7 @@ let chordAt = 0;
 /** The whole keyboard map (prototype HINTS + 1-7, `:`/Cmd-K, `.`, `s`, `L`, `?`). Returns null for keys we ignore. */
 export function resolveKey(e: KeyEvt, c: KeyCtx): Cmd | null {
   const k = e.key;
-  if ((e.meta || e.ctrl) && k.toLowerCase() === "k") return { t: "palette" };
+  if ((e.meta || e.ctrl) && k.toLowerCase() === "k") return c.overlay ? null : { t: "palette" };
   if (k === "Escape") return { t: "escape" };
   if (e.typing || c.overlay) { chordAt = 0; return null; }
   if (e.meta || e.ctrl || e.alt) return null;
@@ -66,7 +66,7 @@ export const HINTS: Record<string, [string, string][]> = {
   inbox: [["j/k", "move"], ["⏎", "open"], ["a/b/c", "answer"]],
   activity: [["j/k", "move"], ["⏎", "open"]],
   dispatches: [],
-  features: [["[ ]", "tab (feature page)"]],
+  features: [],
   changes: [],
   releases: [["c", "cut"], ["y", "dry run"], ["G", "grind"], ["n", "note"], ["p", "post"], ["e", "edit"], ["x", "skip"]],
   ops: [["j/k", "move"], ["⏎", "run"]],
@@ -74,3 +74,6 @@ export const HINTS: Record<string, [string, string][]> = {
   settings: [["u", "update"], ["i", "reinstall"]],
   prd: [["esc", "back"]],
 };
+const FEATURE_PAGE: [string, string][] = [["[ ]", "tab"]];
+/** The hints for a screen's footer; a feature page adds its tab keys. */
+export const hintsFor = (screen: string, onFeaturePage: boolean): [string, string][] => [...(HINTS[screen] ?? []), ...(screen === "features" && onFeaturePage ? FEATURE_PAGE : [])];

@@ -44,7 +44,7 @@ export function ProductsPane() {
         {(products.value ?? []).map((p) => (
           <div key={p.docs_repo}>
             <div class="dh"><b>{p.name}</b><span class="dim mono">{p.docs_repo}</span>
-              <Btn small bad label={`Remove product ${p.name}`} onClick={async () => { if (await askConfirm(`Remove product ${p.name}? The repos stay on disk.`)) void mutate(() => http.send("DELETE", `/api/products/${p.docs_repo}`), "Removed", [...keys]); }}>Remove</Btn></div>
+              <Btn small bad label={`Remove product ${p.name}`} onClick={async () => { if (await askConfirm(`Remove product ${p.name}? The repos stay on disk.`, true)) void mutate(() => http.send("DELETE", `/api/products/${p.docs_repo}`), "Removed", [...keys]); }}>Remove</Btn></div>
             {p.error && <div class="banner bad">{p.error}</div>}
             <KV rows={p.repos.map((r) => [r.name, <span>{r.repo} <span class="dim">{r.role}</span> {r.cloned ? "" : <span class="c-w">not cloned</span>}{r.conflict && <span class="c-b"> conflicts with {r.conflict}</span>}</span>])} />
           </div>
@@ -75,7 +75,7 @@ export function ProductsPane() {
                 <td><input type="checkbox" aria-label={`Auto grind ${r.slug}`} checked={rs.auto_grind} onChange={(e) => void set({ auto_grind: (e.target as HTMLInputElement).checked })} /></td>
                 <td><SaveInput label={`Slack channel ${r.slug}`} saved={rs.slack_channel} width="9em" onSave={(v) => set({ slack_channel: v })} /></td>
                 <td style={{ whiteSpace: "nowrap" }}><SaveInput label={`Release head ${r.slug}`} saved={rs.release_head ?? ""} placeholder="staging" width="7.5em" onSave={(v) => set({ release_head: v })} /> → <SaveInput label={`Release base ${r.slug}`} saved={rs.release_base ?? ""} placeholder="master" width="7.5em" onSave={(v) => set({ release_base: v })} /></td>
-                <td><div class="acts">{r.slug.startsWith("local/") && <Btn small primary label={`Publish repo ${r.slug}`} onClick={() => (publishRepo.value = r.slug)}>Publish</Btn>}<Btn small bad label={`Remove repo ${r.slug}`} onClick={async () => { if (await askConfirm(`Unregister ${r.slug}? The checkout stays on disk.`)) void mutate(() => http.send("DELETE", `/api/repos/${r.slug}`), "Removed", [...keys]); }}>Remove</Btn></div></td>
+                <td><div class="acts">{r.slug.startsWith("local/") && <Btn small primary label={`Publish repo ${r.slug}`} onClick={() => (publishRepo.value = r.slug)}>Publish</Btn>}<Btn small bad label={`Remove repo ${r.slug}`} onClick={async () => { if (await askConfirm(`Unregister ${r.slug}? The checkout stays on disk.`, true)) void mutate(() => http.send("DELETE", `/api/repos/${r.slug}`), "Removed", [...keys]); }}>Remove</Btn></div></td>
               </tr>
             );
           })}</tbody></table></div>
