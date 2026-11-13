@@ -7,6 +7,16 @@ const GROUPS = [
   { key: "layout", label: "Layout", hotkey: "L", opts: [["drawer", "Rail + drawer", "details slide in over the page"], ["split", "Tabs + split", "detail pane always visible"]] },
 ] as const;
 
+/** Arrow keys move the choice and the focus within a radiogroup. */
+function arrow(e: KeyboardEvent, values: readonly string[], cur: string, pick: (v: string) => void): void {
+  const d = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+  if (!d) return;
+  e.preventDefault();
+  const i = (values.indexOf(cur) + d + values.length) % values.length;
+  pick(values[i]!);
+  (e.currentTarget as HTMLElement).parentElement?.querySelectorAll<HTMLElement>('[role="radio"]')[i]?.focus();
+}
+
 export function Appearance() {
   return (
     <Pane label="appearance" wide id="set-appearance">
@@ -18,7 +28,8 @@ export function Appearance() {
               {g.opts.map(([v, name, hint]) => {
                 const on = prefs.value[g.key] === v;
                 return (
-                  <button key={v} type="button" class={`seg-o${on ? " on" : ""}`} role="radio" aria-checked={on} onClick={() => setPref(g.key, v as never)}>
+                  <button key={v} type="button" class={`seg-o${on ? " on" : ""}`} role="radio" aria-checked={on} tabIndex={on ? 0 : -1} onClick={() => setPref(g.key, v as never)}
+                    onKeyDown={(e) => arrow(e, g.opts.map((o) => o[0]), prefs.value[g.key], (x) => setPref(g.key, x as never))}>
                     <b>{name}</b>{hint && <span>{hint}</span>}
                   </button>
                 );
