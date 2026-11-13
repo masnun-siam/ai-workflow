@@ -22,9 +22,10 @@ var looks = map[string]look{
 	"panel-cap":     {"no_entry", "setu: review panel hit its cap", "setu: review panel hit its cap", "Open Inbox"},
 	"dispatch":      {"rocket", "setu: #{n} in a dispatch needs you", "setu: a dispatch needs you", "Open Inbox"},
 	"release":       {"package", "setu: #{n} release finished", "setu: release finished", "Open Inbox"},
+	"stalled":       {"zzz", "setu: #{n} stalled", "setu: stalled", "Open Inbox"},
 }
 
-var boardEvents = map[string]bool{"afk": true, "pr-ready": true, "needs-cleanup": true, "panel-cap": true, "dispatch": true, "release": true}
+var boardEvents = map[string]bool{"afk": true, "pr-ready": true, "needs-cleanup": true, "panel-cap": true, "dispatch": true, "release": true, "stalled": true}
 
 var tagUnsafe = regexp.MustCompile(`[^A-Za-z0-9._#/-]+`)
 

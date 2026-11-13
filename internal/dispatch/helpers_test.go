@@ -148,13 +148,17 @@ func (f *fakeSnaps) set(repo string, d poller.Data) {
 }
 
 type fakeNotifier struct {
-	mu    sync.Mutex
-	Notes []notify.Note
+	mu      sync.Mutex
+	Notes   []notify.Note // the `dispatch` notes
+	Stalled []notify.Note // the `stalled` notes
 }
 
 func (n *fakeNotifier) Notify(event string, note notify.Note) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	if event == "stalled" {
+		n.Stalled = append(n.Stalled, note)
+	}
 	if event == "dispatch" {
 		n.Notes = append(n.Notes, note)
 	}

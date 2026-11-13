@@ -562,3 +562,34 @@ func TestTickAllArchivesOncePerDayAndTicksBusyOnly(t *testing.T) {
 		t.Fatal("not archived the next day")
 	}
 }
+
+func TestLaneStallNotifiesOnce(t *testing.T) {
+	e := newEnv(t)
+	e.svc.d.IdleGuard = func() bool { return true }
+	e.seed(nil, &store.Lane{Repo: "o/r", N: 5, Title: "five", Stage: store.StQueued})
+	e.snaps.set("o/r", data([]poller.Issue{issue(5, []string{"refined"})}, nil))
+	e.tick() // launched
+	e.sess.set("S1", func(r *sessions.Record) { r.Status = sessions.StDone })
+	e.tick() // the idle clock starts
+	if len(e.note.Stalled) != 0 {
+		t.Fatal("stalled before the grace")
+	}
+	e.clk.add(4 * time.Minute)
+	e.tick()
+	e.clk.add(time.Minute)
+	e.tick() // stays stalled
+	if l := e.lane(5); l.Stalled != Stalled || l.NeedsYou != "" {
+		t.Fatalf("%+v", l)
+	}
+	if len(e.note.Stalled) != 1 {
+		t.Fatalf("stalled notes %+v", e.note.Stalled)
+	}
+	if n := e.note.Stalled[0]; n.Repo != "o/r" || n.Link == nil || n.Link.Issue != 5 || n.Text != "o/r#5 "+Stalled {
+		t.Fatalf("%+v", n)
+	}
+	for _, n := range e.note.Notes {
+		if strings.Contains(n.Text, Stalled) {
+			t.Fatalf("stall also sent as dispatch: %+v", n)
+		}
+	}
+}
