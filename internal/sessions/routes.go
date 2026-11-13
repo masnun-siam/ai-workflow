@@ -156,6 +156,7 @@ func Routes(d RouteDeps) []server.Route {
 		action("release", func(_ *http.Request, id string) (Record, error) { return m.Release(id) }),
 		action("start-now", func(r *http.Request, id string) (Record, error) { return m.StartNow(r.Context(), id) }),
 		action("dismiss", func(_ *http.Request, id string) (Record, error) { return m.Dismiss(id) }),
+		action("continue", func(r *http.Request, id string) (Record, error) { return m.Continue(r.Context(), id) }),
 		{Pattern: "POST /api/sessions/{id}/rerun", Handler: h(func(r *http.Request) (int, any, error) {
 			rec, err := m.Rerun(r.Context(), r.PathValue("id"))
 			if err != nil {
