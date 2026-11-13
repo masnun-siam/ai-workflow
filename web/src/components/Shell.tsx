@@ -8,6 +8,7 @@ import { MODES, next, prefs, setPref } from "../state/prefs";
 import { goScreen, nav, route, SCREENS, setParam, type ScreenId } from "../state/route";
 import { dispatchingCount, needCount, runningCount } from "../state/select";
 import { detailOpen, helpOpen, paletteOpen, repoOpen } from "../state/ui";
+import { AWAY_PRESETS, awayLabel } from "../state/away";
 import { clock } from "../state/format";
 import { Btn, Meter } from "./ui";
 import { openCreate } from "../state/ui";
@@ -146,23 +147,17 @@ export function Topbar() {
   );
 }
 
-const PRESETS: [number, string][] = [[30, "30 min"], [60, "1 h"], [120, "2 h"], [240, "4 h"]];
-
 function AwayCard() {
   const a = status.value?.away;
   const [open, setOpen] = useState(false);
   const [end, setEnd] = useState("");
   const go = (until: number) => { setOpen(false); return mutate(() => http.send("POST", "/api/away", { until }), "Away mode on", ["status"]); };
   const inMin = (m: number) => Math.floor(Date.now() / 1000) + m * 60;
-  if (a?.active && a.until) {
+  if (a?.active) {
     return (
-      <div class="away-card">
-        <b>☾ Away until {clock(a.until)}</b>
-        <span class="dim">Answering what it can, holding the rest. {a.held} held for you.</span>
-        <div class="acts">
-          <Btn small onClick={() => go(Math.min(a.until! + 1800, inMin(1430)))}>+30 min</Btn>
-          <Btn small primary onClick={() => mutate(() => http.send("POST", "/api/away/stop", {}), "Welcome back", ["status", "inbox"])}>I'm back</Btn>
-        </div>
+      <div class="away-card" role="status">
+        <b>☾ {awayLabel(a)}</b>
+        <span class="dim">Answering what it can, holding the rest. {a.held} held for you. End it from the banner above.</span>
       </div>
     );
   }
@@ -178,7 +173,7 @@ function AwayCard() {
       <div class="dh"><b class="grow">☾ Away mode</b><Btn small onClick={() => setOpen(!open)}>{open ? "Cancel" : "Go away"}</Btn></div>
       {open ? (
         <>
-          <div class="acts">{PRESETS.map(([m, l]) => <Btn small key={m} onClick={() => go(inMin(m))}>{l}</Btn>)}</div>
+          <div class="acts">{AWAY_PRESETS.map(([m, l]) => <Btn small key={m} onClick={() => go(inMin(m))}>{l}</Btn>)}</div>
           <form class="acts" onSubmit={(e) => { e.preventDefault(); const t = endEpoch(); if (t) void go(t); }}>
             <input type="time" aria-label="Away until" value={end} onInput={(e) => setEnd((e.target as HTMLInputElement).value)} />
             <Btn small type="submit" disabled={!end}>Set</Btn>

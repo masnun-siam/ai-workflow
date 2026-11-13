@@ -71,7 +71,21 @@ export function setPref<K extends keyof Prefs>(k: K, v: Prefs[K]): void {
 }
 export function applyPrefs(p: Prefs, doc: Document | undefined = globalThis.document): void {
   if (!doc) return;
-  doc.body.className = `skin-${p.look}`;
+  for (const c of [...doc.body.classList]) if (c.startsWith("skin-")) doc.body.classList.remove(c);
+  doc.body.classList.add(`skin-${p.look}`);
   if (p.mode === "system") doc.documentElement.removeAttribute("data-theme");
   else doc.documentElement.setAttribute("data-theme", p.mode);
+}
+
+/** Keeps this tab in step when another tab changes the prefs. Returns the unlisten function. */
+export function syncPrefsAcrossTabs(target: Pick<Window, "addEventListener" | "removeEventListener"> = globalThis.window): () => void {
+  if (!target) return () => {};
+  const on = (e: Event) => {
+    const se = e as StorageEvent;
+    if (se.key !== KEY && se.key !== null) return;
+    prefs.value = loadPrefs();
+    applyPrefs(prefs.value);
+  };
+  target.addEventListener("storage", on);
+  return () => target.removeEventListener("storage", on);
 }
