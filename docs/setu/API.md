@@ -460,6 +460,7 @@ type Session = {
   dispatch: { id: string; lane: IssueKey } | null;
   hooks: number;                // count of hook events seen (§TranscriptEvent kind "hook")
   resume_command: string | null;
+  stalled: string | null;       // why the idle guard let it end unfinished ("ended without finishing or asking"); cleared on resume
 };
 type SessionStats = { today_count: number; today_cost: number; month_count: number; month_cost: number };
 

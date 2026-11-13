@@ -233,6 +233,7 @@ func (m *Manager) startFresh(ctx context.Context, rec Record, mutate func(*Recor
 	}
 	return m.spawn(ctx, rec.ID, argv, path, spawnOpts{mutate: func(r *Record) {
 		r.CwdPath = path
+		r.Stalled, r.IdleBlocks = "", 0
 		if mutate != nil {
 			mutate(r)
 		}
