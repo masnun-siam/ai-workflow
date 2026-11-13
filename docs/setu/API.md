@@ -332,7 +332,7 @@ func (m *Manager) Alive(id string) bool                      // in-process proc 
 func (m *Manager) Limits() map[string]Limit                  // key = account cmd
 func (m *Manager) CleanupTargets() []CleanupTarget; func (m *Manager) Cleanup(keys []string) []string
 func SetPending(h *home.Home, id string, payload json.RawMessage) (roundID string, err error) // used by `setu ask`
-func Routes(d RouteDeps) []server.Route; func Commands() []cli.Command // ask
+func Routes(d RouteDeps) []server.Route; func Commands() []cli.Command // ask, hook
 type Answer struct { Labels []string `json:"labels,omitempty"`; Other *string `json:"other,omitempty"`; None bool `json:"none,omitempty"` }
 
 // ---- grind ----
@@ -675,6 +675,7 @@ type VaultPRD = { exists: boolean; status: string | null; title: string | null; 
 | POST | `/api/sessions/{id}/stop` | — | `Session` | 200; 409 |
 | POST | `/api/sessions/{id}/resume` | `{account?: label}` (optional body) | `Session` | 200; 400; 409 |
 | POST | `/api/sessions/{id}/{cancel-auto\|hold\|release\|start-now\|dismiss}` | — | `Session` | 200; 409 |
+| POST | `/api/sessions/{id}/continue` | — | `Session` | 200; 404; 409 `session is not stalled` / `session is already resuming` (or the `prompt` 409s) |
 | POST | `/api/sessions/{id}/rerun` | — | `Session` (new) | 201; 400; 409; 502 |
 | GET | `/api/sessions/cleanup` | — | `{items:{key,label,repo,flags:string[]}[]}` | 200 |
 | POST | `/api/sessions/cleanup` | `{keys: string[]}` | `{removed: string[]}` | 200; 400 |
@@ -686,6 +687,8 @@ Start semantics: S§5.2–5.4 with `step` in place of `command`. `runs_in` routi
 4. An identical (step, args, repo) start within 30 s → 409 `just started (session <id>)`.
 
 Guard 1 always applies to `implement-issue` and `pr-grind` (S§5.4), even without `guard`.
+
+Continue (stalled sessions only): resumes the same Claude session id through the `prompt` path with "Continue the `<step>` flow from where you stopped. Do the remaining steps, then end as the idle guard says." (`sessions.ContinueText`). The resume clears `stalled`. A stalled session that is still running gets the message queued, as `prompt` does.
 
 ### 5.3 Repos, products, GitHub (products, gh, poller)
 | Method | Path | Request | Response | Codes | Pkg |
@@ -854,6 +857,7 @@ External (read-only): `${CLAUDE_CONFIG_DIR:-~/.claude}/plugins/installed_plugins
 | `version` | — | `setu <semver> (<commit>)` | 0 | cmd |
 | `paths` | — | `{plugin_root, prompts_dir, data_dir, pr_grind_dir (created), channels, checkouts, home}` (`plugin_root` == `prompts_dir` == `prompts/<version>`) | 0 | cmd |
 | `ask` | `[--json STR]` (else stdin) | `RECORDED <rid>. The question is now with the human. End your turn immediately; the answer arrives as your next message: Answer to <rid>: {...}` | 0; 2 no session (`setu ask needs a setu session (SETU_SESSION); interactive runs use AskUserQuestion`) or another round waiting (S§1.9 text); 5 bad payload | sessions |
+| `hook idle` | Stop hook input JSON on stdin (`transcript_path`, `last_assistant_message`) | allow: nothing; block: `{"decision":"block","reason":"<FR-2 reason>"}`. Allows on a pending `setu ask` round, live background `Agent`/`Task`/`Workflow`/`run_in_background` Bash started this turn (Monitor does not count), or a final-message table row with ✅/✔. Blocks at most 2 in a row (`idle_blocks`); the 3rd allows and sets `stalled` = `ended without finishing or asking`. An API-error stop allows without counting. Reads only the transcript's last turn, from the end | always 0; no session or any error allows | sessions |
 | `ci status <pr>` | `[--watch] [--timeout 1200]` | `CI` JSON | 0 (any state); 64 unresolvable ref | gh |
 | `threads list <pr>` | `[--open-only] [--for-comment ID]` | `[{node_id,is_resolved,is_outdated,comment_id,url,path,line}]` | 0; 1 read failure | gh |
 | `threads resolve <node_id>...` | — | `resolved <id>` per id | 0; 1 if all failed | gh |
