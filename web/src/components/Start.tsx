@@ -172,6 +172,20 @@ export function askJev(text: string): Promise<void> {
   }).catch(() => undefined);
 }
 
+/** Ask jev once the text is 20+ characters and typing paused for 800 ms; the returned function cancels the pending call. */
+export function scheduleJev(text: string, ask: (text: string) => unknown = askJev): (() => void) | undefined {
+  if (text.trim().length < 20) return undefined;
+  const t = setTimeout(() => void ask(text), 800);
+  return () => clearTimeout(t);
+}
+
+/** A click on the route control: the user's pick is final, so jev stops changing it and its line hides. */
+export function pickRoute(route: CreateRoute): void {
+  createRouteTouched.value = true;
+  createJevPick.value = null;
+  createRoute.value = route;
+}
+
 export function CreateDialog() {
   const route = createRoute.value;
   const [repo, setRepo] = useState(currentRepo.value ?? repoList.value[0]?.slug ?? "");
@@ -191,11 +205,7 @@ export function CreateDialog() {
     const t = setTimeout(() => { void openItems(repo, "issue").then((items) => setDup(likelyDuplicate(text, items))).catch(() => undefined); }, 800);
     return () => clearTimeout(t);
   }, [text, repo]);
-  useEffect(() => {
-    if (text.trim().length < 20) return;
-    const t = setTimeout(() => void askJev(text), 800);
-    return () => clearTimeout(t);
-  }, [text]);
+  useEffect(() => scheduleJev(text), [text]);
   const args = createArgs(route, text, prio, env);
   const n = argLength(args);
   const tooLong = n > MAX_ARG;
@@ -224,7 +234,7 @@ export function CreateDialog() {
         {dup && <div class="banner inline" role="status">Looks like <a href={dup.url ?? `https://github.com/${repo}/issues/${dup.number}`} target="_blank" rel="noreferrer">#{dup.number} {dup.title}</a>. Check it before filing a new one.</div>}
         <div class="seg" role="radiogroup" aria-label="Route">
           {ROUTES.map(([v, l, d]) => (
-            <button key={v} type="button" role="radio" aria-checked={route === v} class={`seg-o${route === v ? " on" : ""}`} onClick={() => { createRouteTouched.value = true; createJevPick.value = null; createRoute.value = v; }}><b>{l}</b><small class="dim">{d}</small></button>
+            <button key={v} type="button" role="radio" aria-checked={route === v} class={`seg-o${route === v ? " on" : ""}`} onClick={() => pickRoute(v)}><b>{l}</b><small class="dim">{d}</small></button>
           ))}
         </div>
         {createJevPick.value && !createRouteTouched.value && <small class="dim">{jevLine(createJevPick.value)}</small>}

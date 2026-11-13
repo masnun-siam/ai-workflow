@@ -1,10 +1,10 @@
 import { renderToString } from "preact-render-to-string";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createClient } from "./api/client";
 import { useMockClient } from "./api/http";
 import { mockFetch } from "../mock/server";
 import { App } from "./app/App";
-import { applyJev, argLength, askJev, createArgs, createBody, jevLine, likelyDuplicate } from "./components/Start";
+import { applyJev, argLength, askJev, createArgs, createBody, jevLine, likelyDuplicate, pickRoute, scheduleJev } from "./components/Start";
 import { loadMany, registry } from "./state/data";
 import { nav } from "./state/route";
 import { createDraft, createJevPick, createOpen, createRoute, createRouteTouched, openCreate, startReq } from "./state/ui";
@@ -230,6 +230,35 @@ describe("create box: jev preselects the route", () => {
     createDraft.value = sent;
     await expect(askJev(sent)).resolves.toBeUndefined();
     expect([createRoute.value, createJevPick.value]).toEqual(["feature", null]);
+  });
+  it("asks once after an 800 ms pause on 20+ characters; shorter text or more typing asks nothing", () => {
+    vi.useFakeTimers();
+    try {
+      const asked: string[] = [];
+      const ask = (t: string) => asked.push(t);
+      expect(scheduleJev("   it crashes        ", ask)).toBeUndefined();
+      const cancel = scheduleJev(sent, ask);
+      vi.advanceTimersByTime(799);
+      expect(asked).toEqual([]);
+      cancel?.(); // typing again within the pause
+      scheduleJev(`${sent} twice`, ask);
+      vi.advanceTimersByTime(800);
+      expect(asked).toEqual([`${sent} twice`]);
+      vi.advanceTimersByTime(5000);
+      expect(asked).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("a click on the route control, the selected one too, hides the jev line and stops later answers", async () => {
+    createDraft.value = sent;
+    await askJev(sent);
+    pickRoute("bug");
+    expect([createRoute.value, createRouteTouched.value, createJevPick.value]).toEqual(["bug", true, null]);
+    pickRoute("feature");
+    await askJev(sent);
+    expect([createRoute.value, createJevPick.value]).toEqual(["feature", null]);
+    expect(render()).not.toContain("jev:");
   });
   it("new text from the palette clears the pick and the touched flag", () => {
     createDraft.value = sent;
