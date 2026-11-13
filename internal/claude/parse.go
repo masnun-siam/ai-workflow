@@ -110,6 +110,10 @@ func ParseLine(line []byte) []Event {
 		return parseAssistant(ev)
 	case "result":
 		return parseResult(ev)
+	case "user":
+		if e, ok := parseStopFeedback(ev); ok {
+			return []Event{e}
+		}
 	case "system":
 		sub, _ := rawStr(ev["subtype"])
 		switch {
@@ -231,6 +235,41 @@ func guardedEdit(d json.RawMessage) bool {
 	return false
 }
 
+// stopFeedbackPrefix starts the user turn claude -p injects when a Stop hook blocks; stream-json
+// has no hook_response line for Stop hooks.
+const stopFeedbackPrefix = "Stop hook feedback:\n"
+
+func parseStopFeedback(ev map[string]json.RawMessage) (Event, bool) {
+	var msg struct {
+		Content json.RawMessage `json:"content"`
+	}
+	if json.Unmarshal(ev["message"], &msg) != nil {
+		return Event{}, false
+	}
+	var texts []string
+	if s, ok := rawStr(msg.Content); ok {
+		texts = []string{s}
+	} else {
+		var blocks []struct{ Type, Text string }
+		_ = json.Unmarshal(msg.Content, &blocks)
+		for _, b := range blocks {
+			if b.Type == "text" {
+				texts = append(texts, b.Text)
+			}
+		}
+	}
+	for _, t := range texts {
+		if r, ok := strings.CutPrefix(t, stopFeedbackPrefix); ok {
+			e := Event{Kind: "hook", Name: "Stop", HookEvent: "Stop", Text: strings.TrimSpace(r), Blocked: true}
+			if utf8.RuneCountInString(e.Text) > hookTextMax {
+				e.Text = string([]rune(e.Text)[:hookTextMax])
+			}
+			return e, true
+		}
+	}
+	return Event{}, false
+}
+
 func parseHook(ev map[string]json.RawMessage) Event {
 	e := Event{Kind: "hook"}
 	e.Name, _ = rawStr(ev["hook_name"])
@@ -240,6 +279,11 @@ func parseHook(ev map[string]json.RawMessage) Event {
 			e.Text = s
 			break
 		}
+	}
+	var d struct{ Decision, Reason string }
+	if strings.HasPrefix(strings.TrimSpace(e.Text), "{") && json.Unmarshal([]byte(e.Text), &d) == nil && d.Decision == "block" {
+		// a JSON decision on stdout (exit 0), as `setu hook idle` prints it
+		e.Text, e.Blocked = strings.TrimSpace(d.Reason), true
 	}
 	if utf8.RuneCountInString(e.Text) > hookTextMax {
 		e.Text = string([]rune(e.Text)[:hookTextMax])

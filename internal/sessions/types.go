@@ -492,6 +492,7 @@ type Settings interface {
 	CheckRun(model, effort string) error
 	RunDefaults() (model, effort string) // settings run_model / run_effort ("" = unset)
 	VaultDir() string
+	IdleGuard() bool // settings idle_guard: attach the idle Stop hook to skill runs and lanes
 }
 
 // Claude is what sessions needs from the claude package.

@@ -543,3 +543,31 @@ func TestTestAccountRoute(t *testing.T) {
 		t.Fatal(c, b)
 	}
 }
+
+func TestIdleHookParseBlock(t *testing.T) {
+	block := ParseLine([]byte(`{"type":"system","subtype":"hook_response","hook_name":"Stop","hook_event":"Stop","stdout":"{\"decision\":\"block\",\"reason\":\"Do not stop idle.\"}\n","exit_code":0}`))
+	if len(block) != 1 || !block[0].Blocked || block[0].Text != "Do not stop idle." || block[0].HookEvent != "Stop" {
+		t.Fatalf("%+v", block)
+	}
+	for _, out := range []string{`checked`, `{\"decision\":\"approve\"}`, `{not json`} {
+		e := ParseLine([]byte(`{"type":"system","subtype":"hook_response","hook_name":"Stop","hook_event":"Stop","stdout":"` + out + `","exit_code":0}`))
+		if len(e) != 1 || e[0].Blocked || e[0].Text == "" {
+			t.Fatalf("%s: %+v", out, e)
+		}
+	}
+}
+
+// Recorded shape of claude -p 2.x: a blocking Stop hook shows as a "Stop hook feedback" user
+// turn, never as a hook_response line.
+func TestIdleHookParseStopFeedback(t *testing.T) {
+	var all []Event
+	for _, l := range lines(t, "claude_stop_block.jsonl") {
+		all = append(all, ParseLine(l)...)
+	}
+	if kinds(all) != "session_id,text,hook,result" {
+		t.Fatal(kinds(all))
+	}
+	if h := all[2]; !h.Blocked || h.HookEvent != "Stop" || h.Text != "Do not stop idle. test" {
+		t.Fatalf("%+v", h)
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -369,6 +370,36 @@ func endedTaskIDs(raw json.RawMessage) []string {
 		}
 	}
 	return ids
+}
+
+// idleGuarded reports whether a spawn of r carries the idle Stop hook (FR-1, FR-8): the setting
+// is on, the session is a UI run or a dispatch lane, and its step is a blubird skill. Grind,
+// panel, coordinator and setu-prompt runs never get it. Read per spawn, so a resume after a
+// toggle follows the new value.
+func (m *Manager) idleGuarded(r Record) bool {
+	if m.d.Settings == nil || !m.d.Settings.IdleGuard() || (r.Kind != "" && r.Kind != "lane") || m.d.Prompts == nil {
+		return false
+	}
+	st, ok := m.d.Prompts.Step(m.stepOf(r))
+	return ok && st.Source == "blubird"
+}
+
+// idleHookSettings is the --settings value that runs `setu hook idle` as a Stop hook, by the
+// absolute path of this setu binary rather than PATH.
+func (m *Manager) idleHookSettings() string {
+	type hook struct {
+		Type    string `json:"type"`
+		Command string `json:"command"`
+		Timeout int    `json:"timeout"`
+	}
+	type matcher struct {
+		Hooks []hook `json:"hooks"`
+	}
+	cmd := shellQuote(filepath.Join(m.d.BinDir, "setu")) + " hook idle"
+	b, _ := json.Marshal(map[string]any{"hooks": map[string][]matcher{
+		"Stop": {{Hooks: []hook{{Type: "command", Command: cmd, Timeout: 10}}}},
+	}})
+	return string(b)
 }
 
 // ContinueText is the FR-6 message that resumes a stalled session of step.

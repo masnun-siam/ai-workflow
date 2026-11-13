@@ -72,6 +72,7 @@ func (s sessSettings) VaultDir() string {
 	}
 	return ""
 }
+func (s sessSettings) IdleGuard() bool { return s.st.Get().IdleGuard }
 
 // sessClaude adapts the claude package functions to sessions.Claude.
 type sessClaude struct{}
