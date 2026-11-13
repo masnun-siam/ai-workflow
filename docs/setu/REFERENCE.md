@@ -61,7 +61,7 @@ External, read only: `~/.claude/plugins/installed_plugins.json` (blubird), `~/.c
 
 `claude_label`, `commands` (accounts) and `default`; `repos` (per-repo options); `slack_channels`, `reviewers` and `active_reviewers`;
 `vault_dir`; `grind_mode` (`deep`/`simple`) and `grind_limits` (`max_rounds`, `poll_interval`, `max_wait`, `max_idle_waits`, `stuck_seen`, `ci_timeout`, `ci_poll`);
-`use_jev`; `run_model`, `run_effort`; `release_note` (channel, cc, suffix); `server` (`port`, `tailscale`, `tailscale_https_port`, `allow_hosts`).
+`use_jev`; `idle_guard` (default on; an absent key reads as on); `run_model`, `run_effort`; `release_note` (channel, cc, suffix); `server` (`port`, `tailscale`, `tailscale_https_port`, `allow_hosts`).
 
 Notification events: waiting, failed, dispatch, panel-cap, pr-ready, needs-cleanup, grind-paused, grind-done, done, afk, release.
 Channels per event: browser, ntfy, mac, push.

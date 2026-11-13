@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Settings gain `idle_guard` (on by default; a settings file without it reads as on), returned by `GET /api/settings` and saved by `PUT /api/settings`. Nothing obeys it yet: the headless idle guard that uses it lands next.
+
 ### Fixed
 
 - A dispatch no longer stalls silently behind a skipped issue. Lanes whose blockers were skipped show **Can't start** at once (the `stranded` and `skipped_deps` lane fields), with **Run #N again** and a new **Unblock** lane action that lets them start without the skipped blocker.

@@ -265,7 +265,8 @@ func TestResumeStoppedRebindAndGuards(t *testing.T) {
 func TestStartNowAndStopQueued(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	e.slow("0.3")
+	// long enough that the first three are still running when the fourth is queued, even on a loaded machine
+	e.slow("3")
 	for i := 0; i < 3; i++ {
 		r := e.req("implement-issue", string(rune('1'+i)))
 		r.Batch = "q"
