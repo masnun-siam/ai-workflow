@@ -51,6 +51,7 @@ type hookInput struct {
 type transcriptEntry struct {
 	Type          string `json:"type"`
 	IsSidechain   bool   `json:"isSidechain"`
+	IsMeta        bool   `json:"isMeta"`
 	IsAPIErrorMsg bool   `json:"isApiErrorMessage"`
 	Message       struct {
 		Content json.RawMessage `json:"content"`
@@ -100,19 +101,19 @@ func runHookIdle(env cli.Env) {
 			return
 		}
 	}
+	if env.Stdin == nil {
+		return
+	}
+	raw, err := io.ReadAll(io.LimitReader(env.Stdin, 1<<20))
+	if err != nil {
+		return
+	}
 	rec, err := readRecord(h, sid)
 	if err != nil {
 		return
 	}
 	verdict := idleAllow
 	if !questionPending(rec) {
-		if env.Stdin == nil {
-			return
-		}
-		raw, err := io.ReadAll(io.LimitReader(env.Stdin, 1<<20))
-		if err != nil {
-			return
-		}
 		var in hookInput
 		if err := json.Unmarshal(raw, &in); err != nil {
 			return
@@ -214,8 +215,9 @@ func reversed(s []json.RawMessage) []json.RawMessage {
 }
 
 // isTurnStart: a main-thread user entry that is typed text or a notification, not a tool result.
+// isMeta entries are text Claude Code injects mid-turn, such as a skill's body after a Skill call.
 func isTurnStart(e transcriptEntry) bool {
-	if e.Type != "user" || e.IsSidechain {
+	if e.Type != "user" || e.IsSidechain || e.IsMeta {
 		return false
 	}
 	var s string

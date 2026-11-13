@@ -30,6 +30,7 @@ func TestIdleDecide(t *testing.T) {
 		{"bg-bash-live", "", idleAllow},
 		{"bg-bash-ended", "", idleBlock},
 		{"bg-agent-live", "", idleAllow},
+		{"bg-agent-then-skill", "", idleAllow},
 		{"monitor-only", "", idleBlock},
 		{"prev-turn-bg", "", idleBlock},
 		{"api-error", "", idleSkip},
@@ -204,9 +205,8 @@ func TestIdleHookErrorsAllow(t *testing.T) {
 	e := newEnv(t)
 	rec := newBareSession(t, e)
 	missing, _ := json.Marshal(hookInput{TranscriptPath: filepath.Join(t.TempDir(), "gone.jsonl")})
-	unreadable := filepath.Join(t.TempDir(), "locked.jsonl")
-	os.WriteFile(unreadable, []byte("{}\n"), 0o000)
-	locked, _ := json.Marshal(hookInput{TranscriptPath: unreadable})
+	// a directory cannot be read as a transcript, whoever runs the test (mode 0000 does not stop root)
+	locked, _ := json.Marshal(hookInput{TranscriptPath: t.TempDir()})
 	for name, c := range map[string][2]string{
 		"no session":         {"", hookStdin(t, "135-pass-table")},
 		"unknown session":    {"20990101T000000000000Z-deadbeef", hookStdin(t, "135-pass-table")},
