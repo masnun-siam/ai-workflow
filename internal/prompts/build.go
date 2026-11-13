@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/masnun-siam/setu/internal/errs"
 )
@@ -20,6 +21,13 @@ var flagFirst = map[string]bool{
 	"release-pr": true, "release-note": true, "peer-review": true, "pr-review": true,
 	"project-coordinator": true, "agentic-onboard": true,
 }
+
+// MaxArgChars caps every step's arguments, in Unicode code points after trim and line-break
+// normalisation.
+const MaxArgChars = 20000
+
+// Steps whose arguments are free text that may span several lines (a pasted log or stack trace).
+var multiLine = map[string]bool{"small-change": true, "report-bug": true}
 
 var (
 	reNum       = regexp.MustCompile(`^#?(\d+)$`)
@@ -74,8 +82,17 @@ func IssueOf(stepID, args string) (int, bool) {
 
 func checkArgs(s Step, args *string, repo string) error {
 	a := *args
-	if strings.ContainsAny(a, "\x00\r\n") {
+	if multiLine[s.ID] {
+		a = strings.ReplaceAll(strings.ReplaceAll(a, "\r\n", "\n"), "\r", "\n")
+		*args = a
+		if strings.ContainsRune(a, 0) {
+			return errs.Invalid("%s: arguments cannot contain NUL", s.ID)
+		}
+	} else if strings.ContainsAny(a, "\x00\r\n") {
 		return errs.Invalid("%s: arguments must be one line without NUL", s.ID)
+	}
+	if utf8.RuneCountInString(a) > MaxArgChars {
+		return errs.Invalid("%s: arguments are longer than %d characters", s.ID, MaxArgChars)
 	}
 	if strings.HasPrefix(a, "-") && !flagFirst[s.ID] {
 		return errs.Invalid("%s: arguments cannot start with '-'", s.ID)

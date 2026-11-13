@@ -1,6 +1,7 @@
 package prompts
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -111,6 +112,7 @@ func TestBuildShapes(t *testing.T) {
 
 func TestArgChecks(t *testing.T) {
 	r := load(t, true)
+	atCap, overCap := strings.Repeat("x", MaxArgChars), strings.Repeat("x", MaxArgChars+1)
 	cases := []struct {
 		step, args, repo string
 		ok               bool
@@ -146,7 +148,21 @@ func TestArgChecks(t *testing.T) {
 		{"agentic-onboard", "--dev", "", true, ""},
 		{"docs-updater", "--full", "", false, ""},
 		{"small-change", "-rf", "", false, ""},
-		{"small-change", "bad\nline", "", false, ""},
+		{"small-change", "Fix the export\n\nPriority: P2", "", true, "Fix the export\n\nPriority: P2"},
+		{"small-change", "a\r\nb", "", true, "a\nb"},
+		{"small-change", "a\rb", "", true, "a\nb"},
+		{"small-change", atCap, "", true, atCap},
+		{"small-change", overCap, "", false, ""},
+		{"small-change", "  " + strings.Repeat("é", MaxArgChars) + "\n", "", true, ""},
+		{"small-change", strings.Repeat("x", MaxArgChars-1) + "\r\n", "", true, ""},
+		{"small-change", strings.Repeat("x", MaxArgChars-2) + "\r\ny", "", true, ""},
+		{"small-change", "-a\nb", "", false, ""},
+		{"implement-issue", "1 " + strings.Repeat("x", MaxArgChars-2), "", true, ""},
+		{"implement-issue", "1 " + strings.Repeat("x", MaxArgChars-1), "", false, ""},
+		{"implement-issue", "12\nmore", "", false, ""},
+		{"refine-issues", "4\n5", "", false, ""},
+		{"create-prd", "an idea\nover two lines", "", false, ""},
+		{"create-prd", "an idea\rover two lines", "", false, ""},
 		{"small-change", "bad\x00nul", "", false, ""},
 		{"nope", "", "", false, ""},
 	}
@@ -168,6 +184,29 @@ func TestArgChecks(t *testing.T) {
 	}
 	if k := errs.KindOf(func() error { _, e := r.Build("nope", ""); return e }()); k != errs.KNotFound {
 		t.Errorf("unknown step kind %v", k)
+	}
+}
+
+// report-bug is keyed by step id; the step itself is registered elsewhere, so check its args directly.
+func TestArgChecksReportBugMultiLine(t *testing.T) {
+	lines := make([]string, 40)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("\tat frame%d (main.go:%d)", i, i+1)
+	}
+	a := strings.Join(lines, "\r\n")
+	if err := checkArgs(Step{ID: "report-bug"}, &a, ""); err != nil {
+		t.Fatalf("40-line report-bug arg: %v", err)
+	}
+	if n := len(strings.Split(a, "\n")); n != 40 || strings.Contains(a, "\r") {
+		t.Errorf("report-bug arg has %d lines, \\r left: %v", n, strings.Contains(a, "\r"))
+	}
+	bad := "trace\x00here"
+	if err := checkArgs(Step{ID: "report-bug"}, &bad, ""); errs.KindOf(err) != errs.KInvalid {
+		t.Errorf("NUL in report-bug: err %v", err)
+	}
+	long := strings.Repeat("y", MaxArgChars+1)
+	if err := checkArgs(Step{ID: "report-bug"}, &long, ""); errs.KindOf(err) != errs.KInvalid {
+		t.Errorf("over-cap report-bug: err %v", err)
 	}
 }
 
