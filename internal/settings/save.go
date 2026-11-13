@@ -188,6 +188,10 @@ func (s *Store) validate(cur *loaded, raw map[string]any, body map[string]json.R
 	if _, err := decodeKey(body, "use_jev", &jev); err != nil {
 		return nil, err
 	}
+	idle := cur.IdleGuard
+	if _, err := decodeKey(body, "idle_guard", &idle); err != nil {
+		return nil, err
+	}
 	rm, re := cur.RunModel, cur.RunEffort
 	if _, err := decodeKey(body, "run_model", &rm); err != nil {
 		return nil, err
@@ -199,6 +203,7 @@ func (s *Store) validate(cur *loaded, raw map[string]any, body map[string]json.R
 		return nil, err
 	}
 	out["grind_mode"], out["use_jev"], out["run_model"], out["run_effort"] = mode, jev, nilIfEmpty(rm), nilIfEmpty(re)
+	out["idle_guard"] = idle
 
 	// ---- slack channels, reviewers ----
 	oldIDs := map[string]bool{}

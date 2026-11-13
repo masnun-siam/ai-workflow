@@ -625,6 +625,7 @@ type Settings = {
   slack_channels: { id: string; name: string }[];
   reviewers: { id: string; name: string; slack_id: string; github_login: string }[]; active_reviewers: string[];
   vault_dir: string | null; grind_mode: "deep" | "simple"; use_jev: boolean;
+  idle_guard: boolean;                                           // default true; absent reads as true
   run_model: Model | null; run_effort: Effort | null;
   grind_limits: { max_rounds: number; poll_interval: number; max_wait: number; max_idle_waits: number;
     stuck_seen: number; ci_timeout: number; ci_poll: number };     // defaults 10, 60, 1500, 4, 2, 1200, 30
