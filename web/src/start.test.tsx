@@ -1,13 +1,13 @@
 import { renderToString } from "preact-render-to-string";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createClient } from "./api/client";
 import { useMockClient } from "./api/http";
 import { mockFetch } from "../mock/server";
 import { App } from "./app/App";
-import { likelyDuplicate } from "./components/Start";
+import { argLength, createArgs, createBody, likelyDuplicate } from "./components/Start";
 import { loadMany, registry } from "./state/data";
 import { nav } from "./state/route";
-import { createDraft, createOpen, startReq } from "./state/ui";
+import { createDraft, createOpen, createRoute, openCreate, startReq } from "./state/ui";
 
 const it_ = (number: number, title: string) => ({ number, title, labels: [], updated_at: "", draft: false });
 
@@ -51,5 +51,98 @@ describe("create box and start dialog render", () => {
     startReq.value = null;
     expect(html).toContain("A custom prompt runs headless");
     expect(html).toContain("Prompt");
+  });
+});
+
+describe("create box routes", () => {
+  const common = { repo: "acme/wasensi-backend" };
+  it("builds each route's argument", () => {
+    expect(createArgs("feature", "  Monthly statement \n", "P1", "Staging")).toBe("Monthly statement");
+    expect(createArgs("small", "Fix the typo", "P3", "Staging")).toBe("Fix the typo\n\nPriority: P3");
+    expect(createArgs("bug", "Login 500s after upgrade", "P1", "Staging")).toBe("Login 500s after upgrade\n\nPriority: P1\nEnvironment: Staging");
+  });
+  it("builds each route's request body; only model and effort per request", () => {
+    expect(createBody("bug", createArgs("bug", "Login 500s after upgrade", "P1", "Staging"), common, ["security"])).toEqual({
+      step: "report-bug", args: "Login 500s after upgrade\n\nPriority: P1\nEnvironment: Staging", model: "opus", effort: "high", repo: "acme/wasensi-backend",
+    });
+    expect(createBody("small", "x\n\nPriority: P2", common, ["security"])).toEqual({ step: "small-change", args: "x\n\nPriority: P2", repo: "acme/wasensi-backend" });
+    expect(createBody("feature", "x", common, ["security"])).toEqual({ step: "create-prd", args: "x", lenses: ["security"], model: "opus", effort: "medium", repo: "acme/wasensi-backend" });
+    expect(createBody("feature", "x", common, []).lenses).toBeUndefined();
+  });
+  it("counts code points, not UTF-16 units", () => {
+    expect(argLength("a🐛b")).toBe(3);
+  });
+});
+
+describe("create box: bug route and the length cap", () => {
+  beforeAll(async () => {
+    useMockClient(createClient(mockFetch));
+    await loadMany(["status", "repos", "products", "settings", "registry", "inbox"]);
+    nav("#/inbox");
+  });
+  afterEach(() => {
+    createRoute.value = "feature";
+    createDraft.value = "";
+    createOpen.value = false;
+  });
+  const render = () => {
+    createOpen.value = true;
+    const html = renderToString(<App />);
+    createOpen.value = false;
+    return html;
+  };
+  it("bug route: three routes in order, priority, environment and its submit label", () => {
+    createDraft.value = "Login 500s after upgrade";
+    createRoute.value = "bug";
+    const html = render();
+    const at = ["Feature", "Small change", "Bug"].map((l) => html.indexOf(`<b>${l}</b>`));
+    expect(at.every((i) => i >= 0)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    expect(html).toContain("reproduce it, then file and refine");
+    for (const s of ["Priority", "P2", "Environment", "Unknown", "Reproduce the bug"]) expect(html).toContain(s);
+    expect(html).not.toContain("Review the PRD with");
+  });
+  it("counter hidden at 18,000, shown past it, submit blocked past 20,000", () => {
+    createDraft.value = "x".repeat(18000);
+    expect(render()).not.toContain("/ 20,000");
+    createDraft.value = "x".repeat(18001);
+    let html = render();
+    expect(html).toContain("18,001 / 20,000");
+    expect(html).not.toMatch(/<button[^>]*disabled[^>]*>Start the PRD interview/);
+    createDraft.value = "x".repeat(20001);
+    html = render();
+    expect(html).toContain("20,001 / 20,000");
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>Start the PRD interview/);
+  });
+  it("the count includes the lines a route adds", () => {
+    createRoute.value = "bug";
+    createDraft.value = "x".repeat(19990);
+    const html = render();
+    expect(html).toContain(`${(19990 + "\n\nPriority: P2\nEnvironment: Unknown".length).toLocaleString("en-US")} / 20,000`);
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>Reproduce the bug/);
+  });
+  it("whitespace-only text cannot be submitted", () => {
+    createDraft.value = "   \n ";
+    expect(render()).toMatch(/<button[^>]*disabled[^>]*>Start the PRD interview/);
+  });
+  it("opening with an empty draft starts on Feature; a kept draft keeps the route", () => {
+    createRoute.value = "bug";
+    createDraft.value = "Login 500s";
+    openCreate();
+    expect(createRoute.value).toBe("bug");
+    createDraft.value = "";
+    openCreate();
+    expect(createRoute.value).toBe("feature");
+    createRoute.value = "bug";
+    openCreate("Add a CSV export");
+    expect(createRoute.value).toBe("feature");
+    expect(createDraft.value).toBe("Add a CSV export");
+  });
+  it("small change: the count includes the priority line", () => {
+    createRoute.value = "small";
+    createDraft.value = "x".repeat(19990);
+    const html = render();
+    expect(html).toContain("20,004 / 20,000");
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>File the issue/);
   });
 });
