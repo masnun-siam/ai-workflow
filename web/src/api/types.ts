@@ -238,6 +238,8 @@ export type PushSubscription = { endpoint: string; keys: { p256dh: string; auth:
 // ---------- vault ----------
 export type VaultFolder = { project: string; feature: string | null; path: string };
 export type VaultSuggestion = { project: string; feature: string; new_project: boolean; new_feature: boolean; why: string };
+/** POST /api/jev/route: route is set only when status is ok (p ≥ 0.4, not unclear). */
+export type JevRoute = { route: "feature" | "small" | "bug" | null; p: number | null; status: string };
 export type VaultPRD = { exists: boolean; status: string | null; title: string | null; folder: string };
 
 // ---------- features (old aiw Features; GET /api/features?product=) ----------

@@ -48,7 +48,7 @@ a repo filter (`?only=owner/name`, default All repos). With no repo registered, 
 | 9 | Me | reconcile and weekly review |
 | 0 | Settings | accounts, products and repos, blubird, notifications, away, review, appearance |
 
-**New** (`n`) opens the Create box: describe a change, then file it as a Feature (PRD interview), a Small change, or a Bug (reproduced, then filed and refined).
+**New** (`n`) opens the Create box: describe a change, then file it as a Feature (PRD interview), a Small change, or a Bug (reproduced, then filed and refined). With **Use jev** on, jev preselects the route while you type; your own pick wins.
 The command palette (`:`) opens the Start dialog: any command, where it runs (repo, another folder, or the notes vault),
 its input (open issues and PRs are listed), model, effort, lenses and account.
 

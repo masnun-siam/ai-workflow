@@ -30,14 +30,21 @@ export type StartReq = { step: RegistryStep | null; repo?: string; args?: string
 export const startReq = signal<StartReq | null>(null);
 
 /** The Create box (n, New): "What should change?" -> a feature (create-prd), a small change or a bug (report-bug).
- *  The draft and the route survive Cancel; opening with an empty draft starts on Feature. */
+ *  The draft and the route survive Cancel; opening with an empty draft starts on Feature.
+ *  jev may preselect the route while typing (createJevPick) until the user clicks one (createRouteTouched). */
 export type CreateRoute = "feature" | "small" | "bug";
 export const createOpen = signal(false);
 export const createDraft = signal("");
 export const createRoute = signal<CreateRoute>("feature");
+export const createRouteTouched = signal(false);
+export const createJevPick = signal<{ route: CreateRoute; p: number } | null>(null);
 export function openCreate(text?: string): void {
   // only reopening a kept draft keeps its route; new text (from the palette) starts on Feature too
-  if (text || !createDraft.value.trim()) createRoute.value = "feature";
+  if (text || !createDraft.value.trim()) {
+    createRoute.value = "feature";
+    createRouteTouched.value = false;
+    createJevPick.value = null;
+  }
   if (text) createDraft.value = text;
   createOpen.value = true;
 }

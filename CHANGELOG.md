@@ -21,6 +21,7 @@
 
 ### Changed
 
+- While you type in the Create box, jev preselects Feature, Small change or Bug and says so ("jev: bug · 82%"); your own pick always wins. With jev off or unsure nothing changes.
 - The Create box has a third route, **Bug**: paste a report (text, logs, a stack trace), pick a priority and where it was seen, and one Opus session reproduces it, then files and refines the issue; if it does not reproduce, it asks whether to file it with the open questions or drop it. Every route takes up to 20,000 characters.
 - The UI is back on the old aiw navigation: a rail with Inbox, Features, Small changes, Dispatches and Activity (then River, Releases, Ops, Me, Settings) and counts for needs-you, dispatching and running; a top bar with the repo switcher (`g r`), search, the needs-you pill and New; a repo filter on list pages (`?only=`); onboarding while no repo is registered; Away mode presets and plan usage in the rail foot. Runs split into Dispatches and Activity; `#/runs` still opens Activity.
 - **New** (`n`) opens the old Create box again: describe the change, pick Feature (a PRD interview with optional peer-review lenses, run on opus at medium) or Small change (one issue with a priority), the repo and the account. It warns when an open issue looks the same. The text survives Cancel.
