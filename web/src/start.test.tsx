@@ -133,5 +133,16 @@ describe("create box: bug route and the length cap", () => {
     createDraft.value = "";
     openCreate();
     expect(createRoute.value).toBe("feature");
+    createRoute.value = "bug";
+    openCreate("Add a CSV export");
+    expect(createRoute.value).toBe("feature");
+    expect(createDraft.value).toBe("Add a CSV export");
+  });
+  it("small change: the count includes the priority line", () => {
+    createRoute.value = "small";
+    createDraft.value = "x".repeat(19990);
+    const html = render();
+    expect(html).toContain("20,004 / 20,000");
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>File the issue/);
   });
 });

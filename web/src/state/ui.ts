@@ -36,8 +36,9 @@ export const createOpen = signal(false);
 export const createDraft = signal("");
 export const createRoute = signal<CreateRoute>("feature");
 export function openCreate(text?: string): void {
+  // only reopening a kept draft keeps its route; new text (from the palette) starts on Feature too
+  if (text || !createDraft.value.trim()) createRoute.value = "feature";
   if (text) createDraft.value = text;
-  if (!createDraft.value.trim()) createRoute.value = "feature";
   createOpen.value = true;
 }
 
