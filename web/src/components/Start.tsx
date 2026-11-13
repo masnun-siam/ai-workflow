@@ -213,7 +213,7 @@ export function CreateDialog() {
           <Btn type="submit" primary disabled={busy || !text.trim() || !repo || tooLong}>{busy ? "Starting…" : SUBMIT[route]}</Btn>
           <Btn onClick={close}>Cancel</Btn>
           {/* the live region stays mounted so screen readers announce the counter when it appears */}
-          <span class={tooLong ? "c-w" : "dim"} aria-live="polite">{n > COUNT_FROM ? `${n.toLocaleString("en-US")} / ${MAX_ARG.toLocaleString("en-US")}` : ""}</span>
+          <span class={tooLong ? "c-w" : "dim"} style={{ alignSelf: "center" }} aria-live="polite">{n > COUNT_FROM ? `${n.toLocaleString("en-US")} / ${MAX_ARG.toLocaleString("en-US")}` : ""}</span>
           <span class="grow" />
           <Btn small onClick={() => { close(); paletteOpen.value = true; }}>Run a command instead</Btn>
         </div>

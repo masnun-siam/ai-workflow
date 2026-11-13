@@ -458,7 +458,7 @@ a.row{color:var(--tx);text-decoration:none}
 .seg-o small{font-size:11.5px}
 @media (max-width:720px){.start{grid-template-columns:1fr}.start-cmds{border-right:0;border-bottom:1px solid var(--line);max-height:180px}}
 .form>.seg{flex:none}
-.form>.seg .seg-o{flex:1 1 200px}
+.form>.seg .seg-o{flex:1 1 140px}
 .banner.inline{display:block}
 
 /* ---------- Features and the feature page (old aiw) ---------- */
