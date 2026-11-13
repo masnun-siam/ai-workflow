@@ -4,12 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Select } from "./Select";
 import { http } from "../api/http";
 import type { RegistryStep } from "../api/extra";
-import type { Effort, Model, OpenItem, PRD, ReviewOffers, Session, VaultFolder, VaultSuggestion } from "../api/types";
+import type { Effort, JevRoute, Model, OpenItem, PRD, ReviewOffers, Session, VaultFolder, VaultSuggestion } from "../api/types";
 import { describeError } from "../state/actions";
 import { currentRepo, load, loadMany, product, products, registry, repoList, repos, settings, status } from "../state/data";
 import { nav } from "../state/route";
 import { clock, shortRepo } from "../state/format";
-import { createDraft, createOpen, createRoute, paletteOpen, startReq, toast, type CreateRoute } from "../state/ui";
+import { createDraft, createJevPick, createOpen, createRoute, createRouteTouched, paletteOpen, startReq, toast, type CreateRoute } from "../state/ui";
 import { RepoField } from "./Shell";
 import { createRepo } from "./Repos";
 import { Btn, Field, useFocusTrap } from "./ui";
@@ -152,6 +152,40 @@ export function createBody(route: CreateRoute, args: string, common: Record<stri
   return { step: "create-prd", args, lenses: lenses.length ? lenses : undefined, model: "opus", effort: "medium", ...common };
 }
 
+export type JevPick = { route: CreateRoute; p: number };
+/** The route jev picked, or null when the user already picked one, the text changed since it was sent, or jev had no answer. */
+export function applyJev(ans: JevRoute, sentText: string, currentText: string, touched: boolean): JevPick | null {
+  if (touched || sentText !== currentText || ans.route === null || ans.p === null) return null;
+  return { route: ans.route, p: ans.p };
+}
+
+/** "jev: bug · 82%", the line under the route control. */
+export const jevLine = (pick: JevPick): string => `jev: ${pick.route === "small" ? "small change" : pick.route} · ${Math.round(pick.p * 100)}%`;
+
+/** Ask jev for a route for `text` and apply its pick. A failed request or no answer changes nothing (FR-6). */
+export function askJev(text: string): Promise<void> {
+  return http.send<JevRoute>("POST", "/api/jev/route", { text }).then((a) => {
+    const pick = applyJev(a, text, createDraft.peek(), createRouteTouched.peek());
+    if (!pick) return;
+    createRoute.value = pick.route;
+    createJevPick.value = pick;
+  }).catch(() => undefined);
+}
+
+/** Ask jev once the text is 20+ characters and typing paused for 800 ms; the returned function cancels the pending call. */
+export function scheduleJev(text: string, ask: (text: string) => unknown = askJev): (() => void) | undefined {
+  if (text.trim().length < 20) return undefined;
+  const t = setTimeout(() => void ask(text), 800);
+  return () => clearTimeout(t);
+}
+
+/** A click on the route control: the user's pick is final, so jev stops changing it and its line hides. */
+export function pickRoute(route: CreateRoute): void {
+  createRouteTouched.value = true;
+  createJevPick.value = null;
+  createRoute.value = route;
+}
+
 export function CreateDialog() {
   const route = createRoute.value;
   const [repo, setRepo] = useState(currentRepo.value ?? repoList.value[0]?.slug ?? "");
@@ -171,6 +205,7 @@ export function CreateDialog() {
     const t = setTimeout(() => { void openItems(repo, "issue").then((items) => setDup(likelyDuplicate(text, items))).catch(() => undefined); }, 800);
     return () => clearTimeout(t);
   }, [text, repo]);
+  useEffect(() => scheduleJev(text), [text]);
   const args = createArgs(route, text, prio, env);
   const n = argLength(args);
   const tooLong = n > MAX_ARG;
@@ -199,9 +234,10 @@ export function CreateDialog() {
         {dup && <div class="banner inline" role="status">Looks like <a href={dup.url ?? `https://github.com/${repo}/issues/${dup.number}`} target="_blank" rel="noreferrer">#{dup.number} {dup.title}</a>. Check it before filing a new one.</div>}
         <div class="seg" role="radiogroup" aria-label="Route">
           {ROUTES.map(([v, l, d]) => (
-            <button key={v} type="button" role="radio" aria-checked={route === v} class={`seg-o${route === v ? " on" : ""}`} onClick={() => (createRoute.value = v)}><b>{l}</b><small class="dim">{d}</small></button>
+            <button key={v} type="button" role="radio" aria-checked={route === v} class={`seg-o${route === v ? " on" : ""}`} onClick={() => pickRoute(v)}><b>{l}</b><small class="dim">{d}</small></button>
           ))}
         </div>
+        {createJevPick.value && !createRouteTouched.value && <small class="dim">{jevLine(createJevPick.value)}</small>}
         <div class="fields">
           <Field label="Repository">{noRepos ? <span class="c-w">No repositories yet. <a href="#/onboarding">Add one</a>.</span> : <RepoField label="Repository" value={repo} onChange={setRepo} />}</Field>
           {route !== "feature" && <Field label="Priority"><Select label="Priority" value={prio} onChange={setPrio} options={PRIORITIES.map((p) => [p, p] as [string, string])} /></Field>}

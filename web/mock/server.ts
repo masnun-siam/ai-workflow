@@ -132,6 +132,7 @@ const routes: [string, RegExp, H][] = [
   ["GET", /^\/api\/review$/, () => ({ panels: db.panels })],
   ["GET", /^\/api\/review\/offers$/, () => ({ default: ["critical"], max_rounds: 3, kinds: { "create-prd": ["critical", "ceo", "cto", "security", "qa", "ux"], custom: ["critical", "cto", "security"] } })],
   ["GET", /^\/api\/repos\/([^/]+)\/([^/]+)\/open$/, ({ q }) => ({ items: q.get("kind") === "pr" ? F.openPRs : F.openIssues })],
+  ["POST", /^\/api\/jev\/route$/, ({ body }) => /crash|error|500|fails?/i.test(String(body.text)) ? { route: "bug", p: 0.82, status: "ok" } : { route: null, p: null, status: "unsure" }],
   ["POST", /^\/api\/vault\/suggest$/, () => ({ project: "wasensi", feature: "payouts", new_project: false, new_feature: false, why: "matches the payouts notes" })],
   ["POST", /^\/api\/repos\/browse$/, () => ({ path: "/code/elsewhere" })],
   ["GET", /^\/api\/dispatches$/, () => ({ dispatches: db.dispatches })],

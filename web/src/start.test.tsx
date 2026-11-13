@@ -1,13 +1,13 @@
 import { renderToString } from "preact-render-to-string";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createClient } from "./api/client";
 import { useMockClient } from "./api/http";
 import { mockFetch } from "../mock/server";
 import { App } from "./app/App";
-import { argLength, createArgs, createBody, likelyDuplicate } from "./components/Start";
+import { applyJev, argLength, askJev, createArgs, createBody, jevLine, likelyDuplicate, pickRoute, scheduleJev } from "./components/Start";
 import { loadMany, registry } from "./state/data";
 import { nav } from "./state/route";
-import { createDraft, createOpen, createRoute, openCreate, startReq } from "./state/ui";
+import { createDraft, createJevPick, createOpen, createRoute, createRouteTouched, openCreate, startReq } from "./state/ui";
 
 const it_ = (number: number, title: string) => ({ number, title, labels: [], updated_at: "", draft: false });
 
@@ -144,5 +144,127 @@ describe("create box: bug route and the length cap", () => {
     const html = render();
     expect(html).toContain("20,004 / 20,000");
     expect(html).toMatch(/<button[^>]*disabled[^>]*>File the issue/);
+  });
+});
+
+describe("create box: jev preselects the route", () => {
+  beforeAll(async () => {
+    useMockClient(createClient(mockFetch));
+    await loadMany(["status", "repos", "products", "settings", "registry", "inbox"]);
+    nav("#/inbox");
+  });
+  afterEach(() => {
+    createRoute.value = "feature";
+    createDraft.value = "";
+    createOpen.value = false;
+    createRouteTouched.value = false;
+    createJevPick.value = null;
+    useMockClient(createClient(mockFetch));
+  });
+  const sent = "The export crashes with a 500 on save";
+  const bug = { route: "bug" as const, p: 0.82, status: "ok" };
+  const render = () => {
+    createOpen.value = true;
+    const html = renderToString(<App />);
+    createOpen.value = false;
+    return html;
+  };
+  it("an answer for the current text, route untouched, is a pick", () => {
+    expect(applyJev(bug, sent, sent, false)).toEqual({ route: "bug", p: 0.82 });
+  });
+  it("a touched route, a changed text or no answer is ignored", () => {
+    expect(applyJev(bug, sent, sent, true)).toBeNull();
+    expect(applyJev(bug, sent, `${sent} and more`, false)).toBeNull();
+    expect(applyJev({ route: null, p: null, status: "off" }, sent, sent, false)).toBeNull();
+    expect(applyJev({ route: null, p: null, status: "unsure" }, sent, sent, false)).toBeNull();
+  });
+  it("names each route in the jev line", () => {
+    expect(jevLine({ route: "bug", p: 0.82 })).toBe("jev: bug · 82%");
+    expect(jevLine({ route: "feature", p: 0.4 })).toBe("jev: feature · 40%");
+    expect(jevLine({ route: "small", p: 0.667 })).toBe("jev: small change · 67%");
+  });
+  it("shows the jev line for its own pick, hides it once the user picked", () => {
+    createDraft.value = sent;
+    createRoute.value = "bug";
+    createJevPick.value = { route: "bug", p: 0.82 };
+    expect(render()).toContain("jev: bug · 82%");
+    createRouteTouched.value = true;
+    expect(render()).not.toContain("jev: bug");
+  });
+  it("no pick, no line", () => {
+    createDraft.value = sent;
+    expect(render()).not.toContain("jev:");
+  });
+  it("a kept draft keeps the pick and the touched flag; an empty draft clears both", () => {
+    createDraft.value = sent;
+    createRoute.value = "bug";
+    createJevPick.value = { route: "bug", p: 0.82 };
+    createRouteTouched.value = true;
+    openCreate();
+    expect([createRoute.value, createRouteTouched.value, createJevPick.value]).toEqual(["bug", true, { route: "bug", p: 0.82 }]);
+    createDraft.value = "";
+    openCreate();
+    expect([createRoute.value, createRouteTouched.value, createJevPick.value]).toEqual(["feature", false, null]);
+  });
+  it("asks jev and applies a bug answer for the current text", async () => {
+    createDraft.value = sent;
+    await askJev(sent);
+    expect([createRoute.value, createJevPick.value]).toEqual(["bug", { route: "bug", p: 0.82 }]);
+  });
+  it("a jev answer after the user picked, or for older text, changes nothing", async () => {
+    createDraft.value = sent;
+    createRoute.value = "feature";
+    createRouteTouched.value = true;
+    await askJev(sent);
+    expect([createRoute.value, createJevPick.value]).toEqual(["feature", null]);
+    createRouteTouched.value = false;
+    createDraft.value = `${sent} when the file is big`;
+    await askJev(sent);
+    expect([createRoute.value, createJevPick.value]).toEqual(["feature", null]);
+  });
+  it("jev unsure or a failed request keeps Feature, with no error", async () => {
+    createDraft.value = "Let merchants download a monthly statement";
+    await askJev(createDraft.value);
+    expect([createRoute.value, createJevPick.value]).toEqual(["feature", null]);
+    useMockClient(createClient(async () => new Response(JSON.stringify({ error: "boom" }), { status: 500 })));
+    createDraft.value = sent;
+    await expect(askJev(sent)).resolves.toBeUndefined();
+    expect([createRoute.value, createJevPick.value]).toEqual(["feature", null]);
+  });
+  it("asks once after an 800 ms pause on 20+ characters; shorter text or more typing asks nothing", () => {
+    vi.useFakeTimers();
+    try {
+      const asked: string[] = [];
+      const ask = (t: string) => asked.push(t);
+      expect(scheduleJev("   it crashes        ", ask)).toBeUndefined();
+      const cancel = scheduleJev(sent, ask);
+      vi.advanceTimersByTime(799);
+      expect(asked).toEqual([]);
+      cancel?.(); // typing again within the pause
+      scheduleJev(`${sent} twice`, ask);
+      vi.advanceTimersByTime(800);
+      expect(asked).toEqual([`${sent} twice`]);
+      vi.advanceTimersByTime(5000);
+      expect(asked).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("a click on the route control, the selected one too, hides the jev line and stops later answers", async () => {
+    createDraft.value = sent;
+    await askJev(sent);
+    pickRoute("bug");
+    expect([createRoute.value, createRouteTouched.value, createJevPick.value]).toEqual(["bug", true, null]);
+    pickRoute("feature");
+    await askJev(sent);
+    expect([createRoute.value, createJevPick.value]).toEqual(["feature", null]);
+    expect(render()).not.toContain("jev:");
+  });
+  it("new text from the palette clears the pick and the touched flag", () => {
+    createDraft.value = sent;
+    createJevPick.value = { route: "bug", p: 0.82 };
+    createRouteTouched.value = true;
+    openCreate("Add a CSV export");
+    expect([createRoute.value, createRouteTouched.value, createJevPick.value]).toEqual(["feature", false, null]);
   });
 });
