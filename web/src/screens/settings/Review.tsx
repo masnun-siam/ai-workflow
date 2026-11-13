@@ -26,7 +26,7 @@ export function ReviewPane() {
         </div>
         <Field label="Lenses, one per line as name: instructions"><textarea rows={5} value={v.lenses} onInput={(e) => setD({ ...v, lenses: (e.target as HTMLTextAreaElement).value })} /></Field>
         <div class="acts"><Btn primary disabled={!d} onClick={() => save()}>Save</Btn>{d && <Btn onClick={() => setD(null)}>Discard</Btn>}
-          <Btn disabled={!c.overridden} title={c.overridden ? undefined : "Already the shipped lenses"} onClick={async () => { if (!(await askConfirm("Replace your lenses with the shipped ones?"))) return; const r = await mutate(() => http.send<ReviewConfig>("PUT", "/api/settings/review", { reset: true }), "Reset to shipped lenses"); if (r) { reviewCfg.value = r; setD(null); } }}>Reset to shipped</Btn></div>
+          <Btn disabled={!c.overridden} title={c.overridden ? undefined : "Already the shipped lenses"} onClick={async () => { if (!(await askConfirm("Replace your lenses with the shipped ones?", true))) return; const r = await mutate(() => http.send<ReviewConfig>("PUT", "/api/settings/review", { reset: true }), "Reset to shipped lenses"); if (r) { reviewCfg.value = r; setD(null); } }}>Reset to shipped</Btn></div>
       </div>
     </Pane>
   );

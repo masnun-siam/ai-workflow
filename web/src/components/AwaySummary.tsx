@@ -7,7 +7,7 @@ import { describeError } from "../state/actions";
 import { load, loadMany, mutate, status } from "../state/data";
 import { clock, fmtCost, shortRepo } from "../state/format";
 import { toast } from "../state/ui";
-import { Btn, Tag, useFocusTrap } from "./ui";
+import { Btn, Tag, useFocusTrap, useLayer } from "./ui";
 
 type Pick = { labels: string[]; other: string };
 type Q = Question & { picked: string[]; why: string };
@@ -18,6 +18,7 @@ function ChangeDialog({ rows, onClose }: { rows: AwayLog[]; onClose: () => void 
   const [busy, setBusy] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   useFocusTrap(box);
+  useLayer(onClose);
   const set = (id: string, qi: number, p: Pick) => setPicks({ ...picks, [id]: picks[id]!.map((x, i) => (i === qi ? p : x)) });
   const changed = rows.filter((r) => (r.questions ?? []).some((q, qi) => { const p = picks[r.id!]![qi]!; return p.other.trim() || p.labels.join("|") !== q.picked.join("|"); }));
   const submit = async () => {

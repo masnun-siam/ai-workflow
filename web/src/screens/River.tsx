@@ -29,7 +29,7 @@ export function River() {
                 {stage.cards.map((c, ci) => {
                   const selected = si === s.stage && ci === s.card;
                   return (
-                    <button key={c.id} type="button" class={`card${c.need ? " need" : ""}${selected ? " sel" : ""}`} aria-current={selected}
+                    <button key={c.id} type="button" class={`card${c.need ? " need" : ""}${selected ? " sel" : ""}`} aria-current={selected || undefined}
                       onClick={() => { setSel({ stage: si, card: ci }); if (prefs.value.layout === "drawer") detailOpen.value = true; }}>
                       <span class="t">{c.title}</span>
                       <span class="m"><span class={`tag ${c.tone}`}>{c.tag}</span>{c.meta}</span>

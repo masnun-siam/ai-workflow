@@ -33,11 +33,11 @@ export const releaseOps = {
   cut: (dry: boolean) => mutate(() => http.send("POST", "/api/releases", { repo: repoSlug.value, dry_run: dry || undefined }), dry ? "Dry run started" : "Started release-pr", [...KEYS, "river"]),
   grind: () => { const r = currentRelease.value; return r && mutate(() => http.send("POST", `/api/releases/${r.id}/grind`, {}), "Grind started", [...KEYS]); },
   note: () => { const r = currentRelease.value; return r && mutate(() => http.send("POST", `/api/releases/${r.id}/note`, {}), "Drafting the note", [...KEYS]); },
-  skip: async () => { const r = currentRelease.value; if (r && (await askConfirm("Skip this release?"))) await mutate(() => http.send("POST", `/api/releases/${r.id}/skip`, {}), "Skipped", [...KEYS, "river"]); },
+  skip: async () => { const r = currentRelease.value; if (r && (await askConfirm("Skip this release?", true))) await mutate(() => http.send("POST", `/api/releases/${r.id}/skip`, {}), "Skipped", [...KEYS, "river"]); },
   post: async () => {
     const r = currentRelease.value; if (!r || r.note_posted_at || !r.note) return;
     const ch = settings.value?.release_note.channel_name ?? "the channel";
-    if (await askConfirm(`Post the note to #${ch}? It posts once and is never retried.`)) await mutate(() => http.send("POST", `/api/releases/${r.id}/post`, {}), `Posted to #${ch}`, [...KEYS, "river", "inbox"]);
+    if (await askConfirm(`Post the note to #${ch}? It posts once and is never retried.`, true)) await mutate(() => http.send("POST", `/api/releases/${r.id}/post`, {}), `Posted to #${ch}`, [...KEYS, "river", "inbox"]);
   },
   edit: () => { const r = currentRelease.value; if (r && !r.note_posted_at) editing.value = true; },
 };

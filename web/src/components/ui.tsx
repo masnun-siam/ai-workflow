@@ -1,5 +1,6 @@
 import type { ComponentChildren, RefObject } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
+import { pushLayer } from "../state/layers";
 import type { Tone } from "../api/types";
 
 export const Kbd = ({ children }: { children: ComponentChildren }) => <kbd>{children}</kbd>;
@@ -61,7 +62,7 @@ export function Chips<T extends string>({ value, options, onPick, label }: { val
   return (
     <div class="chips" role="group" aria-label={label}>
       {options.map(([v, l]) => (
-        <button type="button" class={`chip${v === value ? " on" : ""}`} aria-pressed={v === value} onClick={() => onPick(v)}>{l}</button>
+        <button key={v} type="button" class={`chip${v === value ? " on" : ""}`} aria-pressed={v === value} onClick={() => onPick(v)}>{l}</button>
       ))}
     </div>
   );
@@ -88,6 +89,19 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, focusSelf = fal
       else if (!e.shiftKey && document.activeElement === last) { first.focus(); e.preventDefault(); }
     };
     el?.addEventListener("keydown", onKey);
-    return () => { el?.removeEventListener("keydown", onKey); if (prev && document.contains(prev)) prev.focus(); };
+    return () => { el?.removeEventListener("keydown", onKey); restoreFocus(prev); };
   }, []);
+}
+
+/** Give focus back to the element that opened a layer; when it was the page itself (a key opened it), to the selected row. */
+export function restoreFocus(prev: HTMLElement | null): void {
+  if (prev && prev !== document.body && document.contains(prev)) { prev.focus(); return; }
+  setTimeout(() => document.querySelector<HTMLElement>('[aria-current="true"]')?.focus({ preventScroll: true }), 0);
+}
+
+/** Registers this component as an open layer for Escape and the global-key guard while it is mounted (or `active`). */
+export function useLayer(close: () => void, active = true, modal = true): void {
+  const ref = useRef(close);
+  ref.current = close;
+  useEffect(() => (active ? pushLayer(() => ref.current(), modal) : undefined), [active]);
 }

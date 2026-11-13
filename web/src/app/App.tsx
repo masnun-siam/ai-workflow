@@ -4,7 +4,7 @@ import { ConfirmDialog, Help, Palette, Toast } from "../components/Overlays";
 import { CreateDialog, StartDialog } from "../components/Start";
 import { interceptGitHubLinks, WorkPanel, workTarget } from "../components/WorkPanel";
 import { CreateRepoDialog, createRepo, PublishDialog, publishRepo } from "../components/Repos";
-import { Btn, useFocusTrap } from "../components/ui";
+import { Btn, useFocusTrap, useLayer } from "../components/ui";
 import type { ComponentChildren } from "preact";
 import { Inbox } from "../screens/Inbox";
 import { Me } from "../screens/Me";
@@ -21,7 +21,8 @@ import { SessionPage } from "../screens/SessionPage";
 import { Settings } from "../screens/Settings";
 import { http } from "../api/http";
 import { activityTab, mutate, chooseProduct, currentRepo, currentView, loadMany, repoList, repos, status, load } from "../state/data";
-import { HINTS, resolveKey } from "../state/keymap";
+import { hintsFor, resolveKey } from "../state/keymap";
+import { overlayOpen } from "../state/layers";
 import { applyPrefs, prefs } from "../state/prefs";
 import { visibleKeys } from "../state/refetch";
 import { startRealtime } from "../state/realtime";
@@ -66,6 +67,7 @@ function Banners() {
 function Drawer({ children }: { children: ComponentChildren }) {
   const box = useRef<HTMLDivElement>(null);
   useFocusTrap(box, true);
+  useLayer(() => (detailOpen.value = false), true, false);
   return (
     <>
       <div class="scrim" onClick={() => (detailOpen.value = false)} />
@@ -93,7 +95,7 @@ export function App() {
   const p = prefs.value;
   const split = p.layout === "split";
   const showSide = split && SPLIT_SCREENS.has(r.screen) && !r.id && (r.screen !== "activity" || activityTab.value === "sessions");
-  const hints = [...(HINTS[r.screen] ?? []), ["0-9", "pages"], ["g r", "repo"], ["n", "new"], ["⌘K", "search"], ["?", "keys"]] as [string, string][];
+  const hints = [...hintsFor(r.screen, !!r.id), ["0-9", "pages"], ["g r", "repo"], ["n", "new"], ["⌘K", "search"], ["?", "keys"]] as [string, string][];
   useOnboardingGate();
   // The current repo picks the product River, Releases and Ops show.
   const repoProduct = repoList.value.find((x) => x.slug === currentRepo.value)?.product;
@@ -124,7 +126,7 @@ export function App() {
         { key: e.key, meta: e.metaKey, ctrl: e.ctrlKey, alt: e.altKey, typing },
         {
           screen: route.value.screen,
-          overlay: !!confirmReq.value || !!startReq.value || paletteOpen.value || helpOpen.value || repoOpen.value || createOpen.value || !!workTarget.value || !!createRepo.value || !!publishRepo.value,
+          overlay: overlayOpen(),
           actions: [...targetActions(currentTarget.value), ...screenActionList()],
           quickOptions: quickCount.value,
           nav: hasList(route.value.screen),

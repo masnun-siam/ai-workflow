@@ -9,7 +9,7 @@ import { grinds, loadMany, mutate, repoList, sessionList } from "../state/data";
 import { ago, shortRepo } from "../state/format";
 import { askConfirm } from "../state/ui";
 import { sessionTag } from "./SessionView";
-import { Btn, Tag, useFocusTrap } from "./ui";
+import { Btn, Tag, useFocusTrap, useLayer } from "./ui";
 
 export type WorkTarget = { kind: "issue" | "pr"; repo: string; n: number };
 export const workTarget = signal<WorkTarget | null>(null);
@@ -73,7 +73,7 @@ function IssueBody({ t, v }: { t: WorkTarget; v: IssueView }) {
       <div class="acts">
         {open && <Btn small primary onClick={refine}>Refine</Btn>}
         {open && <Btn small onClick={async () => { if (await askConfirm(`Close #${t.n} as completed?`)) await state("closed", "completed"); }}>Close as completed</Btn>}
-        {open && <Btn small onClick={async () => { if (await askConfirm(`Close #${t.n} as not planned?`)) await state("closed", "not_planned"); }}>Close as not planned</Btn>}
+        {open && <Btn small onClick={async () => { if (await askConfirm(`Close #${t.n} as not planned?`, true)) await state("closed", "not_planned"); }}>Close as not planned</Btn>}
         {!open && <Btn small onClick={() => state("open")}>Reopen</Btn>}
       </div>
       <Html html={v.body_html} />
@@ -103,7 +103,7 @@ function PRBody({ t, v }: { t: WorkTarget; v: PRView }) {
         <span class="mono dim">{v.head} → {v.base}</span><span class="dim">by {v.author} · +{v.additions} −{v.deletions} · {v.files.length} files</span></div>
       <div class="acts">
         {live && <Btn small primary={!warnings.length} onClick={merge}>Merge…</Btn>}
-        {live && <Btn small onClick={async () => { if (await askConfirm(`Close PR #${t.n} without merging?`)) await state("closed"); }}>Close PR…</Btn>}
+        {live && <Btn small onClick={async () => { if (await askConfirm(`Close PR #${t.n} without merging?`, true)) await state("closed"); }}>Close PR…</Btn>}
         {v.state === "closed" && <Btn small onClick={() => state("open")}>Reopen PR</Btn>}
       </div>
       {warnings.length > 0 && live && <div class="banner">Before merging: {warnings.join(", ")}.</div>}
@@ -113,7 +113,7 @@ function PRBody({ t, v }: { t: WorkTarget; v: PRView }) {
             {g.session && <a class="btn sm" href={`#/sessions/${g.session}`} onClick={() => (workTarget.value = null)}>Session</a>}
             {g.thread && <a class="btn sm" href={g.thread} data-ext target="_blank" rel="noreferrer">Slack thread</a>}
             <Btn small onClick={() => mutate(() => http.send("POST", `/api/grinds/${t.repo}/${t.n}/skip-ci`, {}), "CI wait skipped", ["grinds"])}>Skip CI</Btn>
-            <Btn small bad onClick={async () => { if (await askConfirm(`Stop grinding #${t.n}?`)) await mutate(() => http.send("POST", `/api/grinds/${t.repo}/${t.n}/stop`, {}), "Grind stopped", ["grinds"]); }}>Stop</Btn>
+            <Btn small bad onClick={async () => { if (await askConfirm(`Stop grinding #${t.n}?`, true)) await mutate(() => http.send("POST", `/api/grinds/${t.repo}/${t.n}/stop`, {}), "Grind stopped", ["grinds"]); }}>Stop</Btn>
           </div>
         </div>
       )}
@@ -137,6 +137,7 @@ export function WorkPanel() {
   const [err, setErr] = useState("");
   const box = useRef<HTMLDivElement>(null);
   useFocusTrap(box, true);
+  useLayer(() => (workTarget.value = null));
   const get = () => { setErr(""); http.get<IssueView | PRView>(`/api/${t.kind === "pr" ? "pulls" : "issues"}/${t.repo}/${t.n}`).then(setV, (e) => setErr(describeError(e))); };
   reload = () => { get(); void loadMany(["features", "changes"]); };
   useEffect(() => { setV(null); get(); }, [t.kind, t.repo, t.n]);

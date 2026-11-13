@@ -4,10 +4,29 @@ import type { RegistryStep } from "../api/extra";
 export type ToastMsg = { msg: string; level: "info" | "warn" | "error"; path?: string };
 export const toastMsg = signal<ToastMsg | null>(null);
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
+let toastEnds = 0;
+let toastLeft = 0;
+/** Errors and toasts with an action (a path to open) stay at least 6 s; the rest 2.6 s. */
+export const toastMs = (level: ToastMsg["level"], path?: string): number => (level === "error" || path ? 6000 : 2600);
+function arm(ms: number): void {
+  clearTimeout(toastTimer);
+  toastEnds = Date.now() + ms;
+  toastTimer = setTimeout(() => (toastMsg.value = null), ms);
+}
 export function toast(msg: string, level: ToastMsg["level"] = "info", path?: string): void {
   toastMsg.value = { msg, level, path };
+  arm(toastMs(level, path));
+}
+/** Hover or focus on the toast: stop the clock. */
+export function holdToast(): void {
+  if (!toastMsg.peek() || !toastEnds) return;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (toastMsg.value = null), level === "error" ? 6000 : 2600);
+  toastLeft = Math.max(1500, toastEnds - Date.now());
+  toastEnds = 0;
+}
+/** Pointer or focus leaves: run out what was left. */
+export function releaseToast(): void {
+  if (toastMsg.peek() && !toastEnds) arm(toastLeft);
 }
 
 export const paletteOpen = signal(false);
@@ -17,11 +36,12 @@ export const helpOpen = signal(false);
 export const connected = signal(false);
 export const detailOpen = signal(false);
 
-export type ConfirmReq = { text: string; resolve: (yes: boolean) => void };
+export type ConfirmReq = { text: string; danger: boolean; resolve: (yes: boolean) => void };
 export const confirmReq = signal<ConfirmReq | null>(null);
-export function askConfirm(text: string): Promise<boolean> {
+/** `danger`: the confirm destroys or stops something, so focus starts on "No". */
+export function askConfirm(text: string, danger = false): Promise<boolean> {
   return new Promise((resolve) => {
-    confirmReq.value = { text, resolve: (y) => { confirmReq.value = null; resolve(y); } };
+    confirmReq.value = { text, danger, resolve: (y) => { confirmReq.value = null; resolve(y); } };
   });
 }
 

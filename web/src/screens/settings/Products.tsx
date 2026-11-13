@@ -22,7 +22,7 @@ export function ProductsPane() {
         {(products.value ?? []).map((p) => (
           <div key={p.docs_repo}>
             <div class="dh"><b>{p.name}</b><span class="dim mono">{p.docs_repo}</span>
-              <Btn small bad onClick={async () => { if (await askConfirm(`Remove product ${p.name}? The repos stay on disk.`)) void mutate(() => http.send("DELETE", `/api/products/${p.docs_repo}`), "Removed", [...keys]); }}>Remove</Btn></div>
+              <Btn small bad onClick={async () => { if (await askConfirm(`Remove product ${p.name}? The repos stay on disk.`, true)) void mutate(() => http.send("DELETE", `/api/products/${p.docs_repo}`), "Removed", [...keys]); }}>Remove</Btn></div>
             {p.error && <div class="banner bad">{p.error}</div>}
             <KV rows={p.repos.map((r) => [r.name, <span>{r.repo} <span class="dim">{r.role}</span> {r.cloned ? "" : <span class="c-w">not cloned</span>}{r.conflict && <span class="c-b"> conflicts with {r.conflict}</span>}</span>])} />
           </div>
@@ -42,7 +42,7 @@ export function ProductsPane() {
                 <td><input type="checkbox" aria-label={`Auto grind ${r.slug}`} checked={rs.auto_grind} onChange={(e) => set({ auto_grind: (e.target as HTMLInputElement).checked })} /></td>
                 <td><input aria-label={`Slack channel ${r.slug}`} defaultValue={rs.slack_channel} onChange={(e) => set({ slack_channel: (e.target as HTMLInputElement).value.trim() })} style={{ width: "9em" }} /></td>
                 <td style={{ whiteSpace: "nowrap" }}><input aria-label={`Release head ${r.slug}`} defaultValue={rs.release_head ?? ""} placeholder="staging" onChange={(e) => set({ release_head: (e.target as HTMLInputElement).value.trim() })} style={{ width: "7.5em" }} /> → <input aria-label={`Release base ${r.slug}`} defaultValue={rs.release_base ?? ""} placeholder="master" onChange={(e) => set({ release_base: (e.target as HTMLInputElement).value.trim() })} style={{ width: "7.5em" }} /></td>
-                <td><div class="acts">{r.slug.startsWith("local/") && <Btn small primary onClick={() => (publishRepo.value = r.slug)}>Publish</Btn>}<Btn small bad onClick={async () => { if (await askConfirm(`Unregister ${r.slug}? The checkout stays on disk.`)) void mutate(() => http.send("DELETE", `/api/repos/${r.slug}`), "Removed", [...keys]); }}>Remove</Btn></div></td>
+                <td><div class="acts">{r.slug.startsWith("local/") && <Btn small primary onClick={() => (publishRepo.value = r.slug)}>Publish</Btn>}<Btn small bad onClick={async () => { if (await askConfirm(`Unregister ${r.slug}? The checkout stays on disk.`, true)) void mutate(() => http.send("DELETE", `/api/repos/${r.slug}`), "Removed", [...keys]); }}>Remove</Btn></div></td>
               </tr>
             );
           })}</tbody></table></div>

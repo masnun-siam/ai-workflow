@@ -13,7 +13,7 @@ export function Ops() {
       <Pane label="ops">
         <div class="rows">
           {opsRows.value.map((o, i) => (
-            <button key={o.step} type="button" class={`row${i === sel.value.ops ? " sel" : ""}`} aria-current={i === sel.value.ops} style={{ gridTemplateColumns: "minmax(0,1.1fr) 90px minmax(0,1.4fr)" }}
+            <button key={o.step} type="button" class={`row${i === sel.value.ops ? " sel" : ""}`} aria-current={i === sel.value.ops || undefined} style={{ gridTemplateColumns: "minmax(0,1.1fr) 90px minmax(0,1.4fr)" }}
               onClick={() => { setSel({ ops: i }); if (prefs.value.layout === "drawer") detailOpen.value = true; }}>
               <span class="t mono">{o.label}</span><span class="w">{o.scope}</span><span class="t mu">{o.summary}</span>
             </button>
