@@ -58,6 +58,7 @@ func (m *Manager) resumeSpawn(ctx context.Context, rec Record, text string) (Rec
 		r.CwdPath = path
 		r.EndedAt, r.Error, r.Note, r.PendingAnswer = "", "", "", text
 		r.PendingQuestion, r.ResumedFresh, r.TerminalHandoff = nil, nil, nil
+		r.Stalled, r.IdleBlocks = "", 0
 	}})
 }
 
