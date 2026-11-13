@@ -28,6 +28,9 @@ One entry of the built-in registry (`create-prd`, `implement-issue`, `pr-grind`,
 **Session**:
 One headless `claude -p` run started by setu, kept in `~/.setu/sessions/<id>/` with `meta.json`, `stream.jsonl` and `stderr.log`. Status: starting, running, waiting, limited, queued, done, failed, stopped. A `waiting` session has asked the human a question through `setu ask`.
 
+**Idle guard / stalled**:
+The idle guard is setu's Claude Code `Stop` hook (`setu hook idle`) on headless skill sessions: it blocks a turn that ends without a ✅ table, a `setu ask` question or live background work, at most twice in a row. A session it then lets end is **stalled** (`stalled` on its record): it ended without finishing or asking. A dispatch lane is stalled ("stopped before a PR") when, with the guard on, its session sits idle without a ready PR.
+
 **Round**:
 One batch of questions a waiting session asks, answered together from the Inbox, the session page or Away mode.
 
