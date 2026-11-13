@@ -44,6 +44,8 @@ func InboxRows(ds []store.Dispatch, now float64) []InboxRow {
 				continue // closed or skipped: nothing waits on you
 			}
 			switch {
+			case x.Stalled != "":
+				row.Key, row.Group, row.Reason = pre+"stalled", "fix", "Stalled: "+x.Stalled
 			case x.NeedsYou != "":
 				row.Key, row.Group, row.Reason = pre+"needs", "answer", x.NeedsYou
 			case x.Held != "":

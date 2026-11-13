@@ -1,6 +1,7 @@
 package dispatch
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -169,6 +170,65 @@ func TestStepRules(t *testing.T) {
 			func(t *testing.T, l store.Lane, a []Action) {
 				if l.NeedsYou != "waiting on you" {
 					t.Fatal(l.NeedsYou)
+				}
+			}},
+		{"4 implementing, idle guard: idle past grace is stalled, not needs-you", func() store.Lane { l := ln(store.StImplementing); l.IdleSince = now - 181; return l }, Facts{Agent: "idle", IdleGuard: true}, cfg(nil),
+			func(t *testing.T, l store.Lane, a []Action) {
+				if l.Stalled != Stalled || l.NeedsYou != "" || len(a) != 0 {
+					t.Fatal(l.Stalled, l.NeedsYou, a)
+				}
+			}},
+		{"4 implementing, idle guard: idle inside grace only starts the clock", func() store.Lane { return ln(store.StImplementing) }, Facts{Agent: "idle", IdleGuard: true}, cfg(nil),
+			func(t *testing.T, l store.Lane, a []Action) {
+				if l.IdleSince != now || l.Stalled != "" || l.NeedsYou != "" || len(a) != 0 {
+					t.Fatal(l)
+				}
+			}},
+		{"4 implementing, idle guard: a draft PR idle past grace is stalled", func() store.Lane { l := ln(store.StImplementing); l.IdleSince = now - 181; return l },
+			Facts{Agent: "idle", IdleGuard: true, PR: &PRFact{N: 9, State: "OPEN", Draft: true, CI: "success"}}, cfg(nil),
+			func(t *testing.T, l store.Lane, a []Action) {
+				if l.Stage != store.StImplementing || l.Stalled != Stalled || l.NeedsYou != "" || l.PR != 9 {
+					t.Fatal(l)
+				}
+			}},
+		{"4 implementing, idle guard: an old needs-you turns into stalled", func() store.Lane {
+			l := ln(store.StImplementing)
+			l.IdleSince, l.NeedsYou = now-500, "stopped without a ready PR"
+			return l
+		}, Facts{Agent: "idle", IdleGuard: true}, cfg(nil),
+			func(t *testing.T, l store.Lane, a []Action) {
+				if l.Stalled != Stalled || l.NeedsYou != "" || len(a) != 0 {
+					t.Fatal(l.Stalled, l.NeedsYou, a)
+				}
+			}},
+		{"4 implementing, idle guard: blocked agent still needs you", func() store.Lane { l := ln(store.StImplementing); l.Stalled = Stalled; return l }, Facts{Agent: "blocked", IdleGuard: true}, cfg(nil),
+			func(t *testing.T, l store.Lane, a []Action) {
+				if l.NeedsYou != "waiting on you" || l.Stalled != "" || !hasNotify(a, "needs_you") {
+					t.Fatal(l.NeedsYou, l.Stalled, a)
+				}
+			}},
+		{"4 implementing, idle guard: a resumed session clears stalled", func() store.Lane {
+			l := ln(store.StImplementing)
+			l.IdleSince, l.Stalled = now-500, Stalled
+			return l
+		}, Facts{Agent: "working", IdleGuard: true}, cfg(nil),
+			func(t *testing.T, l store.Lane, a []Action) {
+				if l.Stalled != "" || l.NeedsYou != "" || l.IdleSince != 0 {
+					t.Fatal(l)
+				}
+			}},
+		{"4 implementing, idle guard: a ready PR moves on and clears stalled", func() store.Lane { l := ln(store.StImplementing); l.Stalled = Stalled; return l },
+			Facts{Agent: "idle", IdleGuard: true, PR: openPR("success")}, cfg(nil),
+			func(t *testing.T, l store.Lane, a []Action) {
+				if l.Stage == store.StImplementing || l.Stalled != "" {
+					t.Fatal(l.Stage, l.Stalled)
+				}
+			}},
+		{"4 implementing, idle guard: a gone session clears stalled for needs-you", func() store.Lane { l := ln(store.StImplementing); l.Stalled = Stalled; return l },
+			Facts{Agent: "gone", IdleGuard: true}, cfg(nil),
+			func(t *testing.T, l store.Lane, a []Action) {
+				if l.Stalled != "" || l.NeedsYou != "the lane session is gone" {
+					t.Fatal(l.Stalled, l.NeedsYou)
 				}
 			}},
 		{"5 grinding done approved goes to merge_gate", func() store.Lane { return ln(store.StGrinding) }, Facts{PR: openPR("success"), Slack: true, Grind: grindDone}, cfg(nil),
@@ -598,9 +658,10 @@ func TestLaneActions(t *testing.T) {
 		t.Fatal("resume after pause-now restarts")
 	}
 	// retry: implementing without a PR -> close + queued
+	d.Lanes["o/r#1"].Stalled = Stalled
 	_ = act("o/r#1", "retry", "")
 	l1 := d.Lanes["o/r#1"]
-	if l1.Stage != store.StQueued || l1.Handle != nil || len(l1.Outbox) != 1 || l1.Outbox[0].Kind != "close" {
+	if l1.Stage != store.StQueued || l1.Handle != nil || len(l1.Outbox) != 1 || l1.Outbox[0].Kind != "close" || l1.Stalled != "" {
 		t.Fatal(l1)
 	}
 	// retry a skipped lane
@@ -630,9 +691,10 @@ func TestLaneActions(t *testing.T) {
 		t.Fatal("unhold")
 	}
 	// skip closes the active session
+	d.Lanes["o/r#3"].Stalled = Stalled
 	_ = act("o/r#3", "skip", "")
 	l3 := d.Lanes["o/r#3"]
-	if l3.Stage != store.StSkipped || l3.SkipReason != "skipped by you" || len(l3.Outbox) != 1 {
+	if l3.Stage != store.StSkipped || l3.SkipReason != "skipped by you" || len(l3.Outbox) != 1 || l3.Stalled != "" {
 		t.Fatal(l3)
 	}
 	// send needs a handle and sane text
@@ -815,5 +877,50 @@ func TestPublicSettledAndStranded(t *testing.T) {
 	}
 	if l2.Stranded == nil || *l2.Stranded != "blocked by skipped #1" || strings.Join(l2.SkippedDeps, ",") != "o/r#1" {
 		t.Fatalf("stranded lane %+v", l2)
+	}
+}
+
+func TestStalledPublicAndInbox(t *testing.T) {
+	stalled, asks, settled := lane(1, store.StImplementing), lane(2, store.StImplementing), lane(3, store.StSkipped)
+	stalled.Stalled, stalled.NeedsYou = Stalled, "stale text" // needs_you is null while stalled
+	asks.NeedsYou = "waiting on you"
+	settled.Stalled = Stalled
+	d := dsp(stalled, asks, settled)
+	p := New(Deps{Now: func() time.Time { return time.Unix(1000, 0) }}).Public(*d, false)
+	b, _ := json.Marshal(p.Lanes)
+	var got []map[string]any
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got[0]["stalled"] != Stalled || got[0]["needs_you"] != nil {
+		t.Fatalf("stalled lane %v", got[0])
+	}
+	if v, ok := got[1]["stalled"]; !ok || v != nil || got[1]["needs_you"] != "waiting on you" {
+		t.Fatalf("asking lane %v", got[1])
+	}
+	if got[2]["stalled"] != nil || got[2]["needs_you"] != nil {
+		t.Fatalf("settled lane %v", got[2])
+	}
+
+	rows := InboxRows([]store.Dispatch{*d}, 0)
+	if len(rows) != 2 {
+		t.Fatalf("%+v", rows)
+	}
+	if r := rows[0]; r.Key != "dispatch:aaaaaaaaaaaa:o/r#1:stalled" || r.Group != "fix" || r.Reason != "Stalled: stopped before a PR" {
+		t.Fatalf("stalled row %+v", r)
+	}
+	if r := rows[1]; r.Key != "dispatch:aaaaaaaaaaaa:o/r#2:needs" || r.Group != "answer" {
+		t.Fatalf("needs row %+v", r)
+	}
+}
+
+func TestStalledIdleGuardDeps(t *testing.T) {
+	for _, c := range []struct {
+		fn   func() bool
+		want bool
+	}{{nil, false}, {func() bool { return false }, false}, {func() bool { return true }, true}} {
+		if got := New(Deps{IdleGuard: c.fn}).idleGuard(); got != c.want {
+			t.Errorf("idleGuard() = %v, want %v", got, c.want)
+		}
 	}
 }
