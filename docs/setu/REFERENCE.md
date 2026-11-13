@@ -78,4 +78,9 @@ Appearance (look, mode, layout) is not a server setting; it is kept in the brows
 |---|---|
 | `make web` | Vite build into `internal/web/dist/` (committed) |
 | `make test` | `go test ./...` plus web typecheck and tests |
-| `make install` | build, install `~/.local/bin/setu`, load the launchd agent |
+| `make install` | build, install `~/.local/bin/setu`, sign it, load the launchd agent |
+| `make codesign-setup` | once per machine: create the `setu-dev` self-signed code-signing identity (override `SETU_SIGN_ID`) |
+
+`make install` and `make restart` sign the binary with that identity and identifier `dev.setu`, so a Full Disk Access
+grant (System Settings → Privacy & Security → Full Disk Access → add `~/.local/bin/setu`) survives rebuilds. Without
+the identity the binary is signed ad-hoc and macOS drops the grant on every rebuild.
