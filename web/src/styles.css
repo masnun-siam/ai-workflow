@@ -571,12 +571,12 @@ a.btn{text-decoration:none;color:var(--tx)}
 .river-wrap{position:relative}
 .river-wrap::before,.river-wrap::after{content:"";position:absolute;top:0;bottom:0;width:36px;pointer-events:none;opacity:0;transition:opacity .15s;z-index:2}
 .river-wrap::before{left:0;background:linear-gradient(to right,var(--p1),transparent)}
-.river-wrap::after{right:0;background:linear-gradient(to left,var(--p1),transparent);display:flex;align-items:center;justify-content:flex-end;padding-right:4px;font-size:24px;color:var(--mu);content:"›"}
+.river-wrap::after{content:"›";right:0;background:linear-gradient(to left,var(--p1),transparent);display:flex;align-items:center;justify-content:flex-end;padding-right:4px;font-size:24px;color:var(--mu)}
 .river-wrap.can-l::before,.river-wrap.can-r::after{opacity:1}
 @media (max-width:720px){
   .narrow-only{display:inline}
   .rail{flex:0 0 100%;border-right:0;border-bottom:1px solid var(--line)}
-  .rail.bar{flex-direction:row;align-items:center;gap:10px;padding:6px 12px;min-height:52px;position:sticky;top:0;z-index:12}
+  .rail.bar{flex-direction:row;align-items:center;gap:10px;padding:6px 12px;min-height:52px;position:sticky;top:0;z-index:8}
   .rail.bar .brand{padding:0;flex:0 0 auto}
   .bar-title{flex:1;min-width:0;font:600 15px var(--hfont);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .rail.bar .popw{position:static}
