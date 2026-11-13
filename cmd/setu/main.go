@@ -50,7 +50,7 @@ func commands() []cli.Command {
 		{Name: "version", Summary: "print the version", Run: runVersion},
 		{Name: "paths", Summary: "print the data and prompt directories as JSON", Run: runPaths},
 	}
-	cmds = append(cmds, sessions.Commands()...) // ask
+	cmds = append(cmds, sessions.Commands()...) // ask, hook
 	cmds = append(cmds, gh.Commands()...)       // ci, threads
 	cmds = append(cmds, grind.Commands()...)    // grind, grind-mode, grind-reviewers
 	cmds = append(cmds, dispatch.Commands()...)

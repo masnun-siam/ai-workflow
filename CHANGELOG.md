@@ -7,6 +7,7 @@
 - **Stalled** in the UI: a dispatch lane or session that stopped without finishing shows a **Stalled** tag, a "Stalled: <reason>" banner and a **Continue** button (lane action `continue`, `POST /api/sessions/<id>/continue`). Stalled lanes count as **Needs you** on the dispatch list and page. Inbox rows of type `session_stalled` and `dispatch_stalled` sit under **Fix**. When Continue finds it is no longer stalled (409), the dispatch or session reloads.
 - Settings gain `idle_guard` (on by default; a settings file without it reads as on), returned by `GET /api/settings` and saved by `PUT /api/settings`. Dispatch lanes obey it (below).
 - With `idle_guard` on, an implementing dispatch lane whose session has been idle for 3 minutes without a ready PR is **stalled** ("stopped before a PR") instead of needs-you "stopped without a ready PR": the lane JSON gains `stalled` (and `needs_you` is null while it is set), and the Inbox shows it under Fix as `dispatch_stalled` with Retry, not under Questions. A session blocked on a real question still needs you. Retry, skip, a resumed session or a stage change clears it.
+- `setu hook idle`, the headless idle guard's `Stop` hook: it blocks a skill session that tries to end its turn without finishing (a ✅ table), asking (`setu ask`) or waiting on background work, at most twice in a row, then lets it end and marks it stalled. Sessions are not started with it yet.
 
 ### Fixed
 

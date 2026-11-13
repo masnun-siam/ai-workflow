@@ -1,0 +1,8 @@
+{"type": "user", "message": {"role": "user", "content": "/blubird:implement-issue 135"}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "tu_1", "name": "Bash", "input": {"command": "make test"}}]}}
+{"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "tu_1", "content": "ok"}]}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "tu_bg", "name": "Bash", "input": {"command": "sleep 600", "run_in_background": true}}]}}
+{"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "tu_bg", "content": "Command running in background with ID: bash_abc123"}]}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "tu_2", "name": "Bash", "input": {"command": "ls"}}]}}
+{"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "tu_2", "content": [{"type": "text", "text": "a.txt\n<task-notification>\n<task-id>bash_abc123</task-id>\n<status>completed</status>\n</task-notification>"}]}]}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Build finished."}]}}
