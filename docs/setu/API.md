@@ -572,7 +572,7 @@ type SessionBrief = { id: string; status: SessionStatus; started_at: ISO; ended_
 type OpsRow = { step: string; label: string; scope: "each repo" | "docs repo" | "any repo"; summary: string;
   targets: { repo: Slug; last: SessionBrief | null; note: string }[]; actions: Action[] };
 type Ops = { product: Slug; rows: OpsRow[] };
-type Me = { day_end: { date: string; reconciled: boolean; missing_days: number; last: SessionBrief | null };
+type Me = { day_end: { date: string; reconciled: boolean; missing_days: number; missing_dates: string[]; last: SessionBrief | null };
   weekly: { week: number; drafted: boolean; last: SessionBrief | null };
   usage: AccountUsage[]; cost: SessionStats; actions: Action[] };
 

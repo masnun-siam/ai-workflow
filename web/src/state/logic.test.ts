@@ -91,6 +91,9 @@ describe("keyboard map", () => {
     expect(k("r", {}, ctx({ actions: [] }))).toEqual({ t: "repo" });
     expect(k("n", {}, ctx({ actions: [] }))).toEqual({ t: "new" });
     expect(k("n", {}, ctx({ actions: [], screen: "releases", nav: null }))).toEqual({ t: "screen", key: "n" });
+    expect(k("G", {}, ctx({ actions: [], screen: "releases", nav: null }))).toEqual({ t: "screen", key: "G" });
+    expect(k("g", {}, ctx({ actions: [], screen: "releases", nav: null }))).toBeNull();
+    expect(k("d", {}, ctx({ actions: [], screen: "releases", nav: null }))).toEqual({ t: "go", screen: "dispatches" });
     expect(k("g", {}, ctx({ actions: [act({ key: "g" })] }))).toEqual({ t: "action", key: "g" });
   });
   it("palette, help, escape, mode, look, layout", () => {
