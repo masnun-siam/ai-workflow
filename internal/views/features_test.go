@@ -10,6 +10,7 @@ import (
 	"github.com/masnun-siam/setu/internal/inbox/inboxtest"
 	"github.com/masnun-siam/setu/internal/poller"
 	"github.com/masnun-siam/setu/internal/products"
+	"github.com/masnun-siam/setu/internal/sessions"
 )
 
 func featureBySlug(l FeatureList, slug string) Feature {
@@ -149,5 +150,33 @@ func TestChangesAreIssuesWithoutAnEpic(t *testing.T) {
 	}
 	if one := f.svc.Changes(context.Background(), "acme/docs"); len(one.Issues) != 0 {
 		t.Fatalf("docs repo has only the epic: %+v", one.Issues)
+	}
+}
+
+func TestChangesPendingFilingRuns(t *testing.T) {
+	f := newFx(t)
+	f.svc.d.Products = fProductsRepos{f.svc.d.Products.(fProducts), []products.Repo{{Slug: "acme/api"}, {Slug: "acme/docs"}}}
+	f.sess.recs = []sessions.Record{
+		{ID: "bug-live", Step: "report-bug", Repo: "acme/api", Status: sessions.StWaiting, Command: "Report bug: CSV drops VAT", StartedAt: "2026-11-13T08:00:00Z"},
+		{ID: "bug-done", Step: "report-bug", Repo: "acme/api", Status: sessions.StDone},
+		{ID: "bug-failed", Step: "report-bug", Repo: "acme/api", Status: sessions.StFailed},
+		{ID: "sc-live", Step: "small-change", Repo: "acme/api", Status: sessions.StRunning},
+		{ID: "impl-live", Step: "implement-issue", Repo: "acme/api", Status: sessions.StRunning},
+	}
+	pendingIDs := func(repo string) string {
+		var got []string
+		for _, p := range f.svc.Changes(context.Background(), repo).Pending {
+			got = append(got, p.ID)
+		}
+		return strings.Join(got, ",")
+	}
+	for repo, want := range map[string]string{"": "bug-live,sc-live", "acme/api": "bug-live,sc-live", "acme/docs": ""} {
+		if got := pendingIDs(repo); got != want {
+			t.Fatalf("Changes(%q).Pending = %q, want %q", repo, got, want)
+		}
+	}
+	p := f.svc.Changes(context.Background(), "acme/api").Pending[0]
+	if p.Status != "waiting" || p.Title != "Report bug: CSV drops VAT" || p.StartedAt != "2026-11-13T08:00:00Z" || p.Skill != "blubird:report-bug" {
+		t.Fatalf("pending row: %+v", p)
 	}
 }
