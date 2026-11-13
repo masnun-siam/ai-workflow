@@ -101,6 +101,11 @@ const routes: [string, RegExp, H][] = [
     clearNeed(s.id);
     return patchSession(s.id, { status: "running", waiting: false, pending_question: null });
   }],
+  ["POST", /^\/api\/sessions\/([^/]+)\/continue$/, ({ m }) => {
+    const s = sess(m[1]!); if (!s) return fail(404, "not found"); if (!s.stalled) return fail(409, "the session is no longer stalled");
+    clearNeed(s.id);
+    return patchSession(s.id, { status: "running", stalled: null, ended_at: null });
+  }],
   ["POST", /^\/api\/sessions\/([^/]+)\/prompt$/, ({ body }) => (body.text ? { state: "sent" } : fail(400, "text required"))],
   ["POST", /^\/api\/sessions\/([^/]+)\/rerun$/, ({ m }) => startSession({ step: sess(m[1]!)?.step, repo: sess(m[1]!)?.repo })],
   ["POST", /^\/api\/sessions\/([^/]+)\/(stop|resume|hold|release|start-now|dismiss|cancel-auto)$/, (c) => sessionSub(c.m[2]!)(c)],
@@ -141,6 +146,8 @@ const routes: [string, RegExp, H][] = [
     const d = disp(m[1]!); if (!d) return fail(404, "not found");
     if (m[2] === "settings") Object.assign(d.settings, body);
     if (m[2] === "state") d.state = body.state === "cancelled" ? "cancelled" : body.state;
+    if (m[2] === "lane" && body.action === "continue") { const l = d.lanes.find((x) => x.key === body.lane); if (!l?.stalled) return fail(409, "the lane is no longer stalled");
+      l.stalled = null; if (l.session) { clearNeed(l.session); patchSession(l.session, { status: "running", stalled: null, ended_at: null }); } }
     if (m[2] === "lane") { const l = d.lanes.find((x) => x.key === body.lane); if (l) { if (body.action === "pause") l.paused = true; if (body.action === "resume") l.paused = false; if (body.action === "skip") l.stage = "skipped"; if (body.action === "hold") l.hold_merge = true; if (body.action === "unhold") l.hold_merge = false;
       if (body.action === "unblock") { l.unblocked = l.skipped_deps ?? []; l.deps = l.deps.filter((k) => !(l.skipped_deps ?? []).includes(k)); l.skipped_deps = []; l.stranded = null; }
       if (body.action === "retry" && l.stage === "skipped") { l.stage = "queued"; l.skip_reason = null; for (const y of d.lanes) if (y.skipped_deps?.includes(l.key)) { y.skipped_deps = []; y.stranded = null; } } } }

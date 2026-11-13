@@ -8,7 +8,7 @@ import { describeError } from "../state/actions";
 import { grinds, loadMany, mutate, repoList, sessionList } from "../state/data";
 import { ago, shortRepo } from "../state/format";
 import { askConfirm } from "../state/ui";
-import { statusTone } from "./SessionView";
+import { sessionTag } from "./SessionView";
 import { Btn, Tag, useFocusTrap } from "./ui";
 
 export type WorkTarget = { kind: "issue" | "pr"; repo: string; n: number };
@@ -57,7 +57,7 @@ function Sessions({ t }: { t: WorkTarget }) {
   if (!rows.length) return null;
   return (
     <div><div class="gh">Sessions</div>
-      {rows.map((s) => <a key={s.id} class="row" href={`#/sessions/${s.id}`} onClick={() => (workTarget.value = null)}><span class={`tag ${statusTone(s.status)}`}>{s.status}</span><span class="t">{s.skill ?? "free text"}</span><span class="w">{ago(s.started_at)}</span></a>)}
+      {rows.map((s) => <a key={s.id} class="row" href={`#/sessions/${s.id}`} onClick={() => (workTarget.value = null)}><span class={`tag ${sessionTag(s)[1]}`}>{sessionTag(s)[0]}</span><span class="t">{s.skill ?? "free text"}</span><span class="w">{ago(s.started_at)}</span></a>)}
     </div>
   );
 }

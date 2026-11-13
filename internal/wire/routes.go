@@ -11,6 +11,7 @@ import (
 	"github.com/masnun-siam/setu/internal/gh"
 	"github.com/masnun-siam/setu/internal/grind"
 	"github.com/masnun-siam/setu/internal/inbox"
+	"github.com/masnun-siam/setu/internal/jev"
 	"github.com/masnun-siam/setu/internal/notify"
 	"github.com/masnun-siam/setu/internal/poller"
 	"github.com/masnun-siam/setu/internal/products"
@@ -86,6 +87,7 @@ func (a *App) buildRoutes(disp *dispatch.Service) {
 		release.Routes(a.Release),
 		away.Routes(away.RouteDeps{Service: a.Away}),
 		vault.Routes(vault.RouteDeps{Svc: a.Vault}),
+		jev.Routes(jev.Deps{Client: a.Jev}),
 		inbox.Routes(a.Inbox),
 		views.Routes(a.Views),
 	)

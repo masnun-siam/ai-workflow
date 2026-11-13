@@ -160,6 +160,8 @@ type Record struct {
 	Agent           string          `json:"agent,omitempty"`
 	Gate            bool            `json:"gate,omitempty"`
 	Instructions    []string        `json:"instructions,omitempty"`
+	Stalled         string          `json:"stalled,omitempty"`     // why the idle guard let it stop unfinished; cleared on resume
+	IdleBlocks      int             `json:"idle_blocks,omitempty"` // the idle guard's consecutive blocks; cleared on resume
 	// accumulation bases: the totals when the current claude process started (see follower)
 	CostBase     float64 `json:"cost_base,omitempty"`
 	TokenBase    *Tokens `json:"token_base,omitempty"`
@@ -332,6 +334,7 @@ type Session struct {
 	Dispatch        *DispatchRef `json:"dispatch"`
 	Hooks           int          `json:"hooks"`
 	ResumeCommand   *string      `json:"resume_command"`
+	Stalled         *string      `json:"stalled"`
 }
 
 // SessionStats is the cost and count tally in GET /api/sessions.
