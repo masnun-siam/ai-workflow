@@ -74,12 +74,12 @@ export function Popover({ open, setOpen, trigger, children, wide, fit }: { open:
   useLayer(() => setOpen(false), open);
   useEffect(() => {
     if (!open) return;
-    const down = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) setOpen(false); };
+    const down = (e: PointerEvent) => { if (box.current && !box.current.contains(e.target as Node)) setOpen(false); };
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") { setOpen(false); e.stopPropagation(); } };
-    document.addEventListener("mousedown", down);
+    document.addEventListener("pointerdown", down);
     box.current?.addEventListener("keydown", key);
     const el = box.current;
-    return () => { document.removeEventListener("mousedown", down); el?.removeEventListener("keydown", key); };
+    return () => { document.removeEventListener("pointerdown", down); el?.removeEventListener("keydown", key); };
   }, [open]);
   return <span class={`popw${fit ? " fit" : ""}`} ref={box}>{trigger}{open && <div class={`pop${wide ? " wide" : ""}${fit ? " fit" : ""}`}>{children}</div>}</span>;
 }

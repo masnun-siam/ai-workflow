@@ -1,5 +1,5 @@
 import type { ComponentChildren } from "preact";
-import { useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import { http } from "../api/http";
 import type { Session } from "../api/types";
 import { continueStalled, loadMany, mutate, transcript } from "../state/data";
@@ -37,6 +37,12 @@ export function SessionView({ s, compact }: { s: Session; compact?: boolean }) {
   const [text, setText] = useState("");
   const [tab, setTab] = useState<"all" | "hook">("all");
   const t = transcript.value.id === s.id ? transcript.value.events : [];
+  const working = s.status === "running" || s.status === "starting";
+  // When this page last saw a new event; a clock tick re-renders the "Ns ago" while the run is working.
+  const [seen, setSeen] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { setSeen(Date.now()); setNow(Date.now()); }, [s.id, t.length]);
+  useEffect(() => { if (!working) return; const i = setInterval(() => setNow(Date.now()), 5000); return () => clearInterval(i); }, [working]);
   const run = async (a: SubAction) => {
     if (a.confirm && !(await askConfirm(a.confirm))) return;
     if (a.sub === "continue") return continueSession(s.id);
@@ -53,24 +59,26 @@ export function SessionView({ s, compact }: { s: Session; compact?: boolean }) {
   const [tag, tone] = sessionTag(s);
   return (
     <div class="det">
-      <div class="dh"><Tag tone={tone}>{tag}</Tag><b>{s.title}</b></div>
+      <div class="dh"><Tag tone={tone}>{tag}</Tag><b>{s.title}</b>{working && <span class="dim grow r">last event {fmtDur((now - seen) / 1000) || "0s"} ago</span>}</div>
       <span class="dim mono">{s.skill ?? "free text"} · {shortRepo(s.repo) || "no repo"}{s.link && <> · <a href={issueUrl(s.link)} target="_blank" rel="noopener noreferrer">#{s.link.issue}</a></>}</span>
       {s.stalled && <div class="banner">Stalled: {s.stalled}</div>}
       {s.error && <div class="banner bad" role="alert">{s.error}</div>}
       {s.status === "limited" && <div class="banner">Rate limited{s.limit_resets_at ? ` until ${new Date(s.limit_resets_at * 1000).toLocaleTimeString()}` : ""}{s.auto_resume ? ". Resumes by itself." : "."}</div>}
       {s.queued_prompt && <div class="dim">Queued message: {s.queued_prompt}</div>}
       {s.pending_answer && <div class="dim">{s.status === "running" || s.status === "starting" ? "Your answer was sent. The run is continuing with it." : "Your answer is saved. It is sent when the run resumes."}</div>}
-      {s.pending_question && <AskForm sessionId={s.id} round={s.pending_question} />}
+      {s.pending_question && <AskForm key={s.pending_question.id} sessionId={s.id} round={s.pending_question} />}
       <div class="acts">{SUBS.filter((a) => a.when(s)).map((a) => <Btn key={a.sub} small bad={a.sub === "stop"} primary={a.sub === "continue"} onClick={() => run(a)}>{a.label}</Btn>)}</div>
       {!compact && (
+        <details class="meta"><summary>Details</summary>
         <KV rows={[["account", s.account], ["model", `${s.model ?? "default"}${s.effort ? ` · ${s.effort}` : ""}`], ["cost", fmtCost(s.cost) || "n/a"], ["tokens", fmtTokens(s.tokens) || "n/a"],
           ...(s.command.trim() && s.command.trim() !== s.title ? [["prompt", <span class="pre">{s.command.trim()}</span>] as [string, ComponentChildren]] : []),
           ["duration", fmtDur(s.duration_s)], ["hooks", String(s.hooks)], ["id", <span class="mono">{s.id}</span>], ["resume", s.resume_command ? <code>{s.resume_command}</code> : "n/a"]]} />
+        </details>
       )}
       {s.panel && <span class="dim">Peer review {s.panel.role}{s.panel.lens ? ` · ${s.panel.lens}` : ""} · {s.panel.state}</span>}
-      {s.dispatch && <span class="dim">Dispatch {s.dispatch.id} · lane {s.dispatch.lane}</span>}
+      {s.dispatch && <span class="dim"><a href={`#/dispatches/${s.dispatch.id}?lane=${encodeURIComponent(s.dispatch.lane)}`}>Dispatch {s.dispatch.id} · lane {s.dispatch.lane}</a></span>}
       <Chips label="Transcript view" value={tab} onPick={setTab} options={[["all", "Transcript"], ["hook", `Hooks (${s.hooks})`]]} />
-      <Transcript events={t} hooksOnly={tab === "hook"} />
+      <Transcript events={t} hooksOnly={tab === "hook"} fill={!compact} />
       {canSend && (
         <form class="acts" onSubmit={(e) => { e.preventDefault(); void sendPrompt(); }}>
           <input type="text" style={{ flex: 1 }} aria-label="Message to the run" placeholder={finished ? "Reply to continue this run" : "Send a message to the run"} value={text} onInput={(e) => setText((e.target as HTMLInputElement).value)} />

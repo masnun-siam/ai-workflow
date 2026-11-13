@@ -10,12 +10,12 @@ export function SessionPage() {
   const s = sessionOne.value?.id === id ? sessionOne.value : sessionList.value?.sessions.find((x) => x.id === id);
   return (
     <>
-      <Header title="Session"><Btn small onClick={() => goBack(s?.status === "waiting" ? "inbox" : "activity")}>← Back</Btn></Header>
+      <Header title={s?.title ?? "Session"}><Btn small onClick={() => goBack(s?.status === "waiting" ? "inbox" : "activity")}>← Back</Btn></Header>
       {loadErrors.value.session && <div class="banner bad" role="alert">{loadErrors.value.session}</div>}
       {s?.no_repo && s.vault_folder && !["running", "starting", "waiting"].includes(s.status) && (
         <div class="banner">This ran in your notes ({s.vault_folder}). Ready to build it? <Btn small primary onClick={() => (createRepo.value = { vault: s.vault_folder! })}>Create repo</Btn></div>
       )}
-      <Pane label={s ? `session · ${s.skill ?? "free text"}` : "session"}>{s ? <SessionView s={s} /> : <Empty>Loading…</Empty>}</Pane>
+      <Pane label={s ? `session · ${s.skill ?? "free text"}` : "session"}>{s ? <SessionView s={s} /> : loadErrors.value.session ? <Empty>No session with this id. <a href="#/activity">Back to Activity</a></Empty> : <Empty>Loading…</Empty>}</Pane>
     </>
   );
 }
