@@ -81,6 +81,13 @@ type Question struct {
 	Options       []Option `json:"options"`
 }
 
+// Round statuses: pending needs the human; queued was answered while the asking process was
+// still running, and the answer is sent when that process exits.
+const (
+	RoundPending = "pending"
+	RoundQueued  = "queued"
+)
+
 type Round struct {
 	ID            string          `json:"id"`
 	Status        string          `json:"status"`

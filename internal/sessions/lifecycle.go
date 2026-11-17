@@ -120,8 +120,8 @@ func (m *Manager) Answer(ctx context.Context, id, roundID string, answers map[st
 	if rec.Status != StWaiting || rec.PendingQuestion == nil {
 		return rec, errs.Conflict("session is not waiting for an answer", map[string]any{"id": id})
 	}
-	if m.Alive(id) {
-		return rec, errs.Conflict("session process is still running", map[string]any{"id": id})
+	if rec.PendingQuestion.Status == RoundQueued {
+		return rec, errs.Conflict("round already answered", map[string]any{"id": id})
 	}
 	if rec.SessionID == "" {
 		return rec, errs.Conflict("session has no claude session_id", map[string]any{"id": id})
@@ -136,6 +136,11 @@ func (m *Manager) Answer(ctx context.Context, id, roundID string, answers map[st
 	if err != nil {
 		return rec, err
 	}
+	if m.Alive(id) {
+		// The process asked and is still busy (background agents start new turns). Keep the
+		// answer; it is sent as soon as the process exits (outcome → deliverAnswer).
+		return m.queueAnswer(ctx, id, roundID, text)
+	}
 	claimed, ok := m.ClaimAnswer(id, roundID)
 	if !ok {
 		return rec, errs.Conflict("round already answered", map[string]any{"id": id})
@@ -145,6 +150,65 @@ func (m *Manager) Answer(ctx context.Context, id, roundID string, answers map[st
 	out, err := m.resumeSpawn(ctx, cur, text)
 	if err != nil {
 		_ = m.RestoreRound(id, *claimed)
+		return out, errs.WithStatus(500, err.Error())
+	}
+	return out, nil
+}
+
+// queueAnswer stores the answer to a round asked by a process that is still running: the round
+// becomes queued (it no longer needs the human) and the text waits in PendingAnswer.
+func (m *Manager) queueAnswer(ctx context.Context, id, roundID, text string) (Record, error) {
+	out, err := m.Update(id, func(r *Record) error {
+		q := r.PendingQuestion
+		if r.Status != StWaiting || q == nil || q.Status != RoundPending || q.ID != roundID {
+			return errNoClaim
+		}
+		q.Status, q.Held = RoundQueued, false
+		r.PendingAnswer = text
+		return nil
+	})
+	if err == errNoClaim {
+		return out, errs.Conflict("round already answered", map[string]any{"id": id})
+	}
+	if err != nil {
+		return out, err
+	}
+	// the process may have exited between the Alive check and the update: deliver now
+	if !m.Alive(id) {
+		return m.deliverAnswer(ctx, id)
+	}
+	return out, nil
+}
+
+// deliverAnswer resumes a waiting session whose round was answered while its process ran.
+// It does nothing unless the session is waiting on a queued round and has no live process.
+func (m *Manager) deliverAnswer(ctx context.Context, id string) (Record, error) {
+	ctx = context.WithoutCancel(ctx)
+	if m.Alive(id) {
+		return m.Get(id)
+	}
+	var claimed Round
+	var text string
+	cur, err := m.Update(id, func(r *Record) error {
+		q := r.PendingQuestion
+		if r.Status != StWaiting || q == nil || q.Status != RoundQueued || r.PendingAnswer == "" {
+			return errNoClaim
+		}
+		claimed, text = *q, r.PendingAnswer
+		r.PendingQuestion, r.Status = nil, StStarting
+		r.PID, r.PidStarted = 0, ""
+		return nil
+	})
+	if err == errNoClaim {
+		return cur, nil
+	}
+	if err != nil {
+		return cur, err
+	}
+	out, err := m.resumeSpawn(ctx, cur, text)
+	if err != nil {
+		claimed.Status = RoundPending
+		_ = m.RestoreRound(id, claimed)
 		return out, errs.WithStatus(500, err.Error())
 	}
 	return out, nil

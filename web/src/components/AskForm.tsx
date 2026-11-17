@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { http } from "../api/http";
-import type { Round } from "../api/types";
+import type { Round, Session } from "../api/types";
 import { buildAnswers, canSubmit, emptyDraft, toggleLabel, type Draft } from "../state/answer";
 import { currentView, loadMany } from "../state/data";
 import { visibleKeys } from "../state/refetch";
@@ -12,8 +12,10 @@ export async function submitAnswers(sessionId: string, round: Round, drafts: Dra
   const answers = buildAnswers(drafts);
   if (!answers) return false;
   try {
-    await http.send("POST", `/api/sessions/${sessionId}/answer`, { round_id: round.id, answers });
-    toast("Answered. The run continues");
+    const s = await http.send<Session>("POST", `/api/sessions/${sessionId}/answer`, { round_id: round.id, answers });
+    toast(s?.pending_question?.status === "queued"
+      ? "Answer saved. The run is still busy; it gets your answer when its current turn ends"
+      : "Answered. The run continues");
     detailOpen.value = false;
     void loadMany(visibleKeys(currentView()));
     return true;

@@ -437,7 +437,7 @@ type SessionStatus = "starting"|"running"|"waiting"|"limited"|"queued"|"done"|"f
 type Option = { label: string; description: string; preview?: string };
 type Question = { header: string; question: string; multiSelect: boolean; allowFreeText: boolean;
   recommended: string | null; options: Option[] };
-type Round = { id: string; status: "pending"; allowFreeText: boolean; held?: boolean;
+type Round = { id: string; status: "pending" | "queued"; /* queued: answered while the asking process still ran; sent by --resume when it exits */ allowFreeText: boolean; held?: boolean;
   answerer?: string | null; risk?: { p: number | null; unknown?: boolean }; questions: Question[] };
 type Answer = { labels: string[] } | { other: string } | { none: true };
 type Answers = Record<string /* "0".."n-1" */, Answer>;
@@ -670,7 +670,7 @@ type VaultPRD = { exists: boolean; status: string | null; title: string | null; 
 | POST | `/api/sessions` | `StartRequest` | `Session` | 201; 400; 409 `{error,id,href}`; 502 preflight/spawn |
 | GET | `/api/sessions/{id}` | — | `Session` | 200 |
 | GET | `/api/sessions/{id}/stream?offset=N` | — | `Transcript` (S§2.6) | 200, 400 `bad offset` |
-| POST | `/api/sessions/{id}/answer` | `{round_id: string, answers: Answers}` | `Session` | 200; 400/409/413/415/500 as S§1.9 |
+| POST | `/api/sessions/{id}/answer` | `{round_id: string, answers: Answers}` | `Session` | 200; 400/409/413/415/500 as S§1.9. While the asking process still runs (background agents), the answer is kept: round `queued`, text in `pending_answer`, delivered when the process exits; `setu ask` then refuses a new round until it is delivered |
 | POST | `/api/sessions/{id}/prompt` | `{text}` ≤4000 | `{state:"sent"}` / `{state:"queued"}` | 200 / 202; 400; 409 |
 | POST | `/api/sessions/{id}/stop` | — | `Session` | 200; 409 |
 | POST | `/api/sessions/{id}/resume` | `{account?: label}` (optional body) | `Session` | 200; 400; 409 |

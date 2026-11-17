@@ -1,6 +1,8 @@
 package sessions
 
 import (
+	"github.com/masnun-siam/setu/internal/testutil/fakebin"
+
 	"context"
 	"os"
 	"os/exec"
@@ -91,21 +93,27 @@ func TestReconcileWaitingWatcher(t *testing.T) {
 	if !m2.Alive(rec.ID) {
 		t.Fatal("waiting session's process not held")
 	}
-	// no second process may be resumed while the first lives
-	_, err := m2.Answer(context.Background(), rec.ID, "q-1", map[string]Answer{"0": {Labels: []string{"A"}}})
-	if kind(err) != "conflict" {
-		t.Fatalf("answer while process alive: %v", err)
+	// no second process may be resumed while the first lives: the answer is queued instead
+	e.addRule(fakebin.Rule{Bin: "claude", ArgsContains: "--resume", StdoutFile: e.file("after.jsonl", jl(initEv("sw"), resultEv(0.1, 1, 1, nil)))})
+	out, err := m2.Answer(context.Background(), rec.ID, "q-1", map[string]Answer{"0": {Labels: []string{"A"}}})
+	mustNoErr(t, err)
+	if out.Status != StWaiting || out.PendingQuestion == nil || out.PendingQuestion.Status != RoundQueued {
+		t.Fatalf("answer while process alive: %+v", out)
 	}
-	got := e.wait(rec.ID, func(r Record) bool { return r.EndedAt != "" })
-	if got.Status != StWaiting || got.PendingQuestion == nil {
-		t.Fatalf("watcher changed the round: %+v", got)
+	for _, c := range e.claudeCalls() {
+		t.Fatalf("resumed while the first process lives: %q", c.Args)
+	}
+	// once the watched process exits, the queued answer is delivered
+	got := e.wait(rec.ID, func(r Record) bool { return r.Status == StDone })
+	if got.PendingQuestion != nil {
+		t.Fatalf("%+v", got)
+	}
+	if a := e.lastClaude().Args; len(a) == 0 || a[len(a)-1] != `Answer to q-1: {"0":{"labels":["A"]}}` {
+		t.Fatalf("resume argv %q", a)
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for m2.Alive(rec.ID) && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
-	}
-	if m2.Alive(rec.ID) {
-		t.Fatal("watcher did not release the session")
 	}
 }
 

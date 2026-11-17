@@ -22,7 +22,7 @@ export function targetRound(t: Target): { sessionId: string; round: Round } | nu
   if (!t) return null;
   if (t.kind === "card" && t.card.need && t.card.ask) return { sessionId: t.card.ask.session_id, round: t.card.ask.round };
   if (t.kind === "inbox" && t.item.round && t.item.session_id) return { sessionId: t.item.session_id, round: t.item.round };
-  if (t.kind === "session" && t.session.pending_question) return { sessionId: t.session.id, round: t.session.pending_question };
+  if (t.kind === "session" && t.session.pending_question?.status === "pending") return { sessionId: t.session.id, round: t.session.pending_question };
   return null;
 }
 export const targetId = (t: Target): string | undefined =>
