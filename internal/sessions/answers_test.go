@@ -394,3 +394,45 @@ func TestHookEventsFromStream(t *testing.T) {
 		t.Fatal("hooks count not in the API shape")
 	}
 }
+
+// An answer sent while the asking process is still running (background agents keep it alive) is
+// queued on the round and delivered by --resume when that process exits.
+func TestAnswerWhileProcessRunsIsQueued(t *testing.T) {
+	e := newEnv(t)
+	t.Setenv("SESSIONS_TEST_AS_SETU", "1")
+	e.file("ask.jsonl", jl(initEv("sw"), toolEv("Bash", obj{"command": "setu ask --json '...'"})))
+	e.file("res.jsonl", jl(resultEv(0.1, 2, 2, nil)))
+	e.addRule(fakebin.Rule{Bin: "claude", ArgsContains: "--resume", StdoutFile: e.file("after.jsonl", jl(initEv("sw"), resultEv(0.2, 3, 3, nil)))})
+	gate := filepath.Join(e.fb, "gate")
+	e.addRule(fakebin.Rule{Bin: "claude", ArgsContains: "--print", Exec: []string{"sh", "-c", "cat " + filepath.Join(e.fb, "ask.jsonl") + "; " + os.Args[0] + " ask --json '" + askQ + "'; while [ ! -f " + gate + " ]; do sleep 0.05; done; cat " + filepath.Join(e.fb, "res.jsonl")}})
+	rec, err := e.m.StartSession(context.Background(), e.req("implement-issue", "1"))
+	mustNoErr(t, err)
+	r := e.wait(rec.ID, func(r Record) bool { return r.Status == StWaiting && r.PendingQuestion != nil && r.SessionID != "" })
+	if !e.m.Alive(rec.ID) {
+		t.Fatal("process should still be alive")
+	}
+	rid := r.PendingQuestion.ID
+	out, err := e.m.Answer(context.Background(), rec.ID, rid, map[string]Answer{"0": {Labels: []string{"B"}}})
+	mustNoErr(t, err)
+	if out.Status != StWaiting || out.PendingQuestion == nil || out.PendingQuestion.Status != RoundQueued || !strings.Contains(out.PendingAnswer, `"B"`) {
+		t.Fatalf("queued: %+v", out)
+	}
+	if _, err := e.m.Answer(context.Background(), rec.ID, rid, map[string]Answer{"0": {Labels: []string{"A (Recommended)"}}}); kind(err) != "conflict" {
+		t.Fatalf("second answer: %v", err)
+	}
+	// a new question while the answer is queued tells the run to end its turn
+	if _, err := SetPending(e.h, rec.ID, json.RawMessage(`{"questions":[{"question":"other","options":[{"label":"x"}]}]}`)); kind(err) != "conflict" {
+		t.Fatalf("ask while queued: %v", err)
+	}
+	if err := os.WriteFile(gate, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := e.wait(rec.ID, func(r Record) bool { return r.Status == StDone })
+	if d.PendingQuestion != nil || d.PendingAnswer != "" {
+		t.Fatalf("%+v", d)
+	}
+	if got := e.lastClaude().Args; got[len(got)-1] != `Answer to `+rid+`: {"0":{"labels":["B"]}}` {
+		t.Fatalf("resume argv %q", got)
+	}
+	e.settled(rec.ID)
+}

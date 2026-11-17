@@ -698,6 +698,10 @@ func (m *Manager) outcome(id string, st *runState, rc *int, isChild, answered, r
 					r.Error = "blocked by mask-secrets: " + st.blocked
 					return nil
 				})
+			case rec.Status == StWaiting && rec.PendingQuestion != nil && rec.PendingQuestion.Status == RoundQueued:
+				// answered while this process ran: send it now (after the follower drops the process)
+				_, _ = m.Update(id, func(r *Record) error { r.EndedAt = now; return nil })
+				go m.deliverAfterExit(id)
 			case rec.Status == StWaiting: // a question was recorded mid-run: stay waiting for the answer
 				_, _ = m.Update(id, func(r *Record) error { r.EndedAt, r.PendingAnswer = now, ""; return nil })
 			case st.guard != nil && m.relayGuard(id, st.guard):
@@ -726,6 +730,16 @@ func (m *Manager) outcome(id string, st *runState, rc *int, isChild, answered, r
 			})
 		}
 		m.deliverQueued(id)
+	}
+}
+
+// deliverAfterExit sends a queued answer once the follower has let go of the exited process.
+func (m *Manager) deliverAfterExit(id string) {
+	for i := 0; i < 500 && m.Alive(id); i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if _, err := m.deliverAnswer(context.Background(), id); err != nil {
+		logf("sessions %s: queued answer not sent: %v", id, err)
 	}
 }
 

@@ -872,7 +872,9 @@ func (r *rv) sessionLog(rec sessions.Record, s sessions.Session) []string {
 	if rec.Error != "" {
 		out = append(out, firstLine(rec.Error))
 	}
-	if rec.PendingQuestion != nil {
+	if q := rec.PendingQuestion; q != nil && q.Status == sessions.RoundQueued {
+		out = append(out, "Answered; sent when the current turn ends")
+	} else if q != nil {
 		out = append(out, "Waiting for your answer")
 	}
 	return lastN(out, 8)

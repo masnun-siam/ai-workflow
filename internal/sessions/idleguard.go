@@ -149,8 +149,10 @@ func runHookIdle(env cli.Env) {
 	}
 }
 
+// questionPending: a `setu ask` round waits for its answer, or holds one queued for this
+// process's exit. Either way the turn may end.
 func questionPending(r Record) bool {
-	return r.PendingQuestion != nil && r.PendingQuestion.Status == "pending"
+	return r.PendingQuestion != nil && (r.PendingQuestion.Status == RoundPending || r.PendingQuestion.Status == RoundQueued)
 }
 
 // readTurn returns the transcript's entries from the last turn-starting prompt to the end. It reads

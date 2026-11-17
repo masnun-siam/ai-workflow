@@ -110,7 +110,10 @@ func SetPending(h *home.Home, id string, payload json.RawMessage) (string, error
 		if err != nil {
 			return err
 		}
-		if r.Status == StWaiting && r.PendingQuestion != nil && r.PendingQuestion.Status == "pending" {
+		if r.Status == StWaiting && r.PendingQuestion != nil && r.PendingQuestion.Status == RoundQueued {
+			return errs.Conflict(fmt.Sprintf("the human already answered round %s; end your turn now, the answer arrives as your next message. Ask again after it", r.PendingQuestion.ID), nil)
+		}
+		if r.Status == StWaiting && r.PendingQuestion != nil && r.PendingQuestion.Status == RoundPending {
 			rid = r.PendingQuestion.ID
 			if signature(cand.Questions) != signature(r.PendingQuestion.Questions) {
 				return errs.Conflict(fmt.Sprintf("a question round (%s) is already waiting for the human; end your turn and wait for its answer instead of asking again", rid), nil)

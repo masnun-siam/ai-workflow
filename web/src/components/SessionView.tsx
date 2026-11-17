@@ -55,7 +55,9 @@ export function SessionView({ s, compact }: { s: Session; compact?: boolean }) {
   };
   const live = ["starting", "running", "waiting"].includes(s.status);
   const finished = ["done", "failed", "stopped"].includes(s.status) && !!s.session_id;
-  const canSend = live || finished || s.status === "limited" || s.status === "queued";
+  const queued = s.pending_question?.status === "queued";
+  // While a question waits, the answer form is the way to reply; the server refuses messages then.
+  const canSend = (live || finished || s.status === "limited" || s.status === "queued") && s.status !== "waiting";
   const [tag, tone] = sessionTag(s);
   return (
     <div class="det">
@@ -65,8 +67,10 @@ export function SessionView({ s, compact }: { s: Session; compact?: boolean }) {
       {s.error && <div class="banner bad" role="alert">{s.error}</div>}
       {s.status === "limited" && <div class="banner">Rate limited{s.limit_resets_at ? ` until ${new Date(s.limit_resets_at * 1000).toLocaleTimeString()}` : ""}{s.auto_resume ? ". Resumes by itself." : "."}</div>}
       {s.queued_prompt && <div class="dim">Queued message: {s.queued_prompt}</div>}
-      {s.pending_answer && <div class="dim">{s.status === "running" || s.status === "starting" ? "Your answer was sent. The run is continuing with it." : "Your answer is saved. It is sent when the run resumes."}</div>}
-      {s.pending_question && <AskForm key={s.pending_question.id} sessionId={s.id} round={s.pending_question} />}
+      {s.pending_answer && <div class={queued ? "banner" : "dim"} role="status">{queued
+        ? "Your answer is saved. The run is still finishing background work; it gets your answer as soon as its current turn ends."
+        : s.status === "running" || s.status === "starting" ? "Your answer was sent. The run is continuing with it." : "Your answer is saved. It is sent when the run resumes."}</div>}
+      {s.pending_question?.status === "pending" && <AskForm key={s.pending_question.id} sessionId={s.id} round={s.pending_question} />}
       <div class="acts">{SUBS.filter((a) => a.when(s)).map((a) => <Btn key={a.sub} small bad={a.sub === "stop"} primary={a.sub === "continue"} onClick={() => run(a)}>{a.label}</Btn>)}</div>
       {!compact && (
         <details class="meta"><summary>Details</summary>

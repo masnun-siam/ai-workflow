@@ -29,7 +29,8 @@ export type SessionStatus = "starting"|"running"|"waiting"|"limited"|"queued"|"d
 export type Option = { label: string; description: string; preview?: string };
 export type Question = { header: string; question: string; multiSelect: boolean; allowFreeText: boolean;
   recommended: string | null; options: Option[] };
-export type Round = { id: string; status: "pending"; allowFreeText: boolean; held?: boolean;
+export type Round = { id: string; status: "pending" | "queued"; // queued: answered while the run was busy, sent when its turn ends
+  allowFreeText: boolean; held?: boolean;
   answerer?: string | null; risk?: { p: number | null; unknown?: boolean }; questions: Question[] };
 export type Answer = { labels: string[] } | { other: string } | { none: true };
 export type Answers = Record<string /* "0".."n-1" */, Answer>;

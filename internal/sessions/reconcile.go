@@ -54,7 +54,7 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 
 // watchWaiting holds a waiting session's surviving claude in the process map, so no answer
 // resumes a second process, and stamps ended_at once it exits (that unlocks the answer form).
-// It never touches the status or the round.
+// It never touches the status or the round, except to send an answer queued meanwhile.
 func (m *Manager) watchWaiting(id string, pid int, started string) {
 	closeIt := func() {
 		if cur, err := m.Get(id); err == nil && cur.Status == StWaiting {
@@ -81,6 +81,10 @@ func (m *Manager) watchWaiting(id string, pid int, started string) {
 				delete(m.stopping, id)
 			}
 			m.mu.Unlock()
+			// an answer queued while the process lived is sent now (no-op otherwise)
+			if _, err := m.deliverAnswer(context.Background(), id); err != nil {
+				logf("sessions %s: queued answer not sent: %v", id, err)
+			}
 		}()
 		errors := 0
 		for {
