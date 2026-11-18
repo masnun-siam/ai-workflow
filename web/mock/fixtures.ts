@@ -271,7 +271,7 @@ export const featureList: FeatureList = { product: PRODUCT, stale: [], features:
   { product: PRODUCT, slug: "recheck", title: "KYC re-check", status: "Draft", path: "docs/prds/kyc/recheck.md", module: "kyc", prd_route: `#/prd?repo=${PRODUCT}&path=docs/prds/kyc/recheck.md`,
     stage: "draft", bay: "go", next: "Draft. Run a peer review, or approve it as it is.", epic: null, issues: [], done: [], counts: counts([], 0), panel: null, dispatch: null, live: 0, sessions: [],
     actions: [{ key: "v", label: "Start peer review", method: "POST", path: "/api/noop", toast: "", primary: true, open: `#/features/recheck?product=${PRODUCT}&tab=review` },
-      { ...start("p", "Approve without review", "create-prd", "docs/prds/kyc/recheck.md — the team has reviewed it; approve it", PRODUCT), confirm: "Approve this PRD and create its epic?" }, readPrd("docs/prds/kyc/recheck.md")] },
+      { ...start("p", "Approve without review", "create-prd", "docs/prds/kyc/recheck.md — the team has reviewed it; approve it", PRODUCT), confirm: "Approve this PRD? Claude checks it against the business docs, asks you to confirm each rule it adds or changes, and then creates the epic." }, readPrd("docs/prds/kyc/recheck.md")] },
   { product: PRODUCT, slug: "login", title: "Passwordless login", status: "Done", path: "docs/prds/login.md", module: null, prd_route: `#/prd?repo=${PRODUCT}&path=docs/prds/login.md`,
     stage: "shipped", bay: "shipped", next: "Shipped.", epic: null, issues: [], done: [], counts: counts([], 0), panel: null, dispatch: null, live: 0, sessions: [], actions: [readPrd("docs/prds/login.md")] },
 ] };

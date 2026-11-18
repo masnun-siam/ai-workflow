@@ -52,6 +52,9 @@ func TestFeaturesStagesAndNextSteps(t *testing.T) {
 			t.Errorf("%s: first action is not primary", c.slug)
 		}
 	}
+	if a := featureBySlug(l, "rev").Actions[0]; a.Label != "Approve PRD" || a.Confirm != inbox.ApproveConfirm {
+		t.Errorf("approve confirm: %+v", a)
+	}
 	// bays sort you, go, running, shipped
 	if l.Features[0].Bay != "you" || l.Features[len(l.Features)-1].Bay != "shipped" {
 		t.Errorf("order %s .. %s", l.Features[0].Slug, l.Features[len(l.Features)-1].Slug)
