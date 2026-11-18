@@ -17,7 +17,8 @@ import (
 
 // Stage ids in pipeline order.
 var stageOrder = []struct{ id, name, skills string }{
-	{"prd", "PRD", "create-prd · map-prds"},
+	{"docs", "Docs", "collect-docs · refine-docs · business-code-validator"},
+	{"prd", "PRD", "create-prd"},
 	{"tasks", "Tasks", "create-tasks"},
 	{"refine", "Refine", "refine-issues · reproduce-bug"},
 	{"implement", "Implement", "implement-issue · coordinator"},
@@ -726,7 +727,7 @@ func lastN(s []string, n int) []string {
 
 // ---- sessions ----
 
-var riverStages = map[string]bool{"prd": true, "tasks": true, "refine": true, "implement": true, "review": true, "release": true, "notify": true}
+var riverStages = map[string]bool{"docs": true, "prd": true, "tasks": true, "refine": true, "implement": true, "review": true, "release": true, "notify": true}
 
 func stageOf(st prompts.Step) (string, bool) {
 	for _, g := range strings.Split(st.Stage, ",") {

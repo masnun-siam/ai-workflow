@@ -94,6 +94,7 @@ func start(t *testing.T) *server {
 	cfg := filepath.Join(s.hm, ".claude")
 	inst := filepath.Join(cfg, "plugins", "cache", "agentic-workflow", "blubird", "1.2.3")
 	write(t, filepath.Join(inst, "skills", "create-prd", "SKILL.md"), "---\nname: create-prd\n---\nbody\n")
+	write(t, filepath.Join(inst, "skills", "implement-issue", "SKILL.md"), "---\nname: implement-issue\n---\nbody\n")
 	write(t, filepath.Join(cfg, "plugins", "installed_plugins.json"),
 		fmt.Sprintf(`{"version":2,"plugins":{"blubird@agentic-workflow":[{"scope":"user","installPath":%q,"version":"1.2.3"}]}}`, inst))
 
@@ -299,15 +300,25 @@ func TestEndToEnd(t *testing.T) {
 				t.Fatalf("step %s not available: %v", id, st)
 			}
 		}
+		// a step whose skill the installed blubird lacks
+		if st := found["collect-docs"]; st["available"] != false || st["reason"] != "needs blubird 1.2.0" || st["stage"] != "docs" {
+			t.Fatalf("collect-docs %v", st)
+		}
+		if e := s.must("POST", "/api/sessions", obj{"step": "collect-docs", "args": "docs/old"}, 409); e["error"] != "needs blubird 1.2.0" {
+			t.Fatalf("start %v", e)
+		}
+		if n := len(s.must("GET", "/api/sessions", nil, 200)["sessions"].([]any)); n != 0 {
+			t.Fatalf("a refused start left %d sessions", n)
+		}
 	})
 
 	run(s, "blubird status", func(t *testing.T) {
 		b := s.must("GET", "/api/blubird", nil, 200)
-		if b["installed"] != true || b["version"] != "1.2.3" {
+		if b["installed"] != true || b["version"] != "1.2.3" || b["min_version"] != "1.2.0" || b["too_old"] != false {
 			t.Fatalf("%v", b)
 		}
 		skills, _ := b["skills"].([]any)
-		if len(skills) != 1 || skills[0] != "create-prd" {
+		if len(skills) != 2 || skills[0] != "create-prd" || skills[1] != "implement-issue" {
 			t.Fatalf("skills %v", b["skills"])
 		}
 	})
