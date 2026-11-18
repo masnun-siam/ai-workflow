@@ -118,10 +118,7 @@ func (r *Registry) CheckBusiness(ctx context.Context) {
 			continue
 		}
 		dir := filepath.Join(p.Path, "docs", "business")
-		stamp := noStamp
-		if isDir(dir) {
-			stamp = businessStamp(dir)
-		}
+		stamp := r.gateStamp(dir)
 		r.biz.mu.Lock()
 		e := r.gateEntry(p.DocsRepo)
 		if stamp == e.seen {
@@ -152,25 +149,50 @@ func (r *Registry) CheckBusiness(ctx context.Context) {
 	}
 }
 
+// gateStamp is noStamp without docs/business, else the docs stamp plus the checker's environment,
+// so installing python3 or blubird 1.2 reruns the gate too.
+func (r *Registry) gateStamp(dir string) string {
+	if !isDir(dir) {
+		return noStamp
+	}
+	return businessStamp(dir) + "|" + r.gateEnv()
+}
+
+// gateEnv says what the checker needs: python3 on PATH and the checker file.
+func (r *Registry) gateEnv() string {
+	_, err := exec.LookPath("python3")
+	script := r.checkerScript()
+	return strconv.FormatBool(err == nil) + "|" + script + "|" + strconv.FormatBool(script != "" && exists(script))
+}
+
+// checkerScript is blubird's check-business-docs.py path ("" when blubird is not installed).
+func (r *Registry) checkerScript() string {
+	r.biz.mu.Lock()
+	f := r.biz.checker
+	r.biz.mu.Unlock()
+	if f == nil {
+		return ""
+	}
+	install := f()
+	if install == "" {
+		return ""
+	}
+	return filepath.Join(install, filepath.FromSlash(gateChecker))
+}
+
 // runGate checks until the result belongs to the stamp the docs have when it ends: a change during
 // a run drops that result and runs once more.
 func (r *Registry) runGate(p Product, dir string) {
 	defer r.biz.wg.Done()
 	for {
-		before := noStamp
-		if isDir(dir) {
-			before = businessStamp(dir)
-		}
+		before := r.gateStamp(dir)
 		var g BusinessGate
 		if before == noStamp {
 			g = unavailable("no docs/business")
 		} else {
 			g = r.checkBusiness(p.Path)
 		}
-		after := noStamp
-		if isDir(dir) {
-			after = businessStamp(dir)
-		}
+		after := r.gateStamp(dir)
 		r.biz.mu.Lock()
 		e := r.gateEntry(p.DocsRepo)
 		if after != before {
@@ -197,16 +219,13 @@ func (r *Registry) checkBusiness(checkout string) BusinessGate {
 		return unavailable("python3 not found")
 	}
 	r.biz.mu.Lock()
-	install, timeout := "", r.biz.timeout
-	if r.biz.checker != nil {
-		install = r.biz.checker()
-	}
+	timeout := r.biz.timeout
 	r.biz.mu.Unlock()
 	if timeout <= 0 {
 		timeout = gateTimeout
 	}
-	script := filepath.Join(install, filepath.FromSlash(gateChecker))
-	if install == "" || !exists(script) {
+	script := r.checkerScript()
+	if script == "" || !exists(script) {
 		return unavailable("blubird older than 1.2.0")
 	}
 	res := execx.Run(context.Background(), []string{"python3", "-I", script, "docs/business"}, execx.Opts{Dir: checkout, Timeout: timeout})

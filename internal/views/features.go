@@ -308,7 +308,7 @@ func openPRs(repos []string, snaps map[string]poller.Snapshot) map[string]poller
 	return prOf
 }
 
-// epicChildren returns the open, non-epic children of epic (repo#n), by its sub-issue list and by
+// epicChildren returns the non-epic children of epic (repo#n), by its sub-issue list and by
 // each issue's parent, sorted by number.
 func epicChildren(repo string, epic poller.Issue, all []found, index map[string]found) []found {
 	seen := map[string]bool{}

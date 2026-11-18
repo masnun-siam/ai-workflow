@@ -110,6 +110,7 @@ func ParseBusinessDoc(r io.Reader, docPath, folderModule string) BusinessDoc {
 		switch section {
 		case "rules":
 			if m := bizRuleStart.FindStringSubmatch(line); m != nil {
+				// the template writes "Withdrawn by …" in the rule's own line, so it counts there too
 				cur = &bizRule{id: m[1], withdrawn: strings.Contains(strings.ToLower(line), "withdrawn by")}
 				rules = append(rules, cur)
 			} else if cur != nil && strings.HasPrefix(line, "  ") {
@@ -226,7 +227,7 @@ func (r *Registry) BusinessDocs(product string) ([]BusinessDoc, error) {
 		}
 		name := de.Name()
 		if de.IsDir() {
-			if abs != root && (strings.HasPrefix(name, ".") || bizSkipDirs[name]) {
+			if abs != root && bizSkipDirs[name] {
 				return filepath.SkipDir
 			}
 			return nil

@@ -74,12 +74,17 @@ func (f *gateFx) calls(t *testing.T) []fakebin.Call {
 	return out
 }
 
-// events waits briefly for the bus and returns the business events seen so far.
-func (f *gateFx) events() int {
-	time.Sleep(50 * time.Millisecond)
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return len(f.evs)
+// events waits up to 2 s for at least want business events and returns how many were seen.
+func (f *gateFx) events(want int) int {
+	for i := 0; ; i++ {
+		f.mu.Lock()
+		n := len(f.evs)
+		f.mu.Unlock()
+		if n >= want || i == 200 {
+			return n
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 // touch rewrites the doc with a newer mtime so the stamp changes.
@@ -214,12 +219,14 @@ func TestBusinessGateChangeDuringRunAndEvents(t *testing.T) {
 		t.Fatalf("stored %+v", g)
 	}
 	// events: tick 1 (stamp), tick 2 (stamp), one stored result
-	if n := f.events(); n != 3 {
+	if n := f.events(3); n != 3 {
 		t.Fatalf("events %d", n)
 	}
 	f.tick()
 	f.tick()
-	if n := f.events(); n != 3 {
+	// a sentinel published after the idle ticks: the bus is ordered, so it arrives fourth
+	f.r.changed("business", "sentinel")
+	if n := f.events(4); n != 4 || f.evs[3]["repo"] != "sentinel" {
 		t.Fatalf("idle ticks published: %d", n)
 	}
 	f.mu.Lock()
@@ -227,5 +234,45 @@ func TestBusinessGateChangeDuringRunAndEvents(t *testing.T) {
 	f.mu.Unlock()
 	if repo != "acme/shop-wiki" {
 		t.Fatalf("repo %v", repo)
+	}
+}
+
+func TestBusinessGateKeepsResultDuringRerun(t *testing.T) {
+	f := newGateFx(t)
+	f.rules(t, checkerRule(1, "bad\n", "", 0))
+	f.tick()
+	f.rules(t, checkerRule(0, "ok\n", "", 400))
+	f.touch(t, bizDoc+"\n")
+	f.r.CheckBusiness(context.Background())
+	if g := f.gate(); !g.Running || g.State != "fail" || !reflect.DeepEqual(g.Failures, []string{"bad"}) {
+		t.Fatalf("during rerun %+v", g)
+	}
+	f.r.WaitBusiness()
+	if g := f.gate(); g.Running || g.State != "pass" {
+		t.Fatalf("after %+v", g)
+	}
+}
+
+func TestBusinessGateRerunsWhenTheEnvironmentChanges(t *testing.T) {
+	f := newGateFx(t)
+	f.rules(t, checkerRule(0, "ok\n", "", 0))
+	f.r.SetBusinessChecker(func() string { return "" })
+	f.tick()
+	if g := f.gate(); g.State != "unavailable" || *g.Reason != "blubird older than 1.2.0" {
+		t.Fatalf("%+v", g)
+	}
+	f.tick()
+	if n := len(f.calls(t)); n != 0 {
+		t.Fatalf("calls %d", n)
+	}
+	// blubird 1.2 gets installed: the next tick reruns without any doc change
+	f.r.SetBusinessChecker(func() string { return f.install })
+	f.tick()
+	if g := f.gate(); g.State != "pass" || len(f.calls(t)) != 1 {
+		t.Fatalf("%+v", g)
+	}
+	f.tick()
+	if n := len(f.calls(t)); n != 1 {
+		t.Fatalf("idle tick after the run: %d calls", n)
 	}
 }

@@ -124,7 +124,7 @@ func TestBusinessDocsWalk(t *testing.T) {
 	write(t, filepath.Join(b, "auth/signup.md"), "# Signup — business documentation\n\n**Module:** auth\n\n## Rules\n\n- **R-1 A.** x\n  - Delivery: not delivered — y\n")
 	write(t, filepath.Join(b, "billing/plans.md"), "# Plans\n\n## Rules\n\n- **R-1 A.** x\n")
 	write(t, filepath.Join(b, "top.md"), "# Top\n")
-	for _, skip := range []string{"README.md", "Open-Questions-To-Client.md", "auth/readme.md", "sources/x.md", "auth/checklists/y.md", "auth/notes.txt", ".hidden/z.md"} {
+	for _, skip := range []string{"README.md", "Open-Questions-To-Client.md", "auth/readme.md", "sources/x.md", "auth/checklists/y.md", "auth/notes.txt"} {
 		write(t, filepath.Join(b, skip), "# skip\n")
 	}
 	big := filepath.Join(b, "billing/huge.md")
