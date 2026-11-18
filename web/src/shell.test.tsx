@@ -6,7 +6,7 @@ import { mockFetch } from "../mock/server";
 import { App } from "./app/App";
 import { parentScreen, runCommand } from "./app/commands";
 import { Palette, matchPages } from "./components/Overlays";
-import { loadMany } from "./state/data";
+import { loadMany, status } from "./state/data";
 import type { LoadKey } from "./state/refetch";
 import { hintsFor, resolveKey, type KeyCtx } from "./state/keymap";
 import { closeTopLayer, layerCount, overlayOpen, pushLayer } from "./state/layers";
@@ -124,6 +124,30 @@ describe("confirm, hints, palette", () => {
     expect(html).toContain("Go to Settings");
     expect(html).toMatch(/role="option"[^>]*>(?:(?!<\/button>).)*Describe a feature or a fix/);
     expect(html).toContain('aria-expanded="true"');
+  });
+});
+
+describe("blubird too-old banner", () => {
+  const withBlubird = (b: Partial<NonNullable<typeof status.value>["blubird"]>) => {
+    const saved = status.value!;
+    status.value = { ...saved, blubird: { ...saved.blubird, ...b } };
+    nav("#/inbox");
+    const html = renderToString(<App />);
+    status.value = saved;
+    return html;
+  };
+  it("names the installed version and offers Update", () => {
+    const html = withBlubird({ version: "0.28.0", too_old: true });
+    expect(html).toContain("blubird 0.28.0 is older than 1.2.0, so some skills are disabled.");
+    expect(html).toMatch(/older than 1\.2\.0, so some skills are disabled\. <button[^>]*>Update</);
+  });
+  it("is absent when the install is new enough, as after an update and a status re-read", () => {
+    expect(withBlubird({ version: "1.2.0", too_old: false })).not.toContain("is older than");
+  });
+  it("leaves a missing install to the not-installed banner", () => {
+    const html = withBlubird({ installed: false, version: "", too_old: false });
+    expect(html).toContain("blubird is not installed");
+    expect(html).not.toContain("is older than");
   });
 });
 
