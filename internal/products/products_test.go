@@ -738,7 +738,7 @@ func (e *env) do(method, path, body string) (int, map[string]any) {
 		rd = strings.NewReader(body)
 	}
 	req := httptest.NewRequest(method, path, rd)
-	if method == http.MethodPost {
+	if method == http.MethodPost || method == http.MethodPut {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("Host", "127.0.0.1")
@@ -832,6 +832,12 @@ func TestRoutes(t *testing.T) {
 			t.Errorf("%s: %d", q, code)
 		}
 	}
+	// an approved PRD is locked: 409 with the lock message, nothing written
+	write(t, filepath.Join(docs, "docs/prds/m/ok.md"), strings.Replace(prdA, "In review", "Approved", 1))
+	code, m = e.do("PUT", "/api/prd", `{"repo":"acme/shop-wiki","path":"docs/prds/m/ok.md","text":"x","base_sha":"0"}`)
+	if code != 409 || m["error"] != "approved PRDs are locked: start a new PRD or a task" {
+		t.Fatalf("%d %v", code, m)
+	}
 	// cleanup
 	wt, _ := worktreeFor(t, api, 4, "thing")
 	if code, m = e.do("POST", "/api/repos/acme/shop-api/cleanup", `{"issue":4,"confirm":true}`); code != 409 || m["error"] != "#4's PR is not merged" {
@@ -912,6 +918,65 @@ func TestSavePRDCommitsOnlyThatFile(t *testing.T) {
 	}
 	if _, err := r.SavePRD(ctx, "acme/shop-wiki", "docs/prds/../x.md", "x", got.Sha); errs.KindOf(err) != errs.KInvalid {
 		t.Fatal(err)
+	}
+}
+
+func TestSavePRDRefusesLocked(t *testing.T) {
+	r, ws, _ := setup(t)
+	write(t, os.Getenv("GIT_CONFIG_GLOBAL"), "[user]\n\tname = t\n\temail = t@t\n[commit]\n\tgpgsign = false\n")
+	docs, _ := product(t, ws)
+	ctx := context.Background()
+	const lockMsg = "approved PRDs are locked: start a new PRD or a task"
+	for _, status := range []string{"Approved", "Done", "approved"} {
+		t.Run(status, func(t *testing.T) {
+			rel := "docs/prds/lock/" + strings.ToLower(status) + ".md"
+			text := strings.Replace(prdA, "In review", status, 1)
+			write(t, filepath.Join(docs, rel), text)
+			run(t, docs, "add", ".")
+			run(t, docs, "commit", "-q", "-m", "prd "+status)
+			r.Register(ctx, docs)
+			f, err := r.ReadPRD("acme/shop-wiki", rel)
+			if err != nil {
+				t.Fatal(err)
+			}
+			head := run(t, docs, "rev-parse", "HEAD")
+			// the lock wins over the sha check and the same-text shortcut
+			for name, c := range map[string][2]string{
+				"right sha": {text + "\nMore.\n", f.Sha},
+				"stale sha": {"x", "0000000000000000000000000000000000000000"},
+				"empty sha": {"x", ""},
+				"same text": {text, f.Sha},
+			} {
+				_, err := r.SavePRD(ctx, "acme/shop-wiki", rel, c[0], c[1])
+				if errs.KindOf(err) != errs.KConflict || err.Error() != lockMsg {
+					t.Fatalf("%s: %v", name, err)
+				}
+			}
+			if b, _ := os.ReadFile(filepath.Join(docs, rel)); string(b) != text {
+				t.Fatalf("file changed: %q", b)
+			}
+			if got := run(t, docs, "rev-parse", "HEAD"); got != head {
+				t.Fatalf("committed: %s", got)
+			}
+			if st := run(t, docs, "status", "--porcelain"); st != "" {
+				t.Fatalf("worktree changed: %q", st)
+			}
+		})
+	}
+	// Draft, and an unknown status word (read as Draft), still save
+	for _, status := range []string{"Draft", "Someday"} {
+		rel := "docs/prds/lock/" + strings.ToLower(status) + ".md"
+		text := strings.Replace(prdA, "In review", status, 1)
+		write(t, filepath.Join(docs, rel), text)
+		run(t, docs, "add", ".")
+		run(t, docs, "commit", "-q", "-m", "prd "+status)
+		f, err := r.ReadPRD("acme/shop-wiki", rel)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := r.SavePRD(ctx, "acme/shop-wiki", rel, text+"\nMore.\n", f.Sha); err != nil {
+			t.Fatalf("%s: %v", status, err)
+		}
 	}
 }
 
