@@ -156,7 +156,7 @@ function LockedPrd({ f, file }: { f: Feature; file: PRDFile | null }) {
           const s = await startRun(newPrdRun(f, newPrd), "the new PRD");
           if (s) { setNewPrd(""); nav(`#/sessions/${s.id}`); }
         }}>
-          <input class="grow" placeholder="What should change?" aria-label="New PRD for this change" value={newPrd} onInput={(e) => setNewPrd((e.target as HTMLInputElement).value)} />
+          <input class="grow" placeholder="What should change?" aria-label="What should change, for a new PRD" value={newPrd} onInput={(e) => setNewPrd((e.target as HTMLInputElement).value)} />
           <Btn small type="submit" disabled={!newPrd.trim()}>New PRD for this change</Btn>
         </form>
         <form class="acts" onSubmit={async (e) => {
@@ -164,7 +164,7 @@ function LockedPrd({ f, file }: { f: Feature; file: PRDFile | null }) {
           if (!task.trim()) return;
           if (await startRun(smallTaskRun(f, task), "filing the task")) setTask("");
         }}>
-          <input class="grow" placeholder={f.epic ? "A small task for this epic" : "A small task, no product decision"} aria-label="One small task" value={task} onInput={(e) => setTask((e.target as HTMLInputElement).value)} />
+          <input class="grow" placeholder={f.epic ? "A small task for this epic" : "A small task, no product decision"} aria-label="The small task to file" value={task} onInput={(e) => setTask((e.target as HTMLInputElement).value)} />
           <Btn small type="submit" disabled={!task.trim()}>One small task</Btn>
         </form>
       </Pane>
