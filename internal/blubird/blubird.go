@@ -146,9 +146,9 @@ func detect() Status {
 }
 
 // olderThan compares numeric major.minor.patch versions; an unparsable version is never older.
-func olderThan(v, min string) bool {
+func olderThan(v, floor string) bool {
 	a, ok := parseVersion(v)
-	b, okMin := parseVersion(min)
+	b, okMin := parseVersion(floor)
 	if !ok || !okMin {
 		return false
 	}
