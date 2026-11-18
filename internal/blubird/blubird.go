@@ -27,12 +27,17 @@ const (
 	stepTimeout     = 300 * time.Second
 )
 
+// MinVersion is the oldest blubird whose skills match setu's step registry.
+const MinVersion = "1.2.0"
+
 // Status is the Blubird type of API.md §4.
 type Status struct {
 	Installed       bool     `json:"installed"`
 	Version         string   `json:"version"`
 	Latest          string   `json:"latest"`
 	UpdateAvailable bool     `json:"update_available"`
+	MinVersion      string   `json:"min_version"`
+	TooOld          bool     `json:"too_old"`
 	InstallPath     string   `json:"install_path"`
 	Marketplace     string   `json:"marketplace"`
 	Skills          []string `json:"skills"`
@@ -101,7 +106,7 @@ type installedFile struct {
 }
 
 func detect() Status {
-	st := Status{Marketplace: marketplaceName, Skills: []string{}, Hooks: []string{}}
+	st := Status{Marketplace: marketplaceName, MinVersion: MinVersion, Skills: []string{}, Hooks: []string{}}
 	var inst installedFile
 	if b, err := os.ReadFile(filepath.Join(pluginsDir(), "installed_plugins.json")); err == nil {
 		_ = json.Unmarshal(b, &inst)
@@ -136,7 +141,39 @@ func detect() Status {
 	}
 	st.Latest = latestVersion(st.Marketplace)
 	st.UpdateAvailable = st.Installed && st.Latest != "" && st.Latest != st.Version
+	st.TooOld = st.Installed && olderThan(st.Version, MinVersion)
 	return st
+}
+
+// olderThan compares numeric major.minor.patch versions; an unparsable version is never older.
+func olderThan(v, min string) bool {
+	a, ok := parseVersion(v)
+	b, okMin := parseVersion(min)
+	if !ok || !okMin {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return a[i] < b[i]
+		}
+	}
+	return false
+}
+
+func parseVersion(v string) ([3]int, bool) {
+	var out [3]int
+	parts := strings.Split(strings.TrimPrefix(v, "v"), ".")
+	if len(parts) != 3 {
+		return out, false
+	}
+	for i, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 0 {
+			return out, false
+		}
+		out[i] = n
+	}
+	return out, true
 }
 
 func listSkills(root string) []string {
