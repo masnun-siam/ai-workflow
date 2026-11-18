@@ -11,7 +11,7 @@ A Documentation Repo plus the code repos listed in its `.blubird/repos.json`. se
 The repo holding `docs/prds/` for a product. `docs`-run steps (`create-prd`, `create-tasks`, `map-prds`, `security-sweep`, `project-coordinator`) run in its checkout.
 
 **PRD**:
-The product requirements for one feature, at `docs/prds/<slug>.md`, written by blubird `create-prd`. Status Draft, In review or Approved; only Approved is split into tasks.
+The product requirements for one feature, at `docs/prds/<slug>.md`, written by blubird `create-prd`. Status Draft, In review or Approved; only Approved is split into tasks. Approved (and the legacy Done) is locked: read-only in setu, changed through a new PRD or one small task.
 
 **Epic / refined issue**:
 An epic is the parent GitHub issue of one PRD entry; its child issues become refined issues once `refine-issues` writes their body. Only a refined issue is ready to implement.
