@@ -263,7 +263,16 @@ export type Feature = {
   dispatch: { id: string; state: string; lanes: number; closed: number; needs: number } | null;
   live: number; sessions: { id: string; status: SessionStatus; skill: string; title: string; started_at: ISO; cost: number }[];
   actions: Action[];
+  business?: string[];          // matching business doc paths (FR-9 order); absent from an older server
 };
 export type FeatureList = { product: Slug; stale: Slug[]; features: Feature[] };
 export type ChangesList = { stale: Slug[]; issues: FeatureIssue[]; pending: Feature["sessions"] };
 export type CleanupItem = { key: string; label: string; repo: string; flags: string[] };
+
+// ---------- business docs (blubird 1.2; GET /api/products/{o}/{n}/business, GET /api/business) ----------
+export type BusinessDoc = { product: Slug; module: string; feature: string; path: string; title: string; updated: string; repos: string[];
+  rules: number; counts: { not_delivered: number; partly_delivered: number; drifted: number; built_differently: number; planned: number; open_questions: number };
+  prds: string[]; error: string };    // error: "" when fine, else "too large" | "unreadable" (counts zero)
+export type BusinessGate = { state: "pass" | "fail" | "unavailable"; failures: string[]; reason: string | null; checked_at: ISO | null; running: boolean };
+export type ValidationEpic = { repo: Slug; n: number; title: string; module: string /* lowercase, "other" when none */; url: string; issues: FeatureIssue[]; actions: Action[] };
+export type BusinessView = { docs: BusinessDoc[]; gate: BusinessGate; epics: ValidationEpic[] };

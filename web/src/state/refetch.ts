@@ -4,7 +4,7 @@ import type { Topic } from "../api/sse";
 export type LoadKey =
   | "status" | "river" | "inbox" | "sessions" | "session" | "stream" | "releases" | "ops" | "me"
   | "settings" | "notify" | "review" | "blubird" | "products" | "repos" | "dispatches" | "coordinators"
-  | "grinds" | "panels" | "registry" | "features" | "changes";
+  | "grinds" | "panels" | "registry" | "features" | "changes" | "business";
 
 export type View = { screen: string; sessionId?: string; tab?: string };
 
@@ -15,7 +15,8 @@ export function visibleKeys(v: View): LoadKey[] {
   switch (v.screen) {
     case "river": return [...base, "river"];
     case "inbox": return base;
-    case "features": return [...base, "features", "panels"];
+    case "features": return [...base, "features", "panels", "business"];
+    case "docs": return [...base, "business"];
     case "changes": return [...base, "changes"];
     case "dispatches": return [...base, "grinds"];
     case "activity": {
@@ -64,6 +65,7 @@ export function refetchFor(topic: Topic, payload: unknown, v: View): LoadKey[] {
         case "blubird": add("blubird", "status"); break;
         case "coordinator": add("coordinators"); break;
         case "prd": add("river", "products", "features"); break;
+        case "business": add("business"); break;
         default: add("river", "releases", "ops", "products", "blubird");
       }
       break;

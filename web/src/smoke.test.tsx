@@ -9,7 +9,7 @@ import type { LoadKey } from "./state/refetch";
 import { prefs } from "./state/prefs";
 import { nav } from "./state/route";
 
-const ALL: LoadKey[] = ["status", "river", "inbox", "sessions", "releases", "ops", "me", "settings", "notify", "review", "blubird", "products", "repos", "dispatches", "coordinators", "grinds", "panels", "registry"];
+const ALL: LoadKey[] = ["status", "river", "inbox", "sessions", "releases", "ops", "me", "settings", "notify", "review", "blubird", "products", "repos", "dispatches", "coordinators", "grinds", "panels", "registry", "business"];
 
 beforeAll(async () => {
   useMockClient(createClient(mockFetch));
@@ -17,7 +17,7 @@ beforeAll(async () => {
 });
 
 const SCREENS: [string, string][] = [["#/river", "Merchant payouts v2"], ["#/inbox", "Questions"], ["#/activity", "Payout batch model"], ["#/dispatches", "Dispatches"],
-  ["#/features", "Features"], ["#/changes", "Small changes"], ["#/releases", "release note preview"],
+  ["#/features", "Features"], ["#/docs", "Docs"], ["#/changes", "Small changes"], ["#/releases", "release note preview"],
   ["#/ops", "security-sweep"], ["#/me", "Run day-end"], ["#/settings", "appearance"], ["#/prd?repo=a/b&path=x.md", "PRD"]];
 
 describe("smoke render from mock fixtures", () => {

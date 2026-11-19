@@ -141,6 +141,13 @@ const routes: [string, RegExp, H][] = [
   ["GET", /^\/api\/prd$/, () => F.prdFile],
   ["PUT", /^\/api\/prd$/, ({ body }) => (body.base_sha !== F.prdFile.sha ? fail(409, "the PRD changed since you opened it: reload it and edit again") : Object.assign(F.prdFile, { text: body.text, sha: "def" + Date.now() }))],
   ["GET", /^\/api\/features$/, ({ q }) => (q.get("product") === F.PRODUCT ? F.featureList : { product: q.get("product"), stale: [], features: [] })],
+  ["GET", /^\/api\/products\/([^/]+)\/([^/]+)\/business$/, ({ m }) => (`${m[1]}/${m[2]}` === F.PRODUCT ? F.businessView : fail(404, "unknown product"))],
+  ["GET", /^\/api\/business$/, ({ q }) => {
+    const path = q.get("path") ?? "";
+    if (q.get("repo") !== F.PRODUCT || !F.businessView.docs.some((d) => d.path === path)) return fail(404, "no such file");
+    if (F.businessView.docs.find((d) => d.path === path)!.error) return fail(400, "too large");
+    return { ...F.businessFile, path, text: path === F.businessFile.path ? F.businessFile.text : `# ${path}\n\nA business doc.` };
+  }],
   ["GET", /^\/api\/products\/([^/]+)\/([^/]+)\/prds$/, ({ m }) => ({ prds: F.prds.filter((p) => p.product === `${m[1]}/${m[2]}`) })],
   ["POST", /^\/api\/refresh$/, () => json({ ok: true }, 202)],
   ["GET", /^\/api\/river$/, () => db.river],

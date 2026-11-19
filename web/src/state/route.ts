@@ -1,9 +1,10 @@
 import { signal } from "@preact/signals";
 
-/** The rail, in order. Number keys 1-9 go to the first nine, 0 to Settings. */
+/** The rail, in order. Number keys follow DIGIT_SCREENS: 1-9 the first nine, 0 Settings; Docs has none. */
 export const SCREENS = [
   ["inbox", "Inbox"],
   ["features", "Features"],
+  ["docs", "Docs"],
   ["changes", "Small changes"],
   ["dispatches", "Dispatches"],
   ["activity", "Activity"],
@@ -14,13 +15,18 @@ export const SCREENS = [
   ["settings", "Settings"],
 ] as const;
 export type ScreenId = (typeof SCREENS)[number][0];
+/** The screens with a number key, in key order (1-9, then 0). Docs came later and has no key, so the others keep theirs. */
+export const DIGIT_SCREENS: readonly ScreenId[] = SCREENS.map((s) => s[0]).filter((id) => id !== "docs");
+/** A screen's number key ("1"-"9", "0"), or "" when it has none. */
+export const digitFor = (id: ScreenId): string => { const i = DIGIT_SCREENS.indexOf(id); return i < 0 ? "" : String((i + 1) % 10); };
 export type Route = { screen: ScreenId | "prd" | "onboarding"; id?: string; query: Record<string, string> };
 
 const IDS = new Set<string>(SCREENS.map((s) => s[0]));
 /** Old hashes that moved: the Runs screen split into Dispatches and Activity. */
 const ALIASES: Record<string, ScreenId> = { runs: "activity", issues: "changes" };
 
-/** `#/inbox?only=o/r`, `#/sessions/<id>` (Activity, full page), `#/features/<slug>?product=o/r` (feature page), `#/prd?repo=..&path=..`, `#/onboarding`. Unknown or malformed -> inbox. */
+/** `#/inbox?only=o/r`, `#/sessions/<id>` (Activity, full page), `#/features/<slug>?product=o/r` (feature page),
+ *  `#/docs/<encoded path>?product=o/r` (business doc reader), `#/prd?repo=..&path=..`, `#/onboarding`. Unknown or malformed -> inbox. */
 export function parseHash(hash: string): Route {
   return parseKnown(hash) ?? { screen: "inbox", query: {} };
 }
@@ -39,7 +45,7 @@ function parseSegments(hash: string): Route | null {
   if (seg[0] === "sessions" && seg[1]) return { screen: "activity", id: decodeURIComponent(seg[1]), query };
   if (seg[0] === "prd") return { screen: "prd", query };
   if (seg[0] === "onboarding") return { screen: "onboarding", query };
-  if ((seg[0] === "features" || seg[0] === "dispatches") && seg[1]) return { screen: seg[0], id: decodeURIComponent(seg[1]), query };
+  if ((seg[0] === "features" || seg[0] === "dispatches" || seg[0] === "docs") && seg[1]) return { screen: seg[0], id: decodeURIComponent(seg[1]), query };
   if (seg[0] && IDS.has(seg[0])) return { screen: seg[0] as ScreenId, query };
   if (seg[0] && ALIASES[seg[0]]) return { screen: ALIASES[seg[0]]!, query };
   return seg[0] ? null : { screen: "inbox", query };

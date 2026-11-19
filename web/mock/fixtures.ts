@@ -1,7 +1,7 @@
 // Mock data for `npm run dev:mock` and the smoke tests. Typed by src/api/types.ts.
 import type {
   Action, Card, Coordinator, Dispatch, InboxItem, Me, NotifySettings, Ops, Panel, Product, Release, ReleaseRepo,
-  Repo, ReviewConfig, River, Round, Session, Settings, Status, TranscriptEvent, GrindStatus, AccountUsage, Away, PRD, FeatureIssue, FeatureList, ChangesList, IssueView, PRView,
+  Repo, ReviewConfig, River, Round, Session, Settings, Status, TranscriptEvent, GrindStatus, AccountUsage, Away, PRD, FeatureIssue, FeatureList, ChangesList, IssueView, PRView, BusinessView, BusinessDoc,
 } from "../src/api/types";
 import type { RegistryStep } from "../src/api/extra";
 
@@ -267,7 +267,8 @@ export const featureList: FeatureList = { product: PRODUCT, stale: [], features:
     stage: "building", bay: "you", next: "1 ready to merge.", epic: { key: "acme/wasensi-backend#941", repo: "acme/wasensi-backend", n: 941, title: "Rate cache", url: "https://github.com/acme/wasensi-backend/issues/941" },
     issues: rateIssues, done: [{ key: "acme/wasensi-backend#940", n: 940, title: "Spike: cache store", url: "https://github.com/acme/wasensi-backend/issues/940" }], counts: counts(rateIssues, 1),
     panel: null, dispatch: null, live: 1, sessions: [{ id: SID(2), status: "running", skill: "blubird:implement-issue", title: "#943 Cache reader", started_at: "2026-11-12T08:00:00Z", cost: 2.3 }],
-    actions: [rateIssues[0]!.actions[0]!, { key: "d", label: "Run epic", method: "POST", path: "/api/noop", toast: "", open: "#/dispatches?new=acme%2Fwasensi-backend%23941" }, readPrd("docs/prds/cache/rates.md")] },
+    actions: [rateIssues[0]!.actions[0]!, { key: "d", label: "Run epic", method: "POST", path: "/api/noop", toast: "", open: "#/dispatches?new=acme%2Fwasensi-backend%23941" }, readPrd("docs/prds/cache/rates.md")],
+    business: ["docs/business/cache/rates.md", "docs/business/payouts/batches.md"] },
   { product: PRODUCT, slug: "batches", title: "Merchant payouts v2", status: "In review", path: "docs/prds/payouts/batches.md", module: "payouts", prd_route: `#/prd?repo=${PRODUCT}&path=docs/prds/payouts/batches.md`,
     stage: "review", bay: "running", next: "Peer review round 1 of 3: 1 of 2 lenses approve.", epic: null, issues: [], done: [], counts: counts([], 0),
     panel: { id: "p-20261112T090000Z-abcdef", repo: PRODUCT, artifact: "/code/wasensi-docs/docs/prds/payouts/batches.md", state: "running", round: 1, max_rounds: 3, root_session: SID(1), status: { approved: 1, total: 2 } },
@@ -295,3 +296,23 @@ export const prView: PRView = { number: 1060, title: "Rename the settings tab", 
   conversation: [{ kind: "review", author: "copilot", at: "2026-11-12T08:30:00Z", state: "COMMENTED", body_html: "<p>Looks fine.</p>" }],
   checks: [{ name: "test", bucket: "pending", link: "https://github.com/acme/wasensi-backend/actions/runs/1" }, { name: "lint", bucket: "green", link: "https://github.com/acme/wasensi-backend/actions/runs/2" }] };
 export const vaultPrd = { exists: true, status: "Draft", title: "Notes app", folder: "05-Work/wasensi/payouts" };
+
+// ---------- business docs (blubird 1.2) ----------
+const bdoc = (module: string, feature: string, title: string, extra: Partial<BusinessDoc> = {}): BusinessDoc => ({
+  product: PRODUCT, module, feature, path: `docs/business/${module}/${feature}.md`, title, updated: "2026-11-10", repos: ["acme/wasensi-backend"], rules: 0,
+  counts: { not_delivered: 0, partly_delivered: 0, drifted: 0, built_differently: 0, planned: 0, open_questions: 0 }, prds: [], error: "", ...extra });
+export const businessView: BusinessView = {
+  docs: [
+    bdoc("cache", "rates", "Rate cache", { rules: 6, counts: { not_delivered: 2, partly_delivered: 1, drifted: 0, built_differently: 0, planned: 1, open_questions: 1 }, prds: ["docs/prds/cache/rates.md"] }),
+    bdoc("cache", "invalidation", "Cache invalidation", { rules: 3, updated: "", counts: { not_delivered: 0, partly_delivered: 0, drifted: 1, built_differently: 1, planned: 0, open_questions: 0 } }),
+    bdoc("payouts", "batches", "Payout batches", { rules: 4, counts: { not_delivered: 0, partly_delivered: 0, drifted: 0, built_differently: 0, planned: 2, open_questions: 0 }, prds: ["docs/prds/cache/rates.md"] }),
+    bdoc("payouts", "statements", "Payout statements", { error: "too large" }),
+  ],
+  gate: { state: "pass", failures: [], reason: null, checked_at: iso(5), running: false },
+  epics: [{ repo: "acme/wasensi-backend", n: 960, title: "Business validation: Kyc", module: "kyc", url: "https://github.com/acme/wasensi-backend/issues/960",
+    issues: [fi(961, "KYC re-check skips expired documents", "ready", { bug: true, actions: [start("i", "Start", "implement-issue", "961", "acme/wasensi-backend", { primary: true })] }),
+      fi(962, "KYC reminder email drifted from the doc", "unrefined", { actions: [start("e", "Refine", "refine-issues", "962", "acme/wasensi-backend")] })],
+    actions: [{ key: "d", label: "Run epic", method: "POST", path: "/api/noop", toast: "", open: "#/dispatches?new=acme%2Fwasensi-backend%23960" }] }],
+};
+export const businessFile = { repo: PRODUCT, path: "docs/business/cache/rates.md", sha: "bus1", branch: "main",
+  text: "# Rate cache\n\n**Module:** cache\n**Updated:** 2026-11-10\n\n## Rules\n\n### R-1 Rates are cached for 5 minutes\n\nNot delivered.\n\n## Timeline\n\n- 2026-11-01 planned R-1 docs/prds/cache/rates.md\n" };
