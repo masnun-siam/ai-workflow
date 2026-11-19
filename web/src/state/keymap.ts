@@ -1,7 +1,7 @@
 import type { Action } from "../api/types";
 import { answerKeyIndex } from "./answer";
 import type { ScreenId } from "./route";
-import { SCREENS } from "./route";
+import { DIGIT_SCREENS } from "./route";
 
 export type KeyEvt = { key: string; meta?: boolean; ctrl?: boolean; alt?: boolean; typing?: boolean };
 export type KeyCtx = {
@@ -44,7 +44,7 @@ export function resolveKey(e: KeyEvt, c: KeyCtx): Cmd | null {
   if (k === ".") return { t: "mode" };
   if (k === "s") return { t: "look" };
   if (k === "L") return { t: "layout" };
-  if (/^[0-9]$/.test(k)) return { t: "go", screen: SCREENS[k === "0" ? SCREENS.length - 1 : Number(k) - 1]![0] };
+  if (/^[0-9]$/.test(k)) return { t: "go", screen: DIGIT_SCREENS[k === "0" ? DIGIT_SCREENS.length - 1 : Number(k) - 1]! };
   if (c.nav) {
     if (k === "j" || k === "ArrowDown") return { t: "move", dx: 0, dy: 1 };
     if (k === "k" || k === "ArrowUp") return { t: "move", dx: 0, dy: -1 };
@@ -67,6 +67,7 @@ export const HINTS: Record<string, [string, string][]> = {
   activity: [["j/k", "move"], ["⏎", "open"]],
   dispatches: [],
   features: [],
+  docs: [],
   changes: [],
   releases: [["c", "cut"], ["y", "dry run"], ["G", "grind"], ["n", "note"], ["p", "post"], ["e", "edit"], ["x", "skip"]],
   ops: [["j/k", "move"], ["⏎", "run"]],

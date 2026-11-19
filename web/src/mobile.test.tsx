@@ -34,7 +34,12 @@ describe("phone-width shell", () => {
     navOpen.value = true;
     const html = renderToString(<Rail />);
     expect(html).toContain("pop sheet");
-    for (const s of ["Small changes", "Away mode", "keys", "system"]) expect(html).toContain(s);
+    for (const s of ["Small changes", "Docs", "Away mode", "keys", "system"]) expect(html).toContain(s);
+  });
+  it("the narrow top bar names the Docs page", () => {
+    nav("#/docs");
+    narrow.value = true;
+    expect(renderToString(<Rail />)).toMatch(/class="bar-title"[^>]*>Docs</);
   });
   it("the search button has a visible label and an aria-label", () => {
     const html = renderToString(<Topbar />);

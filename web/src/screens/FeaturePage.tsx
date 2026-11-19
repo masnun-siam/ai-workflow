@@ -8,6 +8,7 @@ import { exec } from "../state/exec";
 import { ago, fmtCost, prio } from "../state/format";
 import { nav, route, setParam } from "../state/route";
 import { askConfirm, toast } from "../state/ui";
+import { BusinessTab } from "../components/BusinessDoc";
 import { Header } from "../components/Header";
 import { Markdown, headings } from "../components/Markdown";
 import { statusTone } from "../components/SessionView";
@@ -15,8 +16,8 @@ import { Popover } from "../components/Shell";
 import { Btn, Empty, Pane, Tag } from "../components/ui";
 import { FeatureStrip } from "./Features";
 
-type Tab = "issues" | "prd" | "review" | "sessions";
-const TABS: [Tab, string][] = [["issues", "Issues"], ["prd", "PRD"], ["review", "Peer review"], ["sessions", "Sessions"]];
+type Tab = "issues" | "prd" | "business" | "review" | "sessions";
+const TABS: [Tab, string][] = [["issues", "Issues"], ["prd", "PRD"], ["business", "Business"], ["review", "Peer review"], ["sessions", "Sessions"]];
 const defaultTab = (f: Feature): Tab => (f.stage === "draft" ? "prd" : f.stage === "review" ? "review" : "issues");
 
 const STATE: Record<FeatureIssueState, [string, string]> = {
@@ -67,7 +68,7 @@ function BuildMap({ f }: { f: Feature }) {
 }
 
 /** "#944" as a link to that issue: its row here when it is in this feature, else GitHub. The title shows on hover. */
-function Blockers({ i, f }: { i: FeatureIssue; f: Feature }) {
+function Blockers({ i, f }: { i: FeatureIssue; f: Pick<Feature, "issues" | "done"> }) {
   return (
     <span class="dim"> · after {i.blockers.map((b, k) => {
       const n = Number(/(\d+)/.exec(b)?.[1]);
@@ -80,7 +81,7 @@ function Blockers({ i, f }: { i: FeatureIssue; f: Feature }) {
   );
 }
 
-function IssueRow({ i, f, picked, onPick, hold }: { i: FeatureIssue; f: Feature; picked: boolean; onPick?: (v: boolean) => void; hold?: string }) {
+export function IssueRow({ i, f, picked, onPick, hold }: { i: FeatureIssue; f: Pick<Feature, "issues" | "done">; picked: boolean; onPick?: (v: boolean) => void; hold?: string }) {
   const [label, tone] = STATE[i.state];
   return (
     <div class="irow" id={`issue-${i.n}`}>
@@ -341,6 +342,7 @@ export function FeaturePage() {
       <Pane label={TABS.find(([t]) => t === tab)?.[1] ?? ""} id="feature-panel" role="tabpanel" labelledBy={`tab-${tab}`}>
         {tab === "issues" && <IssuesTab f={f} />}
         {tab === "prd" && <PrdTab f={f} />}
+        {tab === "business" && <BusinessTab f={f} />}
         {tab === "review" && <ReviewTab f={f} />}
         {tab === "sessions" && <SessionsTab f={f} />}
       </Pane>
