@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -148,6 +149,7 @@ func (b *Builder) Build(ctx context.Context, product, repo string) List {
 	items = append(items, b.cleanupItems(v)...)
 	items = append(items, b.releaseItems(v)...)
 	items = append(items, b.dispatchItems(v)...)
+	items = append(items, b.coordItems(v)...)
 	items = append(items, b.awayItems(v)...)
 
 	out := items[:0]
@@ -838,6 +840,48 @@ func (b *Builder) dispatchItems(v *view) []Item {
 				it.Actions = []Action{Open("o", "Open dispatch", route).WithPrimary()}
 				out = append(out, it)
 			}
+		}
+	}
+	return out
+}
+
+// ---- project coordinator ----
+
+// StateCoordStale is blubird's queue state for an issue In progress and assigned to you with no
+// open PR and no run on it (project-coordinator normalize.jq).
+const StateCoordStale = "in-progress-stale"
+
+// CoordStaleHint is blubird's hint for StateCoordStale; web/src/screens/Activity.tsx shows the same.
+const CoordStaleHint = "In progress and assigned to you, but no open PR and no run on it."
+
+// coordItems adds one item per in-progress-stale queue line of a live coordinator run. The queue
+// has no repo column: the issue belongs to the run's repo.
+func (b *Builder) coordItems(v *view) []Item {
+	if b.d.Coordinators == nil {
+		return nil
+	}
+	var out []Item
+	for _, co := range b.d.Coordinators.Coordinators() {
+		if !co.Live || co.Repo == "" {
+			continue
+		}
+		repo := v.slug(co.Repo)
+		for _, q := range co.Queue {
+			if q.State != StateCoordStale || q.Issue <= 0 {
+				continue
+			}
+			url := IssueURL(repo, q.Issue)
+			body := map[string]any{"step": "implement-issue", "repo": repo, "issue": q.Issue, "args": strconv.Itoa(q.Issue), "guard": true}
+			out = append(out, Item{
+				Key: fmt.Sprintf("%s:%s:%d", TCoordStale, co.Run, q.Issue), Group: GFix, Type: TCoordStale, Kind: "Coordinator",
+				Title: strings.TrimSpace(fmt.Sprintf("#%d %s", q.Issue, q.Title)), Repo: &repo,
+				Detail: []string{CoordStaleHint}, Links: Links{Issue: url},
+				Anchors: []string{fmt.Sprintf("issue:%s#%d", lower(repo), q.Issue), "coord:" + co.Run},
+				Actions: []Action{
+					Start("i", "Implement", fmt.Sprintf("Started implement-issue %d", q.Issue), body).WithPrimary(),
+					Open("o", "Open issue", url),
+				},
+			})
 		}
 	}
 	return out

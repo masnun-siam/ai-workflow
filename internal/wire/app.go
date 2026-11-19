@@ -243,7 +243,7 @@ func Build(ctx context.Context, h *home.Home, bus *events.Bus, version, binDir s
 		Sessions: a.Sessions, Snapshots: a.Poller, Products: a.Products, GH: a.Auth, Blubird: a.Blubird,
 		Settings: inbox.StoreGrind{Store: a.Settings}, Grinds: inboxGrinds{grindSv},
 		Dispatch: inboxDispatch{disp}, Away: inboxAway{a.Away}, Panels: inboxPanels{revSvc},
-		Releases: inboxReleases{a.Release}, Cleanup: cf, Jev: a.Jev, Bus: bus,
+		Releases: inboxReleases{a.Release}, Coordinators: viewDispatch{inboxDispatch{disp}, disp}, Cleanup: cf, Jev: a.Jev, Bus: bus,
 	})
 	views_ = views.New(views.Deps{
 		Inbox: a.Inbox, Sessions: a.Sessions, Snapshots: a.Poller, Products: a.Products, Prompts: reg,

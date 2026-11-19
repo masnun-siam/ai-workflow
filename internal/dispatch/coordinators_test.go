@@ -138,3 +138,14 @@ func TestStartCoordinatorSession(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// blubird 1.2 adds the in-progress-stale queue state: the reader passes it through as is.
+func TestCoordinatorQueueStale(t *testing.T) {
+	e := newEnv(t)
+	_, liveDir, _ := coordFixture(t, e)
+	write(t, filepath.Join(liveDir, "queue.tsv"), "6321\tok\tFast CI\n6340\tin-progress-stale\tAbandoned\n6341\t\tno state\nabc\tin-progress-stale\tbad issue\n")
+	c := e.svc.Coordinators()[0]
+	if len(c.Queue) != 3 || c.Queue[1] != (CoordQueue{6340, "in-progress-stale", "Abandoned"}) || c.Queue[2] != (CoordQueue{6341, "", "no state"}) {
+		t.Fatalf("%+v", c.Queue)
+	}
+}
