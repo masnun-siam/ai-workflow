@@ -143,13 +143,17 @@ export function RepoMapDialog() {
   useFocusTrap(box);
   useLayer(() => r.resolve("cancel"));
   useEffect(() => {
-    if (!r.repo.startsWith("local/")) void stagingMissing(r.repo).then(setNoStaging);
+    // a second refused start reuses this dialog for another repo: drop the old answer and any late one
+    let live = true;
+    setNoStaging(false);
+    if (!r.repo.startsWith("local/")) void stagingMissing(r.repo).then((v) => live && setNoStaging(v));
+    return () => { live = false; };
   }, [r.repo]);
   const local = r.repo.startsWith("local/");
   return (
     <div class="ov" onClick={(e) => { if (e.target === e.currentTarget) r.resolve("cancel"); }}>
       <div class="dlg form narrow" ref={box} role="alertdialog" aria-modal="true" aria-labelledby="repomap-t" aria-describedby="repomap-d"
-        onKeyDown={(e) => { if (local) return; if (e.key === "m") r.resolve("monorepo"); else if (e.key === "o") r.resolve("onboard"); }}>
+        onKeyDown={(e) => { if (local || e.ctrlKey || e.metaKey || e.altKey) return; if (e.key === "m") r.resolve("monorepo"); else if (e.key === "o") r.resolve("onboard"); }}>
         <RepoMapChoice repo={r.repo} noStaging={noStaging} choose={r.resolve} />
       </div>
     </div>
