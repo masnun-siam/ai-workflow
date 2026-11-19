@@ -6,7 +6,7 @@ import { mockFetch } from "../mock/server";
 import { App } from "./app/App";
 import { loadMany } from "./state/data";
 import { parseHash, nav } from "./state/route";
-import { newPrdRun, smallTaskRun } from "./screens/FeaturePage";
+import { newPrdRun, prdUpdateArgs, smallTaskRun } from "./screens/FeaturePage";
 import { features } from "./state/data";
 
 describe("features", () => {
@@ -71,6 +71,12 @@ describe("features", () => {
     expect(noEpic).toMatchObject({ step: "small-change", repo: "acme/wasensi-docs" });
     for (const s of ["Fix the copy", "docs/prds/login.md"]) expect(noEpic.args).toContain(s);
     expect(noEpic.args).not.toContain("epic");
+  });
+  it("PRD update args: path first, then the request on one line", () => {
+    expect(prdUpdateArgs("docs/prds/x.md", "  rename the title  ")).toBe("docs/prds/x.md — update this PRD: rename the title");
+    const multi = prdUpdateArgs("docs/prds/x.md", "first line\nsecond  line\r\n\r\n  third\r\nfourth");
+    expect(multi).toBe("docs/prds/x.md — update this PRD: first line second  line third fourth");
+    expect(multi).not.toMatch(/[\r\n]/);
   });
   it("unknown feature says so", () => {
     nav("#/features/nope?product=acme/wasensi-docs");
