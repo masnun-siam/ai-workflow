@@ -241,6 +241,25 @@ func Routes(d Deps) []server.Route {
 			reg.changed("registry", key)
 			return 0, map[string]any{"removed": removed}, nil
 		}),
+		h("POST /api/repos/{owner}/{name}/monorepo", func(r *http.Request) (int, any, error) {
+			slug, err := server.Slug(r)
+			if err != nil {
+				return 0, nil, errs.NotFound("%s", err.Error())
+			}
+			var in struct{}
+			if err := server.Decode(r, &in); err != nil {
+				return 0, nil, err
+			}
+			p, wrote, err := reg.Monorepo(r.Context(), slug)
+			if err != nil {
+				return 0, nil, err
+			}
+			code := http.StatusOK
+			if wrote {
+				code = http.StatusCreated
+			}
+			return code, map[string]any{"product": p}, nil
+		}),
 		h("GET /api/products", func(r *http.Request) (int, any, error) {
 			return 0, map[string]any{"products": reg.Products()}, nil
 		}),
