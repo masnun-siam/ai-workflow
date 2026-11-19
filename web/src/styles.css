@@ -194,6 +194,7 @@ table.t th{text-align:left;color:var(--dim);font-weight:500;padding:2px 8px;bord
 table.t td{padding:4px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 .tablewrap{overflow-x:auto}
 table.t td.brk{overflow-wrap:anywhere;min-width:12em}
+table.t tr.need td{background:color-mix(in srgb,var(--warn) 8%,transparent)}table.t tr.need td:first-child{box-shadow:inset 2px 0 var(--warn)}
 .mx td,.mx th{text-align:center}.mx td:first-child,.mx th:first-child{text-align:left}
 .row.static{cursor:default}
 .toast.error{border-color:var(--bad)}

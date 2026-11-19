@@ -193,7 +193,7 @@ export const dispatches: Dispatch[] = [{
   events: [{ at: Math.floor(now / 1000) - 880, lane: null, kind: "start", text: "dispatch started: 2 issues, 3 at most" }, { at: Math.floor(now / 1000) - 870, lane: "acme/wasensi-backend#942", kind: "start", text: "implement-issue started" }],
 }];
 export const coordinators: Coordinator[] = [{ run: "20261112-coord", repo: "acme/bop-bd", source: "label:payments", destination: "staging", session: SID(4), live: true,
-  queue: [{ issue: 455, state: "ok", title: "phpstan" }, { issue: 461, state: "blocked:#455", title: "Rate cache" }], claims: [455], prs: {}, poll: { calls: 12, last: Math.floor(now / 1000), result: "ok", every: 60 }, events: ["#455 verifying", "#458 PR open"] }];
+  queue: [{ issue: 455, state: "ok", title: "phpstan" }, { issue: 461, state: "blocked:#455", title: "Rate cache" }, { issue: 463, state: "in-progress-stale", title: "Payout retries" }], claims: [455], prs: {}, poll: { calls: 12, last: Math.floor(now / 1000), result: "ok", every: 60 }, events: ["#455 verifying", "#458 PR open"] }];
 export const panels: Panel[] = [{ id: "p-20261112T090000Z-abcdef", repo: "acme/wasensi-backend", artifact: "/tmp/plan.md", lenses: ["security", "perf"], root_session: SID(1), round: 1, max_rounds: 3, dropped: [], failed: [], state: "running", reason: null, phase: "lenses", lens_sessions: {}, status: { approved: 1, total: 2, lenses: { security: "approve", perf: "waiting" } } }];
 
 export const settings: Settings = {
