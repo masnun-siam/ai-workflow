@@ -253,6 +253,13 @@ func (r *Registry) ProductOf(slug string) (Product, bool)
 func (r *Registry) Sync(ctx context.Context)                 // called every poll tick
 func (r *Registry) PRDs(product string) ([]PRD, error)       // recursive docs/prds/**/*.md in the docs checkout
 func (r *Registry) ReadPRD(repo, rel string) (PRDFile, error)
+func (r *Registry) BusinessDocs(product string) ([]BusinessDoc, error) // docs/business/**/*.md, minus README.md, open-questions-to-client.md, sources/, checklists/
+func (r *Registry) ReadBusiness(repo, rel string) (PRDFile, error)     // one business doc, PRD path checks under docs/business/
+func ParseBusinessDoc(r io.Reader, path, folderModule string) BusinessDoc // pure; counters only
+func (r *Registry) SetBusinessChecker(f func() string)       // f returns blubird's install path (wiring: blubird status)
+func (r *Registry) CheckBusiness(ctx context.Context)        // called every poll tick: runs the gate in the background when docs/business changed
+func (r *Registry) BusinessGate(product string) BusinessGate // the cached gate; never runs anything
+func (r *Registry) WaitBusiness()                            // waits for running gate checks (tests)
 func (r *Registry) CleanupCheck(checkout string, n int, mergedHead string) *CleanupFlags // G§5
 func (r *Registry) Cleanup(checkout string, n int, confirm bool, mergedHead string) (removed []string, flags *CleanupFlags, err error)
 func (r *Registry) WatchedRepos() []string                   // all product repos with a GitHub slug
@@ -515,6 +522,20 @@ type PRD = { product: Slug; module: string | null; slug: string; title: string;
   status: "Draft" | "In review" | "Approved" | "Done"; path: string; label: string; epic: IssueKey | null };
 type PRDFile = { repo: Slug; path: string; text: string; sha: string; branch: string };
 
+// ---------- business docs (blubird 1.2, docs/business/<module>/<feature>.md) ----------
+// module: the **Module:** header, else the folder under docs/business, else "other". Withdrawn rules are in no count.
+// planned = rules whose last `planned` Timeline bullet has no later `delivered`/`withdrawn` bullet. error: "too large" | "unreadable" (counts zero).
+type BusinessDoc = { product: Slug; module: string; feature: string; path: string; title: string; updated: string; repos: string[];
+  rules: number; counts: { not_delivered: number; partly_delivered: number; drifted: number; built_differently: number;
+  planned: number; open_questions: number }; prds: string[] /* docs/prds/...md linked by planned bullets */; error: string };
+// unavailable reasons: "not checked yet", "python3 not found", "blubird older than 1.2.0", "timed out", "no docs/business", "checker exited <n>: <line>"
+type BusinessGate = { state: "pass" | "fail" | "unavailable"; failures: string[] /* checker lines, ≤200 */; reason: string | null;
+  checked_at: ISO | null; running: boolean };
+type ValidationEpic = { repo: Slug; n: number; title: string; module: string /* lowercase, "other" when none */; url: string;
+  issues: FeatureIssue[]; actions: Action[] /* Run epic, or Open dispatch */ };
+type BusinessView = { docs: BusinessDoc[]; gate: BusinessGate; epics: ValidationEpic[] };
+// FeatureList: each feature also has business: string[] (FR-9 order: same module/file as the PRD, then docs whose prds link it)
+
 // ---------- GitHub popups (shapes as G§1.2) ----------
 type IssueView = { number: number; title: string; url: string; state: string; state_reason: string | null; is_pr: boolean;
   merged: boolean; author: string; created_at: ISO; labels: { name: string; color: string }[]; assignees: string[];
@@ -708,6 +729,7 @@ Continue (stalled sessions only): resumes the same Claude session id through the
 | DELETE | `/api/products/{owner}/{name}` | — | `{products: Product[]}` | 200 | products |
 | GET | `/api/products/{owner}/{name}/prds` | — | `{prds: PRD[]}` | 200 | products |
 | GET | `/api/prd?repo=<slug>&path=docs/prds/...md` | — | `PRDFile` | 200; 400 | products |
+| GET | `/api/business?repo=<docs slug>&path=docs/business/...md` | — | `PRDFile` (a business doc) | 200; 400 bad path, not `docs/business/...md`, or over 2 MiB; 404 missing, not a product's docs repo, or a symlink out of `docs/business/` | products |
 | POST | `/api/repos/create` | `{name, parent: abs dir, vault_folder?}` | `{repo, repos}` | 201; 400; 409 exists; 502 git | products: `git init -b main`, README (+ the vault folder's PRD.md at `docs/prds/<feature>.md`), first commit, registered as `local/<name>` |
 | POST | `/api/repos/publish` | `{slug: "local/…", owner, name, private}` | `{repo, repos}` | 200; 400; 404; 502 gh | products: `gh repo create owner/name --private\|--public --source <dir> --remote origin --push`, then the checkout becomes `owner/name` |
 | GET | `/api/github/owners` | — | `{owners: string[]}` (gh user, then orgs) | 200; 502 | products |
@@ -726,7 +748,8 @@ Continue (stalled sessions only): resumes the same Claude session id through the
 |---|---|---|---|---|
 | GET | `/api/river?product=<docs slug>&repo=` (`repo` of no product: a River of that repo alone, without PRD and "commits ahead" cards; a repo of a product shows that product) | — | `River` (marks the shown repos viewed; every card's `log` and `actions` are arrays, never null) | 200; 400 unknown product or repo |
 | GET | `/api/inbox?product=&repo=` | — | `InboxList` (marks viewed `*`) | 200 |
-| GET | `/api/features?product=` | — | `FeatureList`: per PRD the stage (draft, review, approved, tasks, building, shipped), bay (you, go, running, shipped), next-step line and actions, epic, its open issues (state and row actions) and closed ones, counts, newest panel on the PRD file, the dispatch owning the epic, sessions. Sorted by bay | 200; 400 unknown product |
+| GET | `/api/features?product=` | — | `FeatureList`: per PRD the stage (draft, review, approved, tasks, building, shipped), bay (you, go, running, shipped), next-step line and actions, epic, its open issues (state and row actions) and closed ones, counts, newest panel on the PRD file, the dispatch owning the epic, sessions. Sorted by bay. Each feature has `business`: its matching business doc paths | 200; 400 unknown product |
+| GET | `/api/products/{owner}/{name}/business` (a `views` route: it needs the poller's issues) | — | `BusinessView`: the product's business docs, the cached gate (a request never runs or waits for it) and the open `epic` + `business-validation` issues of its docs repo with their children; `docs`, `failures`, `epics` are arrays, never null | 200; 404 unknown product |
 | GET | `/api/changes?repo=` | — | `{stale, issues: FeatureIssue[], pending: FeatureSession[]}`: open issues that belong to no epic in every registered repo (or one), with feature-issue states and row actions; `pending` = live `small-change` and `report-bug` runs | 200 |
 | GET | `/api/ops?product=&repo=` (`repo` of no product: its repo steps run on itself, docs repo steps "needs a product" with no action) | — | `Ops` | 200; 400 unknown product or repo |
 | GET | `/api/me` | — | `Me` | 200 |
@@ -806,7 +829,7 @@ Headers: `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `X-Accel-
 | `hello` | `{version, boot_id, resync: boolean}` | connect; after the server dropped events for a slow client (`resync:true`) | everything visible |
 | `sessions` | `{id, status, change:"record"\|"stream"\|"removed"}` | any `Manager.Update`; a `meta.json` change written by `setu ask` (seen by the meta watcher within 1 s); stream growth (throttled to 1 per s per session); cleanup | `/api/sessions`; `/api/sessions/{id}` + `stream?offset` if open; River/Me (debounced 1 s) |
 | `inbox` | `{count}` | the inbox's (key, content-hash) set changes. It is recomputed 500 ms (debounced) after any sessions/products/dispatch/usage{away} event. | `/api/inbox` (+ nav badge from `count`) |
-| `products` | `{kind:"snapshot"\|"registry"\|"release"\|"grind"\|"review"\|"blubird"\|"coordinator"\|"prd", repo?: Slug}` | poller fresh-with-change (data hash differs) or a stale flip; repos/products change; release, grind index, panel, coordinator file change (10 s scan); blubird job state | `/api/river`, `/api/releases`, `/api/ops`, `/api/products`, `/api/blubird` as relevant to `kind` |
+| `products` | `{kind:"snapshot"\|"registry"\|"release"\|"grind"\|"review"\|"blubird"\|"coordinator"\|"prd"\|"business", repo?: Slug}` | poller fresh-with-change (data hash differs) or a stale flip; repos/products change; release, grind index, panel, coordinator file change (10 s scan); blubird job state; `business`: a product's `docs/business` changed (seen by the poll tick; a change in `python3` or the blubird checker being available counts too) or a gate result was stored | `/api/river`, `/api/releases`, `/api/ops`, `/api/products`, `/api/blubird` as relevant to `kind` |
 | `dispatch` | `{id, change:"record"\|"removed"}` | dispatch save/archive | `/api/dispatches[/id]` |
 | `usage` | `{kind:"usage"\|"limits"\|"gh"\|"away"\|"settings"}` | meter refresh; limits change; gh auth flips; away begin/end/tick-log; settings save | `/api/status` (+ `/api/settings` on `settings`) |
 | `toast` | `{id: number, event: NotifyEvent \| "info" \| "error", title, body, path: string /* "#/..." */, level:"info"\|"warn"\|"error"}` | notify browser channel (W§4.4 replaces the `ui_feed` ring); finished background jobs (blubird install, release post) | none: show it, `path` = click target |

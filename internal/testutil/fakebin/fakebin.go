@@ -1,5 +1,5 @@
-// Package fakebin is a test harness: fake claude, gh, slackcli, jev, terminal-notifier, security
-// and tailscale executables, driven by a rules file. One small Go program (./fake) is built once
+// Package fakebin is a test harness: fake claude, gh, slackcli, jev, terminal-notifier, security,
+// tailscale and python3 executables, driven by a rules file. One small Go program (./fake) is built once
 // (cached in the OS temp dir by source hash) and symlinked under each binary name.
 //
 // Rules live in $FAKEBIN_FIXTURES (<dir>/rules.json), first match wins; an unmatched call exits
@@ -26,7 +26,7 @@ import (
 )
 
 // Bins are the executables Install creates.
-var Bins = []string{"claude", "gh", "slackcli", "jev", "terminal-notifier", "security", "tailscale"}
+var Bins = []string{"claude", "gh", "slackcli", "jev", "terminal-notifier", "security", "tailscale", "python3"}
 
 // Rule is one fixture entry.
 type Rule struct {

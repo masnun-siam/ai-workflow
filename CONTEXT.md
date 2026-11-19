@@ -13,6 +13,9 @@ The repo holding `docs/prds/` for a product. `docs`-run steps (`collect-docs`, `
 **PRD**:
 The product requirements for one feature, at `docs/prds/<slug>.md`, written by blubird `create-prd`. Status Draft, In review or Approved; only Approved is split into tasks.
 
+**Business doc**:
+blubird 1.2's lasting record of what is live for one feature, at `docs/business/<module>/<feature>.md` in the Documentation Repo: rules `R-n` with a Delivery mark and a dated Timeline. setu only reads them and shows the result of blubird's checker (the docs gate); the docs skills write them.
+
 **Epic / refined issue**:
 An epic is the parent GitHub issue of one PRD entry; its child issues become refined issues once `refine-issues` writes their body. Only a refined issue is ready to implement.
 
