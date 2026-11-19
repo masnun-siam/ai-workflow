@@ -49,6 +49,7 @@ const (
 	TDispatchDone    = "dispatch_done"
 	TAwaySummary     = "away_summary"
 	TRepoUnpublished = "repo_unpublished"
+	TCoordStale      = "coord_stale"
 )
 
 // Action is a server-built button (API §4). An action with Open set navigates instead of fetching.
@@ -91,7 +92,7 @@ type Item struct {
 	Actions   []Action        `json:"actions"`
 
 	// Anchors tie the item to River cards ("session:<id>", "issue:o/r#n", "pr:o/r#n",
-	// "prd:o/r:path", "release:<id>", "dispatch:<id>"). Not serialised.
+	// "prd:o/r:path", "release:<id>", "dispatch:<id>", "coord:<run>"). Not serialised.
 	Anchors []string `json:"-"`
 
 	text string // what the urgency scorer reads ("" = unscorable)
@@ -258,18 +259,21 @@ type Panel struct {
 
 // Coordinator mirrors dispatch.Coordinator.
 type Coordinator struct {
-	Run         string  `json:"run"`
-	Repo        string  `json:"repo"`
-	Source      string  `json:"source"`
-	Destination string  `json:"destination"`
-	Session     *string `json:"session"`
-	Live        bool    `json:"live"`
-	Queue       []struct {
-		Issue int    `json:"issue"`
-		State string `json:"state"`
-		Title string `json:"title"`
-	} `json:"queue"`
-	Events []string `json:"events"`
+	Run         string       `json:"run"`
+	Repo        string       `json:"repo"`
+	Source      string       `json:"source"`
+	Destination string       `json:"destination"`
+	Session     *string      `json:"session"`
+	Live        bool         `json:"live"`
+	Queue       []CoordQueue `json:"queue"`
+	Events      []string     `json:"events"`
+}
+
+// CoordQueue mirrors dispatch.CoordQueue: one queue.tsv line.
+type CoordQueue struct {
+	Issue int    `json:"issue"`
+	State string `json:"state"`
+	Title string `json:"title"`
 }
 
 // AwayLog is passed through untouched.

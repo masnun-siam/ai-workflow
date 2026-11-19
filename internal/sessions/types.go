@@ -514,6 +514,8 @@ type RepoResolver interface {
 	Resolve(ctx context.Context, repo string) (path, slug string, err error)
 	DocsRepo(ctx context.Context, cwd string) (path, slug string, err error)
 	SlugOf(path string) string
+	// NeedsMap reports whether repo has no map or pointer and is in no product (FR-12).
+	NeedsMap(ctx context.Context, repo string) (slug string, needs bool)
 }
 
 // Note mirrors notify.Note.

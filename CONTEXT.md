@@ -10,6 +10,9 @@ A Documentation Repo plus the code repos listed in its `.blubird/repos.json`. se
 **Documentation Repo**:
 The repo holding `docs/prds/` for a product. `docs`-run steps (`collect-docs`, `refine-docs`, `business-code-validator`, `create-prd`, `create-tasks`, `security-sweep`, `project-coordinator`) run in its checkout.
 
+**Monorepo map**:
+A one-entry `.blubird/repos.json` (`"path": "."`) that makes a repo its own Documentation Repo. setu writes it when you choose "use as a monorepo" for a repo with no map and no pointer, registers the product at once, and never commits it: the product shows Map not committed until the file is tracked at HEAD.
+
 **PRD**:
 The product requirements for one feature, at `docs/prds/<slug>.md`, written by blubird `create-prd`. Status Draft, In review or Approved; only Approved is split into tasks. Approved (and the legacy Done) is locked: read-only in setu, changed through a new PRD or one small task.
 

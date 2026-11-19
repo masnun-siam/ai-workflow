@@ -7,6 +7,7 @@ export const TYPE_LABEL: Record<InboxType, string> = {
   grind_paused: "Grind paused", needs_cleanup: "Needs cleanup", pr_conflict: "PR conflict", pr_ready: "PR ready to merge", release_note: "Release note",
   dispatch_needs: "Dispatch needs you", dispatch_stalled: "Dispatch stalled", dispatch_held: "Dispatch held", dispatch_merge: "Dispatch merge",
   dispatch_limited: "Dispatch limited", dispatch_done: "Dispatch done", away_summary: "While you were away", repo_unpublished: "Repo not on GitHub",
+  coord_stale: "Stale issue",
 };
 export const typeLabel = (t: string): string => TYPE_LABEL[t as InboxType] ?? t.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 

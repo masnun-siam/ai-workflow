@@ -78,7 +78,7 @@ func (r *Registry) CreateLocal(ctx context.Context, name, parent string, prd []b
 		return Repo{}, err
 	}
 	r.changed("registry", "local/"+name)
-	return Repo{Slug: "local/" + name, Path: top}, nil
+	return Repo{Slug: "local/" + name, Path: top, Map: mapState(top)}, nil
 }
 
 // ghRun runs gh with a timeout; it is a var so tests can fake it.
@@ -132,7 +132,8 @@ func (r *Registry) Publish(ctx context.Context, slug, owner, name string, privat
 	r.promoteLocal(ctx)
 	full := owner + "/" + name
 	if k2, ok := findKey(r.checkouts(), full); ok {
-		return Repo{Slug: k2, Path: r.checkouts()[k2]}, nil
+		p := r.checkouts()[k2]
+		return Repo{Slug: k2, Path: p, Map: mapState(p)}, nil
 	}
-	return Repo{Slug: full, Path: dir}, nil
+	return Repo{Slug: full, Path: dir, Map: mapState(dir)}, nil
 }

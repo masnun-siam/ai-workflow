@@ -81,6 +81,11 @@ type Releases interface {
 	Repos(product string) []ReleaseRepo
 }
 
+// Coordinators lists blubird project-coordinator runs (dispatch.Service.Coordinators, adapted).
+type Coordinators interface {
+	Coordinators() []Coordinator
+}
+
 // CleanupFlags returns the merge-cleanup flags of a repo by issue number (memory only, set when a
 // merged PR is first seen).
 type CleanupFlags interface {
@@ -97,20 +102,21 @@ type Jev interface {
 
 // Deps wires a Builder.
 type Deps struct {
-	Sessions  Sessions
-	Snapshots Snapshots
-	Products  Products
-	GH        GHAuth
-	Blubird   BlubirdStatus
-	Settings  GrindSettings
-	Grinds    Grinds
-	Dispatch  Dispatches
-	Away      AwayState
-	Panels    Panels
-	Releases  Releases
-	Cleanup   CleanupFlags
-	Jev       Jev
-	Bus       *events.Bus
+	Sessions     Sessions
+	Snapshots    Snapshots
+	Products     Products
+	GH           GHAuth
+	Blubird      BlubirdStatus
+	Settings     GrindSettings
+	Grinds       Grinds
+	Dispatch     Dispatches
+	Away         AwayState
+	Panels       Panels
+	Releases     Releases
+	Coordinators Coordinators
+	Cleanup      CleanupFlags
+	Jev          Jev
+	Bus          *events.Bus
 
 	// PRDStatus reads the **Status:** of a PRD file by absolute path ("" = unknown). Default reads
 	// the file head.
