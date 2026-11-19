@@ -17,7 +17,8 @@ import (
 
 // Stage ids in pipeline order.
 var stageOrder = []struct{ id, name, skills string }{
-	{"prd", "PRD", "create-prd · map-prds"},
+	{"docs", "Docs", "collect-docs · refine-docs · business-code-validator"},
+	{"prd", "PRD", "create-prd"},
 	{"tasks", "Tasks", "create-tasks"},
 	{"refine", "Refine", "refine-issues · reproduce-bug"},
 	{"implement", "Implement", "implement-issue · coordinator"},
@@ -304,7 +305,7 @@ func (r *rv) prds() {
 			c.Tag, c.Meta = "review", "in review · "+mod
 			c.Actions = []inbox.Action{
 				inbox.Start("e", "Approve + create epic", "Approved; creating the epic", map[string]any{
-					"step": "create-prd", "repo": docs, "product": docs, "args": inbox.ApproveArgs(d.Path)}).WithPrimary().WithClears().WithConfirm("Approve this PRD and create its epic?"),
+					"step": "create-prd", "repo": docs, "product": docs, "args": inbox.ApproveArgs(d.Path)}).WithPrimary().WithClears().WithConfirm(inbox.ApproveConfirm),
 				read}
 		case "Approved":
 			if d.Epic != nil {
@@ -726,7 +727,7 @@ func lastN(s []string, n int) []string {
 
 // ---- sessions ----
 
-var riverStages = map[string]bool{"prd": true, "tasks": true, "refine": true, "implement": true, "review": true, "release": true, "notify": true}
+var riverStages = map[string]bool{"docs": true, "prd": true, "tasks": true, "refine": true, "implement": true, "review": true, "release": true, "notify": true}
 
 func stageOf(st prompts.Step) (string, bool) {
 	for _, g := range strings.Split(st.Stage, ",") {

@@ -119,6 +119,7 @@ var fakeSteps = map[string]Step{
 	"report-bug":          {ID: "report-bug", Source: "blubird", Skill: "reproduce-bug", RunsIn: "repo"},
 	"after-merge":         {ID: "after-merge", Source: "blubird", Skill: "implement-issue", RunsIn: "issue"},
 	"project-coordinator": {ID: "project-coordinator", Source: "blubird", Skill: "project-coordinator", RunsIn: "docs"},
+	"collect-docs":        {ID: "collect-docs", Source: "blubird", Skill: "collect-docs", RunsIn: "docs"},
 }
 
 func (fakePrompts) Step(id string) (Step, bool) { s, ok := fakeSteps[id]; return s, ok }
@@ -136,7 +137,14 @@ func (fakePrompts) Build(id, args string) (Prompt, error) {
 	}
 	return Prompt{Step: id, Display: strings.TrimSpace("/" + s.Skill + " " + args), Text: "SETU " + s.Skill + "\n\nARGUMENTS: " + args}, nil
 }
-func (fakePrompts) Available(id string) error { return nil }
+
+// Available refuses collect-docs, as for a blubird install older than 1.2.0.
+func (fakePrompts) Available(id string) error {
+	if id == "collect-docs" {
+		return errs.Conflict("needs blubird 1.2.0", nil)
+	}
+	return nil
+}
 func (fakePrompts) Agent(name string) (string, []string, error) {
 	switch name {
 	case "away-answerer":

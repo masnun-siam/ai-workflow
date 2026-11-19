@@ -80,7 +80,7 @@ const routes: [string, RegExp, H][] = [
   ["POST", /^\/api\/sessions$/, ({ body }) => {
     if (!body.step && !body.text) return fail(400, "step or text required");
     if (body.guard && body.step === "implement-issue" && body.args === "1013") return fail(409, "implement-issue already running for acme/wasensi-backend#1013 (session x)", { id: F.sessions[1]!.id, href: `#/sessions/${F.sessions[1]!.id}` });
-    if (body.step === "create-prd" && String(body.args).includes("approve")) { db.river.stages[0]!.cards = db.river.stages[0]!.cards.filter((c) => c.id !== "prd:pay"); db.inbox = db.inbox.filter((i) => i.type !== "prd_approval"); emit("inbox", { count: 1 }); }
+    if (body.step === "create-prd" && String(body.args).includes("approve")) { const prd = db.river.stages.find((s) => s.id === "prd")!; prd.cards = prd.cards.filter((c) => c.id !== "prd:pay"); db.inbox = db.inbox.filter((i) => i.type !== "prd_approval"); emit("inbox", { count: 1 }); }
     return startSession(body);
   }],
   ["GET", /^\/api\/sessions\/cleanup$/, () => ({ items: [{ key: F.sessions[3]!.id, label: "Release PR #1040", repo: "acme/wasensi-backend", flags: [] }, { key: F.sessions[4]!.id, label: "#1044 CSV drops VAT", repo: "acme/wasensi-backend", flags: ["uncommitted"] }] })],
@@ -175,7 +175,7 @@ const routes: [string, RegExp, H][] = [
   ["PUT", /^\/api\/releases\/([^/]+)\/note$/, ({ m, body }) => { const r = rel(m[1]!); if (r?.note_posted_at) return fail(409, "already posted"); return patchRelease(m[1]!, { note: body.text }) ?? fail(404, "not found"); }],
   ["POST", /^\/api\/releases\/([^/]+)\/post$/, ({ m }) => {
     const r = rel(m[1]!); if (!r) return fail(404, "not found"); if (r.note_posted_at) return fail(409, "already posted"); if (!r.note) return fail(409, "no note");
-    db.inbox = db.inbox.filter((i) => i.type !== "release_note"); for (const c of db.river.stages[6]!.cards) { c.need = false; c.tag = "done"; c.tone = "c-o"; }
+    db.inbox = db.inbox.filter((i) => i.type !== "release_note"); for (const c of db.river.stages.find((s) => s.id === "notify")!.cards) { c.need = false; c.tag = "done"; c.tone = "c-o"; }
     return patchRelease(m[1]!, { stage: "done", note_posted_at: new Date().toISOString() });
   }],
   ["POST", /^\/api\/releases\/([^/]+)\/skip$/, ({ m }) => patchRelease(m[1]!, { stage: "skipped" }) ?? fail(404, "not found")],

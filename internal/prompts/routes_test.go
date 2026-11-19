@@ -22,8 +22,11 @@ func TestRegistryRoute(t *testing.T) {
 			Available                   bool
 		}
 	}
-	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &out) != nil || len(out.Steps) != 23 {
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &out) != nil || len(out.Steps) != 25 {
 		t.Fatalf("%d %s", w.Code, w.Body.String())
+	}
+	if out.Steps[0].ID != "collect-docs" || out.Steps[1].ID != "refine-docs" || out.Steps[2].ID != "business-code-validator" {
+		t.Fatalf("docs steps not first: %+v", out.Steps[:3])
 	}
 	for _, s := range out.Steps {
 		switch s.ID {
@@ -33,6 +36,10 @@ func TestRegistryRoute(t *testing.T) {
 			}
 		case "report-bug":
 			if s.Command != "/blubird:reproduce-bug" || s.Source != "blubird" || s.RunsIn != "repo" {
+				t.Fatalf("%+v", s)
+			}
+		case "collect-docs":
+			if s.Available || s.Reason != "blubird is not installed" || s.Command != "/blubird:collect-docs" || s.RunsIn != "docs" {
 				t.Fatalf("%+v", s)
 			}
 		case "release-pr":

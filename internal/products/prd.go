@@ -181,7 +181,8 @@ func (r *Registry) ReadPRD(repo, rel string) (PRDFile, error) {
 
 // SavePRD writes an existing PRD and commits only that file on the checkout's current branch (it
 // never pushes). baseSHA is the blob sha the edit started from: a different file on disk is a
-// conflict, so a concurrent change (a create-prd run, a pull) is never overwritten.
+// conflict, so a concurrent change (a create-prd run, a pull) is never overwritten. An Approved or
+// Done PRD is locked and never written: a change to it is a new PRD or a task.
 func (r *Registry) SavePRD(ctx context.Context, repo, rel, text, baseSHA string) (PRDFile, error) {
 	if strings.ContainsRune(text, 0) || len(text) > prdMaxFile {
 		return PRDFile{}, errs.Invalid("text must be under 2 MiB with no NUL")
@@ -189,6 +190,9 @@ func (r *Registry) SavePRD(ctx context.Context, repo, rel, text, baseSHA string)
 	cur, err := r.ReadPRD(repo, rel)
 	if err != nil {
 		return PRDFile{}, err
+	}
+	if status, _, _ := ParsePRD(strings.ToValidUTF8(cur.Text[:min(len(cur.Text), prdHead)], ""), ""); status == "Approved" || status == "Done" {
+		return PRDFile{}, errs.Conflict("approved PRDs are locked: start a new PRD or a task", nil)
 	}
 	if baseSHA == "" || cur.Sha != baseSHA {
 		return PRDFile{}, errs.Conflict("the PRD changed since you opened it: reload it and edit again", map[string]any{"sha": cur.Sha})

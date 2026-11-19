@@ -44,6 +44,7 @@ type Registry struct {
 	gh  GH
 	bus *events.Bus
 	mu  sync.Mutex // serialises registry mutations inside this process (files are also flocked)
+	biz businessState
 
 	commitMu  sync.RWMutex
 	committed map[string]bool // lower-case docs slug -> repos.json tracked at HEAD (refreshCommitted)

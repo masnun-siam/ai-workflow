@@ -128,6 +128,7 @@ func TestStartValidation(t *testing.T) {
 		{"bad model", StartRequest{Step: "implement-issue", Args: "1", Repo: "acme/app", Model: "gpt"}, "invalid"},
 		{"no_repo with step", StartRequest{Step: "implement-issue", NoRepo: true}, "invalid"},
 		{"bad vault folder", StartRequest{Text: "hi", NoRepo: true, VaultFolder: "../x"}, "invalid"},
+		{"unavailable step", StartRequest{Step: "collect-docs", Repo: "acme/app"}, "conflict"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := e.m.StartSession(ctx, tc.req)

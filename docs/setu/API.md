@@ -253,6 +253,13 @@ func (r *Registry) ProductOf(slug string) (Product, bool)
 func (r *Registry) Sync(ctx context.Context)                 // called every poll tick
 func (r *Registry) PRDs(product string) ([]PRD, error)       // recursive docs/prds/**/*.md in the docs checkout
 func (r *Registry) ReadPRD(repo, rel string) (PRDFile, error)
+func (r *Registry) BusinessDocs(product string) ([]BusinessDoc, error) // docs/business/**/*.md, minus README.md, open-questions-to-client.md, sources/, checklists/
+func (r *Registry) ReadBusiness(repo, rel string) (PRDFile, error)     // one business doc, PRD path checks under docs/business/
+func ParseBusinessDoc(r io.Reader, path, folderModule string) BusinessDoc // pure; counters only
+func (r *Registry) SetBusinessChecker(f func() string)       // f returns blubird's install path (wiring: blubird status)
+func (r *Registry) CheckBusiness(ctx context.Context)        // called every poll tick: runs the gate in the background when docs/business changed
+func (r *Registry) BusinessGate(product string) BusinessGate // the cached gate; never runs anything
+func (r *Registry) WaitBusiness()                            // waits for running gate checks (tests)
 func (r *Registry) CleanupCheck(checkout string, n int, mergedHead string) *CleanupFlags // G§5
 func (r *Registry) Cleanup(checkout string, n int, confirm bool, mergedHead string) (removed []string, flags *CleanupFlags, err error)
 func (r *Registry) WatchedRepos() []string                   // all product repos with a GitHub slug
@@ -504,7 +511,8 @@ type Status = {
   poller: { remaining: number | null; reset_at: ISO | null };
 };
 type Blubird = { installed: boolean; version: string; latest: string; update_available: boolean;
-  install_path: string; marketplace: string; skills: string[]; hooks: string[]; busy: "" | "installing" | "updating"; error: string };
+  install_path: string; marketplace: string; skills: string[]; hooks: string[]; busy: "" | "installing" | "updating"; error: string;
+  min_version: string; too_old: boolean };  // min_version "1.2.0"; too_old: installed and its major.minor.patch is below it (unparsable → false)
 
 // ---------- repos / products ----------
 type Repo = { slug: Slug; path: string; product: Slug | null;
@@ -516,6 +524,20 @@ type Product = { docs_repo: Slug; name: string; path: string; repos: ProductRepo
 type PRD = { product: Slug; module: string | null; slug: string; title: string;
   status: "Draft" | "In review" | "Approved" | "Done"; path: string; label: string; epic: IssueKey | null };
 type PRDFile = { repo: Slug; path: string; text: string; sha: string; branch: string };
+
+// ---------- business docs (blubird 1.2, docs/business/<module>/<feature>.md) ----------
+// module: the **Module:** header, else the folder under docs/business, else "other". Withdrawn rules are in no count.
+// planned = rules whose last `planned` Timeline bullet has no later `delivered`/`withdrawn` bullet. error: "too large" | "unreadable" (counts zero).
+type BusinessDoc = { product: Slug; module: string; feature: string; path: string; title: string; updated: string; repos: string[];
+  rules: number; counts: { not_delivered: number; partly_delivered: number; drifted: number; built_differently: number;
+  planned: number; open_questions: number }; prds: string[] /* docs/prds/...md linked by planned bullets */; error: string };
+// unavailable reasons: "not checked yet", "python3 not found", "blubird older than 1.2.0", "timed out", "no docs/business", "checker exited <n>: <line>"
+type BusinessGate = { state: "pass" | "fail" | "unavailable"; failures: string[] /* checker lines, ≤200 */; reason: string | null;
+  checked_at: ISO | null; running: boolean };
+type ValidationEpic = { repo: Slug; n: number; title: string; module: string /* lowercase, "other" when none */; url: string;
+  issues: FeatureIssue[]; actions: Action[] /* Run epic, or Open dispatch */ };
+type BusinessView = { docs: BusinessDoc[]; gate: BusinessGate; epics: ValidationEpic[] };
+// FeatureList: each feature also has business: string[] (FR-9 order: same module/file as the PRD, then docs whose prds link it)
 
 // ---------- GitHub popups (shapes as G§1.2) ----------
 type IssueView = { number: number; title: string; url: string; state: string; state_reason: string | null; is_pr: boolean;
@@ -531,7 +553,7 @@ type PRView = { number: number; title: string; url: string; state: "open"|"close
 type OpenItem = { number: number; title: string; labels: string[]; updated_at: ISO; draft: boolean; url?: string };
 
 // ---------- River ----------
-type StageId = "prd" | "tasks" | "refine" | "implement" | "review" | "release" | "notify";
+type StageId = "docs" | "prd" | "tasks" | "refine" | "implement" | "review" | "release" | "notify";
 type Card = {
   id: string;                   // stable: "prd:<slug>" | "epic:<key>" | "issue:<key>" | "pr:<key>" | "session:<id>" | "release:<id>" | "repo:<slug>" | "coord:<run>"
   stage: StageId; title: string; meta: string; tag: string; tone: Tone;
@@ -683,7 +705,7 @@ type VaultPRD = { exists: boolean; status: string | null; title: string | null; 
 | GET | `/api/sessions/cleanup` | — | `{items:{key,label,repo,flags:string[]}[]}` | 200 |
 | POST | `/api/sessions/cleanup` | `{keys: string[]}` | `{removed: string[]}` | 200; 400 |
 
-Start semantics: S§5.2–5.4 with `step` in place of `command`. `runs_in` routing: `docs` → `DocsRepo(repo|product)`; `issue`/`repo` → the resolved checkout; `none` → `vault_dir` if it exists, else `$HOME` (no slug). A blubird step while blubird is missing → 409 `blubird is not installed`. A `runs_in: docs` step, `refine-issues`, `implement-issue` or `after-merge` on a registered repo whose `map` is `none` and that is in no product → 409 `{error:"needs a repo map", repo}` before `DocsRepo` and before the `local/` "no GitHub remote yet" 400; the UI answers with the monorepo choice (`POST /api/repos/{owner}/{name}/monorepo`, then the same start again). Guards when `guard:true`, in order:
+Start semantics: S§5.2–5.4 with `step` in place of `command`. `runs_in` routing: `docs` → `DocsRepo(repo|product)`; `issue`/`repo` → the resolved checkout; `none` → `vault_dir` if it exists, else `$HOME` (no slug). A blubird step while blubird is missing → 409 `blubird is not installed`; one whose `skills/<skill>/SKILL.md` the installed blubird lacks → 409 `needs blubird 1.2.0` (the same `reason` `GET /api/registry` gives with `available: false`). A `runs_in: docs` step, `refine-issues`, `implement-issue` or `after-merge` on a registered repo whose `map` is `none` and that is in no product → 409 `{error:"needs a repo map", repo}` before `DocsRepo` and before the `local/` "no GitHub remote yet" 400; the UI answers with the monorepo choice (`POST /api/repos/{owner}/{name}/monorepo`, then the same start again). Guards when `guard:true`, in order:
 1. A live session with the same step family, issue and repo → 409 `<step> already running for o/r#N (session <id>)`.
 2. A dispatch lane owns the issue or PR → 409 `dispatch <id> owns o/r#N`.
 3. `implement-issue` with open blockers and no `force` → 409 `#N is blocked by #a, #b`.
@@ -711,10 +733,11 @@ Continue (stalled sessions only): resumes the same Claude session id through the
 | DELETE | `/api/products/{owner}/{name}` | — | `{products: Product[]}` | 200 | products |
 | GET | `/api/products/{owner}/{name}/prds` | — | `{prds: PRD[]}` | 200 | products |
 | GET | `/api/prd?repo=<slug>&path=docs/prds/...md` | — | `PRDFile` | 200; 400 | products |
+| GET | `/api/business?repo=<docs slug>&path=docs/business/...md` | — | `PRDFile` (a business doc) | 200; 400 bad path, not `docs/business/...md`, or over 2 MiB; 404 missing, not a product's docs repo, or a symlink out of `docs/business/` | products |
 | POST | `/api/repos/create` | `{name, parent: abs dir, vault_folder?}` | `{repo, repos}` | 201; 400; 409 exists; 502 git | products: `git init -b main`, README (+ the vault folder's PRD.md at `docs/prds/<feature>.md`), first commit, registered as `local/<name>` |
 | POST | `/api/repos/publish` | `{slug: "local/…", owner, name, private}` | `{repo, repos}` | 200; 400; 404; 502 gh | products: `gh repo create owner/name --private\|--public --source <dir> --remote origin --push`, then the checkout becomes `owner/name` |
 | GET | `/api/github/owners` | — | `{owners: string[]}` (gh user, then orgs) | 200; 502 | products |
-| PUT | `/api/prd` | `{repo, path, text, base_sha}` | `PRDFile` (after the commit) | 200; 400; 404; 409 file changed since `base_sha` (`{sha}`); 502 git | products: writes the file and commits only it on the current branch (`docs(prd): edit <path> in setu`), never pushes |
+| PUT | `/api/prd` | `{repo, path, text, base_sha}` | `PRDFile` (after the commit) | 200; 400; 404; 409 file changed since `base_sha` (`{sha}`); 409 `approved PRDs are locked: start a new PRD or a task` when the file's status is Approved or Done (checked first, writes nothing); 502 git | products: writes the file and commits only it on the current branch (`docs(prd): edit <path> in setu`), never pushes |
 | GET | `/api/issues/{owner}/{name}/{n}` | — | `IssueView` | 200; 400; 404; 502 | gh |
 | GET | `/api/pulls/{owner}/{name}/{n}` | — | `PRView` | 200; 400; 404; 502 | gh |
 | POST | `/api/issues/{owner}/{name}/{n}/comment` / `/api/pulls/.../comment` | `{text}` ≤65536 | `{ok:true, url}` | 200; 400; 502 | gh |
@@ -729,7 +752,8 @@ Continue (stalled sessions only): resumes the same Claude session id through the
 |---|---|---|---|---|
 | GET | `/api/river?product=<docs slug>&repo=` (`repo` of no product: a River of that repo alone, without PRD and "commits ahead" cards; a repo of a product shows that product) | — | `River` (marks the shown repos viewed; every card's `log` and `actions` are arrays, never null) | 200; 400 unknown product or repo |
 | GET | `/api/inbox?product=&repo=` | — | `InboxList` (marks viewed `*`) | 200 |
-| GET | `/api/features?product=` | — | `FeatureList`: per PRD the stage (draft, review, approved, tasks, building, shipped), bay (you, go, running, shipped), next-step line and actions, epic, its open issues (state and row actions) and closed ones, counts, newest panel on the PRD file, the dispatch owning the epic, sessions. Sorted by bay | 200; 400 unknown product |
+| GET | `/api/features?product=` | — | `FeatureList`: per PRD the stage (draft, review, approved, tasks, building, shipped), bay (you, go, running, shipped), next-step line and actions, epic, its open issues (state and row actions) and closed ones, counts, newest panel on the PRD file, the dispatch owning the epic, sessions. Sorted by bay. Each feature has `business`: its matching business doc paths | 200; 400 unknown product |
+| GET | `/api/products/{owner}/{name}/business` (a `views` route: it needs the poller's issues) | — | `BusinessView`: the product's business docs, the cached gate (a request never runs or waits for it) and the open `epic` + `business-validation` issues of its docs repo with their children; `docs`, `failures`, `epics` are arrays, never null | 200; 404 unknown product |
 | GET | `/api/changes?repo=` | — | `{stale, issues: FeatureIssue[], pending: FeatureSession[]}`: open issues that belong to no epic in every registered repo (or one), with feature-issue states and row actions; `pending` = live `small-change` and `report-bug` runs | 200 |
 | GET | `/api/ops?product=&repo=` (`repo` of no product: its repo steps run on itself, docs repo steps "needs a product" with no action) | — | `Ops` | 200; 400 unknown product or repo |
 | GET | `/api/me` | — | `Me` | 200 |
@@ -809,7 +833,7 @@ Headers: `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `X-Accel-
 | `hello` | `{version, boot_id, resync: boolean}` | connect; after the server dropped events for a slow client (`resync:true`) | everything visible |
 | `sessions` | `{id, status, change:"record"\|"stream"\|"removed"}` | any `Manager.Update`; a `meta.json` change written by `setu ask` (seen by the meta watcher within 1 s); stream growth (throttled to 1 per s per session); cleanup | `/api/sessions`; `/api/sessions/{id}` + `stream?offset` if open; River/Me (debounced 1 s) |
 | `inbox` | `{count}` | the inbox's (key, content-hash) set changes. It is recomputed 500 ms (debounced) after any sessions/products/dispatch/usage{away} event. | `/api/inbox` (+ nav badge from `count`) |
-| `products` | `{kind:"snapshot"\|"registry"\|"release"\|"grind"\|"review"\|"blubird"\|"coordinator"\|"prd", repo?: Slug}` | poller fresh-with-change (data hash differs) or a stale flip; repos/products change; release, grind index, panel, coordinator file change (10 s scan); blubird job state | `/api/river`, `/api/releases`, `/api/ops`, `/api/products`, `/api/blubird` as relevant to `kind` |
+| `products` | `{kind:"snapshot"\|"registry"\|"release"\|"grind"\|"review"\|"blubird"\|"coordinator"\|"prd"\|"business", repo?: Slug}` | poller fresh-with-change (data hash differs) or a stale flip; repos/products change; release, grind index, panel, coordinator file change (10 s scan); blubird job state; `business`: a product's `docs/business` changed (seen by the poll tick; a change in `python3` or the blubird checker being available counts too) or a gate result was stored | `/api/river`, `/api/releases`, `/api/ops`, `/api/products`, `/api/blubird` as relevant to `kind` |
 | `dispatch` | `{id, change:"record"\|"removed"}` | dispatch save/archive | `/api/dispatches[/id]` |
 | `usage` | `{kind:"usage"\|"limits"\|"gh"\|"away"\|"settings"}` | meter refresh; limits change; gh auth flips; away begin/end/tick-log; settings save | `/api/status` (+ `/api/settings` on `settings`) |
 | `toast` | `{id: number, event: NotifyEvent \| "info" \| "error", title, body, path: string /* "#/..." */, level:"info"\|"warn"\|"error"}` | notify browser channel (W§4.4 replaces the `ui_feed` ring); finished background jobs (blubird install, release post) | none: show it, `path` = click target |
@@ -892,8 +916,10 @@ External (read-only): `${CLAUDE_CONFIG_DIR:-~/.claude}/plugins/installed_plugins
 
 | step id | source | skill | runs_in | stage (River/Ops/Me) | args |
 |---|---|---|---|---|---|
+| `collect-docs` | blubird | collect-docs | docs | docs | `[file or folder ...]` |
+| `refine-docs` | blubird | refine-docs | docs | docs | `[module \| docs/business/<module>/<feature>.md ...]` |
+| `business-code-validator` | blubird | business-code-validator | docs | docs | `[module \| docs/business/<module>/<feature>.md ...]` |
 | `create-prd` | blubird | create-prd | docs | prd | free text, a PRD path, or `<path> — the team has reviewed it; approve it` (Approval action) |
-| `map-prds` | blubird | map-prds | docs | prd · ops | `[file or folder ...]` |
 | `create-tasks` | blubird | create-tasks | docs | tasks | `<PRD path>` |
 | `small-change` | blubird | create-tasks | repo | refine | `<finding>` |
 | `refine-issues` | blubird | refine-issues | issue | refine | `<epic \| issues>` (repo = the epic's/issues' repo) |
@@ -962,7 +988,7 @@ Test harness (`internal/testutil/fakebin`): `Install(t, dir)` writes fake `claud
 | settings | S§4.1 validation table (labels, cmds, channels, reviewers, repos keys); partial save keeps omitted keys; legacy `auto_grind` migration; old file with `harness`/codex keys loads; new keys default; `ui.json` 0644 ignored |
 | claude | `ParseLine` over every S§1.7 row + the hook kinds; `tokens_of` edge cases; `Argv` `cc` rewrite + not-on-PATH; preflight messages (not logged in, timeout, default vs other); usage keychain service name; expired token → `re-login needed`; usage fetch only while present (fake HTTP via `httptest`, URL injectable) |
 | blubird | detect from `installed_plugins.json` (respects `CLAUDE_CONFIG_DIR`), missing → `installed:false`; latest from the marketplace manifest; install/update argv sequence; busy → 409; "unknown command" on `plugin update` tolerated |
-| prompts | registry covers every §9.1 row; `Build` for blubird/setu shapes; frontmatter stripped; no `aiw ` left in embedded prompts (grep test); extraction idempotent; old-version pruning keeps 5; `Agent` tools parsed; blubird step unavailable → Conflict |
+| prompts | registry covers every §9.1 row; `Build` for blubird/setu shapes; frontmatter stripped; no `aiw ` left in embedded prompts (grep test); extraction idempotent; old-version pruning keeps 5; `Agent` tools parsed; blubird step unavailable (not installed, or its skill missing) → Conflict |
 | gh | `gh_json` scalar/empty/non-JSON; CI: conflict, `no checks`→green, nonzero exit with JSON read, pending>red>green, error, `--watch` stops/cap note, log excerpt 4000; threads pagination, `--open-only`, `--for-comment` string/int; resolve partial failure exit codes; popups 404 vs 502, patch caps; PR ref parsing all forms |
 | poller | every G§10 "pinned by tests" bullet; cross-repo `Ref` for parent/sub-issues/blockers; Projects v2 `Status` read when present, derived otherwise (G§3 mapping); `OnFresh` gets prev; publishes `products{snapshot}` only on change |
 | products | G§10 products bullets; nested PRD discovery `docs/prds/<module>/<feature>.md` + status/slug/title regexes; docs-repo pointer errors; scan budget/dup; merge cleanup bullets (never outside `.worktrees/`, never HEAD branch, never remote) |

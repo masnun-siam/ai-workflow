@@ -96,7 +96,8 @@ export type Status = {
   poller: { remaining: number | null; reset_at: ISO | null };
 };
 export type Blubird = { installed: boolean; version: string; latest: string; update_available: boolean;
-  install_path: string; marketplace: string; skills: string[]; hooks: string[]; busy: "" | "installing" | "updating"; error: string };
+  install_path: string; marketplace: string; skills: string[]; hooks: string[]; busy: "" | "installing" | "updating"; error: string;
+  min_version: string; too_old: boolean };  // too_old: installed below min_version, so newer steps are unavailable
 
 // ---------- repos / products ----------
 export type Repo = { slug: Slug; path: string; product: Slug | null };
@@ -121,7 +122,7 @@ export type PRView = { number: number; title: string; url: string; state: "open"
 export type OpenItem = { number: number; title: string; labels: string[]; updated_at: ISO; draft: boolean; url?: string };
 
 // ---------- River ----------
-export type StageId = "prd" | "tasks" | "refine" | "implement" | "review" | "release" | "notify";
+export type StageId = "docs" | "prd" | "tasks" | "refine" | "implement" | "review" | "release" | "notify";
 export type Card = {
   id: string;                   // stable: "prd:<slug>" | "epic:<key>" | "issue:<key>" | "pr:<key>" | "session:<id>" | "release:<id>" | "repo:<slug>" | "coord:<run>"
   stage: StageId; title: string; meta: string; tag: string; tone: Tone;

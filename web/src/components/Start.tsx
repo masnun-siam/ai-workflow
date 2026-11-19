@@ -272,7 +272,7 @@ export function CreateDialog() {
 }
 
 // ---------- Start dialog ----------
-const STAGES: [string, string][] = [["prd", "Plan"], ["tasks", "Plan"], ["refine", "Plan"], ["implement", "Build"], ["review", "Review"], ["release", "Ship"], ["notify", "Ship"], ["ops", "Maintain"], ["me", "Capture"]];
+const STAGES: [string, string][] = [["docs", "Plan"], ["prd", "Plan"], ["tasks", "Plan"], ["refine", "Plan"], ["implement", "Build"], ["review", "Review"], ["release", "Ship"], ["notify", "Ship"], ["ops", "Maintain"], ["me", "Capture"]];
 const GROUP_ORDER = ["Plan", "Build", "Review", "Ship", "Capture", "Maintain"];
 const groupOf = (s: RegistryStep) => STAGES.find(([st]) => s.stage.split(",")[0] === st)?.[1] ?? "Maintain";
 /** Steps whose argument is an open issue or PR of the repo (old OpenPicker). */

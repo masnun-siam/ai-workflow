@@ -85,7 +85,7 @@ func osaPick(ctx context.Context, start string) (string, error) {
 
 func reposBody(r *Registry) map[string]any { return map[string]any{"repos": r.Repos()} }
 
-// Routes returns the repo, product and PRD routes of API §5.3.
+// Routes returns the repo, product, PRD and business doc routes of API §5.3.
 func Routes(d Deps) []server.Route {
 	reg := d.Reg
 	pick := d.Pick
@@ -303,6 +303,14 @@ func Routes(d Deps) []server.Route {
 				return 0, nil, errs.Invalid("repo must look like owner/repo")
 			}
 			f, err := reg.ReadPRD(repo, path)
+			return 0, f, err
+		}),
+		h("GET /api/business", func(r *http.Request) (int, any, error) {
+			repo, path := r.URL.Query().Get("repo"), r.URL.Query().Get("path")
+			if !slugRe.MatchString(repo) {
+				return 0, nil, errs.Invalid("repo must look like owner/repo")
+			}
+			f, err := reg.ReadBusiness(repo, path)
 			return 0, f, err
 		}),
 		h("PUT /api/prd", func(r *http.Request) (int, any, error) {

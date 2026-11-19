@@ -45,6 +45,27 @@ describe("create box and start dialog render", () => {
     startReq.value = null;
     for (const s of ["Plan", "Build", "Review", "Ship", "Custom prompt", "Where", "Model", "Effort", "Make these the default", "Implement issue"]) expect(html).toContain(s);
   });
+  it("start dialog: the Docs steps are in Plan, before Create PRD", () => {
+    startReq.value = { step: registry.value.find((s) => s.id === "implement-issue")!, repo: "acme/wasensi-backend" };
+    const html = renderToString(<App />);
+    startReq.value = null;
+    const plan = html.slice(html.indexOf('aria-label="Plan"'), html.indexOf('aria-label="Build"'));
+    const at = (label: string) => plan.indexOf(`>${label}<`);
+    for (const l of ["Collect docs", "Refine docs", "Validate business", "Create PRD"]) expect(at(l)).toBeGreaterThan(-1);
+    expect(at("Collect docs")).toBeLessThan(at("Refine docs"));
+    expect(at("Validate business")).toBeLessThan(at("Create PRD"));
+    expect(html).not.toContain("Map PRDs");
+  });
+  it("start dialog: a step the installed blubird lacks is dimmed with its reason", () => {
+    const saved = registry.value;
+    registry.value = saved.map((s) => s.id === "collect-docs" ? { ...s, available: false, reason: "needs blubird 1.2.0" } : s);
+    startReq.value = { step: saved.find((s) => s.id === "implement-issue")!, repo: "acme/wasensi-backend" };
+    const html = renderToString(<App />);
+    startReq.value = null;
+    registry.value = saved;
+    expect(html).toContain('class="pi off" title="needs blubird 1.2.0">Collect docs<');
+    expect(html).toMatch(/class="pi" title="[^"]*">Refine docs</);
+  });
   it("start dialog: a custom prompt offers the notes vault and another folder", () => {
     startReq.value = { step: null, args: "summarise the logs" };
     const html = renderToString(<App />);
