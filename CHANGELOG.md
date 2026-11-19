@@ -31,6 +31,7 @@
 
 ### Fixed
 
+- PRD tab, **ask claude to change it** on a Draft or In review PRD: submitting no longer fails with 400 `create-prd: arguments must be one line without NUL`. The form sends `<path> — update this PRD: <request>` on one line, each line break in the request flattened to a space.
 - Shell keyboard and focus: Escape closes the top layer first (popover, dialog, lane panel, drawer) and only then goes back to the parent screen (feature page → Features, dispatch → Dispatches, session → Activity, PRD → Features). Global keys (`n`, digits, `g`, ⌘K…) are ignored while a dialog or popover is open, so they no longer open Create over the cleanup dialog or navigate away from an open Select. Every dialog registers as a layer, so Escape works after focus left it. A destructive confirm focuses "No". Closing a drawer or dialog with the keyboard returns focus to the selected row. The Settings `u`/`i` keys share the pane buttons' guard (confirm on reinstall, off while busy or not installed). The `[ ]` tab hint shows only on a feature page.
 - Toasts are announced: the live region is always mounted, the timer pauses on hover and focus, and a toast with an action stays at least 6 s.
 - A malformed hash (`#/sessions/%E0%A4%A`) or an unknown one (`#/foo`) goes to the inbox (`#/foo` is replaced, not pushed). `aria-current` is no longer rendered as `"false"`; `Chips` and the product switch have keys.
