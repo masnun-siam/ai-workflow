@@ -56,6 +56,13 @@ function startSession(b: Record<string, any>): Session {
   emit("sessions", { id, status: "running", change: "record" });
   return s;
 }
+/** FR-12: a docs step, refine, implement or after-merge on a repo with no map and no product needs the monorepo choice. */
+const GATED = new Set(["refine-issues", "implement-issue", "after-merge"]);
+function needsMap(repo: unknown, step: unknown): Response | undefined {
+  const r = db.repos.find((x) => x.slug === repo);
+  const gated = GATED.has(String(step)) || db.registry.some((x) => x.id === step && x.runs_in === "docs");
+  return r && r.map === "none" && !r.product && gated ? fail(409, "needs a repo map", { repo: r.slug }) : undefined;
+}
 const rel = (id: string) => db.releases.find((r) => r.id === id);
 function patchRelease(id: string, p: Partial<Release>) {
   const r = rel(id); if (!r) return undefined;
@@ -79,6 +86,8 @@ const routes: [string, RegExp, H][] = [
   }],
   ["POST", /^\/api\/sessions$/, ({ body }) => {
     if (!body.step && !body.text) return fail(400, "step or text required");
+    const unmapped = needsMap(body.repo, body.step);
+    if (unmapped) return unmapped;
     if (body.guard && body.step === "implement-issue" && body.args === "1013") return fail(409, "implement-issue already running for acme/wasensi-backend#1013 (session x)", { id: F.sessions[1]!.id, href: `#/sessions/${F.sessions[1]!.id}` });
     if (body.step === "create-prd" && String(body.args).includes("approve")) { const prd = db.river.stages.find((s) => s.id === "prd")!; prd.cards = prd.cards.filter((c) => c.id !== "prd:pay"); db.inbox = db.inbox.filter((i) => i.type !== "prd_approval"); emit("inbox", { count: 1 }); }
     return startSession(body);
@@ -110,12 +119,24 @@ const routes: [string, RegExp, H][] = [
   ["POST", /^\/api\/sessions\/([^/]+)\/rerun$/, ({ m }) => startSession({ step: sess(m[1]!)?.step, repo: sess(m[1]!)?.repo })],
   ["POST", /^\/api\/sessions\/([^/]+)\/(stop|resume|hold|release|start-now|dismiss|cancel-auto)$/, (c) => sessionSub(c.m[2]!)(c)],
   ["GET", /^\/api\/repos$/, () => ({ repos: db.repos, can_browse: true, scan_roots: ["/code"] })],
-  ["POST", /^\/api\/repos$/, ({ body }) => { const r = { slug: body.slug, path: body.path, product: null }; db.repos.push(r); return { repo: r, repos: db.repos }; }],
+  ["POST", /^\/api\/repos$/, ({ body }) => { const r = { slug: body.slug, path: body.path, product: null as string | null, map: "none" as const }; db.repos.push(r); return { repo: r, repos: db.repos }; }],
+  ["POST", /^\/api\/repos\/([^/]+)\/([^/]+)\/monorepo$/, ({ m }) => {
+    const r = db.repos.find((x) => x.slug === `${m[1]}/${m[2]}`);
+    if (!r) return fail(404, "not a registered repo");
+    if (r.slug.startsWith("local/")) return fail(400, "no GitHub origin");
+    if (r.map !== "none") return fail(409, `${r.slug} already has a repo map`);
+    const name = m[2]!;
+    const p = { docs_repo: r.slug, name, path: r.path, repos: [{ name, role: "docs", repo: r.slug, path: r.path, cloned: true }], map_committed: false };
+    Object.assign(r, { map: "docs", product: r.slug });
+    db.products.push(p);
+    emit("registry", {});
+    return json({ product: p }, 201);
+  }],
   ["DELETE", /^\/api\/repos\/([^/]+)\/([^/]+)$/, ({ m }) => { db.repos = db.repos.filter((r) => r.slug !== `${m[1]}/${m[2]}`); return { repos: db.repos }; }],
   ["POST", /^\/api\/repos\/scan$/, () => ({ added: [], duplicates: [], repos: db.repos })],
   ["POST", /^\/api\/repos\/check$/, () => ({ problems: Object.fromEntries(db.repos.map((r) => [r.slug, null])) })],
   ["GET", /^\/api\/products$/, () => ({ products: db.products })],
-  ["POST", /^\/api\/products$/, ({ body }) => { const p = { docs_repo: "acme/new-docs", name: "New", path: body.path, repos: [] }; db.products.push(p); return json(p, 201); }],
+  ["POST", /^\/api\/products$/, ({ body }) => { const p = { docs_repo: "acme/new-docs", name: "New", path: body.path, repos: [], map_committed: true }; db.products.push(p); return json(p, 201); }],
   ["DELETE", /^\/api\/products\/([^/]+)\/([^/]+)$/, ({ m }) => { db.products = db.products.filter((p) => p.docs_repo !== `${m[1]}/${m[2]}`); return { products: db.products }; }],
   ["GET", /^\/api\/prd$/, () => F.prdFile],
   ["PUT", /^\/api\/prd$/, ({ body }) => (body.base_sha !== F.prdFile.sha ? fail(409, "the PRD changed since you opened it: reload it and edit again") : Object.assign(F.prdFile, { text: body.text, sha: "def" + Date.now() }))],
@@ -161,7 +182,7 @@ const routes: [string, RegExp, H][] = [
   ["GET", /^\/api\/vault\/folders$/, () => F.vault],
   ["GET", /^\/api\/vault\/prd$/, ({ q }) => ({ ...F.vaultPrd, folder: q.get("folder") })],
   ["POST", /^\/api\/away\/change$/, ({ body }) => ({ sent: body.changes.map((c: { id: string }) => c.id), queued: [], errors: [] })],
-  ["POST", /^\/api\/repos\/create$/, ({ body }) => { const r = { slug: `local/${body.name}`, path: `${body.parent}/${body.name}`, product: null }; db.repos.push(r); return json({ repo: r, repos: db.repos }, 201); }],
+  ["POST", /^\/api\/repos\/create$/, ({ body }) => { const r = { slug: `local/${body.name}`, path: `${body.parent}/${body.name}`, product: null, map: "none" as const }; db.repos.push(r); return json({ repo: r, repos: db.repos }, 201); }],
   ["POST", /^\/api\/repos\/publish$/, ({ body }) => { const r = db.repos.find((x) => x.slug === body.slug); if (r) r.slug = `${body.owner}/${body.name}`; return { repo: r, repos: db.repos }; }],
   ["GET", /^\/api\/github\/owners$/, () => ({ owners: ["masnun", "acme"] })],
   ["GET", /^\/api\/releases$/, () => ({ repos: db.releaseRepos, releases: db.releases })],

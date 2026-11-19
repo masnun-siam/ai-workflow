@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import type { RegistryStep } from "../api/extra";
 import { registry } from "../state/data";
 import { goScreen, nav, SCREENS, type ScreenId } from "../state/route";
-import { confirmReq, helpOpen, holdToast, openCreate, paletteOpen, releaseToast, startReq, toast, toastMsg } from "../state/ui";
+import { http, type MapChoice } from "../api/http";
+import { confirmReq, helpOpen, holdToast, openCreate, paletteOpen, releaseToast, repoMapReq, startReq, toast, toastMsg } from "../state/ui";
 import { clamp } from "../state/ui";
 import { HINTS, hintsFor } from "../state/keymap";
 import { Btn, useFocusTrap, useLayer } from "./ui";
@@ -91,6 +92,65 @@ export function ConfirmDialog() {
         onKeyDown={(e) => { if (e.key === "y") c.resolve(true); else if (e.key === "n") c.resolve(false); }}>
         <span id="confirm-t">{c.text}</span>
         <div class="acts"><button type="button" class="btn pri" onClick={() => c.resolve(true)}><kbd>y</kbd>Yes</button><Btn k="n" onClick={() => c.resolve(false)}>No</Btn></div>
+      </div>
+    </div>
+  );
+}
+
+/** True when the repo's branches load and none is `staging`; false when it has one or the call fails. */
+export async function stagingMissing(repo: string): Promise<boolean> {
+  try {
+    const b = await http.get<{ branches: string[] }>(`/api/repos/${repo}/branches`);
+    return !b.branches.includes("staging");
+  } catch {
+    return false;
+  }
+}
+
+const MAP_CHOICES: [Exclude<MapChoice, "cancel">, string, (repo: string) => string, string][] = [
+  ["monorepo", "m", (r) => `Use ${r} as a monorepo`, "Writes .blubird/repos.json in its checkout, then starts the step there."],
+  ["onboard", "o", () => "Run agentic-onboard", "Starts the onboarding skill in this repo instead."],
+];
+
+/** The body of the monorepo choice; `noStaging` adds the base-branch line. A `local/` repo only gets Cancel. */
+export function RepoMapChoice({ repo, noStaging, choose }: { repo: string; noStaging: boolean; choose: (c: MapChoice) => void }) {
+  const local = repo.startsWith("local/");
+  return (
+    <>
+      <h2 id="repomap-t" class="dlg-h">{repo} has no repo map</h2>
+      {local ? (
+        <span id="repomap-d">Add a GitHub remote first. A local repo can't be made a monorepo.</span>
+      ) : (
+        <>
+          <span id="repomap-d">This step runs in a Documentation Repo, and {repo} is not part of a product yet.</span>
+          {noStaging && <span class="dim">blubird skills target <code>staging</code> unless the repo's own instructions name another base.</span>}
+          {MAP_CHOICES.map(([c, k, label, what], i) => (
+            <button key={c} type="button" class={`btn qopt${i === 0 ? " pri" : ""}`} onClick={() => choose(c)}>
+              <kbd>{k}</kbd><b>{label(repo)}</b><span class="qd">{what}</span>
+            </button>
+          ))}
+        </>
+      )}
+      <div class="acts"><Btn k="esc" onClick={() => choose("cancel")}>Cancel</Btn>{!local && <span class="dim">Starts nothing.</span>}</div>
+    </>
+  );
+}
+
+export function RepoMapDialog() {
+  const r = repoMapReq.value!;
+  const box = useRef<HTMLDivElement>(null);
+  const [noStaging, setNoStaging] = useState(false);
+  useFocusTrap(box);
+  useLayer(() => r.resolve("cancel"));
+  useEffect(() => {
+    if (!r.repo.startsWith("local/")) void stagingMissing(r.repo).then(setNoStaging);
+  }, [r.repo]);
+  const local = r.repo.startsWith("local/");
+  return (
+    <div class="ov" onClick={(e) => { if (e.target === e.currentTarget) r.resolve("cancel"); }}>
+      <div class="dlg form narrow" ref={box} role="alertdialog" aria-modal="true" aria-labelledby="repomap-t" aria-describedby="repomap-d"
+        onKeyDown={(e) => { if (local) return; if (e.key === "m") r.resolve("monorepo"); else if (e.key === "o") r.resolve("onboard"); }}>
+        <RepoMapChoice repo={r.repo} noStaging={noStaging} choose={r.resolve} />
       </div>
     </div>
   );

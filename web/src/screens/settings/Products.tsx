@@ -5,6 +5,7 @@ import { http } from "../../api/http";
 import { loadMany, mutate, products, repos, settings } from "../../state/data";
 import { askConfirm } from "../../state/ui";
 import { Btn, Field, KV, Pane } from "../../components/ui";
+import { MapNote } from "../../components/Header";
 import { saveSettings, val } from "./common";
 import { toast } from "../../state/ui";
 import type { RepoSettings } from "../../api/types";
@@ -43,7 +44,7 @@ export function ProductsPane() {
       <div class="det">
         {(products.value ?? []).map((p) => (
           <div key={p.docs_repo}>
-            <div class="dh"><b>{p.name}</b><span class="dim mono">{p.docs_repo}</span>
+            <div class="dh"><b>{p.name}</b><span class="dim mono">{p.docs_repo}</span><MapNote p={p} />
               <Btn small bad label={`Remove product ${p.name}`} onClick={async () => { if (await askConfirm(`Remove product ${p.name}? The repos stay on disk.`, true)) void mutate(() => http.send("DELETE", `/api/products/${p.docs_repo}`), "Removed", [...keys]); }}>Remove</Btn></div>
             {p.error && <div class="banner bad">{p.error}</div>}
             <KV rows={p.repos.map((r) => [r.name, <span>{r.repo} <span class="dim">{r.role}</span> {r.cloned ? "" : <span class="c-w">not cloned</span>}{r.conflict && <span class="c-b"> conflicts with {r.conflict}</span>}</span>])} />

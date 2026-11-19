@@ -1,5 +1,5 @@
 import type { Action } from "../api/types";
-import { ApiFailure } from "../api/client";
+import { ApiFailure, isDeclined } from "../api/client";
 
 export type ActionDeps = {
   send: (method: Action["method"], path: string, body?: unknown) => Promise<unknown>;
@@ -25,7 +25,7 @@ export async function runAction(a: Action, d: ActionDeps): Promise<boolean> {
   try {
     await d.send(a.method, a.path, a.body);
   } catch (e) {
-    d.toast(describeError(e), "error");
+    if (!isDeclined(e)) d.toast(describeError(e), "error");
     return false;
   }
   d.toast(a.toast);

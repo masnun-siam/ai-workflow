@@ -11,6 +11,16 @@ export class ApiFailure extends Error {
   }
 }
 
+/** A start the user turned down at the repo-map choice (Run agentic-onboard or Cancel). Callers treat it as
+ *  "did not run" and show nothing: the choice already said what happened. */
+export class Declined extends ApiFailure {
+  constructor() {
+    super(409, { error: "declined" });
+    this.name = "Declined";
+  }
+}
+export const isDeclined = (e: unknown): e is Declined => e instanceof Declined;
+
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 export type Client = {

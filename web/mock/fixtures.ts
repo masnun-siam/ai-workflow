@@ -144,13 +144,13 @@ export const status: Status = {
 };
 
 export const products: Product[] = [
-  { docs_repo: PRODUCT, name: "Wasensi", path: "/code/wasensi-docs", repos: [
+  { docs_repo: PRODUCT, name: "Wasensi", path: "/code/wasensi-docs", map_committed: true, repos: [
     { name: "backend", role: "api", repo: "acme/wasensi-backend", path: "/code/wasensi-backend", cloned: true }, { name: "web", role: "ui", repo: "acme/wasensi-web", path: "/code/wasensi-web", cloned: true }] },
-  { docs_repo: "acme/bop-bd-docs", name: "BOP BD", path: "/code/bop-docs", repos: [{ name: "bop-bd", role: "app", repo: "acme/bop-bd", path: "/code/bop-bd", cloned: true }, { name: "bop-bd-ui", role: "ui", repo: "acme/bop-bd-ui", path: "", cloned: false }] },
+  { docs_repo: "acme/bop-bd-docs", name: "BOP BD", path: "/code/bop-docs", map_committed: true, repos: [{ name: "bop-bd", role: "app", repo: "acme/bop-bd", path: "/code/bop-bd", cloned: true }, { name: "bop-bd-ui", role: "ui", repo: "acme/bop-bd-ui", path: "", cloned: false }] },
 ];
 export const repos: Repo[] = [
-  { slug: "acme/wasensi-docs", path: "/code/wasensi-docs", product: PRODUCT }, { slug: "acme/wasensi-backend", path: "/code/wasensi-backend", product: PRODUCT },
-  { slug: "acme/wasensi-web", path: "/code/wasensi-web", product: PRODUCT }, { slug: "acme/bop-bd", path: "/code/bop-bd", product: "acme/bop-bd-docs" },
+  { slug: "acme/wasensi-docs", path: "/code/wasensi-docs", product: PRODUCT, map: "docs" }, { slug: "acme/wasensi-backend", path: "/code/wasensi-backend", product: PRODUCT, map: "pointer" },
+  { slug: "acme/wasensi-web", path: "/code/wasensi-web", product: PRODUCT, map: "pointer" }, { slug: "acme/bop-bd", path: "/code/bop-bd", product: "acme/bop-bd-docs", map: "pointer" },
 ];
 
 const so = (id: string, kind: string): Action => ({ key: "r", label: "Run", method: "POST", path: "/api/sessions", body: { step: id, repo: "acme/wasensi-backend" }, toast: `Started ${id}` });
