@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "preact/hooks";
 import { Detail } from "../components/Detail";
-import { ConfirmDialog, Help, Palette, Toast } from "../components/Overlays";
+import { ConfirmDialog, Help, Palette, RepoMapDialog, Toast } from "../components/Overlays";
 import { CreateDialog, StartDialog } from "../components/Start";
 import { interceptGitHubLinks, WorkPanel, workTarget } from "../components/WorkPanel";
 import { CreateRepoDialog, createRepo, PublishDialog, publishRepo } from "../components/Repos";
@@ -32,7 +32,7 @@ import { visibleKeys } from "../state/refetch";
 import { startRealtime } from "../state/realtime";
 import { goScreen, nav, route, startRouter } from "../state/route";
 import { currentTarget, hasList, needCount, quickCount } from "../state/select";
-import { confirmReq, connected, createOpen, detailOpen, helpOpen, paletteOpen, repoOpen, startReq } from "../state/ui";
+import { confirmReq, connected, createOpen, detailOpen, helpOpen, paletteOpen, repoMapReq, repoOpen, startReq } from "../state/ui";
 import { targetActions } from "../components/Detail";
 import { closeTopLayer, runCommand, screenActionList } from "./commands";
 
@@ -176,6 +176,7 @@ export function App() {
       {publishRepo.value && <PublishDialog />}
       {helpOpen.value && <Help />}
       {confirmReq.value && <ConfirmDialog />}
+      {repoMapReq.value && <RepoMapDialog />}
       <Toast />
     </div>
   );

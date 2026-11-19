@@ -1,5 +1,6 @@
 import { signal } from "@preact/signals";
 import type { RegistryStep } from "../api/extra";
+import type { MapChoice } from "../api/http";
 
 export type ToastMsg = { msg: string; level: "info" | "warn" | "error"; path?: string };
 export const toastMsg = signal<ToastMsg | null>(null);
@@ -47,6 +48,18 @@ export const confirmReq = signal<ConfirmReq | null>(null);
 export function askConfirm(text: string, danger = false): Promise<boolean> {
   return new Promise((resolve) => {
     confirmReq.value = { text, danger, resolve: (y) => { confirmReq.value = null; resolve(y); } };
+  });
+}
+
+/** The monorepo choice (FR-12) for a start the server refused with 409 `needs a repo map`. */
+export type RepoMapReq = { repo: string; resolve: (c: MapChoice) => void };
+export const repoMapReq = signal<RepoMapReq | null>(null);
+export function askRepoMap(repo: string): Promise<MapChoice> {
+  // a second refused start while one choice is open cancels the first, so no caller waits forever
+  repoMapReq.peek()?.resolve("cancel");
+  return new Promise((resolve) => {
+    const req: RepoMapReq = { repo, resolve: (c) => { if (repoMapReq.peek() === req) repoMapReq.value = null; resolve(c); } };
+    repoMapReq.value = req;
   });
 }
 

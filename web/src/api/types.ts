@@ -100,9 +100,11 @@ export type Blubird = { installed: boolean; version: string; latest: string; upd
   min_version: string; too_old: boolean };  // too_old: installed below min_version, so newer steps are unavailable
 
 // ---------- repos / products ----------
-export type Repo = { slug: Slug; path: string; product: Slug | null };
+export type Repo = { slug: Slug; path: string; product: Slug | null;
+  map: "docs" | "pointer" | "none" };  // holds .blubird/repos.json | only .blubird/docs-repo | neither
 export type ProductRepo = { name: string; role: string; repo: Slug; path: string; cloned: boolean; conflict?: Slug };
-export type Product = { docs_repo: Slug; name: string; path: string; repos: ProductRepo[]; error?: string };
+export type Product = { docs_repo: Slug; name: string; path: string; repos: ProductRepo[]; error?: string;
+  map_committed: boolean };  // false: .blubird/repos.json is not tracked at the checkout's HEAD (FR-13)
 // name = docs repo's repos.json "product" key if present, else the docs repo name without "-docs"/"-wiki"
 export type PRD = { product: Slug; module: string | null; slug: string; title: string;
   status: "Draft" | "In review" | "Approved" | "Done"; path: string; label: string; epic: IssueKey | null };

@@ -2,6 +2,7 @@
  *  model and effort, account). Both post StartRequest (API.md section 4) to POST /api/sessions. */
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Select } from "./Select";
+import { isDeclined } from "../api/client";
 import { http } from "../api/http";
 import type { RegistryStep } from "../api/extra";
 import type { Effort, JevRoute, Model, OpenItem, PRD, ReviewOffers, Session, VaultFolder, VaultSuggestion } from "../api/types";
@@ -105,6 +106,8 @@ async function start(body: Record<string, unknown>, label: string): Promise<bool
     nav(`#/sessions/${s.id}`);
     return true;
   } catch (e) {
+    // declined at the repo-map choice: stay open with the draft, nothing to say
+    if (isDeclined(e)) return false;
     const f = e as { body?: { href?: string } };
     toast(describeError(e), "error", f.body?.href);
     return false;
