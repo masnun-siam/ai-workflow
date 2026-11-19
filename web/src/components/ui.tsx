@@ -98,7 +98,12 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, focusSelf = fal
 export function restoreFocus(prev: HTMLElement | null): void {
   if (prev && prev !== document.body && document.contains(prev)) { prev.focus(); return; }
   // later, and only if nothing took focus meanwhile: a dialog opened by the one that just closed keeps its own focus
-  setTimeout(() => { if (!document.activeElement || document.activeElement === document.body) document.querySelector<HTMLElement>('[aria-current="true"]')?.focus({ preventScroll: true }); }, 0);
+  // a dialog still open underneath (its opener went disabled while busy) keeps focus inside it
+  setTimeout(() => {
+    if (document.activeElement && document.activeElement !== document.body) return;
+    const under = [...document.querySelectorAll<HTMLElement>(".ov .dlg")].pop();
+    (under?.querySelector<HTMLElement>(FOCUSABLE) ?? document.querySelector<HTMLElement>('[aria-current="true"]'))?.focus({ preventScroll: true });
+  }, 0);
 }
 
 /** Registers this component as an open layer for Escape and the global-key guard while it is mounted (or `active`). */
