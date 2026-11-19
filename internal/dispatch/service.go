@@ -89,6 +89,9 @@ type Deps struct {
 	SkillDir  func(skill string) (string, bool) // blubird.Manager.SkillDir
 	IdleGuard func() bool                       // the idle_guard setting; nil reads as off
 	Merge     func(ctx context.Context, repo string, pr int, sha string) (ok bool, errText string)
+	// NeedsMap reports a lane repo with no map or pointer outside any product (products.Registry);
+	// nil means none ever needs one
+	NeedsMap  func(ctx context.Context, repo string) (slug string, needs bool)
 	Now       func() time.Time
 	CoordRoot string // default ~/.claude/project-coordinator (tests)
 }
@@ -313,6 +316,13 @@ func (s *Service) Create(ctx context.Context, r CreateRequest) (store.Dispatch, 
 		return store.Dispatch{}, err
 	}
 	repos := repoSet(res.Children)
+	if s.d.NeedsMap != nil {
+		for _, repo := range repos {
+			if slug, needs := s.d.NeedsMap(ctx, repo); needs {
+				return store.Dispatch{}, errs.Conflict("needs a repo map", map[string]any{"repo": slug})
+			}
+		}
+	}
 	if miss := s.MissingBase(ctx, repos, store.Str(st.BaseBranch)); len(miss) > 0 {
 		return store.Dispatch{}, errs.Invalid("%s", strings.Join(miss, "; "))
 	}

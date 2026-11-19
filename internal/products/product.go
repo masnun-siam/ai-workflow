@@ -28,6 +28,9 @@ type Product struct {
 	Path     string        `json:"path"`
 	Repos    []ProductRepo `json:"repos"`
 	Error    string        `json:"error,omitempty"`
+	// MapCommitted: .blubird/repos.json is tracked at the checkout's HEAD, as of the last poll tick
+	// (true until checked, and for a product with an error).
+	MapCommitted bool `json:"map_committed"`
 }
 
 type mapEntry struct{ Name, Role, Repo, Path string }
@@ -114,7 +117,7 @@ func (r *Registry) Products() []Product {
 	sort.Slice(slugs, func(i, j int) bool { return strings.ToLower(slugs[i]) < strings.ToLower(slugs[j]) })
 	out := make([]Product, 0, len(slugs))
 	for _, s := range slugs {
-		p := Product{DocsRepo: s, Name: defaultName(s), Path: rows[s], Repos: []ProductRepo{}}
+		p := Product{DocsRepo: s, Name: defaultName(s), Path: rows[s], Repos: []ProductRepo{}, MapCommitted: true}
 		m, err := readMap(rows[s])
 		if err != nil {
 			p.Error = err.Error()
@@ -124,6 +127,7 @@ func (r *Registry) Products() []Product {
 		if m.Product != "" {
 			p.Name = m.Product
 		}
+		p.MapCommitted = r.mapCommitted(s)
 		for _, e := range m.Entries {
 			p.Repos = append(p.Repos, ProductRepo{Name: e.Name, Role: e.Role, Repo: e.Repo, Path: resolveEntry(rows[s], e.Path),
 				Cloned: exists(filepath.Join(resolveEntry(rows[s], e.Path), ".git"))})
@@ -286,8 +290,9 @@ func (r *Registry) RemoveProduct(docsSlug string) error {
 }
 
 // Sync registers mapped repos that are not yet known: checkouts that hold a repo map but are not
-// products, and cloned repos of known products that are not checkouts. Called every poll tick;
-// it only runs git when something is missing. Errors per repo are swallowed.
+// products, and cloned repos of known products that are not checkouts, then refreshes each
+// product's map_committed. Called every poll tick; besides one `git cat-file` per product it runs
+// git only when something is missing. Errors per repo are swallowed.
 func (r *Registry) Sync(ctx context.Context) {
 	co := r.checkouts()
 	rows := readStrings(r.productsFile())
@@ -319,8 +324,9 @@ func (r *Registry) Sync(ctx context.Context) {
 	sort.Strings(docs)
 	for _, d := range docs {
 		if ctx.Err() != nil {
-			return
+			break
 		}
 		_, _ = r.Register(ctx, d)
 	}
+	r.refreshCommitted(ctx)
 }

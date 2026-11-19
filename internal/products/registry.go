@@ -30,6 +30,7 @@ type Repo struct {
 	Slug    string  `json:"slug"`
 	Path    string  `json:"path"`
 	Product *string `json:"product"`
+	Map     string  `json:"map"` // MapDocs, MapPointer or MapNone
 }
 
 type ScanResult struct {
@@ -44,6 +45,9 @@ type Registry struct {
 	bus *events.Bus
 	mu  sync.Mutex // serialises registry mutations inside this process (files are also flocked)
 	biz businessState
+
+	commitMu  sync.RWMutex
+	committed map[string]bool // lower-case docs slug -> repos.json tracked at HEAD (refreshCommitted)
 }
 
 func New(h *home.Home, c GH, bus *events.Bus) *Registry {
@@ -169,7 +173,7 @@ func (r *Registry) Repos() []Repo {
 	prods := r.Products()
 	out := make([]Repo, 0, len(co))
 	for slug, path := range co {
-		rp := Repo{Slug: slug, Path: path}
+		rp := Repo{Slug: slug, Path: path, Map: mapState(path)}
 		if p, ok := productIn(prods, slug); ok {
 			d := p.DocsRepo
 			rp.Product = &d
@@ -206,7 +210,7 @@ func (r *Registry) RegisterRepo(ctx context.Context, slug, path string) (Repo, e
 		return Repo{}, err
 	}
 	r.changed("registry", key)
-	rp := Repo{Slug: key, Path: top}
+	rp := Repo{Slug: key, Path: top, Map: mapState(top)}
 	if p, ok := r.ProductOf(key); ok {
 		d := p.DocsRepo
 		rp.Product = &d
@@ -409,13 +413,13 @@ func (r *Registry) Scan(ctx context.Context, roots []string) (ScanResult, error)
 	for _, c := range found {
 		if k, ok := findKey(co, c.slug); ok {
 			if co[k] != c.path && realpath(co[k]) != realpath(c.path) {
-				res.Duplicates = append(res.Duplicates, Repo{Slug: k, Path: c.path})
+				res.Duplicates = append(res.Duplicates, Repo{Slug: k, Path: c.path, Map: mapState(c.path)})
 			}
 			continue
 		}
 		co[c.slug] = c.path
 		add[c.slug] = c.path
-		res.Added = append(res.Added, Repo{Slug: c.slug, Path: c.path})
+		res.Added = append(res.Added, Repo{Slug: c.slug, Path: c.path, Map: mapState(c.path)})
 	}
 	err := r.setCheckouts(add)
 	r.mu.Unlock()

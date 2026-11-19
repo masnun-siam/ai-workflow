@@ -303,6 +303,7 @@ type RepoResolver interface {
   Resolve(ctx context.Context, repo string) (path, slug string, err error)
   DocsRepo(ctx context.Context, cwd string) (path, slug string, err error)
   SlugOf(path string) string
+  NeedsMap(ctx context.Context, repo string) (slug string, needs bool) // no map, no pointer, in no product (FR-12)
 }
 type Notifier interface { Notify(event string, n notify.Note) }
 type Deps struct { Home *home.Home; Settings *settings.Store; Prompts *prompts.Registry; Repos RepoResolver
@@ -514,9 +515,11 @@ type Blubird = { installed: boolean; version: string; latest: string; update_ava
   min_version: string; too_old: boolean };  // min_version "1.2.0"; too_old: installed and its major.minor.patch is below it (unparsable → false)
 
 // ---------- repos / products ----------
-type Repo = { slug: Slug; path: string; product: Slug | null };
+type Repo = { slug: Slug; path: string; product: Slug | null;
+  map: "docs" | "pointer" | "none" };  // holds .blubird/repos.json | only .blubird/docs-repo | neither
 type ProductRepo = { name: string; role: string; repo: Slug; path: string; cloned: boolean; conflict?: Slug };
-type Product = { docs_repo: Slug; name: string; path: string; repos: ProductRepo[]; error?: string };
+type Product = { docs_repo: Slug; name: string; path: string; repos: ProductRepo[]; error?: string;
+  map_committed: boolean };  // .blubird/repos.json tracked at the checkout's HEAD, refreshed each poll tick (true until checked, and with an error)
 // name = docs repo's repos.json "product" key if present, else the docs repo name without "-docs"/"-wiki"
 type PRD = { product: Slug; module: string | null; slug: string; title: string;
   status: "Draft" | "In review" | "Approved" | "Done"; path: string; label: string; epic: IssueKey | null };
@@ -690,7 +693,7 @@ type VaultPRD = { exists: boolean; status: string | null; title: string | null; 
 | Method | Path | Request | Response | Codes |
 |---|---|---|---|---|
 | GET | `/api/sessions?limit=200&before=<id>&status=<csv>&repo=<slug>&step=<id>` | — | `{sessions: Session[], stats: SessionStats, limits: Record<string, Limit>}` | 200, 400 |
-| POST | `/api/sessions` | `StartRequest` | `Session` | 201; 400; 409 `{error,id,href}`; 502 preflight/spawn |
+| POST | `/api/sessions` | `StartRequest` | `Session` | 201; 400; 409 `{error,id,href}`; 409 `{error:"needs a repo map", repo}`; 502 preflight/spawn |
 | GET | `/api/sessions/{id}` | — | `Session` | 200 |
 | GET | `/api/sessions/{id}/stream?offset=N` | — | `Transcript` (S§2.6) | 200, 400 `bad offset` |
 | POST | `/api/sessions/{id}/answer` | `{round_id: string, answers: Answers}` | `Session` | 200; 400/409/413/415/500 as S§1.9. While the asking process still runs (background agents), the answer is kept: round `queued`, text in `pending_answer`, delivered when the process exits; `setu ask` then refuses a new round until it is delivered |
@@ -703,7 +706,7 @@ type VaultPRD = { exists: boolean; status: string | null; title: string | null; 
 | GET | `/api/sessions/cleanup` | — | `{items:{key,label,repo,flags:string[]}[]}` | 200 |
 | POST | `/api/sessions/cleanup` | `{keys: string[]}` | `{removed: string[]}` | 200; 400 |
 
-Start semantics: S§5.2–5.4 with `step` in place of `command`. `runs_in` routing: `docs` → `DocsRepo(repo|product)`; `issue`/`repo` → the resolved checkout; `none` → `vault_dir` if it exists, else `$HOME` (no slug). A blubird step while blubird is missing → 409 `blubird is not installed`; one whose `skills/<skill>/SKILL.md` the installed blubird lacks → 409 `needs blubird 1.2.0` (the same `reason` `GET /api/registry` gives with `available: false`). Guards when `guard:true`, in order:
+Start semantics: S§5.2–5.4 with `step` in place of `command`. `runs_in` routing: `docs` → `DocsRepo(repo|product)`; `issue`/`repo` → the resolved checkout; `none` → `vault_dir` if it exists, else `$HOME` (no slug). A blubird step while blubird is missing → 409 `blubird is not installed`; one whose `skills/<skill>/SKILL.md` the installed blubird lacks → 409 `needs blubird 1.2.0` (the same `reason` `GET /api/registry` gives with `available: false`). A `runs_in: docs` step, `refine-issues`, `implement-issue` or `after-merge` on a registered repo whose `map` is `none` and that is in no product → 409 `{error:"needs a repo map", repo}` before `DocsRepo` and before the `local/` "no GitHub remote yet" 400; the UI answers with the monorepo choice (`POST /api/repos/{owner}/{name}/monorepo`, then the same start again). Guards when `guard:true`, in order:
 1. A live session with the same step family, issue and repo → 409 `<step> already running for o/r#N (session <id>)`.
 2. A dispatch lane owns the issue or PR → 409 `dispatch <id> owns o/r#N`.
 3. `implement-issue` with open blockers and no `force` → 409 `#N is blocked by #a, #b`.
@@ -722,6 +725,7 @@ Continue (stalled sessions only): resumes the same Claude session id through the
 | POST | `/api/repos/scan` | `{roots?: string[]}` | `{added: Repo[], duplicates: Repo[], repos: Repo[]}` | 200; 400 | products |
 | POST | `/api/repos/check` | `{}` | `{problems: Record<Slug, string \| null>}` | 200 | products |
 | POST | `/api/repos/browse` | `{start?: string}` | `{path: string \| null}` | 200; 403 | products |
+| POST | `/api/repos/{owner}/{name}/monorepo` | `{}` | `{product: Product}` | 201 map written; 200 the identical map was already there; 400 no GitHub origin; 404 not a registered repo; 409 a different map, a pointer, or a code repo of another product | products: writes `.blubird/repos.json` `{"repos":[{name, role:"docs", repo:"owner/name", path:"."}]}` (atomic, never overwrites, never `git add`), then registers the product |
 | POST | `/api/repos/{owner}/{name}/cleanup` | `{issue: number, confirm: true}` | `{removed: string[]}` | 200; 400; 409 `#N's PR is not merged` | products |
 | GET | `/api/repos/{owner}/{name}/open?kind=issue\|pr` | — | `{items: OpenItem[]}` | 200; 400; 502 | gh |
 | GET | `/api/repos/{owner}/{name}/branches` | — | `{branches: string[], default: string}` | 200; 502 | gh |
@@ -770,7 +774,7 @@ Continue (stalled sessions only): resumes the same Claude session id through the
 | POST | `/api/review/{panel}/rounds` | `{add: 1..5}` | `Panel` | 200; 400; 409 | review |
 | GET | `/api/review/offers` | — | `ReviewOffers` | 200 | review |
 | GET | `/api/dispatches` | — | `{dispatches: Dispatch[]}` | 200 | dispatch |
-| POST | `/api/dispatches` | `{epic?: IssueKey\|string, issues?: IssueKey[], settings?: Partial<DispatchSettings>}` (one of epic/issues) | `Dispatch` | 201; 400; 409 `{error,id}` | dispatch |
+| POST | `/api/dispatches` | `{epic?: IssueKey\|string, issues?: IssueKey[], settings?: Partial<DispatchSettings>}` (one of epic/issues) | `Dispatch` | 201; 400; 409 `{error,id}`; 409 `{error:"needs a repo map", repo}` when a lane repo has `map: none` outside any product (nothing created) | dispatch |
 | POST | `/api/dispatches/plan` | same as create | `DispatchPlan` | 200; 400 | dispatch |
 | GET | `/api/dispatches/{id}` | — | `Dispatch` (with events) | 200 | dispatch |
 | POST | `/api/dispatches/{id}/settings` | `Partial<DispatchSettings>` | `Dispatch` | 200; 400 | dispatch |

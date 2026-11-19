@@ -30,6 +30,9 @@ var (
 	needsRemote = map[string]bool{"create-tasks": true, "small-change": true, "refine-issues": true, "implement-issue": true, "after-merge": true, "pr-grind": true, "pr-review": true, "release-pr": true, "project-coordinator": true, "report-bug": true}
 	// free-text steps always run on the picked repo
 	freeText = map[string]bool{"small-change": true, "report-bug": true}
+	// mapGated: steps besides runs_in "docs" ones that get the monorepo choice on an unmapped repo
+	// (FR-14); after-merge runs implement-issue
+	mapGated = map[string]bool{"refine-issues": true, "implement-issue": true, "after-merge": true}
 )
 
 func noNUL(s string) bool { return !strings.ContainsRune(s, 0) }
@@ -168,6 +171,9 @@ func (m *Manager) StartSession(ctx context.Context, req StartRequest) (Record, e
 		if step.RunsIn != "docs" && !freeText[req.Step] {
 			if mm := issueURLRe.FindStringSubmatch(prompt.Display); mm != nil {
 				if p, s, err := m.d.Repos.Resolve(ctx, mm[1]+"/"+mm[2]); err == nil && p != "" {
+					if err := m.mapGate(ctx, step, req.Step, s); err != nil {
+						return Record{}, err
+					}
 					cwd, slug = p, s
 				}
 			}
@@ -175,6 +181,9 @@ func (m *Manager) StartSession(ctx context.Context, req StartRequest) (Record, e
 		if cwd == "" {
 			p, s, err := m.d.Repos.Resolve(ctx, base)
 			if err != nil {
+				return Record{}, err
+			}
+			if err := m.mapGate(ctx, step, req.Step, s); err != nil {
 				return Record{}, err
 			}
 			cwd, slug = p, s
@@ -364,4 +373,17 @@ func (m *Manager) Rerun(ctx context.Context, id string) (Record, error) {
 	}
 	req.Guard = false
 	return m.StartSession(ctx, req)
+}
+
+// mapGate returns 409 "needs a repo map" when a docs-repo step or a mapGated step targets a
+// registered repo with no map or pointer outside any product, so the UI can offer the monorepo
+// choice (FR-12, FR-14) instead of DocsRepo's 400.
+func (m *Manager) mapGate(ctx context.Context, step Step, name, slug string) error {
+	if slug == "" || (step.RunsIn != "docs" && !mapGated[name]) {
+		return nil
+	}
+	if s, needs := m.d.Repos.NeedsMap(ctx, slug); needs {
+		return errs.Conflict("needs a repo map", map[string]any{"repo": s})
+	}
+	return nil
 }
