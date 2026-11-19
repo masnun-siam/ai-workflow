@@ -68,6 +68,13 @@ describe("SSE refetch map (API.md section 6)", () => {
     expect(refetchFor("products", { kind: "coordinator" }, river)).toEqual([]);
     expect(refetchFor("toast", { id: 1 }, river)).toEqual([]);
   });
+  it("business docs: the Docs page and an open feature page reload them", () => {
+    expect(visibleKeys({ screen: "docs" })).toContain("business");
+    expect(refetchFor("products", { kind: "business" }, { screen: "docs" })).toEqual(["business"]);
+    expect(refetchFor("products", { kind: "business" }, { screen: "features" })).toEqual(["business"]);
+    expect(refetchFor("products", { kind: "business" }, river)).toEqual([]);
+    expect(refetchFor("products", { kind: "prd" }, { screen: "docs" })).not.toContain("business");
+  });
   it("visible keys per screen", () => {
     expect(visibleKeys({ screen: "ops" })).toContain("ops");
     expect(visibleKeys({ screen: "activity", sessionId: "s" })).toEqual(expect.arrayContaining(["session", "stream"]));
@@ -83,6 +90,12 @@ describe("keyboard map", () => {
     expect(k("5")).toEqual({ t: "go", screen: "activity" });
     expect(k("6")).toEqual({ t: "go", screen: "river" });
     expect(k("0")).toEqual({ t: "go", screen: "settings" });
+    expect(k("3")).toEqual({ t: "go", screen: "changes" });
+    expect(k("9")).toEqual({ t: "go", screen: "me" });
+  });
+  it("routes a business doc reader", () => {
+    expect(parseHash("#/docs/docs%2Fbusiness%2Fauth%2Flogin.md?product=a/b")).toEqual({ screen: "docs", id: "docs/business/auth/login.md", query: { product: "a/b" } });
+    expect(parseHash("#/docs")).toEqual({ screen: "docs", query: {} });
   });
   it("g chord goes to a page or opens the repo switcher; n is New except on Releases", () => {
     expect(k("g", {}, ctx({ actions: [] }))).toBeNull();
