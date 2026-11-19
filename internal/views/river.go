@@ -305,7 +305,7 @@ func (r *rv) prds() {
 			c.Tag, c.Meta = "review", "in review · "+mod
 			c.Actions = []inbox.Action{
 				inbox.Start("e", "Approve + create epic", "Approved; creating the epic", map[string]any{
-					"step": "create-prd", "repo": docs, "product": docs, "args": inbox.ApproveArgs(d.Path)}).WithPrimary().WithClears().WithConfirm("Approve this PRD and create its epic?"),
+					"step": "create-prd", "repo": docs, "product": docs, "args": inbox.ApproveArgs(d.Path)}).WithPrimary().WithClears().WithConfirm(inbox.ApproveConfirm),
 				read}
 		case "Approved":
 			if d.Epic != nil {

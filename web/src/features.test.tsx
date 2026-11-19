@@ -6,6 +6,8 @@ import { mockFetch } from "../mock/server";
 import { App } from "./app/App";
 import { loadMany } from "./state/data";
 import { parseHash, nav } from "./state/route";
+import { newPrdRun, smallTaskRun } from "./screens/FeaturePage";
+import { features } from "./state/data";
 
 describe("features", () => {
   beforeAll(async () => {
@@ -36,6 +38,39 @@ describe("features", () => {
   it("feature page: a draft offers the panel with lenses", () => {
     nav("#/features/recheck?product=acme/wasensi-docs&tab=review");
     expect(renderToString(<App />)).toContain("Run the peer review panel");
+  });
+  it("feature page: an approved or done PRD is locked", () => {
+    for (const slug of ["rates", "login"]) {
+      nav(`#/features/${slug}?product=acme/wasensi-docs&tab=prd`);
+      const html = renderToString(<App />);
+      for (const s of ["Locked", "New PRD for this change", "One small task"]) expect(html, slug).toContain(s);
+      expect(html, slug).not.toContain(">Edit<");
+      expect(html, slug).not.toContain("ask claude to change it");
+    }
+  });
+  it("feature page: a draft PRD keeps Edit and the change box", () => {
+    nav("#/features/recheck?product=acme/wasensi-docs&tab=prd");
+    const html = renderToString(<App />);
+    expect(html).toContain(">Edit<");
+    expect(html).toContain("ask claude to change it");
+    expect(html).not.toContain("One small task");
+    expect(html).not.toContain("Locked");
+  });
+  it("builds the locked PRD's change requests", () => {
+    const all = features.value!.flatMap((l) => l.features);
+    const rates = all.find((f) => f.slug === "rates")!;
+    const login = all.find((f) => f.slug === "login")!;
+    const np = newPrdRun(rates, "  Add a TTL setting  ");
+    expect(np).toMatchObject({ step: "create-prd", repo: "acme/wasensi-docs", product: "acme/wasensi-docs" });
+    expect(np.args).not.toMatch(/[\r\n]/);
+    for (const s of ["Add a TTL setting", "docs/prds/cache/rates.md", "Related"]) expect(np.args).toContain(s);
+    const withEpic = smallTaskRun(rates, "Add a TTL setting");
+    expect(withEpic).toMatchObject({ step: "small-change", repo: "acme/wasensi-backend" });
+    for (const s of ["Add a TTL setting", "docs/prds/cache/rates.md", "#941", "acme/wasensi-backend#941"]) expect(withEpic.args).toContain(s);
+    const noEpic = smallTaskRun(login, "Fix the copy");
+    expect(noEpic).toMatchObject({ step: "small-change", repo: "acme/wasensi-docs" });
+    for (const s of ["Fix the copy", "docs/prds/login.md"]) expect(noEpic.args).toContain(s);
+    expect(noEpic.args).not.toContain("epic");
   });
   it("unknown feature says so", () => {
     nav("#/features/nope?product=acme/wasensi-docs");

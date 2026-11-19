@@ -733,7 +733,7 @@ Continue (stalled sessions only): resumes the same Claude session id through the
 | POST | `/api/repos/create` | `{name, parent: abs dir, vault_folder?}` | `{repo, repos}` | 201; 400; 409 exists; 502 git | products: `git init -b main`, README (+ the vault folder's PRD.md at `docs/prds/<feature>.md`), first commit, registered as `local/<name>` |
 | POST | `/api/repos/publish` | `{slug: "local/…", owner, name, private}` | `{repo, repos}` | 200; 400; 404; 502 gh | products: `gh repo create owner/name --private\|--public --source <dir> --remote origin --push`, then the checkout becomes `owner/name` |
 | GET | `/api/github/owners` | — | `{owners: string[]}` (gh user, then orgs) | 200; 502 | products |
-| PUT | `/api/prd` | `{repo, path, text, base_sha}` | `PRDFile` (after the commit) | 200; 400; 404; 409 file changed since `base_sha` (`{sha}`); 502 git | products: writes the file and commits only it on the current branch (`docs(prd): edit <path> in setu`), never pushes |
+| PUT | `/api/prd` | `{repo, path, text, base_sha}` | `PRDFile` (after the commit) | 200; 400; 404; 409 file changed since `base_sha` (`{sha}`); 409 `approved PRDs are locked: start a new PRD or a task` when the file's status is Approved or Done (checked first, writes nothing); 502 git | products: writes the file and commits only it on the current branch (`docs(prd): edit <path> in setu`), never pushes |
 | GET | `/api/issues/{owner}/{name}/{n}` | — | `IssueView` | 200; 400; 404; 502 | gh |
 | GET | `/api/pulls/{owner}/{name}/{n}` | — | `PRView` | 200; 400; 404; 502 | gh |
 | POST | `/api/issues/{owner}/{name}/{n}/comment` / `/api/pulls/.../comment` | `{text}` ≤65536 | `{ok:true, url}` | 200; 400; 502 | gh |

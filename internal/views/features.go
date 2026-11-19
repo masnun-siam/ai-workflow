@@ -448,7 +448,7 @@ func mergeAction(repo string, pr int, sha string) inbox.Action {
 func (s *Service) nextStep(f *Feature, docs string) {
 	tab := func(t string) string { return FeatureRoute(docs, f.Slug, t) }
 	approve := inbox.Start("p", "Approve PRD", "Approved; creating the epic", map[string]any{
-		"step": "create-prd", "repo": docs, "product": docs, "args": inbox.ApproveArgs(f.Path)}).WithConfirm("Approve this PRD and create its epic?")
+		"step": "create-prd", "repo": docs, "product": docs, "args": inbox.ApproveArgs(f.Path)}).WithConfirm(inbox.ApproveConfirm)
 	add := func(a ...inbox.Action) { f.Actions = append(f.Actions, a...) }
 	switch {
 	case f.Status == "Done" || (f.Epic == nil && f.Status == "Approved" && f.Counts.Done > 0):
