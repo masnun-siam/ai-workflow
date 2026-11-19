@@ -74,7 +74,8 @@ export const note = "@here\nRelease Note - 12 November 2026\nMerchants can now s
 export const river: River = {
   product: PRODUCT, stale: [], fetched_at: iso(1),
   stages: [
-    { id: "prd", name: "PRD", skills: "create-prd · map-prds", hot: true, cards: [
+    { id: "docs", name: "Docs", skills: "collect-docs · refine-docs · business-code-validator", hot: false, cards: [] },
+    { id: "prd", name: "PRD", skills: "create-prd", hot: true, cards: [
       C({ id: "prd:kyc", stage: "prd", title: "Merchant KYC re-check", meta: "draft · wasensi-docs", tag: "draft", tone: "c-w", skill: "blubird:create-prd", repo: "wasensi-docs", log: ["Interview 6 of 11 questions answered", "Paused 2 days ago"],
         actions: [start("o", "Continue interview", "create-prd", "docs/prds/kyc/recheck.md", "acme/wasensi-docs")] }),
       C({ id: "prd:pay", stage: "prd", title: "Merchant payouts v2", meta: "9 tasks planned", tag: "approve", tone: "c-w", need: true, need_kind: "Approval", skill: "blubird:create-prd", repo: "wasensi-docs",
@@ -114,14 +115,14 @@ const I = (p: Partial<InboxItem> & Pick<InboxItem, "key" | "group" | "type" | "k
 export const inboxItems: InboxItem[] = [
   I({ key: "question:" + SID(1), group: "answer", type: "question", kind: "Question", title: "#1012 Payout batch model", repo: "acme/wasensi-backend", session_id: SID(1), round: q1, actions: [open(SID(1)), stop(SID(1))] }),
   I({ key: "question:" + SID(9), group: "answer", type: "question", kind: "Question", title: "Why is the build slow?", session_id: SID(9), round: q2, actions: [open(SID(9))] }),
-  I({ key: "prd:pay", group: "decide", type: "prd_approval", kind: "Approval", title: "Merchant payouts v2", repo: "acme/wasensi-docs", actions: river.stages[0]!.cards[1]!.actions }),
+  I({ key: "prd:pay", group: "decide", type: "prd_approval", kind: "Approval", title: "Merchant payouts v2", repo: "acme/wasensi-docs", actions: river.stages.find((s) => s.id === "prd")!.cards[1]!.actions }),
   I({ key: "failed:" + SID(5), group: "fix", type: "session_failed", kind: "Failed", title: "#455 phpstan failed", repo: "acme/bop-bd", session_id: SID(5),
     detail: ["RateCache.php:41 missing return type", "RateCache.php:77 undefined method get()"], actions: [{ key: "f", label: "Resume with fix", method: "POST", path: `/api/sessions/${SID(5)}/resume`, toast: "Resumed", clears: true, primary: true }, open(SID(5))] }),
   I({ key: "stalled:" + SID(10), group: "fix", type: "dispatch_stalled", kind: "Stalled", title: "#946 Rate cache metrics", repo: "acme/wasensi-backend", session_id: SID(10), note: "stopped before a PR",
     actions: [{ key: "c", label: "Continue", method: "POST", path: "/api/dispatches/d1a2b3c4d5e6/lane", body: { lane: "acme/wasensi-backend#946", action: "continue" }, toast: "Continuing", clears: true, primary: true }, open(SID(10))] }),
   I({ key: "stalled:" + SID(11), group: "fix", type: "session_stalled", kind: "Stalled", title: "Docs refresh", repo: "acme/wasensi-docs", session_id: SID(11), note: "ended its turn without finishing",
     actions: [{ key: "c", label: "Continue", method: "POST", path: `/api/sessions/${SID(11)}/continue`, toast: "Continuing", clears: true, primary: true }, open(SID(11))] }),
-  I({ key: "release:b", group: "decide", type: "release_note", kind: "Release", title: "Release #1036 note", repo: "acme/wasensi-backend", note, actions: river.stages[6]!.cards[0]!.actions }),
+  I({ key: "release:b", group: "decide", type: "release_note", kind: "Release", title: "Release #1036 note", repo: "acme/wasensi-backend", note, actions: river.stages.find((s) => s.id === "notify")!.cards[0]!.actions }),
   I({ key: "limited:" + SID(6), group: "wait", type: "limited", kind: "Limited", title: "#1044 waits for the limit reset", repo: "acme/wasensi-backend", actions: [open(SID(6))] }),
 ];
 
@@ -138,7 +139,8 @@ export const away: Away = { active: false, until: null, started: null, decisions
 export const status: Status = {
   version: "0.1.0", boot_id: "boot1", gh: { ok: true, login: "siam", error: "" }, usage: [usage("work", 62, 41), usage("personal", 8, 3)], away, migrated: true,
   poller: { remaining: 4800, reset_at: null },
-  blubird: { installed: true, version: "0.26.3", latest: "0.26.3", update_available: false, install_path: "~/.claude/plugins/blubird", marketplace: "agentic-workflow", skills: ["create-prd", "implement-issue"], hooks: ["claude-md-guard", "mask-secrets", "idle-guard"], busy: "", error: "" },
+  blubird: { installed: true, version: "1.2.0", latest: "1.2.0", update_available: false, install_path: "~/.claude/plugins/blubird", marketplace: "agentic-workflow", skills: ["create-prd", "implement-issue"], hooks: ["claude-md-guard", "mask-secrets", "idle-guard"], busy: "", error: "",
+    min_version: "1.2.0", too_old: false },
 };
 
 export const products: Product[] = [
@@ -218,6 +220,8 @@ export const reviewCfg: ReviewConfig = {
   shipped: { max_rounds: 3, default_lenses: ["security"], lenses: {} }, overridden: true,
 };
 export const registry: RegistryStep[] = ([
+  ["collect-docs", "blubird", "docs", "docs", "Collect docs", "[file or folder ...]"], ["refine-docs", "blubird", "docs", "docs", "Refine docs", "[module | docs/business/<module>/<feature>.md ...]"],
+  ["business-code-validator", "blubird", "docs", "docs", "Validate business", "[module | docs/business/<module>/<feature>.md ...]"],
   ["create-prd", "blubird", "docs", "prd", "Create PRD", "free text, a PRD path"], ["create-tasks", "blubird", "docs", "tasks", "Create tasks", "<PRD path>"],
   ["small-change", "blubird", "repo", "refine", "Small change", "<finding>"], ["refine-issues", "blubird", "issue", "refine", "Refine issues", "<epic | issues>"],
   ["reproduce-bug", "blubird", "issue", "refine", "Reproduce bug", "<issue | symptoms>"], ["implement-issue", "blubird", "issue", "implement", "Implement issue", "<issue | epic>"],
@@ -271,7 +275,7 @@ export const featureList: FeatureList = { product: PRODUCT, stale: [], features:
   { product: PRODUCT, slug: "recheck", title: "KYC re-check", status: "Draft", path: "docs/prds/kyc/recheck.md", module: "kyc", prd_route: `#/prd?repo=${PRODUCT}&path=docs/prds/kyc/recheck.md`,
     stage: "draft", bay: "go", next: "Draft. Run a peer review, or approve it as it is.", epic: null, issues: [], done: [], counts: counts([], 0), panel: null, dispatch: null, live: 0, sessions: [],
     actions: [{ key: "v", label: "Start peer review", method: "POST", path: "/api/noop", toast: "", primary: true, open: `#/features/recheck?product=${PRODUCT}&tab=review` },
-      { ...start("p", "Approve without review", "create-prd", "docs/prds/kyc/recheck.md — the team has reviewed it; approve it", PRODUCT), confirm: "Approve this PRD and create its epic?" }, readPrd("docs/prds/kyc/recheck.md")] },
+      { ...start("p", "Approve without review", "create-prd", "docs/prds/kyc/recheck.md — the team has reviewed it; approve it", PRODUCT), confirm: "Approve this PRD? Claude checks it against the business docs, asks you to confirm each rule it adds or changes, and then creates the epic." }, readPrd("docs/prds/kyc/recheck.md")] },
   { product: PRODUCT, slug: "login", title: "Passwordless login", status: "Done", path: "docs/prds/login.md", module: null, prd_route: `#/prd?repo=${PRODUCT}&path=docs/prds/login.md`,
     stage: "shipped", bay: "shipped", next: "Shipped.", epic: null, issues: [], done: [], counts: counts([], 0), panel: null, dispatch: null, live: 0, sessions: [], actions: [readPrd("docs/prds/login.md")] },
 ] };

@@ -119,6 +119,7 @@ func Build(ctx context.Context, h *home.Home, bus *events.Bus, version, binDir s
 	a.GH = gh.New()
 	a.Auth = gh.NewAuth(a.GH)
 	a.Products = products.New(h, a.GH, bus)
+	a.Products.SetBusinessChecker(func() string { return a.Blubird.Status().InstallPath })
 	a.Notify = notify.New(h, a.Settings, bus)
 	a.Jev = jev.New(h, func() bool { return a.Settings.Get().UseJev })
 
@@ -163,7 +164,10 @@ func Build(ctx context.Context, h *home.Home, bus *events.Bus, version, binDir s
 			}
 			return false
 		},
-		Tick: a.Products.Sync,
+		Tick: func(ctx context.Context) {
+			a.Products.Sync(ctx)
+			a.Products.CheckBusiness(ctx)
+		},
 	})
 
 	// ---- sessions ----
@@ -246,7 +250,7 @@ func Build(ctx context.Context, h *home.Home, bus *events.Bus, version, binDir s
 		Releases: inboxReleases{a.Release}, Coordinators: viewDispatch{inboxDispatch{disp}, disp}, Cleanup: cf, Jev: a.Jev, Bus: bus,
 	})
 	views_ = views.New(views.Deps{
-		Inbox: a.Inbox, Sessions: a.Sessions, Snapshots: a.Poller, Products: a.Products, Prompts: reg,
+		Inbox: a.Inbox, Sessions: a.Sessions, Snapshots: a.Poller, Products: a.Products, Business: a.Products, Prompts: reg,
 		Grinds: inboxGrinds{grindSv}, Dispatch: viewDispatch{inboxDispatch{disp}, disp},
 		Releases: inboxReleases{a.Release}, Panels: inboxPanels{revSvc}, Accounts: a.Settings, Usage: a.Usage, Blubird: a.Blubird, GH: a.Auth,
 		Away: inboxAway{a.Away}, Poller: a.Poller, Home: h, Version: version,

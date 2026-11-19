@@ -249,6 +249,15 @@ func TestEveryKeptType(t *testing.T) {
 			t.Errorf("a stalled lane has no needs row")
 		}
 	}
+	for _, ty := range []string{TPRDApproval, TReviewApproved} {
+		if a := m[ty].Actions[0]; a.Label != "Approve + create epic" || a.Confirm != ApproveConfirm {
+			t.Errorf("%s approve action: %+v", ty, a)
+		}
+	}
+	if !strings.Contains(ApproveConfirm, "business docs") || !strings.Contains(ApproveConfirm, "confirm each rule it adds or changes") ||
+		!strings.Contains(ApproveConfirm, "creates the epic") {
+		t.Errorf("approve confirm: %q", ApproveConfirm)
+	}
 	if m[TGrindPaused].Detail[0] != "reviewer silent" || *m[TGrindPaused].At != "2026-11-12T09:30:00Z" {
 		t.Errorf("grind item: %+v", m[TGrindPaused])
 	}

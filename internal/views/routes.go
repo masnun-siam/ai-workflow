@@ -8,7 +8,7 @@ import (
 	"github.com/masnun-siam/setu/internal/server"
 )
 
-// Routes serves /api/status, /api/river, /api/features, /api/ops and /api/me. (/api/inbox is inbox.Routes.)
+// Routes serves /api/status, /api/river, /api/features, a product's /business, /api/changes, /api/ops and /api/me. (/api/inbox is inbox.Routes.)
 func Routes(s *Service) []server.Route {
 	product := func(r *http.Request) (string, error) {
 		q := r.URL.Query().Get("product")
@@ -53,6 +53,14 @@ func Routes(s *Service) []server.Route {
 				return 0, nil, err
 			}
 			return http.StatusOK, s.Features(r.Context(), p), nil
+		})},
+		{Pattern: "GET /api/products/{owner}/{name}/business", Handler: server.Handle(func(r *http.Request) (int, any, error) {
+			slug, err := server.Slug(r)
+			if err != nil {
+				return 0, nil, errs.NotFound("%s", err.Error())
+			}
+			v, err := s.Business(r.Context(), slug)
+			return 0, v, err
 		})},
 		{Pattern: "GET /api/changes", Handler: server.Handle(func(r *http.Request) (int, any, error) {
 			return http.StatusOK, s.Changes(r.Context(), r.URL.Query().Get("repo")), nil

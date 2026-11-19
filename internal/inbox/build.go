@@ -422,10 +422,14 @@ func ApproveArgs(path string) string {
 	return path + " — the team has reviewed it; approve it"
 }
 
+// ApproveConfirm is the confirmation of every Approve PRD action: approval checks the PRD against
+// the business docs before it creates the epic (blubird 1.2).
+const ApproveConfirm = "Approve this PRD? Claude checks it against the business docs, asks you to confirm each rule it adds or changes, and then creates the epic."
+
 func approveAction(key, docs, path string) Action {
 	return Start(key, "Approve + create epic", "Approved; creating the epic", map[string]any{
 		"step": "create-prd", "repo": docs, "product": docs, "args": ApproveArgs(path),
-	}).WithPrimary().WithClears().WithConfirm("Approve this PRD and create its epic?")
+	}).WithPrimary().WithClears().WithConfirm(ApproveConfirm)
 }
 
 func (b *Builder) prdItems(v *view) []Item {

@@ -73,6 +73,9 @@ type Deps struct {
 	Poller    Budget
 	Home      *home.Home
 
+	// Business reads business docs and the docs gate (nil: no docs).
+	Business BusinessAPI
+
 	Version string
 	BootID  func() string
 	// NoteChannel names the Slack channel release notes go to ("" = "Slack").

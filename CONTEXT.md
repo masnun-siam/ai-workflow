@@ -8,10 +8,13 @@ Local frontend for Claude Code that drives the blubird plugin. This is the vocab
 A Documentation Repo plus the code repos listed in its `.blubird/repos.json`. setu groups boards, inbox and River by product. Registered in `~/.setu/products.json`.
 
 **Documentation Repo**:
-The repo holding `docs/prds/` for a product. `docs`-run steps (`create-prd`, `create-tasks`, `map-prds`, `security-sweep`, `project-coordinator`) run in its checkout.
+The repo holding `docs/prds/` for a product. `docs`-run steps (`collect-docs`, `refine-docs`, `business-code-validator`, `create-prd`, `create-tasks`, `security-sweep`, `project-coordinator`) run in its checkout.
 
 **PRD**:
-The product requirements for one feature, at `docs/prds/<slug>.md`, written by blubird `create-prd`. Status Draft, In review or Approved; only Approved is split into tasks.
+The product requirements for one feature, at `docs/prds/<slug>.md`, written by blubird `create-prd`. Status Draft, In review or Approved; only Approved is split into tasks. Approved (and the legacy Done) is locked: read-only in setu, changed through a new PRD or one small task.
+
+**Business doc**:
+blubird 1.2's lasting record of what is live for one feature, at `docs/business/<module>/<feature>.md` in the Documentation Repo: rules `R-n` with a Delivery mark and a dated Timeline. setu only reads them and shows the result of blubird's checker (the docs gate); the docs skills write them.
 
 **Epic / refined issue**:
 An epic is the parent GitHub issue of one PRD entry; its child issues become refined issues once `refine-issues` writes their body. Only a refined issue is ready to implement.
@@ -20,7 +23,7 @@ An epic is the parent GitHub issue of one PRD entry; its child issues become ref
 The home screen: the pipeline as columns of cards, one per stage. Also one of the three looks (Classic, Console, River).
 
 **Stage**:
-A column of the River and the group a step belongs to: `prd`, `tasks`, `refine`, `implement`, `review`, `release`, `notify`, `ops`. Each registry step names its stage.
+A column of the River and the group a step belongs to: `docs`, `prd`, `tasks`, `refine`, `implement`, `review`, `release`, `notify`, `ops`. Each registry step names its stage.
 
 **Step**:
 One entry of the built-in registry (`create-prd`, `implement-issue`, `pr-grind`, `release-pr` ...). A step is either a blubird skill (`/blubird:<skill>`) or a setu built-in prompt, and declares where it runs (`runs_in`: `docs`, `repo`, `issue` or `none`).

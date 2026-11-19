@@ -365,6 +365,6 @@ Pinned by tests:
 | Base branch | PR linking handled for non-default targets (body keyword, `issue-<n>-` branch) | Always `staging`; issue not auto-closed by merge, so the skill closes it and sets Done; engine's MERGED-PR fix-up already models this |
 | Branch/worktree | `issue-<n>-<slug>`, worktree `<checkout>/.worktrees/<n>-<slug>` | Branch `issue-<n>-<slug>` from `staging`; worktree path set by the skill; engine cleanup scans `.worktrees/` only |
 | Merge | `merge_gate` + `Merge` button in UI, grind loop (`pr-grind`) | Humans only; agents never merge; `merge-when-green.sh` pins to a reviewed SHA and base |
-| Onboarding | 6-phase `repo-bootstrap` chain with `BOOTSTRAP:` sentinel | `/blubird:agentic-onboard` (Docs repo first, writes repos.json), `--dev`, `map-prds`, no phase chain |
+| Onboarding | 6-phase `repo-bootstrap` chain with `BOOTSTRAP:` sentinel | `/blubird:agentic-onboard` (Docs repo first, writes repos.json), `--dev`, `collect-docs` for old docs, no phase chain |
 | Epic state | Epic stays open until closed; Done column = closed epic or all subs closed | Epic moved to In progress by refine-issues; closed when all done |
 | Gaps in engine | `ui_products.sync` unwired; `_flags` cleanup state is memory-only; issues query capped at 500; reviewThreads capped at 100; no Projects v2; no cross-repo blocker resolution | Required by blubird flow |
