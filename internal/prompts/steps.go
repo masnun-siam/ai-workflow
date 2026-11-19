@@ -2,8 +2,7 @@ package prompts
 
 import "strings"
 
-// InStage reports whether the step belongs to a stage ("map-prds" is in both prd and ops; its
-// Stage is "prd,ops").
+// InStage reports whether the step belongs to a stage. Stage may list several, comma-separated.
 func (s Step) InStage(stage string) bool {
 	for _, x := range strings.Split(s.Stage, ",") {
 		if x == stage {
@@ -17,8 +16,10 @@ func (s Step) InStage(stage string) bool {
 func defaultSteps() []Step {
 	b, s := SrcBlubird, SrcSetu
 	return []Step{
+		{"collect-docs", b, "collect-docs", InDocs, "docs", "Collect docs", "[file or folder ...]"},
+		{"refine-docs", b, "refine-docs", InDocs, "docs", "Refine docs", "[module | docs/business/<module>/<feature>.md ...]"},
+		{"business-code-validator", b, "business-code-validator", InDocs, "docs", "Validate business", "[module | docs/business/<module>/<feature>.md ...]"},
 		{"create-prd", b, "create-prd", InDocs, "prd", "Create PRD", "free text, a PRD path, or <path> — the team has reviewed it; approve it"},
-		{"map-prds", b, "map-prds", InDocs, "prd,ops", "Map PRDs", "[file or folder ...]"},
 		{"create-tasks", b, "create-tasks", InDocs, "tasks", "Create tasks", "<PRD path>"},
 		{"small-change", b, "create-tasks", InRepo, "refine", "Small change", "<finding>"},
 		{"refine-issues", b, "refine-issues", InIssue, "refine", "Refine issues", "<epic | issues>"},

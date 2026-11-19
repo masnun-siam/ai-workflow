@@ -8,7 +8,7 @@ Local frontend for Claude Code that drives the blubird plugin. This is the vocab
 A Documentation Repo plus the code repos listed in its `.blubird/repos.json`. setu groups boards, inbox and River by product. Registered in `~/.setu/products.json`.
 
 **Documentation Repo**:
-The repo holding `docs/prds/` for a product. `docs`-run steps (`create-prd`, `create-tasks`, `map-prds`, `security-sweep`, `project-coordinator`) run in its checkout.
+The repo holding `docs/prds/` for a product. `docs`-run steps (`collect-docs`, `refine-docs`, `business-code-validator`, `create-prd`, `create-tasks`, `security-sweep`, `project-coordinator`) run in its checkout.
 
 **PRD**:
 The product requirements for one feature, at `docs/prds/<slug>.md`, written by blubird `create-prd`. Status Draft, In review or Approved; only Approved is split into tasks.
@@ -20,7 +20,7 @@ An epic is the parent GitHub issue of one PRD entry; its child issues become ref
 The home screen: the pipeline as columns of cards, one per stage. Also one of the three looks (Classic, Console, River).
 
 **Stage**:
-A column of the River and the group a step belongs to: `prd`, `tasks`, `refine`, `implement`, `review`, `release`, `notify`, `ops`. Each registry step names its stage.
+A column of the River and the group a step belongs to: `docs`, `prd`, `tasks`, `refine`, `implement`, `review`, `release`, `notify`, `ops`. Each registry step names its stage.
 
 **Step**:
 One entry of the built-in registry (`create-prd`, `implement-issue`, `pr-grind`, `release-pr` ...). A step is either a blubird skill (`/blubird:<skill>`) or a setu built-in prompt, and declares where it runs (`runs_in`: `docs`, `repo`, `issue` or `none`).

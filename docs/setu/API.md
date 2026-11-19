@@ -503,7 +503,8 @@ type Status = {
   poller: { remaining: number | null; reset_at: ISO | null };
 };
 type Blubird = { installed: boolean; version: string; latest: string; update_available: boolean;
-  install_path: string; marketplace: string; skills: string[]; hooks: string[]; busy: "" | "installing" | "updating"; error: string };
+  install_path: string; marketplace: string; skills: string[]; hooks: string[]; busy: "" | "installing" | "updating"; error: string;
+  min_version: string; too_old: boolean };  // min_version "1.2.0"; too_old: installed and its major.minor.patch is below it (unparsable → false)
 
 // ---------- repos / products ----------
 type Repo = { slug: Slug; path: string; product: Slug | null };
@@ -528,7 +529,7 @@ type PRView = { number: number; title: string; url: string; state: "open"|"close
 type OpenItem = { number: number; title: string; labels: string[]; updated_at: ISO; draft: boolean; url?: string };
 
 // ---------- River ----------
-type StageId = "prd" | "tasks" | "refine" | "implement" | "review" | "release" | "notify";
+type StageId = "docs" | "prd" | "tasks" | "refine" | "implement" | "review" | "release" | "notify";
 type Card = {
   id: string;                   // stable: "prd:<slug>" | "epic:<key>" | "issue:<key>" | "pr:<key>" | "session:<id>" | "release:<id>" | "repo:<slug>" | "coord:<run>"
   stage: StageId; title: string; meta: string; tag: string; tone: Tone;
@@ -680,7 +681,7 @@ type VaultPRD = { exists: boolean; status: string | null; title: string | null; 
 | GET | `/api/sessions/cleanup` | — | `{items:{key,label,repo,flags:string[]}[]}` | 200 |
 | POST | `/api/sessions/cleanup` | `{keys: string[]}` | `{removed: string[]}` | 200; 400 |
 
-Start semantics: S§5.2–5.4 with `step` in place of `command`. `runs_in` routing: `docs` → `DocsRepo(repo|product)`; `issue`/`repo` → the resolved checkout; `none` → `vault_dir` if it exists, else `$HOME` (no slug). A blubird step while blubird is missing → 409 `blubird is not installed`. Guards when `guard:true`, in order:
+Start semantics: S§5.2–5.4 with `step` in place of `command`. `runs_in` routing: `docs` → `DocsRepo(repo|product)`; `issue`/`repo` → the resolved checkout; `none` → `vault_dir` if it exists, else `$HOME` (no slug). A blubird step while blubird is missing → 409 `blubird is not installed`; one whose `skills/<skill>/SKILL.md` the installed blubird lacks → 409 `needs blubird 1.2.0` (the same `reason` `GET /api/registry` gives with `available: false`). Guards when `guard:true`, in order:
 1. A live session with the same step family, issue and repo → 409 `<step> already running for o/r#N (session <id>)`.
 2. A dispatch lane owns the issue or PR → 409 `dispatch <id> owns o/r#N`.
 3. `implement-issue` with open blockers and no `force` → 409 `#N is blocked by #a, #b`.
@@ -888,8 +889,10 @@ External (read-only): `${CLAUDE_CONFIG_DIR:-~/.claude}/plugins/installed_plugins
 
 | step id | source | skill | runs_in | stage (River/Ops/Me) | args |
 |---|---|---|---|---|---|
+| `collect-docs` | blubird | collect-docs | docs | docs | `[file or folder ...]` |
+| `refine-docs` | blubird | refine-docs | docs | docs | `[module \| docs/business/<module>/<feature>.md ...]` |
+| `business-code-validator` | blubird | business-code-validator | docs | docs | `[module \| docs/business/<module>/<feature>.md ...]` |
 | `create-prd` | blubird | create-prd | docs | prd | free text, a PRD path, or `<path> — the team has reviewed it; approve it` (Approval action) |
-| `map-prds` | blubird | map-prds | docs | prd · ops | `[file or folder ...]` |
 | `create-tasks` | blubird | create-tasks | docs | tasks | `<PRD path>` |
 | `small-change` | blubird | create-tasks | repo | refine | `<finding>` |
 | `refine-issues` | blubird | refine-issues | issue | refine | `<epic \| issues>` (repo = the epic's/issues' repo) |
@@ -958,7 +961,7 @@ Test harness (`internal/testutil/fakebin`): `Install(t, dir)` writes fake `claud
 | settings | S§4.1 validation table (labels, cmds, channels, reviewers, repos keys); partial save keeps omitted keys; legacy `auto_grind` migration; old file with `harness`/codex keys loads; new keys default; `ui.json` 0644 ignored |
 | claude | `ParseLine` over every S§1.7 row + the hook kinds; `tokens_of` edge cases; `Argv` `cc` rewrite + not-on-PATH; preflight messages (not logged in, timeout, default vs other); usage keychain service name; expired token → `re-login needed`; usage fetch only while present (fake HTTP via `httptest`, URL injectable) |
 | blubird | detect from `installed_plugins.json` (respects `CLAUDE_CONFIG_DIR`), missing → `installed:false`; latest from the marketplace manifest; install/update argv sequence; busy → 409; "unknown command" on `plugin update` tolerated |
-| prompts | registry covers every §9.1 row; `Build` for blubird/setu shapes; frontmatter stripped; no `aiw ` left in embedded prompts (grep test); extraction idempotent; old-version pruning keeps 5; `Agent` tools parsed; blubird step unavailable → Conflict |
+| prompts | registry covers every §9.1 row; `Build` for blubird/setu shapes; frontmatter stripped; no `aiw ` left in embedded prompts (grep test); extraction idempotent; old-version pruning keeps 5; `Agent` tools parsed; blubird step unavailable (not installed, or its skill missing) → Conflict |
 | gh | `gh_json` scalar/empty/non-JSON; CI: conflict, `no checks`→green, nonzero exit with JSON read, pending>red>green, error, `--watch` stops/cap note, log excerpt 4000; threads pagination, `--open-only`, `--for-comment` string/int; resolve partial failure exit codes; popups 404 vs 502, patch caps; PR ref parsing all forms |
 | poller | every G§10 "pinned by tests" bullet; cross-repo `Ref` for parent/sub-issues/blockers; Projects v2 `Status` read when present, derived otherwise (G§3 mapping); `OnFresh` gets prev; publishes `products{snapshot}` only on change |
 | products | G§10 products bullets; nested PRD discovery `docs/prds/<module>/<feature>.md` + status/slug/title regexes; docs-repo pointer errors; scan budget/dup; merge cleanup bullets (never outside `.worktrees/`, never HEAD branch, never remote) |

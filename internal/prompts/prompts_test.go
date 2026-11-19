@@ -30,14 +30,31 @@ func env(t *testing.T) (*home.Home, string) {
 	return h, cfg
 }
 
+// installBlubird fakes a 1.2.0 install holding every blubird skill the registry names.
 func installBlubird(t *testing.T, cfg string) {
+	t.Helper()
+	var skills []string
+	for _, s := range defaultSteps() {
+		if s.Source == SrcBlubird {
+			skills = append(skills, s.Skill)
+		}
+	}
+	installBlubirdAt(t, cfg, "1.2.0", skills)
+}
+
+func installBlubirdAt(t *testing.T, cfg, version string, skills []string) {
 	t.Helper()
 	inst := filepath.Join(cfg, "inst")
 	_ = os.MkdirAll(inst, 0o755)
+	for _, sk := range skills {
+		d := filepath.Join(inst, "skills", sk)
+		_ = os.MkdirAll(d, 0o755)
+		_ = os.WriteFile(filepath.Join(d, "SKILL.md"), []byte("x"), 0o644)
+	}
 	p := filepath.Join(cfg, "plugins")
 	_ = os.MkdirAll(p, 0o755)
 	_ = os.WriteFile(filepath.Join(p, "installed_plugins.json"),
-		[]byte(`{"plugins":{"blubird@agentic-workflow":[{"scope":"user","installPath":"`+inst+`","version":"1"}]}}`), 0o644)
+		[]byte(`{"plugins":{"blubird@agentic-workflow":[{"scope":"user","installPath":"`+inst+`","version":"`+version+`"}]}}`), 0o644)
 }
 
 func load(t *testing.T, withBlubird bool) *Registry {
@@ -54,7 +71,7 @@ func load(t *testing.T, withBlubird bool) *Registry {
 
 func TestRegistryCoversSpec(t *testing.T) {
 	r := load(t, false)
-	want := strings.Fields("create-prd map-prds create-tasks small-change refine-issues reproduce-bug report-bug implement-issue after-merge verifier-locally project-coordinator pr-review peer-review pr-grind release-pr release-note agentic-onboard ci-optimize security-sweep docs-updater skill-feedback day-end-reconcile weekly-review")
+	want := strings.Fields("collect-docs refine-docs business-code-validator create-prd create-tasks small-change refine-issues reproduce-bug report-bug implement-issue after-merge verifier-locally project-coordinator pr-review peer-review pr-grind release-pr release-note agentic-onboard ci-optimize security-sweep docs-updater skill-feedback day-end-reconcile weekly-review")
 	got := r.Steps()
 	if len(got) != len(want) {
 		t.Fatalf("%d steps, want %d", len(got), len(want))
@@ -79,8 +96,28 @@ func TestRegistryCoversSpec(t *testing.T) {
 		s.Stage != "refine" || s.Label != "Report bug" || s.ArgsHint != "<bug report>" {
 		t.Fatalf("%+v", s)
 	}
-	if s, _ := r.Step("map-prds"); !s.InStage("ops") || !s.InStage("prd") || s.InStage("me") {
+	for id, label := range map[string]string{"collect-docs": "Collect docs", "refine-docs": "Refine docs", "business-code-validator": "Validate business"} {
+		s, _ := r.Step(id)
+		if s.Source != SrcBlubird || s.Skill != id || s.RunsIn != InDocs || s.Stage != "docs" || s.Label != label ||
+			!s.InStage("docs") || s.InStage("prd") || s.InStage("ops") {
+			t.Fatalf("%+v", s)
+		}
+	}
+	if s, _ := r.Step("collect-docs"); s.ArgsHint != "[file or folder ...]" {
 		t.Fatalf("%+v", s)
+	}
+	if s, _ := r.Step("refine-docs"); s.ArgsHint != "[module | docs/business/<module>/<feature>.md ...]" {
+		t.Fatalf("%+v", s)
+	}
+	if s, _ := r.Step("agentic-onboard"); !s.InStage("ops") || s.InStage("me") {
+		t.Fatalf("%+v", s)
+	}
+}
+
+func TestBuildDocsStep(t *testing.T) {
+	p, err := load(t, true).Build("collect-docs", "docs/old")
+	if err != nil || p.Text != "/blubird:collect-docs docs/old" || p.Display != p.Text {
+		t.Fatalf("%+v %v", p, err)
 	}
 }
 
@@ -241,8 +278,31 @@ func TestAvailable(t *testing.T) {
 	if errs.KindOf(r.Available("zzz")) != errs.KNotFound {
 		t.Fatal("unknown step")
 	}
-	if err := load(t, true).Available("implement-issue"); err != nil {
+	r = load(t, true)
+	for _, id := range []string{"implement-issue", "collect-docs", "refine-docs", "business-code-validator"} {
+		if err := r.Available(id); err != nil {
+			t.Fatalf("%s: %v", id, err)
+		}
+	}
+}
+
+func TestAvailableTooOldInstall(t *testing.T) {
+	h, cfg := env(t)
+	installBlubirdAt(t, cfg, "0.28.0", []string{"implement-issue", "create-prd"})
+	r, err := Load(h, "1.0.0", blubird.New(h, events.New()))
+	if err != nil {
 		t.Fatal(err)
+	}
+	for _, id := range []string{"collect-docs", "refine-docs", "business-code-validator"} {
+		err := r.Available(id)
+		if errs.KindOf(err) != errs.KConflict || err.Error() != "needs blubird 1.2.0" || errs.Status(err) != 409 {
+			t.Fatalf("%s: %v", id, err)
+		}
+	}
+	for _, id := range []string{"implement-issue", "after-merge", "create-prd", "pr-grind"} {
+		if err := r.Available(id); err != nil {
+			t.Fatalf("%s: %v", id, err)
+		}
 	}
 }
 
