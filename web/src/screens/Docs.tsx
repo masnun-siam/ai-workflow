@@ -39,7 +39,7 @@ function GateStatus({ g }: { g: BusinessGate }) {
       {g.checked_at && <span class="dim">checked {ago(g.checked_at)}</span>}
     </span>
   );
-  if (!g.failures.length) return <div class="gate" aria-label="Docs gate">{line}</div>;
+  if (!g.failures.length) return <div class="gate" role="group" aria-label="Docs gate">{line}</div>;
   return (
     <details class="gate" open aria-label="Docs gate">
       <summary>{line}</summary>
