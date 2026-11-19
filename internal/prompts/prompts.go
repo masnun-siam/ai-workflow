@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -115,14 +116,25 @@ func (r *Registry) Agent(name string) (string, []string, error) {
 	return a.body, append([]string(nil), a.tools...), nil
 }
 
-// Available is nil when the step can run: a blubird step needs blubird installed.
+// Available is nil when the step can run: a blubird step needs blubird installed with the
+// step's skill (skills/<skill>/SKILL.md).
 func (r *Registry) Available(stepID string) error {
 	s, ok := r.byID[stepID]
 	if !ok {
 		return errs.NotFound("unknown step %q", stepID)
 	}
-	if s.Source == SrcBlubird && (r.bb == nil || !r.bb.Status().Installed) {
+	if s.Source != SrcBlubird {
+		return nil
+	}
+	if r.bb == nil {
 		return errs.Conflict("blubird is not installed", nil)
+	}
+	st := r.bb.Status()
+	if !st.Installed {
+		return errs.Conflict("blubird is not installed", nil)
+	}
+	if !slices.Contains(st.Skills, s.Skill) {
+		return errs.Conflict("needs blubird "+blubird.MinVersion, nil)
 	}
 	return nil
 }

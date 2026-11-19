@@ -100,6 +100,7 @@ type Feature struct {
 	Live     int              `json:"live"`
 	Sessions []FeatureSession `json:"sessions"`
 	Actions  []inbox.Action   `json:"actions"` // next-step buttons, primary first
+	Business []string         `json:"business"`
 }
 
 type FeatureEpicSub struct {
@@ -137,36 +138,13 @@ func (s *Service) Features(ctx context.Context, product string) FeatureList {
 		return out
 	}
 	repos := inbox.ProductRepos(p)
-	snaps := map[string]poller.Snapshot{}
-	index := map[string]found{}
-	var all []found
-	if s.d.Snapshots != nil {
-		for _, repo := range repos {
-			sn := s.d.Snapshots.Snapshot(repo)
-			snaps[lower(repo)] = sn
-			if !sn.Fresh() {
-				out.Stale = append(out.Stale, repo)
-			}
-			for _, is := range sn.Data.Issues {
-				f := found{repo, is}
-				all = append(all, f)
-				index[fmt.Sprintf("%s#%d", lower(repo), is.N)] = f
-			}
-		}
-	}
-	// open PR per issue
-	prOf := map[string]poller.OpenPR{}
+	snaps, all, index := s.productIssues(repos)
 	for _, repo := range repos {
-		d := snaps[lower(repo)].Data
-		for _, pr := range d.OpenPRs {
-			if n := inbox.IssueOfPR(d, pr); n > 0 {
-				k := fmt.Sprintf("%s#%d", lower(repo), n)
-				if _, dup := prOf[k]; !dup {
-					prOf[k] = pr
-				}
-			}
+		if sn, ok := snaps[lower(repo)]; ok && !sn.Fresh() {
+			out.Stale = append(out.Stale, repo)
 		}
 	}
+	prOf := openPRs(repos, snaps)
 	// newest panel per artifact
 	panels := map[string]inbox.Panel{}
 	if s.d.Panels != nil {
@@ -184,8 +162,11 @@ func (s *Service) Features(ctx context.Context, product string) FeatureList {
 	if s.d.Dispatch != nil {
 		dispatches = s.d.Dispatch.List()
 	}
+	docs := s.businessDocs(p.DocsRepo)
 	for _, d := range prds {
-		out.Features = append(out.Features, s.feature(p, d, all, index, prOf, panels, recs, dispatches))
+		f := s.feature(p, d, all, index, prOf, panels, recs, dispatches)
+		f.Business = matchBusiness(d.Path, docs)
+		out.Features = append(out.Features, f)
 	}
 	sort.SliceStable(out.Features, func(i, j int) bool { return bayRank[out.Features[i].Bay] < bayRank[out.Features[j].Bay] })
 	return out
@@ -197,7 +178,7 @@ func (s *Service) feature(p products.Product, d products.PRD, all []found, index
 	panels map[string]inbox.Panel, recs []sessions.Record, dispatches []inbox.Dispatch) Feature {
 	docs := p.DocsRepo
 	f := Feature{Product: docs, Slug: d.Slug, Title: d.Title, Status: d.Status, Path: d.Path, Module: d.Module,
-		PRDRoute: inbox.PRDRoute(docs, d.Path), Issues: []FeatureIssue{}, Done: []FeatureEpicSub{}, Sessions: []FeatureSession{}, Actions: []inbox.Action{}}
+		PRDRoute: inbox.PRDRoute(docs, d.Path), Issues: []FeatureIssue{}, Done: []FeatureEpicSub{}, Sessions: []FeatureSession{}, Actions: []inbox.Action{}, Business: []string{}}
 	if pn, ok := panels[filepath.Join(p.Path, filepath.FromSlash(d.Path))]; ok {
 		f.Panel = &pn
 	}
@@ -213,28 +194,8 @@ func (s *Service) feature(p products.Product, d products.PRD, all []found, index
 	}
 	issueKeys := map[string]bool{}
 	if f.Epic != nil {
-		seen := map[string]bool{}
-		var kids []found
-		add := func(k found) {
-			key := fmt.Sprintf("%s#%d", lower(k.repo), k.issue.N)
-			if !seen[key] && !hasLabel(k.issue.Labels, "epic") {
-				seen[key] = true
-				kids = append(kids, k)
-			}
-		}
-		for _, ref := range epicIssue.SubIssues {
-			if k, ok := index[lower(ref.Repo)+"#"+strconv.Itoa(ref.N)]; ok {
-				add(k)
-			}
-		}
-		for _, k := range all {
-			if k.issue.Parent != nil && strings.EqualFold(k.issue.Parent.Repo, f.Epic.Repo) && k.issue.Parent.N == f.Epic.N {
-				add(k)
-			}
-		}
-		sort.Slice(kids, func(i, j int) bool { return kids[i].issue.N < kids[j].issue.N })
 		latest := latestByIssue(recs)
-		for _, k := range kids {
+		for _, k := range epicChildren(f.Epic.Repo, *epicIssue, all, index) {
 			fi := s.featureIssue(k, prOf, latest)
 			issueKeys[lower(fi.Key)] = true
 			f.Issues = append(f.Issues, fi)
@@ -260,17 +221,11 @@ func (s *Service) feature(p products.Product, d products.PRD, all []found, index
 	f.Counts.Done = len(f.Done)
 
 	// dispatch on this epic, or owning its issues
-	for _, dp := range dispatches {
-		if dp.State != "running" && dp.State != "paused" {
-			continue
-		}
-		mine := f.Epic != nil && dp.Epic != nil && strings.EqualFold(*dp.Epic, f.Epic.Key)
-		for _, l := range dp.Lanes {
-			mine = mine || issueKeys[lower(l.Key)]
-		}
-		if !mine {
-			continue
-		}
+	epicKey := ""
+	if f.Epic != nil {
+		epicKey = f.Epic.Key
+	}
+	if dp, ok := epicDispatch(dispatches, epicKey, issueKeys); ok {
 		fd := &FeatureDispatch{ID: dp.ID, State: dp.State, Lanes: len(dp.Lanes)}
 		for _, l := range dp.Lanes {
 			if l.Stage == "closed" {
@@ -281,7 +236,6 @@ func (s *Service) feature(p products.Product, d products.PRD, all []found, index
 			}
 		}
 		f.Dispatch = fd
-		break
 	}
 
 	// sessions about the PRD or the epic's issues
@@ -314,6 +268,98 @@ func (s *Service) feature(p products.Product, d products.PRD, all []found, index
 
 	s.nextStep(&f, docs)
 	return f
+}
+
+// productIssues reads the snapshots of repos: each snapshot (by lowercase repo), every issue, and
+// the issues by lowercase "owner/name#n".
+func (s *Service) productIssues(repos []string) (map[string]poller.Snapshot, []found, map[string]found) {
+	snaps := map[string]poller.Snapshot{}
+	index := map[string]found{}
+	var all []found
+	if s.d.Snapshots == nil {
+		return snaps, all, index
+	}
+	for _, repo := range repos {
+		sn := s.d.Snapshots.Snapshot(repo)
+		snaps[lower(repo)] = sn
+		for _, is := range sn.Data.Issues {
+			f := found{repo, is}
+			all = append(all, f)
+			index[fmt.Sprintf("%s#%d", lower(repo), is.N)] = f
+		}
+	}
+	return snaps, all, index
+}
+
+// openPRs maps lowercase "owner/name#n" to the first open PR that closes issue n.
+func openPRs(repos []string, snaps map[string]poller.Snapshot) map[string]poller.OpenPR {
+	prOf := map[string]poller.OpenPR{}
+	for _, repo := range repos {
+		d := snaps[lower(repo)].Data
+		for _, pr := range d.OpenPRs {
+			if n := inbox.IssueOfPR(d, pr); n > 0 {
+				k := fmt.Sprintf("%s#%d", lower(repo), n)
+				if _, dup := prOf[k]; !dup {
+					prOf[k] = pr
+				}
+			}
+		}
+	}
+	return prOf
+}
+
+// epicChildren returns the non-epic children of epic (repo#n), by its sub-issue list and by
+// each issue's parent, sorted by number.
+func epicChildren(repo string, epic poller.Issue, all []found, index map[string]found) []found {
+	seen := map[string]bool{}
+	var kids []found
+	add := func(k found) {
+		key := fmt.Sprintf("%s#%d", lower(k.repo), k.issue.N)
+		if !seen[key] && !hasLabel(k.issue.Labels, "epic") {
+			seen[key] = true
+			kids = append(kids, k)
+		}
+	}
+	for _, ref := range epic.SubIssues {
+		if k, ok := index[lower(ref.Repo)+"#"+strconv.Itoa(ref.N)]; ok {
+			add(k)
+		}
+	}
+	for _, k := range all {
+		if k.issue.Parent != nil && strings.EqualFold(k.issue.Parent.Repo, repo) && k.issue.Parent.N == epic.N {
+			add(k)
+		}
+	}
+	sort.Slice(kids, func(i, j int) bool { return kids[i].issue.N < kids[j].issue.N })
+	return kids
+}
+
+// epicDispatch is the running or paused dispatch on epicKey or owning one of issueKeys (lowercase).
+func epicDispatch(dispatches []inbox.Dispatch, epicKey string, issueKeys map[string]bool) (inbox.Dispatch, bool) {
+	for _, dp := range dispatches {
+		if dp.State != "running" && dp.State != "paused" {
+			continue
+		}
+		mine := epicKey != "" && dp.Epic != nil && strings.EqualFold(*dp.Epic, epicKey)
+		for _, l := range dp.Lanes {
+			mine = mine || issueKeys[lower(l.Key)]
+		}
+		if mine {
+			return dp, true
+		}
+	}
+	return inbox.Dispatch{}, false
+}
+
+// epicRunActions is Open dispatch when a dispatch owns the epic, else Run epic when an issue is ready.
+func epicRunActions(epicKey string, dispatched bool, ready int) []inbox.Action {
+	switch {
+	case dispatched:
+		return []inbox.Action{inbox.Open("d", "Open dispatch", "#/dispatches")}
+	case ready > 0:
+		return []inbox.Action{inbox.Open("d", "Run epic", "#/dispatches?new="+url.QueryEscape(epicKey)).WithPrimary()}
+	}
+	return nil
 }
 
 // latestByIssue maps "owner/name#n" (lowercase) to its newest session record.
@@ -489,11 +535,7 @@ func (s *Service) nextStep(f *Feature, docs string) {
 			f.Bay = "running"
 			f.Next = fmt.Sprintf("%d open, %d in review, %d done.", f.Counts.Open, f.Counts.Review, f.Counts.Done)
 		}
-		if f.Dispatch != nil {
-			add(inbox.Open("d", "Open dispatch", "#/dispatches"))
-		} else if f.Counts.Ready > 0 {
-			add(inbox.Open("d", "Run epic", "#/dispatches?new="+url.QueryEscape(f.Epic.Key)).WithPrimary())
-		}
+		add(epicRunActions(f.Epic.Key, f.Dispatch != nil, f.Counts.Ready)...)
 	}
 	add(inbox.Open("r", "Read PRD", f.PRDRoute))
 }

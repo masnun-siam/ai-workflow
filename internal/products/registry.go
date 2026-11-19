@@ -43,6 +43,7 @@ type Registry struct {
 	gh  GH
 	bus *events.Bus
 	mu  sync.Mutex // serialises registry mutations inside this process (files are also flocked)
+	biz businessState
 }
 
 func New(h *home.Home, c GH, bus *events.Bus) *Registry {

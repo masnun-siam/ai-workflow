@@ -99,6 +99,36 @@ func TestMissing(t *testing.T) {
 	}
 }
 
+func TestTooOld(t *testing.T) {
+	for _, c := range []struct {
+		version string
+		tooOld  bool
+	}{
+		{"0.28.0", true}, {"1.1.9", true}, {"1.2.0", false}, {"1.3.0", false},
+		{"1.10.0", false}, {"1", false}, {"abc", false}, {"1.2.x", false},
+	} {
+		t.Run(c.version, func(t *testing.T) {
+			cfg, install := setup(t, true)
+			write(t, filepath.Join(cfg, "plugins", "installed_plugins.json"),
+				`{"plugins":{"blubird@agentic-workflow":[{"scope":"user","installPath":`+jstr(install)+`,"version":`+jstr(c.version)+`}]}}`)
+			st := newMgr(t).Status()
+			if st.MinVersion != "1.2.0" || st.TooOld != c.tooOld || st.Version != c.version {
+				t.Fatalf("status %+v", st)
+			}
+			b, _ := json.Marshal(st)
+			if !strings.Contains(string(b), `"min_version":"1.2.0"`) || !strings.Contains(string(b), `"too_old":`) {
+				t.Fatalf("json %s", b)
+			}
+		})
+	}
+	t.Run("not installed", func(t *testing.T) {
+		setup(t, false)
+		if st := newMgr(t).Status(); st.TooOld || st.MinVersion != "1.2.0" {
+			t.Fatalf("status %+v", st)
+		}
+	})
+}
+
 func TestStaleInstallPathIsMissing(t *testing.T) {
 	cfg, _ := setup(t, false)
 	write(t, filepath.Join(cfg, "plugins", "installed_plugins.json"),

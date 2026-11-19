@@ -83,7 +83,8 @@ var steps = fSteps{
 	{ID: "refine-issues", Source: "blubird", Skill: "refine-issues", RunsIn: prompts.InIssue, Stage: "refine", Label: "Refine issues"},
 	{ID: "implement-issue", Source: "blubird", Skill: "implement-issue", RunsIn: prompts.InIssue, Stage: "implement", Label: "Implement issue"},
 	{ID: "verifier-locally", Source: "blubird", Skill: "verifier-locally", RunsIn: prompts.InIssue, Stage: "implement", Label: "Verify"},
-	{ID: "map-prds", Source: "blubird", Skill: "map-prds", RunsIn: prompts.InDocs, Stage: "prd,ops", Label: "Map PRDs"},
+	{ID: "refine-docs", Source: "blubird", Skill: "refine-docs", RunsIn: prompts.InDocs, Stage: "docs", Label: "Refine docs"},
+	{ID: "security-sweep", Source: "blubird", Skill: "security-sweep", RunsIn: prompts.InDocs, Stage: "ops", Label: "Security sweep"},
 	{ID: "agentic-onboard", Source: "blubird", Skill: "agentic-onboard", RunsIn: prompts.InRepo, Stage: "ops", Label: "Agentic onboard"},
 	{ID: "skill-feedback", Source: "blubird", Skill: "skill-feedback", RunsIn: prompts.InRepo, Stage: "ops", Label: "Skill feedback"},
 	{ID: "day-end-reconcile", Source: "blubird", Skill: "day-end-reconcile", RunsIn: prompts.InNone, Stage: "me", Label: "Day end"},
@@ -245,14 +246,14 @@ func TestRiverStagesFromSnapshots(t *testing.T) {
 		repo: []inbox.ReleaseRepo{{Repo: "acme/api", Head: "staging", Base: "master", Ahead: ptr(3), Open: ptr("r-1")}, {Repo: "acme/web", Head: "staging", Base: "master", Ahead: ptr(2)}, {Repo: "acme/x", Ahead: ptr(0)}},
 	}
 	r := f.svc.River(context.Background(), "ACME/docs", "")
-	if r.Product != "acme/docs" || len(r.Stages) != 7 {
+	if r.Product != "acme/docs" || len(r.Stages) != 8 {
 		t.Fatalf("river %+v", r)
 	}
 	var order []string
 	for _, s := range r.Stages {
 		order = append(order, s.ID)
 	}
-	if strings.Join(order, ",") != "prd,tasks,refine,implement,review,release,notify" {
+	if strings.Join(order, ",") != "docs,prd,tasks,refine,implement,review,release,notify" {
 		t.Fatalf("stage order %v", order)
 	}
 	if got := ids(cardsOf(r, "prd")); got != "prd:draft,prd:rev,prd:appr" {
@@ -371,8 +372,26 @@ func TestRiverNeedMatchesInboxAndAsk(t *testing.T) {
 	if c10.Actions[0].Key != "o" || c10.Actions[0].Open == "" {
 		t.Errorf("card actions %+v", c10.Actions)
 	}
-	if st := r.Stages[3]; !st.Hot {
+	if st := r.Stages[4]; !st.Hot {
 		t.Error("implement stage should be hot")
+	}
+}
+
+func TestRiverDocsSession(t *testing.T) {
+	f := newFx(t)
+	live := sessions.Record{ID: "20261112T090000000001Z-eeeeeeee", Step: "refine-docs", Command: "/blubird:refine-docs billing", Args: "billing",
+		Repo: "acme/docs", Status: sessions.StRunning, StartedAt: "2026-11-12T09:00:00Z"}
+	f.sess.recs = []sessions.Record{live}
+	r := f.svc.River(context.Background(), "acme/docs", "")
+	if st := r.Stages[0]; st.ID != "docs" || st.Name != "Docs" || st.Skills != "collect-docs · refine-docs · business-code-validator" {
+		t.Fatalf("first stage %+v", st)
+	}
+	if st := r.Stages[1]; st.ID != "prd" || st.Skills != "create-prd" {
+		t.Fatalf("prd stage %+v", st)
+	}
+	cards := cardsOf(r, "docs")
+	if len(cards) != 1 || cards[0].ID != "session:"+live.ID || !cards[0].Live || cards[0].Stage != "docs" {
+		t.Fatalf("docs cards %+v", cards)
 	}
 }
 
@@ -478,7 +497,7 @@ func TestOps(t *testing.T) {
 	c := 1.2
 	f.sess.recs = []sessions.Record{
 		{ID: "20261110T090000000001Z-aaaaaaaa", Step: "agentic-onboard", Repo: "acme/api", Status: sessions.StDone, StartedAt: "2026-11-10T09:00:00Z", Cost: &c},
-		{ID: "20261111T090000000001Z-bbbbbbbb", Step: "map-prds", Repo: "acme/docs", Status: sessions.StDone, StartedAt: "2026-11-11T09:00:00Z"},
+		{ID: "20261111T090000000001Z-bbbbbbbb", Step: "security-sweep", Repo: "acme/docs", Status: sessions.StDone, StartedAt: "2026-11-11T09:00:00Z"},
 	}
 	o := f.svc.Ops(context.Background(), "acme/docs", "")
 	var got []string
@@ -487,7 +506,7 @@ func TestOps(t *testing.T) {
 		got = append(got, r.Step)
 		rows[r.Step] = r
 	}
-	if strings.Join(got, ",") != "map-prds,agentic-onboard,skill-feedback" {
+	if strings.Join(got, ",") != "security-sweep,agentic-onboard,skill-feedback" {
 		t.Fatalf("rows %v", got)
 	}
 	ao := rows["agentic-onboard"]
@@ -501,8 +520,11 @@ func TestOps(t *testing.T) {
 	if b := ao.Actions[0].Body.(map[string]any); b["repo"] != "acme/docs" || ao.Actions[0].Key != "r" {
 		t.Errorf("next target %+v", ao.Actions[0])
 	}
-	if rows["map-prds"].Scope != "docs repo" || rows["map-prds"].Summary != "last run: done 11 Nov" {
-		t.Errorf("map-prds %+v", rows["map-prds"])
+	if rows["security-sweep"].Scope != "docs repo" || rows["security-sweep"].Summary != "last run: done 11 Nov" {
+		t.Errorf("security-sweep %+v", rows["security-sweep"])
+	}
+	if _, ok := rows["refine-docs"]; ok {
+		t.Error("docs steps are not Ops rows")
 	}
 	if rows["skill-feedback"].Scope != "any repo" || rows["skill-feedback"].Summary != "never run" || len(rows["skill-feedback"].Targets) != 1 {
 		t.Errorf("skill-feedback %+v", rows["skill-feedback"])
@@ -633,7 +655,7 @@ func TestRoutes(t *testing.T) {
 		_ = json.Unmarshal(w.Body.Bytes(), &m)
 		return w.Code, m
 	}
-	if code, m := get("/api/river?product=acme/docs"); code != 200 || len(m["stages"].([]any)) != 7 {
+	if code, m := get("/api/river?product=acme/docs"); code != 200 || len(m["stages"].([]any)) != 8 {
 		t.Errorf("river %d %v", code, m)
 	}
 	if code, m := get("/api/river?product=nope/none"); code != 400 || m["error"] == nil {

@@ -19,6 +19,7 @@ import { Features } from "../screens/Features";
 import { Onboarding, Rail, Topbar } from "../components/Shell";
 import { SessionPage } from "../screens/SessionPage";
 import { Settings } from "../screens/Settings";
+import { blubirdAction } from "../screens/settings/Blubird";
 import { http } from "../api/http";
 import { activityTab, mutate, chooseProduct, currentRepo, currentView, loadMany, repoList, repos, status, load } from "../state/data";
 import { hintsFor, resolveKey } from "../state/keymap";
@@ -61,6 +62,7 @@ function Banners() {
       {!connected.value && <div class="banner" role="status">Offline: reconnecting to setu… What you see may be out of date.</div>}
       {st.away.active && <div class="banner" role="status">{awayLabel(st.away)}: Claude answers what it can and holds the rest. <Btn small onClick={() => mutate(() => http.send("POST", "/api/away/stop", {}), "Welcome back", ["status", "inbox"])}>I'm back</Btn></div>}
       {!st.blubird.installed && <div class="banner" role="alert">blubird is not installed, so its skills are disabled. <Btn small onClick={() => goScreen("settings")}>Open settings</Btn></div>}
+      {st.blubird.too_old && <div class="banner" role="alert">blubird {st.blubird.version} is older than {st.blubird.min_version}, so some skills are disabled. <Btn small disabled={!!st.blubird.busy} onClick={() => void blubirdAction("update")}>{st.blubird.busy === "updating" ? "Updating…" : "Update"}</Btn></div>}
       {!st.gh.ok && <div class="banner bad" role="alert">GitHub CLI is not signed in{st.gh.error ? `: ${st.gh.error}` : ""}. Run <code>gh auth login</code> in a terminal, then reload.</div>}
     </>
   );
