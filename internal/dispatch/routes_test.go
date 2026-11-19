@@ -1,6 +1,7 @@
 package dispatch
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -238,5 +239,36 @@ func TestContinueLaneRoute(t *testing.T) {
 	}
 	if l := e.lane(5); l.Handle == nil || l.Handle.Session != "S1" || l.Stalled != "" || len(l.Outbox) != 0 {
 		t.Fatalf("%+v", l)
+	}
+}
+
+func TestCreateNeedsRepoMap(t *testing.T) {
+	e := newEnv(t)
+	m := mux(t, e)
+	e.gh.Add(epicRule([]node{{n: 2, state: "OPEN", refined: true}}))
+	var asked []string
+	needs := true
+	e.svc.d.NeedsMap = func(_ context.Context, repo string) (string, bool) {
+		asked = append(asked, repo)
+		return repo, needs
+	}
+	code, body := call(m, "POST", "/api/dispatches", `{"epic":"o/r#1"}`)
+	if code != 409 || body["error"] != "needs a repo map" || body["repo"] != "o/r" {
+		t.Fatal(code, body)
+	}
+	if strings.Join(asked, ",") != "o/r" {
+		t.Fatalf("asked %v", asked)
+	}
+	if _, body = call(m, "GET", "/api/dispatches", ""); len(body["dispatches"].([]any)) != 0 {
+		t.Fatalf("dispatch stored: %v", body)
+	}
+	// plan is a preview: never gated
+	asked = nil
+	if code, body = call(m, "POST", "/api/dispatches/plan", `{"epic":"o/r#1"}`); code != 200 || len(asked) != 0 {
+		t.Fatal(code, body, asked)
+	}
+	needs = false
+	if code, body = call(m, "POST", "/api/dispatches", `{"epic":"o/r#1"}`); code != 201 {
+		t.Fatal(code, body)
 	}
 }

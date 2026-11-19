@@ -522,3 +522,73 @@ func TestRoutesAndCleanup(t *testing.T) {
 	}
 	_ = http.StatusOK
 }
+
+func TestStartNeedsRepoMap(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	e.claudeRule("--print", e.file("ok.jsonl", okStream("nm", 0, 1, 1)), 0)
+	fr := e.m.d.Repos.(*fakeRepos)
+	fr.slugs["local/scratch"] = t.TempDir()
+	fr.needsMap = map[string]bool{"acme/app": true, "local/scratch": true}
+	gated := func(req StartRequest, slug string) {
+		t.Helper()
+		before, calls := len(e.m.List(Filter{})), len(e.claudeCalls())
+		_, err := e.m.StartSession(ctx, req)
+		ee, ok := errs.As(err)
+		if kind(err) != "conflict" || err.Error() != "needs a repo map" || !ok || ee.Extra["repo"] != slug {
+			t.Errorf("%s on %s: %v", req.Step, req.Repo, err)
+		}
+		if len(e.m.List(Filter{})) != before || len(e.claudeCalls()) != calls {
+			t.Errorf("%s on %s started something", req.Step, req.Repo)
+		}
+	}
+	for _, req := range []StartRequest{
+		{Step: "create-prd", Repo: "acme/app"},
+		{Step: "refine-issues", Args: "3", Repo: "acme/app"},
+		{Step: "implement-issue", Args: "3", Repo: "acme/app"},
+		{Step: "after-merge", Args: "3", Repo: "acme/app"},
+		// an issue URL that overrides the pick to an unmapped repo
+		{Step: "refine-issues", Args: "https://github.com/acme/app/issues/3", Repo: "acme/docs"},
+		{Step: "project-coordinator", Args: "3", Repo: "acme/app"},
+	} {
+		gated(req, "acme/app")
+	}
+	// the map gate answers before "no GitHub remote yet"
+	gated(StartRequest{Step: "implement-issue", Args: "1", Repo: "local/scratch"}, "local/scratch")
+
+	// ungated steps start as before
+	for _, req := range []StartRequest{
+		{Step: "small-change", Args: "x", Repo: "acme/app"},
+		{Step: "report-bug", Args: "it breaks", Repo: "acme/app"},
+		{Step: "pr-grind", Args: "4", Repo: "acme/app"},
+		{Text: "free text", Repo: "acme/app"},
+	} {
+		rec, err := e.m.StartSession(ctx, req)
+		if err != nil {
+			t.Errorf("%s: %v", req.Step, err)
+			continue
+		}
+		e.status(rec.ID, StDone)
+		e.settled(rec.ID)
+	}
+	// a mapped repo (or one in a product) starts
+	fr.needsMap["acme/app"] = false
+	rec, err := e.m.StartSession(ctx, StartRequest{Step: "implement-issue", Args: "3", Repo: "acme/app"})
+	mustNoErr(t, err)
+	e.status(rec.ID, StDone)
+	e.settled(rec.ID)
+
+	// the route answers 409 {error, repo}
+	fr.needsMap["acme/app"] = true
+	srv := server.New(server.Config{Port: 8420}, e.bus, Routes(RouteDeps{Manager: e.m}))
+	r := httptest.NewRequest("POST", "/api/sessions", strings.NewReader(`{"step":"create-prd","repo":"acme/app"}`))
+	r.Host = "127.0.0.1:8420"
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, r)
+	var out map[string]any
+	json.Unmarshal(w.Body.Bytes(), &out)
+	if w.Code != http.StatusConflict || out["error"] != "needs a repo map" || out["repo"] != "acme/app" {
+		t.Fatalf("%d %v", w.Code, out)
+	}
+}

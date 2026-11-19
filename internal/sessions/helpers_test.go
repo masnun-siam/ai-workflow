@@ -145,7 +145,14 @@ func (fakePrompts) Agent(name string) (string, []string, error) {
 	return "", nil, errors.New("no agent " + name)
 }
 
-type fakeRepos struct{ slugs map[string]string } // slug -> dir
+type fakeRepos struct {
+	slugs    map[string]string // slug -> dir
+	needsMap map[string]bool   // slug -> NeedsMap answer (default false)
+}
+
+func (f *fakeRepos) NeedsMap(ctx context.Context, repo string) (string, bool) {
+	return repo, f.needsMap[repo]
+}
 
 func (f *fakeRepos) Resolve(ctx context.Context, repo string) (string, string, error) {
 	if p, ok := f.slugs[repo]; ok {

@@ -202,6 +202,7 @@ func Build(ctx context.Context, h *home.Home, bus *events.Bus, version, binDir s
 		Login:     func(ctx context.Context) string { return a.Auth.Get(ctx).Login },
 		SkillDir:  a.Blubird.SkillDir,
 		IdleGuard: func() bool { return a.Settings.Get().IdleGuard },
+		NeedsMap:  a.Products.NeedsMap,
 	})
 	a.Dispatch = disp
 
