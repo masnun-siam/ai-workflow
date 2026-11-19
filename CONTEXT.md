@@ -11,7 +11,7 @@ A Documentation Repo plus the code repos listed in its `.blubird/repos.json`. se
 The repo holding `docs/prds/` for a product. `docs`-run steps (`collect-docs`, `refine-docs`, `business-code-validator`, `create-prd`, `create-tasks`, `security-sweep`, `project-coordinator`) run in its checkout.
 
 **PRD**:
-The product requirements for one feature, at `docs/prds/<slug>.md`, written by blubird `create-prd`. Status Draft, In review or Approved; only Approved is split into tasks.
+The product requirements for one feature, at `docs/prds/<slug>.md`, written by blubird `create-prd`. Status Draft, In review or Approved; only Approved is split into tasks. Approved (and the legacy Done) is locked: read-only in setu, changed through a new PRD or one small task.
 
 **Business doc**:
 blubird 1.2's lasting record of what is live for one feature, at `docs/business/<module>/<feature>.md` in the Documentation Repo: rules `R-n` with a Delivery mark and a dated Timeline. setu only reads them and shows the result of blubird's checker (the docs gate); the docs skills write them.

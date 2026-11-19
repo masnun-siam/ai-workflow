@@ -32,6 +32,20 @@ async function startRun(body: Record<string, unknown>, label: string): Promise<S
   return mutate(() => http.send<Session>("POST", "/api/sessions", { ...body, guard: true }), `Started ${label}`, ["features", "sessions"]);
 }
 
+/** An Approved or Done PRD is locked: the server refuses edits, and a change is a new PRD or one task. */
+const isLocked = (f: Feature) => f.status === "Approved" || f.status === "Done";
+
+/** The create-prd start for a change to a locked PRD. Its args stay on one line (create-prd rejects newlines). */
+export function newPrdRun(f: Feature, text: string) {
+  return { step: "create-prd", repo: f.product, product: f.product, args: `${text.trim()} — a change to the approved PRD ${f.path}; name that PRD under "Related"` };
+}
+
+/** The small-change start for a change to a locked PRD: filed under the epic when there is one, else in the docs repo. */
+export function smallTaskRun(f: Feature, text: string) {
+  const parent = f.epic ? `\n\nFile it as a child of epic #${f.epic.n} (${f.epic.key}).` : "";
+  return { step: "small-change", repo: f.epic ? f.epic.repo : f.product, args: `${text.trim()}\n\nIt changes the approved PRD ${f.path}.${parent}` };
+}
+
 function BuildMap({ f }: { f: Feature }) {
   if (!f.issues.length && !f.done.length) return null;
   return (
@@ -125,12 +139,46 @@ function IssuesTab({ f }: { f: Feature }) {
   );
 }
 
+/** The PRD tab's bar for a locked PRD: no Edit, and a change goes through a new PRD or one small task (FR-4). */
+function LockedPrd({ f, file }: { f: Feature; file: PRDFile | null }) {
+  const [newPrd, setNewPrd] = useState("");
+  const [task, setTask] = useState("");
+  return (
+    <>
+      <div class="acts">
+        <Tag>Locked</Tag>
+        <span class="dim">{file ? `${file.path}${file.branch ? ` on ${file.branch}` : ""}` : "Loading…"} · approved PRDs are read-only: change it through a new PRD or one small task</span>
+      </div>
+      <Pane label="change approved work">
+        <form class="acts" onSubmit={async (e) => {
+          e.preventDefault();
+          if (!newPrd.trim()) return;
+          const s = await startRun(newPrdRun(f, newPrd), "the new PRD");
+          if (s) { setNewPrd(""); nav(`#/sessions/${s.id}`); }
+        }}>
+          <input class="grow" placeholder="What should change?" aria-label="What should change, for a new PRD" value={newPrd} onInput={(e) => setNewPrd((e.target as HTMLInputElement).value)} />
+          <Btn small type="submit" disabled={!newPrd.trim()}>New PRD for this change</Btn>
+        </form>
+        <form class="acts" onSubmit={async (e) => {
+          e.preventDefault();
+          if (!task.trim()) return;
+          if (await startRun(smallTaskRun(f, task), "filing the task")) setTask("");
+        }}>
+          <input class="grow" placeholder={f.epic ? "A small task for this epic" : "A small task, no product decision"} aria-label="The small task to file" value={task} onInput={(e) => setTask((e.target as HTMLInputElement).value)} />
+          <Btn small type="submit" disabled={!task.trim()}>One small task</Btn>
+        </form>
+      </Pane>
+    </>
+  );
+}
+
 function PrdTab({ f }: { f: Feature }) {
   const [file, setFile] = useState<PRDFile | null>(null);
   const [err, setErr] = useState("");
   const [edit, setEdit] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
   const [ask, setAsk] = useState("");
+  const locked = isLocked(f);
   const toc = useMemo(() => (file ? headings(file.text) : []), [file?.text]);
   const get = () => { setErr(""); setConflict(false); http.get<PRDFile>(`/api/prd?repo=${encodeURIComponent(f.product)}&path=${encodeURIComponent(f.path)}`).then(setFile, (e) => setErr(describeError(e))); };
   useEffect(get, [f.product, f.path]);
@@ -141,31 +189,35 @@ function PrdTab({ f }: { f: Feature }) {
       setFile(nf); setEdit(null); toast(`Saved and committed on ${nf.branch || "the current branch"} (not pushed)`); void loadMany(["features"]);
     } catch (e) {
       const st = (e as { status?: number }).status;
-      if (st === 409) setConflict(true);
+      if (st === 409) { setConflict(true); void loadMany(["features"]); }
       toast(describeError(e), "error");
     }
   };
   return (
     <>
       {err && <div class="banner bad" role="alert">{err}</div>}
-      {conflict && <div class="banner bad" role="alert">The PRD changed on disk since you opened it. <Btn small onClick={() => { setEdit(null); get(); }}>Reload (drops your edit)</Btn></div>}
-      <div class="acts">
-        {edit === null
-          ? <Btn small disabled={!file} onClick={() => setEdit(file!.text)}>Edit</Btn>
-          : <><Btn small primary onClick={save}>Save and commit</Btn><Btn small onClick={async () => { if (edit === file?.text || (await askConfirm("Discard your edit?", true))) setEdit(null); }}>Discard</Btn></>}
-        <span class="dim">{file ? `${file.path}${file.branch ? ` on ${file.branch}` : ""}` : "Loading…"}{edit !== null ? " · saving commits only this file, it does not push" : ""}</span>
-      </div>
-      <Pane label="ask claude to change it">
-        <form class="form" onSubmit={async (e) => {
-          e.preventDefault();
-          if (!ask.trim()) return;
-          const s = await startRun({ step: "create-prd", repo: f.product, product: f.product, args: `${f.path}\n\nUpdate this PRD: ${ask.trim()}` }, "the PRD update");
-          if (s) { setAsk(""); nav(`#/sessions/${s.id}`); }
-        }}>
-          <textarea rows={3} aria-label="What should change in the PRD" placeholder="What should change? Claude updates the PRD and asks you when it is unsure." value={ask} onInput={(e) => setAsk((e.target as HTMLTextAreaElement).value)} />
-          <div class="acts"><Btn small type="submit" disabled={!ask.trim()}>Start update</Btn></div>
-        </form>
-      </Pane>
+      {conflict && <div class="banner bad" role="alert">The PRD changed on disk since you opened it. <Btn small onClick={() => { setEdit(null); get(); void loadMany(["features"]); }}>Reload (drops your edit)</Btn></div>}
+      {locked ? <LockedPrd f={f} file={file} /> : (
+        <>
+          <div class="acts">
+            {edit === null
+              ? <Btn small disabled={!file} onClick={() => setEdit(file!.text)}>Edit</Btn>
+              : <><Btn small primary onClick={save}>Save and commit</Btn><Btn small onClick={async () => { if (edit === file?.text || (await askConfirm("Discard your edit?", true))) setEdit(null); }}>Discard</Btn></>}
+            <span class="dim">{file ? `${file.path}${file.branch ? ` on ${file.branch}` : ""}` : "Loading…"}{edit !== null ? " · saving commits only this file, it does not push" : ""}</span>
+          </div>
+          <Pane label="ask claude to change it">
+            <form class="form" onSubmit={async (e) => {
+              e.preventDefault();
+              if (!ask.trim()) return;
+              const s = await startRun({ step: "create-prd", repo: f.product, product: f.product, args: `${f.path}\n\nUpdate this PRD: ${ask.trim()}` }, "the PRD update");
+              if (s) { setAsk(""); nav(`#/sessions/${s.id}`); }
+            }}>
+              <textarea rows={3} aria-label="What should change in the PRD" placeholder="What should change? Claude updates the PRD and asks you when it is unsure." value={ask} onInput={(e) => setAsk((e.target as HTMLTextAreaElement).value)} />
+              <div class="acts"><Btn small type="submit" disabled={!ask.trim()}>Start update</Btn></div>
+            </form>
+          </Pane>
+        </>
+      )}
       {file && edit === null && toc.length > 1 && (
         <div class="prd-wrap">
           <nav class="toc" aria-label="Table of contents"><ul>{toc.map((h) => <li key={h.id} class={`l${h.level}`}><a href={`#${h.id}`} onClick={(e) => { e.preventDefault(); document.getElementById(h.id)?.scrollIntoView({ block: "start" }); }}>{h.text}</a></li>)}</ul></nav>
