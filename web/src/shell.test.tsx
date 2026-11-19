@@ -117,7 +117,9 @@ describe("confirm, hints, palette", () => {
 
   it("lists page jumps and renders the describe row as an option", () => {
     expect(matchPages("sett").map((p) => p.id)).toEqual(["settings"]);
-    expect(matchPages("")).toHaveLength(10);
+    expect(matchPages("")).toHaveLength(11);
+    expect(matchPages("docs")).toEqual([{ id: "docs", label: "Docs", key: "" }]);
+    expect(matchPages("sett")[0]!.key).toBe("0");
     paletteOpen.value = true;
     const html = renderToString(<Palette />);
     paletteOpen.value = false;

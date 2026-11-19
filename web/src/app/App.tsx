@@ -16,6 +16,7 @@ import { Activity } from "../screens/Activity";
 import { Changes } from "../screens/Changes";
 import { Dispatches } from "../screens/Dispatches";
 import { Features } from "../screens/Features";
+import { Docs } from "../screens/Docs";
 import { Onboarding, Rail, Topbar } from "../components/Shell";
 import { SessionPage } from "../screens/SessionPage";
 import { Settings } from "../screens/Settings";
@@ -42,6 +43,7 @@ function Screen() {
     case "river": return <River />;
     case "inbox": return <Inbox />;
     case "features": return <Features />;
+    case "docs": return <Docs />;
     case "changes": return <Changes />;
     case "dispatches": return <Dispatches />;
     case "activity": return <Activity />;

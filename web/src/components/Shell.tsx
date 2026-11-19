@@ -5,7 +5,7 @@ import { http } from "../api/http";
 import type { Repo } from "../api/types";
 import { chooseRepo, currentRepo, mutate, only, repoList, repos, settings, status } from "../state/data";
 import { MODES, next, prefs, setPref } from "../state/prefs";
-import { goScreen, nav, route, SCREENS, setParam, type ScreenId } from "../state/route";
+import { digitFor, goScreen, nav, route, SCREENS, setParam, type ScreenId } from "../state/route";
 import { dispatchingCount, needCount, runningCount } from "../state/select";
 import { detailOpen, helpOpen, narrow, navOpen, paletteOpen, repoOpen } from "../state/ui";
 import { AWAY_PRESETS, awayLabel } from "../state/away";
@@ -222,13 +222,14 @@ function NavItems() {
   const count = (id: ScreenId) => (id === "inbox" ? needCount.value : id === "activity" ? runningCount.value : id === "dispatches" ? dispatchingCount.value : 0);
   return (
     <>
-      {SCREENS.map(([id, name], i) => {
+      {SCREENS.map(([id, name]) => {
         const on = cur === id;
+        const key = digitFor(id);
         const n = count(id);
         return (
-          <button key={id} type="button" class={`nv${on ? " on" : ""}${i === 5 ? " sep" : ""}`} aria-current={on ? "page" : undefined}
+          <button key={id} type="button" class={`nv${on ? " on" : ""}${id === "river" ? " sep" : ""}`} aria-current={on ? "page" : undefined}
             onClick={() => { detailOpen.value = false; navOpen.value = false; goScreen(id); }}>
-            <kbd>{i === 9 ? 0 : i + 1}</kbd>{name}
+            {key ? <kbd>{key}</kbd> : <kbd class="nokey" aria-hidden="true">0</kbd>}{name}
             {n > 0 && <span class={`n${id === "inbox" ? "" : " quiet"}`} aria-label={`${n} ${id === "inbox" ? "need you" : "running"}`}>{n}</span>}
           </button>
         );

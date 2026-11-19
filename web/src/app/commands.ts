@@ -20,7 +20,7 @@ export const screenActionList = (): readonly Action[] => (route.value.screen ===
 export function parentScreen(): ScreenId | null {
   const r = route.value;
   if (r.screen === "prd") return "features";
-  return r.id && (r.screen === "features" || r.screen === "dispatches" || r.screen === "activity") ? r.screen : null;
+  return r.id && (r.screen === "features" || r.screen === "docs" || r.screen === "dispatches" || r.screen === "activity") ? r.screen : null;
 }
 
 export function runCommand(c: Cmd): void {
@@ -72,7 +72,7 @@ export function runCommand(c: Cmd): void {
       if (screen === "releases") { releaseKey(c.key); return; }
       if (screen === "me") { const a = me.value?.actions.find((x) => x.key === c.key); if (a) void exec(a); return; }
       if (screen === "features" && route.value.id && (c.key === "[" || c.key === "]")) {
-        const tabs = ["issues", "prd", "review", "sessions"];
+        const tabs = ["issues", "prd", "business", "review", "sessions"];
         const cur = Math.max(0, tabs.indexOf(route.value.query.tab ?? ""));
         setParam("tab", tabs[(cur + (c.key === "]" ? 1 : tabs.length - 1)) % tabs.length]!, true);
         return;

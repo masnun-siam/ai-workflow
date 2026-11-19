@@ -4,7 +4,7 @@ import { ApiFailure } from "../api/client";
 import type { RegistryStep, SessionList } from "../api/extra";
 import type {
   ChangesList, Coordinator, Dispatch, FeatureList, GrindStatus, InboxList, Me, NotifySettings, Ops, Panel, Product, Repo, ReleaseRepo,
-  Release, ReviewConfig, River, Settings, Status, Transcript, TranscriptEvent, Session, Blubird, Slug,
+  Release, ReviewConfig, River, Settings, Status, Transcript, TranscriptEvent, Session, Blubird, Slug, BusinessView,
 } from "../api/types";
 import type { LoadKey, View } from "./refetch";
 import { describeError } from "./actions";
@@ -42,6 +42,10 @@ export const registry = signal<RegistryStep[]>([]);
 /** Features of every product (old aiw opened Features on all repos; the page filters by `?only=`). */
 export const features = signal<FeatureList[] | null>(null);
 export const changes = signal<ChangesList | null>(null);
+/** The selected product's business docs, gate and validation epics (Docs page). */
+export const business = signal<({ product: Slug } & BusinessView) | null>(null);
+/** Bumped after each business load, so an open doc reader re-fetches its file. */
+export const businessRev = signal(0);
 export const loadErrors = signal<Record<string, string>>({});
 export type ActivityTab = "sessions" | "coordinators" | "grinds" | "panels";
 export const activityTab = signal<ActivityTab>("sessions");
@@ -158,6 +162,13 @@ const loaders: Record<LoadKey, Loader> = {
   panels: async () => (panels.value = (await http.get<{ panels: Panel[] }>("/api/review")).panels),
   registry: async () => (registry.value = (await http.get<{ steps: RegistryStep[] }>("/api/registry")).steps),
   changes: async () => { const o = only.peek(); changes.value = await http.get<ChangesList>(`/api/changes${o ? `?repo=${encodeURIComponent(o)}` : ""}`); },
+  business: async () => {
+    const p = product.value;
+    if (!p) { business.value = null; return; }
+    const [o, n] = p.split("/");
+    business.value = { product: p, ...(await http.get<BusinessView>(`/api/products/${encodeURIComponent(o!)}/${encodeURIComponent(n!)}/business`)) };
+    businessRev.value++;
+  },
   features: async () => {
     const ps = products.value ?? (await http.get<{ products: Product[] }>("/api/products")).products;
     features.value = await Promise.all(ps.map((p) => http.get<FeatureList>(`/api/features?product=${encodeURIComponent(p.docs_repo)}`)));

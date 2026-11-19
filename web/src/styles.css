@@ -648,3 +648,18 @@ details.meta[open]>summary{margin-bottom:6px}
 /* An inline popover opens in the flow and pushes what is below it down, so it never covers a button. */
 .popw.inline{flex-direction:column;align-items:flex-end}
 .popw.inline .pop{position:static;margin-top:6px;width:240px;box-shadow:none}
+
+/* Docs page (business docs, gate, validation epics) and the doc reader */
+.nv kbd.nokey{visibility:hidden}
+.gate{border:1px solid var(--line);border-radius:var(--rc);padding:8px 10px;margin-bottom:12px;background:var(--p1)}
+.gate summary{cursor:pointer}
+.gate-line{display:inline-flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
+.gate-out{margin:8px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;font:12px "JetBrains Mono",monospace;color:var(--mu);max-height:320px;overflow-y:auto}
+.drow{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;padding:6px 8px;border:1px solid var(--line);border-radius:var(--rc);background:var(--p1);margin-bottom:4px;color:var(--tx);text-decoration:none}
+.drow:hover{background:var(--p2)}
+.drow:focus-visible{outline:2px solid var(--acc)}
+.drow .t{flex:1 1 240px;min-width:0;overflow-wrap:anywhere}
+.dcounts{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline}
+.vepic{border:1px solid var(--line);border-radius:var(--rc);padding:8px;margin:8px 0;background:var(--p1)}
+.doc-where{overflow-wrap:anywhere;min-width:0}
+.doc-pick{margin-bottom:8px;align-items:center}

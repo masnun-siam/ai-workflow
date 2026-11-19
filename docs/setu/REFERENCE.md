@@ -70,6 +70,12 @@ Channels per event: browser, ntfy, mac, push.
 
 Appearance (look, mode, layout) is not a server setting; it is kept in the browser (`setu.prefs.v1`).
 
+## UI routes
+
+Most pages are `#/<screen>` with a number key (README "Screens"). **Docs** (`#/docs`) has none: it lists the selected product's
+business docs, the docs gate and the business validation epics. A doc opens read-only at `#/docs/<encoded path>?product=<docs repo>`
+(Escape goes back to the list); a feature page's Business tab (`#/features/<slug>?product=&tab=business`) reads the same docs inline.
+
 ## Built-in prompts
 
 `release-pr`, `pr-grind`, `release-note`, `peer-review`, plus agent bodies `peer-reviewer` and `away-answerer`, in `prompts/`. Step registry: API.md §9. The fixed texts that version with the binary (`Headless`, `Reentry`, and `ReportBug`, the `report-bug` step's

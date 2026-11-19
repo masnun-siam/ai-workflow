@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { RegistryStep } from "../api/extra";
 import { registry } from "../state/data";
-import { goScreen, nav, SCREENS, type ScreenId } from "../state/route";
+import { digitFor, goScreen, nav, SCREENS, type ScreenId } from "../state/route";
 import { confirmReq, helpOpen, holdToast, openCreate, paletteOpen, releaseToast, startReq, toast, toastMsg } from "../state/ui";
 import { clamp } from "../state/ui";
 import { HINTS, hintsFor } from "../state/keymap";
@@ -19,7 +19,7 @@ type PalRow = { k: "skill"; s: RegistryStep } | { k: "go"; id: ScreenId; label: 
 /** Page-jump entries whose name matches the query (all of them for an empty query), with their number key. */
 export function matchPages(q: string): { id: ScreenId; label: string; key: string }[] {
   const s = q.trim().toLowerCase();
-  return SCREENS.map(([id, label], n) => ({ id, label, key: String((n + 1) % 10) })).filter((p) => !s || `${p.label} ${p.id}`.toLowerCase().includes(s));
+  return SCREENS.map(([id, label]) => ({ id, label, key: digitFor(id) })).filter((p) => !s || `${p.label} ${p.id}`.toLowerCase().includes(s));
 }
 
 export function Palette() {
@@ -66,7 +66,7 @@ export function Palette() {
                 </button>
               );
             }
-            if (row.k === "go") return <button key={`g-${row.id}`} {...props(n)} class={`pi${on ? " sel" : ""}`}><span class="c-w">→</span>Go to {row.label}<span class="r"><kbd>{row.key}</kbd></span></button>;
+            if (row.k === "go") return <button key={`g-${row.id}`} {...props(n)} class={`pi${on ? " sel" : ""}`}><span class="c-w">→</span>Go to {row.label}<span class="r">{row.key && <kbd>{row.key}</kbd>}</span></button>;
             if (row.k === "free") return <button key="free" {...props(n)} class={`pi${on ? " sel" : ""}`}><span class="c-w">›</span>Run as free text: <b>{q.trim()}</b><span class="r">{skills.length ? "" : "no skill matches"}</span></button>;
             return <button key="describe" {...props(n)} class={`pi${on ? " sel" : ""}`}><span class="c-w">+</span>Describe a feature or a fix{q.trim() ? <>: <b>{q.trim()}</b></> : null}<span class="r"><kbd>n</kbd></span></button>;
           })}
