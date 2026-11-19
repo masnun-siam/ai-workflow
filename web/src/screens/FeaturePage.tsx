@@ -40,6 +40,11 @@ export function newPrdRun(f: Feature, text: string) {
   return { step: "create-prd", repo: f.product, product: f.product, args: `${text.trim()} — a change to the approved PRD ${f.path}; name that PRD under "Related"` };
 }
 
+/** The create-prd args to update an unapproved PRD: one line (create-prd rejects newlines), each line break flattened to a space. */
+export function prdUpdateArgs(path: string, ask: string) {
+  return `${path} — update this PRD: ${ask.trim().replace(/\s*[\r\n]+\s*/g, " ")}`;
+}
+
 /** The small-change start for a change to a locked PRD: filed under the epic when there is one, else in the docs repo. */
 export function smallTaskRun(f: Feature, text: string) {
   const parent = f.epic ? `\n\nFile it as a child of epic #${f.epic.n} (${f.epic.key}).` : "";
@@ -209,7 +214,7 @@ function PrdTab({ f }: { f: Feature }) {
             <form class="form" onSubmit={async (e) => {
               e.preventDefault();
               if (!ask.trim()) return;
-              const s = await startRun({ step: "create-prd", repo: f.product, product: f.product, args: `${f.path}\n\nUpdate this PRD: ${ask.trim()}` }, "the PRD update");
+              const s = await startRun({ step: "create-prd", repo: f.product, product: f.product, args: prdUpdateArgs(f.path, ask) }, "the PRD update");
               if (s) { setAsk(""); nav(`#/sessions/${s.id}`); }
             }}>
               <textarea rows={3} aria-label="What should change in the PRD" placeholder="What should change? Claude updates the PRD and asks you when it is unsure." value={ask} onInput={(e) => setAsk((e.target as HTMLTextAreaElement).value)} />
