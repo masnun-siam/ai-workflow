@@ -3,6 +3,8 @@ package inbox
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -86,6 +88,10 @@ func (f fDispatch) Owned(repo string, issue, pr int) bool {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+type fCoords []Coordinator
+
+func (f fCoords) Coordinators() []Coordinator { return f }
 
 type fAway struct{ a Away }
 
@@ -191,7 +197,9 @@ func TestEveryKeptType(t *testing.T) {
 		PRDStatus: func(string) string { return "Draft" },
 		Releases:  fReleases{[]Release{{ID: "r-1", Repo: "acme/api", Stage: "notify", Note: &note, PR: &pn, UpdatedAt: "2026-11-12T09:00:00Z"}}},
 		Cleanup:   fCleanup{"acme/api": {5: {Uncommitted: []string{"a.go"}}}},
-		Now:       now,
+		Coordinators: fCoords{{Run: "20261112-090000", Repo: "acme/api", Live: true,
+			Queue: []CoordQueue{{Issue: 30, State: StateCoordStale, Title: "abandoned"}}}},
+		Now: now,
 	})
 	// the grind on PR 12 is paused, so pr_ready is blocked only if grind on; settings off -> ready
 	l := b.Build(context.Background(), "", "")
@@ -222,7 +230,7 @@ func TestEveryKeptType(t *testing.T) {
 	}
 	for _, ty := range []string{TGHAuth, TBlubirdMissing, TQuestion, TPRDApproval, TSessionFailed, TSessionStalled, TLimited, TQueued, TReviewCap,
 		TReviewApproved, TGrindPaused, TNeedsCleanup, TPRConflict, TPRReady, TReleaseNote, TDispatchNeeds, TDispatchHeld,
-		TDispatchStalled, TDispatchMerge, TDispatchLimited, TDispatchDone, TAwaySummary, TRepoUnpublished} {
+		TDispatchStalled, TDispatchMerge, TDispatchLimited, TDispatchDone, TAwaySummary, TRepoUnpublished, TCoordStale} {
 		if !got[ty] {
 			t.Errorf("missing item type %s", ty)
 		}
@@ -600,4 +608,71 @@ func (m *mutSessions) List(sessions.Filter) []sessions.Record {
 }
 func (m *mutSessions) Public(r sessions.Record) sessions.Session {
 	return sessions.Session{ID: r.ID, Title: r.Command, Status: r.Status}
+}
+
+func TestCoordStale(t *testing.T) {
+	co := Coordinator{Run: "20261112-090000", Repo: "Acme/API", Live: true, Queue: []CoordQueue{
+		{Issue: 30, State: "ok", Title: "fine"},
+		{Issue: 31, State: StateCoordStale, Title: "Abandoned"},
+	}}
+	cs := fCoords{co}
+	b := New(Deps{Coordinators: &cs, Products: fProducts{repo: []products.Repo{{Slug: "acme/api"}}}, Now: now})
+	build := func() []Item {
+		var out []Item
+		for _, it := range b.Build(context.Background(), "", "").Items {
+			if it.Type == TCoordStale {
+				out = append(out, it)
+			}
+		}
+		return out
+	}
+
+	got := build()
+	if len(got) != 1 {
+		t.Fatalf("one stale line: %+v", got)
+	}
+	it := got[0]
+	if it.Key != "coord_stale:20261112-090000:31" || it.Group != GFix || it.Kind != "Coordinator" || it.Title != "#31 Abandoned" ||
+		it.Repo == nil || *it.Repo != "acme/api" || len(it.Detail) != 1 || it.Detail[0] != CoordStaleHint ||
+		it.Links.Issue != "https://github.com/acme/api/issues/31" {
+		t.Fatalf("item: %+v", it)
+	}
+	if fmt.Sprint(it.Anchors) != "[issue:acme/api#31 coord:20261112-090000]" {
+		t.Errorf("anchors: %v", it.Anchors)
+	}
+	a := it.Actions
+	if len(a) != 2 || a[0].Key != "i" || a[0].Label != "Implement" || !a[0].Primary || a[0].Method != "POST" || a[0].Path != "/api/sessions" ||
+		a[1].Key != "o" || a[1].Label != "Open issue" || a[1].Open != "https://github.com/acme/api/issues/31" || a[1].Primary {
+		t.Fatalf("actions: %+v", a)
+	}
+	want := map[string]any{"step": "implement-issue", "repo": "acme/api", "issue": 31, "args": "31", "guard": true}
+	if !reflect.DeepEqual(a[0].Body, want) {
+		t.Errorf("implement body: %#v", a[0].Body)
+	}
+
+	// two stale lines give two items
+	cs[0].Queue = append(cs[0].Queue, CoordQueue{Issue: 32, State: StateCoordStale})
+	if got := build(); len(got) != 2 || got[0].Key != "coord_stale:20261112-090000:31" || got[1].Key != "coord_stale:20261112-090000:32" {
+		t.Fatalf("two lines: %+v", got)
+	}
+	// removing the lines removes the items on the next read
+	cs[0].Queue = []CoordQueue{{Issue: 30, State: "ok"}}
+	if got := build(); len(got) != 0 {
+		t.Fatalf("line removed: %+v", got)
+	}
+	// a run that is not live gives none
+	cs[0].Queue, cs[0].Live = []CoordQueue{{Issue: 31, State: StateCoordStale}}, false
+	if got := build(); len(got) != 0 {
+		t.Fatalf("not live: %+v", got)
+	}
+	// malformed lines (no state, no issue, no repo) give none and do not break the inbox
+	cs[0].Live = true
+	cs[0].Queue = []CoordQueue{{Issue: 31, State: ""}, {Issue: 0, State: StateCoordStale}}
+	if got := build(); len(got) != 0 {
+		t.Fatalf("malformed: %+v", got)
+	}
+	cs[0].Repo, cs[0].Queue = "", []CoordQueue{{Issue: 31, State: StateCoordStale}}
+	if got := build(); len(got) != 0 {
+		t.Fatalf("no repo: %+v", got)
+	}
 }

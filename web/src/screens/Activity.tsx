@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { http } from "../api/http";
-import type { CleanupItem } from "../api/types";
+import type { CleanupItem, Coordinator } from "../api/types";
 import { useFocusTrap, useLayer } from "../components/ui";
 import { activityTab, coordinators, grinds, inScope, mutate, panels, sessionList, type ActivityTab } from "../state/data";
 import { activityQuery, activityResult, RUNNING, runList } from "../state/select";
@@ -103,6 +103,16 @@ function Sessions() {
   );
 }
 
+/** blubird's queue state for an issue In progress and assigned to you with no open PR and no run on it. */
+export const COORD_STALE = "in-progress-stale";
+/** blubird's hint for COORD_STALE; internal/inbox CoordStaleHint carries the same text. */
+export const COORD_STALE_HINT = "In progress and assigned to you, but no open PR and no run on it.";
+
+function QueueRow({ q }: { q: Coordinator["queue"][number] }) {
+  if (q.state !== COORD_STALE) return <tr><td>#{q.issue}</td><td>{q.title}</td><td>{q.state}</td></tr>;
+  return <tr class="need"><td>#{q.issue}</td><td>{q.title}<div class="dim">{COORD_STALE_HINT}</div></td><td><Tag tone="c-w">{q.state}</Tag></td></tr>;
+}
+
 export function Activity() {
   const tab = activityTab.value;
   const [clean, setClean] = useState(false);
@@ -121,7 +131,7 @@ export function Activity() {
           {(coordinators.value ?? []).map((c) => (
             <div class="det" key={c.run}>
               <div class="dh"><Tag tone={c.live ? "c-q" : ""}>{c.live ? "live" : "stopped"}</Tag><b title={c.source}>{friendlyRef(c.source)}</b><span class="dim" title={c.destination}>{shortRepo(c.repo)} → {friendlyRef(c.destination)}</span></div>
-              <div class="tablewrap"><table class="t"><tbody>{c.queue.map((q) => <tr key={q.issue}><td>#{q.issue}</td><td>{q.title}</td><td>{q.state}</td></tr>)}</tbody></table></div>
+              <div class="tablewrap"><table class="t"><tbody>{c.queue.map((q) => <QueueRow key={q.issue} q={q} />)}</tbody></table></div>
               <div class="log">{c.events.map((e, i) => <span key={i}>{e}</span>)}</div>
               <div class="acts">{c.session && <a href={`#/sessions/${c.session}`}>session</a>}{c.live && <Btn small bad onClick={async () => { if (await askConfirm("Stop refilling this coordinator? Running sessions keep going.", true)) await mutate(() => http.send("POST", `/api/coordinators/${c.run}/stop`, {}), "Coordinator stopped", ["coordinators"]); }}>Stop refilling</Btn>}</div>
             </div>
